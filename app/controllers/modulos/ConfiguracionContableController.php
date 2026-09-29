@@ -1431,6 +1431,9 @@ class ConfiguracionContableController extends BaseModuloController
         $idEmpresa = (int) $_SESSION['id_empresa'];
         $tipoAsiento = trim($_GET['tipo_asiento'] ?? '');
         $tipoReferencia = trim($_GET['tipo_referencia'] ?? '');
+        // Opcional: solo las reglas de UNA entidad (p. ej. la pestaña «Contable» de la ficha del
+        // proveedor). Aplica a las dimensiones con id numérico; sin él se devuelven todas.
+        $idReferenciaFiltro = (int) ($_GET['id_referencia'] ?? 0);
 
         if ($tipoAsiento === '' || $tipoReferencia === '') {
             echo json_encode(['ok' => false, 'error' => 'Parámetros incompletos.']);
@@ -1567,12 +1570,17 @@ class ConfiguracionContableController extends BaseModuloController
                     INNER JOIN {$joinTable} ref ON {$joinCond}
                     WHERE ap.id_empresa = ? 
                       AND at.tipo_asiento = ? 
-                      AND ap.tipo_referencia = ? 
+                      AND ap.tipo_referencia = ?
                       AND ap.eliminado = false
+                      " . ($idReferenciaFiltro > 0 ? 'AND ap.id_referencia = ?' : '') . "
                     ORDER BY dimension_nombre ASC";
 
+            $params = [$idEmpresa, $tipoAsiento, $tipoReferencia];
+            if ($idReferenciaFiltro > 0) {
+                $params[] = $idReferenciaFiltro;
+            }
             $st = $db->prepare($sql);
-            $st->execute([$idEmpresa, $tipoAsiento, $tipoReferencia]);
+            $st->execute($params);
             $rows = $st->fetchAll(PDO::FETCH_ASSOC);
 
             // Overrides de cuenta de IVA por esta misma dimensión (cliente/proveedor/producto/categoria/
@@ -1607,9 +1615,14 @@ class ConfiguracionContableController extends BaseModuloController
                              AND ap.codigo_tarifa_iva IS NOT NULL
                              AND ap.direccion_iva = ?
                              AND ap.eliminado = false
+                             " . ($idReferenciaFiltro > 0 ? 'AND ap.id_referencia = ?' : '') . "
                            ORDER BY dimension_nombre ASC";
+                $paramsIva = [$direccionIva === 'compra' ? 'debe' : 'haber', $idEmpresa, $tipoReferencia, $direccionIva];
+                if ($idReferenciaFiltro > 0) {
+                    $paramsIva[] = $idReferenciaFiltro;
+                }
                 $stIva = $db->prepare($sqlIva);
-                $stIva->execute([$direccionIva === 'compra' ? 'debe' : 'haber', $idEmpresa, $tipoReferencia, $direccionIva]);
+                $stIva->execute($paramsIva);
                 $rows = array_merge($rows, $stIva->fetchAll(PDO::FETCH_ASSOC));
             }
 

@@ -32,6 +32,11 @@ $provVerTransacciones = \App\Helpers\Permisos::puedeVerAlguna(\App\controllers\m
 $provVerEstadoCuenta  = \App\Helpers\Permisos::puedeVerAlguna(\App\controllers\modulos\ProveedoresController::RUTAS_ESTADO_CUENTA);
 $provVerAnticipos     = \App\Helpers\Permisos::puedeVerAlguna(\App\controllers\modulos\ProveedoresController::RUTAS_ANTICIPOS);
 
+// Pestaña «Contable»: las reglas por proveedor de Configuración Contable, editadas desde la
+// ficha. Se pinta solo si el usuario puede ver ese módulo; guardar/quitar cuentas exige además
+// crear/eliminar allí (los endpoints de configuracion-contable lo validan igual).
+$provVerContable = \App\Helpers\Permisos::puedeVer('modulos/configuracion-contable');
+
 // Cargar Leaflet solo una vez (evitar duplicado si ya lo cargó modal_cliente)
 if (!defined('LEAFLET_LOADED')) {
     define('LEAFLET_LOADED', true);
@@ -103,6 +108,11 @@ if (!defined('LEAFLET_LOADED')) {
                             <li class="nav-item" role="presentation">
                                 <a class="nav-link" id="prov-tab-sri-btn" data-bs-toggle="tab" data-bs-target="#prov-tab-sri" href="#prov-tab-sri" role="tab" title="SRI"><i class="bi bi-file-earmark-text me-1"></i> SRI</a>
                             </li>
+                            <?php if ($provVerContable): ?>
+                                <li class="nav-item" role="presentation">
+                                    <a class="nav-link" id="prov-tab-contable-btn" data-bs-toggle="tab" data-bs-target="#prov-tab-contable" href="#prov-tab-contable" role="tab" title="Cuentas contables del asiento de este proveedor"><i class="bi bi-journal-bookmark me-1"></i> Contable</a>
+                                </li>
+                            <?php endif; ?>
                             <li class="nav-item" role="presentation">
                                 <a class="nav-link" id="prov-tab-ubicacion-btn" data-bs-toggle="tab" data-bs-target="#prov-pane-ubicacion" href="#prov-pane-ubicacion" role="tab" title="Ubicación"><i class="bi bi-geo-alt-fill me-1"></i> Ubicación</a>
                             </li>
@@ -124,8 +134,11 @@ if (!defined('LEAFLET_LOADED')) {
                                 'prov-tab-retenciones'=> 'Retenciones',
                                 'prov-tab-pagos'      => 'Pagos',
                                 'prov-tab-sri'        => 'SRI',
-                                'prov-pane-ubicacion' => 'Ubicación',
                             ];
+                            if ($provVerContable) {
+                                $pestanasConfigProv['prov-tab-contable'] = 'Contable';
+                            }
+                            $pestanasConfigProv['prov-pane-ubicacion'] = 'Ubicación';
                             echo \App\Helpers\PreferenciasHelper::renderDropdownPestanas($pestanasConfigProv, $vistaConfigProv ?? [], 'proveedores');
                             ?>
                         </div>
@@ -442,6 +455,25 @@ if (!defined('LEAFLET_LOADED')) {
                                 </div>
                             </div>
                         </div>
+
+                        <?php if ($provVerContable): ?>
+                            <?php
+                            // Pestaña CONTABLE: reglas por proveedor de Configuración Contable (componente compartido con clientes)
+                            $fichaContable = [
+                                'panel'           => 'prov-tab-contable',
+                                'tipo_referencia' => 'proveedor',
+                                'id_input'        => 'prov_id',
+                                'nombre_input'    => 'prov_razon',
+                                'modal'           => 'modalProveedor',
+                                'evento'          => 'proveedorGuardado',
+                                'entidad'         => 'el proveedor',
+                                'tipos'           => [
+                                    'adquisiciones_compras' => 'Adquisiciones de Compras/Servicios (compras y liquidaciones)',
+                                ],
+                            ];
+                            include MVC_APP . '/views/partials/ficha_contable.php';
+                            ?>
+                        <?php endif; ?>
 
                         <!-- Pestaña UBICACIÓN -->
                         <div class="tab-pane fade" id="prov-pane-ubicacion" role="tabpanel">

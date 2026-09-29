@@ -237,10 +237,16 @@ Además:
   empresa apagó un módulo, el aviso nunca pide configurar sus cuentas. Si un
   ingreso o egreso cobra o paga documentos de ese módulo, se menciona solo como
   nota informativa.
-- **Los errores que no son de cuentas no se disfrazan.** Si hay documentos de un
-  período cerrado, la línea lo dice (sin enlace). Si el motivo es un error
-  inesperado, la línea pide comunicarse con soporte; el motivo exacto y los
-  números de documento quedan en el registro del servidor.
+- **Los errores que no son de cuentas no se disfrazan.** Van sin enlace y dicen
+  qué pasa:
+  - Documentos de un período cerrado: reabra el período si deben contabilizarse.
+  - Ingresos o egresos con una forma de cobro/pago que ya no existe: edítelos y
+    elija la forma correcta.
+  - Documentos a los que les falta un dato que el asiento necesita (valores o
+    formas de cobro/pago).
+  - Cualquier otro motivo de negocio se muestra tal cual. Solo un error técnico
+    (de base de datos) pide comunicarse con soporte; el detalle exacto y los
+    números de documento quedan en el registro del servidor.
 
 ## Documentos migrados sin asiento contable
 
@@ -425,6 +431,9 @@ tienen un documento individual con tercero que mostrar.
   configurar módulos apagados en *Módulos que contabilizan*. Se retira el
   desplegable con el detalle por documento. Al final indica cuántos asientos
   quedan pendientes por generar.
+  Un ingreso, egreso o retención al que le faltan las cuentas de los dos lados (por
+  ejemplo, la forma de pago y la cuenta por pagar) ya no queda sin asiento en silencio:
+  el aviso dice qué cuentas faltan, en vez de «error inesperado».
 - **1.26** — Nuevo botón **Duplicar** en los asientos de tipo Diario: copia las
   líneas a un asiento nuevo, exigiendo cambiar la fecha o el concepto para que
   no quede idéntico al original.

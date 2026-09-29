@@ -397,23 +397,6 @@ class ContadoresNavbarService
                     }
                 }
 
-                // Suscripciones que la empresa activa gestiona como ADMINISTRADORA:
-                // avisar si hay de sus clientes vencidas o por vencer.
-                if (!empty($permRuta[self::RUTA_SUSCRIPCIONES])) {
-                    $sus = $empresa['__suscripciones'] ?? null;
-                    if (is_array($sus)) {
-                        $sVenc = (int) ($sus['vencidas'] ?? 0);
-                        $sProx = (int) ($sus['por_vencer'] ?? 0);
-                        if ($sVenc > 0 || $sProx > 0) {
-                            $out['suscripciones_gestion'] = [
-                                'vencidas'   => $sVenc,
-                                'por_vencer' => $sProx,
-                                'total'      => $sVenc + $sProx,
-                            ];
-                        }
-                    }
-                }
-
                 // Firma electrónica: avisar si no hay firma vigente, o si está por caducar/caducada.
                 $firma = $empresa['__firma'] ?? null;
                 if (is_array($firma)) {
@@ -424,6 +407,25 @@ class ContadoresNavbarService
                         $out['firma'] = [
                             'dias'   => $dias,
                             'estado' => $dias < 0 ? 'caducada' : 'por_caducar',
+                        ];
+                    }
+                }
+            }
+
+            // Suscripciones que la empresa activa gestiona como ADMINISTRADORA: avisar si hay
+            // de sus clientes vencidas o por vencer. Depende SOLO del módulo Suscripciones
+            // (antes estaba anidado bajo el permiso de Empresa y quien tenía Suscripciones
+            // asignado sin Empresa no veía el aviso).
+            if (!empty($permRuta[self::RUTA_SUSCRIPCIONES])) {
+                $sus = $empresa['__suscripciones'] ?? null;
+                if (is_array($sus)) {
+                    $sVenc = (int) ($sus['vencidas'] ?? 0);
+                    $sProx = (int) ($sus['por_vencer'] ?? 0);
+                    if ($sVenc > 0 || $sProx > 0) {
+                        $out['suscripciones_gestion'] = [
+                            'vencidas'   => $sVenc,
+                            'por_vencer' => $sProx,
+                            'total'      => $sVenc + $sProx,
                         ];
                     }
                 }

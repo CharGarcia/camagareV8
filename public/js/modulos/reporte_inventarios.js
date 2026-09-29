@@ -690,7 +690,34 @@ window.RI_Existencias = {
         return params;
     },
 
+    /**
+     * "En general" suma todo el kardex del producto en la bodega: un filtro de lote, NUP o
+     * caducidad no recortaba el Stock (solo decidía qué productos salían), y el número no
+     * coincidía con el saldo de ese lote en Movimientos. Con uno de esos filtros se baja al
+     * desglose que sí lo aplica. Misma regla que
+     * ReporteInventariosController::desgloseSegunFiltrosDeLote().
+     */
+    ajustarDesglosePorLote() {
+        const sel = document.getElementById('ri-ex-desglose');
+        if (!sel || sel.value !== 'GENERAL') return;
+        const val = id => (document.getElementById(id)?.value || '').trim();
+        const lote = val('ri-ex-lote'), nup = val('ri-ex-nup');
+        const cad = val('ri-ex-caducidad-desde') !== '' || val('ri-ex-caducidad-hasta') !== '';
+        const nuevo = nup !== '' ? 'LOTE_CADUCIDAD' : (lote !== '' ? 'LOTE' : (cad ? 'CADUCIDAD' : ''));
+        if (!nuevo) return;
+
+        sel.value = nuevo;
+        this.cambiarDesglose();
+        if (typeof Swal !== 'undefined') {
+            Swal.fire({
+                toast: true, position: 'top-end', icon: 'info', timer: 4500, showConfirmButton: false,
+                title: 'Con filtro de lote, NUP o caducidad el stock se muestra desglosado ("' + sel.selectedOptions[0].textContent + '"), para que sea el de ese lote.',
+            });
+        }
+    },
+
     generar() {
+        this.ajustarDesglosePorLote();
         const modo = this.modoActual();
         this.dibujarCabecera(modo);
 
@@ -730,6 +757,8 @@ window.RI_Existencias = {
 window.RI_Movimientos = {
     limpiarFiltros() {
         RI_limpiarFiltros('ri-mv', ['ri-mv-producto-seleccionado']);
+        const resumen = document.getElementById('ri-mv-resumen');
+        if (resumen) resumen.innerHTML = '';
         this.cambiarMesAnio();   // el reset deja el año por defecto: hay que rehacer las fechas
     },
 
@@ -789,22 +818,18 @@ window.RI_Movimientos = {
         const modo = document.getElementById('ri-mv-agrupar').value;
         this.dibujarCabecera(modo);
 
-        const params = RI_paramsFromIds({
-            fecha_desde: 'ri-mv-fecha-desde', fecha_hasta: 'ri-mv-fecha-hasta',
-            id_bodega: 'ri-mv-bodega', id_producto: 'ri-mv-id-producto',
-            id_categoria: 'ri-mv-categoria', id_marca: 'ri-mv-marca',
-            tipo_movimiento: 'ri-mv-tipo', referencia_tipo: 'ri-mv-origen',
-            id_usuario: 'ri-mv-usuario', numero_lote: 'ri-mv-lote', nup: 'ri-mv-nup',
-            fecha_caducidad_desde: 'ri-mv-caducidad-desde', fecha_caducidad_hasta: 'ri-mv-caducidad-hasta',
-            observaciones: 'ri-mv-observaciones',
-            agrupar_por: 'ri-mv-agrupar',
-        });
+        const params = this._filtros();
+        params.delete('tab');
 
         const tbody = document.getElementById('ri-mv-tbody');
+        const resumen = document.getElementById('ri-mv-resumen');
         const colSpan = modo === 'NINGUNO' ? 13 : (modo === 'PRODUCTO' ? 7 : 6);
         RI_fetchGenerar('movimientos', params, (res) => {
             tbody.innerHTML = res.rows;
+            // Resumen de cuadre del producto, o el aviso de que el Saldo no es stock.
+            if (resumen) resumen.innerHTML = res.resumen || '';
         }, (msg) => {
+            if (resumen) resumen.innerHTML = '';
             tbody.innerHTML = `<tr><td colspan="${colSpan}" class="text-center py-4 text-danger">${msg}</td></tr>`;
         }, { prefijo: 'ri-mv', colSpan });
     },
@@ -817,6 +842,7 @@ window.RI_Movimientos = {
         const params = this._filtros();
         RI_descargarExport('pdf', params);
     },
+    /** Filtros del formulario, los mismos para Mostrar, PDF y Excel. */
     _filtros() {
         const params = RI_paramsFromIds({
             fecha_desde: 'ri-mv-fecha-desde', fecha_hasta: 'ri-mv-fecha-hasta',
@@ -826,6 +852,7 @@ window.RI_Movimientos = {
             id_usuario: 'ri-mv-usuario', numero_lote: 'ri-mv-lote', nup: 'ri-mv-nup',
             fecha_caducidad_desde: 'ri-mv-caducidad-desde', fecha_caducidad_hasta: 'ri-mv-caducidad-hasta',
             observaciones: 'ri-mv-observaciones',
+            ocultar_correcciones: 'ri-mv-correcciones',
             agrupar_por: 'ri-mv-agrupar',
         });
         params.set('tab', 'movimientos');

@@ -4,7 +4,8 @@ import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import type { RootStackParamList } from '../navigation/RootNavigator';
 import { FacturaListado, listarFacturas } from '../api/facturasVenta';
-import { mensajeError } from '../api/client';
+import { useListadoPaginado } from '../hooks/useListadoPaginado';
+import PieListado from '../components/PieListado';
 
 const COLOR_ESTADO: Record<string, string> = {
   BORRADOR: '#fd7e14',
@@ -17,37 +18,34 @@ const COLOR_ESTADO: Record<string, string> = {
 
 export default function FacturasVentaListScreen() {
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
-  const [facturas, setFacturas] = useState<FacturaListado[]>([]);
   const [buscar, setBuscar] = useState('');
-  const [cargando, setCargando] = useState(true);
-  const [refrescando, setRefrescando] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const buscarRef = useRef('');
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-  const cargar = useCallback(async (texto: string, esRefresh = false) => {
-    esRefresh ? setRefrescando(true) : setCargando(true);
-    setError(null);
-    try {
-      const resp = await listarFacturas({ buscar: texto, page: 1 });
-      setFacturas(resp.data);
-    } catch (err) {
-      setError(mensajeError(err, 'No se pudieron cargar las facturas.'));
-    } finally {
-      esRefresh ? setRefrescando(false) : setCargando(false);
-    }
-  }, []);
+  const {
+    items: facturas,
+    total,
+    cargando,
+    refrescando,
+    cargandoMas,
+    error,
+    cargar,
+    cargarMas,
+  } = useListadoPaginado<FacturaListado>(
+    (page) => listarFacturas({ buscar: buscarRef.current, page }),
+    'No se pudieron cargar las facturas.'
+  );
 
   useFocusEffect(
     useCallback(() => {
-      cargar(buscar);
-      // eslint-disable-next-line react-hooks/exhaustive-deps
+      cargar();
     }, [cargar])
   );
 
   function onBuscarChange(texto: string) {
     setBuscar(texto);
+    buscarRef.current = texto;
     if (debounceRef.current) clearTimeout(debounceRef.current);
-    debounceRef.current = setTimeout(() => cargar(texto), 350);
+    debounceRef.current = setTimeout(() => cargar(), 350);
   }
 
   return (
@@ -73,7 +71,10 @@ export default function FacturasVentaListScreen() {
           data={facturas}
           keyExtractor={(item) => String(item.id)}
           contentContainerStyle={{ padding: 16 }}
-          refreshControl={<RefreshControl refreshing={refrescando} onRefresh={() => cargar(buscar, true)} />}
+          refreshControl={<RefreshControl refreshing={refrescando} onRefresh={() => cargar(true)} />}
+          onEndReached={cargarMas}
+          onEndReachedThreshold={0.4}
+          ListFooterComponent={<PieListado cargandoMas={cargandoMas} mostrados={facturas.length} total={total} />}
           ListEmptyComponent={<Text style={styles.vacio}>No hay facturas todavía.</Text>}
           renderItem={({ item }) => {
             const color = COLOR_ESTADO[(item.estado || '').toUpperCase()] ?? '#6c757d';

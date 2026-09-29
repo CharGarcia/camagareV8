@@ -13,44 +13,42 @@ import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import type { RootStackParamList } from '../navigation/RootNavigator';
 import { OrdenListado, listarOrdenes } from '../api/servicioExterno';
-import { mensajeError } from '../api/client';
+import { useListadoPaginado } from '../hooks/useListadoPaginado';
+import PieListado from '../components/PieListado';
 
 const ESTADO_LABEL: Record<string, string> = { borrador: 'Borrador', facturado: 'Facturado', anulado: 'Anulado' };
 const ESTADO_COLOR: Record<string, string> = { borrador: '#6c757d', facturado: '#198754', anulado: '#dc3545' };
 
 export default function ServicioExternoListScreen() {
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
-  const [ordenes, setOrdenes] = useState<OrdenListado[]>([]);
   const [buscar, setBuscar] = useState('');
-  const [cargando, setCargando] = useState(true);
-  const [refrescando, setRefrescando] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const buscarRef = useRef('');
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-  const cargar = useCallback(async (texto: string, esRefresh = false) => {
-    esRefresh ? setRefrescando(true) : setCargando(true);
-    setError(null);
-    try {
-      const resp = await listarOrdenes({ buscar: texto, page: 1 });
-      setOrdenes(resp.data);
-    } catch (err) {
-      setError(mensajeError(err, 'No se pudieron cargar las órdenes.'));
-    } finally {
-      esRefresh ? setRefrescando(false) : setCargando(false);
-    }
-  }, []);
+  const {
+    items: ordenes,
+    total,
+    cargando,
+    refrescando,
+    cargandoMas,
+    error,
+    cargar,
+    cargarMas,
+  } = useListadoPaginado<OrdenListado>(
+    (page) => listarOrdenes({ buscar: buscarRef.current, page }),
+    'No se pudieron cargar las órdenes.'
+  );
 
   useFocusEffect(
     useCallback(() => {
-      cargar(buscar);
-      // eslint-disable-next-line react-hooks/exhaustive-deps
+      cargar();
     }, [cargar])
   );
 
   function onBuscarChange(texto: string) {
     setBuscar(texto);
+    buscarRef.current = texto;
     if (debounceRef.current) clearTimeout(debounceRef.current);
-    debounceRef.current = setTimeout(() => cargar(texto), 350);
+    debounceRef.current = setTimeout(() => cargar(), 350);
   }
 
   return (
@@ -76,7 +74,10 @@ export default function ServicioExternoListScreen() {
           data={ordenes}
           keyExtractor={(item) => String(item.id)}
           contentContainerStyle={{ padding: 16 }}
-          refreshControl={<RefreshControl refreshing={refrescando} onRefresh={() => cargar(buscar, true)} />}
+          refreshControl={<RefreshControl refreshing={refrescando} onRefresh={() => cargar(true)} />}
+          onEndReached={cargarMas}
+          onEndReachedThreshold={0.4}
+          ListFooterComponent={<PieListado cargandoMas={cargandoMas} mostrados={ordenes.length} total={total} />}
           ListEmptyComponent={<Text style={styles.vacio}>No hay órdenes de servicio externo todavía.</Text>}
           renderItem={({ item }) => {
             const fecha = item.fecha_servicio ? new Date(item.fecha_servicio).toLocaleDateString('es-EC') : '';

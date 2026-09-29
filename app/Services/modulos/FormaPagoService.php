@@ -351,8 +351,12 @@ class FormaPagoService
 
     public function eliminar(int $id, int $idEmpresa, int $usuarioId): bool
     {
-        if ($this->repository->estaUsado($id, $idEmpresa)) {
-            throw new Exception("No se puede eliminar esta forma de cobro/pago porque ya registra movimientos en transacciones de Ingresos o Egresos.");
+        // No se elimina una forma que ya tiene movimientos, en ningún módulo: marcada como
+        // eliminada desaparece de esas pantallas y reportes. Puede desactivarla en su lugar.
+        $usos = $this->repository->getModulosDondeSeUsa($id, $idEmpresa);
+        if ($usos) {
+            throw new Exception('No se puede eliminar esta forma de cobro/pago porque ya registra movimientos en: '
+                . implode(', ', $usos) . '. Si ya no la usa, desactívela.');
         }
         return $this->repository->delete($id, $idEmpresa, $usuarioId);
     }

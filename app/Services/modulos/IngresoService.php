@@ -711,13 +711,14 @@ class IngresoService
         $detallesConCuenta = $data['detalles'] ?? [];
         $builder  = new AsientoBuilderService();
         $detalles = $builder->generarAsientoIngreso($idEmpresa, $idIngreso, $detallesConCuenta);
+
+        // Mismo diagnóstico que en EgresoService::procesarAsientoContable: explicar qué cuenta
+        // falta en vez de dejar salir el genérico "El asiento no está cuadrado". Va ANTES del
+        // "asiento vacío → nada que hacer": vacío por cuentas faltantes también debe decirlo.
+        AsientoBuilderService::verificarCuadre($detalles, $builder->getMotivosFaltantes());
         if (empty($detalles)) {
             return;
         }
-
-        // Mismo diagnóstico que en EgresoService::procesarAsientoContable: explicar qué cuenta
-        // falta en vez de dejar salir el genérico "El asiento no está cuadrado".
-        AsientoBuilderService::verificarCuadre($detalles, $builder->getMotivosFaltantes());
 
         $num = $ingreso['numero_ingreso'] ?? (string) $idIngreso;
         // Referencia de cada línea = "Ingreso 8 · <detalle de la línea>": el ingreso con solo su

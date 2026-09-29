@@ -6,7 +6,7 @@ ruta_modulo: modulos/formas_cobros_pagos
 tipo: modulo
 visibilidad: todos
 etiquetas: formas de pago, formas de cobro, efectivo, caja, banco, tarjeta, payphone, anticipo, transferencia, cheque, orden, ordenar formas de pago, primera forma de pago, orden en ingresos, orden en egresos, saldo, mostrar saldo, ocultar saldo, saldo disponible, saldo de caja, saldo del banco
-version: 1.4
+version: 1.5
 orden: 70
 estado: activo
 ---
@@ -117,6 +117,12 @@ por dos medios (p. ej. "Cheques Pichincha" y "Transferencias Pichincha").
 
 ## Errores frecuentes
 
+- **"No se puede eliminar esta forma de cobro/pago porque ya registra movimientos en: …"**:
+  una forma que ya se usó no se puede eliminar, en ningún módulo (Ingresos, Egresos,
+  Traspasos, Control Bancario, Impresión de Cheques, Saldos Iniciales, Conciliación de
+  Cobros y de Tarjetas, Transferencias, Payphone, Nuvei). El mensaje dice dónde se usa.
+  Si ya no la necesita, desactívela: deja de ofrecerse en los formularios y sus
+  movimientos siguen visibles en los reportes.
 - **No aparece al registrar un cobro**: puede estar inactiva, o ser de un tipo que
   no admite esa operación (Payphone no admite egresos).
 - **Al registrar un ingreso o egreso, una forma no muestra su saldo**: tiene
@@ -140,6 +146,10 @@ por dos medios (p. ej. "Cheques Pichincha" y "Transferencias Pichincha").
 
 ## Historial de cambios
 
+- **1.5** — Una forma de cobro/pago con movimientos ya no se puede eliminar aunque
+  solo se haya usado fuera de Ingresos y Egresos (traspasos, Control Bancario, cheques,
+  saldos iniciales, conciliaciones, transferencias, Payphone, Nuvei). El aviso dice en
+  qué módulos se usa y sugiere desactivarla.
 - **1.4** — Dos campos nuevos en la forma: **Orden**, la posición en la lista de
   formas al registrar Ingresos y Egresos (las que no tienen orden van al final,
   por nombre), y **Mostrar saldo**, que decide si esa lista muestra el saldo de la

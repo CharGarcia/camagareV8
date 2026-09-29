@@ -13,7 +13,8 @@ import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import type { RootStackParamList } from '../navigation/RootNavigator';
 import { listarPedidos, PedidoListado } from '../api/pedidos';
-import { mensajeError } from '../api/client';
+import { useListadoPaginado } from '../hooks/useListadoPaginado';
+import PieListado from '../components/PieListado';
 import { useSerie } from '../pedidos/SerieContext';
 
 const COLOR_ESTADO: Record<string, string> = {
@@ -26,37 +27,34 @@ const COLOR_ESTADO: Record<string, string> = {
 export default function PedidosListScreen() {
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const { serie } = useSerie();
-  const [pedidos, setPedidos] = useState<PedidoListado[]>([]);
   const [buscar, setBuscar] = useState('');
-  const [cargando, setCargando] = useState(true);
-  const [refrescando, setRefrescando] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const buscarRef = useRef('');
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-  const cargar = useCallback(async (texto: string, esRefresh = false) => {
-    esRefresh ? setRefrescando(true) : setCargando(true);
-    setError(null);
-    try {
-      const resp = await listarPedidos({ buscar: texto, page: 1 });
-      setPedidos(resp.data);
-    } catch (err) {
-      setError(mensajeError(err, 'No se pudieron cargar los pedidos.'));
-    } finally {
-      esRefresh ? setRefrescando(false) : setCargando(false);
-    }
-  }, []);
+  const {
+    items: pedidos,
+    total,
+    cargando,
+    refrescando,
+    cargandoMas,
+    error,
+    cargar,
+    cargarMas,
+  } = useListadoPaginado<PedidoListado>(
+    (page) => listarPedidos({ buscar: buscarRef.current, page }),
+    'No se pudieron cargar los pedidos.'
+  );
 
   useFocusEffect(
     useCallback(() => {
-      cargar(buscar);
-      // eslint-disable-next-line react-hooks/exhaustive-deps
+      cargar();
     }, [cargar])
   );
 
   function onBuscarChange(texto: string) {
     setBuscar(texto);
+    buscarRef.current = texto;
     if (debounceRef.current) clearTimeout(debounceRef.current);
-    debounceRef.current = setTimeout(() => cargar(texto), 350);
+    debounceRef.current = setTimeout(() => cargar(), 350);
   }
 
   function nuevoPedido() {
@@ -90,7 +88,10 @@ export default function PedidosListScreen() {
           data={pedidos}
           keyExtractor={(item) => String(item.id)}
           contentContainerStyle={{ padding: 16 }}
-          refreshControl={<RefreshControl refreshing={refrescando} onRefresh={() => cargar(buscar, true)} />}
+          refreshControl={<RefreshControl refreshing={refrescando} onRefresh={() => cargar(true)} />}
+          onEndReached={cargarMas}
+          onEndReachedThreshold={0.4}
+          ListFooterComponent={<PieListado cargandoMas={cargandoMas} mostrados={pedidos.length} total={total} />}
           ListEmptyComponent={<Text style={styles.vacio}>No hay pedidos todavía.</Text>}
           renderItem={({ item }) => {
             const color = COLOR_ESTADO[(item.estado || '').toUpperCase()] ?? '#6c757d';

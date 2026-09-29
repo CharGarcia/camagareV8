@@ -5,8 +5,8 @@ categoria: Ventas
 ruta_modulo: modulos/alumnos
 tipo: modulo
 visibilidad: todos
-etiquetas: alumnos, estudiantes, matrícula, matricula, colegio, escuela, centro infantil, campus, sede, nivel, curso, representante, representantes, padres, autorizado, autorizados, retirar, retiro, quién retira, facturación, facturar, generar factura, facturar pensión, facturar mensualidad, facturas del alumno, horario, pensión, pension, imprimir, impresora, filtrar alumnos, filtro por campus, filtro por nivel, alumnos por curso, alumnos por sede, buscar alumno
-version: 1.6
+etiquetas: alumnos, estudiantes, matrícula, matricula, colegio, escuela, centro infantil, campus, sede, nivel, curso, representante, representantes, padres, autorizado, autorizados, retirar, retiro, quién retira, facturación, facturar, generar factura, facturar pensión, facturar mensualidad, facturas del alumno, horario, pensión, pension, imprimir, impresora, filtrar alumnos, filtro por campus, filtro por nivel, alumnos por curso, alumnos por sede, buscar alumno, portal de representantes, qr, codigo qr, padres de familia, actualizar datos, registrar alumno, inscripcion, codigo de verificacion, enlace para padres
+version: 1.7
 orden: 0
 estado: activo
 ---
@@ -214,6 +214,67 @@ referencia a la factura en que salió.
 - Al pie, la cantidad de facturas vigentes y la suma de subtotal, IVA y total.
   Las facturas **anuladas** se ven tachadas y no suman.
 
+## Portal de representantes (QR)
+
+Los representantes (padres de familia, a quienes se les factura) pueden
+**actualizar sus datos y los de sus hijos, o registrar alumnos nuevos**, desde
+su celular, sin usuario ni contraseña, con un **QR general del colegio**.
+
+### Cómo lo usa el colegio
+
+En el listado de Alumnos, botón **Portal de representantes** (solo usuarios con
+permiso de *modificar* Alumnos):
+
+- **QR y enlace** del colegio, para copiar.
+- **Imprimir hoja con QR**: una hoja con el QR y las instrucciones, para la
+  entrada o las aulas.
+- **Enviar por correo**: envía el enlace a los representantes (clientes que
+  facturan) de los alumnos del **listado actual**; si hay filtros de campus o
+  nivel, solo a esos. Un correo por representante; avisa cuáles no tienen
+  correo registrado.
+- **Portal activo**: al desactivarlo, el QR deja de funcionar.
+- **Regenerar QR**: crea uno nuevo y el anterior deja de funcionar (úselo si el
+  enlace se difundió donde no debía).
+
+### Cómo lo usa el representante
+
+1. Escanea el QR y escribe **su cédula o RUC** (la del representante al que se
+   le factura; la cédula y el RUC …001 de la misma persona se reconocen igual).
+2. Le llega un **código de 6 dígitos a su correo registrado** (se le muestra
+   enmascarado, p. ej. *ma***@gmail.com*). Si no está registrado como cliente,
+   escribe su correo y el código le llega ahí. Si está registrado **sin
+   correo**, se le pide comunicarse con la institución.
+3. Con el código ve sus **datos de facturación** y la lista de **sus hijos**, y
+   puede:
+   - corregir su nombre o razón social, correo, teléfono y dirección (no su
+     cédula/RUC);
+   - corregir los datos de cada hijo: nombres, identificación, fecha de
+     nacimiento, sexo, nacionalidad, tipo de sangre, alergias, contacto de
+     emergencia y **personas autorizadas a retirarlo**;
+   - **agregar alumnos** nuevos, eligiendo su **campus** y **nivel / curso**.
+4. Al guardar, los cambios **se aplican al instante** y recibe una constancia
+   por correo.
+
+### Reglas
+
+- El código vence a los **10 minutos** y sirve para **un solo envío**: para otro
+  cambio hay que volver a ingresar y pedir un código nuevo.
+- Nunca ve ni cambia servicios, precios, descuentos, serie, matrícula ni
+  facturas.
+- Solo ve a **sus** alumnos (los que tienen su identificación como cliente que
+  factura). Un representante nuevo no ve ningún dato existente.
+- No se puede registrar un alumno con una identificación que ya existe en el
+  colegio.
+- Límite de 5 códigos por hora por identificación y de 15 por dispositivo
+  (IP), contra abusos; 5 intentos por código.
+- Los alumnos registrados desde el portal quedan con **origen «portal»** y
+  activos. Si el representante eligió campus o nivel, se crea su **matrícula
+  vigente desde ese día**; los servicios, la serie y el resto de la matrícula
+  los completa el colegio. En los alumnos que ya existían, la matrícula no se
+  cambia desde el portal. Todo cambio queda en el registro de auditoría (log del sistema) con el
+  origen «portal», la IP y el correo verificado.
+- El enlace no funciona si la empresa está inactiva.
+
 ## Permisos
 
 Sigue el esquema estándar de permisos por submódulo (`r/w/u/d/t`). Con
@@ -281,6 +342,14 @@ pestaña Transacciones aparece solo si el usuario puede **ver** Facturas de Vent
   mano y guardar normalmente.
 
 ## Historial de cambios
+
+- **1.7** — **Portal de representantes (QR)**: un QR general del colegio con el
+  que los padres, verificados con un código en su correo, actualizan una vez sus
+  datos de facturación y los de sus hijos, o registran alumnos nuevos (con su
+  campus y nivel). Botón
+  *Portal de representantes* en el listado: QR, hoja para imprimir, envío del
+  enlace por correo, activar/desactivar y regenerar. Requiere ejecutar en la
+  base `database/migrations/20260929_alumnos_portal_representantes.sql`.
 
 - **1.6** — Con el IVA configurado **al subtotal**, el IVA de cada línea de las facturas
   generadas se reajusta para que su suma sea exactamente el IVA sobre el

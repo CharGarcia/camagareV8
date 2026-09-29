@@ -46,6 +46,11 @@ $urlBaseCliShared = BASE_URL . '/modulos/clientes';
 $cliVerTransacciones = \App\Helpers\Permisos::puedeVerAlguna(\App\controllers\modulos\ClientesController::RUTAS_TRANSACCIONES);
 $cliVerEstadoCuenta  = \App\Helpers\Permisos::puedeVerAlguna(\App\controllers\modulos\ClientesController::RUTAS_ESTADO_CUENTA);
 $cliVerAnticipos     = \App\Helpers\Permisos::puedeVerAlguna(\App\controllers\modulos\ClientesController::RUTAS_ANTICIPOS);
+
+// Pestaña «Contable»: las reglas por cliente de Configuración Contable, editadas desde la
+// ficha. Se pinta solo si el usuario puede ver ese módulo; guardar/quitar cuentas exige además
+// crear/eliminar allí (los endpoints de configuracion-contable lo validan igual).
+$cliVerContable = \App\Helpers\Permisos::puedeVer('modulos/configuracion-contable');
 ?>
 
 <?php
@@ -110,6 +115,11 @@ if (!defined('LEAFLET_LOADED')) {
                             <li class="nav-item" role="presentation">
                                 <a class="nav-link py-2 small" id="tab-visitas-btn" data-bs-toggle="tab" data-bs-target="#pane-visitas" href="#pane-visitas" role="tab"><i class="bi bi-calendar-week me-1"></i>Visitas</a>
                             </li>
+                            <?php if ($cliVerContable): ?>
+                                <li class="nav-item" role="presentation">
+                                    <a class="nav-link py-2 small" id="cli-tab-contable-btn" data-bs-toggle="tab" data-bs-target="#cli-pane-contable" href="#cli-pane-contable" role="tab" title="Cuentas contables del asiento de este cliente"><i class="bi bi-journal-bookmark me-1"></i>Contable</a>
+                                </li>
+                            <?php endif; ?>
                             <li class="nav-item" role="presentation">
                                 <a class="nav-link py-2 small" id="tab-ubicacion-btn" data-bs-toggle="tab" data-bs-target="#pane-ubicacion" href="#pane-ubicacion" role="tab"><i class="bi bi-geo-alt-fill me-1"></i>Ubicación</a>
                             </li>
@@ -131,8 +141,11 @@ if (!defined('LEAFLET_LOADED')) {
                             $pestanasConfigCli += [
                                 'pane-cobros'    => 'Cobros',
                                 'pane-visitas'   => 'Visitas',
-                                'pane-ubicacion' => 'Ubicación',
                             ];
+                            if ($cliVerContable) {
+                                $pestanasConfigCli['cli-pane-contable'] = 'Contable';
+                            }
+                            $pestanasConfigCli['pane-ubicacion'] = 'Ubicación';
                             echo \App\Helpers\PreferenciasHelper::renderDropdownPestanas(
                                 $pestanasConfigCli,
                                 $vistaConfigCli ?? [],
@@ -496,6 +509,26 @@ if (!defined('LEAFLET_LOADED')) {
                                 </div>
                             </div>
                         </div>
+
+                        <?php if ($cliVerContable): ?>
+                            <?php
+                            // Pestaña CONTABLE: reglas por cliente de Configuración Contable (componente compartido con proveedores)
+                            $fichaContable = [
+                                'panel'           => 'cli-pane-contable',
+                                'tipo_referencia' => 'cliente',
+                                'id_input'        => 'cliente_id',
+                                'nombre_input'    => 'cliente_nombre',
+                                'modal'           => 'modalCliente',
+                                'evento'          => 'clienteGuardado',
+                                'entidad'         => 'el cliente',
+                                'tipos'           => [
+                                    'ventas_factura' => 'Ventas con Factura (facturas y notas de crédito)',
+                                    'recibos_venta'  => 'Recibos de Venta',
+                                ],
+                            ];
+                            include MVC_APP . '/views/partials/ficha_contable.php';
+                            ?>
+                        <?php endif; ?>
 
                         <!-- Pestaña: UBICACIÓN -->
                         <div class="tab-pane fade" id="pane-ubicacion" role="tabpanel">

@@ -13,41 +13,39 @@ import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import type { RootStackParamList } from '../navigation/RootNavigator';
 import { CompraListado, listarCompras } from '../api/compras';
-import { mensajeError } from '../api/client';
+import { useListadoPaginado } from '../hooks/useListadoPaginado';
+import PieListado from '../components/PieListado';
 
 export default function ComprasListScreen() {
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
-  const [compras, setCompras] = useState<CompraListado[]>([]);
   const [buscar, setBuscar] = useState('');
-  const [cargando, setCargando] = useState(true);
-  const [refrescando, setRefrescando] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const buscarRef = useRef('');
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-  const cargar = useCallback(async (texto: string, esRefresh = false) => {
-    esRefresh ? setRefrescando(true) : setCargando(true);
-    setError(null);
-    try {
-      const resp = await listarCompras({ buscar: texto, page: 1 });
-      setCompras(resp.data);
-    } catch (err) {
-      setError(mensajeError(err, 'No se pudieron cargar las compras.'));
-    } finally {
-      esRefresh ? setRefrescando(false) : setCargando(false);
-    }
-  }, []);
+  const {
+    items: compras,
+    total,
+    cargando,
+    refrescando,
+    cargandoMas,
+    error,
+    cargar,
+    cargarMas,
+  } = useListadoPaginado<CompraListado>(
+    (page) => listarCompras({ buscar: buscarRef.current, page }),
+    'No se pudieron cargar las compras.'
+  );
 
   useFocusEffect(
     useCallback(() => {
-      cargar(buscar);
-      // eslint-disable-next-line react-hooks/exhaustive-deps
+      cargar();
     }, [cargar])
   );
 
   function onBuscarChange(texto: string) {
     setBuscar(texto);
+    buscarRef.current = texto;
     if (debounceRef.current) clearTimeout(debounceRef.current);
-    debounceRef.current = setTimeout(() => cargar(texto), 350);
+    debounceRef.current = setTimeout(() => cargar(), 350);
   }
 
   return (
@@ -73,7 +71,10 @@ export default function ComprasListScreen() {
           data={compras}
           keyExtractor={(item) => String(item.id)}
           contentContainerStyle={{ padding: 16 }}
-          refreshControl={<RefreshControl refreshing={refrescando} onRefresh={() => cargar(buscar, true)} />}
+          refreshControl={<RefreshControl refreshing={refrescando} onRefresh={() => cargar(true)} />}
+          onEndReached={cargarMas}
+          onEndReachedThreshold={0.4}
+          ListFooterComponent={<PieListado cargandoMas={cargandoMas} mostrados={compras.length} total={total} />}
           ListEmptyComponent={<Text style={styles.vacio}>No hay compras registradas todavía.</Text>}
           renderItem={({ item }) => {
             const numero = `${item.establecimiento_prov}-${item.punto_emision_prov}-${item.secuencial_prov}`;

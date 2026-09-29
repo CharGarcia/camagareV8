@@ -663,6 +663,62 @@ class FormaPagoRepository extends BaseRepository
         return $row ?: null;
     }
 
+    /**
+     * Movimientos (no configuración) que usan una forma de cobro/pago: tabla => [columnas, módulo].
+     * Si una forma aparece en cualquiera de ellos no se puede eliminar: al marcarla eliminada deja
+     * de aparecer en esas pantallas y en sus reportes. Ingresos y Egresos van aparte en
+     * estaUsado() porque su filtro de vigencia pasa por la cabecera del documento.
+     */
+    private const USOS_MOVIMIENTOS = [
+        'traspasos_cabecera'              => [['id_forma_origen', 'id_forma_destino'], 'Traspasos'],
+        'control_bancario_movimientos'    => [['id_forma_pago'], 'Control Bancario'],
+        'control_bancario_conciliaciones' => [['id_forma_pago'], 'Control Bancario (conciliaciones)'],
+        'cheques_impresos'                => [['id_forma_pago'], 'Impresión de Cheques'],
+        'saldos_iniciales_bancos'         => [['id_forma_pago'], 'Saldos Iniciales (bancos)'],
+        'saldos_iniciales_anticipos'      => [['id_forma_pago'], 'Saldos Iniciales (anticipos)'],
+        'conciliacion_cargas'             => [['id_forma_pago'], 'Conciliación de Cobros'],
+        'conciliacion_tarjetas_cabecera'  => [['id_forma_cobro', 'id_forma_cobro_destino'], 'Conciliación de Tarjetas'],
+        'transferencias_lotes'            => [['id_forma_pago_origen'], 'Transferencias'],
+        'payphone_transacciones'          => [['id_forma_cobro'], 'Cobros con Payphone'],
+        'nuvei_transacciones'             => [['id_forma_cobro'], 'Cobros con Nuvei'],
+    ];
+
+    /**
+     * Módulos en los que la forma de cobro/pago ya registra movimientos (vacío = no se usa).
+     * Una tabla que aún no existe en esta base (migración pendiente) se omite sin romper.
+     *
+     * @return string[]
+     */
+    public function getModulosDondeSeUsa(int $id, int $idEmpresa): array
+    {
+        $modulos = [];
+        if ($this->estaUsado($id, $idEmpresa)) {
+            $modulos[] = 'Ingresos / Egresos';
+        }
+        // Se consulta primero qué tablas existen: un SELECT sobre una tabla ausente abortaría la
+        // transacción del llamador (25P02) aunque se capture la excepción.
+        $st = $this->db->prepare("SELECT relname FROM pg_class WHERE relkind = 'r' AND relname = ANY(string_to_array(:t, ','))");
+        $st->execute([':t' => implode(',', array_keys(self::USOS_MOVIMIENTOS))]);
+        $existentes = $st->fetchAll(PDO::FETCH_COLUMN);
+
+        foreach (self::USOS_MOVIMIENTOS as $tabla => [$columnas, $modulo]) {
+            if (!in_array($tabla, $existentes, true)) {
+                continue;
+            }
+            $cond = implode(' OR ', array_map(fn($c) => "{$c} = :id", $columnas));
+            try {
+                $st = $this->db->prepare("SELECT 1 FROM {$tabla} WHERE ({$cond}) AND id_empresa = :id_empresa AND eliminado = false LIMIT 1");
+                $st->execute([':id' => $id, ':id_empresa' => $idEmpresa]);
+                if ($st->fetchColumn() && !in_array($modulo, $modulos, true)) {
+                    $modulos[] = $modulo;
+                }
+            } catch (\Throwable $e) {
+                // Tabla o columna inexistente: ese módulo no se revisa.
+            }
+        }
+        return $modulos;
+    }
+
     public function estaUsado(int $id, int $idEmpresa): bool
     {
         // 1. Verificar en ingresos_pagos

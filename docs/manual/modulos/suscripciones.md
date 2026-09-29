@@ -6,7 +6,7 @@ ruta_modulo: modulos/suscripciones
 tipo: modulo
 visibilidad: todos
 etiquetas: suscripciones, suscripcion, cobro recurrente, facturacion recurrente, factura recurrente, mensualidad, pension, plan mensual, membresia, renovacion, periodicidad, proximo cobro, generar documentos, generar facturas, facturacion automatica, facturas del cliente, facturas emitidas, historial de facturas, detalle de facturas, recibos del cliente, que le facture, saldo del cliente, facturas pendientes, facturas pagadas, facturas abonadas, cobro con tarjeta, debito automatico, nuvei, kushki, aviso de vencimiento, imprimir, impresora, excel, exportar, resumen de valores, total por periodicidad, proyeccion anual, ingresos recurrentes, iva por tarifa, resumen por concepto, detalle por cliente, que se le factura a cada cliente, items por cliente, informacion adicional en excel, resumen en pdf, detalle por cliente en pdf, pdf de la suscripcion, imprimir suscripcion, contrato, ficha de la suscripcion, detalle de la suscripcion en pdf
-version: 1.12
+version: 1.13
 orden: 0
 estado: activo
 ---
@@ -269,6 +269,9 @@ registrados*.
   vencimiento por correo o WhatsApp.
 - **Empresa**: la tarjeta de suscripción y vigencia del sistema lee la suscripción
   del cliente.
+- **Barra superior**: el ícono de flechas circulares avisa cuántas suscripciones de
+  clientes están vencidas o por vencer (próximos 7 días). Lo ve quien tiene asignado
+  este módulo en la empresa activa (el superadministrador lo ve siempre).
 
 ## Errores frecuentes
 
@@ -285,6 +288,9 @@ registrados*.
 
 ## Historial de cambios
 
+- **1.13** — El aviso de suscripciones vencidas o por vencer de la barra superior depende
+  solo del permiso sobre Suscripciones: antes exigía además el módulo Empresa y quien
+  tenía Suscripciones asignado sin Empresa no lo veía.
 - **1.12** — Botón **PDF** en la barra superior del modal: documento con logo y el
   detalle de la suscripción (cliente, datos, productos con totales, información
   adicional, forma de cobro e historial de cobros).

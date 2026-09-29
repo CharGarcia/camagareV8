@@ -462,6 +462,80 @@ class AlumnosController extends BaseModuloController
         exit;
     }
 
+    // ------------------------------------------------------------------
+    // Portal de representantes (QR general del colegio). Solo con permiso
+    // de MODIFICAR en Alumnos: el portal escribe datos de alumnos y clientes.
+    // ------------------------------------------------------------------
+
+    private function portalJson(callable $fn): void
+    {
+        $this->requireActualizar();
+        header('Content-Type: application/json; charset=utf-8');
+        try {
+            echo json_encode(['ok' => true] + $fn(new \App\Services\modulos\AlumnoPortalService()), JSON_UNESCAPED_UNICODE);
+        } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => 'portal']);
+            echo json_encode(['ok' => false, 'error' => $e->getMessage()], JSON_UNESCAPED_UNICODE);
+        }
+        exit;
+    }
+
+    public function portalAjax(): void
+    {
+        $this->portalJson(fn($s) => $s->getPortal((int) $_SESSION['id_empresa'], (int) $_SESSION['id_usuario']));
+    }
+
+    public function portalRegenerarAjax(): void
+    {
+        $this->portalJson(fn($s) => $s->regenerar((int) $_SESSION['id_empresa'], (int) $_SESSION['id_usuario']));
+    }
+
+    public function portalActivarAjax(): void
+    {
+        $this->portalJson(fn($s) => $s->setActivo((int) $_SESSION['id_empresa'], !empty($_POST['activo']), (int) $_SESSION['id_usuario']));
+    }
+
+    /** Envía el enlace a los representantes de los alumnos del listado filtrado (?b=). */
+    public function portalEnviarAjax(): void
+    {
+        $this->portalJson(function ($s) {
+            $idEmpresa = (int) $_SESSION['id_empresa'];
+            $idUsuarioFiltro = empty($this->getPermisos()['todo']) ? (int) $_SESSION['id_usuario'] : null;
+            $rows = $this->service->getListado($idEmpresa, trim((string) ($_POST['b'] ?? '')), 1, 0, 'apellidos', 'ASC', $idUsuarioFiltro)['rows'] ?? [];
+            return $s->enviarInvitaciones($idEmpresa, (int) $_SESSION['id_usuario'], array_column($rows, 'id'));
+        });
+    }
+
+    /** Cuántos representantes recibirían el enlace con el filtro actual (para confirmar). */
+    public function portalContarAjax(): void
+    {
+        $this->portalJson(function () {
+            $idEmpresa = (int) $_SESSION['id_empresa'];
+            $idUsuarioFiltro = empty($this->getPermisos()['todo']) ? (int) $_SESSION['id_usuario'] : null;
+            $rows = $this->service->getListado($idEmpresa, trim((string) ($_GET['b'] ?? '')), 1, 0, 'apellidos', 'ASC', $idUsuarioFiltro)['rows'] ?? [];
+            return ['alumnos' => count($rows), 'representantes' => count(array_unique(array_filter(array_column($rows, 'id_cliente'))))];
+        });
+    }
+
+    /** Hoja imprimible con el QR del portal (para la entrada / aulas). */
+    public function portalImprimir(): void
+    {
+        $this->requireActualizar();
+        try {
+            $portal = (new \App\Services\modulos\AlumnoPortalService())->getPortal((int) $_SESSION['id_empresa'], (int) $_SESSION['id_usuario']);
+        } catch (\Throwable $e) {
+            http_response_code(400);
+            echo htmlspecialchars($e->getMessage());
+            exit;
+        }
+        $empresa = (new \App\models\Empresa())->getPorId((int) $_SESSION['id_empresa']) ?? [];
+        $this->view('modulos.alumnos.portal_imprimir', [
+            'url'     => $portal['url'],
+            'activo'  => $portal['activo'],
+            'empresa' => (string) (($empresa['nombre_comercial'] ?? '') !== '' ? $empresa['nombre_comercial'] : ($empresa['nombre'] ?? '')),
+        ]);
+    }
+
     /**
      * Consulta una cédula en el servicio global de identificación para
      * autocompletar nombres y apellidos del alumno. Mismo servicio que Clientes,

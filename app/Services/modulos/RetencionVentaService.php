@@ -274,13 +274,13 @@ class RetencionVentaService
 
         $builder = new AsientoBuilderService();
         $detallesSugeridos = $builder->generarAsientoRetencionVenta($idEmpresa, $idRetencion);
+        // Si el asiento quedó descuadrado (o vacío) por un código de retención o la cuenta por
+        // cobrar sin cuenta, fallar con ese motivo y no con el genérico "Total Debe (…) no coincide
+        // con Total Haber (…)" de AsientoContableRules —o en silencio—, que no dicen qué configurar.
+        AsientoBuilderService::verificarCuadre($detallesSugeridos, $builder->getMotivosFaltantes());
         if (empty($detallesSugeridos)) {
             return;
         }
-        // Si el asiento quedó descuadrado por un código de retención (o la cuenta por cobrar) sin
-        // cuenta, fallar con ese motivo y no con el genérico "Total Debe (…) no coincide con Total
-        // Haber (…)" de AsientoContableRules, que no dice qué configurar.
-        AsientoBuilderService::verificarCuadre($detallesSugeridos, $builder->getMotivosFaltantes());
 
         $num = ($data['establecimiento'] ?? '') . '-' . ($data['punto_emision'] ?? '') . '-' . ($data['secuencial'] ?? '');
 

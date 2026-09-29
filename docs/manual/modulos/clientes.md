@@ -5,8 +5,8 @@ categoria: Ventas
 ruta_modulo: modulos/clientes
 tipo: modulo
 visibilidad: todos
-etiquetas: clientes, cliente, cartera, buscar cliente, buscador, filtros, filtrar clientes, clientes sin correo, clientes por ciudad, clientes por vendedor, chips, ordenar por dos columnas, ordenar por ciudad y nombre, ruc, cedula, consumidor final, deudores, cobro automatico, cobros pendientes, forma de cobro, ingreso automatico, cheque, dias de credito, visitas, dias de visita, ruta de visita, rutero, frecuencia de visita, vendedor, preventa, visita del vendedor, horario de atencion, orden de visita, importar clientes, carga masiva, asignar vendedor, transacciones, productos vendidos, servicios vendidos, historial de ventas, que le vendi, ultimo precio, precio de venta, estado de cuenta, kardex, saldo del cliente, historial de cobros, cobros realizados, ingresos, ver ingreso, cedula y ruc, cliente duplicado, proveedor duplicado, identificacion repetida, ruc es la cedula mas 001, mismo tercero dos fichas, estado de cuenta partido, cedula falsa, cedula invalida, cedula incorrecta, ruc invalido, digito verificador, validar cedula, comprobar cedula, imprimir, impresora
-version: 2.5
+etiquetas: clientes, contable, cuenta contable, cuentas contables, asiento contable, configuracion contable, cuenta por cobrar del cliente, cuenta de ventas del cliente, cliente, cartera, buscar cliente, buscador, filtros, filtrar clientes, clientes sin correo, clientes por ciudad, clientes por vendedor, chips, ordenar por dos columnas, ordenar por ciudad y nombre, ruc, cedula, consumidor final, deudores, cobro automatico, cobros pendientes, forma de cobro, ingreso automatico, cheque, dias de credito, visitas, dias de visita, ruta de visita, rutero, frecuencia de visita, vendedor, preventa, visita del vendedor, horario de atencion, orden de visita, importar clientes, carga masiva, asignar vendedor, transacciones, productos vendidos, servicios vendidos, historial de ventas, que le vendi, ultimo precio, precio de venta, estado de cuenta, kardex, saldo del cliente, historial de cobros, cobros realizados, ingresos, ver ingreso, cedula y ruc, cliente duplicado, proveedor duplicado, identificacion repetida, ruc es la cedula mas 001, mismo tercero dos fichas, estado de cuenta partido, cedula falsa, cedula invalida, cedula incorrecta, ruc invalido, digito verificador, validar cedula, comprobar cedula, imprimir, impresora
+version: 2.6
 orden: 10
 estado: activo
 ---
@@ -345,6 +345,41 @@ eliminar por separado. La pestaña **Anticipos** tampoco se suma, se queda en la
 ficha: es el saldo que se consume al registrar un cobro, y ahí cada ficha
 tiene el suyo.
 
+## Cuentas contables del cliente (pestaña Contable)
+
+Si usted puede ver **Configuración Contable**, la ficha muestra la pestaña
+**Contable**. Ahí se configuran las cuentas con las que se arma el asiento de
+los documentos de venta **de este cliente**, sin salir de la ficha. Es la misma
+regla por cliente de *Configuración Contable → Reglas por Clientes*: lo que
+cambie aquí se ve allá y viceversa.
+
+- Arriba se elige el **tipo de asiento**: *Ventas con Factura* (facturas y
+  notas de crédito) o *Recibos de Venta*. Cada uno tiene su propia
+  configuración.
+- Los conceptos se reparten en dos columnas, **Debe** y **Haber** (cuenta por
+  cobrar, ventas, costo, inventario, IVA por tarifa, etc.).
+- Si el concepto tiene cuenta propia del cliente, se ve escrita. Si no, el
+  campo muestra en gris la cuenta de la configuración **General** que se usará.
+  Los conceptos en **rojo** no tienen cuenta ni aquí ni en General: el asiento
+  quedaría incompleto.
+- Escriba parte del código o del nombre de la cuenta y elíjala de la lista: se
+  **guarda al instante**. Para quitarla, borre el campo (Retroceso o Suprimir
+  la borra de una vez) o use la papelera de la fila.
+- **Copiar cuentas de General** rellena los conceptos vacíos con las cuentas de
+  General, para partir de esa base y cambiar solo lo necesario.
+- **Quitar configuración** elimina todas las cuentas propias del cliente para
+  el tipo de asiento elegido (pide confirmación); desde ese momento se
+  contabiliza con la General.
+- Arriba se indica cuántas cuentas propias tiene y si la configuración está
+  **completa** o cuántos conceptos **faltan**.
+
+> Importante: en cuanto el cliente tiene **una sola** cuenta propia (sin contar
+> las de IVA), todo el documento se contabiliza con sus cuentas; lo que no le
+> haya asignado toma la General y ya no se reparte por producto, categoría,
+> marca ni tipo de producción. El IVA por tarifa sigue su propia cascada.
+
+Con la ficha nueva (sin guardar) la pestaña pide primero guardar el cliente.
+
 ## Carga masiva desde Excel
 
 En *Configuración → Importador desde Excel* la entidad **Clientes** permite
@@ -377,6 +412,10 @@ donde salen sus datos:
 - **Estado de cuenta**: aparece si puede ver **Cuentas por Cobrar** o el
   **Reporte de Cartera**. Para desplegar un cobro hace falta, además, permiso
   para ver **Ingresos**.
+- **Contable**: aparece si puede ver **Configuración Contable**. Para asignar
+  cuentas hace falta permiso de **crear** en ese módulo (sin él, la pestaña es
+  de solo lectura), y para quitarlas, permiso de **eliminar**. La búsqueda de
+  cuentas usa el **Plan de Cuentas**, que también debe poder ver.
 
 ## Eliminar un cliente
 
@@ -412,8 +451,16 @@ usuario y la fecha.
   borrador o no aceptadas por el SRI, ni las del otro ambiente
   (pruebas/producción).
 - **Un cobro no se despliega al hacer clic**: necesita permiso para ver Ingresos.
+- **No veo la pestaña Contable**: le falta permiso para ver Configuración
+  Contable, o la ocultó con el botón de configurar pestañas.
+- **En la pestaña Contable no puedo escribir**: tiene permiso de ver, pero no de
+  crear, en Configuración Contable.
 
 ## Historial de cambios
+
+- **2.6** — Nueva pestaña **Contable** en la ficha: las cuentas del asiento de
+  facturas/notas de crédito y de recibos de venta de ese cliente (reglas por
+  cliente de Configuración Contable) se ven y se editan desde la propia ficha.
 
 - **2.5** — Los botones y enlaces de **PDF** de los documentos preguntan ahora si se quiere
   **Imprimir** (abre el cuadro de impresión con el documento ya cargado),

@@ -1348,8 +1348,8 @@ class SincronizadorAsientosService
     private function motivosSinAsiento(\PDO $db, ?string $tablaVerif, array $ids): array
     {
         $mapa = [
-            'ingresos_cabecera' => ['tabla' => 'ingresos_pagos', 'col' => 'id_ingreso', 'flujo' => 'cobro',  'doc' => 'El ingreso'],
-            'egresos_cabecera'  => ['tabla' => 'egresos_pagos',  'col' => 'id_egreso',  'flujo' => 'pago',   'doc' => 'El egreso'],
+            'ingresos_cabecera' => ['tabla' => 'ingresos_pagos', 'col' => 'id_ingreso', 'colForma' => 'id_forma_cobro', 'flujo' => 'cobro',  'doc' => 'El ingreso'],
+            'egresos_cabecera'  => ['tabla' => 'egresos_pagos',  'col' => 'id_egreso',  'colForma' => 'id_forma_pago',  'flujo' => 'pago',   'doc' => 'El egreso'],
         ];
         if ($tablaVerif === null || !isset($mapa[$tablaVerif]) || empty($ids)) {
             return [];
@@ -1366,7 +1366,12 @@ class SincronizadorAsientosService
             $sql = "SELECT p.{$cfg['col']} AS id_doc,
                            COUNT(*) AS total,
                            COALESCE(SUM(CASE WHEN {$condVigente} AND p.monto > 0 THEN p.monto ELSE 0 END), 0) AS monto_vigente,
-                           SUM(CASE WHEN NOT ({$condVigente}) THEN 1 ELSE 0 END) AS anulados
+                           SUM(CASE WHEN NOT ({$condVigente}) THEN 1 ELSE 0 END) AS anulados,
+                           -- Pagos vigentes cuya forma de cobro/pago ya no existe: lineasFormas()
+                           -- los cruza con INNER JOIN y los descarta sin avisar.
+                           SUM(CASE WHEN {$condVigente} AND p.monto > 0
+                                     AND NOT EXISTS (SELECT 1 FROM empresa_formas_pago f WHERE f.id = p.{$cfg['colForma']})
+                                    THEN 1 ELSE 0 END) AS sin_forma
                       FROM {$cfg['tabla']} p
                      WHERE p.{$cfg['col']} IN ({$in}){$filtroElim}
                      GROUP BY p.{$cfg['col']}";
@@ -1386,6 +1391,11 @@ class SincronizadorAsientosService
             $f  = $porDoc[$id] ?? null;
             if ($f === null || (int) $f['total'] === 0) {
                 $motivos[$id] = "{$cfg['doc']} no tiene formas de {$cfg['flujo']} registradas: no hay nada que contabilizar.";
+                continue;
+            }
+            if ((int) ($f['sin_forma'] ?? 0) > 0) {
+                $motivos[$id] = "{$cfg['doc']} tiene un {$cfg['flujo']} con una forma de {$cfg['flujo']} que ya no existe: "
+                              . "edítelo y elija la forma de {$cfg['flujo']} correcta.";
                 continue;
             }
             if (round((float) $f['monto_vigente'], 2) > 0) {
@@ -1554,6 +1564,22 @@ class SincronizadorAsientosService
             return;
         }
 
+        // Pago con una forma de pago que ya no existe: se corrige en el documento, no en
+        // Configuración Contable (ver motivosSinAsiento()).
+        if (str_contains($m, 'que ya no existe')) {
+            $this->agregarAccion('', '', "Algunos {$nombreModulo} usan una forma de cobro/pago que ya no existe: edítelos y elija la forma correcta");
+            return;
+        }
+
+        // El documento quedó sin asiento y ni el service ni el diagnóstico dijeron por qué (el
+        // builder devolvió un asiento vacío sin lanzar excepción). No es un error del sistema:
+        // falta un dato que el asiento necesita. Se dice eso, no "error inesperado".
+        if (trim($m) === '') {
+            $this->agregarAccion('', '', "Algunos {$nombreModulo} quedaron sin asiento porque les falta un dato que el asiento necesita "
+                . '(revise que tengan valores y formas de cobro/pago); si todo está completo, comuníquese con soporte');
+            return;
+        }
+
         $coincidio = false;
 
         // Cobro/pago de documentos que todavía no tienen su propio asiento: se arregla al
@@ -1648,7 +1674,14 @@ class SincronizadorAsientosService
         // "El asiento no está cuadrado" / "no cuadra" también es configuración: el builder omite la
         // línea cuya cuenta no encontró y el asiento queda cojo. Cae a la acción de la sección.
         if (!str_contains($m, 'cuenta') && !str_contains($m, 'configur') && !str_contains($m, 'cuadr')) {
-            $this->agregarAccion('', '', "Algunos asientos de {$nombreModulo} no se pudieron generar por un error inesperado: comuníquese con soporte");
+            // Los mensajes de negocio (asiento migrado, documento sin datos, etc.) se entienden
+            // solos: se muestran tal cual. Solo lo técnico (errores de base de datos, clases PHP)
+            // se reemplaza por "comuníquese con soporte"; el texto real queda en el log.
+            $esTecnico = preg_match('/sqlstate|pdoexception|exception|error de sintaxis|undefined|stack trace|\.php/i', $motivo)
+                || mb_strlen($motivo) > 220;
+            $this->agregarAccion('', '', $esTecnico
+                ? "Algunos asientos de {$nombreModulo} no se pudieron generar por un error técnico: comuníquese con soporte"
+                : "Algunos asientos de {$nombreModulo} no se pudieron generar: " . rtrim($motivo, ". "));
             return;
         }
 
@@ -1721,7 +1754,9 @@ class SincronizadorAsientosService
     private function agregarAccion(string $tipo, string $seccion, string $texto, ?string $textoGenerico = null, ?string $dependeDe = null): void
     {
         $textoGenerico ??= $texto;
-        $clave = $tipo !== '' ? $tipo . '|' . $seccion : '|' . $texto;
+        // Sin enlace (tipo vacío) la línea se agrupa por su texto, ignorando los números: un mismo
+        // motivo que cita "asiento #123" y "asiento #456" es una sola línea, no una por documento.
+        $clave = $tipo !== '' ? $tipo . '|' . $seccion : '|' . preg_replace('/\d+/', '#', $texto);
         if (isset($this->acciones[$clave])) {
             $previa = &$this->acciones[$clave];
             if ($previa['texto'] !== $texto) {

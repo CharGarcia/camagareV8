@@ -175,10 +175,34 @@
                         
                         if (esRetenciones && item.sin_catalogo) {
                             // Código usado en documentos pero ausente del catálogo SRI: no se puede configurar.
+                            // Se listan las retenciones que lo usan, con enlace al listado filtrado por número.
+                            const escD = (s) => String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+                            const esVentaSc = (tipoAsiento === 'retenciones_venta');
+                            const rutaSc = `${window.BASE_URL || ''}/modulos/${esVentaSc ? 'retenciones_ventas' : 'retenciones_compras'}`;
+                            const docs = item.documentos || { total: 0, items: [] };
+                            const docsHtml = (docs.items || []).map(d => {
+                                // Ventas: 'numero' busca en estab-punto-secuencial; compras: solo en el secuencial.
+                                const filtro = esVentaSc ? d.numero : d.numero.split('-').pop();
+                                const href = `${rutaSc}?b=${encodeURIComponent(`numero:"${filtro}"`)}`;
+                                return `<li>
+                                    <a href="${href}" target="_blank" class="text-decoration-none fw-semibold">${escD(d.numero)}</a>
+                                    <span class="text-muted">· ${escD(d.fecha)}${d.tercero ? ` · ${escD(d.tercero)}` : ''}</span>
+                                    ${d.pruebas ? '<span class="badge bg-secondary bg-opacity-10 text-secondary border ms-1">Pruebas</span>' : ''}
+                                </li>`;
+                            }).join('');
+                            const resto = docs.total - (docs.items || []).length;
+                            const docsBloque = docs.total > 0
+                                ? `<div class="mt-1 text-dark">
+                                       <span class="fw-semibold">${docs.total === 1 ? 'Documento afectado' : `Documentos afectados (${docs.total})`}:</span>
+                                       <ul class="mb-0 ps-3" style="max-height: 160px; overflow-y: auto;">${docsHtml}</ul>
+                                       ${resto > 0 ? `<div class="text-muted">… y ${resto} más.</div>` : ''}
+                                   </div>`
+                                : '';
                             tr.innerHTML = `
-                                <td class="ps-4 fw-bold text-dark">${item.concepto}</td>
+                                <td class="ps-4 fw-bold text-dark">${escD(item.concepto)}</td>
                                 <td colspan="5" class="small text-danger">
-                                    <i class="bi bi-exclamation-triangle me-1"></i>${item.detalle}: sus retenciones no generan línea contable hasta corregir el código en el documento o agregarlo al catálogo.
+                                    <i class="bi bi-exclamation-triangle me-1"></i>${escD(item.detalle)}: sus retenciones no generan línea contable hasta corregir el código en el documento o agregarlo al catálogo.
+                                    ${docsBloque}
                                 </td>
                             `;
                             tbody.appendChild(tr);

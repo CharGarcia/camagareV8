@@ -38,6 +38,57 @@ class ReporteInventarioRepository extends BaseRepository
     ];
 
     /**
+     * Orígenes que CORRIGEN un movimiento anterior del mismo documento en vez de mover
+     * mercadería nueva: el reverso al pasar un retorno a Borrador/Anulada y su entrada al
+     * volver a Emitida, la reversa al eliminar, las ediciones de consignación. El valor es
+     * la "familia": el origen del movimiento que corrigen. Las correcciones que se compensan
+     * (reverso + reactivación) o que dejan el documento en 0 no movieron nada en neto, y el
+     * listado puede ocultarlas (ver cteCorreccionesAnuladas()).
+     */
+    public const REFERENCIAS_CORRECCION = [
+        'CAMBIO_ESTADO_RETORNO_CV'       => 'RETORNO_CV',
+        'ELIMINACION_RETORNO_CV'         => 'RETORNO_CV',
+        'EDICION_CONSIGNACION_VENTA'     => 'CONSIGNACION_VENTA',
+        'ELIMINACION_CONSIGNACION_VENTA' => 'CONSIGNACION_VENTA',
+    ];
+
+    public static function esCorreccion(?string $tipo): bool
+    {
+        return isset(self::REFERENCIAS_CORRECCION[(string) $tipo]);
+    }
+
+    /** Lista SQL de literales. Solo para valores de las constantes de esta clase, nunca de la petición. */
+    private static function sqlLista(array $valores): string
+    {
+        return implode(', ', array_map(static fn($v) => "'" . $v . "'", array_values(array_unique($valores))));
+    }
+
+    /** Familia del origen: el de una corrección pasa a ser el del movimiento que corrige. */
+    private static function sqlFamiliaReferencia(string $columna): string
+    {
+        $when = '';
+        foreach (self::REFERENCIAS_CORRECCION as $tipo => $familia) {
+            $when .= " WHEN '{$tipo}' THEN '{$familia}'";
+        }
+        return "(CASE {$columna}{$when} ELSE {$columna} END)";
+    }
+
+    /** `k.referencia_tipo` es una corrección (false, no NULL, para los movimientos sin origen). */
+    private static function sqlEsCorreccion(string $alias): string
+    {
+        return "COALESCE({$alias}.referencia_tipo IN (" . self::sqlLista(array_keys(self::REFERENCIAS_CORRECCION)) . "), false)";
+    }
+
+    /**
+     * Si el listado oculta las correcciones que se anulan. Con un Origen elegido no se oculta
+     * nada: quien filtra por "Retorno (cambio de estado)" quiere ver justo esos movimientos.
+     */
+    public static function ocultaCorrecciones(array $filtros): bool
+    {
+        return !empty($filtros['ocultar_correcciones']) && empty($filtros['referencia_tipo']);
+    }
+
+    /**
      * Tope de filas que se envían A LA PANTALLA en las consultas que pueden devolver
      * un resultado sin cota. El desglose por lote/caducidad de Existencias llegó a
      * 288.000 filas en la prueba de carga (2.000 productos × 5 bodegas × 400 lotes):
@@ -784,11 +835,17 @@ class ReporteInventarioRepository extends BaseRepository
      *
      * @return array{0: string, 1: string, 2: array} [condiciones del kardex, condiciones de producto/bodega, parámetros]
      */
-    private function buildWhereMovimientos(int $idEmpresa, array $filtros): array
+    private function buildWhereMovimientos(int $idEmpresa, array $filtros, bool $conAmbiente = true): array
     {
-        $whereKardex = "k.id_empresa = :id_empresa AND k.eliminado = false AND k.tipo_ambiente = :tipo_ambiente";
+        // $conAmbiente = false solo para el cruce con Existencias del resumen de cuadre:
+        // Existencias suma el kardex de todos los ambientes (ver getSeguimientoClave()).
+        $whereKardex = "k.id_empresa = :id_empresa AND k.eliminado = false";
         $whereFuera  = "true";
-        $params = [':id_empresa' => $idEmpresa, ':tipo_ambiente' => $this->tipoAmbienteEmpresa($idEmpresa)];
+        $params = [':id_empresa' => $idEmpresa];
+        if ($conAmbiente) {
+            $whereKardex .= " AND k.tipo_ambiente = :tipo_ambiente";
+            $params[':tipo_ambiente'] = $this->tipoAmbienteEmpresa($idEmpresa);
+        }
 
         if (!empty($filtros['fecha_desde'])) {
             $whereKardex .= " AND k.fecha_movimiento >= :fecha_desde";
@@ -870,15 +927,69 @@ class ReporteInventarioRepository extends BaseRepository
      * (y "Por mes" de 4,7 s a 0,4 s). El CTE se llama k para que las expresiones de
      * agrupación (k.fecha_movimiento, k.tipo_movimiento…) sigan valiendo.
      */
-    private function cteMovimientos(string $whereKardex): string
+    private function cteMovimientos(string $whereKardex, bool $ocultarCorrecciones = false): string
     {
-        return "WITH k AS MATERIALIZED (
-                    SELECT k.id, k.id_producto, k.id_bodega, k.fecha_movimiento, k.tipo_movimiento,
+        $select = "SELECT k.id, k.id_producto, k.id_bodega, k.fecha_movimiento, k.tipo_movimiento,
                            k.referencia_tipo, k.referencia_id, k.cantidad, k.costo_unitario, k.costo_total,
                            k.numero_lote, k.fecha_caducidad, k.nup, k.observaciones
                     FROM inventario_kardex k
-                    WHERE {$whereKardex}
+                    WHERE {$whereKardex}";
+        if (!$ocultarCorrecciones) {
+            return "WITH k AS MATERIALIZED ({$select})";
+        }
+        return "WITH " . $this->cteCorreccionesAnuladas($whereKardex) . ",
+                k AS MATERIALIZED ({$select} AND NOT " . self::sqlEsAnulada('k') . ")";
+    }
+
+    /**
+     * CTEs de las correcciones que se anulan dentro del periodo. La clave es siempre
+     * documento + producto + bodega + lote + NUP (cada línea de un retorno es un NUP):
+     *
+     *  - `anuladas_corr`: correcciones del MISMO origen que suman 0 entre sí. Es el caso
+     *    típico: un retorno pasado a Borrador (−1) y vuelto a Emitir (+1). Se ocultan solo
+     *    esas dos filas; la entrada original del retorno sigue a la vista.
+     *  - `anuladas_doc`: el documento entero (su movimiento original y sus correcciones)
+     *    suma 0 y tuvo alguna corrección: un retorno creado y eliminado, o pasado a Borrador
+     *    y dejado así. En neto no movió nada, y se oculta todo.
+     *
+     * Ocultar esos movimientos no cambia el saldo final ni el inicial (suman 0, y el saldo
+     * inicial se calcula aparte con todo el kardex anterior). El saldo corrido de las filas
+     * que quedan se lee como si la corrección no hubiera existido, que es lo que se busca.
+     * Una corrección que NO se compensa sigue visible: p. ej. el reverso de un retorno que
+     * se quedó en Borrador cuando su entrada original es de un periodo anterior.
+     *
+     * Solo leen los movimientos de las familias con correcciones, no todo el periodo.
+     */
+    private function cteCorreccionesAnuladas(string $whereKardex): string
+    {
+        $familias = array_merge(array_keys(self::REFERENCIAS_CORRECCION), array_values(self::REFERENCIAS_CORRECCION));
+        $clave = "k.referencia_id, k.id_producto, k.id_bodega, COALESCE(k.numero_lote, '') AS lote, COALESCE(k.nup, '') AS nup";
+        return "anuladas_corr AS MATERIALIZED (
+                    SELECT k.referencia_tipo AS origen, {$clave}
+                    FROM inventario_kardex k
+                    WHERE {$whereKardex} AND k.referencia_tipo IN (" . self::sqlLista(array_keys(self::REFERENCIAS_CORRECCION)) . ")
+                    GROUP BY 1, 2, 3, 4, 5, 6
+                    HAVING SUM(k.cantidad) = 0
+                ),
+                anuladas_doc AS MATERIALIZED (
+                    SELECT " . self::sqlFamiliaReferencia('k.referencia_tipo') . " AS origen, {$clave}
+                    FROM inventario_kardex k
+                    WHERE {$whereKardex} AND k.referencia_tipo IN (" . self::sqlLista($familias) . ")
+                    GROUP BY 1, 2, 3, 4, 5, 6
+                    HAVING SUM(k.cantidad) = 0 AND BOOL_OR(" . self::sqlEsCorreccion('k') . ")
                 )";
+    }
+
+    /** El movimiento `$alias` pertenece a una clave de `anuladas_corr` o de `anuladas_doc`. */
+    private static function sqlEsAnulada(string $alias): string
+    {
+        $mismaClave = "an.referencia_id = {$alias}.referencia_id
+                          AND an.id_producto = {$alias}.id_producto AND an.id_bodega = {$alias}.id_bodega
+                          AND an.lote = COALESCE({$alias}.numero_lote, '') AND an.nup = COALESCE({$alias}.nup, '')";
+        return "(EXISTS (SELECT 1 FROM anuladas_corr an
+                         WHERE an.origen = {$alias}.referencia_tipo AND {$mismaClave})
+                 OR EXISTS (SELECT 1 FROM anuladas_doc an
+                         WHERE an.origen = " . self::sqlFamiliaReferencia("{$alias}.referencia_tipo") . " AND {$mismaClave}))";
     }
 
     private function fromMovimientos(string $whereFuera): string
@@ -911,7 +1022,7 @@ class ReporteInventarioRepository extends BaseRepository
         if (self::llevaSaldoInicial($filtros)) {
             return $this->getMovimientosDetalleConSaldoInicial($idEmpresa, $filtros, $limite, $whereKardex, $whereFuera, $params);
         }
-        $sql = $this->cteMovimientos($whereKardex) . "
+        $sql = $this->cteMovimientos($whereKardex, self::ocultaCorrecciones($filtros)) . "
                 SELECT k.id, k.fecha_movimiento, k.tipo_movimiento, k.referencia_tipo, k.referencia_id,
                        k.cantidad, k.costo_unitario, k.costo_total,
                        SUM(k.cantidad) OVER (
@@ -930,7 +1041,8 @@ class ReporteInventarioRepository extends BaseRepository
         $st->execute($params);
         $rows = $st->fetchAll(PDO::FETCH_ASSOC);
         foreach ($rows as &$r) {
-            $r['origen_label'] = self::labelOrigen($r['referencia_tipo']);
+            $r['origen_label']  = self::labelOrigen($r['referencia_tipo']);
+            $r['es_correccion'] = self::esCorreccion($r['referencia_tipo']);
         }
         unset($r);
         return $rows;
@@ -995,7 +1107,7 @@ class ReporteInventarioRepository extends BaseRepository
             ? ' AND (p.nombre ILIKE :buscar OR p.codigo ILIKE :buscar OR b.nombre ILIKE :buscar)'
             : '';
 
-        $sql = $this->cteMovimientos($whereKardex) . $ctePares . ",
+        $sql = $this->cteMovimientos($whereKardex, self::ocultaCorrecciones($filtros)) . $ctePares . ",
                 si AS MATERIALIZED (
                     SELECT k.id_producto, k.id_bodega, SUM(k.cantidad) AS saldo,
                            (MAX(ARRAY[EXTRACT(EPOCH FROM k.fecha_movimiento), k.id, k.costo_unitario]))[3] AS costo_unitario
@@ -1046,6 +1158,7 @@ class ReporteInventarioRepository extends BaseRepository
         foreach ($rows as &$r) {
             $r['es_saldo_inicial'] = (int) $r['es_saldo_inicial'] === 1;
             $r['origen_label'] = $r['es_saldo_inicial'] ? 'Saldo inicial' : self::labelOrigen($r['referencia_tipo']);
+            $r['es_correccion'] = !$r['es_saldo_inicial'] && self::esCorreccion($r['referencia_tipo']);
         }
         unset($r);
         return $rows;
@@ -1057,7 +1170,7 @@ class ReporteInventarioRepository extends BaseRepository
     {
         list($whereKardex, $whereFuera, $params) = $this->buildWhereMovimientos($idEmpresa, $filtros);
         $selCodigo = $campoCodigo !== null ? "MAX({$campoCodigo}) AS codigo_grupo," : '';
-        $sql = $this->cteMovimientos($whereKardex) . "
+        $sql = $this->cteMovimientos($whereKardex, self::ocultaCorrecciones($filtros)) . "
                 SELECT {$campoId} AS id_grupo, MAX({$campoLabelExpr}) AS nombre_grupo, {$selCodigo}
                        COUNT(*) AS cantidad_movimientos,
                        SUM(CASE WHEN k.cantidad > 0 THEN k.cantidad ELSE 0 END) AS total_entradas,
@@ -1111,7 +1224,7 @@ class ReporteInventarioRepository extends BaseRepository
     public function getMovimientosKpis(int $idEmpresa, array $filtros): array
     {
         list($whereKardex, $whereFuera, $params) = $this->buildWhereMovimientos($idEmpresa, $filtros);
-        $sql = $this->cteMovimientos($whereKardex) . "
+        $sql = $this->cteMovimientos($whereKardex, self::ocultaCorrecciones($filtros)) . "
                 SELECT
                     COUNT(*) AS total_movimientos,
                     COALESCE(SUM(CASE WHEN k.cantidad > 0 THEN k.cantidad ELSE 0 END), 0) AS total_entradas,
@@ -1129,6 +1242,144 @@ class ReporteInventarioRepository extends BaseRepository
             'total_salidas'     => (float) ($row['total_salidas'] ?? 0),
             'saldo_neto'        => (float) ($row['saldo_neto'] ?? 0),
         ];
+    }
+
+    /**
+     * El resumen de cuadre solo tiene sentido para UN producto y sin filtros de clase de
+     * movimiento: con "solo salidas" o "solo del usuario X" el saldo ya no es stock.
+     */
+    public static function resumenCuadreAplica(array $filtros): bool
+    {
+        if (empty($filtros['id_producto'])) {
+            return false;
+        }
+        foreach (self::FILTROS_SIN_SALDO_INICIAL as $clave) {
+            if (!empty($filtros[$clave])) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    /**
+     * RESUMEN DE CUADRE de un producto (pestaña Movimientos), una fila por bodega:
+     *
+     *   saldo inicial + entradas − salidas ± correcciones = saldo final  →  ¿= Existencias?
+     *
+     * - Saldo inicial: kardex anterior a "Desde", igual que la fila de saldo inicial del detalle.
+     * - Entradas / salidas: movimientos del periodo que NO son correcciones.
+     * - Correcciones: los orígenes de REFERENCIAS_CORRECCION (reversos por cambio de estado,
+     *   reactivaciones, eliminaciones, ediciones). Con "ocultar correcciones que se anulan",
+     *   las que se compensan dentro del periodo no suman en ninguna columna (su neto es 0) y
+     *   solo se cuentan en `ocultos_mov`, igual que en el listado.
+     * - Existencias: lo que muestra la pestaña Existencias a la fecha "Hasta" con los mismos
+     *   filtros de bodega/lote/NUP/caducidad. Existencias suma el kardex de TODOS los ambientes
+     *   y Movimientos solo el de la empresa: si hay movimientos de otro ambiente, esa es la
+     *   diferencia, y se informa (`otro_amb_mov`, `otro_amb_cant`) en vez de esconderla.
+     *
+     * Solo lee el kardex de un producto, así que son consultas acotadas.
+     *
+     * @return array<int,array<string,mixed>> filas por bodega, ordenadas por nombre.
+     */
+    public function getResumenCuadre(int $idEmpresa, array $filtros): array
+    {
+        $ocultar = self::ocultaCorrecciones($filtros);
+
+        // 1. Periodo: las mismas filas que el listado.
+        list($whereKardex, , $params) = $this->buildWhereMovimientos($idEmpresa, $filtros);
+        $visible = $ocultar ? 'NOT ' . self::sqlEsAnulada('k') : 'true';
+        $sql = ($ocultar ? 'WITH ' . $this->cteCorreccionesAnuladas($whereKardex) : '') . "
+                SELECT m.id_bodega,
+                       COALESCE(SUM(m.cantidad) FILTER (WHERE m.visible AND NOT m.es_corr AND m.cantidad > 0), 0) AS entradas,
+                       COALESCE(-SUM(m.cantidad) FILTER (WHERE m.visible AND NOT m.es_corr AND m.cantidad < 0), 0) AS salidas,
+                       COALESCE(SUM(m.cantidad) FILTER (WHERE m.visible AND m.es_corr), 0) AS correcciones,
+                       COUNT(*) FILTER (WHERE m.visible AND m.es_corr) AS correcciones_mov,
+                       COUNT(*) FILTER (WHERE NOT m.visible) AS ocultos_mov
+                FROM (
+                    SELECT k.id_bodega, k.cantidad, " . self::sqlEsCorreccion('k') . " AS es_corr, {$visible} AS visible
+                    FROM inventario_kardex k
+                    WHERE {$whereKardex}
+                ) m
+                GROUP BY m.id_bodega";
+        $st = $this->db->prepare($sql);
+        $st->execute($params);
+        $periodo = [];
+        foreach ($st->fetchAll(PDO::FETCH_ASSOC) as $r) {
+            $periodo[(int) $r['id_bodega']] = $r;
+        }
+
+        // Sin el rango del periodo: los dos cortes siguientes ponen el suyo.
+        $filtrosSinFechas = $filtros;
+        unset($filtrosSinFechas['fecha_desde'], $filtrosSinFechas['fecha_hasta'], $filtrosSinFechas['buscar']);
+
+        // 2. Saldo inicial (mismo criterio que getMovimientosDetalleConSaldoInicial()).
+        $inicial = [];
+        if (!empty($filtros['fecha_desde'])) {
+            list($whereSaldo, , $paramsSaldo) = $this->buildWhereMovimientos($idEmpresa, $filtrosSinFechas);
+            $paramsSaldo[':fecha_desde'] = $filtros['fecha_desde'] . ' 00:00:00';
+            $st = $this->db->prepare("SELECT k.id_bodega, SUM(k.cantidad) AS saldo
+                                        FROM inventario_kardex k
+                                       WHERE {$whereSaldo} AND k.fecha_movimiento < :fecha_desde
+                                       GROUP BY k.id_bodega");
+            $st->execute($paramsSaldo);
+            foreach ($st->fetchAll(PDO::FETCH_ASSOC) as $r) {
+                $inicial[(int) $r['id_bodega']] = (float) $r['saldo'];
+            }
+        }
+
+        // 3. Existencias a la fecha "Hasta", sin filtro de ambiente (como la pestaña Existencias).
+        list($whereEx, , $paramsEx) = $this->buildWhereMovimientos($idEmpresa, $filtrosSinFechas, false);
+        if (!empty($filtros['fecha_hasta'])) {
+            $whereEx .= " AND k.fecha_movimiento < CAST(:fecha_corte AS date) + 1";
+            $paramsEx[':fecha_corte'] = $filtros['fecha_hasta'];
+        }
+        $paramsEx[':ambiente_empresa'] = $this->tipoAmbienteEmpresa($idEmpresa);
+        $st = $this->db->prepare("SELECT k.id_bodega, MAX(b.nombre) AS bodega_nombre,
+                                         SUM(k.cantidad) AS existencias,
+                                         COUNT(*) FILTER (WHERE k.tipo_ambiente IS DISTINCT FROM :ambiente_empresa) AS otro_amb_mov,
+                                         COALESCE(SUM(k.cantidad) FILTER (WHERE k.tipo_ambiente IS DISTINCT FROM :ambiente_empresa), 0) AS otro_amb_cant
+                                    FROM inventario_kardex k
+                                    INNER JOIN bodegas b ON b.id = k.id_bodega
+                                   WHERE {$whereEx}
+                                   GROUP BY k.id_bodega");
+        $st->execute($paramsEx);
+
+        // Las bodegas del corte 3 contienen a las de 1 y 2: son todos los movimientos hasta
+        // "Hasta", de cualquier ambiente.
+        $filas = [];
+        foreach ($st->fetchAll(PDO::FETCH_ASSOC) as $r) {
+            $idBodega = (int) $r['id_bodega'];
+            $p = $periodo[$idBodega] ?? [];
+            $saldoInicial = $inicial[$idBodega] ?? 0.0;
+            $entradas     = (float) ($p['entradas'] ?? 0);
+            $salidas      = (float) ($p['salidas'] ?? 0);
+            $correcciones = (float) ($p['correcciones'] ?? 0);
+            $movimientos  = !empty($p);
+            $saldoFinal   = $saldoInicial + $entradas - $salidas + $correcciones;
+            $existencias  = (float) $r['existencias'];
+
+            // Bodega sin nada que contar: ni saldo ni movimientos en el periodo.
+            if (!$movimientos && abs($saldoInicial) < 1e-9 && abs($existencias) < 1e-9) {
+                continue;
+            }
+            $filas[] = [
+                'id_bodega'        => $idBodega,
+                'bodega_nombre'    => (string) $r['bodega_nombre'],
+                'saldo_inicial'    => $saldoInicial,
+                'entradas'         => $entradas,
+                'salidas'          => $salidas,
+                'correcciones'     => $correcciones,
+                'correcciones_mov' => (int) ($p['correcciones_mov'] ?? 0),
+                'ocultos_mov'      => (int) ($p['ocultos_mov'] ?? 0),
+                'saldo_final'      => $saldoFinal,
+                'existencias'      => $existencias,
+                'otro_amb_mov'     => (int) $r['otro_amb_mov'],
+                'otro_amb_cant'    => (float) $r['otro_amb_cant'],
+                'cuadra'           => abs($saldoFinal - $existencias) < 0.000001,
+            ];
+        }
+        usort($filas, static fn($a, $b) => strcmp($a['bodega_nombre'], $b['bodega_nombre']));
+        return $filas;
     }
 
     /**

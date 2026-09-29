@@ -29,6 +29,11 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
 <div class="d-flex justify-content-between align-items-center mb-3">
     <h5 class="mb-0 fw-bold"><i class="bi bi-mortarboard-fill me-2 text-primary"></i>Alumnos</h5>
     <div class="d-flex gap-2">
+        <?php if (!empty($perm['actualizar'])): ?>
+            <button type="button" class="btn btn-outline-primary btn-sm px-3 shadow-sm" onclick="aluAbrirPortal()" title="QR y enlace para que los representantes actualicen sus datos">
+                <i class="bi bi-qr-code me-1"></i> Portal de representantes
+            </button>
+        <?php endif; ?>
         <?php if ($perm['crear']): ?>
             <button type="button" class="btn btn-primary btn-sm px-3 shadow-sm" onclick="abrirModalAlumnoCrear()">
                 <i class="bi bi-plus-lg me-1"></i> Nuevo
@@ -148,6 +153,115 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
 
 <script>window.BASE_URL = '<?= $base ?>';</script>
 <?php include 'modal_alumno.php'; ?>
+
+<?php if (!empty($perm['actualizar'])): ?>
+<!-- Modal: Portal de representantes (QR general del colegio) -->
+<div class="modal fade" id="modalPortalAlu" tabindex="-1" aria-hidden="true" data-cmg-nav="off">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content shadow-lg border-0">
+            <div class="modal-header bg-light py-2">
+                <h5 class="modal-title fw-bold mb-0"><i class="bi bi-qr-code me-2 text-primary"></i>Portal de representantes</h5>
+                <button type="button" class="btn-close shadow-none" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+            </div>
+            <div class="modal-body">
+                <p class="small text-muted mb-3">Los representantes escanean este QR, se identifican con su cédula o RUC y, con un código que les llega al correo, actualizan una vez sus datos de facturación y los de sus hijos, o registran un alumno nuevo. Los cambios se aplican al instante.</p>
+                <div class="text-center mb-3">
+                    <div id="portalAluSpinner" class="spinner-border text-primary my-5" role="status"></div>
+                    <img id="portalAluQr" src="" alt="QR del portal" class="img-fluid border rounded-3 d-none" style="max-width:240px;">
+                </div>
+                <div class="input-group input-group-sm mb-2">
+                    <input type="text" id="portalAluUrl" class="form-control" readonly>
+                    <button class="btn btn-outline-secondary" type="button" onclick="aluPortalCopiar()" title="Copiar enlace"><i class="bi bi-clipboard"></i></button>
+                </div>
+                <div class="form-check form-switch mb-3">
+                    <input class="form-check-input" type="checkbox" id="portalAluActivo" onchange="aluPortalActivar(this.checked)">
+                    <label class="form-check-label small" for="portalAluActivo">Portal activo (si se desactiva, el QR deja de funcionar)</label>
+                </div>
+                <div class="d-flex flex-wrap gap-2">
+                    <button type="button" class="btn btn-outline-secondary btn-sm" onclick="aluPortalImprimir()"><i class="bi bi-printer me-1"></i>Imprimir hoja con QR</button>
+                    <button type="button" class="btn btn-outline-primary btn-sm" onclick="aluPortalEnviar()" title="Envía el enlace por correo a los representantes de los alumnos del listado (con el filtro actual)"><i class="bi bi-envelope me-1"></i>Enviar por correo</button>
+                    <button type="button" class="btn btn-outline-danger btn-sm ms-auto" onclick="aluPortalRegenerar()" title="Crea un QR nuevo; el anterior deja de funcionar"><i class="bi bi-arrow-repeat me-1"></i>Regenerar QR</button>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+<script>
+    (function () {
+        'use strict';
+        const urlBase = '<?= $urlBaseAlu ?>';
+        const el = () => document.getElementById('modalPortalAlu');
+        const swalOpts = (o) => Object.assign({ target: el(), heightAuto: false, confirmButtonText: 'Aceptar' }, o);
+        const aviso = (icon, text) => (typeof Swal !== 'undefined') ? Swal.fire(swalOpts({ icon, title: icon === 'success' ? 'Listo' : (icon === 'error' ? 'Error' : 'Atención'), text })) : alert(text);
+
+        function pintar(d) {
+            const img = document.getElementById('portalAluQr');
+            const sp = document.getElementById('portalAluSpinner');
+            document.getElementById('portalAluUrl').value = d.url;
+            document.getElementById('portalAluActivo').checked = !!d.activo;
+            img.classList.add('d-none'); sp.classList.remove('d-none');
+            img.onload = () => { sp.classList.add('d-none'); img.classList.remove('d-none'); };
+            // El QR lleva la URL ABSOLUTA (url_absoluta en el servidor): se abre desde la cámara del celular.
+            img.src = 'https://api.qrserver.com/v1/create-qr-code/?data=' + encodeURIComponent(d.url) + '&size=300x300&margin=10';
+            img.style.opacity = d.activo ? '1' : '.35';
+        }
+
+        async function llamar(accion, body) {
+            const opt = body ? { method: 'POST', body } : {};
+            const r = await fetch(urlBase + '/' + accion, opt);
+            return r.json();
+        }
+
+        window.aluAbrirPortal = async function () {
+            bootstrap.Modal.getOrCreateInstance(el()).show();
+            try {
+                const j = await llamar('portalAjax');
+                j.ok ? pintar(j) : aviso('error', j.error || 'No se pudo abrir el portal.');
+            } catch (e) { aviso('error', 'Error de conexión.'); }
+        };
+        window.aluPortalCopiar = function () {
+            const v = document.getElementById('portalAluUrl').value;
+            if (navigator.clipboard) navigator.clipboard.writeText(v).then(() => aviso('success', 'Enlace copiado.'));
+        };
+        window.aluPortalImprimir = function () { window.open(urlBase + '/portalImprimir', '_blank'); };
+        window.aluPortalActivar = async function (activo) {
+            const fd = new FormData(); fd.append('activo', activo ? '1' : '');
+            try {
+                const j = await llamar('portalActivarAjax', fd);
+                j.ok ? pintar(j) : aviso('error', j.error || 'No se pudo cambiar.');
+            } catch (e) { aviso('error', 'Error de conexión.'); }
+        };
+        window.aluPortalRegenerar = async function () {
+            const r = await Swal.fire(swalOpts({ icon: 'warning', title: '¿Regenerar el QR?', text: 'El QR y el enlace actuales dejarán de funcionar; habrá que imprimir y enviar el nuevo.', showCancelButton: true, confirmButtonText: 'Sí, regenerar', cancelButtonText: 'Cancelar', confirmButtonColor: '#dc3545', reverseButtons: true }));
+            if (!r.isConfirmed) return;
+            try {
+                const j = await llamar('portalRegenerarAjax', new FormData());
+                j.ok ? (pintar(j), aviso('success', 'QR regenerado.')) : aviso('error', j.error || 'No se pudo regenerar.');
+            } catch (e) { aviso('error', 'Error de conexión.'); }
+        };
+        window.aluPortalEnviar = async function () {
+            const b = document.getElementById('buscarAlumno')?.value || '';
+            try {
+                const c = await llamar('portalContarAjax?b=' + encodeURIComponent(b));
+                if (!c.ok) { aviso('error', c.error || 'Error'); return; }
+                if (!c.representantes) { aviso('info', 'No hay alumnos con representante en el listado actual.'); return; }
+                const r = await Swal.fire(swalOpts({ icon: 'question', title: 'Enviar el enlace por correo',
+                    html: `Se enviará a <b>${c.representantes}</b> representante(s) de <b>${c.alumnos}</b> alumno(s) del listado actual${b ? ' (con el filtro aplicado)' : ''}.`,
+                    showCancelButton: true, confirmButtonText: 'Enviar', cancelButtonText: 'Cancelar', reverseButtons: true }));
+                if (!r.isConfirmed) return;
+                Swal.fire(swalOpts({ title: 'Enviando…', allowOutsideClick: false, didOpen: () => Swal.showLoading() }));
+                const fd = new FormData(); fd.append('b', b);
+                const j = await llamar('portalEnviarAjax', fd);
+                if (!j.ok) { aviso('error', j.error || 'No se pudo enviar.'); return; }
+                let txt = `Enviados: ${j.enviados}.`;
+                if (j.sin_correo) txt += ` Sin correo registrado: ${j.sin_correo}` + (j.sin_correo_muestra && j.sin_correo_muestra.length ? ` (${j.sin_correo_muestra.join(', ')}${j.sin_correo > j.sin_correo_muestra.length ? '…' : ''})` : '') + '.';
+                if (j.fallidos) txt += ` Fallidos: ${j.fallidos} (revise la configuración de correo).`;
+                aviso(j.fallidos || j.sin_correo ? 'warning' : 'success', txt);
+            } catch (e) { aviso('error', 'Error de conexión.'); }
+        };
+    })();
+</script>
+<?php endif; ?>
 
 <script>
     (function () {

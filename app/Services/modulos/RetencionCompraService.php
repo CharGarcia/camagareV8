@@ -758,12 +758,12 @@ class RetencionCompraService
 
         $builder = new \App\Services\modulos\AsientoBuilderService();
         $detallesSugeridos = $builder->generarAsientoRetencionCompra($idEmpresa, $idRetencion);
+        // Descuadre (o asiento vacío) por un código de retención o la cuenta por pagar sin cuenta:
+        // fallar con ese motivo, no con el genérico "Total Debe (…) no coincide con Total Haber (…)".
+        \App\Services\modulos\AsientoBuilderService::verificarCuadre($detallesSugeridos, $builder->getMotivosFaltantes());
         if (empty($detallesSugeridos)) {
             return;
         }
-        // Descuadre por un código de retención (o la cuenta por pagar) sin cuenta: fallar con ese
-        // motivo, no con el genérico "Total Debe (…) no coincide con Total Haber (…)".
-        \App\Services\modulos\AsientoBuilderService::verificarCuadre($detallesSugeridos, $builder->getMotivosFaltantes());
 
         $num = ($data['establecimiento'] ?? '') . '-' . ($data['punto_emision'] ?? '') . '-' . ($data['secuencial'] ?? '');
 

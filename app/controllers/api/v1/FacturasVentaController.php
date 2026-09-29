@@ -41,6 +41,7 @@ namespace App\controllers\api\v1;
 
 use App\controllers\api\ApiBaseController;
 use App\core\Database;
+use App\Helpers\Booleano;
 use App\models\Empresa;
 use App\models\FormaPagoSri;
 use App\models\SriEnvioLog;
@@ -257,6 +258,8 @@ class FacturasVentaController extends ApiBaseController
                 'direccion' => $est['direccion'] ?? '',
                 'id_forma_pago_sri_def' => isset($config['id_forma_pago_sri_def']) ? (int) $config['id_forma_pago_sri_def'] : null,
                 'valor_limite_consumidor_final' => isset($config['valor_limite_consumidor_final']) ? (float) $config['valor_limite_consumidor_final'] : 50.0,
+                'editar_precio_factura' => Booleano::es($config['editar_precio_factura'] ?? true),
+                'editar_descuento_factura' => Booleano::es($config['editar_descuento_factura'] ?? true),
                 'puntos_emision' => array_map(static function (array $p): array {
                     return [
                         'id_punto_emision' => (int) $p['id'],
@@ -324,7 +327,8 @@ class FacturasVentaController extends ApiBaseController
      *   fecha_emision?, id_cliente, id_establecimiento, id_punto_emision,
      *   establecimiento, punto_emision, secuencial, dias_credito?, observaciones?,
      *   id_vendedor?, id_bodega?, forma_pago (código SRI),
-     *   detalles: [{ id_producto, cantidad }]
+     *   detalles: [{ id_producto, cantidad, precio_unitario?, descuento? }]
+     *   (precio_unitario y descuento solo se aplican si el establecimiento lo permite)
      * }
      */
     public function crear(): void
@@ -591,7 +595,25 @@ class FacturasVentaController extends ApiBaseController
         $idBodega = !empty($body['id_bodega']) ? (int) $body['id_bodega'] : null;
         $detalles = [];
         $totalSinImpuestos = 0.0;
+        $totalDescuento = 0.0;
         $totalIva = 0.0;
+
+        $empresaModel = new Empresa();
+        $empresaData = $empresaModel->getPorId($idEmpresa) ?? [];
+        try {
+            $estConfig = (new EmpresaRepository())->getEstablecimientoConfig($identidad['id_establecimiento']);
+            if ($estConfig) {
+                $empresaData = array_merge($empresaData, $estConfig);
+            }
+        } catch (Throwable $e) {
+            // Si falla, el Service usa sus propios defaults (tipo_ambiente '1', etc.)
+        }
+
+        // Misma configuración del establecimiento que la web (Empresa → Facturación):
+        // sin el permiso, el precio sale del catálogo y el descuento queda en 0 aunque
+        // el celular los mande. Default true, igual que factura_venta/index.php.
+        $puedeEditarPrecio = Booleano::es($empresaData['editar_precio_factura'] ?? true);
+        $puedeEditarDescuento = Booleano::es($empresaData['editar_descuento_factura'] ?? true);
 
         foreach ($lineasBody as $linea) {
             $idProducto = (int) ($linea['id_producto'] ?? 0);
@@ -606,7 +628,23 @@ class FacturasVentaController extends ApiBaseController
             }
 
             $precioUnitario = round((float) $producto['precio_base'], 4);
-            $subtotalLinea = round($precioUnitario * $cantidad, 2);
+            if ($puedeEditarPrecio && isset($linea['precio_unitario']) && is_numeric($linea['precio_unitario'])) {
+                $precioUnitario = round((float) $linea['precio_unitario'], 4);
+                if ($precioUnitario < 0) {
+                    $this->jsonError('PRECIO_INVALIDO', "El precio de {$producto['nombre']} no puede ser negativo.", 422);
+                }
+            }
+
+            $bruto = round($precioUnitario * $cantidad, 2);
+            $descuento = 0.0;
+            if ($puedeEditarDescuento && isset($linea['descuento']) && is_numeric($linea['descuento'])) {
+                $descuento = round((float) $linea['descuento'], 2);
+                if ($descuento < 0 || $descuento > $bruto) {
+                    $this->jsonError('DESCUENTO_INVALIDO', "El descuento de {$producto['nombre']} debe estar entre 0 y $" . number_format($bruto, 2, '.', '') . '.', 422);
+                }
+            }
+            $subtotalLinea = round($bruto - $descuento, 2);
+            $totalDescuento += $descuento;
             $tarifaPct = (float) ($producto['porcentaje_iva'] ?? 0);
             $codigoPorcentaje = (string) ($producto['codigo_iva'] ?? '0');
             $valorIva = round($subtotalLinea * $tarifaPct / 100, 2);
@@ -624,7 +662,7 @@ class FacturasVentaController extends ApiBaseController
                 'nombre' => $producto['nombre'],
                 'cantidad' => $cantidad,
                 'precio_unitario' => $precioUnitario,
-                'descuento' => 0,
+                'descuento' => $descuento,
                 'precio_total_sin_impuesto' => $subtotalLinea,
                 'id_tarifa_iva' => $producto['tarifa_iva'] ? (int) $producto['tarifa_iva'] : null,
                 'impuestos' => [[
@@ -645,17 +683,6 @@ class FacturasVentaController extends ApiBaseController
         $totalIva = round($totalIva, 2);
         $importeTotal = round($totalSinImpuestos + $totalIva, 2);
 
-        $empresaModel = new Empresa();
-        $empresaData = $empresaModel->getPorId($idEmpresa) ?? [];
-        try {
-            $estConfig = (new EmpresaRepository())->getEstablecimientoConfig($identidad['id_establecimiento']);
-            if ($estConfig) {
-                $empresaData = array_merge($empresaData, $estConfig);
-            }
-        } catch (Throwable $e) {
-            // Si falla, el Service usa sus propios defaults (tipo_ambiente '1', etc.)
-        }
-
         return array_merge($identidad, [
             'id_empresa' => $idEmpresa,
             'id_usuario' => $idUsuario,
@@ -666,7 +693,7 @@ class FacturasVentaController extends ApiBaseController
             'id_vendedor' => !empty($body['id_vendedor']) ? (int) $body['id_vendedor'] : null,
             'id_bodega' => $idBodega,
             'total_sin_impuestos' => $totalSinImpuestos,
-            'total_descuento' => 0,
+            'total_descuento' => round($totalDescuento, 2),
             'total_ice' => 0,
             'propina' => 0,
             'importe_total' => $importeTotal,

@@ -265,8 +265,16 @@ class AsientoBuilderService
      */
     public static function verificarCuadre(array $detalles, array $motivos): void
     {
-        if (empty($detalles) || empty($motivos)) {
+        if (empty($motivos)) {
             return;
+        }
+        // Asiento vacío CON cuentas faltantes: faltó la cuenta de los dos lados (p. ej. la forma de
+        // pago y la cartera de compras), así que no quedó ninguna línea. Antes el llamador lo tomaba
+        // por "nada que contabilizar" y retornaba en silencio: el documento quedaba sin asiento y el
+        // aviso de pendientes no sabía por qué ("error inesperado"). Un asiento vacío SIN motivos
+        // (sin formas de pago, montos en cero) sí es legítimo y sigue sin lanzar nada.
+        if (empty($detalles)) {
+            throw new \Exception('Faltan cuentas por configurar: ' . implode(' ', $motivos));
         }
 
         $debe  = round(array_sum(array_map(static fn($d) => (float) ($d['debe'] ?? 0), $detalles)), 2);

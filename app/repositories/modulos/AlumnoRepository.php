@@ -654,6 +654,14 @@ class AlumnoRepository extends BaseRepository
         return $out;
     }
 
+    /** ¿Ya hay un alumno vivo con ese número de identificación en la empresa? */
+    public function existeIdentificacion(int $idEmpresa, string $numero): bool
+    {
+        $st = $this->db->prepare("SELECT 1 FROM alumnos WHERE id_empresa = ? AND numero_identificacion = ? AND eliminado = false LIMIT 1");
+        $st->execute([$idEmpresa, $numero]);
+        return (bool) $st->fetchColumn();
+    }
+
     public function getPuntosEmisionParaSelect(int $idEmpresa): array
     {
         // Series activas como en la Factura de Venta: «001-001» (establecimiento-punto),

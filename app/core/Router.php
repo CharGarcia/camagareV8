@@ -121,6 +121,14 @@ class Router
                 }
             }
 
+            // /portal-alumnos/{token}[/codigo|/verificar|/guardar] → portal público de
+            // representantes (QR general del colegio, sin auth; ver AlumnosPortalController)
+            if (($parts[0] ?? '') === 'portal-alumnos') {
+                $controller    = 'AlumnosPortal';
+                $_GET['token'] = $parts[1] ?? ($_GET['token'] ?? '');
+                $action        = in_array(($parts[2] ?? ''), ['codigo', 'verificar', 'guardar'], true) ? $parts[2] : 'index';
+            }
+
             // /solicitud-vacaciones/{token}[/enviar] → formulario público con el que el
             // empleado solicita sus vacaciones (sin auth; el token llega en su correo)
             if (($parts[0] ?? '') === 'solicitud-vacaciones') {

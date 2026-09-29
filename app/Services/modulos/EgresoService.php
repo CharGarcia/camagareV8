@@ -898,16 +898,16 @@ class EgresoService
         $detallesConCuenta = $data['detalles'] ?? [];
         $builder  = new AsientoBuilderService();
         $detalles = $builder->generarAsientoEgreso($idEmpresa, $idEgreso, $detallesConCuenta);
+
+        // Si el asiento quedó descuadrado —o directamente vacío— por cuentas sin configurar, fallar
+        // aquí con el motivo concreto (qué cuenta falta y dónde se configura). Sin esto el error que
+        // ve el usuario es el de AsientoContableRules —"Total Debe (0) no coincide con Total Haber
+        // (…)"—, o nada en absoluto cuando faltaban las cuentas de los dos lados. Si no se pudo
+        // determinar la causa no lanza nada y sigue el camino de siempre.
+        AsientoBuilderService::verificarCuadre($detalles, $builder->getMotivosFaltantes());
         if (empty($detalles)) {
             return;
         }
-
-        // Si el asiento quedó descuadrado por cuentas sin configurar, fallar aquí con el motivo
-        // concreto (qué cuenta falta y dónde se configura). Sin esto el error que ve el usuario es
-        // el de AsientoContableRules —"Total Debe (0) no coincide con Total Haber (…)"—, que no
-        // dice qué corregir. Si no se pudo determinar la causa no lanza nada y sigue el camino
-        // de siempre.
-        AsientoBuilderService::verificarCuadre($detalles, $builder->getMotivosFaltantes());
 
         $num        = $egreso['numero_egreso'] ?? (string) $idEgreso;
         $tipoSujeto = strtolower((string) ($egreso['tipo_sujeto'] ?? ''));

@@ -12,6 +12,7 @@ export type ProductoListado = {
   nombre: string;
   precio_base: string;
   pvp: string;
+  porcentaje_iva_final?: string | null;
   status: number;
   nombre_categoria: string | null;
   nombre_medida: string | null;

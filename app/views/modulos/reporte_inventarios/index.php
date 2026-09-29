@@ -24,7 +24,8 @@ $riSubtitulo = count($riNombres) > 1
 <script>document.body.classList.add('cmg-no-app-shell');</script>
 
 <style>
-    .ri-ex-scroll, .ri-mv-scroll, .ri-va-scroll, .ri-cv-scroll, .ri-au-scroll { overflow-x: auto; }
+    .ri-ex-scroll, .ri-mv-scroll, .ri-va-scroll, .ri-cv-scroll, .ri-au-scroll, .ri-mv-resumen-scroll { overflow-x: auto; }
+    .ri-mv-resumen-scroll td, .ri-mv-resumen-scroll th { white-space: nowrap; }
     .ri-ex-scroll thead th, .ri-mv-scroll thead th, .ri-va-scroll thead th, .ri-cv-scroll thead th, .ri-au-scroll thead th {
         background: #f8f9fa; box-shadow: 0 1px 0 #dee2e6; white-space: nowrap;
     }
@@ -55,7 +56,7 @@ $riSubtitulo = count($riNombres) > 1
     @media (max-width: 767.98px) {
         #modulo-reporte_inventarios .ri-ex-scroll, #modulo-reporte_inventarios .ri-mv-scroll,
         #modulo-reporte_inventarios .ri-va-scroll, #modulo-reporte_inventarios .ri-cv-scroll,
-        #modulo-reporte_inventarios .ri-au-scroll { max-height:none !important; height:auto !important; overflow-y:visible !important; }
+        #modulo-reporte_inventarios .ri-au-scroll, #modulo-reporte_inventarios .ri-mv-resumen-scroll { max-height:none !important; height:auto !important; overflow-y:visible !important; }
     }
 </style>
 
@@ -337,6 +338,13 @@ $riSubtitulo = count($riNombres) > 1
                                 </select>
                             </div>
                             <div>
+                                <label class="form-label small fw-bold mb-1 d-block text-muted text-uppercase" style="font-size:.65rem;">Correcciones</label>
+                                <select id="ri-mv-correcciones" class="form-select form-select-sm shadow-none border" style="width:170px;" title="Reversos por pasar un documento a Borrador y su nueva entrada al volver a Emitir, documentos creados y eliminados… Si se compensan entre sí no cambian el saldo, y se pueden ocultar. No aplica cuando se elige un Origen.">
+                                    <option value="1" selected>Ocultar las que se anulan</option>
+                                    <option value="0">Mostrar todas</option>
+                                </select>
+                            </div>
+                            <div>
                                 <label class="form-label small fw-bold mb-1 d-block text-muted text-uppercase" style="font-size:.65rem;">Lote</label>
                                 <input type="text" id="ri-mv-lote" class="form-control form-control-sm shadow-none border" style="width:110px;" placeholder="Nro. lote">
                             </div>
@@ -378,6 +386,9 @@ $riSubtitulo = count($riNombres) > 1
                     </form>
                 </div>
             </div>
+
+            <!-- Resumen de cuadre / avisos sobre el Saldo (lo arma ReporteInventariosController::htmlResumenCuadre) -->
+            <div id="ri-mv-resumen"></div>
 
             <div class="card cmg-table-card w-100 border-0 shadow-sm rounded-3">
                 <div class="card-header bg-white py-2 px-3 border-bottom d-flex justify-content-between align-items-center flex-wrap gap-2">

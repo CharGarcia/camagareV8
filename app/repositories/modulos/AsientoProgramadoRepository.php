@@ -1205,11 +1205,12 @@ class AsientoProgramadoRepository extends BaseRepository
 
         // 2. Códigos de retención usados en ventas de esta empresa (o ya configurados)
         $conceptos = $this->getConceptosRetencion($idEmpresa, 'venta');
+        $docsSinCatalogo = $this->getDocumentosSinCatalogo($idEmpresa, 'venta', $conceptos);
 
         $reglas = [];
         foreach ($conceptos as $c) {
             if (empty($c['id'])) {
-                $reglas[] = $this->reglaRetencionSinCatalogo($c, 'retenciones_venta');
+                $reglas[] = $this->reglaRetencionSinCatalogo($c, 'retenciones_venta', $docsSinCatalogo[$c['codigo_usado']] ?? []);
                 continue;
             }
             // Buscar la cuenta Debe configurada en asientos_programados para esta retención
@@ -1313,11 +1314,12 @@ class AsientoProgramadoRepository extends BaseRepository
 
         // 2. Códigos de retención usados en compras de esta empresa (o ya configurados)
         $conceptos = $this->getConceptosRetencion($idEmpresa, 'compra');
+        $docsSinCatalogo = $this->getDocumentosSinCatalogo($idEmpresa, 'compra', $conceptos);
 
         $reglas = [];
         foreach ($conceptos as $c) {
             if (empty($c['id'])) {
-                $reglas[] = $this->reglaRetencionSinCatalogo($c, 'retenciones_compra');
+                $reglas[] = $this->reglaRetencionSinCatalogo($c, 'retenciones_compra', $docsSinCatalogo[$c['codigo_usado']] ?? []);
                 continue;
             }
             // HABER: cuenta de la retención por pagar (específica por concepto).
@@ -1444,7 +1446,7 @@ class AsientoProgramadoRepository extends BaseRepository
      * catálogo retenciones_sri: no se puede configurar (la cuenta se guarda por id del catálogo)
      * y el asiento de esas retenciones saldrá sin esa línea.
      */
-    private function reglaRetencionSinCatalogo(array $c, string $tipoAsiento): array
+    private function reglaRetencionSinCatalogo(array $c, string $tipoAsiento, array $documentos = []): array
     {
         return [
             'id_asiento_tipo' => 0,
@@ -1454,6 +1456,73 @@ class AsientoProgramadoRepository extends BaseRepository
             'codigo'          => $c['codigo_usado'],
             'sin_catalogo'    => true,
             'id_referencia'   => null,
+            'documentos'      => $documentos ?: ['total' => 0, 'items' => []],
         ];
+    }
+
+    /** Tope de documentos listados por código en el aviso (el resto se informa como total). */
+    private const MAX_DOCS_SIN_CATALOGO = 50;
+
+    /**
+     * Retenciones (de venta o compra) con líneas cuyo código no existe en el catálogo
+     * retenciones_sri, agrupadas por ese código: el aviso de Configuración Contable las lista
+     * para que el usuario sepa qué documento corregir. Mismo cruce que getConceptosRetencion()
+     * (y que el generador de asientos). Solo consulta si hay algún código sin catálogo.
+     *
+     * @return array<string, array{total:int, items:array<int, array<string, mixed>>}>
+     */
+    private function getDocumentosSinCatalogo(int $idEmpresa, string $lado, array $conceptos): array
+    {
+        $hay = false;
+        foreach ($conceptos as $c) {
+            if (empty($c['id'])) { $hay = true; break; }
+        }
+        if (!$hay) {
+            return [];
+        }
+
+        $esVenta  = $lado === 'venta';
+        $tablaDet = $esVenta ? 'retencion_venta_detalle' : 'retencion_compra_detalle';
+        $tablaCab = $esVenta ? 'retencion_venta_cabecera' : 'retencion_compra_cabecera';
+        $joinTer  = $esVenta
+            ? 'LEFT JOIN clientes t ON t.id = c.id_cliente'
+            : 'LEFT JOIN proveedores t ON t.id = c.id_proveedor';
+        $colTer   = $esVenta ? 't.nombre' : 't.razon_social';
+        $colIdSri = $esVenta ? null : 'd.id_retencion_sri';
+        $cruce    = CruceRetencionSri::joinLateral('d.codigo_retencion', $colIdSri, 'rsl');
+
+        $sql = "SELECT d.codigo_retencion AS codigo, c.id, c.fecha_emision, c.tipo_ambiente,
+                       c.establecimiento || '-' || c.punto_emision || '-' || COALESCE(c.secuencial, '') AS numero,
+                       {$colTer} AS tercero
+                FROM {$tablaDet} d
+                INNER JOIN {$tablaCab} c ON c.id = d.id_retencion
+                {$cruce}
+                {$joinTer}
+                WHERE c.id_empresa = :id_empresa
+                  AND c.eliminado = false
+                  AND COALESCE(TRIM(d.codigo_retencion), '') <> ''
+                  AND rsl.id IS NULL
+                GROUP BY d.codigo_retencion, c.id, c.fecha_emision, c.tipo_ambiente,
+                         c.establecimiento, c.punto_emision, c.secuencial, {$colTer}
+                ORDER BY d.codigo_retencion, c.fecha_emision DESC, c.id DESC";
+        $st = $this->db->prepare($sql);
+        $st->execute([':id_empresa' => $idEmpresa]);
+
+        $mapa = [];
+        while ($r = $st->fetch(PDO::FETCH_ASSOC)) {
+            $cod = $r['codigo'];
+            $mapa[$cod] ??= ['total' => 0, 'items' => []];
+            $mapa[$cod]['total']++;
+            if (count($mapa[$cod]['items']) < self::MAX_DOCS_SIN_CATALOGO) {
+                $mapa[$cod]['items'][] = [
+                    'id'      => (int) $r['id'],
+                    'numero'  => $r['numero'],
+                    'fecha'   => $r['fecha_emision'] ? date('d-m-Y', strtotime($r['fecha_emision'])) : '',
+                    'tercero' => $r['tercero'] ?? '',
+                    'pruebas' => (string) $r['tipo_ambiente'] === '1',
+                ];
+            }
+        }
+        return $mapa;
     }
 }

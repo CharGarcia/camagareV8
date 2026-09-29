@@ -4,41 +4,39 @@ import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import type { RootStackParamList } from '../navigation/RootNavigator';
 import { ConsignacionPendiente, listarPendientesEntrega } from '../api/entregas';
-import { mensajeError } from '../api/client';
+import { useListadoPaginado } from '../hooks/useListadoPaginado';
+import PieListado from '../components/PieListado';
 
 export default function EntregasListScreen() {
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
-  const [items, setItems] = useState<ConsignacionPendiente[]>([]);
   const [buscar, setBuscar] = useState('');
-  const [cargando, setCargando] = useState(true);
-  const [refrescando, setRefrescando] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const buscarRef = useRef('');
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-  const cargar = useCallback(async (texto: string, esRefresh = false) => {
-    esRefresh ? setRefrescando(true) : setCargando(true);
-    setError(null);
-    try {
-      const resp = await listarPendientesEntrega({ buscar: texto, page: 1 });
-      setItems(resp.data);
-    } catch (err) {
-      setError(mensajeError(err, 'No se pudieron cargar las entregas pendientes.'));
-    } finally {
-      esRefresh ? setRefrescando(false) : setCargando(false);
-    }
-  }, []);
+  const {
+    items: items,
+    total,
+    cargando,
+    refrescando,
+    cargandoMas,
+    error,
+    cargar,
+    cargarMas,
+  } = useListadoPaginado<ConsignacionPendiente>(
+    (page) => listarPendientesEntrega({ buscar: buscarRef.current, page }),
+    'No se pudieron cargar las entregas pendientes.'
+  );
 
   useFocusEffect(
     useCallback(() => {
-      cargar(buscar);
-      // eslint-disable-next-line react-hooks/exhaustive-deps
+      cargar();
     }, [cargar])
   );
 
   function onBuscarChange(texto: string) {
     setBuscar(texto);
+    buscarRef.current = texto;
     if (debounceRef.current) clearTimeout(debounceRef.current);
-    debounceRef.current = setTimeout(() => cargar(texto), 350);
+    debounceRef.current = setTimeout(() => cargar(), 350);
   }
 
   return (
@@ -61,7 +59,10 @@ export default function EntregasListScreen() {
           data={items}
           keyExtractor={(item) => String(item.id)}
           contentContainerStyle={{ padding: 16 }}
-          refreshControl={<RefreshControl refreshing={refrescando} onRefresh={() => cargar(buscar, true)} />}
+          refreshControl={<RefreshControl refreshing={refrescando} onRefresh={() => cargar(true)} />}
+          onEndReached={cargarMas}
+          onEndReachedThreshold={0.4}
+          ListFooterComponent={<PieListado cargandoMas={cargandoMas} mostrados={items.length} total={total} />}
           ListEmptyComponent={<Text style={styles.vacio}>No hay entregas pendientes.</Text>}
           renderItem={({ item }) => (
             <TouchableOpacity style={styles.card} onPress={() => navigation.navigate('Entrega', { id: item.id })}>

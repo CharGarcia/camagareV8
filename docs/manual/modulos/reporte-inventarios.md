@@ -5,8 +5,8 @@ categoria: Reportes
 ruta_modulo: modulos/reporte_inventarios
 tipo: modulo
 visibilidad: todos
-etiquetas: reporte de inventario, no descarga el excel, excel no descarga, excel en blanco, demasiados datos, excel muy grande, filtrar por año, no descarga el pdf, pdf en blanco, pdf muy grande, excel de la consignacion, numero de factura en el excel, numero de retorno en el excel, totales en el excel, existencias, stock por bodega, valorizacion, kardex, faltantes, exportar, auditoria, stock cacheado, corregir stock, consignaciones, stock por lote, por caducidad, que se vence, vencimientos, limpiar filtros, lento, tarda, se cuelga, tarda en abrir, tarda en entrar, busqueda lenta, se recarga la pagina, ordenar por columna, pierde el resultado, no puedo abrir otro modulo mientras carga, primeras 5000 filas, listado recortado, lote, nup, asesor, detalle de consignacion, totales del detalle, pdf del documento relacionado, permisos, pestañas, no veo la pestaña, no aparece consignaciones, no aparece existencias, acceso a inventario, permiso de inventario, permiso de consignaciones, pdf de la consignacion, estado de la consignacion, imprimir consignacion con saldo, consignacion completa, saldo en poder del cliente, no veo una bodega, bodegas asignadas, acceso a bodegas, solo mi bodega, falta una bodega, no aparece la bodega, codigo de producto en consignacion, codigo del producto en el detalle, codigo como primera columna, columna codigo, codigo de producto en el reporte, ordenar por codigo, lote mas consignacion, que lote tiene cada cliente, lote por cliente, consignacion por lote, con quien salio el lote, entregas por lote, se genera solo, se consulta solo, no muestra datos, boton mostrar, hay que pulsar mostrar, al elegir el producto se pone a cargar, al cambiar el anio se pone a cargar, no quiero que cargue solo, carga sola, consulta automatica, lotes en cero, lote agotado, no muestra lotes vacios, stock cero, lotes sin stock, filas en cero, por que no aparece el lote, lote desaparecio del reporte, boton mostrar bloqueado, no puedo pulsar mostrar, doble clic en mostrar, barra de progreso, porcentaje de avance, cuanto falta, se queda cargando, indicador de carga, stock negativo, por que esta en negativo, saldo negativo, negativo en existencias, seguimiento, trazabilidad del lote, de donde sale el negativo, lote sin entrada, lote duplicado, lote mal escrito, movimientos de otro ambiente, kardex de un lote, filtros no funcionan, no filtra, no coge los filtros, filtro de estado, filtro consignado, saldo a fecha, fecha de corte, saldo inicial, saldo anterior, saldo de arranque, saldo al inicio del mes, kardex empieza en cero, saldo empieza en cero
-version: 1.32
+etiquetas: reporte de inventario, no descarga el excel, excel no descarga, excel en blanco, demasiados datos, excel muy grande, filtrar por año, no descarga el pdf, pdf en blanco, pdf muy grande, excel de la consignacion, numero de factura en el excel, numero de retorno en el excel, totales en el excel, existencias, stock por bodega, valorizacion, kardex, faltantes, exportar, auditoria, stock cacheado, corregir stock, consignaciones, stock por lote, por caducidad, que se vence, vencimientos, limpiar filtros, lento, tarda, se cuelga, tarda en abrir, tarda en entrar, busqueda lenta, se recarga la pagina, ordenar por columna, pierde el resultado, no puedo abrir otro modulo mientras carga, primeras 5000 filas, listado recortado, lote, nup, asesor, detalle de consignacion, totales del detalle, pdf del documento relacionado, permisos, pestañas, no veo la pestaña, no aparece consignaciones, no aparece existencias, acceso a inventario, permiso de inventario, permiso de consignaciones, pdf de la consignacion, estado de la consignacion, imprimir consignacion con saldo, consignacion completa, saldo en poder del cliente, no veo una bodega, bodegas asignadas, acceso a bodegas, solo mi bodega, falta una bodega, no aparece la bodega, codigo de producto en consignacion, codigo del producto en el detalle, codigo como primera columna, columna codigo, codigo de producto en el reporte, ordenar por codigo, lote mas consignacion, que lote tiene cada cliente, lote por cliente, consignacion por lote, con quien salio el lote, entregas por lote, se genera solo, se consulta solo, no muestra datos, boton mostrar, hay que pulsar mostrar, al elegir el producto se pone a cargar, al cambiar el anio se pone a cargar, no quiero que cargue solo, carga sola, consulta automatica, lotes en cero, lote agotado, no muestra lotes vacios, stock cero, lotes sin stock, filas en cero, por que no aparece el lote, lote desaparecio del reporte, boton mostrar bloqueado, no puedo pulsar mostrar, doble clic en mostrar, barra de progreso, porcentaje de avance, cuanto falta, se queda cargando, indicador de carga, stock negativo, por que esta en negativo, saldo negativo, negativo en existencias, seguimiento, trazabilidad del lote, de donde sale el negativo, lote sin entrada, lote duplicado, lote mal escrito, movimientos de otro ambiente, kardex de un lote, filtros no funcionan, no filtra, no coge los filtros, filtro de estado, filtro consignado, saldo a fecha, fecha de corte, saldo inicial, saldo anterior, saldo de arranque, saldo al inicio del mes, kardex empieza en cero, saldo empieza en cero, resumen de cuadre, cuadre de inventario, no cuadra, movimientos y existencias no coinciden, saldo distinto, reverso por cambio a borrador, retorno en borrador, reactivacion, entrada por reactivacion, correcciones, ocultar correcciones, movimientos que se anulan, el saldo no es el stock, filtro de lote en existencias, stock del lote
+version: 1.33
 orden: 40
 estado: activo
 ---
@@ -105,7 +105,7 @@ ya agotado, está la pestaña **Movimientos**, filtrando por ese lote.
 | Filtro | En general (detallado o agrupado) | Por lotes / caducidad / lote + caducidad | Lote + consignación |
 |---|---|---|---|
 | Bodega, Categoría, Marca, Producto | Sí | Sí | Sí |
-| Lote, NUP, Caducidad desde/hasta | Sí | Sí | Sí |
+| Lote, NUP, Caducidad desde/hasta | Cambia el Detalle solo (ver abajo) | Sí | Sí |
 | Estado | Sí | No (desactivado) | No (desactivado) |
 | Consignado | Sí | Sí | Sí (por saldo) |
 | Saldo a fecha | Sí | Sí | Sí (consignaciones emitidas hasta ese día) |
@@ -121,6 +121,23 @@ producto elegido antes.
 
 **Saldo a fecha** incluye **todo el día** elegido: los movimientos de esa fecha
 cuentan, sea cual sea su hora.
+
+### Filtrar por lote, NUP o caducidad cambia el Detalle
+
+Si el Detalle está en **En general** y se escribe un **Lote**, un **NUP** o una
+**Caducidad**, al pulsar **Mostrar** el Detalle cambia solo y aparece un aviso:
+
+| Filtro escrito | El Detalle pasa a |
+|---|---|
+| NUP | Lote + caducidad |
+| Lote | Por lotes |
+| Solo caducidad | Por caducidad |
+
+El motivo: en *En general* la fila es el producto en la bodega y su Stock es la
+suma de **todos** sus lotes. El filtro de lote solo decidía qué productos
+salían, y el número no coincidía con el saldo de ese lote en **Movimientos**.
+En los desgloses el filtro sí recorta la suma, así que el Stock es el del lote.
+El PDF y el Excel siguen la misma regla.
 
 ## Lote + consignación: qué lote tiene cada cliente
 
@@ -240,6 +257,61 @@ cierre del periodo.
   el saldo corrido ya no es un stock, así que sumarle el saldo inicial daría un
   número engañoso. Tampoco con el año en *Todos* (no hay periodo anterior).
 - El PDF y el Excel llevan las mismas filas de saldo inicial.
+
+## Resumen de cuadre en Movimientos
+
+Al elegir un **producto** en **Movimientos** y pulsar **Mostrar**, sobre la tabla
+aparece el **Resumen de cuadre**, con una fila por bodega:
+
+| Columna | Qué suma |
+|---|---|
+| **Saldo inicial** | Lo que había antes de la fecha *Desde* (0 si el año está en *Todos*) |
+| **+ Entradas** | Compras, cargas, retornos, reingresos, ajustes de entrada del periodo |
+| **− Salidas** | Consignaciones, facturas, ajustes de salida del periodo |
+| **± Correcciones** | Reversos y reactivaciones por cambio de estado, eliminaciones y ediciones (ver abajo), con cuántos movimientos son |
+| **= Saldo final** | Saldo inicial + entradas − salidas ± correcciones. Es el saldo de la última fila del listado |
+| **Existencias** | Lo que muestra la pestaña **Existencias** a la fecha *Hasta*, con los mismos filtros de bodega, lote, NUP y caducidad |
+| **Cuadre** | **Cuadra** si el saldo final y Existencias son iguales |
+
+Respeta los filtros de bodega, lote, NUP y caducidad. Si se filtra por **Tipo**,
+**Origen**, **Usuario** u **Observaciones**, el resumen no se muestra: en su lugar
+aparece un aviso de que la columna **Saldo** es el acumulado de lo filtrado y no
+el stock.
+
+**Si sale "No cuadra"**, el resumen dice la diferencia y su causa. La causa
+normal son **movimientos de otro ambiente** (pruebas/producción): Existencias
+los suma y Movimientos no los muestra. Si no es eso, revise la pestaña
+*Auditoría*.
+
+## Correcciones: reversos por Borrador, eliminaciones y ediciones
+
+Algunos movimientos no son mercadería nueva, sino la **corrección** de un
+movimiento anterior del mismo documento. En el listado llevan la etiqueta
+**Corrección** junto al Origen (y *[Corrección]* en el Excel/PDF):
+
+| Origen | Cuándo se genera |
+|---|---|
+| Retorno de consignación (cambio de estado) | Al pasar un retorno de *Emitida* a *Borrador* o *Anulada* (salida: se deshace la entrada) y al volverlo a *Emitida* (entrada otra vez) |
+| Retorno de consignación (reversa) | Al eliminar un retorno emitido |
+| Consignación (editada) / (reversa) | Al editar o eliminar una consignación |
+
+Un retorno **solo se puede editar en Borrador**, así que para cambiar hasta una
+observación el usuario lo pasa a Borrador y lo vuelve a emitir. Eso deja dos
+movimientos (salida y entrada) que se anulan entre sí.
+
+El filtro **Correcciones** decide qué se ve:
+
+- **Ocultar las que se anulan** (por defecto): no se muestran las correcciones
+  que suman cero entre sí (un retorno pasado a Borrador y vuelto a *Emitida*),
+  ni los documentos que en neto no movieron nada (un retorno creado y eliminado,
+  o pasado a Borrador y dejado así, dentro del periodo). **El saldo final no
+  cambia**, y el resumen de cuadre dice cuántos movimientos se ocultaron.
+- **Mostrar todas**: el kardex completo, movimiento por movimiento, para
+  auditar.
+
+Una corrección que **no** se compensa siempre se ve. Por ejemplo, el reverso de
+un retorno que se quedó en Borrador cuando su entrada es de un periodo anterior.
+Si se elige un **Origen**, no se oculta nada.
 
 ## Por qué una fila sale en negativo (seguimiento)
 
@@ -522,6 +594,15 @@ ahí.
   quitó el acceso a esa bodega en *Bodegas → Accesos*. Es una restricción de
   acceso, no un filtro: poner *Todas* en el selector no la trae de vuelta.
 - **El stock está en otra bodega**: revise el filtro de bodega.
+- **Movimientos y Existencias dan números distintos**: elija el producto en
+  Movimientos y mire el *Resumen de cuadre*, que compara los dos y dice la
+  causa. Revise también que Movimientos no tenga filtros de Tipo, Origen,
+  Usuario u Observaciones (con ellos el Saldo no es el stock).
+- **Aparece "Reverso por cambio a Borrador del Retorno…"**: alguien pasó ese
+  retorno a Borrador (normalmente para editarlo). Si luego lo volvió a emitir,
+  hay una entrada por reactivación que lo compensa; con *Correcciones* en
+  *Ocultar las que se anulan* el par no se muestra. Si no hay reactivación, el
+  retorno sigue en Borrador y esa mercadería no cuenta en el stock.
 - **El valor no coincide con la contabilidad**: compare contra el mayor de la
   cuenta de inventario; las diferencias suelen venir de compras sin procesar sus
   entradas.
@@ -537,6 +618,16 @@ ahí.
   los selectores Usuario y Año recorre el kardex completo de la empresa.
 
 ## Historial de cambios
+
+- **1.33** — **Resumen de cuadre y correcciones en Movimientos**. Con un producto
+  elegido, un resumen por bodega muestra saldo inicial + entradas − salidas ±
+  correcciones = saldo final, y lo compara con Existencias (con la causa si no
+  cuadra). Los reversos y reactivaciones por cambio de estado, las eliminaciones
+  y las ediciones se marcan como **Corrección**, y el nuevo filtro
+  **Correcciones** oculta por defecto las que se anulan entre sí. Con filtros de
+  Tipo/Origen/Usuario/Observaciones se avisa que el Saldo no es el stock. En
+  **Existencias**, filtrar por lote, NUP o caducidad en *En general* cambia el
+  Detalle al desglose correspondiente, para que el Stock sea el del lote.
 
 - **1.32** — **Saldo inicial en Movimientos**: con una fecha *Desde*, el
   Detallado (y su PDF/Excel) arranca con una fila *SALDO INICIAL* por producto

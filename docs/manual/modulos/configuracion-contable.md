@@ -5,8 +5,8 @@ categoria: Contabilidad
 ruta_modulo: modulos/configuracion-contable
 tipo: modulo
 visibilidad: admin
-etiquetas: configuracion contable, cuentas por documento, asiento automatico, parametrizacion, ventas, compras, cierre, tipo de produccion, bien, servicio, filtro por año, periodo, listado de proveedores, listado de clientes, cobros y pagos, ingresos y egresos, forma de pago, cuenta bancaria, efectivo, misma cuenta en los dos bloques, formas hermanas, cheques y transferencias, mismo banco, numero de cuenta, nomina, rol de pagos, prestamo quirografario, prestamo hipotecario, prestamo empresa, prestamos iess, cuentas opcionales, costo de ventas, costo de venta, inventario, asiento sin costo, no sale el costo, cuenta de iva del cliente, reglas por cliente, buscar proveedor, buscar cliente, buscar ficha, filtrar fichas, muchos proveedores, cuentas faltantes, modulos que contabilizan, apagar asientos, no generar asientos, no contabilizar, desactivar contabilidad, interruptor, consignaciones sin asiento, aviso de asientos pendientes, asientos pendientes en el balance, proveedores sin cuentas, clientes sin cuentas, productos sin cuentas, pendientes de configurar, retenciones en venta, retenciones en compra, retencion de renta, no aparecen las retenciones, codigo de retencion, catalogo de retenciones sri, codigo ats, codigo del anexo, retencion mal asignada
-version: 1.19
+etiquetas: configuracion contable, cuentas por documento, asiento automatico, parametrizacion, ventas, compras, cierre, tipo de produccion, bien, servicio, filtro por año, periodo, listado de proveedores, listado de clientes, cobros y pagos, ingresos y egresos, forma de pago, cuenta bancaria, efectivo, misma cuenta en los dos bloques, formas hermanas, cheques y transferencias, mismo banco, numero de cuenta, nomina, rol de pagos, prestamo quirografario, prestamo hipotecario, prestamo empresa, prestamos iess, cuentas opcionales, costo de ventas, costo de venta, inventario, asiento sin costo, no sale el costo, cuenta de iva del cliente, reglas por cliente, buscar proveedor, buscar cliente, buscar ficha, filtrar fichas, muchos proveedores, cuentas faltantes, modulos que contabilizan, apagar asientos, no generar asientos, no contabilizar, desactivar contabilidad, interruptor, consignaciones sin asiento, aviso de asientos pendientes, asientos pendientes en el balance, proveedores sin cuentas, clientes sin cuentas, productos sin cuentas, pendientes de configurar, retenciones en venta, retenciones en compra, retencion de renta, no aparecen las retenciones, codigo de retencion, catalogo de retenciones sri, codigo ats, codigo del anexo, retencion mal asignada, codigo de retencion no existe, en que documento esta el error, retencion con codigo invalido
+version: 1.21
 orden: 5
 estado: activo
 ---
@@ -123,6 +123,11 @@ En las fichas de **Proveedor**, junto a ese botón está **Información de
 adquisiciones**: muestra los ítems que se le han comprado a ese proveedor (según
 el año elegido en el selector de la regla), para decidir las cuentas sin tener
 que volver a buscarlo arriba.
+
+Las reglas de un proveedor o de un cliente también se pueden ver y editar desde su propia ficha,
+en la pestaña **Contable** de los módulos *Proveedores* y *Clientes* (y de cualquier pantalla que
+abra esa ficha, como Compras, Liquidaciones o Facturas de Venta). Es la misma regla:
+lo que se cambie en un lado se ve en el otro.
 
 El botón de la papelera de la cabecera elimina **toda la configuración de esa
 entidad** de una vez: pide confirmación y, al aceptar, esa entidad vuelve a
@@ -290,6 +295,13 @@ retenciones SRI* y no deja elegir cuenta: el asiento de esas retenciones sale si
 esa línea hasta que se corrija el código en el documento o se agregue al
 catálogo.
 
+Debajo del aviso se listan las **retenciones que usan ese código** (número,
+fecha y cliente o proveedor; las de ambiente de pruebas llevan la marca
+*Pruebas*). Cada número es un enlace que abre, en otra pestaña, el listado de
+Retenciones en Ventas o en Compras ya filtrado por ese documento, para
+corregir el código ahí. Si son más de 50, se muestran las 50 más recientes y
+el total.
+
 ## Nómina: cuentas de los préstamos
 
 En el tipo **Nómina** hay tres conceptos para las cuotas de préstamo que se
@@ -395,6 +407,10 @@ ingresos o egresos. Solo falta asignar la cuenta.
 
 ## Historial de cambios
 
+- **1.21** — El aviso *No existe en el catálogo de retenciones SRI* (retenciones en
+  venta y en compra) lista las retenciones que usan ese código, con enlace a cada una.
+- **1.20** — Las reglas por **Proveedor** y por **Cliente** se pueden editar también desde la
+  pestaña **Contable** de la ficha del proveedor o del cliente.
 - **1.19** — La pantalla se puede abrir desde el enlace **Configurar** del aviso
   de asientos pendientes: carga sola el tipo de asiento y despliega la sección
   donde falta la cuenta.

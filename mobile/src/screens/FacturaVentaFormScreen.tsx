@@ -36,14 +36,35 @@ import { mensajeError } from '../api/client';
 import SelectorFechaHora from '../components/SelectorFechaHora';
 import SelectorLista from '../components/SelectorLista';
 
+// Precio y descuento se guardan como texto mientras se editan (para poder escribir
+// "1." o dejar el campo vacío); se convierten con aNumero() al calcular y al guardar.
 type LineaFactura = {
   id_producto: number;
   producto_nombre: string;
   codigo: string;
-  precioBase: number;
-  pvp: number;
+  precioTexto: string;
+  descuentoTexto: string;
+  ivaPct: number;
   cantidad: number;
 };
+
+function aNumero(texto: string): number {
+  const n = Number(texto.replace(',', '.'));
+  return Number.isFinite(n) ? n : 0;
+}
+
+function redondear2(n: number): number {
+  return Math.round(n * 100) / 100;
+}
+
+/** Subtotal (sin IVA, ya con descuento) e IVA de una línea, igual que la API. */
+function calcularLinea(l: LineaFactura) {
+  const bruto = redondear2(aNumero(l.precioTexto) * l.cantidad);
+  const descuento = Math.min(Math.max(redondear2(aNumero(l.descuentoTexto)), 0), bruto);
+  const subtotal = redondear2(bruto - descuento);
+  const iva = redondear2((subtotal * l.ivaPct) / 100);
+  return { bruto, descuento, subtotal, iva };
+}
 
 type Modo = 'ver' | 'crear' | 'editar';
 
@@ -185,14 +206,16 @@ export default function FacturaVentaFormScreen() {
       });
   }, []);
 
-  // Series: solo hacen falta para CREAR (en editar la serie ya está fija).
+  // Series: la serie solo se elige al CREAR (en editar ya está fija), pero se cargan
+  // siempre porque traen la configuración de facturación de cada establecimiento
+  // (si se puede editar el precio y el descuento), que también aplica al editar.
   // Auto-selección: la serie favorita del usuario (misma estrellita que en la
   // web); si no tiene ninguna marcada, la primera disponible.
   useEffect(() => {
-    if (idFactura) return;
     obtenerSeries()
       .then(({ establecimientos: series, id_punto_emision_favorito }) => {
         setEstablecimientos(series);
+        if (idFactura) return;
         const opciones = aSerieOpciones(series);
         if (opciones.length === 0) return;
         const favorita = opciones.find((o) => o.id === id_punto_emision_favorito);
@@ -257,6 +280,12 @@ export default function FacturaVentaFormScreen() {
 
   const serieOpciones = aSerieOpciones(establecimientos);
 
+  // Mientras no se conozca la configuración, se asume lo mismo que la web por
+  // defecto (permitido); la API vuelve a validarlo al guardar.
+  const configEstablecimiento = establecimientos.find((e) => e.id_establecimiento === idEstablecimiento);
+  const puedeEditarPrecio = configEstablecimiento?.editar_precio_factura ?? true;
+  const puedeEditarDescuento = configEstablecimiento?.editar_descuento_factura ?? true;
+
   /** Copia los datos de la factura ya guardada al formulario y pasa a modo edición. */
   function iniciarEdicion() {
     if (!cabeceraLectura) return;
@@ -291,17 +320,16 @@ export default function FacturaVentaFormScreen() {
 
     setLineas(
       detallesLectura.map((d) => {
-        const cantidad = Number(d.cantidad);
-        const base = Number(d.precio_unitario);
-        const ivaTotal = d.impuestos.reduce((s, i) => s + Number(i.valor), 0);
-        const pvpUnit = cantidad > 0 ? (Number(d.precio_total_sin_impuesto) + ivaTotal) / cantidad : base;
+        const iva = d.impuestos.find((i) => i.codigo_impuesto === '2') ?? d.impuestos[0];
+        const descuento = Number(d.descuento ?? 0);
         return {
           id_producto: d.id_producto ?? 0,
           producto_nombre: d.producto_nombre,
           codigo: d.producto_codigo ?? '',
-          precioBase: base,
-          pvp: pvpUnit,
-          cantidad,
+          precioTexto: String(Number(d.precio_unitario)),
+          descuentoTexto: descuento > 0 ? descuento.toFixed(2) : '',
+          ivaPct: Number(iva?.tarifa ?? 0),
+          cantidad: Number(d.cantidad),
         };
       })
     );
@@ -343,14 +371,23 @@ export default function FacturaVentaFormScreen() {
   }
 
   function agregarProducto(p: ProductoListado) {
+    const base = Number(p.precio_base);
+    // % de IVA del producto; si el listado no lo trae, se deduce del PVP.
+    const ivaPct =
+      p.porcentaje_iva_final != null
+        ? Number(p.porcentaje_iva_final)
+        : base > 0
+          ? redondear2((Number(p.pvp ?? base) / base - 1) * 100)
+          : 0;
     setLineas((prev) => [
       ...prev,
       {
         id_producto: p.id,
         producto_nombre: p.nombre,
         codigo: p.codigo,
-        precioBase: Number(p.precio_base),
-        pvp: Number(p.pvp ?? p.precio_base),
+        precioTexto: String(base),
+        descuentoTexto: '',
+        ivaPct,
         cantidad: 1,
       },
     ]);
@@ -358,10 +395,10 @@ export default function FacturaVentaFormScreen() {
     setProductoResultados([]);
   }
 
-  function actualizarCantidad(index: number, cantidad: number) {
+  function actualizarLinea(index: number, cambios: Partial<LineaFactura>) {
     setLineas((prev) => {
       const copia = [...prev];
-      copia[index] = { ...copia[index], cantidad };
+      copia[index] = { ...copia[index], ...cambios };
       return copia;
     });
   }
@@ -370,9 +407,11 @@ export default function FacturaVentaFormScreen() {
     setLineas((prev) => prev.filter((_, i) => i !== index));
   }
 
-  const subtotal = lineas.reduce((acc, l) => acc + l.precioBase * l.cantidad, 0);
-  const total = lineas.reduce((acc, l) => acc + l.pvp * l.cantidad, 0);
-  const iva = total - subtotal;
+  const calculos = lineas.map(calcularLinea);
+  const totalDescuento = calculos.reduce((acc, c) => acc + c.descuento, 0);
+  const subtotal = calculos.reduce((acc, c) => acc + c.subtotal, 0);
+  const iva = calculos.reduce((acc, c) => acc + c.iva, 0);
+  const total = subtotal + iva;
 
   async function guardar() {
     if (!clienteSeleccionado) {
@@ -392,10 +431,29 @@ export default function FacturaVentaFormScreen() {
       return;
     }
 
+    for (const l of lineas) {
+      const c = calcularLinea(l);
+      if (aNumero(l.precioTexto) < 0) {
+        Alert.alert('Precio inválido', `El precio de ${l.producto_nombre} no puede ser negativo.`);
+        return;
+      }
+      if (aNumero(l.descuentoTexto) < 0 || aNumero(l.descuentoTexto) > c.bruto) {
+        Alert.alert('Descuento inválido', `El descuento de ${l.producto_nombre} debe estar entre $0.00 y $${c.bruto.toFixed(2)}.`);
+        return;
+      }
+    }
+
     setGuardando(true);
     setError(null);
     try {
-      const detalles = lineas.map((l) => ({ id_producto: l.id_producto, cantidad: l.cantidad }));
+      // Precio y descuento solo viajan si el establecimiento los permite; la API
+      // igual los ignora si no.
+      const detalles = lineas.map((l) => ({
+        id_producto: l.id_producto,
+        cantidad: l.cantidad,
+        ...(puedeEditarPrecio ? { precio_unitario: aNumero(l.precioTexto) } : {}),
+        ...(puedeEditarDescuento ? { descuento: redondear2(aNumero(l.descuentoTexto)) } : {}),
+      }));
       if (modo === 'editar' && idFactura) {
         await actualizarFactura(idFactura, {
           fecha_emision: fechaLocalISO(fechaEmision),
@@ -640,12 +698,20 @@ export default function FacturaVentaFormScreen() {
           <View key={i} style={styles.lineaLectura}>
             <Text style={styles.lineaNombre}>{d.producto_nombre}</Text>
             <Text style={styles.lineaSub}>
-              {d.cantidad} x ${Number(d.precio_unitario).toFixed(2)} = ${Number(d.precio_total_sin_impuesto).toFixed(2)}
+              {d.cantidad} x ${Number(d.precio_unitario).toFixed(2)}
+              {Number(d.descuento ?? 0) > 0 ? ` - desc. $${Number(d.descuento).toFixed(2)}` : ''} = $
+              {Number(d.precio_total_sin_impuesto).toFixed(2)}
             </Text>
           </View>
         ))}
 
         <View style={styles.totalesBox}>
+          {Number(cabeceraLectura.total_descuento) > 0 ? (
+            <View style={styles.totalFila}>
+              <Text style={styles.totalLabel}>Descuento</Text>
+              <Text style={[styles.totalValor, styles.textoDescuento]}>-${Number(cabeceraLectura.total_descuento).toFixed(2)}</Text>
+            </View>
+          ) : null}
           <View style={[styles.totalFila, styles.totalFilaBorde]}>
             <Text style={[styles.totalLabel, styles.totalLabelFuerte]}>Subtotal</Text>
             <Text style={styles.totalValor}>${Number(cabeceraLectura.total_sin_impuestos).toFixed(2)}</Text>
@@ -928,29 +994,66 @@ export default function FacturaVentaFormScreen() {
       {lineas.length === 0 ? (
         <Text style={styles.vacio}>Aún no agregas productos.</Text>
       ) : (
-        lineas.map((l, i) => (
-          <View key={i} style={styles.lineaEdit}>
-            <View style={{ flex: 1 }}>
-              <Text style={styles.lineaNombre}>{l.producto_nombre}</Text>
+        lineas.map((l, i) => {
+          const c = calculos[i];
+          return (
+            <View key={i} style={styles.lineaEditBox}>
+              <View style={styles.lineaEditCabecera}>
+                <Text style={[styles.lineaNombre, { flex: 1 }]}>{l.producto_nombre}</Text>
+                <TouchableOpacity onPress={() => quitarLinea(i)}>
+                  <Text style={styles.quitar}>Quitar</Text>
+                </TouchableOpacity>
+              </View>
+              <View style={styles.lineaCampos}>
+                <View style={styles.lineaCampo}>
+                  <Text style={styles.lineaCampoLabel}>Cantidad</Text>
+                  <TextInput
+                    style={styles.inputLinea}
+                    keyboardType="decimal-pad"
+                    value={String(l.cantidad)}
+                    onChangeText={(v) => actualizarLinea(i, { cantidad: aNumero(v) })}
+                  />
+                </View>
+                <View style={styles.lineaCampo}>
+                  <Text style={styles.lineaCampoLabel}>Precio (sin IVA)</Text>
+                  <TextInput
+                    style={[styles.inputLinea, !puedeEditarPrecio && styles.inputLineaBloqueado]}
+                    keyboardType="decimal-pad"
+                    value={l.precioTexto}
+                    editable={puedeEditarPrecio}
+                    onChangeText={(v) => actualizarLinea(i, { precioTexto: v })}
+                  />
+                </View>
+                {puedeEditarDescuento ? (
+                  <View style={styles.lineaCampo}>
+                    <Text style={styles.lineaCampoLabel}>Descuento $</Text>
+                    <TextInput
+                      style={[styles.inputLinea, styles.inputDescuento]}
+                      keyboardType="decimal-pad"
+                      value={l.descuentoTexto}
+                      placeholder="0.00"
+                      onChangeText={(v) => actualizarLinea(i, { descuentoTexto: v })}
+                    />
+                  </View>
+                ) : null}
+              </View>
               <Text style={styles.lineaSub}>
-                ${l.precioBase.toFixed(2)} c/u · ${(l.precioBase * l.cantidad).toFixed(2)}
+                Subtotal ${c.subtotal.toFixed(2)}
+                {c.descuento > 0 ? ` (desc. $${c.descuento.toFixed(2)})` : ''} · Total ${(c.subtotal + c.iva).toFixed(2)}
               </Text>
             </View>
-            <TextInput
-              style={styles.inputCantidad}
-              keyboardType="decimal-pad"
-              value={String(l.cantidad)}
-              onChangeText={(v) => actualizarCantidad(i, Number(v.replace(',', '.')) || 0)}
-            />
-            <TouchableOpacity onPress={() => quitarLinea(i)}>
-              <Text style={styles.quitar}>Quitar</Text>
-            </TouchableOpacity>
-          </View>
-        ))
+          );
+        })
       )}
 
       {lineas.length > 0 ? (
         <View style={styles.totalesBox}>
+          {totalDescuento > 0 ? (
+            <View style={styles.totalFila}>
+              <Text style={styles.totalLabel}>Descuento</Text>
+              <Text style={[styles.totalValor, styles.textoDescuento]}>-${totalDescuento.toFixed(2)}</Text>
+            </View>
+          ) : null}
           <View style={styles.totalFila}>
             <Text style={styles.totalLabel}>Subtotal</Text>
             <Text style={styles.totalValor}>${subtotal.toFixed(2)}</Text>
@@ -1004,9 +1107,16 @@ const styles = StyleSheet.create({
   quitar: { color: '#dc3545', fontWeight: '600' },
   tituloSeccion: { fontSize: 15, fontWeight: '700', marginTop: 8, marginBottom: 8 },
   vacio: { color: '#888' },
-  lineaEdit: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#fff', borderRadius: 8, padding: 12, marginBottom: 8, gap: 10 },
+  lineaEditBox: { backgroundColor: '#fff', borderRadius: 8, padding: 12, marginBottom: 8 },
+  lineaEditCabecera: { flexDirection: 'row', alignItems: 'flex-start', gap: 10 },
+  lineaCampos: { flexDirection: 'row', gap: 8, marginTop: 8, marginBottom: 6 },
+  lineaCampo: { flex: 1 },
+  lineaCampoLabel: { fontSize: 11, color: '#777', marginBottom: 2 },
   lineaNombre: { fontSize: 14, fontWeight: '600' },
-  inputCantidad: { borderWidth: 1, borderColor: '#ccc', borderRadius: 6, paddingHorizontal: 8, paddingVertical: 4, width: 56, fontSize: 13, textAlign: 'center' },
+  inputLinea: { borderWidth: 1, borderColor: '#ccc', borderRadius: 6, paddingHorizontal: 8, paddingVertical: 6, fontSize: 13, textAlign: 'right', backgroundColor: '#fff' },
+  inputLineaBloqueado: { backgroundColor: '#f1f1f1', color: '#777' },
+  inputDescuento: { color: '#dc3545' },
+  textoDescuento: { color: '#dc3545' },
   botonGuardar: { backgroundColor: '#0d6efd', borderRadius: 8, paddingVertical: 14, marginTop: 20, alignItems: 'center' },
   botonEditar: { backgroundColor: '#0d6efd', borderRadius: 8, paddingVertical: 14, marginTop: 20, alignItems: 'center' },
   botonSri: { backgroundColor: '#6f42c1', borderRadius: 8, paddingVertical: 14, marginTop: 12, alignItems: 'center' },

@@ -222,10 +222,43 @@ class ReporteInventariosController extends BaseModuloController
         return 'GENERAL';
     }
 
+    /**
+     * En "En general" la fila es el producto en la bodega y suma TODO su kardex: un filtro de
+     * lote, NUP o caducidad solo decidía qué productos aparecían, y el Stock seguía siendo el
+     * de todos los lotes. Movimientos, con el mismo filtro, muestra el saldo de ese lote, así
+     * que las dos pestañas daban números distintos. Con uno de esos filtros se baja al
+     * desglose que sí los aplica sobre la suma (la vista hace lo mismo al pulsar Mostrar;
+     * esto cubre exportaciones y enlaces armados antes).
+     */
+    private static function desgloseSegunFiltrosDeLote(string $desglose, string $lote, string $nup, string $cadDesde, string $cadHasta): string
+    {
+        if ($desglose !== 'GENERAL') {
+            return $desglose;
+        }
+        // Los desgloses aplican los cuatro filtros sobre la suma; solo cambia cómo se parten
+        // las filas. El NUP solo tiene columna en "Lote + caducidad".
+        if ($nup !== '') {
+            return 'LOTE_CADUCIDAD';
+        }
+        if ($lote !== '') {
+            return 'LOTE';
+        }
+        if ($cadDesde !== '' || $cadHasta !== '') {
+            return 'CADUCIDAD';
+        }
+        return $desglose;
+    }
+
     private function getFiltrosExistencias(): array
     {
         return [
-            'desglose'     => $this->resolverDesglose(),
+            'desglose'     => self::desgloseSegunFiltrosDeLote(
+                $this->resolverDesglose(),
+                trim((string) ($_REQUEST['numero_lote'] ?? '')),
+                trim((string) ($_REQUEST['nup'] ?? '')),
+                (string) ($_REQUEST['fecha_caducidad_desde'] ?? ''),
+                (string) ($_REQUEST['fecha_caducidad_hasta'] ?? '')
+            ),
             'agrupar_por'  => $_REQUEST['agrupar_por'] ?? 'NINGUNO',
             'id_bodega'    => $_REQUEST['id_bodega']    ?? '',
             'id_categoria' => $_REQUEST['id_categoria'] ?? '',
@@ -289,6 +322,10 @@ class ReporteInventariosController extends BaseModuloController
             'fecha_caducidad_hasta' => $_REQUEST['fecha_caducidad_hasta'] ?? '',
             'observaciones'   => trim($_REQUEST['observaciones'] ?? ''),
             'buscar'          => trim($_REQUEST['buscar'] ?? ''),
+            // "1" = ocultar los reversos/reactivaciones que se compensan (ver
+            // ReporteInventarioRepository::cteCorreccionesAnuladas()). Sin el parámetro
+            // (enlaces viejos) se muestran todos, como antes.
+            'ocultar_correcciones' => ($_REQUEST['ocultar_correcciones'] ?? '') === '1',
             'bodegas_denegadas' => $this->bodegasDenegadas(),
         ];
     }
@@ -480,7 +517,113 @@ class ReporteInventariosController extends BaseModuloController
                             . ($hayMas ? self::filaTopeAlcanzado($limite, $colSpan) : ''),
             'agrupacion' => $modo,
             'tope'       => $hayMas ? $limite : null,
+            'resumen'    => $this->htmlResumenCuadre($idEmpresa, $filtros),
         ];
+    }
+
+    /**
+     * Bloque sobre la tabla de Movimientos:
+     *  - con un producto elegido, el resumen de cuadre por bodega (saldo inicial + entradas
+     *    − salidas ± correcciones = saldo final, contra lo que dice Existencias);
+     *  - con filtros de tipo/origen/usuario/observaciones, el aviso de que la columna Saldo
+     *    ya no es stock sino el acumulado de lo filtrado;
+     *  - sin producto, una línea que dice cómo obtener el resumen.
+     */
+    private function htmlResumenCuadre(int $idEmpresa, array $filtros): string
+    {
+        $claseFiltrada = !empty($filtros['tipo_movimiento']) || !empty($filtros['referencia_tipo'])
+            || !empty($filtros['id_usuario']) || !empty($filtros['observaciones']);
+        if ($claseFiltrada) {
+            return '<div class="alert alert-warning border-0 shadow-sm rounded-3 small py-2 px-3 mb-3">'
+                . '<i class="bi bi-exclamation-triangle me-1"></i><strong>La columna Saldo no es el stock.</strong> '
+                . 'Con un filtro de Tipo, Origen, Usuario u Observaciones solo se suman los movimientos filtrados, '
+                . 'así que el Saldo es el acumulado de esos movimientos. Para ver el stock y el resumen de cuadre, '
+                . 'quite esos filtros y elija un producto.</div>';
+        }
+        if (!ReporteInventarioRepository::resumenCuadreAplica($filtros)) {
+            return '<div class="small text-muted mb-2 px-1"><i class="bi bi-info-circle me-1"></i>'
+                . 'Elija un producto para ver el resumen de cuadre (saldo inicial, entradas, salidas y correcciones) '
+                . 'y compararlo con Existencias.</div>';
+        }
+
+        $filas = $this->repository->getResumenCuadre($idEmpresa, $filtros);
+        if (empty($filtros['fecha_hasta'])) {
+            $alCorte = 'hoy';
+        } else {
+            $alCorte = 'al ' . date('d-m-Y', strtotime((string) $filtros['fecha_hasta']));
+        }
+        $desde = !empty($filtros['fecha_desde']) ? date('d-m-Y', strtotime((string) $filtros['fecha_desde'])) : '';
+        $num = static fn(float $v) => number_format($v, 2);
+        $signo = static fn(float $v) => ($v > 0 ? '+' : ($v < 0 ? '−' : '')) . number_format(abs($v), 2);
+
+        $alcance = [];
+        if (($filtros['numero_lote'] ?? '') !== '') $alcance[] = 'lote <strong>' . htmlspecialchars($filtros['numero_lote']) . '</strong>';
+        if (($filtros['nup'] ?? '') !== '')         $alcance[] = 'NUP <strong>' . htmlspecialchars($filtros['nup']) . '</strong>';
+        if (($filtros['fecha_caducidad_desde'] ?? '') !== '' || ($filtros['fecha_caducidad_hasta'] ?? '') !== '') $alcance[] = 'caducidad filtrada';
+
+        $html = '<div class="card border-0 shadow-sm rounded-3 mb-3">'
+            . '<div class="card-header bg-white border-bottom py-2 px-3 d-flex flex-wrap align-items-center gap-2">'
+            . '<h6 class="mb-0 fw-bold"><i class="bi bi-clipboard-check me-2 text-primary"></i>Resumen de cuadre</h6>'
+            . '<span class="small text-muted">' . ($desde !== '' ? 'del ' . $desde . ' ' : '') . ($alCorte === 'hoy' ? 'hasta hoy' : $alCorte)
+            . ($alcance ? ' · ' . implode(' · ', $alcance) : '') . '</span>'
+            . '</div>';
+
+        if (empty($filas)) {
+            return $html . '<div class="card-body small text-muted py-3 px-3">Este producto no tiene movimientos ni saldo con los filtros elegidos.</div></div>';
+        }
+
+        $html .= '<div class="card-body p-0"><div class="ri-mv-resumen-scroll w-100"><table class="table table-sm mb-0 align-middle small">'
+            . '<thead class="table-light"><tr class="text-secondary">'
+            . '<th class="ps-3">Bodega</th>'
+            . '<th class="text-end">Saldo inicial</th>'
+            . '<th class="text-end" title="Compras, retornos, reingresos, ajustes de entrada…">+ Entradas</th>'
+            . '<th class="text-end" title="Consignaciones, facturas, ajustes de salida…">− Salidas</th>'
+            . '<th class="text-end" title="Reversos al pasar un documento a Borrador/Anulado, reactivaciones, eliminaciones y ediciones">± Correcciones</th>'
+            . '<th class="text-end">= Saldo final</th>'
+            . '<th class="text-end" title="Lo que muestra la pestaña Existencias ' . $alCorte . ' con los mismos filtros">Existencias ' . $alCorte . '</th>'
+            . '<th class="pe-3">Cuadre</th>'
+            . '</tr></thead><tbody>';
+
+        $ocultosTotal = 0;
+        foreach ($filas as $f) {
+            $ocultosTotal += $f['ocultos_mov'];
+            $corr = $f['correcciones_mov'] > 0
+                ? $signo($f['correcciones']) . ' <span class="text-muted">(' . $f['correcciones_mov'] . ' mov.)</span>'
+                : '<span class="text-muted">—</span>';
+            if ($f['cuadra']) {
+                $estado = '<span class="badge bg-success bg-opacity-10 text-success border border-success border-opacity-25"><i class="bi bi-check-lg me-1"></i>Cuadra</span>';
+            } else {
+                $dif = $f['existencias'] - $f['saldo_final'];
+                $explicacion = ($f['otro_amb_mov'] > 0 && abs($dif - $f['otro_amb_cant']) < 0.000001)
+                    ? 'Diferencia de ' . $signo($dif) . ': ' . $f['otro_amb_mov'] . ' movimiento(s) de otro ambiente (pruebas/producción). Existencias los suma y Movimientos no los muestra.'
+                    : 'Diferencia de ' . $signo($dif) . '. Revise la pestaña Auditoría.';
+                $estado = '<span class="badge bg-danger bg-opacity-10 text-danger border border-danger border-opacity-25" title="' . htmlspecialchars($explicacion, ENT_QUOTES) . '">'
+                    . '<i class="bi bi-exclamation-triangle me-1"></i>No cuadra</span>'
+                    . '<div class="text-danger" style="font-size:.7rem;white-space:normal;min-width:240px;">' . htmlspecialchars($explicacion) . '</div>';
+            }
+            $html .= '<tr>'
+                . '<td class="ps-3 fw-semibold">' . htmlspecialchars($f['bodega_nombre']) . '</td>'
+                . '<td class="text-end">' . $num($f['saldo_inicial']) . '</td>'
+                . '<td class="text-end text-success">' . ($f['entradas'] > 0 ? '+' . $num($f['entradas']) : '—') . '</td>'
+                . '<td class="text-end text-danger">' . ($f['salidas'] > 0 ? '−' . $num($f['salidas']) : '—') . '</td>'
+                . '<td class="text-end">' . $corr . '</td>'
+                . '<td class="text-end fw-bold text-primary">' . $num($f['saldo_final']) . '</td>'
+                . '<td class="text-end fw-bold">' . $num($f['existencias']) . '</td>'
+                . '<td class="pe-3">' . $estado . '</td>'
+                . '</tr>';
+        }
+        $html .= '</tbody></table></div></div>';
+
+        $notas = [];
+        if ($ocultosTotal > 0) {
+            $notas[] = '<i class="bi bi-eye-slash me-1"></i>' . $ocultosTotal . ' movimiento(s) de corrección se anulan entre sí '
+                . '(p. ej. un retorno pasado a Borrador y vuelto a Emitir) y están ocultos en el listado; no cambian el saldo. '
+                . 'Para verlos, elija "Mostrar todas" en Correcciones.';
+        }
+        if ($notas) {
+            $html .= '<div class="card-footer bg-white border-top py-2 px-3 small text-muted">' . implode('<br>', $notas) . '</div>';
+        }
+        return $html . '</div>';
     }
 
     private function generarValorizacion(int $idEmpresa): array
@@ -809,7 +952,11 @@ class ReporteInventariosController extends BaseModuloController
                 . '<td><span class="fw-bold">' . htmlspecialchars($r['producto_nombre'] ?? '') . '</span></td>'
                 . '<td class="small">' . htmlspecialchars($r['bodega_nombre'] ?? '') . '</td>'
                 . '<td class="text-center small text-uppercase">' . htmlspecialchars($r['tipo_movimiento'] ?? '') . '</td>'
-                . '<td class="small">' . htmlspecialchars($r['origen_label'] ?? '') . '</td>'
+                . '<td class="small">' . htmlspecialchars($r['origen_label'] ?? '')
+                . (!empty($r['es_correccion'])
+                    ? ' <span class="badge bg-warning bg-opacity-10 text-warning border border-warning border-opacity-25" title="Corrige un movimiento anterior del mismo documento (reverso, reactivación, eliminación o edición); no es mercadería nueva">Corrección</span>'
+                    : '')
+                . '</td>'
                 . '<td class="text-end text-success">' . $entrada . '</td>'
                 . '<td class="text-end text-danger">' . $salida . '</td>'
                 . '<td class="text-end fw-bold">' . number_format($saldo, 2) . '</td>'
@@ -1988,7 +2135,8 @@ class ReporteInventariosController extends BaseModuloController
                             $r['producto_codigo'] ?? '',
                             date('d-m-Y H:i', strtotime($r['fecha_movimiento'])),
                             $r['producto_nombre'] ?? '', $r['bodega_nombre'] ?? '',
-                            strtoupper($r['tipo_movimiento'] ?? ''), $r['origen_label'] ?? '',
+                            strtoupper($r['tipo_movimiento'] ?? ''),
+                            ($r['origen_label'] ?? '') . (!empty($r['es_correccion']) ? ' [Corrección]' : ''),
                             $cant > 0 ? $cant : 0, $cant < 0 ? abs($cant) : 0, (float) $r['saldo'],
                             (float) $r['costo_unitario'], $r['numero_lote'] ?? '', $r['observaciones'] ?? '',
                         ];

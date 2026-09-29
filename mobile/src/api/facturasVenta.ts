@@ -49,6 +49,7 @@ export type FacturaDetalleLinea = {
   producto_codigo: string | null;
   cantidad: string;
   precio_unitario: string;
+  descuento?: string | null;
   precio_total_sin_impuesto: string;
   impuestos: { codigo_impuesto: string; codigo_porcentaje: string; tarifa: string; base_imponible: string; valor: string }[];
 };
@@ -86,6 +87,9 @@ export type EstablecimientoFactura = {
   direccion: string;
   id_forma_pago_sri_def: number | null;
   valor_limite_consumidor_final: number;
+  /** Config de facturación del establecimiento (Empresa → Facturación), igual que la web. */
+  editar_precio_factura?: boolean;
+  editar_descuento_factura?: boolean;
   puntos_emision: { id_punto_emision: number; punto_emision: string }[];
 };
 
@@ -121,7 +125,7 @@ export type FacturaInput = {
   id_vendedor?: number;
   id_bodega?: number;
   forma_pago: string;
-  detalles: { id_producto: number; cantidad: number }[];
+  detalles: { id_producto: number; cantidad: number; precio_unitario?: number; descuento?: number }[];
 };
 
 export async function crearFactura(input: FacturaInput) {
