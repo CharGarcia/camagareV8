@@ -6,7 +6,7 @@ ruta_modulo: modulos/asientos_contables
 tipo: modulo
 visibilidad: todos
 etiquetas: asientos, asiento contable, diario, debe, haber, partida doble, cuadrado, comprobante, contabilidad, imprimir, pdf, excel, documento origen, cuadre con el documento, total de la factura, cuenta por cobrar, cartera, editar asiento desde el documento, pestaña asiento contable, editado a mano, restaurar asiento automático, permisos de contabilidad, documentos migrados, migración, sistema anterior, buscar asiento, buscador, filtros, filtrar asientos, buscar por cuenta, buscar por referencia, libro diario, chips, asiento descuadrado, búsqueda lenta, se queda buscando, filtrar por origen, origen del asiento, módulo de origen, vista previa, costo de ventas, asiento sin costo, duplicar asiento, copiar asiento, clonar asiento, repetir asiento
-version: 1.26
+version: 1.27
 orden: 20
 estado: activo
 ---
@@ -197,6 +197,39 @@ los asientos con las cuentas tal como estén configuradas, así que un concepto 
 apuntado se propaga a todos los documentos de golpe y el error solo se nota al
 revisar el balance.
 
+## Qué dice el aviso cuando quedan asientos sin generar
+
+Al terminar la generación, el aviso ya no cuenta documentos por módulo
+("70 en Facturas de Compra, 6 en Egresos…"): dice **qué hay que configurar**, una
+línea por cada sección de Configuración Contable, aunque sean cientos de
+documentos con el mismo problema. Por ejemplo:
+
+- Falta configurar la Cuenta por Pagar en Adquisiciones de Compras.
+- Falta configurar la Cuenta por Pagar en algunos proveedores con cuentas propias
+  (Adquisiciones de Compras).
+- Algunas formas de pago no tienen cuenta contable (Cobros y Pagos).
+- Configure las cuentas contables de Nómina.
+
+Cada línea trae el enlace **Configurar**, que abre Configuración Contable en otra
+pestaña con ese tipo de asiento ya cargado y la sección correspondiente
+desplegada (General, Proveedores, Clientes, formas de cobro o pago, conceptos de
+ingresos o egresos). El enlace solo aparece si usted tiene permiso para ver
+Configuración Contable.
+
+Además:
+
+- **Lo que se resuelve solo no se pide dos veces.** Un egreso que paga compras que
+  todavía no tienen asiento no genera una línea aparte: se arregla al configurar
+  las compras, y el aviso lo menciona como nota informativa (en azul).
+- **Lo que no es de configuración va como nota.** Un egreso con todos los
+  cheques anulados, o con formas de pago en cero, no tiene nada que contabilizar
+  y no aparece como pendiente.
+- **Los errores que no son de cuentas no se disfrazan.** Si un asiento no se generó
+  por otro motivo (por ejemplo, un período cerrado), la línea lo dice sin
+  enlace y el motivo exacto está en *Ver detalle técnico*.
+- **Ver detalle técnico** conserva, para soporte, el motivo exacto y los números
+  de documento de cada caso.
+
 ## Documentos migrados sin asiento contable
 
 Los documentos que llegaron desde el sistema anterior por la migración **no
@@ -371,6 +404,12 @@ tienen un documento individual con tercero que mostrar.
 
 ## Historial de cambios
 
+- **1.27** — El aviso de asientos sin generar dice **qué configurar** (una línea
+  por sección, sin cifras) en lugar de contar documentos por módulo, y cada línea
+  enlaza directo a la sección de Configuración Contable donde falta la cuenta.
+  Distingue cuando la cuenta falta en algunos proveedores o clientes con cuentas
+  propias. Los cobros/pagos que dependen de otro documento sin asiento y los
+  documentos sin valor que contabilizar pasan a ser notas informativas.
 - **1.26** — Nuevo botón **Duplicar** en los asientos de tipo Diario: copia las
   líneas a un asiento nuevo, exigiendo cambiar la fecha o el concepto para que
   no quede idéntico al original.

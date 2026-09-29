@@ -1991,4 +1991,33 @@
         }
     });
 
+    // Enlace directo desde el aviso de asientos pendientes (asientos_pendientes.js):
+    // ?tipo=<tipo de asiento del selector>&seccion=<general|cliente|proveedor|empleado|ingresos|egresos|cobros|pagos>
+    // Carga ese tipo de asiento y abre la sección donde falta la cuenta.
+    const SECCIONES_ENLACE = {
+        general:   '#headingGeneral .accordion-button',
+        cliente:   '#accItemCliente .accordion-button',
+        proveedor: '#accItemProveedor .accordion-button',
+        empleado:  '#accItemEmpleado .accordion-button',
+        ingresos:  '[data-bs-target="#collapseOpcIngresos"]',
+        egresos:   '[data-bs-target="#collapseOpcEgresos"]',
+        cobros:    '[data-bs-target="#collapseFormaCobros"]',
+        pagos:     '[data-bs-target="#collapseFormaPagos"]',
+    };
+    (async function ASIENTOPROG_abrirDesdeEnlace() {
+        const qs = new URLSearchParams(window.location.search);
+        const tipo = qs.get('tipo');
+        const selector = document.getElementById('tipoAsientoSelector');
+        if (!tipo || !selector || !Array.from(selector.options).some(o => o.value === tipo)) return;
+
+        selector.value = tipo;
+        await window.ASIENTOPROG_configurar();
+
+        const btn = document.querySelector(SECCIONES_ENLACE[qs.get('seccion')] || SECCIONES_ENLACE.general);
+        if (btn && btn.offsetParent !== null) {
+            if (btn.classList.contains('collapsed')) btn.click();
+            btn.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }
+    })();
+
 })();

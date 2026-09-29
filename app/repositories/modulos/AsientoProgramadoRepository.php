@@ -1027,6 +1027,45 @@ class AsientoProgramadoRepository extends BaseRepository
     }
 
     /**
+     * De un lote de documentos, cuántos son de un cliente/proveedor que tiene cuentas PROPIAS para
+     * ese tipo de asiento (cascada "la entidad manda"). Lo usa el aviso de asientos pendientes
+     * para decir "falta configurar … en algunos proveedores" en vez de culpar solo a la General.
+     * $tablaDoc/$colEntidad son literales del código (SincronizadorAsientosService::AREAS), no
+     * entrada del usuario. Falla en silencio (0) si la tabla/columna no existe.
+     */
+    public function contarDocumentosConEntidadConReglas(string $tablaDoc, string $colEntidad, string $tipoReferencia, string $tipoAsiento, array $ids): int
+    {
+        $ids = array_values(array_filter(array_map('intval', $ids)));
+        if (!$ids || !preg_match('/^[a-z_]+$/', $tablaDoc) || !preg_match('/^[a-z_]+$/', $colEntidad)) {
+            return 0;
+        }
+        try {
+            $st = $this->db->prepare(
+                "SELECT COUNT(*)
+                   FROM {$tablaDoc} d
+                  WHERE d.id = ANY(string_to_array(:ids, ',')::int[])
+                    AND EXISTS (SELECT 1
+                                  FROM {$this->table} ap
+                                  JOIN asientos_tipo at ON at.id = ap.id_asiento_tipo
+                                 WHERE ap.id_empresa      = d.id_empresa
+                                   AND ap.tipo_referencia = :tipo_ref
+                                   AND ap.id_referencia   = d.{$colEntidad}
+                                   AND at.tipo_asiento    = :tipo_asiento
+                                   AND ap.eliminado       = false
+                                   AND ap.id_cuenta IS NOT NULL)"
+            );
+            $st->execute([
+                ':ids'          => implode(',', $ids),
+                ':tipo_ref'     => $tipoReferencia,
+                ':tipo_asiento' => $tipoAsiento,
+            ]);
+            return (int) $st->fetchColumn();
+        } catch (\Throwable $e) {
+            return 0;
+        }
+    }
+
+    /**
      * Para una entidad/ítem puntual de una dimensión, calcula qué le faltaría configurar para que
      * el asiento quede completo SI esa entidad usa esta regla (Opción 2: "la entidad manda" —
      * ver AsientoBuilderService::generarAsientoSugerido()). Un concepto NO falta si lo cubre la

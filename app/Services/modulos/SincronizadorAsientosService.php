@@ -21,6 +21,44 @@ class SincronizadorAsientosService
     private array $resumenPorModulo = [];
     /** Detalle motivo-por-motivo (mismo contenido que antes iba directo a $warnings). */
     private array $detalle = [];
+    /**
+     * Lo que el usuario tiene que HACER, sin cifras: una línea por sección de Configuración
+     * Contable (ej. "Falta configurar la Cuenta por Pagar en algunos proveedores"), sin repetir
+     * aunque 70 documentos fallen por la misma causa. Es el mensaje principal del aviso; el
+     * conteo por módulo y el detalle por documento quedan solo para "Ver detalle". Ver
+     * registrarAccion().
+     */
+    private array $acciones = [];
+
+    /**
+     * Sección de Configuración Contable de la que sale el asiento de cada módulo (clave del
+     * trabajo => tipo de asiento del selector de esa pantalla + nombre visible). 'entidad' marca
+     * los módulos donde un cliente/proveedor puede tener cuentas propias que mandan sobre la
+     * General (cascada "la entidad manda"): [tipo_referencia, tabla del documento, columna].
+     * Liquidaciones de Compra no la lleva: su asiento no aplica reglas por proveedor.
+     */
+    private const AREAS = [
+        'facturas_venta'        => ['tipo' => 'ventas_factura',            'nombre' => 'Ventas con Factura',          'entidad' => ['cliente', 'ventas_cabecera', 'id_cliente']],
+        'recibos_venta'         => ['tipo' => 'recibos_venta',             'nombre' => 'Recibos de Venta',            'entidad' => ['cliente', 'recibos_venta_cabecera', 'id_cliente']],
+        'notas_credito'         => ['tipo' => 'ventas_factura',            'nombre' => 'Ventas con Factura',          'entidad' => ['cliente', 'notas_credito_cabecera', 'id_cliente']],
+        'notas_debito'          => ['tipo' => 'ventas_factura',            'nombre' => 'Ventas con Factura'],
+        'compras'               => ['tipo' => 'adquisiciones_compras',     'nombre' => 'Adquisiciones de Compras',    'entidad' => ['proveedor', 'compras_cabecera', 'id_proveedor']],
+        'liquidaciones_compra'  => ['tipo' => 'adquisiciones_compras',     'nombre' => 'Adquisiciones de Compras'],
+        'importaciones'         => ['tipo' => 'adquisiciones_importacion', 'nombre' => 'Importaciones'],
+        'factura_reembolso'     => ['tipo' => 'factura_reembolso',         'nombre' => 'Factura de Reembolso'],
+        'retenciones_venta'     => ['tipo' => 'retenciones_venta',         'nombre' => 'Retenciones en Venta'],
+        'retenciones_compra'    => ['tipo' => 'retenciones_compra',        'nombre' => 'Retenciones en Compra'],
+        'ingresos'              => ['tipo' => 'ingresos_egresos',          'nombre' => 'Ingresos y Egresos'],
+        'egresos'               => ['tipo' => 'ingresos_egresos',          'nombre' => 'Ingresos y Egresos'],
+        'consignaciones'        => ['tipo' => 'consignacion_venta',        'nombre' => 'Consignaciones en Ventas'],
+        'retornos_cv'           => ['tipo' => 'consignacion_venta',        'nombre' => 'Consignaciones en Ventas'],
+        'cambios_producto_cv'   => ['tipo' => 'consignacion_venta',        'nombre' => 'Consignaciones en Ventas'],
+        'facturacion_cv'        => ['tipo' => 'consignacion_venta',        'nombre' => 'Consignaciones en Ventas'],
+        'roles_pago'            => ['tipo' => 'nomina',                    'nombre' => 'Nómina'],
+        'conciliacion_tarjetas' => ['tipo' => 'cobros_pagos',              'nombre' => 'Cobros y Pagos (formas de cobro con tarjeta)', 'seccion' => 'cobros'],
+        'traspasos'             => ['tipo' => 'cobros_pagos',              'nombre' => 'Cobros y Pagos'],
+        'activos_fijos_alta'    => ['tipo' => 'activos_fijos_alta',        'nombre' => 'Activos Fijos - Alta'],
+    ];
 
     public function sincronizar(int $idEmpresa, int $idUsuario): void
     {
@@ -40,7 +78,8 @@ class SincronizadorAsientosService
                 $t['dondeConfigurar'],
                 $t['tablaVerif'],
                 $t['colAsiento'],
-                $t['colsDoc'] ?? []
+                $t['colsDoc'] ?? [],
+                (string) ($t['clave'] ?? '')
             );
         }
 
@@ -91,7 +130,8 @@ class SincronizadorAsientosService
             $nombrePaso = $t['nombre'];
             $this->sincronizarModulo(
                 $db, $t['sql'], $t['params'], $t['factory'], $t['nombre'],
-                $t['dondeConfigurar'], $t['tablaVerif'], $t['colAsiento'], $t['colsDoc'] ?? []
+                $t['dondeConfigurar'], $t['tablaVerif'], $t['colAsiento'], $t['colsDoc'] ?? [],
+                (string) ($t['clave'] ?? '')
             );
         } elseif ($paso === count($trabajos)) {
             $nombrePaso = 'Configuración de cuentas (Ingresos/Egresos, Cobros/Pagos)';
@@ -113,6 +153,8 @@ class SincronizadorAsientosService
             'warnings'         => $this->warnings,
             'detalle'          => $this->detalle,
             'resumenPorModulo' => $this->resumenPorModulo,
+            'acciones'         => array_values($this->acciones),
+            'puedeConfigurar'  => $this->puedeConfigurar(),
             'info'             => $this->info,
         ];
     }
@@ -1168,7 +1210,7 @@ class SincronizadorAsientosService
      *                                para mostrar "001-001-000000123" en los avisos en vez del id interno.
      *                                Vacío = se muestra "#id" (no hay columna de número conocida).
      */
-    private function sincronizarModulo(\PDO $db, string $sql, array $params, callable $serviceFactory, string $nombreModulo, string $dondeConfigurar = 'Asientos Programados', ?string $tablaVerif = null, string $colAsiento = 'id_asiento_contable', array $colsDoc = []): void
+    private function sincronizarModulo(\PDO $db, string $sql, array $params, callable $serviceFactory, string $nombreModulo, string $dondeConfigurar = 'Asientos Programados', ?string $tablaVerif = null, string $colAsiento = 'id_asiento_contable', array $colsDoc = [], string $clave = ''): void
     {
         try {
             $st = $db->prepare($sql);
@@ -1247,6 +1289,7 @@ class SincronizadorAsientosService
             $totalConProblema += $n;
             $docs = $this->listarDocumentos($idsFallidos, $numeros);
             $this->detalle[] = "{$nombreModulo} — {$n} asiento(s): {$motivo} (documento(s): {$docs})";
+            $this->registrarAccion($db, $clave, $nombreModulo, $motivo, $idsFallidos);
             error_log("[SincronizadorAsientos] {$nombreModulo}: {$n} fallo(s) — {$motivo} — docs: {$docs} — ids: " . implode(',', $idsFallidos));
         }
 
@@ -1269,6 +1312,7 @@ class SincronizadorAsientosService
                     ? "{$nombreModulo} — {$n} documento(s) sin asiento: {$motivo} (documento(s): {$docs})"
                     : "{$nombreModulo} — {$n} documento(s) sin asiento (documento(s): {$docs})";
                 $this->detalle[] = $texto;
+                $this->registrarAccion($db, $clave, $nombreModulo, $motivo, $idsMotivo);
                 error_log("[SincronizadorAsientos] {$texto} — ids: " . implode(',', $idsMotivo));
             }
         }
@@ -1420,20 +1464,197 @@ class SincronizadorAsientosService
     }
 
     /**
-     * Arma el mensaje corto de una sola línea que ve el usuario por defecto (ej. "Hay asiento(s) por
-     * generar: 20 en Facturas de Venta, 3 en Facturas de Compra. Revise la configuración contable.").
-     * El detalle motivo-por-motivo/documento-por-documento está en getDetalle() (y en el log del
-     * servidor) para quien necesite profundizar (soporte, Auditoría Contable).
+     * Acciones a realizar (ver $acciones): [{clave, texto, textoGenerico, tipo, seccion, dependeDe}]. `tipo` y
+     * `seccion` arman el enlace a Configuración Contable (?tipo=…&seccion=…); `tipo` vacío = sin
+     * enlace. `dependeDe` es el módulo del que depende (ej. un egreso que paga compras sin asiento):
+     * si ese módulo también quedó con pendientes, la acción sobra y la UI la convierte en nota.
+     */
+    public function getAcciones(): array
+    {
+        return array_values($this->acciones);
+    }
+
+    /**
+     * Mensaje corto que ve el usuario: QUÉ configurar, sin cifras (ej. "Faltan algunas
+     * configuraciones contables: Falta configurar la Cuenta por Pagar en algunos proveedores con
+     * cuentas propias (Adquisiciones de Compras); Configure las cuentas contables de Nómina.").
+     * El detalle por documento sigue en getDetalle() (y en el log del servidor) para soporte.
+     * La UI con barra de progreso arma lo mismo desde getAcciones() — ver asientos_pendientes.js.
      */
     public function getResumenMensaje(): ?string
     {
-        if (empty($this->resumenPorModulo)) {
+        $lineas = [];
+        foreach ($this->acciones as $a) {
+            if ($a['dependeDe'] !== null && isset($this->resumenPorModulo[$a['dependeDe']])) {
+                continue;
+            }
+            $lineas[] = $a['texto'];
+        }
+        if (!$lineas) {
             return null;
         }
-        $partes = [];
-        foreach ($this->resumenPorModulo as $modulo => $n) {
-            $partes[] = "{$n} en {$modulo}";
+        return 'Faltan algunas configuraciones contables: ' . implode('; ', $lineas) . '.';
+    }
+
+    /** ¿El usuario puede abrir Configuración Contable? Si no, el aviso no le muestra enlaces. */
+    private function puedeConfigurar(): bool
+    {
+        try {
+            return \App\Helpers\Permisos::puedeVer('modulos/configuracion-contable');
+        } catch (\Throwable $e) {
+            return false;
         }
-        return 'Hay asiento(s) por generar: ' . implode(', ', $partes) . '. Revise la configuración contable.';
+    }
+
+    /**
+     * Traduce UN motivo de fallo (texto de la excepción o del diagnóstico) a la acción que el
+     * usuario tiene que hacer, agrupada por sección de Configuración Contable. Un mismo motivo
+     * puede traer varias causas concatenadas (AsientoBuilderService::verificarCuadre() une todas
+     * las cuentas faltantes en una sola excepción), por eso cada regla se evalúa por separado y
+     * solo se cae a la acción genérica del módulo si ninguna coincidió.
+     */
+    private function registrarAccion(\PDO $db, string $clave, string $nombreModulo, string $motivo, array $ids): void
+    {
+        $m    = mb_strtolower($motivo, 'UTF-8');
+        $area = self::AREAS[$clave] ?? null;
+
+        // Sin valor que contabilizar (egreso con todos los cheques anulados, formas en 0, etc.):
+        // no hay nada que configurar, así que no es una acción sino una nota informativa.
+        if (str_contains($m, 'que contabilizar')) {
+            $nota = "Algunos documentos de {$nombreModulo} no tienen valor que contabilizar "
+                  . '(sin formas de cobro/pago vigentes o en cero): no requieren configuración.';
+            if (!in_array($nota, $this->info, true)) {
+                $this->info[] = $nota;
+            }
+            return;
+        }
+
+        $coincidio = false;
+
+        // Cobro/pago de documentos que todavía no tienen su propio asiento: se arregla al
+        // configurar ESE módulo. Si ese módulo también quedó pendiente en esta corrida, la acción
+        // sobra (dependeDe) y el aviso solo lo menciona como nota.
+        $dependencias = [
+            'genere primero los de facturas de compra' => ['Facturas de Compra', 'adquisiciones_compras', 'la Cuenta por Pagar', 'Adquisiciones de Compras'],
+            'genere primero los de facturas de venta'  => ['Facturas de Venta', 'ventas_factura', 'la Cuenta por Cobrar', 'Ventas con Factura'],
+            'los recibos que cobra'                    => ['Recibos de Venta', 'recibos_venta', 'la Cuenta por Cobrar', 'Recibos de Venta'],
+        ];
+        foreach ($dependencias as $patron => [$modDep, $tipoDep, $que, $nombreDep]) {
+            if (str_contains($m, $patron)) {
+                $this->agregarAccion(
+                    $tipoDep, 'general', "Falta configurar {$que} en {$nombreDep}",
+                    "Configure las cuentas contables de {$nombreDep}", $modDep
+                );
+                $coincidio = true;
+            }
+        }
+
+        if (str_contains($m, 'la forma de cobro')) {
+            $this->agregarAccion('cobros_pagos', 'cobros', 'Algunas formas de cobro no tienen cuenta contable (Cobros y Pagos)');
+            $coincidio = true;
+        }
+        if (str_contains($m, 'la forma de pago')) {
+            $this->agregarAccion('cobros_pagos', 'pagos', 'Algunas formas de pago no tienen cuenta contable (Cobros y Pagos)');
+            $coincidio = true;
+        }
+        if (str_contains($m, 'no tiene cuenta contable asignada') && str_contains($m, 'ingresos y egresos')) {
+            $esEgreso = ($clave === 'egresos');
+            $this->agregarAccion(
+                'ingresos_egresos',
+                $esEgreso ? 'egresos' : 'ingresos',
+                'Algunos conceptos de ' . ($esEgreso ? 'egresos' : 'ingresos') . ' no tienen cuenta contable (Ingresos y Egresos)'
+            );
+            $coincidio = true;
+        }
+        if ($clave !== 'roles_pago' && (str_contains($m, 'sueldos por pagar') || str_contains($m, 'cuentas de nómina'))) {
+            $this->agregarAccion('nomina', 'general', 'Configure las cuentas contables de Nómina');
+            $coincidio = true;
+        }
+        if ($coincidio) {
+            return;
+        }
+
+        // Un error que no habla de cuentas ni de configuración (período cerrado, error de base de
+        // datos…) no se disfraza de "configure las cuentas": se avisa sin enlace y el motivo real
+        // queda en "Ver detalle".
+        if (!str_contains($m, 'cuenta') && !str_contains($m, 'configur')) {
+            $this->agregarAccion('', '', "Algunos asientos de {$nombreModulo} no se pudieron generar (vea el detalle)");
+            return;
+        }
+
+        if ($area === null) {
+            $this->agregarAccion('', '', "Revise la configuración contable de {$nombreModulo}");
+            return;
+        }
+
+        // Solo en ventas/compras vale la pena nombrar la cartera: es la cuenta que el usuario
+        // reconoce y la que más falta. En el resto el texto genérico de la sección basta.
+        $concepto = null;
+        if (in_array($area['tipo'], ['ventas_factura', 'recibos_venta', 'adquisiciones_compras'], true)) {
+            if (str_contains($m, 'por pagar')) {
+                $concepto = 'la Cuenta por Pagar';
+            } elseif (str_contains($m, 'por cobrar')) {
+                $concepto = 'la Cuenta por Cobrar';
+            }
+        }
+
+        // Cascada "la entidad manda": si el cliente/proveedor del documento tiene cuentas propias,
+        // el hueco está en SU configuración (o en la General que la complementa), no solo en la
+        // General — se dice "en algunos proveedores" y el enlace abre esa sección.
+        $conReglas = 0;
+        if (!empty($area['entidad'])) {
+            [$tipoRef, $tablaDoc, $colEntidad] = $area['entidad'];
+            $conReglas = (new \App\repositories\modulos\AsientoProgramadoRepository())
+                ->contarDocumentosConEntidadConReglas($tablaDoc, $colEntidad, $tipoRef, $area['tipo'], $ids);
+            if ($conReglas > 0) {
+                $plural = $tipoRef === 'proveedor' ? 'proveedores' : 'clientes';
+                $this->agregarAccion(
+                    $area['tipo'],
+                    $tipoRef,
+                    'Falta configurar ' . ($concepto ?? 'algunas cuentas contables') . " en algunos {$plural} con cuentas propias ({$area['nombre']})",
+                    "Falta configurar algunas cuentas contables en algunos {$plural} con cuentas propias ({$area['nombre']})"
+                );
+            }
+        }
+        if ($conReglas < count($ids)) {
+            $generico = "Configure las cuentas contables de {$area['nombre']}";
+            $this->agregarAccion(
+                $area['tipo'],
+                $area['seccion'] ?? 'general',
+                $concepto !== null ? "Falta configurar {$concepto} en {$area['nombre']}" : $generico,
+                $generico
+            );
+        }
+    }
+
+    /**
+     * Agrega una acción: UNA línea por sección de Configuración Contable (tipo + sección). Si a la
+     * misma sección le llegan faltas distintas (ej. la Cuenta por Pagar en unas compras y el IVA en
+     * otras), la línea pasa a su texto genérico ("Configure las cuentas contables de …") en vez de
+     * repetir la sección. Las acciones sin enlace (tipo vacío) se distinguen por su texto.
+     */
+    private function agregarAccion(string $tipo, string $seccion, string $texto, ?string $textoGenerico = null, ?string $dependeDe = null): void
+    {
+        $textoGenerico ??= $texto;
+        $clave = $tipo !== '' ? $tipo . '|' . $seccion : '|' . $texto;
+        if (isset($this->acciones[$clave])) {
+            $previa = &$this->acciones[$clave];
+            if ($previa['texto'] !== $texto) {
+                $previa['texto'] = $previa['textoGenerico'];
+            }
+            // Si la misma falta llega también de forma directa, ya no es solo una dependencia.
+            if ($dependeDe === null) {
+                $previa['dependeDe'] = null;
+            }
+            return;
+        }
+        $this->acciones[$clave] = [
+            'clave'         => $clave,
+            'texto'         => $texto,
+            'textoGenerico' => $textoGenerico,
+            'tipo'          => $tipo,
+            'seccion'       => $seccion,
+            'dependeDe'     => $dependeDe,
+        ];
     }
 }

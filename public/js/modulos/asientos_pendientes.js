@@ -16,7 +16,11 @@
  *   GET {urlBase}/contarPendientesAjax        → { ok: true, pendientes: <int> }
  *   GET {urlBase}/sincronizarPasoAjax?paso=N  → { ok: true, paso, totalPasos, nombrePaso,
  *                                                 terminado, generados, warnings, detalle,
- *                                                 resumenPorModulo, info }
+ *                                                 resumenPorModulo, acciones, puedeConfigurar, info }
+ *
+ * `acciones` es lo que se muestra: qué configurar, una línea por sección de Configuración Contable,
+ * sin cifras (ver SincronizadorAsientosService::registrarAccion()). Cada una enlaza a
+ * /modulos/configuracion-contable?tipo=…&seccion=… si `puedeConfigurar`.
  *
  * `info` es un canal INFORMATIVO (azul): notas que no son error ni pendiente. Los documentos
  * traídos por la migración NO se revisan ni se cuentan: su contabilidad es el histórico migrado
@@ -47,13 +51,23 @@
         `;
     }
 
-    /** Arma y muestra el resultado final (generados + resumen + detalle + avisos), acumulados de todos los pasos. */
+    /** "…/modulos/asientos_contables" → "…/modulos/configuracion-contable" (misma base de la app). */
+    function urlConfiguracion(urlBase) {
+        return String(urlBase).replace(/\/modulos\/[^/]+\/?$/, '') + '/modulos/configuracion-contable';
+    }
+
+    /**
+     * Arma y muestra el resultado final (generados + acciones + detalle + avisos), acumulados de
+     * todos los pasos. Las acciones dicen QUÉ configurar (una línea por sección, sin cifras) y,
+     * si el usuario puede entrar a Configuración Contable, enlazan directo a esa sección.
+     */
     function mostrarResultado(opts) {
         // Los `warnings` del backend (conceptos/formas de pago sin cuenta, etc.) ya NO se muestran
-        // como "Otros avisos": solo se informa lo generado y lo que quedó pendiente por módulo.
-        const { resumen, detalle, generados, interrumpido, onGenerado } = opts;
+        // como "Otros avisos": solo se informa lo generado y lo que queda por configurar.
+        const { detalle, generados, interrumpido, onGenerado } = opts;
+        const acciones = Array.isArray(opts.acciones) ? opts.acciones : [];
         const info = Array.isArray(opts.info) ? opts.info : [];
-        const hayPendientes = !!resumen;
+        const hayPendientes = acciones.length > 0;
 
         let html = '';
         if (interrumpido) {
@@ -62,15 +76,26 @@
         if (generados > 0) {
             html += `<div class="mb-2"><i class="bi bi-check-circle-fill text-success me-1"></i> Se generaron <strong>${generados}</strong> asiento(s) contable(s).</div>`;
         }
-        if (resumen) {
-            html += `<div class="text-start small mb-2"><i class="bi bi-exclamation-triangle text-warning me-1"></i> ${escapeHtml(resumen)}</div>`;
+        if (hayPendientes) {
+            const items = acciones.map(a => {
+                let enlace = '';
+                if (opts.urlConfig && a.tipo) {
+                    const qs = new URLSearchParams({ tipo: a.tipo, seccion: a.seccion || 'general' });
+                    enlace = ` <a href="${escapeHtml(opts.urlConfig + '?' + qs.toString())}" target="_blank" rel="noopener" class="text-nowrap">`
+                        + `<i class="bi bi-box-arrow-up-right me-1"></i>Configurar</a>`;
+                }
+                return `<li class="mb-1">${escapeHtml(a.texto)}.${enlace}</li>`;
+            }).join('');
+            html += `<div class="text-start small mb-2"><i class="bi bi-exclamation-triangle text-warning me-1"></i> `
+                + `<strong>Faltan algunas configuraciones contables:</strong>`
+                + `<ul class="mb-0 mt-1">${items}</ul></div>`;
         }
         if (detalle.length) {
             const idDetalle = `asientosPendDetalle_${Date.now()}`;
             html += `<div class="text-start small mb-2">`
                 + `<a href="#" class="link-secondary" onclick="event.preventDefault(); `
                 + `var d=document.getElementById('${idDetalle}'); d.style.display = d.style.display==='none' ? '' : 'none';">`
-                + `<i class="bi bi-chevron-down me-1"></i>Ver detalle (qué cuenta falta, qué documentos)</a>`
+                + `<i class="bi bi-chevron-down me-1"></i>Ver detalle técnico (qué documentos)</a>`
                 + `<ul id="${idDetalle}" class="mb-0 mt-1 small" style="display:none;">`
                 + detalle.map(d => `<li class="mb-1">${escapeHtml(d)}</li>`).join('') + `</ul></div>`;
         }
@@ -174,6 +199,8 @@
         const acumDetalle = [];
         const acumInfo = [];
         const acumResumen = {};
+        const acumAcciones = new Map();
+        let puedeConfigurar = false;
         let generados = 0;
 
         (async () => {
@@ -218,6 +245,17 @@
                         acumResumen[mod] = (acumResumen[mod] || 0) + (parseInt(cnt, 10) || 0);
                     });
                 }
+                if (Array.isArray(json.acciones)) {
+                    json.acciones.forEach(a => {
+                        if (!a || !a.clave) return;
+                        const previa = acumAcciones.get(a.clave);
+                        if (!previa) { acumAcciones.set(a.clave, a); return; }
+                        // Una sola línea por sección: faltas distintas en la misma sección → texto genérico.
+                        if (previa.texto !== a.texto) previa.texto = previa.textoGenerico || a.textoGenerico || previa.texto;
+                        if (!a.dependeDe) previa.dependeDe = null; // también falta de forma directa
+                    });
+                }
+                if (json.puedeConfigurar) puedeConfigurar = true;
 
                 n++;
                 if (!cancelado) {
@@ -233,10 +271,23 @@
                 return;
             }
 
-            const partes = Object.entries(acumResumen).map(([mod, cnt]) => `${cnt} en ${mod}`);
-            const resumen = partes.length ? `Hay asiento(s) por generar: ${partes.join(', ')}. Revise la configuración contable.` : null;
+            // Mismo criterio que SincronizadorAsientosService::getResumenMensaje(): una acción que
+            // depende de otro módulo que también quedó pendiente (ej. egresos que pagan compras sin
+            // asiento) no se pide aparte — se resuelve al corregir ese módulo, y se dice como nota.
+            const acciones = [];
+            acumAcciones.forEach(a => {
+                if (a.dependeDe && acumResumen[a.dependeDe]) {
+                    const nota = `Los ingresos/egresos que cobran o pagan ${a.dependeDe} se contabilizarán solos cuando esos documentos tengan su asiento.`;
+                    if (!acumInfo.includes(nota)) acumInfo.push(nota);
+                    return;
+                }
+                acciones.push(a);
+            });
 
-            mostrarResultado({ resumen, detalle: acumDetalle, info: acumInfo, generados, interrumpido, onGenerado });
+            mostrarResultado({
+                acciones, urlConfig: puedeConfigurar ? urlConfiguracion(urlBase) : null,
+                detalle: acumDetalle, info: acumInfo, generados, interrumpido, onGenerado,
+            });
         })();
     }
 

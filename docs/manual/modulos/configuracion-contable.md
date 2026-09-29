@@ -6,7 +6,7 @@ ruta_modulo: modulos/configuracion-contable
 tipo: modulo
 visibilidad: admin
 etiquetas: configuracion contable, cuentas por documento, asiento automatico, parametrizacion, ventas, compras, cierre, tipo de produccion, bien, servicio, filtro por año, periodo, listado de proveedores, listado de clientes, cobros y pagos, ingresos y egresos, forma de pago, cuenta bancaria, efectivo, misma cuenta en los dos bloques, formas hermanas, cheques y transferencias, mismo banco, numero de cuenta, nomina, rol de pagos, prestamo quirografario, prestamo hipotecario, prestamo empresa, prestamos iess, cuentas opcionales, costo de ventas, costo de venta, inventario, asiento sin costo, no sale el costo, cuenta de iva del cliente, reglas por cliente, buscar proveedor, buscar cliente, buscar ficha, filtrar fichas, muchos proveedores, cuentas faltantes, modulos que contabilizan, apagar asientos, no generar asientos, no contabilizar, desactivar contabilidad, interruptor, consignaciones sin asiento, aviso de asientos pendientes, asientos pendientes en el balance, proveedores sin cuentas, clientes sin cuentas, productos sin cuentas, pendientes de configurar, retenciones en venta, retenciones en compra, retencion de renta, no aparecen las retenciones, codigo de retencion, catalogo de retenciones sri, codigo ats, codigo del anexo, retencion mal asignada
-version: 1.18
+version: 1.19
 orden: 5
 estado: activo
 ---
@@ -356,6 +356,15 @@ permiso **Actualizar** de este módulo.
 Si el error es en un solo documento, el problema no está aquí sino en ese
 documento o en la ficha de la entidad implicada.
 
+## Llegar desde el aviso de asientos pendientes
+
+El aviso de asientos sin generar (Asientos Contables, Mayores, Estados
+Financieros y Balance de Comprobación) trae, en cada línea, un enlace
+**Configurar**. Abre esta pantalla en otra pestaña con el tipo de asiento ya
+elegido y la sección donde falta la cuenta desplegada: la General, las reglas por
+Proveedor o por Cliente, las formas de cobro o de pago, o los conceptos de
+ingresos o egresos. Solo falta asignar la cuenta.
+
 ## Errores frecuentes
 
 - **Un documento no genera asiento**: falta configurar su tipo de operación.
@@ -386,6 +395,9 @@ documento o en la ficha de la entidad implicada.
 
 ## Historial de cambios
 
+- **1.19** — La pantalla se puede abrir desde el enlace **Configurar** del aviso
+  de asientos pendientes: carga sola el tipo de asiento y despliega la sección
+  donde falta la cuenta.
 - **1.18** — El botón *Configurar Asientos* pasa a llamarse **Configurar** y es
   más compacto, para que *Crear Cuenta Contable* y *Módulos que contabilizan*
   quepan en la misma fila que el selector de tipo de asiento.

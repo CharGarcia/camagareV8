@@ -5,7 +5,7 @@ categoria: Contabilidad
 tipo: guia
 visibilidad: todos
 etiquetas: asientos automáticos, generar asientos, contabilidad automática, asientos pendientes, asientos que faltan, contabilizar documentos, no se generó el asiento, factura sin asiento, sincronizar contabilidad, asientos en segundo plano, costo de ventas pendiente, asiento sin costo, actualizar asiento repetido
-version: 1.4
+version: 1.5
 orden: 30
 estado: activo
 ---
@@ -131,8 +131,9 @@ permiso para ver el módulo tampoco genera nada, porque ni siquiera puede abrirl
 
 - **Asientos Contables, Mayores, Estados Financieros y Balance de
   Comprobación** conservan su aviso de siempre: al entrar, preguntan si desea
-  generar los asientos pendientes de **todos** los módulos y muestran el detalle
-  de qué cuenta falta en cada caso. En Mayores, Estados Financieros y Balance
+  generar los asientos pendientes de **todos** los módulos y, al terminar, dicen
+  qué hay que configurar (una línea por sección, con un enlace directo a
+  Configuración Contable). En Mayores, Estados Financieros y Balance
   de Comprobación el reporte no se puede generar hasta que ese aviso se resuelva. Ese aviso sigue siendo el lugar donde ver los
   problemas: la generación automática es silenciosa a propósito, pero no esconde
   nada.
@@ -144,8 +145,9 @@ permiso para ver el módulo tampoco genera nada, porque ni siquiera puede abrirl
 
 - **«Abrí el módulo y mi documento sigue sin asiento»**: casi siempre falta una
   cuenta. Entre a **Asientos Contables**: el aviso de asientos pendientes dice
-  exactamente qué cuenta falta y en qué documentos. Corrija la cuenta en
-  Configuración Contable y vuelva a abrir el módulo.
+  qué configurar y su enlace **Configurar** lo lleva a la sección exacta (los
+  números de documento están en *Ver detalle técnico*). Corrija la cuenta y
+  vuelva a abrir el módulo.
 - **«Tengo cientos de documentos atrasados y solo se generaron algunos»**: es lo
   esperado, se procesan de a 50. Vuelva a entrar al módulo (o use el botón de
   generar de Asientos Contables, que los procesa todos con barra de progreso).
@@ -162,6 +164,8 @@ permiso para ver el módulo tampoco genera nada, porque ni siquiera puede abrirl
 
 ## Historial de cambios
 
+- **1.5** — El aviso de Asientos Contables, Mayores, Estados Financieros y Balance
+  dice qué configurar, sin cifras, con enlace directo a Configuración Contable.
 - **1.4** — Las facturas, recibos y notas de crédito con el costo de ventas pendiente
   por falta de cuenta ya no se vuelven a contabilizar cada vez que se abre el módulo.
   Antes se regeneraban en cada pasada (hasta 50 por vez) sin ningún cambio y dejaban
