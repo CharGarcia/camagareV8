@@ -359,6 +359,47 @@ class SuscripcionesController extends BaseModuloController
         }
     }
 
+    /**
+     * PDF con el detalle de una suscripción (botón PDF de la barra superior del modal).
+     * Se abre con CMG_pdfDocumento(): ante un error responde JSON {ok:false, mensaje}.
+     */
+    public function pdf(): void
+    {
+        $this->requireLeer();
+
+        $idSusc    = (int) ($_GET['id'] ?? 0);
+        $idEmpresa = (int) $_SESSION['id_empresa'];
+
+        try {
+            // Registros propios (§6): sin acceso total, solo las suscripciones que registró.
+            $this->requireRegistroPropio($this->service->getSuscripcion($idSusc, $idEmpresa));
+
+            $datos = $this->service->getDatosPdf($idSusc, $idEmpresa);
+
+            $empresaModel     = new \App\models\Empresa();
+            $empresa          = $empresaModel->getPorId($idEmpresa) ?? [];
+            $establecimientos = $empresaModel->getEstablecimientos($idEmpresa);
+            if (!empty($establecimientos[0]['logo_ruta'])) {
+                $empresa['logo_ruta'] = $establecimientos[0]['logo_ruta'];
+            }
+
+            $autoload = MVC_ROOT . '/vendor/autoload.php';
+            if (file_exists($autoload)) {
+                require_once $autoload;
+            }
+            (new \App\Services\modulos\SuscripcionPdfService())
+                ->generar($datos['cabecera'], $datos['detalle'], $datos['pagos'], $empresa, 'I');
+        } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
+            if (!headers_sent()) {
+                http_response_code(500);
+                header('Content-Type: application/json');
+            }
+            echo json_encode(['ok' => false, 'mensaje' => 'No se pudo generar el PDF: ' . $e->getMessage()], JSON_UNESCAPED_UNICODE);
+        }
+        exit;
+    }
+
     public function getPagosAjax(): void
     {
         $this->requireLeer();

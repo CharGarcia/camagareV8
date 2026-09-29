@@ -71,6 +71,23 @@ class SuscripcionesService
     }
 
     /**
+     * Datos del PDF de una suscripción: cabecera (cliente, periodicidad, tarjeta), ítems
+     * que se facturan en cada cobro e historial de cobros. Solo lectura.
+     */
+    public function getDatosPdf(int $idSuscripcion, int $idEmpresa): array
+    {
+        $cabecera = $this->repository->getCabeceraPdf($idSuscripcion, $idEmpresa);
+        if (!$cabecera) {
+            throw new Exception('Suscripción no encontrada.');
+        }
+        return [
+            'cabecera' => $cabecera,
+            'detalle'  => $this->repository->getDetalle($idSuscripcion),
+            'pagos'    => $this->repository->getPagosPorSuscripcion($idSuscripcion),
+        ];
+    }
+
+    /**
      * Pestaña "Facturas" del modal: facturas y recibos de venta emitidos al cliente elegido
      * en el formulario, o —con $soloSuscripcion— solo los que generó esta suscripción, con
      * su estado de cobro y el detalle de productos/servicios. Solo lectura.

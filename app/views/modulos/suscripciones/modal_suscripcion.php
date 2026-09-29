@@ -76,6 +76,8 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosPestanasOcultas($vistaConfigS
                         <?php if (\App\Helpers\Permisos::puedeCrear('modulos/productos')): ?>
                         <button type="button" class="btn btn-outline-primary btn-sm px-2" onclick="abrirModalProductoCrear()" title="Registrar nuevo producto"><i class="bi bi-box-seam fs-6"></i></button>
                         <?php endif; ?>
+                        <div class="vr mx-1"></div>
+                        <button type="button" class="btn btn-outline-danger btn-sm px-2" onclick="suscPdf()" title="PDF de la suscripción"><i class="bi bi-file-earmark-pdf fs-6"></i></button>
                     </div>
 
                     <!-- Pestañas -->
@@ -1083,6 +1085,16 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosPestanasOcultas($vistaConfigS
 
         // Cargar detalle tras abrir modal
         await suscCargarDetalle(s.id);
+    };
+
+    /* ── PDF de la suscripción ────────────────────────────────────────────────── */
+    window.suscPdf = function () {
+        const id = document.getElementById('susc_id').value;
+        if (!id) {
+            Swal.fire({ icon: 'info', title: 'Suscripción sin guardar', text: 'Guarde la suscripción antes de generar el PDF.', target: document.getElementById('modalSusc') });
+            return;
+        }
+        CMG_pdfDocumento(urlBase + '/pdf?id=' + encodeURIComponent(id));
     };
 
     /* ── Guardar (crear / actualizar) ────────────────────────────────────────── */

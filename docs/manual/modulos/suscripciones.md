@@ -5,8 +5,8 @@ categoria: Ventas
 ruta_modulo: modulos/suscripciones
 tipo: modulo
 visibilidad: todos
-etiquetas: suscripciones, suscripcion, cobro recurrente, facturacion recurrente, factura recurrente, mensualidad, pension, plan mensual, membresia, renovacion, periodicidad, proximo cobro, generar documentos, generar facturas, facturacion automatica, facturas del cliente, facturas emitidas, historial de facturas, detalle de facturas, recibos del cliente, que le facture, saldo del cliente, facturas pendientes, facturas pagadas, facturas abonadas, cobro con tarjeta, debito automatico, nuvei, kushki, aviso de vencimiento, imprimir, impresora, excel, exportar, resumen de valores, total por periodicidad, proyeccion anual, ingresos recurrentes, iva por tarifa, resumen por concepto, detalle por cliente, que se le factura a cada cliente, items por cliente, informacion adicional en excel, resumen en pdf, detalle por cliente en pdf
-version: 1.11
+etiquetas: suscripciones, suscripcion, cobro recurrente, facturacion recurrente, factura recurrente, mensualidad, pension, plan mensual, membresia, renovacion, periodicidad, proximo cobro, generar documentos, generar facturas, facturacion automatica, facturas del cliente, facturas emitidas, historial de facturas, detalle de facturas, recibos del cliente, que le facture, saldo del cliente, facturas pendientes, facturas pagadas, facturas abonadas, cobro con tarjeta, debito automatico, nuvei, kushki, aviso de vencimiento, imprimir, impresora, excel, exportar, resumen de valores, total por periodicidad, proyeccion anual, ingresos recurrentes, iva por tarifa, resumen por concepto, detalle por cliente, que se le factura a cada cliente, items por cliente, informacion adicional en excel, resumen en pdf, detalle por cliente en pdf, pdf de la suscripcion, imprimir suscripcion, contrato, ficha de la suscripcion, detalle de la suscripcion en pdf
+version: 1.12
 orden: 0
 estado: activo
 ---
@@ -160,6 +160,30 @@ reenviar desde la pestaña **Forma de pago** o usar una tarjeta que el cliente y
 registró). El cargo lo hace la automatización **Cobrar suscripciones (Nuvei)**, aparte
 de la generación del documento.
 
+## PDF de la suscripción
+
+En la barra superior del modal, junto a los botones de crear cliente y producto, el
+botón rojo **PDF** genera un documento con el detalle de la suscripción abierta y
+pregunta si desea **Imprimir**, **Descargar** o **Ver**. La suscripción debe estar
+guardada; si es nueva, primero pulse **Guardar**.
+
+El PDF lleva el **logo** y los datos de la empresa, el número y el estado de la
+suscripción, y en orden:
+
+- **Cliente**: nombre, RUC o cédula, correo, teléfono y dirección.
+- **Datos de la suscripción**: periodicidad, comprobante, fecha de inicio, fecha de
+  fin (o *Indefinida*) y próximo cobro.
+- **Productos / servicios** que se facturan en cada cobro, con cantidad, precio, IVA
+  y subtotal, y los totales: subtotal por tarifa de IVA, IVA y **total por cobro**.
+- **Información adicional**, si la tiene.
+- **Cobro y observaciones**: forma de cobro, tarjeta registrada (solo los 4 últimos
+  dígitos), observaciones y quién la registró.
+- **Historial de cobros**: fecha, factura o recibo generado con su estado, resultado
+  del cobro y monto, con el total cobrado (solo cobros exitosos).
+
+El PDF muestra lo que está **guardado**: los cambios sin guardar del formulario no
+aparecen.
+
 ## Buscar y filtrar el listado
 
 El cuadro de búsqueda busca en las columnas del listado, en los productos de cada
@@ -260,6 +284,10 @@ registrados*.
   registrado en Ingresos, o se registró en otro documento.
 
 ## Historial de cambios
+
+- **1.12** — Botón **PDF** en la barra superior del modal: documento con logo y el
+  detalle de la suscripción (cliente, datos, productos con totales, información
+  adicional, forma de cobro e historial de cobros).
 
 - **1.11** — El **PDF** del listado incluye también el **Detalle por cliente**: lo que se
   le factura a cada cliente, con IVA, información adicional y totales.

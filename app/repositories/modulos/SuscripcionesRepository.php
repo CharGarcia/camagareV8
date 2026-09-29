@@ -1060,6 +1060,34 @@ class SuscripcionesRepository extends BaseRepository
         $this->db->prepare("UPDATE {$this->table} SET intentos_fallidos = 0, updated_at = CURRENT_TIMESTAMP WHERE id = :id")->execute([':id' => $id]);
     }
 
+    /**
+     * Cabecera completa de una suscripción para su PDF: cliente, periodicidad, tarjeta
+     * registrada y usuario que la creó. Null si no es de la empresa o fue eliminada.
+     */
+    public function getCabeceraPdf(int $id, int $idEmpresa): ?array
+    {
+        $sql = "SELECT s.*,
+                       c.nombre         AS nombre_cliente,
+                       c.identificacion AS identificacion_cliente,
+                       c.email          AS email_cliente,
+                       c.telefono       AS telefono_cliente,
+                       c.direccion      AS direccion_cliente,
+                       per.nombre       AS nombre_periodicidad,
+                       nt.ultimos4      AS nuvei_ultimos4,
+                       nt.marca         AS nuvei_marca,
+                       u.nombre         AS usuario_creador
+                FROM {$this->table} s
+                LEFT JOIN clientes c   ON c.id  = s.id_cliente
+                LEFT JOIN suscripcion_periodicidades per ON per.id = s.id_periodicidad
+                LEFT JOIN nuvei_tarjetas_cliente nt ON nt.id = s.id_nuvei_tarjeta
+                LEFT JOIN usuarios u   ON u.id  = s.created_by
+                WHERE s.id = :id AND s.id_empresa = :id_empresa AND s.eliminado = false";
+        $st = $this->db->prepare($sql);
+        $st->execute([':id' => $id, ':id_empresa' => $idEmpresa]);
+        $row = $st->fetch(PDO::FETCH_ASSOC);
+        return $row ?: null;
+    }
+
     // ── Detalle (productos/servicios) ─────────────────────────────────────────
 
     public function getDetalle(int $idSuscripcion): array
