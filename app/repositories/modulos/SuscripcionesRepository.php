@@ -1223,7 +1223,9 @@ class SuscripcionesRepository extends BaseRepository
         // (id_recibo → recibos_venta_cabecera), según el tipo_comprobante de la
         // suscripción. Se expone el número/estado del documento que corresponda.
         $sql = "SELECT sp.*,
-                       COALESCE(vc.factura_numero, rv.recibo_numero) AS factura_numero,
+                       -- ventas_cabecera no tiene factura_numero: se arma con la serie y el secuencial.
+                       COALESCE(NULLIF(CONCAT_WS('-', vc.establecimiento, vc.punto_emision, vc.secuencial), ''),
+                                rv.recibo_numero)            AS factura_numero,
                        COALESCE(vc.estado, rv.estado)                AS estado_factura,
                        CASE WHEN sp.id_recibo IS NOT NULL THEN 'recibo' ELSE 'factura' END AS tipo_documento
                 FROM suscripciones_pagos sp
