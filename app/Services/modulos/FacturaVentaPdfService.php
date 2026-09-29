@@ -858,9 +858,15 @@ class FacturaVentaPdfService
         $yTot += $lh;
         $this->filaTotales($pdf, $totX, $yTot, $lblW, $valW, $lh, 'SUBTOTAL EXENTO DE IVA', $exentoIva);
         $yTot += $lh;
-        $this->filaTotales($pdf, $totX, $yTot, $lblW, $valW, $lh, 'SUBTOTAL SIN IMPUESTOS', $subtotalSinImp);
+        // Subtotal antes y después del descuento. El XML no tiene campo para el
+        // subtotal sin descuento (totalSinImpuestos ya viene neto); en el RIDE se
+        // muestra como información adicional para que la resta se lea en orden:
+        // SIN DESCUENTO − TOTAL DESCUENTO = CON DESCUENTO (= totalSinImpuestos).
+        $this->filaTotales($pdf, $totX, $yTot, $lblW, $valW, $lh, 'SUBTOTAL SIN DESCUENTO', round($subtotalSinImp + $totalDcto, 2));
         $yTot += $lh;
         $this->filaTotales($pdf, $totX, $yTot, $lblW, $valW, $lh, 'TOTAL DESCUENTO', $totalDcto);
+        $yTot += $lh;
+        $this->filaTotales($pdf, $totX, $yTot, $lblW, $valW, $lh, 'SUBTOTAL CON DESCUENTO', $subtotalSinImp);
         $yTot += $lh;
         $this->filaTotales($pdf, $totX, $yTot, $lblW, $valW, $lh, 'ICE', $totalIce);
         $yTot += $lh;
