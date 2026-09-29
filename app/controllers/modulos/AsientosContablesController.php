@@ -499,6 +499,14 @@ class AsientosContablesController extends BaseModuloController
                 exit;
             }
 
+            // Copia de un asiento de Diario («Duplicar» del modal).
+            $idDuplicadoDe = (int) ($_POST['duplicado_de'] ?? 0);
+            if ($idDuplicadoDe > 0) {
+                $id = $this->service->guardarDuplicado($idDuplicadoDe, $data['cabecera'], $data['detalles'], $idEmpresa, $idUsuario);
+                echo json_encode(['ok' => true, 'msg' => 'Asiento duplicado correctamente.', 'id' => $id]);
+                exit;
+            }
+
             $id = $this->service->guardarAsiento($data['cabecera'], $data['detalles'], $idEmpresa, $idUsuario, true);
             if ($this->hayDescuadreDocumento($cuadre)) {
                 $this->service->registrarDescuadreConfirmado($id, $cuadre, $idEmpresa, $idUsuario);

@@ -96,6 +96,41 @@ class AsientoContableRules
         }
     }
 
+    /**
+     * Duplicar un asiento: solo los de tipo Diario (los demás son el reflejo contable de un
+     * documento y se duplicarían sin su documento) y la copia no puede ser idéntica al
+     * original — tiene que cambiar al menos la fecha o el concepto, para que no queden dos
+     * asientos indistinguibles en el Libro Diario.
+     *
+     * @param array $origen Cabecera del asiento original (getDetalleAsiento()).
+     * @param array $nueva  Cabecera del asiento que se va a registrar.
+     */
+    public function validarDuplicado(array $origen, array $nueva): void
+    {
+        if ($origen === []) {
+            throw new \Exception('El asiento que intenta duplicar no existe.');
+        }
+
+        if (strtolower(trim((string) ($origen['tipo_comprobante'] ?? ''))) !== 'diario') {
+            throw new \Exception('Solo se pueden duplicar asientos de tipo Diario.');
+        }
+
+        $mismaFecha = substr((string) ($origen['fecha_asiento'] ?? ''), 0, 10)
+                   === substr((string) ($nueva['fecha_asiento'] ?? ''), 0, 10);
+        $mismoConcepto = $this->normalizarConcepto((string) ($origen['concepto'] ?? ''))
+                      === $this->normalizarConcepto((string) ($nueva['concepto'] ?? ''));
+
+        if ($mismaFecha && $mismoConcepto) {
+            throw new \Exception('El asiento duplicado no puede ser idéntico al original: cambie la fecha o el concepto.');
+        }
+    }
+
+    /** Mayúsculas y espacios no cuentan como cambio: «Pago  luz» y «pago luz» son el mismo concepto. */
+    private function normalizarConcepto(string $concepto): string
+    {
+        return mb_strtolower((string) preg_replace('/\s+/u', ' ', trim($concepto)));
+    }
+
     public function validarDetalles(array $detalles, bool $esBorrador = false): void
     {
         if (empty($detalles) || !is_array($detalles)) {

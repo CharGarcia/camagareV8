@@ -8,6 +8,11 @@
     // Cuadre contra el documento origen del asiento abierto (null = asiento de Diario o de un
     // origen cuyo total no es comparable). Lo arma el backend en getDetalleAjax.
     let cuadreDocumento = null;
+    // Fecha y concepto tal como están guardados en el asiento abierto: referencia para que
+    // la copia de «Duplicar» no sea idéntica al original.
+    let asientoCargado = null;
+    // Mientras se arma una copia: { id, numero, fecha, concepto } del original.
+    let duplicadoDe = null;
 
     // Constantes de URLs
     const API_ASIENTOS = `${window.BASE_URL || ''}/modulos/asientos_contables`;
@@ -98,6 +103,7 @@
         document.getElementById('btnGuardarAsiento').classList.remove('d-none');
         document.getElementById('asientoBarraAcciones').classList.toggle('d-none', !(id > 0));
         document.getElementById('btnVerDocumentoOrigenAsiento').classList.add('d-none');
+        reiniciarDuplicado();
         cuadreDocumento = null;
         aplicarModoLecturaAsiento(false);
         document.getElementById('asientoModalTitle').textContent = id > 0 ? 'Editar Asiento' : 'Nuevo Asiento';
@@ -151,6 +157,7 @@
         document.getElementById('btnRestablecerAsiento').classList.add('d-none');
         document.getElementById('btnGuardarAsiento').classList.remove('d-none');
         document.getElementById('btnVerDocumentoOrigenAsiento').classList.add('d-none');
+        reiniciarDuplicado();
         cuadreDocumento = null;
         aplicarModoLecturaAsiento(false);
         document.getElementById('asiento_fecha').value = getCurrentLocalDate();
@@ -217,6 +224,16 @@
         const tieneOrigen = !!(data.id_referencia_origen && MODULOS_CON_DOCUMENTO_ORIGEN.includes(data.modulo_origen));
         document.getElementById('btnVerDocumentoOrigenAsiento').classList.toggle('d-none', !tieneOrigen);
 
+        // Solo los asientos de Diario se duplican: los demás son el reflejo de un documento.
+        asientoCargado = {
+            id: data.id,
+            numero: data.numero_comprobante || '',
+            fecha: (data.fecha_asiento || '').substring(0, 10),
+            concepto: data.concepto || '',
+        };
+        document.getElementById('btnDuplicarAsiento')
+            .classList.toggle('d-none', !(window.ASIENTO_PUEDE_DUPLICAR && esDiario && data.id > 0));
+
         if (data.detalles && data.detalles.length > 0) {
             data.detalles.forEach(d => window.ASIENTO_agregarFila(d));
         } else {
@@ -225,6 +242,107 @@
 
         aplicarModoLecturaAsiento(soloLectura);
     }
+
+    function reiniciarDuplicado() {
+        asientoCargado = null;
+        duplicadoDe = null;
+        document.getElementById('asiento_duplicado_de').value = '';
+        document.getElementById('btnDuplicarAsiento').classList.add('d-none');
+    }
+
+    // Mismo criterio que AsientoContableRules::validarDuplicado(): mayúsculas y espacios no
+    // cuentan como cambio de concepto.
+    function normalizarConcepto(txt) {
+        return String(txt || '').trim().replace(/\s+/g, ' ').toLowerCase();
+    }
+
+    function esCopiaIdentica(fecha, concepto) {
+        return !!duplicadoDe
+            && fecha === duplicadoDe.fecha
+            && normalizarConcepto(concepto) === normalizarConcepto(duplicadoDe.concepto);
+    }
+
+    /**
+     * Convierte el asiento abierto en un asiento nuevo con las mismas líneas. Antes pide la
+     * fecha y el concepto de la copia: no puede quedar idéntica al original, así que al menos
+     * uno de los dos tiene que cambiar. La copia no se guarda hasta que el usuario pulse Guardar.
+     */
+    window.ASIENTO_duplicar = async function () {
+        if (!asientoCargado || !(asientoCargado.id > 0)) return;
+        if ((document.getElementById('asiento_tipo').value || '') !== 'diario') {
+            await swalWarning('Solo se pueden duplicar asientos de tipo Diario.');
+            return;
+        }
+
+        const original = { ...asientoCargado };
+        const r = await Swal.fire({
+            title: 'Duplicar asiento',
+            icon: 'info',
+            html: `
+                <div class="text-start small">
+                    <div class="alert alert-warning py-2 small mb-3">
+                        <i class="bi bi-exclamation-triangle me-1"></i>
+                        La copia no puede ser idéntica al original: cambie la <b>fecha</b> o el <b>concepto</b>.
+                    </div>
+                    <label class="form-label small fw-medium mb-1 d-block">Fecha</label>
+                    <input type="date" id="dupAsientoFecha" class="form-control form-control-sm mb-2">
+                    <label class="form-label small fw-medium mb-1 d-block">Concepto / Glosa</label>
+                    <input type="text" id="dupAsientoConcepto" class="form-control form-control-sm">
+                </div>`,
+            showCancelButton: true,
+            confirmButtonText: '<i class="bi bi-copy me-1"></i> Duplicar',
+            cancelButtonText: 'Cancelar',
+            reverseButtons: true,
+            focusConfirm: false,
+            didOpen: () => {
+                // Valores asignados por propiedad (no interpolados en el HTML) para no tener
+                // que escapar comillas o etiquetas del concepto.
+                document.getElementById('dupAsientoFecha').value = original.fecha;
+                document.getElementById('dupAsientoConcepto').value = original.concepto;
+            },
+            preConfirm: () => {
+                const fecha = document.getElementById('dupAsientoFecha').value;
+                const concepto = document.getElementById('dupAsientoConcepto').value.trim();
+                if (!fecha) {
+                    Swal.showValidationMessage('La fecha es obligatoria.');
+                    return false;
+                }
+                if (!concepto) {
+                    Swal.showValidationMessage('El concepto es obligatorio.');
+                    return false;
+                }
+                if (fecha === original.fecha
+                    && normalizarConcepto(concepto) === normalizarConcepto(original.concepto)) {
+                    Swal.showValidationMessage('Cambie la fecha o el concepto: la copia no puede ser idéntica al original.');
+                    return false;
+                }
+                return { fecha, concepto };
+            },
+        });
+        if (!r.isConfirmed || !r.value) return;
+
+        duplicadoDe = original;
+        document.getElementById('asiento_duplicado_de').value = original.id;
+        document.getElementById('asiento_id').value = '';
+        document.getElementById('asiento_numero').value = '';
+        document.getElementById('asiento_modulo_origen').value = 'manual';
+        document.getElementById('asiento_id_referencia_origen').value = '';
+        document.getElementById('asiento_fecha').value = r.value.fecha;
+        document.getElementById('asiento_concepto').value = r.value.concepto;
+        // Si el original estaba anulado, la copia nace viva: calcularTotales() decide
+        // contabilizado/borrador según el cuadre (no toca un estado 'anulado').
+        document.getElementById('asiento_estado').value = 'contabilizado';
+
+        document.getElementById('asientoModalTitle').textContent =
+            `Copia del asiento ${original.numero || '#' + original.id}`;
+        document.getElementById('asientoBarraAcciones').classList.add('d-none');
+        document.getElementById('btnAnularAsiento').classList.add('d-none');
+        document.getElementById('btnRestablecerAsiento').classList.add('d-none');
+        document.getElementById('btnGuardarAsiento').classList.remove('d-none');
+        cuadreDocumento = null;
+        aplicarModoLecturaAsiento(false);
+        calcularTotales();
+    };
 
     function aplicarModoLecturaAsiento(soloLectura) {
         const fecha = document.getElementById('asiento_fecha');
@@ -520,6 +638,13 @@
 
         if (error) {
             await swalWarning('Debe seleccionar una cuenta contable válida en todas las filas.');
+            return;
+        }
+
+        // La copia pudo volver a la fecha y concepto del original editando el formulario.
+        if (esCopiaIdentica(document.getElementById('asiento_fecha').value,
+                            document.getElementById('asiento_concepto').value)) {
+            await swalWarning('La copia no puede ser idéntica al asiento original: cambie la fecha o el concepto.');
             return;
         }
 

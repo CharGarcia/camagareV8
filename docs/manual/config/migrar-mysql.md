@@ -5,8 +5,8 @@ categoria: Configuración global
 ruta_modulo: config/migrar-mysql
 tipo: modulo
 visibilidad: superadmin
-etiquetas: migracion, migrar, sistema anterior, mysql, vendedor asignado, vendedor del cliente, clientes sin vendedor, vendedores migracion, asignacion de vendedor, migrar empresas, establecimientos migracion, ruc base, elegir establecimiento, fusionar establecimientos, cliente separado, serie, series, punto de emision, secuencial, numeracion, numero repetido, ingresos sin serie, egresos sin serie, pedidos sin serie, liquidacion pendiente de pago, liquidaciones de compra migradas, pagos migrados, egresos migrados, pago no aparece, cuentas por pagar migradas, compra pendiente de pago, compra pagada sale pendiente, pago no cruza, retencion en borrador, marcas, marca del producto, productos sin marca, catalogo de marcas, migrar marcas, cambios de productos migrados, cambio sin factura, factura del cambio, nup del cambio, recambio, registro de cambio, facturacion de consignacion migrada, unidad duplicada para devolver, iva inflado, iva multiplicado, iva x1000, asiento de compra mal, iva del asiento mayor, nota de credito compra asiento, contabilidad migrada
-version: 1.12
+etiquetas: migracion, migrar, sistema anterior, mysql, vendedor asignado, vendedor del cliente, clientes sin vendedor, vendedores migracion, asignacion de vendedor, migrar empresas, establecimientos migracion, ruc base, elegir establecimiento, fusionar establecimientos, cliente separado, serie, series, punto de emision, secuencial, numeracion, numero repetido, ingresos sin serie, egresos sin serie, pedidos sin serie, liquidacion pendiente de pago, liquidaciones de compra migradas, pagos migrados, egresos migrados, pago no aparece, cuentas por pagar migradas, compra pendiente de pago, compra pagada sale pendiente, pago no cruza, retencion en borrador, marcas, marca del producto, productos sin marca, catalogo de marcas, migrar marcas, cambios de productos migrados, cambio sin factura, factura del cambio, nup del cambio, recambio, registro de cambio, facturacion de consignacion migrada, unidad duplicada para devolver, iva inflado, iva multiplicado, iva x1000, asiento de compra mal, iva del asiento mayor, nota de credito compra asiento, contabilidad migrada, alumnos, migrar alumnos, estudiantes, campus, niveles, cursos, horarios, pension, servicios del alumno, descuento del alumno, alumnos activos, alumnos pasivos, representante del alumno
+version: 1.13
 orden: 2
 estado: activo
 ---
@@ -293,6 +293,40 @@ usaban sus facturas.
 - Si el número de una orden ya está ocupado por otra en esa serie, se renumera al
   siguiente libre; si es la misma orden (misma placa y fecha), se vincula.
 
+## Alumnos: campus, niveles y alumnos activos
+
+Tres entidades traen el módulo de alumnos del sistema anterior al módulo
+**Alumnos**. Ejecútelas en este orden, **después de Clientes y Productos**:
+
+1. **Alumnos: campus** — los campus (sedes). Si un nombre se repite, o ya existe
+   en el sistema nuevo, se vincula en vez de duplicarse.
+2. **Alumnos: niveles / cursos** — los niveles (Inicial, Sala Cuna…), igual que
+   los campus.
+3. **Alumnos activos** — **solo los alumnos en estado Activo** del sistema
+   anterior; los *Pasivos* no se migran. Cada alumno llega con:
+   - **Nombres y apellidos**: el anterior los guardaba en un solo campo (nombres
+     primero); los dos últimos bloques pasan a Apellidos («ANA MARÍA PÉREZ
+     LÓPEZ» → Nombres «ANA MARÍA», Apellidos «PÉREZ LÓPEZ»). Con tres palabras
+     no se puede saber si la del medio es nombre o apellido: revise esos casos.
+   - Identificación (cédula o pasaporte), fecha de nacimiento y sexo.
+   - **Cliente que factura** (el representante): el cliente del alumno, ya
+     migrado. Si el alumno no tenía cliente, o su cliente todavía no se migró,
+     queda con **Consumidor Final** y un aviso en sus observaciones para
+     asignarlo a mano. El resumen lista cuáles fueron.
+   - **Serie** de facturación (p. ej. 001-001), si existe en la empresa.
+   - **Matrícula vigente** con su campus, nivel y fecha de ingreso.
+   - **Horario**: el anterior lo guardaba como texto («8h30 a 14h00»); se
+     registra de **lunes a viernes** con esas horas. Si el texto no tiene horas
+     reconocibles (p. ej. «MAÑANA»), queda en las observaciones del alumno.
+   - **Servicios a facturar** con su cantidad, **precio pactado** y **descuento**
+     (valor en $ por servicio, que se resta en cada factura). Los servicios cuyo
+     producto no está migrado se omiten y el resumen los cuenta.
+
+Si un alumno ya existe en el sistema nuevo con la misma identificación, se
+vincula y no se duplica. Volver a ejecutar no repite nada. Los descuentos
+puntuales por mes del flujo antiguo de facturación masiva no se migran (el
+sistema anterior tampoco los aplicaba al facturar por alumno).
+
 ## Errores frecuentes
 
 - **El asiento de una compra migrada tiene el IVA mucho mayor que el
@@ -367,6 +401,11 @@ usaban sus facturas.
   datos reales todavía).
 
 ## Historial de cambios
+
+- **1.13** — Nuevas entidades **Alumnos: campus**, **Alumnos: niveles / cursos** y
+  **Alumnos activos**: migran solo los alumnos activos, con su cliente
+  (representante), serie, matrícula vigente, horario, servicios a facturar y
+  descuentos.
 
 - **1.12** — Nueva entidad **Órdenes de servicio (Car-Wash / mecánica)**: migra el
   módulo *Orden mecánica* del sistema anterior al Servicio de car wash, con su

@@ -73,6 +73,9 @@ class AlumnosController extends BaseModuloController
             'ordenCol'   => $ordenCol,
             'ordenDir'   => $ordenDir,
             'vistaConfig'=> $prefsVista,
+            // Opciones de los filtros Campus / Nivel del buscador (mismos catálogos del modal).
+            'opcionesCampus' => (new \App\repositories\modulos\AlumnoCampusRepository())->getParaSelect($idEmpresa),
+            'opcionesNivel'  => (new \App\repositories\modulos\AlumnoNivelRepository())->getParaSelect($idEmpresa),
         ]);
     }
 

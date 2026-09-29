@@ -725,6 +725,22 @@ $base = BASE_URL;
                         : '';
                     html += `<br><span class="text-warning small">ℹ ${fmt(d.sin_factura)} cambio(s) de productos siguen sin factura${muestra}. Si falta migrar las Facturas de venta, vuelva a ejecutar Cambios de productos después.</span>`;
                 }
+                // Alumnos: resumen de lo que trajo cada alumno y lo que hay que revisar a mano.
+                if (ent === 'alumnos' && d.migrados > 0) {
+                    html += `<br><span class="text-muted small">${fmt(d.servicios || 0)} servicio(s) a facturar, ${fmt(d.horarios || 0)} horario(s) y ${fmt(d.periodos || 0)} matrícula(s) vigente(s).</span>`;
+                }
+                if (d.sin_cliente > 0) {
+                    const muestra = (d.sin_cliente_muestra && d.sin_cliente_muestra.length)
+                        ? ': ' + d.sin_cliente_muestra.map(x => String(x).replace(/</g, '&lt;')).join('; ') + (d.sin_cliente > d.sin_cliente_muestra.length ? '…' : '')
+                        : '';
+                    html += `<br><span class="text-warning small">ℹ ${fmt(d.sin_cliente)} alumno(s) sin representante migrado quedaron con Consumidor Final${muestra}. Si falta migrar Clientes, hágalo y asigne el cliente en la ficha del alumno (pestaña Facturación).</span>`;
+                }
+                if (d.servicios_sin_producto > 0) {
+                    html += `<br><span class="text-warning small">ℹ ${fmt(d.servicios_sin_producto)} servicio(s) de alumnos no se enlazaron porque su producto no está migrado. Migre Productos antes que Alumnos.</span>`;
+                }
+                if (d.horarios_texto > 0) {
+                    html += `<br><span class="text-warning small">ℹ ${fmt(d.horarios_texto)} horario(s) no tenían horas reconocibles: el texto quedó en las observaciones del alumno.</span>`;
+                }
                 if (d.serie_omitida > 0) {
                     // El sistema anterior numera estos documentos POR ESTABLECIMIENTO: el mismo número
                     // puede existir dos veces y solo uno puede ocupar la serie de destino.

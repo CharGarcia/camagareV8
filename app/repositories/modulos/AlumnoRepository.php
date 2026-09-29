@@ -35,10 +35,26 @@ class AlumnoRepository extends BaseRepository
             $params[':id_usuario_filtro'] = $idUsuarioFiltro;
         }
 
-        if ($buscar !== '') {
-            $whereSql .= " AND (a.nombres ILIKE :b OR a.apellidos ILIKE :b OR a.numero_identificacion ILIKE :b OR cli.nombre ILIKE :b)";
-            $params[':b'] = '%' . $buscar . '%';
+        // Buscador estándar (FiltrosModal): texto libre + filtros `clave:valor` del modal.
+        // campus/nivel filtran por la matrícula que muestra el listado (la vigente o, si no
+        // hay, la más reciente: el LATERAL `per` de abajo).
+        $parsed = \App\Helpers\FiltrosBusqueda::parsear($buscar);
+        if ($parsed['texto_libre'] !== '') {
+            $condTexto = \App\Helpers\FiltrosBusqueda::condicionTexto(
+                ['a.nombres', 'a.apellidos', 'a.numero_identificacion', 'cli.nombre', 'camp.nombre', 'niv.nombre'],
+                $parsed['texto_libre'],
+                $params
+            );
+            if ($condTexto !== '') {
+                $whereSql .= ' AND ' . $condTexto;
+            }
         }
+        \App\Helpers\FiltrosBusqueda::aplicarFiltros($whereSql, $params, $parsed['filtros'], [
+            'exacto' => [
+                'campus' => 'per.id_campus',
+                'nivel'  => 'per.id_nivel',
+            ],
+        ]);
 
         $joins = "LEFT JOIN clientes cli ON cli.id = a.id_cliente
                   LEFT JOIN LATERAL (
@@ -359,7 +375,7 @@ class AlumnoRepository extends BaseRepository
             $st = $this->db->query(
                 "SELECT (SELECT count(*) FROM information_schema.columns
                           WHERE (table_name = 'alumnos' AND column_name = 'info_adicional')
-                             OR (table_name = 'alumnos_servicios' AND column_name IN ('detalle', 'id_tarifa_iva'))) = 3"
+                             OR (table_name = 'alumnos_servicios' AND column_name IN ('detalle', 'id_tarifa_iva', 'descuento'))) = 4"
             );
             $this->hayInfoAdicional = (bool) $st->fetchColumn();
         }
@@ -418,7 +434,7 @@ class AlumnoRepository extends BaseRepository
      */
     public function getServiciosParaFacturar(int $idAlumno, int $idEmpresa): array
     {
-        $colDetalle = $this->existeColumnasFacturacion() ? 's.detalle' : 'NULL AS detalle';
+        $colDetalle = $this->existeColumnasFacturacion() ? 's.detalle, s.descuento' : 'NULL AS detalle, 0 AS descuento';
         $tarifa = $this->existeColumnasFacturacion() ? 'COALESCE(s.id_tarifa_iva, p.tarifa_iva)' : 'p.tarifa_iva';
         $sql = "SELECT s.id, s.id_producto, s.cantidad_default, s.precio_override, {$colDetalle},
                        p.codigo AS codigo_producto, p.nombre AS nombre_producto, p.precio_base,
@@ -538,8 +554,8 @@ class AlumnoRepository extends BaseRepository
         // «detalle» (texto del ítem) solo si la columna ya existe (SQL 20260924).
         $conDetalle = $this->existeColumnasFacturacion();
         $sql = $conDetalle
-            ? "INSERT INTO alumnos_servicios (id_alumno, id_empresa, id_producto, cantidad_default, precio_override, frecuencia, activo, detalle, id_tarifa_iva, created_by, updated_by)
-               VALUES (:a, :e, :prod, :cant, :precio, :frec, :act, :det, :tar, :u, :u)"
+            ? "INSERT INTO alumnos_servicios (id_alumno, id_empresa, id_producto, cantidad_default, precio_override, frecuencia, activo, detalle, id_tarifa_iva, descuento, created_by, updated_by)
+               VALUES (:a, :e, :prod, :cant, :precio, :frec, :act, :det, :tar, :des, :u, :u)"
             : "INSERT INTO alumnos_servicios (id_alumno, id_empresa, id_producto, cantidad_default, precio_override, frecuencia, activo, created_by, updated_by)
                VALUES (:a, :e, :prod, :cant, :precio, :frec, :act, :u, :u)";
         $st = $this->db->prepare($sql);
@@ -560,6 +576,7 @@ class AlumnoRepository extends BaseRepository
             if ($conDetalle) {
                 $params[':det'] = trim((string) ($s['detalle'] ?? '')) !== '' ? trim((string) $s['detalle']) : null;
                 $params[':tar'] = !empty($s['id_tarifa_iva']) ? (int) $s['id_tarifa_iva'] : null;
+                $params[':des'] = round(max(0, (float) ($s['descuento'] ?? 0)), 2);
             }
             $st->execute($params);
         }

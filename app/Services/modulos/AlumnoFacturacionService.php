@@ -100,13 +100,15 @@ class AlumnoFacturacionService
         foreach ($this->repository->getServiciosParaFacturar($idAlumno, $idEmpresa) as $s) {
             $precio = $s['precio_override'] !== null ? (float) $s['precio_override'] : (float) $s['precio_base'];
             $cant   = (float) $s['cantidad_default'];
-            $base   = round($cant * $precio, 2);
+            $desc   = round((float) ($s['descuento'] ?? 0), 2);
+            $base   = round($cant * $precio - $desc, 2);
             $iva    = round($base * ((float) $s['porcentaje_iva'] / 100), 2);
             $lineas[] = [
                 'id'              => (int) $s['id'],
                 'producto'        => $s['nombre_producto'],
                 'cantidad'        => $cant,
                 'precio'          => $precio,
+                'descuento'       => $desc,
                 'porcentaje_iva'  => (float) $s['porcentaje_iva'],
                 'total'           => round($base + $iva, 2),
                 'id_cliente'      => (int) $s['id_cliente'],
@@ -202,6 +204,7 @@ class AlumnoFacturacionService
                 'descripcion'       => $s['nombre_producto'],
                 'cantidad'          => (float) $s['cantidad_default'],
                 'precio_unitario'   => $precio,
+                'descuento'         => round((float) ($s['descuento'] ?? 0), 2),
                 'porcentaje_iva'    => (float) $s['porcentaje_iva'],
                 'codigo_porcentaje' => $s['codigo_porcentaje'],
                 'id_tarifa_iva'     => $s['id_tarifa_iva'],
@@ -229,7 +232,7 @@ class AlumnoFacturacionService
                 // (el generador hablaría de "suscripción").
                 $monto = 0.0;
                 foreach ($g['detalle'] as $d) {
-                    $monto += round($d['cantidad'] * $d['precio_unitario'], 2);
+                    $monto += round($d['cantidad'] * $d['precio_unitario'] - $d['descuento'], 2);
                 }
                 if ($monto <= 0) {
                     throw new Exception('los servicios elegidos no tienen monto (precio en cero).');

@@ -60,10 +60,15 @@ class SuscripcionFacturacionService
         $detallesFactura = [];
         $basePorTarifa   = []; // clave = tarifa (string) → suma de bases de línea
         $ivaPorTarifa    = []; // clave = tarifa (string) → IVA acumulado línea a línea
+        $totalDescuento  = 0.0; // suma de descuentos de línea (solo Alumnos los envía)
 
         foreach ($detalle as $det) {
             $tarifaIva = (float)($det['porcentaje_iva'] ?? 0);
-            $base = round((float)$det['cantidad'] * (float)$det['precio_unitario'], 2);
+            // Descuento en $ de la línea (lo manda Alumnos; Suscripciones no → 0).
+            // Igual que la factura de venta: base = cantidad × precio − descuento.
+            $descLinea = max(0.0, round((float)($det['descuento'] ?? 0), 2));
+            $base = round((float)$det['cantidad'] * (float)$det['precio_unitario'] - $descLinea, 2);
+            $totalDescuento += $descLinea;
 
             $claveTarifa = (string)$tarifaIva;
             $basePorTarifa[$claveTarifa] = ($basePorTarifa[$claveTarifa] ?? 0.0) + $base;
@@ -94,7 +99,7 @@ class SuscripcionFacturacionService
                     : ($textoItem !== '' ? $textoItem : null),
                 'cantidad'                  => $det['cantidad'],
                 'precio_unitario'           => $det['precio_unitario'],
-                'descuento'                 => 0,
+                'descuento'                 => $descLinea,
                 'precio_total_sin_impuesto' => $base,
                 // Guardar la tarifa en la propia línea (igual que una factura manual),
                 // para que al re-abrir la factura el IVA se restaure aunque no hubiese
@@ -214,7 +219,7 @@ class SuscripcionFacturacionService
             ]],
             'info_adicional'      => $infoAdicional,
             'total_sin_impuestos' => $totalSinImp,
-            'total_descuento'     => 0,
+            'total_descuento'     => round($totalDescuento, 2),
             'importe_total'       => $importe,
             'propina'             => 0,
             'observaciones'       => '',

@@ -13,12 +13,15 @@
                     <button type="button" class="btn btn-outline-danger btn-sm px-2" onclick="window.ASIENTO_exportarPdf()" title="Exportar PDF"><i class="bi bi-file-earmark-pdf"></i></button>
                     <button type="button" class="btn btn-outline-success btn-sm px-2" onclick="window.ASIENTO_exportarExcel()" title="Exportar Excel"><i class="bi bi-file-earmark-excel"></i></button>
                     <div class="vr mx-1"></div>
+                    <button type="button" class="btn btn-outline-secondary btn-sm px-2 d-none" id="btnDuplicarAsiento" onclick="window.ASIENTO_duplicar()" title="Duplicar asiento (solo tipo Diario)"><i class="bi bi-copy"></i> Duplicar</button>
                     <button type="button" class="btn btn-outline-primary btn-sm px-2 d-none" id="btnVerDocumentoOrigenAsiento" onclick="window.ASIENTO_verDocumentoOrigen()" title="Ver documento origen"><i class="bi bi-file-earmark-text"></i> Ver Documento</button>
                 </div>
                 <div class="modal-body px-4 py-3">
                     <input type="hidden" id="asiento_id" name="id">
                     <input type="hidden" id="asiento_modulo_origen" name="modulo_origen" value="manual">
                     <input type="hidden" id="asiento_id_referencia_origen" name="id_referencia_origen" value="">
+                    <!-- Id del asiento de Diario del que este es copia (solo al duplicar). -->
+                    <input type="hidden" id="asiento_duplicado_de" name="duplicado_de" value="">
 
                     <!-- Cabecera -->
                     <div class="row g-3 mb-4">

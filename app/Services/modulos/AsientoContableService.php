@@ -559,6 +559,56 @@ class AsientoContableService
         }
     }
 
+    /**
+     * Registra la copia de un asiento de Diario. La copia es siempre un asiento manual nuevo
+     * (sin documento origen ni número: se le asigna el siguiente) y debe diferir del original
+     * al menos en la fecha o el concepto — ver AsientoContableRules::validarDuplicado().
+     */
+    public function guardarDuplicado(int $idOrigen, array $cabeceraData, array $detallesData, int $idEmpresa, int $idUsuario): int
+    {
+        $origen = $this->repository->getDetalleAsiento($idOrigen, $idEmpresa);
+        $this->rules->validarDuplicado($origen, $cabeceraData);
+
+        $cabeceraData['id'] = 0;
+        $cabeceraData['numero_comprobante'] = '';
+        $cabeceraData['tipo_comprobante'] = 'diario';
+        $cabeceraData['modulo_origen'] = 'manual';
+        $cabeceraData['id_referencia_origen'] = null;
+
+        $pdo = \App\core\Database::getConnection();
+        $managedTransaction = !$pdo->inTransaction();
+        if ($managedTransaction) $pdo->beginTransaction();
+
+        try {
+            $idNuevo = $this->guardarAsiento($cabeceraData, $detallesData, $idEmpresa, $idUsuario, true);
+
+            $this->logService->registrar(
+                idUsuario: $idUsuario,
+                idEmpresa: $idEmpresa,
+                accion: 'Duplicar Asiento',
+                tabla: 'asientos_contables_cabecera',
+                idRegistro: $idNuevo,
+                antes: [
+                    'id' => $idOrigen,
+                    'numero_comprobante' => $origen['numero_comprobante'] ?? null,
+                    'fecha_asiento' => $origen['fecha_asiento'] ?? null,
+                    'concepto' => $origen['concepto'] ?? null,
+                ],
+                despues: [
+                    'id' => $idNuevo,
+                    'fecha_asiento' => $cabeceraData['fecha_asiento'] ?? null,
+                    'concepto' => $cabeceraData['concepto'] ?? null,
+                ]
+            );
+
+            if ($managedTransaction) $pdo->commit();
+            return $idNuevo;
+        } catch (\Throwable $e) {
+            if ($managedTransaction && $pdo->inTransaction()) $pdo->rollBack();
+            throw $e;
+        }
+    }
+
     public function anular(int $idAsiento, int $idEmpresa, int $idUsuario): void
     {
         $asiento = $this->repository->getDetalleAsiento($idAsiento, $idEmpresa);

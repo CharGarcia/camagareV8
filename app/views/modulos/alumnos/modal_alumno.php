@@ -239,9 +239,10 @@ $pestanasConfigAlu = [
                                         <thead>
                                             <tr class="border-bottom">
                                                 <th style="width:28%;">Producto / Servicio</th>
-                                                <th style="width:22%;" title="Texto que sale bajo la descripción del ítem en la factura. Admite marcadores como {alumno} o {MES}">Detalle del ítem</th>
+                                                <th style="width:22%;" title="Texto que sale bajo la descripción del ítem en la factura. Admite marcadores como {alumno} o {MES}">Adicional</th>
                                                 <th style="width:8%;">Cantidad</th>
                                                 <th style="width:10%;">Precio</th>
+                                                <th style="width:8%;" title="Descuento en $ de la línea (se resta en cada factura)">Desc.</th>
                                                 <th style="width:11%;">IVA</th>
                                                 <th style="width:9%;" class="text-end">Total</th>
                                                 <th style="width:6%;" class="text-center">Activo</th>
@@ -302,6 +303,10 @@ $pestanasConfigAlu = [
                                             <span id="aluLblSubtotal">0.00</span>
                                         </div>
                                         <div id="aluLblSubtotalesIva" class="mb-1"></div>
+                                        <div class="d-flex justify-content-between align-items-center mb-1">
+                                            <span class="text-muted">(-) Descuento</span>
+                                            <span class="fw-bold text-dark" id="aluLblDescuento">0.00</span>
+                                        </div>
                                         <div id="aluLblIvas" class="mb-1"></div>
                                         <hr class="my-1 opacity-25">
                                         <div class="d-flex justify-content-between align-items-center bg-light border py-1 px-2 rounded">
@@ -518,7 +523,7 @@ $pestanasConfigAlu = [
                         <input type="month" class="form-control form-control-sm shadow-none" id="aluGfMes">
                     </div>
                     <div class="col-md-4">
-                        <label class="form-label small fw-bold text-muted mb-1" title="Se usa en los servicios que no tienen «Detalle del ítem» propio">Texto para ítems sin detalle</label>
+                        <label class="form-label small fw-bold text-muted mb-1" title="Se usa en los servicios que no tienen «Adicional» propio">Texto para ítems sin detalle</label>
                         <input type="text" class="form-control form-control-sm shadow-none" id="aluGfTexto" maxlength="300" placeholder="Ej. {MES} {anio}">
                     </div>
                 </div>

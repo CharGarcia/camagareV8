@@ -222,6 +222,9 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
 
 <script>
     window.BASE_URL = '<?= $base ?>';
+    // «Duplicar» del modal: solo en este módulo y con permiso de crear (el modal se comparte
+    // con Control Bancario, Declaraciones y EEFF, que no lo ofrecen).
+    window.ASIENTO_PUEDE_DUPLICAR = <?= !empty($perm['crear']) ? 'true' : 'false' ?>;
 </script>
 <?php include 'modal_asiento.php'; ?>
 <?php include __DIR__ . '/../documento_origen/modal_documento.php'; ?>

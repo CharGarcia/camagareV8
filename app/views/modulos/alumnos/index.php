@@ -40,11 +40,39 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
 <div class="card cmg-table-card border-0 shadow-sm rounded-3">
     <div class="card-header bg-white py-2 px-3 border-bottom d-flex justify-content-between align-items-center flex-wrap gap-2">
         <div class="d-flex align-items-center gap-2">
-            <div class="input-group input-group-sm" style="width: 260px;">
-                <span class="input-group-text bg-white border-end-0 text-muted"><i class="bi bi-search"></i></span>
-                <input type="text" id="buscarAlumno" class="form-control border-start-0 ps-0 shadow-none" placeholder="Buscar alumno o representante..." value="<?= htmlspecialchars($buscar) ?>" autocomplete="off">
-            </div>
-            <div class="btn-group btn-group-sm">
+            <?php
+            // Buscador estándar (FiltrosModal, igual que Ingresos): texto libre + botón Filtros con
+            // Campus y Nivel/Curso de la matrícula. Viaja como `campus:ID nivel:ID` en ?b=, así que
+            // PDF y Excel respetan los mismos filtros.
+            $optCampus = array_map(fn($c) => ['v' => (string) $c['id'], 'l' => $c['nombre']], $opcionesCampus ?? []);
+            $optNivel  = array_map(fn($n) => ['v' => (string) $n['id'], 'l' => $n['nombre']], $opcionesNivel ?? []);
+            $filtrosAlumnos = [
+                ['key' => 'campus', 'label' => 'Campus',      'icon' => 'bi-geo-alt',  'type' => 'select', 'grupo' => 'Matrícula', 'col' => 6, 'options' => $optCampus],
+                ['key' => 'nivel',  'label' => 'Nivel / Curso', 'icon' => 'bi-mortarboard', 'type' => 'select', 'grupo' => 'Matrícula', 'col' => 6, 'options' => $optNivel],
+            ];
+            ?>
+            <link rel="stylesheet" href="<?= rtrim(BASE_URL, '/') ?>/css/components/filtros_modal.css?v=<?= asset_ver('/css/components/filtros_modal.css') ?>">
+            <script src="<?= rtrim(BASE_URL, '/') ?>/js/components/filtros_modal.js?v=<?= asset_ver('/js/components/filtros_modal.js') ?>"></script>
+            <div id="fmBuscadorALU"></div>
+            <input type="hidden" id="buscarAlumno" value="<?= htmlspecialchars($buscar) ?>">
+            <script>
+                document.addEventListener('DOMContentLoaded', () => {
+                    if (!window.FiltrosModal) return;
+                    new FiltrosModal({
+                        containerId: 'fmBuscadorALU',
+                        hiddenInputId: 'buscarAlumno',
+                        placeholder: 'Buscar alumno, cédula, representante, campus o nivel...',
+                        titulo: 'Filtros de alumnos',
+                        inputWidth: 380,
+                        extraId: 'fmExtraALU',
+                        fields: <?= json_encode($filtrosAlumnos, JSON_UNESCAPED_UNICODE | JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS) ?>,
+                        loadingTarget: '#tbodyAlumnos',
+                        onApply: () => window.fetchSearchAlumnos && window.fetchSearchAlumnos(1),
+                    }).init();
+                });
+            </script>
+            <?php // FiltrosModal (extraId) mueve estos botones dentro del input-group del buscador; si el JS no corre, quedan aquí. ?>
+            <div id="fmExtraALU" class="btn-group btn-group-sm">
                 <?php
                 $columnasTabla = [
                     'nombres'          => 'Alumno',
@@ -155,7 +183,7 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                 }
             } catch (e) {}
         }
-        window.fetchSearchAlumnos = fetchSearch;
+        window.fetchSearchAlumnos = (p) => fetchSearch(p);
 
         if (typeof window.CMG_initSort === 'function') {
             window.CMG_initSort('alumnos', (col, dir) => {
@@ -174,9 +202,5 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
             });
         }
 
-        if (inputB) inputB.addEventListener('input', () => {
-            clearTimeout(timer);
-            timer = setTimeout(() => fetchSearch(1), 400);
-        });
     })();
 </script>

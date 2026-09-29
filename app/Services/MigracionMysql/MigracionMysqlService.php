@@ -16,6 +16,9 @@ use Throwable;
  */
 class MigracionMysqlService
 {
+    // Alumnos (campus, niveles, alumnos activos con matrícula, horario, servicios y descuentos).
+    use MigracionAlumnosTrait;
+
     /**
      * Entidades migrables: clave => [label, tabla, fecha (columna de fecha o null), tipo].
      * `tipo` (catalogo|documento) ajusta la estimación de tiempo. Todas filtran por ruc_empresa.
@@ -35,6 +38,13 @@ class MigracionMysqlService
         'productos'         => ['label' => 'Productos y servicios',            'tabla' => 'productos_servicios',        'fecha' => 'fecha_agregado', 'tipo' => 'catalogo'],
         'proveedores'       => ['label' => 'Proveedores',                      'tabla' => 'proveedores',                'fecha' => 'fecha_agregado', 'tipo' => 'catalogo'],
         'bodegas'           => ['label' => 'Bodegas',                          'tabla' => 'bodega',                     'fecha' => null,             'tipo' => 'catalogo'],
+        // Módulo Alumnos: DESPUÉS de Clientes y Productos (cada alumno enlaza su representante y sus
+        // servicios). Campus y niveles ANTES que alumnos (la matrícula vigente apunta a ellos).
+        'alumnos_campus'    => ['label' => 'Alumnos: campus',                  'tabla' => 'campus_alumnos',             'fecha' => null,             'tipo' => 'catalogo'],
+        'alumnos_niveles'   => ['label' => 'Alumnos: niveles / cursos',        'tabla' => 'nivel_alumnos',              'fecha' => null,             'tipo' => 'catalogo'],
+        // Solo ACTIVOS (estado_alumno = '1'); los pasivos no se migran. Trae matrícula, horario,
+        // servicios a facturar (detalle_por_facturar) con su descuento, cliente y serie.
+        'alumnos'           => ['label' => 'Alumnos activos (con horario, servicios y descuentos)', 'tabla' => 'alumnos', 'fecha' => null,         'tipo' => 'catalogo', 'filtro' => "estado_alumno = '1'"],
         // Responsables de traslado/entrega (repartidores) del viejo `responsable_traslado` (por ruc_empresa).
         // Se relacionan luego en pedidos y consignaciones. Conviene migrarlo ANTES de esos documentos.
         'responsables_traslado' => ['label' => 'Responsables de traslado/entrega', 'tabla' => 'responsable_traslado', 'fecha' => null,      'tipo' => 'catalogo', 'filtro' => 'status = 1'],
@@ -298,6 +308,11 @@ class MigracionMysqlService
                 return $this->migrarBodegas($idEmpresa, $ruc, $idUsuario);
             case 'responsables_traslado':
                 return $this->migrarResponsablesTraslado($idEmpresa, $ruc, $idUsuario);
+            case 'alumnos_campus':
+            case 'alumnos_niveles':
+                return $this->migrarAlumnosCatalogo($entidad, $idEmpresa, $ruc, $idUsuario);
+            case 'alumnos':
+                return $this->migrarAlumnos($idEmpresa, $ruc, $idUsuario);
             case 'empleados':
                 return $this->migrarEmpleados($idEmpresa, $ruc, $idUsuario);
             case 'novedades':
@@ -431,6 +446,7 @@ class MigracionMysqlService
         'proveedores' => 'proveedores', 'vendedores' => 'vendedores', 'bodegas' => 'bodegas', 'empleados' => 'empleados', 'novedades' => 'novedades',
         'roles_pago' => 'rol_cabecera', 'quincenas' => 'rol_cabecera',
         'responsables_traslado' => 'responsables_traslado',
+        'alumnos_campus' => 'alumnos_campus', 'alumnos_niveles' => 'alumnos_niveles', 'alumnos' => 'alumnos',
         'cuentas_bancarias' => 'empresa_formas_pago', 'formas_pago' => 'empresa_formas_pago',
         'facturas' => 'ventas_cabecera', 'notas_credito' => 'notas_credito_cabecera',
         'retenciones_venta' => 'retencion_venta_cabecera', 'retenciones_compra' => 'retencion_compra_cabecera',
@@ -518,7 +534,7 @@ class MigracionMysqlService
     }
 
     /** Catálogos: NO se eliminan con esta herramienta (se auto-corrigen al re-migrar por reconciliación). */
-    private const ELIMINAR_VEDADAS = ['plan_cuentas', 'clientes', 'productos', 'marcas', 'proveedores', 'vendedores', 'bodegas', 'empleados', 'novedades', 'cuentas_bancarias', 'formas_pago'];
+    private const ELIMINAR_VEDADAS = ['plan_cuentas', 'clientes', 'productos', 'marcas', 'proveedores', 'vendedores', 'bodegas', 'empleados', 'novedades', 'cuentas_bancarias', 'formas_pago', 'alumnos_campus', 'alumnos_niveles', 'alumnos'];
 
     /**
      * Cuántos registros ELIMINARÍA por entidad (para la confirmación previa). Solo cuenta lo que la

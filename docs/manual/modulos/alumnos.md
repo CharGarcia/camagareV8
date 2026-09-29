@@ -5,7 +5,7 @@ categoria: Ventas
 ruta_modulo: modulos/alumnos
 tipo: modulo
 visibilidad: todos
-etiquetas: alumnos, estudiantes, matrícula, matricula, colegio, escuela, centro infantil, campus, sede, nivel, curso, representante, representantes, padres, autorizado, autorizados, retirar, retiro, quién retira, facturación, facturar, generar factura, facturar pensión, facturar mensualidad, facturas del alumno, horario, pensión, pension, imprimir, impresora
+etiquetas: alumnos, estudiantes, matrícula, matricula, colegio, escuela, centro infantil, campus, sede, nivel, curso, representante, representantes, padres, autorizado, autorizados, retirar, retiro, quién retira, facturación, facturar, generar factura, facturar pensión, facturar mensualidad, facturas del alumno, horario, pensión, pension, imprimir, impresora, filtrar alumnos, filtro por campus, filtro por nivel, alumnos por curso, alumnos por sede, buscar alumno
 version: 1.6
 orden: 0
 estado: activo
@@ -109,10 +109,24 @@ perder el historial de los anteriores.
 | Horario (día, hora inicio/fin, jornada) | No | Horario propio del alumno, no se hereda de un curso compartido. |
 | Tipo de sangre / Alergias / Contacto de emergencia | No | Información útil en caso de emergencia. |
 | Servicios y productos (producto, cantidad, precio, activo) | No | En la pestaña **Facturación**, debajo del cliente. Productos o servicios del catálogo que se le facturan al alumno. Al elegir el producto (o al abrir un alumno cuya línea no tenía precio propio), el **precio** se llena con su precio base y se puede cambiar para este alumno. Ese precio queda guardado en la línea: si luego cambia el precio base del producto, hay que actualizarlo aquí. Si se borra, se usa el precio base vigente al facturar. El **IVA** viene de la tarifa del producto y se puede cambiar en la línea si la configuración de facturación lo permite; el **Total** se calcula solo. |
-| Detalle del ítem | No | Texto que sale bajo la descripción de esa línea en la factura (máx. 300 caracteres). Admite marcadores, p. ej. `{alumno} - Pensión {MES} {anio}`. |
+| Descuento (por ítem) | No | Valor en $ que se resta de esa línea en cada factura (no puede superar cantidad × precio). Sale como descuento de la línea, igual que en Facturas de Venta, y se suma en «(-) Descuento» de los totales. |
+| Adicional (por ítem) | No | Texto que sale bajo la descripción de esa línea en la factura (máx. 300 caracteres). Admite marcadores, p. ej. `{alumno} - Pensión {MES} {anio}`. |
 | Información adicional | No | Filas concepto / detalle que se agregan a cada factura del alumno (máx. 10). Un alumno nuevo viene con «Alumno: {alumno}». |
 | Foto del alumno | No | Imagen del alumno. Se carga en la pestaña **Documentos**, también al crear el alumno. |
 | Documentos | No | Archivos adjuntos (PDF/imagen) asociados al alumno. |
+
+## Buscar y filtrar el listado
+
+El cuadro de búsqueda del listado busca a la vez en apellidos y nombres, número
+de identificación, representante (cliente que factura), campus y nivel/curso;
+se pueden escribir varias palabras en cualquier orden.
+
+El botón **Filtros**, junto al buscador, abre los filtros por **Campus** y
+**Nivel / Curso** de la matrícula del alumno (la vigente o, si no tiene, la más
+reciente, que es la que muestra el listado). Se aplican con el botón *Aplicar*
+y quedan como etiquetas junto al buscador; se quitan con la ✕ de cada una. Se
+pueden combinar entre sí y con el texto. Las descargas en **PDF** y **Excel**
+respetan los mismos filtros.
 
 ## Facturar los servicios del alumno
 
@@ -121,7 +135,7 @@ que factura** (pestaña Facturación).
 
 1. En la pestaña **Facturación**, debajo del cliente que factura, agregue los
    productos o servicios con su cantidad, precio e IVA y, si quiere, un
-   **detalle del ítem** (si el alumno no tiene ítems, ya aparece una fila vacía
+   **adicional* del ítem* (si el alumno no tiene ítems, ya aparece una fila vacía
    lista para escribir, también al quitar el último ítem; las filas sin producto
    no se guardan). Debajo, complete la **información adicional** y
    revise los **totales** (subtotal por tarifa de IVA, IVA y total, igual que
@@ -131,7 +145,7 @@ que factura** (pestaña Facturación).
    superior del modal.
 3. Elija la **serie**, el **mes facturado** y, si quiere, un **texto para los
    ítems sin detalle** (por ejemplo `Pensión {MES} {anio}` → «Pensión
-   SEPTIEMBRE 2026»). Las líneas que tienen su propio *detalle del ítem* usan
+   SEPTIEMBRE 2026»). Las líneas que tienen su propio *adicional* del ítem usan
    el suyo.
 4. Revise las líneas marcadas y el resumen de facturas que se van a generar, y
    pulse **Generar**.
@@ -155,7 +169,7 @@ Cómo decide qué facturar:
 
 ### Marcadores
 
-En el detalle del ítem, en la información adicional (concepto y detalle) y en
+En el adicional de cada ítem, en la información adicional (concepto y detalle) y en
 el texto de la ventana de generación se pueden usar:
 
 | Marcador | Se reemplaza por |
@@ -276,10 +290,12 @@ pestaña Transacciones aparece solo si el usuario puede **ver** Facturas de Vent
   **Imprimir** (abre el cuadro de impresión con el documento ya cargado),
   **Descargar** o **Ver** en otra pestaña. Ver la guía *Descargar archivos*.
 
-- **1.4** — **Facturación desde el alumno.** La antigua pestaña **Servicios**
+- **1.4** — El listado tiene buscador con **Filtros** por campus y nivel/curso
+  (también en PDF y Excel). **Facturación desde el alumno.** La antigua pestaña **Servicios**
   se une a **Facturación**: el cliente que factura, la serie y, debajo, los
-  servicios y productos, que ahora muestran IVA y total de cada línea. Se
-  quita la columna **Frecuencia**: al generar, todos los servicios activos
+  servicios y productos, que ahora muestran IVA y total de cada línea. Nueva columna **Descuento** (valor en $ por servicio que se
+  resta en cada factura). Los alumnos activos del sistema anterior se pueden
+  traer con la Migración desde MySQL. Se quita la columna **Frecuencia**: al generar, todos los servicios activos
   vienen marcados y se desmarca lo que no corresponda. Nuevo botón **Generar
   factura** en la barra superior: factura al cliente que factura, en
   borrador, del mes elegido, con aviso si ese mes ya se facturó. Nueva pestaña **Transacciones**,

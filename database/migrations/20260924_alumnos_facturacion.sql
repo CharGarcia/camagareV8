@@ -5,8 +5,8 @@
 --   Crea alumnos_facturas: qué factura se generó desde el alumno, para qué mes
 --      (periodo) y a qué cliente. Sirve para la pestaña Facturas del alumno y
 --      para avisar si un mes ya se facturó. `items` guarda los productos facturados.
---   Agrega alumnos.info_adicional, alumnos_servicios.detalle y
---   alumnos_servicios.id_tarifa_iva (vacías).
+--   Agrega alumnos.info_adicional y, en alumnos_servicios, detalle, id_tarifa_iva
+--   y descuento (vacías / 0).
 -- No modifica ni borra datos existentes.
 -- Idempotente: se puede ejecutar más de una vez.
 -- Reversible:
@@ -14,6 +14,7 @@
 --   ALTER TABLE alumnos DROP COLUMN IF EXISTS info_adicional;
 --   ALTER TABLE alumnos_servicios DROP COLUMN IF EXISTS detalle;
 --   ALTER TABLE alumnos_servicios DROP COLUMN IF EXISTS id_tarifa_iva;
+--   ALTER TABLE alumnos_servicios DROP COLUMN IF EXISTS descuento;
 -- Orden de despliegue: ejecutar ANTES de desplegar el código. Si el código llega
 --   primero, el alumno se guarda igual y el botón «Generar factura» avisa que
 --   falta este script.
@@ -32,6 +33,8 @@ BEGIN;
 ALTER TABLE alumnos ADD COLUMN IF NOT EXISTS info_adicional JSONB;
 ALTER TABLE alumnos_servicios ADD COLUMN IF NOT EXISTS detalle VARCHAR(300);
 ALTER TABLE alumnos_servicios ADD COLUMN IF NOT EXISTS id_tarifa_iva INTEGER;
+-- Descuento en $ de cada servicio (se resta en la factura, como en Facturas de Venta).
+ALTER TABLE alumnos_servicios ADD COLUMN IF NOT EXISTS descuento NUMERIC(14,2) NOT NULL DEFAULT 0;
 
 CREATE TABLE IF NOT EXISTS alumnos_facturas (
     id              SERIAL PRIMARY KEY,
@@ -58,10 +61,10 @@ CREATE INDEX IF NOT EXISTS idx_alumnos_facturas_factura
 
 COMMIT;
 
--- Comprobación (debe salir 1 fila con tres valores no nulos; y 3 al contar columnas):
+-- Comprobación (debe salir 1 fila con tres valores no nulos; y 4 al contar columnas):
 -- SELECT count(*) FROM information_schema.columns
 --  WHERE (table_name = 'alumnos' AND column_name = 'info_adicional')
---     OR (table_name = 'alumnos_servicios' AND column_name IN ('detalle', 'id_tarifa_iva'));
+--     OR (table_name = 'alumnos_servicios' AND column_name IN ('detalle', 'id_tarifa_iva', 'descuento'));
 -- SELECT to_regclass('public.alumnos_facturas') AS tabla,
 --        (SELECT column_name FROM information_schema.columns WHERE table_name = 'alumnos' AND column_name = 'info_adicional') AS col_alumno,
 --        (SELECT column_name FROM information_schema.columns WHERE table_name = 'alumnos_servicios' AND column_name = 'detalle') AS col_servicio;

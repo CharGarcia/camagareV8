@@ -110,6 +110,15 @@ class AlumnoRules
             if (($s['precio_override'] ?? '') !== '' && (float) $s['precio_override'] < 0) {
                 throw new Exception("Servicio #{$num}: El precio no puede ser negativo.");
             }
+            $desc = (float) ($s['descuento'] ?? 0);
+            if ($desc < 0) {
+                throw new Exception("Servicio #{$num}: El descuento no puede ser negativo.");
+            }
+            // Mismo tope que la factura de venta: el descuento no supera el valor de la línea.
+            if ($desc > 0 && ($s['precio_override'] ?? '') !== ''
+                && $desc > round((float) ($s['cantidad_default'] ?? 1) * (float) $s['precio_override'], 2)) {
+                throw new Exception("Servicio #{$num}: El descuento no puede ser mayor que cantidad × precio.");
+            }
         }
     }
 

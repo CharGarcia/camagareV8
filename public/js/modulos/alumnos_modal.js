@@ -310,7 +310,8 @@
         const txtPrecio = row.querySelector('.txt-precio')?.value;
         const precio = txtPrecio !== '' && txtPrecio !== undefined ? (parseFloat(txtPrecio) || 0) : (parseFloat(row.dataset.precioBase) || 0);
         const iva = pctIvaFila(row);
-        const base = Math.round(cant * precio * 100) / 100;
+        const desc = parseFloat(row.querySelector('.txt-descuento')?.value) || 0;
+        const base = Math.round((cant * precio - desc) * 100) / 100;
         const total = base + Math.round(base * iva) / 100;
         const celTotal = row.querySelector('.cel-total');
         if (celTotal) celTotal.textContent = total.toFixed(2);
@@ -339,13 +340,16 @@
         const grupos = {};
         let subtotal = 0;
         let ivaTotal = 0;
+        let descTotal = 0;
         document.querySelectorAll('#tablaServicios tbody tr').forEach(tr => {
             if ((!tr.querySelector('.hid-producto')?.value && tr.dataset.libre !== '1') || !tr.querySelector('.chk-activo')?.checked) return;
             const cant = parseFloat(tr.querySelector('.txt-cantidad')?.value) || 0;
             const txtPrecio = tr.querySelector('.txt-precio')?.value;
             const precio = txtPrecio !== '' && txtPrecio !== undefined ? (parseFloat(txtPrecio) || 0) : (parseFloat(tr.dataset.precioBase) || 0);
             const pct = pctIvaFila(tr);
-            const base = Math.round(cant * precio * 100) / 100;
+            const desc = parseFloat(tr.querySelector('.txt-descuento')?.value) || 0;
+            descTotal += desc;
+            const base = Math.round((cant * precio - desc) * 100) / 100;
             const iva = Math.round(base * pct) / 100;
             const opt = tr.querySelector('.sel-iva')?.selectedOptions?.[0];
             const k = opt ? opt.value : String(pct);
@@ -358,6 +362,7 @@
         const lista = Object.values(grupos).sort((a, b) => b.pct - a.pct);
         const txt = (id, v) => { const el = document.getElementById(id); if (el) el.textContent = v; };
         txt('aluLblSubtotal', subtotal.toFixed(2));
+        txt('aluLblDescuento', descTotal.toFixed(2));
         txt('aluLblTotal', (Math.round((subtotal + ivaTotal) * 100) / 100).toFixed(2));
         const pctTxt = (n) => (n % 1 === 0 ? n : n.toFixed(2)) + '%';
         const contSub = document.getElementById('aluLblSubtotalesIva');
@@ -560,6 +565,7 @@
             <td><input type="text" class="form-control form-control-sm input-alu txt-detalle" maxlength="300" placeholder="Ej. Pensión {MES} {anio}" value="${escAttr(data.detalle)}"></td>
             <td><input type="number" step="0.01" min="0" class="form-control form-control-sm input-alu txt-cantidad" value="${escAttr(data.cantidad_default ?? 1)}"></td>
             <td><input type="number" step="0.01" min="0" class="form-control form-control-sm input-alu txt-precio" placeholder="${escAttr(baseTxt)}" title="Vacío = precio base del producto" value="${escAttr(precioInicial)}"></td>
+            <td><input type="number" step="0.01" min="0" class="form-control form-control-sm input-alu txt-descuento" placeholder="0.00" value="${escAttr(Number(data.descuento || 0) > 0 ? Number(data.descuento).toFixed(2) : '')}"></td>
             <td><select class="form-select form-select-sm input-alu sel-iva" ${editarIva ? '' : 'disabled title="La configuración de facturación no permite cambiar el IVA"'}>${opcionesTarifas(data.id_tarifa_efectiva ?? data.producto_id_tarifa_iva)}</select></td>
             <td class="text-end cel-total fw-semibold"></td>
             <td class="text-center"><input type="checkbox" class="form-check-input chk-activo" ${(data.activo === undefined || data.activo === true || data.activo === 't') ? 'checked' : ''}></td>
@@ -570,7 +576,7 @@
         // antes, para poder quitarlas junto con la fila.
         row._listas = [row.querySelector('.producto-dropdown')];
         initProductoTypeahead(row);
-        row.querySelectorAll('.txt-cantidad, .txt-precio').forEach(el => el.addEventListener('input', () => recalcularFilaServicio(row)));
+        row.querySelectorAll('.txt-cantidad, .txt-precio, .txt-descuento').forEach(el => el.addEventListener('input', () => recalcularFilaServicio(row)));
         row.querySelector('.sel-iva').addEventListener('change', () => recalcularFilaServicio(row));
         // El precio solo se edita si la configuración de facturación lo permite.
         if (datosCatalogos.config.editar_precio_factura === false) row.querySelector('.txt-precio').readOnly = true;
@@ -649,6 +655,7 @@
                 detalle: tr.querySelector('.txt-detalle')?.value.trim() || '',
                 cantidad_default: tr.querySelector('.txt-cantidad')?.value || 1,
                 precio_override: tr.querySelector('.txt-precio')?.value || '',
+                descuento: tr.querySelector('.txt-descuento')?.value || '0',
                 activo: tr.querySelector('.chk-activo')?.checked ?? true,
             });
         });
@@ -977,7 +984,7 @@
                         <td>${escHtml(l.producto)}${l.aviso ? ` <span class="badge bg-warning text-dark">${escHtml(l.aviso)}</span>` : ''}${l.detalle ? `<div class="text-muted" style="font-size:.72rem;">${escHtml(l.detalle)}</div>` : ''}</td>
                         <td class="text-end">${fmt(l.cantidad)}</td>
                         <td class="text-end">${fmt(l.precio)}</td>
-                        <td class="text-end">${fmt(l.total)}</td>
+                        <td class="text-end">${fmt(l.total)}${l.descuento > 0 ? `<div class="text-muted" style="font-size:.72rem;">Desc. ${fmt(l.descuento)}</div>` : ''}</td>
                         <td>${escHtml(l.cliente)}</td>
                     </tr>`).join('');
                 tbody.querySelectorAll('.gf-chk').forEach(c => c.addEventListener('change', gfResumen));

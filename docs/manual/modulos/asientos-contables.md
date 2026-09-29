@@ -5,8 +5,8 @@ categoria: Contabilidad
 ruta_modulo: modulos/asientos_contables
 tipo: modulo
 visibilidad: todos
-etiquetas: asientos, asiento contable, diario, debe, haber, partida doble, cuadrado, comprobante, contabilidad, imprimir, pdf, excel, documento origen, cuadre con el documento, total de la factura, cuenta por cobrar, cartera, editar asiento desde el documento, pestaña asiento contable, editado a mano, restaurar asiento automático, permisos de contabilidad, documentos migrados, migración, sistema anterior, buscar asiento, buscador, filtros, filtrar asientos, buscar por cuenta, buscar por referencia, libro diario, chips, asiento descuadrado, búsqueda lenta, se queda buscando, filtrar por origen, origen del asiento, módulo de origen, vista previa, costo de ventas, asiento sin costo
-version: 1.25
+etiquetas: asientos, asiento contable, diario, debe, haber, partida doble, cuadrado, comprobante, contabilidad, imprimir, pdf, excel, documento origen, cuadre con el documento, total de la factura, cuenta por cobrar, cartera, editar asiento desde el documento, pestaña asiento contable, editado a mano, restaurar asiento automático, permisos de contabilidad, documentos migrados, migración, sistema anterior, buscar asiento, buscador, filtros, filtrar asientos, buscar por cuenta, buscar por referencia, libro diario, chips, asiento descuadrado, búsqueda lenta, se queda buscando, filtrar por origen, origen del asiento, módulo de origen, vista previa, costo de ventas, asiento sin costo, duplicar asiento, copiar asiento, clonar asiento, repetir asiento
+version: 1.26
 orden: 20
 estado: activo
 ---
@@ -315,6 +315,26 @@ con dos botones:
 Estos botones no aparecen en un asiento nuevo sin guardar, porque todavía no
 tiene número de comprobante.
 
+## Duplicar un asiento de Diario
+
+Los asientos de tipo **Diario** (los que se registran a mano) se pueden copiar
+para no volver a escribir las mismas cuentas. Abra el asiento y, en la barra de
+arriba, pulse **Duplicar**.
+
+- Se pide la **fecha** y el **concepto** de la copia, precargados con los del
+  original. **La copia no puede ser idéntica al original**: hay que cambiar al
+  menos la fecha o el concepto (cambiar solo mayúsculas o espacios no cuenta).
+- Al aceptar, el modal pasa a ser un asiento **nuevo** con las mismas líneas
+  (cuentas, centro de costo, proyecto, documento/ref y valores). Puede
+  ajustarlas antes de guardar; la copia no existe hasta que pulse **Guardar
+  Asiento**, y recibe el siguiente número de comprobante.
+- Si el original estaba anulado, la copia nace como asiento normal.
+- El botón no aparece en los asientos generados por documentos (facturas,
+  compras, ingresos, etc.): su contabilidad sale del documento. Tampoco sin el
+  permiso de *Crear* en Asientos Contables.
+- La copia queda registrada en la auditoría del sistema indicando de qué
+  asiento proviene.
+
 ## Ver el documento que originó el asiento
 
 Cuando el asiento nace de un documento (factura de venta, compra, ingreso,
@@ -329,6 +349,8 @@ tienen un documento individual con tercero que mostrar.
 
 - **"El asiento no está cuadrado"**: el mensaje muestra el total del Debe y del
   Haber; la diferencia le dice qué línea falta o sobra.
+- **"El asiento duplicado no puede ser idéntico al original"**: al duplicar,
+  cambie la fecha o el concepto de la copia.
 - **"El asiento debe contener al menos un detalle de cuenta"**: falta añadir
   líneas.
 - **"El asiento no cuadra con el documento"**: la cartera del asiento (o su total
@@ -348,6 +370,10 @@ tienen un documento individual con tercero que mostrar.
   contabilizado. Guárdelo (o genere la contabilidad) y vuelva a la pestaña.
 
 ## Historial de cambios
+
+- **1.26** — Nuevo botón **Duplicar** en los asientos de tipo Diario: copia las
+  líneas a un asiento nuevo, exigiendo cambiar la fecha o el concepto para que
+  no quede idéntico al original.
 
 - **1.25** — El botón **PDF** del documento pregunta ahora si se quiere
   **Imprimir** (abre el cuadro de impresión con el documento ya cargado),
