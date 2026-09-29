@@ -86,7 +86,6 @@ class NovedadImportService
         $errores    = [];   // ver agregarError()
         $leidas     = 0;    // novedades encontradas en el archivo, válidas o no
         $omitidas   = 0;    // filas sin ningún valor: a ese empleado no le aplica nada
-        $enArchivo  = [];   // clave duplicidad => nº de fila donde apareció primero
 
         for ($i = 1; $i < count($filas); $i++) {
             $fila = $filas[$i];
@@ -108,19 +107,18 @@ class NovedadImportService
                 $this->agregarError($errores, $nf, $novedad, $msg);
             }
 
+            // Un empleado puede tener varias novedades del mismo tipo en el mes (p. ej.
+            // dos préstamos quirografarios): en la plantilla van en filas distintas y
+            // cada una es su propia novedad; el rol las toma por separado.
             foreach ($res['novedades'] as $data) {
-                $clave = $this->claveNovedad($data);
-                if (isset($enArchivo[$clave])) {
-                    $this->agregarError($errores, $nf, $this->etiqueta($data),
-                        'Repetida en la plantilla: ese empleado ya la tiene para el mismo período en la fila ' . $enArchivo[$clave] . '.');
-                    continue;
-                }
-                $enArchivo[$clave] = $nf;
                 $preparadas[] = ['fila' => $nf, 'data' => $data];
             }
         }
 
-        // Duplicados contra lo ya registrado (una sola consulta para todo el archivo).
+        // Contra lo ya registrado solo se rechaza la novedad IDÉNTICA (mismo empleado,
+        // tipo, período, marca de IESS y valor): así una segunda novedad del mismo tipo
+        // entra, pero subir otra vez el mismo archivo no duplica nada.
+        // Una sola consulta para todo el archivo.
         if (!empty($preparadas)) {
             $datos = array_column($preparadas, 'data');
             $existentes = [];
@@ -134,7 +132,8 @@ class NovedadImportService
             foreach ($preparadas as $k => $p) {
                 if (isset($existentes[$this->claveNovedad($p['data'])])) {
                     $this->agregarError($errores, $p['fila'], $this->etiqueta($p['data']),
-                        'Ya está registrada para ' . $p['data']['_nombre_empleado'] . ' en ' . $this->nombrePeriodo($p['data']) . '.');
+                        'Ya está registrada para ' . $p['data']['_nombre_empleado'] . ' en ' . $this->nombrePeriodo($p['data'])
+                        . ' con el mismo valor (' . number_format((float) $p['data']['valor'], 2, '.', '') . ').');
                     unset($preparadas[$k]);
                 }
             }
@@ -338,10 +337,10 @@ class NovedadImportService
     }
 
     /**
-     * Clave de duplicidad: mismo empleado, mismo tipo, mismo período (mes/año) y,
-     * en Otros Ingresos y horas, misma marca de IESS (se puede tener uno con IESS
-     * y otro sin IESS en el mes). Sirve para las filas del archivo y para las
-     * novedades ya registradas (NovedadRepository::getParaDuplicados).
+     * Clave de duplicidad contra lo ya registrado: mismo empleado, tipo, período
+     * (mes/año), valor y, en Otros Ingresos y horas, misma marca de IESS. Sirve
+     * para las filas del archivo y para las novedades ya registradas
+     * (NovedadRepository::getParaDuplicados).
      */
     private function claveNovedad(array $d): string
     {
@@ -350,7 +349,8 @@ class NovedadImportService
             ? (CatalogoNovedades::aportaIess($tipo, $d['aporta_iess'] ?? null) ? '|I' : '|N')
             : '';
         return ((int) $d['id_empleado']) . '|' . $tipo
-            . '|' . ((int) $d['periodo_mes']) . '|' . ((int) $d['periodo_anio']) . $marca;
+            . '|' . ((int) $d['periodo_mes']) . '|' . ((int) $d['periodo_anio']) . $marca
+            . '|' . number_format((float) ($d['valor'] ?? 0), 2, '.', '');
     }
 
     /** Nombre de la novedad para los mensajes: "Descuento", "Horas Nocturnas con IESS"... */

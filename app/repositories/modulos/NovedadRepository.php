@@ -551,9 +551,9 @@ class NovedadRepository extends BaseRepository
     }
     /**
      * Novedades vigentes de esos empleados y años, en el ambiente actual de la
-     * empresa (empleado, tipo, período y marca de IESS). La importación arma con
-     * ellas la clave de duplicado para rechazar lo que ya está registrado antes
-     * de escribir nada. Una sola consulta para todo el archivo.
+     * empresa (empleado, tipo, período, marca de IESS y valor). La importación
+     * arma con ellas la clave de duplicado para rechazar lo que ya está registrado
+     * antes de escribir nada. Una sola consulta para todo el archivo.
      */
     public function getParaDuplicados(int $idEmpresa, array $idsEmpleado, array $anios): array
     {
@@ -566,7 +566,7 @@ class NovedadRepository extends BaseRepository
         $inAnio = implode(',', $anios);
         $colIess = $this->tieneMarcaIess() ? 'aporta_iess' : 'NULL AS aporta_iess';
 
-        $sql = "SELECT id_empleado, tipo_codigo, periodo_mes, periodo_anio, {$colIess}
+        $sql = "SELECT id_empleado, tipo_codigo, periodo_mes, periodo_anio, valor, {$colIess}
                   FROM {$this->table}
                  WHERE id_empresa = :id_empresa AND eliminado = false
                    AND id_empleado IN ($inEmp) AND periodo_anio IN ($inAnio)

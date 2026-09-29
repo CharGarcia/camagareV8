@@ -6,7 +6,7 @@ ruta_modulo: modulos/novedades
 tipo: modulo
 visibilidad: todos
 etiquetas: novedades, novedad, horas extra, faltas, atrasos, prestamo, anticipo, descuento, aviso de salida, motivo de salida, multa, bonos, comisiones, otros ingresos, iess, aporta iess, con iess, sin iess, aporte personal, base del iess, carga masiva, importar, importacion, excel, plantilla, plantilla por empleado, columnas por novedad, subir novedades, eliminar carga, revertir carga, deshacer carga, borrar importacion, historial de cargas, duplicados, repetida, todo o nada, buscar novedades, buscador, filtros, filtrar novedades, buscar por empleado, novedades pagadas, novedades pendientes, chips
-version: 1.8
+version: 1.9
 orden: 20
 estado: activo
 ---
@@ -184,15 +184,15 @@ periodo ya está pagado), se muestra una sola vez con todas ellas. Se revisa que
 - el *afecta a* y el motivo de salida existan en el catálogo;
 - el valor sea un número y el periodo sea válido;
 - el rol de ese empleado y periodo **no esté ya pagado**;
-- **no exista ya la misma novedad**: mismo empleado, mismo tipo y mismo mes/año
-  (en Otros Ingresos y horas, además, la misma marca de IESS: se puede tener una
-  con IESS y otra sin IESS). Vale tanto contra lo ya registrado como contra la
-  propia plantilla (si repite la fila de un empleado, las dos filas no pueden
-  traer la misma novedad para el mismo periodo).
+- **no esté ya registrada una novedad idéntica**: mismo empleado, mismo tipo,
+  mismo mes/año, **mismo valor** y, en Otros Ingresos y horas, la misma marca de
+  IESS.
 
-Ese último control es el que evita subir dos veces la misma carga. Si de verdad
-necesita dos novedades del mismo tipo y periodo para una persona, regístrelas a
-mano desde **Nuevo**.
+Ese último control es el que evita subir dos veces la misma carga. En cambio,
+**un empleado sí puede tener varias novedades del mismo tipo en el mismo
+periodo** (por ejemplo, dos préstamos quirografarios): repita la fila del
+empleado en la plantilla y ponga cada valor en una fila distinta. Cada fila se
+registra como una novedad aparte y el rol descuenta ambas.
 
 ## Historial de cargas
 
@@ -272,12 +272,11 @@ filtrado.
   imputó.
 - **"No existe un empleado con identificación ..."** al importar: la cédula o RUC
   de esa fila no coincide con ningún empleado activo de la empresa.
-- **"Fila N · Tipo: Ya está registrada para ... en ..."**: esa persona ya tiene
-  registrada una novedad de ese tipo en ese mes; borre el valor de esa celda o
-  corrija el periodo de la fila.
-- **"Fila N · Tipo: Repetida en la plantilla ..."**: el empleado aparece en dos
-  filas con el mismo tipo de novedad y el mismo periodo; deje el valor en una
-  sola de ellas.
+- **"Fila N · Tipo: Ya está registrada para ... en ... con el mismo valor"**:
+  esa persona ya tiene registrada esa misma novedad (tipo, mes y valor); lo más
+  probable es que el archivo ya se haya subido. Borre el valor de esa celda o
+  corrija el periodo de la fila. Si de verdad es una segunda novedad por el
+  mismo monto, regístrela a mano desde **Nuevo**.
 - **"El valor «...» no es un número"**: en las columnas de monto, horas o días
   solo van números (se acepta coma o punto decimal).
 - **"Motivo de salida no reconocido"**: en la columna *AVISO DE SALIDA* va el
@@ -297,6 +296,11 @@ filtrado.
 
 ## Historial de cambios
 
+- **1.9** — **La plantilla acepta novedades repetidas.** Un empleado puede traer
+  dos o más novedades del mismo tipo y periodo (por ejemplo, dos préstamos
+  quirografarios) en filas distintas de la plantilla. Contra lo ya registrado
+  solo se rechaza la novedad idéntica (mismo tipo, periodo y valor), para que
+  subir dos veces el mismo archivo no duplique nada.
 - **1.8** — **Un anticipo o préstamo al que le queda $0.01 sigue pendiente.**
   Antes ese centavo lo daba por pagado y la novedad salía como *pagada*. Ahora
   el criterio es el mismo de *Egresos*: hay saldo mientras quede al menos un
