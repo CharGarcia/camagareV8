@@ -638,11 +638,15 @@
         return String(f).split(' ')[0].split('T')[0];
     }
 
+    // Hasta 9 dígitos sin guiones se dejan tal cual: es un secuencial y así se busca
+    // la factura por su número (antes "1311" se convertía en "131-1" y no encontraba nada).
     function ND_aplicarMascaraNroDoc(el) {
         if (!el) return;
         el.addEventListener('input', (e) => {
+            const conGuion = e.target.value.includes('-');
             let v = e.target.value.replace(/\D/g, '');
             if (v.length > 15) v = v.slice(0, 15);
+            if (!conGuion && v.length <= 9) { e.target.value = v; return; }
             let res = '';
             if (v.length > 0) res += v.slice(0, 3);
             if (v.length > 3) res += '-' + v.slice(3, 6);

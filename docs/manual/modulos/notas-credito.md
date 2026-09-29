@@ -5,7 +5,7 @@ categoria: Ventas
 ruta_modulo: modulos/notas_credito
 tipo: modulo
 visibilidad: todos
-etiquetas: nota de credito, notas de credito, devolucion, descuento, anular factura, corregir factura, sri, buscar nota de credito, buscador, filtros, filtrar notas de credito, buscar por producto, filtro de fechas, documento modificado, chips, aparecen notas que no busque, resultados que no corresponden, buscar por clave de acceso, lote, lotes, nup, serial, numero de serie, caducidad, vencimiento, fecha de vencimiento, devolver al inventario, reingreso de stock, devolucion de mercaderia, lote equivocado, bodega de reintegro, sin bodegas asignadas, no tiene bodegas, no se refleja en inventario, no aparece en inventario, no devolvio stock, informacion adicional, info adicional, limite de caracteres, maximo 300 caracteres, value too long, no se pudo guardar la nota, codigo, codigo del producto, columna codigo, buscar por codigo, iva, tarifa iva, iva 12, 12%, iva anterior, iva historico, factura año anterior, exento, no objeto de impuesto, tarifa 0, descuento por pronto pago, pronto pago, descuento posterior, descuento comercial, rebaja de precio, bonificacion, no afecta inventario, sin afectar inventario, sin devolver mercaderia, nota de credito sin productos, linea libre, linea manual, sin bodega, invalid input syntax for type integer, vendedor, asesor, vendedor de la nota de credito, cambiar vendedor, comision, motivo, cambiar vendedor nota autorizada, corregir vendedor, vendedor de la factura, vendedor equivocado, vendedor del cliente, imprimir, impresora
+etiquetas: nota de credito, notas de credito, devolucion, descuento, anular factura, corregir factura, sri, buscar nota de credito, buscador, filtros, filtrar notas de credito, buscar por producto, filtro de fechas, documento modificado, chips, aparecen notas que no busque, resultados que no corresponden, buscar por clave de acceso, lote, lotes, nup, serial, numero de serie, caducidad, vencimiento, fecha de vencimiento, devolver al inventario, reingreso de stock, devolucion de mercaderia, lote equivocado, bodega de reintegro, sin bodegas asignadas, no tiene bodegas, no se refleja en inventario, no aparece en inventario, no devolvio stock, informacion adicional, info adicional, limite de caracteres, maximo 300 caracteres, value too long, no se pudo guardar la nota, codigo, codigo del producto, columna codigo, buscar por codigo, iva, tarifa iva, iva 12, 12%, iva anterior, iva historico, factura año anterior, exento, no objeto de impuesto, tarifa 0, descuento por pronto pago, pronto pago, descuento posterior, descuento comercial, rebaja de precio, bonificacion, no afecta inventario, sin afectar inventario, sin devolver mercaderia, nota de credito sin productos, linea libre, linea manual, subtotal negativo, valor negativo, descuento mayor, sin bodega, invalid input syntax for type integer, vendedor, asesor, vendedor de la nota de credito, cambiar vendedor, comision, motivo, cambiar vendedor nota autorizada, corregir vendedor, vendedor de la factura, vendedor equivocado, vendedor del cliente, imprimir, impresora
 version: 1.25
 orden: 30
 estado: activo
@@ -29,6 +29,12 @@ iniciales) del cliente con **saldo pendiente mayor a cero**: total menos cobros,
 notas de crédito y retenciones ya aplicadas. Cada opción muestra el total y el
 saldo. Una factura ya pagada no aparece en la lista; si igual necesita emitir la
 nota sobre ella, puede escribir el número a mano.
+
+Para **buscar una factura por su secuencial**, escriba solo el número (por ejemplo
+`1311`): la lista muestra las facturas del cliente cuyo número lo contiene. Para
+digitar el número completo, escríbalo con sus 15 dígitos o con guiones
+(`001-001-000001311`); al salir del campo, un número de hasta 9 dígitos se completa
+como `001-001-` más el secuencial.
 
 ## No puede superar el total de la factura
 
@@ -99,6 +105,11 @@ tarifas de 0% tengan el mismo porcentaje.
 La columna **Subtotal** de cada línea muestra el valor **neto: cantidad x precio
 unitario, menos el descuento de esa línea, y sin IVA**. Es el mismo criterio de
 la factura de venta y el mismo valor que viaja al XML del SRI y al RIDE.
+
+El subtotal de una línea **nunca puede ser negativo**. Cantidad, precio y descuento
+no aceptan el signo menos, y el **descuento no puede ser mayor que cantidad x precio**.
+Si la línea queda así (por ejemplo, con un valor pegado), el subtotal se ve en rojo y
+al guardar aparece el aviso con el campo a corregir.
 
 En el pie, el **Subtotal** es el bruto (antes de descuentos) y el descuento se
 resta en su propia línea, igual que en la factura de venta. Es decir: la suma de
@@ -341,6 +352,13 @@ la operación de inmediato.
 
 ## Historial de cambios
 
+- **1.27** — Corregido: el **subtotal de una línea** podía quedar en negativo al llenarla
+  (se aceptaba el signo menos en cantidad, precio o descuento, y un descuento mayor que
+  el valor de la línea). Ahora no se puede escribir el signo menos, la línea se marca en
+  rojo si el descuento la supera y no deja guardar.
+- **1.26** — La factura a modificar se puede buscar escribiendo solo su
+  **secuencial**. Antes el campo le ponía guiones mientras se escribía (`1311`
+  quedaba como `131-1`) y la búsqueda no encontraba la factura.
 - **1.25** — La nota de crédito respeta ahora el cálculo del IVA configurado en la
   empresa (**línea por línea** o **al subtotal**), igual que la factura.
   Antes siempre calculaba línea por línea: al devolver completa una

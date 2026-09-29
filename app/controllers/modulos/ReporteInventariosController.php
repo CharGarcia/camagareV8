@@ -779,6 +779,24 @@ class ReporteInventariosController extends BaseModuloController
 
     private function filaMovimientos(array $r, string $modo): string
     {
+        if ($modo === 'NINGUNO' && !empty($r['es_saldo_inicial'])) {
+            // Saldo con el que arranca el periodo (kardex anterior a la fecha "Desde").
+            return '<tr class="table-light">'
+                . self::tdCodigo($r['producto_codigo'] ?? '')
+                . '<td class="small text-nowrap">' . date('d-m-Y', strtotime($r['fecha_movimiento'] ?? '')) . '</td>'
+                . '<td><span class="fw-bold">' . htmlspecialchars($r['producto_nombre'] ?? '') . '</span></td>'
+                . '<td class="small">' . htmlspecialchars($r['bodega_nombre'] ?? '') . '</td>'
+                . '<td class="text-center small text-uppercase fw-bold text-primary">Saldo inicial</td>'
+                . '<td class="small fst-italic text-muted">Antes del periodo</td>'
+                . '<td class="text-end">-</td>'
+                . '<td class="text-end">-</td>'
+                . '<td class="text-end fw-bold text-primary">' . number_format((float) ($r['saldo'] ?? 0), 2) . '</td>'
+                . '<td class="text-end small">' . number_format((float) ($r['costo_unitario'] ?? 0), 4) . '</td>'
+                . '<td class="small">-</td>'
+                . '<td class="small">-</td>'
+                . '<td class="small">-</td>'
+                . '</tr>';
+        }
         if ($modo === 'NINGUNO') {
             $cant = (float) ($r['cantidad'] ?? 0);
             $entrada = $cant > 0 ? number_format($cant, 2) : '-';
@@ -1955,6 +1973,16 @@ class ReporteInventariosController extends BaseModuloController
                 if ($modo === 'NINGUNO') {
                     $headers = ['Código', 'Fecha', 'Producto', 'Bodega', 'Tipo', 'Origen', 'Entradas', 'Salidas', 'Saldo', 'Costo Unit.', 'Lote', 'Observaciones'];
                     $data = array_map(function ($r) {
+                        if (!empty($r['es_saldo_inicial'])) {
+                            return [
+                                $r['producto_codigo'] ?? '',
+                                date('d-m-Y', strtotime($r['fecha_movimiento'])),
+                                $r['producto_nombre'] ?? '', $r['bodega_nombre'] ?? '',
+                                'SALDO INICIAL', 'Antes del periodo',
+                                0, 0, (float) $r['saldo'],
+                                (float) $r['costo_unitario'], '', '',
+                            ];
+                        }
                         $cant = (float) $r['cantidad'];
                         return [
                             $r['producto_codigo'] ?? '',

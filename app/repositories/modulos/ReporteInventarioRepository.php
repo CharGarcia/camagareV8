@@ -905,9 +905,12 @@ class ReporteInventarioRepository extends BaseRepository
         // puede quedar desincronizado si algo externo toca productos_bodegas sin pasar por
         // el kardex). En su lugar se calcula en vivo: suma corrida de "cantidad" (entradas
         // positivas, salidas negativas) por producto+bodega, en orden cronológico, sobre las
-        // filas que cumplen los filtros actuales. Nota: si se filtra por rango de fechas, el
-        // saldo corrido arranca desde la primera fila visible en ese rango, no desde el inicio
-        // absoluto del historial (igual que una suma acumulada sobre un rango filtrado).
+        // filas que cumplen los filtros actuales. Con fecha "Desde", el saldo corrido parte
+        // del SALDO INICIAL de cada producto+bodega (todo el kardex anterior a esa fecha);
+        // ver getMovimientosDetalleConSaldoInicial().
+        if (self::llevaSaldoInicial($filtros)) {
+            return $this->getMovimientosDetalleConSaldoInicial($idEmpresa, $filtros, $limite, $whereKardex, $whereFuera, $params);
+        }
         $sql = $this->cteMovimientos($whereKardex) . "
                 SELECT k.id, k.fecha_movimiento, k.tipo_movimiento, k.referencia_tipo, k.referencia_id,
                        k.cantidad, k.costo_unitario, k.costo_total,
@@ -928,6 +931,121 @@ class ReporteInventarioRepository extends BaseRepository
         $rows = $st->fetchAll(PDO::FETCH_ASSOC);
         foreach ($rows as &$r) {
             $r['origen_label'] = self::labelOrigen($r['referencia_tipo']);
+        }
+        unset($r);
+        return $rows;
+    }
+
+    /**
+     * Filtros que eligen una CLASE de movimiento (no un producto, bodega o lote). Con uno
+     * activo el saldo corrido ya no es un stock —p. ej. solo entradas = entradas
+     * acumuladas—, así que sumarle un saldo inicial mezclaría dos cosas distintas: en ese
+     * caso el detalle se queda como siempre, sin saldo inicial.
+     */
+    private const FILTROS_SIN_SALDO_INICIAL = ['tipo_movimiento', 'referencia_tipo', 'id_usuario', 'observaciones'];
+
+    /** El saldo inicial solo aplica con fecha "Desde" y sin filtros de clase de movimiento. */
+    public static function llevaSaldoInicial(array $filtros): bool
+    {
+        if (empty($filtros['fecha_desde'])) {
+            return false;
+        }
+        foreach (self::FILTROS_SIN_SALDO_INICIAL as $clave) {
+            if (!empty($filtros[$clave])) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    /**
+     * Detalle de Movimientos que arranca con un SALDO INICIAL por producto+bodega: lo que
+     * sumaba el kardex antes de la fecha "Desde" (mismos filtros de empresa, ambiente,
+     * producto, bodega, categoría, marca, lote, NUP y caducidad). Ese saldo se suma a la
+     * suma corrida de cada fila, y además sale como una fila propia al principio
+     * (es_saldo_inicial = 1), antes de los movimientos del periodo.
+     *
+     * Qué pares llevan fila de saldo inicial (solo si es distinto de cero):
+     *  - sin producto elegido: los producto+bodega que tienen movimientos en el periodo
+     *    (restringir a esos pares evita sumar el histórico de toda la empresa y cientos
+     *    de filas de productos que no se movieron);
+     *  - con producto elegido: todas sus bodegas, aunque no se hayan movido en el
+     *    periodo — es el kardex de ese producto, y su saldo tiene que verse igual.
+     *
+     * Todo en una sola consulta: el CTE `si` se calcula una vez y sirve tanto para las
+     * filas de saldo inicial como para el saldo corrido.
+     */
+    private function getMovimientosDetalleConSaldoInicial(int $idEmpresa, array $filtros, ?int $limite, string $whereKardex, string $whereFuera, array $params): array
+    {
+        // Mismos filtros de producto/bodega/lote, sin el rango del periodo ni el buscador
+        // (el buscador mezcla k.observaciones, que no aplica a un saldo agregado).
+        $filtrosSaldo = $filtros;
+        unset($filtrosSaldo['fecha_desde'], $filtrosSaldo['fecha_hasta'], $filtrosSaldo['buscar']);
+        list($whereKardexSaldo, , $paramsSaldo) = $this->buildWhereMovimientos($idEmpresa, $filtrosSaldo);
+        $params += $paramsSaldo;   // mismos nombres, mismos valores
+
+        $conProducto = !empty($filtros['id_producto']);
+        $ctePares = $conProducto ? '' : ",
+                pares AS MATERIALIZED (
+                    SELECT DISTINCT k.id_producto, k.id_bodega
+                    " . $this->fromMovimientos($whereFuera) . "
+                )";
+        $condPares = $conProducto ? '' : ' AND (k.id_producto, k.id_bodega) IN (SELECT id_producto, id_bodega FROM pares)';
+        $condBuscarSaldo = !empty($filtros['buscar'])
+            ? ' AND (p.nombre ILIKE :buscar OR p.codigo ILIKE :buscar OR b.nombre ILIKE :buscar)'
+            : '';
+
+        $sql = $this->cteMovimientos($whereKardex) . $ctePares . ",
+                si AS MATERIALIZED (
+                    SELECT k.id_producto, k.id_bodega, SUM(k.cantidad) AS saldo,
+                           (MAX(ARRAY[EXTRACT(EPOCH FROM k.fecha_movimiento), k.id, k.costo_unitario]))[3] AS costo_unitario
+                    FROM inventario_kardex k
+                    WHERE {$whereKardexSaldo}
+                      AND k.fecha_movimiento < :fecha_desde{$condPares}
+                    GROUP BY k.id_producto, k.id_bodega
+                )
+                SELECT * FROM (
+                    SELECT 0 AS es_saldo_inicial, k.id, k.fecha_movimiento, k.tipo_movimiento,
+                           k.referencia_tipo, k.referencia_id, k.cantidad, k.costo_unitario, k.costo_total,
+                           COALESCE(si.saldo, 0) + SUM(k.cantidad) OVER (
+                               PARTITION BY k.id_producto, k.id_bodega
+                               ORDER BY k.fecha_movimiento, k.id
+                               ROWS UNBOUNDED PRECEDING
+                           ) AS saldo,
+                           k.numero_lote, k.fecha_caducidad, k.nup, k.observaciones,
+                           p.codigo AS producto_codigo, p.nombre AS producto_nombre,
+                           b.nombre AS bodega_nombre
+                    FROM k
+                    INNER JOIN productos p ON p.id = k.id_producto
+                    INNER JOIN bodegas b ON b.id = k.id_bodega
+                    LEFT JOIN si ON si.id_producto = k.id_producto AND si.id_bodega = k.id_bodega
+                    WHERE {$whereFuera}
+
+                    UNION ALL
+
+                    SELECT 1, NULL, CAST(:fecha_desde AS timestamp), NULL,
+                           NULL, NULL, 0, si.costo_unitario, NULL,
+                           si.saldo,
+                           NULL, NULL, NULL, NULL,
+                           p.codigo, p.nombre,
+                           b.nombre
+                    FROM si
+                    INNER JOIN productos p ON p.id = si.id_producto
+                    INNER JOIN bodegas b ON b.id = si.id_bodega
+                    WHERE si.saldo <> 0{$condBuscarSaldo}
+                ) t
+                ORDER BY t.es_saldo_inicial DESC,
+                         CASE WHEN t.es_saldo_inicial = 1 THEN t.producto_nombre END,
+                         CASE WHEN t.es_saldo_inicial = 1 THEN t.bodega_nombre END,
+                         t.fecha_movimiento ASC, t.id ASC"
+                . ($limite !== null ? ' LIMIT ' . ((int) $limite + 1) : '');
+
+        $st = $this->db->prepare($sql);
+        $st->execute($params);
+        $rows = $st->fetchAll(PDO::FETCH_ASSOC);
+        foreach ($rows as &$r) {
+            $r['es_saldo_inicial'] = (int) $r['es_saldo_inicial'] === 1;
+            $r['origen_label'] = $r['es_saldo_inicial'] ? 'Saldo inicial' : self::labelOrigen($r['referencia_tipo']);
         }
         unset($r);
         return $rows;

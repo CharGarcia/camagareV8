@@ -56,9 +56,13 @@
 
     // ── MÁSCARA COMPARTIDA (000-000-000000000) ───────────────────────────────
 
+    // Hasta 9 dígitos sin guiones se dejan tal cual (es el secuencial); normalizarMascara()
+    // lo completa como 001-001-secuencial al salir del campo. Antes "1311" quedaba "131-1".
     function aplicarMascara(input) {
+        const conGuion = input.value.includes('-');
         let v = input.value.replace(/\D/g, '');
         if (v.length > 15) v = v.slice(0, 15);
+        if (!conGuion && v.length <= 9) { input.value = v; return; }
         let res = '';
         if (v.length > 0)  res  = v.slice(0, 3);
         if (v.length > 3)  res += '-' + v.slice(3, 6);
@@ -69,6 +73,11 @@
     function normalizarMascara(input) {
         const raw = input.value.replace(/\D/g, '');
         if (!raw) return;
+        // Solo el secuencial (sin guiones): mismo criterio que los demás comprobantes.
+        if (!input.value.includes('-') && raw.length <= 9) {
+            input.value = `001-001-${raw.padStart(9, '0')}`;
+            return;
+        }
         const p1 = raw.slice(0, 3).padStart(3, '0');
         const p2 = raw.slice(3, 6).padStart(3, '0');
         const sec = raw.slice(6, 15);

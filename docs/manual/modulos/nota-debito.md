@@ -158,6 +158,7 @@ la operación de inmediato.
 
 ## Historial de cambios
 
+- **1.9** — La factura a modificar se puede buscar escribiendo solo su **secuencial**. Antes el campo le ponía guiones mientras se escribía (`1311` quedaba como `131-1`) y la búsqueda no encontraba la factura. Al salir del campo, un número de hasta 9 dígitos se completa como `001-001-` más el secuencial.
 - **1.8** — El botón **PDF** del documento pregunta ahora si se quiere
   **Imprimir** (abre el cuadro de impresión con el documento ya cargado),
   **Descargar** o **Ver** en otra pestaña. Ver la guía *Descargar archivos*.

@@ -5,8 +5,8 @@ categoria: Reportes
 ruta_modulo: modulos/reporte_inventarios
 tipo: modulo
 visibilidad: todos
-etiquetas: reporte de inventario, no descarga el excel, excel no descarga, excel en blanco, demasiados datos, excel muy grande, filtrar por año, no descarga el pdf, pdf en blanco, pdf muy grande, excel de la consignacion, numero de factura en el excel, numero de retorno en el excel, totales en el excel, existencias, stock por bodega, valorizacion, kardex, faltantes, exportar, auditoria, stock cacheado, corregir stock, consignaciones, stock por lote, por caducidad, que se vence, vencimientos, limpiar filtros, lento, tarda, se cuelga, tarda en abrir, tarda en entrar, busqueda lenta, se recarga la pagina, ordenar por columna, pierde el resultado, no puedo abrir otro modulo mientras carga, primeras 5000 filas, listado recortado, lote, nup, asesor, detalle de consignacion, totales del detalle, pdf del documento relacionado, permisos, pestañas, no veo la pestaña, no aparece consignaciones, no aparece existencias, acceso a inventario, permiso de inventario, permiso de consignaciones, pdf de la consignacion, estado de la consignacion, imprimir consignacion con saldo, consignacion completa, saldo en poder del cliente, no veo una bodega, bodegas asignadas, acceso a bodegas, solo mi bodega, falta una bodega, no aparece la bodega, codigo de producto en consignacion, codigo del producto en el detalle, codigo como primera columna, columna codigo, codigo de producto en el reporte, ordenar por codigo, lote mas consignacion, que lote tiene cada cliente, lote por cliente, consignacion por lote, con quien salio el lote, entregas por lote, se genera solo, se consulta solo, no muestra datos, boton mostrar, hay que pulsar mostrar, al elegir el producto se pone a cargar, al cambiar el anio se pone a cargar, no quiero que cargue solo, carga sola, consulta automatica, lotes en cero, lote agotado, no muestra lotes vacios, stock cero, lotes sin stock, filas en cero, por que no aparece el lote, lote desaparecio del reporte, boton mostrar bloqueado, no puedo pulsar mostrar, doble clic en mostrar, barra de progreso, porcentaje de avance, cuanto falta, se queda cargando, indicador de carga, stock negativo, por que esta en negativo, saldo negativo, negativo en existencias, seguimiento, trazabilidad del lote, de donde sale el negativo, lote sin entrada, lote duplicado, lote mal escrito, movimientos de otro ambiente, kardex de un lote, filtros no funcionan, no filtra, no coge los filtros, filtro de estado, filtro consignado, saldo a fecha, fecha de corte
-version: 1.31
+etiquetas: reporte de inventario, no descarga el excel, excel no descarga, excel en blanco, demasiados datos, excel muy grande, filtrar por año, no descarga el pdf, pdf en blanco, pdf muy grande, excel de la consignacion, numero de factura en el excel, numero de retorno en el excel, totales en el excel, existencias, stock por bodega, valorizacion, kardex, faltantes, exportar, auditoria, stock cacheado, corregir stock, consignaciones, stock por lote, por caducidad, que se vence, vencimientos, limpiar filtros, lento, tarda, se cuelga, tarda en abrir, tarda en entrar, busqueda lenta, se recarga la pagina, ordenar por columna, pierde el resultado, no puedo abrir otro modulo mientras carga, primeras 5000 filas, listado recortado, lote, nup, asesor, detalle de consignacion, totales del detalle, pdf del documento relacionado, permisos, pestañas, no veo la pestaña, no aparece consignaciones, no aparece existencias, acceso a inventario, permiso de inventario, permiso de consignaciones, pdf de la consignacion, estado de la consignacion, imprimir consignacion con saldo, consignacion completa, saldo en poder del cliente, no veo una bodega, bodegas asignadas, acceso a bodegas, solo mi bodega, falta una bodega, no aparece la bodega, codigo de producto en consignacion, codigo del producto en el detalle, codigo como primera columna, columna codigo, codigo de producto en el reporte, ordenar por codigo, lote mas consignacion, que lote tiene cada cliente, lote por cliente, consignacion por lote, con quien salio el lote, entregas por lote, se genera solo, se consulta solo, no muestra datos, boton mostrar, hay que pulsar mostrar, al elegir el producto se pone a cargar, al cambiar el anio se pone a cargar, no quiero que cargue solo, carga sola, consulta automatica, lotes en cero, lote agotado, no muestra lotes vacios, stock cero, lotes sin stock, filas en cero, por que no aparece el lote, lote desaparecio del reporte, boton mostrar bloqueado, no puedo pulsar mostrar, doble clic en mostrar, barra de progreso, porcentaje de avance, cuanto falta, se queda cargando, indicador de carga, stock negativo, por que esta en negativo, saldo negativo, negativo en existencias, seguimiento, trazabilidad del lote, de donde sale el negativo, lote sin entrada, lote duplicado, lote mal escrito, movimientos de otro ambiente, kardex de un lote, filtros no funcionan, no filtra, no coge los filtros, filtro de estado, filtro consignado, saldo a fecha, fecha de corte, saldo inicial, saldo anterior, saldo de arranque, saldo al inicio del mes, kardex empieza en cero, saldo empieza en cero
+version: 1.32
 orden: 40
 estado: activo
 ---
@@ -53,6 +53,8 @@ ordena: un clic en su encabezado ordena el listado por código.
   movimientos salen ordenados por **fecha, del más antiguo al más reciente**,
   mezclando productos y bodegas; el saldo de cada fila sigue siendo el saldo
   corrido de su propio producto y bodega. Lo mismo en el PDF y el Excel.
+  Con una fecha *Desde*, el listado **arranca con el saldo inicial** (ver
+  *Saldo inicial en Movimientos*).
 - Valor del inventario según el costo registrado.
 - Consignaciones vigentes/entregadas, a nivel de cabecera con detalle por línea.
 - Auditoría: diferencias entre el stock guardado y el saldo real del kardex.
@@ -217,6 +219,27 @@ salidas restan) — nunca se confía en un campo de saldo guardado
 que un stock cacheado desincronizado (por ejemplo, por una migración
 incompleta) muestre un número que no corresponde a la suma real de
 movimientos.
+
+## Saldo inicial en Movimientos
+
+En **Movimientos**, vista **Detallado**, cuando hay una fecha *Desde* (por
+ejemplo, al elegir un mes), el listado empieza con una fila **SALDO INICIAL**
+por cada producto y bodega: lo que había antes de esa fecha, sumando todo el
+kardex anterior. A partir de ahí, el **Saldo** de cada movimiento del periodo
+parte de ese valor, así que el saldo de la última fila es el stock real al
+cierre del periodo.
+
+- Sin producto elegido, sale el saldo inicial de los productos y bodegas que
+  **tuvieron movimientos** en el periodo.
+- Con un producto elegido, sale el saldo inicial de **todas sus bodegas**,
+  aunque no se hayan movido en el periodo.
+- Si el saldo inicial es cero, no se muestra la fila (el saldo parte de cero).
+- Respeta los filtros de bodega, categoría, marca, lote, NUP y caducidad.
+- **No** se calcula si se filtra por **Tipo**, **Origen**, **Usuario** u
+  **Observaciones**: con esos filtros solo se ve una parte de los movimientos y
+  el saldo corrido ya no es un stock, así que sumarle el saldo inicial daría un
+  número engañoso. Tampoco con el año en *Todos* (no hay periodo anterior).
+- El PDF y el Excel llevan las mismas filas de saldo inicial.
 
 ## Por qué una fila sale en negativo (seguimiento)
 
@@ -514,6 +537,10 @@ ahí.
   los selectores Usuario y Año recorre el kardex completo de la empresa.
 
 ## Historial de cambios
+
+- **1.32** — **Saldo inicial en Movimientos**: con una fecha *Desde*, el
+  Detallado (y su PDF/Excel) arranca con una fila *SALDO INICIAL* por producto
+  y bodega, y el saldo corrido parte de ella en vez de cero.
 
 - **1.31** — Los botones y enlaces de **PDF** de los documentos preguntan ahora si se quiere
   **Imprimir** (abre el cuadro de impresión con el documento ya cargado),

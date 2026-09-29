@@ -52,6 +52,15 @@ class NotaCreditoRules
             if (($detalle['precio_unitario'] ?? 0) < 0) {
                 throw new Exception("El precio unitario del detalle " . ($index + 1) . " no puede ser negativo.");
             }
+            // Un descuento negativo o mayor que la línea deja su subtotal en negativo.
+            $descuento = (float) ($detalle['descuento'] ?? 0);
+            if ($descuento < 0) {
+                throw new Exception("El descuento del detalle " . ($index + 1) . " no puede ser negativo.");
+            }
+            $bruto = round((float) $detalle['cantidad'] * (float) ($detalle['precio_unitario'] ?? 0), 2);
+            if ($descuento > $bruto + 0.001) {
+                throw new Exception("El descuento del detalle " . ($index + 1) . " no puede ser mayor que cantidad × precio unitario.");
+            }
         }
 
         $this->validarFichaTecnicaSri($data);

@@ -27,12 +27,16 @@ document.addEventListener('DOMContentLoaded', () => {
     SI_aplicarMascaraNroDoc(document.getElementById('si-consig-nro'));
 });
 
-/* Máscara de comprobante 000-000-000000000 (3-3-9) */
+/* Máscara de comprobante 000-000-000000000 (3-3-9).
+   Hasta 9 dígitos sin guiones se dejan tal cual (es el secuencial): al salir del campo
+   se completa como 001-001-secuencial. Antes "1311" quedaba "131-1". */
 function SI_aplicarMascaraNroDoc(el) {
     if (!el) return;
     el.addEventListener('input', (e) => {
+        const conGuion = e.target.value.includes('-');
         let v = e.target.value.replace(/\D/g, '');
         if (v.length > 15) v = v.slice(0, 15);
+        if (!conGuion && v.length <= 9) { e.target.value = v; return; }
         let res = '';
         if (v.length > 0) res += v.slice(0, 3);
         if (v.length > 3) res += '-' + v.slice(3, 6);

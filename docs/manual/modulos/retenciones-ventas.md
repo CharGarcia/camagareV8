@@ -173,6 +173,7 @@ cerrado.
 
 ## Historial de cambios
 
+- **1.12** — En el número de la retención y en el documento sustento se puede escribir solo el secuencial (`1311`): al salir del campo se completa como `001-001-000001311`. Antes se partía por posición y quedaba como `131-001-000000000`.
 - **1.11** — Cuando un código de retención no tiene cuenta o no existe en el catálogo
   del SRI, el aviso de asientos pendientes lo dice así, en lugar de «error inesperado».
 - **1.10** — El botón **PDF** del documento pregunta ahora si se quiere

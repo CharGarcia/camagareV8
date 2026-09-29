@@ -373,6 +373,7 @@ El valor lo configura el superadministrador en `/config/sri-proveedor`.
 
 ## Historial de cambios
 
+- **1.19** — En **Nº Doc. Retenido** se puede escribir solo el secuencial (`1311`): al salir del campo se completa como `001-001-000001311`. Antes quedaba como `131-1` y no se completaba.
 - **1.18** — Cuando un código de retención no tiene cuenta o no existe en el catálogo
   del SRI, el aviso de asientos pendientes lo dice así, en lugar de «error inesperado».
 - **1.17** — El botón **PDF** de la retención pregunta ahora si se quiere

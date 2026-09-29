@@ -34,9 +34,13 @@
         // Aplicar máscara al número de documento
         const numDocInput = document.getElementById('ret_num_doc_sustento');
         if (numDocInput) {
+            // Hasta 9 dígitos sin guiones se dejan tal cual (es el secuencial): al salir
+            // del campo se completa como 001-001-secuencial. Antes "1311" quedaba "131-1".
             numDocInput.addEventListener('input', (e) => {
+                const conGuion = e.target.value.includes('-');
                 let v = e.target.value.replace(/\D/g, '');
                 if (v.length > 15) v = v.slice(0, 15);
+                if (!conGuion && v.length <= 9) { e.target.value = v; return; }
                 let res = '';
                 if (v.length > 0) res += v.slice(0, 3);
                 if (v.length > 3) res += '-' + v.slice(3, 6);

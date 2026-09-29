@@ -768,11 +768,15 @@
     }
 
     // Máscara de comprobante 000-000-000000000 (3-3-9) para entrada manual.
+    // Hasta 9 dígitos sin guiones se dejan tal cual: es un secuencial y así se busca
+    // la factura por su número (antes "1311" se convertía en "131-1" y no encontraba nada).
     function NC_aplicarMascaraNroDoc(el) {
         if (!el) return;
         el.addEventListener('input', (e) => {
+            const conGuion = e.target.value.includes('-');
             let v = e.target.value.replace(/\D/g, '');
             if (v.length > 15) v = v.slice(0, 15);
+            if (!conGuion && v.length <= 9) { e.target.value = v; return; }
             let res = '';
             if (v.length > 0) res += v.slice(0, 3);
             if (v.length > 3) res += '-' + v.slice(3, 6);
@@ -1011,6 +1015,9 @@
         const precioUnitario = data.precio_unitario || 0;
         const descuento = data.descuento || 0;
         const idTarifaIva = data.id_tarifa_iva || 1;
+        // Cantidad, precio y descuento no admiten negativos: el signo "-" (y la "e" de
+        // notación científica) dejaban el subtotal de la línea en negativo al escribir.
+        const sinNegativos = `min="0" onkeydown="if(event.key==='-'||event.key==='e'||event.key==='E')event.preventDefault()"`;
 
         tr.innerHTML = `
             <td class="ps-3 py-1">
@@ -1022,13 +1029,13 @@
                 <input type="text" name="det_descripcion[]" class="input-detalle" value="${descripcion}" placeholder="Buscar producto/servicio o escribir..." autocomplete="off">
             </td>
             <td class="py-1">
-                <input type="number" name="det_cantidad[]" class="input-detalle text-center" value="${cantidad}" step="0.000001" oninput="window.NC_calcFila(this)">
+                <input type="number" name="det_cantidad[]" class="input-detalle text-center" value="${cantidad}" step="0.000001" ${sinNegativos} oninput="window.NC_calcFila(this)">
             </td>
             <td class="py-1">
-                <input type="number" name="det_precio_unitario[]" class="input-detalle text-end" value="${precioUnitario}" step="0.000001" oninput="window.NC_calcFila(this)">
+                <input type="number" name="det_precio_unitario[]" class="input-detalle text-end" value="${precioUnitario}" step="0.000001" ${sinNegativos} oninput="window.NC_calcFila(this)">
             </td>
             <td class="py-1">
-                <input type="number" name="det_descuento[]" class="input-detalle text-end" value="${descuento}" step="0.01" oninput="window.NC_calcFila(this)">
+                <input type="number" name="det_descuento[]" class="input-detalle text-end" value="${descuento}" step="0.01" ${sinNegativos} oninput="window.NC_calcFila(this)">
             </td>
             <td class="py-1">
                 <select name="det_id_tarifa_iva[]" class="input-detalle text-center" onchange="window.NC_calcFila(this)">
@@ -1349,7 +1356,14 @@
             // es el mismo valor que se guarda en precio_total_sin_impuesto.
             const decP = window.nc_dec_p || 2;
             const totalFilaEl = tr.querySelector('.nc-fila-total');
-            if (totalFilaEl) totalFilaEl.textContent = baseConDesc.toFixed(decP);
+            if (totalFilaEl) {
+                totalFilaEl.textContent = baseConDesc.toFixed(decP);
+                // Un valor pegado o precargado puede traer negativos o un descuento mayor
+                // que la línea: se marca en rojo y NC_validarObligatorios() no deja guardar.
+                const invalida = baseConDesc < 0 || cant < 0 || prec < 0 || desc < 0;
+                totalFilaEl.classList.toggle('text-danger', invalida);
+                totalFilaEl.title = invalida ? 'El descuento no puede superar Cantidad × P. Unitario y ningún valor puede ser negativo.' : '';
+            }
         });
 
         // IVA "al subtotal" (misma config que Facturas de Venta): el IVA de cada tarifa
@@ -1478,6 +1492,15 @@
             const cant = tr.querySelector('input[name="det_cantidad[]"]');
             if (!desc.value.trim()) { NC_focusYError(desc, 'La descripción del ítem es obligatoria.'); return false; }
             if (!(parseFloat(cant.value) > 0)) { NC_focusYError(cant, 'La cantidad del ítem debe ser mayor a cero.'); return false; }
+            const prec  = tr.querySelector('input[name="det_precio_unitario[]"]');
+            const dscto = tr.querySelector('input[name="det_descuento[]"]');
+            if ((parseFloat(prec.value) || 0) < 0) { NC_focusYError(prec, 'El precio unitario no puede ser negativo.'); return false; }
+            const vDscto = parseFloat(dscto.value) || 0;
+            if (vDscto < 0) { NC_focusYError(dscto, 'El descuento no puede ser negativo.'); return false; }
+            if (vDscto > r2((parseFloat(cant.value) || 0) * (parseFloat(prec.value) || 0))) {
+                NC_focusYError(dscto, 'El descuento no puede ser mayor que Cantidad × P. Unitario: el subtotal de la línea quedaría negativo.');
+                return false;
+            }
         }
         return true;
     }

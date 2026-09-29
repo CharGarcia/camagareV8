@@ -113,6 +113,7 @@ normalmente, así que volver a subir el mismo archivo no duplica nada.
 
 ## Historial de cambios
 
+- **1.6** — En el número de documento (cuentas por cobrar, por pagar y consignaciones) se puede escribir solo el secuencial (`1311`): al salir del campo se completa como `001-001-000001311`. Antes quedaba como `131-1`.
 - **1.5** — Corregido: los botones **Editar** y **Registrar cobro / pago** de las filas (cuentas por cobrar, por pagar, anticipos y consignaciones) no hacían nada, sin mostrar aviso, cuando algún dato del registro (nombre del cliente o proveedor, observaciones, etc.) llevaba un apóstrofo, p. ej. `D'ONOFRIO`.
 - **1.4** — Un documento ya no se puede cargar dos veces como saldo inicial, ni cargarse como saldo inicial si ya existe como factura, compra o liquidación en el sistema (al crear, editar e importar). Además, **Ingresos** y **Conciliación de Cobros** restan ahora las notas de crédito del saldo inicial, igual que este módulo: antes permitían volver a cobrar la parte ya cancelada por la nota. Nueva sección *Un documento no se puede cargar dos veces*.
 - **1.3** — Corregido: el **pago** de un saldo por pagar se rechazaba siempre con  *"ya no tiene saldo suficiente (disponible: $0.00)"*. Ahora se valida contra su  saldo real. Además, el botón **Guardar** del cobro/pago ya no admite un doble  clic que registraba el movimiento dos veces.
