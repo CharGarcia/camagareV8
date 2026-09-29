@@ -6,7 +6,7 @@ ruta_modulo: modulos/retenciones_compras
 tipo: modulo
 visibilidad: todos
 etiquetas: retencion, retenciones, comprobante de retencion, proveedor, iva, renta, sustento tributario, sri, plazo, base imponible, porcentaje, advertencias, ruc proveedor, ruc del proveedor del sistema, informacion adicional, resolucion 27, pdf, ride, imprimir, imprimir retencion, impresora, descargar pdf, ver pdf, buscar retencion, buscador, filtros, filtrar retenciones, buscar por codigo de retencion, estado de correo, chips, aparecen documentos que no busque, resultados que no corresponden, la busqueda trae otros documentos
-version: 1.17
+version: 1.18
 orden: 30
 estado: activo
 ---
@@ -323,6 +323,13 @@ El valor lo configura el superadministrador en `/config/sri-proveedor`.
 
 ## Errores frecuentes
 
+- **La retención no genera asiento: "el código de retención … no existe en el catálogo
+  del SRI"**: el código guardado en la retención no está en el catálogo de retenciones
+  (por ejemplo, 344, que es el casillero del formulario; los códigos vigentes son 3440,
+  344A o 344B). A un código así no se le puede asignar cuenta: corrija el código en la
+  retención y el asiento se genera en la siguiente pasada.
+- **La retención no genera asiento: "el código de retención … no tiene cuenta contable"**:
+  asígnele la cuenta en Configuración Contable → Retenciones en Compra.
 - **"El tipo de documento de sustento no es válido"**: use uno de los códigos
   admitidos por el SRI.
 - **"La base de la retención de IVA supera el IVA del documento"**: puso el
@@ -366,6 +373,8 @@ El valor lo configura el superadministrador en `/config/sri-proveedor`.
 
 ## Historial de cambios
 
+- **1.18** — Cuando un código de retención no tiene cuenta o no existe en el catálogo
+  del SRI, el aviso de asientos pendientes lo dice así, en lugar de «error inesperado».
 - **1.17** — El botón **PDF** de la retención pregunta ahora si se quiere
   **Imprimir** (abre el cuadro de impresión con el comprobante ya cargado),
   **Descargar** o **Ver** en otra pestaña. Antes solo descargaba el archivo.

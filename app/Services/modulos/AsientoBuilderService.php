@@ -3982,10 +3982,12 @@ class AsientoBuilderService
     public function generarAsientoRetencionVenta(int $idEmpresa, int $idRetencion): array
     {
         $db = \App\core\Database::getConnection();
+        $this->motivosFaltantes = [];
 
         // 1. DEBE: por código de retención → cuenta configurada + valor retenido
         $sqlDebe = "SELECT d.codigo_retencion,
                            SUM(d.valor_retenido) AS total,
+                           rsx.id AS id_catalogo,
                            ap.id_cuenta,
                            pc.codigo AS cuenta_codigo,
                            pc.nombre AS cuenta_nombre
@@ -3998,7 +4000,7 @@ class AsientoBuilderService
                           AND ap.eliminado = false
                     LEFT JOIN plan_cuentas pc ON pc.id = ap.id_cuenta
                     WHERE d.id_retencion = :id
-                    GROUP BY d.codigo_retencion, ap.id_cuenta, pc.codigo, pc.nombre";
+                    GROUP BY d.codigo_retencion, rsx.id, ap.id_cuenta, pc.codigo, pc.nombre";
         $st = $db->prepare($sqlDebe);
         $st->execute([':emp' => $idEmpresa, ':id' => $idRetencion]);
 
@@ -4008,7 +4010,12 @@ class AsientoBuilderService
             $valor = round((float) $l['total'], 2);
             if ($valor <= 0) continue;
             $totalRetenido += $valor;
-            if (empty($l['id_cuenta'])) continue; // sin cuenta configurada para ese código
+            if (empty($l['id_cuenta'])) { // sin cuenta configurada para ese código
+                $this->registrarFaltante(empty($l['id_catalogo'])
+                    ? "El código de retención {$l['codigo_retencion']} no existe en el catálogo de retenciones del SRI: corríjalo en la retención."
+                    : "El código de retención {$l['codigo_retencion']} no tiene cuenta contable (Configuración Contable → Retenciones en Venta).");
+                continue;
+            }
             $detalles[] = [
                 'id_cuenta_contable' => (int) $l['id_cuenta'],
                 'cuenta_codigo'      => $l['cuenta_codigo'],
@@ -4046,6 +4053,8 @@ class AsientoBuilderService
                 'haber'              => $totalRetenido,
                 'referencia_detalle' => 'Cuentas por cobrar (retención)',
             ];
+        } else {
+            $this->registrarFaltante('Falta la cuenta «Cuentas por Cobrar» en Configuración Contable → Ventas con Factura (contrapartida de la retención).');
         }
 
         return $detalles;
@@ -4064,10 +4073,12 @@ class AsientoBuilderService
     public function generarAsientoRetencionCompra(int $idEmpresa, int $idRetencion): array
     {
         $db = \App\core\Database::getConnection();
+        $this->motivosFaltantes = [];
 
         // 1. HABER: por código de retención → cuenta configurada + valor retenido
         $sqlHaber = "SELECT d.codigo_retencion,
                             SUM(d.valor_retenido) AS total,
+                            rsx.id AS id_catalogo,
                             ap.id_cuenta,
                             pc.codigo AS cuenta_codigo,
                             pc.nombre AS cuenta_nombre
@@ -4080,7 +4091,7 @@ class AsientoBuilderService
                            AND ap.eliminado = false
                      LEFT JOIN plan_cuentas pc ON pc.id = ap.id_cuenta
                      WHERE d.id_retencion = :id
-                     GROUP BY d.codigo_retencion, ap.id_cuenta, pc.codigo, pc.nombre";
+                     GROUP BY d.codigo_retencion, rsx.id, ap.id_cuenta, pc.codigo, pc.nombre";
         $st = $db->prepare($sqlHaber);
         $st->execute([':emp' => $idEmpresa, ':id' => $idRetencion]);
 
@@ -4090,7 +4101,12 @@ class AsientoBuilderService
             $valor = round((float) $l['total'], 2);
             if ($valor <= 0) continue;
             $totalRetenido += $valor;
-            if (empty($l['id_cuenta'])) continue; // sin cuenta configurada para ese código
+            if (empty($l['id_cuenta'])) { // sin cuenta configurada para ese código
+                $this->registrarFaltante(empty($l['id_catalogo'])
+                    ? "El código de retención {$l['codigo_retencion']} no existe en el catálogo de retenciones del SRI: corríjalo en la retención."
+                    : "El código de retención {$l['codigo_retencion']} no tiene cuenta contable (Configuración Contable → Retenciones en Compra).");
+                continue;
+            }
             $detalles[] = [
                 'id_cuenta_contable' => (int) $l['id_cuenta'],
                 'cuenta_codigo'      => $l['cuenta_codigo'],
@@ -4128,6 +4144,8 @@ class AsientoBuilderService
                 'haber'              => 0.0,
                 'referencia_detalle' => 'Cuentas por pagar (retención)',
             ];
+        } else {
+            $this->registrarFaltante('Falta la cuenta «Cuentas por Pagar» en Configuración Contable → Adquisiciones de Compras/Servicios (contrapartida de la retención).');
         }
 
         return $detalles;

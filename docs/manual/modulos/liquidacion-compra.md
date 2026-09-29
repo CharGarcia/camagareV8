@@ -6,7 +6,7 @@ ruta_modulo: modulos/liquidacion-compra
 tipo: modulo
 visibilidad: todos
 etiquetas: liquidacion de compra, liquidacion, proveedor sin factura, comprobante 03, sri, sustento, eliminar, borrar, borrador, anular, buscar liquidacion, buscador, filtros, filtrar liquidaciones, buscar por producto, saldo pendiente, estado de pago, chips, aparecen documentos que no busque, resultados que no corresponden, la busqueda trae otros documentos, totales, subtotal, descuento, iva, redondeo, centavos, decimales, decimales de precio, calculo del iva, al subtotal, linea por linea, no cuadra, diferencia de un centavo, error en diferencias, exento, no objeto de iva, codigo del item, item sin codigo, item sin descripcion, falta el codigo, error en estructura de comprobante, rechazado por estructura, no autorizado, informacion adicional, ruc proveedor, campo que no se puede borrar, no me deja eliminar la fila, concepto muy largo, limite de caracteres, maximo 100 caracteres, value too long, no se pudo guardar la liquidacion, registrar pago, pagar liquidacion, egreso de liquidacion, pestaña pagos, no deja pagar, error al registrar pago, secuencial de egreso, imprimir, impresora
-version: 1.16
+version: 1.17
 orden: 40
 estado: activo
 ---
@@ -265,6 +265,10 @@ la operación de inmediato.
 
 ## Historial de cambios
 
+- **1.17** — El **Detalle Adicional** de cada ítem ahora se incluye en el XML
+  que se envía al SRI (como detalle adicional del ítem, hasta 300 caracteres);
+  antes solo se guardaba en el sistema. En el PDF aparece la columna
+  **Det. Adicional** solo si algún ítem trae ese dato.
 - **1.16** — Con el IVA configurado **al subtotal**, los centavos de diferencia se reparten
   entre las líneas (ninguna cambia más de un centavo). Antes caían todos en
   la última línea, que en liquidaciones grandes podía quedar varios centavos

@@ -6,7 +6,7 @@ ruta_modulo: modulos/retenciones_ventas
 tipo: modulo
 visibilidad: todos
 etiquetas: retencion de venta, retenciones recibidas, cliente retiene, credito tributario, periodo fiscal, cobro, buscar retencion, buscador, filtros, filtrar retenciones, documento sustento, codigo de retencion, filtro de fechas, chips, aparecen documentos que no busque, resultados que no corresponden, la busqueda trae otros documentos, imprimir, impresora
-version: 1.10
+version: 1.11
 orden: 40
 estado: activo
 ---
@@ -154,6 +154,13 @@ cerrado.
 
 ## Errores frecuentes
 
+- **La retención no genera asiento: "el código de retención … no existe en el catálogo
+  del SRI"**: el código guardado en la retención no está en el catálogo de retenciones
+  (por ejemplo, 344, que es el casillero del formulario; los códigos vigentes son 3440,
+  344A o 344B). A un código así no se le puede asignar cuenta: corrija el código en la
+  retención y el asiento se genera en la siguiente pasada.
+- **La retención no genera asiento: "el código de retención … no tiene cuenta contable"**:
+  asígnele la cuenta en Configuración Contable → Retenciones en Venta.
 - **"El período fiscal debe tener el formato MM/YYYY"**: escríbalo con mes y año,
   por ejemplo `07/2026`.
 - **La factura queda con saldo pendiente que nadie va a pagar**: falta registrar
@@ -166,6 +173,8 @@ cerrado.
 
 ## Historial de cambios
 
+- **1.11** — Cuando un código de retención no tiene cuenta o no existe en el catálogo
+  del SRI, el aviso de asientos pendientes lo dice así, en lugar de «error inesperado».
 - **1.10** — El botón **PDF** del documento pregunta ahora si se quiere
   **Imprimir** (abre el cuadro de impresión con el documento ya cargado),
   **Descargar** o **Ver** en otra pestaña. Ver la guía *Descargar archivos*.

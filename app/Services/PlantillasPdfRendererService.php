@@ -334,6 +334,27 @@ class PlantillasPdfRendererService
         $cfgCols = !empty($cfg['columnas']) ? $cfg['columnas'] : $defCols;
         $cols    = array_values(array_filter($cfgCols, fn($c) => (bool)($c['visible'] ?? true)));
 
+        // "Det. Adicional" solo se dibuja si algún ítem trae información (mismo
+        // criterio que el PDF estándar); su ancho lo reabsorbe la columna flexible.
+        // En el XML del SRI el dato sí viaja siempre que exista.
+        $hayDetalle = false;
+        foreach ($detalles as $d) {
+            if (trim((string)($d['info_adicional'] ?? ($d['detalle_adicional'] ?? ''))) !== '') { $hayDetalle = true; break; }
+        }
+        if (!$hayDetalle) {
+            $sinDeta = array_values(array_filter($cols, fn($c) => !in_array($c['key'] ?? '', ['detalle_adicional', 'info_adicional'], true)));
+            $tieneFlex = (bool) array_filter($sinDeta, fn($c) => (float)($c['ancho'] ?? 0) === 0.0);
+            // Si la plantilla no tiene columna flexible, el hueco se lo lleva la descripción.
+            if (!$tieneFlex && count($sinDeta) < count($cols)) {
+                $libre = $w - array_sum(array_map(fn($c) => (float)($c['ancho'] ?? 0), $sinDeta));
+                foreach ($sinDeta as &$c) {
+                    if (($c['key'] ?? '') === 'descripcion') { $c['ancho'] = (float)$c['ancho'] + max(0.0, $libre); break; }
+                }
+                unset($c);
+            }
+            $cols = $sinDeta;
+        }
+
         // Calcular ancho flexible (columnas con ancho=0)
         $fixedW = array_sum(array_map(fn($c) => (float)($c['ancho'] ?? 0), $cols));
         $flexW  = max(10.0, $w - $fixedW);

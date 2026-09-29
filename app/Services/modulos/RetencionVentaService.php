@@ -272,10 +272,15 @@ class RetencionVentaService
         }
         $fecha     = $data['fecha_emision'] ?? date('Y-m-d');
 
-        $detallesSugeridos = $this->obtenerAsientoSugerido($idEmpresa, $idRetencion);
+        $builder = new AsientoBuilderService();
+        $detallesSugeridos = $builder->generarAsientoRetencionVenta($idEmpresa, $idRetencion);
         if (empty($detallesSugeridos)) {
             return;
         }
+        // Si el asiento quedó descuadrado por un código de retención (o la cuenta por cobrar) sin
+        // cuenta, fallar con ese motivo y no con el genérico "Total Debe (…) no coincide con Total
+        // Haber (…)" de AsientoContableRules, que no dice qué configurar.
+        AsientoBuilderService::verificarCuadre($detallesSugeridos, $builder->getMotivosFaltantes());
 
         $num = ($data['establecimiento'] ?? '') . '-' . ($data['punto_emision'] ?? '') . '-' . ($data['secuencial'] ?? '');
 

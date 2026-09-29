@@ -276,6 +276,19 @@ class XmlLiquidacionCompraService
             $this->txt($dom, $det, 'descuento',              $this->dec2($d['descuento']       ?? 0));
             $this->txt($dom, $det, 'precioTotalSinImpuesto', $this->dec2($d['precio_total_sin_impuesto'] ?? 0));
 
+            // Campo "Detalle Adicional" del ítem (liquidaciones_detalle.info_adicional).
+            // El XSD lo ubica entre precioTotalSinImpuesto e impuestos; los
+            // atributos nombre/valor admiten hasta 300 caracteres.
+            $detAdic = trim((string) preg_replace('/\s+/u', ' ', (string) ($d['info_adicional'] ?? '')));
+            if ($detAdic !== '') {
+                $adicEl = $dom->createElement('detallesAdicionales');
+                $da     = $dom->createElement('detAdicional');
+                $da->setAttribute('nombre', 'Detalle');
+                $da->setAttribute('valor', mb_substr($detAdic, 0, 300));
+                $adicEl->appendChild($da);
+                $det->appendChild($adicEl);
+            }
+
             $impuestosEl = $dom->createElement('impuestos');
             foreach ($d['impuestos'] ?? [] as $imp) {
                 $impEl = $dom->createElement('impuesto');

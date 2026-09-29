@@ -6,7 +6,7 @@ ruta_modulo: modulos/factura-venta
 tipo: modulo
 visibilidad: todos
 etiquetas: factura, facturar, venta, buscar factura, buscador, aparecen facturas que no busque, resultados que no corresponden, la busqueda trae otras facturas, buscar por clave de acceso, filtros, filtrar facturas, buscar por producto vendido, buscar por forma de pago, filtro de fechas, saldo pendiente, chips, ordenar por dos columnas, ordenar por estado de pago, ordenar por cliente y fecha, sri, comprobante electronico, xml, excel, anular, nota de credito, whatsapp, link de pago, payphone, nuvei, serie vacia, sin puntos de emision, secuencial repetido, secuencial ya existe, punto de emision, ambiente, pruebas, produccion, cambio de ambiente, clave de acceso en procesamiento, error 70, comprobante devuelto, reintento automatico, saldo, stock, existencias, cuanto queda, disponible, buscador de productos, lote, vencimiento, caducidad, fecha de vencimiento, lote y vencimiento, pdf, ride, columnas del pdf, subsidio, irbpnr, servicio, propina, codigo cortado, detalle adicional, forma de pago, plazo, dias credito, unidad de tiempo, meses, anios, informacion adicional, vendedor, cajero, no sale el vendedor, falta informacion en el pdf, se cierra el modal, autorizar, bloquear factura, no puedo editar, letra pequena, tamano de letra, fuente del pdf, letra del pdf, no se lee el pdf, ancho de columna, agrandar columna, ensanchar, codigo cortado en el modal, descripcion cortada, no se ve la descripcion completa, redimensionar, precio con impuestos, precio con iva, sale en cero, columna descuento, tipo de identificacion, tipo de documento del cliente, ruc o cedula, es ruc o cedula, cedula o pasaporte, consumidor final, no se cual identificacion tiene el cliente, buscador de clientes, buscar cliente, elegir cliente, datos del cliente, informacion adicional larga, limite de caracteres, maximo 300 caracteres, value too long, no se pudo guardar la factura, imprimir, impresora, iva al subtotal, iva sobre el subtotal, iva linea por linea, calculo del iva, iva no cuadra, iva mal calculado, centavos de diferencia, factura grande, muchas lineas, muchos items, factura lenta, tarda en abrir, tarda en cargar, peso del xml, tamano del xml, 320 kb
-version: 2.23
+version: 2.24
 orden: 20
 estado: activo
 ---
@@ -195,6 +195,9 @@ ni líneas en campos vacíos:
 - **Cód. Auxiliar** y **Detalle Adicional** aparecen **solo si algún ítem de la
   factura trae ese dato**. Si no, la columna no se dibuja y su espacio pasa a la
   descripción.
+- El **Detalle Adicional** de cada ítem también viaja en el **XML** que se
+  envía al SRI (como detalle adicional del ítem, hasta 300 caracteres). Si la
+  empresa agrupa ítems iguales, los detalles distintos se unen con « | ».
 - El ancho de **Cód. Principal** se ajusta al código más largo de la factura, de
   modo que el código se vea completo. Si es excepcionalmente largo, el texto se
   condensa dentro de su celda en lugar de invadir la columna siguiente.
@@ -460,6 +463,8 @@ la operación de inmediato.
 
 ## Historial de cambios
 
+- **2.24** — El **Detalle Adicional** de cada ítem ahora se incluye en el XML
+  autorizado por el SRI (antes solo salía en el PDF).
 - **2.23** — Con el IVA configurado **al subtotal**, las facturas con muchas
   líneas volvían a mostrar el IVA línea por línea en el PDF, en el XML y al
   reabrirlas (varios centavos de diferencia con el total). Ahora el IVA al

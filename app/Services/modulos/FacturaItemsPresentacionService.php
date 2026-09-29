@@ -190,6 +190,14 @@ class FacturaItemsPresentacionService
         $a['_nups']        = $this->unir($a['_nups']        ?? [], $this->valoresDe($b, 'nup'));
         $a['_caducidades'] = $this->unir($a['_caducidades'] ?? [], $this->valoresFecha($b, 'fecha_caducidad'));
 
+        // Detalle adicional: se conservan los textos distintos de las líneas
+        // fusionadas (antes solo quedaba el de la primera).
+        $adicA = trim((string) ($a['info_adicional'] ?? ''));
+        $adicB = trim((string) ($b['info_adicional'] ?? ''));
+        if ($adicB !== '' && !in_array($this->norm($adicB), array_map([$this, 'norm'], explode(' | ', $adicA)), true)) {
+            $a['info_adicional'] = $adicA === '' ? $adicB : $adicA . ' | ' . $adicB;
+        }
+
         $a['_fusionadas'] = (int) ($a['_fusionadas'] ?? 1) + 1;
 
         return $a;

@@ -393,14 +393,29 @@ class LiquidacionCompraPdfService
             'total'   => $pageW * 0.14,
         ];
 
+        // "Det. Adicional" solo se dibuja si algún ítem trae información (mismo
+        // criterio que la factura); su ancho sale de la descripción. En el XML
+        // del SRI el dato sí viaja siempre que exista.
+        $hayDetalle = false;
+        foreach ($detalles as $d) {
+            if (trim((string)($d['info_adicional'] ?? '')) !== '') { $hayDetalle = true; break; }
+        }
+        if ($hayDetalle) {
+            $anchos['deta']  = $pageW * 0.16;
+            $anchos['desc'] -= $anchos['deta'];
+        }
+
         // Encabezado de la tabla. Se encapsula porque hay que repetirlo al inicio de cada
         // página cuando el detalle no cabe en una sola.
-        $dibujarCabeceraTabla = function () use ($pdf, $x, $anchos): void {
+        $dibujarCabeceraTabla = function () use ($pdf, $x, $anchos, $hayDetalle): void {
             $pdf->SetFont(self::FUENTE, 'B', 7);
             $pdf->SetFillColor(220, 220, 220);
             $pdf->SetX($x);
             $pdf->Cell($anchos['codigo'], 5, 'CÓDIGO',        1, 0, 'C', true);
             $pdf->Cell($anchos['desc'],   5, 'DESCRIPCIÓN',   1, 0, 'C', true);
+            if ($hayDetalle) {
+                $pdf->Cell($anchos['deta'], 5, 'DET. ADICIONAL', 1, 0, 'C', true);
+            }
             $pdf->Cell($anchos['cant'],   5, 'CANT.',         1, 0, 'C', true);
             $pdf->Cell($anchos['precio'], 5, 'P. UNIT.',      1, 0, 'R', true);
             $pdf->Cell($anchos['descto'], 5, 'DESC.',         1, 0, 'R', true);
@@ -416,8 +431,9 @@ class LiquidacionCompraPdfService
         foreach ($detalles as $d) {
             $codigo = trim((string)($d['codigo_principal'] ?? ''));
             $desc   = (string)($d['descripcion'] ?? '');
+            $deta   = $hayDetalle ? trim((string)($d['info_adicional'] ?? '')) : '';
 
-            $nLineas = max(ceil(mb_strlen($desc) / 55), 1);
+            $nLineas = max(ceil(mb_strlen($desc) / ($hayDetalle ? 33 : 55)), 1);
             // Si la descripción —o un código largo— necesita más alto que la estimación por
             // caracteres (pasa con textos en mayúsculas), manda su alto real; si no, el texto
             // pisaría la fila siguiente y el control de salto de abajo fallaría.
@@ -425,7 +441,8 @@ class LiquidacionCompraPdfService
                 4.5,
                 $nLineas * 4.5,
                 $pdf->getStringHeight($anchos['desc'], $desc, false, true, null, 1),
-                $pdf->getStringHeight($anchos['codigo'], $codigo, false, true, null, 1)
+                $pdf->getStringHeight($anchos['codigo'], $codigo, false, true, null, 1),
+                $hayDetalle ? $pdf->getStringHeight($anchos['deta'], $deta, false, true, null, 1) : 0
             );
 
             // Salto de página CONTROLADO. Sin esto, la fila que no cabía se partía entre
@@ -442,6 +459,9 @@ class LiquidacionCompraPdfService
 
             $pdf->MultiCell($anchos['codigo'], $h, $codigo,                                            1, 'C', false, 0);
             $pdf->MultiCell($anchos['desc'],   $h, $desc,                                              1, 'L', false, 0);
+            if ($hayDetalle) {
+                $pdf->MultiCell($anchos['deta'], $h, $deta,                                            1, 'L', false, 0);
+            }
             $pdf->MultiCell($anchos['cant'],   $h, number_format((float)($d['cantidad'] ?? 0), $decCant),         1, 'C', false, 0);
             $pdf->MultiCell($anchos['precio'], $h, number_format((float)($d['precio_unitario'] ?? 0), $decPrecio), 1, 'R', false, 0);
             $pdf->MultiCell($anchos['descto'], $h, number_format((float)($d['descuento'] ?? 0), 2),               1, 'R', false, 0);

@@ -6,7 +6,7 @@ ruta_modulo: modulos/plantillas-pdf
 tipo: modulo
 visibilidad: admin
 etiquetas: plantillas pdf, diseno de factura, formato de impresion, cheques, calibrar, membrete, personalizar documento, banco, plantilla por banco, plantilla original, tipos de documento, diseñador
-version: 1.2
+version: 1.3
 orden: 30
 estado: activo
 ---
@@ -123,6 +123,9 @@ este diseñador directamente. Ver [Egresos](modulos/egresos).
 
 ## Historial de cambios
 
+- **1.3** — En la tabla de ítems, la columna **Det. Adicional** se oculta
+  automáticamente cuando ningún ítem del documento trae ese dato; su espacio
+  pasa a la descripción.
 - **1.2** — Se amplió de 6 a 17 tipos de documento soportados (retenciones,
   recibo de venta, egreso, ingreso, traspaso, proforma, retorno de
   consignación, consignación en ventas, facturación de consignación, cambio de

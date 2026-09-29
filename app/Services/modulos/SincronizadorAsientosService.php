@@ -1605,6 +1605,31 @@ class SincronizadorAsientosService
             );
             $coincidio = true;
         }
+        // Contrapartida de una retención: la cartera no se configura en Retenciones sino en la
+        // sección de Ventas / Compras (AsientoBuilderService::generarAsientoRetencionVenta/Compra).
+        if (str_contains($m, 'contrapartida de la retención')) {
+            if (str_contains($m, 'por cobrar')) {
+                $this->agregarAccion('ventas_factura', 'general', 'Falta configurar la Cuenta por Cobrar en Ventas con Factura', 'Configure las cuentas contables de Ventas con Factura');
+            } else {
+                $this->agregarAccion('adquisiciones_compras', 'general', 'Falta configurar la Cuenta por Pagar en Adquisiciones de Compras', 'Configure las cuentas contables de Adquisiciones de Compras');
+            }
+            $coincidio = true;
+        }
+        // Código fuera del catálogo del SRI: no se le puede asignar cuenta (Configuración Contable
+        // lo muestra marcado y sin campo). Se corrige en el documento, así que va sin enlace.
+        if (str_contains($m, 'no existe en el catálogo de retenciones')) {
+            $this->agregarAccion('', '', "Algunas {$nombreModulo} usan un código de retención que no existe en el catálogo del SRI: corrija el código en esas retenciones");
+            $coincidio = true;
+        }
+        if (str_contains($m, 'el código de retención') && str_contains($m, 'no tiene cuenta contable')) {
+            $esCompra = ($clave === 'retenciones_compra');
+            $this->agregarAccion(
+                $esCompra ? 'retenciones_compra' : 'retenciones_venta',
+                'general',
+                'Algunos códigos de retención no tienen cuenta contable (Retenciones en ' . ($esCompra ? 'Compra' : 'Venta') . ')'
+            );
+            $coincidio = true;
+        }
         if ($clave !== 'roles_pago' && (str_contains($m, 'sueldos por pagar') || str_contains($m, 'cuentas de nómina'))) {
             $this->agregarAccion('nomina', 'general', 'Configure las cuentas contables de Nómina');
             $coincidio = true;
@@ -1620,7 +1645,9 @@ class SincronizadorAsientosService
             $this->agregarAccion('', '', "Algunos documentos de {$nombreModulo} son de un período contable cerrado: reábralo si deben contabilizarse");
             return;
         }
-        if (!str_contains($m, 'cuenta') && !str_contains($m, 'configur')) {
+        // "El asiento no está cuadrado" / "no cuadra" también es configuración: el builder omite la
+        // línea cuya cuenta no encontró y el asiento queda cojo. Cae a la acción de la sección.
+        if (!str_contains($m, 'cuenta') && !str_contains($m, 'configur') && !str_contains($m, 'cuadr')) {
             $this->agregarAccion('', '', "Algunos asientos de {$nombreModulo} no se pudieron generar por un error inesperado: comuníquese con soporte");
             return;
         }
