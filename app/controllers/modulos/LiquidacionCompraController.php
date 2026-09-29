@@ -81,6 +81,25 @@ class LiquidacionCompraController extends BaseModuloController
         // en el bucle anterior).
         $seriesFiltro = $this->repository->getSeriesDistintas($idEmpresa);
 
+        // Modal de retención (pestaña Retenciones): sus series son las configuradas
+        // para 'Retenciones de compras' —no las de liquidación— y sus botones siguen
+        // los permisos del módulo de Retenciones, que es el que atiende sus endpoints.
+        $permRetencion   = $this->permisosModuloPorRuta('modulos/retenciones_compras');
+        $puntosRetencion = [];
+        if (!empty($permRetencion['ver'])) {
+            $secRepo = $secRepo ?? new \App\repositories\SecuencialRepository();
+            foreach ($establecimientos as $est) {
+                foreach ($empresaModel->getPuntosEmision((int) $est['id']) as $p) {
+                    $config = $secRepo->getConfigSecuencial((int) $p['id'], 'Retenciones de compras');
+                    if (empty($config['id'])) {
+                        continue;
+                    }
+                    $p['cod_establecimiento'] = $est['codigo'];
+                    $puntosRetencion[] = $p;
+                }
+            }
+        }
+
         $total = $result['total'];
         $this->viewWithLayout('layouts.main', 'modulos/liquidacion_compra/index', [
             'titulo'              => 'Liquidaciones de Compras y Servicios',
@@ -103,6 +122,8 @@ class LiquidacionCompraController extends BaseModuloController
             'tarifasIva'          => $this->repository->getTarifasIva(),
             'sustentos'           => $this->repository->getSustentosTributarios(),
             'puntos'              => $puntos,
+            'permRetencion'       => $permRetencion,
+            'puntosRetencion'     => $puntosRetencion,
             'seriesFiltro'        => $seriesFiltro,
             // Selects del modal de filtros: solo valores usados por la empresa.
             'usuariosFiltro'      => $this->repository->getUsuariosConLiquidaciones($idEmpresa),

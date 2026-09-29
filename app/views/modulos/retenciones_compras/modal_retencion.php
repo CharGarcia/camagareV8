@@ -164,11 +164,19 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosPestanasOcultas($vistaConfigR
                                     </div>
 
                                     <!-- Nº Doc Retenido -->
-                                    <div class="col-md-3">
-                                        <label class="x-small fw-bold text-muted mb-1">Nº Doc. Retenido <span class="text-danger">*</span></label>
+                                    <!-- Al enfocar (con proveedor elegido) o al escribir el número/secuencial se listan las compras y liquidaciones de compra registradas
+                                         (del proveedor elegido, si lo hay). Elegir una vincula la retención a
+                                         ese documento; Backspace/Supr sobre un documento vinculado lo desvincula. -->
+                                    <div class="col-md-3 position-relative">
+                                        <label class="x-small fw-bold text-muted mb-1">Nº Doc. Retenido <span class="text-danger">*</span>
+                                            <span id="ret_doc_vinculo" class="badge bg-success bg-opacity-10 text-success border border-success border-opacity-25 ms-1 d-none" style="font-size:.65rem;"></span>
+                                        </label>
                                         <input type="text" name="num_doc_sustento" id="ret_num_doc_sustento"
                                                class="form-control form-control-sm border-primary border-opacity-25 py-0"
-                                               style="height:31px;" placeholder="001-001-000000001" maxlength="17">
+                                               style="height:31px;" placeholder="001-001-000000001" maxlength="17" autocomplete="off" title="Escriba el número o secuencial para buscar compras y liquidaciones registradas">
+                                        <div id="ret_doc_dropdown"
+                                             class="list-group shadow dropdown-predictivo position-absolute d-none"
+                                             style="z-index:1050;width:420px;max-width:90vw;right:0;max-height:280px;overflow-y:auto;top:55px;"></div>
                                     </div>
                                 </div>
 

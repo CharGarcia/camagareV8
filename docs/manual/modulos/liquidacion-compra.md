@@ -5,8 +5,8 @@ categoria: Compras
 ruta_modulo: modulos/liquidacion-compra
 tipo: modulo
 visibilidad: todos
-etiquetas: liquidacion de compra, liquidacion, proveedor sin factura, comprobante 03, sri, sustento, eliminar, borrar, borrador, anular, buscar liquidacion, buscador, filtros, filtrar liquidaciones, buscar por producto, saldo pendiente, estado de pago, chips, aparecen documentos que no busque, resultados que no corresponden, la busqueda trae otros documentos, totales, subtotal, descuento, iva, redondeo, centavos, decimales, decimales de precio, calculo del iva, al subtotal, linea por linea, no cuadra, diferencia de un centavo, error en diferencias, exento, no objeto de iva, codigo del item, item sin codigo, item sin descripcion, falta el codigo, error en estructura de comprobante, rechazado por estructura, no autorizado, informacion adicional, ruc proveedor, campo que no se puede borrar, no me deja eliminar la fila, concepto muy largo, limite de caracteres, maximo 100 caracteres, value too long, no se pudo guardar la liquidacion, registrar pago, pagar liquidacion, egreso de liquidacion, pestaña pagos, no deja pagar, error al registrar pago, secuencial de egreso, imprimir, impresora
-version: 1.17
+etiquetas: liquidacion de compra, liquidacion, proveedor sin factura, comprobante 03, sri, sustento, eliminar, borrar, borrador, anular, buscar liquidacion, buscador, filtros, filtrar liquidaciones, buscar por producto, saldo pendiente, estado de pago, chips, aparecen documentos que no busque, resultados que no corresponden, la busqueda trae otros documentos, totales, subtotal, descuento, iva, redondeo, centavos, decimales, decimales de precio, calculo del iva, al subtotal, linea por linea, no cuadra, diferencia de un centavo, error en diferencias, exento, no objeto de iva, codigo del item, item sin codigo, item sin descripcion, falta el codigo, error en estructura de comprobante, rechazado por estructura, no autorizado, informacion adicional, ruc proveedor, campo que no se puede borrar, no me deja eliminar la fila, concepto muy largo, limite de caracteres, maximo 100 caracteres, value too long, no se pudo guardar la liquidacion, registrar pago, pagar liquidacion, egreso de liquidacion, pestaña pagos, no deja pagar, error al registrar pago, secuencial de egreso, imprimir, impresora, retencion, emitir retencion, retener liquidacion, pestaña retenciones, comprobante de retencion
+version: 1.18
 orden: 40
 estado: activo
 ---
@@ -195,6 +195,28 @@ El saldo se vuelve a calcular en el momento de guardar: si alguien registró otr
 pago mientras tenía la pestaña abierta, el sistema lo tiene en cuenta. El egreso
 genera su asiento contable como cualquier egreso.
 
+## Emitir la retención de la liquidación
+
+En la pestaña **Retenciones** de una liquidación guardada se ven las retenciones
+emitidas sobre ella y se crea una nueva con **Emitir Retención**.
+
+1. Pulse **Emitir Retención**: se abre el comprobante de retención con el
+   proveedor, el número y la fecha de la liquidación, el tipo de documento
+   **03 - Liquidación de compra**, el sustento tributario y los totales (subtotal
+   e IVA) ya cargados.
+2. Elija los códigos de retención y revise bases y porcentajes.
+3. Guarde y envíe al SRI. Al cerrar la retención, la pestaña se actualiza.
+
+La retención es la misma del módulo **Retenciones en compras** y sigue sus
+permisos: sin permiso de crear allí no aparece el botón, y sin acceso a ese
+módulo la pestaña lo indica. Los datos se toman de la liquidación **guardada**;
+si cambió algo, guárdela antes de emitir la retención. También se puede retener
+una liquidación desde el propio módulo de Retenciones eligiéndola en **Nº Doc.
+Retenido**.
+
+Una liquidación que ya tiene retención **no se puede eliminar**: primero hay que
+eliminar la retención.
+
 ## Eliminar una liquidación
 
 Solo se pueden eliminar las liquidaciones en estado **borrador** —incluidas las
@@ -265,6 +287,10 @@ la operación de inmediato.
 
 ## Historial de cambios
 
+- **1.18** — El botón **Emitir Retención** de la pestaña **Retenciones** ahora
+  funciona: abre el comprobante de retención con los datos de la liquidación ya
+  cargados (antes mostraba «Módulo de retenciones no cargado»). Nueva sección
+  *Emitir la retención de la liquidación*.
 - **1.17** — El **Detalle Adicional** de cada ítem ahora se incluye en el XML
   que se envía al SRI (como detalle adicional del ítem, hasta 300 caracteres);
   antes solo se guardaba en el sistema. En el PDF aparece la columna

@@ -5,8 +5,8 @@ categoria: Compras
 ruta_modulo: modulos/retenciones_compras
 tipo: modulo
 visibilidad: todos
-etiquetas: retencion, retenciones, comprobante de retencion, proveedor, iva, renta, sustento tributario, sri, plazo, base imponible, porcentaje, advertencias, ruc proveedor, ruc del proveedor del sistema, informacion adicional, resolucion 27, pdf, ride, imprimir, imprimir retencion, impresora, descargar pdf, ver pdf, buscar retencion, buscador, filtros, filtrar retenciones, buscar por codigo de retencion, estado de correo, chips, aparecen documentos que no busque, resultados que no corresponden, la busqueda trae otros documentos
-version: 1.18
+etiquetas: retencion, retenciones, retencion de liquidacion, retener liquidacion de compra, liquidacion de compra, vincular compra, vincular documento, documento sustento, buscar compra para retener, comprobante de retencion, proveedor, iva, renta, sustento tributario, sri, plazo, base imponible, porcentaje, advertencias, ruc proveedor, ruc del proveedor del sistema, informacion adicional, resolucion 27, pdf, ride, imprimir, imprimir retencion, impresora, descargar pdf, ver pdf, buscar retencion, buscador, filtros, filtrar retenciones, buscar por codigo de retencion, estado de correo, chips, aparecen documentos que no busque, resultados que no corresponden, la busqueda trae otros documentos
+version: 1.20
 orden: 30
 estado: activo
 ---
@@ -16,14 +16,15 @@ emitir un **comprobante de retención** al proveedor y enviarlo al SRI. Este
 módulo gestiona esos comprobantes.
 
 La retención siempre se apoya en un **documento de sustento**: la factura de
-compra que la origina.
+compra que la origina o la **liquidación de compra** que emitió la empresa.
 
 ## Cómo se emite
 
-Lo habitual es generarla desde la propia compra: así el proveedor, el documento
-de sustento —con su tipo, número, fecha y totales— vienen ya cargados.
+Lo habitual es generarla desde la propia compra o liquidación (pestaña
+**Retenciones** → **Emitir Retención**): así el proveedor y el documento de
+sustento —con su tipo, número, fecha y totales— vienen ya cargados.
 
-1. Abra la compra y genere la retención.
+1. Abra la compra o la liquidación de compra y genere la retención.
 2. Revise el **proveedor** y la **fecha de emisión**.
 3. Compruebe el **documento de sustento**: tipo, número y fecha de emisión.
 4. Elija los códigos de retención de la lista y revise bases y porcentajes.
@@ -259,6 +260,32 @@ Detalles que conviene conocer:
 - Las retenciones de **otro ambiente** (las de pruebas cuando la empresa ya está en
   producción) tampoco bloquean, igual que no aparecen en el listado.
 
+## Elegir la compra o liquidación desde este módulo
+
+Con **Nueva** también se puede emitir la retención sobre un documento ya
+registrado, sin ir a Compras ni a Liquidaciones:
+
+1. Elija el **proveedor**.
+2. Haga clic en **Nº Doc. Retenido**: aparece la lista de sus compras y
+   liquidaciones de compra (las más recientes primero), cada una marcada como
+   *Compra* o *Liquidación de compra*. Escribiendo el número o el secuencial se
+   filtra; si todavía no eligió proveedor, escriba al menos tres dígitos del
+   número para buscar entre todos.
+3. Elija el documento. Se cargan el proveedor, el número, la fecha, el tipo de
+   documento (03 para liquidaciones), el sustento tributario y los totales, y
+   junto a la etiqueta aparece el aviso **Compra** o **Liquidación de compra**
+   indicando que la retención quedó vinculada.
+
+Si el documento ya tiene una retención registrada, la lista lo avisa en rojo.
+Para quitar el vínculo pulse **Backspace** o **Supr** en el número: se borra de
+una vez y puede elegir otro documento o escribir el número a mano (documento no
+registrado en el sistema, con sus totales en la tarjeta *Documento sustento*).
+Cambiar de proveedor también quita el vínculo con el documento del proveedor
+anterior.
+
+No aparecen los documentos anulados, eliminados ni los de otro ambiente (pruebas
+o producción).
+
 ## Relación con la compra
 
 Una compra que ya tiene retención **no se puede eliminar**: primero hay que
@@ -373,6 +400,14 @@ El valor lo configura el superadministrador en `/config/sri-proveedor`.
 
 ## Historial de cambios
 
+- **1.20** — Desde **Nuevo** se puede elegir la **compra o liquidación de compra**
+  a retener en el campo **Nº Doc. Retenido** (ver *Elegir la compra o liquidación
+  desde este módulo*). Antes solo se podía vincular abriendo la retención desde la
+  compra, y las liquidaciones de compra no tenían forma de retenerse. Al emitirla
+  desde una compra o liquidación, junto a **Nº Doc. Retenido** aparece el aviso
+  del documento vinculado (*Compra* / *Liquidación de compra*). El XML de
+  una retención sobre liquidación lleva ahora el número de autorización de la
+  liquidación.
 - **1.19** — En **Nº Doc. Retenido** se puede escribir solo el secuencial (`1311`): al salir del campo se completa como `001-001-000001311`. Antes quedaba como `131-1` y no se completaba.
 - **1.18** — Cuando un código de retención no tiene cuenta o no existe en el catálogo
   del SRI, el aviso de asientos pendientes lo dice así, en lugar de «error inesperado».

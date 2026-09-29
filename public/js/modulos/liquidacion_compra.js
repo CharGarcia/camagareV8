@@ -102,6 +102,8 @@
         // Escuchar cuando se guarda un proveedor desde el modal compartido
         document.addEventListener('proveedorGuardado', (e) => {
             const res = e.detail;
+            // Proveedor creado desde el modal de retención: no es para esta liquidación.
+            if (document.getElementById('modalRetencion')?.classList.contains('show')) return;
             if (res.ok && res.data) {
                 // Seleccionar automáticamente al nuevo proveedor
                 seleccionarProveedorFn({
@@ -127,6 +129,15 @@
         if (tabRet) {
             tabRet.addEventListener('shown.bs.tab', () => {
                 window.LC_cargarRetencionesCompra();
+            });
+        }
+        // Al cerrar el modal de retención (emitida, anulada o eliminada desde ahí),
+        // refrescar la pestaña Retenciones de la liquidación que sigue abierta.
+        const modalRetEl = document.getElementById('modalRetencion');
+        if (modalRetEl) {
+            modalRetEl.addEventListener('hidden.bs.modal', () => {
+                const idLiq = (document.getElementById('liq-id') || {}).value;
+                if (idLiq) window.LC_cargarRetencionesCompra();
             });
         }
         // Pestaña «Asiento contable»: solo existe con acceso a Contabilidad → Asientos Contables.
@@ -1747,16 +1758,26 @@
         const tbody = document.getElementById('lc-tbody-retenciones');
         const btn = document.getElementById('btnNuevaRetencionLiq');
         
-        if (!tbody || !btn) return;
+        // btn no existe si el usuario no puede crear retenciones (permisos del módulo
+        // Retenciones en compras); el listado igual se muestra.
+        if (!tbody) return;
+
+        // Sin acceso al módulo de Retenciones la vista no incluye su modal ni su JS.
+        if (typeof window.RET_abrirModal !== 'function') {
+            if (btn) btn.disabled = true;
+            tbody.innerHTML = '<tr><td colspan="5" class="text-center py-4 text-muted">No tiene acceso al módulo de Retenciones en compras.</td></tr>';
+            return;
+        }
+
         tbody.innerHTML = '<tr><td colspan="5" class="text-center py-4 text-muted"><i class="spinner-border spinner-border-sm me-2"></i>Cargando retenciones...</td></tr>';
 
         if (!idLiq) {
-            btn.disabled = true;
+            if (btn) btn.disabled = true;
             tbody.innerHTML = '<tr><td colspan="5" class="text-center py-4 text-muted">Guarda la liquidación para emitir retenciones.</td></tr>';
             return;
         }
 
-        btn.disabled = false;
+        if (btn) btn.disabled = false;
         try {
             const resp = await fetch(`${B_BASE}/modulos/retenciones_compras/getPorCompraAjax?id_liquidacion=${idLiq}`);
             const res = await resp.json();

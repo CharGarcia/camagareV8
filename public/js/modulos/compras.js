@@ -3716,6 +3716,14 @@ window.CMG_nuevaRetencionDesdeCompra = function() {
     const idCompra = document.getElementById('mcId').value || document.getElementById('modalCompra').dataset.id;
     if (!idCompra) return;
 
+    // Mismo camino que Liquidaciones y que el buscador del módulo Retenciones: los
+    // datos de la compra GUARDADA llegan del servidor y la retención queda vinculada
+    // con su aviso «Compra» (Backspace/Supr en el Nº Doc. la desvincula).
+    if (typeof window.RET_nuevaRetencionDesdeCompra === 'function') {
+        window.RET_nuevaRetencionDesdeCompra(idCompra);
+        return;
+    }
+
     const modalCompra = document.getElementById('modalCompra');
     const idProv = document.getElementById('mcIdProveedor').value;
     const nombreProv = document.getElementById('mcBuscarProveedor').value;

@@ -851,6 +851,57 @@ class RetencionesComprasController extends BaseModuloController
         exit;
     }
 
+    /**
+     * Buscador del documento sustento en el modal: compras y liquidaciones de
+     * compra de la empresa activa (opcionalmente solo las del proveedor elegido).
+     */
+    public function buscarDocumentosSustentoAjax(): void
+    {
+        $this->requireLeer();
+        header('Content-Type: application/json');
+
+        $idEmpresa   = (int) $_SESSION['id_empresa'];
+        $buscar      = mb_substr(trim((string) ($_GET['q'] ?? '')), 0, 100);
+        $idProveedor = (int) ($_GET['id_proveedor'] ?? 0) ?: null;
+        $origen      = in_array($_GET['origen'] ?? '', ['compra', 'liquidacion'], true) ? $_GET['origen'] : null;
+
+        try {
+            $data = $this->repository->buscarDocumentosSustento($idEmpresa, $buscar, $idProveedor, $origen);
+            echo json_encode(['ok' => true, 'data' => $data]);
+        } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
+            echo json_encode(['ok' => false, 'mensaje' => 'No se pudieron buscar los documentos.']);
+        }
+        exit;
+    }
+
+    /** Un documento sustento concreto (compra o liquidación) para precargar el modal. */
+    public function getDocumentoSustentoAjax(): void
+    {
+        $this->requireLeer();
+        header('Content-Type: application/json');
+
+        $idEmpresa = (int) $_SESSION['id_empresa'];
+        $origen    = (string) ($_GET['origen'] ?? '');
+        $id        = (int) ($_GET['id'] ?? 0);
+
+        if (!in_array($origen, ['compra', 'liquidacion'], true) || $id <= 0) {
+            echo json_encode(['ok' => false, 'mensaje' => 'Documento no válido.']);
+            exit;
+        }
+
+        try {
+            $rows = $this->repository->buscarDocumentosSustento($idEmpresa, '', null, $origen, $id, 1);
+            echo json_encode($rows
+                ? ['ok' => true, 'data' => $rows[0]]
+                : ['ok' => false, 'mensaje' => 'El documento no existe, está anulado o es de otro ambiente.']);
+        } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
+            echo json_encode(['ok' => false, 'mensaje' => 'No se pudo cargar el documento.']);
+        }
+        exit;
+    }
+
     public function getSecuencialAjax(): void
     {
         $this->requireLeer();

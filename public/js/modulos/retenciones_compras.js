@@ -11,6 +11,10 @@
     // para no sobrescribir el número guardado. Se libera al terminar la carga, de modo
     // que un cambio manual de serie sí recargue el siguiente consecutivo (igual que factura).
     let retBloquearSecuencial = false;
+    // Documento sustento vinculado (compra o liquidación de compra), o null si el
+    // número se capturó a mano. Solo se usa en pantalla: lo que viaja al servidor
+    // son los hidden ret_id_compra / ret_id_liquidacion.
+    let docVinculado = null;
 
     const BASE = window.RET_rutaBase || (typeof BASE_URL !== 'undefined' ? BASE_URL : '') + '/modulos/retenciones_compras';
 
@@ -22,6 +26,11 @@
         // Buscar proveedor
         const provUrl = (typeof BASE_URL !== 'undefined' ? BASE_URL : '') + '/modulos/proveedores/getProveedoresAjax';
         busquedaPredictiva('ret_proveedor_search', 'ret_proveedor_dropdown', provUrl, (item) => {
+            // El documento vinculado tiene que ser del proveedor retenido: si se
+            // cambia de proveedor, el vínculo anterior ya no vale.
+            if (docVinculado && String(docVinculado.id_proveedor) !== String(item.id)) {
+                desvincularDocumento(true);
+            }
             document.getElementById('ret_id_proveedor').value = item.id;
             document.getElementById('ret_proveedor_search').value = item.razon_social || item.nombre;
             mostrarInfoProveedor(item);
@@ -63,6 +72,8 @@
                     e.target.value = `${p1}-${p2}-${p3}`;
                 }
             });
+
+            initBuscadorDocumento(numDocInput);
         }
 
 
@@ -115,7 +126,9 @@
         // Mismo indicador que el buscador (FiltrosModal): la tabla se atenúa mientras
         // carga, también al paginar y ordenar, que llaman a esta función directo.
         const tbody = document.getElementById('ret-table-body');
-        if (tbody) tbody.classList.add('fm-cargando-target');
+        // Incluido desde Compras o Liquidaciones no hay listado de retenciones que refrescar.
+        if (!tbody) return;
+        tbody.classList.add('fm-cargando-target');
         try {
             const res  = await fetch(url);
             const data = await res.json();
@@ -321,6 +334,10 @@
                 // Refrescar listado en el modal de compras si existe la función global.
                 if (typeof window.CMG_cargarRetencionesCompra === 'function') {
                     setTimeout(() => window.CMG_cargarRetencionesCompra(), 400);
+                }
+                // Ídem en el modal de Liquidaciones de compra.
+                if (typeof window.LC_cargarRetencionesCompra === 'function') {
+                    setTimeout(() => window.LC_cargarRetencionesCompra(), 400);
                 }
 
                 // Recargar la retención guardada dentro del modal (modo edición).
@@ -1153,6 +1170,10 @@
         set('ret_id_proveedor', cab.id_proveedor || '');
         set('ret_id_compra', cab.id_compra || '');
         set('ret_id_liquidacion', cab.id_liquidacion || '');
+        docVinculado = cab.id_compra
+            ? { origen: 'compra', id: cab.id_compra, id_proveedor: cab.id_proveedor }
+            : (cab.id_liquidacion ? { origen: 'liquidacion', id: cab.id_liquidacion, id_proveedor: cab.id_proveedor } : null);
+        setBadgeVinculo(docVinculado);
 
         // Proveedor search display
         const provEl = document.getElementById('ret_proveedor_search');
@@ -1464,6 +1485,10 @@
         if (elIdComp) elIdComp.value = '';
         const elIdLiq = document.getElementById('ret_id_liquidacion');
         if (elIdLiq) elIdLiq.value = '';
+        docVinculado = null;
+        setBadgeVinculo(null);
+        // Base sugerida de la compra/liquidación abierta antes: no aplica a esta.
+        if (form) { delete form.dataset.compraSubtotal; delete form.dataset.compraIva; }
 
         // El documento sustento de la retención anterior ya no aplica: sin esto, sus
         // totales quedarían marcados como escritos a mano y no se autollenarían.
@@ -1648,57 +1673,219 @@
         return div.innerHTML;
     }
 
-    window.RET_nuevaRetencionDesdeLiquidacion = function(idLiq) {
-        if (!idLiq) return;
+    // ── DOCUMENTO SUSTENTO (compra / liquidación de compra) ────────────────────────
 
-        const idProv = document.getElementById('liq-proveedor-id').value;
-        const nombreProv = document.getElementById('liq-proveedor-search').value;
-        const estab = document.getElementById('liq-establecimiento').value;
-        const pto = document.getElementById('liq-punto').value;
-        const sec = document.getElementById('liq-secuencial').value;
-        const numDoc = `${estab}-${pto}-${sec}`;
-        const fechaDoc = document.getElementById('liq-fecha-emision').value;
-        
-        const subtotal = document.getElementById('liq-subtotal-neto').value || '0.00';
-        const totalIva = document.getElementById('liq-total-iva').value || '0.00';
+    const ETIQUETA_ORIGEN = { compra: 'Compra', liquidacion: 'Liquidación de compra' };
 
-        if (typeof window.RET_abrirModalNuevo === 'function') {
-            window.RET_abrirModalNuevo();
-            
-            setTimeout(() => {
-                const form = document.getElementById('formRetencion');
-                if (form) {
-                    form.dataset.compraSubtotal = subtotal;
-                    form.dataset.compraIva      = totalIva;
-                }
+    /**
+     * Buscador del Nº Doc. Retenido: al enfocarlo con un proveedor elegido lista sus
+     * compras y liquidaciones; al escribir el número/secuencial filtra (de todos los
+     * proveedores si aún no hay uno). Elegir un resultado vincula la retención a ese
+     * documento. Con un documento vinculado, Backspace/Supr lo desvincula de una vez
+     * (regla de los inputs tipo chip); escribir otro número también lo desvincula.
+     */
+    function initBuscadorDocumento(input) {
+        const drop = document.getElementById('ret_doc_dropdown');
+        if (!drop) return;
+        let timer = null;
+        let ultimoReq = 0;
 
-                const elIdLiq = document.getElementById('ret_id_liquidacion');
-                if (elIdLiq) elIdLiq.value = idLiq;
-                
-                const elIdProv = document.getElementById('ret_id_proveedor');
-                if (elIdProv) elIdProv.value = idProv;
-                
-                const elSearchProv = document.getElementById('ret_proveedor_search');
-                if (elSearchProv) elSearchProv.value = nombreProv;
-                
-                const elNumDoc = document.getElementById('ret_num_doc_sustento');
-                if (elNumDoc) elNumDoc.value = numDoc;
-                
-                const elFechaDoc = document.getElementById('ret_fecha_emision_doc_sustento');
-                if (elFechaDoc) elFechaDoc.value = fechaDoc;
+        const buscar = async () => {
+            const idProv = (document.getElementById('ret_id_proveedor') || {}).value || '';
+            const q = input.value.trim();
+            if (!idProv && q.replace(/\D/g, '').length < 3) { ocultar(); return; }
 
-                const selectTipo = document.getElementById('ret_tipo_doc_sustento');
-                if (selectTipo) selectTipo.value = '03'; // Liquidación de compra
+            const req = ++ultimoReq;
+            try {
+                const params = new URLSearchParams({ q, id_proveedor: idProv });
+                const res  = await fetch(`${BASE}/buscarDocumentosSustentoAjax?${params}`);
+                const data = await res.json();
+                if (req !== ultimoReq) return; // llegó tarde: hay una búsqueda más nueva
+                pintar(data.ok ? (data.data || []) : []);
+            } catch (e) { console.error(e); ocultar(); }
+        };
 
-                // Totales del documento sustento (desde la liquidación)
-                const elSub = document.getElementById('ret_doc_subtotal');
-                const elIva = document.getElementById('ret_doc_iva');
-                if (elSub) elSub.value = subtotal;
-                if (elIva) elIva.value = totalIva;
-                if (typeof window.RET_calcTotalSustento === 'function') window.RET_calcTotalSustento();
-            }, 300);
+        const ocultar = () => { drop.classList.add('d-none'); drop.innerHTML = ''; };
+
+        const pintar = (items) => {
+            if (!items.length) {
+                drop.innerHTML = '<div class="list-group-item small text-muted py-1">Sin compras ni liquidaciones registradas. Puede escribir el número a mano.</div>';
+                drop.classList.remove('d-none');
+                return;
+            }
+            drop.innerHTML = items.map((d, i) => {
+                const esLiq = d.origen === 'liquidacion';
+                const retenida = d.tiene_retencion === true || d.tiene_retencion === 't';
+                return `<button type="button" class="list-group-item list-group-item-action py-1 small" data-idx="${i}">
+                    <div class="d-flex justify-content-between gap-2">
+                        <strong class="font-monospace">${escHtml(d.num_comprobante)}</strong>
+                        <span class="badge ${esLiq ? 'bg-warning text-warning' : 'bg-primary text-primary'} bg-opacity-10 border border-opacity-25 ${esLiq ? 'border-warning' : 'border-primary'}">${ETIQUETA_ORIGEN[d.origen] || ''}</span>
+                    </div>
+                    <div class="d-flex justify-content-between gap-2 text-muted">
+                        <span class="text-truncate">${escHtml(d.proveedor_nombre || '')}</span>
+                        <span class="text-nowrap">${escHtml(String(d.fecha_emision || '').substring(0, 10).split('-').reverse().join('-'))} · $${(parseFloat(d.importe_total) || 0).toFixed(2)}</span>
+                    </div>
+                    ${retenida ? '<div class="text-danger" style="font-size:.7rem;"><i class="bi bi-exclamation-triangle me-1"></i>Ya tiene una retención registrada</div>' : ''}
+                </button>`;
+            }).join('');
+            drop.querySelectorAll('button[data-idx]').forEach((btn) => {
+                btn.addEventListener('mousedown', (e) => e.preventDefault()); // no perder el foco antes del click
+                btn.addEventListener('click', () => {
+                    window.RET_aplicarDocumentoSustento(items[parseInt(btn.dataset.idx, 10)]);
+                    ocultar();
+                });
+            });
+            drop.classList.remove('d-none');
+        };
+
+        input.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape') { ocultar(); return; }
+            if (docVinculado && (e.key === 'Backspace' || e.key === 'Delete')) {
+                e.preventDefault();
+                desvincularDocumento(true);
+                buscar();
+            }
+        });
+
+        input.addEventListener('input', () => {
+            if (docVinculado) desvincularDocumento(false);
+            clearTimeout(timer);
+            timer = setTimeout(buscar, 300);
+        });
+
+        input.addEventListener('focus', () => {
+            if (!docVinculado && input.value.trim() === '') buscar();
+        });
+
+        input.addEventListener('blur', () => setTimeout(ocultar, 150));
+    }
+
+    function setBadgeVinculo(doc) {
+        const badge = document.getElementById('ret_doc_vinculo');
+        if (!badge) return;
+        if (doc && doc.origen) {
+            badge.innerHTML = `<i class="bi bi-link-45deg"></i> ${ETIQUETA_ORIGEN[doc.origen] || ''}`;
+            badge.title = 'Retención vinculada a este documento. Backspace/Supr en el número lo desvincula.';
+            badge.classList.remove('d-none');
+        } else {
+            badge.innerHTML = '';
+            badge.classList.add('d-none');
+        }
+    }
+
+    /**
+     * Quita el vínculo con la compra/liquidación. `limpiarNumero` borra además el
+     * número y los totales que venían del documento; sin él, se conservan como
+     * captura manual (el usuario está corrigiendo el número a mano).
+     */
+    function desvincularDocumento(limpiarNumero) {
+        docVinculado = null;
+        const set = (id, v) => { const el = document.getElementById(id); if (el) el.value = v; };
+        set('ret_id_compra', '');
+        set('ret_id_liquidacion', '');
+        const form = document.getElementById('formRetencion');
+        if (form) { delete form.dataset.compraSubtotal; delete form.dataset.compraIva; }
+        if (limpiarNumero) {
+            set('ret_num_doc_sustento', '');
+            set('ret_doc_subtotal', '');
+            set('ret_doc_iva', '');
+            ['ret_doc_subtotal', 'ret_doc_iva'].forEach((id) => {
+                const el = document.getElementById(id);
+                if (el) delete el.dataset.editado;
+            });
+            if (typeof window.RET_calcTotalSustento === 'function') window.RET_calcTotalSustento();
+        }
+        setBadgeVinculo(null);
+    }
+
+    /**
+     * Vincula la retención a una compra o liquidación de compra (fila de
+     * buscarDocumentosSustentoAjax / getDocumentoSustentoAjax) y llena con ella el
+     * proveedor, el número, la fecha, el tipo de documento, el sustento y los totales.
+     */
+    window.RET_aplicarDocumentoSustento = function (doc) {
+        if (!doc || !doc.id) return;
+        const set = (id, v) => { const el = document.getElementById(id); if (el) el.value = v ?? ''; };
+        const subtotal = (parseFloat(doc.subtotal) || 0).toFixed(2);
+        const iva      = (parseFloat(doc.iva) || 0).toFixed(2);
+
+        docVinculado = doc;
+        set('ret_id_compra',      doc.origen === 'compra' ? doc.id : '');
+        set('ret_id_liquidacion', doc.origen === 'liquidacion' ? doc.id : '');
+
+        set('ret_id_proveedor', doc.id_proveedor);
+        set('ret_proveedor_search', doc.proveedor_nombre);
+        mostrarInfoProveedor({ identificacion: doc.proveedor_ruc, direccion: doc.proveedor_direccion, email: doc.proveedor_email });
+
+        set('ret_num_doc_sustento', doc.num_comprobante);
+        if (doc.fecha_emision) set('ret_fecha_emision_doc_sustento', String(doc.fecha_emision).substring(0, 10));
+
+        const tipo = String(doc.tipo_doc_sri || '').padStart(2, '0');
+        const selTipo = document.getElementById('ret_tipo_doc_sustento');
+        if (selTipo && [...selTipo.options].some(o => o.value === tipo)) {
+            selTipo.value = tipo;
+            window.RET_filtrarSustentos(tipo, doc.id_sustento_tributario || null);
+        }
+
+        const form = document.getElementById('formRetencion');
+        if (form) { form.dataset.compraSubtotal = subtotal; form.dataset.compraIva = iva; }
+
+        set('ret_doc_subtotal', subtotal);
+        set('ret_doc_iva', iva);
+        ['ret_doc_subtotal', 'ret_doc_iva'].forEach((id) => {
+            const el = document.getElementById(id);
+            if (el) delete el.dataset.editado;
+        });
+        if (typeof window.RET_calcTotalSustento === 'function') window.RET_calcTotalSustento();
+
+        // Líneas aún sin base: la de renta toma el subtotal y la de IVA el IVA del documento.
+        let cambio = false;
+        lineasData.forEach((l) => {
+            if (parseFloat(l.base_imponible || 0) > 0) return;
+            const cod = String(l.codigo_impuesto || '').toUpperCase();
+            let base = null;
+            if ((cod === '1' || cod === 'RENTA') && parseFloat(subtotal) > 0) base = subtotal;
+            else if ((cod === '2' || cod === 'IVA') && parseFloat(iva) > 0) base = iva;
+            if (base === null) return;
+            l.base_imponible = base;
+            l.valor_retenido = Math.round(parseFloat(base) * parseFloat(l.porcentaje_retener || 0) / 100 * 100) / 100;
+            cambio = true;
+        });
+        if (cambio) { renderLineas(); calcTotales(); }
+
+        setBadgeVinculo(doc);
+
+        if (doc.tiene_retencion === true || doc.tiene_retencion === 't') {
+            mostrarAlerta('Este documento ya tiene una retención registrada.', 'warning');
         }
     };
+
+    /**
+     * Nueva retención sobre una compra o liquidación de compra (botón de la pestaña
+     * Retenciones de esos modales). Los datos se piden al servidor en lugar de leerlos
+     * del formulario del documento: así valen los guardados, no lo que esté a medio
+     * editar en pantalla, y la retención queda vinculada (con su aviso) igual que al
+     * elegir el documento en el buscador.
+     */
+    async function nuevaRetencionDesdeDocumento(origen, id) {
+        if (!id || typeof window.RET_abrirModalNuevo !== 'function') return;
+        const nombre = origen === 'compra' ? 'la compra' : 'la liquidación';
+        let doc = null;
+        try {
+            const res  = await fetch(`${BASE}/getDocumentoSustentoAjax?origen=${origen}&id=${encodeURIComponent(id)}`);
+            const data = await res.json();
+            if (!data.ok) { mostrarAlerta(data.mensaje || `No se pudo cargar ${nombre}.`, 'danger'); return; }
+            doc = data.data;
+        } catch (e) {
+            mostrarAlerta(`Error de red al cargar ${nombre}.`, 'danger');
+            return;
+        }
+        window.RET_abrirModalNuevo();
+        window.RET_aplicarDocumentoSustento(doc);
+    }
+
+    window.RET_nuevaRetencionDesdeLiquidacion = (idLiq) => nuevaRetencionDesdeDocumento('liquidacion', idLiq);
+    window.RET_nuevaRetencionDesdeCompra      = (idCompra) => nuevaRetencionDesdeDocumento('compra', idCompra);
 })();
 
 

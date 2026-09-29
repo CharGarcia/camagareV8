@@ -506,7 +506,8 @@ class RetencionCompraRepository extends BaseRepository
                 $out['impuestos'] = $sti->fetchAll(PDO::FETCH_ASSOC);
             }
         } elseif ($idLiquidacion > 0) {
-            $sql = "SELECT l.total_sin_impuestos, l.importe_total, l.fecha_emision, st.codigo AS sustento_codigo
+            $sql = "SELECT l.total_sin_impuestos, l.importe_total, l.fecha_emision, st.codigo AS sustento_codigo,
+                           COALESCE(NULLIF(l.numero_autorizacion, ''), l.clave_acceso) AS numero_autorizacion
                     FROM liquidaciones_cabecera l
                     LEFT JOIN sustento_tributario st ON st.id = l.id_sustento_tributario
                     WHERE l.id = :id AND l.id_empresa = :ie";
@@ -519,6 +520,11 @@ class RetencionCompraRepository extends BaseRepository
                 $out['importeTotal']            = (float)$doc['importe_total'];
                 $out['codSustento']             = ($doc['sustento_codigo'] ?? '') !== '' ? $doc['sustento_codigo'] : null;
                 $out['fechaEmisionDocSustento'] = $doc['fecha_emision'] ?? null;
+                // La liquidación es un comprobante electrónico propio: su número de
+                // autorización (= clave de acceso) es el numAutDocSustento del XML.
+                if (empty($out['numAutDocSustento'])) {
+                    $out['numAutDocSustento'] = $doc['numero_autorizacion'] ?? null;
+                }
 
                 $sqlImp = "SELECT li.codigo_impuesto, li.codigo_porcentaje, li.tarifa,
                                   SUM(li.base_imponible) AS base_imponible, SUM(li.valor) AS valor
@@ -929,6 +935,113 @@ class RetencionCompraRepository extends BaseRepository
 
         $st = $this->db->prepare($sql);
         $st->execute([':ie' => $idEmpresa, ':b' => '%' . $buscar . '%']);
+        return $st->fetchAll(PDO::FETCH_ASSOC);
+    }
+
+    // ── Documento sustento: compras y liquidaciones de compra ────
+
+    /**
+     * Documentos sobre los que se puede emitir una retención: compras registradas
+     * (factura 01, liquidación recibida 03, nota de débito 05) y liquidaciones de
+     * compra emitidas por la propia empresa (codDoc 03). Cada fila trae lo necesario
+     * para llenar el modal: proveedor, número, fecha, subtotal, IVA y autorización.
+     *
+     * @param string|null $origen 'compra' | 'liquidacion' | null (ambos)
+     * @param int|null    $id     Documento concreto (requiere $origen). Con id no se
+     *                            filtra el tipo de la compra: se abre desde la propia
+     *                            compra y, como antes, el servidor avisa al guardar si
+     *                            su tipo no corresponde.
+     */
+    public function buscarDocumentosSustento(
+        int $idEmpresa,
+        string $buscar = '',
+        ?int $idProveedor = null,
+        ?string $origen = null,
+        ?int $id = null,
+        int $limit = 20
+    ): array {
+        $params = [];
+        $partes = [];
+
+        if ($origen === null || $origen === 'compra') {
+            $whereC = "c.id_empresa = :ie_c AND c.eliminado = false
+                       AND COALESCE(c.estado, '') NOT IN ('anulado', 'anulada')
+                       " . ($id ? '' : "AND c.tipo_comprobante IN ('01', '03', '05')") . "
+                       AND c.tipo_ambiente = (SELECT CAST(tipo_ambiente AS VARCHAR(1)) FROM empresas WHERE id = :ie_c2)";
+            $params[':ie_c']  = $idEmpresa;
+            $params[':ie_c2'] = $idEmpresa;
+            if ($idProveedor) { $whereC .= ' AND c.id_proveedor = :prov_c'; $params[':prov_c'] = $idProveedor; }
+            if ($id)          { $whereC .= ' AND c.id = :id_c';             $params[':id_c']   = $id; }
+            $condC = \App\Helpers\FiltrosBusqueda::condicionTexto([
+                'p.razon_social', 'p.identificacion', 'c.secuencial_prov', 'c.numero_autorizacion',
+                "COALESCE(c.establecimiento_prov,'') || '-' || COALESCE(c.punto_emision_prov,'') || '-' || COALESCE(c.secuencial_prov,'')",
+            ], $buscar, $params, 'bc');
+            if ($condC !== '') $whereC .= " AND $condC";
+
+            $partes[] = "SELECT 'compra' AS origen, c.id, c.tipo_comprobante AS tipo_doc_sri,
+                                COALESCE(c.establecimiento_prov,'') || '-' || COALESCE(c.punto_emision_prov,'') || '-' || COALESCE(c.secuencial_prov,'') AS num_comprobante,
+                                c.fecha_emision, c.id_proveedor,
+                                p.razon_social AS proveedor_nombre, p.identificacion AS proveedor_ruc,
+                                p.direccion AS proveedor_direccion, p.email AS proveedor_email,
+                                COALESCE(c.total_sin_impuestos, 0) AS subtotal,
+                                COALESCE((SELECT SUM(ci.valor) FROM compras_detalle_impuestos ci
+                                          JOIN compras_detalle cd ON cd.id = ci.id_compra_detalle
+                                          WHERE cd.id_compra = c.id AND ci.codigo_impuesto = '2'), 0) AS iva,
+                                COALESCE(c.importe_total, 0) AS importe_total,
+                                c.numero_autorizacion, c.id_sustento_tributario, c.estado,
+                                EXISTS (SELECT 1 FROM retencion_compra_cabecera r
+                                         WHERE r.id_compra = c.id AND r.id_empresa = c.id_empresa
+                                           AND r.eliminado = false AND r.estado <> 'anulada') AS tiene_retencion
+                           FROM compras_cabecera c
+                           JOIN proveedores p ON p.id = c.id_proveedor
+                          WHERE $whereC";
+        }
+
+        if ($origen === null || $origen === 'liquidacion') {
+            $whereL = "l.id_empresa = :ie_l AND l.eliminado = false
+                       AND COALESCE(l.estado, '') NOT IN ('anulado', 'anulada')
+                       AND l.tipo_ambiente = (SELECT CAST(tipo_ambiente AS VARCHAR(1)) FROM empresas WHERE id = :ie_l2)";
+            $params[':ie_l']  = $idEmpresa;
+            $params[':ie_l2'] = $idEmpresa;
+            if ($idProveedor) { $whereL .= ' AND l.id_proveedor = :prov_l'; $params[':prov_l'] = $idProveedor; }
+            if ($id)          { $whereL .= ' AND l.id = :id_l';             $params[':id_l']   = $id; }
+            $condL = \App\Helpers\FiltrosBusqueda::condicionTexto([
+                'p.razon_social', 'p.identificacion', 'l.secuencial', 'l.numero_autorizacion', 'l.clave_acceso',
+                "COALESCE(l.establecimiento,'') || '-' || COALESCE(l.punto_emision,'') || '-' || COALESCE(l.secuencial,'')",
+            ], $buscar, $params, 'bl');
+            if ($condL !== '') $whereL .= " AND $condL";
+
+            $partes[] = "SELECT 'liquidacion' AS origen, l.id, '03' AS tipo_doc_sri,
+                                COALESCE(l.establecimiento,'') || '-' || COALESCE(l.punto_emision,'') || '-' || COALESCE(l.secuencial,'') AS num_comprobante,
+                                l.fecha_emision, l.id_proveedor,
+                                p.razon_social AS proveedor_nombre, p.identificacion AS proveedor_ruc,
+                                p.direccion AS proveedor_direccion, p.email AS proveedor_email,
+                                COALESCE(l.total_sin_impuestos, 0) AS subtotal,
+                                COALESCE((SELECT SUM(li.valor) FROM liquidaciones_detalle_impuestos li
+                                          JOIN liquidaciones_detalle d ON d.id = li.id_detalle
+                                          WHERE d.id_cabecera = l.id AND li.codigo_impuesto = '2'), 0) AS iva,
+                                COALESCE(l.importe_total, 0) AS importe_total,
+                                COALESCE(NULLIF(l.numero_autorizacion, ''), l.clave_acceso) AS numero_autorizacion,
+                                l.id_sustento_tributario, l.estado,
+                                EXISTS (SELECT 1 FROM retencion_compra_cabecera r
+                                         WHERE r.id_liquidacion = l.id AND r.id_empresa = l.id_empresa
+                                           AND r.eliminado = false AND r.estado <> 'anulada') AS tiene_retencion
+                           FROM liquidaciones_cabecera l
+                           JOIN proveedores p ON p.id = l.id_proveedor
+                          WHERE $whereL";
+        }
+
+        if (empty($partes)) {
+            return [];
+        }
+
+        $limit = max(1, min(50, $limit));
+        $sql = 'SELECT * FROM (' . implode(' UNION ALL ', $partes) . ") d
+                ORDER BY d.fecha_emision DESC, d.id DESC
+                LIMIT $limit";
+
+        $st = $this->db->prepare($sql);
+        $st->execute($params);
         return $st->fetchAll(PDO::FETCH_ASSOC);
     }
 

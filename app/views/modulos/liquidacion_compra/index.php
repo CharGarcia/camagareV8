@@ -749,9 +749,11 @@ $pestanasConfigLiq = array_merge(
                             <div class="card cmg-table-card border-0 shadow-none">
                                 <div class="card-header bg-white border-0 py-3 d-flex justify-content-between align-items-center">
                                     <div class="d-flex gap-2">
+                                        <?php if (!empty($permRetencion['crear'])): ?>
                                         <button type="button" class="btn btn-primary btn-sm px-3" id="btnNuevaRetencionLiq" onclick="window.LC_nuevaRetencionDesdeLiq()" disabled>
                                             <i class="bi bi-plus-circle me-1"></i> Emitir Retención
                                         </button>
+                                        <?php endif; ?>
                                     </div>
                                     <div class="ms-auto" id="lc-retenciones-info"></div>
                                 </div>
@@ -919,6 +921,18 @@ $pestanasConfigLiq = array_merge(
 <!-- Incluir el Modal de Proveedor Reutilizable -->
 <?php include __DIR__ . '/../proveedores/modal_proveedor.php'; ?>
 
+<?php
+// Modal de Retención en Compras (pestaña Retenciones): el mismo del módulo de
+// Retenciones, con SUS permisos, series y preferencias. Va en un scope propio para
+// que sus variables ($perm, $puntos, $p…) no pisen las de esta vista.
+if (!empty($permRetencion['ver'])) {
+    (static function (array $perm, array $puntos, array $sustentos): void {
+        $rutaModulo = 'modulos/retenciones_compras';
+        include MVC_APP . '/views/modulos/retenciones_compras/modal_retencion.php';
+    })($permRetencion, $puntosRetencion ?? [], $sustentos ?? []);
+}
+?>
+
 <script>
     // Definir constantes del sistema ANTES de cargar los archivos JS
     window.BASE_URL  = '<?= $base ?>';
@@ -969,3 +983,6 @@ $pestanasConfigLiq = array_merge(
 <script src="<?= $base ?>/js/modulos/asiento_contable_tab.js?v=<?= asset_ver('/js/modulos/asiento_contable_tab.js') ?>"></script>
 <script src="<?= $base ?>/js/modulos/proveedores_modal.js?v=<?= asset_ver('/js/modulos/proveedores_modal.js') ?>"></script>
 <script src="<?= $base ?>/js/modulos/liquidacion_compra.js?v=<?= asset_ver('/js/modulos/liquidacion_compra.js') ?>"></script>
+<?php if (!empty($permRetencion['ver'])): ?>
+<script src="<?= $base ?>/js/modulos/retenciones_compras.js?v=<?= asset_ver('/js/modulos/retenciones_compras.js') ?>"></script>
+<?php endif; ?>
