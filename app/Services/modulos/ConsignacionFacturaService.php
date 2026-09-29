@@ -665,6 +665,23 @@ class ConsignacionFacturaService
      * factura salía con centavos de más frente a la misma venta hecha en Facturas de Venta
      * (p. ej. 3 × 59,98 + 4 × 14,50 al 15%: 35,72 por línea vs. 35,69 al subtotal).
      */
+    /**
+     * codigoPorcentaje del SRI de una línea: el de su tarifa (`tarifa_iva.codigo`, vía
+     * id_impuesto), que es lo que distingue 0% (0), No objeto (6), Exento (7) y 5% (5).
+     * Antes se deducía del porcentaje (12→2, 15→4, cualquier otro >0→3, 0→0): el 5% quedaba
+     * como 14% y los exentos / no objeto como 0% gravado en ventas_detalle_impuestos, que es
+     * lo que leen la Declaración de IVA y el ATS. Solo si la línea no tiene tarifa (o su % no
+     * coincide con el de la línea) se usa el mapa por porcentaje de SriIvaHelper.
+     */
+    private function codigoPorcentajeSri(array $d, float $pct): string
+    {
+        $codigo = trim((string) ($d['tarifa_codigo_sri'] ?? ''));
+        if ($codigo !== '' && abs((float) ($d['tarifa_porcentaje'] ?? -1) - $pct) < 0.01) {
+            return $codigo;
+        }
+        return \App\Helpers\SriIvaHelper::codigoPorcentaje($pct);
+    }
+
     private function aplicarModoIva(array $detalles, string $modoIva): array
     {
         $lineasIva = [];
@@ -743,8 +760,7 @@ class ConsignacionFacturaService
             $ivaTotal    += $iva;
             $descTotal   += (float) ($d['descuento'] ?? 0);
 
-            $codPct = '0';
-            if ($pct > 0) { $codPct = (abs($pct - 12) < 0.01) ? '2' : ((abs($pct - 15) < 0.01) ? '4' : '3'); }
+            $codPct = $this->codigoPorcentajeSri($d, $pct);
 
             $detFactura[] = [
                 'id_producto'               => (int) $d['id_producto'],

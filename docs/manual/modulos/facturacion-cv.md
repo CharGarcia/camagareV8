@@ -5,7 +5,7 @@ categoria: Ventas
 ruta_modulo: modulos/facturacion-cv
 tipo: modulo
 visibilidad: todos
-etiquetas: facturacion de consignacion, registro de cambio, cambio de productos, reposicion, etiqueta cambio, buscar facturacion, buscador, filtros, filtrar facturaciones, buscar por producto, buscar por lote, buscar por consignacion, chips, facturar consignacion, consignacion vendida, liquidacion de consignacion, cobrar consignacion, descuento en consignacion, descuento por linea, descuento porcentaje, aplicar descuento a todos, precio de lista en consignacion, generar factura, borrador, saldo facturable, observaciones en la factura, informacion adicional, info adicional, cajero, vendedor en la factura, vendedor obligatorio, exige vendedor, seleccione el vendedor, lento, demora al generar factura, tarda en guardar, iva del registro de cambio, iva del producto, iva al subtotal, iva linea por linea, calculo del iva, diferencia de centavos en el iva, aparecen documentos que no busque, resultados que no corresponden, buscar por producto en el listado, el descuento no se aplica, la factura sale sin descuento, se pierde el descuento, descuento en cero, coma decimal, punto decimal, separador de decimales, escribir con coma, cambios sin guardar, no se pudo generar la factura, observaciones largas, no me deja escribir mas, limite de caracteres, maximo 300 caracteres, value too long, asiento de reingreso, no contabilizar consignaciones, sin reingreso, modulos que contabilizan, acceso denegado a la bodega, bodega no asignada, otra bodega, no me deja facturar, imprimir, impresora
+etiquetas: facturacion de consignacion, registro de cambio, cambio de productos, reposicion, etiqueta cambio, buscar facturacion, buscador, filtros, filtrar facturaciones, buscar por producto, buscar por lote, buscar por consignacion, chips, facturar consignacion, consignacion vendida, liquidacion de consignacion, cobrar consignacion, descuento en consignacion, descuento por linea, descuento porcentaje, aplicar descuento a todos, precio de lista en consignacion, generar factura, borrador, saldo facturable, observaciones en la factura, informacion adicional, info adicional, cajero, vendedor en la factura, vendedor obligatorio, exige vendedor, seleccione el vendedor, lento, demora al generar factura, tarda en guardar, iva del registro de cambio, iva del producto, iva al subtotal, iva linea por linea, calculo del iva, diferencia de centavos en el iva, iva 5%, exento, no objeto de iva, codigo de tarifa, aparecen documentos que no busque, resultados que no corresponden, buscar por producto en el listado, el descuento no se aplica, la factura sale sin descuento, se pierde el descuento, descuento en cero, coma decimal, punto decimal, separador de decimales, escribir con coma, cambios sin guardar, no se pudo generar la factura, observaciones largas, no me deja escribir mas, limite de caracteres, maximo 300 caracteres, value too long, asiento de reingreso, no contabilizar consignaciones, sin reingreso, modulos que contabilizan, acceso denegado a la bodega, bodega no asignada, otra bodega, no me deja facturar, imprimir, impresora
 version: 1.25
 orden: 47
 estado: activo
@@ -313,7 +313,10 @@ El descuento funciona igual que en [Facturas de Venta](modulos/factura-venta):
 - **1.25** — El **IVA** respeta el *Método de cálculo de IVA en facturación* (línea por
   línea o al subtotal). Antes siempre se calculaba línea por línea, y en empresas
   configuradas al subtotal la factura podía salir con centavos de más frente a la
-  misma venta hecha en Facturas de Venta. Las facturas ya emitidas no cambian.
+  misma venta hecha en Facturas de Venta. Además, la factura guarda el **código
+  de tarifa del SRI** del producto: antes las ventas al 5% quedaban registradas
+  como 14%, y las exentas o no objeto de IVA como 0%, y así pasaban a la
+  Declaración de IVA y al ATS. Las facturas ya emitidas no cambian.
 
 - **1.24** — El **Vendedor** pasa a ser obligatorio (al guardar y al generar la
   factura) cuando la configuración de facturación tiene activo *Mostrar nombre

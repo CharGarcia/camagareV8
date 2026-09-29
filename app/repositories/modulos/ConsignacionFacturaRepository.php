@@ -631,9 +631,11 @@ class ConsignacionFacturaRepository extends BaseRepository
                        p.inventariable, p.tipo_produccion,
                        b.nombre AS bodega_nombre,
                        cv.serie AS consignacion_serie, cv.secuencial AS consignacion_secuencial,
+                       ti.codigo AS tarifa_codigo_sri, ti.porcentaje_iva AS tarifa_porcentaje,
                        $saldoExpr AS saldo_facturable
                 FROM consignaciones_facturas_detalles cfd
                 INNER JOIN productos p ON p.id = cfd.id_producto
+                LEFT JOIN tarifa_iva ti ON ti.id = cfd.id_impuesto
                 LEFT JOIN bodegas b ON b.id = cfd.id_bodega
                 LEFT JOIN consignaciones_ventas cv ON cv.id = cfd.id_consignacion
                 WHERE cfd.id_consignacion_factura = :id AND cfd.id_empresa = :e
