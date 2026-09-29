@@ -293,7 +293,9 @@ Si un documento trae un código que **no existe en el catálogo de retenciones d
 SRI**, la fila aparece en rojo con el aviso *No existe en el catálogo de
 retenciones SRI* y no deja elegir cuenta: el asiento de esas retenciones sale sin
 esa línea hasta que se corrija el código en el documento o se agregue al
-catálogo.
+catálogo. El aviso solo aparece si alguna de esas retenciones tiene **valor
+retenido**: una línea con valor cero no genera asiento, así que no hay nada que
+corregir ni que configurar.
 
 Debajo del aviso se listan las **retenciones que usan ese código** (número,
 fecha y cliente o proveedor; las de ambiente de pruebas llevan la marca
@@ -408,7 +410,8 @@ ingresos o egresos. Solo falta asignar la cuenta.
 ## Historial de cambios
 
 - **1.21** — El aviso *No existe en el catálogo de retenciones SRI* (retenciones en
-  venta y en compra) lista las retenciones que usan ese código, con enlace a cada una.
+  venta y en compra) lista las retenciones que usan ese código, con enlace a cada una,
+  y solo aparece si esas retenciones tienen valor retenido.
 - **1.20** — Las reglas por **Proveedor** y por **Cliente** se pueden editar también desde la
   pestaña **Contable** de la ficha del proveedor o del cliente.
 - **1.19** — La pantalla se puede abrir desde el enlace **Configurar** del aviso

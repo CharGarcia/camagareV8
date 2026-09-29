@@ -6,7 +6,7 @@ ruta_modulo: modulos/proveedores
 tipo: modulo
 visibilidad: todos
 etiquetas: proveedores, contable, cuenta contable, cuentas contables, asiento contable, configuracion contable, cuenta por pagar del proveedor, cuenta de gasto del proveedor, buscar proveedor, buscador, filtros, filtrar proveedores, proveedores sin correo, proveedores por banco, proveedores por ciudad, chips, ordenar por dos columnas, ordenar por ciudad y razon social, proveedor, acreedor, ruc, retencion, cuenta bancaria, plazo, credito, parte relacionada, pago automatico, cheque, egreso automatico, pagos pendientes, resumen comercial, por pagar, buscar, buscador, filtrar, copiar a otra empresa, replicar, duplicar, multiempresa, valores de terceros, otros conceptos, valores adicionales, bomberos, tasa de basura, planilla de luz, transacciones, productos comprados, servicios comprados, historial de compras, que le compre, ultimo precio, precio de compra, estado de cuenta, kardex, saldo del proveedor, historial de pagos, pagos realizados, egresos, ver egreso, cedula y ruc, cliente duplicado, proveedor duplicado, identificacion repetida, ruc es la cedula mas 001, mismo tercero dos fichas, estado de cuenta partido, cedula falsa, cedula invalida, cedula incorrecta, ruc invalido, digito verificador, validar cedula, comprobar cedula, imprimir, impresora
-version: 2.8
+version: 2.9
 orden: 10
 estado: activo
 ---
@@ -293,8 +293,8 @@ las compras y liquidaciones de compra **de este proveedor**, sin salir de la
 ficha. Es la misma regla por proveedor de *Configuración Contable → Reglas por
 Proveedores*: lo que cambie aquí se ve allá y viceversa.
 
-- Arriba se elige el **tipo de asiento** (hoy: *Adquisiciones de
-  Compras/Servicios*, que cubre compras y liquidaciones de compra).
+- Las cuentas son las del asiento de *Adquisiciones de Compras/Servicios*, que
+  cubre compras y liquidaciones de compra.
 - Los conceptos se reparten en dos columnas, **Debe** y **Haber** (cuenta por
   pagar, subtotal o gasto, inventario, IVA por tarifa, etc.).
 - Si el concepto tiene cuenta propia del proveedor, se ve escrita. Si no, el
@@ -304,12 +304,8 @@ Proveedores*: lo que cambie aquí se ve allá y viceversa.
 - Escriba parte del código o del nombre de la cuenta y elíjala de la lista: se
   **guarda al instante**. Para quitarla, borre el campo (Retroceso o Suprimir
   la borra de una vez) o use la papelera de la fila.
-- **Copiar cuentas de General** rellena los conceptos vacíos con las cuentas de
-  General, para partir de esa base y cambiar solo lo necesario.
-- **Quitar configuración** elimina todas las cuentas propias del proveedor
-  (pide confirmación); desde ese momento se contabiliza con la General.
-- Arriba se indica cuántas cuentas propias tiene y si la configuración está
-  **completa** o cuántos conceptos **faltan**.
+- Para copiar de una vez las cuentas de General o quitar todas las cuentas
+  propias del proveedor, use *Configuración Contable → Reglas por Proveedores*.
 
 > Importante: en cuanto el proveedor tiene **una sola** cuenta propia, todo el
 > documento se contabiliza con sus cuentas; lo que no le haya asignado toma la
@@ -485,6 +481,8 @@ lo referencian se conservan intactas. Si solo quiere dejar de usarlo, cámbielo 
 
 ## Historial de cambios
 
+- **2.9** — La pestaña **Contable** queda solo con las cuentas: sin selector de tipo de
+  asiento, indicadores ni botones de copiar, quitar o abrir Configuración Contable.
 - **2.8** — Nueva pestaña **Contable** en la ficha: las cuentas del asiento de
   compras y liquidaciones de ese proveedor (reglas por proveedor de
   Configuración Contable) se ven y se editan desde la propia ficha.

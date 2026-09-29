@@ -467,6 +467,7 @@ if (!defined('LEAFLET_LOADED')) {
                                 'modal'           => 'modalProveedor',
                                 'evento'          => 'proveedorGuardado',
                                 'entidad'         => 'el proveedor',
+                                'sin_barra'       => true,
                                 'tipos'           => [
                                     'adquisiciones_compras' => 'Adquisiciones de Compras/Servicios (compras y liquidaciones)',
                                 ],

@@ -17,6 +17,9 @@
  *   evento           CustomEvent que emite la ficha al guardar (detail.id = id guardado)
  *   tipos            [tipo_asiento => etiqueta] que admiten reglas por esta entidad
  *   entidad          'el proveedor' | 'el cliente' (textos)
+ *   sin_barra        true = sin selector de tipo de asiento, badges de estado ni botones
+ *                    (Copiar de General / Quitar configuración / Configuración Contable);
+ *                    se usa el primer tipo de 'tipos'
  *
  * Sus controles no llevan "name": viven dentro del <form> de la ficha y no se envían con él.
  */
@@ -42,6 +45,10 @@ $fcEnt    = $fichaContable['entidad'] ?? 'la ficha';
         <i class="bi bi-info-circle me-1"></i> Guarde <?= htmlspecialchars($fcEnt) ?> para configurar sus cuentas contables.
     </div>
     <div data-fctb="wrap" class="d-none">
+        <?php if (!empty($fichaContable['sin_barra'])): ?>
+        <?php // Sin barra: tipo de asiento fijo (el primero de 'tipos'); el JS lo lee igual por data-fctb="tipo". ?>
+        <input type="hidden" data-fctb="tipo" value="<?= htmlspecialchars((string) array_key_first($fichaContable['tipos'] ?? [])) ?>">
+        <?php else: ?>
         <div class="d-flex flex-wrap align-items-end gap-2 mb-2">
             <div style="width:340px;">
                 <label class="form-label small fw-bold text-muted mb-1 d-block">Tipo de asiento</label>
@@ -64,6 +71,7 @@ $fcEnt    = $fichaContable['entidad'] ?? 'la ficha';
                 </a>
             </div>
         </div>
+        <?php endif; ?>
         <div class="text-muted mb-2" style="font-size:.72rem; line-height:1.5;">
             <i class="bi bi-info-circle me-1"></i>
             Si <?= htmlspecialchars($fcEnt) ?> tiene al menos una cuenta propia, <b>todo el documento</b> se contabiliza con sus cuentas;

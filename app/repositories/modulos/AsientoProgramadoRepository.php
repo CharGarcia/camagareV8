@@ -1426,6 +1426,9 @@ class AsientoProgramadoRepository extends BaseRepository
                     WHERE c.id_empresa = :id_empresa
                       AND c.eliminado = false
                       AND COALESCE(TRIM(d.codigo_retencion), '') <> ''
+                      -- Un código sin catálogo solo se avisa si retuvo valor: sin valor no hay
+                      -- línea de asiento que se pierda ni cuenta que configurar.
+                      AND (rsl.id IS NOT NULL OR COALESCE(d.valor_retenido, 0) > 0)
                     UNION
                     SELECT ap.id_referencia, NULL
                     FROM asientos_programados ap
@@ -1502,6 +1505,7 @@ class AsientoProgramadoRepository extends BaseRepository
                   AND c.eliminado = false
                   AND COALESCE(TRIM(d.codigo_retencion), '') <> ''
                   AND rsl.id IS NULL
+                  AND COALESCE(d.valor_retenido, 0) > 0
                 GROUP BY d.codigo_retencion, c.id, c.fecha_emision, c.tipo_ambiente,
                          c.establecimiento, c.punto_emision, c.secuencial, {$colTer}
                 ORDER BY d.codigo_retencion, c.fecha_emision DESC, c.id DESC";

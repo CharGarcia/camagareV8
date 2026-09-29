@@ -521,6 +521,7 @@ if (!defined('LEAFLET_LOADED')) {
                                 'modal'           => 'modalCliente',
                                 'evento'          => 'clienteGuardado',
                                 'entidad'         => 'el cliente',
+                                'sin_barra'       => true,
                                 'tipos'           => [
                                     'ventas_factura' => 'Ventas con Factura (facturas y notas de crédito)',
                                     'recibos_venta'  => 'Recibos de Venta',

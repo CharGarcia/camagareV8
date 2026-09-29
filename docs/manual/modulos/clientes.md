@@ -6,7 +6,7 @@ ruta_modulo: modulos/clientes
 tipo: modulo
 visibilidad: todos
 etiquetas: clientes, contable, cuenta contable, cuentas contables, asiento contable, configuracion contable, cuenta por cobrar del cliente, cuenta de ventas del cliente, cliente, cartera, buscar cliente, buscador, filtros, filtrar clientes, clientes sin correo, clientes por ciudad, clientes por vendedor, chips, ordenar por dos columnas, ordenar por ciudad y nombre, ruc, cedula, consumidor final, deudores, cobro automatico, cobros pendientes, forma de cobro, ingreso automatico, cheque, dias de credito, visitas, dias de visita, ruta de visita, rutero, frecuencia de visita, vendedor, preventa, visita del vendedor, horario de atencion, orden de visita, importar clientes, carga masiva, asignar vendedor, transacciones, productos vendidos, servicios vendidos, historial de ventas, que le vendi, ultimo precio, precio de venta, estado de cuenta, kardex, saldo del cliente, historial de cobros, cobros realizados, ingresos, ver ingreso, cedula y ruc, cliente duplicado, proveedor duplicado, identificacion repetida, ruc es la cedula mas 001, mismo tercero dos fichas, estado de cuenta partido, cedula falsa, cedula invalida, cedula incorrecta, ruc invalido, digito verificador, validar cedula, comprobar cedula, imprimir, impresora
-version: 2.6
+version: 2.7
 orden: 10
 estado: activo
 ---
@@ -353,9 +353,9 @@ los documentos de venta **de este cliente**, sin salir de la ficha. Es la misma
 regla por cliente de *Configuración Contable → Reglas por Clientes*: lo que
 cambie aquí se ve allá y viceversa.
 
-- Arriba se elige el **tipo de asiento**: *Ventas con Factura* (facturas y
-  notas de crédito) o *Recibos de Venta*. Cada uno tiene su propia
-  configuración.
+- Las cuentas son las del asiento de *Ventas con Factura* (facturas y notas de
+  crédito). Las de *Recibos de Venta* del cliente se configuran en
+  *Configuración Contable → Reglas por Clientes*.
 - Los conceptos se reparten en dos columnas, **Debe** y **Haber** (cuenta por
   cobrar, ventas, costo, inventario, IVA por tarifa, etc.).
 - Si el concepto tiene cuenta propia del cliente, se ve escrita. Si no, el
@@ -365,13 +365,8 @@ cambie aquí se ve allá y viceversa.
 - Escriba parte del código o del nombre de la cuenta y elíjala de la lista: se
   **guarda al instante**. Para quitarla, borre el campo (Retroceso o Suprimir
   la borra de una vez) o use la papelera de la fila.
-- **Copiar cuentas de General** rellena los conceptos vacíos con las cuentas de
-  General, para partir de esa base y cambiar solo lo necesario.
-- **Quitar configuración** elimina todas las cuentas propias del cliente para
-  el tipo de asiento elegido (pide confirmación); desde ese momento se
-  contabiliza con la General.
-- Arriba se indica cuántas cuentas propias tiene y si la configuración está
-  **completa** o cuántos conceptos **faltan**.
+- Para copiar de una vez las cuentas de General o quitar todas las cuentas
+  propias del cliente, use *Configuración Contable → Reglas por Clientes*.
 
 > Importante: en cuanto el cliente tiene **una sola** cuenta propia (sin contar
 > las de IVA), todo el documento se contabiliza con sus cuentas; lo que no le
@@ -458,6 +453,9 @@ usuario y la fecha.
 
 ## Historial de cambios
 
+- **2.7** — La pestaña **Contable** queda solo con las cuentas de *Ventas con Factura*:
+  sin selector de tipo de asiento, indicadores ni botones de copiar, quitar o abrir
+  Configuración Contable. *Recibos de Venta* se configura desde Configuración Contable.
 - **2.6** — Nueva pestaña **Contable** en la ficha: las cuentas del asiento de
   facturas/notas de crédito y de recibos de venta de ese cliente (reglas por
   cliente de Configuración Contable) se ven y se editan desde la propia ficha.
