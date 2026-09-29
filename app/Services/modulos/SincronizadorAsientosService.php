@@ -16,7 +16,7 @@ class SincronizadorAsientosService
      * Resumen corto de documentos con problema, agrupado por módulo: ['Facturas de Venta' => 20, ...].
      * Es lo que se muestra por defecto al usuario (ej. "Hay 20 asiento(s) por generar en Facturas de
      * Venta"); el detalle motivo-por-motivo (qué cuenta falta, qué documentos) se guarda aparte en
-     * $detalle para que la UI lo pueda mostrar bajo un "Ver detalle" sin volver el mensaje largo.
+     * $detalle, que ya no se muestra al usuario: queda para soporte y para el log del servidor.
      */
     private array $resumenPorModulo = [];
     /** Detalle motivo-por-motivo (mismo contenido que antes iba directo a $warnings). */
@@ -25,7 +25,7 @@ class SincronizadorAsientosService
      * Lo que el usuario tiene que HACER, sin cifras: una línea por sección de Configuración
      * Contable (ej. "Falta configurar la Cuenta por Pagar en algunos proveedores"), sin repetir
      * aunque 70 documentos fallen por la misma causa. Es el mensaje principal del aviso; el
-     * conteo por módulo y el detalle por documento quedan solo para "Ver detalle". Ver
+     * conteo por módulo y el detalle por documento ya no se muestran (solo log). Ver
      * registrarAccion().
      */
     private array $acciones = [];
@@ -60,8 +60,12 @@ class SincronizadorAsientosService
         'activos_fijos_alta'    => ['tipo' => 'activos_fijos_alta',        'nombre' => 'Activos Fijos - Alta'],
     ];
 
+    /** Empresa de la corrida en curso: la usa registrarAccion() para consultar el interruptor. */
+    private int $idEmpresa = 0;
+
     public function sincronizar(int $idEmpresa, int $idUsuario): void
     {
+        $this->idEmpresa = $idEmpresa;
         $db = Database::getConnection();
         $this->prepararEsquema($db);
 
@@ -118,6 +122,7 @@ class SincronizadorAsientosService
      */
     public function ejecutarPaso(int $idEmpresa, int $idUsuario, int $paso): array
     {
+        $this->idEmpresa = $idEmpresa;
         $db = Database::getConnection();
         $this->prepararEsquema($db);
         $excMig = $this->construirExclusionMigracion($db);
@@ -1281,8 +1286,8 @@ class SincronizadorAsientosService
             : [];
 
         // El aviso corto ("Hay 20 en Facturas de Venta") va en $resumenPorModulo; el motivo real
-        // (qué cuenta falta) y los documentos afectados quedan en $detalle, para un "Ver detalle"
-        // en la UI — y también al log del servidor por si hace falta revisar fuera del navegador.
+        // (qué cuenta falta) y los documentos afectados quedan en $detalle (ya no se muestra)
+        // y queda en el log del servidor por si hace falta revisar fuera del navegador.
         $totalConProblema = 0;
         foreach ($errores as $motivo => $idsFallidos) {
             $n = count($idsFallidos);
@@ -1455,8 +1460,8 @@ class SincronizadorAsientosService
     }
 
     /**
-     * Detalle real de cada motivo (qué cuenta falta, qué documentos), uno por línea. La UI lo
-     * muestra bajo un "Ver detalle" oculto por defecto, para no alargar el mensaje principal.
+     * Detalle real de cada motivo (qué cuenta falta, qué documentos), uno por línea. La UI
+     * ya no lo muestra (solo la lista de acciones); queda en el log del servidor para soporte.
      */
     public function getDetalle(): array
     {
@@ -1475,8 +1480,8 @@ class SincronizadorAsientosService
     }
 
     /**
-     * Mensaje corto que ve el usuario: QUÉ configurar, sin cifras (ej. "Faltan algunas
-     * configuraciones contables: Falta configurar la Cuenta por Pagar en algunos proveedores con
+     * Mensaje corto que ve el usuario: QUÉ configurar, sin cifras (ej. "Para
+     * generar los asientos que faltan: Falta configurar la Cuenta por Pagar en algunos proveedores con
      * cuentas propias (Adquisiciones de Compras); Configure las cuentas contables de Nómina.").
      * El detalle por documento sigue en getDetalle() (y en el log del servidor) para soporte.
      * La UI con barra de progreso arma lo mismo desde getAcciones() — ver asientos_pendientes.js.
@@ -1493,7 +1498,7 @@ class SincronizadorAsientosService
         if (!$lineas) {
             return null;
         }
-        return 'Faltan algunas configuraciones contables: ' . implode('; ', $lineas) . '.';
+        return 'Para generar los asientos que faltan: ' . implode('; ', $lineas) . '.';
     }
 
     /** ¿El usuario puede abrir Configuración Contable? Si no, el aviso no le muestra enlaces. */
@@ -1534,18 +1539,31 @@ class SincronizadorAsientosService
         // Cobro/pago de documentos que todavía no tienen su propio asiento: se arregla al
         // configurar ESE módulo. Si ese módulo también quedó pendiente en esta corrida, la acción
         // sobra (dependeDe) y el aviso solo lo menciona como nota.
+        //
+        // Los módulos apagados en «Módulos que contabilizan» ya no llegan aquí (construirTrabajos()
+        // los filtra), pero sí puede llegar un cobro/pago de un módulo encendido que depende de uno
+        // apagado. No se pide configurar un módulo que la empresa decidió no contabilizar: queda
+        // como nota informativa y el motivo exacto en el log del servidor.
         $dependencias = [
-            'genere primero los de facturas de compra' => ['Facturas de Compra', 'adquisiciones_compras', 'la Cuenta por Pagar', 'Adquisiciones de Compras'],
-            'genere primero los de facturas de venta'  => ['Facturas de Venta', 'ventas_factura', 'la Cuenta por Cobrar', 'Ventas con Factura'],
-            'los recibos que cobra'                    => ['Recibos de Venta', 'recibos_venta', 'la Cuenta por Cobrar', 'Recibos de Venta'],
+            'genere primero los de facturas de compra' => ['Facturas de Compra', 'adquisiciones_compras', 'la Cuenta por Pagar', 'Adquisiciones de Compras', ['compras', 'liquidaciones_compra']],
+            'genere primero los de facturas de venta'  => ['Facturas de Venta', 'ventas_factura', 'la Cuenta por Cobrar', 'Ventas con Factura', ['facturas_venta']],
+            'los recibos que cobra'                    => ['Recibos de Venta', 'recibos_venta', 'la Cuenta por Cobrar', 'Recibos de Venta', ['recibos_venta']],
         ];
-        foreach ($dependencias as $patron => [$modDep, $tipoDep, $que, $nombreDep]) {
+        foreach ($dependencias as $patron => [$modDep, $tipoDep, $que, $nombreDep, $clavesDep]) {
             if (str_contains($m, $patron)) {
+                $coincidio = true;
+                if (!$this->algunoContabiliza($clavesDep)) {
+                    $nota = "Algunos documentos de {$nombreModulo} cobran o pagan {$modDep}, un módulo que "
+                          . 'esta empresa no contabiliza, por eso no se genera su asiento.';
+                    if (!in_array($nota, $this->info, true)) {
+                        $this->info[] = $nota;
+                    }
+                    continue;
+                }
                 $this->agregarAccion(
                     $tipoDep, 'general', "Falta configurar {$que} en {$nombreDep}",
                     "Configure las cuentas contables de {$nombreDep}", $modDep
                 );
-                $coincidio = true;
             }
         }
 
@@ -1575,10 +1593,14 @@ class SincronizadorAsientosService
         }
 
         // Un error que no habla de cuentas ni de configuración (período cerrado, error de base de
-        // datos…) no se disfraza de "configure las cuentas": se avisa sin enlace y el motivo real
-        // queda en "Ver detalle".
+        // datos…) no se disfraza de "configure las cuentas": se avisa sin enlace. El motivo exacto
+        // queda en el log del servidor (error_log de sincronizarModulo) para soporte.
+        if (str_contains($m, 'período') && str_contains($m, 'cerrado')) {
+            $this->agregarAccion('', '', "Algunos documentos de {$nombreModulo} son de un período contable cerrado: reábralo si deben contabilizarse");
+            return;
+        }
         if (!str_contains($m, 'cuenta') && !str_contains($m, 'configur')) {
-            $this->agregarAccion('', '', "Algunos asientos de {$nombreModulo} no se pudieron generar (vea el detalle)");
+            $this->agregarAccion('', '', "Algunos asientos de {$nombreModulo} no se pudieron generar por un error inesperado: comuníquese con soporte");
             return;
         }
 
@@ -1625,6 +1647,21 @@ class SincronizadorAsientosService
                 $generico
             );
         }
+    }
+
+    /** ¿Al menos uno de estos módulos genera asientos en la empresa de la corrida? */
+    private function algunoContabiliza(array $claves): bool
+    {
+        if ($this->idEmpresa <= 0) {
+            return true;
+        }
+        $interruptor = ContabilidadInterruptorService::crear();
+        foreach ($claves as $c) {
+            if ($interruptor->contabiliza($this->idEmpresa, $c)) {
+                return true;
+            }
+        }
+        return false;
     }
 
     /**

@@ -200,9 +200,11 @@ revisar el balance.
 ## Qué dice el aviso cuando quedan asientos sin generar
 
 Al terminar la generación, el aviso ya no cuenta documentos por módulo
-("70 en Facturas de Compra, 6 en Egresos…"): dice **qué hay que configurar**, una
-línea por cada sección de Configuración Contable, aunque sean cientos de
-documentos con el mismo problema. Por ejemplo:
+("70 en Facturas de Compra, 6 en Egresos…") ni lista documento por documento:
+dice **qué hay que configurar**, una sola línea por cada sección de Configuración
+Contable, aunque sean cientos de documentos con el mismo problema. Si a una
+sección le faltan varias cuentas distintas, la línea dice en general «Configure
+las cuentas contables de …». Por ejemplo:
 
 - Falta configurar la Cuenta por Pagar en Adquisiciones de Compras.
 - Falta configurar la Cuenta por Pagar en algunos proveedores con cuentas propias
@@ -224,11 +226,14 @@ Además:
 - **Lo que no es de configuración va como nota.** Un egreso con todos los
   cheques anulados, o con formas de pago en cero, no tiene nada que contabilizar
   y no aparece como pendiente.
-- **Los errores que no son de cuentas no se disfrazan.** Si un asiento no se generó
-  por otro motivo (por ejemplo, un período cerrado), la línea lo dice sin
-  enlace y el motivo exacto está en *Ver detalle técnico*.
-- **Ver detalle técnico** conserva, para soporte, el motivo exacto y los números
-  de documento de cada caso.
+- **Los módulos apagados no se reclaman.** Si en *Módulos que contabilizan* la
+  empresa apagó un módulo, el aviso nunca pide configurar sus cuentas. Si un
+  ingreso o egreso cobra o paga documentos de ese módulo, se menciona solo como
+  nota informativa.
+- **Los errores que no son de cuentas no se disfrazan.** Si hay documentos de un
+  período cerrado, la línea lo dice (sin enlace). Si el motivo es un error
+  inesperado, la línea pide comunicarse con soporte; el motivo exacto y los
+  números de documento quedan en el registro del servidor.
 
 ## Documentos migrados sin asiento contable
 
@@ -409,7 +414,9 @@ tienen un documento individual con tercero que mostrar.
   enlaza directo a la sección de Configuración Contable donde falta la cuenta.
   Distingue cuando la cuenta falta en algunos proveedores o clientes con cuentas
   propias. Los cobros/pagos que dependen de otro documento sin asiento y los
-  documentos sin valor que contabilizar pasan a ser notas informativas.
+  documentos sin valor que contabilizar pasan a ser notas informativas. No pide
+  configurar módulos apagados en *Módulos que contabilizan*. Se retira el
+  desplegable con el detalle por documento.
 - **1.26** — Nuevo botón **Duplicar** en los asientos de tipo Diario: copia las
   líneas a un asiento nuevo, exigiendo cambiar la fecha o el concepto para que
   no quede idéntico al original.

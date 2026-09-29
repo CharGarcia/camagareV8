@@ -145,9 +145,8 @@ permiso para ver el módulo tampoco genera nada, porque ni siquiera puede abrirl
 
 - **«Abrí el módulo y mi documento sigue sin asiento»**: casi siempre falta una
   cuenta. Entre a **Asientos Contables**: el aviso de asientos pendientes dice
-  qué configurar y su enlace **Configurar** lo lleva a la sección exacta (los
-  números de documento están en *Ver detalle técnico*). Corrija la cuenta y
-  vuelva a abrir el módulo.
+  qué configurar y su enlace **Configurar** lo lleva a la sección exacta. Corrija
+  la cuenta y vuelva a abrir el módulo.
 - **«Tengo cientos de documentos atrasados y solo se generaron algunos»**: es lo
   esperado, se procesan de a 50. Vuelva a entrar al módulo (o use el botón de
   generar de Asientos Contables, que los procesa todos con barra de progreso).

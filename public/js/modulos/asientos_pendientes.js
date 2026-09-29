@@ -57,14 +57,15 @@
     }
 
     /**
-     * Arma y muestra el resultado final (generados + acciones + detalle + avisos), acumulados de
+     * Arma y muestra el resultado final (generados + acciones + notas), acumulados de
      * todos los pasos. Las acciones dicen QUÉ configurar (una línea por sección, sin cifras) y,
      * si el usuario puede entrar a Configuración Contable, enlazan directo a esa sección.
      */
     function mostrarResultado(opts) {
         // Los `warnings` del backend (conceptos/formas de pago sin cuenta, etc.) ya NO se muestran
         // como "Otros avisos": solo se informa lo generado y lo que queda por configurar.
-        const { detalle, generados, interrumpido, onGenerado } = opts;
+        // El detalle por documento ya no se muestra: queda en el log del servidor para soporte.
+        const { generados, interrumpido, onGenerado } = opts;
         const acciones = Array.isArray(opts.acciones) ? opts.acciones : [];
         const info = Array.isArray(opts.info) ? opts.info : [];
         const hayPendientes = acciones.length > 0;
@@ -87,17 +88,8 @@
                 return `<li class="mb-1">${escapeHtml(a.texto)}.${enlace}</li>`;
             }).join('');
             html += `<div class="text-start small mb-2"><i class="bi bi-exclamation-triangle text-warning me-1"></i> `
-                + `<strong>Faltan algunas configuraciones contables:</strong>`
+                + `<strong>Para generar los asientos que faltan:</strong>`
                 + `<ul class="mb-0 mt-1">${items}</ul></div>`;
-        }
-        if (detalle.length) {
-            const idDetalle = `asientosPendDetalle_${Date.now()}`;
-            html += `<div class="text-start small mb-2">`
-                + `<a href="#" class="link-secondary" onclick="event.preventDefault(); `
-                + `var d=document.getElementById('${idDetalle}'); d.style.display = d.style.display==='none' ? '' : 'none';">`
-                + `<i class="bi bi-chevron-down me-1"></i>Ver detalle técnico (qué documentos)</a>`
-                + `<ul id="${idDetalle}" class="mb-0 mt-1 small" style="display:none;">`
-                + detalle.map(d => `<li class="mb-1">${escapeHtml(d)}</li>`).join('') + `</ul></div>`;
         }
         if (!html) html = 'No quedaron asientos por generar.';
         if (info.length) {
@@ -111,7 +103,7 @@
                 icon: interrumpido ? 'info' : (hayPendientes ? 'warning' : 'success'),
                 title: interrumpido ? 'Generación interrumpida' : (hayPendientes ? 'Generación completada con avisos' : 'Asientos generados'),
                 html: html,
-                width: (detalle.length || info.length) ? 640 : undefined,
+                width: (acciones.length || info.length) ? 640 : undefined,
                 confirmButtonText: 'Aceptar',
             }).then(() => {
                 terminar();
@@ -196,7 +188,6 @@
             if (result.dismiss === Swal.DismissReason.cancel) cancelado = true;
         });
 
-        const acumDetalle = [];
         const acumInfo = [];
         const acumResumen = {};
         const acumAcciones = new Map();
@@ -238,7 +229,6 @@
 
                 totalPasos = json.totalPasos || totalPasos;
                 generados += json.generados || 0;
-                if (Array.isArray(json.detalle)) acumDetalle.push(...json.detalle);
                 if (Array.isArray(json.info)) json.info.forEach(i => { if (!acumInfo.includes(i)) acumInfo.push(i); });
                 if (json.resumenPorModulo && typeof json.resumenPorModulo === 'object') {
                     Object.entries(json.resumenPorModulo).forEach(([mod, cnt]) => {
@@ -286,7 +276,7 @@
 
             mostrarResultado({
                 acciones, urlConfig: puedeConfigurar ? urlConfiguracion(urlBase) : null,
-                detalle: acumDetalle, info: acumInfo, generados, interrumpido, onGenerado,
+                info: acumInfo, generados, interrumpido, onGenerado,
             });
         })();
     }
