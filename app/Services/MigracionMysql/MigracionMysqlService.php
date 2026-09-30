@@ -48,6 +48,12 @@ class MigracionMysqlService
         // Responsables de traslado/entrega (repartidores) del viejo `responsable_traslado` (por ruc_empresa).
         // Se relacionan luego en pedidos y consignaciones. Conviene migrarlo ANTES de esos documentos.
         'responsables_traslado' => ['label' => 'Responsables de traslado/entrega', 'tabla' => 'responsable_traslado', 'fecha' => null,      'tipo' => 'catalogo', 'filtro' => 'status = 1'],
+        // Vehículos del viejo: `vehiculos` guarda UNA copia por orden de servicio (snapshot), así que
+        // se consolida por PLACA (un vehículo por placa, con los datos de su orden más reciente).
+        // DESPUÉS de Clientes (enlaza el cliente de la última orden) y ANTES de Car-Wash (las órdenes
+        // reutilizan el vehículo por placa). 'contar' = placas distintas, no filas.
+        'vehiculos'         => ['label' => 'Vehículos (uno por placa)',         'tabla' => 'vehiculos',                  'fecha' => null,             'tipo' => 'catalogo', 'filtro' => "TRIM(placa) <> ''",
+                                'contar' => "COUNT(DISTINCT UPPER(REGEXP_REPLACE(placa, '[^A-Za-z0-9]', '')))"],
         // La tabla vieja de empleados filtra por id_empresa (id viejo), NO por ruc_empresa; se resuelve
         // vía empresas (LEFT(ruc,10)). Marcado con 'ruc_via_empresa' para el conteo/análisis.
         'empleados'         => ['label' => 'Empleados',                        'tabla' => 'empleados',                  'fecha' => null,             'tipo' => 'catalogo', 'ruc_via_empresa' => true],
@@ -116,7 +122,7 @@ class MigracionMysqlService
             $fecha = $def['fecha'] ?? null;
             $fila = ['label' => $def['label'], 'tabla' => $def['tabla'], 'total' => null, 'fecha_min' => null, 'fecha_max' => null, 'est_segundos' => 0, 'error' => null];
             try {
-                $sel = "COUNT(*) AS n";
+                $sel = ($def['contar'] ?? 'COUNT(*)') . " AS n";
                 if ($fecha) {
                     $sel .= ", MIN(CASE WHEN `$fecha` >= '2000-01-01' THEN `$fecha` END) AS fmin, MAX(`$fecha`) AS fmax";
                 }
@@ -308,6 +314,8 @@ class MigracionMysqlService
                 return $this->migrarBodegas($idEmpresa, $ruc, $idUsuario);
             case 'responsables_traslado':
                 return $this->migrarResponsablesTraslado($idEmpresa, $ruc, $idUsuario);
+            case 'vehiculos':
+                return $this->migrarVehiculos($idEmpresa, $ruc, $idUsuario);
             case 'alumnos_campus':
             case 'alumnos_niveles':
                 return $this->migrarAlumnosCatalogo($entidad, $idEmpresa, $ruc, $idUsuario);
@@ -445,7 +453,7 @@ class MigracionMysqlService
         'plan_cuentas' => 'plan_cuentas', 'clientes' => 'clientes', 'productos' => 'productos', 'marcas' => 'marcas',
         'proveedores' => 'proveedores', 'vendedores' => 'vendedores', 'bodegas' => 'bodegas', 'empleados' => 'empleados', 'novedades' => 'novedades',
         'roles_pago' => 'rol_cabecera', 'quincenas' => 'rol_cabecera',
-        'responsables_traslado' => 'responsables_traslado',
+        'responsables_traslado' => 'responsables_traslado', 'vehiculos' => 'vehiculos',
         'alumnos_campus' => 'alumnos_campus', 'alumnos_niveles' => 'alumnos_niveles', 'alumnos' => 'alumnos',
         'cuentas_bancarias' => 'empresa_formas_pago', 'formas_pago' => 'empresa_formas_pago',
         'facturas' => 'ventas_cabecera', 'notas_credito' => 'notas_credito_cabecera',
@@ -534,7 +542,7 @@ class MigracionMysqlService
     }
 
     /** Catálogos: NO se eliminan con esta herramienta (se auto-corrigen al re-migrar por reconciliación). */
-    private const ELIMINAR_VEDADAS = ['plan_cuentas', 'clientes', 'productos', 'marcas', 'proveedores', 'vendedores', 'bodegas', 'empleados', 'novedades', 'cuentas_bancarias', 'formas_pago', 'alumnos_campus', 'alumnos_niveles', 'alumnos'];
+    private const ELIMINAR_VEDADAS = ['plan_cuentas', 'clientes', 'productos', 'marcas', 'proveedores', 'vendedores', 'bodegas', 'empleados', 'novedades', 'cuentas_bancarias', 'formas_pago', 'alumnos_campus', 'alumnos_niveles', 'alumnos', 'vehiculos'];
 
     /**
      * Cuántos registros ELIMINARÍA por entidad (para la confirmación previa). Solo cuenta lo que la
@@ -3298,6 +3306,223 @@ class MigracionMysqlService
         return $res;
     }
 
+    /** Chasis y propietario que el formulario viejo precargaba por defecto (no son datos reales). */
+    private const VEH_CHASIS_RELLENO      = ['123456789', 'N/A', 'NA', 'S/N', 'SN'];
+    private const VEH_PROPIETARIO_RELLENO = ['PRIVADO', 'SN', 'S/N', 'SIN NOMBRE', 'N/A', 'NA'];
+
+    /**
+     * Datos de un vehículo del viejo SIN los valores de relleno del formulario anterior: chasis
+     * '123456789', propietario 'Privado' y año 2022 venían precargados y casi nadie los cambió
+     * (≈98% de las filas). El año 2022 solo se descarta si el chasis también es el de relleno
+     * (coinciden fila a fila: es el mismo valor por defecto); con chasis real, 2022 es un año real.
+     *
+     * @return array{marca:?string,chasis:?string,anio:?int,propietario:?string}
+     */
+    private static function vehiculoLimpio(array $v): array
+    {
+        $chasis = strtoupper(trim((string) ($v['chasis'] ?? '')));
+        $chasisRelleno = in_array($chasis, self::VEH_CHASIS_RELLENO, true);
+        $prop = trim(preg_replace('/\s+/u', ' ', (string) ($v['propietario'] ?? '')));
+        $anio = (int) ($v['anio'] ?? 0);
+        if ($anio <= 1900 || $anio > (int) date('Y') + 1 || ($anio === 2022 && $chasisRelleno)) { $anio = null; }
+        return [
+            'marca'       => self::nz(mb_substr(trim(preg_replace('/\s+/u', ' ', (string) ($v['marca'] ?? ''))), 0, 100)),
+            'chasis'      => ($chasisRelleno || $chasis === '') ? null : mb_substr(trim((string) $v['chasis']), 0, 100),
+            'anio'        => $anio,
+            'propietario' => in_array(mb_strtoupper($prop), self::VEH_PROPIETARIO_RELLENO, true) ? null : self::nz(mb_substr($prop, 0, 200)),
+        ];
+    }
+
+    /**
+     * Vehículos del sistema anterior → `vehiculos`, uno por PLACA.
+     *
+     * El viejo no tiene catálogo de vehículos: `vehiculos` guarda una copia por cada orden de
+     * servicio (enlazada por `codigo_unico`). Aquí se agrupan esas copias por placa normalizada
+     * (sin guiones/espacios, en mayúsculas) y se toma, campo por campo, el dato más reciente que
+     * no sea de relleno (ver vehiculoLimpio); el cliente es el de la orden más reciente que lo tenga.
+     * A diferencia de la entidad Car-Wash, entran TODAS las placas: también las de órdenes sin
+     * servicios/productos y las copias huérfanas sin orden.
+     *
+     * Mapa: id_origen = id_vehiculo MÁS ANTIGUO de la placa (estable aunque el viejo siga creando
+     * órdenes). Contra el sistema nuevo:
+     *  - placa inexistente → se crea.
+     *  - placa de un vehículo registrado a mano → se VINCULA sin tocar sus datos.
+     *  - placa de un vehículo que creó la migración (esta entidad, o Car-Wash al migrar sus órdenes)
+     *    → se actualiza: si nadie lo editó después (updated_at = created_at) toma los datos
+     *    consolidados; si fue editado, solo se limpian los valores de relleno y se completan vacíos.
+     *    Así se corrigen los vehículos ya migrados con chasis 123456789 / año 2022 / "Privado".
+     * Idempotente: re-correrla solo re-sincroniza los vehículos de la migración.
+     */
+    private function migrarVehiculos(int $idEmpresa, string $ruc, int $idUsuario): array
+    {
+        $base  = substr(preg_replace('/\D+/', '', $ruc), 0, 10);
+        $mysql = LegacyMysqlConnection::get();
+        $pg    = Database::getConnection();
+
+        $res = ['entidad' => 'vehiculos', 'total' => 0, 'migrados' => 0, 'vinculados' => 0, 'vinculados_muestra' => [],
+                'ya_migrados' => 0, 'actualizados' => 0, 'omitidos' => 0, 'errores' => 0];
+
+        $normPlaca   = static fn($p): string => preg_replace('/[^A-Z0-9]/', '', strtoupper(trim((string) $p)));
+        $mapVeh      = $this->mapaDe($pg, $idEmpresa, 'vehiculos');
+        $mapCliente  = $this->mapaDe($pg, $idEmpresa, 'clientes');
+        $cliPorIdent = $this->clientesPorIdentificacion($pg, $idEmpresa);
+        $insMap      = $this->stmtMap($pg, 'vehiculos');
+        $qBase       = $mysql->quote($base . '%');
+
+        // Vehículos del sistema nuevo por placa normalizada (incluye eliminados: la placa es única por
+        // empresa). 'de_migracion' = lo creó esta entidad o Car-Wash al migrar una orden (el vehículo
+        // y la fila del mapa de esa orden se insertan en la misma transacción → mismo created_at).
+        $qv = $pg->prepare("SELECT v.id, v.placa, v.marca, v.chasis, v.anio, v.propietario, v.id_cliente, v.eliminado,
+                                   (v.updated_at IS NOT DISTINCT FROM v.created_at) AS intacto,
+                                   (EXISTS (SELECT 1 FROM migracion_mysql_map m
+                                             WHERE m.id_empresa = v.id_empresa AND m.entidad = 'vehiculos' AND m.id_destino = v.id AND m.vinculado = false)
+                                    OR EXISTS (SELECT 1 FROM carwash_ordenes o
+                                                 JOIN migracion_mysql_map m ON m.id_empresa = o.id_empresa AND m.entidad = 'carwash'
+                                                                           AND m.id_destino = o.id AND m.vinculado = false
+                                                WHERE o.id_empresa = v.id_empresa AND o.id_vehiculo = v.id AND m.created_at = v.created_at)) AS de_migracion
+                              FROM vehiculos v
+                             WHERE v.id_empresa = ?
+                             ORDER BY v.eliminado, v.id");
+        $qv->execute([$idEmpresa]);
+        $nuevoPorPlaca = [];
+        foreach ($qv->fetchAll(PDO::FETCH_ASSOC) as $v) {
+            $k = $normPlaca($v['placa']);
+            if ($k !== '' && !isset($nuevoPorPlaca[$k])) { $nuevoPorPlaca[$k] = $v; }
+        }
+
+        // Cliente de cada orden vieja (codigo_unico → id_cliente). Se lee aparte: el JOIN por
+        // codigo_unico en el MySQL viejo no tiene índice y es muy lento.
+        $cliOrden = [];
+        foreach ($mysql->query("SELECT ruc_empresa, codigo_unico, id_cliente FROM encabezado_mecanica WHERE ruc_empresa LIKE $qBase AND id_cliente > 0") as $o) {
+            $cliOrden[$o['ruc_empresa'] . '|' . $o['codigo_unico']] = (int) $o['id_cliente'];
+        }
+
+        // Copias viejas agrupadas por placa, en orden cronológico (id_vehiculo creciente).
+        $grupos = [];
+        $sql = "SELECT id_vehiculo, ruc_empresa, marca, placa, chasis, anio, propietario, codigo_unico
+                  FROM vehiculos
+                 WHERE ruc_empresa LIKE $qBase AND TRIM(placa) <> ''" . $this->clausulaEstabOrigen('ruc_empresa', $base, $mysql) . "
+                 ORDER BY id_vehiculo";
+        foreach ($mysql->query($sql) as $v) {
+            $k = $normPlaca($v['placa']);
+            if ($k === '') { continue; }
+            $v['id_cliente_orden'] = $cliOrden[$v['ruc_empresa'] . '|' . $v['codigo_unico']] ?? 0;
+            $grupos[$k][] = $v;
+        }
+
+        // Identificación de los clientes viejos involucrados, en lote: resolverlos uno a uno contra el
+        // MySQL remoto es un viaje de red por placa (miles). Solo se llama a resolverOCrearCliente
+        // para los que aún no existen en el sistema nuevo (y hay que crearlos).
+        $rucClienteViejo = [];
+        $idsCli = array_values(array_diff(array_unique(array_filter($cliOrden)), array_map('intval', array_keys($mapCliente))));
+        foreach (array_chunk($idsCli, 1000) as $lote) {
+            foreach ($mysql->query("SELECT id, ruc FROM clientes WHERE id IN (" . implode(',', array_map('intval', $lote)) . ")") as $c) {
+                $rucClienteViejo[(int) $c['id']] = trim((string) $c['ruc']);
+            }
+        }
+        $clienteNuevo = function (int $oldId) use (&$cliPorIdent, $mapCliente, $rucClienteViejo, $idEmpresa, $idUsuario, $mysql, $pg): ?int {
+            if (isset($mapCliente[(string) $oldId])) { return $mapCliente[(string) $oldId]; }
+            $ident = $rucClienteViejo[$oldId] ?? '';
+            if ($ident === '') { return null; }
+            return $cliPorIdent[$ident] ?? $this->resolverOCrearCliente($cliPorIdent, $mapCliente, $oldId, $idEmpresa, $idUsuario, $mysql, $pg);
+        };
+
+        $insVeh = $pg->prepare("INSERT INTO vehiculos (id_empresa, id_usuario, marca, placa, chasis, anio, propietario, estado, id_cliente, eliminado, created_by, updated_by)
+                                VALUES (?, ?, ?, ?, ?, ?, ?, 'activo', ?, false, ?, ?) RETURNING id");
+        // Sin tocar updated_at: es una re-sincronización de datos migrados, no una edición del usuario
+        // (así una re-corrida posterior lo sigue reconociendo como "intacto").
+        $updVeh = $pg->prepare("UPDATE vehiculos SET marca = ?, chasis = ?, anio = ?, propietario = ?, id_cliente = ?, updated_by = ?
+                                 WHERE id = ? AND id_empresa = ?");
+
+        foreach ($grupos as $k => $copias) {
+            $res['total']++;
+            $oldId  = (int) $copias[0]['id_vehiculo'];
+            $ultima = end($copias);
+            $placa  = mb_substr(strtoupper(trim((string) $ultima['placa'])), 0, 20);
+
+            // Consolidado: por campo, el dato más reciente que no sea de relleno.
+            $dato = ['marca' => null, 'chasis' => null, 'anio' => null, 'propietario' => null];
+            $oldCliente = 0;
+            foreach (array_reverse($copias) as $c) {
+                foreach (self::vehiculoLimpio($c) as $campo => $val) {
+                    if ($dato[$campo] === null && $val !== null) { $dato[$campo] = $val; }
+                }
+                if ($oldCliente === 0 && $c['id_cliente_orden'] > 0) { $oldCliente = $c['id_cliente_orden']; }
+            }
+
+            $snapCli = $cliPorIdent;
+            try {
+                $pg->beginTransaction();
+                $existe = $nuevoPorPlaca[$k] ?? null;
+                // El cliente solo se resuelve (o crea) si el vehículo va a llevar datos de la migración.
+                $idCliente = ($oldCliente > 0 && (!$existe || !empty($existe['de_migracion'])))
+                    ? $clienteNuevo($oldCliente)
+                    : null;
+
+                if (!$existe) {
+                    $insVeh->execute([$idEmpresa, $idUsuario, $dato['marca'], $placa, $dato['chasis'], $dato['anio'],
+                        $dato['propietario'], $idCliente, $idUsuario, $idUsuario]);
+                    $idNuevo = (int) $insVeh->fetchColumn();
+                    $insMap->execute([':e' => $idEmpresa, ':o' => $oldId, ':d' => $idNuevo, ':cn' => $placa, ':vin' => 'f', ':cb' => $idUsuario]);
+                    $pg->commit();
+                    $nuevoPorPlaca[$k] = ['id' => $idNuevo, 'de_migracion' => true];
+                    $mapVeh[(string) $oldId] = $idNuevo;
+                    $res['migrados']++;
+                    continue;
+                }
+
+                $idDest = (int) $existe['id'];
+                if (empty($existe['de_migracion'])) {
+                    // Registrado a mano en el sistema nuevo: se vincula y no se toca.
+                    if (!isset($mapVeh[(string) $oldId])) {
+                        $this->marcarVinculado($res, $mapVeh, $pg, $idEmpresa, $oldId, $idDest, $placa, $idUsuario);
+                    } else {
+                        $res['ya_migrados']++;
+                    }
+                    $pg->commit();
+                    continue;
+                }
+
+                // Vehículo creado por la migración: re-sincronizar (salvo que el usuario lo haya eliminado).
+                if (isset($mapVeh[(string) $oldId])) {
+                    $res['ya_migrados']++;
+                } else {
+                    // Lo creó Car-Wash (sin fila en el mapa de vehículos): pasa a ser de esta entidad.
+                    $insMap->execute([':e' => $idEmpresa, ':o' => $oldId, ':d' => $idDest, ':cn' => $placa, ':vin' => 'f', ':cb' => $idUsuario]);
+                    $mapVeh[(string) $oldId] = $idDest;
+                    $res['migrados']++;
+                }
+                if (empty($existe['eliminado'])) {
+                    $actual = self::vehiculoLimpio($existe);
+                    $intacto = !empty($existe['intacto']);
+                    $nuevo = [];
+                    foreach ($dato as $campo => $val) {
+                        // Intacto: manda el consolidado. Editado: manda lo del usuario (ya sin relleno).
+                        $nuevo[$campo] = $intacto ? ($val ?? $actual[$campo]) : ($actual[$campo] ?? $val);
+                    }
+                    $nuevoCli = $intacto ? ($idCliente ?? $existe['id_cliente']) : ($existe['id_cliente'] ?? $idCliente);
+                    $cambia = (string) $nuevo['marca'] !== (string) $existe['marca']
+                           || (string) $nuevo['chasis'] !== (string) $existe['chasis']
+                           || (string) $nuevo['anio'] !== (string) $existe['anio']
+                           || (string) $nuevo['propietario'] !== (string) $existe['propietario']
+                           || (string) $nuevoCli !== (string) $existe['id_cliente'];
+                    if ($cambia) {
+                        $updVeh->execute([$nuevo['marca'], $nuevo['chasis'], $nuevo['anio'], $nuevo['propietario'],
+                            $nuevoCli !== null ? (int) $nuevoCli : null, $idUsuario, $idDest, $idEmpresa]);
+                        $res['actualizados']++;
+                    }
+                }
+                $pg->commit();
+            } catch (Throwable $ex) {
+                if ($pg->inTransaction()) { $pg->rollBack(); }
+                $cliPorIdent = $snapCli;
+                $res['errores']++;
+                if (empty($res['error_muestra'])) { $res['error_muestra'] = 'Placa ' . $placa . ': ' . substr($ex->getMessage(), 0, 180); }
+            }
+        }
+        return $res;
+    }
+
     /**
      * Órdenes de servicio del sistema anterior (módulo "orden_mecanica") → módulo Car-Wash.
      *
@@ -3306,7 +3531,8 @@ class MigracionMysqlService
      *    de recepción y entrega, persona a cargo del vehículo, próximo chequeo, estado EN ESPERA /
      *    EN TALLER / CERRADA).
      *  - `vehiculos` (viejo): UN registro por orden (snapshot) → se consolida por PLACA en `vehiculos`
-     *    del sistema nuevo (get-or-create; la placa es única por empresa).
+     *    del sistema nuevo (get-or-create; la placa es única por empresa). Lo normal es que ya los haya
+     *    creado la entidad "Vehículos" (migrarVehiculos), que trae además las placas sin orden válida.
      *  - `detalle_factura_mecanica`: servicios/productos (precio SIN IVA, subtotal neto de descuento,
      *    tarifa_iva = código SRI, bodega).
      *  - `observaciones_mecanica`: observaciones de entrada y demás notas → Info. Adicional.
@@ -3543,13 +3769,14 @@ class MigracionMysqlService
                         : null;
 
                     // Vehículo: get-or-create por placa.
+                    // Lo normal es que ya exista (entidad "Vehículos", que consolida por placa); si no, se
+                    // crea con los datos de esta orden, sin los valores de relleno del formulario viejo.
                     if (!isset($vehPorPlaca[$kPlaca])) {
-                        $anio = (int) ($vv['anio'] ?? 0);
+                        $vl = self::vehiculoLimpio($vv);
                         $pg->exec('SAVEPOINT sp_veh');
                         try {
-                            $insVeh->execute([$idEmpresa, $idUsuario, self::nz(mb_substr((string) ($vv['marca'] ?? ''), 0, 100)), $placa,
-                                self::nz(mb_substr((string) ($vv['chasis'] ?? ''), 0, 100)), $anio > 1900 ? $anio : null,
-                                self::nz(mb_substr((string) ($vv['propietario'] ?? ''), 0, 200)), $idCliente, $idUsuario, $idUsuario]);
+                            $insVeh->execute([$idEmpresa, $idUsuario, $vl['marca'], $placa, $vl['chasis'], $vl['anio'],
+                                $vl['propietario'], $idCliente, $idUsuario, $idUsuario]);
                             $vehPorPlaca[$kPlaca] = (int) $insVeh->fetchColumn();
                             $pg->exec('RELEASE SAVEPOINT sp_veh');
                         } catch (Throwable $e) {

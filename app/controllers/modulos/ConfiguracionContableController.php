@@ -1301,6 +1301,55 @@ class ConfiguracionContableController extends BaseModuloController
     }
 
     /**
+     * Sugerencias de «Reglas por Proveedores»: proveedores sin cuentas propias que compran lo mismo
+     * que un proveedor ya configurado. Acepta `anio` (opcional), igual que el resto de la sección.
+     */
+    public function getSugerenciasProveedorAjax(): void
+    {
+        $this->requireLeer();
+        header('Content-Type: application/json');
+
+        $idEmpresa = (int) $_SESSION['id_empresa'];
+        $anio = trim((string) ($_GET['anio'] ?? ''));
+
+        try {
+            $data = $this->repository->getSugerenciasReglasProveedor($idEmpresa, ctype_digit($anio) ? (int) $anio : null);
+            foreach ($data as &$fila) {
+                $fila['ejemplos'] = json_decode((string) $fila['ejemplos'], true) ?: [];
+            }
+            unset($fila);
+            echo json_encode(['ok' => true, 'data' => $data]);
+        } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
+            echo json_encode(['ok' => false, 'error' => 'No se pudieron calcular las sugerencias.']);
+        }
+        exit;
+    }
+
+    /**
+     * Aplica una sugerencia: copia las cuentas del proveedor origen al proveedor destino.
+     */
+    public function copiarReglasProveedorAjax(): void
+    {
+        $this->requireCrear();
+        header('Content-Type: application/json');
+
+        $idEmpresa = (int) $_SESSION['id_empresa'];
+        $idUsuario = (int) $_SESSION['id_usuario'];
+        $idOrigen  = (int) ($_POST['id_origen'] ?? 0);
+        $idDestino = (int) ($_POST['id_destino'] ?? 0);
+
+        try {
+            $copiadas = $this->service->copiarReglasCompraProveedor($idOrigen, $idDestino, $idEmpresa, $idUsuario);
+            echo json_encode(['ok' => true, 'copiadas' => $copiadas]);
+        } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
+            echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
+        }
+        exit;
+    }
+
+    /**
      * Registra o actualiza una regla de dimensión contable.
      */
     public function guardarReglaDimensionAjax(): void

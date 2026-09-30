@@ -1101,6 +1101,7 @@
                 // cada tarjeta (que además guardan al vuelo).
                 ASIENTOPROG_vincularDimAutocomplete(tipo);
                 ASIENTOPROG_vincularCuentasTarjetas(tipo);
+                if (tipo === 'proveedor') ASIENTOPROG_contarSugerenciasProveedor();
 
                 // Al recargar tras guardar una cuenta, dejar abierta la ficha que se estaba editando.
                 if (abrirIdx !== null && abrirIdx !== undefined && window.bootstrap) {
@@ -1546,6 +1547,185 @@
         if (copiadas > 0) {
             delete ASIENTOPROG_dimNueva[tipo];
             ASIENTOPROG_cargarDim(tipo, idx);
+        }
+    };
+
+    // ── Sugerencias de «Reglas por Proveedores» ──────────────────────────────────────────────
+    // Proveedores sin cuentas propias que compran los mismos ítems que un proveedor ya configurado
+    // (p. ej. gasolineras que venden «EXTRA»): «Asignar» le copia todas las cuentas de ese proveedor.
+    let ASIENTOPROG_sugProv = [];
+
+    const ASIENTOPROG_anioProveedor = () => (document.getElementById('dim_anio_proveedor') || {}).value || '';
+
+    async function ASIENTOPROG_fetchSugerenciasProveedor() {
+        const anio = ASIENTOPROG_anioProveedor();
+        const res = await (await fetch(`${API_PROG}/getSugerenciasProveedorAjax?anio=${encodeURIComponent(anio)}`)).json();
+        if (!res.ok) throw new Error(res.error || 'No se pudieron calcular las sugerencias.');
+        ASIENTOPROG_sugProv = Array.isArray(res.data) ? res.data : [];
+        const badge = document.getElementById('sugProvContador');
+        if (badge) {
+            badge.textContent = ASIENTOPROG_sugProv.length;
+            badge.classList.toggle('d-none', ASIENTOPROG_sugProv.length === 0);
+        }
+        return ASIENTOPROG_sugProv;
+    }
+
+    /** Solo actualiza el contador del botón (al abrir la sección de proveedores). */
+    window.ASIENTOPROG_contarSugerenciasProveedor = function () {
+        ASIENTOPROG_fetchSugerenciasProveedor().catch(() => { /* el contador es opcional */ });
+    };
+
+    function ASIENTOPROG_pintarSugerenciasProveedor() {
+        const lista = document.getElementById('sugProvLista');
+        const btnTodas = document.getElementById('sugProvAsignarTodas');
+        if (!lista) return;
+        const esc = ASIENTOPROG_esc;
+        const filtro = ((document.getElementById('sugProvFiltro') || {}).value || '').trim().toLowerCase();
+        const visibles = ASIENTOPROG_sugProv.filter(s => !filtro
+            || [s.destino, s.origen, s.destino_identificacion, ...(s.ejemplos || [])].join(' ').toLowerCase().includes(filtro));
+
+        if (!visibles.length) {
+            lista.innerHTML = `<div class="text-muted text-center py-3"><i class="bi bi-info-circle me-1"></i> ${ASIENTOPROG_sugProv.length
+                ? 'Ninguna sugerencia coincide con el filtro.'
+                : 'No hay sugerencias: ningún proveedor sin cuentas compra lo mismo que un proveedor ya configurado.'}</div>`;
+            btnTodas?.classList.add('d-none');
+            return;
+        }
+
+        lista.innerHTML = visibles.map(s => {
+            const ejemplos = (s.ejemplos || []).map(e => `<span class="badge bg-light text-dark border fw-normal me-1">${esc(e)}</span>`).join('');
+            const mas = s.comunes > (s.ejemplos || []).length ? `<span class="text-muted">+${s.comunes - s.ejemplos.length}</span>` : '';
+            const alt = s.alternativas > 0
+                ? ` <span class="text-muted" title="Otros proveedores configurados también comparten ítems con este; se sugiere el que más comparte.">(+${s.alternativas} opción(es) más)</span>`
+                : '';
+            return `<div class="list-group-item px-2 py-2 d-flex align-items-start gap-2" data-sug-destino="${s.id_destino}">
+                <div class="flex-grow-1" style="min-width:0;">
+                    <div class="fw-bold text-dark text-truncate">${esc(s.destino)}
+                        <span class="text-muted fw-normal">${esc(s.destino_identificacion || '')}</span></div>
+                    <div class="text-muted">
+                        <i class="bi bi-arrow-return-right me-1"></i>copiar las ${esc(s.cuentas_origen)} cuenta(s) de
+                        <b class="text-success">${esc(s.origen)}</b>${alt}
+                    </div>
+                    <div class="mt-1">
+                        <span class="text-muted me-1">${esc(s.comunes)} de ${esc(s.items_destino)} ítem(s) en común:</span>${ejemplos}${mas}
+                    </div>
+                </div>
+                <button type="button" class="btn btn-sm btn-outline-success text-nowrap" data-sug-asignar="${s.id_destino}">
+                    <i class="bi bi-check2 me-1"></i> Asignar
+                </button>
+            </div>`;
+        }).join('');
+        if (btnTodas) {
+            btnTodas.classList.toggle('d-none', visibles.length < 2);
+            btnTodas.innerHTML = `<i class="bi bi-check2-all me-1"></i> Asignar las visibles (${visibles.length})`;
+        }
+    }
+
+    async function ASIENTOPROG_asignarSugerencia(sug) {
+        const fd = new FormData();
+        fd.append('id_origen', sug.id_origen);
+        fd.append('id_destino', sug.id_destino);
+        const res = await (await fetch(`${API_PROG}/copiarReglasProveedorAjax`, { method: 'POST', body: fd })).json();
+        if (!res.ok) throw new Error(res.error || 'No se pudieron copiar las cuentas.');
+        ASIENTOPROG_sugProv = ASIENTOPROG_sugProv.filter(s => s.id_destino !== sug.id_destino);
+        return res.copiadas || 0;
+    }
+
+    function ASIENTOPROG_toastSug(icon, title) {
+        if (window.Swal) {
+            Swal.mixin({ toast: true, position: 'top-end', showConfirmButton: false, timer: 3000, timerProgressBar: true })
+                .fire({ icon, title });
+        }
+    }
+
+    /** Tras asignar: repinta el modal, el contador y las tarjetas de proveedores. */
+    function ASIENTOPROG_trasAsignarSugerencias() {
+        ASIENTOPROG_pintarSugerenciasProveedor();
+        const badge = document.getElementById('sugProvContador');
+        if (badge) {
+            badge.textContent = ASIENTOPROG_sugProv.length;
+            badge.classList.toggle('d-none', ASIENTOPROG_sugProv.length === 0);
+        }
+        delete ASIENTOPROG_dimNueva['proveedor'];
+        ASIENTOPROG_cargarDim('proveedor');
+    }
+
+    window.ASIENTOPROG_abrirSugerenciasProveedor = async function () {
+        const modalEl = document.getElementById('modalSugerenciasProveedor');
+        const lista = document.getElementById('sugProvLista');
+        if (!modalEl || !lista) return;
+
+        const anio = ASIENTOPROG_anioProveedor();
+        const spanAnio = document.getElementById('sugProvAnio');
+        if (spanAnio) {
+            spanAnio.innerHTML = anio
+                ? `<span class="badge bg-primary bg-opacity-10 text-primary border border-primary border-opacity-25 ms-1">compras ${ASIENTOPROG_esc(anio)}</span>`
+                : '';
+        }
+
+        if (!modalEl.dataset.iniciado) {
+            modalEl.dataset.iniciado = '1';
+            document.getElementById('sugProvFiltro')?.addEventListener('input', ASIENTOPROG_pintarSugerenciasProveedor);
+
+            lista.addEventListener('click', async (e) => {
+                const btn = e.target.closest('[data-sug-asignar]');
+                if (!btn) return;
+                const sug = ASIENTOPROG_sugProv.find(s => String(s.id_destino) === btn.dataset.sugAsignar);
+                if (!sug) return;
+                btn.disabled = true;
+                btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span>';
+                try {
+                    const n = await ASIENTOPROG_asignarSugerencia(sug);
+                    ASIENTOPROG_toastSug('success', `${sug.destino}: se copiaron ${n} cuenta(s) de ${sug.origen}.`);
+                    ASIENTOPROG_trasAsignarSugerencias();
+                } catch (err) {
+                    btn.disabled = false;
+                    btn.innerHTML = '<i class="bi bi-check2 me-1"></i> Asignar';
+                    if (window.Swal) Swal.fire('Atención', err.message, 'warning');
+                }
+            });
+
+            document.getElementById('sugProvAsignarTodas')?.addEventListener('click', async (e) => {
+                const filtro = ((document.getElementById('sugProvFiltro') || {}).value || '').trim().toLowerCase();
+                const visibles = ASIENTOPROG_sugProv.filter(s => !filtro
+                    || [s.destino, s.origen, s.destino_identificacion, ...(s.ejemplos || [])].join(' ').toLowerCase().includes(filtro));
+                if (!visibles.length) return;
+                if (window.Swal) {
+                    const ok = await Swal.fire({
+                        icon: 'question',
+                        title: 'Asignar sugerencias',
+                        html: `Se copiarán las cuentas sugeridas a <b>${visibles.length}</b> proveedor(es).<br>Revise antes la lista: cada uno queda con las cuentas del proveedor indicado.`,
+                        showCancelButton: true,
+                        confirmButtonText: 'Sí, asignar',
+                        cancelButtonText: 'Cancelar',
+                    });
+                    if (!ok.isConfirmed) return;
+                }
+                const boton = e.currentTarget;
+                boton.disabled = true;
+                let hechos = 0;
+                const fallos = [];
+                for (const sug of visibles) {
+                    try { await ASIENTOPROG_asignarSugerencia(sug); hechos++; }
+                    catch (err) { fallos.push(`${sug.destino}: ${err.message}`); }
+                }
+                boton.disabled = false;
+                ASIENTOPROG_trasAsignarSugerencias();
+                if (fallos.length && window.Swal) {
+                    Swal.fire('Asignación parcial', `Se asignaron ${hechos}. No se pudo en ${fallos.length}:<br><small>${fallos.map(ASIENTOPROG_esc).join('<br>')}</small>`, 'warning');
+                } else {
+                    ASIENTOPROG_toastSug('success', `Se asignaron cuentas a ${hechos} proveedor(es).`);
+                }
+            });
+        }
+
+        bootstrap.Modal.getOrCreateInstance(modalEl).show();
+        lista.innerHTML = '<div class="text-muted small py-3 text-center"><span class="spinner-border spinner-border-sm me-1"></span> Buscando proveedores que compran lo mismo...</div>';
+        try {
+            await ASIENTOPROG_fetchSugerenciasProveedor();
+            ASIENTOPROG_pintarSugerenciasProveedor();
+        } catch (err) {
+            lista.innerHTML = `<div class="text-danger text-center py-3">${ASIENTOPROG_esc(err.message)}</div>`;
         }
     };
 

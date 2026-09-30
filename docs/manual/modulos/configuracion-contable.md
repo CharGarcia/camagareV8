@@ -5,8 +5,8 @@ categoria: Contabilidad
 ruta_modulo: modulos/configuracion-contable
 tipo: modulo
 visibilidad: admin
-etiquetas: configuracion contable, cuentas por documento, asiento automatico, parametrizacion, ventas, compras, cierre, tipo de produccion, bien, servicio, filtro por año, periodo, listado de proveedores, listado de clientes, cobros y pagos, ingresos y egresos, forma de pago, cuenta bancaria, efectivo, misma cuenta en los dos bloques, formas hermanas, cheques y transferencias, mismo banco, numero de cuenta, nomina, rol de pagos, prestamo quirografario, prestamo hipotecario, prestamo empresa, prestamos iess, cuentas opcionales, costo de ventas, costo de venta, inventario, asiento sin costo, no sale el costo, cuenta de iva del cliente, reglas por cliente, buscar proveedor, buscar cliente, buscar ficha, filtrar fichas, muchos proveedores, cuentas faltantes, modulos que contabilizan, apagar asientos, no generar asientos, no contabilizar, desactivar contabilidad, interruptor, consignaciones sin asiento, aviso de asientos pendientes, asientos pendientes en el balance, proveedores sin cuentas, clientes sin cuentas, productos sin cuentas, pendientes de configurar, retenciones en venta, retenciones en compra, retencion de renta, no aparecen las retenciones, codigo de retencion, catalogo de retenciones sri, codigo ats, codigo del anexo, retencion mal asignada, codigo de retencion no existe, en que documento esta el error, retencion con codigo invalido
-version: 1.21
+etiquetas: configuracion contable, cuentas por documento, asiento automatico, parametrizacion, ventas, compras, cierre, tipo de produccion, bien, servicio, filtro por año, periodo, listado de proveedores, listado de clientes, cobros y pagos, ingresos y egresos, forma de pago, cuenta bancaria, efectivo, misma cuenta en los dos bloques, formas hermanas, cheques y transferencias, mismo banco, numero de cuenta, nomina, rol de pagos, prestamo quirografario, prestamo hipotecario, prestamo empresa, prestamos iess, cuentas opcionales, costo de ventas, costo de venta, inventario, asiento sin costo, no sale el costo, cuenta de iva del cliente, reglas por cliente, buscar proveedor, buscar cliente, buscar ficha, filtrar fichas, muchos proveedores, cuentas faltantes, modulos que contabilizan, apagar asientos, no generar asientos, no contabilizar, desactivar contabilidad, interruptor, consignaciones sin asiento, aviso de asientos pendientes, asientos pendientes en el balance, proveedores sin cuentas, clientes sin cuentas, productos sin cuentas, pendientes de configurar, retenciones en venta, retenciones en compra, retencion de renta, no aparecen las retenciones, codigo de retencion, catalogo de retenciones sri, codigo ats, codigo del anexo, retencion mal asignada, codigo de retencion no existe, en que documento esta el error, retencion con codigo invalido, sugerencias, sugerir cuentas, proveedores que compran lo mismo, copiar cuentas de otro proveedor, misma cuenta para varios proveedores, gasolineras, proveedores parecidos
+version: 1.22
 orden: 5
 estado: activo
 ---
@@ -133,6 +133,33 @@ El botón de la papelera de la cabecera elimina **toda la configuración de esa
 entidad** de una vez: pide confirmación y, al aceptar, esa entidad vuelve a
 contabilizarse con la configuración General. Solo afecta al tipo de asiento que
 se esté viendo — si el mismo producto tiene reglas en Compras, esas se conservan.
+
+## Sugerencias: proveedores que compran lo mismo
+
+En *Adquisiciones de Compras/Servicios → Reglas por Proveedores*, el botón
+**Sugerencias** (con el número de sugerencias al lado) lista los proveedores que
+**todavía no tienen cuentas propias** pero a los que se les compra lo mismo que a
+un proveedor **ya configurado**. Ejemplo: si la gasolinera ATIMASA ya tiene sus
+cuentas y a otras gasolineras también se les compra *EXTRA*, se sugiere darles
+las mismas cuentas.
+
+- Cada sugerencia muestra el proveedor sin cuentas, el proveedor del que se
+  copiarían, cuántas cuentas son y los ítems que comparten.
+- Si varios proveedores configurados comparten ítems con el mismo proveedor, se
+  sugiere el que más ítems tiene en común y se indica cuántas opciones más hay.
+- **Asignar** le copia **todas** las cuentas propias de ese proveedor (conceptos
+  e IVA por tarifa). Después se pueden ajustar en su tarjeta como cualquier otra.
+- **Asignar las visibles** aplica de una vez las sugerencias que queden tras
+  usar el filtro del modal; pide confirmación antes.
+- Nunca se modifica un proveedor que ya tenga cuentas propias: por eso solo
+  aparecen proveedores sin configurar.
+- Se comparan las **descripciones** de los ítems de compras y liquidaciones de
+  compra, sin distinguir mayúsculas, tildes ni signos. Si en el filtro de año hay
+  un año elegido, solo se toman las compras de ese año.
+
+Es una sugerencia: revise que el proveedor de verdad sea del mismo giro antes de
+asignar. Un ítem genérico (por ejemplo *SERVICIO*) puede emparejar proveedores
+que no tienen nada que ver.
 
 ## Buscar entre las fichas ya agregadas
 
@@ -409,6 +436,9 @@ ingresos o egresos. Solo falta asignar la cuenta.
 
 ## Historial de cambios
 
+- **1.22** — Nuevo botón **Sugerencias** en *Reglas por Proveedores*: propone copiar las
+  cuentas de un proveedor ya configurado a los proveedores sin cuentas a los que se les
+  compra lo mismo.
 - **1.21** — El aviso *No existe en el catálogo de retenciones SRI* (retenciones en
   venta y en compra) lista las retenciones que usan ese código, con enlace a cada una,
   y solo aparece si esas retenciones tienen valor retenido.

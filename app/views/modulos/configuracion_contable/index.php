@@ -348,6 +348,10 @@ $base = BASE_URL;
                                 <button type="button" class="btn btn-outline-primary btn-sm text-nowrap" onclick="ASIENTOPROG_abrirModalItems('proveedor')">
                                     <i class="bi bi-box-seam me-1"></i> Informaci&oacute;n de adquisiciones
                                 </button>
+                                <button type="button" class="btn btn-outline-success btn-sm text-nowrap" onclick="ASIENTOPROG_abrirSugerenciasProveedor()" title="Proveedores sin cuentas que compran lo mismo que un proveedor ya configurado">
+                                    <i class="bi bi-lightbulb me-1"></i> Sugerencias
+                                    <span class="badge bg-success ms-1 d-none" id="sugProvContador"></span>
+                                </button>
                             </div>
                         </div>
                         <div class="col-12" id="dim_faltantes_proveedor"></div>
@@ -899,6 +903,31 @@ $base = BASE_URL;
                 <input type="text" id="modalProvSearch" class="form-control form-control-sm mb-2" placeholder="Filtrar..." autocomplete="off">
                 <div class="small text-muted mb-2"><i class="bi bi-check-circle-fill text-success"></i> = ya tiene cuentas asignadas en esta regla.</div>
                 <div id="modalProvLista" class="list-group list-group-flush small"></div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal: Sugerencias de cuentas por proveedor (compran lo mismo que otro ya configurado) -->
+<div class="modal fade" id="modalSugerenciasProveedor" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered modal-dialog-scrollable" style="max-width:760px;">
+        <div class="modal-content">
+            <div class="modal-header py-2">
+                <h6 class="modal-title mb-0"><i class="bi bi-lightbulb me-1 text-success"></i> Sugerencias de cuentas por proveedor <span id="sugProvAnio"></span></h6>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+            </div>
+            <div class="modal-body">
+                <div class="small text-muted mb-2">
+                    <i class="bi bi-info-circle me-1"></i>
+                    Proveedores <b>sin cuentas propias</b> que compran los mismos &iacute;tems que un proveedor <b>ya configurado</b>.
+                    <b>Asignar</b> le copia todas las cuentas de ese proveedor; despu&eacute;s puede ajustarlas en su tarjeta.
+                </div>
+                <input type="text" id="sugProvFiltro" class="form-control form-control-sm mb-2" placeholder="Filtrar por proveedor o &iacute;tem..." autocomplete="off">
+                <div id="sugProvLista" class="list-group list-group-flush small"></div>
+            </div>
+            <div class="modal-footer py-2">
+                <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Cerrar</button>
+                <button type="button" class="btn btn-success btn-sm d-none" id="sugProvAsignarTodas"><i class="bi bi-check2-all me-1"></i> Asignar las visibles</button>
             </div>
         </div>
     </div>

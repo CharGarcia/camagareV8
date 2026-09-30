@@ -5,8 +5,8 @@ categoria: Configuración global
 ruta_modulo: config/migrar-mysql
 tipo: modulo
 visibilidad: superadmin
-etiquetas: migracion, migrar, sistema anterior, mysql, vendedor asignado, vendedor del cliente, clientes sin vendedor, vendedores migracion, asignacion de vendedor, migrar empresas, establecimientos migracion, ruc base, elegir establecimiento, fusionar establecimientos, cliente separado, serie, series, punto de emision, secuencial, numeracion, numero repetido, ingresos sin serie, egresos sin serie, pedidos sin serie, liquidacion pendiente de pago, liquidaciones de compra migradas, pagos migrados, egresos migrados, pago no aparece, cuentas por pagar migradas, compra pendiente de pago, compra pagada sale pendiente, pago no cruza, retencion en borrador, marcas, marca del producto, productos sin marca, catalogo de marcas, migrar marcas, cambios de productos migrados, cambio sin factura, factura del cambio, nup del cambio, recambio, registro de cambio, facturacion de consignacion migrada, unidad duplicada para devolver, iva inflado, iva multiplicado, iva x1000, asiento de compra mal, iva del asiento mayor, nota de credito compra asiento, contabilidad migrada, alumnos, migrar alumnos, estudiantes, campus, niveles, cursos, horarios, pension, servicios del alumno, descuento del alumno, alumnos activos, alumnos pasivos, representante del alumno
-version: 1.13
+etiquetas: migracion, migrar, sistema anterior, mysql, vendedor asignado, vendedor del cliente, clientes sin vendedor, vendedores migracion, asignacion de vendedor, migrar empresas, establecimientos migracion, ruc base, elegir establecimiento, fusionar establecimientos, cliente separado, serie, series, punto de emision, secuencial, numeracion, numero repetido, ingresos sin serie, egresos sin serie, pedidos sin serie, liquidacion pendiente de pago, liquidaciones de compra migradas, pagos migrados, egresos migrados, pago no aparece, cuentas por pagar migradas, compra pendiente de pago, compra pagada sale pendiente, pago no cruza, retencion en borrador, marcas, marca del producto, productos sin marca, catalogo de marcas, migrar marcas, cambios de productos migrados, cambio sin factura, factura del cambio, nup del cambio, recambio, registro de cambio, facturacion de consignacion migrada, unidad duplicada para devolver, iva inflado, iva multiplicado, iva x1000, asiento de compra mal, iva del asiento mayor, nota de credito compra asiento, contabilidad migrada, alumnos, migrar alumnos, estudiantes, campus, niveles, cursos, horarios, pension, servicios del alumno, descuento del alumno, alumnos activos, alumnos pasivos, representante del alumno, vehiculos, migrar vehiculos, placas, placa, chasis, chasis 123456789, año 2022, propietario privado, vehiculos faltantes, vehiculo sin orden, car wash migracion
+version: 1.14
 orden: 2
 estado: activo
 ---
@@ -274,16 +274,53 @@ asiento venía mal.
   usar el script `database/migrations/20260923_corregir_iva_x1000_asientos_migrados.sql`
   sin volver a migrar.
 
+## Vehículos: uno por placa
+
+La entidad **Vehículos (uno por placa)** trae al módulo **Vehículos** todas las
+placas del sistema anterior. Ese sistema no tenía un catálogo de vehículos: guardaba
+una copia del vehículo en cada orden de servicio. Por eso el resumen cuenta **placas
+distintas** (no filas), y cada placa llega como **un solo vehículo** con:
+
+- los datos de su orden **más reciente** (marca, chasis, año, propietario), campo por
+  campo: si la última orden dejó un campo vacío, se toma el de la orden anterior;
+- el **cliente** de la orden más reciente que tenga uno.
+
+Qué hace con cada placa:
+
+- **Placa nueva**: se crea el vehículo.
+- **Placa que ya estaba registrada a mano** en el sistema nuevo (con o sin guion,
+  p. ej. `PIW0394` y `PIW-0394` se consideran la misma): se **vincula** y no se
+  cambia ningún dato.
+- **Placa que creó una migración anterior** (esta entidad o la de Órdenes de
+  servicio): se **actualiza** con los datos más recientes. Si alguien editó el
+  vehículo después de migrarlo, se respetan sus cambios y solo se completan los
+  campos vacíos. El resultado lo informa como *vehículos actualizados*.
+
+**Valores de relleno**: el formulario del sistema anterior venía precargado con
+chasis `123456789`, año `2022` y propietario `Privado`, y casi nadie los cambiaba.
+Esos valores **no se migran** (el campo queda vacío). El año 2022 se descarta solo
+cuando el chasis también es el de relleno: con un chasis real, 2022 es un año real.
+Al volver a ejecutar la entidad, también se limpian los vehículos migrados antes
+con esos valores.
+
+- Migre **Clientes** antes, para que el vehículo quede enlazado a su cliente.
+- Ejecútela **antes de Órdenes de servicio**: las órdenes usan el vehículo de su
+  placa. Si ya migró las órdenes, ejecútela igual: corrige sus vehículos y trae las
+  placas que faltaban (las de órdenes sin servicios, que no se migran).
+- Se puede ejecutar varias veces sin duplicar nada.
+
 ## Órdenes de servicio (Car-Wash / mecánica)
 
 La entidad **Órdenes de servicio (Car-Wash / mecánica)** trae las órdenes del módulo
 *Orden mecánica* del sistema anterior al módulo **Servicio de car wash**: cada orden
-con sus servicios y productos, el vehículo (se crea en Vehículos si no existe, uno
-por placa), el cliente, fechas de recepción y entrega, próxima cita y
-observaciones. Conserva el número de orden como secuencial, en la serie que más
-usaban sus facturas.
+con sus servicios y productos, el vehículo (usa el de su placa; si no existe, lo
+crea sin los valores de relleno), el cliente, fechas de recepción y entrega,
+próxima cita y observaciones. Conserva el número de orden como secuencial, en la
+serie que más usaban sus facturas.
 
-- Migre antes **Clientes**, **Productos**, **Bodegas**, **Facturas** y **Recibos**: así
+- Las órdenes **sin servicios ni productos** no se migran; sus vehículos sí llegan
+  con la entidad **Vehículos**.
+- Migre antes **Clientes**, **Vehículos**, **Productos**, **Bodegas**, **Facturas** y **Recibos**: así
   cada orden queda enlazada con la factura o el recibo en que se cobró (pestaña
   *Facturación* de la orden).
 - Si Facturas o Recibos se migran después, vuelva a ejecutar las órdenes: se
@@ -401,6 +438,12 @@ sistema anterior tampoco los aplicaba al facturar por alumno).
   datos reales todavía).
 
 ## Historial de cambios
+
+- **1.14** — Nueva entidad **Vehículos (uno por placa)**: trae todas las placas del
+  sistema anterior (también las de órdenes sin servicios, que antes se perdían), con
+  los datos de su orden más reciente y su cliente. Ya no se migran los valores de
+  relleno (chasis 123456789, año 2022, propietario "Privado"), y al re-ejecutarla se
+  corrigen los vehículos migrados antes.
 
 - **1.13** — Nuevas entidades **Alumnos: campus**, **Alumnos: niveles / cursos** y
   **Alumnos activos**: migran solo los alumnos activos, con su cliente

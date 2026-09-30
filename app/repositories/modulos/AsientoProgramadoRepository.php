@@ -1529,4 +1529,126 @@ class AsientoProgramadoRepository extends BaseRepository
         }
         return $mapa;
     }
+
+    /**
+     * Condición (sobre alias `ap`) de las reglas propias de un proveedor en el asiento de compras
+     * (adquisiciones_compras, que cubre compras y liquidaciones): sus conceptos y sus overrides de IVA.
+     * Requiere `LEFT JOIN asientos_tipo at ON at.id = ap.id_asiento_tipo`.
+     */
+    private const COND_REGLA_COMPRA_PROVEEDOR = "ap.tipo_referencia = 'proveedor' AND ap.eliminado = false
+          AND (at.tipo_asiento = 'adquisiciones_compras' OR (ap.id_asiento_tipo = 0 AND ap.direccion_iva = 'compra'))";
+
+    /**
+     * Sugerencias de «Reglas por Proveedores»: para cada proveedor SIN cuentas propias en el asiento
+     * de compras, el proveedor YA configurado con el que comparte más ítems comprados (compras y
+     * liquidaciones), para copiarle sus cuentas. Ej.: varias gasolineras que venden «EXTRA».
+     *
+     * El ítem se compara por la descripción normalizada (minúsculas, sin tildes ni signos), porque
+     * en compras llega como texto libre del proveedor (compras_detalle.id_producto suele ser NULL).
+     * Es solo una sugerencia: el usuario decide si la aplica.
+     *
+     * @return array<int, array<string, mixed>> id_destino, destino, id_origen, origen, comunes,
+     *         items_destino, ejemplos (json), alternativas, cuentas_origen
+     */
+    public function getSugerenciasReglasProveedor(int $idEmpresa, ?int $anio = null): array
+    {
+        $norm = "NULLIF(TRIM(regexp_replace(lower(translate(COALESCE(d.descripcion, ''), 'ÁÉÍÓÚÜÑáéíóúüñ', 'AEIOUUNaeiouun')), '[^a-z0-9]+', ' ', 'g')), '')";
+        $params = [':e' => $idEmpresa];
+        $filtroCompra = $filtroLiq = '';
+        if ($anio !== null) {
+            $filtroCompra = ' AND EXTRACT(YEAR FROM c.fecha_emision) = :anio';
+            $filtroLiq    = ' AND EXTRACT(YEAR FROM l.fecha_emision) = :anio2';
+            $params[':anio']  = $anio;
+            $params[':anio2'] = $anio;
+        }
+        $cond = self::COND_REGLA_COMPRA_PROVEEDOR;
+
+        $sql = "WITH items AS (
+                    SELECT c.id_proveedor, {$norm} AS item
+                    FROM compras_detalle d
+                    INNER JOIN compras_cabecera c ON c.id = d.id_compra
+                    WHERE c.id_empresa = :e AND c.eliminado = false{$filtroCompra}
+                    UNION
+                    SELECT l.id_proveedor, {$norm}
+                    FROM liquidaciones_detalle d
+                    INNER JOIN liquidaciones_cabecera l ON l.id = d.id_cabecera
+                    WHERE l.id_empresa = :e2 AND l.eliminado = false{$filtroLiq}
+                ),
+                configurados AS (
+                    SELECT ap.id_referencia AS id_proveedor, COUNT(*) AS cuentas
+                    FROM asientos_programados ap
+                    LEFT JOIN asientos_tipo at ON at.id = ap.id_asiento_tipo
+                    WHERE ap.id_empresa = :e3 AND {$cond}
+                    GROUP BY ap.id_referencia
+                ),
+                comunes AS (
+                    SELECT dst.id_proveedor AS id_destino, src.id_proveedor AS id_origen,
+                           COUNT(*) AS comunes,
+                           (array_agg(dst.item ORDER BY dst.item))[1:5] AS ejemplos
+                    FROM items dst
+                    INNER JOIN items src ON src.item = dst.item AND src.id_proveedor <> dst.id_proveedor
+                    INNER JOIN configurados cf ON cf.id_proveedor = src.id_proveedor
+                    WHERE dst.item IS NOT NULL
+                      AND NOT EXISTS (SELECT 1 FROM configurados x WHERE x.id_proveedor = dst.id_proveedor)
+                    GROUP BY 1, 2
+                ),
+                ranking AS (
+                    SELECT cm.*,
+                           ROW_NUMBER() OVER (PARTITION BY cm.id_destino ORDER BY cm.comunes DESC, cm.id_origen) AS rn,
+                           COUNT(*) OVER (PARTITION BY cm.id_destino) - 1 AS alternativas
+                    FROM comunes cm
+                )
+                SELECT r.id_destino, pd.razon_social AS destino, pd.identificacion AS destino_identificacion,
+                       r.id_origen, po.razon_social AS origen,
+                       r.comunes, r.alternativas, cf.cuentas AS cuentas_origen,
+                       (SELECT COUNT(*) FROM items i WHERE i.id_proveedor = r.id_destino AND i.item IS NOT NULL) AS items_destino,
+                       array_to_json(r.ejemplos) AS ejemplos
+                FROM ranking r
+                INNER JOIN proveedores pd ON pd.id = r.id_destino AND pd.id_empresa = :e4 AND pd.eliminado = false
+                INNER JOIN proveedores po ON po.id = r.id_origen AND po.id_empresa = :e5 AND po.eliminado = false
+                INNER JOIN configurados cf ON cf.id_proveedor = r.id_origen
+                WHERE r.rn = 1
+                ORDER BY r.comunes DESC, pd.razon_social ASC
+                LIMIT 300";
+        $params += [':e2' => $idEmpresa, ':e3' => $idEmpresa, ':e4' => $idEmpresa, ':e5' => $idEmpresa];
+        $st = $this->db->prepare($sql);
+        $st->execute($params);
+        return $st->fetchAll(PDO::FETCH_ASSOC);
+    }
+
+    /**
+     * Reglas propias del proveedor en el asiento de compras (conceptos + overrides de IVA de compra),
+     * con los campos necesarios para replicarlas en otro proveedor.
+     */
+    public function getReglasCompraProveedor(int $idEmpresa, int $idProveedor): array
+    {
+        $cond = self::COND_REGLA_COMPRA_PROVEEDOR;
+        $sql = "SELECT ap.id, ap.id_asiento_tipo, ap.id_cuenta, ap.codigo_tarifa_iva, ap.direccion_iva
+                FROM asientos_programados ap
+                LEFT JOIN asientos_tipo at ON at.id = ap.id_asiento_tipo
+                WHERE ap.id_empresa = :e AND ap.id_referencia = :id AND {$cond}
+                ORDER BY ap.id";
+        $st = $this->db->prepare($sql);
+        $st->execute([':e' => $idEmpresa, ':id' => $idProveedor]);
+        return $st->fetchAll(PDO::FETCH_ASSOC);
+    }
+
+    /**
+     * Candado transaccional sobre las reglas de un proveedor (se libera al COMMIT/ROLLBACK):
+     * serializa «¿ya tiene reglas? → copiar» para que dos copias simultáneas no las dupliquen.
+     */
+    public function lockReglasProveedor(int $idEmpresa, int $idProveedor): void
+    {
+        $st = $this->db->prepare("SELECT pg_advisory_xact_lock(hashtext('reglas_proveedor:' || :e || ':' || :id))");
+        $st->execute([':e' => $idEmpresa, ':id' => $idProveedor]);
+    }
+
+    /** Razón social del proveedor si pertenece a la empresa y no está eliminado; null si no. */
+    public function getNombreProveedorEmpresa(int $idEmpresa, int $idProveedor): ?string
+    {
+        $st = $this->db->prepare("SELECT razon_social FROM proveedores WHERE id = :id AND id_empresa = :e AND eliminado = false");
+        $st->execute([':id' => $idProveedor, ':e' => $idEmpresa]);
+        $nombre = $st->fetchColumn();
+        return $nombre === false ? null : (string) $nombre;
+    }
 }

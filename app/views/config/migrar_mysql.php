@@ -675,6 +675,11 @@ $base = BASE_URL;
                     const muestra = (d.iva_x1000_muestra || []).map(x => String(x).replace(/</g, '&lt;')).join(', ');
                     html += `<br><span class="text-warning small">🛠 ${fmt(d.iva_x1000_corregidos)} asiento(s) de compra venían del sistema anterior con el IVA multiplicado por 1000 → se corrigieron al importar${muestra ? ': ' + muestra : ''}${d.iva_x1000_corregidos > (d.iva_x1000_muestra || []).length ? '…' : ''}</span>`;
                 }
+                // Vehículos: los creados por una migración anterior se re-sincronizan con los datos más
+                // recientes de su placa y pierden los valores de relleno (chasis 123456789, año 2022, "Privado").
+                if (d.actualizados > 0 && ent === 'vehiculos') {
+                    html += `<br><span class="text-success small">🛠 ${fmt(d.actualizados)} vehículo(s) ya migrado(s) se actualizaron (datos más recientes, sin valores de relleno).</span>`;
+                }
                 if (d.revividos > 0) {
                     html += `<br><span class="text-success small">♻ ${fmt(d.revividos)} estaban eliminado(s) y se restauraron (volvieron a mostrarse).</span>`;
                 }

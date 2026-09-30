@@ -274,6 +274,79 @@ class AsientoProgramadoService
     }
 
     /**
+     * Sugerencia de «Reglas por Proveedores»: copia al proveedor destino todas las cuentas propias
+     * que el proveedor origen tiene en el asiento de compras (conceptos + IVA por tarifa).
+     *
+     * Solo aplica si el destino aún no tiene cuentas propias en ese asiento (no pisa una
+     * configuración existente). Todo en una transacción, bajo candado del destino.
+     *
+     * @return int cuentas copiadas
+     */
+    public function copiarReglasCompraProveedor(int $idOrigen, int $idDestino, int $idEmpresa, int $idUsuario): int
+    {
+        if ($idOrigen <= 0 || $idDestino <= 0 || $idOrigen === $idDestino) {
+            throw new Exception('Proveedores no válidos.');
+        }
+        $origen  = $this->repo->getNombreProveedorEmpresa($idEmpresa, $idOrigen);
+        $destino = $this->repo->getNombreProveedorEmpresa($idEmpresa, $idDestino);
+        if ($origen === null || $destino === null) {
+            throw new Exception('El proveedor no existe o no pertenece a su empresa.');
+        }
+
+        $this->db->beginTransaction();
+        try {
+            $this->repo->lockReglasProveedor($idEmpresa, $idDestino);
+
+            if ($this->repo->getReglasCompraProveedor($idEmpresa, $idDestino)) {
+                throw new Exception("{$destino} ya tiene cuentas propias: revíselas en su tarjeta.");
+            }
+            $reglas = $this->repo->getReglasCompraProveedor($idEmpresa, $idOrigen);
+            if (!$reglas) {
+                throw new Exception("{$origen} ya no tiene cuentas propias que copiar.");
+            }
+
+            $creadas = [];
+            foreach ($reglas as $r) {
+                $creadas[] = $this->repo->create([
+                    'id_empresa'        => $idEmpresa,
+                    'id_usuario'        => $idUsuario,
+                    'id_asiento_tipo'   => (int) $r['id_asiento_tipo'],
+                    'id_cuenta'         => (int) $r['id_cuenta'],
+                    'id_referencia'     => $idDestino,
+                    'tipo_referencia'   => 'proveedor',
+                    'referencia_texto'  => null,
+                    'codigo_tarifa_iva' => $r['codigo_tarifa_iva'],
+                    'direccion_iva'     => $r['direccion_iva'],
+                    'created_by'        => $idUsuario,
+                ]);
+            }
+
+            $this->logService->registrar(
+                $idUsuario,
+                $idEmpresa,
+                'COPIAR REGLAS PROVEEDOR',
+                'asientos_programados',
+                $idDestino,
+                null,
+                [
+                    'id_proveedor_origen'  => $idOrigen,
+                    'proveedor_origen'     => $origen,
+                    'id_proveedor_destino' => $idDestino,
+                    'proveedor_destino'    => $destino,
+                    'reglas_origen'        => array_column($reglas, 'id'),
+                    'reglas_creadas'       => $creadas,
+                ]
+            );
+
+            $this->db->commit();
+            return count($creadas);
+        } catch (\Throwable $e) {
+            $this->db->rollBack();
+            throw $e;
+        }
+    }
+
+    /**
      * Obtiene la preferencia de método de contabilización de la empresa para un tipo de asiento.
      */
     public function getMetodoPreferencia(int $idEmpresa, string $tipoAsiento): string
