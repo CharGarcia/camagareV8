@@ -111,9 +111,9 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                         titulo: 'Filtros de órdenes de compra',
                         inputWidth: 420,
                         extraId: 'fmExtraOC',   // columnas + PDF + Excel, pegados al final del grupo
-                        // Pestaña Detalles: búsqueda libre dentro de las órdenes (ítems y compras vinculadas).
+                        // Pestaña "Búsqueda por detalle": búsqueda libre dentro de las órdenes (ítems y compras vinculadas).
                         busquedaDetalle: {
-                            tab: 'Detalles',
+                            tab: 'Búsqueda por detalle',
                             url: `<?= $urlBaseOc ?>/buscarDetallesAjax`,
                             label: 'Buscar libremente dentro de las órdenes de compra',
                             placeholder: 'Producto, código, descripción, notas, número de la compra vinculada...',

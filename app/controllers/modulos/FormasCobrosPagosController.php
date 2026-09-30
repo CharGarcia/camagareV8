@@ -30,13 +30,15 @@ class FormasCobrosPagosController extends BaseModuloController
         $idEmpresa = (int) $_SESSION['id_empresa'];
         $prefsVista = PreferenciasHelper::getPreferenciasVista($this->getRutaModulo());
 
-        $buscar   = trim($_GET['b'] ?? $_POST['b'] ?? '');
-        $page     = max(1, (int) ($_GET['page'] ?? 1));
+        // URL limpia: búsqueda, página y orden llegan por sesión (estadoListadoAjax).
+        $estado   = $this->leerEstadoListado();
+        $buscar   = $estado['b'];
+        $page     = $estado['page'];
         // leer() deja la columna como identificador y la dirección en ASC/DESC: la vista las
         // imprime dentro de su <script>.
         $orden    = OrdenListado::leer($prefsVista, 'nombre');
-        $ordenCol = OrdenListado::primeraCol($orden, 'nombre');
-        $ordenDir = OrdenListado::primeraDir($orden);
+        $ordenCol = $estado['sort'] !== '' ? $estado['sort'] : OrdenListado::primeraCol($orden, 'nombre');
+        $ordenDir = $estado['dir'] !== '' ? $estado['dir'] : OrdenListado::primeraDir($orden);
         $perPage  = 20;
 
         $result = $this->service->getListado($idEmpresa, $buscar, $page, $perPage, $ordenCol, $ordenDir);

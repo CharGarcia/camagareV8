@@ -30,10 +30,12 @@ class OpcionesIngresoEgresoController extends BaseModuloController
         $idEmpresa = (int)$_SESSION['id_empresa'];
         $prefsVista = PreferenciasHelper::getPreferenciasVista($this->getRutaModulo());
 
-        $buscar   = trim($_GET['b'] ?? $_POST['b'] ?? '');
-        $page     = max(1, (int) ($_GET['page'] ?? 1));
-        $ordenCol = trim($_GET['sort'] ?? $prefsVista['__ordenCol__'] ?? 'nombre');
-        $ordenDir = strtoupper(trim($_GET['dir'] ?? $prefsVista['__ordenDir__'] ?? 'ASC'));
+        // URL limpia: búsqueda, página y orden llegan por sesión (estadoListadoAjax).
+        $estado   = $this->leerEstadoListado();
+        $buscar   = $estado['b'];
+        $page     = $estado['page'];
+        $ordenCol = $estado['sort'] !== '' ? $estado['sort'] : trim($prefsVista['__ordenCol__'] ?? 'nombre');
+        $ordenDir = $estado['dir'] !== '' ? $estado['dir'] : strtoupper(trim($prefsVista['__ordenDir__'] ?? 'ASC'));
         $perPage  = 20;
 
         $result = $this->service->getListado($idEmpresa, $buscar, $page, $perPage, $ordenCol, $ordenDir);

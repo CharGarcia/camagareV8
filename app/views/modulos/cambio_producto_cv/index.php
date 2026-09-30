@@ -127,10 +127,10 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                         titulo: 'Filtros de cambios de productos',
                         inputWidth: 420,
                         extraId: 'fmExtraCAM',   // columnas + PDF + Excel, pegados al final del grupo
-                        // Pestaña Detalles: búsqueda libre dentro de los cambios (líneas devueltas y
+                        // Pestaña "Búsqueda por detalle": búsqueda libre dentro de los cambios (líneas devueltas y
                         // entregadas con lote/NUP, bodega y documento de origen).
                         busquedaDetalle: {
-                            tab: 'Detalles',
+                            tab: 'Búsqueda por detalle',
                             url: `<?= $urlBaseCam ?>/buscarDetallesAjax`,
                             label: 'Buscar libremente dentro de los cambios',
                             placeholder: 'Producto, código, lote, NUP, bodega, factura de venta o documento de origen...',

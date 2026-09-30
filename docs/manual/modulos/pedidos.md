@@ -6,7 +6,7 @@ ruta_modulo: modulos/pedidos
 tipo: modulo
 visibilidad: todos
 etiquetas: pedidos, pedido desde proforma, proforma a pedido, enviar a pedidos, generar pedido desde cotizacion, pedido de cliente, vendedor del cliente, asesor, quien atiende al cliente, solicitado por, quien hizo el pedido, usuario que registro el pedido, buscar pedidos, buscador, filtros, filtrar pedidos, buscar por producto, buscar por cliente, ordenar por estado y fecha de entrega, ordenar por dos columnas, encargo, orden de pedido, reserva, entregas, despacho, agenda de entrega, hora de entrega, responsable de entrega, rango horario, pedidos pendientes, aparecen pedidos que no busque, resultados que no corresponden, buscar por producto en el listado, imprimir, impresora
-version: 1.13
+version: 1.14
 orden: 0
 estado: activo
 ---
@@ -168,13 +168,13 @@ de filtros (botón del embudo):
 
 | Dato | Dónde se busca |
 |------|----------------|
-| Códigos y nombres de los productos pedidos | Pestaña *Detalles* |
-| N° de las consignaciones y facturas que tomaron el pedido | Pestaña *Detalles* |
+| Códigos y nombres de los productos pedidos | Pestaña *Búsqueda por detalle* |
+| N° de las consignaciones y facturas que tomaron el pedido | Pestaña *Búsqueda por detalle* |
 | Identificación / RUC del cliente | Pestaña *Pedido* → **RUC / cédula** |
 | Usuario que registró | Pestaña *Pedido* |
 | Estado | Pestaña *Pedido* |
 
-La pestaña *Detalles* es además más clara para eso: muestra **qué línea o qué
+La pestaña *Búsqueda por detalle* es además más clara para eso: muestra **qué línea o qué
 documento coincidió**, mientras que desde el cuadro el pedido aparecía en la
 lista sin que se viera el motivo.
 
@@ -197,7 +197,7 @@ Los selectores *Serie*, *Usuario que registró* y *Responsable de entrega* lista
 solo lo que la empresa ya usó en sus pedidos. El *total* es la suma de las líneas
 del pedido.
 
-**Pestaña Detalles** (lo que hay dentro del pedido). Es un único cuadro,
+**Pestaña Búsqueda por detalle** (lo que hay dentro del pedido). Es un único cuadro,
 **Buscar libremente dentro de los pedidos**: escriba un producto, un código, una
 cantidad o el número de una consignación o factura, y aparece la lista de **cada
 línea que coincide** con el pedido al que pertenece (número, fecha, cliente y
@@ -326,6 +326,9 @@ esas líneas primero. El detalle está en el manual de **Proformas**, sección
 
 ## Historial de cambios
 
+- **1.14** — En la ventana de filtros, la pestaña *Detalles* se llama ahora
+  **Búsqueda por detalle**, y la ventana ya no tiene barra de desplazamiento
+  vertical propia: se muestra completa.
 - **1.13** — La lista de productos del detalle también se despliega en **Chrome
   de iPad**: ahí podía no aparecer aunque en Safari sí.
 

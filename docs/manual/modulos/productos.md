@@ -6,7 +6,7 @@ ruta_modulo: modulos/productos
 tipo: modulo
 visibilidad: todos
 etiquetas: productos, buscar producto, buscador, filtros, filtrar productos, productos bajo el minimo, reponer stock, buscar por variante, buscar por codigo de proveedor, kits, chips, ordenar por dos columnas, ordenar por categoria y descripcion, articulos, servicios, catalogo, precio, costo, iva, ice, stock, codigo de barras, inventariable, varios precios, lista de precios, mayorista, carga masiva, importar productos, precio editable, cambiar precio en la comanda, precio variable, envio a domicilio, delivery, servicio a domicilio, recargo por servicio, excluir propina, restaurante
-version: 1.8
+version: 1.9
 orden: 10
 estado: activo
 ---
@@ -168,7 +168,7 @@ cuyo saldo actual (suma de todas las bodegas) está por debajo: es la lista de l
 que hay que reponer. En *Estado*, **Inactivo** incluye cualquier producto que no
 esté activo, igual que en la columna del listado.
 
-**Pestaña Detalles** (lo que hay dentro del producto). Es un único cuadro,
+**Pestaña Búsqueda por detalle** (lo que hay dentro del producto). Es un único cuadro,
 **Buscar libremente dentro de los productos**: escriba una variante, el código o
 nombre de un componente de un kit, el nombre de una lista de precios o el código
 o nombre de un proveedor, y aparece la lista de **cada detalle que coincide**
@@ -240,6 +240,9 @@ aparecer al facturar.
 
 ## Historial de cambios
 
+- **1.9** — En la ventana de filtros, la pestaña *Detalles* se llama ahora
+  **Búsqueda por detalle**, y la ventana ya no tiene barra de desplazamiento
+  vertical propia: se muestra completa.
 - **1.8** — El **nombre del producto admite hasta 300 caracteres** (antes 200), el
   mismo máximo que el SRI acepta en la descripción de cada ítem de la factura. Aplica
   al formulario de Productos, a la creación rápida desde los documentos (facturas,

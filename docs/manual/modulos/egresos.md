@@ -6,7 +6,7 @@ ruta_modulo: modulos/egresos
 tipo: modulo
 visibilidad: todos
 etiquetas: egresos, egreso, pago, buscar egreso, buscador, filtros, filtrar egresos, buscar cheque, buscar por compra pagada, buscar por beneficiario, filtro de fechas, chips, editar egreso, modificar egreso, corregir egreso, cambiar monto pagado, quitar factura del egreso, cambiar beneficiario, periodo cerrado, solo lectura, no deja editar, no puedo modificar, ordenar por dos columnas, ordenar por beneficiario y fecha, pagar, dinero que sale, proveedor, empleado, cheque, transferencia, comprobante de egreso, excel, exportar, anular cheque, cheque anulado, cheque dañado, reimprimir cheque, combinar conceptos, mezclar conceptos, otros conceptos, varios documentos, gasto sin factura, tipo real, tipo de egreso, decimo cuarto, decimo tercero, prestamos, rol de pago, numero de egreso, serie, secuencial, numero repetido, numero duplicado, numeracion por fecha, numero con el año, reiniciar numeracion, reinicio anual, reinicio mensual, correlativo por año, correlativo por mes, modo de numeracion, orden de formas de pago, saldo de la forma de pago, saldo disponible, ocultar saldo, aparecen documentos que no busque, resultados que no corresponden, buscar por numero de documento cobrado, cuenta del anticipo, anticipo sin cuenta, anticipo a proveedor, cuenta contable del concepto, cuenta por defecto, falta cuenta contable, pagar compra y dar anticipo, listado no se actualiza, no aparece el egreso guardado, no se ve el cambio, vuelve a la primera pagina, se pierde la pagina, refrescar listado, recargar tabla, fila resaltada, observaciones automaticas, observaciones se llenan solas, observaciones se completan solas, glosa del egreso, concepto del comprobante, descripcion del pago, pago factura de compra, falta un centavo, centavo pendiente, no puedo pagar el centavo, diferencia de un centavo, saldo de 0.01, queda un centavo, referencia muy larga, no guarda el egreso, no se guarda el pago, error al guardar egreso, value too long, texto demasiado largo, se corta la referencia, limite de caracteres, saldo equivocado, valor a pagar incorrecto, saldo menor al real, nota de venta, retencion de otro proveedor, descuenta una retencion que no es, imprimir, impresora, siguiente egreso, egreso anterior, navegar entre egresos, pasar al siguiente, flechas del modal, recorrer egresos, pago duplicado, pagar dos veces, doble pago, doble clic, egreso duplicado, ya no tiene saldo suficiente, declaracion ya pagada
-version: 1.32
+version: 1.33
 orden: 20
 estado: activo
 ---
@@ -436,12 +436,12 @@ de filtros:
 
 | Dato | Dónde se busca |
 |------|----------------|
-| N° de los documentos pagados (compras, liquidaciones, roles…) | Pestaña *Detalles* |
+| N° de los documentos pagados (compras, liquidaciones, roles…) | Pestaña *Búsqueda por detalle* |
 | Identificación / RUC del proveedor o del empleado | Pestaña *Egreso* → **RUC / cédula** |
 | Usuario que registró | Pestaña *Egreso* |
 | Tipo y Estado | Pestaña *Egreso* |
 
-La pestaña *Detalles* busca dentro de los egresos —documentos pagados, su
+La pestaña *Búsqueda por detalle* busca dentro de los egresos —documentos pagados, su
 descripción, montos y cuenta contable, y también las formas de pago con su
 referencia, cheque, beneficiario del cheque y operación bancaria— y muestra **qué
 línea coincidió**, mientras que desde el cuadro el egreso aparecía sin que se
@@ -461,7 +461,7 @@ Limpiar filtros.
 
 El selector *Tipo de egreso* lista solo los tipos que la empresa ya usó.
 
-**Pestaña Detalles** (lo que hay dentro del egreso). Es un único cuadro,
+**Pestaña Búsqueda por detalle** (lo que hay dentro del egreso). Es un único cuadro,
 **Buscar libremente dentro de los egresos**: escriba un número de compra o de
 rol, una descripción, una cuenta contable, una forma de pago, una referencia,
 un número de cheque, el beneficiario del cheque o un monto, y aparece la lista
@@ -575,6 +575,9 @@ proveedores), pasa por la misma revisión al guardar:
 
 ## Historial de cambios
 
+- **1.33** — En la ventana de filtros, la pestaña *Detalles* se llama ahora
+  **Búsqueda por detalle**, y la ventana ya no tiene barra de desplazamiento
+  vertical propia: se muestra completa.
 - **1.32** — Corregido: al agregar una forma de pago, la línea (y las observaciones automáticas) guardaban el saldo que muestra la lista (`Banco Pichincha — $1,250.00`); ahora se registra solo el nombre de la forma.
 - **1.31** — Los pagos bancarios por **transferencia, depósito o débito** toman como fecha de cobro la fecha de emisión del egreso; solo el cheque queda pendiente de confirmar su Fecha Banco en Control Bancario.
 - **1.30** — No se puede pagar dos veces lo mismo. Corregido: los pagos de  **saldos iniciales por pagar**, **facturas de importación** y **declaraciones**  se rechazaban siempre con *"ya no tiene saldo suficiente (disponible: $0.00)"*;  ahora se valida su saldo real. Una declaración solo admite un pago vigente, y  el botón **Guardar** ya no permite un doble clic que generaba dos egresos.  Nueva sección *Cómo se evita pagar dos veces lo mismo*.

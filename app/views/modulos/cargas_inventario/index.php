@@ -171,9 +171,9 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosColumnasOcultas($vistaConfig)
                         titulo: 'Filtros de cargas de inventario',
                         inputWidth: 420,
                         extraId: 'fmExtraCI',   // columnas + PDF + Excel, pegados al final del grupo
-                        // Pestaña Detalles: búsqueda libre dentro de las líneas de las cargas.
+                        // Pestaña "Búsqueda por detalle": búsqueda libre dentro de las líneas de las cargas.
                         busquedaDetalle: {
-                            tab: 'Detalles',
+                            tab: 'Búsqueda por detalle',
                             url: `<?= $urlBase ?>/buscarDetallesAjax`,
                             label: 'Buscar libremente dentro de las cargas',
                             placeholder: 'Código o nombre de producto, bodega, lote, NUP, observación, error, cantidad...',

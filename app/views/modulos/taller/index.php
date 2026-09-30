@@ -185,9 +185,9 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                         titulo: 'Filtros de órdenes de trabajo',
                         inputWidth: 420,
                         extraId: 'fmExtraTLL',   // columnas + PDF + Excel, pegados al final del grupo
-                        // Pestaña Detalles: búsqueda libre dentro de las órdenes.
+                        // Pestaña "Búsqueda por detalle": búsqueda libre dentro de las órdenes.
                         busquedaDetalle: {
-                            tab: 'Detalles',
+                            tab: 'Búsqueda por detalle',
                             url: '<?= $urlBase ?>/buscarDetallesAjax',
                             label: 'Buscar libremente dentro de las órdenes',
                             placeholder: 'Repuesto, mano de obra, código, técnico, trabajo realizado, nota de bitácora...',

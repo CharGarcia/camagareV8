@@ -148,7 +148,25 @@
                 if (tab) tab.cargar(document.getElementById('liq-id')?.value || 0);
             });
         }
+
+        // Cada vez que se alza el modal arranca en la pestaña «Liquidación». Si quedaba
+        // activa otra (Pagos, Retenciones, Asiento…) de la liquidación vista antes, esa
+        // pestaña no volvía a dispararse (ya estaba activa) y mostraba los datos viejos.
+        const modalLiqEl = document.getElementById('modalLiquidacion');
+        if (modalLiqEl) {
+            modalLiqEl.addEventListener('show.bs.modal', (e) => {
+                if (e.target === modalLiqEl) lcMostrarPestanaLiquidacion();
+            });
+        }
     });
+
+    function lcMostrarPestanaLiquidacion() {
+        const tabBtn = document.getElementById('tab-liq-compra-btn');
+        if (tabBtn) bootstrap.Tab.getOrCreateInstance(tabBtn).show();
+        // Sub-pestañas del pie (Info. Adicional / Pagos SRI / Sustento): la primera.
+        const subTab = document.querySelector('#modalLiquidacion [data-bs-target="#subtab-info-extra"]');
+        if (subTab) bootstrap.Tab.getOrCreateInstance(subTab).show();
+    }
 
     // ── Pestaña Asiento contable ─────────────────────────────────────────────
     // Componente compartido: muestra el asiento de la liquidación y —con permiso de actualizar
@@ -250,9 +268,7 @@
 
         document.getElementById('tbodyDetalles').innerHTML = '';
         
-        // Tab Default
-        const tabBtn = document.getElementById('tab-liq-compra-btn');
-        if (tabBtn) bootstrap.Tab.getOrCreateInstance(tabBtn).show();
+        lcMostrarPestanaLiquidacion();
 
         const pt = document.getElementById('liq-punto');
         if (pt && pt.value) syncSecuencialFn(pt.value);
@@ -409,10 +425,15 @@
 
     function abrirModalLiquidacionVerFn(row) {
         const data = JSON.parse(row.dataset.row);
-        fetch(`${API_URL}/getLiquidacionAjax?id=${data.id}`)
+        // Solo pinta la ÚLTIMA liquidación pedida: si se abren dos seguidas, la respuesta
+        // tardía de la primera no debe sobrescribir el modal de la segunda.
+        const token = (window.LC_aperturaToken = (window.LC_aperturaToken || 0) + 1);
+        fetch(`${API_URL}/getLiquidacionAjax?id=${data.id}`, { cache: 'no-store' })
             .then(r => r.json())
             .then(res => {
+                if (token !== window.LC_aperturaToken) return;
                 if (res.ok) {
+                    lcMostrarPestanaLiquidacion();
                     liquidacionActual = res.cabecera;
                     detalles = res.detalles.map(d => ({
                         ...d,
@@ -857,10 +878,17 @@
         } catch (e) {}
     }
 
+    // Auto-guardado debounced (ver lcRegistrarAutoGuardado). lcLimpiarBorrador() lo cancela:
+    // un guardado programado por la última tecla antes de "Guardar" disparaba después del
+    // limpiado —mientras la liquidación recién creada aún no tenía liq-id— y volvía a dejar
+    // en localStorage un documento ya hecho ("sin guardar" sin motivo).
+    let lcDebouncedGuardar = null;
+
     function lcLimpiarBorrador() {
         try {
             localStorage.removeItem(LC_STORAGE_KEY);
         } catch (e) {}
+        if (lcDebouncedGuardar) lcDebouncedGuardar.cancel();
     }
 
     function lcRestaurar(estado) {
@@ -910,17 +938,19 @@
     function lcRegistrarAutoGuardado() {
         const form = document.getElementById('formLiquidacion');
         if (!form) return;
-        const debouncedGuardar = debounce(lcAutoGuardar, 800);
-        form.addEventListener('input', debouncedGuardar);
-        form.addEventListener('change', debouncedGuardar);
+        lcDebouncedGuardar = debounce(lcAutoGuardar, 800);
+        form.addEventListener('input', lcDebouncedGuardar);
+        form.addEventListener('change', lcDebouncedGuardar);
     }
 
     function debounce(func, wait) {
         let timeout;
-        return function(...args) {
+        const debounced = function(...args) {
             clearTimeout(timeout);
             timeout = setTimeout(() => func.apply(this, args), wait);
         };
+        debounced.cancel = () => clearTimeout(timeout);
+        return debounced;
     }
 
 
@@ -1228,6 +1258,9 @@
                 const idPrevio   = parseInt(document.getElementById('liq-id')?.value || '0');
                 const idGuardado = parseInt(res.id) || idPrevio;
                 lcLimpiarBorrador();
+                // Fijar el id ya, sin esperar el fetch de abrirModalLiquidacionVer:
+                // mientras liq-id esté vacío el auto-guardado la trata como nueva.
+                if (idGuardado > 0) document.getElementById('liq-id').value = idGuardado;
 
                 // NO se cierra el modal: el usuario lo cierra a mano. Así puede
                 // corregir la fecha y reenviar al SRI sin reabrir.
@@ -1670,7 +1703,17 @@
             // Retenciones (vienen calculadas del servidor para lo guardado)
             const totalRetenido = parseFloat(res.total_retenido || 0);
 
-            const saldo = Math.max(0, totalLiq - totalAbonado - totalRetenido);
+            // Pagada en el sistema anterior (liquidación migrada hasta 2020, que allá no registraba
+            // pagos): saldo 0 sin egreso, igual que en Cuentas por pagar y en el listado.
+            const pagadaAnterior = cab.pagada_sistema_anterior === true || cab.pagada_sistema_anterior === 't';
+            const restante = Math.max(0, totalLiq - totalAbonado - totalRetenido);
+            const saldo = pagadaAnterior ? 0 : restante;
+            const txtPagada = alertaPagada.querySelector('p');
+            if (txtPagada) {
+                txtPagada.textContent = (pagadaAnterior && Math.round(restante * 100) > 0)
+                    ? 'Pagada en el sistema anterior: al migrarla no tenía pagos registrados (antes de 2021 ese sistema no los guardaba).'
+                    : 'El saldo pendiente de esta liquidación es de $0.00.';
+            }
             document.getElementById('pagoTotalCompra').textContent = totalLiq.toFixed(2);
             document.getElementById('pagoTotalRetencion').textContent = totalRetenido.toFixed(2);
             document.getElementById('pagoTotalAbonado').textContent = totalAbonado.toFixed(2);

@@ -187,15 +187,21 @@ window.abrirModalCompra = function (el) {
         // usuario ve el modal "vacío" y piensa que la compra no tiene datos.
         document.getElementById('cmp-modal-loader')?.classList.remove('d-none');
 
-        // Cargar datos completos
-        fetch(`${window.CMG_urlBase}/getCompraAjax?id=${row.id}`)
+        // Cargar datos completos. Solo pinta la ÚLTIMA compra pedida: si se abren dos
+        // seguidas, la respuesta tardía de la primera no debe sobrescribir la segunda.
+        const token = (window.MC_aperturaToken = (window.MC_aperturaToken || 0) + 1);
+        fetch(`${window.CMG_urlBase}/getCompraAjax?id=${row.id}`, { cache: 'no-store' })
             .then(r => r.json())
             .then(res => {
+                if (token !== window.MC_aperturaToken) return;
                 if (!res.ok) { Swal.fire('Error', res.mensaje, 'error'); return; }
                 CMG_poblarModal(res.data);
+                mcMostrarPrimeraPestana();
             }).catch(e => console.error(e))
             .finally(() => {
-                document.getElementById('cmp-modal-loader')?.classList.add('d-none');
+                if (token === window.MC_aperturaToken) {
+                    document.getElementById('cmp-modal-loader')?.classList.add('d-none');
+                }
             });
     } catch (e) {
         console.error('Error al abrir modal para editar:', e);
@@ -223,7 +229,27 @@ function mcAsientoTab() {
     return _mcAsientoTab;
 }
 
+/**
+ * Deja el modal en la pestaña «Detalle de Compra» (y la sub-pestaña «Info Adicional»).
+ * Si quedaba activa otra pestaña (Pagos, Retenciones, Asiento…) de la compra vista
+ * antes, esa pestaña no volvía a dispararse y mostraba los datos de la anterior.
+ */
+function mcMostrarPrimeraPestana() {
+    const tabDetalle = document.getElementById('tab_compra');
+    if (tabDetalle) bootstrap.Tab.getOrCreateInstance(tabDetalle).show();
+    const subTab = document.querySelector('#modalCompra [data-bs-target="#mc-subtab-info-adicional"]');
+    if (subTab) bootstrap.Tab.getOrCreateInstance(subTab).show();
+}
+
 document.addEventListener('DOMContentLoaded', function () {
+    // Cada vez que se alza el modal arranca en la primera pestaña.
+    const modalCompraEl = document.getElementById('modalCompra');
+    if (modalCompraEl) {
+        modalCompraEl.addEventListener('show.bs.modal', function (e) {
+            if (e.target === modalCompraEl) mcMostrarPrimeraPestana();
+        });
+    }
+
     const btnTab = document.getElementById('tab_asiento');
     if (btnTab) {
         btnTab.addEventListener('shown.bs.tab', function () {

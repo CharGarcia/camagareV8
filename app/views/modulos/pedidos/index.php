@@ -194,11 +194,11 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                         titulo: 'Filtros de pedidos',
                         inputWidth: 420,
                         extraId: 'fmExtraPED',   // columnas + PDF + Excel, pegados al final del grupo
-                        // Pestaña Detalles: búsqueda libre dentro de los pedidos (productos
+                        // Pestaña "Búsqueda por detalle": búsqueda libre dentro de los pedidos (productos
                         // pedidos y consignaciones/facturas que los consumieron). Cada
                         // coincidencia dice a qué pedido pertenece.
                         busquedaDetalle: {
-                            tab: 'Detalles',
+                            tab: 'Búsqueda por detalle',
                             url: `<?= BASE_URL ?>/<?= $rutaModulo ?>/buscarDetallesAjax`,
                             label: 'Buscar libremente dentro de los pedidos',
                             placeholder: 'Producto, código, cantidad, Nº de consignación o factura...',

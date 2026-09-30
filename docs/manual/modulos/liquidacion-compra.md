@@ -5,8 +5,8 @@ categoria: Compras
 ruta_modulo: modulos/liquidacion-compra
 tipo: modulo
 visibilidad: todos
-etiquetas: liquidacion de compra, liquidacion, proveedor sin factura, comprobante 03, sri, sustento, eliminar, borrar, borrador, anular, buscar liquidacion, buscador, filtros, filtrar liquidaciones, buscar por producto, saldo pendiente, estado de pago, chips, aparecen documentos que no busque, resultados que no corresponden, la busqueda trae otros documentos, totales, subtotal, descuento, iva, redondeo, centavos, decimales, decimales de precio, calculo del iva, al subtotal, linea por linea, no cuadra, diferencia de un centavo, error en diferencias, exento, no objeto de iva, codigo del item, item sin codigo, item sin descripcion, falta el codigo, error en estructura de comprobante, rechazado por estructura, no autorizado, informacion adicional, ruc proveedor, campo que no se puede borrar, no me deja eliminar la fila, concepto muy largo, limite de caracteres, maximo 100 caracteres, value too long, no se pudo guardar la liquidacion, registrar pago, pagar liquidacion, egreso de liquidacion, pestaña pagos, no deja pagar, error al registrar pago, secuencial de egreso, imprimir, impresora, retencion, emitir retencion, retener liquidacion, pestaña retenciones, comprobante de retencion
-version: 1.18
+etiquetas: liquidacion de compra, liquidacion, proveedor sin factura, comprobante 03, sri, sustento, eliminar, borrar, borrador, anular, buscar liquidacion, buscador, filtros, filtrar liquidaciones, buscar por producto, saldo pendiente, estado de pago, chips, aparecen documentos que no busque, resultados que no corresponden, la busqueda trae otros documentos, totales, subtotal, descuento, iva, redondeo, centavos, decimales, decimales de precio, calculo del iva, al subtotal, linea por linea, no cuadra, diferencia de un centavo, error en diferencias, exento, no objeto de iva, codigo del item, item sin codigo, item sin descripcion, falta el codigo, error en estructura de comprobante, rechazado por estructura, no autorizado, informacion adicional, ruc proveedor, campo que no se puede borrar, no me deja eliminar la fila, concepto muy largo, limite de caracteres, maximo 100 caracteres, value too long, no se pudo guardar la liquidacion, registrar pago, pagar liquidacion, egreso de liquidacion, pestaña pagos, no deja pagar, error al registrar pago, secuencial de egreso, imprimir, impresora, retencion, emitir retencion, retener liquidacion, pestaña retenciones, comprobante de retencion, columna saldo, cuanto se debe, saldo por pagar, datos de otra liquidacion, modal no se actualiza, pestaña liquidacion, pagada en el sistema anterior, liquidaciones migradas pendientes, liquidaciones 2020, liquidaciones antiguas sin pago, sistema anterior no registraba pagos
+version: 1.22
 orden: 40
 estado: activo
 ---
@@ -134,7 +134,7 @@ consultan en la ventana de filtros (botón del embudo):
 | Dato | Dónde se busca |
 |------|----------------|
 | Clave de acceso y N° de autorización | Pestaña *Liquidación* → **N° autorización** |
-| Productos o servicios de la liquidación (código y descripción) | Pestaña *Detalles* |
+| Productos o servicios de la liquidación (código y descripción) | Pestaña *Búsqueda por detalle* |
 | Correo y Estado | Pestaña *Liquidación* |
 
 En un comprobante electrónico la clave de acceso y el número de autorización son
@@ -161,7 +161,7 @@ Los selectores *Serie*, *Sustento tributario* y *Usuario* listan solo lo que la
 empresa ya usó. El *estado de pago* y el *saldo pendiente* se calculan con los
 pagos registrados en Egresos y las retenciones no anuladas de la liquidación.
 
-**Pestaña Detalles** (lo que hay dentro de la liquidación). Es un único cuadro,
+**Pestaña Búsqueda por detalle** (lo que hay dentro de la liquidación). Es un único cuadro,
 **Buscar libremente dentro de las liquidaciones**: escriba un producto o
 servicio, un código, una forma de pago SRI, un plazo o un dato de la
 información adicional, y aparece la lista de **cada línea que coincide** con la
@@ -172,6 +172,43 @@ la abre directamente.
 **Chips.** Cada filtro aplicado aparece como una etiqueta **dentro del cuadro de
 búsqueda**. La **×** quita solo ese filtro, y con el cuadro vacío la tecla
 **Retroceso** quita el último.
+
+## Columna Saldo del listado
+
+La columna **Saldo** muestra lo que falta pagar de cada liquidación: el total
+menos los pagos registrados en Egresos (no anulados) y las retenciones emitidas
+(no anuladas). Es el mismo valor que usa el filtro *Saldo pendiente*.
+
+- En **rojo**, si todavía hay saldo por pagar.
+- En **verde** ($0.00), si ya está pagada por completo.
+- Con un guion (—), si la liquidación está **anulada**.
+
+Se puede ordenar el listado por esta columna, ocultarla con el botón de columnas,
+y sale también en el PDF y el Excel del listado.
+
+## Liquidaciones pagadas en el sistema anterior
+
+El sistema anterior no registraba los pagos de las liquidaciones hasta 2020. Por
+eso, las liquidaciones **migradas con fecha hasta el 31-12-2020** que llegaban sin
+pagos quedan marcadas como **pagadas en el sistema anterior**:
+
+- Su saldo es **$0.00** en este listado, en **Cuentas por pagar**, en la ficha y
+  el estado de cuenta del **proveedor** y en el **Reporte de cartera** (ahí
+  aparece un abono *Pagada en el sistema anterior* por lo que les faltaba).
+- No aparecen entre las liquidaciones **pendientes de pago** de **Egresos** ni
+  admiten un pago nuevo; la pestaña **Pagos** lo explica.
+- **No se creó ningún egreso**: no mueven caja ni bancos, y sus asientos,
+  declaraciones y ATS no cambian.
+
+Solo aplica a liquidaciones que vinieron del sistema anterior; las registradas en
+este sistema nunca se marcan.
+
+## Al abrir una liquidación
+
+La ventana de la liquidación se abre **siempre en la pestaña «Liquidación»**, aunque
+la última vez se haya cerrado en Pagos, Retenciones, Asiento contable o SRI. Así
+se ven de inmediato los datos de la liquidación que se acaba de abrir; las demás
+pestañas cargan su información al entrar en ellas.
 
 ## Documentos del módulo
 
@@ -286,6 +323,22 @@ cierran en **Contabilidad → Períodos Contables**; reabrir el período permite
 la operación de inmediato.
 
 ## Historial de cambios
+
+- **1.22** — Las liquidaciones migradas hasta 2020 que llegaban sin pagos (el
+  sistema anterior no los registraba) quedan **pagadas en el sistema anterior**:
+  saldo $0.00 en todo el sistema, sin crear egresos.
+- **1.21** — Nueva columna **Saldo** en el listado (también en PDF y Excel,
+  ordenable). Corregido: al abrir una liquidación después de haber visto otra, la
+  ventana podía quedar en la pestaña de la anterior (Pagos, Retenciones…) con sus
+  datos; ahora siempre abre en la pestaña **Liquidación** con la información del
+  documento abierto.
+- **1.20** — En la ventana de filtros, la pestaña *Detalles* se llama ahora
+  **Búsqueda por detalle**, y la ventana ya no tiene barra de desplazamiento
+  vertical propia: se muestra completa.
+- **1.19** — Corregido: el aviso **«Liquidación sin guardar»** podía aparecer al
+  abrir una liquidación nueva aunque la anterior ya se hubiera guardado (pasaba
+  al pulsar *Guardar* justo después de escribir). Si el aviso sale una última
+  vez con una liquidación que ya existe, elegir **Nueva liquidación** lo descarta.
 
 - **1.18** — El botón **Emitir Retención** de la pestaña **Retenciones** ahora
   funciona: abre el comprobante de retención con los datos de la liquidación ya

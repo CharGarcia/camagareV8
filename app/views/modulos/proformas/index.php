@@ -125,11 +125,11 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                     titulo:        'Filtros de proformas',
                     inputWidth:    420,
                     extraId:       'fmExtraPF',   // columnas + PDF + Excel, pegados al final del grupo
-                    // Pestaña Detalles: búsqueda libre dentro de las proformas (productos
+                    // Pestaña "Búsqueda por detalle": búsqueda libre dentro de las proformas (productos
                     // cotizados e información adicional). Cada coincidencia dice a qué
                     // proforma pertenece.
                     busquedaDetalle: {
-                        tab: 'Detalles',
+                        tab: 'Búsqueda por detalle',
                         url: `<?= $urlBase ?>/buscarDetallesAjax`,
                         label: 'Buscar libremente dentro de las proformas',
                         placeholder: 'Producto, código, descripción, cantidad, valor, información adicional...',

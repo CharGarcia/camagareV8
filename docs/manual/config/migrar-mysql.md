@@ -5,8 +5,8 @@ categoria: Configuración global
 ruta_modulo: config/migrar-mysql
 tipo: modulo
 visibilidad: superadmin
-etiquetas: migracion, migrar, sistema anterior, mysql, vendedor asignado, vendedor del cliente, clientes sin vendedor, vendedores migracion, asignacion de vendedor, migrar empresas, establecimientos migracion, ruc base, elegir establecimiento, fusionar establecimientos, cliente separado, serie, series, punto de emision, secuencial, numeracion, numero repetido, ingresos sin serie, egresos sin serie, pedidos sin serie, liquidacion pendiente de pago, liquidaciones de compra migradas, pagos migrados, egresos migrados, pago no aparece, cuentas por pagar migradas, compra pendiente de pago, compra pagada sale pendiente, pago no cruza, retencion en borrador, marcas, marca del producto, productos sin marca, catalogo de marcas, migrar marcas, cambios de productos migrados, cambio sin factura, factura del cambio, nup del cambio, recambio, registro de cambio, facturacion de consignacion migrada, unidad duplicada para devolver, iva inflado, iva multiplicado, iva x1000, asiento de compra mal, iva del asiento mayor, nota de credito compra asiento, contabilidad migrada, alumnos, migrar alumnos, estudiantes, campus, niveles, cursos, horarios, pension, servicios del alumno, descuento del alumno, alumnos activos, alumnos pasivos, representante del alumno, vehiculos, migrar vehiculos, placas, placa, chasis, chasis 123456789, año 2022, propietario privado, vehiculos faltantes, vehiculo sin orden, car wash migracion, cobros de recibos, recibo pendiente migrado, recibo sin abono, pago de recibo no cruza, recibos de venta migrados, saldo de recibo
-version: 1.15
+etiquetas: migracion, migrar, sistema anterior, mysql, vendedor asignado, vendedor del cliente, clientes sin vendedor, vendedores migracion, asignacion de vendedor, migrar empresas, establecimientos migracion, ruc base, elegir establecimiento, fusionar establecimientos, cliente separado, serie, series, punto de emision, secuencial, numeracion, numero repetido, ingresos sin serie, egresos sin serie, pedidos sin serie, liquidacion pendiente de pago, liquidaciones de compra migradas, pagos migrados, egresos migrados, pago no aparece, cuentas por pagar migradas, compra pendiente de pago, compra pagada sale pendiente, pago no cruza, retencion en borrador, marcas, marca del producto, productos sin marca, catalogo de marcas, migrar marcas, cambios de productos migrados, cambio sin factura, factura del cambio, nup del cambio, recambio, registro de cambio, facturacion de consignacion migrada, unidad duplicada para devolver, iva inflado, iva multiplicado, iva x1000, asiento de compra mal, iva del asiento mayor, nota de credito compra asiento, contabilidad migrada, alumnos, migrar alumnos, estudiantes, campus, niveles, cursos, horarios, pension, servicios del alumno, descuento del alumno, alumnos activos, alumnos pasivos, representante del alumno, vehiculos, migrar vehiculos, placas, placa, chasis, chasis 123456789, año 2022, propietario privado, vehiculos faltantes, vehiculo sin orden, car wash migracion, cobros de recibos, recibo pendiente migrado, recibo sin abono, pago de recibo no cruza, recibos de venta migrados, saldo de recibo, liquidaciones 2020, liquidaciones antiguas pendientes, pagada en el sistema anterior, liquidacion sin pago migrada
+version: 1.16
 orden: 2
 estado: activo
 ---
@@ -139,6 +139,25 @@ de aquí). Ese enlace se pierde en dos situaciones:
 
 En ambos casos Cuentas por Pagar muestra la compra pendiente aunque el pago
 exista (ver *Errores frecuentes*).
+
+### Liquidaciones hasta 2020: pagadas en el sistema anterior
+
+El sistema anterior no registraba los pagos de las liquidaciones de compra hasta
+2020, así que las de esos años llegaban **pendientes de pago** aunque estaban
+pagadas. Al migrar **Liquidaciones de compra**, las que cumplen todo esto quedan
+marcadas como **pagadas en el sistema anterior** (saldo $0.00):
+
+- vinieron del sistema anterior (no las que ya existían aquí y solo se vincularon);
+- fecha de emisión hasta el **31-12-2020**;
+- vigentes (no anuladas);
+- con saldo pendiente, **total o parcial**, descontando pagos y retenciones.
+
+No se crea ningún egreso: no mueven caja ni bancos, ni cambian asientos,
+declaraciones o ATS. El resultado lo informa como *liquidaciones hasta 2020
+marcadas como pagadas*. Volver a ejecutar Liquidaciones marca también las migradas
+antes; no desmarca ni duplica nada. Para marcar lo ya migrado sin volver a migrar,
+el SQL `database/migrations/20260930_liquidaciones_pagada_sistema_anterior.sql`
+hace lo mismo en todas las empresas.
 
 ## Cobros de recibos de venta
 
@@ -467,6 +486,9 @@ sistema anterior tampoco los aplicaba al facturar por alumno).
 
 ## Historial de cambios
 
+- **1.16** — **Liquidaciones de compra**: las migradas hasta 2020 con saldo
+  pendiente quedan **pagadas en el sistema anterior** (saldo $0.00, sin egreso),
+  porque ese sistema no registraba sus pagos.
 - **1.15** — **Cobros**: los pagos de recibos de venta se cruzan con su recibo
   migrado (antes llegaban como "otros ingresos" sin enlace y los recibos quedaban
   pendientes). Los recibos migrados con cobro cruzado pasan de Borrador a Emitido.

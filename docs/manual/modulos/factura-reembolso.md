@@ -6,7 +6,7 @@ ruta_modulo: modulos/factura-reembolso
 tipo: modulo
 visibilidad: todos
 etiquetas: factura de reembolso, reembolso de gastos, ats 41, comprobante de venta emitido por reembolso, intermediario, terceros reembolsados, sri, comprobante electronico, buscar factura de reembolso, buscador, filtros, filtrar facturas de reembolso, buscar por proveedor, comprobante de terceros, filtro de fechas, chips, aparecen documentos que no busque, resultados que no corresponden, la busqueda trae otros documentos, informacion adicional, info adicional, limite de caracteres, maximo 300 caracteres, value too long, no se pudo guardar, imprimir, impresora
-version: 1.7
+version: 1.8
 orden: 21
 estado: activo
 ---
@@ -77,8 +77,8 @@ en la ventana de filtros (botón del embudo):
 | Dato | Dónde se busca |
 |------|----------------|
 | Clave de acceso y N° de autorización | Pestaña *Factura de reembolso* |
-| Descripciones de las líneas | Pestaña *Detalles* |
-| Comprobantes de terceros (proveedor, RUC y número) | Pestaña *Detalles* |
+| Descripciones de las líneas | Pestaña *Búsqueda por detalle* |
+| Comprobantes de terceros (proveedor, RUC y número) | Pestaña *Búsqueda por detalle* |
 | Estado | Pestaña *Factura de reembolso* |
 
 En un comprobante electrónico la clave de acceso y el número de autorización son
@@ -104,7 +104,7 @@ Limpiar filtros.
 El selector *Usuario que registró* lista solo a quienes ya registraron facturas
 de reembolso en la empresa, y *Serie* solo las series con facturas guardadas.
 
-**Pestaña Detalles** (lo que hay dentro de la factura). Es un único cuadro,
+**Pestaña Búsqueda por detalle** (lo que hay dentro de la factura). Es un único cuadro,
 **Buscar libremente dentro de las facturas de reembolso**: escriba una
 descripción, un proveedor, un RUC, el número de un comprobante de terceros,
 una forma de pago o un dato de la información adicional, y aparece la lista de
@@ -192,6 +192,9 @@ Contables**; reabrir el período permite la operación de inmediato.
 
 ## Historial de cambios
 
+- **1.8** — En la ventana de filtros, la pestaña *Detalles* se llama ahora
+  **Búsqueda por detalle**, y la ventana ya no tiene barra de desplazamiento
+  vertical propia: se muestra completa.
 - **1.7** — El botón **PDF** del documento pregunta ahora si se quiere
   **Imprimir** (abre el cuadro de impresión con el documento ya cargado),
   **Descargar** o **Ver** en otra pestaña. Ver la guía *Descargar archivos*.

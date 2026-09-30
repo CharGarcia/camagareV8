@@ -6,7 +6,7 @@ ruta_modulo: modulos/roles-pago
 tipo: modulo
 visibilidad: todos
 etiquetas: rol de pago, roles, nomina, sueldo, quincena, semanal, mensual, pago de empleados, descuentos, liquido a recibir, neteo, ingresos de quincena, bono en quincena, horas extra en quincena, observacion, observaciones, detalle de novedad, motivo del descuento, asiento contable, contabilizacion, cuentas de nomina, prestamo quirografario, prestamo hipotecario, prestamo empresa, prestamos iess, aporte iess, base del iess, con iess, sin iess, bonos, comisiones, horas extra, dias no laborados, faltas, dias laborados, sueldo ganado, fondos de reserva, decimo tercero, decimo cuarto, buscar rol de pago, buscador, filtros, filtrar roles, buscar empleado en el rol, buscar rubro, chips, ordenar, ordenamiento, ordenar por periodo, ordenar columnas, orden del listado, periodo mas reciente, imprimir, impresora
-version: 1.10
+version: 1.11
 orden: 30
 estado: activo
 ---
@@ -190,7 +190,7 @@ Limpiar filtros.
 Los selectores *Año del período* y *Usuario que registró* listan solo lo que la
 empresa ya usó.
 
-**Pestaña Detalles** (lo que hay dentro de cada corrida). Es un único cuadro,
+**Pestaña Búsqueda por detalle** (lo que hay dentro de cada corrida). Es un único cuadro,
 **Buscar libremente dentro de los roles de pago**: escriba un empleado, una
 identificación, un cargo, un rubro (*Sueldo*, *Horas suplementarias*, *IESS*,
 *Transporte*…), un valor o la observación de la novedad que originó un rubro, y
@@ -239,6 +239,9 @@ módulo. Para regresar al orden de fábrica, ordene por *Período* de mayor a me
 
 ## Historial de cambios
 
+- **1.11** — En la ventana de filtros, la pestaña *Detalles* se llama ahora
+  **Búsqueda por detalle**, y la ventana ya no tiene barra de desplazamiento
+  vertical propia: se muestra completa.
 - **1.10** — El botón **PDF** del documento pregunta ahora si se quiere
   **Imprimir** (abre el cuadro de impresión con el documento ya cargado),
   **Descargar** o **Ver** en otra pestaña. Ver la guía *Descargar archivos*.

@@ -175,9 +175,9 @@ $estadoLabelMap = [
                         titulo: 'Filtros de importaciones',
                         inputWidth: 420,
                         extraId: 'fmExtraImportaciones',   // columnas + PDF + Excel, pegados al final del grupo
-                        // Pestaña Detalles: búsqueda libre dentro de las importaciones.
+                        // Pestaña "Búsqueda por detalle": búsqueda libre dentro de las importaciones.
                         busquedaDetalle: {
-                            tab: 'Detalles',
+                            tab: 'Búsqueda por detalle',
                             url: `<?= $urlBase ?>/buscarDetallesAjax`,
                             label: 'Buscar libremente dentro de las importaciones',
                             placeholder: 'Producto, código, lote, factura del exterior, gasto, compra o liquidación vinculada...',

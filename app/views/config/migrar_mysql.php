@@ -679,6 +679,10 @@ $base = BASE_URL;
                 if (d.recibos_enlazados > 0) {
                     html += `<br><span class="text-success small">🔗 ${fmt(d.recibos_enlazados)} pago(s) de recibos de venta cruzados con su recibo.</span>`;
                 }
+                // Liquidaciones hasta 2020 sin pagos registrados: el sistema anterior no los guardaba.
+                if (d.pagadas_sistema_anterior > 0) {
+                    html += `<br><span class="text-success small">✔ ${fmt(d.pagadas_sistema_anterior)} liquidación(es) hasta 2020 marcadas como pagadas en el sistema anterior (saldo 0, sin egreso).</span>`;
+                }
                 // Recibos: estado del sistema anterior (Anulado → Anulado, Cerrado → Emitido).
                 if (ent === 'recibos' && (d.anulados > 0 || d.cerrados > 0)) {
                     html += `<br><span class="text-info small">ℹ Estado del sistema anterior: ${fmt(d.anulados)} anulado(s) y ${fmt(d.cerrados)} cerrado(s) (quedan como Emitido).</span>`;

@@ -126,9 +126,9 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                         titulo: 'Filtros de órdenes car-wash',
                         inputWidth: 420,
                         extraId: 'fmExtraCW',   // columnas + PDF + Excel, pegados al final del grupo
-                        // Pestaña Detalles: búsqueda libre dentro de las órdenes (servicios/productos y novedades).
+                        // Pestaña "Búsqueda por detalle": búsqueda libre dentro de las órdenes (servicios/productos y novedades).
                         busquedaDetalle: {
-                            tab: 'Detalles',
+                            tab: 'Búsqueda por detalle',
                             url: '<?= $urlBase ?>/buscarDetallesAjax',
                             label: 'Buscar libremente dentro de las órdenes',
                             placeholder: 'Servicio, producto, código, novedad, monto...',

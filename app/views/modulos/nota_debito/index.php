@@ -180,10 +180,10 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                         titulo: 'Filtros de notas de débito',
                         inputWidth: 420,
                         extraId: 'fmExtraND',   // columnas + PDF + Excel, pegados al final del grupo
-                        // Pestaña Detalles: búsqueda libre dentro de las notas (motivos, formas de
+                        // Pestaña "Búsqueda por detalle": búsqueda libre dentro de las notas (motivos, formas de
                         // pago e información adicional). Cada coincidencia dice a qué nota pertenece.
                         busquedaDetalle: {
-                            tab: 'Detalles',
+                            tab: 'Búsqueda por detalle',
                             url: `<?= BASE_URL ?>/<?= $rutaModulo ?>/buscarDetallesAjax`,
                             label: 'Buscar libremente dentro de las notas de débito',
                             placeholder: 'Motivo, valor, forma de pago, plazo, información adicional...',

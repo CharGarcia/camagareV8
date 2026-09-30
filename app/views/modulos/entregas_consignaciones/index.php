@@ -191,10 +191,10 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                         titulo: 'Filtros de entregas de consignaciones',
                         inputWidth: 420,
                         extraId: 'fmExtraENTC',   // columnas + PDF + Excel, pegados al final del grupo
-                        // Pestaña Detalles: búsqueda libre dentro de las consignaciones (productos con
+                        // Pestaña "Búsqueda por detalle": búsqueda libre dentro de las consignaciones (productos con
                         // lote/NUP y evidencias de entrega), en pendientes y entregadas.
                         busquedaDetalle: {
-                            tab: 'Detalles',
+                            tab: 'Búsqueda por detalle',
                             url: `<?= $urlBaseEnt ?>/buscarDetallesAjax`,
                             label: 'Buscar libremente dentro de las consignaciones',
                             placeholder: 'Producto, código, lote, NUP, bodega, dispositivo u observación de la entrega...',

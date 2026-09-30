@@ -17,7 +17,7 @@
  *     extraId:       'fmExtra',          // opcional: contenedor con botones del módulo (columnas, PDF,
  *                                        // Excel…) que se mueven al final del mismo grupo, pegados
  *     fields: [
- *       // tab:   pestaña del modal (p. ej. 'Ingreso' / 'Detalles'); con una sola no se pintan pestañas
+ *       // tab:   pestaña del modal (p. ej. 'Ingreso'); con una sola no se pintan pestañas
  *       // grupo: encabezado dentro de la pestaña (se pinta cuando cambia)
  *       // col:   ancho Bootstrap dentro del modal (col-md-N); 4 por defecto
  *       { key: 'fecha',   label: 'Fecha',   type: 'date_range',   grupo: 'Documento', col: 6, atajos: true },
@@ -31,7 +31,7 @@
  *     // línea que coincidió y del registro padre. Clic en la fila → onSelect (p. ej. filtrar
  *     // el listado a ese registro con fm.aplicarFiltro({ key:'numero', value: row.numero })).
  *     busquedaDetalle: {
- *       tab: 'Detalles', url: '/modulos/ingresos/buscarDetallesAjax',
+ *       tab: 'Búsqueda por detalle', url: '/modulos/ingresos/buscarDetallesAjax',
  *       label: 'Buscar dentro de los ingresos', placeholder: 'Nº de factura, referencia, cheque…',
  *       columns: [{ key: 'origen', label: 'Tipo' }, { key: 'monto', label: 'Monto', align: 'end' }, …],
  *       onSelect: (row, fm) => fm.aplicarFiltro({ key: 'numero', value: row.numero_ingreso }),
@@ -113,6 +113,10 @@
                 inputWidth: 320,
                 extraId: null,      // id de un contenedor con botones del módulo que se pegan al final del grupo
                 tabDefault: 'General', // pestaña de los campos sin `tab`
+                // Por defecto el cuerpo del modal no tiene scroll vertical propio: crece con su
+                // contenido y, si no cabe en la ventana, se desplaza el modal completo.
+                // true: vuelve al modal-dialog-scrollable de Bootstrap.
+                scrollable: false,
                 // Búsqueda libre dentro de los registros, en una pestaña (ver doc arriba).
                 busquedaDetalle: null, // { tab, url, label, placeholder, hint, minChars, max, columns:[{key,label,align}], onSelect(row, fm), onOpen(row, fm) }
                 fields: [],
@@ -193,7 +197,7 @@
             const wrap = document.createElement('div');
             wrap.innerHTML = `
                 <div class="modal fade fm-modal" id="${id}" tabindex="-1" aria-hidden="true">
-                  <div class="modal-dialog modal-lg modal-dialog-scrollable">
+                  <div class="modal-dialog modal-lg${this.opts.scrollable ? ' modal-dialog-scrollable' : ''}">
                     <div class="modal-content">
                       <div class="modal-header py-2">
                         <h6 class="modal-title fw-bold"><i class="bi bi-funnel me-2 text-primary"></i>${escapeHtml(this.opts.titulo)}</h6>

@@ -6,7 +6,7 @@ ruta_modulo: modulos/consignaciones-ventas
 tipo: modulo
 visibilidad: todos
 etiquetas: consignacion, consignaciones, buscar consignacion, buscador, filtros, filtrar consignaciones, buscar por producto, buscar por lote, buscar por NUP, chips, asesor, vendedor, vendedor del cliente, asesor automatico, mercaderia en consignacion, entrega, deposito, liquidar, facturar consignacion, numeracion por fecha, numero con el año, reiniciar numeracion, reinicio anual, reinicio mensual, correlativo por año, correlativo por mes, modo de numeracion, cargar desde pedido, llamar pedido, lote, vencimiento, caducidad, fecha de vencimiento, NUP, acceso total, registros propios, solo mis documentos, quien ve que, permiso actualizar, no puedo guardar, boton guardar no aparece, no tengo permiso para esta accion, demora al guardar, guardar lento, se queda guardando, estado del pedido, pedido procesado, pedido pendiente, eliminar consignacion, editar consignacion, no puedo eliminar la consignacion, documentos relacionados, el stock no volvio, devolver stock, costo promedio, kardex anulado, pestana pedidos, pedidos relacionados, pedido de la consignacion, pendiente del pedido, asiento no generado, faltan cuentas, asiento incompleto, aparecen documentos que no busque, resultados que no corresponden, buscar por producto en el listado, codigo del producto, codigo de producto, ver codigo, NUP repetido, nup duplicado, serie repetida, el nup no puede repetirse, mismo nup dos productos, nup por lote, cada unidad su nup, numero de serie repetido, el modal se cierra al guardar, no se cierra el modal, seguir en la consignacion, imprimir despues de guardar, guardar y seguir, no contabilizar consignaciones, sin asiento de consignacion, apagar asiento, modulos que contabilizan, enfoque sin reclasificacion, consignacion sin asiento, aviso de asientos pendientes
-version: 1.31
+version: 1.32
 orden: 45
 estado: activo
 ---
@@ -246,8 +246,8 @@ ventana de filtros (botón del embudo):
 
 | Dato | Dónde se busca |
 |------|----------------|
-| Productos consignados, lote y NUP | Pestaña *Detalles* |
-| N° de las facturas de consignación, retornos y cambios de producto | Pestaña *Detalles* |
+| Productos consignados, lote y NUP | Pestaña *Búsqueda por detalle* |
+| N° de las facturas de consignación, retornos y cambios de producto | Pestaña *Búsqueda por detalle* |
 | RUC o cédula del cliente | Pestaña *Consignación* → **RUC / cédula** |
 | Puntos de partida y de llegada | Pestaña *Consignación* |
 | Total | Pestaña *Consignación* → **Total** (mínimo y máximo) |
@@ -255,7 +255,7 @@ ventana de filtros (botón del embudo):
 | Usuario que registró | Pestaña *Consignación* |
 | Estado | Pestaña *Consignación* |
 
-La pestaña *Detalles* es además más clara para eso: muestra **qué línea o qué
+La pestaña *Búsqueda por detalle* es además más clara para eso: muestra **qué línea o qué
 documento coincidió** (el producto, el lote, el número del retorno…), mientras que
 desde el cuadro la consignación aparecía en la lista sin que se viera el motivo.
 
@@ -276,7 +276,7 @@ Los selectores *Serie*, *Usuario que registró*, *Asesor* y *Responsable de
 traslado* listan solo lo que la empresa ya usó en sus consignaciones. *Con
 factura de consignación* cuenta las facturas que no están anuladas.
 
-**Pestaña Detalles** (lo que hay dentro de la consignación). Es un único cuadro,
+**Pestaña Búsqueda por detalle** (lo que hay dentro de la consignación). Es un único cuadro,
 **Buscar libremente dentro de las consignaciones**: escriba un producto, un
 código, un lote, un NUP, una bodega o el número de una factura, retorno o cambio
 relacionado, y aparece la lista de **cada coincidencia** con la consignación a
@@ -455,6 +455,9 @@ Contables**; reabrir el período permite la operación de inmediato.
 
 ## Historial de cambios
 
+- **1.32** — En la ventana de filtros, la pestaña *Detalles* se llama ahora
+  **Búsqueda por detalle**, y la ventana ya no tiene barra de desplazamiento
+  vertical propia: se muestra completa.
 - **1.31** — En **iPad/iPhone** la lista de productos del detalle se despliega
   pegada al campo aunque el teclado en pantalla esté abierto (antes podía quedar
   escondida detrás del teclado). Al tocar el campo, este se sube a la vista para

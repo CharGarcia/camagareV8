@@ -6,7 +6,7 @@ ruta_modulo: modulos/guias_remision
 tipo: modulo
 visibilidad: todos
 etiquetas: guia de remision, guias, traslado, transporte, envio, placa, transportista, sri, mercaderia en transito, ride, pdf, imprimir guia, guia desde transferencia, traslado entre bodegas, traslado entre establecimientos, buscar guia, buscador, filtros, filtrar guias, buscar por producto, filtro de fechas, chips, aparecen documentos que no busque, resultados que no corresponden, la busqueda trae otros documentos
-version: 1.11
+version: 1.12
 orden: 55
 estado: activo
 ---
@@ -196,7 +196,7 @@ la ventana de filtros (botón del embudo):
 | Dato | Dónde se busca |
 |------|----------------|
 | Clave de acceso y N° de autorización | Pestaña *Guía* |
-| Productos transportados (código y descripción) | Pestaña *Detalles* |
+| Productos transportados (código y descripción) | Pestaña *Búsqueda por detalle* |
 | Estado y Correo | Pestaña *Guía* |
 
 En un comprobante electrónico la clave de acceso y el número de autorización son
@@ -223,7 +223,7 @@ Los selectores *Usuario que registró* y *Transportista* listan solo a quienes
 ya aparecen en guías de la empresa, y *Serie* solo las series con guías
 guardadas.
 
-**Pestaña Detalles** (lo que hay dentro de la guía). Es un único cuadro,
+**Pestaña Búsqueda por detalle** (lo que hay dentro de la guía). Es un único cuadro,
 **Buscar libremente dentro de las guías**: escriba un producto, un código, una
 cantidad o un dato de la información adicional, y aparece la lista de **cada
 línea que coincide** con la guía a la que pertenece (número, fecha,
@@ -266,6 +266,9 @@ cargados. Solo queda completar el **destinatario**, el **transportista** y la
 
 ## Historial de cambios
 
+- **1.12** — En la ventana de filtros, la pestaña *Detalles* se llama ahora
+  **Búsqueda por detalle**, y la ventana ya no tiene barra de desplazamiento
+  vertical propia: se muestra completa.
 - **1.11** — El botón **PDF** del documento pregunta ahora si se quiere
   **Imprimir** (abre el cuadro de impresión con el documento ya cargado),
   **Descargar** o **Ver** en otra pestaña. Ver la guía *Descargar archivos*.

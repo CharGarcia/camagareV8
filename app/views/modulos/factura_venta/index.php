@@ -312,11 +312,11 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                         titulo: 'Filtros de facturas',
                         inputWidth: 420,
                         extraId: 'fmExtraFV',   // columnas + PDF + Excel, pegados al final del grupo
-                        // Pestaña Detalles: búsqueda libre dentro de las facturas (productos,
-                        // formas de pago e información adicional). Cada coincidencia dice a
-                        // qué factura pertenece.
+                        // Pestaña "Búsqueda por detalle": búsqueda libre dentro de las facturas
+                        // (productos, formas de pago e información adicional). Cada coincidencia
+                        // dice a qué factura pertenece.
                         busquedaDetalle: {
-                            tab: 'Detalles',
+                            tab: 'Búsqueda por detalle',
                             url: `<?= BASE_URL ?>/<?= $rutaModulo ?>/buscarDetallesAjax`,
                             label: 'Buscar libremente dentro de las facturas',
                             placeholder: 'Producto, código, lote, forma de pago, plazo, información adicional...',
@@ -2108,7 +2108,13 @@ $totalPages = $totalPagesOriginal;
                 // Capturar antes de cualquier limpieza: distingue crear vs actualizar.
                 const esActualizacion = FV_ID_ACTIVO > 0;
                 const idGuardado      = parseInt(json.id) || (esActualizacion ? FV_ID_ACTIVO : 0);
-                fvLimpiarBorrador();
+                // Factura nueva ya creada: su borrador deja de tener sentido. Al actualizar
+                // una existente no se toca, porque el borrador guardado (si lo hay) es de
+                // otra factura nueva que el usuario dejó pendiente.
+                if (!esActualizacion) fvLimpiarBorrador();
+                // Desde aquí FV_ID_ACTIVO queda en el id guardado (abrirModalFacturaVer),
+                // así que fvAutoGuardar ya no vuelve a escribir el borrador.
+                FV_ID_ACTIVO = idGuardado || FV_ID_ACTIVO;
 
                 // NO se cierra el modal automáticamente: el usuario lo cierra a mano.
                 // Así, si el SRI pide corregir la fecha, se ajusta y se reenvía sin
@@ -2248,6 +2254,12 @@ $totalPages = $totalPagesOriginal;
 
     /** Guarda el estado actual en localStorage. */
     function fvAutoGuardar() {
+        // El borrador es solo para facturas NUEVAS. Con una factura ya guardada en el
+        // modal (FV_ID_ACTIVO > 0: recién creada, o abierta desde el listado) no se
+        // escribe nada: tras guardar, el modal recarga la factura y esa carga dispara
+        // eventos change que volvían a dejar en localStorage una factura ya hecha,
+        // mostrando luego el aviso "Factura sin guardar" sin motivo.
+        if (FV_ID_ACTIVO > 0) return;
         try {
             const estado = fvCapturarEstado();
             // Solo guardar si hay algo significativo (cliente o al menos un ítem con producto)
@@ -5746,10 +5758,15 @@ $totalPages = $totalPagesOriginal;
         // Cargar cobros en background para mostrar el botón de pago con tarjeta
         fvCargarCobrosTab();
 
+        // Solo pinta la ÚLTIMA factura pedida: si se abren dos seguidas, la respuesta
+        // tardía de la primera no debe sobrescribir el modal de la segunda.
+        const token = (window.FV_aperturaToken = (window.FV_aperturaToken || 0) + 1);
+
         // Cargar datos completos vÃ­a AJAX
         try {
-            const resp = await fetch(`${B_URL}/${RUTA_MODULO}/getFacturaAjax?id=${id}`);
+            const resp = await fetch(`${B_URL}/${RUTA_MODULO}/getFacturaAjax?id=${id}`, { cache: 'no-store' });
             const json = await resp.json();
+            if (token !== window.FV_aperturaToken) return;
             if (!json.ok) {
                 Swal.fire({ icon: 'error', title: 'No se pudo cargar la factura', text: json.mensaje || json.error || 'Intenta cerrar y volver a abrir esta factura.' });
                 return;
@@ -6381,10 +6398,13 @@ $totalPages = $totalPagesOriginal;
             console.error('Error cargando factura:', err);
             Swal.fire({ icon: 'error', title: 'No se pudo cargar la factura', text: 'Ocurrió un error de conexión. Intenta cerrar y volver a abrir esta factura.' });
         } finally {
-            // Liberar el bloqueo: a partir de aquÃ­ cualquier cambio manual de punto de emisiÃ³n
-            // podrÃ¡ volver a cargar el siguiente consecutivo normalmente
-            FV_BLOQUEAR_SECUENCIAL = false;
-            document.getElementById('fv-modal-loader')?.classList.add('d-none');
+            // Una carga reemplazada por otra más nueva no toca nada: la nueva decide.
+            if (token === window.FV_aperturaToken) {
+                // Liberar el bloqueo: a partir de aquÃ­ cualquier cambio manual de punto de emisiÃ³n
+                // podrÃ¡ volver a cargar el siguiente consecutivo normalmente
+                FV_BLOQUEAR_SECUENCIAL = false;
+                document.getElementById('fv-modal-loader')?.classList.add('d-none');
+            }
         }
     };
 
@@ -7847,6 +7867,21 @@ $totalPages = $totalPagesOriginal;
     document.getElementById('tab-fv-asiento-btn')?.addEventListener('shown.bs.tab', function() {
         fvCargarAsiento(FV_ID_ACTIVO);
     });
+
+    // Cada vez que se alza el modal arranca en la pestaña «Factura de venta» (y, abajo,
+    // en «Info. Adicional»). Si quedaba activa otra pestaña (Pagos, Retenciones, Notas…)
+    // de la factura vista antes, esa pestaña no volvía a dispararse y mostraba datos viejos.
+    (function () {
+        const modalFvEl = document.getElementById('modalNuevaFactura');
+        if (!modalFvEl) return;
+        modalFvEl.addEventListener('show.bs.modal', function (e) {
+            if (e.target !== modalFvEl) return;
+            const tabVenta = document.getElementById('tab-fv-venta-btn');
+            if (tabVenta) bootstrap.Tab.getOrCreateInstance(tabVenta).show();
+            const subTab = modalFvEl.querySelector('[data-bs-target="#m-subtab-info"]');
+            if (subTab) bootstrap.Tab.getOrCreateInstance(subTab).show();
+        });
+    })();
 
 </script>
 <?php 

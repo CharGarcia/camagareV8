@@ -125,11 +125,11 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                             titulo: 'Filtros de consignaciones',
                             inputWidth: 420,
                             extraId: 'fmExtraCONS',   // columnas + PDF + Excel, pegados al final del grupo
-                            // Pestaña Detalles: búsqueda libre dentro de las consignaciones (productos
+                            // Pestaña "Búsqueda por detalle": búsqueda libre dentro de las consignaciones (productos
                             // con lote/NUP y documentos relacionados). Cada coincidencia dice a qué
                             // consignación pertenece.
                             busquedaDetalle: {
-                                tab: 'Detalles',
+                                tab: 'Búsqueda por detalle',
                                 url: `<?= BASE_URL ?>/<?= $rutaModulo ?>/buscarDetallesAjax`,
                                 label: 'Buscar libremente dentro de las consignaciones',
                                 placeholder: 'Producto, código, lote, NUP, bodega, factura, retorno o cambio relacionado...',

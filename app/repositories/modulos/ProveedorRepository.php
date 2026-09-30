@@ -434,9 +434,7 @@ class ProveedorRepository extends BaseRepository
 
                     -- Liquidaciones de compra
                     SELECT l.importe_total                                          AS total,
-                           l.importe_total
-                             - COALESCE(pg.total_pagado, 0)
-                             - COALESCE(rt.total_retenido, 0)                       AS saldo
+                           " . \App\Helpers\LiquidacionPagoAnterior::saldo('l', 'l.importe_total - COALESCE(pg.total_pagado, 0) - COALESCE(rt.total_retenido, 0)') . " AS saldo
                     FROM liquidaciones_cabecera l
                     LEFT JOIN pagado pg ON pg.tipo_documento = 'LIQUIDACION' AND pg.id_doc = l.id
                     LEFT JOIN ret    rt ON rt.id_liquidacion = l.id

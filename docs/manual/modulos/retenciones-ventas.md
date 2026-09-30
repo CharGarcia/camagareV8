@@ -6,7 +6,7 @@ ruta_modulo: modulos/retenciones_ventas
 tipo: modulo
 visibilidad: todos
 etiquetas: retencion de venta, retenciones recibidas, cliente retiene, credito tributario, periodo fiscal, cobro, buscar retencion, buscador, filtros, filtrar retenciones, documento sustento, codigo de retencion, filtro de fechas, chips, aparecen documentos que no busque, resultados que no corresponden, la busqueda trae otros documentos, imprimir, impresora
-version: 1.11
+version: 1.13
 orden: 40
 estado: activo
 ---
@@ -81,7 +81,7 @@ consultan en la ventana de filtros (botón del embudo):
 |------|----------------|
 | Clave de acceso | Pestaña *Retención* |
 | Usuario que registró | Pestaña *Retención* |
-| Documentos sustento y códigos de retención de las líneas | Pestaña *Detalles* |
+| Documentos sustento y códigos de retención de las líneas | Pestaña *Búsqueda por detalle* |
 | Origen | Pestaña *Retención* |
 
 La clave de acceso son 49 dígitos que llevan dentro la fecha, el RUC y el número
@@ -108,7 +108,7 @@ Limpiar filtros.
 El selector *Usuario que registró* lista solo a quienes ya registraron
 retenciones en la empresa, y *Serie* solo las series con retenciones guardadas.
 
-**Pestaña Detalles** (lo que hay dentro de la retención). Es un único cuadro,
+**Pestaña Búsqueda por detalle** (lo que hay dentro de la retención). Es un único cuadro,
 **Buscar libremente dentro de las retenciones**: escriba el número de una
 factura sustento, un código de retención, un impuesto, una base, un porcentaje
 o un valor retenido, y aparece la lista de **cada línea que coincide** con la
@@ -173,6 +173,9 @@ cerrado.
 
 ## Historial de cambios
 
+- **1.13** — En la ventana de filtros, la pestaña *Detalles* se llama ahora
+  **Búsqueda por detalle**, y la ventana ya no tiene barra de desplazamiento
+  vertical propia: se muestra completa.
 - **1.12** — En el número de la retención y en el documento sustento se puede escribir solo el secuencial (`1311`): al salir del campo se completa como `001-001-000001311`. Antes se partía por posición y quedaba como `131-001-000000000`.
 - **1.11** — Cuando un código de retención no tiene cuenta o no existe en el catálogo
   del SRI, el aviso de asientos pendientes lo dice así, en lugar de «error inesperado».

@@ -6,7 +6,7 @@ ruta_modulo: modulos/factura-venta
 tipo: modulo
 visibilidad: todos
 etiquetas: factura, facturar, venta, buscar factura, buscador, aparecen facturas que no busque, resultados que no corresponden, la busqueda trae otras facturas, buscar por clave de acceso, filtros, filtrar facturas, buscar por producto vendido, buscar por forma de pago, filtro de fechas, saldo pendiente, chips, ordenar por dos columnas, ordenar por estado de pago, ordenar por cliente y fecha, sri, comprobante electronico, xml, excel, anular, nota de credito, whatsapp, link de pago, payphone, nuvei, serie vacia, sin puntos de emision, secuencial repetido, secuencial ya existe, punto de emision, ambiente, pruebas, produccion, cambio de ambiente, clave de acceso en procesamiento, error 70, comprobante devuelto, reintento automatico, saldo, stock, existencias, cuanto queda, disponible, buscador de productos, lote, vencimiento, caducidad, fecha de vencimiento, lote y vencimiento, pdf, ride, columnas del pdf, subsidio, irbpnr, servicio, propina, codigo cortado, detalle adicional, forma de pago, plazo, dias credito, unidad de tiempo, meses, anios, informacion adicional, vendedor, cajero, no sale el vendedor, falta informacion en el pdf, se cierra el modal, autorizar, bloquear factura, no puedo editar, letra pequena, tamano de letra, fuente del pdf, letra del pdf, no se lee el pdf, ancho de columna, agrandar columna, ensanchar, codigo cortado en el modal, descripcion cortada, no se ve la descripcion completa, redimensionar, precio con impuestos, precio con iva, sale en cero, columna descuento, tipo de identificacion, tipo de documento del cliente, ruc o cedula, es ruc o cedula, cedula o pasaporte, consumidor final, no se cual identificacion tiene el cliente, buscador de clientes, buscar cliente, elegir cliente, datos del cliente, informacion adicional larga, limite de caracteres, maximo 300 caracteres, value too long, no se pudo guardar la factura, imprimir, impresora, iva al subtotal, iva sobre el subtotal, iva linea por linea, calculo del iva, iva no cuadra, iva mal calculado, centavos de diferencia, factura grande, muchas lineas, muchos items, factura lenta, tarda en abrir, tarda en cargar, peso del xml, tamano del xml, 320 kb
-version: 2.27
+version: 2.30
 orden: 20
 estado: activo
 ---
@@ -153,6 +153,15 @@ no deja escribir más. Ese mismo tope se aplica a lo que llega por otras vías
 (Facturación de Consignaciones, POS, cargas por Excel): si un texto viene más
 largo, la factura lo **recorta a 300** en lugar de rechazar el documento — antes
 un solo valor pasado de largo hacía fallar toda la emisión sin decir por qué.
+
+## Al abrir una factura
+
+La ventana de la factura se abre **siempre en la pestaña «Factura de venta»** (y,
+abajo, en *Info. Adicional*), aunque la última vez se haya cerrado en Pagos,
+Retenciones, Notas de crédito, Asiento contable u otra. Así se ven de inmediato
+los datos de la factura que se acaba de abrir; las demás pestañas cargan su
+información al entrar en ellas. Si abre dos facturas seguidas muy rápido, se
+muestra siempre la última que eligió.
 
 ## Barra de acciones del documento
 
@@ -335,7 +344,7 @@ en la ventana de filtros (botón del embudo):
 |------|----------------|
 | Clave de acceso | Pestaña *Factura* → **Clave de acceso** |
 | Usuario que registró | Pestaña *Factura* → **Usuario que registró** |
-| Productos vendidos (código, descripción, lote, NUP) | Pestaña *Detalles* |
+| Productos vendidos (código, descripción, lote, NUP) | Pestaña *Búsqueda por detalle* |
 | Estado, Estado correo, Estado de pago | Pestaña *Factura* |
 
 La clave de acceso son 49 dígitos que llevan dentro la fecha, el RUC y el número
@@ -366,7 +375,7 @@ solo con la X, Cancelar, Aplicar o Limpiar filtros.
 El *estado de pago* y el *saldo pendiente* se calculan con la misma regla que
 la columna Saldo: cobros de Ingresos, notas de crédito y retenciones.
 
-**Pestaña Detalles** (lo que hay dentro de la factura). Es un único cuadro,
+**Pestaña Búsqueda por detalle** (lo que hay dentro de la factura). Es un único cuadro,
 **Buscar libremente dentro de las facturas**: escriba un producto, un código,
 un lote, un NUP, una forma de pago, un plazo o un dato de la información
 adicional, y aparece la lista de **cada línea que coincide** con la factura a
@@ -465,6 +474,18 @@ cierran en **Contabilidad → Períodos Contables**; reabrir el período permite
 la operación de inmediato.
 
 ## Historial de cambios
+
+- **2.30** — La ventana de la factura se abre siempre en la pestaña **Factura de
+  venta** con los datos de la factura elegida; al abrir dos facturas seguidas ya
+  no pueden quedar mostrados los datos de la anterior.
+- **2.29** — En la ventana de filtros, la pestaña *Detalles* se llama ahora
+  **Búsqueda por detalle**, y la ventana ya no tiene barra de desplazamiento
+  vertical propia: se muestra completa.
+- **2.28** — Corregido: el aviso **«Factura sin guardar»** aparecía al abrir una
+  factura nueva aunque la anterior ya se hubiera guardado. El borrador que el
+  sistema conserva en el navegador ahora solo se guarda mientras la factura es
+  nueva, y se borra al guardarla. Si el aviso aparece una última vez con una
+  factura que ya existe, elegir **Nueva factura** lo descarta.
 
 - **2.27** — La lista de productos del detalle también se despliega en **Chrome
   de iPad**: ahí podía no aparecer aunque en Safari sí.

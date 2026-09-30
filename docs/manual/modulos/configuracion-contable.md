@@ -6,7 +6,7 @@ ruta_modulo: modulos/configuracion-contable
 tipo: modulo
 visibilidad: admin
 etiquetas: configuracion contable, cuentas por documento, asiento automatico, parametrizacion, ventas, compras, cierre, tipo de produccion, bien, servicio, filtro por año, periodo, listado de proveedores, listado de clientes, cobros y pagos, ingresos y egresos, forma de pago, cuenta bancaria, efectivo, misma cuenta en los dos bloques, formas hermanas, cheques y transferencias, mismo banco, numero de cuenta, nomina, rol de pagos, prestamo quirografario, prestamo hipotecario, prestamo empresa, prestamos iess, cuentas opcionales, costo de ventas, costo de venta, inventario, asiento sin costo, no sale el costo, cuenta de iva del cliente, reglas por cliente, buscar proveedor, buscar cliente, buscar ficha, filtrar fichas, muchos proveedores, cuentas faltantes, modulos que contabilizan, apagar asientos, no generar asientos, no contabilizar, desactivar contabilidad, interruptor, consignaciones sin asiento, aviso de asientos pendientes, asientos pendientes en el balance, proveedores sin cuentas, clientes sin cuentas, productos sin cuentas, pendientes de configurar, retenciones en venta, retenciones en compra, retencion de renta, no aparecen las retenciones, codigo de retencion, catalogo de retenciones sri, codigo ats, codigo del anexo, retencion mal asignada, codigo de retencion no existe, en que documento esta el error, retencion con codigo invalido, sugerencias, sugerir cuentas, proveedores que compran lo mismo, copiar cuentas de otro proveedor, misma cuenta para varios proveedores, gasolineras, proveedores parecidos
-version: 1.22
+version: 1.23
 orden: 5
 estado: activo
 ---
@@ -86,8 +86,10 @@ o se busca la cuenta. El campo dice de un vistazo cómo está ese concepto hoy:
 - **Con cuenta propia**: muestra la cuenta asignada a esa entidad y, al lado, el
   botón para quitarla.
 - **Vacío con la nota gris `General: …`**: la entidad no tiene cuenta propia, pero
-  la configuración General resuelve ese concepto. No hay nada que hacer, salvo
-  que se quiera una cuenta distinta para esta entidad en concreto.
+  la configuración General resuelve ese concepto. La nota trae el código y el
+  nombre de esa cuenta (por ejemplo `General: 1.1.4.01.001 - IVA en compras`); si
+  no cabe entera, se lee completa al pasar el mouse sobre el campo. No hay nada
+  que hacer, salvo que se quiera una cuenta distinta para esta entidad en concreto.
 - **Vacío con la nota roja `sin cuenta` y el borde rojo**: no hay cuenta ni en
   esta ficha ni en la General. Esos son los que hay que atender: dejan el asiento
   incompleto.
@@ -436,6 +438,8 @@ ingresos o egresos. Solo falta asignar la cuenta.
 
 ## Historial de cambios
 
+- **1.23** — En las tarjetas de reglas por entidad, la nota gris `General: …` muestra
+  también el nombre de la cuenta, no solo su código.
 - **1.22** — Nuevo botón **Sugerencias** en *Reglas por Proveedores*: propone copiar las
   cuentas de un proveedor ya configurado a los proveedores sin cuentas a los que se les
   compra lo mismo.

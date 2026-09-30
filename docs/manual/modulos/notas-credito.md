@@ -6,7 +6,7 @@ ruta_modulo: modulos/notas_credito
 tipo: modulo
 visibilidad: todos
 etiquetas: nota de credito, notas de credito, devolucion, descuento, anular factura, corregir factura, sri, buscar nota de credito, buscador, filtros, filtrar notas de credito, buscar por producto, filtro de fechas, documento modificado, chips, aparecen notas que no busque, resultados que no corresponden, buscar por clave de acceso, lote, lotes, nup, serial, numero de serie, caducidad, vencimiento, fecha de vencimiento, devolver al inventario, reingreso de stock, devolucion de mercaderia, lote equivocado, bodega de reintegro, sin bodegas asignadas, no tiene bodegas, no se refleja en inventario, no aparece en inventario, no devolvio stock, informacion adicional, info adicional, limite de caracteres, maximo 300 caracteres, value too long, no se pudo guardar la nota, codigo, codigo del producto, columna codigo, buscar por codigo, iva, tarifa iva, iva 12, 12%, iva anterior, iva historico, factura año anterior, exento, no objeto de impuesto, tarifa 0, descuento por pronto pago, pronto pago, descuento posterior, descuento comercial, rebaja de precio, bonificacion, no afecta inventario, sin afectar inventario, sin devolver mercaderia, nota de credito sin productos, linea libre, linea manual, subtotal negativo, valor negativo, descuento mayor, sin bodega, invalid input syntax for type integer, vendedor, asesor, vendedor de la nota de credito, cambiar vendedor, comision, motivo, cambiar vendedor nota autorizada, corregir vendedor, vendedor de la factura, vendedor equivocado, vendedor del cliente, imprimir, impresora
-version: 1.25
+version: 1.29
 orden: 30
 estado: activo
 ---
@@ -133,6 +133,14 @@ nota**, que descarta el borrador y empieza en blanco.
 El borrador es por usuario y por empresa, y se descarta solo al guardar la nota
 o al elegir "Nueva nota".
 
+## Al abrir una nota de crédito
+
+La ventana se abre **siempre en la pestaña «Nota de crédito»**, aunque la última
+vez se haya cerrado en Asiento contable o SRI. Así se ven de inmediato los datos
+de la nota que se acaba de abrir; las demás pestañas cargan su información al
+entrar en ellas. Si abre dos notas seguidas muy rápido, se muestra siempre la
+última que eligió. Lo mismo aplica al abrir la nota desde la factura de venta.
+
 ## Editar y eliminar
 
 Solo se pueden **editar** o **eliminar** notas de crédito en estado **borrador**.
@@ -257,7 +265,7 @@ la ventana de filtros (botón del embudo):
 | Dato | Dónde se busca |
 |------|----------------|
 | Clave de acceso y N° de autorización | Pestaña *Nota de crédito* |
-| Productos o servicios de la nota (código y descripción) | Pestaña *Detalles* |
+| Productos o servicios de la nota (código y descripción) | Pestaña *Búsqueda por detalle* |
 | Correo y Estado | Pestaña *Nota de crédito* |
 
 En un comprobante electrónico la clave de acceso y el número de autorización son
@@ -284,7 +292,7 @@ El selector *Usuario que registró* lista solo a quienes ya registraron notas
 de crédito en la empresa, *Vendedor* solo a los vendedores que tienen notas, y
 *Serie* solo las series con notas guardadas.
 
-**Pestaña Detalles** (lo que hay dentro de la nota). Es un único cuadro,
+**Pestaña Búsqueda por detalle** (lo que hay dentro de la nota). Es un único cuadro,
 **Buscar libremente dentro de las notas de crédito**: escriba un producto, un
 código, una cantidad, un valor o un dato de la información adicional (por
 ejemplo, un correo), y aparece la lista de **cada línea que coincide** con la
@@ -352,6 +360,13 @@ la operación de inmediato.
 
 ## Historial de cambios
 
+- **1.29** — Corregido: al abrir una nota de crédito después de haber visto otra,
+  la ventana podía quedar en la pestaña de la anterior (Asiento contable, SRI) con
+  sus datos; ahora siempre abre en la pestaña **Nota de crédito** con la
+  información de la nota elegida.
+- **1.28** — En la ventana de filtros, la pestaña *Detalles* se llama ahora
+  **Búsqueda por detalle**, y la ventana ya no tiene barra de desplazamiento
+  vertical propia: se muestra completa.
 - **1.27** — Corregido: el **subtotal de una línea** podía quedar en negativo al llenarla
   (se aceptaba el signo menos en cantidad, precio o descuento, y un descuento mayor que
   el valor de la línea). Ahora no se puede escribir el signo menos, la línea se marca en

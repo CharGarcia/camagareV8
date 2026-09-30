@@ -6,7 +6,7 @@ ruta_modulo: modulos/cargas-inventario
 tipo: modulo
 visibilidad: todos
 etiquetas: carga de inventario, errores de carga, no se puede aprobar, lineas con error, comprobada, corregir carga, ajuste masivo, entrada masiva, salida masiva, conteo fisico, inventario fisico, toma fisica, cuadrar stock, saldo contado, diferencia de inventario, faltantes, sobrantes, importar stock, aprobacion, buscar, filtrar, ordenar, columnas, observacion, observaciones, observacion de la linea, creado por, aprobado por, exportar, buscador, filtros, filtrar cargas, buscar por producto, cargas pendientes, chips, detalle de la carga, lineas de la carga, ver lineas, motivo, fila del excel, descargar pdf, descargar excel, exportar lineas, cargando archivo, importar excel, rechazar carga, eliminar carga, anular carga, anular carga aprobada, reversar carga, revertir carga, deshacer carga, modificar carga aprobada, editar carga aprobada, corregir carga aprobada, carga anulada, productos ya usados, no se puede anular, nup, serie, series, serial, numero de serie, varias series, lote, ajuste por lote, imprimir, impresora
-version: 1.8
+version: 1.9
 orden: 25
 estado: activo
 ---
@@ -204,7 +204,7 @@ Los selectores de *Creado por*, *Aprobado por* y *Bodega* listan solo lo que
 aparece en las cargas de la empresa. *Pendiente con líneas en error* son las
 cargas que muestran el triángulo naranja en la columna Estado.
 
-**Pestaña Detalles** (lo que hay dentro de la carga). Es un único cuadro,
+**Pestaña Búsqueda por detalle** (lo que hay dentro de la carga). Es un único cuadro,
 **Buscar libremente dentro de las cargas**: escriba un código o nombre de
 producto, una bodega, un lote, un NUP, una observación de línea, un mensaje de
 error o una cantidad, y aparece la lista de **cada línea que coincide** con la
@@ -342,6 +342,9 @@ para corregir el archivo. Los motivos posibles son:
 
 ## Historial de cambios
 
+- **1.9** — En la ventana de filtros, la pestaña *Detalles* se llama ahora
+  **Búsqueda por detalle**, y la ventana ya no tiene barra de desplazamiento
+  vertical propia: se muestra completa.
 - **1.8** — Los botones y enlaces de **PDF** de los documentos preguntan ahora si se quiere
   **Imprimir** (abre el cuadro de impresión con el documento ya cargado),
   **Descargar** o **Ver** en otra pestaña. Ver la guía *Descargar archivos*.

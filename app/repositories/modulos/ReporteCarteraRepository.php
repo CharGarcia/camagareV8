@@ -605,6 +605,37 @@ class ReporteCarteraRepository extends BaseRepository
             ':emp5' => $idEmpresa, ':emp6' => $idEmpresa, ':emp7' => $idEmpresa, ':emp8' => $idEmpresa,
         ];
 
+        // Liquidaciones PAGADAS EN EL SISTEMA ANTERIOR (migración, hasta 2020): no tienen egreso, así
+        // que se abonan aquí por lo que les quedaba pendiente, a su misma fecha (saldo 0 como en CxP).
+        $pagadaAnterior = '';
+        if (\App\Helpers\LiquidacionPagoAnterior::existe()) {
+            $fLa = $this->fechaWhere('l.fecha_emision', 'la', $fechaDesde, $fechaHasta, $params);
+            $wLa = $this->entidadWhere('l.id_proveedor', 'la', $idProveedor, $params);
+            $dLa = $this->documentoWhere(["l.establecimiento || '-' || l.punto_emision || '-' || l.secuencial"], 'la', $documento, $params);
+            $params[':emp9'] = $idEmpresa;
+            $liqVigenteLa = \App\Helpers\TiposComprobanteCompra::sqlLiquidacionVigente('l.estado');
+            $pagadaAnterior = "
+                UNION ALL
+
+                -- LIQUIDACIONES PAGADAS EN EL SISTEMA ANTERIOR (ABONO por el saldo que les quedaba)
+                SELECT l.fecha_emision::date, 'ABONO', -1, 'PAGO_SISTEMA_ANTERIOR',
+                       CONCAT(l.establecimiento,'-',l.punto_emision,'-',l.secuencial),
+                       'Pagada en el sistema anterior',
+                       GREATEST(0, l.importe_total
+                           - COALESCE((SELECT SUM(ed.monto_pagado) FROM egresos_detalle ed JOIN egresos_cabecera ec ON ec.id = ed.id_egreso
+                                        WHERE ed.tipo_documento = 'LIQUIDACION' AND ed.id_referencia_documento = l.id
+                                          AND ed.eliminado = false AND ec.eliminado = false AND ec.estado != 'anulado'), 0)
+                           - COALESCE((SELECT SUM(r.total_retenido) FROM retencion_compra_cabecera r
+                                        WHERE r.id_liquidacion = l.id AND r.eliminado = false
+                                          AND UPPER(COALESCE(r.estado,'')) NOT IN ('ANULADO','ANULADA','BORRADOR','PENDIENTE')), 0)),
+                       l.id, l.id_proveedor
+                FROM liquidaciones_cabecera l
+                WHERE l.id_empresa = :emp9 AND l.eliminado = false
+                  AND {$liqVigenteLa}
+                  AND " . \App\Helpers\LiquidacionPagoAnterior::flag('l') . "
+                  AND (l.tipo_ambiente IS NULL OR l.tipo_ambiente = '{$amb}') {$wLa} {$fLa} {$dLa}";
+        }
+
         // Todo comprobante que genera deuda (factura, nota de venta, doc. financiero, planilla…),
         // no solo '01': mismo criterio que Cuentas por Pagar y que el asiento de compra.
         $esCargo       = \App\Helpers\TiposComprobanteCompra::sqlEsCargo('c.tipo_comprobante');
@@ -712,6 +743,7 @@ class ReporteCarteraRepository extends BaseRepository
                 WHERE nc.id_empresa = :emp8 AND nc.eliminado = false
                   AND nc.tipo_comprobante = '04'
                   AND (nc.tipo_ambiente IS NULL OR nc.tipo_ambiente = '{$amb}') {$wNc} {$fNc} {$dNc}
+                {$pagadaAnterior}
         ";
     }
 

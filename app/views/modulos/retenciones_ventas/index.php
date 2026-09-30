@@ -117,10 +117,10 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                         titulo: 'Filtros de retenciones en ventas',
                         inputWidth: 420,
                         extraId: 'fmExtraRetV',   // columnas + PDF + Excel, pegados al final del grupo
-                        // Pestaña Detalles: búsqueda libre dentro de las líneas retenidas (documento
+                        // Pestaña "Búsqueda por detalle": búsqueda libre dentro de las líneas retenidas (documento
                         // sustento, impuesto, código, base, porcentaje y valor).
                         busquedaDetalle: {
-                            tab: 'Detalles',
+                            tab: 'Búsqueda por detalle',
                             url: `<?= BASE_URL ?>/<?= $rutaModulo ?>/buscarDetallesAjax`,
                             label: 'Buscar libremente dentro de las retenciones',
                             placeholder: 'Nº de factura sustento, código de retención, base, porcentaje, valor...',

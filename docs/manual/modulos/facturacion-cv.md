@@ -6,7 +6,7 @@ ruta_modulo: modulos/facturacion-cv
 tipo: modulo
 visibilidad: todos
 etiquetas: facturacion de consignacion, registro de cambio, cambio de productos, reposicion, etiqueta cambio, buscar facturacion, buscador, filtros, filtrar facturaciones, buscar por producto, buscar por lote, buscar por consignacion, chips, facturar consignacion, consignacion vendida, liquidacion de consignacion, cobrar consignacion, descuento en consignacion, descuento por linea, descuento porcentaje, aplicar descuento a todos, precio de lista en consignacion, generar factura, borrador, saldo facturable, observaciones en la factura, informacion adicional, info adicional, cajero, vendedor en la factura, vendedor obligatorio, exige vendedor, seleccione el vendedor, lento, demora al generar factura, tarda en guardar, iva del registro de cambio, iva del producto, iva al subtotal, iva linea por linea, calculo del iva, diferencia de centavos en el iva, iva 5%, exento, no objeto de iva, codigo de tarifa, aparecen documentos que no busque, resultados que no corresponden, buscar por producto en el listado, el descuento no se aplica, la factura sale sin descuento, se pierde el descuento, descuento en cero, coma decimal, punto decimal, separador de decimales, escribir con coma, cambios sin guardar, no se pudo generar la factura, observaciones largas, no me deja escribir mas, limite de caracteres, maximo 300 caracteres, value too long, asiento de reingreso, no contabilizar consignaciones, sin reingreso, modulos que contabilizan, acceso denegado a la bodega, bodega no asignada, otra bodega, no me deja facturar, imprimir, impresora
-version: 1.25
+version: 1.26
 orden: 47
 estado: activo
 ---
@@ -120,8 +120,8 @@ ventana de filtros (botón del embudo):
 
 | Dato | Dónde se busca |
 |------|----------------|
-| Productos facturados, lote y NUP | Pestaña *Detalles* |
-| N° de las consignaciones de origen | Pestaña *Detalles* |
+| Productos facturados, lote y NUP | Pestaña *Búsqueda por detalle* |
+| N° de las consignaciones de origen | Pestaña *Búsqueda por detalle* |
 | RUC o cédula del cliente | Pestaña *Facturación* → **RUC / cédula** |
 | Vendedor, total, usuario que registró e información adicional | Pestaña *Facturación* |
 | Estado | Pestaña *Facturación* |
@@ -142,7 +142,7 @@ Limpiar filtros.
 Los selectores *Serie*, *Vendedor* y *Usuario que registró* listan solo lo que
 la empresa ya usó en estos documentos.
 
-**Pestaña Detalles** (lo que hay dentro del documento). Es un único cuadro,
+**Pestaña Búsqueda por detalle** (lo que hay dentro del documento). Es un único cuadro,
 **Buscar libremente dentro de las facturaciones**: escriba un producto, un
 código, un lote, un NUP, una bodega, el número de una consignación de origen o
 un dato de la información adicional (por ejemplo un correo), y aparece la lista
@@ -310,6 +310,9 @@ El descuento funciona igual que en [Facturas de Venta](modulos/factura-venta):
 
 ## Historial de cambios
 
+- **1.26** — En la ventana de filtros, la pestaña *Detalles* se llama ahora
+  **Búsqueda por detalle**, y la ventana ya no tiene barra de desplazamiento
+  vertical propia: se muestra completa.
 - **1.25** — El **IVA** respeta el *Método de cálculo de IVA en facturación* (línea por
   línea o al subtotal). Antes siempre se calculaba línea por línea, y en empresas
   configuradas al subtotal la factura podía salir con centavos de más frente a la

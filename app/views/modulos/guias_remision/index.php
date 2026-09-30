@@ -121,10 +121,10 @@ $to      = $total > 0 ? min($page * $perPage, $total) : 0;
                         titulo: 'Filtros de guías de remisión',
                         inputWidth: 420,
                         extraId: 'fmExtraGR',   // columnas + PDF + Excel, pegados al final del grupo
-                        // Pestaña Detalles: búsqueda libre dentro de las guías (productos transportados
+                        // Pestaña "Búsqueda por detalle": búsqueda libre dentro de las guías (productos transportados
                         // e información adicional). Cada coincidencia dice a qué guía pertenece.
                         busquedaDetalle: {
-                            tab: 'Detalles',
+                            tab: 'Búsqueda por detalle',
                             url: `<?= BASE_URL ?>/<?= $rutaModulo ?>/buscarDetallesAjax`,
                             label: 'Buscar libremente dentro de las guías',
                             placeholder: 'Producto, código, descripción, cantidad, información adicional...',

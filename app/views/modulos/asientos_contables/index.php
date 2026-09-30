@@ -124,10 +124,10 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                         titulo: 'Filtros de asientos contables',
                         inputWidth: 420,
                         extraId: 'fmExtraASIENTOS',   // columnas, pegadas al final del grupo
-                        // Pestaña Detalles: búsqueda libre dentro de las líneas de los asientos.
+                        // Pestaña "Búsqueda por detalle": búsqueda libre dentro de las líneas de los asientos.
                         // Cada coincidencia dice a qué asiento pertenece.
                         busquedaDetalle: {
-                            tab: 'Detalles',
+                            tab: 'Búsqueda por detalle',
                             url: `<?= $urlBaseModulo ?>/buscarDetallesAjax`,
                             label: 'Buscar libremente dentro de los asientos',
                             placeholder: 'Cuenta (código o nombre), referencia, documento, tercero, centro de costo, valor...',

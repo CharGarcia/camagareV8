@@ -5,8 +5,8 @@ categoria: Ventas
 ruta_modulo: modulos/proformas
 tipo: modulo
 visibilidad: todos
-etiquetas: proforma, proformas, ordenar por dos columnas, ordenar por estado y fecha, cotizacion, cotizar, presupuesto, oferta, duplicar, duplicar proforma, copiar proforma, repetir cotizacion, volver a cotizar, regresar a borrador, volver a borrador, reabrir proforma, reabrir, desaprobar, quitar aprobacion, editar proforma aprobada, convertir a factura, enviar a pedidos, generar pedido, pasar a pedido, crear pedido desde proforma, despacho, orden de despacho, items sin producto, concepto libre, linea sin producto, pestana pedidos, enviar por whatsapp, exportar excel, info productos, ficha de productos, catalogo, imagenes de productos, informacion adicional, plantillas, plantilla de proforma, guardar como plantilla, condiciones, terminos y condiciones, anexo, pdf de condiciones, texto con formato, clausulas, numeracion por fecha, numero con el año, reiniciar numeracion, reinicio anual, reinicio mensual, correlativo por año, correlativo por mes, modo de numeracion, pdf de la proforma, codigo del producto en el pdf, columna codigo, buscar por codigo, codigo en el detalle, columna codigo en la proforma, observaciones en el pdf, numero repetido, secuencial repetido, secuencial duplicado, dos proformas con el mismo numero, buscar proforma, buscador, filtros, filtrar proformas, buscar por producto, proformas vencidas, proformas sin facturar, filtro de fechas, chips, imprimir, impresora
-version: 1.19
+etiquetas: proforma, proformas, ordenar por dos columnas, ordenar por estado y fecha, cotizacion, cotizar, presupuesto, oferta, duplicar, duplicar proforma, copiar proforma, repetir cotizacion, volver a cotizar, regresar a borrador, volver a borrador, reabrir proforma, reabrir, desaprobar, quitar aprobacion, editar proforma aprobada, convertir a factura, enviar a pedidos, generar pedido, pasar a pedido, crear pedido desde proforma, despacho, orden de despacho, items sin producto, concepto libre, linea sin producto, pestana pedidos, enviar por whatsapp, exportar excel, info productos, ficha de productos, catalogo, imagenes de productos, informacion adicional, plantillas, plantilla de proforma, guardar como plantilla, condiciones, terminos y condiciones, anexo, pdf de condiciones, texto con formato, clausulas, numeracion por fecha, numero con el año, reiniciar numeracion, reinicio anual, reinicio mensual, correlativo por año, correlativo por mes, modo de numeracion, pdf de la proforma, codigo del producto en el pdf, columna codigo, buscar por codigo, codigo en el detalle, columna codigo en la proforma, observaciones en el pdf, numero repetido, secuencial repetido, secuencial duplicado, dos proformas con el mismo numero, buscar proforma, buscador, filtros, filtrar proformas, buscar por producto, proformas vencidas, proformas sin facturar, filtro de fechas, chips, imprimir, impresora, vendedor del cliente, vendedor asignado, vendedor por defecto
+version: 1.22
 orden: 15
 estado: activo
 ---
@@ -36,7 +36,9 @@ Cualquier otro salto se rechaza. El significado de cada uno:
 ## Cómo se usa
 
 1. Pulse **Nuevo**.
-2. Elija el cliente.
+2. Elija el cliente. Si el cliente tiene un **vendedor asignado** en su ficha,
+   ese vendedor se completa solo en la proforma (puede cambiarlo). Si el cliente
+   no tiene vendedor, se mantiene el que ya estaba elegido.
 3. Agregue los productos con su cantidad, precio y descuento.
 4. Guarde. La proforma queda en **borrador**.
 5. Envíela al cliente. Si la acepta, cámbiela a **aprobada**.
@@ -238,7 +240,7 @@ otro estado (por ejemplo *Emitida*), también ese. *Vigencia* compara la fecha
 de emisión más los días de vigencia con la fecha de hoy. *Vendedor* y *Usuario
 que registró* listan solo a quienes ya aparecen en proformas de la empresa.
 
-**Pestaña Detalles** (lo que hay dentro de la proforma). Es un único cuadro,
+**Pestaña Búsqueda por detalle** (lo que hay dentro de la proforma). Es un único cuadro,
 **Buscar libremente dentro de las proformas**: escriba un producto, un código,
 una cantidad, un valor o un dato de la información adicional, y aparece la
 lista de **cada línea que coincide** con la proforma a la que pertenece
@@ -484,6 +486,16 @@ documentos admite cada periodo) está en el manual de **Empresa**, sección
 *Secuenciales por punto de emisión*.
 
 ## Historial de cambios
+
+- **1.22** — Al elegir el cliente, el campo **Vendedor** se completa con el
+  vendedor asignado en la ficha del cliente.
+- **1.21** — En la ventana de filtros, la pestaña *Detalles* se llama ahora
+  **Búsqueda por detalle**, y la ventana ya no tiene barra de desplazamiento
+  vertical propia: se muestra completa.
+- **1.20** — Corregido: el aviso **«Proforma sin guardar»** podía aparecer al
+  abrir una proforma nueva aunque la anterior ya se hubiera guardado (pasaba al
+  pulsar *Guardar* justo después de escribir). Si el aviso sale una última vez
+  con una proforma que ya existe, elegir **Nueva proforma** lo descarta.
 
 - **1.19** — Ya se pueden seleccionar productos y clientes cuyo nombre o código
   lleva un apóstrofo (p. ej. `PANTALLA 4.3'`, `D'ONOFRIO`). Antes el clic en el

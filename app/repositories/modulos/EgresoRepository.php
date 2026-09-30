@@ -744,6 +744,7 @@ class EgresoRepository extends BaseRepository
                   AND l.estado = 'autorizado'
                   AND l.tipo_ambiente = (SELECT CAST(tipo_ambiente AS VARCHAR(1)) FROM empresas WHERE id = :id_empresa)
                   AND ROUND(l.importe_total - COALESCE(p.total_pagado, 0), 2) > 0
+                  AND NOT " . \App\Helpers\LiquidacionPagoAnterior::flag('l') . " -- pagada en el sistema anterior
                 ORDER BY fecha_emision ASC";
 
         return $this->query($sql, [
@@ -1259,6 +1260,7 @@ class EgresoRepository extends BaseRepository
                       AND l.estado = 'autorizado'
                       AND l.tipo_ambiente = (SELECT CAST(tipo_ambiente AS VARCHAR(1)) FROM empresas WHERE id = :id_empresa)
                       AND ROUND(l.importe_total - COALESCE(p.total_pagado, 0) - COALESCE(rl.total_retenido, 0), 2) > 0
+                      AND NOT " . \App\Helpers\LiquidacionPagoAnterior::flag('l') . " -- pagada en el sistema anterior
                       $filtroBusq
                       {$filtroFecha('l.fecha_emision')}
                       {$filtroSoloId('l.id')}

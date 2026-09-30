@@ -182,10 +182,10 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                         titulo: 'Filtros de notas de crédito',
                         inputWidth: 420,
                         extraId: 'fmExtraNC',   // columnas + PDF + Excel, pegados al final del grupo
-                        // Pestaña Detalles: búsqueda libre dentro de las notas (productos/servicios
+                        // Pestaña "Búsqueda por detalle": búsqueda libre dentro de las notas (productos/servicios
                         // e información adicional). Cada coincidencia dice a qué nota pertenece.
                         busquedaDetalle: {
-                            tab: 'Detalles',
+                            tab: 'Búsqueda por detalle',
                             url: `<?= BASE_URL ?>/<?= $rutaModulo ?>/buscarDetallesAjax`,
                             label: 'Buscar libremente dentro de las notas de crédito',
                             placeholder: 'Producto, código, descripción, cantidad, valor, información adicional...',

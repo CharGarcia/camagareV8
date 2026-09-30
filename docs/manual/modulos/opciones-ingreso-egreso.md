@@ -6,7 +6,7 @@ ruta_modulo: modulos/opciones_ingreso_egreso
 tipo: modulo
 visibilidad: todos
 etiquetas: opciones de ingreso, opciones de egreso, conceptos, motivos, concepto del ingreso, concepto del egreso, cuenta contable del concepto, anticipos, prestamo empleado, relacionado con modulos
-version: 1.0
+version: 1.1
 orden: 71
 estado: activo
 ---
@@ -130,6 +130,8 @@ empresa; sin él, solo los creados por el propio usuario.
 
 ## Historial de cambios
 
+- **1.1** — La dirección del navegador queda limpia al buscar, cambiar de página u
+  ordenar el listado; la búsqueda y la página se conservan al recargar.
 - **1.0** — Versión inicial. Documenta además que la cuenta contable de los
   conceptos libres es la misma que la del bloque *Ingresos y Egresos* de
   Configuración Contable, sincronizada en las dos pantallas.

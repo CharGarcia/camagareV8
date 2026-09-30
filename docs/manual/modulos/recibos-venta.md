@@ -6,7 +6,7 @@ ruta_modulo: modulos/recibo-venta
 tipo: modulo
 visibilidad: todos
 etiquetas: recibo de venta, recibos, buscar recibos, buscador, filtros, filtrar recibos, buscar por cliente, buscar por producto, estado de pago, saldo pendiente, nota de venta, venta sin factura, documento interno, sin impuestos, numeracion por fecha, numero con el año, reiniciar numeracion, reinicio anual, reinicio mensual, correlativo por año, correlativo por mes, modo de numeracion, lote, vencimiento, caducidad, fecha de vencimiento, lote y vencimiento, ancho de columna, agrandar columna, ensanchar, codigo cortado, descripcion cortada, no se ve la descripcion completa, redimensionar, precio con impuestos, precio con iva, sale en cero, tipo de identificacion, tipo de documento del cliente, ruc o cedula, es ruc o cedula, cedula o pasaporte, consumidor final, no se cual identificacion tiene el cliente, buscador de clientes, buscar cliente, elegir cliente, datos del cliente, imprimir, impresora
-version: 1.19
+version: 1.20
 orden: 35
 estado: activo
 ---
@@ -133,7 +133,7 @@ la empresa ya usó en sus recibos. El *estado de pago* y el *saldo pendiente* se
 calculan con la misma regla que la columna Pago: los cobros de
 Ingresos no anulados registrados contra el recibo.
 
-**Pestaña Detalles** (lo que hay dentro del recibo). Es un único cuadro,
+**Pestaña Búsqueda por detalle** (lo que hay dentro del recibo). Es un único cuadro,
 **Buscar libremente dentro de los recibos**: escriba un producto, un código, un
 lote, una forma de pago, un plazo o un dato de la información adicional, y
 aparece la lista de **cada línea que coincide** con el recibo al que pertenece
@@ -199,6 +199,9 @@ la operación de inmediato.
 
 ## Historial de cambios
 
+- **1.20** — En la ventana de filtros, la pestaña *Detalles* se llama ahora
+  **Búsqueda por detalle**, y la ventana ya no tiene barra de desplazamiento
+  vertical propia: se muestra completa.
 - **1.19** — En **iPad/iPhone** la lista de productos del detalle ya se despliega
   pegada al campo de código o descripción: antes quedaba escondida detrás del
   teclado en pantalla. Al tocar el campo, este se sube a la vista para dejar sitio

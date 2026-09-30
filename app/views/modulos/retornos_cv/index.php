@@ -115,10 +115,10 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                         titulo: 'Filtros de retornos de consignaciones',
                         inputWidth: 420,
                         extraId: 'fmExtraRET',   // columnas + PDF + Excel, pegados al final del grupo
-                        // Pestaña Detalles: búsqueda libre dentro de los retornos (productos retornados
+                        // Pestaña "Búsqueda por detalle": búsqueda libre dentro de los retornos (productos retornados
                         // con lote/NUP, bodega y consignación de origen).
                         busquedaDetalle: {
-                            tab: 'Detalles',
+                            tab: 'Búsqueda por detalle',
                             url: `<?= $urlBaseRet ?>/buscarDetallesAjax`,
                             label: 'Buscar libremente dentro de los retornos',
                             placeholder: 'Producto, código, lote, NUP, bodega, consignación de origen...',

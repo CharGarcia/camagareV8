@@ -6,7 +6,7 @@ ruta_modulo: modulos/car-wash
 tipo: modulo
 visibilidad: todos
 etiquetas: car wash, lavado, lavadora de autos, lubricadora, cambio de aceite, mecanica, taller, orden de servicio, orden mecanica, orden de trabajo, vehiculo, placa, historial del vehiculo, historial del cliente, visitas, ultima visita, facturar orden, recibo de venta, refacturar, factura anulada, proxima cita, proximo chequeo, migracion, sistema anterior, numeracion por fecha, numero con el año, reiniciar numeracion, reinicio anual, reinicio mensual, correlativo por año, correlativo por mes, modo de numeracion, buscar orden, buscar placa, buscador, filtros, filtrar ordenes, filtro de fechas, buscar por servicio, chips, imprimir, impresora
-version: 1.8
+version: 1.9
 orden: 10
 estado: activo
 ---
@@ -292,7 +292,7 @@ Limpiar filtros.
 Los selectores *Serie* y *Usuario que registró* listan solo lo que la empresa ya
 usó en sus órdenes.
 
-**Pestaña Detalles** (lo que hay dentro de la orden). Es un único cuadro,
+**Pestaña Búsqueda por detalle** (lo que hay dentro de la orden). Es un único cuadro,
 **Buscar libremente dentro de las órdenes**: escriba un servicio, un producto,
 un código o una novedad, y aparece la lista de **cada línea que coincide** con
 la orden a la que pertenece (número, fecha, placa, cliente y estado). Un clic en
@@ -339,6 +339,9 @@ documentos admite cada periodo) está en el manual de **Empresa**, sección
 
 ## Historial de cambios
 
+- **1.9** — En la ventana de filtros, la pestaña *Detalles* se llama ahora
+  **Búsqueda por detalle**, y la ventana ya no tiene barra de desplazamiento
+  vertical propia: se muestra completa.
 - **1.8** — En **iPad/iPhone** (Safari y Chrome) la lista de productos del
   detalle se despliega pegada al campo de código o descripción: antes quedaba
   escondida detrás del teclado en pantalla. Al tocar el campo, este se sube a la

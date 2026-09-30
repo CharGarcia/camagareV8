@@ -152,10 +152,10 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                         titulo: 'Filtros de facturas de reembolso',
                         inputWidth: 420,
                         extraId: 'fmExtraFR',   // columnas + PDF + Excel, pegados al final del grupo
-                        // Pestaña Detalles: búsqueda libre dentro de las facturas (líneas, comprobantes
+                        // Pestaña "Búsqueda por detalle": búsqueda libre dentro de las facturas (líneas, comprobantes
                         // de terceros, formas de pago e información adicional).
                         busquedaDetalle: {
-                            tab: 'Detalles',
+                            tab: 'Búsqueda por detalle',
                             url: `<?= BASE_URL ?>/<?= $rutaModulo ?>/buscarDetallesAjax`,
                             label: 'Buscar libremente dentro de las facturas de reembolso',
                             placeholder: 'Descripción, proveedor, RUC, Nº de comprobante, forma de pago, información adicional...',

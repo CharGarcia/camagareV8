@@ -353,6 +353,14 @@
         const dd = $id('pf_ddClientes');
         if (dd) dd.classList.add('d-none');
 
+        // Vendedor asociado al cliente: se precarga en la proforma. Si el cliente no
+        // tiene vendedor (o el suyo no está en la lista), se respeta el ya elegido.
+        const selVend = $id('pf_vendedor');
+        if (selVend && c.id_vendedor) {
+            const optVend = Array.from(selVend.options).find(o => String(o.value) === String(c.id_vendedor));
+            if (optVend) selVend.value = optVend.value;
+        }
+
         // Mover foco al primer ítem de descripción
         setTimeout(() => {
             const primerDesc = document.querySelector('#pf_tbodyDetalle .input-descripcion');
@@ -1565,8 +1573,15 @@
         } catch (e) { /* localStorage lleno o deshabilitado */ }
     }
 
+    // Timer del auto-guardado (ver _registrarAutoGuardado). _limpiarBorrador() lo cancela:
+    // un guardado programado por la última tecla antes de "Guardar" disparaba después del
+    // limpiado —mientras la proforma recién creada aún no tenía pf_id— y volvía a dejar en
+    // localStorage una proforma ya hecha ("Proforma sin guardar" sin motivo).
+    let _borradorTimer = null;
+
     /** Elimina el borrador guardado. */
     function _limpiarBorrador() {
+        clearTimeout(_borradorTimer);
         try { localStorage.removeItem(_storageKey()); } catch (e) {}
     }
 
@@ -1644,8 +1659,7 @@
         if (_borradorListenersOk) return;
         const modal = $id('modalProforma');
         if (!modal) return;
-        let timer;
-        const debounced = () => { clearTimeout(timer); timer = setTimeout(_autoGuardarBorrador, 800); };
+        const debounced = () => { clearTimeout(_borradorTimer); _borradorTimer = setTimeout(_autoGuardarBorrador, 800); };
         modal.addEventListener('input', debounced);
         modal.addEventListener('change', debounced);
         _borradorListenersOk = true;
@@ -1769,6 +1783,9 @@
                 if (!data.ok) { toast(data.error || 'Error al guardar', 'error'); return; }
 
                 _limpiarBorrador();
+                // Fijar el id ya, sin esperar a que _cargarProforma() termine su fetch:
+                // mientras pf_id esté vacío el auto-guardado la trata como nueva.
+                if (data.id) $id('pf_id').value = data.id;
                 toast(data.msg || 'Guardado correctamente');
 
                 // No cerrar el modal: recargar la proforma guardada (igual que factura de

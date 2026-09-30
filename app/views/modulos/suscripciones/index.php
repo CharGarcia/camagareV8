@@ -138,9 +138,9 @@ $estadoClases = [
                         titulo: 'Filtros de suscripciones',
                         inputWidth: 420,
                         extraId: 'fmExtraSUSC',   // columnas + PDF + Excel, pegados al final del grupo
-                        // Pestaña Detalles: búsqueda libre dentro de las suscripciones.
+                        // Pestaña "Búsqueda por detalle": búsqueda libre dentro de las suscripciones.
                         busquedaDetalle: {
-                            tab: 'Detalles',
+                            tab: 'Búsqueda por detalle',
                             url: '<?= $urlBase ?>/buscarDetallesAjax',
                             label: 'Buscar libremente dentro de las suscripciones',
                             placeholder: 'Producto, servicio, código, n° de factura o recibo, fecha o monto de un cobro, información adicional...',

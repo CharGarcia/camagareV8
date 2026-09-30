@@ -48,7 +48,7 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosColumnasOcultas($vistaConfig 
                     <span class="input-group-text bg-white border-end-0 text-muted"><i class="bi bi-search"></i></span>
                     <input type="text" id="txtBuscarFP" class="form-control border-start-0 ps-0 shadow-none border" placeholder="Buscar por nombre o banco..." value="<?= htmlspecialchars($buscar ?? '') ?>" autocomplete="off">
                     <?php if (!empty($buscar)): ?>
-                        <a href="<?= $urlBase ?>/index" class="btn border border-start-0 text-muted" title="Limpiar"><i class="bi bi-x-lg"></i></a>
+                        <a href="javascript:void(0)" onclick="FP_limpiar()" class="btn border border-start-0 text-muted" title="Limpiar"><i class="bi bi-x-lg"></i></a>
                     <?php endif; ?>
                 </div>
             </form>
@@ -207,9 +207,20 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosColumnasOcultas($vistaConfig 
 let currentSort = '<?= $ordenCol ?>';
 let currentDir = '<?= $ordenDir ?>';
 
-function FP_buscar(p = 1){
-    const b = document.getElementById('txtBuscarFP').value;
-    window.location.href = `<?= $urlBase ?>/index?b=${encodeURIComponent(b)}&page=${p}&sort=${currentSort}&dir=${currentDir}`;
+// URL limpia: el estado del listado se guarda en sesión y luego se recarga el módulo.
+async function FP_buscar(p = 1){
+    const fd = new FormData();
+    fd.append('b', document.getElementById('txtBuscarFP').value);
+    fd.append('page', p);
+    fd.append('sort', currentSort);
+    fd.append('dir', currentDir);
+    try { await fetch('<?= $urlBase ?>/estadoListadoAjax', { method: 'POST', body: fd }); } catch (e) {}
+    window.location.href = '<?= $urlBase ?>';
+}
+
+function FP_limpiar(){
+    document.getElementById('txtBuscarFP').value = '';
+    FP_buscar(1);
 }
 
 function FP_sort(col){

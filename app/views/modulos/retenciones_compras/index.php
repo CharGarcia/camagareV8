@@ -167,9 +167,9 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                         titulo: 'Filtros de retenciones en compras',
                         inputWidth: 420,
                         extraId: 'fmExtraRet',   // columnas + PDF + Excel, pegados al final del grupo
-                        // Pestaña Detalles: búsqueda libre dentro de las líneas de las retenciones.
+                        // Pestaña "Búsqueda por detalle": búsqueda libre dentro de las líneas de las retenciones.
                         busquedaDetalle: {
-                            tab: 'Detalles',
+                            tab: 'Búsqueda por detalle',
                             url: `<?= BASE_URL ?>/<?= $rutaModulo ?>/buscarDetallesAjax`,
                             label: 'Buscar libremente dentro de las retenciones',
                             placeholder: 'Código de retención, concepto, impuesto, base, porcentaje, valor...',

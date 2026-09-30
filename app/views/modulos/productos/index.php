@@ -144,10 +144,10 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                         titulo: 'Filtros de productos',
                         inputWidth: 420,
                         extraId: 'fmExtraPROD',   // columnas + PDF + Excel + acciones, pegados al final del grupo
-                        // Pestaña Detalles: búsqueda libre dentro de los productos (variantes,
+                        // Pestaña "Búsqueda por detalle": búsqueda libre dentro de los productos (variantes,
                         // componentes de kits, precios adicionales y códigos de proveedor).
                         busquedaDetalle: {
-                            tab: 'Detalles',
+                            tab: 'Búsqueda por detalle',
                             url: `<?= BASE_URL ?>/<?= $rutaModulo ?>/buscarDetallesAjax`,
                             label: 'Buscar libremente dentro de los productos',
                             placeholder: 'Variante (talla, color...), componente de un kit, lista de precios, código o proveedor...',

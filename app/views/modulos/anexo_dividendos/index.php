@@ -173,9 +173,9 @@ $pestanas = [
                         titulo: 'Filtros del anexo de dividendos',
                         inputWidth: 420,
                         extraId: 'fmExtraADI',   // columnas + PDF + Excel, pegados al final del grupo
-                        // Pestaña Detalles: búsqueda libre dentro de los beneficiarios y la distribución.
+                        // Pestaña "Búsqueda por detalle": búsqueda libre dentro de los beneficiarios y la distribución.
                         busquedaDetalle: {
-                            tab: 'Detalles',
+                            tab: 'Búsqueda por detalle',
                             url: `<?= $urlBaseAdi ?>/buscarDetallesAjax`,
                             label: 'Buscar libremente dentro de los anexos',
                             placeholder: 'Identificación o nombre del beneficiario, año de la utilidad, fecha, monto...',

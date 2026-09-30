@@ -6,7 +6,7 @@ ruta_modulo: modulos/ordenes-compra
 tipo: modulo
 visibilidad: todos
 etiquetas: orden de compra, ordenes, pedido a proveedor, requisicion, compra pendiente, autorizar compra, vincular compra, recibido, pedido vs facturado, aprobacion por correo, enviado, aprobar orden, entrega parcial, recibido parcial, duplicar orden, cerrar orden, iva, tarifa iva, subtotales, total con impuestos, impuestos, notas, notas por linea, observaciones del item, instrucciones al proveedor, numeracion por fecha, numero con el año, reiniciar numeracion, reinicio anual, reinicio mensual, correlativo por año, correlativo por mes, modo de numeracion, buscar orden de compra, buscador, filtros, filtrar ordenes, buscar por producto pedido, compra vinculada, chips, aparecen documentos que no busque, resultados que no corresponden, la busqueda trae otros documentos, imprimir, impresora
-version: 1.17
+version: 1.18
 orden: 15
 estado: activo
 ---
@@ -182,11 +182,11 @@ la ventana de filtros (botón del embudo):
 | Dato | Dónde se busca |
 |------|----------------|
 | Usuario que la creó | Pestaña *Orden de compra* → selector **Usuario** |
-| Productos pedidos (código, descripción y notas) | Pestaña *Detalles* |
-| N° de las compras vinculadas | Pestaña *Detalles* |
+| Productos pedidos (código, descripción y notas) | Pestaña *Búsqueda por detalle* |
+| N° de las compras vinculadas | Pestaña *Búsqueda por detalle* |
 | Estado | Pestaña *Orden de compra* |
 
-La pestaña *Detalles* busca las dos cosas —líneas de la orden y compras
+La pestaña *Búsqueda por detalle* busca las dos cosas —líneas de la orden y compras
 vinculadas— y muestra cuál coincidió, mientras que desde el cuadro la orden
 aparecía en el listado sin que se viera el motivo.
 
@@ -205,7 +205,7 @@ Limpiar filtros.
 
 Los selectores *Serie* y *Usuario* listan solo lo que la empresa ya usó.
 
-**Pestaña Detalles** (lo que hay dentro de la orden). Es un único cuadro,
+**Pestaña Búsqueda por detalle** (lo que hay dentro de la orden). Es un único cuadro,
 **Buscar libremente dentro de las órdenes de compra**: escriba un producto, un
 código, una descripción, una nota de línea o el número de una compra vinculada,
 y aparece la lista de **cada ítem o compra que coincide** con la orden a la que
@@ -330,6 +330,9 @@ documentos admite cada periodo) está en el manual de **Empresa**, sección
 
 ## Historial de cambios
 
+- **1.18** — En la ventana de filtros, la pestaña *Detalles* se llama ahora
+  **Búsqueda por detalle**, y la ventana ya no tiene barra de desplazamiento
+  vertical propia: se muestra completa.
 - **1.17** — En el detalle, **Retroceso** y **Suprimir** ya no borran toda la
   búsqueda del producto mientras se escribe: borran letra por letra, y solo con
   un producto ya elegido limpian la línea de una vez.

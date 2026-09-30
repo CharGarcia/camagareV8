@@ -106,10 +106,10 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                         titulo: 'Filtros de facturación de consignaciones',
                         inputWidth: 420,
                         extraId: 'fmExtraFAC',   // columnas + PDF + Excel, pegados al final del grupo
-                        // Pestaña Detalles: búsqueda libre dentro de los documentos (productos con
+                        // Pestaña "Búsqueda por detalle": búsqueda libre dentro de los documentos (productos con
                         // lote/NUP y consignación de origen, e información adicional).
                         busquedaDetalle: {
-                            tab: 'Detalles',
+                            tab: 'Búsqueda por detalle',
                             url: `<?= $urlBaseFac ?>/buscarDetallesAjax`,
                             label: 'Buscar libremente dentro de las facturaciones',
                             placeholder: 'Producto, código, lote, NUP, bodega, consignación de origen, información adicional...',

@@ -6,7 +6,7 @@ ruta_modulo: modulos/asientos_contables
 tipo: modulo
 visibilidad: todos
 etiquetas: asientos, asiento contable, diario, debe, haber, partida doble, cuadrado, comprobante, contabilidad, imprimir, pdf, excel, documento origen, cuadre con el documento, total de la factura, cuenta por cobrar, cartera, editar asiento desde el documento, pestaña asiento contable, editado a mano, restaurar asiento automático, permisos de contabilidad, documentos migrados, migración, sistema anterior, buscar asiento, buscador, filtros, filtrar asientos, buscar por cuenta, buscar por referencia, libro diario, chips, asiento descuadrado, búsqueda lenta, se queda buscando, filtrar por origen, origen del asiento, módulo de origen, vista previa, costo de ventas, asiento sin costo, duplicar asiento, copiar asiento, clonar asiento, repetir asiento
-version: 1.27
+version: 1.28
 orden: 20
 estado: activo
 ---
@@ -311,7 +311,7 @@ observaciones, el usuario que lo registró y los **documentos y referencias de
 sus líneas** (por ejemplo *Egreso 001-101-000000003* o *pago planilla*). Las
 columnas **Tipo**, **Origen** y **Estado** no entran en la búsqueda libre: para
 filtrar por ellas use la ventana de filtros. Las cuentas contables tampoco (casi
-todo asiento usa Caja o Bancos): búsquelas en la pestaña *Detalles* o con el
+todo asiento usa Caja o Bancos): búsquelas en la pestaña *Búsqueda por detalle* o con el
 filtro *Cuenta contable*. Puede escribir varias palabras en cualquier orden y no
 importan mayúsculas ni tildes. El total también se encuentra escrito con coma
 decimal (*1078,09* encuentra *1.078,09*). Para limpiar, borre el texto o pulse
@@ -340,7 +340,7 @@ anterior), aunque la empresa todavía no tenga asientos de alguno; si la empresa
 tiene asientos con otro origen, también aparece, al final. Los selectores *Tipo* y
 *Usuario que registró* listan solo lo que la empresa ya tiene en sus asientos.
 
-**Pestaña Detalles** (lo que hay dentro del asiento). Es un único cuadro,
+**Pestaña Búsqueda por detalle** (lo que hay dentro del asiento). Es un único cuadro,
 **Buscar libremente dentro de los asientos**: escriba una cuenta (código o
 nombre), una referencia, un documento, un cliente, proveedor o empleado, un
 centro de costo, un proyecto o un valor del Debe o Haber, y aparece la lista de
@@ -422,6 +422,9 @@ tienen un documento individual con tercero que mostrar.
 
 ## Historial de cambios
 
+- **1.28** — En la ventana de filtros, la pestaña *Detalles* se llama ahora
+  **Búsqueda por detalle**, y la ventana ya no tiene barra de desplazamiento
+  vertical propia: se muestra completa.
 - **1.27** — El aviso de asientos sin generar dice **qué configurar** (una línea
   por sección, sin cifras) en lugar de contar documentos por módulo, y cada línea
   enlaza directo a la sección de Configuración Contable donde falta la cuenta.

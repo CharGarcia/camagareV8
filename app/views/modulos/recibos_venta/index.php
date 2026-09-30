@@ -291,11 +291,11 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                         titulo: 'Filtros de recibos',
                         inputWidth: 420,
                         extraId: 'fmExtraRV',   // columnas + PDF + Excel, pegados al final del grupo
-                        // Pestaña Detalles: búsqueda libre dentro de los recibos (productos,
+                        // Pestaña "Búsqueda por detalle": búsqueda libre dentro de los recibos (productos,
                         // formas de pago e información adicional). Cada coincidencia dice a
                         // qué recibo pertenece.
                         busquedaDetalle: {
-                            tab: 'Detalles',
+                            tab: 'Búsqueda por detalle',
                             url: `<?= BASE_URL ?>/<?= $rutaModulo ?>/buscarDetallesAjax`,
                             label: 'Buscar libremente dentro de los recibos',
                             placeholder: 'Producto, código, lote, forma de pago, plazo, información adicional...',

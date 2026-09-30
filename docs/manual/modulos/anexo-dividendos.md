@@ -6,7 +6,7 @@ ruta_modulo: modulos/anexo-dividendos
 tipo: modulo
 visibilidad: todos
 etiquetas: anexo dividendos, ADI, dividendos, utilidades, accionistas, socios, participes, reparto de utilidades, retencion dividendos, impuesto unico dividendos, articulo 39.2, anexo anual SRI, ADI-2025.zip, dimm anexos, buscar anexo, buscador, filtros, filtrar anexos, buscar beneficiario, chips
-version: 1.7
+version: 1.8
 orden: 31
 estado: activo
 ---
@@ -108,7 +108,7 @@ momento. La ventana solo se cierra con la X, Cancelar, Aplicar o Limpiar filtros
 | Informante | Informante, identificación |
 | Distribución | Tipo de beneficiario y tipo de dividendo (anexos que tengan al menos una línea de ese tipo) |
 
-**Pestaña Detalles** (lo que hay dentro del anexo). Es un único cuadro, **Buscar
+**Pestaña Búsqueda por detalle** (lo que hay dentro del anexo). Es un único cuadro, **Buscar
 libremente dentro de los anexos**: escriba la identificación o el nombre de un
 beneficiario, el año que generó la utilidad, una fecha o un monto, y aparece la
 lista de **cada beneficiario o línea de dividendo que coincide** con el año del anexo
@@ -321,6 +321,9 @@ del sistema.
 
 ## Historial de cambios
 
+- **1.8** — En la ventana de filtros, la pestaña *Detalles* se llama ahora
+  **Búsqueda por detalle**, y la ventana ya no tiene barra de desplazamiento
+  vertical propia: se muestra completa.
 - **1.7** — Nuevo buscador del listado: el cuadro ya no despliega sugerencias; lo que
   se escribe se busca en las columnas del anexo (incluidos los totales), las
   observaciones y los beneficiarios, salvo Tipo informante y Estado. Los filtros pasan

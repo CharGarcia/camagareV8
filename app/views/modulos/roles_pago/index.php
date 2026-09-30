@@ -114,10 +114,10 @@ $colores = ['borrador' => 'secondary', 'generado' => 'info', 'pagado' => 'succes
                         titulo: 'Filtros de roles de pago',
                         inputWidth: 420,
                         extraId: 'fmExtraROL',   // columnas, pegado al final del grupo
-                        // Pestaña Detalles: búsqueda libre dentro de las corridas (líneas de
+                        // Pestaña "Búsqueda por detalle": búsqueda libre dentro de las corridas (líneas de
                         // empleado y rubros). Cada coincidencia dice a qué corrida pertenece.
                         busquedaDetalle: {
-                            tab: 'Detalles',
+                            tab: 'Búsqueda por detalle',
                             url: `<?= $urlBaseRol ?>/buscarDetallesAjax`,
                             label: 'Buscar libremente dentro de los roles de pago',
                             placeholder: 'Empleado, identificación, cargo, rubro (sueldo, horas extra, IESS…), valor...',

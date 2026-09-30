@@ -200,10 +200,10 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                         titulo: 'Filtros de ingresos',
                         inputWidth: 420,
                         extraId: 'fmExtraING',   // columnas + PDF + Excel, pegados al final del grupo
-                        // Pestaña Detalles: búsqueda libre dentro de los ingresos (líneas cobradas y
+                        // Pestaña "Búsqueda por detalle": búsqueda libre dentro de los ingresos (líneas cobradas y
                         // formas de cobro). Cada coincidencia dice a qué ingreso pertenece.
                         busquedaDetalle: {
-                            tab: 'Detalles',
+                            tab: 'Búsqueda por detalle',
                             url: `<?= BASE_URL ?>/<?= $rutaModulo ?>/buscarDetallesAjax`,
                             label: 'Buscar libremente dentro de los ingresos',
                             placeholder: 'Nº de factura o recibo, descripción, cuenta, forma de cobro, referencia, cheque, monto...',

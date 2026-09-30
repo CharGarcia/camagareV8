@@ -6,7 +6,7 @@ ruta_modulo: modulos/nota_debito
 tipo: modulo
 visibilidad: todos
 etiquetas: nota de debito, notas de debito, cargo adicional, interes por mora, sri, buscar nota de debito, buscador, filtros, filtrar notas de debito, buscar por motivo, filtro de fechas, documento modificado, chips, aparecen notas que no busque, resultados que no corresponden, buscar por clave de acceso, imprimir, impresora
-version: 1.8
+version: 1.10
 orden: 31
 estado: activo
 ---
@@ -78,7 +78,7 @@ la ventana de filtros (botón del embudo):
 | Dato | Dónde se busca |
 |------|----------------|
 | Clave de acceso y N° de autorización | Pestaña *Nota de débito* |
-| Motivos de la nota | Pestaña *Detalles* |
+| Motivos de la nota | Pestaña *Búsqueda por detalle* |
 | Correo y Estado | Pestaña *Nota de débito* |
 
 En un comprobante electrónico la clave de acceso y el número de autorización son
@@ -105,7 +105,7 @@ El selector *Usuario que registró* lista solo a quienes ya registraron notas
 de débito en la empresa, y *Serie* solo las series con notas guardadas. El
 *IVA* se calcula como total menos subtotal.
 
-**Pestaña Detalles** (lo que hay dentro de la nota). Es un único cuadro,
+**Pestaña Búsqueda por detalle** (lo que hay dentro de la nota). Es un único cuadro,
 **Buscar libremente dentro de las notas de débito**: escriba un motivo, un
 valor, una forma de pago SRI, un plazo o un dato de la información adicional,
 y aparece la lista de **cada línea que coincide** con la nota a la que
@@ -158,6 +158,9 @@ la operación de inmediato.
 
 ## Historial de cambios
 
+- **1.10** — En la ventana de filtros, la pestaña *Detalles* se llama ahora
+  **Búsqueda por detalle**, y la ventana ya no tiene barra de desplazamiento
+  vertical propia: se muestra completa.
 - **1.9** — La factura a modificar se puede buscar escribiendo solo su **secuencial**. Antes el campo le ponía guiones mientras se escribía (`1311` quedaba como `131-1`) y la búsqueda no encontraba la factura. Al salir del campo, un número de hasta 9 dígitos se completa como `001-001-` más el secuencial.
 - **1.8** — El botón **PDF** del documento pregunta ahora si se quiere
   **Imprimir** (abre el cuadro de impresión con el documento ya cargado),

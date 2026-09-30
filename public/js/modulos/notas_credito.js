@@ -387,8 +387,12 @@
 
             // Cargar detalles y datos completos del cliente (incluye cliente_email)
             try {
-                const resp = await fetch(`${BASE_URL}/modulos/notas_credito/getNcAjax?id=${data.id}`);
+                const token = (window.NC_aperturaToken = (window.NC_aperturaToken || 0) + 1);
+                const resp = await fetch(`${BASE_URL}/modulos/notas_credito/getNcAjax?id=${data.id}`, { cache: 'no-store' });
                 const result = await resp.json();
+                // Solo pinta la ÚLTIMA nota pedida: si se abren dos seguidas, la
+                // respuesta tardía de la primera no debe sobrescribir la segunda.
+                if (token !== window.NC_aperturaToken) return;
                 if (result.ok) {
                     renderDetalles(result.detalles);
                     NC_renderInfoAdicional(result.info_adicional);
@@ -2173,6 +2177,18 @@
                 const tab = ncAsientoTab();
                 const idEl = document.getElementById('nc_id');
                 if (tab) tab.cargar(idEl ? idEl.value : 0);
+            });
+        }
+
+        // Cada vez que se alza el modal arranca en la pestaña «Nota de crédito». Al abrir
+        // una nota existente quedaba activa la pestaña de la anterior (Asiento, SRI), que
+        // no volvía a dispararse y mostraba los datos de esa otra nota.
+        const modalNcEl = document.getElementById('modalNC');
+        if (modalNcEl) {
+            modalNcEl.addEventListener('show.bs.modal', function (e) {
+                if (e.target !== modalNcEl) return;
+                const tabPrincipal = document.getElementById('tab-nc-principal-btn');
+                if (tabPrincipal) bootstrap.Tab.getOrCreateInstance(tabPrincipal).show();
             });
         }
     });

@@ -94,6 +94,15 @@ class CuentasPorPagarRepository extends BaseRepository
     // ─────────────────────────────────────────────────────────────────────
 
     /**
+     * Saldo de una liquidación (alias `l`): 0 si está marcada como pagada en el sistema anterior
+     * (liquidaciones migradas hasta 2020, ver App\Helpers\LiquidacionPagoAnterior).
+     */
+    private function saldoLiq(string $expr): string
+    {
+        return \App\Helpers\LiquidacionPagoAnterior::saldo('l', $expr);
+    }
+
+    /**
      * CTE que acumula lo pagado desde egresos_detalle hasta una fecha de corte opcional.
      * $idEmpresa: filtra por empresa (multiempresa, §4) — sin esto el GROUP BY sumaba
      * los pagos de TODAS las empresas del sistema en cada consulta del reporte (mismo
@@ -437,9 +446,7 @@ class CuentasPorPagarRepository extends BaseRepository
                     0::numeric                                                    AS total_nc,
                     0::numeric                                                    AS total_nd,
                     COALESCE(ret.total_retenido, 0)                               AS total_retenido,
-                    ROUND(l.importe_total
-                        - COALESCE(pg.total_pagado,   0)
-                        - COALESCE(ret.total_retenido,0), 2)                         AS saldo,
+                    ROUND({$this->saldoLiq('l.importe_total - COALESCE(pg.total_pagado, 0) - COALESCE(ret.total_retenido, 0)')}, 2) AS saldo,
                     {$fvlExpr}                                                    AS fecha_vencimiento
                 FROM liquidaciones_cabecera l
                 LEFT JOIN empresas emp
@@ -562,9 +569,7 @@ class CuentasPorPagarRepository extends BaseRepository
                 SELECT l.id_proveedor,
                        'LIQUIDACION'::text                                         AS tipo_fuente,
                        l.fecha_emision,
-                       ROUND(l.importe_total
-                           - COALESCE(pg.total_pagado,   0)
-                           - COALESCE(ret.total_retenido,0), 2) AS saldo,
+                       ROUND({$this->saldoLiq('l.importe_total - COALESCE(pg.total_pagado, 0) - COALESCE(ret.total_retenido, 0)')}, 2) AS saldo,
                        {$fvlExpr} AS fecha_vencimiento
                 FROM liquidaciones_cabecera l
                 JOIN proveedores p ON p.id = l.id_proveedor
@@ -753,9 +758,7 @@ class CuentasPorPagarRepository extends BaseRepository
                 SELECT l.id_proveedor,
                        'LIQUIDACION'::text                                         AS tipo_fuente,
                        l.fecha_emision,
-                       ROUND(l.importe_total
-                           - COALESCE(pg.total_pagado,   0)
-                           - COALESCE(ret.total_retenido,0), 2) AS saldo,
+                       ROUND({$this->saldoLiq('l.importe_total - COALESCE(pg.total_pagado, 0) - COALESCE(ret.total_retenido, 0)')}, 2) AS saldo,
                        {$fvlExpr} AS fecha_vencimiento
                 FROM liquidaciones_cabecera l
                 JOIN proveedores p ON p.id=l.id_proveedor
@@ -921,6 +924,7 @@ class CuentasPorPagarRepository extends BaseRepository
                        l.fecha_emision,
                        l.importe_total,
                        CONCAT(l.establecimiento,'-',l.punto_emision,'-',l.secuencial) AS numero_documento,
+                       " . \App\Helpers\LiquidacionPagoAnterior::flag('l') . " AS pagada_sistema_anterior,
                        COALESCE((
                            SELECT SUM(ed.monto_pagado)
                            FROM egresos_detalle ed
@@ -1056,6 +1060,8 @@ class CuentasPorPagarRepository extends BaseRepository
             + (float)($row['total_nd'] ?? 0),
             2
         );
+        // Liquidación pagada en el sistema anterior (migración, hasta 2020): no admite pagos.
+        if (!empty($row['pagada_sistema_anterior'])) { $saldo = 0.0; }
         $row['saldo'] = $saldo;
         return $row;
     }

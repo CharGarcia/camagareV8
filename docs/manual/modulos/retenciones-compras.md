@@ -6,7 +6,7 @@ ruta_modulo: modulos/retenciones_compras
 tipo: modulo
 visibilidad: todos
 etiquetas: retencion, retenciones, retencion de liquidacion, retener liquidacion de compra, liquidacion de compra, vincular compra, vincular documento, documento sustento, buscar compra para retener, comprobante de retencion, proveedor, iva, renta, sustento tributario, sri, plazo, base imponible, porcentaje, advertencias, ruc proveedor, ruc del proveedor del sistema, informacion adicional, resolucion 27, pdf, ride, imprimir, imprimir retencion, impresora, descargar pdf, ver pdf, buscar retencion, buscador, filtros, filtrar retenciones, buscar por codigo de retencion, estado de correo, chips, aparecen documentos que no busque, resultados que no corresponden, la busqueda trae otros documentos
-version: 1.20
+version: 1.21
 orden: 30
 estado: activo
 ---
@@ -55,7 +55,7 @@ consultan en la ventana de filtros (botón del embudo):
 |------|----------------|
 | Clave de acceso y N° de autorización | Pestaña *Retención* |
 | Usuario que registró | Pestaña *Retención* |
-| Códigos y conceptos de retención de las líneas | Pestaña *Detalles* |
+| Códigos y conceptos de retención de las líneas | Pestaña *Búsqueda por detalle* |
 | Tipo Doc., Correo y Estado | Pestaña *Retención* |
 
 En un comprobante electrónico la clave de acceso y el número de autorización son
@@ -81,7 +81,7 @@ Limpiar filtros.
 Los selectores *Serie*, *Tipo de documento*, *Sustento tributario* y *Usuario*
 listan solo lo que la empresa ya usó.
 
-**Pestaña Detalles** (las líneas de la retención). Es un único cuadro, **Buscar
+**Pestaña Búsqueda por detalle** (las líneas de la retención). Es un único cuadro, **Buscar
 libremente dentro de las retenciones**: escriba un código de retención (por
 ejemplo *303*), un concepto, el impuesto (*renta*, *IVA*, *ISD*), una base, un
 porcentaje o un valor, y aparece la lista de **cada línea que coincide** con la
@@ -400,6 +400,9 @@ El valor lo configura el superadministrador en `/config/sri-proveedor`.
 
 ## Historial de cambios
 
+- **1.21** — En la ventana de filtros, la pestaña *Detalles* se llama ahora
+  **Búsqueda por detalle**, y la ventana ya no tiene barra de desplazamiento
+  vertical propia: se muestra completa.
 - **1.20** — Desde **Nuevo** se puede elegir la **compra o liquidación de compra**
   a retener en el campo **Nº Doc. Retenido** (ver *Elegir la compra o liquidación
   desde este módulo*). Antes solo se podía vincular abriendo la retención desde la

@@ -6,7 +6,7 @@ ruta_modulo: modulos/entregas-consignaciones
 tipo: modulo
 visibilidad: todos
 etiquetas: entregas, entrega, comentario de entrega, observación de entrega, nota de entrega, buscar entrega, buscar consignacion, buscador, filtros, filtrar entregas, buscar por producto, buscar por lote, con firma, sin firma, con gps, sin gps, chips, pendientes de entrega, por entregar, consignaciones, repartidor, GPS, firma, evidencia de entrega, app móvil, entregas confirmadas, resumen de entregas, aparecen documentos que no busque, resultados que no corresponden, buscar por producto en el listado
-version: 1.11
+version: 1.12
 orden: 0
 estado: activo
 ---
@@ -132,8 +132,8 @@ de filtros (botón del embudo):
 
 | Dato | Dónde se busca |
 |------|----------------|
-| Productos consignados, lote y NUP | Pestaña *Detalles* |
-| Dispositivo de la app móvil | Pestaña *Detalles* |
+| Productos consignados, lote y NUP | Pestaña *Búsqueda por detalle* |
+| Dispositivo de la app móvil | Pestaña *Búsqueda por detalle* |
 | RUC o cédula del cliente | Pestaña *Entrega* → **RUC / cédula** |
 | Observaciones y punto de llegada **de la consignación** | Listado de Consignaciones de Venta |
 | Estado, Canal, Firma y GPS | Pestaña *Entrega* |
@@ -156,7 +156,7 @@ ya aparecen en las consignaciones y entregas de la empresa. Los selectores de
 ventana (Año y Mes arman el rango completo de fechas de emisión), y se
 actualizan si el filtro se cambia desde la ventana o se quita su etiqueta.
 
-**Pestaña Detalles**. Es un único cuadro, **Buscar libremente dentro de las
+**Pestaña Búsqueda por detalle**. Es un único cuadro, **Buscar libremente dentro de las
 consignaciones**: escriba un producto, un código, un lote, un NUP, una bodega,
 un dispositivo o un texto de la observación de una entrega, y aparece la lista
 de **cada coincidencia** con la consignación a la que pertenece (número,
@@ -275,6 +275,9 @@ igual que una que no existe.
 
 ## Historial de cambios
 
+- **1.12** — En la ventana de filtros, la pestaña *Detalles* se llama ahora
+  **Búsqueda por detalle**, y la ventana ya no tiene barra de desplazamiento
+  vertical propia: se muestra completa.
 - **1.11** — App móvil (iPhone y Android): al registrar una entrega ya se puede
   escribir una **observación** (opcional, hasta 500 caracteres), como en la web,
   y se quitó el recuadro de **firma**. El KPI *Evidencia incompleta* ya no cuenta

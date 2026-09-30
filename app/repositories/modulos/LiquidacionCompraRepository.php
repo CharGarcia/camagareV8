@@ -34,11 +34,12 @@ class LiquidacionCompraRepository extends BaseRepository
         // Abonos de la liquidación, con la misma regla que Compras: pagos de Egresos
         // (tipo_documento LIQUIDACION, egreso no anulado) + retenciones no anuladas
         // enlazadas por id_liquidacion. Los usan los filtros "pago:", "saldo:",
-        // "retenido:" y "retencion:" (no son columnas del listado).
+        // "retenido:" y "retencion:"; el saldo además es la columna "Saldo" del listado.
         $sqlPagado   = "(SELECT COALESCE(SUM(ed.monto_pagado), 0) FROM egresos_detalle ed INNER JOIN egresos_cabecera ec ON ed.id_egreso = ec.id WHERE ed.tipo_documento = 'LIQUIDACION' AND ed.id_referencia_documento = l.id AND ed.eliminado = false AND ec.estado != 'anulado' AND ec.eliminado = false)";
         $sqlRetenido = "(SELECT COALESCE(SUM(r.total_retenido), 0) FROM retencion_compra_cabecera r WHERE r.id_liquidacion = l.id AND r.id_empresa = l.id_empresa AND r.eliminado = false AND r.estado != 'anulada')";
         $sqlAbonos   = "($sqlPagado + $sqlRetenido)";
-        $saldo       = "GREATEST(0, l.importe_total - $sqlAbonos)";
+        // Pagada en el sistema anterior (migración, hasta 2020): saldo 0 sin egreso.
+        $saldo       = \App\Helpers\LiquidacionPagoAnterior::saldo('l', "GREATEST(0, l.importe_total - $sqlAbonos)");
 
         // Texto libre: las columnas del listado —número, secuencial, fecha, proveedor,
         // identificación, subtotal, descuento, total y usuario— más las observaciones.
@@ -146,7 +147,7 @@ class LiquidacionCompraRepository extends BaseRepository
             $params[':id_usuario'] = $idUsuario;
         }
 
-        $allowedCols = ['id', 'fecha_emision', 'secuencial', 'importe_total', 'total_sin_impuestos', 'total_descuento', 'estado', 'estado_correo', 'proveedor_nombre', 'proveedor_ruc', 'usuario_nombre', 'observaciones'];
+        $allowedCols = ['id', 'fecha_emision', 'secuencial', 'importe_total', 'total_sin_impuestos', 'total_descuento', 'estado', 'estado_correo', 'proveedor_nombre', 'proveedor_ruc', 'usuario_nombre', 'observaciones', 'saldo'];
         if (!in_array($ordenCol, $allowedCols)) $ordenCol = 'fecha_emision';
         $ordenDir = strtoupper($ordenDir) === 'ASC' ? 'ASC' : 'DESC';
 
@@ -154,6 +155,7 @@ class LiquidacionCompraRepository extends BaseRepository
             'proveedor_nombre' => 'p.razon_social',
             'proveedor_ruc'    => 'p.identificacion',
             'usuario_nombre'   => 'u.nombre',
+            'saldo'            => $saldo,
             default            => "l.$ordenCol",
         };
 
@@ -177,7 +179,8 @@ class LiquidacionCompraRepository extends BaseRepository
                 'select'      => "l.*,
                        p.razon_social    AS proveedor_nombre,
                        p.identificacion   AS proveedor_ruc,
-                       u.nombre          AS usuario_nombre",
+                       u.nombre          AS usuario_nombre,
+                       ROUND($saldo, 2)  AS saldo",
             ],
             $params
         );

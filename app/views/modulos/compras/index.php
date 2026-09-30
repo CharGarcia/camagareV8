@@ -207,10 +207,10 @@ $to         = $to         ?? 0;
                         titulo: 'Filtros de compras',
                         inputWidth: 420,
                         extraId: 'fmExtraCompras',   // columnas + PDF + Excel, pegados al final del grupo
-                        // Pestaña Detalles: búsqueda libre dentro de las compras (productos,
-                        // formas de pago, información adicional y reembolsos de terceros).
+                        // Pestaña "Búsqueda por detalle": búsqueda libre dentro de las compras
+                        // (productos, formas de pago, información adicional y reembolsos de terceros).
                         busquedaDetalle: {
-                            tab: 'Detalles',
+                            tab: 'Búsqueda por detalle',
                             url: `<?= BASE_URL ?>/<?= $rutaModulo ?>/buscarDetallesAjax`,
                             label: 'Buscar libremente dentro de las compras',
                             placeholder: 'Producto, código, forma de pago, plazo, información adicional, reembolso...',

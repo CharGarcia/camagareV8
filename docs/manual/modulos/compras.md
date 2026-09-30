@@ -6,7 +6,7 @@ ruta_modulo: modulos/compras
 tipo: modulo
 visibilidad: todos
 etiquetas: compras, compra, factura de compra, buscar compra, buscador, aparecen compras que no busque, resultados que no corresponden, la busqueda trae otras compras, buscar por numero de autorizacion, filtros, filtrar compras, buscar por producto comprado, filtro de fechas, saldo pendiente, estado de pago, chips, ordenar por dos columnas, ordenar por proveedor y fecha, asiento contable, editar asiento, pestaña asiento, proveedor, xml, sri, entrada de mercaderia, vincular producto, retencion, orden de compra, vincular orden, pedido a proveedor, comparar pedido vs facturado, entrega parcial, recibido parcial, cerrar orden, sustento tributario, codigo de sustento, autorizacion, fecha de caducidad, ats, persona natural, obligada a llevar contabilidad, tipo de contribuyente, registro manual, compra fisica, pagar la compra, pestaña pagos, saldo pendiente, valores de terceros, otros conceptos, valores adicionales, bomberos, tasa de basura, recoleccion de basura, planilla de luz, planilla de agua, servicios basicos, informacion adicional, info adicional, nombre muy largo, limite de caracteres, value too long, no se pudo guardar la compra, imprimir, impresora
-version: 2.20
+version: 2.22
 orden: 20
 estado: activo
 ---
@@ -331,6 +331,15 @@ campos cuyo nombre menciona *bomberos*, *basura*, *recolección* o *terceros* y
 cuyo valor es un número. En una compra registrada a mano se consigue lo mismo
 agregando el rubro en la pestaña Info Adicional con uno de esos nombres.
 
+## Al abrir una compra
+
+La ventana de la compra se abre **siempre en la pestaña «Detalle de Compra»** (y,
+abajo, en *Info Adicional*), aunque la última vez se haya cerrado en Pagos,
+Retenciones, Inventario, Asiento contable u otra. Así se ven de inmediato los
+datos de la compra que se acaba de abrir; las demás pestañas cargan su
+información al entrar en ellas. Si abre dos compras seguidas muy rápido, se
+muestra siempre la última que eligió.
+
 ## Documentos del módulo
 
 Desde la compra guardada se puede generar el **PDF** del documento, exportarlo a
@@ -360,7 +369,7 @@ en la ventana de filtros (botón del embudo):
 | N° de autorización | Pestaña *Compra* → **N° autorización** |
 | RUC / cédula del proveedor | Pestaña *Compra* → **RUC / cédula** |
 | Usuario que registró | Pestaña *Compra* → **Usuario que registró** |
-| Productos comprados (código y descripción) | Pestaña *Detalles* |
+| Productos comprados (código y descripción) | Pestaña *Búsqueda por detalle* |
 | Tipo, Sustento, Pago, Estado | Pestaña *Compra* |
 
 El número de autorización de un comprobante electrónico son 49 dígitos que
@@ -394,7 +403,7 @@ la empresa ya usó. El *estado de pago* y el *saldo pendiente* se calculan con l
 misma regla que las columnas Pago y Saldo: pagos de Egresos, notas de crédito y
 retenciones; las notas de crédito cuentan siempre como pagadas.
 
-**Pestaña Detalles** (lo que hay dentro de la compra). Es un único cuadro,
+**Pestaña Búsqueda por detalle** (lo que hay dentro de la compra). Es un único cuadro,
 **Buscar libremente dentro de las compras**: escriba un producto, un código,
 una forma de pago SRI, un plazo, un dato de la información adicional o un
 comprobante de reembolso de terceros, y aparece la lista de **cada línea que
@@ -559,6 +568,12 @@ aprobaciones pasa, así que no se paga dos veces.
 
 ## Historial de cambios
 
+- **2.22** — La ventana de la compra se abre siempre en la pestaña **Detalle de
+  Compra** con los datos de la compra elegida; al abrir dos compras seguidas ya
+  no pueden quedar mostrados los datos de la anterior.
+- **2.21** — En la ventana de filtros, la pestaña *Detalles* se llama ahora
+  **Búsqueda por detalle**, y la ventana ya no tiene barra de desplazamiento
+  vertical propia: se muestra completa.
 - **2.20** — El botón **PDF** del documento pregunta ahora si se quiere
   **Imprimir** (abre el cuadro de impresión con el documento ya cargado),
   **Descargar** o **Ver** en otra pestaña. También el PDF de cada egreso en la

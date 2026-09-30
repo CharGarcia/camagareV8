@@ -6,7 +6,7 @@ ruta_modulo: modulos/taller
 tipo: modulo
 visibilidad: todos
 etiquetas: taller, mecanica, precuenta, whatsapp, mecánica, orden de trabajo, OT, orden de reparacion, enderezada, pintura, latoneria, repuestos, mano de obra, tecnico, diagnostico, informe tecnico, garantia, siniestro, aseguradora, vehiculo, auto, carro, presupuesto, aprobacion, numeracion por fecha, numero con el año, reiniciar numeracion, reinicio anual, reinicio mensual, correlativo por año, correlativo por mes, modo de numeracion, buscar orden, buscar placa, buscador, filtros, filtrar ordenes de trabajo, filtro de fechas, buscar por repuesto, chips, imprimir, impresora
-version: 1.11
+version: 1.12
 orden: 0
 estado: activo
 ---
@@ -181,7 +181,7 @@ Los selectores *Serie*, *Departamento actual*, *Usuario que registró*, *Asesor
 de servicio* y *Jefe de taller* listan solo lo que la empresa ya usó en sus
 órdenes.
 
-**Pestaña Detalles** (lo que hay dentro de la orden). Es un único cuadro,
+**Pestaña Búsqueda por detalle** (lo que hay dentro de la orden). Es un único cuadro,
 **Buscar libremente dentro de las órdenes**: escriba un repuesto, un código, un
 técnico, lo que registró un departamento como trabajo realizado, una
 observación del checklist de recepción o una nota de la bitácora, y aparece la
@@ -330,6 +330,9 @@ documentos admite cada periodo) está en el manual de **Empresa**, sección
 
 ## Historial de cambios
 
+- **1.12** — En la ventana de filtros, la pestaña *Detalles* se llama ahora
+  **Búsqueda por detalle**, y la ventana ya no tiene barra de desplazamiento
+  vertical propia: se muestra completa.
 - **1.11** — En **iPad/iPhone** (Safari y Chrome) la lista del catálogo del campo
   **Descripción** se despliega pegada al campo, encima o debajo según el sitio que deje el
   teclado en pantalla: antes quedaba detrás del teclado o recortada por el

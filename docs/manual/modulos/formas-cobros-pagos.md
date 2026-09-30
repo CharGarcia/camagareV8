@@ -6,7 +6,7 @@ ruta_modulo: modulos/formas_cobros_pagos
 tipo: modulo
 visibilidad: todos
 etiquetas: formas de pago, formas de cobro, efectivo, caja, banco, tarjeta, payphone, anticipo, transferencia, cheque, orden, ordenar formas de pago, primera forma de pago, orden en ingresos, orden en egresos, saldo, mostrar saldo, ocultar saldo, saldo disponible, saldo de caja, saldo del banco
-version: 1.5
+version: 1.6
 orden: 70
 estado: activo
 ---
@@ -146,6 +146,8 @@ por dos medios (p. ej. "Cheques Pichincha" y "Transferencias Pichincha").
 
 ## Historial de cambios
 
+- **1.6** — La dirección del navegador queda limpia al buscar, cambiar de página u
+  ordenar el listado; la búsqueda y la página se conservan al recargar.
 - **1.5** — Una forma de cobro/pago con movimientos ya no se puede eliminar aunque
   solo se haya usado fuera de Ingresos y Egresos (traspasos, Control Bancario, cheques,
   saldos iniciales, conciliaciones, transferencias, Payphone, Nuvei). El aviso dice en

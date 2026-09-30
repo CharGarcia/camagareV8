@@ -106,11 +106,11 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                     titulo: 'Filtros de cotizaciones',
                     inputWidth: 420,
                     extraId: 'fmExtraCP',   // columnas + Excel, pegados al final del grupo
-                    // Pestaña Detalles: búsqueda libre dentro de las cotizaciones (líneas
+                    // Pestaña "Búsqueda por detalle": búsqueda libre dentro de las cotizaciones (líneas
                     // cotizadas y costos por proveedor). Cada coincidencia dice a qué
                     // cotización pertenece.
                     busquedaDetalle: {
-                        tab: 'Detalles',
+                        tab: 'Búsqueda por detalle',
                         url: `<?= BASE_URL ?>/<?= $rutaModulo ?>/buscarDetallesAjax`,
                         label: 'Buscar libremente dentro de las cotizaciones',
                         placeholder: 'Descripción, categoría, valor, proveedor, factura del proveedor...',

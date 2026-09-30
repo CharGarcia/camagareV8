@@ -208,7 +208,7 @@ class LiquidacionCompraController extends BaseModuloController
 
         ob_start();
         if (empty($rows)) {
-            echo '<tr><td colspan="10" class="text-center py-5 text-muted"><i class="bi bi-receipt fs-3 d-block mb-2"></i>No se encontraron liquidaciones.</td></tr>';
+            echo '<tr><td colspan="11" class="text-center py-5 text-muted"><i class="bi bi-receipt fs-3 d-block mb-2"></i>No se encontraron liquidaciones.</td></tr>';
         } else {
             foreach ($rows as $r) {
                 $rowData      = htmlspecialchars(json_encode($r), ENT_QUOTES, 'UTF-8');
@@ -231,6 +231,7 @@ class LiquidacionCompraController extends BaseModuloController
                         <td class="text-end" data-col="total_sin_impuestos">$' . number_format((float)($r['total_sin_impuestos'] ?? 0), 2) . '</td>
                         <td class="text-end" data-col="total_descuento">$' . number_format((float)($r['total_descuento'] ?? 0), 2) . '</td>
                         <td class="text-end fw-bold" data-col="importe_total">$' . number_format((float)($r['importe_total'] ?? 0), 2) . '</td>
+                        <td class="text-end" data-col="saldo">' . self::htmlSaldo($r) . '</td>
                         <td data-col="usuario_nombre">' . htmlspecialchars($r['usuario_nombre'] ?? '—') . '</td>
                         <td class="text-center" data-col="estado_correo">—</td>
                         <td class="text-center pe-3" data-col="estado">' . $estadoBadge . '</td>
@@ -733,6 +734,20 @@ class LiquidacionCompraController extends BaseModuloController
     // Exportación del LISTADO (respeta filtro y orden actuales)
     // ─────────────────────────────────────────────────────────────────────────
 
+    /**
+     * Celda "Saldo" del listado (la usan la vista y searchAjax): lo pendiente de pago,
+     * total − egresos − retenciones. Una liquidación anulada no debe nada: guion.
+     */
+    public static function htmlSaldo(array $r): string
+    {
+        if (($r['estado'] ?? '') === 'anulado') {
+            return '<span class="text-muted">—</span>';
+        }
+        $saldo = (float) ($r['saldo'] ?? 0);
+        $clase = $saldo > 0.004 ? 'text-danger fw-semibold' : 'text-success';
+        return '<span class="' . $clase . '">$' . number_format($saldo, 2) . '</span>';
+    }
+
     /** Filas del listado con los mismos filtros/orden de la vista, sin paginar. */
     private function filasParaExport(): array
     {
@@ -784,12 +799,13 @@ class LiquidacionCompraController extends BaseModuloController
                         <tr>
                             <th style="width:11%">Nº Liquidación</th>
                             <th style="width:9%">Fecha</th>
-                            <th style="width:26%">Proveedor</th>
+                            <th style="width:20%">Proveedor</th>
                             <th style="width:11%">Identificación</th>
                             <th style="width:9%" class="r">Subtotal</th>
                             <th style="width:8%" class="r">Descuento</th>
                             <th style="width:9%" class="r">Total</th>
-                            <th style="width:9%">Usuario</th>
+                            <th style="width:8%" class="r">Saldo</th>
+                            <th style="width:7%">Usuario</th>
                             <th style="width:8%">Estado</th>
                         </tr>
                     </thead>
@@ -805,6 +821,7 @@ class LiquidacionCompraController extends BaseModuloController
                             <td class="r"><?= number_format((float) ($r['total_sin_impuestos'] ?? 0), 2) ?></td>
                             <td class="r"><?= number_format((float) ($r['total_descuento'] ?? 0), 2) ?></td>
                             <td class="r"><?= number_format((float) ($r['importe_total'] ?? 0), 2) ?></td>
+                            <td class="r"><?= ($r['estado'] ?? '') === 'anulado' ? '-' : number_format((float) ($r['saldo'] ?? 0), 2) ?></td>
                             <td><?= htmlspecialchars((string) ($r['usuario_nombre'] ?? '-')) ?></td>
                             <td><?= ucfirst((string) ($r['estado'] ?? '')) ?></td>
                         </tr>
@@ -843,7 +860,7 @@ class LiquidacionCompraController extends BaseModuloController
             }
 
             $headers = ['Nº Liquidación', 'Fecha', 'Proveedor', 'Identificación', 'Subtotal',
-                        'Descuento', 'Total', 'Usuario', 'Observaciones', 'Estado'];
+                        'Descuento', 'Total', 'Saldo', 'Usuario', 'Observaciones', 'Estado'];
 
             $exportData = [];
             foreach ($rows as $r) {
@@ -856,6 +873,7 @@ class LiquidacionCompraController extends BaseModuloController
                     number_format((float) ($r['total_sin_impuestos'] ?? 0), 2, '.', ''),
                     number_format((float) ($r['total_descuento'] ?? 0), 2, '.', ''),
                     number_format((float) ($r['importe_total'] ?? 0), 2, '.', ''),
+                    ($r['estado'] ?? '') === 'anulado' ? '' : number_format((float) ($r['saldo'] ?? 0), 2, '.', ''),
                     (string) ($r['usuario_nombre'] ?? '-'),
                     (string) ($r['observaciones'] ?? ''),
                     ucfirst((string) ($r['estado'] ?? '')),

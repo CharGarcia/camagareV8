@@ -5752,7 +5752,43 @@ class MigracionMysqlService
         // Cruce pago (egreso) → liquidación: si Pagos (egresos) se migró ANTES, sus líneas LIQUIDACION
         // quedaron sin documento; ahora que las liquidaciones existen, se completa el enlace.
         $res['pagos_enlazados'] = $this->cruzarEgresosConLiquidaciones($pg, $idEmpresa);
+        $res['pagadas_sistema_anterior'] = $this->marcarLiquidacionesPagadasSistemaAnterior($pg, $idEmpresa, $idUsuario);
         return $res;
+    }
+
+    /**
+     * El sistema anterior no registraba pagos de liquidaciones hasta 2020: al migrarlas quedaban
+     * "pendientes de pago" aunque estaban pagadas. Marca como pagadas en el sistema anterior
+     * (liquidaciones_cabecera.pagada_sistema_anterior, ver App\Helpers\LiquidacionPagoAnterior) las
+     * liquidaciones que INSERTÓ la migración (no las vinculadas, que son nativas), vigentes, con fecha
+     * de emisión hasta LiquidacionPagoAnterior::FECHA_CORTE y con saldo pendiente — total o parcial —
+     * descontando pagos (egresos no anulados) y retenciones. No crea egresos ni mueve caja/bancos.
+     * Idempotente; cubre también lo migrado en corridas anteriores. Sin la columna (SQL no aplicado) no hace nada.
+     */
+    private function marcarLiquidacionesPagadasSistemaAnterior(PDO $pg, int $idEmpresa, int $idUsuario): int
+    {
+        if (!\App\Helpers\LiquidacionPagoAnterior::existe()) { return 0; }
+        $liqVigente = \App\Helpers\TiposComprobanteCompra::sqlLiquidacionVigente('l.estado');
+        $st = $pg->prepare(
+            "UPDATE liquidaciones_cabecera l
+                SET pagada_sistema_anterior = true, updated_at = now(), updated_by = :u
+              WHERE l.id_empresa = :e AND l.eliminado = false
+                AND COALESCE(l.pagada_sistema_anterior, false) = false
+                AND l.fecha_emision <= CAST(:corte AS date)
+                AND {$liqVigente}
+                AND EXISTS (SELECT 1 FROM migracion_mysql_map m
+                             WHERE m.id_empresa = l.id_empresa AND m.entidad = 'liquidaciones'
+                               AND m.id_destino = l.id AND m.vinculado = false)
+                AND ROUND(l.importe_total
+                    - COALESCE((SELECT SUM(ed.monto_pagado) FROM egresos_detalle ed JOIN egresos_cabecera ec ON ec.id = ed.id_egreso
+                                 WHERE ed.tipo_documento = 'LIQUIDACION' AND ed.id_referencia_documento = l.id
+                                   AND ed.eliminado = false AND ec.eliminado = false AND ec.estado != 'anulado'), 0)
+                    - COALESCE((SELECT SUM(r.total_retenido) FROM retencion_compra_cabecera r
+                                 WHERE r.id_liquidacion = l.id AND r.id_empresa = l.id_empresa
+                                   AND r.eliminado = false AND r.estado != 'anulada'), 0), 2) > 0"
+        );
+        $st->execute([':u' => $idUsuario, ':e' => $idEmpresa, ':corte' => \App\Helpers\LiquidacionPagoAnterior::FECHA_CORTE]);
+        return $st->rowCount();
     }
 
     /**

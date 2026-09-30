@@ -231,4 +231,41 @@ abstract class BaseModuloController extends Controller
         echo json_encode(['ok' => true, 'data' => $historial]);
         exit;
     }
+
+    /**
+     * AJAX: guarda en sesión el estado del listado (búsqueda, página y orden) para que la
+     * vista navegue luego a la URL limpia (`modulos/x`, sin `?b=&page=&sort=&dir=`).
+     * El index() lo recupera con leerEstadoListado(). Se conserva al recargar la página
+     * (p. ej. tras guardar en el modal), por eso no es de un solo uso.
+     */
+    public function estadoListadoAjax(): void
+    {
+        $this->requireLeer();
+
+        $dir = strtoupper(trim((string) ($_POST['dir'] ?? '')));
+        $_SESSION['listado_estado'][$this->getRutaModulo()] = [
+            'b'    => mb_substr(trim((string) ($_POST['b'] ?? '')), 0, 200),
+            'page' => max(1, (int) ($_POST['page'] ?? 1)),
+            // Solo identificadores: la whitelist real de columnas vive en el repository.
+            'sort' => preg_replace('/[^a-z0-9_]/i', '', (string) ($_POST['sort'] ?? '')),
+            'dir'  => in_array($dir, ['ASC', 'DESC'], true) ? $dir : '',
+        ];
+
+        $this->json(['ok' => true]);
+    }
+
+    /**
+     * Estado del listado guardado por estadoListadoAjax(): ['b','page','sort','dir'].
+     * Las claves vacías significan "usar el valor por defecto / las preferencias".
+     */
+    protected function leerEstadoListado(): array
+    {
+        $estado = $_SESSION['listado_estado'][$this->getRutaModulo()] ?? [];
+        return [
+            'b'    => (string) ($estado['b'] ?? ''),
+            'page' => max(1, (int) ($estado['page'] ?? 1)),
+            'sort' => (string) ($estado['sort'] ?? ''),
+            'dir'  => (string) ($estado['dir'] ?? ''),
+        ];
+    }
 }

@@ -125,9 +125,9 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                         titulo: 'Filtros de servicio externo',
                         inputWidth: 420,
                         extraId: 'fmExtraSE',   // columnas + PDF + Excel, pegados al final del grupo
-                        // Pestaña Detalles: búsqueda libre dentro de las órdenes (servicios/productos).
+                        // Pestaña "Búsqueda por detalle": búsqueda libre dentro de las órdenes (servicios/productos).
                         busquedaDetalle: {
-                            tab: 'Detalles',
+                            tab: 'Búsqueda por detalle',
                             url: '<?= $urlBase ?>/buscarDetallesAjax',
                             label: 'Buscar libremente dentro de las órdenes',
                             placeholder: 'Servicio, producto, código, bodega, monto...',

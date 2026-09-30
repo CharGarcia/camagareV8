@@ -204,10 +204,10 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                         titulo: 'Filtros de egresos',
                         inputWidth: 420,
                         extraId: 'fmExtraEGR',   // columnas + PDF + Excel, pegados al final del grupo
-                        // Pestaña Detalles: búsqueda libre dentro de los egresos (documentos
+                        // Pestaña "Búsqueda por detalle": búsqueda libre dentro de los egresos (documentos
                         // pagados y formas de pago). Cada coincidencia dice a qué egreso pertenece.
                         busquedaDetalle: {
-                            tab: 'Detalles',
+                            tab: 'Búsqueda por detalle',
                             url: `<?= BASE_URL ?>/<?= $rutaModulo ?>/buscarDetallesAjax`,
                             label: 'Buscar libremente dentro de los egresos',
                             placeholder: 'Nº de compra o rol, descripción, cuenta, forma de pago, referencia, cheque, monto...',

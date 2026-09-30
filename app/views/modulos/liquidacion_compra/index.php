@@ -222,9 +222,9 @@ $pestanasConfigLiq = array_merge(
                         titulo: 'Filtros de liquidaciones de compra',
                         inputWidth: 420,
                         extraId: 'fmExtraLC',   // columnas + PDF + Excel, pegados al final del grupo
-                        // Pestaña Detalles: búsqueda libre dentro de las liquidaciones.
+                        // Pestaña "Búsqueda por detalle": búsqueda libre dentro de las liquidaciones.
                         busquedaDetalle: {
-                            tab: 'Detalles',
+                            tab: 'Búsqueda por detalle',
                             url: `<?= BASE_URL ?>/<?= $rutaModulo ?>/buscarDetallesAjax`,
                             label: 'Buscar libremente dentro de las liquidaciones',
                             placeholder: 'Producto o servicio, código, forma de pago, plazo, información adicional...',
@@ -265,6 +265,7 @@ $pestanasConfigLiq = array_merge(
                     'total_sin_impuestos' => 'Subtotal',
                     'total_descuento'     => 'Descuento',
                     'importe_total'       => 'Total',
+                    'saldo'               => 'Saldo',
                     'usuario_nombre'      => 'Usuario',
                     'estado_correo'       => 'Estado correo',
                     'estado'              => 'Estado',
@@ -316,6 +317,9 @@ $pestanasConfigLiq = array_merge(
                         <th class="sortable-header text-end" role="button" data-sort="importe_total" data-col="importe_total">
                             Total <i class="bi <?= $ordenCol === 'importe_total' ? ($ordenDir === 'ASC' ? 'bi-sort-alpha-down text-primary' : 'bi-sort-alpha-up text-primary') : 'bi-arrow-down-up small text-muted' ?> ms-1"></i>
                         </th>
+                        <th class="sortable-header text-end" role="button" data-sort="saldo" data-col="saldo">
+                            Saldo <i class="bi <?= $ordenCol === 'saldo' ? ($ordenDir === 'ASC' ? 'bi-sort-alpha-down text-primary' : 'bi-sort-alpha-up text-primary') : 'bi-arrow-down-up small text-muted' ?> ms-1"></i>
+                        </th>
                         <th class="sortable-header" role="button" data-sort="usuario_nombre" data-col="usuario_nombre">
                             Usuario <i class="bi <?= $ordenCol === 'usuario_nombre' ? ($ordenDir === 'ASC' ? 'bi-sort-alpha-down text-primary' : 'bi-sort-alpha-up text-primary') : 'bi-arrow-down-up small text-muted' ?> ms-1"></i>
                         </th>
@@ -330,7 +334,7 @@ $pestanasConfigLiq = array_merge(
                 <tbody id="tbodyLiquidaciones">
                     <?php if (empty($rows)): ?>
                         <tr>
-                            <td colspan="10" class="text-center py-5 text-muted"><i class="bi bi-receipt fs-3 d-block mb-2"></i>No se encontraron liquidaciones.</td>
+                            <td colspan="11" class="text-center py-5 text-muted"><i class="bi bi-receipt fs-3 d-block mb-2"></i>No se encontraron liquidaciones.</td>
                         </tr>
                     <?php else: ?>
                         <?php foreach ($rows as $r): ?>
@@ -352,6 +356,7 @@ $pestanasConfigLiq = array_merge(
                                 <td class="text-end" data-col="total_sin_impuestos">$<?= number_format((float)($r['total_sin_impuestos'] ?? 0), 2) ?></td>
                                 <td class="text-end text-danger" data-col="total_descuento">$<?= number_format((float)($r['total_descuento'] ?? 0), 2) ?></td>
                                 <td class="text-end fw-bold" data-col="importe_total">$<?= number_format((float)($r['importe_total'] ?? 0), 2) ?></td>
+                                <td class="text-end" data-col="saldo"><?= \App\controllers\modulos\LiquidacionCompraController::htmlSaldo($r) ?></td>
                                 <td data-col="usuario_nombre"><?= htmlspecialchars($r['usuario_nombre'] ?? '-') ?></td>
                                 <td class="text-center" data-col="estado_correo">-</td>
                                 <td class="text-center pe-3" data-col="estado"><?= $estadoBadge ?></td>

@@ -1256,7 +1256,7 @@
             const key       = ASIENTOPROG_dimKey(c);
             const inputId   = `dimc_${tipo}_${idx}_${key}`;
             const valor     = propia ? `${propia.cuenta_codigo} - ${propia.cuenta_nombre}` : '';
-            const general   = c.cuenta_codigo ? `${c.cuenta_codigo}` : '';
+            const general   = c.cuenta_codigo ? `${c.cuenta_codigo} - ${c.cuenta_nombre || ''}` : '';
             // Concepto opcional sin cuenta en General: su valor va al concepto de respaldo, no falta.
             const marcador  = general ? `General: ${general}` : (c.respaldo_concepto ? `usa ${c.respaldo_concepto}` : 'sin cuenta');
             const claseSin  = (!propia && !c.id_cuenta && !c.respaldo_concepto) ? ' border-danger' : '';
@@ -1266,6 +1266,7 @@
                 <div class="position-relative flex-grow-1">
                     <input type="text" class="form-control form-control-sm py-0 bg-white text-dark${claseSin}" style="height:26px; font-size:.78rem;"
                            id="${inputId}" value="${ASIENTOPROG_esc(valor)}" placeholder="${ASIENTOPROG_esc(marcador)}" autocomplete="off"
+                           title="${ASIENTOPROG_esc(valor || marcador)}"
                            data-tipo="${tipo}" data-idx="${idx}"
                            data-asiento-tipo="${c.id_asiento_tipo}"
                            data-tarifa-iva="${ASIENTOPROG_esConceptoIva(c) ? c.id_referencia : ''}"
