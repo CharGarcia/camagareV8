@@ -216,7 +216,11 @@ módulos de Facturas y Recibos de venta, así que requieren permiso de lectura e
   ocurre en una sola operación: si algo falla, nada queda a medias.
 - La factura lleva en Info. Adicional la **placa** y el **número de orden**, además de
   lo que se haya escrito en la orden.
-- Una orden con documento vigente no se puede editar, eliminar ni volver a facturar.
+- Una orden con documento vigente no se puede editar, eliminar ni volver a facturar. Al
+  abrirla se muestra en **solo lectura**: un aviso indica en qué factura o recibo se
+  emitió, las líneas, la Info. Adicional y las condiciones no se pueden cambiar y no
+  aparecen los botones de agregar, quitar ni descontar. Para corregirla, anule o elimine
+  primero ese documento; la orden se libera. Lo mismo aplica a las órdenes anuladas.
 - **Solo se factura a clientes activos.** El buscador de clientes muestra solo los
   activos; si el cliente de una orden se desactiva después, la orden muestra el aviso
   *Cliente inactivo* y los botones Factura y Recibo quedan deshabilitados (el sistema
@@ -337,7 +341,9 @@ documentos admite cada periodo) está en el manual de **Empresa**, sección
 
 - **1.7** — La grilla de la orden muestra la **descripción completa** de cada ítem (el
   campo crece con el texto) y las columnas Código y Descripción se pueden ensanchar
-  arrastrando o con doble clic en el encabezado, igual que en Factura de venta.
+  arrastrando o con doble clic en el encabezado, igual que en Factura de venta. Una
+  orden facturada (o anulada) se abre en **solo lectura** con un aviso del documento
+  que la bloquea; antes las líneas parecían editables aunque no se podían guardar.
 - **1.6** — El modal se organiza en pestañas: **General**, **Historial** (todas las
   órdenes de un vehículo o de un cliente, con resumen de visitas) y **Facturación**
   (en qué factura o recibo se emitió la orden, con su estado actual y PDF). La

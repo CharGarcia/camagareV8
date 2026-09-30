@@ -6,7 +6,7 @@ ruta_modulo: modulos/recibo-venta
 tipo: modulo
 visibilidad: todos
 etiquetas: recibo de venta, recibos, buscar recibos, buscador, filtros, filtrar recibos, buscar por cliente, buscar por producto, estado de pago, saldo pendiente, nota de venta, venta sin factura, documento interno, sin impuestos, numeracion por fecha, numero con el año, reiniciar numeracion, reinicio anual, reinicio mensual, correlativo por año, correlativo por mes, modo de numeracion, lote, vencimiento, caducidad, fecha de vencimiento, lote y vencimiento, ancho de columna, agrandar columna, ensanchar, codigo cortado, descripcion cortada, no se ve la descripcion completa, redimensionar, precio con impuestos, precio con iva, sale en cero, tipo de identificacion, tipo de documento del cliente, ruc o cedula, es ruc o cedula, cedula o pasaporte, consumidor final, no se cual identificacion tiene el cliente, buscador de clientes, buscar cliente, elegir cliente, datos del cliente, imprimir, impresora
-version: 1.17
+version: 1.18
 orden: 35
 estado: activo
 ---
@@ -79,6 +79,9 @@ En la tabla de productos del recibo:
   - Con **doble clic** en ese mismo borde, la columna se ajusta sola al texto más
     largo del recibo (la descripción, hasta un máximo; lo que no quepa baja a
     otra línea).
+- Las columnas **Precios** y **Medida** solo aparecen cuando algún producto del
+  recibo tiene listas de precios adicionales o unidades de medida; si ninguno las
+  usa, se ocultan y la descripción ocupa ese espacio (igual que en Facturas de venta).
 
 El ancho que elija se **guarda para su usuario** y se mantiene en los siguientes
 recibos, sin afectar a los demás usuarios, a las columnas del listado ni a los
@@ -105,7 +108,7 @@ solo, sin menús ni sugerencias. Busca en las columnas del recibo: número, fech
 cliente, identificación, subtotal, descuento, IVA, ICE, propina, total,
 vendedor, observaciones y usuario. Además busca en el número de la **factura
 generada** desde el recibo y en los **códigos y descripciones de los productos**
-del recibo. Las columnas **Impuestos** (con o sin), **Estado de pago** y
+del recibo. Las columnas **Impuestos** (con o sin), **Pago** y
 **Estado** no entran en la búsqueda libre: para filtrar por ellas use la ventana
 de filtros. Puede escribir varias palabras en cualquier orden y no importan
 mayúsculas ni tildes. Para limpiar, borre el texto o pulse Escape en el cuadro.
@@ -127,7 +130,7 @@ Limpiar filtros.
 
 Los selectores *Serie*, *Vendedor* y *Usuario que registró* listan solo lo que
 la empresa ya usó en sus recibos. El *estado de pago* y el *saldo pendiente* se
-calculan con la misma regla que la columna Estado de pago: los cobros de
+calculan con la misma regla que la columna Pago: los cobros de
 Ingresos no anulados registrados contra el recibo.
 
 **Pestaña Detalles** (lo que hay dentro del recibo). Es un único cuadro,
@@ -196,6 +199,10 @@ la operación de inmediato.
 
 ## Historial de cambios
 
+- **1.18** — La tabla de productos tiene el mismo diseño que Facturas de venta: la
+  **Descripción** es más ancha y el **Código** se ensancha con su texto. Las columnas
+  **Precios** y **Medida** solo se muestran cuando algún producto las usa. La columna
+  *Estado de pago* del listado y su filtro se llaman ahora **Pago**.
 - **1.17** — Con el IVA configurado **al subtotal**, el IVA de cada línea se reajusta al
   guardar para que su suma sea exactamente el IVA sobre el subtotal. La factura
   que se genera desde un recibo también respeta ahora ese modo (antes lo

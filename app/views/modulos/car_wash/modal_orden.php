@@ -154,6 +154,11 @@
                         <div class="mt-1" id="cw_info_cliente" style="font-size:.78rem"></div>
                     </div>
 
+                    <!-- Orden facturada / anulada: solo lectura (lo valida también el servidor). -->
+                    <div id="cw_aviso_bloqueo" class="alert alert-warning py-1 px-2 small mt-2 mb-0 d-none">
+                        <i class="bi bi-lock-fill me-1"></i><span></span>
+                    </div>
+
                     <!-- Servicios / Productos (grilla igual que factura de venta) -->
                     <div class="mt-2 border rounded-3 overflow-hidden bg-white shadow-sm">
                         <div class="table-responsive" style="max-height: 350px;">
@@ -187,7 +192,7 @@
                             </table>
                         </div>
                         <div class="p-2 border-top bg-light d-flex justify-content-between align-items-center">
-                            <button type="button" class="btn btn-link btn-sm p-0 text-decoration-none fw-bold" onclick="cwAgregarLinea()">
+                            <button type="button" class="btn btn-link btn-sm p-0 text-decoration-none fw-bold cw-solo-edicion" onclick="cwAgregarLinea()">
                                 <i class="bi bi-plus-circle me-1"></i> Agregar línea
                             </button>
                             <div class="small fw-bold text-muted pe-3">Items: <span id="cw-count-items">0</span></div>
@@ -217,7 +222,7 @@
                                             </table>
                                         </div>
                                         <div class="p-1 border-top bg-light">
-                                            <button type="button" class="btn btn-link btn-sm p-0 text-decoration-none fw-bold ms-2" onclick="cwAgregarInfo()">
+                                            <button type="button" class="btn btn-link btn-sm p-0 text-decoration-none fw-bold ms-2 cw-solo-edicion" onclick="cwAgregarInfo()">
                                                 <i class="bi bi-plus-circle me-1"></i> Agregar línea
                                             </button>
                                         </div>
@@ -350,6 +355,12 @@
     .cw-quill .ql-container.ql-snow { border-radius: 0 0 4px 4px; font-size: 0.8rem; }
     .cw-quill .ql-editor { min-height: 110px; max-height: 220px; overflow-y: auto; }
     .cw-quill .ql-editor.ql-blank::before { font-style: italic; color: #adb5bd; }
+    /* Orden facturada o anulada: sin agregar, quitar ni descontar líneas. */
+    #modalOrdenCW.cw-solo-lectura .cw-solo-edicion,
+    #modalOrdenCW.cw-solo-lectura #cw_tbodyDetalle .btn,
+    #modalOrdenCW.cw-solo-lectura #cw_info_body .btn { display: none !important; }
+    #modalOrdenCW.cw-solo-lectura #cw_tbodyDetalle .input-detalle:disabled,
+    #modalOrdenCW.cw-solo-lectura #cw_info_body :disabled { background: transparent; color: inherit; opacity: 1; }
 </style>
 <script>
 (function () {
@@ -527,7 +538,7 @@
         cwRenderDocumentos([]);
     }
 
-    function setEditable(editable) {
+    function setEditable(editable, aviso) {
         ['cw_fecha_ingreso','cw_select_serie','cw_vehiculo_busqueda','cw_cliente_busqueda','cw_kilometraje',
          'cw_nivel_combustible','cw_proxima_cita','cw_id_bodega'].forEach(id => {
             const el = document.getElementById(id); if (el) el.disabled = !editable;
@@ -536,6 +547,17 @@
         if (document.getElementById('cw_id').value) document.getElementById('cw_select_serie').disabled = true;
         document.getElementById('cw_btn_guardar').classList.toggle('d-none', !editable);
         const q = cwQuill(); if (q) q.enable(!!editable);
+        // Grilla e info adicional: una orden facturada (documento vigente) o anulada es solo de
+        // consulta. Solo se deshabilita: al abrir otra orden las filas se vuelven a crear, así
+        // no se re-habilitan campos que la configuración deja fijos (p. ej. el IVA).
+        const modal = document.getElementById('modalOrdenCW');
+        modal.classList.toggle('cw-solo-lectura', !editable);
+        if (!editable) {
+            modal.querySelectorAll('#cw_tbodyDetalle input, #cw_tbodyDetalle select, #cw_tbodyDetalle textarea, #cw_info_body input, #cw_info_body select, #cw_info_body textarea')
+                .forEach(el => { el.disabled = true; });
+        }
+        const av = document.getElementById('cw_aviso_bloqueo');
+        if (av) { av.querySelector('span').textContent = aviso || ''; av.classList.toggle('d-none', !!editable || !aviso); }
     }
 
     window.cwAbrirNuevo = function () {
@@ -616,7 +638,13 @@
             if (!(o.detalles || []).length) cwAgregarLinea();
             cwCalcTotales();
 
-            setEditable(editable);
+            let aviso = '';
+            if (!editable) {
+                if (o.estado === 'anulado') aviso = 'Orden anulada: solo se puede consultar.';
+                else if (o.id_documento) aviso = `Orden facturada en ${o.tipo_documento === 'RECIBO' ? 'el recibo de venta' : 'la factura'} ${o.numero_documento || ''}: no se puede modificar. Para corregirla, anule o elimine primero ese documento en su módulo.`;
+                else aviso = 'Orden facturada: no se puede modificar.';
+            }
+            setEditable(editable, aviso);
             document.getElementById('cw_btn_eliminar').classList.toggle('d-none', !(window.CW_PERM.eliminar && !!o.editable));
 
             // Botones de documento: generar si es borrador sin documento; PDF/correo/wa si ya hay documento.

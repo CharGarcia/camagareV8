@@ -165,6 +165,12 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
         padding: 2px 8px !important;
     }
 
+    .modal-factura .table-detalle .input-codigo {
+        field-sizing: content;
+        min-width: 100%;
+        max-width: 320px;
+    }
+
     .modal-factura .card-header {
         padding: 0.4rem 1rem !important;
     }
@@ -214,7 +220,7 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
             $opcionesUsuario  = array_map(fn($x) => ['v' => (string) $x['id'], 'l' => $x['nombre']], $usuariosFiltro ?? []);
             $tR = 'Recibo';
             // Orden pensado en filas de 12 columnas:
-            //   Documento: [Fecha de emisión 6][Estado 3][Estado de pago 3]
+            //   Documento: [Fecha de emisión 6][Estado 3][Pago 3]
             //              [Serie 3][Nº recibo 3][Secuencial 2][Impuestos 4]
             //              [Origen 4][Asiento contable 4][Días de crédito 4]
             //   Valores:   [Total 4][Saldo pendiente 4][Subtotal 4]
@@ -232,7 +238,7 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                     ['v' => 'facturado', 'l' => 'Facturado'],
                     ['v' => 'anulado',   'l' => 'Anulado'],
                 ]],
-                ['tab' => $tR, 'key' => 'pago',   'label' => 'Estado de pago',   'icon' => 'bi-wallet2',        'type' => 'select',     'grupo' => 'Documento', 'col' => 3, 'options' => [
+                ['tab' => $tR, 'key' => 'pago',   'label' => 'Pago',             'icon' => 'bi-wallet2',        'type' => 'select',     'grupo' => 'Documento', 'col' => 3, 'options' => [
                     ['v' => 'pendiente', 'l' => 'Pendiente'],
                     ['v' => 'abonada',   'l' => 'Abonado'],
                     ['v' => 'pagada',    'l' => 'Pagado'],
@@ -343,7 +349,7 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                     'vendedor_nombre'     => 'Vendedor',
                     'observaciones'       => 'Observaciones',
                     'usuario_nombre'      => 'Usuario',
-                    'estado_pago'         => 'Estado de pago',
+                    'estado_pago'         => 'Pago',
                     'estado'              => 'Estado',
                 ];
                 ?>
@@ -425,7 +431,7 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                             Usuario <i class="bi <?= $ordenCol === 'usuario_nombre' ? ($ordenDir === 'ASC' ? 'bi-sort-alpha-down text-primary' : 'bi-sort-alpha-up text-primary') : 'bi-arrow-down-up small text-muted' ?> ms-1"></i>
                         </th>
                         <th class="text-center sortable-header" role="button" data-col="estado_pago">
-                            Estado de pago
+                            Pago
                         </th>
                         <th class="text-center pe-3 sortable-header" role="button" data-sort="estado" data-col="estado" onclick="window.RV_ordenar(this.dataset.sort)">
                             Estado <i class="bi <?= $ordenCol === 'estado' ? ($ordenDir === 'ASC' ? 'bi-sort-alpha-down text-primary' : 'bi-sort-alpha-up text-primary') : 'bi-arrow-down-up small text-muted' ?> ms-1"></i>
@@ -678,14 +684,14 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                                             <thead>
                                                 <tr class="table-light border-bottom">
                                                     <th class="ps-3 py-2 small fw-bold text-muted" data-det-col="codigo" style="width: 9%;">Código</th>
-                                                    <th class="py-2 small fw-bold text-muted" data-det-col="descripcion" style="width: 15%;">Descripción</th>
-                                                    <th class="py-2 small fw-bold text-muted" style="width: 10%;">Adicional</th>
-                                                    <th class="py-2 small fw-bold text-muted col-medida-header <?= (($empresa['mostrar_unidad_medida'] ?? true) === 'true' || ($empresa['mostrar_unidad_medida'] ?? true) === true) ? '' : 'd-none' ?>" style="width: 8%;">Medida</th>
+                                                    <th class="py-2 small fw-bold text-muted" data-det-col="descripcion" style="width: 26%;">Descripción</th>
+                                                    <th class="py-2 small fw-bold text-muted" style="width: 7%;">Adicional</th>
+                                                    <th class="py-2 small fw-bold text-muted col-medida-header col-medida d-none" style="width: 8%;">Medida</th>
                                                     <th class="py-2 small fw-bold text-muted text-center" style="width: 6%;">Cant.</th>
-                                                    <th class="py-2 small fw-bold text-muted" style="width: 12%;">Precios</th>
+                                                    <th class="py-2 small fw-bold text-muted col-lista-precios d-none" style="width: 12%;">Precios</th>
                                                     <th class="py-2 small fw-bold text-muted text-end" style="width: 8%;">P. Sin Imp.</th>
                                                     <th class="py-2 small fw-bold text-muted text-end" style="width: 8%;">P. Con Imp.</th>
-                                                    <th class="py-2 small fw-bold text-muted text-end" style="width: 7%;">Desc.</th>
+                                                    <th class="py-2 small fw-bold text-muted text-end" style="width: 10%;">Desc.</th>
                                                     <th class="py-2 small fw-bold text-muted text-center" style="width: 7%;">Iva</th>
                                                     <?php if (!empty($empresa['obligatorio_lotes']) && ($empresa['obligatorio_lotes'] === 'true' || $empresa['obligatorio_lotes'] === true)): ?>
                                                         <th class="py-2 small fw-bold text-muted text-center" style="width:8%;">Lote</th>
@@ -696,7 +702,7 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                                                     <?php if (!empty($empresa['obligatorio_nup']) && ($empresa['obligatorio_nup'] === 'true' || $empresa['obligatorio_nup'] === true)): ?>
                                                         <th class="py-2 small fw-bold text-muted text-center" style="width:9%;">NUP / Serial</th>
                                                     <?php endif; ?>
-                                                    <th class="py-2 small fw-bold text-muted text-end pe-4" style="width: 11%;">Subtotal</th>
+                                                    <th class="py-2 small fw-bold text-muted text-end pe-4" style="width: 78px; min-width: 78px;">Subtotal</th>
                                                     <th style="width: 40px;"></th>
                                                 </tr>
                                             </thead>
@@ -3362,14 +3368,14 @@ $totalPages = $totalPagesOriginal;
                 </span>
             </td>
             <td><input type="text" class="form-control form-control-sm input-detalle input-adicional text-muted fst-italic" placeholder="Info adicional"></td>
-            <td class="${EMPRESA_CONFIG.mostrar_unidad_medida ? '' : 'd-none'}">
+            <td class="col-medida d-none">
                 <select class="form-select form-select-sm input-detalle input-medida d-none">
                     <option value="">Medida</option>
                 </select>
             </td>
             <td><input type="number" class="form-control form-control-sm input-detalle text-center input-cantidad" value="1" step="any" oninput="calcFila(this)"></td>
-            <td>
-                <select class="form-select form-select-sm input-detalle input-lista-precios">
+            <td class="col-lista-precios d-none">
+                <select class="form-select form-select-sm input-detalle input-lista-precios d-none">
                     <option value="1">Precio 1</option>
                     <option value="2">Precio 2</option>
                     <option value="3">Precio 3</option>
@@ -3663,6 +3669,9 @@ $totalPages = $totalPagesOriginal;
                     selPrecios.appendChild(opt);
                 });
             }
+            // El selector solo se muestra si el producto tiene precios ADICIONALES:
+            // con solo el precio base no hay nada que elegir.
+            selPrecios.classList.toggle('d-none', !(p.precios_lista && p.precios_lista.length > 0));
 
             // Cambiar precio al seleccionar de la lista
             selPrecios.onchange = () => {
@@ -4263,7 +4272,26 @@ $totalPages = $totalPagesOriginal;
         }
     });
 
+    /**
+     * Columnas dinámicas del detalle (igual que Factura de Venta): "Precios" y "Medida"
+     * solo se muestran si algún ítem las usa; así la Descripción tiene el espacio.
+     * Medida además respeta la configuración de empresa (mostrar_unidad_medida).
+     */
+    function rvActualizarColumnasDinamicas() {
+        const hayPrecios = !!document.querySelector('#m-tbodyDetalle .input-lista-precios:not(.d-none)');
+        document.querySelectorAll('#modalNuevaFactura .col-lista-precios').forEach(el => {
+            el.classList.toggle('d-none', !hayPrecios);
+        });
+
+        const hayMedida = !!EMPRESA_CONFIG.mostrar_unidad_medida
+            && !!document.querySelector('#m-tbodyDetalle .input-medida:not(.d-none)');
+        document.querySelectorAll('#modalNuevaFactura .col-medida').forEach(el => {
+            el.classList.toggle('d-none', !hayMedida);
+        });
+    }
+
     function calcTotales() {
+        rvActualizarColumnasDinamicas();
         const modoIva = EMPRESA_CONFIG.calculo_iva ?? 'linea_linea';
 
         // Suma de los subtotales de LÍNEA (neto, ya con el descuento de cada línea
@@ -5021,6 +5049,9 @@ $totalPages = $totalPagesOriginal;
                             selPrecios.appendChild(opt);
                         });
                     }
+
+                    // El selector solo se muestra si el producto tiene precios adicionales.
+                    selPrecios.classList.toggle('d-none', !(d.precios_lista && d.precios_lista.length > 0));
 
                     // Intentar seleccionar el precio que coincida con el guardado
                     const precioActual = parseFloat(d.precio_unitario || 0);
