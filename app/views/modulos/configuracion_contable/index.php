@@ -101,20 +101,20 @@ $base = BASE_URL;
                     // Los tipos cuyos módulos están todos apagados en «Módulos que contabilizan» no se
                     // listan; el JS reconstruye el selector al cambiar un interruptor (ASIENTOPROG_TIPOS).
                     $tiposAsientoSelector = [
-                        'ventas_factura'             => 'Ventas con Factura (Facturas y notas de crédito)',
-                        'factura_reembolso'          => 'Factura de Reembolso (Cuenta puente de terceros)',
-                        'recibos_venta'              => 'Recibos de Venta (Recibos y su IVA)',
-                        'consignacion_venta'         => 'Consignaciones en Ventas (Reclasificación de inventario a costo)',
-                        'adquisiciones_compras'      => 'Adquisiciones de Compras/Servicios (Documentos recibidos)',
-                        'adquisiciones_importacion'  => 'Importaciones (Inventario nacionalizado, IVA/ISD aduana, CxP)',
+                        'ventas_factura'             => 'Ventas con Factura',
+                        'factura_reembolso'          => 'Factura de Reembolso',
+                        'recibos_venta'              => 'Recibos de Venta',
+                        'consignacion_venta'         => 'Consignaciones en Ventas',
+                        'adquisiciones_compras'      => 'Adquisiciones de Compras/Servicios',
+                        'adquisiciones_importacion'  => 'Importaciones',
                         'retenciones_venta'          => 'Retenciones en Venta',
                         'retenciones_compra'         => 'Retenciones en Compra',
-                        'ingresos_egresos'           => 'Ingresos y Egresos (Transacciones directas)',
+                        'ingresos_egresos'           => 'Ingresos y Egresos',
                         'cobros_pagos'               => 'Cobros y Pagos',
                         'nomina'                     => 'Nómina',
-                        'cierre_ejercicio'           => 'Cierre del Ejercicio (Saldo de resultados a patrimonio)',
-                        'activos_fijos_alta'         => 'Activos Fijos - Alta (Contrapartida)',
-                        'activos_fijos_depreciacion' => 'Activos Fijos - Depreciación (Ajuste por redondeo)',
+                        'cierre_ejercicio'           => 'Cierre del Ejercicio',
+                        'activos_fijos_alta'         => 'Activos Fijos - Alta',
+                        'activos_fijos_depreciacion' => 'Activos Fijos - Depreciación',
                     ];
                     $tiposInactivos = $tiposInactivos ?? [];
                     foreach ($tiposAsientoSelector as $tipoValor => $tipoEtiqueta):
@@ -283,7 +283,7 @@ $base = BASE_URL;
                             </div>
                         </div>
                         <div class="col-12" id="dim_faltantes_cliente"></div>
-                        <div class="col-12 mt-4 text-end">
+                        <div class="col-12 mt-4 text-center">
                             <button type="submit" class="btn btn-primary btn-sm fw-bold px-4 shadow-sm"><i class="bi bi-plus-lg me-1"></i> Agregar</button>
                         </div>
                     </form>
@@ -319,7 +319,7 @@ $base = BASE_URL;
                                 </button>
                             </div>
                         </div>
-                        <div class="col-12 mt-4 text-end">
+                        <div class="col-12 mt-4 text-center">
                             <button type="submit" class="btn btn-primary btn-sm fw-bold px-4 shadow-sm"><i class="bi bi-plus-lg me-1"></i> Agregar</button>
                         </div>
                     </form>
@@ -356,7 +356,7 @@ $base = BASE_URL;
                                     <i class="bi bi-truck me-1"></i> Proveedores con compras
                                 </button>
                                 <button type="button" class="btn btn-outline-primary btn-sm text-nowrap" onclick="ASIENTOPROG_abrirModalItems('proveedor')">
-                                    <i class="bi bi-box-seam me-1"></i> Informaci&oacute;n de adquisiciones
+                                    <i class="bi bi-box-seam me-1"></i> Detalle de compras o servicios de este proveedor
                                 </button>
                                 <button type="button" class="btn btn-outline-success btn-sm text-nowrap" onclick="ASIENTOPROG_abrirSugerenciasProveedor()" title="Proveedores sin cuentas que compran lo mismo que un proveedor ya configurado">
                                     <i class="bi bi-lightbulb me-1"></i> Sugerencias
@@ -365,7 +365,7 @@ $base = BASE_URL;
                             </div>
                         </div>
                         <div class="col-12" id="dim_faltantes_proveedor"></div>
-                        <div class="col-12 mt-4 text-end">
+                        <div class="col-12 mt-4 text-center">
                             <button type="submit" class="btn btn-primary btn-sm fw-bold px-4 shadow-sm"><i class="bi bi-plus-lg me-1"></i> Agregar</button>
                         </div>
                     </form>
@@ -402,7 +402,7 @@ $base = BASE_URL;
                             </div>
                         </div>
                         <div class="col-12" id="dim_faltantes_producto"></div>
-                        <div class="col-12 mt-4 text-end"><button type="submit" class="btn btn-primary btn-sm fw-bold px-4 shadow-sm"><i class="bi bi-plus-lg me-1"></i> Agregar</button></div>
+                        <div class="col-12 mt-4 text-center"><button type="submit" class="btn btn-primary btn-sm fw-bold px-4 shadow-sm"><i class="bi bi-plus-lg me-1"></i> Agregar</button></div>
                     </form>
                     <div class="row g-2" id="dimCards_producto"></div>
                 </div>
@@ -437,7 +437,7 @@ $base = BASE_URL;
                             </div>
                         </div>
                         <div class="col-12" id="dim_faltantes_categoria"></div>
-                        <div class="col-12 mt-4 text-end"><button type="submit" class="btn btn-primary btn-sm fw-bold px-4 shadow-sm"><i class="bi bi-plus-lg me-1"></i> Agregar</button></div>
+                        <div class="col-12 mt-4 text-center"><button type="submit" class="btn btn-primary btn-sm fw-bold px-4 shadow-sm"><i class="bi bi-plus-lg me-1"></i> Agregar</button></div>
                     </form>
                     <div class="row g-2" id="dimCards_categoria"></div>
                 </div>
@@ -472,7 +472,7 @@ $base = BASE_URL;
                             </div>
                         </div>
                         <div class="col-12" id="dim_faltantes_marca"></div>
-                        <div class="col-12 mt-4 text-end"><button type="submit" class="btn btn-primary btn-sm fw-bold px-4 shadow-sm"><i class="bi bi-plus-lg me-1"></i> Agregar</button></div>
+                        <div class="col-12 mt-4 text-center"><button type="submit" class="btn btn-primary btn-sm fw-bold px-4 shadow-sm"><i class="bi bi-plus-lg me-1"></i> Agregar</button></div>
                     </form>
                     <div class="row g-2" id="dimCards_marca"></div>
                 </div>
@@ -504,7 +504,7 @@ $base = BASE_URL;
                             <input type="hidden" id="dim_id_tipo_produccion" required>
                         </div>
                         <div class="col-12" id="dim_faltantes_tipo_produccion"></div>
-                        <div class="col-12 mt-4 text-end"><button type="submit" class="btn btn-primary btn-sm fw-bold px-4 shadow-sm"><i class="bi bi-plus-lg me-1"></i> Agregar</button></div>
+                        <div class="col-12 mt-4 text-center"><button type="submit" class="btn btn-primary btn-sm fw-bold px-4 shadow-sm"><i class="bi bi-plus-lg me-1"></i> Agregar</button></div>
                     </form>
                     <div class="row g-2" id="dimCards_tipo_produccion"></div>
                 </div>

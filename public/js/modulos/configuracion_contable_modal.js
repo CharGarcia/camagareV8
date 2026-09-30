@@ -1455,7 +1455,7 @@
                                 <span class="d-flex gap-1 flex-wrap">
                                     ${tipo === 'proveedor' ? `<button type="button" class="btn btn-outline-primary btn-sm py-0" style="font-size:.75rem;"
                                             onclick="ASIENTOPROG_abrirModalItemsTarjeta('${tipo}', ${idx})">
-                                        <i class="bi bi-box-seam me-1"></i>Informaci&oacute;n de adquisiciones
+                                        <i class="bi bi-box-seam me-1"></i>Detalle de compras o servicios de este proveedor
                                     </button>` : ''}
                                     <button type="button" class="btn btn-outline-secondary btn-sm py-0" style="font-size:.75rem;"
                                             onclick="ASIENTOPROG_copiarDeGeneral('${tipo}', ${idx})">
