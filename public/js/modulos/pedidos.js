@@ -702,8 +702,11 @@ function agregarFilaProducto(prod = null) {
         // subirlo, pero el `modal-body` ya suele estar al final de su scroll. Se le
         // insiste una vez cuando el teclado ya redujo la pantalla (de ahí el
         // retardo), dejando además sitio para la lista debajo del campo.
+        // En tablet (iPad) pasa lo mismo aunque la pantalla sea ancha: el teclado
+        // en pantalla tapa la mitad inferior, así que se decide por puntero táctil.
         inputEl.addEventListener('focus', () => {
-            if (window.innerWidth > 767) return;
+            const tactil = window.matchMedia && window.matchMedia('(pointer: coarse)').matches;
+            if (window.innerWidth > 767 && !tactil) return;
             setTimeout(() => {
                 if (document.activeElement !== inputEl) return;
                 if (typeof window.CMG_asegurarInputVisible === 'function') {

@@ -6,7 +6,7 @@ ruta_modulo: modulos/pedidos
 tipo: modulo
 visibilidad: todos
 etiquetas: pedidos, pedido desde proforma, proforma a pedido, enviar a pedidos, generar pedido desde cotizacion, pedido de cliente, vendedor del cliente, asesor, quien atiende al cliente, solicitado por, quien hizo el pedido, usuario que registro el pedido, buscar pedidos, buscador, filtros, filtrar pedidos, buscar por producto, buscar por cliente, ordenar por estado y fecha de entrega, ordenar por dos columnas, encargo, orden de pedido, reserva, entregas, despacho, agenda de entrega, hora de entrega, responsable de entrega, rango horario, pedidos pendientes, aparecen pedidos que no busque, resultados que no corresponden, buscar por producto en el listado, imprimir, impresora
-version: 1.11
+version: 1.12
 orden: 0
 estado: activo
 ---
@@ -325,6 +325,11 @@ esas líneas primero. El detalle está en el manual de **Proformas**, sección
   recargue la pantalla). Resuelto en la versión 1.2.
 
 ## Historial de cambios
+
+- **1.12** — En **iPad/iPhone** la lista de productos del detalle ya se despliega
+  pegada al campo al escribir: antes, con el teclado en pantalla abierto, quedaba
+  escondida detrás del teclado. En tablet el campo también se sube a la vista al
+  tocarlo.
 
 - **1.11** — El botón **PDF** del documento pregunta ahora si se quiere
   **Imprimir** (abre el cuadro de impresión con el documento ya cargado),

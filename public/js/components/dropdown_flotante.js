@@ -165,8 +165,14 @@
         } else {
             // Anclada por abajo (no por arriba) para que quede pegada al input
             // aunque la lista traiga pocos resultados y no ocupe todo el alto.
+            // `bottom` de un position:fixed se mide contra el layout viewport, así
+            // que se usa su alto (clientHeight) y NO window.innerHeight: en Safari
+            // de iPad/iPhone innerHeight es el alto VISIBLE (ya sin el teclado), y
+            // restarle rect.top daba negativo → la lista quedaba pegada al fondo de
+            // la pantalla, detrás del teclado, y parecía que no se desplegaba.
+            var altoLayout = document.documentElement.clientHeight || window.innerHeight;
             dropdown.style.top    = 'auto';
-            dropdown.style.bottom = Math.max(0, window.innerHeight - rect.top + 2) + 'px';
+            dropdown.style.bottom = Math.max(0, altoLayout - rect.top + 2) + 'px';
         }
 
         var left = movil ? MARGEN : Math.min(rect.left, f.ancho - ancho - MARGEN);
