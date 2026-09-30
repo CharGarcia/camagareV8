@@ -156,6 +156,17 @@ que apunta al recibo. Al migrar **Cobros (ingresos)**, cada una de esas líneas 
   reconstruyen y quedan cruzados con sus recibos, sin duplicarse.
 - Un cobro que paga facturas y recibos a la vez queda como cobro de factura, pero
   cada línea cruza con su propio documento.
+- **Estado del recibo**: se respeta el del sistema anterior. *Abierto* llega como
+  **Borrador**, *Anulado* como **Anulado** (no aparece en Cuentas por cobrar ni
+  admite cobros) y *Cerrado* (ya cobrado por completo) como **Emitido**. Al volver
+  a ejecutar Recibos, los ya migrados se corrigen: solo se avanza el estado
+  (Borrador → Emitido o Anulado; Emitido → Anulado); nunca se reabre un recibo ni se
+  cambia uno facturado.
+- Además, los recibos que siguen en **Borrador** y ya tienen un cobro cruzado
+  (no anulado), aunque sea parcial, pasan a **Emitido** al terminar la migración de
+  Cobros: quedan cerrados y ya no se editan (se pueden seguir cobrando, facturando
+  o anulando). Los recibos que ya existían en el sistema y solo se vincularon no se
+  tocan.
 
 ## Vendedor asignado a cada cliente
 
@@ -458,7 +469,10 @@ sistema anterior tampoco los aplicaba al facturar por alumno).
 
 - **1.15** — **Cobros**: los pagos de recibos de venta se cruzan con su recibo
   migrado (antes llegaban como "otros ingresos" sin enlace y los recibos quedaban
-  pendientes). Re-ejecutar Cobros corrige lo migrado antes.
+  pendientes). Los recibos migrados con cobro cruzado pasan de Borrador a Emitido.
+  **Recibos**: se migra su estado del sistema anterior (los anulados llegaban como
+  Borrador y figuraban pendientes de cobro).
+  Re-ejecutar Cobros corrige lo migrado antes.
 - **1.14** — Nueva entidad **Vehículos (uno por placa)**: trae todas las placas del
   sistema anterior (también las de órdenes sin servicios, que antes se perdían), con
   los datos de su orden más reciente y su cliente. Ya no se migran los valores de

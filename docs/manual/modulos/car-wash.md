@@ -6,7 +6,7 @@ ruta_modulo: modulos/car-wash
 tipo: modulo
 visibilidad: todos
 etiquetas: car wash, lavado, lavadora de autos, lubricadora, cambio de aceite, mecanica, taller, orden de servicio, orden mecanica, orden de trabajo, vehiculo, placa, historial del vehiculo, historial del cliente, visitas, ultima visita, facturar orden, recibo de venta, refacturar, factura anulada, proxima cita, proximo chequeo, migracion, sistema anterior, numeracion por fecha, numero con el año, reiniciar numeracion, reinicio anual, reinicio mensual, correlativo por año, correlativo por mes, modo de numeracion, buscar orden, buscar placa, buscador, filtros, filtrar ordenes, filtro de fechas, buscar por servicio, chips, imprimir, impresora
-version: 1.6
+version: 1.7
 orden: 10
 estado: activo
 ---
@@ -91,6 +91,12 @@ Es la misma de **Facturas de venta**: **Código** (busca por código; Enter toma
 primero), **Descripción** (busca por nombre), Adicional, Cantidad, P. Sin Imp.,
 P. Con Imp., Descuento, IVA y Subtotal. Las columnas **Medida** y **Precios** solo
 aparecen cuando algún ítem tiene unidades de medida o listas de precios.
+
+**Descripción completa.** Como en la factura, la descripción de cada línea crece en alto
+hasta mostrar todo su texto (pasadas unas 10 líneas aparece una barra dentro del
+campo). Las columnas **Código** y **Descripción** se ensanchan arrastrando el borde
+derecho de su encabezado; con **doble clic** en ese borde se ajustan al texto más
+largo. El ancho queda guardado para cada usuario.
 
 **Descuento rápido.** Junto al descuento de cada línea está el botón **+** (si la
 empresa permite editar descuentos): abre una ventana para aplicar el descuento por
@@ -329,6 +335,9 @@ documentos admite cada periodo) está en el manual de **Empresa**, sección
 
 ## Historial de cambios
 
+- **1.7** — La grilla de la orden muestra la **descripción completa** de cada ítem (el
+  campo crece con el texto) y las columnas Código y Descripción se pueden ensanchar
+  arrastrando o con doble clic en el encabezado, igual que en Factura de venta.
 - **1.6** — El modal se organiza en pestañas: **General**, **Historial** (todas las
   órdenes de un vehículo o de un cliente, con resumen de visitas) y **Facturación**
   (en qué factura o recibo se emitió la orden, con su estado actual y PDF). La

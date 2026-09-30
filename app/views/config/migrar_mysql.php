@@ -679,6 +679,13 @@ $base = BASE_URL;
                 if (d.recibos_enlazados > 0) {
                     html += `<br><span class="text-success small">🔗 ${fmt(d.recibos_enlazados)} pago(s) de recibos de venta cruzados con su recibo.</span>`;
                 }
+                // Recibos: estado del sistema anterior (Anulado → Anulado, Cerrado → Emitido).
+                if (ent === 'recibos' && (d.anulados > 0 || d.cerrados > 0)) {
+                    html += `<br><span class="text-info small">ℹ Estado del sistema anterior: ${fmt(d.anulados)} anulado(s) y ${fmt(d.cerrados)} cerrado(s) (quedan como Emitido).</span>`;
+                }
+                if (d.recibos_cerrados > 0) {
+                    html += `<br><span class="text-success small">🔒 ${fmt(d.recibos_cerrados)} recibo(s) con cobro pasaron de Borrador a Emitido (ya no se editan).</span>`;
+                }
                 if (d.recibos_sin_migrar > 0) {
                     html += `<br><span class="text-warning small">ℹ ${fmt(d.recibos_sin_migrar)} pago(s) de recibos sin cruzar: su recibo aún no está migrado. Migre <b>Recibos de venta</b> y vuelva a ejecutar <b>Cobros</b>.</span>`;
                 }

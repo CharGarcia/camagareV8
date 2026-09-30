@@ -157,11 +157,11 @@
                     <!-- Servicios / Productos (grilla igual que factura de venta) -->
                     <div class="mt-2 border rounded-3 overflow-hidden bg-white shadow-sm">
                         <div class="table-responsive" style="max-height: 350px;">
-                            <table class="table table-sm table-detalle mb-0 text-nowrap">
+                            <table class="table table-sm table-detalle mb-0 text-nowrap" id="cw_tabla_detalle">
                                 <thead>
                                     <tr class="table-light border-bottom">
-                                        <th class="ps-3 py-2 small fw-bold text-muted" style="width: 9%;">Código</th>
-                                        <th class="py-2 small fw-bold text-muted" style="width: 26%;">Descripción</th>
+                                        <th class="ps-3 py-2 small fw-bold text-muted" data-det-col="codigo" style="width: 9%;">Código</th>
+                                        <th class="py-2 small fw-bold text-muted" data-det-col="descripcion" style="width: 26%;">Descripción</th>
                                         <th class="py-2 small fw-bold text-muted" style="width: 7%;">Adicional</th>
                                         <th class="py-2 small fw-bold text-muted col-medida-header col-medida d-none" style="width: 8%;">Medida</th>
                                         <th class="py-2 small fw-bold text-muted text-center" style="width: 6%;">Cant.</th>
@@ -343,6 +343,7 @@
 
 <link href="https://cdn.quilljs.com/1.3.6/quill.snow.css" rel="stylesheet">
 <script src="https://cdn.quilljs.com/1.3.6/quill.min.js"></script>
+<script src="<?= BASE_URL ?>/js/components/detalle_columnas.js?v=<?= asset_ver('/js/components/detalle_columnas.js') ?>"></script>
 <style>
     .cw-quill .ql-toolbar.ql-snow { padding: 3px 4px; border-radius: 4px 4px 0 0; }
     .cw-quill .ql-toolbar.ql-snow .ql-formats { margin-right: 6px; }
@@ -353,6 +354,21 @@
 <script>
 (function () {
     const RUTA = window.RUTA_MODULO_CW;
+
+    // Código y Descripción del detalle, igual que en Factura de Venta: la descripción crece
+    // con su texto y las dos columnas se ensanchan arrastrando el borde del encabezado
+    // (doble clic: ajustar al texto; el ancho se guarda por usuario).
+    // Ver public/js/components/detalle_columnas.js. Sin el componente, la orden sigue igual.
+    const CW_DET = typeof CMG_detalleColumnas !== 'function'
+        ? { engancharDescripcion() {}, ajustarDescripciones() {}, pausarAjuste() {} }
+        : CMG_detalleColumnas({
+            tabla:   '#cw_tabla_detalle',
+            tbody:   '#cw_tbodyDetalle',
+            modal:   '#modalOrdenCW',
+            anchos:  <?= json_encode((object) \App\Helpers\PreferenciasHelper::getAnchosDetalle($vistaConfig ?? [])) ?>,
+            modulo:  'modulos/car-wash',
+            urlBase: '<?= rtrim(BASE_URL, '/') ?>',
+        });
 
     // ─── Editor de condiciones de ingreso (Quill, mismo que Proforma) ─────────
     // Sin imágenes a propósito (irían en base64 dentro de la columna de texto).
@@ -591,6 +607,7 @@
             document.getElementById('cw_id_bodega').value = o.id_bodega || '';
             document.getElementById('cw_proxima_cita').value = o.proxima_cita ? String(o.proxima_cita).slice(0, 10) : '';
 
+            CW_DET.pausarAjuste(true);   // cientos de líneas: medir las descripciones una sola vez al final
             (o.detalles || []).forEach(d => cwCargarLineaGuardada(d));
             (o.info_adicional || []).forEach(ia => cwAgregarInfo(ia));
             cwSetCondiciones(o.condiciones_html || '');
@@ -612,6 +629,7 @@
         } catch (e) {
             Swal.fire('Error', e.message, 'error');
         } finally {
+            CW_DET.pausarAjuste(false);
             document.getElementById('cw-modal-loader')?.classList.add('d-none');
         }
     };
@@ -851,6 +869,7 @@
         tbody.appendChild(tr);
 
         const inputDesc = tr.querySelector('.input-descripcion');
+        CW_DET.engancharDescripcion(inputDesc);
         const dropdownGlobal = document.getElementById('cw-dropdown-productos-global');
 
         const buscarProducto = async (q, sourceInput) => {

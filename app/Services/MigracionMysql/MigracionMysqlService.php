@@ -5172,6 +5172,24 @@ class MigracionMysqlService
                 if (empty($res['error_muestra'])) { $res['error_muestra'] = substr($ex->getMessage(), 0, 180); }
             }
         }
+
+        // Cierre de recibos: el recibo migrado nace en BORRADOR (editable); si ya tiene un cobro
+        // cruzado (no anulado) se pasa a EMITIDO, que es inmutable, para que no se pueda editar un
+        // recibo que ya se cobró. Solo recibos que INSERTÓ la migración (los vinculados son nativos)
+        // y solo los que siguen en borrador (no toca anulados ni facturados). Idempotente; cubre
+        // también los migrados en corridas anteriores.
+        $cerrar = $pg->prepare("UPDATE recibos_venta_cabecera r
+                                   SET estado = 'emitido', updated_at = now(), updated_by = ?
+                                 WHERE r.id_empresa = ? AND r.estado = 'borrador' AND r.eliminado = false
+                                   AND EXISTS (SELECT 1 FROM migracion_mysql_map m
+                                                WHERE m.id_empresa = r.id_empresa AND m.entidad = 'recibos'
+                                                  AND m.id_destino = r.id AND m.vinculado = false)
+                                   AND EXISTS (SELECT 1 FROM ingresos_detalle d
+                                                 JOIN ingresos_cabecera c ON c.id = d.id_ingreso
+                                                WHERE d.tipo_documento = 'RECIBO' AND d.id_referencia_documento = r.id
+                                                  AND c.id_empresa = r.id_empresa AND c.estado <> 'anulado' AND c.eliminado = false)");
+        $cerrar->execute([$idUsuario, $idEmpresa]);
+        $res['recibos_cerrados'] = $cerrar->rowCount();
         return $res;
     }
 
@@ -7057,7 +7075,8 @@ class MigracionMysqlService
         $mysql = LegacyMysqlConnection::get();
         $pg    = Database::getConnection();
 
-        $res = ['entidad' => 'recibos', 'total' => 0, 'migrados' => 0, 'vinculados' => 0, 'vinculados_muestra' => [], 'ya_migrados' => 0, 'omitidos' => 0, 'errores' => 0];
+        $res = ['entidad' => 'recibos', 'total' => 0, 'migrados' => 0, 'vinculados' => 0, 'vinculados_muestra' => [], 'ya_migrados' => 0, 'omitidos' => 0, 'errores' => 0,
+                'anulados' => 0, 'cerrados' => 0];
         $done       = $this->idsMigrados($pg, $idEmpresa, 'recibos');
         $mapCliente = $this->mapaDe($pg, $idEmpresa, 'clientes');
         $mapProd    = $this->mapaDe($pg, $idEmpresa, 'productos');
@@ -7119,11 +7138,21 @@ class MigracionMysqlService
         $qMapRec->execute([$idEmpresa]);
         foreach ($qMapRec->fetchAll(PDO::FETCH_ASSOC) as $r) { $mapRec[(string) $r['id_origen']] = (int) $r['id_destino']; }
         $updCabR = $pg->prepare("UPDATE recibos_venta_cabecera SET id_vendedor = ?, dias_credito = ?, tipo_ambiente = ?, updated_at = now(), updated_by = ? WHERE id = ?");
+        // Estado: el viejo guarda encabezado_recibo.status 1 = Abierto, 2 = Anulado (su cobro también se
+        // anula y sus líneas se borran), 3 = Cerrado (lo pone al registrar el cobro que deja saldo 0).
+        // → borrador / anulado / emitido (emitido = cerrado, inmutable). Sin esto los anulados llegaban
+        // en borrador y figuraban como pendientes de cobro en Cuentas por cobrar.
+        $estadoRecibo = static fn($status): string => match ((int) $status) { 2 => 'anulado', 3 => 'emitido', default => 'borrador' };
+        // Re-corrida: solo AVANZA el estado de lo migrado (borrador → emitido/anulado, emitido → anulado);
+        // nunca reabre ni pisa un facturado o un cierre hecho por el cruce de cobros.
+        $updEstR = $pg->prepare("UPDATE recibos_venta_cabecera SET estado = :n, updated_at = now(), updated_by = :u
+                                  WHERE id = :id AND :n2 <> 'borrador'
+                                    AND (estado = 'borrador' OR (estado = 'emitido' AND :n3 = 'anulado'))");
         $qCliRDe = $pg->prepare("SELECT id_cliente FROM recibos_venta_cabecera WHERE id = ?");
 
         $insCab = $pg->prepare(
-            "INSERT INTO recibos_venta_cabecera (id_empresa, id_establecimiento, id_punto_emision, id_cliente, id_usuario, id_vendedor, dias_credito, fecha_emision, establecimiento, punto_emision, secuencial, recibo_numero, con_impuestos, total_sin_impuestos, total_descuento, importe_total, propina, moneda, tipo_ambiente, created_by)
-             VALUES (:e, :est, :pto, :cli, :u, :vend, :dias, :fe, :estc, :ptoc, :sec, :num, :ci, :tsi, :tdes, :tot, :prop, 'DOLAR', :amb, :cb) RETURNING id"
+            "INSERT INTO recibos_venta_cabecera (id_empresa, id_establecimiento, id_punto_emision, id_cliente, id_usuario, id_vendedor, dias_credito, fecha_emision, establecimiento, punto_emision, secuencial, recibo_numero, con_impuestos, total_sin_impuestos, total_descuento, importe_total, propina, moneda, tipo_ambiente, estado, created_by)
+             VALUES (:e, :est, :pto, :cli, :u, :vend, :dias, :fe, :estc, :ptoc, :sec, :num, :ci, :tsi, :tdes, :tot, :prop, 'DOLAR', :amb, :estado, :cb) RETURNING id"
         );
         $insDet = $pg->prepare(
             "INSERT INTO recibos_venta_detalle (id_recibo, id_producto, id_bodega, codigo_principal, descripcion, cantidad, precio_unitario, descuento, precio_total_sin_impuesto)
@@ -7135,7 +7164,7 @@ class MigracionMysqlService
         );
         $cuerpoStmt = $mysql->prepare("SELECT id_producto, cantidad, valor_unitario, subtotal, descuento, tarifa_iva, codigo_producto, nombre_producto, id_bodega FROM cuerpo_recibo WHERE id_encabezado_recibo = :id");
 
-        $sql = "SELECT id_encabezado_recibo, fecha_recibo, serie_recibo, secuencial_recibo, id_cliente, total_recibo, propina
+        $sql = "SELECT id_encabezado_recibo, fecha_recibo, serie_recibo, secuencial_recibo, id_cliente, total_recibo, propina, status
                   FROM encabezado_recibo WHERE ruc_empresa LIKE " . $mysql->quote($base . '%') . $this->clausulaEstabOrigen('ruc_empresa', $base, $mysql) . $this->clausulaFecha('fecha_recibo', $desde, $hasta, $mysql) . " ORDER BY id_encabezado_recibo";
         if ($limite > 0) { $sql .= " LIMIT " . (int) $limite; }
         $stmt = $mysql->query($sql);
@@ -7151,6 +7180,9 @@ class MigracionMysqlService
                     $pg->beginTransaction();
                     $qCliRDe->execute([$idExist]);
                     $updCabR->execute([$vendedorRDe($old), $diasRDe((int) $qCliRDe->fetchColumn()), $this->ambienteEmpresa($pg, $idEmpresa), $idUsuario, $idExist]);
+                    $nuevoEst = $estadoRecibo($ec['status']);
+                    $updEstR->execute([':n' => $nuevoEst, ':n2' => $nuevoEst, ':n3' => $nuevoEst, ':u' => $idUsuario, ':id' => $idExist]);
+                    if ($updEstR->rowCount() > 0) { $res[$nuevoEst === 'anulado' ? 'anulados' : 'cerrados']++; }
                     $migrarAdicR($idExist, $old);
                     $pg->commit();
                     $res['ya_migrados']++;
@@ -7193,7 +7225,8 @@ class MigracionMysqlService
                     ':vend' => $vendedorRDe($old), ':dias' => $diasRDe($idCliente),
                     ':fe' => substr((string) $ec['fecha_recibo'], 0, 10), ':estc' => $estab, ':ptoc' => $pto, ':sec' => $sec,
                     ':num' => "$estab-$pto-$sec", ':ci' => $conImp, ':tsi' => round($tsi, 2), ':tdes' => round($tdes, 2),
-                    ':tot' => (float) $ec['total_recibo'], ':prop' => (float) $ec['propina'], ':amb' => $this->ambienteEmpresa($pg, $idEmpresa), ':cb' => $idUsuario,
+                    ':tot' => (float) $ec['total_recibo'], ':prop' => (float) $ec['propina'], ':amb' => $this->ambienteEmpresa($pg, $idEmpresa),
+                    ':estado' => $estadoRecibo($ec['status']), ':cb' => $idUsuario,
                 ]);
                 $idRec = (int) $insCab->fetchColumn();
 
@@ -7217,6 +7250,8 @@ class MigracionMysqlService
                 $pg->commit();
                 $done[(string) $old] = true;
                 $res['migrados']++;
+                $estIns = $estadoRecibo($ec['status']);
+                if ($estIns !== 'borrador') { $res[$estIns === 'anulado' ? 'anulados' : 'cerrados']++; }
             } catch (Throwable $ex) {
                 if ($pg->inTransaction()) { $pg->rollBack(); }
                 $res['errores']++;

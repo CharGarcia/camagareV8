@@ -45,6 +45,7 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
     #modalOrdenCW .table-detalle th { font-size: 0.7rem; text-transform: uppercase; padding: 4px 8px !important; background-color: #f8f9fa; }
     #modalOrdenCW .table-detalle td { padding: 0 !important; vertical-align: middle; }
     #modalOrdenCW .input-detalle { border: none; background: transparent; height: 30px !important; font-size: 0.82rem !important; padding: 2px 8px !important; }
+    #modalOrdenCW .table-detalle .input-codigo { field-sizing: content; min-width: 100%; max-width: 320px; }
     #modalOrdenCW .input-detalle:focus { background: #fff; box-shadow: inset 0 0 0 1px #0d6efd; outline: none; }
     #modalOrdenCW .row-detalle:hover { background-color: rgba(13, 110, 253, 0.03); }
 </style>
