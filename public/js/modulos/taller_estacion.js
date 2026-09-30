@@ -262,6 +262,32 @@
         if (horas) horas.disabled = (val('tw_l_tipo') !== 'mano_obra');
     };
 
+    /**
+     * Muestra la lista de productos pegada al campo con el componente compartido
+     * js/components/dropdown_flotante.js (el mismo de Taller y Factura de Venta).
+     * La lista nacía `position-absolute` dentro del modal: en el iPad se abría
+     * debajo del campo, detrás del teclado, y el scroll del modal la recortaba.
+     * La primera vez se la cuelga del <body> como `position: fixed` para que el
+     * componente la pueda pegar encima o debajo del campo según el sitio visible.
+     * Sin el componente se muestra como antes.
+     */
+    function mostrarListaProductos(box, input) {
+        if (typeof window.CMG_anclarDropdown !== 'function' || !input) {
+            box.classList.remove('d-none');
+            return;
+        }
+        if (box.parentElement !== document.body) {
+            document.body.appendChild(box);
+            box.classList.remove('position-absolute', 'w-100');
+            box.style.position = 'fixed';
+            box.style.zIndex = '9999'; // sobre el modal
+            box.style.backgroundColor = '#fff';
+            // Fuera del modal ya no se va con él: se esconde al cerrarlo.
+            document.addEventListener('hide.bs.modal', () => box.classList.add('d-none'));
+        }
+        window.CMG_anclarDropdown(box, input, { anchoMinimo: 320, altoMaximo: 260 });
+    }
+
     window.twBuscarProductos = function (q) {
         clearTimeout(debounceProd);
         const box = $('tw_prod_dropdown');
@@ -309,7 +335,7 @@
                     box.classList.add('d-none');
                 });
             });
-            box.classList.remove('d-none');
+            mostrarListaProductos(box, $('tw_l_descripcion'));
         }, 350);
     };
 
@@ -484,5 +510,21 @@
             const input = $('tw_l_descripcion');
             if (box && !box.contains(ev.target) && ev.target !== input) box.classList.add('d-none');
         });
+
+        // Tablet/celular: el teclado en pantalla tapa el campo al tocarlo. Se sube a
+        // la vista dejando sitio para la lista debajo.
+        const desc = $('tw_l_descripcion');
+        if (desc) {
+            desc.addEventListener('focus', () => {
+                const tactil = window.matchMedia && window.matchMedia('(pointer: coarse)').matches;
+                if (window.innerWidth > 767 && !tactil) return;
+                setTimeout(() => {
+                    if (document.activeElement !== desc) return;
+                    if (typeof window.CMG_asegurarInputVisible === 'function') {
+                        window.CMG_asegurarInputVisible(desc, 260);
+                    }
+                }, 300);
+            });
+        }
     });
 })();

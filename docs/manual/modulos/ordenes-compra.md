@@ -6,7 +6,7 @@ ruta_modulo: modulos/ordenes-compra
 tipo: modulo
 visibilidad: todos
 etiquetas: orden de compra, ordenes, pedido a proveedor, requisicion, compra pendiente, autorizar compra, vincular compra, recibido, pedido vs facturado, aprobacion por correo, enviado, aprobar orden, entrega parcial, recibido parcial, duplicar orden, cerrar orden, iva, tarifa iva, subtotales, total con impuestos, impuestos, notas, notas por linea, observaciones del item, instrucciones al proveedor, numeracion por fecha, numero con el año, reiniciar numeracion, reinicio anual, reinicio mensual, correlativo por año, correlativo por mes, modo de numeracion, buscar orden de compra, buscador, filtros, filtrar ordenes, buscar por producto pedido, compra vinculada, chips, aparecen documentos que no busque, resultados que no corresponden, la busqueda trae otros documentos, imprimir, impresora
-version: 1.15
+version: 1.17
 orden: 15
 estado: activo
 ---
@@ -34,6 +34,9 @@ inventario. Es un compromiso, no una compra.
    del catálogo, el precio unitario se precarga con su **precio de costo**
    (no el de venta) — es lo que se le paga al proveedor. Si el producto no
    tiene costo configurado se precarga en 0.00 y se escribe a mano.
+   Mientras escribe la búsqueda, **Retroceso** y **Suprimir** borran letra por
+   letra; con un producto ya elegido, cualquiera de las dos limpia la línea de
+   una vez para buscar otro.
 4. Revise la **Tarifa IVA** de cada línea (ver abajo).
 5. Si hace falta, escriba una **Nota** en la línea (ver abajo).
 6. Guarde. Mientras esté en **Borrador** puede seguir editándola libremente.
@@ -326,6 +329,15 @@ documentos admite cada periodo) está en el manual de **Empresa**, sección
 *Secuenciales por punto de emisión*.
 
 ## Historial de cambios
+
+- **1.17** — En el detalle, **Retroceso** y **Suprimir** ya no borran toda la
+  búsqueda del producto mientras se escribe: borran letra por letra, y solo con
+  un producto ya elegido limpian la línea de una vez.
+
+- **1.16** — En **iPad/iPhone** la lista de productos del detalle se despliega
+  pegada al campo aunque el teclado en pantalla esté abierto (antes podía quedar
+  escondida detrás del teclado). Al tocar el campo, este se sube a la vista para
+  dejar sitio a la lista.
 
 - **1.15** — El botón **PDF** del documento pregunta ahora si se quiere
   **Imprimir** (abre el cuadro de impresión con el documento ya cargado),

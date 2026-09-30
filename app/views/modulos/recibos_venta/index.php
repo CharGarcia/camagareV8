@@ -3444,6 +3444,24 @@ $totalPages = $totalPagesOriginal;
         }
         const dropdownGlobal = document.getElementById('m-dropdown-productos-global');
 
+        // Pega la lista de productos al input que la abrió. El cálculo (abrir hacia
+        // arriba si el teclado del iPad/celular no deja sitio abajo, subir el campo a
+        // la vista, reanclar al scrollear) vive en js/components/dropdown_flotante.js,
+        // el mismo que usan Factura de Venta y Pedidos. Antes se dibujaba siempre
+        // debajo del campo y en el iPad quedaba detrás del teclado.
+        const rvPosicionarDropdownProductos = (inputEl) => {
+            if (typeof window.CMG_anclarDropdown === 'function') {
+                window.CMG_anclarDropdown(dropdownGlobal, inputEl, { anchoMinimo: 350, altoMaximo: 250 });
+                return;
+            }
+            // Respaldo si el componente no cargó (comportamiento anterior).
+            const rect = inputEl.getBoundingClientRect();
+            dropdownGlobal.style.top = `${rect.bottom + 2}px`;
+            dropdownGlobal.style.left = `${rect.left}px`;
+            dropdownGlobal.style.width = `${Math.max(rect.width, 350)}px`;
+            dropdownGlobal.classList.remove('d-none');
+        };
+
         const seleccionarProductoEnFila = (p, row) => {
             row.querySelector('.input-codigo').value = p.codigo;
             row.querySelector('.input-descripcion').value = p.nombre;
@@ -3696,11 +3714,7 @@ $totalPages = $totalPagesOriginal;
                 return;
             }
 
-            const rect = sourceInput.getBoundingClientRect();
-            dropdownGlobal.style.top = `${rect.bottom + 2}px`;
-            dropdownGlobal.style.left = `${rect.left}px`;
-            dropdownGlobal.style.width = `${Math.max(rect.width, 350)}px`;
-            dropdownGlobal.classList.remove('d-none');
+            rvPosicionarDropdownProductos(sourceInput);
             dropdownGlobal.innerHTML = '<div class="list-group-item small text-muted">Buscando...</div>';
 
             try {
@@ -3750,10 +3764,27 @@ $totalPages = $totalPagesOriginal;
                         dropdownGlobal.innerHTML = '<div class="list-group-item small text-muted">Sin coincidencias en el catálogo</div>';
                     }
                 }
+                // Entre la búsqueda y la respuesta el teclado pudo abrirse o el modal
+                // pudo scrollear: se vuelve a anclar al input con el alto ya definitivo.
+                if (!dropdownGlobal.classList.contains('d-none')) rvPosicionarDropdownProductos(sourceInput);
             } catch (err) {
                 console.error('Error productos', err);
             }
         };
+
+        // Celular/tablet: el detalle está en la parte baja del modal y el teclado en
+        // pantalla lo tapa al tocar el campo. Se sube el campo a la vista dejando
+        // sitio para la lista debajo (mismo criterio que Factura de Venta).
+        [inputDesc, inputCodigoVisible].forEach(inp => inp.addEventListener('focus', () => {
+            const tactil = window.matchMedia && window.matchMedia('(pointer: coarse)').matches;
+            if (window.innerWidth > 767 && !tactil) return;
+            setTimeout(() => {
+                if (document.activeElement !== inp) return;
+                if (typeof window.CMG_asegurarInputVisible === 'function') {
+                    window.CMG_asegurarInputVisible(inp, 250);
+                }
+            }, 300);
+        }));
 
         inputDesc.addEventListener('input', debounce((e) => buscarProducto(e.target.value, inputDesc), 400));
 
@@ -6586,6 +6617,7 @@ $totalPages = $totalPagesOriginal;
     });
 
 </script>
+<script src="<?= BASE_URL ?>/js/components/dropdown_flotante.js?v=<?= asset_ver('/js/components/dropdown_flotante.js') ?>"></script>
 <script src="<?= BASE_URL ?>/js/modulos/asiento_contable_tab.js?v=<?= asset_ver('/js/modulos/asiento_contable_tab.js') ?>"></script>
 <script src="<?= BASE_URL ?>/js/modulos/clientes_modal.js?v=<?= asset_ver('/js/modulos/clientes_modal.js') ?>"></script>
 <script src="<?= BASE_URL ?>/js/modulos/productos_modal.js?v=<?= asset_ver('/js/modulos/productos_modal.js') ?>"></script>

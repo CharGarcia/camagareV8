@@ -6,7 +6,7 @@ ruta_modulo: modulos/taller
 tipo: modulo
 visibilidad: todos
 etiquetas: taller, mecanica, precuenta, whatsapp, mecánica, orden de trabajo, OT, orden de reparacion, enderezada, pintura, latoneria, repuestos, mano de obra, tecnico, diagnostico, informe tecnico, garantia, siniestro, aseguradora, vehiculo, auto, carro, presupuesto, aprobacion, numeracion por fecha, numero con el año, reiniciar numeracion, reinicio anual, reinicio mensual, correlativo por año, correlativo por mes, modo de numeracion, buscar orden, buscar placa, buscador, filtros, filtrar ordenes de trabajo, filtro de fechas, buscar por repuesto, chips, imprimir, impresora
-version: 1.10
+version: 1.11
 orden: 0
 estado: activo
 ---
@@ -329,6 +329,11 @@ documentos admite cada periodo) está en el manual de **Empresa**, sección
 *Secuenciales por punto de emisión*.
 
 ## Historial de cambios
+
+- **1.11** — En **iPad/iPhone** (Safari y Chrome) la lista del catálogo del campo
+  **Descripción** se despliega pegada al campo, encima o debajo según el sitio que deje el
+  teclado en pantalla: antes quedaba detrás del teclado o recortada por el
+  formulario. Al tocar el campo, este se sube a la vista.
 
 - **1.10** — El botón **PDF** del documento pregunta ahora si se quiere
   **Imprimir** (abre el cuadro de impresión con el documento ya cargado),

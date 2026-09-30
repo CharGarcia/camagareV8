@@ -134,11 +134,18 @@
         }
 
         var inputVisible = rect.bottom > f.top && rect.top < f.bottom;
+        // Si el usuario está escribiendo en el input, la lista nunca se esconde:
+        // Chrome en iPad (y otras apps con navegador propio) puede reportar la
+        // franja visible desfasada por su barra de herramientas o el modo
+        // escritorio, y este chequeo daba "input fuera de pantalla" con el campo a
+        // la vista → la lista no aparecía. En ese caso se la mantiene dentro de la
+        // franja visible (abajo se acota) en vez de esconderla.
+        var enfocado = document.activeElement === input;
 
         // El input se fue de la pantalla y no se lo pudo traer de vuelta (scroll del
         // modal en escritorio): no tiene sentido dibujar la lista pegada a algo que
         // no se ve.
-        if (!inputVisible) {
+        if (!inputVisible && !enfocado) {
             dropdown.classList.add('d-none');
             return;
         }
@@ -160,8 +167,11 @@
         dropdown.style.maxHeight = alto + 'px';
 
         if (abrirAbajo) {
+            // Acotada a la franja visible: aunque el input quede al ras del borde,
+            // al menos ALTO_UTIL de lista queda a la vista.
+            var topAbajo = Math.min(rect.bottom + 2, f.bottom - MARGEN - Math.min(alto, ALTO_UTIL));
             dropdown.style.bottom = 'auto';
-            dropdown.style.top    = Math.max(f.top + MARGEN, rect.bottom + 2) + 'px';
+            dropdown.style.top    = Math.max(f.top + MARGEN, topAbajo) + 'px';
         } else {
             // Anclada por abajo (no por arriba) para que quede pegada al input
             // aunque la lista traiga pocos resultados y no ocupe todo el alto.
@@ -171,8 +181,12 @@
             // restarle rect.top daba negativo → la lista quedaba pegada al fondo de
             // la pantalla, detrás del teclado, y parecía que no se desplegaba.
             var altoLayout = document.documentElement.clientHeight || window.innerHeight;
+            // Borde inferior de la lista: justo encima del input, pero siempre dentro
+            // de la franja visible (con sitio para al menos ALTO_UTIL de lista).
+            var bordeInferior = Math.min(rect.top - 2, f.bottom - MARGEN);
+            bordeInferior = Math.max(bordeInferior, f.top + MARGEN + Math.min(alto, ALTO_UTIL));
             dropdown.style.top    = 'auto';
-            dropdown.style.bottom = Math.max(0, altoLayout - rect.top + 2) + 'px';
+            dropdown.style.bottom = Math.max(0, altoLayout - bordeInferior) + 'px';
         }
 
         var left = movil ? MARGEN : Math.min(rect.left, f.ancho - ancho - MARGEN);

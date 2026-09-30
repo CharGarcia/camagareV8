@@ -1085,6 +1085,20 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosPestanasOcultas($vistaConfigC
                 }, 200);
             });
 
+            // Celular/tablet (iPad): el detalle está en la parte baja del modal y el
+            // teclado en pantalla lo tapa al tocar el campo. Se sube el campo a la
+            // vista dejando sitio para la lista debajo (mismo criterio que Pedidos).
+            inputDesc.addEventListener('focus', () => {
+                const tactil = window.matchMedia && window.matchMedia('(pointer: coarse)').matches;
+                if (window.innerWidth > 767 && !tactil) return;
+                setTimeout(() => {
+                    if (document.activeElement !== inputDesc) return;
+                    if (typeof window.CMG_asegurarInputVisible === 'function') {
+                        window.CMG_asegurarInputVisible(inputDesc, 250);
+                    }
+                }, 300);
+            });
+
             inputDesc.addEventListener('input', () => {
                 const q = inputDesc.value.trim();
                 if (q.length < 2) {

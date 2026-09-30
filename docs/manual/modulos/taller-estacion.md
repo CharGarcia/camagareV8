@@ -6,7 +6,7 @@ ruta_modulo: modulos/taller-estacion
 tipo: modulo
 visibilidad: todos
 etiquetas: estacion, tablet, taller, mecanica, operario, tecnico, pantalla, departamento, pintura, enderezada, tomar trabajo, terminar trabajo, repuestos usados
-version: 1.0
+version: 1.1
 orden: 3
 estado: activo
 ---
@@ -108,6 +108,11 @@ parte comercial.
   texto sale en el informe técnico.
 
 ## Historial de cambios
+
+- **1.1** — En **iPad/iPhone** (Safari y Chrome) la lista del catálogo del campo
+  **Repuesto o trabajo** se despliega pegada al campo, encima o debajo según el sitio que deje el
+  teclado en pantalla: antes quedaba detrás del teclado o recortada por el
+  formulario. Al tocar el campo, este se sube a la vista.
 
 - **1.0** — Versión inicial como módulo propio, separado de Órdenes de Trabajo
   para que el personal del taller tenga acceso solo a lo suyo.

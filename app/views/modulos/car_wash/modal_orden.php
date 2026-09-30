@@ -348,6 +348,7 @@
 
 <link href="https://cdn.quilljs.com/1.3.6/quill.snow.css" rel="stylesheet">
 <script src="https://cdn.quilljs.com/1.3.6/quill.min.js"></script>
+<script src="<?= BASE_URL ?>/js/components/dropdown_flotante.js?v=<?= asset_ver('/js/components/dropdown_flotante.js') ?>"></script>
 <script src="<?= BASE_URL ?>/js/components/detalle_columnas.js?v=<?= asset_ver('/js/components/detalle_columnas.js') ?>"></script>
 <style>
     .cw-quill .ql-toolbar.ql-snow { padding: 3px 4px; border-radius: 4px 4px 0 0; }
@@ -900,14 +901,28 @@
         CW_DET.engancharDescripcion(inputDesc);
         const dropdownGlobal = document.getElementById('cw-dropdown-productos-global');
 
-        const buscarProducto = async (q, sourceInput) => {
-            q = (q || '').trim();
-            if (q.length < 2) { dropdownGlobal.classList.add('d-none'); return; }
-            const rect = sourceInput.getBoundingClientRect();
+        // Pega la lista de productos al input que la abrió. El cálculo (abrir hacia
+        // arriba si el teclado del iPad/celular no deja sitio abajo, subir el campo a
+        // la vista, reanclar al scrollear) vive en js/components/dropdown_flotante.js,
+        // el mismo de Factura de Venta y Pedidos. Antes se dibujaba siempre debajo
+        // del campo y en el iPad quedaba detrás del teclado.
+        const cwPosicionarDropdownProductos = (inputEl) => {
+            if (typeof window.CMG_anclarDropdown === 'function') {
+                window.CMG_anclarDropdown(dropdownGlobal, inputEl, { anchoMinimo: 350, altoMaximo: 250 });
+                return;
+            }
+            // Respaldo si el componente no cargó (comportamiento anterior).
+            const rect = inputEl.getBoundingClientRect();
             dropdownGlobal.style.top = `${rect.bottom + 2}px`;
             dropdownGlobal.style.left = `${rect.left}px`;
             dropdownGlobal.style.width = `${Math.max(rect.width, 350)}px`;
             dropdownGlobal.classList.remove('d-none');
+        };
+
+        const buscarProducto = async (q, sourceInput) => {
+            q = (q || '').trim();
+            if (q.length < 2) { dropdownGlobal.classList.add('d-none'); return; }
+            cwPosicionarDropdownProductos(sourceInput);
             dropdownGlobal.innerHTML = '<div class="list-group-item small text-muted">Buscando...</div>';
             try {
                 // Stock según la bodega de la cabecera (aplica a toda la orden).
@@ -947,6 +962,9 @@
                     if (EMPRESA_CONFIG.facturacion_libre) cwAgregarOpcionServicioLibre(q, tr, dropdownGlobal);
                     else dropdownGlobal.innerHTML = '<div class="list-group-item small text-muted">Sin coincidencias en el catálogo</div>';
                 }
+                // Entre la búsqueda y la respuesta el teclado pudo abrirse o el modal
+                // pudo scrollear: se vuelve a anclar al input con el alto ya definitivo.
+                if (!dropdownGlobal.classList.contains('d-none')) cwPosicionarDropdownProductos(sourceInput);
             } catch (err) { console.error('Error productos', err); }
         };
 
@@ -977,6 +995,20 @@
             }
         });
         inputCodigo.addEventListener('blur', () => setTimeout(() => dropdownGlobal.classList.add('d-none'), 200));
+
+        // Celular/tablet (iPad): el detalle está en la parte baja del modal y el
+        // teclado en pantalla lo tapa al tocar el campo. Se sube el campo a la vista
+        // dejando sitio para la lista debajo (mismo criterio que Factura de Venta).
+        [inputDesc, inputCodigo].forEach(inp => inp.addEventListener('focus', () => {
+            const tactil = window.matchMedia && window.matchMedia('(pointer: coarse)').matches;
+            if (window.innerWidth > 767 && !tactil) return;
+            setTimeout(() => {
+                if (document.activeElement !== inp) return;
+                if (typeof window.CMG_asegurarInputVisible === 'function') {
+                    window.CMG_asegurarInputVisible(inp, 250);
+                }
+            }, 300);
+        }));
         inputDesc.addEventListener('blur', () => setTimeout(() => dropdownGlobal.classList.add('d-none'), 200));
         inputDesc.addEventListener('blur', () => { inputDesc.value = inputDesc.value.replace(/\s+/g, ' ').trim(); });
         inputDesc.addEventListener('blur', () => {

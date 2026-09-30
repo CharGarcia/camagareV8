@@ -6,7 +6,7 @@ ruta_modulo: modulos/recibo-venta
 tipo: modulo
 visibilidad: todos
 etiquetas: recibo de venta, recibos, buscar recibos, buscador, filtros, filtrar recibos, buscar por cliente, buscar por producto, estado de pago, saldo pendiente, nota de venta, venta sin factura, documento interno, sin impuestos, numeracion por fecha, numero con el año, reiniciar numeracion, reinicio anual, reinicio mensual, correlativo por año, correlativo por mes, modo de numeracion, lote, vencimiento, caducidad, fecha de vencimiento, lote y vencimiento, ancho de columna, agrandar columna, ensanchar, codigo cortado, descripcion cortada, no se ve la descripcion completa, redimensionar, precio con impuestos, precio con iva, sale en cero, tipo de identificacion, tipo de documento del cliente, ruc o cedula, es ruc o cedula, cedula o pasaporte, consumidor final, no se cual identificacion tiene el cliente, buscador de clientes, buscar cliente, elegir cliente, datos del cliente, imprimir, impresora
-version: 1.18
+version: 1.19
 orden: 35
 estado: activo
 ---
@@ -198,6 +198,11 @@ cierran en **Contabilidad → Períodos Contables**; reabrir el período permite
 la operación de inmediato.
 
 ## Historial de cambios
+
+- **1.19** — En **iPad/iPhone** la lista de productos del detalle ya se despliega
+  pegada al campo de código o descripción: antes quedaba escondida detrás del
+  teclado en pantalla. Al tocar el campo, este se sube a la vista para dejar sitio
+  a la lista.
 
 - **1.18** — La tabla de productos tiene el mismo diseño que Facturas de venta: la
   **Descripción** es más ancha y el **Código** se ensancha con su texto. Las columnas

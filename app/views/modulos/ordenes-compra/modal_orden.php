@@ -522,13 +522,32 @@ window.ocAgregarFilaDetalle = function(item = {}) {
     };
 
     const setupAutocomplete = (inputEl) => {
+        // Celular/tablet (iPad): el detalle está en la parte baja del modal y el
+        // teclado en pantalla lo tapa al tocar el campo. Se sube el campo a la
+        // vista dejando sitio para la lista debajo (mismo criterio que Pedidos).
+        inputEl.addEventListener('focus', () => {
+            const tactil = window.matchMedia && window.matchMedia('(pointer: coarse)').matches;
+            if (window.innerWidth > 767 && !tactil) return;
+            setTimeout(() => {
+                if (document.activeElement !== inputEl) return;
+                if (typeof window.CMG_asegurarInputVisible === 'function') {
+                    window.CMG_asegurarInputVisible(inputEl, 260);
+                }
+            }, 300);
+        });
         inputEl.addEventListener('input', ocDebounce((e) => buscarProducto(e.target.value, inputEl), 380));
         inputEl.addEventListener('keydown', (e) => {
             if (e.key === 'Delete' || e.key === 'Backspace') {
-                e.preventDefault();
-                inputCod.value = ''; inputDesc.value = '';
-                tr.querySelector('.oc-item-id-producto').value = '';
-                dropdown.classList.add('d-none');
+                // Solo con un producto ya elegido (la fila muestra su etiqueta fija) estas
+                // teclas limpian toda la selección de un golpe (CLAUDE.md §9); mientras se
+                // escribe la búsqueda borran carácter a carácter, como en cualquier input.
+                const inputIdProd = tr.querySelector('.oc-item-id-producto');
+                if (inputIdProd && inputIdProd.value !== '') {
+                    e.preventDefault();
+                    inputCod.value = ''; inputDesc.value = '';
+                    inputIdProd.value = '';
+                    dropdown.classList.add('d-none');
+                }
             }
             if (e.key === 'Enter') {
                 const first = dropdown.querySelector('button');

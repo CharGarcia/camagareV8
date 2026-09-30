@@ -283,6 +283,7 @@ foreach ($departamentos as $d) {
         decimales_precio: <?= (int) ($decimalesPrecio ?? 2) ?>
     };
 </script>
+<script src="<?= $base ?>/js/components/dropdown_flotante.js?v=<?= asset_ver('/js/components/dropdown_flotante.js') ?>"></script>
 <script src="<?= $base ?>/js/modulos/taller_estacion.js?v=<?= asset_ver('/js/modulos/taller_estacion.js') ?>"></script>
 </body>
 </html>

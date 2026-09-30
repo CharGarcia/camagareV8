@@ -371,6 +371,7 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
 <!-- Dropdown global de búsqueda de repuestos de la grilla (igual que factura) -->
 <div id="tll-dropdown-productos-global" class="list-group shadow position-fixed d-none" style="z-index: 9999; min-width: 400px; max-height: 250px; overflow-y: auto; background-color: white;"></div>
 
+<script src="<?= BASE_URL ?>/js/components/dropdown_flotante.js?v=<?= asset_ver('/js/components/dropdown_flotante.js') ?>"></script>
 <script src="<?= BASE_URL ?>/js/modulos/taller.js?v=<?= asset_ver('/js/modulos/taller.js') ?>"></script>
 
 <script>
