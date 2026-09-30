@@ -177,10 +177,11 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                     <input class="form-check-input" type="checkbox" id="portalAluActivo" onchange="aluPortalActivar(this.checked)">
                     <label class="form-check-label small" for="portalAluActivo">Portal activo (si se desactiva, el QR deja de funcionar)</label>
                 </div>
-                <div class="d-flex flex-wrap gap-2">
-                    <button type="button" class="btn btn-outline-secondary btn-sm" onclick="aluPortalImprimir()"><i class="bi bi-printer me-1"></i>Imprimir hoja con QR</button>
-                    <button type="button" class="btn btn-outline-primary btn-sm" onclick="aluPortalEnviar()" title="Envía el enlace por correo a los representantes de los alumnos del listado (con el filtro actual)"><i class="bi bi-envelope me-1"></i>Enviar por correo</button>
-                    <button type="button" class="btn btn-outline-danger btn-sm ms-auto" onclick="aluPortalRegenerar()" title="Crea un QR nuevo; el anterior deja de funcionar"><i class="bi bi-arrow-repeat me-1"></i>Regenerar QR</button>
+                <?php // Los tres botones en una sola fila: se reparten el ancho y no se parten en dos líneas. ?>
+                <div class="d-flex flex-nowrap gap-2">
+                    <button type="button" class="btn btn-outline-secondary btn-sm flex-fill text-nowrap" onclick="aluPortalImprimir()" title="Imprimir una hoja con el QR y las instrucciones"><i class="bi bi-printer me-1"></i>Imprimir</button>
+                    <button type="button" class="btn btn-outline-primary btn-sm flex-fill text-nowrap" onclick="aluPortalEnviar()" title="Envía el enlace por correo a los representantes de los alumnos del listado (con el filtro actual)"><i class="bi bi-envelope me-1"></i>Enviar por correo</button>
+                    <button type="button" class="btn btn-outline-danger btn-sm flex-fill text-nowrap" onclick="aluPortalRegenerar()" title="Crea un QR nuevo; el anterior deja de funcionar"><i class="bi bi-arrow-repeat me-1"></i>Regenerar QR</button>
                 </div>
             </div>
         </div>

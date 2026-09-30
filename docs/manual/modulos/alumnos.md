@@ -226,7 +226,7 @@ En el listado de Alumnos, botón **Portal de representantes** (solo usuarios con
 permiso de *modificar* Alumnos):
 
 - **QR y enlace** del colegio, para copiar.
-- **Imprimir hoja con QR**: una hoja con el QR y las instrucciones, para la
+- **Imprimir**: una hoja con el QR y las instrucciones, para la
   entrada o las aulas.
 - **Enviar por correo**: envía el enlace a los representantes (clientes que
   facturan) de los alumnos del **listado actual**; si hay filtros de campus o
