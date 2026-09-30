@@ -97,20 +97,30 @@ $base = BASE_URL;
                 <label for="tipoAsientoSelector" class="form-label small fw-bold text-secondary mb-1">Seleccionar Tipo de Asiento</label>
                 <select class="form-select form-select-sm border shadow-none" id="tipoAsientoSelector">
                     <option value="" disabled selected>-- Elija un Tipo de Asiento --</option>
-                    <option value="ventas_factura">Ventas con Factura (Facturas y notas de crédito)</option>
-                    <option value="factura_reembolso">Factura de Reembolso (Cuenta puente de terceros)</option>
-                    <option value="recibos_venta">Recibos de Venta (Recibos y su IVA)</option>
-                    <option value="consignacion_venta">Consignaciones en Ventas (Reclasificación de inventario a costo)</option>
-                    <option value="adquisiciones_compras">Adquisiciones de Compras/Servicios (Documentos recibidos)</option>
-                    <option value="adquisiciones_importacion">Importaciones (Inventario nacionalizado, IVA/ISD aduana, CxP)</option>
-                    <option value="retenciones_venta">Retenciones en Venta</option>
-                    <option value="retenciones_compra">Retenciones en Compra</option>
-                    <option value="ingresos_egresos">Ingresos y Egresos (Transacciones directas)</option>
-                    <option value="cobros_pagos">Cobros y Pagos</option>
-                    <option value="nomina">Nómina</option>
-                    <option value="cierre_ejercicio">Cierre del Ejercicio (Saldo de resultados a patrimonio)</option>
-                    <option value="activos_fijos_alta">Activos Fijos - Alta (Contrapartida)</option>
-                    <option value="activos_fijos_depreciacion">Activos Fijos - Depreciación (Ajuste por redondeo)</option>
+                    <?php
+                    // Los tipos cuyos módulos están todos apagados en «Módulos que contabilizan» no se
+                    // listan; el JS reconstruye el selector al cambiar un interruptor (ASIENTOPROG_TIPOS).
+                    $tiposAsientoSelector = [
+                        'ventas_factura'             => 'Ventas con Factura (Facturas y notas de crédito)',
+                        'factura_reembolso'          => 'Factura de Reembolso (Cuenta puente de terceros)',
+                        'recibos_venta'              => 'Recibos de Venta (Recibos y su IVA)',
+                        'consignacion_venta'         => 'Consignaciones en Ventas (Reclasificación de inventario a costo)',
+                        'adquisiciones_compras'      => 'Adquisiciones de Compras/Servicios (Documentos recibidos)',
+                        'adquisiciones_importacion'  => 'Importaciones (Inventario nacionalizado, IVA/ISD aduana, CxP)',
+                        'retenciones_venta'          => 'Retenciones en Venta',
+                        'retenciones_compra'         => 'Retenciones en Compra',
+                        'ingresos_egresos'           => 'Ingresos y Egresos (Transacciones directas)',
+                        'cobros_pagos'               => 'Cobros y Pagos',
+                        'nomina'                     => 'Nómina',
+                        'cierre_ejercicio'           => 'Cierre del Ejercicio (Saldo de resultados a patrimonio)',
+                        'activos_fijos_alta'         => 'Activos Fijos - Alta (Contrapartida)',
+                        'activos_fijos_depreciacion' => 'Activos Fijos - Depreciación (Ajuste por redondeo)',
+                    ];
+                    $tiposInactivos = $tiposInactivos ?? [];
+                    foreach ($tiposAsientoSelector as $tipoValor => $tipoEtiqueta):
+                        if (in_array($tipoValor, $tiposInactivos, true)) { continue; } ?>
+                    <option value="<?= htmlspecialchars($tipoValor) ?>"><?= htmlspecialchars($tipoEtiqueta) ?></option>
+                    <?php endforeach; ?>
                 </select>
             </div>
             <div class="col-auto">
@@ -950,6 +960,8 @@ $base = BASE_URL;
     window.BASE_URL = '<?= $base ?>';
     // Sección a abrir al llegar desde el aviso de asientos pendientes (viaja en sesión, no en la URL).
     window.ASIENTOPROG_ABRIR = <?= json_encode($abrirSeccion ?? null, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT) ?>;
+    // Catálogo completo del selector de tipo de asiento, para reconstruirlo al encender/apagar módulos.
+    window.ASIENTOPROG_TIPOS = <?= json_encode($tiposAsientoSelector, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_UNESCAPED_UNICODE) ?>;
 </script>
 
 <script src="<?= $base ?>/js/modulos/configuracion_contable_modal.js?v=<?= asset_ver('/js/modulos/configuracion_contable_modal.js') ?>"></script>

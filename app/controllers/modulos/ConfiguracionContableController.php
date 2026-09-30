@@ -93,8 +93,18 @@ class ConfiguracionContableController extends BaseModuloController
         $abrirSeccion = $_SESSION['config_contable_abrir'] ?? null;
         unset($_SESSION['config_contable_abrir']);
 
+        // Tipos de asiento cuyos módulos están todos apagados en «Módulos que contabilizan»: no se
+        // listan en el selector (no generan asientos, no hay nada que configurar).
+        try {
+            $tiposInactivos = \App\Services\modulos\ContabilidadInterruptorService::crear()->tiposAsientoInactivos($idEmpresa);
+        } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
+            $tiposInactivos = [];
+        }
+
         $this->viewWithLayout('layouts.main', 'modulos.configuracion_contable.index', [
             'abrirSeccion' => is_array($abrirSeccion) ? $abrirSeccion : null,
+            'tiposInactivos' => $tiposInactivos,
             'titulo'       => 'Configuración Contable',
             'perm'         => $perm,
             'rutaModulo'   => self::RUTA_MODULO,
@@ -1264,8 +1274,10 @@ class ConfiguracionContableController extends BaseModuloController
         }
 
         try {
-            $res = \App\Services\modulos\ContabilidadInterruptorService::crear()
-                ->cambiar((int) $_SESSION['id_empresa'], (int) $_SESSION['id_usuario'], $clave, $contabiliza);
+            $svc = \App\Services\modulos\ContabilidadInterruptorService::crear();
+            $res = $svc->cambiar((int) $_SESSION['id_empresa'], (int) $_SESSION['id_usuario'], $clave, $contabiliza);
+            // Para refrescar el selector de tipo de asiento sin recargar la página.
+            $res['tipos_inactivos'] = $svc->tiposAsientoInactivos((int) $_SESSION['id_empresa']);
             echo json_encode(['ok' => true] + $res);
         } catch (\Throwable $e) {
             \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);

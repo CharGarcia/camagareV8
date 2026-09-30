@@ -63,6 +63,49 @@ class ContabilidadModulos
         return self::$porRuta[self::normalizarRuta($rutaMvc)] ?? [];
     }
 
+    /**
+     * Referencias de asientos_programados → tipo de asiento del selector de Configuración
+     * Contable al que pertenecen (los módulos que se configuran por referencia y no por concepto).
+     */
+    private const TIPO_POR_REFERENCIA = [
+        'retenciones_venta'        => 'retenciones_venta',
+        'retenciones_venta_debe'   => 'retenciones_venta',
+        'retenciones_venta_haber'  => 'retenciones_venta',
+        'retenciones_compra_debe'  => 'retenciones_compra',
+        'retenciones_compra_haber' => 'retenciones_compra',
+        'opcion_ingreso'           => 'ingresos_egresos',
+        'opcion_egreso'            => 'ingresos_egresos',
+        'forma_cobro'              => 'cobros_pagos',
+        'forma_pago'               => 'cobros_pagos',
+    ];
+
+    /**
+     * Módulos con interruptor propio (sin 'sigue_a') que usan cada tipo de asiento del selector de
+     * Configuración Contable, según sus 'conceptos' y 'referencias'. Un tipo de asiento que no
+     * aparece aquí (cierre del ejercicio, depreciación…) no depende de ningún interruptor.
+     *
+     * @return array<string, string[]> tipo_asiento => claves de módulo
+     */
+    public static function modulosPorTipoAsiento(): array
+    {
+        $mapa = [];
+        foreach (self::todos() as $clave => $def) {
+            if (!empty($def['sigue_a'])) {
+                continue;
+            }
+            $tipos = (array) ($def['conceptos'] ?? []);
+            foreach ((array) ($def['referencias'] ?? []) as $ref) {
+                if (isset(self::TIPO_POR_REFERENCIA[$ref])) {
+                    $tipos[] = self::TIPO_POR_REFERENCIA[$ref];
+                }
+            }
+            foreach (array_unique($tipos) as $tipo) {
+                $mapa[$tipo][] = (string) $clave;
+            }
+        }
+        return $mapa;
+    }
+
     /** ¿Esta ruta MVC genera asientos automáticamente? */
     public static function rutaTieneContabilidad(string $rutaMvc): bool
     {

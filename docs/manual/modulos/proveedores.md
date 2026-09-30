@@ -6,7 +6,7 @@ ruta_modulo: modulos/proveedores
 tipo: modulo
 visibilidad: todos
 etiquetas: proveedores, contable, cuenta contable, cuentas contables, asiento contable, configuracion contable, cuenta por pagar del proveedor, cuenta de gasto del proveedor, buscar proveedor, buscador, filtros, filtrar proveedores, proveedores sin correo, proveedores por banco, proveedores por ciudad, chips, ordenar por dos columnas, ordenar por ciudad y razon social, proveedor, acreedor, ruc, retencion, cuenta bancaria, plazo, credito, parte relacionada, pago automatico, cheque, egreso automatico, pagos pendientes, resumen comercial, por pagar, buscar, buscador, filtrar, copiar a otra empresa, replicar, duplicar, multiempresa, valores de terceros, otros conceptos, valores adicionales, bomberos, tasa de basura, planilla de luz, transacciones, productos comprados, servicios comprados, historial de compras, que le compre, ultimo precio, precio de compra, estado de cuenta, kardex, saldo del proveedor, historial de pagos, pagos realizados, egresos, ver egreso, cedula y ruc, cliente duplicado, proveedor duplicado, identificacion repetida, ruc es la cedula mas 001, mismo tercero dos fichas, estado de cuenta partido, cedula falsa, cedula invalida, cedula incorrecta, ruc invalido, digito verificador, validar cedula, comprobar cedula, imprimir, impresora
-version: 2.9
+version: 2.10
 orden: 10
 estado: activo
 ---
@@ -295,8 +295,12 @@ Proveedores*: lo que cambie aquí se ve allá y viceversa.
 
 - Las cuentas son las del asiento de *Adquisiciones de Compras/Servicios*, que
   cubre compras y liquidaciones de compra.
-- Los conceptos se reparten en dos columnas, **Debe** y **Haber** (cuenta por
-  pagar, subtotal o gasto, inventario, IVA por tarifa, etc.).
+- De entrada solo se ve la cuenta del **Subtotal** de la compra (el gasto o
+  costo), que es la que normalmente cambia de un proveedor a otro. Para
+  personalizar el resto (cuenta por pagar, descuento, ICE, IVA por tarifa, etc.)
+  use **Mostrar las demás cuentas (N)**; se reparten en dos columnas, **Debe** y
+  **Haber**. Los conceptos que ya tienen cuenta propia o que no tienen cuenta en
+  ningún lado se ven siempre.
 - Si el concepto tiene cuenta propia del proveedor, se ve escrita. Si no, el
   campo muestra en gris la cuenta de la configuración **General** que se usará.
   Los conceptos en **rojo** no tienen cuenta ni aquí ni en General: el asiento
@@ -481,6 +485,8 @@ lo referencian se conservan intactas. Si solo quiere dejar de usarlo, cámbielo 
 
 ## Historial de cambios
 
+- **2.10** — La pestaña **Contable** muestra de entrada solo la cuenta del Subtotal de la
+  compra; las demás se despliegan con *Mostrar las demás cuentas*.
 - **2.9** — La pestaña **Contable** queda solo con las cuentas: sin selector de tipo de
   asiento, indicadores ni botones de copiar, quitar o abrir Configuración Contable.
 - **2.8** — Nueva pestaña **Contable** en la ficha: las cuentas del asiento de

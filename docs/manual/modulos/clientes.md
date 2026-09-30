@@ -6,7 +6,7 @@ ruta_modulo: modulos/clientes
 tipo: modulo
 visibilidad: todos
 etiquetas: clientes, contable, cuenta contable, cuentas contables, asiento contable, configuracion contable, cuenta por cobrar del cliente, cuenta de ventas del cliente, cliente, cartera, buscar cliente, buscador, filtros, filtrar clientes, clientes sin correo, clientes por ciudad, clientes por vendedor, chips, ordenar por dos columnas, ordenar por ciudad y nombre, ruc, cedula, consumidor final, deudores, cobro automatico, cobros pendientes, forma de cobro, ingreso automatico, cheque, dias de credito, visitas, dias de visita, ruta de visita, rutero, frecuencia de visita, vendedor, preventa, visita del vendedor, horario de atencion, orden de visita, importar clientes, carga masiva, asignar vendedor, transacciones, productos vendidos, servicios vendidos, historial de ventas, que le vendi, ultimo precio, precio de venta, estado de cuenta, kardex, saldo del cliente, historial de cobros, cobros realizados, ingresos, ver ingreso, cedula y ruc, cliente duplicado, proveedor duplicado, identificacion repetida, ruc es la cedula mas 001, mismo tercero dos fichas, estado de cuenta partido, cedula falsa, cedula invalida, cedula incorrecta, ruc invalido, digito verificador, validar cedula, comprobar cedula, imprimir, impresora
-version: 2.7
+version: 2.8
 orden: 10
 estado: activo
 ---
@@ -356,8 +356,12 @@ cambie aquí se ve allá y viceversa.
 - Las cuentas son las del asiento de *Ventas con Factura* (facturas y notas de
   crédito). Las de *Recibos de Venta* del cliente se configuran en
   *Configuración Contable → Reglas por Clientes*.
-- Los conceptos se reparten en dos columnas, **Debe** y **Haber** (cuenta por
-  cobrar, ventas, costo, inventario, IVA por tarifa, etc.).
+- De entrada solo se ve la cuenta de **ventas** (Subtotal), que es la que
+  normalmente cambia de un cliente a otro. Para personalizar el resto (cuenta
+  por cobrar, costo, inventario, descuento, IVA por tarifa, etc.) use **Mostrar
+  las demás cuentas (N)**; se reparten en dos columnas, **Debe** y **Haber**.
+  Los conceptos que ya tienen cuenta propia o que no tienen cuenta en ningún
+  lado se ven siempre.
 - Si el concepto tiene cuenta propia del cliente, se ve escrita. Si no, el
   campo muestra en gris la cuenta de la configuración **General** que se usará.
   Los conceptos en **rojo** no tienen cuenta ni aquí ni en General: el asiento
@@ -453,6 +457,8 @@ usuario y la fecha.
 
 ## Historial de cambios
 
+- **2.8** — La pestaña **Contable** muestra de entrada solo la cuenta de ventas; las demás
+  se despliegan con *Mostrar las demás cuentas*.
 - **2.7** — La pestaña **Contable** queda solo con las cuentas de *Ventas con Factura*:
   sin selector de tipo de asiento, indicadores ni botones de copiar, quitar o abrir
   Configuración Contable. *Recibos de Venta* se configura desde Configuración Contable.

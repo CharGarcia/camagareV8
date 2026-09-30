@@ -80,6 +80,29 @@ class ContabilidadInterruptorService
     }
 
     /**
+     * Tipos de asiento del selector de Configuración Contable que ya no se usan en la empresa:
+     * TODOS los módulos que los contabilizan están apagados (p. ej. «Ventas con Factura» solo si
+     * están apagados Facturas, Notas de Crédito, Notas de Débito y Cambios de productos). Los tipos
+     * que no dependen de ningún interruptor nunca se ocultan.
+     *
+     * @return string[]
+     */
+    public function tiposAsientoInactivos(int $idEmpresa): array
+    {
+        $apagadas = $this->clavesApagadas($idEmpresa);
+        if (!$apagadas) {
+            return [];
+        }
+        $inactivos = [];
+        foreach (ContabilidadModulos::modulosPorTipoAsiento() as $tipo => $claves) {
+            if (!array_diff($claves, $apagadas)) {
+                $inactivos[] = $tipo;
+            }
+        }
+        return $inactivos;
+    }
+
+    /**
      * Módulos agrupados para la ventana «Módulos que contabilizan».
      *
      * @return array<string, array<int, array{clave:string, nombre:string, ayuda:string, contabiliza:bool, sigue_a:?string}>>

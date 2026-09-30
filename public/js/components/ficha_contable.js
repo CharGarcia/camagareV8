@@ -52,6 +52,26 @@
         return parseInt(c.id_asiento_tipo, 10) > 0 || esConceptoIva(c);
     }
 
+    // Conceptos visibles de entrada por tipo de asiento (código de asientos_tipo): la cuenta de ventas
+    // o de gasto/costo (Subtotal), que es la que cambia de un cliente/proveedor a otro. El resto va
+    // tras «Mostrar las demás cuentas». Mismo criterio que las tarjetas de Configuración Contable
+    // (ASIENTOPROG_CONCEPTOS_PRINCIPALES.*.entidad en configuracion_contable_modal.js).
+    const CONCEPTOS_PRINCIPALES = {
+        ventas_factura:        ['SUBTOTALFACTURAVENTA'],
+        recibos_venta:         ['SUBTOTALRECIBOVENTA'],
+        adquisiciones_compras: ['SUBTOTALFACTURACOMPRA'],
+    };
+
+    (function estilos() {
+        if (document.getElementById('cc-extra-estilos')) return;
+        const st = document.createElement('style');
+        st.id = 'cc-extra-estilos';
+        st.textContent = `
+            .cc-compacta .cc-extra, .cc-compacta .cc-col-extra { display: none !important; }
+            .cc-compacta .cc-col-principal { flex: 0 0 100%; max-width: 100%; }`;
+        document.head.appendChild(st);
+    })();
+
     function crear(panel) {
         const cfg = panel.dataset;
         const q = (rol) => panel.querySelector(`[data-fctb="${rol}"]`);
@@ -62,6 +82,7 @@
         let reglas = [];           // reglas propias de la entidad
         let idRecienGuardado = ''; // id de la ficha recién creada, mientras el input aún no lo tiene
         let debounceTimer = null;
+        let expandida = false;     // «Mostrar las demás cuentas» desplegado (se reinicia al cambiar de ficha)
 
         const idEntidad = () => (document.getElementById(cfg.idInput)?.value || '').trim() || idRecienGuardado;
         const tipoAsiento = () => q('tipo')?.value || '';
@@ -92,6 +113,7 @@
 
             const clave = `${id}|${tipoAsiento()}`;
             if (!forzar && clave === cargadoPara) return;
+            if (clave !== cargadoPara) expandida = false;
             cargadoPara = clave;
 
             const cuerpo = q('cuerpo');
@@ -129,6 +151,14 @@
                 return;
             }
 
+            // Vista resumida: solo el concepto principal del tipo de asiento (Subtotal de ventas o
+            // de compras), más los que ya tienen cuenta propia o no tienen cuenta en ningún lado.
+            const principales = CONCEPTOS_PRINCIPALES[tipoAsiento()] || null;
+            const faltaDe = (c) => !propiaDe(c) && !c.id_cuenta && !c.respaldo_concepto;
+            const esExtra = (c) => !!principales && !principales.includes(c.codigo) && !propiaDe(c) && !faltaDe(c);
+            const extras = conceptos.filter(esExtra).length;
+            const compacta = extras > 0 && !expandida;
+
             const linea = (c) => {
                 const propia = propiaDe(c);
                 const key = esConceptoIva(c) ? `iva_${c.id_referencia}` : c.id_asiento_tipo;
@@ -140,7 +170,7 @@
                     : (c.respaldo_concepto ? `usa ${c.respaldo_concepto}` : 'sin cuenta');
                 const falta = !propia && !c.id_cuenta && !c.respaldo_concepto;
                 return `
-                <div class="d-flex align-items-center gap-1 border-bottom py-1">
+                <div class="d-flex align-items-center gap-1 border-bottom py-1${esExtra(c) ? ' cc-extra' : ''}">
                     <span class="small text-truncate${falta ? ' text-danger' : ''}" style="flex:0 0 40%;" title="${esc(c.detalle || c.concepto)}">${esc(c.concepto)}</span>
                     <div class="position-relative flex-grow-1">
                         <input type="text" class="form-control form-control-sm py-0 bg-white text-dark${falta ? ' border-danger' : ''}"
@@ -163,8 +193,9 @@
             };
 
             const esDebe = (c) => String(c.debe_haber || 'debe').toLowerCase() === 'debe';
+            const colClase = (lista) => !extras ? '' : (lista.length && lista.every(esExtra) ? 'cc-col-extra' : 'cc-col-principal');
             const columna = (titulo, fondo, color, icono, lista) => `
-                <div class="col-md-6">
+                <div class="col-md-6 ${colClase(lista)}">
                     <div class="border rounded-3 h-100">
                         <div class="fw-bold small px-3 py-2 d-flex align-items-center gap-2" style="background:${fondo}; color:${color}; border-top-left-radius:.45rem; border-top-right-radius:.45rem;">
                             <i class="bi ${icono}"></i> ${titulo}
@@ -173,11 +204,16 @@
                     </div>
                 </div>`;
 
+            cuerpo.classList.toggle('cc-compacta', compacta);
+            const textoExtras = compacta
+                ? `<i class="bi bi-chevron-down me-1"></i>Mostrar las demás cuentas (${extras})`
+                : '<i class="bi bi-chevron-up me-1"></i>Ocultar las demás cuentas';
             cuerpo.innerHTML = `
                 <div class="row g-3">
                     ${columna('Debe', '#E6F1FB', '#0C447C', 'bi-arrow-down-right', conceptos.filter(esDebe))}
                     ${columna('Haber', '#FAEEDA', '#633806', 'bi-arrow-up-right', conceptos.filter(c => !esDebe(c)))}
                 </div>
+                ${extras ? `<button type="button" class="btn btn-link btn-sm p-0 mt-2 text-decoration-none" style="font-size:.78rem;" data-fctb-extras="1">${textoExtras}</button>` : ''}
                 ${editable ? '' : '<div class="small text-muted mt-2"><i class="bi bi-lock me-1"></i>Solo lectura: no tiene permiso para crear en Configuración Contable.</div>'}`;
 
             pintarEstado();
@@ -362,6 +398,10 @@
         panel.addEventListener('click', (e) => {
             const btn = e.target.closest('[data-fctb-quitar]');
             if (btn && btn.dataset.fctbQuitar) quitarCuenta(btn.dataset.fctbQuitar);
+            if (e.target.closest('[data-fctb-extras]')) {
+                expandida = !expandida;
+                pintar();
+            }
         });
 
         document.addEventListener('click', (e) => {

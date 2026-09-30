@@ -76,6 +76,26 @@
     /**
      * Inicializa o actualiza la visualización de acordeones al presionar "Configurar Asientos".
      */
+    /**
+     * Reconstruye el selector de tipo de asiento sin los tipos cuyos módulos están todos apagados
+     * en «Módulos que contabilizan» (lo llama configuracion_contable_interruptores.js tras cada
+     * cambio). Si el tipo elegido deja de estar disponible, el selector vuelve a «Elija…».
+     */
+    window.ASIENTOPROG_aplicarTiposInactivos = function (inactivos) {
+        const sel = document.getElementById('tipoAsientoSelector');
+        const tipos = window.ASIENTOPROG_TIPOS || null;
+        if (!sel || !tipos) return;
+        const actual = sel.value;
+        const fuera = new Set(inactivos || []);
+        const esc = ASIENTOPROG_esc;
+        sel.innerHTML = '<option value="" disabled>-- Elija un Tipo de Asiento --</option>'
+            + Object.entries(tipos)
+                .filter(([valor]) => !fuera.has(valor))
+                .map(([valor, etiqueta]) => `<option value="${esc(valor)}">${esc(etiqueta)}</option>`)
+                .join('');
+        sel.value = (actual && !fuera.has(actual)) ? actual : '';
+    };
+
     window.ASIENTOPROG_configurar = async function () {
         const selector = document.getElementById('tipoAsientoSelector');
         const tipoAsiento = selector.value;
@@ -1141,6 +1161,64 @@
      */
     const ASIENTOPROG_dimNueva = {};
 
+    // Conceptos que se muestran de entrada en la tarjeta de cada dimensión (código de asientos_tipo),
+    // por tipo de asiento. En cliente/proveedor lo que cambia de uno a otro es la cuenta de ventas o
+    // de gasto/costo (Subtotal); en las dimensiones de línea (producto, categoría, marca, tipo de
+    // producción) además el costo y el inventario. Cuenta por cobrar/pagar, descuento, ICE, IVA…
+    // casi siempre son los de General y confundían al usuario. Las demás filas quedan tras «Mostrar
+    // las demás cuentas» (salvo las que ya tienen cuenta propia o no tienen cuenta en ningún lado,
+    // que siempre se ven). Tipo de asiento o dimensión sin entrada aquí: se muestra todo.
+    // Mismo mapa en public/js/components/ficha_contable.js (CONCEPTOS_PRINCIPALES).
+    const ASIENTOPROG_CONCEPTOS_PRINCIPALES = {
+        ventas_factura: {
+            entidad: ['SUBTOTALFACTURAVENTA'],
+            linea:   ['SUBTOTALFACTURAVENTA', 'COSTOFACTURAVENTA', 'INVENTARIOFACTURAVENTA'],
+        },
+        recibos_venta: {
+            entidad: ['SUBTOTALRECIBOVENTA'],
+            linea:   ['SUBTOTALRECIBOVENTA', 'COSTORECIBOVENTA', 'INVENTARIORECIBOVENTA'],
+        },
+        adquisiciones_compras: {
+            entidad: ['SUBTOTALFACTURACOMPRA'],
+            linea:   ['SUBTOTALFACTURACOMPRA', 'INVENTARIOFACTURACOMPRA'],
+        },
+    };
+    const ASIENTOPROG_DIM_ENTIDAD = ['cliente', 'proveedor'];
+    const ASIENTOPROG_DIM_LINEA   = ['producto', 'categoria', 'marca', 'tipo_produccion'];
+
+    /** Códigos visibles de entrada para la dimensión en el tipo de asiento elegido; null = todos. */
+    function ASIENTOPROG_principalesDe(tipo) {
+        const ta = (document.getElementById('tipoAsientoSelector') || {}).value || '';
+        const mapa = ASIENTOPROG_CONCEPTOS_PRINCIPALES[ta];
+        if (!mapa) return null;
+        if (ASIENTOPROG_DIM_ENTIDAD.includes(tipo)) return mapa.entidad || null;
+        if (ASIENTOPROG_DIM_LINEA.includes(tipo)) return mapa.linea || null;
+        return null;
+    }
+    // Tarjetas con «las demás cuentas» desplegadas ("tipo|id"): se respeta al repintar tras guardar.
+    const ASIENTOPROG_dimExpandidas = new Set();
+
+    window.ASIENTOPROG_alternarExtras = function (btn, tipo, refId, extras) {
+        const body = btn.closest('.card-body');
+        if (!body) return;
+        const clave = `${tipo}|${refId}`;
+        const compacta = body.classList.toggle('cc-compacta');
+        if (compacta) ASIENTOPROG_dimExpandidas.delete(clave); else ASIENTOPROG_dimExpandidas.add(clave);
+        btn.innerHTML = compacta
+            ? `<i class="bi bi-chevron-down me-1"></i>Mostrar las demás cuentas (${extras})`
+            : '<i class="bi bi-chevron-up me-1"></i>Ocultar las demás cuentas';
+    };
+
+    (function () {
+        if (document.getElementById('cc-extra-estilos')) return;
+        const st = document.createElement('style');
+        st.id = 'cc-extra-estilos';
+        st.textContent = `
+            .cc-compacta .cc-extra, .cc-compacta .cc-col-extra { display: none !important; }
+            .cc-compacta .cc-col-principal { flex: 0 0 100%; max-width: 100%; }`;
+        document.head.appendChild(st);
+    })();
+
     /** Texto para comparar en el buscador de fichas: minúsculas y sin tildes. */
     function ASIENTOPROG_normBuscar(s) {
         return String(s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().trim();
@@ -1252,7 +1330,7 @@
         // Fila EDITABLE de un concepto dentro de la tarjeta: el input trae la cuenta propia si la
         // tiene; si no, el marcador de posición dice qué pasa hoy con ese concepto (lo cubre la
         // General, o no lo cubre nadie). Se guarda al vuelo al elegir cuenta y se quita al vaciarlo.
-        const lineaConcepto = (c, propia, idx) => {
+        const lineaConcepto = (c, propia, idx, extra = false) => {
             const key       = ASIENTOPROG_dimKey(c);
             const inputId   = `dimc_${tipo}_${idx}_${key}`;
             const valor     = propia ? `${propia.cuenta_codigo} - ${propia.cuenta_nombre}` : '';
@@ -1261,7 +1339,7 @@
             const marcador  = general ? `General: ${general}` : (c.respaldo_concepto ? `usa ${c.respaldo_concepto}` : 'sin cuenta');
             const claseSin  = (!propia && !c.id_cuenta && !c.respaldo_concepto) ? ' border-danger' : '';
             return `
-            <div class="d-flex align-items-center gap-1 border-bottom py-1">
+            <div class="d-flex align-items-center gap-1 border-bottom py-1${extra ? ' cc-extra' : ''}">
                 <span class="small text-truncate" style="flex:0 0 42%;" title="${ASIENTOPROG_esc(c.concepto)}">${ASIENTOPROG_esc(c.concepto)}</span>
                 <div class="position-relative flex-grow-1">
                     <input type="text" class="form-control form-control-sm py-0 bg-white text-dark${claseSin}" style="height:26px; font-size:.78rem;"
@@ -1281,8 +1359,8 @@
             </div>`;
         };
 
-        const columna = (titulo, fondo, color, icono, filasHtml) => `
-            <div class="col-6">
+        const columna = (titulo, fondo, color, icono, filasHtml, clases = '') => `
+            <div class="col-6 ${clases}">
                 <div class="fw-bold small mb-1 px-2 py-1 rounded" style="background:${fondo}; color:${color};">
                     <i class="bi ${icono} me-1"></i>${titulo}
                 </div>
@@ -1302,9 +1380,23 @@
             const heredados = conceptos.filter(c => c.id_cuenta && !propiaDe(c)).length;
 
             const esDebe = (x) => ((x.debe_haber || 'debe') + '').toLowerCase() === 'debe';
+
+            // Vista resumida: solo los conceptos principales de la dimensión en este tipo de asiento
+            // (ASIENTOPROG_CONCEPTOS_PRINCIPALES), más los que ya tienen cuenta propia o no tienen
+            // cuenta en ningún lado. El resto se despliega con «Mostrar las demás cuentas».
+            const principales = ASIENTOPROG_principalesDe(tipo);
+            const esExtra = (c) => !!principales && !principales.includes(c.codigo)
+                && !propiaDe(c) && !faltantes.includes(c);
+            const extras = principales ? conceptos.filter(esExtra).length : 0;
+            const compacta = extras > 0 && !ASIENTOPROG_dimExpandidas.has(`${tipo}|${g.refId ?? (g.filas[0] ? g.filas[0].id_referencia : '')}`);
+            const colClases = (lado) => {
+                if (!extras) return '';
+                const delLado = conceptos.filter(c => (lado === 'debe') === esDebe(c));
+                return delLado.length && delLado.every(esExtra) ? 'cc-col-extra' : 'cc-col-principal';
+            };
             const filasDe = (lado) => conceptos
                 .filter(c => (lado === 'debe') === esDebe(c))
-                .map(c => lineaConcepto(c, propiaDe(c), idx))
+                .map(c => lineaConcepto(c, propiaDe(c), idx, esExtra(c)))
                 .join('');
 
             // Sin la configuración General cargada no hay con qué comparar: se omite el estado en
@@ -1347,11 +1439,15 @@
                         </button>
                     </div>
                     <div id="${idPanel}" class="collapse">
-                        <div class="card-body p-2 border-top">
+                        <div class="card-body p-2 border-top${compacta ? ' cc-compacta' : ''}">
                             <div class="row g-2">
-                                ${columna('Debe',  '#E6F1FB', '#0C447C', 'bi-arrow-down-right', filasDe('debe'))}
-                                ${columna('Haber', '#FAEEDA', '#633806', 'bi-arrow-up-right',   filasDe('haber'))}
+                                ${columna('Debe',  '#E6F1FB', '#0C447C', 'bi-arrow-down-right', filasDe('debe'), colClases('debe'))}
+                                ${columna('Haber', '#FAEEDA', '#633806', 'bi-arrow-up-right',   filasDe('haber'), colClases('haber'))}
                             </div>
+                            ${extras ? `<button type="button" class="btn btn-link btn-sm p-0 mt-1 text-decoration-none" style="font-size:.78rem;"
+                                    onclick="ASIENTOPROG_alternarExtras(this, '${tipo}', '${ASIENTOPROG_esc(String(refId ?? ''))}', ${extras})">
+                                ${compacta ? `<i class="bi bi-chevron-down me-1"></i>Mostrar las demás cuentas (${extras})` : '<i class="bi bi-chevron-up me-1"></i>Ocultar las demás cuentas'}
+                            </button>` : ''}
                             <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mt-2">
                                 <span class="small text-muted">
                                     ${heredados ? `<i class="bi bi-info-circle me-1"></i>Otros ${heredados} concepto(s) usan la cuenta de la configuración General.` : ''}

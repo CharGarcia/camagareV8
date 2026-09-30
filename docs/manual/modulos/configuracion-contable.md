@@ -5,8 +5,8 @@ categoria: Contabilidad
 ruta_modulo: modulos/configuracion-contable
 tipo: modulo
 visibilidad: admin
-etiquetas: configuracion contable, cuentas por documento, asiento automatico, parametrizacion, ventas, compras, cierre, tipo de produccion, bien, servicio, filtro por año, periodo, listado de proveedores, listado de clientes, cobros y pagos, ingresos y egresos, forma de pago, cuenta bancaria, efectivo, misma cuenta en los dos bloques, formas hermanas, cheques y transferencias, mismo banco, numero de cuenta, nomina, rol de pagos, prestamo quirografario, prestamo hipotecario, prestamo empresa, prestamos iess, cuentas opcionales, costo de ventas, costo de venta, inventario, asiento sin costo, no sale el costo, cuenta de iva del cliente, reglas por cliente, buscar proveedor, buscar cliente, buscar ficha, filtrar fichas, muchos proveedores, cuentas faltantes, modulos que contabilizan, apagar asientos, no generar asientos, no contabilizar, desactivar contabilidad, interruptor, consignaciones sin asiento, aviso de asientos pendientes, asientos pendientes en el balance, proveedores sin cuentas, clientes sin cuentas, productos sin cuentas, pendientes de configurar, retenciones en venta, retenciones en compra, retencion de renta, no aparecen las retenciones, codigo de retencion, catalogo de retenciones sri, codigo ats, codigo del anexo, retencion mal asignada, codigo de retencion no existe, en que documento esta el error, retencion con codigo invalido, sugerencias, sugerir cuentas, proveedores que compran lo mismo, copiar cuentas de otro proveedor, misma cuenta para varios proveedores, gasolineras, proveedores parecidos
-version: 1.23
+etiquetas: configuracion contable, cuentas por documento, asiento automatico, parametrizacion, ventas, compras, cierre, tipo de produccion, bien, servicio, filtro por año, periodo, listado de proveedores, listado de clientes, cobros y pagos, ingresos y egresos, forma de pago, cuenta bancaria, efectivo, misma cuenta en los dos bloques, formas hermanas, cheques y transferencias, mismo banco, numero de cuenta, nomina, rol de pagos, prestamo quirografario, prestamo hipotecario, prestamo empresa, prestamos iess, cuentas opcionales, costo de ventas, costo de venta, inventario, asiento sin costo, no sale el costo, cuenta de iva del cliente, reglas por cliente, buscar proveedor, buscar cliente, buscar ficha, filtrar fichas, muchos proveedores, cuentas faltantes, modulos que contabilizan, apagar asientos, no generar asientos, no contabilizar, desactivar contabilidad, interruptor, consignaciones sin asiento, aviso de asientos pendientes, asientos pendientes en el balance, proveedores sin cuentas, clientes sin cuentas, productos sin cuentas, pendientes de configurar, retenciones en venta, retenciones en compra, retencion de renta, no aparecen las retenciones, codigo de retencion, catalogo de retenciones sri, codigo ats, codigo del anexo, retencion mal asignada, codigo de retencion no existe, en que documento esta el error, retencion con codigo invalido, sugerencias, sugerir cuentas, proveedores que compran lo mismo, copiar cuentas de otro proveedor, misma cuenta para varios proveedores, gasolineras, proveedores parecidos, subtotal de compras, cuenta de gasto del proveedor, mostrar las demas cuentas, ver todas las cuentas, tipo de asiento no aparece, falta tipo de asiento en el selector, modulo apagado
+version: 1.26
 orden: 5
 estado: activo
 ---
@@ -93,6 +93,25 @@ o se busca la cuenta. El campo dice de un vistazo cómo está ese concepto hoy:
 - **Vacío con la nota roja `sin cuenta` y el borde rojo**: no hay cuenta ni en
   esta ficha ni en la General. Esos son los que hay que atender: dejan el asiento
   incompleto.
+
+**Vista resumida.** En Ventas con Factura, Recibos de Venta y Adquisiciones de
+Compras/Servicios, cada tarjeta muestra de entrada solo las cuentas que
+normalmente cambian en esa regla:
+
+| Regla | Se ve de entrada |
+|---|---|
+| Por Cliente (ventas o recibos) | Subtotal (cuenta de ventas) |
+| Por Proveedor | Subtotal de la compra (gasto o costo) |
+| Por Producto, Categoría, Marca o Tipo de Producción, en ventas o recibos | Subtotal, Costo de Ventas e Inventario |
+| Por Ítem de compra, Categoría o Marca, en compras | Subtotal de la compra e Inventario |
+
+El resto de conceptos (cuenta por cobrar o por pagar, descuento, ICE, propina,
+IVA, redondeo, etc.) queda detrás del enlace **Mostrar las demás cuentas (N)**,
+por si se quiere personalizar alguno; **Ocultar las demás cuentas** los vuelve a
+esconder. Aunque la tarjeta esté resumida, siempre se ven los conceptos que ya
+tienen cuenta propia y los que no tienen cuenta en ningún lado (en rojo). Las
+reglas por Empleado (nómina) y los demás tipos de asiento muestran todas sus
+cuentas.
 
 La cabecera de la tarjeta resume el estado: cuántas cuentas propias tiene y si
 queda algo sin resolver (*completa* o *faltan N*). Al pie, una línea indica
@@ -372,6 +391,15 @@ Con un módulo apagado:
   sin cuenta cuando ambos módulos están apagados).
 - Los documentos que **ya tenían asiento lo conservan** y se siguen actualizando
   si se editan, para que asiento y documento no queden descuadrados.
+- Cuando **todos** los módulos que usan un tipo de asiento están apagados, ese
+  tipo **deja de aparecer** en el selector *Seleccionar Tipo de Asiento*: no hay
+  nada que configurar. Por ejemplo, *Ventas con Factura* solo desaparece si están
+  apagados Facturas de Venta, Notas de Crédito, Notas de Débito y Cambios de
+  Productos; *Cobros y Pagos*, si lo están Ingresos, Egresos, Conciliación de
+  Tarjetas y Traspasos. El selector se actualiza en el momento; al volver a
+  encender un módulo, su tipo de asiento reaparece. *Cierre del Ejercicio* y
+  *Activos Fijos - Depreciación* no dependen de ningún interruptor y siempre se
+  muestran.
 
 **Retornos** y **Facturación de consignaciones** no tienen interruptor propio:
 aparecen con la etiqueta *Sigue a Consignaciones en Ventas*. Su asiento es el
@@ -438,6 +466,13 @@ ingresos o egresos. Solo falta asignar la cuenta.
 
 ## Historial de cambios
 
+- **1.26** — Los tipos de asiento cuyos módulos están todos apagados en *Módulos que
+  contabilizan* ya no aparecen en el selector de tipo de asiento.
+- **1.25** — La vista resumida se extiende a las reglas por Cliente (cuenta de ventas) y
+  a las de Producto, Categoría, Marca, Tipo de Producción e Ítem de compra (Subtotal,
+  Costo e Inventario según el asiento).
+- **1.24** — Las tarjetas de proveedor muestran de entrada solo la cuenta del Subtotal de
+  la compra; las demás se despliegan con *Mostrar las demás cuentas*.
 - **1.23** — En las tarjetas de reglas por entidad, la nota gris `General: …` muestra
   también el nombre de la cuenta, no solo su código.
 - **1.22** — Nuevo botón **Sugerencias** en *Reglas por Proveedores*: propone copiar las

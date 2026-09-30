@@ -84,6 +84,9 @@
             fd.append('contabiliza', contabiliza ? '1' : '0');
             const res = await (await fetch(`${API}/guardarInterruptorAjax`, { method: 'POST', body: fd })).json();
             if (!res.ok) throw new Error(res.error || 'No se pudo guardar.');
+            if (Array.isArray(res.tipos_inactivos) && window.ASIENTOPROG_aplicarTiposInactivos) {
+                window.ASIENTOPROG_aplicarTiposInactivos(res.tipos_inactivos);
+            }
             if (res.aviso) {
                 alerta(contabiliza ? 'Módulo encendido' : 'Módulo apagado', res.aviso, 'info');
             } else if (window.Swal) {
