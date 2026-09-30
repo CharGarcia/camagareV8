@@ -4958,10 +4958,27 @@ class MigracionMysqlService
         $mysql = LegacyMysqlConnection::get();
         $pg    = Database::getConnection();
 
-        $res = ['entidad' => 'ingresos', 'total' => 0, 'migrados' => 0, 'ya_migrados' => 0, 'omitidos' => 0, 'errores' => 0];
+        $res = ['entidad' => 'ingresos', 'total' => 0, 'migrados' => 0, 'ya_migrados' => 0, 'omitidos' => 0, 'errores' => 0,
+                'recibos_enlazados' => 0, 'recibos_sin_migrar' => 0];
         $done       = $this->idsMigrados($pg, $idEmpresa, 'ingresos');
         $mapFactura = $this->mapaDe($pg, $idEmpresa, 'facturas');
         $insMap     = $this->stmtMap($pg,'ingresos');
+
+        // Cobros de RECIBOS de venta: el viejo los guarda con tipo_ing_egr 'CCXRC' y
+        // codigo_documento_cv = 'RV' + id_encabezado_recibo (texto, no número). Se enlazan al recibo
+        // migrado (tipo_documento 'RECIBO') para que su saldo en Recibos / Cuentas por cobrar se cruce.
+        $mapRecibo = $this->mapaDe($pg, $idEmpresa, 'recibos');
+        $reciboNuevo = []; // id nuevo → [id_cliente, número]
+        $qr = $pg->prepare("SELECT id, id_cliente, establecimiento || '-' || punto_emision || '-' || secuencial AS numero FROM recibos_venta_cabecera WHERE id_empresa = ?");
+        $qr->execute([$idEmpresa]);
+        foreach ($qr->fetchAll(PDO::FETCH_ASSOC) as $r) { $reciboNuevo[(int) $r['id']] = $r; }
+        // Documento que cobra una línea vieja: ['FACTURA', id viejo] | ['RECIBO', id viejo] | null (concepto).
+        $docDeLinea = static function (array $d): ?array {
+            $cv = trim((string) $d['codigo_documento_cv']);
+            if (preg_match('/^RV(\d+)$/i', $cv, $m)) { return ['RECIBO', (int) $m[1]]; }
+            if (ctype_digit($cv) && (int) $cv > 0) { return ['FACTURA', (int) $cv]; }
+            return null;
+        };
 
         // Formas de cobro: pre-crear desde el catálogo viejo (fuera de transacción) + una por defecto
         $formaCache = [];
@@ -5048,9 +5065,17 @@ class MigracionMysqlService
 
                 // Cliente: desde la factura vieja referenciada (funciona aunque la factura no se haya migrado).
                 // El id_cliente de la factura viene pre-cargado en el batch (LEFT JOIN encabezado_factura).
+                // Si cobra un recibo, el cliente es el del recibo ya migrado.
                 $idCliente = null;
                 foreach ($dets as $d) {
-                    if ((int) $d['codigo_documento_cv'] <= 0) { continue; }
+                    $doc = $docDeLinea($d);
+                    if ($doc === null) { continue; }
+                    if ($doc[0] === 'RECIBO') {
+                        $idRec = $mapRecibo[(string) $doc[1]] ?? null;
+                        $idCliente = $idRec ? ((int) ($reciboNuevo[$idRec]['id_cliente'] ?? 0) ?: null) : null;
+                        if ($idCliente) { break; }
+                        continue;
+                    }
                     $oldCli = (int) ($d['fac_cliente'] ?? 0);
                     if ($oldCli > 0) {
                         $idCliente = $this->resolverOCrearCliente($cliPorIdent, $mapCliente, $oldCli, $idEmpresa, $idUsuario, $mysql, $pg);
@@ -5072,13 +5097,15 @@ class MigracionMysqlService
                 // Los de concepto se guardan como ingreso tipo OTRO + concepto genérico, con detalle de
                 // texto libre (tipo_documento='OTRO'), para que la vista NO pinte un documento clickeable
                 // con id nulo. Los que sí referencian factura quedan como FACTURA_VENTA (como antes).
-                $esConcepto = true;
-                foreach ($dets as $d) { if ((int) $d['codigo_documento_cv'] > 0) { $esConcepto = false; break; } }
-                if ($esConcepto) {
+                // Cobro de recibos (sin facturas) → RECIBO_VENTA, como lo registra el sistema nuevo; si
+                // mezcla facturas y recibos queda FACTURA_VENTA (el cruce va por el tipo de cada línea).
+                $tiposDoc = [];
+                foreach ($dets as $d) { if ($doc = $docDeLinea($d)) { $tiposDoc[$doc[0]] = true; } }
+                if (!$tiposDoc) {
                     $tipoIngreso = 'OTRO';
                     $idConcepto  = $this->getOrCreateConceptoMigracion($idEmpresa, $idUsuario, 'ingreso', $pg);
                 } else {
-                    $tipoIngreso = 'FACTURA_VENTA';
+                    $tipoIngreso = isset($tiposDoc['FACTURA']) ? 'FACTURA_VENTA' : 'RECIBO_VENTA';
                     $idConcepto  = null;
                 }
 
@@ -5101,11 +5128,17 @@ class MigracionMysqlService
                 }
 
                 foreach ($dets as $d) {
-                    $cv = (int) $d['codigo_documento_cv'];
-                    if ($cv > 0) { // línea de documento: factura de venta
+                    $doc = $docDeLinea($d);
+                    if ($doc !== null && $doc[0] === 'FACTURA') { // línea de documento: factura de venta
                         $tdoc   = 'FACTURA';
-                        $idRef  = $mapFactura[(string) $cv] ?? null;
+                        $idRef  = $mapFactura[(string) $doc[1]] ?? null;
                         $numDoc = (preg_match('/(\d{1,3}-\d{1,3}-\d+)/', (string) $d['detalle_ing_egr'], $mnum) ? $mnum[1] : null);
+                    } elseif ($doc !== null) { // línea de documento: recibo de venta
+                        $tdoc   = 'RECIBO';
+                        $idRef  = $mapRecibo[(string) $doc[1]] ?? null;
+                        $numDoc = $idRef ? ($reciboNuevo[$idRef]['numero'] ?? null) : null;
+                        if (!$numDoc && preg_match('/(\d{1,3}-\d{1,3}-\d+)/', (string) $d['detalle_ing_egr'], $mnum)) { $numDoc = $mnum[1]; }
+                        $res[$idRef ? 'recibos_enlazados' : 'recibos_sin_migrar']++;
                     } else { // línea de concepto: texto libre, sin documento clickeable
                         $tdoc   = 'OTRO';
                         $idRef  = null;

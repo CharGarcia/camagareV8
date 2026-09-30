@@ -675,6 +675,13 @@ $base = BASE_URL;
                     const muestra = (d.iva_x1000_muestra || []).map(x => String(x).replace(/</g, '&lt;')).join(', ');
                     html += `<br><span class="text-warning small">🛠 ${fmt(d.iva_x1000_corregidos)} asiento(s) de compra venían del sistema anterior con el IVA multiplicado por 1000 → se corrigieron al importar${muestra ? ': ' + muestra : ''}${d.iva_x1000_corregidos > (d.iva_x1000_muestra || []).length ? '…' : ''}</span>`;
                 }
+                // Cobros: líneas que pagan un recibo de venta, enlazadas al recibo migrado (cruzan su saldo).
+                if (d.recibos_enlazados > 0) {
+                    html += `<br><span class="text-success small">🔗 ${fmt(d.recibos_enlazados)} pago(s) de recibos de venta cruzados con su recibo.</span>`;
+                }
+                if (d.recibos_sin_migrar > 0) {
+                    html += `<br><span class="text-warning small">ℹ ${fmt(d.recibos_sin_migrar)} pago(s) de recibos sin cruzar: su recibo aún no está migrado. Migre <b>Recibos de venta</b> y vuelva a ejecutar <b>Cobros</b>.</span>`;
+                }
                 // Vehículos: los creados por una migración anterior se re-sincronizan con los datos más
                 // recientes de su placa y pierden los valores de relleno (chasis 123456789, año 2022, "Privado").
                 if (d.actualizados > 0 && ent === 'vehiculos') {

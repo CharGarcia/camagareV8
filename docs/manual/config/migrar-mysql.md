@@ -5,8 +5,8 @@ categoria: Configuración global
 ruta_modulo: config/migrar-mysql
 tipo: modulo
 visibilidad: superadmin
-etiquetas: migracion, migrar, sistema anterior, mysql, vendedor asignado, vendedor del cliente, clientes sin vendedor, vendedores migracion, asignacion de vendedor, migrar empresas, establecimientos migracion, ruc base, elegir establecimiento, fusionar establecimientos, cliente separado, serie, series, punto de emision, secuencial, numeracion, numero repetido, ingresos sin serie, egresos sin serie, pedidos sin serie, liquidacion pendiente de pago, liquidaciones de compra migradas, pagos migrados, egresos migrados, pago no aparece, cuentas por pagar migradas, compra pendiente de pago, compra pagada sale pendiente, pago no cruza, retencion en borrador, marcas, marca del producto, productos sin marca, catalogo de marcas, migrar marcas, cambios de productos migrados, cambio sin factura, factura del cambio, nup del cambio, recambio, registro de cambio, facturacion de consignacion migrada, unidad duplicada para devolver, iva inflado, iva multiplicado, iva x1000, asiento de compra mal, iva del asiento mayor, nota de credito compra asiento, contabilidad migrada, alumnos, migrar alumnos, estudiantes, campus, niveles, cursos, horarios, pension, servicios del alumno, descuento del alumno, alumnos activos, alumnos pasivos, representante del alumno, vehiculos, migrar vehiculos, placas, placa, chasis, chasis 123456789, año 2022, propietario privado, vehiculos faltantes, vehiculo sin orden, car wash migracion
-version: 1.14
+etiquetas: migracion, migrar, sistema anterior, mysql, vendedor asignado, vendedor del cliente, clientes sin vendedor, vendedores migracion, asignacion de vendedor, migrar empresas, establecimientos migracion, ruc base, elegir establecimiento, fusionar establecimientos, cliente separado, serie, series, punto de emision, secuencial, numeracion, numero repetido, ingresos sin serie, egresos sin serie, pedidos sin serie, liquidacion pendiente de pago, liquidaciones de compra migradas, pagos migrados, egresos migrados, pago no aparece, cuentas por pagar migradas, compra pendiente de pago, compra pagada sale pendiente, pago no cruza, retencion en borrador, marcas, marca del producto, productos sin marca, catalogo de marcas, migrar marcas, cambios de productos migrados, cambio sin factura, factura del cambio, nup del cambio, recambio, registro de cambio, facturacion de consignacion migrada, unidad duplicada para devolver, iva inflado, iva multiplicado, iva x1000, asiento de compra mal, iva del asiento mayor, nota de credito compra asiento, contabilidad migrada, alumnos, migrar alumnos, estudiantes, campus, niveles, cursos, horarios, pension, servicios del alumno, descuento del alumno, alumnos activos, alumnos pasivos, representante del alumno, vehiculos, migrar vehiculos, placas, placa, chasis, chasis 123456789, año 2022, propietario privado, vehiculos faltantes, vehiculo sin orden, car wash migracion, cobros de recibos, recibo pendiente migrado, recibo sin abono, pago de recibo no cruza, recibos de venta migrados, saldo de recibo
+version: 1.15
 orden: 2
 estado: activo
 ---
@@ -139,6 +139,23 @@ de aquí). Ese enlace se pierde en dos situaciones:
 
 En ambos casos Cuentas por Pagar muestra la compra pendiente aunque el pago
 exista (ver *Errores frecuentes*).
+
+## Cobros de recibos de venta
+
+En el sistema anterior, el cobro de un recibo de venta es una línea del ingreso
+que apunta al recibo. Al migrar **Cobros (ingresos)**, cada una de esas líneas se
+**cruza con su recibo migrado**: el recibo muestra su abono y su saldo en
+**Recibos de venta** y en **Cuentas por cobrar**, y el cobro llega como tipo
+*Recibo de venta*, con el cliente del recibo y el número del recibo en el detalle.
+
+- Migre **Recibos de venta antes que Cobros**. Si un cobro apunta a un recibo que
+  todavía no está migrado, la línea queda sin cruzar y el resultado lo avisa
+  (*pagos de recibos sin cruzar*): migre los recibos y vuelva a ejecutar Cobros.
+- Si los cobros ya se habían migrado y los recibos aparecen **pendientes aunque
+  estaban pagados**, vuelva a ejecutar **Cobros**: los cobros ya migrados se
+  reconstruyen y quedan cruzados con sus recibos, sin duplicarse.
+- Un cobro que paga facturas y recibos a la vez queda como cobro de factura, pero
+  cada línea cruza con su propio documento.
 
 ## Vendedor asignado a cada cliente
 
@@ -439,6 +456,9 @@ sistema anterior tampoco los aplicaba al facturar por alumno).
 
 ## Historial de cambios
 
+- **1.15** — **Cobros**: los pagos de recibos de venta se cruzan con su recibo
+  migrado (antes llegaban como "otros ingresos" sin enlace y los recibos quedaban
+  pendientes). Re-ejecutar Cobros corrige lo migrado antes.
 - **1.14** — Nueva entidad **Vehículos (uno por placa)**: trae todas las placas del
   sistema anterior (también las de órdenes sin servicios, que antes se perdían), con
   los datos de su orden más reciente y su cliente. Ya no se migran los valores de
