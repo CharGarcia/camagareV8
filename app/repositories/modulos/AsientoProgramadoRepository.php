@@ -1616,61 +1616,139 @@ class AsientoProgramadoRepository extends BaseRepository
         return $st->fetchAll(PDO::FETCH_ASSOC);
     }
 
+    /** Documentos (cabecera, detalle, FK del detalle a la cabecera) de los que sale cada tipo de asiento. */
+    private const DOCS_POR_TIPO_ASIENTO = [
+        'adquisiciones_compras' => [
+            ['compras_cabecera', 'compras_detalle', 'id_compra'],
+            ['liquidaciones_cabecera', 'liquidaciones_detalle', 'id_cabecera'],
+        ],
+        'ventas_factura' => [['ventas_cabecera', 'ventas_detalle', 'id_venta']],
+        'recibos_venta'  => [['recibos_venta_cabecera', 'recibos_venta_detalle', 'id_recibo']],
+    ];
+
+    /** Dimensiones que admite la tabla de reglas (la de producto en compras es el ítem por texto). */
+    public const DIMS_TABLA_REGLAS = ['proveedor', 'cliente', 'producto', 'categoria', 'marca'];
+
     /**
-     * Tabla de «Reglas por Proveedores»: los proveedores con compras o liquidaciones de compra
-     * (opcionalmente de un año), los que ya tienen cuentas propias primero, paginado y con buscador
-     * por razón social o identificación.
+     * Tabla de reglas por entidad (Proveedores, Clientes, Productos/Ítems, Categorías, Marcas):
+     * las entidades con movimiento en los documentos del tipo de asiento (opcionalmente de un año;
+     * categorías y marcas sin año: todas), paginado y con buscador. Primero las que aún no tienen
+     * cuenta propia en ninguno de los conceptos principales ($principales, códigos de asientos_tipo:
+     * las columnas de la tabla), cada grupo de la A a la Z.
      *
-     * @return array{rows: array<int, array<string, mixed>>, total: int}
+     * En compras la dimensión «producto» es el ÍTEM de compra (texto libre, regla 'item_compra'):
+     * la clave es la descripción, no un id.
+     *
+     * @param string[] $principales
+     * @return array{rows: array<int, array{clave:string, nombre:string, identificacion:?string, tiene_principal:bool}>, total: int}
      */
-    public function listarProveedoresReglaCompra(int $idEmpresa, string $buscar, ?int $anio, int $page, int $perPage): array
-    {
-        $cond = self::COND_REGLA_COMPRA_PROVEEDOR;
-        $params = [':e' => $idEmpresa, ':e2' => $idEmpresa, ':e3' => $idEmpresa, ':e4' => $idEmpresa, ':e5' => $idEmpresa];
-        $fCompra = $fLiq = '';
-        if ($anio !== null) {
-            $fCompra = ' AND EXTRACT(YEAR FROM c.fecha_emision) = :anio';
-            $fLiq    = ' AND EXTRACT(YEAR FROM l.fecha_emision) = :anio2';
-            $params[':anio']  = $anio;
-            $params[':anio2'] = $anio;
+    public function listarEntidadesRegla(
+        int $idEmpresa,
+        string $dim,
+        string $tipoAsiento,
+        array $principales,
+        string $buscar,
+        ?int $anio,
+        int $page,
+        int $perPage
+    ): array {
+        $docs = self::DOCS_POR_TIPO_ASIENTO[$tipoAsiento] ?? null;
+        if ($docs === null || !in_array($dim, self::DIMS_TABLA_REGLAS, true)) {
+            throw new \InvalidArgumentException('Regla no disponible para este tipo de asiento.');
+        }
+        $esCompra = $tipoAsiento === 'adquisiciones_compras';
+        if (($dim === 'proveedor' && !$esCompra) || ($dim === 'cliente' && $esCompra)) {
+            throw new \InvalidArgumentException('Regla no disponible para este tipo de asiento.');
+        }
+        $esItem = $dim === 'producto' && $esCompra;
+
+        $params = [];
+        $n = 0;
+        $p = function ($valor) use (&$params, &$n): string {
+            $k = ':p' . (++$n);
+            $params[$k] = $valor;
+            return $k;
+        };
+
+        // Movimiento en los documentos del tipo de asiento (cabecera c, detalle d).
+        $existeMov = function (string $condicion, bool $conDetalle) use ($docs, $anio, $idEmpresa, $p): string {
+            $partes = [];
+            foreach ($docs as [$cab, $det, $fk]) {
+                $join = $conDetalle ? " INNER JOIN {$det} d ON d.{$fk} = c.id" : '';
+                $filtroAnio = $anio !== null ? ' AND EXTRACT(YEAR FROM c.fecha_emision) = ' . $p($anio) : '';
+                $partes[] = "EXISTS (SELECT 1 FROM {$cab} c{$join}
+                                     WHERE c.id_empresa = {$p($idEmpresa)} AND c.eliminado = false
+                                       AND {$condicion}{$filtroAnio})";
+            }
+            return '(' . implode(' OR ', $partes) . ')';
+        };
+
+        if ($esItem) {
+            $uniones = [];
+            foreach ($docs as [$cab, $det, $fk]) {
+                $filtroAnio = $anio !== null ? ' AND EXTRACT(YEAR FROM c.fecha_emision) = ' . $p($anio) : '';
+                $uniones[] = "SELECT TRIM(d.descripcion) AS clave
+                              FROM {$det} d INNER JOIN {$cab} c ON c.id = d.{$fk}
+                              WHERE c.id_empresa = {$p($idEmpresa)} AND c.eliminado = false
+                                AND COALESCE(TRIM(d.descripcion), '') <> ''{$filtroAnio}";
+            }
+            $base = "SELECT u.clave, u.clave AS nombre, NULL::text AS identificacion
+                     FROM (" . implode(' UNION ', $uniones) . ") u";
+        } else {
+            [$tabla, $colNombre, $colIdent] = match ($dim) {
+                'proveedor' => ['proveedores', 'e.razon_social', 'e.identificacion'],
+                'cliente'   => ['clientes', 'e.nombre', 'e.identificacion'],
+                'producto'  => ['productos', 'e.nombre', 'e.codigo'],
+                'categoria' => ['categorias', 'e.nombre', 'NULL::text'],
+                'marca'     => ['marcas', 'e.nombre', 'NULL::text'],
+            };
+            $where = "e.id_empresa = {$p($idEmpresa)} AND e.eliminado = false";
+            if ($dim === 'proveedor' || $dim === 'cliente') {
+                $where .= ' AND ' . $existeMov("c.id_{$dim} = e.id", false);
+            } elseif ($dim === 'producto') {
+                $where .= ' AND ' . $existeMov('d.id_producto = e.id', true);
+            } elseif ($anio !== null) {
+                // Categorías y marcas: sin año, todas (se pueden configurar por adelantado).
+                $col = $dim === 'categoria' ? 'id_categoria' : 'id_marca';
+                $where .= ' AND ' . $existeMov("EXISTS (SELECT 1 FROM productos pr WHERE pr.id = d.id_producto AND pr.{$col} = e.id)", true);
+            }
+            $base = "SELECT e.id::text AS clave, {$colNombre} AS nombre, {$colIdent}::text AS identificacion
+                     FROM {$tabla} e WHERE {$where}";
         }
 
-        $where = "p.id_empresa = :e AND p.eliminado = false
-                  AND (EXISTS (SELECT 1 FROM compras_cabecera c
-                               WHERE c.id_proveedor = p.id AND c.id_empresa = :e2 AND c.eliminado = false{$fCompra})
-                       OR EXISTS (SELECT 1 FROM liquidaciones_cabecera l
-                                  WHERE l.id_proveedor = p.id AND l.id_empresa = :e3 AND l.eliminado = false{$fLiq}))";
+        $filtro = '';
         if (trim($buscar) !== '') {
-            $condTexto = \App\Helpers\FiltrosBusqueda::condicionTexto(['p.razon_social', 'p.identificacion'], $buscar, $params, 'bp');
-            if ($condTexto !== '') {
-                $where .= " AND {$condTexto}";
+            $cond = \App\Helpers\FiltrosBusqueda::condicionTexto(['x.nombre', 'x.identificacion'], $buscar, $params, 'bq');
+            if ($cond !== '') {
+                $filtro = " WHERE {$cond}";
             }
         }
 
-        // :e4 y :e5 solo se usan en el SELECT de la página, no en el conteo.
-        $paramsTotal = $params;
-        unset($paramsTotal[':e4'], $paramsTotal[':e5']);
-        $st = $this->db->prepare("SELECT COUNT(*) FROM proveedores p WHERE {$where}");
-        $st->execute($paramsTotal);
+        $st = $this->db->prepare("SELECT COUNT(*) FROM ({$base}) x{$filtro}");
+        $st->execute($params);
         $total = (int) $st->fetchColumn();
+
+        // ¿Ya tiene cuenta propia en algún concepto principal (columna de la tabla)?
+        $codigos = array_values(array_filter($principales, fn($c) => is_string($c) && preg_match('/^[A-Z0-9_]{1,60}$/', $c)));
+        $condCodigo = $codigos
+            ? 'AND at.codigo IN (' . implode(', ', array_map($p, $codigos)) . ')'
+            : '';
+        $condRef = $esItem
+            ? "ap.tipo_referencia = 'item_compra' AND TRIM(ap.referencia_texto) = x.clave"
+            : "ap.tipo_referencia = {$p($dim)} AND ap.id_referencia::text = x.clave";
+        $tienePrincipal = "EXISTS (SELECT 1 FROM asientos_programados ap
+                                   INNER JOIN asientos_tipo at ON at.id = ap.id_asiento_tipo
+                                   WHERE ap.id_empresa = {$p($idEmpresa)} AND ap.eliminado = false
+                                     AND at.tipo_asiento = {$p($tipoAsiento)} {$condCodigo}
+                                     AND {$condRef})";
 
         $perPage = max(1, $perPage);
         $offset  = (max(1, $page) - 1) * $perPage;
-        $sql = "SELECT x.* FROM (
-                    SELECT p.id, p.razon_social AS nombre, p.identificacion,
-                           (SELECT COUNT(*) FROM asientos_programados ap
-                            LEFT JOIN asientos_tipo at ON at.id = ap.id_asiento_tipo
-                            WHERE ap.id_empresa = :e4 AND ap.id_referencia = p.id AND {$cond}) AS cuentas_propias,
-                           EXISTS (SELECT 1 FROM asientos_programados ap
-                                   INNER JOIN asientos_tipo at ON at.id = ap.id_asiento_tipo
-                                   WHERE ap.id_empresa = :e5 AND ap.id_referencia = p.id AND {$cond}
-                                     AND at.codigo = 'SUBTOTALFACTURACOMPRA') AS tiene_subtotal
-                    FROM proveedores p
-                    WHERE {$where}
-                ) x
-                -- Primero los que aún no tienen cuenta propia de Subtotal (la columna de la tabla),
-                -- cada grupo de la A a la Z.
-                ORDER BY x.tiene_subtotal ASC, UPPER(x.nombre) ASC, x.id ASC
+        $sql = "SELECT y.* FROM (
+                    SELECT x.clave, x.nombre, x.identificacion, {$tienePrincipal} AS tiene_principal
+                    FROM ({$base}) x{$filtro}
+                ) y
+                ORDER BY y.tiene_principal ASC, UPPER(y.nombre) ASC, y.clave ASC
                 LIMIT {$perPage} OFFSET {$offset}";
         $st = $this->db->prepare($sql);
         $st->execute($params);

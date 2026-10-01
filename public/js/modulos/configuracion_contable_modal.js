@@ -1095,9 +1095,10 @@
             } catch (e) { /* noop */ }
         }
 
-        // Proveedores: tabla de todos los proveedores con compras (no tarjetas de los ya agregados).
-        if (tipo === 'proveedor') {
-            await ASIENTOPROG_cargarTablaProveedores();
+        // Proveedores, clientes, productos, categorías y marcas: tabla de todas las entidades con
+        // movimiento (no tarjetas de las ya agregadas). Tipo de producción y empleado siguen en tarjetas.
+        if (ASIENTOPROG_DIMS_TABLA.includes(tipo)) {
+            await ASIENTOPROG_cargarTabla(tipo);
             return;
         }
 
@@ -1343,57 +1344,83 @@
             </div>`;
     }
 
-    // ── Reglas por Proveedores: TABLA ─────────────────────────────────────────────────────────
-    // Una fila por proveedor con compras: nombre (y debajo «Personalizar asiento contable»), la
-    // cuenta del Subtotal y los botones de detalle de compras / copiar de General. Personalizar
-    // despliega debajo de la fila las demás cuentas (Debe | Haber). Cada fila lleva los mismos
-    // data-* que las tarjetas (data-dim-card, data-ref-id), así que guardar, quitar, copiar de
-    // General y el detalle de compras usan las mismas funciones que las otras reglas.
-    const ASIENTOPROG_provTabla = { page: 1, q: '', abiertos: new Set(), timer: null };
+    // ── Reglas por entidad: TABLA ────────────────────────────────────────────────────────────
+    // Proveedores, Clientes, Productos (en compras: ítems), Categorías y Marcas. Una fila por
+    // entidad con movimiento: nombre (y debajo «Personalizar asiento contable»), una columna por
+    // cada cuenta principal de la regla (ASIENTOPROG_principalesDe) y los botones de detalle /
+    // copiar de General. Personalizar despliega debajo de la fila las demás cuentas (Debe | Haber).
+    // Cada fila lleva los mismos data-* que las tarjetas (data-dim-card, data-ref-id, data-ref-texto),
+    // así que guardar, quitar, copiar de General y el detalle usan las mismas funciones.
+    // Elementos de la vista por dimensión: dimTablaBuscar_{tipo}, dim_anio_{tipo},
+    // dimTablaContador_{tipo}, dimCards_{tipo}, dimTablaPag_{tipo}.
+    const ASIENTOPROG_DIMS_TABLA = ['proveedor', 'cliente', 'producto', 'categoria', 'marca'];
+    const ASIENTOPROG_dimTabla = {};      // tipo => { page, q, timer, tipoAsiento }
+    const ASIENTOPROG_dimAbiertas = new Set();   // "tipo|clave" con «Personalizar» desplegado
 
-    async function ASIENTOPROG_cargarTablaProveedores() {
-        const cont = document.getElementById('dimCards_proveedor');
+    const ASIENTOPROG_tablaEstado = (tipo) =>
+        (ASIENTOPROG_dimTabla[tipo] = ASIENTOPROG_dimTabla[tipo] || { page: 1, q: '', timer: null, tipoAsiento: '' });
+
+    /** Etiquetas de la tabla según la dimensión (en compras, «producto» es el ítem de compra). */
+    function ASIENTOPROG_textosTabla(tipo) {
+        const item = ASIENTOPROG_esItemCompra(tipo);
+        return {
+            proveedor: { col: 'Proveedor', plural: 'proveedor(es) con compras', vacio: 'No hay proveedores con compras registradas.' },
+            cliente:   { col: 'Cliente', plural: 'cliente(s) con ventas', vacio: 'No hay clientes con ventas registradas.' },
+            producto:  item
+                ? { col: 'Ítem de compra', plural: 'ítem(s) comprados', vacio: 'No hay ítems de compras registrados.' }
+                : { col: 'Producto / Servicio', plural: 'producto(s) vendidos', vacio: 'No hay productos vendidos.' },
+            categoria: { col: 'Categoría', plural: 'categoría(s)', vacio: 'No hay categorías.' },
+            marca:     { col: 'Marca', plural: 'marca(s)', vacio: 'No hay marcas.' },
+        }[tipo];
+    }
+
+    async function ASIENTOPROG_cargarTabla(tipo) {
+        const cont = document.getElementById(`dimCards_${tipo}`);
         const tipoAsiento = (document.getElementById('tipoAsientoSelector') || {}).value || '';
         if (!cont || !tipoAsiento) return;
 
-        ASIENTOPROG_vincularBarraProveedores();
-        const st = ASIENTOPROG_provTabla;
-        const anio = ASIENTOPROG_anioProveedor();
+        ASIENTOPROG_vincularBarraTabla(tipo);
+        const st = ASIENTOPROG_tablaEstado(tipo);
+        if (st.tipoAsiento !== tipoAsiento) { st.page = 1; st.tipoAsiento = tipoAsiento; }
+        const anio = (document.getElementById(`dim_anio_${tipo}`) || {}).value || '';
+        const principales = ASIENTOPROG_principalesDe(tipo) || [];
         if (!cont.querySelector('[data-dim-card]')) {
-            cont.innerHTML = '<div class="text-center py-3 text-muted small"><span class="spinner-border spinner-border-sm me-1"></span> Cargando proveedores...</div>';
+            cont.innerHTML = '<div class="text-center py-3 text-muted small"><span class="spinner-border spinner-border-sm me-1"></span> Cargando...</div>';
         }
 
         try {
+            const refType = ASIENTOPROG_esItemCompra(tipo) ? 'item_compra' : tipo;
+            const qs = new URLSearchParams({ tipo, tipo_asiento: tipoAsiento, principales: principales.join(','), q: st.q, anio, page: st.page });
             const [resLista, resReglas] = await Promise.all([
-                fetch(`${API_PROG}/getProveedoresReglaAjax?q=${encodeURIComponent(st.q)}&anio=${encodeURIComponent(anio)}&page=${st.page}`).then(r => r.json()),
-                fetch(`${API_PROG}/cargarReglasDimensionAjax?tipo_asiento=${encodeURIComponent(tipoAsiento)}&tipo_referencia=proveedor`).then(r => r.json()),
+                fetch(`${API_PROG}/getEntidadesReglaAjax?${qs}`).then(r => r.json()),
+                fetch(`${API_PROG}/cargarReglasDimensionAjax?tipo_asiento=${encodeURIComponent(tipoAsiento)}&tipo_referencia=${refType}`).then(r => r.json()),
             ]);
             if (!resLista.ok) throw new Error(resLista.error || 'No se pudo cargar el listado.');
             if (!resReglas.ok) throw new Error(resReglas.error || 'No se pudieron cargar las cuentas.');
 
-            // La página pedida ya no existe (p. ej. tras buscar): volver a la última.
+            // La página pedida ya no existe (p. ej. tras buscar): ir a la última.
             if (resLista.page > resLista.pages && resLista.total > 0) {
                 st.page = resLista.pages;
-                return ASIENTOPROG_cargarTablaProveedores();
+                return ASIENTOPROG_cargarTabla(tipo);
             }
 
-            cont.innerHTML = ASIENTOPROG_tablaProveedores(resLista.data || [], resReglas.data || []);
-            ASIENTOPROG_vincularCuentasTarjetas('proveedor');
+            cont.innerHTML = ASIENTOPROG_htmlTabla(tipo, resLista.data || [], resReglas.data || []);
+            ASIENTOPROG_vincularCuentasTarjetas(tipo);
 
-            const contador = document.getElementById('provTablaContador');
-            if (contador) contador.textContent = `${resLista.total} proveedor(es) con compras${anio ? ` en ${anio}` : ''}`;
-            ASIENTOPROG_paginacionProveedores(resLista.page, resLista.pages);
-            ASIENTOPROG_contarSugerenciasProveedor();
+            const contador = document.getElementById(`dimTablaContador_${tipo}`);
+            if (contador) contador.textContent = `${resLista.total} ${ASIENTOPROG_textosTabla(tipo).plural}${anio ? ` en ${anio}` : ''}`;
+            ASIENTOPROG_paginacionTabla(tipo, resLista.page, resLista.pages);
+            if (tipo === 'proveedor') ASIENTOPROG_contarSugerenciasProveedor();
         } catch (e) {
             console.error(e);
             cont.innerHTML = `<div class="text-center py-3 text-danger small">${ASIENTOPROG_esc(e.message || 'Error de conexión al cargar datos.')}</div>`;
         }
     }
 
-    /** Buscador y año de la barra superior (se enlazan una sola vez). */
-    function ASIENTOPROG_vincularBarraProveedores() {
-        const st = ASIENTOPROG_provTabla;
-        const buscar = document.getElementById('provTablaBuscar');
+    /** Buscador y año de la barra superior de la tabla (se enlazan una sola vez). */
+    function ASIENTOPROG_vincularBarraTabla(tipo) {
+        const st = ASIENTOPROG_tablaEstado(tipo);
+        const buscar = document.getElementById(`dimTablaBuscar_${tipo}`);
         if (buscar && !buscar.dataset.bound) {
             buscar.dataset.bound = '1';
             buscar.addEventListener('keydown', (e) => { if (e.key === 'Enter') e.preventDefault(); });
@@ -1402,65 +1429,72 @@
                 st.timer = setTimeout(() => {
                     st.q = buscar.value.trim();
                     st.page = 1;
-                    ASIENTOPROG_cargarTablaProveedores();
+                    ASIENTOPROG_cargarTabla(tipo);
                 }, 350);
             });
         }
-        const anio = document.getElementById('dim_anio_proveedor');
+        const anio = document.getElementById(`dim_anio_${tipo}`);
         if (anio && !anio.dataset.boundTabla) {
             anio.dataset.boundTabla = '1';
-            anio.addEventListener('change', () => { st.page = 1; ASIENTOPROG_cargarTablaProveedores(); });
+            anio.addEventListener('change', () => { st.page = 1; ASIENTOPROG_cargarTabla(tipo); });
         }
     }
 
-    function ASIENTOPROG_paginacionProveedores(page, pages) {
-        const cont = document.getElementById('provTablaPaginacion');
+    function ASIENTOPROG_paginacionTabla(tipo, page, pages) {
+        const cont = document.getElementById(`dimTablaPag_${tipo}`);
         if (!cont) return;
         if (pages <= 1) { cont.innerHTML = ''; return; }
         cont.innerHTML = `
-            <button type="button" class="btn btn-outline-secondary btn-sm py-0" ${page <= 1 ? 'disabled' : ''} data-prov-pag="${page - 1}"><i class="bi bi-chevron-left"></i></button>
+            <button type="button" class="btn btn-outline-secondary btn-sm py-0" ${page <= 1 ? 'disabled' : ''} data-tabla-pag="${page - 1}"><i class="bi bi-chevron-left"></i></button>
             <span class="small text-muted">Página ${page} de ${pages}</span>
-            <button type="button" class="btn btn-outline-secondary btn-sm py-0" ${page >= pages ? 'disabled' : ''} data-prov-pag="${page + 1}"><i class="bi bi-chevron-right"></i></button>`;
-        cont.querySelectorAll('[data-prov-pag]').forEach(b => b.addEventListener('click', () => {
-            ASIENTOPROG_provTabla.page = parseInt(b.dataset.provPag, 10) || 1;
-            ASIENTOPROG_cargarTablaProveedores();
-            document.getElementById('collapseProveedores')?.scrollIntoView({ block: 'start', behavior: 'smooth' });
+            <button type="button" class="btn btn-outline-secondary btn-sm py-0" ${page >= pages ? 'disabled' : ''} data-tabla-pag="${page + 1}"><i class="bi bi-chevron-right"></i></button>`;
+        cont.querySelectorAll('[data-tabla-pag]').forEach(b => b.addEventListener('click', () => {
+            ASIENTOPROG_tablaEstado(tipo).page = parseInt(b.dataset.tablaPag, 10) || 1;
+            ASIENTOPROG_cargarTabla(tipo);
+            cont.closest('.accordion-collapse')?.scrollIntoView({ block: 'start', behavior: 'smooth' });
         }));
     }
 
     /** «Personalizar asiento contable»: despliega/oculta las demás cuentas debajo de la fila. */
-    window.ASIENTOPROG_alternarPersonalizarProveedor = function (btn, idProveedor) {
+    window.ASIENTOPROG_alternarPersonalizar = function (btn, tipo) {
         const fila = btn.closest('[data-dim-card]');
-        const panel = fila ? fila.querySelector('[data-prov-detalle]') : null;
+        const panel = fila ? fila.querySelector('[data-dim-detalle]') : null;
         if (!panel) return;
         const abrir = panel.classList.contains('d-none');
         panel.classList.toggle('d-none', !abrir);
         btn.querySelector('i.bi')?.classList.replace(abrir ? 'bi-chevron-down' : 'bi-chevron-up', abrir ? 'bi-chevron-up' : 'bi-chevron-down');
-        if (abrir) ASIENTOPROG_provTabla.abiertos.add(String(idProveedor));
-        else ASIENTOPROG_provTabla.abiertos.delete(String(idProveedor));
+        const clave = `${tipo}|${fila.dataset.refTexto || fila.dataset.refId}`;
+        if (abrir) ASIENTOPROG_dimAbiertas.add(clave); else ASIENTOPROG_dimAbiertas.delete(clave);
     };
 
-    function ASIENTOPROG_tablaProveedores(proveedores, filas) {
-        if (!proveedores.length) {
-            return `<div class="text-center py-4 text-muted small"><i class="bi bi-info-circle me-1"></i> ${ASIENTOPROG_provTabla.q
-                ? 'Ningún proveedor coincide con la búsqueda.'
-                : 'No hay proveedores con compras registradas.'}</div>`;
+    function ASIENTOPROG_htmlTabla(tipo, entidades, filas) {
+        const textos = ASIENTOPROG_textosTabla(tipo);
+        if (!entidades.length) {
+            return `<div class="text-center py-4 text-muted small"><i class="bi bi-info-circle me-1"></i> ${ASIENTOPROG_tablaEstado(tipo).q
+                ? 'Nada coincide con la búsqueda.' : textos.vacio}</div>`;
         }
-        const tipo = 'proveedor';
         const esc = ASIENTOPROG_esc;
+        const esItem = ASIENTOPROG_esItemCompra(tipo);
         const conceptos = window.CONCEPTOS_CONFIGURADOS || [];
-        const principales = ASIENTOPROG_principalesDe(tipo) || ['SUBTOTALFACTURACOMPRA'];
-        const cSubtotal = conceptos.find(c => principales.includes(c.codigo)) || null;
-        const otros = conceptos.filter(c => c !== cSubtotal);
+        const codigos = ASIENTOPROG_principalesDe(tipo) || [];
+        // Columnas: los conceptos principales, en el orden del mapa.
+        const cols = codigos.map(cod => conceptos.find(c => c.codigo === cod)).filter(Boolean);
+        const otros = conceptos.filter(c => !cols.includes(c));
         const esIvaFila = (f) => parseInt(f.id_asiento_tipo) === 0 && f.codigo_tarifa_iva != null;
         const esDebe = (x) => ((x.debe_haber || 'debe') + '').toLowerCase() === 'debe';
 
-        const porProveedor = new Map();
+        // Reglas por entidad (en ítems de compra, por el texto del ítem).
+        const porEntidad = new Map();
         filas.forEach(f => {
-            const k = String(f.id_referencia);
-            if (!porProveedor.has(k)) porProveedor.set(k, []);
-            porProveedor.get(k).push(f);
+            const k = esItem ? String(f.dimension_nombre || '').trim() : String(f.id_referencia);
+            if (!porEntidad.has(k)) porEntidad.set(k, []);
+            porEntidad.get(k).push(f);
         });
+
+        // Grilla de 12: acciones 3; nombre 4 (3 si hay 3+ cuentas); el resto, repartido entre las cuentas.
+        const anchoNombre = cols.length >= 3 ? 3 : 4;
+        const anchoCuenta = cols.length ? Math.max(2, Math.floor((12 - 3 - anchoNombre) / cols.length)) : 5;
+        const conDetalle = tipo === 'proveedor' || tipo === 'cliente';
 
         const columna = (titulo, fondo, color, icono, html) => `
             <div class="col-md-6">
@@ -1470,48 +1504,51 @@
                 ${html || '<div class="small text-muted py-1">—</div>'}
             </div>`;
 
-        const cuerpo = proveedores.map((p, idx) => {
-            const reglas = porProveedor.get(String(p.id)) || [];
+        const cuerpo = entidades.map((ent, idx) => {
+            const clave = String(ent.clave);
+            const reglas = porEntidad.get(esItem ? clave.trim() : clave) || [];
             const propiaDe = (c) => parseInt(c.id_asiento_tipo) > 0
                 ? reglas.find(f => parseInt(f.id_asiento_tipo) === parseInt(c.id_asiento_tipo))
                 : reglas.find(f => esIvaFila(f) && String(f.codigo_tarifa_iva) === String(c.id_referencia));
             const propiasOtros = otros.filter(c => propiaDe(c)).length;
-            const abierto = ASIENTOPROG_provTabla.abiertos.has(String(p.id));
+            const abierto = ASIENTOPROG_dimAbiertas.has(`${tipo}|${clave}`);
 
-            const celdaSubtotal = cSubtotal
-                ? ASIENTOPROG_htmlLineaConcepto(tipo, cSubtotal, propiaDe(cSubtotal), idx, { sinEtiqueta: true })
-                : '<span class="small text-muted">Configure primero la General.</span>';
+            const celdas = cols.length
+                ? cols.map(c => `<div class="col-md-${anchoCuenta}">${ASIENTOPROG_htmlLineaConcepto(tipo, c, propiaDe(c), idx, { sinEtiqueta: true })}</div>`).join('')
+                : `<div class="col-md-5"><span class="small text-muted">Configure primero la General.</span></div>`;
             const lineas = (lado) => otros.filter(c => (lado === 'debe') === esDebe(c))
                 .map(c => ASIENTOPROG_htmlLineaConcepto(tipo, c, propiaDe(c), idx)).join('');
-
-            const badges = [
-                propiasOtros ? `<span class="badge bg-primary bg-opacity-10 text-primary border border-primary border-opacity-25 ms-1" title="Cuentas propias además del Subtotal">+${propiasOtros} personalizada(s)</span>` : '',
-            ].join('');
+            const badge = propiasOtros
+                ? `<span class="badge bg-primary bg-opacity-10 text-primary border border-primary border-opacity-25 ms-1" title="Cuentas propias además de las columnas de la tabla">+${propiasOtros} personalizada(s)</span>`
+                : '';
+            const detalle = !conDetalle ? '' : `
+                <button type="button" class="btn btn-outline-primary btn-sm py-0" style="font-size:.75rem;"
+                        onclick="ASIENTOPROG_abrirModalItemsTarjeta('${tipo}', ${idx})"
+                        title="${tipo === 'proveedor' ? 'Detalle de compras o servicios de este proveedor' : 'Detalle de lo vendido a este cliente'}">
+                    <i class="bi bi-box-seam me-1"></i>${tipo === 'proveedor' ? 'Detalle de compras' : 'Detalle de ventas'}
+                </button>`;
 
             return `
-            <div class="border-bottom" data-dim-card="${idx}" data-ref-id="${esc(String(p.id))}" data-ref-texto="" data-nombre="${esc(p.nombre)}">
+            <div class="border-bottom" data-dim-card="${idx}" data-ref-id="${esc(esItem ? '' : clave)}" data-ref-texto="${esc(esItem ? clave : '')}" data-nombre="${esc(ent.nombre)}">
                 <div class="row g-2 align-items-center py-2 px-2">
-                    <div class="col-md-4" style="min-width:0;">
-                        <div class="fw-bold text-dark text-truncate small" title="${esc(p.nombre)}">${esc(p.nombre)}</div>
-                        <div class="text-muted" style="font-size:.72rem;">${esc(p.identificacion || '')}${badges}</div>
+                    <div class="col-md-${anchoNombre}" style="min-width:0;">
+                        <div class="fw-bold text-dark text-truncate small" title="${esc(ent.nombre)}">${esc(ent.nombre)}</div>
+                        ${(ent.identificacion || badge) ? `<div class="text-muted" style="font-size:.72rem;">${esc(ent.identificacion || '')}${badge}</div>` : ''}
                         <button type="button" class="btn btn-link btn-sm p-0 text-decoration-none" style="font-size:.75rem;"
-                                onclick="ASIENTOPROG_alternarPersonalizarProveedor(this, ${parseInt(p.id, 10)})">
+                                onclick="ASIENTOPROG_alternarPersonalizar(this, '${tipo}')">
                             <i class="bi ${abierto ? 'bi-chevron-up' : 'bi-chevron-down'} me-1"></i>Personalizar asiento contable
                         </button>
                     </div>
-                    <div class="col-md-5">${celdaSubtotal}</div>
-                    <div class="col-md-3 d-flex flex-wrap gap-1 justify-content-md-end">
-                        <button type="button" class="btn btn-outline-primary btn-sm py-0" style="font-size:.75rem;"
-                                onclick="ASIENTOPROG_abrirModalItemsTarjeta('${tipo}', ${idx})" title="Detalle de compras o servicios de este proveedor">
-                            <i class="bi bi-box-seam me-1"></i>Detalle de compras
-                        </button>
+                    ${celdas}
+                    <div class="col-md-3 d-flex flex-wrap gap-1 justify-content-md-end ms-auto">
+                        ${detalle}
                         <button type="button" class="btn btn-outline-secondary btn-sm py-0" style="font-size:.75rem;"
                                 onclick="ASIENTOPROG_copiarDeGeneral('${tipo}', ${idx})" title="Copia las cuentas de la configuración General que aún no tenga">
                             <i class="bi bi-clipboard-check me-1"></i>Copiar de General
                         </button>
                     </div>
                 </div>
-                <div class="px-2 pb-2${abierto ? '' : ' d-none'}" data-prov-detalle="1">
+                <div class="px-2 pb-2${abierto ? '' : ' d-none'}" data-dim-detalle="1">
                     <div class="border rounded p-2 bg-light">
                         <div class="row g-2">
                             ${columna('Debe',  '#E6F1FB', '#0C447C', 'bi-arrow-down-right', lineas('debe'))}
@@ -1519,7 +1556,7 @@
                         </div>
                         <div class="text-end mt-2">
                             <button type="button" class="btn btn-outline-danger btn-sm py-0${reglas.length ? '' : ' d-none'}" style="font-size:.75rem;"
-                                    onclick="ASIENTOPROG_eliminarConfiguracionEntidad('${tipo}', ${idx})" title="Quitar todas las cuentas propias de este proveedor">
+                                    onclick="ASIENTOPROG_eliminarConfiguracionEntidad('${tipo}', ${idx})" title="Quitar todas las cuentas propias">
                                 <i class="bi bi-trash me-1"></i>Quitar todas sus cuentas
                             </button>
                         </div>
@@ -1528,12 +1565,15 @@
             </div>`;
         }).join('');
 
+        const encCols = cols.length
+            ? cols.map(c => `<div class="col-md-${anchoCuenta}">${esc(c.concepto)}</div>`).join('')
+            : '<div class="col-md-5">Cuenta</div>';
         return `
             <div class="border rounded">
                 <div class="row g-2 px-2 py-2 bg-light border-bottom small fw-bold text-secondary d-none d-md-flex">
-                    <div class="col-md-4">Proveedor</div>
-                    <div class="col-md-5">${esc(cSubtotal ? cSubtotal.concepto : 'Subtotal')}</div>
-                    <div class="col-md-3 text-md-end">Acciones</div>
+                    <div class="col-md-${anchoNombre}">${esc(textos.col)}</div>
+                    ${encCols}
+                    <div class="col-md-3 text-md-end ms-auto">Acciones</div>
                 </div>
                 ${cuerpo}
             </div>`;

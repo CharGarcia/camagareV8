@@ -6,7 +6,7 @@ ruta_modulo: modulos/configuracion-contable
 tipo: modulo
 visibilidad: admin
 etiquetas: configuracion contable, cuentas por documento, asiento automatico, parametrizacion, ventas, compras, cierre, tipo de produccion, bien, servicio, filtro por año, periodo, listado de proveedores, listado de clientes, cobros y pagos, ingresos y egresos, forma de pago, cuenta bancaria, efectivo, misma cuenta en los dos bloques, formas hermanas, cheques y transferencias, mismo banco, numero de cuenta, nomina, rol de pagos, prestamo quirografario, prestamo hipotecario, prestamo empresa, prestamos iess, cuentas opcionales, costo de ventas, costo de venta, inventario, asiento sin costo, no sale el costo, cuenta de iva del cliente, reglas por cliente, buscar proveedor, buscar cliente, buscar ficha, filtrar fichas, muchos proveedores, cuentas faltantes, modulos que contabilizan, apagar asientos, no generar asientos, no contabilizar, desactivar contabilidad, interruptor, consignaciones sin asiento, aviso de asientos pendientes, asientos pendientes en el balance, proveedores sin cuentas, clientes sin cuentas, productos sin cuentas, pendientes de configurar, retenciones en venta, retenciones en compra, retencion de renta, no aparecen las retenciones, codigo de retencion, catalogo de retenciones sri, codigo ats, codigo del anexo, retencion mal asignada, codigo de retencion no existe, en que documento esta el error, retencion con codigo invalido, sugerencias, sugerir cuentas, proveedores que compran lo mismo, copiar cuentas de otro proveedor, misma cuenta para varios proveedores, gasolineras, proveedores parecidos, subtotal de compras, cuenta de gasto del proveedor, mostrar las demas cuentas, ver todas las cuentas, tipo de asiento no aparece, falta tipo de asiento en el selector, modulo apagado, personalizar asiento contable, tabla de proveedores, detalle de compras, cuenta de subtotal por proveedor
-version: 1.27
+version: 1.28
 orden: 5
 estado: activo
 ---
@@ -69,19 +69,13 @@ no entra.
 
 ## Cómo se leen las reglas por entidad
 
-En las pestañas de reglas por Cliente, Proveedor, Producto, Categoría, Marca, Tipo
-de Producción e Ítem de compra, lo configurado se muestra en **una tarjeta por
-entidad**, una debajo de otra y ordenadas por nombre. Cada tarjeta se pliega y se
-despliega al hacer clic en su título, y reúne todas las cuentas de ese producto
-(o cliente, o categoría), incluidas las de IVA por tarifa, repartidas en dos
-columnas: **Debe** a la izquierda y **Haber** a la derecha.
+Las reglas por **Proveedor, Cliente, Producto (o Ítem de compra), Categoría y
+Marca** se muestran en una **tabla** (ver la sección siguiente). Las de **Tipo de
+Producción** y **Empleado** siguen en **tarjetas** (ver *Tarjetas: Tipo de
+Producción y Empleado*).
 
-Todas las tarjetas aparecen **plegadas** al entrar, para poder recorrer la lista
-de un vistazo. No hace falta abrirlas para saber cuáles necesitan atención: la
-propia cabecera indica *faltan N* o *completa*.
-
-Dentro de cada columna hay una línea por concepto, con un campo donde se escribe
-o se busca la cuenta. El campo dice de un vistazo cómo está ese concepto hoy:
+En los dos formatos, cada cuenta se edita en un campo donde se escribe o se busca
+la cuenta. El campo dice de un vistazo cómo está ese concepto hoy:
 
 - **Con cuenta propia**: muestra la cuenta asignada a esa entidad y, al lado, el
   botón para quitarla.
@@ -94,96 +88,87 @@ o se busca la cuenta. El campo dice de un vistazo cómo está ese concepto hoy:
   esta ficha ni en la General. Esos son los que hay que atender: dejan el asiento
   incompleto.
 
-**Vista resumida.** En Ventas con Factura, Recibos de Venta y Adquisiciones de
-Compras/Servicios, cada tarjeta muestra de entrada solo las cuentas que
-normalmente cambian en esa regla:
+Cada cuenta **se guarda sola** al elegirla de la lista, sin botón de guardar; si
+se borra el contenido del campo, esa cuenta se quita.
 
-| Regla | Se ve de entrada |
+Las reglas de un proveedor o de un cliente también se pueden ver y editar desde su
+propia ficha, en la pestaña **Contable** de los módulos *Proveedores* y *Clientes*
+(y de cualquier pantalla que abra esa ficha, como Compras, Liquidaciones o
+Facturas de Venta). Es la misma regla: lo que se cambie en un lado se ve en el otro.
+
+## Tablas de reglas: Proveedores, Clientes, Productos, Categorías y Marcas
+
+Al abrir la regla se listan **todas las entidades con movimiento**, sin tener que
+agregarlas antes:
+
+| Regla | Qué lista |
 |---|---|
+| Por Proveedores (compras) | Proveedores con compras o liquidaciones de compra |
+| Por Clientes (ventas o recibos) | Clientes con facturas (o con recibos, en *Recibos de Venta*) |
+| Por Productos, en ventas o recibos | Productos vendidos en esos documentos |
+| Por Productos, en compras | Los **ítems** de las compras y liquidaciones (por su descripción) |
+| Por Categorías y Marcas | Todas; con un año elegido, solo las de productos con movimiento ese año |
+
+Primero salen las que **todavía no tienen cuenta propia en las columnas de la
+tabla** y después las que ya la tienen; cada grupo, en orden alfabético (de la A
+a la Z). Se muestran de 25 en 25 (flechas abajo para cambiar de página). Arriba
+están el **buscador** y el selector de **año**; en Proveedores, además, el botón
+**Sugerencias**.
+
+Cada fila tiene:
+
+- **El nombre** (con RUC, identificación o código cuando lo hay). Si tiene más
+  cuentas propias que las de las columnas, lo indica (*+N personalizada(s)*).
+- **Las cuentas que normalmente cambian** en esa regla, una por columna:
+
+| Regla | Columnas |
+|---|---|
+| Por Proveedor | Subtotal de la compra (gasto o costo) |
 | Por Cliente (ventas o recibos) | Subtotal (cuenta de ventas) |
-| Por Proveedor | Subtotal de la compra, en la tabla (ver *Reglas por Proveedores: la tabla*) |
-| Por Producto, Categoría, Marca o Tipo de Producción, en ventas o recibos | Subtotal, Costo de Ventas e Inventario |
+| Por Producto, Categoría o Marca, en ventas o recibos | Subtotal, Costo de Ventas e Inventario |
 | Por Ítem de compra, Categoría o Marca, en compras | Subtotal de la compra e Inventario |
 
-El resto de conceptos (cuenta por cobrar o por pagar, descuento, ICE, propina,
-IVA, redondeo, etc.) queda detrás del enlace **Mostrar las demás cuentas (N)**,
-por si se quiere personalizar alguno; **Ocultar las demás cuentas** los vuelve a
-esconder. Aunque la tarjeta esté resumida, siempre se ven los conceptos que ya
-tienen cuenta propia y los que no tienen cuenta en ningún lado (en rojo). Las
-reglas por Empleado (nómina) y los demás tipos de asiento muestran todas sus
-cuentas.
+- **Detalle de compras** (proveedores) o **Detalle de ventas** (clientes): lo que
+  se le ha comprado o vendido, según el año elegido, para decidir la cuenta.
+- **Copiar de General**: le pone de una vez las cuentas de la configuración
+  General en los conceptos que aún no tenga. No pisa lo que ya esté asignado.
+- **Personalizar asiento contable** (debajo del nombre): despliega debajo de la
+  fila **las demás cuentas** (cuenta por cobrar o por pagar, descuento, ICE,
+  propina, IVA por tarifa, redondeo…) en dos columnas, Debe y Haber, para cambiar
+  las que hagan falta. Ahí mismo está **Quitar todas sus cuentas**, que la devuelve
+  a la configuración General (pide confirmación). Solo afecta al tipo de asiento
+  que se esté viendo: si el mismo producto tiene reglas en Compras, esas se
+  conservan.
 
-La cabecera de la tarjeta resume el estado: cuántas cuentas propias tiene y si
-queda algo sin resolver (*completa* o *faltan N*). Al pie, una línea indica
-cuántos conceptos más se resuelven con la cuenta General.
+Las entidades sin movimiento no aparecen en la tabla. Las cuentas de un proveedor
+o cliente sin documentos se pueden poner desde la pestaña **Contable** de su ficha.
 
-Así se distingue a simple vista, por ejemplo, un producto al que solo se le
-asignó la cuenta de ingresos de otro que además tiene su propia cartera o su
-costo, y se ve enseguida de qué lado del asiento falta algo.
+## Tarjetas: Tipo de Producción y Empleado
 
-## Agregar y quitar reglas por entidad
+En las reglas por **Tipo de Producción** y por **Empleado** lo configurado se
+muestra en **una tarjeta por entidad**, plegada al entrar. Su cabecera indica
+*faltan N* o *completa*, y al desplegarla reúne las cuentas en dos columnas,
+**Debe** y **Haber**.
 
 El alta se hace en dos pasos:
 
-1. En el buscador de la parte superior de la pestaña se elige la entidad
-   (cliente, producto, categoría…) y se pulsa **Agregar**. Su tarjeta aparece
-   arriba de la lista, ya desplegada y todavía sin cuentas.
-2. Dentro de la tarjeta se va asignando la cuenta de cada concepto. **Cada cuenta
-   se guarda sola** al elegirla de la lista, sin botón de guardar; si se borra el
-   contenido del campo, esa cuenta se quita.
+1. En el buscador de la parte superior se elige la entidad y se pulsa
+   **Agregar**. Su tarjeta aparece arriba de la lista, ya desplegada y todavía sin
+   cuentas.
+2. Dentro de la tarjeta se va asignando la cuenta de cada concepto.
 
 Una ficha sin ninguna cuenta asignada no queda registrada: si se agrega una
 entidad y no se le pone nada, al volver a entrar simplemente no aparece.
 
-Dentro de cada tarjeta, el botón **Copiar cuentas de General** rellena de una vez
-los conceptos que aún no tienen cuenta propia con las de la configuración
-General, para partir de esa base y ajustar solo lo que cambie. No pisa lo que ya
-esté asignado en la ficha.
+**Vista resumida.** En *Ventas con Factura* y *Recibos de Venta*, la tarjeta de
+Tipo de Producción muestra de entrada solo **Subtotal, Costo de Ventas e
+Inventario**; el resto queda detrás de **Mostrar las demás cuentas (N)**. Siempre
+se ven los conceptos que ya tienen cuenta propia y los que no tienen cuenta en
+ningún lado (en rojo). Las tarjetas de Empleado muestran todas sus cuentas.
 
-Las reglas por **Proveedor** no usan tarjetas ni el paso de *Agregar*: tienen su
-propia tabla, descrita en la sección siguiente.
-
-Las reglas de un proveedor o de un cliente también se pueden ver y editar desde su propia ficha,
-en la pestaña **Contable** de los módulos *Proveedores* y *Clientes* (y de cualquier pantalla que
-abra esa ficha, como Compras, Liquidaciones o Facturas de Venta). Es la misma regla:
-lo que se cambie en un lado se ve en el otro.
-
-El botón de la papelera de la cabecera elimina **toda la configuración de esa
-entidad** de una vez: pide confirmación y, al aceptar, esa entidad vuelve a
-contabilizarse con la configuración General. Solo afecta al tipo de asiento que
-se esté viendo — si el mismo producto tiene reglas en Compras, esas se conservan.
-
-## Reglas por Proveedores: la tabla
-
-En *Adquisiciones de Compras/Servicios → Reglas por Proveedores* se listan
-**todos los proveedores con compras o liquidaciones de compra**, sin tener que
-agregarlos antes. Primero salen los que **todavía no tienen su cuenta de
-Subtotal** y después los que ya la tienen; cada grupo, en orden alfabético (de la
-A a la Z). Se muestran de 25 en 25 (flechas abajo para cambiar de página).
-
-Arriba de la tabla están el **buscador** (por nombre o RUC), el selector de
-**año** (solo los proveedores con compras en ese año) y el botón **Sugerencias**.
-
-Cada fila tiene:
-
-- **Proveedor**: nombre y RUC. Si tiene más cuentas propias que la del Subtotal,
-  lo indica (*+N personalizada(s)*).
-- **Subtotal**: la cuenta del gasto o costo de sus compras, que es la que
-  normalmente cambia de un proveedor a otro. Si está vacía, el campo muestra en
-  gris la cuenta General que se usará. Se elige escribiendo parte del código o del
-  nombre y **se guarda al instante**; al borrar el campo, se quita.
-- **Detalle de compras**: los ítems que se le han comprado (según el año elegido),
-  para decidir la cuenta.
-- **Copiar de General**: le pone de una vez las cuentas de la configuración
-  General en los conceptos que aún no tenga.
-- **Personalizar asiento contable** (debajo del nombre): despliega debajo de la
-  fila **las demás cuentas** de ese proveedor (cuenta por pagar, descuento, ICE,
-  inventario, IVA por tarifa…) en dos columnas, Debe y Haber, para cambiar las que
-  hagan falta. Ahí mismo está **Quitar todas sus cuentas**, que lo devuelve a la
-  configuración General (pide confirmación).
-
-Los proveedores sin compras no aparecen en la tabla: sus cuentas se pueden poner
-desde la pestaña **Contable** de su ficha.
+Dentro de cada tarjeta, **Copiar cuentas de General** rellena de una vez los
+conceptos que aún no tienen cuenta propia, y la papelera de la cabecera elimina
+**toda la configuración de esa entidad** (pide confirmación).
 
 ## Sugerencias: proveedores que compran lo mismo
 
@@ -212,26 +197,19 @@ Es una sugerencia: revise que el proveedor de verdad sea del mismo giro antes de
 asignar. Un ítem genérico (por ejemplo *SERVICIO*) puede emparejar proveedores
 que no tienen nada que ver.
 
-## Buscar entre las fichas ya agregadas
+## Buscar en las tablas y en las tarjetas
 
-Cuando una pestaña tiene muchas fichas (cientos de proveedores o clientes), no
-hace falta bajar con el mouse hasta encontrar la que se busca. Encima de la
-lista de tarjetas hay un campo **Buscar en las fichas ya agregadas**:
+En las **tablas** de reglas (Proveedores, Clientes, Productos, Categorías y
+Marcas), el buscador de arriba filtra la tabla mientras se escribe, por nombre y
+por RUC, identificación o código. No distingue mayúsculas ni tildes, y admite
+varias palabras en cualquier orden: `comercial ferreteria` encuentra
+"FERRETERÍA COMERCIAL S.A.". A la derecha se ve cuántas entidades coinciden.
 
-- Filtra al instante mientras se escribe, por el nombre de la entidad.
-- No distingue mayúsculas ni tildes, y admite varias palabras en cualquier
-  orden: `comercial ferreteria` encuentra "FERRETERÍA COMERCIAL S.A.".
-- La casilla **Solo con cuentas faltantes** deja a la vista únicamente las fichas
-  con el aviso rojo *faltan N*, para completarlas sin revisar una por una.
-- A la derecha se ve cuántas fichas coinciden sobre el total.
-
-El filtro se mantiene al guardar una cuenta (la lista se recarga pero sigue
-filtrada). La ficha recién agregada con **Agregar** se muestra siempre, aunque
-no coincida con la búsqueda.
-
-Este buscador es distinto del de la parte superior de la pestaña: aquel sirve
-para **agregar** una entidad nueva; este, para **encontrar** las que ya tienen
-reglas.
+En las **tarjetas** de Empleado, encima de la lista hay un campo **Buscar en las
+fichas ya agregadas**, que funciona igual, y la casilla **Solo con cuentas
+faltantes**, que deja a la vista únicamente las fichas con el aviso rojo
+*faltan N*. El filtro se mantiene al guardar una cuenta, y la ficha recién
+agregada con **Agregar** se muestra siempre.
 
 ## Cada concepto admite un solo tipo de cuenta
 
@@ -321,31 +299,20 @@ conciliación de esa cuenta en Control Bancario.
 
 ## Filtrar los listados por año
 
-En las reglas por **Cliente**, **Producto**, **Categoría** y **Marca** hay un
-selector de año junto al botón que abre el listado (*Clientes con ventas*,
-*Ítems de compras*, *Categorías*, *Marcas*…). Ese selector muestra solo los años
-en los que la empresa tuvo movimientos. En las reglas por **Proveedor** el
-selector de año está sobre la tabla y la filtra directamente (ver *Reglas por
-Proveedores: la tabla*).
+En las tablas de reglas por **Proveedor**, **Cliente**, **Producto**,
+**Categoría** y **Marca**, el selector de año de arriba muestra solo los años en
+los que la empresa tuvo movimientos. Al elegir uno, la tabla muestra únicamente
+las entidades que tuvieron movimiento ese año: proveedores con compras del año,
+clientes con ventas del año, productos o ítems que se movieron ese año, y las
+categorías y marcas de esos productos.
 
-Al elegir un año, el listado muestra únicamente las entidades que tuvieron
-movimiento en ese año: proveedores con compras del año, clientes con ventas del
-año, ítems comprados ese año, y las categorías y marcas de los productos que se
-movieron ese año. El año elegido aparece como etiqueta en el título del listado.
-
-Con **Todos los años** el listado se comporta como siempre: todas las entidades
-con movimiento (y, en el caso de categorías y marcas, todas las registradas, para
-poder configurarlas por adelantado).
-
-En todos estos listados (*Clientes con ventas*,
-productos, *Ítems de compras*, *Categorías* y *Marcas*), las entidades que
-todavía **no tienen cuentas asignadas** aparecen primero; las que ya las tienen
-(marcadas con *con cuentas*) quedan al final. Así lo pendiente de configurar
-queda siempre arriba.
+Con **Todos los años** la tabla muestra todas las entidades con movimiento (y, en
+categorías y marcas, todas las registradas, para poder configurarlas por
+adelantado).
 
 El módulo del que salen los movimientos depende del tipo de asiento: en
-*Adquisiciones de Compras/Servicios* se miran las compras; en *Ventas con
-Factura* y *Recibos de Venta*, las ventas.
+*Adquisiciones de Compras/Servicios* se miran las compras y liquidaciones; en
+*Ventas con Factura*, las facturas; en *Recibos de Venta*, los recibos.
 
 ## Cierre del ejercicio
 
@@ -497,6 +464,10 @@ ingresos o egresos. Solo falta asignar la cuenta.
 
 ## Historial de cambios
 
+- **1.28** — Las reglas por Clientes, Productos (e Ítems de compra), Categorías y Marcas
+  pasan al mismo diseño de tabla que Proveedores: todas las entidades con movimiento, las
+  cuentas principales como columnas, *Personalizar asiento contable* para el resto y sin el
+  formulario *Nueva Asociación*. Primero las que no tienen esas cuentas, de la A a la Z.
 - **1.27** — *Reglas por Proveedores* pasa a ser una tabla con todos los proveedores con
   compras: nombre, cuenta del Subtotal, *Detalle de compras* y *Copiar de General*; las
   demás cuentas se abren con *Personalizar asiento contable*. Se quitó el formulario

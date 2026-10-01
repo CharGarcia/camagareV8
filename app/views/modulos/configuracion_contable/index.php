@@ -258,36 +258,20 @@ $base = BASE_URL;
                 </button>
             </h2>
             <div id="collapseClientes" class="accordion-collapse collapse" aria-labelledby="headingClientes" data-bs-parent="#acordeonConfiguracion">
-                <div class="accordion-body bg-white p-4">
-                    <form onsubmit="ASIENTOPROG_agregarDim(event, 'cliente')" class="row g-3 align-items-end mb-4 bg-light p-3 rounded-3 border shadow-sm">
-                        <div class="col-12 mb-2 border-bottom pb-2">
-                            <h6 class="text-primary mb-0 fw-bold"><i class="bi bi-person-plus-fill me-1"></i> Nueva Asociaci&oacute;n por Cliente</h6>
+                <div class="accordion-body bg-white p-3">
+                    <!-- Tabla de reglas: nombre · cuentas principales · acciones (ASIENTOPROG_cargarTabla). -->
+                    <div class="d-flex flex-wrap align-items-center gap-2 mb-2">
+                        <div class="input-group input-group-sm" style="max-width:420px;">
+                            <span class="input-group-text bg-white"><i class="bi bi-search"></i></span>
+                            <input type="search" class="form-control" id="dimTablaBuscar_cliente" autocomplete="off" placeholder="Buscar cliente por nombre o identificaci&oacute;n...">
                         </div>
-                        <div class="col-md-12 mb-2">
-                            <label class="form-label small fw-bold text-muted mb-1"><i class="bi bi-search me-1"></i> Cliente</label>
-                            <div class="d-flex gap-2 align-items-center flex-wrap">
-                                <div class="position-relative" style="flex:1 1 240px; min-width:220px; max-width:420px;">
-                                    <input type="text" class="form-control form-control-sm bg-white text-dark" id="dim_search_cliente" placeholder="Escriba, o use &quot;Clientes con ventas&quot;..." autocomplete="off" required>
-                                    <input type="hidden" id="dim_id_cliente" required>
-                                    <div class="list-group sugerencias-flotantes" id="dim_sug_cliente" style="display: none;"></div>
-                                </div>
-                                <select id="dim_anio_cliente" class="form-select form-select-sm" style="width:auto;" title="A&ntilde;o de ventas">
-                                    <option value="">Todos los a&ntilde;os</option>
-                                </select>
-                                <button type="button" class="btn btn-outline-secondary btn-sm text-nowrap" onclick="ASIENTOPROG_abrirModalEntidades('cliente')">
-                                    <i class="bi bi-people me-1"></i> Clientes con ventas
-                                </button>
-                                <button type="button" class="btn btn-outline-primary btn-sm text-nowrap" onclick="ASIENTOPROG_abrirModalItems('cliente')">
-                                    <i class="bi bi-box-seam me-1"></i> Informaci&oacute;n de adquisiciones
-                                </button>
-                            </div>
-                        </div>
-                        <div class="col-12" id="dim_faltantes_cliente"></div>
-                        <div class="col-12 mt-4 text-center">
-                            <button type="submit" class="btn btn-primary btn-sm fw-bold px-4 shadow-sm"><i class="bi bi-plus-lg me-1"></i> Agregar</button>
-                        </div>
-                    </form>
-                    <div class="row g-2" id="dimCards_cliente"></div>
+                        <select id="dim_anio_cliente" class="form-select form-select-sm" style="width:auto;" title="A&ntilde;o de ventas">
+                            <option value="">Todos los a&ntilde;os</option>
+                        </select>
+                        <span class="small text-muted ms-auto" id="dimTablaContador_cliente"></span>
+                    </div>
+                    <div id="dimCards_cliente"></div>
+                    <div id="dimTablaPag_cliente" class="d-flex justify-content-center align-items-center gap-2 mt-2"></div>
                 </div>
             </div>
         </div>
@@ -343,7 +327,7 @@ $base = BASE_URL;
                     <div class="d-flex flex-wrap align-items-center gap-2 mb-2">
                         <div class="input-group input-group-sm" style="max-width:420px;">
                             <span class="input-group-text bg-white"><i class="bi bi-search"></i></span>
-                            <input type="search" class="form-control" id="provTablaBuscar" autocomplete="off" placeholder="Buscar proveedor por nombre o RUC...">
+                            <input type="search" class="form-control" id="dimTablaBuscar_proveedor" autocomplete="off" placeholder="Buscar proveedor por nombre o RUC...">
                         </div>
                         <select id="dim_anio_proveedor" class="form-select form-select-sm" style="width:auto;" title="A&ntilde;o de compras">
                             <option value="">Todos los a&ntilde;os</option>
@@ -352,10 +336,10 @@ $base = BASE_URL;
                             <i class="bi bi-lightbulb me-1"></i> Sugerencias
                             <span class="badge bg-success ms-1 d-none" id="sugProvContador"></span>
                         </button>
-                        <span class="small text-muted ms-auto" id="provTablaContador"></span>
+                        <span class="small text-muted ms-auto" id="dimTablaContador_proveedor"></span>
                     </div>
                     <div id="dimCards_proveedor"></div>
-                    <div id="provTablaPaginacion" class="d-flex justify-content-center align-items-center gap-2 mt-2"></div>
+                    <div id="dimTablaPag_proveedor" class="d-flex justify-content-center align-items-center gap-2 mt-2"></div>
                 </div>
             </div>
         </div>
@@ -368,29 +352,20 @@ $base = BASE_URL;
                 </button>
             </h2>
             <div id="collapseProductos" class="accordion-collapse collapse" aria-labelledby="headingProductos" data-bs-parent="#acordeonConfiguracion">
-                <div class="accordion-body bg-white p-4">
-                    <form onsubmit="ASIENTOPROG_agregarDim(event, 'producto')" class="row g-3 align-items-end mb-4 bg-light p-3 rounded-3 border shadow-sm">
-                        <div class="col-12 mb-2 border-bottom pb-2"><h6 class="text-primary mb-0 fw-bold"><i class="bi bi-box-seam me-1"></i> Nueva Asociaci&oacute;n por Producto/Servicio</h6></div>
-                        <div class="col-md-12 mb-2">
-                            <label class="form-label small fw-bold text-muted mb-1"><i class="bi bi-search me-1"></i> Producto / Servicio</label>
-                            <div class="d-flex gap-2 align-items-center flex-wrap">
-                                <div class="position-relative" style="flex:1 1 240px; min-width:220px; max-width:420px;">
-                                    <input type="text" class="form-control form-control-sm bg-white text-dark" id="dim_search_producto" placeholder="Escriba, o use &quot;Productos con movimientos&quot;..." autocomplete="off" required>
-                                    <input type="hidden" id="dim_id_producto" required>
-                                    <div class="list-group sugerencias-flotantes" id="dim_sug_producto" style="display: none;"></div>
-                                </div>
-                                <select id="dim_anio_producto" class="form-select form-select-sm" style="width:auto;" title="A&ntilde;o de movimientos">
-                                    <option value="">Todos los a&ntilde;os</option>
-                                </select>
-                                <button type="button" class="btn btn-outline-secondary btn-sm text-nowrap" onclick="ASIENTOPROG_abrirModalEntidades('producto')">
-                                    <i class="bi bi-box-seam me-1"></i> Productos con movimientos
-                                </button>
-                            </div>
+                <div class="accordion-body bg-white p-3">
+                    <!-- Tabla de reglas: nombre · cuentas principales · acciones (ASIENTOPROG_cargarTabla). -->
+                    <div class="d-flex flex-wrap align-items-center gap-2 mb-2">
+                        <div class="input-group input-group-sm" style="max-width:420px;">
+                            <span class="input-group-text bg-white"><i class="bi bi-search"></i></span>
+                            <input type="search" class="form-control" id="dimTablaBuscar_producto" autocomplete="off" placeholder="Buscar producto o &iacute;tem...">
                         </div>
-                        <div class="col-12" id="dim_faltantes_producto"></div>
-                        <div class="col-12 mt-4 text-center"><button type="submit" class="btn btn-primary btn-sm fw-bold px-4 shadow-sm"><i class="bi bi-plus-lg me-1"></i> Agregar</button></div>
-                    </form>
-                    <div class="row g-2" id="dimCards_producto"></div>
+                        <select id="dim_anio_producto" class="form-select form-select-sm" style="width:auto;" title="A&ntilde;o de movimientos">
+                            <option value="">Todos los a&ntilde;os</option>
+                        </select>
+                        <span class="small text-muted ms-auto" id="dimTablaContador_producto"></span>
+                    </div>
+                    <div id="dimCards_producto"></div>
+                    <div id="dimTablaPag_producto" class="d-flex justify-content-center align-items-center gap-2 mt-2"></div>
                 </div>
             </div>
         </div>
@@ -403,29 +378,20 @@ $base = BASE_URL;
                 </button>
             </h2>
             <div id="collapseCategorias" class="accordion-collapse collapse" aria-labelledby="headingCategorias" data-bs-parent="#acordeonConfiguracion">
-                <div class="accordion-body bg-white p-4">
-                    <form onsubmit="ASIENTOPROG_agregarDim(event, 'categoria')" class="row g-3 align-items-end mb-4 bg-light p-3 rounded-3 border shadow-sm">
-                        <div class="col-12 mb-2 border-bottom pb-2"><h6 class="text-primary mb-0 fw-bold"><i class="bi bi-tags me-1"></i> Nueva Asociaci&oacute;n por Categor&iacute;a</h6></div>
-                        <div class="col-md-12 mb-2">
-                            <label class="form-label small fw-bold text-muted mb-1"><i class="bi bi-search me-1"></i> Categor&iacute;a</label>
-                            <div class="d-flex gap-2 align-items-center flex-wrap">
-                                <div class="position-relative" style="flex:1 1 240px; min-width:220px; max-width:420px;">
-                                    <input type="text" class="form-control form-control-sm bg-white text-dark" id="dim_search_categoria" placeholder="Escriba, o use &quot;Categor&iacute;as&quot;..." autocomplete="off" required>
-                                    <input type="hidden" id="dim_id_categoria" required>
-                                    <div class="list-group sugerencias-flotantes" id="dim_sug_categoria" style="display: none;"></div>
-                                </div>
-                                <select id="dim_anio_categoria" class="form-select form-select-sm" style="width:auto;" title="A&ntilde;o de movimientos">
-                                    <option value="">Todos los a&ntilde;os</option>
-                                </select>
-                                <button type="button" class="btn btn-outline-secondary btn-sm text-nowrap" onclick="ASIENTOPROG_abrirModalEntidades('categoria')">
-                                    <i class="bi bi-tags me-1"></i> Categor&iacute;as
-                                </button>
-                            </div>
+                <div class="accordion-body bg-white p-3">
+                    <!-- Tabla de reglas: nombre · cuentas principales · acciones (ASIENTOPROG_cargarTabla). -->
+                    <div class="d-flex flex-wrap align-items-center gap-2 mb-2">
+                        <div class="input-group input-group-sm" style="max-width:420px;">
+                            <span class="input-group-text bg-white"><i class="bi bi-search"></i></span>
+                            <input type="search" class="form-control" id="dimTablaBuscar_categoria" autocomplete="off" placeholder="Buscar categor&iacute;a...">
                         </div>
-                        <div class="col-12" id="dim_faltantes_categoria"></div>
-                        <div class="col-12 mt-4 text-center"><button type="submit" class="btn btn-primary btn-sm fw-bold px-4 shadow-sm"><i class="bi bi-plus-lg me-1"></i> Agregar</button></div>
-                    </form>
-                    <div class="row g-2" id="dimCards_categoria"></div>
+                        <select id="dim_anio_categoria" class="form-select form-select-sm" style="width:auto;" title="A&ntilde;o de movimientos">
+                            <option value="">Todos los a&ntilde;os</option>
+                        </select>
+                        <span class="small text-muted ms-auto" id="dimTablaContador_categoria"></span>
+                    </div>
+                    <div id="dimCards_categoria"></div>
+                    <div id="dimTablaPag_categoria" class="d-flex justify-content-center align-items-center gap-2 mt-2"></div>
                 </div>
             </div>
         </div>
@@ -438,29 +404,20 @@ $base = BASE_URL;
                 </button>
             </h2>
             <div id="collapseMarcas" class="accordion-collapse collapse" aria-labelledby="headingMarcas" data-bs-parent="#acordeonConfiguracion">
-                <div class="accordion-body bg-white p-4">
-                    <form onsubmit="ASIENTOPROG_agregarDim(event, 'marca')" class="row g-3 align-items-end mb-4 bg-light p-3 rounded-3 border shadow-sm">
-                        <div class="col-12 mb-2 border-bottom pb-2"><h6 class="text-primary mb-0 fw-bold"><i class="bi bi-bookmark-star me-1"></i> Nueva Asociaci&oacute;n por Marca</h6></div>
-                        <div class="col-md-12 mb-2">
-                            <label class="form-label small fw-bold text-muted mb-1"><i class="bi bi-search me-1"></i> Marca</label>
-                            <div class="d-flex gap-2 align-items-center flex-wrap">
-                                <div class="position-relative" style="flex:1 1 240px; min-width:220px; max-width:420px;">
-                                    <input type="text" class="form-control form-control-sm bg-white text-dark" id="dim_search_marca" placeholder="Escriba, o use &quot;Marcas&quot;..." autocomplete="off" required>
-                                    <input type="hidden" id="dim_id_marca" required>
-                                    <div class="list-group sugerencias-flotantes" id="dim_sug_marca" style="display: none;"></div>
-                                </div>
-                                <select id="dim_anio_marca" class="form-select form-select-sm" style="width:auto;" title="A&ntilde;o de movimientos">
-                                    <option value="">Todos los a&ntilde;os</option>
-                                </select>
-                                <button type="button" class="btn btn-outline-secondary btn-sm text-nowrap" onclick="ASIENTOPROG_abrirModalEntidades('marca')">
-                                    <i class="bi bi-bookmark-star me-1"></i> Marcas
-                                </button>
-                            </div>
+                <div class="accordion-body bg-white p-3">
+                    <!-- Tabla de reglas: nombre · cuentas principales · acciones (ASIENTOPROG_cargarTabla). -->
+                    <div class="d-flex flex-wrap align-items-center gap-2 mb-2">
+                        <div class="input-group input-group-sm" style="max-width:420px;">
+                            <span class="input-group-text bg-white"><i class="bi bi-search"></i></span>
+                            <input type="search" class="form-control" id="dimTablaBuscar_marca" autocomplete="off" placeholder="Buscar marca...">
                         </div>
-                        <div class="col-12" id="dim_faltantes_marca"></div>
-                        <div class="col-12 mt-4 text-center"><button type="submit" class="btn btn-primary btn-sm fw-bold px-4 shadow-sm"><i class="bi bi-plus-lg me-1"></i> Agregar</button></div>
-                    </form>
-                    <div class="row g-2" id="dimCards_marca"></div>
+                        <select id="dim_anio_marca" class="form-select form-select-sm" style="width:auto;" title="A&ntilde;o de movimientos">
+                            <option value="">Todos los a&ntilde;os</option>
+                        </select>
+                        <span class="small text-muted ms-auto" id="dimTablaContador_marca"></span>
+                    </div>
+                    <div id="dimCards_marca"></div>
+                    <div id="dimTablaPag_marca" class="d-flex justify-content-center align-items-center gap-2 mt-2"></div>
                 </div>
             </div>
         </div>

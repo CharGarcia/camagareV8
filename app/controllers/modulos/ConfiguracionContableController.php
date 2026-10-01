@@ -1313,23 +1313,30 @@ class ConfiguracionContableController extends BaseModuloController
     }
 
     /**
-     * Página de la tabla «Reglas por Proveedores»: proveedores con compras/liquidaciones, con
-     * buscador (`q`), año (`anio`) y paginación (`page`). Las cuentas de cada uno se leen aparte con
-     * cargarReglasDimensionAjax.
+     * Página de la tabla de reglas por entidad (proveedor, cliente, producto/ítem, categoría, marca):
+     * `tipo` (dimensión), `tipo_asiento`, `principales` (códigos de los conceptos que son columnas
+     * de la tabla, separados por coma), buscador `q`, `anio` y `page`. Las cuentas de cada entidad
+     * se leen aparte con cargarReglasDimensionAjax.
      */
-    public function getProveedoresReglaAjax(): void
+    public function getEntidadesReglaAjax(): void
     {
         $this->requireLeer();
         header('Content-Type: application/json');
 
-        $idEmpresa = (int) $_SESSION['id_empresa'];
+        $idEmpresa   = (int) $_SESSION['id_empresa'];
+        $dim         = trim((string) ($_GET['tipo'] ?? ''));
+        $tipoAsiento = trim((string) ($_GET['tipo_asiento'] ?? ''));
+        $principales = array_filter(array_map('trim', explode(',', (string) ($_GET['principales'] ?? ''))));
         $q    = trim((string) ($_GET['q'] ?? ''));
         $anio = trim((string) ($_GET['anio'] ?? ''));
         $page = max(1, (int) ($_GET['page'] ?? 1));
         $perPage = 25;
 
         try {
-            $res = $this->repository->listarProveedoresReglaCompra($idEmpresa, $q, ctype_digit($anio) ? (int) $anio : null, $page, $perPage);
+            $res = $this->repository->listarEntidadesRegla(
+                $idEmpresa, $dim, $tipoAsiento, $principales, $q,
+                ctype_digit($anio) ? (int) $anio : null, $page, $perPage
+            );
             echo json_encode([
                 'ok'       => true,
                 'data'     => $res['rows'],
@@ -1338,9 +1345,11 @@ class ConfiguracionContableController extends BaseModuloController
                 'per_page' => $perPage,
                 'pages'    => max(1, (int) ceil($res['total'] / $perPage)),
             ]);
+        } catch (\InvalidArgumentException $e) {
+            echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
         } catch (\Throwable $e) {
             \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
-            echo json_encode(['ok' => false, 'error' => 'No se pudo cargar el listado de proveedores.']);
+            echo json_encode(['ok' => false, 'error' => 'No se pudo cargar el listado.']);
         }
         exit;
     }
