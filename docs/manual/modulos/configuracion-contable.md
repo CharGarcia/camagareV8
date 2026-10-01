@@ -6,7 +6,7 @@ ruta_modulo: modulos/configuracion-contable
 tipo: modulo
 visibilidad: admin
 etiquetas: configuracion contable, cuentas por documento, asiento automatico, parametrizacion, ventas, compras, cierre, tipo de produccion, bien, servicio, filtro por año, periodo, listado de proveedores, listado de clientes, cobros y pagos, ingresos y egresos, forma de pago, cuenta bancaria, efectivo, misma cuenta en los dos bloques, formas hermanas, cheques y transferencias, mismo banco, numero de cuenta, nomina, rol de pagos, prestamo quirografario, prestamo hipotecario, prestamo empresa, prestamos iess, cuentas opcionales, costo de ventas, costo de venta, inventario, asiento sin costo, no sale el costo, cuenta de iva del cliente, reglas por cliente, buscar proveedor, buscar cliente, buscar ficha, filtrar fichas, muchos proveedores, cuentas faltantes, modulos que contabilizan, apagar asientos, no generar asientos, no contabilizar, desactivar contabilidad, interruptor, consignaciones sin asiento, aviso de asientos pendientes, asientos pendientes en el balance, proveedores sin cuentas, clientes sin cuentas, productos sin cuentas, pendientes de configurar, retenciones en venta, retenciones en compra, retencion de renta, no aparecen las retenciones, codigo de retencion, catalogo de retenciones sri, codigo ats, codigo del anexo, retencion mal asignada, codigo de retencion no existe, en que documento esta el error, retencion con codigo invalido, sugerencias, sugerir cuentas, proveedores que compran lo mismo, copiar cuentas de otro proveedor, misma cuenta para varios proveedores, gasolineras, proveedores parecidos, subtotal de compras, cuenta de gasto del proveedor, mostrar las demas cuentas, ver todas las cuentas, tipo de asiento no aparece, falta tipo de asiento en el selector, modulo apagado, personalizar asiento contable, tabla de proveedores, detalle de compras, cuenta de subtotal por proveedor
-version: 1.28
+version: 1.29
 orden: 5
 estado: activo
 ---
@@ -69,10 +69,9 @@ no entra.
 
 ## Cómo se leen las reglas por entidad
 
-Las reglas por **Proveedor, Cliente, Producto (o Ítem de compra), Categoría y
-Marca** se muestran en una **tabla** (ver la sección siguiente). Las de **Tipo de
-Producción** y **Empleado** siguen en **tarjetas** (ver *Tarjetas: Tipo de
-Producción y Empleado*).
+Las reglas por **Proveedor, Cliente, Producto (o Ítem de compra), Categoría,
+Marca y Tipo de Producción** se muestran en una **tabla** (ver la sección
+siguiente). Las de **Empleado** siguen en **tarjetas** (ver *Tarjetas: Empleado*).
 
 En los dos formatos, cada cuenta se edita en un campo donde se escribe o se busca
 la cuenta. El campo dice de un vistazo cómo está ese concepto hoy:
@@ -96,7 +95,7 @@ propia ficha, en la pestaña **Contable** de los módulos *Proveedores* y *Clien
 (y de cualquier pantalla que abra esa ficha, como Compras, Liquidaciones o
 Facturas de Venta). Es la misma regla: lo que se cambie en un lado se ve en el otro.
 
-## Tablas de reglas: Proveedores, Clientes, Productos, Categorías y Marcas
+## Tablas de reglas: Proveedores, Clientes, Productos, Categorías, Marcas y Tipo de Producción
 
 Al abrir la regla se listan **todas las entidades con movimiento**, sin tener que
 agregarlas antes:
@@ -108,6 +107,12 @@ agregarlas antes:
 | Por Productos, en ventas o recibos | Productos vendidos en esos documentos |
 | Por Productos, en compras | Los **ítems** de las compras y liquidaciones (por su descripción) |
 | Por Categorías y Marcas | Todas; con un año elegido, solo las de productos con movimiento ese año |
+| Por Tipo de Producción (ventas o recibos) | Siempre las dos filas: **Bien** y **Servicio** |
+
+La regla por Tipo de Producción se aplica según la clasificación Bien/Servicio del
+producto de cada línea, solo cuando esa línea no resolvió cuenta por Producto,
+Categoría ni Marca. Como son solo dos filas, no tiene buscador, año ni páginas, y
+no admite cuentas de IVA por tarifa.
 
 Primero salen las que **todavía no tienen cuenta propia en las columnas de la
 tabla** y después las que ya la tienen; cada grupo, en orden alfabético (de la A
@@ -125,7 +130,7 @@ Cada fila tiene:
 |---|---|
 | Por Proveedor | Subtotal de la compra (gasto o costo) |
 | Por Cliente (ventas o recibos) | Subtotal (cuenta de ventas) |
-| Por Producto, Categoría o Marca, en ventas o recibos | Subtotal, Costo de Ventas e Inventario |
+| Por Producto, Categoría, Marca o Tipo de Producción, en ventas o recibos | Subtotal, Costo de Ventas e Inventario |
 | Por Ítem de compra, Categoría o Marca, en compras | Subtotal de la compra e Inventario |
 
 - **Detalle de compras** (proveedores) o **Detalle de ventas** (clientes): lo que
@@ -143,28 +148,22 @@ Cada fila tiene:
 Las entidades sin movimiento no aparecen en la tabla. Las cuentas de un proveedor
 o cliente sin documentos se pueden poner desde la pestaña **Contable** de su ficha.
 
-## Tarjetas: Tipo de Producción y Empleado
+## Tarjetas: Empleado
 
-En las reglas por **Tipo de Producción** y por **Empleado** lo configurado se
-muestra en **una tarjeta por entidad**, plegada al entrar. Su cabecera indica
-*faltan N* o *completa*, y al desplegarla reúne las cuentas en dos columnas,
-**Debe** y **Haber**.
+En las reglas por **Empleado** (Nómina) lo configurado se muestra en **una
+tarjeta por empleado**, plegada al entrar. Su cabecera indica *faltan N* o
+*completa*, y al desplegarla reúne todas las cuentas en dos columnas, **Debe** y
+**Haber**.
 
 El alta se hace en dos pasos:
 
-1. En el buscador de la parte superior se elige la entidad y se pulsa
+1. En el buscador de la parte superior se elige el empleado y se pulsa
    **Agregar**. Su tarjeta aparece arriba de la lista, ya desplegada y todavía sin
    cuentas.
 2. Dentro de la tarjeta se va asignando la cuenta de cada concepto.
 
-Una ficha sin ninguna cuenta asignada no queda registrada: si se agrega una
-entidad y no se le pone nada, al volver a entrar simplemente no aparece.
-
-**Vista resumida.** En *Ventas con Factura* y *Recibos de Venta*, la tarjeta de
-Tipo de Producción muestra de entrada solo **Subtotal, Costo de Ventas e
-Inventario**; el resto queda detrás de **Mostrar las demás cuentas (N)**. Siempre
-se ven los conceptos que ya tienen cuenta propia y los que no tienen cuenta en
-ningún lado (en rojo). Las tarjetas de Empleado muestran todas sus cuentas.
+Una ficha sin ninguna cuenta asignada no queda registrada: si se agrega un
+empleado y no se le pone nada, al volver a entrar simplemente no aparece.
 
 Dentro de cada tarjeta, **Copiar cuentas de General** rellena de una vez los
 conceptos que aún no tienen cuenta propia, y la papelera de la cabecera elimina
@@ -464,6 +463,9 @@ ingresos o egresos. Solo falta asignar la cuenta.
 
 ## Historial de cambios
 
+- **1.29** — La regla por Tipo de Producción también pasa a la tabla: dos filas fijas (Bien y
+  Servicio) con Subtotal, Costo de Ventas e Inventario como columnas y *Personalizar asiento
+  contable* para el resto; se quitó su formulario *Nueva Asociación*.
 - **1.28** — Las reglas por Clientes, Productos (e Ítems de compra), Categorías y Marcas
   pasan al mismo diseño de tabla que Proveedores: todas las entidades con movimiento, las
   cuentas principales como columnas, *Personalizar asiento contable* para el resto y sin el

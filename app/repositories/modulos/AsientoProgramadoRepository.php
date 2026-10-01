@@ -1627,7 +1627,7 @@ class AsientoProgramadoRepository extends BaseRepository
     ];
 
     /** Dimensiones que admite la tabla de reglas (la de producto en compras es el ítem por texto). */
-    public const DIMS_TABLA_REGLAS = ['proveedor', 'cliente', 'producto', 'categoria', 'marca'];
+    public const DIMS_TABLA_REGLAS = ['proveedor', 'cliente', 'producto', 'categoria', 'marca', 'tipo_produccion'];
 
     /**
      * Tabla de reglas por entidad (Proveedores, Clientes, Productos/Ítems, Categorías, Marcas):
@@ -1657,7 +1657,7 @@ class AsientoProgramadoRepository extends BaseRepository
             throw new \InvalidArgumentException('Regla no disponible para este tipo de asiento.');
         }
         $esCompra = $tipoAsiento === 'adquisiciones_compras';
-        if (($dim === 'proveedor' && !$esCompra) || ($dim === 'cliente' && $esCompra)) {
+        if (($dim === 'proveedor' && !$esCompra) || (in_array($dim, ['cliente', 'tipo_produccion'], true) && $esCompra)) {
             throw new \InvalidArgumentException('Regla no disponible para este tipo de asiento.');
         }
         $esItem = $dim === 'producto' && $esCompra;
@@ -1683,7 +1683,12 @@ class AsientoProgramadoRepository extends BaseRepository
             return '(' . implode(' OR ', $partes) . ')';
         };
 
-        if ($esItem) {
+        if ($dim === 'tipo_produccion') {
+            // Sin catálogo: dos valores fijos; id_referencia 1 = Bien, 2 = Servicio (mismo mapeo que
+            // cargarReglasDimensionAjax y AsientoBuilderService::repartirVentasCascada()). Siempre los dos.
+            $base = "SELECT v.clave, v.nombre, NULL::text AS identificacion
+                     FROM (VALUES ('1', 'Bien'), ('2', 'Servicio')) AS v(clave, nombre)";
+        } elseif ($esItem) {
             $uniones = [];
             foreach ($docs as [$cab, $det, $fk]) {
                 $filtroAnio = $anio !== null ? ' AND EXTRACT(YEAR FROM c.fecha_emision) = ' . $p($anio) : '';

@@ -430,26 +430,13 @@ $base = BASE_URL;
                 </button>
             </h2>
             <div id="collapseTipoProduccion" class="accordion-collapse collapse" aria-labelledby="headingTipoProduccion" data-bs-parent="#acordeonConfiguracion">
-                <div class="accordion-body bg-white p-4">
-                    <form onsubmit="ASIENTOPROG_agregarDim(event, 'tipo_produccion')" class="row g-3 align-items-end mb-4 bg-light p-3 rounded-3 border shadow-sm">
-                        <div class="col-12 mb-2 border-bottom pb-2">
-                            <h6 class="text-primary mb-0 fw-bold"><i class="bi bi-box-seam me-1"></i> Nueva Asociaci&oacute;n por Tipo de Producci&oacute;n</h6>
-                            <small class="text-muted">Se aplica seg&uacute;n la clasificaci&oacute;n Bien/Servicio del producto de cada l&iacute;nea. Solo se usa cuando esa l&iacute;nea no resolvi&oacute; cuenta por Producto, Categor&iacute;a ni Marca.</small>
-                        </div>
-                        <div class="col-md-4 mb-2">
-                            <label class="form-label small fw-bold text-muted mb-1"><i class="bi bi-search me-1"></i> Tipo de Producci&oacute;n</label>
-                            <select class="form-select form-select-sm bg-white text-dark" id="dim_select_tipo_produccion" onchange="ASIENTOPROG_seleccionarTipoProduccion(this)" required>
-                                <option value="" selected>-- Seleccione --</option>
-                                <option value="1">Bien</option>
-                                <option value="2">Servicio</option>
-                            </select>
-                            <input type="hidden" id="dim_search_tipo_produccion">
-                            <input type="hidden" id="dim_id_tipo_produccion" required>
-                        </div>
-                        <div class="col-12" id="dim_faltantes_tipo_produccion"></div>
-                        <div class="col-12 mt-4 text-center"><button type="submit" class="btn btn-primary btn-sm fw-bold px-4 shadow-sm"><i class="bi bi-plus-lg me-1"></i> Agregar</button></div>
-                    </form>
-                    <div class="row g-2" id="dimCards_tipo_produccion"></div>
+                <div class="accordion-body bg-white p-3">
+                    <!-- Tabla de reglas con las dos filas fijas, Bien y Servicio (ASIENTOPROG_cargarTabla). -->
+                    <div class="small text-muted mb-2">
+                        <i class="bi bi-info-circle me-1"></i>
+                        Se aplica seg&uacute;n la clasificaci&oacute;n Bien/Servicio del producto de cada l&iacute;nea. Solo se usa cuando esa l&iacute;nea no resolvi&oacute; cuenta por Producto, Categor&iacute;a ni Marca.
+                    </div>
+                    <div id="dimCards_tipo_produccion"></div>
                 </div>
             </div>
         </div>

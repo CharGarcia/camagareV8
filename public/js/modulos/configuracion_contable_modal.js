@@ -32,18 +32,6 @@
         return (ta === 'ventas_factura' || ta === 'recibos_venta') ? 'ventas' : 'compras';
     }
 
-    // Tipo de Producción (Bien/Servicio) es un selector fijo de 2 valores, no un buscador con
-    // autocompletado como el resto de dimensiones — por eso no pasa por
-    // ASIENTOPROG_vincularDimAutocomplete(); este handler solo replica lo que allí hace el click
-    // de una sugerencia: fijar el hidden id_referencia y disparar el indicador de faltantes.
-    window.ASIENTOPROG_seleccionarTipoProduccion = function (select) {
-        const hidden = document.getElementById('dim_id_tipo_produccion');
-        const label = document.getElementById('dim_search_tipo_produccion');
-        if (hidden) hidden.value = select.value;
-        if (label) label.value = select.options[select.selectedIndex] ? select.options[select.selectedIndex].text : '';
-        if (select.value) ASIENTOPROG_mostrarFaltantesEntidad('tipo_produccion');
-    };
-
     function ASIENTOPROG_mostrarAcordeonesDim(tipoAsiento) {
         const visibles = ACORDEONES_DIM[tipoAsiento] || [];
         ACORDEONES_DIM_TODOS.forEach(id => {
@@ -1353,7 +1341,7 @@
     // así que guardar, quitar, copiar de General y el detalle usan las mismas funciones.
     // Elementos de la vista por dimensión: dimTablaBuscar_{tipo}, dim_anio_{tipo},
     // dimTablaContador_{tipo}, dimCards_{tipo}, dimTablaPag_{tipo}.
-    const ASIENTOPROG_DIMS_TABLA = ['proveedor', 'cliente', 'producto', 'categoria', 'marca'];
+    const ASIENTOPROG_DIMS_TABLA = ['proveedor', 'cliente', 'producto', 'categoria', 'marca', 'tipo_produccion'];
     const ASIENTOPROG_dimTabla = {};      // tipo => { page, q, timer, tipoAsiento }
     const ASIENTOPROG_dimAbiertas = new Set();   // "tipo|clave" con «Personalizar» desplegado
 
@@ -1371,6 +1359,7 @@
                 : { col: 'Producto / Servicio', plural: 'producto(s) vendidos', vacio: 'No hay productos vendidos.' },
             categoria: { col: 'Categoría', plural: 'categoría(s)', vacio: 'No hay categorías.' },
             marca:     { col: 'Marca', plural: 'marca(s)', vacio: 'No hay marcas.' },
+            tipo_produccion: { col: 'Tipo de producción', plural: 'tipos de producción', vacio: '' },
         }[tipo];
     }
 
@@ -1475,7 +1464,10 @@
         }
         const esc = ASIENTOPROG_esc;
         const esItem = ASIENTOPROG_esItemCompra(tipo);
-        const conceptos = window.CONCEPTOS_CONFIGURADOS || [];
+        // Tipo de producción no admite cuentas de IVA por tarifa (el backend no las guarda por esa
+        // dimensión): solo sus conceptos.
+        const conceptos = (window.CONCEPTOS_CONFIGURADOS || [])
+            .filter(c => tipo !== 'tipo_produccion' || !ASIENTOPROG_esConceptoIva(c));
         const codigos = ASIENTOPROG_principalesDe(tipo) || [];
         // Columnas: los conceptos principales, en el orden del mapa.
         const cols = codigos.map(cod => conceptos.find(c => c.codigo === cod)).filter(Boolean);
