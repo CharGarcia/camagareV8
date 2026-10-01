@@ -116,7 +116,16 @@
                         + ` data-asientos-cfg-tipo="${escapeHtml(a.tipo)}" data-asientos-cfg-seccion="${escapeHtml(a.seccion || 'general')}">`
                         + `<i class="bi bi-box-arrow-up-right me-1"></i>Configurar</a>`;
                 }
-                return `<li class="mb-1">${escapeHtml(a.texto)}.${enlace}</li>`;
+                // Qué documentos, de quién y qué cuentas faltan (ver SincronizadorAsientosService::detalleDeLote).
+                const det = Array.isArray(a.detalles) ? a.detalles : [];
+                const maxDet = 8;
+                const sub = det.length
+                    ? `<ul class="mb-1 mt-1 text-muted" style="font-size:.78rem;">`
+                        + det.slice(0, maxDet).map(d => `<li>${escapeHtml(d)}</li>`).join('')
+                        + (det.length > maxDet ? `<li>y ${det.length - maxDet} grupo(s) más</li>` : '')
+                        + `</ul>`
+                    : '';
+                return `<li class="mb-1">${escapeHtml(a.texto)}.${enlace}${sub}</li>`;
             }).join('');
             html += `<div class="text-start small mb-2"><i class="bi bi-exclamation-triangle text-warning me-1"></i> `
                 + `<strong>Para generar los asientos que faltan:</strong>`
@@ -282,7 +291,11 @@
                     json.acciones.forEach(a => {
                         if (!a || !a.clave) return;
                         const previa = acumAcciones.get(a.clave);
-                        if (!previa) { acumAcciones.set(a.clave, a); return; }
+                        if (!previa) { acumAcciones.set(a.clave, { ...a, detalles: Array.isArray(a.detalles) ? [...a.detalles] : [] }); return; }
+                        // Los detalles de cada paso se suman (sin repetir): no se pierden al generalizar el texto.
+                        (Array.isArray(a.detalles) ? a.detalles : []).forEach(d => {
+                            if (!previa.detalles.includes(d)) previa.detalles.push(d);
+                        });
                         // Una sola línea por sección: faltas distintas en la misma sección → texto genérico.
                         if (previa.texto !== a.texto) previa.texto = previa.textoGenerico || a.textoGenerico || previa.texto;
                         if (!a.dependeDe) previa.dependeDe = null; // también falta de forma directa

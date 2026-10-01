@@ -37,6 +37,8 @@ class SincronizadorAsientosService
     private array $formasSinCuenta = ['cobro' => [], 'pago' => []];
     /** Igual que $formasSinCuenta para los conceptos de Ingresos y Egresos: flujo => [nombre => inactivo]. */
     private array $conceptosSinCuenta = ['ingreso' => [], 'egreso' => []];
+    /** Línea de detalle del lote que se está registrando (ver registrarAccion/adjuntarDetalle). */
+    private ?string $detalleActual = null;
     /**
      * Documentos sin asiento que NO se deben generar: sin valor que contabilizar, o que cobran/pagan
      * documentos de un módulo apagado en «Módulos que contabilizan». Se restan del total de
@@ -1306,7 +1308,7 @@ class SincronizadorAsientosService
             $totalConProblema += $n;
             $docs = $this->listarDocumentos($idsFallidos, $numeros);
             $this->detalle[] = "{$nombreModulo} — {$n} asiento(s): {$motivo} (documento(s): {$docs})";
-            $this->registrarAccion($db, $clave, $nombreModulo, $motivo, $idsFallidos);
+            $this->registrarAccion($db, $clave, $nombreModulo, $motivo, $idsFallidos, $numeros);
             error_log("[SincronizadorAsientos] {$nombreModulo}: {$n} fallo(s) — {$motivo} — docs: {$docs} — ids: " . implode(',', $idsFallidos));
         }
 
@@ -1329,7 +1331,7 @@ class SincronizadorAsientosService
                     ? "{$nombreModulo} — {$n} documento(s) sin asiento: {$motivo} (documento(s): {$docs})"
                     : "{$nombreModulo} — {$n} documento(s) sin asiento (documento(s): {$docs})";
                 $this->detalle[] = $texto;
-                $this->registrarAccion($db, $clave, $nombreModulo, $motivo, $idsMotivo);
+                $this->registrarAccion($db, $clave, $nombreModulo, $motivo, $idsMotivo, $numeros);
                 error_log("[SincronizadorAsientos] {$texto} — ids: " . implode(',', $idsMotivo));
             }
         }
@@ -1515,7 +1517,14 @@ class SincronizadorAsientosService
             if ($a['dependeDe'] !== null && isset($this->resumenPorModulo[$a['dependeDe']])) {
                 continue;
             }
-            $lineas[] = $a['texto'];
+            // Qué documentos / de quién / qué cuentas (hasta 3 lotes; el resto se cuenta).
+            $det   = $a['detalles'] ?? [];
+            $extra = '';
+            if ($det) {
+                $resto = count($det) - min(count($det), 3);
+                $extra = ' (' . implode('; ', array_slice($det, 0, 3)) . ($resto > 0 ? "; y {$resto} grupo(s) más" : '') . ')';
+            }
+            $lineas[] = $a['texto'] . $extra;
         }
         $pendientes = $this->getPendientes();
         $cierre = $pendientes > 0 ? " Quedan pendientes {$pendientes} asiento(s) por generar." : '';
@@ -1552,7 +1561,97 @@ class SincronizadorAsientosService
      * las cuentas faltantes en una sola excepción), por eso cada regla se evalúa por separado y
      * solo se cae a la acción genérica del módulo si ninguna coincidió.
      */
-    private function registrarAccion(\PDO $db, string $clave, string $nombreModulo, string $motivo, array $ids): void
+    private function registrarAccion(\PDO $db, string $clave, string $nombreModulo, string $motivo, array $ids, array $numeros = []): void
+    {
+        // Detalle concreto de este lote (qué documentos, de quién y qué cuentas faltan): se adjunta
+        // a cada acción que registre registrarAccionInterna() — ver agregarAccion()/fijarAccion().
+        $this->detalleActual = $this->detalleDeLote($clave, $nombreModulo, $motivo, $ids, $numeros);
+        try {
+            $this->registrarAccionInterna($db, $clave, $nombreModulo, $motivo, $ids);
+        } finally {
+            $this->detalleActual = null;
+        }
+    }
+
+    /**
+     * Línea de detalle de un lote de documentos que no se pudieron contabilizar por el mismo motivo:
+     * "Facturas de Compra 001-001-000000123, 001-001-000000456 · proveedores: ACME S.A., XYZ —
+     * falta: «Subtotal factura de compras», «IVA compras tarifa 15%»". Es lo que permite al usuario
+     * saber EXACTAMENTE qué configurar (el texto de la acción solo dice la sección).
+     */
+    private function detalleDeLote(string $clave, string $nombreModulo, string $motivo, array $ids, array $numeros): ?string
+    {
+        if (!$ids) {
+            return null;
+        }
+        $linea = $nombreModulo . ' ' . $this->listarDocumentos($ids, $numeros);
+
+        $area = self::AREAS[$clave] ?? null;
+        if (!empty($area['entidad'])) {
+            [$tipoRef, $tablaDoc, $colEntidad] = $area['entidad'];
+            $nombres = array_values(array_unique(array_filter(
+                (new \App\repositories\modulos\AsientoProgramadoRepository())
+                    ->getNombresEntidadPorDocumento($tablaDoc, $colEntidad, $tipoRef, $ids)
+            )));
+            if ($nombres) {
+                $resto = count($nombres) - min(count($nombres), 4);
+                $linea .= ' · ' . ($tipoRef === 'proveedor' ? 'proveedor' : 'cliente') . (count($nombres) > 1 ? 'es' : '')
+                        . ': ' . implode(', ', array_slice($nombres, 0, 4)) . ($resto > 0 ? " y {$resto} más" : '');
+            }
+        }
+
+        $faltan = self::conceptosFaltantes($motivo);
+        if ($faltan) {
+            $linea .= ' — falta: ' . implode(', ', array_map(fn($c) => '«' . $c . '»', $faltan));
+        }
+        return $linea;
+    }
+
+    /**
+     * Nombres de las cuentas/conceptos que el motivo de fallo dice que faltan: lo que va entre
+     * «comillas» (AsientoBuilderService::registrarFaltante*) y las listas "Falta asignar la cuenta
+     * contable de: A, B." (ensamblado de compras/ventas) y "Configure las cuentas de nómina en
+     * Configuración Contable: A, B." (RolAsientoService).
+     *
+     * @return string[]
+     */
+    private static function conceptosFaltantes(string $motivo): array
+    {
+        $out = [];
+        // La coletilla "Configúrela en Contabilidad → Configuración contable, concepto «compras»" dice
+        // DÓNDE configurar, no qué falta: se quita para que «compras» no aparezca como cuenta.
+        $motivo = (string) preg_replace('/Config[úu]rela en .*$/u', '', $motivo);
+        if (preg_match_all('/«([^»]+)»/u', $motivo, $mm)) {
+            foreach ($mm[1] as $c) {
+                $out[] = trim($c);
+            }
+        }
+        foreach (['/cuenta contable de:\s*(.+?)\.(?:\s|$)/u', '/cuentas de nómina en Configuración Contable:\s*(.+?)\.?$/u'] as $re) {
+            if (preg_match($re, $motivo, $m1)) {
+                foreach (explode(',', $m1[1]) as $c) {
+                    $c = trim($c);
+                    if ($c !== '') {
+                        $out[] = $c;
+                    }
+                }
+            }
+        }
+        return array_slice(array_values(array_unique($out)), 0, 8);
+    }
+
+    /** Adjunta a una acción la línea de detalle del lote en curso (sin repetir). */
+    private function adjuntarDetalle(string $clave): void
+    {
+        if ($this->detalleActual === null || !isset($this->acciones[$clave])) {
+            return;
+        }
+        $this->acciones[$clave]['detalles'] ??= [];
+        if (!in_array($this->detalleActual, $this->acciones[$clave]['detalles'], true)) {
+            $this->acciones[$clave]['detalles'][] = $this->detalleActual;
+        }
+    }
+
+    private function registrarAccionInterna(\PDO $db, string $clave, string $nombreModulo, string $motivo, array $ids): void
     {
         $m    = mb_strtolower($motivo, 'UTF-8');
         $area = self::AREAS[$clave] ?? null;
@@ -1847,7 +1946,9 @@ class SincronizadorAsientosService
             'tipo'          => $tipo,
             'seccion'       => $seccion,
             'dependeDe'     => null,
+            'detalles'      => $this->acciones[$clave]['detalles'] ?? [], // se conservan al reescribir
         ];
+        $this->adjuntarDetalle($clave);
     }
 
     /**
@@ -1871,6 +1972,8 @@ class SincronizadorAsientosService
             if ($dependeDe === null) {
                 $previa['dependeDe'] = null;
             }
+            unset($previa);
+            $this->adjuntarDetalle($clave);
             return;
         }
         $this->acciones[$clave] = [
@@ -1880,6 +1983,8 @@ class SincronizadorAsientosService
             'tipo'          => $tipo,
             'seccion'       => $seccion,
             'dependeDe'     => $dependeDe,
+            'detalles'      => [], // qué documentos / de quién / qué cuentas (ver detalleDeLote)
         ];
+        $this->adjuntarDetalle($clave);
     }
 }

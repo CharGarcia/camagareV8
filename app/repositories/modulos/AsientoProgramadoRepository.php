@@ -1033,6 +1033,46 @@ class AsientoProgramadoRepository extends BaseRepository
      * $tablaDoc/$colEntidad son literales del código (SincronizadorAsientosService::AREAS), no
      * entrada del usuario. Falla en silencio (0) si la tabla/columna no existe.
      */
+    /**
+     * Nombre del cliente/proveedor de cada documento de un lote (id_documento => nombre), para que
+     * el aviso de asientos pendientes diga DE QUIÉN son los documentos que no se pudieron generar.
+     * $tablaDoc/$colEntidad son literales del código (SincronizadorAsientosService::AREAS). Falla en
+     * silencio ([]) si la tabla/columna no existe.
+     *
+     * @return array<int,string>
+     */
+    public function getNombresEntidadPorDocumento(string $tablaDoc, string $colEntidad, string $tipoReferencia, array $ids): array
+    {
+        $ids = array_values(array_filter(array_map('intval', $ids)));
+        if (!$ids || !preg_match('/^[a-z_]+$/', $tablaDoc) || !preg_match('/^[a-z_]+$/', $colEntidad)) {
+            return [];
+        }
+        [$tablaEnt, $colNombre] = match ($tipoReferencia) {
+            'proveedor' => ['proveedores', 'razon_social'],
+            'cliente'   => ['clientes', 'nombre'],
+            default     => [null, null],
+        };
+        if ($tablaEnt === null) {
+            return [];
+        }
+        try {
+            $st = $this->db->prepare(
+                "SELECT d.id, e.{$colNombre} AS nombre
+                   FROM {$tablaDoc} d
+                   JOIN {$tablaEnt} e ON e.id = d.{$colEntidad}
+                  WHERE d.id = ANY(string_to_array(:ids, ',')::int[])"
+            );
+            $st->execute([':ids' => implode(',', $ids)]);
+            $out = [];
+            foreach ($st->fetchAll(PDO::FETCH_ASSOC) as $r) {
+                $out[(int) $r['id']] = trim((string) $r['nombre']);
+            }
+            return $out;
+        } catch (\Throwable $e) {
+            return [];
+        }
+    }
+
     public function contarDocumentosConEntidadConReglas(string $tablaDoc, string $colEntidad, string $tipoReferencia, string $tipoAsiento, array $ids): int
     {
         $ids = array_values(array_filter(array_map('intval', $ids)));

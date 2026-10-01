@@ -6,7 +6,7 @@ ruta_modulo: modulos/asientos_contables
 tipo: modulo
 visibilidad: todos
 etiquetas: asientos, asiento contable, diario, debe, haber, partida doble, cuadrado, comprobante, contabilidad, imprimir, pdf, excel, documento origen, cuadre con el documento, total de la factura, cuenta por cobrar, cartera, editar asiento desde el documento, pestaña asiento contable, editado a mano, restaurar asiento automático, permisos de contabilidad, documentos migrados, migración, sistema anterior, buscar asiento, buscador, filtros, filtrar asientos, buscar por cuenta, buscar por referencia, libro diario, chips, asiento descuadrado, búsqueda lenta, se queda buscando, filtrar por origen, origen del asiento, módulo de origen, vista previa, costo de ventas, asiento sin costo, duplicar asiento, copiar asiento, clonar asiento, repetir asiento
-version: 1.31
+version: 1.32
 orden: 20
 estado: activo
 ---
@@ -222,12 +222,30 @@ revisar el balance.
 
 ## Qué dice el aviso cuando quedan asientos sin generar
 
-Al terminar la generación, el aviso ya no cuenta documentos por módulo
-("70 en Facturas de Compra, 6 en Egresos…") ni lista documento por documento:
-dice **qué hay que configurar**, una sola línea por cada sección de Configuración
-Contable, aunque sean cientos de documentos con el mismo problema. Si a una
-sección le faltan varias cuentas distintas, la línea dice en general «Configure
-las cuentas contables de …». Por ejemplo:
+Al terminar la generación, el aviso dice **qué hay que configurar**, una línea por
+cada sección de Configuración Contable (con el enlace **Configurar**), aunque sean
+cientos de documentos con el mismo problema. Si a una sección le faltan varias
+cuentas distintas, la línea dice en general «Configure las cuentas contables de
+…».
+
+Debajo de cada línea, en letra pequeña, va el **detalle exacto**: qué documentos
+no se pudieron contabilizar, de qué **proveedor o cliente** son y **qué cuentas
+faltan**, agrupados por motivo. Por ejemplo:
+
+> Configure las cuentas contables de Adquisiciones de Compras. *Configurar*
+> - Facturas de Compra 002-004-000042869, 001-001-000000015 · proveedores:
+>   LATAMPARTS S.A., BRIZUELA ALMIRA FIDEL — falta: «subtotal factura de compras»,
+>   «IVA compras tarifa 15%»
+>
+> Configure las cuentas contables de Nómina. *Configurar*
+> - Egresos 001-101-000000018 — falta: «Sueldos por Pagar», «Anticipos y Descuentos»
+
+Si el detalle nombra **proveedores o clientes**, esos tienen cuentas propias: la
+cuenta que falta se asigna en su fila de *Reglas por Proveedores* o *Reglas por
+Clientes* (o en la General, que la complementa). Cuando el motivo no permite saber
+qué cuenta exacta falta, el detalle muestra solo los documentos y de quién son.
+
+Otros ejemplos de líneas:
 
 - Falta configurar la Cuenta por Pagar en Adquisiciones de Compras.
 - Falta configurar la Cuenta por Pagar en algunos proveedores con cuentas propias
@@ -459,6 +477,8 @@ tienen un documento individual con tercero que mostrar.
 
 ## Historial de cambios
 
+- **1.32** — El aviso de asientos pendientes vuelve a decir exactamente qué falta: debajo de
+  cada línea muestra los documentos, de qué proveedor o cliente son y qué cuentas faltan.
 - **1.31** — El aviso de conceptos de Ingresos/Egresos sin cuenta también se limita a los que ya
   se usan en documentos (activos o inactivos), igual que el de formas de cobro/pago.
 - **1.30** — Formas de cobro/pago y conceptos de Ingresos/Egresos **inactivos** que ya se usan
