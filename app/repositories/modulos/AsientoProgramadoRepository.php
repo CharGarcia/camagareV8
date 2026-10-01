@@ -1617,6 +1617,61 @@ class AsientoProgramadoRepository extends BaseRepository
     }
 
     /**
+     * Tabla de «Reglas por Proveedores»: los proveedores con compras o liquidaciones de compra
+     * (opcionalmente de un año), los que ya tienen cuentas propias primero, paginado y con buscador
+     * por razón social o identificación.
+     *
+     * @return array{rows: array<int, array<string, mixed>>, total: int}
+     */
+    public function listarProveedoresReglaCompra(int $idEmpresa, string $buscar, ?int $anio, int $page, int $perPage): array
+    {
+        $cond = self::COND_REGLA_COMPRA_PROVEEDOR;
+        $params = [':e' => $idEmpresa, ':e2' => $idEmpresa, ':e3' => $idEmpresa, ':e4' => $idEmpresa];
+        $fCompra = $fLiq = '';
+        if ($anio !== null) {
+            $fCompra = ' AND EXTRACT(YEAR FROM c.fecha_emision) = :anio';
+            $fLiq    = ' AND EXTRACT(YEAR FROM l.fecha_emision) = :anio2';
+            $params[':anio']  = $anio;
+            $params[':anio2'] = $anio;
+        }
+
+        $where = "p.id_empresa = :e AND p.eliminado = false
+                  AND (EXISTS (SELECT 1 FROM compras_cabecera c
+                               WHERE c.id_proveedor = p.id AND c.id_empresa = :e2 AND c.eliminado = false{$fCompra})
+                       OR EXISTS (SELECT 1 FROM liquidaciones_cabecera l
+                                  WHERE l.id_proveedor = p.id AND l.id_empresa = :e3 AND l.eliminado = false{$fLiq}))";
+        if (trim($buscar) !== '') {
+            $condTexto = \App\Helpers\FiltrosBusqueda::condicionTexto(['p.razon_social', 'p.identificacion'], $buscar, $params, 'bp');
+            if ($condTexto !== '') {
+                $where .= " AND {$condTexto}";
+            }
+        }
+
+        // :e4 solo se usa en el SELECT de la página, no en el conteo.
+        $paramsTotal = $params;
+        unset($paramsTotal[':e4']);
+        $st = $this->db->prepare("SELECT COUNT(*) FROM proveedores p WHERE {$where}");
+        $st->execute($paramsTotal);
+        $total = (int) $st->fetchColumn();
+
+        $perPage = max(1, $perPage);
+        $offset  = (max(1, $page) - 1) * $perPage;
+        $sql = "SELECT x.* FROM (
+                    SELECT p.id, p.razon_social AS nombre, p.identificacion,
+                           (SELECT COUNT(*) FROM asientos_programados ap
+                            LEFT JOIN asientos_tipo at ON at.id = ap.id_asiento_tipo
+                            WHERE ap.id_empresa = :e4 AND ap.id_referencia = p.id AND {$cond}) AS cuentas_propias
+                    FROM proveedores p
+                    WHERE {$where}
+                ) x
+                ORDER BY (x.cuentas_propias > 0) DESC, x.nombre ASC, x.id ASC
+                LIMIT {$perPage} OFFSET {$offset}";
+        $st = $this->db->prepare($sql);
+        $st->execute($params);
+        return ['rows' => $st->fetchAll(PDO::FETCH_ASSOC), 'total' => $total];
+    }
+
+    /**
      * Reglas propias del proveedor en el asiento de compras (conceptos + overrides de IVA de compra),
      * con los campos necesarios para replicarlas en otro proveedor.
      */

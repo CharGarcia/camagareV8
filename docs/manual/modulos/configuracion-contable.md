@@ -5,8 +5,8 @@ categoria: Contabilidad
 ruta_modulo: modulos/configuracion-contable
 tipo: modulo
 visibilidad: admin
-etiquetas: configuracion contable, cuentas por documento, asiento automatico, parametrizacion, ventas, compras, cierre, tipo de produccion, bien, servicio, filtro por año, periodo, listado de proveedores, listado de clientes, cobros y pagos, ingresos y egresos, forma de pago, cuenta bancaria, efectivo, misma cuenta en los dos bloques, formas hermanas, cheques y transferencias, mismo banco, numero de cuenta, nomina, rol de pagos, prestamo quirografario, prestamo hipotecario, prestamo empresa, prestamos iess, cuentas opcionales, costo de ventas, costo de venta, inventario, asiento sin costo, no sale el costo, cuenta de iva del cliente, reglas por cliente, buscar proveedor, buscar cliente, buscar ficha, filtrar fichas, muchos proveedores, cuentas faltantes, modulos que contabilizan, apagar asientos, no generar asientos, no contabilizar, desactivar contabilidad, interruptor, consignaciones sin asiento, aviso de asientos pendientes, asientos pendientes en el balance, proveedores sin cuentas, clientes sin cuentas, productos sin cuentas, pendientes de configurar, retenciones en venta, retenciones en compra, retencion de renta, no aparecen las retenciones, codigo de retencion, catalogo de retenciones sri, codigo ats, codigo del anexo, retencion mal asignada, codigo de retencion no existe, en que documento esta el error, retencion con codigo invalido, sugerencias, sugerir cuentas, proveedores que compran lo mismo, copiar cuentas de otro proveedor, misma cuenta para varios proveedores, gasolineras, proveedores parecidos, subtotal de compras, cuenta de gasto del proveedor, mostrar las demas cuentas, ver todas las cuentas, tipo de asiento no aparece, falta tipo de asiento en el selector, modulo apagado
-version: 1.26
+etiquetas: configuracion contable, cuentas por documento, asiento automatico, parametrizacion, ventas, compras, cierre, tipo de produccion, bien, servicio, filtro por año, periodo, listado de proveedores, listado de clientes, cobros y pagos, ingresos y egresos, forma de pago, cuenta bancaria, efectivo, misma cuenta en los dos bloques, formas hermanas, cheques y transferencias, mismo banco, numero de cuenta, nomina, rol de pagos, prestamo quirografario, prestamo hipotecario, prestamo empresa, prestamos iess, cuentas opcionales, costo de ventas, costo de venta, inventario, asiento sin costo, no sale el costo, cuenta de iva del cliente, reglas por cliente, buscar proveedor, buscar cliente, buscar ficha, filtrar fichas, muchos proveedores, cuentas faltantes, modulos que contabilizan, apagar asientos, no generar asientos, no contabilizar, desactivar contabilidad, interruptor, consignaciones sin asiento, aviso de asientos pendientes, asientos pendientes en el balance, proveedores sin cuentas, clientes sin cuentas, productos sin cuentas, pendientes de configurar, retenciones en venta, retenciones en compra, retencion de renta, no aparecen las retenciones, codigo de retencion, catalogo de retenciones sri, codigo ats, codigo del anexo, retencion mal asignada, codigo de retencion no existe, en que documento esta el error, retencion con codigo invalido, sugerencias, sugerir cuentas, proveedores que compran lo mismo, copiar cuentas de otro proveedor, misma cuenta para varios proveedores, gasolineras, proveedores parecidos, subtotal de compras, cuenta de gasto del proveedor, mostrar las demas cuentas, ver todas las cuentas, tipo de asiento no aparece, falta tipo de asiento en el selector, modulo apagado, personalizar asiento contable, tabla de proveedores, detalle de compras, cuenta de subtotal por proveedor
+version: 1.27
 orden: 5
 estado: activo
 ---
@@ -101,7 +101,7 @@ normalmente cambian en esa regla:
 | Regla | Se ve de entrada |
 |---|---|
 | Por Cliente (ventas o recibos) | Subtotal (cuenta de ventas) |
-| Por Proveedor | Subtotal de la compra (gasto o costo) |
+| Por Proveedor | Subtotal de la compra, en la tabla (ver *Reglas por Proveedores: la tabla*) |
 | Por Producto, Categoría, Marca o Tipo de Producción, en ventas o recibos | Subtotal, Costo de Ventas e Inventario |
 | Por Ítem de compra, Categoría o Marca, en compras | Subtotal de la compra e Inventario |
 
@@ -140,10 +140,8 @@ los conceptos que aún no tienen cuenta propia con las de la configuración
 General, para partir de esa base y ajustar solo lo que cambie. No pisa lo que ya
 esté asignado en la ficha.
 
-En las fichas de **Proveedor**, junto a ese botón está **Información de
-adquisiciones**: muestra los ítems que se le han comprado a ese proveedor (según
-el año elegido en el selector de la regla), para decidir las cuentas sin tener
-que volver a buscarlo arriba.
+Las reglas por **Proveedor** no usan tarjetas ni el paso de *Agregar*: tienen su
+propia tabla, descrita en la sección siguiente.
 
 Las reglas de un proveedor o de un cliente también se pueden ver y editar desde su propia ficha,
 en la pestaña **Contable** de los módulos *Proveedores* y *Clientes* (y de cualquier pantalla que
@@ -154,6 +152,37 @@ El botón de la papelera de la cabecera elimina **toda la configuración de esa
 entidad** de una vez: pide confirmación y, al aceptar, esa entidad vuelve a
 contabilizarse con la configuración General. Solo afecta al tipo de asiento que
 se esté viendo — si el mismo producto tiene reglas en Compras, esas se conservan.
+
+## Reglas por Proveedores: la tabla
+
+En *Adquisiciones de Compras/Servicios → Reglas por Proveedores* se listan
+**todos los proveedores con compras o liquidaciones de compra**, sin tener que
+agregarlos antes. Primero salen los que ya tienen cuentas propias y luego el
+resto, por nombre, de 25 en 25 (flechas abajo para cambiar de página).
+
+Arriba de la tabla están el **buscador** (por nombre o RUC), el selector de
+**año** (solo los proveedores con compras en ese año) y el botón **Sugerencias**.
+
+Cada fila tiene:
+
+- **Proveedor**: nombre y RUC. Si tiene más cuentas propias que la del Subtotal,
+  lo indica (*+N personalizada(s)*), y en rojo si le falta alguna cuenta.
+- **Subtotal**: la cuenta del gasto o costo de sus compras, que es la que
+  normalmente cambia de un proveedor a otro. Si está vacía, el campo muestra en
+  gris la cuenta General que se usará. Se elige escribiendo parte del código o del
+  nombre y **se guarda al instante**; al borrar el campo, se quita.
+- **Detalle de compras**: los ítems que se le han comprado (según el año elegido),
+  para decidir la cuenta.
+- **Copiar de General**: le pone de una vez las cuentas de la configuración
+  General en los conceptos que aún no tenga.
+- **Personalizar asiento contable** (debajo del nombre): despliega debajo de la
+  fila **las demás cuentas** de ese proveedor (cuenta por pagar, descuento, ICE,
+  inventario, IVA por tarifa…) en dos columnas, Debe y Haber, para cambiar las que
+  hagan falta. Ahí mismo está **Quitar todas sus cuentas**, que lo devuelve a la
+  configuración General (pide confirmación).
+
+Los proveedores sin compras no aparecen en la tabla: sus cuentas se pueden poner
+desde la pestaña **Contable** de su ficha.
 
 ## Sugerencias: proveedores que compran lo mismo
 
@@ -291,11 +320,12 @@ conciliación de esa cuenta en Control Bancario.
 
 ## Filtrar los listados por año
 
-En las reglas por **Proveedor**, **Cliente**, **Producto**, **Categoría** y
-**Marca** hay un selector de año junto al botón que abre el listado (*Proveedores
-con compras*, *Clientes con ventas*, *Ítems de compras*, *Categorías*,
-*Marcas*…). Ese selector muestra solo los años en los que la empresa tuvo
-movimientos.
+En las reglas por **Cliente**, **Producto**, **Categoría** y **Marca** hay un
+selector de año junto al botón que abre el listado (*Clientes con ventas*,
+*Ítems de compras*, *Categorías*, *Marcas*…). Ese selector muestra solo los años
+en los que la empresa tuvo movimientos. En las reglas por **Proveedor** el
+selector de año está sobre la tabla y la filtra directamente (ver *Reglas por
+Proveedores: la tabla*).
 
 Al elegir un año, el listado muestra únicamente las entidades que tuvieron
 movimiento en ese año: proveedores con compras del año, clientes con ventas del
@@ -306,7 +336,7 @@ Con **Todos los años** el listado se comporta como siempre: todas las entidades
 con movimiento (y, en el caso de categorías y marcas, todas las registradas, para
 poder configurarlas por adelantado).
 
-En todos estos listados (*Proveedores con compras*, *Clientes con ventas*,
+En todos estos listados (*Clientes con ventas*,
 productos, *Ítems de compras*, *Categorías* y *Marcas*), las entidades que
 todavía **no tienen cuentas asignadas** aparecen primero; las que ya las tienen
 (marcadas con *con cuentas*) quedan al final. Así lo pendiente de configurar
@@ -466,6 +496,10 @@ ingresos o egresos. Solo falta asignar la cuenta.
 
 ## Historial de cambios
 
+- **1.27** — *Reglas por Proveedores* pasa a ser una tabla con todos los proveedores con
+  compras: nombre, cuenta del Subtotal, *Detalle de compras* y *Copiar de General*; las
+  demás cuentas se abren con *Personalizar asiento contable*. Se quitó el formulario
+  *Nueva Asociación por Proveedor*.
 - **1.26** — Los tipos de asiento cuyos módulos están todos apagados en *Módulos que
   contabilizan* ya no aparecen en el selector de tipo de asiento.
 - **1.25** — La vista resumida se extiende a las reglas por Cliente (cuenta de ventas) y

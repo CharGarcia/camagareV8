@@ -336,40 +336,26 @@ $base = BASE_URL;
                 </button>
             </h2>
             <div id="collapseProveedores" class="accordion-collapse collapse" aria-labelledby="headingProveedores" data-bs-parent="#acordeonConfiguracion">
-                <div class="accordion-body bg-white p-4">
-                    <form onsubmit="ASIENTOPROG_agregarDim(event, 'proveedor')" class="row g-3 align-items-end mb-4 bg-light p-3 rounded-3 border shadow-sm">
-                        <div class="col-12 mb-2 border-bottom pb-2">
-                            <h6 class="text-primary mb-0 fw-bold"><i class="bi bi-building-add me-1"></i> Nueva Asociaci&oacute;n por Proveedor</h6>
+                <div class="accordion-body bg-white p-3">
+                    <!-- Tabla de proveedores con compras: nombre · cuenta del Subtotal · acciones.
+                         «Personalizar asiento contable» despliega las demás cuentas debajo de la fila.
+                         La pinta ASIENTOPROG_tablaProveedores() (configuracion_contable_modal.js). -->
+                    <div class="d-flex flex-wrap align-items-center gap-2 mb-2">
+                        <div class="input-group input-group-sm" style="max-width:420px;">
+                            <span class="input-group-text bg-white"><i class="bi bi-search"></i></span>
+                            <input type="search" class="form-control" id="provTablaBuscar" autocomplete="off" placeholder="Buscar proveedor por nombre o RUC...">
                         </div>
-                        <div class="col-md-12 mb-2">
-                            <label class="form-label small fw-bold text-muted mb-1"><i class="bi bi-search me-1"></i> Proveedor</label>
-                            <div class="d-flex gap-2 align-items-center flex-wrap">
-                                <div class="position-relative" style="flex:1 1 240px; min-width:220px; max-width:420px;">
-                                    <input type="text" class="form-control form-control-sm bg-white text-dark" id="dim_search_proveedor" placeholder="Escriba, o use &quot;Proveedores con compras&quot;..." autocomplete="off" required>
-                                    <input type="hidden" id="dim_id_proveedor" required>
-                                    <div class="list-group sugerencias-flotantes" id="dim_sug_proveedor" style="display: none;"></div>
-                                </div>
-                                <select id="dim_anio_proveedor" class="form-select form-select-sm" style="width:auto;" title="A&ntilde;o de compras">
-                                    <option value="">Todos los a&ntilde;os</option>
-                                </select>
-                                <button type="button" class="btn btn-outline-secondary btn-sm text-nowrap" onclick="ASIENTOPROG_abrirModalEntidades('proveedor')">
-                                    <i class="bi bi-truck me-1"></i> Proveedores con compras
-                                </button>
-                                <button type="button" class="btn btn-outline-primary btn-sm text-nowrap" onclick="ASIENTOPROG_abrirModalItems('proveedor')">
-                                    <i class="bi bi-box-seam me-1"></i> Detalle de compras o servicios de este proveedor
-                                </button>
-                                <button type="button" class="btn btn-outline-success btn-sm text-nowrap" onclick="ASIENTOPROG_abrirSugerenciasProveedor()" title="Proveedores sin cuentas que compran lo mismo que un proveedor ya configurado">
-                                    <i class="bi bi-lightbulb me-1"></i> Sugerencias
-                                    <span class="badge bg-success ms-1 d-none" id="sugProvContador"></span>
-                                </button>
-                            </div>
-                        </div>
-                        <div class="col-12" id="dim_faltantes_proveedor"></div>
-                        <div class="col-12 mt-4 text-center">
-                            <button type="submit" class="btn btn-primary btn-sm fw-bold px-4 shadow-sm"><i class="bi bi-plus-lg me-1"></i> Agregar</button>
-                        </div>
-                    </form>
-                    <div class="row g-2" id="dimCards_proveedor"></div>
+                        <select id="dim_anio_proveedor" class="form-select form-select-sm" style="width:auto;" title="A&ntilde;o de compras">
+                            <option value="">Todos los a&ntilde;os</option>
+                        </select>
+                        <button type="button" class="btn btn-outline-success btn-sm text-nowrap" onclick="ASIENTOPROG_abrirSugerenciasProveedor()" title="Proveedores sin cuentas que compran lo mismo que un proveedor ya configurado">
+                            <i class="bi bi-lightbulb me-1"></i> Sugerencias
+                            <span class="badge bg-success ms-1 d-none" id="sugProvContador"></span>
+                        </button>
+                        <span class="small text-muted ms-auto" id="provTablaContador"></span>
+                    </div>
+                    <div id="dimCards_proveedor"></div>
+                    <div id="provTablaPaginacion" class="d-flex justify-content-center align-items-center gap-2 mt-2"></div>
                 </div>
             </div>
         </div>

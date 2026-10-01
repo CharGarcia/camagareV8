@@ -1095,6 +1095,12 @@
             } catch (e) { /* noop */ }
         }
 
+        // Proveedores: tabla de todos los proveedores con compras (no tarjetas de los ya agregados).
+        if (tipo === 'proveedor') {
+            await ASIENTOPROG_cargarTablaProveedores();
+            return;
+        }
+
         // Los campos de cuenta ya no viven en el formulario de alta: se editan dentro de la
         // tarjeta de cada entidad (ver ASIENTOPROG_tarjetasDim), que es donde también se consultan.
 
@@ -1300,6 +1306,241 @@
         }
     }
 
+    /**
+     * Fila EDITABLE de un concepto: el input trae la cuenta propia si la tiene; si no, el marcador
+     * de posición dice qué pasa hoy con ese concepto (lo cubre la General, un respaldo, o nadie).
+     * Se guarda al vuelo al elegir cuenta y se quita al vaciarlo (ASIENTOPROG_vincularCuentasTarjetas).
+     * opts.extra = fila oculta en la vista resumida; opts.sinEtiqueta = solo el campo (celda de tabla).
+     */
+    function ASIENTOPROG_htmlLineaConcepto(tipo, c, propia, idx, opts = {}) {
+        const key       = ASIENTOPROG_dimKey(c);
+        const inputId   = `dimc_${tipo}_${idx}_${key}`;
+        const valor     = propia ? `${propia.cuenta_codigo} - ${propia.cuenta_nombre}` : '';
+        const general   = c.cuenta_codigo ? `${c.cuenta_codigo} - ${c.cuenta_nombre || ''}` : '';
+        // Concepto opcional sin cuenta en General: su valor va al concepto de respaldo, no falta.
+        const marcador  = general ? `General: ${general}` : (c.respaldo_concepto ? `usa ${c.respaldo_concepto}` : 'sin cuenta');
+        const claseSin  = (!propia && !c.id_cuenta && !c.respaldo_concepto) ? ' border-danger' : '';
+        const etiqueta  = opts.sinEtiqueta ? ''
+            : `<span class="small text-truncate" style="flex:0 0 42%;" title="${ASIENTOPROG_esc(c.concepto)}">${ASIENTOPROG_esc(c.concepto)}</span>`;
+        return `
+            <div class="d-flex align-items-center gap-1${opts.sinEtiqueta ? '' : ' border-bottom py-1'}${opts.extra ? ' cc-extra' : ''}">
+                ${etiqueta}
+                <div class="position-relative flex-grow-1">
+                    <input type="text" class="form-control form-control-sm py-0 bg-white text-dark${claseSin}" style="height:26px; font-size:.78rem;"
+                           id="${inputId}" value="${ASIENTOPROG_esc(valor)}" placeholder="${ASIENTOPROG_esc(marcador)}" autocomplete="off"
+                           title="${ASIENTOPROG_esc(valor || marcador)}"
+                           data-tipo="${tipo}" data-idx="${idx}"
+                           data-asiento-tipo="${c.id_asiento_tipo}"
+                           data-tarifa-iva="${ASIENTOPROG_esConceptoIva(c) ? c.id_referencia : ''}"
+                           data-tipo-cuenta="${ASIENTOPROG_esc(c.tipo_cuenta || '')}"
+                           data-regla="${propia ? propia.id : ''}">
+                    <div class="list-group sugerencias-flotantes" id="${inputId}_sug" style="display:none;"></div>
+                </div>
+                <button type="button" class="btn btn-link text-danger p-0 border-0 lh-1${propia ? '' : ' invisible'}"
+                        onclick="ASIENTOPROG_eliminarDim(${propia ? propia.id : 0}, '${tipo}')" title="Quitar esta cuenta">
+                    <i class="bi bi-trash small"></i>
+                </button>
+            </div>`;
+    }
+
+    // ── Reglas por Proveedores: TABLA ─────────────────────────────────────────────────────────
+    // Una fila por proveedor con compras: nombre (y debajo «Personalizar asiento contable»), la
+    // cuenta del Subtotal y los botones de detalle de compras / copiar de General. Personalizar
+    // despliega debajo de la fila las demás cuentas (Debe | Haber). Cada fila lleva los mismos
+    // data-* que las tarjetas (data-dim-card, data-ref-id), así que guardar, quitar, copiar de
+    // General y el detalle de compras usan las mismas funciones que las otras reglas.
+    const ASIENTOPROG_provTabla = { page: 1, q: '', abiertos: new Set(), timer: null };
+
+    async function ASIENTOPROG_cargarTablaProveedores() {
+        const cont = document.getElementById('dimCards_proveedor');
+        const tipoAsiento = (document.getElementById('tipoAsientoSelector') || {}).value || '';
+        if (!cont || !tipoAsiento) return;
+
+        ASIENTOPROG_vincularBarraProveedores();
+        const st = ASIENTOPROG_provTabla;
+        const anio = ASIENTOPROG_anioProveedor();
+        if (!cont.querySelector('[data-dim-card]')) {
+            cont.innerHTML = '<div class="text-center py-3 text-muted small"><span class="spinner-border spinner-border-sm me-1"></span> Cargando proveedores...</div>';
+        }
+
+        try {
+            const [resLista, resReglas] = await Promise.all([
+                fetch(`${API_PROG}/getProveedoresReglaAjax?q=${encodeURIComponent(st.q)}&anio=${encodeURIComponent(anio)}&page=${st.page}`).then(r => r.json()),
+                fetch(`${API_PROG}/cargarReglasDimensionAjax?tipo_asiento=${encodeURIComponent(tipoAsiento)}&tipo_referencia=proveedor`).then(r => r.json()),
+            ]);
+            if (!resLista.ok) throw new Error(resLista.error || 'No se pudo cargar el listado.');
+            if (!resReglas.ok) throw new Error(resReglas.error || 'No se pudieron cargar las cuentas.');
+
+            // La página pedida ya no existe (p. ej. tras buscar): volver a la última.
+            if (resLista.page > resLista.pages && resLista.total > 0) {
+                st.page = resLista.pages;
+                return ASIENTOPROG_cargarTablaProveedores();
+            }
+
+            cont.innerHTML = ASIENTOPROG_tablaProveedores(resLista.data || [], resReglas.data || []);
+            ASIENTOPROG_vincularCuentasTarjetas('proveedor');
+
+            const contador = document.getElementById('provTablaContador');
+            if (contador) contador.textContent = `${resLista.total} proveedor(es) con compras${anio ? ` en ${anio}` : ''}`;
+            ASIENTOPROG_paginacionProveedores(resLista.page, resLista.pages);
+            ASIENTOPROG_contarSugerenciasProveedor();
+        } catch (e) {
+            console.error(e);
+            cont.innerHTML = `<div class="text-center py-3 text-danger small">${ASIENTOPROG_esc(e.message || 'Error de conexión al cargar datos.')}</div>`;
+        }
+    }
+
+    /** Buscador y año de la barra superior (se enlazan una sola vez). */
+    function ASIENTOPROG_vincularBarraProveedores() {
+        const st = ASIENTOPROG_provTabla;
+        const buscar = document.getElementById('provTablaBuscar');
+        if (buscar && !buscar.dataset.bound) {
+            buscar.dataset.bound = '1';
+            buscar.addEventListener('keydown', (e) => { if (e.key === 'Enter') e.preventDefault(); });
+            buscar.addEventListener('input', () => {
+                clearTimeout(st.timer);
+                st.timer = setTimeout(() => {
+                    st.q = buscar.value.trim();
+                    st.page = 1;
+                    ASIENTOPROG_cargarTablaProveedores();
+                }, 350);
+            });
+        }
+        const anio = document.getElementById('dim_anio_proveedor');
+        if (anio && !anio.dataset.boundTabla) {
+            anio.dataset.boundTabla = '1';
+            anio.addEventListener('change', () => { st.page = 1; ASIENTOPROG_cargarTablaProveedores(); });
+        }
+    }
+
+    function ASIENTOPROG_paginacionProveedores(page, pages) {
+        const cont = document.getElementById('provTablaPaginacion');
+        if (!cont) return;
+        if (pages <= 1) { cont.innerHTML = ''; return; }
+        cont.innerHTML = `
+            <button type="button" class="btn btn-outline-secondary btn-sm py-0" ${page <= 1 ? 'disabled' : ''} data-prov-pag="${page - 1}"><i class="bi bi-chevron-left"></i></button>
+            <span class="small text-muted">Página ${page} de ${pages}</span>
+            <button type="button" class="btn btn-outline-secondary btn-sm py-0" ${page >= pages ? 'disabled' : ''} data-prov-pag="${page + 1}"><i class="bi bi-chevron-right"></i></button>`;
+        cont.querySelectorAll('[data-prov-pag]').forEach(b => b.addEventListener('click', () => {
+            ASIENTOPROG_provTabla.page = parseInt(b.dataset.provPag, 10) || 1;
+            ASIENTOPROG_cargarTablaProveedores();
+            document.getElementById('collapseProveedores')?.scrollIntoView({ block: 'start', behavior: 'smooth' });
+        }));
+    }
+
+    /** «Personalizar asiento contable»: despliega/oculta las demás cuentas debajo de la fila. */
+    window.ASIENTOPROG_alternarPersonalizarProveedor = function (btn, idProveedor) {
+        const fila = btn.closest('[data-dim-card]');
+        const panel = fila ? fila.querySelector('[data-prov-detalle]') : null;
+        if (!panel) return;
+        const abrir = panel.classList.contains('d-none');
+        panel.classList.toggle('d-none', !abrir);
+        btn.querySelector('i.bi')?.classList.replace(abrir ? 'bi-chevron-down' : 'bi-chevron-up', abrir ? 'bi-chevron-up' : 'bi-chevron-down');
+        if (abrir) ASIENTOPROG_provTabla.abiertos.add(String(idProveedor));
+        else ASIENTOPROG_provTabla.abiertos.delete(String(idProveedor));
+    };
+
+    function ASIENTOPROG_tablaProveedores(proveedores, filas) {
+        if (!proveedores.length) {
+            return `<div class="text-center py-4 text-muted small"><i class="bi bi-info-circle me-1"></i> ${ASIENTOPROG_provTabla.q
+                ? 'Ningún proveedor coincide con la búsqueda.'
+                : 'No hay proveedores con compras registradas.'}</div>`;
+        }
+        const tipo = 'proveedor';
+        const esc = ASIENTOPROG_esc;
+        const conceptos = window.CONCEPTOS_CONFIGURADOS || [];
+        const principales = ASIENTOPROG_principalesDe(tipo) || ['SUBTOTALFACTURACOMPRA'];
+        const cSubtotal = conceptos.find(c => principales.includes(c.codigo)) || null;
+        const otros = conceptos.filter(c => c !== cSubtotal);
+        const esIvaFila = (f) => parseInt(f.id_asiento_tipo) === 0 && f.codigo_tarifa_iva != null;
+        const esDebe = (x) => ((x.debe_haber || 'debe') + '').toLowerCase() === 'debe';
+
+        const porProveedor = new Map();
+        filas.forEach(f => {
+            const k = String(f.id_referencia);
+            if (!porProveedor.has(k)) porProveedor.set(k, []);
+            porProveedor.get(k).push(f);
+        });
+
+        const columna = (titulo, fondo, color, icono, html) => `
+            <div class="col-md-6">
+                <div class="fw-bold small mb-1 px-2 py-1 rounded" style="background:${fondo}; color:${color};">
+                    <i class="bi ${icono} me-1"></i>${titulo}
+                </div>
+                ${html || '<div class="small text-muted py-1">—</div>'}
+            </div>`;
+
+        const cuerpo = proveedores.map((p, idx) => {
+            const reglas = porProveedor.get(String(p.id)) || [];
+            const propiaDe = (c) => parseInt(c.id_asiento_tipo) > 0
+                ? reglas.find(f => parseInt(f.id_asiento_tipo) === parseInt(c.id_asiento_tipo))
+                : reglas.find(f => esIvaFila(f) && String(f.codigo_tarifa_iva) === String(c.id_referencia));
+            const faltan = conceptos.filter(c => !c.id_cuenta && !propiaDe(c) && !c.respaldo_concepto).length;
+            const propiasOtros = otros.filter(c => propiaDe(c)).length;
+            const abierto = ASIENTOPROG_provTabla.abiertos.has(String(p.id));
+
+            const celdaSubtotal = cSubtotal
+                ? ASIENTOPROG_htmlLineaConcepto(tipo, cSubtotal, propiaDe(cSubtotal), idx, { sinEtiqueta: true })
+                : '<span class="small text-muted">Configure primero la General.</span>';
+            const lineas = (lado) => otros.filter(c => (lado === 'debe') === esDebe(c))
+                .map(c => ASIENTOPROG_htmlLineaConcepto(tipo, c, propiaDe(c), idx)).join('');
+
+            const badges = [
+                propiasOtros ? `<span class="badge bg-primary bg-opacity-10 text-primary border border-primary border-opacity-25 ms-1" title="Cuentas propias además del Subtotal">+${propiasOtros} personalizada(s)</span>` : '',
+                faltan ? `<span class="badge bg-danger bg-opacity-10 text-danger border border-danger border-opacity-25 ms-1" title="Conceptos sin cuenta ni aquí ni en la configuración General">faltan ${faltan}</span>` : '',
+            ].join('');
+
+            return `
+            <div class="border-bottom" data-dim-card="${idx}" data-ref-id="${esc(String(p.id))}" data-ref-texto="" data-nombre="${esc(p.nombre)}">
+                <div class="row g-2 align-items-center py-2 px-2">
+                    <div class="col-md-4" style="min-width:0;">
+                        <div class="fw-bold text-dark text-truncate small" title="${esc(p.nombre)}">${esc(p.nombre)}</div>
+                        <div class="text-muted" style="font-size:.72rem;">${esc(p.identificacion || '')}${badges}</div>
+                        <button type="button" class="btn btn-link btn-sm p-0 text-decoration-none" style="font-size:.75rem;"
+                                onclick="ASIENTOPROG_alternarPersonalizarProveedor(this, ${parseInt(p.id, 10)})">
+                            <i class="bi ${abierto ? 'bi-chevron-up' : 'bi-chevron-down'} me-1"></i>Personalizar asiento contable
+                        </button>
+                    </div>
+                    <div class="col-md-5">${celdaSubtotal}</div>
+                    <div class="col-md-3 d-flex flex-wrap gap-1 justify-content-md-end">
+                        <button type="button" class="btn btn-outline-primary btn-sm py-0" style="font-size:.75rem;"
+                                onclick="ASIENTOPROG_abrirModalItemsTarjeta('${tipo}', ${idx})" title="Detalle de compras o servicios de este proveedor">
+                            <i class="bi bi-box-seam me-1"></i>Detalle de compras
+                        </button>
+                        <button type="button" class="btn btn-outline-secondary btn-sm py-0" style="font-size:.75rem;"
+                                onclick="ASIENTOPROG_copiarDeGeneral('${tipo}', ${idx})" title="Copia las cuentas de la configuración General que aún no tenga">
+                            <i class="bi bi-clipboard-check me-1"></i>Copiar de General
+                        </button>
+                    </div>
+                </div>
+                <div class="px-2 pb-2${abierto ? '' : ' d-none'}" data-prov-detalle="1">
+                    <div class="border rounded p-2 bg-light">
+                        <div class="row g-2">
+                            ${columna('Debe',  '#E6F1FB', '#0C447C', 'bi-arrow-down-right', lineas('debe'))}
+                            ${columna('Haber', '#FAEEDA', '#633806', 'bi-arrow-up-right',   lineas('haber'))}
+                        </div>
+                        <div class="text-end mt-2">
+                            <button type="button" class="btn btn-outline-danger btn-sm py-0${reglas.length ? '' : ' d-none'}" style="font-size:.75rem;"
+                                    onclick="ASIENTOPROG_eliminarConfiguracionEntidad('${tipo}', ${idx})" title="Quitar todas las cuentas propias de este proveedor">
+                                <i class="bi bi-trash me-1"></i>Quitar todas sus cuentas
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>`;
+        }).join('');
+
+        return `
+            <div class="border rounded">
+                <div class="row g-2 px-2 py-2 bg-light border-bottom small fw-bold text-secondary d-none d-md-flex">
+                    <div class="col-md-4">Proveedor</div>
+                    <div class="col-md-5">${esc(cSubtotal ? cSubtotal.concepto : 'Subtotal')}</div>
+                    <div class="col-md-3 text-md-end">Acciones</div>
+                </div>
+                ${cuerpo}
+            </div>`;
+    }
+
     function ASIENTOPROG_tarjetasDim(tipo, filas) {
         const conceptos = (window.CONCEPTOS_CONFIGURADOS || []);
         // Clave de agrupación: el id de la entidad (o su nombre en los ítems de compra, que no
@@ -1327,38 +1568,8 @@
             if (mismaQueNueva) grupos.get(clave).nombre = f.dimension_nombre || nueva.nombre;
         });
 
-        // Fila EDITABLE de un concepto dentro de la tarjeta: el input trae la cuenta propia si la
-        // tiene; si no, el marcador de posición dice qué pasa hoy con ese concepto (lo cubre la
-        // General, o no lo cubre nadie). Se guarda al vuelo al elegir cuenta y se quita al vaciarlo.
-        const lineaConcepto = (c, propia, idx, extra = false) => {
-            const key       = ASIENTOPROG_dimKey(c);
-            const inputId   = `dimc_${tipo}_${idx}_${key}`;
-            const valor     = propia ? `${propia.cuenta_codigo} - ${propia.cuenta_nombre}` : '';
-            const general   = c.cuenta_codigo ? `${c.cuenta_codigo} - ${c.cuenta_nombre || ''}` : '';
-            // Concepto opcional sin cuenta en General: su valor va al concepto de respaldo, no falta.
-            const marcador  = general ? `General: ${general}` : (c.respaldo_concepto ? `usa ${c.respaldo_concepto}` : 'sin cuenta');
-            const claseSin  = (!propia && !c.id_cuenta && !c.respaldo_concepto) ? ' border-danger' : '';
-            return `
-            <div class="d-flex align-items-center gap-1 border-bottom py-1${extra ? ' cc-extra' : ''}">
-                <span class="small text-truncate" style="flex:0 0 42%;" title="${ASIENTOPROG_esc(c.concepto)}">${ASIENTOPROG_esc(c.concepto)}</span>
-                <div class="position-relative flex-grow-1">
-                    <input type="text" class="form-control form-control-sm py-0 bg-white text-dark${claseSin}" style="height:26px; font-size:.78rem;"
-                           id="${inputId}" value="${ASIENTOPROG_esc(valor)}" placeholder="${ASIENTOPROG_esc(marcador)}" autocomplete="off"
-                           title="${ASIENTOPROG_esc(valor || marcador)}"
-                           data-tipo="${tipo}" data-idx="${idx}"
-                           data-asiento-tipo="${c.id_asiento_tipo}"
-                           data-tarifa-iva="${ASIENTOPROG_esConceptoIva(c) ? c.id_referencia : ''}"
-                           data-tipo-cuenta="${ASIENTOPROG_esc(c.tipo_cuenta || '')}"
-                           data-regla="${propia ? propia.id : ''}">
-                    <div class="list-group sugerencias-flotantes" id="${inputId}_sug" style="display:none;"></div>
-                </div>
-                <button type="button" class="btn btn-link text-danger p-0 border-0 lh-1${propia ? '' : ' invisible'}"
-                        onclick="ASIENTOPROG_eliminarDim(${propia ? propia.id : 0}, '${tipo}')" title="Quitar esta cuenta">
-                    <i class="bi bi-trash small"></i>
-                </button>
-            </div>`;
-        };
-
+        // Fila EDITABLE de un concepto dentro de la tarjeta (ver ASIENTOPROG_htmlLineaConcepto).
+        const lineaConcepto = (c, propia, idx, extra = false) => ASIENTOPROG_htmlLineaConcepto(tipo, c, propia, idx, { extra });
         const columna = (titulo, fondo, color, icono, filasHtml, clases = '') => `
             <div class="col-6 ${clases}">
                 <div class="fw-bold small mb-1 px-2 py-1 rounded" style="background:${fondo}; color:${color};">
@@ -2021,9 +2232,8 @@
     window.ASIENTOPROG_abrirModalItemsTarjeta = function (tipo, idx) {
         const ref  = ASIENTOPROG_refDeTarjeta(tipo, idx);
         const card = document.querySelector(`#dimCards_${tipo} [data-dim-card="${idx}"]`);
-        const nombreEl = card ? card.querySelector('.card-header .fw-bold') : null;
         if (!ref) return;
-        ASIENTOPROG_abrirModalItems(tipo, { id: ref.id, nombre: nombreEl ? nombreEl.textContent.trim() : '' });
+        ASIENTOPROG_abrirModalItems(tipo, { id: ref.id, nombre: ASIENTOPROG_nombreDeTarjeta(card) });
     };
 
     /**
@@ -2123,6 +2333,13 @@
         });
     }
 
+    /** Nombre de la entidad de una tarjeta (o de una fila de la tabla de proveedores, data-nombre). */
+    function ASIENTOPROG_nombreDeTarjeta(card) {
+        if (!card) return '';
+        if (card.dataset.nombre) return card.dataset.nombre;
+        return (card.querySelector('.card-header .fw-bold')?.textContent || '').trim();
+    }
+
     /** Datos de la entidad (id o nombre) a la que pertenece una tarjeta. */
     function ASIENTOPROG_refDeTarjeta(tipo, idx) {
         const card = document.querySelector(`#dimCards_${tipo} [data-dim-card="${idx}"]`);
@@ -2184,7 +2401,7 @@
         if (!tipoAsiento || !ref) return;
 
         const card = document.querySelector(`#dimCards_${tipo} [data-dim-card="${idx}"]`);
-        const nombre = card ? (card.querySelector('.card-header .fw-bold')?.textContent || '') : '';
+        const nombre = ASIENTOPROG_nombreDeTarjeta(card);
 
         if (window.Swal) {
             const conf = await Swal.fire({

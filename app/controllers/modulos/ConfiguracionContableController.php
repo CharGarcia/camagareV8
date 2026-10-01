@@ -1313,6 +1313,39 @@ class ConfiguracionContableController extends BaseModuloController
     }
 
     /**
+     * Página de la tabla «Reglas por Proveedores»: proveedores con compras/liquidaciones, con
+     * buscador (`q`), año (`anio`) y paginación (`page`). Las cuentas de cada uno se leen aparte con
+     * cargarReglasDimensionAjax.
+     */
+    public function getProveedoresReglaAjax(): void
+    {
+        $this->requireLeer();
+        header('Content-Type: application/json');
+
+        $idEmpresa = (int) $_SESSION['id_empresa'];
+        $q    = trim((string) ($_GET['q'] ?? ''));
+        $anio = trim((string) ($_GET['anio'] ?? ''));
+        $page = max(1, (int) ($_GET['page'] ?? 1));
+        $perPage = 25;
+
+        try {
+            $res = $this->repository->listarProveedoresReglaCompra($idEmpresa, $q, ctype_digit($anio) ? (int) $anio : null, $page, $perPage);
+            echo json_encode([
+                'ok'       => true,
+                'data'     => $res['rows'],
+                'total'    => $res['total'],
+                'page'     => $page,
+                'per_page' => $perPage,
+                'pages'    => max(1, (int) ceil($res['total'] / $perPage)),
+            ]);
+        } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
+            echo json_encode(['ok' => false, 'error' => 'No se pudo cargar el listado de proveedores.']);
+        }
+        exit;
+    }
+
+    /**
      * Sugerencias de «Reglas por Proveedores»: proveedores sin cuentas propias que compran lo mismo
      * que un proveedor ya configurado. Acepta `anio` (opcional), igual que el resto de la sección.
      */
