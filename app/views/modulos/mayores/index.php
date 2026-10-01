@@ -11,128 +11,10 @@
 $base = BASE_URL;
 $urlBaseReporte = rtrim($base, '/') . '/' . ltrim($rutaModulo ?? '', '/');
 ?>
-<div class="card border-0 shadow-sm rounded-4 mb-4">
-    <div class="card-header bg-white border-bottom-0 pt-4 pb-2 px-4 d-flex justify-content-between align-items-center">
-        <h5 class="mb-0 fw-bold" style="font-family: 'Inter', sans-serif;"><i class="bi bi-journal-text text-primary me-2"></i><?= htmlspecialchars($titulo) ?></h5>
-    </div>
-
-    <!-- Filtros -->
-    <div class="px-4 pb-3 pt-2 bg-light bg-opacity-50 border-bottom border-top">
-        <form id="formFiltros" class="row g-2 align-items-end" onsubmit="event.preventDefault(); generarReporte();">
-            <div class="col position-relative">
-                <label class="form-label small fw-bold text-muted mb-1">Cuenta</label>
-                <input type="text" class="form-control form-control-sm shadow-none" id="filtro_cuenta_texto" placeholder="Código o nombre" autocomplete="off">
-                <input type="hidden" id="filtro_cuenta_id" value="">
-                <div id="dropdown_cuenta" class="list-group position-absolute shadow-sm" style="z-index:1050; max-height:220px; overflow:auto; display:none; width:100%;"></div>
-            </div>
-            <div class="col">
-                <label class="form-label small fw-bold text-muted mb-1">Tipo Tercero</label>
-                <select class="form-select form-select-sm shadow-none" id="filtro_tipo_entidad" onchange="onTipoEntidadChange()">
-                    <option value="">Todos</option>
-                    <option value="cliente">Cliente</option>
-                    <option value="proveedor">Proveedor</option>
-                    <option value="empleado">Empleado</option>
-                </select>
-            </div>
-            <div class="col position-relative">
-                <label class="form-label small fw-bold text-muted mb-1">Tercero</label>
-                <input type="text" class="form-control form-control-sm shadow-none" id="filtro_tercero_texto" placeholder="Seleccione un tipo primero" autocomplete="off" disabled>
-                <input type="hidden" id="filtro_tercero_id" value="">
-                <div id="dropdown_tercero" class="list-group position-absolute shadow-sm" style="z-index:1050; max-height:220px; overflow:auto; display:none; width:100%;"></div>
-            </div>
-            <div class="col">
-                <label class="form-label small fw-bold text-muted mb-1">Año</label>
-                <select class="form-select form-select-sm shadow-none" id="filtro_anio" onchange="actualizarFechas()">
-                    <?php foreach ($aniosDisponibles as $anio): ?>
-                        <option value="<?= $anio ?>"><?= $anio ?></option>
-                    <?php endforeach; ?>
-                </select>
-            </div>
-            <div class="col">
-                <label class="form-label small fw-bold text-muted mb-1">Mes</label>
-                <select class="form-select form-select-sm shadow-none" id="filtro_mes" onchange="actualizarFechas()">
-                    <option value="0">Todos</option>
-                    <option value="1">Enero</option>
-                    <option value="2">Febrero</option>
-                    <option value="3">Marzo</option>
-                    <option value="4">Abril</option>
-                    <option value="5">Mayo</option>
-                    <option value="6">Junio</option>
-                    <option value="7">Julio</option>
-                    <option value="8">Agosto</option>
-                    <option value="9">Septiembre</option>
-                    <option value="10">Octubre</option>
-                    <option value="11">Noviembre</option>
-                    <option value="12">Diciembre</option>
-                </select>
-            </div>
-            <div class="col">
-                <label class="form-label small fw-bold text-muted mb-1">C. Costo</label>
-                <select class="form-select form-select-sm shadow-none" id="filtro_centro_costo">
-                    <option value="">Todos</option>
-                    <?php foreach ($centrosCosto ?? [] as $cc): ?>
-                        <option value="<?= $cc['id'] ?>"><?= htmlspecialchars($cc['codigo'] . ' - ' . $cc['nombre']) ?></option>
-                    <?php endforeach; ?>
-                </select>
-            </div>
-            <div class="col">
-                <label class="form-label small fw-bold text-muted mb-1">Proyecto</label>
-                <select class="form-select form-select-sm shadow-none" id="filtro_proyecto">
-                    <option value="">Todos</option>
-                    <?php foreach ($proyectos ?? [] as $py): ?>
-                        <option value="<?= $py['id'] ?>"><?= htmlspecialchars($py['codigo'] . ' - ' . $py['nombre']) ?></option>
-                    <?php endforeach; ?>
-                </select>
-            </div>
-            <div class="col">
-                <label class="form-label small fw-bold text-muted mb-1">Fecha Inicio</label>
-                <input type="date" class="form-control form-control-sm shadow-none" id="fecha_inicio" name="fecha_inicio" value="<?= htmlspecialchars($fechaInicio) ?>" required>
-            </div>
-            <div class="col">
-                <label class="form-label small fw-bold text-muted mb-1">Fecha Fin</label>
-                <input type="date" class="form-control form-control-sm shadow-none" id="fecha_fin" name="fecha_fin" value="<?= htmlspecialchars($fechaFin) ?>" required>
-            </div>
-            <div class="col">
-                <button type="submit" class="btn btn-primary btn-sm px-3 shadow-sm w-100" id="btnGenerar">
-                    <i class="bi bi-search me-1"></i> Generar
-                </button>
-            </div>
-        </form>
-    </div>
-
-    <!-- Buscador en pantalla + Exportación -->
-    <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 bg-light px-3 py-2 border-bottom">
-        <div class="position-relative" style="max-width: 320px; width: 100%;">
-            <i class="bi bi-search position-absolute text-muted" style="left: 10px; top: 50%; transform: translateY(-50%); font-size: 0.8rem; pointer-events: none;"></i>
-            <input type="text" class="form-control form-control-sm shadow-none ps-4" id="buscadorMayorTexto"
-                   placeholder="Buscar en el reporte (cuenta, tercero, comprobante, glosa...)"
-                   autocomplete="off" oninput="filtrarMayorEnPantalla()">
-        </div>
-        <div class="btn-group btn-group-sm shadow-sm">
-            <button type="button" class="btn btn-white border px-3" title="Descargar PDF" onclick="exportar('pdf')">
-                <i class="bi bi-file-earmark-pdf text-danger"></i> PDF
-            </button>
-            <button type="button" class="btn btn-white border px-3" title="Descargar Excel" onclick="exportar('excel')">
-                <i class="bi bi-file-earmark-excel text-success"></i> Excel
-            </button>
-        </div>
-    </div>
-
-    <!-- Contenido del reporte -->
-    <div class="px-3 py-3" style="min-height: 400px;">
-        <div id="loader-reporte" class="text-center py-5 d-none">
-            <div class="spinner-border text-primary" role="status">
-                <span class="visually-hidden">Cargando...</span>
-            </div>
-            <p class="text-muted mt-2 small">Generando reporte...</p>
-        </div>
-        <div id="content-reporte" class="table-responsive">
-            <p class="text-muted text-center py-5 small"><i class="bi bi-info-circle me-1"></i> Seleccione el rango de fechas y presione Generar.</p>
-        </div>
-    </div>
-</div>
+<script>document.body.classList.add('cmg-no-app-shell');</script>
 
 <style>
+    .mayores-scroll { overflow-x:auto; }
     .tabla-reporte { width: 100%; border-collapse: collapse; font-family: 'Inter', sans-serif; font-size: 0.85rem; }
     .tabla-reporte th { padding: 8px 10px; background-color: #f8f9fa; border-bottom: 2px solid #dee2e6; color: #495057; font-weight: 600; text-transform: uppercase; font-size: 0.72rem; }
     .tabla-reporte td { padding: 5px 10px; border-bottom: 1px solid #e9ecef; color: #212529; }
@@ -141,7 +23,220 @@ $urlBaseReporte = rtrim($base, '/') . '/' . ltrim($rutaModulo ?? '', '/');
     .tr-total td { font-weight: bold; background-color: rgba(13, 110, 253, 0.05); color: #0d6efd; border-top: 2px solid #dee2e6; }
     .tr-total-general td { font-weight: 800; background-color: #f8f9fa; border-top: 2px solid #343a40; font-size: 0.95rem; }
     .monto-negativo { color: #dc3545; }
+    /* Altura idéntica y explícita para todos los controles de filtros (selects, inputs, buscadores y botones),
+       para que queden alineados sin depender de que cada variante -sm de Bootstrap renderice igual. */
+    #formFiltros .form-select,
+    #formFiltros .form-control,
+    #formFiltros .input-group-text,
+    #formFiltros .btn { height:28px; font-size:.75rem; }
+    /* La tabla se extiende libremente hacia abajo; hace scroll la página, no un contenedor interno */
+    @media (max-width: 767.98px) {
+        #modulo-mayores .mayores-scroll { max-height:none !important; height:auto !important; overflow-y:visible !important; }
+    }
 </style>
+
+<div class="container-fluid pt-0 pb-3 px-0 px-md-3" id="modulo-mayores">
+
+    <!-- ── Tarjeta de control fija (título + filtros + KPIs) ── -->
+    <div class="card cmg-control-card border-0 shadow-sm rounded-3 mb-3">
+        <div class="card-header bg-white border-bottom py-2 px-3">
+            <h5 class="mb-0 fw-bold"><i class="bi bi-journal-text me-2 text-primary"></i><?= htmlspecialchars($titulo) ?></h5>
+        </div>
+        <div class="card-body p-3">
+            <form id="formFiltros" onsubmit="event.preventDefault(); generarReporte();" class="d-flex flex-wrap align-items-start gap-2">
+
+                <!-- Año -->
+                <div>
+                    <label class="form-label small fw-bold mb-1 d-block text-muted text-uppercase" style="font-size:.65rem;">Año</label>
+                    <select class="form-select form-select-sm shadow-none border" id="filtro_anio" style="width:85px;" onchange="actualizarFechas()">
+                        <?php foreach ($aniosDisponibles as $anio): ?>
+                            <option value="<?= $anio ?>"><?= $anio ?></option>
+                        <?php endforeach; ?>
+                    </select>
+                </div>
+
+                <!-- Mes -->
+                <div>
+                    <label class="form-label small fw-bold mb-1 d-block text-muted text-uppercase" style="font-size:.65rem;">Mes</label>
+                    <select class="form-select form-select-sm shadow-none border" id="filtro_mes" style="width:115px;" onchange="actualizarFechas()">
+                        <option value="0">Todos</option>
+                        <option value="1">Enero</option>
+                        <option value="2">Febrero</option>
+                        <option value="3">Marzo</option>
+                        <option value="4">Abril</option>
+                        <option value="5">Mayo</option>
+                        <option value="6">Junio</option>
+                        <option value="7">Julio</option>
+                        <option value="8">Agosto</option>
+                        <option value="9">Septiembre</option>
+                        <option value="10">Octubre</option>
+                        <option value="11">Noviembre</option>
+                        <option value="12">Diciembre</option>
+                    </select>
+                </div>
+
+                <!-- Fecha Inicio -->
+                <div>
+                    <label class="form-label small fw-bold mb-1 d-block text-muted text-uppercase" style="font-size:.65rem;">Fecha Inicio</label>
+                    <input type="date" class="form-control form-control-sm shadow-none border" id="fecha_inicio" name="fecha_inicio" style="width:115px;"
+                           value="<?= htmlspecialchars($fechaInicio) ?>" required>
+                </div>
+
+                <!-- Fecha Fin -->
+                <div>
+                    <label class="form-label small fw-bold mb-1 d-block text-muted text-uppercase" style="font-size:.65rem;">Fecha Fin</label>
+                    <input type="date" class="form-control form-control-sm shadow-none border" id="fecha_fin" name="fecha_fin" style="width:115px;"
+                           value="<?= htmlspecialchars($fechaFin) ?>" required>
+                </div>
+
+                <!-- Centro de costo y Proyecto: solo si la empresa tiene alguno activo -->
+                <?php if (!empty($centrosCosto)): ?>
+                <div>
+                    <label class="form-label small fw-bold mb-1 d-block text-muted text-uppercase" style="font-size:.65rem;">C. Costo</label>
+                    <select class="form-select form-select-sm shadow-none border" id="filtro_centro_costo" style="width:140px;">
+                        <option value="">Todos</option>
+                        <?php foreach ($centrosCosto ?? [] as $cc): ?>
+                            <option value="<?= $cc['id'] ?>"><?= htmlspecialchars($cc['codigo'] . ' - ' . $cc['nombre']) ?></option>
+                        <?php endforeach; ?>
+                    </select>
+                </div>
+                <?php endif; ?>
+
+                <?php if (!empty($proyectos)): ?>
+                <div>
+                    <label class="form-label small fw-bold mb-1 d-block text-muted text-uppercase" style="font-size:.65rem;">Proyecto</label>
+                    <select class="form-select form-select-sm shadow-none border" id="filtro_proyecto" style="width:140px;">
+                        <option value="">Todos</option>
+                        <?php foreach ($proyectos ?? [] as $py): ?>
+                            <option value="<?= $py['id'] ?>"><?= htmlspecialchars($py['codigo'] . ' - ' . $py['nombre']) ?></option>
+                        <?php endforeach; ?>
+                    </select>
+                </div>
+                <?php endif; ?>
+
+                <!-- Tipo de tercero -->
+                <div>
+                    <label class="form-label small fw-bold mb-1 d-block text-muted text-uppercase" style="font-size:.65rem;">Tipo Tercero</label>
+                    <select class="form-select form-select-sm shadow-none border" id="filtro_tipo_entidad" style="width:115px;" onchange="onTipoEntidadChange()">
+                        <option value="">Todos</option>
+                        <option value="cliente">Cliente</option>
+                        <option value="proveedor">Proveedor</option>
+                        <option value="empleado">Empleado</option>
+                    </select>
+                </div>
+
+                <!-- Cuenta + Tercero + Botones: un solo ítem flexible que ocupa el resto de la fila.
+                     Los dos buscadores reparten el espacio sobrante y los botones van al final;
+                     si no cabe, el grupo salta junto a la siguiente línea (nunca se separan). -->
+                <div class="d-flex flex-wrap align-items-start gap-2" style="flex:1 1 520px;min-width:0;">
+                    <!-- Buscador cuenta -->
+                    <div class="position-relative" style="flex:1 1 200px;min-width:180px;">
+                        <label class="form-label small fw-bold mb-1 d-block text-muted text-uppercase" style="font-size:.65rem;">Cuenta</label>
+                        <div class="input-group input-group-sm">
+                            <span class="input-group-text bg-white border-end-0 text-muted"><i class="bi bi-search"></i></span>
+                            <input type="text" class="form-control border-start-0 px-1 shadow-none" id="filtro_cuenta_texto"
+                                   placeholder="Código o nombre" autocomplete="off">
+                        </div>
+                        <input type="hidden" id="filtro_cuenta_id" value="">
+                        <div id="dropdown_cuenta" class="list-group position-absolute shadow-sm"
+                             style="z-index:1050; max-height:220px; overflow:auto; display:none; width:100%; min-width:320px; margin-top:2px;"></div>
+                    </div>
+
+                    <!-- Buscador tercero (habilitado al elegir un tipo) -->
+                    <div class="position-relative" style="flex:1 1 200px;min-width:180px;">
+                        <label class="form-label small fw-bold mb-1 d-block text-muted text-uppercase" style="font-size:.65rem;">Tercero</label>
+                        <div class="input-group input-group-sm">
+                            <span class="input-group-text bg-white border-end-0 text-muted"><i class="bi bi-person"></i></span>
+                            <input type="text" class="form-control border-start-0 px-1 shadow-none" id="filtro_tercero_texto"
+                                   placeholder="Seleccione un tipo primero" autocomplete="off" disabled>
+                        </div>
+                        <input type="hidden" id="filtro_tercero_id" value="">
+                        <div id="dropdown_tercero" class="list-group position-absolute shadow-sm"
+                             style="z-index:1050; max-height:220px; overflow:auto; display:none; width:100%; min-width:320px; margin-top:2px;"></div>
+                    </div>
+
+                    <!-- Botones -->
+                    <div>
+                        <label class="form-label small fw-bold mb-1 d-block" style="font-size:.65rem;">&nbsp;</label>
+                        <div class="d-flex gap-1">
+                            <button type="button" class="btn btn-outline-secondary btn-sm px-2" onclick="limpiarFiltros()" title="Limpiar filtros">
+                                <i class="bi bi-eraser me-1"></i>Limpiar
+                            </button>
+                            <button type="submit" class="btn btn-primary btn-sm px-2 shadow-sm" id="btnGenerar" title="Generar el mayor">
+                                <i class="bi bi-search me-1"></i> Generar
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </form>
+        </div>
+        <div class="card-footer bg-white border-top py-2 px-3">
+            <div class="cmg-control-card__stats">
+                <div class="cmg-control-card__stat">
+                    <i class="bi bi-journal-text bg-primary bg-opacity-10 text-primary"></i>
+                    <div>
+                        <div class="cmg-control-card__stat-value" id="mayor-stat-cuentas">0</div>
+                        <div class="cmg-control-card__stat-label">Cuentas</div>
+                    </div>
+                </div>
+                <div class="cmg-control-card__stat">
+                    <i class="bi bi-list-ul bg-secondary bg-opacity-10 text-secondary"></i>
+                    <div>
+                        <div class="cmg-control-card__stat-value" id="mayor-stat-movimientos">0</div>
+                        <div class="cmg-control-card__stat-label">Movimientos</div>
+                    </div>
+                </div>
+                <div class="cmg-control-card__stat">
+                    <i class="bi bi-arrow-down-circle bg-success bg-opacity-10 text-success"></i>
+                    <div>
+                        <div class="cmg-control-card__stat-value text-success">$<span id="mayor-stat-debe">0.00</span></div>
+                        <div class="cmg-control-card__stat-label">Total Debe</div>
+                    </div>
+                </div>
+                <div class="cmg-control-card__stat">
+                    <i class="bi bi-arrow-up-circle bg-danger bg-opacity-10 text-danger"></i>
+                    <div>
+                        <div class="cmg-control-card__stat-value text-danger">$<span id="mayor-stat-haber">0.00</span></div>
+                        <div class="cmg-control-card__stat-label">Total Haber</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ── Reporte ── -->
+    <div class="card border-0 shadow-sm rounded-3">
+        <!-- Buscador en pantalla + Exportación -->
+        <div class="card-header bg-white py-2 px-3 border-bottom">
+            <div class="d-flex justify-content-between align-items-center flex-wrap gap-2">
+                <div class="btn-group btn-group-sm">
+                    <button type="button" class="btn btn-outline-danger" title="Descargar PDF" onclick="exportar('pdf')">
+                        <i class="bi bi-file-earmark-pdf"></i><span class="d-none d-md-inline"> PDF</span>
+                    </button>
+                    <button type="button" class="btn btn-outline-success" title="Descargar Excel" onclick="exportar('excel')">
+                        <i class="bi bi-file-earmark-spreadsheet"></i><span class="d-none d-md-inline"> Excel</span>
+                    </button>
+                </div>
+                <input type="search" class="form-control form-control-sm shadow-none border" style="max-width:320px;"
+                       id="buscadorMayorTexto" placeholder="Buscar en el reporte (cuenta, tercero, comprobante, glosa...)"
+                       autocomplete="off" oninput="filtrarMayorEnPantalla()">
+            </div>
+        </div>
+
+        <!-- Contenido del reporte -->
+        <div class="card-body p-0">
+            <div id="loader-reporte" class="text-center py-5 d-none">
+                <div class="spinner-border text-primary" role="status">
+                    <span class="visually-hidden">Cargando...</span>
+                </div>
+                <p class="text-muted mt-2 small">Generando reporte...</p>
+            </div>
+            <div id="content-reporte" class="mayores-scroll w-100">
+                <p class="text-muted text-center py-5 small"><i class="bi bi-info-circle me-1"></i> Seleccione el rango de fechas y presione Generar.</p>
+            </div>
+        </div>
+    </div>
+</div>
 
 <script>
     const urlBase = '<?= $urlBaseReporte ?>';
@@ -287,8 +382,9 @@ $urlBaseReporte = rtrim($base, '/') . '/' . ltrim($rutaModulo ?? '', '/');
             id_cuenta: document.getElementById('filtro_cuenta_id').value,
             tipo_entidad: document.getElementById('filtro_tipo_entidad').value,
             id_entidad: document.getElementById('filtro_tercero_id').value,
-            centro_costo: document.getElementById('filtro_centro_costo').value,
-            proyecto: document.getElementById('filtro_proyecto').value,
+            // Estos dos selects solo existen si la empresa tiene centros de costo / proyectos.
+            centro_costo: document.getElementById('filtro_centro_costo')?.value || '',
+            proyecto: document.getElementById('filtro_proyecto')?.value || '',
         };
     }
 
@@ -334,7 +430,33 @@ $urlBaseReporte = rtrim($base, '/') . '/' . ltrim($rutaModulo ?? '', '/');
                    class="text-decoration-none" title="Ver el documento">${texto}</a>`;
     }
 
+    // KPIs del pie de la tarjeta de control (se ponen en cero al limpiar o sin datos).
+    function actualizarStats(data) {
+        const cuentas = (data && data.cuentas) || [];
+        const movs = cuentas.reduce((n, c) => n + (c.movimientos ? c.movimientos.length : 0), 0);
+        const fmt = (v) => (parseFloat(v) || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+        document.getElementById('mayor-stat-cuentas').textContent = cuentas.length;
+        document.getElementById('mayor-stat-movimientos').textContent = movs;
+        document.getElementById('mayor-stat-debe').textContent = fmt(data && data.totales ? data.totales.debe : 0);
+        document.getElementById('mayor-stat-haber').textContent = fmt(data && data.totales ? data.totales.haber : 0);
+    }
+
+    function limpiarFiltros() {
+        const form = document.getElementById('formFiltros');
+        form.reset();
+        // Los hidden no vuelven a vacío con reset(): su valor por defecto es el atributo, que cambia al asignarlo.
+        document.getElementById('filtro_cuenta_id').value = '';
+        document.getElementById('dropdown_cuenta').style.display = 'none';
+        document.getElementById('dropdown_tercero').style.display = 'none';
+        onTipoEntidadChange();
+        document.getElementById('buscadorMayorTexto').value = '';
+        document.getElementById('content-reporte').innerHTML =
+            '<p class="text-muted text-center py-5 small"><i class="bi bi-info-circle me-1"></i> Seleccione el rango de fechas y presione Generar.</p>';
+        actualizarStats(null);
+    }
+
     function renderMayor(data) {
+        actualizarStats(data);
         if (!data.cuentas || !data.cuentas.length) {
             document.getElementById('content-reporte').innerHTML =
                 '<p class="text-muted text-center py-5 small"><i class="bi bi-info-circle me-1"></i> No hay movimientos con los filtros seleccionados.</p>';

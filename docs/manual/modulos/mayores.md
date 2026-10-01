@@ -5,8 +5,8 @@ categoria: Contabilidad
 ruta_modulo: modulos/mayores
 tipo: modulo
 visibilidad: todos
-etiquetas: mayor, mayores, libro mayor, movimientos de cuenta, saldo de cuenta, auxiliar, cuadre
-version: 1.1
+etiquetas: mayor, mayores, libro mayor, movimientos de cuenta, saldo de cuenta, auxiliar, cuadre, pdf mayor, imprimir mayor
+version: 1.2
 orden: 40
 estado: activo
 ---
@@ -17,12 +17,36 @@ cuenta tiene este saldo?"*.
 
 ## Cómo se consulta
 
-1. Elija la **cuenta** en el buscador.
-2. Indique el **rango de fechas**.
-3. Genere el informe.
+Los filtros están en la tarjeta de arriba, que queda fija al bajar por el informe:
+
+1. Elija el **año** y el **mes** (o escriba el rango de **fechas**).
+2. Si quiere, elija la **cuenta** en el buscador y el **tercero** (primero su tipo:
+   cliente, proveedor o empleado).
+3. Pulse **Generar**. **Limpiar** devuelve todos los filtros a su valor inicial.
+
+Los filtros **C. Costo** y **Proyecto** solo aparecen si la empresa tiene centros
+de costo o proyectos activos.
+
+Al pie de la tarjeta se resume el informe generado: número de **cuentas** y de
+**movimientos**, **total debe** y **total haber**.
 
 En el buscador de cuenta, si ya hay una seleccionada, pulsar **Retroceso** o
 **Suprimir** limpia toda la selección de una vez.
+
+## Exportar a PDF y Excel
+
+El **PDF** sale en hoja horizontal con el formato de los demás reportes del
+sistema: logo del establecimiento, nombre de la empresa, período, recuadro de
+**Filtros aplicados**, banda de totales (cuentas, movimientos, debe, haber y
+diferencia), el detalle por cuenta con su subtotal, el **total general** al
+final y la numeración *Página x/y*. El encabezado de columnas se repite en cada
+hoja.
+
+El **Excel** sigue el mismo formato de los demás reportes: nombre de la empresa,
+filtros aplicados, totales y fecha de generación arriba; luego un solo
+encabezado de columnas (queda fijo al desplazarse), cada cuenta con su fila de
+título resaltada y su subtotal, y el **total general** al final. Debe, Haber y
+Saldo son números, así que se pueden sumar o filtrar directamente.
 
 ## Llegar al documento de origen
 
@@ -53,6 +77,10 @@ exportaciones quedan bloqueados.
 
 ## Historial de cambios
 
+- **1.2** — Los filtros pasan a una tarjeta fija con un resumen al pie y botón
+  **Limpiar**; C. Costo y Proyecto solo se muestran si la empresa los usa. El PDF
+  y el Excel adoptan el formato común de reportes (logo en el PDF, filtros aplicados,
+  totales; *Página x/y* en el PDF y encabezado fijo en el Excel).
 - **1.1** — El aviso de asientos pendientes ya no muestra la sección **Otros
   avisos**; mientras el aviso no se resuelve, **Generar** y las exportaciones
   quedan bloqueados.

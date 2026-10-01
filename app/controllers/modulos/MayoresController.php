@@ -279,10 +279,14 @@ class MayoresController extends BaseModuloController
         $empresaModel = new \App\models\Empresa();
         $empresa = $empresaModel->getPorId($idEmpresa);
         $empresaNombre = $empresa['nombre_comercial'] ?: $empresa['nombre'];
-        $rangoFechas = $filtros['fecha_inicio'] . ' al ' . $filtros['fecha_fin'];
 
-        $datos = $this->service->generarMayor($idEmpresa, $filtros);
-        $this->service->exportarExcel($datos, $empresaNombre, $rangoFechas);
+        try {
+            $datos = $this->service->generarMayor($idEmpresa, $filtros);
+            $this->service->exportarExcel($idEmpresa, $datos, $filtros, (string) $empresaNombre);
+        } catch (\Throwable $th) {
+            \App\Services\ErrorLogService::registrar($th, ['ruta' => static::class, 'accion' => __FUNCTION__]);
+            $this->json(['success' => false, 'error' => 'Error al generar Excel: ' . $th->getMessage()]);
+        }
     }
 
     public function exportPdf(): void
@@ -294,9 +298,13 @@ class MayoresController extends BaseModuloController
         $empresaModel = new \App\models\Empresa();
         $empresa = $empresaModel->getPorId($idEmpresa);
         $empresaNombre = $empresa['nombre_comercial'] ?: $empresa['nombre'];
-        $rangoFechas = $filtros['fecha_inicio'] . ' al ' . $filtros['fecha_fin'];
 
-        $datos = $this->service->generarMayor($idEmpresa, $filtros);
-        $this->service->exportarPdf($datos, $empresaNombre, $rangoFechas);
+        try {
+            $datos = $this->service->generarMayor($idEmpresa, $filtros);
+            $this->service->exportarPdf($idEmpresa, $datos, $filtros, (string) $empresaNombre);
+        } catch (\Throwable $th) {
+            \App\Services\ErrorLogService::registrar($th, ['ruta' => static::class, 'accion' => __FUNCTION__]);
+            $this->json(['success' => false, 'error' => 'Error al generar PDF: ' . $th->getMessage()]);
+        }
     }
 }
