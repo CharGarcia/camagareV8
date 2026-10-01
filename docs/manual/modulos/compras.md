@@ -6,7 +6,7 @@ ruta_modulo: modulos/compras
 tipo: modulo
 visibilidad: todos
 etiquetas: compras, compra, factura de compra, buscar compra, buscador, aparecen compras que no busque, resultados que no corresponden, la busqueda trae otras compras, buscar por numero de autorizacion, filtros, filtrar compras, buscar por producto comprado, filtro de fechas, saldo pendiente, estado de pago, chips, ordenar por dos columnas, ordenar por proveedor y fecha, asiento contable, editar asiento, pestaña asiento, proveedor, xml, sri, entrada de mercaderia, vincular producto, retencion, orden de compra, vincular orden, pedido a proveedor, comparar pedido vs facturado, entrega parcial, recibido parcial, cerrar orden, sustento tributario, codigo de sustento, autorizacion, fecha de caducidad, ats, persona natural, obligada a llevar contabilidad, tipo de contribuyente, registro manual, compra fisica, pagar la compra, pestaña pagos, saldo pendiente, valores de terceros, otros conceptos, valores adicionales, bomberos, tasa de basura, recoleccion de basura, planilla de luz, planilla de agua, servicios basicos, informacion adicional, info adicional, nombre muy largo, limite de caracteres, value too long, no se pudo guardar la compra, imprimir, impresora
-version: 2.22
+version: 2.23
 orden: 20
 estado: activo
 ---
@@ -37,6 +37,7 @@ que se capturan a mano:
 
 | Código | Comprobante |
 |---|---|
+| 01 | Factura (cuando no llega por XML del SRI) |
 | 02 | Nota o boleta de venta |
 | 08 | Boletos o entradas a espectáculos públicos |
 | 11 | Pasajes expedidos por empresas de aviación |
@@ -47,9 +48,11 @@ que se capturan a mano:
 | 20 | Documentos por Servicios Administrativos (Inst. del Estado) |
 | 21 | Carta de Porte Aéreo |
 
-Las **facturas (01)**, liquidaciones de compra (03) y notas de crédito/débito
-(04 / 05) entran por su vía propia — la carga del **XML del SRI** — y ya no se
-capturan a mano desde este selector. Una compra ya registrada con uno de esos
+La **factura (01)** se puede registrar a mano cuando no llega por el XML del
+SRI (p. ej. una factura física o una que no se pudo descargar); si existe el
+XML, sigue siendo preferible cargarlo. Las liquidaciones de compra (03) y notas
+de crédito/débito (04 / 05) entran por su vía propia — la carga del **XML del
+SRI** — y no se capturan a mano desde este selector. Una compra ya registrada con uno de esos
 códigos **conserva su tipo**: al abrirla, el modal agrega su opción y la
 muestra normalmente.
 
@@ -568,6 +571,9 @@ aprobaciones pasa, así que no se paga dos veces.
 
 ## Historial de cambios
 
+- **2.23** — El selector **Tipo de Comprobante** del registro manual vuelve a
+  ofrecer la **Factura (01)**, para registrar a mano facturas que no llegan por
+  el XML del SRI.
 - **2.22** — La ventana de la compra se abre siempre en la pestaña **Detalle de
   Compra** con los datos de la compra elegida; al abrir dos compras seguidas ya
   no pueden quedar mostrados los datos de la anterior.

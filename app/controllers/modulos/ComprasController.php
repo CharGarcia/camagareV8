@@ -18,7 +18,8 @@ class ComprasController extends BaseModuloController
      * selector "Tipo de Comprobante" del modal de Compras. El catálogo completo
      * trae ~40 códigos (retenciones, guías, RECAP, notas TC, etc.) que no se
      * capturan a mano desde aquí; esta lista acota el modal a los documentos
-     * que sí se registran manualmente.
+     * que sí se registran manualmente. La factura (01) se incluye para poder
+     * registrar a mano facturas que no llegan por XML del SRI (2026-10-01).
      *
      * Solo afecta a la vista de este módulo: no toca el catálogo ni a los demás
      * módulos que lo leen. Una compra ya registrada con un código fuera de esta
@@ -26,7 +27,7 @@ class ComprasController extends BaseModuloController
      * tipo: el JS agrega esa opción al vuelo al abrirla (ver
      * mcAsegurarOpcionComprobante en public/js/modulos/compras.js).
      */
-    private const TIPOS_COMPROBANTE_MODAL = ['02', '08', '11', '12', '15', '16', '19', '20', '21'];
+    private const TIPOS_COMPROBANTE_MODAL = ['01', '02', '08', '11', '12', '15', '16', '19', '20', '21'];
 
     protected function getRutaModulo(): string
     {
