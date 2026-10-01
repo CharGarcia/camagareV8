@@ -6,7 +6,7 @@ ruta_modulo: modulos/taller
 tipo: modulo
 visibilidad: todos
 etiquetas: taller, mecanica, precuenta, whatsapp, mecánica, orden de trabajo, OT, orden de reparacion, enderezada, pintura, latoneria, repuestos, mano de obra, tecnico, diagnostico, informe tecnico, garantia, siniestro, aseguradora, vehiculo, auto, carro, presupuesto, aprobacion, numeracion por fecha, numero con el año, reiniciar numeracion, reinicio anual, reinicio mensual, correlativo por año, correlativo por mes, modo de numeracion, buscar orden, buscar placa, buscador, filtros, filtrar ordenes de trabajo, filtro de fechas, buscar por repuesto, chips, imprimir, impresora
-version: 1.12
+version: 1.13
 orden: 0
 estado: activo
 ---
@@ -330,6 +330,10 @@ documentos admite cada periodo) está en el manual de **Empresa**, sección
 
 ## Historial de cambios
 
+- **1.13** — La orden y la factura que genera respetan la configuración de
+  facturación **al subtotal** del establecimiento del punto (antes calculaban
+  siempre línea por línea). Ver [Cómo se calcula el
+  IVA](conceptos/calculo-iva).
 - **1.12** — En la ventana de filtros, la pestaña *Detalles* se llama ahora
   **Búsqueda por detalle**, y la ventana ya no tiene barra de desplazamiento
   vertical propia: se muestra completa.

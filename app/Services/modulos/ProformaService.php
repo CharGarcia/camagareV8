@@ -45,7 +45,7 @@ class ProformaService
      */
     public function crear(array $data, array $config = []): int
     {
-        $data    = $this->normalizarImportes($data, $config);
+        $data    = $this->normalizarImportes($data, $config, (int) ($data['id_punto_emision'] ?? 0));
         $errores = $this->rules->validar($data);
         if (!empty($errores)) {
             throw new \RuntimeException(implode(' | ', $errores));
@@ -127,7 +127,7 @@ class ProformaService
             throw new \RuntimeException('Solo se pueden editar proformas en estado borrador.');
         }
 
-        $data    = $this->normalizarImportes($data, $config);
+        $data    = $this->normalizarImportes($data, $config, (int) $proforma['id_punto_emision']);
         $errores = $this->rules->validar($data);
         if (!empty($errores)) {
             throw new \RuntimeException(implode(' | ', $errores));
@@ -1239,8 +1239,10 @@ class ProformaService
      * que nunca se guarde, p. ej., una cantidad 1.23456 que el PDF imprime como 1.23 con
      * un subtotal que ya no cuadra con cantidad × precio.
      * Sin $config (llamadas antiguas) los datos se dejan tal cual.
+     * El modo de IVA es el del establecimiento del punto de la proforma ($idPunto);
+     * $config solo es respaldo si el punto no se puede resolver.
      */
-    private function normalizarImportes(array $data, array $config): array
+    private function normalizarImportes(array $data, array $config, int $idPunto = 0): array
     {
         if (empty($config) || empty($data['detalles']) || !is_array($data['detalles'])) {
             return $data;
@@ -1260,7 +1262,8 @@ class ProformaService
         }
         unset($d);
 
-        [$data['detalles'], $tot] = ProformaTotales::aplicarModoIva($data['detalles'], IvaSubtotal::modo($config));
+        $modoIva = IvaSubtotal::modoPunto($idPunto, (int) ($data['id_empresa'] ?? 0), $config);
+        [$data['detalles'], $tot] = ProformaTotales::aplicarModoIva($data['detalles'], $modoIva);
 
         $data['total_sin_impuestos'] = $tot['subtotal'];
         $data['total_descuento']     = $tot['descuento'];

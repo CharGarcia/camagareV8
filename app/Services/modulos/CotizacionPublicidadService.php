@@ -434,6 +434,23 @@ class CotizacionPublicidadService
             ];
         }
 
+        // IVA según la configuración de facturación del establecimiento del punto con
+        // que se emite la factura: en 'subtotal' el IVA de cada tarifa es
+        // round(Σ bases × %) y sus centavos se reparten entre las líneas.
+        $modoIva = \App\Helpers\IvaSubtotal::modoPunto((int) $data['id_punto_emision'], $idEmpresa, $empresaData);
+        if ($modoIva === 'subtotal') {
+            $lineasIva = [];
+            foreach ($detallesFac as $k => $l) {
+                $imp = $l['impuestos'][0];
+                $lineasIva[$k] = ['grupo' => $imp['codigo_porcentaje'] . ':' . $imp['tarifa'], 'base' => (float) $imp['base_imponible'], 'pct' => (float) $imp['tarifa']];
+            }
+            $ivaTotal = 0.0;
+            foreach (\App\Helpers\IvaSubtotal::repartir($lineasIva, $modoIva) as $k => $ivaLinea) {
+                $detallesFac[$k]['impuestos'][0]['valor'] = $ivaLinea;
+                $ivaTotal += $ivaLinea;
+            }
+        }
+
         $importeTotal = round($subtotalTotal + $ivaTotal, 2);
         $pagos = [[
             'forma_pago'    => '01',

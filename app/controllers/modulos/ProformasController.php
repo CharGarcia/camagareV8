@@ -561,9 +561,8 @@ class ProformasController extends BaseModuloController
             $empresa = $this->empresaConfig($idEmpresa);
             \App\Helpers\LogoPuntoEmision::aplicar($empresa, $idEmpresa, $cabecera['id_punto_emision'] ?? null);
 
-            // IVA con la configuración de facturación VIGENTE (al subtotal o ítem por
-            // ítem), también para la plantilla PDF propia de la empresa.
-            [$cabecera, $detalles] = \App\Helpers\ProformaTotales::recalcularIva($cabecera, $detalles, $empresa);
+            // IVA GUARDADO (calculado al guardar con la configuración de facturación de la
+            // serie): la plantilla PDF muestra lo que se vio y se guardó, sin recalcular.
 
             $renderer  = new \App\Services\PlantillasPdfRendererService();
             $plantilla = $renderer->getPlantillaActiva($idEmpresa, 'proforma');
@@ -682,8 +681,7 @@ class ProformasController extends BaseModuloController
             $empresa = $this->empresaConfig($idEmpresa);
             \App\Helpers\LogoPuntoEmision::aplicar($empresa, $idEmpresa, $cabecera['id_punto_emision'] ?? null);
 
-            // IVA con la configuración de facturación VIGENTE, igual que el PDF.
-            [$cabecera, $detalles] = \App\Helpers\ProformaTotales::recalcularIva($cabecera, $detalles, $empresa);
+            // IVA GUARDADO, igual que el PDF (sin recalcular con la configuración vigente).
 
             $numero = ($cabecera['establecimiento'] ?? '001') . '-'
                     . ($cabecera['punto_emision']   ?? '001') . '-'

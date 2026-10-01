@@ -707,7 +707,7 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosPestanasOcultas($vistaConfigS
         // Redondeo a 2 decimales, idéntico al del backend (round PHP): la base se
         // redondea por línea y el IVA se calcula AGRUPADO por tarifa. Así el total
         // que se muestra coincide exactamente con el documento generado.
-        const r2 = (n) => Math.round((n + Number.EPSILON) * 100) / 100;
+        const r2 = (n) => window.CMG_r2(n); // redondeo común (public/js/app.js)
 
         let subGeneral = 0;
         let totalGeneral = 0;
@@ -721,11 +721,11 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosPestanasOcultas($vistaConfigS
             const ivaP = parseFloat(tr.querySelector('.det-porcentaje-iva')?.value) || 0;
             const sub  = r2(qty * prc);
 
-            subGeneral += sub;
+            subGeneral = r2(subGeneral + sub);
 
             if (!basesIva[ivaP])  basesIva[ivaP]  = 0;
             if (!ivasLinea[ivaP]) ivasLinea[ivaP] = 0;
-            basesIva[ivaP]  += sub;
+            basesIva[ivaP]  = r2(basesIva[ivaP] + sub);
             ivasLinea[ivaP]  = r2(ivasLinea[ivaP] + r2(sub * ivaP / 100));
         });
         subGeneral = r2(subGeneral);
@@ -752,9 +752,9 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosPestanasOcultas($vistaConfigS
         let sumaIvas = 0;
         sortedTasas.forEach(tasa => {
             const montoIva = SUSC_CALCULO_IVA === 'subtotal'
-                ? r2(basesIva[tasa] * (tasa / 100))
+                ? r2(basesIva[tasa] * tasa / 100)
                 : (ivasLinea[tasa] || 0);
-            sumaIvas += montoIva;
+            sumaIvas = r2(sumaIvas + montoIva);
             if (tasa > 0 && montoIva > 0) {
                 contIvasGrupo.innerHTML += `
                     <div class="d-flex justify-content-between align-items-center mt-1">

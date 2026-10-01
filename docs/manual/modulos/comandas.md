@@ -6,7 +6,7 @@ ruta_modulo: modulos/comandas
 tipo: modulo
 visibilidad: todos
 etiquetas: comandas, comanda, pedido, mesa, sri, autorizacion sri, factura autorizada, numero de autorizacion, clave de acceso, enviar al sri, firma electronica, restaurante, cocina, anular, cerrar cuenta, servicio, 10%, propina, propina voluntaria, recargo, total con iva, turno de caja, punto de emision, mesa ocupada por otro usuario, doble cobro, cobro duplicado, tirilla, ticket, impresora termica, 80mm, imprimir cuenta, tirilla descuadrada, imprimir orden, orden de cocina, comanda en papel, reimprimir orden, copia, sin estacion, stock general, configuracion restaurante, datos para la factura, precuenta, cuenta previa, llenar a mano, direccion, telefono, cambiar precio, editar precio, precio editable, envio a domicilio, delivery, servicio a domicilio, precio variable
-version: 1.29
+version: 1.30
 orden: 20
 estado: activo
 ---
@@ -609,6 +609,10 @@ tocarlas cada vez.
 
 ## Historial de cambios
 
+- **1.30** — Ahora respeta la configuración de facturación **al subtotal**
+  del establecimiento del punto (antes calculaba siempre línea por línea): con
+  98,10 al 15% el IVA es 14,72, no 14,73. Ver [Cómo se calcula el
+  IVA](conceptos/calculo-iva).
 - **1.29** — Botones **− / +** en cada línea para cambiar la cantidad de un ítem
   ya agregado, sin volver a buscarlo en el catálogo. Si el ítem ya se envió a
   cocina o barra, el + lo agrega como una línea nueva para que la estación se

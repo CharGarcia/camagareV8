@@ -222,6 +222,7 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
 </div>
 
 <!-- Globales para el modal (IIFE) -->
+<?php require MVC_APP . '/views/partials/iva_modos_punto.php'; ?>
 <script>
     window.RUTA_MODULO_SE = '<?= $urlBase ?>';
     window.SE_PERM = {

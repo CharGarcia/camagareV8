@@ -5,6 +5,7 @@ namespace App\Services\modulos;
 
 use App\core\Database;
 use App\Helpers\Booleano;
+use App\Helpers\IvaSubtotal;
 use App\repositories\modulos\TallerDepartamentoRepository;
 use App\repositories\modulos\TallerOrdenRepository;
 use App\Rules\modulos\TallerOrdenRules;
@@ -1128,6 +1129,22 @@ class TallerOrdenService
             ];
         }
 
+        // IVA según la configuración de facturación del establecimiento del punto de la
+        // orden: en 'subtotal' el IVA de cada tarifa es round(Σ bases × %) y sus
+        // centavos se reparten entre las líneas.
+        $modoIva = IvaSubtotal::modoPunto($idPunto, $idEmpresa, $empresaConfig);
+        if ($modoIva === 'subtotal') {
+            $lineasIva = [];
+            foreach ($det as $k => $l) {
+                $lineasIva[$k] = ['grupo' => $l['id_tarifa_iva'] ?: 'pct:' . $l['porcentaje_iva'], 'base' => $l['precio_total_sin_impuesto'], 'pct' => $l['porcentaje_iva']];
+            }
+            $ivaTotal = 0.0;
+            foreach (IvaSubtotal::repartir($lineasIva, $modoIva) as $k => $ivaLinea) {
+                $det[$k]['impuestos'][0]['valor'] = $ivaLinea;
+                $ivaTotal += $ivaLinea;
+            }
+        }
+
         $totalSinImp  = round($totalSinImp, 2);
         $totalDesc    = round($totalDesc, 2);
         $ivaTotal     = round($ivaTotal, 2);
@@ -1314,7 +1331,22 @@ class TallerOrdenService
     /** Recalcula y guarda los totales de la orden a partir de sus líneas. */
     private function recalcularTotales(int $idOrden, int $idEmpresa): void
     {
-        $this->repository->updateTotales($idOrden, $idEmpresa, $this->repository->calcularTotales($idOrden, $idEmpresa));
+        $tot = $this->repository->calcularTotales($idOrden, $idEmpresa);
+
+        // Configuración de facturación "al subtotal" del establecimiento del punto de la
+        // orden: el IVA de cada tarifa es round(Σ bases × %), no la suma del IVA de cada
+        // línea (que es lo que guarda valor_iva). Así la OT muestra lo mismo que su factura.
+        $bases = $this->repository->getBasesIvaFacturables($idOrden, $idEmpresa);
+        if (IvaSubtotal::modoPunto($bases['id_punto_emision'], $idEmpresa) === 'subtotal') {
+            $iva = 0.0;
+            foreach ($bases['grupos'] as $g) {
+                $iva += round(round($g['base'], 2) * $g['pct'] / 100, 2);
+            }
+            $tot['iva']   = round($iva, 2);
+            $tot['total'] = round($tot['subtotal'] + $tot['iva'], 2);
+        }
+
+        $this->repository->updateTotales($idOrden, $idEmpresa, $tot);
     }
 
     /**

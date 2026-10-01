@@ -6,7 +6,7 @@ ruta_modulo: modulos/nota_debito
 tipo: modulo
 visibilidad: todos
 etiquetas: nota de debito, notas de debito, cargo adicional, interes por mora, sri, buscar nota de debito, buscador, filtros, filtrar notas de debito, buscar por motivo, filtro de fechas, documento modificado, chips, aparecen notas que no busque, resultados que no corresponden, buscar por clave de acceso, imprimir, impresora
-version: 1.10
+version: 1.11
 orden: 31
 estado: activo
 ---
@@ -158,6 +158,9 @@ la operación de inmediato.
 
 ## Historial de cambios
 
+- **1.11** — El IVA, el subtotal y el total se redondean a 2 decimales (antes
+  el IVA podía guardarse con más decimales y no cuadrar con el total). Ver
+  [Cómo se calcula el IVA](conceptos/calculo-iva).
 - **1.10** — En la ventana de filtros, la pestaña *Detalles* se llama ahora
   **Búsqueda por detalle**, y la ventana ya no tiene barra de desplazamiento
   vertical propia: se muestra completa.

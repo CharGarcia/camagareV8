@@ -6,7 +6,7 @@ ruta_modulo: modulos/suscripciones
 tipo: modulo
 visibilidad: todos
 etiquetas: suscripciones, suscripcion, cobro recurrente, facturacion recurrente, factura recurrente, mensualidad, pension, plan mensual, membresia, renovacion, periodicidad, proximo cobro, generar documentos, generar facturas, facturacion automatica, facturas del cliente, facturas emitidas, historial de facturas, detalle de facturas, recibos del cliente, que le facture, saldo del cliente, facturas pendientes, facturas pagadas, facturas abonadas, cobro con tarjeta, debito automatico, nuvei, kushki, aviso de vencimiento, imprimir, impresora, excel, exportar, resumen de valores, total por periodicidad, proyeccion anual, ingresos recurrentes, iva por tarifa, resumen por concepto, detalle por cliente, que se le factura a cada cliente, items por cliente, informacion adicional en excel, resumen en pdf, detalle por cliente en pdf, pdf de la suscripcion, imprimir suscripcion, contrato, ficha de la suscripcion, detalle de la suscripcion en pdf
-version: 1.14
+version: 1.15
 orden: 0
 estado: activo
 ---
@@ -288,6 +288,9 @@ registrados*.
 
 ## Historial de cambios
 
+- **1.15** — El PDF de la suscripción calcula el IVA con la configuración de
+  facturación (al subtotal o línea por línea), igual que la pantalla (antes, siempre
+  línea por línea). Ver [Cómo se calcula el IVA](conceptos/calculo-iva).
 - **1.14** — En la ventana de filtros, la pestaña *Detalles* se llama ahora
   **Búsqueda por detalle**, y la ventana ya no tiene barra de desplazamiento
   vertical propia: se muestra completa.

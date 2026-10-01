@@ -292,6 +292,15 @@ eliminado (boolean), deleted_at, deleted_by
 **Fechas**
 - Mostrar siempre con formato **`d-m-Y H:i:s`**.
 
+**Cálculo del IVA (obligatorio en todo documento, existente o futuro)**
+- El IVA **siempre** depende de la configuración de facturación (`empresa_establecimiento.calculo_iva_facturacion`) del establecimiento de la **serie (punto de emisión) del documento**, nunca del primer establecimiento de la empresa:
+  - `subtotal`: IVA de cada tarifa = `round(Σ bases netas de la tarifa × %, 2)` **una sola vez** (subtotal general menos descuentos; el 0%/exento/no objeto no paga IVA y cada tarifa > 0 va por separado, como exige el SRI). El IVA por línea que pide el XML es solo el reparto de ese valor (`IvaSubtotal::repartir`).
+  - `linea_linea`: IVA de cada línea = `round(base × %, 2)` y se suman.
+- **Servidor**: el modo sale de `IvaSubtotal::modoPunto($idPunto, $idEmpresa, $respaldo)`; el reparto, de `IvaSubtotal::repartir()`. **Nunca** calcular el IVA a mano con otra fórmula. Facturas, Notas de Crédito, Recibos y Notas de Débito ya pasan por `App\Helpers\CalculoIvaDocumento` en su Service (recalcula antes de guardar; la última forma de pago absorbe hasta 0,05 de redondeo y más se rechaza): un módulo que cree esos documentos debe hacerlo **siempre** a través de su Service, nunca con SQL propio.
+- **Pantalla (JS)**: modo con `CMG_modoIvaPunto(idPuntoElegido, respaldo)` (la vista incluye `app/views/partials/iva_modos_punto.php`) y redondeo con `CMG_r2()` / `CMG_iva(base, pct)` de `public/js/app.js`; al cambiar de serie, recalcular totales. **Prohibido** `Math.round(v * 100) / 100` y `base * (pct / 100)`: con 98,10 × 15% dan 14,71 en vez de 14,72. Una vista *standalone* sin `app.js` replica el mismo redondeo (`toPrecision(12)`, medio hacia arriba).
+- **Lo que se ve = lo que se guarda = lo que imprime el PDF/XML**: los PDF leen el IVA guardado, no lo recalculan con la configuración vigente.
+- Después de tocar cualquier cálculo de IVA, correr `php tools/test_calculo_iva.php` (debe terminar en `TODO OK`). Detalle para el usuario: `docs/manual/conceptos/calculo-iva.md`.
+
 ---
 
 ## 10. Cómo crear un módulo nuevo (checklist)

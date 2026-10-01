@@ -448,7 +448,7 @@
     // Redondeo a centavos igual que el backend (ConsignacionFacturaService::normalizarDetalles):
     // se redondea POR LÍNEA antes de sumar, no solo al final, para que el total de este modal
     // coincida centavo a centavo con lo que se guarda y con la Factura de Venta generada.
-    function round2(n) { return Math.round((n + Number.EPSILON) * 100) / 100; }
+    function round2(n) { return window.CMG_r2(n); } // redondeo común (public/js/app.js)
     function esc(s) { return String(s ?? '').replace(/[&<>"']/g, c => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c])); }
 
     // ── Separador decimal: SIEMPRE punto ──────────────────────────────────────
@@ -672,6 +672,7 @@
         if (!idPunto || !opt) { $('faccv_serie').value=''; $('faccv_id_punto_emision').value=''; $('faccv_secuencial').value=''; return; }
         const est = opt.dataset.codEst || '', punto = opt.dataset.codPunto || '';
         $('faccv_serie').value = est + '-' + punto; $('faccv_establecimiento').value = est; $('faccv_punto_emision').value = punto; $('faccv_id_punto_emision').value = idPunto;
+        recalc(); // otra serie puede ser de otro establecimiento, con otro modo de IVA
         const res = await fetch(`${RUTA}/getSecuencialAjax?id_punto_emision=${idPunto}&fecha=${encodeURIComponent(document.getElementById('faccv_fecha')?.value || '')}`);
         const data = await res.json();
         if (!data.ok) { $('faccv_secuencial').value=''; Swal.fire('Atención', data.msg || 'No hay secuencial configurado.', 'warning'); return; }
@@ -1138,19 +1139,19 @@
             const b = round2(precio * cant);
             const net = round2(Math.max(0, b - d));
             const iva = round2(net * pct / 100);
-            bruto += b; desc += d; netTotal += net;
+            bruto = round2(bruto + b); desc = round2(desc + d); netTotal = round2(netTotal + net);
             const key = pct.toFixed(2);
             if (!grupos[key]) grupos[key] = { pct, base: 0, iva: 0 };
-            grupos[key].base += net;
-            grupos[key].iva += iva;
+            grupos[key].base = round2(grupos[key].base + net);
+            grupos[key].iva  = round2(grupos[key].iva + iva);
         });
         const lista = Object.values(grupos).sort((a, b) => a.pct - b.pct);
         // Configuración de facturación "al subtotal": el IVA de cada tarifa es r2(Σ bases × %),
         // no la suma de los IVA por línea (igual que el servidor y Facturas de Venta).
-        if ((window.EMPRESA_CONFIG || {}).calculo_iva === 'subtotal') {
+        if (window.CMG_modoIvaPunto($('faccv_id_punto_emision').value, (window.EMPRESA_CONFIG || {}).calculo_iva) === 'subtotal') {
             lista.forEach(g => { g.iva = round2(round2(g.base) * g.pct / 100); });
         }
-        let ivaTotal = 0; lista.forEach(g => ivaTotal += g.iva);
+        let ivaTotal = 0; lista.forEach(g => ivaTotal = round2(ivaTotal + g.iva));
 
         $('faccv_tot_subtotal').textContent = bruto.toFixed(2);
 
@@ -1176,7 +1177,7 @@
             }
         });
 
-        $('faccv_tot_total').textContent = (netTotal + ivaTotal).toFixed(2);
+        $('faccv_tot_total').textContent = round2(netTotal + ivaTotal).toFixed(2);
         $('faccv_count_items').textContent = contarLineas();
     }
 

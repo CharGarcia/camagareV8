@@ -29,6 +29,8 @@ class NotaDebitoService
 
     public function crear(array $data): int
     {
+        // IVA a centavos y total cuadrado en el servidor (una sola tarifa sobre los motivos).
+        $data = \App\Helpers\CalculoIvaDocumento::normalizarImpuestosCabecera($data, 'la nota de débito');
         $this->rules->validar($data);
 
         $this->validarPeriodoContable(
@@ -214,6 +216,8 @@ class NotaDebitoService
 
     public function actualizar(int $id, array $data): int
     {
+        // IVA a centavos y total cuadrado en el servidor (una sola tarifa sobre los motivos).
+        $data = \App\Helpers\CalculoIvaDocumento::normalizarImpuestosCabecera($data, 'la nota de débito');
         $this->rules->validar($data);
 
         $ndActual = $this->repository->getPorId($id);

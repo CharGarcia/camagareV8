@@ -35,9 +35,8 @@ class ProformaPdfService
         $this->decCantidad = max(0, min(6, (int) ($empresa['decimales_cantidad'] ?? 2)));
         $this->decPrecio   = max(0, min(6, (int) ($empresa['decimales_precio']   ?? 2)));
 
-        // IVA con la configuración de facturación VIGENTE (al subtotal o ítem por ítem):
-        // una proforma guardada con otro modo se imprime igual que se facturaría hoy.
-        [$cabecera, $detalles] = \App\Helpers\ProformaTotales::recalcularIva($cabecera, $detalles, $empresa);
+        // El IVA es el GUARDADO (calculado al guardar con la configuración de facturación
+        // del establecimiento de la serie): el PDF muestra lo que se vio y se guardó.
 
         $pdf = new TCPDF('P', 'mm', 'A4', true, 'UTF-8', false);
         $pdf->SetCreator('CaMaGaRe');

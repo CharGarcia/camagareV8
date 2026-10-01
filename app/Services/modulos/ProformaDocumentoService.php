@@ -66,16 +66,19 @@ class ProformaDocumentoService
     }
 
     /**
-     * Cabecera y líneas con el IVA recalculado según la configuración de facturación
-     * VIGENTE (al subtotal o ítem por ítem), para que el PDF —propio o de plantilla— y
-     * el total que se cita en el correo / WhatsApp coincidan con lo que se facturaría.
+     * Cabecera y líneas con el IVA GUARDADO, para que el PDF —propio o de plantilla— y el
+     * total que se cita en el correo / WhatsApp sean exactamente lo que se vio y se guardó.
+     * El IVA ya se calculó al guardar con la configuración de facturación del
+     * establecimiento de la serie (ProformaService::normalizarImportes); aquí no se
+     * recalcula, o una proforma impresa después de un cambio de configuración mostraría
+     * otras cifras que las guardadas. (Al CONVERTIR en factura sí se recalcula: es otro
+     * documento, que se emite con la configuración vigente.)
      *
      * @return array{0: array, 1: array} [cabecera, detalles]
      */
     public function conIvaVigente(int $id, array $cabecera, ?array $empresa = null): array
     {
-        $empresa = $empresa ?? $this->empresaConfig((int) ($cabecera['id_empresa'] ?? 0));
-        return \App\Helpers\ProformaTotales::recalcularIva($cabecera, $this->getDetallesConImpuestos($id), $empresa);
+        return [$cabecera, $this->getDetallesConImpuestos($id)];
     }
 
     /**

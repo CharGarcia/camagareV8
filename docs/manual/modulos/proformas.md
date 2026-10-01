@@ -6,7 +6,7 @@ ruta_modulo: modulos/proformas
 tipo: modulo
 visibilidad: todos
 etiquetas: proforma, proformas, ordenar por dos columnas, ordenar por estado y fecha, cotizacion, cotizar, presupuesto, oferta, duplicar, duplicar proforma, copiar proforma, repetir cotizacion, volver a cotizar, regresar a borrador, volver a borrador, reabrir proforma, reabrir, desaprobar, quitar aprobacion, editar proforma aprobada, convertir a factura, enviar a pedidos, generar pedido, pasar a pedido, crear pedido desde proforma, despacho, orden de despacho, items sin producto, concepto libre, linea sin producto, pestana pedidos, enviar por whatsapp, exportar excel, info productos, ficha de productos, catalogo, imagenes de productos, informacion adicional, plantillas, plantilla de proforma, guardar como plantilla, condiciones, terminos y condiciones, anexo, pdf de condiciones, texto con formato, clausulas, numeracion por fecha, numero con el año, reiniciar numeracion, reinicio anual, reinicio mensual, correlativo por año, correlativo por mes, modo de numeracion, pdf de la proforma, codigo del producto en el pdf, columna codigo, buscar por codigo, codigo en el detalle, columna codigo en la proforma, observaciones en el pdf, numero repetido, secuencial repetido, secuencial duplicado, dos proformas con el mismo numero, buscar proforma, buscador, filtros, filtrar proformas, buscar por producto, proformas vencidas, proformas sin facturar, filtro de fechas, chips, imprimir, impresora, vendedor del cliente, vendedor asignado, vendedor por defecto, celular, movil, telefono, columnas cortadas, descripcion completa, iva al subtotal, iva item por item, iva linea por linea, calculo del iva
-version: 1.26
+version: 1.27
 orden: 15
 estado: activo
 ---
@@ -503,6 +503,13 @@ documentos admite cada periodo) está en el manual de **Empresa**, sección
 
 ## Historial de cambios
 
+- **1.27** — El IVA se calcula con la configuración de facturación (al
+  subtotal o línea por línea) del establecimiento de la **serie elegida**; antes
+  se tomaba la del primer establecimiento de la empresa. Al cambiar de serie los
+  totales se recalculan. Redondeo corregido (98,10 × 15% = 14,72). Ver [Cómo se
+  calcula el IVA](conceptos/calculo-iva).
+  El PDF, la plantilla PDF, el Excel y el correo muestran el IVA **guardado** (ya no
+  lo recalculan con la configuración del momento de imprimir).
 - **1.26** — El **PDF** (diseño propio o plantilla de la empresa), el **Excel** y el
   total citado en el **correo** y en **WhatsApp** calculan el IVA con el modo
   configurado hoy (al subtotal o ítem por ítem), igual que las conversiones.

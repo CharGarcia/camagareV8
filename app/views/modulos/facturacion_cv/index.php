@@ -203,6 +203,7 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
     </div>
 </div>
 
+<?php require MVC_APP . '/views/partials/iva_modos_punto.php'; ?>
 <script>
     window.RUTA_MODULO_FACCV = '<?= $urlBaseFac ?>';
     window.FACCV_PERM = {

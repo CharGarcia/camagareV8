@@ -6,7 +6,7 @@ ruta_modulo: modulos/caja-pos
 tipo: modulo
 visibilidad: todos
 etiquetas: pos, punto de venta, caja, mostrador, venta rapida, apertura de caja, cierre de caja, arqueo, fondo inicial, servicio, 10%, propina, recargo, punto de emision, establecimiento, turno, restaurante, salon, volver al sistema, sri, autorizacion sri, factura autorizada, numero de autorizacion, tirilla con autorizacion, enviar al sri, firma electronica, cierre de caja, arqueo, formas de pago, cobrado por forma de pago, correo de cierre, detalle del cierre, cambiar precio, editar precio, precio editable, envio a domicilio, delivery, precio variable, servicio del turno, propina voluntaria, reparto al personal, detalle de impuestos, iva del turno, subtotal por tarifa, total vendido, total cobrado, reporte de cierre
-version: 1.11
+version: 1.12
 orden: 25
 estado: activo
 ---
@@ -256,6 +256,10 @@ Pagos**. Antes se cobraba igual con un "Efectivo" inventado, y esa venta quedaba
 su Ingreso —con la Cuenta por Cobrar abierta— sin avisar a nadie.
 ## Historial de cambios
 
+- **1.12** — Ahora respeta la configuración de facturación **al subtotal**
+  del establecimiento del punto (antes calculaba siempre línea por línea): con
+  98,10 al 15% el IVA es 14,72, no 14,73. Ver [Cómo se calcula el
+  IVA](conceptos/calculo-iva).
 - **1.11** — El correo del cierre de caja sigue ahora el **formato de la tirilla
   del Reporte Restaurante** e incluye el **detalle de impuestos** (subtotales por
   tarifa, IVA, servicio y total con impuestos) y el **Total vendido (sin imp.)**.

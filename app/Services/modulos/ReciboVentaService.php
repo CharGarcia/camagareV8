@@ -300,6 +300,12 @@ class ReciboVentaService
         }
 
         $this->enriquecerDetalles($data);
+        // IVA recalculado en el servidor con la configuración de facturación de la serie
+        // (al subtotal / línea por línea): no se guarda lo que mande quien llama.
+        // Un recibo "sin impuestos" no lleva IVA: se deja tal cual.
+        if (\App\Helpers\Booleano::es($data['con_impuestos'] ?? true)) {
+            $data = \App\Helpers\CalculoIvaDocumento::normalizar($data, 'el recibo');
+        }
         $this->rules->validar($data, $estConfig ?? []);
         $this->normalizarYValidarStock($data, $estConfig, null);
 
@@ -376,6 +382,12 @@ class ReciboVentaService
         }
 
         $this->enriquecerDetalles($data);
+        // IVA recalculado en el servidor con la configuración de facturación de la serie
+        // (al subtotal / línea por línea): no se guarda lo que mande quien llama.
+        // Un recibo "sin impuestos" no lleva IVA: se deja tal cual.
+        if (\App\Helpers\Booleano::es($data['con_impuestos'] ?? true)) {
+            $data = \App\Helpers\CalculoIvaDocumento::normalizar($data, 'el recibo');
+        }
         $this->rules->validar($data, $estConfig ?? []);
         $this->normalizarYValidarStock($data, $estConfig, $id);
 
@@ -665,7 +677,8 @@ class ReciboVentaService
 
         // Respetar el modo de cálculo del IVA del establecimiento: en 'subtotal' el IVA
         // de cada tarifa se calcula sobre la suma de bases y se reparte entre las líneas.
-        $modoIva = \App\Helpers\IvaSubtotal::modo($empresaConfig);
+        // Manda el establecimiento del punto con que se emite la factura (el del recibo).
+        $modoIva = \App\Helpers\IvaSubtotal::modoPunto((int) $recibo['id_punto_emision'], $idEmpresa, $empresaConfig);
         if ($modoIva === 'subtotal') {
             $lineasIva = [];
             foreach ($detFactura as $k => $df) {

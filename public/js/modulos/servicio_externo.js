@@ -202,6 +202,7 @@
         document.getElementById('se_serie').value = est + '-' + punto;
         document.getElementById('se_id_punto_emision').value = idPunto;
         document.getElementById('se_id_establecimiento').value = opt.dataset.idEst || '';
+        seCalcTotales(); // otra serie puede ser de otro establecimiento, con otro modo de IVA
         await seCargarSecuencial(idPunto);
     };
     async function seCargarSecuencial(idPunto) {
@@ -308,7 +309,7 @@
     const TARIFAS_IVA = window.TARIFAS_IVA || [];
     const UNIDADES = window.UNIDADES || [];
     const DEC_PRECIO = EMPRESA_CONFIG.decimales_precio ?? 2;
-    const r2 = v => Math.round(v * 100) / 100;
+    const r2 = v => window.CMG_r2(v); // redondeo común (public/js/app.js): 98,10 × 15% = 14,72, no 14,71
     function seDebounce(fn, wait) { let t; return function (...a) { clearTimeout(t); t = setTimeout(() => fn.apply(this, a), wait); }; }
 
     // Al cambiar la bodega de la cabecera se recalcula el saldo de todas las líneas.
@@ -612,7 +613,8 @@
         seCalcTotales();
     };
     window.seCalcTotales = function () {
-        const modoIva = EMPRESA_CONFIG.calculo_iva || 'linea_linea';
+        // Modo del establecimiento de la serie elegida (igual que el servidor al guardar).
+        const modoIva = window.CMG_modoIvaPunto(document.getElementById('se_id_punto_emision')?.value, EMPRESA_CONFIG.calculo_iva);
         let subtotalGeneral = 0, descuentoTotal = 0;
         const grupos = {};
         document.querySelectorAll('#se_tbodyDetalle .row-detalle').forEach(tr => {

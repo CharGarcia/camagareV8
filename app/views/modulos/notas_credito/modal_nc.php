@@ -477,9 +477,12 @@ $vistaConfigNC = \App\Helpers\PreferenciasHelper::getPreferenciasVista('notas_cr
     #modalNC.nc-lectura .nc-edit-only {
         display: none !important;
     }
-</style><script>
-    // Modo de cálculo del IVA del establecimiento (Empresa → Facturación). Va en el
-    // modal porque se incluye también desde Facturas de Venta: ahí $empresa ya trae
-    // la config del establecimiento fusionada; en /notas_credito la pasa el controller.
+</style>
+<?php require MVC_APP . '/views/partials/iva_modos_punto.php'; ?>
+<script>
+    // Modo de cálculo del IVA de respaldo (Empresa → Facturación). El que manda es el del
+    // establecimiento de la serie elegida (ver NC_modoIva() en notas_credito.js); este
+    // solo se usa si el punto no está en el mapa. Va en el modal porque se incluye
+    // también desde Facturas de Venta; en /notas_credito lo pasa el controller.
     window.nc_calculo_iva = <?= json_encode((($ncCalculoIva ?? $empresa['calculo_iva_facturacion'] ?? 'linea_linea') === 'subtotal') ? 'subtotal' : 'linea_linea') ?>;
 </script>

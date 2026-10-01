@@ -680,6 +680,23 @@ class FacturasVentaController extends ApiBaseController
             $this->jsonError('SIN_DETALLES', 'Agrega al menos un producto con cantidad válida.', 422);
         }
 
+        // IVA según la configuración de facturación del establecimiento del punto con que
+        // se emite (igual que la web): en 'subtotal' el IVA de cada tarifa es
+        // round(Σ bases × %) y sus centavos se reparten entre las líneas.
+        $modoIva = \App\Helpers\IvaSubtotal::modoPunto((int) ($identidad['id_punto_emision'] ?? 0), $idEmpresa, $empresaData);
+        if ($modoIva === 'subtotal') {
+            $lineasIva = [];
+            foreach ($detalles as $k => $d) {
+                $imp = $d['impuestos'][0];
+                $lineasIva[$k] = ['grupo' => $d['id_tarifa_iva'] ?: $imp['codigo_porcentaje'] . ':' . $imp['tarifa'], 'base' => $d['precio_total_sin_impuesto'], 'pct' => $imp['tarifa']];
+            }
+            $totalIva = 0.0;
+            foreach (\App\Helpers\IvaSubtotal::repartir($lineasIva, $modoIva) as $k => $ivaLinea) {
+                $detalles[$k]['impuestos'][0]['valor'] = $ivaLinea;
+                $totalIva += $ivaLinea;
+            }
+        }
+
         $totalSinImpuestos = round($totalSinImpuestos, 2);
         $totalIva = round($totalIva, 2);
         $importeTotal = round($totalSinImpuestos + $totalIva, 2);

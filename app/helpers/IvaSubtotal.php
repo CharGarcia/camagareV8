@@ -30,6 +30,46 @@ final class IvaSubtotal
     }
 
     /**
+     * Modo del establecimiento al que pertenece el punto de emisión del documento.
+     * La configuración de facturación es por establecimiento: el modo lo decide la serie
+     * con la que se emite, no el primer establecimiento de la empresa. Si el punto no se
+     * puede resolver (sin punto, punto ajeno o migración pendiente) se usa `$respaldo`.
+     */
+    public static function modoPunto(?int $idPunto, int $idEmpresa, ?array $respaldo = null): string
+    {
+        if ((int) $idPunto > 0) {
+            try {
+                $v = (new \App\repositories\modulos\EmpresaRepository())->getModoIvaPunto((int) $idPunto, $idEmpresa);
+                if ($v !== null) {
+                    return self::modo(['calculo_iva_facturacion' => $v]);
+                }
+            } catch (\Throwable $e) {
+                // Se cae al respaldo.
+            }
+        }
+        return self::modo($respaldo);
+    }
+
+    /**
+     * Mapa id_punto => modo de todos los puntos de la empresa, para que las pantallas
+     * calculen con el modo de la serie elegida (ver CMG_modoIvaPunto() en app.js).
+     *
+     * @return array<string, string>
+     */
+    public static function modosPorPunto(int $idEmpresa): array
+    {
+        $out = [];
+        try {
+            foreach ((new \App\repositories\modulos\EmpresaRepository())->getModosIvaPorPunto($idEmpresa) as $id => $v) {
+                $out[(string) $id] = self::modo(['calculo_iva_facturacion' => $v]);
+            }
+        } catch (\Throwable $e) {
+            // Sin mapa, las pantallas usan su modo por defecto.
+        }
+        return $out;
+    }
+
+    /**
      * @param array<int|string, array{grupo:string|int, base:float, pct:float}> $lineas
      *        Una entrada por línea (la clave se conserva). `grupo` identifica la tarifa
      *        (id o código): las líneas se agrupan por él. `base` es la base imponible

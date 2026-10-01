@@ -4,6 +4,7 @@ declare(strict_types=1);
 namespace App\Services\modulos;
 
 use App\core\Database;
+use App\Helpers\IvaSubtotal;
 use App\models\FormaPagoSri;
 use App\repositories\modulos\ClienteRepository;
 use App\repositories\modulos\EmpresaRepository;
@@ -341,6 +342,22 @@ class PosVentaService
 
         if (empty($det)) {
             throw new Exception('No hay líneas válidas en el carrito.');
+        }
+
+        // IVA según la configuración de facturación del establecimiento del punto
+        // (`calculo_iva_facturacion`): en 'subtotal' el IVA de cada tarifa es
+        // round(Σ bases × %) y sus centavos se reparten entre las líneas.
+        $modoIva = IvaSubtotal::modoPunto($idPuntoEmision, $idEmpresa, $empresaConfig);
+        if ($modoIva === 'subtotal') {
+            $lineasIva = [];
+            foreach ($det as $k => $d) {
+                $lineasIva[$k] = ['grupo' => $d['id_tarifa_iva'] ?: 'pct:' . $d['porcentaje_iva'], 'base' => $d['precio_total_sin_impuesto'], 'pct' => $d['porcentaje_iva']];
+            }
+            $ivaTotal = 0.0;
+            foreach (IvaSubtotal::repartir($lineasIva, $modoIva) as $k => $ivaLinea) {
+                $det[$k]['impuestos'][0]['valor'] = $ivaLinea;
+                $ivaTotal += $ivaLinea;
+            }
         }
 
         $totalSinImp = round($totalSinImp, 2);

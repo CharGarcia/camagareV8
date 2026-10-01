@@ -654,6 +654,28 @@ window.CMG_Identificacion = (function () {
     });
 
     /**
+     * Redondeo a 2 decimales "medio hacia arriba" (lejos de cero), como round() de PHP y
+     * como redondea el SRI. `Math.round(v * 100) / 100` falla con el binario de los
+     * decimales: 98,10 × (15 / 100) = 14,714999999999998 → 14,71 en vez de 14,72
+     * (y 1,005 → 1,00). Se limpia ese ruido a 12 cifras significativas antes de redondear.
+     */
+    window.CMG_r2 = function (v) {
+        v = parseFloat(v) || 0;
+        var x = Math.abs(v) * 100;
+        var r = Math.round(parseFloat(x.toPrecision(12))) / 100;
+        return v < 0 ? -r : r;
+    };
+
+    /**
+     * IVA de una base con su tarifa, redondeado a centavos: r2(base × % / 100).
+     * Úsese para el IVA de una línea (modo línea a línea) y para el IVA de una tarifa
+     * sobre su subtotal (modo al subtotal: base = Σ bases netas de descuento + ICE).
+     */
+    window.CMG_iva = function (base, pct) {
+        return window.CMG_r2((parseFloat(base) || 0) * (parseFloat(pct) || 0) / 100);
+    };
+
+    /**
      * IVA "al subtotal" (Empresa → Facturación → calculo_iva_facturacion = 'subtotal').
      * El IVA de cada tarifa es r2(Σ bases × %), pero el documento guarda además el IVA de
      * cada línea; redondeando cada línea por su cuenta la suma difiere del IVA al subtotal
@@ -669,7 +691,7 @@ window.CMG_Identificacion = (function () {
      */
     window.CMG_repartirIvaSubtotal = function (detalles, modo) {
         if (modo !== 'subtotal' || !Array.isArray(detalles)) return;
-        var r2 = function (v) { return Math.round(v * 100) / 100; };
+        var r2 = window.CMG_r2;
         var grupos = {};
         detalles.forEach(function (d) {
             var imp = (d.impuestos || []).filter(function (i) { return String(i.codigo_impuesto) === '2'; })[0];
@@ -701,5 +723,21 @@ window.CMG_Identificacion = (function () {
                 l.imp.valor = typeof l.imp.valor === 'number' ? l.valor : l.valor.toFixed(2);
             });
         });
+    };
+
+    /**
+     * Modo de cálculo del IVA ('subtotal' | 'linea_linea') del punto de emisión elegido:
+     * la configuración de facturación es POR ESTABLECIMIENTO, así que manda el
+     * establecimiento de la serie del documento, no el primero de la empresa.
+     * El mapa lo inyecta app/views/partials/iva_modos_punto.php (id_punto => modo).
+     *
+     * @param {string|number} idPunto  id de empresa_punto_emision seleccionado.
+     * @param {string}        porDefecto Modo a usar si el punto no está en el mapa.
+     */
+    window.CMG_modoIvaPunto = function (idPunto, porDefecto) {
+        var mapa = window.CMG_IVA_MODOS_PUNTO || {};
+        var modo = mapa[String(idPunto || '')];
+        if (!modo) modo = porDefecto;
+        return modo === 'subtotal' ? 'subtotal' : 'linea_linea';
     };
 })();

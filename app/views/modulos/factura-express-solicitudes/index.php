@@ -353,6 +353,7 @@ $decimalesPrec = $decimalesPrec ?? 2;
 <!-- Dropdown global para el buscador de productos (ítems editables) -->
 <div id="fexsolDropProductos" class="list-group shadow position-fixed d-none" style="z-index: 2000; min-width: 360px; max-height: 250px; overflow-y: auto; background:#fff;"></div>
 
+<?php require MVC_APP . '/views/partials/iva_modos_punto.php'; ?>
 <script>
 (function () {
     'use strict';
@@ -430,6 +431,7 @@ $decimalesPrec = $decimalesPrec ?? 2;
 
     window.fexsolAbrirSolicitud = function(el) {
         const r = JSON.parse(el.dataset.row);
+        window.FEX_PUNTO_ACTUAL = r.plantilla_id_punto || ''; // modo de IVA de su serie
         document.getElementById('fexsolDetId').value                   = r.id;
         document.getElementById('fexsolDetNombre').textContent         = r.nombre_cliente ?? '';
         document.getElementById('fexsolDetIdentificacion').textContent = r.identificacion ?? '';
@@ -715,15 +717,41 @@ $decimalesPrec = $decimalesPrec ?? 2;
         fexsolCalcTotalEdit();
     };
 
-    window.fexsolCalcTotalEdit = function() {
-        let total = 0;
-        document.querySelectorAll('#fexsolEditTbody tr').forEach(tr => {
-            const cant = parseFloat(tr.querySelector('.fexsol-cant').value) || 0;
-            const prec = parseFloat(tr.querySelector('.fexsol-precio').value) || 0;
-            const iva  = parseFloat(tr.querySelector('.fexsol-iva').value) || 0;
-            const base = Math.round(cant * prec * 100) / 100;
-            total += base + Math.round(base * (iva / 100) * 100) / 100;
+    /**
+     * Total con IVA de unas líneas [{cant, prec, pct}] con el modo de cálculo del IVA
+     * (Empresa → Facturación) del establecimiento del punto de la plantilla de la
+     * solicitud (window.FEX_PUNTO_ACTUAL), el mismo que aplica el servidor al facturar.
+     * Lo usan esta vista y el panel móvil (panel.php).
+     */
+    window.fexTotalConIva = function (lineas) {
+        const modo = window.CMG_modoIvaPunto(window.FEX_PUNTO_ACTUAL, 'linea_linea');
+        const grupos = {};
+        let subtotal = 0;
+        lineas.forEach(l => {
+            const base = window.CMG_r2(l.cant * l.prec);
+            subtotal = window.CMG_r2(subtotal + base);
+            const k = String(l.pct);
+            if (!grupos[k]) grupos[k] = { pct: l.pct, base: 0, iva: 0 };
+            grupos[k].base = window.CMG_r2(grupos[k].base + base);
+            grupos[k].iva  = window.CMG_r2(grupos[k].iva + window.CMG_iva(base, l.pct));
         });
+        let iva = 0;
+        Object.values(grupos).forEach(g => {
+            iva = window.CMG_r2(iva + (modo === 'subtotal' ? window.CMG_iva(g.base, g.pct) : g.iva));
+        });
+        return window.CMG_r2(subtotal + iva);
+    };
+
+    window.fexsolCalcTotalEdit = function() {
+        const lineas = [];
+        document.querySelectorAll('#fexsolEditTbody tr').forEach(tr => {
+            lineas.push({
+                cant: parseFloat(tr.querySelector('.fexsol-cant').value) || 0,
+                prec: parseFloat(tr.querySelector('.fexsol-precio').value) || 0,
+                pct:  parseFloat(tr.querySelector('.fexsol-iva').value) || 0,
+            });
+        });
+        const total = window.fexTotalConIva(lineas);
         const lbl = document.getElementById('fexsolEditTotal');
         if (lbl) lbl.textContent = '$' + total.toFixed(2);
     };

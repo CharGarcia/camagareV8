@@ -1073,6 +1073,7 @@ $totalPages = $totalPagesOriginal;
 ?>
 
 <script src="<?= BASE_URL ?>/js/components/detalle_columnas.js?v=<?= asset_ver('/js/components/detalle_columnas.js') ?>"></script>
+<?php require MVC_APP . '/views/partials/iva_modos_punto.php'; ?>
 <script>
     // Ajustar z-index de los backdrops dinámicamente para modales anidados
     document.addEventListener('show.bs.modal', function(event) {
@@ -1116,6 +1117,11 @@ $totalPages = $totalPagesOriginal;
     let RV_BLOQUEAR_SECUENCIAL = false;
     const TARIFAS_IVA = <?= json_encode($tarifasIva) ?>;
     const UNIDADES = <?= json_encode($unidades) ?>;
+    // Modo de IVA (al subtotal / línea a línea) del establecimiento de la serie elegida;
+    // EMPRESA_CONFIG.calculo_iva queda solo como respaldo si el punto no está en el mapa.
+    function rvModoIva() {
+        return CMG_modoIvaPunto(document.getElementById('m-select-puntos')?.value, EMPRESA_CONFIG.calculo_iva);
+    }
     const EMPRESA_CONFIG = {
         facturacion_libre: <?= (($empresa['facturacion_libre'] ?? false) === 'true' || ($empresa['facturacion_libre'] ?? false) === true) ? 'true' : 'false' ?>,
         facturacion_inventario: <?= (($empresa['facturacion_inventario'] ?? true) === 'true'  || ($empresa['facturacion_inventario'] ?? true)  === true)  ? 'true' : 'false' ?>,
@@ -1496,7 +1502,7 @@ $totalPages = $totalPagesOriginal;
             text: 'Debe agregar al menos un producto o servicio.'
         });
         // IVA al subtotal: cuadrar Σ IVA por línea con el IVA de la tarifa (public/js/app.js).
-        CMG_repartirIvaSubtotal(detalles, EMPRESA_CONFIG.calculo_iva ?? 'linea_linea');
+        CMG_repartirIvaSubtotal(detalles, rvModoIva());
 
         // ”€”€ Recolectar pagos ”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€
         let sumPagos = 0;
@@ -2385,6 +2391,8 @@ $totalPages = $totalPagesOriginal;
             document.getElementById('m-id-establecimiento').value = opt.dataset.est || '';
         }
         cargarSecuencial(idPunto);
+        // Otra serie puede ser de otro establecimiento, con otro modo de cálculo del IVA.
+        calcTotales();
     }
 
 
@@ -4224,7 +4232,7 @@ $totalPages = $totalPagesOriginal;
     }
 
     /** Redondea a 2 decimales evitando errores de punto flotante. */
-    const r2 = v => Math.round(v * 100) / 100;
+    const r2 = v => window.CMG_r2(v); // redondeo común (public/js/app.js): 98,10 × 15% = 14,72, no 14,71
 
     function calcFila(el) {
         const tr = el.closest('tr');
@@ -4323,7 +4331,7 @@ $totalPages = $totalPagesOriginal;
 
     function calcTotales() {
         rvActualizarColumnasDinamicas();
-        const modoIva = EMPRESA_CONFIG.calculo_iva ?? 'linea_linea';
+        const modoIva = rvModoIva();
 
         // Suma de los subtotales de LÍNEA (neto, ya con el descuento de cada línea
         // restado) — debe coincidir exactamente con sumar a mano la columna

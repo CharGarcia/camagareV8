@@ -255,6 +255,7 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
 </div>
 
 <!-- Variables PHP → JS -->
+<?php require MVC_APP . '/views/partials/iva_modos_punto.php'; ?>
 <script>
 window.BASE_URL   = '<?= $base ?>';
 window.PF_CONFIG  = {

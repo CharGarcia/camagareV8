@@ -19,7 +19,7 @@
     });
 
     function r2(v) {
-        return Math.round((parseFloat(v) || 0) * 100) / 100;
+        return window.CMG_r2(v); // redondeo común (public/js/app.js)
     }
 
     function setEl(id, prop, val) {

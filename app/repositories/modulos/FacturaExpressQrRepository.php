@@ -280,7 +280,7 @@ class FacturaExpressQrRepository extends BaseRepository
         $rows = [];
         if ($total > 0) {
             $offset = ($page - 1) * $perPage;
-            $sql = "SELECT s.*, p.nombre AS nombre_plantilla
+            $sql = "SELECT s.*, p.nombre AS nombre_plantilla, p.id_punto_emision AS plantilla_id_punto
                     FROM factura_express_solicitudes s
                     LEFT JOIN factura_express_plantillas p ON p.id = s.id_plantilla
                     $where

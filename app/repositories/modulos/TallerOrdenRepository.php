@@ -778,6 +778,31 @@ class TallerOrdenRepository extends BaseRepository
         ];
     }
 
+    /**
+     * Base neta por tarifa de IVA de lo que entra al total de la OT (mismo filtro que
+     * calcularTotales()), y el punto de emisión de la orden: para el IVA "al subtotal".
+     *
+     * @return array{id_punto_emision:int, grupos: array<int, array{pct: float, base: float}>}
+     */
+    public function getBasesIvaFacturables(int $idOrden, int $idEmpresa): array
+    {
+        $st = $this->db->prepare(
+            "SELECT COALESCE(id_tarifa_iva, 0) AS id_tarifa, COALESCE(porcentaje_iva, 0) AS pct,
+                    COALESCE(SUM(ROUND((precio_unitario * cantidad - descuento)::numeric, 2)), 0) AS base
+               FROM taller_ordenes_detalle
+              WHERE id_orden = :id AND id_empresa = :e AND eliminado = false
+                AND facturable = true AND estado_linea IN ('aprobada','ejecutada')
+              GROUP BY COALESCE(id_tarifa_iva, 0), COALESCE(porcentaje_iva, 0)"
+        );
+        $st->execute([':id' => $idOrden, ':e' => $idEmpresa]);
+        $grupos = array_map(static fn($r) => ['pct' => (float) $r['pct'], 'base' => (float) $r['base']], $st->fetchAll(PDO::FETCH_ASSOC));
+
+        $sp = $this->db->prepare("SELECT COALESCE(id_punto_emision, 0) FROM taller_ordenes WHERE id = :id AND id_empresa = :e");
+        $sp->execute([':id' => $idOrden, ':e' => $idEmpresa]);
+
+        return ['id_punto_emision' => (int) $sp->fetchColumn(), 'grupos' => $grupos];
+    }
+
     // ─── ETAPAS (recorrido por departamentos) ─────────────────────────────────
 
     public function insertEtapa(array $d): int

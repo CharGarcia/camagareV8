@@ -133,6 +133,9 @@ class NotaCreditoService
 
     public function crear(array $data): int
     {
+        // IVA recalculado en el servidor con la configuración de facturación de la serie
+        // (al subtotal / línea por línea): no se guarda lo que mande quien llama.
+        $data = \App\Helpers\CalculoIvaDocumento::normalizar($data, 'la nota de crédito');
         $this->rules->validar($data);
         $data = $this->validarBodegaReintegro($data);
         $data = $this->validarVendedor($data);
@@ -349,6 +352,9 @@ class NotaCreditoService
 
     public function actualizar(int $id, array $data): int
     {
+        // IVA recalculado en el servidor con la configuración de facturación de la serie
+        // (al subtotal / línea por línea): no se guarda lo que mande quien llama.
+        $data = \App\Helpers\CalculoIvaDocumento::normalizar($data, 'la nota de crédito');
         $this->rules->validar($data);
         $data = $this->validarBodegaReintegro($data);
         $data = $this->validarVendedor($data);

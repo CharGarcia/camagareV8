@@ -357,7 +357,7 @@ class ConsignacionFacturaService
             // la vista previa que se cargó al abrir el modal.
             $numero = $this->reservarNumero($idEmpresa, $data);
 
-            [$detalles, $tot] = $this->normalizarDetalles($data['detalles'], $idEmpresa, null, IvaSubtotal::modo($data['empresa_config'] ?? null));
+            [$detalles, $tot] = $this->normalizarDetalles($data['detalles'], $idEmpresa, null, IvaSubtotal::modoPunto((int) ($data['id_punto_emision'] ?? 0), $idEmpresa, $data['empresa_config'] ?? null));
 
             $idDoc = $this->crearCabecera([
                 'id_empresa'       => $idEmpresa,
@@ -423,7 +423,7 @@ class ConsignacionFacturaService
         try {
             $db->beginTransaction();
 
-            [$detalles, $tot] = $this->normalizarDetalles($data['detalles'], $idEmpresa, null, IvaSubtotal::modo($data['empresa_config'] ?? null));
+            [$detalles, $tot] = $this->normalizarDetalles($data['detalles'], $idEmpresa, null, IvaSubtotal::modoPunto((int) ($data['id_punto_emision'] ?? $doc['id_punto_emision'] ?? 0), $idEmpresa, $data['empresa_config'] ?? null));
 
             $this->repository->deleteDetalles($id, $idEmpresa);
             foreach ($detalles as $d) {
@@ -732,7 +732,7 @@ class ConsignacionFacturaService
         // IVA recalculado con la configuración VIGENTE (`calculo_iva_facturacion`): un borrador
         // guardado antes (o con otra configuración) no debe arrastrar su IVA a la factura. Si
         // cambia, el documento se actualiza junto con la factura (paso 3).
-        [$detalles, $totDoc] = $this->aplicarModoIva($detalles, IvaSubtotal::modo($empresaConfig));
+        [$detalles, $totDoc] = $this->aplicarModoIva($detalles, IvaSubtotal::modoPunto((int) ($doc['id_punto_emision'] ?? 0), $idEmpresa, $empresaConfig));
         $ivaCambio = abs($totDoc['impuesto'] - round((float) ($doc['impuesto'] ?? 0), 2)) > 0.001
                   || abs($totDoc['total'] - round((float) ($doc['total'] ?? 0), 2)) > 0.001;
 
@@ -1015,12 +1015,18 @@ class ConsignacionFacturaService
                 'empresa_config'   => ['tipo_ambiente' => (string) ($data['tipo_ambiente'] ?? '1')],
             ]);
 
-            $subtotal = 0.0; $impuesto = 0.0; $total = 0.0;
-            foreach ($lineas as $l) {
-                $subtotal += (float) ($l['subtotal'] ?? 0);
-                $impuesto += (float) ($l['valor_impuesto'] ?? 0);
-                $total    += (float) ($l['total'] ?? 0);
+            // IVA con la configuración de facturación del establecimiento de la serie del
+            // registro (al subtotal / línea por línea), igual que un documento normal: las
+            // líneas del cambio traen el IVA línea a línea con 6 decimales.
+            foreach ($lineas as &$l) {
+                $l['subtotal'] = round((float) ($l['subtotal'] ?? 0), 2);
             }
+            unset($l);
+            [$lineas, $tot] = $this->aplicarModoIva(
+                $lineas,
+                IvaSubtotal::modoPunto((int) $numero['id_punto_emision'], $idEmpresa)
+            );
+            $subtotal = $tot['subtotal']; $impuesto = $tot['impuesto']; $total = $tot['total'];
 
             $numeroFactura = trim((string) ($data['numero_factura'] ?? ''));
             $idDoc = $this->crearCabecera([

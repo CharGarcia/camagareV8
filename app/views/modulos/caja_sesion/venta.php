@@ -426,6 +426,29 @@ $rutaAjax = $base . '/' . $rutaModulo;
     const AJAX = "<?= $rutaAjax ?>";
     const BASE = "<?= $base ?>";
     const ID_PUNTO = <?= (int) $idPuntoEmision ?>;
+    // Modo de cálculo del IVA del establecimiento de este punto (Empresa → Facturación),
+    // el mismo que aplica PosVentaService al cobrar.
+    const MODO_IVA = '<?= \App\Helpers\IvaSubtotal::modoPunto((int) $idPuntoEmision, (int) ($_SESSION['id_empresa'] ?? 0)) ?>';
+    // Redondeo a centavos medio hacia arriba, como round() de PHP y el SRI (esta vista
+    // es standalone y no carga app.js; mismo criterio que CMG_r2): 98,10 × 15% = 14,72.
+    const posR2 = (v) => { v = parseFloat(v) || 0; const r = Math.round(parseFloat((Math.abs(v) * 100).toPrecision(12))) / 100; return v < 0 ? -r : r; };
+    // IVA del carrito por tarifa según MODO_IVA: línea a línea suma el IVA redondeado de
+    // cada línea; al subtotal es round(Σ bases netas × %) por tarifa.
+    function ivaCarritoPorTarifa(lineas) {
+        const grupos = {};
+        lineas.forEach(l => {
+            const base = posR2(Math.max(0, l.precio_unitario * l.cantidad - (l.descuento || 0)));
+            const pct = parseFloat(l.pct_iva) || 0;
+            const k = String(pct);
+            if (!grupos[k]) grupos[k] = { pct, base: 0, iva: 0 };
+            grupos[k].base = posR2(grupos[k].base + base);
+            grupos[k].iva = posR2(grupos[k].iva + posR2(base * pct / 100));
+        });
+        if (MODO_IVA === 'subtotal') {
+            Object.values(grupos).forEach(g => { g.iva = posR2(g.base * g.pct / 100); });
+        }
+        return grupos;
+    }
     // Mismos datos que EMPRESA_INFO en factura_venta/recibos_venta — para armar
     // el encabezado del ticket de impresión (imprimirTicketPos), sin llamada extra.
     const EMPRESA_INFO = {
@@ -1024,16 +1047,18 @@ $rutaAjax = $base . '/' . $rutaModulo;
         let subtotal = 0, totalIva = 0, baseServicioPrevia = 0;
         const impMap = {};
         cart.forEach(l => {
-            const baseNeta = Math.max(0, l.precio_unitario * l.cantidad - (l.descuento || 0));
-            subtotal += baseNeta;
-            const ivaLinea = baseNeta * l.pct_iva / 100;
-            const lbl = `IVA ${l.pct_iva}%`;
-            impMap[lbl] = (impMap[lbl] || 0) + ivaLinea;
+            const baseNeta = posR2(Math.max(0, l.precio_unitario * l.cantidad - (l.descuento || 0)));
+            subtotal = posR2(subtotal + baseNeta);
             if (!l.excluir_recargo) baseServicioPrevia += baseNeta;
         });
-        Object.values(impMap).forEach(v => totalIva += v);
-        const servicioPrevia = (aplicaServicio && SERVICIO_PCT > 0 && !esDomicilio()) ? Math.round(baseServicioPrevia * SERVICIO_PCT) / 100 : 0;
-        const total = subtotal + totalIva + servicioPrevia;
+        // IVA por tarifa con el modo de la configuración (mismo cálculo que al cobrar).
+        Object.values(ivaCarritoPorTarifa(cart)).forEach(g => {
+            const lbl = `IVA ${g.pct}%`;
+            impMap[lbl] = posR2((impMap[lbl] || 0) + g.iva);
+            totalIva = posR2(totalIva + g.iva);
+        });
+        const servicioPrevia = (aplicaServicio && SERVICIO_PCT > 0 && !esDomicilio()) ? posR2(posR2(baseServicioPrevia) * SERVICIO_PCT / 100) : 0;
+        const total = posR2(subtotal + totalIva + servicioPrevia);
 
         const lineas = cart.map(l => {
             const baseNeta = Math.max(0, l.precio_unitario * l.cantidad - (l.descuento || 0));
@@ -1562,15 +1587,15 @@ $rutaAjax = $base . '/' . $rutaModulo;
     function totalCarrito() {
         let subtotal = 0, iva = 0, baseServicio = 0;
         cart.forEach(l => {
-            const baseNeta = Math.max(0, l.precio_unitario * l.cantidad - (l.descuento || 0));
-            subtotal += baseNeta;
-            iva += baseNeta * l.pct_iva / 100;
+            const baseNeta = posR2(Math.max(0, l.precio_unitario * l.cantidad - (l.descuento || 0)));
+            subtotal = posR2(subtotal + baseNeta);
             if (!l.excluir_recargo) baseServicio += baseNeta;
         });
+        Object.values(ivaCarritoPorTarifa(cart)).forEach(g => { iva = posR2(iva + g.iva); });
         const servicio = (aplicaServicio && SERVICIO_PCT > 0 && !esDomicilio())
-            ? Math.round(baseServicio * SERVICIO_PCT) / 100
+            ? posR2(posR2(baseServicio) * SERVICIO_PCT / 100)
             : 0;
-        return { subtotal, iva, servicio, total: subtotal + iva + servicio };
+        return { subtotal, iva, servicio, total: posR2(subtotal + iva + servicio) };
     }
 
     function cambiarCantidad(uid, delta) {

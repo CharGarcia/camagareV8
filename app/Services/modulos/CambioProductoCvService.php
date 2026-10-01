@@ -8,6 +8,7 @@ use App\repositories\modulos\InventarioRepository;
 use App\Rules\modulos\CambioProductoCvRules;
 use App\Services\LogSistemaService;
 use App\core\Database;
+use App\Helpers\IvaSubtotal;
 use Exception;
 
 /**
@@ -289,17 +290,17 @@ class CambioProductoCvService
             $numero = $num['serie'] . '-' . $num['secuencial'];
             $this->ultimoNumeroGenerado = $numero;
 
-            $totDev = $this->procesarLineas($idCambio, $idEmpresa, $idUsuario, $empresaConfig, $data['devoluciones'] ?? [], 'devolucion', true, $numero, (int) $data['id_cliente']);
-            $totEnt = $this->procesarLineas($idCambio, $idEmpresa, $idUsuario, $empresaConfig, $data['entregas'] ?? [], 'entrega', true, $numero, (int) $data['id_cliente']);
+            $totDev = $this->procesarLineas($idCambio, $idEmpresa, $idUsuario, $empresaConfig, $data['devoluciones'] ?? [], 'devolucion', true, $numero, (int) $data['id_cliente'], (int) $num['id_punto_emision']);
+            $totEnt = $this->procesarLineas($idCambio, $idEmpresa, $idUsuario, $empresaConfig, $data['entregas'] ?? [], 'entrega', true, $numero, (int) $data['id_cliente'], (int) $num['id_punto_emision']);
 
             $this->repository->updateCabecera($idCambio, $idEmpresa, [
-                'subtotal_devuelto'  => round($totDev, 6),
-                'subtotal_entregado' => round($totEnt, 6),
-                'diferencia'         => round($totEnt - $totDev, 6),
+                'subtotal_devuelto'  => round($totDev, 2),
+                'subtotal_entregado' => round($totEnt, 2),
+                'diferencia'         => round($totEnt - $totDev, 2),
             ]);
-            $cabecera['subtotal_devuelto']  = round($totDev, 6);
-            $cabecera['subtotal_entregado'] = round($totEnt, 6);
-            $cabecera['diferencia']         = round($totEnt - $totDev, 6);
+            $cabecera['subtotal_devuelto']  = round($totDev, 2);
+            $cabecera['subtotal_entregado'] = round($totEnt, 2);
+            $cabecera['diferencia']         = round($totEnt - $totDev, 2);
 
             // Lo entregado desde consignación queda facturado en la factura de venta de lo devuelto.
             $this->crearRegistrosFacturacion($idCambio, $idEmpresa, $idUsuario);
@@ -326,9 +327,10 @@ class CambioProductoCvService
      * el descuento que tuvo esa línea; lo que sale lleva el IVA vigente del producto
      * (ivaDelProducto). El IVA nunca se toma del navegador.
      */
-    private function procesarLineas(int $idCambio, int $idEmpresa, int $idUsuario, array $empresaConfig, array $lineas, string $tipoLinea, bool $aplicaInventario, string $numero, int $idCliente): float
+    private function procesarLineas(int $idCambio, int $idEmpresa, int $idUsuario, array $empresaConfig, array $lineas, string $tipoLinea, bool $aplicaInventario, string $numero, int $idCliente, int $idPunto = 0): float
     {
         $total = 0.0;
+        $preparadas = []; // 1ª pasada: validar y armar cada línea; el IVA se calcula después para todas
 
         foreach ($lineas as $det) {
             $cant = (float) ($det['cantidad'] ?? 0);
@@ -463,9 +465,31 @@ class CambioProductoCvService
                 ];
             }
 
-            $subtotal   = round($precio * $cant - $descuento, 6);
-            $valorImp   = round($subtotal * ($porcImp / 100), 6);
-            $totalLinea = round($subtotal + $valorImp, 6);
+            $preparadas[] = ['linea' => $linea, 'cant' => $cant, 'precio' => $precio, 'porc' => $porcImp,
+                             'base' => round(round($precio * $cant, 2) - round($descuento, 2), 2)];
+        }
+
+        // IVA del lado con la configuración de facturación (al subtotal / línea por línea) del
+        // establecimiento de la serie del cambio, a centavos; antes era línea a línea con 6
+        // decimales. Se calcula con todas las líneas a la vez (el modo "al subtotal" lo exige).
+        $lineasIva = [];
+        foreach ($preparadas as $k => $p) {
+            $lineasIva[$k] = [
+                'grupo' => !empty($p['linea']['id_impuesto']) ? 'id:' . (int) $p['linea']['id_impuesto'] : 'pct:' . $p['porc'],
+                'base'  => $p['base'],
+                'pct'   => (float) $p['porc'],
+            ];
+        }
+        $ivas = IvaSubtotal::repartir($lineasIva, IvaSubtotal::modoPunto($idPunto, $idEmpresa, $empresaConfig));
+
+        foreach ($preparadas as $k => $p) {
+            $linea      = $p['linea'];
+            $cant       = $p['cant'];
+            $precio     = $p['precio'];
+            $porcImp    = $p['porc'];
+            $subtotal   = $p['base'];
+            $valorImp   = (float) ($ivas[$k] ?? 0);
+            $totalLinea = round($subtotal + $valorImp, 2);
 
             $this->repository->insertDetalle([
                 'id_cambio'           => $idCambio,
@@ -499,7 +523,7 @@ class CambioProductoCvService
             $total += $totalLinea;
         }
 
-        return $total;
+        return round($total, 2);
     }
 
     /**
@@ -552,17 +576,17 @@ class CambioProductoCvService
             $this->repository->deleteDetalles($id, $idEmpresa);
 
             $numero = ($cab['serie'] ?? '') . '-' . ($cab['secuencial'] ?? '');
-            $totDev = $this->procesarLineas($id, $idEmpresa, $idUsuario, [], $data['devoluciones'] ?? [], 'devolucion', false, $numero, (int) $data['id_cliente']);
-            $totEnt = $this->procesarLineas($id, $idEmpresa, $idUsuario, [], $data['entregas'] ?? [], 'entrega', false, $numero, (int) $data['id_cliente']);
+            $totDev = $this->procesarLineas($id, $idEmpresa, $idUsuario, [], $data['devoluciones'] ?? [], 'devolucion', false, $numero, (int) $data['id_cliente'], (int) ($cab['id_punto_emision'] ?? 0));
+            $totEnt = $this->procesarLineas($id, $idEmpresa, $idUsuario, [], $data['entregas'] ?? [], 'entrega', false, $numero, (int) $data['id_cliente'], (int) ($cab['id_punto_emision'] ?? 0));
 
             $this->repository->updateCabecera($id, $idEmpresa, [
                 'fecha_cambio'       => $data['fecha_cambio'],
                 'id_cliente'         => (int) $data['id_cliente'],
                 'motivo'             => $data['motivo'] ?? null,
                 'observaciones'      => $data['observaciones'] ?? null,
-                'subtotal_devuelto'  => round($totDev, 6),
-                'subtotal_entregado' => round($totEnt, 6),
-                'diferencia'         => round($totEnt - $totDev, 6),
+                'subtotal_devuelto'  => round($totDev, 2),
+                'subtotal_entregado' => round($totEnt, 2),
+                'diferencia'         => round($totEnt - $totDev, 2),
                 'updated_by'         => $idUsuario,
                 'updated_at'         => date('Y-m-d H:i:s'),
             ]);

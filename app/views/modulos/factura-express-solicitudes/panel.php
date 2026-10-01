@@ -261,6 +261,7 @@ $estadosOpc = [
 
         const items    = JSON.parse(r.items_json || '[]');
         const editable = (r.estado === 'pendiente' && PUEDE_ACTUALIZAR);
+        window.FEX_PUNTO_ACTUAL = r.plantilla_id_punto || ''; // modo de IVA de su serie
 
         const itemsBox = document.getElementById('fexpItemsBox');
         document.getElementById('fexpItems').innerHTML = '';
@@ -401,14 +402,17 @@ $estadosOpc = [
     }
 
     function fexpCalcTotal() {
-        let total = 0;
+        // Mismo cálculo que la vista de escritorio (fexTotalConIva en index.php): modo de
+        // IVA de la configuración de facturación del punto de la plantilla.
+        const lineas = [];
         document.querySelectorAll('#fexpItems .fexp-item').forEach(w => {
-            const c = parseFloat(w.querySelector('.fexp-i-cant').value) || 0;
-            const p = parseFloat(w.querySelector('.fexp-i-precio').value) || 0;
-            const iva = parseFloat(w.querySelector('.fexp-i-iva').value) || 0;
-            const base = Math.round(c * p * 100) / 100;
-            total += base + Math.round(base * (iva/100) * 100) / 100;
+            lineas.push({
+                cant: parseFloat(w.querySelector('.fexp-i-cant').value) || 0,
+                prec: parseFloat(w.querySelector('.fexp-i-precio').value) || 0,
+                pct:  parseFloat(w.querySelector('.fexp-i-iva').value) || 0,
+            });
         });
+        const total = window.fexTotalConIva(lineas);
         document.getElementById('fexpTotal').textContent = '$' + total.toFixed(2);
     }
 

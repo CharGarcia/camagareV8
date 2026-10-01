@@ -153,13 +153,16 @@ class RetornoCvService
             $totImpuesto = 0.0;
             $totTotal    = 0.0;
 
+            // 1ª pasada: validar cada línea contra su consignación de origen (autoritativo,
+            // no del cliente) y calcular su IVA con la configuración de facturación del
+            // establecimiento de la serie, para todo el documento a la vez (el modo "al
+            // subtotal" necesita conocer todas las líneas).
+            $items = [];
             foreach ($data['detalles'] as $det) {
                 $cant = (float) ($det['cantidad'] ?? 0);
                 if ($cant <= 0) continue;
 
                 $idConsDet = (int) ($det['id_consignacion_detalle'] ?? 0);
-
-                // Traer los datos "tal cual" de la línea de consignación de origen (autoritativo, no del cliente).
                 $consLinea = $this->getConsignacionDetalle($db, $idConsDet, $idEmpresa);
                 if (!$consLinea) {
                     throw new Exception("La línea de consignación #{$idConsDet} no existe o no pertenece a la empresa.");
@@ -171,13 +174,22 @@ class RetornoCvService
                     $nombre = $consLinea['producto_nombre'] ?? 'Producto';
                     throw new Exception("No puede retornar {$cant} de \"{$nombre}\": el saldo pendiente es {$saldo}.");
                 }
+                $items[] = ['cant' => $cant, 'id_cons_det' => $idConsDet, 'cons' => $consLinea];
+            }
+            $ivaItems = $this->calcularIvaItems($items, (int) $numero['id_punto_emision'], $idEmpresa, $empresaConfig);
+
+            // 2ª pasada: guardar líneas y mover inventario.
+            foreach ($items as $k => $it) {
+                $cant      = $it['cant'];
+                $idConsDet = $it['id_cons_det'];
+                $consLinea = $it['cons'];
 
                 // Valores proporcionales a la cantidad retornada, con el precio/impuesto de la consignación.
                 $precio     = (float) $consLinea['precio_unitario'];
                 $porcImp    = (float) ($consLinea['porcentaje_impuesto'] ?? 0);
-                $subtotal   = round($precio * $cant, 6);
-                $valorImp   = round($subtotal * ($porcImp / 100), 6);
-                $totalLinea = round($subtotal + $valorImp, 6);
+                $subtotal   = $ivaItems[$k]['subtotal'];
+                $valorImp   = $ivaItems[$k]['iva'];
+                $totalLinea = $ivaItems[$k]['total'];
 
                 $idBodega = (int) ($consLinea['id_bodega'] ?? 0);
 
@@ -238,15 +250,15 @@ class RetornoCvService
             $this->repository->getDb()->prepare(
                 "UPDATE retornos_cv SET subtotal = :s, impuesto = :i, total = :t WHERE id = :id AND id_empresa = :e"
             )->execute([
-                ':s' => round($totSubtotal, 6),
-                ':i' => round($totImpuesto, 6),
-                ':t' => round($totTotal, 6),
+                ':s' => round($totSubtotal, 2),
+                ':i' => round($totImpuesto, 2),
+                ':t' => round($totTotal, 2),
                 ':id' => $idRetorno,
                 ':e' => $idEmpresa,
             ]);
-            $cabecera['subtotal'] = round($totSubtotal, 6);
-            $cabecera['impuesto'] = round($totImpuesto, 6);
-            $cabecera['total']    = round($totTotal, 6);
+            $cabecera['subtotal'] = round($totSubtotal, 2);
+            $cabecera['impuesto'] = round($totImpuesto, 2);
+            $cabecera['total']    = round($totTotal, 2);
 
             $this->logService->registrar($idUsuario, $idEmpresa, 'CREAR_RETORNO_CV', 'retornos_cv', $idRetorno, null, $cabecera);
 
@@ -268,6 +280,36 @@ class RetornoCvService
      * pero el POST puede traer cualquier id: si la serie se inactivó mientras el modal
      * estaba abierto, o si alguien manda el id a mano, se rechaza aquí.
      */
+    /**
+     * Subtotal, IVA y total de cada línea del retorno, a centavos, según la configuración
+     * de facturación (`calculo_iva_facturacion`) del establecimiento de la serie:
+     *   - 'linea_linea': IVA de cada línea round(base × %).
+     *   - 'subtotal'   : IVA de cada tarifa round(Σ bases × %), repartido entre sus líneas.
+     *
+     * @param array<int, array{cant: float, cons: array}> $items
+     * @return array<int, array{subtotal: float, iva: float, total: float}>
+     */
+    private function calcularIvaItems(array $items, int $idPunto, int $idEmpresa, array $empresaConfig): array
+    {
+        $lineas = [];
+        foreach ($items as $k => $it) {
+            $pct = (float) ($it['cons']['porcentaje_impuesto'] ?? 0);
+            $lineas[$k] = [
+                'grupo' => !empty($it['cons']['id_impuesto']) ? 'id:' . (int) $it['cons']['id_impuesto'] : 'pct:' . $pct,
+                'base'  => round((float) $it['cons']['precio_unitario'] * $it['cant'], 2),
+                'pct'   => $pct,
+            ];
+        }
+        $ivas = \App\Helpers\IvaSubtotal::repartir($lineas, \App\Helpers\IvaSubtotal::modoPunto($idPunto, $idEmpresa, $empresaConfig));
+
+        $out = [];
+        foreach ($lineas as $k => $l) {
+            $iva = (float) ($ivas[$k] ?? 0);
+            $out[$k] = ['subtotal' => $l['base'], 'iva' => $iva, 'total' => round($l['base'] + $iva, 2)];
+        }
+        return $out;
+    }
+
     private function validarSerieActiva(int $idEmpresa, $idPuntoEmision): void
     {
         $idPunto = (int) ($idPuntoEmision ?? 0);
@@ -367,6 +409,7 @@ class RetornoCvService
             $this->repository->deleteDetalles($id, $idEmpresa);
 
             $totSub = 0.0; $totImp = 0.0; $totTot = 0.0;
+            $items = [];
             foreach ($data['detalles'] as $det) {
                 $cant = (float) ($det['cantidad'] ?? 0);
                 if ($cant <= 0) continue;
@@ -382,12 +425,21 @@ class RetornoCvService
                     $nombre = $consLinea['producto_nombre'] ?? 'Producto';
                     throw new Exception("No puede retornar {$cant} de \"{$nombre}\": el saldo pendiente es {$saldo}.");
                 }
+                $items[] = ['cant' => $cant, 'id_cons_det' => $idConsDet, 'cons' => $consLinea];
+            }
+            // IVA con la configuración de facturación del establecimiento de la serie del retorno.
+            $ivaItems = $this->calcularIvaItems($items, (int) ($cab['id_punto_emision'] ?? 0), $idEmpresa, $data['empresa_config'] ?? []);
+
+            foreach ($items as $k => $it) {
+                $cant      = $it['cant'];
+                $idConsDet = $it['id_cons_det'];
+                $consLinea = $it['cons'];
 
                 $precio     = (float) $consLinea['precio_unitario'];
                 $porcImp    = (float) ($consLinea['porcentaje_impuesto'] ?? 0);
-                $subtotal   = round($precio * $cant, 6);
-                $valorImp   = round($subtotal * ($porcImp / 100), 6);
-                $totalLinea = round($subtotal + $valorImp, 6);
+                $subtotal   = $ivaItems[$k]['subtotal'];
+                $valorImp   = $ivaItems[$k]['iva'];
+                $totalLinea = $ivaItems[$k]['total'];
 
                 $this->repository->insertDetalle([
                     'id_retorno'              => $id,
@@ -416,9 +468,9 @@ class RetornoCvService
                 'id_cliente'    => (int) $data['id_cliente'],
                 'motivo'        => $data['motivo'] ?? null,
                 'observaciones' => $data['observaciones'] ?? null,
-                'subtotal'      => round($totSub, 6),
-                'impuesto'      => round($totImp, 6),
-                'total'         => round($totTot, 6),
+                'subtotal'      => round($totSub, 2),
+                'impuesto'      => round($totImp, 2),
+                'total'         => round($totTot, 2),
                 'updated_by'    => $idUsuario,
                 'updated_at'    => date('Y-m-d H:i:s'),
             ]);

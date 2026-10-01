@@ -18,7 +18,7 @@
     let LC_BLOQUEADO = false;
 
 
-    const r2 = v => Math.round(v * 100) / 100;
+    const r2 = v => window.CMG_r2(v); // redondeo común (public/js/app.js): 98,10 × 15% = 14,72, no 14,71
 
     // Configuración de facturación de la empresa (empresa_establecimiento), inyectada
     // por la vista. Los decimales son los mismos con los que se muestran precio y
@@ -28,7 +28,8 @@
     const LC_CFG = window.LC_EMPRESA_CONFIG || {};
     const DEC_PRECIO = Math.max(0, Math.min(6, parseInt(LC_CFG.decimales_precio ?? 2, 10) || 0));
     const DEC_CANT   = Math.max(0, Math.min(6, parseInt(LC_CFG.decimales_cantidad ?? 2, 10) || 0));
-    const MODO_IVA   = LC_CFG.calculo_iva === 'subtotal' ? 'subtotal' : 'linea_linea';
+    // Modo de IVA del establecimiento de la serie elegida; LC_CFG.calculo_iva es el respaldo.
+    const modoIva = () => window.CMG_modoIvaPunto(document.getElementById('liq-punto')?.value, LC_CFG.calculo_iva);
 
     // Campo normativo del SRI en la información adicional (Res. NAC-DGERCGC26-00000027):
     // el RUC del proveedor del sistema de facturación. Lo agrega y lo vuelve a forzar el
@@ -716,6 +717,7 @@
 
     // --- Totals Calculation ---
     function LC_calcTotales() {
+        const modoIvaDoc = modoIva();
         // subtotalGeneral es NETO (el descuento de cada línea ya está restado), igual
         // que en Facturas de Venta: es el número que se guarda en total_sin_impuestos
         // y el que el SRI compara contra importeTotal = totalSinImpuestos + Σ IVA.
@@ -751,13 +753,13 @@
             }
             grupos[key].base = r2(grupos[key].base + neto);
             // Modo línea a línea: se acumula el IVA ya redondeado de cada renglón.
-            if (MODO_IVA === 'linea_linea') {
+            if (modoIvaDoc === 'linea_linea') {
                 grupos[key].iva = r2(grupos[key].iva + r2(neto * ivaPct / 100));
             }
         });
 
         // Modo al subtotal: el IVA se calcula sobre la base acumulada de cada tarifa.
-        if (MODO_IVA === 'subtotal') {
+        if (modoIvaDoc === 'subtotal') {
             Object.values(grupos).forEach(g => {
                 g.iva = r2(g.base * g.pct / 100);
             });
@@ -1016,6 +1018,7 @@
 
     function syncSecuencialFn(idPunto) {
         if (!idPunto) return;
+        LC_calcTotales(); // otra serie puede ser de otro establecimiento, con otro modo de IVA
         fetch(`${API_URL}/getSecuencialAjax?id_punto_emision=${idPunto}`)
             .then(r => r.json())
             .then(res => {

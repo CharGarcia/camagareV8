@@ -702,6 +702,10 @@ class FacturaVentaService
             }
         }
 
+        // IVA recalculado en el servidor con la configuración de facturación de la serie
+        // (al subtotal / línea por línea): no se guarda lo que mande quien llama.
+        $data = \App\Helpers\CalculoIvaDocumento::normalizar($data, 'la factura');
+
         $this->rules->validar($data, $estConfig ?? []);
 
         // 2. LÃ³gica de selecciÃ³n automÃ¡tica de lotes/stock si aplica (CON AGREGACIÃN PARA VALIDACIÃN)
@@ -975,6 +979,10 @@ class FacturaVentaService
                 }
             }
         }
+
+        // IVA recalculado en el servidor con la configuración de facturación de la serie
+        // (al subtotal / línea por línea): no se guarda lo que mande quien llama.
+        $data = \App\Helpers\CalculoIvaDocumento::normalizar($data, 'la factura');
 
         $this->rules->validar($data, $estConfig ?? []);
 

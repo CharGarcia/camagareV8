@@ -244,6 +244,13 @@
         return inp ? (parseFloat(inp.value) || 0) : (parseFloat(row.dataset.precio) || 0);
     }
 
+    // Modo de cálculo del IVA (Empresa → Facturación) del establecimiento del punto de
+    // la plantilla: el mismo que aplica FacturaExpressQrService al facturar.
+    const MODO_IVA = '<?= \App\Helpers\IvaSubtotal::modoPunto((int) ($plantilla['id_punto_emision'] ?? 0), (int) ($plantilla['id_empresa'] ?? 0)) ?>';
+    // Redondeo a centavos medio hacia arriba, como round() de PHP y el SRI
+    // (98,10 × 15% = 14,72; Math.round(v * 100) / 100 da 14,71 por el binario).
+    const r2 = (v) => { v = parseFloat(v) || 0; const r = Math.round(parseFloat((Math.abs(v) * 100).toPrecision(12))) / 100; return v < 0 ? -r : r; };
+
     function recalcTotales() {
         let subtotal = 0;
         const gruposIva = {}; // { '15': { base: 0, iva: 0 }, '0': { base: 0, iva: 0 }, ... }
@@ -257,8 +264,8 @@
             const cant   = cantEl
                 ? parseFloat(cantEl.value) || 0
                 : parseFloat(row.querySelector('input[type=hidden][name*=cantidad]')?.value || 1);
-            const base   = precio * cant;
-            subtotal += base;
+            const base   = r2(precio * cant);
+            subtotal = r2(subtotal + base);
             // Agrupar por CONCEPTO de tarifa (nombre), igual que la factura de venta:
             // así "Exento de IVA", "No objeto de impuesto" y "0%" (todos con tarifa 0)
             // aparecen como subtotales separados, no mezclados en "0%".
@@ -266,9 +273,13 @@
                 ? row.dataset.ivaNombre
                 : (ivaP.toFixed(0) + '%');
             if (!gruposIva[label]) gruposIva[label] = { base: 0, iva: 0, pct: ivaP, label };
-            gruposIva[label].base += base;
-            gruposIva[label].iva  += base * (ivaP / 100);
+            gruposIva[label].base = r2(gruposIva[label].base + base);
+            gruposIva[label].iva  = r2(gruposIva[label].iva + r2(base * ivaP / 100));
         });
+        // Al subtotal: el IVA de cada tarifa es round(Σ bases × %), no la suma por línea.
+        if (MODO_IVA === 'subtotal') {
+            Object.values(gruposIva).forEach(g => { g.iva = r2(g.base * g.pct / 100); });
+        }
 
         // Subtotal general
         document.getElementById('fexprSubtotal').textContent = subtotal.toFixed(2);
@@ -289,14 +300,14 @@
         let totalIva = 0;
         Object.values(gruposIva).forEach(g => {
             if (g.pct <= 0) return;
-            totalIva += g.iva;
+            totalIva = r2(totalIva + g.iva);
             const div = document.createElement('div');
             div.className = 'd-flex justify-content-between align-items-center mb-1';
             div.innerHTML = `<span class="text-muted">(+) IVA ${g.pct.toFixed(0)}%</span><span class="fw-medium">${g.iva.toFixed(2)}</span>`;
             elIvas.appendChild(div);
         });
 
-        const total = subtotal + totalIva;
+        const total = r2(subtotal + totalIva);
         document.getElementById('fexprTotal').textContent = total.toFixed(2);
     }
 

@@ -269,17 +269,19 @@
         document.querySelectorAll('#cp_tbodyDetalle .row-detalle').forEach(tr => {
             const cant   = parseFloat(tr.querySelector('.input-cantidad').value || 0);
             const precio = parseFloat(tr.querySelector('.input-precio').value || 0);
-            subtotal += cant * precio;
+            subtotal = window.CMG_r2(subtotal + window.CMG_r2(cant * precio));
         });
 
+        // Mismo redondeo que CotizacionPublicidadService::calcularTotales() (centavos por
+        // paso, medio hacia arriba): la pantalla muestra lo que se guarda.
         const comisionPct = parseFloat($id('cp_comision').value || 0);
-        const comision = subtotal * (comisionPct / 100);
+        const comision = window.CMG_r2(subtotal * comisionPct / 100);
 
         const selIva = $id('cp_tarifaIva');
         const pct = parseFloat(selIva?.selectedOptions[0]?.dataset.pct || 0);
-        const iva = (subtotal + comision) * (pct / 100);
+        const iva = window.CMG_iva(subtotal + comision, pct);
 
-        const total = subtotal + comision + iva;
+        const total = window.CMG_r2(subtotal + comision + iva);
 
         $id('cp_subtotal').textContent      = fmt2(subtotal);
         $id('cp_totalComision').textContent = fmt2(comision);

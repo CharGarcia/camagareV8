@@ -6,7 +6,7 @@ ruta_modulo: modulos/notas_credito
 tipo: modulo
 visibilidad: todos
 etiquetas: nota de credito, notas de credito, devolucion, descuento, anular factura, corregir factura, sri, buscar nota de credito, buscador, filtros, filtrar notas de credito, buscar por producto, filtro de fechas, documento modificado, chips, aparecen notas que no busque, resultados que no corresponden, buscar por clave de acceso, lote, lotes, nup, serial, numero de serie, caducidad, vencimiento, fecha de vencimiento, devolver al inventario, reingreso de stock, devolucion de mercaderia, lote equivocado, bodega de reintegro, sin bodegas asignadas, no tiene bodegas, no se refleja en inventario, no aparece en inventario, no devolvio stock, informacion adicional, info adicional, limite de caracteres, maximo 300 caracteres, value too long, no se pudo guardar la nota, codigo, codigo del producto, columna codigo, buscar por codigo, iva, tarifa iva, iva 12, 12%, iva anterior, iva historico, factura año anterior, exento, no objeto de impuesto, tarifa 0, descuento por pronto pago, pronto pago, descuento posterior, descuento comercial, rebaja de precio, bonificacion, no afecta inventario, sin afectar inventario, sin devolver mercaderia, nota de credito sin productos, linea libre, linea manual, subtotal negativo, valor negativo, descuento mayor, sin bodega, invalid input syntax for type integer, vendedor, asesor, vendedor de la nota de credito, cambiar vendedor, comision, motivo, cambiar vendedor nota autorizada, corregir vendedor, vendedor de la factura, vendedor equivocado, vendedor del cliente, imprimir, impresora
-version: 1.29
+version: 1.30
 orden: 30
 estado: activo
 ---
@@ -360,6 +360,11 @@ la operación de inmediato.
 
 ## Historial de cambios
 
+- **1.30** — El IVA se calcula con la configuración de facturación (al
+  subtotal o línea por línea) del establecimiento de la **serie elegida**; antes
+  se tomaba la del primer establecimiento de la empresa. Al cambiar de serie los
+  totales se recalculan. Redondeo corregido (98,10 × 15% = 14,72). Ver [Cómo se
+  calcula el IVA](conceptos/calculo-iva).
 - **1.29** — Corregido: al abrir una nota de crédito después de haber visto otra,
   la ventana podía quedar en la pestaña de la anterior (Asiento contable, SRI) con
   sus datos; ahora siempre abre en la pestaña **Nota de crédito** con la

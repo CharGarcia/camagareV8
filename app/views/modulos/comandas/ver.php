@@ -587,7 +587,12 @@ window.addEventListener('pageshow', function (e) {
     // El porcentaje es el informativo de ComandaRepository::getLineas(); al
     // cobrar, PosVentaService lo resuelve de nuevo desde el producto — esto
     // muestra, no decide.
-    const round2 = (n) => Math.round((parseFloat(n) || 0) * 100) / 100;
+    // Redondeo medio hacia arriba como round() de PHP y el SRI (98,10 × 15% = 14,72;
+    // Math.round(v * 100) / 100 daba 14,71 por el binario). Vista standalone, sin app.js.
+    const round2 = (n) => { const v = parseFloat(n) || 0; const r = Math.round(parseFloat((Math.abs(v) * 100).toPrecision(12))) / 100; return v < 0 ? -r : r; };
+    // Modo de IVA del establecimiento del punto de la caja (Empresa → Facturación), el
+    // mismo que aplica PosVentaService al cobrar.
+    const MODO_IVA = '<?= \App\Helpers\IvaSubtotal::modoPunto((int) ($_SESSION['pos_id_punto_emision'] ?? 0), (int) ($_SESSION['id_empresa'] ?? 0)) ?>';
 
     // IVA y total CON impuestos de UNA línea. El recargo por servicio queda
     // fuera a propósito: es un recargo de la cuenta (se muestra y se cobra una
@@ -647,6 +652,7 @@ window.addEventListener('pageshow', function (e) {
     function calcularTotales(vivas) {
         let subtotal = 0, totalImpuestos = 0, propina = 0, excluidoServicio = 0;
         const impuestos = {};
+        const basesIva = {};
         vivas.forEach(d => {
             const base = round2(d.subtotal);
             subtotal = round2(subtotal + base);
@@ -656,10 +662,20 @@ window.addEventListener('pageshow', function (e) {
             if (pct > 0) {
                 const lbl = `IVA ${pct}%`;
                 const iva = round2(base * pct / 100);
+                if (!basesIva[lbl]) basesIva[lbl] = { pct, base: 0 };
+                basesIva[lbl].base = round2(basesIva[lbl].base + base);
                 impuestos[lbl] = round2((impuestos[lbl] || 0) + iva);
                 totalImpuestos = round2(totalImpuestos + iva);
             }
         });
+        // Al subtotal: el IVA de cada tarifa es round(Σ bases × %), no la suma por línea.
+        if (MODO_IVA === 'subtotal') {
+            totalImpuestos = 0;
+            Object.keys(basesIva).forEach(lbl => {
+                impuestos[lbl] = round2(basesIva[lbl].base * basesIva[lbl].pct / 100);
+                totalImpuestos = round2(totalImpuestos + impuestos[lbl]);
+            });
+        }
         // El recargo se calcula sobre el CONSUMO, así que la propina voluntaria
         // —que es una línea más— y los productos marcados "no aplica recargo de
         // servicio" (envases, empaques) se descuentan de la base. Mismo criterio

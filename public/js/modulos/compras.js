@@ -36,7 +36,7 @@ const DEC_PRECIO = parseInt(window.CMG_empresa?.decimales_precio ?? 2, 10) || 2;
 // (1565.20), mientras que Math.round(v*100)/100 aplicado igual en los dos lugares sí redondea
 // para arriba (1565.21) de forma consistente — evita que el subtotal de una línea individual
 // no coincida con el subtotal agrupado por tarifa de IVA que lo debería igualar.
-const _r2 = v => Math.round(v * 100) / 100;
+const _r2 = v => window.CMG_r2(v); // redondeo común (public/js/app.js): 98,10 × 15% = 14,72, no 14,71
 
 // Muestra cantidad/precio_unitario TAL COMO están guardados en BD (que a su vez preserva lo que
 // trajo el XML del SRI), sin forzar un número fijo de decimales: cada proveedor puede declarar

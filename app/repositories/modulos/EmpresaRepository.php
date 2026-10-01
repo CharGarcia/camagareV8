@@ -740,6 +740,45 @@ class EmpresaRepository extends BaseModel
     }
 
     /**
+     * Modo de cálculo del IVA (`calculo_iva_facturacion`) de cada punto de emisión de la
+     * empresa, tomado del establecimiento al que pertenece el punto.
+     *
+     * @return array<int, string> id_punto => valor guardado ('subtotal' | 'linea_linea' | null)
+     */
+    public function getModosIvaPorPunto(int $idEmpresa): array
+    {
+        $st = $this->db->prepare(
+            "SELECT p.id, e.calculo_iva_facturacion
+               FROM empresa_punto_emision p
+               JOIN empresa_establecimiento e ON e.id = p.id_establecimiento AND e.eliminado = false
+              WHERE p.id_empresa = :id_empresa AND p.eliminado = false"
+        );
+        $st->execute([':id_empresa' => $idEmpresa]);
+        $out = [];
+        foreach ($st->fetchAll(\PDO::FETCH_ASSOC) as $r) {
+            $out[(int) $r['id']] = $r['calculo_iva_facturacion'];
+        }
+        return $out;
+    }
+
+    /**
+     * Valor de `calculo_iva_facturacion` del establecimiento de un punto de emisión
+     * (null si el punto no existe en la empresa).
+     */
+    public function getModoIvaPunto(int $idPunto, int $idEmpresa): ?string
+    {
+        $st = $this->db->prepare(
+            "SELECT COALESCE(e.calculo_iva_facturacion, 'linea_linea')
+               FROM empresa_punto_emision p
+               JOIN empresa_establecimiento e ON e.id = p.id_establecimiento AND e.eliminado = false
+              WHERE p.id = :id_punto AND p.id_empresa = :id_empresa AND p.eliminado = false"
+        );
+        $st->execute([':id_punto' => $idPunto, ':id_empresa' => $idEmpresa]);
+        $v = $st->fetchColumn();
+        return $v === false ? null : (string) $v;
+    }
+
+    /**
      * Logo propio del punto de emisión ('' si no tiene). Lo consume
      * App\Helpers\LogoPuntoEmision: el PDF de un documento usa el logo de su
      * punto y, si el punto no tiene, se queda con el del establecimiento.

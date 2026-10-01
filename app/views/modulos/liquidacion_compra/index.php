@@ -938,6 +938,7 @@ if (!empty($permRetencion['ver'])) {
 }
 ?>
 
+<?php require MVC_APP . '/views/partials/iva_modos_punto.php'; ?>
 <script>
     // Definir constantes del sistema ANTES de cargar los archivos JS
     window.BASE_URL  = '<?= $base ?>';

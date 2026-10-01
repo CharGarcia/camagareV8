@@ -11,10 +11,11 @@ namespace App\Helpers;
  * para que ninguna salida pueda divergir de lo que el usuario vio al guardar.
  *
  * desglosar() no recalcula: lee los impuestos de cada línea y los totales de la
- * cabecera. Antes de llamarlo, las salidas pasan por recalcularIva(), que aplica el
- * modo de IVA VIGENTE de la empresa (`calculo_iva_facturacion`: al subtotal o ítem por
- * ítem) sobre las bases guardadas, para que el PDF, el Excel y las conversiones usen
- * siempre la configuración actual aunque la proforma se haya grabado con otra.
+ * cabecera tal como se GUARDARON. El IVA se calcula una sola vez, al guardar
+ * (ProformaService::normalizarImportes → aplicarModoIva, con el modo del establecimiento
+ * de la serie), y el PDF, la plantilla PDF, el Excel y el correo muestran eso mismo.
+ * recalcularIva() queda solo para quien necesite el IVA con la configuración vigente
+ * (hoy ninguna salida impresa lo usa).
  */
 class ProformaTotales
 {
@@ -188,7 +189,11 @@ class ProformaTotales
     public static function recalcularIva(array $cabecera, array $detalles, array $config): array
     {
         if (empty($detalles)) return [$cabecera, $detalles];
-        [$detalles, $tot] = self::aplicarModoIva($detalles, IvaSubtotal::modo($config));
+        // Modo del establecimiento del punto de la proforma; $config es solo respaldo.
+        $modo = IvaSubtotal::modoPunto(
+            (int) ($cabecera['id_punto_emision'] ?? 0), (int) ($cabecera['id_empresa'] ?? 0), $config
+        );
+        [$detalles, $tot] = self::aplicarModoIva($detalles, $modo);
         $cabecera['total_sin_impuestos'] = $tot['subtotal'];
         $cabecera['total_descuento']     = $tot['descuento'];
         $cabecera['importe_total']       = round($tot['subtotal'] + (float) ($cabecera['total_ice'] ?? 0) + $tot['iva'], 2);

@@ -18,6 +18,8 @@ use TCPDF;
 class SuscripcionPdfService
 {
     private TCPDF $pdf;
+    /** Modo de cálculo del IVA (Empresa → Facturación): 'subtotal' | 'linea_linea'. */
+    private string $modoIva = 'linea_linea';
 
     private float $marginL  = 12;
     private float $marginR  = 12;
@@ -38,6 +40,7 @@ class SuscripcionPdfService
     public function generar(array $cabecera, array $detalle, array $pagos, array $empresa, string $outputDest = 'I')
     {
         $numero = str_pad((string) (int) ($cabecera['id'] ?? 0), 6, '0', STR_PAD_LEFT);
+        $this->modoIva = \App\Helpers\IvaSubtotal::modo($empresa);
 
         $this->pdf = new TCPDF('P', 'mm', 'A4', true, 'UTF-8', false);
         $this->pdf->SetCreator('Sistema');
@@ -259,6 +262,7 @@ class SuscripcionPdfService
         $subtotal   = 0.0;
         $iva        = 0.0;
         $porTarifa  = [];
+        $pctTarifa  = [];
 
         if (empty($detalle)) {
             $pdf->SetX($mL);
@@ -276,6 +280,7 @@ class SuscripcionPdfService
             $iva      += round($sub * $pct / 100, 2);
             $clave     = $this->numLibre($pct) . '%';
             $porTarifa[$clave] = ($porTarifa[$clave] ?? 0) + $sub;
+            $pctTarifa[$clave] = $pct;
 
             $desc = trim((string) ($d['descripcion'] ?? '')) !== '' ? (string) $d['descripcion'] : (string) ($d['nombre_producto'] ?? '');
             $vals = [
@@ -309,6 +314,17 @@ class SuscripcionPdfService
             }
             $pdf->SetXY($mL, $yRow + $h);
         }
+
+        // Configuración de facturación "al subtotal": el IVA de cada tarifa es
+        // round(subtotal de la tarifa × %), una sola vez (igual que el modal).
+        if ($this->modoIva === 'subtotal') {
+            $iva = 0.0;
+            foreach ($porTarifa as $clave => $monto) {
+                $iva += round(round($monto, 2) * $pctTarifa[$clave] / 100, 2);
+            }
+        }
+        $subtotal = round($subtotal, 2);
+        $iva      = round($iva, 2);
 
         // Totales a la derecha.
         $filas = [];

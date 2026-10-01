@@ -6,7 +6,7 @@ ruta_modulo: modulos/cambio-producto-cv
 tipo: modulo
 visibilidad: todos
 etiquetas: cambio de producto, cambios de productos, listado de cambios, producto que entra, producto que sale, entra y sale, buscar cambio, buscador, filtros, filtrar cambios, buscar por producto, documento de origen, chips, garantia, reposicion, devolucion con reposicion, canje, buscar por nup, nup, serial, numero de serie, lote, buscar por factura, numero de factura, factura de venta, numero de factura de venta, factura de consignacion, facturacion de consignaciones, buscar por consignacion, numero de consignacion, entregar desde consignacion, existencias, catalogo, bodega, bodega de origen, diferencia a favor, saldo de consignacion, mercaderia en consignacion, inventario, asiento a costo, pdf del cambio, exportar excel, registro en facturacion de consignaciones, facturado por cambio, reposicion facturada, secuencial facturacion consignaciones, sin factura, fecha de emision, fecha del cambio, cambios migrados, nup en el listado, columna nup, iva, impuesto, iva del producto, tarifa de iva, descuento de la factura, aparecen documentos que no busque, resultados que no corresponden, buscar por producto en el listado, consignacion de otro cliente, otro cliente, no aparece la consignacion, no contabilizar cambios, modulos que contabilizan, consignacion sin asiento, imprimir, impresora
-version: 1.23
+version: 1.24
 orden: 47
 estado: activo
 ---
@@ -408,6 +408,11 @@ búsqueda**. La **×** quita solo ese filtro, y con el cuadro vacío la tecla
 
 ## Historial de cambios
 
+- **1.24** — El IVA de lo devuelto y de lo entregado se calcula con la
+  configuración de facturación (al subtotal o línea por línea) del
+  establecimiento de la serie, y los valores se guardan a centavos (antes, línea
+  por línea con 6 decimales). Ver [Cómo se calcula el
+  IVA](conceptos/calculo-iva).
 - **1.23** — En la ventana de filtros, la pestaña *Detalles* se llama ahora
   **Búsqueda por detalle**, y la ventana ya no tiene barra de desplazamiento
   vertical propia: se muestra completa.

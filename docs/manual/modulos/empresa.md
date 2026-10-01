@@ -6,7 +6,7 @@ ruta_modulo: modulos/empresa
 tipo: modulo
 visibilidad: admin
 etiquetas: empresa, datos de la empresa, ruc, establecimiento, punto de emision, logo, logo por punto de emision, logo de la caja, logo por sucursal, otra marca, quitar logo, ambiente, pruebas, produccion, configuracion, correo, email, smtp, envio de correos, cuerpo del correo, asunto, plantilla de correo, remitente, documentos legales, acuerdo de uso de datos, contrato de uso del sistema, aceptacion de documentos, documentos firmados, documentos cargados, archivos de la empresa, secuenciales, numeracion, tipos de documento, codDoc, eliminar secuencial, crear secuenciales, agregar todos los faltantes, facturas de reembolso, punto unico por empresa, punto inactivo, eliminar punto de emision con documentos, puntos duplicados, secuencial inicial, numero inicial, hueco, huecos, rellenar hueco, salto de numeracion, siguiente numero, retomar numeracion, presentacion de los items, agrupar items, agrupar por nombre, agrupar por lote, agrupar por nup, agrupar por serie, juntar lineas repetidas, sumar items iguales, mostrar lote en la factura, mostrar caducidad, mostrar unidad de medida, mostrar nup, descripcion del item, tirilla, ticket, impresion termica, modo de numeracion, numeracion por fecha, secuencial por fecha, reiniciar numeracion, reinicio anual, reinicio mensual, numeracion anual, numeracion mensual, correlativo por año, correlativo por mes, empezar de cero cada año, prefijo del año, numero con el año, volver a empezar la numeracion
-version: 1.28
+version: 1.29
 orden: 5
 estado: activo
 ---
@@ -392,6 +392,10 @@ de taxis.
 
 ## Historial de cambios
 
+- **1.29** — El **Cálculo del IVA** de Facturación aplica a los documentos
+  emitidos con las series de ese establecimiento (antes los módulos usaban la del
+  primer establecimiento). Ver [Cómo se calcula el
+  IVA](conceptos/calculo-iva).
 - **1.28** — Se quita de la pestaña **Inventario** el aviso "Aprobación de cargas de
   inventario"; esa configuración sigue en el módulo **Aprobaciones**.
 - **1.27** — Las pestañas **Puntos de Emisión** y **Secuenciales** se unen en una sola,

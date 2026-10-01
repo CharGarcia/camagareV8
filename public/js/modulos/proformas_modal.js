@@ -23,10 +23,11 @@
         const n = parseInt(CFG().decimales_cantidad, 10);
         return isNaN(n) ? 2 : Math.max(0, Math.min(6, n));
     };
-    const modoIva = () => CFG().calculo_iva || 'linea_linea';
+    // Modo de IVA del establecimiento de la serie elegida; CFG().calculo_iva es el respaldo.
+    const modoIva = () => window.CMG_modoIvaPunto(document.getElementById('pf_punto')?.value, CFG().calculo_iva);
 
     /** Redondea a 2 decimales evitando errores de punto flotante (igual que en Facturas). */
-    const r2 = v => Math.round(((parseFloat(v) || 0) + Number.EPSILON) * 100) / 100;
+    const r2 = v => window.CMG_r2(v); // redondeo común (public/js/app.js): 98,10 × 15% = 14,72, no 14,71
 
     /** Redondea a N decimales (sin errores de punto flotante). */
     const rN = (v, n) => { const f = Math.pow(10, n); return Math.round(((parseFloat(v) || 0) + Number.EPSILON) * f) / f; };
@@ -2627,6 +2628,8 @@
             selPunto.addEventListener('change', () => {
                 _syncEstab(selPunto);
                 _cargarSecuencial(selPunto.value);
+                // Otra serie puede ser de otro establecimiento, con otro modo de IVA.
+                _calcularTotales();
             });
         }
 

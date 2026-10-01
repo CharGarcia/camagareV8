@@ -6,7 +6,7 @@ ruta_modulo: modulos/liquidacion-compra
 tipo: modulo
 visibilidad: todos
 etiquetas: liquidacion de compra, liquidacion, proveedor sin factura, comprobante 03, sri, sustento, eliminar, borrar, borrador, anular, buscar liquidacion, buscador, filtros, filtrar liquidaciones, buscar por producto, saldo pendiente, estado de pago, chips, aparecen documentos que no busque, resultados que no corresponden, la busqueda trae otros documentos, totales, subtotal, descuento, iva, redondeo, centavos, decimales, decimales de precio, calculo del iva, al subtotal, linea por linea, no cuadra, diferencia de un centavo, error en diferencias, exento, no objeto de iva, codigo del item, item sin codigo, item sin descripcion, falta el codigo, error en estructura de comprobante, rechazado por estructura, no autorizado, informacion adicional, ruc proveedor, campo que no se puede borrar, no me deja eliminar la fila, concepto muy largo, limite de caracteres, maximo 100 caracteres, value too long, no se pudo guardar la liquidacion, registrar pago, pagar liquidacion, egreso de liquidacion, pestaña pagos, no deja pagar, error al registrar pago, secuencial de egreso, imprimir, impresora, retencion, emitir retencion, retener liquidacion, pestaña retenciones, comprobante de retencion, columna saldo, cuanto se debe, saldo por pagar, datos de otra liquidacion, modal no se actualiza, pestaña liquidacion, pagada en el sistema anterior, liquidaciones migradas pendientes, liquidaciones 2020, liquidaciones antiguas sin pago, sistema anterior no registraba pagos
-version: 1.22
+version: 1.23
 orden: 40
 estado: activo
 ---
@@ -324,6 +324,11 @@ la operación de inmediato.
 
 ## Historial de cambios
 
+- **1.23** — El IVA se calcula con la configuración de facturación (al
+  subtotal o línea por línea) del establecimiento de la **serie elegida**; antes
+  se tomaba la del primer establecimiento de la empresa. Al cambiar de serie los
+  totales se recalculan. Redondeo corregido (98,10 × 15% = 14,72). Ver [Cómo se
+  calcula el IVA](conceptos/calculo-iva).
 - **1.22** — Las liquidaciones migradas hasta 2020 que llegaban sin pagos (el
   sistema anterior no los registraba) quedan **pagadas en el sistema anterior**:
   saldo $0.00 en todo el sistema, sin crear egresos.

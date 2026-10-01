@@ -492,6 +492,24 @@ class FacturaExpressQrService
             ];
         }
 
+        // IVA según la configuración de facturación del establecimiento del punto con
+        // que se emite: en 'subtotal' el IVA de cada tarifa es round(Σ bases × %) y sus
+        // centavos se reparten entre las líneas.
+        $modoIva = \App\Helpers\IvaSubtotal::modoPunto((int) $estab['id_punto_emision'], $idEmpresa, $empresaConfig);
+        if ($modoIva === 'subtotal') {
+            $lineasIva = [];
+            foreach ($detalles as $k => $l) {
+                $lineasIva[$k] = ['grupo' => $l['id_tarifa_iva'] ?: 'pct:' . $l['porcentaje_iva'], 'base' => $l['precio_total_sin_impuesto'], 'pct' => $l['porcentaje_iva']];
+            }
+            $totalIva = 0.0;
+            foreach (\App\Helpers\IvaSubtotal::repartir($lineasIva, $modoIva) as $k => $ivaLinea) {
+                $detalles[$k]['impuestos'][0]['valor'] = $ivaLinea;
+                $totalIva += $ivaLinea;
+            }
+        }
+        $totalSinImp = round($totalSinImp, 2);
+        $totalIva    = round($totalIva, 2);
+
         return [
             'id_empresa'          => $idEmpresa,
             'id_usuario'          => $idUsuario,

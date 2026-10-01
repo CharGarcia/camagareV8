@@ -382,6 +382,17 @@ class SuscripcionesController extends BaseModuloController
             if (!empty($establecimientos[0]['logo_ruta'])) {
                 $empresa['logo_ruta'] = $establecimientos[0]['logo_ruta'];
             }
+            // Mismo modo de cálculo del IVA que muestra el modal de la suscripción (la
+            // suscripción no tiene serie: se usa el establecimiento principal, ver index()).
+            $empresa['calculo_iva_facturacion'] = 'linea_linea';
+            if (!empty($establecimientos)) {
+                try {
+                    $estCfg = (new \App\repositories\modulos\EmpresaRepository())->getEstablecimientoConfig((int) $establecimientos[0]['id']);
+                    $empresa['calculo_iva_facturacion'] = \App\Helpers\IvaSubtotal::modo($estCfg);
+                } catch (\Throwable $e) {
+                    // Migración pendiente: línea a línea.
+                }
+            }
 
             $autoload = MVC_ROOT . '/vendor/autoload.php';
             if (file_exists($autoload)) {

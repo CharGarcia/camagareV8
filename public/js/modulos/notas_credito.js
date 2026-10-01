@@ -12,7 +12,7 @@
 
     // Redondeo monetario a 2 decimales: los importes del documento (y del XML del SRI)
     // son siempre de 2 decimales, sin importar los decimales de presentación de la empresa.
-    const r2 = v => Math.round((v + Number.EPSILON) * 100) / 100;
+    const r2 = v => window.CMG_r2(v); // redondeo común (public/js/app.js): 98,10 × 15% = 14,72, no 14,71
 
     // Inicialización al cargar el script
     document.addEventListener('DOMContentLoaded', () => {
@@ -625,9 +625,17 @@
         }[estado] || 'bg-primary text-primary border-primary';
     }
 
+    // Modo de IVA (al subtotal / línea a línea) del establecimiento de la serie elegida;
+    // window.nc_calculo_iva es solo el respaldo si el punto no está en el mapa.
+    window.NC_modoIva = () => window.CMG_modoIvaPunto(
+        document.getElementById('nc_id_punto_emision')?.value, window.nc_calculo_iva
+    );
+
     window.NC_cargarSecuencial = () => {
         const idPt = document.getElementById('nc_id_punto_emision').value;
         if (!idPt) return;
+        // Otra serie puede ser de otro establecimiento, con otro modo de cálculo del IVA.
+        window.NC_calcFila();
 
         const url = `${BASE_URL}/modulos/notas_credito/getSecuencialAjax?id_punto=${idPt}`;
         fetch(url)
@@ -1373,7 +1381,7 @@
         // IVA "al subtotal" (misma config que Facturas de Venta): el IVA de cada tarifa
         // se calcula una vez sobre la suma de sus bases, no sumando el de cada línea.
         // Así una NC que devuelve la factura completa lleva exactamente su mismo IVA.
-        if (window.nc_calculo_iva === 'subtotal') {
+        if (window.NC_modoIva() === 'subtotal') {
             Object.keys(ivasPorTarifa).forEach(nombre => {
                 ivasPorTarifa[nombre] = r2(subtotalesPorTarifa[nombre] * pctPorTarifa[nombre] / 100);
             });
@@ -1579,7 +1587,7 @@
             });
         });
         // IVA al subtotal: cuadrar Σ IVA por línea con el IVA de la tarifa (public/js/app.js).
-        window.CMG_repartirIvaSubtotal(detalles, window.nc_calculo_iva || 'linea_linea');
+        window.CMG_repartirIvaSubtotal(detalles, window.NC_modoIva());
 
         const payload = {
             id: document.getElementById('nc_id').value,

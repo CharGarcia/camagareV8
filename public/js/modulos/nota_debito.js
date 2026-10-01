@@ -1006,16 +1006,18 @@
         const opt = sel ? sel.options[sel.selectedIndex] : null;
         const porcIva = opt ? (parseFloat(opt.dataset.porcentaje) || 0) : 0;
         const nombreIva = opt ? opt.text : 'IVA';
-        const valorIva = subtotal * (porcIva / 100);
-        const total = subtotal + valorIva;
+        // Montos del comprobante a centavos (el SRI los valida con 2 decimales): una sola
+        // tarifa sobre la suma de los motivos, así que el IVA es el mismo en ambos modos.
+        subtotal = window.CMG_r2(subtotal);
+        const valorIva = window.CMG_iva(subtotal, porcIva);
+        const total = window.CMG_r2(subtotal + valorIva);
 
-        const decP = window.nd_dec_p || 2;
-        setEl('nd_lbl_subtotal', 'textContent', subtotal.toFixed(decP));
+        setEl('nd_lbl_subtotal', 'textContent', subtotal.toFixed(2));
         setEl('nd_lbl_iva_nombre', 'textContent', nombreIva);
-        setEl('nd_lbl_iva', 'textContent', valorIva.toFixed(decP));
-        setEl('nd_lbl_total', 'textContent', total.toFixed(decP));
-        setEl('nd_total_sin_impuestos', 'value', subtotal.toFixed(decP));
-        setEl('nd_importe_total', 'value', total.toFixed(decP));
+        setEl('nd_lbl_iva', 'textContent', valorIva.toFixed(2));
+        setEl('nd_lbl_total', 'textContent', total.toFixed(2));
+        setEl('nd_total_sin_impuestos', 'value', subtotal.toFixed(2));
+        setEl('nd_importe_total', 'value', total.toFixed(2));
     };
 
     // ─── OPERACIONES CRUD ───────────────────────────────────────────────────
@@ -1091,7 +1093,7 @@
         if (!opt || subtotal <= 0) return [];
 
         const porcIva = parseFloat(opt.dataset.porcentaje) || 0;
-        const valorIva = subtotal * (porcIva / 100);
+        const valorIva = window.CMG_iva(subtotal, porcIva);
         return [{
             codigo_impuesto: '2',
             codigo_porcentaje: opt.dataset.codigo,

@@ -139,9 +139,11 @@ class LiquidacionCompraService
         }
 
         $config  = is_array($data['empresa_config'] ?? null) ? $data['empresa_config'] : [];
-        $modoIva = ($config['calculo_iva_facturacion'] ?? 'linea_linea') === 'subtotal'
-            ? 'subtotal'
-            : 'linea_linea';
+        // Modo del establecimiento del punto de emisión de la liquidación; la config que
+        // manda el controller (primer establecimiento) es solo el respaldo.
+        $modoIva = \App\Helpers\IvaSubtotal::modoPunto(
+            (int) ($data['id_punto_emision'] ?? 0), (int) ($data['id_empresa'] ?? 0), $config
+        );
 
         $tarifas = [];
         foreach ($this->repository->getTarifasIva() as $t) {
