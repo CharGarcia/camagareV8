@@ -457,6 +457,7 @@ class RetencionesComprasController extends BaseModuloController
      */
     private function generarPdfRetencionCompra(int $idEmpresa, array $cabecera, array $lineas, array $empresa, string $outputDest)
     {
+        \App\Helpers\LogoPuntoEmision::aplicar($empresa, $idEmpresa, $cabecera['id_punto_emision'] ?? null);
         $renderer  = new \App\Services\PlantillasPdfRendererService();
         $plantilla = $renderer->getPlantillaActiva($idEmpresa, 'retencion_compra');
         if ($plantilla) {

@@ -559,6 +559,7 @@ class ProformasController extends BaseModuloController
 
         try {
             $empresa = $this->empresaConfig($idEmpresa);
+            \App\Helpers\LogoPuntoEmision::aplicar($empresa, $idEmpresa, $cabecera['id_punto_emision'] ?? null);
 
             // IVA con la configuración de facturación VIGENTE (al subtotal o ítem por
             // ítem), también para la plantilla PDF propia de la empresa.
@@ -599,6 +600,7 @@ class ProformasController extends BaseModuloController
 
         $detalles = $this->repository->getDetalles($id);
         $empresa  = $this->empresaConfig($idEmpresa);
+        \App\Helpers\LogoPuntoEmision::aplicar($empresa, $idEmpresa, $cabecera['id_punto_emision'] ?? null);
 
         $pdf = (new \App\Services\modulos\ProformaFichaProductosPdfService())->generar($cabecera, $detalles, $empresa, 'S');
         if ($pdf === '') {
@@ -632,6 +634,7 @@ class ProformasController extends BaseModuloController
         }
 
         $empresa = $this->empresaConfig($idEmpresa);
+        \App\Helpers\LogoPuntoEmision::aplicar($empresa, $idEmpresa, $cabecera['id_punto_emision'] ?? null);
         $pdf = (new \App\Services\modulos\ProformaCondicionesPdfService())->generar($cabecera, $empresa, 'S');
         if ($pdf === '') {
             http_response_code(404);
@@ -677,6 +680,7 @@ class ProformasController extends BaseModuloController
             $adicional = $this->repository->getInfoAdicional($id);
 
             $empresa = $this->empresaConfig($idEmpresa);
+            \App\Helpers\LogoPuntoEmision::aplicar($empresa, $idEmpresa, $cabecera['id_punto_emision'] ?? null);
 
             // IVA con la configuración de facturación VIGENTE, igual que el PDF.
             [$cabecera, $detalles] = \App\Helpers\ProformaTotales::recalcularIva($cabecera, $detalles, $empresa);

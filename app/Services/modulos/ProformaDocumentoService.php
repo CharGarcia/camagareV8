@@ -88,6 +88,7 @@ class ProformaDocumentoService
         if (!$cabecera) return null;
 
         $empresa   = $this->empresaConfig($idEmpresa);
+        \App\Helpers\LogoPuntoEmision::aplicar($empresa, $idEmpresa, $cabecera['id_punto_emision'] ?? null);
         [$cabecera, $detalles] = $this->conIvaVigente($id, $cabecera, $empresa);
         $adicional = $this->repository->getInfoAdicional($id);
 

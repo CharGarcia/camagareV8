@@ -578,7 +578,7 @@ class RetornosCvController extends BaseModuloController
             }
 
             $detalles = $retorno['detalles'] ?? [];
-            $empresa  = $this->cargarEmpresaParaPdf($idEmpresa);
+            $empresa  = $this->cargarEmpresaParaPdf($idEmpresa, $retorno['id_punto_emision'] ?? null);
 
             // Fase 2 (personalización): renderer si hay plantilla activa 'retorno_cv'.
             $renderer  = new \App\Services\PlantillasPdfRendererService();
@@ -725,7 +725,7 @@ class RetornosCvController extends BaseModuloController
             }
 
             $detalles = $retorno['detalles'] ?? [];
-            $empresa  = $this->cargarEmpresaParaPdf($idEmpresa);
+            $empresa  = $this->cargarEmpresaParaPdf($idEmpresa, $retorno['id_punto_emision'] ?? null);
 
             // PDF como string (mismo hook que la descarga).
             $renderer  = new \App\Services\PlantillasPdfRendererService();
@@ -779,7 +779,7 @@ class RetornosCvController extends BaseModuloController
     }
 
     /** Datos de la empresa (con logo del establecimiento) para el PDF. */
-    private function cargarEmpresaParaPdf(int $idEmpresa): array
+    private function cargarEmpresaParaPdf(int $idEmpresa, $idPuntoEmision = null): array
     {
         $empresaModel = new \App\models\Empresa();
         $empresa      = $empresaModel->getPorId($idEmpresa) ?? [];
@@ -787,6 +787,7 @@ class RetornosCvController extends BaseModuloController
         if (!empty($establecimientos[0]['logo_ruta'])) {
             $empresa['logo_ruta'] = $establecimientos[0]['logo_ruta'];
         }
+        \App\Helpers\LogoPuntoEmision::aplicar($empresa, $idEmpresa, $idPuntoEmision);
         return $empresa;
     }
 

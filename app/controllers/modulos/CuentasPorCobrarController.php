@@ -1807,6 +1807,7 @@ $plantillasFiltradas = [];
                 }
             }
 
+            \App\Helpers\LogoPuntoEmision::aplicar($empresa, $idEmpresa, $factura['id_punto_emision'] ?? null);
             $renderer  = new \App\Services\PlantillasPdfRendererService();
             $plantillaPdf = $renderer->getPlantillaActiva($idEmpresa, 'factura_venta');
 

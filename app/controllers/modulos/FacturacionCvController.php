@@ -738,7 +738,7 @@ class FacturacionCvController extends BaseModuloController
             $this->docPropioOCortar($id);
             $doc = $this->service->getDetalleCompleto($id, $idEmpresa);
             if (!$doc) { http_response_code(404); echo 'Documento no encontrado'; exit; }
-            $empresa = $this->cargarEmpresaParaPdf($idEmpresa);
+            $empresa = $this->cargarEmpresaParaPdf($idEmpresa, $doc['id_punto_emision'] ?? null);
             $this->generarPdfConsignacionFactura($idEmpresa, $doc, $empresa, 'D');
         } catch (\Throwable $e) {
             http_response_code(500);
@@ -777,7 +777,7 @@ class FacturacionCvController extends BaseModuloController
             if (!$doc) { http_response_code(404); echo 'Documento no encontrado'; exit; }
 
             $detalles = $doc['detalles'] ?? [];
-            $empresa  = $this->cargarEmpresaParaPdf($idEmpresa);
+            $empresa  = $this->cargarEmpresaParaPdf($idEmpresa, $doc['id_punto_emision'] ?? null);
             $numero   = trim((string)($doc['serie'] ?? '') . '-' . (string)($doc['secuencial'] ?? ''), '-');
 
             require_once MVC_ROOT . '/vendor/autoload.php';
@@ -890,7 +890,7 @@ class FacturacionCvController extends BaseModuloController
             $doc = $this->service->getDetalleCompleto($id, $idEmpresa);
             if (!$doc) { if (ob_get_level() > 0) ob_end_clean(); echo json_encode(['ok' => false, 'mensaje' => 'Documento no encontrado.']); exit; }
 
-            $empresa = $this->cargarEmpresaParaPdf($idEmpresa);
+            $empresa = $this->cargarEmpresaParaPdf($idEmpresa, $doc['id_punto_emision'] ?? null);
             $pdfString = $this->generarPdfConsignacionFactura($idEmpresa, $doc, $empresa, 'S');
 
             $numero = trim((string)($doc['serie'] ?? '') . '-' . (string)($doc['secuencial'] ?? ''), '-');
@@ -953,7 +953,7 @@ class FacturacionCvController extends BaseModuloController
         return $html;
     }
 
-    private function cargarEmpresaParaPdf(int $idEmpresa): array
+    private function cargarEmpresaParaPdf(int $idEmpresa, $idPuntoEmision = null): array
     {
         $empresaModel = new \App\models\Empresa();
         $empresa      = $empresaModel->getPorId($idEmpresa) ?? [];
@@ -961,6 +961,8 @@ class FacturacionCvController extends BaseModuloController
         if (!empty($establecimientos[0]['logo_ruta'])) {
             $empresa['logo_ruta'] = $establecimientos[0]['logo_ruta'];
         }
+        // Logo del punto de emisión del documento (si no tiene, queda el del establecimiento).
+        \App\Helpers\LogoPuntoEmision::aplicar($empresa, $idEmpresa, $idPuntoEmision);
         return $empresa;
     }
 

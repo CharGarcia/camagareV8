@@ -703,7 +703,7 @@ class EmpresaRepository extends BaseModel
         $est_id = (int) ($data['id_establecimiento'] ?? 0);
         $nom = $this->escape($data['nombre'] ?? '');
         $cod = $this->escape($data['codigo_punto'] ?? '001');
-        $logo = $this->escape($data['logo_ruta'] ?? '');
+        $logo = $this->escape((string) ($data['logo_ruta'] ?? ''));
         $est = $this->escape($data['estado'] ?? 'activo');
         $user = (int) ($_SESSION['id_usuario'] ?? 0);
 
@@ -734,9 +734,24 @@ class EmpresaRepository extends BaseModel
     public function getPuntoEmision(int $idPunto, int $idEmpresa): ?array
     {
         $id = (int) $idPunto; $ide = (int) $idEmpresa;
-        $r = $this->query("SELECT id, id_establecimiento, nombre, codigo_punto, estado
+        $r = $this->query("SELECT id, id_establecimiento, nombre, codigo_punto, estado, logo_ruta
                            FROM empresa_punto_emision WHERE id = {$id} AND id_empresa = {$ide} AND eliminado = false");
         return $r[0] ?? null;
+    }
+
+    /**
+     * Logo propio del punto de emisión ('' si no tiene). Lo consume
+     * App\Helpers\LogoPuntoEmision: el PDF de un documento usa el logo de su
+     * punto y, si el punto no tiene, se queda con el del establecimiento.
+     */
+    public function getLogoPuntoEmision(int $idPunto, int $idEmpresa): string
+    {
+        $st = $this->db->prepare(
+            "SELECT COALESCE(logo_ruta, '') FROM empresa_punto_emision
+              WHERE id = ? AND id_empresa = ? AND eliminado = false"
+        );
+        $st->execute([$idPunto, $idEmpresa]);
+        return trim((string) ($st->fetchColumn() ?: ''));
     }
 
     public function updatePuntoEmision(int $idPunto, int $idEmpresa, array $data): bool
@@ -747,10 +762,15 @@ class EmpresaRepository extends BaseModel
         $cod = $this->escape($data['codigo_punto'] ?? '001');
         $est = $this->escape($data['estado'] ?? 'activo');
         $user = (int) ($_SESSION['id_usuario'] ?? 0);
+        // logo_ruta solo se toca si viene en $data ('' = quitar el logo propio y
+        // volver al del establecimiento); sin la clave se conserva el actual.
+        $logoSql = array_key_exists('logo_ruta', $data)
+            ? ", logo_ruta = '" . $this->escape((string) $data['logo_ruta']) . "'"
+            : '';
 
-        $sql = "UPDATE empresa_punto_emision SET 
-                id_establecimiento = {$est_id}, nombre = '{$nom}', codigo_punto = '{$cod}', 
-                estado = '{$est}', updated_at = NOW(), updated_by = {$user}
+        $sql = "UPDATE empresa_punto_emision SET
+                id_establecimiento = {$est_id}, nombre = '{$nom}', codigo_punto = '{$cod}',
+                estado = '{$est}'{$logoSql}, updated_at = NOW(), updated_by = {$user}
                 WHERE id = {$id} AND id_empresa = {$idEmpresa}";
         return $this->execute($sql);
     }

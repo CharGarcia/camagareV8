@@ -695,6 +695,8 @@ class FacturaVentaController extends BaseModuloController
                 } catch (\Throwable $e) {}
             }
 
+            // Logo del punto de emisión de la factura (si no tiene, queda el del establecimiento).
+            \App\Helpers\LogoPuntoEmision::aplicar($empresa, $idEmpresa, $factura['id_punto_emision'] ?? null);
             $renderer  = new \App\Services\PlantillasPdfRendererService();
             $plantilla = $renderer->getPlantillaActiva($idEmpresa, 'factura_venta');
 
@@ -924,6 +926,7 @@ class FacturaVentaController extends BaseModuloController
                 } catch (\Throwable $e) {}
             }
 
+            \App\Helpers\LogoPuntoEmision::aplicar($empresa, $idEmpresa, $factura['id_punto_emision'] ?? null);
             $renderer  = new \App\Services\PlantillasPdfRendererService();
             $plantillaPdf = $renderer->getPlantillaActiva($idEmpresa, 'factura_venta');
 
@@ -2881,6 +2884,7 @@ class FacturaVentaController extends BaseModuloController
                     } catch (\Throwable $e) {}
                 }
 
+                \App\Helpers\LogoPuntoEmision::aplicar($empresaData, $idEmpresa, $factura['id_punto_emision'] ?? null);
                 $renderer     = new \App\Services\PlantillasPdfRendererService();
                 $plantillaPdf = $renderer->getPlantillaActiva($idEmpresa, 'factura_venta');
                 if ($plantillaPdf) {
@@ -3200,6 +3204,7 @@ class FacturaVentaController extends BaseModuloController
                     } catch (\Throwable $e) {}
                 }
 
+                \App\Helpers\LogoPuntoEmision::aplicar($empresaData, $idEmpresa, $factura['id_punto_emision'] ?? null);
                 $renderer     = new \App\Services\PlantillasPdfRendererService();
                 $plantillaPdf = $renderer->getPlantillaActiva($idEmpresa, 'factura_venta');
                 if ($plantillaPdf) {
@@ -3443,6 +3448,7 @@ class FacturaVentaController extends BaseModuloController
                 } catch (\Throwable $e) {}
             }
 
+            \App\Helpers\LogoPuntoEmision::aplicar($empresa, $idEmpresa, $factura['id_punto_emision'] ?? null);
             $renderer  = new \App\Services\PlantillasPdfRendererService();
             $plantillaPdf = $renderer->getPlantillaActiva($idEmpresa, 'factura_venta');
 

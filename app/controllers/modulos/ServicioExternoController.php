@@ -300,7 +300,7 @@ class ServicioExternoController extends BaseModuloController
             $orden = $this->service->getDetalleCompleto($id, $idEmpresa);
             if (!$orden) { http_response_code(404); echo 'Orden no encontrada'; exit; }
 
-            $empresa = $this->cargarEmpresaPdf($idEmpresa);
+            $empresa = $this->cargarEmpresaPdf($idEmpresa, $orden['id_punto_emision'] ?? null);
             (new \App\Services\modulos\ServicioExternoPdfService())->generar($orden, $empresa, 'D');
         } catch (\Throwable $e) {
             http_response_code(500);
@@ -327,7 +327,7 @@ class ServicioExternoController extends BaseModuloController
             $orden = $this->service->getDetalleCompleto($id, $idEmpresa);
             if (!$orden) { if (ob_get_level() > 0) ob_end_clean(); echo json_encode(['ok' => false, 'mensaje' => 'Orden no encontrada.']); exit; }
 
-            $empresa = $this->cargarEmpresaPdf($idEmpresa);
+            $empresa = $this->cargarEmpresaPdf($idEmpresa, $orden['id_punto_emision'] ?? null);
             $pdfString = (new \App\Services\modulos\ServicioExternoPdfService())->generar($orden, $empresa, 'S');
 
             $numero = trim((string)($orden['numero_orden'] ?? ''));
@@ -371,7 +371,7 @@ class ServicioExternoController extends BaseModuloController
     }
 
     /** Datos de la empresa (con logo del establecimiento y config) para el PDF. */
-    private function cargarEmpresaPdf(int $idEmpresa): array
+    private function cargarEmpresaPdf(int $idEmpresa, $idPuntoEmision = null): array
     {
         $empresaModel = new \App\models\Empresa();
         $empresa = $empresaModel->getPorId($idEmpresa) ?? [];
@@ -384,6 +384,7 @@ class ServicioExternoController extends BaseModuloController
             $estConfig = $estRepo->getEstablecimientoConfig((int) ($establecimientos[0]['id'] ?? 0));
             if ($estConfig) { $empresa = array_merge($empresa, $estConfig); }
         } catch (\Throwable $e) {}
+        \App\Helpers\LogoPuntoEmision::aplicar($empresa, $idEmpresa, $idPuntoEmision);
         return $empresa;
     }
 

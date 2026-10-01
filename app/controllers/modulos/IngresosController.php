@@ -928,7 +928,7 @@ class IngresosController extends BaseModuloController
             $ingreso = $this->service->getPorId($id, $idEmpresa);
             if (!$ingreso) { http_response_code(404); echo 'Ingreso no encontrado'; exit; }
 
-            $empresa   = $this->cargarEmpresaParaPdf($idEmpresa);
+            $empresa   = $this->cargarEmpresaParaPdf($idEmpresa, $ingreso['id_punto_emision'] ?? null);
             $detalles  = $ingreso['detalles'] ?? [];
             $pagos     = $ingreso['pagos'] ?? [];
             $asiento   = $this->service->getAsientoContable($id, $idEmpresa);
@@ -970,7 +970,7 @@ class IngresosController extends BaseModuloController
 
             $detalles = $ingreso['detalles'] ?? [];
             $pagos    = $ingreso['pagos'] ?? [];
-            $empresa  = $this->cargarEmpresaParaPdf($idEmpresa);
+            $empresa  = $this->cargarEmpresaParaPdf($idEmpresa, $ingreso['id_punto_emision'] ?? null);
             $numero   = (string) ($ingreso['numero_ingreso'] ?? $id);
             $sujeto   = trim((string) ($ingreso['recibo_de'] ?? $ingreso['cliente_nombre'] ?? $ingreso['recibo_cliente_nombre'] ?? ''));
 
@@ -1081,7 +1081,7 @@ class IngresosController extends BaseModuloController
     }
 
     /** Datos de la empresa (con logo del establecimiento) para el PDF. */
-    private function cargarEmpresaParaPdf(int $idEmpresa): array
+    private function cargarEmpresaParaPdf(int $idEmpresa, $idPuntoEmision = null): array
     {
         $empresaModel = new Empresa();
         $empresa      = $empresaModel->getPorId($idEmpresa) ?? [];
@@ -1089,6 +1089,7 @@ class IngresosController extends BaseModuloController
         if (!empty($establecimientos[0]['logo_ruta'])) {
             $empresa['logo_ruta'] = $establecimientos[0]['logo_ruta'];
         }
+        \App\Helpers\LogoPuntoEmision::aplicar($empresa, $idEmpresa, $idPuntoEmision);
         return $empresa;
     }
 

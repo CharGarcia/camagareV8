@@ -549,6 +549,7 @@ class FacturasVentaController extends ApiBaseController
             }
         }
 
+        \App\Helpers\LogoPuntoEmision::aplicar($empresa, $idEmpresa, $factura['id_punto_emision'] ?? null);
         try {
             $renderer = new \App\Services\PlantillasPdfRendererService();
             $plantilla = $renderer->getPlantillaActiva($idEmpresa, 'factura_venta');

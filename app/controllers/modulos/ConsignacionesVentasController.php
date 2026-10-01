@@ -476,7 +476,7 @@ class ConsignacionesVentasController extends BaseModuloController
             if (!$cons) { http_response_code(404); echo 'Consignación no encontrada'; exit; }
 
             $detalles = $cons['detalles'] ?? [];
-            $empresa  = $this->cargarEmpresaParaPdf($idEmpresa);
+            $empresa  = $this->cargarEmpresaParaPdf($idEmpresa, $cons['id_punto_emision'] ?? null);
 
             // Cantidad retornada, facturada y entregada a cambio por línea (columnas "Retorno",
             // "Facturados" y "Cambio" del PDF).
@@ -521,7 +521,7 @@ class ConsignacionesVentasController extends BaseModuloController
             if (!$cons) { http_response_code(404); echo 'Consignación no encontrada'; exit; }
 
             $detalles = $cons['detalles'] ?? [];
-            $empresa  = $this->cargarEmpresaParaPdf($idEmpresa);
+            $empresa  = $this->cargarEmpresaParaPdf($idEmpresa, $cons['id_punto_emision'] ?? null);
 
             // Cantidad retornada, facturada y entregada a cambio por línea (mismas columnas
             // "Retorno", "Facturados" y "Cambio" del PDF).
@@ -612,7 +612,7 @@ class ConsignacionesVentasController extends BaseModuloController
     }
 
     /** Datos de la empresa (con logo del establecimiento) para el PDF. */
-    private function cargarEmpresaParaPdf(int $idEmpresa): array
+    private function cargarEmpresaParaPdf(int $idEmpresa, $idPuntoEmision = null): array
     {
         $empresaModel = new \App\models\Empresa();
         $empresa      = $empresaModel->getPorId($idEmpresa) ?? [];
@@ -620,6 +620,7 @@ class ConsignacionesVentasController extends BaseModuloController
         if (!empty($establecimientos[0]['logo_ruta'])) {
             $empresa['logo_ruta'] = $establecimientos[0]['logo_ruta'];
         }
+        \App\Helpers\LogoPuntoEmision::aplicar($empresa, $idEmpresa, $idPuntoEmision);
         return $empresa;
     }
 
@@ -643,7 +644,7 @@ class ConsignacionesVentasController extends BaseModuloController
             if (!$cons) { if (ob_get_level() > 0) ob_end_clean(); echo json_encode(['ok' => false, 'mensaje' => 'Consignación no encontrada.']); exit; }
 
             $detalles  = $cons['detalles'] ?? [];
-            $empresa   = $this->cargarEmpresaParaPdf($idEmpresa);
+            $empresa   = $this->cargarEmpresaParaPdf($idEmpresa, $cons['id_punto_emision'] ?? null);
             $retornado = $this->service->getRetornadoPorLinea($id, $idEmpresa);
             $facturado = $this->service->getFacturadoPorLinea($id, $idEmpresa);
             $cambiado  = $this->service->getCambiadoPorLinea($id, $idEmpresa);

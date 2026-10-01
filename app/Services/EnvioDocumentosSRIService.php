@@ -131,7 +131,7 @@ class EnvioDocumentosSRIService
             : '';
 
         // Logo del emisor para la cabecera del correo
-        $logoPath     = $this->resolverLogoEmpresa($idEmpresa, isset($cabecera['id_establecimiento']) ? (int)$cabecera['id_establecimiento'] : null);
+        $logoPath     = $this->resolverLogoEmpresa($idEmpresa, isset($cabecera['id_establecimiento']) ? (int)$cabecera['id_establecimiento'] : null, $cabecera['id_punto_emision'] ?? null);
         $logoCid      = $logoPath !== '' ? 'logoempresa' : '';
 
         // La empresa puede elegir enviar SOLO su propio contenido, sin el diseño del
@@ -609,7 +609,7 @@ class EnvioDocumentosSRIService
             : '';
 
         $datosEmpresa = $this->datosEmpresaCorreo($idEmpresa);
-        $logoPath     = $this->resolverLogoEmpresa($idEmpresa, isset($cabecera['id_establecimiento']) ? (int)$cabecera['id_establecimiento'] : null);
+        $logoPath     = $this->resolverLogoEmpresa($idEmpresa, isset($cabecera['id_establecimiento']) ? (int)$cabecera['id_establecimiento'] : null, $cabecera['id_punto_emision'] ?? null);
         $logoCid      = $logoPath !== '' ? 'logoempresa' : '';
 
         $htmlCuerpo = $this->renderPlantillaDocumento([
@@ -812,7 +812,7 @@ class EnvioDocumentosSRIService
      * Ruta absoluta en disco del logo de la empresa (vive en empresa_establecimiento.logo_ruta).
      * Misma resolucion de rutas que usan los PDF, para no duplicar criterios.
      */
-    private function resolverLogoEmpresa(int $idEmpresa, ?int $idEstablecimiento): string
+    private function resolverLogoEmpresa(int $idEmpresa, ?int $idEstablecimiento, $idPuntoEmision = null): string
     {
         $logoRuta = '';
         try {
@@ -830,6 +830,9 @@ class EnvioDocumentosSRIService
         } catch (\Throwable) {
             return '';
         }
+
+        // Logo propio del punto de emisión del documento (si no tiene, queda el del establecimiento).
+        $logoRuta = \App\Helpers\LogoPuntoEmision::resolver($idEmpresa, $idPuntoEmision, $logoRuta);
 
         if ($logoRuta === '') {
             return '';

@@ -139,7 +139,7 @@ class EmpresaController extends BaseModuloController
                     break;
                 case 'punto':
                     $this->requireActualizar();
-                    echo json_encode($this->service->savePunto($idEmpresa, $_POST));
+                    echo json_encode($this->service->savePunto($idEmpresa, $_POST, $_FILES));
                     break;
                 case 'establecimiento':
                     $this->requireActualizar();

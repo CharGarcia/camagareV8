@@ -326,7 +326,7 @@ class TraspasosController extends BaseModuloController
             $traspaso = $this->service->getPorId($id, $idEmpresa);
             if (!$traspaso) { http_response_code(404); echo 'Traspaso no encontrado'; exit; }
 
-            $empresa = $this->cargarEmpresaParaPdf($idEmpresa);
+            $empresa = $this->cargarEmpresaParaPdf($idEmpresa, $traspaso['id_punto_emision'] ?? null);
             $asiento = $this->service->getAsientoContable($id, $idEmpresa);
 
             $renderer  = new \App\Services\PlantillasPdfRendererService();
@@ -365,7 +365,7 @@ class TraspasosController extends BaseModuloController
                 http_response_code(404); echo 'Traspaso no encontrado'; exit;
             }
 
-            $empresa = $this->cargarEmpresaParaPdf($idEmpresa);
+            $empresa = $this->cargarEmpresaParaPdf($idEmpresa, $traspaso['id_punto_emision'] ?? null);
             $numero  = (string) ($traspaso['numero_traspaso'] ?? $id);
 
             require_once MVC_ROOT . '/vendor/autoload.php';
@@ -435,7 +435,7 @@ class TraspasosController extends BaseModuloController
     }
 
     /** Datos de la empresa (con logo del establecimiento) para el PDF. */
-    private function cargarEmpresaParaPdf(int $idEmpresa): array
+    private function cargarEmpresaParaPdf(int $idEmpresa, $idPuntoEmision = null): array
     {
         $empresaModel = new Empresa();
         $empresa      = $empresaModel->getPorId($idEmpresa) ?? [];
@@ -443,6 +443,7 @@ class TraspasosController extends BaseModuloController
         if (!empty($establecimientos[0]['logo_ruta'])) {
             $empresa['logo_ruta'] = $establecimientos[0]['logo_ruta'];
         }
+        \App\Helpers\LogoPuntoEmision::aplicar($empresa, $idEmpresa, $idPuntoEmision);
         return $empresa;
     }
 }

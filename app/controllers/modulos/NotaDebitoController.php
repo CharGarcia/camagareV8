@@ -783,6 +783,7 @@ class NotaDebitoController extends BaseModuloController
             } catch (\Throwable $e) {}
         }
 
+        \App\Helpers\LogoPuntoEmision::aplicar($empresa, $idEmpresa, $nd['id_punto_emision'] ?? null);
         return [$empresa, $dirEstablecimiento];
     }
 

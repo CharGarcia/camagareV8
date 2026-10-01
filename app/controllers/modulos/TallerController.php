@@ -688,7 +688,7 @@ class TallerController extends BaseModuloController
             $orden = $this->service->getDetalleCompleto($id, $idEmpresa, false);
             if (!$orden) { http_response_code(404); echo 'Orden no encontrada'; exit; }
 
-            (new \App\Services\modulos\TallerOrdenPdfService())->generar($orden, $this->cargarEmpresaPdf($idEmpresa), 'D');
+            (new \App\Services\modulos\TallerOrdenPdfService())->generar($orden, $this->cargarEmpresaPdf($idEmpresa, $orden['id_punto_emision'] ?? null), 'D');
         } catch (\Throwable $e) {
             http_response_code(500);
             echo 'Error al generar PDF: ' . $e->getMessage();
@@ -709,7 +709,7 @@ class TallerController extends BaseModuloController
             $orden = $this->service->getDetalleCompleto($id, $idEmpresa, false);
             if (!$orden) { http_response_code(404); echo 'Orden no encontrada'; exit; }
 
-            (new \App\Services\modulos\TallerInformeTecnicoPdfService())->generar($orden, $this->cargarEmpresaPdf($idEmpresa), 'D');
+            (new \App\Services\modulos\TallerInformeTecnicoPdfService())->generar($orden, $this->cargarEmpresaPdf($idEmpresa, $orden['id_punto_emision'] ?? null), 'D');
         } catch (\Throwable $e) {
             http_response_code(500);
             echo 'Error al generar el informe: ' . $e->getMessage();
@@ -730,7 +730,7 @@ class TallerController extends BaseModuloController
             $orden = $this->service->getDetalleCompleto($id, $idEmpresa, false);
             if (!$orden) { http_response_code(404); echo 'Orden no encontrada'; exit; }
 
-            (new \App\Services\modulos\TallerPrecuentaPdfService())->generar($orden, $this->cargarEmpresaPdf($idEmpresa), 'D');
+            (new \App\Services\modulos\TallerPrecuentaPdfService())->generar($orden, $this->cargarEmpresaPdf($idEmpresa, $orden['id_punto_emision'] ?? null), 'D');
         } catch (\Throwable $e) {
             http_response_code(500);
             echo 'Error al generar la precuenta: ' . $e->getMessage();
@@ -908,7 +908,7 @@ class TallerController extends BaseModuloController
      */
     private function generarPdfDocumento(string $tipo, array $orden, int $idEmpresa): array
     {
-        $empresa = $this->cargarEmpresaPdf($idEmpresa);
+        $empresa = $this->cargarEmpresaPdf($idEmpresa, $orden['id_punto_emision'] ?? null);
         $numero  = trim((string) ($orden['numero_orden'] ?? 'OT'));
 
         switch ($tipo) {
@@ -1019,7 +1019,7 @@ class TallerController extends BaseModuloController
                 exit;
             }
 
-            $empresa = $this->cargarEmpresaPdf($idEmpresa);
+            $empresa = $this->cargarEmpresaPdf($idEmpresa, $orden['id_punto_emision'] ?? null);
             [$pdfString, $etiqueta, $archivo] = $this->generarPdfDocumento($tipo, $orden, $idEmpresa);
 
             $numero = trim((string) ($orden['numero_orden'] ?? ''));
@@ -1448,7 +1448,7 @@ class TallerController extends BaseModuloController
         return $data['rows'];
     }
 
-    private function cargarEmpresaPdf(int $idEmpresa): array
+    private function cargarEmpresaPdf(int $idEmpresa, $idPuntoEmision = null): array
     {
         $empresaModel = new \App\models\Empresa();
         $empresa = $empresaModel->getPorId($idEmpresa) ?? [];
@@ -1461,6 +1461,7 @@ class TallerController extends BaseModuloController
                 ->getEstablecimientoConfig((int) ($establecimientos[0]['id'] ?? 0));
             if ($estConfig) { $empresa = array_merge($empresa, $estConfig); }
         } catch (\Throwable $e) {}
+        \App\Helpers\LogoPuntoEmision::aplicar($empresa, $idEmpresa, $idPuntoEmision);
         return $empresa;
     }
 

@@ -343,7 +343,7 @@ class DescargaMasivaService
     // NotaDebitoController/GuiasRemisionController/FacturaReembolsoController.
     // Una sola copia aquí para los 8 tipos de este módulo, en vez de otra más.
 
-    private function construirEmpresa(int $idEmpresa): array
+    private function construirEmpresa(int $idEmpresa, $idPuntoEmision = null): array
     {
         $empresaModel = new Empresa();
         $empresa = $empresaModel->getPorId($idEmpresa) ?? [];
@@ -374,6 +374,7 @@ class DescargaMasivaService
             // El PDF/XML se genera igual sin la config extendida del establecimiento.
         }
 
+        \App\Helpers\LogoPuntoEmision::aplicar($empresa, $idEmpresa, $idPuntoEmision);
         return $empresa;
     }
 
@@ -410,7 +411,7 @@ class DescargaMasivaService
                 unset($d);
                 $pagos = $repo->getPagos($id);
                 $infoAdicional = $repo->getInfoAdicional($id);
-                return (new FacturaVentaPdfService())->generarBytes($cab, $detalles, $pagos, $infoAdicional, $this->construirEmpresa($idEmpresa));
+                return (new FacturaVentaPdfService())->generarBytes($cab, $detalles, $pagos, $infoAdicional, $this->construirEmpresa($idEmpresa, $cab['id_punto_emision'] ?? null));
 
             case 'notas_credito':
                 $repo = new NotaCreditoRepository();
@@ -420,7 +421,7 @@ class DescargaMasivaService
                 foreach ($detalles as &$d) { $d['impuestos'] = $repo->getImpuestosDetalle((int) $d['id']); }
                 unset($d);
                 $infoAdicional = $repo->getInfoAdicional($id);
-                return (new NotaCreditoPdfService())->generarBytes($cab, $detalles, $this->construirEmpresa($idEmpresa), $infoAdicional);
+                return (new NotaCreditoPdfService())->generarBytes($cab, $detalles, $this->construirEmpresa($idEmpresa, $cab['id_punto_emision'] ?? null), $infoAdicional);
 
             case 'nota_debito':
                 $repo = new NotaDebitoRepository();
@@ -430,7 +431,7 @@ class DescargaMasivaService
                 $impuestos = $repo->getImpuestos($id);
                 $pagos = $repo->getPagos($id);
                 $infoAdicional = $repo->getInfoAdicional($id);
-                return (new NotaDebitoPdfService())->generarBytes($cab, $motivos, $impuestos, $pagos, $this->construirEmpresa($idEmpresa), $infoAdicional);
+                return (new NotaDebitoPdfService())->generarBytes($cab, $motivos, $impuestos, $pagos, $this->construirEmpresa($idEmpresa, $cab['id_punto_emision'] ?? null), $infoAdicional);
 
             case 'guias_remision':
                 $repo = new GuiaRemisionRepository();
@@ -438,7 +439,7 @@ class DescargaMasivaService
                 if (!$cab || (int) ($cab['id_empresa'] ?? 0) !== $idEmpresa) { return null; }
                 $detalles = $repo->getDetalles($id);
                 $infoAdicional = $repo->getInfoAdicional($id);
-                return (new GuiaRemisionPdfService())->generarBytes($cab, $detalles, $infoAdicional, $this->construirEmpresa($idEmpresa));
+                return (new GuiaRemisionPdfService())->generarBytes($cab, $detalles, $infoAdicional, $this->construirEmpresa($idEmpresa, $cab['id_punto_emision'] ?? null));
 
             case 'retencion_venta':
                 $repo = new RetencionVentaRepository();
@@ -458,7 +459,7 @@ class DescargaMasivaService
                 $cab = $repo->getPorIdSri($id, $idEmpresa);
                 if (!$cab) { return null; }
                 $lineas = $repo->getDetalle($id);
-                return (new RetencionCompraPdfService())->generarBytes($cab, $lineas, $this->construirEmpresa($idEmpresa));
+                return (new RetencionCompraPdfService())->generarBytes($cab, $lineas, $this->construirEmpresa($idEmpresa, $cab['id_punto_emision'] ?? null));
 
             case 'liquidacion_compra':
                 $repo = new LiquidacionCompraRepository();
@@ -469,7 +470,7 @@ class DescargaMasivaService
                 unset($d);
                 $pagos = $repo->getPagos($id);
                 $infoAdicional = $repo->getInfoAdicional($id);
-                return (new LiquidacionCompraPdfService())->generarBytes($cab, $detalles, $pagos, $infoAdicional, $this->construirEmpresa($idEmpresa));
+                return (new LiquidacionCompraPdfService())->generarBytes($cab, $detalles, $pagos, $infoAdicional, $this->construirEmpresa($idEmpresa, $cab['id_punto_emision'] ?? null));
 
             case 'compras':
                 $service = new ComprasService();
@@ -497,7 +498,7 @@ class DescargaMasivaService
                 $detalles = $egreso['detalles'] ?? [];
                 $pagos = $egreso['pagos'] ?? [];
                 $asiento = $service->getAsientoContable($id, $idEmpresa);
-                return (new ComprobanteCajaPdfService())->generarEgreso($egreso, $detalles, $pagos, $this->construirEmpresa($idEmpresa), 'S', $asiento);
+                return (new ComprobanteCajaPdfService())->generarEgreso($egreso, $detalles, $pagos, $this->construirEmpresa($idEmpresa, $egreso['id_punto_emision'] ?? null), 'S', $asiento);
 
             case 'ingreso':
                 $service = new IngresoService(new IngresoRepository(), new IngresoRules(), new LogSistemaService());
@@ -506,7 +507,7 @@ class DescargaMasivaService
                 $detalles = $ingreso['detalles'] ?? [];
                 $pagos = $ingreso['pagos'] ?? [];
                 $asiento = $service->getAsientoContable($id, $idEmpresa);
-                return (new ComprobanteCajaPdfService())->generarIngreso($ingreso, $detalles, $pagos, $this->construirEmpresa($idEmpresa), 'S', $asiento);
+                return (new ComprobanteCajaPdfService())->generarIngreso($ingreso, $detalles, $pagos, $this->construirEmpresa($idEmpresa, $ingreso['id_punto_emision'] ?? null), 'S', $asiento);
 
             case 'cheque':
                 $repo = new ChequeRepository();

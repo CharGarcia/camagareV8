@@ -271,6 +271,7 @@ class SriEnvioService
 
             // --- ENVÍO AUTOMÁTICO DE CORREO ---
             try {
+                \App\Helpers\LogoPuntoEmision::aplicar($empresa, $idEmpresa, $cabecera['id_punto_emision'] ?? null);
                 $renderer = new \App\Services\PlantillasPdfRendererService();
                 $plantillaPdf = $renderer->getPlantillaActiva($idEmpresa, 'factura_venta');
 
@@ -516,6 +517,7 @@ class SriEnvioService
 
             // --- ENVÍO AUTOMÁTICO DE CORREO ---
             try {
+                \App\Helpers\LogoPuntoEmision::aplicar($empresa, $idEmpresa, $cabecera['id_punto_emision'] ?? null);
                 $pdfService = new \App\Services\modulos\FacturaReembolsoPdfService();
                 $pdfString  = $pdfService->generarBytes($cabecera, $detalles, $terceros, $pagos, $infoAdicional, $empresa);
 
@@ -776,6 +778,7 @@ class SriEnvioService
 
             // --- ENVÍO AUTOMÁTICO DE CORREO ---
             try {
+                \App\Helpers\LogoPuntoEmision::aplicar($empresa, $idEmpresa, $cabecera['id_punto_emision'] ?? null);
                 $pdfService = new \App\Services\modulos\NotaCreditoPdfService();
                 $pdfString  = $pdfService->generarBytes($cabecera, $detalles, $empresa, $infoAdicional);
 
@@ -981,6 +984,7 @@ class SriEnvioService
 
             // --- ENVÍO AUTOMÁTICO DE CORREO ---
             try {
+                \App\Helpers\LogoPuntoEmision::aplicar($empresa, $idEmpresa, $cabecera['id_punto_emision'] ?? null);
                 $pdfService = new \App\Services\modulos\NotaDebitoPdfService();
                 $pdfString  = $pdfService->generarBytes($cabecera, $motivos, $impuestos, $pagos, $empresa, $infoAdicional);
 
@@ -1200,6 +1204,7 @@ class SriEnvioService
 
             // --- ENVÍO AUTOMÁTICO DE CORREO ---
             try {
+                \App\Helpers\LogoPuntoEmision::aplicar($empresa, $idEmpresa, $cabecera['id_punto_emision'] ?? null);
                 $pdfService = new \App\Services\modulos\RetencionCompraPdfService();
                 $pdfString  = $pdfService->generarBytes($cabecera, $lineas, $empresa);
 
@@ -1880,6 +1885,7 @@ class SriEnvioService
             }
         } catch (\Throwable) {}
 
+        \App\Helpers\LogoPuntoEmision::aplicar($empresa, $idEmpresa, $cabecera['id_punto_emision'] ?? null);
         return $empresa;
     }
 
@@ -2186,6 +2192,7 @@ class SriEnvioService
 
             // --- ENVÍO AUTOMÁTICO DE CORREO (PDF de la guía al destinatario) ---
             try {
+                \App\Helpers\LogoPuntoEmision::aplicar($empresa, $idEmpresa, $cabecera['id_punto_emision'] ?? null);
                 $renderer     = new \App\Services\PlantillasPdfRendererService();
                 $plantillaPdf = $renderer->getPlantillaActiva($idEmpresa, 'guia_remision');
                 if ($plantillaPdf) {
@@ -2407,6 +2414,7 @@ class SriEnvioService
 
             // --- ENVÍO AUTOMÁTICO DE CORREO (PDF de la liquidación al proveedor) ---
             try {
+                \App\Helpers\LogoPuntoEmision::aplicar($empresa, $idEmpresa, $cabecera['id_punto_emision'] ?? null);
                 $renderer     = new \App\Services\PlantillasPdfRendererService();
                 $plantillaPdf = $renderer->getPlantillaActiva($idEmpresa, 'liquidacion_compra');
                 if ($plantillaPdf) {

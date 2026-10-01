@@ -48,6 +48,7 @@ class DocumentoVentaPdfService
         $infoAdicional = $repo->getInfoAdicional($idDocumento);
         $empresa       = $this->empresaParaPdf($idEmpresa, !$esRecibo);
 
+        \App\Helpers\LogoPuntoEmision::aplicar($empresa, $idEmpresa, $cabecera['id_punto_emision'] ?? null);
         $renderer  = new PlantillasPdfRendererService();
         $plantilla = $renderer->getPlantillaActiva($idEmpresa, $esRecibo ? 'recibo_venta' : 'factura_venta');
         if ($plantilla) {

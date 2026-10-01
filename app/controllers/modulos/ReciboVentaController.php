@@ -530,6 +530,7 @@ class ReciboVentaController extends BaseModuloController
                 } catch (\Throwable $e) {}
             }
 
+            \App\Helpers\LogoPuntoEmision::aplicar($empresa, $idEmpresa, $recibo['id_punto_emision'] ?? null);
             $renderer  = new \App\Services\PlantillasPdfRendererService();
             $plantilla = $renderer->getPlantillaActiva($idEmpresa, 'recibo_venta');
             if ($plantilla) {

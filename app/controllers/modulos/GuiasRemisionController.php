@@ -884,6 +884,7 @@ class GuiasRemisionController extends BaseModuloController
             } catch (\Throwable $e) {}
         }
 
+        \App\Helpers\LogoPuntoEmision::aplicar($empresa, $idEmpresa, $guia['id_punto_emision'] ?? null);
         return [$empresa, $dirEstablecimiento];
     }
 

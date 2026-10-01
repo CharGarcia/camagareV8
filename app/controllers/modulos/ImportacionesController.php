@@ -871,6 +871,7 @@ class ImportacionesController extends BaseModuloController
             $empresa['direccion_establecimiento'] = $est['direccion'] ?? '';
         }
 
+        \App\Helpers\LogoPuntoEmision::aplicar($empresa, $idEmpresa, $importacion['id_punto_emision'] ?? null);
         return ['cabecera' => $importacion, 'empresa' => $empresa];
     }
 

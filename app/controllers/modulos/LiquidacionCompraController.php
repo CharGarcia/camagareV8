@@ -1200,6 +1200,7 @@ class LiquidacionCompraController extends BaseModuloController
             $empresa['direccion_establecimiento'] = $est['direccion'] ?? '';
         }
 
+        \App\Helpers\LogoPuntoEmision::aplicar($empresa, $idEmpresa, $cabecera['id_punto_emision'] ?? null);
         return [
             'cabecera'       => $cabecera,
             'detalles'       => $detalles,

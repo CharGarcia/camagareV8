@@ -731,6 +731,7 @@ class FacturaReembolsoController extends BaseModuloController
             } catch (\Throwable $e) {}
         }
 
+        \App\Helpers\LogoPuntoEmision::aplicar($empresa, $idEmpresa, $fr['id_punto_emision'] ?? null);
         return [$empresa, $dirEstablecimiento];
     }
 

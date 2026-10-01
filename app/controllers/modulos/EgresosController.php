@@ -774,7 +774,7 @@ class EgresosController extends BaseModuloController
             $egreso = $this->service->getPorId($id, $idEmpresa);
             if (!$egreso) { http_response_code(404); echo 'Egreso no encontrado'; exit; }
 
-            $empresa  = $this->cargarEmpresaParaPdf($idEmpresa);
+            $empresa  = $this->cargarEmpresaParaPdf($idEmpresa, $egreso['id_punto_emision'] ?? null);
             $detalles = $egreso['detalles'] ?? [];
             $pagos    = $egreso['pagos'] ?? [];
             $asiento  = $this->service->getAsientoContable($id, $idEmpresa);
@@ -998,7 +998,7 @@ class EgresosController extends BaseModuloController
 
             $detalles = $egreso['detalles'] ?? [];
             $pagos    = $egreso['pagos'] ?? [];
-            $empresa  = $this->cargarEmpresaParaPdf($idEmpresa);
+            $empresa  = $this->cargarEmpresaParaPdf($idEmpresa, $egreso['id_punto_emision'] ?? null);
             $numero   = (string) ($egreso['numero_egreso'] ?? $id);
             $sujeto   = trim((string) ($egreso['sujeto_nombre'] ?? ''));
 
@@ -1109,7 +1109,7 @@ class EgresosController extends BaseModuloController
     }
 
     /** Datos de la empresa (con logo del establecimiento) para el PDF. */
-    private function cargarEmpresaParaPdf(int $idEmpresa): array
+    private function cargarEmpresaParaPdf(int $idEmpresa, $idPuntoEmision = null): array
     {
         $empresaModel = new Empresa();
         $empresa      = $empresaModel->getPorId($idEmpresa) ?? [];
@@ -1117,6 +1117,7 @@ class EgresosController extends BaseModuloController
         if (!empty($establecimientos[0]['logo_ruta'])) {
             $empresa['logo_ruta'] = $establecimientos[0]['logo_ruta'];
         }
+        \App\Helpers\LogoPuntoEmision::aplicar($empresa, $idEmpresa, $idPuntoEmision);
         return $empresa;
     }
 

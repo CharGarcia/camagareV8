@@ -1061,11 +1061,20 @@ $warnIcon = '<i class="bi bi-exclamation-circle-fill text-warning ms-1" title="C
                                     onclick="editarPunto(this)">
                                     <div class="card-body p-3">
                                         <div class="d-flex align-items-center mb-3">
-                                            <div class="bg-primary bg-opacity-10 text-primary p-3 rounded-3 me-3">
-                                                <i class="bi bi-shop fs-4"></i>
-                                            </div>
+                                            <?php if (!empty($p['logo_ruta'])): ?>
+                                                <div class="border rounded-3 me-3 bg-white d-flex align-items-center justify-content-center overflow-hidden flex-shrink-0" style="width:56px;height:56px;">
+                                                    <img src="<?= htmlspecialchars((string) $p['logo_ruta']) ?>" alt="Logo del punto" style="max-width:54px;max-height:54px;object-fit:contain;">
+                                                </div>
+                                            <?php else: ?>
+                                                <div class="bg-primary bg-opacity-10 text-primary p-3 rounded-3 me-3">
+                                                    <i class="bi bi-shop fs-4"></i>
+                                                </div>
+                                            <?php endif; ?>
                                             <div class="flex-grow-1 min-w-0">
                                                 <h6 class="mb-0 small fw-bold text-truncate"><?= htmlspecialchars($p['codigo_punto']) ?> - <?= htmlspecialchars($p['nombre']) ?></h6>
+                                                <div class="text-muted" style="font-size:.65rem;">
+                                                    <?= !empty($p['logo_ruta']) ? '<i class="bi bi-image me-1"></i>Logo propio' : '<i class="bi bi-building me-1"></i>Logo del establecimiento' ?>
+                                                </div>
                                             </div>
                                         </div>
                                         <div class="d-flex justify-content-between align-items-center">
@@ -1170,6 +1179,7 @@ $warnIcon = '<i class="bi bi-exclamation-circle-fill text-warning ms-1" title="C
                                     <div class="list-group-item text-muted small py-3"><i class="bi bi-info-circle me-1"></i>No hay puntos de emisión.</div>
                                 <?php else: foreach ($puntosSec as $idx => $p): $ptoInactivo = strtolower((string)($p['estado'] ?? 'activo')) !== 'activo'; ?>
                                     <a href="#" class="list-group-item list-group-item-action py-3 <?= ($idx === 0) ? 'active' : '' ?>"
+                                        data-punto-id="<?= (int)($p['id'] ?? 0) ?>"
                                         onclick="cargarSecuenciales(this, <?= (int)($p['id'] ?? 0) ?>)">
                                         <div class="d-flex justify-content-between align-items-center w-100">
                                             <span class="fw-medium"><?= $p['codigo_punto'] ?> - <?= $p['nombre'] ?></span>
@@ -2044,6 +2054,33 @@ $warnIcon = '<i class="bi bi-exclamation-circle-fill text-warning ms-1" title="C
                             <option value="inactivo">Inactivo</option>
                         </select>
                     </div>
+                    <div class="col-md-12">
+                        <label class="form-label small fw-bold">Logo del Punto <span class="text-muted fw-normal">(opcional)</span></label>
+                        <input type="hidden" name="quitar_logo" id="punto-quitar-logo" value="">
+                        <div class="d-flex align-items-center gap-3 flex-wrap">
+                            <div class="d-flex flex-column align-items-center gap-1 flex-shrink-0">
+                                <div class="border rounded-2 bg-light d-flex align-items-center justify-content-center overflow-hidden" style="width:110px;height:80px;">
+                                    <img id="punto-logo-preview" src="" alt="" style="max-width:108px;max-height:78px;object-fit:contain;display:none;">
+                                    <div id="punto-logo-placeholder" class="flex-column align-items-center justify-content-center text-muted" style="display:flex;font-size:.65rem;text-align:center;">
+                                        <i class="bi bi-image fs-4 d-block mb-1"></i>Sin logo propio
+                                    </div>
+                                </div>
+                                <button type="button" class="btn btn-link btn-sm text-danger text-decoration-none p-0 d-none" id="btn-quitar-logo-punto"
+                                        style="font-size:.65rem;" onclick="quitarLogoPunto()">
+                                    <i class="bi bi-x-circle me-1"></i>Quitar logo
+                                </button>
+                            </div>
+                            <div class="flex-grow-1">
+                                <input type="file" name="logo_punto" id="punto-logo-input"
+                                       class="form-control form-control-sm" accept="image/png,image/jpeg,image/gif,image/webp"
+                                       onchange="previewLogoPunto(this)">
+                                <div class="form-text" id="punto-logo-hint" style="font-size:.65rem;">
+                                    PNG, JPG, GIF o WEBP. Máx. 2 MB. Mismo espacio en el PDF que el logo del establecimiento.
+                                    <br><span id="punto-logo-hint-fallback"><i class="bi bi-info-circle me-1 text-primary"></i>Sin logo propio, los documentos de este punto usan el <strong>logo del establecimiento</strong>.</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
                 </div>
             </div>
             <div class="modal-footer bg-light py-2 d-flex justify-content-between">
@@ -2171,10 +2208,49 @@ $warnIcon = '<i class="bi bi-exclamation-circle-fill text-warning ms-1" title="C
 
     let puntoEnUsoActual = false;
 
+    // ── Logo propio del punto de emisión (si no tiene, se usa el del establecimiento) ──
+    function pintarLogoPunto(src) {
+        const preview     = document.getElementById('punto-logo-preview');
+        const placeholder = document.getElementById('punto-logo-placeholder');
+        const hayLogo = !!src;
+        preview.src = hayLogo ? src : '';
+        preview.style.display = hayLogo ? 'block' : 'none';
+        placeholder.style.display = hayLogo ? 'none' : 'flex';
+        document.getElementById('btn-quitar-logo-punto').classList.toggle('d-none', !hayLogo);
+        document.getElementById('punto-logo-hint-fallback').style.display = hayLogo ? 'none' : 'inline';
+    }
+
+    function previewLogoPunto(input) {
+        if (!input.files || !input.files[0]) return;
+        const file = input.files[0];
+        if (!file.type.startsWith('image/')) {
+            Swal.fire('Archivo no válido', 'Seleccione una imagen (PNG, JPG, GIF, WEBP).', 'warning');
+            input.value = '';
+            return;
+        }
+        if (file.size > 2 * 1024 * 1024) {
+            Swal.fire('Archivo muy grande', 'El logo no debe superar los 2 MB.', 'warning');
+            input.value = '';
+            return;
+        }
+        document.getElementById('punto-quitar-logo').value = '';
+        const reader = new FileReader();
+        reader.onload = e => pintarLogoPunto(e.target.result);
+        reader.readAsDataURL(file);
+    }
+
+    function quitarLogoPunto() {
+        document.getElementById('punto-logo-input').value = '';
+        document.getElementById('punto-quitar-logo').value = '1';
+        pintarLogoPunto('');
+    }
+
     function nuevoPunto() {
         const form = document.getElementById('form-punto');
         form.reset();
         document.getElementById('punto-id').value = '';
+        document.getElementById('punto-quitar-logo').value = '';
+        pintarLogoPunto('');
         document.getElementById('btn-eliminar-punto').classList.add('d-none');
         puntoEnUsoActual = false;
         // Rehabilitar el código (por si se venía de editar un punto en uso).
@@ -2198,6 +2274,9 @@ $warnIcon = '<i class="bi bi-exclamation-circle-fill text-warning ms-1" title="C
         const codigoInput = form.querySelector('[name=codigo_punto]');
         codigoInput.value = data.codigo_punto || '';
         form.querySelector('[name=estado]').value = data.estado || 'activo';
+        document.getElementById('punto-logo-input').value = '';
+        document.getElementById('punto-quitar-logo').value = '';
+        pintarLogoPunto(data.logo_ruta || '');
 
         // Si el punto ya tiene documentos: el código no se puede cambiar (rompería la
         // numeración). Sí se permite cambiar nombre y estado (activar/inhabilitar), y
@@ -2324,6 +2403,8 @@ $warnIcon = '<i class="bi bi-exclamation-circle-fill text-warning ms-1" title="C
         document.querySelectorAll('#secuenciales-puntos-list a').forEach(a => a.classList.remove('active'));
         el.classList.add('active');
         document.getElementById('sec-punto-id').value = id;
+        // Recordar el punto elegido: tras guardar, la página se recarga y vuelve a él.
+        try { sessionStorage.setItem('empresa_sec_punto', String(id)); } catch (e) {}
 
         const container = document.getElementById('secuenciales-fields');
         container.innerHTML = '<div class="col-12 text-center py-4"><div class="spinner-border spinner-border-sm text-primary" role="status"></div><span class="ms-2 small">Cargando secuenciales...</span></div>';
@@ -2755,16 +2836,44 @@ $warnIcon = '<i class="bi bi-exclamation-circle-fill text-warning ms-1" title="C
             const secTab = document.getElementById('secuenciales-tab');
             if (secTab) {
                 secTab.addEventListener('shown.bs.tab', function() {
-                    const firstLink = document.querySelector('#secuenciales-puntos-list a');
-                    if (firstLink && !firstLink.dataset.loaded) {
-                        firstLink.dataset.loaded = '1';
-                        cargarSecuenciales(firstLink, <?= (int)($puntosSec[0]['id'] ?? 0) ?>);
+                    // Vuelve al punto que se estaba editando antes de recargar; si ya no
+                    // existe, carga el primero.
+                    let idGuardado = '';
+                    try { idGuardado = sessionStorage.getItem('empresa_sec_punto') || ''; } catch (e) {}
+                    const link = (idGuardado && document.querySelector(`#secuenciales-puntos-list a[data-punto-id="${CSS.escape(idGuardado)}"]`))
+                        || document.querySelector('#secuenciales-puntos-list a');
+                    if (link && !link.dataset.loaded) {
+                        link.dataset.loaded = '1';
+                        cargarSecuenciales(link, parseInt(link.dataset.puntoId, 10) || 0);
                     }
                 }, {
                     once: true
                 });
             }
         <?php endif; ?>
+
+        // Pestaña activa: se recuerda al cambiarla y se restaura al recargar la página
+        // (varios guardados recargan), para que el usuario siga en la pestaña donde estaba.
+        // sessionStorage: dura solo en esta pestaña del navegador; si falla, abre en General.
+        document.querySelectorAll('#empresaTabs [data-bs-toggle="tab"]').forEach(btn => {
+            btn.addEventListener('shown.bs.tab', () => {
+                const destino = btn.getAttribute('data-bs-target');
+                try { sessionStorage.setItem('empresa_tab_activa', destino); } catch (e) {}
+                // El #pestaña de la URL sigue a la pestaña actual: si no, al recargar
+                // ganaría el # con el que se entró y no la pestaña donde se estaba.
+                if (location.hash && location.hash !== destino) {
+                    history.replaceState(null, '', location.pathname + location.search + destino);
+                }
+            });
+        });
+        // Un enlace con #pestaña (p. ej. modulos/empresa#establecimientos desde Declaración
+        // de IVA) manda sobre la pestaña recordada.
+        const buscarTab = t => t ? document.querySelector(`#empresaTabs [data-bs-target="${CSS.escape(t)}"]`) : null;
+        let btnTab = buscarTab(location.hash);
+        if (!btnTab) {
+            try { btnTab = buscarTab(sessionStorage.getItem('empresa_tab_activa')); } catch (e) {}
+        }
+        if (btnTab) bootstrap.Tab.getOrCreateInstance(btnTab).show();
 
         // Agrupación de ítems: los dos criterios son excluyentes.
         document.querySelectorAll('.sw-agrupar-items').forEach(sw => {

@@ -594,7 +594,7 @@ h2 { margin:3px 0 0; color:#666; font-size:10pt; text-transform:uppercase; }
     }
 
     /** Datos de la empresa (con el logo del establecimiento de la orden) para el PDF. */
-    private function cargarEmpresaParaPdf(int $idEmpresa, ?int $idEstablecimiento = null): array
+    private function cargarEmpresaParaPdf(int $idEmpresa, ?int $idEstablecimiento = null, $idPuntoEmision = null): array
     {
         $empresaModel = new \App\models\Empresa();
         $empresa      = $empresaModel->getPorId($idEmpresa) ?? [];
@@ -609,6 +609,7 @@ h2 { margin:3px 0 0; color:#666; font-size:10pt; text-transform:uppercase; }
                 $empresa['logo_ruta'] = $establecimientos[0]['logo_ruta'];
             }
         }
+        \App\Helpers\LogoPuntoEmision::aplicar($empresa, $idEmpresa, $idPuntoEmision);
         return $empresa;
     }
 
@@ -625,7 +626,7 @@ h2 { margin:3px 0 0; color:#666; font-size:10pt; text-transform:uppercase; }
             $doc = $this->cargarOrdenParaDocumento($id, $idEmpresa);
             if (!$doc) { http_response_code(404); echo 'Orden de compra no encontrada'; exit; }
 
-            $empresa = $this->cargarEmpresaParaPdf($idEmpresa, !empty($doc['cabecera']['id_establecimiento']) ? (int) $doc['cabecera']['id_establecimiento'] : null);
+            $empresa = $this->cargarEmpresaParaPdf($idEmpresa, !empty($doc['cabecera']['id_establecimiento']) ? (int) $doc['cabecera']['id_establecimiento'] : null, $doc['cabecera']['id_punto_emision'] ?? null);
 
             (new \App\Services\modulos\OrdenCompraPdfService())->generar($doc['cabecera'], $doc['detalles'], $empresa, 'D');
         } catch (\Throwable $e) {
@@ -651,7 +652,7 @@ h2 { margin:3px 0 0; color:#666; font-size:10pt; text-transform:uppercase; }
             $cabecera = $doc['cabecera'];
             $detalles = $doc['detalles'];
 
-            $empresa = $this->cargarEmpresaParaPdf($idEmpresa, !empty($cabecera['id_establecimiento']) ? (int) $cabecera['id_establecimiento'] : null);
+            $empresa = $this->cargarEmpresaParaPdf($idEmpresa, !empty($cabecera['id_establecimiento']) ? (int) $cabecera['id_establecimiento'] : null, $cabecera['id_punto_emision'] ?? null);
             $numero  = (string) ($cabecera['numero_orden'] ?? '');
 
             require_once MVC_ROOT . '/vendor/autoload.php';
@@ -779,7 +780,7 @@ h2 { margin:3px 0 0; color:#666; font-size:10pt; text-transform:uppercase; }
             if (!$doc) { if (ob_get_level() > 0) ob_end_clean(); echo json_encode(['ok' => false, 'mensaje' => 'Orden de compra no encontrada.']); exit; }
             $cabecera = $doc['cabecera'];
 
-            $empresa = $this->cargarEmpresaParaPdf($idEmpresa, !empty($cabecera['id_establecimiento']) ? (int) $cabecera['id_establecimiento'] : null);
+            $empresa = $this->cargarEmpresaParaPdf($idEmpresa, !empty($cabecera['id_establecimiento']) ? (int) $cabecera['id_establecimiento'] : null, $cabecera['id_punto_emision'] ?? null);
             $numero  = (string) ($cabecera['numero_orden'] ?? '');
 
             $pdfString = (new \App\Services\modulos\OrdenCompraPdfService())->generar($cabecera, $doc['detalles'], $empresa, 'S');

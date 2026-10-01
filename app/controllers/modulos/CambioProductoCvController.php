@@ -692,7 +692,7 @@ class CambioProductoCvController extends BaseModuloController
             }
 
             $detalles = $cambio['detalles'] ?? [];
-            $empresa  = $this->cargarEmpresaParaPdf($idEmpresa);
+            $empresa  = $this->cargarEmpresaParaPdf($idEmpresa, $cambio['id_punto_emision'] ?? null);
 
             $renderer  = new \App\Services\PlantillasPdfRendererService();
             $plantilla = $renderer->getPlantillaActiva($idEmpresa, 'cambio_producto_cv');
@@ -852,7 +852,7 @@ class CambioProductoCvController extends BaseModuloController
             }
 
             $detalles = $cambio['detalles'] ?? [];
-            $empresa  = $this->cargarEmpresaParaPdf($idEmpresa);
+            $empresa  = $this->cargarEmpresaParaPdf($idEmpresa, $cambio['id_punto_emision'] ?? null);
 
             $renderer  = new \App\Services\PlantillasPdfRendererService();
             $plantilla = $renderer->getPlantillaActiva($idEmpresa, 'cambio_producto_cv');
@@ -1053,7 +1053,7 @@ class CambioProductoCvController extends BaseModuloController
         return $empresaData;
     }
 
-    private function cargarEmpresaParaPdf(int $idEmpresa): array
+    private function cargarEmpresaParaPdf(int $idEmpresa, $idPuntoEmision = null): array
     {
         $empresaModel = new \App\models\Empresa();
         $empresa      = $empresaModel->getPorId($idEmpresa) ?? [];
@@ -1061,6 +1061,7 @@ class CambioProductoCvController extends BaseModuloController
         if (!empty($establecimientos[0]['logo_ruta'])) {
             $empresa['logo_ruta'] = $establecimientos[0]['logo_ruta'];
         }
+        \App\Helpers\LogoPuntoEmision::aplicar($empresa, $idEmpresa, $idPuntoEmision);
         return $empresa;
     }
 

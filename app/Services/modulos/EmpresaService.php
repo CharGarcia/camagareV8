@@ -165,33 +165,12 @@ class EmpresaService
     public function saveEstablecimiento(int $idEmpresa, array $data, array $files = []): array
     {
         $idEst = (int) ($data['id'] ?? 0);
-        
-        // Manejar subida de logo
-        if (!empty($files['logo_establecimiento']) && $files['logo_establecimiento']['error'] === UPLOAD_ERR_OK) {
-            $file = $files['logo_establecimiento'];
-            $ext = strtolower(pathinfo($file['name'], PATHINFO_EXTENSION));
 
-            // El destino está dentro de public/: sin lista blanca, un archivo
-            // .php subido aquí quedaría accesible por URL y el servidor lo
-            // ejecutaría. Mismo criterio que productos y menú.
-            $permitidas = ['jpg', 'jpeg', 'png', 'gif', 'webp'];
-            if (!in_array($ext, $permitidas, true)) {
-                throw new \Exception('Formato de logo no permitido. Use JPG, PNG, GIF o WEBP.');
-            }
-            if ($file['size'] > 2 * 1024 * 1024) {
-                throw new \Exception('El logo excede los 2MB.');
-            }
-
-            $dir = MVC_ROOT . "/public/uploads/logos/empresa_{$idEmpresa}";
-            if (!is_dir($dir)) mkdir($dir, 0755, true);
-            
-            $filename = "logo_est_" . time() . "." . $ext;
-            $dest = $dir . "/" . $filename;
-            
-            if (move_uploaded_file($file['tmp_name'], $dest)) {
-                // BASE_URL ya incluye "/public", solo agregar el subpath dentro de public/
-                $data['logo_ruta'] = rtrim(BASE_URL, '/') . "/uploads/logos/empresa_{$idEmpresa}/" . $filename;
-            }
+        // La ruta del logo nunca se acepta del formulario: solo sale de una subida.
+        unset($data['logo_ruta']);
+        $logo = $this->subirLogo($files['logo_establecimiento'] ?? null, $idEmpresa, 'logo_est_');
+        if ($logo !== null) {
+            $data['logo_ruta'] = $logo;
         }
 
         if ($idEst > 0) {
@@ -688,9 +667,73 @@ class EmpresaService
         return ['ok' => true, 'msg' => 'Firma cargada correctamente'];
     }
 
-    public function savePunto(int $idEmpresa, array $data): array
+    /**
+     * Sube un logo (establecimiento o punto de emisión) a public/uploads/logos/empresa_{id}.
+     * Devuelve la URL pública a guardar en logo_ruta, o null si no llegó archivo.
+     */
+    private function subirLogo(?array $file, int $idEmpresa, string $prefijo): ?string
+    {
+        if (empty($file) || ($file['error'] ?? UPLOAD_ERR_NO_FILE) !== UPLOAD_ERR_OK) {
+            return null;
+        }
+        $ext = strtolower(pathinfo((string) $file['name'], PATHINFO_EXTENSION));
+
+        // El destino está dentro de public/: sin lista blanca, un archivo
+        // .php subido aquí quedaría accesible por URL y el servidor lo
+        // ejecutaría. Mismo criterio que productos y menú.
+        $permitidas = ['jpg', 'jpeg', 'png', 'gif', 'webp'];
+        if (!in_array($ext, $permitidas, true)) {
+            throw new \Exception('Formato de logo no permitido. Use JPG, PNG, GIF o WEBP.');
+        }
+        if ($file['size'] > 2 * 1024 * 1024) {
+            throw new \Exception('El logo excede los 2MB.');
+        }
+
+        $dir = MVC_ROOT . "/public/uploads/logos/empresa_{$idEmpresa}";
+        if (!is_dir($dir)) mkdir($dir, 0755, true);
+
+        $filename = $prefijo . time() . "." . $ext;
+        if (!move_uploaded_file($file['tmp_name'], $dir . "/" . $filename)) {
+            throw new \Exception('No se pudo guardar el logo en el servidor.');
+        }
+        // BASE_URL ya incluye "/public", solo agregar el subpath dentro de public/
+        return rtrim(BASE_URL, '/') . "/uploads/logos/empresa_{$idEmpresa}/" . $filename;
+    }
+
+    public function savePunto(int $idEmpresa, array $data, array $files = []): array
     {
         $idPunto = (int) ($data['id'] ?? 0);
+
+        // Logo propio del punto: si no tiene, los PDF de sus documentos usan el del
+        // establecimiento (ver App\Helpers\LogoPuntoEmision). La ruta nunca se acepta
+        // del formulario: sale de la subida o de "quitar_logo".
+        $quitarLogo = !empty($data['quitar_logo']);
+        unset($data['logo_ruta'], $data['quitar_logo']);
+        $logoNuevo = $this->subirLogo($files['logo_punto'] ?? null, $idEmpresa, 'logo_pto_');
+        if ($logoNuevo !== null) {
+            $data['logo_ruta'] = $logoNuevo;
+        } elseif ($quitarLogo) {
+            $data['logo_ruta'] = '';
+        }
+        $logoAnterior = $idPunto > 0
+            ? (string) ($this->repository->getPuntoEmision($idPunto, $idEmpresa)['logo_ruta'] ?? '')
+            : '';
+
+        $resultado = $this->guardarPunto($idEmpresa, $idPunto, $data);
+
+        if (!empty($resultado['ok']) && array_key_exists('logo_ruta', $data) && $data['logo_ruta'] !== $logoAnterior) {
+            (new \App\Services\LogSistemaService())->registrar(
+                (int) ($_SESSION['id_usuario'] ?? 0), $idEmpresa,
+                $data['logo_ruta'] === '' ? 'QUITAR_LOGO_PUNTO_EMISION' : 'CAMBIAR_LOGO_PUNTO_EMISION',
+                'empresa_punto_emision', (int) ($resultado['id'] ?? $idPunto),
+                ['logo_ruta' => $logoAnterior], ['logo_ruta' => $data['logo_ruta']]
+            );
+        }
+        return $resultado;
+    }
+
+    private function guardarPunto(int $idEmpresa, int $idPunto, array $data): array
+    {
         if ($idPunto > 0) {
             // Si el punto ya tiene documentos, se puede cambiar el NOMBRE y el ESTADO
             // (activar/inhabilitar), pero NO el código ni el establecimiento, porque eso

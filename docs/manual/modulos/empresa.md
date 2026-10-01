@@ -5,8 +5,8 @@ categoria: Configuración de empresa
 ruta_modulo: modulos/empresa
 tipo: modulo
 visibilidad: admin
-etiquetas: empresa, datos de la empresa, ruc, establecimiento, punto de emision, logo, ambiente, pruebas, produccion, configuracion, correo, email, smtp, envio de correos, cuerpo del correo, asunto, plantilla de correo, remitente, documentos legales, acuerdo de uso de datos, contrato de uso del sistema, aceptacion de documentos, documentos firmados, documentos cargados, archivos de la empresa, secuenciales, numeracion, tipos de documento, codDoc, eliminar secuencial, crear secuenciales, agregar todos los faltantes, facturas de reembolso, punto unico por empresa, punto inactivo, eliminar punto de emision con documentos, puntos duplicados, secuencial inicial, numero inicial, hueco, huecos, rellenar hueco, salto de numeracion, siguiente numero, retomar numeracion, presentacion de los items, agrupar items, agrupar por nombre, agrupar por lote, agrupar por nup, agrupar por serie, juntar lineas repetidas, sumar items iguales, mostrar lote en la factura, mostrar caducidad, mostrar unidad de medida, mostrar nup, descripcion del item, tirilla, ticket, impresion termica, modo de numeracion, numeracion por fecha, secuencial por fecha, reiniciar numeracion, reinicio anual, reinicio mensual, numeracion anual, numeracion mensual, correlativo por año, correlativo por mes, empezar de cero cada año, prefijo del año, numero con el año, volver a empezar la numeracion
-version: 1.24
+etiquetas: empresa, datos de la empresa, ruc, establecimiento, punto de emision, logo, logo por punto de emision, logo de la caja, logo por sucursal, otra marca, quitar logo, ambiente, pruebas, produccion, configuracion, correo, email, smtp, envio de correos, cuerpo del correo, asunto, plantilla de correo, remitente, documentos legales, acuerdo de uso de datos, contrato de uso del sistema, aceptacion de documentos, documentos firmados, documentos cargados, archivos de la empresa, secuenciales, numeracion, tipos de documento, codDoc, eliminar secuencial, crear secuenciales, agregar todos los faltantes, facturas de reembolso, punto unico por empresa, punto inactivo, eliminar punto de emision con documentos, puntos duplicados, secuencial inicial, numero inicial, hueco, huecos, rellenar hueco, salto de numeracion, siguiente numero, retomar numeracion, presentacion de los items, agrupar items, agrupar por nombre, agrupar por lote, agrupar por nup, agrupar por serie, juntar lineas repetidas, sumar items iguales, mostrar lote en la factura, mostrar caducidad, mostrar unidad de medida, mostrar nup, descripcion del item, tirilla, ticket, impresion termica, modo de numeracion, numeracion por fecha, secuencial por fecha, reiniciar numeracion, reinicio anual, reinicio mensual, numeracion anual, numeracion mensual, correlativo por año, correlativo por mes, empezar de cero cada año, prefijo del año, numero con el año, volver a empezar la numeracion
+version: 1.26
 orden: 5
 estado: activo
 ---
@@ -40,6 +40,32 @@ uno cuadrado o vertical. Formato **PNG con fondo transparente** (también acepta
 JPG o GIF), máximo 2 MB; resolución sugerida ~960 × 300 px o mayor, misma
 proporción, para que se vea nítido al imprimir. Junto a la miniatura hay un
 enlace para **descargar el logo actualmente guardado**.
+
+### Logo por punto de emisión
+
+Cada punto de emisión puede tener **su propio logo** (por ejemplo, una caja o
+sucursal que vende con otra marca). Se carga en la pestaña **Puntos de
+Emisión**: al abrir un punto, el campo **Logo del Punto** permite subir la
+imagen (mismos formatos, tamaño máximo y espacio en el PDF que el logo del
+establecimiento) o **Quitar logo**.
+
+- Si el punto **tiene logo propio**, todos los documentos emitidos con esa
+  serie lo usan: factura (incluida la app móvil), nota de crédito, nota de
+  débito, retención, liquidación de compra, guía de remisión, recibo, factura
+  de reembolso, facturación de consignaciones, proforma (y su ficha de
+  productos y condiciones), pedido, orden de compra, importación, ingreso,
+  egreso, traspaso, consignaciones, retornos, cambios de producto, órdenes de
+  car-wash, taller y servicio externo. También el PDF que se envía por correo
+  y la cabecera del correo.
+- Si el punto **no tiene logo**, se sigue usando el **logo del
+  establecimiento**, igual que siempre.
+- Los **reportes y listados** (reporte de ventas, cartera, roles de pago,
+  inventario, etc.) no pertenecen a un punto y siempre llevan el logo del
+  establecimiento.
+
+En la tarjeta de cada punto se ve su logo y la leyenda *Logo propio* o *Logo
+del establecimiento*. Cada cambio o retiro del logo de un punto queda
+registrado en el log del sistema.
 
 Si los comprobantes salen con una numeración que no esperaba, es aquí donde se
 corrige.
@@ -123,9 +149,10 @@ y débito, retenciones, guías de remisión y liquidaciones de compra).
 - **Cuerpo del correo**: editor de texto con formato (títulos, negritas,
   colores, alineación, listas, enlaces e imágenes).
 
-El logo que aparece en la cabecera del correo es el del **establecimiento** que
-emitió el documento (pestaña Establecimiento). Si el establecimiento no tiene
-logo, la cabecera muestra el nombre de la empresa en texto.
+El logo que aparece en la cabecera del correo es el del **punto de emisión** del
+documento si tiene uno propio; si no, el del **establecimiento** que lo emitió
+(pestaña Establecimiento). Si ninguno tiene logo, la cabecera muestra el nombre
+de la empresa en texto.
 
 El remitente que ve el destinatario es el nombre comercial de la empresa (o su
 razón social si no tiene nombre comercial).
@@ -174,6 +201,9 @@ comprobante electrónico y la representación impresa siempre dicen lo mismo.
   documentos de pruebas no se ven en producción.
 - **El logo no sale en el PDF**: compruebe que esté cargado y en un formato
   admitido.
+- **Un documento sale con un logo distinto al del establecimiento**: su punto
+  de emisión tiene logo propio. Ábralo en la pestaña **Puntos de Emisión** y use
+  **Quitar logo** si debe usar el del establecimiento.
 
 - **El correo llega con dos saludos o dos despedidas**: está usando el diseño
   del sistema y además escribió su propio saludo o firma en el cuerpo. Quite esa
@@ -348,6 +378,15 @@ de taxis.
 
 ## Historial de cambios
 
+- **1.26** — Al guardar un cambio, el módulo se queda en la **misma pestaña** donde se
+  estaba (antes, los guardados que recargan la página volvían a *Datos generales*). En
+  **Secuenciales** también vuelve al mismo punto de emisión. Los enlaces de otros
+  módulos a una pestaña concreta (p. ej. *Empresa → Establecimientos*) ahora abren
+  esa pestaña.
+- **1.25** — **Logo por punto de emisión**: cada punto puede tener su propio logo
+  (pestaña Puntos de Emisión). Los documentos de ese punto, su PDF por correo y la
+  cabecera del correo lo usan; si el punto no tiene logo, se sigue usando el del
+  establecimiento. Ver "Logo por punto de emisión".
 - **1.24** — Las opciones de la pestaña **Facturación** apagadas ahora se respetan en
   todo el inventario: con **"La facturación afecta al inventario"** apagada, facturas,
   recibos, notas de crédito y órdenes de car-wash, taller y servicio externo ya no

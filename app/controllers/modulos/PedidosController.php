@@ -728,7 +728,7 @@ class PedidosController extends BaseModuloController {
     }
 
     /** Datos de la empresa (con el logo del establecimiento del pedido) para el PDF. */
-    private function cargarEmpresaParaPdf(int $idEmpresa, ?int $idEstablecimiento = null): array
+    private function cargarEmpresaParaPdf(int $idEmpresa, ?int $idEstablecimiento = null, $idPuntoEmision = null): array
     {
         $empresaModel = new Empresa();
         $empresa      = $empresaModel->getPorId($idEmpresa) ?? [];
@@ -743,6 +743,7 @@ class PedidosController extends BaseModuloController {
                 $empresa['logo_ruta'] = $establecimientos[0]['logo_ruta'];
             }
         }
+        \App\Helpers\LogoPuntoEmision::aplicar($empresa, $idEmpresa, $idPuntoEmision);
         return $empresa;
     }
 
@@ -758,7 +759,7 @@ class PedidosController extends BaseModuloController {
             $doc = $this->cargarPedidoParaDocumento($id, $idEmpresa);
             if (!$doc) { http_response_code(404); echo 'Pedido no encontrado'; exit; }
 
-            $empresa = $this->cargarEmpresaParaPdf($idEmpresa, !empty($doc['cabecera']['id_establecimiento']) ? (int) $doc['cabecera']['id_establecimiento'] : null);
+            $empresa = $this->cargarEmpresaParaPdf($idEmpresa, !empty($doc['cabecera']['id_establecimiento']) ? (int) $doc['cabecera']['id_establecimiento'] : null, $doc['cabecera']['id_punto_emision'] ?? null);
 
             (new \App\Services\modulos\PedidoPdfService())->generar($doc['cabecera'], $doc['detalles'], $empresa, 'D');
         } catch (\Throwable $e) {
@@ -783,7 +784,7 @@ class PedidosController extends BaseModuloController {
             $cabecera = $doc['cabecera'];
             $detalles = $doc['detalles'];
 
-            $empresa = $this->cargarEmpresaParaPdf($idEmpresa, !empty($cabecera['id_establecimiento']) ? (int) $cabecera['id_establecimiento'] : null);
+            $empresa = $this->cargarEmpresaParaPdf($idEmpresa, !empty($cabecera['id_establecimiento']) ? (int) $cabecera['id_establecimiento'] : null, $cabecera['id_punto_emision'] ?? null);
             $numero  = (string) ($cabecera['numero_pedido'] ?? '');
 
             require_once MVC_ROOT . '/vendor/autoload.php';
@@ -872,7 +873,7 @@ class PedidosController extends BaseModuloController {
             if (!$doc) { if (ob_get_level() > 0) ob_end_clean(); echo json_encode(['ok' => false, 'mensaje' => 'Pedido no encontrado.']); exit; }
             $cabecera = $doc['cabecera'];
 
-            $empresa = $this->cargarEmpresaParaPdf($idEmpresa, !empty($cabecera['id_establecimiento']) ? (int) $cabecera['id_establecimiento'] : null);
+            $empresa = $this->cargarEmpresaParaPdf($idEmpresa, !empty($cabecera['id_establecimiento']) ? (int) $cabecera['id_establecimiento'] : null, $cabecera['id_punto_emision'] ?? null);
             $numero  = (string) ($cabecera['numero_pedido'] ?? '');
 
             $pdfString = (new \App\Services\modulos\PedidoPdfService())->generar($cabecera, $doc['detalles'], $empresa, 'S');

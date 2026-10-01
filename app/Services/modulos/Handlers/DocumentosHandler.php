@@ -212,6 +212,7 @@ class DocumentosHandler extends BaseHandler
             } catch (\Throwable) {}
         }
 
+        \App\Helpers\LogoPuntoEmision::aplicar($empresa, $idEmpresa, $factura['id_punto_emision'] ?? null);
         // PDF (plantilla activa o servicio por defecto)
         $renderer     = new \App\Services\PlantillasPdfRendererService();
         $plantillaPdf = $renderer->getPlantillaActiva($idEmpresa, 'factura_venta');

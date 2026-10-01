@@ -794,6 +794,7 @@ class NotasCreditoController extends BaseModuloController
             } catch (\Throwable $e) {}
         }
 
+        \App\Helpers\LogoPuntoEmision::aplicar($empresa, $idEmpresa, $nc['id_punto_emision'] ?? null);
         return [$empresa, $dirEstablecimiento];
     }
 
