@@ -5153,7 +5153,28 @@ class AsientoBuilderService
             return [['id_cuenta' => $conceptoCuenta, 'monto' => round($totalMovido, 2), 'referencia' => $conceptoNombre]];
         }
 
-        // 4. Conciliar centavos contra el total movido (la pata banco/caja es la fuente de verdad).
+        // 4. Lo que $totalMovido trae ADEMÁS de las líneas manuales no es de ellas: es la parte de
+        //    documentos de cartera (compras/liquidaciones, facturas/recibos) que el llamador no pudo
+        //    cancelar contra el asiento propio del documento (p. ej. compras sin asiento). Esa parte
+        //    va a la cuenta del concepto (la oficial: Cuentas por Pagar/Cobrar) con la referencia que
+        //    pasa el llamador (los documentos), NO a la línea manual más grande. Antes el "ajuste de
+        //    centavos" de abajo se la sumaba entera: en un egreso de compras + "otros conceptos",
+        //    el saldo de las compras sin asiento terminaba en la cuenta del gasto manual (caso real:
+        //    egreso 002-101-202609011, 687,58 de 17 compras). Solo se separa si supera el margen de
+        //    redondeo; los centavos sí se concilian en la línea más grande.
+        $sumaManual = round(array_sum(array_column($grupos, 'monto')), 2);
+        $excedente  = round($totalMovido - $sumaManual, 2);
+        if ($excedente > 0.05) {
+            if ($conceptoCuenta <= 0) {
+                $faltaCuenta = true; // sin cuenta para ese saldo → descuadre intencional (se reporta)
+            } elseif (isset($grupos[$conceptoCuenta])) {
+                $grupos[$conceptoCuenta]['monto'] = round($grupos[$conceptoCuenta]['monto'] + $excedente, 2);
+            } else {
+                $grupos[$conceptoCuenta] = ['id_cuenta' => $conceptoCuenta, 'monto' => $excedente, 'referencia' => $conceptoNombre];
+            }
+        }
+
+        // 5. Conciliar centavos contra el total movido (la pata banco/caja es la fuente de verdad).
         //    Solo si TODAS las líneas resolvieron cuenta; si faltó alguna, dejamos el descuadre.
         if (!$faltaCuenta) {
             $sumaGrupos = round(array_sum(array_column($grupos, 'monto')), 2);

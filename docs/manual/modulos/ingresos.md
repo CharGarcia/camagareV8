@@ -452,7 +452,10 @@ misma revisión al guardar:
   perdía cuando el asiento se regeneraba sin abrir el ingreso (sincronización de
   asientos) y tomaba la del concepto (en un ingreso que también cobra facturas o
   recibos, Cuentas por Cobrar). Ahora el asiento usa siempre la cuenta guardada en cada
-  línea. Los asientos ya generados mal se corrigen volviendo a guardar el ingreso.
+  línea. Además, en un ingreso que cobra facturas o recibos sin asiento propio y lleva
+  «Otros conceptos», el saldo de esos documentos ya no se suma a la cuenta de la línea
+  manual: va a la cuenta del concepto (Cuentas por Cobrar). Los asientos ya generados
+  mal se corrigen volviendo a guardar el ingreso.
 - **3.8** — En la ventana de filtros, la pestaña *Detalles* se llama ahora
   **Búsqueda por detalle**, y la ventana ya no tiene barra de desplazamiento
   vertical propia: se muestra completa.

@@ -584,7 +584,10 @@ proveedores), pasa por la misma revisión al guardar:
   perdía cuando el asiento se regeneraba sin abrir el egreso (anular un cheque,
   sincronizar asientos) y tomaba la del concepto (en un egreso que también paga
   compras, Cuentas por Pagar). Ahora el asiento usa siempre la cuenta guardada en
-  cada línea. Los asientos ya generados mal se corrigen volviendo a guardar el egreso.
+  cada línea. Además, en un egreso que paga compras sin asiento propio y lleva «Otros
+  conceptos», el saldo de esas compras ya no se suma a la cuenta de la línea manual: va a
+  la cuenta del concepto (Cuentas por Pagar). Los asientos ya generados mal se corrigen
+  volviendo a guardar el egreso.
 - **1.33** — En la ventana de filtros, la pestaña *Detalles* se llama ahora
   **Búsqueda por detalle**, y la ventana ya no tiene barra de desplazamiento
   vertical propia: se muestra completa.
