@@ -36,6 +36,17 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosPestanasOcultas($vistaConfigP
     }
     .modal-proforma .input-detalle[readonly]  { background-color: #f8f9fa !important; color: #6c757d; }
     .modal-proforma select.input-detalle      { padding-right: 18px; }
+    /* Móvil: las columnas van por porcentaje y app.css sube los inputs a 16px (evita el
+       zoom de iOS), así que Código y Descripción quedaban de pocos px y el texto cortado.
+       Se les da un ancho mínimo real y la tabla hace scroll horizontal. */
+    @media (max-width: 767.98px) {
+        .modal-proforma .table-detalle .pf-col-codigo { min-width: 150px; }
+        .modal-proforma .table-detalle .pf-col-desc   { min-width: 320px; }
+        .modal-proforma .table-detalle .pf-col-adic   { min-width: 160px; }
+        .modal-proforma .table-detalle .pf-col-num    { min-width: 95px; }
+        .modal-proforma .table-detalle .pf-col-sel    { min-width: 120px; }
+        .modal-proforma .input-detalle                { height: 28px; }
+    }
     .modal-proforma .bg-light.p-3,
     .modal-proforma .p-3 { padding: 10px !important; }
     .modal-proforma hr { margin: 6px 0; }
@@ -331,16 +342,16 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosPestanasOcultas($vistaConfigP
                                     <table class="table table-sm table-detalle mb-0 text-nowrap" id="pf_tablaDetalle">
                                         <thead>
                                             <tr class="table-light border-bottom">
-                                                <th class="ps-3 py-2 small fw-bold text-muted" style="width:9%;">Código</th>
-                                                <th class="py-2 small fw-bold text-muted" style="width:18%;">Descripción</th>
-                                                <th class="py-2 small fw-bold text-muted" style="width:9%;">Adicional</th>
-                                                <th class="py-2 small fw-bold text-muted text-center" style="width:6%;">Cant.</th>
-                                                <th class="py-2 small fw-bold text-muted" style="width:12%;">Precios</th>
-                                                <th class="py-2 small fw-bold text-muted text-end" style="width:8%;">P. Sin Imp.</th>
-                                                <th class="py-2 small fw-bold text-muted text-end" style="width:8%;">P. Con Imp.</th>
-                                                <th class="py-2 small fw-bold text-muted text-end" style="width:7%;">Desc.</th>
-                                                <th class="py-2 small fw-bold text-muted text-center" style="width:7%;">Iva</th>
-                                                <th class="py-2 small fw-bold text-muted text-end pe-4" style="width:11%;">Subtotal</th>
+                                                <th class="ps-3 py-2 small fw-bold text-muted pf-col-codigo" style="width:9%;">Código</th>
+                                                <th class="py-2 small fw-bold text-muted pf-col-desc" style="width:18%;">Descripción</th>
+                                                <th class="py-2 small fw-bold text-muted pf-col-adic" style="width:9%;">Adicional</th>
+                                                <th class="py-2 small fw-bold text-muted text-center pf-col-num" style="width:6%;">Cant.</th>
+                                                <th class="py-2 small fw-bold text-muted pf-col-sel" style="width:12%;">Precios</th>
+                                                <th class="py-2 small fw-bold text-muted text-end pf-col-num" style="width:8%;">P. Sin Imp.</th>
+                                                <th class="py-2 small fw-bold text-muted text-end pf-col-num" style="width:8%;">P. Con Imp.</th>
+                                                <th class="py-2 small fw-bold text-muted text-end pf-col-num" style="width:7%;">Desc.</th>
+                                                <th class="py-2 small fw-bold text-muted text-center pf-col-sel" style="width:7%;">Iva</th>
+                                                <th class="py-2 small fw-bold text-muted text-end pe-4 pf-col-num" style="width:11%;">Subtotal</th>
                                                 <th style="width:40px;"></th>
                                             </tr>
                                         </thead>
@@ -744,13 +755,13 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosPestanasOcultas($vistaConfigP
                             <table class="table table-sm table-detalle mb-0 text-nowrap">
                                 <thead>
                                     <tr class="table-light border-bottom">
-                                        <th class="ps-3 py-2 small fw-bold text-muted" style="width:12%;">Código</th>
-                                        <th class="py-2 small fw-bold text-muted" style="width:24%;">Descripción</th>
-                                        <th class="py-2 small fw-bold text-muted" style="width:12%;">Adicional</th>
-                                        <th class="py-2 small fw-bold text-muted text-center" style="width:10%;">Cant.</th>
-                                        <th class="py-2 small fw-bold text-muted text-end" style="width:14%;">P. Unit.</th>
-                                        <th class="py-2 small fw-bold text-muted text-end" style="width:12%;">Desc.</th>
-                                        <th class="py-2 small fw-bold text-muted text-center" style="width:12%;">Iva</th>
+                                        <th class="ps-3 py-2 small fw-bold text-muted pf-col-codigo" style="width:12%;">Código</th>
+                                        <th class="py-2 small fw-bold text-muted pf-col-desc" style="width:24%;">Descripción</th>
+                                        <th class="py-2 small fw-bold text-muted pf-col-adic" style="width:12%;">Adicional</th>
+                                        <th class="py-2 small fw-bold text-muted text-center pf-col-num" style="width:10%;">Cant.</th>
+                                        <th class="py-2 small fw-bold text-muted text-end pf-col-num" style="width:14%;">P. Unit.</th>
+                                        <th class="py-2 small fw-bold text-muted text-end pf-col-num" style="width:12%;">Desc.</th>
+                                        <th class="py-2 small fw-bold text-muted text-center pf-col-sel" style="width:12%;">Iva</th>
                                         <th style="width:40px;"></th>
                                     </tr>
                                 </thead>

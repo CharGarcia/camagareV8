@@ -35,6 +35,10 @@ class ProformaPdfService
         $this->decCantidad = max(0, min(6, (int) ($empresa['decimales_cantidad'] ?? 2)));
         $this->decPrecio   = max(0, min(6, (int) ($empresa['decimales_precio']   ?? 2)));
 
+        // IVA con la configuración de facturación VIGENTE (al subtotal o ítem por ítem):
+        // una proforma guardada con otro modo se imprime igual que se facturaría hoy.
+        [$cabecera, $detalles] = \App\Helpers\ProformaTotales::recalcularIva($cabecera, $detalles, $empresa);
+
         $pdf = new TCPDF('P', 'mm', 'A4', true, 'UTF-8', false);
         $pdf->SetCreator('CaMaGaRe');
         $pdf->SetAuthor((string) ($empresa['nombre_comercial'] ?? $empresa['nombre'] ?? 'CaMaGaRe'));
@@ -269,10 +273,8 @@ class ProformaPdfService
      * Subtotal (bruto), un "Subtotal {tarifa}%" por cada tarifa de IVA presente, el
      * descuento y un "(+) IVA {tarifa}%" por cada tarifa mayor a cero.
      *
-     * Los valores NO se recalculan: salen de los impuestos guardados en cada línea y de
-     * los totales de la cabecera —que la pantalla calculó con el modo de IVA configurado
-     * por la empresa (línea por línea o al subtotal)—, igual que hace el RIDE de Facturas
-     * de Venta. Así el PDF no puede divergir de la proforma.
+     * El IVA ya viene recalculado en generar() con el modo configurado por la empresa
+     * (línea por línea o al subtotal); aquí solo se desglosa por tarifa.
      */
     private function totales(TCPDF $pdf, array $cabecera, array $detalles = []): array
     {

@@ -10,10 +10,11 @@ namespace App\Helpers;
  * Es la única fuente del bloque de totales: la usan el PDF y la exportación a Excel,
  * para que ninguna salida pueda divergir de lo que el usuario vio al guardar.
  *
- * Los valores NO se recalculan: salen de los impuestos guardados en cada línea y de
- * los totales de la cabecera —que el modal calculó con los decimales y el modo de
- * cálculo del IVA configurados por la empresa (`decimales_precio`, `decimales_cantidad`,
- * `calculo_iva_facturacion`)—. Es el mismo criterio del RIDE de Facturas de Venta.
+ * desglosar() no recalcula: lee los impuestos de cada línea y los totales de la
+ * cabecera. Antes de llamarlo, las salidas pasan por recalcularIva(), que aplica el
+ * modo de IVA VIGENTE de la empresa (`calculo_iva_facturacion`: al subtotal o ítem por
+ * ítem) sobre las bases guardadas, para que el PDF, el Excel y las conversiones usen
+ * siempre la configuración actual aunque la proforma se haya grabado con otra.
  */
 class ProformaTotales
 {
@@ -119,6 +120,93 @@ class ProformaTotales
         }
         if (!$desglose['grupos']) $filas[] = ['(+) IVA', $desglose['iva']];
         return $filas;
+    }
+
+    /**
+     * IVA de cada línea según la configuración de facturación (`calculo_iva_facturacion`),
+     * sobre la base ya calculada de la línea (precio_total_sin_impuesto):
+     *   - 'linea_linea': cada línea round(base × %), y el total es su suma.
+     *   - 'subtotal'   : el IVA de cada tarifa es round(Σ bases × %) y los centavos se
+     *                    reparten entre sus líneas (IvaSubtotal::repartir, el mismo
+     *                    algoritmo que CMG_repartirIvaSubtotal() del modal).
+     * Actualiza base_imponible y valor del impuesto IVA (código 2) de cada línea.
+     *
+     * Única implementación: la usan el guardado y las conversiones (ProformaService),
+     * el PDF y el Excel.
+     *
+     * @return array{0: array, 1: array{subtotal: float, descuento: float, iva: float}}
+     */
+    public static function aplicarModoIva(array $detalles, string $modo): array
+    {
+        $lineasIva = [];
+        $idxIva    = [];
+        foreach ($detalles as $k => $d) {
+            if (!is_array($d)) continue;
+            $idxIva[$k] = null;
+            foreach ($d['impuestos'] ?? [] as $i => $imp) {
+                if ((string) ($imp['codigo_impuesto'] ?? '2') === '2') { $idxIva[$k] = $i; break; }
+            }
+            $pct   = $idxIva[$k] !== null ? (float) ($d['impuestos'][$idxIva[$k]]['tarifa'] ?? 0) : 0.0;
+            $idTar = (int) ($d['id_tarifa_iva'] ?? 0);
+            $lineasIva[$k] = [
+                'grupo' => $idTar > 0 ? 'id:' . $idTar : 'pct:' . $pct,
+                'base'  => round(self::baseLinea($d), 2),
+                'pct'   => $pct,
+            ];
+        }
+
+        $ivaLineas = IvaSubtotal::repartir($lineasIva, $modo);
+
+        $subtotal = 0.0; $descuento = 0.0; $iva = 0.0;
+        foreach ($detalles as $k => &$d) {
+            if (!is_array($d)) continue;
+            $base = $lineasIva[$k]['base'];
+            $val  = (float) ($ivaLineas[$k] ?? 0);
+            if ($idxIva[$k] !== null) {
+                $d['impuestos'][$idxIva[$k]]['base_imponible'] = $base;
+                $d['impuestos'][$idxIva[$k]]['valor']          = $val;
+            }
+            $subtotal  = round($subtotal + $base, 2);
+            $descuento = round($descuento + (float) ($d['descuento'] ?? 0), 2);
+            $iva       = round($iva + $val, 2);
+        }
+        unset($d);
+
+        return [$detalles, ['subtotal' => $subtotal, 'descuento' => $descuento, 'iva' => $iva]];
+    }
+
+    /**
+     * Recalcula el IVA de la proforma con la configuración VIGENTE y ajusta los totales
+     * de la cabecera (total_sin_impuestos, total_descuento, importe_total). Cantidades,
+     * precios, descuentos y bases de cada línea se respetan tal como se cotizaron.
+     *
+     * Así una proforma guardada con otro modo de IVA (o antes de que la proforma
+     * respetara la configuración) se imprime, exporta y convierte con el modo actual.
+     *
+     * @return array{0: array, 1: array} [cabecera, detalles]
+     */
+    public static function recalcularIva(array $cabecera, array $detalles, array $config): array
+    {
+        if (empty($detalles)) return [$cabecera, $detalles];
+        [$detalles, $tot] = self::aplicarModoIva($detalles, IvaSubtotal::modo($config));
+        $cabecera['total_sin_impuestos'] = $tot['subtotal'];
+        $cabecera['total_descuento']     = $tot['descuento'];
+        $cabecera['importe_total']       = round($tot['subtotal'] + (float) ($cabecera['total_ice'] ?? 0) + $tot['iva'], 2);
+        return [$cabecera, $detalles];
+    }
+
+    /**
+     * Decimales de cantidad y de precio configurados por la empresa/establecimiento,
+     * acotados a 0..6 (mismo criterio que el modal, el PDF y el Excel).
+     *
+     * @return array{0:int,1:int} [decimales_cantidad, decimales_precio]
+     */
+    public static function decimales(array $config): array
+    {
+        return [
+            max(0, min(6, (int) ($config['decimales_cantidad'] ?? 2))),
+            max(0, min(6, (int) ($config['decimales_precio']   ?? 2))),
+        ];
     }
 
     /** Porcentaje sin ceros sobrantes: 15 → "15", 12.50 → "12.5". */

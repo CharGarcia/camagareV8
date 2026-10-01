@@ -26,6 +26,7 @@ const RUTAS_IMPLEMENTADAS = new Set([
   'modulos/reporte_ventas',
   'modulos/reporte_compras',
   'modulos/servicio-externo',
+  'modulos/proformas',
 ]);
 
 function soloImplementados(modulos: ModuloMenu[]): ModuloMenu[] {
@@ -96,6 +97,8 @@ export default function MenuScreen() {
       navigation.navigate('ReporteCompras');
     } else if (sub.ruta === 'modulos/servicio-externo') {
       navigation.navigate('ServicioExternoList');
+    } else if (sub.ruta === 'modulos/proformas') {
+      navigation.navigate('ProformasList');
     }
   }
 

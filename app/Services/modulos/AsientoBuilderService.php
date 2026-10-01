@@ -210,7 +210,7 @@ class AsientoBuilderService
      *
      * @param string $flujo 'ingreso' | 'egreso'
      */
-    private function registrarFaltanteContrapartida(string $flujo, string $comportamiento, string $conceptoNombre): void
+    private function registrarFaltanteContrapartida(string $flujo, string $comportamiento, string $conceptoNombre, bool $conceptoInactivo = false): void
     {
         $comportamiento = strtoupper(trim($comportamiento));
         $documento = $flujo === 'egreso' ? 'este egreso' : 'este ingreso';
@@ -245,7 +245,16 @@ class AsientoBuilderService
                 return;
         }
 
+        // Concepto inactivo: Configuración Contable solo lista los activos, así que su cuenta se pone
+        // en el propio módulo de Opciones de Ingreso/Egreso (SincronizadorAsientosService lee el
+        // «(inactivo)» para separarlo en el aviso).
         $seccion = 'Configuración Contable → Ingresos y Egresos';
+        if ($conceptoNombre !== '' && $conceptoInactivo) {
+            $this->registrarFaltante("El concepto «{$conceptoNombre}» (inactivo) no tiene cuenta contable asignada: "
+                . 'asígnela en Opciones de Ingreso/Egreso (editar el concepto → Cuenta contable), porque '
+                . 'Configuración Contable solo muestra los conceptos activos.');
+            return;
+        }
         $this->registrarFaltante($conceptoNombre !== ''
             ? "El concepto «{$conceptoNombre}» no tiene cuenta contable asignada ({$seccion})."
             : "El concepto de {$documento} no tiene cuenta contable asignada ({$seccion}).");
@@ -4184,6 +4193,7 @@ class AsientoBuilderService
                           i.id_cliente,
                           COALESCE(ap.id_cuenta, o.id_cuenta_contable) AS concepto_id_cuenta,
                           o.nombre             AS concepto_nombre,
+                          o.estado             AS concepto_estado,
                           o.comportamiento     AS concepto_comportamiento
                    FROM ingresos_cabecera i
                    LEFT JOIN empresa_opciones_ingreso_egreso o ON o.id = i.id_ingreso_concepto
@@ -4262,7 +4272,8 @@ class AsientoBuilderService
                 $this->registrarFaltanteContrapartida(
                     'ingreso',
                     (string) ($ingreso['concepto_comportamiento'] ?? ''),
-                    (string) ($ingreso['concepto_nombre'] ?? '')
+                    (string) ($ingreso['concepto_nombre'] ?? ''),
+                    strtoupper(trim((string) ($ingreso['concepto_estado'] ?? 'ACTIVO'))) === 'INACTIVO'
                 );
             }
             foreach ($contrapartida as $linea) {
@@ -4295,6 +4306,7 @@ class AsientoBuilderService
                           e.id_proveedor,
                           COALESCE(ap.id_cuenta, o.id_cuenta_contable) AS concepto_id_cuenta,
                           o.nombre             AS concepto_nombre,
+                          o.estado             AS concepto_estado,
                           o.comportamiento     AS concepto_comportamiento
                    FROM egresos_cabecera e
                    LEFT JOIN empresa_opciones_ingreso_egreso o ON o.id = e.id_egreso_concepto
@@ -4437,7 +4449,8 @@ class AsientoBuilderService
                 $this->registrarFaltanteContrapartida(
                     'egreso',
                     (string) ($egreso['concepto_comportamiento'] ?? ''),
-                    (string) ($egreso['concepto_nombre'] ?? '')
+                    (string) ($egreso['concepto_nombre'] ?? ''),
+                    strtoupper(trim((string) ($egreso['concepto_estado'] ?? 'ACTIVO'))) === 'INACTIVO'
                 );
             }
             foreach ($contrapartida as $linea) {
@@ -5184,7 +5197,7 @@ class AsientoBuilderService
 
         $sql = "SELECT p.{$colForma} AS id_forma, p.monto,
                        p.referencia AS pago_referencia, p.tipo_operacion_bancaria, p.numero_cheque,
-                       f.nombre AS forma_nombre,
+                       f.nombre AS forma_nombre, f.activo AS forma_activa,
                        COALESCE(ap.id_cuenta, f.id_cuenta_contable) AS id_cuenta,
                        pc.codigo AS cuenta_codigo, pc.nombre AS cuenta_nombre
                 FROM {$tabla} p
@@ -5210,8 +5223,16 @@ class AsientoBuilderService
             if (empty($p['id_cuenta'])) {
                 // Forma sin cuenta configurada: se omite y el asiento descuadra. Se anota el
                 // motivo para poder decir CUÁL forma falta, en vez del genérico de descuadre.
+                // Inactiva igual necesita cuenta: el documento ya la usa (SincronizadorAsientosService
+                // lee el «(inactiva)» para explicarlo en el aviso).
+                $inactiva = in_array($p['forma_activa'] ?? true, [false, 'f', 'false', 0, '0'], true);
                 $this->registrarFaltante(sprintf(
-                    'La forma de %s «%s» no tiene cuenta contable asignada (Configuración Contable → Cobros y Pagos).',
+                    $inactiva
+                        // Configuración Contable solo lista las formas activas: se dice dónde ponerla.
+                        ? 'La forma de %s «%s» (inactiva) no tiene cuenta contable asignada: asígnela en '
+                          . 'Formas de Cobros y Pagos (editar la forma → Cuenta Contable), porque '
+                          . 'Configuración Contable solo muestra las formas activas.'
+                        : 'La forma de %s «%s» no tiene cuenta contable asignada (Configuración Contable → Cobros y Pagos).',
                     $esDebe ? 'cobro' : 'pago',
                     trim((string) ($p['forma_nombre'] ?? '')) !== '' ? $p['forma_nombre'] : 'sin nombre'
                 ));

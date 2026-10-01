@@ -271,4 +271,39 @@ class OpcionIngresoEgresoRepository extends BaseRepository
 
         return false;
     }
+
+    /**
+     * Conceptos sin cuenta contable que ya usan ingresos/egresos vigentes (un concepto que nadie usa
+     * no deja ningún asiento pendiente). Activos e inactivos (`activo`): un inactivo sigue
+     * necesitando cuenta (AsientoBuilderService no filtra por estado), pero Configuración Contable
+     * solo lista los activos — el aviso de la sincronización lo manda a configurar en este módulo.
+     * Misma lectura de la cuenta que el resto del sistema: COALESCE(asientos_programados, columna).
+     *
+     * @return array<int, array{nombre:string, comportamiento:?string, activo:bool}>
+     */
+    public function getUsadosSinCuenta(int $idEmpresa): array
+    {
+        $sql = "SELECT DISTINCT o.nombre, o.comportamiento,
+                       (UPPER(COALESCE(o.estado, 'ACTIVO')) = 'ACTIVO') AS activo
+                  FROM empresa_opciones_ingreso_egreso o
+                  LEFT JOIN asientos_programados ap
+                         ON ap.id_referencia   = o.id
+                        AND ap.tipo_referencia IN ('opcion_ingreso', 'opcion_egreso')
+                        AND ap.id_empresa      = o.id_empresa
+                        AND ap.eliminado       = false
+                 WHERE o.id_empresa = :id_empresa AND o.eliminado = false
+                   AND COALESCE(ap.id_cuenta, o.id_cuenta_contable) IS NULL
+                   AND (EXISTS (SELECT 1 FROM ingresos_cabecera i
+                                WHERE i.id_ingreso_concepto = o.id AND i.id_empresa = o.id_empresa AND i.eliminado = false)
+                        OR EXISTS (SELECT 1 FROM egresos_cabecera e
+                                   WHERE e.id_egreso_concepto = o.id AND e.id_empresa = o.id_empresa AND e.eliminado = false))
+                 ORDER BY o.nombre";
+        $st = $this->db->prepare($sql);
+        $st->execute([':id_empresa' => $idEmpresa]);
+        return array_map(fn($r) => [
+            'nombre'         => (string) $r['nombre'],
+            'comportamiento' => $r['comportamiento'],
+            'activo'         => (bool) $r['activo'],
+        ], $st->fetchAll(PDO::FETCH_ASSOC));
+    }
 }

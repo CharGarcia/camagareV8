@@ -30,6 +30,8 @@ import ReporteComprasScreen from '../screens/ReporteComprasScreen';
 import ServicioExternoListScreen from '../screens/ServicioExternoListScreen';
 import ServicioExternoFormScreen from '../screens/ServicioExternoFormScreen';
 import ServicioExternoDetailScreen from '../screens/ServicioExternoDetailScreen';
+import ProformasListScreen from '../screens/ProformasListScreen';
+import ProformaFormScreen from '../screens/ProformaFormScreen';
 
 export type RootStackParamList = {
   Login: undefined;
@@ -59,6 +61,8 @@ export type RootStackParamList = {
   ServicioExternoList: undefined;
   ServicioExternoForm: undefined;
   ServicioExternoDetail: { id: number };
+  ProformasList: undefined;
+  ProformaForm: { id?: number } | undefined;
 };
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
@@ -107,6 +111,8 @@ export default function RootNavigator() {
             <Stack.Screen name="ServicioExternoList" component={ServicioExternoListScreen} options={{ title: 'Servicio externo' }} />
             <Stack.Screen name="ServicioExternoForm" component={ServicioExternoFormScreen} options={{ title: 'Nueva orden' }} />
             <Stack.Screen name="ServicioExternoDetail" component={ServicioExternoDetailScreen} options={{ title: 'Orden de servicio' }} />
+            <Stack.Screen name="ProformasList" component={ProformasListScreen} options={{ title: 'Proformas' }} />
+            <Stack.Screen name="ProformaForm" component={ProformaFormScreen} options={{ title: 'Proforma' }} />
           </>
         )}
         {/* Fuera del bloqueo de login a propósito: quien marca asistencia (ej. guardias)

@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Services\modulos;
 
+use App\Helpers\ProformaTotales;
 use App\repositories\modulos\ProformaPlantillaRepository;
 use App\Rules\modulos\ProformaRules;
 use App\Services\LogSistemaService;
@@ -36,7 +37,7 @@ class ProformaPlantillaService
     }
 
     /** Crea una plantilla a partir del detalle/adicional/vigencia actuales del modal. */
-    public function crear(array $data): int
+    public function crear(array $data, array $config = []): int
     {
         $nombre = trim((string) ($data['nombre'] ?? ''));
         if ($nombre === '') {
@@ -61,7 +62,7 @@ class ProformaPlantillaService
                 'condiciones_html' => ProformaRules::sanitizarCondiciones($data['condiciones_html'] ?? null),
             ]);
 
-            foreach ($data['detalles'] as $det) {
+            foreach ($this->redondearDetalles($data['detalles'], $config) as $det) {
                 $det['id_plantilla'] = $idPlantilla;
                 $this->repository->insertDetalle($det);
             }
@@ -91,7 +92,7 @@ class ProformaPlantillaService
     }
 
     /** Actualiza una plantilla existente (reemplaza detalle/adicional, igual que Proforma::actualizar). */
-    public function actualizar(int $id, array $data): void
+    public function actualizar(int $id, array $data, array $config = []): void
     {
         $idEmpresa = (int) $data['id_empresa'];
         $idUsuario = (int) $data['id_usuario'];
@@ -121,7 +122,7 @@ class ProformaPlantillaService
             ]);
 
             $this->repository->deleteDetalles($id);
-            foreach ($data['detalles'] as $det) {
+            foreach ($this->redondearDetalles($data['detalles'], $config) as $det) {
                 $det['id_plantilla'] = $id;
                 $this->repository->insertDetalle($det);
             }
@@ -147,6 +148,24 @@ class ProformaPlantillaService
             $db->rollBack();
             throw $e;
         }
+    }
+
+    /**
+     * Cantidad y precio con los decimales configurados por la empresa (los mismos que
+     * usa la proforma): al aplicar la plantilla, la proforma no hereda valores que su
+     * pantalla y su PDF mostrarían redondeados. Sin $config se dejan tal cual.
+     */
+    private function redondearDetalles(array $detalles, array $config): array
+    {
+        if (empty($config)) return $detalles;
+        [$decCant, $decPrecio] = ProformaTotales::decimales($config);
+        foreach ($detalles as &$det) {
+            if (!is_array($det)) continue;
+            $det['cantidad']        = round((float) ($det['cantidad'] ?? 0), $decCant);
+            $det['precio_unitario'] = round((float) ($det['precio_unitario'] ?? 0), $decPrecio);
+        }
+        unset($det);
+        return $detalles;
     }
 
     public function eliminar(int $id, int $idEmpresa, int $idUsuario): void

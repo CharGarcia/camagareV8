@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace App\Services\modulos;
 
+use App\Helpers\IvaSubtotal;
+use App\Helpers\ProformaTotales;
 use App\repositories\modulos\ProformaRepository;
 use App\Rules\modulos\ProformaRules;
 use App\Services\LogSistemaService;
@@ -37,10 +39,13 @@ class ProformaService
 
     /**
      * Crea una nueva proforma. Retorna el id creado.
+     * @param array $config Configuración de facturación de la empresa (decimales y
+     *                      modo de cálculo del IVA). Ver normalizarImportes().
      * @throws \RuntimeException si hay errores de validación o duplicado
      */
-    public function crear(array $data): int
+    public function crear(array $data, array $config = []): int
     {
+        $data    = $this->normalizarImportes($data, $config);
         $errores = $this->rules->validar($data);
         if (!empty($errores)) {
             throw new \RuntimeException(implode(' | ', $errores));
@@ -109,9 +114,10 @@ class ProformaService
 
     /**
      * Actualiza una proforma existente. Solo se puede editar si está en borrador.
+     * @param array $config Configuración de facturación de la empresa (ver crear()).
      * @throws \RuntimeException
      */
-    public function actualizar(int $id, array $data): int
+    public function actualizar(int $id, array $data, array $config = []): int
     {
         $proforma = $this->repository->getPorId($id);
         if (!$proforma) {
@@ -121,6 +127,7 @@ class ProformaService
             throw new \RuntimeException('Solo se pueden editar proformas en estado borrador.');
         }
 
+        $data    = $this->normalizarImportes($data, $config);
         $errores = $this->rules->validar($data);
         if (!empty($errores)) {
             throw new \RuntimeException(implode(' | ', $errores));
@@ -487,6 +494,9 @@ class ProformaService
             }
         } catch (\Throwable $e) { /* config opcional del establecimiento */ }
 
+        // IVA según la configuración de facturación VIGENTE (al subtotal o ítem por ítem).
+        [$detallesPf, $totPf] = $this->recalcularIvaVigente($proforma, $detallesPf, $empresaData);
+
         $secRepo = new \App\repositories\SecuencialRepository();
         $puntos  = [];
         foreach ($empresaModel->getPuntosEmision($idEstab) as $p) {
@@ -582,7 +592,7 @@ class ProformaService
 
         // ── Pago por defecto: la factura exige al menos una forma de pago cuyo total
         //    cuadre con el importe. El usuario puede cambiarla al revisar el borrador. ──
-        $importeTotal = (float) ($proforma['importe_total'] ?? 0);
+        $importeTotal = $totPf['total'];
         $pagos = [[
             'forma_pago'    => '01', // 01 = Sin utilización del sistema financiero (efectivo)
             'total'         => $importeTotal,
@@ -605,8 +615,8 @@ class ProformaService
             'fecha_emision'       => date('Y-m-d'),
             'id_bodega'           => $idBodega,
             'moneda'              => $proforma['moneda'] ?? 'DOLAR',
-            'total_sin_impuestos' => (float) ($proforma['total_sin_impuestos'] ?? 0),
-            'total_descuento'     => (float) ($proforma['total_descuento'] ?? 0),
+            'total_sin_impuestos' => $totPf['subtotal'],
+            'total_descuento'     => $totPf['descuento'],
             'total_ice'           => (float) ($proforma['total_ice'] ?? 0),
             'importe_total'       => $importeTotal,
             'propina'             => 0,
@@ -701,6 +711,9 @@ class ProformaService
             }
         } catch (\Throwable $e) { /* config opcional del establecimiento */ }
 
+        // IVA según la configuración de facturación VIGENTE (al subtotal o ítem por ítem).
+        [$detallesPf, $totPf] = $this->recalcularIvaVigente($proforma, $detallesPf, $empresaData);
+
         $secRepo = new \App\repositories\SecuencialRepository();
         $puntos  = [];
         foreach ($empresaModel->getPuntosEmision($idEstab) as $p) {
@@ -787,7 +800,7 @@ class ProformaService
         }
 
         // ── Pago por defecto (efectivo) que cuadra con el total ──
-        $importeTotal = (float) ($proforma['importe_total'] ?? 0);
+        $importeTotal = $totPf['total'];
         $pagos = [[
             'forma_pago'    => '01',
             'total'         => $importeTotal,
@@ -816,8 +829,8 @@ class ProformaService
             'estado'              => 'borrador',
             'observaciones'       => trim('Generado desde proforma ' . $numProf . '. ' . ($proforma['observaciones'] ?? '')),
             'id_bodega'           => $idBodega,
-            'total_sin_impuestos' => (float) ($proforma['total_sin_impuestos'] ?? 0),
-            'total_descuento'     => (float) ($proforma['total_descuento'] ?? 0),
+            'total_sin_impuestos' => $totPf['subtotal'],
+            'total_descuento'     => $totPf['descuento'],
             'total_ice'           => (float) ($proforma['total_ice'] ?? 0),
             'propina'             => 0,
             'importe_total'       => $importeTotal,
@@ -951,12 +964,23 @@ class ProformaService
         // (precio_total_sin_impuesto) ya viene neto, así que el valor del pedido cuadra
         // con lo cotizado aunque el precio unitario se guarde bruto.
         $impuestosPorLinea = $this->repository->getImpuestosPorDetalles(array_column($detallesPf, 'id'));
+        foreach ($detallesPf as &$d) {
+            $d['impuestos'] = $impuestosPorLinea[(int) $d['id']] ?? [];
+        }
+        unset($d);
+
+        // IVA según la configuración de facturación VIGENTE (al subtotal o ítem por ítem).
+        $configEst = [];
+        try {
+            $configEst = (new \App\repositories\modulos\EmpresaRepository())->getEstablecimientoConfig($idEstab) ?? [];
+        } catch (\Throwable $e) { /* sin config: línea por línea */ }
+        [$detallesPf] = $this->recalcularIvaVigente($proforma, $detallesPf, $configEst);
 
         $detallesPed = [];
         foreach ($detallesPf as $d) {
             $iva        = 0.0;
             $impuestos  = 0.0;
-            foreach ($impuestosPorLinea[(int) $d['id']] ?? [] as $imp) {
+            foreach ($d['impuestos'] as $imp) {
                 $valor      = (float) ($imp['valor'] ?? 0);
                 $impuestos += $valor;
                 if ((string) ($imp['codigo_impuesto'] ?? '2') === '2') {
@@ -1204,6 +1228,60 @@ class ProformaService
         $numero = ($prof['establecimiento'] ?? '') . '-' . ($prof['punto_emision'] ?? '') . '-'
                 . str_pad((string) ($prof['secuencial'] ?? ''), 9, '0', STR_PAD_LEFT);
         return ['numero' => $numero];
+    }
+
+    /**
+     * Ajusta cantidad y precio a los decimales configurados por la empresa y, con esos
+     * valores, recalcula la base de cada línea, su IVA (ProformaTotales::aplicarModoIva()) y los totales
+     * de cabecera.
+     *
+     * El modal ya envía todo redondeado; esto es la validación real del servidor, para
+     * que nunca se guarde, p. ej., una cantidad 1.23456 que el PDF imprime como 1.23 con
+     * un subtotal que ya no cuadra con cantidad × precio.
+     * Sin $config (llamadas antiguas) los datos se dejan tal cual.
+     */
+    private function normalizarImportes(array $data, array $config): array
+    {
+        if (empty($config) || empty($data['detalles']) || !is_array($data['detalles'])) {
+            return $data;
+        }
+        [$decCant, $decPrecio] = ProformaTotales::decimales($config);
+
+        foreach ($data['detalles'] as &$d) {
+            if (!is_array($d)) continue;
+            $cant   = round((float) ($d['cantidad'] ?? 0), $decCant);
+            $precio = round((float) ($d['precio_unitario'] ?? 0), $decPrecio);
+            $desc   = round(max(0.0, (float) ($d['descuento'] ?? 0)), 2);
+
+            $d['cantidad']                  = $cant;
+            $d['precio_unitario']           = $precio;
+            $d['descuento']                 = $desc;
+            $d['precio_total_sin_impuesto'] = max(0.0, round(round($cant * $precio, 2) - $desc, 2));
+        }
+        unset($d);
+
+        [$data['detalles'], $tot] = ProformaTotales::aplicarModoIva($data['detalles'], IvaSubtotal::modo($config));
+
+        $data['total_sin_impuestos'] = $tot['subtotal'];
+        $data['total_descuento']     = $tot['descuento'];
+        $data['importe_total']       = round($tot['subtotal'] + (float) ($data['total_ice'] ?? 0) + $tot['iva'], 2);
+
+        return $data;
+    }
+
+    /**
+     * Al convertir (factura, recibo, pedido) el IVA se recalcula con la configuración
+     * VIGENTE (ProformaTotales::aplicarModoIva): una proforma guardada con otro modo no
+     * debe arrastrar ese IVA al documento nuevo. Cantidades, precios y bases se respetan
+     * tal como se cotizaron.
+     *
+     * @return array{0: array, 1: array{subtotal: float, descuento: float, iva: float, total: float}}
+     */
+    private function recalcularIvaVigente(array $proforma, array $detallesPf, array $config): array
+    {
+        [$detallesPf, $tot] = ProformaTotales::aplicarModoIva($detallesPf, IvaSubtotal::modo($config));
+        $tot['total'] = round($tot['subtotal'] + (float) ($proforma['total_ice'] ?? 0) + $tot['iva'], 2);
+        return [$detallesPf, $tot];
     }
 
     private function guardarDetalles(int $idProforma, array $detalles): void

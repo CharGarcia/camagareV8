@@ -28,6 +28,26 @@
     /** Redondea a 2 decimales evitando errores de punto flotante (igual que en Facturas). */
     const r2 = v => Math.round(((parseFloat(v) || 0) + Number.EPSILON) * 100) / 100;
 
+    /** Redondea a N decimales (sin errores de punto flotante). */
+    const rN = (v, n) => { const f = Math.pow(10, n); return Math.round(((parseFloat(v) || 0) + Number.EPSILON) * f) / f; };
+
+    /**
+     * Cantidad y precio SIEMPRE con los decimales de la empresa: lo que se calcula y se
+     * guarda es lo mismo que se ve y lo que imprime el PDF. Si el usuario escribe más
+     * decimales de los configurados (p. ej. 1.23456 con 2), se usa 1.23 en todo.
+     */
+    const leerCant   = el => rN(el?.value, decCant());
+    const leerPrecio = el => rN(el?.value, decPrecio());
+
+    /** Al salir del campo, deja escrito el valor ya ajustado a los decimales configurados. */
+    const ajustarAlSalir = (el, dec) => {
+        if (!el) return;
+        el.addEventListener('blur', () => {
+            if (el.readOnly || el.value === '') return;
+            el.value = rN(el.value, dec()).toFixed(dec());
+        });
+    };
+
     /* ── Shortcuts DOM ───────────────────────────────────────── */
     const $id = id => document.getElementById(id);
     const fmt2 = v => parseFloat(v || 0).toFixed(2);
@@ -651,7 +671,7 @@
 
         inpPrecio.addEventListener('input', () => {
             const t = parseFloat(selIva.value || 0);
-            inpPrecIva.value = (parseFloat(inpPrecio.value || 0) * (1 + t / 100)).toFixed(decPrecio());
+            inpPrecIva.value = (leerPrecio(inpPrecio) * (1 + t / 100)).toFixed(decPrecio());
             _recalcFila(tr);
         });
         inpPrecIva.addEventListener('input', () => {
@@ -662,10 +682,15 @@
         });
         selIva.addEventListener('change', () => {
             const t = parseFloat(selIva.value || 0);
-            inpPrecIva.value = (parseFloat(inpPrecio.value || 0) * (1 + t / 100)).toFixed(decPrecio());
+            inpPrecIva.value = (leerPrecio(inpPrecio) * (1 + t / 100)).toFixed(decPrecio());
             _recalcFila(tr);
         });
         tr.querySelector('.input-cantidad').addEventListener('input', () => _recalcFila(tr));
+
+        // Cantidad y precios quedan escritos con los decimales de la empresa al salir.
+        ajustarAlSalir(tr.querySelector('.input-cantidad'), decCant);
+        ajustarAlSalir(inpPrecio,  decPrecio);
+        ajustarAlSalir(inpPrecIva, decPrecio);
         tr.querySelector('.input-desc').addEventListener('input', () => _recalcFila(tr));
 
         // Cambiar lista de precios → actualiza precio sin/con IVA
@@ -750,8 +775,8 @@
     }
 
     function _recalcFila(tr) {
-        const cant = parseFloat(tr.querySelector('.input-cantidad').value || 0);
-        const pSin = parseFloat(tr.querySelector('.input-precio').value || 0);
+        const cant = leerCant(tr.querySelector('.input-cantidad'));
+        const pSin = leerPrecio(tr.querySelector('.input-precio'));
         const desc = parseFloat(tr.querySelector('.input-desc').value || 0);
         // Igual que Facturas de Venta: se redondea el bruto y luego el neto, no al final.
         const base = Math.max(0, r2(r2(cant * pSin) - desc));
@@ -781,8 +806,8 @@
         let totalDesc = 0;
 
         document.querySelectorAll('#pf_tbodyDetalle .row-detalle').forEach(tr => {
-            const cant  = parseFloat(tr.querySelector('.input-cantidad').value || 0);
-            const pSin  = parseFloat(tr.querySelector('.input-precio').value   || 0);
+            const cant  = leerCant(tr.querySelector('.input-cantidad'));
+            const pSin  = leerPrecio(tr.querySelector('.input-precio'));
             const desc  = parseFloat(tr.querySelector('.input-desc').value     || 0);
             const sel   = tr.querySelector('.input-iva');
             const tasa  = parseFloat(sel.value || 0);                  // value = porcentaje
@@ -882,8 +907,8 @@
             const tasa     = parseFloat(sel?.value || 0);                          // value = porcentaje
             const codPct   = sel?.selectedOptions[0]?.dataset.codigo || '0';
             const idTarIva = parseInt(sel?.selectedOptions[0]?.dataset.id || 0);   // data-id = id tarifa
-            const cant     = parseFloat(tr.querySelector('.input-cantidad').value || 0);
-            const pSin     = parseFloat(tr.querySelector('.input-precio').value   || 0);
+            const cant     = leerCant(tr.querySelector('.input-cantidad'));
+            const pSin     = leerPrecio(tr.querySelector('.input-precio'));
             const desc     = r2(tr.querySelector('.input-desc').value             || 0);
             const base     = Math.max(0, r2(r2(cant * pSin) - desc));
             const valIva   = r2(base * (tasa / 100));
@@ -1239,6 +1264,10 @@
             </button>
         </td>`;
 
+        // Mismos decimales que el detalle de la proforma.
+        ajustarAlSalir(tr.querySelector('.plt-input-cantidad'), decCant);
+        ajustarAlSalir(tr.querySelector('.plt-input-precio'),   decPrecio);
+
         // Autocomplete código / descripción → productos (mismo patrón que la tabla de
         // detalle de la proforma: los dos inputs comparten el dropdown, anclado al body
         // para escapar el overflow de la tabla)
@@ -1361,8 +1390,8 @@
                 codigo_principal:          tr.querySelector('.plt-input-codigo')?.value.trim() || '',
                 descripcion:               descripcion,
                 adicional:                 tr.querySelector('.plt-input-adicional')?.value.trim() || '',
-                cantidad:                  parseFloat(tr.querySelector('.plt-input-cantidad').value || 0),
-                precio_unitario:           parseFloat(tr.querySelector('.plt-input-precio').value || 0),
+                cantidad:                  leerCant(tr.querySelector('.plt-input-cantidad')),
+                precio_unitario:           leerPrecio(tr.querySelector('.plt-input-precio')),
                 descuento:                 parseFloat(tr.querySelector('.plt-input-desc').value || 0),
                 precio_total_sin_impuesto: 0,
                 id_tarifa_iva:             parseInt(sel?.selectedOptions[0]?.dataset.id || 0),
@@ -2504,8 +2533,8 @@
             if (!tr) return;
             const tipo   = document.querySelector('input[name="pfTipoDesc"]:checked')?.value || 'P';
             const val    = parseFloat($id('pf_inputDescVal').value) || 0;
-            const cant   = parseFloat(tr.querySelector('.input-cantidad').value) || 1;
-            const precio = parseFloat(tr.querySelector('.input-precio').value) || 0;
+            const cant   = leerCant(tr.querySelector('.input-cantidad')) || 1;
+            const precio = leerPrecio(tr.querySelector('.input-precio'));
             const sub    = precio * cant;
             $id('pf_inputDescCalc').value = r2(tipo === 'P' ? sub * (val / 100) : val).toFixed(2);
         },
@@ -2528,8 +2557,8 @@
             let todasValidas = true;
             filas.forEach(tr => {
                 if (!tr) return;
-                const p = parseFloat(tr.querySelector('.input-precio').value) || 0;
-                const c = parseFloat(tr.querySelector('.input-cantidad').value) || 1;
+                const p = leerPrecio(tr.querySelector('.input-precio'));
+                const c = leerCant(tr.querySelector('.input-cantidad')) || 1;
                 const subtotal = p * c;
                 const finalDesc = tipo === 'P' ? subtotal * (val / 100) : val;
 
@@ -2546,8 +2575,8 @@
             // Aplicar descuento si pasa validaciones
             filas.forEach(tr => {
                 if (!tr) return;
-                const p = parseFloat(tr.querySelector('.input-precio').value) || 0;
-                const c = parseFloat(tr.querySelector('.input-cantidad').value) || 1;
+                const p = leerPrecio(tr.querySelector('.input-precio'));
+                const c = leerCant(tr.querySelector('.input-cantidad')) || 1;
                 const finalDesc = tipo === 'P' ? (p * c) * (val / 100) : val;
                 const inp = tr.querySelector('.input-desc');
                 inp.value = r2(finalDesc).toFixed(2);

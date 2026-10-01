@@ -6,7 +6,7 @@ ruta_modulo: modulos/opciones_ingreso_egreso
 tipo: modulo
 visibilidad: todos
 etiquetas: opciones de ingreso, opciones de egreso, conceptos, motivos, concepto del ingreso, concepto del egreso, cuenta contable del concepto, anticipos, prestamo empleado, relacionado con modulos
-version: 1.1
+version: 1.2
 orden: 71
 estado: activo
 ---
@@ -59,6 +59,12 @@ documento se reporta como pendiente al contabilizar.
 
 La cuenta que se ve aquí es exactamente la que usa el asiento del ingreso o del
 egreso, sin intermediarios.
+
+**Conceptos inactivos: la cuenta se pone aquí.** Configuración Contable solo lista
+los conceptos **activos**. Si un concepto inactivo ya se usó en ingresos o egresos
+y no tiene cuenta, esos asientos no se pueden generar, y el aviso de asientos
+pendientes lo indica nombrando el concepto. Para resolverlo, edítelo aquí (se puede
+sin volver a activarlo) y llene su *Cuenta contable*.
 
 Si el concepto cambia de naturaleza (de Ingreso a Egreso o al revés), la
 configuración contable de la naturaleza anterior se retira: ese concepto ya no
@@ -130,6 +136,8 @@ empresa; sin él, solo los creados por el propio usuario.
 
 ## Historial de cambios
 
+- **1.2** — Se documenta que la cuenta de un concepto **inactivo** que ya se usa se asigna
+  desde este módulo (Configuración Contable solo muestra los activos).
 - **1.1** — La dirección del navegador queda limpia al buscar, cambiar de página u
   ordenar el listado; la búsqueda y la página se conservan al recargar.
 - **1.0** — Versión inicial. Documenta además que la cuenta contable de los

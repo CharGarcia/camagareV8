@@ -5,8 +5,8 @@ categoria: Ventas
 ruta_modulo: modulos/proformas
 tipo: modulo
 visibilidad: todos
-etiquetas: proforma, proformas, ordenar por dos columnas, ordenar por estado y fecha, cotizacion, cotizar, presupuesto, oferta, duplicar, duplicar proforma, copiar proforma, repetir cotizacion, volver a cotizar, regresar a borrador, volver a borrador, reabrir proforma, reabrir, desaprobar, quitar aprobacion, editar proforma aprobada, convertir a factura, enviar a pedidos, generar pedido, pasar a pedido, crear pedido desde proforma, despacho, orden de despacho, items sin producto, concepto libre, linea sin producto, pestana pedidos, enviar por whatsapp, exportar excel, info productos, ficha de productos, catalogo, imagenes de productos, informacion adicional, plantillas, plantilla de proforma, guardar como plantilla, condiciones, terminos y condiciones, anexo, pdf de condiciones, texto con formato, clausulas, numeracion por fecha, numero con el año, reiniciar numeracion, reinicio anual, reinicio mensual, correlativo por año, correlativo por mes, modo de numeracion, pdf de la proforma, codigo del producto en el pdf, columna codigo, buscar por codigo, codigo en el detalle, columna codigo en la proforma, observaciones en el pdf, numero repetido, secuencial repetido, secuencial duplicado, dos proformas con el mismo numero, buscar proforma, buscador, filtros, filtrar proformas, buscar por producto, proformas vencidas, proformas sin facturar, filtro de fechas, chips, imprimir, impresora, vendedor del cliente, vendedor asignado, vendedor por defecto
-version: 1.22
+etiquetas: proforma, proformas, ordenar por dos columnas, ordenar por estado y fecha, cotizacion, cotizar, presupuesto, oferta, duplicar, duplicar proforma, copiar proforma, repetir cotizacion, volver a cotizar, regresar a borrador, volver a borrador, reabrir proforma, reabrir, desaprobar, quitar aprobacion, editar proforma aprobada, convertir a factura, enviar a pedidos, generar pedido, pasar a pedido, crear pedido desde proforma, despacho, orden de despacho, items sin producto, concepto libre, linea sin producto, pestana pedidos, enviar por whatsapp, exportar excel, info productos, ficha de productos, catalogo, imagenes de productos, informacion adicional, plantillas, plantilla de proforma, guardar como plantilla, condiciones, terminos y condiciones, anexo, pdf de condiciones, texto con formato, clausulas, numeracion por fecha, numero con el año, reiniciar numeracion, reinicio anual, reinicio mensual, correlativo por año, correlativo por mes, modo de numeracion, pdf de la proforma, codigo del producto en el pdf, columna codigo, buscar por codigo, codigo en el detalle, columna codigo en la proforma, observaciones en el pdf, numero repetido, secuencial repetido, secuencial duplicado, dos proformas con el mismo numero, buscar proforma, buscador, filtros, filtrar proformas, buscar por producto, proformas vencidas, proformas sin facturar, filtro de fechas, chips, imprimir, impresora, vendedor del cliente, vendedor asignado, vendedor por defecto, celular, movil, telefono, columnas cortadas, descripcion completa, iva al subtotal, iva item por item, iva linea por linea, calculo del iva
+version: 1.26
 orden: 15
 estado: activo
 ---
@@ -193,17 +193,33 @@ venta**, que se define en *Empresa → Establecimientos*:
 | **Decimales de precio** | Cuántos decimales se muestran en *P. Sin Imp.* y *P. Con Imp.* |
 | **Cálculo del IVA** | *Línea por línea* (se redondea el IVA de cada renglón y se suman) o *Al subtotal* (se calcula sobre la base acumulada de cada tarifa) |
 
+Si escribe una cantidad o un precio con **más decimales de los configurados**
+(por ejemplo `1.23456` con 2 decimales de cantidad), el sistema calcula y guarda
+el valor ya ajustado (`1.23`) y, al salir del campo, lo deja escrito así. De esa
+forma lo que se ve, lo que se guarda y lo que imprime el PDF son siempre lo mismo.
+Aplica igual en las filas de las **plantillas**. El servidor repite ese ajuste al
+guardar y recalcula con él el subtotal de cada línea, el IVA y los totales, así que
+la proforma nunca queda grabada con más decimales de los configurados.
+
 Los importes (descuento, subtotal y totales) siempre llevan 2 decimales, y cada
 paso del cálculo se redondea a 2 decimales, exactamente igual que en facturas.
 
-Por eso la pantalla, el **PDF** y el **Excel** muestran las mismas cifras: las
-salidas no recalculan nada, leen los valores guardados de la proforma. El pie de
+La pantalla, el **PDF** y el **Excel** muestran las mismas cifras. El pie de
 totales es el mismo en las tres: **Subtotal** (antes de descuento), un
 **Subtotal por cada tarifa de IVA**, **(-) Descuento**, un **(+) IVA por cada
 tarifa** y el **TOTAL**.
 
-> Si cambia la configuración de decimales o de cálculo del IVA, las proformas ya
-> guardadas conservan los valores con los que se grabaron. Se actualizan cuando
+**El IVA siempre sigue la configuración vigente.** Si la empresa calcula el IVA
+**al subtotal** o **ítem por ítem**, ese modo se aplica en la pantalla, al
+guardar, en el **PDF** (también con una plantilla PDF propia), en el **Excel**,
+en el total que se cita en el **correo** y en **WhatsApp**, y al **convertir**
+la proforma en factura, recibo de venta o pedido. Si una proforma se guardó
+cuando la empresa tenía otro modo, sus salidas y conversiones se calculan con
+el modo actual. Cantidades, precios y descuentos se mantienen tal como se
+cotizaron; solo el IVA (y por tanto el total) puede variar en algún centavo.
+
+> Si cambia la configuración de **decimales**, las proformas ya guardadas
+> conservan las cantidades y precios con los que se grabaron. Se ajustan cuando
 > se vuelve a abrir y guardar la proforma.
 
 ## Buscar y filtrar el listado
@@ -487,6 +503,21 @@ documentos admite cada periodo) está en el manual de **Empresa**, sección
 
 ## Historial de cambios
 
+- **1.26** — El **PDF** (diseño propio o plantilla de la empresa), el **Excel** y el
+  total citado en el **correo** y en **WhatsApp** calculan el IVA con el modo
+  configurado hoy (al subtotal o ítem por ítem), igual que las conversiones.
+- **1.25** — Al convertir la proforma en **factura**, **recibo de venta** o
+  **pedido**, el IVA se recalcula con el modo configurado en la empresa (al
+  subtotal o ítem por ítem). Antes se copiaba el IVA grabado en la proforma, que
+  podía corresponder a otra configuración.
+- **1.24** — En el **celular**, las columnas **Código** y **Descripción** del
+  detalle (y de las plantillas) se ven completas: la tabla se desplaza hacia los
+  lados en vez de achicar las columnas hasta cortar el texto.
+- **1.23** — La **cantidad** y el **precio** escritos a mano se ajustan a los
+  decimales configurados para la empresa (antes se calculaba y guardaba el valor
+  con todos los decimales escritos, y el PDF lo mostraba redondeado, así que el
+  subtotal podía no cuadrar con cantidad × precio). El servidor también lo ajusta
+  al guardar.
 - **1.22** — Al elegir el cliente, el campo **Vendedor** se completa con el
   vendedor asignado en la ficha del cliente.
 - **1.21** — En la ventana de filtros, la pestaña *Detalles* se llama ahora

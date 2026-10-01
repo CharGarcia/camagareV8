@@ -15,6 +15,7 @@ class ProformasController extends BaseModuloController
     private ProformaRepository $repository;
     private ProformaService $service;
     private \App\Services\modulos\ProformaPlantillaService $plantillaService;
+    private \App\Services\modulos\ProformaDocumentoService $documentoService;
 
     protected function getRutaModulo(): string
     {
@@ -32,6 +33,7 @@ class ProformasController extends BaseModuloController
             new \App\repositories\modulos\ProformaPlantillaRepository(),
             $logService
         );
+        $this->documentoService = new \App\Services\modulos\ProformaDocumentoService($this->repository, $this->service);
     }
 
     public function index(): void
@@ -295,11 +297,11 @@ class ProformasController extends BaseModuloController
             $id = (int) ($data['id'] ?? 0);
             if ($id > 0) {
                 $this->requireActualizar();
-                $this->plantillaService->actualizar($id, $data);
+                $this->plantillaService->actualizar($id, $data, $this->empresaConfig($data['id_empresa']));
                 $idPlantilla = $id;
             } else {
                 $this->requireCrear();
-                $idPlantilla = $this->plantillaService->crear($data);
+                $idPlantilla = $this->plantillaService->crear($data, $this->empresaConfig($data['id_empresa']));
             }
 
             echo json_encode(['ok' => true, 'id' => $idPlantilla, 'mensaje' => 'Plantilla guardada correctamente.']);
@@ -340,19 +342,19 @@ class ProformasController extends BaseModuloController
             $data['id_empresa'] = $idEmpresa;
             $data['id_usuario'] = $idUsuario;
 
-            // Tipo ambiente desde empresa (para compatibilidad con SecuencialRepository)
-            $empresaModel = new Empresa();
-            $empresa      = $empresaModel->getPorId($idEmpresa);
-            $data['tipo_ambiente'] = (string) ($empresa['tipo_ambiente'] ?? '1');
+            // Empresa + configuración de facturación: tipo de ambiente (SecuencialRepository)
+            // y los decimales / modo de IVA con los que el servicio ajusta los importes.
+            $config = $this->empresaConfig($idEmpresa);
+            $data['tipo_ambiente'] = (string) ($config['tipo_ambiente'] ?? '1');
 
             $id = (int) ($data['id'] ?? 0);
             if ($id > 0) {
                 $this->requireActualizar();
-                $id = $this->service->actualizar($id, $data);
+                $id = $this->service->actualizar($id, $data, $config);
                 $msg = 'Proforma actualizada correctamente.';
             } else {
                 $this->requireCrear();
-                $id = $this->service->crear($data);
+                $id = $this->service->crear($data, $config);
                 $msg = 'Proforma creada correctamente.';
             }
 
@@ -558,6 +560,10 @@ class ProformasController extends BaseModuloController
         try {
             $empresa = $this->empresaConfig($idEmpresa);
 
+            // IVA con la configuración de facturación VIGENTE (al subtotal o ítem por
+            // ítem), también para la plantilla PDF propia de la empresa.
+            [$cabecera, $detalles] = \App\Helpers\ProformaTotales::recalcularIva($cabecera, $detalles, $empresa);
+
             $renderer  = new \App\Services\PlantillasPdfRendererService();
             $plantilla = $renderer->getPlantillaActiva($idEmpresa, 'proforma');
 
@@ -671,6 +677,9 @@ class ProformasController extends BaseModuloController
             $adicional = $this->repository->getInfoAdicional($id);
 
             $empresa = $this->empresaConfig($idEmpresa);
+
+            // IVA con la configuración de facturación VIGENTE, igual que el PDF.
+            [$cabecera, $detalles] = \App\Helpers\ProformaTotales::recalcularIva($cabecera, $detalles, $empresa);
 
             $numero = ($cabecera['establecimiento'] ?? '001') . '-'
                     . ($cabecera['punto_emision']   ?? '001') . '-'
@@ -819,83 +828,12 @@ class ProformasController extends BaseModuloController
         if ($correos === '') { echo json_encode(['ok' => false, 'mensaje' => 'Debe indicar al menos un correo.']); exit; }
 
         try {
-            $cabecera = $this->repository->getPorId($id);
-            if (!$cabecera || (int) $cabecera['id_empresa'] !== $idEmpresa) {
-                echo json_encode(['ok' => false, 'mensaje' => 'Proforma no encontrada.']);
-                exit;
+            // PDF, enlace de aprobación y correo: ProformaDocumentoService (compartido con la app móvil).
+            $res = $this->documentoService->enviarCorreo($id, $idEmpresa, $correos, $adjuntarFicha);
+            if ($res['ok']) {
+                $res['rowHtml'] = $this->renderFilaHtml($this->repository->getPorId($id) ?? []);
             }
-
-            $pdf = $this->generarPdfProformaString($id, $idEmpresa, $cabecera);
-            if ($pdf === null || $pdf === '') {
-                echo json_encode(['ok' => false, 'mensaje' => 'No se pudo generar el PDF de la proforma.']);
-                exit;
-            }
-
-            $numero = ($cabecera['establecimiento'] ?? '') . '-' . ($cabecera['punto_emision'] ?? '') . '-'
-                    . str_pad((string) ($cabecera['secuencial'] ?? ''), 9, '0', STR_PAD_LEFT);
-
-            $empresa       = (new Empresa())->getPorId($idEmpresa) ?? [];
-            $empresaNombre = $empresa['nombre_comercial'] ?? ($empresa['nombre'] ?? 'CaMaGaRe');
-
-            // Token + enlace absoluto para aprobar desde el correo (solo si está pendiente).
-            $urlAprobar   = '';
-            $mostrarBoton = (($cabecera['estado'] ?? '') === 'borrador');
-            if ($mostrarBoton) {
-                try {
-                    $token   = $this->service->obtenerTokenAprobacion($id, $idEmpresa);
-                    $host    = $_SERVER['HTTP_HOST'] ?? '';
-                    $scheme  = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? 'https' : 'http';
-                    $basePub = rtrim(defined('BASE_URL') ? BASE_URL : '', '/');
-                    $urlAprobar = ($host !== '' ? $scheme . '://' . $host : '') . $basePub . '/aprobar-proforma/' . $token;
-                } catch (\Throwable $e) {
-                    $mostrarBoton = false;
-                }
-            }
-
-            $asunto = "Proforma {$numero} · " . $empresaNombre;
-            $cuerpo = $this->construirCorreoProforma(
-                (string) ($cabecera['cliente_nombre'] ?? 'cliente'),
-                $numero,
-                (float) ($cabecera['importe_total'] ?? 0),
-                (string) $empresaNombre,
-                ($mostrarBoton ? $urlAprobar : '')
-            );
-
-            $adjuntosExtra = [];
-            if ($adjuntarFicha) {
-                $detallesFicha = $this->repository->getDetalles($id);
-                $fichaPdf = (new \App\Services\modulos\ProformaFichaProductosPdfService())
-                    ->generar($cabecera, $detallesFicha, $empresa, 'S');
-                if ($fichaPdf !== '') {
-                    $adjuntosExtra[] = ['contenido' => $fichaPdf, 'nombre' => "Ficha_Productos_{$numero}.pdf"];
-                }
-            }
-            // Anexo de condiciones: va SIEMPRE con la proforma cuando existe texto guardado
-            // (si la proforma no tiene condiciones, generar() devuelve '' y no se adjunta nada).
-            $condPdf = (new \App\Services\modulos\ProformaCondicionesPdfService())->generar($cabecera, $empresa, 'S');
-            if ($condPdf !== '') {
-                $adjuntosExtra[] = ['contenido' => $condPdf, 'nombre' => "Condiciones_{$numero}.pdf"];
-            }
-
-            $emailSvc = new \App\Services\EnvioDocumentosSRIService();
-            $enviado  = $emailSvc->enviarPdfSimple(
-                $idEmpresa,
-                $correos,
-                (string) ($cabecera['cliente_nombre'] ?? ''),
-                $asunto,
-                $cuerpo,
-                $pdf,
-                "Proforma_{$numero}",
-                (string) $empresaNombre,
-                $adjuntosExtra
-            );
-
-            if ($enviado) {
-                try { $this->repository->marcarCorreoEnviado($id); } catch (\Throwable $e) { /* columna aún no desplegada */ }
-                echo json_encode(['ok' => true, 'mensaje' => 'Correo enviado correctamente.', 'rowHtml' => $this->renderFilaHtml($this->repository->getPorId($id) ?? [])]);
-            } else {
-                echo json_encode(['ok' => false, 'mensaje' => 'No se pudo enviar el correo. Verifique la configuración de correo de la empresa.']);
-            }
+            echo json_encode($res);
         } catch (\Throwable $e) {
             \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             echo json_encode(['ok' => false, 'mensaje' => $e->getMessage()]);
@@ -1020,7 +958,9 @@ class ProformasController extends BaseModuloController
             $numero        = ($cabecera['establecimiento'] ?? '') . '-' . ($cabecera['punto_emision'] ?? '') . '-'
                            . str_pad((string) ($cabecera['secuencial'] ?? ''), 9, '0', STR_PAD_LEFT);
             $nombreCliente = $cabecera['cliente_nombre'] ?? 'Cliente';
-            $total         = number_format((float) ($cabecera['importe_total'] ?? 0), 2);
+            // Mismo total (IVA vigente) que el PDF que se adjunta.
+            [$cabTotales]  = $this->documentoService->conIvaVigente($id, $cabecera);
+            $total         = number_format((float) ($cabTotales['importe_total'] ?? 0), 2);
 
             $whatsappService = new \App\services\WhatsappService();
 
@@ -1144,90 +1084,10 @@ class ProformasController extends BaseModuloController
         exit;
     }
 
-    /**
-     * Construye el cuerpo HTML del correo de la proforma (diseño simple, inline styles
-     * para compatibilidad con clientes de correo). Incluye el botón de aprobación si se
-     * pasa una URL, y la invitación a responder el correo.
-     */
-    private function construirCorreoProforma(string $cliente, string $numero, float $total, string $empresaNombre, string $urlAprobar): string
-    {
-        $e   = fn($v) => htmlspecialchars((string) $v, ENT_QUOTES, 'UTF-8');
-        $tot = '$' . number_format($total, 2, '.', ',');
-
-        $botonHtml = '';
-        if ($urlAprobar !== '') {
-            $botonHtml =
-                '<tr><td style="padding:6px 0 2px;">'
-              . '<a href="' . $e($urlAprobar) . '" target="_blank" '
-              . 'style="display:inline-block;background:#16a34a;color:#ffffff;text-decoration:none;'
-              . 'font-weight:700;font-size:15px;padding:13px 26px;border-radius:8px;">✓ Aprobar esta proforma</a>'
-              . '</td></tr>'
-              . '<tr><td style="padding:8px 0 0;color:#64748b;font-size:12px;">'
-              . 'También puede aprobarla escribiendo un comentario en el enlace anterior.'
-              . '</td></tr>';
-        }
-
-        return
-            '<div style="font-family:-apple-system,Segoe UI,Roboto,Arial,sans-serif;color:#1e293b;max-width:560px;">'
-          . '<table role="presentation" cellpadding="0" cellspacing="0" width="100%" '
-          . 'style="background:#ffffff;border:1px solid #e2e8f0;border-radius:12px;overflow:hidden;">'
-          . '<tr><td style="background:#1f4e79;color:#ffffff;padding:18px 22px;font-size:18px;font-weight:700;">'
-          . $e($empresaNombre) . '</td></tr>'
-          . '<tr><td style="padding:22px;">'
-          . '<p style="margin:0 0 12px;font-size:15px;">Estimado(a) <strong>' . $e($cliente) . '</strong>,</p>'
-          . '<p style="margin:0 0 12px;font-size:14px;line-height:1.5;">Adjuntamos en PDF la proforma '
-          . '<strong>N.º ' . $e($numero) . '</strong> por un total de <strong>' . $e($tot) . '</strong> para su revisión.</p>'
-          . '<p style="margin:0 0 16px;font-size:14px;line-height:1.5;">Si está de acuerdo, puede '
-          . '<strong>responder a este correo</strong> para confirmarnos'
-          . ($urlAprobar !== '' ? ', o aprobarla directamente con el botón:' : '.') . '</p>'
-          . '<table role="presentation" cellpadding="0" cellspacing="0">' . $botonHtml . '</table>'
-          . '<p style="margin:18px 0 0;font-size:13px;color:#475569;">Quedamos atentos a cualquier consulta.<br>'
-          . 'Saludos cordiales,<br><strong>' . $e($empresaNombre) . '</strong></p>'
-          . '</td></tr>'
-          . '<tr><td style="background:#f8fafc;padding:12px 22px;color:#94a3b8;font-size:11px;">'
-          . 'Documento no tributario · Proforma sin validez de factura.</td></tr>'
-          . '</table></div>';
-    }
-
-    /**
-     * Genera el PDF de la proforma como STRING (para adjuntar en correo/WhatsApp).
-     * Usa la plantilla configurable 'proforma' si existe; si no, un PDF básico TCPDF.
-     */
+    /** PDF de la proforma como string (correo/WhatsApp): ProformaDocumentoService, compartido con la app móvil. */
     private function generarPdfProformaString(int $id, int $idEmpresa, ?array $cabecera = null): ?string
     {
-        $cabecera = $cabecera ?? $this->repository->getPorId($id);
-        if (!$cabecera) return null;
-
-        $detalles = $this->repository->getDetalles($id);
-        // Impuestos EN LOTE: una sola consulta para todas las líneas, en vez
-        // de una por línea. Con la base en un servidor remoto, un documento
-        // largo pagaba un viaje de red por cada ítem.
-        $impuestosPorDetalle = $this->repository->getImpuestosPorDetalles(array_column($detalles, 'id'));
-        foreach ($detalles as &$d) {
-            $d['impuestos'] = $impuestosPorDetalle[(int) $d['id']] ?? [];
-        }
-        unset($d);
-        $adicional = $this->repository->getInfoAdicional($id);
-
-        $empresa = $this->empresaConfig($idEmpresa);
-
-        try {
-            $renderer  = new \App\Services\PlantillasPdfRendererService();
-            $plantilla = $renderer->getPlantillaActiva($idEmpresa, 'proforma');
-            if ($plantilla) {
-                $pdf = $renderer->generar($plantilla, $cabecera, $detalles, [], $adicional, $empresa, 'S');
-                if (is_string($pdf) && $pdf !== '') return $pdf;
-            }
-        } catch (\Throwable $e) {
-            // cae al diseño propio
-        }
-
-        try {
-            return (new \App\Services\modulos\ProformaPdfService())
-                ->generar($cabecera, $detalles, $adicional, $empresa, 'S');
-        } catch (\Throwable $e) {
-            return null;
-        }
+        return $this->documentoService->generarPdfString($id, $idEmpresa, $cabecera);
     }
 
     /**
@@ -1535,24 +1395,7 @@ class ProformasController extends BaseModuloController
      */
     private function empresaConfig(int $idEmpresa): array
     {
-        $empresaModel = new Empresa();
-        $empresa      = $empresaModel->getPorId($idEmpresa) ?? [];
-        try {
-            $estabs = $empresaModel->getEstablecimientos($idEmpresa);
-            if (!empty($estabs)) {
-                $estRepo   = new \App\repositories\modulos\EmpresaRepository();
-                $estConfig = $estRepo->getEstablecimientoConfig((int) $estabs[0]['id']);
-                if ($estConfig) {
-                    $empresa = array_merge($empresa, $estConfig);
-                }
-                if (!empty($estabs[0]['logo_ruta'])) {
-                    $empresa['logo_ruta'] = $estabs[0]['logo_ruta'];
-                }
-            }
-        } catch (\Throwable $e) {
-            // Sin config de establecimiento se usan los valores por defecto (2 decimales).
-        }
-        return $empresa;
+        return $this->documentoService->empresaConfig($idEmpresa);
     }
 
     /** Badge del estado de envío por correo (reutilizable listado inicial + AJAX). */

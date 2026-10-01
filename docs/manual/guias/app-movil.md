@@ -4,8 +4,8 @@ resumen: Cómo funcionan los listados, las facturas de venta y el registro de en
 categoria: Primeros pasos
 tipo: guia
 visibilidad: todos
-etiquetas: app movil, app móvil, aplicacion, celular, telefono, iphone, android, ios, app store, play store, listado, solo veo 20, solo salen 20, ver mas filas, cargar mas, mas registros, factura desde el celular, editar precio en la app, descuento en la app, entregas en la app, observacion de entrega, comentario de entrega, repartidor
-version: 1.0
+etiquetas: proformas en la app, cotizacion desde el celular, cotizar, enviar proforma, aprobar proforma, convertir proforma, app movil, app móvil, aplicacion, celular, telefono, iphone, android, ios, app store, play store, listado, solo veo 20, solo salen 20, ver mas filas, cargar mas, mas registros, factura desde el celular, editar precio en la app, descuento en la app, entregas en la app, observacion de entrega, comentario de entrega, repartidor
+version: 1.1
 orden: 40
 estado: activo
 ---
@@ -17,8 +17,8 @@ Esta guía explica lo que funciona distinto o merece aclararse en el celular.
 ## Qué es y para qué sirve
 
 Permite consultar y registrar desde el celular clientes, proveedores,
-productos, compras, facturas de venta, pedidos, órdenes de servicio y entregas
-de consignaciones, con los mismos permisos que el usuario tiene en la web.
+productos, compras, facturas de venta, proformas, pedidos, órdenes de servicio
+y entregas de consignaciones, con los mismos permisos que el usuario tiene en la web.
 
 ## Requisitos previos
 
@@ -33,8 +33,8 @@ de consignaciones, con los mismos permisos que el usuario tiene en la web.
 
 ### Listados: ver más filas
 
-Cada listado (clientes, proveedores, productos, compras, facturas, pedidos,
-órdenes de servicio y entregas) muestra primero los 20 registros más recientes.
+Cada listado (clientes, proveedores, productos, compras, facturas, proformas,
+pedidos, órdenes de servicio y entregas) muestra primero los 20 registros más recientes.
 Al **deslizar hacia abajo** y llegar al final, la app carga los 20 siguientes
 automáticamente, y así hasta el último. Al pie de la lista se ve cuántos se
 muestran de cuántos hay (p. ej. *Mostrando 40 de 135*). El buscador filtra sobre
@@ -55,6 +55,29 @@ pestaña **Facturación**):
 
 Cada línea muestra su subtotal (ya con el descuento) y su total con IVA, y los
 totales de la factura incluyen una fila *Descuento* cuando hay alguno.
+
+### Proformas
+
+La app trabaja con las mismas proformas que la web ([Proformas](../modulos/proformas.md)):
+
+1. **Listado**: número, cliente, total, estado y si ya se envió por correo.
+   Pulse **+ Nueva** para crear una.
+2. **Crear / editar** (solo en *Borrador*): serie, fecha, cliente, vendedor,
+   días de vigencia, observaciones y productos. En cada producto se cambian
+   **cantidad, precio (sin IVA) y descuento en dólares** libremente, igual que
+   en la web (las proformas no usan los interruptores de Facturación). El
+   número definitivo lo asigna el sistema al guardar.
+3. **Acciones** desde el detalle, según el estado:
+   - *Borrador*: **Editar**, **Aprobar**, **Anular**.
+   - *Aprobada*: **Convertir a factura** (crea la factura en borrador),
+     **Reabrir** (solo administradores), **Rechazada por el cliente**, **Anular**.
+   - **Enviar a pedidos** (borrador, aprobada o convertida), **Compartir PDF**,
+     **Enviar por correo** (con la opción de adjuntar la ficha de productos; si
+     está en borrador, el correo trae el botón para que el cliente la apruebe) y
+     **Duplicar**.
+
+Al editar desde la app se conservan las condiciones, la información adicional
+y las líneas de texto libre que se cargaron en la web.
 
 ### Entregas de consignaciones
 
@@ -82,6 +105,13 @@ no pide la firma de quien recibe. Ver
 
 ## Errores frecuentes
 
+- **"No hay series con secuencial de Proformas configurado"**: la empresa no
+  tiene un punto de emisión con secuencial de Proformas (Empresa → Secuenciales).
+- **"Stock insuficiente" al convertir a factura**: la empresa exige stock y no
+  hay saldo; la app lista los productos que faltan.
+- **"No se puede enviar a pedidos"**: la proforma tiene líneas de texto libre;
+  el pedido solo admite productos del catálogo.
+
 - **Solo veo 20 registros**: deslice hasta el final de la lista para cargar
   más. Si la app no carga más, actualícela desde la tienda: las versiones
   anteriores mostraban solo los 20 más recientes.
@@ -92,6 +122,9 @@ no pide la firma de quien recibe. Ver
 
 ## Historial de cambios
 
+- **1.1** — Proformas en la app: listado, crear y editar borradores, aprobar,
+  anular, rechazar y reabrir, PDF, envío por correo con aprobación del cliente,
+  duplicar y convertir a factura o pedido.
 - **1.0** — Versión inicial: listados con carga de más filas al deslizar,
   precio y descuento editables en facturas según la configuración del
   establecimiento, y observación en las entregas (sin firma).

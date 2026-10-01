@@ -684,6 +684,66 @@ class FormaPagoRepository extends BaseRepository
     ];
 
     /**
+     * Movimientos que GENERAN ASIENTO con la cuenta de la forma de cobro/pago (además de los pagos de
+     * Ingresos y Egresos): tabla => columnas de la forma. Subconjunto de USOS_MOVIMIENTOS.
+     */
+    private const USOS_CONTABLES = [
+        'traspasos_cabecera'             => ['id_forma_origen', 'id_forma_destino'],
+        'conciliacion_tarjetas_cabecera' => ['id_forma_cobro', 'id_forma_cobro_destino'],
+    ];
+
+    /**
+     * Formas de cobro/pago sin cuenta contable y USADAS en documentos vigentes que se contabilizan
+     * (pagos de Ingresos/Egresos, Traspasos, Conciliación de Tarjetas). Es la lista del aviso de
+     * configuración de la sincronización de asientos: una forma que ningún documento usa no impide
+     * generar ningún asiento, así que no se avisa. Se devuelven activas e inactivas (`activo`): una
+     * inactiva que ya se usa igual necesita cuenta, pero no aparece en Configuración Contable — el
+     * aviso manda a configurarla en el módulo de Formas de Cobros y Pagos.
+     *
+     * La cuenta puede vivir en asientos_programados (forma_cobro/forma_pago) o en la propia forma,
+     * igual que la lee AsientoBuilderService::lineasFormas(): COALESCE(ap.id_cuenta, f.id_cuenta_contable).
+     *
+     * @return array<int, array{nombre:string, activo:bool}>
+     */
+    public function getUsadasSinCuenta(int $idEmpresa): array
+    {
+        $usos = [
+            "EXISTS (SELECT 1 FROM ingresos_pagos ip INNER JOIN ingresos_cabecera ic ON ic.id = ip.id_ingreso
+                     WHERE ip.id_forma_cobro = f.id AND ic.id_empresa = f.id_empresa AND ic.eliminado = false)",
+            "EXISTS (SELECT 1 FROM egresos_pagos ep INNER JOIN egresos_cabecera ec ON ec.id = ep.id_egreso
+                     WHERE ep.id_forma_pago = f.id AND ec.id_empresa = f.id_empresa
+                       AND ec.eliminado = false AND ep.eliminado = false)",
+        ];
+        // Solo las tablas que existen en esta base: un SELECT sobre una ausente abortaría la consulta.
+        $st = $this->db->prepare("SELECT relname FROM pg_class WHERE relkind = 'r' AND relname = ANY(string_to_array(:t, ','))");
+        $st->execute([':t' => implode(',', array_keys(self::USOS_CONTABLES))]);
+        $existentes = $st->fetchAll(PDO::FETCH_COLUMN);
+        foreach (self::USOS_CONTABLES as $tabla => $columnas) {
+            if (!in_array($tabla, $existentes, true)) {
+                continue;
+            }
+            $cond = implode(' OR ', array_map(fn($c) => "u.{$c} = f.id", $columnas));
+            $usos[] = "EXISTS (SELECT 1 FROM {$tabla} u WHERE ({$cond}) AND u.id_empresa = f.id_empresa AND u.eliminado = false)";
+        }
+
+        $sql = "SELECT DISTINCT f.nombre, f.activo
+                  FROM empresa_formas_pago f
+                  LEFT JOIN asientos_programados ap
+                         ON ap.id_referencia   = f.id
+                        AND ap.tipo_referencia IN ('forma_cobro', 'forma_pago')
+                        AND ap.id_empresa      = f.id_empresa
+                        AND ap.eliminado       = false
+                 WHERE f.id_empresa = :id_empresa AND f.eliminado = false
+                   AND COALESCE(ap.id_cuenta, f.id_cuenta_contable) IS NULL
+                   AND (" . implode(' OR ', $usos) . ")
+                 ORDER BY f.nombre";
+        $st = $this->db->prepare($sql);
+        $st->execute([':id_empresa' => $idEmpresa]);
+        return array_map(fn($r) => ['nombre' => (string) $r['nombre'], 'activo' => (bool) $r['activo']],
+            $st->fetchAll(PDO::FETCH_ASSOC));
+    }
+
+    /**
      * Módulos en los que la forma de cobro/pago ya registra movimientos (vacío = no se usa).
      * Una tabla que aún no existe en esta base (migración pendiente) se omite sin romper.
      *

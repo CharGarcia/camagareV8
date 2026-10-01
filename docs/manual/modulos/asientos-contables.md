@@ -6,7 +6,7 @@ ruta_modulo: modulos/asientos_contables
 tipo: modulo
 visibilidad: todos
 etiquetas: asientos, asiento contable, diario, debe, haber, partida doble, cuadrado, comprobante, contabilidad, imprimir, pdf, excel, documento origen, cuadre con el documento, total de la factura, cuenta por cobrar, cartera, editar asiento desde el documento, pestaña asiento contable, editado a mano, restaurar asiento automático, permisos de contabilidad, documentos migrados, migración, sistema anterior, buscar asiento, buscador, filtros, filtrar asientos, buscar por cuenta, buscar por referencia, libro diario, chips, asiento descuadrado, búsqueda lenta, se queda buscando, filtrar por origen, origen del asiento, módulo de origen, vista previa, costo de ventas, asiento sin costo, duplicar asiento, copiar asiento, clonar asiento, repetir asiento
-version: 1.28
+version: 1.31
 orden: 20
 estado: activo
 ---
@@ -192,6 +192,29 @@ formas de cobro/pago sin cuenta, y **cuentas cuya naturaleza no corresponde al
 concepto** (por ejemplo una cuenta de ventas puesta en *Cuenta por cobrar*, o una
 cuenta de caja en un concepto de nómina).
 
+De las formas de cobro/pago y de los conceptos de Ingresos/Egresos sin cuenta solo
+se avisan los que **se usan** en documentos vigentes que generan asiento (las
+formas, en pagos de Ingresos o Egresos, Traspasos o Conciliación de Tarjetas; los
+conceptos, en Ingresos o Egresos): uno que nadie usa no deja ningún asiento
+pendiente.
+
+### Formas de pago y conceptos inactivos que ya se usan
+
+Una forma de cobro/pago o un concepto de Ingresos/Egresos **inactivo** no aparece
+en Configuración Contable (allí solo se listan los activos), pero si ya hay
+documentos que lo usan, **sigue necesitando su cuenta**: sin ella, esos asientos
+no se pueden generar. Inactivarlo solo impide elegirlo en documentos nuevos.
+
+Por eso el aviso los muestra aparte, marcados como **inactivos**, y dice dónde
+poner la cuenta:
+
+- **Forma de cobro/pago inactiva** → módulo **Formas de Cobros y Pagos**: editar
+  la forma y llenar *Cuenta Contable — Cobros* o *— Pagos*.
+- **Concepto de ingreso/egreso inactivo** → módulo **Opciones de Ingreso/Egreso**:
+  editar el concepto y llenar *Cuenta contable*.
+
+Los dos módulos permiten editar un registro inactivo sin volver a activarlo.
+
 Ese último aviso conviene atenderlo antes de continuar: la sincronización genera
 los asientos con las cuentas tal como estén configuradas, así que un concepto mal
 apuntado se propaga a todos los documentos de golpe y el error solo se nota al
@@ -209,8 +232,22 @@ las cuentas contables de …». Por ejemplo:
 - Falta configurar la Cuenta por Pagar en Adquisiciones de Compras.
 - Falta configurar la Cuenta por Pagar en algunos proveedores con cuentas propias
   (Adquisiciones de Compras).
-- Algunas formas de pago no tienen cuenta contable (Cobros y Pagos).
+- Las formas de pago «Cheque Pichincha», «Transferencia Produbanco» no tienen
+  cuenta contable (Cobros y Pagos).
 - Configure las cuentas contables de Nómina.
+
+En las líneas de formas de cobro/pago y de conceptos de Ingresos/Egresos se
+**nombran** los que usan los documentos que no se pudieron contabilizar (hasta
+cinco, y cuántos más). Los **activos** van en una línea que lleva a su sección de
+Configuración Contable; los **inactivos**, en otra que indica el módulo donde
+asignarles la cuenta (ver *Formas de pago y conceptos inactivos que ya se usan*).
+Por ejemplo:
+
+- La forma de pago «Cheque Pichincha» no tiene cuenta contable (Cobros y Pagos).
+- La forma de pago «Caja chica 2019» no tiene cuenta contable y está inactiva: por
+  eso no aparece en Configuración Contable. Asígnele la cuenta en Formas de Cobros
+  y Pagos (editar la forma → Cuenta Contable); aunque esté inactiva, hay documentos
+  que ya la usan.
 
 Al final, el aviso cierra con el total: **«Quedan pendientes N asiento(s) por
 generar»**. Cuenta solo los asientos que de verdad se deben generar: no incluye
@@ -422,6 +459,14 @@ tienen un documento individual con tercero que mostrar.
 
 ## Historial de cambios
 
+- **1.31** — El aviso de conceptos de Ingresos/Egresos sin cuenta también se limita a los que ya
+  se usan en documentos (activos o inactivos), igual que el de formas de cobro/pago.
+- **1.30** — Formas de cobro/pago y conceptos de Ingresos/Egresos **inactivos** que ya se usan
+  y no tienen cuenta: el aviso los separa y dice dónde configurarlos (Formas de Cobros y Pagos u
+  Opciones de Ingreso/Egreso), porque en Configuración Contable no aparecen.
+- **1.29** — El aviso de formas de cobro/pago sin cuenta solo incluye las activas y usadas en
+  documentos que se contabilizan; cuando quedan asientos sin generar, nombra las formas
+  y marca las inactivas.
 - **1.28** — En la ventana de filtros, la pestaña *Detalles* se llama ahora
   **Búsqueda por detalle**, y la ventana ya no tiene barra de desplazamiento
   vertical propia: se muestra completa.

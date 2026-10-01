@@ -30,6 +30,14 @@ class SincronizadorAsientosService
      */
     private array $acciones = [];
     /**
+     * Formas de cobro/pago sin cuenta que usan los documentos que fallaron, por flujo
+     * ('cobro' | 'pago') => [nombre => inactiva]. Para que el aviso diga CUÁLES son (y cuáles están
+     * inactivas) en vez del genérico «algunas formas…». Ver accionFormaSinCuenta().
+     */
+    private array $formasSinCuenta = ['cobro' => [], 'pago' => []];
+    /** Igual que $formasSinCuenta para los conceptos de Ingresos y Egresos: flujo => [nombre => inactivo]. */
+    private array $conceptosSinCuenta = ['ingreso' => [], 'egreso' => []];
+    /**
      * Documentos sin asiento que NO se deben generar: sin valor que contabilizar, o que cobran/pagan
      * documentos de un módulo apagado en «Módulos que contabilizan». Se restan del total de
      * pendientes (getPendientes()) para que el aviso cuente solo lo que en realidad falta generar.
@@ -971,48 +979,47 @@ class SincronizadorAsientosService
         $interruptor = ContabilidadInterruptorService::crear();
         $tesoreria   = $interruptor->contabiliza($idEmpresa, 'ingresos') || $interruptor->contabiliza($idEmpresa, 'egresos');
 
-        // Conceptos (opciones de Ingreso/Egreso) activos realmente sin cuenta contable.
-        // Dos precisiones, ambas necesarias para no dar un aviso falso:
+        // Conceptos (opciones de Ingreso/Egreso) sin cuenta contable que ya USAN ingresos/egresos
+        // vigentes (OpcionIngresoEgresoRepository::getUsadosSinCuenta()): uno que nadie usa no deja
+        // ningún asiento pendiente. Precisiones para no dar un aviso falso:
         //  1. La cuenta vive en DOS sitios y el resto del sistema la lee con
         //     COALESCE(asientos_programados.id_cuenta, o.id_cuenta_contable) — ver
-        //     AsientoProgramadoRepository::getReglasOpcionesIngresoEgreso() y
-        //     AsientoBuilderService::lineasFormas(). Mirar solo la columna del módulo daba por
-        //     "sin configurar" toda regla creada por siembra del plan modelo o por la importación
-        //     de configuración contable, que solo escribe en asientos_programados.
+        //     AsientoProgramadoRepository::getReglasOpcionesIngresoEgreso(). Mirar solo la columna
+        //     del módulo daba por "sin configurar" toda regla creada por siembra del plan modelo o
+        //     por la importación de configuración contable, que solo escribe en asientos_programados.
         //  2. Los conceptos con cuenta OFICIAL por comportamiento (COMPRA, LIQUIDACION,
         //     FACTURA_VENTA, RECIBO_VENTA, ROL) nunca tienen cuenta propia A PROPÓSITO: la toman
-        //     de la configuración de su módulo (Adquisiciones/Ventas/Recibos/Nómina) vía
-        //     getCuentaOficialPorComportamiento(). Configuración Contable ni siquiera los muestra
-        //     y rechaza asignarles una cuenta aparte, así que avisarlos mandaba al usuario a una
-        //     pantalla donde no aparecen — "ya está todo configurado" y el aviso seguía saliendo.
+        //     de la configuración de su módulo vía getCuentaOficialPorComportamiento(). Configuración
+        //     Contable ni siquiera los muestra, así que no se avisan.
+        //  3. Activos → se configuran en Configuración Contable. Inactivos → ahí no aparecen: se
+        //     manda al módulo Opciones de Ingreso/Egreso, que permite editarlos inactivos.
         try {
-            $st = $db->prepare(
-                "SELECT o.nombre, o.comportamiento
-                   FROM empresa_opciones_ingreso_egreso o
-                   LEFT JOIN asientos_programados ap
-                          ON ap.id_referencia   = o.id
-                         AND ap.tipo_referencia IN ('opcion_ingreso', 'opcion_egreso')
-                         AND ap.id_empresa      = o.id_empresa
-                         AND ap.eliminado       = false
-                  WHERE o.id_empresa = ? AND o.eliminado = false
-                    AND UPPER(o.estado) = 'ACTIVO'
-                    AND COALESCE(ap.id_cuenta, o.id_cuenta_contable) IS NULL
-                  ORDER BY o.nombre"
-            );
-            $st->execute([$idEmpresa]);
-            $pendientes = [];
-            foreach ($st->fetchAll(\PDO::FETCH_ASSOC) as $opcion) {
-                if ($programadoRepo->tieneCuentaOficialPorComportamiento((string) ($opcion['comportamiento'] ?? ''))) {
-                    continue; // su cuenta se configura en el módulo, no aquí
+            $activos = $inactivos = [];
+            if ($tesoreria) {
+                foreach ((new \App\repositories\modulos\OpcionIngresoEgresoRepository())->getUsadosSinCuenta($idEmpresa) as $opcion) {
+                    if ($programadoRepo->tieneCuentaOficialPorComportamiento((string) ($opcion['comportamiento'] ?? ''))) {
+                        continue; // su cuenta se configura en el módulo, no aquí
+                    }
+                    if ($opcion['activo']) {
+                        $activos[] = $opcion['nombre'];
+                    } else {
+                        $inactivos[] = $opcion['nombre'];
+                    }
                 }
-                $pendientes[] = (string) $opcion['nombre'];
             }
-            if ($tesoreria && !empty($pendientes)) {
-                $n = count($pendientes);
-                $this->warnings[] = "Hay {$n} concepto(s) de Ingresos/Egresos sin cuenta contable asignada ("
-                    . implode(', ', array_slice($pendientes, 0, 5))
-                    . ($n > 5 ? ' y ' . ($n - 5) . ' más' : '')
-                    . '). Configúrelos en Configuración Contable (tipo de asiento «Ingresos y Egresos»).';
+            $lista = function (array $nombres): string {
+                $nombres = array_values(array_unique($nombres));
+                $n = count($nombres);
+                return implode(', ', array_slice($nombres, 0, 5)) . ($n > 5 ? ' y ' . ($n - 5) . ' más' : '');
+            };
+            if ($activos) {
+                $this->warnings[] = 'Hay ' . count(array_unique($activos)) . ' concepto(s) de Ingresos/Egresos sin cuenta contable asignada que ya se usan en documentos ('
+                    . $lista($activos) . '). Configúrelos en Configuración Contable (tipo de asiento «Ingresos y Egresos»).';
+            }
+            if ($inactivos) {
+                $this->warnings[] = 'Hay ' . count(array_unique($inactivos)) . ' concepto(s) de Ingresos/Egresos INACTIVO(S) sin cuenta contable que ya se usan en documentos ('
+                    . $lista($inactivos) . '). Por estar inactivos no aparecen en Configuración Contable: asígneles la cuenta en '
+                    . 'Opciones de Ingreso/Egreso (editar el concepto → Cuenta contable).';
             }
         } catch (\Throwable $e) {
             // Tabla inexistente (migración pendiente): omitir sin romper.
@@ -1060,30 +1067,28 @@ class SincronizadorAsientosService
             // Catálogo o columnas aún sin migrar: omitir sin romper la sincronización.
         }
 
-        // Formas de Cobro/Pago activas sin cuenta contable. Misma precisión que arriba: la cuenta
-        // puede vivir solo en asientos_programados (tipo_referencia forma_cobro/forma_pago), que es
-        // como la lee AsientoBuilderService::lineasFormas() — COALESCE(ap.id_cuenta, f.id_cuenta_contable).
+        // Formas de Cobro/Pago sin cuenta contable: solo las USADAS en documentos que se contabilizan
+        // (ver FormaPagoRepository::getUsadasSinCuenta()); una que ningún documento usa no deja
+        // ningún asiento pendiente. Activas → Configuración Contable. Inactivas → no aparecen ahí,
+        // así que se manda al módulo Formas de Cobros y Pagos (permite editarlas inactivas).
         try {
-            $st = $db->prepare(
-                "SELECT f.nombre
-                   FROM empresa_formas_pago f
-                   LEFT JOIN asientos_programados ap
-                          ON ap.id_referencia   = f.id
-                         AND ap.tipo_referencia IN ('forma_cobro', 'forma_pago')
-                         AND ap.id_empresa      = f.id_empresa
-                         AND ap.eliminado       = false
-                  WHERE f.id_empresa = ? AND f.eliminado = false AND f.activo = true
-                    AND COALESCE(ap.id_cuenta, f.id_cuenta_contable) IS NULL
-                  ORDER BY f.nombre"
-            );
-            $st->execute([$idEmpresa]);
-            $formas = array_map('strval', $st->fetchAll(\PDO::FETCH_COLUMN));
-            if ($tesoreria && !empty($formas)) {
-                $n = count($formas);
-                $this->warnings[] = "Hay {$n} forma(s) de Cobro/Pago sin cuenta contable asignada ("
-                    . implode(', ', array_slice($formas, 0, 5))
-                    . ($n > 5 ? ' y ' . ($n - 5) . ' más' : '')
-                    . '). Configúrelas en Configuración Contable (tipo de asiento «Cobros y Pagos»).';
+            $formas = $tesoreria
+                ? (new \App\repositories\modulos\FormaPagoRepository())->getUsadasSinCuenta($idEmpresa)
+                : [];
+            $lista = function (array $nombres): string {
+                $n = count($nombres);
+                return implode(', ', array_slice($nombres, 0, 5)) . ($n > 5 ? ' y ' . ($n - 5) . ' más' : '');
+            };
+            $activas   = array_values(array_unique(array_column(array_filter($formas, fn($f) => $f['activo']), 'nombre')));
+            $inactivas = array_values(array_unique(array_column(array_filter($formas, fn($f) => !$f['activo']), 'nombre')));
+            if ($activas) {
+                $this->warnings[] = 'Hay ' . count($activas) . ' forma(s) de Cobro/Pago sin cuenta contable asignada ('
+                    . $lista($activas) . '). Configúrelas en Configuración Contable (tipo de asiento «Cobros y Pagos»).';
+            }
+            if ($inactivas) {
+                $this->warnings[] = 'Hay ' . count($inactivas) . ' forma(s) de Cobro/Pago INACTIVA(S) sin cuenta contable que ya se usan en documentos ('
+                    . $lista($inactivas) . '). Por estar inactivas no aparecen en Configuración Contable: asígneles la cuenta en '
+                    . 'Formas de Cobros y Pagos (editar la forma → Cuenta Contable).';
             }
         } catch (\Throwable $e) {
             // Tabla inexistente (migración pendiente): omitir sin romper.
@@ -1615,20 +1620,18 @@ class SincronizadorAsientosService
         }
 
         if (str_contains($m, 'la forma de cobro')) {
-            $this->agregarAccion('cobros_pagos', 'cobros', 'Algunas formas de cobro no tienen cuenta contable (Cobros y Pagos)');
+            $this->accionFormaSinCuenta('cobro', $motivo);
             $coincidio = true;
         }
         if (str_contains($m, 'la forma de pago')) {
-            $this->agregarAccion('cobros_pagos', 'pagos', 'Algunas formas de pago no tienen cuenta contable (Cobros y Pagos)');
+            $this->accionFormaSinCuenta('pago', $motivo);
             $coincidio = true;
         }
-        if (str_contains($m, 'no tiene cuenta contable asignada') && str_contains($m, 'ingresos y egresos')) {
-            $esEgreso = ($clave === 'egresos');
-            $this->agregarAccion(
-                'ingresos_egresos',
-                $esEgreso ? 'egresos' : 'ingresos',
-                'Algunos conceptos de ' . ($esEgreso ? 'egresos' : 'ingresos') . ' no tienen cuenta contable (Ingresos y Egresos)'
-            );
+        // Concepto (opción) de Ingresos/Egresos sin cuenta. Si está inactivo, el motivo manda a
+        // «Opciones de Ingreso/Egreso» en vez de a Configuración Contable (ahí no aparece).
+        if (str_contains($m, 'no tiene cuenta contable asignada')
+            && (str_contains($m, 'ingresos y egresos') || str_contains($m, 'opciones de ingreso/egreso'))) {
+            $this->accionConceptoSinCuenta($clave === 'egresos', $motivo);
             $coincidio = true;
         }
         // Contrapartida de una retención: la cartera no se configura en Retenciones sino en la
@@ -1743,6 +1746,108 @@ class SincronizadorAsientosService
             }
         }
         return false;
+    }
+
+    /**
+     * Acción «formas de cobro/pago sin cuenta» NOMBRANDO las formas, que toma del motivo
+     * (AsientoBuilderService::lineasFormas(): «La forma de pago «X» (inactiva) no tiene cuenta…»;
+     * Conciliación de Tarjetas usa comillas rectas). Son formas que un documento YA usa.
+     */
+    private function accionFormaSinCuenta(string $flujo, string $motivo): void
+    {
+        if (preg_match_all('/forma de ' . $flujo . '(?: destino)? [«"]([^»"]+)[»"]( \(inactiva\))?/iu', $motivo, $mm, PREG_SET_ORDER)) {
+            foreach ($mm as $x) {
+                $this->formasSinCuenta[$flujo][trim($x[1])] = !empty($x[2]);
+            }
+        }
+        $this->accionesSinCuenta(
+            $this->formasSinCuenta[$flujo],
+            ['la forma de ' . $flujo, 'las formas de ' . $flujo, 'inactiva', 'inactivas', 'la', 'las'],
+            'cobros_pagos', $flujo === 'cobro' ? 'cobros' : 'pagos', 'Cobros y Pagos',
+            'Formas de Cobros y Pagos (editar la forma → Cuenta Contable)',
+            "Algunas formas de {$flujo} no tienen cuenta contable (Cobros y Pagos)"
+        );
+    }
+
+    /**
+     * Igual que accionFormaSinCuenta() para los conceptos (opciones) de Ingresos y Egresos, que
+     * AsientoBuilderService::registrarFaltanteContrapartida() nombra: «El concepto «X» (inactivo)…».
+     */
+    private function accionConceptoSinCuenta(bool $esEgreso, string $motivo): void
+    {
+        $flujo = $esEgreso ? 'egreso' : 'ingreso';
+        if (preg_match_all('/concepto [«"]([^»"]+)[»"]( \(inactivo\))? no tiene cuenta/iu', $motivo, $mm, PREG_SET_ORDER)) {
+            foreach ($mm as $x) {
+                $this->conceptosSinCuenta[$flujo][trim($x[1])] = !empty($x[2]);
+            }
+        }
+        $plural = $esEgreso ? 'egresos' : 'ingresos';
+        $this->accionesSinCuenta(
+            $this->conceptosSinCuenta[$flujo],
+            ["el concepto de {$plural}", "los conceptos de {$plural}", 'inactivo', 'inactivos', 'lo', 'los'],
+            'ingresos_egresos', $plural, 'Ingresos y Egresos',
+            'Opciones de Ingreso/Egreso (editar el concepto → Cuenta contable)',
+            "Algunos conceptos de {$plural} no tienen cuenta contable (Ingresos y Egresos)"
+        );
+    }
+
+    /**
+     * Arma las líneas del aviso para formas / conceptos sin cuenta, en DOS grupos:
+     *  - Activos: enlace a su sección de Configuración Contable (tipo + sección), donde aparecen.
+     *  - Inactivos: Configuración Contable solo lista los activos, así que no aparecerían ahí; la
+     *    línea dice que se configuran en el módulo propio ($dondeInactivos) — sin enlace — y que
+     *    siguen necesitando cuenta porque hay documentos que ya los usan.
+     * Cada línea se reescribe al sumarse nombres de otros documentos (una por grupo y flujo).
+     *
+     * @param array<string,bool> $items  nombre => inactivo
+     * @param string[] $txt  [singular, plural, «inactivo» singular, plural, pronombre singular, plural]
+     */
+    private function accionesSinCuenta(array $items, array $txt, string $tipo, string $seccion,
+                                       string $nombreSeccion, string $dondeInactivos, string $generico): void
+    {
+        [$sing, $plur, $inacS, $inacP, $pronS, $pronP] = $txt;
+        $lista = function (array $nombres, string $sufijo) use ($sing, $plur): string {
+            $muestra = array_map(fn($n) => '«' . $n . '»', array_slice($nombres, 0, 5));
+            $resto = count($nombres) - count($muestra);
+            return ucfirst(count($nombres) === 1 ? $sing : $plur) . ' ' . implode(', ', $muestra)
+                . ($resto > 0 ? " y {$resto} más" : '')
+                . (count($nombres) === 1 ? ' no tiene' : ' no tienen') . ' cuenta contable' . $sufijo;
+        };
+
+        $activos   = array_keys(array_filter($items, fn($inactivo) => !$inactivo));
+        $inactivos = array_keys(array_filter($items, fn($inactivo) => $inactivo));
+
+        // Sin nombres en el motivo (texto antiguo o sin nombre): la línea genérica de siempre.
+        if (!$items) {
+            $this->fijarAccion($tipo . '|' . $seccion, $tipo, $seccion, $generico);
+            return;
+        }
+        if ($activos) {
+            $this->fijarAccion($tipo . '|' . $seccion, $tipo, $seccion, $lista($activos, " ({$nombreSeccion})"));
+        }
+        if ($inactivos) {
+            $esUno = count($inactivos) === 1;
+            $this->fijarAccion(
+                'inactivos|' . $tipo . '|' . $seccion, '', '',
+                $lista($inactivos, '') . ' y ' . ($esUno ? "está {$inacS}" : "están {$inacP}")
+                . ': por eso no ' . ($esUno ? 'aparece' : 'aparecen') . ' en Configuración Contable. '
+                . ($esUno ? 'Asígnele' : 'Asígneles') . " la cuenta en {$dondeInactivos}; "
+                . 'aunque ' . ($esUno ? "esté {$inacS}" : "estén {$inacP}") . ', hay documentos que ya ' . ($esUno ? $pronS : $pronP) . ' usan'
+            );
+        }
+    }
+
+    /** Crea o reescribe una acción por su clave (líneas que se completan con cada documento). */
+    private function fijarAccion(string $clave, string $tipo, string $seccion, string $texto): void
+    {
+        $this->acciones[$clave] = [
+            'clave'         => $clave,
+            'texto'         => $texto,
+            'textoGenerico' => $texto,
+            'tipo'          => $tipo,
+            'seccion'       => $seccion,
+            'dependeDe'     => null,
+        ];
     }
 
     /**

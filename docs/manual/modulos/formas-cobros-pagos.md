@@ -6,7 +6,7 @@ ruta_modulo: modulos/formas_cobros_pagos
 tipo: modulo
 visibilidad: todos
 etiquetas: formas de pago, formas de cobro, efectivo, caja, banco, tarjeta, payphone, anticipo, transferencia, cheque, orden, ordenar formas de pago, primera forma de pago, orden en ingresos, orden en egresos, saldo, mostrar saldo, ocultar saldo, saldo disponible, saldo de caja, saldo del banco
-version: 1.6
+version: 1.7
 orden: 70
 estado: activo
 ---
@@ -94,6 +94,12 @@ contabilidad va a usar de verdad. Antes esta pantalla mostraba y guardaba una
 cuenta propia que Configuración Contable podía estar sobrescribiendo, así que
 podía verse una cuenta y contabilizarse otra.
 
+**Formas inactivas: la cuenta se pone aquí.** Configuración Contable solo lista
+las formas **activas**. Si una forma inactiva ya se usó en ingresos, egresos,
+traspasos o conciliaciones y no tiene cuenta, esos asientos no se pueden generar,
+y el aviso de asientos pendientes lo indica nombrando la forma. Para resolverlo,
+edítela aquí (se puede sin volver a activarla) y llene su *Cuenta Contable*.
+
 Al crear una empresa, las formas por defecto nacen **sin cuenta**, porque en ese
 momento todavía no existe el plan de cuentas. Se les asigna sola al pulsar
 **Cargar Plan Modelo** en [Plan de cuentas](plan-cuentas.md): Efectivo recibe
@@ -146,6 +152,8 @@ por dos medios (p. ej. "Cheques Pichincha" y "Transferencias Pichincha").
 
 ## Historial de cambios
 
+- **1.7** — Se documenta que la cuenta de una forma **inactiva** que ya se usa se asigna
+  desde este módulo (Configuración Contable solo muestra las activas).
 - **1.6** — La dirección del navegador queda limpia al buscar, cambiar de página u
   ordenar el listado; la búsqueda y la página se conservan al recargar.
 - **1.5** — Una forma de cobro/pago con movimientos ya no se puede eliminar aunque
