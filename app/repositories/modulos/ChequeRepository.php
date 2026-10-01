@@ -46,7 +46,7 @@ class ChequeRepository extends BaseRepository
                    e.fecha_emision,
                    e.observaciones,
                    e.tipo_ambiente,
-                   COALESCE(NULLIF(ep.beneficiario_cheque, ''), p.razon_social, emp.nombres_apellidos, 'N/A') AS beneficiario,
+                   COALESCE(NULLIF(ep.beneficiario_cheque, ''), p.razon_social, emp.nombres_apellidos, NULLIF(TRIM(e.beneficiario_nombre), ''), 'N/A') AS beneficiario,
                    COALESCE(p.identificacion, emp.identificacion, '')     AS beneficiario_ident,
                    fp.nombre                     AS forma_nombre,
                    fp.numero_cuenta              AS cuenta_numero,
@@ -157,7 +157,7 @@ class ChequeRepository extends BaseRepository
                 $params[$p] = '%' . $palabra . '%';
                 $where .= " AND (ep.numero_cheque ILIKE $p
                               OR e.numero_egreso ILIKE $p
-                              OR COALESCE(p.razon_social, emp.nombres_apellidos, '') ILIKE $p
+                              OR COALESCE(NULLIF(ep.beneficiario_cheque, ''), p.razon_social, emp.nombres_apellidos, e.beneficiario_nombre, '') ILIKE $p
                               OR fp.nombre ILIKE $p)";
             }
         }
