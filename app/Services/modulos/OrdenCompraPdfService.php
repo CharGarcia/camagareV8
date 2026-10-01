@@ -39,7 +39,8 @@ class OrdenCompraPdfService
         $y = $this->dibujarEncabezado($empresa, $numero, (string) ($cabecera['estado'] ?? 'borrador'));
         $y = $this->dibujarDatosOrden($cabecera, $y + 3);
         $y = $this->dibujarTablaDetalle($detalles, $y + 3);
-        $this->dibujarObservaciones($cabecera, $y + 3);
+        $y = $this->dibujarObservaciones($cabecera, $y + 3);
+        $this->dibujarFirmas($cabecera, $y + 3);
 
         $nombre = 'OrdenCompra_' . ($numero !== '' ? $numero : 'comprobante') . '.pdf';
         if ($outputDest === 'S') {
@@ -293,7 +294,7 @@ class OrdenCompraPdfService
         return rtrim(rtrim($txt, '0'), '.') ?: '0';
     }
 
-    private function dibujarObservaciones(array $c, float $y): void
+    private function dibujarObservaciones(array $c, float $y): float
     {
         $pdf = $this->pdf;
         $mL  = $this->marginL;
@@ -301,7 +302,7 @@ class OrdenCompraPdfService
 
         $obs = trim((string) ($c['observaciones'] ?? ''));
         if ($obs === '') {
-            return;
+            return $y;
         }
 
         $pdf->SetXY($mL, $y);
@@ -310,6 +311,61 @@ class OrdenCompraPdfService
         $pdf->SetX($mL);
         $pdf->SetFont('helvetica', '', 8);
         $pdf->MultiCell($w, 4.5, $obs, 0, 'L', false, 1);
+        return $pdf->GetY();
+    }
+
+    /**
+     * Bloque de firmas: Solicitado por / Revisado por / Aprobado por, tres columnas con
+     * una línea para firmar y el nombre debajo. "Solicitado por" sale del campo del modal;
+     * "Aprobado por" solo se rellena con la aprobación MANUAL (guardada como
+     * "Manual (Nombre)") — la aprobación del proveedor por correo no es una firma interna.
+     * "Revisado por" queda en blanco para firmarse a mano.
+     */
+    private function dibujarFirmas(array $c, float $y): void
+    {
+        $pdf = $this->pdf;
+        $mL  = $this->marginL;
+
+        $aprobado = '';
+        if (preg_match('/^Manual \((.+)\)$/u', trim((string) ($c['aprobado_por'] ?? '')), $m)) {
+            $aprobado = trim($m[1]);
+        }
+
+        $firmas = [
+            ['Solicitado por', trim((string) ($c['solicitado_por'] ?? ''))],
+            ['Revisado por',   ''],
+            ['Aprobado por',   $aprobado],
+        ];
+
+        // Espacio para firmar sobre la línea + nombre + etiqueta. Si no cabe en lo que
+        // queda de la hoja, el bloque completo pasa a la siguiente (no se parte).
+        $espacioFirma = 16;
+        $altoBloque   = $espacioFirma + 10;
+        $limite       = $pdf->getPageHeight() - $pdf->getBreakMargin();
+        if ($y + $altoBloque > $limite) {
+            $pdf->AddPage();
+            $y = $pdf->GetY();
+        }
+
+        $sep   = 10;
+        $colW  = ($this->contentW - $sep * 2) / 3;
+        $yLine = $y + $espacioFirma;
+
+        $pdf->SetDrawColor(80, 80, 80);
+        $pdf->SetLineWidth(0.25);
+        foreach ($firmas as $i => [$etiqueta, $nombre]) {
+            $x = $mL + $i * ($colW + $sep);
+            $pdf->Line($x, $yLine, $x + $colW, $yLine);
+
+            $pdf->SetXY($x, $yLine + 0.8);
+            $pdf->SetFont('helvetica', '', 8);
+            $pdf->Cell($colW, 4, $this->ajustarTexto($nombre, $colW), 0, 0, 'C');
+
+            $pdf->SetXY($x, $yLine + 4.8);
+            $pdf->SetFont('helvetica', 'B', 8);
+            $pdf->Cell($colW, 4, $etiqueta, 0, 0, 'C');
+        }
+        $pdf->SetY($yLine + 10);
     }
 
     /** Resuelve la ruta en disco del logo (maneja el prefijo web /sistema/public). */

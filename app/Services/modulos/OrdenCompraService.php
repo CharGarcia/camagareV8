@@ -364,6 +364,7 @@ class OrdenCompraService
             'id_punto_emision'   => $orden['id_punto_emision'],
             'fecha_orden'        => date('Y-m-d'),
             'fecha_recepcion'    => null,
+            'solicitado_por'     => $orden['solicitado_por'] ?? null,
             'observaciones'      => trim('Duplicada de la orden ' . ($orden['numero_orden'] ?? '') . '.'),
             'estado'             => 'borrador',
             'created_by'         => $idUsuario,

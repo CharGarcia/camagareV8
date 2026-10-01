@@ -52,13 +52,8 @@ $warnIcon = '<i class="bi bi-exclamation-circle-fill text-warning ms-1" title="C
                     </button>
                 </li>
                 <li class="nav-item" role="presentation">
-                    <button class="nav-link px-2 py-1 small text-nowrap" style="font-size: 0.75rem;" id="puntos-tab" data-bs-toggle="tab" data-bs-target="#puntos" type="button" role="tab">
-                        Puntos de Emisión <?= $warnPuntos ? $warnIcon : '' ?>
-                    </button>
-                </li>
-                <li class="nav-item" role="presentation">
                     <button class="nav-link px-2 py-1 small text-nowrap" style="font-size: 0.75rem;" id="secuenciales-tab" data-bs-toggle="tab" data-bs-target="#secuenciales" type="button" role="tab">
-                        Secuenciales
+                        Puntos de Emisión y Secuenciales <?= $warnPuntos ? $warnIcon : '' ?>
                     </button>
                 </li>
                 <li class="nav-item" role="presentation">
@@ -1047,49 +1042,6 @@ $warnIcon = '<i class="bi bi-exclamation-circle-fill text-warning ms-1" title="C
                     <?php endif; ?>
                 </div>
 
-                <!-- Pestaña: Puntos de Emisión -->
-                <div class="tab-pane fade" id="puntos" role="tabpanel">
-                    <div class="d-flex justify-content-between align-items-center mb-4">
-                        <h6 class="fw-bold mb-0 small">Mis Puntos de Emisión Registrados</h6>
-                        <button class="btn btn-primary btn-sm rounded-pill px-3" onclick="nuevoPunto()"><i class="bi bi-plus-lg me-1"></i>Nuevo Punto</button>
-                    </div>
-                    <div class="row g-3" id="puntos-container">
-                        <?php foreach ($puntos as $p): ?>
-                            <div class="col-md-6 col-lg-4">
-                                <div class="card h-100 border shadow-none point-card" role="button"
-                                    data-punto='<?= htmlspecialchars(json_encode($p), ENT_QUOTES, 'UTF-8') ?>'
-                                    onclick="editarPunto(this)">
-                                    <div class="card-body p-3">
-                                        <div class="d-flex align-items-center mb-3">
-                                            <?php if (!empty($p['logo_ruta'])): ?>
-                                                <div class="border rounded-3 me-3 bg-white d-flex align-items-center justify-content-center overflow-hidden flex-shrink-0" style="width:56px;height:56px;">
-                                                    <img src="<?= htmlspecialchars((string) $p['logo_ruta']) ?>" alt="Logo del punto" style="max-width:54px;max-height:54px;object-fit:contain;">
-                                                </div>
-                                            <?php else: ?>
-                                                <div class="bg-primary bg-opacity-10 text-primary p-3 rounded-3 me-3">
-                                                    <i class="bi bi-shop fs-4"></i>
-                                                </div>
-                                            <?php endif; ?>
-                                            <div class="flex-grow-1 min-w-0">
-                                                <h6 class="mb-0 small fw-bold text-truncate"><?= htmlspecialchars($p['codigo_punto']) ?> - <?= htmlspecialchars($p['nombre']) ?></h6>
-                                                <div class="text-muted" style="font-size:.65rem;">
-                                                    <?= !empty($p['logo_ruta']) ? '<i class="bi bi-image me-1"></i>Logo propio' : '<i class="bi bi-building me-1"></i>Logo del establecimiento' ?>
-                                                </div>
-                                            </div>
-                                        </div>
-                                        <div class="d-flex justify-content-between align-items-center">
-                                            <span class="badge bg-<?= ($p['estado'] == 'activo') ? 'success' : 'danger' ?> bg-opacity-10 text-<?= ($p['estado'] == 'activo') ? 'success' : 'danger' ?> border border-<?= ($p['estado'] == 'activo') ? 'success' : 'danger' ?> rounded-pill" style="font-size: 0.65rem;">
-                                                <?= strtoupper($p['estado']) ?>
-                                            </span>
-                                            <i class="bi bi-pencil-square text-muted opacity-50"></i>
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
-                        <?php endforeach; ?>
-                    </div>
-                </div>
-
                 <!-- Pestaña: Secuenciales -->
                 <div class="tab-pane fade" id="secuenciales" role="tabpanel">
                     <?php
@@ -1097,8 +1049,8 @@ $warnIcon = '<i class="bi bi-exclamation-circle-fill text-warning ms-1" title="C
                     // inactivo (p. ej. el dedicado a "Facturas de reembolso" que se crea
                     // inactivo al dar de alta la empresa, ver EmpresaInicializadorService)
                     // debe poder preconfigurarse aquí — con cualquier tipo de documento, no
-                    // solo el que le dio origen — antes de activarlo en la pestaña
-                    // "Puntos de Emisión". Mientras esté inactivo, no se puede emitir desde
+                    // solo el que le dio origen — antes de activarlo desde su botón
+                    // editar. Mientras esté inactivo, no se puede emitir desde
                     // él (se marca con el badge "Inactivo"), pero sí configurar.
                     // Activos primero: son los que se usan para emitir documentos, así que
                     // conviene tenerlos a mano sin desplazarse. usort() es estable desde
@@ -1165,35 +1117,57 @@ $warnIcon = '<i class="bi bi-exclamation-circle-fill text-warning ms-1" title="C
                                         <li>Puede <strong>eliminar</strong> un tipo (ícono papelera) mientras no tenga documentos emitidos en ese punto; si ya los tiene, el sistema lo bloquea.</li>
                                         <li>Dos tipos que ante el SRI son el mismo comprobante (mismo codDoc, p. ej. Facturas de venta / Facturas de reembolso) nunca se crean juntos en el mismo punto: numerarían el mismo documento dos veces.</li>
                                         <li>Algunos tipos (p. ej. <strong>Facturas de reembolso</strong>) solo pueden existir en <strong>un único punto</strong> de toda la empresa: si ya está configurado en otro punto, no aparece en el selector de este.</li>
-                                        <li>Un punto marcado <strong>Inactivo</strong> (p. ej. el que se crea automáticamente para Facturas de Reembolso) se puede configurar aquí igual que cualquier otro — incluso con otros tipos de documento, no solo el que le dio origen — pero no podrá emitir documentos hasta activarlo en la pestaña <strong>Puntos de Emisión</strong>.</li>
+                                        <li>Un punto marcado <strong>Inactivo</strong> (p. ej. el que se crea automáticamente para Facturas de Reembolso) se puede configurar aquí igual que cualquier otro — incluso con otros tipos de documento, no solo el que le dio origen — pero no podrá emitir documentos hasta activarlo con el botón <i class="bi bi-pencil-square"></i> (editar) del punto, en la lista de la izquierda.</li>
                                     </ul>
                                 </div>
                             </div>
                         </div>
                     </div>
                     <div class="row g-4">
-                        <div class="col-md-3 border-end">
-                            <label class="form-label small fw-bold mb-3 text-primary">Punto de Emisión</label>
+                        <div class="col-md-4 border-end">
+                            <div class="d-flex justify-content-between align-items-center mb-3">
+                                <label class="form-label small fw-bold mb-0 text-primary">Puntos de Emisión</label>
+                                <button type="button" class="btn btn-primary btn-sm rounded-pill px-3" onclick="nuevoPunto()"><i class="bi bi-plus-lg me-1"></i>Nuevo Punto</button>
+                            </div>
                             <div class="list-group list-group-flush small rounded-3 border" id="secuenciales-puntos-list">
                                 <?php if (empty($puntosSec)): ?>
-                                    <div class="list-group-item text-muted small py-3"><i class="bi bi-info-circle me-1"></i>No hay puntos de emisión.</div>
+                                    <div class="list-group-item text-muted small py-3"><i class="bi bi-info-circle me-1"></i>No hay puntos de emisión. Cree el primero con <strong>Nuevo Punto</strong>.</div>
                                 <?php else: foreach ($puntosSec as $idx => $p): $ptoInactivo = strtolower((string)($p['estado'] ?? 'activo')) !== 'activo'; ?>
-                                    <a href="#" class="list-group-item list-group-item-action py-3 <?= ($idx === 0) ? 'active' : '' ?>"
+                                    <a href="#" class="list-group-item list-group-item-action py-2 <?= ($idx === 0) ? 'active' : '' ?>"
                                         data-punto-id="<?= (int)($p['id'] ?? 0) ?>"
-                                        onclick="cargarSecuenciales(this, <?= (int)($p['id'] ?? 0) ?>)">
-                                        <div class="d-flex justify-content-between align-items-center w-100">
-                                            <span class="fw-medium"><?= $p['codigo_punto'] ?> - <?= $p['nombre'] ?></span>
-                                            <?php if ($ptoInactivo): ?>
-                                                <span class="badge bg-danger ms-2" style="font-size: 0.62rem;" title="Este punto está inactivo: se puede configurar aquí, pero no se pueden emitir documentos desde él hasta activarlo en la pestaña Puntos de Emisión.">Inactivo</span>
+                                        onclick="event.preventDefault(); cargarSecuenciales(this, <?= (int)($p['id'] ?? 0) ?>)">
+                                        <div class="d-flex align-items-center gap-2 w-100">
+                                            <?php if (!empty($p['logo_ruta'])): ?>
+                                                <span class="border rounded-2 bg-white d-flex align-items-center justify-content-center overflow-hidden flex-shrink-0" style="width:38px;height:38px;">
+                                                    <img src="<?= htmlspecialchars((string) $p['logo_ruta']) ?>" alt="Logo del punto" style="max-width:36px;max-height:36px;object-fit:contain;">
+                                                </span>
                                             <?php else: ?>
-                                                <span class="badge bg-success ms-2" style="font-size: 0.62rem;">Activo</span>
+                                                <span class="bg-primary bg-opacity-10 text-primary rounded-2 d-flex align-items-center justify-content-center flex-shrink-0" style="width:38px;height:38px;">
+                                                    <i class="bi bi-shop"></i>
+                                                </span>
                                             <?php endif; ?>
+                                            <span class="flex-grow-1 min-w-0">
+                                                <span class="fw-medium d-block text-truncate"><?= htmlspecialchars((string) $p['codigo_punto']) ?> - <?= htmlspecialchars((string) $p['nombre']) ?></span>
+                                                <span class="d-block opacity-75" style="font-size:.65rem;">
+                                                    <?= !empty($p['logo_ruta']) ? '<i class="bi bi-image me-1"></i>Logo propio' : '<i class="bi bi-building me-1"></i>Logo del establecimiento' ?>
+                                                </span>
+                                            </span>
+                                            <?php if ($ptoInactivo): ?>
+                                                <span class="badge bg-danger" style="font-size: 0.62rem;" title="Este punto está inactivo: se puede configurar aquí, pero no se pueden emitir documentos desde él hasta activarlo (botón editar del punto).">Inactivo</span>
+                                            <?php else: ?>
+                                                <span class="badge bg-success" style="font-size: 0.62rem;">Activo</span>
+                                            <?php endif; ?>
+                                            <span role="button" class="btn btn-sm btn-light border py-0 px-1 flex-shrink-0" title="Editar punto (nombre, código, estado, logo)"
+                                                data-punto='<?= htmlspecialchars(json_encode($p), ENT_QUOTES, 'UTF-8') ?>'
+                                                onclick="event.preventDefault(); event.stopPropagation(); editarPunto(this)">
+                                                <i class="bi bi-pencil-square"></i>
+                                            </span>
                                         </div>
                                     </a>
                                 <?php endforeach; endif; ?>
                             </div>
                         </div>
-                        <div class="col-md-9 bg-light bg-opacity-50 p-4 rounded-3 border">
+                        <div class="col-md-8 bg-light bg-opacity-50 p-4 rounded-3 border">
                             <form id="form-secuenciales" method="POST">
                                 <input type="hidden" name="section" value="secuenciales">
                                 <input type="hidden" name="id_punto_emision" id="sec-punto-id" value="<?= $puntosSec[0]['id'] ?? '' ?>">
@@ -1937,23 +1911,6 @@ $warnIcon = '<i class="bi bi-exclamation-circle-fill text-warning ms-1" title="C
                                     </div>
                                 </div>
                             </div>
-
-                            <!--
-                                La aprobación de cargas de inventario se movió al módulo
-                                Aprobaciones (se configura por empresa junto al resto de
-                                procesos aprobables, no aquí por establecimiento).
-                            -->
-                            <div class="col-md-12">
-                                <div class="alert alert-light border d-flex align-items-start gap-2 py-2 px-3 mb-0">
-                                    <i class="bi bi-check2-square text-primary mt-1"></i>
-                                    <div class="small">
-                                        <strong>Aprobación de cargas de inventario.</strong>
-                                        Ahora se configura en el módulo <strong>Aprobaciones</strong>, junto con los
-                                        demás procesos que requieren autorización.
-                                        <a href="<?= BASE_URL ?>/modulos/aprobaciones-config" class="ms-1">Ir a Aprobaciones</a>
-                                    </div>
-                                </div>
-                            </div>
                         </div>
                         <div class="col-12 mt-4 text-end">
                             <button type="submit" class="btn btn-primary btn-sm px-4">Guardar Configuración</button>
@@ -2341,9 +2298,8 @@ $warnIcon = '<i class="bi bi-exclamation-circle-fill text-warning ms-1" title="C
             '</div>';
     }
 
-    // Elimina el punto de emisión seleccionado en la pestaña Secuenciales. El
-    // backend (deletePunto, mismo endpoint que usa la pestaña Puntos de
-    // Emisión) vuelve a validar que no tenga documentos emitidos antes de
+    // Elimina el punto de emisión seleccionado. El backend (deletePunto,
+    // mismo endpoint que el botón Eliminar del modal del punto) vuelve a validar que no tenga documentos emitidos antes de
     // borrar — este botón solo se ofrece cuando no tiene secuenciales, pero la
     // validación real y definitiva es esa.
     async function eliminarPuntoDesdeSecuenciales() {
@@ -2806,6 +2762,11 @@ $warnIcon = '<i class="bi bi-exclamation-circle-fill text-warning ms-1" title="C
                     const res = await response.json();
                     if (res.ok) {
                         swalToastOk(res.msg || 'Cambios guardados correctamente');
+                        if (id === 'form-punto') {
+                            // Tras recargar, dejar seleccionado el punto recién creado o editado.
+                            const idPto = res.id || formData.get('id');
+                            if (idPto) { try { sessionStorage.setItem('empresa_sec_punto', String(idPto)); } catch (e) {} }
+                        }
                         if (id === 'form-firma' || id === 'form-punto' || id === 'form-ice' || id === 'form-matriz' || id === 'form-establecimiento-directo') setTimeout(() => location.reload(), 1000);
                     } else {
                         if (res.confirm) {
@@ -2868,7 +2829,11 @@ $warnIcon = '<i class="bi bi-exclamation-circle-fill text-warning ms-1" title="C
         });
         // Un enlace con #pestaña (p. ej. modulos/empresa#establecimientos desde Declaración
         // de IVA) manda sobre la pestaña recordada.
-        const buscarTab = t => t ? document.querySelector(`#empresaTabs [data-bs-target="${CSS.escape(t)}"]`) : null;
+        // "#puntos" era la antigua pestaña Puntos de Emisión, hoy unida a Secuenciales.
+        const buscarTab = t => {
+            if (t === '#puntos') t = '#secuenciales';
+            return t ? document.querySelector(`#empresaTabs [data-bs-target="${CSS.escape(t)}"]`) : null;
+        };
         let btnTab = buscarTab(location.hash);
         if (!btnTab) {
             try { btnTab = buscarTab(sessionStorage.getItem('empresa_tab_activa')); } catch (e) {}

@@ -6,7 +6,7 @@ ruta_modulo: modulos/empresa
 tipo: modulo
 visibilidad: admin
 etiquetas: empresa, datos de la empresa, ruc, establecimiento, punto de emision, logo, logo por punto de emision, logo de la caja, logo por sucursal, otra marca, quitar logo, ambiente, pruebas, produccion, configuracion, correo, email, smtp, envio de correos, cuerpo del correo, asunto, plantilla de correo, remitente, documentos legales, acuerdo de uso de datos, contrato de uso del sistema, aceptacion de documentos, documentos firmados, documentos cargados, archivos de la empresa, secuenciales, numeracion, tipos de documento, codDoc, eliminar secuencial, crear secuenciales, agregar todos los faltantes, facturas de reembolso, punto unico por empresa, punto inactivo, eliminar punto de emision con documentos, puntos duplicados, secuencial inicial, numero inicial, hueco, huecos, rellenar hueco, salto de numeracion, siguiente numero, retomar numeracion, presentacion de los items, agrupar items, agrupar por nombre, agrupar por lote, agrupar por nup, agrupar por serie, juntar lineas repetidas, sumar items iguales, mostrar lote en la factura, mostrar caducidad, mostrar unidad de medida, mostrar nup, descripcion del item, tirilla, ticket, impresion termica, modo de numeracion, numeracion por fecha, secuencial por fecha, reiniciar numeracion, reinicio anual, reinicio mensual, numeracion anual, numeracion mensual, correlativo por año, correlativo por mes, empezar de cero cada año, prefijo del año, numero con el año, volver a empezar la numeracion
-version: 1.26
+version: 1.28
 orden: 5
 estado: activo
 ---
@@ -28,6 +28,21 @@ emisión**. La numeración de los comprobantes depende de esta estructura: el
 `001-002-000000123` de una factura son precisamente el establecimiento, el punto
 de emisión y el secuencial.
 
+### Pestaña Puntos de Emisión y Secuenciales
+
+Los puntos de emisión y sus secuenciales se administran en **una sola pestaña**,
+**Puntos de Emisión y Secuenciales**:
+
+- **A la izquierda**, la lista de puntos de emisión (activos primero), cada uno
+  con su logo (o el ícono de tienda si usa el del establecimiento), su estado y
+  el botón **editar** (lápiz), que abre el punto para cambiar nombre, código,
+  estado y logo, o eliminarlo. Arriba está el botón **Nuevo Punto**.
+- **A la derecha**, los secuenciales del punto seleccionado (ver "Secuenciales
+  por punto de emisión").
+
+Al hacer clic en un punto se cargan sus secuenciales; al crear o editar un punto,
+la página vuelve a la pestaña con ese mismo punto seleccionado.
+
 ### Logo del establecimiento
 
 En la pestaña **Establecimiento** se sube el logo que aparece en los documentos
@@ -45,7 +60,7 @@ enlace para **descargar el logo actualmente guardado**.
 
 Cada punto de emisión puede tener **su propio logo** (por ejemplo, una caja o
 sucursal que vende con otra marca). Se carga en la pestaña **Puntos de
-Emisión**: al abrir un punto, el campo **Logo del Punto** permite subir la
+Emisión y Secuenciales**: al editar un punto (lápiz), el campo **Logo del Punto** permite subir la
 imagen (mismos formatos, tamaño máximo y espacio en el PDF que el logo del
 establecimiento) o **Quitar logo**.
 
@@ -202,7 +217,7 @@ comprobante electrónico y la representación impresa siempre dicen lo mismo.
 - **El logo no sale en el PDF**: compruebe que esté cargado y en un formato
   admitido.
 - **Un documento sale con un logo distinto al del establecimiento**: su punto
-  de emisión tiene logo propio. Ábralo en la pestaña **Puntos de Emisión** y use
+  de emisión tiene logo propio. Ábralo (lápiz) en la pestaña **Puntos de Emisión y Secuenciales** y use
   **Quitar logo** si debe usar el del establecimiento.
 
 - **El correo llega con dos saludos o dos despedidas**: está usando el diseño
@@ -241,7 +256,7 @@ Vigencia, hay una tarjeta con dos bloques:
 
 ## Secuenciales por punto de emisión
 
-En la pestaña **Secuenciales** se configura, por cada **punto de emisión**, el
+En la pestaña **Puntos de Emisión y Secuenciales** se configura, por cada **punto de emisión**, el
 número inicial de cada tipo de comprobante (factura, nota de crédito, ingreso,
 egreso, pedido, etc.).
 
@@ -348,8 +363,7 @@ siquiera aparece.
 - **Eliminar el punto de emisión**: cuando un punto se queda **sin ningún**
   tipo de secuencial configurado (por ejemplo, tras eliminarlos todos), en su
   lugar aparece el botón **"Eliminar este punto de emisión"** — mismo
-  resultado y misma validación que eliminarlo desde la pestaña **Puntos de
-  Emisión**: si ya tiene documentos emitidos, solo se puede eliminar cuando
+  resultado y misma validación que el botón **Eliminar** del punto (lápiz): si ya tiene documentos emitidos, solo se puede eliminar cuando
   queda **al menos otro punto con el mismo número** en otro establecimiento
   de la empresa (el modal muestra una advertencia roja en ese caso); si no
   queda ninguno, sigue bloqueado por completo. Ver más abajo, "Eliminar un
@@ -365,7 +379,7 @@ siquiera aparece.
   automáticamente (inactivo) al dar de alta la empresa. Un punto inactivo se
   puede configurar aquí igual que cualquier otro, incluso con **otros tipos
   de documento** además del que le dio origen, pero no podrá **emitir**
-  documentos hasta activarlo en la pestaña **Puntos de Emisión**.
+  documentos hasta activarlo desde su botón **editar** (lápiz).
 
 ## Operadoras de transporte comercial (placa en la factura)
 
@@ -378,6 +392,11 @@ de taxis.
 
 ## Historial de cambios
 
+- **1.28** — Se quita de la pestaña **Inventario** el aviso "Aprobación de cargas de
+  inventario"; esa configuración sigue en el módulo **Aprobaciones**.
+- **1.27** — Las pestañas **Puntos de Emisión** y **Secuenciales** se unen en una sola,
+  **Puntos de Emisión y Secuenciales**: a la izquierda los puntos (con su logo, estado,
+  botón editar y **Nuevo Punto**) y a la derecha los secuenciales del punto elegido.
 - **1.26** — Al guardar un cambio, el módulo se queda en la **misma pestaña** donde se
   estaba (antes, los guardados que recargan la página volvían a *Datos generales*). En
   **Secuenciales** también vuelve al mismo punto de emisión. Los enlaces de otros

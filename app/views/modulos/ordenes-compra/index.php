@@ -423,6 +423,7 @@ window.ocAbrirCrear = function() {
     document.getElementById('oc_titulo_modal').textContent = 'Nueva Orden de Compra';
     document.getElementById('oc_fecha_orden').value = CMG_fechaLocal();
     document.getElementById('oc_fecha_recepcion').value = '';
+    document.getElementById('oc_solicitado_por').value  = '';
     document.getElementById('oc_observaciones').value   = '';
     document.getElementById('oc_estado').value           = 'borrador';
     document.getElementById('oc_proveedor_id').value    = '';
@@ -456,6 +457,7 @@ window.ocAbrirEditar = function(tr) {
     document.getElementById('oc_titulo_modal').textContent = `Editar Orden de Compra #${d.numero_orden || ''}`;
     document.getElementById('oc_fecha_orden').value     = ocParseDate(d.fecha_orden ?? '');
     document.getElementById('oc_fecha_recepcion').value = ocParseDate(d.fecha_recepcion ?? '');
+    document.getElementById('oc_solicitado_por').value  = d.solicitado_por ?? '';
     document.getElementById('oc_observaciones').value   = d.observaciones ?? '';
     document.getElementById('oc_estado').value          = d.estado ?? 'borrador';
     document.getElementById('oc_proveedor_id').value    = d.id_proveedor ?? '';
@@ -465,6 +467,16 @@ window.ocAbrirEditar = function(tr) {
     ocPopularPuntosSelect();
     const sel = document.getElementById('oc_id_punto_emision');
     if (d.id_punto_emision) {
+        // La lista solo trae puntos ACTIVOS con secuencial de "Órdenes de compra". Si la
+        // orden se emitió en un punto que luego se inactivó, se agrega su serie solo para
+        // ESTE documento: sin ella el select quedaba vacío y la orden no se podía guardar.
+        if (![...sel.options].some(o => o.value === String(d.id_punto_emision))) {
+            const opt = document.createElement('option');
+            opt.value       = d.id_punto_emision;
+            opt.dataset.est = d.id_establecimiento ?? '';
+            opt.textContent = `${d.establecimiento ?? ''}-${d.punto_emision ?? ''}`;
+            sel.appendChild(opt);
+        }
         sel.value = d.id_punto_emision;
         const opt = sel.options[sel.selectedIndex];
         if (opt) document.getElementById('oc_id_establecimiento').value = opt.dataset.est || '';
@@ -511,6 +523,10 @@ document.getElementById('formOrdenCompra')?.addEventListener('submit', async fun
 
     if (!document.getElementById('oc_proveedor_id').value) {
         Swal.fire({ icon: 'warning', title: 'Proveedor requerido', text: 'Debe seleccionar un proveedor.', confirmButtonColor: '#0d6efd' });
+        return;
+    }
+    if (!document.getElementById('oc_id_punto_emision').options.length) {
+        Swal.fire({ icon: 'warning', title: 'Sin serie disponible', html: 'No hay una serie (punto de emisión) <strong>activa</strong> con secuencial de "Órdenes de compra".<br>Configúrela en <strong>Empresa → Puntos de emisión</strong>.', confirmButtonColor: '#0d6efd' });
         return;
     }
     if (!document.getElementById('oc_id_establecimiento').value) {

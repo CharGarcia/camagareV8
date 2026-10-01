@@ -114,7 +114,7 @@
                         </div>
                     </div>
 
-                    <!-- Fila 2: Fechas + Observaciones -->
+                    <!-- Fila 2: Fechas + Solicitado por (Observaciones va abajo, junto a los subtotales) -->
                     <div class="row g-3 mb-4">
                         <div class="col-md-2">
                             <label class="form-label small fw-bold mb-1">Fecha Orden <span class="text-danger">*</span></label>
@@ -124,10 +124,10 @@
                             <label class="form-label small fw-bold mb-1">Fecha Recepción</label>
                             <input type="date" class="form-control form-control-sm" id="oc_fecha_recepcion" name="fecha_recepcion">
                         </div>
-                        <div class="col-md-8">
-                            <label class="form-label small fw-bold mb-1">Observaciones</label>
-                            <input type="text" class="form-control form-control-sm" id="oc_observaciones" name="observaciones"
-                                   placeholder="Notas adicionales sobre la orden..." maxlength="500">
+                        <div class="col-md-4">
+                            <label class="form-label small fw-bold mb-1">Solicitado por</label>
+                            <input type="text" class="form-control form-control-sm" id="oc_solicitado_por" name="solicitado_por"
+                                   placeholder="Nombre de quien solicita la compra..." maxlength="150">
                         </div>
                     </div>
 
@@ -166,8 +166,13 @@
                         </div>
                     </div>
 
-                    <!-- Resumen de subtotales por tarifa de IVA (mismo formato que Compras) -->
-                    <div class="row justify-content-end">
+                    <!-- Observaciones (izquierda) + resumen de subtotales por tarifa de IVA (derecha, mismo formato que Compras) -->
+                    <div class="row g-3">
+                        <div class="col-md-7">
+                            <label class="form-label small fw-bold mb-1">Observaciones</label>
+                            <textarea class="form-control form-control-sm" id="oc_observaciones" name="observaciones" rows="4"
+                                      placeholder="Notas adicionales sobre la orden..." maxlength="500"></textarea>
+                        </div>
                         <div class="col-md-5">
                             <div class="bg-white border rounded p-2 shadow-sm" style="font-size:0.75rem;">
                                 <div class="d-flex justify-content-between align-items-center mb-1 fw-bold border-bottom pb-1">

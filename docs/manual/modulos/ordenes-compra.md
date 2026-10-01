@@ -5,8 +5,8 @@ categoria: Compras
 ruta_modulo: modulos/ordenes-compra
 tipo: modulo
 visibilidad: todos
-etiquetas: orden de compra, ordenes, pedido a proveedor, requisicion, compra pendiente, autorizar compra, vincular compra, recibido, pedido vs facturado, aprobacion por correo, enviado, aprobar orden, entrega parcial, recibido parcial, duplicar orden, cerrar orden, iva, tarifa iva, subtotales, total con impuestos, impuestos, notas, notas por linea, observaciones del item, instrucciones al proveedor, numeracion por fecha, numero con el año, reiniciar numeracion, reinicio anual, reinicio mensual, correlativo por año, correlativo por mes, modo de numeracion, buscar orden de compra, buscador, filtros, filtrar ordenes, buscar por producto pedido, compra vinculada, chips, aparecen documentos que no busque, resultados que no corresponden, la busqueda trae otros documentos, imprimir, impresora
-version: 1.18
+etiquetas: orden de compra, ordenes, pedido a proveedor, requisicion, compra pendiente, autorizar compra, vincular compra, recibido, pedido vs facturado, aprobacion por correo, enviado, aprobar orden, entrega parcial, recibido parcial, duplicar orden, cerrar orden, iva, tarifa iva, subtotales, total con impuestos, impuestos, notas, notas por linea, observaciones del item, instrucciones al proveedor, numeracion por fecha, numero con el año, reiniciar numeracion, reinicio anual, reinicio mensual, correlativo por año, correlativo por mes, modo de numeracion, buscar orden de compra, buscador, filtros, filtrar ordenes, buscar por producto pedido, compra vinculada, chips, aparecen documentos que no busque, resultados que no corresponden, la busqueda trae otros documentos, imprimir, impresora, solicitado por, revisado por, aprobado por, firmas, quien solicita, solicitante, serie activa, punto de emision inactivo, no aparece la serie
+version: 1.19
 orden: 15
 estado: activo
 ---
@@ -29,7 +29,8 @@ inventario. Es un compromiso, no una compra.
 ## Cómo se usa
 
 1. Pulse **Nuevo**.
-2. Elija el **proveedor**.
+2. Elija la **serie** y el **proveedor**. Si lo desea, escriba en **Solicitado por**
+   el nombre de quien pidió la compra (sale en el PDF, ver abajo).
 3. Añada los productos con cantidad y precio acordado. Al buscar un producto
    del catálogo, el precio unitario se precarga con su **precio de costo**
    (no el de venta) — es lo que se le paga al proveedor. Si el producto no
@@ -40,6 +41,37 @@ inventario. Es un compromiso, no una compra.
 4. Revise la **Tarifa IVA** de cada línea (ver abajo).
 5. Si hace falta, escriba una **Nota** en la línea (ver abajo).
 6. Guarde. Mientras esté en **Borrador** puede seguir editándola libremente.
+
+## Serie (punto de emisión)
+
+El selector **Serie** solo ofrece los puntos de emisión que cumplen dos
+condiciones, igual que en Facturas de venta:
+
+- están **activos** en **Empresa → Puntos de emisión**, y
+- tienen configurado el secuencial de **Órdenes de compra** en **Empresa →
+  Secuenciales**.
+
+Un punto inactivo ya no aparece para órdenes nuevas. Si se abre una orden
+antigua emitida en un punto que después se inactivó, su serie se sigue
+mostrando (solo para esa orden) para poder consultarla o guardarla.
+
+## Solicitado por, observaciones y firmas
+
+- **Solicitado por** (junto a las fechas, hasta 150 caracteres): nombre de la
+  persona o área que pidió la compra. Es opcional y se copia al **duplicar**
+  la orden.
+- **Observaciones**: está debajo del detalle, a la izquierda del resumen de
+  subtotales. Es para indicaciones que aplican a **toda** la orden.
+
+Al final del **PDF** se imprime un bloque de firmas con tres líneas:
+
+| Firma | Qué nombre aparece bajo la línea |
+|---|---|
+| Solicitado por | Lo escrito en el campo *Solicitado por* |
+| Revisado por | En blanco, para firmar a mano |
+| Aprobado por | El usuario que pulsó **Aprobar** (aprobación manual). Si la aprobó el proveedor desde el correo, o aún no está aprobada, queda en blanco |
+
+El Excel también muestra *Solicitado por* en la cabecera.
 
 ## Notas de cada línea
 
@@ -288,6 +320,9 @@ Compras (procesar entradas, retención, etc.).
 - **No aparece en cuentas por pagar**: tampoco genera deuda; la deuda nace con la
   compra.
 - **El proveedor no aparece**: regístrelo primero en Proveedores.
+- **No aparece ninguna serie / "Sin serie disponible"**: no hay un punto de
+  emisión **activo** con secuencial de *Órdenes de compra*. Actívelo o
+  configúrelo en **Empresa → Puntos de emisión / Secuenciales**.
 - **No aparece en el buscador de la pestaña "Orden de Compra"**: revise que
   la orden esté en estado **Aprobado** o **Recibido parcial** (Borrador y
   Enviado no bastan), y que sea del mismo proveedor de la compra. Si ya está
@@ -330,6 +365,10 @@ documentos admite cada periodo) está en el manual de **Empresa**, sección
 
 ## Historial de cambios
 
+- **1.19** — La **Serie** solo lista puntos de emisión **activos** (igual que
+  Facturas de venta). Nuevo campo **Solicitado por**; **Observaciones** pasa
+  debajo del detalle, a la izquierda de los subtotales. El PDF termina con las
+  firmas **Solicitado por / Revisado por / Aprobado por**.
 - **1.18** — En la ventana de filtros, la pestaña *Detalles* se llama ahora
   **Búsqueda por detalle**, y la ventana ya no tiene barra de desplazamiento
   vertical propia: se muestra completa.

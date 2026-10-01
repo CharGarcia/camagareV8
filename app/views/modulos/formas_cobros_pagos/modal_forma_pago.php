@@ -370,7 +370,13 @@ try {
                             Swal.fire('¡Éxito!', res.mensaje, 'success').then(() => {
                                 // Si existe una funcion de callback global, dispararla para refrescar listados externos
                                 if (typeof window.onFormaPagoCreada === 'function') {
-                                    window.onFormaPagoCreada(res.id, formData.get('nombre'));
+                                    // Tercer argumento: lo que necesita quien la agrega a su combo
+                                    // (Ingresos/Egresos) para que quede lista para usar sin recargar.
+                                    window.onFormaPagoCreada(res.id, formData.get('nombre'), {
+                                        tipo:          formData.get('tipo') || '',
+                                        aplica_en:     formData.get('aplica_en') || 'AMBAS',
+                                        mostrar_saldo: formData.get('mostrar_saldo') === '1',
+                                    });
                                     modalInstanciaFP.hide();
                                 } else {
                                     location.reload();

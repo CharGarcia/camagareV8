@@ -404,19 +404,22 @@ class OrdenCompraRepository extends BaseRepository
 
     public function insertar(array $data): int
     {
+        $conSol = $this->soportaSolicitadoPor();
+        $colSol = $conSol ? ', solicitado_por' : '';
+        $valSol = $conSol ? ', :solicitado_por' : '';
+
         $sql = "INSERT INTO ordenes_compra
                     (id_empresa, id_proveedor, id_establecimiento, id_punto_emision,
                      establecimiento, punto_emision, secuencial, tipo_ambiente,
                      fecha_orden, fecha_recepcion, observaciones, estado,
-                     created_at, updated_at, created_by, updated_by, eliminado)
+                     created_at, updated_at, created_by, updated_by, eliminado{$colSol})
                 VALUES
                     (:id_empresa, :id_proveedor, :id_establecimiento, :id_punto_emision,
                      :establecimiento, :punto_emision, :secuencial, :tipo_ambiente,
                      :fecha_orden, :fecha_recepcion, :observaciones, :estado,
-                     NOW(), NOW(), :created_by, :updated_by, false)
+                     NOW(), NOW(), :created_by, :updated_by, false{$valSol})
                 RETURNING id";
-        $st = $this->db->prepare($sql);
-        $st->execute([
+        $params = [
             ':id_empresa'         => $data['id_empresa'],
             ':id_proveedor'       => $data['id_proveedor'],
             ':id_establecimiento' => $data['id_establecimiento'],
@@ -431,7 +434,12 @@ class OrdenCompraRepository extends BaseRepository
             ':estado'             => $data['estado'] ?? 'borrador',
             ':created_by'         => $data['created_by'],
             ':updated_by'         => $data['created_by'],
-        ]);
+        ];
+        if ($conSol) {
+            $params[':solicitado_por'] = $this->_solicitadoPor($data);
+        }
+        $st = $this->db->prepare($sql);
+        $st->execute($params);
         return (int) $st->fetchColumn();
     }
 
@@ -460,7 +468,11 @@ class OrdenCompraRepository extends BaseRepository
 
     public function actualizar(int $id, int $idEmpresa, array $data): void
     {
+        $conSol = $this->soportaSolicitadoPor();
+        $setSol = $conSol ? 'solicitado_por     = :solicitado_por,' : '';
+
         $sql = "UPDATE ordenes_compra SET
+                    {$setSol}
                     id_proveedor       = :id_proveedor,
                     id_establecimiento = :id_establecimiento,
                     id_punto_emision   = :id_punto_emision,
@@ -474,7 +486,7 @@ class OrdenCompraRepository extends BaseRepository
                     updated_by         = :updated_by
                 WHERE id = :id AND id_empresa = :id_empresa AND eliminado = false";
         $st = $this->db->prepare($sql);
-        $st->execute([
+        $params = [
             ':id'                 => $id,
             ':id_empresa'         => $idEmpresa,
             ':id_proveedor'       => $data['id_proveedor'],
@@ -487,7 +499,39 @@ class OrdenCompraRepository extends BaseRepository
             ':observaciones'      => $data['observaciones'] ?: null,
             ':estado'             => $data['estado'] ?? 'borrador',
             ':updated_by'         => $data['updated_by'],
-        ]);
+        ];
+        if ($conSol) {
+            $params[':solicitado_por'] = $this->_solicitadoPor($data);
+        }
+        $st->execute($params);
+    }
+
+    /**
+     * ¿Existe ya la columna ordenes_compra.solicitado_por? (database/ordenes_compra_solicitado_por.sql).
+     * Mientras el SQL no se aplique en un ambiente, el guardado sigue funcionando sin ese campo.
+     */
+    public function soportaSolicitadoPor(): bool
+    {
+        static $cache = null;
+        if ($cache !== null) {
+            return $cache;
+        }
+        try {
+            $cache = (bool) $this->db->query(
+                "SELECT 1 FROM information_schema.columns
+                  WHERE table_schema = 'public' AND table_name = 'ordenes_compra'
+                    AND column_name = 'solicitado_por'"
+            )->fetchColumn();
+        } catch (\Throwable) {
+            $cache = false;
+        }
+        return $cache;
+    }
+
+    private function _solicitadoPor(array $data): ?string
+    {
+        $v = trim((string) ($data['solicitado_por'] ?? ''));
+        return $v !== '' ? $v : null;
     }
 
     /**

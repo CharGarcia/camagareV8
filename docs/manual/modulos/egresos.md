@@ -5,8 +5,8 @@ categoria: Tesorería
 ruta_modulo: modulos/egresos
 tipo: modulo
 visibilidad: todos
-etiquetas: egresos, egreso, pago, buscar egreso, buscador, filtros, filtrar egresos, buscar cheque, buscar por compra pagada, buscar por beneficiario, filtro de fechas, chips, editar egreso, modificar egreso, corregir egreso, cambiar monto pagado, quitar factura del egreso, cambiar beneficiario, periodo cerrado, solo lectura, no deja editar, no puedo modificar, ordenar por dos columnas, ordenar por beneficiario y fecha, pagar, dinero que sale, proveedor, empleado, cheque, transferencia, comprobante de egreso, excel, exportar, anular cheque, cheque anulado, cheque dañado, reimprimir cheque, combinar conceptos, mezclar conceptos, otros conceptos, varios documentos, gasto sin factura, tipo real, tipo de egreso, decimo cuarto, decimo tercero, prestamos, rol de pago, numero de egreso, serie, secuencial, numero repetido, numero duplicado, numeracion por fecha, numero con el año, reiniciar numeracion, reinicio anual, reinicio mensual, correlativo por año, correlativo por mes, modo de numeracion, orden de formas de pago, saldo de la forma de pago, saldo disponible, ocultar saldo, aparecen documentos que no busque, resultados que no corresponden, buscar por numero de documento cobrado, cuenta del anticipo, anticipo sin cuenta, anticipo a proveedor, cuenta contable del concepto, cuenta por defecto, falta cuenta contable, pagar compra y dar anticipo, listado no se actualiza, no aparece el egreso guardado, no se ve el cambio, vuelve a la primera pagina, se pierde la pagina, refrescar listado, recargar tabla, fila resaltada, observaciones automaticas, observaciones se llenan solas, observaciones se completan solas, glosa del egreso, concepto del comprobante, descripcion del pago, pago factura de compra, falta un centavo, centavo pendiente, no puedo pagar el centavo, diferencia de un centavo, saldo de 0.01, queda un centavo, referencia muy larga, no guarda el egreso, no se guarda el pago, error al guardar egreso, value too long, texto demasiado largo, se corta la referencia, limite de caracteres, saldo equivocado, valor a pagar incorrecto, saldo menor al real, nota de venta, retencion de otro proveedor, descuenta una retencion que no es, imprimir, impresora, siguiente egreso, egreso anterior, navegar entre egresos, pasar al siguiente, flechas del modal, recorrer egresos, pago duplicado, pagar dos veces, doble pago, doble clic, egreso duplicado, ya no tiene saldo suficiente, declaracion ya pagada
-version: 1.34
+etiquetas: egresos, egreso, pago, buscar egreso, buscador, filtros, filtrar egresos, buscar cheque, buscar por compra pagada, buscar por beneficiario, filtro de fechas, chips, editar egreso, modificar egreso, corregir egreso, cambiar monto pagado, quitar factura del egreso, cambiar beneficiario, periodo cerrado, solo lectura, no deja editar, no puedo modificar, ordenar por dos columnas, ordenar por beneficiario y fecha, pagar, dinero que sale, proveedor, empleado, cheque, transferencia, comprobante de egreso, excel, exportar, anular cheque, cheque anulado, cheque dañado, reimprimir cheque, combinar conceptos, mezclar conceptos, otros conceptos, varios documentos, gasto sin factura, tipo real, tipo de egreso, decimo cuarto, decimo tercero, prestamos, rol de pago, numero de egreso, serie, secuencial, numero repetido, numero duplicado, numeracion por fecha, numero con el año, reiniciar numeracion, reinicio anual, reinicio mensual, correlativo por año, correlativo por mes, modo de numeracion, orden de formas de pago, saldo de la forma de pago, saldo disponible, ocultar saldo, aparecen documentos que no busque, resultados que no corresponden, buscar por numero de documento cobrado, cuenta del anticipo, anticipo sin cuenta, anticipo a proveedor, cuenta contable del concepto, cuenta por defecto, falta cuenta contable, pagar compra y dar anticipo, listado no se actualiza, no aparece el egreso guardado, no se ve el cambio, vuelve a la primera pagina, se pierde la pagina, refrescar listado, recargar tabla, fila resaltada, observaciones automaticas, observaciones se llenan solas, observaciones se completan solas, glosa del egreso, concepto del comprobante, descripcion del pago, pago factura de compra, falta un centavo, centavo pendiente, no puedo pagar el centavo, diferencia de un centavo, saldo de 0.01, queda un centavo, referencia muy larga, no guarda el egreso, no se guarda el pago, error al guardar egreso, value too long, texto demasiado largo, se corta la referencia, limite de caracteres, saldo equivocado, valor a pagar incorrecto, saldo menor al real, nota de venta, retencion de otro proveedor, descuenta una retencion que no es, imprimir, impresora, siguiente egreso, egreso anterior, navegar entre egresos, pasar al siguiente, flechas del modal, recorrer egresos, pago duplicado, pagar dos veces, doble pago, doble clic, egreso duplicado, ya no tiene saldo suficiente, declaracion ya pagada, crear proveedor desde el egreso, nuevo proveedor, nuevo empleado, registrar proveedor, registrar empleado, crear forma de pago, crear concepto, no aparece el boton de crear proveedor, falta el boton nuevo proveedor
+version: 1.35
 orden: 20
 estado: activo
 ---
@@ -515,6 +515,28 @@ muestra el botón **PDF** (comprobante de egreso) y, junto a él, el botón
 formas de pago) en un archivo `.xlsx`. Ambos botones quedan ocultos mientras
 el egreso es nuevo y no se ha guardado.
 
+## Crear un proveedor, empleado, forma de pago o concepto sin salir del egreso
+
+A la izquierda de la barra superior del modal hay atajos para registrar, sin
+cerrar el egreso, una **forma de pago**, un **concepto de egreso**, un
+**proveedor** o un **empleado** nuevos. Cada botón aparece **solo si el usuario
+tiene permiso de crear** en ese módulo (Formas de Cobro y Pago, Opciones de
+Ingreso/Egreso, Proveedores, Empleados); si no lo tiene, el botón no se muestra.
+
+Lo que se crea queda listo para usarse en el egreso abierto:
+
+- **Proveedor / Empleado**: queda como beneficiario del egreso (cambia solo el
+  tipo *Proveedor/Empleado* si hace falta). La ficha se queda abierta para
+  seguir completándola; al cerrarla, el egreso ya lo tiene. Si el egreso ya
+  tenía documentos de otro beneficiario, el sistema pregunta antes de quitarlos.
+- **Forma de pago**: se agrega a la lista *Forma de pago* y queda seleccionada
+  (si se creó solo para Ingresos, no aparece aquí).
+- **Concepto** sin relación con módulos: se agrega a *Otro concepto…* y queda
+  seleccionado. Un concepto ligado a un módulo aparece como botón en la barra.
+
+En un egreso en solo lectura (anulado o de periodo cerrado) nada de esto
+cambia el documento.
+
 ## Permisos
 
 Con **acceso total** se ven los egresos de toda la empresa; sin él, cada usuario
@@ -580,6 +602,11 @@ proveedores), pasa por la misma revisión al guardar:
 
 ## Historial de cambios
 
+- **1.35** — Los atajos de la barra superior del modal (crear forma de pago,
+  concepto, proveedor y empleado) solo aparecen si el usuario tiene permiso de crear
+  en ese módulo. Lo recién creado queda seleccionado en el egreso: el proveedor o
+  empleado como beneficiario, la forma de pago en su lista y el concepto general en
+  *Otro concepto…* (antes el proveedor/empleado creado había que buscarlo a mano).
 - **1.34** — Corrección: la cuenta elegida a mano en las líneas de *Otros conceptos* se
   perdía cuando el asiento se regeneraba sin abrir el egreso (anular un cheque,
   sincronizar asientos) y tomaba la del concepto (en un egreso que también paga

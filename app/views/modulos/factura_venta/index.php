@@ -1724,6 +1724,82 @@ $totalPages = $totalPagesOriginal;
         }
     };
 
+    // --- Lo creado desde los atajos de la barra superior queda listo para usar ---
+    // Solo con la factura abierta y en borrador (el buscador de cliente se deshabilita
+    // fuera de borrador, ver actualizarBotonesEstado).
+    function fvFacturaEditableAbierta() {
+        const modal = document.getElementById('modalNuevaFactura');
+        if (!modal || !modal.classList.contains('show')) return false;
+        return !document.getElementById('m-search-cliente')?.disabled && !fvFacturaEstaAutorizada();
+    }
+
+    // clientes_modal.js emite 'clienteGuardado' al crear y al editar. Se toma el registro
+    // si es nuevo, o si es el cliente ya seleccionado (refresca sus datos); la edición de
+    // otro cliente no pisa la factura. Se vuelve a pedir por getClientesAjax para traer los
+    // mismos campos que usa seleccionarCliente() (tipo de id, vendedor, plazo, forma SRI).
+    document.addEventListener('clienteGuardado', async (e) => {
+        if (!fvFacturaEditableAbierta()) return;
+        const res = e.detail;
+        if (!res || !res.ok || !res.data || !res.data.id) return;
+        const idSel   = document.getElementById('m-id-cliente')?.value || '';
+        const esNuevo = /cread/i.test(res.msg || '');
+        if (!esNuevo && String(idSel) !== String(res.data.id)) return;
+
+        const termino = String(res.data.identificacion || res.data.nombre || '').trim();
+        if (!termino) return;
+        try {
+            const resp = await fetch(`${B_URL}/${RUTA_MODULO}/getClientesAjax?q=${encodeURIComponent(termino)}`);
+            const json = await resp.json();
+            const c = (json.data || []).find(x => String(x.id) === String(res.data.id));
+            if (c) seleccionarCliente(c);
+        } catch (err) {
+            console.error('Error al recuperar el cliente recién creado:', err);
+        }
+    });
+
+    // productos_modal.js emite 'productoGuardado'; solo /store devuelve `id` (al editar no
+    // llega), así que esto reacciona únicamente a productos nuevos. Se agrega en la primera
+    // fila vacía del detalle (o en una nueva) con el mismo llenado que la búsqueda manual.
+    document.addEventListener('productoGuardado', async (e) => {
+        if (!fvFacturaEditableAbierta()) return;
+        const res = e.detail;
+        if (!res || !res.ok || !res.id) return;
+
+        const codigo  = document.getElementById('prod_codigo')?.value?.trim() || '';
+        const nombre  = document.getElementById('prod_nombre')?.value?.trim() || '';
+        const termino = codigo || nombre;
+        if (!termino || typeof window.fvSeleccionarProductoEnFila !== 'function') return;
+
+        let url = `${B_URL}/${RUTA_MODULO}/getProductosAjax?q=${encodeURIComponent(termino)}`;
+        if (EMPRESA_CONFIG.facturacion_inventario) {
+            const idBod = getIdBodegaCabecera();
+            if (idBod) url += `&id_bodega=${encodeURIComponent(idBod)}`;
+        }
+        try {
+            const resp = await fetch(url);
+            const json = await resp.json();
+            const prod = (json.data || []).find(p => String(p.id) === String(res.id));
+            if (!prod) {
+                Swal.fire({ toast: true, position: 'top-end', icon: 'info', showConfirmButton: false, timer: 2500,
+                    title: 'Producto creado. Búscalo en el detalle para agregarlo.' });
+                return;
+            }
+            let fila = [...document.querySelectorAll('#m-tbodyDetalle .row-detalle')].find(tr =>
+                !tr.querySelector('.input-id-producto')?.value &&
+                !(tr.querySelector('.input-descripcion')?.value || '').trim());
+            if (!fila) {
+                agregarFila();
+                const filas = document.querySelectorAll('#m-tbodyDetalle .row-detalle');
+                fila = filas[filas.length - 1];
+            }
+            if (!fila) return;
+            window.fvSeleccionarProductoEnFila(prod, fila);
+            if (typeof calcTotales === 'function') calcTotales();
+        } catch (err) {
+            console.error('Error al recuperar el producto recién creado:', err);
+        }
+    });
+
     // fetchSearch está definido más abajo para el listado de facturas (AJAX).
 
     async function cargarPuntosEmision(idEst) {

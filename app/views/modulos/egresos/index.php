@@ -333,19 +333,35 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
             <div class="modal-body p-0">
                 <!-- Barra de Acciones Superior -->
                 <div class="px-3 py-2 bg-light border-bottom d-flex gap-1 align-items-center flex-wrap">
-                    <button type="button" class="btn btn-outline-primary btn-sm px-2" onclick="window.modalCrearFormaPago ? window.modalCrearFormaPago() : Swal.fire('Módulo en desarrollo','','info')" title="Crear Forma de Pago">
+                    <?php
+                        // Atajos "crear X": solo si el usuario puede crear en ese módulo (ver EgresosController::index).
+                        $atajos = $permAtajos ?? [];
+                        $atajoCatalogos = !empty($atajos['forma_pago']) || !empty($atajos['opcion']);
+                        $atajoSujetos   = !empty($atajos['proveedor']) || !empty($atajos['empleado']);
+                    ?>
+                    <?php if (!empty($atajos['forma_pago'])): ?>
+                    <button type="button" class="btn btn-outline-primary btn-sm px-2" onclick="window.modalCrearFormaPago()" title="Crear Forma de Pago">
                         <i class="bi bi-credit-card fs-6"></i>
                     </button>
-                    <button type="button" class="btn btn-outline-primary btn-sm px-2" onclick="window.modalCrearOpcionEgreso ? window.modalCrearOpcionEgreso() : Swal.fire('Módulo en desarrollo','','info')" title="Crear Opción de Egreso / Concepto">
+                    <?php endif; ?>
+                    <?php if (!empty($atajos['opcion'])): ?>
+                    <button type="button" class="btn btn-outline-primary btn-sm px-2" onclick="window.modalCrearOpcionEgreso()" title="Crear Opción de Egreso / Concepto">
                         <i class="bi bi-tags fs-6"></i>
                     </button>
+                    <?php endif; ?>
+                    <?php if ($atajoCatalogos && $atajoSujetos): ?>
                     <div class="vr mx-1"></div>
-                    <button type="button" class="btn btn-outline-primary btn-sm px-2" onclick="window.modalCrearProveedor ? window.modalCrearProveedor() : Swal.fire('Módulo en desarrollo','','info')" title="Registrar nuevo Proveedor">
+                    <?php endif; ?>
+                    <?php if (!empty($atajos['proveedor'])): ?>
+                    <button type="button" class="btn btn-outline-primary btn-sm px-2" onclick="window.modalCrearProveedor()" title="Registrar nuevo Proveedor">
                         <i class="bi bi-person-plus fs-6"></i>
                     </button>
-                    <button type="button" class="btn btn-outline-primary btn-sm px-2" onclick="window.modalCrearEmpleado ? window.modalCrearEmpleado() : Swal.fire('Módulo en desarrollo','','info')" title="Registrar nuevo Empleado">
+                    <?php endif; ?>
+                    <?php if (!empty($atajos['empleado'])): ?>
+                    <button type="button" class="btn btn-outline-primary btn-sm px-2" onclick="window.modalCrearEmpleado()" title="Registrar nuevo Empleado">
                         <i class="bi bi-person-lines-fill fs-6"></i>
                     </button>
+                    <?php endif; ?>
                     <button type="button" class="btn btn-outline-danger btn-sm px-2 d-none" id="btnPdfEgreso" onclick="abrirPdfEgreso()" title="Generar PDF del comprobante">
                         <i class="bi bi-file-earmark-pdf fs-6"></i>
                     </button>
@@ -3340,8 +3356,42 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
 
     // ─── Callbacks globales para modales compartidos ──────────────────────────
     window.modalCrearFormaPago = function () { abrirModalFP(); };
-    window.onFormaPagoCreada = function (id, nombre) {
-        Swal.fire({ icon: 'success', title: '¡Creada!', text: `Forma de pago "${nombre}" creada correctamente.`, timer: 2000, showConfirmButton: false });
+    // Tras guardar la forma de pago: se agrega al combo "Forma de pago" (con los mismos data-*
+    // que las que pinta el servidor) y queda seleccionada para usarla de inmediato.
+    // `info` = {tipo, aplica_en, mostrar_saldo} (ver modal_forma_pago.php).
+    window.onFormaPagoCreada = function (id, nombre, info) {
+        info = info || {};
+        const combo = document.getElementById('eg-add-pago-forma');
+        const aplicaEgreso = !info.aplica_en || ['AMBAS', 'EGRESO'].includes(info.aplica_en);
+        if (combo && id && aplicaEgreso) {
+            let opt = [...combo.options].find(o => o.value == id);
+            if (!opt) {
+                const esAnt    = info.tipo === 'ANTICIPO';
+                const conSaldo = !!info.mostrar_saldo && !esAnt; // forma nueva: saldo 0
+                opt = document.createElement('option');
+                opt.value = id;
+                opt.dataset.tipo         = info.tipo || '';
+                opt.dataset.anticipo     = esAnt ? '1' : '0';
+                opt.dataset.nombre       = nombre;
+                opt.dataset.mostrarSaldo = info.mostrar_saldo ? '1' : '0';
+                opt.dataset.saldo        = conSaldo ? '0.00' : '';
+                opt.textContent = nombre + (conSaldo ? ' — $0.00' : '');
+                combo.appendChild(opt);
+            }
+            if (!combo.disabled) {
+                combo.value = id;
+                combo.dispatchEvent(new Event('change'));
+            }
+        }
+        Swal.fire({
+            icon: 'success',
+            title: '¡Creada!',
+            text: aplicaEgreso
+                ? `Forma de pago "${nombre}" creada y seleccionada.`
+                : `Forma de pago "${nombre}" creada, pero no aplica a Egresos.`,
+            timer: 2000,
+            showConfirmButton: false
+        });
     };
 
     window.modalCrearOpcionEgreso = function () {
@@ -3377,6 +3427,11 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                 optG.value = id;
                 optG.textContent = nombre;
                 selGen.appendChild(optG);
+                // Queda seleccionado para usarlo (salvo egreso en solo lectura)
+                if (!selGen.disabled && !document.getElementById('eg-search-input')?.disabled) {
+                    selGen.value = id;
+                    seleccionarConceptoGeneralEgreso(id);
+                }
             }
         } else {
             // Concepto relacionado con un módulo → botón dinámico
@@ -3414,6 +3469,77 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
             if (modalEl) bootstrap.Modal.getOrCreateInstance(modalEl).show();
         }
     };
+
+    /**
+     * Deja como beneficiario del egreso al proveedor/empleado recién creado desde los atajos
+     * de la barra superior. Si el egreso ya tiene cargado algo de otro beneficiario (o del
+     * otro tipo de sujeto), pide confirmación antes de soltarlo, igual que egCambiarConcepto().
+     */
+    function egUsarSujetoCreado(item, tipo) {
+        const modalEg = document.getElementById('modalNuevoEgreso');
+        if (!modalEg || !modalEg.classList.contains('show')) return;
+        if (document.getElementById('eg-search-input')?.disabled) return; // solo lectura
+        if (!item || !item.id) return;
+
+        const selSuj   = document.getElementById('eg-select-tipo-sujeto');
+        const idActual = document.getElementById('eg-input-id-sujeto').value;
+        if (selSuj.value === tipo && String(idActual) === String(item.id)) {
+            selectSujeto(item, tipo); // mismo sujeto (p. ej. se volvió a guardar): refresca el nombre
+            return;
+        }
+
+        const cambiaTipo  = selSuj.value !== tipo;
+        const hayDocs     = docsEgreso.length > 0;
+        const hayContenido = cambiaTipo
+            ? (hayDocs || manualEgreso.some(m => m.desc.trim() !== '' || m.monto > 0))
+            : hayDocs && !!idActual;
+
+        const aplicar = () => {
+            if (cambiaTipo) {
+                selSuj.value = tipo;
+                toggleBuscadorSujeto(tipo); // limpia sujeto, documentos y conceptos
+            } else if (hayDocs) {
+                docsEgreso = []; // los documentos eran del beneficiario anterior
+                renderDocsEgreso();
+                recalcEgresoTot();
+            }
+            selectSujeto(item, tipo);
+        };
+
+        if (!hayContenido) { aplicar(); return; }
+
+        Swal.fire({
+            title: '¿Usar el nuevo beneficiario?',
+            html: `Se registró <b>${escapeHtmlEg(item.razon_social || item.nombres_apellidos || '')}</b>. ` +
+                  (cambiaTipo
+                      ? 'Para usarlo se eliminarán los documentos y conceptos ya cargados (las formas de pago se conservan).'
+                      : 'Para usarlo se quitarán los documentos del beneficiario anterior.'),
+            icon: 'question',
+            showCancelButton: true,
+            confirmButtonText: 'Sí, usarlo',
+            cancelButtonText: 'No'
+        }).then(r => { if (r.isConfirmed) aplicar(); });
+    }
+
+    function escapeHtmlEg(s) {
+        return String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+    }
+
+    // proveedores_modal.js emite 'proveedorGuardado' (en document) con {id, data: {razon_social, ...}}.
+    document.addEventListener('proveedorGuardado', (ev) => {
+        const d = ev.detail || {};
+        const id = d.id || (d.data && d.data.id);
+        const nombre = (d.data && (d.data.razon_social || d.data.nombre)) || d.nombre || '';
+        if (id && nombre) egUsarSujetoCreado({ id, razon_social: nombre }, 'PROVEEDOR');
+    });
+
+    // empleados_modal.js emite 'empleadoGuardado' (en window) con {id} solo al crear; el id y
+    // el nombre se toman del propio formulario del modal, que ya quedó en modo edición.
+    window.addEventListener('empleadoGuardado', (ev) => {
+        const id = (ev.detail && ev.detail.id) || document.getElementById('emp_id')?.value;
+        const nombre = (document.getElementById('emp_nombres_apellidos')?.value || '').trim();
+        if (id && nombre) egUsarSujetoCreado({ id, nombres_apellidos: nombre }, 'EMPLEADO');
+    });
 
     function abrirPrevisualizadorDoc(id, tipo) {
         const offcanvasEl = document.getElementById('offcanvasDocPreview');
@@ -3786,22 +3912,32 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
 
 <?php
 // ─── Modales compartidos ─────────────────────────────────────────────────────
+// Cada uno solo se carga si el usuario puede crear en ese módulo (mismo criterio que
+// los botones de la barra superior, ver $permAtajos).
 
 // 1. Forma de Pago
-include_once MVC_APP . '/views/modulos/formas_cobros_pagos/modal_forma_pago.php';
+if (!empty($atajos['forma_pago'])) {
+    include_once MVC_APP . '/views/modulos/formas_cobros_pagos/modal_forma_pago.php';
+}
 
 // 2. Opción de Egreso (reutiliza modal de opciones_ingreso_egreso)
-$urlBase = BASE_URL . '/modulos/opciones_ingreso_egreso';
-$permOIE = $perm;
-$perm    = ['ver' => true, 'crear' => true, 'actualizar' => true, 'eliminar' => true, 'todo' => true];
-include_once MVC_APP . '/views/modulos/opciones_ingreso_egreso/modal_opcion.php';
-$perm = $permOIE;
+if (!empty($atajos['opcion'])) {
+    $urlBase = BASE_URL . '/modulos/opciones_ingreso_egreso';
+    $permOIE = $perm;
+    $perm    = ['ver' => true, 'crear' => true, 'actualizar' => true, 'eliminar' => true, 'todo' => true];
+    include_once MVC_APP . '/views/modulos/opciones_ingreso_egreso/modal_opcion.php';
+    $perm = $permOIE;
+}
 
 // 3. Proveedor
-include_once MVC_APP . '/views/modulos/proveedores/modal_proveedor.php';
+if (!empty($atajos['proveedor'])) {
+    include_once MVC_APP . '/views/modulos/proveedores/modal_proveedor.php';
+}
 
 // 4. Empleado
-include_once MVC_APP . '/views/modulos/empleados/modal_empleado.php';
+if (!empty($atajos['empleado'])) {
+    include_once MVC_APP . '/views/modulos/empleados/modal_empleado.php';
+}
 ?>
 
 <!-- Variable global BASE_URL requerida por los JS externos de modales compartidos -->
@@ -3809,5 +3945,9 @@ include_once MVC_APP . '/views/modulos/empleados/modal_empleado.php';
 
 <!-- JS para modales de proveedores y empleados (expone abrirModalProveedorCrear / abrirModalCrear) -->
 <script src="<?= BASE_URL ?>/js/modulos/asiento_contable_tab.js?v=<?= asset_ver('/js/modulos/asiento_contable_tab.js') ?>"></script>
+<?php if (!empty($atajos['proveedor'])): ?>
 <script src="<?= BASE_URL ?>/js/modulos/proveedores_modal.js?v=<?= asset_ver('/js/modulos/proveedores_modal.js') ?>"></script>
+<?php endif; ?>
+<?php if (!empty($atajos['empleado'])): ?>
 <script src="<?= BASE_URL ?>/js/modulos/empleados_modal.js?v=<?= asset_ver('/js/modulos/empleados_modal.js') ?>"></script>
+<?php endif; ?>

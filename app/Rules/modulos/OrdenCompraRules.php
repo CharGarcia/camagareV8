@@ -25,6 +25,10 @@ class OrdenCompraRules
         if (!empty($data['fecha_recepcion']) && !$this->esFechaValida($data['fecha_recepcion'])) {
             throw new \InvalidArgumentException('La fecha de recepción no tiene un formato válido.');
         }
+        // Mismo tope que el maxlength del input y la columna solicitado_por VARCHAR(150).
+        if (mb_strlen(trim((string)($data['solicitado_por'] ?? ''))) > 150) {
+            throw new \InvalidArgumentException('El campo "Solicitado por" no puede superar los 150 caracteres.');
+        }
     }
 
     public function validarDetalle(array $items): void

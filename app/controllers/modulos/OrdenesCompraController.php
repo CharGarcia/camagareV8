@@ -81,7 +81,9 @@ class OrdenesCompraController extends BaseModuloController
         $establecimientos = $empresaRepo->getEstablecimientos($idEmpresa);
         $secRepo = new \App\repositories\SecuencialRepository();
         $puntosEmision = [];
-        foreach ($empresaRepo->getPuntosEmision($idEmpresa) as $p) {
+        // Igual que Facturas de venta: solo puntos ACTIVOS (Empresa → Puntos de emisión)
+        // y con secuencial configurado para "Órdenes de compra".
+        foreach ($empresaRepo->getPuntosEmision($idEmpresa, true) as $p) {
             $config = $secRepo->getConfigSecuencial((int) $p['id'], 'Órdenes de compra');
             if (empty($config['id'])) {
                 continue;
@@ -145,7 +147,7 @@ class OrdenesCompraController extends BaseModuloController
         ];
         $origenes = ['PRODUCTO' => 'Ítem', 'COMPRA' => 'Compra vinculada'];
         $camposOrden = ['id', 'id_proveedor', 'id_establecimiento', 'id_punto_emision', 'establecimiento', 'punto_emision',
-                        'secuencial', 'numero_orden', 'fecha_orden', 'fecha_recepcion', 'observaciones', 'estado',
+                        'secuencial', 'numero_orden', 'fecha_orden', 'fecha_recepcion', 'solicitado_por', 'observaciones', 'estado',
                         'proveedor_nombre', 'proveedor_identificacion', 'proveedor_email'];
 
         $rows = [];
@@ -674,6 +676,10 @@ h2 { margin:3px 0 0; color:#666; font-size:10pt; text-transform:uppercase; }
             $sheet->setCellValue('A4', 'Proveedor: ' . (string) ($cabecera['proveedor_nombre'] ?? ''));
             $sheet->setCellValue('A5', 'Identificación: ' . (string) ($cabecera['proveedor_identificacion'] ?? ''));
             $sheet->setCellValue('A6', 'Estado: ' . ucfirst((string) ($cabecera['estado'] ?? '')));
+            $solicitadoPor = trim((string) ($cabecera['solicitado_por'] ?? ''));
+            if ($solicitadoPor !== '') {
+                $sheet->setCellValue('A7', 'Solicitado por: ' . $solicitadoPor);
+            }
 
             $headerRow = 8;
             // En el Excel la nota sí va como columna propia (a diferencia del PDF, donde se
@@ -906,6 +912,7 @@ h2 { margin:3px 0 0; color:#666; font-size:10pt; text-transform:uppercase; }
             'id_punto_emision'   => (int) ($_POST['id_punto_emision'] ?? 0),
             'fecha_orden'        => trim($_POST['fecha_orden'] ?? ''),
             'fecha_recepcion'    => trim($_POST['fecha_recepcion'] ?? '') ?: null,
+            'solicitado_por'     => trim($_POST['solicitado_por'] ?? '') ?: null,
             'observaciones'      => trim($_POST['observaciones'] ?? '') ?: null,
             'estado'             => trim($_POST['estado'] ?? 'borrador'),
             'created_by'         => $idUsuario,

@@ -107,6 +107,14 @@ class IngresosController extends BaseModuloController
             }
         }
 
+        // Atajos "crear X" de la barra del modal: solo se muestran si el usuario puede crear en
+        // ese módulo (el guard real sigue en el guardar de cada módulo, con requireCrear()).
+        $permAtajos = [
+            'forma_pago' => $this->permisosModuloPorRuta('modulos/formas_cobros_pagos')['crear'],
+            'opcion'     => $this->permisosModuloPorRuta('modulos/opciones_ingreso_egreso')['crear'],
+            'cliente'    => $this->permisosModuloPorRuta('modulos/clientes')['crear'],
+        ];
+
         $this->viewWithLayout('layouts.main', 'modulos/ingresos/index', [
             'titulo'            => 'Ingresos',
             'perm'              => $perm,
@@ -133,6 +141,7 @@ class IngresosController extends BaseModuloController
             'formasCobro'       => $formasCobro,
             'conceptos'         => $conceptos,
             'comportamientosConPendientes' => $comportamientosConPendientes,
+            'permAtajos'        => $permAtajos,
             'fullWidth'         => true,
         ]);
     }

@@ -319,16 +319,29 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
             <div class="modal-body p-0">
                 <!-- Barra de Acciones Superior -->
                 <div class="px-3 py-2 bg-light border-bottom d-flex gap-1 align-items-center flex-wrap">
-                    <button type="button" class="btn btn-outline-primary btn-sm px-2" onclick="window.modalCrearFormaPago ? window.modalCrearFormaPago() : Swal.fire('Módulo en desarrollo','','info')" title="Crear Forma de Pago">
+                    <?php
+                        // Atajos "crear X": solo si el usuario puede crear en ese módulo (ver IngresosController::index).
+                        $atajos = $permAtajos ?? [];
+                        $atajoCatalogos = !empty($atajos['forma_pago']) || !empty($atajos['opcion']);
+                    ?>
+                    <?php if (!empty($atajos['forma_pago'])): ?>
+                    <button type="button" class="btn btn-outline-primary btn-sm px-2" onclick="window.modalCrearFormaPago()" title="Crear Forma de Pago">
                         <i class="bi bi-credit-card fs-6"></i>
                     </button>
-                    <button type="button" class="btn btn-outline-primary btn-sm px-2" onclick="window.modalCrearOpcionIngreso ? window.modalCrearOpcionIngreso() : Swal.fire('Módulo en desarrollo','','info')" title="Crear Opción de Ingreso">
+                    <?php endif; ?>
+                    <?php if (!empty($atajos['opcion'])): ?>
+                    <button type="button" class="btn btn-outline-primary btn-sm px-2" onclick="window.modalCrearOpcionIngreso()" title="Crear Opción de Ingreso">
                         <i class="bi bi-tags fs-6"></i>
                     </button>
+                    <?php endif; ?>
+                    <?php if ($atajoCatalogos && !empty($atajos['cliente'])): ?>
                     <div class="vr mx-1"></div>
-                    <button type="button" class="btn btn-outline-primary btn-sm px-2" onclick="window.abrirModalClienteCrear ? window.abrirModalClienteCrear() : Swal.fire('Módulo en desarrollo','','info')" title="Registrar nuevo cliente">
+                    <?php endif; ?>
+                    <?php if (!empty($atajos['cliente'])): ?>
+                    <button type="button" class="btn btn-outline-primary btn-sm px-2" onclick="window.abrirModalClienteCrear()" title="Registrar nuevo cliente">
                         <i class="bi bi-person-plus fs-6"></i>
                     </button>
+                    <?php endif; ?>
                     <button type="button" class="btn btn-outline-danger btn-sm px-2 d-none" id="btnPdfIngreso" onclick="abrirPdfIngreso()" title="Generar PDF del comprobante">
                         <i class="bi bi-file-earmark-pdf fs-6"></i>
                     </button>
@@ -3133,20 +3146,28 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
 
 <?php
 // ── Modales compartidos incluidos desde Ingresos ─────────────────────────────
+// Cada uno solo se carga si el usuario puede crear en ese módulo (mismo criterio que
+// los botones de la barra superior, ver $permAtajos).
 
 // 1. Forma de Pago
-include_once MVC_APP . '/views/modulos/formas_cobros_pagos/modal_forma_pago.php';
+if (!empty($atajos['forma_pago'])) {
+    include_once MVC_APP . '/views/modulos/formas_cobros_pagos/modal_forma_pago.php';
+}
 
 // 2. Opción de Ingreso / Egreso
-$urlBase    = BASE_URL . '/modulos/opciones_ingreso_egreso';
-$permOIE    = $perm; // guardar permisos actuales
-$perm       = ['ver' => true, 'crear' => true, 'actualizar' => true, 'eliminar' => true, 'todo' => true];
-include_once MVC_APP . '/views/modulos/opciones_ingreso_egreso/modal_opcion.php';
-$perm = $permOIE;
+if (!empty($atajos['opcion'])) {
+    $urlBase    = BASE_URL . '/modulos/opciones_ingreso_egreso';
+    $permOIE    = $perm; // guardar permisos actuales
+    $perm       = ['ver' => true, 'crear' => true, 'actualizar' => true, 'eliminar' => true, 'todo' => true];
+    include_once MVC_APP . '/views/modulos/opciones_ingreso_egreso/modal_opcion.php';
+    $perm = $permOIE;
+}
 
 // 3. Clientes
-$urlBaseClientes  = BASE_URL . '/modulos/clientes';
-include_once MVC_APP . '/views/modulos/clientes/modal_cliente.php';
+if (!empty($atajos['cliente'])) {
+    $urlBaseClientes  = BASE_URL . '/modulos/clientes';
+    include_once MVC_APP . '/views/modulos/clientes/modal_cliente.php';
+}
 ?>
 
 <script>
@@ -3157,16 +3178,42 @@ window.modalCrearFormaPago = function () {
     abrirModalFP();
 };
 
-// Callback tras guardar forma de pago: agrega la nueva al select de formas del modal
-window.onFormaPagoCreada = function (id, nombre) {
+// Callback tras guardar forma de pago: la agrega al combo "Forma de Cobro" (con los mismos
+// data-* que las que pinta el servidor) y la deja seleccionada para usarla de inmediato.
+// `info` = {tipo, aplica_en, mostrar_saldo} (ver modal_forma_pago.php).
+window.onFormaPagoCreada = function (id, nombre, info) {
+    info = info || {};
+    const combo = document.getElementById('m-add-cobro-forma');
+    const aplicaIngreso = !info.aplica_en || ['AMBAS', 'INGRESO'].includes(info.aplica_en);
+    if (combo && id && aplicaIngreso) {
+        let opt = [...combo.options].find(o => o.value == id);
+        if (!opt) {
+            const esAnt   = info.tipo === 'ANTICIPO';
+            const conSaldo = !!info.mostrar_saldo && !esAnt; // forma nueva: saldo 0
+            opt = document.createElement('option');
+            opt.value = id;
+            opt.dataset.tipo         = info.tipo || '';
+            opt.dataset.anticipo     = esAnt ? '1' : '0';
+            opt.dataset.nombre       = nombre;
+            opt.dataset.mostrarSaldo = info.mostrar_saldo ? '1' : '0';
+            opt.dataset.saldo        = conSaldo ? '0.00' : '';
+            opt.textContent = nombre + (conSaldo ? ' — $0.00' : '');
+            combo.appendChild(opt);
+        }
+        if (!combo.disabled) {
+            combo.value = id;
+            combo.dispatchEvent(new Event('change'));
+        }
+    }
     Swal.fire({
         icon: 'success',
         title: 'Forma de pago creada',
-        text: `"${nombre}" fue registrada. Ya puedes seleccionarla en la lista de cobros.`,
+        text: aplicaIngreso
+            ? `"${nombre}" fue registrada y quedó seleccionada en la forma de cobro.`
+            : `"${nombre}" fue registrada, pero no aplica a Ingresos.`,
         timer: 2500,
         showConfirmButton: false
     });
-    if (typeof renderPagos === 'function') renderPagos();
 };
 
 // Botón: Crear Opción de Ingreso (preselecciona "Ingreso" antes de abrir)
@@ -3201,12 +3248,16 @@ window.onOpcionCreada = function (id, nombre, comportamiento, cuenta) {
     }
 
     if (comportamiento === 'GENERAL') {
-        // Concepto sin relación con módulos → al selector
+        // Concepto sin relación con módulos → al selector, y queda seleccionado para usarlo
         if (selGen) {
             const optG = document.createElement('option');
             optG.value = id;
             optG.textContent = nombre;
             selGen.appendChild(optG);
+            if (!selGen.disabled) {
+                selGen.value = id;
+                seleccionarConceptoGeneralIngreso(id);
+            }
         }
     } else if (grupo && sel) {
         // Concepto relacionado con un módulo → botón visible
@@ -3236,6 +3287,8 @@ document.addEventListener('clienteGuardado', async (ev) => {
     let ident = '';
     if (ev.detail && ev.detail.data && ev.detail.data.identificacion) ident = String(ev.detail.data.identificacion).trim();
     if (!ident) return;
+    // Un ingreso en solo lectura (anulado/periodo cerrado) no cambia de cliente.
+    if (document.getElementById('m-recibo-de-input')?.disabled) return;
     try {
         const res  = await fetch(`<?= BASE_URL ?>/<?= $rutaModulo ?>/getClientesAjax?q=${encodeURIComponent(ident)}`);
         const data = await res.json();
@@ -3246,4 +3299,6 @@ document.addEventListener('clienteGuardado', async (ev) => {
 });
 </script>
 <script src="<?= BASE_URL ?>/js/modulos/asiento_contable_tab.js?v=<?= asset_ver('/js/modulos/asiento_contable_tab.js') ?>"></script>
+<?php if (!empty($atajos['cliente'])): ?>
 <script src="<?= BASE_URL ?>/js/modulos/clientes_modal.js?v=<?= asset_ver('/js/modulos/clientes_modal.js') ?>"></script>
+<?php endif; ?>
