@@ -6,7 +6,7 @@ ruta_modulo: modulos/configuracion-contable
 tipo: modulo
 visibilidad: admin
 etiquetas: configuracion contable, cuentas por documento, asiento automatico, parametrizacion, ventas, compras, cierre, tipo de produccion, bien, servicio, filtro por año, periodo, listado de proveedores, listado de clientes, cobros y pagos, ingresos y egresos, forma de pago, cuenta bancaria, efectivo, misma cuenta en los dos bloques, formas hermanas, cheques y transferencias, mismo banco, numero de cuenta, nomina, rol de pagos, prestamo quirografario, prestamo hipotecario, prestamo empresa, prestamos iess, cuentas opcionales, costo de ventas, costo de venta, inventario, asiento sin costo, no sale el costo, cuenta de iva del cliente, reglas por cliente, buscar proveedor, buscar cliente, buscar ficha, filtrar fichas, muchos proveedores, cuentas faltantes, modulos que contabilizan, apagar asientos, no generar asientos, no contabilizar, desactivar contabilidad, interruptor, consignaciones sin asiento, aviso de asientos pendientes, asientos pendientes en el balance, proveedores sin cuentas, clientes sin cuentas, productos sin cuentas, pendientes de configurar, retenciones en venta, retenciones en compra, retencion de renta, no aparecen las retenciones, codigo de retencion, catalogo de retenciones sri, codigo ats, codigo del anexo, retencion mal asignada, codigo de retencion no existe, en que documento esta el error, retencion con codigo invalido, sugerencias, sugerir cuentas, proveedores que compran lo mismo, copiar cuentas de otro proveedor, misma cuenta para varios proveedores, gasolineras, proveedores parecidos, subtotal de compras, cuenta de gasto del proveedor, mostrar las demas cuentas, ver todas las cuentas, tipo de asiento no aparece, falta tipo de asiento en el selector, modulo apagado, personalizar asiento contable, tabla de proveedores, detalle de compras, cuenta de subtotal por proveedor
-version: 1.30
+version: 1.31
 orden: 5
 estado: activo
 ---
@@ -446,6 +446,16 @@ ingresos o egresos. Solo falta asignar la cuenta.
   en la General como respaldo. No es obligatorio usar la General. Antes ese
   producto se quedaba fuera del asiento sin avisar; ahora el asiento no se genera
   hasta configurarlo.
+- **"Hay N producto(s)/servicio(s) sin cuenta contable para Ventas con Factura"**
+  (aviso al generar asientos): es el mismo caso de arriba, detectado **antes** de
+  facturar. Lista los productos o servicios que no tienen regla propia y cuya
+  categoría, marca o tipo de producción tampoco tiene cuenta, indicando si están
+  *sin categoría* o *sin marca* y qué cuenta les falta (Cuenta por cobrar,
+  Subtotal o el IVA de su tarifa). Si la empresa tiene cuenta General para ese
+  concepto, no aparece el aviso. También se muestra aquí, arriba de la
+  configuración, al elegir **Ventas con Factura** (cada producto enlaza a
+  Productos). Solución: asignarles la categoría o marca en **Productos**, o
+  configurar la regla que corresponda.
 - **No aparece una retención (de renta o IVA) para configurar**: la lista solo
   muestra códigos ya usados en retenciones de la empresa. Si el código sale con el
   aviso de que no existe en el catálogo SRI, el problema es el código del
@@ -473,6 +483,10 @@ ingresos o egresos. Solo falta asignar la cuenta.
 
 ## Historial de cambios
 
+- **1.31** — Aviso preventivo al generar asientos: productos y servicios sin categoría o sin
+  marca (o sin ninguna regla) que se quedarían sin cuenta en Ventas con Factura. El mismo aviso
+  aparece arriba de la configuración al elegir el tipo de asiento «Ventas con Factura», con
+  enlace a cada producto.
 - **1.30** — Si un producto de una venta, recibo, nota de crédito o compra no tiene cuenta en
   ninguna regla (ni producto, ni categoría, ni marca, ni tipo de producción) ni en la General,
   el asiento ya no se genera sin esa línea: se detiene y dice qué producto y qué cuenta faltan.

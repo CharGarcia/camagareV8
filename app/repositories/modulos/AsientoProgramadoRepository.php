@@ -1801,6 +1801,92 @@ class AsientoProgramadoRepository extends BaseRepository
     }
 
     /**
+     * Productos/servicios activos que, en una factura de venta, NO encontrarían cuenta en ningún nivel
+     * de la cascada (AsientoBuilderService::repartirVentasCascada y el IVA por tarifa): ni por el
+     * propio producto, ni su categoría, ni su marca, ni su tipo de producción (no aplica al IVA), ni
+     * la General. Sus facturas no generan asiento (se bloquea). Caso típico: la empresa configura
+     * todo por categoría (o por marca) y un producto quedó SIN categoría / SIN marca (GOLIFE,
+     * «SERVICIO GO WOMAN»).
+     *
+     * Solo se revisa un concepto si NO tiene cuenta General: con General, todo producto resuelve.
+     * Las reglas por Cliente no se consideran (dependen de quién compre, no del producto).
+     *
+     * @return array<int, array{codigo:string, nombre:string, sin_categoria:bool, sin_marca:bool, faltan:string}>
+     */
+    public function getProductosSinCuentaVentas(int $idEmpresa, int $limite = 100): array
+    {
+        $tipos = [];
+        foreach ($this->getReglasGeneralesPorConcepto($idEmpresa, 'ventas_factura') as $r) {
+            $tipos[(string) ($r['codigo'] ?? '')] = [
+                'id'      => (int) ($r['id_asiento_tipo'] ?? 0),
+                'general' => (int) ($r['id_cuenta'] ?? 0) > 0,
+                'nombre'  => (string) ($r['concepto'] ?? ''),
+            ];
+        }
+        $checks = [];
+        $params = [':e' => $idEmpresa];
+        foreach (['PORCOBRARFACTURAVENTA' => 'Cuenta por cobrar', 'SUBTOTALFACTURAVENTA' => 'Subtotal (venta)'] as $cod => $etiqueta) {
+            $t = $tipos[$cod] ?? null;
+            if ($t === null || $t['id'] <= 0 || $t['general']) {
+                continue; // con General, cualquier producto resuelve
+            }
+            $k = ':at' . count($checks);
+            $params[$k] = $t['id'];
+            $checks[] = "CASE WHEN NOT EXISTS (
+                            SELECT 1 FROM asientos_programados ap
+                             WHERE ap.id_empresa = p.id_empresa AND ap.eliminado = false
+                               AND ap.id_cuenta IS NOT NULL AND ap.id_asiento_tipo = {$k}
+                               AND (   (ap.tipo_referencia = 'producto'  AND ap.id_referencia = p.id)
+                                    OR (ap.tipo_referencia = 'categoria' AND ap.id_referencia = c.id)
+                                    OR (ap.tipo_referencia = 'marca'     AND ap.id_referencia = m.id)
+                                    OR (ap.tipo_referencia = 'tipo_produccion'
+                                        AND ap.id_referencia = (CASE p.tipo_produccion WHEN '02' THEN 2 WHEN '01' THEN 1 END))))
+                         THEN '{$etiqueta}' END";
+        }
+        // IVA de la tarifa del producto (solo tarifas con porcentaje > 0): cascada propia producto →
+        // categoría → marca → General (iva_ventas_factura); el tipo de producción NO participa.
+        $checks[] = "CASE WHEN COALESCE(t.porcentaje_iva, 0) > 0 AND NOT EXISTS (
+                        SELECT 1 FROM asientos_programados ap
+                         WHERE ap.id_empresa = p.id_empresa AND ap.eliminado = false AND ap.id_cuenta IS NOT NULL
+                           AND (   (ap.id_asiento_tipo = 0 AND ap.direccion_iva = 'venta'
+                                    AND ap.codigo_tarifa_iva = p.tarifa_iva::text
+                                    AND (   (ap.tipo_referencia = 'producto'  AND ap.id_referencia = p.id)
+                                         OR (ap.tipo_referencia = 'categoria' AND ap.id_referencia = c.id)
+                                         OR (ap.tipo_referencia = 'marca'     AND ap.id_referencia = m.id)))
+                                OR (ap.tipo_referencia = 'iva_ventas_factura' AND ap.id_referencia = p.tarifa_iva)))
+                     THEN 'IVA ' || t.tarifa END";
+
+        $limite = max(1, $limite);
+        $sql = "SELECT x.codigo, x.nombre, x.sin_categoria, x.sin_marca, array_to_string(x.faltan, ', ') AS faltan
+                  FROM (
+                    SELECT p.codigo, p.nombre, (c.id IS NULL) AS sin_categoria, (m.id IS NULL) AS sin_marca,
+                           array_remove(ARRAY[" . implode(', ', $checks) . "], NULL) AS faltan
+                      FROM productos p
+                      LEFT JOIN categorias c ON c.id = p.id_categoria AND c.eliminado = false AND c.id_empresa = p.id_empresa
+                      LEFT JOIN marcas m ON m.id = p.id_marca AND m.eliminado = false AND m.id_empresa = p.id_empresa
+                      LEFT JOIN tarifa_iva t ON t.codigo = p.tarifa_iva::text
+                     WHERE p.id_empresa = :e AND p.eliminado = false
+                  ) x
+                 WHERE cardinality(x.faltan) > 0
+                 ORDER BY x.sin_categoria DESC, x.sin_marca DESC, x.nombre
+                 LIMIT {$limite}";
+        try {
+            $st = $this->db->prepare($sql);
+            $st->execute($params);
+            return array_map(fn($r) => [
+                'codigo'        => (string) $r['codigo'],
+                'nombre'        => (string) $r['nombre'],
+                'sin_categoria' => (bool) $r['sin_categoria'],
+                'sin_marca'     => (bool) $r['sin_marca'],
+                'faltan'        => (string) $r['faltan'],
+            ], $st->fetchAll(PDO::FETCH_ASSOC));
+        } catch (\Throwable $e) {
+            error_log('getProductosSinCuentaVentas: ' . $e->getMessage());
+            return [];
+        }
+    }
+
+    /**
      * Reglas propias del proveedor en el asiento de compras (conceptos + overrides de IVA de compra),
      * con los campos necesarios para replicarlas en otro proveedor.
      */

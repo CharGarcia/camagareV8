@@ -84,6 +84,37 @@
         sel.value = (actual && !fuera.has(actual)) ? actual : '';
     };
 
+    /**
+     * Aviso de Ventas con Factura: productos/servicios que no encuentran cuenta en ningún nivel
+     * (producto, categoría, marca, tipo de producción ni General). Sus facturas no generan asiento.
+     * Datos: AsientoProgramadoRepository::getProductosSinCuentaVentas() (máx. 100).
+     */
+    window.ASIENTOPROG_renderProductosSinCuenta = function (lista) {
+        const cont = document.getElementById('avisoProductosSinCuenta');
+        if (!cont) return;
+        if (!lista.length) { cont.style.display = 'none'; cont.innerHTML = ''; return; }
+        const esc = (s) => String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+        const rutaProd = `${window.BASE_URL || ''}/modulos/productos`;
+        const filas = lista.map(p => {
+            const sin = [p.sin_categoria ? 'sin categoría' : '', p.sin_marca ? 'sin marca' : ''].filter(Boolean)
+                .map(t => `<span class="badge bg-warning bg-opacity-10 text-warning border border-warning-subtle ms-1">${t}</span>`).join('');
+            const href = `${rutaProd}?b=${encodeURIComponent(p.codigo || p.nombre)}`;
+            return `<li class="mb-1"><a href="${href}" target="_blank" rel="noopener" title="Abrir en Productos">${esc(p.codigo)} - ${esc(p.nombre)}</a>${sin}
+                    <span class="text-muted"> · falta: ${esc(p.faltan)}</span></li>`;
+        }).join('');
+        const n = lista.length >= 100 ? 'Más de 99' : lista.length;
+        cont.innerHTML = `
+            <div class="alert alert-warning py-2 px-3 small mb-0">
+                <div class="fw-semibold mb-1"><i class="bi bi-exclamation-triangle me-1"></i>
+                    ${n} producto(s)/servicio(s) sin cuenta contable: sus facturas no generarán asiento.</div>
+                <div class="mb-1">No tienen regla propia y su categoría, marca o tipo de producción tampoco tiene la cuenta
+                    (y no hay cuenta General para ese concepto). Asígneles la categoría o marca en <b>Productos</b>,
+                    o configure la regla que corresponda (por producto, categoría, marca, tipo de producción o General).</div>
+                <ul class="mb-0 ps-3" style="max-height:180px;overflow:auto">${filas}</ul>
+            </div>`;
+        cont.style.display = '';
+    };
+
     window.ASIENTOPROG_configurar = async function () {
         const selector = document.getElementById('tipoAsientoSelector');
         const tipoAsiento = selector.value;
@@ -104,6 +135,7 @@
             const res = await resp.json();
 
             if (res.ok) {
+                ASIENTOPROG_renderProductosSinCuenta(res.productos_sin_cuenta || []);
                 // Modos especiales con dos acordeones (referencias de otros módulos)
                 if (res.modo === 'ingresos_egresos') {
                     ASIENTOPROG_renderModoIngresoEgreso(res, selector);

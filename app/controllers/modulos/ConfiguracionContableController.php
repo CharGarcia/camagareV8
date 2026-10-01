@@ -394,7 +394,12 @@ class ConfiguracionContableController extends BaseModuloController
             }
 
             $metodo = $this->repository->getMetodoPreferencia($idEmpresa, $tipoAsiento);
-            echo json_encode(['ok' => true, 'data' => $reglas, 'metodo' => $metodo]);
+            $resp = ['ok' => true, 'data' => $reglas, 'metodo' => $metodo];
+            if ($tipoAsiento === 'ventas_factura') {
+                // Productos que no encontrarían cuenta en ningún nivel: sus facturas no generan asiento.
+                $resp['productos_sin_cuenta'] = $this->repository->getProductosSinCuentaVentas($idEmpresa, 100);
+            }
+            echo json_encode($resp);
         } catch (\Throwable $e) {
             \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             echo json_encode(['ok' => false, 'error' => $e->getMessage()]);

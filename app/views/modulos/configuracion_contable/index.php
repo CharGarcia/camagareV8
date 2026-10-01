@@ -198,6 +198,9 @@ $base = BASE_URL;
         </div>
     </div>
 
+    <!-- Productos/servicios sin cuenta en Ventas con Factura (lo arma ASIENTOPROG_renderProductosSinCuenta) -->
+    <div id="avisoProductosSinCuenta" class="mb-3" style="display:none"></div>
+
     <div class="accordion shadow-sm rounded-3 overflow-hidden" id="acordeonConfiguracion">
 
         <!-- ACORDEÓN 1: CONFIGURACIÓN GENERAL -->

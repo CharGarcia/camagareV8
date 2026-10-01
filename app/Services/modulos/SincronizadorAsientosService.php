@@ -155,7 +155,7 @@ class SincronizadorAsientosService
                 (string) ($t['clave'] ?? '')
             );
         } elseif ($paso === count($trabajos)) {
-            $nombrePaso = 'Configuración de cuentas (Ingresos/Egresos, Cobros/Pagos)';
+            $nombrePaso = 'Configuración de cuentas (Ingresos/Egresos, Cobros/Pagos, Productos en ventas)';
             $this->verificarConfiguracionCuentas($db, $idEmpresa);
         } elseif ($paso === count($trabajos) + 1) {
             $nombrePaso = 'Consignaciones en Ventas pendientes';
@@ -1094,6 +1094,31 @@ class SincronizadorAsientosService
             }
         } catch (\Throwable $e) {
             // Tabla inexistente (migración pendiente): omitir sin romper.
+        }
+
+        // Productos/servicios que en una factura de venta no encontrarían cuenta en NINGÚN nivel
+        // (producto, categoría, marca, tipo de producción ni General): sus facturas se bloquean
+        // (AsientoBuilderService::aplicarAjusteRedondeo). Caso típico: todo configurado por
+        // categoría o por marca y un producto quedó sin categoría / sin marca. Si existe la cuenta
+        // General no se avisa nada: ahí todo producto resuelve. Ver getProductosSinCuentaVentas().
+        try {
+            if ($interruptor->contabiliza($idEmpresa, 'facturas_venta')) {
+                $productos = $programadoRepo->getProductosSinCuentaVentas($idEmpresa, 100);
+                if ($productos) {
+                    $nombres = array_map(function (array $p): string {
+                        $sin = array_filter([$p['sin_categoria'] ? 'sin categoría' : null, $p['sin_marca'] ? 'sin marca' : null]);
+                        return $p['nombre'] . ($sin ? ' (' . implode(', ', $sin) . ')' : '') . ' → falta: ' . $p['faltan'];
+                    }, array_slice($productos, 0, 5));
+                    $n = count($productos);
+                    $this->warnings[] = 'Hay ' . ($n >= 100 ? 'más de 99' : $n) . ' producto(s)/servicio(s) sin cuenta contable para Ventas con Factura: '
+                        . 'no tienen regla propia y su categoría, marca o tipo de producción tampoco la tiene (ni hay cuenta General). '
+                        . 'Sus facturas no generarán asiento. ' . implode(' · ', $nombres)
+                        . ($n > 5 ? ' · y ' . ($n >= 100 ? 'más' : ($n - 5) . ' más') : '') . '. '
+                        . 'Asígneles la categoría o marca en Productos, o configure la cuenta en Configuración Contable (Ventas con Factura).';
+                }
+            }
+        } catch (\Throwable $e) {
+            // Catálogo sin migrar: omitir sin romper la sincronización.
         }
     }
 
