@@ -1801,6 +1801,123 @@ class AsientoProgramadoRepository extends BaseRepository
     }
 
     /**
+     * Diagnóstico de las líneas que no resolvieron cuenta en el reparto por línea (ventas, recibos,
+     * NC): por cada producto, su categoría/marca y si el tipo de asiento de $idAsientoTipo se
+     * contabiliza por categoría/marca (hay alguna regla de esa dimensión con cuenta). Sirve para que
+     * el mensaje diga lo que realmente falta (p. ej. "no tiene categoría") y no solo la cuenta.
+     *
+     * @param int[] $idsProductos
+     * @return array{usa_categoria:bool, usa_marca:bool, productos: array<int, array{nombre:string, categoria:?string, marca:?string}>}
+     */
+    public function getDiagnosticoProductosSinCuenta(int $idEmpresa, int $idAsientoTipo, array $idsProductos): array
+    {
+        $out = ['usa_categoria' => false, 'usa_marca' => false, 'productos' => []];
+        $ids = array_values(array_unique(array_filter(array_map('intval', $idsProductos))));
+        try {
+            $st = $this->db->prepare(
+                "SELECT ap.tipo_referencia
+                   FROM asientos_programados ap
+                  WHERE ap.id_empresa = :e AND ap.eliminado = false AND ap.id_cuenta IS NOT NULL
+                    AND ap.tipo_referencia IN ('categoria', 'marca')
+                    AND ap.id_asiento_tipo IN (SELECT id FROM asientos_tipo
+                                                WHERE tipo_asiento = (SELECT tipo_asiento FROM asientos_tipo WHERE id = :t))
+                  GROUP BY ap.tipo_referencia"
+            );
+            $st->execute([':e' => $idEmpresa, ':t' => $idAsientoTipo]);
+            foreach ($st->fetchAll(PDO::FETCH_COLUMN) as $dim) {
+                $out['usa_' . $dim] = true;
+            }
+            if ($ids) {
+                $in = implode(',', array_map(fn($i) => ':p' . $i, array_keys($ids)));
+                $params = [':e' => $idEmpresa];
+                foreach ($ids as $i => $id) {
+                    $params[':p' . $i] = $id;
+                }
+                $st = $this->db->prepare(
+                    "SELECT p.id, p.nombre, c.nombre AS categoria, m.nombre AS marca
+                       FROM productos p
+                       LEFT JOIN categorias c ON c.id = p.id_categoria AND c.eliminado = false AND c.id_empresa = p.id_empresa
+                       LEFT JOIN marcas m     ON m.id = p.id_marca     AND m.eliminado = false AND m.id_empresa = p.id_empresa
+                      WHERE p.id_empresa = :e AND p.id IN ({$in})
+                      ORDER BY p.nombre"
+                );
+                $st->execute($params);
+                foreach ($st->fetchAll(PDO::FETCH_ASSOC) as $r) {
+                    $out['productos'][(int) $r['id']] = [
+                        'nombre'    => (string) $r['nombre'],
+                        'categoria' => $r['categoria'] !== null ? (string) $r['categoria'] : null,
+                        'marca'     => $r['marca'] !== null ? (string) $r['marca'] : null,
+                    ];
+                }
+            }
+        } catch (\Throwable $e) {
+            error_log('getDiagnosticoProductosSinCuenta: ' . $e->getMessage());
+        }
+        return $out;
+    }
+
+    /**
+     * Si la empresa contabiliza un tipo de asiento POR CATEGORÍA (o POR MARCA) — tiene al menos una
+     * regla de categoría/marca con cuenta en ese tipo, incluido el IVA por tarifa de ventas/compras —,
+     * todos sus productos y servicios deben tener asignada una categoría (o marca) válida. Devuelve,
+     * por dimensión usada, los productos que no la tienen. Se excluyen los productos con regla
+     * propia en ese tipo de asiento (no dependen de la categoría/marca).
+     *
+     * @return array{categoria: ?array{total:int, items:array}, marca: ?array{total:int, items:array}}
+     *         null = la empresa no contabiliza ese tipo por esa dimensión.
+     */
+    public function getProductosSinClasificacion(int $idEmpresa, string $tipoAsiento, int $limite = 100): array
+    {
+        $direccionIva = ['ventas_factura' => 'venta', 'adquisiciones_compras' => 'compra'][$tipoAsiento] ?? null;
+        $condRegla = "ap.id_empresa = :e AND ap.eliminado = false AND ap.id_cuenta IS NOT NULL
+                      AND (ap.id_asiento_tipo IN (SELECT id FROM asientos_tipo WHERE tipo_asiento = :ta)"
+                   . ($direccionIva ? " OR (ap.id_asiento_tipo = 0 AND ap.direccion_iva = :dir)" : '') . ")";
+        $params = [':e' => $idEmpresa, ':ta' => $tipoAsiento];
+        if ($direccionIva) {
+            $params[':dir'] = $direccionIva;
+        }
+        $dims = [
+            'categoria' => ['tabla' => 'categorias', 'col' => 'id_categoria'],
+            'marca'     => ['tabla' => 'marcas',     'col' => 'id_marca'],
+        ];
+        $limite = max(1, $limite);
+        $out = ['categoria' => null, 'marca' => null];
+        try {
+            foreach ($dims as $dim => $d) {
+                $st = $this->db->prepare("SELECT EXISTS (SELECT 1 FROM asientos_programados ap
+                                                          WHERE {$condRegla} AND ap.tipo_referencia = '{$dim}')");
+                $st->execute($params);
+                if (!$st->fetchColumn()) {
+                    continue;
+                }
+                $st = $this->db->prepare(
+                    "SELECT p.codigo, p.nombre, p.tipo_produccion, COUNT(*) OVER () AS total
+                       FROM productos p
+                       LEFT JOIN {$d['tabla']} x ON x.id = p.{$d['col']} AND x.eliminado = false AND x.id_empresa = p.id_empresa
+                      WHERE p.id_empresa = :e AND p.eliminado = false AND x.id IS NULL
+                        AND NOT EXISTS (SELECT 1 FROM asientos_programados ap
+                                         WHERE {$condRegla} AND ap.tipo_referencia = 'producto' AND ap.id_referencia = p.id)
+                      ORDER BY p.nombre
+                      LIMIT {$limite}"
+                );
+                $st->execute($params);
+                $rows = $st->fetchAll(PDO::FETCH_ASSOC);
+                $out[$dim] = [
+                    'total' => $rows ? (int) $rows[0]['total'] : 0,
+                    'items' => array_map(fn($r) => [
+                        'codigo'   => (string) $r['codigo'],
+                        'nombre'   => (string) $r['nombre'],
+                        'servicio' => (string) $r['tipo_produccion'] === '02',
+                    ], $rows),
+                ];
+            }
+        } catch (\Throwable $e) {
+            error_log('getProductosSinClasificacion: ' . $e->getMessage());
+        }
+        return $out;
+    }
+
+    /**
      * Productos/servicios activos que, en una factura de venta, NO encontrarían cuenta en ningún nivel
      * de la cascada (AsientoBuilderService::repartirVentasCascada y el IVA por tarifa): ni por el
      * propio producto, ni su categoría, ni su marca, ni su tipo de producción (no aplica al IVA), ni

@@ -395,10 +395,8 @@ class ConfiguracionContableController extends BaseModuloController
 
             $metodo = $this->repository->getMetodoPreferencia($idEmpresa, $tipoAsiento);
             $resp = ['ok' => true, 'data' => $reglas, 'metodo' => $metodo];
-            if ($tipoAsiento === 'ventas_factura') {
-                // Productos que no encontrarían cuenta en ningún nivel: sus facturas no generan asiento.
-                $resp['productos_sin_cuenta'] = $this->repository->getProductosSinCuentaVentas($idEmpresa, 100);
-            }
+            // Si este tipo se contabiliza por categoría o por marca: productos/servicios sin ella asignada.
+            $resp['sin_clasificacion'] = $this->repository->getProductosSinClasificacion($idEmpresa, $tipoAsiento, 100);
             echo json_encode($resp);
         } catch (\Throwable $e) {
             \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);

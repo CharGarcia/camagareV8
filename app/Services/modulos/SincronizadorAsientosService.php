@@ -1096,25 +1096,48 @@ class SincronizadorAsientosService
             // Tabla inexistente (migración pendiente): omitir sin romper.
         }
 
-        // Productos/servicios que en una factura de venta no encontrarían cuenta en NINGÚN nivel
-        // (producto, categoría, marca, tipo de producción ni General): sus facturas se bloquean
-        // (AsientoBuilderService::aplicarAjusteRedondeo). Caso típico: todo configurado por
-        // categoría o por marca y un producto quedó sin categoría / sin marca. Si existe la cuenta
-        // General no se avisa nada: ahí todo producto resuelve. Ver getProductosSinCuentaVentas().
+        // Productos/servicios sin la categoría (o marca) con la que se contabiliza el asiento: si un
+        // tipo de asiento tiene reglas por categoría/marca, todo producto debe tenerla asignada —
+        // lo que falta ahí es ASIGNARLA en Productos, no una cuenta (ver getProductosSinClasificacion()).
+        // Después, los que SÍ la tienen pero su categoría/marca no tiene la cuenta y no hay General
+        // (getProductosSinCuentaVentas()): esos sí bloquean sus facturas por falta de cuenta.
         try {
+            $lista = function (array $items, int $total): string {
+                $nombres = array_map(fn($p) => $p['nombre'], array_slice($items, 0, 5));
+                return implode(', ', $nombres) . ($total > 5 ? ' y ' . ($total - 5) . ' más' : '');
+            };
+            $tiposProducto = [
+                'ventas_factura'        => ['facturas_venta', 'Ventas con Factura'],
+                'recibos_venta'         => ['recibos_venta', 'Recibos de Venta'],
+                'adquisiciones_compras' => ['compras', 'Compras'],
+            ];
+            $faltaClasif = ['categoria' => false, 'marca' => false]; // en Ventas con Factura
+            foreach ($tiposProducto as $tipo => [$clave, $nombreTipo]) {
+                if (!$interruptor->contabiliza($idEmpresa, $clave)) continue;
+                $sc = $programadoRepo->getProductosSinClasificacion($idEmpresa, $tipo, 100);
+                foreach (['categoria' => ['categorías', 'categoría'], 'marca' => ['marcas', 'marca']] as $dim => [$plural, $singular]) {
+                    $d = $sc[$dim] ?? null;
+                    if (!$d || !$d['total']) continue;
+                    if ($tipo === 'ventas_factura') $faltaClasif[$dim] = true;
+                    $this->warnings[] = "{$nombreTipo} se contabiliza por {$plural}, pero hay {$d['total']} producto(s)/servicio(s) sin {$singular} asignada ("
+                        . $lista($d['items'], $d['total']) . "). Asígnesela en Productos (editar el producto → "
+                        . ucfirst($singular) . "): mientras no la tengan no usan las cuentas de su {$singular} "
+                        . '(toman la cuenta General o, si no la hay, su documento no genera asiento).';
+                }
+            }
             if ($interruptor->contabiliza($idEmpresa, 'facturas_venta')) {
-                $productos = $programadoRepo->getProductosSinCuentaVentas($idEmpresa, 100);
+                // Los que ya salieron arriba por no tener categoría/marca no se repiten aquí.
+                $productos = array_values(array_filter(
+                    $programadoRepo->getProductosSinCuentaVentas($idEmpresa, 100),
+                    fn($p) => !(($faltaClasif['categoria'] && $p['sin_categoria']) || ($faltaClasif['marca'] && $p['sin_marca']))
+                ));
                 if ($productos) {
-                    $nombres = array_map(function (array $p): string {
-                        $sin = array_filter([$p['sin_categoria'] ? 'sin categoría' : null, $p['sin_marca'] ? 'sin marca' : null]);
-                        return $p['nombre'] . ($sin ? ' (' . implode(', ', $sin) . ')' : '') . ' → falta: ' . $p['faltan'];
-                    }, array_slice($productos, 0, 5));
+                    $nombres = array_map(fn($p) => $p['nombre'] . ' → falta: ' . $p['faltan'], array_slice($productos, 0, 5));
                     $n = count($productos);
-                    $this->warnings[] = 'Hay ' . ($n >= 100 ? 'más de 99' : $n) . ' producto(s)/servicio(s) sin cuenta contable para Ventas con Factura: '
-                        . 'no tienen regla propia y su categoría, marca o tipo de producción tampoco la tiene (ni hay cuenta General). '
-                        . 'Sus facturas no generarán asiento. ' . implode(' · ', $nombres)
-                        . ($n > 5 ? ' · y ' . ($n >= 100 ? 'más' : ($n - 5) . ' más') : '') . '. '
-                        . 'Asígneles la categoría o marca en Productos, o configure la cuenta en Configuración Contable (Ventas con Factura).';
+                    $this->warnings[] = "Hay {$n} producto(s)/servicio(s) cuya categoría, marca o tipo de producción no tiene la cuenta de Ventas con Factura "
+                        . '(y no hay cuenta General): sus facturas no generarán asiento. ' . implode(' · ', $nombres)
+                        . ($n > 5 ? ' · y ' . ($n - 5) . ' más' : '') . '. '
+                        . 'Configure la cuenta en Configuración Contable (Ventas con Factura) en la regla de su categoría, marca o tipo de producción.';
                 }
             }
         } catch (\Throwable $e) {

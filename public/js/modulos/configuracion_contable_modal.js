@@ -85,34 +85,35 @@
     };
 
     /**
-     * Aviso de Ventas con Factura: productos/servicios que no encuentran cuenta en ningún nivel
-     * (producto, categoría, marca, tipo de producción ni General). Sus facturas no generan asiento.
-     * Datos: AsientoProgramadoRepository::getProductosSinCuentaVentas() (máx. 100).
+     * Aviso por categoría/marca: si el tipo de asiento se contabiliza por categoría (o por marca),
+     * todos los productos y servicios deben tenerla asignada. Lista los que no la tienen.
+     * Datos: AsientoProgramadoRepository::getProductosSinClasificacion() (null = no se usa esa dimensión).
      */
-    window.ASIENTOPROG_renderProductosSinCuenta = function (lista) {
-        const cont = document.getElementById('avisoProductosSinCuenta');
+    window.ASIENTOPROG_renderSinClasificacion = function (data) {
+        const cont = document.getElementById('avisoSinClasificacion');
         if (!cont) return;
-        if (!lista.length) { cont.style.display = 'none'; cont.innerHTML = ''; return; }
         const esc = (s) => String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
         const rutaProd = `${window.BASE_URL || ''}/modulos/productos`;
-        const filas = lista.map(p => {
-            const sin = [p.sin_categoria ? 'sin categoría' : '', p.sin_marca ? 'sin marca' : ''].filter(Boolean)
-                .map(t => `<span class="badge bg-warning bg-opacity-10 text-warning border border-warning-subtle ms-1">${t}</span>`).join('');
-            const href = `${rutaProd}?b=${encodeURIComponent(p.codigo || p.nombre)}`;
-            return `<li class="mb-1"><a href="${href}" target="_blank" rel="noopener" title="Abrir en Productos">${esc(p.codigo)} - ${esc(p.nombre)}</a>${sin}
-                    <span class="text-muted"> · falta: ${esc(p.faltan)}</span></li>`;
+        const bloques = [['categoria', 'categorías', 'categoría'], ['marca', 'marcas', 'marca']].map(([dim, plural, singular]) => {
+            const d = (data || {})[dim];
+            if (!d || !d.total) return '';
+            const filas = (d.items || []).map(p => {
+                const href = `${rutaProd}?b=${encodeURIComponent(p.codigo || p.nombre)}`;
+                return `<li><a href="${href}" target="_blank" rel="noopener" title="Abrir en Productos">${esc(p.codigo)} - ${esc(p.nombre)}</a>`
+                     + `<span class="text-muted"> · ${p.servicio ? 'Servicio' : 'Bien'}</span></li>`;
+            }).join('');
+            const mas = d.total > (d.items || []).length ? `<li class="text-muted">y ${d.total - d.items.length} más…</li>` : '';
+            return `
+                <div class="alert alert-warning py-2 px-3 small mb-2">
+                    <div class="fw-semibold mb-1"><i class="bi bi-exclamation-triangle me-1"></i>
+                        Está contabilizando por ${plural}: hay ${d.total} producto(s)/servicio(s) sin ${singular} asignada.</div>
+                    <div class="mb-1">Asígneles una ${singular} en <b>Productos</b>; mientras no la tengan, sus documentos no usarán
+                        las cuentas de la ${singular} (tomarán la cuenta General o, si no la hay, no generarán asiento).</div>
+                    <ul class="mb-0 ps-3" style="max-height:180px;overflow:auto">${filas}${mas}</ul>
+                </div>`;
         }).join('');
-        const n = lista.length >= 100 ? 'Más de 99' : lista.length;
-        cont.innerHTML = `
-            <div class="alert alert-warning py-2 px-3 small mb-0">
-                <div class="fw-semibold mb-1"><i class="bi bi-exclamation-triangle me-1"></i>
-                    ${n} producto(s)/servicio(s) sin cuenta contable: sus facturas no generarán asiento.</div>
-                <div class="mb-1">No tienen regla propia y su categoría, marca o tipo de producción tampoco tiene la cuenta
-                    (y no hay cuenta General para ese concepto). Asígneles la categoría o marca en <b>Productos</b>,
-                    o configure la regla que corresponda (por producto, categoría, marca, tipo de producción o General).</div>
-                <ul class="mb-0 ps-3" style="max-height:180px;overflow:auto">${filas}</ul>
-            </div>`;
-        cont.style.display = '';
+        cont.innerHTML = bloques;
+        cont.style.display = bloques ? '' : 'none';
     };
 
     window.ASIENTOPROG_configurar = async function () {
@@ -135,7 +136,7 @@
             const res = await resp.json();
 
             if (res.ok) {
-                ASIENTOPROG_renderProductosSinCuenta(res.productos_sin_cuenta || []);
+                ASIENTOPROG_renderSinClasificacion(res.sin_clasificacion);
                 // Modos especiales con dos acordeones (referencias de otros módulos)
                 if (res.modo === 'ingresos_egresos') {
                     ASIENTOPROG_renderModoIngresoEgreso(res, selector);
