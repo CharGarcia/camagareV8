@@ -5052,9 +5052,16 @@ class AsientoBuilderService
      * total, igual que antes (cero regresión).
      *
      * Fuente de la cuenta por línea, en orden de prioridad:
-     *   1. $detallesModal: lo que envió el modal al guardar/actualizar (descripcion + id_cuenta_contable).
-     *   2. El asiento ya existente del documento (regeneración sin modal): referencia_detalle → cuenta.
-     *   3. La cuenta del concepto.
+     *   1. La cuenta guardada en la propia línea (egresos_detalle / ingresos_detalle.id_cuenta_contable).
+     *      Es la fuente de verdad: se graba al guardar el documento y sirve igual en todos los
+     *      caminos que regeneran el asiento SIN el modal (anular un cheque, sincronización de
+     *      asientos, Estados Financieros). Antes no se leía y esos caminos caían a 2/3: si varias
+     *      líneas compartían cuenta, o el asiento anterior no existía, la línea terminaba con la
+     *      cuenta del concepto — en un egreso que además paga compras, Cuentas por Pagar.
+     *   2. $detallesModal: lo que envió el modal al guardar/actualizar (descripcion + id_cuenta_contable).
+     *   3. El asiento ya existente del documento (líneas antiguas, de antes de esa columna):
+     *      referencia_detalle → cuenta.
+     *   4. La cuenta del concepto.
      *
      * Si alguna línea no logra resolver cuenta, NO se concilia el redondeo: el asiento queda
      * descuadrado a propósito para que no se genere (misma política que "forma sin cuenta").
@@ -5076,7 +5083,7 @@ class AsientoBuilderService
         //    egresos_detalle tiene columna 'eliminado'; ingresos_detalle NO (mismo caso que
         //    ingresos_pagos en lineasFormas): solo se filtra por eliminado en egresos.
         $filtroElim = $esEgreso ? ' AND eliminado = FALSE' : '';
-        $sql = "SELECT descripcion, {$colMonto} AS monto
+        $sql = "SELECT descripcion, {$colMonto} AS monto, id_cuenta_contable
                 FROM {$tablaDet}
                 WHERE {$colDoc} = :id{$filtroElim} AND tipo_documento = :tipo
                 ORDER BY id ASC";
@@ -5131,7 +5138,8 @@ class AsientoBuilderService
             // tampoco la tiene el concepto. El motivo lo registra quien llama
             // (registrarFaltanteContrapartida), que sabe de qué sección de Configuración Contable
             // debía salir esa cuenta; anotarlo también aquí solo repetiría el mismo aviso.
-            $cta = $mapaCuenta[$desc] ?? $conceptoCuenta;
+            $ctaLinea = (int) ($row['id_cuenta_contable'] ?? 0);
+            $cta = $ctaLinea > 0 ? $ctaLinea : ($mapaCuenta[$desc] ?? $conceptoCuenta);
             if ($cta <= 0) { $faltaCuenta = true; continue; } // sin cuenta → descuadre intencional
             if (!isset($grupos[$cta])) {
                 $grupos[$cta] = ['id_cuenta' => $cta, 'monto' => 0.0, 'referencia' => $desc !== '' ? $desc : $conceptoNombre];

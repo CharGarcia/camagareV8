@@ -6,7 +6,7 @@ ruta_modulo: modulos/ingresos
 tipo: modulo
 visibilidad: todos
 etiquetas: ingresos, cobro, cobrar, buscar ingreso, buscador, filtros, filtrar ingresos, filtrar por forma de cobro, buscar por factura cobrada, buscar por cheque, buscar por transferencia, filtro de fechas, chips, editar ingreso, modificar ingreso, corregir ingreso, cambiar monto cobrado, quitar factura del ingreso, periodo cerrado, solo lectura, no deja editar, no puedo modificar, ordenar por dos columnas, ordenar por recibi de y fecha, recibo, dinero que entra, anticipo, deposito, efectivo, transferencia, caja, excel, exportar, combinar conceptos, mezclar conceptos, otros conceptos, varios documentos, cobro sin factura, tipo real, tipo de ingreso, numero de ingreso, serie, secuencial, numero repetido, numero duplicado, numeracion por fecha, numero con el año, reiniciar numeracion, reinicio anual, reinicio mensual, correlativo por año, correlativo por mes, modo de numeracion, orden de formas de cobro, saldo de la forma de cobro, saldo disponible, ocultar saldo, aparecen documentos que no busque, resultados que no corresponden, buscar por numero de documento cobrado, cuenta del anticipo, anticipo sin cuenta, cuenta contable del concepto, cuenta por defecto, falta cuenta contable, cobrar factura y dejar anticipo, excedente como anticipo, listado no se actualiza, no aparece el ingreso guardado, no se ve el cambio, vuelve a la primera pagina, se pierde la pagina, refrescar listado, recargar tabla, fila resaltada, observaciones automaticas, observaciones se llenan solas, observaciones se completan solas, glosa del ingreso, concepto del comprobante, descripcion del cobro, cobro factura de venta, falta un centavo, centavo pendiente, no puedo cobrar el centavo, diferencia de un centavo, saldo de 0.01, queda un centavo, referencia muy larga, glosa larga, no guarda el ingreso, no se guarda el cobro, error al guardar ingreso, value too long, texto demasiado largo, se corta la referencia, limite de caracteres, imprimir, impresora, doble clic, ingreso duplicado, cobro duplicado, cobrar dos veces, doble cobro, ya no tiene saldo suficiente
-version: 3.8
+version: 3.9
 orden: 10
 estado: activo
 ---
@@ -116,6 +116,10 @@ en *Configuración Contable → Ingresos y Egresos* (la misma que se ve en
   línea sin documento necesita que se elija la cuenta.
 - Si un concepto no propone ninguna cuenta, revise que la tenga asignada en
   *Configuración Contable → Ingresos y Egresos*.
+- La cuenta elegida en cada línea **queda guardada con la línea** y es la que usa
+  el asiento siempre, también cuando el asiento se vuelve a generar sin abrir el
+  ingreso (al sincronizar los asientos desde Estados Financieros). Líneas
+  distintas con la misma cuenta se suman en una sola línea del asiento.
 
 ## Observaciones que se completan solas
 
@@ -444,6 +448,11 @@ misma revisión al guardar:
 
 ## Historial de cambios
 
+- **3.9** — Corrección: la cuenta elegida a mano en las líneas de *Otros conceptos* se
+  perdía cuando el asiento se regeneraba sin abrir el ingreso (sincronización de
+  asientos) y tomaba la del concepto (en un ingreso que también cobra facturas o
+  recibos, Cuentas por Cobrar). Ahora el asiento usa siempre la cuenta guardada en cada
+  línea. Los asientos ya generados mal se corrigen volviendo a guardar el ingreso.
 - **3.8** — En la ventana de filtros, la pestaña *Detalles* se llama ahora
   **Búsqueda por detalle**, y la ventana ya no tiene barra de desplazamiento
   vertical propia: se muestra completa.
