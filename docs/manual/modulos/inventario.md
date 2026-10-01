@@ -6,7 +6,7 @@ ruta_modulo: modulos/inventario
 tipo: modulo
 visibilidad: todos
 etiquetas: inventario, stock, existencias, kardex, movimientos, ajuste, entradas, salidas, bodega, costo, buscar movimientos, buscador, filtros, filtrar movimientos, buscar por lote, buscar por serial, movimientos por bodega, chips, buscar por codigo de barras, buscar por bodega, buscar movimientos de una factura, buscar por mes, imprimir movimiento, pdf del movimiento, comprobante de movimiento, ficha del movimiento, imprimir registro, imprimir un movimiento
-version: 1.7
+version: 1.8
 orden: 20
 estado: activo
 ---
@@ -155,6 +155,11 @@ problema pero no aparece en el kardex ni tiene stock.
   que originó el movimiento; revise el precio de esa compra.
 
 ## Historial de cambios
+
+- **1.8** — Corregido: en el buscador de producto al registrar un movimiento,
+  algunos productos aparecían en la lista pero no se podían seleccionar (los que
+  tienen comillas en el nombre, como `TUBO 1/2"`, o no tienen código). Además, el
+  stock del lote de un movimiento anterior ya no se queda guardado al abrir otro.
 
 - **1.7** — El botón **PDF** del documento pregunta ahora si se quiere
   **Imprimir** (abre el cuadro de impresión con el documento ya cargado),

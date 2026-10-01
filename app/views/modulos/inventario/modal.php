@@ -370,7 +370,12 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosPestanasOcultas($vistaConfigI
             }
         }
 
+        // Al reconstruir el campo de lote ya no hay lote elegido: se limpia su stock, que
+        // si no sobrevivía entre aperturas del modal y la cantidad se validaba contra el
+        // lote de un movimiento anterior.
         function restablecerCampoLote() {
+            stockActualLote = null;
+            listaLotes = [];
             loteContainer.innerHTML = `<input type="text" name="numero_lote" id="ajuste_lote_input" class="form-control form-control-sm" placeholder="Ej: LOT-2024-001">`;
         }
 
@@ -425,6 +430,7 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosPestanasOcultas($vistaConfigI
             });
             html += `</select>`;
             loteContainer.innerHTML = html;
+            stockActualLote = null;
         }
 
         function actualizarBadgeStock() {
@@ -566,17 +572,32 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosPestanasOcultas($vistaConfigI
             }, 400);
         });
 
+        // Se arma con nodos DOM + listener (no onclick inline con el nombre interpolado):
+        // un nombre con comillas dobles (p. ej. TUBO 1/2"), barra invertida o un código
+        // vacío rompía el atributo onclick y el clic sobre el resultado no hacía nada.
         function renderResultados(items) {
-            resDiv.innerHTML = items.map(item => {
-                const nomEscaped = item.nombre.replace(/'/g, "\\'");
-                const codEscaped = item.codigo.replace(/'/g, "\\'");
-                return `
-                    <div class="predictivo-item" onclick="seleccionarProducto(${item.id}, '${codEscaped}', '${nomEscaped}')">
-                        <span class="item-codigo">[${item.codigo}]</span>
-                        <span class="item-nombre">${item.nombre}</span>
-                    </div>
-                `;
-            }).join('');
+            resDiv.innerHTML = '';
+            items.forEach(item => {
+                const cod = item.codigo == null ? '' : String(item.codigo);
+                const nom = item.nombre == null ? '' : String(item.nombre);
+
+                const div = document.createElement('div');
+                div.className = 'predictivo-item';
+                const spCod = document.createElement('span');
+                spCod.className = 'item-codigo';
+                spCod.textContent = `[${cod}]`;
+                const spNom = document.createElement('span');
+                spNom.className = 'item-nombre';
+                spNom.textContent = nom;
+                div.append(spCod, spNom);
+
+                // mousedown: se dispara antes que cualquier cierre por clic/blur.
+                div.addEventListener('mousedown', (ev) => {
+                    ev.preventDefault();
+                    window.seleccionarProducto(item.id, cod, nom);
+                });
+                resDiv.appendChild(div);
+            });
             resDiv.classList.remove('d-none');
             resDiv.classList.add('show');
         }
