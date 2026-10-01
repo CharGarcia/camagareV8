@@ -157,8 +157,9 @@ se esté viendo — si el mismo producto tiene reglas en Compras, esas se conser
 
 En *Adquisiciones de Compras/Servicios → Reglas por Proveedores* se listan
 **todos los proveedores con compras o liquidaciones de compra**, sin tener que
-agregarlos antes. Primero salen los que ya tienen cuentas propias y luego el
-resto, por nombre, de 25 en 25 (flechas abajo para cambiar de página).
+agregarlos antes. Primero salen los que **todavía no tienen su cuenta de
+Subtotal** y después los que ya la tienen; cada grupo, en orden alfabético (de la
+A a la Z). Se muestran de 25 en 25 (flechas abajo para cambiar de página).
 
 Arriba de la tabla están el **buscador** (por nombre o RUC), el selector de
 **año** (solo los proveedores con compras en ese año) y el botón **Sugerencias**.
@@ -166,7 +167,7 @@ Arriba de la tabla están el **buscador** (por nombre o RUC), el selector de
 Cada fila tiene:
 
 - **Proveedor**: nombre y RUC. Si tiene más cuentas propias que la del Subtotal,
-  lo indica (*+N personalizada(s)*), y en rojo si le falta alguna cuenta.
+  lo indica (*+N personalizada(s)*).
 - **Subtotal**: la cuenta del gasto o costo de sus compras, que es la que
   normalmente cambia de un proveedor a otro. Si está vacía, el campo muestra en
   gris la cuenta General que se usará. Se elige escribiendo parte del código o del
@@ -499,7 +500,8 @@ ingresos o egresos. Solo falta asignar la cuenta.
 - **1.27** — *Reglas por Proveedores* pasa a ser una tabla con todos los proveedores con
   compras: nombre, cuenta del Subtotal, *Detalle de compras* y *Copiar de General*; las
   demás cuentas se abren con *Personalizar asiento contable*. Se quitó el formulario
-  *Nueva Asociación por Proveedor*.
+  *Nueva Asociación por Proveedor*. Primero salen los proveedores sin cuenta de Subtotal,
+  de la A a la Z.
 - **1.26** — Los tipos de asiento cuyos módulos están todos apagados en *Módulos que
   contabilizan* ya no aparecen en el selector de tipo de asiento.
 - **1.25** — La vista resumida se extiende a las reglas por Cliente (cuenta de ventas) y

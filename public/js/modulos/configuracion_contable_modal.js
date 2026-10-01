@@ -1475,7 +1475,6 @@
             const propiaDe = (c) => parseInt(c.id_asiento_tipo) > 0
                 ? reglas.find(f => parseInt(f.id_asiento_tipo) === parseInt(c.id_asiento_tipo))
                 : reglas.find(f => esIvaFila(f) && String(f.codigo_tarifa_iva) === String(c.id_referencia));
-            const faltan = conceptos.filter(c => !c.id_cuenta && !propiaDe(c) && !c.respaldo_concepto).length;
             const propiasOtros = otros.filter(c => propiaDe(c)).length;
             const abierto = ASIENTOPROG_provTabla.abiertos.has(String(p.id));
 
@@ -1487,7 +1486,6 @@
 
             const badges = [
                 propiasOtros ? `<span class="badge bg-primary bg-opacity-10 text-primary border border-primary border-opacity-25 ms-1" title="Cuentas propias además del Subtotal">+${propiasOtros} personalizada(s)</span>` : '',
-                faltan ? `<span class="badge bg-danger bg-opacity-10 text-danger border border-danger border-opacity-25 ms-1" title="Conceptos sin cuenta ni aquí ni en la configuración General">faltan ${faltan}</span>` : '',
             ].join('');
 
             return `

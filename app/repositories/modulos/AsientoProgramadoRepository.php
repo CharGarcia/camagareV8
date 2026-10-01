@@ -1626,7 +1626,7 @@ class AsientoProgramadoRepository extends BaseRepository
     public function listarProveedoresReglaCompra(int $idEmpresa, string $buscar, ?int $anio, int $page, int $perPage): array
     {
         $cond = self::COND_REGLA_COMPRA_PROVEEDOR;
-        $params = [':e' => $idEmpresa, ':e2' => $idEmpresa, ':e3' => $idEmpresa, ':e4' => $idEmpresa];
+        $params = [':e' => $idEmpresa, ':e2' => $idEmpresa, ':e3' => $idEmpresa, ':e4' => $idEmpresa, ':e5' => $idEmpresa];
         $fCompra = $fLiq = '';
         if ($anio !== null) {
             $fCompra = ' AND EXTRACT(YEAR FROM c.fecha_emision) = :anio';
@@ -1647,9 +1647,9 @@ class AsientoProgramadoRepository extends BaseRepository
             }
         }
 
-        // :e4 solo se usa en el SELECT de la página, no en el conteo.
+        // :e4 y :e5 solo se usan en el SELECT de la página, no en el conteo.
         $paramsTotal = $params;
-        unset($paramsTotal[':e4']);
+        unset($paramsTotal[':e4'], $paramsTotal[':e5']);
         $st = $this->db->prepare("SELECT COUNT(*) FROM proveedores p WHERE {$where}");
         $st->execute($paramsTotal);
         $total = (int) $st->fetchColumn();
@@ -1660,11 +1660,17 @@ class AsientoProgramadoRepository extends BaseRepository
                     SELECT p.id, p.razon_social AS nombre, p.identificacion,
                            (SELECT COUNT(*) FROM asientos_programados ap
                             LEFT JOIN asientos_tipo at ON at.id = ap.id_asiento_tipo
-                            WHERE ap.id_empresa = :e4 AND ap.id_referencia = p.id AND {$cond}) AS cuentas_propias
+                            WHERE ap.id_empresa = :e4 AND ap.id_referencia = p.id AND {$cond}) AS cuentas_propias,
+                           EXISTS (SELECT 1 FROM asientos_programados ap
+                                   INNER JOIN asientos_tipo at ON at.id = ap.id_asiento_tipo
+                                   WHERE ap.id_empresa = :e5 AND ap.id_referencia = p.id AND {$cond}
+                                     AND at.codigo = 'SUBTOTALFACTURACOMPRA') AS tiene_subtotal
                     FROM proveedores p
                     WHERE {$where}
                 ) x
-                ORDER BY (x.cuentas_propias > 0) DESC, x.nombre ASC, x.id ASC
+                -- Primero los que aún no tienen cuenta propia de Subtotal (la columna de la tabla),
+                -- cada grupo de la A a la Z.
+                ORDER BY x.tiene_subtotal ASC, UPPER(x.nombre) ASC, x.id ASC
                 LIMIT {$perPage} OFFSET {$offset}";
         $st = $this->db->prepare($sql);
         $st->execute($params);
