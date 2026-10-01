@@ -679,6 +679,10 @@ $base = BASE_URL;
                 if (d.recibos_enlazados > 0) {
                     html += `<br><span class="text-success small">🔗 ${fmt(d.recibos_enlazados)} pago(s) de recibos de venta cruzados con su recibo.</span>`;
                 }
+                // Pagos/Cobros migrados después de la Contabilidad: se enlazan con su asiento ya migrado.
+                if (d.asientos_enlazados > 0) {
+                    html += `<br><span class="text-success small">🔗 ${fmt(d.asientos_enlazados)} documento(s) enlazado(s) con su asiento contable ya migrado.</span>`;
+                }
                 // Liquidaciones hasta 2020 sin pagos registrados: el sistema anterior no los guardaba.
                 if (d.pagadas_sistema_anterior > 0) {
                     html += `<br><span class="text-success small">✔ ${fmt(d.pagadas_sistema_anterior)} liquidación(es) hasta 2020 marcadas como pagadas en el sistema anterior (saldo 0, sin egreso).</span>`;

@@ -4116,8 +4116,39 @@ class MigracionMysqlService
         $docMapCache  = [];
         $updDocStmts  = [];
         $updRefOrigen = $pg->prepare("UPDATE asientos_contables_cabecera SET id_referencia_origen = ? WHERE id = ? AND id_empresa = ?");
-        $enlazar = function (array $e, int $idAsiento) use (&$docMapCache, &$updDocStmts, $idEmpresa, $pg, $updRefOrigen): void {
-            $r = $this->docDeDiario($pg, $idEmpresa, (string) $e['tipo'], (string) $e['codigo_unico'], $docMapCache);
+        // Vínculo REAL egreso/ingreso ↔ asiento del viejo: ingresos_egresos.codigo_contable = id_diario.
+        // El codigo_unico del asiento ('EGR'/'ING' + id) NO siempre trae el id del documento (egresos
+        // renumerados en el viejo: el egreso 14828 tiene el asiento 'EGR203157', que no existe o es de
+        // otra empresa) y por él el asiento se migraba pero el egreso quedaba "sin asiento". Se usa
+        // primero este vínculo y, para el resto de documentos, el codigo_unico (docDeDiario).
+        $docPorDiario = [];   // id_diario → [entidad, id viejo del documento]
+        $diarioPorDoc = [];   // 'egresos|id' → id_diario (para que el respaldo por código no pise el vínculo real)
+        foreach ($mysql->query("SELECT id_ing_egr, codigo_contable, tipo_ing_egr FROM ingresos_egresos
+                                 WHERE ruc_empresa LIKE " . $mysql->quote($base . '%') . " AND codigo_contable > 0") as $r) {
+            $entDoc = strtoupper((string) $r['tipo_ing_egr']) === 'EGRESO' ? 'egresos' : 'ingresos';
+            $docPorDiario[(int) $r['codigo_contable']] ??= [$entDoc, (int) $r['id_ing_egr']];
+            $diarioPorDoc[$entDoc . '|' . (int) $r['id_ing_egr']] = (int) $r['codigo_contable'];
+        }
+        $enlazar = function (array $e, int $idAsiento) use (&$docMapCache, &$updDocStmts, $idEmpresa, $pg, $updRefOrigen, $docPorDiario, $diarioPorDoc): void {
+            $r = null;
+            $idDiario = (int) $e['id_diario'];
+            if (isset($docPorDiario[$idDiario])) {
+                // Vínculo real: si el documento aún no está migrado, no se enlaza nada (ni por código).
+                [$entDoc, $oldDoc] = $docPorDiario[$idDiario];
+                if (!isset($docMapCache[$entDoc])) { $docMapCache[$entDoc] = $this->mapaDe($pg, $idEmpresa, $entDoc); }
+                $idDoc = $docMapCache[$entDoc][(string) $oldDoc] ?? null;
+                if (!$idDoc) { return; }
+                $r = [$entDoc === 'egresos' ? 'egresos_cabecera' : 'ingresos_cabecera', (int) $idDoc];
+            } else {
+                $tipoE = strtoupper(trim((string) $e['tipo']));
+                if ($tipoE === 'EGRESOS' || $tipoE === 'INGRESOS') {
+                    // Respaldo por código solo si ese egreso/ingreso no tiene OTRO asiento propio.
+                    $oldDoc = (int) preg_replace('/\D+/', '', (string) $e['codigo_unico']);
+                    $propio = $diarioPorDoc[($tipoE === 'EGRESOS' ? 'egresos' : 'ingresos') . '|' . $oldDoc] ?? null;
+                    if ($propio !== null && $propio !== $idDiario) { return; }
+                }
+            }
+            $r ??= $this->docDeDiario($pg, $idEmpresa, (string) $e['tipo'], (string) $e['codigo_unico'], $docMapCache);
             if ($r === null) { return; }                                             // sin documento o documento no migrado
             [$tabla, $idDocNuevo] = $r;
             if (!isset($updDocStmts[$tabla])) { $updDocStmts[$tabla] = $pg->prepare("UPDATE $tabla SET id_asiento_contable = ? WHERE id = ? AND id_empresa = ?"); }
@@ -4125,9 +4156,14 @@ class MigracionMysqlService
             $updRefOrigen->execute([$idDocNuevo, $idAsiento, $idEmpresa]);
         };
 
+        // Rango "Desde": además de los asientos FECHADOS desde ese día, trae los REGISTRADOS (o editados)
+        // desde ese día aunque tengan fecha anterior. El sistema viejo sigue en uso y muchos asientos se
+        // registran semanas después de su fecha (p. ej. egreso del 18-06 contabilizado el 15-07): filtrar
+        // solo por fecha_asiento los dejaba fuera en una re-sincronización con "Desde" reciente.
+        $fechaCl = $this->clausulaFechaConRegistro('fecha_asiento', 'fecha_registro', $desde, $hasta, $mysql);
         // Los asientos ELIMINADOS en el sistema viejo se marcan con estado='Anulado' → NO se migran.
         $sql = "SELECT id_diario, codigo_unico, fecha_asiento, concepto_general, estado, tipo, id_documento
-                  FROM encabezado_diario WHERE ruc_empresa LIKE " . $mysql->quote($base . '%') . $this->clausulaEstabOrigen('ruc_empresa', $base, $mysql) . " AND codigo_unico <> '' AND LOWER(TRIM(estado)) <> 'anulado'" . $this->clausulaFecha('fecha_asiento', $desde, $hasta, $mysql) . " ORDER BY id_diario";
+                  FROM encabezado_diario WHERE ruc_empresa LIKE " . $mysql->quote($base . '%') . $this->clausulaEstabOrigen('ruc_empresa', $base, $mysql) . " AND codigo_unico <> '' AND LOWER(TRIM(estado)) <> 'anulado'" . $fechaCl . " ORDER BY id_diario";
         if ($limite > 0) { $sql .= " LIMIT " . (int) $limite; }
         $stmt = $mysql->query($sql);
 
@@ -4989,9 +5025,8 @@ class MigracionMysqlService
 
         // PRE-CARGA por lote (evita ~3 round-trips al MySQL viejo por documento): detalle (con el cliente de
         // la factura referenciada vía LEFT JOIN) y formas de pago del RANGO completo, agrupados por documento.
-        $dateCl = '';
-        if ($desde && preg_match('/^\d{4}-\d{2}-\d{2}$/', $desde)) { $dateCl .= " AND DATE(ie.fecha_ing_egr) >= " . $mysql->quote($desde); }
-        if ($hasta && preg_match('/^\d{4}-\d{2}-\d{2}$/', $hasta)) { $dateCl .= " AND DATE(ie.fecha_ing_egr) <= " . $mysql->quote($hasta); }
+        // "Desde" incluye lo registrado desde ese día aunque tenga fecha anterior (mismo criterio que el SELECT principal).
+        $dateCl = $this->clausulaFechaConRegistro('ie.fecha_ing_egr', 'ie.fecha_agregado', $desde, $hasta, $mysql);
         $detByDoc = [];
         foreach ($mysql->query("SELECT d.codigo_documento AS cd, d.valor_ing_egr, d.detalle_ing_egr, d.codigo_documento_cv, ef.id_cliente AS fac_cliente
                                   FROM detalle_ingresos_egresos d
@@ -5016,6 +5051,8 @@ class MigracionMysqlService
         $mapCliente  = $this->mapaDe($pg, $idEmpresa, 'clientes');
         $cliPorIdent = $this->clientesPorIdentificacion($pg, $idEmpresa);
         $mapIngreso  = $this->mapaDe($pg, $idEmpresa, 'ingresos'); // para reconciliar al re-correr
+        $mapContab   = $this->mapaDe($pg, $idEmpresa, 'contabilidad'); // asiento ya migrado (id_diario viejo → id)
+        $res['asientos_enlazados'] = 0;
         $updCab      = $pg->prepare("UPDATE ingresos_cabecera SET fecha_emision = ?, tipo_ingreso = ?, id_ingreso_concepto = ?, id_cliente = ?, monto_total = ?, observaciones = ?, estado = ?, recibo_de = ?, id_recibo_cliente = ?, tipo_ambiente = ?, updated_at = now(), updated_by = ? WHERE id = ?");
         $delDet      = $pg->prepare("DELETE FROM ingresos_detalle WHERE id_ingreso = ?");
         $delPag      = $pg->prepare("DELETE FROM ingresos_pagos WHERE id_ingreso = ?");
@@ -5047,8 +5084,8 @@ class MigracionMysqlService
         // fecha_banco = fecha_pago, para que afecte el saldo bancario (girado no afecta hasta cobrarse).
         $insCbm  = $pg->prepare("INSERT INTO control_bancario_movimientos (id_empresa, id_forma_pago, tipo_transaccion, cheque_direccion, numero_cheque, fecha_cheque, fecha_banco, origen_tipo, origen_id, eliminado, created_at, updated_at, created_by) VALUES (?, ?, 'CHEQUE', 'RECIBIDO', ?, ?, ?, 'ingreso', ?, false, now(), now(), ?)");
 
-        $sql = "SELECT id_ing_egr, codigo_documento, numero_ing_egr, valor_ing_egr, fecha_ing_egr, detalle_adicional, estado, nombre_ing_egr, id_cli_pro
-                  FROM ingresos_egresos WHERE ruc_empresa LIKE " . $mysql->quote($base . '%') . $this->clausulaEstabOrigen('ruc_empresa', $base, $mysql) . " AND tipo_ing_egr = 'INGRESO'" . $this->clausulaFecha('fecha_ing_egr', $desde, $hasta, $mysql) . " ORDER BY id_ing_egr";
+        $sql = "SELECT id_ing_egr, codigo_documento, numero_ing_egr, valor_ing_egr, fecha_ing_egr, detalle_adicional, estado, nombre_ing_egr, id_cli_pro, codigo_contable
+                  FROM ingresos_egresos WHERE ruc_empresa LIKE " . $mysql->quote($base . '%') . $this->clausulaEstabOrigen('ruc_empresa', $base, $mysql) . " AND tipo_ing_egr = 'INGRESO'" . $this->clausulaFechaConRegistro('fecha_ing_egr', 'fecha_agregado', $desde, $hasta, $mysql) . " ORDER BY id_ing_egr";
         if ($limite > 0) { $sql .= " LIMIT " . (int) $limite; }
         $stmt = $mysql->query($sql);
 
@@ -5164,6 +5201,8 @@ class MigracionMysqlService
                 if (!$idIngExist) {
                     $insMap->execute([':e' => $idEmpresa, ':o' => $old, ':d' => $idIng, ':cn' => (string) $ie['numero_ing_egr'], ':vin' => 'f', ':cb' => $idUsuario]);
                 }
+                // Su asiento, si la Contabilidad ya se migró antes que este cobro.
+                if ($this->enlazarAsientoMigrado($pg, $idEmpresa, 'ingresos_cabecera', $idIng, (int) $ie['codigo_contable'], $mapContab)) { $res['asientos_enlazados']++; }
                 $pg->commit();
                 $done[(string) $old] = true;
             } catch (Throwable $ex) {
@@ -5221,9 +5260,8 @@ class MigracionMysqlService
 
         // PRE-CARGA por lote (evita ~3 round-trips al MySQL viejo por documento): detalle + formas de pago del
         // RANGO, agrupados por documento; y el proveedor de la compra referenciada en un mapa (código → proveedor).
-        $dateCl = '';
-        if ($desde && preg_match('/^\d{4}-\d{2}-\d{2}$/', $desde)) { $dateCl .= " AND DATE(ie.fecha_ing_egr) >= " . $mysql->quote($desde); }
-        if ($hasta && preg_match('/^\d{4}-\d{2}-\d{2}$/', $hasta)) { $dateCl .= " AND DATE(ie.fecha_ing_egr) <= " . $mysql->quote($hasta); }
+        // "Desde" incluye lo registrado desde ese día aunque tenga fecha anterior (mismo criterio que el SELECT principal).
+        $dateCl = $this->clausulaFechaConRegistro('ie.fecha_ing_egr', 'ie.fecha_agregado', $desde, $hasta, $mysql);
         $detByDoc = [];
         foreach ($mysql->query("SELECT d.codigo_documento AS cd, d.valor_ing_egr, d.detalle_ing_egr, d.codigo_documento_cv
                                   FROM detalle_ingresos_egresos d
@@ -5293,6 +5331,8 @@ class MigracionMysqlService
         $mapProv     = $this->mapaDe($pg, $idEmpresa, 'proveedores');
         $provPorIdent = $this->proveedoresPorIdentificacion($pg, $idEmpresa);
         $mapEgreso   = $this->mapaDe($pg, $idEmpresa, 'egresos'); // para reconciliar al re-correr
+        $mapContab   = $this->mapaDe($pg, $idEmpresa, 'contabilidad'); // asiento ya migrado (id_diario viejo → id)
+        $res['asientos_enlazados'] = 0;
         $updCab      = $pg->prepare("UPDATE egresos_cabecera SET fecha_emision = ?, tipo_egreso = ?, tipo_sujeto = ?, id_egreso_concepto = ?, id_proveedor = ?, id_empleado = ?, monto_total = ?, observaciones = ?, estado = ?, beneficiario_nombre = ?, tipo_ambiente = ?, updated_at = now(), updated_by = ? WHERE id = ?");
         $delDet      = $pg->prepare("DELETE FROM egresos_detalle WHERE id_egreso = ?");
         $delPag      = $pg->prepare("DELETE FROM egresos_pagos WHERE id_egreso = ?");
@@ -5319,7 +5359,7 @@ class MigracionMysqlService
         $insCbm  = $pg->prepare("INSERT INTO control_bancario_movimientos (id_empresa, id_forma_pago, tipo_transaccion, cheque_direccion, numero_cheque, fecha_cheque, fecha_banco, origen_tipo, origen_id, eliminado, created_at, updated_at, created_by) VALUES (?, ?, 'CHEQUE', 'EMITIDO', ?, ?, ?, 'egreso', ?, false, now(), now(), ?)");
 
         $sql = "SELECT id_ing_egr, codigo_documento, numero_ing_egr, valor_ing_egr, fecha_ing_egr, detalle_adicional, estado, nombre_ing_egr, id_cli_pro, codigo_contable
-                  FROM ingresos_egresos WHERE ruc_empresa LIKE " . $mysql->quote($base . '%') . $this->clausulaEstabOrigen('ruc_empresa', $base, $mysql) . " AND tipo_ing_egr = 'EGRESO'" . $this->clausulaFecha('fecha_ing_egr', $desde, $hasta, $mysql) . " ORDER BY id_ing_egr";
+                  FROM ingresos_egresos WHERE ruc_empresa LIKE " . $mysql->quote($base . '%') . $this->clausulaEstabOrigen('ruc_empresa', $base, $mysql) . " AND tipo_ing_egr = 'EGRESO'" . $this->clausulaFechaConRegistro('fecha_ing_egr', 'fecha_agregado', $desde, $hasta, $mysql) . " ORDER BY id_ing_egr";
         if ($limite > 0) { $sql .= " LIMIT " . (int) $limite; }
         $stmt = $mysql->query($sql);
 
@@ -5485,6 +5525,8 @@ class MigracionMysqlService
                 if (!$idEgrExist) {
                     $insMap->execute([':e' => $idEmpresa, ':o' => $old, ':d' => $idEgr, ':cn' => (string) $ie['numero_ing_egr'], ':vin' => 'f', ':cb' => $idUsuario]);
                 }
+                // Su asiento, si la Contabilidad ya se migró antes que este pago.
+                if ($this->enlazarAsientoMigrado($pg, $idEmpresa, 'egresos_cabecera', $idEgr, (int) $ie['codigo_contable'], $mapContab)) { $res['asientos_enlazados']++; }
                 $pg->commit();
                 $done[(string) $old] = true;
                 $res['pagos_liquidacion']         += $liqOk;
@@ -7345,6 +7387,26 @@ class MigracionMysqlService
     }
 
     /** Cláusula SQL de filtro por rango de fechas (sobre la columna de fecha del documento). */
+    /**
+     * Como clausulaFecha, pero el "Desde" incluye también lo REGISTRADO en el viejo desde ese día aunque
+     * su fecha sea anterior ($colRegistro = fecha de registro/edición). El viejo sigue en uso y muchos
+     * documentos/asientos se registran semanas después de su fecha: con solo la fecha, una
+     * re-sincronización con "Desde" reciente los dejaba fuera. El "Hasta" sigue siendo por la fecha.
+     * $col y $colRegistro van tal cual (pueden llevar alias, p. ej. 'ie.fecha_ing_egr').
+     */
+    private function clausulaFechaConRegistro(string $col, string $colRegistro, ?string $desde, ?string $hasta, PDO $mysql): string
+    {
+        $c = '';
+        if ($desde && preg_match('/^\d{4}-\d{2}-\d{2}$/', $desde)) {
+            $d = $mysql->quote($desde);
+            $c .= " AND (DATE($col) >= $d OR $colRegistro >= $d)";
+        }
+        if ($hasta && preg_match('/^\d{4}-\d{2}-\d{2}$/', $hasta)) {
+            $c .= " AND DATE($col) <= " . $mysql->quote($hasta);
+        }
+        return $c;
+    }
+
     private function clausulaFecha(string $col, ?string $desde, ?string $hasta, PDO $mysql): string
     {
         $c = '';
@@ -7921,6 +7983,24 @@ class MigracionMysqlService
             "INSERT INTO migracion_mysql_map (id_empresa, entidad, id_origen, id_destino, clave_natural, vinculado, created_by)
              VALUES (:e, " . $pg->quote($entidad) . ", :o, :d, :cn, :vin, :cb) ON CONFLICT (id_empresa, entidad, id_origen) DO NOTHING"
         );
+    }
+
+    /**
+     * Enlaza un egreso/ingreso migrado con SU asiento, si la Contabilidad ya se migró: el viejo los une
+     * por ingresos_egresos.codigo_contable = encabezado_diario.id_diario, y el mapa 'contabilidad' guarda
+     * id_diario → asiento nuevo. Sin esto, un pago migrado DESPUÉS que la Contabilidad quedaba sin asiento
+     * hasta volver a migrar la Contabilidad. No pisa un asiento distinto ya enlazado. True si enlazó.
+     */
+    private function enlazarAsientoMigrado(PDO $pg, int $idEmpresa, string $tabla, int $idDoc, int $codigoContable, array $mapContab): bool
+    {
+        $idAsiento = $codigoContable > 0 ? ($mapContab[(string) $codigoContable] ?? null) : null;
+        if (!$idAsiento) { return false; }
+        $st = $pg->prepare("UPDATE $tabla SET id_asiento_contable = ? WHERE id = ? AND id_empresa = ? AND id_asiento_contable IS NULL");
+        $st->execute([(int) $idAsiento, $idDoc, $idEmpresa]);
+        if ($st->rowCount() === 0) { return false; }
+        $pg->prepare("UPDATE asientos_contables_cabecera SET id_referencia_origen = ? WHERE id = ? AND id_empresa = ?")
+           ->execute([$idDoc, (int) $idAsiento, $idEmpresa]);
+        return true;
     }
 
     /** Fecha a 'Y-m-d' o null (descarta ceros / vacíos). */
