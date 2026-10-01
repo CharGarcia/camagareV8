@@ -608,10 +608,41 @@ class AuditoriaContableRepository extends BaseRepository
             ? " OR (a.modulo_origen = 'migracion' AND a.tipo_comprobante = '{$tipoMig}')"
             : '';
 
+        // Con qué parte del asiento se compara el total del documento: la misma regla que la
+        // pestaña «Asiento contable» (CuadreDocumentoAsiento + AsientoContableRules::
+        // evaluarCuadreDocumento). En ventas/compras se compara la línea de CARTERA (Cuenta por
+        // Cobrar / por Pagar configurada), NO el Debe total: el Debe de una factura de venta lleva
+        // además Costo de Ventas y descuentos, así que comparar el Debe total marcaba como
+        // «monto no coincide» toda factura con costo, estando bien. Sin cartera configurada, o si el
+        // asiento no usa ninguna de esas cuentas, se compara el Debe total (comportamiento anterior).
+        $cuadre      = \App\Helpers\CuadreDocumentoAsiento::paraModulo($origen);
+        $ladoCartera = (($cuadre['lado'] ?? 'debe') === 'haber') ? 'haber' : 'debe';
+        $cuentasCartera = !empty($cuadre['slots'])
+            ? (new AsientoContableRepository())->getCuentasSlotCartera($idEmpresa, (array) $cuadre['slots'])
+            : [];
+        $joinCartera = '';
+        $colsCartera = 'NULL::numeric AS monto_cartera, 0 AS lineas_cartera';
+        if ($cuentasCartera !== []) {
+            $params[':cuentas_cartera'] = '{' . implode(',', array_map('intval', $cuentasCartera)) . '}';
+            // Solo para el asiento del propio módulo: los migrados (modulo_origen 'migracion')
+            // consolidan varios documentos y no se comparan por cartera.
+            $joinCartera = "LEFT JOIN LATERAL (
+                                SELECT SUM(ad.{$ladoCartera}) AS monto, COUNT(*) AS lineas
+                                  FROM asientos_contables_detalle ad
+                                 WHERE ad.id_asiento = a.id
+                                   AND ad.eliminado = false
+                                   AND ad.{$ladoCartera} > 0
+                                   AND ad.id_cuenta_contable = ANY(CAST(:cuentas_cartera AS int[]))
+                                   AND a.modulo_origen = '{$origen}'
+                            ) k ON true";
+            $colsCartera = 'k.monto AS monto_cartera, COALESCE(k.lineas, 0) AS lineas_cartera';
+        }
+
         $sql = "SELECT d.id AS id_documento,
                        {$total} AS monto_documento,
                        a.id AS id_asiento,
                        a.total_debe AS monto_asiento,
+                       {$colsCartera},
                        d.{$colFecha} AS fecha_documento
                 FROM {$tabla} d
                 LEFT JOIN asientos_contables_cabecera a
@@ -621,6 +652,7 @@ class AuditoriaContableRepository extends BaseRepository
                       AND a.estado <> 'anulado'
                       AND a.id_empresa = d.id_empresa
                       AND CAST(a.tipo_ambiente AS VARCHAR(1)) = {$amb}
+                {$joinCartera}
                 WHERE d.id_empresa = :id_empresa
                   AND d.eliminado = false
                   AND CAST(d.tipo_ambiente AS VARCHAR(1)) = {$amb}
@@ -643,7 +675,8 @@ class AuditoriaContableRepository extends BaseRepository
             if (empty($cfg['chequear_monto'])) {
                 continue;
             }
-            $montoAsiento = (float) $r['monto_asiento'];
+            $porCartera   = (int) ($r['lineas_cartera'] ?? 0) > 0;
+            $montoAsiento = $porCartera ? (float) $r['monto_cartera'] : (float) $r['monto_asiento'];
             // Una diferencia de hasta 3 centavos es redondeo legítimo absorbido por la cuenta de
             // «Ajuste por redondeo» del asiento (mismo tope que AsientoBuilderService); solo es
             // hallazgo real cuando la diferencia supera ese margen.
@@ -659,7 +692,10 @@ class AuditoriaContableRepository extends BaseRepository
                     $montoDoc, $montoAsiento, round($montoDoc - $montoAsiento, 2),
                     $esInformativo
                         ? "El total del documento difiere del asiento (esperado en este módulo: el asiento incluye conceptos que no están en el total del documento). Informativo."
-                        : "El total del documento no coincide con el total del asiento.",
+                        : ($porCartera
+                            ? 'El total del documento no coincide con la Cuenta por ' . ($ladoCartera === 'debe' ? 'Cobrar' : 'Pagar')
+                              . ' del asiento (cartera del asiento: ' . number_format($montoAsiento, 2, '.', '') . ').'
+                            : "El total del documento no coincide con el total del asiento."),
                     $r['fecha_documento']
                 );
             }

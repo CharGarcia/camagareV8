@@ -45,6 +45,21 @@ class AsientoBuilderService
      * real de su Cuenta por Pagar (puede estar repartida por línea/Producto/Categoría/Marca —
      * ver contrapartidaCarteraCompras) en vez de asumir una única cuenta global.
      */
+    /**
+     * Marca interna de $reglasSinCuenta para una línea COMERCIAL del documento que no resolvió
+     * cuenta en ningún nivel: aplicarAjusteRedondeo() la convierte en bloqueo (ver allí).
+     */
+    private const LINEA_SIN_CUENTA = '§linea§';
+
+    /** $reglasSinCuenta sin la marca interna LINEA_SIN_CUENTA, para mostrarla en un mensaje. */
+    private static function sinMarcaLinea(array $reglasSinCuenta): array
+    {
+        return array_map(
+            static fn($m) => is_string($m) && str_starts_with($m, self::LINEA_SIN_CUENTA) ? substr($m, strlen(self::LINEA_SIN_CUENTA)) : $m,
+            $reglasSinCuenta
+        );
+    }
+
     private const MODULO_ORIGEN_CARTERA_COMPRAS = [
         'COMPRA'      => 'compra',
         'LIQUIDACION' => 'liquidacion_compra',
@@ -955,7 +970,8 @@ class AsientoBuilderService
         // caer a la cuenta base (Cliente/General).
         $sql = "SELECT COALESCE(ap_p.id_cuenta, ap_c.id_cuenta, ap_m.id_cuenta, ap_tp.id_cuenta) AS dim_cuenta,
                        pc.codigo AS dim_codigo, pc.nombre AS dim_nombre,
-                       ROUND(SUM({$valorExpr})::numeric, 2) AS monto
+                       ROUND(SUM({$valorExpr})::numeric, 2) AS monto,
+                       string_agg(DISTINCT COALESCE(p.nombre, '(línea sin producto)'), ', ') AS productos
                 FROM {$fromClause}
                 LEFT JOIN productos p ON p.id = d.id_producto
                 {$joinsExtra}
@@ -987,6 +1003,7 @@ class AsientoBuilderService
         $mapa      = [];
         $total     = 0.0;
         $sinCuenta = 0.0;
+        $productosSinCuenta = []; // nombres de las líneas que no resolvieron cuenta
         while ($row = $st->fetch(\PDO::FETCH_ASSOC)) {
             $monto = round((float)$row['monto'], 2);
             if ($monto == 0.0) continue;
@@ -1003,6 +1020,7 @@ class AsientoBuilderService
                 // Ni la línea (producto/categoría/marca) ni la General/Cliente tienen cuenta:
                 // no se puede postear — se reporta aparte, nunca con id_cuenta=0.
                 $sinCuenta = round($sinCuenta + $monto, 2);
+                if (!empty($row['productos'])) { $productosSinCuenta[] = (string) $row['productos']; }
                 $total     = round($total + $monto, 2);
                 continue;
             }
@@ -1032,7 +1050,8 @@ class AsientoBuilderService
             }
         }
 
-        return ['partes' => array_values($mapa), 'sin_cuenta' => round(max(0.0, $sinCuenta), 2)];
+        return ['partes' => array_values($mapa), 'sin_cuenta' => round(max(0.0, $sinCuenta), 2),
+                'productos_sin_cuenta' => implode(', ', array_unique(array_map('trim', explode(',', implode(',', $productosSinCuenta)))))];
     }
 
     /**
@@ -1065,7 +1084,11 @@ class AsientoBuilderService
             if ($esLineaCosto) { $costoLineas[] = $linea; } else { $detalles[] = $linea; }
         }
         if ($res['sin_cuenta'] >= 0.01) {
-            $reglasSinCuenta[] = $refBase . ' (algunas líneas sin cuenta por producto/categoría/marca/tipo de producción, ni en la General)';
+            // Línea COMERCIAL sin cuenta (Cuenta por Cobrar, venta, ICE, descuento): se marca para que
+            // aplicarAjusteRedondeo() bloquee el asiento aunque cuadre — ver LINEA_SIN_CUENTA.
+            $reglasSinCuenta[] = $esLineaCosto
+                ? $refBase . ' (algunas líneas sin cuenta por producto/categoría/marca/tipo de producción, ni en la General)'
+                : self::LINEA_SIN_CUENTA . '«' . $refBase . '» para ' . ($res['productos_sin_cuenta'] !== '' ? $res['productos_sin_cuenta'] : 'algunas líneas');
         }
     }
 
@@ -1102,7 +1125,8 @@ class AsientoBuilderService
 
         $sql = "SELECT COALESCE(ap_p.id_cuenta, ap_c.id_cuenta, ap_m.id_cuenta, ap_tp.id_cuenta) AS dim_cuenta,
                        pc.codigo AS dim_codigo, pc.nombre AS dim_nombre,
-                       ROUND(SUM({$valorExpr})::numeric, 2) AS monto
+                       ROUND(SUM({$valorExpr})::numeric, 2) AS monto,
+                       string_agg(DISTINCT COALESCE(p.nombre, '(línea sin producto)'), ', ') AS productos
                 FROM {$fromClause}
                 LEFT JOIN productos p ON p.id = d.id_producto
                 {$joinsExtra}
@@ -1134,6 +1158,7 @@ class AsientoBuilderService
         $mapa      = [];
         $total     = 0.0;
         $sinCuenta = 0.0;
+        $productosSinCuenta = []; // nombres de las líneas que no resolvieron cuenta
         while ($row = $st->fetch(\PDO::FETCH_ASSOC)) {
             $monto = round((float)$row['monto'], 2);
             if ($monto == 0.0) continue;
@@ -1148,6 +1173,7 @@ class AsientoBuilderService
                 $nom   = $baseLinea['cuenta_nombre'];
             } else {
                 $sinCuenta = round($sinCuenta + $monto, 2);
+                if (!empty($row['productos'])) { $productosSinCuenta[] = (string) $row['productos']; }
                 $total     = round($total + $monto, 2);
                 continue;
             }
@@ -1175,7 +1201,8 @@ class AsientoBuilderService
             }
         }
 
-        return ['partes' => array_values($mapa), 'sin_cuenta' => round(max(0.0, $sinCuenta), 2)];
+        return ['partes' => array_values($mapa), 'sin_cuenta' => round(max(0.0, $sinCuenta), 2),
+                'productos_sin_cuenta' => implode(', ', array_unique(array_map('trim', explode(',', implode(',', $productosSinCuenta)))))];
     }
 
     /**
@@ -1207,7 +1234,11 @@ class AsientoBuilderService
             if ($esLineaCosto) { $costoLineas[] = $linea; } else { $detalles[] = $linea; }
         }
         if ($res['sin_cuenta'] >= 0.01) {
-            $reglasSinCuenta[] = $refBase . ' (algunas líneas sin cuenta por producto/categoría/marca/tipo de producción, ni en la General)';
+            // Línea COMERCIAL sin cuenta (Cuenta por Cobrar, venta, ICE, descuento): se marca para que
+            // aplicarAjusteRedondeo() bloquee el asiento aunque cuadre — ver LINEA_SIN_CUENTA.
+            $reglasSinCuenta[] = $esLineaCosto
+                ? $refBase . ' (algunas líneas sin cuenta por producto/categoría/marca/tipo de producción, ni en la General)'
+                : self::LINEA_SIN_CUENTA . '«' . $refBase . '» para ' . ($res['productos_sin_cuenta'] !== '' ? $res['productos_sin_cuenta'] : 'algunas líneas');
         }
     }
 
@@ -1244,7 +1275,8 @@ class AsientoBuilderService
 
         $sql = "SELECT COALESCE(ap_p.id_cuenta, ap_c.id_cuenta, ap_m.id_cuenta, ap_tp.id_cuenta) AS dim_cuenta,
                        pc.codigo AS dim_codigo, pc.nombre AS dim_nombre,
-                       ROUND(SUM({$valorExpr})::numeric, 2) AS monto
+                       ROUND(SUM({$valorExpr})::numeric, 2) AS monto,
+                       string_agg(DISTINCT COALESCE(p.nombre, '(línea sin producto)'), ', ') AS productos
                 FROM {$fromClause}
                 LEFT JOIN productos p ON p.id = d.id_producto
                 {$joinsExtra}
@@ -1276,6 +1308,7 @@ class AsientoBuilderService
         $mapa      = [];
         $total     = 0.0;
         $sinCuenta = 0.0;
+        $productosSinCuenta = []; // nombres de las líneas que no resolvieron cuenta
         while ($row = $st->fetch(\PDO::FETCH_ASSOC)) {
             $monto = round((float)$row['monto'], 2);
             if ($monto == 0.0) continue;
@@ -1290,6 +1323,7 @@ class AsientoBuilderService
                 $nom   = $baseLinea['cuenta_nombre'];
             } else {
                 $sinCuenta = round($sinCuenta + $monto, 2);
+                if (!empty($row['productos'])) { $productosSinCuenta[] = (string) $row['productos']; }
                 $total     = round($total + $monto, 2);
                 continue;
             }
@@ -1317,7 +1351,8 @@ class AsientoBuilderService
             }
         }
 
-        return ['partes' => array_values($mapa), 'sin_cuenta' => round(max(0.0, $sinCuenta), 2)];
+        return ['partes' => array_values($mapa), 'sin_cuenta' => round(max(0.0, $sinCuenta), 2),
+                'productos_sin_cuenta' => implode(', ', array_unique(array_map('trim', explode(',', implode(',', $productosSinCuenta)))))];
     }
 
     /**
@@ -1349,7 +1384,11 @@ class AsientoBuilderService
             if ($esLineaCosto) { $costoLineas[] = $linea; } else { $comercial[] = $linea; }
         }
         if ($res['sin_cuenta'] >= 0.01) {
-            $reglasSinCuenta[] = $refBase . ' (algunas líneas sin cuenta por producto/categoría/marca/tipo de producción, ni en la General)';
+            // Línea COMERCIAL sin cuenta (Cuenta por Cobrar, venta, ICE, descuento): se marca para que
+            // aplicarAjusteRedondeo() bloquee el asiento aunque cuadre — ver LINEA_SIN_CUENTA.
+            $reglasSinCuenta[] = $esLineaCosto
+                ? $refBase . ' (algunas líneas sin cuenta por producto/categoría/marca/tipo de producción, ni en la General)'
+                : self::LINEA_SIN_CUENTA . '«' . $refBase . '» para ' . ($res['productos_sin_cuenta'] !== '' ? $res['productos_sin_cuenta'] : 'algunas líneas');
         }
     }
 
@@ -1402,7 +1441,8 @@ class AsientoBuilderService
 
         $sql = "SELECT COALESCE(ap_i.id_cuenta, ap_c.id_cuenta, ap_m.id_cuenta) AS dim_cuenta,
                        pc.codigo AS dim_codigo, pc.nombre AS dim_nombre,
-                       ROUND(SUM({$valorExpr})::numeric, 2) AS monto
+                       ROUND(SUM({$valorExpr})::numeric, 2) AS monto,
+                       string_agg(DISTINCT COALESCE(NULLIF(TRIM(d.descripcion), ''), p.nombre, '(sin descripción)'), ', ') AS productos
                 FROM {$tablaDetalle} d
                 LEFT JOIN productos p ON p.id = d.id_producto
                 {$joinsExtra}
@@ -1430,6 +1470,7 @@ class AsientoBuilderService
         $mapa      = [];
         $total     = 0.0;
         $sinCuenta = 0.0;
+        $productosSinCuenta = []; // nombres de las líneas que no resolvieron cuenta
         while ($row = $st->fetch(\PDO::FETCH_ASSOC)) {
             $monto = round((float)$row['monto'], 2);
             if ($monto == 0.0) continue;
@@ -1444,6 +1485,7 @@ class AsientoBuilderService
                 $nom   = $baseLinea['cuenta_nombre'];
             } else {
                 $sinCuenta = round($sinCuenta + $monto, 2);
+                if (!empty($row['productos'])) { $productosSinCuenta[] = (string) $row['productos']; }
                 $total     = round($total + $monto, 2);
                 continue;
             }
@@ -1472,7 +1514,8 @@ class AsientoBuilderService
             }
         }
 
-        return ['partes' => array_values($mapa), 'sin_cuenta' => round(max(0.0, $sinCuenta), 2)];
+        return ['partes' => array_values($mapa), 'sin_cuenta' => round(max(0.0, $sinCuenta), 2),
+                'productos_sin_cuenta' => implode(', ', array_unique(array_map('trim', explode(',', implode(',', $productosSinCuenta)))))];
     }
 
     /**
@@ -1499,6 +1542,29 @@ class AsientoBuilderService
      */
     private function aplicarAjusteRedondeo(array $detalles, array $reglas, string $etiqueta, array $reglasSinCuenta = [], ?array $cuentaRedondeoCategoria = null, int $numLineasIva = 0): array
     {
+        // Líneas COMERCIALES del documento que no resolvieron cuenta en ningún nivel (producto,
+        // categoría, marca, tipo de producción, General): su monto quedó fuera del asiento. Si les
+        // faltaba la cuenta en TODOS los conceptos a la vez (Cuenta por Cobrar, venta, IVA…), el
+        // asiento cuadra igual y antes se guardaba SIN esa línea, en silencio — se perdían ventas
+        // sin que nada avisara (caso real: GOLIFE, factura 001-001-000000104, la línea de servicio
+        // sin categoría quedó fuera porque la CxC solo estaba configurada por categoría). Ahora no
+        // se genera y el motivo dice qué producto y qué cuenta faltan.
+        $lineasSinCuenta = array_values(array_filter(
+            $reglasSinCuenta,
+            static fn($m) => is_string($m) && str_starts_with($m, self::LINEA_SIN_CUENTA)
+        ));
+        if ($lineasSinCuenta) {
+            throw new \Exception(
+                'Faltan cuentas por configurar: ' . implode('; ', array_map(
+                    static fn($m) => substr($m, strlen(self::LINEA_SIN_CUENTA)),
+                    array_unique($lineasSinCuenta)
+                ))
+                . ' (no tienen cuenta en su producto, categoría, marca ni tipo de producción, ni en la General). '
+                . "Asígnela en Configuración Contable ({$etiqueta}) en la regla que corresponda: producto, "
+                . 'categoría, marca, tipo de producción (Bien/Servicio) o General.'
+            );
+        }
+
         $totalDebe  = round(array_sum(array_column($detalles, 'debe')),  2);
         $totalHaber = round(array_sum(array_column($detalles, 'haber')), 2);
         $diff = round($totalDebe - $totalHaber, 2);
@@ -1521,7 +1587,7 @@ class AsientoBuilderService
                 throw new \Exception(
                     "El asiento no cuadra (Debe: $" . number_format($totalDebe, 2) .
                     ", Haber: $" . number_format($totalHaber, 2) . "). Falta asignar la cuenta contable de: " .
-                    implode(', ', array_unique($reglasSinCuenta)) .
+                    implode(', ', array_unique(self::sinMarcaLinea($reglasSinCuenta))) .
                     // Llaves obligatorias: «» son multibyte y PHP los absorbería en el nombre de la variable.
                     ". Configúrela en Contabilidad → Configuración contable, concepto «{$etiqueta}»."
                 );
@@ -2093,7 +2159,7 @@ class AsientoBuilderService
             if (!empty($reglasSinCuenta)) {
                 throw new \Exception(
                     "No se generó ninguna línea del asiento. Falta asignar la cuenta contable de: " .
-                    implode(', ', array_unique($reglasSinCuenta)) .
+                    implode(', ', array_unique(self::sinMarcaLinea($reglasSinCuenta))) .
                     ". Configúrela en Contabilidad → Configuración contable, concepto «ventas»."
                 );
             }
@@ -2533,7 +2599,7 @@ class AsientoBuilderService
             if (!empty($reglasSinCuenta)) {
                 throw new \Exception(
                     "No se generó ninguna línea del asiento. Falta asignar la cuenta contable de: " .
-                    implode(', ', array_unique($reglasSinCuenta)) .
+                    implode(', ', array_unique(self::sinMarcaLinea($reglasSinCuenta))) .
                     ". Configúrela en Contabilidad → Configuración contable, concepto «recibos de venta»."
                 );
             }
@@ -2799,7 +2865,7 @@ class AsientoBuilderService
                 $inventarioLineas = $res['partes'];
             }
             if ($res !== null && $res['sin_cuenta'] >= 0.01) {
-                $sinCuentaExtra[] = $refConcepto . ' (algunas líneas sin cuenta por ítem/categoría/marca, ni en la General)';
+                $sinCuentaExtra[] = self::LINEA_SIN_CUENTA . '«' . $refConcepto . '» para ' . ($res['productos_sin_cuenta'] !== '' ? $res['productos_sin_cuenta'] : 'algunas líneas');
             }
         }
 
@@ -2942,7 +3008,7 @@ class AsientoBuilderService
             if (!empty($reglasSinCuenta)) {
                 throw new \Exception(
                     "No se generó ninguna línea del asiento. Falta asignar la cuenta contable de: " .
-                    implode(', ', array_unique($reglasSinCuenta)) .
+                    implode(', ', array_unique(self::sinMarcaLinea($reglasSinCuenta))) .
                     ". Configúrela en Contabilidad → Configuración contable, concepto «compras»."
                 );
             }
@@ -3441,7 +3507,7 @@ class AsientoBuilderService
             if (!empty($reglasSinCuenta)) {
                 throw new \Exception(
                     "No se generó ninguna línea del asiento. Falta asignar la cuenta contable de: " .
-                    implode(', ', array_unique($reglasSinCuenta)) .
+                    implode(', ', array_unique(self::sinMarcaLinea($reglasSinCuenta))) .
                     ". Configúrela en Contabilidad → Configuración contable."
                 );
             }
@@ -3689,7 +3755,7 @@ class AsientoBuilderService
             if (!empty($reglasSinCuenta)) {
                 throw new \Exception(
                     "No se generó ninguna línea del asiento. Falta asignar la cuenta contable de: " .
-                    implode(', ', array_unique($reglasSinCuenta)) .
+                    implode(', ', array_unique(self::sinMarcaLinea($reglasSinCuenta))) .
                     ". Configúrela en Contabilidad → Configuración contable, concepto «ventas»."
                 );
             }
@@ -4561,7 +4627,7 @@ class AsientoBuilderService
         // redondeo no detectaría esto (Debe=Haber=0, sin descuadre), así que se avisa explícito.
         if (empty($detalles)) {
             throw new \Exception(
-                'Falta configurar la(s) cuenta(s) contable(s) de: ' . implode(', ', array_unique($reglasSinCuenta)) .
+                'Falta configurar la(s) cuenta(s) contable(s) de: ' . implode(', ', array_unique(self::sinMarcaLinea($reglasSinCuenta))) .
                 '. Configúrelas en Contabilidad → Configuración contable, concepto «Declaración de IVA».'
             );
         }

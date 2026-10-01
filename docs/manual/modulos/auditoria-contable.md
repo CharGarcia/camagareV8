@@ -5,8 +5,8 @@ categoria: Contabilidad
 ruta_modulo: modulos/auditoria_contable
 tipo: modulo
 visibilidad: admin
-etiquetas: auditoria contable, revisar asientos, documentos sin asiento, descuadres, regenerar contabilidad, hallazgos
-version: 1.0
+etiquetas: auditoria contable, revisar asientos, documentos sin asiento, descuadres, regenerar contabilidad, hallazgos, monto no coincide, cartera del asiento, diferencia asiento documento
+version: 1.2
 orden: 70
 estado: activo
 ---
@@ -23,6 +23,24 @@ por dónde empezar.
 1. Ejecute la revisión sobre el periodo que le interese.
 2. Revise los **hallazgos** agrupados por tipo.
 3. Corrija los que correspondan, en masa o uno a uno.
+
+## Monto no coincide
+
+El hallazgo **Monto no coincide** compara el total del documento con su asiento:
+
+- En **facturas y recibos de venta, compras y liquidaciones** se compara con la
+  **Cuenta por Cobrar o por Pagar** del asiento (las cuentas configuradas para
+  eso en Configuración Contable), no con el total del Debe. El Debe de una venta
+  incluye además el Costo de Ventas y los descuentos, así que no sirve para
+  comparar. Es el mismo criterio que muestra la pestaña *Asiento contable* del
+  documento ("Cartera del asiento: … · diferencia: …").
+- Si el asiento no usa ninguna cuenta de cartera configurada, o el documento no
+  tiene cuenta de cartera, se compara con el total del Debe.
+- Diferencias de hasta 3 centavos son redondeo y no se reportan.
+
+Si aparece, las causas habituales son: el documento se modificó después y su
+asiento no se actualizó, el asiento se editó a mano, o la Cuenta por Cobrar/Pagar
+que usa el asiento ya no es la configurada hoy.
 
 ## Regenerar toda la contabilidad
 
@@ -51,5 +69,6 @@ aparecerán como "documentos sin asiento".
 
 ## Historial de cambios
 
+- **1.2** — *Monto no coincide* en ventas, recibos, compras y liquidaciones compara la Cuenta por Cobrar o por Pagar del asiento, no el Debe total: antes marcaba como error toda factura con costo de ventas.
 - **1.1** — **Regenerar** ya no toca los documentos cuya contabilidad vino de la migración aunque el documento haya existido antes de migrar (la migración solo lo enlazó a su asiento histórico): se avisa que su contabilidad es la del histórico migrado. Al anular asientos duplicados o regenerar, nunca se suelta el enlace del documento con su asiento migrado.
 - **1.0** — Versión inicial.

@@ -6,7 +6,7 @@ ruta_modulo: modulos/asientos_contables
 tipo: modulo
 visibilidad: todos
 etiquetas: asientos, asiento contable, diario, debe, haber, partida doble, cuadrado, comprobante, contabilidad, imprimir, pdf, excel, documento origen, cuadre con el documento, total de la factura, cuenta por cobrar, cartera, editar asiento desde el documento, pestaña asiento contable, editado a mano, restaurar asiento automático, permisos de contabilidad, documentos migrados, migración, sistema anterior, buscar asiento, buscador, filtros, filtrar asientos, buscar por cuenta, buscar por referencia, libro diario, chips, asiento descuadrado, búsqueda lenta, se queda buscando, filtrar por origen, origen del asiento, módulo de origen, vista previa, costo de ventas, asiento sin costo, duplicar asiento, copiar asiento, clonar asiento, repetir asiento
-version: 1.32
+version: 1.33
 orden: 20
 estado: activo
 ---
@@ -477,6 +477,9 @@ tienen un documento individual con tercero que mostrar.
 
 ## Historial de cambios
 
+- **1.33** — Un asiento ya no se genera si alguna línea del documento se quedó sin cuenta
+  contable (antes se omitía esa línea y el asiento cuadraba igual, perdiendo la venta sin aviso).
+  El aviso de pendientes nombra el producto y la cuenta que faltan.
 - **1.32** — El aviso de asientos pendientes vuelve a decir exactamente qué falta: debajo de
   cada línea muestra los documentos, de qué proveedor o cliente son y qué cuentas faltan.
 - **1.31** — El aviso de conceptos de Ingresos/Egresos sin cuenta también se limita a los que ya
