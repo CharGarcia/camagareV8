@@ -222,7 +222,7 @@ su celular, sin usuario ni contraseña, con un **QR general del colegio**.
 
 ### Cómo lo usa el colegio
 
-En el listado de Alumnos, botón **Portal de representantes** (solo usuarios con
+En el listado de Alumnos, botón **QR representantes**, junto a PDF y Excel (solo usuarios con
 permiso de *modificar* Alumnos):
 
 - **QR y enlace** del colegio, para copiar.
@@ -347,7 +347,7 @@ pestaña Transacciones aparece solo si el usuario puede **ver** Facturas de Vent
   que los padres, verificados con un código en su correo, actualizan una vez sus
   datos de facturación y los de sus hijos, o registran alumnos nuevos (con su
   campus y nivel). Botón
-  *Portal de representantes* en el listado: QR, hoja para imprimir, envío del
+  *QR representantes* en el listado: QR, hoja para imprimir, envío del
   enlace por correo, activar/desactivar y regenerar. Requiere ejecutar en la
   base `database/migrations/20260929_alumnos_portal_representantes.sql`.
 

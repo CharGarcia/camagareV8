@@ -29,11 +29,6 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
 <div class="d-flex justify-content-between align-items-center mb-3">
     <h5 class="mb-0 fw-bold"><i class="bi bi-mortarboard-fill me-2 text-primary"></i>Alumnos</h5>
     <div class="d-flex gap-2">
-        <?php if (!empty($perm['actualizar'])): ?>
-            <button type="button" class="btn btn-outline-primary btn-sm px-3 shadow-sm" onclick="aluAbrirPortal()" title="QR y enlace para que los representantes actualicen sus datos">
-                <i class="bi bi-qr-code me-1"></i> Portal de representantes
-            </button>
-        <?php endif; ?>
         <?php if ($perm['crear']): ?>
             <button type="button" class="btn btn-primary btn-sm px-3 shadow-sm" onclick="abrirModalAlumnoCrear()">
                 <i class="bi bi-plus-lg me-1"></i> Nuevo
@@ -91,6 +86,9 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                 ?>
                 <a id="btnExportPdf" href="<?= $urlBaseAlu ?>/export-pdf?b=<?= urlencode($buscar) ?>&sort=<?= urlencode($ordenCol) ?>&dir=<?= urlencode($ordenDir) ?>" class="btn btn-outline-danger" title="PDF"><i class="bi bi-file-earmark-pdf"></i> PDF</a>
                 <a id="btnExportExcel" href="<?= $urlBaseAlu ?>/export-excel?b=<?= urlencode($buscar) ?>&sort=<?= urlencode($ordenCol) ?>&dir=<?= urlencode($ordenDir) ?>" class="btn btn-outline-success" title="Excel"><i class="bi bi-file-earmark-spreadsheet"></i> Excel</a>
+                <?php if (!empty($perm['actualizar'])): ?>
+                <button type="button" class="btn btn-outline-primary" onclick="aluAbrirPortal()" title="QR y enlace para que los representantes actualicen sus datos"><i class="bi bi-qr-code"></i> QR representantes</button>
+                <?php endif; ?>
             </div>
         </div>
 
