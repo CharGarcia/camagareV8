@@ -86,6 +86,21 @@ class AsientoContableService
         return $this->repository->getAsientoPorOrigen($modulo, $idRef, $idEmpresa);
     }
 
+    /**
+     * Asiento MIGRADO del sistema anterior enlazado a un documento, con su detalle, para mostrarlo
+     * en la pestaña "Asiento contable" del documento. getAsientoPorOrigen() no lo encuentra porque
+     * su modulo_origen es 'migracion'; el enlace es el del documento (id_asiento_contable).
+     */
+    public function getAsientoMigradoParaMostrar(string $modulo, int $idRef, int $idEmpresa): ?array
+    {
+        $doc = \App\Helpers\DocumentoOrigenAsiento::paraModulo($modulo);
+        if ($doc === null || $idRef <= 0) {
+            return null;
+        }
+        $id = $this->repository->getAsientoMigradoDeDocumento($doc['tabla'], $doc['col_asiento'], $idRef, $idEmpresa);
+        return $id !== null ? ($this->repository->getDetalleAsiento($id, $idEmpresa) ?: null) : null;
+    }
+
     /** @return int[] Todos los ids de asientos activos de un origen (puede haber varios). */
     public function getIdsAsientosPorOrigen(string $modulo, int $idRef, int $idEmpresa): array
     {

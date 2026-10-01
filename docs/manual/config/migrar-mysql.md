@@ -334,6 +334,10 @@ egreso o ingreso):
 - No importa el orden: si **Pagos (egresos)** o **Cobros (ingresos)** se migran
   después de la Contabilidad, se enlazan solos con su asiento ya migrado (el
   resultado lo informa como *documentos enlazados con su asiento contable*).
+- La pestaña **Asiento contable** del documento (egreso, ingreso, factura o
+  recibo de venta) muestra ese asiento migrado, con su número del sistema
+  anterior (por ejemplo `EGR184544`) y su fecha original. El número interno del
+  asiento en el sistema anterior (por ejemplo 635015) no se conserva.
 - **"Desde" incluye lo registrado tarde.** En Contabilidad, Pagos y Cobros, la
   fecha *Desde* trae lo fechado desde ese día **y también lo registrado (o
   editado) en el sistema anterior desde ese día**, aunque tenga una fecha
@@ -514,7 +518,8 @@ sistema anterior tampoco los aplicaba al facturar por alumno).
 
 - **1.17** — **Asientos de pagos y cobros**: se enlazan por el vínculo real del
   sistema anterior y también al migrar Pagos/Cobros después de la Contabilidad;
-  el filtro **Desde** de Contabilidad, Pagos y Cobros incluye lo registrado tarde.
+  el filtro **Desde** de Contabilidad, Pagos y Cobros incluye lo registrado tarde;
+  la pestaña *Asiento contable* del documento muestra el asiento migrado.
 - **1.16** — **Liquidaciones de compra**: las migradas hasta 2020 con saldo
   pendiente quedan **pagadas en el sistema anterior** (saldo $0.00, sin egreso),
   porque ese sistema no registraba sus pagos.

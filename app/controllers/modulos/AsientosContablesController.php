@@ -292,6 +292,9 @@ class AsientosContablesController extends BaseModuloController
 
         if ($modulo !== '' && $idRef > 0) {
             $data = $this->service->getAsientoPorOrigen($modulo, $idRef, $idEmpresa);
+            // Documento migrado: su asiento histórico (modulo_origen 'migracion') solo se encuentra
+            // por el enlace del documento (id_asiento_contable).
+            $data = $data ?: $this->service->getAsientoMigradoParaMostrar($modulo, $idRef, $idEmpresa);
         } else {
             $data = $this->service->getDetalleAsiento($id, $idEmpresa);
         }
