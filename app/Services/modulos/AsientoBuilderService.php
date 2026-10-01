@@ -4245,12 +4245,28 @@ class AsientoBuilderService
         //    registrarse (puede estar repartida en varias cuentas por línea/Cliente/Producto —
         //    misma cascada que Compras), no la cuenta del concepto elegido en el ingreso.
         $restante = $totalMovido;
-        [$lineasCartera, $totalCartera, $refCarteraNoResuelta] = $this->contrapartidaCarteraVentas($db, $idEmpresa, $idIngreso);
+        [$lineasCartera, $totalCartera, $refCarteraNoResuelta, $montoNoResuelto, $docsNoResueltos] = $this->contrapartidaCarteraVentas($db, $idEmpresa, $idIngreso);
         if ($totalCartera > 0) {
             foreach ($lineasCartera as $l) {
                 $detalles[] = $l;
             }
             $restante = round($restante - $totalCartera, 2);
+        }
+        // Facturas/recibos SIN asiento propio (migrados, aún sin contabilizar): a la Cuenta por
+        // Cobrar oficial, no a la cuenta del concepto de cabecera — si el concepto es Anticipo
+        // Clientes, el cobro de la factura terminaba en el anticipo (ver lineasCarteraNoResuelta).
+        [$lineasNoRes, $cubiertoNoRes] = $this->lineasCarteraNoResuelta(
+            $idEmpresa, $montoNoResuelto, $docsNoResueltos,
+            (int) ($ingreso['id_cliente'] ?? 0) ?: null, 'cliente', 'haber'
+        );
+        if ($cubiertoNoRes > 0) {
+            foreach ($lineasNoRes as $l) {
+                $detalles[] = $l;
+            }
+            $restante = round($restante - $cubiertoNoRes, 2);
+            if ($cubiertoNoRes >= round(array_sum($montoNoResuelto), 2) - 0.005) {
+                $refCarteraNoResuelta = ''; // ya no queda cartera para el concepto
+            }
         }
         // Documentos sin asiento propio resoluble (o sin línea de Debe): su monto se queda en
         // $restante y cae al camino normal (cuenta del concepto). Su referencia, eso sí, sigue
@@ -4421,12 +4437,27 @@ class AsientoBuilderService
         //    Cuenta por Pagar que el documento acreditó en su propio asiento al registrarse
         //    (puede estar repartida en varias cuentas por línea/Producto/Categoría/Marca — ver
         //    contrapartidaCarteraCompras), no la cuenta del concepto elegido en el egreso.
-        [$lineasCartera, $totalCartera, $refCarteraNoResuelta] = $this->contrapartidaCarteraCompras($db, $idEmpresa, $idEgreso);
+        [$lineasCartera, $totalCartera, $refCarteraNoResuelta, $montoNoResuelto, $docsNoResueltos] = $this->contrapartidaCarteraCompras($db, $idEmpresa, $idEgreso);
         if ($totalCartera > 0) {
             foreach ($lineasCartera as $l) {
                 $detalles[] = $l;
             }
             $restante = round($restante - $totalCartera, 2);
+        }
+        // Compras/liquidaciones SIN asiento propio (migradas, aún sin contabilizar): a la Cuenta por
+        // Pagar oficial, no a la cuenta del concepto de cabecera (ver lineasCarteraNoResuelta).
+        [$lineasNoRes, $cubiertoNoRes] = $this->lineasCarteraNoResuelta(
+            $idEmpresa, $montoNoResuelto, $docsNoResueltos,
+            (int) ($egreso['id_proveedor'] ?? 0) ?: null, 'proveedor', 'debe'
+        );
+        if ($cubiertoNoRes > 0) {
+            foreach ($lineasNoRes as $l) {
+                $detalles[] = $l;
+            }
+            $restante = round($restante - $cubiertoNoRes, 2);
+            if ($cubiertoNoRes >= round(array_sum($montoNoResuelto), 2) - 0.005) {
+                $refCarteraNoResuelta = ''; // ya no queda cartera para el concepto
+            }
         }
         // Documentos sin asiento propio resoluble (o sin línea de Haber): su monto se queda en
         // $restante y cae al camino normal (cuenta del concepto). Su referencia, eso sí, sigue
@@ -4735,6 +4766,7 @@ class AsientoBuilderService
         $lineasPorCuenta = [];
         $docsPorCuenta   = []; // id_cuenta => tipo_documento => [secuencial corto => true]
         $docsNoResueltos = []; // tipo_documento => [secuencial corto => true] (sin asiento propio)
+        $montoNoResuelto = []; // tipo_documento => monto pagado de documentos sin asiento propio
         $totalResuelto = 0.0;
 
         foreach ($documentos as $doc) {
@@ -4765,12 +4797,14 @@ class AsientoBuilderService
 
             $totalHaberDoc = round((float) array_sum(array_column($haberLineas, 'monto')), 2);
             if (empty($haberLineas) || $totalHaberDoc <= 0) {
-                // Documento sin asiento propio (o sin Haber): cae al camino normal. Se anota su
-                // número para que la línea del concepto también diga qué documento se pagó.
+                // Documento sin asiento propio (o sin Haber): lo resuelve el llamador con la
+                // Cuenta por Pagar oficial de su tipo (ver lineasCarteraNoResuelta). Se anota su
+                // número y su monto para eso.
                 $nc = self::secuencialCorto((string) ($doc['numero_documento'] ?? ''));
                 if ($nc !== '') {
                     $docsNoResueltos[$tipoDoc][$nc] = true;
                 }
+                $montoNoResuelto[$tipoDoc] = round(($montoNoResuelto[$tipoDoc] ?? 0) + $totalPagado, 2);
                 continue;
             }
 
@@ -4816,7 +4850,67 @@ class AsientoBuilderService
         // 42869") o '' si todos los documentos resolvieron por su propio asiento.
         $refNoResueltos = self::referenciaCartera('Pago', self::ETIQUETA_DOC_CARTERA_COMPRAS, $docsNoResueltos);
 
-        return [array_values($lineasPorCuenta), $totalResuelto, $refNoResueltos];
+        return [array_values($lineasPorCuenta), $totalResuelto, $refNoResueltos, $montoNoResuelto, $docsNoResueltos];
+    }
+
+    /** Comportamiento (cuenta oficial de Configuración Contable) de cada tipo de documento de cartera. */
+    private const COMPORTAMIENTO_POR_DOC_CARTERA = [
+        'COMPRA'      => 'COMPRA',
+        'LIQUIDACION' => 'LIQUIDACION',
+        'FACTURA'     => 'FACTURA_VENTA',
+        'RECIBO'      => 'RECIBO_VENTA',
+    ];
+
+    /**
+     * Contrapartida de los documentos de cartera que NO tienen asiento propio del que copiar la
+     * Cuenta por Cobrar/Pagar (migrados —su asiento es el histórico, modulo_origen 'migracion'—,
+     * o documentos que aún no se contabilizaron). Van a la cuenta OFICIAL de su tipo de documento
+     * en Configuración Contable (Cuentas por Pagar de Adquisiciones, Cuentas por Cobrar de Ventas
+     * con Factura / Recibos de Venta), respetando la regla propia del proveedor/cliente.
+     *
+     * Antes caían a la cuenta del CONCEPTO de cabecera: si era un anticipo (sin cuenta oficial), el
+     * cobro de una factura migrada terminaba en Anticipo Clientes (caso real: ingreso
+     * 001-101-000025088 de ASAMED, empresa 23). Si el tipo no tiene cuenta oficial configurada, el
+     * monto se deja en $restante para el camino de siempre (concepto / aviso de cuenta faltante).
+     *
+     * @param array<string,float> $montoNoResuelto tipo_documento => monto
+     * @param array<string,array> $docsNoResueltos tipo_documento => [secuencial corto => true]
+     * @param string $lado 'debe' (egreso: cancela CxP) | 'haber' (ingreso: cancela CxC)
+     * @return array{0: array, 1: float} [líneas, total cubierto]
+     */
+    private function lineasCarteraNoResuelta(
+        int $idEmpresa, array $montoNoResuelto, array $docsNoResueltos,
+        ?int $idEntidad, string $tipoEntidad, string $lado
+    ): array {
+        $esIngreso = $lado === 'haber';
+        $lineas = [];
+        $cubierto = 0.0;
+        foreach ($montoNoResuelto as $tipoDoc => $monto) {
+            $monto = round((float) $monto, 2);
+            $comp  = self::COMPORTAMIENTO_POR_DOC_CARTERA[$tipoDoc] ?? null;
+            if ($monto <= 0 || $comp === null) {
+                continue;
+            }
+            $oficial = $this->programadoRepo->getCuentaOficialPorComportamiento($idEmpresa, $comp, $idEntidad, $tipoEntidad);
+            $idCuenta = (int) ($oficial['id_cuenta'] ?? 0);
+            if ($idCuenta <= 0) {
+                continue; // sin cuenta oficial: se queda en $restante (camino de siempre)
+            }
+            $ref = self::referenciaCartera(
+                $esIngreso ? 'Cobro' : 'Pago',
+                $esIngreso ? self::ETIQUETA_DOC_CARTERA_VENTAS : self::ETIQUETA_DOC_CARTERA_COMPRAS,
+                [$tipoDoc => $docsNoResueltos[$tipoDoc] ?? []]
+            );
+            $lineas[] = [
+                'id_cuenta_contable' => $idCuenta,
+                'debe'               => $esIngreso ? 0.0 : $monto,
+                'haber'              => $esIngreso ? $monto : 0.0,
+                'referencia_detalle' => $ref !== '' ? $ref
+                    : ($esIngreso ? self::NOMBRE_CONTRAPARTIDA_CARTERA_VENTAS[$tipoDoc] : self::NOMBRE_CONTRAPARTIDA_CARTERA_COMPRAS[$tipoDoc]),
+            ];
+            $cubierto = round($cubierto + $monto, 2);
+        }
+        return [$lineas, $cubierto];
     }
 
     /**
@@ -4845,6 +4939,7 @@ class AsientoBuilderService
         $lineasPorCuenta = [];
         $docsPorCuenta   = []; // id_cuenta => tipo_documento => [secuencial corto => true]
         $docsNoResueltos = []; // tipo_documento => [secuencial corto => true] (sin asiento propio)
+        $montoNoResuelto = []; // tipo_documento => monto cobrado de documentos sin asiento propio
         $totalResuelto = 0.0;
 
         foreach ($documentos as $doc) {
@@ -4878,12 +4973,14 @@ class AsientoBuilderService
 
             $totalDebeDoc = round((float) array_sum(array_column($debeLineas, 'monto')), 2);
             if (empty($debeLineas) || $totalDebeDoc <= 0) {
-                // Documento sin asiento propio (o sin Debe): cae al camino normal. Se anota su
-                // número para que la línea del concepto también diga qué documento se cobró.
+                // Documento sin asiento propio (o sin Debe): lo resuelve el llamador con la
+                // Cuenta por Cobrar oficial de su tipo (ver lineasCarteraNoResuelta). Se anota su
+                // número y su monto para eso.
                 $nc = self::secuencialCorto((string) ($doc['numero_documento'] ?? ''));
                 if ($nc !== '') {
                     $docsNoResueltos[$tipoDoc][$nc] = true;
                 }
+                $montoNoResuelto[$tipoDoc] = round(($montoNoResuelto[$tipoDoc] ?? 0) + $totalCobrado, 2);
                 continue;
             }
 
@@ -4929,7 +5026,7 @@ class AsientoBuilderService
         // 123") o '' si todos los documentos resolvieron por su propio asiento.
         $refNoResueltos = self::referenciaCartera('Cobro', self::ETIQUETA_DOC_CARTERA_VENTAS, $docsNoResueltos);
 
-        return [array_values($lineasPorCuenta), $totalResuelto, $refNoResueltos];
+        return [array_values($lineasPorCuenta), $totalResuelto, $refNoResueltos, $montoNoResuelto, $docsNoResueltos];
     }
 
     /**

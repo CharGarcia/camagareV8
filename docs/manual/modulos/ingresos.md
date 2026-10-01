@@ -454,7 +454,8 @@ misma revisión al guardar:
   recibos, Cuentas por Cobrar). Ahora el asiento usa siempre la cuenta guardada en cada
   línea. Además, en un ingreso que cobra facturas o recibos sin asiento propio y lleva
   «Otros conceptos», el saldo de esos documentos ya no se suma a la cuenta de la línea
-  manual: va a la cuenta del concepto (Cuentas por Cobrar). Los asientos ya generados
+  manual: va a la Cuenta por Cobrar oficial de Ventas con Factura / Recibos de Venta (o la
+  del cliente), aunque el concepto del ingreso sea un anticipo. Los asientos ya generados
   mal se corrigen volviendo a guardar el ingreso.
 - **3.8** — En la ventana de filtros, la pestaña *Detalles* se llama ahora
   **Búsqueda por detalle**, y la ventana ya no tiene barra de desplazamiento
