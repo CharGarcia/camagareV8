@@ -124,7 +124,7 @@
                             <label class="form-label small fw-bold mb-1">Fecha Recepción</label>
                             <input type="date" class="form-control form-control-sm" id="oc_fecha_recepcion" name="fecha_recepcion">
                         </div>
-                        <div class="col-md-4">
+                        <div class="col-md-8">
                             <label class="form-label small fw-bold mb-1">Solicitado por</label>
                             <input type="text" class="form-control form-control-sm" id="oc_solicitado_por" name="solicitado_por"
                                    placeholder="Nombre de quien solicita la compra..." maxlength="150">
