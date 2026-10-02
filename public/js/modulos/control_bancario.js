@@ -161,7 +161,7 @@
         solo_documento:   { txt: 'Sin asiento contable',            cls: 'warning',   ayuda: 'El ingreso/egreso no tiene asiento contabilizado en la cuenta del banco.' },
         solo_contabilidad: { txt: 'Solo en contabilidad',            cls: 'info',      ayuda: 'Asiento sin ingreso/egreso detrás (manual, migrado, etc.).' },
         documento_anulado: { txt: 'Asiento de documento anulado',    cls: 'danger',    ayuda: 'El ingreso/egreso está anulado o eliminado pero su asiento sigue contabilizado.' },
-        otra_cuenta:       { txt: 'Cobrado/pagado con otra cuenta',  cls: 'secondary', ayuda: 'El asiento toca esta cuenta contable pero el documento se cobró/pagó con otra forma de pago.' },
+        otra_cuenta:       { txt: 'Cobrado/pagado con otra cuenta',  cls: 'secondary', ayuda: 'El asiento mueve esta cuenta contable, pero el documento se registró con otra forma de pago. Revise la forma de pago del documento o la cuenta de su asiento.' },
         monto_distinto:    { txt: 'Monto distinto',                  cls: 'danger',    ayuda: 'El documento y su asiento mueven montos distintos en el banco.' },
         fecha_distinta:    { txt: 'Fecha en otro período',           cls: 'secondary', ayuda: 'El documento y su asiento tienen fechas que caen en períodos distintos.' },
     };
@@ -267,7 +267,17 @@
         // Mayor comparado: saldo al inicio, cada movimiento con el saldo acumulado de cada lado,
         // y saldo al final. La fila donde cambia la diferencia acumulada es la que descuadra.
         const filas = (d.partidas || []).map(p => {
-            const c = CLASES_COMPROBACION[p.clase] || { txt: p.clase, cls: 'secondary', ayuda: '' };
+            let c = CLASES_COMPROBACION[p.clase] || { txt: p.clase, cls: 'secondary', ayuda: '' };
+            // "Otra cuenta": se nombra la forma con que se registró el documento (p. ej. Efectivo),
+            // que es la causa: el asiento va al banco y el documento dice otra cosa.
+            if (p.clase === 'otra_cuenta' && p.formas_doc) {
+                c = {
+                    ...c,
+                    txt: `${p.tipo === 'ingreso' ? 'Cobrado' : 'Pagado'} con ${escHtml(p.formas_doc)}`,
+                    ayuda: `El documento se registró con "${p.formas_doc}", pero su asiento mueve esta cuenta contable. `
+                         + 'Corrija la forma de pago del documento (si el dinero pasó por el banco) o la cuenta de su asiento.',
+                };
+            }
             const ok = p.clase === 'cuadra';
             const tipoDoc = p.tipo === 'ingreso' ? 'Ingreso' : (p.tipo === 'egreso' ? 'Egreso' : 'Asiento');
             const asiento = p.id_asiento

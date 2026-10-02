@@ -253,6 +253,19 @@ class ControlBancarioRepository extends BaseRepository
                 )
                 SELECT p.*,
                        efecto_doc - efecto_contable AS diferencia,
+                       -- Documento con asiento en esta cuenta pero sin pago con sus formas bancarias:
+                       -- con qué forma(s) se registró, para que la etiqueta diga la causa.
+                       CASE WHEN p.monto_doc IS NULL AND p.tipo = 'ingreso' THEN
+                                (SELECT STRING_AGG(DISTINCT fpx.nombre, ', ')
+                                   FROM ingresos_pagos ipx
+                                   JOIN empresa_formas_pago fpx ON fpx.id = ipx.id_forma_cobro
+                                  WHERE ipx.id_ingreso = p.id_doc)
+                            WHEN p.monto_doc IS NULL AND p.tipo = 'egreso' THEN
+                                (SELECT STRING_AGG(DISTINCT fpx.nombre, ', ')
+                                   FROM egresos_pagos epx
+                                   JOIN empresa_formas_pago fpx ON fpx.id = epx.id_forma_pago
+                                  WHERE epx.id_egreso = p.id_doc AND COALESCE(epx.eliminado, FALSE) = FALSE)
+                       END AS formas_doc,
                        CASE WHEN ABS(efecto_doc - efecto_contable) <= 0.005 THEN 'cuadra'
                             WHEN monto_asiento IS NULL THEN 'solo_documento'
                             WHEN monto_doc IS NULL AND doc_anulado THEN 'documento_anulado'

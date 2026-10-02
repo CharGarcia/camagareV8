@@ -338,7 +338,7 @@ movimientos; si hay más, acote el período.
 | Sin asiento contable | El ingreso/egreso no tiene asiento contabilizado en la cuenta del banco |
 | Solo en contabilidad | Asiento sin ingreso/egreso detrás (manual, migrado, apertura) |
 | Asiento de documento anulado | El ingreso/egreso está anulado, pero su asiento sigue contabilizado |
-| Cobrado/pagado con otra cuenta | El asiento toca esta cuenta contable, pero el documento usó otra forma de pago |
+| Cobrado/Pagado con *(forma)* | El asiento mueve esta cuenta contable, pero el documento se registró con la forma de pago que indica la etiqueta (p. ej. *Pagado con Efectivo*). Si el dinero sí pasó por el banco, corrija la forma de pago del documento; si no, el asiento está en la cuenta equivocada |
 | Monto distinto | El documento y su asiento mueven montos distintos en el banco |
 | Fecha en otro período | El documento y su asiento tienen fechas en períodos distintos |
 
@@ -418,7 +418,8 @@ los dos casos.
   inicio, muestra todos los movimientos del período con el saldo acumulado de
   cada lado y la diferencia acumulada, y marca la fila donde se descuadra (con
   opción de ver solo esas filas). Las tablas usan el estilo de los demás
-  listados.
+  listados. La situación "Cobrado/pagado con otra cuenta" ahora nombra la forma
+  de pago con que se registró el documento (p. ej. *Pagado con Efectivo*).
 - **1.15** — El módulo deja de depender de los asientos contables: el detalle,
   el saldo, los cheques y la conciliación de **todas** las cuentas salen de los
   cobros y pagos de Ingresos y Egresos, con su fecha y su número. Cada cuenta
