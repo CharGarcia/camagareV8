@@ -276,6 +276,10 @@ async function CTAR_refrescarDetalle() {
     const id = document.getElementById('ctar-m-id').value;
     if (!id) return;
     CTAR_detalle = await CTAR_api(`detalleAjax?id=${id}`);
+    // La línea seleccionada se conserva entre refrescos, salvo que ya no exista (eliminada).
+    if (CTAR_lineaSel && !(CTAR_detalle.lineas || []).some((l) => String(l.id) === String(CTAR_lineaSel))) {
+        CTAR_lineaSel = null;
+    }
     CTAR_pintarModal();
 }
 
@@ -603,7 +607,8 @@ async function CTAR_cruzarCon(idIngresoPago) {
         if (r.omitidos && r.omitidos.length) {
             CTAR_aviso('warning', 'No se pudo cruzar', r.omitidos[0].motivo);
         }
-        CTAR_lineaSel = null;
+        // La línea sigue seleccionada: un depósito consolidado se cruza con varios
+        // cobros, uno tras otro. Se desmarca con otro clic sobre la misma línea.
         await CTAR_refrescarDetalle();
     } catch (e) {
         CTAR_aviso('error', 'Error al cruzar', e.message);

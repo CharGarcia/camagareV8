@@ -6,7 +6,7 @@ ruta_modulo: modulos/conciliacion-tarjetas
 tipo: modulo
 visibilidad: todos
 etiquetas: conciliar tarjetas, recaps diners, interdin, visa, mastercard, discover, asiento no generado, asiento pendiente, contabilizar conciliacion, payphone, nuvei, datafono, tarjeta de credito, liquidacion, comision de tarjeta, deposito de tarjeta, retenciones tarjeta, cuadrar tarjetas, cobros por depositar, asiento del deposito, imprimir, impresora
-version: 2.2
+version: 2.3
 orden: 66
 estado: activo
 ---
@@ -100,7 +100,9 @@ ocultarla con el engranaje de las pestañas.
    sugerencias de *solo monto* son las menos seguras y llegan sin marcar; si la
    suma de los cobros no coincide con el bruto de la línea, el monto sale en rojo.
    Lo que quede suelto se cruza a mano — clic en la línea de la izquierda y luego
-   en el cobro de la derecha.
+   en el cobro de la derecha. La línea **sigue marcada** después de cada cruce,
+   así que puede seguir haciendo clic en más cobros de la derecha (p. ej. para un
+   depósito que agrupa varios cobros); para desmarcarla, vuelva a hacer clic en ella.
 5. Las líneas que no correspondan a ningún cobro márquelas con el triángulo de
    aviso: quedan reportadas como *sin documento*.
 6. Indique **Depositado en** (el banco) y el **Neto depositado**, revise que la
@@ -240,6 +242,8 @@ igual. Los períodos se abren y se cierran en **Contabilidad → Períodos
 Contables**; reabrir el período permite la operación de inmediato.
 
 ## Historial de cambios
+
+- **2.3** — Al cruzar a mano, la línea del estado de cuenta **queda marcada** después de cada cruce: se pueden seguir eligiendo cobros de la derecha sin volver a seleccionarla. Se desmarca con otro clic sobre la misma línea.
 
 - **2.2** — Se pueden cargar los **recaps de Diners / Interdin** (un Excel con una hoja por marca y columnas ocultas) con los perfiles *Diners/Interdin - Recaps*: el de todas las marcas lee todas las hojas y pone la marca en la descripción; los de cada hoja leen solo esa marca. La descripción de cada línea muestra también el **lote** y la **fecha de pago**. Ver *Perfiles de Lectura de Tarjetas*.
 
