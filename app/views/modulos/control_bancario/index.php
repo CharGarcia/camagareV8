@@ -50,8 +50,13 @@ $urlBase = rtrim($base, '/') . '/' . ltrim($rutaModulo, '/');
         box-shadow: 0 1px 0 #dee2e6;
         white-space: nowrap;
     }
-    /* top negativo = padding del modal-body (p-3), para que pegue contra el borde visible. */
-    .cb-comp-partidas thead th { position: sticky; top: -1rem; z-index: 2; }
+    /* El mayor tiene 10 columnas: si no caben, su envoltorio da scroll horizontal (la tarjeta
+       con `clip` lo recortaba sin barra). Un contenedor con overflow-x es contenedor de scroll,
+       así que el encabezado ya no puede quedar fijo al bajar por el modal. El nombre no lleva
+       "-scroll" a propósito: app.css le impondría un alto máximo en el celular. */
+    .cb-comp-partidas { overflow: visible; }
+    .cb-comp-mayor-wrap { overflow-x: auto; border-radius: inherit; }
+    .cb-comp-mayor-wrap > .table { min-width: 100%; width: max-content; }
     .cb-comp-card .cb-comp-total td { background: #f8f9fa; border-top: 2px solid #dee2e6; }
     /* Mayor comparado: columnas de saldo acumulado separadas del detalle, y filtro "solo diferencias". */
     .cb-comp-card .cb-col-saldo { background-color: rgba(13, 110, 253, .04); }
@@ -546,7 +551,8 @@ $urlBase = rtrim($base, '/') . '/' . ltrim($rutaModulo, '/');
 
 <!-- ═══════════════════ MODAL: Comprobación con Contabilidad ═══════════════════ -->
 <div class="modal fade" id="modalComprobacionContableCB" tabindex="-1" aria-hidden="true">
-    <div class="modal-dialog modal-xl modal-dialog-centered modal-dialog-scrollable">
+    <!-- Más ancho que modal-xl: el mayor comparado tiene 10 columnas. -->
+    <div class="modal-dialog modal-xl modal-dialog-centered modal-dialog-scrollable" style="max-width:min(1500px, 96vw);">
         <div class="modal-content border-0 shadow-lg">
             <div class="modal-header bg-primary text-white py-2 px-3">
                 <h6 class="modal-title fw-bold"><i class="bi bi-journal-check me-2"></i>Comprobación con Contabilidad</h6>

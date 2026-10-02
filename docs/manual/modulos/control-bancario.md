@@ -323,6 +323,10 @@ ese lado.
 El interruptor **Ver solo las filas con diferencia** oculta los movimientos que
 cuadran; los saldos acumulados siguen contando todos.
 
+Si la pantalla es angosta y las columnas no caben, la tabla tiene **barra de
+desplazamiento horizontal** al pie para llegar a los saldos y la diferencia
+acumulada.
+
 Si el período ya **empieza descuadrado**, la diferencia viene de antes de la fecha
 de inicio. Para encontrar la fila que la causa, ponga como fecha de inicio el
 comienzo de las operaciones y vuelva a comprobar. La tabla muestra hasta 3000

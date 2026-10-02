@@ -340,6 +340,7 @@
                 (por ejemplo, la apertura migrada o un saldo inicial distinto en Saldos Iniciales). Para encontrar la fila que la causa,
                 ponga como fecha de inicio el comienzo de las operaciones y vuelva a comprobar.</div>` : ''}
             <div class="card cb-comp-card cb-comp-partidas border-0 shadow-sm rounded-3" id="cb-comp-mayor">
+              <div class="cb-comp-mayor-wrap">
                 <table class="table table-hover table-sm small mb-0">
                     <thead>
                         <tr><th class="ps-3">Situación</th><th>Documento</th><th>Fecha doc.</th><th class="text-end">Monto doc.</th>
@@ -353,6 +354,7 @@
                         ${d.truncado ? '' : filaSaldo('Saldo al final del período', d.fin.libros, d.fin.contable, d.fin.diferencia)}
                     </tbody>
                 </table>
+              </div>
             </div>
             ${d.truncado ? `<div class="small text-warning mt-1">Se muestran los primeros ${Number(d.limite || 0).toLocaleString('en-US')} movimientos; acote el período para ver el resto.</div>` : ''}`;
     }
