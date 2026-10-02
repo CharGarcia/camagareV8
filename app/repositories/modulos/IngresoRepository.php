@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\repositories\modulos;
 
 use App\Helpers\AbonosVentaSql;
+use App\Helpers\AlcanceRegistros;
 use App\repositories\BaseRepository;
 use PDO;
 
@@ -990,7 +991,7 @@ class IngresoRepository extends BaseRepository
         $this->query("DELETE FROM ingresos_pagos WHERE id_ingreso = ?", [$idIngreso]);
     }
 
-    public function buscarDocumentosPendientes(int $idEmpresa, string $q = '', ?int $excluirIngresoId = null, string $tipo = 'FACTURA', ?string $fechaDesde = null, ?string $fechaHasta = null, ?int $soloId = null, ?string $soloTipoDocumento = null): array
+    public function buscarDocumentosPendientes(int $idEmpresa, string $q = '', ?int $excluirIngresoId = null, string $tipo = 'FACTURA', ?string $fechaDesde = null, ?string $fechaHasta = null, ?int $soloId = null, ?string $soloTipoDocumento = null, array $alcance = []): array
     {
         // Según el concepto del ingreso: 'RECIBO' muestra solo recibos de venta;
         // 'FACTURA_REEMBOLSO' muestra solo facturas de reembolso; cualquier otro
@@ -1066,6 +1067,15 @@ class IngresoRepository extends BaseRepository
                 OR COALESCE(c.identificacion, s.ruc_cliente)    ILIKE :q
             )";
         }
+
+        // Alcance del usuario (§6, App\Helpers\AlcanceRegistros): el mismo que aplica Cuentas
+        // por Cobrar, para que un usuario de nivel 1 sin acceso total vea aquí exactamente los
+        // documentos que ve allá (los de su vendedor o los que él registró). $alcance lo arma
+        // el controller desde la sesión y el permiso; vacío = toda la empresa.
+        $alcFac = AlcanceRegistros::condicionSql($alcance, 'v', 'id_usuario', 'alc_fac', $params);
+        $alcSi  = AlcanceRegistros::condicionSql($alcance, 's', 'created_by', 'alc_si', $params, false);
+        $alcRec = AlcanceRegistros::condicionSql($alcance, 'r', 'id_usuario', 'alc_rec', $params);
+        $alcFr  = AlcanceRegistros::condicionSql($alcance, 'fr', 'id_usuario', 'alc_fr', $params, false);
 
         // Exclusión del propio ingreso (al editar) también para los cobros de saldos iniciales
         $excluirSqlSi = $excluirIngresoId !== null ? " AND i.id <> :excluir" : '';
@@ -1171,6 +1181,7 @@ class IngresoRepository extends BaseRepository
                       AND v.tipo_ambiente = (SELECT CAST(tipo_ambiente AS VARCHAR(1)) FROM empresas WHERE id = :id_empresa)
                       AND (v.importe_total + COALESCE(ndf.total_nd, 0) - COALESCE(cb.total_cobrado, 0) - COALESCE(rf.total_retenido, 0) - COALESCE(ncf.total_nc, 0)) > 0
                       $filtroBusq
+                      $alcFac
 
                     UNION ALL
 
@@ -1209,6 +1220,7 @@ class IngresoRepository extends BaseRepository
                       AND s.eliminado = FALSE
                       AND (s.saldo_inicial - COALESCE(csi.total_cobrado, 0) - COALESCE(rsi.total_retenido, 0) - COALESCE(ncsi.total_nc, 0)) > 0
                       $filtroBusqCxc
+                      $alcSi
 
                     UNION ALL
 
@@ -1234,6 +1246,7 @@ class IngresoRepository extends BaseRepository
                       AND r.tipo_ambiente = (SELECT CAST(tipo_ambiente AS VARCHAR(1)) FROM empresas WHERE id = :id_empresa)
                       AND (r.importe_total - COALESCE(cr.total_cobrado, 0)) > 0
                       $filtroBusqRec
+                      $alcRec
 
                     UNION ALL
 
@@ -1259,6 +1272,7 @@ class IngresoRepository extends BaseRepository
                       AND fr.tipo_ambiente = (SELECT CAST(tipo_ambiente AS VARCHAR(1)) FROM empresas WHERE id = :id_empresa)
                       AND (fr.importe_total - COALESCE(cfr.total_cobrado, 0)) > 0
                       $filtroBusqFr
+                      $alcFr
                 ) docs
                 WHERE docs.tipo_documento = ANY(:tipos::text[])
                 $filtroFecha

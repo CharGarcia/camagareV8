@@ -5,8 +5,8 @@ categoria: Tesorería
 ruta_modulo: modulos/ingresos
 tipo: modulo
 visibilidad: todos
-etiquetas: ingresos, cobro, cobrar, buscar ingreso, buscador, filtros, filtrar ingresos, filtrar por forma de cobro, buscar por factura cobrada, buscar por cheque, buscar por transferencia, filtro de fechas, chips, editar ingreso, modificar ingreso, corregir ingreso, cambiar monto cobrado, quitar factura del ingreso, periodo cerrado, solo lectura, no deja editar, no puedo modificar, ordenar por dos columnas, ordenar por recibi de y fecha, recibo, dinero que entra, anticipo, deposito, efectivo, transferencia, caja, excel, exportar, combinar conceptos, mezclar conceptos, otros conceptos, varios documentos, cobro sin factura, tipo real, tipo de ingreso, numero de ingreso, serie, secuencial, numero repetido, numero duplicado, numeracion por fecha, numero con el año, reiniciar numeracion, reinicio anual, reinicio mensual, correlativo por año, correlativo por mes, modo de numeracion, orden de formas de cobro, saldo de la forma de cobro, saldo disponible, ocultar saldo, aparecen documentos que no busque, resultados que no corresponden, buscar por numero de documento cobrado, cuenta del anticipo, anticipo sin cuenta, cuenta contable del concepto, cuenta por defecto, falta cuenta contable, cobrar factura y dejar anticipo, excedente como anticipo, listado no se actualiza, no aparece el ingreso guardado, no se ve el cambio, vuelve a la primera pagina, se pierde la pagina, refrescar listado, recargar tabla, fila resaltada, observaciones automaticas, observaciones se llenan solas, observaciones se completan solas, glosa del ingreso, concepto del comprobante, descripcion del cobro, cobro factura de venta, falta un centavo, centavo pendiente, no puedo cobrar el centavo, diferencia de un centavo, saldo de 0.01, queda un centavo, referencia muy larga, glosa larga, no guarda el ingreso, no se guarda el cobro, error al guardar ingreso, value too long, texto demasiado largo, se corta la referencia, limite de caracteres, imprimir, impresora, doble clic, ingreso duplicado, cobro duplicado, cobrar dos veces, doble cobro, ya no tiene saldo suficiente, crear cliente desde el ingreso, nuevo cliente, registrar cliente, crear forma de cobro, crear concepto, no aparece el boton de crear cliente, falta el boton nuevo cliente
-version: 3.10
+etiquetas: ingresos, documentos pendientes, no coincide con cuentas por cobrar, solo mis documentos, vendedor, acceso total, cobro, cobrar, buscar ingreso, buscador, filtros, filtrar ingresos, filtrar por forma de cobro, buscar por factura cobrada, buscar por cheque, buscar por transferencia, filtro de fechas, chips, editar ingreso, modificar ingreso, corregir ingreso, cambiar monto cobrado, quitar factura del ingreso, periodo cerrado, solo lectura, no deja editar, no puedo modificar, ordenar por dos columnas, ordenar por recibi de y fecha, recibo, dinero que entra, anticipo, deposito, efectivo, transferencia, caja, excel, exportar, combinar conceptos, mezclar conceptos, otros conceptos, varios documentos, cobro sin factura, tipo real, tipo de ingreso, numero de ingreso, serie, secuencial, numero repetido, numero duplicado, numeracion por fecha, numero con el año, reiniciar numeracion, reinicio anual, reinicio mensual, correlativo por año, correlativo por mes, modo de numeracion, orden de formas de cobro, saldo de la forma de cobro, saldo disponible, ocultar saldo, aparecen documentos que no busque, resultados que no corresponden, buscar por numero de documento cobrado, cuenta del anticipo, anticipo sin cuenta, cuenta contable del concepto, cuenta por defecto, falta cuenta contable, cobrar factura y dejar anticipo, excedente como anticipo, listado no se actualiza, no aparece el ingreso guardado, no se ve el cambio, vuelve a la primera pagina, se pierde la pagina, refrescar listado, recargar tabla, fila resaltada, observaciones automaticas, observaciones se llenan solas, observaciones se completan solas, glosa del ingreso, concepto del comprobante, descripcion del cobro, cobro factura de venta, falta un centavo, centavo pendiente, no puedo cobrar el centavo, diferencia de un centavo, saldo de 0.01, queda un centavo, referencia muy larga, glosa larga, no guarda el ingreso, no se guarda el cobro, error al guardar ingreso, value too long, texto demasiado largo, se corta la referencia, limite de caracteres, imprimir, impresora, doble clic, ingreso duplicado, cobro duplicado, cobrar dos veces, doble cobro, ya no tiene saldo suficiente, crear cliente desde el ingreso, nuevo cliente, registrar cliente, crear forma de cobro, crear concepto, no aparece el boton de crear cliente, falta el boton nuevo cliente
+version: 3.11
 orden: 10
 estado: activo
 ---
@@ -419,6 +419,23 @@ Con **acceso total** se ven los ingresos de toda la empresa; sin él, cada usuar
 ve solo los que registró. En una caja con varios turnos esto suele ser lo
 deseable; para el contador o el administrador, active el acceso total.
 
+## Qué documentos pendientes ve cada usuario
+
+El buscador de **documentos pendientes de cobro** (facturas, recibos, facturas
+de reembolso y saldos iniciales) aplica la misma regla que *Cuentas por Cobrar*,
+así que cada usuario ve en las dos pantallas los mismos documentos:
+
+- **Administradores (nivel 2), superadministradores (nivel 3) y usuarios con
+  acceso total en Ingresos**: todos los documentos pendientes de la empresa.
+- **Nivel 1 sin acceso total y el usuario es un vendedor**: solo los documentos
+  que llevan su nombre en *Vendedor* y, si un documento no tiene vendedor, los de
+  los clientes que tiene asignados.
+- **Nivel 1 sin acceso total y el usuario no es vendedor**: solo los documentos
+  que él registró.
+
+Las facturas en **borrador** (sin autorizar por el SRI, incluidas las migradas)
+se pueden cobrar y aparecen tanto aquí como en *Cuentas por Cobrar*.
+
 ## Cómo se evita cobrar dos veces lo mismo
 
 Todo ingreso, venga de donde venga (este módulo, cobro rápido desde la factura o
@@ -468,6 +485,10 @@ misma revisión al guardar:
 
 ## Historial de cambios
 
+- **3.11** — El buscador de documentos pendientes respeta el alcance del usuario
+  (vendedor o registros propios) igual que *Cuentas por Cobrar*; antes mostraba los
+  de toda la empresa a cualquier usuario. Nueva sección *Qué documentos pendientes
+  ve cada usuario*.
 - **3.10** — Los atajos de la barra superior del modal (crear forma de cobro,
   concepto y cliente) solo aparecen si el usuario tiene permiso de crear en ese
   módulo. La forma de cobro y el concepto recién creados quedan seleccionados en el

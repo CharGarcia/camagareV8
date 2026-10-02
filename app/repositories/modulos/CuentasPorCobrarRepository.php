@@ -250,33 +250,7 @@ class CuentasPorCobrarRepository extends BaseRepository
      */
     private function condAlcanceUsuario(array $filtros, string $alias, string $columna, string $ph, array &$params, bool $docTieneVendedor = true): string
     {
-        // Modo VENDEDOR: solo lo de su vendedor. Manda el vendedor del documento; si no
-        // tiene (NULL o 0), el asignado al cliente. Los saldos iniciales no llevan
-        // vendedor: entran solo por el cliente.
-        $idsVend = \App\Helpers\AlcanceRegistros::idsVendedor($filtros);
-        if ($idsVend) {
-            $in = [];
-            foreach ($idsVend as $i => $id) {
-                $in[] = ":{$ph}_v{$i}";
-                $params[":{$ph}_v{$i}"] = $id;
-            }
-            $in = implode(',', $in);
-            $clienteSuyo = "EXISTS (SELECT 1 FROM clientes {$ph}_c
-                                    WHERE {$ph}_c.id = {$alias}.id_cliente AND {$ph}_c.id_vendedor IN ({$in}))";
-            if (!$docTieneVendedor) {
-                return " AND {$clienteSuyo}";
-            }
-            return " AND ({$alias}.id_vendedor IN ({$in})
-                          OR (COALESCE({$alias}.id_vendedor, 0) = 0 AND {$clienteSuyo}))";
-        }
-
-        // Modo REGISTROS PROPIOS: el usuario no es vendedor, ve lo que él registró.
-        $idUsuario = \App\Helpers\AlcanceRegistros::idUsuario($filtros);
-        if ($idUsuario <= 0) {
-            return '';
-        }
-        $params[":{$ph}"] = $idUsuario;
-        return " AND {$alias}.{$columna} = :{$ph}";
+        return \App\Helpers\AlcanceRegistros::condicionSql($filtros, $alias, $columna, $ph, $params, $docTieneVendedor);
     }
 
     /**
@@ -1154,7 +1128,7 @@ class CuentasPorCobrarRepository extends BaseRepository
             WHERE v.id         = :id
               AND v.id_empresa = :id_empresa
               AND v.eliminado  = false
-              AND v.estado    IN ('autorizado','autorizada')
+              AND v.estado NOT IN ('anulado','anulada') -- incluye 'borrador' (mismo criterio que Ingresos)
         ";
 
         $st = $this->db->prepare($sql);
@@ -1260,14 +1234,14 @@ class CuentasPorCobrarRepository extends BaseRepository
     }
 
     /**
-     * Años disponibles con facturas autorizadas.
+     * Años disponibles con facturas no anuladas (incluye borradores, igual que el listado).
      */
     public function getAniosDisponibles(int $idEmpresa): array
     {
         $sql = "SELECT DISTINCT EXTRACT(YEAR FROM fecha_emision)::int AS anio
                 FROM ventas_cabecera
                 WHERE id_empresa = :id_empresa AND eliminado = false
-                  AND estado IN ('autorizado','autorizada')
+                  AND estado NOT IN ('anulado','anulada')
                 ORDER BY anio DESC";
         $st = $this->db->prepare($sql);
         $st->execute([':id_empresa' => $idEmpresa]);
@@ -1536,9 +1510,12 @@ class CuentasPorCobrarRepository extends BaseRepository
     private function buildWhere(array $idsEmpresa, array $filtros): array
     {
         $params = [];
+        // Estado: toda factura no anulada, INCLUIDO el 'borrador' (aún sin autorizar del SRI).
+        // Es el mismo criterio del buscador de documentos pendientes de Ingresos
+        // (IngresoRepository::buscarDocumentosPendientes): si se puede cobrar, es cartera.
         $where = "v.id_empresa IN ({$this->phIn($idsEmpresa, 'emp', $params)})
               AND v.eliminado  = false
-              AND v.estado    IN ('autorizado','autorizada')
+              AND v.estado NOT IN ('anulado','anulada')
               AND {$this->condAmbiente('v', $idsEmpresa)}"
               . $this->condAlcanceUsuario($filtros, 'v', 'id_usuario', 'prop_fac', $params);
 

@@ -5,8 +5,8 @@ categoria: Tesorería
 ruta_modulo: modulos/cuentas_por_cobrar
 tipo: modulo
 visibilidad: todos
-etiquetas: cuentas por cobrar, cxc, cartera, deudas de clientes, saldo pendiente, vencido, morosidad, cobrar, recibos de venta, tipo de documento, envio masivo, estado de cuenta, recordatorio de pago, fecha de corte, saldo a una fecha, fecha hasta, vendedor, cartera por vendedor, filtrar por vendedor, producto, cartera por producto, filtrar por producto, que deben por un producto, consolidado, establecimientos, sucursales, matriz, mismo ruc, cartera consolidada, todas las sucursales, serie, punto de emision, serie inactiva, registrar cobro, cedula y ruc, cliente duplicado, proveedor duplicado, mismo cliente dos veces, mismo proveedor dos veces, identificacion repetida, ruc es la cedula mas 001, unificar fichas, cartera partida en dos, tildes, acentos, eñe, buscar sin tildes, no encuentra al cliente, no aparece el cliente, buscar por apellido, buscar por varias palabras, mayor, mayor del cliente, cartera como mayor, agrupado por cliente, subtotal por cliente, total general, seccion por cliente, no carga al entrar, boton aplicar, aplicar filtros, listado vacio al entrar, detalle por cliente, columnas del detalle, nc, abonos, retenciones, dias vencidos, dias transcurridos, antiguedad del documento, columna dias, dias desde la emision, cuadricula del pdf, lineas de la tabla del pdf, ruc delante del nombre, asesor, vendedor del documento, fecha un dia antes, ordenar, ordenamiento, orden alfabetico, a-z, z-a, ordenar por cliente, ordenar por saldo, ordenar por vencimiento, clic en la columna, ordenar la tabla, ordenar el excel, ordenar el pdf, flecha de la columna, saldo junto al nombre, saldo del cliente, pdf vertical, pdf horizontal, orientacion del pdf, hoja vertical, pdf apaisado, acceso total, permiso de ver todos, registros propios, solo mis facturas, no veo las facturas de otro, cada usuario ve lo suyo, documentos migrados no aparecen, cartera del vendedor, mis clientes, clientes asignados, vendedor vinculado, usuario del sistema, el vendedor no ve nada, asesor solo ve sus clientes, logo, logo en el pdf, logo de la empresa, encabezado del pdf, filtros del pdf, filtros aplicados, resumen de filtros, filtros en el pdf, mostrar filtros del pdf, columna asesor, columna vendedor, ocultar columna asesor, quitar columna vendedor, se repite el asesor, nivel de usuario, administrador ve todo, el vendedor ve la cartera de todos, pdf de la factura, descargar pdf, descargar factura, imprimir factura, ride, pdf del recibo, acciones de la fila, botones de la fila, detalle del documento, panel de detalle, ver detalle, error http, http 403, no carga el detalle, no aparece el boton de cobro, no aparece el historial, no aparece whatsapp, whatsapp no configurado, permiso de ingresos, reporte de cartera, celular, movil, telefono, botones pequeños, menu del celular, menu bloqueado, menu no responde, lineas montadas, lineas encimadas, lineas pisadas, texto montado en el pdf, filas cortadas, fila partida entre paginas, paginas en blanco, hojas en blanco en el pdf, pdf descuadrado, encabezado de columnas en cada pagina, encabezado por cada cliente, encabezado por cliente, no se ve a que columna corresponde, rotulo de columnas, estado de cuenta por whatsapp, whatsapp por cliente, resumen vencido, resumen total, deuda total por whatsapp, cuantas facturas debe, cobranza por whatsapp, correo por cliente, estado de cuenta por correo, enviar correo al cliente, numero de documento montado, documento se pasa a la otra columna, numero cortado en el pdf, cobrar dos veces, doble cobro, cobro duplicado, supera el saldo pendiente
-version: 2.29
+etiquetas: cuentas por cobrar, borrador, factura en borrador, sin autorizar, facturas migradas, no coincide con ingresos, distinto a ingresos, cxc, cartera, deudas de clientes, saldo pendiente, vencido, morosidad, cobrar, recibos de venta, tipo de documento, envio masivo, estado de cuenta, recordatorio de pago, fecha de corte, saldo a una fecha, fecha hasta, vendedor, cartera por vendedor, filtrar por vendedor, producto, cartera por producto, filtrar por producto, que deben por un producto, consolidado, establecimientos, sucursales, matriz, mismo ruc, cartera consolidada, todas las sucursales, serie, punto de emision, serie inactiva, registrar cobro, cedula y ruc, cliente duplicado, proveedor duplicado, mismo cliente dos veces, mismo proveedor dos veces, identificacion repetida, ruc es la cedula mas 001, unificar fichas, cartera partida en dos, tildes, acentos, eñe, buscar sin tildes, no encuentra al cliente, no aparece el cliente, buscar por apellido, buscar por varias palabras, mayor, mayor del cliente, cartera como mayor, agrupado por cliente, subtotal por cliente, total general, seccion por cliente, no carga al entrar, boton aplicar, aplicar filtros, listado vacio al entrar, detalle por cliente, columnas del detalle, nc, abonos, retenciones, dias vencidos, dias transcurridos, antiguedad del documento, columna dias, dias desde la emision, cuadricula del pdf, lineas de la tabla del pdf, ruc delante del nombre, asesor, vendedor del documento, fecha un dia antes, ordenar, ordenamiento, orden alfabetico, a-z, z-a, ordenar por cliente, ordenar por saldo, ordenar por vencimiento, clic en la columna, ordenar la tabla, ordenar el excel, ordenar el pdf, flecha de la columna, saldo junto al nombre, saldo del cliente, pdf vertical, pdf horizontal, orientacion del pdf, hoja vertical, pdf apaisado, acceso total, permiso de ver todos, registros propios, solo mis facturas, no veo las facturas de otro, cada usuario ve lo suyo, documentos migrados no aparecen, cartera del vendedor, mis clientes, clientes asignados, vendedor vinculado, usuario del sistema, el vendedor no ve nada, asesor solo ve sus clientes, logo, logo en el pdf, logo de la empresa, encabezado del pdf, filtros del pdf, filtros aplicados, resumen de filtros, filtros en el pdf, mostrar filtros del pdf, columna asesor, columna vendedor, ocultar columna asesor, quitar columna vendedor, se repite el asesor, nivel de usuario, administrador ve todo, el vendedor ve la cartera de todos, pdf de la factura, descargar pdf, descargar factura, imprimir factura, ride, pdf del recibo, acciones de la fila, botones de la fila, detalle del documento, panel de detalle, ver detalle, error http, http 403, no carga el detalle, no aparece el boton de cobro, no aparece el historial, no aparece whatsapp, whatsapp no configurado, permiso de ingresos, reporte de cartera, celular, movil, telefono, botones pequeños, menu del celular, menu bloqueado, menu no responde, lineas montadas, lineas encimadas, lineas pisadas, texto montado en el pdf, filas cortadas, fila partida entre paginas, paginas en blanco, hojas en blanco en el pdf, pdf descuadrado, encabezado de columnas en cada pagina, encabezado por cada cliente, encabezado por cliente, no se ve a que columna corresponde, rotulo de columnas, estado de cuenta por whatsapp, whatsapp por cliente, resumen vencido, resumen total, deuda total por whatsapp, cuantas facturas debe, cobranza por whatsapp, correo por cliente, estado de cuenta por correo, enviar correo al cliente, numero de documento montado, documento se pasa a la otra columna, numero cortado en el pdf, cobrar dos veces, doble cobro, cobro duplicado, supera el saldo pendiente
+version: 2.30
 orden: 40
 estado: activo
 ---
@@ -668,13 +668,25 @@ Casi siempre por una de estas tres razones, en este orden de frecuencia:
 2. **Falta la nota de crédito** de una devolución ya acordada.
 3. El cobro se registró **contra otro documento** del mismo cliente.
 
-Y dos casos que el reporte **no** descuenta a propósito:
+Y un caso que el reporte **no** descuenta a propósito:
 
 - Una retención o nota de crédito cuyo documento de sustento **no existe** como
   factura ni como saldo inicial (por ejemplo, de una factura anterior al uso
   del sistema). Regístrela como saldo inicial o corrija el número.
-- Una factura que sigue en **borrador** (aún sin autorizar): no aparece en el
-  listado aunque tenga saldo.
+
+
+## Facturas en borrador (sin autorizar) también son cartera
+
+El listado incluye **toda factura que no esté anulada**, también las que siguen
+en **borrador** (aún sin autorizar por el SRI): las del POS que esperan la
+respuesta del SRI y las **migradas** del sistema anterior que allá quedaron
+pendientes, con error o devueltas por el SRI. Es el mismo criterio del buscador
+de **documentos pendientes de cobro** de *Ingresos*, así que las dos pantallas
+muestran las mismas facturas con el mismo saldo. Si una factura en borrador no
+debe cobrarse, anúlela.
+
+El **envío automático de estados de cuenta** a los clientes (automatizaciones)
+sigue incluyendo solo facturas autorizadas.
 
 ## Cómo se evita cobrar dos veces el mismo documento
 
@@ -733,6 +745,12 @@ un doble clic no genera dos ingresos.
   (y en las demás que tienen el panel de detalle). Ya está corregido.
 
 ## Historial de cambios
+- **2.30** — Las facturas en **borrador** (sin autorizar, incluidas las migradas que
+  en el sistema anterior quedaron pendientes en el SRI) ahora aparecen en la cartera,
+  igual que en el buscador de documentos pendientes de *Ingresos*. Antes una misma
+  factura se podía cobrar desde Ingresos pero no salía aquí. Nueva sección *Facturas
+  en borrador (sin autorizar) también son cartera*.
+
 - **2.29** — Documentado cómo se impide cobrar dos veces el mismo documento (nueva sección *Cómo se evita cobrar dos veces el mismo documento*). Revisado: los tres cobros del módulo (factura, recibo y saldo inicial) validan el saldo real con el documento bloqueado, y el saldo que muestra el módulo coincide con el que usa esa validación.
 
 - **2.28** — PDF: el **número de documento** ya no se monta sobre la columna de al lado.

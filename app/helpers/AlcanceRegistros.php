@@ -66,6 +66,53 @@ final class AlcanceRegistros
         return ['id_usuario_filtro' => $idUsuario, 'id_vendedor_filtro' => []];
     }
 
+    /**
+     * Condición SQL del alcance para concatenar al WHERE (" AND (...)"), o cadena
+     * vacía si el usuario ve toda la empresa. Es la regla única que comparten
+     * Cuentas por Cobrar y el buscador de documentos pendientes de Ingresos, para
+     * que las dos pantallas muestren los mismos documentos al mismo usuario.
+     *
+     * Modo vendedor: manda el `id_vendedor` del documento; si no tiene (NULL o 0),
+     * el vendedor asignado al cliente. Modo registros propios: `{alias}.{columna}`
+     * igual al usuario.
+     *
+     * Cada llamada usa su propio prefijo de placeholder ($ph): varias consultas
+     * combinan más de un WHERE en el mismo SQL. Dentro de una misma condición el
+     * IN del vendedor se repite (cliente y documento); en este proyecto eso es
+     * seguro (ver memoria pdo-placeholders-repetidos).
+     *
+     * @param string $columna          Columna del creador (`id_usuario` o `created_by`).
+     * @param bool   $docTieneVendedor false para tablas sin `id_vendedor` (saldos
+     *                                 iniciales, facturas de reembolso): entran solo
+     *                                 por el vendedor del cliente.
+     */
+    public static function condicionSql(array $filtros, string $alias, string $columna, string $ph, array &$params, bool $docTieneVendedor = true): string
+    {
+        $idsVend = self::idsVendedor($filtros);
+        if ($idsVend) {
+            $in = [];
+            foreach ($idsVend as $i => $id) {
+                $in[] = ":{$ph}_v{$i}";
+                $params[":{$ph}_v{$i}"] = $id;
+            }
+            $in = implode(',', $in);
+            $clienteSuyo = "EXISTS (SELECT 1 FROM clientes {$ph}_c
+                                    WHERE {$ph}_c.id = {$alias}.id_cliente AND {$ph}_c.id_vendedor IN ({$in}))";
+            if (!$docTieneVendedor) {
+                return " AND {$clienteSuyo}";
+            }
+            return " AND ({$alias}.id_vendedor IN ({$in})
+                          OR (COALESCE({$alias}.id_vendedor, 0) = 0 AND {$clienteSuyo}))";
+        }
+
+        $idUsuario = self::idUsuario($filtros);
+        if ($idUsuario <= 0) {
+            return '';
+        }
+        $params[":{$ph}"] = $idUsuario;
+        return " AND {$alias}.{$columna} = :{$ph}";
+    }
+
     /** ¿Los filtros traen alguna restricción de alcance? */
     public static function restringe(array $filtros): bool
     {

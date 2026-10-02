@@ -101,7 +101,10 @@ class IngresosController extends BaseModuloController
         // Anticipo Cliente) no dependen de esto y siempre se muestran.
         $comportamientosConPendientes = [];
         foreach (['FACTURA' => 'FACTURA_VENTA', 'RECIBO' => 'RECIBO_VENTA', 'FACTURA_REEMBOLSO' => 'FACTURA_REEMBOLSO'] as $tipoDoc => $comportamiento) {
-            $chk = $this->repository->buscarDocumentosPendientes($idEmpresa, '', null, $tipoDoc);
+            $chk = $this->repository->buscarDocumentosPendientes(
+                $idEmpresa, '', null, $tipoDoc, null, null, null, null,
+                $this->alcanceDocumentosPendientes($idEmpresa)
+            );
             if (!empty($chk['data'])) {
                 $comportamientosConPendientes[] = $comportamiento;
             }
@@ -506,6 +509,24 @@ class IngresosController extends BaseModuloController
         echo json_encode(['rows' => $rows], JSON_UNESCAPED_UNICODE);
     }
 
+    /**
+     * Alcance del usuario en el buscador de documentos pendientes (§6): misma regla
+     * que Cuentas por Cobrar (App\Helpers\AlcanceRegistros) — niveles 2 y 3 y quien
+     * tenga acceso total en Ingresos ven toda la empresa; el nivel 1 sin acceso total
+     * ve los documentos de su vendedor o, si no es vendedor, los que él registró.
+     * Se resuelve de la sesión y el permiso, nunca de la petición.
+     */
+    private ?array $alcanceDocsCache = null;
+
+    private function alcanceDocumentosPendientes(int $idEmpresa): array
+    {
+        return $this->alcanceDocsCache ??= \App\Helpers\AlcanceRegistros::resolver(
+            $this->getPermisos(),
+            (int) ($_SESSION['id_usuario'] ?? 0),
+            [$idEmpresa]
+        );
+    }
+
     public function buscarDocumentosPendientesAjax(): void
     {
         $this->requireLeer();
@@ -521,7 +542,10 @@ class IngresosController extends BaseModuloController
         $fechaDesde = trim($_GET['fecha_desde'] ?? '') ?: null;
         $fechaHasta = trim($_GET['fecha_hasta'] ?? '') ?: null;
 
-        $result = $this->repository->buscarDocumentosPendientes($idEmpresa, $q, $excluirId, $tipoDoc, $fechaDesde, $fechaHasta);
+        $result = $this->repository->buscarDocumentosPendientes(
+            $idEmpresa, $q, $excluirId, $tipoDoc, $fechaDesde, $fechaHasta, null, null,
+            $this->alcanceDocumentosPendientes($idEmpresa)
+        );
         echo json_encode(['ok' => true, 'data' => $result['data'], 'has_more' => $result['has_more']]);
         exit;
     }
