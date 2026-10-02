@@ -545,7 +545,7 @@
                 return;
             }
             tbody.innerHTML = json.rows;
-            document.getElementById('cb-pagination-container').innerHTML = json.pagination;
+            // Sin paginación: el listado trae todo el período; aquí solo va el total.
             document.getElementById('cb-pagination-info').textContent = json.info;
             document.getElementById('cb-btn-pdf').href = json.pdf_url;
             document.getElementById('cb-btn-excel').href = json.excel_url;
@@ -559,11 +559,6 @@
             // mientras la nueva sigue en curso).
             if (miSeq === searchRequestSeq) tbody.classList.remove('fm-cargando-target');
         }
-    };
-
-    window.CB_cambiarPaginaAjax = function (page) {
-        if (page < 1) return;
-        window.CB_fetchSearch(page);
     };
 
     // ── Modal de clasificación ──────────────────────────────────────────────

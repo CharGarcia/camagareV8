@@ -157,10 +157,12 @@ class ControlBancarioController extends BaseModuloController
 
         $prefsVista = PreferenciasHelper::getPreferenciasVista($this->getRutaModulo());
         $filtros = $this->getFiltrosDesdeRequest();
-        $page = max(1, (int) ($_GET['page'] ?? $_POST['page'] ?? 1));
         $ordenCol = trim($_GET['sort'] ?? $_POST['sort'] ?? $prefsVista['__ordenCol__'] ?? 'fecha_asiento');
         $ordenDir = strtoupper(trim($_GET['dir'] ?? $_POST['dir'] ?? $prefsVista['__ordenDir__'] ?? 'ASC'));
-        $perPage = 30;
+        // Sin paginar (como Cuentas por Cobrar): la tabla muestra todo el período hacia abajo
+        // y hace scroll la página. perPage alto = mismo patrón que getMovimientosGrupo().
+        $page = 1;
+        $perPage = 1000000;
 
         try {
             $pares = $this->resolverPares($idEmpresa, $idFormaPago, $idUsuario, $consolidado);
@@ -175,9 +177,6 @@ class ControlBancarioController extends BaseModuloController
 
         $rows = $result['rows'];
         $total = $result['total'];
-        $totalPages = $perPage > 0 ? (int) ceil($total / $perPage) : 1;
-        $from = $total > 0 ? (($page - 1) * $perPage) + 1 : 0;
-        $to = $total > 0 ? min($page * $perPage, $total) : 0;
 
         $tipoLabels = [
             'DEPOSITO' => 'Depósito', 'CHEQUE' => 'Cheque', 'TRANSFERENCIA' => 'Transferencia',
@@ -261,13 +260,6 @@ class ControlBancarioController extends BaseModuloController
         }
         $rowsHtml = ob_get_clean();
 
-        ob_start();
-        $prevDisabled = ($page <= 1) ? 'disabled' : '';
-        $nextDisabled = ($page >= $totalPages) ? 'disabled' : '';
-        echo '<button type="button" class="btn btn-outline-secondary btn-sm" ' . $prevDisabled . ' onclick="window.CB_cambiarPaginaAjax(' . ($page - 1) . ')"><i class="bi bi-chevron-left"></i></button>
-              <button type="button" class="btn btn-outline-secondary btn-sm" ' . $nextDisabled . ' onclick="window.CB_cambiarPaginaAjax(' . ($page + 1) . ')"><i class="bi bi-chevron-right"></i></button>';
-        $paginationHtml = ob_get_clean();
-
         // La exportación repite exactamente lo que se está viendo, incluidos los filtros de
         // flujo, tipo y estado del cheque (antes solo viajaban las fechas y la búsqueda).
         $urlBase = BASE_URL . '/' . $this->getRutaModulo();
@@ -282,8 +274,7 @@ class ControlBancarioController extends BaseModuloController
         echo json_encode([
             'ok' => true,
             'rows' => $rowsHtml,
-            'pagination' => $paginationHtml,
-            'info' => "$from-$to/$total",
+            'info' => number_format($total, 0, '.', ',') . ($total === 1 ? ' movimiento' : ' movimientos'),
             'total' => $total,
             'pdf_url' => $urlBase . '/exportarPdfAjax?' . $qs,
             'excel_url' => $urlBase . '/exportarExcelAjax?' . $qs,

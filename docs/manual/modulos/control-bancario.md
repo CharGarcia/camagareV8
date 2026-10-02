@@ -223,12 +223,14 @@ mientras se baja por la tabla:
   conciliaciones y **Conciliar Período**. En pantallas medianas los tres primeros
   se ven solo con su ícono; al pasar el mouse se lee su nombre.
 - **Filtros**: cuenta bancaria, flujo, tipo, cheques, año, mes y fechas, con el
-  botón **Aplicar**.
+  botón **Mostrar**.
 - **Resumen del período**, en una línea: saldo inicial, créditos (entradas),
   débitos (salidas) y saldo final.
 
-Debajo, la tabla de movimientos no tiene un alto máximo: se muestra completa
-hacia abajo y se recorre con el scroll de la página.
+Debajo, la tabla de movimientos muestra **todos** los movimientos del período,
+sin páginas ni alto máximo: se lee hacia abajo y se recorre con el scroll de la
+página. Arriba de la tabla, a la derecha, se ve cuántos movimientos hay. Si el
+período es muy largo y la tabla tarda en cargar, acote las fechas.
 
 ## Buscar y filtrar el listado
 
@@ -403,7 +405,7 @@ los dos casos.
 
 - **1.16** — Pantalla reorganizada: título, botones, filtros y resumen del
   período van en una sola **tarjeta de control** fija arriba (el resumen pasa de
-  cuatro tarjetas grandes a una línea), y la tabla de movimientos se extiende
+  cuatro tarjetas grandes a una línea), y la tabla de movimientos deja de paginar (muestra todo el período) y se extiende
   hacia abajo sin scroll propio. El botón *Marcar Período como Conciliado* pasa a
   llamarse **Conciliar Período**. En *Comprobar con Contabilidad*, la lista de
   partidas se convierte en un mayor **saldo por saldo**: arranca en el saldo al

@@ -160,7 +160,7 @@ $urlBase = rtrim($base, '/') . '/' . ltrim($rutaModulo, '/');
                     </div>
                     <div>
                         <label class="form-label cb-lbl mb-1 d-block">&nbsp;</label>
-                        <button type="submit" class="btn btn-primary btn-sm shadow-sm px-3"><i class="bi bi-search"></i> Aplicar</button>
+                        <button type="submit" class="btn btn-primary btn-sm shadow-sm px-3"><i class="bi bi-search"></i> Mostrar</button>
                     </div>
                 </div>
             </form>
@@ -308,8 +308,8 @@ $urlBase = rtrim($base, '/') . '/' . ltrim($rutaModulo, '/');
                     </div>
                 </div>
                 <div class="d-flex align-items-center gap-3">
+                    <!-- Sin paginación: el listado muestra todo el período; aquí va el total. -->
                     <span id="cb-pagination-info" class="text-muted small fw-medium"></span>
-                    <div id="cb-pagination-container" class="btn-group btn-group-sm"></div>
                 </div>
             </div>
         </div>
