@@ -13,143 +13,227 @@ $base = BASE_URL;
 $urlBaseReporte = rtrim($base, '/') . '/' . ltrim($rutaModulo ?? '', '/');
 $urlBaseActivosFijos = rtrim($base, '/') . '/modulos/activos-fijos';
 ?>
+<script>document.body.classList.add('cmg-no-app-shell');</script>
+<style>
+    /* Tarjeta de control fija arriba (app.css) y el reporte debajo, libre hacia abajo: hace scroll la
+       página, no un contenedor interno. El .ef-scroll solo da el scroll horizontal si no cabe. */
+    .ef-scroll { overflow-x: auto; }
+    #formFiltros .form-select,
+    #formFiltros .form-control,
+    #formFiltros .btn { height: 28px; font-size: .75rem; }
+    @media (max-width: 767.98px) {
+        #modulo-estados-financieros .ef-scroll { max-height: none !important; height: auto !important; overflow-y: visible !important; }
+    }
+</style>
 <div id="ef-depreciacion-warning"></div>
 
-<div class="card border-0 shadow-sm rounded-4 mb-4">
-    <div class="card-header bg-white border-bottom-0 pt-4 pb-2 px-4 d-flex justify-content-between align-items-center">
-        <h5 class="mb-0 fw-bold" style="font-family: 'Inter', sans-serif;"><i class="bi bi-bar-chart-line text-primary me-2"></i><?= htmlspecialchars($titulo) ?></h5>
-    </div>
-    
-    <!-- Filtros -->
-    <div class="px-4 pb-3 pt-2 bg-light bg-opacity-50 border-bottom border-top">
-        <form id="formFiltros" class="row g-2 align-items-end" onsubmit="event.preventDefault(); generarReporte();">
-            <div class="col">
-                <label class="form-label small fw-bold text-muted mb-1">Tipo de Reporte</label>
-                <select class="form-select form-select-sm shadow-none" id="tipo_reporte" name="tipo_reporte" onchange="setTipoReporte(this.value)">
-                    <option value="situacion">Estado de Situación Financiera</option>
-                    <option value="resultados">Estado de Resultados</option>
-                    <option value="situacion_periodos">Estado de Situación Financiera por Periodos</option>
-                    <option value="resultados_periodos">Estado de Resultados por Periodos</option>
-                </select>
+<div class="container-fluid pt-0 pb-3 px-0 px-md-3" id="modulo-estados-financieros">
+
+    <!-- ── Tarjeta de control fija (título + filtros + indicadores) ── -->
+    <div class="card cmg-control-card border-0 shadow-sm rounded-3 mb-3">
+        <div class="card-header bg-white border-bottom py-2 px-3">
+            <h5 class="mb-0 fw-bold"><i class="bi bi-bar-chart-line me-2 text-primary"></i><?= htmlspecialchars($titulo) ?></h5>
+        </div>
+        <div class="card-body p-3">
+            <form id="formFiltros" class="d-flex flex-wrap align-items-start gap-2" onsubmit="event.preventDefault(); generarReporte();">
+                <div style="width:250px;">
+                    <label class="form-label small fw-bold mb-1 d-block text-muted text-uppercase" style="font-size:.65rem;">Tipo de Reporte</label>
+                    <select class="form-select form-select-sm shadow-none border" id="tipo_reporte" name="tipo_reporte" onchange="setTipoReporte(this.value)">
+                        <option value="situacion">Estado de Situación Financiera</option>
+                        <option value="resultados">Estado de Resultados</option>
+                        <option value="situacion_periodos">Estado de Situación Financiera por Periodos</option>
+                        <option value="resultados_periodos">Estado de Resultados por Periodos</option>
+                    </select>
+                </div>
+                <div style="width:130px;">
+                    <label class="form-label small fw-bold mb-1 d-block text-muted text-uppercase" style="font-size:.65rem;">Nivel</label>
+                    <select class="form-select form-select-sm shadow-none border" id="filtro_nivel">
+                        <option value="5">Nivel 5 (Todos)</option>
+                        <option value="4">Nivel 4</option>
+                        <option value="3">Nivel 3</option>
+                        <option value="2">Nivel 2</option>
+                        <option value="1">Nivel 1</option>
+                    </select>
+                </div>
+                <div style="width:90px;">
+                    <label class="form-label small fw-bold mb-1 d-block text-muted text-uppercase" style="font-size:.65rem;">Año</label>
+                    <select class="form-select form-select-sm shadow-none border" id="filtro_anio" onchange="actualizarFechas()">
+                        <?php foreach ($aniosDisponibles as $anio): ?>
+                            <option value="<?= $anio ?>"><?= $anio ?></option>
+                        <?php endforeach; ?>
+                    </select>
+                </div>
+                <div style="width:120px;">
+                    <label class="form-label small fw-bold mb-1 d-block text-muted text-uppercase" style="font-size:.65rem;">Mes</label>
+                    <select class="form-select form-select-sm shadow-none border" id="filtro_mes" onchange="actualizarFechas()">
+                        <option value="0">Todos</option>
+                        <option value="1">Enero</option>
+                        <option value="2">Febrero</option>
+                        <option value="3">Marzo</option>
+                        <option value="4">Abril</option>
+                        <option value="5">Mayo</option>
+                        <option value="6">Junio</option>
+                        <option value="7">Julio</option>
+                        <option value="8">Agosto</option>
+                        <option value="9">Septiembre</option>
+                        <option value="10">Octubre</option>
+                        <option value="11">Noviembre</option>
+                        <option value="12">Diciembre</option>
+                    </select>
+                </div>
+                <div style="width:160px;">
+                    <label class="form-label small fw-bold mb-1 d-block text-muted text-uppercase" style="font-size:.65rem;">C. Costo</label>
+                    <select class="form-select form-select-sm shadow-none border" id="filtro_centro_costo">
+                        <option value="">Todos</option>
+                        <?php foreach ($centrosCosto ?? [] as $cc): ?>
+                            <option value="<?= $cc['id'] ?>"><?= htmlspecialchars($cc['codigo'] . ' - ' . $cc['nombre']) ?></option>
+                        <?php endforeach; ?>
+                    </select>
+                </div>
+                <div style="width:160px;">
+                    <label class="form-label small fw-bold mb-1 d-block text-muted text-uppercase" style="font-size:.65rem;">Proyecto</label>
+                    <select class="form-select form-select-sm shadow-none border" id="filtro_proyecto">
+                        <option value="">Todos</option>
+                        <?php foreach ($proyectos ?? [] as $py): ?>
+                            <option value="<?= $py['id'] ?>"><?= htmlspecialchars($py['codigo'] . ' - ' . $py['nombre']) ?></option>
+                        <?php endforeach; ?>
+                    </select>
+                </div>
+                <!-- Fechas y botón juntos: si no caben en la fila, saltan juntos a la siguiente. -->
+                <div class="d-flex flex-wrap align-items-start gap-2">
+                    <div style="width:120px;">
+                        <label class="form-label small fw-bold mb-1 d-block text-muted text-uppercase" style="font-size:.65rem;">Fecha Inicio</label>
+                        <input type="date" class="form-control form-control-sm shadow-none border" id="fecha_inicio" name="fecha_inicio" value="<?= htmlspecialchars($fechaInicio) ?>" required>
+                    </div>
+                    <div style="width:120px;">
+                        <label class="form-label small fw-bold mb-1 d-block text-muted text-uppercase" style="font-size:.65rem;">Fecha Fin</label>
+                        <input type="date" class="form-control form-control-sm shadow-none border" id="fecha_fin" name="fecha_fin" value="<?= htmlspecialchars($fechaFin) ?>" required>
+                    </div>
+                    <div>
+                        <label class="form-label small fw-bold mb-1 d-block" style="font-size:.65rem;">&nbsp;</label>
+                        <button type="submit" class="btn btn-primary btn-sm px-3 shadow-sm" id="btnGenerar" style="width:110px;">
+                            <i class="bi bi-search me-1"></i>Mostrar
+                        </button>
+                    </div>
+                </div>
+            </form>
+        </div>
+        <!-- Indicadores del reporte mostrado: los llena EF_actualizarStats() al generar. -->
+        <div class="card-footer bg-white border-top py-2 px-3">
+            <div class="cmg-control-card__stats" id="ef-stats-row">
+                <?php foreach ([['bi-graph-up', 'primary'], ['bi-graph-down', 'danger'], ['bi-bank', 'info'], ['bi-check2-circle', 'success']] as $i => [$icono, $color]): ?>
+                <div class="cmg-control-card__stat">
+                    <i class="bi <?= $icono ?> bg-<?= $color ?> bg-opacity-10 text-<?= $color ?>" id="ef-stat-icono-<?= $i + 1 ?>"></i>
+                    <div>
+                        <div class="cmg-control-card__stat-value" id="ef-stat-valor-<?= $i + 1 ?>">—</div>
+                        <div class="cmg-control-card__stat-label" id="ef-stat-label-<?= $i + 1 ?>"><?= ['Activos', 'Pasivos', 'Patrimonio', 'Cuadre'][$i] ?></div>
+                    </div>
+                </div>
+                <?php endforeach; ?>
             </div>
-            <div class="col">
-                <label class="form-label small fw-bold text-muted mb-1">Nivel</label>
-                <select class="form-select form-select-sm shadow-none" id="filtro_nivel">
-                    <option value="5">Nivel 5 (Todos)</option>
-                    <option value="4">Nivel 4</option>
-                    <option value="3">Nivel 3</option>
-                    <option value="2">Nivel 2</option>
-                    <option value="1">Nivel 1</option>
-                </select>
-            </div>
-            <div class="col">
-                <label class="form-label small fw-bold text-muted mb-1">Año</label>
-                <select class="form-select form-select-sm shadow-none" id="filtro_anio" onchange="actualizarFechas()">
-                    <?php foreach ($aniosDisponibles as $anio): ?>
-                        <option value="<?= $anio ?>"><?= $anio ?></option>
-                    <?php endforeach; ?>
-                </select>
-            </div>
-            <div class="col">
-                <label class="form-label small fw-bold text-muted mb-1">Mes</label>
-                <select class="form-select form-select-sm shadow-none" id="filtro_mes" onchange="actualizarFechas()">
-                    <option value="0">Todos</option>
-                    <option value="1">Enero</option>
-                    <option value="2">Febrero</option>
-                    <option value="3">Marzo</option>
-                    <option value="4">Abril</option>
-                    <option value="5">Mayo</option>
-                    <option value="6">Junio</option>
-                    <option value="7">Julio</option>
-                    <option value="8">Agosto</option>
-                    <option value="9">Septiembre</option>
-                    <option value="10">Octubre</option>
-                    <option value="11">Noviembre</option>
-                    <option value="12">Diciembre</option>
-                </select>
-            </div>
-            <div class="col">
-                <label class="form-label small fw-bold text-muted mb-1">C. Costo</label>
-                <select class="form-select form-select-sm shadow-none" id="filtro_centro_costo">
-                    <option value="">Todos</option>
-                    <?php foreach ($centrosCosto ?? [] as $cc): ?>
-                        <option value="<?= $cc['id'] ?>"><?= htmlspecialchars($cc['codigo'] . ' - ' . $cc['nombre']) ?></option>
-                    <?php endforeach; ?>
-                </select>
-            </div>
-            <div class="col">
-                <label class="form-label small fw-bold text-muted mb-1">Proyecto</label>
-                <select class="form-select form-select-sm shadow-none" id="filtro_proyecto">
-                    <option value="">Todos</option>
-                    <?php foreach ($proyectos ?? [] as $py): ?>
-                        <option value="<?= $py['id'] ?>"><?= htmlspecialchars($py['codigo'] . ' - ' . $py['nombre']) ?></option>
-                    <?php endforeach; ?>
-                </select>
-            </div>
-            <div class="col">
-                <label class="form-label small fw-bold text-muted mb-1">Fecha Inicio</label>
-                <input type="date" class="form-control form-control-sm shadow-none" id="fecha_inicio" name="fecha_inicio" value="<?= htmlspecialchars($fechaInicio) ?>" required>
-            </div>
-            <div class="col">
-                <label class="form-label small fw-bold text-muted mb-1">Fecha Fin</label>
-                <input type="date" class="form-control form-control-sm shadow-none" id="fecha_fin" name="fecha_fin" value="<?= htmlspecialchars($fechaFin) ?>" required>
-            </div>
-            <div class="col">
-                <button type="submit" class="btn btn-primary btn-sm px-3 shadow-sm w-100" id="btnGenerar">
-                    <i class="bi bi-search me-1"></i> Generar
-                </button>
-            </div>
-        </form>
+        </div>
     </div>
 
-    <!-- Exportación -->
-    <div class="d-flex justify-content-end bg-light px-3 py-2 border-bottom">
-        <div class="btn-group btn-group-sm shadow-sm">
-            <button type="button" class="btn btn-white border px-3" title="Descargar PDF" onclick="exportar('pdf')">
-                <i class="bi bi-file-earmark-pdf text-danger"></i> PDF
-            </button>
-            <button type="button" class="btn btn-white border px-3" title="Descargar Excel" onclick="exportar('excel')">
-                <i class="bi bi-file-earmark-excel text-success"></i> Excel
-            </button>
-            <button type="button" class="btn btn-white border px-3 btn-export-periodo-unico" title="Descargar Formato SRI" onclick="exportar('sri')">
-                <i class="bi bi-file-earmark-code text-primary"></i> Renta SRI
-            </button>
-            <button type="button" class="btn btn-white border px-3 btn-export-periodo-unico" title="Descargar Supercias ESF" onclick="exportar('supercias_esf')">
-                <i class="bi bi-bank text-info"></i> Supercias ESF
-            </button>
-            <button type="button" class="btn btn-white border px-3 btn-export-periodo-unico" title="Descargar Supercias ERI" onclick="exportar('supercias_eri')">
-                <i class="bi bi-bank text-info"></i> Supercias ERI
-            </button>
-            <button type="button" class="btn btn-white border px-3 btn-export-periodo-unico" title="Estado de Cambios en el Patrimonio (Supercias ECP): ver la matriz y descargar el TXT" onclick="verEcp()">
-                <i class="bi bi-grid-3x3 text-info"></i> Supercias ECP
-            </button>
-            <button type="button" class="btn btn-white border px-3 btn-export-periodo-unico" title="Estado de Flujos de Efectivo (Supercias EFE): ver el detalle y descargar el TXT" onclick="verEfe()">
-                <i class="bi bi-cash-stack text-info"></i> Supercias EFE
-            </button>
-            <button type="button" class="btn btn-white border px-3 btn-export-periodo-unico" title="Revisar qué falta configurar para que los archivos Supercias salgan completos y cuadrados" onclick="revisarSupercias()">
-                <i class="bi bi-clipboard2-check text-warning"></i> Revisar Supercias
-            </button>
-        </div>
-        <?php if (!empty($hayGrupoRuc)): ?>
-        <button type="button" class="btn btn-outline-primary btn-sm shadow-sm ms-2" onclick="verConsolidadoRuc()">
-            <i class="bi bi-diagram-3 me-1"></i> Consolidado por RUC
-        </button>
-        <?php endif; ?>
-    </div>
-
-    <!-- Contenido del reporte -->
-    <div class="px-3 py-3" style="min-height: 400px;">
-        <div id="loader-reporte" class="text-center py-5 d-none">
-            <div class="spinner-border text-primary" role="status">
-                <span class="visually-hidden">Cargando...</span>
+    <!-- ── Reporte ── -->
+    <div class="card cmg-table-card w-100 border-0 shadow-sm rounded-3">
+        <div class="card-header bg-white py-2 px-3 border-bottom">
+            <div class="d-flex justify-content-between align-items-center flex-wrap gap-2">
+                <div class="btn-group btn-group-sm flex-wrap">
+                    <button type="button" class="btn btn-outline-danger" title="Descargar PDF" onclick="exportar('pdf')">
+                        <i class="bi bi-file-earmark-pdf"></i><span class="d-none d-md-inline"> PDF</span>
+                    </button>
+                    <button type="button" class="btn btn-outline-success" title="Descargar Excel" onclick="exportar('excel')">
+                        <i class="bi bi-file-earmark-spreadsheet"></i><span class="d-none d-md-inline"> Excel</span>
+                    </button>
+                    <button type="button" class="btn btn-outline-primary btn-export-periodo-unico" title="Descargar Formato SRI" onclick="exportar('sri')">
+                        <i class="bi bi-file-earmark-code"></i><span class="d-none d-md-inline"> Renta SRI</span>
+                    </button>
+                    <button type="button" class="btn btn-outline-info btn-export-periodo-unico" title="Descargar Supercias ESF" onclick="exportar('supercias_esf')">
+                        <i class="bi bi-bank"></i><span class="d-none d-md-inline"> Supercias ESF</span>
+                    </button>
+                    <button type="button" class="btn btn-outline-info btn-export-periodo-unico" title="Descargar Supercias ERI" onclick="exportar('supercias_eri')">
+                        <i class="bi bi-bank"></i><span class="d-none d-md-inline"> Supercias ERI</span>
+                    </button>
+                    <button type="button" class="btn btn-outline-info btn-export-periodo-unico" title="Estado de Cambios en el Patrimonio (Supercias ECP): ver la matriz y descargar el TXT" onclick="verEcp()">
+                        <i class="bi bi-grid-3x3"></i><span class="d-none d-md-inline"> Supercias ECP</span>
+                    </button>
+                    <button type="button" class="btn btn-outline-info btn-export-periodo-unico" title="Estado de Flujos de Efectivo (Supercias EFE): ver el detalle y descargar el TXT" onclick="verEfe()">
+                        <i class="bi bi-cash-stack"></i><span class="d-none d-md-inline"> Supercias EFE</span>
+                    </button>
+                    <button type="button" class="btn btn-outline-warning btn-export-periodo-unico" title="Revisar qué falta configurar para que los archivos Supercias salgan completos y cuadrados" onclick="revisarSupercias()">
+                        <i class="bi bi-clipboard2-check"></i><span class="d-none d-md-inline"> Revisar Supercias</span>
+                    </button>
+                </div>
+                <div class="d-flex align-items-center gap-2 flex-wrap">
+                    <?php if (!empty($hayGrupoRuc)): ?>
+                    <button type="button" class="btn btn-outline-primary btn-sm" onclick="verConsolidadoRuc()">
+                        <i class="bi bi-diagram-3 me-1"></i>Consolidado por RUC
+                    </button>
+                    <?php endif; ?>
+                    <button type="button" class="btn btn-outline-primary btn-sm" onclick="EF_cuadreModulos()"
+                            title="Cuadre con módulos: compara las cuentas contables con el saldo de Bancos, Caja, Cuentas por Cobrar, Cuentas por Pagar, Inventarios y Anticipos">
+                        <i class="bi bi-journal-check me-1"></i>Cuadre con Módulos
+                    </button>
+                </div>
             </div>
-            <p class="text-muted mt-2 small">Generando reporte...</p>
         </div>
-        <div id="content-reporte" class="table-responsive">
-            <p class="text-muted text-center py-5 small"><i class="bi bi-info-circle me-1"></i> Seleccione el rango de fechas y presione Generar.</p>
+        <div class="card-body p-0">
+            <div class="ef-scroll w-100 p-3" style="min-height: 400px;">
+                <div id="loader-reporte" class="text-center py-5 d-none">
+                    <div class="spinner-border text-primary" role="status">
+                        <span class="visually-hidden">Cargando...</span>
+                    </div>
+                    <p class="text-muted mt-2 small">Generando reporte...</p>
+                </div>
+                <div id="content-reporte">
+                    <p class="text-muted text-center py-5 small"><i class="bi bi-info-circle me-1"></i> Seleccione el rango de fechas y presione Mostrar.</p>
+                </div>
+            </div>
         </div>
     </div>
 </div>
+
+<!-- Modal: Cuadre con módulos (la contabilidad contra el saldo de cada módulo) -->
+<div class="modal fade" id="modalCuadreModulos" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-xl modal-dialog-centered modal-dialog-scrollable">
+        <div class="modal-content border-0 shadow-lg">
+            <div class="modal-header bg-primary text-white py-2 px-3">
+                <h6 class="modal-title fw-bold"><i class="bi bi-journal-check me-2"></i>Cuadre con Módulos</h6>
+                <button type="button" class="btn-close btn-close-white btn-sm" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body p-3 position-relative">
+                <div id="ef-cuadre-loader" class="d-none position-absolute top-0 start-0 w-100 h-100 d-flex flex-column align-items-center justify-content-center bg-white bg-opacity-75" style="z-index: 1055;">
+                    <div class="spinner-border text-primary mb-2" role="status"></div>
+                    <div class="small text-muted">Comparando con los módulos...</div>
+                </div>
+                <form id="form-filtros-cuadre" class="d-flex flex-wrap align-items-start gap-2 mb-3 pb-2 border-bottom"
+                      onsubmit="event.preventDefault(); EF_cuadreModulosCargar();">
+                    <div style="width:130px;">
+                        <label class="form-label small fw-bold mb-1 d-block text-muted text-uppercase" style="font-size:.65rem;" for="ef-cuadre-desde">Desde</label>
+                        <input type="date" class="form-control form-control-sm" id="ef-cuadre-desde">
+                    </div>
+                    <div style="width:130px;">
+                        <label class="form-label small fw-bold mb-1 d-block text-muted text-uppercase" style="font-size:.65rem;" for="ef-cuadre-hasta">Hasta</label>
+                        <input type="date" class="form-control form-control-sm" id="ef-cuadre-hasta">
+                    </div>
+                    <div>
+                        <label class="form-label small fw-bold mb-1 d-block" style="font-size:.65rem;">&nbsp;</label>
+                        <button type="submit" class="btn btn-primary btn-sm"><i class="bi bi-search me-1"></i>Mostrar</button>
+                    </div>
+                </form>
+                <div id="ef-cuadre-contenido"></div>
+            </div>
+            <div class="modal-footer py-2 px-3">
+                <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Cerrar</button>
+            </div>
+        </div>
+    </div>
+</div>
+<style>
+    #form-filtros-cuadre .form-control, #form-filtros-cuadre .btn { height: 28px; font-size: .75rem; }
+    #modalCuadreModulos .ef-cuadre-card { overflow: clip; }
+    #modalCuadreModulos .ef-cuadre-card thead th { background: #f8f9fa; box-shadow: 0 1px 0 #dee2e6; white-space: nowrap; }
+</style>
 
 <!-- Modal: Consolidado por RUC -->
 <div class="modal fade" id="modalConsolidadoRuc" tabindex="-1" aria-hidden="true">
@@ -433,7 +517,17 @@ $urlBaseActivosFijos = rtrim($base, '/') . '/modulos/activos-fijos';
 
     function setTipoReporte(tipo) {
         tipoReporteActivo = tipo;
-        document.getElementById('content-reporte').innerHTML = '<p class="text-muted text-center py-5 small"><i class="bi bi-info-circle me-1"></i> Presione Generar para actualizar el reporte.</p>';
+        document.getElementById('content-reporte').innerHTML = '<p class="text-muted text-center py-5 small"><i class="bi bi-info-circle me-1"></i> Presione Mostrar para actualizar el reporte.</p>';
+        // Los indicadores eran del reporte anterior: quedan en blanco con los rótulos del nuevo.
+        const rotulos = (tipo === 'situacion' || tipo === 'situacion_periodos')
+            ? ['Activos', 'Pasivos', 'Patrimonio', 'Cuadre']
+            : ['Ingresos', 'Costos', 'Gastos', 'Resultado del ejercicio'];
+        rotulos.forEach((r, i) => {
+            document.getElementById(`ef-stat-label-${i + 1}`).textContent = r;
+            const v = document.getElementById(`ef-stat-valor-${i + 1}`);
+            v.textContent = '—';
+            v.className = 'cmg-control-card__stat-value';
+        });
 
         // Renta SRI y Supercias son formatos de un solo corte; no aplican a los reportes por periodos.
         const esPeriodos = tipo === 'resultados_periodos' || tipo === 'situacion_periodos';
@@ -601,6 +695,7 @@ $urlBaseActivosFijos = rtrim($base, '/') . '/modulos/activos-fijos';
             const json = await resp.json();
             if (json.success) {
                 ep.render(json.data, nivel);
+                EF_actualizarStats(tipoReporteActivo, json.data.totales || {});
             } else {
                 Swal.fire({ icon: 'error', title: 'Error', text: json.error || 'Error al generar el reporte' });
             }
@@ -611,8 +706,49 @@ $urlBaseActivosFijos = rtrim($base, '/') . '/modulos/activos-fijos';
             document.getElementById('loader-reporte').classList.add('d-none');
         } finally {
             btn.disabled = false;
-            btn.innerHTML = '<i class="bi bi-search me-1"></i> Generar';
+            btn.innerHTML = '<i class="bi bi-search me-1"></i>Mostrar';
         }
+    }
+
+    // Indicadores del pie de la tarjeta de control. En los reportes por periodos cada total
+    // viene por periodo: se muestra el total (resultados) o el último periodo (situación).
+    function EF_actualizarStats(tipo, totales) {
+        const valor = (v) => {
+            if (v && typeof v === 'object') {
+                if (v.total !== undefined) return parseFloat(v.total) || 0;
+                const claves = Object.keys(v);
+                return parseFloat(v[claves[claves.length - 1]]) || 0;
+            }
+            return parseFloat(v) || 0;
+        };
+        const esSituacion = tipo === 'situacion' || tipo === 'situacion_periodos';
+        let stats;
+        if (esSituacion) {
+            const dif = valor(totales.activos) - valor(totales.pasivo_patrimonio);
+            const cuadra = Math.abs(dif) < 0.005;
+            stats = [
+                ['Activos', valor(totales.activos), 'bi-graph-up', 'primary'],
+                ['Pasivos', valor(totales.pasivos), 'bi-graph-down', 'danger'],
+                ['Patrimonio', valor(totales.patrimonio), 'bi-bank', 'info'],
+                [cuadra ? 'Cuadra' : 'Diferencia Activo − (Pasivo + Patrimonio)', dif, cuadra ? 'bi-check2-circle' : 'bi-exclamation-triangle', cuadra ? 'success' : 'danger'],
+            ];
+        } else {
+            const neta = valor(totales.utilidad_neta);
+            stats = [
+                ['Ingresos', valor(totales.ingresos), 'bi-graph-up', 'primary'],
+                ['Costos', valor(totales.costos), 'bi-box-seam', 'secondary'],
+                ['Gastos', valor(totales.gastos), 'bi-graph-down', 'danger'],
+                [neta >= 0 ? 'Utilidad del ejercicio' : 'Pérdida del ejercicio', neta, neta >= 0 ? 'bi-check2-circle' : 'bi-exclamation-triangle', neta >= 0 ? 'success' : 'danger'],
+            ];
+        }
+        stats.forEach(([label, monto, icono, color], i) => {
+            const n = i + 1;
+            document.getElementById(`ef-stat-label-${n}`).textContent = label;
+            const v = document.getElementById(`ef-stat-valor-${n}`);
+            v.textContent = formatMoney(monto);
+            v.className = `cmg-control-card__stat-value text-${color}`;
+            document.getElementById(`ef-stat-icono-${n}`).className = `bi ${icono} bg-${color} bg-opacity-10 text-${color}`;
+        });
     }
 
     // Celda del código: en cuentas de nivel 2 a 5 es clicable y abre la ficha de la cuenta
@@ -1308,6 +1444,13 @@ $urlBaseActivosFijos = rtrim($base, '/') . '/modulos/activos-fijos';
 <script>window.BASE_URL = '<?= $base ?>';</script>
 <?php include __DIR__ . '/../asientos_contables/modal_asiento.php'; ?>
 <script src="<?= $base ?>/js/modulos/asientos_contables_modal.js?v=<?= asset_ver('/js/modulos/asientos_contables_modal.js') ?>"></script>
+<?php
+// Modal común de la Comprobación con Contabilidad ("Ver detalle" del Cuadre con módulos).
+// El modal de asiento ya está incluido arriba: el partial no debe repetirlo.
+$GLOBALS['__cmg_modal_asiento_incluido'] = true;
+require MVC_APP . '/views/partials/comprobacion_contable_modal.php';
+?>
+<script src="<?= $base ?>/js/modulos/estados_financieros_cuadre.js?v=<?= asset_ver('/js/modulos/estados_financieros_cuadre.js') ?>"></script>
 <script src="<?= $base ?>/js/modulos/asientos_pendientes.js?v=<?= asset_ver('/js/modulos/asientos_pendientes.js') ?>"></script>
 
 <!-- Modal reutilizable de Plan de Cuentas: lo abre el código de cada cuenta de nivel 5 del reporte.

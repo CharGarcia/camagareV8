@@ -5,8 +5,8 @@ categoria: Reportes
 ruta_modulo: modulos/reporte_inventarios
 tipo: modulo
 visibilidad: todos
-etiquetas: reporte de inventario, no descarga el excel, excel no descarga, excel en blanco, demasiados datos, excel muy grande, filtrar por año, no descarga el pdf, pdf en blanco, pdf muy grande, excel de la consignacion, numero de factura en el excel, numero de retorno en el excel, totales en el excel, existencias, stock por bodega, valorizacion, kardex, faltantes, exportar, auditoria, stock cacheado, corregir stock, consignaciones, stock por lote, por caducidad, que se vence, vencimientos, limpiar filtros, lento, tarda, se cuelga, tarda en abrir, tarda en entrar, busqueda lenta, se recarga la pagina, ordenar por columna, pierde el resultado, no puedo abrir otro modulo mientras carga, primeras 5000 filas, listado recortado, lote, nup, asesor, detalle de consignacion, totales del detalle, pdf del documento relacionado, permisos, pestañas, no veo la pestaña, no aparece consignaciones, no aparece existencias, acceso a inventario, permiso de inventario, permiso de consignaciones, pdf de la consignacion, estado de la consignacion, imprimir consignacion con saldo, consignacion completa, saldo en poder del cliente, no veo una bodega, bodegas asignadas, acceso a bodegas, solo mi bodega, falta una bodega, no aparece la bodega, codigo de producto en consignacion, codigo del producto en el detalle, codigo como primera columna, columna codigo, codigo de producto en el reporte, ordenar por codigo, lote mas consignacion, que lote tiene cada cliente, lote por cliente, consignacion por lote, con quien salio el lote, entregas por lote, se genera solo, se consulta solo, no muestra datos, boton mostrar, hay que pulsar mostrar, al elegir el producto se pone a cargar, al cambiar el anio se pone a cargar, no quiero que cargue solo, carga sola, consulta automatica, lotes en cero, lote agotado, no muestra lotes vacios, stock cero, lotes sin stock, filas en cero, por que no aparece el lote, lote desaparecio del reporte, boton mostrar bloqueado, no puedo pulsar mostrar, doble clic en mostrar, barra de progreso, porcentaje de avance, cuanto falta, se queda cargando, indicador de carga, stock negativo, por que esta en negativo, saldo negativo, negativo en existencias, seguimiento, trazabilidad del lote, de donde sale el negativo, lote sin entrada, lote duplicado, lote mal escrito, movimientos de otro ambiente, kardex de un lote, filtros no funcionan, no filtra, no coge los filtros, filtro de estado, filtro consignado, saldo a fecha, fecha de corte, saldo inicial, saldo anterior, saldo de arranque, saldo al inicio del mes, kardex empieza en cero, saldo empieza en cero, resumen de cuadre, cuadre de inventario, no cuadra, movimientos y existencias no coinciden, saldo distinto, reverso por cambio a borrador, retorno en borrador, reactivacion, entrada por reactivacion, correcciones, ocultar correcciones, movimientos que se anulan, el saldo no es el stock, filtro de lote en existencias, stock del lote
-version: 1.33
+etiquetas: reporte de inventario, comprobar con contabilidad, cuadrar con contabilidad, inventario vs contabilidad, kardex vs contabilidad, valor del inventario contable, cuenta de inventario, no cuadra con contabilidad, no descarga el excel, excel no descarga, excel en blanco, demasiados datos, excel muy grande, filtrar por año, no descarga el pdf, pdf en blanco, pdf muy grande, excel de la consignacion, numero de factura en el excel, numero de retorno en el excel, totales en el excel, existencias, stock por bodega, valorizacion, kardex, faltantes, exportar, auditoria, stock cacheado, corregir stock, consignaciones, stock por lote, por caducidad, que se vence, vencimientos, limpiar filtros, lento, tarda, se cuelga, tarda en abrir, tarda en entrar, busqueda lenta, se recarga la pagina, ordenar por columna, pierde el resultado, no puedo abrir otro modulo mientras carga, primeras 5000 filas, listado recortado, lote, nup, asesor, detalle de consignacion, totales del detalle, pdf del documento relacionado, permisos, pestañas, no veo la pestaña, no aparece consignaciones, no aparece existencias, acceso a inventario, permiso de inventario, permiso de consignaciones, pdf de la consignacion, estado de la consignacion, imprimir consignacion con saldo, consignacion completa, saldo en poder del cliente, no veo una bodega, bodegas asignadas, acceso a bodegas, solo mi bodega, falta una bodega, no aparece la bodega, codigo de producto en consignacion, codigo del producto en el detalle, codigo como primera columna, columna codigo, codigo de producto en el reporte, ordenar por codigo, lote mas consignacion, que lote tiene cada cliente, lote por cliente, consignacion por lote, con quien salio el lote, entregas por lote, se genera solo, se consulta solo, no muestra datos, boton mostrar, hay que pulsar mostrar, al elegir el producto se pone a cargar, al cambiar el anio se pone a cargar, no quiero que cargue solo, carga sola, consulta automatica, lotes en cero, lote agotado, no muestra lotes vacios, stock cero, lotes sin stock, filas en cero, por que no aparece el lote, lote desaparecio del reporte, boton mostrar bloqueado, no puedo pulsar mostrar, doble clic en mostrar, barra de progreso, porcentaje de avance, cuanto falta, se queda cargando, indicador de carga, stock negativo, por que esta en negativo, saldo negativo, negativo en existencias, seguimiento, trazabilidad del lote, de donde sale el negativo, lote sin entrada, lote duplicado, lote mal escrito, movimientos de otro ambiente, kardex de un lote, filtros no funcionan, no filtra, no coge los filtros, filtro de estado, filtro consignado, saldo a fecha, fecha de corte, saldo inicial, saldo anterior, saldo de arranque, saldo al inicio del mes, kardex empieza en cero, saldo empieza en cero, resumen de cuadre, cuadre de inventario, no cuadra, movimientos y existencias no coinciden, saldo distinto, reverso por cambio a borrador, retorno en borrador, reactivacion, entrada por reactivacion, correcciones, ocultar correcciones, movimientos que se anulan, el saldo no es el stock, filtro de lote en existencias, stock del lote
+version: 1.34
 orden: 40
 estado: activo
 ---
@@ -537,6 +537,31 @@ compras, consignaciones, retornos, cambios de producto y ajustes manuales).
 Los productos con discrepancias que ya existían antes de esta corrección
 siguen apareciendo aquí hasta que se corrigen manualmente.
 
+### Comprobar el inventario con la contabilidad
+
+El botón **Comprobar con Contabilidad** (en la cabecera de la tabla de
+Auditoría, junto a *Corregir todo*) compara el **valor** del inventario según el kardex con el saldo de
+las **cuentas de inventario** de la contabilidad (las configuradas para
+compras, ventas, recibos, importaciones y consignaciones), al inicio y al final
+del período, y lista documento por documento lo que cada lado movió. No
+modifica nada.
+
+- **"Según Kardex"** es el valor por movimientos, de **todas las bodegas**:
+  cada entrada suma su costo y cada salida resta el costo con que salió (el
+  mismo que la venta lleva a Costo de Ventas). **No es** el valor de la pestaña
+  Valorización, que multiplica el stock por el último costo.
+- Los filtros de bodega, producto y búsqueda de la pestaña no aplican: la
+  contabilidad no distingue bodega ni producto.
+- Ajustes manuales, cargas de inventario, órdenes de taller y saldos iniciales
+  del kardex no generan asiento: salen como *Sin asiento contable*. Una compra
+  sale como *Monto distinto* cuando el asiento registró el inventario por el
+  precio de la factura y el kardex por otro costo.
+- Solo la ve quien tiene acceso a la contabilidad: permiso de ver el módulo
+  **Estados financieros** en la empresa activa.
+
+Cómo leer la pantalla y qué significa cada situación:
+[Comprobar un módulo con la contabilidad](../conceptos/comprobacion-con-contabilidad.md).
+
 ## Cuántas filas se muestran
 
 En pantalla, cada pestaña muestra **como máximo 5.000 filas**. Si el resultado
@@ -619,6 +644,9 @@ ahí.
 
 ## Historial de cambios
 
+- **1.34** — Pestaña Auditoría: nuevo botón **Comprobar con Contabilidad**, que
+  compara el valor del inventario según el kardex con las cuentas de inventario,
+  documento por documento.
 - **1.33** — **Resumen de cuadre y correcciones en Movimientos**. Con un producto
   elegido, un resumen por bodega muestra saldo inicial + entradas − salidas ±
   correcciones = saldo final, y lo compara con Existencias (con la causa si no

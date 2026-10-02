@@ -5,8 +5,8 @@ categoria: Tesorería
 ruta_modulo: modulos/control-bancario
 tipo: modulo
 visibilidad: todos
-etiquetas: control bancario, conciliacion bancaria, estado de cuenta, banco, cheques, movimientos, cuadrar banco, buscar movimiento, buscador, filtros, filtrar movimientos bancarios, buscar cheque, chips, cheques posfechados, cheque por cobrar, cheque por depositar, aviso de cheques, alerta, notificacion, vencimiento de cheques, comprobar con contabilidad, cuadrar con contabilidad, saldo contable vs banco, diferencia contable, asiento faltante, sin asiento
-version: 1.16
+etiquetas: control bancario, traspaso, traspasos en el banco, deposito de caja al banco, traspaso no aparece en el banco, conciliacion bancaria, estado de cuenta, banco, cheques, movimientos, cuadrar banco, buscar movimiento, buscador, filtros, filtrar movimientos bancarios, buscar cheque, chips, cheques posfechados, cheque por cobrar, cheque por depositar, aviso de cheques, alerta, notificacion, vencimiento de cheques, comprobar con contabilidad, cuadrar con contabilidad, saldo contable vs banco, diferencia contable, asiento faltante, sin asiento
+version: 1.17
 orden: 60
 estado: activo
 ---
@@ -290,6 +290,13 @@ El botón **Comprobar con Contabilidad** (arriba) compara, para la cuenta y el
 período seleccionados, lo registrado en Ingresos/Egresos con la **cuenta
 contable** del banco. No modifica nada: es solo una revisión.
 
+La cuenta contable que se compara es la que **de verdad mueven los asientos**:
+si en **Configuración Contable** la forma de pago tiene una regla propia para
+cobros o para pagos, manda esa regla; si no, la cuenta contable de la forma de
+pago. Cobros y pagos pueden ir a cuentas distintas: en ese caso se comparan las
+dos juntas y arriba se indica cuál es la de cobros y cuál la de pagos. El PDF de
+la conciliación muestra esa misma cuenta.
+
 Muestra tres líneas, cada una con su diferencia:
 
 | Línea | Qué compara |
@@ -299,8 +306,8 @@ Muestra tres líneas, cada una con su diferencia:
 | Saldo al final del período | Todo hasta la fecha de fin |
 
 "Según Ingresos/Egresos" es el **saldo en libros**: saldo inicial de
-[Saldos iniciales](saldos-iniciales.md) más todos los cobros y pagos, con los
-cheques desde que se emiten (así los registra la contabilidad). Puede diferir del
+[Saldos iniciales](saldos-iniciales.md) más todos los cobros, pagos y
+traspasos, con los cheques desde que se emiten (así los registra la contabilidad). Puede diferir del
 saldo del listado, que solo cuenta un cheque cuando tiene Fecha Banco.
 
 ### Buscar dónde se descuadra (saldo por saldo)
@@ -363,9 +370,16 @@ contables:
 - Cada línea de pago de un **ingreso** es una entrada de dinero; cada línea de
   pago de un **egreso**, una salida. Esto incluye los ingresos y egresos que
   generan otros módulos (recibos, facturas, POS, roles de pago, liquidaciones).
+- Cada **traspaso de fondos** ([Traspasos](traspasos.md)) es una entrada en la
+  cuenta **destino** y una salida de la cuenta **origen** (por ejemplo, el
+  depósito del efectivo de Caja al banco aparece como *Depósito*; la salida del
+  banco, como *Transferencia*). El comprobante es el número del traspaso y se
+  concilia (Fecha Banco) igual que cualquier movimiento; un traspaso entre dos
+  bancos se concilia por separado en cada uno.
 - La **fecha** de cada fila es la fecha de emisión del ingreso/egreso y el
   **comprobante** es su número, no los del asiento.
-- Se excluyen los documentos eliminados o anulados y los cheques anulados.
+- Se excluyen los documentos y traspasos eliminados o anulados y los cheques
+  anulados.
 - Cada cuenta muestra **solo sus propios cobros y pagos**, aunque varias cuentas
   bancarias compartan la misma cuenta contable.
 - El saldo del período, los créditos y débitos, el saldo acumulado línea a
@@ -408,6 +422,15 @@ los dos casos.
 
 ## Historial de cambios
 
+- **1.17** — Corregido: *Comprobar con Contabilidad* comparaba siempre contra la
+  cuenta contable de la forma de pago, aunque Configuración Contable tuviera una
+  regla que enviaba los cobros o pagos de esa forma a otra cuenta; en ese caso
+  todo salía como "Sin asiento contable". Ahora compara contra la cuenta que
+  usan los asientos (también si cobros y pagos van a cuentas distintas), y el
+  PDF de la conciliación muestra esa cuenta. Los **traspasos de fondos** ahora
+  son movimientos de la cuenta bancaria (entrada en la destino, salida de la
+  origen): antes no aparecían, aunque su asiento sí movía la cuenta del banco, y
+  en *Comprobar con Contabilidad* salían como "Solo en contabilidad".
 - **1.16** — Pantalla reorganizada: título, botones, filtros y resumen del
   período van en una sola **tarjeta de control** fija arriba (el resumen pasa de
   cuatro tarjetas grandes a una línea), y la tabla de movimientos deja de paginar (muestra todo el período; al abrir, el

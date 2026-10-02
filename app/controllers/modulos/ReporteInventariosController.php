@@ -190,6 +190,8 @@ class ReporteInventariosController extends BaseModuloController
             'origenes'   => $origenes,
             'anios'      => $anios,
             'responsables' => $responsables,
+            // Comprobación con Contabilidad (botón de la pestaña Auditoría): con acceso a Estados Financieros.
+            'puedeComprobarContabilidad' => !empty($pestanas['auditoria']) && $this->puedeComprobarContabilidad(),
             'fullWidth'  => true,
             'base'       => BASE_URL,
         ]);
@@ -1661,6 +1663,22 @@ class ReporteInventariosController extends BaseModuloController
             $this->errorDescarga('Error al generar el PDF: ' . $e->getMessage(), 500);
         }
         exit;
+    }
+
+    // ────────────────────────────────────────────────────────────────
+    // COMPROBACIÓN CON CONTABILIDAD (Auditoría)
+    // ────────────────────────────────────────────────────────────────
+
+    /**
+     * Valor del inventario según el kardex contra las cuentas de inventario, al inicio y al
+     * fin del período, documento por documento (solo lectura). Abarca todas las bodegas (la
+     * contabilidad no las distingue); el acceso lo da Estados Financieros.
+     */
+    public function comprobacionContableAjax(): void
+    {
+        $this->requirePestana('auditoria');
+        $this->liberarSesion();
+        $this->responderComprobacionContable($this->repository->definicionComprobacionContable());
     }
 
     // ────────────────────────────────────────────────────────────────

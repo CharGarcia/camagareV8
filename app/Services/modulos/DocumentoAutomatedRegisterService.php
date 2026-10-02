@@ -919,6 +919,17 @@ class DocumentoAutomatedRegisterService
                 $this->comprasPendientes[] = ['id' => $idCompra, 'id_empresa' => $idEmpresa, 'token' => $token];
             }
 
+            // 7. Retención emitida antes de que llegara esta factura: se enlaza ahora.
+            $ret = $this->retencionCompraRepo->enlazarRetencionPendienteACompra($idCompra, $idEmpresa, $idUsuario);
+            if ($ret !== null) {
+                (new LogSistemaService())->registrar(
+                    $idUsuario, $idEmpresa,
+                    'ENLAZAR_COMPRA', 'retencion_compra_cabecera', (int) $ret['id'],
+                    ['id_compra' => null],
+                    ['id_compra' => $idCompra, 'num_doc_sustento' => $ret['num_doc_sustento']]
+                );
+            }
+
             $db->commit();
             return $idCompra;
         } catch (Exception $e) {

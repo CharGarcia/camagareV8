@@ -2187,4 +2187,91 @@ class ReporteInventarioRepository extends BaseRepository
             throw $e;
         }
     }
+
+    // ── Comprobación con Contabilidad ────────────────────────────────────────────
+    //
+    // Definición para App\Services\ComprobacionContableService (ver el formato en
+    // App\repositories\ComprobacionContableRepository). Lado documento: el VALOR del kardex
+    // por movimientos (entradas + costo, salidas − costo), agrupado por el documento que lo
+    // originó. Lado contable: las cuentas de los conceptos de inventario de Configuración
+    // Contable (código con "INVENTARIO", en cualquier nivel de la cascada).
+    //
+    // El valor por movimientos es el que registra la contabilidad (el costo de cada venta sale
+    // del kardex); NO es el de la pestaña Valorización, que multiplica el stock por el último
+    // costo. Las compras e importaciones guardan en el kardex el id de la LÍNEA, así que se
+    // llevan a su cabecera, que es lo que enlaza el asiento.
+
+    /** referencia_tipo del kardex => tipo del cruce (= modulo_origen del asiento). */
+    private const COMPROBACION_TIPOS_KARDEX = [
+        'CONSIGNACION_VENTA'             => 'consignacion_venta',
+        'EDICION_CONSIGNACION_VENTA'     => 'consignacion_venta',
+        'ELIMINACION_CONSIGNACION_VENTA' => 'consignacion_venta',
+        'RETORNO_CV'                     => 'retorno_cv',
+        'CAMBIO_ESTADO_RETORNO_CV'       => 'retorno_cv',
+        'ELIMINACION_RETORNO_CV'         => 'retorno_cv',
+        'CAMBIO_PRODUCTO_CV'             => 'cambio_producto_cv',
+    ];
+
+    public function definicionComprobacionContable(): array
+    {
+        $casos = '';
+        foreach (self::COMPROBACION_TIPOS_KARDEX as $ref => $tipo) {
+            $casos .= " WHEN '{$ref}' THEN '{$tipo}'";
+        }
+        $serie = \App\repositories\ComprobacionContableRepository::NUM_SERIE;
+
+        $docs = "SELECT CASE WHEN cd.id_compra IS NOT NULL THEN 'compra'
+                             WHEN idt.id_importacion IS NOT NULL THEN 'importacion'
+                             WHEN k.referencia_tipo = 'SALDO_INICIAL' THEN 'saldo_inicial'
+                             ELSE CASE k.referencia_tipo {$casos} ELSE k.referencia_tipo END
+                        END AS tipo,
+                        CASE WHEN cd.id_compra IS NOT NULL THEN cd.id_compra
+                             WHEN idt.id_importacion IS NOT NULL THEN idt.id_importacion
+                             WHEN k.referencia_tipo = 'SALDO_INICIAL' THEN 0
+                             ELSE COALESCE(k.referencia_id, 0)
+                        END AS id_doc,
+                        k.fecha_movimiento::DATE AS fecha,
+                        CASE WHEN k.tipo_movimiento = 'salida' OR k.cantidad < 0 THEN -1 ELSE 1 END
+                          * ABS(COALESCE(k.costo_total, ABS(k.cantidad) * k.costo_unitario, 0)) AS monto
+                 FROM inventario_kardex k
+                 LEFT JOIN compras_detalle cd
+                        ON k.referencia_tipo IN ('compra', 'compra_item') AND cd.id = k.referencia_id
+                 LEFT JOIN importaciones_detalle idt
+                        ON k.referencia_tipo = 'importacion' AND idt.id = k.referencia_id
+                 WHERE k.id_empresa = :e AND k.eliminado = FALSE
+                   AND (k.tipo_ambiente IS NULL OR k.tipo_ambiente = (SELECT t FROM amb))";
+
+        $migrados = "SELECT id_asiento_contable AS id_asiento, 'factura_venta' AS tipo, id AS id_doc FROM ventas_cabecera WHERE id_empresa = :e AND id_asiento_contable IS NOT NULL
+                     UNION ALL SELECT id_asiento_contable, 'recibo_venta', id FROM recibos_venta_cabecera WHERE id_empresa = :e AND id_asiento_contable IS NOT NULL
+                     UNION ALL SELECT id_asiento_contable, 'nota_credito', id FROM notas_credito_cabecera WHERE id_empresa = :e AND id_asiento_contable IS NOT NULL
+                     UNION ALL SELECT id_asiento_contable, 'compra', id FROM compras_cabecera WHERE id_empresa = :e AND id_asiento_contable IS NOT NULL
+                     UNION ALL SELECT id_asiento_contable, 'importacion', id FROM importaciones_cabecera WHERE id_empresa = :e AND id_asiento_contable IS NOT NULL
+                     UNION ALL SELECT id_asiento_contable, 'consignacion_venta', id FROM consignaciones_ventas WHERE id_empresa = :e AND id_asiento_contable IS NOT NULL
+                     UNION ALL SELECT id_asiento_contable, 'retorno_cv', id FROM retornos_cv WHERE id_empresa = :e AND id_asiento_contable IS NOT NULL
+                     UNION ALL SELECT id_asiento_contable, 'cambio_producto_cv', id FROM cambios_producto_cv WHERE id_empresa = :e AND id_asiento_contable IS NOT NULL";
+
+        return [
+            'patron_concepto' => 'INVENTARIO',
+            'conceptos_texto' => 'Inventario (compras, ventas, recibos, importaciones y consignaciones)',
+            'signo' => 1,
+            'docs' => $docs,
+            'nativos' => [
+                'factura_venta' => 'factura_venta', 'recibo_venta' => 'recibo_venta', 'nota_credito' => 'nota_credito',
+                'compra' => 'compra', 'importacion' => 'importacion', 'consignacion_venta' => 'consignacion_venta',
+                'retorno_cv' => 'retorno_cv', 'FACTURACION_CV' => 'FACTURACION_CV', 'cambio_producto_cv' => 'cambio_producto_cv',
+            ],
+            'migrados' => $migrados,
+            'apertura' => true,
+            'numeros' => [
+                'factura_venta' => ['ventas_cabecera', $serie],
+                'recibo_venta' => ['recibos_venta_cabecera', $serie],
+                'nota_credito' => ['notas_credito_cabecera', $serie],
+                'compra' => ['compras_cabecera', "CONCAT(x.establecimiento_prov, '-', x.punto_emision_prov, '-', x.secuencial_prov)"],
+                'importacion' => ['importaciones_cabecera', 'x.numero_importacion'],
+                'consignacion_venta' => ['consignaciones_ventas', $serie],
+                'retorno_cv' => ['retornos_cv', $serie],
+                'cambio_producto_cv' => ['cambios_producto_cv', $serie],
+            ],
+        ];
+    }
 }

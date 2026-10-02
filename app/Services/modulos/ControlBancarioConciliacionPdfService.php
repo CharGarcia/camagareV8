@@ -91,7 +91,16 @@ class ControlBancarioConciliacionPdfService
         if (!empty($forma['numero_cuenta'])) {
             $pdf->Cell(0, 6, 'N.° de cuenta: ' . $forma['numero_cuenta'], 0, 1, 'C');
         }
-        if (!empty($forma['cuenta_codigo'])) {
+        // Cuenta que mueven los asientos: la regla de Configuración Contable de la forma (cobros
+        // y pagos pueden ir a cuentas distintas) o, si no hay, su cuenta base.
+        $cobro = !empty($forma['cuenta_cobro_codigo']) ? $forma['cuenta_cobro_codigo'] . ' - ' . $forma['cuenta_cobro_nombre'] : null;
+        $pago = !empty($forma['cuenta_pago_codigo']) ? $forma['cuenta_pago_codigo'] . ' - ' . $forma['cuenta_pago_nombre'] : null;
+        if ($cobro !== null && $pago !== null && $cobro !== $pago) {
+            $pdf->Cell(0, 6, 'Cuenta contable de cobros: ' . $cobro, 0, 1, 'C');
+            $pdf->Cell(0, 6, 'Cuenta contable de pagos: ' . $pago, 0, 1, 'C');
+        } elseif ($cobro !== null || $pago !== null) {
+            $pdf->Cell(0, 6, 'Cuenta contable: ' . ($cobro ?? $pago), 0, 1, 'C');
+        } elseif (!empty($forma['cuenta_codigo'])) {
             $pdf->Cell(0, 6, 'Cuenta contable: ' . $forma['cuenta_codigo'] . ' - ' . $forma['cuenta_nombre'], 0, 1, 'C');
         }
 

@@ -6,7 +6,7 @@ ruta_modulo: modulos/proveedores
 tipo: modulo
 visibilidad: todos
 etiquetas: proveedores, contable, cuenta contable, cuentas contables, asiento contable, configuracion contable, cuenta por pagar del proveedor, cuenta de gasto del proveedor, buscar proveedor, buscador, filtros, filtrar proveedores, proveedores sin correo, proveedores por banco, proveedores por ciudad, chips, ordenar por dos columnas, ordenar por ciudad y razon social, proveedor, acreedor, ruc, retencion, cuenta bancaria, plazo, credito, parte relacionada, pago automatico, cheque, egreso automatico, pagos pendientes, resumen comercial, por pagar, buscar, buscador, filtrar, copiar a otra empresa, replicar, duplicar, multiempresa, valores de terceros, otros conceptos, valores adicionales, bomberos, tasa de basura, planilla de luz, transacciones, productos comprados, servicios comprados, historial de compras, que le compre, ultimo precio, precio de compra, estado de cuenta, kardex, saldo del proveedor, historial de pagos, pagos realizados, egresos, ver egreso, cedula y ruc, cliente duplicado, proveedor duplicado, identificacion repetida, ruc es la cedula mas 001, mismo tercero dos fichas, estado de cuenta partido, cedula falsa, cedula invalida, cedula incorrecta, ruc invalido, digito verificador, validar cedula, comprobar cedula, imprimir, impresora
-version: 2.10
+version: 2.11
 orden: 10
 estado: activo
 ---
@@ -249,6 +249,10 @@ Al pie se ven los tres totales: lo entregado, lo ya aplicado y el **saldo a favo
 Ese saldo es el mismo que aparece al elegir la forma de pago *anticipo* mientras se
 registra un pago: sale de la misma fórmula, así que no puede discrepar.
 
+Solo cuentan los ingresos y egresos del **ambiente** en que trabaja la empresa
+(pruebas o producción): un anticipo registrado mientras la empresa estaba en
+pruebas no suma ni se aplica en producción. Los saldos iniciales sí cuentan siempre.
+
 La pestaña **solo aparece** si el proveedor tiene anticipos y el usuario puede ver
 **Egresos**, que es donde se registran.
 
@@ -485,6 +489,9 @@ lo referencian se conservan intactas. Si solo quiere dejar de usarlo, cámbielo 
 
 ## Historial de cambios
 
+- **2.11** — Anticipos: solo cuentan los egresos del ambiente de la empresa
+  (pruebas o producción), igual que en el resto de saldos. Antes un anticipo
+  registrado en pruebas seguía sumando en producción.
 - **2.10** — La pestaña **Contable** muestra de entrada solo la cuenta del Subtotal de la
   compra; las demás se despliegan con *Mostrar las demás cuentas*.
 - **2.9** — La pestaña **Contable** queda solo con las cuentas: sin selector de tipo de

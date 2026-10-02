@@ -102,6 +102,7 @@ class CuentasPorCobrarController extends BaseModuloController
             // empresaEscritura()). El cobro se decide además por fila (`puede_operar`).
             'puedeHistorial'   => \App\Helpers\Permisos::puedeVer(self::RUTA_CARTERA),
             'puedeCobrar'      => $this->puedeRegistrarCobro($idEmpresa),
+            'puedeComprobarContabilidad' => $this->puedeComprobarContabilidad(),
             'fullWidth'   => true,
             'base'        => BASE_URL,
         ]);
@@ -907,6 +908,16 @@ class CuentasPorCobrarController extends BaseModuloController
         // o el que el usuario eligió en las cabeceras (`orden_col`/`orden_dir`). Al pasar
         // por aquí la pantalla, el Excel y el PDF, los tres salen con el mismo orden.
         return $this->repo->ordenarFilas($filas, $filtros);
+    }
+
+    /**
+     * Comprobación con Contabilidad (solo lectura): saldo de la cartera de la empresa activa
+     * contra sus cuentas por cobrar, al inicio y al fin del período, documento por documento.
+     */
+    public function comprobacionContableAjax(): void
+    {
+        $this->requireLeer();
+        $this->responderComprobacionContable($this->repo->definicionComprobacionContable());
     }
 
     // ─────────────────────────────────────────────────────────────────────

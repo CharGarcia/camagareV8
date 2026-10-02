@@ -309,7 +309,8 @@ class ControlBancarioService
     {
         $tipo = strtolower(trim((string) ($data['origen_tipo'] ?? '')));
         $id = (int) ($data['origen_id'] ?? 0);
-        if (!in_array($tipo, ['ingreso', 'egreso'], true) || $id <= 0) {
+        // trasp_in / trasp_out: entrada o salida de un traspaso de fondos (id del traspaso).
+        if (!in_array($tipo, ['ingreso', 'egreso', 'trasp_in', 'trasp_out'], true) || $id <= 0) {
             return [null, 0];
         }
         return [$tipo, $id];
@@ -366,30 +367,49 @@ class ControlBancarioService
      * que se emiten, igual que los registra la contabilidad) con el saldo de la cuenta contable,
      * al inicio y al fin del período, y lista las partidas del período que explican la diferencia.
      *
+     * La cuenta contable es la que de verdad mueven los asientos: la regla de la forma en
+     * Configuración Contable (cobros / pagos) o, si no hay, su cuenta base (ver
+     * ControlBancarioRepository::getCuentasEfectivasForma). Si cobros y pagos van a cuentas
+     * distintas, se comparan las dos juntas.
+     *
      * Si la cuenta contable la comparten varias cuentas bancarias, se comparan todas juntas: la
-     * contabilidad no las distingue.
+     * contabilidad no las distingue. De cada una entra solo el flujo (cobros o pagos) que va a
+     * esas cuentas.
+     *
+     * @param bool $conPartidas false = solo los saldos de cada lado, sin el detalle por
+     *             documento (cuadro "Cuadre con módulos" de Estados Financieros).
      */
-    public function getComprobacionContable(int $idEmpresa, int $idFormaPago, string $fechaInicio, string $fechaFin): array
+    public function getComprobacionContable(int $idEmpresa, int $idFormaPago, string $fechaInicio, string $fechaFin, bool $conPartidas = true): array
     {
         $this->rules->validarConciliacion([
             'id_forma_pago' => $idFormaPago, 'fecha_inicio' => $fechaInicio, 'fecha_fin' => $fechaFin,
         ]);
         $forma = $this->getFormaBancariaOFallar($idFormaPago, $idEmpresa);
-        $idCuenta = (int) ($forma['id_cuenta_contable'] ?? 0);
-        if ($idCuenta <= 0) {
+        $efectivas = $this->repository->getCuentasEfectivasForma($idEmpresa, $idFormaPago);
+        $idsCuentas = array_values(array_unique(array_filter([$efectivas['cobro'], $efectivas['pago']])));
+        if (!$idsCuentas) {
             return ['sin_cuenta_contable' => true, 'forma' => $forma['nombre']];
         }
 
-        $formas = $this->repository->getFormasBancariasPorCuentaContable($idEmpresa, $idCuenta);
-        $idsFormas = array_map(static fn ($f) => (int) $f['id'], $formas);
+        $formas = $this->repository->getFormasBancariasPorCuentas($idEmpresa, $idsCuentas);
+        $idsFormasCobro = [];
+        $idsFormasPago = [];
         $saldoInicial = 0.0;
-        foreach ($idsFormas as $idF) {
-            $saldoInicial += $this->repository->getSaldoInicial($idEmpresa, $idF);
+        foreach ($formas as $f) {
+            if (in_array((int) $f['id_cuenta_cobro'], $idsCuentas, true)) {
+                $idsFormasCobro[] = (int) $f['id'];
+            }
+            if (in_array((int) $f['id_cuenta_pago'], $idsCuentas, true)) {
+                $idsFormasPago[] = (int) $f['id'];
+            }
+            $saldoInicial += $this->repository->getSaldoInicial($idEmpresa, (int) $f['id']);
         }
 
-        $t = $this->repository->getTotalesCruceContable($idEmpresa, $idCuenta, $idsFormas, $fechaInicio, $fechaFin);
+        $t = $this->repository->getTotalesCruceContable($idEmpresa, $idsCuentas, $idsFormasCobro, $idsFormasPago, $fechaInicio, $fechaFin);
         $limite = 3000;
-        $partidas = $this->repository->getPartidasCruceContable($idEmpresa, $idCuenta, $idsFormas, $fechaInicio, $fechaFin, $limite + 1);
+        $partidas = $conPartidas
+            ? $this->repository->getPartidasCruceContable($idEmpresa, $idsCuentas, $idsFormasCobro, $idsFormasPago, $fechaInicio, $fechaFin, $limite + 1)
+            : [];
         $truncado = count($partidas) > $limite;
         $partidas = array_slice($partidas, 0, $limite);
 
@@ -423,7 +443,10 @@ class ControlBancarioService
 
         return [
             'sin_cuenta_contable' => false,
-            'cuenta' => $this->repository->getCuentaContable($idEmpresa, $idCuenta),
+            'cuentas' => $this->repository->getCuentasContables($idEmpresa, $idsCuentas),
+            // Si cobros y pagos van a cuentas distintas, cuál es cuál (para explicarlo en pantalla).
+            'cuenta_cobro' => $efectivas['cobro'],
+            'cuenta_pago' => $efectivas['pago'],
             'formas' => $formas,
             'fecha_inicio' => $fechaInicio,
             'fecha_fin' => $fechaFin,

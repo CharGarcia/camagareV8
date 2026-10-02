@@ -1850,4 +1850,153 @@ class CuentasPorCobrarRepository extends BaseRepository
         }
         return $out;
     }
+
+    // ─────────────────────────────────────────────────────────────────────
+    // COMPROBACIÓN CON CONTABILIDAD
+    //
+    // Definición para App\Services\ComprobacionContableService (formato en
+    // App\repositories\ComprobacionContableRepository). El saldo de la cartera se descompone
+    // en el documento que origina cada parte, con las MISMAS reglas del listado (getListado,
+    // getListadoRecibos, getSaldosInicialesCxc): + factura, recibo, ND y saldo inicial;
+    // − cobro (por ingreso), retención y NC aplicadas. Así cada asiento se compara con lo que
+    // su documento movió en la cartera. Siempre es la empresa activa completa: sin filtros de
+    // cliente/vendedor ni consolidado, porque la cuenta contable no los distingue.
+    //
+    // Lado contable: las cuentas de los conceptos de cartera de ventas y recibos
+    // (PORCOBRARFACTURAVENTA / PORCOBRARRECIBOVENTA) en cualquier nivel de la cascada.
+    // ─────────────────────────────────────────────────────────────────────
+
+    public function definicionComprobacionContable(): array
+    {
+        $numFac  = AbonosVentaSql::numFactura('v');
+        $numNc   = AbonosVentaSql::normalizar('n.num_doc_modificado');
+        $numSus  = AbonosVentaSql::normalizar('rd.num_doc_sustento');
+        $numVc   = AbonosVentaSql::numFactura('vc');
+        $digitos = static fn (string $e): string => "regexp_replace({$e}, '[^0-9]', '', 'g')";
+        $digVc   = $digitos("CONCAT(vc.establecimiento, '-', vc.punto_emision, '-', vc.secuencial)");
+        $serie   = \App\repositories\ComprobacionContableRepository::NUM_SERIE;
+
+        // Documentos que forman la cartera (mismo criterio que buildWhere / buildWhereRecibos).
+        $ctes = "fac AS (
+                    SELECT v.id, v.fecha_emision, v.importe_total, {$numFac} AS num
+                    FROM ventas_cabecera v
+                    WHERE v.id_empresa = :e AND v.eliminado = FALSE
+                      AND v.estado NOT IN ('anulado', 'anulada')
+                      AND v.tipo_ambiente = (SELECT t FROM amb)
+                ),
+                rec AS (
+                    SELECT v.id, v.fecha_emision, v.importe_total
+                    FROM recibos_venta_cabecera v
+                    WHERE v.id_empresa = :e AND v.eliminado = FALSE
+                      AND v.estado NOT IN ('anulado', 'facturado')
+                      AND v.tipo_ambiente = (SELECT t FROM amb)
+                ),
+                si AS (
+                    SELECT s.id, s.fecha_emision, s.saldo_inicial, s.id_cliente,
+                           {$digitos('s.nro_documento')} AS num_dig
+                    FROM saldos_iniciales_cxc s
+                    WHERE s.id_empresa = :e AND s.eliminado = FALSE
+                ),
+                -- Facturas (cualquier estado no eliminado) por número en dígitos: guarda
+                -- anti-duplicado de las retenciones/NC de saldos iniciales (lateralRetSaldoInicial).
+                vdig AS (
+                    SELECT DISTINCT {$digVc} AS num_dig
+                    FROM ventas_cabecera vc
+                    WHERE vc.id_empresa = :e AND vc.eliminado = FALSE
+                )";
+
+        $docs = "SELECT 'factura_venta' AS tipo, id AS id_doc, fecha_emision AS fecha, importe_total AS monto FROM fac
+                 UNION ALL
+                 SELECT 'recibo_venta', id, fecha_emision, importe_total FROM rec
+                 UNION ALL
+                 SELECT 'saldo_inicial', 0, fecha_emision, saldo_inicial FROM si
+                 UNION ALL
+                 -- Cobros (getCteCobrado / lateralCobradoSaldoInicial), uno por ingreso.
+                 SELECT 'ingreso', ic.id, ic.fecha_emision, -id2.monto_cobrado
+                 FROM ingresos_detalle id2
+                 JOIN ingresos_cabecera ic ON ic.id = id2.id_ingreso
+                 WHERE ic.id_empresa = :e AND ic.estado != 'anulado' AND ic.eliminado = FALSE
+                   AND (   (id2.tipo_documento = 'FACTURA'       AND id2.id_referencia_documento IN (SELECT id FROM fac))
+                        OR (id2.tipo_documento = 'RECIBO'        AND id2.id_referencia_documento IN (SELECT id FROM rec))
+                        OR (id2.tipo_documento = 'SALDO_INICIAL' AND id2.id_referencia_documento IN (SELECT id FROM si)))
+                 UNION ALL
+                 -- Notas de crédito y de débito aplicadas a facturas (getCteNC / getCteND).
+                 SELECT 'nota_credito', n.id, n.fecha_emision, -n.importe_total * (SELECT COUNT(*) FROM fac WHERE fac.num = {$numNc})
+                 FROM notas_credito_cabecera n
+                 WHERE n.id_empresa = :e AND n.estado != 'anulado' AND n.eliminado = FALSE
+                   AND (n.tipo_ambiente IS NULL OR n.tipo_ambiente = (SELECT t FROM amb))
+                   AND EXISTS (SELECT 1 FROM fac WHERE fac.num = {$numNc})
+                 UNION ALL
+                 SELECT 'nota_debito', n.id, n.fecha_emision, n.importe_total * (SELECT COUNT(*) FROM fac WHERE fac.num = {$numNc})
+                 FROM nota_debito_cabecera n
+                 WHERE n.id_empresa = :e AND n.estado != 'anulado' AND n.eliminado = FALSE
+                   AND (n.tipo_ambiente IS NULL OR n.tipo_ambiente = (SELECT t FROM amb))
+                   AND EXISTS (SELECT 1 FROM fac WHERE fac.num = {$numNc})
+                 UNION ALL
+                 -- NC aplicadas a saldos iniciales (lateralNcSaldoInicial).
+                 SELECT 'nota_credito', n.id, n.fecha_emision, -n.importe_total
+                 FROM notas_credito_cabecera n
+                 JOIN si ON si.num_dig = {$digitos('n.num_doc_modificado')}
+                 WHERE n.id_empresa = :e AND n.estado != 'anulado' AND n.eliminado = FALSE
+                   AND si.num_dig NOT IN (SELECT num_dig FROM vdig)
+                 UNION ALL
+                 -- Retenciones (AbonosVentaSql::cteRetenidoPorFactura): (a) líneas enlazadas
+                 -- por número de sustento, (b) cabecera cuando se registró desde la factura.
+                 SELECT 'retencion_venta', r.id, r.fecha_emision, -rd.valor_retenido
+                 FROM retencion_venta_cabecera r
+                 JOIN retencion_venta_detalle rd ON rd.id_retencion = r.id
+                 JOIN fac ON fac.num = {$numSus}
+                 WHERE r.eliminado = FALSE AND r.id_empresa = :e
+                   AND COALESCE(rd.num_doc_sustento, '') <> ''
+                 UNION ALL
+                 SELECT 'retencion_venta', r.id, r.fecha_emision, -(r.total_renta + r.total_iva + r.total_isd)
+                 FROM retencion_venta_cabecera r
+                 WHERE r.eliminado = FALSE AND r.id_empresa = :e
+                   AND r.id_venta IN (SELECT id FROM fac)
+                   AND NOT EXISTS (
+                       SELECT 1 FROM retencion_venta_detalle rd
+                       JOIN ventas_cabecera vc ON vc.id_empresa = r.id_empresa AND vc.eliminado = FALSE
+                                              AND {$numVc} = {$numSus}
+                       WHERE rd.id_retencion = r.id AND COALESCE(rd.num_doc_sustento, '') <> ''
+                   )
+                 UNION ALL
+                 -- (c) Retenciones sobre saldos iniciales (lateralRetSaldoInicial).
+                 SELECT 'retencion_venta', r.id, r.fecha_emision, -rd.valor_retenido
+                 FROM retencion_venta_detalle rd
+                 JOIN retencion_venta_cabecera r ON r.id = rd.id_retencion
+                 JOIN si ON si.id_cliente = r.id_cliente AND si.num_dig = {$digitos('rd.num_doc_sustento')}
+                 WHERE r.eliminado = FALSE AND r.id_empresa = :e AND r.id_venta IS NULL
+                   AND COALESCE(rd.num_doc_sustento, '') <> ''
+                   AND si.num_dig NOT IN (SELECT num_dig FROM vdig)";
+
+        $migrados = "SELECT id_asiento_contable AS id_asiento, 'factura_venta' AS tipo, id AS id_doc FROM ventas_cabecera WHERE id_empresa = :e AND id_asiento_contable IS NOT NULL
+                     UNION ALL SELECT id_asiento_contable, 'recibo_venta', id FROM recibos_venta_cabecera WHERE id_empresa = :e AND id_asiento_contable IS NOT NULL
+                     UNION ALL SELECT id_asiento_contable, 'nota_credito', id FROM notas_credito_cabecera WHERE id_empresa = :e AND id_asiento_contable IS NOT NULL
+                     UNION ALL SELECT id_asiento_contable, 'nota_debito', id FROM nota_debito_cabecera WHERE id_empresa = :e AND id_asiento_contable IS NOT NULL
+                     UNION ALL SELECT id_asiento_contable, 'retencion_venta', id FROM retencion_venta_cabecera WHERE id_empresa = :e AND id_asiento_contable IS NOT NULL
+                     UNION ALL SELECT id_asiento_contable, 'ingreso', id FROM ingresos_cabecera WHERE id_empresa = :e AND id_asiento_contable IS NOT NULL";
+
+        return [
+            'conceptos' => ['PORCOBRARFACTURAVENTA', 'PORCOBRARRECIBOVENTA'],
+            'conceptos_texto' => 'Cuenta por cobrar de Facturas de Venta y de Recibos de Venta',
+            'signo' => 1,
+            'ctes' => $ctes,
+            'docs' => $docs,
+            'nativos' => [
+                'factura_venta' => 'factura_venta', 'recibo_venta' => 'recibo_venta',
+                'nota_credito' => 'nota_credito', 'nota_debito' => 'nota_debito',
+                'retencion_venta' => 'retencion_venta', 'ingreso' => 'ingreso',
+            ],
+            'migrados' => $migrados,
+            'apertura' => true,
+            'numeros' => [
+                'factura_venta' => ['ventas_cabecera', $serie],
+                'recibo_venta' => ['recibos_venta_cabecera', $serie],
+                'nota_credito' => ['notas_credito_cabecera', $serie],
+                'nota_debito' => ['nota_debito_cabecera', $serie],
+                'retencion_venta' => ['retencion_venta_cabecera', $serie],
+                'ingreso' => ['ingresos_cabecera', 'x.numero_ingreso'],
+            ],
+        ];
+    }
 }

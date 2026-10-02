@@ -6,7 +6,7 @@ ruta_modulo: modulos/traspasos
 tipo: modulo
 visibilidad: todos
 etiquetas: traspaso, traspasos, transferencia interna, caja a banco, deposito, mover dinero, saldo, formas de pago, excel, exportar, numeracion por fecha, numero con el año, reiniciar numeracion, reinicio anual, reinicio mensual, correlativo por año, correlativo por mes, modo de numeracion, buscar traspaso, buscador, filtros, filtrar traspasos, chips, imprimir, impresora
-version: 1.5
+version: 1.6
 orden: 30
 estado: activo
 ---
@@ -112,8 +112,17 @@ El detalle completo (qué tipos lo permiten, qué pasa al cambiar de modo y cuá
 documentos admite cada periodo) está en el manual de **Empresa**, sección
 *Secuenciales por punto de emisión*.
 
+## En Control Bancario
+
+Un traspaso en el que interviene una **cuenta bancaria** aparece en
+[Control bancario](control-bancario.md) como un movimiento más: entrada en la
+cuenta destino, salida de la cuenta origen. Ahí se concilia con su Fecha Banco
+como cualquier depósito o transferencia. Los traspasos anulados no aparecen.
+
 ## Historial de cambios
 
+- **1.6** — Los traspasos con una cuenta bancaria aparecen en **Control
+  bancario** (sección *En Control Bancario*).
 - **1.5** — El botón **PDF** del documento pregunta ahora si se quiere
   **Imprimir** (abre el cuadro de impresión con el documento ya cargado),
   **Descargar** o **Ver** en otra pestaña. Ver la guía *Descargar archivos*.

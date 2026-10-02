@@ -212,7 +212,10 @@ considera usada cuando:
 - el **rol** de ese empleado y periodo (mensual, quincena o semanal, según el
   campo *Afecta a*) ya está **pagado** o contabilizado, o
 - se trata de un **anticipo** o una cuota de **préstamo empresa** que ya tiene un
-  **desembolso registrado por egreso**.
+  **desembolso registrado por egreso** (un egreso anulado no cuenta), o
+- es un anticipo o una cuota de préstamo empresa **migrada** del sistema
+  anterior que ya venía pagada (sale como *Pagada*). Las demás cuotas
+  pendientes del mismo empleado sí se pueden editar o eliminar.
 
 Si aunque sea una novedad de la carga cumple lo anterior, la carga aparece con un
 candado y **no se elimina nada**: el aviso indica qué novedades la están
@@ -296,6 +299,13 @@ filtrado.
 
 ## Historial de cambios
 
+- **1.10** — **Las cuotas de préstamo empresa pendientes se pueden eliminar
+  aunque el empleado tenga cuotas migradas.** Antes, si el empleado tenía cuotas
+  migradas ya pagadas en el sistema anterior, ninguna otra cuota suya se podía
+  editar ni eliminar, y el aviso hablaba de un egreso aunque estuviera anulado.
+  Ahora solo bloquea un egreso real no anulado, o la propia cuota migrada.
+  Además, las novedades migradas del sistema anterior se marcan como *Pagada*
+  aunque se hayan migrado después que los roles o quincenas de su período.
 - **1.9** — **La plantilla acepta novedades repetidas.** Un empleado puede traer
   dos o más novedades del mismo tipo y periodo (por ejemplo, dos préstamos
   quirografarios) en filas distintas de la plantilla. Contra lo ya registrado

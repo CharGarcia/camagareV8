@@ -44,19 +44,27 @@ class ControlBancarioRepository extends BaseRepository
      */
     public function getFormasBancarias(int $idEmpresa): array
     {
-        $sql = "SELECT fp.id, fp.nombre, fp.tipo, fp.tipo_cuenta, fp.numero_cuenta,
-                       fp.id_cuenta_contable, pc.codigo AS cuenta_codigo, pc.nombre AS cuenta_nombre,
-                       b.nombre_banco
-                FROM empresa_formas_pago fp
-                LEFT JOIN plan_cuentas pc ON pc.id = fp.id_cuenta_contable
-                LEFT JOIN bancos_ecuador b ON b.id = fp.id_banco
-                WHERE fp.id_empresa = :id_empresa
-                  AND fp.eliminado = FALSE
-                  AND fp.activo = TRUE
-                  AND fp.id_banco IS NOT NULL
-                ORDER BY fp.nombre ASC";
+        // Además de la cuenta base, la efectiva de cobros y de pagos (la que mueven los
+        // asientos, ver getCuentasEfectivasForma): el PDF de conciliación muestra esa.
+        $sql = "SELECT * FROM (
+                    SELECT DISTINCT ON (fp.id)
+                           fp.id, fp.nombre, fp.tipo, fp.tipo_cuenta, fp.numero_cuenta,
+                           fp.id_cuenta_contable, pc.codigo AS cuenta_codigo, pc.nombre AS cuenta_nombre,
+                           b.nombre_banco,
+                           " . FormaPagoRepository::SELECT_CUENTAS_FLUJO . "
+                    FROM empresa_formas_pago fp
+                    LEFT JOIN plan_cuentas pc ON pc.id = fp.id_cuenta_contable
+                    LEFT JOIN bancos_ecuador b ON b.id = fp.id_banco
+                    " . FormaPagoRepository::JOIN_CUENTAS_FLUJO . "
+                    WHERE fp.id_empresa = :id_empresa
+                      AND fp.eliminado = FALSE
+                      AND fp.activo = TRUE
+                      AND fp.id_banco IS NOT NULL
+                    ORDER BY fp.id, apc.id DESC NULLS LAST, app.id DESC NULLS LAST
+                ) x
+                ORDER BY x.nombre ASC";
         $st = $this->db->prepare($sql);
-        $st->execute([':id_empresa' => $idEmpresa]);
+        $st->execute([':id_empresa' => $idEmpresa, ':emp_ap_cobro' => $idEmpresa, ':emp_ap_pago' => $idEmpresa]);
         return $st->fetchAll(PDO::FETCH_ASSOC) ?: [];
     }
 
@@ -116,34 +124,77 @@ class ControlBancarioRepository extends BaseRepository
     // bancarias que usan la cuenta contable C (lado "documento") contra lo que su asiento movió
     // en C (lado "contable"). Un asiento sin ingreso/egreso detrás es una partida propia.
 
-    /** Formas bancarias (no eliminadas) de la empresa que usan la cuenta contable indicada. */
-    public function getFormasBancariasPorCuentaContable(int $idEmpresa, int $idCuentaContable): array
+    //
+    // La cuenta contable que se compara es la que de verdad mueven los asientos, no la base de
+    // la forma de pago: la regla de Configuración Contable de la forma ('forma_cobro' para los
+    // cobros, 'forma_pago' para los pagos) manda sobre empresa_formas_pago.id_cuenta_contable
+    // (AsientoBuilderService::lineasFormas). Por eso cobros y pagos pueden ir a cuentas
+    // distintas, y cada flujo se compara contra la suya.
+
+    /**
+     * Cuenta contable efectiva de cada flujo de la forma: ['cobro' => ?int, 'pago' => ?int].
+     * Misma regla que FormaPagoRepository::SELECT_CUENTAS_FLUJO.
+     */
+    public function getCuentasEfectivasForma(int $idEmpresa, int $idFormaPago): array
     {
-        $sql = "SELECT fp.id, fp.nombre, fp.numero_cuenta, b.nombre_banco
+        $sql = "SELECT " . FormaPagoRepository::SELECT_CUENTAS_FLUJO . "
                 FROM empresa_formas_pago fp
-                LEFT JOIN bancos_ecuador b ON b.id = fp.id_banco
-                WHERE fp.id_empresa = :id_empresa AND fp.id_cuenta_contable = :id_cuenta
-                  AND fp.eliminado = FALSE AND fp.id_banco IS NOT NULL
-                ORDER BY fp.nombre";
+                " . FormaPagoRepository::JOIN_CUENTAS_FLUJO . "
+                WHERE fp.id = :id AND fp.id_empresa = :id_empresa
+                ORDER BY apc.id DESC NULLS LAST, app.id DESC NULLS LAST
+                LIMIT 1";
         $st = $this->db->prepare($sql);
-        $st->execute([':id_empresa' => $idEmpresa, ':id_cuenta' => $idCuentaContable]);
-        return $st->fetchAll(PDO::FETCH_ASSOC) ?: [];
+        $st->execute([':id' => $idFormaPago, ':id_empresa' => $idEmpresa, ':emp_ap_cobro' => $idEmpresa, ':emp_ap_pago' => $idEmpresa]);
+        $r = $st->fetch(PDO::FETCH_ASSOC) ?: [];
+        return [
+            'cobro' => !empty($r['id_cuenta_cobro']) ? (int) $r['id_cuenta_cobro'] : null,
+            'pago' => !empty($r['id_cuenta_pago']) ? (int) $r['id_cuenta_pago'] : null,
+        ];
     }
 
-    /** Código y nombre de una cuenta contable de la empresa. */
-    public function getCuentaContable(int $idEmpresa, int $idCuentaContable): ?array
+    /**
+     * Formas bancarias (no eliminadas) de la empresa cuyos cobros o pagos van, según su cuenta
+     * efectiva, a alguna de las cuentas indicadas. Trae id_cuenta_cobro / id_cuenta_pago para
+     * que el llamador sepa qué flujo de cada forma entra en la comparación.
+     */
+    public function getFormasBancariasPorCuentas(int $idEmpresa, array $idsCuentas): array
     {
-        $st = $this->db->prepare("SELECT id, codigo, nombre FROM plan_cuentas WHERE id = :id AND id_empresa = :id_empresa");
-        $st->execute([':id' => $idCuentaContable, ':id_empresa' => $idEmpresa]);
-        return $st->fetch(PDO::FETCH_ASSOC) ?: null;
+        $idsCuentas = array_values(array_unique(array_filter(array_map('intval', $idsCuentas)))) ?: [0];
+        $in = implode(', ', $idsCuentas);
+        $sql = "SELECT DISTINCT ON (fp.id) fp.id, fp.nombre, fp.numero_cuenta, b.nombre_banco,
+                       " . FormaPagoRepository::SELECT_CUENTAS_FLUJO . "
+                FROM empresa_formas_pago fp
+                LEFT JOIN bancos_ecuador b ON b.id = fp.id_banco
+                " . FormaPagoRepository::JOIN_CUENTAS_FLUJO . "
+                WHERE fp.id_empresa = :id_empresa AND fp.eliminado = FALSE AND fp.id_banco IS NOT NULL
+                  AND (COALESCE(apc.id_cuenta, fp.id_cuenta_contable) IN ({$in})
+                       OR COALESCE(app.id_cuenta, fp.id_cuenta_contable) IN ({$in}))
+                ORDER BY fp.id, apc.id DESC NULLS LAST, app.id DESC NULLS LAST";
+        $st = $this->db->prepare($sql);
+        $st->execute([':id_empresa' => $idEmpresa, ':emp_ap_cobro' => $idEmpresa, ':emp_ap_pago' => $idEmpresa]);
+        $filas = $st->fetchAll(PDO::FETCH_ASSOC) ?: [];
+        usort($filas, static fn ($a, $b) => strcmp((string) $a['nombre'], (string) $b['nombre']));
+        return $filas;
+    }
+
+    /** Código y nombre de cuentas contables de la empresa. */
+    public function getCuentasContables(int $idEmpresa, array $idsCuentas): array
+    {
+        $idsCuentas = array_values(array_unique(array_filter(array_map('intval', $idsCuentas)))) ?: [0];
+        $st = $this->db->prepare("SELECT id, codigo, nombre FROM plan_cuentas
+                                  WHERE id IN (" . implode(', ', $idsCuentas) . ") AND id_empresa = :id_empresa
+                                  ORDER BY codigo");
+        $st->execute([':id_empresa' => $idEmpresa]);
+        return $st->fetchAll(PDO::FETCH_ASSOC) ?: [];
     }
 
     /**
      * CTE `j`: una fila por documento (ingreso/egreso) o por asiento sin documento, con su
      * monto y fecha en cada lado. monto_doc / monto_asiento con signo: + entra al banco, − sale.
-     * Placeholders: :e (empresa), :c (cuenta contable) y los de $marcasFormas.
+     * Placeholders: :e (empresa) y los de las marcas. $marcasCobro / $marcasPago: formas cuyos
+     * cobros / pagos van a las cuentas comparadas; $cuentasIn: ids (enteros) de esas cuentas.
      */
-    private function sqlCruceContable(string $marcasFormas): string
+    private function sqlCruceContable(string $marcasCobro, string $marcasPago, string $cuentasIn): string
     {
         return "WITH amb AS (
                     SELECT CAST(tipo_ambiente AS VARCHAR(1)) AS t FROM empresas WHERE id = :e
@@ -156,7 +207,7 @@ class ControlBancarioRepository extends BaseRepository
                     WHERE ic.id_empresa = :e AND ic.eliminado = FALSE
                       AND COALESCE(ic.estado, 'registrado') <> 'anulado'
                       AND ic.tipo_ambiente = (SELECT t FROM amb)
-                      AND ip.id_forma_cobro IN ({$marcasFormas})
+                      AND ip.id_forma_cobro IN ({$marcasCobro})
                     GROUP BY ic.id
                     UNION ALL
                     SELECT 'egreso', ec.id, ec.numero_egreso, ec.fecha_emision, -SUM(ep.monto)
@@ -167,32 +218,50 @@ class ControlBancarioRepository extends BaseRepository
                       AND COALESCE(ec.estado, 'registrado') <> 'anulado'
                       AND COALESCE(ep.estado_cheque, 'vigente') <> 'anulado'
                       AND ec.tipo_ambiente = (SELECT t FROM amb)
-                      AND ep.id_forma_pago IN ({$marcasFormas})
+                      AND ep.id_forma_pago IN ({$marcasPago})
                     GROUP BY ec.id
+                    UNION ALL
+                    -- Traspasos: entra en la cuenta destino (por su cuenta de cobro) y sale de la
+                    -- origen (por su cuenta de pago), igual que los contabiliza el asiento. Un
+                    -- traspaso entre dos cuentas comparadas queda en neto (una fila por traspaso).
+                    SELECT 'traspaso', tc.id, tc.numero_traspaso, tc.fecha_emision,
+                           (CASE WHEN tc.id_forma_destino IN ({$marcasCobro}) THEN tc.monto ELSE 0 END)
+                         - (CASE WHEN tc.id_forma_origen IN ({$marcasPago}) THEN tc.monto ELSE 0 END)
+                    FROM traspasos_cabecera tc
+                    WHERE tc.id_empresa = :e AND tc.eliminado = FALSE
+                      AND COALESCE(tc.estado, 'registrado') <> 'anulado'
+                      AND tc.tipo_ambiente = (SELECT t FROM amb)
+                      AND (tc.id_forma_destino IN ({$marcasCobro}) OR tc.id_forma_origen IN ({$marcasPago}))
                 ),
                 k AS (
                     SELECT CASE WHEN icx.id IS NOT NULL THEN 'ingreso'
                                 WHEN ecx.id IS NOT NULL THEN 'egreso'
+                                WHEN tcx.id IS NOT NULL THEN 'traspaso'
                                 ELSE 'asiento' END::VARCHAR AS tipo,
-                           COALESCE(icx.id, ecx.id, ac.id) AS id_doc,
+                           COALESCE(icx.id, ecx.id, tcx.id, ac.id) AS id_doc,
                            MIN(ac.fecha_asiento) AS fecha,
                            SUM(ad.debe - ad.haber) AS monto,
                            MIN(ac.id) AS id_asiento,
                            STRING_AGG(DISTINCT ac.numero_comprobante, ', ') AS numero_asiento,
                            MIN(ac.concepto) AS concepto,
-                           BOOL_OR(COALESCE(icx.eliminado, ecx.eliminado, FALSE)
-                                   OR COALESCE(icx.estado, ecx.estado, '') = 'anulado') AS doc_anulado,
-                           MIN(COALESCE(icx.numero_ingreso, ecx.numero_egreso)) AS numero_doc
+                           BOOL_OR(COALESCE(icx.eliminado, ecx.eliminado, tcx.eliminado, FALSE)
+                                   OR COALESCE(icx.estado, ecx.estado, tcx.estado, '') = 'anulado') AS doc_anulado,
+                           MIN(COALESCE(icx.numero_ingreso, ecx.numero_egreso, tcx.numero_traspaso)) AS numero_doc
                     FROM asientos_contables_detalle ad
                     JOIN asientos_contables_cabecera ac ON ac.id = ad.id_asiento
                     LEFT JOIN ingresos_cabecera icx ON UPPER(ac.tipo_comprobante) = 'INGRESOS'
                          AND icx.id = ac.id_referencia_origen AND icx.id_empresa = ac.id_empresa
                     LEFT JOIN egresos_cabecera ecx ON UPPER(ac.tipo_comprobante) = 'EGRESOS'
                          AND ecx.id = ac.id_referencia_origen AND ecx.id_empresa = ac.id_empresa
+                    -- Asiento del traspaso: nativo (modulo_origen 'traspaso') o enlazado desde el
+                    -- traspaso (id_asiento_contable, p. ej. migrado).
+                    LEFT JOIN traspasos_cabecera tcx ON tcx.id_empresa = ac.id_empresa
+                         AND ((ac.modulo_origen = 'traspaso' AND tcx.id = ac.id_referencia_origen)
+                              OR tcx.id_asiento_contable = ac.id)
                     WHERE ac.id_empresa = :e AND ac.estado = 'contabilizado'
                       AND ac.eliminado = FALSE AND ad.eliminado = FALSE
                       AND ac.tipo_ambiente = (SELECT t FROM amb)
-                      AND ad.id_cuenta_contable = :c
+                      AND ad.id_cuenta_contable IN ({$cuentasIn})
                     GROUP BY 1, 2
                 ),
                 j AS (
@@ -212,10 +281,10 @@ class ControlBancarioRepository extends BaseRepository
      * Totales del cruce: lo movido según Ingresos/Egresos y según contabilidad, antes del
      * período y hasta su fin (sin saldo inicial: lo suma el service).
      */
-    public function getTotalesCruceContable(int $idEmpresa, int $idCuentaContable, array $idsFormas, string $fechaInicio, string $fechaFin): array
+    public function getTotalesCruceContable(int $idEmpresa, array $idsCuentas, array $idsFormasCobro, array $idsFormasPago, string $fechaInicio, string $fechaFin): array
     {
-        [$marcas, $params] = $this->marcasFormas($idsFormas);
-        $sql = $this->sqlCruceContable($marcas) . "
+        [$sqlCruce, $params] = $this->armarCruce($idsCuentas, $idsFormasCobro, $idsFormasPago);
+        $sql = $sqlCruce . "
                 SELECT COALESCE(SUM(monto_doc)     FILTER (WHERE fecha_doc     <  :fi1), 0) AS doc_ini,
                        COALESCE(SUM(monto_doc)     FILTER (WHERE fecha_doc     <= :ff1), 0) AS doc_fin,
                        COALESCE(SUM(monto_asiento) FILTER (WHERE fecha_asiento <  :fi2), 0) AS cont_ini,
@@ -223,7 +292,7 @@ class ControlBancarioRepository extends BaseRepository
                 FROM j";
         $st = $this->db->prepare($sql);
         $st->execute($params + [
-            ':e' => $idEmpresa, ':c' => $idCuentaContable,
+            ':e' => $idEmpresa,
             ':fi1' => $fechaInicio, ':ff1' => $fechaFin, ':fi2' => $fechaInicio, ':ff2' => $fechaFin,
         ]);
         $r = $st->fetch(PDO::FETCH_ASSOC) ?: [];
@@ -239,10 +308,10 @@ class ControlBancarioRepository extends BaseRepository
      *  - clase: 'cuadra' si no hay diferencia; si no, el motivo (falta en un lado, monto
      *    distinto o fechas que caen en períodos distintos).
      */
-    public function getPartidasCruceContable(int $idEmpresa, int $idCuentaContable, array $idsFormas, string $fechaInicio, string $fechaFin, int $limite = 1000): array
+    public function getPartidasCruceContable(int $idEmpresa, array $idsCuentas, array $idsFormasCobro, array $idsFormasPago, string $fechaInicio, string $fechaFin, int $limite = 1000): array
     {
-        [$marcas, $params] = $this->marcasFormas($idsFormas);
-        $sql = $this->sqlCruceContable($marcas) . ",
+        [$sqlCruce, $params] = $this->armarCruce($idsCuentas, $idsFormasCobro, $idsFormasPago);
+        $sql = $sqlCruce . ",
                 p AS (
                     SELECT j.*,
                            CASE WHEN fecha_doc BETWEEN :fi1 AND :ff1 THEN monto_doc ELSE 0 END AS efecto_doc,
@@ -278,7 +347,7 @@ class ControlBancarioRepository extends BaseRepository
                 LIMIT " . max(1, $limite);
         $st = $this->db->prepare($sql);
         $st->execute($params + [
-            ':e' => $idEmpresa, ':c' => $idCuentaContable,
+            ':e' => $idEmpresa,
             ':fi1' => $fechaInicio, ':ff1' => $fechaFin, ':fi2' => $fechaInicio, ':ff2' => $fechaFin,
             ':fi3' => $fechaInicio, ':ff3' => $fechaFin, ':fi4' => $fechaInicio, ':ff4' => $fechaFin,
             ':fi5' => $fechaInicio, ':ff5' => $fechaFin,
@@ -286,15 +355,24 @@ class ControlBancarioRepository extends BaseRepository
         return $st->fetchAll(PDO::FETCH_ASSOC) ?: [];
     }
 
-    /** Placeholders :f0, :f1… para una lista IN de formas de pago. */
-    private function marcasFormas(array $idsFormas): array
+    /** CTE del cruce con sus parámetros, para las cuentas y las formas de cada flujo. */
+    private function armarCruce(array $idsCuentas, array $idsFormasCobro, array $idsFormasPago): array
+    {
+        [$marcasCobro, $paramsCobro] = $this->marcasFormas($idsFormasCobro, 'fc');
+        [$marcasPago, $paramsPago] = $this->marcasFormas($idsFormasPago, 'fp');
+        $cuentasIn = implode(', ', array_values(array_unique(array_filter(array_map('intval', $idsCuentas)))) ?: [0]);
+        return [$this->sqlCruceContable($marcasCobro, $marcasPago, $cuentasIn), $paramsCobro + $paramsPago];
+    }
+
+    /** Placeholders :{prefijo}0, :{prefijo}1… para una lista IN de formas de pago. */
+    private function marcasFormas(array $idsFormas, string $prefijo = 'f'): array
     {
         $idsFormas = array_values(array_unique(array_map('intval', $idsFormas))) ?: [0];
         $marcas = [];
         $params = [];
         foreach ($idsFormas as $i => $id) {
-            $marcas[] = ":f{$i}";
-            $params[":f{$i}"] = $id;
+            $marcas[] = ":{$prefijo}{$i}";
+            $params[":{$prefijo}{$i}"] = $id;
         }
         return [implode(', ', $marcas), $params];
     }
@@ -504,7 +582,86 @@ class ControlBancarioRepository extends BaseRepository
               AND COALESCE(ep.eliminado, FALSE) = FALSE
               AND COALESCE(ec.estado, 'registrado') <> 'anulado'
               AND COALESCE(ep.estado_cheque, 'vigente') <> 'anulado'
-              AND ec.tipo_ambiente = (SELECT CAST(tipo_ambiente AS VARCHAR(1)) FROM empresas WHERE id = :amb_e)";
+              AND ec.tipo_ambiente = (SELECT CAST(tipo_ambiente AS VARCHAR(1)) FROM empresas WHERE id = :amb_e)
+
+            UNION ALL
+
+            -- Traspasos de fondos (traspasos_cabecera): entra dinero en la cuenta DESTINO y sale
+            -- de la cuenta ORIGEN (p. ej. el depósito del efectivo de Caja). Su asiento mueve la
+            -- cuenta del banco, así que también es movimiento del banco. Cada lado tiene su propia
+            -- ancla de clasificación ('trasp_in' / 'trasp_out' + id del traspaso): un traspaso
+            -- entre dos bancos se concilia por separado en cada uno.
+            SELECT
+                NULL::INTEGER AS id_asiento_detalle,
+                NULL::INTEGER AS id_asiento,
+                'trasp_in'::VARCHAR AS origen_tipo,
+                tc.id AS origen_id,
+                tc.fecha_emision AS fecha_asiento,
+                tc.numero_traspaso AS numero_comprobante,
+                'Traspaso desde ' || COALESCE(fo.nombre, 'otra cuenta') AS concepto,
+                COALESCE(NULLIF(tc.observaciones, ''), 'Traspaso desde ' || COALESCE(fo.nombre, 'otra cuenta')) AS referencia_detalle,
+                NULL::VARCHAR AS documento_referencia,
+                tc.monto AS debe,
+                0::NUMERIC AS haber,
+                NULL::VARCHAR AS tipo_entidad,
+                NULL::INTEGER AS id_entidad,
+                COALESCE(fo.nombre, 'otra cuenta') AS nombre_entidad,
+                COALESCE(fo.nombre, 'otra cuenta') AS beneficiario_cheque,
+                COALESCE(cbm.tipo_transaccion, 'DEPOSITO') AS tipo_transaccion,
+                COALESCE(cbm.cheque_direccion, 'RECIBIDO') AS cheque_direccion,
+                cbm.numero_cheque AS numero_cheque,
+                cbm.fecha_cheque AS fecha_cheque,
+                COALESCE(cbm.fecha_banco, tc.fecha_emision) AS fecha_banco,
+                cbm.fecha_banco AS fecha_banco_manual,
+                cbm.id AS id_clasificacion,
+                cbm.observacion AS observacion,
+                TRUE AS tiene_documento
+            FROM traspasos_cabecera tc
+            LEFT JOIN empresa_formas_pago fo ON fo.id = tc.id_forma_origen
+            LEFT JOIN control_bancario_movimientos cbm
+                   ON cbm.origen_tipo = 'trasp_in' AND cbm.origen_id = tc.id AND cbm.eliminado = FALSE
+            WHERE tc.id_empresa = :id_empresa_ti
+              AND tc.id_forma_destino = :id_forma_ti
+              AND tc.eliminado = FALSE
+              AND COALESCE(tc.estado, 'registrado') <> 'anulado'
+              AND tc.tipo_ambiente = (SELECT CAST(tipo_ambiente AS VARCHAR(1)) FROM empresas WHERE id = :amb_ti)
+
+            UNION ALL
+
+            SELECT
+                NULL::INTEGER AS id_asiento_detalle,
+                NULL::INTEGER AS id_asiento,
+                'trasp_out'::VARCHAR AS origen_tipo,
+                tc.id AS origen_id,
+                tc.fecha_emision AS fecha_asiento,
+                tc.numero_traspaso AS numero_comprobante,
+                'Traspaso a ' || COALESCE(fd.nombre, 'otra cuenta') AS concepto,
+                COALESCE(NULLIF(tc.observaciones, ''), 'Traspaso a ' || COALESCE(fd.nombre, 'otra cuenta')) AS referencia_detalle,
+                NULL::VARCHAR AS documento_referencia,
+                0::NUMERIC AS debe,
+                tc.monto AS haber,
+                NULL::VARCHAR AS tipo_entidad,
+                NULL::INTEGER AS id_entidad,
+                COALESCE(fd.nombre, 'otra cuenta') AS nombre_entidad,
+                COALESCE(fd.nombre, 'otra cuenta') AS beneficiario_cheque,
+                COALESCE(cbm.tipo_transaccion, 'TRANSFERENCIA') AS tipo_transaccion,
+                COALESCE(cbm.cheque_direccion, 'EMITIDO') AS cheque_direccion,
+                cbm.numero_cheque AS numero_cheque,
+                cbm.fecha_cheque AS fecha_cheque,
+                COALESCE(cbm.fecha_banco, tc.fecha_emision) AS fecha_banco,
+                cbm.fecha_banco AS fecha_banco_manual,
+                cbm.id AS id_clasificacion,
+                cbm.observacion AS observacion,
+                TRUE AS tiene_documento
+            FROM traspasos_cabecera tc
+            LEFT JOIN empresa_formas_pago fd ON fd.id = tc.id_forma_destino
+            LEFT JOIN control_bancario_movimientos cbm
+                   ON cbm.origen_tipo = 'trasp_out' AND cbm.origen_id = tc.id AND cbm.eliminado = FALSE
+            WHERE tc.id_empresa = :id_empresa_to
+              AND tc.id_forma_origen = :id_forma_to
+              AND tc.eliminado = FALSE
+              AND COALESCE(tc.estado, 'registrado') <> 'anulado'
+              AND tc.tipo_ambiente = (SELECT CAST(tipo_ambiente AS VARCHAR(1)) FROM empresas WHERE id = :amb_to)";
     }
 
     /** Parámetros que espera baseTesoreria(). */
@@ -513,6 +670,8 @@ class ControlBancarioRepository extends BaseRepository
         return [
             ':id_empresa_i' => $idEmpresa, ':id_forma_i' => $idFormaPago, ':amb_i' => $idEmpresa,
             ':id_empresa_e' => $idEmpresa, ':id_forma_e' => $idFormaPago, ':amb_e' => $idEmpresa,
+            ':id_empresa_ti' => $idEmpresa, ':id_forma_ti' => $idFormaPago, ':amb_ti' => $idEmpresa,
+            ':id_empresa_to' => $idEmpresa, ':id_forma_to' => $idFormaPago, ':amb_to' => $idEmpresa,
         ];
     }
 
@@ -1226,6 +1385,13 @@ class ControlBancarioRepository extends BaseRepository
                     INNER JOIN ingresos_cabecera ic ON ic.id = ip.id_ingreso
                     WHERE ip.id = :id AND ic.id_empresa = :id_empresa
                       AND ip.id_forma_cobro = :id_forma_pago AND ic.eliminado = FALSE";
+        } elseif ($origenTipo === 'trasp_in' || $origenTipo === 'trasp_out') {
+            // Entrada (cuenta destino) o salida (cuenta origen) de un traspaso de fondos.
+            $columna = $origenTipo === 'trasp_in' ? 'id_forma_destino' : 'id_forma_origen';
+            $sql = "SELECT tc.fecha_emision
+                    FROM traspasos_cabecera tc
+                    WHERE tc.id = :id AND tc.id_empresa = :id_empresa
+                      AND tc.{$columna} = :id_forma_pago AND tc.eliminado = FALSE";
         } else {
             $sql = "SELECT ec.fecha_emision
                     FROM egresos_pagos ep

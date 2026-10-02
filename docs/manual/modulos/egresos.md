@@ -100,6 +100,10 @@ Empresa**, **Anticipo Empleado**. El botón **Nómina**, por ejemplo, busca
 indistintamente rol, décimos, préstamos y anticipos de empleado — pero cada
 egreso que resulte de eso muestra en el listado cuál de esos fue realmente.
 
+Los roles, quincenas, anticipos y préstamos empresa **migrados del sistema
+anterior** no aparecen en el buscador de **Nómina**: ya se pagaron allá, aunque
+su egreso no haya quedado enlazado en la migración.
+
 Si el egreso combina más de un tipo (ver "Combinar varios conceptos" arriba),
 la columna los junta con `+` (p. ej. "Compra + Otros Conceptos"). Si es un
 concepto sin documento (Anticipo Proveedor, SRI, IESS…), muestra directamente
@@ -602,6 +606,9 @@ proveedores), pasa por la misma revisión al guardar:
 
 ## Historial de cambios
 
+- **1.36** — El buscador de **Nómina** ya no muestra como pendientes los roles,
+  quincenas, anticipos y préstamos empresa migrados del sistema anterior, que ya
+  se pagaron allá. Antes salían con saldo cuando su pago no quedaba enlazado.
 - **1.35** — Los atajos de la barra superior del modal (crear forma de pago,
   concepto, proveedor y empleado) solo aparecen si el usuario tiene permiso de crear
   en ese módulo. Lo recién creado queda seleccionado en el egreso: el proveedor o

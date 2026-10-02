@@ -6,7 +6,7 @@ ruta_modulo: modulos/clientes
 tipo: modulo
 visibilidad: todos
 etiquetas: clientes, contable, cuenta contable, cuentas contables, asiento contable, configuracion contable, cuenta por cobrar del cliente, cuenta de ventas del cliente, cliente, cartera, buscar cliente, buscador, filtros, filtrar clientes, clientes sin correo, clientes por ciudad, clientes por vendedor, chips, ordenar por dos columnas, ordenar por ciudad y nombre, ruc, cedula, consumidor final, deudores, cobro automatico, cobros pendientes, forma de cobro, ingreso automatico, cheque, dias de credito, visitas, dias de visita, ruta de visita, rutero, frecuencia de visita, vendedor, preventa, visita del vendedor, horario de atencion, orden de visita, importar clientes, carga masiva, asignar vendedor, transacciones, productos vendidos, servicios vendidos, historial de ventas, que le vendi, ultimo precio, precio de venta, estado de cuenta, kardex, saldo del cliente, historial de cobros, cobros realizados, ingresos, ver ingreso, cedula y ruc, cliente duplicado, proveedor duplicado, identificacion repetida, ruc es la cedula mas 001, mismo tercero dos fichas, estado de cuenta partido, cedula falsa, cedula invalida, cedula incorrecta, ruc invalido, digito verificador, validar cedula, comprobar cedula, imprimir, impresora
-version: 2.8
+version: 2.9
 orden: 10
 estado: activo
 ---
@@ -323,6 +323,10 @@ Al pie se ven los tres totales: lo recibido, lo ya aplicado y el **saldo a favor
 Ese saldo es el mismo que aparece al elegir la forma de cobro *anticipo* mientras
 se registra un cobro: sale de la misma fórmula, así que no puede discrepar.
 
+Solo cuentan los ingresos y egresos del **ambiente** en que trabaja la empresa
+(pruebas o producción): un anticipo registrado mientras la empresa estaba en
+pruebas no suma ni se aplica en producción. Los saldos iniciales sí cuentan siempre.
+
 La pestaña **solo aparece** si el cliente tiene anticipos y el usuario puede ver
 **Ingresos**, que es donde se registran.
 
@@ -457,6 +461,9 @@ usuario y la fecha.
 
 ## Historial de cambios
 
+- **2.9** — Anticipos: solo cuentan los ingresos del ambiente de la empresa
+  (pruebas o producción), igual que en el resto de saldos. Antes un anticipo
+  registrado en pruebas seguía sumando en producción.
 - **2.8** — La pestaña **Contable** muestra de entrada solo la cuenta de ventas; las demás
   se despliegan con *Mostrar las demás cuentas*.
 - **2.7** — La pestaña **Contable** queda solo con las cuentas de *Ventas con Factura*:

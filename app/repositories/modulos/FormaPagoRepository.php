@@ -28,7 +28,7 @@ class FormaPagoRepository extends BaseRepository
      * se cae a la cuenta base del propio módulo (empresa_formas_pago.id_cuenta_contable).
      * Sin esto el módulo mostraría la cuenta base aunque el asiento la esté sobrescribiendo.
      */
-    private const SELECT_CUENTAS_FLUJO = "
+    public const SELECT_CUENTAS_FLUJO = "
                            COALESCE(apc.id_cuenta, fp.id_cuenta_contable) AS id_cuenta_cobro,
                            pcc.codigo AS cuenta_cobro_codigo,
                            pcc.nombre AS cuenta_cobro_nombre,
@@ -36,8 +36,12 @@ class FormaPagoRepository extends BaseRepository
                            pcp.codigo AS cuenta_pago_codigo,
                            pcp.nombre AS cuenta_pago_nombre";
 
-    /** Joins que alimentan SELECT_CUENTAS_FLUJO (placeholders distintos: PDO/pgsql no repite). */
-    private const JOIN_CUENTAS_FLUJO = "
+    /**
+     * Joins que alimentan SELECT_CUENTAS_FLUJO (placeholders distintos: PDO/pgsql no repite).
+     * Públicas: también las usa Control Bancario para comparar con la cuenta que de verdad
+     * mueven los asientos. Requieren el alias `fp` y los parámetros :emp_ap_cobro / :emp_ap_pago.
+     */
+    public const JOIN_CUENTAS_FLUJO = "
                     LEFT JOIN asientos_programados apc ON apc.id_referencia = fp.id
                                                      AND apc.tipo_referencia = 'forma_cobro'
                                                      AND apc.id_empresa = :emp_ap_cobro
@@ -513,6 +517,7 @@ class FormaPagoRepository extends BaseRepository
                  FROM egresos_cabecera ec
                  INNER JOIN empresa_opciones_ingreso_egreso o ON o.id = ec.id_egreso_concepto
                  WHERE ec.id_empresa = :e AND ec.eliminado = FALSE AND ec.estado <> 'anulado'
+                   AND ec.tipo_ambiente = (SELECT CAST(tipo_ambiente AS VARCHAR(1)) FROM empresas WHERE id = :e)
                    AND o.comportamiento = 'ANTICIPO_PROVEEDOR'
                    AND ec.id_proveedor = :t"
             );
@@ -522,6 +527,7 @@ class FormaPagoRepository extends BaseRepository
                  FROM ingresos_cabecera ic
                  INNER JOIN empresa_opciones_ingreso_egreso o ON o.id = ic.id_ingreso_concepto
                  WHERE ic.id_empresa = :e AND ic.eliminado = FALSE AND ic.estado <> 'anulado'
+                   AND ic.tipo_ambiente = (SELECT CAST(tipo_ambiente AS VARCHAR(1)) FROM empresas WHERE id = :e)
                    AND o.comportamiento = 'ANTICIPO_CLIENTE'
                    AND COALESCE(ic.id_cliente, ic.id_recibo_cliente) = :t"
             );
@@ -537,6 +543,7 @@ class FormaPagoRepository extends BaseRepository
                  INNER JOIN egresos_cabecera ec ON ec.id = ep.id_egreso
                  WHERE ec.id_empresa = :e AND ec.eliminado = FALSE AND ec.estado <> 'anulado'
                    AND ep.eliminado = FALSE
+                   AND ec.tipo_ambiente = (SELECT CAST(tipo_ambiente AS VARCHAR(1)) FROM empresas WHERE id = :e)
                    AND ep.id_forma_pago = :forma
                    AND ec.id_proveedor = :t"
             );
@@ -546,6 +553,7 @@ class FormaPagoRepository extends BaseRepository
                  FROM ingresos_pagos ip
                  INNER JOIN ingresos_cabecera ic ON ic.id = ip.id_ingreso
                  WHERE ic.id_empresa = :e AND ic.eliminado = FALSE AND ic.estado <> 'anulado'
+                   AND ic.tipo_ambiente = (SELECT CAST(tipo_ambiente AS VARCHAR(1)) FROM empresas WHERE id = :e)
                    AND ip.id_forma_cobro = :forma
                    AND ic.id_cliente = :t"
             );
@@ -600,7 +608,7 @@ class FormaPagoRepository extends BaseRepository
                        COALESCE(ec.observaciones, '')::text, ec.monto_total, 1, ec.id
                 FROM egresos_cabecera ec
                 INNER JOIN empresa_opciones_ingreso_egreso o ON o.id = ec.id_egreso_concepto
-                WHERE ec.id_empresa = :e AND ec.eliminado = FALSE AND ec.estado <> 'anulado'
+                WHERE ec.id_empresa = :e AND ec.eliminado = FALSE AND ec.estado <> 'anulado' AND ec.tipo_ambiente = (SELECT CAST(tipo_ambiente AS VARCHAR(1)) FROM empresas WHERE id = :e)
                   AND o.comportamiento = 'ANTICIPO_PROVEEDOR' AND ec.id_proveedor = :t
                 UNION ALL
                 SELECT ec.fecha_emision::date, 'APLICADO'::text, 'Aplicado a un pago'::text,
@@ -609,7 +617,7 @@ class FormaPagoRepository extends BaseRepository
                 FROM egresos_pagos ep
                 INNER JOIN egresos_cabecera ec ON ec.id = ep.id_egreso
                 INNER JOIN empresa_formas_pago fp ON fp.id = ep.id_forma_pago AND fp.tipo = 'ANTICIPO'
-                WHERE ec.id_empresa = :e AND ec.eliminado = FALSE AND ec.estado <> 'anulado'
+                WHERE ec.id_empresa = :e AND ec.eliminado = FALSE AND ec.estado <> 'anulado' AND ec.tipo_ambiente = (SELECT CAST(tipo_ambiente AS VARCHAR(1)) FROM empresas WHERE id = :e)
                   AND ep.eliminado = FALSE AND ec.id_proveedor = :t";
         }
 
@@ -627,7 +635,7 @@ class FormaPagoRepository extends BaseRepository
                    COALESCE(ic.observaciones, '')::text, ic.monto_total, 1, ic.id
             FROM ingresos_cabecera ic
             INNER JOIN empresa_opciones_ingreso_egreso o ON o.id = ic.id_ingreso_concepto
-            WHERE ic.id_empresa = :e AND ic.eliminado = FALSE AND ic.estado <> 'anulado'
+            WHERE ic.id_empresa = :e AND ic.eliminado = FALSE AND ic.estado <> 'anulado' AND ic.tipo_ambiente = (SELECT CAST(tipo_ambiente AS VARCHAR(1)) FROM empresas WHERE id = :e)
               AND o.comportamiento = 'ANTICIPO_CLIENTE'
               AND COALESCE(ic.id_cliente, ic.id_recibo_cliente) = :t
             UNION ALL
@@ -637,7 +645,7 @@ class FormaPagoRepository extends BaseRepository
             FROM ingresos_pagos ip
             INNER JOIN ingresos_cabecera ic ON ic.id = ip.id_ingreso
             INNER JOIN empresa_formas_pago fp ON fp.id = ip.id_forma_cobro AND fp.tipo = 'ANTICIPO'
-            WHERE ic.id_empresa = :e AND ic.eliminado = FALSE AND ic.estado <> 'anulado'
+            WHERE ic.id_empresa = :e AND ic.eliminado = FALSE AND ic.estado <> 'anulado' AND ic.tipo_ambiente = (SELECT CAST(tipo_ambiente AS VARCHAR(1)) FROM empresas WHERE id = :e)
               AND ic.id_cliente = :t";
     }
 
@@ -809,5 +817,188 @@ class FormaPagoRepository extends BaseRepository
         }
 
         return false;
+    }
+
+    // ─────────────────────────────────────────────────────────────────────
+    // COMPROBACIÓN CON CONTABILIDAD: CAJA Y ANTICIPOS
+    //
+    // Definiciones para App\Services\ComprobacionContableService (formato en
+    // App\repositories\ComprobacionContableRepository), con las MISMAS fuentes que los
+    // saldos de este repositorio: getSaldosActuales() para caja y getSaldoAnticipo() /
+    // sqlMovimientosAnticipo() para anticipos. La cuenta contable de cada flujo es la
+    // efectiva (SELECT_CUENTAS_FLUJO): la regla de Configuración Contable o la base.
+    // ─────────────────────────────────────────────────────────────────────
+
+    /**
+     * Formas de caja: las que tienen saldo en getSaldosActuales() (no anticipo ni Payphone)
+     * y no son cuenta bancaria (esas las compara Control Bancario), con la cuenta efectiva
+     * de cobros y de pagos.
+     */
+    public function getFormasCajaConCuentas(int $idEmpresa): array
+    {
+        $sql = "SELECT * FROM (
+                    SELECT DISTINCT ON (fp.id) fp.id, fp.nombre, fp.tipo, " . self::SELECT_CUENTAS_FLUJO . "
+                    FROM {$this->table} fp
+                    " . self::JOIN_CUENTAS_FLUJO . "
+                    WHERE fp.id_empresa = :id_empresa AND fp.eliminado = FALSE AND fp.activo = TRUE
+                      AND fp.tipo <> 'ANTICIPO' AND fp.tipo <> 'PAYPHONE' AND fp.id_banco IS NULL
+                    ORDER BY fp.id, apc.id DESC NULLS LAST, app.id DESC NULLS LAST
+                ) x ORDER BY x.nombre";
+        $st = $this->db->prepare($sql);
+        $st->execute([':id_empresa' => $idEmpresa, ':emp_ap_cobro' => $idEmpresa, ':emp_ap_pago' => $idEmpresa]);
+        return $st->fetchAll(PDO::FETCH_ASSOC) ?: [];
+    }
+
+    /** Lista SQL de ids enteros para un IN (siempre válida: vacía = 0). */
+    private static function inIds(array $ids): string
+    {
+        $ids = array_values(array_unique(array_filter(array_map('intval', $ids))));
+        return $ids ? implode(', ', $ids) : '0';
+    }
+
+    /**
+     * Caja: saldo inicial + cobros − pagos + traspasos recibidos − enviados de las formas
+     * indicadas (getSaldosActuales). Cada flujo entra solo si su cuenta efectiva es una de las
+     * comparadas: cobros y traspasos recibidos por la cuenta de cobro; pagos y traspasos
+     * enviados por la de pago (así los contabiliza AsientoBuilderService).
+     */
+    public function definicionComprobacionCaja(array $idsCuentas, array $idsFormasCobro, array $idsFormasPago, array $idsFormasSaldo): array
+    {
+        $cobro = self::inIds($idsFormasCobro);
+        $pago = self::inIds($idsFormasPago);
+        $saldo = self::inIds($idsFormasSaldo);
+        $amb = "(SELECT t FROM amb)";
+
+        $docs = "SELECT 'saldo_inicial' AS tipo, 0 AS id_doc, COALESCE(sib.fecha_saldo, DATE '1900-01-01') AS fecha,
+                        sib.saldo_inicial AS monto
+                 FROM saldos_iniciales_bancos sib
+                 WHERE sib.id_empresa = :e AND sib.eliminado = FALSE AND sib.id_forma_pago IN ({$saldo})
+                 UNION ALL
+                 SELECT 'ingreso', ic.id, ic.fecha_emision, ip.monto
+                 FROM ingresos_pagos ip
+                 JOIN ingresos_cabecera ic ON ic.id = ip.id_ingreso
+                 WHERE ic.id_empresa = :e AND ic.eliminado = FALSE AND ic.estado <> 'anulado'
+                   AND ic.tipo_ambiente = {$amb} AND ip.id_forma_cobro IN ({$cobro})
+                 UNION ALL
+                 SELECT 'egreso', ec.id, ec.fecha_emision, -ep.monto
+                 FROM egresos_pagos ep
+                 JOIN egresos_cabecera ec ON ec.id = ep.id_egreso
+                 WHERE ec.id_empresa = :e AND ec.eliminado = FALSE AND ec.estado <> 'anulado' AND ep.eliminado = FALSE
+                   AND ec.tipo_ambiente = {$amb} AND ep.id_forma_pago IN ({$pago})
+                 UNION ALL
+                 SELECT 'traspaso', tc.id, tc.fecha_emision, tc.monto
+                 FROM traspasos_cabecera tc
+                 WHERE tc.id_empresa = :e AND tc.eliminado = FALSE AND tc.estado <> 'anulado'
+                   AND tc.tipo_ambiente = {$amb} AND tc.id_forma_destino IN ({$cobro})
+                 UNION ALL
+                 SELECT 'traspaso', tc.id, tc.fecha_emision, -tc.monto
+                 FROM traspasos_cabecera tc
+                 WHERE tc.id_empresa = :e AND tc.eliminado = FALSE AND tc.estado <> 'anulado'
+                   AND tc.tipo_ambiente = {$amb} AND tc.id_forma_origen IN ({$pago})";
+
+        return [
+            'cuentas_ids' => $idsCuentas,
+            'signo' => 1,
+            'docs' => $docs,
+            'nativos' => ['ingreso' => 'ingreso', 'egreso' => 'egreso', 'traspaso' => 'traspaso'],
+            'migrados' => "SELECT id_asiento_contable AS id_asiento, 'ingreso' AS tipo, id AS id_doc FROM ingresos_cabecera WHERE id_empresa = :e AND id_asiento_contable IS NOT NULL
+                           UNION ALL SELECT id_asiento_contable, 'egreso', id FROM egresos_cabecera WHERE id_empresa = :e AND id_asiento_contable IS NOT NULL
+                           UNION ALL SELECT id_asiento_contable, 'traspaso', id FROM traspasos_cabecera WHERE id_empresa = :e AND id_asiento_contable IS NOT NULL",
+            'apertura' => true,
+            'numeros' => [
+                'ingreso' => ['ingresos_cabecera', 'x.numero_ingreso'],
+                'egreso' => ['egresos_cabecera', 'x.numero_egreso'],
+                'traspaso' => ['traspasos_cabecera', 'x.numero_traspaso'],
+            ],
+        ];
+    }
+
+    /**
+     * Cuentas contables de los anticipos de clientes ($proveedor = false) o de proveedores:
+     * la de las opciones con comportamiento ANTICIPO_CLIENTE / ANTICIPO_PROVEEDOR (donde se
+     * registra el anticipo recibido/entregado) y la de las formas tipo ANTICIPO en ese flujo
+     * (donde se aplica). Lo normal es que sean la misma; si no, se comparan juntas.
+     */
+    public function getCuentasAnticipos(int $idEmpresa, bool $proveedor): array
+    {
+        $comportamiento = $proveedor ? 'ANTICIPO_PROVEEDOR' : 'ANTICIPO_CLIENTE';
+        $refOpcion = $proveedor ? 'opcion_egreso' : 'opcion_ingreso';
+        $refForma = $proveedor ? 'forma_pago' : 'forma_cobro';
+        $flujo = $proveedor ? 'EGRESO' : 'INGRESO';
+        $sql = "SELECT COALESCE(ap.id_cuenta, o.id_cuenta_contable) AS id_cuenta
+                FROM empresa_opciones_ingreso_egreso o
+                LEFT JOIN asientos_programados ap ON ap.id_referencia = o.id AND ap.tipo_referencia = '{$refOpcion}'
+                                                 AND ap.id_empresa = :e1 AND ap.eliminado = FALSE
+                WHERE o.id_empresa = :e2 AND o.comportamiento = '{$comportamiento}'
+                UNION
+                SELECT COALESCE(ap.id_cuenta, fp.id_cuenta_contable)
+                FROM {$this->table} fp
+                LEFT JOIN asientos_programados ap ON ap.id_referencia = fp.id AND ap.tipo_referencia = '{$refForma}'
+                                                 AND ap.id_empresa = :e3 AND ap.eliminado = FALSE
+                WHERE fp.id_empresa = :e4 AND fp.eliminado = FALSE AND fp.tipo = 'ANTICIPO'
+                  AND UPPER(COALESCE(fp.aplica_en, 'AMBAS')) IN ('AMBAS', '{$flujo}')";
+        $st = $this->db->prepare($sql);
+        $st->execute([':e1' => $idEmpresa, ':e2' => $idEmpresa, ':e3' => $idEmpresa, ':e4' => $idEmpresa]);
+        return array_values(array_filter(array_map('intval', $st->fetchAll(PDO::FETCH_COLUMN) ?: [])));
+    }
+
+    /**
+     * Anticipos de clientes (pasivo) o de proveedores (activo), de toda la empresa: saldo
+     * inicial + anticipos recibidos/entregados − aplicados, con las fuentes de
+     * sqlMovimientosAnticipo() (la pestaña Anticipos de la ficha) sin acotar a un tercero.
+     */
+    public function definicionComprobacionAnticipos(bool $proveedor, array $idsCuentas): array
+    {
+        if ($proveedor) {
+            $docs = "SELECT 'saldo_inicial' AS tipo, 0 AS id_doc, COALESCE(a.fecha_saldo, DATE '1900-01-01') AS fecha, a.saldo_inicial AS monto
+                     FROM saldos_iniciales_anticipos a
+                     WHERE a.id_empresa = :e AND a.eliminado = FALSE AND a.id_proveedor IS NOT NULL
+                     UNION ALL
+                     SELECT 'egreso', ec.id, ec.fecha_emision, ec.monto_total
+                     FROM egresos_cabecera ec
+                     JOIN empresa_opciones_ingreso_egreso o ON o.id = ec.id_egreso_concepto
+                     WHERE ec.id_empresa = :e AND ec.eliminado = FALSE AND ec.estado <> 'anulado' AND ec.tipo_ambiente = (SELECT CAST(tipo_ambiente AS VARCHAR(1)) FROM empresas WHERE id = :e)
+                       AND o.comportamiento = 'ANTICIPO_PROVEEDOR'
+                     UNION ALL
+                     SELECT 'egreso', ec.id, ec.fecha_emision, -ep.monto
+                     FROM egresos_pagos ep
+                     JOIN egresos_cabecera ec ON ec.id = ep.id_egreso
+                     JOIN {$this->table} fp ON fp.id = ep.id_forma_pago AND fp.tipo = 'ANTICIPO'
+                     WHERE ec.id_empresa = :e AND ec.eliminado = FALSE AND ec.estado <> 'anulado' AND ec.tipo_ambiente = (SELECT CAST(tipo_ambiente AS VARCHAR(1)) FROM empresas WHERE id = :e) AND ep.eliminado = FALSE";
+            $tipo = 'egreso';
+            $tabla = 'egresos_cabecera';
+            $numero = 'x.numero_egreso';
+        } else {
+            $docs = "SELECT 'saldo_inicial' AS tipo, 0 AS id_doc, COALESCE(a.fecha_saldo, DATE '1900-01-01') AS fecha, a.saldo_inicial AS monto
+                     FROM saldos_iniciales_anticipos a
+                     WHERE a.id_empresa = :e AND a.eliminado = FALSE AND a.id_cliente IS NOT NULL
+                     UNION ALL
+                     SELECT 'ingreso', ic.id, ic.fecha_emision, ic.monto_total
+                     FROM ingresos_cabecera ic
+                     JOIN empresa_opciones_ingreso_egreso o ON o.id = ic.id_ingreso_concepto
+                     WHERE ic.id_empresa = :e AND ic.eliminado = FALSE AND ic.estado <> 'anulado' AND ic.tipo_ambiente = (SELECT CAST(tipo_ambiente AS VARCHAR(1)) FROM empresas WHERE id = :e)
+                       AND o.comportamiento = 'ANTICIPO_CLIENTE'
+                     UNION ALL
+                     SELECT 'ingreso', ic.id, ic.fecha_emision, -ip.monto
+                     FROM ingresos_pagos ip
+                     JOIN ingresos_cabecera ic ON ic.id = ip.id_ingreso
+                     JOIN {$this->table} fp ON fp.id = ip.id_forma_cobro AND fp.tipo = 'ANTICIPO'
+                     WHERE ic.id_empresa = :e AND ic.eliminado = FALSE AND ic.estado <> 'anulado' AND ic.tipo_ambiente = (SELECT CAST(tipo_ambiente AS VARCHAR(1)) FROM empresas WHERE id = :e)";
+            $tipo = 'ingreso';
+            $tabla = 'ingresos_cabecera';
+            $numero = 'x.numero_ingreso';
+        }
+
+        return [
+            'cuentas_ids' => $idsCuentas,
+            // Anticipo de cliente: lo que se le debe (pasivo). De proveedor: lo que él debe (activo).
+            'signo' => $proveedor ? 1 : -1,
+            'docs' => $docs,
+            'nativos' => [$tipo => $tipo],
+            'migrados' => "SELECT id_asiento_contable AS id_asiento, '{$tipo}' AS tipo, id AS id_doc FROM {$tabla}
+                           WHERE id_empresa = :e AND id_asiento_contable IS NOT NULL",
+            'apertura' => true,
+            'numeros' => [$tipo => [$tabla, $numero]],
+        ];
     }
 }

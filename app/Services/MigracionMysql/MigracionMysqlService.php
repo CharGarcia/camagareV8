@@ -1672,6 +1672,15 @@ class MigracionMysqlService
             if (empty($res['error_muestra'])) { $res['error_muestra'] = 'desembolso lote: ' . substr($ex->getMessage(), 0, 150); }
         }
 
+        // Conciliar contra los roles/quincenas YA migrados: si estos se migraron antes que las novedades,
+        // la conciliación que corre al migrar roles no alcanzó a estas novedades y quedaban "Pendiente".
+        try {
+            $res['novedades_conciliadas'] = $this->conciliarNovedadesMigradas($pg, $idEmpresa, 'rol', 'roles_pago')
+                + $this->conciliarNovedadesMigradas($pg, $idEmpresa, 'quincena', 'quincenas');
+        } catch (Throwable $ex) {
+            if (empty($res['error_muestra'])) { $res['error_muestra'] = 'conciliación: ' . substr($ex->getMessage(), 0, 150); }
+        }
+
         return $res;
     }
 
@@ -1789,19 +1798,9 @@ class MigracionMysqlService
             }
         }
 
-        // Conciliación por período: toda novedad de aplica_en correspondiente cuyo (empleado, mes, año)
-        // tenga un rol migrado de este tipo pasa a conciliada_migrada=true → se ve "Pagada" (el viejo
-        // consideraba pagada = estar en el rol de ese período). Set-based, idempotente.
+        // Conciliación por período de las novedades contra los roles migrados (ver conciliarNovedadesMigradas).
         try {
-            $conc = $pg->prepare("UPDATE novedades nv SET conciliada_migrada = true, updated_at = now()
-                WHERE nv.id_empresa = :e AND nv.eliminado = false AND nv.aplica_en = :ap AND nv.conciliada_migrada = false
-                  AND EXISTS (SELECT 1 FROM rol_detalle rd JOIN rol_cabecera rc ON rc.id = rd.id_rol
-                              JOIN migracion_mysql_map m ON m.id_destino = rc.id AND m.entidad = :ent AND m.id_empresa = rc.id_empresa
-                              WHERE rc.id_empresa = nv.id_empresa AND rc.eliminado = false
-                                AND rd.id_empleado = nv.id_empleado
-                                AND rc.periodo_anio = nv.periodo_anio AND rc.periodo_mes = nv.periodo_mes)");
-            $conc->execute([':e' => $idEmpresa, ':ap' => $aplicaEn, ':ent' => $modo]);
-            $res['novedades_conciliadas'] = $conc->rowCount();
+            $res['novedades_conciliadas'] = $this->conciliarNovedadesMigradas($pg, $idEmpresa, $aplicaEn, $modo);
         } catch (Throwable $ex) {
             if (empty($res['error_muestra'])) { $res['error_muestra'] = 'conciliación: ' . substr($ex->getMessage(), 0, 150); }
         }
@@ -1810,6 +1809,25 @@ class MigracionMysqlService
         $res['pagos_rol_enlazados'] = $this->cruzarEgresosConRoles($idEmpresa);
 
         return $res;
+    }
+
+    /**
+     * Conciliación por período: toda novedad con ese aplica_en cuyo (empleado, mes, año) tenga un rol
+     * migrado de ese tipo pasa a conciliada_migrada=true → se ve "Pagada" (el viejo consideraba pagada =
+     * estar en el rol de ese período). Set-based e idempotente. Se llama al migrar roles/quincenas Y al
+     * migrar novedades: si las novedades se migran DESPUÉS que los roles, sin esto quedaban "Pendiente".
+     */
+    private function conciliarNovedadesMigradas(PDO $pg, int $idEmpresa, string $aplicaEn, string $entidadRol): int
+    {
+        $conc = $pg->prepare("UPDATE novedades nv SET conciliada_migrada = true, updated_at = now()
+            WHERE nv.id_empresa = :e AND nv.eliminado = false AND nv.aplica_en = :ap AND nv.conciliada_migrada = false
+              AND EXISTS (SELECT 1 FROM rol_detalle rd JOIN rol_cabecera rc ON rc.id = rd.id_rol
+                          JOIN migracion_mysql_map m ON m.id_destino = rc.id AND m.entidad = :ent AND m.id_empresa = rc.id_empresa
+                          WHERE rc.id_empresa = nv.id_empresa AND rc.eliminado = false
+                            AND rd.id_empleado = nv.id_empleado
+                            AND rc.periodo_anio = nv.periodo_anio AND rc.periodo_mes = nv.periodo_mes)");
+        $conc->execute([':e' => $idEmpresa, ':ap' => $aplicaEn, ':ent' => $entidadRol]);
+        return $conc->rowCount();
     }
 
     /** Arma una línea de rol_detalle (+ rubros resumen) desde una fila de detalle_rolespago (MENSUAL). */

@@ -702,25 +702,18 @@ class RolPagoRepository extends BaseRepository
                 WHERE ed.tipo_documento = :td AND ed.id_referencia_documento = :emp2
                   AND ec.estado != 'anulado' AND ec.eliminado = false AND ed.eliminado = false
                   AND ec.id_empresa = :emp";
-        $desembolsado = 0.0;
+        // Solo egresos REALES (no anulados). Las cuotas migradas con desembolsado_migrado=true
+        // NO se suman aquí: su "desembolso" es el propio valor de cada cuota (no hay egreso que
+        // quede sin respaldo), así que no deben bloquear las demás cuotas del empleado. La cuota
+        // migrada en sí se bloquea por su propio flag (NovedadService::yaDesembolsada), igual
+        // que en el listado (NovedadRepository::anexarEstadoPago).
         try {
             $st = $this->db->prepare($sql);
             $st->execute([':td' => 'PRESTAMO' . $tipoCodigo, ':emp2' => $idEmpleado, ':emp' => $idEmpresa]);
-            $desembolsado = (float) $st->fetchColumn();
+            return (float) $st->fetchColumn();
         } catch (\Throwable $e) {
             return 0.0; // egresos no disponible → sin desembolso
         }
-        // Cuotas migradas marcadas como desembolsadas (sin egreso): también cuentan como desembolsado.
-        try {
-            $st2 = $this->db->prepare("SELECT COALESCE(SUM(valor), 0) FROM novedades
-                WHERE id_empresa = :emp AND id_empleado = :ide AND tipo_codigo = :tc
-                  AND desembolsado_migrado = true AND estado = 'activo' AND eliminado = false");
-            $st2->execute([':emp' => $idEmpresa, ':ide' => $idEmpleado, ':tc' => $tipoCodigo]);
-            $desembolsado += (float) $st2->fetchColumn();
-        } catch (\Throwable $e) {
-            // columna ausente → sin efecto
-        }
-        return $desembolsado;
     }
 
     /**
@@ -789,6 +782,7 @@ class RolPagoRepository extends BaseRepository
         $sql = "SELECT COUNT(*)
                 FROM rol_detalle rd
                 WHERE rd.id_rol = :r AND rd.id_empresa = :e
+                  AND NOT " . self::sqlRolMigrado('rd.id_rol', 'rd.id_empresa') . "
                   AND ROUND(rd.neto - COALESCE((SELECT SUM(ed.monto_pagado)
                         FROM egresos_detalle ed JOIN egresos_cabecera ec ON ec.id = ed.id_egreso
                        WHERE ed.tipo_documento = 'ROL' AND ec.estado != 'anulado'
@@ -846,7 +840,8 @@ class RolPagoRepository extends BaseRepository
                        AND n.tipo_ambiente = (SELECT CAST(tipo_ambiente AS VARCHAR(1)) FROM empresas WHERE id = :emp)
                        AND ROUND((SELECT COALESCE(SUM(n2.valor), 0) FROM novedades n2
                              WHERE n2.id_empresa = n.id_empresa AND n2.id_empleado = n.id_empleado
-                               AND n2.tipo_codigo = n.tipo_codigo AND n2.eliminado = false AND n2.estado = 'activo')
+                               AND n2.tipo_codigo = n.tipo_codigo AND n2.eliminado = false AND n2.estado = 'activo'
+                               AND n2.desembolsado_migrado = false)
                            - (SELECT COALESCE(SUM(ed.monto_pagado), 0) FROM egresos_detalle ed JOIN egresos_cabecera ec ON ec.id = ed.id_egreso
                                WHERE ed.tipo_documento = ('PRESTAMO' || n.tipo_codigo) AND ed.id_referencia_documento = n.id_empleado
                                  AND ec.estado != 'anulado' AND ec.eliminado = false AND ed.eliminado = false), 2) > 0
@@ -962,9 +957,38 @@ class RolPagoRepository extends BaseRepository
         }
     }
 
+    /**
+     * Condición SQL "este rol vino migrado del sistema anterior" (rol/quincena insertado por la
+     * migración, no vinculado a uno nativo). El sistema anterior ya pagó esos roles: sus líneas
+     * NO deben salir como pendientes de pago aunque su egreso no haya quedado enlazado (pagos en
+     * lote, egresos sin código ROL_PAGOS/QUINCENA, egresos fuera del rango migrado, etc.).
+     * Mismo criterio que `novedades.desembolsado_migrado` para anticipos/préstamos.
+     */
+    public static function sqlRolMigrado(string $colIdRol, string $colIdEmpresa): string
+    {
+        return "EXISTS (SELECT 1 FROM migracion_mysql_map mrm
+                         WHERE mrm.id_empresa = {$colIdEmpresa} AND mrm.id_destino = {$colIdRol}
+                           AND mrm.entidad IN ('roles_pago','quincenas') AND mrm.vinculado = false)";
+    }
+
     /** Monto pagado por cada línea de rol (desde egresos), para saber si un empleado está pagado. */
     public function getPagadoPorDetalle(int $idRol): array
     {
+        // Rol migrado: el sistema anterior ya lo pagó → cada línea cuenta como pagada por su neto.
+        try {
+            $st = $this->db->prepare("SELECT rd.id, rd.neto FROM rol_detalle rd JOIN rol_cabecera rc ON rc.id = rd.id_rol
+                                      WHERE rc.id = :r AND " . self::sqlRolMigrado('rc.id', 'rc.id_empresa'));
+            $st->execute([':r' => $idRol]);
+            $migradas = $st->fetchAll(PDO::FETCH_ASSOC);
+            if ($migradas) {
+                $map = [];
+                foreach ($migradas as $row) { $map[(int) $row['id']] = (float) $row['neto']; }
+                return $map;
+            }
+        } catch (\Throwable $e) {
+            // tabla de migración ausente → criterio normal por egresos
+        }
+
         $sql = "SELECT d.id_referencia_documento AS id_detalle, COALESCE(SUM(d.monto_pagado), 0) AS pagado
                 FROM egresos_detalle d
                 JOIN egresos_cabecera e ON e.id = d.id_egreso

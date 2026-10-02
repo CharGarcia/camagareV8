@@ -225,7 +225,7 @@ class ControlBancarioController extends BaseModuloController
                 $numeroComprobante = htmlspecialchars((string) ($r['numero_comprobante'] ?: 'S/N'));
                 $celdaComprobante = !empty($r['id_asiento'])
                     ? '<a href="#" onclick="event.stopPropagation(); event.preventDefault(); ASIENTO_abrirModal(' . (int) $r['id_asiento'] . ');" class="text-decoration-none fw-bold" title="Ver asiento contable">' . $numeroComprobante . '</a>'
-                    : '<span class="fw-bold" title="' . ((($r['origen_tipo'] ?? '') === 'egreso') ? 'Egreso' : 'Ingreso') . '">' . $numeroComprobante . '</span>';
+                    : '<span class="fw-bold" title="' . (['egreso' => 'Egreso', 'trasp_in' => 'Traspaso (entrada)', 'trasp_out' => 'Traspaso (salida)'][$r['origen_tipo'] ?? ''] ?? 'Ingreso') . '">' . $numeroComprobante . '</span>';
 
                 // Un cheque sin cobrar no mueve el saldo del banco (afecta_saldo = 0): su saldo
                 // acumulado repite el anterior, y se atenúa para que se note por qué.

@@ -72,6 +72,7 @@ class CuentasPorPagarController extends BaseModuloController
             'puedeConsolidar'  => !empty($idsConsolidado),
             'establecimientos' => $establecimientos,
             'idEmpresa'        => $idEmpresa,
+            'puedeComprobarContabilidad' => $this->puedeComprobarContabilidad(),
             'fullWidth'   => true,
             'base'        => BASE_URL,
         ]);
@@ -269,6 +270,16 @@ class CuentasPorPagarController extends BaseModuloController
         // o el que el usuario eligió en las cabeceras (`orden_col`/`orden_dir`). Al pasar
         // por aquí la pantalla, el Excel y el PDF, los tres salen con el mismo orden.
         return $this->repo->ordenarFilas($filas, $filtros);
+    }
+
+    /**
+     * Comprobación con Contabilidad (solo lectura): saldo por pagar de la empresa activa
+     * contra sus cuentas por pagar, al inicio y al fin del período, documento por documento.
+     */
+    public function comprobacionContableAjax(): void
+    {
+        $this->requireLeer();
+        $this->responderComprobacionContable($this->repo->definicionComprobacionContable());
     }
 
     // ─────────────────────────────────────────────────────────────────────

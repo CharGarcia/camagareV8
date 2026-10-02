@@ -550,6 +550,7 @@ class DashboardService
                  FROM egresos_cabecera ec
                  INNER JOIN empresa_opciones_ingreso_egreso o ON o.id = ec.id_egreso_concepto
                  WHERE ec.id_empresa = :e AND ec.eliminado = FALSE AND ec.estado <> 'anulado'
+                   AND ec.tipo_ambiente = (SELECT CAST(tipo_ambiente AS VARCHAR(1)) FROM empresas WHERE id = :e)
                    AND o.comportamiento = 'ANTICIPO_PROVEEDOR'"
             );
         } else {
@@ -558,6 +559,7 @@ class DashboardService
                  FROM ingresos_cabecera ic
                  INNER JOIN empresa_opciones_ingreso_egreso o ON o.id = ic.id_ingreso_concepto
                  WHERE ic.id_empresa = :e AND ic.eliminado = FALSE AND ic.estado <> 'anulado'
+                   AND ic.tipo_ambiente = (SELECT CAST(tipo_ambiente AS VARCHAR(1)) FROM empresas WHERE id = :e)
                    AND o.comportamiento = 'ANTICIPO_CLIENTE'"
             );
         }
@@ -571,6 +573,7 @@ class DashboardService
                  INNER JOIN egresos_cabecera ec ON ec.id = ep.id_egreso
                  INNER JOIN empresa_formas_pago efp ON efp.id = ep.id_forma_pago
                  WHERE ec.id_empresa = :e AND ec.eliminado = FALSE AND ec.estado <> 'anulado'
+                   AND ec.tipo_ambiente = (SELECT CAST(tipo_ambiente AS VARCHAR(1)) FROM empresas WHERE id = :e)
                    AND ep.eliminado = FALSE
                    AND efp.tipo = 'ANTICIPO' AND UPPER(efp.aplica_en) = 'EGRESO'"
             );
@@ -581,6 +584,7 @@ class DashboardService
                  INNER JOIN ingresos_cabecera ic ON ic.id = ip.id_ingreso
                  INNER JOIN empresa_formas_pago efp ON efp.id = ip.id_forma_cobro
                  WHERE ic.id_empresa = :e AND ic.eliminado = FALSE AND ic.estado <> 'anulado'
+                   AND ic.tipo_ambiente = (SELECT CAST(tipo_ambiente AS VARCHAR(1)) FROM empresas WHERE id = :e)
                    AND efp.tipo = 'ANTICIPO' AND UPPER(efp.aplica_en) = 'INGRESO'"
             );
         }

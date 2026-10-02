@@ -206,6 +206,63 @@ abstract class BaseModuloController extends Controller
         exit;
     }
 
+    // ─── Comprobación con Contabilidad ────────────────────────────────────────
+    // Compartido por los módulos con saldo propio que debe cuadrar con sus cuentas
+    // contables (Reporte de Inventarios, Cuentas por Cobrar, Cuentas por Pagar). La
+    // definición de qué se compara la arma el repositorio del módulo; el cálculo,
+    // App\Services\ComprobacionContableService.
+
+    /** Módulo que da acceso a la comprobación: quien ve la contabilidad de la empresa. */
+    private const RUTA_ACCESO_COMPROBACION = 'modulos/estados-financieros';
+
+    /**
+     * ¿Puede usar la Comprobación con Contabilidad? Solo quien tiene acceso a la
+     * contabilidad (módulo Estados Financieros) en la empresa activa: la comprobación
+     * muestra saldos contables y los totales de toda la empresa.
+     */
+    protected function puedeComprobarContabilidad(): bool
+    {
+        return \App\Helpers\Permisos::puedeVer(self::RUTA_ACCESO_COMPROBACION);
+    }
+
+    /**
+     * Responde el JSON de la comprobación del período ?fecha_inicio=&fecha_fin= para la
+     * empresa activa. El llamador ya validó el permiso de ver el módulo.
+     */
+    protected function responderComprobacionContable(array $definicion): void
+    {
+        $this->responderJsonComprobacion(fn (int $idEmpresa, string $desde, string $hasta) =>
+            (new \App\Services\ComprobacionContableService())->comprobar($definicion, $idEmpresa, $desde, $hasta));
+    }
+
+    /**
+     * Envoltorio común de las respuestas de comprobación: exige el acceso a la contabilidad,
+     * lee el período (?fecha_inicio=&fecha_fin=) y traduce los errores. $calculo recibe
+     * (idEmpresa, desde, hasta) y devuelve los datos.
+     */
+    protected function responderJsonComprobacion(callable $calculo): void
+    {
+        header('Content-Type: application/json; charset=utf-8');
+        try {
+            if (!$this->puedeComprobarContabilidad()) {
+                http_response_code(403);
+                throw new \DomainException('La comprobación con contabilidad requiere acceso al módulo Estados Financieros.');
+            }
+            $data = $calculo(
+                (int) $_SESSION['id_empresa'],
+                trim((string) ($_GET['fecha_inicio'] ?? '')),
+                trim((string) ($_GET['fecha_fin'] ?? ''))
+            );
+            echo json_encode(['ok' => true, 'data' => $data]);
+        } catch (\InvalidArgumentException | \DomainException $e) {
+            echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
+        } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => 'comprobacionContableAjax']);
+            echo json_encode(['ok' => false, 'error' => 'No se pudo hacer la comprobación con la contabilidad.']);
+        }
+        exit;
+    }
+
     /**
      * AJAX: Obtiene el historial de cambios de un registro.
      */

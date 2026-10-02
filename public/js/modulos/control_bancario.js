@@ -237,7 +237,15 @@
                 La cuenta <strong>${escHtml(d.forma)}</strong> no tiene cuenta contable asignada: no hay contabilidad contra la cual comparar.
                 Se asigna en <em>Formas de cobro y pago</em>.</div>`;
         }
-        const cuenta = d.cuenta ? `${escHtml(d.cuenta.codigo)} — ${escHtml(d.cuenta.nombre)}` : '—';
+        // Cuenta(s) que de verdad mueven los asientos (regla de Configuración Contable o cuenta
+        // base de la forma). Si cobros y pagos van a cuentas distintas, se dice cuál es cuál.
+        const nombreCuenta = c => `${escHtml(c.codigo)} — ${escHtml(c.nombre)}`;
+        const cuentasPorId = Object.fromEntries((d.cuentas || []).map(c => [String(c.id), c]));
+        const cCobro = cuentasPorId[String(d.cuenta_cobro)];
+        const cPago = cuentasPorId[String(d.cuenta_pago)];
+        const cuenta = (cCobro && cPago && cCobro.id !== cPago.id)
+            ? `Cobros: ${nombreCuenta(cCobro)} · Pagos: ${nombreCuenta(cPago)}`
+            : ((d.cuentas || []).map(nombreCuenta).join(', ') || '—');
         const formas = (d.formas || []).map(f => escHtml(f.nombre)).join(', ');
         const avisoCompartida = (d.formas || []).length > 1
             ? `<div class="alert alert-warning py-2 px-3 small mb-2"><i class="bi bi-exclamation-triangle me-1"></i>
@@ -279,7 +287,7 @@
                 };
             }
             const ok = p.clase === 'cuadra';
-            const tipoDoc = p.tipo === 'ingreso' ? 'Ingreso' : (p.tipo === 'egreso' ? 'Egreso' : 'Asiento');
+            const tipoDoc = ({ ingreso: 'Ingreso', egreso: 'Egreso', traspaso: 'Traspaso' })[p.tipo] || 'Asiento';
             const asiento = p.id_asiento
                 ? `<a href="#" onclick="event.preventDefault(); ASIENTO_abrirModal(${parseInt(p.id_asiento, 10)});" title="Ver asiento">${escHtml(p.numero_asiento || 'Asiento')}</a>`
                 : vacio;
@@ -331,7 +339,7 @@
                 </table>
             </div>
             <div class="form-text mb-2">
-                "Según Ingresos/Egresos" es el saldo en libros: saldo inicial de Saldos Iniciales más todos los cobros y pagos,
+                "Según Ingresos/Egresos" es el saldo en libros: saldo inicial de Saldos Iniciales más todos los cobros, pagos y traspasos,
                 con los cheques desde que se emiten (igual que la contabilidad). Por eso puede diferir del saldo de esta pantalla,
                 que solo cuenta un cheque cuando tiene Fecha Banco.
             </div>

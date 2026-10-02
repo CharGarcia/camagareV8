@@ -5,8 +5,8 @@ categoria: Compras
 ruta_modulo: modulos/retenciones_compras
 tipo: modulo
 visibilidad: todos
-etiquetas: retencion, retenciones, retencion de liquidacion, retener liquidacion de compra, liquidacion de compra, vincular compra, vincular documento, documento sustento, buscar compra para retener, comprobante de retencion, proveedor, iva, renta, sustento tributario, sri, plazo, base imponible, porcentaje, advertencias, ruc proveedor, ruc del proveedor del sistema, informacion adicional, resolucion 27, pdf, ride, imprimir, imprimir retencion, impresora, descargar pdf, ver pdf, buscar retencion, buscador, filtros, filtrar retenciones, buscar por codigo de retencion, estado de correo, chips, aparecen documentos que no busque, resultados que no corresponden, la busqueda trae otros documentos
-version: 1.21
+etiquetas: retencion, retenciones, retencion de liquidacion, retener liquidacion de compra, liquidacion de compra, vincular compra, vincular documento, documento sustento, buscar compra para retener, comprobante de retencion, proveedor, iva, renta, sustento tributario, sri, plazo, base imponible, porcentaje, advertencias, ruc proveedor, ruc del proveedor del sistema, informacion adicional, resolucion 27, pdf, ride, imprimir, imprimir retencion, impresora, descargar pdf, ver pdf, buscar retencion, buscador, filtros, filtrar retenciones, buscar por codigo de retencion, estado de correo, chips, aparecen documentos que no busque, resultados que no corresponden, la busqueda trae otros documentos, archivo no cumple estructura xml, totalDigits, tarifa 14.99, retencion antes de la factura, enlazar retencion, retencion sin compra, factura registrada despues
+version: 1.23
 orden: 30
 estado: activo
 ---
@@ -286,6 +286,18 @@ anterior.
 No aparecen los documentos anulados, eliminados ni los de otro ambiente (pruebas
 o producción).
 
+## Retención emitida antes de registrar la factura
+
+Si la retención se emitió **antes** de registrar la factura (escribiendo el número a
+mano porque la compra todavía no estaba en el sistema), se **enlaza sola** cuando la
+factura se registra, a mano o por XML/descarga del SRI, o cuando se corrige el número o
+el proveedor de la compra al editarla. Deben coincidir el **proveedor**, el **tipo de
+documento** y el **número** (da igual si se escribió con o sin ceros a la izquierda) y
+el ambiente (pruebas/producción). Si la compra ya tiene otra retención, no se enlaza.
+Desde ese momento la retención resta del saldo de la compra en Cuentas por Pagar y el
+XML usa los totales de la compra registrada. El enlace queda en el historial de la
+retención (acción *ENLAZAR_COMPRA*).
+
 ## Relación con la compra
 
 Una compra que ya tiene retención **no se puede eliminar**: primero hay que
@@ -397,9 +409,22 @@ El valor lo configura el superadministrador en `/config/sri-proveedor`.
   detalle del historial SRI muestra lo que respondió el servicio. Si el motivo es
   un código del SRI (por ejemplo 35 "ARCHIVO NO CUMPLE ESTRUCTURA XML"), sí es un
   rechazo real: corrija lo que indica el detalle antes de reenviar.
+- **"ARCHIVO NO CUMPLE ESTRUCTURA XML" … `Value '14.99' has 4 total digits`**: pasaba
+  cuando el documento sustento no está registrado en el sistema y se escribieron a mano
+  su subtotal e IVA: la tarifa se deducía dividiendo IVA entre subtotal y, por los
+  centavos, salía 14,99 % en lugar de 15 %. Corregido en la versión 1.22: vuelva a
+  enviar la retención.
 
 ## Historial de cambios
 
+- **1.23** — Una retención emitida antes de registrar la factura de compra se enlaza
+  sola a esa factura cuando se registra (a mano o por XML/SRI) o cuando se corrige su
+  número o proveedor. Antes quedaba suelta y la compra seguía con el saldo completo.
+- **1.22** — Corregido el rechazo del SRI «ARCHIVO NO CUMPLE ESTRUCTURA XML» (*Value
+  '14.99' has 4 total digits*) en retenciones cuyo documento sustento se capturó a mano:
+  la tarifa de IVA del documento ahora es siempre una tarifa válida del SRI (15 %, 12 %,
+  5 %…) y no el resultado de dividir IVA entre subtotal. Si el IVA corresponde solo a una
+  parte del subtotal, el resto se declara como base 0 %.
 - **1.21** — En la ventana de filtros, la pestaña *Detalles* se llama ahora
   **Búsqueda por detalle**, y la ventana ya no tiene barra de desplazamiento
   vertical propia: se muestra completa.

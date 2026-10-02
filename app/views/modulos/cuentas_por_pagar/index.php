@@ -207,6 +207,12 @@
                             <i class="bi bi-file-earmark-spreadsheet"></i> Excel
                         </button>
                     </div>
+                    <?php if (!empty($puedeComprobarContabilidad)): ?>
+                    <button type="button" class="btn btn-outline-primary btn-sm" onclick="CXP_comprobarContabilidad()"
+                            title="Comprobar con Contabilidad: compara el saldo por pagar con el de las cuentas por pagar">
+                        <i class="bi bi-journal-check"></i><span class="d-none d-md-inline"> Comprobar con Contabilidad</span>
+                    </button>
+                    <?php endif; ?>
                     <div class="btn-group btn-group-sm ms-1" role="group" aria-label="Vista de tabla">
                         <button type="button" id="cxp-btn-detalle" class="btn btn-primary" onclick="CXP_setVista('detalle')" title="Ver todos los documentos en lista">
                             <i class="bi bi-list-ul"></i> Detallado
@@ -503,6 +509,9 @@
 
 <?php // Panel lateral con el detalle del documento (clic sobre una fila)
 require_once MVC_APP . '/views/partials/offcanvas_doc_preview.php'; ?>
+<?php if (!empty($puedeComprobarContabilidad)) {
+    require MVC_APP . '/views/partials/comprobacion_contable_modal.php';
+} ?>
 
 <script>
     const RUTA_MODULO_CXP = "<?php echo $rutaModulo; ?>";

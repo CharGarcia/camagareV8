@@ -239,6 +239,10 @@ módulo. Para regresar al orden de fábrica, ordene por *Período* de mayor a me
 
 ## Historial de cambios
 
+- **1.13** — Los roles y quincenas migrados del sistema anterior muestran a cada
+  empleado como **pagado**, aunque el egreso de ese pago no haya quedado enlazado
+  en la migración. El aviso de préstamos empresa por desembolsar ya no cuenta las
+  cuotas migradas.
 - **1.12** — En el PDF del rol personal de cada empleado, las firmas
   **Recibí conforme** y **Empleador** quedan algo más abajo, con espacio
   suficiente para firmar a mano, y el logo de la empresa se imprime más grande (también en la planilla

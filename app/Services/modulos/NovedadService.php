@@ -284,6 +284,9 @@ class NovedadService
         if (!$this->yaDesembolsada($idEmpresa, $novedad)) return;
 
         $cod = (string) ($novedad['tipo_codigo'] ?? '');
+        if (in_array($novedad['desembolsado_migrado'] ?? null, ['t', true, 1, '1', 'true'], true)) {
+            throw new Exception('No se puede editar ni eliminar esta novedad: viene migrada del sistema anterior, donde ya fue pagada/desembolsada. Registre una novedad nueva de ajuste si necesita corregirla.');
+        }
         $msg = $cod === '3'
             ? 'No se puede editar ni eliminar este Anticipo: ya fue pagado por egreso.'
             : 'No se puede editar ni eliminar esta cuota: el Préstamo Empresa de este empleado ya tiene desembolsos registrados por egreso.';
@@ -304,6 +307,12 @@ class NovedadService
         $idNovedad = (int) ($novedad['id'] ?? 0);
         $idEmpleado = (int) ($novedad['id_empleado'] ?? 0);
         if ($idEmpleado <= 0 || $idNovedad <= 0) return false;
+
+        // Cuota de Préstamo Empresa migrada ya saldada en el sistema anterior: se bloquea por su
+        // propio flag (mismo criterio que el listado), no por las demás cuotas migradas del empleado.
+        if ($cod === '9' && in_array($novedad['desembolsado_migrado'] ?? null, ['t', true, 1, '1', 'true'], true)) {
+            return true;
+        }
 
         try {
             $rolRepo = new \App\repositories\modulos\RolPagoRepository();

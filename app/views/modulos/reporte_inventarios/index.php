@@ -689,9 +689,17 @@ $riSubtitulo = count($riNombres) > 1
             <div class="card cmg-table-card w-100 border-0 shadow-sm rounded-3">
                 <div class="card-header bg-white py-2 px-3 border-bottom d-flex justify-content-between align-items-center flex-wrap gap-2">
                     <span class="text-muted small fw-medium" id="ri-au-info-total">&nbsp;</span>
-                    <button type="button" data-ri-accion="ri-au" class="btn btn-outline-danger btn-sm" id="ri-au-btn-corregir-todo" style="display:none;" onclick="window.RI_Auditoria.corregirTodo();">
-                        <i class="bi bi-check2-all me-1"></i>Corregir todo
-                    </button>
+                    <div class="d-flex align-items-center gap-2">
+                        <?php if (!empty($puedeComprobarContabilidad)): ?>
+                        <button type="button" class="btn btn-outline-primary btn-sm" onclick="window.RI_Auditoria.comprobarContabilidad();"
+                                title="Comprobar con Contabilidad: compara el valor del inventario según el kardex con el de las cuentas de inventario">
+                            <i class="bi bi-journal-check"></i><span class="d-none d-md-inline"> Comprobar con Contabilidad</span>
+                        </button>
+                        <?php endif; ?>
+                        <button type="button" data-ri-accion="ri-au" class="btn btn-outline-danger btn-sm" id="ri-au-btn-corregir-todo" style="display:none;" onclick="window.RI_Auditoria.corregirTodo();">
+                            <i class="bi bi-check2-all me-1"></i>Corregir todo
+                        </button>
+                    </div>
                 </div>
                 <div class="card-body p-0">
                     <div class="ri-au-scroll w-100">
@@ -981,6 +989,9 @@ $riSubtitulo = count($riNombres) > 1
     </div>
 </div>
 
+<?php if (!empty($puedeComprobarContabilidad)) {
+    require MVC_APP . '/views/partials/comprobacion_contable_modal.php';
+} ?>
 <script>
     const RUTA_MODULO = "<?php echo $rutaModulo; ?>";
 </script>

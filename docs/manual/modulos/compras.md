@@ -5,8 +5,8 @@ categoria: Compras
 ruta_modulo: modulos/compras
 tipo: modulo
 visibilidad: todos
-etiquetas: compras, compra, factura de compra, buscar compra, buscador, aparecen compras que no busque, resultados que no corresponden, la busqueda trae otras compras, buscar por numero de autorizacion, filtros, filtrar compras, buscar por producto comprado, filtro de fechas, saldo pendiente, estado de pago, chips, ordenar por dos columnas, ordenar por proveedor y fecha, asiento contable, editar asiento, pestaña asiento, proveedor, xml, sri, entrada de mercaderia, vincular producto, retencion, orden de compra, vincular orden, pedido a proveedor, comparar pedido vs facturado, entrega parcial, recibido parcial, cerrar orden, sustento tributario, codigo de sustento, autorizacion, fecha de caducidad, ats, persona natural, obligada a llevar contabilidad, tipo de contribuyente, registro manual, compra fisica, pagar la compra, pestaña pagos, saldo pendiente, valores de terceros, otros conceptos, valores adicionales, bomberos, tasa de basura, recoleccion de basura, planilla de luz, planilla de agua, servicios basicos, informacion adicional, info adicional, nombre muy largo, limite de caracteres, value too long, no se pudo guardar la compra, imprimir, impresora
-version: 2.23
+etiquetas: compras, compra, factura de compra, buscar compra, buscador, aparecen compras que no busque, resultados que no corresponden, la busqueda trae otras compras, buscar por numero de autorizacion, filtros, filtrar compras, buscar por producto comprado, filtro de fechas, saldo pendiente, estado de pago, chips, ordenar por dos columnas, ordenar por proveedor y fecha, asiento contable, editar asiento, pestaña asiento, proveedor, xml, sri, entrada de mercaderia, vincular producto, retencion, orden de compra, vincular orden, pedido a proveedor, comparar pedido vs facturado, entrega parcial, recibido parcial, cerrar orden, sustento tributario, codigo de sustento, autorizacion, fecha de caducidad, ats, persona natural, obligada a llevar contabilidad, tipo de contribuyente, registro manual, compra fisica, pagar la compra, pestaña pagos, saldo pendiente, valores de terceros, otros conceptos, valores adicionales, bomberos, tasa de basura, recoleccion de basura, planilla de luz, planilla de agua, servicios basicos, informacion adicional, info adicional, nombre muy largo, limite de caracteres, value too long, no se pudo guardar la compra, imprimir, impresora, retencion antes de la factura, enlazar retencion
+version: 2.24
 orden: 20
 estado: activo
 ---
@@ -268,6 +268,16 @@ se envía al SRI.
 
 **Importante**: una compra con retención asociada **no se puede eliminar**. Hay
 que eliminar primero la retención. El sistema lo avisa con ese mismo mensaje.
+
+Si la retención se emitió **antes** de registrar la factura (escribiendo el número a
+mano porque la compra todavía no estaba en el sistema), se **enlaza sola** cuando la
+factura se registra, a mano o por XML/descarga del SRI, o cuando se corrige el número o
+el proveedor de la compra al editarla. Deben coincidir el **proveedor**, el **tipo de
+documento** y el **número** (da igual si se escribió con o sin ceros a la izquierda) y
+el ambiente (pruebas/producción). Si la compra ya tiene otra retención, no se enlaza.
+Desde ese momento la retención resta del saldo de la compra en Cuentas por Pagar y el
+XML usa los totales de la compra registrada. El enlace queda en el historial de la
+retención (acción *ENLAZAR_COMPRA*).
 
 ## Qué pasa al eliminar una compra
 
@@ -571,6 +581,9 @@ aprobaciones pasa, así que no se paga dos veces.
 
 ## Historial de cambios
 
+- **2.24** — Al registrar (o corregir) una compra, si ya existía una retención emitida
+  a ese proveedor sobre ese mismo número de documento, la retención se enlaza sola a
+  la compra y su valor se descuenta del saldo.
 - **2.23** — El selector **Tipo de Comprobante** del registro manual vuelve a
   ofrecer la **Factura (01)**, para registrar a mano facturas que no llegan por
   el XML del SRI.

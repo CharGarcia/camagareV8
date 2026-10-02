@@ -1277,3 +1277,22 @@ document.addEventListener('click', function (e) {
         enganchar();
     }
 })();
+
+// ─── Comprobación con Contabilidad ──────────────────────────────────────────
+// Saldo por pagar de la empresa activa contra sus cuentas por pagar (modal común,
+// public/js/comprobacion_contable.js). El período termina en la "Fecha Hasta" del filtro;
+// proveedor, tipo de documento y consolidado no aplican: la cuenta contable no los distingue.
+function CXP_comprobarContabilidad() {
+    CMG_comprobacionContable.abrir({
+        url: `${BASE_URL}/${RUTA_MODULO_CXP}/comprobacionContableAjax`,
+        modulo: 'Cuentas por Pagar',
+        etiquetaLibros: 'Según Cartera',
+        hasta: document.getElementById('cxp-fecha-hasta')?.value || '',
+        desde: document.getElementById('cxp-fecha-desde')?.value || '',
+        nota: '"Según Cartera" es la suma de los saldos de todas las compras, liquidaciones, facturas del exterior y saldos iniciales '
+            + 'de esta empresa (incluidos los ya pagados), con los pagos, retenciones y notas de crédito hasta cada fecha: lo mismo '
+            + 'que muestra el listado con "Estado: Todos". No aplica los filtros de proveedor, tipo ni el consolidado.',
+        // Las NC/ND de compra viven en compras_cabecera y su asiento es del módulo Compras.
+        tipos: { compra: 'Comprobante de compra' },
+    });
+}

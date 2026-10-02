@@ -560,13 +560,28 @@ class RetencionCompraRepository extends BaseRepository
                 $out['importeTotal']      = $total;
 
                 if ($iva > 0 && $subtotal > 0) {
+                    // La tarifa NO se deduce como iva/subtotal: por el redondeo de
+                    // centavos da 14.99 en vez de 15 y el XSD (totalDigits 3) lo
+                    // rechaza ("ARCHIVO NO CUMPLE ESTRUCTURA XML").
+                    [$tarifa, $baseGravada] = $this->tarifaIvaDesdeTotales($subtotal, $iva);
                     $out['impuestos'][] = [
                         'codigo_impuesto'   => '2',
                         'codigo_porcentaje' => '', // se deriva de la tarifa en el XML
-                        'tarifa'            => round($iva / $subtotal * 100, 2),
-                        'base_imponible'    => $subtotal,
+                        'tarifa'            => $tarifa,
+                        'base_imponible'    => $baseGravada,
                         'valor'             => $iva,
                     ];
+                    // Documento mixto: la parte del subtotal que no paga IVA va como tarifa 0.
+                    $baseCero = round($subtotal - $baseGravada, 2);
+                    if ($baseCero > 0) {
+                        $out['impuestos'][] = [
+                            'codigo_impuesto'   => '2',
+                            'codigo_porcentaje' => '0',
+                            'tarifa'            => 0.0,
+                            'base_imponible'    => $baseCero,
+                            'valor'             => 0.0,
+                        ];
+                    }
                 } elseif ($subtotal > 0) {
                     // Documento sin IVA (tarifa 0)
                     $out['impuestos'][] = [
@@ -581,6 +596,39 @@ class RetencionCompraRepository extends BaseRepository
         }
 
         return $out;
+    }
+
+    /**
+     * Tarifa de IVA (válida en el SRI) y base gravada a partir de los totales
+     * capturados a mano del documento sustento.
+     *
+     * - Si iva/subtotal está a ±0,1 puntos de una tarifa real, todo el subtotal
+     *   es base de esa tarifa (caso normal: 14,99 % → 15 %).
+     * - Si no (documento mixto 0 % + gravado), se asume la tarifa vigente (15 %)
+     *   o la primera cuya base implícita (iva / tarifa) quepa en el subtotal, y el
+     *   resto del subtotal lo declara el llamador como tarifa 0.
+     *
+     * @return array{0: float, 1: float} [tarifa, baseGravada]
+     */
+    private function tarifaIvaDesdeTotales(float $subtotal, float $iva): array
+    {
+        $tarifas = [15.0, 12.0, 5.0, 13.0, 14.0, 8.0];
+        $ratio   = $iva / $subtotal * 100;
+
+        foreach ($tarifas as $t) {
+            if (abs($ratio - $t) <= 0.1) {
+                return [$t, $subtotal];
+            }
+        }
+        foreach ($tarifas as $t) {
+            $base = round($iva / $t * 100, 2);
+            if ($base <= $subtotal) {
+                return [$t, $base];
+            }
+        }
+        // IVA mayor al 15 % del subtotal: dato capturado inconsistente; se
+        // declara al 15 % para no romper el XSD (el SRI validará las diferencias).
+        return [15.0, $subtotal];
     }
 
     // ── Insertar cabecera ────────────────────────────────────────
@@ -1162,6 +1210,67 @@ class RetencionCompraRepository extends BaseRepository
         $st = $this->db->prepare($sql);
         $st->execute($params);
         return (int) $st->fetchColumn() > 0;
+    }
+
+    // ── Enlazar una retención emitida antes que su compra ─────
+
+    /**
+     * Retención hecha cuando la factura de compra aún no estaba registrada: queda con
+     * id_compra NULL y solo el número capturado a mano (num_doc_sustento). Al registrar
+     * esa compra, se enlaza aquí: mismo proveedor + tipo de documento + número del
+     * proveedor (identidad de un documento de compra, ver buscarRetencionParaDocSustento)
+     * y mismo ambiente. Mismo cruce que MigracionMysqlService::cruzarRetencionesConCompras,
+     * con el número normalizado a 3-3-9 dígitos en ambos lados.
+     *
+     * Solo si la compra no tiene ya una retención viva (una por documento) y solo la
+     * primera candidata. FOR UPDATE: dos registros simultáneos no enlazan la misma.
+     *
+     * @return array|null Retención enlazada (id, establecimiento, punto_emision, secuencial) o null.
+     */
+    public function enlazarRetencionPendienteACompra(int $idCompra, int $idEmpresa, int $idUsuario): ?array
+    {
+        $numRet = "CASE WHEN rc.num_doc_sustento LIKE '%-%-%'
+                        THEN LPAD(split_part(rc.num_doc_sustento, '-', 1), 3, '0')
+                          || LPAD(split_part(rc.num_doc_sustento, '-', 2), 3, '0')
+                          || LPAD(split_part(rc.num_doc_sustento, '-', 3), 9, '0')
+                        ELSE regexp_replace(rc.num_doc_sustento, '[^0-9]', '', 'g') END";
+
+        $sql = "WITH cand AS (
+                    SELECT rc.id
+                    FROM retencion_compra_cabecera rc
+                    JOIN compras_cabecera c
+                      ON c.id = :ic AND c.id_empresa = :ie AND c.eliminado = false
+                    WHERE rc.id_empresa = c.id_empresa
+                      AND rc.id_proveedor = c.id_proveedor
+                      AND rc.eliminado = false
+                      AND rc.estado <> 'anulada'
+                      AND rc.id_compra IS NULL
+                      AND rc.id_liquidacion IS NULL
+                      AND COALESCE(NULLIF(rc.tipo_doc_sustento, ''), '01') = c.tipo_comprobante
+                      AND COALESCE(rc.num_doc_sustento, '') <> ''
+                      AND $numRet = LPAD(COALESCE(c.establecimiento_prov, ''), 3, '0')
+                                 || LPAD(COALESCE(c.punto_emision_prov, ''), 3, '0')
+                                 || LPAD(COALESCE(c.secuencial_prov, ''), 9, '0')
+                      AND COALESCE(rc.tipo_ambiente::text, '1') = COALESCE(c.tipo_ambiente::text, '1')
+                      AND NOT EXISTS (
+                            SELECT 1 FROM retencion_compra_cabecera r2
+                            WHERE r2.id_compra = c.id AND r2.id_empresa = c.id_empresa
+                              AND r2.eliminado = false AND r2.estado <> 'anulada')
+                    ORDER BY rc.id
+                    LIMIT 1
+                    FOR UPDATE OF rc
+                )
+                UPDATE retencion_compra_cabecera r
+                   SET id_compra = :ic_set, updated_at = now(), updated_by = :iu
+                  FROM cand
+                 WHERE r.id = cand.id
+             RETURNING r.id, r.establecimiento, r.punto_emision, r.secuencial, r.num_doc_sustento";
+
+        $st = $this->db->prepare($sql);
+        $st->execute([':ic' => $idCompra, ':ic_set' => $idCompra, ':ie' => $idEmpresa, ':iu' => $idUsuario]);
+        $row = $st->fetch(PDO::FETCH_ASSOC);
+
+        return $row !== false ? $row : null;
     }
 
     // ── Verificar si ya existe una retención para una liquidación de compra ─────

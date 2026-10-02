@@ -1921,3 +1921,21 @@ document.addEventListener('click', function (e) {
         enganchar();
     }
 })();
+
+// ─── Comprobación con Contabilidad ──────────────────────────────────────────
+// Saldo de la cartera de la empresa activa contra sus cuentas por cobrar (modal común,
+// public/js/comprobacion_contable.js). El período termina en la "Fecha Hasta" del filtro;
+// cliente, vendedor y consolidado no aplican: la cuenta contable no los distingue.
+function CXC_comprobarContabilidad() {
+    const hasta = document.getElementById('cxc-fecha-hasta')?.value || '';
+    CMG_comprobacionContable.abrir({
+        url: `${BASE_URL}/${RUTA_MODULO_CXC}/comprobacionContableAjax`,
+        modulo: 'Cuentas por Cobrar',
+        etiquetaLibros: 'Según Cartera',
+        hasta,
+        desde: document.getElementById('cxc-fecha-desde')?.value || '',
+        nota: '"Según Cartera" es la suma de los saldos de todas las facturas, recibos y saldos iniciales de esta empresa '
+            + '(incluidos los ya cobrados y los cobrados de más), con los cobros, retenciones y notas de crédito hasta cada fecha: '
+            + 'lo mismo que muestra el listado con "Estado: Todos". No aplica los filtros de cliente, vendedor ni el consolidado.',
+    });
+}

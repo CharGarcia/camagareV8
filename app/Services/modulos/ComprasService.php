@@ -41,6 +41,26 @@ class ComprasService
         $this->periodosService = new PeriodosContablesService($periodosRepo, $periodosRules, $this->logService);
     }
 
+    /**
+     * Enlaza la retención emitida antes de registrar esta compra (ver
+     * RetencionCompraRepository::enlazarRetencionPendienteACompra). Va dentro de
+     * la transacción del llamador: si la compra no se guarda, el enlace tampoco.
+     */
+    private function enlazarRetencionPendiente(int $idCompra, int $idEmpresa, int $idUsuario): void
+    {
+        $ret = (new \App\repositories\modulos\RetencionCompraRepository())
+            ->enlazarRetencionPendienteACompra($idCompra, $idEmpresa, $idUsuario);
+        if ($ret === null) {
+            return;
+        }
+        $this->logService->registrar(
+            $idUsuario, $idEmpresa,
+            'ENLAZAR_COMPRA', 'retencion_compra_cabecera', (int) $ret['id'],
+            ['id_compra' => null],
+            ['id_compra' => $idCompra, 'num_doc_sustento' => $ret['num_doc_sustento']]
+        );
+    }
+
     public function crear(array $data): int
     {
         $this->rules->validar($data);
@@ -91,6 +111,8 @@ class ComprasService
                 'CREAR', 'compras_cabecera', $idCompra,
                 null, ['id_compra' => $idCompra, 'total' => $data['importe_total'] ?? 0]
             );
+
+            $this->enlazarRetencionPendiente($idCompra, $idEmpresa, $idUsuario);
 
             $this->sincronizarCasilleros($idCompra, $data);
 
@@ -1198,6 +1220,10 @@ class ComprasService
                 'MODIFICAR', 'compras_cabecera', $id,
                 $cabecera, ['total' => $data['importe_total'] ?? 0]
             );
+
+            // Si al editar se corrigió el número o el proveedor, la retención que
+            // esperaba esta factura se enlaza ahora.
+            $this->enlazarRetencionPendiente($id, $idEmpresa, $idUsuario);
 
             $this->sincronizarCasilleros($id, $data);
 

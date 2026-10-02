@@ -5,8 +5,8 @@ categoria: Contabilidad
 ruta_modulo: modulos/estados_financieros
 tipo: modulo
 visibilidad: todos
-etiquetas: estados financieros, balance, estado de resultados, situacion financiera, perdidas y ganancias, activo pasivo patrimonio, reportes por periodos, comparativo mensual, horizontal por mes, editar cuenta desde el balance, codigo sri, supercias, entidades de control, pdf con logo, firma del contador, firma del representante legal, balances firmados, excel por niveles, columnas por nivel, exportar excel
-version: 1.11
+etiquetas: estados financieros, cuadre con modulos, cuadre de caja, caja vs contabilidad, anticipos vs contabilidad, cuadre de anticipos, cuadrar contabilidad con modulos, contabilidad vs bancos, contabilidad vs cartera, contabilidad vs inventario, comprobar con contabilidad, no cuadra con el modulo, balance, estado de resultados, situacion financiera, perdidas y ganancias, activo pasivo patrimonio, reportes por periodos, comparativo mensual, horizontal por mes, editar cuenta desde el balance, codigo sri, supercias, entidades de control, pdf con logo, firma del contador, firma del representante legal, balances firmados, excel por niveles, columnas por nivel, exportar excel
+version: 1.12
 orden: 50
 estado: activo
 ---
@@ -33,8 +33,21 @@ para una consulta rápida, pero no para presentar nada.
 ## Cómo se generan
 
 1. Indique el **rango de fechas** (o la fecha de corte).
-2. Genere el estado que necesite.
+2. Elija el estado que necesite y presione **Mostrar**.
 3. Expórtelo si va a presentarlo o archivarlo.
+
+### Cómo está organizada la pantalla
+
+- Arriba, una **tarjeta fija** (no se esconde al bajar por el reporte) con el
+  título, los filtros y el botón **Mostrar**. Su pie muestra los **totales del
+  reporte mostrado**: en Situación Financiera, *Activos*, *Pasivos*,
+  *Patrimonio* y si **cuadra** (o la diferencia entre Activo y Pasivo +
+  Patrimonio); en Resultados, *Ingresos*, *Costos*, *Gastos* y la *utilidad o
+  pérdida del ejercicio*. En los reportes por periodos, Situación muestra el
+  último periodo y Resultados el total.
+- Debajo, el **reporte**, con las exportaciones (PDF, Excel, Renta SRI,
+  Supercias…), *Consolidado por RUC* y *Cuadre con Módulos* en su cabecera. La
+  página completa baja al recorrer el reporte.
 
 ### Formatos de exportación
 
@@ -310,6 +323,36 @@ Revise en este orden:
    contra patrimonio, el balance puede mostrar un descuadre que en realidad es la
    utilidad acumulada del propio ejercicio.
 
+## Cuadre con módulos: la contabilidad contra Bancos, Caja, Cartera, Inventarios y Anticipos
+
+El botón **Cuadre con Módulos** (en la cabecera del reporte, a la derecha)
+compara las cuentas contables con el saldo que lleva cada módulo, todo en una
+sola tabla. No modifica nada.
+
+| Fila | Saldo del módulo | Contra qué cuentas |
+|------|------------------|--------------------|
+| Banco: (una por cuenta bancaria) | Según Ingresos/Egresos, como en [Control bancario](control-bancario.md) | La cuenta contable de la cuenta bancaria (o la de su regla en Configuración Contable) |
+| Cuentas por Cobrar | Según la cartera de [Cuentas por cobrar](cuentas-por-cobrar.md) | Las cuentas por cobrar de Facturas y Recibos de Venta |
+| Cuentas por Pagar | Según la cartera de [Cuentas por pagar](cuentas-por-pagar.md) | Las cuentas por pagar de Compras e Importaciones |
+| Inventarios | Según el kardex, como en el [Reporte de inventarios](reporte-inventarios.md) | Las cuentas de inventario |
+| Caja: (una por forma de pago que no es banco: efectivo, tarjeta, etc.) | Saldo inicial + cobros − pagos ± traspasos, el mismo saldo que muestra [Traspasos](traspasos.md) | La cuenta contable de la forma de pago (o la de su regla en Configuración Contable) |
+| Anticipos de Clientes | Saldo inicial + anticipos recibidos − aplicados a cobros: el total de la pestaña Anticipos de las fichas de cliente | Las cuentas de las opciones de anticipo de clientes y de la forma de pago Anticipo |
+| Anticipos a Proveedores | Saldo inicial + anticipos entregados − aplicados a pagos | Las cuentas de las opciones de anticipo de proveedores y de la forma de pago Anticipo |
+
+- Las fechas **Desde** y **Hasta** se toman del reporte; la tabla muestra los
+  saldos a la fecha Hasta. Cámbielas y presione **Mostrar**.
+- Cada fila dice si **cuadra** y, si ya venía descuadrada, la diferencia **al
+  inicio** del período.
+- Las cuentas bancarias que comparten la misma cuenta contable salen juntas en
+  una sola fila, porque la contabilidad no las distingue.
+- Una fila **sin cuenta contable configurada** lo avisa y no compara nada.
+- **Ver detalle** abre la comparación documento por documento del período, la
+  misma que tiene cada módulo en su botón *Comprobar con Contabilidad*. Cómo
+  leerla: [Comprobar un módulo con la contabilidad](../conceptos/comprobacion-con-contabilidad.md).
+
+Lo ve quien tiene acceso a Estados Financieros; no hace falta tener permiso en
+los otros módulos.
+
 ## Errores frecuentes
 
 - **Faltan movimientos del mes**: hay asientos pendientes; acéptelos al abrir.
@@ -343,6 +386,12 @@ Revise en este orden:
 
 ## Historial de cambios
 
+- **1.12** — Nuevo botón **Cuadre con Módulos**: compara las cuentas contables con
+  el saldo de cada cuenta bancaria, cada caja, Cuentas por Cobrar, Cuentas por
+  Pagar, Inventarios y los anticipos de clientes y proveedores, con el detalle
+  documento por documento. Pantalla reorganizada: título, filtros y totales del
+  reporte en una **tarjeta fija** arriba, y el reporte debajo con sus
+  exportaciones; el botón de los filtros se llama **Mostrar** (antes *Generar*).
 - **1.11** — El **Excel** sale con el formato del PDF (cabecera de la empresa,
   secciones, totales resaltados y firmas) y, en el reporte de un periodo, con el
   saldo de cada cuenta en la **columna de su nivel** (Nivel 5 … Nivel 1).

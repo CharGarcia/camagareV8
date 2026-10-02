@@ -1381,4 +1381,129 @@ class CuentasPorPagarRepository extends BaseRepository
     {
         return $this->db;
     }
+
+    // ─────────────────────────────────────────────────────────────────────
+    // COMPROBACIÓN CON CONTABILIDAD
+    //
+    // Definición para App\Services\ComprobacionContableService (formato en
+    // App\repositories\ComprobacionContableRepository). El saldo por pagar se descompone en
+    // el documento que origina cada parte, con las MISMAS reglas del listado (getListado,
+    // getSaldosInicialesCxp): + compra (con valores de terceros), liquidación, factura del
+    // exterior, ND y saldo inicial; − pago (por egreso), retención y NC. Las liquidaciones
+    // pagadas en el sistema anterior no son deuda (saldo 0 en el listado): quedan fuera con
+    // sus pagos. Siempre es la empresa activa completa, sin filtros de proveedor.
+    //
+    // Lado contable (pasivo: haber − debe): cuentas de los conceptos PORPAGARFACTURACOMPRA y
+    // PORPAGARPROVEEDOREXTERIOR en cualquier nivel de la cascada.
+    // ─────────────────────────────────────────────────────────────────────
+
+    public function definicionComprobacionContable(): array
+    {
+        $esCargo = \App\Helpers\TiposComprobanteCompra::sqlEsCargo('c.tipo_comprobante');
+        $compraVigente = \App\Helpers\TiposComprobanteCompra::sqlCompraVigente('c.estado');
+        $liqVigente = \App\Helpers\TiposComprobanteCompra::sqlLiquidacionVigente('l.estado');
+        $pagoAnterior = \App\Helpers\LiquidacionPagoAnterior::flag('l');
+        $numCompra = "CONCAT(c.establecimiento_prov, '-', c.punto_emision_prov, '-', c.secuencial_prov)";
+        $serie = \App\repositories\ComprobacionContableRepository::NUM_SERIE;
+        $retVigente = "UPPER(r.estado) NOT IN ('ANULADO','ANULADA','BORRADOR','PENDIENTE')";
+
+        $ctes = "com AS (
+                    SELECT c.id, c.id_proveedor, c.fecha_emision,
+                           c.importe_total + COALESCE(c.total_terceros, 0) AS total, {$numCompra} AS num
+                    FROM compras_cabecera c
+                    WHERE c.id_empresa = :e AND c.eliminado = FALSE
+                      AND {$esCargo} AND {$compraVigente}
+                      AND c.tipo_ambiente = (SELECT t FROM amb)
+                ),
+                liq AS (
+                    SELECT l.id, l.fecha_emision, l.importe_total
+                    FROM liquidaciones_cabecera l
+                    WHERE l.id_empresa = :e AND l.eliminado = FALSE AND {$liqVigente}
+                      AND (l.tipo_ambiente IS NULL OR l.tipo_ambiente = (SELECT t FROM amb))
+                      AND NOT {$pagoAnterior}
+                ),
+                imp AS (
+                    SELECT fe.id, ic.id AS id_importacion, fe.monto_usd,
+                           COALESCE(fe.fecha_factura, ic.fecha_nacionalizacion, ic.created_at::DATE) AS fecha
+                    FROM importaciones_factura_exterior fe
+                    JOIN importaciones_cabecera ic ON ic.id = fe.id_importacion
+                    WHERE fe.eliminado = FALSE AND ic.eliminado = FALSE AND ic.id_empresa = :e
+                      AND ic.tipo_ambiente = (SELECT t FROM amb)
+                ),
+                si AS (
+                    SELECT s.id, s.fecha_emision, s.saldo_inicial
+                    FROM saldos_iniciales_cxp s
+                    WHERE s.id_empresa = :e AND s.eliminado = FALSE
+                )";
+
+        $docs = "SELECT 'compra' AS tipo, id AS id_doc, fecha_emision AS fecha, total AS monto FROM com
+                 UNION ALL
+                 SELECT 'liquidacion_compra', id, fecha_emision, importe_total FROM liq
+                 UNION ALL
+                 SELECT 'importacion', id_importacion, fecha, monto_usd FROM imp
+                 UNION ALL
+                 SELECT 'saldo_inicial', 0, fecha_emision, saldo_inicial FROM si
+                 UNION ALL
+                 -- Pagos (getCtePagado / lateralPagadoSaldoInicialCxp), uno por egreso.
+                 SELECT 'egreso', ec.id, ec.fecha_emision, -ed.monto_pagado
+                 FROM egresos_detalle ed
+                 JOIN egresos_cabecera ec ON ec.id = ed.id_egreso
+                 WHERE ec.id_empresa = :e AND ec.estado != 'anulado' AND ec.eliminado = FALSE AND ed.eliminado = FALSE
+                   AND (   (ed.tipo_documento = 'COMPRA'        AND ed.id_referencia_documento IN (SELECT id FROM com))
+                        OR (ed.tipo_documento = 'LIQUIDACION'   AND ed.id_referencia_documento IN (SELECT id FROM liq))
+                        OR (ed.tipo_documento = 'IMPORTACION'   AND ed.id_referencia_documento IN (SELECT id FROM imp))
+                        OR (ed.tipo_documento = 'SALDO_INICIAL' AND ed.id_referencia_documento IN (SELECT id FROM si)))
+                 UNION ALL
+                 -- NC (04) y ND (05) de compras sobre una compra de la cartera (getCteNcNd).
+                 SELECT 'compra', nc.id, nc.fecha_emision,
+                        CASE WHEN nc.tipo_comprobante = '04' THEN -nc.importe_total ELSE nc.importe_total END
+                          * (SELECT COUNT(*) FROM com WHERE com.id_proveedor = nc.id_proveedor AND com.num = nc.documento_modificado)
+                 FROM compras_cabecera nc
+                 WHERE nc.id_empresa = :e AND nc.eliminado = FALSE AND nc.tipo_comprobante IN ('04', '05')
+                   AND EXISTS (SELECT 1 FROM com WHERE com.id_proveedor = nc.id_proveedor AND com.num = nc.documento_modificado)
+                 UNION ALL
+                 -- Retenciones (getCteRetenciones): por id de compra/liquidación o, las
+                 -- migradas sin id, por número de sustento del mismo proveedor.
+                 SELECT 'retencion_compra', r.id, r.fecha_emision, -r.total_retenido
+                 FROM retencion_compra_cabecera r
+                 WHERE r.id_empresa = :e AND r.eliminado = FALSE AND {$retVigente}
+                   AND (   (r.id_compra IN (SELECT id FROM com) AND r.id_liquidacion IS NULL)
+                        OR (r.id_liquidacion IN (SELECT id FROM liq) AND r.id_compra IS NULL))
+                 UNION ALL
+                 SELECT 'retencion_compra', r.id, r.fecha_emision, -r.total_retenido
+                 FROM retencion_compra_cabecera r
+                 WHERE r.id_empresa = :e AND r.eliminado = FALSE AND {$retVigente}
+                   AND r.id_compra IS NULL AND r.id_liquidacion IS NULL
+                   AND COALESCE(r.num_doc_sustento, '') <> ''
+                   AND EXISTS (SELECT 1 FROM com
+                               WHERE com.id_proveedor = r.id_proveedor
+                                 AND regexp_replace(com.num, '[^0-9]', '', 'g') = regexp_replace(r.num_doc_sustento, '[^0-9]', '', 'g'))";
+
+        $migrados = "SELECT id_asiento_contable AS id_asiento, 'compra' AS tipo, id AS id_doc FROM compras_cabecera WHERE id_empresa = :e AND id_asiento_contable IS NOT NULL
+                     UNION ALL SELECT id_asiento_contable, 'liquidacion_compra', id FROM liquidaciones_cabecera WHERE id_empresa = :e AND id_asiento_contable IS NOT NULL
+                     UNION ALL SELECT id_asiento_contable, 'retencion_compra', id FROM retencion_compra_cabecera WHERE id_empresa = :e AND id_asiento_contable IS NOT NULL
+                     UNION ALL SELECT id_asiento_contable, 'importacion', id FROM importaciones_cabecera WHERE id_empresa = :e AND id_asiento_contable IS NOT NULL
+                     UNION ALL SELECT id_asiento_contable, 'egreso', id FROM egresos_cabecera WHERE id_empresa = :e AND id_asiento_contable IS NOT NULL";
+
+        return [
+            'conceptos' => ['PORPAGARFACTURACOMPRA', 'PORPAGARPROVEEDOREXTERIOR'],
+            'conceptos_texto' => 'Cuenta por pagar de Compras y de Importaciones (proveedor del exterior)',
+            'signo' => -1,
+            'ctes' => $ctes,
+            'docs' => $docs,
+            'nativos' => [
+                'compra' => 'compra', 'liquidacion_compra' => 'liquidacion_compra',
+                'retencion_compra' => 'retencion_compra', 'importacion' => 'importacion', 'egreso' => 'egreso',
+            ],
+            'migrados' => $migrados,
+            'apertura' => true,
+            'numeros' => [
+                'compra' => ['compras_cabecera', "CONCAT(x.establecimiento_prov, '-', x.punto_emision_prov, '-', x.secuencial_prov)"],
+                'liquidacion_compra' => ['liquidaciones_cabecera', $serie],
+                'retencion_compra' => ['retencion_compra_cabecera', $serie],
+                'importacion' => ['importaciones_cabecera', 'x.numero_importacion'],
+                'egreso' => ['egresos_cabecera', 'x.numero_egreso'],
+            ],
+        ];
+    }
 }

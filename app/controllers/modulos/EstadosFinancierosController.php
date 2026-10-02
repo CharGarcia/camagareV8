@@ -410,6 +410,27 @@ class EstadosFinancierosController extends BaseModuloController
         return 'modulos/estados-financieros';
     }
 
+    /**
+     * "Cuadre con módulos": saldo de cada cuenta bancaria, Cuentas por Cobrar, Cuentas por
+     * Pagar e Inventarios según el módulo y según la contabilidad (solo lectura).
+     */
+    public function cuadreModulosAjax(): void
+    {
+        $this->requireLeer();
+        $this->responderJsonComprobacion(fn (int $idEmpresa, string $desde, string $hasta) =>
+            (new \App\Services\modulos\CuadreModulosService())->resumen($idEmpresa, $desde, $hasta));
+    }
+
+    /** Detalle documento por documento de una fila del cuadre (?modulo=&forma=). */
+    public function cuadreModuloDetalleAjax(): void
+    {
+        $this->requireLeer();
+        $modulo = (string) ($_GET['modulo'] ?? '');
+        $idForma = (int) ($_GET['forma'] ?? 0);
+        $this->responderJsonComprobacion(fn (int $idEmpresa, string $desde, string $hasta) =>
+            (new \App\Services\modulos\CuadreModulosService())->detalle($idEmpresa, $modulo, $idForma, $desde, $hasta));
+    }
+
     public function generarMayorAuxiliar(): void
     {
         header('Content-Type: application/json; charset=utf-8');

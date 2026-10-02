@@ -1135,6 +1135,30 @@ window.RI_Consignaciones = {
 window.RI_Auditoria = {
     ultimoTotal: 0,
 
+    /**
+     * Comprobación con Contabilidad (modal común, public/js/comprobacion_contable.js): valor
+     * del inventario según el kardex contra las cuentas de inventario, de todas las bodegas
+     * (los filtros de esta pestaña no aplican: la contabilidad no distingue bodega ni producto).
+     */
+    comprobarContabilidad() {
+        CMG_comprobacionContable.abrir({
+            url: `${BASE_URL}/${RUTA_MODULO}/comprobacionContableAjax`,
+            modulo: 'Inventarios',
+            etiquetaLibros: 'Según Kardex',
+            nota: '"Según Kardex" es el valor del inventario por movimientos, de todas las bodegas: cada entrada suma su costo y cada '
+                + 'salida resta el costo con que salió (el mismo que la venta lleva a Costo de Ventas). No es el valor de la pestaña '
+                + 'Valorización, que multiplica el stock por el último costo. Ajustes, cargas, órdenes de taller y saldos iniciales '
+                + 'del kardex no generan asiento: aparecen como "Sin asiento contable".',
+            tipos: {
+                consignacion_venta: 'Consignación', retorno_cv: 'Retorno de consignación',
+                FACTURACION_CV: 'Facturación de consignación', cambio_producto_cv: 'Cambio de producto',
+                ajuste_manual: 'Ajuste manual', carga_inventario: 'Carga de inventario', migracion: 'Migración',
+                transferencia_inventario: 'Transferencia', taller_orden: 'Orden de taller',
+                carwash_orden: 'Orden de car wash', servicioexterno_orden: 'Servicio externo',
+            },
+        });
+    },
+
     limpiarFiltros() {
         RI_limpiarFiltros("ri-au", ["ri-au-producto-seleccionado"]);
     },
