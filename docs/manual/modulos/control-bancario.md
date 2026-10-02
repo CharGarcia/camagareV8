@@ -6,7 +6,7 @@ ruta_modulo: modulos/control-bancario
 tipo: modulo
 visibilidad: todos
 etiquetas: control bancario, conciliacion bancaria, estado de cuenta, banco, cheques, movimientos, cuadrar banco, buscar movimiento, buscador, filtros, filtrar movimientos bancarios, buscar cheque, chips, cheques posfechados, cheque por cobrar, cheque por depositar, aviso de cheques, alerta, notificacion, vencimiento de cheques, comprobar con contabilidad, cuadrar con contabilidad, saldo contable vs banco, diferencia contable, asiento faltante, sin asiento
-version: 1.15
+version: 1.16
 orden: 60
 estado: activo
 ---
@@ -213,12 +213,29 @@ Por lo mismo, al abrir una transferencia, depósito o débito en la ventana
 documento (o con la que se haya registrado a mano). En un cheque viene vacío
 hasta que se confirme su cobro.
 
+## Cómo está organizada la pantalla
+
+Arriba hay una sola **tarjeta de control** que queda fija bajo la barra superior
+mientras se baja por la tabla:
+
+- **Encabezado**: el título, la etiqueta *Período conciliado* (si aplica) y los
+  botones **Cheques Posfechados**, **Comprobar con Contabilidad**, **Historial** de
+  conciliaciones y **Conciliar Período**. En pantallas medianas los tres primeros
+  se ven solo con su ícono; al pasar el mouse se lee su nombre.
+- **Filtros**: cuenta bancaria, flujo, tipo, cheques, año, mes y fechas, con el
+  botón **Aplicar**.
+- **Resumen del período**, en una línea: saldo inicial, créditos (entradas),
+  débitos (salidas) y saldo final.
+
+Debajo, la tabla de movimientos no tiene un alto máximo: se muestra completa
+hacia abajo y se recorre con el scroll de la página.
+
 ## Buscar y filtrar el listado
 
-La **tarjeta de filtros de arriba** (cuenta bancaria, flujo, tipo, cheques, año,
-mes y fechas) define **qué cuenta y qué período** se revisan, y con eso se calculan
+Los **filtros de la tarjeta de arriba** (cuenta bancaria, flujo, tipo, cheques, año,
+mes y fechas) definen **qué cuenta y qué período** se revisan, y con eso se calculan
 el saldo inicial, los créditos, los débitos y el saldo final. El buscador de la
-tabla afina **dentro** de esos movimientos, sin cambiar los saldos de las tarjetas.
+tabla afina **dentro** de esos movimientos, sin cambiar el resumen del período.
 
 Arriba de la tabla hay un solo grupo: el botón del **embudo**, el cuadro de
 búsqueda y los botones de columnas, PDF y Excel (los de **Conciliación** quedan
@@ -283,11 +300,34 @@ Muestra tres líneas, cada una con su diferencia:
 cheques desde que se emiten (así los registra la contabilidad). Puede diferir del
 saldo del listado, que solo cuenta un cheque cuando tiene Fecha Banco.
 
-Debajo lista las **partidas del período** que explican la diferencia, documento
-por documento:
+### Buscar dónde se descuadra (saldo por saldo)
+
+Debajo está la tabla **Movimientos del período, saldo por saldo**, que se lee como
+un mayor de los dos lados a la vez:
+
+1. La primera fila es el **saldo al inicio del período**, según Ingresos/Egresos y
+   según contabilidad, con su diferencia.
+2. Después viene **cada movimiento del período** (los que cuadran y los que no),
+   en orden de fecha. Cada fila muestra el saldo acumulado de cada lado y la
+   **diferencia acumulada**.
+3. La última fila es el **saldo al final del período**.
+
+La fila donde **cambia la diferencia acumulada** es la que descuadra: queda marcada
+con una raya roja a la izquierda y, bajo la diferencia acumulada, lo que esa fila
+agrega. Un monto **tachado** tiene su fecha fuera del período, así que no suma en
+ese lado.
+
+El interruptor **Ver solo las filas con diferencia** oculta los movimientos que
+cuadran; los saldos acumulados siguen contando todos.
+
+Si el período ya **empieza descuadrado**, la diferencia viene de antes de la fecha
+de inicio. Para encontrar la fila que la causa, ponga como fecha de inicio el
+comienzo de las operaciones y vuelva a comprobar. La tabla muestra hasta 3000
+movimientos; si hay más, acote el período.
 
 | Situación | Qué significa |
 |-----------|---------------|
+| Cuadra | El documento y su asiento mueven lo mismo en el período |
 | Sin asiento contable | El ingreso/egreso no tiene asiento contabilizado en la cuenta del banco |
 | Solo en contabilidad | Asiento sin ingreso/egreso detrás (manual, migrado, apertura) |
 | Asiento de documento anulado | El ingreso/egreso está anulado, pero su asiento sigue contabilizado |
@@ -361,6 +401,16 @@ los dos casos.
 
 ## Historial de cambios
 
+- **1.16** — Pantalla reorganizada: título, botones, filtros y resumen del
+  período van en una sola **tarjeta de control** fija arriba (el resumen pasa de
+  cuatro tarjetas grandes a una línea), y la tabla de movimientos se extiende
+  hacia abajo sin scroll propio. El botón *Marcar Período como Conciliado* pasa a
+  llamarse **Conciliar Período**. En *Comprobar con Contabilidad*, la lista de
+  partidas se convierte en un mayor **saldo por saldo**: arranca en el saldo al
+  inicio, muestra todos los movimientos del período con el saldo acumulado de
+  cada lado y la diferencia acumulada, y marca la fila donde se descuadra (con
+  opción de ver solo esas filas). Las tablas usan el estilo de los demás
+  listados.
 - **1.15** — El módulo deja de depender de los asientos contables: el detalle,
   el saldo, los cheques y la conciliación de **todas** las cuentas salen de los
   cobros y pagos de Ingresos y Egresos, con su fecha y su número. Cada cuenta

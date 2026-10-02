@@ -231,9 +231,13 @@ class ControlBancarioRepository extends BaseRepository
     }
 
     /**
-     * Partidas que explican la diferencia DEL PERÍODO: documentos o asientos cuyo efecto dentro
-     * del rango no es el mismo en los dos lados (falta en uno, monto distinto o fechas que caen
-     * en períodos distintos). `diferencia` = efecto según documento − efecto según contabilidad.
+     * Movimientos DEL PERÍODO de los dos lados, cruzados documento por documento, en orden de
+     * fecha (la del documento si cae en el rango; si no, la del asiento). Por cada uno:
+     *  - efecto_doc / efecto_contable: lo que suma dentro del rango en cada lado (0 si su fecha
+     *    cae fuera), para que el Service arrastre el saldo acumulado de cada lado.
+     *  - diferencia = efecto_doc − efecto_contable.
+     *  - clase: 'cuadra' si no hay diferencia; si no, el motivo (falta en un lado, monto
+     *    distinto o fechas que caen en períodos distintos).
      */
     public function getPartidasCruceContable(int $idEmpresa, int $idCuentaContable, array $idsFormas, string $fechaInicio, string $fechaFin, int $limite = 1000): array
     {
@@ -241,27 +245,30 @@ class ControlBancarioRepository extends BaseRepository
         $sql = $this->sqlCruceContable($marcas) . ",
                 p AS (
                     SELECT j.*,
-                           CASE WHEN fecha_doc BETWEEN :fi1 AND :ff1 THEN monto_doc ELSE 0 END
-                         - CASE WHEN fecha_asiento BETWEEN :fi2 AND :ff2 THEN monto_asiento ELSE 0 END AS diferencia
+                           CASE WHEN fecha_doc BETWEEN :fi1 AND :ff1 THEN monto_doc ELSE 0 END AS efecto_doc,
+                           CASE WHEN fecha_asiento BETWEEN :fi2 AND :ff2 THEN monto_asiento ELSE 0 END AS efecto_contable,
+                           COALESCE(CASE WHEN fecha_doc BETWEEN :fi5 AND :ff5 THEN fecha_doc END, fecha_asiento) AS fecha_orden
                     FROM j
                     WHERE fecha_doc BETWEEN :fi3 AND :ff3 OR fecha_asiento BETWEEN :fi4 AND :ff4
                 )
                 SELECT p.*,
-                       CASE WHEN monto_asiento IS NULL THEN 'solo_documento'
+                       efecto_doc - efecto_contable AS diferencia,
+                       CASE WHEN ABS(efecto_doc - efecto_contable) <= 0.005 THEN 'cuadra'
+                            WHEN monto_asiento IS NULL THEN 'solo_documento'
                             WHEN monto_doc IS NULL AND doc_anulado THEN 'documento_anulado'
                             WHEN monto_doc IS NULL AND tipo = 'asiento' THEN 'solo_contabilidad'
                             WHEN monto_doc IS NULL THEN 'otra_cuenta'
                             WHEN ABS(monto_doc - monto_asiento) > 0.005 THEN 'monto_distinto'
                             ELSE 'fecha_distinta' END AS clase
                 FROM p
-                WHERE ABS(diferencia) > 0.005
-                ORDER BY COALESCE(fecha_doc, fecha_asiento), tipo, id_doc
+                ORDER BY fecha_orden, tipo, id_doc
                 LIMIT " . max(1, $limite);
         $st = $this->db->prepare($sql);
         $st->execute($params + [
             ':e' => $idEmpresa, ':c' => $idCuentaContable,
             ':fi1' => $fechaInicio, ':ff1' => $fechaFin, ':fi2' => $fechaInicio, ':ff2' => $fechaFin,
             ':fi3' => $fechaInicio, ':ff3' => $fechaFin, ':fi4' => $fechaInicio, ':ff4' => $fechaFin,
+            ':fi5' => $fechaInicio, ':ff5' => $fechaFin,
         ]);
         return $st->fetchAll(PDO::FETCH_ASSOC) ?: [];
     }

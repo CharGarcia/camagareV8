@@ -20,60 +20,73 @@ $urlBase = rtrim($base, '/') . '/' . ltrim($rutaModulo, '/');
 <?= \App\Helpers\PreferenciasHelper::renderEstilosColumnasOcultas($vistaConfig ?? []) ?>
 
 <style>
-    .cb-header { flex-shrink: 0; }
-    .control-bancario-scroll {
-        max-height: calc(100vh - 300px);
-        min-height: 320px;
-        overflow-y: auto;
-        overflow-x: auto;
-    }
+    /* Tarjeta de control fija (§9): la tabla de abajo no tiene scroll interno, se extiende
+       hacia abajo y hace scroll la página. Solo conserva el scroll horizontal. */
+    .control-bancario-scroll { overflow-x: auto; }
     .control-bancario-scroll thead th {
-        position: sticky;
-        top: 0;
-        z-index: 10;
         background: #f8f9fa;
         box-shadow: 0 1px 0 #dee2e6;
         white-space: nowrap;
     }
+    @media (max-width: 767.98px) {
+        #modulo-control_bancario .control-bancario-scroll { max-height: none !important; height: auto !important; overflow-y: visible !important; }
+    }
+    /* Altura idéntica y explícita para todos los controles de filtros (ver §9). */
+    #cb-form-filtros .form-select,
+    #cb-form-filtros .form-control,
+    #cb-form-filtros .btn { height: 28px; font-size: .75rem; }
+    #cb-form-filtros .cb-lbl { font-size: .65rem; }
+    #cb-aviso-fuente:empty, #cb-badge-conciliacion:empty { display: none; }
     .cb-row { cursor: pointer; }
     .cb-row:hover { background-color: rgba(0,0,0,.04); }
+
+    /* Comprobación con contabilidad: tablas con el mismo estilo que los listados (Proveedores).
+       La lista de partidas no tiene scroll propio: crece hacia abajo y scrollea el modal entero.
+       `overflow: clip` (no `hidden`) redondea las esquinas sin crear un contenedor de scroll,
+       que rompería el encabezado fijo. */
+    .cb-comp-card { overflow: clip; }
+    .cb-comp-card thead th {
+        background: #f8f9fa;
+        box-shadow: 0 1px 0 #dee2e6;
+        white-space: nowrap;
+    }
+    /* top negativo = padding del modal-body (p-3), para que pegue contra el borde visible. */
+    .cb-comp-partidas thead th { position: sticky; top: -1rem; z-index: 2; }
+    .cb-comp-card .cb-comp-total td { background: #f8f9fa; border-top: 2px solid #dee2e6; }
+    /* Mayor comparado: columnas de saldo acumulado separadas del detalle, y filtro "solo diferencias". */
+    .cb-comp-card .cb-col-saldo { background-color: rgba(13, 110, 253, .04); }
+    .cb-comp-card .cb-fila-dif > td:first-child { box-shadow: inset 3px 0 0 #dc3545; }
+    .cb-solo-dif tr.cb-fila-ok { display: none; }
 </style>
 
-<div class="container-fluid pt-2 pb-3 px-0 px-md-3" id="modulo-control_bancario">
+<div class="container-fluid pt-0 pb-3 px-0 px-md-3" id="modulo-control_bancario">
 
-    <div class="cb-header d-flex justify-content-between align-items-center flex-wrap gap-2 mb-3">
-        <div>
+    <!-- ── Tarjeta de control fija (título + acciones / filtros / KPI del período) ── -->
+    <div class="card cmg-control-card border-0 shadow-sm rounded-3 mb-3">
+        <div class="card-header bg-white border-bottom py-2 px-3 d-flex align-items-center flex-wrap gap-2">
             <h5 class="mb-0 fw-bold"><i class="bi bi-bank me-2 text-primary"></i><?= htmlspecialchars($titulo) ?></h5>
-            <small class="text-muted">Detalle de transacciones por cuenta bancaria, conciliación y seguimiento de cheques posfechados</small>
+            <div id="cb-badge-conciliacion" class="small"></div>
+            <!-- ms-auto: aunque la fila se parta en pantallas angostas, los botones quedan a la
+                 derecha. En pantallas medianas quedan solo con el ícono (el title lo explica). -->
+            <div class="d-flex flex-wrap justify-content-end gap-1 ms-auto">
+                <button type="button" class="btn btn-outline-warning btn-sm" onclick="CB_abrirModalPosfechados()" title="Cheques Posfechados">
+                    <i class="bi bi-calendar-event"></i><span class="d-none d-xl-inline"> Cheques Posfechados</span>
+                </button>
+                <button type="button" class="btn btn-outline-primary btn-sm" onclick="CB_abrirComprobacionContable()" title="Comprobar con Contabilidad: compara el saldo según Ingresos/Egresos con el de la cuenta contable del banco">
+                    <i class="bi bi-journal-check"></i><span class="d-none d-xl-inline"> Comprobar con Contabilidad</span>
+                </button>
+                <button type="button" class="btn btn-outline-secondary btn-sm" onclick="CB_abrirModalHistorialConciliaciones()" title="Historial de Conciliaciones">
+                    <i class="bi bi-clock-history"></i><span class="d-none d-xl-inline"> Historial</span>
+                </button>
+                <button type="button" class="btn btn-success btn-sm" id="cb-btn-conciliar" onclick="CB_abrirModalConciliar()">
+                    <i class="bi bi-check2-circle"></i><span class="d-none d-md-inline"> Conciliar Período</span>
+                </button>
+            </div>
         </div>
-        <!-- ms-auto + justify-content-end: aunque la fila se parta en pantallas angostas, los
-             botones quedan pegados a la derecha. -->
-        <div class="d-flex flex-wrap justify-content-end gap-2 ms-auto">
-            <button type="button" class="btn btn-outline-warning btn-sm" onclick="CB_abrirModalPosfechados()">
-                <i class="bi bi-calendar-event me-1"></i> Cheques Posfechados
-            </button>
-            <button type="button" class="btn btn-outline-primary btn-sm" onclick="CB_abrirComprobacionContable()" title="Compara el saldo según Ingresos/Egresos con el de la cuenta contable del banco">
-                <i class="bi bi-journal-check me-1"></i> Comprobar con Contabilidad
-            </button>
-            <button type="button" class="btn btn-outline-secondary btn-sm" onclick="CB_abrirModalHistorialConciliaciones()">
-                <i class="bi bi-clock-history me-1"></i> Historial de Conciliaciones
-            </button>
-            <button type="button" class="btn btn-success btn-sm" id="cb-btn-conciliar" onclick="CB_abrirModalConciliar()">
-                <i class="bi bi-check2-circle me-1"></i> Marcar Período como Conciliado
-            </button>
-        </div>
-    </div>
-
-    <div id="cb-badge-conciliacion" class="mb-2"></div>
-    <!-- Aviso de origen de los datos cuando la cuenta no tiene cuenta contable (ver JS). -->
-    <div id="cb-aviso-fuente" class="mb-2"></div>
-
-    <!-- ── Selector de cuenta + filtros de fecha ── -->
-    <div class="card border-0 shadow-sm rounded-3 mb-3">
         <div class="card-body p-3">
-            <form id="cb-form-filtros" class="d-flex flex-nowrap align-items-end gap-2" onsubmit="event.preventDefault(); window.CB_fetchSearch(1);">
-                <div style="flex:2.2 1 0;min-width:0">
-                    <label class="form-label small fw-bold text-muted mb-1">Cuenta Bancaria</label>
+            <form id="cb-form-filtros" class="d-flex flex-wrap align-items-start gap-2" onsubmit="event.preventDefault(); window.CB_fetchSearch(1);">
+                <div style="width:340px;max-width:100%;">
+                    <label class="form-label cb-lbl fw-bold text-muted text-uppercase mb-1 d-block">Cuenta Bancaria</label>
                     <select id="cb-forma" class="form-select form-select-sm shadow-none" onchange="window.CB_cambiarCuenta(this.value)">
                         <option value="">— Seleccione —</option>
                         <?php foreach ($formas as $f): ?>
@@ -81,21 +94,21 @@ $urlBase = rtrim($base, '/') . '/' . ltrim($rutaModulo, '/');
                                 <?= htmlspecialchars($f['nombre'] . ($f['nombre_banco'] ? ' — ' . $f['nombre_banco'] : '') . ($f['numero_cuenta'] ? ' (' . $f['numero_cuenta'] . ')' : '')) ?>                            </option>
                         <?php endforeach; ?>
                     </select>
-                    <div class="form-check form-switch mt-1" id="cb-consolidado-wrap" style="display:none;">
+                    <div class="form-check form-switch mt-1 mb-0" id="cb-consolidado-wrap" style="display:none;">
                         <input class="form-check-input" type="checkbox" id="cb-consolidado" <?= $consolidado ? 'checked' : '' ?> onchange="window.CB_toggleConsolidado(this.checked)">
                         <label class="form-check-label small" for="cb-consolidado" title="Une los movimientos de todos los establecimientos del mismo RUC que comparten esta cuenta bancaria">Consolidar por RUC</label>
                     </div>
                 </div>
-                <div style="flex:1.1 1 0;min-width:0">
-                    <label class="form-label small fw-bold text-muted mb-1">Flujo</label>
+                <div style="width:110px;">
+                    <label class="form-label cb-lbl fw-bold text-muted text-uppercase mb-1 d-block">Flujo</label>
                     <select class="form-select form-select-sm shadow-none" id="cb-flujo" onchange="window.CB_fetchSearch(1)">
                         <option value="TODOS" selected>Todos</option>
                         <option value="INGRESO">Ingresos</option>
                         <option value="EGRESO">Egresos</option>
                     </select>
                 </div>
-                <div style="flex:1.2 1 0;min-width:0">
-                    <label class="form-label small fw-bold text-muted mb-1">Tipo</label>
+                <div style="width:130px;">
+                    <label class="form-label cb-lbl fw-bold text-muted text-uppercase mb-1 d-block">Tipo</label>
                     <select class="form-select form-select-sm shadow-none" id="cb-tipo" onchange="window.CB_fetchSearch(1)">
                         <option value="" selected>Todos</option>
                         <option value="TRANSFERENCIA">Transferencia</option>
@@ -107,8 +120,8 @@ $urlBase = rtrim($base, '/') . '/' . ltrim($rutaModulo, '/');
                         <option value="OTRO">Otro</option>
                     </select>
                 </div>
-                <div style="flex:1.3 1 0;min-width:0">
-                    <label class="form-label small fw-bold text-muted mb-1">Cheques</label>
+                <div style="width:130px;">
+                    <label class="form-label cb-lbl fw-bold text-muted text-uppercase mb-1 d-block">Cheques</label>
                     <select class="form-select form-select-sm shadow-none" id="cb-cheque" onchange="window.CB_fetchSearch(1)">
                         <option value="" selected>Todos</option>
                         <option value="NO_COBRADOS">No cobrados</option>
@@ -116,16 +129,16 @@ $urlBase = rtrim($base, '/') . '/' . ltrim($rutaModulo, '/');
                         <option value="POSFECHADOS">Posfechados</option>
                     </select>
                 </div>
-                <div style="flex:0.8 1 0;min-width:0">
-                    <label class="form-label small fw-bold text-muted mb-1">Año</label>
+                <div style="width:90px;">
+                    <label class="form-label cb-lbl fw-bold text-muted text-uppercase mb-1 d-block">Año</label>
                     <select class="form-select form-select-sm shadow-none" id="cb-anio" onchange="window.CB_actualizarFechas()">
                         <?php foreach ($aniosDisponibles as $anio): ?>
                             <option value="<?= $anio ?>" <?= $anio === (int) date('Y') ? 'selected' : '' ?>><?= $anio ?></option>
                         <?php endforeach; ?>
                     </select>
                 </div>
-                <div style="flex:1.1 1 0;min-width:0">
-                    <label class="form-label small fw-bold text-muted mb-1">Mes</label>
+                <div style="width:120px;">
+                    <label class="form-label cb-lbl fw-bold text-muted text-uppercase mb-1 d-block">Mes</label>
                     <select class="form-select form-select-sm shadow-none" id="cb-mes" onchange="window.CB_actualizarFechas()">
                         <option value="0" selected>Todos</option>
                         <?php
@@ -135,52 +148,54 @@ $urlBase = rtrim($base, '/') . '/' . ltrim($rutaModulo, '/');
                         <?php endforeach; ?>
                     </select>
                 </div>
-                <div style="flex:1.3 1 0;min-width:0">
-                    <label class="form-label small fw-bold text-muted mb-1">Fecha Inicio</label>
-                    <input type="date" class="form-control form-control-sm shadow-none" id="cb-fecha-inicio" value="<?= htmlspecialchars($fechaInicio) ?>">
-                </div>
-                <div style="flex:1.3 1 0;min-width:0">
-                    <label class="form-label small fw-bold text-muted mb-1">Fecha Fin</label>
-                    <input type="date" class="form-control form-control-sm shadow-none" id="cb-fecha-fin" value="<?= htmlspecialchars($fechaFin) ?>">
-                </div>
-                <div style="flex:0 0 auto">
-                    <button type="submit" class="btn btn-primary btn-sm shadow-sm"><i class="bi bi-search"></i></button>
+                <!-- Fechas + botón juntos: si no caben, saltan de línea los tres a la vez. -->
+                <div class="d-flex flex-wrap align-items-start gap-2">
+                    <div style="width:125px;">
+                        <label class="form-label cb-lbl fw-bold text-muted text-uppercase mb-1 d-block">Fecha Inicio</label>
+                        <input type="date" class="form-control form-control-sm shadow-none" id="cb-fecha-inicio" value="<?= htmlspecialchars($fechaInicio) ?>">
+                    </div>
+                    <div style="width:125px;">
+                        <label class="form-label cb-lbl fw-bold text-muted text-uppercase mb-1 d-block">Fecha Fin</label>
+                        <input type="date" class="form-control form-control-sm shadow-none" id="cb-fecha-fin" value="<?= htmlspecialchars($fechaFin) ?>">
+                    </div>
+                    <div>
+                        <label class="form-label cb-lbl mb-1 d-block">&nbsp;</label>
+                        <button type="submit" class="btn btn-primary btn-sm shadow-sm px-3"><i class="bi bi-search"></i> Aplicar</button>
+                    </div>
                 </div>
             </form>
+            <!-- Aviso de origen de los datos cuando la cuenta no tiene cuenta contable (ver JS). -->
+            <div id="cb-aviso-fuente" class="mt-2"></div>
         </div>
-    </div>
-
-    <!-- ── KPI del período seleccionado ── -->
-    <div class="row g-3 mb-3">
-        <div class="col-6 col-md-3">
-            <div class="card border-0 rounded-4 shadow-sm h-100">
-                <div class="card-body p-3">
-                    <div class="text-muted small fw-bold text-uppercase" style="font-size:.62rem;">Saldo Inicial</div>
-                    <div class="fw-bold fs-5" id="cb-stat-saldo-inicial">$<?= number_format($resumen['saldo_inicial'] ?? 0, 2) ?></div>
+        <div class="card-footer bg-white border-top py-2 px-3">
+            <div class="cmg-control-card__stats">
+                <div class="cmg-control-card__stat">
+                    <i class="bi bi-wallet2 bg-secondary bg-opacity-10 text-secondary"></i>
+                    <div>
+                        <div class="cmg-control-card__stat-value" id="cb-stat-saldo-inicial">$<?= number_format($resumen['saldo_inicial'] ?? 0, 2) ?></div>
+                        <div class="cmg-control-card__stat-label">Saldo Inicial</div>
+                    </div>
                 </div>
-            </div>
-        </div>
-        <div class="col-6 col-md-3">
-            <div class="card border-0 rounded-4 shadow-sm h-100">
-                <div class="card-body p-3">
-                    <div class="text-muted small fw-bold text-uppercase" style="font-size:.62rem;">Créditos (entradas)</div>
-                    <div class="fw-bold fs-5 text-success" id="cb-stat-creditos">$<?= number_format($resumen['creditos'] ?? 0, 2) ?></div>
+                <div class="cmg-control-card__stat">
+                    <i class="bi bi-arrow-down-circle bg-success bg-opacity-10 text-success"></i>
+                    <div>
+                        <div class="cmg-control-card__stat-value text-success" id="cb-stat-creditos">$<?= number_format($resumen['creditos'] ?? 0, 2) ?></div>
+                        <div class="cmg-control-card__stat-label">Créditos (entradas)</div>
+                    </div>
                 </div>
-            </div>
-        </div>
-        <div class="col-6 col-md-3">
-            <div class="card border-0 rounded-4 shadow-sm h-100">
-                <div class="card-body p-3">
-                    <div class="text-muted small fw-bold text-uppercase" style="font-size:.62rem;">Débitos (salidas)</div>
-                    <div class="fw-bold fs-5 text-danger" id="cb-stat-debitos">$<?= number_format($resumen['debitos'] ?? 0, 2) ?></div>
+                <div class="cmg-control-card__stat">
+                    <i class="bi bi-arrow-up-circle bg-danger bg-opacity-10 text-danger"></i>
+                    <div>
+                        <div class="cmg-control-card__stat-value text-danger" id="cb-stat-debitos">$<?= number_format($resumen['debitos'] ?? 0, 2) ?></div>
+                        <div class="cmg-control-card__stat-label">Débitos (salidas)</div>
+                    </div>
                 </div>
-            </div>
-        </div>
-        <div class="col-6 col-md-3">
-            <div class="card border-0 rounded-4 shadow-sm h-100">
-                <div class="card-body p-3">
-                    <div class="text-muted small fw-bold text-uppercase" style="font-size:.62rem;">Saldo Final</div>
-                    <div class="fw-bold fs-5 text-primary" id="cb-stat-saldo-final">$<?= number_format($resumen['saldo_final'] ?? 0, 2) ?></div>
+                <div class="cmg-control-card__stat">
+                    <i class="bi bi-bank bg-primary bg-opacity-10 text-primary"></i>
+                    <div>
+                        <div class="cmg-control-card__stat-value text-primary" id="cb-stat-saldo-final">$<?= number_format($resumen['saldo_final'] ?? 0, 2) ?></div>
+                        <div class="cmg-control-card__stat-label">Saldo Final</div>
+                    </div>
                 </div>
             </div>
         </div>

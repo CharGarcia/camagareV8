@@ -388,22 +388,38 @@ class ControlBancarioService
         }
 
         $t = $this->repository->getTotalesCruceContable($idEmpresa, $idCuenta, $idsFormas, $fechaInicio, $fechaFin);
-        $limite = 1000;
+        $limite = 3000;
         $partidas = $this->repository->getPartidasCruceContable($idEmpresa, $idCuenta, $idsFormas, $fechaInicio, $fechaFin, $limite + 1);
         $truncado = count($partidas) > $limite;
         $partidas = array_slice($partidas, 0, $limite);
-
-        $resumenClases = [];
-        foreach ($partidas as $p) {
-            $c = $p['clase'];
-            $resumenClases[$c]['cantidad'] = ($resumenClases[$c]['cantidad'] ?? 0) + 1;
-            $resumenClases[$c]['diferencia'] = round(($resumenClases[$c]['diferencia'] ?? 0) + (float) $p['diferencia'], 2);
-        }
 
         $librosIni = round($saldoInicial + $t['doc_ini'], 2);
         $librosFin = round($saldoInicial + $t['doc_fin'], 2);
         $contIni = round($t['cont_ini'], 2);
         $contFin = round($t['cont_fin'], 2);
+
+        // Mayor comparado: arranca en el saldo al inicio de cada lado y arrastra fila por fila,
+        // así la primera fila donde cambia la diferencia acumulada es donde se descuadra.
+        $saldoLibros = $librosIni;
+        $saldoCont = $contIni;
+        $resumenClases = [];
+        $conDiferencia = 0;
+        foreach ($partidas as &$p) {
+            $saldoLibros = round($saldoLibros + (float) $p['efecto_doc'], 2);
+            $saldoCont = round($saldoCont + (float) $p['efecto_contable'], 2);
+            $p['saldo_libros'] = $saldoLibros;
+            $p['saldo_contable'] = $saldoCont;
+            $p['diferencia_acumulada'] = round($saldoLibros - $saldoCont, 2);
+
+            $c = $p['clase'];
+            if ($c === 'cuadra') {
+                continue;
+            }
+            $conDiferencia++;
+            $resumenClases[$c]['cantidad'] = ($resumenClases[$c]['cantidad'] ?? 0) + 1;
+            $resumenClases[$c]['diferencia'] = round(($resumenClases[$c]['diferencia'] ?? 0) + (float) $p['diferencia'], 2);
+        }
+        unset($p);
 
         return [
             'sin_cuenta_contable' => false,
@@ -417,7 +433,9 @@ class ControlBancarioService
             'diferencia_periodo' => round(($librosFin - $librosIni) - ($contFin - $contIni), 2),
             'resumen_clases' => $resumenClases,
             'partidas' => $partidas,
+            'partidas_con_diferencia' => $conDiferencia,
             'truncado' => $truncado,
+            'limite' => $limite,
         ];
     }
 

@@ -157,7 +157,8 @@
 
     // ── Comprobación con Contabilidad (solo lectura) ─────────────────────────
     const CLASES_COMPROBACION = {
-        solo_documento:    { txt: 'Sin asiento contable',            cls: 'warning',   ayuda: 'El ingreso/egreso no tiene asiento contabilizado en la cuenta del banco.' },
+        cuadra:            { txt: 'Cuadra',                          cls: 'success',   ayuda: 'El documento y su asiento mueven lo mismo en el período.' },
+        solo_documento:   { txt: 'Sin asiento contable',            cls: 'warning',   ayuda: 'El ingreso/egreso no tiene asiento contabilizado en la cuenta del banco.' },
         solo_contabilidad: { txt: 'Solo en contabilidad',            cls: 'info',      ayuda: 'Asiento sin ingreso/egreso detrás (manual, migrado, etc.).' },
         documento_anulado: { txt: 'Asiento de documento anulado',    cls: 'danger',    ayuda: 'El ingreso/egreso está anulado o eliminado pero su asiento sigue contabilizado.' },
         otra_cuenta:       { txt: 'Cobrado/pagado con otra cuenta',  cls: 'secondary', ayuda: 'El asiento toca esta cuenta contable pero el documento se cobró/pagó con otra forma de pago.' },
@@ -253,24 +254,49 @@
                         ${c.txt}: ${r.cantidad} · ${fmtMoney(r.diferencia)}</span>`;
         }).join('');
 
+        const vacio = '<span class="text-muted">—</span>';
+        // Monto de un lado: si su fecha cae fuera del período no suma aquí, y se ve tachado.
+        const celdaMonto = (monto, efecto) => {
+            if (monto === null || monto === undefined) return vacio;
+            const fuera = Math.abs(Number(efecto || 0)) < 0.005 && Math.abs(Number(monto)) >= 0.005;
+            return fuera
+                ? `<span class="text-muted text-decoration-line-through" title="Su fecha cae fuera del período: no suma aquí">${fmtMoney(monto)}</span>`
+                : fmtMoney(monto);
+        };
+
+        // Mayor comparado: saldo al inicio, cada movimiento con el saldo acumulado de cada lado,
+        // y saldo al final. La fila donde cambia la diferencia acumulada es la que descuadra.
         const filas = (d.partidas || []).map(p => {
             const c = CLASES_COMPROBACION[p.clase] || { txt: p.clase, cls: 'secondary', ayuda: '' };
+            const ok = p.clase === 'cuadra';
             const tipoDoc = p.tipo === 'ingreso' ? 'Ingreso' : (p.tipo === 'egreso' ? 'Egreso' : 'Asiento');
             const asiento = p.id_asiento
                 ? `<a href="#" onclick="event.preventDefault(); ASIENTO_abrirModal(${parseInt(p.id_asiento, 10)});" title="Ver asiento">${escHtml(p.numero_asiento || 'Asiento')}</a>`
-                : '—';
+                : vacio;
             const doc = p.tipo === 'asiento' ? escHtml(p.concepto || '') : `${tipoDoc} ${escHtml(p.numero || '')}`;
-            return `<tr>
-                <td class="p-1"><span class="badge bg-${c.cls} bg-opacity-10 text-${c.cls === 'warning' ? 'warning-emphasis' : c.cls} border border-${c.cls} border-opacity-25" title="${escHtml(c.ayuda)}">${c.txt}</span></td>
-                <td class="p-1 text-truncate" style="max-width:220px;" title="${doc}">${doc}</td>
-                <td class="p-1 text-nowrap">${p.fecha_doc ? fmtDateDisplay(p.fecha_doc) : '—'}</td>
-                <td class="p-1 text-end">${p.monto_doc !== null ? fmtMoney(p.monto_doc) : '—'}</td>
-                <td class="p-1">${asiento}</td>
-                <td class="p-1 text-nowrap">${p.fecha_asiento ? fmtDateDisplay(p.fecha_asiento) : '—'}</td>
-                <td class="p-1 text-end">${p.monto_asiento !== null ? fmtMoney(p.monto_asiento) : '—'}</td>
-                <td class="p-1 text-end">${celdaDif(p.diferencia)}</td>
+            const dif = Number(p.diferencia || 0);
+            const salto = ok ? '' : `<div class="text-danger" style="font-size:.7rem;" title="Lo que esta fila descuadra">${dif > 0 ? '+' : ''}${fmtMoney(dif)}</div>`;
+            return `<tr class="${ok ? 'cb-fila-ok' : 'cb-fila-dif'}">
+                <td class="ps-3"><span class="badge bg-${c.cls} bg-opacity-10 text-${c.cls === 'warning' ? 'warning-emphasis' : c.cls} border border-${c.cls} border-opacity-25" title="${escHtml(c.ayuda)}">${c.txt}</span></td>
+                <td class="fw-medium text-truncate" style="max-width:240px;" title="${doc}">${doc}</td>
+                <td class="text-nowrap">${p.fecha_doc ? fmtDateDisplay(p.fecha_doc) : vacio}</td>
+                <td class="text-end text-nowrap">${celdaMonto(p.monto_doc, p.efecto_doc)}</td>
+                <td class="text-nowrap">${asiento}</td>
+                <td class="text-nowrap">${p.fecha_asiento ? fmtDateDisplay(p.fecha_asiento) : vacio}</td>
+                <td class="text-end text-nowrap">${celdaMonto(p.monto_asiento, p.efecto_contable)}</td>
+                <td class="text-end text-nowrap cb-col-saldo">${fmtMoney(p.saldo_libros)}</td>
+                <td class="text-end text-nowrap cb-col-saldo">${fmtMoney(p.saldo_contable)}</td>
+                <td class="text-end text-nowrap pe-3">${celdaDif(p.diferencia_acumulada)}${salto}</td>
             </tr>`;
         }).join('');
+        const filaSaldo = (txt, libros, contable, dif) => `<tr class="fw-bold cb-comp-total">
+                <td class="ps-3" colspan="7">${txt}</td>
+                <td class="text-end text-nowrap cb-col-saldo">${fmtMoney(libros)}</td>
+                <td class="text-end text-nowrap cb-col-saldo">${fmtMoney(contable)}</td>
+                <td class="text-end text-nowrap pe-3">${celdaDif(dif)}</td>
+            </tr>`;
+        const nPartidas = (d.partidas || []).length;
+        const nDif = Number(d.partidas_con_diferencia || 0);
 
         const cuadra = Math.abs(d.fin.diferencia) < 0.005;
         return `
@@ -282,37 +308,53 @@
                     : '<span class="badge bg-danger bg-opacity-10 text-danger border border-danger border-opacity-25"><i class="bi bi-exclamation-circle-fill"></i> No cuadra con la contabilidad</span>'}</div>
             </div>
             ${avisoCompartida}
-            <table class="table table-sm table-bordered small mb-2">
-                <thead class="table-light">
-                    <tr><th></th><th class="text-end">Según Ingresos/Egresos</th><th class="text-end">Según Contabilidad</th><th class="text-end">Diferencia</th></tr>
-                </thead>
-                <tbody>
-                    <tr><td>Saldo al inicio del período</td><td class="text-end">${fmtMoney(d.inicio.libros)}</td><td class="text-end">${fmtMoney(d.inicio.contable)}</td><td class="text-end">${celdaDif(d.inicio.diferencia)}</td></tr>
-                    <tr><td>Movimiento del período</td><td class="text-end">${fmtMoney(movLibros)}</td><td class="text-end">${fmtMoney(movCont)}</td><td class="text-end">${celdaDif(d.diferencia_periodo)}</td></tr>
-                    <tr class="fw-bold"><td>Saldo al final del período</td><td class="text-end">${fmtMoney(d.fin.libros)}</td><td class="text-end">${fmtMoney(d.fin.contable)}</td><td class="text-end">${celdaDif(d.fin.diferencia)}</td></tr>
-                </tbody>
-            </table>
+            <div class="card cb-comp-card border-0 shadow-sm rounded-3 mb-2">
+                <table class="table table-hover table-sm small mb-0">
+                    <thead>
+                        <tr><th class="ps-3">Concepto</th><th class="text-end">Según Ingresos/Egresos</th><th class="text-end">Según Contabilidad</th><th class="text-end pe-3">Diferencia</th></tr>
+                    </thead>
+                    <tbody>
+                        <tr><td class="ps-3">Saldo al inicio del período</td><td class="text-end text-nowrap">${fmtMoney(d.inicio.libros)}</td><td class="text-end text-nowrap">${fmtMoney(d.inicio.contable)}</td><td class="text-end text-nowrap pe-3">${celdaDif(d.inicio.diferencia)}</td></tr>
+                        <tr><td class="ps-3">Movimiento del período</td><td class="text-end text-nowrap">${fmtMoney(movLibros)}</td><td class="text-end text-nowrap">${fmtMoney(movCont)}</td><td class="text-end text-nowrap pe-3">${celdaDif(d.diferencia_periodo)}</td></tr>
+                        <tr class="fw-bold cb-comp-total"><td class="ps-3">Saldo al final del período</td><td class="text-end text-nowrap">${fmtMoney(d.fin.libros)}</td><td class="text-end text-nowrap">${fmtMoney(d.fin.contable)}</td><td class="text-end text-nowrap pe-3">${celdaDif(d.fin.diferencia)}</td></tr>
+                    </tbody>
+                </table>
+            </div>
             <div class="form-text mb-2">
                 "Según Ingresos/Egresos" es el saldo en libros: saldo inicial de Saldos Iniciales más todos los cobros y pagos,
                 con los cheques desde que se emiten (igual que la contabilidad). Por eso puede diferir del saldo de esta pantalla,
                 que solo cuenta un cheque cuando tiene Fecha Banco.
             </div>
-            <h6 class="fw-bold small mt-3 mb-1">Partidas del período que explican la diferencia</h6>
+            <div class="d-flex flex-wrap align-items-center gap-2 mt-3 mb-1">
+                <h6 class="fw-bold small mb-0">Movimientos del período, saldo por saldo
+                    <span class="text-muted fw-normal">(${nPartidas}${nDif ? `, ${nDif} con diferencia` : ''})</span></h6>
+                ${nDif && nDif < nPartidas ? `<div class="form-check form-switch small mb-0 ms-auto">
+                    <input class="form-check-input" type="checkbox" id="cb-comp-solo-dif"
+                           onchange="document.getElementById('cb-comp-mayor').classList.toggle('cb-solo-dif', this.checked)">
+                    <label class="form-check-label" for="cb-comp-solo-dif">Ver solo las filas con diferencia</label>
+                </div>` : ''}
+            </div>
             <div class="mb-2">${chips || '<span class="text-success small"><i class="bi bi-check-circle me-1"></i>No hay partidas con diferencia en el período.</span>'}</div>
-            ${filas ? `
-            <div class="comprobacion-scroll" style="max-height:340px;overflow:auto;">
-                <table class="table table-sm table-hover small mb-0">
-                    <thead class="table-light" style="position:sticky;top:0;">
-                        <tr><th>Situación</th><th>Documento</th><th>Fecha doc.</th><th class="text-end">Monto doc.</th>
-                            <th>Asiento</th><th>Fecha asiento</th><th class="text-end">Monto contable</th><th class="text-end">Diferencia</th></tr>
+            ${Math.abs(d.inicio.diferencia) >= 0.005 ? `<div class="alert alert-warning py-2 px-3 small mb-2"><i class="bi bi-info-circle me-1"></i>
+                El período ya <strong>empieza descuadrado</strong> en ${fmtMoney(d.inicio.diferencia)}: esa diferencia viene de antes de la fecha de inicio
+                (por ejemplo, la apertura migrada o un saldo inicial distinto en Saldos Iniciales). Para encontrar la fila que la causa,
+                ponga como fecha de inicio el comienzo de las operaciones y vuelva a comprobar.</div>` : ''}
+            <div class="card cb-comp-card cb-comp-partidas border-0 shadow-sm rounded-3" id="cb-comp-mayor">
+                <table class="table table-hover table-sm small mb-0">
+                    <thead>
+                        <tr><th class="ps-3">Situación</th><th>Documento</th><th>Fecha doc.</th><th class="text-end">Monto doc.</th>
+                            <th>Asiento</th><th>Fecha asiento</th><th class="text-end">Monto contable</th>
+                            <th class="text-end cb-col-saldo">Saldo Ing./Egr.</th><th class="text-end cb-col-saldo">Saldo contable</th>
+                            <th class="text-end pe-3">Diferencia acum.</th></tr>
                     </thead>
-                    <tbody>${filas}</tbody>
+                    <tbody>
+                        ${filaSaldo('Saldo al inicio del período', d.inicio.libros, d.inicio.contable, d.inicio.diferencia)}
+                        ${filas || `<tr><td colspan="10" class="text-center text-muted py-3">No hay movimientos en el período.</td></tr>`}
+                        ${d.truncado ? '' : filaSaldo('Saldo al final del período', d.fin.libros, d.fin.contable, d.fin.diferencia)}
+                    </tbody>
                 </table>
-            </div>` : ''}
-            ${d.truncado ? '<div class="small text-warning mt-1">Se muestran las primeras 1000 partidas; acote el período para ver el resto.</div>' : ''}
-            ${Math.abs(d.inicio.diferencia) >= 0.005 ? `<div class="small text-muted mt-2"><i class="bi bi-info-circle me-1"></i>
-                La diferencia al <strong>inicio</strong> viene de períodos anteriores (por ejemplo, la apertura migrada o un saldo inicial distinto
-                en Saldos Iniciales). Para ver sus partidas, compruebe un período anterior.</div>` : ''}`;
+            </div>
+            ${d.truncado ? `<div class="small text-warning mt-1">Se muestran los primeros ${Number(d.limite || 0).toLocaleString('en-US')} movimientos; acote el período para ver el resto.</div>` : ''}`;
     }
 
     window.CB_confirmarConciliar = async function () {
