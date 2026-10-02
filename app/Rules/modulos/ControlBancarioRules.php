@@ -17,7 +17,7 @@ class ControlBancarioRules
         // El movimiento se identifica por la línea del asiento (cuenta con contabilidad) o por el
         // cobro/pago de origen (cuenta sin cuenta contable); debe venir uno de los dos. Un
         // traspaso de fondos se identifica por su lado: entrada (trasp_in) o salida (trasp_out).
-        $tieneOrigen = in_array(strtolower((string) ($data['origen_tipo'] ?? '')), ['ingreso', 'egreso', 'trasp_in', 'trasp_out'], true)
+        $tieneOrigen = in_array(strtolower((string) ($data['origen_tipo'] ?? '')), ['ingreso', 'egreso', 'trasp_in', 'trasp_out', 'liq_tarj'], true)
             && !empty($data['origen_id']);
         if (empty($data['id_asiento_detalle']) && !$tieneOrigen) {
             throw new \Exception('Falta indicar el movimiento a clasificar.');

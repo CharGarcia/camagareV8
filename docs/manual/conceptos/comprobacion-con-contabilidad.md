@@ -5,7 +5,7 @@ categoria: Contabilidad
 tipo: concepto
 visibilidad: todos
 etiquetas: comprobar con contabilidad, cuadre de caja, caja vs contabilidad, anticipos vs contabilidad, comprobacion con contabilidad, cuadre contable, cuadrar con contabilidad, conciliar con contabilidad, no cuadra con contabilidad, diferencia con contabilidad, saldo contable, mayor, mayor comparado, cartera vs contabilidad, inventario vs contabilidad, kardex vs contabilidad, cuentas por cobrar vs mayor, cuentas por pagar vs mayor, sin asiento contable, solo en contabilidad, asiento sin documento, documento anulado con asiento, monto distinto, fecha en otro periodo, empieza descuadrado, diferencia acumulada, cuenta contable del modulo, configuracion contable, auditoria contable, saldos iniciales, apertura
-version: 1.1
+version: 1.3
 orden: 30
 estado: activo
 ---
@@ -24,7 +24,8 @@ diferencia. No modifica nada: es solo una revisión.
 | [Cuentas por cobrar](../modulos/cuentas-por-cobrar.md) | En la cabecera de la tabla, junto a PDF y Excel | Saldo de la cartera de clientes contra las cuentas por cobrar |
 | [Cuentas por pagar](../modulos/cuentas-por-pagar.md) | En la cabecera de la tabla, junto a PDF y Excel | Saldo por pagar a proveedores contra las cuentas por pagar |
 | [Control bancario](../modulos/control-bancario.md) | Arriba, en la barra de botones | Saldo del banco según Ingresos/Egresos contra la cuenta contable del banco |
-| [Estados financieros](../modulos/estados-financieros.md) | Botón **Cuadre con Módulos** | Todos los anteriores en una sola tabla, vistos desde la contabilidad, más **cada caja** (formas de pago que no son banco) y los **anticipos** de clientes y de proveedores, que solo se comparan aquí; *Ver detalle* abre la comparación de cada uno |
+| [Activos fijos](../modulos/activos-fijos.md) | En la cabecera de la tabla, junto a PDF y Excel | Costo contra la cuenta del activo, y depreciación acumulada contra su cuenta |
+| [Estados financieros](../modulos/estados-financieros.md) | Botón **Cuadre con Módulos** | Todos los anteriores en una sola tabla, vistos desde la contabilidad, más **cada caja** (formas de pago que no son banco) los **anticipos** de clientes y de proveedores y las **tarjetas por liquidar**, que solo se comparan aquí; *Ver detalle* abre la comparación de cada uno |
 
 La comprobación siempre abarca **la empresa activa completa**: no aplica los
 filtros de la pantalla (cliente, proveedor, bodega, producto, vendedor ni el
@@ -93,7 +94,8 @@ movimientos; si hay más, acorte el período.
 | Situación | Qué pasa | Qué revisar |
 |-----------|----------|-------------|
 | Cuadra | El documento y su asiento mueven lo mismo | Nada |
-| Sin asiento contable | El documento suma en el módulo, pero no tiene asiento en estas cuentas | Si está en borrador o sin contabilizar; si su asiento usa otra cuenta (Configuración Contable); generarlo desde Auditoría Contable |
+| Documento sin asiento | El documento suma en el módulo, pero no tiene **ningún** asiento contabilizado (borrador, pendiente de contabilizar, o un movimiento que no genera asiento, como un ajuste) | Generarlo desde Auditoría Contable; en un borrador, se genera al autorizarlo |
+| Asiento sin cuenta de *(inventario, por cobrar…)* | El documento **sí tiene asiento**, pero ninguna de sus líneas toca las cuentas comparadas. Típico de las **facturas migradas** del sistema anterior, que solo registraron la venta sin el costo contra inventario. El número del asiento (atenuado) lo abre | La cuenta en Configuración Contable y regenerar el asiento; en lo migrado, un asiento de ajuste a la fecha de la migración |
 | Solo en contabilidad | Asiento sin un documento del módulo detrás (manual, migrado o de otro módulo) | Si el asiento manual corresponde, o si debió hacerse con un documento |
 | Documento que no suma aquí | El asiento es de un documento que el módulo no cuenta: anulado, eliminado, en un estado que no suma, o que no se aplica a ningún documento del módulo (p. ej. una retención sin factura) | Anular el asiento del documento anulado, o enlazar el documento |
 | Monto distinto | Los dos lados mueven montos distintos | El asiento (cuenta o valor) o el documento |
@@ -126,6 +128,8 @@ submódulo *Estados financieros*.
 
 ## Historial de cambios
 
+- **1.3** — Comparación de **tarjetas por liquidar** (en Estados financieros) y de **activos fijos** (costo y depreciación acumulada).
+- **1.2** — La situación *Sin asiento contable* se separa en **Documento sin asiento** (no tiene ninguno) y **Asiento sin cuenta de…** (tiene asiento, pero no toca las cuentas comparadas, como las facturas migradas sin costo de ventas), con enlace a ese asiento.
 - **1.1** — Comparación de **caja** y de **anticipos** de clientes y proveedores. El mismo cuadre desde la contabilidad: botón **Cuadre con Módulos** en
   Estados financieros. La pantalla de detalle muestra también las situaciones
   propias de los bancos (asiento de documento anulado, cobrado o pagado con otra

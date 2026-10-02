@@ -342,7 +342,8 @@ movimientos; si hay más, acote el período.
 | Situación | Qué significa |
 |-----------|---------------|
 | Cuadra | El documento y su asiento mueven lo mismo en el período |
-| Sin asiento contable | El ingreso/egreso no tiene asiento contabilizado en la cuenta del banco |
+| Documento sin asiento | El ingreso/egreso/traspaso no tiene ningún asiento contabilizado |
+| Asiento sin cuenta del banco | El documento tiene asiento, pero ninguna línea toca la cuenta contable del banco (su forma de pago fue a otra cuenta). El número del asiento lo abre |
 | Solo en contabilidad | Asiento sin ingreso/egreso detrás (manual, migrado, apertura) |
 | Asiento de documento anulado | El ingreso/egreso está anulado, pero su asiento sigue contabilizado |
 | Cobrado/Pagado con *(forma)* | El asiento mueve esta cuenta contable, pero el documento se registró con la forma de pago que indica la etiqueta (p. ej. *Pagado con Efectivo*). Si el dinero sí pasó por el banco, corrija la forma de pago del documento; si no, el asiento está en la cuenta equivocada |
@@ -376,6 +377,9 @@ contables:
   banco, como *Transferencia*). El comprobante es el número del traspaso y se
   concilia (Fecha Banco) igual que cualquier movimiento; un traspaso entre dos
   bancos se concilia por separado en cada uno.
+- Cada **liquidación de tarjetas** ([Conciliación de tarjetas](conciliacion-tarjetas.md))
+  **cerrada** es un depósito por el **neto** en la cuenta bancaria destino. El
+  comprobante es el número de la conciliación (CT-…) y se concilia igual.
 - La **fecha** de cada fila es la fecha de emisión del ingreso/egreso y el
   **comprobante** es su número, no los del asiento.
 - Se excluyen los documentos y traspasos eliminados o anulados y los cheques
@@ -430,7 +434,10 @@ los dos casos.
   PDF de la conciliación muestra esa cuenta. Los **traspasos de fondos** ahora
   son movimientos de la cuenta bancaria (entrada en la destino, salida de la
   origen): antes no aparecían, aunque su asiento sí movía la cuenta del banco, y
-  en *Comprobar con Contabilidad* salían como "Solo en contabilidad".
+  en *Comprobar con Contabilidad* salían como "Solo en contabilidad". La
+  situación *Sin asiento contable* se separa en *Documento sin asiento* y
+  *Asiento sin cuenta del banco*. Las **liquidaciones de tarjetas** cerradas también
+  son movimientos del banco (depósito del neto en la cuenta destino).
 - **1.16** — Pantalla reorganizada: título, botones, filtros y resumen del
   período van en una sola **tarjeta de control** fija arriba (el resumen pasa de
   cuatro tarjetas grandes a una línea), y la tabla de movimientos deja de paginar (muestra todo el período; al abrir, el

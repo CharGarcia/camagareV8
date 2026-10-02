@@ -836,12 +836,29 @@ class FormaPagoRepository extends BaseRepository
      */
     public function getFormasCajaConCuentas(int $idEmpresa): array
     {
+        // Las tarjetas (TARJETA/NUVEI/PAYPHONE) no son caja: su saldo baja con la liquidación de
+        // la procesadora (Conciliación de Tarjetas), no con un egreso. Van en getFormasTarjetaConCuentas().
+        return $this->formasNoBancariasConCuentas($idEmpresa, false);
+    }
+
+    /** Formas de tarjeta (liquidación diferida), con la cuenta puente efectiva de cobro y de pago. */
+    public function getFormasTarjetaConCuentas(int $idEmpresa): array
+    {
+        return $this->formasNoBancariasConCuentas($idEmpresa, true);
+    }
+
+    private function formasNoBancariasConCuentas(int $idEmpresa, bool $tarjetas): array
+    {
+        $tiposTarjeta = "'" . implode("', '", ConciliacionTarjetasRepository::TIPOS_LIQUIDACION_DIFERIDA) . "'";
+        $condTipo = $tarjetas
+            ? "UPPER(fp.tipo) IN ({$tiposTarjeta})"
+            : "fp.tipo <> 'ANTICIPO' AND UPPER(fp.tipo) NOT IN ({$tiposTarjeta})";
         $sql = "SELECT * FROM (
                     SELECT DISTINCT ON (fp.id) fp.id, fp.nombre, fp.tipo, " . self::SELECT_CUENTAS_FLUJO . "
                     FROM {$this->table} fp
                     " . self::JOIN_CUENTAS_FLUJO . "
                     WHERE fp.id_empresa = :id_empresa AND fp.eliminado = FALSE AND fp.activo = TRUE
-                      AND fp.tipo <> 'ANTICIPO' AND fp.tipo <> 'PAYPHONE' AND fp.id_banco IS NULL
+                      AND {$condTipo} AND fp.id_banco IS NULL
                     ORDER BY fp.id, apc.id DESC NULLS LAST, app.id DESC NULLS LAST
                 ) x ORDER BY x.nombre";
         $st = $this->db->prepare($sql);
@@ -911,6 +928,36 @@ class FormaPagoRepository extends BaseRepository
                 'traspaso' => ['traspasos_cabecera', 'x.numero_traspaso'],
             ],
         ];
+    }
+
+    /**
+     * Tarjetas por liquidar: lo mismo que la caja de esas formas (saldo inicial + cobros −
+     * pagos ± traspasos) MENOS lo que la procesadora ya liquidó en Conciliación de Tarjetas.
+     * La liquidación no genera egreso: solo el cruce de cada cobro y, al CERRAR la
+     * conciliación, su asiento (Haber a la cuenta puente por lo cruzado). Por eso solo restan
+     * las conciliaciones cerradas, en su fecha de conciliación, y por lo cruzado de los cobros
+     * de estas formas (ConciliacionTarjetasService::generarAsiento).
+     */
+    public function definicionComprobacionTarjetas(array $idsCuentas, array $idsFormasCobro, array $idsFormasPago, array $idsFormasSaldo): array
+    {
+        $def = $this->definicionComprobacionCaja($idsCuentas, $idsFormasCobro, $idsFormasPago, $idsFormasSaldo);
+        $cobro = self::inIds($idsFormasCobro);
+
+        $def['docs'] .= "
+                 UNION ALL
+                 SELECT 'conciliacion_tarjetas', ct.id, ct.fecha_conciliacion, -cr.monto_cruzado
+                 FROM conciliacion_tarjetas_cruces cr
+                 JOIN conciliacion_tarjetas_cabecera ct ON ct.id = cr.id_cabecera
+                 JOIN ingresos_pagos ip ON ip.id = cr.id_ingreso_pago
+                 WHERE ct.id_empresa = :e AND ct.eliminado = FALSE AND ct.estado = 'cerrada'
+                   AND cr.eliminado = FALSE
+                   AND ct.tipo_ambiente = (SELECT t FROM amb)
+                   AND ip.id_forma_cobro IN ({$cobro})";
+        $def['nativos']['conciliacion_tarjetas'] = 'conciliacion_tarjetas';
+        $def['migrados'] .= "
+                           UNION ALL SELECT id_asiento_contable, 'conciliacion_tarjetas', id FROM conciliacion_tarjetas_cabecera WHERE id_empresa = :e AND id_asiento_contable IS NOT NULL";
+        $def['numeros']['conciliacion_tarjetas'] = ['conciliacion_tarjetas_cabecera', 'x.numero'];
+        return $def;
     }
 
     /**

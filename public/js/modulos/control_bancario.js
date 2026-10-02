@@ -158,7 +158,8 @@
     // ── Comprobación con Contabilidad (solo lectura) ─────────────────────────
     const CLASES_COMPROBACION = {
         cuadra:            { txt: 'Cuadra',                          cls: 'success',   ayuda: 'El documento y su asiento mueven lo mismo en el período.' },
-        solo_documento:   { txt: 'Sin asiento contable',            cls: 'warning',   ayuda: 'El ingreso/egreso no tiene asiento contabilizado en la cuenta del banco.' },
+        solo_documento:   { txt: 'Documento sin asiento',           cls: 'warning',   ayuda: 'El ingreso/egreso/traspaso no tiene ningún asiento contabilizado (pendiente de contabilizar o migrado sin asiento).' },
+        sin_cuenta_modulo: { txt: 'Asiento sin cuenta del banco',   cls: 'warning',   ayuda: 'El documento tiene asiento, pero ninguna de sus líneas afecta la cuenta contable del banco (su forma de pago apunta a otra cuenta en el asiento). El número del asiento lo abre.' },
         solo_contabilidad: { txt: 'Solo en contabilidad',            cls: 'info',      ayuda: 'Asiento sin ingreso/egreso detrás (manual, migrado, etc.).' },
         documento_anulado: { txt: 'Asiento de documento anulado',    cls: 'danger',    ayuda: 'El ingreso/egreso está anulado o eliminado pero su asiento sigue contabilizado.' },
         otra_cuenta:       { txt: 'Cobrado/pagado con otra cuenta',  cls: 'secondary', ayuda: 'El asiento mueve esta cuenta contable, pero el documento se registró con otra forma de pago. Revise la forma de pago del documento o la cuenta de su asiento.' },
@@ -287,10 +288,14 @@
                 };
             }
             const ok = p.clase === 'cuadra';
-            const tipoDoc = ({ ingreso: 'Ingreso', egreso: 'Egreso', traspaso: 'Traspaso' })[p.tipo] || 'Asiento';
+            const tipoDoc = ({ ingreso: 'Ingreso', egreso: 'Egreso', traspaso: 'Traspaso', conciliacion_tarjetas: 'Liquidación de tarjetas' })[p.tipo] || 'Asiento';
+            // Sin línea en la cuenta del banco pero con asiento del documento en otras cuentas: se
+            // enlaza ese asiento (atenuado) para ver a qué cuenta fue.
             const asiento = p.id_asiento
                 ? `<a href="#" onclick="event.preventDefault(); ASIENTO_abrirModal(${parseInt(p.id_asiento, 10)});" title="Ver asiento">${escHtml(p.numero_asiento || 'Asiento')}</a>`
-                : vacio;
+                : (p.id_asiento_doc
+                    ? `<a href="#" class="text-muted" onclick="event.preventDefault(); ASIENTO_abrirModal(${parseInt(p.id_asiento_doc, 10)});" title="Asiento del documento: no afecta la cuenta del banco">${escHtml(p.numero_asiento_doc || 'Asiento')}</a>`
+                    : vacio);
             const doc = p.tipo === 'asiento' ? escHtml(p.concepto || '') : `${tipoDoc} ${escHtml(p.numero || '')}`;
             const dif = Number(p.diferencia || 0);
             const salto = ok ? '' : `<div class="text-danger" style="font-size:.7rem;" title="Lo que esta fila descuadra">${dif > 0 ? '+' : ''}${fmtMoney(dif)}</div>`;

@@ -5,7 +5,7 @@ categoria: Contabilidad
 ruta_modulo: modulos/estados_financieros
 tipo: modulo
 visibilidad: todos
-etiquetas: estados financieros, cuadre con modulos, cuadre de caja, caja vs contabilidad, anticipos vs contabilidad, cuadre de anticipos, cuadrar contabilidad con modulos, contabilidad vs bancos, contabilidad vs cartera, contabilidad vs inventario, comprobar con contabilidad, no cuadra con el modulo, balance, estado de resultados, situacion financiera, perdidas y ganancias, activo pasivo patrimonio, reportes por periodos, comparativo mensual, horizontal por mes, editar cuenta desde el balance, codigo sri, supercias, entidades de control, pdf con logo, firma del contador, firma del representante legal, balances firmados, excel por niveles, columnas por nivel, exportar excel
+etiquetas: estados financieros, cuadre con modulos, tarjetas por liquidar, cuenta puente de tarjetas, activos fijos vs contabilidad, depreciacion acumulada vs contabilidad, cuadre de caja, caja vs contabilidad, anticipos vs contabilidad, cuadre de anticipos, cuadrar contabilidad con modulos, contabilidad vs bancos, contabilidad vs cartera, contabilidad vs inventario, comprobar con contabilidad, no cuadra con el modulo, balance, estado de resultados, situacion financiera, perdidas y ganancias, activo pasivo patrimonio, reportes por periodos, comparativo mensual, horizontal por mes, editar cuenta desde el balance, codigo sri, supercias, entidades de control, pdf con logo, firma del contador, firma del representante legal, balances firmados, excel por niveles, columnas por nivel, exportar excel
 version: 1.12
 orden: 50
 estado: activo
@@ -323,7 +323,7 @@ Revise en este orden:
    contra patrimonio, el balance puede mostrar un descuadre que en realidad es la
    utilidad acumulada del propio ejercicio.
 
-## Cuadre con módulos: la contabilidad contra Bancos, Caja, Cartera, Inventarios y Anticipos
+## Cuadre con módulos: la contabilidad contra Bancos, Caja, Tarjetas, Cartera, Inventarios, Anticipos y Activos Fijos
 
 El botón **Cuadre con Módulos** (en la cabecera del reporte, a la derecha)
 compara las cuentas contables con el saldo que lleva cada módulo, todo en una
@@ -335,7 +335,10 @@ sola tabla. No modifica nada.
 | Cuentas por Cobrar | Según la cartera de [Cuentas por cobrar](cuentas-por-cobrar.md) | Las cuentas por cobrar de Facturas y Recibos de Venta |
 | Cuentas por Pagar | Según la cartera de [Cuentas por pagar](cuentas-por-pagar.md) | Las cuentas por pagar de Compras e Importaciones |
 | Inventarios | Según el kardex, como en el [Reporte de inventarios](reporte-inventarios.md) | Las cuentas de inventario |
-| Caja: (una por forma de pago que no es banco: efectivo, tarjeta, etc.) | Saldo inicial + cobros − pagos ± traspasos, el mismo saldo que muestra [Traspasos](traspasos.md) | La cuenta contable de la forma de pago (o la de su regla en Configuración Contable) |
+| Caja: (una por forma de pago que no es banco ni tarjeta: efectivo, otros) | Saldo inicial + cobros − pagos ± traspasos, el mismo saldo que muestra [Traspasos](traspasos.md) | La cuenta contable de la forma de pago (o la de su regla en Configuración Contable) |
+| Tarjetas por liquidar: (una por forma Tarjeta, Nuvei o Payphone) | Lo cobrado con la tarjeta que la procesadora todavía no liquida: cobros − pagos ± traspasos − lo cruzado en las conciliaciones **cerradas** de [Conciliación de tarjetas](conciliacion-tarjetas.md) | La cuenta puente de la tarjeta |
+| Activos Fijos: costo | El valor de adquisición de los activos de [Activos fijos](activos-fijos.md), a su fecha de adquisición | La cuenta del activo de cada activo |
+| Activos Fijos: depreciación acumulada | Lo depreciado en cada lote mensual, al último día de su mes | La cuenta de depreciación acumulada de cada activo |
 | Anticipos de Clientes | Saldo inicial + anticipos recibidos − aplicados a cobros: el total de la pestaña Anticipos de las fichas de cliente | Las cuentas de las opciones de anticipo de clientes y de la forma de pago Anticipo |
 | Anticipos a Proveedores | Saldo inicial + anticipos entregados − aplicados a pagos | Las cuentas de las opciones de anticipo de proveedores y de la forma de pago Anticipo |
 
@@ -389,7 +392,8 @@ los otros módulos.
 - **1.12** — Nuevo botón **Cuadre con Módulos**: compara las cuentas contables con
   el saldo de cada cuenta bancaria, cada caja, Cuentas por Cobrar, Cuentas por
   Pagar, Inventarios y los anticipos de clientes y proveedores, con el detalle
-  documento por documento. Pantalla reorganizada: título, filtros y totales del
+  documento por documento, más **tarjetas por liquidar** y **activos fijos** (costo y
+  depreciación acumulada). Pantalla reorganizada: título, filtros y totales del
   reporte en una **tarjeta fija** arriba, y el reporte debajo con sus
   exportaciones; el botón de los filtros se llama **Mostrar** (antes *Generar*).
 - **1.11** — El **Excel** sale con el formato del PDF (cabecera de la empresa,

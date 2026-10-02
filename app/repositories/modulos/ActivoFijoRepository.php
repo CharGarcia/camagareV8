@@ -313,4 +313,89 @@ class ActivoFijoRepository extends BaseRepository
             [$idActivo]
         )->fetchAll();
     }
+
+    // ─────────────────────────────────────────────────────────────────────
+    // COMPROBACIÓN CON CONTABILIDAD (Cuadre con Módulos de Estados Financieros)
+    //
+    // Definiciones para App\Services\ComprobacionContableService (formato en
+    // App\repositories\ComprobacionContableRepository): el costo de los activos contra sus
+    // cuentas de activo, y la depreciación acumulada contra sus cuentas de depreciación
+    // acumulada. Las cuentas son las de cada activo (id_cuenta_activo /
+    // id_cuenta_depreciacion_acumulada), que es con las que se contabiliza.
+    // ─────────────────────────────────────────────────────────────────────
+
+    /** Cuentas distintas de una columna de cuenta de los activos de la empresa. */
+    private function cuentasDeActivos(int $idEmpresa, string $columna): array
+    {
+        $columna = in_array($columna, ['id_cuenta_activo', 'id_cuenta_depreciacion_acumulada'], true) ? $columna : 'id_cuenta_activo';
+        return array_map('intval', $this->query(
+            "SELECT DISTINCT {$columna} FROM activos_fijos
+             WHERE id_empresa = ? AND eliminado = false AND {$columna} IS NOT NULL",
+            [$idEmpresa]
+        )->fetchAll(\PDO::FETCH_COLUMN) ?: []);
+    }
+
+    /**
+     * Costo: el valor de adquisición de cada activo, en su fecha de adquisición. El alta manual
+     * tiene asiento propio ('activos_fijos_alta'); el que viene de una compra se contabiliza
+     * con el asiento de la COMPRA, así que se agrupa por compra (si ese asiento no lleva la
+     * cuenta del activo, sale como "Asiento sin cuenta…").
+     */
+    public function definicionComprobacionCosto(int $idEmpresa): array
+    {
+        $docs = "SELECT 'activo_fijo' AS tipo, a.id AS id_doc, a.fecha_adquisicion AS fecha, a.valor_adquisicion AS monto
+                 FROM activos_fijos a
+                 WHERE a.id_empresa = :e AND a.eliminado = FALSE AND COALESCE(a.origen, 'manual') <> 'compra'
+                 UNION ALL
+                 SELECT 'compra', a.id_compra, a.fecha_adquisicion, a.valor_adquisicion
+                 FROM activos_fijos a
+                 WHERE a.id_empresa = :e AND a.eliminado = FALSE AND a.origen = 'compra' AND a.id_compra IS NOT NULL";
+
+        return [
+            'cuentas_ids' => $this->cuentasDeActivos($idEmpresa, 'id_cuenta_activo'),
+            'conceptos_texto' => 'la cuenta de activo de los activos fijos',
+            'signo' => 1,
+            'docs' => $docs,
+            'nativos' => ['activos_fijos_alta' => 'activo_fijo', 'compra' => 'compra'],
+            'migrados' => "SELECT id_asiento_alta AS id_asiento, 'activo_fijo' AS tipo, id AS id_doc FROM activos_fijos
+                           WHERE id_empresa = :e AND id_asiento_alta IS NOT NULL
+                           UNION ALL SELECT c.id_asiento_contable, 'compra', c.id FROM compras_cabecera c
+                           WHERE c.id_empresa = :e AND c.id_asiento_contable IS NOT NULL
+                             AND c.id IN (SELECT id_compra FROM activos_fijos WHERE id_empresa = :e AND id_compra IS NOT NULL)",
+            'apertura' => true,
+            'numeros' => [
+                'activo_fijo' => ['activos_fijos', "CONCAT(x.codigo, ' ', x.nombre)"],
+                'compra' => ['compras_cabecera', "CONCAT(x.establecimiento_prov, '-', x.punto_emision_prov, '-', x.secuencial_prov)"],
+            ],
+        ];
+    }
+
+    /**
+     * Depreciación acumulada (acreedora): lo depreciado en cada lote mensual contabilizado, al
+     * último día de su mes (la fecha de su asiento). La depreciación anterior al sistema
+     * (activos migrados ya depreciados) solo existe en contabilidad: sale en el saldo inicial.
+     */
+    public function definicionComprobacionDepreciacion(int $idEmpresa): array
+    {
+        $docs = "SELECT 'depreciacion' AS tipo, l.id AS id_doc,
+                        (MAKE_DATE(l.periodo_anio, l.periodo_mes, 1) + INTERVAL '1 month - 1 day')::DATE AS fecha,
+                        d.valor_depreciado AS monto
+                 FROM activos_fijos_lotes l
+                 JOIN activos_fijos_depreciaciones d ON d.id_lote = l.id AND d.eliminado = FALSE
+                 WHERE l.id_empresa = :e AND l.eliminado = FALSE AND l.estado = 'contabilizado'";
+
+        return [
+            'cuentas_ids' => $this->cuentasDeActivos($idEmpresa, 'id_cuenta_depreciacion_acumulada'),
+            'conceptos_texto' => 'la cuenta de depreciación acumulada de los activos fijos',
+            'signo' => -1,
+            'docs' => $docs,
+            'nativos' => ['activos_fijos_depreciacion' => 'depreciacion'],
+            'migrados' => "SELECT id_asiento_contable AS id_asiento, 'depreciacion' AS tipo, id AS id_doc FROM activos_fijos_lotes
+                           WHERE id_empresa = :e AND id_asiento_contable IS NOT NULL",
+            'apertura' => true,
+            'numeros' => [
+                'depreciacion' => ['activos_fijos_lotes', "CONCAT('Depreciación ', LPAD(x.periodo_mes::TEXT, 2, '0'), '-', x.periodo_anio)"],
+            ],
+        ];
+    }
 }

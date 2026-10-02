@@ -498,3 +498,20 @@
         });
     };
 })();
+
+// ─── Comprobación con Contabilidad ──────────────────────────────────────────
+// Costo de los activos contra sus cuentas de activo, o depreciación acumulada contra sus
+// cuentas de depreciación acumulada (modal común, public/js/comprobacion_contable.js).
+window.AF_comprobarContabilidad = function (tipo) {
+    const dep = tipo === 'depreciacion';
+    CMG_comprobacionContable.abrir({
+        url: `${window.AF_URL_BASE}/comprobacionContableAjax?tipo=${dep ? 'depreciacion' : 'costo'}`,
+        modulo: dep ? 'Activos Fijos: depreciación acumulada' : 'Activos Fijos: costo',
+        etiquetaLibros: 'Según Activos Fijos',
+        etiquetaCuenta: dep ? 'cuenta de depreciación acumulada' : 'cuenta del activo',
+        nota: dep
+            ? '"Según Activos Fijos" es la suma de lo depreciado en cada lote mensual generado en el módulo, al último día de su mes. La depreciación anterior al sistema (activos que ya venían depreciados) solo existe en contabilidad y aparece en el saldo inicial.'
+            : '"Según Activos Fijos" es el valor de adquisición de los activos registrados, a su fecha de adquisición. El alta manual tiene su propio asiento; el activo que viene de una compra se contabiliza con el asiento de esa compra.',
+        tipos: { activo_fijo: 'Activo', compra: 'Compra', depreciacion: '' },
+    });
+};

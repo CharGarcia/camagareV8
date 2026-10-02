@@ -553,7 +553,10 @@ modifica nada.
 - Los filtros de bodega, producto y búsqueda de la pestaña no aplican: la
   contabilidad no distingue bodega ni producto.
 - Ajustes manuales, cargas de inventario, órdenes de taller y saldos iniciales
-  del kardex no generan asiento: salen como *Sin asiento contable*. Una compra
+  del kardex no generan asiento: salen como *Documento sin asiento*. Las
+  **facturas migradas** del sistema anterior sí tienen asiento, pero solo de la
+  venta (sin el costo contra inventario): salen como *Asiento sin cuenta de
+  inventario*, con enlace a ese asiento. Una compra
   sale como *Monto distinto* cuando el asiento registró el inventario por el
   precio de la factura y el kardex por otro costo.
 - Solo la ve quien tiene acceso a la contabilidad: permiso de ver el módulo

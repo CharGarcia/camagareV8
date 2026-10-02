@@ -232,24 +232,34 @@ class ControlBancarioRepository extends BaseRepository
                       AND COALESCE(tc.estado, 'registrado') <> 'anulado'
                       AND tc.tipo_ambiente = (SELECT t FROM amb)
                       AND (tc.id_forma_destino IN ({$marcasCobro}) OR tc.id_forma_origen IN ({$marcasPago}))
+                    UNION ALL
+                    -- Liquidaciones de tarjetas cerradas: el neto depositado entra en el banco
+                    -- destino (su asiento lo debita con la cuenta de cobro del destino).
+                    SELECT 'conciliacion_tarjetas', ct.id, ct.numero, ct.fecha_conciliacion, ct.neto_depositado
+                    FROM conciliacion_tarjetas_cabecera ct
+                    WHERE ct.id_empresa = :e AND ct.eliminado = FALSE AND ct.estado = 'cerrada'
+                      AND ct.neto_depositado <> 0
+                      AND ct.tipo_ambiente = (SELECT t FROM amb)
+                      AND ct.id_forma_cobro_destino IN ({$marcasCobro})
                 ),
                 k AS (
                     SELECT CASE WHEN icx.id IS NOT NULL THEN 'ingreso'
                                 WHEN ecx.id IS NOT NULL THEN 'egreso'
                                 WHEN tcx.id IS NOT NULL THEN 'traspaso'
+                                WHEN ctx.id IS NOT NULL THEN 'conciliacion_tarjetas'
                                 ELSE 'asiento' END::VARCHAR AS tipo,
-                           COALESCE(icx.id, ecx.id, tcx.id, ac.id) AS id_doc,
+                           COALESCE(icx.id, ecx.id, tcx.id, ctx.id, ac.id) AS id_doc,
                            MIN(ac.fecha_asiento) AS fecha,
                            SUM(ad.debe - ad.haber) AS monto,
                            MIN(ac.id) AS id_asiento,
                            STRING_AGG(DISTINCT ac.numero_comprobante, ', ') AS numero_asiento,
                            MIN(ac.concepto) AS concepto,
-                           BOOL_OR(COALESCE(icx.eliminado, ecx.eliminado, tcx.eliminado, FALSE)
-                                   OR COALESCE(icx.estado, ecx.estado, tcx.estado, '') = 'anulado') AS doc_anulado,
-                           MIN(COALESCE(icx.numero_ingreso, ecx.numero_egreso, tcx.numero_traspaso)) AS numero_doc
+                           BOOL_OR(COALESCE(icx.eliminado, ecx.eliminado, tcx.eliminado, ctx.eliminado, FALSE)
+                                   OR COALESCE(icx.estado, ecx.estado, tcx.estado, ctx.estado, '') IN ('anulado', 'anulada')) AS doc_anulado,
+                           MIN(COALESCE(icx.numero_ingreso, ecx.numero_egreso, tcx.numero_traspaso, ctx.numero)) AS numero_doc
                     FROM asientos_contables_detalle ad
                     JOIN asientos_contables_cabecera ac ON ac.id = ad.id_asiento
-                    LEFT JOIN ingresos_cabecera icx ON UPPER(ac.tipo_comprobante) = 'INGRESOS'
+                    LEFT JOIN ingresos_cabecera icx ON UPPER(ac.tipo_comprobante) = 'INGRESOS' AND COALESCE(ac.modulo_origen, '') <> 'conciliacion_tarjetas'
                          AND icx.id = ac.id_referencia_origen AND icx.id_empresa = ac.id_empresa
                     LEFT JOIN egresos_cabecera ecx ON UPPER(ac.tipo_comprobante) = 'EGRESOS'
                          AND ecx.id = ac.id_referencia_origen AND ecx.id_empresa = ac.id_empresa
@@ -258,6 +268,10 @@ class ControlBancarioRepository extends BaseRepository
                     LEFT JOIN traspasos_cabecera tcx ON tcx.id_empresa = ac.id_empresa
                          AND ((ac.modulo_origen = 'traspaso' AND tcx.id = ac.id_referencia_origen)
                               OR tcx.id_asiento_contable = ac.id)
+                    -- Asiento de la liquidación de tarjetas (Conciliación de Tarjetas).
+                    LEFT JOIN conciliacion_tarjetas_cabecera ctx ON ctx.id_empresa = ac.id_empresa
+                         AND ((ac.modulo_origen = 'conciliacion_tarjetas' AND ctx.id = ac.id_referencia_origen)
+                              OR ctx.id_asiento_contable = ac.id)
                     WHERE ac.id_empresa = :e AND ac.estado = 'contabilizado'
                       AND ac.eliminado = FALSE AND ad.eliminado = FALSE
                       AND ac.tipo_ambiente = (SELECT t FROM amb)
@@ -335,7 +349,9 @@ class ControlBancarioRepository extends BaseRepository
                                    JOIN empresa_formas_pago fpx ON fpx.id = epx.id_forma_pago
                                   WHERE epx.id_egreso = p.id_doc AND COALESCE(epx.eliminado, FALSE) = FALSE)
                        END AS formas_doc,
+                       oa.id AS id_asiento_doc, oa.numero_comprobante AS numero_asiento_doc,
                        CASE WHEN ABS(efecto_doc - efecto_contable) <= 0.005 THEN 'cuadra'
+                            WHEN monto_asiento IS NULL AND oa.id IS NOT NULL THEN 'sin_cuenta_modulo'
                             WHEN monto_asiento IS NULL THEN 'solo_documento'
                             WHEN monto_doc IS NULL AND doc_anulado THEN 'documento_anulado'
                             WHEN monto_doc IS NULL AND tipo = 'asiento' THEN 'solo_contabilidad'
@@ -343,6 +359,22 @@ class ControlBancarioRepository extends BaseRepository
                             WHEN ABS(monto_doc - monto_asiento) > 0.005 THEN 'monto_distinto'
                             ELSE 'fecha_distinta' END AS clase
                 FROM p
+                -- Documento sin nada en la cuenta del banco: ¿tiene asiento en OTRAS cuentas? (el
+                -- cobro/pago se contabilizó, pero contra otra cuenta). Mismo enlace que el CTE k.
+                LEFT JOIN LATERAL (
+                    SELECT ac.id, ac.numero_comprobante
+                    FROM asientos_contables_cabecera ac
+                    WHERE p.monto_asiento IS NULL AND p.tipo IN ('ingreso', 'egreso', 'traspaso', 'conciliacion_tarjetas')
+                      AND ac.id_empresa = :e AND ac.estado = 'contabilizado' AND ac.eliminado = FALSE
+                      AND ac.tipo_ambiente = (SELECT t FROM amb)
+                      AND (   (p.tipo = 'ingreso'  AND UPPER(ac.tipo_comprobante) = 'INGRESOS' AND COALESCE(ac.modulo_origen, '') <> 'conciliacion_tarjetas' AND ac.id_referencia_origen = p.id_doc)
+                           OR (p.tipo = 'egreso'   AND UPPER(ac.tipo_comprobante) = 'EGRESOS'  AND ac.id_referencia_origen = p.id_doc)
+                           OR (p.tipo = 'traspaso' AND ac.modulo_origen = 'traspaso'           AND ac.id_referencia_origen = p.id_doc)
+                           OR (p.tipo = 'traspaso' AND ac.id = (SELECT tcy.id_asiento_contable FROM traspasos_cabecera tcy WHERE tcy.id = p.id_doc))
+                           OR (p.tipo = 'conciliacion_tarjetas' AND ac.modulo_origen = 'conciliacion_tarjetas' AND ac.id_referencia_origen = p.id_doc))
+                    ORDER BY ac.id
+                    LIMIT 1
+                ) oa ON TRUE
                 ORDER BY fecha_orden, tipo, id_doc
                 LIMIT " . max(1, $limite);
         $st = $this->db->prepare($sql);
@@ -661,7 +693,48 @@ class ControlBancarioRepository extends BaseRepository
               AND tc.id_forma_origen = :id_forma_to
               AND tc.eliminado = FALSE
               AND COALESCE(tc.estado, 'registrado') <> 'anulado'
-              AND tc.tipo_ambiente = (SELECT CAST(tipo_ambiente AS VARCHAR(1)) FROM empresas WHERE id = :amb_to)";
+              AND tc.tipo_ambiente = (SELECT CAST(tipo_ambiente AS VARCHAR(1)) FROM empresas WHERE id = :amb_to)
+
+            UNION ALL
+
+            -- Liquidación de tarjetas (Conciliación de Tarjetas cerrada): la procesadora deposita
+            -- el neto en el banco destino. No genera un ingreso, pero su asiento debita la cuenta
+            -- del banco, así que también es movimiento del banco. Ancla: 'liq_tarj' + id.
+            SELECT
+                NULL::INTEGER AS id_asiento_detalle,
+                NULL::INTEGER AS id_asiento,
+                'liq_tarj'::VARCHAR AS origen_tipo,
+                ct.id AS origen_id,
+                ct.fecha_conciliacion AS fecha_asiento,
+                ct.numero AS numero_comprobante,
+                'Liquidación de ' || COALESCE(fpt.nombre, 'tarjetas') AS concepto,
+                COALESCE(NULLIF(ct.observaciones, ''), 'Liquidación de ' || COALESCE(fpt.nombre, 'tarjetas')) AS referencia_detalle,
+                NULL::VARCHAR AS documento_referencia,
+                ct.neto_depositado AS debe,
+                0::NUMERIC AS haber,
+                NULL::VARCHAR AS tipo_entidad,
+                NULL::INTEGER AS id_entidad,
+                COALESCE(fpt.nombre, 'tarjetas') AS nombre_entidad,
+                COALESCE(fpt.nombre, 'tarjetas') AS beneficiario_cheque,
+                COALESCE(cbm.tipo_transaccion, 'DEPOSITO') AS tipo_transaccion,
+                COALESCE(cbm.cheque_direccion, 'RECIBIDO') AS cheque_direccion,
+                cbm.numero_cheque AS numero_cheque,
+                cbm.fecha_cheque AS fecha_cheque,
+                COALESCE(cbm.fecha_banco, ct.fecha_conciliacion) AS fecha_banco,
+                cbm.fecha_banco AS fecha_banco_manual,
+                cbm.id AS id_clasificacion,
+                cbm.observacion AS observacion,
+                TRUE AS tiene_documento
+            FROM conciliacion_tarjetas_cabecera ct
+            LEFT JOIN empresa_formas_pago fpt ON fpt.id = ct.id_forma_cobro
+            LEFT JOIN control_bancario_movimientos cbm
+                   ON cbm.origen_tipo = 'liq_tarj' AND cbm.origen_id = ct.id AND cbm.eliminado = FALSE
+            WHERE ct.id_empresa = :id_empresa_lt
+              AND ct.id_forma_cobro_destino = :id_forma_lt
+              AND ct.eliminado = FALSE
+              AND ct.estado = 'cerrada'
+              AND ct.neto_depositado <> 0
+              AND ct.tipo_ambiente = (SELECT CAST(tipo_ambiente AS VARCHAR(1)) FROM empresas WHERE id = :amb_lt)";
     }
 
     /** Parámetros que espera baseTesoreria(). */
@@ -672,6 +745,7 @@ class ControlBancarioRepository extends BaseRepository
             ':id_empresa_e' => $idEmpresa, ':id_forma_e' => $idFormaPago, ':amb_e' => $idEmpresa,
             ':id_empresa_ti' => $idEmpresa, ':id_forma_ti' => $idFormaPago, ':amb_ti' => $idEmpresa,
             ':id_empresa_to' => $idEmpresa, ':id_forma_to' => $idFormaPago, ':amb_to' => $idEmpresa,
+            ':id_empresa_lt' => $idEmpresa, ':id_forma_lt' => $idFormaPago, ':amb_lt' => $idEmpresa,
         ];
     }
 
@@ -779,7 +853,7 @@ class ControlBancarioRepository extends BaseRepository
                 SELECT ip2.* FROM ingresos_pagos ip2
                 INNER JOIN empresa_formas_pago fp2 ON fp2.id = ip2.id_forma_cobro
                     AND fp2.id_cuenta_contable = fp.id_cuenta_contable AND fp2.eliminado = FALSE
-                WHERE UPPER(ac.tipo_comprobante) = 'INGRESOS'
+                WHERE UPPER(ac.tipo_comprobante) = 'INGRESOS' AND COALESCE(ac.modulo_origen, '') <> 'conciliacion_tarjetas'
                   AND ac.id_referencia_origen = ip2.id_ingreso
                 ORDER BY ip2.id
                 LIMIT 1
@@ -828,7 +902,7 @@ class ControlBancarioRepository extends BaseRepository
         return "
               AND NOT EXISTS (
                     SELECT 1 FROM ingresos_cabecera icx
-                    WHERE UPPER(ac.tipo_comprobante) = 'INGRESOS'
+                    WHERE UPPER(ac.tipo_comprobante) = 'INGRESOS' AND COALESCE(ac.modulo_origen, '') <> 'conciliacion_tarjetas'
                       AND icx.id = ac.id_referencia_origen
                       AND (icx.eliminado = TRUE OR COALESCE(icx.estado, '') = 'anulado')
               )
@@ -1385,6 +1459,13 @@ class ControlBancarioRepository extends BaseRepository
                     INNER JOIN ingresos_cabecera ic ON ic.id = ip.id_ingreso
                     WHERE ip.id = :id AND ic.id_empresa = :id_empresa
                       AND ip.id_forma_cobro = :id_forma_pago AND ic.eliminado = FALSE";
+        } elseif ($origenTipo === 'liq_tarj') {
+            // Liquidación de tarjetas cerrada depositada en esta cuenta bancaria.
+            $sql = "SELECT ct.fecha_conciliacion
+                    FROM conciliacion_tarjetas_cabecera ct
+                    WHERE ct.id = :id AND ct.id_empresa = :id_empresa
+                      AND ct.id_forma_cobro_destino = :id_forma_pago AND ct.eliminado = FALSE
+                      AND ct.estado = 'cerrada'";
         } elseif ($origenTipo === 'trasp_in' || $origenTipo === 'trasp_out') {
             // Entrada (cuenta destino) o salida (cuenta origen) de un traspaso de fondos.
             $columna = $origenTipo === 'trasp_in' ? 'id_forma_destino' : 'id_forma_origen';

@@ -690,7 +690,7 @@ No modifica nada.
 - No aplica los filtros de cliente, vendedor, producto ni el consolidado: la
   cuenta contable no los distingue.
 - Las **facturas en borrador** suman en la cartera pero no tienen asiento:
-  salen como *Sin asiento contable*. Una retención o NC cuyo sustento no es
+  salen como *Documento sin asiento*. Una retención o NC cuyo sustento no es
   ninguna factura de la cartera sale como *Documento que no suma aquí*.
 - Solo la ve quien tiene acceso a la contabilidad: permiso de ver el módulo
   **Estados financieros** en la empresa activa.

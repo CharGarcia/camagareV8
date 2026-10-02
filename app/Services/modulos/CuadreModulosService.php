@@ -3,6 +3,7 @@ declare(strict_types=1);
 
 namespace App\Services\modulos;
 
+use App\repositories\modulos\ActivoFijoRepository;
 use App\repositories\modulos\ControlBancarioRepository;
 use App\repositories\modulos\CuentasPorCobrarRepository;
 use App\repositories\modulos\CuentasPorPagarRepository;
@@ -100,24 +101,26 @@ class CuadreModulosService
             ];
         }
 
-        // Caja: una fila por forma de pago no bancaria (las que comparten cuenta, juntas).
-        $formasCaja = $this->formas->getFormasCajaConCuentas($idEmpresa);
-        $vistas = [];
-        foreach ($formasCaja as $forma) {
-            $idForma = (int) $forma['id'];
-            if (isset($vistas[$idForma])) {
-                continue;
+        // Caja y tarjetas: una fila por forma de pago no bancaria (las que comparten cuenta, juntas).
+        foreach (self::POR_FORMA as $modulo => $prefijo) {
+            $formas = $this->formasDe($modulo, $idEmpresa);
+            $vistas = [];
+            foreach ($formas as $forma) {
+                $idForma = (int) $forma['id'];
+                if (isset($vistas[$idForma])) {
+                    continue;
+                }
+                $grupo = $this->grupoCaja($formas, $idForma);
+                if (!$grupo['cuentas']) {
+                    $filas[] = ['modulo' => $modulo, 'id_forma' => $idForma, 'nombre' => $prefijo . $forma['nombre'], 'sin_cuentas' => true];
+                    continue;
+                }
+                foreach ($grupo['formas'] as $idF) {
+                    $vistas[$idF] = true;
+                }
+                $r = $this->comprobacion->resumir($this->definicionGrupo($modulo, $grupo), $idEmpresa, $fechaInicio, $fechaFin);
+                $filas[] = ['modulo' => $modulo, 'id_forma' => $idForma, 'nombre' => $prefijo . implode(', ', $grupo['nombres'])] + $r;
             }
-            $grupo = $this->grupoCaja($formasCaja, $idForma);
-            if (!$grupo['cuentas']) {
-                $filas[] = ['modulo' => 'caja', 'id_forma' => $idForma, 'nombre' => 'Caja: ' . $forma['nombre'], 'sin_cuentas' => true];
-                continue;
-            }
-            foreach ($grupo['formas'] as $idF) {
-                $vistas[$idF] = true;
-            }
-            $r = $this->comprobacion->resumir($this->definicionCaja($grupo), $idEmpresa, $fechaInicio, $fechaFin);
-            $filas[] = ['modulo' => 'caja', 'id_forma' => $idForma, 'nombre' => 'Caja: ' . implode(', ', $grupo['nombres'])] + $r;
         }
 
         foreach (self::MODULOS as $clave => [, $nombre]) {
@@ -130,7 +133,46 @@ class CuadreModulosService
             $filas[] = ['modulo' => $clave, 'id_forma' => null, 'nombre' => $nombre] + $r;
         }
 
+        foreach (self::ACTIVOS as $clave => [$depreciacion, $nombre]) {
+            $r = $this->comprobacion->resumir($this->definicionActivos($idEmpresa, $depreciacion), $idEmpresa, $fechaInicio, $fechaFin);
+            $filas[] = ['modulo' => $clave, 'id_forma' => null, 'nombre' => $nombre] + $r;
+        }
+
         return ['fecha_inicio' => $fechaInicio, 'fecha_fin' => $fechaFin, 'filas' => $filas];
+    }
+
+    /** Filas por forma de pago no bancaria: módulo => prefijo del nombre. */
+    private const POR_FORMA = [
+        'caja'     => 'Caja: ',
+        'tarjetas' => 'Tarjetas por liquidar: ',
+    ];
+
+    /** Activos fijos: clave => [¿depreciación acumulada? (si no, costo), nombre]. */
+    private const ACTIVOS = [
+        'activos_costo'        => [false, 'Activos Fijos: costo'],
+        'activos_depreciacion' => [true, 'Activos Fijos: depreciación acumulada'],
+    ];
+
+    private function formasDe(string $modulo, int $idEmpresa): array
+    {
+        return $modulo === 'tarjetas'
+            ? $this->formas->getFormasTarjetaConCuentas($idEmpresa)
+            : $this->formas->getFormasCajaConCuentas($idEmpresa);
+    }
+
+    private function definicionGrupo(string $modulo, array $grupo): array
+    {
+        return $modulo === 'tarjetas'
+            ? $this->formas->definicionComprobacionTarjetas($grupo['cuentas'], $grupo['cobro'], $grupo['pago'], $grupo['formas'])
+            : $this->formas->definicionComprobacionCaja($grupo['cuentas'], $grupo['cobro'], $grupo['pago'], $grupo['formas']);
+    }
+
+    private function definicionActivos(int $idEmpresa, bool $depreciacion): array
+    {
+        $repo = new ActivoFijoRepository();
+        return $depreciacion
+            ? $repo->definicionComprobacionDepreciacion($idEmpresa)
+            : $repo->definicionComprobacionCosto($idEmpresa);
     }
 
     /** Anticipos: clave => [¿de proveedores?, nombre]. */
@@ -161,7 +203,7 @@ class CuadreModulosService
             }
         }
         if ($base === null) {
-            throw new \InvalidArgumentException('La forma de pago indicada no es de caja.');
+            throw new \InvalidArgumentException('La forma de pago indicada no corresponde a esta fila del cuadre.');
         }
         $cuentas = array_values(array_unique(array_filter([(int) $base['id_cuenta_cobro'], (int) $base['id_cuenta_pago']])));
         $grupo = ['cuentas' => $cuentas, 'cobro' => [], 'pago' => [], 'formas' => [], 'nombres' => []];
@@ -183,18 +225,16 @@ class CuadreModulosService
         return $grupo;
     }
 
-    private function definicionCaja(array $grupo): array
-    {
-        return $this->formas->definicionComprobacionCaja($grupo['cuentas'], $grupo['cobro'], $grupo['pago'], $grupo['formas']);
-    }
-
     /** Detalle documento por documento de una fila del resumen (formato de la pantalla común). */
     public function detalle(int $idEmpresa, string $modulo, int $idForma, string $fechaInicio, string $fechaFin): array
     {
         $this->validarPeriodo($fechaInicio, $fechaFin);
-        if ($modulo === 'caja') {
-            $grupo = $this->grupoCaja($this->formas->getFormasCajaConCuentas($idEmpresa), $idForma);
-            return $this->comprobacion->comprobar($this->definicionCaja($grupo), $idEmpresa, $fechaInicio, $fechaFin);
+        if (isset(self::POR_FORMA[$modulo])) {
+            $grupo = $this->grupoCaja($this->formasDe($modulo, $idEmpresa), $idForma);
+            return $this->comprobacion->comprobar($this->definicionGrupo($modulo, $grupo), $idEmpresa, $fechaInicio, $fechaFin);
+        }
+        if (isset(self::ACTIVOS[$modulo])) {
+            return $this->comprobacion->comprobar($this->definicionActivos($idEmpresa, self::ACTIVOS[$modulo][0]), $idEmpresa, $fechaInicio, $fechaFin);
         }
         if (isset(self::ANTICIPOS[$modulo])) {
             $def = $this->definicionAnticipos($idEmpresa, self::ANTICIPOS[$modulo][0]);

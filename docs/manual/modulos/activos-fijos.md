@@ -5,8 +5,8 @@ categoria: Contabilidad
 ruta_modulo: modulos/activos-fijos
 tipo: modulo
 visibilidad: todos
-etiquetas: activos fijos, activo, depreciacion, bienes, maquinaria, vehiculos, muebles, vida util, linea recta
-version: 1.3
+etiquetas: activos fijos, comprobar con contabilidad, cuadre de activos fijos, depreciacion no cuadra, activo, depreciacion, bienes, maquinaria, vehiculos, muebles, vida util, linea recta
+version: 1.4
 orden: 60
 estado: activo
 ---
@@ -60,6 +60,25 @@ El asiento no se borra: queda en estado **anulado**, así que el rastro se conse
 Si la fecha de alta cae en un **período contable cerrado**, la eliminación se
 rechaza. Reabra el período si realmente necesita eliminarlo.
 
+## Comprobar con la contabilidad
+
+El botón **Comprobar con Contabilidad** (en la cabecera de la tabla, junto a PDF y
+Excel) ofrece dos comparaciones. No modifican nada:
+
+- **Costo de los activos**: el valor de adquisición de cada activo, a su fecha de
+  adquisición, contra la **cuenta del activo**. El alta manual se cruza con su
+  propio asiento; el activo que viene de una compra, con el asiento de esa compra
+  (si ese asiento no usó la cuenta del activo, sale como *Asiento sin cuenta del
+  activo*).
+- **Depreciación acumulada**: lo depreciado en cada lote mensual, al último día de
+  su mes, contra la **cuenta de depreciación acumulada**. La depreciación anterior
+  al sistema (activos que ya venían depreciados) solo está en contabilidad y
+  aparece en el saldo inicial.
+
+Solo lo ve quien tiene acceso a **Estados financieros**. Las dos comparaciones
+también están en el *Cuadre con Módulos* de Estados financieros. Cómo leer la
+pantalla: [Comprobar un módulo con la contabilidad](../conceptos/comprobacion-con-contabilidad.md).
+
 ## Errores frecuentes
 
 - **"La categoría seleccionada está inactiva"**: actívela o elija otra.
@@ -86,6 +105,8 @@ Contables**; reabrir el período permite la operación de inmediato.
 
 ## Historial de cambios
 
+- **1.4** — Nuevo botón **Comprobar con Contabilidad** (costo y depreciación
+  acumulada contra sus cuentas).
 - **1.3** — Asiento de **alta** de los activos manuales: si faltaba una cuenta o el período estaba cerrado, el documento quedaba sin asiento y nada lo volvía a intentar. Ahora, al completar la configuración contable, el asiento se genera solo la próxima vez que alguien abra el módulo (igual que en Facturas de Venta), o desde la sincronización de Asientos Contables. Respeta el interruptor *Módulos que contabilizan*.
 - **1.2** — El módulo respeta ahora el **cierre contable**: no se puede operar
   sobre un activo cuyo período esté cerrado. Antes no se comprobaba.

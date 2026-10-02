@@ -6,7 +6,7 @@ ruta_modulo: modulos/conciliacion-tarjetas
 tipo: modulo
 visibilidad: todos
 etiquetas: conciliar tarjetas, recaps diners, interdin, visa, mastercard, discover, asiento no generado, asiento pendiente, contabilizar conciliacion, payphone, nuvei, datafono, tarjeta de credito, liquidacion, comision de tarjeta, deposito de tarjeta, retenciones tarjeta, cuadrar tarjetas, cobros por depositar, asiento del deposito, imprimir, impresora
-version: 2.4
+version: 2.5
 orden: 66
 estado: activo
 ---
@@ -211,8 +211,12 @@ Módulos que contabilizan*, no se genera ninguno.
   que es la llave más confiable para cruzar.
 - **Contabilidad**: al cerrar genera un asiento — Banco por el neto, más
   comisión, IVA y retenciones, contra la cuenta puente por el bruto.
-- **Control Bancario**: el depósito aparece solo en la cuenta bancaria, porque
-  ese módulo se alimenta de los asientos.
+- **Control Bancario**: una conciliación **cerrada** aparece en la cuenta bancaria
+  destino como un depósito por el **neto**, y ahí se concilia con su Fecha Banco.
+  Las conciliaciones en borrador o anuladas no aparecen.
+- **Estados financieros** (*Cuadre con Módulos*): la fila *Tarjetas por liquidar*
+  compara lo cobrado con cada tarjeta menos lo liquidado en conciliaciones
+  cerradas contra la cuenta puente.
 
 ## Errores frecuentes
 
@@ -254,6 +258,10 @@ Contables**; reabrir el período permite la operación de inmediato.
 
 ## Historial de cambios
 
+- **2.5** — La liquidación de una conciliación cerrada aparece en **Control
+  Bancario** como depósito del neto en la cuenta destino, y el saldo por
+  liquidar de cada tarjeta se compara con su cuenta puente en el *Cuadre con
+  Módulos* de Estados financieros.
 - **2.4** — Al asignar un cobro a una línea, el sistema **valida que no pase del bruto** de la línea (con la tolerancia de la configuración) y avisa *"El valor del cobro es superior al que falta cruzar"*; también en el cruce automático. Cada línea muestra cuánto **falta** cruzar o si está **completa**, y con una línea marcada la lista de cobros indica **Falta por cruzar** y atenúa los cobros que no caben.
 
 - **2.3** — Al cruzar a mano, la línea del estado de cuenta **queda marcada** después de cada cruce: se pueden seguir eligiendo cobros de la derecha sin volver a seleccionarla. Se desmarca con otro clic sobre la misma línea.

@@ -88,7 +88,23 @@ class ActivosFijosController extends BaseModuloController
             'ordenDir'    => $ordenDir,
             'vistaConfig' => $prefsVista,
             'rutaModulo'  => $this->getRutaModulo(),
+            'puedeComprobarContabilidad' => $this->puedeComprobarContabilidad(),
         ]);
+    }
+
+    /**
+     * Comprobación con Contabilidad (solo lectura): ?tipo=costo compara el valor de
+     * adquisición de los activos con sus cuentas de activo; ?tipo=depreciacion, la
+     * depreciación acumulada (lotes mensuales) con sus cuentas de depreciación acumulada.
+     */
+    public function comprobacionContableAjax(): void
+    {
+        $this->requireLeer();
+        $idEmpresa = (int) $_SESSION['id_empresa'];
+        $definicion = ($_GET['tipo'] ?? '') === 'depreciacion'
+            ? $this->repository->definicionComprobacionDepreciacion($idEmpresa)
+            : $this->repository->definicionComprobacionCosto($idEmpresa);
+        $this->responderComprobacionContable($definicion);
     }
 
     public function searchAjax(): void

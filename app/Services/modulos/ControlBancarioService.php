@@ -310,7 +310,7 @@ class ControlBancarioService
         $tipo = strtolower(trim((string) ($data['origen_tipo'] ?? '')));
         $id = (int) ($data['origen_id'] ?? 0);
         // trasp_in / trasp_out: entrada o salida de un traspaso de fondos (id del traspaso).
-        if (!in_array($tipo, ['ingreso', 'egreso', 'trasp_in', 'trasp_out'], true) || $id <= 0) {
+        if (!in_array($tipo, ['ingreso', 'egreso', 'trasp_in', 'trasp_out', 'liq_tarj'], true) || $id <= 0) {
             return [null, 0];
         }
         return [$tipo, $id];

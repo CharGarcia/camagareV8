@@ -1145,6 +1145,7 @@ window.RI_Auditoria = {
             url: `${BASE_URL}/${RUTA_MODULO}/comprobacionContableAjax`,
             modulo: 'Inventarios',
             etiquetaLibros: 'Según Kardex',
+            etiquetaCuenta: 'cuenta de inventario',
             nota: '"Según Kardex" es el valor del inventario por movimientos, de todas las bodegas: cada entrada suma su costo y cada '
                 + 'salida resta el costo con que salió (el mismo que la venta lleva a Costo de Ventas). No es el valor de la pestaña '
                 + 'Valorización, que multiplica el stock por el último costo. Ajustes, cargas, órdenes de taller y saldos iniciales '

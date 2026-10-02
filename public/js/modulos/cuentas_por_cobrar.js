@@ -1932,6 +1932,7 @@ function CXC_comprobarContabilidad() {
         url: `${BASE_URL}/${RUTA_MODULO_CXC}/comprobacionContableAjax`,
         modulo: 'Cuentas por Cobrar',
         etiquetaLibros: 'Según Cartera',
+        etiquetaCuenta: 'cuenta por cobrar',
         hasta,
         desde: document.getElementById('cxc-fecha-desde')?.value || '',
         nota: '"Según Cartera" es la suma de los saldos de todas las facturas, recibos y saldos iniciales de esta empresa '

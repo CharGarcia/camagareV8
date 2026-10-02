@@ -25,6 +25,7 @@
         nota_debito: 'Nota de débito', retencion_venta: 'Retención', ingreso: 'Ingreso',
         compra: 'Compra', liquidacion_compra: 'Liquidación', retencion_compra: 'Retención',
         egreso: 'Egreso', importacion: 'Importación', saldo_inicial: 'Saldos iniciales', traspaso: 'Traspaso',
+        conciliacion_tarjetas: 'Liquidación de tarjetas', activo_fijo: 'Activo fijo', depreciacion: 'Depreciación',
         asiento: 'Asiento',
     };
 
@@ -59,7 +60,8 @@
         const m = opciones.modulo || 'el módulo';
         return {
             cuadra:            { txt: 'Cuadra', cls: 'success', ayuda: 'El documento y su asiento mueven lo mismo en el período.' },
-            solo_documento:    { txt: 'Sin asiento contable', cls: 'warning', ayuda: `El documento suma en ${m}, pero no tiene asiento contabilizado en estas cuentas (borrador, sin contabilizar, o su asiento usa otra cuenta).` },
+            solo_documento:    { txt: 'Documento sin asiento', cls: 'warning', ayuda: `El documento suma en ${m}, pero no tiene ningún asiento contabilizado (borrador, pendiente de contabilizar, o un movimiento que no genera asiento, como un ajuste).` },
+            sin_cuenta_modulo: { txt: `Asiento sin ${opciones.etiquetaCuenta || 'las cuentas comparadas'}`, cls: 'warning', ayuda: `El documento tiene asiento, pero ninguna de sus líneas afecta ${opciones.etiquetaCuenta ? 'la ' + opciones.etiquetaCuenta : 'las cuentas comparadas'} (p. ej. una factura migrada del sistema anterior, que solo registró la venta sin el costo, o una cuenta mal configurada). El número del asiento lo abre.` },
             solo_contabilidad: { txt: 'Solo en contabilidad', cls: 'info', ayuda: `Asiento sin un documento de ${m} detrás (manual, migrado o de otro módulo).` },
             fuera_modulo:      { txt: 'Documento que no suma aquí', cls: 'danger', ayuda: `El asiento es de un documento que ${m} no cuenta: anulado, eliminado, en un estado que no suma, o que no se aplica a ningún documento del módulo.` },
             monto_distinto:    { txt: 'Monto distinto', cls: 'danger', ayuda: 'El documento y su asiento mueven montos distintos en estas cuentas.' },
@@ -144,9 +146,13 @@
                 : p.tipo === 'saldo_inicial'
                     ? 'Saldos iniciales / apertura'
                     : `${esc(nombreTipo)} ${esc(p.numero || (p.id_doc ? '#' + p.id_doc : ''))}`;
+            // Sin línea en estas cuentas pero con asiento del documento en otras: se enlaza ese
+            // asiento (atenuado) para ver qué registró.
             const asiento = p.id_asiento
                 ? `<a href="#" onclick="event.preventDefault(); ASIENTO_abrirModal(${parseInt(p.id_asiento, 10)});" title="Ver asiento">${esc(p.numero_asiento || 'Asiento')}</a>`
-                : vacio;
+                : (p.id_asiento_doc
+                    ? `<a href="#" class="text-muted" onclick="event.preventDefault(); ASIENTO_abrirModal(${parseInt(p.id_asiento_doc, 10)});" title="Asiento del documento: no afecta estas cuentas">${esc(p.numero_asiento_doc || 'Asiento')}</a>`
+                    : vacio);
             const dif = Number(p.diferencia || 0);
             const salto = ok ? '' : `<div class="text-danger" style="font-size:.7rem;" title="Lo que esta fila descuadra">${dif > 0 ? '+' : ''}${dinero(dif)}</div>`;
             return `<tr class="${ok ? 'cc-fila-ok' : 'cc-fila-dif'}">

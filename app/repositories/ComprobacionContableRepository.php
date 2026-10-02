@@ -230,7 +230,9 @@ class ComprobacionContableRepository extends BaseRepository
      * fecha. Por cada uno: efecto_doc / efecto_contable (lo que suma dentro del rango en cada
      * lado), diferencia y clase:
      *  - cuadra:            sin diferencia.
-     *  - solo_documento:    el documento no tiene asiento en las cuentas del módulo.
+     *  - solo_documento:    el documento no tiene ningún asiento contabilizado.
+     *  - sin_cuenta_modulo: el documento tiene asiento (id_asiento_doc), pero ninguna de sus
+     *                       líneas afecta las cuentas comparadas.
      *  - solo_contabilidad: asiento sin documento detrás (manual, migrado sin enlace…).
      *  - fuera_modulo:      asiento de un documento que el módulo no cuenta (anulado,
      *                       borrador, eliminado, o que no afecta este saldo).
@@ -250,6 +252,18 @@ class ComprobacionContableRepository extends BaseRepository
         }
         $numero = $casosNumero ? 'CASE p.tipo ' . implode(' ', $casosNumero) . ' END' : 'NULL';
 
+        // Documento sin nada en las cuentas comparadas: ¿tiene asiento en OTRAS cuentas? (p. ej.
+        // una factura migrada cuyo asiento solo registró la venta, sin el costo contra
+        // inventario). Mismo enlace documento↔asiento que sqlCruce(): nativo por
+        // (modulo_origen, id_referencia_origen) o desde el documento (CTE m).
+        $pares = [];
+        foreach (($def['nativos'] ?? []) as $modulo => $tipo) {
+            $pares[] = '(' . $this->literal((string) $modulo) . ', ' . $this->literal((string) $tipo) . ')';
+        }
+        $condNativo = $pares
+            ? '(ac.id_referencia_origen = p.id_doc AND (ac.modulo_origen::text, p.tipo::text) IN (' . implode(', ', $pares) . '))'
+            : 'FALSE';
+
         $sql = $this->sqlCruce($def) . ",
                 p AS (
                     SELECT j.*,
@@ -267,13 +281,26 @@ class ComprobacionContableRepository extends BaseRepository
                        p.efecto_doc, p.efecto_contable, p.fecha_orden,
                        CASE WHEN p.tipo IN ('asiento', 'saldo_inicial') THEN NULL ELSE ({$numero}) END AS numero,
                        p.efecto_doc - p.efecto_contable AS diferencia,
+                       oa.id AS id_asiento_doc, oa.numero_comprobante AS numero_asiento_doc,
                        CASE WHEN ABS(p.efecto_doc - p.efecto_contable) <= 0.005 THEN 'cuadra'
+                            WHEN p.monto_asiento IS NULL AND oa.id IS NOT NULL THEN 'sin_cuenta_modulo'
                             WHEN p.monto_asiento IS NULL THEN 'solo_documento'
                             WHEN p.monto_doc IS NULL AND p.tipo = 'asiento' THEN 'solo_contabilidad'
                             WHEN p.monto_doc IS NULL THEN 'fuera_modulo'
                             WHEN ABS(p.monto_doc - p.monto_asiento) > 0.005 THEN 'monto_distinto'
                             ELSE 'fecha_distinta' END AS clase
                 FROM p
+                LEFT JOIN LATERAL (
+                    SELECT ac.id, ac.numero_comprobante
+                    FROM asientos_contables_cabecera ac
+                    WHERE p.monto_asiento IS NULL AND p.tipo NOT IN ('asiento', 'saldo_inicial')
+                      AND ac.id_empresa = :e AND ac.estado = 'contabilizado' AND ac.eliminado = FALSE
+                      AND ac.tipo_ambiente = (SELECT t FROM amb)
+                      AND ({$condNativo}
+                           OR ac.id IN (SELECT m.id_asiento FROM m WHERE m.tipo = p.tipo AND m.id_doc = p.id_doc))
+                    ORDER BY ac.id
+                    LIMIT 1
+                ) oa ON TRUE
                 ORDER BY p.fecha_orden, p.tipo, p.id_doc
                 LIMIT " . max(1, $limite);
         $st = $this->db->prepare($sql);

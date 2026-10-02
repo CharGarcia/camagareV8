@@ -96,6 +96,20 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                     <i class="bi bi-file-earmark-spreadsheet"></i> Excel
                 </a>
             </div>
+            <?php if (!empty($puedeComprobarContabilidad)): ?>
+            <div class="dropdown">
+                <button type="button" class="btn btn-outline-primary btn-sm dropdown-toggle" data-bs-toggle="dropdown"
+                        title="Comprobar con Contabilidad: compara el costo y la depreciación acumulada de los activos con sus cuentas contables">
+                    <i class="bi bi-journal-check"></i><span class="d-none d-md-inline"> Comprobar con Contabilidad</span>
+                </button>
+                <ul class="dropdown-menu">
+                    <li><a class="dropdown-item small" href="#" onclick="event.preventDefault(); AF_comprobarContabilidad('costo');">
+                        <i class="bi bi-box-seam me-1"></i>Costo de los activos</a></li>
+                    <li><a class="dropdown-item small" href="#" onclick="event.preventDefault(); AF_comprobarContabilidad('depreciacion');">
+                        <i class="bi bi-graph-down me-1"></i>Depreciación acumulada</a></li>
+                </ul>
+            </div>
+            <?php endif; ?>
         </div>
 
         <div class="d-flex align-items-center gap-3">
@@ -187,3 +201,6 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
     window.AF_PERM = <?= json_encode($perm) ?>;
 </script>
 <script src="<?= rtrim(BASE_URL, '/') ?>/js/modulos/activos_fijos.js?v=<?= asset_ver('/js/modulos/activos_fijos.js') ?>"></script>
+<?php if (!empty($puedeComprobarContabilidad)) {
+    require MVC_APP . '/views/partials/comprobacion_contable_modal.php';
+} ?>

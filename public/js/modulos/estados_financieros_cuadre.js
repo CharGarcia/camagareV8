@@ -13,36 +13,63 @@
     // Cómo se llama el saldo de cada módulo y qué explica la nota del detalle.
     const MODULOS = {
         banco: {
+            etiquetaCuenta: 'cuenta del banco',
             etiqueta: 'Según Ingresos/Egresos',
             nota: '"Según Ingresos/Egresos" es el saldo en libros: saldo inicial de Saldos Iniciales más todos los cobros, pagos y traspasos de la cuenta, con los cheques desde que se emiten.',
             sinCuenta: 'se asigna en Formas de cobro y pago',
         },
         caja: {
+            etiquetaCuenta: 'cuenta de caja',
             etiqueta: 'Según Ingresos/Egresos',
             nota: '"Según Ingresos/Egresos" es el saldo de la caja: saldo inicial de Saldos Iniciales más los cobros, menos los pagos, más los traspasos recibidos y menos los enviados (el mismo saldo que muestra Traspasos).',
             tipos: { traspaso: 'Traspaso' },
             sinCuenta: 'se asigna en Formas de cobro y pago',
         },
         anticipos_clientes: {
+            etiquetaCuenta: 'cuenta de anticipos',
             etiqueta: 'Según Anticipos',
             nota: '"Según Anticipos" es lo que se debe a los clientes por anticipos: saldo inicial más los anticipos recibidos (ingresos con una opción de anticipo) menos los aplicados a cobros con la forma Anticipo. Es el total de la pestaña Anticipos de las fichas de cliente.',
             sinCuenta: 'se asigna a la opción de anticipo en Opciones de ingreso/egreso y a la forma de pago Anticipo',
         },
         anticipos_proveedores: {
+            etiquetaCuenta: 'cuenta de anticipos',
             etiqueta: 'Según Anticipos',
             nota: '"Según Anticipos" es lo que los proveedores deben por anticipos entregados: saldo inicial más los anticipos entregados (egresos con una opción de anticipo) menos los aplicados a pagos con la forma Anticipo. Es el total de la pestaña Anticipos de las fichas de proveedor.',
             sinCuenta: 'se asigna a la opción de anticipo en Opciones de ingreso/egreso y a la forma de pago Anticipo',
         },
+        tarjetas: {
+            etiquetaCuenta: 'cuenta puente de la tarjeta',
+            etiqueta: 'Según Ingresos/Conciliación',
+            nota: 'Lo cobrado con la tarjeta (Ingresos) que la procesadora todavía no liquida: saldo inicial más los cobros, menos los pagos y traspasos, menos lo cruzado en las conciliaciones de tarjetas CERRADAS (en su fecha de conciliación). Una conciliación en borrador no resta: su asiento nace al cerrarla.',
+            sinCuenta: 'se asigna en Formas de cobro y pago',
+        },
+        activos_costo: {
+            etiquetaCuenta: 'cuenta del activo',
+            etiqueta: 'Según Activos Fijos',
+            nota: 'El valor de adquisición de los activos registrados, a su fecha de adquisición. El alta manual tiene su propio asiento; el activo que viene de una compra se contabiliza con el asiento de esa compra.',
+            tipos: { activo_fijo: 'Activo', compra: 'Compra' },
+            sinCuenta: 'se asigna en cada activo fijo',
+        },
+        activos_depreciacion: {
+            etiquetaCuenta: 'cuenta de depreciación acumulada',
+            etiqueta: 'Según Activos Fijos',
+            nota: 'Lo depreciado en cada lote mensual generado en el módulo, al último día de su mes. La depreciación anterior al sistema solo existe en contabilidad y aparece en el saldo inicial.',
+            tipos: { depreciacion: '' },
+            sinCuenta: 'se asigna en cada activo fijo',
+        },
         cxc: {
+            etiquetaCuenta: 'cuenta por cobrar',
             etiqueta: 'Según Cartera',
             nota: '"Según Cartera" es la suma de los saldos de todas las facturas, recibos y saldos iniciales (incluidos los ya cobrados), con los cobros, retenciones y notas de crédito hasta cada fecha.',
         },
         cxp: {
+            etiquetaCuenta: 'cuenta por pagar',
             etiqueta: 'Según Cartera',
             nota: '"Según Cartera" es la suma de los saldos de todas las compras, liquidaciones, facturas del exterior y saldos iniciales (incluidos los ya pagados), con los pagos, retenciones y notas de crédito hasta cada fecha.',
             tipos: { compra: 'Comprobante de compra' },
         },
         inventario: {
+            etiquetaCuenta: 'cuenta de inventario',
             etiqueta: 'Según Kardex',
             nota: '"Según Kardex" es el valor del inventario por movimientos, de todas las bodegas: cada entrada suma su costo y cada salida resta el costo con que salió. No es el valor de la Valorización (stock por último costo).',
             tipos: {
@@ -152,6 +179,7 @@
             url: `${urlBase}/cuadreModuloDetalleAjax?${params}`,
             modulo: f.nombre,
             etiquetaLibros: m.etiqueta,
+            etiquetaCuenta: m.etiquetaCuenta,
             nota: m.nota,
             tipos: m.tipos,
             desde: el('ef-cuadre-desde').value,

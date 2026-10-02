@@ -1287,6 +1287,7 @@ function CXP_comprobarContabilidad() {
         url: `${BASE_URL}/${RUTA_MODULO_CXP}/comprobacionContableAjax`,
         modulo: 'Cuentas por Pagar',
         etiquetaLibros: 'Según Cartera',
+        etiquetaCuenta: 'cuenta por pagar',
         hasta: document.getElementById('cxp-fecha-hasta')?.value || '',
         desde: document.getElementById('cxp-fecha-desde')?.value || '',
         nota: '"Según Cartera" es la suma de los saldos de todas las compras, liquidaciones, facturas del exterior y saldos iniciales '
