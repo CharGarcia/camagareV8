@@ -156,8 +156,8 @@
                             <button type="button" class="btn btn-outline-secondary btn-sm px-2" onclick="CXC_limpiarFiltros()" title="Limpiar filtros">
                                 <i class="bi bi-eraser me-1"></i>Limpiar
                             </button>
-                            <button type="submit" class="btn btn-success btn-sm px-2 shadow-sm" title="Aplicar filtros">
-                                <i class="bi bi-search me-1"></i>Aplicar
+                            <button type="submit" class="btn btn-success btn-sm px-2 shadow-sm" title="Mostrar">
+                                <i class="bi bi-search me-1"></i>Mostrar
                             </button>
                         </div>
                     </div>

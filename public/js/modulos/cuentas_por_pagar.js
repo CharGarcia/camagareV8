@@ -18,7 +18,7 @@ let CXP_agrupado      = false;          // vista agrupada por proveedor
 let CXP_consolidado   = false;
 
 // ¿Ya se consultó el listado al menos una vez? Al entrar al módulo NO se carga nada: el
-// usuario elige sus filtros y presiona "Aplicar"; recién ahí se consulta al servidor.
+// usuario elige sus filtros y presiona "Mostrar"; recién ahí se consulta al servidor.
 let CXP_cargado       = false;
 /* ════════════════════════════════════════════════════
    ORDEN DE LA TABLA
@@ -100,7 +100,7 @@ async function CXP_cargarCatalogosDe(idEmpresa) {
 ════════════════════════════════════════════════════ */
 document.addEventListener('DOMContentLoaded', () => {
     // Al entrar NO se consulta nada: el listado se carga solo cuando el usuario
-    // presiona "Aplicar" (ver CXP_cargado / CXP_recargar).
+    // presiona "Mostrar" (ver CXP_cargado / CXP_recargar).
     CXP_initOrden();
     CXP_estadoInicial();
     CXP_cargarCatalogos();
@@ -133,14 +133,14 @@ function CXP_estadoInicial() {
     if (tbody) {
         tbody.innerHTML = `<tr><td colspan="11" class="text-center py-5 text-muted">
             <i class="bi bi-funnel fs-3 d-block mb-2 text-primary opacity-50"></i>
-            Elija los filtros y presione <span class="fw-semibold text-primary">Aplicar Filtros</span> para ver las cuentas por pagar.
+            Elija los filtros y presione <span class="fw-semibold text-primary">Mostrar</span> para ver las cuentas por pagar.
         </td></tr>`;
     }
     const label = document.getElementById('cxp-count-label');
     if (label) label.textContent = '';
 }
 
-/* Recarga el listado SOLO si ya se aplicó una vez. Antes del primer "Aplicar" no se consulta
+/* Recarga el listado SOLO si ya se aplicó una vez. Antes del primer "Mostrar" no se consulta
    nada al servidor: cambiar un filtro no dispara la carga. */
 function CXP_recargar() {
     if (CXP_cargado) CXP_cargar();

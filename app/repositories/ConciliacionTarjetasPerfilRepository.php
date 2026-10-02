@@ -75,10 +75,12 @@ class ConciliacionTarjetasPerfilRepository extends BaseRepository
     {
         $sql = "INSERT INTO conciliacion_tarjetas_perfiles (
                     tipo_procesadora, id_banco, nombre_perfil, tipo_archivo, nivel, fila_inicio,
-                    formato_fecha, separador_decimal, mapeo_columnas, activo, created_by, updated_by
+                    formato_fecha, separador_decimal, hoja, solo_columnas_visibles, mapeo_columnas, activo,
+                    created_by, updated_by
                 ) VALUES (
                     :tipo_procesadora, :id_banco, :nombre_perfil, :tipo_archivo, :nivel, :fila_inicio,
-                    :formato_fecha, :separador_decimal, CAST(:mapeo_columnas AS JSONB), :activo, :usuario, :usuario2
+                    :formato_fecha, :separador_decimal, :hoja, :solo_columnas_visibles, CAST(:mapeo_columnas AS JSONB), :activo,
+                    :usuario, :usuario2
                 ) RETURNING id";
         $st = $this->db->prepare($sql);
         $st->execute($this->parametros($data) + [':usuario2' => $data['usuario_id']]);
@@ -91,7 +93,8 @@ class ConciliacionTarjetasPerfilRepository extends BaseRepository
                     tipo_procesadora = :tipo_procesadora, id_banco = :id_banco,
                     nombre_perfil = :nombre_perfil, tipo_archivo = :tipo_archivo, nivel = :nivel,
                     fila_inicio = :fila_inicio, formato_fecha = :formato_fecha,
-                    separador_decimal = :separador_decimal, mapeo_columnas = CAST(:mapeo_columnas AS JSONB),
+                    separador_decimal = :separador_decimal, hoja = :hoja,
+                    solo_columnas_visibles = :solo_columnas_visibles, mapeo_columnas = CAST(:mapeo_columnas AS JSONB),
                     activo = :activo, updated_by = :usuario, updated_at = CURRENT_TIMESTAMP
                 WHERE id = :id AND eliminado = FALSE";
         $st = $this->db->prepare($sql);
@@ -123,6 +126,8 @@ class ConciliacionTarjetasPerfilRepository extends BaseRepository
             ':fila_inicio' => (int) ($data['fila_inicio'] ?? 0),
             ':formato_fecha' => $data['formato_fecha'] ?? 'd/m/Y',
             ':separador_decimal' => $data['separador_decimal'] ?? '.',
+            ':hoja' => $data['hoja'] ?? null,
+            ':solo_columnas_visibles' => !empty($data['solo_columnas_visibles']) ? 't' : 'f',
             ':mapeo_columnas' => json_encode($data['mapeo_columnas'], JSON_UNESCAPED_UNICODE),
             // PDO + PostgreSQL: un false de PHP llega como cadena vacía; se envía como 't'/'f'.
             ':activo' => !empty($data['activo']) ? 't' : 'f',

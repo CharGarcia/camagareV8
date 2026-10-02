@@ -137,7 +137,7 @@
                                 <i class="bi bi-eraser me-1"></i>Limpiar filtros
                             </button>
                             <button type="submit" class="btn btn-primary btn-sm px-3 shadow-sm">
-                                <i class="bi bi-search me-1"></i>Aplicar Filtros
+                                <i class="bi bi-search me-1"></i>Mostrar
                             </button>
                         </div>
                     </div>

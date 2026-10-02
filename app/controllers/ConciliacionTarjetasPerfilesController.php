@@ -87,6 +87,8 @@ class ConciliacionTarjetasPerfilesController extends Controller
             json_decode((string) ($_POST['mapeo_prueba'] ?? ''), true) ?: null,
             trim((string) ($_POST['formato_fecha'] ?? '')),
             (string) ($_POST['separador_decimal'] ?? '.'),
+            trim((string) ($_POST['hoja'] ?? '')),
+            !empty($_POST['solo_columnas_visibles']),
         ));
     }
 

@@ -5,8 +5,8 @@ categoria: Tesorería
 ruta_modulo: modulos/conciliacion-tarjetas
 tipo: modulo
 visibilidad: todos
-etiquetas: conciliar tarjetas, asiento no generado, asiento pendiente, contabilizar conciliacion, payphone, nuvei, datafono, tarjeta de credito, liquidacion, comision de tarjeta, deposito de tarjeta, retenciones tarjeta, cuadrar tarjetas, cobros por depositar, asiento del deposito, imprimir, impresora
-version: 2.1
+etiquetas: conciliar tarjetas, recaps diners, interdin, visa, mastercard, discover, asiento no generado, asiento pendiente, contabilizar conciliacion, payphone, nuvei, datafono, tarjeta de credito, liquidacion, comision de tarjeta, deposito de tarjeta, retenciones tarjeta, cuadrar tarjetas, cobros por depositar, asiento del deposito, imprimir, impresora
+version: 2.2
 orden: 66
 estado: activo
 ---
@@ -240,6 +240,8 @@ igual. Los períodos se abren y se cierran en **Contabilidad → Períodos
 Contables**; reabrir el período permite la operación de inmediato.
 
 ## Historial de cambios
+
+- **2.2** — Se pueden cargar los **recaps de Diners / Interdin** (un Excel con una hoja por marca y columnas ocultas) con los perfiles *Diners/Interdin - Recaps*: el de todas las marcas lee todas las hojas y pone la marca en la descripción; los de cada hoja leen solo esa marca. La descripción de cada línea muestra también el **lote** y la **fecha de pago**. Ver *Perfiles de Lectura de Tarjetas*.
 
 - **2.1** — El modal ajusta su alto a lo que muestra cada pestaña, como la ficha de Clientes: **Conciliación** (con el estado de cuenta ya cargado) usa casi toda la pantalla para las dos listas; **Asiento contable**, **Configuración** y una conciliación nueva se ajustan a su contenido y quedan centradas.
 

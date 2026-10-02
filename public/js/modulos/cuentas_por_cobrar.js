@@ -27,7 +27,7 @@ const CXC_gruposAbiertos = new Set();  // claves de grupos expandidos (vista por
 let CXC_consolidado = false;
 
 // ¿Ya se consultó el listado al menos una vez? Al entrar al módulo NO se carga nada: el
-// usuario elige sus filtros y presiona "Aplicar"; recién ahí se consulta al servidor.
+// usuario elige sus filtros y presiona "Mostrar"; recién ahí se consulta al servidor.
 let CXC_cargado = false;
 /* ════════════════════════════════════════════════════
    ORDEN DE LA TABLA
@@ -106,7 +106,7 @@ async function CXC_cargarCatalogosDe(idEmpresa) {
 ════════════════════════════════════════════════════ */
 document.addEventListener('DOMContentLoaded', () => {
     // Al entrar NO se consulta nada: el listado se carga solo cuando el usuario
-    // presiona "Aplicar" (ver CXC_cargado / CXC_recargar).
+    // presiona "Mostrar" (ver CXC_cargado / CXC_recargar).
     CXC_initOrden();
     CXC_estadoInicial();
     // Series, conceptos y formas de cobro solo hacen falta si puede cobrar en esta empresa
@@ -153,14 +153,14 @@ function CXC_estadoInicial() {
     if (tbody) {
         tbody.innerHTML = `<tr><td colspan="${CXC_nCols()}" class="text-center py-5 text-muted">
             <i class="bi bi-funnel fs-3 d-block mb-2 text-success opacity-50"></i>
-            Elija los filtros y presione <span class="fw-semibold text-success">Aplicar</span> para ver las cuentas por cobrar.
+            Elija los filtros y presione <span class="fw-semibold text-success">Mostrar</span> para ver las cuentas por cobrar.
         </td></tr>`;
     }
     const label = document.getElementById('cxc-count-label');
     if (label) label.textContent = '';
 }
 
-/* Recarga el listado SOLO si ya se aplicó una vez. Antes del primer "Aplicar" no se consulta
+/* Recarga el listado SOLO si ya se aplicó una vez. Antes del primer "Mostrar" no se consulta
    nada al servidor: cambiar un filtro no dispara la carga. */
 function CXC_recargar() {
     if (CXC_cargado) CXC_cargar();

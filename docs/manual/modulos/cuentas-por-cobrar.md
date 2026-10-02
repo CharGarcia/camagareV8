@@ -6,7 +6,7 @@ ruta_modulo: modulos/cuentas_por_cobrar
 tipo: modulo
 visibilidad: todos
 etiquetas: cuentas por cobrar, borrador, factura en borrador, sin autorizar, facturas migradas, no coincide con ingresos, distinto a ingresos, cxc, cartera, deudas de clientes, saldo pendiente, vencido, morosidad, cobrar, recibos de venta, tipo de documento, envio masivo, estado de cuenta, recordatorio de pago, fecha de corte, saldo a una fecha, fecha hasta, vendedor, cartera por vendedor, filtrar por vendedor, producto, cartera por producto, filtrar por producto, que deben por un producto, consolidado, establecimientos, sucursales, matriz, mismo ruc, cartera consolidada, todas las sucursales, serie, punto de emision, serie inactiva, registrar cobro, cedula y ruc, cliente duplicado, proveedor duplicado, mismo cliente dos veces, mismo proveedor dos veces, identificacion repetida, ruc es la cedula mas 001, unificar fichas, cartera partida en dos, tildes, acentos, eñe, buscar sin tildes, no encuentra al cliente, no aparece el cliente, buscar por apellido, buscar por varias palabras, mayor, mayor del cliente, cartera como mayor, agrupado por cliente, subtotal por cliente, total general, seccion por cliente, no carga al entrar, boton aplicar, aplicar filtros, listado vacio al entrar, detalle por cliente, columnas del detalle, nc, abonos, retenciones, dias vencidos, dias transcurridos, antiguedad del documento, columna dias, dias desde la emision, cuadricula del pdf, lineas de la tabla del pdf, ruc delante del nombre, asesor, vendedor del documento, fecha un dia antes, ordenar, ordenamiento, orden alfabetico, a-z, z-a, ordenar por cliente, ordenar por saldo, ordenar por vencimiento, clic en la columna, ordenar la tabla, ordenar el excel, ordenar el pdf, flecha de la columna, saldo junto al nombre, saldo del cliente, pdf vertical, pdf horizontal, orientacion del pdf, hoja vertical, pdf apaisado, acceso total, permiso de ver todos, registros propios, solo mis facturas, no veo las facturas de otro, cada usuario ve lo suyo, documentos migrados no aparecen, cartera del vendedor, mis clientes, clientes asignados, vendedor vinculado, usuario del sistema, el vendedor no ve nada, asesor solo ve sus clientes, logo, logo en el pdf, logo de la empresa, encabezado del pdf, filtros del pdf, filtros aplicados, resumen de filtros, filtros en el pdf, mostrar filtros del pdf, columna asesor, columna vendedor, ocultar columna asesor, quitar columna vendedor, se repite el asesor, nivel de usuario, administrador ve todo, el vendedor ve la cartera de todos, pdf de la factura, descargar pdf, descargar factura, imprimir factura, ride, pdf del recibo, acciones de la fila, botones de la fila, detalle del documento, panel de detalle, ver detalle, error http, http 403, no carga el detalle, no aparece el boton de cobro, no aparece el historial, no aparece whatsapp, whatsapp no configurado, permiso de ingresos, reporte de cartera, celular, movil, telefono, botones pequeños, menu del celular, menu bloqueado, menu no responde, lineas montadas, lineas encimadas, lineas pisadas, texto montado en el pdf, filas cortadas, fila partida entre paginas, paginas en blanco, hojas en blanco en el pdf, pdf descuadrado, encabezado de columnas en cada pagina, encabezado por cada cliente, encabezado por cliente, no se ve a que columna corresponde, rotulo de columnas, estado de cuenta por whatsapp, whatsapp por cliente, resumen vencido, resumen total, deuda total por whatsapp, cuantas facturas debe, cobranza por whatsapp, correo por cliente, estado de cuenta por correo, enviar correo al cliente, numero de documento montado, documento se pasa a la otra columna, numero cortado en el pdf, cobrar dos veces, doble cobro, cobro duplicado, supera el saldo pendiente
-version: 2.30
+version: 2.31
 orden: 40
 estado: activo
 ---
@@ -14,20 +14,20 @@ estado: activo
 **Cuentas por cobrar** es la cartera de la empresa: qué facturas siguen sin
 cobrarse, de qué cliente y cuántos días llevan vencidas.
 
-## El listado se consulta al presionar Aplicar
+## El listado se consulta al presionar Mostrar
 
 Al entrar al módulo **no se consulta nada**: la tabla muestra la invitación
-*«Elija los filtros y presione Aplicar»* y las tarjetas de arriba quedan en
+*«Elija los filtros y presione Mostrar»* y las tarjetas de arriba quedan en
 cero. Primero se arman los filtros (documento, estado, vendedor, fechas,
-cliente, producto, establecimientos) y recién al presionar **Aplicar** el
+cliente, producto, establecimientos) y recién al presionar **Mostrar** el
 sistema va a buscar la cartera.
 
 - Así se evita la consulta pesada de "toda la cartera" cada vez que alguien
   abre el módulo de paso, y se pueden elegir varios filtros sin que la pantalla
   se recargue en cada cambio.
-- **Antes del primer Aplicar** ningún filtro dispara la consulta: cambiar el
+- **Antes del primer Mostrar** ningún filtro dispara la consulta: cambiar el
   estado, el vendedor o agregar un producto solo prepara la búsqueda.
-- **Después del primer Aplicar** el módulo se comporta como siempre: cambiar un
+- **Después del primer Mostrar** el módulo se comporta como siempre: cambiar un
   filtro vuelve a consultar de inmediato.
 - El botón **Limpiar** deja los filtros en sus valores por defecto; si todavía
   no se aplicó nada, tampoco consulta.
@@ -745,6 +745,7 @@ un doble clic no genera dos ingresos.
   (y en las demás que tienen el panel de detalle). Ya está corregido.
 
 ## Historial de cambios
+- **2.31** — El botón de los filtros se llama ahora **Mostrar** (antes *Aplicar*).
 - **2.30** — Las facturas en **borrador** (sin autorizar, incluidas las migradas que
   en el sistema anterior quedaron pendientes en el SRI) ahora aparecen en la cartera,
   igual que en el buscador de documentos pendientes de *Ingresos*. Antes una misma
@@ -798,7 +799,7 @@ un doble clic no genera dos ingresos.
   vistas *Por cliente* y *Por producto*. Actualizada *El PDF del listado*.
 
   En pantalla, los **mensajes que ocupan toda la fila** de la tabla (*Elija los
-  filtros y presione Aplicar*, *Cargando…*, *No se encontraron cuentas por
+  filtros y presione Mostrar*, *Cargando…*, *No se encontraron cuentas por
   cobrar*, los de error) se **ajustan al número de columnas de la vista activa**.
   En la vista *Por cliente* con la columna *Asesor* oculta —al filtrar por un
   vendedor, o siendo un usuario vendedor— la tabla tiene 10 columnas y esos

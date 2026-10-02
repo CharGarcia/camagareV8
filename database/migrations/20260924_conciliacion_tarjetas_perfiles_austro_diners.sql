@@ -32,7 +32,11 @@
 --      col 33 Valor Total Comisión     -> comision
 --      col 34 Valor Total Retención IVA -> retencion_iva
 --      col 35 Valor Total Retención IRF -> retencion_ir
---      col 36 Valor Total Pago         -> monto_neto
+--      col 36 Valor Total Pago         -> NO se mapea: es bruto − comisión
+--             SIN descontar la retención IR (en los recaps de sep-2026,
+--             40,82 − 1,89 = 38,93, pero se depositan 38,11). El neto lo
+--             calcula el sistema: bruto − comisión − ret. IVA − ret. IR.
+--             (Corregido el 2026-10-02; ver 20261002_conciliacion_tarjetas_perfil_diners_neto.sql)
 --      col 42 Número de autorización   -> autorizacion
 --    Se usan las columnas "Total" (no las "Cuota") para que un
 --    consumo diferido se cruce por su valor completo.
@@ -79,7 +83,7 @@ SELECT
     '.',
     '{"fecha": {"col": 1}, "referencia": {"col": 9}, "descripcion": {"col": 10},
       "monto_bruto": {"col": 32}, "comision": {"col": 33}, "retencion_iva": {"col": 34},
-      "retencion_ir": {"col": 35}, "monto_neto": {"col": 36}, "autorizacion": {"col": 42}}'::jsonb,
+      "retencion_ir": {"col": 35}, "autorizacion": {"col": 42}}'::jsonb,
     TRUE
 WHERE NOT EXISTS (
     SELECT 1 FROM conciliacion_tarjetas_perfiles

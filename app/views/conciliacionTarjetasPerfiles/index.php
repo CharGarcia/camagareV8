@@ -151,6 +151,19 @@ unset($_SESSION['config_msg']);
                                     <label for="ctp-fila-inicio" class="form-label">Filas de encabezado a saltar</label>
                                     <input type="number" id="ctp-fila-inicio" class="form-control form-control-sm" value="1" min="0">
                                 </div>
+                                <div class="col-md-4 ctp-solo-excel">
+                                    <label for="ctp-hoja" class="form-label">Hoja a leer</label>
+                                    <input type="text" id="ctp-hoja" class="form-control form-control-sm" maxlength="60" placeholder="Vacío = la primera">
+                                    <small class="text-muted"><code>*</code> = todas las hojas (el nombre de cada una va a la descripción). Un nombre (p. ej. <code>VISA</code>) = solo esa hoja.</small>
+                                </div>
+                                <div class="col-md-8 ctp-solo-excel">
+                                    <label class="form-label d-block">&nbsp;</label>
+                                    <div class="form-check">
+                                        <input class="form-check-input" type="checkbox" id="ctp-solo-visibles">
+                                        <label class="form-check-label" for="ctp-solo-visibles">Leer solo las columnas visibles</label>
+                                    </div>
+                                    <small class="text-muted">Se ignoran las columnas ocultas del Excel y el resto se numera desde 0 en el orden en que se ven.</small>
+                                </div>
                             </div>
                         </div>
 
@@ -193,7 +206,7 @@ unset($_SESSION['config_msg']);
                                 <div class="table-responsive" style="max-height:220px; overflow:auto;">
                                     <table class="table table-sm table-bordered mb-0">
                                         <thead class="table-light">
-                                            <tr><th>Fecha</th><th>Autorización</th><th class="text-end">Bruto</th><th class="text-end">Comisión</th><th class="text-end">Neto</th></tr>
+                                            <tr><th>Fecha</th><th>Autorización</th><th>Referencia</th><th>Descripción</th><th class="text-end">Bruto</th><th class="text-end">Comisión</th><th class="text-end">Neto</th></tr>
                                         </thead>
                                         <tbody id="ctp-preview-resultado-tbody"></tbody>
                                     </table>

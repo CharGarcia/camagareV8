@@ -64,6 +64,10 @@ class ConciliacionTarjetasPerfilService
 
         $data['nombre_perfil'] = trim((string) $data['nombre_perfil']);
         $data['id_banco'] = (int) ($data['id_banco'] ?? 0) ?: null;
+        // Hoja y columnas visibles solo aplican a Excel (un CSV tiene una sola "hoja" y no oculta nada).
+        $esExcel = $data['tipo_archivo'] === 'EXCEL';
+        $data['hoja'] = $esExcel ? (mb_substr(trim((string) ($data['hoja'] ?? '')), 0, 60) ?: null) : null;
+        $data['solo_columnas_visibles'] = $esExcel && !empty($data['solo_columnas_visibles']);
         $data['activo'] = !array_key_exists('activo', $data) || !empty($data['activo']);
         $data['usuario_id'] = $idUsuario;
 
@@ -114,14 +118,24 @@ class ConciliacionTarjetasPerfilService
 
     // ── Prueba del mapeo con un archivo de muestra (no guarda nada) ──────────
 
-    public function previsualizarArchivo(array $file, string $tipoArchivo, int $filaInicio, ?array $mapeoPrueba, string $formatoFecha, string $separador): array
-    {
+    public function previsualizarArchivo(
+        array $file,
+        string $tipoArchivo,
+        int $filaInicio,
+        ?array $mapeoPrueba,
+        string $formatoFecha,
+        string $separador,
+        string $hoja = '',
+        bool $soloVisibles = false
+    ): array {
         $tipoArchivo = strtoupper($tipoArchivo);
         $ruta = $this->copiarTemporal($file, $tipoArchivo);
         try {
+            $esExcel = $tipoArchivo === 'EXCEL';
             return (new ConciliacionTarjetasImportService())->previsualizar(
                 $ruta, $tipoArchivo, $filaInicio, 60, $mapeoPrueba,
-                $formatoFecha !== '' ? $formatoFecha : 'd/m/Y', $separador === ',' ? ',' : '.'
+                $formatoFecha !== '' ? $formatoFecha : 'd/m/Y', $separador === ',' ? ',' : '.',
+                $esExcel ? $hoja : '', $esExcel && $soloVisibles
             );
         } finally {
             @unlink($ruta);

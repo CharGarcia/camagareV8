@@ -18,6 +18,8 @@
         ['autorizacion', 'Autorización', false],
         ['referencia', 'Referencia', false],
         ['descripcion', 'Descripción', false],
+        ['lote', 'Lote / Recap', false],
+        ['fecha_pago', 'Fecha de pago', false],
         ['monto_bruto', 'Bruto', true],
         ['comision', 'Comisión', false],
         ['iva_comision', 'IVA comisión', false],
@@ -203,6 +205,8 @@
             $('ctp-separador').value = p.separador_decimal || '.';
             $('ctp-fila-inicio').value = p.fila_inicio || 0;
             $('ctp-formato-fecha').value = p.formato_fecha || 'd/m/Y';
+            $('ctp-hoja').value = p.hoja || '';
+            $('ctp-solo-visibles').checked = [true, 't', 1, '1'].includes(p.solo_columnas_visibles);
             $('ctp-activo').value = esActivo(p) ? '1' : '0';
 
             const mapeo = p.mapeo_columnas || {};
@@ -224,6 +228,9 @@
         $('ctp-mapeo-excel').style.display = esPdf ? 'none' : '';
         $('ctp-mapeo-pdf').style.display = esPdf ? '' : 'none';
         $('ctp-fila-inicio-wrap').style.display = esPdf ? 'none' : '';
+        // Hoja y columnas visibles: solo un Excel tiene varias hojas y columnas ocultas.
+        const esExcel = $('ctp-tipo').value === 'EXCEL';
+        document.querySelectorAll('.ctp-solo-excel').forEach((el) => { el.style.display = esExcel ? '' : 'none'; });
         $('ctp-preview-resultado').style.display = 'none';
     };
 
@@ -241,6 +248,8 @@
         fd.append('fila_inicio', $('ctp-fila-inicio').value || 0);
         fd.append('formato_fecha', $('ctp-formato-fecha').value.trim());
         fd.append('separador_decimal', $('ctp-separador').value);
+        fd.append('hoja', $('ctp-hoja').value.trim());
+        fd.append('solo_columnas_visibles', $('ctp-solo-visibles').checked ? '1' : '0');
         fd.append('mapeo_prueba', JSON.stringify(mapeoActual()));
 
         const box = $('ctp-preview-box');
@@ -255,9 +264,13 @@
         }
 
         const lineas = json.data.lineas || [];
+        const hojasFilas = json.data.hojas_filas || [];
+        const varias = $('ctp-hoja').value.trim() === '*';
         box.textContent = esPdf
             ? lineas.join('\n')
-            : lineas.map((fila, i) => `Fila ${i}: ` + (fila || []).map((v, c) => `[${c}]${v ?? ''}`).join('  ')).join('\n');
+            : (json.data.hojas ? `Hojas del archivo: ${json.data.hojas.join(', ')}\n\n` : '')
+              + lineas.map((fila, i) => `${varias ? `[${hojasFilas[i] || ''}] ` : ''}Fila ${i}: `
+                  + (fila || []).map((v, c) => `[${c}]${v ?? ''}`).join('  ')).join('\n');
         CTP.mostrarResultadoPrueba(json.data.filas_probadas);
     };
 
@@ -270,17 +283,19 @@
         }
         wrap.style.display = '';
         if (resultado.error) {
-            tbody.innerHTML = `<tr><td colspan="5" class="text-danger">${esc(resultado.error)}</td></tr>`;
+            tbody.innerHTML = `<tr><td colspan="7" class="text-danger">${esc(resultado.error)}</td></tr>`;
             return;
         }
         if (!resultado.length) {
-            tbody.innerHTML = '<tr><td colspan="5" class="text-center text-muted">El mapeo actual no encontró ninguna línea con fecha y valor en este archivo.</td></tr>';
+            tbody.innerHTML = '<tr><td colspan="7" class="text-center text-muted">El mapeo actual no encontró ninguna línea con fecha y valor en este archivo.</td></tr>';
             return;
         }
         tbody.innerHTML = resultado.slice(0, 20).map((l) => `
             <tr>
                 <td>${fmtDate(l.fecha)}</td>
                 <td>${esc(l.autorizacion || '')}</td>
+                <td>${esc(l.referencia || '')}</td>
+                <td class="small">${esc(l.descripcion || '')}</td>
                 <td class="text-end">${fmtMoney(l.monto_bruto)}</td>
                 <td class="text-end">${fmtMoney(l.comision)}</td>
                 <td class="text-end">${fmtMoney(l.monto_neto)}</td>
@@ -299,6 +314,8 @@
             fila_inicio: parseInt($('ctp-fila-inicio').value || '0', 10),
             formato_fecha: $('ctp-formato-fecha').value.trim() || 'd/m/Y',
             separador_decimal: $('ctp-separador').value,
+            hoja: $('ctp-hoja').value.trim() || null,
+            solo_columnas_visibles: $('ctp-solo-visibles').checked,
             activo: $('ctp-activo').value === '1',
             mapeo_columnas: mapeoActual(),
         });
