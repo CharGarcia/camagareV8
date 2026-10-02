@@ -747,7 +747,9 @@ $urlBaseActivosFijos = rtrim($base, '/') . '/modulos/activos-fijos';
             const n = i + 1;
             document.getElementById(`ef-stat-label-${n}`).textContent = label;
             const v = document.getElementById(`ef-stat-valor-${n}`);
-            v.textContent = formatMoney(monto);
+            // formatMoney devuelve HTML (<span class="monto-negativo">) para los negativos;
+            // con textContent la etiqueta se veía como texto. Solo contiene un número formateado.
+            v.innerHTML = formatMoney(monto);
             v.className = `cmg-control-card__stat-value text-${color}`;
             document.getElementById(`ef-stat-icono-${n}`).className = `bi ${icono} bg-${color} bg-opacity-10 text-${color}`;
         });
