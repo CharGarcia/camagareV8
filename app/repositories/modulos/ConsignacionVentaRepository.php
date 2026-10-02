@@ -42,6 +42,51 @@ class ConsignacionVentaRepository extends BaseRepository
         parent::__construct('consignaciones_ventas');
     }
 
+    /**
+     * Candado del SALDO de líneas de consignación (CLAUDE.md §8). Retornos, Cambios de productos y
+     * Facturación CV consumen el mismo saldo (cantidad − retornado − facturado − entregado a cambio)
+     * con el patrón "leer saldo → validar en PHP → escribir"; sin candado, dos documentos guardados
+     * a la vez leen el mismo saldo y la línea queda en negativo. Llamarlo ANTES de leer el saldo,
+     * dentro de la transacción que escribe el documento: se libera solo al COMMIT/ROLLBACK.
+     * Los ids se ordenan para que dos documentos con las mismas líneas no se bloqueen en cruz.
+     */
+    public function lockSaldoLineas(array $idsLinea, int $idEmpresa): void
+    {
+        $this->bloquearLineas($idsLinea, $idEmpresa, 'pg_advisory_xact_lock');
+    }
+
+    /**
+     * Igual que lockSaldoLineas(), pero a nivel de SESIÓN: para los flujos que validan el saldo en
+     * una transacción y lo consumen en otra (Facturación CV › generar factura). Mismo espacio de
+     * claves, así que choca con el candado transaccional de Retornos y Cambios. Liberar SIEMPRE con
+     * unlockSaldoLineasSesion() en un finally.
+     */
+    public function lockSaldoLineasSesion(array $idsLinea, int $idEmpresa): array
+    {
+        return $this->bloquearLineas($idsLinea, $idEmpresa, 'pg_advisory_lock');
+    }
+
+    public function unlockSaldoLineasSesion(array $idsLinea, int $idEmpresa): void
+    {
+        $this->bloquearLineas($idsLinea, $idEmpresa, 'pg_advisory_unlock');
+    }
+
+    /** @return int[] los ids bloqueados (sin repetir, ordenados) */
+    private function bloquearLineas(array $idsLinea, int $idEmpresa, string $funcion): array
+    {
+        $ids = array_values(array_unique(array_filter(array_map('intval', $idsLinea), static fn($i) => $i > 0)));
+        sort($ids);
+        if (!$ids) {
+            return [];
+        }
+        $st = $this->db->prepare("SELECT {$funcion}(hashtext('cv_linea:' || CAST(:e AS text) || ':' || CAST(:id AS text)))");
+        foreach ($ids as $id) {
+            $st->execute([':e' => $idEmpresa, ':id' => $id]);
+            $st->closeCursor();
+        }
+        return $ids;
+    }
+
     /** Series (establecimiento-punto_emision) usadas realmente en documentos existentes, para el filtro del listado. */
     public function getSeriesDistintas(int $idEmpresa): array
     {

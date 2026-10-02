@@ -4,6 +4,7 @@ declare(strict_types=1);
 namespace App\Services\modulos;
 
 use App\repositories\modulos\CambioProductoCvRepository;
+use App\repositories\modulos\ConsignacionVentaRepository;
 use App\repositories\modulos\InventarioRepository;
 use App\Rules\modulos\CambioProductoCvRules;
 use App\Services\LogSistemaService;
@@ -290,6 +291,7 @@ class CambioProductoCvService
             $numero = $num['serie'] . '-' . $num['secuencial'];
             $this->ultimoNumeroGenerado = $numero;
 
+            $this->bloquearSaldoConsignaciones($idEmpresa, $data['devoluciones'] ?? [], $data['entregas'] ?? []);
             $totDev = $this->procesarLineas($idCambio, $idEmpresa, $idUsuario, $empresaConfig, $data['devoluciones'] ?? [], 'devolucion', true, $numero, (int) $data['id_cliente'], (int) $num['id_punto_emision']);
             $totEnt = $this->procesarLineas($idCambio, $idEmpresa, $idUsuario, $empresaConfig, $data['entregas'] ?? [], 'entrega', true, $numero, (int) $data['id_cliente'], (int) $num['id_punto_emision']);
 
@@ -576,6 +578,7 @@ class CambioProductoCvService
             $this->repository->deleteDetalles($id, $idEmpresa);
 
             $numero = ($cab['serie'] ?? '') . '-' . ($cab['secuencial'] ?? '');
+            $this->bloquearSaldoConsignaciones($idEmpresa, $data['devoluciones'] ?? [], $data['entregas'] ?? []);
             $totDev = $this->procesarLineas($id, $idEmpresa, $idUsuario, [], $data['devoluciones'] ?? [], 'devolucion', false, $numero, (int) $data['id_cliente'], (int) ($cab['id_punto_emision'] ?? 0));
             $totEnt = $this->procesarLineas($id, $idEmpresa, $idUsuario, [], $data['entregas'] ?? [], 'entrega', false, $numero, (int) $data['id_cliente'], (int) ($cab['id_punto_emision'] ?? 0));
 
@@ -691,6 +694,7 @@ class CambioProductoCvService
             } elseif (!$wasActive && $willActive) {
                 // Revalidar saldo (excluyendo este cambio) antes de re-aplicar: devoluciones
                 // contra su origen y entregas tomadas de una consignación contra su saldo.
+                $this->bloquearSaldoConsignaciones($idEmpresa, $detalles);
                 foreach ($detalles as $det) {
                     $cant = (float) $det['cantidad'];
                     if ($cant <= 0) continue;
@@ -705,7 +709,10 @@ class CambioProductoCvService
                         throw new Exception("No se puede volver a Emitir: \"{$nombre}\" supera el saldo disponible ({$saldo}).");
                     }
                 }
-                foreach ($detalles as $det) {
+                // Migrado: al anularlo no se reversó inventario (ver reversarInventario), así que
+                // tampoco se re-aplica; su efecto sigue en el kardex del sistema anterior.
+                $migrado = $this->repository->esMigrado($id, $idEmpresa);
+                foreach ($migrado ? [] : $detalles as $det) {
                     $tipoMov = (($det['tipo_linea'] ?? '') === 'devolucion') ? 'entrada' : 'salida';
                     $this->moverInventarioLinea($det, $idEmpresa, $idUsuario, $empresaConfig, $tipoMov,
                         'CAMBIO_PRODUCTO_CV', $id, "Re-aplicación (Emitida) del Cambio {$numero}");
@@ -732,9 +739,33 @@ class CambioProductoCvService
         }
     }
 
+    /**
+     * Candado del saldo de las líneas de CONSIGNACIÓN que tocan estas líneas (devoluciones o
+     * entregas con origen_tipo 'CONSIGNACION'), todas de una vez y antes de leer cualquier saldo.
+     * Ver ConsignacionVentaRepository::lockSaldoLineas.
+     */
+    private function bloquearSaldoConsignaciones(int $idEmpresa, array ...$listas): void
+    {
+        $ids = [];
+        foreach ($listas as $lineas) {
+            foreach ($lineas as $ln) {
+                if (strtoupper((string) ($ln['origen_tipo'] ?? '')) === 'CONSIGNACION') {
+                    $ids[] = (int) ($ln['id_origen_detalle'] ?? 0);
+                }
+            }
+        }
+        (new ConsignacionVentaRepository())->lockSaldoLineas($ids, $idEmpresa);
+    }
+
     /** Reversa el inventario de ambos lados (devolucion→salida, entrega→entrada). */
     private function reversarInventario(int $id, int $idEmpresa, int $idUsuario, array $empresaConfig, string $obs): void
     {
+        // Un cambio MIGRADO no movió inventario por su cuenta: su efecto está en el kardex copiado
+        // del sistema anterior (referencia 'migracion'). "Reversarlo" generaría movimientos que
+        // nunca tuvieron su contraparte y descuadraría el stock; al anularlo solo se libera el saldo.
+        if ($this->repository->esMigrado($id, $idEmpresa)) {
+            return;
+        }
         $detalles = $this->repository->getDetalles($id, $idEmpresa);
         foreach ($detalles as $det) {
             // Inverso del movimiento original.
@@ -1041,6 +1072,18 @@ class CambioProductoCvService
 
         $idProducto  = (int) $det['id_producto'];
         $this->inventarioRepo->lockStock($idProducto, $idBodega, $idEmpresa);
+        if ($tipo === 'salida') {
+            // Entrega desde bodega, o reverso de una devolución al anular/eliminar: la unidad
+            // tiene que estar en bodega. Sin esto el lote quedaba en negativo (p. ej. anular un
+            // cambio cuya unidad devuelta ya se volvió a consignar o a vender).
+            $lote  = (isset($det['lote']) && $det['lote'] !== '' && $det['lote'] !== 'sin_lote') ? (string) $det['lote'] : null;
+            $saldo = $this->inventarioRepo->getStockActual($idProducto, $idBodega, $idEmpresa, null, null, $lote);
+            if ($cant > $saldo + 1e-9) {
+                $nombre  = $det['producto_nombre'] ?? 'Producto';
+                $detalle = ($lote !== null ? " lote {$lote}" : '') . (!empty($det['nup']) ? " NUP {$det['nup']}" : '');
+                throw new Exception("Stock insuficiente en bodega para \"{$nombre}\"{$detalle}: saldo {$saldo}, se necesitan {$cant}. Si es el reverso de una devolución, esa unidad ya se volvió a consignar o se vendió.");
+            }
+        }
         $stockActual = $this->inventarioRepo->getStockActual($idProducto, $idBodega, $idEmpresa);
         $delta       = ($tipo === 'entrada') ? $cant : -$cant;
         $nuevoStock  = $stockActual + $delta;

@@ -717,8 +717,34 @@ class ConsignacionFacturaService
 
     // ─── Paso 2: generar la factura de venta ──────────────────────────────────
 
-    /** @return array{id_factura:int, numero_factura:string} */
+    /**
+     * Valida el saldo de las líneas (paso 1) y lo consume al marcar el documento 'facturada'
+     * (paso 4), con varias transacciones de por medio. Mientras tanto se retiene el candado de
+     * SESIÓN del saldo de esas líneas de consignación (CLAUDE.md §8): sin él, un retorno, un cambio
+     * u otra facturación guardados en ese intervalo leían el mismo saldo y la línea quedaba en
+     * negativo. Se libera siempre, falle o no la factura.
+     *
+     * @return array{id_factura:int, numero_factura:string}
+     */
     public function generarFactura(int $idDoc, int $idEmpresa, int $idUsuario, array $empresaConfig): array
+    {
+        $lineas = array_column($this->repository->getDetalles($idDoc, $idEmpresa), 'id_consignacion_detalle');
+        $bloqueadas = $this->consignacionRepo->lockSaldoLineasSesion($lineas, $idEmpresa);
+        try {
+            return $this->generarFacturaConSaldoBloqueado($idDoc, $idEmpresa, $idUsuario, $empresaConfig);
+        } finally {
+            try {
+                $this->consignacionRepo->unlockSaldoLineasSesion($bloqueadas, $idEmpresa);
+            } catch (\Throwable $e) {
+                // Con una transacción abortada no se puede liberar aquí; el candado de sesión se
+                // suelta igual al cerrarse la conexión (fin de la petición). No tapar el error real.
+                error_log('[FacturacionCV] No se pudo liberar el candado de saldo: ' . $e->getMessage());
+            }
+        }
+    }
+
+    /** @return array{id_factura:int, numero_factura:string} */
+    private function generarFacturaConSaldoBloqueado(int $idDoc, int $idEmpresa, int $idUsuario, array $empresaConfig): array
     {
         $doc = $this->repository->find($idDoc, $idEmpresa);
         if (!$doc) throw new Exception('Documento no encontrado.');

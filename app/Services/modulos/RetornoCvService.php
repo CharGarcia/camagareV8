@@ -4,6 +4,7 @@ declare(strict_types=1);
 namespace App\Services\modulos;
 
 use App\repositories\modulos\RetornoCvRepository;
+use App\repositories\modulos\ConsignacionVentaRepository;
 use App\repositories\modulos\InventarioRepository;
 use App\repositories\modulos\ProductoRepository;
 use App\Rules\modulos\RetornoCvRules;
@@ -158,6 +159,7 @@ class RetornoCvService
             // establecimiento de la serie, para todo el documento a la vez (el modo "al
             // subtotal" necesita conocer todas las líneas).
             $items = [];
+            $this->bloquearSaldoLineas(array_column($data['detalles'], 'id_consignacion_detalle'), $idEmpresa);
             foreach ($data['detalles'] as $det) {
                 $cant = (float) ($det['cantidad'] ?? 0);
                 if ($cant <= 0) continue;
@@ -410,6 +412,7 @@ class RetornoCvService
 
             $totSub = 0.0; $totImp = 0.0; $totTot = 0.0;
             $items = [];
+            $this->bloquearSaldoLineas(array_column($data['detalles'], 'id_consignacion_detalle'), $idEmpresa);
             foreach ($data['detalles'] as $det) {
                 $cant = (float) ($det['cantidad'] ?? 0);
                 if ($cant <= 0) continue;
@@ -565,6 +568,7 @@ class RetornoCvService
                 }
             } elseif (!$wasActive && $willActive) {
                 // Se reactiva: validar saldo (excluyendo este retorno) y volver a aplicar la entrada.
+                $this->bloquearSaldoLineas(array_column($detalles, 'id_consignacion_detalle'), $idEmpresa);
                 foreach ($detalles as $det) {
                     $cant = (float) $det['cantidad'];
                     if ($cant <= 0) continue;
@@ -763,6 +767,9 @@ class RetornoCvService
 
         $idProducto  = (int) $det['id_producto'];
         $this->inventarioRepo->lockStock($idProducto, $idBodega, $idEmpresa);
+        if ($tipo === 'salida') {
+            $this->validarStockParaReverso($det, $idProducto, $idBodega, $idEmpresa, $cant);
+        }
         $stockActual = $this->inventarioRepo->getStockActual($idProducto, $idBodega, $idEmpresa);
         $delta       = ($tipo === 'entrada') ? $cant : -$cant;
         $nuevoStock  = $stockActual + $delta;
@@ -788,6 +795,29 @@ class RetornoCvService
         ]);
 
         $this->inventarioRepo->actualizarStock($idProducto, $idBodega, $idEmpresa, $nuevoStock, $idUsuario);
+    }
+
+    /** Candado del saldo de las líneas de consignación (ver ConsignacionVentaRepository::lockSaldoLineas). */
+    private function bloquearSaldoLineas(array $idsLinea, int $idEmpresa): void
+    {
+        (new ConsignacionVentaRepository())->lockSaldoLineas($idsLinea, $idEmpresa);
+    }
+
+    /**
+     * Pasar a Borrador/Anulada o eliminar un retorno Emitida saca de bodega lo que entró. Si esas
+     * unidades ya no están (se volvieron a consignar o se vendieron), la salida dejaría el lote en
+     * negativo y la unidad figurando a la vez en poder del cliente y fuera de la bodega: se rechaza.
+     * Va por lote (si la línea tiene), que es como el resto del sistema controla el stock.
+     */
+    private function validarStockParaReverso(array $det, int $idProducto, int $idBodega, int $idEmpresa, float $cant): void
+    {
+        $lote  = (isset($det['lote']) && $det['lote'] !== '' && $det['lote'] !== 'sin_lote') ? (string) $det['lote'] : null;
+        $saldo = $this->inventarioRepo->getStockActual($idProducto, $idBodega, $idEmpresa, null, null, $lote);
+        if ($cant > $saldo + 1e-9) {
+            $nombre  = $det['producto_nombre'] ?? 'Producto';
+            $detalle = ($lote !== null ? " lote {$lote}" : '') . (!empty($det['nup']) ? " NUP {$det['nup']}" : '');
+            throw new Exception("No se puede quitar la entrada del retorno: \"{$nombre}\"{$detalle} ya no está en bodega (saldo {$saldo}, se necesitan {$cant}). Esa unidad ya se volvió a consignar o se vendió después del retorno.");
+        }
     }
 
     /**

@@ -5,8 +5,8 @@ categoria: Ventas
 ruta_modulo: modulos/retornos-cv
 tipo: modulo
 visibilidad: todos
-etiquetas: retorno, retornos, observaciones, columna observaciones, ver observaciones, notas del retorno, comentarios, columnas del listado, ordenar listado, ocultar columnas, buscar retorno, buscador, filtros, filtrar retornos, buscar por producto, buscar por lote, buscar por NUP, chips, devolucion de consignacion, mercaderia no vendida, reingreso, saldo consignado, numeracion por fecha, numero con el año, reiniciar numeracion, reinicio anual, reinicio mensual, correlativo por año, correlativo por mes, modo de numeracion, buscar por numero de consignacion, agregar consignacion, numero de consignacion, serie inactiva, punto de emision inactivo, permiso actualizar, no puedo guardar, no tengo permiso para esta accion, costo del retorno, costo promedio, retorno a costo cero, aparecen documentos que no busque, resultados que no corresponden, buscar por producto en el listado, cambiar estado, estado del retorno, anular retorno, pasar a borrador, emitir retorno, selector de estado, columna bodega en el pdf, bodega del retorno, a que bodega regresa, total de cantidades, suma de cantidades, total del pdf, fila total, vencimiento, fecha de vencimiento, caducidad, fecha de caducidad, columna vencimiento, vence, lote vencido, no se ve el vencimiento, asiento sigue a la consignacion, no contabilizar consignaciones, retorno sin asiento, modulos que contabilizan, imprimir, impresora
-version: 1.23
+etiquetas: retorno, retornos, saldo negativo, consignacion en negativo, ya no esta en bodega, no se puede quitar la entrada, dos usuarios a la vez, observaciones, columna observaciones, ver observaciones, notas del retorno, comentarios, columnas del listado, ordenar listado, ocultar columnas, buscar retorno, buscador, filtros, filtrar retornos, buscar por producto, buscar por lote, buscar por NUP, chips, devolucion de consignacion, mercaderia no vendida, reingreso, saldo consignado, numeracion por fecha, numero con el año, reiniciar numeracion, reinicio anual, reinicio mensual, correlativo por año, correlativo por mes, modo de numeracion, buscar por numero de consignacion, agregar consignacion, numero de consignacion, serie inactiva, punto de emision inactivo, permiso actualizar, no puedo guardar, no tengo permiso para esta accion, costo del retorno, costo promedio, retorno a costo cero, aparecen documentos que no busque, resultados que no corresponden, buscar por producto en el listado, cambiar estado, estado del retorno, anular retorno, pasar a borrador, emitir retorno, selector de estado, columna bodega en el pdf, bodega del retorno, a que bodega regresa, total de cantidades, suma de cantidades, total del pdf, fila total, vencimiento, fecha de vencimiento, caducidad, fecha de caducidad, columna vencimiento, vence, lote vencido, no se ve el vencimiento, asiento sigue a la consignacion, no contabilizar consignaciones, retorno sin asiento, modulos que contabilizan, imprimir, impresora
+version: 1.24
 orden: 46
 estado: activo
 ---
@@ -93,6 +93,11 @@ aplica en ese momento, sin pulsar Guardar.
 - Hace falta el permiso **Actualizar**; sin él, el selector se ve pero no se
   puede cambiar.
 - En un retorno nuevo el selector no aparece: primero se guarda.
+- Si las unidades del retorno ya **no están en bodega** (después del retorno se
+  volvieron a consignar o se vendieron), el sistema no deja pasarlo a
+  *Borrador*, *Anulada* ni eliminarlo: sacarlas otra vez dejaría el lote en
+  negativo. Para corregir el retorno, primero hay que deshacer lo que se hizo
+  después con esas unidades.
 
 ## Exportar
 
@@ -265,6 +270,12 @@ Contables**; reabrir el período permite la operación de inmediato.
 
 ## Historial de cambios
 
+- **1.24** — Ya no se puede pasar a *Borrador*, anular ni eliminar un retorno
+  cuyas unidades ya no están en bodega (se volvieron a consignar o se vendieron):
+  antes el lote quedaba en negativo. Además, si dos usuarios guardan a la vez un
+  retorno, un cambio de productos o una facturación sobre la misma línea de
+  consignación, el segundo espera al primero y vuelve a revisar el saldo: la
+  línea ya no puede quedar con saldo negativo.
 - **1.23** — El IVA del retorno se calcula con la configuración de
   facturación (al subtotal o línea por línea) del establecimiento de la serie,
   y los valores se guardan a centavos (antes, línea por línea con 6 decimales).
