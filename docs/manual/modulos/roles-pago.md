@@ -6,7 +6,7 @@ ruta_modulo: modulos/roles-pago
 tipo: modulo
 visibilidad: todos
 etiquetas: rol de pago, roles, nomina, sueldo, quincena, semanal, mensual, pago de empleados, descuentos, liquido a recibir, neteo, ingresos de quincena, bono en quincena, horas extra en quincena, observacion, observaciones, detalle de novedad, motivo del descuento, asiento contable, contabilizacion, cuentas de nomina, prestamo quirografario, prestamo hipotecario, prestamo empresa, prestamos iess, aporte iess, base del iess, con iess, sin iess, bonos, comisiones, horas extra, dias no laborados, faltas, dias laborados, sueldo ganado, fondos de reserva, decimo tercero, decimo cuarto, buscar rol de pago, buscador, filtros, filtrar roles, buscar empleado en el rol, buscar rubro, chips, ordenar, ordenamiento, ordenar por periodo, ordenar columnas, orden del listado, periodo mas reciente, imprimir, impresora
-version: 1.11
+version: 1.12
 orden: 30
 estado: activo
 ---
@@ -239,6 +239,10 @@ módulo. Para regresar al orden de fábrica, ordene por *Período* de mayor a me
 
 ## Historial de cambios
 
+- **1.12** — En el PDF del rol personal de cada empleado, las firmas
+  **Recibí conforme** y **Empleador** quedan más abajo, con más espacio libre
+  para firmar a mano, y el logo de la empresa se imprime más grande (también en la planilla
+  general con todos los empleados).
 - **1.11** — En la ventana de filtros, la pestaña *Detalles* se llama ahora
   **Búsqueda por detalle**, y la ventana ya no tiene barra de desplazamiento
   vertical propia: se muestra completa.

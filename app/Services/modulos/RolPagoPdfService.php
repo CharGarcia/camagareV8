@@ -34,7 +34,9 @@ class RolPagoPdfService
         $pdf->SetMargins(14, 14, 14);
         $pdf->SetAutoPageBreak(true, 14);
         $pdf->AddPage();
-        $conLogo = $this->dibujarLogoSiExiste($pdf, $empresa, 14, 14, 32);
+        // Logo más grande en el rol individual: cabe en una caja de 46 x 24 mm
+        // (proporcional, sin deformar) y el encabezado le reserva ese hueco.
+        $conLogo = $this->dibujarLogoSiExiste($pdf, $empresa, 14, 14, 46, 24);
 
         $h = fn($v) => htmlspecialchars((string) ($v ?? ''));
         $m = fn($v) => number_format((float) $v, 2);
@@ -42,7 +44,7 @@ class RolPagoPdfService
         $ing = array_values(array_filter($lin['rubros'] ?? [], fn($r) => $r['tipo'] === 'ingreso'));
         $egr = array_values(array_filter($lin['rubros'] ?? [], fn($r) => $r['tipo'] === 'egreso'));
 
-        $html = '<style>
+        $estilos = '<style>
             .t { font-size:13px; font-weight:bold; }
             .sub { font-size:8px; color:#555; }
             .sect { background-color:#e9ecef; font-weight:bold; font-size:9px; padding:4px; }
@@ -51,8 +53,17 @@ class RolPagoPdfService
             table.g td { font-size:8.5px; padding:3px 5px; border:0.5px solid #ddd; }
             .tot { font-weight:bold; background-color:#f8f9fa; }
         </style>';
+        $html = $estilos;
 
-        $html .= $this->htmlEncabezadoEmpresa($empresa, 'ROL DE PAGO', $h($tipo . ' — ' . $periodo), $conLogo);
+        $html .= $this->htmlEncabezadoEmpresa($empresa, 'ROL DE PAGO', $h($tipo . ' — ' . $periodo), $conLogo, 27);
+
+        // El encabezado se escribe aparte para que, si el logo es más alto que los
+        // datos de la empresa, el contenido arranque debajo del logo y no encima.
+        $pdf->writeHTML($html, false, false, true, false, '');
+        if ($conLogo && $pdf->GetY() < 14 + 24 + 3) {
+            $pdf->SetY(14 + 24 + 3);
+        }
+        $html = $estilos;
 
         $html .= '<div class="sect">DATOS DEL EMPLEADO</div>';
         $html .= '<table class="info" cellpadding="0"><tr>'
@@ -89,14 +100,18 @@ class RolPagoPdfService
 
         $html .= '<table class="g" cellpadding="0"><tr>'
             . '<td width="70%" align="right" class="tot" style="font-size:10px;">NETO A RECIBIR</td>'
-            . '<td width="30%" align="right" class="tot" style="font-size:11px;">$ ' . $m($lin['neto']) . '</td></tr></table><br><br>';
+            . '<td width="30%" align="right" class="tot" style="font-size:11px;">$ ' . $m($lin['neto']) . '</td></tr></table>';
 
-        $html .= '<table cellpadding="0"><tr>'
+        $pdf->writeHTML($html, true, false, true, false, '');
+
+        // Espacio libre para firmar a mano (los <br> seguidos de TCPDF se colapsan,
+        // por eso el salto va con Ln() y las firmas en un writeHTML aparte).
+        $pdf->Ln(25);
+        $firmas = '<table cellpadding="0"><tr>'
             . '<td width="45%" align="center" style="border-top:0.5px solid #333; font-size:8px;">Recibí conforme</td>'
             . '<td width="10%"></td>'
             . '<td width="45%" align="center" style="border-top:0.5px solid #333; font-size:8px;">Empleador</td></tr></table>';
-
-        $pdf->writeHTML($html, true, false, true, false, '');
+        $pdf->writeHTML($firmas, true, false, true, false, '');
         $arch = 'Rol_' . preg_replace('/[^A-Za-z0-9]/', '_', (string) ($lin['identificacion'] ?? 'empleado')) . '.pdf';
         return $pdf->Output($arch, $dest);
     }
@@ -124,20 +139,31 @@ class RolPagoPdfService
         $pdf->SetMargins(10, 10, 10);
         $pdf->SetAutoPageBreak(true, 16);
         $pdf->AddPage();
-        $conLogo = $this->dibujarLogoSiExiste($pdf, $empresa, 10, 10, 32);
+        // Mismo tamaño de logo que el rol individual (caja de 46 x 24 mm). En A4
+        // horizontal el 20% de la fila (~55 mm) ya le alcanza al hueco del logo.
+        $conLogo = $this->dibujarLogoSiExiste($pdf, $empresa, 10, 10, 46, 24);
 
         $h = fn($v) => htmlspecialchars((string) ($v ?? ''));
         $m = fn($v) => number_format((float) $v, 2);
 
-        $html = '<style>
+        $estilos = '<style>
             .t { font-size:13px; font-weight:bold; }
             .sub { font-size:8px; color:#555; }
             table.g th { background-color:#e9ecef; font-size:7px; font-weight:bold; padding:2.5px 3px; border:0.5px solid #bbb; }
             table.g td { font-size:7px; padding:2.5px 3px; border:0.5px solid #ddd; }
             .tot { font-weight:bold; background-color:#f1f3f5; }
         </style>';
+        $html = $estilos;
 
         $html .= $this->htmlEncabezadoEmpresa($empresa, 'ROL DE PAGO', $h($tipo . ' — ' . $periodo), $conLogo);
+
+        // Encabezado aparte: la tabla arranca debajo del logo aunque este sea más
+        // alto que los datos de la empresa.
+        $pdf->writeHTML($html, false, false, true, false, '');
+        if ($conLogo && $pdf->GetY() < 10 + 24 + 3) {
+            $pdf->SetY(10 + 24 + 3);
+        }
+        $html = $estilos;
 
         $html .= '<table class="g" cellpadding="0"><tr>'
             . '<th width="17%">Empleado</th>'
@@ -200,7 +226,7 @@ class RolPagoPdfService
      * hueco a la izquierda si ya se dibujó el logo con dibujarLogoSiExiste),
      * título del documento a la derecha.
      */
-    private function htmlEncabezadoEmpresa(array $empresa, string $titulo, string $subtitulo, bool $conLogo): string
+    private function htmlEncabezadoEmpresa(array $empresa, string $titulo, string $subtitulo, bool $conLogo, int $pctLogo = 20): string
     {
         $h = fn($v) => htmlspecialchars((string) ($v ?? ''));
         $empNom = $h($empresa['razon_social'] ?? $empresa['nombre_comercial'] ?? $empresa['nombre'] ?? 'Empresa');
@@ -208,8 +234,8 @@ class RolPagoPdfService
         $empDir = $h($empresa['direccion'] ?? '');
         $empTel = $h($empresa['telefono'] ?? '');
 
-        $logoCell = $conLogo ? '<td width="20%">&nbsp;</td>' : '';
-        $anchoTexto = $conLogo ? '45%' : '65%';
+        $logoCell = $conLogo ? '<td width="' . $pctLogo . '%">&nbsp;</td>' : '';
+        $anchoTexto = $conLogo ? (65 - $pctLogo) . '%' : '65%';
 
         $datos = '<span class="t">' . $empNom . '</span><br><span class="sub">RUC: ' . $empRuc . '</span>';
         if ($empDir !== '') $datos .= '<br><span class="sub">' . $empDir . '</span>';
@@ -224,10 +250,11 @@ class RolPagoPdfService
 
     /**
      * Dibuja el logo de la empresa en (x, y) si existe el archivo, con ancho fijo
-     * $w (alto proporcional, centrado). Devuelve true si lo dibujó — el llamador
+     * $w (alto proporcional). Con $hMax > 0 el logo se ajusta dentro de la caja
+     * $w x $hMax sin deformarse. Devuelve true si lo dibujó — el llamador
      * usa eso para reservar el hueco correspondiente en la tabla HTML del encabezado.
      */
-    private function dibujarLogoSiExiste(TCPDF $pdf, array $empresa, float $x, float $y, float $w): bool
+    private function dibujarLogoSiExiste(TCPDF $pdf, array $empresa, float $x, float $y, float $w, float $hMax = 0): bool
     {
         $ruta = trim((string) ($empresa['logo_ruta'] ?? $empresa['logo'] ?? ''));
         if ($ruta === '') return false;
@@ -246,7 +273,11 @@ class RolPagoPdfService
         }
         if ($rutaAbsoluta === '') return false;
 
-        $pdf->Image($rutaAbsoluta, $x, $y, $w, 0, '', '', 'T', false, 300, '', false, false, 0, 'T');
+        if ($hMax > 0) {
+            $pdf->Image($rutaAbsoluta, $x, $y, $w, $hMax, '', '', 'T', false, 300, '', false, false, 0, 'LT');
+        } else {
+            $pdf->Image($rutaAbsoluta, $x, $y, $w, 0, '', '', 'T', false, 300, '', false, false, 0, 'T');
+        }
         return true;
     }
 }
