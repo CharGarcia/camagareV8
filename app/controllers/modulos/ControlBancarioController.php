@@ -103,8 +103,10 @@ class ControlBancarioController extends BaseModuloController
         }
 
         $prefsVista = PreferenciasHelper::getPreferenciasVista($this->getRutaModulo());
-        $fechaInicio = date('Y-01-01');
-        $fechaFin = date('Y-12-31');
+        // Abre en el mes actual (no el año completo): la tabla ya no pagina y muestra todo
+        // el período, así que el rango por defecto se mantiene acotado.
+        $fechaInicio = date('Y-m-01');
+        $fechaFin = date('Y-m-t');
 
         $resumen = ['saldo_inicial' => 0.0, 'creditos' => 0.0, 'debitos' => 0.0, 'saldo_final' => 0.0];
         if ($idFormaPago > 0) {

@@ -140,11 +140,11 @@ $urlBase = rtrim($base, '/') . '/' . ltrim($rutaModulo, '/');
                 <div style="width:120px;">
                     <label class="form-label cb-lbl fw-bold text-muted text-uppercase mb-1 d-block">Mes</label>
                     <select class="form-select form-select-sm shadow-none" id="cb-mes" onchange="window.CB_actualizarFechas()">
-                        <option value="0" selected>Todos</option>
+                        <option value="0">Todos</option>
                         <?php
                         $meses = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
                         foreach ($meses as $i => $m): ?>
-                            <option value="<?= $i + 1 ?>"><?= $m ?></option>
+                            <option value="<?= $i + 1 ?>" <?= ($i + 1) === (int) date('n') ? 'selected' : '' ?>><?= $m ?></option>
                         <?php endforeach; ?>
                     </select>
                 </div>
