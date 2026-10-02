@@ -263,7 +263,9 @@ $urlBaseReporte = rtrim($base, '/') . '/' . ltrim($rutaModulo ?? '', '/');
     }
 
     const formatMoney = (amount) => {
-        const num = parseFloat(amount) || 0;
+        // Redondear a centavos antes de mirar el signo: un residuo de coma flotante
+        // (-0.0000001) o un -0 se mostraban como "-0.00" en rojo. "+ 0" convierte -0 en 0.
+        const num = CMG_r2(amount) + 0;
         const formatted = num.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
         return num < 0 ? `<span class="monto-negativo">${formatted}</span>` : formatted;
     };
