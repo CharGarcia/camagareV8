@@ -106,7 +106,7 @@ class RolPagoPdfService
 
         // Espacio libre para firmar a mano (los <br> seguidos de TCPDF se colapsan,
         // por eso el salto va con Ln() y las firmas en un writeHTML aparte).
-        $pdf->Ln(25);
+        $pdf->Ln(14);
         $firmas = '<table cellpadding="0"><tr>'
             . '<td width="45%" align="center" style="border-top:0.5px solid #333; font-size:8px;">Recibí conforme</td>'
             . '<td width="10%"></td>'

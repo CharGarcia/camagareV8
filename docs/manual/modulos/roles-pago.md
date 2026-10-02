@@ -240,8 +240,8 @@ módulo. Para regresar al orden de fábrica, ordene por *Período* de mayor a me
 ## Historial de cambios
 
 - **1.12** — En el PDF del rol personal de cada empleado, las firmas
-  **Recibí conforme** y **Empleador** quedan más abajo, con más espacio libre
-  para firmar a mano, y el logo de la empresa se imprime más grande (también en la planilla
+  **Recibí conforme** y **Empleador** quedan algo más abajo, con espacio
+  suficiente para firmar a mano, y el logo de la empresa se imprime más grande (también en la planilla
   general con todos los empleados).
 - **1.11** — En la ventana de filtros, la pestaña *Detalles* se llama ahora
   **Búsqueda por detalle**, y la ventana ya no tiene barra de desplazamiento
