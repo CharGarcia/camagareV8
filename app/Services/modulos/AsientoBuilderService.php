@@ -27,15 +27,26 @@ class AsientoBuilderService
      * tipo_documento (egresos_detalle) => código (asientos_tipo, tipo 'nomina') cuyo pasivo
      * ya se provisiona mes a mes en el rol y que, al pagarse por Egresos, debe cancelarse
      * directo contra esa cuenta específica (no contra la cuenta genérica del concepto).
+     *
+     * ANTICIPO (novedad 3) y PRESTAMO9 (desembolso del Préstamo Empresa) van al revés: el egreso
+     * es el origen y debita la MISMA cuenta que el rol mensual acredita después al descontarlos
+     * (RolAsientoService: ANTICIPOSDESCUENTOSNOMINA / PRESTAMOEMPRESANOMINA). Antes no estaban
+     * aquí y caían a la cuenta del concepto ROL, que está bloqueada y vacía: el asiento no se
+     * generaba y el aviso pedía «Sueldos por Pagar / Anticipos y Descuentos» aunque estuvieran
+     * configuradas.
      */
     private const CONTRAPARTIDA_ESPECIFICA_NOMINA = [
         'DECIMO_TERCERO' => 'DECIMOTERCEROPORPAGARNOMINA',
         'DECIMO_CUARTO'  => 'DECIMOCUARTOPORPAGARNOMINA',
+        'ANTICIPO'       => 'ANTICIPOSDESCUENTOSNOMINA',
+        'PRESTAMO9'      => 'PRESTAMOEMPRESANOMINA',
     ];
 
     private const NOMBRE_CONTRAPARTIDA_NOMINA = [
         'DECIMO_TERCERO' => 'Décimo Tercero por Pagar',
         'DECIMO_CUARTO'  => 'Décimo Cuarto por Pagar',
+        'ANTICIPO'       => 'Anticipos y Descuentos (anticipo a empleado)',
+        'PRESTAMO9'      => 'Préstamos Empresa por Cobrar (desembolso)',
     ];
 
     /**
@@ -4537,6 +4548,12 @@ class AsientoBuilderService
             if ($totalTipo <= 0) continue;
 
             $idCtaTipo = $this->cuentaProgramadaPorCodigo($idEmpresa, 'nomina', $codigo);
+            // Concepto opcional sin cuenta (p. ej. Préstamo Empresa): el rol descuenta la cuota en
+            // su concepto de respaldo, así que el desembolso debe debitar esa misma cuenta.
+            $respaldo = AsientoProgramadoRepository::CONCEPTOS_CON_RESPALDO[$codigo] ?? null;
+            if ($idCtaTipo <= 0 && $respaldo !== null) {
+                $idCtaTipo = $this->cuentaProgramadaPorCodigo($idEmpresa, 'nomina', $respaldo);
+            }
             if ($idCtaTipo > 0) {
                 $detalles[] = [
                     'id_cuenta_contable' => $idCtaTipo,

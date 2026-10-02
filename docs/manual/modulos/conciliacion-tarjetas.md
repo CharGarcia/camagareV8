@@ -6,7 +6,7 @@ ruta_modulo: modulos/conciliacion-tarjetas
 tipo: modulo
 visibilidad: todos
 etiquetas: conciliar tarjetas, recaps diners, interdin, visa, mastercard, discover, asiento no generado, asiento pendiente, contabilizar conciliacion, payphone, nuvei, datafono, tarjeta de credito, liquidacion, comision de tarjeta, deposito de tarjeta, retenciones tarjeta, cuadrar tarjetas, cobros por depositar, asiento del deposito, imprimir, impresora
-version: 2.3
+version: 2.4
 orden: 66
 estado: activo
 ---
@@ -179,6 +179,14 @@ Módulos que contabilizan*, no se genera ninguno.
 
 - **Un cobro no se concilia dos veces.** La base de datos lo impide, incluso si
   dos personas concilian al mismo tiempo.
+- **Los cobros de una línea no pasan de su bruto.** Se cruza por el **bruto** (lo
+  que pagó el cliente), no por el neto: la comisión y las retenciones de la línea
+  se descuentan al cerrar, en el asiento. Por eso, al asignar un cobro, si sumado a
+  lo ya cruzado supera el bruto de la línea, el sistema lo rechaza con *"El valor
+  del cobro es superior al que falta cruzar en la línea"*. Se admite la tolerancia
+  de la configuración (redondeos de centavos). Bajo el bruto de cada línea se ve
+  cuánto **falta** cruzar o si está **completa**; con una línea marcada, la lista
+  de cobros muestra **Falta por cruzar** y atenúa los cobros que no caben.
 - **Lo que no aparece, vuelve.** Un cobro sin línea en el estado de cuenta sigue
   pendiente y se vuelve a ofrecer en la siguiente conciliación, como un cheque
   girado y no cobrado.
@@ -208,6 +216,9 @@ Módulos que contabilizan*, no se genera ninguno.
 
 ## Errores frecuentes
 
+- **"El valor del cobro es superior al que falta cruzar en la línea"**: ese cobro
+  no cabe en lo que le falta a la línea. Revise si corresponde a otra línea, o
+  deshaga el cruce equivocado (la **x** junto al cobro cruzado) y vuelva a cruzar.
 - **"La forma de cobro no tiene cuenta contable asignada"**: la conciliación se
   guarda igual, pero sin asiento. Asigne una cuenta puente en *Formas de
   Cobro/Pago* si lleva contabilidad; el asiento se genera solo al volver a abrir
@@ -242,6 +253,8 @@ igual. Los períodos se abren y se cierran en **Contabilidad → Períodos
 Contables**; reabrir el período permite la operación de inmediato.
 
 ## Historial de cambios
+
+- **2.4** — Al asignar un cobro a una línea, el sistema **valida que no pase del bruto** de la línea (con la tolerancia de la configuración) y avisa *"El valor del cobro es superior al que falta cruzar"*; también en el cruce automático. Cada línea muestra cuánto **falta** cruzar o si está **completa**, y con una línea marcada la lista de cobros indica **Falta por cruzar** y atenúa los cobros que no caben.
 
 - **2.3** — Al cruzar a mano, la línea del estado de cuenta **queda marcada** después de cada cruce: se pueden seguir eligiendo cobros de la derecha sin volver a seleccionarla. Se desmarca con otro clic sobre la misma línea.
 

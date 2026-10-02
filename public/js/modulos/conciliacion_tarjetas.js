@@ -443,7 +443,7 @@ function CTAR_pintarLineas() {
                     ${l.tipo_linea === 'deposito' ? '<span class="badge bg-info bg-opacity-25 text-info ms-1">depósito</span>' : ''}
                 </td>
                 <td class="small">${CTAR_esc(l.autorizacion || l.referencia || '—')}</td>
-                <td class="text-end fw-bold">$${CTAR_num(l.monto_bruto)}</td>
+                <td class="text-end fw-bold">$${CTAR_num(l.monto_bruto)}${CTAR_badgeSaldoLinea(l)}</td>
                 <td class="text-end text-secondary">$${CTAR_num(l.comision)}</td>
                 <td class="text-end text-secondary">$${CTAR_num(retenciones)}</td>
                 <td class="text-end">$${CTAR_num(l.monto_neto)}</td>
@@ -462,6 +462,31 @@ function CTAR_pintarLineas() {
             </tr>
             ${cruzados ? `<tr class="${seleccionada ? 'table-primary' : ''}"><td colspan="8" class="py-0 pb-1">${cruzados}</td></tr>` : ''}`;
     }).join('');
+}
+
+/** Bruto, suma ya cruzada y lo que falta de una línea del estado de cuenta. */
+function CTAR_saldoLinea(l) {
+    const bruto = CMG_r2(parseFloat(l.monto_bruto) || 0);
+    const cruzado = CMG_r2((l.cruces_detalle || []).reduce((s, cr) => s + (parseFloat(cr.monto_cruzado) || 0), 0));
+    return { bruto, cruzado, falta: CMG_r2(bruto - cruzado) };
+}
+
+/** Debajo del bruto: cuánto falta cruzar (ámbar) o "completa" (verde). Nada si no tiene cruces. */
+function CTAR_badgeSaldoLinea(l) {
+    const s = CTAR_saldoLinea(l);
+    if (s.cruzado <= 0) return '';
+    if (Math.abs(s.falta) < 0.005) {
+        return '<div class="small text-success fw-normal">completa</div>';
+    }
+    return s.falta > 0
+        ? `<div class="small text-warning fw-normal" title="Cruzado $${CTAR_num(s.cruzado)} de $${CTAR_num(s.bruto)}">falta $${CTAR_num(s.falta)}</div>`
+        : `<div class="small text-danger fw-normal" title="Cruzado $${CTAR_num(s.cruzado)} de $${CTAR_num(s.bruto)}">excede $${CTAR_num(-s.falta)}</div>`;
+}
+
+/** Línea seleccionada (o null). */
+function CTAR_lineaSeleccionada() {
+    if (!CTAR_lineaSel || !CTAR_detalle) return null;
+    return (CTAR_detalle.lineas || []).find((l) => String(l.id) === String(CTAR_lineaSel)) || null;
 }
 
 function CTAR_seleccionarLinea(id) {
@@ -492,8 +517,15 @@ function CTAR_pintarCobros(filtro = null) {
     const q = filtro.trim().toLowerCase();
     const visibles = q ? enFechas.filter((c) => CTAR_cobroCoincideTexto(c, q)) : enFechas;
 
-    document.getElementById('ctar-m-resumen-cobros').textContent =
-        (visibles.length !== CTAR_cobrosCache.length ? `${visibles.length} de ` : '') + `${CTAR_cobrosCache.length} disponibles`;
+    // Con una línea seleccionada: cuánto le falta. Los cobros que no caben se atenúan
+    // (el servidor igual los rechaza con el mismo criterio y la misma tolerancia).
+    const lineaSel = editable ? CTAR_lineaSeleccionada() : null;
+    const saldoSel = lineaSel ? CTAR_saldoLinea(lineaSel) : null;
+    const tolerancia = parseFloat(CTAR_detalle.tolerancia ?? 0.05) || 0;
+
+    document.getElementById('ctar-m-resumen-cobros').innerHTML =
+        (saldoSel ? `<span class="fw-semibold ${saldoSel.falta > 0 ? 'text-primary' : 'text-success'}">Falta por cruzar $${CTAR_num(Math.max(saldoSel.falta, 0))}</span> · ` : '')
+        + (visibles.length !== CTAR_cobrosCache.length ? `${visibles.length} de ` : '') + `${CTAR_cobrosCache.length} disponibles`;
 
     if (!visibles.length) {
         tbody.innerHTML = '<tr><td colspan="5" class="text-center py-4 text-muted small">Sin cobros pendientes.</td></tr>';
@@ -511,10 +543,13 @@ function CTAR_pintarCobros(filtro = null) {
         const celdaFechas = docs.length
             ? docs.map((d) => `<div class="text-nowrap">${d.fecha ? CTAR_fecha(d.fecha) : '—'}</div>`).join('')
             : '—';
+        const noCabe = saldoSel && CMG_r2(parseFloat(c.monto) || 0) > CMG_r2(saldoSel.falta + tolerancia) + 0.0001;
         return `
-        <tr style="cursor:${puedeCruzar ? 'pointer' : 'default'};"
+        <tr class="${noCabe ? 'opacity-50' : ''}" style="cursor:${puedeCruzar ? 'pointer' : 'default'};"
             ${puedeCruzar ? `onclick="CTAR_cruzarCon(${c.id_ingreso_pago})"` : ''}
-            title="${puedeCruzar ? 'Cruzar con la línea seleccionada' : 'Seleccione primero una línea del estado de cuenta'}">
+            title="${!puedeCruzar ? 'Seleccione primero una línea del estado de cuenta'
+                : noCabe ? 'Su valor es superior al que falta cruzar en la línea seleccionada'
+                : 'Cruzar con la línea seleccionada'}">
             <td class="ps-3 fw-medium">${celdaDocs}</td>
             <td class="small" title="Cobro ${CTAR_esc(c.numero_ingreso || '')} del ${CTAR_fecha(c.fecha_emision)}">${celdaFechas}</td>
             <td class="small">${CTAR_esc(c.cliente_nombre || '—')}</td>
@@ -599,6 +634,24 @@ async function CTAR_cruzarCon(idIngresoPago) {
         CTAR_aviso('info', 'Seleccione una línea', 'Primero elija la línea del estado de cuenta que quiere cruzar.');
         return;
     }
+
+    // Aviso inmediato si el cobro no cabe en lo que falta de la línea. El servidor
+    // vuelve a validarlo (ConciliacionTarjetasRules::validarSaldoLinea).
+    const linea = CTAR_lineaSeleccionada();
+    const cobro = (CTAR_detalle.cobros || []).find((c) => String(c.id_ingreso_pago) === String(idIngresoPago));
+    if (linea && cobro) {
+        const s = CTAR_saldoLinea(linea);
+        const monto = CMG_r2(parseFloat(cobro.monto) || 0);
+        const tolerancia = parseFloat(CTAR_detalle.tolerancia ?? 0.05) || 0;
+        if (CMG_r2(s.cruzado + monto) > CMG_r2(s.bruto + tolerancia) + 0.0001) {
+            CTAR_aviso('warning', 'Valor superior',
+                s.falta > 0
+                    ? `El valor del cobro ($${CTAR_num(monto)}) es superior al que falta cruzar en la línea ($${CTAR_num(s.falta)} de $${CTAR_num(s.bruto)}).`
+                    : `La línea de $${CTAR_num(s.bruto)} ya está cruzada completa: no admite más cobros.`);
+            return;
+        }
+    }
+
     try {
         const r = await CTAR_post('cruzarAjax', {
             id_cabecera: document.getElementById('ctar-m-id').value,
@@ -727,8 +780,11 @@ async function CTAR_aplicarSugerencias() {
         const r = await CTAR_post('cruzarAjax', { id_cabecera: id, pares });
         bootstrap.Modal.getInstance(document.getElementById('modalSugerenciasTarjeta'))?.hide();
         await CTAR_refrescarDetalle();
-        CTAR_aviso('success', 'Cruce automático',
-            `Se emparejaron ${r.creados} cobros.` + (r.omitidos.length ? ` ${r.omitidos.length} no se pudieron cruzar.` : ''));
+        // Si alguno se rechazó (p. ej. su valor pasaba del bruto de la línea), se dice por qué.
+        CTAR_aviso(r.omitidos.length ? 'warning' : 'success', 'Cruce automático',
+            `Se emparejaron ${r.creados} cobros.` + (r.omitidos.length
+                ? ` ${r.omitidos.length} no se pudieron cruzar. Por ejemplo: ${r.omitidos[0].motivo}`
+                : ''));
     } catch (e) {
         CTAR_aviso('error', 'No se pudo cruzar', e.message);
     } finally {

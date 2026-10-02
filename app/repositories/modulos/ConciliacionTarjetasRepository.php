@@ -749,10 +749,13 @@ class ConciliacionTarjetasRepository extends BaseRepository
     {
         // Incluye el conteo de cruces vigentes: el Service decide con él si la línea
         // puede marcarse como "sin cobro" o si al descruzar vuelve a quedar pendiente.
+        // Y la suma ya cruzada: al cruzar, los cobros no pueden pasar del bruto de la línea.
         $st = $this->db->prepare(
             "SELECT l.*,
                     (SELECT COUNT(*) FROM conciliacion_tarjetas_cruces cr
-                      WHERE cr.id_linea = l.id AND cr.eliminado = FALSE) AS cruces
+                      WHERE cr.id_linea = l.id AND cr.eliminado = FALSE) AS cruces,
+                    (SELECT COALESCE(SUM(cr.monto_cruzado), 0) FROM conciliacion_tarjetas_cruces cr
+                      WHERE cr.id_linea = l.id AND cr.eliminado = FALSE) AS monto_cruzado
                FROM conciliacion_tarjetas_lineas l
               WHERE l.id = :id AND l.id_empresa = :e AND l.eliminado = FALSE"
         );

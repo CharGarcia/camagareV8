@@ -110,6 +110,35 @@ class ConciliacionTarjetasRules
     }
 
     /**
+     * Lo cruzado en una línea no puede pasar de su bruto: la comisión y las retenciones
+     * de la línea se calcularon sobre ese bruto, y al cerrar se descuentan de lo cruzado.
+     * Si sobran cobros, la cuenta puente se acredita de más y el depósito se infla.
+     * Se admite la tolerancia de la procesadora (redondeos de centavos).
+     *
+     * @param float $yaCruzado Suma de los cobros ya cruzados en la línea
+     */
+    public function validarSaldoLinea(array $linea, array $cobro, float $yaCruzado, float $tolerancia): void
+    {
+        $bruto = round((float) $linea['monto_bruto'], 2);
+        $monto = round((float) $cobro['monto'], 2);
+        $falta = round($bruto - $yaCruzado, 2);
+
+        if (round($yaCruzado + $monto, 2) <= round($bruto + $tolerancia, 2) + 0.0001) {
+            return;
+        }
+
+        $fmt = static fn(float $v) => '$' . number_format($v, 2, ',', '.');
+        throw new \Exception(
+            $falta > 0
+                ? sprintf(
+                    'El valor del cobro (%s) es superior al que falta cruzar en la línea (%s de %s).',
+                    $fmt($monto), $fmt($falta), $fmt($bruto)
+                )
+                : sprintf('La línea de %s ya está cruzada completa: no admite más cobros.', $fmt($bruto))
+        );
+    }
+
+    /**
      * Cierre de la conciliación.
      *
      * @param float $diferencia Neto depositado − neto calculado de lo cruzado

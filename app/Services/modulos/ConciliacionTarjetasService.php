@@ -181,6 +181,9 @@ class ConciliacionTarjetasService
             'cobros'        => $cobros,
             'totales'       => $totales,
             'contabilidad'  => $this->evaluarContabilidad($cabecera, $idEmpresa, $totales),
+            // Margen con el que se acepta que los cobros de una línea pasen de su bruto
+            // (lo valida cruzar(); la pantalla lo usa para atenuar los que no caben).
+            'tolerancia'    => (float) ($this->repository->getConfig($idEmpresa, (int) $cabecera['id_forma_cobro'])['tolerancia_diferencia'] ?? 0.05),
         ];
     }
 
@@ -430,16 +433,22 @@ class ConciliacionTarjetasService
             $creados  = 0;
             $omitidos = [];
 
+            $config     = $this->repository->getConfig($idEmpresa, (int) $cabecera['id_forma_cobro']);
+            $tolerancia = (float) ($config['tolerancia_diferencia'] ?? 0.05);
+
             foreach ($pares as $par) {
                 $idLinea = (int) ($par['id_linea'] ?? 0);
                 $idPago  = (int) ($par['id_ingreso_pago'] ?? 0);
 
+                // Se relee en cada par: el cruce automático puede traer varios cobros
+                // para la misma línea (depósito consolidado) y cada uno suma al anterior.
                 $linea = $this->repository->getLinea($idLinea, $idEmpresa);
                 $cobro = $cobros[$idPago] ?? null;
                 $ya    = $this->repository->estaCruzado($idPago);
 
                 try {
                     $this->rules->validarCruce($cabecera, $linea, $cobro, $ya);
+                    $this->rules->validarSaldoLinea($linea, $cobro, (float) $linea['monto_cruzado'], $tolerancia);
                 } catch (\Throwable $e) {
                     $omitidos[] = ['id_linea' => $idLinea, 'id_ingreso_pago' => $idPago, 'motivo' => $e->getMessage()];
                     continue;

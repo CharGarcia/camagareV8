@@ -6,7 +6,7 @@ ruta_modulo: modulos/asientos_contables
 tipo: modulo
 visibilidad: todos
 etiquetas: asientos, asiento contable, diario, debe, haber, partida doble, cuadrado, comprobante, contabilidad, imprimir, pdf, excel, documento origen, cuadre con el documento, total de la factura, cuenta por cobrar, cartera, editar asiento desde el documento, pestaña asiento contable, editado a mano, restaurar asiento automático, permisos de contabilidad, documentos migrados, migración, sistema anterior, buscar asiento, buscador, filtros, filtrar asientos, buscar por cuenta, buscar por referencia, libro diario, chips, asiento descuadrado, búsqueda lenta, se queda buscando, filtrar por origen, origen del asiento, módulo de origen, vista previa, costo de ventas, asiento sin costo, duplicar asiento, copiar asiento, clonar asiento, repetir asiento
-version: 1.33
+version: 1.34
 orden: 20
 estado: activo
 ---
@@ -239,6 +239,14 @@ faltan**, agrupados por motivo. Por ejemplo:
 >
 > Configure las cuentas contables de Nómina. *Configurar*
 > - Egresos 001-101-000000018 — falta: «Sueldos por Pagar», «Anticipos y Descuentos»
+
+Un egreso de **nómina** (concepto de tipo Rol) cancela cada parte en su propia
+cuenta de Configuración Contable → Nómina: el pago de un rol mensual va a *Sueldos
+por Pagar*; el de una quincena o semana y el de un **anticipo** a empleado, a
+*Anticipos y Descuentos*; el **desembolso de un Préstamo Empresa**, a *Préstamos
+Empresa por Cobrar* (o a *Descuentos* si esa cuenta no está configurada), y los
+décimos, a su cuenta por pagar. Si el mismo egreso paga además facturas de compra,
+esa parte va a la Cuenta por Pagar de las compras.
 
 Si el detalle nombra **proveedores o clientes**, esos tienen cuentas propias: la
 cuenta que falta se asigna en su fila de *Reglas por Proveedores* o *Reglas por
@@ -477,6 +485,10 @@ tienen un documento individual con tercero que mostrar.
 
 ## Historial de cambios
 
+- **1.34** — Los egresos de nómina que pagan un **anticipo** a empleado o el **desembolso de un
+  Préstamo Empresa** ya generan su asiento (a *Anticipos y Descuentos* y a *Préstamos Empresa por
+  Cobrar*). Antes no se contabilizaban y el aviso pedía «Sueldos por Pagar», «Anticipos y
+  Descuentos» aunque estuvieran configuradas.
 - **1.33** — Un asiento ya no se genera si alguna línea del documento se quedó sin cuenta
   contable (antes se omitía esa línea y el asiento cuadraba igual, perdiendo la venta sin aviso).
   El aviso de pendientes nombra el producto y la cuenta que faltan.
