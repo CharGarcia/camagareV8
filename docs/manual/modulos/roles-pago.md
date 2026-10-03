@@ -5,8 +5,8 @@ categoria: Nómina
 ruta_modulo: modulos/roles-pago
 tipo: modulo
 visibilidad: todos
-etiquetas: rol de pago, roles, nomina, sueldo, quincena, semanal, mensual, pago de empleados, descuentos, liquido a recibir, neteo, ingresos de quincena, bono en quincena, horas extra en quincena, observacion, observaciones, detalle de novedad, motivo del descuento, asiento contable, contabilizacion, cuentas de nomina, prestamo quirografario, prestamo hipotecario, prestamo empresa, prestamos iess, aporte iess, base del iess, con iess, sin iess, bonos, comisiones, horas extra, dias no laborados, faltas, dias laborados, sueldo ganado, fondos de reserva, decimo tercero, decimo cuarto, buscar rol de pago, buscador, filtros, filtrar roles, buscar empleado en el rol, buscar rubro, chips, ordenar, ordenamiento, ordenar por periodo, ordenar columnas, orden del listado, periodo mas reciente, imprimir, impresora
-version: 1.12
+etiquetas: rol de pago, roles, nomina, sueldo, quincena, semanal, mensual, pago de empleados, descuentos, liquido a recibir, neteo, ingresos de quincena, bono en quincena, horas extra en quincena, observacion, observaciones, detalle de novedad, motivo del descuento, asiento contable, contabilizacion, cuentas de nomina, prestamo quirografario, prestamo hipotecario, prestamo empresa, prestamos iess, aporte iess, base del iess, con iess, sin iess, bonos, comisiones, horas extra, dias no laborados, faltas, dias laborados, sueldo ganado, fondos de reserva, decimo tercero, decimo cuarto, buscar rol de pago, buscador, filtros, filtrar roles, buscar empleado en el rol, buscar rubro, chips, ordenar, ordenamiento, ordenar por periodo, ordenar columnas, orden del listado, periodo mas reciente, imprimir, impresora, eliminar rol, anular rol, rol eliminado, nomina duplicada, nomina contabilizada dos veces, gasto de nomina inflado, asiento sigue contabilizado, asiento de rol eliminado
+version: 1.14
 orden: 30
 estado: activo
 ---
@@ -158,6 +158,18 @@ dentro de *Descuentos aplicados en quincenas/semanas del mes*).
 Cambiar la configuración no modifica los asientos ya generados: las cuentas
 nuevas se usan en los roles que se contabilicen desde ese momento.
 
+### Al anular o eliminar un rol
+
+Anular o eliminar un rol **anula todos sus asientos** en la misma operación (un
+rol mensual puede tener uno por empleado). Si alguno no se puede anular (por
+ejemplo, porque su fecha cae en un período contable cerrado), el rol **no cambia**
+y el sistema muestra el motivo.
+
+Volver a generar un rol ya contabilizado lo deja en estado *Generado*, pero su
+asiento sigue vigente y se actualiza solo. Por eso eliminarlo también anula ese
+asiento: antes quedaba vivo, y si el rol se volvía a crear la nómina del mes se
+contabilizaba dos o más veces.
+
 ## Buscar y filtrar el listado
 
 Arriba de la tabla hay un solo grupo: el botón del **embudo**, el cuadro de
@@ -227,6 +239,13 @@ módulo. Para regresar al orden de fábrica, ordene por *Período* de mayor a me
 
 ## Errores frecuentes
 
+- **"No se pudo anular el asiento contable del rol de pagos: …"**: al anular o
+  eliminar el rol, uno de sus asientos no se pudo anular y no se cambió nada; el
+  texto que sigue dice por qué (lo más común, un período contable cerrado).
+- **El gasto de nómina de un mes sale duplicado en el Balance**: hasta la versión
+  1.13, eliminar un rol que se había regenerado dejaba su asiento vivo. Anule en
+  *Contabilidad → Asientos Contables* los asientos de nómina (*NO-…*) de los roles
+  eliminados; el del rol vigente se queda.
 - **"La quincena debe ser 1 o 2"** / **"La semana debe estar entre 1 y 5"**:
   revise el periodo elegido.
 - **Falta una hora extra en el rol**: la novedad está imputada a otro mes o año.
@@ -239,6 +258,12 @@ módulo. Para regresar al orden de fábrica, ordene por *Período* de mayor a me
 
 ## Historial de cambios
 
+- **1.14** — Corrección: eliminar un rol anula todos sus asientos en la misma
+  operación, y anularlo también lo hace dentro de la misma operación. Antes, un rol
+  contabilizado que se volvía a generar quedaba en *Generado*, se podía eliminar y
+  su asiento seguía contabilizado: al recrear el rol, la nómina del mes se
+  contabilizaba dos o más veces. Al anular, un asiento que fallaba por un motivo
+  distinto del período cerrado también quedaba vivo.
 - **1.13** — Los roles y quincenas migrados del sistema anterior muestran a cada
   empleado como **pagado**, aunque el egreso de ese pago no haya quedado enlazado
   en la migración. El aviso de préstamos empresa por desembolsar ya no cuenta las

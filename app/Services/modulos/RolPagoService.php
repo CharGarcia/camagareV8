@@ -624,13 +624,22 @@ class RolPagoService
             throw new Exception('Genere la corrida antes de marcarla como pagada.');
         }
 
-        // Al anular, revertir su asiento contable (si lo tiene).
-        if ($nuevo === 'anulado' && (int) ($cab['id_asiento'] ?? 0) > 0) {
-            (new RolAsientoService($this->repo, $this->log))->anularAsiento($cab, $idEmpresa, $idUsuario);
-        }
+        $this->repo->beginTransaction();
+        try {
+            // Al anular, sus asientos se anulan en la MISMA transacción. Se buscan todos los del
+            // rol (un mensual puede tener uno por empleado), no solo el de id_asiento: tras
+            // regenerar un rol, ese marcador puede no reflejar todos los asientos vivos.
+            if ($nuevo === 'anulado') {
+                (new RolAsientoService($this->repo, $this->log))->anularAsiento($cab, $idEmpresa, $idUsuario);
+            }
 
-        $this->repo->setEstado($id, $idEmpresa, $nuevo, $idUsuario);
-        $this->log->registrar($idUsuario, $idEmpresa, 'ESTADO_' . strtoupper($nuevo), 'rol_cabecera', $id, $cab, ['estado' => $nuevo]);
+            $this->repo->setEstado($id, $idEmpresa, $nuevo, $idUsuario);
+            $this->log->registrar($idUsuario, $idEmpresa, 'ESTADO_' . strtoupper($nuevo), 'rol_cabecera', $id, $cab, ['estado' => $nuevo]);
+            $this->repo->commit();
+        } catch (\Throwable $e) {
+            $this->repo->rollBack();
+            throw $e;
+        }
 
         // Pagar/despagar una semana o quincena cambia el neteo del rol mensual del mismo período.
         if (in_array($cab['tipo_rol'], ['SEMANAL', 'QUINCENA'], true)) {
@@ -653,10 +662,15 @@ class RolPagoService
         }
         $this->repo->beginTransaction();
         try {
+            // Sus asientos se anulan en la MISMA transacción. El bloqueo de arriba no alcanza:
+            // regenerar un rol ya contabilizado lo devuelve a 'generado' con su asiento vivo, y
+            // así se eliminaban roles dejando la nómina contabilizada dos o más veces.
+            (new RolAsientoService($this->repo, $this->log))->anularAsiento($cab, $idEmpresa, $idUsuario);
+
             $this->repo->deleteLogic($id, $idEmpresa, $idUsuario);
             $this->log->registrar($idUsuario, $idEmpresa, 'ELIMINAR', 'rol_cabecera', $id, $cab, null);
             $this->repo->commit();
-        } catch (Exception $e) {
+        } catch (\Throwable $e) {
             $this->repo->rollBack();
             throw $e;
         }

@@ -647,9 +647,10 @@ class CambioProductoCvService
             $this->repository->eliminar($id, $idEmpresa, $idUsuario);
             $this->logService->registrar($idUsuario, $idEmpresa, 'ELIMINAR_CAMBIO_PRODUCTO_CV', 'cambios_producto_cv', $id, $cabecera, null);
 
-            $db->commit();
+            // El asiento se anula en la MISMA transacción: si no se puede, el cambio no se elimina.
+            $this->anularAsientoSiExiste($cabecera, $idEmpresa, $idUsuario);
 
-            $this->anularAsientoSiExiste($id, $idEmpresa, $idUsuario);
+            $db->commit();
         } catch (Exception $e) {
             if ($db->inTransaction()) $db->rollBack();
             throw $e;
@@ -726,12 +727,17 @@ class CambioProductoCvService
             $this->logService->registrar($idUsuario, $idEmpresa, 'CAMBIAR_ESTADO_CAMBIO_PRODUCTO_CV', 'cambios_producto_cv', $id,
                 ['estado' => $actual], ['estado' => $nuevoEstado]);
 
+            // Al desactivarlo, su asiento se anula en la MISMA transacción.
+            if ($wasActive && !$willActive) {
+                $this->anularAsientoSiExiste($cab, $idEmpresa, $idUsuario);
+            }
+
             $db->commit();
 
+            // Al reactivarlo, el asiento se regenera tras el commit (si falla, lo retoma la
+            // sincronización de asientos).
             if ($willActive) {
                 $this->procesarAsientoSeguro($id, ['id_empresa' => $idEmpresa, 'id_usuario' => $idUsuario]);
-            } elseif ($wasActive) {
-                $this->anularAsientoSiExiste($id, $idEmpresa, $idUsuario);
             }
         } catch (Exception $e) {
             if ($db->inTransaction()) $db->rollBack();
@@ -1027,27 +1033,33 @@ class CambioProductoCvService
         $this->repository->updateAsientoContable($idCambio, $idEmpresa, $idGenerado);
     }
 
-    private function anularAsientoSiExiste(int $idCambio, int $idEmpresa, int $idUsuario): void
+    /**
+     * Anula (y desvincula) el asiento del cambio al eliminarlo o pasarlo a Borrador/Anulada.
+     * Se llama DENTRO de la transacción del cambio y propaga cualquier error, para que el
+     * documento y su asiento cambien juntos o no cambie ninguno.
+     *
+     * $cab es la cabecera leída ANTES del cambio: find() filtra eliminado = false, así que
+     * releerla después de eliminar() perdía el asiento y nunca se anulaba.
+     */
+    private function anularAsientoSiExiste(array $cab, int $idEmpresa, int $idUsuario): void
     {
-        try {
-            $cab = $this->repository->find($idCambio, $idEmpresa);
-            $idAsiento = (int) ($cab['id_asiento_contable'] ?? 0);
-            if ($idAsiento <= 0) return;
-            $asientoService = new AsientoContableService(
-                new \App\repositories\modulos\AsientoContableRepository(),
-                new \App\Rules\modulos\AsientoContableRules(),
-                $this->logService
-            );
-            $asientoService->anular($idAsiento, $idEmpresa, $idUsuario);
-            $this->repository->updateAsientoContable($idCambio, $idEmpresa, null);
-        } catch (\Throwable $e) {
-            // Un período cerrado debe abortar: si no, el documento quedaría anulado con su
-            // asiento aún vigente (descuadre silencioso).
-            if (stripos($e->getMessage(), 'contable cerrado') !== false) {
-                throw $e;
-            }
-            error_log("[CambioProductoCV] No se pudo anular el asiento del cambio $idCambio: " . $e->getMessage());
+        $idCambio = (int) $cab['id'];
+        $asientoService = new AsientoContableService(
+            new \App\repositories\modulos\AsientoContableRepository(),
+            new \App\Rules\modulos\AsientoContableRules(),
+            $this->logService
+        );
+        $idAsiento = (int) ($cab['id_asiento_contable'] ?? 0);
+        if ($idAsiento <= 0) {
+            // Respaldo por origen, por si la columna del documento no quedó registrada.
+            $prev = $asientoService->getAsientoPorOrigen('cambio_producto_cv', $idCambio, $idEmpresa);
+            $idAsiento = $prev ? (int) $prev['id'] : 0;
         }
+        if ($idAsiento <= 0) {
+            return;
+        }
+        $asientoService->anularDeDocumento($idAsiento, $idEmpresa, $idUsuario, 'del cambio de producto');
+        $this->repository->updateAsientoContable($idCambio, $idEmpresa, null);
     }
 
     // ─── Helpers de inventario ────────────────────────────────────────────────

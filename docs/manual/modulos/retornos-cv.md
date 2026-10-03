@@ -5,8 +5,8 @@ categoria: Ventas
 ruta_modulo: modulos/retornos-cv
 tipo: modulo
 visibilidad: todos
-etiquetas: retorno, retornos, saldo negativo, consignacion en negativo, ya no esta en bodega, no se puede quitar la entrada, dos usuarios a la vez, observaciones, columna observaciones, ver observaciones, notas del retorno, comentarios, columnas del listado, ordenar listado, ocultar columnas, buscar retorno, buscador, filtros, filtrar retornos, buscar por producto, buscar por lote, buscar por NUP, chips, devolucion de consignacion, mercaderia no vendida, reingreso, saldo consignado, numeracion por fecha, numero con el año, reiniciar numeracion, reinicio anual, reinicio mensual, correlativo por año, correlativo por mes, modo de numeracion, buscar por numero de consignacion, agregar consignacion, numero de consignacion, serie inactiva, punto de emision inactivo, permiso actualizar, no puedo guardar, no tengo permiso para esta accion, costo del retorno, costo promedio, retorno a costo cero, aparecen documentos que no busque, resultados que no corresponden, buscar por producto en el listado, cambiar estado, estado del retorno, anular retorno, pasar a borrador, emitir retorno, selector de estado, columna bodega en el pdf, bodega del retorno, a que bodega regresa, total de cantidades, suma de cantidades, total del pdf, fila total, vencimiento, fecha de vencimiento, caducidad, fecha de caducidad, columna vencimiento, vence, lote vencido, no se ve el vencimiento, asiento sigue a la consignacion, no contabilizar consignaciones, retorno sin asiento, modulos que contabilizan, imprimir, impresora
-version: 1.24
+etiquetas: retorno, retornos, saldo negativo, consignacion en negativo, ya no esta en bodega, no se puede quitar la entrada, dos usuarios a la vez, observaciones, columna observaciones, ver observaciones, notas del retorno, comentarios, columnas del listado, ordenar listado, ocultar columnas, buscar retorno, buscador, filtros, filtrar retornos, buscar por producto, buscar por lote, buscar por NUP, chips, devolucion de consignacion, mercaderia no vendida, reingreso, saldo consignado, numeracion por fecha, numero con el año, reiniciar numeracion, reinicio anual, reinicio mensual, correlativo por año, correlativo por mes, modo de numeracion, buscar por numero de consignacion, agregar consignacion, numero de consignacion, serie inactiva, punto de emision inactivo, permiso actualizar, no puedo guardar, no tengo permiso para esta accion, costo del retorno, costo promedio, retorno a costo cero, aparecen documentos que no busque, resultados que no corresponden, buscar por producto en el listado, cambiar estado, estado del retorno, anular retorno, pasar a borrador, emitir retorno, selector de estado, columna bodega en el pdf, bodega del retorno, a que bodega regresa, total de cantidades, suma de cantidades, total del pdf, fila total, vencimiento, fecha de vencimiento, caducidad, fecha de caducidad, columna vencimiento, vence, lote vencido, no se ve el vencimiento, asiento sigue a la consignacion, no contabilizar consignaciones, retorno sin asiento, modulos que contabilizan, imprimir, impresora, asiento de documento anulado, asiento sigue contabilizado, no se anulo el asiento, no se pudo anular el asiento contable
+version: 1.25
 orden: 46
 estado: activo
 ---
@@ -208,6 +208,11 @@ Para **guardar el cambio** de un retorno ya registrado basta el permiso
 *Actualizar*: no hace falta tener además *Crear*.
 ## Errores frecuentes
 
+- **"No se pudo anular el asiento contable del retorno: …"**: al eliminar un retorno
+  o pasarlo a Borrador o Anulada, su asiento contable se anula en la misma operación;
+  si no se puede, no se cambia nada y el texto que sigue dice por qué (lo más común,
+  un período contable cerrado en la fecha del asiento). Corrija esa causa y vuelva a
+  intentarlo.
 - **El saldo no cuadra**: revise si falta registrar un retorno o si hay
   mercadería vendida sin facturar.
 - **El stock no subió**: compruebe la bodega de destino del retorno.
@@ -270,6 +275,11 @@ Contables**; reabrir el período permite la operación de inmediato.
 
 ## Historial de cambios
 
+- **1.25** — Corrección: al eliminar un retorno, o pasarlo de Emitida a Borrador o
+  Anulada, su asiento se anula en la misma operación. Al **eliminar** un retorno
+  emitido, su asiento quedaba contabilizado (no se encontraba porque el retorno ya
+  estaba eliminado). Ahora, si el asiento no se puede anular, el retorno no cambia y
+  se muestra el motivo.
 - **1.24** — Ya no se puede pasar a *Borrador*, anular ni eliminar un retorno
   cuyas unidades ya no están en bodega (se volvieron a consignar o se vendieron):
   antes el lote quedaba en negativo. Además, si dos usuarios guardan a la vez un

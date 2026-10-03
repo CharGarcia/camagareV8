@@ -162,6 +162,10 @@ class TraspasoService
                 ['estado' => 'anulado']
             );
 
+            // El asiento se anula en la MISMA transacción: si no se puede, el traspaso tampoco
+            // queda anulado (antes quedaba anulado con su asiento vivo y el error solo en el log).
+            $this->anularAsientoContable($traspaso, $idEmpresa, $idUsuario);
+
             if (!$inTrans) $db->commit();
         } catch (\Throwable $e) {
             if (!$inTrans && $db->inTransaction()) {
@@ -169,9 +173,6 @@ class TraspasoService
             }
             throw $e;
         }
-
-        // Anular el asiento contable asociado (fuera de la transacción).
-        $this->anularAsientoContable($id, $idEmpresa, $idUsuario);
 
         return $res;
     }
@@ -302,18 +303,30 @@ class TraspasoService
         $this->repository->updateAsientoContable($idTraspaso, $idGenerado);
     }
 
-    /** Anula el asiento contable asociado al traspaso, si existe y no está ya anulado. */
-    private function anularAsientoContable(int $idTraspaso, int $idEmpresa, int $idUsuario): void
+    /**
+     * Anula el asiento del traspaso. Se llama DENTRO de la transacción de anular() y propaga
+     * cualquier error (p. ej. período contable cerrado en la fecha del asiento), para que el
+     * documento y su asiento cambien juntos o no cambie ninguno.
+     *
+     * $traspaso es la fila leída ANTES de anular.
+     */
+    private function anularAsientoContable(array $traspaso, int $idEmpresa, int $idUsuario): void
     {
-        try {
-            $asientoService = $this->asientoContableService();
-            $previo = $asientoService->getAsientoPorOrigen('traspaso', $idTraspaso, $idEmpresa);
-            if ($previo && ($previo['estado'] ?? '') !== 'anulado') {
-                $asientoService->anular((int) $previo['id'], $idEmpresa, $idUsuario);
-                $this->repository->updateAsientoContable($idTraspaso, null);
-            }
-        } catch (\Throwable $e) {
-            error_log('[Traspaso] No se pudo anular el asiento del traspaso #' . $idTraspaso . ': ' . $e->getMessage());
+        $idTraspaso = (int) $traspaso['id'];
+        $asientoService = $this->asientoContableService();
+        $previo = $asientoService->getAsientoPorOrigen('traspaso', $idTraspaso, $idEmpresa);
+        $idAsiento = $previo ? (int) $previo['id'] : 0;
+
+        // Fallback (traspasos migrados): su asiento no tiene modulo_origen='traspaso' y solo se
+        // enlaza por id_asiento_contable (el mismo criterio con el que Control Bancario lo cruza).
+        if ($idAsiento <= 0) {
+            $idAsiento = (int) ($traspaso['id_asiento_contable'] ?? 0);
         }
+        if ($idAsiento <= 0) {
+            return;
+        }
+
+        $asientoService->anularDeDocumento($idAsiento, $idEmpresa, $idUsuario, 'del traspaso');
+        $this->repository->updateAsientoContable($idTraspaso, null);
     }
 }

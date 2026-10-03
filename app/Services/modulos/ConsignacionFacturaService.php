@@ -950,7 +950,12 @@ class ConsignacionFacturaService
             if ($managedTransaction && $db->inTransaction()) {
                 $db->rollBack();
             }
-            $this->revertirReingreso($idDoc, $idEmpresa, $idUsuario, false); // deshacer reingreso, no cambiar estado
+            // Limpieza tras un fallo: si a su vez falla, se registra y se informa el error original.
+            try {
+                $this->revertirReingreso($idDoc, $idEmpresa, $idUsuario, false); // deshacer reingreso, no cambiar estado
+            } catch (\Throwable $eRev) {
+                error_log("[FacturacionCV] No se pudo deshacer el reingreso del documento $idDoc: " . $eRev->getMessage());
+            }
             throw new Exception('No se pudo generar la factura: ' . $e->getMessage());
         }
 
@@ -1194,13 +1199,9 @@ class ConsignacionFacturaService
             } catch (\Throwable $e) { $idAsiento = 0; }
         }
         if ($idAsiento > 0) {
-            try {
-                $asientoSvc->anular($idAsiento, $idEmpresa, $idUsuario);
-            } catch (\Throwable $e) {
-                if (stripos($e->getMessage(), 'ya se encuentra anulado') === false) {
-                    error_log("[FacturacionCV] No se pudo anular el asiento de reingreso $idAsiento: " . $e->getMessage());
-                }
-            }
+            // Propaga el error: dentro de la transacción del llamador (anular/eliminar la factura
+            // de origen), un asiento que no se puede anular revierte todo en vez de dejarlo vivo.
+            $asientoSvc->anularDeDocumento($idAsiento, $idEmpresa, $idUsuario, 'de reingreso de la consignación');
             $this->repository->updateAsientoReingreso($idDoc, $idEmpresa, null);
         }
 

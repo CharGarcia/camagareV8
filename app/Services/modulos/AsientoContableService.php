@@ -624,6 +624,36 @@ class AsientoContableService
         }
     }
 
+    /**
+     * Anula el asiento de un documento que se está anulando o eliminando. Se llama DENTRO de la
+     * transacción del documento y propaga cualquier error (p. ej. período contable cerrado en la
+     * fecha del asiento): así el documento y su asiento cambian juntos o no cambia ninguno.
+     * Antes cada módulo lo hacía tras el commit y con el error solo en error_log, y quedaban
+     * documentos anulados con su asiento contabilizado ("Asiento de documento anulado" en
+     * Control Bancario).
+     *
+     * No hace nada si no hay asiento (id 0, eliminado o de otro ambiente) o si ya está anulado.
+     * $documento completa el mensaje de error: "del ingreso", "del retorno", etc.
+     */
+    public function anularDeDocumento(int $idAsiento, int $idEmpresa, int $idUsuario, string $documento): void
+    {
+        if ($idAsiento <= 0) {
+            return;
+        }
+        $asiento = $this->repository->getDetalleAsiento($idAsiento, $idEmpresa);
+        if (!$asiento || ($asiento['estado'] ?? '') === 'anulado') {
+            return;
+        }
+        try {
+            $this->anular($idAsiento, $idEmpresa, $idUsuario);
+        } catch (\Throwable $e) {
+            // Solo se tolera que otro proceso lo haya anulado entre la lectura y este punto.
+            if (stripos($e->getMessage(), 'ya se encuentra anulado') === false) {
+                throw new \Exception("No se pudo anular el asiento contable {$documento}: " . $e->getMessage(), 0, $e);
+            }
+        }
+    }
+
     public function anular(int $idAsiento, int $idEmpresa, int $idUsuario): void
     {
         $asiento = $this->repository->getDetalleAsiento($idAsiento, $idEmpresa);

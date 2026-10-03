@@ -337,6 +337,10 @@ class EgresoService
                 ['estado' => 'anulado']
             );
 
+            // El asiento se anula en la MISMA transacción: si no se puede, el egreso tampoco
+            // queda anulado (antes quedaba anulado con su asiento vivo y el error solo en el log).
+            $this->anularAsientoContable($egreso, $idEmpresa, $idUsuario);
+
             if (!$inTrans) $db->commit();
         } catch (\Throwable $e) {
             if (!$inTrans && $db->inTransaction()) {
@@ -344,9 +348,6 @@ class EgresoService
             }
             throw $e;
         }
-
-        // Anular el asiento contable asociado (fuera de la transacción).
-        $this->anularAsientoContable($id, $idEmpresa, $idUsuario);
 
         // Al anular un egreso que pagaba semanas/quincenas, el mensual debe des-netear:
         // se regenera con lo que queda realmente pagado.
@@ -974,31 +975,31 @@ class EgresoService
         ]);
     }
 
-    /** Anula el asiento contable asociado al egreso, si existe y no está ya anulado. */
-    private function anularAsientoContable(int $idEgreso, int $idEmpresa, int $idUsuario): void
+    /**
+     * Anula el asiento del egreso. Se llama DENTRO de la transacción de anular() y propaga
+     * cualquier error (p. ej. período contable cerrado en la fecha del asiento), para que el
+     * documento y su asiento cambien juntos o no cambie ninguno.
+     *
+     * $egreso es la fila leída ANTES de anular (getPorId() filtra eliminado = false).
+     */
+    private function anularAsientoContable(array $egreso, int $idEmpresa, int $idUsuario): void
     {
-        try {
-            $asientoService = $this->asientoContableService();
-            $previo = $asientoService->getAsientoPorOrigen('egreso', $idEgreso, $idEmpresa);
-            $idAsiento = $previo ? (int) $previo['id'] : 0;
+        $idEgreso = (int) $egreso['id'];
+        $asientoService = $this->asientoContableService();
+        $previo = $asientoService->getAsientoPorOrigen('egreso', $idEgreso, $idEmpresa);
+        $idAsiento = $previo ? (int) $previo['id'] : 0;
 
-            // Fallback (documentos migrados): el asiento histórico tiene modulo_origen='migracion',
-            // así que getAsientoPorOrigen no lo halla; se resuelve por el enlace id_asiento_contable
-            // del propio egreso (mismo criterio que getAsientoContable()).
-            if ($idAsiento <= 0) {
-                $row = $this->repository->getPorId($idEgreso, $idEmpresa);
-                $idAsiento = (int) ($row['id_asiento_contable'] ?? 0);
-            }
-
-            if ($idAsiento > 0) {
-                $asiento = $asientoService->getDetalleAsiento($idAsiento, $idEmpresa);
-                if ($asiento && ($asiento['estado'] ?? '') !== 'anulado') {
-                    $asientoService->anular($idAsiento, $idEmpresa, $idUsuario);
-                }
-                $this->repository->updateAsientoContable($idEgreso, null);
-            }
-        } catch (\Throwable $e) {
-            error_log('[Egreso] No se pudo anular el asiento del egreso #' . $idEgreso . ': ' . $e->getMessage());
+        // Fallback (documentos migrados): el asiento histórico tiene modulo_origen='migracion',
+        // así que getAsientoPorOrigen no lo halla; se resuelve por el enlace id_asiento_contable
+        // del propio egreso (mismo criterio que getAsientoContable()).
+        if ($idAsiento <= 0) {
+            $idAsiento = (int) ($egreso['id_asiento_contable'] ?? 0);
         }
+        if ($idAsiento <= 0) {
+            return;
+        }
+
+        $asientoService->anularDeDocumento($idAsiento, $idEmpresa, $idUsuario, 'del egreso');
+        $this->repository->updateAsientoContable($idEgreso, null);
     }
 }

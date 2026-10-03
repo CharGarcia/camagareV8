@@ -5,8 +5,8 @@ categoria: Tesorería
 ruta_modulo: modulos/traspasos
 tipo: modulo
 visibilidad: todos
-etiquetas: traspaso, traspasos, transferencia interna, caja a banco, deposito, mover dinero, saldo, formas de pago, excel, exportar, numeracion por fecha, numero con el año, reiniciar numeracion, reinicio anual, reinicio mensual, correlativo por año, correlativo por mes, modo de numeracion, buscar traspaso, buscador, filtros, filtrar traspasos, chips, imprimir, impresora
-version: 1.6
+etiquetas: traspaso, traspasos, transferencia interna, caja a banco, deposito, mover dinero, saldo, formas de pago, excel, exportar, numeracion por fecha, numero con el año, reiniciar numeracion, reinicio anual, reinicio mensual, correlativo por año, correlativo por mes, modo de numeracion, buscar traspaso, buscador, filtros, filtrar traspasos, chips, imprimir, impresora, asiento de documento anulado, asiento sigue contabilizado, no se anulo el asiento, no se pudo anular el asiento contable
+version: 1.7
 orden: 30
 estado: activo
 ---
@@ -87,6 +87,10 @@ quedan ocultos mientras el traspaso es nuevo y no se ha guardado.
 
 ## Errores frecuentes
 
+- **"No se pudo anular el asiento contable del traspaso: …"**: al anular un
+  traspaso, su asiento contable se anula en la misma operación; si no se puede, no se
+  cambia nada y el texto que sigue dice por qué (lo más común, un período contable
+  cerrado en la fecha del asiento). Corrija esa causa y vuelva a intentarlo.
 - **"Saldo insuficiente en la forma de pago de origen"**: el mensaje indica el
   disponible real. Revise si hay movimientos posteriores que no esperaba.
 - **"No se pudo determinar el saldo de la forma de pago de origen"**: es de tipo
@@ -121,6 +125,11 @@ como cualquier depósito o transferencia. Los traspasos anulados no aparecen.
 
 ## Historial de cambios
 
+- **1.7** — Corrección: al anular un traspaso, su asiento contable se anula en la
+  misma operación (también el de un traspaso migrado, que antes no se encontraba).
+  Antes, si el asiento fallaba, el traspaso quedaba anulado con el asiento todavía
+  contabilizado y no se avisaba. Ahora, si el asiento no se puede anular, el traspaso
+  tampoco se anula y se muestra el motivo.
 - **1.6** — Los traspasos con una cuenta bancaria aparecen en **Control
   bancario** (sección *En Control Bancario*).
 - **1.5** — El botón **PDF** del documento pregunta ahora si se quiere

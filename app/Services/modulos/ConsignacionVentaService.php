@@ -649,29 +649,20 @@ class ConsignacionVentaService
 
             $this->reconciliarPedidosAfectados($idEmpresa, $idUsuario, $idsPedidoDetalle, $this->numeroConsignacion($cabecera));
 
-            $db->commit();
-
-            // Anular el asiento contable de la consignación (si existe), fuera de la transacción.
+            // El asiento de la consignación (si existe) se anula en la MISMA transacción: si no
+            // se puede, la consignación no se elimina (antes quedaba eliminada con su asiento vivo).
             $idAsiento = (int) ($cabecera['id_asiento_contable'] ?? 0);
             if ($idAsiento > 0) {
-                try {
-                    $asientoService = new \App\Services\modulos\AsientoContableService(
-                        new \App\repositories\modulos\AsientoContableRepository(),
-                        new \App\Rules\modulos\AsientoContableRules(),
-                        $this->logService
-                    );
-                    $asientoService->anular($idAsiento, $idEmpresa, $idUsuario);
-                } catch (\Throwable $e) {
-                    // Un período cerrado debe abortar: si no, el documento quedaría anulado
-                    // con su asiento aún vigente (descuadre silencioso).
-                    if (stripos($e->getMessage(), 'contable cerrado') !== false) {
-                        throw $e;
-                    }
-                    error_log("[Consignacion] No se pudo anular el asiento $idAsiento: " . $e->getMessage());
-                }
+                (new \App\Services\modulos\AsientoContableService(
+                    new \App\repositories\modulos\AsientoContableRepository(),
+                    new \App\Rules\modulos\AsientoContableRules(),
+                    $this->logService
+                ))->anularDeDocumento($idAsiento, $idEmpresa, $idUsuario, 'de la consignación');
             }
+
+            $db->commit();
         } catch (Exception $e) {
-            $db->rollBack();
+            if ($db->inTransaction()) $db->rollBack();
             throw $e;
         }
     }

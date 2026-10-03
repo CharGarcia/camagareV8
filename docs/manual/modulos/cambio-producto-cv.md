@@ -5,8 +5,8 @@ categoria: Ventas
 ruta_modulo: modulos/cambio-producto-cv
 tipo: modulo
 visibilidad: todos
-etiquetas: cambio de producto, cambios de productos, listado de cambios, producto que entra, producto que sale, entra y sale, buscar cambio, buscador, filtros, filtrar cambios, buscar por producto, documento de origen, chips, garantia, reposicion, devolucion con reposicion, canje, buscar por nup, nup, serial, numero de serie, lote, buscar por factura, numero de factura, factura de venta, numero de factura de venta, factura de consignacion, facturacion de consignaciones, buscar por consignacion, numero de consignacion, entregar desde consignacion, existencias, catalogo, bodega, bodega de origen, diferencia a favor, saldo de consignacion, mercaderia en consignacion, inventario, asiento a costo, pdf del cambio, exportar excel, registro en facturacion de consignaciones, facturado por cambio, reposicion facturada, secuencial facturacion consignaciones, sin factura, fecha de emision, fecha del cambio, cambios migrados, nup en el listado, columna nup, iva, impuesto, iva del producto, tarifa de iva, descuento de la factura, aparecen documentos que no busque, resultados que no corresponden, buscar por producto en el listado, consignacion de otro cliente, otro cliente, no aparece la consignacion, no contabilizar cambios, modulos que contabilizan, consignacion sin asiento, imprimir, impresora
-version: 1.25
+etiquetas: cambio de producto, cambios de productos, listado de cambios, producto que entra, producto que sale, entra y sale, buscar cambio, buscador, filtros, filtrar cambios, buscar por producto, documento de origen, chips, garantia, reposicion, devolucion con reposicion, canje, buscar por nup, nup, serial, numero de serie, lote, buscar por factura, numero de factura, factura de venta, numero de factura de venta, factura de consignacion, facturacion de consignaciones, buscar por consignacion, numero de consignacion, entregar desde consignacion, existencias, catalogo, bodega, bodega de origen, diferencia a favor, saldo de consignacion, mercaderia en consignacion, inventario, asiento a costo, pdf del cambio, exportar excel, registro en facturacion de consignaciones, facturado por cambio, reposicion facturada, secuencial facturacion consignaciones, sin factura, fecha de emision, fecha del cambio, cambios migrados, nup en el listado, columna nup, iva, impuesto, iva del producto, tarifa de iva, descuento de la factura, aparecen documentos que no busque, resultados que no corresponden, buscar por producto en el listado, consignacion de otro cliente, otro cliente, no aparece la consignacion, no contabilizar cambios, modulos que contabilizan, consignacion sin asiento, imprimir, impresora, asiento de documento anulado, asiento sigue contabilizado, no se anulo el asiento, no se pudo anular el asiento contable
+version: 1.26
 orden: 47
 estado: activo
 ---
@@ -351,6 +351,11 @@ búsqueda**. La **×** quita solo ese filtro, y con el cuadro vacío la tecla
 
 ## Errores frecuentes
 
+- **"No se pudo anular el asiento contable del cambio de producto: …"**: al eliminar
+  un cambio o pasarlo a Borrador o Anulada, su asiento contable se anula en la misma
+  operación; si no se puede, no se cambia nada y el texto que sigue dice por qué (lo
+  más común, un período contable cerrado en la fecha del asiento). Corrija esa causa y
+  vuelva a intentarlo.
 - **"Stock insuficiente en bodega para …"**: lo que se entrega desde bodega no
   tiene saldo en ese lote, o, al anular o eliminar el cambio, la unidad devuelta
   ya no está en bodega (se volvió a consignar o se vendió). Revise el lote en
@@ -413,6 +418,11 @@ búsqueda**. La **×** quita solo ese filtro, y con el cuadro vacío la tecla
 
 ## Historial de cambios
 
+- **1.26** — Corrección: al eliminar un cambio, o pasarlo de Emitida a Borrador o
+  Anulada, su asiento se anula en la misma operación. Al **eliminar** un cambio
+  emitido, su asiento quedaba contabilizado (no se encontraba porque el cambio ya
+  estaba eliminado). Ahora, si el asiento no se puede anular, el cambio no se modifica
+  y se muestra el motivo.
 - **1.25** — Lo que se **entrega desde bodega** exige stock del lote (o del
   producto, si no tiene lote) cuando el establecimiento trabaja con inventario;
   antes el lote podía quedar en negativo. Tampoco se puede anular ni eliminar un

@@ -427,6 +427,10 @@ class IngresoService
                 ['id_ingreso' => $id, 'nuevo_estado' => 'anulado']
             );
 
+            // El asiento se anula en la MISMA transacción: si no se puede, el ingreso tampoco
+            // queda anulado (antes quedaba anulado con su asiento vivo y el error solo en el log).
+            $this->anularAsientoContable($ingreso, $idEmpresa, $idUsuario);
+
             if ($managedTransaction) {
                 $db->commit();
             }
@@ -436,9 +440,6 @@ class IngresoService
             }
             throw $e;
         }
-
-        // Anular el asiento contable asociado (fuera de la transacción).
-        $this->anularAsientoContable($id, $idEmpresa, $idUsuario);
 
         // Recalcular saldos iniciales CXC que cobraba este ingreso (ya excluye el anulado).
         $this->recalcularSaldosInicialesCxc($idsSaldo, $idEmpresa);
@@ -482,6 +483,9 @@ class IngresoService
                 ['id_ingreso' => $id, 'eliminado' => true]
             );
 
+            // Misma transacción que el borrado lógico (ver anular()).
+            $this->anularAsientoContable($ingreso, $idEmpresa, $idUsuario);
+
             if ($managedTransaction) {
                 $db->commit();
             }
@@ -491,9 +495,6 @@ class IngresoService
             }
             throw $e;
         }
-
-        // Anular el asiento contable asociado (fuera de la transacción).
-        $this->anularAsientoContable($id, $idEmpresa, $idUsuario);
 
         // Recalcular saldos iniciales CXC que cobraba este ingreso (ya excluye el eliminado).
         $this->recalcularSaldosInicialesCxc($idsSaldo, $idEmpresa);
@@ -782,30 +783,32 @@ class IngresoService
     }
 
     /** Anula el asiento contable asociado al ingreso, si existe y no está ya anulado. */
-    private function anularAsientoContable(int $idIngreso, int $idEmpresa, int $idUsuario): void
+    /**
+     * Anula el asiento del ingreso. Se llama DENTRO de la transacción de anular()/eliminar() y
+     * propaga cualquier error (p. ej. período contable cerrado en la fecha del asiento), para que
+     * el documento y su asiento cambien juntos o no cambie ninguno.
+     *
+     * $ingreso es la fila leída ANTES de anular/eliminar: getPorId() filtra eliminado = false, así
+     * que releerla después de eliminarLogico() perdía el enlace de los asientos migrados.
+     */
+    private function anularAsientoContable(array $ingreso, int $idEmpresa, int $idUsuario): void
     {
-        try {
-            $asientoService = $this->asientoContableService();
-            $previo = $asientoService->getAsientoPorOrigen('ingreso', $idIngreso, $idEmpresa);
-            $idAsiento = $previo ? (int) $previo['id'] : 0;
+        $idIngreso = (int) $ingreso['id'];
+        $asientoService = $this->asientoContableService();
+        $previo = $asientoService->getAsientoPorOrigen('ingreso', $idIngreso, $idEmpresa);
+        $idAsiento = $previo ? (int) $previo['id'] : 0;
 
-            // Fallback (documentos migrados): el asiento histórico tiene modulo_origen='migracion',
-            // así que getAsientoPorOrigen no lo halla; se resuelve por el enlace id_asiento_contable
-            // del propio ingreso (mismo criterio que getAsientoContable()).
-            if ($idAsiento <= 0) {
-                $row = $this->repository->getPorId($idIngreso, $idEmpresa);
-                $idAsiento = (int) ($row['id_asiento_contable'] ?? 0);
-            }
-
-            if ($idAsiento > 0) {
-                $asiento = $asientoService->getDetalleAsiento($idAsiento, $idEmpresa);
-                if ($asiento && ($asiento['estado'] ?? '') !== 'anulado') {
-                    $asientoService->anular($idAsiento, $idEmpresa, $idUsuario);
-                }
-                $this->repository->updateAsientoContable($idIngreso, null);
-            }
-        } catch (\Throwable $e) {
-            error_log('[Ingreso] No se pudo anular el asiento del ingreso #' . $idIngreso . ': ' . $e->getMessage());
+        // Fallback (documentos migrados): el asiento histórico tiene modulo_origen='migracion',
+        // así que getAsientoPorOrigen no lo halla; se resuelve por el enlace id_asiento_contable
+        // del propio ingreso (mismo criterio que getAsientoContable()).
+        if ($idAsiento <= 0) {
+            $idAsiento = (int) ($ingreso['id_asiento_contable'] ?? 0);
         }
+        if ($idAsiento <= 0) {
+            return;
+        }
+
+        $asientoService->anularDeDocumento($idAsiento, $idEmpresa, $idUsuario, 'del ingreso');
+        $this->repository->updateAsientoContable($idIngreso, null);
     }
 }

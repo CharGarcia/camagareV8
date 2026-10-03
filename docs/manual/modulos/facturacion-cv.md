@@ -5,8 +5,8 @@ categoria: Ventas
 ruta_modulo: modulos/facturacion-cv
 tipo: modulo
 visibilidad: todos
-etiquetas: facturacion de consignacion, registro de cambio, cambio de productos, reposicion, etiqueta cambio, buscar facturacion, buscador, filtros, filtrar facturaciones, buscar por producto, buscar por lote, buscar por consignacion, chips, facturar consignacion, consignacion vendida, liquidacion de consignacion, cobrar consignacion, descuento en consignacion, descuento por linea, descuento porcentaje, aplicar descuento a todos, precio de lista en consignacion, generar factura, borrador, saldo facturable, observaciones en la factura, informacion adicional, info adicional, cajero, vendedor en la factura, vendedor obligatorio, exige vendedor, seleccione el vendedor, lento, demora al generar factura, tarda en guardar, iva del registro de cambio, iva del producto, iva al subtotal, iva linea por linea, calculo del iva, diferencia de centavos en el iva, iva 5%, exento, no objeto de iva, codigo de tarifa, aparecen documentos que no busque, resultados que no corresponden, buscar por producto en el listado, el descuento no se aplica, la factura sale sin descuento, se pierde el descuento, descuento en cero, coma decimal, punto decimal, separador de decimales, escribir con coma, cambios sin guardar, no se pudo generar la factura, observaciones largas, no me deja escribir mas, limite de caracteres, maximo 300 caracteres, value too long, asiento de reingreso, no contabilizar consignaciones, sin reingreso, modulos que contabilizan, acceso denegado a la bodega, bodega no asignada, otra bodega, no me deja facturar, imprimir, impresora
-version: 1.27
+etiquetas: facturacion de consignacion, registro de cambio, cambio de productos, reposicion, etiqueta cambio, buscar facturacion, buscador, filtros, filtrar facturaciones, buscar por producto, buscar por lote, buscar por consignacion, chips, facturar consignacion, consignacion vendida, liquidacion de consignacion, cobrar consignacion, descuento en consignacion, descuento por linea, descuento porcentaje, aplicar descuento a todos, precio de lista en consignacion, generar factura, borrador, saldo facturable, observaciones en la factura, informacion adicional, info adicional, cajero, vendedor en la factura, vendedor obligatorio, exige vendedor, seleccione el vendedor, lento, demora al generar factura, tarda en guardar, iva del registro de cambio, iva del producto, iva al subtotal, iva linea por linea, calculo del iva, diferencia de centavos en el iva, iva 5%, exento, no objeto de iva, codigo de tarifa, aparecen documentos que no busque, resultados que no corresponden, buscar por producto en el listado, el descuento no se aplica, la factura sale sin descuento, se pierde el descuento, descuento en cero, coma decimal, punto decimal, separador de decimales, escribir con coma, cambios sin guardar, no se pudo generar la factura, observaciones largas, no me deja escribir mas, limite de caracteres, maximo 300 caracteres, value too long, asiento de reingreso, no contabilizar consignaciones, sin reingreso, modulos que contabilizan, acceso denegado a la bodega, bodega no asignada, otra bodega, no me deja facturar, imprimir, impresora, asiento de documento anulado, asiento sigue contabilizado, no se anulo el asiento, no se pudo anular el asiento contable
+version: 1.28
 orden: 47
 estado: activo
 ---
@@ -269,6 +269,11 @@ El descuento funciona igual que en [Facturas de Venta](modulos/factura-venta):
 
 ## Errores frecuentes
 
+- **"No se pudo anular el asiento contable de reingreso de la consignación: …"**: al
+  anular o eliminar la factura de venta generada desde este documento, su asiento
+  contable se anula en la misma operación; si no se puede, no se cambia nada y el
+  texto que sigue dice por qué (lo más común, un período contable cerrado en la fecha
+  del asiento). Corrija esa causa y vuelva a intentarlo.
 - **«Seleccione el vendedor: la configuración de facturación exige un vendedor
   en la factura»**: el establecimiento tiene activo *Mostrar nombre del vendedor
   en la factura*. Elija el vendedor en la cabecera, guarde y vuelva a generar.
@@ -310,6 +315,10 @@ El descuento funciona igual que en [Facturas de Venta](modulos/factura-venta):
 
 ## Historial de cambios
 
+- **1.28** — Corrección: al anular o eliminar la factura de venta de origen, si el
+  asiento de reingreso no se puede anular, la factura tampoco se anula y se muestra el
+  motivo. Antes el documento quedaba Anulado con su asiento de reingreso todavía
+  contabilizado y el error solo quedaba en el registro del servidor.
 - **1.27** — El IVA se calcula con la configuración de facturación (al
   subtotal o línea por línea) del establecimiento de la **serie elegida**; antes
   se tomaba la del primer establecimiento de la empresa. Al cambiar de serie los

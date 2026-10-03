@@ -528,17 +528,11 @@ class RolAsientoService
         $asientoService = new AsientoContableService(new AsientoContableRepository(), new AsientoContableRules(), $this->log);
         $ids = $asientoService->getIdsAsientosPorOrigen('nomina', (int) $cab['id'], $idEmpresa);
         if (empty($ids)) return;
+        // Se llama DENTRO de la transacción del llamador (anular/eliminar el rol): cualquier
+        // asiento que no se pueda anular propaga el error y se revierte todo. Antes solo el
+        // período cerrado abortaba; otros errores dejaban asientos vivos de un rol anulado.
         foreach ($ids as $idAsiento) {
-            try {
-                $asientoService->anular($idAsiento, $idEmpresa, $idUsuario);
-            } catch (\Throwable $e) {
-                // Un período cerrado debe abortar la operación completa: si se tragara, el rol
-                // quedaría anulado con parte de sus asientos aún vigentes (descuadre silencioso).
-                if (stripos($e->getMessage(), 'contable cerrado') !== false) {
-                    throw $e;
-                }
-                // Otros errores: continuar con los demás, igual desvinculamos del rol al final.
-            }
+            $asientoService->anularDeDocumento((int) $idAsiento, $idEmpresa, $idUsuario, 'del rol de pagos');
         }
         $this->repo->setIdAsiento((int) $cab['id'], null);
     }
