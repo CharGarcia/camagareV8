@@ -683,6 +683,10 @@ $base = BASE_URL;
                 if (d.asientos_enlazados > 0) {
                     html += `<br><span class="text-success small">🔗 ${fmt(d.asientos_enlazados)} documento(s) enlazado(s) con su asiento contable ya migrado.</span>`;
                 }
+                // Anulados en el sistema anterior después de migrar la Contabilidad: su asiento se anula.
+                if (d.asientos_anulados > 0) {
+                    html += `<br><span class="text-warning small">⊘ ${fmt(d.asientos_anulados)} documento(s) anulado(s) en el sistema anterior: se anuló su asiento contable migrado.</span>`;
+                }
                 // Liquidaciones hasta 2020 sin pagos registrados: el sistema anterior no los guardaba.
                 if (d.pagadas_sistema_anterior > 0) {
                     html += `<br><span class="text-success small">✔ ${fmt(d.pagadas_sistema_anterior)} liquidación(es) hasta 2020 marcadas como pagadas en el sistema anterior (saldo 0, sin egreso).</span>`;

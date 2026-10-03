@@ -5071,6 +5071,7 @@ class MigracionMysqlService
         $mapIngreso  = $this->mapaDe($pg, $idEmpresa, 'ingresos'); // para reconciliar al re-correr
         $mapContab   = $this->mapaDe($pg, $idEmpresa, 'contabilidad'); // asiento ya migrado (id_diario viejo → id)
         $res['asientos_enlazados'] = 0;
+        $res['asientos_anulados']  = 0;
         $updCab      = $pg->prepare("UPDATE ingresos_cabecera SET fecha_emision = ?, tipo_ingreso = ?, id_ingreso_concepto = ?, id_cliente = ?, monto_total = ?, observaciones = ?, estado = ?, recibo_de = ?, id_recibo_cliente = ?, tipo_ambiente = ?, updated_at = now(), updated_by = ? WHERE id = ?");
         $delDet      = $pg->prepare("DELETE FROM ingresos_detalle WHERE id_ingreso = ?");
         $delPag      = $pg->prepare("DELETE FROM ingresos_pagos WHERE id_ingreso = ?");
@@ -5219,8 +5220,11 @@ class MigracionMysqlService
                 if (!$idIngExist) {
                     $insMap->execute([':e' => $idEmpresa, ':o' => $old, ':d' => $idIng, ':cn' => (string) $ie['numero_ing_egr'], ':vin' => 'f', ':cb' => $idUsuario]);
                 }
-                // Su asiento, si la Contabilidad ya se migró antes que este cobro.
-                if ($this->enlazarAsientoMigrado($pg, $idEmpresa, 'ingresos_cabecera', $idIng, (int) $ie['codigo_contable'], $mapContab)) { $res['asientos_enlazados']++; }
+                // Su asiento, si la Contabilidad ya se migró antes que este cobro. Si llega ANULADO, su
+                // asiento migrado (si quedó vivo) se anula en vez de enlazarse.
+                if ($estado === 'anulado') {
+                    if ($this->anularAsientoMigradoDeAnulado($pg, $idEmpresa, 'ingresos_cabecera', $idIng, $idUsuario)) { $res['asientos_anulados']++; }
+                } elseif ($this->enlazarAsientoMigrado($pg, $idEmpresa, 'ingresos_cabecera', $idIng, (int) $ie['codigo_contable'], $mapContab)) { $res['asientos_enlazados']++; }
                 $pg->commit();
                 $done[(string) $old] = true;
             } catch (Throwable $ex) {
@@ -5351,6 +5355,7 @@ class MigracionMysqlService
         $mapEgreso   = $this->mapaDe($pg, $idEmpresa, 'egresos'); // para reconciliar al re-correr
         $mapContab   = $this->mapaDe($pg, $idEmpresa, 'contabilidad'); // asiento ya migrado (id_diario viejo → id)
         $res['asientos_enlazados'] = 0;
+        $res['asientos_anulados']  = 0;
         $updCab      = $pg->prepare("UPDATE egresos_cabecera SET fecha_emision = ?, tipo_egreso = ?, tipo_sujeto = ?, id_egreso_concepto = ?, id_proveedor = ?, id_empleado = ?, monto_total = ?, observaciones = ?, estado = ?, beneficiario_nombre = ?, tipo_ambiente = ?, updated_at = now(), updated_by = ? WHERE id = ?");
         $delDet      = $pg->prepare("DELETE FROM egresos_detalle WHERE id_egreso = ?");
         $delPag      = $pg->prepare("DELETE FROM egresos_pagos WHERE id_egreso = ?");
@@ -5543,8 +5548,11 @@ class MigracionMysqlService
                 if (!$idEgrExist) {
                     $insMap->execute([':e' => $idEmpresa, ':o' => $old, ':d' => $idEgr, ':cn' => (string) $ie['numero_ing_egr'], ':vin' => 'f', ':cb' => $idUsuario]);
                 }
-                // Su asiento, si la Contabilidad ya se migró antes que este pago.
-                if ($this->enlazarAsientoMigrado($pg, $idEmpresa, 'egresos_cabecera', $idEgr, (int) $ie['codigo_contable'], $mapContab)) { $res['asientos_enlazados']++; }
+                // Su asiento, si la Contabilidad ya se migró antes que este pago. Si llega ANULADO, su
+                // asiento migrado (si quedó vivo) se anula en vez de enlazarse.
+                if ($estado === 'anulado') {
+                    if ($this->anularAsientoMigradoDeAnulado($pg, $idEmpresa, 'egresos_cabecera', $idEgr, $idUsuario)) { $res['asientos_anulados']++; }
+                } elseif ($this->enlazarAsientoMigrado($pg, $idEmpresa, 'egresos_cabecera', $idEgr, (int) $ie['codigo_contable'], $mapContab)) { $res['asientos_enlazados']++; }
                 $pg->commit();
                 $done[(string) $old] = true;
                 $res['pagos_liquidacion']         += $liqOk;
@@ -8018,6 +8026,34 @@ class MigracionMysqlService
         if ($st->rowCount() === 0) { return false; }
         $pg->prepare("UPDATE asientos_contables_cabecera SET id_referencia_origen = ? WHERE id = ? AND id_empresa = ?")
            ->execute([$idDoc, (int) $idAsiento, $idEmpresa]);
+        return true;
+    }
+
+    /**
+     * Documento que llega ANULADO del viejo con un asiento migrado VIVO enlazado. Al anular, el viejo
+     * desvincula su diario (codigo_contable = 0, valor 0), pero si la Contabilidad se migró antes de
+     * esa anulación el asiento ya estaba aquí y ninguna re-migración lo tocaba: Contabilidad solo lee
+     * diarios vigentes y nunca se entera de que este desapareció. Se anula en la MISMA transacción
+     * del documento (un período cerrado propaga el error y ese documento no se reconcilia). Solo
+     * asientos 'migracion': el de un documento nativo es de su módulo. True si anuló.
+     */
+    private function anularAsientoMigradoDeAnulado(PDO $pg, int $idEmpresa, string $tabla, int $idDoc, int $idUsuario): bool
+    {
+        $st = $pg->prepare("SELECT a.id FROM $tabla d
+                              JOIN asientos_contables_cabecera a ON a.id = d.id_asiento_contable
+                             WHERE d.id = ? AND d.id_empresa = ?
+                               AND a.modulo_origen = 'migracion' AND a.eliminado = false AND a.estado <> 'anulado'
+                               AND a.tipo_ambiente = (SELECT CAST(tipo_ambiente AS VARCHAR(1)) FROM empresas WHERE id = d.id_empresa)");
+        $st->execute([$idDoc, $idEmpresa]);
+        $idAsiento = (int) $st->fetchColumn();
+        if ($idAsiento <= 0) { return false; }
+
+        (new \App\Services\modulos\AsientoContableService(
+            new \App\repositories\modulos\AsientoContableRepository(),
+            new \App\Rules\modulos\AsientoContableRules(),
+            new \App\Services\LogSistemaService()
+        ))->anularDeDocumento($idAsiento, $idEmpresa, $idUsuario, $tabla === 'egresos_cabecera' ? 'del egreso' : 'del ingreso');
+        $pg->prepare("UPDATE $tabla SET id_asiento_contable = NULL WHERE id = ? AND id_empresa = ?")->execute([$idDoc, $idEmpresa]);
         return true;
     }
 

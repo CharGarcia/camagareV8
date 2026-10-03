@@ -5,8 +5,8 @@ categoria: Configuración global
 ruta_modulo: config/migrar-mysql
 tipo: modulo
 visibilidad: superadmin
-etiquetas: migracion, migrar, sistema anterior, mysql, vendedor asignado, vendedor del cliente, clientes sin vendedor, vendedores migracion, asignacion de vendedor, migrar empresas, establecimientos migracion, ruc base, elegir establecimiento, fusionar establecimientos, cliente separado, serie, series, punto de emision, secuencial, numeracion, numero repetido, ingresos sin serie, egresos sin serie, pedidos sin serie, liquidacion pendiente de pago, liquidaciones de compra migradas, pagos migrados, egresos migrados, pago no aparece, cuentas por pagar migradas, compra pendiente de pago, compra pagada sale pendiente, pago no cruza, retencion en borrador, marcas, marca del producto, productos sin marca, catalogo de marcas, migrar marcas, cambios de productos migrados, cambio sin factura, factura del cambio, nup del cambio, recambio, registro de cambio, facturacion de consignacion migrada, unidad duplicada para devolver, iva inflado, iva multiplicado, iva x1000, asiento de compra mal, iva del asiento mayor, nota de credito compra asiento, contabilidad migrada, alumnos, migrar alumnos, estudiantes, campus, niveles, cursos, horarios, pension, servicios del alumno, descuento del alumno, alumnos activos, alumnos pasivos, representante del alumno, vehiculos, migrar vehiculos, placas, placa, chasis, chasis 123456789, año 2022, propietario privado, vehiculos faltantes, vehiculo sin orden, car wash migracion, cobros de recibos, recibo pendiente migrado, recibo sin abono, pago de recibo no cruza, recibos de venta migrados, saldo de recibo, liquidaciones 2020, liquidaciones antiguas pendientes, pagada en el sistema anterior, liquidacion sin pago migrada, egreso sin asiento, asiento no migrado, asiento contable faltante, desde, re-sincronizar contabilidad, registrado tarde
-version: 1.17
+etiquetas: migracion, migrar, sistema anterior, mysql, vendedor asignado, vendedor del cliente, clientes sin vendedor, vendedores migracion, asignacion de vendedor, migrar empresas, establecimientos migracion, ruc base, elegir establecimiento, fusionar establecimientos, cliente separado, serie, series, punto de emision, secuencial, numeracion, numero repetido, ingresos sin serie, egresos sin serie, pedidos sin serie, liquidacion pendiente de pago, liquidaciones de compra migradas, pagos migrados, egresos migrados, pago no aparece, cuentas por pagar migradas, compra pendiente de pago, compra pagada sale pendiente, pago no cruza, retencion en borrador, marcas, marca del producto, productos sin marca, catalogo de marcas, migrar marcas, cambios de productos migrados, cambio sin factura, factura del cambio, nup del cambio, recambio, registro de cambio, facturacion de consignacion migrada, unidad duplicada para devolver, iva inflado, iva multiplicado, iva x1000, asiento de compra mal, iva del asiento mayor, nota de credito compra asiento, contabilidad migrada, alumnos, migrar alumnos, estudiantes, campus, niveles, cursos, horarios, pension, servicios del alumno, descuento del alumno, alumnos activos, alumnos pasivos, representante del alumno, vehiculos, migrar vehiculos, placas, placa, chasis, chasis 123456789, año 2022, propietario privado, vehiculos faltantes, vehiculo sin orden, car wash migracion, cobros de recibos, recibo pendiente migrado, recibo sin abono, pago de recibo no cruza, recibos de venta migrados, saldo de recibo, liquidaciones 2020, liquidaciones antiguas pendientes, pagada en el sistema anterior, liquidacion sin pago migrada, egreso sin asiento, asiento no migrado, asiento contable faltante, desde, re-sincronizar contabilidad, registrado tarde, anulado en el sistema anterior, ingreso anulado con asiento, egreso anulado con asiento, asiento migrado vivo, asiento de documento anulado
+version: 1.18
 orden: 2
 estado: activo
 ---
@@ -347,6 +347,16 @@ egreso o ingreso):
 - Hay egresos que **no tienen asiento que migrar**: en el sistema anterior nunca
   se contabilizaron, o su asiento quedó **vacío** al editarlo (figura como
   *Editado* sin líneas). Esos se quedan sin asiento.
+- **Documentos anulados en el sistema anterior después de migrar.** Si un pago
+  o cobro se anula en el sistema anterior **después** de haber migrado la
+  Contabilidad, allá su asiento se desvincula (el documento queda en 0,00), pero
+  aquí el asiento migrado seguía contabilizado. Al volver a migrar **Pagos
+  (egresos)** o **Cobros (ingresos)**, el documento llega anulado y **su asiento
+  migrado se anula** en la misma operación (el resultado lo informa como
+  *documentos anulados en el sistema anterior*). Si el asiento cae en un período
+  contable cerrado, ese documento se cuenta como error y no cambia: abra el
+  período y vuelva a migrar. Solo se anulan asientos de la migración; el asiento
+  propio de un documento nativo no se toca.
 
 Diagnóstico de solo lectura para producción:
 `database/diagnosticos/20261001_egresos_migrados_sin_asiento.sql`.
@@ -516,6 +526,10 @@ sistema anterior tampoco los aplicaba al facturar por alumno).
 
 ## Historial de cambios
 
+- **1.18** — Al volver a migrar Pagos (egresos) o Cobros (ingresos), un
+  documento que llega **anulado** del sistema anterior anula su asiento migrado
+  si seguía contabilizado. Antes, un documento anulado allá después de migrar la
+  Contabilidad quedaba aquí anulado pero con el asiento vivo.
 - **1.17** — **Asientos de pagos y cobros**: se enlazan por el vínculo real del
   sistema anterior y también al migrar Pagos/Cobros después de la Contabilidad;
   el filtro **Desde** de Contabilidad, Pagos y Cobros incluye lo registrado tarde;
