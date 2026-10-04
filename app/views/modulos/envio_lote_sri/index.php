@@ -168,7 +168,14 @@ $puedeCrear = !empty($perm['crear']);
                     <span>Procesados: <strong id="els-p-proc">0</strong> / <span id="els-p-total">0</span></span>
                     <span class="text-success">Autorizados: <strong id="els-p-ok">0</strong></span>
                     <span class="text-danger">Con error: <strong id="els-p-err">0</strong></span>
+                    <span class="text-warning" title="El SRI los recibió pero no confirmó a tiempo; el sistema los sigue consultando solo cada 5 minutos.">En procesamiento: <strong id="els-p-proc-sri">0</strong></span>
                     <span class="badge bg-secondary" id="els-p-estado">pendiente</span>
+                </div>
+                <!-- Tiempos del lote (lo pinta envio-lote-sri.js con los segundos que da el servidor). -->
+                <div class="d-flex flex-wrap justify-content-between small mb-3 gap-2" id="els-tiempos">
+                    <span><i class="bi bi-stopwatch me-1"></i>Transcurrido: <strong id="els-t-transcurrido">0:00</strong></span>
+                    <span><i class="bi bi-hourglass-split me-1"></i>Restante estimado: <strong id="els-t-restante">calculando…</strong></span>
+                    <span class="text-muted" id="els-t-maximo"></span>
                 </div>
                 <div class="table-responsive" style="max-height:340px;overflow:auto;">
                     <table class="table table-sm table-hover mb-0">

@@ -2300,9 +2300,10 @@ class AsientoBuilderService
     }
 
     /**
-     * Igual que armarDistribucionVentasFactura() pero para RECIBOS DE VENTA: reutiliza el MISMO
-     * catálogo de cuentas (tipo_asiento='ventas_factura' — misma plantilla, mismas cuentas CxC/
-     * Subtotal/IVA/Costo), pero lee los datos del documento de recibos_venta_cabecera/
+     * Igual que armarDistribucionVentasFactura() pero para RECIBOS DE VENTA: misma plantilla, pero
+     * con catálogo de cuentas PROPIO (tipo_asiento='recibos_venta', IVA 'iva_recibos_venta' /
+     * direccion_iva='recibo'; Configuración Contable puede copiarlo desde Facturas con
+     * AsientoProgramadoService::copiarConfiguracionFacturaARecibo()). Lee los datos del documento de recibos_venta_cabecera/
      * recibos_venta_detalle/recibos_venta_detalle_impuestos, que son tablas separadas con su
      * propia numeración de IDs (NO ventas_cabecera/ventas_detalle — usar esas tablas con el ID
      * de un recibo contabilizaba los montos de una venta ajena que coincidiera con ese mismo ID).

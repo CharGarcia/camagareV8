@@ -216,7 +216,15 @@ class EnvioLoteSriRepository extends BaseRepository
             "SELECT *,
                     TO_CHAR(created_at,    'DD-MM-YYYY HH24:MI:SS') AS created_at_fmt,
                     TO_CHAR(iniciado_at,   'DD-MM-YYYY HH24:MI:SS') AS iniciado_at_fmt,
-                    TO_CHAR(finalizado_at, 'DD-MM-YYYY HH24:MI:SS') AS finalizado_at_fmt
+                    TO_CHAR(finalizado_at, 'DD-MM-YYYY HH24:MI:SS') AS finalizado_at_fmt,
+                    -- Tiempos medidos con el reloj de la BD (no el del navegador) para la cuenta
+                    -- regresiva del modal de progreso. El ítem en curso empezó al terminar el
+                    -- anterior (el worker es secuencial) o al iniciar el lote.
+                    CASE WHEN iniciado_at IS NULL THEN NULL
+                         ELSE EXTRACT(EPOCH FROM (COALESCE(finalizado_at, NOW()) - iniciado_at))::int END AS seg_transcurridos,
+                    CASE WHEN iniciado_at IS NULL THEN NULL
+                         ELSE EXTRACT(EPOCH FROM (NOW() - GREATEST(iniciado_at,
+                              COALESCE((SELECT MAX(i.processed_at) FROM sri_lote_items i WHERE i.id_lote = sri_lotes.id), iniciado_at))))::int END AS seg_item_actual
              FROM sri_lotes
              WHERE id = :id AND id_empresa = :ie AND eliminado = FALSE"
         );
@@ -285,12 +293,14 @@ class EnvioLoteSriRepository extends BaseRepository
     }
 
     /** Suma 1 a procesados y, según resultado, a exitosos o fallidos. */
-    public function incrementarContadores(int $idLote, bool $exito): void
+    /** $exito null = procesado sin resultado definitivo (en procesamiento en el SRI): solo suma a 'procesados'. */
+    public function incrementarContadores(int $idLote, ?bool $exito): void
     {
-        $col = $exito ? 'exitosos' : 'fallidos';
+        $col = $exito === null ? null : ($exito ? 'exitosos' : 'fallidos');
+        $extra = $col === null ? '' : ", {$col} = {$col} + 1";
         $st = $this->db->prepare(
             "UPDATE sri_lotes
-                SET procesados = procesados + 1, {$col} = {$col} + 1, updated_at = NOW()
+                SET procesados = procesados + 1{$extra}, updated_at = NOW()
               WHERE id = :id"
         );
         $st->execute([':id' => $idLote]);

@@ -136,6 +136,8 @@
             const res = await resp.json();
 
             if (res.ok) {
+                const btnCopiaRecibo = document.getElementById('btnCopiarFacturaARecibo');
+                if (btnCopiaRecibo) btnCopiaRecibo.style.display = tipoAsiento === 'recibos_venta' ? '' : 'none';
                 ASIENTOPROG_renderSinClasificacion(res.sin_clasificacion);
                 // Modos especiales con dos acordeones (referencias de otros módulos)
                 if (res.modo === 'ingresos_egresos') {
@@ -2563,6 +2565,108 @@
         }
     };
 
+
+    /**
+     * «Copiar configuración de Facturas de Venta» (solo en Recibos de Venta): muestra qué cambiaría
+     * y deja elegir entre completar lo que falta o dejar Recibos idéntico a Facturas.
+     * Servidor: AsientoProgramadoService::previsualizarCopiaFacturaARecibo() / copiarConfiguracionFacturaARecibo().
+     */
+    window.ASIENTOPROG_copiarFacturaARecibo = async function () {
+        if (!window.Swal) return;
+        const btn = document.getElementById('btnCopiarFacturaARecibo');
+        const puedeIgualar = btn && btn.dataset.puedeIgualar === '1';
+
+        let prev;
+        try {
+            const resp = await fetch(`${API_PROG}/previsualizarCopiaFacturaReciboAjax`);
+            const res = await resp.json();
+            if (!res.ok) { Swal.fire('Error', res.error || 'No se pudo comparar la configuración.', 'error'); return; }
+            prev = res.data;
+        } catch (e) {
+            console.error(e);
+            Swal.fire('Error', 'Error de red al intentar consultar.', 'error');
+            return;
+        }
+
+        const lista = (items, total) => {
+            if (!items.length) return '';
+            const mas = total > items.length ? `<li class="text-muted">y ${total - items.length} más…</li>` : '';
+            return `<ul class="small mb-0 ps-3" style="max-height:150px;overflow:auto">${items.map(t => `<li>${ASIENTOPROG_esc(t)}</li>`).join('')}${mas}</ul>`;
+        };
+        const bloque = (titulo, color, items, total) => total ? `
+            <div class="mb-2">
+                <div class="fw-semibold text-${color}">${titulo} (${total})</div>
+                ${lista(items, total)}
+            </div>` : '';
+        const omitidas = (prev.omitidas || []).length ? `
+            <div class="alert alert-warning py-2 px-3 small mb-2">
+                <div class="fw-semibold mb-1"><i class="bi bi-exclamation-triangle me-1"></i>No se copiarán:</div>
+                <ul class="mb-0 ps-3">${prev.omitidas.map(t => `<li>${ASIENTOPROG_esc(t)}</li>`).join('')}</ul>
+            </div>` : '';
+
+        const hayCambiosIgualar = prev.crear + prev.actualizar + prev.sobrantes > 0;
+        if (!hayCambiosIgualar) {
+            Swal.fire({
+                title: 'Sin diferencias',
+                html: `Recibos de Venta ya tiene la misma configuración que Facturas de Venta (${prev.iguales} cuenta(s)).${omitidas}`,
+                icon: 'info'
+            });
+            return;
+        }
+
+        const html = `
+            <div class="text-start">
+                <p class="small mb-2">Comparación de Recibos de Venta contra Facturas de Venta
+                   (General, IVA por tarifa y reglas por Cliente, Producto, Categoría, Marca y Tipo de producción).
+                   ${prev.iguales ? `${prev.iguales} cuenta(s) ya coinciden.` : ''}</p>
+                ${bloque('Faltan en Recibos — se crearán', 'success', prev.detalle.crear, prev.crear)}
+                ${bloque('Cuenta distinta en Recibos — se reemplazará solo con «Dejar igual»', 'primary', prev.detalle.actualizar, prev.actualizar)}
+                ${bloque('Solo existen en Recibos — se eliminarán solo con «Dejar igual»', 'danger', prev.detalle.sobrantes, prev.sobrantes)}
+                ${omitidas}
+                <div class="small text-muted border-top pt-2">
+                    <b>Completar lo que falta</b>: solo crea las cuentas que Recibos no tiene; no cambia ninguna ya puesta.<br>
+                    <b>Dejar igual a Facturas</b>: además reemplaza las cuentas distintas y elimina las que solo están en Recibos.
+                    ${puedeIgualar ? '' : '<br><span class="text-danger">Para «Dejar igual» necesita permiso de modificar y eliminar.</span>'}
+                </div>
+            </div>`;
+
+        const conf = await Swal.fire({
+            title: 'Copiar configuración de Facturas de Venta',
+            html,
+            icon: 'question',
+            width: 720,
+            showConfirmButton: prev.crear > 0,
+            confirmButtonText: `Completar lo que falta (${prev.crear})`,
+            confirmButtonColor: '#198754',
+            showDenyButton: puedeIgualar,
+            denyButtonText: 'Dejar igual a Facturas',
+            denyButtonColor: '#0d6efd',
+            showCancelButton: true,
+            cancelButtonText: 'Cancelar',
+            cancelButtonColor: '#6c757d'
+        });
+        if (conf.isDismissed) return;
+        const modo = conf.isConfirmed ? 'completar' : 'igualar';
+
+        const fd = new FormData();
+        fd.append('modo', modo);
+        try {
+            if (btn) btn.disabled = true;
+            const resp = await fetch(`${API_PROG}/copiarConfiguracionFacturaReciboAjax`, { method: 'POST', body: fd });
+            const res = await resp.json();
+            if (!res.ok) { Swal.fire('Error', res.error || 'No se pudo copiar la configuración.', 'error'); return; }
+            const d = res.data;
+            const partes = [`${d.creadas} creada(s)`];
+            if (modo === 'igualar') partes.push(`${d.actualizadas} reemplazada(s)`, `${d.eliminadas} eliminada(s)`);
+            await window.ASIENTOPROG_configurar();
+            Swal.fire({ title: 'Configuración copiada', html: `Cuentas de Recibos de Venta: ${partes.join(', ')}.`, icon: 'success' });
+        } catch (e) {
+            console.error(e);
+            Swal.fire('Error', 'Error de red al intentar guardar.', 'error');
+        } finally {
+            if (btn) btn.disabled = false;
+        }
+    };
 
     // Cerrar sugerencias flotantes al hacer clic en otra parte de la pantalla
     document.addEventListener('click', function (e) {

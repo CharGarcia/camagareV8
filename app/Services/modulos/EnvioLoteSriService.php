@@ -160,7 +160,7 @@ class EnvioLoteSriService
      * Envía un ítem al SRI usando el método correspondiente de SriEnvioService
      * y traduce el resultado a un estado de ítem.
      *
-     * @return array{0:string,1:bool,2:?string,3:?string} [estadoItem, exito, mensaje, numeroAutorizacion]
+     * @return array{0:string,1:?bool,2:?string,3:?string} [estadoItem, exito, mensaje, numeroAutorizacion]
      */
     private function despachar(SriEnvioService $svc, array $item, int $idEmpresa, int $idUsuario): array
     {
@@ -189,7 +189,9 @@ class EnvioLoteSriService
             'autorizado', 'autorizada'     => 'autorizado',
             'devuelta'                     => 'devuelto',
             'no_autorizado', 'no_autorizada' => 'no_autorizado',
-            'en_procesamiento'             => 'error',
+            // El SRI lo recibió pero no confirmó a tiempo: NO es un error. Queda pendiente y
+            // SriReintentosPendientesService (cron) termina de consultarlo.
+            'en_procesamiento'             => 'en_procesamiento',
             default                        => 'error',
         };
 
@@ -209,7 +211,8 @@ class EnvioLoteSriService
             }
         }
 
-        $exito = ($estadoItem === 'autorizado');
+        // null = ni autorizado ni fallido (en procesamiento): no suma a 'fallidos'.
+        $exito = $estadoItem === 'en_procesamiento' ? null : ($estadoItem === 'autorizado');
         return [$estadoItem, $exito, ($mensaje !== '' ? $mensaje : null), ($numAut ?: null)];
     }
 
@@ -222,6 +225,9 @@ class EnvioLoteSriService
             return null;
         }
         $lote['items'] = $this->repo->getItems($idLote, $idEmpresa);
+        // Tiempo máximo que puede esperar cada comprobante (la pantalla arma con esto la
+        // cuenta regresiva del ítem en curso y el máximo restante del lote).
+        $lote['tiempo_max_item'] = SriEnvioService::TIEMPO_MAXIMO_SEGUNDOS;
         return $lote;
     }
 }

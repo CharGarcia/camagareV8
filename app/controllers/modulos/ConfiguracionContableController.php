@@ -1407,6 +1407,52 @@ class ConfiguracionContableController extends BaseModuloController
     }
 
     /**
+     * Vista previa de «Copiar configuración de Facturas de Venta» (sección Recibos de Venta).
+     */
+    public function previsualizarCopiaFacturaReciboAjax(): void
+    {
+        $this->requireLeer();
+        header('Content-Type: application/json');
+
+        try {
+            $data = $this->service->previsualizarCopiaFacturaARecibo((int) $_SESSION['id_empresa']);
+            echo json_encode(['ok' => true, 'data' => $data]);
+        } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
+            echo json_encode(['ok' => false, 'error' => 'No se pudo comparar la configuración de Facturas y Recibos.']);
+        }
+        exit;
+    }
+
+    /**
+     * Copia a Recibos de Venta la configuración de Facturas de Venta. modo=completar solo crea lo
+     * que falta; modo=igualar además reemplaza y elimina, por eso pide también actualizar y eliminar.
+     */
+    public function copiarConfiguracionFacturaReciboAjax(): void
+    {
+        $this->requireCrear();
+        $modo = trim((string) ($_POST['modo'] ?? ''));
+        if ($modo === 'igualar') {
+            $this->requireActualizar();
+            $this->requireEliminar();
+        }
+        header('Content-Type: application/json');
+
+        try {
+            $res = $this->service->copiarConfiguracionFacturaARecibo(
+                (int) $_SESSION['id_empresa'],
+                (int) $_SESSION['id_usuario'],
+                $modo
+            );
+            echo json_encode(['ok' => true, 'data' => $res]);
+        } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
+            echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
+        }
+        exit;
+    }
+
+    /**
      * Registra o actualiza una regla de dimensión contable.
      */
     public function guardarReglaDimensionAjax(): void

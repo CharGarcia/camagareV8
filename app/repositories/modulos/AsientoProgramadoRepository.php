@@ -1868,7 +1868,7 @@ class AsientoProgramadoRepository extends BaseRepository
      */
     public function getProductosSinClasificacion(int $idEmpresa, string $tipoAsiento, int $limite = 100): array
     {
-        $direccionIva = ['ventas_factura' => 'venta', 'adquisiciones_compras' => 'compra'][$tipoAsiento] ?? null;
+        $direccionIva = ['ventas_factura' => 'venta', 'recibos_venta' => 'recibo', 'adquisiciones_compras' => 'compra'][$tipoAsiento] ?? null;
         $condRegla = "ap.id_empresa = :e AND ap.eliminado = false AND ap.id_cuenta IS NOT NULL
                       AND (ap.id_asiento_tipo IN (SELECT id FROM asientos_tipo WHERE tipo_asiento = :ta)"
                    . ($direccionIva ? " OR (ap.id_asiento_tipo = 0 AND ap.direccion_iva = :dir)" : '') . ")";
@@ -2028,6 +2028,106 @@ class AsientoProgramadoRepository extends BaseRepository
     {
         $st = $this->db->prepare("SELECT pg_advisory_xact_lock(hashtext('reglas_proveedor:' || :e || ':' || :id))");
         $st->execute([':e' => $idEmpresa, ':id' => $idProveedor]);
+    }
+
+    /**
+     * Reglas vivas de un tipo de asiento, para copiarlas a otro (Configuración Contable → «Copiar
+     * configuración de Facturas de Venta» en Recibos): conceptos de asientos_tipo (General y por
+     * dimensión), IVA General por tarifa ($tipoRefIva) e IVA por dimensión ($direccionIva).
+     * La cuenta debe existir y estar viva en el plan de la empresa (si no, cuenta_codigo = NULL).
+     */
+    public function getReglasParaCopiar(int $idEmpresa, string $tipoAsiento, string $tipoRefIva, string $direccionIva): array
+    {
+        $sql = "SELECT ap.id, ap.id_asiento_tipo, ap.id_cuenta, ap.id_referencia, ap.tipo_referencia,
+                       ap.codigo_tarifa_iva,
+                       at.codigo AS concepto_codigo, at.referencia AS concepto,
+                       pc.codigo AS cuenta_codigo, pc.nombre AS cuenta_nombre,
+                       ti.tarifa AS tarifa_iva
+                FROM asientos_programados ap
+                LEFT JOIN asientos_tipo at ON at.id = ap.id_asiento_tipo AND at.eliminado = false
+                LEFT JOIN plan_cuentas pc ON pc.id = ap.id_cuenta AND pc.id_empresa = ap.id_empresa AND pc.eliminado = false
+                -- LATERAL: solo la etiqueta de la tarifa, sin multiplicar filas si el catálogo repite código.
+                LEFT JOIN LATERAL (
+                    SELECT t.tarifa FROM tarifa_iva t
+                     WHERE ltrim(t.codigo, '0') = ltrim(CASE WHEN ap.tipo_referencia = :tref_iva_t
+                                                             THEN ap.id_referencia::text
+                                                             ELSE ap.codigo_tarifa_iva END, '0')
+                     LIMIT 1
+                ) ti ON true
+                WHERE ap.id_empresa = :e AND ap.eliminado = false AND ap.id_cuenta IS NOT NULL
+                  AND (   at.tipo_asiento = :ta
+                       OR (ap.id_asiento_tipo = 0 AND ap.tipo_referencia = :tref_iva_w)
+                       OR (ap.id_asiento_tipo = 0 AND ap.direccion_iva = :dir AND ap.codigo_tarifa_iva IS NOT NULL))
+                ORDER BY ap.id";
+        $st = $this->db->prepare($sql);
+        $st->execute([':e' => $idEmpresa, ':ta' => $tipoAsiento, ':tref_iva_t' => $tipoRefIva, ':tref_iva_w' => $tipoRefIva, ':dir' => $direccionIva]);
+        return $st->fetchAll(PDO::FETCH_ASSOC);
+    }
+
+    /**
+     * Conceptos de asientos_tipo (tabla global) por código: [codigo => {id, referencia, tipo_cuenta}].
+     */
+    public function getConceptosPorCodigo(array $codigos): array
+    {
+        $codigos = array_values(array_unique(array_filter(array_map('strval', $codigos))));
+        if (!$codigos) {
+            return [];
+        }
+        $st = $this->db->prepare("SELECT id, codigo, referencia, COALESCE(tipo_cuenta, '') AS tipo_cuenta
+                                    FROM asientos_tipo
+                                   WHERE eliminado = false AND codigo = ANY(string_to_array(:c, ','))");
+        $st->execute([':c' => implode(',', $codigos)]);
+        $out = [];
+        foreach ($st->fetchAll(PDO::FETCH_ASSOC) as $r) {
+            $out[(string) $r['codigo']] = $r;
+        }
+        return $out;
+    }
+
+    /**
+     * Nombres de las entidades de una dimensión de reglas (cliente, producto, categoría, marca),
+     * acotados a la empresa: [id => nombre]. Tipo de producción no tiene tabla (1 Bien, 2 Servicio).
+     */
+    public function getNombresDimension(int $idEmpresa, string $dimension, array $ids): array
+    {
+        $ids = array_values(array_unique(array_filter(array_map('intval', $ids))));
+        if (!$ids) {
+            return [];
+        }
+        if ($dimension === 'tipo_produccion') {
+            return array_intersect_key([1 => 'Bien', 2 => 'Servicio'], array_flip($ids));
+        }
+        $tabla = ['cliente' => 'clientes', 'producto' => 'productos', 'categoria' => 'categorias', 'marca' => 'marcas'][$dimension] ?? null;
+        if ($tabla === null) {
+            return [];
+        }
+        $st = $this->db->prepare("SELECT id, nombre FROM {$tabla}
+                                   WHERE id_empresa = :e AND id = ANY(string_to_array(:ids, ',')::int[])");
+        $st->execute([':e' => $idEmpresa, ':ids' => implode(',', $ids)]);
+        $out = [];
+        foreach ($st->fetchAll(PDO::FETCH_ASSOC) as $r) {
+            $out[(int) $r['id']] = trim((string) $r['nombre']);
+        }
+        return $out;
+    }
+
+    /** Cambia solo la cuenta de una regla viva de la empresa. */
+    public function actualizarCuentaRegla(int $id, int $idEmpresa, int $idCuenta, int $idUsuario): bool
+    {
+        $st = $this->db->prepare("UPDATE {$this->table}
+                                     SET id_cuenta = :c, updated_by = :u, updated_at = CURRENT_TIMESTAMP
+                                   WHERE id = :id AND id_empresa = :e AND eliminado = false");
+        return $st->execute([':c' => $idCuenta, ':u' => $idUsuario, ':id' => $id, ':e' => $idEmpresa]);
+    }
+
+    /**
+     * Candado transaccional sobre la configuración de un tipo de asiento de la empresa (se libera al
+     * COMMIT/ROLLBACK): serializa «leer reglas → copiar» para que dos copias simultáneas no dupliquen.
+     */
+    public function lockConfiguracionTipoAsiento(int $idEmpresa, string $tipoAsiento): void
+    {
+        $st = $this->db->prepare("SELECT pg_advisory_xact_lock(hashtext('config_contable:' || :e || ':' || :ta))");
+        $st->execute([':e' => $idEmpresa, ':ta' => $tipoAsiento]);
     }
 
     /** Razón social del proveedor si pertenece a la empresa y no está eliminado; null si no. */

@@ -30,9 +30,32 @@ class SriWebserviceService
 
     private int $timeoutSegundos;
 
+    /**
+     * Límite de reloj (microtime) para TODAS las llamadas: ninguna espera más allá de
+     * este instante. null = sin límite global (solo el timeout por llamada).
+     * Lo fija SriEnvioService con el tiempo máximo total del envío.
+     */
+    private ?float $limite = null;
+
     public function __construct(int $timeoutSegundos = 30)
     {
         $this->timeoutSegundos = $timeoutSegundos;
+    }
+
+    public function setLimite(?float $limite): void
+    {
+        $this->limite = $limite;
+    }
+
+    public function getLimite(): ?float
+    {
+        return $this->limite;
+    }
+
+    /** Segundos que quedan antes del límite global (PHP_INT_MAX si no hay límite). */
+    private function segundosRestantes(): float
+    {
+        return $this->limite === null ? (float) PHP_INT_MAX : $this->limite - microtime(true);
     }
 
     // ── Recepción ──────────────────────────────────────────────────────────────
@@ -342,6 +365,17 @@ SOAP;
         $motivo = '';
 
         while ($intento < $maxIntentos) {
+            // Tiempo máximo total del envío: cada intento solo espera lo que queda, y si
+            // ya no queda tiempo útil se deja de esperar (el cron retoma el documento).
+            $restante = $this->segundosRestantes();
+            if ($restante < 2) {
+                throw new SriTiempoAgotadoException(
+                    'El SRI no respondió dentro del tiempo máximo de espera. El comprobante quedó pendiente '
+                    . 'y el sistema seguirá intentando automáticamente cada 5 minutos; no hace falta volver a enviarlo.'
+                );
+            }
+            $timeout = (int) max(1, min($this->timeoutSegundos, floor($restante)));
+
             $intento++;
             $ch = curl_init($url);
             curl_setopt_array($ch, [
@@ -355,8 +389,8 @@ SOAP;
                 ],
                 CURLOPT_SSL_VERIFYPEER => false, // SRI usa certificados auto-firmados en pruebas
                 CURLOPT_SSL_VERIFYHOST => false,
-                CURLOPT_TIMEOUT        => $this->timeoutSegundos,
-                CURLOPT_CONNECTTIMEOUT => 10,
+                CURLOPT_TIMEOUT        => $timeout,
+                CURLOPT_CONNECTTIMEOUT => min(10, $timeout),
                 CURLOPT_FOLLOWLOCATION => false,
             ]);
 
@@ -377,9 +411,18 @@ SOAP;
             }
 
             error_log("[SRI soapPost] Intento {$intento}/{$maxIntentos} fallido contra $url: $motivo");
-            if ($intento < $maxIntentos) {
+            if ($intento < $maxIntentos && $this->segundosRestantes() > 4) {
                 sleep(2); // Esperar 2 segundos antes del siguiente intento
             }
+        }
+
+        if ($motivo !== '' && $this->segundosRestantes() < 2) {
+            // El último intento lo cortó el tiempo máximo total, no el SRI.
+            error_log("[SRI soapPost] Tiempo máximo agotado contra $url: $motivo");
+            throw new SriTiempoAgotadoException(
+                'El SRI no respondió dentro del tiempo máximo de espera. El comprobante quedó pendiente '
+                . 'y el sistema seguirá intentando automáticamente cada 5 minutos; no hace falta volver a enviarlo.'
+            );
         }
 
         if ($motivo !== '') {

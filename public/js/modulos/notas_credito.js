@@ -1818,13 +1818,7 @@
             if (result.isConfirmed) {
                 // Progreso persistente mientras se firma/envía (igual que factura):
                 // no se cierra al hacer clic afuera y no tiene botón de confirmar.
-                Swal.fire({
-                    title: 'Enviando al SRI...',
-                    html: '<div class="spinner-border text-primary" role="status"></div><br><small class="text-muted mt-2 d-block">Firmando y enviando comprobante…</small>',
-                    allowOutsideClick: false,
-                    allowEscapeKey: false,
-                    showConfirmButton: false,
-                });
+                CMG_sriEsperando(); // cuenta regresiva del tiempo máximo + "Seguir en segundo plano" (app.js)
                 try {
                     const resp = await fetch(`${BASE_URL}/modulos/notas_credito/autorizarSRIAjax`, {
                         method: 'POST',

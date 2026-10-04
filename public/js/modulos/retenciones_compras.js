@@ -484,12 +484,7 @@
         if (!confirmar.isConfirmed) return;
 
         // Progreso (bloqueante) — "Enviando al SRI..."
-        Swal.fire({
-            title: 'Enviando al SRI...',
-            html: '<div class="spinner-border text-primary" role="status"></div><br><small class="text-muted mt-2 d-block">Firmando y enviando comprobante...</small>',
-            allowOutsideClick: false,
-            showConfirmButton: false,
-        });
+        CMG_sriEsperando(); // cuenta regresiva del tiempo máximo + "Seguir en segundo plano" (app.js)
 
         const btn = document.getElementById('ret-btn-sri');
         if (btn) btn.disabled = true;

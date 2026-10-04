@@ -61,6 +61,7 @@
             devuelto:     ['danger', 'Devuelto'],
             no_autorizado:['danger', 'No autorizado'],
             error:        ['danger', 'Error'],
+            en_procesamiento: ['warning', 'En procesamiento SRI'],
             procesando:   ['info', 'Procesando'],
             pendiente:    ['secondary', 'Pendiente'],
         };
@@ -222,6 +223,7 @@
     }
     function iniciarPolling(idLote) {
         detenerPolling();
+        tiempos = null;
         const tick = async () => {
             try {
                 const r = await fetch(`${URL('estadoLoteAjax')}?id=${idLote}`);
@@ -230,6 +232,20 @@
                 const d = j.data;
                 setBar(+d.procesados, +d.total, +d.exitosos, +d.fallidos, d.estado);
                 pintarItems(d.items || []);
+                document.getElementById('els-p-proc-sri').textContent =
+                    (d.items || []).filter(it => it.estado === 'en_procesamiento').length;
+                // Base para el reloj: segundos medidos por el servidor + el momento en que
+                // llegaron; entre una consulta y otra el reloj avanza solo cada segundo.
+                tiempos = {
+                    recibido:     Date.now(),
+                    transcurrido: d.seg_transcurridos === null ? null : +d.seg_transcurridos,
+                    itemActual:   d.seg_item_actual === null ? null : +d.seg_item_actual,
+                    maxItem:      +d.tiempo_max_item || 90,
+                    total:        +d.total,
+                    procesados:   +d.procesados,
+                    estado:       d.estado,
+                };
+                pintarTiempos();
                 if (['completado', 'completado_con_errores', 'cancelado'].includes(d.estado)) {
                     detenerPolling();
                     document.getElementById('els-progress-bar').classList.remove('progress-bar-animated');
@@ -238,18 +254,82 @@
         };
         tick();
         pollTimer = setInterval(tick, 2500);
+        relojTimer = setInterval(pintarTiempos, 1000);
     }
-    function detenerPolling() { if (pollTimer) { clearInterval(pollTimer); pollTimer = null; } }
+    function detenerPolling() {
+        if (pollTimer) { clearInterval(pollTimer); pollTimer = null; }
+        if (relojTimer) { clearInterval(relojTimer); relojTimer = null; }
+    }
+
+    // ── Reloj del lote ──────────────────────────────────────────────────────
+    // Cada comprobante espera al SRI como máximo `maxItem` segundos (mismo tope que el
+    // envío individual, SriEnvioService::TIEMPO_MAXIMO_SEGUNDOS). Con eso:
+    //  - el comprobante en curso muestra su cuenta regresiva;
+    //  - "Restante estimado" = promedio real de los ya procesados × los que faltan;
+    //  - "máximo" = el peor caso (todos los que faltan agotando su tiempo).
+    let tiempos = null;
+    let relojTimer = null;
+    function mmss(s) {
+        s = Math.max(0, Math.round(s));
+        const h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60), ss = String(s % 60).padStart(2, '0');
+        return h > 0 ? `${h}:${String(m).padStart(2, '0')}:${ss}` : `${m}:${ss}`;
+    }
+    function pintarTiempos() {
+        const elT = document.getElementById('els-t-transcurrido');
+        const elR = document.getElementById('els-t-restante');
+        const elM = document.getElementById('els-t-maximo');
+        if (!tiempos || !elT) return;
+        const fin = ['completado', 'completado_con_errores', 'cancelado'].includes(tiempos.estado);
+        const delta = fin ? 0 : (Date.now() - tiempos.recibido) / 1000;
+
+        if (tiempos.transcurrido === null) {   // el worker todavía no arranca
+            elT.textContent = '0:00'; elR.textContent = 'en cola…'; elM.textContent = '';
+            return;
+        }
+        const transcurrido = tiempos.transcurrido + delta;
+        const itemActual = (tiempos.itemActual ?? 0) + delta;
+        elT.textContent = mmss(transcurrido);
+
+        if (fin) {
+            elR.textContent = tiempos.estado === 'cancelado' ? 'cancelado' : 'terminado';
+            elM.textContent = '';
+            return;
+        }
+
+        const faltan = Math.max(0, tiempos.total - tiempos.procesados);   // incluye el que está en curso
+        const restanteItem = Math.max(0, tiempos.maxItem - itemActual);
+        const maximo = restanteItem + Math.max(0, faltan - 1) * tiempos.maxItem;
+        if (tiempos.procesados > 0) {
+            const promedio = Math.max(1, (transcurrido - itemActual) / tiempos.procesados);
+            elR.textContent = '~' + mmss(Math.min(maximo, Math.max(0, promedio * faltan - itemActual)));
+        } else {
+            elR.textContent = 'calculando…';
+        }
+        elM.textContent = `máximo ${mmss(maximo)}`;
+
+        // Cuenta regresiva del comprobante en curso (fila "Procesando").
+        const elItem = document.querySelector('.els-item-cuenta');
+        if (elItem) {
+            elItem.textContent = itemActual > tiempos.maxItem + 60
+                ? 'sin respuesta del proceso — revise el historial de lotes'
+                : (restanteItem > 0 ? `esperando al SRI · quedan ${mmss(restanteItem)}` : 'finalizando…');
+        }
+    }
+
     function pintarItems(items) {
         document.getElementById('els-progress-items').innerHTML = items.map(it => {
             const [lbl] = TIPO_LABEL[it.tipo_comprobante] || [it.tipo_comprobante];
+            const detalle = it.estado === 'procesando'
+                ? '<span class="els-item-cuenta text-info"></span>'
+                : esc(it.mensaje || '');
             return `<tr>
                 <td class="text-nowrap">${esc(it.numero || '')}</td>
                 <td>${esc(lbl)}</td>
                 <td>${estadoItemBadge(it.estado)}</td>
-                <td class="small text-muted">${esc(it.mensaje || '')}</td>
+                <td class="small text-muted">${detalle}</td>
             </tr>`;
         }).join('');
+        pintarTiempos();
     }
 
     async function cancelar() {

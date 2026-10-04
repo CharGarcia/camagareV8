@@ -654,6 +654,76 @@ window.CMG_Identificacion = (function () {
     });
 
     /**
+     * Aviso "Enviando al SRI…" con CUENTA REGRESIVA del tiempo máximo de espera
+     * (window.CMG_SRI_TIEMPO_MAX = SriEnvioService::TIEMPO_MAXIMO_SEGUNDOS) y, pasados
+     * unos segundos, el botón "Seguir en segundo plano": cierra el aviso sin cortar el
+     * envío (el servidor lo termina igual y el resultado se muestra al llegar, o queda en
+     * el historial SRI del documento si el usuario ya salió de la pantalla).
+     *
+     * Uso: en lugar del Swal.fire({ title: 'Enviando al SRI...' }) de cada módulo,
+     *   CMG_sriEsperando();
+     * El módulo sigue cerrando/reemplazando el aviso con su propio Swal al recibir la
+     * respuesta, como siempre (Swal reemplaza el aviso abierto y detiene el contador).
+     */
+    window.CMG_sriEsperando = function (opciones) {
+        opciones = opciones || {};
+        if (typeof Swal === 'undefined') return;
+        var total = parseInt(window.CMG_SRI_TIEMPO_MAX, 10) || 90;
+        var segundosBoton = opciones.segundosBoton || 15;
+        var inicio = Date.now();
+        var timer = null;
+        var fmt = function (s) {
+            s = Math.max(0, Math.ceil(s));
+            return Math.floor(s / 60) + ':' + String(s % 60).padStart(2, '0');
+        };
+
+        Swal.fire({
+            title: opciones.titulo || 'Enviando al SRI...',
+            html:
+                '<div class="spinner-border text-primary" role="status"></div>' +
+                '<small class="text-muted mt-2 d-block cmg-sri-fase">Firmando y enviando comprobante…</small>' +
+                '<div class="mt-3 small">Tiempo restante (máximo): <b class="cmg-sri-restante">' + fmt(total) + '</b></div>' +
+                '<div class="progress mt-1" style="height:6px;"><div class="progress-bar cmg-sri-barra" style="width:100%"></div></div>' +
+                '<small class="text-muted d-block mt-2 cmg-sri-nota" style="font-size:.75rem;">' +
+                'Si el SRI no responde en ese tiempo, el comprobante queda pendiente y el sistema sigue intentando solo.</small>' +
+                '<button type="button" class="btn btn-sm btn-outline-secondary mt-3 d-none cmg-sri-fondo">' +
+                '<i class="bi bi-arrow-down-right-square me-1"></i>Seguir en segundo plano</button>',
+            allowOutsideClick: false,
+            allowEscapeKey: false,
+            showConfirmButton: false,
+            didOpen: function (popup) {
+                var elRest = popup.querySelector('.cmg-sri-restante');
+                var elBarra = popup.querySelector('.cmg-sri-barra');
+                var elFase = popup.querySelector('.cmg-sri-fase');
+                var btn = popup.querySelector('.cmg-sri-fondo');
+                btn.addEventListener('click', function () {
+                    Swal.close();
+                    if (window.Toast) {
+                        window.Toast.fire({ icon: 'info', title: 'El envío al SRI continúa. Le mostraremos el resultado al terminar.' });
+                    }
+                });
+                var tick = function () {
+                    var transcurrido = (Date.now() - inicio) / 1000;
+                    var restante = total - transcurrido;
+                    if (elRest) elRest.textContent = restante > 0 ? fmt(restante) : 'finalizando…';
+                    if (elBarra) {
+                        var pct = Math.max(0, restante / total * 100);
+                        elBarra.style.width = pct + '%';
+                        elBarra.classList.toggle('bg-warning', pct < 34);
+                    }
+                    if (elFase && transcurrido > 8) elFase.textContent = 'Esperando la autorización del SRI…';
+                    if (btn && transcurrido >= segundosBoton) btn.classList.remove('d-none');
+                };
+                tick();
+                timer = setInterval(tick, 500);
+            },
+            willClose: function () {
+                if (timer) clearInterval(timer);
+            },
+        });
+    };
+
+    /**
      * Redondeo a 2 decimales "medio hacia arriba" (lejos de cero), como round() de PHP y
      * como redondea el SRI. `Math.round(v * 100) / 100` falla con el binario de los
      * decimales: 98,10 × (15 / 100) = 14,714999999999998 → 14,71 en vez de 14,72

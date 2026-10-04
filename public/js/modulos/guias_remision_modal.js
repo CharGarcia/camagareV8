@@ -1034,14 +1034,7 @@
 
         // El envío firma el XML, lo entrega al SRI y espera la autorización: son
         // varios segundos, así que se avisa que el proceso está en curso.
-        Swal.fire({
-            title: 'Enviando al SRI...',
-            html: 'Firmando el comprobante y esperando la autorización.<br><small class="text-muted">No cierre esta ventana.</small>',
-            allowOutsideClick: false,
-            allowEscapeKey: false,
-            showConfirmButton: false,
-            didOpen: () => Swal.showLoading(),
-        });
+        CMG_sriEsperando(); // cuenta regresiva del tiempo máximo + "Seguir en segundo plano" (app.js)
 
         fetch(urlBaseGR + '/enviar-sri-ajax', {
             method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' },

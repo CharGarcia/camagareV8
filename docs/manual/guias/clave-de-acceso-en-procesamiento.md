@@ -4,8 +4,8 @@ resumen: Por qué el SRI responde que la clave está en procesamiento, por qué 
 categoria: Ventas
 tipo: guia
 visibilidad: todos
-etiquetas: clave de acceso en procesamiento, error 70, error 45, error 43, secuencial registrado, clave acceso registrada, comprobante devuelto, el sri devolvio el comprobante con errores, reenviar al sri, reintento automatico, en cola, sin autorizacion, factura devuelta, nota de credito devuelta, retencion devuelta, guia devuelta, no aparece en el portal, ambiente de pruebas, numero ya usado, no se puede eliminar
-version: 1.1
+etiquetas: clave de acceso en procesamiento, error 70, error 45, error 43, secuencial registrado, clave acceso registrada, comprobante devuelto, el sri devolvio el comprobante con errores, reenviar al sri, reintento automatico, en cola, sin autorizacion, factura devuelta, nota de credito devuelta, retencion devuelta, guia devuelta, no aparece en el portal, ambiente de pruebas, numero ya usado, no se puede eliminar, tarda mucho, se queda enviando, enviando al sri, tiempo restante, cuenta regresiva, cancelar envio, seguir en segundo plano, tiempo de espera agotado, ya se esta enviando
+version: 1.2
 orden: 30
 estado: activo
 ---
@@ -19,6 +19,25 @@ Aunque llega con la etiqueta de error, **no es un rechazo**. Significa que el SR
 **ya recibió** el comprobante en un envío anterior y todavía no publica el
 resultado. El documento está en su cola; lo único que falta es esperar la
 resolución.
+
+## Cuánto espera el sistema al SRI
+
+Al pulsar **Enviar al SRI** en cualquier documento (factura, nota de crédito o
+débito, retención, guía, liquidación, factura de reembolso) aparece el aviso
+*Enviando al SRI…* con una **cuenta regresiva**: el sistema espera la respuesta
+del SRI como **máximo 90 segundos**.
+
+- A los 15 segundos aparece el botón **Seguir en segundo plano**. Cierra el aviso
+  para que pueda seguir trabajando; el envío **no se cancela** (lo que ya llegó
+  al SRI, el SRI lo procesa igual). Si sigue en la pantalla, el resultado se
+  muestra al terminar; si sale, queda en el historial SRI del documento.
+- Si se cumplen los 90 segundos sin respuesta, el documento queda **En
+  procesamiento** con el aviso *Tiempo de espera agotado*. No hace falta volver
+  a enviarlo: el reintento automático lo consulta cada 5 minutos.
+- Un mismo documento no se puede enviar dos veces a la vez. Si se intenta (otra
+  pestaña, otro usuario o el reintento automático), aparece *Este comprobante ya
+  se está enviando al SRI en este momento*: espere unos segundos y revise su
+  estado.
 
 ## Por qué reenviarlo no sirve
 
@@ -106,6 +125,9 @@ está libre.
 
 ## Historial de cambios
 
+- **1.2** — El envío al SRI espera como máximo 90 segundos, con cuenta regresiva
+  y botón *Seguir en segundo plano*. Un documento no puede enviarse dos veces al
+  mismo tiempo.
 - **1.1** — Nueva sección sobre el **error 45 "Secuencial registrado"**: el
   sistema ya no reutiliza el número de un documento eliminado que el SRI ya
   recibió, no deja eliminar un borrador en esa situación y explica el error con

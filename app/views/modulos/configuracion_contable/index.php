@@ -181,9 +181,20 @@ $base = BASE_URL;
 <div id="seccionAcordeones" style="display: none;" class="mb-4">
 
     <div class="mb-3 bg-light p-3 rounded-3 shadow-sm border">
-        <h6 class="fw-bold mb-0 text-dark" id="conceptoSeleccionadoTitulo">
-            <i class="bi bi-gear-fill text-primary me-1"></i> Configuración del Concepto
-        </h6>
+        <div class="d-flex flex-wrap align-items-center gap-2">
+            <h6 class="fw-bold mb-0 text-dark" id="conceptoSeleccionadoTitulo">
+                <i class="bi bi-gear-fill text-primary me-1"></i> Configuración del Concepto
+            </h6>
+            <?php if (!empty($perm['crear'])): ?>
+                <!-- Solo en Recibos de Venta (ASIENTOPROG_copiarFacturaARecibo, configuracion_contable_modal.js) -->
+                <button type="button" id="btnCopiarFacturaARecibo" class="btn btn-outline-primary btn-sm ms-auto" style="display:none;"
+                        title="Usar en Recibos de Venta las mismas cuentas configuradas en Facturas de Venta"
+                        data-puede-igualar="<?= (!empty($perm['actualizar']) && !empty($perm['eliminar'])) ? '1' : '0' ?>"
+                        onclick="ASIENTOPROG_copiarFacturaARecibo()">
+                    <i class="bi bi-files me-1"></i>Copiar configuración de Facturas de Venta
+                </button>
+            <?php endif; ?>
+        </div>
         <div class="text-muted mt-2 pt-2 border-top" style="font-size:0.72rem; line-height:1.55;">
             <span class="fw-bold text-dark"><i class="bi bi-info-circle me-1"></i>Cómo funciona:</span>
             La pestaña <b>General</b> es la base obligatoria: una cuenta por cada concepto (ventas/compras, IVA, cuentas por cobrar/pagar, costo, etc.). Sobre esa base puedes crear <b>reglas específicas</b> por Cliente/Proveedor, Producto, Categoría o Marca.

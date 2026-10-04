@@ -5,8 +5,8 @@ categoria: Contabilidad
 ruta_modulo: modulos/configuracion-contable
 tipo: modulo
 visibilidad: admin
-etiquetas: configuracion contable, cuentas por documento, asiento automatico, parametrizacion, ventas, compras, cierre, tipo de produccion, bien, servicio, filtro por año, periodo, listado de proveedores, listado de clientes, cobros y pagos, ingresos y egresos, forma de pago, cuenta bancaria, efectivo, misma cuenta en los dos bloques, formas hermanas, cheques y transferencias, mismo banco, numero de cuenta, nomina, rol de pagos, prestamo quirografario, prestamo hipotecario, prestamo empresa, prestamos iess, cuentas opcionales, costo de ventas, costo de venta, inventario, asiento sin costo, no sale el costo, cuenta de iva del cliente, reglas por cliente, buscar proveedor, buscar cliente, buscar ficha, filtrar fichas, muchos proveedores, cuentas faltantes, modulos que contabilizan, apagar asientos, no generar asientos, no contabilizar, desactivar contabilidad, interruptor, consignaciones sin asiento, aviso de asientos pendientes, asientos pendientes en el balance, proveedores sin cuentas, clientes sin cuentas, productos sin cuentas, pendientes de configurar, retenciones en venta, retenciones en compra, retencion de renta, no aparecen las retenciones, codigo de retencion, catalogo de retenciones sri, codigo ats, codigo del anexo, retencion mal asignada, codigo de retencion no existe, en que documento esta el error, retencion con codigo invalido, sugerencias, sugerir cuentas, proveedores que compran lo mismo, copiar cuentas de otro proveedor, misma cuenta para varios proveedores, gasolineras, proveedores parecidos, subtotal de compras, cuenta de gasto del proveedor, mostrar las demas cuentas, ver todas las cuentas, tipo de asiento no aparece, falta tipo de asiento en el selector, modulo apagado, personalizar asiento contable, tabla de proveedores, detalle de compras, cuenta de subtotal por proveedor
-version: 1.32
+etiquetas: configuracion contable, cuentas por documento, asiento automatico, parametrizacion, ventas, compras, cierre, tipo de produccion, bien, servicio, filtro por año, periodo, listado de proveedores, listado de clientes, cobros y pagos, ingresos y egresos, forma de pago, cuenta bancaria, efectivo, misma cuenta en los dos bloques, formas hermanas, cheques y transferencias, mismo banco, numero de cuenta, nomina, rol de pagos, prestamo quirografario, prestamo hipotecario, prestamo empresa, prestamos iess, cuentas opcionales, costo de ventas, costo de venta, inventario, asiento sin costo, no sale el costo, cuenta de iva del cliente, reglas por cliente, buscar proveedor, buscar cliente, buscar ficha, filtrar fichas, muchos proveedores, cuentas faltantes, modulos que contabilizan, apagar asientos, no generar asientos, no contabilizar, desactivar contabilidad, interruptor, consignaciones sin asiento, aviso de asientos pendientes, asientos pendientes en el balance, proveedores sin cuentas, clientes sin cuentas, productos sin cuentas, pendientes de configurar, retenciones en venta, retenciones en compra, retencion de renta, no aparecen las retenciones, codigo de retencion, catalogo de retenciones sri, codigo ats, codigo del anexo, retencion mal asignada, codigo de retencion no existe, en que documento esta el error, retencion con codigo invalido, sugerencias, sugerir cuentas, proveedores que compran lo mismo, copiar cuentas de otro proveedor, misma cuenta para varios proveedores, gasolineras, proveedores parecidos, subtotal de compras, cuenta de gasto del proveedor, mostrar las demas cuentas, ver todas las cuentas, tipo de asiento no aparece, falta tipo de asiento en el selector, modulo apagado, personalizar asiento contable, tabla de proveedores, detalle de compras, cuenta de subtotal por proveedor, recibos de venta, copiar configuracion de facturas, recibos con otras cuentas, recibo sin asiento, igualar recibos y facturas
+version: 1.33
 orden: 5
 estado: activo
 ---
@@ -195,6 +195,41 @@ las mismas cuentas.
 Es una sugerencia: revise que el proveedor de verdad sea del mismo giro antes de
 asignar. Un ítem genérico (por ejemplo *SERVICIO*) puede emparejar proveedores
 que no tienen nada que ver.
+
+## Recibos de Venta: copiar la configuración de Facturas de Venta
+
+Recibos de Venta tiene **su propia configuración**, separada de la de Facturas de
+Venta: los mismos conceptos (Cuenta por cobrar, Subtotal, Descuento, Costo,
+Inventario, Propina, ICE, Ajuste por redondeo e IVA por tarifa), pero con sus
+cuentas aparte. Así se puede, si se quiere, llevar los recibos a cuentas distintas
+de las facturas. Si Recibos se deja vacío, **los recibos no generan asiento**: no
+toman las cuentas de Facturas por su cuenta.
+
+Para usar en Recibos las mismas cuentas de Facturas, elija **Recibos de Venta**
+en el selector y pulse **Copiar configuración de Facturas de Venta** (arriba,
+junto al título). Antes de cambiar nada, el sistema muestra la comparación:
+
+- **Faltan en Recibos**: cuentas que Facturas tiene y Recibos no.
+- **Cuenta distinta en Recibos**: el mismo concepto con otra cuenta (se ve la
+  cuenta actual y la de Facturas).
+- **Solo existen en Recibos**: reglas que Facturas no tiene.
+
+Se copia todo: la configuración General, el IVA por tarifa y las reglas por
+Cliente, Producto, Categoría, Marca y Tipo de producción. Luego se elige:
+
+| Opción | Qué hace |
+|---|---|
+| **Completar lo que falta** | Solo crea las cuentas que Recibos no tiene. No cambia ninguna cuenta ya puesta. |
+| **Dejar igual a Facturas** | Además reemplaza las cuentas distintas y elimina las reglas que solo están en Recibos. Recibos queda idéntico a Facturas. Requiere permiso de modificar y eliminar. |
+
+Una cuenta que no corresponde a la naturaleza del concepto, o que ya no existe en
+el plan de cuentas, no se copia y se avisa en la comparación. Cada copia queda
+registrada en el historial del sistema. Después, cualquier cuenta de Recibos se
+puede cambiar a mano como siempre.
+
+Los asientos ya generados no cambian; los recibos que estaban sin asiento lo
+generan con la nueva configuración en la siguiente sincronización de
+contabilidad.
 
 ## Buscar en las tablas y en las tarjetas
 
@@ -486,6 +521,10 @@ ingresos o egresos. Solo falta asignar la cuenta.
 
 ## Historial de cambios
 
+- **1.33** — En Recibos de Venta, botón **Copiar configuración de Facturas de Venta**: compara las
+  dos configuraciones y permite completar lo que falta o dejar Recibos igual a Facturas. El aviso
+  de productos sin categoría o marca ahora también considera el IVA configurado por categoría o
+  marca en Recibos.
 - **1.32** — Cuando el asiento se contabiliza por categoría o marca y un producto no la tiene,
   el mensaje dice que falta asignarle la categoría (o marca) en Productos, en lugar de pedir
   una cuenta. Igual en los avisos al generar asientos y en el aviso de esta pantalla.

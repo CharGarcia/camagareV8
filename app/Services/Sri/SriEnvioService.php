@@ -32,19 +32,136 @@ class SriEnvioService
     /** Segundos entre reintentos de consulta */
     private int $intervaloReintentos;
 
+    /**
+     * Tiempo máximo TOTAL que un envío espera al SRI (verificación previa + recepción +
+     * consultas de autorización). Antes solo había límites por llamada que se sumaban
+     * (hasta ~11 min con el SRI lento). Al cumplirse se deja de ESPERAR, no se cancela
+     * nada: lo ya enviado el SRI lo procesa igual, y el documento queda pendiente para
+     * SriReintentosPendientesService (cron, cada 5 min). La pantalla muestra una cuenta
+     * regresiva con este mismo valor (window.CMG_SRI_TIEMPO_MAX, partials/scripts.php).
+     */
+    public const TIEMPO_MAXIMO_SEGUNDOS = 90;
+
+    /** Tope para la verificación previa (¿ya está autorizado?): que no se coma el tiempo del envío. */
+    private const TIEMPO_MAXIMO_PRE_VERIFICACION = 20;
+
+    /** Timeout de cada llamada HTTP al SRI (antes 30 s). */
+    private const TIMEOUT_LLAMADA_SEGUNDOS = 20;
+
+    /** El último envío se cortó por TIEMPO_MAXIMO_SEGUNDOS (para el mensaje al usuario). */
+    private bool $tiempoAgotado = false;
+
     public function __construct(
         int $esperaInicial       = 3,
         int $maxIntentos         = 5,
         int $intervaloReintentos = 3
     ) {
         $this->firmador            = new FirmadorXmlService();
-        $this->ws                  = new SriWebserviceService(30);
+        $this->ws                  = new SriWebserviceService(self::TIMEOUT_LLAMADA_SEGUNDOS);
         $this->esperaInicial       = $esperaInicial;
         $this->maxIntentos         = $maxIntentos;
         $this->intervaloReintentos = $intervaloReintentos;
     }
 
     // ── API pública ────────────────────────────────────────────────────────────
+    //
+    // Cada envío pasa por conCandadoYTiempo(): candado por documento + reloj del tiempo
+    // máximo. Lo usan la pantalla, la app móvil, el envío en lote y los dos crons.
+
+    public function enviarFacturaVenta(int $idVenta, int $idEmpresa, int $idUsuario): array
+    {
+        return $this->conCandadoYTiempo('factura_venta', $idVenta,
+            fn () => $this->procesarEnvioFacturaVenta($idVenta, $idEmpresa, $idUsuario));
+    }
+
+    public function enviarFacturaReembolso(int $idFR, int $idEmpresa, int $idUsuario): array
+    {
+        return $this->conCandadoYTiempo('factura_reembolso', $idFR,
+            fn () => $this->procesarEnvioFacturaReembolso($idFR, $idEmpresa, $idUsuario));
+    }
+
+    public function enviarNotaCredito(int $idNC, int $idEmpresa, int $idUsuario): array
+    {
+        return $this->conCandadoYTiempo('nota_credito', $idNC,
+            fn () => $this->procesarEnvioNotaCredito($idNC, $idEmpresa, $idUsuario));
+    }
+
+    public function enviarNotaDebito(int $idND, int $idEmpresa, int $idUsuario): array
+    {
+        return $this->conCandadoYTiempo('nota_debito', $idND,
+            fn () => $this->procesarEnvioNotaDebito($idND, $idEmpresa, $idUsuario));
+    }
+
+    public function enviarRetencionCompra(int $idRetencion, int $idEmpresa, int $idUsuario): array
+    {
+        return $this->conCandadoYTiempo('retencion_compra', $idRetencion,
+            fn () => $this->procesarEnvioRetencionCompra($idRetencion, $idEmpresa, $idUsuario));
+    }
+
+    public function enviarGuiaRemision(int $idGuia, int $idEmpresa, int $idUsuario): array
+    {
+        return $this->conCandadoYTiempo('guia_remision', $idGuia,
+            fn () => $this->procesarEnvioGuiaRemision($idGuia, $idEmpresa, $idUsuario));
+    }
+
+    public function enviarLiquidacionCompra(int $idLiq, int $idEmpresa, int $idUsuario): array
+    {
+        return $this->conCandadoYTiempo('liquidacion_compra', $idLiq,
+            fn () => $this->procesarEnvioLiquidacionCompra($idLiq, $idEmpresa, $idUsuario));
+    }
+
+    /**
+     * Ejecuta un envío con:
+     *  1. Candado por documento: dos envíos/consultas del MISMO comprobante nunca corren a la
+     *     vez (usuario que recarga y vuelve a pulsar Enviar, otra pestaña, o el cron que lo
+     *     retoma mientras el envío manual sigue esperando). Sin esto, si ambos recibían
+     *     "AUTORIZADO" ejecutaban dos veces lo que sigue a la autorización (cobro automático,
+     *     correo, asiento). Es un candado de SESIÓN (pg_try_advisory_lock), no de transacción:
+     *     el envío no corre dentro de una transacción (sería tenerla abierta mientras se
+     *     espera al SRI). Se suelta en el finally; si PHP muere, al cerrarse la conexión
+     *     (y con el pool en modo Session, el DISCARD ALL al devolverla).
+     *  2. Reloj del tiempo máximo total (TIEMPO_MAXIMO_SEGUNDOS), que se reinicia en cada
+     *     documento (el lote y el cron reutilizan la misma instancia).
+     */
+    private function conCandadoYTiempo(string $tipo, int $id, callable $envio): array
+    {
+        $db = Database::getConnection();
+        $st = $db->prepare("SELECT pg_try_advisory_lock(hashtext(:k))");
+        $st->execute([':k' => "sri_envio:{$tipo}:{$id}"]);
+        if (!$st->fetchColumn()) {
+            throw new \RuntimeException(
+                'Este comprobante ya se está enviando al SRI en este momento (en otra pantalla o por el '
+                . 'reintento automático). Espere unos segundos y revise su estado antes de volver a enviarlo.'
+            );
+        }
+
+        $this->tiempoAgotado = false;
+        $this->ws->setLimite(microtime(true) + self::TIEMPO_MAXIMO_SEGUNDOS);
+        try {
+            $resultado = $envio();
+            if ($this->tiempoAgotado && ($resultado['estado'] ?? '') === 'en_procesamiento') {
+                $resultado['mensaje'] = self::mensajeTiempoAgotado();
+                $resultado['tiempo_agotado'] = true;
+            }
+            return $resultado;
+        } finally {
+            $this->ws->setLimite(null);
+            try {
+                $u = $db->prepare("SELECT pg_advisory_unlock(hashtext(:k))");
+                $u->execute([':k' => "sri_envio:{$tipo}:{$id}"]);
+            } catch (\Throwable $e) {
+                error_log('[SRI candado] No se pudo soltar el candado de ' . $tipo . ' #' . $id . ': ' . $e->getMessage());
+            }
+        }
+    }
+
+    private static function mensajeTiempoAgotado(): string
+    {
+        return 'El SRI recibió el comprobante pero no confirmó la autorización dentro del tiempo máximo de espera ('
+            . self::TIEMPO_MAXIMO_SEGUNDOS . ' s). Quedó en procesamiento: el sistema seguirá consultando '
+            . 'automáticamente cada 5 minutos y el resultado aparecerá en el historial SRI del documento. '
+            . 'No hace falta volver a enviarlo.';
+    }
 
     /**
      * Procesa el envío completo de una factura de venta al SRI.
@@ -54,7 +171,7 @@ class SriEnvioService
      * @param  int $idUsuario  ID del usuario que dispara el envío
      * @return array Resultado con estado, mensajes y datos de autorización
      */
-    public function enviarFacturaVenta(int $idVenta, int $idEmpresa, int $idUsuario): array
+    private function procesarEnvioFacturaVenta(int $idVenta, int $idEmpresa, int $idUsuario): array
     {
         $repo = new FacturaVentaRepository();
 
@@ -317,7 +434,7 @@ class SriEnvioService
      * @param  int $idUsuario  ID del usuario que dispara el envío
      * @return array Resultado con estado, mensajes y datos de autorización
      */
-    public function enviarFacturaReembolso(int $idFR, int $idEmpresa, int $idUsuario): array
+    private function procesarEnvioFacturaReembolso(int $idFR, int $idEmpresa, int $idUsuario): array
     {
         $repo = new \App\repositories\modulos\FacturaReembolsoRepository();
 
@@ -596,7 +713,7 @@ class SriEnvioService
         }
     }
 
-    public function enviarNotaCredito(int $idNC, int $idEmpresa, int $idUsuario): array
+    private function procesarEnvioNotaCredito(int $idNC, int $idEmpresa, int $idUsuario): array
     {
         $repo = new \App\repositories\modulos\NotaCreditoRepository();
 
@@ -805,7 +922,7 @@ class SriEnvioService
 
     // ── Nota de Débito ─────────────────────────────────────────────────────────
 
-    public function enviarNotaDebito(int $idND, int $idEmpresa, int $idUsuario): array
+    private function procesarEnvioNotaDebito(int $idND, int $idEmpresa, int $idUsuario): array
     {
         $repo = new \App\repositories\modulos\NotaDebitoRepository();
 
@@ -1019,7 +1136,7 @@ class SriEnvioService
      * @param  int $idUsuario    ID del usuario que dispara el envío
      * @return array Resultado con estado, mensajes y datos de autorización
      */
-    public function enviarRetencionCompra(int $idRetencion, int $idEmpresa, int $idUsuario): array
+    private function procesarEnvioRetencionCompra(int $idRetencion, int $idEmpresa, int $idUsuario): array
     {
         $repo = new \App\repositories\modulos\RetencionCompraRepository();
 
@@ -1243,6 +1360,7 @@ class SriEnvioService
      */
     public function verificarAutorizacion(string $claveAcceso, string $tipoAmbiente = '1'): array
     {
+        $this->ws->setLimite(null); // consulta suelta: sin el reloj de un envío
         return $this->ws->consultarAutorizacion($claveAcceso, $tipoAmbiente);
     }
 
@@ -1251,6 +1369,14 @@ class SriEnvioService
     /** Inserta una entrada en sri_envio_log. Silencia errores para no interrumpir el flujo. */
     private function log(array $data): void
     {
+        // Los envíos guardaban "El SRI no autorizó…" también cuando el resultado era
+        // "en procesamiento" (sin resolución todavía), y el historial lo mostraba como rechazo.
+        if (($data['accion'] ?? '') === 'en_procesamiento' && preg_match('/no autoriz/i', (string) ($data['mensaje'] ?? ''))) {
+            $data['mensaje'] = $this->tiempoAgotado
+                ? self::mensajeTiempoAgotado()
+                : 'El SRI recibió el comprobante y todavía no publica la autorización (en procesamiento). '
+                  . 'El sistema seguirá consultando automáticamente.';
+        }
         try {
             (new SriEnvioLog())->registrar($data);
         } catch (\Throwable $e) {
@@ -1343,22 +1469,58 @@ class SriEnvioService
 
     private function consultarConReintentos(string $claveAcceso, string $tipoAmbiente): array
     {
-        sleep($this->esperaInicial);
+        if ($this->segundosRestantes() > $this->esperaInicial + 2) {
+            sleep($this->esperaInicial);
+        }
 
         for ($i = 0; $i < $this->maxIntentos; $i++) {
-            $resultado = $this->ws->consultarAutorizacion($claveAcceso, $tipoAmbiente);
-            $estado    = strtoupper($resultado['estado'] ?? '');
+            try {
+                $resultado = $this->ws->consultarAutorizacion($claveAcceso, $tipoAmbiente);
+            } catch (SriTiempoAgotadoException $e) {
+                return $this->resultadoTiempoAgotado();
+            }
+            $estado = strtoupper($resultado['estado'] ?? '');
 
             if (in_array($estado, self::ESTADOS_DEFINITIVOS, true)) {
                 return $resultado;
             }
 
             if ($i < $this->maxIntentos - 1) {
+                // Sin tiempo para esperar y volver a consultar: dejar de esperar ya.
+                if ($this->segundosRestantes() < $this->intervaloReintentos + 3) {
+                    return $this->resultadoTiempoAgotado();
+                }
                 sleep($this->intervaloReintentos);
             }
         }
 
         return $resultado ?? ['estado' => 'EN_PROCESAMIENTO', 'errores' => []];
+    }
+
+    /** Segundos que quedan del tiempo máximo del envío en curso (PHP_INT_MAX si no hay reloj). */
+    private function segundosRestantes(): float
+    {
+        $limite = $this->ws->getLimite();
+        return $limite === null ? (float) PHP_INT_MAX : $limite - microtime(true);
+    }
+
+    /**
+     * Resultado "sigue en procesamiento" cuando se agota el tiempo máximo esperando la
+     * autorización. 'EN PROCESAMIENTO' (con espacio) se mapea a en_procesamiento, una de
+     * las acciones que retoma el cron.
+     */
+    private function resultadoTiempoAgotado(): array
+    {
+        $this->tiempoAgotado = true;
+        return [
+            'estado'  => 'EN PROCESAMIENTO',
+            'errores' => [[
+                'id'      => '',
+                'mensaje' => 'TIEMPO DE ESPERA AGOTADO',
+                'tipo'    => 'ADVERTENCIA',
+                'info'    => self::mensajeTiempoAgotado(),
+            ]],
+        ];
     }
 
     /**
@@ -1442,12 +1604,19 @@ class SriEnvioService
         string   $estadoAutorizado,
         callable $onAutorizado
     ): ?array {
+        // La verificación previa tiene su propio tope (TIEMPO_MAXIMO_PRE_VERIFICACION) para
+        // que un SRI lento aquí no se coma el tiempo del envío real.
+        $limiteEnvio = $this->ws->getLimite();
+        $limitePre   = microtime(true) + self::TIEMPO_MAXIMO_PRE_VERIFICACION;
+        $this->ws->setLimite($limiteEnvio === null ? $limitePre : min($limiteEnvio, $limitePre));
         try {
             $consulta = $this->ws->consultarAutorizacion($claveAcceso, $tipoAmbiente);
         } catch (\Throwable $e) {
             // Si falla la consulta previa, no bloqueamos el envío
             error_log("[SRI preVerificar] No se pudo consultar estado previo: " . $e->getMessage());
             return null;
+        } finally {
+            $this->ws->setLimite($limiteEnvio);
         }
 
         $estado = strtoupper($consulta['estado'] ?? '');
@@ -1998,7 +2167,7 @@ class SriEnvioService
         return $cabecera;
     }
 
-    public function enviarGuiaRemision(int $idGuia, int $idEmpresa, int $idUsuario): array
+    private function procesarEnvioGuiaRemision(int $idGuia, int $idEmpresa, int $idUsuario): array
     {
         $repo = new \App\repositories\modulos\GuiaRemisionRepository();
 
@@ -2233,7 +2402,7 @@ class SriEnvioService
 
     // ── Liquidación de Compra ─────────────────────────────────────────────────
 
-    public function enviarLiquidacionCompra(int $idLiq, int $idEmpresa, int $idUsuario): array
+    private function procesarEnvioLiquidacionCompra(int $idLiq, int $idEmpresa, int $idUsuario): array
     {
         $repo = new \App\repositories\modulos\LiquidacionCompraRepository();
 
