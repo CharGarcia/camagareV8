@@ -75,6 +75,24 @@ class ContadoresNavbarRepository
     }
 
     /**
+     * Órdenes Car-Wash en borrador (aún sin factura ni recibo), en el ambiente actual de
+     * la empresa: mismo criterio que el listado de modulos/car-wash con `estado:borrador`.
+     * Va en su propia consulta (no en getConteosEmpresa) porque la tabla carwash_ordenes
+     * puede no existir en un servidor sin la migración del módulo: si falla, el servicio
+     * lo atrapa y el resto de avisos sigue funcionando.
+     */
+    public function getCarwashBorrador(int $idEmpresa): int
+    {
+        $st = $this->db->prepare(
+            "SELECT COUNT(*) FROM carwash_ordenes o
+              WHERE o.id_empresa = :e AND o.estado = 'borrador' AND o.eliminado = false
+                AND o.tipo_ambiente = (SELECT COALESCE(CAST(tipo_ambiente AS VARCHAR(1)), '1') FROM empresas WHERE id = :e2)"
+        );
+        $st->execute([':e' => $idEmpresa, ':e2' => $idEmpresa]);
+        return (int) $st->fetchColumn();
+    }
+
+    /**
      * Documentos con NOVEDAD del SRI (devueltos / no autorizados / con error) por tipo.
      *
      * Fuente de verdad: la tabla `sri_envio_log` (la misma que alimenta el seguimiento

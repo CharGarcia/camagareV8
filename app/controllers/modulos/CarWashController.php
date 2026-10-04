@@ -49,6 +49,7 @@ class CarWashController extends BaseModuloController
         $prefsVista = \App\Helpers\PreferenciasHelper::getPreferenciasVista(self::RUTA_MODULO);
 
         $buscar   = trim($_GET['b'] ?? '');
+        $buscar   = $this->filtroDesdeAviso($buscar); // clic en el aviso del navbar (órdenes en borrador)
         $page     = max(1, (int) ($_GET['page'] ?? 1));
         $ordenCol = trim($_GET['sort'] ?? $prefsVista['__ordenCol__'] ?? 'fecha_ingreso');
         $ordenDir = strtoupper(trim($_GET['dir'] ?? $prefsVista['__ordenDir__'] ?? 'desc'));

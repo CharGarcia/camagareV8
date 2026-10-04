@@ -102,6 +102,7 @@ class ContadoresController extends Controller
         'modulos/retenciones_compras' => ['novedad_sri' => 'sri:novedad', 'borrador' => 'estado:borrador'],
         'modulos/notas_credito'       => ['novedad_sri' => 'sri:novedad', 'borrador' => 'estado:borrador'],
         'modulos/guias_remision'      => ['novedad_sri' => 'sri:novedad', 'borrador' => 'estado:borrador'],
+        'modulos/car-wash'            => ['borrador' => 'estado:borrador'],
     ];
 
     /**

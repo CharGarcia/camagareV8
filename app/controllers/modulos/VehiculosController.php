@@ -265,6 +265,28 @@ class VehiculosController extends BaseModuloController
         exit;
     }
 
+    /**
+     * Datos del vehículo por placa desde el SRI (marca, modelo, año) para llenar el
+     * formulario. No guarda nada; un fallo del SRI se devuelve como mensaje.
+     */
+    public function consultarPlacaSriAjax(): void
+    {
+        $this->requireLeer();
+        header('Content-Type: application/json');
+
+        try {
+            $datos = (new \App\Services\Sri\SriConsultaVehiculoService())->consultar((string) ($_GET['placa'] ?? ''));
+            echo json_encode(['ok' => true, 'data' => $datos], JSON_UNESCAPED_UNICODE);
+        } catch (\RuntimeException $e) {
+            // Placa inexistente o SRI caído: mensaje para el usuario, no es un error del sistema.
+            echo json_encode(['ok' => false, 'error' => $e->getMessage()], JSON_UNESCAPED_UNICODE);
+        } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
+            echo json_encode(['ok' => false, 'error' => 'No se pudo consultar el SRI. Escriba los datos a mano.']);
+        }
+        exit;
+    }
+
     public function store(): void
     {
         $this->requireCrear();

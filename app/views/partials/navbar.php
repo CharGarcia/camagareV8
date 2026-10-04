@@ -506,6 +506,10 @@ $urlManual = $base . '/documentacion' . ($rutaActualAyuda !== '' ? '?ruta=' . ur
                     <i class="bi bi-percent" style="font-size: 1.1rem;"></i>
                     <span class="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-warning text-dark retenciones-compras-borrador-badge" style="font-size: 0.6rem; padding: 0.25em 0.5em;">0</span>
                 </a>
+                <a data-aviso="borrador" href="<?= $base ?>/modulos/car-wash" class="text-white text-decoration-none position-relative d-none cmg-icon-update carwash-borrador-icon" title="Órdenes Car-Wash en borrador (sin facturar)">
+                    <i class="bi bi-car-front" style="font-size: 1.1rem;"></i>
+                    <span class="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-warning text-dark carwash-borrador-badge" style="font-size: 0.6rem; padding: 0.25em 0.5em;">0</span>
+                </a>
             </div>
 
             <!-- Grupo 3 · MENSAJES Y NOVEDADES: lo que alguien (o el sistema) tiene que decirle al usuario. -->
@@ -708,6 +712,11 @@ $urlManual = $base . '/documentacion' . ($rutaActualAyuda !== '' ? '?ruta=' . ur
                     <span class="position-absolute badge rounded-pill bg-warning text-dark retenciones-compras-borrador-badge">0</span>
                     <small>Reten.</small>
                 </a>
+                <a data-aviso="borrador" class="cmg-icon-update carwash-borrador-icon d-none" href="<?= $base ?>/modulos/car-wash">
+                    <i class="bi bi-car-front"></i>
+                    <span class="position-absolute badge rounded-pill bg-warning text-dark carwash-borrador-badge">0</span>
+                    <small>Car-Wash</small>
+                </a>
                 <a class="cmg-icon-update whatsapp-unread-icon d-none" href="<?= $base ?>/modulos/whatsapp-chat">
                     <i class="bi bi-whatsapp"></i>
                     <span class="position-absolute badge rounded-pill bg-danger text-white whatsapp-unread-badge">0</span>
@@ -906,6 +915,7 @@ $urlManual = $base . '/documentacion' . ($rutaActualAyuda !== '' ? '?ruta=' . ur
             guias_remision_borrador:      { icon: '.guias-remision-borrador-icon',      badge: '.guias-remision-borrador-badge' },
             factura_express_pendientes:   { icon: '.factura-express-pendientes-icon',   badge: '.factura-express-pendientes-badge' },
             ordenes_compra_borrador:      { icon: '.ordenes-compra-borrador-icon',      badge: '.ordenes-compra-borrador-badge' },
+            carwash_borrador:             { icon: '.carwash-borrador-icon',             badge: '.carwash-borrador-badge' },
             whatsapp_unread:              { icon: '.whatsapp-unread-icon',              badge: '.whatsapp-unread-badge' },
             // Bandeja del equipo de soporte (solo la reciben los agentes).
             soporte_bandeja:              { icon: '.soporte-bandeja-icon',              badge: '.soporte-bandeja-badge' },

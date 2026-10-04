@@ -41,6 +41,7 @@ class ContadoresNavbarService
         'ordenes_compra_borrador'      => 'modulos/ordenes-compra',
         'pedidos_pendientes'           => 'modulos/pedidos',
         'factura_express_pendientes'   => 'modulos/factura-express-solicitudes',
+        'carwash_borrador'             => 'modulos/car-wash',
         'whatsapp_unread'              => self::RUTA_WHATSAPP,
     ];
 
@@ -121,6 +122,7 @@ class ContadoresNavbarService
         'pedidos_cabecera',
         'factura_express_solicitudes',
         'whatsapp_chats',
+        'carwash_ordenes',
         'sri_envio_log', // cualquier acción SRI (devuelta/autorizado/…) cambia las novedades
         // Cheques posfechados: cobros/pagos (alta, edición, anulación de cheque) y la Fecha Banco
         // que se registra en Control Bancario.
@@ -190,6 +192,12 @@ class ContadoresNavbarService
             return $cache;
         }
         $datos = $this->repo->getConteosEmpresa($idEmpresa);
+        // Órdenes Car-Wash en borrador: consulta aparte, la tabla puede no existir sin la migración.
+        try {
+            $datos['carwash_borrador'] = $this->repo->getCarwashBorrador($idEmpresa);
+        } catch (\Throwable $e) {
+            $datos['carwash_borrador'] = 0;
+        }
         // Novedades SRI: si la tabla/columna no existe en algún ambiente, no debe romper el resto.
         try {
             $datos['__novedad_sri'] = $this->repo->getNovedadesSri($idEmpresa);

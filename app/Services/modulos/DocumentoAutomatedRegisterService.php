@@ -1768,17 +1768,22 @@ class DocumentoAutomatedRegisterService
 
         $idRetencion = $this->retencionService->crear($data);
 
-        // Si el sobre del SRI ya trae <estado>AUTORIZADO</estado>, la retención no debe
-        // quedar "pendiente" de envío: se marca igual que cuando la autoriza SriEnvioService.
+        // Si el sobre del SRI ya trae <estado>AUTORIZADO</estado>, se completan los datos de
+        // autorización igual que cuando la autoriza SriEnvioService. La retención ya quedó
+        // registrada (crear() confirmó su transacción): si esto falla, solo se deja constancia.
         $aut = $this->datosAutorizacionSobre();
         if ($aut !== null && $aut['estado'] === 'AUTORIZADO') {
-            $this->retencionCompraRepo->actualizarEstadoSri($idRetencion, [
-                'estado'              => 'autorizada',
-                'estado_sri'          => 'autorizada',
-                'numero_autorizacion' => $aut['numero_autorizacion'] ?: (string)$it->claveAcceso,
-                'fecha_autorizacion'  => $aut['fecha_autorizacion'],
-                'xml_autorizado'      => $this->xmlOriginal,
-            ]);
+            try {
+                $this->retencionCompraRepo->actualizarEstadoSri($idRetencion, [
+                    'estado'              => 'autorizada',
+                    'numero_autorizacion' => $aut['numero_autorizacion'] ?: (string)$it->claveAcceso,
+                    'fecha_autorizacion'  => $aut['fecha_autorizacion'],
+                    'xml_autorizado'      => $this->xmlOriginal,
+                ]);
+            } catch (\Throwable $e) {
+                error_log('[DocumentoAutomatedRegister] Retención #' . $idRetencion
+                    . ' registrada, pero no se pudieron guardar los datos de autorización: ' . $e->getMessage());
+            }
         }
 
         return $idRetencion;

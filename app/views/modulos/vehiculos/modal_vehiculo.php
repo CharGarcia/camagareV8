@@ -73,7 +73,11 @@ $urlBaseVehShared = BASE_URL . '/modulos/vehiculos';
                             </div>
                             <div class="col-md-6">
                                 <label class="form-label mb-1 small fw-bold text-muted">Placa *</label>
-                                <input type="text" class="form-control form-control-sm shadow-none fw-bold" name="placa" id="vehiculo_placa" required maxlength="20" placeholder="Ej. ABC-1234" style="text-transform: uppercase;">
+                                <div class="input-group input-group-sm">
+                                    <input type="text" class="form-control form-control-sm shadow-none fw-bold" name="placa" id="vehiculo_placa" required maxlength="20" placeholder="Ej. ABC-1234" style="text-transform: uppercase;">
+                                    <button type="button" class="btn btn-outline-primary" id="btnVehConsultarSri" title="Traer marca y año desde el SRI"><i class="bi bi-search"></i><span class="d-none d-sm-inline"> SRI</span></button>
+                                </div>
+                                <div class="form-text small d-none" id="vehiculo_sri_info"></div>
                             </div>
                             <div class="col-md-6">
                                 <label class="form-label mb-1 small fw-bold text-muted">Chasis</label>

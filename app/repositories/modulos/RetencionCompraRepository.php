@@ -882,33 +882,22 @@ class RetencionCompraRepository extends BaseRepository
         $sets   = ['updated_at = CURRENT_TIMESTAMP'];
         $params = [':id' => $id];
 
-        if (array_key_exists('estado', $d)) {
-            $sets[]           = 'estado = :est';
-            $params[':est']   = $d['estado'];
-        }
-        if (array_key_exists('estado_sri', $d)) {
-            $sets[]               = 'estado_sri = :esri';
-            $params[':esri']      = $d['estado_sri'];
-        }
-        if (array_key_exists('numero_autorizacion', $d)) {
-            $sets[]                       = 'numero_autorizacion = :na';
-            $params[':na']                = $d['numero_autorizacion'];
-        }
-        if (array_key_exists('fecha_autorizacion', $d)) {
-            $sets[]                        = 'fecha_autorizacion = :fa';
-            $params[':fa']                 = $d['fecha_autorizacion'];
-        }
-        if (array_key_exists('xml_autorizado', $d)) {
-            $sets[]                  = 'xml_autorizado = :xml';
-            $params[':xml']          = $d['xml_autorizado'];
-        }
-        if (array_key_exists('mensajes_sri', $d)) {
-            $sets[]                   = 'mensajes_sri = :msg';
-            $params[':msg']           = $d['mensajes_sri'];
-        }
-        if (array_key_exists('clave_acceso', $d)) {
-            $sets[]                   = 'clave_acceso = :ca';
-            $params[':ca']            = $d['clave_acceso'];
+        // La tabla real no siempre tiene todas las columnas de seguimiento SRI de la
+        // migración original (p. ej. estado_sri no existe): solo se escriben las que
+        // existen, igual que SriEnvioService::actualizarEstadoDocumento().
+        $columnas = [
+            'estado'              => ':est',
+            'numero_autorizacion' => ':na',
+            'fecha_autorizacion'  => ':fa',
+            'xml_autorizado'      => ':xml',
+            'mensajes_sri'        => ':msg',
+            'clave_acceso'        => ':ca',
+        ];
+        foreach ($columnas as $col => $ph) {
+            if (array_key_exists($col, $d) && $this->columnaExiste('retencion_compra_cabecera', $col)) {
+                $sets[]      = "{$col} = {$ph}";
+                $params[$ph] = $d[$col];
+            }
         }
 
         $this->db->prepare("UPDATE retencion_compra_cabecera SET " . implode(', ', $sets) . " WHERE id = :id")

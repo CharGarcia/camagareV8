@@ -5,8 +5,8 @@ categoria: Servicios
 ruta_modulo: modulos/car-wash
 tipo: modulo
 visibilidad: todos
-etiquetas: car wash, lavado, lavadora de autos, lubricadora, cambio de aceite, mecanica, taller, orden de servicio, orden mecanica, orden de trabajo, vehiculo, placa, historial del vehiculo, historial del cliente, visitas, ultima visita, facturar orden, recibo de venta, refacturar, factura anulada, proxima cita, proximo chequeo, migracion, sistema anterior, numeracion por fecha, numero con el año, reiniciar numeracion, reinicio anual, reinicio mensual, correlativo por año, correlativo por mes, modo de numeracion, buscar orden, buscar placa, buscador, filtros, filtrar ordenes, filtro de fechas, buscar por servicio, chips, imprimir, impresora
-version: 1.10
+etiquetas: car wash, lavado, lavadora de autos, lubricadora, cambio de aceite, mecanica, taller, orden de servicio, orden mecanica, orden de trabajo, vehiculo, placa, historial del vehiculo, historial del cliente, visitas, ultima visita, facturar orden, recibo de venta, refacturar, factura anulada, proxima cita, proximo chequeo, migracion, sistema anterior, numeracion por fecha, numero con el año, reiniciar numeracion, reinicio anual, reinicio mensual, correlativo por año, correlativo por mes, modo de numeracion, buscar orden, buscar placa, buscador, filtros, filtrar ordenes, filtro de fechas, buscar por servicio, chips, imprimir, impresora, aviso, avisos, ordenes en borrador, ordenes sin facturar, pendientes de facturar, barra superior
+version: 1.11
 orden: 10
 estado: activo
 ---
@@ -310,6 +310,19 @@ búsqueda**. La **×** quita solo ese filtro, y con el cuadro vacío la tecla
 Si no tiene **acceso total** al módulo, tanto el listado como la pestaña
 Detalles muestran solo las órdenes que usted registró.
 
+### Aviso de órdenes en borrador (barra superior)
+
+En la barra superior aparece el ícono de un **auto** con un número amarillo: son
+las órdenes en **borrador**, es decir, las que todavía no tienen factura ni
+recibo. Al hacer clic se abre este listado ya filtrado con **Estado: Borrador**.
+El filtro aparece como una etiqueta en el cuadro de búsqueda; quítela con la **×**
+para volver a ver todas las órdenes.
+
+El aviso solo se muestra a quien tiene permiso de ver el módulo y cuenta las
+órdenes del ambiente actual (pruebas o producción). Si su usuario solo ve sus
+propios registros, el aviso cuenta los de toda la empresa pero el listado muestra
+solo los suyos.
+
 ## Errores frecuentes
 
 - **La orden no aparece en ventas**: falta emitir la factura o el recibo desde la orden.
@@ -343,6 +356,8 @@ documentos admite cada periodo) está en el manual de **Empresa**, sección
 
 ## Historial de cambios
 
+- **1.11** — Nuevo aviso en la barra superior con las **órdenes en borrador**
+  (sin factura ni recibo); al hacer clic abre el listado filtrado por ellas.
 - **1.10** — El listado de órdenes muestra la columna **Marca** junto a la placa;
   se puede ordenar y ocultar como las demás.
 

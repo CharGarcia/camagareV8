@@ -20,6 +20,7 @@
     window.abrirModalVehiculoCrear = function() {
         if (!formVeh) return;
         formVeh.reset();
+        vehSriInfo(''); vehSriUltimaPlaca = '';
         document.getElementById('vehiculo_id').value = '';
         document.getElementById('tituloModal').textContent = 'Nuevo Vehículo';
         document.getElementById('modalAlert').classList.add('d-none');
@@ -44,6 +45,7 @@
         let data = (rowOrData instanceof HTMLElement) ? JSON.parse(rowOrData.dataset.row) : rowOrData;
         if (!formVeh || !data) return;
         formVeh.reset();
+        vehSriInfo(''); vehSriUltimaPlaca = '';
         
         document.getElementById('vehiculo_id').value = data.id;
         document.getElementById('vehiculo_marca').value = data.marca || '';
@@ -413,5 +415,60 @@
             Swal.fire({ icon: 'error', title: 'Error de Conexión', text: 'No se pudo conectar con el servidor.' });
         }
     };
+
+    // ─── Consulta de marca/año por placa en el SRI ───────────────────────────
+    // Botón "SRI": consulta y reemplaza marca y año. Al salir del campo placa en un
+    // vehículo nuevo con marca vacía, consulta sola y solo llena los campos vacíos.
+    // Si el SRI falla, el usuario sigue escribiendo a mano.
+    let vehSriUltimaPlaca = '';
+
+    function vehSriInfo(html, clase) {
+        const el = document.getElementById('vehiculo_sri_info');
+        if (!el) return;
+        el.className = 'form-text small ' + (html ? (clase || 'text-muted') : 'd-none');
+        el.innerHTML = html;
+    }
+
+    async function vehConsultarSri(automatico) {
+        const inpPlaca = document.getElementById('vehiculo_placa');
+        const btn = document.getElementById('btnVehConsultarSri');
+        const placa = (inpPlaca?.value || '').replace(/[^A-Za-z0-9]/g, '').toUpperCase();
+        if (placa.length < 5) {
+            if (!automatico) Swal.fire({ icon: 'warning', title: 'Atención', text: 'Escriba la placa a consultar.' });
+            return;
+        }
+        if (automatico && placa === vehSriUltimaPlaca) return;
+        vehSriUltimaPlaca = placa;
+
+        const btnHtml = btn ? btn.innerHTML : '';
+        if (btn) { btn.disabled = true; btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span>'; }
+        vehSriInfo('<i class="bi bi-hourglass-split me-1"></i>Consultando el SRI…');
+        try {
+            const json = await (await fetch(`${urlBaseVeh}/consultarPlacaSriAjax?placa=${encodeURIComponent(placa)}`)).json();
+            if (!json.ok) {
+                vehSriInfo('<i class="bi bi-exclamation-circle me-1"></i>' + vehEsc(json.error || 'No se encontró el vehículo en el SRI.'), 'text-warning');
+                return;
+            }
+            const d = json.data || {};
+            const inpMarca = document.getElementById('vehiculo_marca');
+            const inpAnio = document.getElementById('vehiculo_anio');
+            if (d.marca && (!automatico || !inpMarca.value.trim())) inpMarca.value = d.marca;
+            if (d.anio && (!automatico || !inpAnio.value)) inpAnio.value = d.anio;
+
+            const partes = [d.marca, d.modelo, d.anio, d.pais].filter(Boolean).map(vehEsc);
+            vehSriInfo('<i class="bi bi-check-circle me-1"></i>SRI: ' + partes.join(' · '), 'text-success');
+        } catch (e) {
+            vehSriInfo('<i class="bi bi-exclamation-circle me-1"></i>No se pudo consultar el SRI. Escriba los datos a mano.', 'text-warning');
+        } finally {
+            if (btn) { btn.disabled = false; btn.innerHTML = btnHtml; }
+        }
+    }
+
+    document.getElementById('btnVehConsultarSri')?.addEventListener('click', () => vehConsultarSri(false));
+    document.getElementById('vehiculo_placa')?.addEventListener('change', () => {
+        const esNuevo = !document.getElementById('vehiculo_id')?.value;
+        const marcaVacia = !document.getElementById('vehiculo_marca')?.value.trim();
+        if (esNuevo && marcaVacia) vehConsultarSri(true);
+    });
 
 })(window, document);
