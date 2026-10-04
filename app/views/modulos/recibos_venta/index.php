@@ -1354,6 +1354,12 @@ $totalPages = $totalPagesOriginal;
         const btn = document.getElementById('btnGuardarFacturaModal');
         const form = document.getElementById('formFacturaModal');
 
+        // Recibo emitido (pagado por completo): en firme, no se modifica. Para corregirlo, anularlo.
+        if ((parseInt(RV_ID_ACTIVO) || 0) > 0 && RV_ESTADO_ACTIVO === 'emitido') {
+            Swal.fire('No permitido', 'Este recibo ya está emitido (pagado por completo) y no se puede modificar. Para corregirlo, anúlelo y emita uno nuevo.', 'info');
+            return;
+        }
+
         // ”€”€ Leer valores de cabecera ”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€
         const fecha = form.querySelector('[name="fecha_emision"]')?.value || '';
         const idCliente = document.getElementById('m-id-cliente').value;
@@ -2032,6 +2038,7 @@ $totalPages = $totalPagesOriginal;
                 'en_procesamiento': ['bg-warning bg-opacity-10 text-warning border border-warning border-opacity-25',  'En procesamiento'],
                 'recibida':         ['bg-info    bg-opacity-10 text-info    border border-info    border-opacity-25',   'Recibida'],
                 'borrador':         ['bg-secondary bg-opacity-10 text-secondary border border-secondary border-opacity-25', 'Borrador'],
+                'emitido':          ['bg-success bg-opacity-10 text-success border border-success border-opacity-25',   'Emitido'],
                 'anulado':          ['bg-danger  bg-opacity-10 text-danger  border border-danger  border-opacity-25',   'Anulado'],
                 'facturado':        ['bg-primary bg-opacity-10 text-primary border border-primary border-opacity-25',   'Facturado'],
             };
@@ -4725,12 +4732,17 @@ $totalPages = $totalPagesOriginal;
             }
         }
 
-        // Botón guardar: en borrador dice "Guardar"; en estados finales se oculta.
+        // Botón guardar: en borrador dice "Guardar"; en estados finales se oculta. Un recibo
+        // EMITIDO (pagado por completo) ya está en firme y con asiento: no se edita, para
+        // corregirlo hay que anularlo (ReciboVentaService::actualizar también lo rechaza).
+        const esEmitido = (data.estado || '') === 'emitido';
         const btnGuardar = document.getElementById('btnGuardarFacturaModal');
         if (btnGuardar) {
             if (esBorrador) {
                 btnGuardar.classList.remove('d-none');
                 btnGuardar.innerHTML = '<i class="bi bi-check2-circle me-1"></i> Guardar';
+            } else if (esEmitido) {
+                btnGuardar.classList.add('d-none');
             } else if (!esFinal && PERM_ACTUALIZAR) {
                 btnGuardar.classList.remove('d-none');
                 btnGuardar.innerHTML = '<i class="bi bi-check2-circle me-1"></i> Actualizar';
@@ -6598,6 +6610,12 @@ $totalPages = $totalPagesOriginal;
             const res = await resp.json();
             if (res.ok) {
                 Swal.fire({ icon: 'success', title: 'Éxito', text: res.msg, timer: 2000, showConfirmButton: false });
+                // El cobro que completa el total pasa el recibo a 'emitido' (en firme, sin edición).
+                if (res.estado_recibo === 'emitido' && RV_ESTADO_ACTIVO !== 'emitido') {
+                    RV_ESTADO_ACTIVO = 'emitido';
+                    fvActualizarEstadoBotones('emitido');
+                    document.getElementById('btnGuardarFacturaModal')?.classList.add('d-none');
+                }
                 fvCargarCobrosTab();
                 if (typeof fetchSearchFn === 'function') fetchSearchFn(window.RV_currentPage || 1);
             } else {

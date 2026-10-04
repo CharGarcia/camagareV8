@@ -17,8 +17,9 @@ class ProductoMasVendidoRepository extends BaseRepository
     /**
      * Configuración de la fuente de datos según el tipo de documento:
      *  - FACTURA → ventas_*        (facturas de venta autorizadas)
-     *  - RECIBO  → recibos_venta_* (recibos emitidos/facturados; se excluyen los
-     *    ya facturados para no duplicar con FACTURA cuando se combina en AMBOS)
+     *  - RECIBO  → recibos_venta_* (todo recibo no anulado: el recibo nace 'borrador'
+     *    y solo pasa a 'emitido' al quedar pagado; se excluyen los ya facturados para no duplicar
+     *    con FACTURA cuando se combina en AMBOS)
      */
     private function fuente(string $tipo): array
     {
@@ -27,7 +28,9 @@ class ProductoMasVendidoRepository extends BaseRepository
                 'cab'       => 'recibos_venta_cabecera',
                 'det'       => 'recibos_venta_detalle',
                 'fk_det'    => 'id_recibo',
-                'estado_ok' => "{alias}.estado NOT IN ('borrador', 'anulado', 'facturado')",
+                // El recibo nace 'borrador' y solo pasa a 'emitido' al quedar pagado (un recibo a
+                // crédito sigue en borrador y es venta igual): cuenta todo lo que no esté anulado ni facturado (memoria recibos-venta-estado-borrador-es-vigente).
+                'estado_ok' => "{alias}.estado NOT IN ('anulado', 'facturado')",
             ];
         }
 
@@ -51,7 +54,7 @@ class ProductoMasVendidoRepository extends BaseRepository
                     UNION
                     SELECT EXTRACT(YEAR FROM fecha_emision)::int
                     FROM recibos_venta_cabecera
-                    WHERE id_empresa = :e2 AND eliminado = false AND estado NOT IN ('borrador','anulado','facturado')
+                    WHERE id_empresa = :e2 AND eliminado = false AND estado NOT IN ('anulado','facturado')
                 ) t
                 WHERE anio IS NOT NULL
                 ORDER BY anio DESC";

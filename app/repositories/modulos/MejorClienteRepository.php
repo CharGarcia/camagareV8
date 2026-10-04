@@ -69,7 +69,9 @@ class MejorClienteRepository extends BaseRepository
         }
 
         if (!empty($filtros['incluir_recibos'])) {
-            $where = $this->condicionesDocumento('r', "{alias}.estado NOT IN ('borrador', 'anulado', 'facturado')", true, $filtros, '_rec', $params);
+            // Recibo vigente = no anulado ni facturado. Nace 'borrador' y pasa a 'emitido' solo al
+            // quedar pagado: un recibo a crédito sigue en borrador y es venta igual.
+            $where = $this->condicionesDocumento('r', "{alias}.estado NOT IN ('anulado', 'facturado')", true, $filtros, '_rec', $params);
             $partes[] = "SELECT r.id_cliente, r.total_sin_impuestos AS monto, 1 AS cuenta
                          FROM recibos_venta_cabecera r
                          WHERE {$where}";
@@ -182,7 +184,7 @@ class MejorClienteRepository extends BaseRepository
                     UNION
                     SELECT EXTRACT(YEAR FROM fecha_emision)::int
                     FROM recibos_venta_cabecera
-                    WHERE id_empresa = :e2 AND eliminado = false AND estado NOT IN ('borrador','anulado')
+                    WHERE id_empresa = :e2 AND eliminado = false AND estado NOT IN ('anulado','facturado')
                 ) t
                 WHERE anio IS NOT NULL
                 ORDER BY anio DESC";

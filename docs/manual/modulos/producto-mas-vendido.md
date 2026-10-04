@@ -5,8 +5,8 @@ categoria: Reportes
 ruta_modulo: modulos/producto_mas_vendido
 tipo: modulo
 visibilidad: todos
-etiquetas: producto mas vendido, ranking de ventas, top productos, mejores productos, productos top, reporte de ventas por producto, best sellers
-version: 1.0
+etiquetas: producto mas vendido, ranking de ventas, top productos, mejores productos, productos top, reporte de ventas por producto, best sellers, recibos en borrador, no salen los recibos, recibos no aparecen
+version: 1.1
 orden: 0
 estado: activo
 ---
@@ -23,10 +23,11 @@ ambos), cuántas unidades se vendieron de cada producto, en cuántos documentos
 apareció y cuánto se facturó por él. El resultado se ordena de mayor a menor
 cantidad vendida (ranking #1, #2, #3…).
 
-Solo considera documentos válidos: Facturas autorizadas y Recibos emitidos o
-facturados (no anulados ni borradores). Si un recibo terminó siendo facturado,
-se cuenta una sola vez como Factura al elegir "Facturas + Recibos", para no
-duplicar la venta.
+Solo considera documentos válidos: Facturas autorizadas y Recibos no anulados.
+El recibo no pasa por el SRI ni tiene un paso de "emitir": se guarda en estado
+*borrador* y solo pasa a *emitido* cuando queda pagado por completo; un recibo a
+crédito sigue en borrador y cuenta igual. Si un recibo terminó
+siendo facturado, se cuenta una sola vez como Factura, para no duplicar la venta.
 
 ## Cómo se usa
 
@@ -83,11 +84,17 @@ escribe en ninguna tabla: es de solo lectura.
 
 - **El correo no llega**: revisar la configuración SMTP en `correos_config`
   (código `notificaciones`); el mensaje de error del sistema indica la causa.
+- **No aparecían las ventas por Recibo**: hasta la versión 1.0 se descartaban
+  los recibos en *borrador*, que es el estado en que quedan todos los recibos
+  creados en el sistema. Desde la 1.1 cuentan todos los no anulados ni facturados.
 - **Un producto aparece con cantidad menor a la esperada**: verificar el tipo
   de documento elegido — si la venta se hizo por Recibo y luego se facturó,
   solo se contabiliza una vez, como Factura.
 
 ## Historial de cambios
 
+- **1.1** — **Corrección: los Recibos de Venta no aparecían** (ni sus años en el
+  selector), porque se descartaban los recibos en *borrador*, que es el estado normal
+  de un recibo creado en el sistema. Ahora cuenta todo recibo no anulado ni facturado.
 - **1.0** — Versión inicial: ranking por cantidad, filtros de cliente/producto/
   período/tipo de documento, Top N, export a PDF/Excel y envío por correo.

@@ -47,6 +47,12 @@ class ReporteVentasController extends BaseModuloController
             ? \App\Helpers\AlcanceRegistros::vendedorPropio($alcance, $idEmpresa, (int) $_SESSION['id_usuario'])
             : (new \App\repositories\modulos\VendedorRepository())->getVendedoresActivos($idEmpresa);
 
+        // Cajeros (usuario responsable del documento) para el filtro y la agrupación. Al
+        // usuario restringido no se le manda la lista: su alcance ya lo acota.
+        $cajeros = $vendedorFijo
+            ? []
+            : $this->repository->getCajerosCombo($idEmpresa, (int) $_SESSION['id_usuario']);
+
         // Consolidado por establecimientos (mismo selector que Cuentas por Cobrar/Pagar): solo
         // aparece si la empresa activa es la matriz del grupo RUC y el usuario tiene acceso a
         // al menos otro establecimiento (ver EmpresaRepository::getIdsConsolidadoDesdeMatriz).
@@ -72,6 +78,10 @@ class ReporteVentasController extends BaseModuloController
             'anios'       => $anios,
             'vendedores'  => $vendedores,
             'vendedorFijo' => $vendedorFijo,
+            'cajeros'     => $cajeros,
+            // Destinatario por defecto del Resumen diario por correo.
+            'correoEmpresa' => trim((string) (((new \App\models\Empresa())->getPorId($idEmpresa) ?? [])['mail'] ?? '')),
+            'maxDiasResumen' => \App\Rules\modulos\ReporteVentasResumenDiarioRules::MAX_DIAS,
             'marcas'      => $marcas,
             'categorias'  => $categorias,
             'puedeConsolidar'  => !empty($idsConsolidado),
@@ -91,6 +101,8 @@ class ReporteVentasController extends BaseModuloController
             'fecha_hasta'    => $_REQUEST['fecha_hasta'] ?? '',
             'id_cliente'     => $_REQUEST['id_cliente'] ?? '',
             'id_vendedor'    => (int)($_REQUEST['id_vendedor'] ?? 0),
+            // Cajero = usuario responsable del documento (columna "Cajero" del detallado).
+            'id_cajero'      => (int)($_REQUEST['id_cajero'] ?? 0),
             'id_producto'    => $_REQUEST['id_producto'] ?? '',
             // Marca y categoría del producto (selectores). En consolidado, resolverAlcance()
             // los expande a las homónimas de los demás establecimientos.
@@ -140,6 +152,19 @@ class ReporteVentasController extends BaseModuloController
         );
     }
 
+    /** Texto del filtro Cajero para la caja de filtros del PDF, la tirilla y el correo. */
+    private function describirCajero(array $filtros): string
+    {
+        if (\App\Helpers\AlcanceRegistros::idUsuario($filtros) > 0) {
+            return 'Solo sus documentos';
+        }
+        if (!empty($filtros['id_cajero'])) {
+            $nombre = $this->repository->getNombreUsuario((int) $filtros['id_cajero']);
+            return $nombre !== '' ? $nombre : '#' . (int) $filtros['id_cajero'];
+        }
+        return 'Todos';
+    }
+
     /** Texto del selector "Borradores" para el encabezado del PDF/Excel ('' si es el por defecto). */
     private function describirBorradores(string $modo): string
     {
@@ -176,6 +201,11 @@ class ReporteVentasController extends BaseModuloController
         $filtros = \App\Helpers\AlcanceRegistros::limpiarFiltroVendedor(
             array_merge($filtros, $this->alcanceUsuario($idsEmpresa))
         );
+        // Igual con el Cajero: al usuario restringido su alcance ya lo acota (sus propios
+        // documentos o los de su vendedor) y la pantalla no le ofrece el selector.
+        if (\App\Helpers\AlcanceRegistros::restringe($filtros)) {
+            $filtros['id_cajero'] = 0;
+        }
         if ($consolidado) {
             if (!empty($filtros['id_cliente'])) {
                 $raw = is_array($filtros['id_cliente']) ? $filtros['id_cliente'] : explode(',', (string) $filtros['id_cliente']);
@@ -213,6 +243,8 @@ class ReporteVentasController extends BaseModuloController
                 return [$this->repository->getReporteAgrupadoVariante($idEmpresa, $filtros), []];
             case 'FECHA':
                 return [$this->repository->getReporteAgrupadoFecha($idEmpresa, $filtros), []];
+            case 'CAJERO':
+                return [$this->repository->getReporteAgrupadoCajero($idEmpresa, $filtros), []];
             case 'MES':
                 return [$this->repository->getReporteAgrupadoMes($idEmpresa, $filtros), []];
             case 'PRODUCTO_MES':
@@ -388,7 +420,7 @@ class ReporteVentasController extends BaseModuloController
         // Solo el modo detallado corresponde a un documento real: se marca la fila
         // para poder abrir el panel lateral con su detalle (ver offcanvas_doc_preview).
         $attrs = '';
-        if (!in_array($agruparPor, ['CLIENTE', 'PRODUCTO', 'VARIANTE', 'FECHA', 'MES', 'PRODUCTO_MES'], true) && !empty($r['id'])) {
+        if (!in_array($agruparPor, ['CLIENTE', 'PRODUCTO', 'VARIANTE', 'FECHA', 'CAJERO', 'MES', 'PRODUCTO_MES'], true) && !empty($r['id'])) {
             // En el neto (Facturas − NC) cada fila trae su propio tipo; si no, deriva del filtro.
             $tipoDoc = $r['_doc_tipo'] ?? match ($tipoDocumento) {
                 'RECIBO'       => 'RECIBO',
@@ -444,6 +476,13 @@ class ReporteVentasController extends BaseModuloController
             $html .= "<td class='text-end fw-bold text-success'>$total</td>";
         } elseif ($agruparPor === 'FECHA') {
             $html .= "<td><span class='fw-bold'>".date('d/m/Y', strtotime($r['fecha'] ?? ''))."</span></td>";
+            $html .= "<td class='text-center'>".(int)($r['cantidad_facturas'] ?? 0)."</td>";
+            $html .= "<td class='text-end'>$base0</td>";
+            $html .= "<td class='text-end'>$baseIva</td>";
+            $html .= "<td class='text-end'>$iva</td>";
+            $html .= "<td class='text-end fw-bold text-success'>$total</td>";
+        } elseif ($agruparPor === 'CAJERO') {
+            $html .= "<td><span class='fw-bold'>".htmlspecialchars($r['cajero_nombre'] ?? '')."</span></td>";
             $html .= "<td class='text-center'>".(int)($r['cantidad_facturas'] ?? 0)."</td>";
             $html .= "<td class='text-end'>$base0</td>";
             $html .= "<td class='text-end'>$baseIva</td>";
@@ -646,6 +685,19 @@ class ReporteVentasController extends BaseModuloController
                     $exportData[] = [
                         date('d/m/Y', strtotime($r['fecha'])),
                         $r['cantidad_facturas'],
+                        (float)$r['base_0'],
+                        (float)$r['base_iva'],
+                        (float)$r['valor_iva'],
+                        (float)$r['total']
+                    ];
+                }
+            } elseif ($filtros['agrupar_por'] === 'CAJERO') {
+                $headers = ['Cajero', 'Nro Documentos', 'Base 0%', 'Base IVA', 'IVA', 'Total'];
+                $exportData = [];
+                foreach ($rows as $r) {
+                    $exportData[] = [
+                        $r['cajero_nombre'],
+                        (int) $r['cantidad_facturas'],
                         (float)$r['base_0'],
                         (float)$r['base_iva'],
                         (float)$r['valor_iva'],
@@ -891,6 +943,7 @@ class ReporteVentasController extends BaseModuloController
         'PRODUCTO'     => 'Por producto',
         'VARIANTE'     => 'Por variante',
         'FECHA'        => 'Por fecha',
+        'CAJERO'       => 'Por cajero',
         'MES'          => 'Por mes',
         'PRODUCTO_MES' => 'Unidades por producto y mes',
     ];
@@ -903,6 +956,7 @@ class ReporteVentasController extends BaseModuloController
             'PRODUCTO', 'PRODUCTO_MES' => $n === 1 ? 'producto' : 'productos',
             'VARIANTE' => $n === 1 ? 'variante'  : 'variantes',
             'FECHA'    => $n === 1 ? 'día'       : 'días',
+            'CAJERO'   => $n === 1 ? 'cajero'    : 'cajeros',
             'MES'      => $n === 1 ? 'mes'       : 'meses',
             default    => $n === 1 ? 'documento' : 'documentos',
         };
@@ -1075,6 +1129,15 @@ class ReporteVentasController extends BaseModuloController
                 ['lbl' => 'Saldo x Cobrar', 'w' => 12, 'cls' => 'text-end', 'tot' => $sumar('saldo'),
                  'val' => static fn (array $r): string => $num($r['saldo'] ?? 0)],
             ], $importes(12, 11, 13));
+        }
+
+        if ($agrupar === 'CAJERO') {
+            return array_merge([
+                ['lbl' => 'Cajero', 'w' => 24, 'cls' => '',
+                 'val' => static fn (array $r): string => $desc((string) ($r['cajero_nombre'] ?? ''), '', $pt(24))],
+                ['lbl' => 'Documentos', 'w' => 14, 'cls' => 'text-center', 'tot' => $sumar('cantidad_facturas'),
+                 'val' => static fn (array $r): string => (string) (int) ($r['cantidad_facturas'] ?? 0)],
+            ], $importes(15, 14, 18));
         }
 
         if ($agrupar === 'FECHA' || $agrupar === 'MES') {
@@ -1390,6 +1453,7 @@ class ReporteVentasController extends BaseModuloController
                 default   => 'Excluidos (solo documentos válidos)',
             },
             'Vendedor'          => $vendedorTxt,
+            'Cajero'            => $this->describirCajero($filtros),
             'Cliente'           => $clienteTxt,
             'Producto'          => $productoTxt ? implode(', ', $productoTxt) : 'Todos',
         ];
@@ -1409,5 +1473,201 @@ class ReporteVentasController extends BaseModuloController
             $out['Estado'] = ucfirst(strtolower((string) $filtros['estado']));
         }
         return $out;
+    }
+
+    // ── Resumen diario (tipo cierre de caja) ──────────────────────────────────
+    //
+    // Un bloque por día con Documentos, Detalle de impuestos y Cobro por forma de pago,
+    // con el formato de la tirilla del Reporte Restaurante. Toma los mismos filtros del
+    // formulario (y el mismo alcance del usuario) que el resto del reporte, salvo "Tipo de
+    // documento" y "Agrupar por": el resumen junta siempre facturas, recibos y notas de
+    // crédito. Lo arma ReporteVentasResumenDiarioService; aquí solo se presenta.
+
+    /**
+     * Filtros, alcance y resumen ya armado, comunes a las cuatro salidas. Lanza
+     * InvalidArgumentException si el período no es válido para el resumen (ver Rules).
+     *
+     * @return array{empresa: array, idEmpresa: int, resumen: array, filtrosTxt: array}
+     */
+    private function prepararResumenDiario(): array
+    {
+        $idEmpresa = (int) $_SESSION['id_empresa'];
+        $filtros   = $this->getFiltrosDesdeRequest();
+        [$idsEmpresa, $consolidado] = $this->resolverAlcance($idEmpresa, $filtros);
+
+        $resumen = (new \App\Services\modulos\ReporteVentasResumenDiarioService($this->repository))
+            ->generar($idsEmpresa, $filtros);
+
+        // Caja de filtros: lo que acota el resumen. Fuera lo que el resumen no usa (tipo de
+        // documento, agrupación) y los filtros que se quedaron en "Todos".
+        $txt = $this->describirFiltros($idsEmpresa, $filtros, $consolidado);
+        unset($txt['Tipo de documento'], $txt['Agrupación']);
+        if (!$consolidado) {
+            unset($txt['Alcance']);
+        }
+        if (($filtros['borradores'] ?? 'EXCLUIR') === 'EXCLUIR') {
+            unset($txt['Borradores']);
+        }
+        foreach (['Vendedor', 'Cliente', 'Producto'] as $k) {
+            if (($txt[$k] ?? '') === 'Todos') {
+                unset($txt[$k]);
+            }
+        }
+
+        return [
+            'empresa'    => (new \App\models\Empresa())->getPorId($idEmpresa) ?? [],
+            'idEmpresa'  => $idEmpresa,
+            'resumen'    => $resumen,
+            'filtrosTxt' => $txt,
+        ];
+    }
+
+    /** HTML del resumen (pantalla, PDF o correo: cambia solo el estilo, no el contenido). */
+    private function htmlResumenDiario(array $datos, string $modo): string
+    {
+        ob_start();
+        $this->view('modulos/reporte_ventas/resumen_diario', [
+            'modo'       => $modo,
+            'empresa'    => $datos['empresa'],
+            'resumen'    => $datos['resumen'],
+            'filtrosTxt' => $datos['filtrosTxt'],
+        ]);
+        return (string) ob_get_clean();
+    }
+
+    /** PDF del resumen como cadena (para la descarga y el adjunto del correo). */
+    private function pdfResumenDiario(array $datos): string
+    {
+        $autoload = MVC_ROOT . '/vendor/autoload.php';
+        if (file_exists($autoload)) require_once $autoload;
+
+        $html2pdf = new \Spipu\Html2Pdf\Html2Pdf('P', 'A4', 'es');
+        $html2pdf->writeHTML($this->htmlResumenDiario($datos, 'pdf'));
+        return $html2pdf->output('', 'S');
+    }
+
+    /** Resumen para el modal de la pantalla. */
+    public function resumenDiarioAjax(): void
+    {
+        $this->requireLeer();
+        session_write_close();
+        header('Content-Type: application/json');
+        try {
+            $datos = $this->prepararResumenDiario();
+            echo json_encode([
+                'ok'    => true,
+                'dias'  => count($datos['resumen']['dias']),
+                'html'  => $this->htmlResumenDiario($datos, 'pantalla'),
+            ]);
+        } catch (\InvalidArgumentException $e) {
+            echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
+        } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
+            echo json_encode(['ok' => false, 'error' => 'No se pudo generar el resumen diario.']);
+        }
+        exit;
+    }
+
+    /** Tirilla térmica del resumen: ventana propia que se imprime sola, como la del restaurante. */
+    public function imprimirResumenDiario(): void
+    {
+        $this->requireLeer();
+        session_write_close();
+        try {
+            $datos = $this->prepararResumenDiario();
+        } catch (\InvalidArgumentException $e) {
+            echo '<p style="font-family:Arial,sans-serif;padding:12px;">' . htmlspecialchars($e->getMessage()) . '</p>';
+            exit;
+        }
+        $this->view('modulos/reporte_ventas/resumen_diario_tirilla', [
+            'empresa'      => $datos['empresa'],
+            'resumen'      => $datos['resumen'],
+            'filtrosTxt'   => $datos['filtrosTxt'],
+            'anchoTirilla' => (new \App\Services\modulos\ConfiguracionRestauranteService())
+                ->getAnchoTirilla($datos['idEmpresa']),
+        ]);
+        exit;
+    }
+
+    /** PDF del resumen (botón PDF del modal → CMG_pdfDocumento). Ante un error, JSON. */
+    public function resumenDiarioPdf(): void
+    {
+        $this->requireLeer();
+        session_write_close();
+        try {
+            $pdf = $this->pdfResumenDiario($this->prepararResumenDiario());
+            header('Content-Type: application/pdf');
+            header('Content-Disposition: attachment; filename="ResumenDiarioVentas_' . date('Ymd_His') . '.pdf"');
+            header('Content-Length: ' . strlen($pdf));
+            echo $pdf;
+        } catch (\Throwable $e) {
+            if (!$e instanceof \InvalidArgumentException) {
+                \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
+            }
+            header('Content-Type: application/json');
+            echo json_encode(['error' => $e instanceof \InvalidArgumentException
+                ? $e->getMessage() : 'No se pudo generar el PDF del resumen diario.']);
+        }
+        exit;
+    }
+
+    /** Envía el resumen por correo: el resumen en el cuerpo y el PDF adjunto. */
+    public function enviarResumenDiarioCorreoAjax(): void
+    {
+        $this->requireLeer();
+        // Soltar el candado de sesión: armar y enviar el correo tarda.
+        session_write_close();
+        header('Content-Type: application/json');
+
+        try {
+            $destinatarios = array_values(array_filter(
+                array_map('trim', explode(',', trim((string) ($_POST['correos'] ?? '')))),
+                static fn ($c) => filter_var($c, FILTER_VALIDATE_EMAIL) !== false
+            ));
+            if (!$destinatarios) {
+                echo json_encode(['ok' => false, 'mensaje' => 'Ingrese al menos un correo válido.']);
+                exit;
+            }
+
+            $datos = $this->prepararResumenDiario();
+            if (!$datos['resumen']['dias']) {
+                echo json_encode(['ok' => false, 'mensaje' => 'El resumen no tiene ventas en ese período: no hay nada que enviar.']);
+                exit;
+            }
+
+            $adjuntos = [];
+            $pdfPath  = sys_get_temp_dir() . '/rvres_' . $datos['idEmpresa'] . '_' . uniqid() . '.pdf';
+            try {
+                file_put_contents($pdfPath, $this->pdfResumenDiario($datos));
+                $adjuntos[$pdfPath] = 'ResumenDiarioVentas_' . date('Ymd') . '.pdf';
+            } catch (\Throwable $e) {
+                // Sin PDF el correo igual sale: el cuerpo ya lleva el resumen completo.
+                error_log('[ReporteVentas] PDF del resumen diario no generado: ' . $e->getMessage());
+            }
+
+            $nombreEmpresa = (string) ($datos['empresa']['nombre'] ?? 'Reporte de Ventas');
+            $ok = enviar_correo_reporte(
+                $destinatarios,
+                'Resumen diario de ventas (' . ($datos['filtrosTxt']['Período'] ?? '') . ') - ' . $nombreEmpresa,
+                $this->htmlResumenDiario($datos, 'correo'),
+                $adjuntos
+            );
+
+            foreach (array_keys($adjuntos) as $path) {
+                if (is_file($path)) {
+                    unlink($path);
+                }
+            }
+
+            echo json_encode($ok
+                ? ['ok' => true, 'mensaje' => 'Resumen enviado a ' . implode(', ', $destinatarios)]
+                : ['ok' => false, 'mensaje' => $GLOBALS['LAST_EMAIL_ERROR'] ?? 'No se pudo enviar el correo. Verifica la configuración de correo.']);
+        } catch (\InvalidArgumentException $e) {
+            echo json_encode(['ok' => false, 'mensaje' => $e->getMessage()]);
+        } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
+            echo json_encode(['ok' => false, 'mensaje' => 'No se pudo enviar el resumen diario.']);
+        }
+        exit;
     }
 }

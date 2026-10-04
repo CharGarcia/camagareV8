@@ -1,12 +1,12 @@
 ---
 titulo: Reporte de ventas
-resumen: Ventas del periodo con filtros por cliente, vendedor, producto y borradores, agrupables, ordenables y exportables.
+resumen: Ventas del periodo con filtros por cliente, vendedor, cajero, producto y borradores, agrupables, ordenables y exportables, más un resumen diario tipo cierre de caja.
 categoria: Reportes
 ruta_modulo: modulos/reporte_ventas
 tipo: modulo
 visibilidad: todos
-etiquetas: reporte de ventas, ventas, cuanto vendi, por cliente, por vendedor, por producto, estadisticas, exportar, pdf, excel, establecimientos, sucursales, matriz, mismo ruc, consolidado por ruc, borradores, borrador, facturas en borrador, incluir borradores, documentos sin autorizar, pendientes de enviar al sri, ordenar, ordenamiento, ordenar por columna, de mayor a menor, quien compro mas, saldo por cobrar, saldo x cobrar, cuanto me debe el cliente, nro facturas, numero de documentos, cartera en el reporte de ventas, acceso total, permiso de ver todos, registros propios, solo mis ventas, no veo las ventas de otro, cada usuario ve lo suyo, documentos migrados no aparecen, cartera del vendedor, mis clientes, clientes asignados, vendedor vinculado, usuario del sistema, el vendedor no ve nada, asesor solo ve sus clientes, nivel de usuario, administrador ve todo, el asesor ve las ventas de todos, imprimir el reporte, logo en el pdf, el pdf sale angosto, el pdf no ocupa la hoja, nombre del producto cortado, filtros aplicados en el pdf, encabezado del pdf, totales repetidos en el pdf, pdf horizontal, numero de pagina, boton buscar, no se actualiza, no cambia al elegir, hay que pulsar buscar, boton amarillo, filtros sin aplicar, unidades vendidas, unidades por mes, cantidades por mes, cuantas unidades vendi, ventas por producto y mes, producto por mes, rotacion mensual, tabla por meses, una columna por mes, marca, categoria, filtrar por marca, filtrar por categoria, ventas de una marca, ventas de una categoria, linea de productos, participacion por producto, porcentaje de ventas, porcentaje de unidades, % venta, % unidades, unidad de medida, total venta sin iva, producto mas vendido
-version: 1.11
+etiquetas: reporte de ventas, ventas, cuanto vendi, por cliente, por vendedor, por producto, estadisticas, exportar, pdf, excel, establecimientos, sucursales, matriz, mismo ruc, consolidado por ruc, borradores, borrador, facturas en borrador, incluir borradores, documentos sin autorizar, pendientes de enviar al sri, ordenar, ordenamiento, ordenar por columna, de mayor a menor, quien compro mas, saldo por cobrar, saldo x cobrar, cuanto me debe el cliente, nro facturas, numero de documentos, cartera en el reporte de ventas, acceso total, permiso de ver todos, registros propios, solo mis ventas, no veo las ventas de otro, cada usuario ve lo suyo, documentos migrados no aparecen, cartera del vendedor, mis clientes, clientes asignados, vendedor vinculado, usuario del sistema, el vendedor no ve nada, asesor solo ve sus clientes, nivel de usuario, administrador ve todo, el asesor ve las ventas de todos, imprimir el reporte, logo en el pdf, el pdf sale angosto, el pdf no ocupa la hoja, nombre del producto cortado, filtros aplicados en el pdf, encabezado del pdf, totales repetidos en el pdf, pdf horizontal, numero de pagina, boton buscar, no se actualiza, no cambia al elegir, hay que pulsar buscar, boton amarillo, filtros sin aplicar, unidades vendidas, unidades por mes, cantidades por mes, cuantas unidades vendi, ventas por producto y mes, producto por mes, rotacion mensual, tabla por meses, una columna por mes, marca, categoria, filtrar por marca, filtrar por categoria, ventas de una marca, ventas de una categoria, linea de productos, participacion por producto, porcentaje de ventas, porcentaje de unidades, % venta, % unidades, unidad de medida, total venta sin iva, producto mas vendido, cajero, por cajero, por usuario, ventas por usuario, ventas de un cajero, quien facturo, resumen diario, cierre de caja, cierre del dia, cuadre de caja, arqueo, ventas del dia, formas de pago, efectivo, tarjeta, transferencia, cuanto entro en efectivo, tirilla, ticket, enviar por correo, recibos de venta, recibos no aparecen, no salen los recibos, recibos en borrador
+version: 1.12
 orden: 10
 estado: activo
 ---
@@ -21,6 +21,7 @@ qué, en el periodo que se indique.
 | Fecha desde / hasta | El periodo a consultar |
 | Cliente | Ventas de un cliente concreto |
 | Vendedor | Ventas de un vendedor concreto. Las notas de crédito entran por **su propio vendedor** (el campo *Vendedor* de la nota), también en *Facturas − NC* |
+| Cajero | Documentos de un usuario concreto: el **responsable** del documento, el que aparece en la columna *Cajero* del detallado. Lista los usuarios asignados a la empresa. A un usuario que solo ve sus propios documentos (o los de su vendedor) no se le muestra: su alcance ya lo limita |
 | Producto | Ventas de un producto concreto |
 | Marca / Categoría | Solo los productos de esa marca o categoría (las de la ficha del producto). Están en la primera fila, a continuación de *Agrupar por*. Ver la sección *Filtrar por marca o categoría* |
 | Borradores | *Sin borradores* (por defecto), *Con borradores* o *Solo borradores*. Ver la sección *Documentos en borrador* |
@@ -68,15 +69,20 @@ Qué cambia según la vista:
 Es lo que más cambia las cifras:
 
 - **Autorizada**: la venta real, aprobada por el SRI. Es lo que hay que mirar
-  para saber cuánto se vendió. En los recibos de venta, el equivalente es el
-  recibo **emitido**.
-- **Borrador**: guardada pero aún no enviada al SRI (o, en recibos, aún no
-  emitida). Todavía puede cambiar.
+  para saber cuánto se vendió.
+- **Borrador**: factura o nota de crédito guardada pero aún no enviada al SRI.
+  Todavía puede cambiar.
+- **Recibos de venta**: no pasan por el SRI: el
+  recibo se guarda como *borrador* y solo pasa a *emitido* cuando queda pagado por
+  completo (un recibo a crédito sigue en borrador). Por eso **todo recibo cuenta como
+  venta salvo que esté anulado o facturado**, igual que en Cuentas por Cobrar y
+  en la Caja POS. El selector *Borradores* no les aplica (con *Solo borradores*
+  no sale ningún recibo).
 - **Anulada**: dejada sin efecto. No es venta y nunca entra en el reporte; la
   tarjeta de documentos solo muestra cuántas hay (*Anul.*).
 
 Por defecto el reporte suma únicamente lo que es venta: facturas y notas de
-crédito autorizadas, y recibos emitidos. Un recibo que ya se facturó no se cuenta
+crédito autorizadas, y recibos no anulados. Un recibo que ya se facturó no se cuenta
 dos veces: aparece como la factura.
 
 Si el reporte no coincide con lo esperado, revise primero el selector
@@ -141,9 +147,17 @@ Reglas:
 
 ## Agrupación
 
-Los resultados se pueden agrupar (por cliente, por producto, por periodo) para
-pasar del detalle al resumen sin cambiar de pantalla. Es lo que permite ver de un
-vistazo qué cliente compra más o qué producto rota mejor.
+Los resultados se pueden agrupar (por cliente, por producto, por cajero, por
+periodo) para pasar del detalle al resumen sin cambiar de pantalla. Es lo que
+permite ver de un vistazo qué cliente compra más, qué producto rota mejor o
+cuánto vendió cada usuario.
+
+### Por cajero
+
+Una fila por usuario responsable de los documentos (la columna *Cajero* del
+detallado), con el número de documentos, bases, IVA y total; con gráfico, PDF y
+Excel. Los documentos sin usuario (por ejemplo, algunos migrados) se juntan en
+*Sin cajero*. Combinada con el filtro **Cajero** muestra solo ese usuario.
 
 ### Por cliente: la columna Saldo x Cobrar
 
@@ -300,6 +314,51 @@ Para usuarios sin vendedor, una advertencia sobre documentos antiguos: los que
 se **migraron** desde el sistema anterior quedaron a nombre del usuario que
 corrió la migración, así que solo él (o alguien con acceso total) los verá.
 
+## Resumen diario (tipo cierre de caja)
+
+El botón **Resumen diario** (junto a PDF y Excel, sobre la tabla) arma, con los
+filtros del formulario, un resumen **día por día** con el mismo formato que la
+tirilla del Reporte Restaurante y el cierre de caja. Sirve para cuadrar la caja
+de un día o de un cajero (elija el **Cajero** en los filtros).
+
+Cómo se usa:
+
+1. Elija **Fecha desde** y **Fecha hasta** (hasta 31 días) y, si quiere, el
+   cajero, el vendedor u otros filtros.
+2. Pulse **Resumen diario**. Se abre una ventana con un bloque por cada día con
+   ventas y, si hay más de un día, el **Total del período** al final.
+3. Desde la barra de arriba de esa ventana: **Imprimir tirilla** (papel térmico
+   de 58 u 80 mm, el ancho configurado en *Configuración Restaurante*), **PDF** o
+   **Enviar por correo** (sale el correo de la empresa; se puede cambiar o
+   agregar otros separados por comas, y va con el PDF adjunto).
+
+Cada día trae tres secciones:
+
+- **Documentos**: facturas, recibos y notas de crédito (estas restan), cuántos
+  anulados hubo (no suman), el **Total neto** y el total vendido sin impuestos.
+- **Detalle de impuestos**: subtotal por tarifa, subtotal sin impuestos, IVA,
+  servicio y el **Total con impuestos** (igual al total neto).
+- **Cobro por forma de pago**: cuánto de las facturas y recibos de ese día se
+  cobró en efectivo, tarjeta, transferencia, etc.; además las **retenciones**,
+  las **notas de crédito aplicadas** y lo **pendiente de cobro (crédito)**. La
+  suma da el total de facturas y recibos del día.
+
+A tener en cuenta:
+
+- El resumen junta **siempre** facturas, recibos y notas de crédito: no mira el
+  selector *Tipo de documento* ni *Agrupar por*. El resto de filtros sí
+  (cajero, vendedor, cliente, producto, establecimientos, borradores) y también
+  el alcance del usuario (quien solo ve lo suyo, solo resume lo suyo).
+- La forma de pago sale del **Ingreso** con que se cobró cada documento, no del
+  código SRI de la factura. Si un cobro se hizo con varias formas, se reparte
+  entre ellas. Un cobro registrado sin forma de pago aparece como *Sin forma de
+  pago registrada*.
+- Cuenta lo cobrado **hasta hoy**: si una factura a crédito del lunes se cobró
+  el miércoles, al sacar el resumen del lunes ya aparece cobrada (con la forma
+  de ese cobro). Si se cobró de más, sale aparte como *Cobrado de más*.
+- Solo aparecen los días con movimiento. No es un arqueo: no pide el efectivo
+  contado ni calcula diferencias (eso es el cierre de la *Caja POS*).
+
 ## Exportar
 
 El reporte se exporta a **PDF** y **Excel**, con las mismas filas, los mismos
@@ -369,6 +428,15 @@ El PDF es la misma pantalla en hoja, pensado para imprimir o enviar por correo:
 - **En Unidades por producto / mes falta un producto**: solo se listan los que
   vendieron más de cero unidades en el período (con *Facturas − NC*, más de lo
   que se devolvió).
+- **No salen los recibos de venta**: hasta la versión 1.11 el reporte solo
+  contaba los recibos *emitidos*, y los recibos creados en el sistema quedan en
+  *borrador*, así que no aparecían. Desde la 1.12 cuentan todos los recibos no
+  anulados ni facturados.
+- **El resumen diario no abre**: necesita Fecha desde y Fecha hasta, y un período
+  de hasta 31 días.
+- **En el resumen diario una factura aparece como pendiente**: no tiene un
+  Ingreso registrado (o se cobró solo una parte). Regístrelo en *Ingresos* o desde
+  la factura y vuelva a sacar el resumen.
 - **Cambié un filtro y la tabla no cambia**: los filtros no consultan solos;
   pulse **Buscar** (el botón queda en ámbar mientras haya cambios sin aplicar).
 - **La columna Retenciones del detallado no cuadra con la retención**: desde la
@@ -378,6 +446,15 @@ El PDF es la misma pantalla en hoja, pensado para imprimir o enviar por correo:
   que el número de sustento de la retención apunte a esa factura.
 
 ## Historial de cambios
+
+- **1.12** — Nuevo filtro **Cajero** (usuario responsable del documento) y nueva
+  agrupación **Por cajero**, en pantalla, gráfico, PDF y Excel. Nuevo botón
+  **Resumen diario**: un bloque por día con documentos, detalle de impuestos y
+  cobro por forma de pago, con **tirilla**, **PDF** y **envío por correo** (ver
+  *Resumen diario (tipo cierre de caja)*). **Corrección: los recibos de venta no
+  aparecían** en el reporte, porque se exigía el estado *emitido* y los recibos
+  creados en el sistema quedan en *borrador*; ahora cuenta todo recibo no anulado
+  ni facturado (también en la lista de años y en el contador de documentos).
 
 - **1.11** — Las **notas de crédito** se filtran por **su propio vendedor** (nuevo campo
   *Vendedor* de la nota), ya no por el de la factura que modifican. Las notas ya emitidas

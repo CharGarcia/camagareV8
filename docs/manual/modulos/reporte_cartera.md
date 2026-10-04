@@ -5,8 +5,8 @@ categoria: Reportes
 ruta_modulo: modulos/reporte_cartera
 tipo: modulo
 visibilidad: todos
-etiquetas: cartera, estado de cuenta, filtro por documento, numero de factura, kardex de cliente, kardex de proveedor, saldo, cuentas por cobrar, cuentas por pagar, historial de pagos, historial de cobros, deuda, adeudado, cedula y ruc, cliente duplicado, proveedor duplicado, identificacion repetida, ruc es la cedula mas 001, mismo tercero dos fichas, estado de cuenta partido, acceso total, permiso de ver todos, registros propios, solo mis clientes, solo mis documentos, no veo un cliente, no aparece el proveedor en el buscador, imprimir, impresora, pdf cortado, columnas cortadas en el pdf, no sale el saldo en el pdf, falta el abono en el pdf, pdf se sale de la hoja, numero de documento montado, documento se pasa a la otra columna
-version: 1.10
+etiquetas: cartera, estado de cuenta, filtro por documento, numero de factura, kardex de cliente, kardex de proveedor, saldo, cuentas por cobrar, cuentas por pagar, historial de pagos, historial de cobros, deuda, adeudado, cedula y ruc, cliente duplicado, proveedor duplicado, identificacion repetida, ruc es la cedula mas 001, mismo tercero dos fichas, estado de cuenta partido, acceso total, permiso de ver todos, registros propios, solo mis clientes, solo mis documentos, no veo un cliente, no aparece el proveedor en el buscador, imprimir, impresora, pdf cortado, columnas cortadas en el pdf, no sale el saldo en el pdf, falta el abono en el pdf, pdf se sale de la hoja, numero de documento montado, documento se pasa a la otra columna, recibos en borrador, no salen los recibos, recibos no aparecen
+version: 1.11
 orden: 0
 estado: activo
 ---
@@ -97,7 +97,9 @@ El permiso se administra en *Configuración → Permisos por módulo*.
   `tipo_comprobante` (`04` NC, `05` ND).
 - Se excluyen documentos anulados, en borrador o (en el caso de recibos de
   venta) ya facturados — el mismo criterio que usan Cuentas por Cobrar y
-  Cuentas por Pagar.
+  Cuentas por Pagar. Excepción: el **recibo de venta** se guarda como *borrador* y solo pasa a
+  *emitido* al quedar pagado, así que el recibo en borrador
+  **sí** es deuda generada; solo se excluye si está anulado o facturado.
 - **A quién se atribuye cada abono**: al cliente o proveedor **del documento
   que cancela**, no al que quedó escrito en el propio abono. Un cobro se
   atribuye al cliente de la factura, recibo o saldo inicial que cobra; una
@@ -167,6 +169,9 @@ es puramente de lectura.
 
 - **"Seleccione al menos un Cliente/Proveedor..."**: no se puede generar,
   exportar ni enviar el reporte sin al menos una entidad seleccionada.
+- **Un cliente con recibos sale con saldo a favor que no tiene**: hasta la versión
+  1.10 el recibo en *borrador* no entraba como deuda, pero su cobro sí entraba como
+  abono. Corregido en la 1.11.
 - **El saldo no cuadra con Cuentas por Cobrar**: revisar el rango de fechas —
   si hay Fecha Desde, el saldo mostrado parte de "Saldo Anterior" (todo lo
   anterior a esa fecha), no de cero.
@@ -185,6 +190,11 @@ que los tres deben coincidir.
 
 ## Historial de cambios
 
+- **1.11** — **Corrección: los Recibos de Venta no entraban como deuda generada**
+  (se descartaban los recibos en *borrador*, que es el estado normal de un recibo
+  creado en el sistema), pero sus cobros sí se restaban como abono: el cliente
+  quedaba con un saldo a favor que no existía. Ahora el recibo cuenta salvo que esté
+  anulado o facturado, igual que en Cuentas por Cobrar.
 - **1.10** — PDF del estado de cuenta: con un **detalle largo** (p. ej. un cobro con banco,
   cuenta y referencia) la tabla se salía de la hoja y las columnas **Deuda Generada**, **Abono**
   y **Saldo** quedaban cortadas. Ahora cada columna tiene un ancho fijo: el detalle y los números

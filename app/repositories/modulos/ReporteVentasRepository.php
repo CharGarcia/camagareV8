@@ -114,7 +114,7 @@ class ReporteVentasRepository extends BaseRepository
                 'fk_det'      => 'id_recibo',          // detalle.id_recibo = cabecera.id
                 'fk_imp'      => 'id_recibo_detalle',  // impuestos.id_recibo_detalle = detalle.id
                 'fk_adic'     => 'id_recibo',
-                'estado_ok'   => $this->condEstado("{alias}.estado NOT IN ('borrador', 'anulado', 'facturado')", $filtros),
+                'estado_ok'   => $this->condEstadoRecibo($filtros),
                 'retenciones' => false,
                 'clave'       => false,
                 'vendedor'    => true,
@@ -172,6 +172,24 @@ class ReporteVentasRepository extends BaseRepository
             'SOLO'    => $esBorrador,
             default   => $validos,
         };
+    }
+
+    /**
+     * Estados que cuentan como venta en un RECIBO: todo lo que no esté anulado ni
+     * facturado. El recibo nace como `borrador` y solo pasa a `emitido` cuando queda pagado
+     * por completo (ReciboVentaService::emitirSiPagados): un recibo a crédito sigue en
+     * borrador y es venta igual. Excluir `borrador` dejaba fuera del reporte a todos esos. Es el mismo criterio que
+     * Cuentas por Cobrar, la Caja POS, el Reporte Restaurante y el Consolidado. Un
+     * `facturado` ya está en la factura que generó: contarlo duplicaría la venta.
+     *
+     * Por eso el selector "Borradores" no aplica a los recibos: con "Solo borradores" no
+     * sale ninguno (su borrador no es un documento pendiente de autorizar).
+     */
+    private function condEstadoRecibo(array $filtros): string
+    {
+        return strtoupper((string) ($filtros['borradores'] ?? '')) === 'SOLO'
+            ? 'false'
+            : "{alias}.estado NOT IN ('anulado', 'facturado')";
     }
 
     /** ¿El reporte es el neto "Facturas − Notas de crédito"? */
@@ -256,6 +274,15 @@ class ReporteVentasRepository extends BaseRepository
             'valor_iva'         => 'valor_iva {dir}',
             'total'             => 'total {dir}',
         ],
+        'CAJERO' => [
+            '_def'              => ['total', 'DESC'],
+            'cajero_nombre'     => 'cajero_nombre {dir}',
+            'cantidad_facturas' => 'cantidad_facturas {dir}',
+            'base_0'            => 'base_0 {dir}',
+            'base_iva'          => 'base_iva {dir}',
+            'valor_iva'         => 'valor_iva {dir}',
+            'total'             => 'total {dir}',
+        ],
         'MES' => [
             '_def'              => ['mes', 'DESC'],
             'mes'               => 'mes {dir}',
@@ -284,6 +311,7 @@ class ReporteVentasRepository extends BaseRepository
         'getReporteAgrupadoProducto' => 'PRODUCTO',
         'getReporteAgrupadoVariante' => 'VARIANTE',
         'getReporteAgrupadoFecha'    => 'FECHA',
+        'getReporteAgrupadoCajero'   => 'CAJERO',
         'getReporteAgrupadoMes'      => 'MES',
         'getUnidadesProductoMesPlano' => 'PRODUCTO_MES',
     ];
@@ -393,7 +421,7 @@ class ReporteVentasRepository extends BaseRepository
                     UNION
                     SELECT EXTRACT(YEAR FROM fecha_emision)::int
                     FROM recibos_venta_cabecera
-                    WHERE id_empresa = :e2 AND eliminado = false AND estado NOT IN ('borrador','anulado')
+                    WHERE id_empresa = :e2 AND eliminado = false AND estado NOT IN ('anulado','facturado')
                 ) t
                 WHERE anio IS NOT NULL
                 ORDER BY anio DESC";
@@ -624,6 +652,14 @@ class ReporteVentasRepository extends BaseRepository
                 )";
             }
             $params[':id_vendedor'] = (int)$filtros['id_vendedor'];
+        }
+
+        // Filtro por Cajero = usuario responsable del documento (`id_usuario`, la columna
+        // "Cajero" del detallado y la misma que usa el alcance de registros propios). Solo
+        // acota: a un usuario restringido nunca le amplía lo que ya ve.
+        if (!empty($filtros['id_cajero'])) {
+            $where .= " AND {$aliasVenta}.id_usuario = :id_cajero";
+            $params[':id_cajero'] = (int) $filtros['id_cajero'];
         }
 
         if (!empty($filtros['id_producto'])) {
@@ -973,6 +1009,72 @@ class ReporteVentasRepository extends BaseRepository
     }
 
     /**
+     * Reporte agrupado por cajero: una fila por usuario responsable del documento
+     * (`id_usuario`, la columna "Cajero" del detallado). Los documentos sin usuario
+     * (migrados, id 0) quedan juntos en "Sin cajero".
+     */
+    public function getReporteAgrupadoCajero(int|array $idEmpresa, array $filtros): array
+    {
+        if ($this->esNeto($filtros)) {
+            return $this->combinarNeto($idEmpresa, $filtros, 'getReporteAgrupadoCajero', ['id_cajero'],
+                ['base_0', 'base_iva', 'valor_iva', 'total'], ['cantidad_facturas']);
+        }
+
+        $f = $this->fuente($filtros);
+        list($where, $params) = $this->buildWhereYParams($idEmpresa, $filtros, 'v');
+        $orden = $this->ordenSql($filtros, 'CAJERO');
+
+        $sql = "
+            WITH bases AS (" . $this->getCteBasesImpuestos($f) . ")
+            SELECT
+                COALESCE(v.id_usuario, 0) as id_cajero,
+                COALESCE(MAX(u.nombre), 'Sin cajero') as cajero_nombre,
+                COUNT(v.id) as cantidad_facturas,
+                SUM(COALESCE(b.base_0, 0)) as base_0,
+                SUM(COALESCE(b.base_iva, 0)) as base_iva,
+                SUM(COALESCE(b.valor_iva, 0)) as valor_iva,
+                SUM(v.importe_total) as total
+            FROM {$f['cab']} v
+            LEFT JOIN bases b ON b.id_doc = v.id
+            LEFT JOIN usuarios u ON u.id = v.id_usuario
+            WHERE {$where}
+            GROUP BY COALESCE(v.id_usuario, 0)
+            ORDER BY {$orden}
+        ";
+
+        $st = $this->db->prepare($sql);
+        $st->execute($params);
+        return $st->fetchAll(PDO::FETCH_ASSOC);
+    }
+
+    /**
+     * Usuarios para el selector "Cajero": los asignados a la empresa (empresa_asignada),
+     * más el usuario en sesión (un superadministrador no siempre está asignado y es quien
+     * más documentos emite en empresas pequeñas). Sin DISTINCT sobre los documentos: en
+     * tablas grandes recorre la empresa entera (ver memoria combos-distinct-loose-index-scan).
+     */
+    public function getCajerosCombo(int $idEmpresa, int $idUsuarioSesion): array
+    {
+        $st = $this->db->prepare("
+            SELECT u.id, u.nombre
+              FROM usuarios u
+             WHERE u.id IN (SELECT ea.id_usuario FROM empresa_asignada ea WHERE ea.id_empresa = :e)
+                OR u.id = :u
+             ORDER BY u.nombre
+        ");
+        $st->execute([':e' => $idEmpresa, ':u' => $idUsuarioSesion]);
+        return $st->fetchAll(PDO::FETCH_ASSOC);
+    }
+
+    /** Nombre de un usuario (para la caja de filtros del PDF y la tirilla). */
+    public function getNombreUsuario(int $idUsuario): string
+    {
+        $st = $this->db->prepare("SELECT nombre FROM usuarios WHERE id = :id");
+        $st->execute([':id' => $idUsuario]);
+        return (string) ($st->fetchColumn() ?: '');
+    }
+
+    /**
      * Reporte agrupado por mes (año-mes).
      */
     public function getReporteAgrupadoMes(int|array $idEmpresa, array $filtros): array
@@ -1283,8 +1385,15 @@ class ReporteVentasRepository extends BaseRepository
             'borradores'  => 0
         ];
 
+        // En recibos `borrador` es el estado normal de un recibo vigente (ver
+        // condEstadoRecibo()): cuenta como válido, no como borrador.
+        $esRecibo = $f['cab'] === 'recibos_venta_cabecera';
+
         foreach ($rows as $row) {
             $estado = $row['estado'];
+            if ($esRecibo && $estado === 'borrador') {
+                $estado = 'emitido';
+            }
             $cantidad = (int) $row['cantidad'];
             // "Autorizados" agrupa los documentos emitidos/válidos (facturas autorizadas y recibos emitidos/facturados)
             if (in_array($estado, ['autorizado', 'autorizada', 'emitido', 'facturado'])) {
@@ -1297,5 +1406,229 @@ class ReporteVentasRepository extends BaseRepository
         }
 
         return $resumen;
+    }
+
+    // ── Resumen diario (tipo cierre de caja) ──────────────────────────────────
+    //
+    // A diferencia del resto del reporte, el resumen junta SIEMPRE las tres fuentes
+    // —facturas y recibos suman, notas de crédito restan— sin mirar el selector "Tipo de
+    // documento": es el cierre del día, no una vista de un tipo. Todo lo demás (período,
+    // cajero, vendedor, cliente, producto, establecimientos, borradores y el alcance del
+    // usuario) sale del mismo buildWhereYParams() que el resto del reporte, así que el
+    // resumen nunca muestra un documento que el listado no mostraría.
+
+    /** Fuentes del resumen: tipo => signo con que entra al total. */
+    private const RESUMEN_FUENTES = ['FACTURA' => 1, 'RECIBO' => 1, 'NOTA_CREDITO' => -1];
+
+    /**
+     * CTE `docs` con los documentos del resumen: tipo, id, empresa, fecha (día), signo,
+     * subtotal sin impuestos, servicio, importe total y —solo en facturas— el número
+     * normalizado para cruzar notas de crédito aplicadas.
+     *
+     * Las tres consultas comparten los nombres de los placeholders (mismos filtros, mismos
+     * valores): en este proyecto repetirlos es seguro (memoria pdo-placeholders-repetidos).
+     *
+     * @param bool $soloAnulados true = solo los anulados (para el conteo), sin el filtro de
+     *                           estado válido.
+     * @return array{0:string, 1:array}
+     */
+    private function cteResumenDocs(int|array $idEmpresa, array $filtros, bool $soloAnulados = false): array
+    {
+        $partes = [];
+        $params = [];
+        foreach (self::RESUMEN_FUENTES as $tipo => $signo) {
+            $fx = array_merge($filtros, ['tipo_documento' => $tipo]);
+            $f  = $this->fuente($fx);
+            [$where, $p] = $this->buildWhereYParams($idEmpresa, $fx, 'v', null, !$soloAnulados);
+            if ($soloAnulados) {
+                $where .= " AND LOWER(v.estado) = 'anulado'";
+            }
+            $params  = array_merge($params, $p);
+            $propina = $tipo === 'NOTA_CREDITO' ? '0' : 'COALESCE(v.propina, 0)';
+            $num     = $tipo === 'FACTURA' ? AbonosVentaSql::numFactura('v') : 'NULL::text';
+            $partes[] = "SELECT '{$tipo}'::text AS tipo, v.id, v.id_empresa,
+                                v.fecha_emision::date AS fecha, {$signo} AS signo,
+                                COALESCE(v.total_sin_impuestos, 0) AS subtotal,
+                                {$propina} AS servicio,
+                                COALESCE(v.importe_total, 0) AS importe_total,
+                                {$num} AS num_norm
+                           FROM {$f['cab']} v
+                          WHERE {$where}";
+        }
+        return ["WITH docs AS (\n" . implode("\n UNION ALL\n", $partes) . "\n)", $params];
+    }
+
+    /** Documentos válidos por día y tipo: cantidad, subtotal sin impuestos e importe total (sin signo). */
+    public function getResumenDiarioDocumentos(int|array $idEmpresa, array $filtros): array
+    {
+        [$cte, $params] = $this->cteResumenDocs($idEmpresa, $filtros);
+        $st = $this->db->prepare($cte . "
+            SELECT fecha, tipo, COUNT(*) AS cantidad,
+                   COALESCE(SUM(subtotal), 0) AS subtotal,
+                   COALESCE(SUM(importe_total), 0) AS total
+              FROM docs
+             GROUP BY fecha, tipo
+             ORDER BY fecha, tipo
+        ");
+        $st->execute($params);
+        return $st->fetchAll(PDO::FETCH_ASSOC);
+    }
+
+    /** Documentos anulados por día (no suman: solo se informan). */
+    public function getResumenDiarioAnulados(int|array $idEmpresa, array $filtros): array
+    {
+        [$cte, $params] = $this->cteResumenDocs($idEmpresa, $filtros, true);
+        $st = $this->db->prepare($cte . "
+            SELECT fecha, COUNT(*) AS cantidad FROM docs GROUP BY fecha ORDER BY fecha
+        ");
+        $st->execute($params);
+        return $st->fetchAll(PDO::FETCH_ASSOC);
+    }
+
+    /**
+     * Detalle de impuestos por día, con signo (la NC resta): totales de cabecera
+     * (subtotal, servicio, total) y, aparte, base y valor de cada impuesto agrupados por
+     * código y tarifa. Misma consulta que ReporteRestauranteRepository::getResumenImpuestos()
+     * —líneas sin fila de IVA cuentan como 0%— para alimentar App\Helpers\DetalleImpuestos.
+     *
+     * @return array{totales: list<array>, impuestos: list<array>}
+     */
+    public function getResumenDiarioImpuestos(int|array $idEmpresa, array $filtros): array
+    {
+        [$cte, $params] = $this->cteResumenDocs($idEmpresa, $filtros);
+
+        $st = $this->db->prepare($cte . "
+            SELECT fecha,
+                   COALESCE(SUM(signo * subtotal), 0) AS subtotal,
+                   COALESCE(SUM(signo * servicio), 0) AS servicio,
+                   COALESCE(SUM(signo * importe_total), 0) AS total
+              FROM docs
+             GROUP BY fecha
+             ORDER BY fecha
+        ");
+        $st->execute($params);
+        $totales = $st->fetchAll(PDO::FETCH_ASSOC);
+
+        // Una rama por fuente: líneas con sus impuestos, y líneas sin fila de IVA como 0%.
+        $ramas = [];
+        foreach (self::RESUMEN_FUENTES as $tipo => $signo) {
+            $f = $this->fuente(['tipo_documento' => $tipo]);
+            $ramas[] = "SELECT d.fecha, i.codigo_impuesto, i.codigo_porcentaje, i.tarifa,
+                               d.signo * i.base_imponible AS base, d.signo * i.valor AS valor
+                          FROM docs d
+                          JOIN {$f['det']} dl ON dl.{$f['fk_det']} = d.id
+                          JOIN {$f['imp']} i ON i.{$f['fk_imp']} = dl.id
+                         WHERE d.tipo = '{$tipo}'";
+            $ramas[] = "SELECT d.fecha, '2', '0', 0, d.signo * dl.precio_total_sin_impuesto, 0
+                          FROM docs d
+                          JOIN {$f['det']} dl ON dl.{$f['fk_det']} = d.id
+                         WHERE d.tipo = '{$tipo}'
+                           AND NOT EXISTS (SELECT 1 FROM {$f['imp']} i
+                                            WHERE i.{$f['fk_imp']} = dl.id AND TRIM(i.codigo_impuesto) = '2')";
+        }
+
+        $st = $this->db->prepare($cte . ",
+            impuestos AS (" . implode("\n UNION ALL\n", $ramas) . ")
+            SELECT fecha,
+                   TRIM(codigo_impuesto) AS codigo_impuesto,
+                   TRIM(codigo_porcentaje) AS codigo_porcentaje,
+                   COALESCE(tarifa, 0) AS tarifa,
+                   COALESCE(SUM(base), 0) AS base,
+                   COALESCE(SUM(valor), 0) AS valor
+              FROM impuestos
+             GROUP BY fecha, TRIM(codigo_impuesto), TRIM(codigo_porcentaje), COALESCE(tarifa, 0)
+             ORDER BY fecha, 2, 4 DESC, 3
+        ");
+        $st->execute($params);
+
+        return ['totales' => $totales, 'impuestos' => $st->fetchAll(PDO::FETCH_ASSOC)];
+    }
+
+    /**
+     * Cómo se cobraron las facturas y recibos de cada día.
+     *
+     * La forma de pago solo se alcanza por el Ingreso que cobró el documento
+     * (ingresos_detalle → ingresos_pagos), nunca por el código SRI de la factura: ese
+     * código lo resuelve una cascada y un cobro en efectivo puede emitirse con otro
+     * (memoria cierre-caja-formas-pago-y-correo). A diferencia del cierre del POS —un
+     * cobro, una forma— aquí un documento puede tener varios cobros y un Ingreso varias
+     * formas: lo cobrado a cada documento se reparte entre las formas de ese Ingreso en
+     * proporción a su monto. Un Ingreso sin líneas de pago queda como "Sin forma de pago
+     * registrada".
+     *
+     * Lo que el documento no tiene cobrado se explica con las retenciones y las notas de
+     * crédito aplicadas (misma regla que Cuentas por Cobrar, AbonosVentaSql) y el resto
+     * es "Pendiente de cobro" (crédito). Cuenta lo cobrado HASTA HOY, no solo el mismo día.
+     *
+     * @return array{formas: list<array>, saldos: list<array>}
+     */
+    public function getResumenDiarioCobros(int|array $idEmpresa, array $filtros): array
+    {
+        [$cte, $params] = $this->cteResumenDocs($idEmpresa, $filtros);
+        $empresaAny   = "ANY(ARRAY[{$this->inEmp}])";
+        $ambienteNota = "AND (n.tipo_ambiente IS NULL OR n.tipo_ambiente = (SELECT CAST(e.tipo_ambiente AS VARCHAR(1)) FROM empresas e WHERE e.id = n.id_empresa))";
+
+        $cobros = ",
+            cobros AS (
+                SELECT d.tipo, d.id, d.fecha, ip.id_forma_cobro,
+                       CASE WHEN COALESCE(tp.total, 0) > 0
+                            THEN idet.monto_cobrado * ip.monto / tp.total
+                            ELSE idet.monto_cobrado END AS monto
+                  FROM docs d
+                  JOIN ingresos_detalle idet ON idet.id_referencia_documento = d.id
+                                            AND idet.tipo_documento = d.tipo
+                  JOIN ingresos_cabecera ic ON ic.id = idet.id_ingreso
+                                           AND ic.id_empresa = d.id_empresa
+                                           AND ic.eliminado = false
+                                           AND ic.estado <> 'anulado'
+                  LEFT JOIN LATERAL (SELECT SUM(p.monto) AS total FROM ingresos_pagos p
+                                      WHERE p.id_ingreso = ic.id) tp ON true
+                  LEFT JOIN ingresos_pagos ip ON ip.id_ingreso = ic.id AND COALESCE(tp.total, 0) > 0
+                 WHERE d.tipo IN ('FACTURA', 'RECIBO')
+            )";
+
+        $st = $this->db->prepare($cte . $cobros . "
+            SELECT c.fecha,
+                   COALESCE(fp.id, 0) AS id_forma_pago,
+                   COALESCE(MAX(fp.nombre), 'Sin forma de pago registrada') AS forma_pago_nombre,
+                   COUNT(DISTINCT c.tipo || ':' || c.id) AS cantidad_documentos,
+                   COALESCE(SUM(c.monto), 0) AS total
+              FROM cobros c
+              LEFT JOIN empresa_formas_pago fp ON fp.id = c.id_forma_cobro
+             GROUP BY c.fecha, COALESCE(fp.id, 0)
+             ORDER BY c.fecha, total DESC
+        ");
+        $st->execute($params);
+        $formas = $st->fetchAll(PDO::FETCH_ASSOC);
+
+        // Por documento: importe, cobrado, retenido y NC aplicadas; el pendiente nunca
+        // baja de cero (un cobro de más no resta crédito de otro documento).
+        $st = $this->db->prepare($cte . $cobros . ",
+            cobrado AS (SELECT tipo, id, SUM(monto) AS total FROM cobros GROUP BY tipo, id),
+            retenido AS (" . AbonosVentaSql::cteRetenidoPorFactura($empresaAny) . "),
+            nc AS (" . AbonosVentaSql::cteNotasPorFactura('notas_credito_cabecera', 'total_nc', $empresaAny, $ambienteNota, true) . "),
+            por_doc AS (
+                SELECT d.fecha, d.importe_total,
+                       COALESCE(cb.total, 0) AS cobrado,
+                       COALESCE(r.total_retenido, 0) AS retenido,
+                       COALESCE(n.total_nc, 0) AS nc
+                  FROM docs d
+                  LEFT JOIN cobrado cb ON cb.tipo = d.tipo AND cb.id = d.id
+                  LEFT JOIN retenido r ON d.tipo = 'FACTURA' AND r.id_venta = d.id
+                  LEFT JOIN nc n ON d.tipo = 'FACTURA' AND n.id_empresa = d.id_empresa AND n.num_norm = d.num_norm
+                 WHERE d.tipo IN ('FACTURA', 'RECIBO')
+            )
+            SELECT fecha,
+                   COALESCE(SUM(importe_total), 0) AS total,
+                   COALESCE(SUM(retenido), 0) AS retenido,
+                   COALESCE(SUM(nc), 0) AS nc,
+                   COALESCE(SUM(GREATEST(importe_total - cobrado - retenido - nc, 0)), 0) AS pendiente
+              FROM por_doc
+             GROUP BY fecha
+             ORDER BY fecha
+        ");
+        $st->execute($params);
+
+        return ['formas' => $formas, 'saldos' => $st->fetchAll(PDO::FETCH_ASSOC)];
     }
 }

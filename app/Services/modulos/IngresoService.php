@@ -181,6 +181,9 @@ class IngresoService
                 }
             }
 
+            // Recibos que este cobro dejó pagados por completo: pasan a 'emitido'.
+            $this->emitirRecibosPagados($data, $idEmpresa, $idUsuario);
+
             // Insert Pagos (Formas de Cobro)
             if (!empty($data['pagos']) && is_array($data['pagos'])) {
                 $data['pagos'] = $this->fijarFechaCobroBancaria($data['pagos'], (int) $data['id_empresa'], $data['fecha_emision'] ?? null);
@@ -325,6 +328,10 @@ class IngresoService
                 }
             }
 
+            // Recibos que el cobro modificado dejó pagados por completo: pasan a 'emitido'.
+            // Si la edición baja lo cobrado, el recibo ya emitido se queda emitido.
+            $this->emitirRecibosPagados($data, $idEmpresa, (int) ($data['id_usuario'] ?? $_SESSION['id_usuario'] ?? 0));
+
             // Insert Payments
             if (!empty($data['pagos']) && is_array($data['pagos'])) {
                 $data['pagos'] = $this->fijarFechaCobroBancaria($data['pagos'], $idEmpresa, $data['fecha_emision'] ?? $original['fecha_emision']);
@@ -358,6 +365,7 @@ class IngresoService
         // Regenerar el asiento contable fuera de la transacción.
         if ($managedTransaction) {
             $this->generarAsientoContableSeguro($id, $data);
+            $this->generarAsientoRecibosEmitidos($data);
         }
 
         // Recalcular saldos iniciales CXC afectados, tanto los nuevos como los que se quitaron.
@@ -677,7 +685,56 @@ class IngresoService
     public function tareasPostCommit(int $idIngreso, array $data): void
     {
         $this->generarAsientoContableSeguro($idIngreso, $data);
+        $this->generarAsientoRecibosEmitidos($data);
         $this->recalcularSaldosInicialesCxc($this->saldoIdsDesdeDetalles($data), (int) $data['id_empresa']);
+    }
+
+    /** IDs de los recibos de venta presentes en los detalles de un payload de ingreso. */
+    private function reciboIdsDesdeDetalles(array $data): array
+    {
+        $ids = [];
+        foreach (($data['detalles'] ?? []) as $d) {
+            if (($d['tipo_documento'] ?? '') === 'RECIBO' && !empty($d['id_referencia_documento'])) {
+                $ids[] = (int) $d['id_referencia_documento'];
+            }
+        }
+        return array_values(array_unique($ids));
+    }
+
+    private function reciboVentaService(): ReciboVentaService
+    {
+        return new ReciboVentaService(
+            new \App\repositories\modulos\ReciboVentaRepository(),
+            new \App\Rules\modulos\ReciboVentaRules(),
+            $this->logService
+        );
+    }
+
+    /**
+     * Pasa a 'emitido' los recibos que el cobro deja pagados por completo (ver
+     * ReciboVentaService::emitirSiPagados). Dentro de la transacción del ingreso: si el
+     * cobro se revierte, el cambio de estado también.
+     */
+    private function emitirRecibosPagados(array $data, int $idEmpresa, int $idUsuario): void
+    {
+        $ids = $this->reciboIdsDesdeDetalles($data);
+        if ($ids) {
+            $this->reciboVentaService()->emitirSiPagados($ids, $idEmpresa, $idUsuario);
+        }
+    }
+
+    /** Asiento de los recibos recién emitidos, después del commit. No propaga errores. */
+    private function generarAsientoRecibosEmitidos(array $data): void
+    {
+        $ids = $this->reciboIdsDesdeDetalles($data);
+        if (!$ids) {
+            return;
+        }
+        try {
+            $this->reciboVentaService()->generarAsientoEmitidos($ids, (int) $data['id_empresa']);
+        } catch (\Throwable $e) {
+            error_log('[Ingreso] Asiento de recibos emitidos no generado: ' . $e->getMessage());
+        }
     }
 
     /** Genera el asiento sin propagar errores (lo contable no bloquea lo operativo). */

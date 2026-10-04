@@ -52,6 +52,9 @@
                             <option value="PRODUCTO">Por Producto</option>
                             <option value="VARIANTE">Por Variante</option>
                             <option value="FECHA">Por Fecha</option>
+                            <?php if (empty($vendedorFijo)): ?>
+                                <option value="CAJERO">Por Cajero</option>
+                            <?php endif; ?>
                             <option value="MES">Por Mes</option>
                             <option value="PRODUCTO_MES">Unidades por Producto / Mes</option>
                         </select>
@@ -180,6 +183,28 @@
                         <?php endif; ?>
                     </div>
 
+                    <div style="flex:1 1 150px;min-width:0;">
+                        <label class="form-label small fw-bold mb-1 text-muted text-uppercase d-flex align-items-center" style="font-size:.65rem;"
+                               title="Usuario responsable del documento (columna Cajero del detallado)">
+                            <i class="bi bi-person-workspace me-1"></i>Cajero
+                            <?php if (empty($vendedorFijo)): ?>
+                                <?= \App\Helpers\PreferenciasHelper::renderEstrellaFavorito($rutaModulo, 'rv_id_cajero', 'id_cajero') ?>
+                            <?php endif; ?>
+                        </label>
+                        <?php if (!empty($vendedorFijo)): ?>
+                            <?php // Usuario restringido (§6): su alcance ya acota los documentos; el servidor ignora el filtro. ?>
+                            <input type="text" class="form-control form-control-sm shadow-none border bg-light w-100" disabled
+                                   title="Tu alcance ya limita los documentos que ves" value="Según tu alcance">
+                        <?php else: ?>
+                            <select name="id_cajero" id="rv_id_cajero" class="form-select form-select-sm shadow-none border w-100" onchange="window.RV_filtrosCambiados()">
+                                <option value="" selected>Todos</option>
+                                <?php foreach (($cajeros ?? []) as $cj): ?>
+                                    <option value="<?= (int)$cj['id'] ?>"><?= htmlspecialchars($cj['nombre']) ?></option>
+                                <?php endforeach; ?>
+                            </select>
+                        <?php endif; ?>
+                    </div>
+
                     <div class="position-relative" style="flex:1 1 180px;min-width:0;">
                         <label class="form-label small fw-bold mb-1 d-block text-muted text-uppercase" style="font-size:.65rem;">Producto</label>
                         <div class="input-group input-group-sm">
@@ -302,6 +327,10 @@
                             <i class="bi bi-file-earmark-spreadsheet"></i> Excel
                         </button>
                     </div>
+                    <button type="button" class="btn btn-sm btn-outline-dark ms-1" onclick="window.RV_abrirResumenDiario()"
+                            title="Resumen por día (documentos, impuestos y formas de pago) con los filtros actuales: tirilla, PDF y correo">
+                        <i class="bi bi-receipt-cutoff"></i> Resumen diario
+                    </button>
                     <div class="btn-group btn-group-sm ms-1" role="group" aria-label="Vista de tabla">
                         <button type="button" id="rv-btn-detalle" class="btn btn-primary" onclick="window.RV_setVistaAgrupacion('NINGUNO')" title="Ver todas las ventas en lista">
                             <i class="bi bi-list-ul"></i> Detallado
@@ -333,11 +362,63 @@
     </div>
 </div>
 
+<!-- ── Resumen diario (tipo cierre de caja) ── -->
+<div class="modal fade" id="rvModalResumen" tabindex="-1">
+  <div class="modal-dialog modal-xl modal-dialog-scrollable">
+    <div class="modal-content">
+      <div class="modal-header py-2">
+        <h6 class="modal-title fw-bold"><i class="bi bi-receipt-cutoff me-1"></i>Resumen diario de ventas</h6>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body pt-2">
+        <!-- Barra de acciones superior (§9) -->
+        <div class="d-flex gap-1 align-items-center flex-wrap border-bottom pb-2 mb-2">
+          <button type="button" class="btn btn-sm btn-outline-dark" id="rvResBtnTirilla" title="Imprimir tirilla" disabled><i class="bi bi-printer"></i></button>
+          <button type="button" class="btn btn-sm btn-outline-danger" id="rvResBtnPdf" title="PDF" disabled><i class="bi bi-file-earmark-pdf"></i></button>
+          <div class="vr mx-1"></div>
+          <button type="button" class="btn btn-sm btn-outline-info" id="rvResBtnCorreo" title="Enviar por correo" disabled><i class="bi bi-envelope"></i></button>
+          <span class="ms-auto small text-muted">
+            Facturas y recibos suman, notas de crédito restan. Un día por bloque (hasta <?= (int) ($maxDiasResumen ?? 31) ?> días).
+          </span>
+        </div>
+        <div id="rvResContenido"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Enviar el resumen diario por correo -->
+<div class="modal fade" id="rvModalResumenCorreo" tabindex="-1">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content">
+      <div class="modal-header py-2">
+        <h6 class="modal-title"><i class="bi bi-envelope me-1"></i>Enviar resumen por correo</h6>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <label class="form-label small fw-bold mb-1 d-block" for="rv-res-correos">Destinatarios</label>
+        <input type="text" class="form-control form-control-sm" id="rv-res-correos"
+               placeholder="correo@dominio.com, otro@dominio.com"
+               value="<?= htmlspecialchars($correoEmpresa ?? '') ?>">
+        <?php if (empty($correoEmpresa)): ?>
+          <div class="form-text">La empresa no tiene un correo configurado (Empresa → Datos generales). Escriba el destinatario.</div>
+        <?php endif; ?>
+        <div class="form-text">Separe varios correos con comas. Se envía el resumen en el cuerpo y el PDF adjunto.</div>
+      </div>
+      <div class="modal-footer py-2">
+        <button type="button" class="btn btn-outline-secondary btn-sm" data-bs-dismiss="modal">Cancelar</button>
+        <button type="button" class="btn btn-info btn-sm text-white" id="rvResBtnEnviarCorreo"><i class="bi bi-send me-1"></i>Enviar</button>
+      </div>
+    </div>
+  </div>
+</div>
+
 <?php // Panel lateral con el detalle del documento (clic sobre una fila del detallado)
 require_once MVC_APP . '/views/partials/offcanvas_doc_preview.php'; ?>
 
 <script>
     const RUTA_MODULO = "<?php echo $rutaModulo; ?>";
+    const RV_CORREO_EMPRESA = <?= json_encode($correoEmpresa ?? '', JSON_UNESCAPED_UNICODE) ?>;
 </script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 <script src="<?php echo BASE_URL; ?>/js/modulos/reporte_ventas.js?v=<?= asset_ver('/js/modulos/reporte_ventas.js') ?>"></script>

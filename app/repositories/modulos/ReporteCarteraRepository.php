@@ -385,7 +385,9 @@ class ReporteCarteraRepository extends BaseRepository
                        'Recibo de Venta', v.importe_total, v.id, {$eRecibo}
                 FROM recibos_venta_cabecera v
                 WHERE v.id_empresa = :emp2 AND v.eliminado = false
-                  AND v.estado NOT IN ('borrador','anulado','facturado')
+                  -- el recibo nace 'borrador' y solo pasa a 'emitido' al quedar pagado: vigente = no anulado ni facturado
+                  -- (sus cobros ya entran como ABONO; sin el cargo, el saldo salía de menos)
+                  AND v.estado NOT IN ('anulado','facturado')
                   AND (v.tipo_ambiente IS NULL OR v.tipo_ambiente = '{$amb}') {$wRecibo} {$fRecibo} {$dRecibo}
 
                 UNION ALL
@@ -904,7 +906,7 @@ class ReporteCarteraRepository extends BaseRepository
                        v.fecha_emision::date, v.importe_total, v.id_cliente
                 FROM recibos_venta_cabecera v
                 WHERE v.id_empresa = :emp2 AND v.eliminado = false
-                  AND v.estado NOT IN ('borrador','anulado','facturado')
+                  AND v.estado NOT IN ('anulado','facturado')
                   AND (v.tipo_ambiente IS NULL OR v.tipo_ambiente = '{$amb}') {$in('v.id_cliente', 'rv')}
                 UNION ALL
                 SELECT 'SALDO_INICIAL', s.nro_documento, s.fecha_emision::date, s.saldo_inicial, s.id_cliente

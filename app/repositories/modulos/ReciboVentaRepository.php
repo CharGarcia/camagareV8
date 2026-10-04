@@ -377,6 +377,39 @@ class ReciboVentaRepository extends BaseRepository
         return $row ?: null;
     }
 
+    /**
+     * Pasa el recibo de 'borrador' a 'emitido' si ya está pagado por completo (lo cobrado
+     * por ingresos vigentes cubre el total; un recibo solo baja su saldo con cobros, sin NC
+     * ni retenciones). Un solo UPDATE: la condición y el cambio se evalúan juntos dentro de
+     * la transacción del cobro, que ya ve las líneas de ingreso recién insertadas. Nunca
+     * toca otro estado (no revive anulados ni facturados, no regresa a borrador).
+     *
+     * @return bool true si el recibo cambió a 'emitido' en esta llamada.
+     */
+    public function emitirSiPagado(int $id, int $idEmpresa, int $idUsuario): bool
+    {
+        $st = $this->db->prepare("
+            UPDATE recibos_venta_cabecera v
+               SET estado = 'emitido', updated_by = :u, updated_at = CURRENT_TIMESTAMP
+             WHERE v.id = :id
+               AND v.id_empresa = :e
+               AND v.eliminado = false
+               AND v.estado = 'borrador'
+               AND v.importe_total - (
+                       SELECT COALESCE(SUM(ind.monto_cobrado), 0)
+                         FROM ingresos_detalle ind
+                         JOIN ingresos_cabecera inc ON inc.id = ind.id_ingreso
+                        WHERE ind.id_referencia_documento = v.id
+                          AND ind.tipo_documento = 'RECIBO'
+                          AND inc.estado != 'anulado'
+                          AND inc.eliminado = false
+                   ) <= 0.005
+            RETURNING v.id
+        ");
+        $st->execute([':u' => $idUsuario, ':id' => $id, ':e' => $idEmpresa]);
+        return (bool) $st->fetchColumn();
+    }
+
     public function actualizarEstado(int $id, string $estado, int $idUsuario): void
     {
         $sql = "UPDATE recibos_venta_cabecera SET estado = ?, updated_by = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?";

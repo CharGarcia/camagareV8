@@ -1099,7 +1099,12 @@ class ReciboVentaController extends BaseModuloController
             $db->commit();
             // La transacción es nuestra: el asiento se genera después del COMMIT (ver IngresoService::crear).
             $ingresoService->tareasPostCommit($idIngreso, $payload);
-            echo json_encode(['ok' => true, 'msg' => 'Cobro registrado con éxito.', 'id_ingreso' => $idIngreso]);
+            // Si el cobro lo dejó pagado por completo, el recibo pasó a 'emitido': el modal
+            // lo necesita para dejarlo en solo lectura sin tener que reabrirlo.
+            $estadoRecibo = (string) ((new \App\repositories\modulos\ReciboVentaRepository())
+                ->getPorId((int) $data['id_factura'])['estado'] ?? '');
+            echo json_encode(['ok' => true, 'msg' => 'Cobro registrado con éxito.', 'id_ingreso' => $idIngreso,
+                              'estado_recibo' => $estadoRecibo]);
         } catch (\Throwable $e) {
             if (isset($db) && $db->inTransaction()) $db->rollBack();
             \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);

@@ -5,8 +5,8 @@ categoria: Ventas
 ruta_modulo: modulos/recibo-venta
 tipo: modulo
 visibilidad: todos
-etiquetas: recibo de venta, recibos, buscar recibos, buscador, filtros, filtrar recibos, buscar por cliente, buscar por producto, estado de pago, saldo pendiente, nota de venta, venta sin factura, documento interno, sin impuestos, numeracion por fecha, numero con el año, reiniciar numeracion, reinicio anual, reinicio mensual, correlativo por año, correlativo por mes, modo de numeracion, lote, vencimiento, caducidad, fecha de vencimiento, lote y vencimiento, ancho de columna, agrandar columna, ensanchar, codigo cortado, descripcion cortada, no se ve la descripcion completa, redimensionar, precio con impuestos, precio con iva, sale en cero, tipo de identificacion, tipo de documento del cliente, ruc o cedula, es ruc o cedula, cedula o pasaporte, consumidor final, no se cual identificacion tiene el cliente, buscador de clientes, buscar cliente, elegir cliente, datos del cliente, imprimir, impresora
-version: 1.21
+etiquetas: recibo de venta, recibos, buscar recibos, buscador, filtros, filtrar recibos, buscar por cliente, buscar por producto, estado de pago, saldo pendiente, nota de venta, venta sin factura, documento interno, sin impuestos, numeracion por fecha, numero con el año, reiniciar numeracion, reinicio anual, reinicio mensual, correlativo por año, correlativo por mes, modo de numeracion, lote, vencimiento, caducidad, fecha de vencimiento, lote y vencimiento, ancho de columna, agrandar columna, ensanchar, codigo cortado, descripcion cortada, no se ve la descripcion completa, redimensionar, precio con impuestos, precio con iva, sale en cero, tipo de identificacion, tipo de documento del cliente, ruc o cedula, es ruc o cedula, cedula o pasaporte, consumidor final, no se cual identificacion tiene el cliente, buscador de clientes, buscar cliente, elegir cliente, datos del cliente, imprimir, impresora, estado del recibo, borrador, emitido, recibo pagado sigue en borrador, no cambia a emitido, recibo sin asiento, asiento del recibo, cuando se emite, no puedo modificar el recibo, no aparece actualizar, editar recibo emitido, corregir recibo
+version: 1.22
 orden: 35
 estado: activo
 ---
@@ -95,8 +95,38 @@ en lugar de achicar Cantidad, Precio o IVA.
 |--------|---------|
 | Inventario | Descuenta stock igual que una factura |
 | Cobro | Se registra como cobro de tipo recibo |
-| Contabilidad | Genera asiento de venta |
+| Contabilidad | Genera asiento de venta **cuando el recibo pasa a Emitido** (ver *Estado del recibo*) |
 | SRI | **No** se envía |
+
+## Estado del recibo: borrador y emitido
+
+El recibo tiene dos columnas distintas en el listado: **Estado** (en qué etapa está
+el documento) y **Pago** (cuánto se ha cobrado).
+
+| Estado | Cuándo |
+|--------|--------|
+| Borrador | Al guardarlo, y mientras no esté pagado por completo (pendiente o abonado) |
+| Emitido | **Automáticamente** al registrar el cobro que lo deja pagado por completo |
+| Facturado | Al generar una factura desde el recibo |
+| Anulado | Al anularlo |
+
+- El paso a **Emitido** ocurre con cualquier cobro que complete el total: desde el
+  botón de cobro del propio recibo, desde *Ingresos*, la Caja POS, la conciliación de
+  cobros, etc. Queda registrado en el historial del recibo (acción *EMITIR*).
+- Al quedar **Emitido** se genera su **asiento contable**. Si la configuración
+  contable de recibos no está completa, el cobro igual se guarda y el asiento lo
+  completa después la contabilidad automática (al abrir Recibos de Venta) o la
+  sincronización de *Asientos Contables*.
+- Un recibo emitido **queda en firme: no se puede modificar** (el botón *Actualizar*
+  desaparece y el sistema rechaza cualquier cambio). Para corregirlo, **anúlelo** y
+  emita uno nuevo. Sí se le pueden seguir registrando cobros si quedó saldo.
+- Un recibo emitido **no vuelve a borrador**, aunque luego se anule el cobro: queda
+  emitido con saldo pendiente.
+- Esto aplica también a los recibos migrados del sistema anterior, que ya llegaron
+  como *Emitido*. Un recibo *Facturado* tampoco se modifica: los cambios se hacen en
+  la factura generada.
+- En borrador o emitido, el recibo **cuenta como venta** en los reportes y como
+  deuda en Cuentas por Cobrar y Cartera; lo que cambia es el asiento.
 
 ## Buscar y filtrar el listado
 
@@ -161,6 +191,15 @@ Si la operación requiere comprobante válido para el cliente, hay que emitir
 - **El cliente pide su factura y solo tiene un recibo**: emita la factura; el
   recibo es interno.
 - **El stock bajó dos veces**: se emitió recibo *y* factura por la misma entrega.
+- **El recibo está pagado y sigue en Borrador**: pasa a *Emitido* cuando lo cobrado
+  cubre todo el total; con un abono parcial sigue en borrador. Los recibos que ya
+  estaban pagados antes de la versión 1.22 se ponen al día con el script
+  `database/20261004_recibos_pagados_a_emitido.sql`.
+- **No aparece el botón Actualizar / "no se puede modificar"**: el recibo está
+  *Emitido* (pagado por completo). Anúlelo y emita uno nuevo con los datos correctos.
+- **El recibo emitido no tiene asiento**: falta la cuenta en *Configuración
+  Contable* (recibos de venta). Configúrela y abra Recibos de Venta, o sincronice
+  desde *Asientos Contables*.
 
 ## Numeración por fecha de emisión
 
@@ -199,6 +238,14 @@ la operación de inmediato.
 
 ## Historial de cambios
 
+- **1.22** — El recibo pasa **automáticamente a Emitido** cuando queda pagado por
+  completo (antes se quedaba en *Borrador* para siempre). Al emitirse recibe su
+  **asiento contable**: desde el 12-08-2026 los recibos nuevos no lo tenían, porque la
+  contabilidad solo toma recibos emitidos. Un recibo emitido no vuelve a borrador
+  aunque se anule el cobro, y **ya no se puede modificar**: para corregirlo hay que
+  anularlo (aplica también a los migrados). Script para poner al día los ya pagados:
+  `database/20261004_recibos_pagados_a_emitido.sql`. Nueva sección *Estado del
+  recibo: borrador y emitido*.
 - **1.21** — El IVA se calcula con la configuración de facturación (al
   subtotal o línea por línea) del establecimiento de la **serie elegida**; antes
   se tomaba la del primer establecimiento de la empresa. Al cambiar de serie los

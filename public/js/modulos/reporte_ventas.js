@@ -402,6 +402,10 @@ function RV_dibujarGrafico(rawData, agrupacion) {
         labels = sortedData.map(r => r.fecha);
         dataTotales = sortedData.map(r => parseFloat(r.total));
         defaultType = 'line';
+    } else if (agrupacion === 'CAJERO') {
+        labels = rawData.map(r => r.cajero_nombre);
+        dataTotales = rawData.map(r => parseFloat(r.total));
+        defaultType = 'bar';
     } else if (agrupacion === 'MES') {
         let sortedData = [...rawData].sort((a, b) => (a.mes > b.mes ? 1 : -1));
         labels = sortedData.map(r => RV_formatearMes(r.mes));
@@ -512,6 +516,17 @@ const RV_COLUMNAS = {
         cols: [
             ['fecha',             'Fecha',            'ps-4'],
             ['cantidad_facturas', 'Nro Facturas',     'text-center'],
+            ['base_0',            'Base 0% / Exento', 'text-end'],
+            ['base_iva',          'Base IVA',         'text-end'],
+            ['valor_iva',         'Total IVA',        'text-end'],
+            ['total',             'Gran Total',       'text-end pe-4'],
+        ]
+    },
+    CAJERO: {
+        def: ['total', 'DESC'],
+        cols: [
+            ['cajero_nombre',     'Cajero',           'ps-4'],
+            ['cantidad_facturas', 'Nro Documentos',   'text-center'],
             ['base_0',            'Base 0% / Exento', 'text-end'],
             ['base_iva',          'Base IVA',         'text-end'],
             ['valor_iva',         'Total IVA',        'text-end'],
@@ -666,5 +681,124 @@ document.addEventListener('click', function (e) {
         numero:      tr.dataset.docNumero || '',
         sujetoLabel: 'Cliente',
         sujeto:      tr.dataset.docSujeto || ''
+    });
+});
+
+/* ════════════════════════════════════════════════════
+   RESUMEN DIARIO (tipo cierre de caja)
+   Un bloque por día con Documentos, Detalle de impuestos y Cobro por forma de
+   pago, armado en el servidor con los filtros del formulario (ver
+   ReporteVentasController::resumenDiarioAjax). Desde el modal: tirilla, PDF
+   (CMG_pdfDocumento, §9) y correo. El período sale de Fecha Desde / Hasta.
+════════════════════════════════════════════════════ */
+function RV_paramsFormulario() {
+    return new URLSearchParams(new FormData(document.getElementById('form-filtros-reporte')));
+}
+
+function RV_resumenAcciones(activo) {
+    ['rvResBtnTirilla', 'rvResBtnPdf', 'rvResBtnCorreo'].forEach(id => {
+        const b = document.getElementById(id);
+        if (b) b.disabled = !activo;
+    });
+}
+
+window.RV_abrirResumenDiario = function () {
+    const params = RV_paramsFormulario();
+    if (!params.get('fecha_desde') || !params.get('fecha_hasta')) {
+        Swal.fire({ icon: 'warning', title: 'Falta el período', text: 'Elija la Fecha Desde y la Fecha Hasta para el resumen diario.' });
+        return;
+    }
+    // Los parámetros se congelan al abrir: tirilla, PDF y correo salen del mismo resumen
+    // que se ve, aunque el usuario cambie filtros detrás del modal.
+    window.rv_resumen_params = params.toString();
+
+    const cont = document.getElementById('rvResContenido');
+    cont.innerHTML = '<div class="text-center py-5"><div class="spinner-border text-primary"></div>'
+                   + '<div class="text-muted small mt-2">Armando el resumen…</div></div>';
+    RV_resumenAcciones(false);
+    bootstrap.Modal.getOrCreateInstance('#rvModalResumen').show();
+
+    fetch(BASE_URL + '/' + RUTA_MODULO + '/resumenDiarioAjax', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'X-Requested-With': 'XMLHttpRequest' },
+        body: window.rv_resumen_params
+    })
+    .then(r => r.json())
+    .then(res => {
+        if (!res.ok) {
+            cont.innerHTML = '<div class="alert alert-warning mb-0">' + (res.error || 'No se pudo generar el resumen.') + '</div>';
+            return;
+        }
+        cont.innerHTML = res.html;
+        RV_resumenAcciones(res.dias > 0);
+    })
+    .catch(() => {
+        cont.innerHTML = '<div class="alert alert-danger mb-0">Error de comunicación con el servidor.</div>';
+    });
+};
+
+document.addEventListener('DOMContentLoaded', function () {
+    const $ = id => document.getElementById(id);
+    if (!$('rvModalResumen')) return;
+
+    // La tirilla se arma en el servidor y se abre en una ventana angosta que se imprime
+    // sola, igual que la del Reporte Restaurante y las del POS.
+    $('rvResBtnTirilla').addEventListener('click', () => window.open(
+        BASE_URL + '/' + RUTA_MODULO + '/imprimirResumenDiario?' + window.rv_resumen_params,
+        '_blank', 'width=320,height=600,scrollbars=yes'
+    ));
+
+    $('rvResBtnPdf').addEventListener('click', () => window.CMG_pdfDocumento(
+        BASE_URL + '/' + RUTA_MODULO + '/resumenDiarioPdf?' + window.rv_resumen_params,
+        { nombre: 'Resumen diario', archivo: 'ResumenDiarioVentas.pdf' }
+    ));
+
+    // Correo: modal encima del modal del resumen. La regla global .modal (z-index 5060
+    // !important) lo dejaría detrás: se sube con important inline, y su backdrop también
+    // (memoria modales-anidados-zindex-5060).
+    const modalCorreo = $('rvModalResumenCorreo');
+    modalCorreo.addEventListener('show.bs.modal', () => {
+        modalCorreo.style.setProperty('z-index', '5080', 'important');
+        setTimeout(() => {
+            const fondos = document.querySelectorAll('.modal-backdrop');
+            if (fondos.length) fondos[fondos.length - 1].style.setProperty('z-index', '5075', 'important');
+        }, 0);
+    });
+    $('rvResBtnCorreo').addEventListener('click', () => {
+        if (!$('rv-res-correos').value.trim() && RV_CORREO_EMPRESA) $('rv-res-correos').value = RV_CORREO_EMPRESA;
+        bootstrap.Modal.getOrCreateInstance(modalCorreo).show();
+    });
+
+    $('rvResBtnEnviarCorreo').addEventListener('click', async () => {
+        const correos = $('rv-res-correos').value.trim();
+        if (!correos) {
+            Swal.fire({ icon: 'warning', title: 'Falta el destinatario', text: 'Escriba al menos un correo.' });
+            return;
+        }
+        const btn = $('rvResBtnEnviarCorreo');
+        const htmlOriginal = btn.innerHTML;
+        btn.disabled = true;
+        btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Enviando…';
+        try {
+            const body = new URLSearchParams(window.rv_resumen_params);
+            body.set('correos', correos);
+            const res = await fetch(BASE_URL + '/' + RUTA_MODULO + '/enviarResumenDiarioCorreoAjax', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'X-Requested-With': 'XMLHttpRequest' },
+                body: body.toString()
+            });
+            const json = await res.json();
+            if (json.ok) {
+                bootstrap.Modal.getOrCreateInstance(modalCorreo).hide();
+                Swal.fire({ icon: 'success', title: 'Resumen enviado', text: json.mensaje, timer: 3000, showConfirmButton: false });
+            } else {
+                Swal.fire({ icon: 'error', title: 'No se pudo enviar', text: json.mensaje || 'Error desconocido.' });
+            }
+        } catch (e) {
+            Swal.fire({ icon: 'error', title: 'Error de comunicación', text: 'No se pudo contactar con el servidor.' });
+        } finally {
+            btn.disabled = false;
+            btn.innerHTML = htmlOriginal;
+        }
     });
 });

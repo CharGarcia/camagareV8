@@ -361,6 +361,16 @@ class ReciboVentaService
         if (($cabecera['estado'] ?? '') === 'anulado') {
             throw new \Exception('No se puede modificar un recibo anulado.');
         }
+        // Emitido = pagado por completo, en firme y con asiento (ver emitirSiPagados). Editarlo
+        // dejaría desfasados el asiento y los cobros: para corregirlo hay que anularlo
+        // (decisión del usuario, 04-10-2026). Facturado ya lo bloqueaba el modal; aquí también.
+        if (($cabecera['estado'] ?? '') === 'emitido') {
+            throw new \Exception('Este recibo ya está emitido (pagado por completo) y no se puede modificar. '
+                . 'Para corregirlo, anúlelo y emita uno nuevo.');
+        }
+        if (($cabecera['estado'] ?? '') === 'facturado') {
+            throw new \Exception('Este recibo ya fue facturado y no se puede modificar: los cambios se hacen en la factura generada.');
+        }
 
         $this->validarPeriodoContableAlModificar(
             $cabecera['fecha_emision'] ?? null,
@@ -596,6 +606,57 @@ class ReciboVentaService
         } catch (\Throwable $e) {
             if ($managedTransaction && $db->inTransaction()) $db->rollBack();
             throw $e;
+        }
+    }
+
+    /**
+     * Ciclo del recibo: nace 'borrador' y pasa a 'emitido' cuando queda PAGADO POR
+     * COMPLETO (decisión del usuario, 04-10-2026). Desde ahí es una venta en firme: la
+     * sincronización contable solo contabiliza recibos emitidos. Nunca vuelve a borrador,
+     * aunque después se anule el cobro (queda emitido con saldo pendiente).
+     *
+     * Lo llama IngresoService al registrar o modificar un cobro, DENTRO de su transacción
+     * (el estado cambia junto con el cobro o no cambia). Registra la auditoría.
+     *
+     * @param int[] $idsRecibo Recibos que tocó el cobro.
+     * @return int[] Los que pasaron a 'emitido' en esta llamada.
+     */
+    public function emitirSiPagados(array $idsRecibo, int $idEmpresa, int $idUsuario): array
+    {
+        $emitidos = [];
+        foreach (array_unique(array_filter(array_map('intval', $idsRecibo))) as $id) {
+            if ($this->repository->emitirSiPagado($id, $idEmpresa, $idUsuario)) {
+                $emitidos[] = $id;
+                $this->logService->registrar(
+                    $idUsuario, $idEmpresa, 'EMITIR', 'recibos_venta_cabecera', $id,
+                    ['estado' => 'borrador'], ['estado' => 'emitido', 'motivo' => 'Recibo pagado por completo']
+                );
+            }
+        }
+        return $emitidos;
+    }
+
+    /**
+     * Asiento de los recibos ya emitidos que todavía no lo tienen. Va DESPUÉS del commit
+     * del cobro y nunca lanza: lo contable no bloquea lo operativo. Si falla (p. ej. falta
+     * configurar la cuenta), lo retoma la contabilidad automática al abrir Recibos de Venta
+     * o la sincronización manual, que buscan justamente los recibos emitidos sin asiento.
+     *
+     * @param int[] $idsRecibo
+     */
+    public function generarAsientoEmitidos(array $idsRecibo, int $idEmpresa): void
+    {
+        foreach (array_unique(array_filter(array_map('intval', $idsRecibo))) as $id) {
+            try {
+                $cab = $this->repository->getPorId($id);
+                if (!$cab || (int) ($cab['id_empresa'] ?? 0) !== $idEmpresa
+                    || ($cab['estado'] ?? '') !== 'emitido' || !empty($cab['id_asiento_contable'])) {
+                    continue;
+                }
+                $this->procesarAsientoContablePorSincronizacion($id);
+            } catch (\Throwable $e) {
+                error_log('[ReciboVenta] Asiento no generado al emitir el recibo #' . $id . ': ' . $e->getMessage());
+            }
         }
     }
 

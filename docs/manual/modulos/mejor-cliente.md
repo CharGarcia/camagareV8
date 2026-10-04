@@ -5,8 +5,8 @@ categoria: Reportes
 ruta_modulo: modulos/mejor_cliente
 tipo: modulo
 visibilidad: todos
-etiquetas: mejor cliente, top clientes, ranking de clientes, cliente top, cuanto compra cada cliente, mejores clientes, cliente estrella, cliente frecuente, cliente que mas compra
-version: 1.0
+etiquetas: mejor cliente, top clientes, ranking de clientes, cliente top, cuanto compra cada cliente, mejores clientes, cliente estrella, cliente frecuente, cliente que mas compra, recibos en borrador, no salen los recibos, recibos no aparecen
+version: 1.1
 orden: 15
 estado: activo
 ---
@@ -18,7 +18,7 @@ documentos), en el periodo que se indique.
 ## Qué es y para qué sirve
 
 Arma un ranking de clientes a partir de las Facturas de Venta y/o los Recibos de
-Venta emitidos, restando las Notas de Crédito de venta del mismo periodo. Sirve
+Venta vigentes (no anulados ni facturados), restando las Notas de Crédito de venta del mismo periodo. Sirve
 para identificar a los clientes clave de la empresa (o de un asesor puntual) y
 priorizar la atención comercial.
 
@@ -62,8 +62,10 @@ Facturas/Recibos.
 - El **monto neto** es la suma de Facturas y/o Recibos (campo `total_sin_impuestos`,
   es decir sin IVA) menos las Notas de Crédito de venta del mismo cliente y
   periodo.
-- Solo se cuentan documentos **autorizados** (Facturas y Notas de Crédito) o
-  **no anulados/no borrador** (Recibos). Borradores y anulados no cuentan.
+- Solo se cuentan documentos **autorizados** (Facturas y Notas de Crédito) y
+  los Recibos **no anulados ni facturados**. El recibo no pasa por el SRI ni tiene
+  aprobación: se guarda en estado *borrador* y solo pasa a *emitido* cuando queda
+  pagado por completo; un recibo a crédito sigue en borrador y cuenta igual. Las facturas y notas de crédito en borrador no cuentan.
 - La **venta promedio** es el monto neto dividido entre la cantidad de
   documentos (Facturas/Recibos, sin contar las Notas de Crédito como documento).
 - Al filtrar por **Asesor/Vendedor**, las Notas de Crédito se restan igual al
@@ -86,9 +88,16 @@ Facturas/Recibos.
 - **Las cifras no coinciden con Reporte de Ventas**: Reporte de Ventas usa el
   total con impuestos por documento; Mejor Cliente usa el monto **sin
   impuestos** y además resta las Notas de Crédito.
+- **No aparecían los recibos**: hasta la versión 1.0 el reporte descartaba los
+  recibos en *borrador*, que es el estado en que quedan todos los recibos creados en
+  el sistema. Desde la 1.1 cuentan todos los no anulados ni facturados.
 - **Un cliente aparece con monto negativo o menor al esperado**: revise si tiene
   Notas de Crédito grandes en el periodo.
 
 ## Historial de cambios
 
+- **1.1** — **Corrección: los Recibos de Venta no aparecían** en el ranking (ni sus
+  años en el selector), porque se descartaban los recibos en *borrador*, que es el
+  estado normal de un recibo creado en el sistema. Ahora cuenta todo recibo no
+  anulado ni facturado (un recibo facturado ya está en su factura).
 - **1.0** — Versión inicial.
