@@ -6,7 +6,7 @@ ruta_modulo: modulos/control-bancario
 tipo: modulo
 visibilidad: todos
 etiquetas: control bancario, traspaso, traspasos en el banco, deposito de caja al banco, traspaso no aparece en el banco, conciliacion bancaria, estado de cuenta, banco, cheques, movimientos, cuadrar banco, buscar movimiento, buscador, filtros, filtrar movimientos bancarios, buscar cheque, chips, cheques posfechados, cheque por cobrar, cheque por depositar, aviso de cheques, alerta, notificacion, vencimiento de cheques, comprobar con contabilidad, cuadrar con contabilidad, saldo contable vs banco, diferencia contable, asiento faltante, sin asiento
-version: 1.17
+version: 1.18
 orden: 60
 estado: activo
 ---
@@ -159,6 +159,18 @@ Los cheques **migrados del sistema anterior** se tratan aparte: si su fecha es
 futura se siguen listando, pero **sin etiqueta**; si su fecha ya pasó y no tienen
 Fecha Banco, **no se muestran**. Las etiquetas y el aviso son solo para los
 cheques registrados en este sistema.
+
+### Asiento de cobro y protesto
+
+Si la empresa usa las cuentas de **cheques posfechados** (Configuración Contable →
+Cobros y Pagos), registrar la **Fecha Banco** de un cheque posfechado genera su
+**asiento de cobro** (cuenta puente → Bancos) con esa fecha; cambiarla lo mueve y
+quitarla lo anula. Si el mes está cerrado, la Fecha Banco no se guarda.
+
+En la pestaña **Recibidos**, el botón **Protestado** registra que el banco devolvió el
+cheque: pide fecha y motivo y **anula el ingreso**, así la factura vuelve a quedar
+pendiente. El mes del ingreso debe estar abierto y el ingreso no puede tener otras
+formas de cobro. Ver [Cheques posfechados en la contabilidad](../guias/cheques-posfechados.md).
 
 ## Aviso de cheques posfechados en la barra superior
 
@@ -426,6 +438,9 @@ los dos casos.
 
 ## Historial de cambios
 
+- **1.18** — Fecha Banco de cheques posfechados con cuenta puente: genera el asiento
+  de cobro. Botón **Protestado** en *Cheques Posfechados → Recibidos*. *Comprobar con
+  Contabilidad* muestra esos cheques como *Cobro de cheque posfechado* en su Fecha Banco.
 - **1.17** — Corregido: *Comprobar con Contabilidad* comparaba siempre contra la
   cuenta contable de la forma de pago, aunque Configuración Contable tuviera una
   regla que enviaba los cobros o pagos de esa forma a otra cuenta; en ese caso

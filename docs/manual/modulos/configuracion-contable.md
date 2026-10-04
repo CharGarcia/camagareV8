@@ -6,7 +6,7 @@ ruta_modulo: modulos/configuracion-contable
 tipo: modulo
 visibilidad: admin
 etiquetas: configuracion contable, cuentas por documento, asiento automatico, parametrizacion, ventas, compras, cierre, tipo de produccion, bien, servicio, filtro por año, periodo, listado de proveedores, listado de clientes, cobros y pagos, ingresos y egresos, forma de pago, cuenta bancaria, efectivo, misma cuenta en los dos bloques, formas hermanas, cheques y transferencias, mismo banco, numero de cuenta, nomina, rol de pagos, prestamo quirografario, prestamo hipotecario, prestamo empresa, prestamos iess, cuentas opcionales, costo de ventas, costo de venta, inventario, asiento sin costo, no sale el costo, cuenta de iva del cliente, reglas por cliente, buscar proveedor, buscar cliente, buscar ficha, filtrar fichas, muchos proveedores, cuentas faltantes, modulos que contabilizan, apagar asientos, no generar asientos, no contabilizar, desactivar contabilidad, interruptor, consignaciones sin asiento, aviso de asientos pendientes, asientos pendientes en el balance, proveedores sin cuentas, clientes sin cuentas, productos sin cuentas, pendientes de configurar, retenciones en venta, retenciones en compra, retencion de renta, no aparecen las retenciones, codigo de retencion, catalogo de retenciones sri, codigo ats, codigo del anexo, retencion mal asignada, codigo de retencion no existe, en que documento esta el error, retencion con codigo invalido, sugerencias, sugerir cuentas, proveedores que compran lo mismo, copiar cuentas de otro proveedor, misma cuenta para varios proveedores, gasolineras, proveedores parecidos, subtotal de compras, cuenta de gasto del proveedor, mostrar las demas cuentas, ver todas las cuentas, tipo de asiento no aparece, falta tipo de asiento en el selector, modulo apagado, personalizar asiento contable, tabla de proveedores, detalle de compras, cuenta de subtotal por proveedor, recibos de venta, copiar configuracion de facturas, recibos con otras cuentas, recibo sin asiento, igualar recibos y facturas
-version: 1.33
+version: 1.34
 orden: 5
 estado: activo
 ---
@@ -230,6 +230,15 @@ puede cambiar a mano como siempre.
 Los asientos ya generados no cambian; los recibos que estaban sin asiento lo
 generan con la nueva configuración en la siguiente sincronización de
 contabilidad.
+
+## Cobros y Pagos: cheques posfechados
+
+En el tipo **Cobros y Pagos**, la sección **Cheques posfechados** tiene dos cuentas
+opcionales: *Cheques posfechados por cobrar* (activo) y *Cheques posfechados por
+pagar* (pasivo). Con ellas, un cheque con fecha posterior a la del ingreso o egreso
+no va a Bancos sino a esa cuenta, hasta que se registra su Fecha Banco en Control
+Bancario. Aplican a los documentos con fecha desde el día en que se asignan (la
+pantalla muestra *Aplica desde*); lo anterior se ajusta a mano. Ver [Cheques posfechados en la contabilidad](../guias/cheques-posfechados.md).
 
 ## Buscar en las tablas y en las tarjetas
 
@@ -521,6 +530,7 @@ ingresos o egresos. Solo falta asignar la cuenta.
 
 ## Historial de cambios
 
+- **1.34** — Cobros y Pagos: cuentas de **cheques posfechados** por cobrar y por pagar.
 - **1.33** — En Recibos de Venta, botón **Copiar configuración de Facturas de Venta**: compara las
   dos configuraciones y permite completar lo que falta o dejar Recibos igual a Facturas. El aviso
   de productos sin categoría o marca ahora también considera el IVA configurado por categoría o

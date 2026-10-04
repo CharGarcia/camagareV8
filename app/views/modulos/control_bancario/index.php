@@ -481,8 +481,8 @@ $urlBase = rtrim($base, '/') . '/' . ltrim($rutaModulo, '/');
                     <div class="tab-pane fade show active" id="cb-tab-recibidos">
                         <div class="table-responsive" style="max-height:400px;overflow-y:auto;">
                             <table class="table table-sm table-hover mb-0">
-                                <thead class="table-light"><tr><th>Fecha Cheque</th><th>Nº Cheque</th><th>Cuenta</th><th>Cliente</th><th class="text-end">Monto</th></tr></thead>
-                                <tbody id="cb-tbody-posf-recibidos"><tr><td colspan="5" class="text-center text-muted py-4">Cargando…</td></tr></tbody>
+                                <thead class="table-light"><tr><th>Fecha Cheque</th><th>Nº Cheque</th><th>Cuenta</th><th>Cliente</th><th class="text-end">Monto</th><th class="text-center" style="width:1%"></th></tr></thead>
+                                <tbody id="cb-tbody-posf-recibidos"><tr><td colspan="6" class="text-center text-muted py-4">Cargando…</td></tr></tbody>
                             </table>
                         </div>
                     </div>

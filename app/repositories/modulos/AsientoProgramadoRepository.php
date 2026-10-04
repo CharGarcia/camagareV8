@@ -282,9 +282,10 @@ class AsientoProgramadoRepository extends BaseRepository
                        ap.id AS id_programado,
                        ap.id_cuenta,
                        pc.codigo AS cuenta_codigo,
-                       pc.nombre AS cuenta_nombre
+                       pc.nombre AS cuenta_nombre,
+                       CAST(ap.created_at AS DATE) AS asignada_desde
                 FROM asientos_tipo at
-                LEFT JOIN {$this->table} ap ON ap.id_asiento_tipo = at.id 
+                LEFT JOIN {$this->table} ap ON ap.id_asiento_tipo = at.id
                                            AND ap.id_empresa = :id_empresa 
                                            AND ap.id_referencia = at.id 
                                            AND (ap.tipo_referencia = 'asientos tipo' OR ap.tipo_referencia = at.tipo_asiento) 

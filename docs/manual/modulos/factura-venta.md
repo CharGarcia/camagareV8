@@ -6,7 +6,7 @@ ruta_modulo: modulos/factura-venta
 tipo: modulo
 visibilidad: todos
 etiquetas: factura, facturar, venta, buscar factura, buscador, aparecen facturas que no busque, resultados que no corresponden, la busqueda trae otras facturas, buscar por clave de acceso, filtros, filtrar facturas, buscar por producto vendido, buscar por forma de pago, filtro de fechas, saldo pendiente, chips, ordenar por dos columnas, ordenar por estado de pago, ordenar por cliente y fecha, sri, comprobante electronico, xml, excel, anular, nota de credito, whatsapp, link de pago, payphone, nuvei, serie vacia, sin puntos de emision, secuencial repetido, secuencial ya existe, punto de emision, ambiente, pruebas, produccion, cambio de ambiente, clave de acceso en procesamiento, error 70, comprobante devuelto, reintento automatico, saldo, stock, existencias, cuanto queda, disponible, buscador de productos, lote, vencimiento, caducidad, fecha de vencimiento, lote y vencimiento, pdf, ride, columnas del pdf, subsidio, irbpnr, servicio, propina, codigo cortado, detalle adicional, forma de pago, plazo, dias credito, unidad de tiempo, meses, anios, informacion adicional, vendedor, cajero, no sale el vendedor, falta informacion en el pdf, se cierra el modal, autorizar, bloquear factura, no puedo editar, letra pequena, tamano de letra, fuente del pdf, letra del pdf, no se lee el pdf, ancho de columna, agrandar columna, ensanchar, codigo cortado en el modal, descripcion cortada, no se ve la descripcion completa, redimensionar, precio con impuestos, precio con iva, sale en cero, columna descuento, tipo de identificacion, tipo de documento del cliente, ruc o cedula, es ruc o cedula, cedula o pasaporte, consumidor final, no se cual identificacion tiene el cliente, buscador de clientes, buscar cliente, elegir cliente, datos del cliente, informacion adicional larga, limite de caracteres, maximo 300 caracteres, value too long, no se pudo guardar la factura, imprimir, impresora, iva al subtotal, iva sobre el subtotal, iva linea por linea, calculo del iva, iva no cuadra, iva mal calculado, centavos de diferencia, factura grande, muchas lineas, muchos items, factura lenta, tarda en abrir, tarda en cargar, peso del xml, tamano del xml, 320 kb, crear cliente desde la factura, nuevo cliente, crear producto desde la factura, nuevo producto, no aparece el boton de crear cliente, falta el boton nuevo producto, aviso, avisos, novedad sri, documentos con novedad, devuelto, no autorizado, pendientes de enviar, borrador, borradores
-version: 2.33
+version: 2.34
 orden: 20
 estado: activo
 ---
@@ -427,6 +427,13 @@ elegir a mano en la ventana de filtros (pestaña *Factura*, bloque *Documento*).
 usuario solo ve sus propios registros, el aviso cuenta los de toda la empresa pero el
 listado muestra solo los suyos.
 
+### Pagada con cheque posfechado
+
+Junto al estado de pago aparece un ícono de calendario cuando la factura se cobró con
+un **cheque posfechado** que el banco todavía no ha cobrado (sin Fecha Banco en Control
+Bancario). Si el cheque se protesta, el cobro se anula y la factura vuelve a
+*Pendiente*. Ver [Cheques posfechados en la contabilidad](../guias/cheques-posfechados.md).
+
 ## Ordenar el listado
 
 Pulse el título de una columna para ordenar por ella y vuelva a pulsarlo para
@@ -509,6 +516,7 @@ la operación de inmediato.
 
 ## Historial de cambios
 
+- **2.34** — Ícono de *cheque posfechado sin cobrar* junto al estado de pago.
 - **2.33** — Al hacer clic en los avisos de la barra superior (*Documentos con novedad
   del SRI* y documentos en borrador pendientes de enviar) el listado se abre ya
   filtrado con esos documentos. Nuevo filtro **Novedad SRI** en la ventana de filtros.

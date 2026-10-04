@@ -389,6 +389,40 @@ class ControlBancarioController extends BaseModuloController
         exit;
     }
 
+    /**
+     * Protesto de un cheque recibido (modal Cheques Posfechados): anula su ingreso para que la
+     * factura vuelva a quedar pendiente. Como anula un ingreso, pide además permiso de eliminar
+     * en Ingresos en la empresa del cheque.
+     */
+    public function protestarChequeAjax(): void
+    {
+        $this->requireActualizar();
+        header('Content-Type: application/json');
+
+        $idEmpresaActiva = (int) $_SESSION['id_empresa'];
+        $idUsuario = (int) $_SESSION['id_usuario'];
+        $data = json_decode(file_get_contents('php://input') ?: '[]', true) ?: $_POST;
+
+        try {
+            $idEmpresa = $this->resolverEmpresaObjetivo($idEmpresaActiva, $idUsuario, $data);
+            if (empty(\App\Helpers\Permisos::porRutaEnEmpresa('modulos/ingresos', $idEmpresa)['eliminar'])) {
+                throw new \Exception('Protestar un cheque anula su ingreso: necesita permiso de eliminar en Ingresos.');
+            }
+            (new \App\Services\modulos\ChequePosfechadoService())->protestarCheque(
+                $idEmpresa,
+                (int) ($data['id_pago'] ?? 0),
+                trim((string) ($data['fecha'] ?? '')),
+                (string) ($data['motivo'] ?? ''),
+                $idUsuario
+            );
+            echo json_encode(['ok' => true]);
+        } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
+            echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
+        }
+        exit;
+    }
+
     /** Devuelve la conciliación vigente que cubre por completo el rango de fechas mostrado (para el badge). */
     public function conciliacionActualAjax(): void
     {

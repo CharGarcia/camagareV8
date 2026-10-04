@@ -842,6 +842,42 @@ $base = BASE_URL;
             </div>
         </div>
 
+        <!-- ACORDEÓN: CHEQUES POSFECHADOS (cuentas puente, ChequePosfechadoService) -->
+        <div class="accordion-item border-0 border-top">
+            <h2 class="accordion-header" id="headingChequesPosfechados">
+                <button class="accordion-button collapsed fw-bold py-3 px-4 text-dark bg-light" type="button" data-bs-toggle="collapse" data-bs-target="#collapseChequesPosfechados" aria-expanded="false" aria-controls="collapseChequesPosfechados">
+                    <i class="bi bi-calendar2-week me-2 text-warning"></i> Cheques posfechados <span class="badge ms-2 bg-secondary bg-opacity-10 text-secondary fw-normal">Opcional</span>
+                </button>
+            </h2>
+            <div id="collapseChequesPosfechados" class="accordion-collapse collapse" aria-labelledby="headingChequesPosfechados" data-bs-parent="#acordeonCobroPago">
+                <div class="accordion-body p-0 border-top bg-white">
+                    <div class="small text-muted px-4 py-2 border-bottom" style="line-height:1.5;">
+                        Un cheque con fecha posterior a la del ingreso o egreso no va a Bancos: queda en esta cuenta hasta
+                        que se registra su <b>Fecha Banco</b> en Control Bancario, que genera el asiento de cobro.
+                        Aplica a los ingresos y egresos con fecha desde el día en que se asigna la cuenta; lo anterior se
+                        ajusta con asientos manuales. Sin cuenta, los cheques siguen yendo directo a Bancos.
+                    </div>
+                    <div class="table-responsive">
+                        <table class="table table-hover table-sm mb-0 align-middle table-interactiva">
+                            <thead class="table-light">
+                                <tr>
+                                    <th class="ps-4 py-2" style="width: 20%">Concepto</th>
+                                    <th class="py-2" style="width: 25%">Detalle</th>
+                                    <th class="py-2" style="width: 20%">Tipo Cuenta</th>
+                                    <th class="text-center py-2" style="width: 10%">Naturaleza</th>
+                                    <th class="py-2" style="width: 20%">Cuenta Contable</th>
+                                    <th class="text-center py-2" style="width: 5%">Acción</th>
+                                </tr>
+                            </thead>
+                            <tbody id="tbodyChequesPosfechados">
+                                <!-- Filas dinámicas cargadas por JS -->
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+
     </div>
 </div>
 

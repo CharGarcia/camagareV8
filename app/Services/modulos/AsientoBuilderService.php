@@ -5481,27 +5481,36 @@ class AsientoBuilderService
             $colDoc = 'id_ingreso';
             $colForma = 'id_forma_cobro';
             $tipoRef = 'forma_cobro';
+            $tablaDoc = 'ingresos_cabecera';
             $esDebe = true;
         } else {
             $tabla = 'egresos_pagos';
             $colDoc = 'id_egreso';
             $colForma = 'id_forma_pago';
             $tipoRef = 'forma_pago';
+            $tablaDoc = 'egresos_cabecera';
             $esDebe = false;
         }
+
+        // Cheques posfechados: si la empresa configuró la cuenta puente (Cobros y Pagos), el
+        // cheque con fecha futura va a esa cuenta en vez de a Bancos; pasa a Bancos con el asiento
+        // de cobro al registrar su Fecha Banco (ChequePosfechadoService::sincronizarCobro).
+        $puente = (new \App\repositories\modulos\ChequePosfechadoRepository())->getCuentaPuente($idEmpresa, $flujo);
 
         // Las tablas de pagos de egresos tienen columna 'eliminado'; las de ingresos no.
         // Un cheque anulado (estado_cheque) se preserva como historial pero deja de
         // contarse aquí: el asiento se recalcula más chico automáticamente, sin asiento
-        // de reversión (ver EgresoService::anularCheque).
+        // de reversión (ver EgresoService::anularChequesDelEgreso).
         $filtroElim = $flujo === 'egreso' ? " AND p.eliminado = FALSE AND COALESCE(p.estado_cheque, 'vigente') <> 'anulado'" : '';
 
         $sql = "SELECT p.{$colForma} AS id_forma, p.monto,
                        p.referencia AS pago_referencia, p.tipo_operacion_bancaria, p.numero_cheque,
+                       p.fecha_cobro, f.tipo AS forma_tipo, doc.fecha_emision AS fecha_documento,
                        f.nombre AS forma_nombre, f.activo AS forma_activa,
                        COALESCE(ap.id_cuenta, f.id_cuenta_contable) AS id_cuenta,
                        pc.codigo AS cuenta_codigo, pc.nombre AS cuenta_nombre
                 FROM {$tabla} p
+                INNER JOIN {$tablaDoc} doc ON doc.id = p.{$colDoc}
                 INNER JOIN empresa_formas_pago f ON f.id = p.{$colForma}
                 LEFT JOIN asientos_programados ap ON ap.id_referencia = f.id
                                                  AND ap.tipo_referencia = :tipo_ref
@@ -5521,6 +5530,18 @@ class AsientoBuilderService
                 continue;
             }
             $total += $monto;
+            if (\App\Services\modulos\ChequePosfechadoService::aplicaPuente($puente, $p['tipo_operacion_bancaria'], $p['forma_tipo'], $p['fecha_cobro'], $p['fecha_documento'])) {
+                $detalles[] = [
+                    'id_cuenta_contable' => (int) $puente['id_cuenta'],
+                    'cuenta_codigo'      => $puente['cuenta_codigo'],
+                    'cuenta_nombre'      => $puente['cuenta_nombre'],
+                    'debe'               => $esDebe ? $monto : 0.0,
+                    'haber'              => $esDebe ? 0.0 : $monto,
+                    'referencia_detalle' => ($esDebe ? 'Cobro: ' : 'Pago: ') . self::textoFormaPago($p)
+                        . ' · posfechado al ' . date('d-m-Y', strtotime((string) $p['fecha_cobro'])),
+                ];
+                continue;
+            }
             if (empty($p['id_cuenta'])) {
                 // Forma sin cuenta configurada: se omite y el asiento descuadra. Se anota el
                 // motivo para poder decir CUÁL forma falta, en vez del genérico de descuadre.

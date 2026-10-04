@@ -1668,23 +1668,51 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
             return;
         }
         wrap.classList.remove('d-none');
-        tb.innerHTML = pagosAnuladosEgreso.map(p => {
-            const motivo = p.motivo_anulacion_cheque ? ` — ${p.motivo_anulacion_cheque}` : '';
+        tb.innerHTML = pagosAnuladosEgreso.map((p, i) => {
+            const motivo = p.motivo_anulacion_cheque ? ` — ${escapeHtmlEg(p.motivo_anulacion_cheque)}` : '';
+            if (p.pendiente) {
+                // Aún no se guarda: se anula al pulsar Guardar, junto con el pago que lo reemplace.
+                return `<tr class="text-muted">
+                    <td class="small"><span class="text-decoration-line-through">CHQ#${escapeHtmlEg(p.numero_cheque || '?')}</span>${motivo}
+                        <span class="badge bg-warning bg-opacity-10 text-warning-emphasis border border-warning border-opacity-25 ms-1">Se anula al guardar</span>
+                        <button type="button" class="btn btn-link btn-sm p-0 ms-1 align-baseline" onclick="deshacerAnulacionCheque(${i})">Deshacer</button></td>
+                    <td class="text-end small text-decoration-line-through">$${(p.monto || 0).toFixed(2)}</td>
+                </tr>`;
+            }
             const fecha  = p.anulado_cheque_at ? ` (${p.anulado_cheque_at})` : '';
             return `<tr class="text-decoration-line-through text-muted">
-                <td class="small">CHQ#${p.numero_cheque || '?'}${motivo}${fecha}</td>
+                <td class="small">CHQ#${escapeHtmlEg(p.numero_cheque || '?')}${motivo}${fecha}</td>
                 <td class="text-end small">$${(p.monto || 0).toFixed(2)}</td>
             </tr>`;
         }).join('');
     }
 
+    /** Vuelve a dejar vigente un cheque marcado para anular (antes de guardar). */
+    function deshacerAnulacionCheque(i) {
+        const a = pagosAnuladosEgreso[i];
+        if (!a || !a.pendiente) return;
+        pagosAnuladosEgreso.splice(i, 1);
+        pagosEgreso.push(a.pago);
+        renderPagosEgreso();
+        recalcEgresoTot();
+    }
+
+    /**
+     * Anular un cheque (dañado, mal impreso…): se marca aquí y se aplica al GUARDAR el egreso,
+     * junto con lo que lo reemplace — otra forma de pago, o menos pagado a cada documento (la
+     * compra vuelve a quedar con saldo). El guardado exige que las formas de pago cubran el total,
+     * así el egreso nunca queda descubierto con la compra figurando pagada.
+     * Servidor: EgresoService::actualizarPagos() → anularChequesDelEgreso().
+     */
     async function anularChequeEgreso(idPago, index) {
         const p = pagosEgreso[index];
         const { value: motivo, isConfirmed } = await Swal.fire({
             icon: 'warning',
             title: 'Anular cheque',
-            html: `Vas a anular el cheque <b>#${p ? (p.numero_cheque || '?') : '?'}</b>.<br>
-                   El egreso NO se anula; su valor deja de contarse y podrás agregar otra forma de pago para cubrirlo.`,
+            html: `Vas a anular el cheque <b>#${p ? escapeHtmlEg(p.numero_cheque || '?') : '?'}</b>.<br>
+                   El egreso NO se anula. Antes de <b>Guardar</b>, cubre su valor: agrega otra forma de pago
+                   o baja lo pagado de cada documento (la compra quedará con saldo pendiente).<br>
+                   <span class="small text-muted">Si no se pagó nada, anula el egreso completo.</span>`,
             input: 'text',
             inputPlaceholder: 'Motivo de la anulación (obligatorio)',
             showCancelButton: true,
@@ -1698,29 +1726,26 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                 return v.trim();
             }
         });
-        if (!isConfirmed) return;
+        if (!isConfirmed || !p) return;
 
-        const fd = new FormData();
-        fd.append('id_pago', idPago);
-        fd.append('motivo', motivo);
-        try {
-            const res = await (await fetch(`${EGR_URL}/anularChequeAjax`, { method: 'POST', body: fd })).json();
-            if (!res.ok) { Swal.fire('No se pudo anular', res.mensaje, 'warning'); return; }
-            if (p) {
-                pagosAnuladosEgreso.push({
-                    numero_cheque: p.numero_cheque,
-                    monto: p.monto,
-                    motivo_anulacion_cheque: motivo,
-                    anulado_cheque_at: CMG_fechaLocal ? CMG_fechaLocal() : ''
-                });
-            }
-            pagosEgreso.splice(index, 1);
-            renderPagosEgreso();
-            recalcEgresoTot();
-            Swal.fire({ icon: 'success', title: 'Cheque anulado', text: res.mensaje, timer: 1600, showConfirmButton: false });
-        } catch (e) {
-            Swal.fire('Error', 'No se pudo anular el cheque.', 'error');
-        }
+        pagosAnuladosEgreso.push({
+            id_pago: idPago,
+            numero_cheque: p.numero_cheque,
+            monto: p.monto,
+            motivo_anulacion_cheque: motivo,
+            pendiente: true,
+            pago: p, // para «Deshacer»
+        });
+        pagosEgreso.splice(index, 1);
+        renderPagosEgreso();
+        recalcEgresoTot();
+        Swal.fire({
+            icon: 'info',
+            title: 'Cheque marcado para anular',
+            text: 'Se anula al guardar el egreso. Cubra su valor con otra forma de pago o baje lo pagado de cada documento.',
+            target: document.getElementById('modalNuevoEgreso') || 'body',
+            heightAuto: false,
+        });
     }
 
     // ── Impresión de cheques ──────────────────────────────────────────────────
@@ -2726,7 +2751,11 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                 numero_cheque: p.numero_cheque,
                 fecha_cobro: p.fecha_cobro,
                 beneficiario_cheque: p.beneficiario_cheque
-            }))
+            })),
+            // Cheques marcados para anular en el modal: se anulan en este mismo guardado.
+            cheques_anular: pagosAnuladosEgreso
+                .filter(p => p.pendiente)
+                .map(p => ({ id_pago: p.id_pago, motivo: p.motivo_anulacion_cheque }))
         };
 
         fetch(`${EGR_URL}/actualizarPagosAjax`, {

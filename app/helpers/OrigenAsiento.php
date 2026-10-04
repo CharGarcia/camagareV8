@@ -32,6 +32,7 @@ final class OrigenAsiento
         'ingreso'                    => 'Ingreso',
         'egreso'                     => 'Egreso',
         'traspaso'                   => 'Traspaso',
+        'cobro_cheque'               => 'Cobro de cheque posfechado',
         'conciliacion_tarjetas'      => 'Conciliación de tarjetas',
         'consignacion_venta'         => 'Consignación de venta',
         'retorno_cv'                 => 'Retorno de consignación',

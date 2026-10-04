@@ -636,6 +636,7 @@ class AsientoContableRepository
             'declaracion_iva'      => 'DV',
             'importaciones'        => 'IM',
             'traspasos'            => 'TR',
+            'cheques'              => 'CH', // cobro de cheques posfechados (ChequePosfechadoService)
         ];
         // Sin esto, cualquier tipo_comprobante no listado cae en 'DI' y comparte numeración
         // con el diario real: dos documentos de tipos distintos pueden terminar con el MISMO

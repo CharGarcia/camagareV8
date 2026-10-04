@@ -359,12 +359,15 @@ class ConfiguracionContableController extends BaseModuloController
                 $cobros = $this->repository->getReglasFormasCobrosPagos($idEmpresa, 'cobro');
                 $pagos  = $this->repository->getReglasFormasCobrosPagos($idEmpresa, 'pago');
                 $metodo = $this->repository->getMetodoPreferencia($idEmpresa, $tipoAsiento);
+                // Cuentas puente de cheques posfechados (conceptos de asientos_tipo 'cobros_pagos').
+                $cheques = $this->repository->getReglasGeneralesPorConcepto($idEmpresa, 'cobros_pagos');
                 echo json_encode([
-                    'ok'     => true,
-                    'modo'   => 'cobros_pagos',
-                    'cobros' => $cobros,
-                    'pagos'  => $pagos,
-                    'metodo' => $metodo
+                    'ok'      => true,
+                    'modo'    => 'cobros_pagos',
+                    'cobros'  => $cobros,
+                    'pagos'   => $pagos,
+                    'cheques' => $cheques,
+                    'metodo'  => $metodo
                 ]);
                 exit;
             }

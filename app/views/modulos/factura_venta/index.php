@@ -494,6 +494,9 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                             } else {
                                 $estadoPagoBadge = '<span class="badge bg-danger bg-opacity-10 text-danger border border-danger border-opacity-25">Pendiente</span>';
                             }
+                            if ($estado !== 'anulado' && in_array($r['cheque_posfechado_pendiente'] ?? false, [true, 't', 'true', 1, '1'], true)) {
+                                $estadoPagoBadge .= \App\controllers\modulos\FacturaVentaController::ICONO_CHEQUE_POSFECHADO;
+                            }
                             ?>
                             <tr class="factura-row" role="button" tabindex="0" data-row='<?= htmlspecialchars(json_encode($r), ENT_QUOTES, 'UTF-8') ?>' onclick="abrirModalFacturaVer(this)">
                                 <td class="ps-3" data-col="numero"><code class="text-secondary"><?= htmlspecialchars(($r['establecimiento'] ?? '') . '-' . ($r['punto_emision'] ?? '') . '-' . ($r['secuencial'] ?? '')) ?></code></td>

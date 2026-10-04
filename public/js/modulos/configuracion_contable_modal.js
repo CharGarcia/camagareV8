@@ -703,6 +703,53 @@
             naturalezaBadge: ASIENTOPROG_naturalezaBadge('haber'),
             vacioMsg: 'No hay formas de pago activas. Créelas en el módulo "Formas de Cobros y Pagos".'
         }));
+        ASIENTOPROG_renderChequesPosfechados(res.cheques || []);
+    }
+
+    /**
+     * Cuentas puente de cheques posfechados (conceptos generales de 'cobros_pagos'). Se guardan
+     * como cualquier regla General (guardarReglaGeneralAjax). «Aplica desde» = día en que se
+     * asignó la cuenta: solo los ingresos/egresos desde esa fecha usan la cuenta puente.
+     */
+    function ASIENTOPROG_renderChequesPosfechados(lista) {
+        const tbody = document.getElementById('tbodyChequesPosfechados');
+        if (!tbody) return;
+        tbody.innerHTML = '';
+        if (!lista.length) {
+            tbody.innerHTML = '<tr><td colspan="6" class="text-center py-4 text-muted"><i class="bi bi-info-circle me-1"></i> Falta ejecutar la migración de cheques posfechados en la base de datos.</td></tr>';
+            return;
+        }
+        const fmt = (f) => { const p = String(f || '').slice(0, 10).split('-'); return p.length === 3 ? `${p[2]}-${p[1]}-${p[0]}` : ''; };
+        lista.forEach(item => {
+            const suffix   = `cheque_${item.id_asiento_tipo}`;
+            const inputId  = `cuenta_search_${suffix}`;
+            const hiddenId = `cuenta_hidden_${suffix}`;
+            const sugId    = `sug_${suffix}`;
+            const cuentaVal = item.id_cuenta ? `${item.cuenta_codigo} - ${item.cuenta_nombre}` : '';
+            const desde = item.id_cuenta && item.asignada_desde
+                ? `<div class="text-success mt-1"><i class="bi bi-calendar-check me-1"></i>Aplica desde ${fmt(item.asignada_desde)}</div>`
+                : '<div class="text-muted mt-1">Sin cuenta: los cheques van directo a Bancos.</div>';
+
+            const tr = document.createElement('tr');
+            tr.innerHTML = `
+                <td class="ps-4 fw-bold text-dark">${ASIENTOPROG_esc(item.concepto)}</td>
+                <td class="small text-muted">${ASIENTOPROG_esc(item.detalle || '')}${desde}</td>
+                <td>${ASIENTOPROG_badgesPorTipoCuenta(item.tipo_cuenta)}</td>
+                <td class="text-center">${ASIENTOPROG_naturalezaBadge(item.debe_haber)}</td>
+                <td class="autocomplete-celda">
+                    <input type="text" class="form-control form-control-sm" id="${inputId}" placeholder="Escriba código o nombre..." value="${ASIENTOPROG_esc(cuentaVal)}" autocomplete="off">
+                    <input type="hidden" id="${hiddenId}" value="${item.id_cuenta || ''}">
+                    <div class="list-group sugerencias-flotantes" id="${sugId}" style="display: none;"></div>
+                </td>
+                <td class="text-center">
+                    <button type="button" class="btn btn-link text-danger p-0 border-0" title="Quitar cuenta"
+                            onclick="ASIENTOPROG_eliminarAlVuelo(${item.id_asiento_tipo}, '${inputId}', '${hiddenId}')">
+                        <i class="bi bi-trash fs-5"></i>
+                    </button>
+                </td>`;
+            tbody.appendChild(tr);
+            ASIENTOPROG_vincularAutocomplete(item.id_asiento_tipo, inputId, hiddenId, sugId, item.tipo_cuenta || '');
+        });
     }
 
     /**

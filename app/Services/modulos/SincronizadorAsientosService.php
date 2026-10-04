@@ -73,6 +73,7 @@ class SincronizadorAsientosService
         'roles_pago'            => ['tipo' => 'nomina',                    'nombre' => 'Nómina'],
         'conciliacion_tarjetas' => ['tipo' => 'cobros_pagos',              'nombre' => 'Cobros y Pagos (formas de cobro con tarjeta)', 'seccion' => 'cobros'],
         'traspasos'             => ['tipo' => 'cobros_pagos',              'nombre' => 'Cobros y Pagos'],
+        'cobros_cheques'        => ['tipo' => 'cobros_pagos',              'nombre' => 'Cobros y Pagos'],
         'activos_fijos_alta'    => ['tipo' => 'activos_fijos_alta',        'nombre' => 'Activos Fijos - Alta'],
     ];
 
@@ -929,6 +930,23 @@ class SincronizadorAsientosService
             'tablaVerif' => 'traspasos_cabecera',
             'colAsiento' => 'id_asiento_contable',
             'colsDoc' => ['numero_traspaso'],
+        ];
+
+        // 13b. Cobro de cheques posfechados: los que ya tienen Fecha Banco en Control Bancario y
+        //      cuyo ingreso/egreso usa la cuenta puente, sin asiento de cobro (p. ej. si al poner
+        //      la fecha faltaba la cuenta de la forma). Ver ChequePosfechadoService.
+        $trabajos[] = [
+            'sql'    => \App\repositories\modulos\ChequePosfechadoRepository::sqlPendientesDeCobro(),
+            'params' => [$idEmpresa, $idEmpresa],
+            'factory' => function() {
+                return new \App\Services\modulos\ChequePosfechadoService();
+            },
+            'clave'  => 'cobros_cheques',
+            'nombre' => 'Cobro de cheques posfechados',
+            'dondeConfigurar' => 'Configuración Contable (Cobros y Pagos)',
+            'tablaVerif' => 'control_bancario_movimientos',
+            'colAsiento' => 'id_asiento_cobro',
+            'colsDoc' => ['numero_cheque'],
         ];
 
         // 14. Activos Fijos: asiento de ALTA de los activos manuales (los de una compra ya

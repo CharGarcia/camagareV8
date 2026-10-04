@@ -399,7 +399,7 @@ class FacturaVentaRepository extends BaseRepository
                 'tabla'       => 'ventas_cabecera',
                 'alias'       => 'v',
                 'joinsFiltro' => $joins . ' ' . $joinAbonosPagina,
-                'joinsFinal'  => $joins . ' ' . $lateralAbonos,
+                'joinsFinal'  => $joins . ' ' . $lateralAbonos . ' ' . self::LATERAL_CHEQUE_POSFECHADO,
                 'where'       => $where,
                 'orderBy'     => $orderBy,
                 'perPage'     => $perPage,
@@ -413,11 +413,38 @@ class FacturaVentaRepository extends BaseRepository
                        ab.total_cobrado,
                        ab.total_nc,
                        ab.total_nd,
-                       ab.total_retencion",
+                       ab.total_retencion,
+                       chq.cheque_posfechado_pendiente",
             ],
             $params
         );
     }
+
+    /**
+     * ¿La factura está cobrada (en todo o en parte) con un cheque posfechado que el banco aún no
+     * cobró? Cheque de un ingreso vigente que abona la factura, con fecha posterior a la del
+     * ingreso y sin Fecha Banco en Control Bancario (mismo criterio que el aviso de cheques
+     * posfechados del navbar, sin los migrados). Solo se calcula para las filas de la página.
+     */
+    private const LATERAL_CHEQUE_POSFECHADO = "LEFT JOIN LATERAL (
+                SELECT EXISTS (
+                    SELECT 1
+                      FROM ingresos_detalle ind
+                      JOIN ingresos_cabecera inc ON inc.id = ind.id_ingreso
+                           AND inc.estado != 'anulado' AND inc.eliminado = false
+                      JOIN ingresos_pagos ip ON ip.id_ingreso = inc.id
+                      LEFT JOIN empresa_formas_pago fp ON fp.id = ip.id_forma_cobro
+                      LEFT JOIN control_bancario_movimientos cbm
+                           ON cbm.origen_tipo = 'ingreso' AND cbm.origen_id = ip.id AND cbm.eliminado = false
+                     WHERE ind.id_referencia_documento = v.id AND ind.tipo_documento = 'FACTURA'
+                       AND COALESCE(UPPER(NULLIF(TRIM(ip.tipo_operacion_bancaria), '')),
+                                    CASE WHEN UPPER(fp.tipo) = 'CHEQUE' THEN 'CHEQUE' END) = 'CHEQUE'
+                       AND ip.fecha_cobro > inc.fecha_emision
+                       AND cbm.fecha_banco IS NULL
+                       AND NOT EXISTS (SELECT 1 FROM migracion_mysql_map mm
+                                        WHERE mm.id_empresa = inc.id_empresa AND mm.entidad = 'ingresos' AND mm.id_destino = inc.id)
+                ) AS cheque_posfechado_pendiente
+            ) chq ON true";
 
     /**
      * Series (establecimiento-puntoEmision) que REALMENTE tienen al menos una

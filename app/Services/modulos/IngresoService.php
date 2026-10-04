@@ -309,6 +309,10 @@ class IngresoService
             // Update Cabecera
             $this->repository->updateCabecera($id, $data);
 
+            // Un cheque posfechado ya cobrado tiene su asiento de cobro ligado a esta línea de pago,
+            // que se borra y se vuelve a crear aquí abajo: se exige quitar antes su Fecha Banco.
+            (new ChequePosfechadoService(null, $this->logService))->validarSinCobrosContabilizados($idEmpresa, 'ingreso', $id);
+
             // Wipe and rewrite Details and Payments to simplify rebalancing
             $this->repository->deleteDetalles($id);
             $this->repository->deletePagos($id);
@@ -794,6 +798,8 @@ class IngresoService
     private function anularAsientoContable(array $ingreso, int $idEmpresa, int $idUsuario): void
     {
         $idIngreso = (int) $ingreso['id'];
+        // Los asientos de cobro de sus cheques posfechados (Fecha Banco) se anulan con él.
+        (new ChequePosfechadoService(null, $this->logService))->anularCobrosDeDocumento($idEmpresa, 'ingreso', $idIngreso, $idUsuario);
         $asientoService = $this->asientoContableService();
         $previo = $asientoService->getAsientoPorOrigen('ingreso', $idIngreso, $idEmpresa);
         $idAsiento = $previo ? (int) $previo['id'] : 0;

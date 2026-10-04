@@ -196,6 +196,8 @@ class ControlBancarioRepository extends BaseRepository
      */
     private function sqlCruceContable(string $marcasCobro, string $marcasPago, string $cuentasIn): string
     {
+        $puenteIng = ChequePosfechadoRepository::sqlVaACuentaPuente('ingreso', 'ip', 'ic');
+        $puenteEgr = ChequePosfechadoRepository::sqlVaACuentaPuente('egreso', 'ep', 'ec');
         return "WITH amb AS (
                     SELECT CAST(tipo_ambiente AS VARCHAR(1)) AS t FROM empresas WHERE id = :e
                 ),
@@ -208,6 +210,9 @@ class ControlBancarioRepository extends BaseRepository
                       AND COALESCE(ic.estado, 'registrado') <> 'anulado'
                       AND ic.tipo_ambiente = (SELECT t FROM amb)
                       AND ip.id_forma_cobro IN ({$marcasCobro})
+                      -- Cheque posfechado con cuenta puente: no toca el banco en la fecha del
+                      -- ingreso sino en su Fecha Banco (fila 'cobro_cheque' más abajo).
+                      AND NOT {$puenteIng}
                     GROUP BY ic.id
                     UNION ALL
                     SELECT 'egreso', ec.id, ec.numero_egreso, ec.fecha_emision, -SUM(ep.monto)
@@ -219,6 +224,7 @@ class ControlBancarioRepository extends BaseRepository
                       AND COALESCE(ep.estado_cheque, 'vigente') <> 'anulado'
                       AND ec.tipo_ambiente = (SELECT t FROM amb)
                       AND ep.id_forma_pago IN ({$marcasPago})
+                      AND NOT {$puenteEgr}
                     GROUP BY ec.id
                     UNION ALL
                     -- Traspasos: entra en la cuenta destino (por su cuenta de cobro) y sale de la
@@ -241,14 +247,41 @@ class ControlBancarioRepository extends BaseRepository
                       AND ct.neto_depositado <> 0
                       AND ct.tipo_ambiente = (SELECT t FROM amb)
                       AND ct.id_forma_cobro_destino IN ({$marcasCobro})
+                    UNION ALL
+                    -- Cobro de cheques posfechados con cuenta puente: el banco se mueve en la Fecha
+                    -- Banco, con el asiento de cobro (modulo_origen 'cobro_cheque', id = anotación).
+                    SELECT 'cobro_cheque', cbm.id, '#' || COALESCE(ip.numero_cheque, '?'), cbm.fecha_banco, ip.monto
+                    FROM control_bancario_movimientos cbm
+                    JOIN ingresos_pagos ip ON ip.id = cbm.origen_id
+                    JOIN ingresos_cabecera ic ON ic.id = ip.id_ingreso
+                    WHERE cbm.id_empresa = :e AND cbm.origen_tipo = 'ingreso' AND cbm.eliminado = FALSE
+                      AND cbm.fecha_banco IS NOT NULL
+                      AND ic.eliminado = FALSE AND COALESCE(ic.estado, 'registrado') <> 'anulado'
+                      AND ic.tipo_ambiente = (SELECT t FROM amb)
+                      AND ip.id_forma_cobro IN ({$marcasCobro})
+                      AND {$puenteIng}
+                    UNION ALL
+                    SELECT 'cobro_cheque', cbm.id, '#' || COALESCE(ep.numero_cheque, '?'), cbm.fecha_banco, -ep.monto
+                    FROM control_bancario_movimientos cbm
+                    JOIN egresos_pagos ep ON ep.id = cbm.origen_id
+                    JOIN egresos_cabecera ec ON ec.id = ep.id_egreso
+                    WHERE cbm.id_empresa = :e AND cbm.origen_tipo = 'egreso' AND cbm.eliminado = FALSE
+                      AND cbm.fecha_banco IS NOT NULL
+                      AND ec.eliminado = FALSE AND COALESCE(ec.estado, 'registrado') <> 'anulado'
+                      AND COALESCE(ep.eliminado, FALSE) = FALSE AND COALESCE(ep.estado_cheque, 'vigente') <> 'anulado'
+                      AND ec.tipo_ambiente = (SELECT t FROM amb)
+                      AND ep.id_forma_pago IN ({$marcasPago})
+                      AND {$puenteEgr}
                 ),
                 k AS (
                     SELECT CASE WHEN icx.id IS NOT NULL THEN 'ingreso'
                                 WHEN ecx.id IS NOT NULL THEN 'egreso'
                                 WHEN tcx.id IS NOT NULL THEN 'traspaso'
                                 WHEN ctx.id IS NOT NULL THEN 'conciliacion_tarjetas'
+                                WHEN ac.modulo_origen = 'cobro_cheque' THEN 'cobro_cheque'
                                 ELSE 'asiento' END::VARCHAR AS tipo,
-                           COALESCE(icx.id, ecx.id, tcx.id, ctx.id, ac.id) AS id_doc,
+                           COALESCE(icx.id, ecx.id, tcx.id, ctx.id,
+                                    CASE WHEN ac.modulo_origen = 'cobro_cheque' THEN ac.id_referencia_origen END, ac.id) AS id_doc,
                            MIN(ac.fecha_asiento) AS fecha,
                            SUM(ad.debe - ad.haber) AS monto,
                            MIN(ac.id) AS id_asiento,
@@ -364,14 +397,15 @@ class ControlBancarioRepository extends BaseRepository
                 LEFT JOIN LATERAL (
                     SELECT ac.id, ac.numero_comprobante
                     FROM asientos_contables_cabecera ac
-                    WHERE p.monto_asiento IS NULL AND p.tipo IN ('ingreso', 'egreso', 'traspaso', 'conciliacion_tarjetas')
+                    WHERE p.monto_asiento IS NULL AND p.tipo IN ('ingreso', 'egreso', 'traspaso', 'conciliacion_tarjetas', 'cobro_cheque')
                       AND ac.id_empresa = :e AND ac.estado = 'contabilizado' AND ac.eliminado = FALSE
                       AND ac.tipo_ambiente = (SELECT t FROM amb)
                       AND (   (p.tipo = 'ingreso'  AND UPPER(ac.tipo_comprobante) = 'INGRESOS' AND COALESCE(ac.modulo_origen, '') <> 'conciliacion_tarjetas' AND ac.id_referencia_origen = p.id_doc)
                            OR (p.tipo = 'egreso'   AND UPPER(ac.tipo_comprobante) = 'EGRESOS'  AND ac.id_referencia_origen = p.id_doc)
                            OR (p.tipo = 'traspaso' AND ac.modulo_origen = 'traspaso'           AND ac.id_referencia_origen = p.id_doc)
                            OR (p.tipo = 'traspaso' AND ac.id = (SELECT tcy.id_asiento_contable FROM traspasos_cabecera tcy WHERE tcy.id = p.id_doc))
-                           OR (p.tipo = 'conciliacion_tarjetas' AND ac.modulo_origen = 'conciliacion_tarjetas' AND ac.id_referencia_origen = p.id_doc))
+                           OR (p.tipo = 'conciliacion_tarjetas' AND ac.modulo_origen = 'conciliacion_tarjetas' AND ac.id_referencia_origen = p.id_doc)
+                           OR (p.tipo = 'cobro_cheque' AND ac.modulo_origen = 'cobro_cheque' AND ac.id_referencia_origen = p.id_doc))
                     ORDER BY ac.id
                     LIMIT 1
                 ) oa ON TRUE

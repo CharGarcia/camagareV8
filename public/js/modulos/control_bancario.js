@@ -288,7 +288,7 @@
                 };
             }
             const ok = p.clase === 'cuadra';
-            const tipoDoc = ({ ingreso: 'Ingreso', egreso: 'Egreso', traspaso: 'Traspaso', conciliacion_tarjetas: 'Liquidación de tarjetas' })[p.tipo] || 'Asiento';
+            const tipoDoc = ({ ingreso: 'Ingreso', egreso: 'Egreso', traspaso: 'Traspaso', conciliacion_tarjetas: 'Liquidación de tarjetas', cobro_cheque: 'Cobro de cheque posfechado' })[p.tipo] || 'Asiento';
             // Sin línea en la cuenta del banco pero con asiento del documento en otras cuentas: se
             // enlaza ese asiento (atenuado) para ver a qué cuenta fue.
             const asiento = p.id_asiento
@@ -856,23 +856,93 @@
         return r.es_migrado === true || r.es_migrado === 't' || r.es_migrado === 1;
     }
 
-    function renderPosfechados(tbodyId, rows, diasPorVencer) {
+    /** @param {boolean} [conProtesto] Recibidos: botón «Protestado» por fila (ver CB_protestarCheque). */
+    function renderPosfechados(tbodyId, rows, diasPorVencer, conProtesto = false) {
         const tbody = document.getElementById(tbodyId);
+        const cols = conProtesto ? 6 : 5;
         if (!rows || !rows.length) {
-            tbody.innerHTML = `<tr><td colspan="5" class="text-center text-muted py-4">No hay cheques posfechados.</td></tr>`;
+            tbody.innerHTML = `<tr><td colspan="${cols}" class="text-center text-muted py-4">No hay cheques posfechados.</td></tr>`;
             return;
         }
         tbody.innerHTML = rows.map(r => {
             const monto = parseFloat(r.debe) > 0 ? r.debe : r.haber;
+            const montoTxt = Number(monto || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+            let accion = '';
+            if (conProtesto) {
+                const puede = r.origen_tipo === 'ingreso' && !esMigrado(r) && parseInt(r.origen_id, 10) > 0;
+                accion = `<td class="text-center">${puede
+                    ? `<button type="button" class="btn btn-sm btn-outline-danger py-0 px-1 text-nowrap" title="El banco devolvió el cheque: anula el ingreso y la factura vuelve a quedar pendiente"
+                               onclick="CB_protestarCheque(${parseInt(r.origen_id, 10)}, ${parseInt(r.id_empresa, 10) || 0}, '${escHtml(r.numero_cheque)}', '${montoTxt}', '${escHtml(r.nombre_entidad)}')">
+                           <i class="bi bi-x-octagon me-1"></i>Protestado</button>`
+                    : ''}</td>`;
+            }
             return `<tr>
                 <td class="text-nowrap">${fmtDateDisplay(r.fecha_cheque)}${esMigrado(r) ? '' : badgePosfechado(r.fecha_cheque, diasPorVencer)}</td>
                 <td>${escHtml(r.numero_cheque)}</td>
                 <td>${escHtml(r.forma_pago_nombre)}</td>
                 <td>${escHtml(r.nombre_entidad)}</td>
-                <td class="text-end">$${Number(monto || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+                <td class="text-end">$${montoTxt}</td>
+                ${accion}
             </tr>`;
         }).join('');
     }
+
+    /**
+     * Protesto de un cheque recibido: el banco lo devolvió. Anula el ingreso que lo registró
+     * (la factura vuelve a quedar pendiente) — servidor: ChequePosfechadoService::protestarCheque.
+     */
+    window.CB_protestarCheque = async function (idPago, idEmpresa, numero, monto, cliente) {
+        const hoy = new Date();
+        const hoyIso = `${hoy.getFullYear()}-${String(hoy.getMonth() + 1).padStart(2, '0')}-${String(hoy.getDate()).padStart(2, '0')}`;
+        const res = await Swal.fire({
+            icon: 'warning',
+            title: 'Cheque protestado',
+            html: `<div class="text-start small">
+                    <p class="mb-2">Cheque <b>#${numero}</b> de <b>${cliente}</b> por <b>$${monto}</b>.</p>
+                    <p class="mb-2">Se <b>anulará el ingreso</b> que lo registró: la factura vuelve a quedar pendiente y su asiento
+                       se anula. El mes del ingreso debe estar abierto. Los costos del protesto se registran aparte.</p>
+                    <label class="form-label mb-1 d-block">Fecha del protesto</label>
+                    <input type="date" id="cb-protesto-fecha" class="form-control form-control-sm mb-2" value="${hoyIso}">
+                    <label class="form-label mb-1 d-block">Motivo</label>
+                    <textarea id="cb-protesto-motivo" class="form-control form-control-sm" rows="2" maxlength="500" placeholder="Ej.: fondos insuficientes"></textarea>
+                   </div>`,
+            showCancelButton: true,
+            confirmButtonText: 'Registrar protesto',
+            confirmButtonColor: '#dc3545',
+            cancelButtonText: 'Cancelar',
+            focusConfirm: false,
+            preConfirm: () => {
+                const fecha = document.getElementById('cb-protesto-fecha').value;
+                const motivo = document.getElementById('cb-protesto-motivo').value.trim();
+                if (!fecha || !motivo) {
+                    Swal.showValidationMessage('Indique la fecha y el motivo del protesto.');
+                    return false;
+                }
+                return { fecha, motivo };
+            },
+        });
+        if (!res.isConfirmed) return;
+
+        try {
+            const resp = await fetch(`${CB_URL_BASE}/protestarChequeAjax`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
+                body: JSON.stringify({ id_pago: idPago, id_empresa: idEmpresa, fecha: res.value.fecha, motivo: res.value.motivo }),
+            });
+            const json = await resp.json();
+            if (!json.ok) {
+                Swal.fire({ icon: 'error', title: 'No se registró el protesto', text: json.error || 'Error al registrar el protesto.' });
+                return;
+            }
+            bootstrap.Modal.getInstance(document.getElementById('modalPosfechadosCB'))?.hide();
+            Swal.fire({ icon: 'success', title: 'Protesto registrado', text: 'El ingreso quedó anulado y la factura vuelve a estar pendiente.' });
+            window.CB_fetchSearch(state.page);
+            cargarSaldos();
+        } catch (e) {
+            console.error(e);
+            Swal.fire({ icon: 'error', title: 'Error', text: 'Error de red o servidor.' });
+        }
+    };
 
     /**
      * @param {string} [pestana] 'recibidos' | 'emitidos': pestaña a mostrar al abrir (la usa
@@ -892,7 +962,7 @@
             const rowsRec = recibidos.ok ? recibidos.data : [];
             const rowsEmi = emitidos.ok ? emitidos.data : [];
             const rowsEmp = emitidosEmp.ok ? emitidosEmp.data : [];
-            renderPosfechados('cb-tbody-posf-recibidos', rowsRec, diasPorVencer);
+            renderPosfechados('cb-tbody-posf-recibidos', rowsRec, diasPorVencer, true);
             renderPosfechados('cb-tbody-posf-emitidos', rowsEmi, diasPorVencer);
             renderPosfechados('cb-tbody-posf-emitidos-emp', rowsEmp, diasPorVencer);
 

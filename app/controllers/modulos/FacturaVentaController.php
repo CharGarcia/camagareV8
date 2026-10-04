@@ -19,6 +19,10 @@ class FacturaVentaController extends BaseModuloController
     /** Tabla protegida por el bloqueo de edición (solo aplica mientras la factura es borrador). */
     private const TABLA_BLOQUEO = 'ventas_cabecera';
 
+    /** Junto al estado de pago: cobrada con un cheque posfechado que el banco aún no cobró. */
+    public const ICONO_CHEQUE_POSFECHADO = ' <i class="bi bi-calendar2-week text-warning ms-1" '
+        . 'title="Cobrada con un cheque posfechado que el banco aún no ha cobrado"></i>';
+
     private $service;
     private $repository;
 
@@ -3544,6 +3548,9 @@ class FacturaVentaController extends BaseModuloController
             $estadoPagoBadge = '<span class="badge bg-warning bg-opacity-10 text-warning border border-warning border-opacity-25">Abonada</span>';
         } else {
             $estadoPagoBadge = '<span class="badge bg-danger bg-opacity-10 text-danger border border-danger border-opacity-25">Pendiente</span>';
+        }
+        if ($estado !== 'anulado' && in_array($r['cheque_posfechado_pendiente'] ?? false, [true, 't', 'true', 1, '1'], true)) {
+            $estadoPagoBadge .= self::ICONO_CHEQUE_POSFECHADO;
         }
 
         return '<tr class="factura-row" role="button" tabindex="0" data-row=\'' . $rowData . '\' onclick="abrirModalFacturaVer(this)">

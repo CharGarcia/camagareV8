@@ -104,6 +104,8 @@ class EgresoService
             $idUsuario, $idEmpresa, 'ACTUALIZAR_FECHA_COBRO_CHEQUE', 'egresos_pagos', $idPago,
             $antes, ['fecha_cobro' => $fecha]
         );
+        // La fecha del cheque decide si es posfechado (cuenta puente o Bancos): se rehace el asiento.
+        $this->generarAsientoContableSeguro((int) $pago['id_egreso'], ['id_empresa' => $idEmpresa, 'id_usuario' => $idUsuario]);
     }
 
     /**
@@ -132,52 +134,44 @@ class EgresoService
     }
 
     /**
-     * Anula un cheque puntual de un egreso vigente (error de impresión, cheque dañado,
-     * etc.), dejando la fila como historial (no se borra ni se marca `eliminado`). El
-     * egreso y el resto de sus pagos NO se tocan; el monto anulado deja de contarse en
-     * el asiento contable (que se regenera más chico automáticamente) y en Control
-     * Bancario/Impresión de Cheques. Si el pago quedaba sin cobertura, el usuario agrega
-     * otra forma de pago desde el mismo modal (flujo ya existente de "editar pagos").
+     * Anula cheques puntuales del egreso (error de impresión, cheque dañado…) DENTRO del guardado
+     * de actualizarPagos(): la fila queda como historial (estado_cheque = 'anulado', no se borra
+     * ni se marca `eliminado`) y deja de contarse en el asiento, Control Bancario e Impresión de
+     * Cheques.
+     *
+     * Antes se anulaba sola, al instante, y el egreso podía quedar DESCUBIERTO (pagos vigentes
+     * menores que lo pagado a cada documento): la compra seguía figurando pagada aunque el dinero
+     * no salió. Ahora va en la misma transacción que las formas de pago nuevas, y actualizarPagos()
+     * exige que cubran el total del egreso: o se reemplaza el cheque por otro pago, o se baja lo
+     * pagado de cada documento (la compra vuelve a quedar con saldo).
+     *
+     * @param array<int, array{id_pago?:mixed, motivo?:mixed}> $anulaciones
      */
-    public function anularCheque(int $idEmpresa, int $idPago, string $motivo, int $idUsuario): void
+    private function anularChequesDelEgreso(int $idEgreso, int $idEmpresa, int $idUsuario, array $anulaciones): void
     {
-        $pago = $this->repository->getPagoChequeParaEdicion($idEmpresa, $idPago);
-        if (!$pago) {
-            throw new \RuntimeException('Pago no encontrado.');
-        }
-        if (strtoupper((string) $pago['tipo_operacion_bancaria']) !== 'CHEQUE') {
-            throw new \RuntimeException('El pago no es un cheque.');
-        }
-        if (strtoupper((string) $pago['egreso_estado']) === 'ANULADO') {
-            throw new \RuntimeException('El egreso está anulado.');
-        }
-        if (($pago['estado_cheque'] ?? 'vigente') === 'anulado') {
-            throw new \RuntimeException('El cheque ya está anulado.');
-        }
-        // PDO/pgsql devuelve el boolean como 't'/'f'.
-        $conciliado = in_array($pago['cheque_conciliado'], [true, 't', '1', 1], true);
-        if ($conciliado) {
-            throw new \RuntimeException('El cheque ya fue reportado como cobrado (conciliado en Control Bancario); no se puede anular.');
-        }
+        foreach ($anulaciones as $a) {
+            $idPago = (int) ($a['id_pago'] ?? 0);
+            $motivo = trim((string) ($a['motivo'] ?? ''));
+            $pago = $idPago > 0 ? $this->repository->getPagoChequeParaEdicion($idEmpresa, $idPago) : null;
+            if (!$pago || (int) $pago['id_egreso'] !== $idEgreso) {
+                throw new \RuntimeException('El cheque a anular no pertenece a este egreso.');
+            }
+            $num = $pago['numero_cheque'] ?? '?';
+            if (strtoupper((string) $pago['tipo_operacion_bancaria']) !== 'CHEQUE') {
+                throw new \RuntimeException("El pago #{$idPago} no es un cheque.");
+            }
+            if (($pago['estado_cheque'] ?? 'vigente') === 'anulado') {
+                throw new \RuntimeException("El cheque #{$num} ya está anulado.");
+            }
+            // PDO/pgsql devuelve el boolean como 't'/'f'.
+            if (in_array($pago['cheque_conciliado'], [true, 't', '1', 1], true)) {
+                throw new \RuntimeException("El cheque #{$num} ya fue reportado como cobrado (conciliado en Control Bancario); no se puede anular.");
+            }
+            if ($motivo === '') {
+                throw new \InvalidArgumentException("Indique el motivo de anulación del cheque #{$num}.");
+            }
 
-        $motivo = trim($motivo);
-        if ($motivo === '') {
-            throw new \InvalidArgumentException('Debe indicar el motivo de anulación del cheque.');
-        }
-
-        $this->periodosService->validarFechaPermitida(
-            $pago['fecha_emision'],
-            $idEmpresa,
-            'No se puede anular el cheque porque el periodo contable del egreso está cerrado.'
-        );
-
-        $db = Database::getConnection();
-        $inTrans = $db->inTransaction();
-        if (!$inTrans) $db->beginTransaction();
-
-        try {
             $this->repository->anularCheque($idPago, $motivo, $idUsuario);
-
             $this->logService->registrar(
                 $idUsuario,
                 $idEmpresa,
@@ -187,22 +181,7 @@ class EgresoService
                 ['estado_cheque' => 'vigente'],
                 ['estado_cheque' => 'anulado', 'motivo' => $motivo, 'numero_cheque' => $pago['numero_cheque'] ?? null]
             );
-
-            if (!$inTrans) $db->commit();
-        } catch (\Throwable $e) {
-            if (!$inTrans && $db->inTransaction()) {
-                $db->rollBack();
-            }
-            throw $e;
         }
-
-        // Asiento fuera de la transacción (mismo patrón que registrar()/actualizarPagos()):
-        // lineasFormas() ya excluye el pago anulado, así que el asiento se recalcula más
-        // chico automáticamente, sin necesidad de un asiento de reversión.
-        $this->generarAsientoContableSeguro((int) $pago['id_egreso'], [
-            'id_empresa' => $idEmpresa,
-            'usuario_id' => $idUsuario,
-        ]);
     }
 
     public function getPorId(int $id, int $idEmpresa): ?array
@@ -427,6 +406,8 @@ class EgresoService
         $egreso = $this->repository->getPorId($id, $idEmpresa);
         if (!$egreso) throw new \Exception("Egreso no encontrado.");
         if ($egreso['estado'] === 'anulado') throw new \Exception("No se puede editar un egreso anulado.");
+        // Las líneas de pago se reemplazan: un cheque posfechado ya cobrado (asiento de cobro) quedaría huérfano.
+        (new ChequePosfechadoService(null, $this->logService))->validarSinCobrosContabilizados($idEmpresa, 'egreso', $id);
 
         if ($fechaEmision && strtotime($fechaEmision) > strtotime(date('Y-m-d'))) {
             throw new \Exception("La fecha de emisión no puede ser posterior a la fecha actual.");
@@ -497,6 +478,13 @@ class EgresoService
         try {
             // Registrar pagos viejos para la auditoría
             $pagosViejos = $this->repository->getPagos($id);
+
+            // Cheques anulados en el modal: se anulan aquí, junto con las formas de pago que los
+            // reemplazan (la suma ya se validó contra el total del egreso).
+            $anulaciones = array_values(array_filter((array) ($extraData['cheques_anular'] ?? []), 'is_array'));
+            if ($anulaciones) {
+                $this->anularChequesDelEgreso($id, $idEmpresa, $idUsuario, $anulaciones);
+            }
 
             // 1. Eliminar lógicamente los pagos vigentes (los cheques ya anulados se
             //    preservan tal cual: son historial, no se vuelven a tocar aquí).
@@ -985,6 +973,8 @@ class EgresoService
     private function anularAsientoContable(array $egreso, int $idEmpresa, int $idUsuario): void
     {
         $idEgreso = (int) $egreso['id'];
+        // Los asientos de cobro de sus cheques posfechados (Fecha Banco) se anulan con él.
+        (new ChequePosfechadoService(null, $this->logService))->anularCobrosDeDocumento($idEmpresa, 'egreso', $idEgreso, $idUsuario);
         $asientoService = $this->asientoContableService();
         $previo = $asientoService->getAsientoPorOrigen('egreso', $idEgreso, $idEmpresa);
         $idAsiento = $previo ? (int) $previo['id'] : 0;

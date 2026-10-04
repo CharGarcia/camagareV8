@@ -6,7 +6,7 @@ ruta_modulo: modulos/egresos
 tipo: modulo
 visibilidad: todos
 etiquetas: egresos, egreso, pago, buscar egreso, buscador, filtros, filtrar egresos, buscar cheque, buscar por compra pagada, buscar por beneficiario, filtro de fechas, chips, editar egreso, modificar egreso, corregir egreso, cambiar monto pagado, quitar factura del egreso, cambiar beneficiario, periodo cerrado, solo lectura, no deja editar, no puedo modificar, ordenar por dos columnas, ordenar por beneficiario y fecha, pagar, dinero que sale, proveedor, empleado, cheque, transferencia, comprobante de egreso, excel, exportar, anular cheque, cheque anulado, cheque dañado, reimprimir cheque, combinar conceptos, mezclar conceptos, otros conceptos, varios documentos, gasto sin factura, tipo real, tipo de egreso, decimo cuarto, decimo tercero, prestamos, rol de pago, numero de egreso, serie, secuencial, numero repetido, numero duplicado, numeracion por fecha, numero con el año, reiniciar numeracion, reinicio anual, reinicio mensual, correlativo por año, correlativo por mes, modo de numeracion, orden de formas de pago, saldo de la forma de pago, saldo disponible, ocultar saldo, aparecen documentos que no busque, resultados que no corresponden, buscar por numero de documento cobrado, cuenta del anticipo, anticipo sin cuenta, anticipo a proveedor, cuenta contable del concepto, cuenta por defecto, falta cuenta contable, pagar compra y dar anticipo, listado no se actualiza, no aparece el egreso guardado, no se ve el cambio, vuelve a la primera pagina, se pierde la pagina, refrescar listado, recargar tabla, fila resaltada, observaciones automaticas, observaciones se llenan solas, observaciones se completan solas, glosa del egreso, concepto del comprobante, descripcion del pago, pago factura de compra, falta un centavo, centavo pendiente, no puedo pagar el centavo, diferencia de un centavo, saldo de 0.01, queda un centavo, referencia muy larga, no guarda el egreso, no se guarda el pago, error al guardar egreso, value too long, texto demasiado largo, se corta la referencia, limite de caracteres, saldo equivocado, valor a pagar incorrecto, saldo menor al real, nota de venta, retencion de otro proveedor, descuenta una retencion que no es, imprimir, impresora, siguiente egreso, egreso anterior, navegar entre egresos, pasar al siguiente, flechas del modal, recorrer egresos, pago duplicado, pagar dos veces, doble pago, doble clic, egreso duplicado, ya no tiene saldo suficiente, declaracion ya pagada, crear proveedor desde el egreso, nuevo proveedor, nuevo empleado, registrar proveedor, registrar empleado, crear forma de pago, crear concepto, no aparece el boton de crear proveedor, falta el boton nuevo proveedor, asiento de documento anulado, asiento sigue contabilizado, no se anulo el asiento, no se pudo anular el asiento contable
-version: 1.37
+version: 1.39
 orden: 20
 estado: activo
 ---
@@ -332,15 +332,27 @@ cualquier motivo no se va a usar, se puede **anular** desde el icono
 <i class="bi bi-ban"></i> junto a su fila, en la pestaña **Formas de Pago** del
 egreso. El sistema pide el **motivo** de la anulación.
 
+La anulación **se aplica al pulsar Guardar**, no antes. Mientras tanto el cheque
+aparece en **"Cheques anulados"** con la marca *Se anula al guardar* y un enlace
+**Deshacer**. Antes de guardar hay que cubrir su valor, de una de dos formas:
+
+- **Reemplazarlo** por otra forma de pago (otro cheque, una transferencia…) por
+  el mismo valor: la compra sigue pagada, ahora con el pago nuevo.
+- **Bajar lo pagado** de cada documento en el detalle del egreso: la compra (o
+  el documento) vuelve a quedar con **saldo pendiente** por esa diferencia.
+
+Si se cierra el egreso sin guardar, el cheque sigue vigente. Si en realidad no se
+pagó nada, lo que corresponde es **anular el egreso** completo.
+
 Anular un cheque **no anula el egreso**: el documento sigue vigente, solo se
 anula ese cheque puntual. El cheque anulado:
 
 - Queda visible como historial (tachado, con motivo y fecha) en una tabla
   aparte, **"Cheques anulados"**, debajo de las formas de pago activas — nunca
   se borra.
-- Deja de contarse en el total pagado: si el egreso queda sin cobertura por esa
-  diferencia, el total de formas de pago se marca en rojo hasta que se agregue
-  otra forma de pago (u otro cheque) por el mismo valor, en la misma pantalla.
+- Deja de contarse en el total pagado. El egreso no se puede guardar hasta que las
+  formas de pago vuelvan a cubrir el total (el total de formas de pago se marca en
+  rojo mientras no cuadre).
 - Su número **no se reutiliza**: el siguiente cheque autogenerado sigue la
   secuencia normal, saltándose el anulado.
 - Deja de aparecer en Control Bancario y en el listado de "Cheques por
@@ -367,6 +379,15 @@ activa; desde ahí se arrastran los campos a su posición exacta.
 Los ajustes que se guarden ahí **aplican a todos los cheques de ese banco**, sin
 afectar a los de otros bancos. Ver también
 [Plantillas de Documentos](modulos/plantillas-pdf).
+
+## Cheques posfechados en la contabilidad
+
+Si la empresa configuró la cuenta **Cheques posfechados por pagar** (Configuración
+Contable → Cobros y Pagos), un cheque con fecha posterior a la del egreso se acredita a
+esa cuenta y no a Bancos; pasa a Bancos cuando se registra su **Fecha Banco** en
+Control Bancario. Cambiar la fecha de cobro de un cheque rehace el asiento del egreso.
+Mientras un cheque posfechado tenga Fecha Banco, sus pagos no se pueden editar. Ver
+[Cheques posfechados en la contabilidad](../guias/cheques-posfechados.md).
 
 ## El número del documento
 
@@ -610,6 +631,13 @@ proveedores), pasa por la misma revisión al guardar:
 
 ## Historial de cambios
 
+- **1.39** — Corregido: anular un cheque se guardaba al instante y, si no se agregaba
+  otra forma de pago, el egreso quedaba descubierto con la compra figurando pagada. Ahora
+  la anulación se aplica al **Guardar**, junto con el pago que la reemplaza o con la baja
+  de lo pagado a cada documento (la compra vuelve a quedar con saldo). Se puede deshacer
+  antes de guardar.
+- **1.38** — Cheques posfechados con cuenta puente (*Cheques posfechados por pagar*)
+  hasta su Fecha Banco; cambiar la fecha de cobro de un cheque rehace el asiento.
 - **1.37** — Corrección: al anular un egreso, su asiento contable se anula en la
   misma operación. Antes, si el asiento fallaba, el egreso quedaba anulado con el
   asiento todavía contabilizado y no se avisaba (Control Bancario lo mostraba como

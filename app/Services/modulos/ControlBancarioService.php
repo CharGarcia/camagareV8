@@ -689,6 +689,7 @@ class ControlBancarioService
             $rows = $this->repository->getChequesPosfechados((int) $p['id_empresa'], (int) $p['id'], $direccion, $incluirNoCobrados);
             foreach ($rows as $r) {
                 $r['empresa_nombre'] = $p['empresa_nombre'] ?? null;
+                $r['id_empresa'] = (int) $p['id_empresa']; // el protesto opera sobre la empresa del cheque
                 $todas[] = $r;
             }
         }
@@ -885,6 +886,11 @@ class ControlBancarioService
                 'observacion' => $data['observacion'] ?? null,
                 'usuario_id' => $idUsuario,
             ]);
+            // Cheque posfechado con cuenta puente: la Fecha Banco genera (o mueve) su asiento de
+            // cobro en la misma transacción; si no se puede contabilizar, no se guarda la fecha.
+            if ($porOrigen && in_array($origenTipo, ['ingreso', 'egreso'], true)) {
+                (new ChequePosfechadoService(null, $this->logService))->sincronizarCobro($idEmpresa, $id, $idUsuario);
+            }
             $this->repository->commit();
         } catch (\Throwable $e) {
             $this->repository->rollBack();
@@ -935,6 +941,10 @@ class ControlBancarioService
         try {
             if ($porOrigen) {
                 $this->repository->quitarClasificacionPorOrigen($origenTipo, $origenId, $idEmpresa, $idUsuario);
+                // Sin Fecha Banco el cheque posfechado vuelve a la cuenta puente: se anula su asiento de cobro.
+                if (in_array($origenTipo, ['ingreso', 'egreso'], true)) {
+                    (new ChequePosfechadoService(null, $this->logService))->sincronizarCobro($idEmpresa, (int) $antes['id'], $idUsuario);
+                }
             } else {
                 $this->repository->quitarClasificacion($idAsientoDetalle, $idEmpresa, $idUsuario);
             }
