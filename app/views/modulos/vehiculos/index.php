@@ -85,8 +85,8 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                 ['tab' => $tV, 'key' => 'proxima_cita',  'label' => 'Próxima cita',   'icon' => 'bi-calendar-plus',  'type' => 'date_range',   'grupo' => 'Car-Wash', 'col' => 4],
             ];
             $columnasTabla = [
-                'marca' => 'Marca',
                 'placa' => 'Placa',
+                'marca' => 'Marca y modelo',
                 'chasis' => 'Chasis',
                 'anio' => 'Año',
                 'propietario' => 'Propietario',
@@ -122,8 +122,8 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
             <table class="table table-hover table-sm mb-0 align-middle">
                 <thead class="table-light shadow-sm">
                     <tr>
-                        <th class="ps-3 sortable-header" data-sort="marca" role="button" data-col="marca">Marca <i class="bi bi-arrow-down-up small text-muted ms-1"></i></th>
-                        <th class="sortable-header" data-sort="placa" role="button" data-col="placa">Placa <i class="bi bi-arrow-down-up small text-muted ms-1"></i></th>
+                        <th class="ps-3 sortable-header" data-sort="placa" role="button" data-col="placa">Placa <i class="bi bi-arrow-down-up small text-muted ms-1"></i></th>
+                        <th class="sortable-header" data-sort="marca" role="button" data-col="marca">Marca y modelo <i class="bi bi-arrow-down-up small text-muted ms-1"></i></th>
                         <th class="sortable-header" data-sort="chasis" role="button" data-col="chasis">Chasis <i class="bi bi-arrow-down-up small text-muted ms-1"></i></th>
                         <th class="sortable-header" data-sort="anio" role="button" data-col="anio">Año <i class="bi bi-arrow-down-up small text-muted ms-1"></i></th>
                         <th class="sortable-header" data-sort="propietario" role="button" data-col="propietario">Propietario <i class="bi bi-arrow-down-up small text-muted ms-1"></i></th>
@@ -141,8 +141,8 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                     <?php else: ?>
                         <?php foreach ($rows as $row): ?>
                             <tr class="vehiculo-row" onclick="abrirModalVehiculoEditar(this)" data-row='<?= htmlspecialchars(json_encode($row), ENT_QUOTES) ?>'>
-                                <td class="ps-3 fw-bold" data-col="marca"><?= htmlspecialchars((string)($row['marca'] ?? '')) ?></td>
-                                <td data-col="placa" class="fw-medium text-primary"><?= htmlspecialchars((string)($row['placa'] ?? '')) ?></td>
+                                <td data-col="placa" class="ps-3 fw-medium text-primary"><?= htmlspecialchars((string)($row['placa'] ?? '')) ?></td>
+                                <td class="fw-bold" data-col="marca"><?= htmlspecialchars((string)($row['marca'] ?? '')) ?></td>
                                 <td data-col="chasis" class="small text-muted"><?= htmlspecialchars((string)($row['chasis'] ?? '-')) ?></td>
                                 <td data-col="anio"><?= !empty($row['anio']) ? (int) $row['anio'] : '' ?></td>
                                 <td data-col="propietario"><?= htmlspecialchars((string)($row['propietario'] ?? '-')) ?></td>

@@ -1446,7 +1446,10 @@ class DocumentoAutomatedRegisterService
     private function handleRetencion(SimpleXMLElement $xml, int $idEmpresa, int $idUsuario, bool $esEmitida, string $ambiente): array
     {
         $it = $xml->infoTributaria;
-        $info = $xml->infoRetencion;
+        // El comprobante de retención del SRI (v1.0.0 y v2.0.0) usa <infoCompRetencion>;
+        // <infoRetencion> se deja por compatibilidad. Leyendo solo infoRetencion, el sujeto
+        // retenido llegaba vacío: proveedor sin nombre ni identificación y sin enlace a la compra.
+        $info = isset($xml->infoRetencion) ? $xml->infoRetencion : $xml->infoCompRetencion;
         $claveAcceso = (string) $it->claveAcceso;
 
         if ($esEmitida) {
@@ -1455,15 +1458,19 @@ class DocumentoAutomatedRegisterService
                 return ['ok' => true, 'mensaje' => "Retención de Compra ya registrada", 'existe' => true];
             }
             
-            // Buscar proveedor
+            // Buscar proveedor (sujeto retenido). dirEstablecimiento y nombreComercial del XML
+            // son los de la propia empresa (emisora), no del proveedor: no se usan aquí.
+            if (trim((string)$info->identificacionSujetoRetenido) === '') {
+                throw new Exception('El XML de la retención no trae la identificación del sujeto retenido.');
+            }
             $idProv = $this->getOrCreateProveedor(
-                $info->identificacionSujetoRetenido, 
-                $info->razonSocialSujetoRetenido, 
-                $info->dirEstablecimiento ?? '', 
-                $idEmpresa, 
-                $idUsuario, 
-                $info->tipoIdentificacionSujetoRetenido, 
-                (string)($it->nombreComercial ?? '')
+                $info->identificacionSujetoRetenido,
+                $info->razonSocialSujetoRetenido,
+                '',
+                $idEmpresa,
+                $idUsuario,
+                $info->tipoIdentificacionSujetoRetenido,
+                ''
             );
             
             $idRet = $this->insertarRetencionCompra($xml, $idEmpresa, $idProv, $idUsuario, $ambiente);
@@ -1689,12 +1696,14 @@ class DocumentoAutomatedRegisterService
         // Versión 1.0.0 (impuestos/impuesto)
         if (isset($xml->impuestos->impuesto)) {
             foreach ($xml->impuestos->impuesto as $imp) {
-                $codigoRet = (string)$imp->codigoRetencion;
-                $idSri = $this->retencionCompraRepo->getIdRetencionSriPorCodigo($codigoRet);
+                $codigoRet = trim((string)$imp->codigoRetencion);
+                $impuesto  = self::impuestoRetencion((string)$imp->codigo);
+                $sri = $this->resolverConceptoRetencion($codigoRet, $impuesto, (float)$imp->porcentajeRetener, $fechaEmision);
 
                 $lineas[] = [
-                    'codigo_impuesto' => (string)$imp->codigo === '1' ? 'RENTA' : 'IVA',
-                    'id_retencion_sri' => $idSri,
+                    'codigo_impuesto' => $impuesto,
+                    'id_retencion_sri' => $sri['id'],
+                    'concepto' => $sri['concepto'],
                     'codigo_retencion' => $codigoRet,
                     'base_imponible' => (float)$imp->baseImponible,
                     'porcentaje_retener' => (float)$imp->porcentajeRetener,
@@ -1721,12 +1730,14 @@ class DocumentoAutomatedRegisterService
 
                 if (isset($doc->retenciones->retencion)) {
                     foreach ($doc->retenciones->retencion as $ret) {
-                        $codigoRet = (string)$ret->codigoRetencion;
-                        $idSri = $this->retencionCompraRepo->getIdRetencionSriPorCodigo($codigoRet);
+                        $codigoRet = trim((string)$ret->codigoRetencion);
+                        $impuesto  = self::impuestoRetencion((string)$ret->codigo);
+                        $sri = $this->resolverConceptoRetencion($codigoRet, $impuesto, (float)$ret->porcentajeRetener, $fechaEmision);
 
                         $lineas[] = [
-                            'codigo_impuesto' => (string)$ret->codigo === '1' ? 'RENTA' : 'IVA',
-                            'id_retencion_sri' => $idSri,
+                            'codigo_impuesto' => $impuesto,
+                            'id_retencion_sri' => $sri['id'],
+                            'concepto' => $sri['concepto'],
                             'codigo_retencion' => $codigoRet,
                             'base_imponible' => (float)$ret->baseImponible,
                             'porcentaje_retener' => (float)$ret->porcentajeRetener,
@@ -1787,6 +1798,62 @@ class DocumentoAutomatedRegisterService
         }
 
         return $idRetencion;
+    }
+
+    /** Código de impuesto del XML de retención (1 renta, 2 IVA, 6 ISD) → nombre interno. */
+    private static function impuestoRetencion(string $codigo): string
+    {
+        return match (trim($codigo)) {
+            '1'     => 'RENTA',
+            '6'     => 'ISD',
+            default => 'IVA',
+        };
+    }
+
+    /**
+     * Concepto del catálogo `retenciones_sri` para una línea de retención importada.
+     *
+     * El código solo no basta: un mismo código existe en renta y en IVA (p. ej. "1") y se
+     * repite con tarifas distintas según la vigencia. Entre las filas del código se elige,
+     * en orden: la del mismo impuesto; la de igual porcentaje; la vigente a la fecha de
+     * emisión; la activa; la más reciente. Devuelve id y texto del concepto (el modal
+     * muestra `concepto` de la línea; sin él la línea se veía sin concepto).
+     *
+     * @return array{id: ?int, concepto: ?string}
+     */
+    private function resolverConceptoRetencion(string $codigo, string $impuesto, float $porcentaje, string $fecha): array
+    {
+        $filas = $codigo !== '' ? $this->retencionCompraRepo->getRetencionesSriPorCodigo($codigo) : [];
+
+        $mismoImpuesto = array_values(array_filter(
+            $filas,
+            static fn(array $f): bool => strtoupper(trim((string)($f['impuesto_ret'] ?? ''))) === $impuesto
+        ));
+        if ($mismoImpuesto) {
+            $filas = $mismoImpuesto;
+        }
+        if (!$filas) {
+            return ['id' => null, 'concepto' => null];
+        }
+
+        $fechaTs = strtotime($fecha) ?: time();
+        $puntaje = static function (array $f) use ($porcentaje, $fechaTs): array {
+            $mismoPct = abs((float)($f['porcentaje_ret'] ?? -1) - $porcentaje) < 0.001;
+            $desde    = !empty($f['desde']) ? strtotime((string)$f['desde']) : null;
+            $hasta    = !empty($f['hasta']) ? strtotime((string)$f['hasta']) : null;
+            $vigente  = ($desde === null || $desde === false || $desde <= $fechaTs)
+                     && ($hasta === null || $hasta === false || $hasta >= $fechaTs);
+            $activa   = in_array(strtolower(trim((string)($f['status'] ?? '1'))), ['1', 't', 'true', 'activo'], true);
+            return [(int)$mismoPct, (int)$vigente, (int)$activa, (int)$f['id']];
+        };
+        usort($filas, static fn(array $a, array $b): int => $puntaje($b) <=> $puntaje($a));
+
+        $elegida = $filas[0];
+        $concepto = trim((string)($elegida['concepto_ret'] ?? ''));
+        return [
+            'id'       => (int)$elegida['id'],
+            'concepto' => $concepto !== '' ? mb_substr($concepto, 0, 300) : null,
+        ];
     }
 
     /**

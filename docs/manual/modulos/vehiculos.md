@@ -6,7 +6,7 @@ ruta_modulo: modulos/vehiculos
 tipo: modulo
 visibilidad: todos
 etiquetas: vehiculos, vehiculo, carro, auto, placa, propietario, dueño, consulta sri, consultar placa, datos del vehiculo por placa, matricula, marca, año, historial del vehiculo, transacciones, visitas, ordenes car wash, lavado, taller, proxima cita, recordatorio, recordar cita, aviso al cliente, whatsapp, correo, automatizacion, buscar placa, filtros
-version: 1.5
+version: 1.6
 orden: 11
 estado: activo
 ---
@@ -194,6 +194,9 @@ Meta con las variables en el orden indicado.
 
 ## Historial de cambios
 
+- **1.6** — En el listado, la primera columna es **Placa** y le sigue **Marca y
+  modelo** (antes iba primero la marca). El mismo orden se aplica al exportar a PDF
+  y Excel.
 - **1.5** — La **placa** va primero y, en vehículos nuevos, usa el formato
   `AAA-1111`. El campo **Marca** pasa a llamarse **Marca y modelo** y se llena desde
   el SRI con la marca y el modelo. `ABC-1234` y `ABC1234` cuentan como la misma

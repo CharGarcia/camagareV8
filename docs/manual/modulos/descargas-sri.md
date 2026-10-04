@@ -142,6 +142,16 @@ se escribe una nueva; no hay forma de recuperarla desde el sistema.
   reemplazaba el XML cargado por uno generado con los datos guardados. Ahora se
   conserva el archivo tal como se cargó (con su firma y su autorización), que es
   el que se descarga y se envía al proveedor.
+- **La retención en compras cargada desde el SRI sale sin proveedor (nombre en
+  blanco), sin enlace a la compra y con las líneas sin concepto**: el sistema leía
+  los datos del proveedor de una sección del XML que el comprobante de retención
+  no usa, así que llegaban vacíos; y las líneas guardaban el código pero no el
+  concepto del catálogo. Ahora el proveedor se toma del *sujeto retenido* del XML
+  (y se enlaza la compra si ya está registrada), y cada línea queda enlazada al
+  concepto de *Configuración → Retenciones SRI* que corresponde a su impuesto,
+  código y porcentaje. Las retenciones cargadas antes no se corrigen solas: el
+  superadministrador puede eliminarlas desde *Retenciones en Compras* y volver a
+  cargarlas.
 
 ## Historial de cambios
 
@@ -150,7 +160,9 @@ se escribe una nueva; no hay forma de recuperarla desde el sistema.
   autorización del SRI con estado **AUTORIZADO**, la retención se registra como
   autorizada, con número, fecha de autorización y XML autorizado. Además, la
   retención conserva el XML cargado en lugar de reemplazarlo por uno regenerado
-  sin firma.
+  sin firma. Las retenciones en compras cargadas toman el proveedor del sujeto
+  retenido (antes quedaba en blanco y sin enlace a la compra) y enlazan cada línea
+  con su concepto del catálogo de retenciones del SRI.
 
 - **1.9** — En empresas que exigen aprobar las compras (módulo *Aprobaciones*),
   las facturas y liquidaciones descargadas del SRI quedan **pendientes de

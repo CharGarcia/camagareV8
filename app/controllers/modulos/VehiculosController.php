@@ -112,8 +112,8 @@ class VehiculosController extends BaseModuloController
 
                 $dataAttr = htmlspecialchars(json_encode($r), ENT_QUOTES, 'UTF-8');
                 echo '<tr class="vehiculo-row" role="button" tabindex="0" data-row=\'' . $dataAttr . '\' onclick="abrirModalVehiculoEditar(this)">
-                        <td class="ps-3 fw-medium" data-col="marca">' . htmlspecialchars($r['marca'] ?? '') . '</td>
-                        <td data-col="placa">' . htmlspecialchars($r['placa'] ?? '') . '</td>
+                        <td class="ps-3 fw-medium text-primary" data-col="placa">' . htmlspecialchars($r['placa'] ?? '') . '</td>
+                        <td class="fw-bold" data-col="marca">' . htmlspecialchars($r['marca'] ?? '') . '</td>
                         <td data-col="chasis">' . htmlspecialchars($r['chasis'] ?? '') . '</td>
                         <td data-col="anio">' . (!empty($r['anio']) ? (int) $r['anio'] : '') . '</td>
                         <td data-col="propietario">' . htmlspecialchars($r['propietario'] ?? '') . '</td>
@@ -405,8 +405,8 @@ class VehiculosController extends BaseModuloController
                 <table>
                     <thead>
                         <tr>
-                            <th style="width: 20%">Marca</th>
                             <th style="width: 15%">Placa</th>
+                            <th style="width: 20%">Marca y modelo</th>
                             <th style="width: 20%">Chasis</th>
                             <th style="width: 10%">Año</th>
                             <th style="width: 25%">Propietario</th>
@@ -416,8 +416,8 @@ class VehiculosController extends BaseModuloController
                     <tbody>
                         <?php foreach ($rows as $r): ?>
                             <tr>
-                                <td><?= htmlspecialchars((string)($r['marca'] ?? '')) ?></td>
                                 <td><?= htmlspecialchars((string)($r['placa'] ?? '')) ?></td>
+                                <td><?= htmlspecialchars((string)($r['marca'] ?? '')) ?></td>
                                 <td><?= htmlspecialchars((string)($r['chasis'] ?? '')) ?></td>
                                 <td><?= !empty($r['anio']) ? (int) $r['anio'] : '' ?></td>
                                 <td><?= htmlspecialchars((string)($r['propietario'] ?? '')) ?></td>
@@ -465,12 +465,12 @@ class VehiculosController extends BaseModuloController
                 require_once $autoload;
             }
 
-            $headers = ['Marca', 'Placa', 'Chasis', 'Año', 'Propietario', 'Estado', 'Fecha Registro'];
+            $headers = ['Placa', 'Marca y modelo', 'Chasis', 'Año', 'Propietario', 'Estado', 'Fecha Registro'];
             $exportData = [];
             foreach ($rows as $r) {
                 $exportData[] = [
-                    (string)($r['marca'] ?? ''),
                     (string)($r['placa'] ?? ''),
+                    (string)($r['marca'] ?? ''),
                     (string)($r['chasis'] ?? ''),
                     !empty($r['anio']) ? (string) $r['anio'] : '',
                     (string)($r['propietario'] ?? ''),
