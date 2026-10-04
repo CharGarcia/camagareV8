@@ -722,6 +722,10 @@ $base = BASE_URL;
                 }
                 // Marcas: el viejo guarda la marca del producto en una tabla aparte; al migrarla se
                 // escribe en el producto (también en los productos migrados en corridas anteriores).
+                // Productos: categoría del sistema anterior (grupo_familiar_producto).
+                if (d.productos_categorizados > 0 || d.categorias_creadas > 0) {
+                    html += `<br><span class="text-success small">🗂 ${fmt(d.productos_categorizados || 0)} producto(s) quedaron con su categoría${d.categorias_creadas ? ` (${fmt(d.categorias_creadas)} categoría(s) creada(s))` : ''}.</span>`;
+                }
                 if (d.productos_marcados > 0) {
                     html += `<br><span class="text-success small">🏷 ${fmt(d.productos_marcados)} producto(s) quedaron con su marca.</span>`;
                 }

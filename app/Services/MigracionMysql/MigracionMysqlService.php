@@ -1077,6 +1077,91 @@ class MigracionMysqlService
         return $n;
     }
 
+    /**
+     * Categoría de cada producto. El viejo guarda el catálogo de categorías en `grupo_familiar_producto`
+     * (id_grupo, nombre_grupo, por ruc_empresa) y la asignación en la tabla puente
+     * `grupo_producto_asignado` (id_producto → id_grupo); `productos_servicios` no tiene columna de
+     * categoría. Cada grupo se crea (o reutiliza por nombre, sin distinguir mayúsculas) en `categorias`
+     * de la empresa y se fija `productos.id_categoria`: en los productos que INSERTÓ la migración manda
+     * el viejo; en los vinculados (nativos) solo se completa si no tenían categoría. Idempotente.
+     *
+     * @return array{creadas:int, enlazados:int}
+     */
+    private function enlazarCategoriasEnProductos(int $idEmpresa, string $base, int $idUsuario, PDO $pg, PDO $mysql): array
+    {
+        $out = ['creadas' => 0, 'enlazados' => 0];
+        $qBase = $mysql->quote($base . '%');
+
+        $grupos = [];
+        foreach ($mysql->query("SELECT id_grupo, nombre_grupo FROM grupo_familiar_producto WHERE ruc_empresa LIKE $qBase") as $g) {
+            $nom = mb_substr(trim(preg_replace('/\s+/u', ' ', (string) $g['nombre_grupo'])), 0, 100);
+            if ($nom !== '') { $grupos[(int) $g['id_grupo']] = $nom; }
+        }
+        if (!$grupos) { return $out; }
+
+        // Asignación vigente por producto: la más reciente (en el viejo casi nunca hay más de una).
+        $grupoDe = [];
+        foreach ($mysql->query("SELECT id_producto, id_grupo FROM grupo_producto_asignado WHERE ruc_empresa LIKE $qBase ORDER BY id_grupo_producto") as $a) {
+            if (isset($grupos[(int) $a['id_grupo']])) { $grupoDe[(int) $a['id_producto']] = (int) $a['id_grupo']; }
+        }
+
+        $q = $pg->prepare("SELECT id_origen, id_destino, vinculado FROM migracion_mysql_map WHERE id_empresa = ? AND entidad = 'productos'");
+        $q->execute([$idEmpresa]);
+        $prods = $q->fetchAll(PDO::FETCH_ASSOC);
+
+        // Categorías existentes de la empresa por nombre normalizado (vivas primero). La unicidad
+        // (id_empresa, nombre) incluye las eliminadas: si la única coincidencia está eliminada se reactiva.
+        $catPorNombre = [];
+        $qc = $pg->prepare("SELECT id, nombre, COALESCE(eliminado, false) AS eliminado FROM categorias WHERE id_empresa = ? ORDER BY COALESCE(eliminado, false), id");
+        $qc->execute([$idEmpresa]);
+        foreach ($qc->fetchAll(PDO::FETCH_ASSOC) as $c) {
+            $k = mb_strtoupper(trim((string) $c['nombre']));
+            if (!isset($catPorNombre[$k])) { $catPorNombre[$k] = ['id' => (int) $c['id'], 'eliminado' => !empty($c['eliminado'])]; }
+        }
+        $insCat = $pg->prepare("INSERT INTO categorias (id_empresa, id_usuario, nombre, status, created_by, eliminado) VALUES (?, ?, ?, 1, ?, false) RETURNING id");
+        $revCat = $pg->prepare("UPDATE categorias SET eliminado = false, deleted_at = NULL, deleted_by = NULL, updated_at = now(), updated_by = ? WHERE id = ? AND id_empresa = ?");
+        $upd    = $pg->prepare("UPDATE productos SET id_categoria = :c, updated_at = now(), updated_by = :u
+                                 WHERE id = :p AND id_empresa = :e AND id_categoria IS DISTINCT FROM :c2");
+        $updVin = $pg->prepare("UPDATE productos SET id_categoria = :c, updated_at = now(), updated_by = :u
+                                 WHERE id = :p AND id_empresa = :e AND id_categoria IS NULL");
+
+        $pg->beginTransaction();
+        try {
+            // Solo se crean las categorías que tienen al menos un producto migrado asignado.
+            $usados = [];
+            foreach ($prods as $row) {
+                $g = $grupoDe[(int) $row['id_origen']] ?? null;
+                if ($g !== null) { $usados[$g] = true; }
+            }
+            $catDeGrupo = [];
+            foreach (array_keys($usados) as $g) {
+                $k = mb_strtoupper($grupos[$g]);
+                if (!isset($catPorNombre[$k])) {
+                    $insCat->execute([$idEmpresa, $idUsuario, $grupos[$g], $idUsuario]);
+                    $catPorNombre[$k] = ['id' => (int) $insCat->fetchColumn(), 'eliminado' => false];
+                    $out['creadas']++;
+                } elseif ($catPorNombre[$k]['eliminado']) {
+                    $revCat->execute([$idUsuario, $catPorNombre[$k]['id'], $idEmpresa]);
+                    $catPorNombre[$k]['eliminado'] = false;
+                }
+                $catDeGrupo[$g] = $catPorNombre[$k]['id'];
+            }
+            foreach ($prods as $row) {
+                $g = $grupoDe[(int) $row['id_origen']] ?? null;
+                if ($g === null || !isset($catDeGrupo[$g])) { continue; }
+                $vinculado = in_array((string) $row['vinculado'], ['1', 't', 'true'], true); // pgsql/PDO devuelve '1' / ''
+                $par = [':c' => $catDeGrupo[$g], ':u' => $idUsuario, ':p' => (int) $row['id_destino'], ':e' => $idEmpresa];
+                if ($vinculado) { $updVin->execute($par); $out['enlazados'] += $updVin->rowCount(); }
+                else { $par[':c2'] = $catDeGrupo[$g]; $upd->execute($par); $out['enlazados'] += $upd->rowCount(); }
+            }
+            $pg->commit();
+        } catch (Throwable $ex) {
+            if ($pg->inTransaction()) $pg->rollBack();
+            throw $ex;
+        }
+        return $out;
+    }
+
     private function migrarProductos(int $idEmpresa, string $ruc, int $idUsuario): array
     {
         $base  = substr(preg_replace('/\D+/', '', $ruc), 0, 10);
@@ -1185,6 +1270,10 @@ class MigracionMysqlService
         // Marca de cada producto: el viejo la guarda en la tabla puente `marca_producto`, no en
         // `productos_servicios`. Requiere el catálogo de Marcas ya migrado (si no, devuelve 0).
         $res['productos_marcados'] = $this->enlazarMarcasEnProductos($idEmpresa, $idUsuario, $pg, $mysql);
+        // Categoría de cada producto: catálogo `grupo_familiar_producto` + puente `grupo_producto_asignado`.
+        $cat = $this->enlazarCategoriasEnProductos($idEmpresa, $base, $idUsuario, $pg, $mysql);
+        $res['categorias_creadas']      = $cat['creadas'];
+        $res['productos_categorizados'] = $cat['enlazados'];
         return $res;
     }
 
