@@ -115,7 +115,7 @@ class VehiculosController extends BaseModuloController
                         <td class="ps-3 fw-medium" data-col="marca">' . htmlspecialchars($r['marca'] ?? '') . '</td>
                         <td data-col="placa">' . htmlspecialchars($r['placa'] ?? '') . '</td>
                         <td data-col="chasis">' . htmlspecialchars($r['chasis'] ?? '') . '</td>
-                        <td data-col="anio">' . htmlspecialchars((string)($r['anio'] ?? '')) . '</td>
+                        <td data-col="anio">' . (!empty($r['anio']) ? (int) $r['anio'] : '') . '</td>
                         <td data-col="propietario">' . htmlspecialchars($r['propietario'] ?? '') . '</td>
                         <td data-col="correo">' . htmlspecialchars($r['correo'] ?? '—') . '</td>
                         <td data-col="telefono">' . htmlspecialchars($r['telefono'] ?? '—') . '</td>
@@ -397,7 +397,7 @@ class VehiculosController extends BaseModuloController
                                 <td><?= htmlspecialchars((string)($r['marca'] ?? '')) ?></td>
                                 <td><?= htmlspecialchars((string)($r['placa'] ?? '')) ?></td>
                                 <td><?= htmlspecialchars((string)($r['chasis'] ?? '')) ?></td>
-                                <td><?= htmlspecialchars((string)($r['anio'] ?? '')) ?></td>
+                                <td><?= !empty($r['anio']) ? (int) $r['anio'] : '' ?></td>
                                 <td><?= htmlspecialchars((string)($r['propietario'] ?? '')) ?></td>
                                 <td><?= htmlspecialchars((string)($r['estado'] ?? '')) ?></td>
                             </tr>
@@ -450,7 +450,7 @@ class VehiculosController extends BaseModuloController
                     (string)($r['marca'] ?? ''),
                     (string)($r['placa'] ?? ''),
                     (string)($r['chasis'] ?? ''),
-                    (string)($r['anio'] ?? ''),
+                    !empty($r['anio']) ? (string) $r['anio'] : '',
                     (string)($r['propietario'] ?? ''),
                     (string)($r['estado'] ?? ''),
                     (string)($r['created_at'] ?? '')

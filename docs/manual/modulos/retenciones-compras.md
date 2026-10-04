@@ -6,7 +6,7 @@ ruta_modulo: modulos/retenciones_compras
 tipo: modulo
 visibilidad: todos
 etiquetas: retencion, retenciones, retencion de liquidacion, retener liquidacion de compra, liquidacion de compra, vincular compra, vincular documento, documento sustento, buscar compra para retener, comprobante de retencion, proveedor, iva, renta, sustento tributario, sri, plazo, base imponible, porcentaje, advertencias, ruc proveedor, ruc del proveedor del sistema, informacion adicional, resolucion 27, pdf, ride, imprimir, imprimir retencion, impresora, descargar pdf, ver pdf, buscar retencion, buscador, filtros, filtrar retenciones, buscar por codigo de retencion, estado de correo, chips, aparecen documentos que no busque, resultados que no corresponden, la busqueda trae otros documentos, archivo no cumple estructura xml, totalDigits, tarifa 14.99, retencion antes de la factura, enlazar retencion, retencion sin compra, factura registrada despues, aviso, avisos, novedad sri, documentos con novedad, devuelto, no autorizado, pendientes de enviar, borrador, borradores
-version: 1.24
+version: 1.25
 orden: 30
 estado: activo
 ---
@@ -46,6 +46,8 @@ período fiscal y total retenido. Puede escribir varias palabras en cualquier
 orden y no importan mayúsculas ni tildes. Para limpiar, borre el texto o pulse
 Escape en el cuadro. Mientras busca, aparece un **círculo girando** al final del
 cuadro y la tabla se ve atenuada.
+El **número del documento sustento** se encuentra con o sin guiones:
+`001-001-000000123`, `001001000000123` o solo una parte, como `123`.
 
 **Lo que NO entra en la búsqueda libre, y dónde buscarlo.** Para que el cuadro
 devuelva solo retenciones donde se vea por qué coinciden, estos datos se
@@ -436,6 +438,8 @@ El valor lo configura el superadministrador en `/config/sri-proveedor`.
 
 ## Historial de cambios
 
+- **1.25** — En la búsqueda libre, el número del documento sustento se encuentra
+  también escrito sin guiones (`001001000000123`), como se copia del RIDE o del XML.
 - **1.24** — Al hacer clic en los avisos de la barra superior (*Documentos con novedad
   del SRI* y documentos en borrador pendientes de enviar) el listado se abre ya
   filtrado con esos documentos. Nuevo filtro **Novedad SRI** en la ventana de filtros.

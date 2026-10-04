@@ -1755,14 +1755,85 @@ class DocumentoAutomatedRegisterService
             'fecha_emision_doc_sustento' => $fechaSustento,
             'id_compra'                  => $idCompra,
             'id_liquidacion'             => $idLiquidacion,
-            'estado'                     => 'autorizado',
+            // retencion_compra_cabecera.estado tiene CHECK en femenino
+            // ('borrador','pendiente','autorizada','no_autorizada','anulada').
+            'estado'                     => 'autorizada',
             'lineas'                     => $lineas,
             'origen'                     => 'electronico',
-            'detalle_xml'                => $xml->asXML(),
+            // El XML recibido (sobre de autorización del SRI) se guarda TAL CUAL,
+            // igual que en el resto de comprobantes importados.
+            'detalle_xml'                => $this->xmlOriginal ?? $xml->asXML(),
             'tipo_ambiente'              => $ambiente
         ];
 
-        return $this->retencionService->crear($data);
+        $idRetencion = $this->retencionService->crear($data);
+
+        // Si el sobre del SRI ya trae <estado>AUTORIZADO</estado>, la retención no debe
+        // quedar "pendiente" de envío: se marca igual que cuando la autoriza SriEnvioService.
+        $aut = $this->datosAutorizacionSobre();
+        if ($aut !== null && $aut['estado'] === 'AUTORIZADO') {
+            $this->retencionCompraRepo->actualizarEstadoSri($idRetencion, [
+                'estado'              => 'autorizada',
+                'estado_sri'          => 'autorizada',
+                'numero_autorizacion' => $aut['numero_autorizacion'] ?: (string)$it->claveAcceso,
+                'fecha_autorizacion'  => $aut['fecha_autorizacion'],
+                'xml_autorizado'      => $this->xmlOriginal,
+            ]);
+        }
+
+        return $idRetencion;
+    }
+
+    /**
+     * Lee estado, número y fecha de autorización del sobre del SRI guardado en
+     * $this->xmlOriginal (autorizacion, autorizaciones > autorizacion o
+     * RespuestaAutorizacionComprobante > autorizaciones > autorizacion).
+     * Devuelve null si el XML no viene dentro de un sobre de autorización.
+     */
+    private function datosAutorizacionSobre(): ?array
+    {
+        if (empty($this->xmlOriginal)) {
+            return null;
+        }
+        try {
+            $sobre = new SimpleXMLElement(self::limpiarXml($this->xmlOriginal));
+        } catch (\Throwable) {
+            return null;
+        }
+
+        if ($sobre->getName() === 'autorizacion') {
+            $aut = $sobre;
+        } elseif (isset($sobre->autorizacion)) {
+            $aut = $sobre->autorizacion;
+        } elseif (isset($sobre->autorizaciones->autorizacion)) {
+            $aut = $sobre->autorizaciones->autorizacion;
+        } else {
+            return null;
+        }
+
+        $estado = strtoupper(trim((string)$aut->estado));
+        if ($estado === '') {
+            return null;
+        }
+
+        // fechaAutorizacion llega como ISO 8601 (2026-09-03T10:15:22-05:00)
+        // o como d/m/Y H:i:s según el canal de descarga.
+        $fechaRaw = trim((string)$aut->fechaAutorizacion);
+        $fecha = null;
+        if ($fechaRaw !== '') {
+            $dt = \DateTime::createFromFormat('d/m/Y H:i:s', $fechaRaw)
+                ?: \DateTime::createFromFormat('d/m/Y', $fechaRaw);
+            if (!$dt) {
+                try { $dt = new \DateTime($fechaRaw); } catch (\Throwable) { $dt = null; }
+            }
+            $fecha = $dt ? $dt->format('Y-m-d H:i:s') : null;
+        }
+
+        return [
+            'estado'              => $estado,
+            'numero_autorizacion' => trim((string)$aut->numeroAutorizacion),
+            'fecha_autorizacion'  => $fecha,
+        ];
     }
 
     private function insertarRetencionVenta(SimpleXMLElement $xml, int $idEmpresa, int $idCliente, int $idUsuario, string $ambiente): int

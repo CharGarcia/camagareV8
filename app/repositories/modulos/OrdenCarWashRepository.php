@@ -148,6 +148,7 @@ class OrdenCarWashRepository extends BaseRepository
             'fecha_ingreso' => 'o.fecha_ingreso',
             'numero_orden'  => 'o.numero_orden',
             'placa'         => 'o.placa',
+            'marca'         => 'o.marca',
             'cliente'       => 'c.nombre',
             'estado'        => 'o.estado',
             'total'         => 'o.total',

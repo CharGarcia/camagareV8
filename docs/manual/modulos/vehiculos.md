@@ -6,7 +6,7 @@ ruta_modulo: modulos/vehiculos
 tipo: modulo
 visibilidad: todos
 etiquetas: vehiculos, vehiculo, carro, auto, placa, propietario, dueño, historial del vehiculo, transacciones, visitas, ordenes car wash, lavado, taller, proxima cita, recordatorio, recordar cita, aviso al cliente, whatsapp, correo, automatizacion, buscar placa, filtros
-version: 1.2
+version: 1.3
 orden: 11
 estado: activo
 ---
@@ -117,9 +117,9 @@ Meta con las variables en el orden indicado.
 |-------|----------------|
 | Marca | Marca del vehículo. Obligatorio. |
 | Placa | Identifica al vehículo; única por empresa. Obligatorio. |
-| Chasis / Año | Datos del vehículo. |
+| Chasis / Año | Datos del vehículo. Opcionales; si se escribe el año debe estar entre 1900 y 2100. |
 | Estado | Activo o inactivo (los inactivos no aparecen al buscar en las órdenes). |
-| Propietario | Dueño del vehículo. Obligatorio. |
+| Propietario | Dueño del vehículo. Opcional. |
 | Correo / Teléfono | Contacto para los recordatorios (teléfono de 10 dígitos). |
 
 ## Permisos
@@ -157,6 +157,9 @@ Meta con las variables en el orden indicado.
   el detalle del error aparece al pasar el mouse sobre la etiqueta *Error*.
 
 ## Historial de cambios
+
+- **1.3** — **Año** y **Propietario** dejan de ser obligatorios al crear o editar un
+  vehículo (solo lo son marca y placa). Si no tiene año, el listado lo deja en blanco.
 
 - **1.2** — Automatización **Correo y WhatsApp** en una sola tarea. Si ningún
   recordatorio sale, la ejecución queda como error con el motivo (antes figuraba como

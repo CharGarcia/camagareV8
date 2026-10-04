@@ -6,7 +6,7 @@ ruta_modulo: modulos/car-wash
 tipo: modulo
 visibilidad: todos
 etiquetas: car wash, lavado, lavadora de autos, lubricadora, cambio de aceite, mecanica, taller, orden de servicio, orden mecanica, orden de trabajo, vehiculo, placa, historial del vehiculo, historial del cliente, visitas, ultima visita, facturar orden, recibo de venta, refacturar, factura anulada, proxima cita, proximo chequeo, migracion, sistema anterior, numeracion por fecha, numero con el año, reiniciar numeracion, reinicio anual, reinicio mensual, correlativo por año, correlativo por mes, modo de numeracion, buscar orden, buscar placa, buscador, filtros, filtrar ordenes, filtro de fechas, buscar por servicio, chips, imprimir, impresora
-version: 1.9
+version: 1.10
 orden: 10
 estado: activo
 ---
@@ -264,6 +264,10 @@ como secuencial.
 Arriba de la tabla hay un solo grupo: el botón del **embudo**, el cuadro de
 búsqueda y los botones de columnas, PDF y Excel.
 
+El listado muestra las columnas Fecha, N° Orden, Placa, **Marca** (del vehículo),
+Cliente, Total y Estado. Cada una se ordena con un clic en su encabezado y se puede
+ocultar desde el botón de columnas.
+
 **Búsqueda libre.** Escriba cualquier cosa en el cuadro y el listado se filtra
 solo, sin menús ni sugerencias. Busca en las columnas de la orden: fecha, N°
 orden, serie, secuencial, placa, cliente (nombre y RUC / cédula) y total.
@@ -338,6 +342,9 @@ documentos admite cada periodo) está en el manual de **Empresa**, sección
 *Secuenciales por punto de emisión*.
 
 ## Historial de cambios
+
+- **1.10** — El listado de órdenes muestra la columna **Marca** junto a la placa;
+  se puede ordenar y ocultar como las demás.
 
 - **1.9** — En la ventana de filtros, la pestaña *Detalles* se llama ahora
   **Búsqueda por detalle**, y la ventana ya no tiene barra de desplazamiento

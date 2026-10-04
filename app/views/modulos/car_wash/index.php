@@ -161,6 +161,7 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                     'fecha_ingreso' => 'Fecha',
                     'numero_orden'  => 'N° Orden',
                     'placa'         => 'Placa',
+                    'marca'         => 'Marca',
                     'cliente'       => 'Cliente',
                     'total'         => 'Total',
                     'estado'        => 'Estado',
@@ -188,6 +189,7 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                         <th class="ps-3 sortable-header" role="button" data-col="fecha_ingreso">Fecha <i class="bi bi-arrow-down-up small text-muted ms-1"></i></th>
                         <th class="sortable-header" role="button" data-col="numero_orden">N° Orden <i class="bi bi-arrow-down-up small text-muted ms-1"></i></th>
                         <th class="sortable-header" role="button" data-col="placa">Placa <i class="bi bi-arrow-down-up small text-muted ms-1"></i></th>
+                        <th class="sortable-header" role="button" data-col="marca">Marca <i class="bi bi-arrow-down-up small text-muted ms-1"></i></th>
                         <th class="sortable-header" role="button" data-col="cliente">Cliente <i class="bi bi-arrow-down-up small text-muted ms-1"></i></th>
                         <th class="text-end sortable-header" role="button" data-col="total">Total <i class="bi bi-arrow-down-up small text-muted ms-1"></i></th>
                         <th class="text-center pe-3 sortable-header" role="button" data-col="estado">Estado <i class="bi bi-arrow-down-up small text-muted ms-1"></i></th>
@@ -196,7 +198,7 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                 <tbody id="grid-body">
                     <?php if (empty($rows)): ?>
                         <tr>
-                            <td colspan="6" class="text-center py-5 text-muted">
+                            <td colspan="7" class="text-center py-5 text-muted">
                                 <i class="bi bi-droplet-half fs-3 d-block mb-2"></i>
                                 No se encontraron órdenes.
                             </td>
@@ -210,6 +212,7 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                                 <td class="ps-3" data-col="fecha_ingreso"><?= htmlspecialchars($fecha) ?></td>
                                 <td data-col="numero_orden" class="fw-bold text-primary"><?= htmlspecialchars($r['numero_orden'] ?? '') ?></td>
                                 <td data-col="placa" class="fw-semibold"><?= htmlspecialchars($r['placa'] ?? '') ?></td>
+                                <td data-col="marca" class="text-truncate" style="max-width:160px" title="<?= htmlspecialchars($r['marca'] ?? '') ?>"><?= htmlspecialchars($r['marca'] ?? '') ?></td>
                                 <td data-col="cliente" class="text-truncate" style="max-width:240px" title="<?= htmlspecialchars($r['cliente_nombre'] ?? '') ?>"><?= htmlspecialchars($r['cliente_nombre'] ?? '') ?></td>
                                 <td data-col="total" class="text-end"><?= number_format((float)($r['total'] ?? 0), 2) ?></td>
                                 <td class="text-center pe-3" data-col="estado"><?= CarWashController::badgeEstado($r['estado'] ?? '', $r['documento_vigente'] ?? null) ?></td>

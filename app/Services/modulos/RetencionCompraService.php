@@ -157,7 +157,12 @@ class RetencionCompraService
             $this->sincronizarCasilleros($idRetencion, $data);
 
             if ($managed) $db->commit();
-            $this->generarYGuardarXml($idRetencion, $data);
+            // Una retención importada del SRI ya trae su XML firmado/autorizado en
+            // detalle_xml: regenerarlo lo reemplazaría por uno sin firma ni autorización,
+            // que es el que luego se descargaría y enviaría por correo.
+            if (($data['origen'] ?? '') !== 'electronico' || empty($data['detalle_xml'])) {
+                $this->generarYGuardarXml($idRetencion, $data);
+            }
             return $idRetencion;
         } catch (\Throwable $e) {
             if ($managed && $db->inTransaction()) $db->rollBack();

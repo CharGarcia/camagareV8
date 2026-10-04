@@ -333,13 +333,11 @@
 
             const marca = document.getElementById('vehiculo_marca').value.trim();
             const placa = document.getElementById('vehiculo_placa').value.trim();
-            const propietario = document.getElementById('vehiculo_propietario').value.trim();
             const correo = document.getElementById('vehiculo_correo').value.trim();
             const telefono = document.getElementById('vehiculo_telefono').value.trim();
 
             if (!marca) return Swal.fire({ icon: 'warning', title: 'Atención', text: 'La marca es obligatoria.' });
             if (!placa) return Swal.fire({ icon: 'warning', title: 'Atención', text: 'La placa es obligatoria.' });
-            if (!propietario) return Swal.fire({ icon: 'warning', title: 'Atención', text: 'El propietario es obligatorio.' });
 
             if (correo && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(correo)) {
                 return Swal.fire({ icon: 'warning', title: 'Atención', text: 'El correo electrónico no tiene un formato válido.' });

@@ -144,7 +144,7 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                                 <td class="ps-3 fw-bold" data-col="marca"><?= htmlspecialchars((string)($row['marca'] ?? '')) ?></td>
                                 <td data-col="placa" class="fw-medium text-primary"><?= htmlspecialchars((string)($row['placa'] ?? '')) ?></td>
                                 <td data-col="chasis" class="small text-muted"><?= htmlspecialchars((string)($row['chasis'] ?? '-')) ?></td>
-                                <td data-col="anio"><?= htmlspecialchars((string)($row['anio'] ?? '-')) ?></td>
+                                <td data-col="anio"><?= !empty($row['anio']) ? (int) $row['anio'] : '' ?></td>
                                 <td data-col="propietario"><?= htmlspecialchars((string)($row['propietario'] ?? '-')) ?></td>
                                 <td data-col="correo" class="small text-muted"><?= htmlspecialchars((string)($row['correo'] ?? '-')) ?></td>
                                 <td data-col="telefono" class="small text-muted"><?= htmlspecialchars((string)($row['telefono'] ?? '-')) ?></td>

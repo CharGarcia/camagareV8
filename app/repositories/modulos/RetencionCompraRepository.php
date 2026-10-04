@@ -86,7 +86,10 @@ class RetencionCompraRepository extends BaseRepository
                     'p.razon_social',                                                 // Proveedor
                     'p.identificacion',                                               // Identificación
                     'r.num_doc_sustento',                                             // Doc. Sustento
-                    'r.periodo_fiscal',                                               // Período
+                    // Doc. Sustento sin guiones: el número se guarda como 001-001-000000123,
+                    // pero el usuario lo suele copiar del RIDE/XML como 001001000000123.
+                    "REPLACE(r.num_doc_sustento, '-', '')",
+                    'r.periodo_fiscal',                                             // Período
                     'r.total_retenido::text',                                         // Total Ret.
                 ],
                 $parsed['texto_libre'],
@@ -882,6 +885,10 @@ class RetencionCompraRepository extends BaseRepository
         if (array_key_exists('estado', $d)) {
             $sets[]           = 'estado = :est';
             $params[':est']   = $d['estado'];
+        }
+        if (array_key_exists('estado_sri', $d)) {
+            $sets[]               = 'estado_sri = :esri';
+            $params[':esri']      = $d['estado_sri'];
         }
         if (array_key_exists('numero_autorizacion', $d)) {
             $sets[]                       = 'numero_autorizacion = :na';

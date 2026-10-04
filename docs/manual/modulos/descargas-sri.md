@@ -6,7 +6,7 @@ ruta_modulo: modulos/descargas-sri
 tipo: modulo
 visibilidad: todos
 etiquetas: descargas sri, comprobantes recibidos, xml, facturas de proveedores, importar compras, portal sri
-version: 1.9
+version: 1.10
 orden: 50
 estado: activo
 ---
@@ -130,8 +130,27 @@ se escribe una nueva; no hay forma de recuperarla desde el sistema.
   tenía nada que aprobar y tampoco se generaba su pago automático. Las cargas
   nuevas quedan pendientes, como se explica en *Compras → Aprobación de
   compras*; las anteriores las revisa el administrador del sistema.
+- **"SQLSTATE[23514]: Check violation … retencion_compra_cabecera_estado_check"**:
+  ocurría al cargar un comprobante de retención **emitido por la propia
+  empresa** (retención en compras). El sistema lo grababa con un estado que la
+  tabla no admite y el comprobante no se registraba. Ya no ocurre: vuelva a
+  cargar el XML. Si el archivo es el sobre de autorización del SRI y dice
+  **AUTORIZADO**, la retención queda directamente **autorizada**, con su número
+  y fecha de autorización, y ya no aparece como pendiente de envío.
+- **El XML descargado o enviado por correo de una retención en compras cargada
+  desde el SRI no tiene firma ni autorización**: al registrarla, el sistema
+  reemplazaba el XML cargado por uno generado con los datos guardados. Ahora se
+  conserva el archivo tal como se cargó (con su firma y su autorización), que es
+  el que se descarga y se envía al proveedor.
 
 ## Historial de cambios
+
+- **1.10** — Corregido el error *retencion_compra_cabecera_estado_check* al
+  cargar retenciones emitidas por la empresa. Si el XML es el sobre de
+  autorización del SRI con estado **AUTORIZADO**, la retención se registra como
+  autorizada, con número, fecha de autorización y XML autorizado. Además, la
+  retención conserva el XML cargado en lugar de reemplazarlo por uno regenerado
+  sin firma.
 
 - **1.9** — En empresas que exigen aprobar las compras (módulo *Aprobaciones*),
   las facturas y liquidaciones descargadas del SRI quedan **pendientes de

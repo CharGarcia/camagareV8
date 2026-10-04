@@ -91,8 +91,8 @@ $urlBaseVehShared = BASE_URL . '/modulos/vehiculos';
                                 </select>
                             </div>
                             <div class="col-md-12">
-                                <label class="form-label mb-1 small fw-bold text-muted">Propietario *</label>
-                                <input type="text" class="form-control form-control-sm shadow-none" name="propietario" id="vehiculo_propietario" required maxlength="200">
+                                <label class="form-label mb-1 small fw-bold text-muted">Propietario</label>
+                                <input type="text" class="form-control form-control-sm shadow-none" name="propietario" id="vehiculo_propietario" maxlength="200">
                             </div>
                             <div class="col-md-6">
                                 <label class="form-label mb-1 small fw-bold text-muted">Correo Electrónico</label>

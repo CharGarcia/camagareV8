@@ -146,7 +146,7 @@ class CarWashController extends BaseModuloController
 
         ob_start();
         if (empty($rows)) {
-            echo '<tr><td colspan="6" class="text-center py-5 text-muted"><i class="bi bi-droplet-half fs-3 d-block mb-2"></i>No se encontraron órdenes.</td></tr>';
+            echo '<tr><td colspan="7" class="text-center py-5 text-muted"><i class="bi bi-droplet-half fs-3 d-block mb-2"></i>No se encontraron órdenes.</td></tr>';
         } else {
             foreach ($rows as $r) {
                 echo self::filaHistorial($r);
@@ -768,6 +768,7 @@ class CarWashController extends BaseModuloController
                     <td class="ps-3" data-col="fecha_ingreso">' . htmlspecialchars($fecha) . '</td>
                     <td data-col="numero_orden" class="fw-bold text-primary">' . htmlspecialchars($r['numero_orden'] ?? '') . '</td>
                     <td data-col="placa" class="fw-semibold">' . htmlspecialchars($r['placa'] ?? '') . '</td>
+                    <td data-col="marca" class="text-truncate" style="max-width:160px" title="' . htmlspecialchars($r['marca'] ?? '') . '">' . htmlspecialchars($r['marca'] ?? '') . '</td>
                     <td data-col="cliente" class="text-truncate" style="max-width:240px">' . htmlspecialchars($r['cliente_nombre'] ?? '') . '</td>
                     <td data-col="total" class="text-end pe-3">' . number_format((float) ($r['total'] ?? 0), 2) . '</td>
                     <td class="text-center pe-3" data-col="estado">' . $badge . '</td>

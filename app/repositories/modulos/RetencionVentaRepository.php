@@ -58,10 +58,13 @@ class RetencionVentaRepository extends BaseRepository
         //     un número de documento caía dentro de la clave de OTRAS retenciones por
         //     puro azar y el listado devolvía filas sin ninguna coincidencia visible.
         //   - Usuario que registró → filtro `usuario:` (no es columna de este listado).
-        //   - Documentos sustento y códigos de retención de las líneas → pestaña
-        //     "Detalles" del modal de filtros (buscarEnDetalles()), que SÍ dice qué línea
-        //     coincidió. De paso se va la subconsulta STRING_AGG, que corría por cada
-        //     retención de la empresa.
+        //   - Códigos de retención de las líneas → pestaña "Detalles" del modal de
+        //     filtros (buscarEnDetalles()), que SÍ dice qué línea coincidió.
+        //
+        // El Nº de documento sustento SÍ entra (04-10-2026, a pedido del usuario): vive en
+        // las líneas, así que va como EXISTS correlacionado (idx_ret_vta_det_retencion) y
+        // solo para palabras con dígitos. Se compara con y sin guiones: se guarda como
+        // 001-001-000000123 y del RIDE/XML suele copiarse como 001001000000123.
         if ($textoLibre !== '') {
             $condicion = \App\Helpers\FiltrosBusqueda::condicionTexto(
                 [
@@ -75,6 +78,11 @@ class RetencionVentaRepository extends BaseRepository
                     'r.total_iva::text',                                              // Total IVA
                     'r.total_isd::text',                                              // Total ISD
                     '(r.total_renta + r.total_iva + r.total_isd)::text',              // Total Ret.
+                    [                                                                 // Doc. Sustento (líneas)
+                        'col' => "CONCAT_WS(' ', rvd1.num_doc_sustento, REPLACE(rvd1.num_doc_sustento, '-', ''))",
+                        'sql' => 'EXISTS (SELECT 1 FROM retencion_venta_detalle rvd1 WHERE rvd1.id_retencion = r.id AND {cond})',
+                        'si'  => \App\Helpers\FiltrosBusqueda::SI_DIGITOS,
+                    ],
                 ],
                 $textoLibre,
                 $params,

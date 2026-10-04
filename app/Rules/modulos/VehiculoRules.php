@@ -26,11 +26,8 @@ class VehiculoRules
             $errores[] = 'La placa es obligatoria.';
         }
 
-        if (empty(trim($data['propietario'] ?? ''))) {
-            $errores[] = 'El propietario es obligatorio.';
-        }
-
-        if (isset($data['anio']) && (!is_numeric($data['anio']) || $data['anio'] < 1900 || $data['anio'] > 2100)) {
+        // Año y propietario son opcionales; el año vacío llega como 0 y se guarda así.
+        if (!empty($data['anio']) && (!is_numeric($data['anio']) || $data['anio'] < 1900 || $data['anio'] > 2100)) {
             $errores[] = 'El año no es válido.';
         }
 
