@@ -37,6 +37,7 @@ class NotasCreditoController extends BaseModuloController
 
         $prefsVista = \App\Helpers\PreferenciasHelper::getPreferenciasVista($this->getRutaModulo());
         $buscar   = trim($_GET['b'] ?? $_POST['b'] ?? '');
+        $buscar   = $this->filtroDesdeAviso($buscar); // clic en un aviso del navbar (borrador / novedad SRI)
         $page     = max(1, (int) ($_GET['page'] ?? $_POST['page'] ?? 1));
         $ordenCol = trim($_GET['sort'] ?? $_POST['sort'] ?? $prefsVista['__ordenCol__'] ?? 'fecha_emision');
         $ordenDir = strtoupper(trim($_GET['dir'] ?? $_POST['dir'] ?? $prefsVista['__ordenDir__'] ?? 'DESC'));

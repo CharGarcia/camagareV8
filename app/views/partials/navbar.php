@@ -386,23 +386,23 @@ $urlManual = $base . '/documentacion' . ($rutaActualAyuda !== '' ? '?ruta=' . ur
                     <ul class="dropdown-menu dropdown-menu-end shadow-sm" style="min-width: 270px; z-index: 5065;">
                         <li><h6 class="dropdown-header text-danger"><i class="bi bi-exclamation-triangle me-1"></i>Documentos con novedad del SRI</h6></li>
                         <li><hr class="dropdown-divider my-1"></li>
-                        <a class="dropdown-item d-none d-flex justify-content-between align-items-center cmg-nov-item" data-nov="facturas" href="<?= $base ?>/modulos/factura-venta">
+                        <a data-aviso="novedad_sri" class="dropdown-item d-none d-flex justify-content-between align-items-center cmg-nov-item" data-nov="facturas" href="<?= $base ?>/modulos/factura-venta">
                             <span><i class="bi bi-receipt me-2 text-muted"></i>Facturas de venta</span>
                             <span class="badge bg-danger rounded-pill cmg-nov-badge-facturas">0</span>
                         </a>
-                        <a class="dropdown-item d-none d-flex justify-content-between align-items-center cmg-nov-item" data-nov="liquidaciones" href="<?= $base ?>/modulos/liquidacion-compra">
+                        <a data-aviso="novedad_sri" class="dropdown-item d-none d-flex justify-content-between align-items-center cmg-nov-item" data-nov="liquidaciones" href="<?= $base ?>/modulos/liquidacion-compra">
                             <span><i class="bi bi-file-earmark-text me-2 text-muted"></i>Liquidaciones de compra</span>
                             <span class="badge bg-danger rounded-pill cmg-nov-badge-liquidaciones">0</span>
                         </a>
-                        <a class="dropdown-item d-none d-flex justify-content-between align-items-center cmg-nov-item" data-nov="retenciones_compras" href="<?= $base ?>/modulos/retenciones_compras">
+                        <a data-aviso="novedad_sri" class="dropdown-item d-none d-flex justify-content-between align-items-center cmg-nov-item" data-nov="retenciones_compras" href="<?= $base ?>/modulos/retenciones_compras">
                             <span><i class="bi bi-percent me-2 text-muted"></i>Retenciones de compra</span>
                             <span class="badge bg-danger rounded-pill cmg-nov-badge-retenciones_compras">0</span>
                         </a>
-                        <a class="dropdown-item d-none d-flex justify-content-between align-items-center cmg-nov-item" data-nov="notas_credito" href="<?= $base ?>/modulos/notas_credito">
+                        <a data-aviso="novedad_sri" class="dropdown-item d-none d-flex justify-content-between align-items-center cmg-nov-item" data-nov="notas_credito" href="<?= $base ?>/modulos/notas_credito">
                             <span><i class="bi bi-file-earmark-minus me-2 text-muted"></i>Notas de crédito</span>
                             <span class="badge bg-danger rounded-pill cmg-nov-badge-notas_credito">0</span>
                         </a>
-                        <a class="dropdown-item d-none d-flex justify-content-between align-items-center cmg-nov-item" data-nov="guias_remision" href="<?= $base ?>/modulos/guias_remision">
+                        <a data-aviso="novedad_sri" class="dropdown-item d-none d-flex justify-content-between align-items-center cmg-nov-item" data-nov="guias_remision" href="<?= $base ?>/modulos/guias_remision">
                             <span><i class="bi bi-truck me-2 text-muted"></i>Guías de remisión</span>
                             <span class="badge bg-danger rounded-pill cmg-nov-badge-guias_remision">0</span>
                         </a>
@@ -482,15 +482,15 @@ $urlManual = $base . '/documentacion' . ($rutaActualAyuda !== '' ? '?ruta=' . ur
                     <i class="bi bi-qr-code" style="font-size: 1.1rem;"></i>
                     <span class="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-warning text-dark factura-express-pendientes-badge" style="font-size: 0.6rem; padding: 0.25em 0.5em;">0</span>
                 </a>
-                <a href="<?= $base ?>/modulos/factura-venta" class="text-white text-decoration-none position-relative d-none cmg-icon-update facturas-borrador-icon" title="Facturas en borrador">
+                <a data-aviso="borrador" href="<?= $base ?>/modulos/factura-venta" class="text-white text-decoration-none position-relative d-none cmg-icon-update facturas-borrador-icon" title="Facturas en borrador">
                     <i class="bi bi-receipt" style="font-size: 1.1rem;"></i>
                     <span class="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-warning text-dark facturas-borrador-badge" style="font-size: 0.6rem; padding: 0.25em 0.5em;">0</span>
                 </a>
-                <a href="<?= $base ?>/modulos/notas_credito" class="text-white text-decoration-none position-relative d-none cmg-icon-update notas-credito-borrador-icon" title="Notas crédito borrador">
+                <a data-aviso="borrador" href="<?= $base ?>/modulos/notas_credito" class="text-white text-decoration-none position-relative d-none cmg-icon-update notas-credito-borrador-icon" title="Notas crédito borrador">
                     <i class="bi bi-file-earmark-minus" style="font-size: 1.1rem;"></i>
                     <span class="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-warning text-dark notas-credito-borrador-badge" style="font-size: 0.6rem; padding: 0.25em 0.5em;">0</span>
                 </a>
-                <a href="<?= $base ?>/modulos/guias_remision" class="text-white text-decoration-none position-relative d-none cmg-icon-update guias-remision-borrador-icon" title="Guías en borrador">
+                <a data-aviso="borrador" href="<?= $base ?>/modulos/guias_remision" class="text-white text-decoration-none position-relative d-none cmg-icon-update guias-remision-borrador-icon" title="Guías en borrador">
                     <i class="bi bi-truck" style="font-size: 1.1rem;"></i>
                     <span class="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-warning text-dark guias-remision-borrador-badge" style="font-size: 0.6rem; padding: 0.25em 0.5em;">0</span>
                 </a>
@@ -498,11 +498,11 @@ $urlManual = $base . '/documentacion' . ($rutaActualAyuda !== '' ? '?ruta=' . ur
                     <i class="bi bi-cart-plus" style="font-size: 1.1rem;"></i>
                     <span class="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-warning text-dark ordenes-compra-borrador-badge" style="font-size: 0.6rem; padding: 0.25em 0.5em;">0</span>
                 </a>
-                <a href="<?= $base ?>/modulos/liquidacion-compra" class="text-white text-decoration-none position-relative d-none cmg-icon-update liquidaciones-borrador-icon" title="Liquidaciones en borrador">
+                <a data-aviso="borrador" href="<?= $base ?>/modulos/liquidacion-compra" class="text-white text-decoration-none position-relative d-none cmg-icon-update liquidaciones-borrador-icon" title="Liquidaciones en borrador">
                     <i class="bi bi-file-earmark-text" style="font-size: 1.1rem;"></i>
                     <span class="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-warning text-dark liquidaciones-borrador-badge" style="font-size: 0.6rem; padding: 0.25em 0.5em;">0</span>
                 </a>
-                <a href="<?= $base ?>/modulos/retenciones_compras" class="text-white text-decoration-none position-relative d-none cmg-icon-update retenciones-compras-borrador-icon" title="Retenciones en borrador">
+                <a data-aviso="borrador" href="<?= $base ?>/modulos/retenciones_compras" class="text-white text-decoration-none position-relative d-none cmg-icon-update retenciones-compras-borrador-icon" title="Retenciones en borrador">
                     <i class="bi bi-percent" style="font-size: 1.1rem;"></i>
                     <span class="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-warning text-dark retenciones-compras-borrador-badge" style="font-size: 0.6rem; padding: 0.25em 0.5em;">0</span>
                 </a>
@@ -613,27 +613,27 @@ $urlManual = $base . '/documentacion' . ($rutaActualAyuda !== '' ? '?ruta=' . ur
                  barra de escritorio (alertas, pendientes, mensajes, accesos, ayuda y
                  sistema), pero sin separadores ni rótulos. -->
             <div class="cmg-mobile-icons-grid">
-                <a class="cmg-icon-update cmg-nov-item d-none" data-nov="facturas" href="<?= $base ?>/modulos/factura-venta">
+                <a data-aviso="novedad_sri" class="cmg-icon-update cmg-nov-item d-none" data-nov="facturas" href="<?= $base ?>/modulos/factura-venta">
                     <i class="bi bi-receipt text-danger"></i>
                     <span class="position-absolute badge rounded-pill bg-danger cmg-nov-badge-facturas">0</span>
                     <small>Fact. SRI</small>
                 </a>
-                <a class="cmg-icon-update cmg-nov-item d-none" data-nov="liquidaciones" href="<?= $base ?>/modulos/liquidacion-compra">
+                <a data-aviso="novedad_sri" class="cmg-icon-update cmg-nov-item d-none" data-nov="liquidaciones" href="<?= $base ?>/modulos/liquidacion-compra">
                     <i class="bi bi-file-earmark-text text-danger"></i>
                     <span class="position-absolute badge rounded-pill bg-danger cmg-nov-badge-liquidaciones">0</span>
                     <small>Liq. SRI</small>
                 </a>
-                <a class="cmg-icon-update cmg-nov-item d-none" data-nov="retenciones_compras" href="<?= $base ?>/modulos/retenciones_compras">
+                <a data-aviso="novedad_sri" class="cmg-icon-update cmg-nov-item d-none" data-nov="retenciones_compras" href="<?= $base ?>/modulos/retenciones_compras">
                     <i class="bi bi-percent text-danger"></i>
                     <span class="position-absolute badge rounded-pill bg-danger cmg-nov-badge-retenciones_compras">0</span>
                     <small>Ret. SRI</small>
                 </a>
-                <a class="cmg-icon-update cmg-nov-item d-none" data-nov="notas_credito" href="<?= $base ?>/modulos/notas_credito">
+                <a data-aviso="novedad_sri" class="cmg-icon-update cmg-nov-item d-none" data-nov="notas_credito" href="<?= $base ?>/modulos/notas_credito">
                     <i class="bi bi-file-earmark-minus text-danger"></i>
                     <span class="position-absolute badge rounded-pill bg-danger cmg-nov-badge-notas_credito">0</span>
                     <small>N/C SRI</small>
                 </a>
-                <a class="cmg-icon-update cmg-nov-item d-none" data-nov="guias_remision" href="<?= $base ?>/modulos/guias_remision">
+                <a data-aviso="novedad_sri" class="cmg-icon-update cmg-nov-item d-none" data-nov="guias_remision" href="<?= $base ?>/modulos/guias_remision">
                     <i class="bi bi-truck text-danger"></i>
                     <span class="position-absolute badge rounded-pill bg-danger cmg-nov-badge-guias_remision">0</span>
                     <small>Guía SRI</small>
@@ -678,17 +678,17 @@ $urlManual = $base . '/documentacion' . ($rutaActualAyuda !== '' ? '?ruta=' . ur
                     <span class="position-absolute badge rounded-pill bg-warning text-dark factura-express-pendientes-badge">0</span>
                     <small>Express</small>
                 </a>
-                <a class="cmg-icon-update facturas-borrador-icon d-none" href="<?= $base ?>/modulos/factura-venta">
+                <a data-aviso="borrador" class="cmg-icon-update facturas-borrador-icon d-none" href="<?= $base ?>/modulos/factura-venta">
                     <i class="bi bi-receipt"></i>
                     <span class="position-absolute badge rounded-pill bg-warning text-dark facturas-borrador-badge">0</span>
                     <small>Facturas</small>
                 </a>
-                <a class="cmg-icon-update notas-credito-borrador-icon d-none" href="<?= $base ?>/modulos/notas_credito">
+                <a data-aviso="borrador" class="cmg-icon-update notas-credito-borrador-icon d-none" href="<?= $base ?>/modulos/notas_credito">
                     <i class="bi bi-file-earmark-minus"></i>
                     <span class="position-absolute badge rounded-pill bg-warning text-dark notas-credito-borrador-badge">0</span>
                     <small>N/C</small>
                 </a>
-                <a class="cmg-icon-update guias-remision-borrador-icon d-none" href="<?= $base ?>/modulos/guias_remision">
+                <a data-aviso="borrador" class="cmg-icon-update guias-remision-borrador-icon d-none" href="<?= $base ?>/modulos/guias_remision">
                     <i class="bi bi-truck"></i>
                     <span class="position-absolute badge rounded-pill bg-warning text-dark guias-remision-borrador-badge">0</span>
                     <small>Guías</small>
@@ -698,12 +698,12 @@ $urlManual = $base . '/documentacion' . ($rutaActualAyuda !== '' ? '?ruta=' . ur
                     <span class="position-absolute badge rounded-pill bg-warning text-dark ordenes-compra-borrador-badge">0</span>
                     <small>Órdenes</small>
                 </a>
-                <a class="cmg-icon-update liquidaciones-borrador-icon d-none" href="<?= $base ?>/modulos/liquidacion-compra">
+                <a data-aviso="borrador" class="cmg-icon-update liquidaciones-borrador-icon d-none" href="<?= $base ?>/modulos/liquidacion-compra">
                     <i class="bi bi-file-earmark-text"></i>
                     <span class="position-absolute badge rounded-pill bg-warning text-dark liquidaciones-borrador-badge">0</span>
                     <small>Liquida.</small>
                 </a>
-                <a class="cmg-icon-update retenciones-compras-borrador-icon d-none" href="<?= $base ?>/modulos/retenciones_compras">
+                <a data-aviso="borrador" class="cmg-icon-update retenciones-compras-borrador-icon d-none" href="<?= $base ?>/modulos/retenciones_compras">
                     <i class="bi bi-percent"></i>
                     <span class="position-absolute badge rounded-pill bg-warning text-dark retenciones-compras-borrador-badge">0</span>
                     <small>Reten.</small>
@@ -1316,6 +1316,29 @@ $urlManual = $base . '/documentacion' . ($rutaActualAyuda !== '' ? '?ruta=' . ur
             .catch(function() {})
             .finally(function() { window.location.href = '<?= $base ?>/config/tareas-obligaciones'; });
         }
+
+        // Avisos que abren su módulo YA FILTRADO (data-aviso="borrador" | "novedad_sri"):
+        // el filtro viaja en sesión (/contadores/filtroAvisoAjax) y se navega a la URL
+        // limpia del módulo, que lo aplica en su buscador (estado:borrador / sri:novedad).
+        // Si la petición falla, igual se abre el módulo, solo que sin filtro.
+        document.addEventListener('click', function(e) {
+            var a = e.target.closest ? e.target.closest('a[data-aviso]') : null;
+            if (!a || e.ctrlKey || e.metaKey || e.shiftKey || e.button !== 0) return;
+            var href = a.getAttribute('href') || '';
+            var base = '<?= $base ?>';
+            var ruta = href.indexOf(base + '/') === 0 ? href.slice(base.length + 1) : '';
+            if (!ruta) return;
+            e.preventDefault();
+            var fd = new FormData();
+            fd.append('ruta', ruta);
+            fd.append('aviso', a.getAttribute('data-aviso'));
+            fetch(base + '/contadores/filtroAvisoAjax', {
+                method: 'POST', body: fd, credentials: 'same-origin',
+                headers: { 'X-Requested-With': 'XMLHttpRequest' }
+            })
+            .catch(function() {})
+            .finally(function() { window.location.href = href; });
+        });
 
         // Compatibilidad: las funciones antiguas ahora refrescan TODO vía el endpoint unificado.
         window.updateTareasBadge =

@@ -5,8 +5,8 @@ categoria: Ventas
 ruta_modulo: modulos/notas_credito
 tipo: modulo
 visibilidad: todos
-etiquetas: nota de credito, notas de credito, devolucion, descuento, anular factura, corregir factura, sri, buscar nota de credito, buscador, filtros, filtrar notas de credito, buscar por producto, filtro de fechas, documento modificado, chips, aparecen notas que no busque, resultados que no corresponden, buscar por clave de acceso, lote, lotes, nup, serial, numero de serie, caducidad, vencimiento, fecha de vencimiento, devolver al inventario, reingreso de stock, devolucion de mercaderia, lote equivocado, bodega de reintegro, sin bodegas asignadas, no tiene bodegas, no se refleja en inventario, no aparece en inventario, no devolvio stock, informacion adicional, info adicional, limite de caracteres, maximo 300 caracteres, value too long, no se pudo guardar la nota, codigo, codigo del producto, columna codigo, buscar por codigo, iva, tarifa iva, iva 12, 12%, iva anterior, iva historico, factura año anterior, exento, no objeto de impuesto, tarifa 0, descuento por pronto pago, pronto pago, descuento posterior, descuento comercial, rebaja de precio, bonificacion, no afecta inventario, sin afectar inventario, sin devolver mercaderia, nota de credito sin productos, linea libre, linea manual, subtotal negativo, valor negativo, descuento mayor, sin bodega, invalid input syntax for type integer, vendedor, asesor, vendedor de la nota de credito, cambiar vendedor, comision, motivo, cambiar vendedor nota autorizada, corregir vendedor, vendedor de la factura, vendedor equivocado, vendedor del cliente, imprimir, impresora
-version: 1.30
+etiquetas: nota de credito, notas de credito, devolucion, descuento, anular factura, corregir factura, sri, buscar nota de credito, buscador, filtros, filtrar notas de credito, buscar por producto, filtro de fechas, documento modificado, chips, aparecen notas que no busque, resultados que no corresponden, buscar por clave de acceso, lote, lotes, nup, serial, numero de serie, caducidad, vencimiento, fecha de vencimiento, devolver al inventario, reingreso de stock, devolucion de mercaderia, lote equivocado, bodega de reintegro, sin bodegas asignadas, no tiene bodegas, no se refleja en inventario, no aparece en inventario, no devolvio stock, informacion adicional, info adicional, limite de caracteres, maximo 300 caracteres, value too long, no se pudo guardar la nota, codigo, codigo del producto, columna codigo, buscar por codigo, iva, tarifa iva, iva 12, 12%, iva anterior, iva historico, factura año anterior, exento, no objeto de impuesto, tarifa 0, descuento por pronto pago, pronto pago, descuento posterior, descuento comercial, rebaja de precio, bonificacion, no afecta inventario, sin afectar inventario, sin devolver mercaderia, nota de credito sin productos, linea libre, linea manual, subtotal negativo, valor negativo, descuento mayor, sin bodega, invalid input syntax for type integer, vendedor, asesor, vendedor de la nota de credito, cambiar vendedor, comision, motivo, cambiar vendedor nota autorizada, corregir vendedor, vendedor de la factura, vendedor equivocado, vendedor del cliente, imprimir, impresora, aviso, avisos, novedad sri, documentos con novedad, devuelto, no autorizado, pendientes de enviar, borrador, borradores
+version: 1.31
 orden: 30
 estado: activo
 ---
@@ -304,6 +304,25 @@ derecha la abre directamente.
 búsqueda**. La **×** quita solo ese filtro, y con el cuadro vacío la tecla
 **Retroceso** quita el último.
 
+### Abrir el listado desde los avisos de la barra superior
+
+Los avisos de la barra superior llevan directo a los documentos de los que hablan,
+con el listado ya filtrado:
+
+- **Documentos con novedad del SRI** (ícono rojo de alerta) → *Notas de crédito*: el listado
+  se abre con el filtro **Novedad SRI: Devuelto / no autorizado / con error**, es
+  decir, las notas de crédito cuyo último envío al SRI fue devuelto, no autorizado o terminó
+  con error. Son las que hay que corregir y volver a enviar.
+- **Pendientes de enviar al SRI** (ícono amarillo de notas de crédito en borrador): el listado
+  se abre con el filtro **Estado: Borrador**, las notas de crédito guardadas que todavía no se
+  han enviado al SRI.
+
+El filtro aparece como una etiqueta dentro del cuadro de búsqueda; quítela con la
+**×** para volver a ver todo el listado. El filtro **Novedad SRI** también se puede
+elegir a mano en la ventana de filtros (pestaña *Nota de crédito*, bloque *Documento*). Si su
+usuario solo ve sus propios registros, el aviso cuenta los de toda la empresa pero el
+listado muestra solo los suyos.
+
 ## Exportar el listado
 
 Los botones **Excel** y **PDF** de la parte superior del listado exportan las
@@ -360,6 +379,9 @@ la operación de inmediato.
 
 ## Historial de cambios
 
+- **1.31** — Al hacer clic en los avisos de la barra superior (*Documentos con novedad
+  del SRI* y documentos en borrador pendientes de enviar) el listado se abre ya
+  filtrado con esos documentos. Nuevo filtro **Novedad SRI** en la ventana de filtros.
 - **1.30** — El IVA se calcula con la configuración de facturación (al
   subtotal o línea por línea) del establecimiento de la **serie elegida**; antes
   se tomaba la del primer establecimiento de la empresa. Al cambiar de serie los

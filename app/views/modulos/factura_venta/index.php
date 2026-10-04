@@ -250,6 +250,10 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                     ['v' => 'autorizado', 'l' => 'Autorizado'],
                     ['v' => 'anulado',    'l' => 'Anulado'],
                 ]],
+                // Aviso "Documentos con novedad del SRI" del navbar: último envío devuelto / no autorizado / con error.
+                ['tab' => $tF, 'key' => 'sri',        'label' => 'Novedad SRI',      'icon' => 'bi-exclamation-octagon', 'type' => 'select', 'grupo' => 'Documento', 'col' => 2, 'options' => [
+                    ['v' => 'novedad', 'l' => 'Devuelto / no autorizado / con error'],
+                ]],
                 ['tab' => $tF, 'key' => 'pago',    'label' => 'Estado de pago',   'icon' => 'bi-wallet2',        'type' => 'select',     'grupo' => 'Documento', 'col' => 2, 'options' => [
                     ['v' => 'pendiente', 'l' => 'Pendiente'],
                     ['v' => 'abonada',   'l' => 'Abonada'],

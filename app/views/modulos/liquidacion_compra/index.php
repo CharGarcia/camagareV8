@@ -181,6 +181,10 @@ $pestanasConfigLiq = array_merge(
                     ['v' => 'autorizado', 'l' => 'Autorizado'],
                     ['v' => 'anulado',    'l' => 'Anulado'],
                 ]],
+                // Aviso "Documentos con novedad del SRI" del navbar: último envío devuelto / no autorizado / con error.
+                ['tab' => $tL, 'key' => 'sri',        'label' => 'Novedad SRI',      'icon' => 'bi-exclamation-octagon', 'type' => 'select', 'grupo' => 'Documento', 'col' => 4, 'options' => [
+                    ['v' => 'novedad', 'l' => 'Devuelto / no autorizado / con error'],
+                ]],
                 ['tab' => $tL, 'key' => 'pago',          'label' => 'Estado de pago',     'icon' => 'bi-wallet2',         'type' => 'select',     'grupo' => 'Documento', 'col' => 4, 'options' => [
                     ['v' => 'pendiente', 'l' => 'Pendiente'],
                     ['v' => 'abonada',   'l' => 'Abonada'],

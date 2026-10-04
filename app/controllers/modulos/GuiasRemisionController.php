@@ -35,6 +35,7 @@ class GuiasRemisionController extends BaseModuloController
         $prefsVista = \App\Helpers\PreferenciasHelper::getPreferenciasVista($this->getRutaModulo());
 
         $buscar   = trim($_GET['b'] ?? '');
+        $buscar   = $this->filtroDesdeAviso($buscar); // clic en un aviso del navbar (borrador / novedad SRI)
         $page     = max(1, (int) ($_GET['page'] ?? 1));
         $ordenCol = trim($_GET['sort'] ?? $prefsVista['__ordenCol__'] ?? 'fecha_emision');
         $ordenDir = strtoupper(trim($_GET['dir'] ?? $prefsVista['__ordenDir__'] ?? 'DESC'));

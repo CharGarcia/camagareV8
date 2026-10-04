@@ -97,6 +97,10 @@ class NotaCreditoRepository extends BaseRepository
         $mapaVendedorTexto  = $conVendedor ? ['vendedor' => 'vend.nombre'] : [];
         $mapaVendedorExacto = $conVendedor ? ['id_vendedor' => 'nc.id_vendedor'] : [];
 
+        // Filtro sri:novedad (aviso "Documentos con novedad del SRI" del navbar): último envío
+        // al SRI devuelto / no autorizado / con error. Ver App\Helpers\NovedadSriFiltro.
+        \App\Helpers\NovedadSriFiltro::aplicar($where, $params, $filtros, 'nota_credito', 'nc.id', $idEmpresa);
+
         \App\Helpers\FiltrosBusqueda::aplicarFiltros($where, $params, $filtros, [
             'texto' => $mapaVendedorTexto + [
                 'cliente'        => 'c.nombre',

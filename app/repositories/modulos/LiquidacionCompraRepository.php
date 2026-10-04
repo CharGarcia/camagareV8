@@ -105,6 +105,10 @@ class LiquidacionCompraRepository extends BaseRepository
             }
         }
 
+        // Filtro sri:novedad (aviso "Documentos con novedad del SRI" del navbar): último envío
+        // al SRI devuelto / no autorizado / con error. Ver App\Helpers\NovedadSriFiltro.
+        \App\Helpers\NovedadSriFiltro::aplicar($where, $params, $filtros, 'liquidacion_compra', 'l.id', $idEmpresa);
+
         \App\Helpers\FiltrosBusqueda::aplicarFiltros($where, $params, $filtros, [
             'texto' => [
                 'proveedor'      => 'p.razon_social',

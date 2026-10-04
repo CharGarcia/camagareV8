@@ -138,6 +138,10 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                     ['v' => 'autorizado', 'l' => 'Autorizado'],
                     ['v' => 'anulado',    'l' => 'Anulado'],
                 ]],
+                // Aviso "Documentos con novedad del SRI" del navbar: último envío devuelto / no autorizado / con error.
+                ['tab' => $tN, 'key' => 'sri',        'label' => 'Novedad SRI',      'icon' => 'bi-exclamation-octagon', 'type' => 'select', 'grupo' => 'Documento', 'col' => 3, 'options' => [
+                    ['v' => 'novedad', 'l' => 'Devuelto / no autorizado / con error'],
+                ]],
                 ['tab' => $tN, 'key' => 'correo',     'label' => 'Correo',           'icon' => 'bi-envelope',       'type' => 'select',     'grupo' => 'Documento', 'col' => 3, 'options' => [
                     ['v' => 'enviado',   'l' => 'Enviado'],
                     ['v' => 'pendiente', 'l' => 'Pendiente'],

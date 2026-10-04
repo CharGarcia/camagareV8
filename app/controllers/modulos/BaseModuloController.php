@@ -312,6 +312,20 @@ abstract class BaseModuloController extends Controller
     }
 
     /**
+     * Filtro que dejó un aviso del navbar al hacer clic (p. ej. `estado:borrador` o
+     * `sri:novedad`), guardado en sesión por ContadoresController::filtroAvisoAjax().
+     * Es de UN solo uso (se borra al leerlo) y solo aplica si el listado no trae ya una
+     * búsqueda propia. Así la URL del módulo queda limpia, sin `?b=`.
+     */
+    protected function filtroDesdeAviso(string $buscar): string
+    {
+        $ruta = $this->getRutaModulo();
+        $filtro = (string) ($_SESSION['aviso_filtro'][$ruta] ?? '');
+        unset($_SESSION['aviso_filtro'][$ruta]);
+        return ($buscar === '' && $filtro !== '') ? $filtro : $buscar;
+    }
+
+    /**
      * Estado del listado guardado por estadoListadoAjax(): ['b','page','sort','dir'].
      * Las claves vacías significan "usar el valor por defecto / las preferencias".
      */

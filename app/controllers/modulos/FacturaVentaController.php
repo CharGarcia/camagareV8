@@ -59,6 +59,7 @@ class FacturaVentaController extends BaseModuloController
 
         $prefsVista = \App\Helpers\PreferenciasHelper::getPreferenciasVista($this->getRutaModulo());
         $buscar   = trim($_GET['b'] ?? $_POST['b'] ?? $_GET['buscar'] ?? $_POST['buscar'] ?? '');
+        $buscar   = $this->filtroDesdeAviso($buscar); // clic en un aviso del navbar (borrador / novedad SRI)
         $page     = max(1, (int) ($_GET['page'] ?? $_POST['page'] ?? 1));
         // Orden múltiple (Shift+clic): la vista lo manda como `orden=col:DIR,col:DIR`.
         $orden    = \App\Helpers\OrdenListado::leer($prefsVista, 'fecha_emision', 'DESC');

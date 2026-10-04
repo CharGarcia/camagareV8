@@ -94,6 +94,10 @@ class GuiaRemisionRepository extends BaseRepository
                 $where .= " AND {$condicion}";
             }
         }
+        // Filtro sri:novedad (aviso "Documentos con novedad del SRI" del navbar): último envío
+        // al SRI devuelto / no autorizado / con error. Ver App\Helpers\NovedadSriFiltro.
+        \App\Helpers\NovedadSriFiltro::aplicar($where, $params, $parsed['filtros'], 'guia_remision', 'g.id', $idEmpresa);
+
         \App\Helpers\FiltrosBusqueda::aplicarFiltros($where, $params, $parsed['filtros'], [
             'texto' => [
                 'cliente'       => 'c.nombre',

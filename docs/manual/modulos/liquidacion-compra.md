@@ -5,8 +5,8 @@ categoria: Compras
 ruta_modulo: modulos/liquidacion-compra
 tipo: modulo
 visibilidad: todos
-etiquetas: liquidacion de compra, liquidacion, proveedor sin factura, comprobante 03, sri, sustento, eliminar, borrar, borrador, anular, buscar liquidacion, buscador, filtros, filtrar liquidaciones, buscar por producto, saldo pendiente, estado de pago, chips, aparecen documentos que no busque, resultados que no corresponden, la busqueda trae otros documentos, totales, subtotal, descuento, iva, redondeo, centavos, decimales, decimales de precio, calculo del iva, al subtotal, linea por linea, no cuadra, diferencia de un centavo, error en diferencias, exento, no objeto de iva, codigo del item, item sin codigo, item sin descripcion, falta el codigo, error en estructura de comprobante, rechazado por estructura, no autorizado, informacion adicional, ruc proveedor, campo que no se puede borrar, no me deja eliminar la fila, concepto muy largo, limite de caracteres, maximo 100 caracteres, value too long, no se pudo guardar la liquidacion, registrar pago, pagar liquidacion, egreso de liquidacion, pestaña pagos, no deja pagar, error al registrar pago, secuencial de egreso, imprimir, impresora, retencion, emitir retencion, retener liquidacion, pestaña retenciones, comprobante de retencion, columna saldo, cuanto se debe, saldo por pagar, datos de otra liquidacion, modal no se actualiza, pestaña liquidacion, pagada en el sistema anterior, liquidaciones migradas pendientes, liquidaciones 2020, liquidaciones antiguas sin pago, sistema anterior no registraba pagos
-version: 1.23
+etiquetas: liquidacion de compra, liquidacion, proveedor sin factura, comprobante 03, sri, sustento, eliminar, borrar, borrador, anular, buscar liquidacion, buscador, filtros, filtrar liquidaciones, buscar por producto, saldo pendiente, estado de pago, chips, aparecen documentos que no busque, resultados que no corresponden, la busqueda trae otros documentos, totales, subtotal, descuento, iva, redondeo, centavos, decimales, decimales de precio, calculo del iva, al subtotal, linea por linea, no cuadra, diferencia de un centavo, error en diferencias, exento, no objeto de iva, codigo del item, item sin codigo, item sin descripcion, falta el codigo, error en estructura de comprobante, rechazado por estructura, no autorizado, informacion adicional, ruc proveedor, campo que no se puede borrar, no me deja eliminar la fila, concepto muy largo, limite de caracteres, maximo 100 caracteres, value too long, no se pudo guardar la liquidacion, registrar pago, pagar liquidacion, egreso de liquidacion, pestaña pagos, no deja pagar, error al registrar pago, secuencial de egreso, imprimir, impresora, retencion, emitir retencion, retener liquidacion, pestaña retenciones, comprobante de retencion, columna saldo, cuanto se debe, saldo por pagar, datos de otra liquidacion, modal no se actualiza, pestaña liquidacion, pagada en el sistema anterior, liquidaciones migradas pendientes, liquidaciones 2020, liquidaciones antiguas sin pago, sistema anterior no registraba pagos, aviso, avisos, novedad sri, documentos con novedad, devuelto, no autorizado, pendientes de enviar, borrador, borradores
+version: 1.24
 orden: 40
 estado: activo
 ---
@@ -173,6 +173,25 @@ la abre directamente.
 búsqueda**. La **×** quita solo ese filtro, y con el cuadro vacío la tecla
 **Retroceso** quita el último.
 
+### Abrir el listado desde los avisos de la barra superior
+
+Los avisos de la barra superior llevan directo a los documentos de los que hablan,
+con el listado ya filtrado:
+
+- **Documentos con novedad del SRI** (ícono rojo de alerta) → *Liquidaciones de compra*: el listado
+  se abre con el filtro **Novedad SRI: Devuelto / no autorizado / con error**, es
+  decir, las liquidaciones cuyo último envío al SRI fue devuelto, no autorizado o terminó
+  con error. Son las que hay que corregir y volver a enviar.
+- **Pendientes de enviar al SRI** (ícono amarillo de liquidaciones en borrador): el listado
+  se abre con el filtro **Estado: Borrador**, las liquidaciones guardadas que todavía no se
+  han enviado al SRI.
+
+El filtro aparece como una etiqueta dentro del cuadro de búsqueda; quítela con la
+**×** para volver a ver todo el listado. El filtro **Novedad SRI** también se puede
+elegir a mano en la ventana de filtros (pestaña *Liquidación*, bloque *Documento*). Si su
+usuario solo ve sus propios registros, el aviso cuenta los de toda la empresa pero el
+listado muestra solo los suyos.
+
 ## Columna Saldo del listado
 
 La columna **Saldo** muestra lo que falta pagar de cada liquidación: el total
@@ -324,6 +343,9 @@ la operación de inmediato.
 
 ## Historial de cambios
 
+- **1.24** — Al hacer clic en los avisos de la barra superior (*Documentos con novedad
+  del SRI* y documentos en borrador pendientes de enviar) el listado se abre ya
+  filtrado con esos documentos. Nuevo filtro **Novedad SRI** en la ventana de filtros.
 - **1.23** — El IVA se calcula con la configuración de facturación (al
   subtotal o línea por línea) del establecimiento de la **serie elegida**; antes
   se tomaba la del primer establecimiento de la empresa. Al cambiar de serie los

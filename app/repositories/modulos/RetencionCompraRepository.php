@@ -97,6 +97,10 @@ class RetencionCompraRepository extends BaseRepository
                 $where .= " AND {$condicion}";
             }
         }
+        // Filtro sri:novedad (aviso "Documentos con novedad del SRI" del navbar): último envío
+        // al SRI devuelto / no autorizado / con error. Ver App\Helpers\NovedadSriFiltro.
+        \App\Helpers\NovedadSriFiltro::aplicar($where, $params, $parsed['filtros'], 'retencion_compra', 'r.id', $idEmpresa);
+
         \App\Helpers\FiltrosBusqueda::aplicarFiltros($where, $params, $parsed['filtros'], [
             'texto' => [
                 'proveedor'      => 'p.razon_social',

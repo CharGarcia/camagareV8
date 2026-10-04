@@ -5,8 +5,8 @@ categoria: Ventas
 ruta_modulo: modulos/guias_remision
 tipo: modulo
 visibilidad: todos
-etiquetas: guia de remision, guias, traslado, transporte, envio, placa, transportista, sri, mercaderia en transito, ride, pdf, imprimir guia, guia desde transferencia, traslado entre bodegas, traslado entre establecimientos, buscar guia, buscador, filtros, filtrar guias, buscar por producto, filtro de fechas, chips, aparecen documentos que no busque, resultados que no corresponden, la busqueda trae otros documentos
-version: 1.12
+etiquetas: guia de remision, guias, traslado, transporte, envio, placa, transportista, sri, mercaderia en transito, ride, pdf, imprimir guia, guia desde transferencia, traslado entre bodegas, traslado entre establecimientos, buscar guia, buscador, filtros, filtrar guias, buscar por producto, filtro de fechas, chips, aparecen documentos que no busque, resultados que no corresponden, la busqueda trae otros documentos, aviso, avisos, novedad sri, documentos con novedad, devuelto, no autorizado, pendientes de enviar, borrador, borradores
+version: 1.13
 orden: 55
 estado: activo
 ---
@@ -234,6 +234,25 @@ mostrando solo esa guía; el ícono de la derecha la abre directamente.
 búsqueda**. La **×** quita solo ese filtro, y con el cuadro vacío la tecla
 **Retroceso** quita el último.
 
+### Abrir el listado desde los avisos de la barra superior
+
+Los avisos de la barra superior llevan directo a los documentos de los que hablan,
+con el listado ya filtrado:
+
+- **Documentos con novedad del SRI** (ícono rojo de alerta) → *Guías de remisión*: el listado
+  se abre con el filtro **Novedad SRI: Devuelto / no autorizado / con error**, es
+  decir, las guías cuyo último envío al SRI fue devuelto, no autorizado o terminó
+  con error. Son las que hay que corregir y volver a enviar.
+- **Pendientes de enviar al SRI** (ícono amarillo de guías en borrador): el listado
+  se abre con el filtro **Estado: Borrador**, las guías guardadas que todavía no se
+  han enviado al SRI.
+
+El filtro aparece como una etiqueta dentro del cuadro de búsqueda; quítela con la
+**×** para volver a ver todo el listado. El filtro **Novedad SRI** también se puede
+elegir a mano en la ventana de filtros (pestaña *Guía*, bloque *Documento*). Si su
+usuario solo ve sus propios registros, el aviso cuenta los de toda la empresa pero el
+listado muestra solo los suyos.
+
 ## La guía no mueve inventario
 
 Emitir una guía **no descuenta stock**: solo ampara el traslado. El movimiento de
@@ -266,6 +285,9 @@ cargados. Solo queda completar el **destinatario**, el **transportista** y la
 
 ## Historial de cambios
 
+- **1.13** — Al hacer clic en los avisos de la barra superior (*Documentos con novedad
+  del SRI* y documentos en borrador pendientes de enviar) el listado se abre ya
+  filtrado con esos documentos. Nuevo filtro **Novedad SRI** en la ventana de filtros.
 - **1.12** — En la ventana de filtros, la pestaña *Detalles* se llama ahora
   **Búsqueda por detalle**, y la ventana ya no tiene barra de desplazamiento
   vertical propia: se muestra completa.

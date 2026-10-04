@@ -5,8 +5,8 @@ categoria: Compras
 ruta_modulo: modulos/retenciones_compras
 tipo: modulo
 visibilidad: todos
-etiquetas: retencion, retenciones, retencion de liquidacion, retener liquidacion de compra, liquidacion de compra, vincular compra, vincular documento, documento sustento, buscar compra para retener, comprobante de retencion, proveedor, iva, renta, sustento tributario, sri, plazo, base imponible, porcentaje, advertencias, ruc proveedor, ruc del proveedor del sistema, informacion adicional, resolucion 27, pdf, ride, imprimir, imprimir retencion, impresora, descargar pdf, ver pdf, buscar retencion, buscador, filtros, filtrar retenciones, buscar por codigo de retencion, estado de correo, chips, aparecen documentos que no busque, resultados que no corresponden, la busqueda trae otros documentos, archivo no cumple estructura xml, totalDigits, tarifa 14.99, retencion antes de la factura, enlazar retencion, retencion sin compra, factura registrada despues
-version: 1.23
+etiquetas: retencion, retenciones, retencion de liquidacion, retener liquidacion de compra, liquidacion de compra, vincular compra, vincular documento, documento sustento, buscar compra para retener, comprobante de retencion, proveedor, iva, renta, sustento tributario, sri, plazo, base imponible, porcentaje, advertencias, ruc proveedor, ruc del proveedor del sistema, informacion adicional, resolucion 27, pdf, ride, imprimir, imprimir retencion, impresora, descargar pdf, ver pdf, buscar retencion, buscador, filtros, filtrar retenciones, buscar por codigo de retencion, estado de correo, chips, aparecen documentos que no busque, resultados que no corresponden, la busqueda trae otros documentos, archivo no cumple estructura xml, totalDigits, tarifa 14.99, retencion antes de la factura, enlazar retencion, retencion sin compra, factura registrada despues, aviso, avisos, novedad sri, documentos con novedad, devuelto, no autorizado, pendientes de enviar, borrador, borradores
+version: 1.24
 orden: 30
 estado: activo
 ---
@@ -92,6 +92,25 @@ directamente.
 **Chips.** Cada filtro aplicado aparece como una etiqueta **dentro del cuadro de
 búsqueda**. La **×** quita solo ese filtro, y con el cuadro vacío la tecla
 **Retroceso** quita el último.
+
+### Abrir el listado desde los avisos de la barra superior
+
+Los avisos de la barra superior llevan directo a los documentos de los que hablan,
+con el listado ya filtrado:
+
+- **Documentos con novedad del SRI** (ícono rojo de alerta) → *Retenciones de compra*: el listado
+  se abre con el filtro **Novedad SRI: Devuelto / no autorizado / con error**, es
+  decir, las retenciones cuyo último envío al SRI fue devuelto, no autorizado o terminó
+  con error. Son las que hay que corregir y volver a enviar.
+- **Pendientes de enviar al SRI** (ícono amarillo de retenciones en borrador): el listado
+  se abre con el filtro **Estado: Borrador**, las retenciones guardadas que todavía no se
+  han enviado al SRI.
+
+El filtro aparece como una etiqueta dentro del cuadro de búsqueda; quítela con la
+**×** para volver a ver todo el listado. El filtro **Novedad SRI** también se puede
+elegir a mano en la ventana de filtros (pestaña *Retención*, bloque *Documento*). Si su
+usuario solo ve sus propios registros, el aviso cuenta los de toda la empresa pero el
+listado muestra solo los suyos.
 
 ## Cómo buscar el código de retención
 
@@ -417,6 +436,9 @@ El valor lo configura el superadministrador en `/config/sri-proveedor`.
 
 ## Historial de cambios
 
+- **1.24** — Al hacer clic en los avisos de la barra superior (*Documentos con novedad
+  del SRI* y documentos en borrador pendientes de enviar) el listado se abre ya
+  filtrado con esos documentos. Nuevo filtro **Novedad SRI** en la ventana de filtros.
 - **1.23** — Una retención emitida antes de registrar la factura de compra se enlaza
   sola a esa factura cuando se registra (a mano o por XML/SRI) o cuando se corrige su
   número o proveedor. Antes quedaba suelta y la compra seguía con el saldo completo.

@@ -92,6 +92,40 @@ class ContadoresController extends Controller
     }
 
     /**
+     * Avisos del navbar que, al hacer clic, abren su módulo YA FILTRADO por los
+     * documentos que cuentan: ruta MVC => [aviso => filtro del buscador].
+     * Whitelist: lo único que puede quedar en sesión sale de aquí.
+     */
+    private const FILTROS_AVISO = [
+        'modulos/factura-venta'       => ['novedad_sri' => 'sri:novedad', 'borrador' => 'estado:borrador'],
+        'modulos/liquidacion-compra'  => ['novedad_sri' => 'sri:novedad', 'borrador' => 'estado:borrador'],
+        'modulos/retenciones_compras' => ['novedad_sri' => 'sri:novedad', 'borrador' => 'estado:borrador'],
+        'modulos/notas_credito'       => ['novedad_sri' => 'sri:novedad', 'borrador' => 'estado:borrador'],
+        'modulos/guias_remision'      => ['novedad_sri' => 'sri:novedad', 'borrador' => 'estado:borrador'],
+    ];
+
+    /**
+     * POST /contadores/filtroAvisoAjax (ruta, aviso) — el navbar lo llama al hacer clic en
+     * un aviso; deja el filtro en $_SESSION['aviso_filtro'][ruta] y el JS navega a la URL
+     * limpia del módulo, cuyo index() lo toma con BaseModuloController::filtroDesdeAviso().
+     * El permiso de ver lo valida el propio módulo al abrirse.
+     */
+    public function filtroAvisoAjax(): void
+    {
+        $this->requireAuth();
+
+        $ruta  = trim((string) ($_POST['ruta'] ?? ''));
+        $aviso = trim((string) ($_POST['aviso'] ?? ''));
+        $filtro = self::FILTROS_AVISO[$ruta][$aviso] ?? null;
+        if ($filtro === null) {
+            $this->json(['ok' => false, 'error' => 'Aviso no válido.'], 422);
+        }
+
+        $_SESSION['aviso_filtro'][$ruta] = $filtro;
+        $this->json(['ok' => true]);
+    }
+
+    /**
      * GET /contadores/tareasAlertasAjax → lista de la campana de tareas (vencidas y
      * por vencer). Se pide solo al abrir el desplegable, no en el sondeo del navbar.
      * Tareas es global por usuario: basta la sesión.
