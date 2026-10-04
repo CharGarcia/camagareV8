@@ -68,16 +68,17 @@ $urlBaseVehShared = BASE_URL . '/modulos/vehiculos';
                     <div class="px-4 py-3">
                         <div class="row g-3">
                             <div class="col-md-6">
-                                <label class="form-label mb-1 small fw-bold text-muted">Marca *</label>
-                                <input type="text" class="form-control form-control-sm shadow-none" name="marca" id="vehiculo_marca" required maxlength="100" placeholder="Ej. TOYOTA">
-                            </div>
-                            <div class="col-md-6">
                                 <label class="form-label mb-1 small fw-bold text-muted">Placa *</label>
                                 <div class="input-group input-group-sm">
-                                    <input type="text" class="form-control form-control-sm shadow-none fw-bold" name="placa" id="vehiculo_placa" required maxlength="20" placeholder="Ej. ABC-1234" style="text-transform: uppercase;">
-                                    <button type="button" class="btn btn-outline-primary" id="btnVehConsultarSri" title="Traer marca y año desde el SRI"><i class="bi bi-search"></i><span class="d-none d-sm-inline"> SRI</span></button>
+                                    <?php // Máscara AAA-1111 (3 letras, guion, 4 números) en vehiculos_modal.js ?>
+                                    <input type="text" class="form-control form-control-sm shadow-none fw-bold" name="placa" id="vehiculo_placa" required maxlength="8" placeholder="AAA-1111" autocomplete="off" style="text-transform: uppercase;">
+                                    <button type="button" class="btn btn-outline-primary" id="btnVehConsultarSri" title="Traer marca, modelo y año desde el SRI"><i class="bi bi-search"></i><span class="d-none d-sm-inline"> SRI</span></button>
                                 </div>
                                 <div class="form-text small d-none" id="vehiculo_sri_info"></div>
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label mb-1 small fw-bold text-muted">Marca y modelo *</label>
+                                <input type="text" class="form-control form-control-sm shadow-none" name="marca" id="vehiculo_marca" required maxlength="100" placeholder="Ej. TOYOTA COROLLA">
                             </div>
                             <div class="col-md-6">
                                 <label class="form-label mb-1 small fw-bold text-muted">Chasis</label>

@@ -5,8 +5,8 @@ categoria: Compras
 ruta_modulo: modulos/retenciones_compras
 tipo: modulo
 visibilidad: todos
-etiquetas: retencion, retenciones, retencion de liquidacion, retener liquidacion de compra, liquidacion de compra, vincular compra, vincular documento, documento sustento, buscar compra para retener, comprobante de retencion, proveedor, iva, renta, sustento tributario, sri, plazo, base imponible, porcentaje, advertencias, ruc proveedor, ruc del proveedor del sistema, informacion adicional, resolucion 27, pdf, ride, imprimir, imprimir retencion, impresora, descargar pdf, ver pdf, buscar retencion, buscador, filtros, filtrar retenciones, buscar por codigo de retencion, estado de correo, chips, aparecen documentos que no busque, resultados que no corresponden, la busqueda trae otros documentos, archivo no cumple estructura xml, totalDigits, tarifa 14.99, retencion antes de la factura, enlazar retencion, retencion sin compra, factura registrada despues, aviso, avisos, novedad sri, documentos con novedad, devuelto, no autorizado, pendientes de enviar, borrador, borradores
-version: 1.25
+etiquetas: retencion, retenciones, retencion de liquidacion, retener liquidacion de compra, liquidacion de compra, vincular compra, vincular documento, documento sustento, buscar compra para retener, comprobante de retencion, proveedor, iva, renta, sustento tributario, sri, plazo, base imponible, porcentaje, advertencias, ruc proveedor, ruc del proveedor del sistema, informacion adicional, resolucion 27, pdf, ride, imprimir, imprimir retencion, impresora, descargar pdf, ver pdf, buscar retencion, buscador, filtros, filtrar retenciones, buscar por codigo de retencion, estado de correo, chips, aparecen documentos que no busque, resultados que no corresponden, la busqueda trae otros documentos, archivo no cumple estructura xml, totalDigits, tarifa 14.99, retencion antes de la factura, enlazar retencion, retencion sin compra, factura registrada despues, aviso, avisos, novedad sri, documentos con novedad, devuelto, no autorizado, pendientes de enviar, borrador, borradores, eliminar retencion autorizada, borrar retencion, volver a cargar retencion, superadmin
+version: 1.26
 orden: 30
 estado: activo
 ---
@@ -325,6 +325,29 @@ Una compra que ya tiene retención **no se puede eliminar**: primero hay que
 eliminar la retención. Es una protección deliberada, porque la retención declara
 al SRI una compra que dejaría de existir.
 
+## Eliminar una retención autorizada (solo superadministrador)
+
+Por regla, una retención **autorizada** no se elimina: se anula. El
+**superadministrador** (nivel 3) tiene una excepción para corregir una retención
+**cargada con errores**, por ejemplo una traída desde *Descargas del SRI* que se
+quiere volver a cargar:
+
+1. Abra la retención: el botón **Eliminar** aparece en cualquier estado.
+2. Confirme el aviso. Se revierten el asiento contable y los casilleros de la
+   declaración de IVA, y la retención sale del listado.
+3. Vuelva a cargar el XML desde *Descargas del SRI*: como la anterior quedó
+   eliminada, se registra de nuevo.
+
+Tenga en cuenta:
+
+- **En el SRI no se anula nada.** El comprobante sigue autorizado allá; solo se
+  borra la copia del sistema. Si lo que quiere es anular la retención ante el SRI,
+  use **Anular**.
+- Si el período contable de la retención está **cerrado**, no se puede eliminar,
+  tampoco el superadministrador.
+- La eliminación queda en el historial como *ELIMINAR_FORZADO_SUPERADMIN*, con el
+  estado que tenía la retención.
+
 ## Documentos del módulo
 
 Desde la retención guardada están disponibles el **PDF** del comprobante, su
@@ -438,6 +461,9 @@ El valor lo configura el superadministrador en `/config/sri-proveedor`.
 
 ## Historial de cambios
 
+- **1.26** — El superadministrador puede **eliminar** una retención en cualquier
+  estado, también autorizada, para volver a cargar una que entró con errores. No
+  anula nada en el SRI. Ver *Eliminar una retención autorizada*.
 - **1.25** — En la búsqueda libre, el número del documento sustento se encuentra
   también escrito sin guiones (`001001000000123`), como se copia del RIDE o del XML.
 - **1.24** — Al hacer clic en los avisos de la barra superior (*Documentos con novedad

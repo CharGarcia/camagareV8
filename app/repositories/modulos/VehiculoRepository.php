@@ -134,11 +134,12 @@ class VehiculoRepository extends BaseRepository
     {
         $sql = "SELECT 1 FROM {$this->table} 
                 WHERE id_empresa = :id_empresa 
-                  AND UPPER(placa) = UPPER(:placa) 
+                  AND REGEXP_REPLACE(UPPER(placa), '[^A-Z0-9]', '', 'g') = :placa
                   AND eliminado = false";
+        // Sin guiones ni espacios: ABC-1234 y ABC1234 son la misma placa.
         $params = [
             ':id_empresa' => $idEmpresa,
-            ':placa'      => $placa
+            ':placa'      => preg_replace('/[^A-Z0-9]/', '', strtoupper($placa))
         ];
 
         if ($excluirId !== null && $excluirId > 0) {

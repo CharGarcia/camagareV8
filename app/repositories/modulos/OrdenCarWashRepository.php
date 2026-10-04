@@ -278,11 +278,12 @@ class OrdenCarWashRepository extends BaseRepository
         $sql = "SELECT id, placa, marca, chasis, anio, propietario, correo, telefono
                 FROM vehiculos
                 WHERE id_empresa = :e AND eliminado = false AND estado = 'activo'
-                  AND (placa ILIKE :q OR marca ILIKE :q OR propietario ILIKE :q)
+                  AND (placa ILIKE :q OR REPLACE(placa, '-', '') ILIKE :qp OR marca ILIKE :q OR propietario ILIKE :q)
                 ORDER BY placa ASC
                 LIMIT 15";
         $st = $this->db->prepare($sql);
-        $st->execute([':e' => $idEmpresa, ':q' => '%' . $q . '%']);
+        // :qp — placa sin guion: "ABC1234" encuentra "ABC-1234" y viceversa.
+        $st->execute([':e' => $idEmpresa, ':q' => '%' . $q . '%', ':qp' => '%' . str_replace('-', '', $q) . '%']);
         return $st->fetchAll(PDO::FETCH_ASSOC);
     }
 

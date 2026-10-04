@@ -38,7 +38,7 @@
 
         vehPrepararPestanas(0);
         getModalVeh()?.show();
-        setTimeout(() => { document.getElementById('vehiculo_marca')?.focus(); }, 500);
+        setTimeout(() => { document.getElementById('vehiculo_placa')?.focus(); }, 500);
     };
 
     window.abrirModalVehiculoEditar = function(rowOrData) {
@@ -338,8 +338,13 @@
             const correo = document.getElementById('vehiculo_correo').value.trim();
             const telefono = document.getElementById('vehiculo_telefono').value.trim();
 
-            if (!marca) return Swal.fire({ icon: 'warning', title: 'Atención', text: 'La marca es obligatoria.' });
             if (!placa) return Swal.fire({ icon: 'warning', title: 'Atención', text: 'La placa es obligatoria.' });
+            // Vehículo nuevo: placa completa AAA-1111. Al editar no se exige, para no
+            // bloquear placas ya guardadas en otro formato (migradas, motos, etc.).
+            if (!document.getElementById('vehiculo_id').value && !/^[A-Z]{3}-[0-9]{4}$/.test(placa)) {
+                return Swal.fire({ icon: 'warning', title: 'Atención', text: 'La placa debe tener el formato AAA-1111 (3 letras y 4 números).' });
+            }
+            if (!marca) return Swal.fire({ icon: 'warning', title: 'Atención', text: 'La marca y modelo es obligatoria.' });
 
             if (correo && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(correo)) {
                 return Swal.fire({ icon: 'warning', title: 'Atención', text: 'El correo electrónico no tiene un formato válido.' });
@@ -452,7 +457,9 @@
             const d = json.data || {};
             const inpMarca = document.getElementById('vehiculo_marca');
             const inpAnio = document.getElementById('vehiculo_anio');
-            if (d.marca && (!automatico || !inpMarca.value.trim())) inpMarca.value = d.marca;
+            // "Marca y modelo" en un solo campo: GREAT WALL M4 MT AC 1.5 5P 4X2 TM
+            const marcaModelo = [d.marca, d.modelo].filter(Boolean).join(' ').slice(0, 100);
+            if (marcaModelo && (!automatico || !inpMarca.value.trim())) inpMarca.value = marcaModelo;
             if (d.anio && (!automatico || !inpAnio.value)) inpAnio.value = d.anio;
 
             const partes = [d.marca, d.modelo, d.anio, d.pais].filter(Boolean).map(vehEsc);
@@ -464,11 +471,37 @@
         }
     }
 
-    document.getElementById('btnVehConsultarSri')?.addEventListener('click', () => vehConsultarSri(false));
-    document.getElementById('vehiculo_placa')?.addEventListener('change', () => {
+    /**
+     * Máscara de placa AAA-1111: 3 letras (mayúsculas), guion y hasta 4 números;
+     * cualquier otro carácter se descarta al teclear. El guion se agrega solo al
+     * escribir el primer número, para que borrar hacia atrás no se trabe en él.
+     */
+    function vehMaskPlaca(el) {
+        const cursorAlFinal = el.selectionStart === el.value.length;
+        let letras = '', numeros = '';
+        for (const ch of el.value.toUpperCase()) {
+            if (letras.length < 3 && /[A-Z]/.test(ch)) letras += ch;
+            else if (letras.length === 3 && numeros.length < 4 && /[0-9]/.test(ch)) numeros += ch;
+        }
+        el.value = numeros ? `${letras}-${numeros}` : letras;
+        if (cursorAlFinal) el.setSelectionRange(el.value.length, el.value.length);
+    }
+
+    const inpPlacaVeh = document.getElementById('vehiculo_placa');
+    // Solo en vehículo nuevo: al editar, una placa guardada en otro formato (moto,
+    // migrada) se destrozaría con la primera tecla.
+    inpPlacaVeh?.addEventListener('input', () => {
+        if (!document.getElementById('vehiculo_id')?.value) vehMaskPlaca(inpPlacaVeh);
+    });
+    inpPlacaVeh?.addEventListener('change', () => {
+        // Placas antiguas de 3 dígitos: se completan con un 0 (ABC-123 → ABC-0123), como en el SRI.
+        const m = inpPlacaVeh.value.match(/^([A-Z]{3})-([0-9]{3})$/);
+        if (m) inpPlacaVeh.value = `${m[1]}-0${m[2]}`;
+
         const esNuevo = !document.getElementById('vehiculo_id')?.value;
         const marcaVacia = !document.getElementById('vehiculo_marca')?.value.trim();
-        if (esNuevo && marcaVacia) vehConsultarSri(true);
+        if (esNuevo && marcaVacia && /^[A-Z]{3}-[0-9]{4}$/.test(inpPlacaVeh.value)) vehConsultarSri(true);
     });
+    document.getElementById('btnVehConsultarSri')?.addEventListener('click', () => vehConsultarSri(false));
 
 })(window, document);

@@ -6,7 +6,7 @@ ruta_modulo: modulos/vehiculos
 tipo: modulo
 visibilidad: todos
 etiquetas: vehiculos, vehiculo, carro, auto, placa, propietario, dueño, consulta sri, consultar placa, datos del vehiculo por placa, matricula, marca, año, historial del vehiculo, transacciones, visitas, ordenes car wash, lavado, taller, proxima cita, recordatorio, recordar cita, aviso al cliente, whatsapp, correo, automatizacion, buscar placa, filtros
-version: 1.4
+version: 1.5
 orden: 11
 estado: activo
 ---
@@ -33,28 +33,42 @@ El módulo de **Vehículos** guarda la ficha de cada vehículo que atiende la em
 ## Cómo se usa
 
 1. Pulse **Nuevo** o haga clic en un vehículo del listado.
-2. En la pestaña **General** registre marca, placa (única por empresa), chasis, año,
-   estado, propietario, correo y teléfono, y pulse **Guardar**.
+2. En la pestaña **General** escriba primero la **placa** (única por empresa); el
+   sistema trae la marca, el modelo y el año desde el SRI. Complete chasis, estado,
+   propietario, correo y teléfono, y pulse **Guardar**.
 3. Con el vehículo guardado, use las pestañas **Transacciones** y **Recordatorios**.
 
-## Traer marca y año desde el SRI (consulta por placa)
+Cada usuario puede ocultar las pestañas que no use con el engranaje a la derecha de
+las pestañas.
+
+## Formato de la placa (AAA-1111)
+
+En un vehículo **nuevo**, la placa se escribe con el formato `AAA-1111`: 3 letras,
+guion y 4 números. El campo solo acepta letras en las 3 primeras posiciones y
+números en las 4 últimas, pasa las letras a mayúsculas y pone el guion solo. Las
+placas antiguas de 3 números se completan con un 0 al salir del campo
+(`ABC-123` → `ABC-0123`).
+
+Al **editar** un vehículo ya guardado no se aplica la máscara, para no estropear
+placas registradas en otro formato (motos, vehículos migrados). La placa se
+considera la misma con o sin guion: `ABC-1234` y `ABC1234` no pueden registrarse
+dos veces, y los buscadores de vehículos de Car-Wash y Taller encuentran la placa
+escrita de cualquiera de las dos formas.
+
+## Traer marca, modelo y año desde el SRI (consulta por placa)
 
 Junto a la placa está el botón **SRI**. Escriba la placa y púlselo: el sistema
-consulta el SRI y llena **Marca** y **Año**. Debajo de la placa se ve lo que
+consulta el SRI y llena **Marca y modelo** (por ejemplo
+`GREAT WALL M4 MT AC 1.5 5P 4X2 TM`) y **Año**. Debajo de la placa se ve lo que
 respondió el SRI (marca, modelo, año y país).
 
-- En un vehículo **nuevo**, si la marca está vacía, la consulta se hace sola al
-  salir del campo placa y solo llena los campos vacíos. El botón, en cambio,
-  reemplaza la marca y el año que ya estén escritos.
-- La placa puede escribirse con o sin guion (`ABC-1234` o `ABC1234`); las placas
-  antiguas de 3 dígitos se completan solas (`ABC-123` → `ABC0123`).
+- En un vehículo **nuevo**, al completar la placa y salir del campo, la consulta se
+  hace sola si *Marca y modelo* está vacío, y solo llena los campos vacíos. El
+  botón, en cambio, reemplaza lo que ya esté escrito.
 - El SRI **no entrega el propietario**, el chasis ni el teléfono: esos se siguen
   escribiendo a mano.
 - Es una ayuda: si el SRI no responde o no encuentra la placa, aparece un aviso y
   los datos se escriben a mano como siempre. Nada se guarda hasta pulsar **Guardar**.
-
-Cada usuario puede ocultar las pestañas que no use con el engranaje a la derecha de
-las pestañas.
 
 ## Buscar y filtrar el listado
 
@@ -131,8 +145,8 @@ Meta con las variables en el orden indicado.
 
 | Campo | Para qué sirve |
 |-------|----------------|
-| Marca | Marca del vehículo. Obligatorio. |
-| Placa | Identifica al vehículo; única por empresa. Obligatorio. |
+| Placa | Identifica al vehículo; única por empresa (con o sin guion). Formato `AAA-1111` en vehículos nuevos. Obligatorio. |
+| Marca y modelo | Marca y modelo del vehículo en un solo campo; se llena desde el SRI. Obligatorio. |
 | Chasis / Año | Datos del vehículo. Opcionales; si se escribe el año debe estar entre 1900 y 2100. |
 | Estado | Activo o inactivo (los inactivos no aparecen al buscar en las órdenes). |
 | Propietario | Dueño del vehículo. Opcional. |
@@ -179,6 +193,11 @@ Meta con las variables en el orden indicado.
   el detalle del error aparece al pasar el mouse sobre la etiqueta *Error*.
 
 ## Historial de cambios
+
+- **1.5** — La **placa** va primero y, en vehículos nuevos, usa el formato
+  `AAA-1111`. El campo **Marca** pasa a llamarse **Marca y modelo** y se llena desde
+  el SRI con la marca y el modelo. `ABC-1234` y `ABC1234` cuentan como la misma
+  placa al validar duplicados y al buscar en Car-Wash y Taller.
 
 - **1.4** — Botón **SRI** junto a la placa: trae marca y año del vehículo desde el
   SRI (consulta por placa). En un vehículo nuevo se consulta solo al salir de la placa.

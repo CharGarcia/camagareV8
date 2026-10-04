@@ -327,23 +327,35 @@ class RetencionCompraService
     // ELIMINAR (lógico)
     // ─────────────────────────────────────────────────────────────────────────
 
-    public function eliminar(int $id, int $idEmpresa, int $idUsuario): void
+    /**
+     * @param bool $esSuperAdmin Nivel 3: puede eliminar la retención en cualquier estado
+     *                           (p. ej. una retención cargada con errores desde el SRI que
+     *                           se quiere volver a cargar). Lo decide este Service, no la vista.
+     */
+    public function eliminar(int $id, int $idEmpresa, int $idUsuario, bool $esSuperAdmin = false): void
     {
         $cabecera = $this->repository->getPorId($id, $idEmpresa);
         if (!$cabecera || (int)($cabecera['id_empresa'] ?? 0) !== $idEmpresa) {
             throw new \Exception('Retención no encontrada.');
         }
-        if (($cabecera['estado'] ?? '') === 'autorizada') {
+        $estadoActual = (string)($cabecera['estado'] ?? '');
+        if ($estadoActual === 'autorizada' && !$esSuperAdmin) {
             throw new \Exception('No se puede eliminar una retención autorizada por el SRI.');
         }
         // Un borrador que el SRI ya recibió/autorizó no se borra: su secuencial ya está
         // ocupado allá con esa clave (ver SriDocumentoRules).
-        if (($cabecera['estado'] ?? '') === 'borrador') {
+        if ($estadoActual === 'borrador' && !$esSuperAdmin) {
             \App\Rules\SriDocumentoRules::validarEliminable('retencion_compra', $id, 'la retención');
         }
 
+        // A propósito, sin verificación contra el SRI (igual que Factura de Venta, NC y ND):
+        // el caso de uso es borrar del sistema un documento cargado por error/duplicado sin
+        // intención de anularlo realmente — el registro en el SRI no se ve afectado por
+        // eliminar la copia local.
+
         // Igual que al anular: eliminar revierte el asiento y libera el documento de
-        // sustento, y eso no puede hacerse dentro de un período ya cerrado.
+        // sustento, y eso no puede hacerse dentro de un período ya cerrado (también
+        // para el superadministrador).
         $this->validarPeriodoContable(
             $cabecera['fecha_emision'] ?? '',
             $idEmpresa,
@@ -371,10 +383,11 @@ class RetencionCompraService
 
             $this->repository->eliminarLogico($id, $idEmpresa, $idUsuario);
 
+            $forzado = $esSuperAdmin && !in_array($estadoActual, ['borrador', 'no_autorizada'], true);
             $this->logService->registrar(
                 $idUsuario, $idEmpresa,
-                'ELIMINAR', 'retencion_compra_cabecera', $id,
-                $cabecera, ['eliminado' => true]
+                $forzado ? 'ELIMINAR_FORZADO_SUPERADMIN' : 'ELIMINAR', 'retencion_compra_cabecera', $id,
+                $cabecera, ['eliminado' => true, 'estado_previo' => $estadoActual]
             );
 
             $decIvaRepo = new \App\repositories\modulos\DeclaracionIvaRepository();

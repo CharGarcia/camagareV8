@@ -364,11 +364,13 @@ class TallerOrdenRepository extends BaseRepository
                 FROM vehiculos v
                 LEFT JOIN clientes c ON c.id = v.id_cliente AND c.eliminado = false
                 WHERE v.id_empresa = :e AND v.eliminado = false AND v.estado = 'activo'
-                  AND (v.placa ILIKE :q OR v.marca ILIKE :q OR v.modelo ILIKE :q OR v.propietario ILIKE :q)
+                  AND (v.placa ILIKE :q OR REPLACE(v.placa, '-', '') ILIKE :qp
+                       OR v.marca ILIKE :q OR v.modelo ILIKE :q OR v.propietario ILIKE :q)
                 ORDER BY v.placa ASC
                 LIMIT 15";
         $st = $this->db->prepare($sql);
-        $st->execute([':e' => $idEmpresa, ':q' => '%' . $q . '%']);
+        // :qp — placa sin guion: "ABC1234" encuentra "ABC-1234" y viceversa.
+        $st->execute([':e' => $idEmpresa, ':q' => '%' . $q . '%', ':qp' => '%' . str_replace('-', '', $q) . '%']);
         return $st->fetchAll(PDO::FETCH_ASSOC);
     }
 

@@ -7,6 +7,8 @@
     let currentSort = (typeof window.RET_ordenCol !== 'undefined' && window.RET_ordenCol) ? window.RET_ordenCol : 'fecha_emision';
     let currentDir  = (typeof window.RET_ordenDir !== 'undefined' && window.RET_ordenDir) ? window.RET_ordenDir : 'DESC';
     let retIdActual = 0;
+    // Estado de la retención abierta: RET_eliminar() lo usa para el aviso de eliminación forzada (superadmin).
+    let retEstadoActual = '';
     // Bloquea la carga del secuencial SOLO mientras se abre una retención existente,
     // para no sobrescribir el número guardado. Se libera al terminar la carga, de modo
     // que un cambio manual de serie sí recargue el siguiente consecutivo (igual que factura).
@@ -360,7 +362,13 @@
 
     window.RET_eliminar = async () => {
         if (!retIdActual) return;
-        const ok = await confirmar('¿Eliminar esta retención?', 'Esta acción no se puede deshacer.');
+        const esForzado = !!window.RET_ES_SUPERADMIN && !['borrador', 'no_autorizada'].includes(retEstadoActual);
+        const ok = await confirmar(
+            '¿Eliminar esta retención?',
+            esForzado
+                ? `Esta retención está "${retEstadoActual}", no en borrador. Como superadmin puedes eliminarla igual: se revertirán el asiento contable y los casilleros de IVA, y podrás volver a cargarla. En el SRI no se anula nada. No se puede deshacer.`
+                : 'Esta acción no se puede deshacer.'
+        );
         if (!ok) return;
 
         try {
@@ -1374,8 +1382,11 @@
         if (btnExcel) btnExcel.disabled = !tieneId;
         if (btnCorreo) btnCorreo.disabled = !(tieneId && cab.estado === 'autorizada');
 
+        retEstadoActual = tieneId ? (cab.estado || '') : '';
         if (btnEliminar) {
-            const puedeEliminar = tieneId && ['borrador', 'no_autorizada'].includes(cab.estado);
+            // El superadmin (nivel 3) puede eliminar en cualquier estado (p. ej. una retención
+            // cargada con errores desde el SRI); el servidor vuelve a validarlo.
+            const puedeEliminar = tieneId && (['borrador', 'no_autorizada'].includes(cab.estado) || !!window.RET_ES_SUPERADMIN);
             btnEliminar.classList.toggle('d-none', !puedeEliminar);
         }
         if (btnAnular) {

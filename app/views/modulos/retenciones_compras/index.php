@@ -342,6 +342,7 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
 <script>
     window.RET_rutaBase = '<?= $urlBase ?>';
     window.RET_perm = <?= json_encode($perm) ?>;
+    window.RET_ES_SUPERADMIN = <?= ((int) ($_SESSION['nivel'] ?? 1) === 3) ? 'true' : 'false' ?>;
     // Estado inicial de ordenamiento (desde la preferencia persistida en el servidor)
     window.RET_ordenCol = '<?= $ordenCol ?>';
     window.RET_ordenDir = '<?= $ordenDir ?>';
