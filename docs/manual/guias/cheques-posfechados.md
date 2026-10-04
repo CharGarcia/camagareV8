@@ -43,7 +43,7 @@ Ejemplo: el 03-10 un cliente paga una factura de $500 con un cheque fechado al
 | Momento | Asiento |
 |---|---|
 | **Ingreso** (03-10) | Debe *Cheques posfechados por cobrar* 500 / Haber *Cuentas por cobrar* 500 |
-| **El banco lo cobra**: se registra la Fecha Banco en Control Bancario (p. ej. 16-11) | Debe *Bancos* 500 / Haber *Cheques posfechados por cobrar* 500, con fecha 16-11 |
+| **El banco lo cobra**: se registra la Fecha Banco en Conciliación Bancaria (p. ej. 16-11) | Debe *Bancos* 500 / Haber *Cheques posfechados por cobrar* 500, con fecha 16-11 |
 
 Con un cheque **emitido** es el espejo: el egreso acredita *Cheques posfechados
 por pagar* y, al registrar la Fecha Banco, el asiento de cobro pasa ese valor a
@@ -63,7 +63,7 @@ cheque. En el listado de **Facturas de Venta**, junto al estado de pago aparece 
 
 ## Si el banco devuelve el cheque (protesto)
 
-En **Control Bancario → Cheques Posfechados**, pestaña **Recibidos**, el botón
+En **Conciliación Bancaria → Cheques Posfechados**, pestaña **Recibidos**, el botón
 **Protestado** de la fila del cheque pide la fecha y el motivo y:
 
 1. **Anula el ingreso** que registró el cheque. La factura vuelve a quedar
@@ -81,7 +81,7 @@ Condiciones:
 - Si el ingreso tiene **otras formas de cobro** además del cheque (por ejemplo
   efectivo y cheque), el sistema no sabe a qué documento devolver el monto: edite
   el ingreso, quite el cheque y ajuste lo cobrado de cada documento.
-- Requiere permiso de modificar en Control Bancario y de eliminar en Ingresos.
+- Requiere permiso de modificar en Conciliación Bancaria y de eliminar en Ingresos.
 - Las comisiones del banco o la multa al cliente se registran aparte (egreso o
   nota de débito).
 
@@ -90,11 +90,11 @@ Condiciones:
 - **Anular** el ingreso o egreso anula también el asiento de cobro de sus cheques.
 - **Editar** no se permite mientras un cheque posfechado tenga Fecha Banco: al
   guardar se reemplazan las líneas de pago y el asiento de cobro quedaría suelto.
-  Quite primero la Fecha Banco en Control Bancario, edite y vuelva a ponerla.
+  Quite primero la Fecha Banco en Conciliación Bancaria, edite y vuelva a ponerla.
 
 ## Comprobar con la contabilidad
 
-En **Control Bancario → Comprobar con Contabilidad**, un cheque posfechado no
+En **Conciliación Bancaria → Comprobar con Contabilidad**, un cheque posfechado no
 aparece en la fecha del ingreso o egreso, sino como **Cobro de cheque posfechado**
 en su Fecha Banco, cruzado con su asiento de cobro.
 

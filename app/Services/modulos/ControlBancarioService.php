@@ -977,7 +977,7 @@ class ControlBancarioService
             ];
         }
 
-        $this->reportService->exportToExcel('ControlBancario', $headers, $dataExport, 'Control Bancario', "{$empresaNombre} - {$cuentaNombre}");
+        $this->reportService->exportToExcel('ConciliacionBancaria', $headers, $dataExport, 'Conciliación Bancaria', "{$empresaNombre} - {$cuentaNombre}");
     }
 
     /**
@@ -1172,7 +1172,7 @@ class ControlBancarioService
         $pdf = new TCPDF('L', 'mm', 'A4', true, 'UTF-8', false);
         $pdf->SetCreator('Sistema Contable');
         $pdf->SetAuthor($empresaNombre);
-        $pdf->SetTitle('Control Bancario');
+        $pdf->SetTitle('Conciliación Bancaria');
         $pdf->setPrintHeader(false);
         $pdf->setPrintFooter(false);
         $pdf->SetAutoPageBreak(true, 15);
@@ -1181,7 +1181,7 @@ class ControlBancarioService
         $pdf->SetFont('helvetica', 'B', 14);
         $pdf->Cell(0, 8, strtoupper($empresaNombre), 0, 1, 'C');
         $pdf->SetFont('helvetica', 'B', 12);
-        $pdf->Cell(0, 8, 'CONTROL BANCARIO - ' . strtoupper($cuentaNombre), 0, 1, 'C');
+        $pdf->Cell(0, 8, 'CONCILIACIÓN BANCARIA - ' . mb_strtoupper($cuentaNombre), 0, 1, 'C');
         $pdf->Ln(2);
 
         $money = fn ($v) => number_format((float) $v, 2, '.', ',');
@@ -1210,7 +1210,7 @@ class ControlBancarioService
 
         $pdf->writeHTML($html, true, false, true, false, '');
 
-        $filename = 'ControlBancario_' . date('YmdHis') . '.pdf';
+        $filename = 'ConciliacionBancaria_' . date('YmdHis') . '.pdf';
         if (ob_get_length()) {
             ob_end_clean();
         }

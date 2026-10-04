@@ -54,7 +54,7 @@ Generales**, que no tiene tope.
 o depósito**, su fecha de cobro es la **fecha de emisión** del ingreso: se pone
 sola y no queda pendiente. Solo el **cheque** lleva su propia fecha de cobro (la
 que trae girada) y queda pendiente hasta que se registre su **Fecha Banco** en
-[Control bancario](control-bancario.md).
+[Conciliación bancaria](control-bancario.md).
 
 ## Combinar varios conceptos en un mismo ingreso
 
@@ -307,10 +307,10 @@ ingreso se vuelva a guardar o se regenere el asiento.
 
 Si la empresa configuró la cuenta **Cheques posfechados por cobrar** (Configuración
 Contable → Cobros y Pagos), un cheque con fecha posterior a la del ingreso va a esa
-cuenta y no a Bancos; pasa a Bancos cuando se registra su **Fecha Banco** en Control
-Bancario. Mientras ese cheque tenga Fecha Banco, el ingreso no se puede editar (quite
+cuenta y no a Bancos; pasa a Bancos cuando se registra su **Fecha Banco** en Conciliación
+Bancaria. Mientras ese cheque tenga Fecha Banco, el ingreso no se puede editar (quite
 antes la fecha); anularlo anula también el asiento de cobro. Si el banco devuelve el
-cheque, se registra el **protesto** desde Control Bancario y el ingreso se anula. Ver
+cheque, se registra el **protesto** desde Conciliación Bancaria y el ingreso se anula. Ver
 [Cheques posfechados en la contabilidad](../guias/cheques-posfechados.md).
 
 ## Buscar y filtrar el listado
@@ -480,7 +480,7 @@ misma revisión al guardar:
   anuló ni se eliminó porque su asiento no pudo anularse; el texto que sigue dice
   por qué (lo más común, un período contable cerrado en la fecha del asiento).
   Corrija esa causa y vuelva a intentarlo.
-- **Control Bancario marca «Asiento de documento anulado»**: es un ingreso
+- **Conciliación Bancaria marca «Asiento de documento anulado»**: es un ingreso
   anulado antes de la versión 3.12 cuyo asiento quedó contabilizado. Anule ese
   asiento en *Contabilidad → Asientos Contables*.
 - **"Debes reversar el pago con tarjeta primero"**: vaya a la factura, pestaña
@@ -507,11 +507,11 @@ misma revisión al guardar:
 
 - **3.13** — Cheques posfechados con cuenta puente: el cheque con fecha futura va a
   *Cheques posfechados por cobrar* hasta su Fecha Banco; un ingreso con un cheque ya
-  cobrado no se puede editar sin quitar antes esa fecha; protesto desde Control
-  Bancario (anula el ingreso).
+  cobrado no se puede editar sin quitar antes esa fecha; protesto desde Conciliación
+  Bancaria (anula el ingreso).
 - **3.12** — Corrección: al anular o eliminar un ingreso, su asiento contable se
   anula en la misma operación. Antes, si el asiento fallaba, el ingreso quedaba
-  anulado con el asiento todavía contabilizado y no se avisaba (Control Bancario lo
+  anulado con el asiento todavía contabilizado y no se avisaba (Conciliación Bancaria lo
   mostraba como «Asiento de documento anulado»). Al eliminar un ingreso migrado del
   sistema anterior, su asiento tampoco se anulaba; ahora sí.
 - **3.11** — El buscador de documentos pendientes respeta el alcance del usuario
@@ -535,7 +535,7 @@ misma revisión al guardar:
   **Búsqueda por detalle**, y la ventana ya no tiene barra de desplazamiento
   vertical propia: se muestra completa.
 - **3.7** — Corregido: al agregar una forma de cobro, la línea (y las observaciones automáticas) guardaban el saldo que muestra la lista (`Banco Pichincha — $1,250.00`); ahora se registra solo el nombre de la forma.
-- **3.6** — Los cobros bancarios por **transferencia o depósito** toman como fecha de cobro la fecha de emisión del ingreso; solo el cheque queda pendiente de confirmar su Fecha Banco en Control Bancario.
+- **3.6** — Los cobros bancarios por **transferencia o depósito** toman como fecha de cobro la fecha de emisión del ingreso; solo el cheque queda pendiente de confirmar su Fecha Banco en Conciliación Bancaria.
 - **3.5** — Corregido: el saldo de un **saldo inicial por cobrar** no restaba las **notas de crédito** emitidas contra ese documento (Saldos Iniciales y Cuentas por Cobrar sí las restaban), así que desde Ingresos se podía volver a cobrar la parte que la nota ya había cancelado.
 - **3.4** — El botón **Guardar** queda bloqueado desde el primer clic hasta que el sistema responde: un doble clic mientras se verificaba el período contable podía registrar el mismo cobro dos veces. Nueva sección *Cómo se evita cobrar dos veces lo mismo*.
 - **3.3** — El botón **PDF** del documento pregunta ahora si se quiere

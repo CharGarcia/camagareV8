@@ -116,10 +116,10 @@ El detalle completo (qué tipos lo permiten, qué pasa al cambiar de modo y cuá
 documentos admite cada periodo) está en el manual de **Empresa**, sección
 *Secuenciales por punto de emisión*.
 
-## En Control Bancario
+## En Conciliación Bancaria
 
 Un traspaso en el que interviene una **cuenta bancaria** aparece en
-[Control bancario](control-bancario.md) como un movimiento más: entrada en la
+[Conciliación bancaria](control-bancario.md) como un movimiento más: entrada en la
 cuenta destino, salida de la cuenta origen. Ahí se concilia con su Fecha Banco
 como cualquier depósito o transferencia. Los traspasos anulados no aparecen.
 
@@ -130,8 +130,8 @@ como cualquier depósito o transferencia. Los traspasos anulados no aparecen.
   Antes, si el asiento fallaba, el traspaso quedaba anulado con el asiento todavía
   contabilizado y no se avisaba. Ahora, si el asiento no se puede anular, el traspaso
   tampoco se anula y se muestra el motivo.
-- **1.6** — Los traspasos con una cuenta bancaria aparecen en **Control
-  bancario** (sección *En Control Bancario*).
+- **1.6** — Los traspasos con una cuenta bancaria aparecen en **Conciliación
+  bancaria** (sección *En Conciliación Bancaria*).
 - **1.5** — El botón **PDF** del documento pregunta ahora si se quiere
   **Imprimir** (abre el cuadro de impresión con el documento ya cargado),
   **Descargar** o **Ver** en otra pestaña. Ver la guía *Descargar archivos*.

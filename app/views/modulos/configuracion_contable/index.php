@@ -853,7 +853,7 @@ $base = BASE_URL;
                 <div class="accordion-body p-0 border-top bg-white">
                     <div class="small text-muted px-4 py-2 border-bottom" style="line-height:1.5;">
                         Un cheque con fecha posterior a la del ingreso o egreso no va a Bancos: queda en esta cuenta hasta
-                        que se registra su <b>Fecha Banco</b> en Control Bancario, que genera el asiento de cobro.
+                        que se registra su <b>Fecha Banco</b> en Conciliación Bancaria, que genera el asiento de cobro.
                         Aplica a los ingresos y egresos con fecha desde el día en que se asigna la cuenta; lo anterior se
                         ajusta con asientos manuales. Sin cuenta, los cheques siguen yendo directo a Bancos.
                     </div>

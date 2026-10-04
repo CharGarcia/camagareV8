@@ -294,7 +294,7 @@ Cuando el pago sale por cheque se puede registrar su **fecha de cobro**, para
 saber cuándo se hizo efectivo. En cambio, si el pago bancario es por
 **transferencia, depósito o débito**, la fecha de cobro es automáticamente la
 **fecha de emisión** del egreso y no queda pendiente: solo el cheque espera a que
-se confirme su **Fecha Banco** en Control Bancario. Los cheques se imprimen desde la propia fila de
+se confirme su **Fecha Banco** en Conciliación Bancaria. Los cheques se imprimen desde la propia fila de
 pago del egreso, o en lote desde el listado (botón **Imprimir cheques**), tanto
 a PDF (descarga) como directo a la impresora (abre el diálogo de impresión del
 navegador). Cada impresión queda registrada (control anti-reimpresión): si un
@@ -306,7 +306,7 @@ fecha de cobro), y un clic en cualquier parte de la fila lo marca o desmarca.
 
 La fecha que se captura en el egreso es la **fecha girada en el cheque** (la
 posfechada); no significa que el banco ya lo haya pagado. El cheque cuenta como
-**cobrado** cuando en [Control bancario](control-bancario.md) se le registró la
+**cobrado** cuando en [Conciliación bancaria](control-bancario.md) se le registró la
 **Fecha Banco**, es decir, la fecha real en que el banco lo hizo efectivo.
 
 Dónde verlo:
@@ -317,7 +317,7 @@ Dónde verlo:
     nombre del beneficiario y anular el cheque.
   - **⏳ No cobrado** (ámbar): sigue en circulación, todavía se puede corregir
     o anular.
-- **En Control bancario**: la columna **Fecha Banco** del movimiento, y en el
+- **En Conciliación bancaria**: la columna **Fecha Banco** del movimiento, y en el
   reporte de Conciliación las secciones *Cheques emitidos en circulación (no
   cobrados)* y *Cheques cobrados por el banco en el período*.
 
@@ -355,14 +355,14 @@ anula ese cheque puntual. El cheque anulado:
   rojo mientras no cuadre).
 - Su número **no se reutiliza**: el siguiente cheque autogenerado sigue la
   secuencia normal, saltándose el anulado.
-- Deja de aparecer en Control Bancario y en el listado de "Cheques por
+- Deja de aparecer en Conciliación Bancaria y en el listado de "Cheques por
   imprimir"; si ya se había impreso, tampoco se puede volver a imprimir.
 
 No se puede anular un cheque si:
 
 - El egreso ya está anulado.
-- El cheque ya fue reportado como **cobrado** (conciliado en Control
-  Bancario) — a esa altura ya no es una anulación, es un ajuste bancario.
+- El cheque ya fue reportado como **cobrado** (conciliado en Conciliación
+  Bancaria) — a esa altura ya no es una anulación, es un ajuste bancario.
 - El periodo contable del egreso está cerrado.
 
 ### Configurar impresión por banco
@@ -385,7 +385,7 @@ afectar a los de otros bancos. Ver también
 Si la empresa configuró la cuenta **Cheques posfechados por pagar** (Configuración
 Contable → Cobros y Pagos), un cheque con fecha posterior a la del egreso se acredita a
 esa cuenta y no a Bancos; pasa a Bancos cuando se registra su **Fecha Banco** en
-Control Bancario. Cambiar la fecha de cobro de un cheque rehace el asiento del egreso.
+Conciliación Bancaria. Cambiar la fecha de cobro de un cheque rehace el asiento del egreso.
 Mientras un cheque posfechado tenga Fecha Banco, sus pagos no se pueden editar. Ver
 [Cheques posfechados en la contabilidad](../guias/cheques-posfechados.md).
 
@@ -640,7 +640,7 @@ proveedores), pasa por la misma revisión al guardar:
   hasta su Fecha Banco; cambiar la fecha de cobro de un cheque rehace el asiento.
 - **1.37** — Corrección: al anular un egreso, su asiento contable se anula en la
   misma operación. Antes, si el asiento fallaba, el egreso quedaba anulado con el
-  asiento todavía contabilizado y no se avisaba (Control Bancario lo mostraba como
+  asiento todavía contabilizado y no se avisaba (Conciliación Bancaria lo mostraba como
   «Asiento de documento anulado»). Ahora, si el asiento no se puede anular, el egreso
   tampoco se anula y se muestra el motivo.
 - **1.36** — El buscador de **Nómina** ya no muestra como pendientes los roles,
@@ -664,7 +664,7 @@ proveedores), pasa por la misma revisión al guardar:
   **Búsqueda por detalle**, y la ventana ya no tiene barra de desplazamiento
   vertical propia: se muestra completa.
 - **1.32** — Corregido: al agregar una forma de pago, la línea (y las observaciones automáticas) guardaban el saldo que muestra la lista (`Banco Pichincha — $1,250.00`); ahora se registra solo el nombre de la forma.
-- **1.31** — Los pagos bancarios por **transferencia, depósito o débito** toman como fecha de cobro la fecha de emisión del egreso; solo el cheque queda pendiente de confirmar su Fecha Banco en Control Bancario.
+- **1.31** — Los pagos bancarios por **transferencia, depósito o débito** toman como fecha de cobro la fecha de emisión del egreso; solo el cheque queda pendiente de confirmar su Fecha Banco en Conciliación Bancaria.
 - **1.30** — No se puede pagar dos veces lo mismo. Corregido: los pagos de  **saldos iniciales por pagar**, **facturas de importación** y **declaraciones**  se rechazaban siempre con *"ya no tiene saldo suficiente (disponible: $0.00)"*;  ahora se valida su saldo real. Una declaración solo admite un pago vigente, y  el botón **Guardar** ya no permite un doble clic que generaba dos egresos.  Nueva sección *Cómo se evita pagar dos veces lo mismo*.
 - **1.29** — Flechas **anterior / siguiente** en el encabezado del modal para
   recorrer los egresos del listado sin cerrarlo (también con **Alt + ← / →**).

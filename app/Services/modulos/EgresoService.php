@@ -90,7 +90,7 @@ class EgresoService
         // PDO/pgsql devuelve el boolean como 't'/'f'.
         $conciliado = in_array($pago['cheque_conciliado'], [true, 't', '1', 1], true);
         if ($conciliado) {
-            throw new \RuntimeException('El cheque ya fue reportado como cobrado (conciliado en Control Bancario); no se puede modificar la fecha de cobro.');
+            throw new \RuntimeException('El cheque ya fue reportado como cobrado (con Fecha Banco en Conciliación Bancaria); no se puede modificar la fecha de cobro.');
         }
 
         $d = \DateTime::createFromFormat('Y-m-d', $fecha);
@@ -165,7 +165,7 @@ class EgresoService
             }
             // PDO/pgsql devuelve el boolean como 't'/'f'.
             if (in_array($pago['cheque_conciliado'], [true, 't', '1', 1], true)) {
-                throw new \RuntimeException("El cheque #{$num} ya fue reportado como cobrado (conciliado en Control Bancario); no se puede anular.");
+                throw new \RuntimeException("El cheque #{$num} ya fue reportado como cobrado (con Fecha Banco en Conciliación Bancaria); no se puede anular.");
             }
             if ($motivo === '') {
                 throw new \InvalidArgumentException("Indique el motivo de anulación del cheque #{$num}.");

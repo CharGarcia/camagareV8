@@ -297,7 +297,7 @@ class FormaPagoService
                     throw new Exception(
                         "Esa cuenta contable ya está asignada a \"{$otra['nombre']}\" (tipo {$otra['tipo']}). "
                         . "Una forma bancaria (Banco/Cheque) no puede compartir cuenta con una que no lo es: "
-                        . "sus movimientos se mezclarían en Control Bancario. Elija otra cuenta contable."
+                        . "sus movimientos se mezclarían en Conciliación Bancaria. Elija otra cuenta contable."
                     );
                 }
             }

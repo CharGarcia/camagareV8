@@ -5,7 +5,7 @@
     <div class="d-flex align-items-center justify-content-between flex-wrap gap-2 mb-2">
         <div>
             <h5 class="fw-bold mb-0"><i class="bi bi-graph-up-arrow text-primary me-2"></i>Flujo de Caja</h5>
-            <small class="text-muted">Histórico real (Control Bancario) + proyección con CXC/CXP por vencer, roles de pago y cheques posfechados</small>
+            <small class="text-muted">Histórico real (Conciliación Bancaria) + proyección con CXC/CXP por vencer, roles de pago y cheques posfechados</small>
         </div>
         <div class="d-flex gap-1">
             <button type="button" class="btn btn-outline-danger btn-sm" id="fcBtnPdf" disabled><i class="bi bi-file-earmark-pdf me-1"></i>PDF</button>

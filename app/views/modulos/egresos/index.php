@@ -1625,9 +1625,9 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                     if (p.conciliado) {
                         // Fecha real en que el banco lo hizo efectivo (Fecha Banco de Control Bancario).
                         const fechaCobro = p.fecha_banco ? ' el ' + fmtFechaCorta(p.fecha_banco) : '';
-                        badgeCobrado = ` <span class="badge bg-success bg-opacity-10 text-success border border-success border-opacity-25" title="Cobrado: el banco lo hizo efectivo (conciliado en Control Bancario)"><i class="bi bi-check-circle-fill"></i> Cobrado${fechaCobro}</span>`;
+                        badgeCobrado = ` <span class="badge bg-success bg-opacity-10 text-success border border-success border-opacity-25" title="Cobrado: el banco lo hizo efectivo (conciliado en Conciliación Bancaria)"><i class="bi bi-check-circle-fill"></i> Cobrado${fechaCobro}</span>`;
                     } else if (!esEgresoSoloLectura) {
-                        badgeCobrado =` <span class="badge bg-warning bg-opacity-10 text-warning-emphasis border border-warning border-opacity-25" title="Aún no se registra la Fecha Banco en Control Bancario: el cheque sigue en circulación"><i class="bi bi-hourglass-split"></i> No cobrado</span>`;
+                        badgeCobrado =` <span class="badge bg-warning bg-opacity-10 text-warning-emphasis border border-warning border-opacity-25" title="Aún no se registra la Fecha Banco en Conciliación Bancaria: el cheque sigue en circulación"><i class="bi bi-hourglass-split"></i> No cobrado</span>`;
                     }
                     if (!p.conciliado && !esEgresoSoloLectura) {
                         btnEditFecha  =`<button type="button" class="btn btn-link btn-sm text-primary p-0 ms-1 align-baseline" title="Editar fecha de cobro" onclick="editarFechaCobroCheque(${p.id_pago}, '${p.fecha_cobro || ''}', ${i})"><i class="bi bi-calendar-event"></i></button>`;

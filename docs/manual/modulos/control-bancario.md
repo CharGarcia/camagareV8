@@ -1,17 +1,17 @@
 ---
-titulo: Control bancario
+titulo: Conciliación bancaria
 resumen: Clasificación de los movimientos del banco y conciliación con lo registrado en el sistema.
 categoria: Tesorería
 ruta_modulo: modulos/control-bancario
 tipo: modulo
 visibilidad: todos
 etiquetas: control bancario, traspaso, traspasos en el banco, deposito de caja al banco, traspaso no aparece en el banco, conciliacion bancaria, estado de cuenta, banco, cheques, movimientos, cuadrar banco, buscar movimiento, buscador, filtros, filtrar movimientos bancarios, buscar cheque, chips, cheques posfechados, cheque por cobrar, cheque por depositar, aviso de cheques, alerta, notificacion, vencimiento de cheques, comprobar con contabilidad, cuadrar con contabilidad, saldo contable vs banco, diferencia contable, asiento faltante, sin asiento
-version: 1.18
+version: 1.19
 orden: 60
 estado: activo
 ---
 
-El **control bancario** sirve para cuadrar lo que dice el banco con lo que dice
+La **conciliación bancaria** sirve para cuadrar lo que dice el banco con lo que dice
 el sistema: se cargan los movimientos del estado de cuenta, se clasifican y se
 concilian contra los documentos registrados.
 
@@ -196,7 +196,7 @@ como dos accesos: **Ch. recib.** y **Ch. emit.**
 
 Detalles:
 
-- Solo lo ven los usuarios con permiso para **ver** Control Bancario en la
+- Solo lo ven los usuarios con permiso para **ver** Conciliación Bancaria en la
   empresa activa.
 - Se actualiza solo, sin recargar la pantalla, y al instante tras guardar un
   ingreso, un egreso o una Fecha Banco.
@@ -438,6 +438,8 @@ los dos casos.
 
 ## Historial de cambios
 
+- **1.19** — El módulo se nombra **Conciliación Bancaria** en pantallas, mensajes, exportaciones
+  y en este manual (antes *Control bancario*), igual que en el menú.
 - **1.18** — Fecha Banco de cheques posfechados con cuenta puente: genera el asiento
   de cobro. Botón **Protestado** en *Cheques Posfechados → Recibidos*. *Comprobar con
   Contabilidad* muestra esos cheques como *Cobro de cheque posfechado* en su Fecha Banco.

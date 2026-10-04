@@ -181,8 +181,8 @@ cobró cada vendedor, qué movimientos hubo por encima de cierto monto.
   incluye egresos cuya forma de pago fue cambiada (los pagos anteriores quedan
   eliminados lógicamente y no deben cumplir el filtro). Los cheques anulados desde el
   egreso tampoco cuentan: no suman en la vista Por forma ni cumplen los filtros de
-  forma de pago y operación bancaria (mismo criterio que el asiento contable y Control
-  Bancario).
+  forma de pago y operación bancaria (mismo criterio que el asiento contable y Conciliación
+  Bancaria).
 - **1.1** — El detalle exportado a Excel/PDF ya no se corta en 5000 filas; el tope
   de 5000 se mantiene solo para la vista en pantalla.
 - **1.0** — Versión inicial.

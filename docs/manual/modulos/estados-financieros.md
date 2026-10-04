@@ -331,7 +331,7 @@ sola tabla. No modifica nada.
 
 | Fila | Saldo del módulo | Contra qué cuentas |
 |------|------------------|--------------------|
-| Banco: (una por cuenta bancaria) | Según Ingresos/Egresos, como en [Control bancario](control-bancario.md) | La cuenta contable de la cuenta bancaria (o la de su regla en Configuración Contable) |
+| Banco: (una por cuenta bancaria) | Según Ingresos/Egresos, como en [Conciliación bancaria](control-bancario.md) | La cuenta contable de la cuenta bancaria (o la de su regla en Configuración Contable) |
 | Cuentas por Cobrar | Según la cartera de [Cuentas por cobrar](cuentas-por-cobrar.md) | Las cuentas por cobrar de Facturas y Recibos de Venta |
 | Cuentas por Pagar | Según la cartera de [Cuentas por pagar](cuentas-por-pagar.md) | Las cuentas por pagar de Compras e Importaciones |
 | Inventarios | Según el kardex, como en el [Reporte de inventarios](reporte-inventarios.md) | Las cuentas de inventario |

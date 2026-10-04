@@ -430,8 +430,8 @@ listado muestra solo los suyos.
 ### Pagada con cheque posfechado
 
 Junto al estado de pago aparece un ícono de calendario cuando la factura se cobró con
-un **cheque posfechado** que el banco todavía no ha cobrado (sin Fecha Banco en Control
-Bancario). Si el cheque se protesta, el cobro se anula y la factura vuelve a
+un **cheque posfechado** que el banco todavía no ha cobrado (sin Fecha Banco en Conciliación
+Bancaria). Si el cheque se protesta, el cobro se anula y la factura vuelve a
 *Pendiente*. Ver [Cheques posfechados en la contabilidad](../guias/cheques-posfechados.md).
 
 ## Ordenar el listado

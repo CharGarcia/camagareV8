@@ -23,7 +23,7 @@ diferencia. No modifica nada: es solo una revisión.
 | [Reporte de inventarios](../modulos/reporte-inventarios.md) | Pestaña **Auditoría**, en la cabecera de la tabla | Valor del inventario según el kardex contra las cuentas de inventario |
 | [Cuentas por cobrar](../modulos/cuentas-por-cobrar.md) | En la cabecera de la tabla, junto a PDF y Excel | Saldo de la cartera de clientes contra las cuentas por cobrar |
 | [Cuentas por pagar](../modulos/cuentas-por-pagar.md) | En la cabecera de la tabla, junto a PDF y Excel | Saldo por pagar a proveedores contra las cuentas por pagar |
-| [Control bancario](../modulos/control-bancario.md) | Arriba, en la barra de botones | Saldo del banco según Ingresos/Egresos contra la cuenta contable del banco |
+| [Conciliación bancaria](../modulos/control-bancario.md) | Arriba, en la barra de botones | Saldo del banco según Ingresos/Egresos contra la cuenta contable del banco |
 | [Activos fijos](../modulos/activos-fijos.md) | En la cabecera de la tabla, junto a PDF y Excel | Costo contra la cuenta del activo, y depreciación acumulada contra su cuenta |
 | [Estados financieros](../modulos/estados-financieros.md) | Botón **Cuadre con Módulos** | Todos los anteriores en una sola tabla, vistos desde la contabilidad, más **cada caja** (formas de pago que no son banco) los **anticipos** de clientes y de proveedores y las **tarjetas por liquidar**, que solo se comparan aquí; *Ver detalle* abre la comparación de cada uno |
 
@@ -135,4 +135,4 @@ submódulo *Estados financieros*.
   propias de los bancos (asiento de documento anulado, cobrado o pagado con otra
   forma de pago).
 - **1.0** — Versión inicial: comprobación en Reporte de inventarios, Cuentas por
-  cobrar y Cuentas por pagar, con el mismo diseño que la de Control bancario.
+  cobrar y Cuentas por pagar, con el mismo diseño que la de Conciliación bancaria.

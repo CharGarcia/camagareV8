@@ -202,7 +202,7 @@ class ChequePosfechadoService
         if ($this->repo->getMovimientosConCobro($idEmpresa, $flujo, $idDocumento)) {
             throw new \Exception(
                 'Este ' . ($flujo === 'ingreso' ? 'ingreso' : 'egreso') . ' tiene un cheque posfechado ya cobrado '
-                . '(con Fecha Banco en Control Bancario). Quite primero la Fecha Banco de ese cheque para poder editarlo.'
+                . '(con Fecha Banco en Conciliación Bancaria). Quite primero la Fecha Banco de ese cheque para poder editarlo.'
             );
         }
     }
@@ -250,7 +250,7 @@ class ChequePosfechadoService
                 throw new \Exception('El ingreso de este cheque ya está anulado.');
             }
             if (!empty($p['fecha_banco'])) {
-                throw new \Exception('El banco ya cobró este cheque (tiene Fecha Banco en Control Bancario): quite primero la Fecha Banco si en realidad fue devuelto.');
+                throw new \Exception('El banco ya cobró este cheque (tiene Fecha Banco en Conciliación Bancaria): quite primero la Fecha Banco si en realidad fue devuelto.');
             }
             if ($fecha < substr((string) $p['fecha_emision'], 0, 10)) {
                 throw new \Exception('La fecha del protesto no puede ser anterior a la del ingreso.');

@@ -236,8 +236,8 @@ contabilidad.
 En el tipo **Cobros y Pagos**, la sección **Cheques posfechados** tiene dos cuentas
 opcionales: *Cheques posfechados por cobrar* (activo) y *Cheques posfechados por
 pagar* (pasivo). Con ellas, un cheque con fecha posterior a la del ingreso o egreso
-no va a Bancos sino a esa cuenta, hasta que se registra su Fecha Banco en Control
-Bancario. Aplican a los documentos con fecha desde el día en que se asignan (la
+no va a Bancos sino a esa cuenta, hasta que se registra su Fecha Banco en Conciliación
+Bancaria. Aplican a los documentos con fecha desde el día en que se asignan (la
 pantalla muestra *Aplica desde*); lo anterior se ajusta a mano. Ver [Cheques posfechados en la contabilidad](../guias/cheques-posfechados.md).
 
 ## Buscar en las tablas y en las tarjetas
@@ -338,7 +338,7 @@ cuenta, dos formas de efectivo distintas son cajas distintas.
 
 Lo habitual es aceptar: una cuenta bancaria es la misma cuenta contable cobre o
 pague y sea cual sea el medio, y tenerla distinta en cada fila descuadra la
-conciliación de esa cuenta en Control Bancario.
+conciliación de esa cuenta en Conciliación Bancaria.
 
 ## Filtrar los listados por año
 

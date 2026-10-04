@@ -679,8 +679,8 @@ class FormaPagoRepository extends BaseRepository
      */
     private const USOS_MOVIMIENTOS = [
         'traspasos_cabecera'              => [['id_forma_origen', 'id_forma_destino'], 'Traspasos'],
-        'control_bancario_movimientos'    => [['id_forma_pago'], 'Control Bancario'],
-        'control_bancario_conciliaciones' => [['id_forma_pago'], 'Control Bancario (conciliaciones)'],
+        'control_bancario_movimientos'    => [['id_forma_pago'], 'Conciliación Bancaria'],
+        'control_bancario_conciliaciones' => [['id_forma_pago'], 'Conciliación Bancaria (períodos conciliados)'],
         'cheques_impresos'                => [['id_forma_pago'], 'Impresión de Cheques'],
         'saldos_iniciales_bancos'         => [['id_forma_pago'], 'Saldos Iniciales (bancos)'],
         'saldos_iniciales_anticipos'      => [['id_forma_pago'], 'Saldos Iniciales (anticipos)'],

@@ -126,7 +126,7 @@ class ControlBancarioController extends BaseModuloController
         unset($_SESSION[self::SESION_ABRIR_POSFECHADOS]);
 
         $this->viewWithLayout('layouts.main', 'modulos.control_bancario.index', [
-            'titulo' => 'Control Bancario',
+            'titulo' => 'Conciliación Bancaria',
             'perm' => $this->getPermisos(),
             'rutaModulo' => $this->getRutaModulo(),
             'formas' => $formas,

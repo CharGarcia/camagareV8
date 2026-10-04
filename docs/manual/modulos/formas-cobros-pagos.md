@@ -111,7 +111,7 @@ asigna aquí a mano. Mientras no la tengan, un cobro por esas vías genera un
 asiento sin la contrapartida del dinero.
 
 **Una cuenta de tipo Banco/Cheque no puede compartirse con una forma que no
-sea bancaria.** [Control Bancario](control-bancario.md) arma el mayor de una
+sea bancaria.** [Conciliación Bancaria](control-bancario.md) arma el mayor de una
 cuenta bancaria filtrando directamente por esa cuenta contable, sin importar
 qué forma de pago se usó. Si una forma de **Efectivo**, **Tarjeta** u otro tipo
 no bancario reutiliza la cuenta de un banco, sus movimientos se mezclan en la
@@ -125,7 +125,7 @@ por dos medios (p. ej. "Cheques Pichincha" y "Transferencias Pichincha").
 
 - **"No se puede eliminar esta forma de cobro/pago porque ya registra movimientos en: …"**:
   una forma que ya se usó no se puede eliminar, en ningún módulo (Ingresos, Egresos,
-  Traspasos, Control Bancario, Impresión de Cheques, Saldos Iniciales, Conciliación de
+  Traspasos, Conciliación Bancaria, Impresión de Cheques, Saldos Iniciales, Conciliación de
   Cobros y de Tarjetas, Transferencias, Payphone, Nuvei). El mensaje dice dónde se usa.
   Si ya no la necesita, desactívela: deja de ofrecerse en los formularios y sus
   movimientos siguen visibles en los reportes.
@@ -145,7 +145,7 @@ por dos medios (p. ej. "Cheques Pichincha" y "Transferencias Pichincha").
   usa una forma de tipo Banco o Cheque. Elija una cuenta distinta para la forma
   no bancaria, o si en realidad es un movimiento de banco, cambie su tipo a
   Banco y complete los datos bancarios.
-- **En Control Bancario aparecen movimientos que no son del banco** (de una
+- **En Conciliación Bancaria aparecen movimientos que no son del banco** (de una
   forma Efectivo/Tarjeta, etc.): la causa es la anterior pero ya sucedida —
   edite esa forma de pago y cambie su cuenta contable a una que no sea la del
   banco (o conviértala a tipo Banco si de verdad corresponde a esa cuenta).
@@ -157,7 +157,7 @@ por dos medios (p. ej. "Cheques Pichincha" y "Transferencias Pichincha").
 - **1.6** — La dirección del navegador queda limpia al buscar, cambiar de página u
   ordenar el listado; la búsqueda y la página se conservan al recargar.
 - **1.5** — Una forma de cobro/pago con movimientos ya no se puede eliminar aunque
-  solo se haya usado fuera de Ingresos y Egresos (traspasos, Control Bancario, cheques,
+  solo se haya usado fuera de Ingresos y Egresos (traspasos, Conciliación Bancaria, cheques,
   saldos iniciales, conciliaciones, transferencias, Payphone, Nuvei). El aviso dice en
   qué módulos se usa y sugiere desactivarla.
 - **1.4** — Dos campos nuevos en la forma: **Orden**, la posición en la lista de
@@ -178,5 +178,5 @@ por dos medios (p. ej. "Cheques Pichincha" y "Transferencias Pichincha").
   siguen sin cuenta a propósito.
 - **1.1** — Nueva validación: una forma NO bancaria ya no puede guardar la
   misma cuenta contable que una forma de tipo Banco/Cheque (causaba que sus
-  movimientos aparecieran mezclados en Control Bancario).
+  movimientos aparecieran mezclados en Conciliación Bancaria).
 - **1.0** — Versión inicial.
