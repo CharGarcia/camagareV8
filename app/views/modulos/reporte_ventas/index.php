@@ -300,7 +300,6 @@
             <button type="button" class="btn btn-link p-0 text-decoration-none text-dark fw-bold d-flex align-items-center collapsed"
                     data-bs-toggle="collapse" data-bs-target="#rv-grafico-body" aria-expanded="false" aria-controls="rv-grafico-body"
                     id="rv-grafico-toggle" style="font-family: 'Outfit', sans-serif;font-size:.95rem;">
-                <i class="bi bi-chevron-right me-2 small" id="rv-grafico-chevron"></i>
                 <i class="bi bi-graph-up text-primary me-2"></i>Gráfico de Ventas
             </button>
             <div class="d-flex align-items-center gap-2">
@@ -312,6 +311,11 @@
                     <option value="pie">Pastel</option>
                     <option value="doughnut">Dona</option>
                 </select>
+                <?php // Flecha del acordeón, al extremo derecho: abajo = cerrado, arriba = abierto. ?>
+                <button type="button" class="btn btn-sm btn-light border collapsed" title="Mostrar / ocultar el gráfico"
+                        data-bs-toggle="collapse" data-bs-target="#rv-grafico-body" aria-expanded="false" aria-controls="rv-grafico-body">
+                    <i class="bi bi-chevron-down" id="rv-grafico-chevron"></i>
+                </button>
             </div>
         </div>
         <div class="collapse" id="rv-grafico-body">

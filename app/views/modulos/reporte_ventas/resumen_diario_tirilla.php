@@ -10,7 +10,6 @@
  * @var array  $resumen       ['dias' => [...bloques], 'total' => ?bloque]
  * @var array  $filtrosTxt    Filtros aplicados, etiqueta => valor
  * @var int    $anchoTirilla  58 u 80, lo usa el partial de estilos
- * @var string $realizadoPor  Usuario que genera el resumen (firma "Realizado por")
  */
 $e   = fn($v) => htmlspecialchars((string) $v, ENT_QUOTES, 'UTF-8');
 $fmt = fn($v) => ((float) $v < 0 ? '-' : '') . '$' . number_format(abs((float) $v), 2);
@@ -110,16 +109,6 @@ if (!empty($resumen['total'])) {
         </table>
     <?php endforeach; ?>
 
-    <?php // Firmas: una debajo de la otra (en 58/80 mm no caben dos en una fila con espacio
-          // para firmar). El espacio en blanco es para la firma a mano. ?>
-    <hr class="sep">
-    <div style="height:40px;"></div>
-    <div class="center">______________________________</div>
-    <div class="center bold">Realizado por</div>
-    <div class="center"><?= $e($realizadoPor ?? '') ?></div>
-    <div style="height:40px;"></div>
-    <div class="center">______________________________</div>
-    <div class="center bold">Aprobado por</div>
     <hr class="sep">
     <div class="center" style="font-size:10px;">Reporte interno — sin validez tributaria</div>
     <div class="feed"></div>

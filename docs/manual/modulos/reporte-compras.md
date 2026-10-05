@@ -5,8 +5,8 @@ categoria: Reportes
 ruta_modulo: modulos/reporte_compras
 tipo: modulo
 visibilidad: todos
-etiquetas: reporte de compras, compras, cuanto compre, por proveedor, por producto, gasto, exportar, pdf, excel, establecimientos, sucursales, matriz, mismo ruc, consolidado por ruc, boton buscar, no se actualiza, no cambia al elegir, hay que pulsar buscar, boton amarillo, filtros sin aplicar
-version: 1.4
+etiquetas: reporte de compras, compras, cuanto compre, por proveedor, por producto, gasto, exportar, pdf, excel, establecimientos, sucursales, matriz, mismo ruc, consolidado por ruc, boton buscar, no se actualiza, no cambia al elegir, hay que pulsar buscar, boton amarillo, filtros sin aplicar, grafico, ocultar grafico, acordeon, mostrar grafico
+version: 1.5
 orden: 20
 estado: activo
 ---
@@ -102,6 +102,8 @@ su **número de página** sobre el total (*Página 2/5*).
 
 ## Historial de cambios
 
+- **1.5** — El **gráfico de compras** queda dentro de un acordeón, **cerrado por
+  defecto**: se abre con un clic en su título o en la flecha del extremo derecho.
 - **1.4** — El **PDF** muestra el **número de página al pie** de cada hoja
   (*Página 2/5*), en todas las agrupaciones.
 - **1.3** — Los filtros **ya no consultan al cambiarlos**: el reporte se genera

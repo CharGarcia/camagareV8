@@ -1489,14 +1489,14 @@ class ReporteVentasController extends BaseModuloController
      *
      * @return array{empresa: array, idEmpresa: int, resumen: array, filtrosTxt: array}
      */
-    private function prepararResumenDiario(): array
+    private function prepararResumenDiario(bool $conDetalle = false): array
     {
         $idEmpresa = (int) $_SESSION['id_empresa'];
         $filtros   = $this->getFiltrosDesdeRequest();
         [$idsEmpresa, $consolidado] = $this->resolverAlcance($idEmpresa, $filtros);
 
         $resumen = (new \App\Services\modulos\ReporteVentasResumenDiarioService($this->repository))
-            ->generar($idsEmpresa, $filtros);
+            ->generar($idsEmpresa, $filtros, $conDetalle);
 
         // Caja de filtros: lo que acota el resumen. Fuera lo que el resumen no usa (la
         // agrupación) y los filtros que se quedaron en "Todos". El tipo de documento sí va:
@@ -1520,7 +1520,7 @@ class ReporteVentasController extends BaseModuloController
             'idEmpresa'  => $idEmpresa,
             'resumen'    => $resumen,
             'filtrosTxt' => $txt,
-            // Firma "Realizado por" del PDF y la tirilla: quien genera el resumen.
+            // Firma "Realizado por" del PDF: quien genera el resumen.
             'realizadoPor' => $this->repository->getNombreUsuario((int) ($_SESSION['id_usuario'] ?? 0)),
         ];
     }
@@ -1572,7 +1572,7 @@ class ReporteVentasController extends BaseModuloController
         session_write_close();
         header('Content-Type: application/json');
         try {
-            $datos = $this->prepararResumenDiario();
+            $datos = $this->prepararResumenDiario(true);
             echo json_encode([
                 'ok'    => true,
                 'dias'  => count($datos['resumen']['dias']),
@@ -1602,7 +1602,6 @@ class ReporteVentasController extends BaseModuloController
             'empresa'      => $datos['empresa'],
             'resumen'      => $datos['resumen'],
             'filtrosTxt'   => $datos['filtrosTxt'],
-            'realizadoPor' => $datos['realizadoPor'] ?? '',
             'anchoTirilla' => (new \App\Services\modulos\ConfiguracionRestauranteService())
                 ->getAnchoTirilla($datos['idEmpresa']),
         ]);
@@ -1615,7 +1614,7 @@ class ReporteVentasController extends BaseModuloController
         $this->requireLeer();
         session_write_close();
         try {
-            $pdf = $this->pdfResumenDiario($this->prepararResumenDiario());
+            $pdf = $this->pdfResumenDiario($this->prepararResumenDiario(true));
             header('Content-Type: application/pdf');
             header('Content-Disposition: attachment; filename="ResumenDiarioVentas_' . date('Ymd_His') . '.pdf"');
             header('Content-Length: ' . strlen($pdf));
@@ -1649,7 +1648,7 @@ class ReporteVentasController extends BaseModuloController
                 exit;
             }
 
-            $datos = $this->prepararResumenDiario();
+            $datos = $this->prepararResumenDiario(true);
             if (!$datos['resumen']['dias']) {
                 echo json_encode(['ok' => false, 'mensaje' => 'El resumen no tiene ventas en ese período: no hay nada que enviar.']);
                 exit;

@@ -44,9 +44,12 @@ class ReporteVentasResumenDiarioService
      * @param int|int[] $idEmpresa Empresa activa o el grupo RUC (consolidado), ya resuelto
      *                             por el controlador, igual que el resto del reporte.
      * @param array     $filtros   Los del reporte, con el alcance del usuario ya aplicado.
+     * @param bool      $conDetalle Agrega a cada día la lista de sus documentos (número, cliente,
+     *                              total y saldo), agrupada por tipo. La usan la pantalla y el PDF;
+     *                              la tirilla no la necesita y se ahorra la consulta.
      * @return array{dias: list<array>, total: ?array}
      */
-    public function generar(int|array $idEmpresa, array $filtros): array
+    public function generar(int|array $idEmpresa, array $filtros, bool $conDetalle = false): array
     {
         $this->rules->validarPeriodo((string) ($filtros['fecha_desde'] ?? ''), (string) ($filtros['fecha_hasta'] ?? ''));
 
@@ -54,6 +57,7 @@ class ReporteVentasResumenDiarioService
         $anulados  = $this->repository->getResumenDiarioAnulados($idEmpresa, $filtros);
         $impuestos = $this->repository->getResumenDiarioImpuestos($idEmpresa, $filtros);
         $cobros    = $this->repository->getResumenDiarioCobros($idEmpresa, $filtros);
+        $detalle   = $conDetalle ? $this->repository->getResumenDiarioDetalle($idEmpresa, $filtros) : [];
 
         // Días con movimiento (documentos válidos o anulados), en orden.
         $fechas = array_unique(array_merge(array_column($docs, 'fecha'), array_column($anulados, 'fecha')));
@@ -72,7 +76,7 @@ class ReporteVentasResumenDiarioService
                 $porFecha($impuestos['impuestos'], $fecha),
                 $porFecha($cobros['formas'], $fecha),
                 $porFecha($cobros['saldos'], $fecha)
-            );
+            ) + ['detalle' => $this->agruparDetalle($porFecha($detalle, $fecha))];
         }
 
         $total = count($dias) > 1
@@ -84,6 +88,35 @@ class ReporteVentasResumenDiarioService
             : null;
 
         return ['dias' => $dias, 'total' => $total];
+    }
+
+    /**
+     * Documentos de un día agrupados por tipo, en el orden del resumen: tipo => [etiqueta,
+     * filas, total, saldo]. La NC va con su total en negativo (resta), como en Documentos.
+     */
+    private function agruparDetalle(array $filas): array
+    {
+        $grupos = [];
+        foreach (self::ETIQUETA_TIPO as $tipo => $etiqueta) {
+            $docs = array_values(array_filter($filas, static fn (array $r): bool => $r['tipo'] === $tipo));
+            if (!$docs) {
+                continue;
+            }
+            $signo = $tipo === 'NOTA_CREDITO' ? -1 : 1;
+            $grupos[$tipo] = [
+                'etiqueta' => $etiqueta,
+                'filas'    => array_map(static fn (array $r): array => [
+                    'numero'  => (string) $r['numero'],
+                    'cliente' => (string) $r['cliente_nombre'],
+                    'ruc'     => (string) $r['cliente_ruc'],
+                    'total'   => round($signo * (float) $r['total'], 2),
+                    'saldo'   => round((float) $r['saldo'], 2),
+                ], $docs),
+                'total'    => round($signo * array_sum(array_map(static fn (array $r): float => (float) $r['total'], $docs)), 2),
+                'saldo'    => round(array_sum(array_map(static fn (array $r): float => (float) $r['saldo'], $docs)), 2),
+            ];
+        }
+        return $grupos;
     }
 
     /** Un bloque del resumen (un día o el total del período) a partir de las filas que le tocan. */

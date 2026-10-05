@@ -344,11 +344,11 @@ document.addEventListener('DOMContentLoaded', function () {
     const chevron = document.getElementById('rv-grafico-chevron');
     if (!cuerpo) return;
     cuerpo.addEventListener('shown.bs.collapse', function () {
-        if (chevron) chevron.className = 'bi bi-chevron-down me-2 small';
+        if (chevron) chevron.className = 'bi bi-chevron-up';
         if (chartInstance) chartInstance.resize();
     });
     cuerpo.addEventListener('hidden.bs.collapse', function () {
-        if (chevron) chevron.className = 'bi bi-chevron-right me-2 small';
+        if (chevron) chevron.className = 'bi bi-chevron-down';
     });
 });
 

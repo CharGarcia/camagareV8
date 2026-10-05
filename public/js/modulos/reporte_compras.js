@@ -353,6 +353,21 @@ window.rc_last_raw_data   = null;
 window.rc_last_agrupacion = null;
 let rcChartInstance = null;
 
+// Acordeón del gráfico (cerrado por defecto). Chart.js no puede medir un canvas oculto:
+// el gráfico se dibuja igual al generar el reporte y se reajusta al ancho real al abrirse.
+document.addEventListener('DOMContentLoaded', function () {
+    const cuerpo  = document.getElementById('rc-grafico-body');
+    const chevron = document.getElementById('rc-grafico-chevron');
+    if (!cuerpo) return;
+    cuerpo.addEventListener('shown.bs.collapse', function () {
+        if (chevron) chevron.className = 'bi bi-chevron-up';
+        if (rcChartInstance) rcChartInstance.resize();
+    });
+    cuerpo.addEventListener('hidden.bs.collapse', function () {
+        if (chevron) chevron.className = 'bi bi-chevron-down';
+    });
+});
+
 window.RC_cambiarTipoGrafico = function () {
     if (window.rc_last_raw_data) RC_dibujarGrafico(window.rc_last_raw_data, window.rc_last_agrupacion);
 };

@@ -1507,7 +1507,9 @@ class ReporteVentasRepository extends BaseRepository
                                 COALESCE(v.total_sin_impuestos, 0) AS subtotal,
                                 {$propina} AS servicio,
                                 COALESCE(v.importe_total, 0) AS importe_total,
-                                {$num} AS num_norm
+                                {$num} AS num_norm,
+                                CONCAT(v.establecimiento, '-', v.punto_emision, '-', v.secuencial) AS numero,
+                                v.id_cliente
                            FROM {$f['cab']} v
                           WHERE {$where}";
         }
@@ -1621,10 +1623,71 @@ class ReporteVentasRepository extends BaseRepository
     public function getResumenDiarioCobros(int|array $idEmpresa, array $filtros): array
     {
         [$cte, $params] = $this->cteResumenDocs($idEmpresa, $filtros);
-        $empresaAny   = "ANY(ARRAY[{$this->inEmp}])";
-        $ambienteNota = "AND (n.tipo_ambiente IS NULL OR n.tipo_ambiente = (SELECT CAST(e.tipo_ambiente AS VARCHAR(1)) FROM empresas e WHERE e.id = n.id_empresa))";
 
-        $cobros = ",
+        $st = $this->db->prepare($cte . $this->cteCobrosResumen() . "
+            SELECT c.fecha,
+                   COALESCE(fp.id, 0) AS id_forma_pago,
+                   COALESCE(MAX(fp.nombre), 'Sin forma de pago registrada') AS forma_pago_nombre,
+                   COUNT(DISTINCT c.tipo || ':' || c.id) AS cantidad_documentos,
+                   COALESCE(SUM(c.monto), 0) AS total
+              FROM cobros c
+              LEFT JOIN empresa_formas_pago fp ON fp.id = c.id_forma_cobro
+             GROUP BY c.fecha, COALESCE(fp.id, 0)
+             ORDER BY c.fecha, total DESC
+        ");
+        $st->execute($params);
+        $formas = $st->fetchAll(PDO::FETCH_ASSOC);
+
+        // Por documento: importe, cobrado, retenido y NC aplicadas; el pendiente nunca
+        // baja de cero (un cobro de más no resta crédito de otro documento).
+        $st = $this->db->prepare($cte . $this->cteCobrosResumen() . $this->ctePorDocResumen() . "
+            SELECT fecha,
+                   COALESCE(SUM(importe_total), 0) AS total,
+                   COALESCE(SUM(retenido), 0) AS retenido,
+                   COALESCE(SUM(nc), 0) AS nc,
+                   COALESCE(SUM(saldo), 0) AS pendiente
+              FROM por_doc
+             WHERE tipo IN ('FACTURA', 'RECIBO')
+             GROUP BY fecha
+             ORDER BY fecha
+        ");
+        $st->execute($params);
+
+        return ['formas' => $formas, 'saldos' => $st->fetchAll(PDO::FETCH_ASSOC)];
+    }
+
+    /**
+     * Detalle documento por documento del resumen (para el PDF): por día y tipo, número,
+     * cliente, total y saldo pendiente HOY (misma cuenta que "Pendiente de cobro": total −
+     * cobrado − retenido − NC aplicadas, nunca negativo). La NC no tiene saldo (es un abono):
+     * sale con saldo 0. Orden: día, tipo (facturas, recibos, NC) y número.
+     */
+    public function getResumenDiarioDetalle(int|array $idEmpresa, array $filtros): array
+    {
+        [$cte, $params] = $this->cteResumenDocs($idEmpresa, $filtros);
+        $st = $this->db->prepare($cte . $this->cteCobrosResumen() . $this->ctePorDocResumen() . "
+            SELECT p.fecha, p.tipo, p.numero,
+                   COALESCE(c.nombre, '') AS cliente_nombre,
+                   COALESCE(c.identificacion, '') AS cliente_ruc,
+                   p.importe_total AS total,
+                   p.saldo
+              FROM por_doc p
+              LEFT JOIN clientes c ON c.id = p.id_cliente
+             ORDER BY p.fecha,
+                      CASE p.tipo WHEN 'FACTURA' THEN 1 WHEN 'RECIBO' THEN 2 ELSE 3 END,
+                      p.numero
+        ");
+        $st->execute($params);
+        return $st->fetchAll(PDO::FETCH_ASSOC);
+    }
+
+    /**
+     * CTE `cobros` del resumen (requiere `docs`): lo cobrado a cada factura y recibo por
+     * forma de pago, desde el Ingreso que lo cobró. Ver getResumenDiarioCobros().
+     */
+    private function cteCobrosResumen(): string
+    {
+        return ",
             cobros AS (
                 SELECT d.tipo, d.id, d.fecha, ip.id_forma_cobro,
                        CASE WHEN COALESCE(tp.total, 0) > 0
@@ -1642,49 +1705,35 @@ class ReporteVentasRepository extends BaseRepository
                   LEFT JOIN ingresos_pagos ip ON ip.id_ingreso = ic.id AND COALESCE(tp.total, 0) > 0
                  WHERE d.tipo IN ('FACTURA', 'RECIBO')
             )";
+    }
 
-        $st = $this->db->prepare($cte . $cobros . "
-            SELECT c.fecha,
-                   COALESCE(fp.id, 0) AS id_forma_pago,
-                   COALESCE(MAX(fp.nombre), 'Sin forma de pago registrada') AS forma_pago_nombre,
-                   COUNT(DISTINCT c.tipo || ':' || c.id) AS cantidad_documentos,
-                   COALESCE(SUM(c.monto), 0) AS total
-              FROM cobros c
-              LEFT JOIN empresa_formas_pago fp ON fp.id = c.id_forma_cobro
-             GROUP BY c.fecha, COALESCE(fp.id, 0)
-             ORDER BY c.fecha, total DESC
-        ");
-        $st->execute($params);
-        $formas = $st->fetchAll(PDO::FETCH_ASSOC);
-
-        // Por documento: importe, cobrado, retenido y NC aplicadas; el pendiente nunca
-        // baja de cero (un cobro de más no resta crédito de otro documento).
-        $st = $this->db->prepare($cte . $cobros . ",
+    /**
+     * CTEs `cobrado`, `retenido`, `nc` y `por_doc` (requieren `docs` y `cobros`): una fila
+     * por documento con lo cobrado, retenido, NC aplicadas y el saldo pendiente. Las
+     * retenciones y NC con la misma regla que Cuentas por Cobrar (AbonosVentaSql). Usa el
+     * alcance de empresas que dejó cteResumenDocs() en $this->inEmp.
+     */
+    private function ctePorDocResumen(): string
+    {
+        $empresaAny   = "ANY(ARRAY[{$this->inEmp}])";
+        $ambienteNota = "AND (n.tipo_ambiente IS NULL OR n.tipo_ambiente = (SELECT CAST(e.tipo_ambiente AS VARCHAR(1)) FROM empresas e WHERE e.id = n.id_empresa))";
+        return ",
             cobrado AS (SELECT tipo, id, SUM(monto) AS total FROM cobros GROUP BY tipo, id),
             retenido AS (" . AbonosVentaSql::cteRetenidoPorFactura($empresaAny) . "),
             nc AS (" . AbonosVentaSql::cteNotasPorFactura('notas_credito_cabecera', 'total_nc', $empresaAny, $ambienteNota, true) . "),
             por_doc AS (
-                SELECT d.fecha, d.importe_total,
+                SELECT d.fecha, d.tipo, d.id, d.numero, d.id_cliente, d.importe_total,
                        COALESCE(cb.total, 0) AS cobrado,
                        COALESCE(r.total_retenido, 0) AS retenido,
-                       COALESCE(n.total_nc, 0) AS nc
+                       COALESCE(n.total_nc, 0) AS nc,
+                       CASE WHEN d.tipo = 'NOTA_CREDITO' THEN 0
+                            ELSE GREATEST(d.importe_total - COALESCE(cb.total, 0)
+                                          - COALESCE(r.total_retenido, 0) - COALESCE(n.total_nc, 0), 0)
+                       END AS saldo
                   FROM docs d
                   LEFT JOIN cobrado cb ON cb.tipo = d.tipo AND cb.id = d.id
                   LEFT JOIN retenido r ON d.tipo = 'FACTURA' AND r.id_venta = d.id
                   LEFT JOIN nc n ON d.tipo = 'FACTURA' AND n.id_empresa = d.id_empresa AND n.num_norm = d.num_norm
-                 WHERE d.tipo IN ('FACTURA', 'RECIBO')
-            )
-            SELECT fecha,
-                   COALESCE(SUM(importe_total), 0) AS total,
-                   COALESCE(SUM(retenido), 0) AS retenido,
-                   COALESCE(SUM(nc), 0) AS nc,
-                   COALESCE(SUM(GREATEST(importe_total - cobrado - retenido - nc, 0)), 0) AS pendiente
-              FROM por_doc
-             GROUP BY fecha
-             ORDER BY fecha
-        ");
-        $st->execute($params);
-
-        return ['formas' => $formas, 'saldos' => $st->fetchAll(PDO::FETCH_ASSOC)];
+            )";
     }
 }

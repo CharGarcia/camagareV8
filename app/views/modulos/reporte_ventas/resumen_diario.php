@@ -108,6 +108,47 @@ $nombreEmpresa = (string) ($empresa['nombre_comercial'] ?? '') !== '' ? $empresa
                 <?= $esTotal ? 'TOTAL DEL PERÍODO · ' : '' ?><?= $e($b['titulo']) ?>
                 <span class="float-end"><?= $e($fmt($b['total_neto'])) ?></span>
             </div>
+            <?php // Detalle documento por documento (como el PDF): facturas, recibos y, si entran,
+                  // NC, con su saldo pendiente hoy (en rojo si el cliente aún debe). ?>
+            <?php foreach (($b['detalle'] ?? []) as $g): ?>
+                <div class="px-2 pt-2">
+                    <div class="small fw-bold text-uppercase text-muted mb-1" style="font-size:.68rem;">
+                        <?= $e($g['etiqueta']) ?> (<?= count($g['filas']) ?>)
+                    </div>
+                    <div class="table-responsive">
+                        <table class="table table-sm table-hover mb-0" style="font-size:.78rem;">
+                            <thead class="table-light">
+                                <tr>
+                                    <th class="py-1">Número</th>
+                                    <th class="py-1">Cliente</th>
+                                    <th class="py-1 text-end">Total</th>
+                                    <th class="py-1 text-end">Saldo</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <?php foreach ($g['filas'] as $d): ?>
+                                    <tr>
+                                        <td class="py-1 text-nowrap"><?= $e($d['numero']) ?></td>
+                                        <td class="py-1"><?= $e($d['cliente']) ?><?php if ($d['ruc'] !== ''): ?> <small class="text-muted">(<?= $e($d['ruc']) ?>)</small><?php endif; ?></td>
+                                        <td class="py-1 text-end text-nowrap"><?= $e($fmt($d['total'])) ?></td>
+                                        <td class="py-1 text-end text-nowrap <?= $d['saldo'] > 0.004 ? 'text-danger fw-semibold' : 'text-muted' ?>"><?= $e($fmt($d['saldo'])) ?></td>
+                                    </tr>
+                                <?php endforeach; ?>
+                            </tbody>
+                            <tfoot>
+                                <tr class="fw-bold table-light">
+                                    <td class="py-1 text-end" colspan="2">Total <?= $e(mb_strtolower($g['etiqueta'])) ?></td>
+                                    <td class="py-1 text-end text-nowrap"><?= $e($fmt($g['total'])) ?></td>
+                                    <td class="py-1 text-end text-nowrap"><?= $e($fmt($g['saldo'])) ?></td>
+                                </tr>
+                            </tfoot>
+                        </table>
+                    </div>
+                </div>
+            <?php endforeach; ?>
+            <?php if (!empty($b['detalle'])): ?>
+                <div class="px-2 pt-3 small fw-bold text-uppercase text-primary" style="font-size:.7rem;">Resumen del día</div>
+            <?php endif; ?>
             <div class="row g-0">
                 <?php foreach ($secciones($b) as [$titulo, $filas]): ?>
                     <div class="col-md-4 p-2">
@@ -151,12 +192,64 @@ $nombreEmpresa = (string) ($empresa['nombre_comercial'] ?? '') !== '' ? $empresa
 
         <?php foreach ($bloques as $b): ?>
             <?php $esTotal = !empty($b['_es_total']); ?>
-            <table style="width:100%;border-collapse:collapse;font-family:Arial,sans-serif;margin-top:6px;" nobreak="true">
+            <?php // Barra del día (o del total del período). ?>
+            <table style="width:100%;border-collapse:collapse;font-family:Arial,sans-serif;margin-top:8px;">
                 <tr>
-                    <td colspan="3" style="width:100%;padding:4px 5px;font-size:9.5pt;font-weight:bold;color:#fff;background:<?= $esTotal ? '#146c43' : '#2c4a6b' ?>;">
+                    <td style="width:100%;padding:4px 5px;font-size:9.5pt;font-weight:bold;color:#fff;background:<?= $esTotal ? '#146c43' : '#2c4a6b' ?>;">
                         <?= $esTotal ? 'TOTAL DEL PERÍODO · ' : '' ?><?= $e($b['titulo']) ?> — Total neto <?= $e($fmt($b['total_neto'])) ?>
                     </td>
                 </tr>
+            </table>
+
+            <?php // 1) Detalle: un listado por tipo (facturas, recibos y, si entran, NC) con número,
+                  //    cliente, total y saldo pendiente hoy. Puede ocupar varias páginas: el <thead>
+                  //    se repite y el total va en tabla aparte (un <tfoot> se repetiría en cada hoja). ?>
+            <?php foreach (($b['detalle'] ?? []) as $g): ?>
+                <table style="width:100%;border-collapse:collapse;font-family:Arial,sans-serif;font-size:7.5pt;margin-top:4px;table-layout:fixed;">
+                    <thead>
+                        <tr>
+                            <th colspan="4" style="width:100%;text-align:left;background:#e3e9f0;border:1px solid #9aa7b4;padding:3px 5px;font-size:8.5pt;color:#1b2a3a;">
+                                <?= $e(mb_strtoupper($g['etiqueta'])) ?> (<?= count($g['filas']) ?>)
+                            </th>
+                        </tr>
+                        <tr>
+                            <th style="width:18%;background:#f4f7fa;border:1px solid #c3ccd6;padding:2px 4px;">Número</th>
+                            <th style="width:54%;background:#f4f7fa;border:1px solid #c3ccd6;padding:2px 4px;">Cliente</th>
+                            <th style="width:14%;background:#f4f7fa;border:1px solid #c3ccd6;padding:2px 4px;text-align:right;">Total</th>
+                            <th style="width:14%;background:#f4f7fa;border:1px solid #c3ccd6;padding:2px 4px;text-align:right;">Saldo</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <?php foreach ($g['filas'] as $i => $d): ?>
+                            <?php $z = $i % 2 ? 'background:#f6f8fa;' : ''; ?>
+                            <tr>
+                                <td style="width:18%;border:1px solid #c3ccd6;padding:2px 4px;<?= $z ?>"><?= $e($d['numero']) ?></td>
+                                <td style="width:54%;border:1px solid #c3ccd6;padding:2px 4px;<?= $z ?>"><?= $e($d['cliente']) ?><?= $d['ruc'] !== '' ? ' <span style="color:#6a747e;">(' . $e($d['ruc']) . ')</span>' : '' ?></td>
+                                <td style="width:14%;border:1px solid #c3ccd6;padding:2px 4px;text-align:right;<?= $z ?>"><?= $e($fmt($d['total'])) ?></td>
+                                <td style="width:14%;border:1px solid #c3ccd6;padding:2px 4px;text-align:right;<?= $z ?><?= $d['saldo'] > 0.004 ? 'color:#b02a37;font-weight:bold;' : '' ?>"><?= $e($fmt($d['saldo'])) ?></td>
+                            </tr>
+                        <?php endforeach; ?>
+                    </tbody>
+                </table>
+                <table style="width:100%;border-collapse:collapse;font-family:Arial,sans-serif;font-size:7.5pt;table-layout:fixed;">
+                    <tr>
+                        <td style="width:72%;border:1px solid #9aa7b4;background:#e3e9f0;padding:2px 4px;text-align:right;font-weight:bold;">TOTAL <?= $e(mb_strtoupper($g['etiqueta'])) ?>:</td>
+                        <td style="width:14%;border:1px solid #9aa7b4;background:#e3e9f0;padding:2px 4px;text-align:right;font-weight:bold;"><?= $e($fmt($g['total'])) ?></td>
+                        <td style="width:14%;border:1px solid #9aa7b4;background:#e3e9f0;padding:2px 4px;text-align:right;font-weight:bold;"><?= $e($fmt($g['saldo'])) ?></td>
+                    </tr>
+                </table>
+            <?php endforeach; ?>
+
+            <?php // 2) Resumen del día (o del período): Documentos, Detalle de impuestos y Cobro.
+                  //    nobreak: las tres columnas nunca quedan partidas entre dos páginas. ?>
+            <table style="width:100%;border-collapse:collapse;font-family:Arial,sans-serif;margin-top:5px;" nobreak="true">
+                <?php if (!empty($b['detalle'])): ?>
+                    <tr>
+                        <td colspan="3" style="width:100%;padding:2px 2px 0 2px;font-size:8pt;font-weight:bold;color:#2c4a6b;">
+                            RESUMEN DEL DÍA <?= $e($b['titulo']) ?>
+                        </td>
+                    </tr>
+                <?php endif; ?>
                 <tr>
                     <?php foreach ($secciones($b) as [$titulo, $filas]): ?>
                         <td style="width:33%;vertical-align:top;padding:3px 2px 0 2px;">
@@ -204,6 +297,39 @@ $nombreEmpresa = (string) ($empresa['nombre_comercial'] ?? '') !== '' ? $empresa
             <div style="margin:16px 0 4px 0;padding:6px 8px;font-weight:bold;color:#fff;background:<?= $esTotal ? '#146c43' : '#2c4a6b' ?>;">
                 <?= $esTotal ? 'TOTAL DEL PERÍODO · ' : '' ?><?= $e($b['titulo']) ?> — Total neto <?= $e($fmt($b['total_neto'])) ?>
             </div>
+            <?php // Detalle documento por documento (como la pantalla y el PDF). Estilos en línea:
+                  // los clientes de correo ignoran <style> y clases. ?>
+            <?php foreach (($b['detalle'] ?? []) as $g): ?>
+                <table style="width:100%;border-collapse:collapse;font-family:Arial,sans-serif;font-size:12px;margin-bottom:6px;">
+                    <tr>
+                        <td colspan="4" style="background:#e3e9f0;border:1px solid #9aa7b4;padding:4px 6px;font-weight:bold;color:#1b2a3a;">
+                            <?= $e(mb_strtoupper($g['etiqueta'])) ?> (<?= count($g['filas']) ?>)
+                        </td>
+                    </tr>
+                    <tr>
+                        <td style="background:#f4f7fa;border:1px solid #c3ccd6;padding:3px 6px;font-weight:bold;">Número</td>
+                        <td style="background:#f4f7fa;border:1px solid #c3ccd6;padding:3px 6px;font-weight:bold;">Cliente</td>
+                        <td style="background:#f4f7fa;border:1px solid #c3ccd6;padding:3px 6px;font-weight:bold;text-align:right;">Total</td>
+                        <td style="background:#f4f7fa;border:1px solid #c3ccd6;padding:3px 6px;font-weight:bold;text-align:right;">Saldo</td>
+                    </tr>
+                    <?php foreach ($g['filas'] as $d): ?>
+                        <tr>
+                            <td style="border:1px solid #c3ccd6;padding:3px 6px;white-space:nowrap;"><?= $e($d['numero']) ?></td>
+                            <td style="border:1px solid #c3ccd6;padding:3px 6px;"><?= $e($d['cliente']) ?><?php if ($d['ruc'] !== ''): ?> <span style="color:#6a747e;">(<?= $e($d['ruc']) ?>)</span><?php endif; ?></td>
+                            <td style="border:1px solid #c3ccd6;padding:3px 6px;text-align:right;white-space:nowrap;"><?= $e($fmt($d['total'])) ?></td>
+                            <td style="border:1px solid #c3ccd6;padding:3px 6px;text-align:right;white-space:nowrap;<?= $d['saldo'] > 0.004 ? 'color:#b02a37;font-weight:bold;' : '' ?>"><?= $e($fmt($d['saldo'])) ?></td>
+                        </tr>
+                    <?php endforeach; ?>
+                    <tr>
+                        <td colspan="2" style="background:#e3e9f0;border:1px solid #9aa7b4;padding:3px 6px;text-align:right;font-weight:bold;">Total <?= $e(mb_strtolower($g['etiqueta'])) ?></td>
+                        <td style="background:#e3e9f0;border:1px solid #9aa7b4;padding:3px 6px;text-align:right;font-weight:bold;white-space:nowrap;"><?= $e($fmt($g['total'])) ?></td>
+                        <td style="background:#e3e9f0;border:1px solid #9aa7b4;padding:3px 6px;text-align:right;font-weight:bold;white-space:nowrap;"><?= $e($fmt($g['saldo'])) ?></td>
+                    </tr>
+                </table>
+            <?php endforeach; ?>
+            <?php if (!empty($b['detalle'])): ?>
+                <div style="margin:10px 0 4px 0;font-size:12px;font-weight:bold;color:#2c4a6b;">RESUMEN DEL DÍA <?= $e($b['titulo']) ?></div>
+            <?php endif; ?>
             <?php foreach ($secciones($b) as [$titulo, $filas]): ?>
                 <div style="margin-bottom:6px;"><?= $tablaInline($titulo, $filas, '100%') ?></div>
             <?php endforeach; ?>

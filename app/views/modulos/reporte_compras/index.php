@@ -207,12 +207,14 @@
         </div>
     </div>
 
-    <!-- ── Gráfico ── -->
-    <div class="card border-0 shadow-sm mb-4" id="chart-container" style="display:none;">
-        <div class="card-header bg-white border-bottom-0 pt-4 pb-0 d-flex justify-content-between align-items-center flex-wrap gap-2">
-            <h6 class="mb-0 fw-bold text-dark" style="font-family:'Outfit',sans-serif;">
+    <!-- ── Gráfico: acordeón, cerrado por defecto (el título y la flecha lo abren/cierran) ── -->
+    <div class="card border-0 shadow-sm mb-3" id="chart-container" style="display:none;">
+        <div class="card-header bg-white border-bottom-0 py-2 d-flex justify-content-between align-items-center flex-wrap gap-2">
+            <button type="button" class="btn btn-link p-0 text-decoration-none text-dark fw-bold d-flex align-items-center collapsed"
+                    data-bs-toggle="collapse" data-bs-target="#rc-grafico-body" aria-expanded="false" aria-controls="rc-grafico-body"
+                    style="font-family:'Outfit',sans-serif;font-size:.95rem;">
                 <i class="bi bi-graph-up text-danger me-2"></i>Gráfico de Compras
-            </h6>
+            </button>
             <div class="d-flex align-items-center gap-2">
                 <?= \App\Helpers\PreferenciasHelper::renderEstrellaFavorito($rutaModulo, 'rc-tipo-grafico', 'tipo_grafico') ?>
                 <select id="rc-tipo-grafico" class="form-select form-select-sm shadow-none border" style="width:140px;"
@@ -223,10 +225,17 @@
                     <option value="pie">Pastel</option>
                     <option value="doughnut">Dona</option>
                 </select>
+                <?php // Flecha del acordeón, al extremo derecho: abajo = cerrado, arriba = abierto. ?>
+                <button type="button" class="btn btn-sm btn-light border collapsed" title="Mostrar / ocultar el gráfico"
+                        data-bs-toggle="collapse" data-bs-target="#rc-grafico-body" aria-expanded="false" aria-controls="rc-grafico-body">
+                    <i class="bi bi-chevron-down" id="rc-grafico-chevron"></i>
+                </button>
             </div>
         </div>
-        <div class="card-body">
-            <canvas id="reporteChart" style="max-height:300px;"></canvas>
+        <div class="collapse" id="rc-grafico-body">
+            <div class="card-body pt-0">
+                <canvas id="reporteChart" style="max-height:300px;"></canvas>
+            </div>
         </div>
     </div>
 
