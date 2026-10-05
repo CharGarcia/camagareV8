@@ -80,6 +80,12 @@ class SuscripcionDevengoRepository extends BaseRepository
         return (bool) $st->fetchColumn();
     }
 
+    /** ¿suscripciones ya tiene modalidad_cobro/reconocimiento? (SQL 20261004_suscripciones_devengo.sql) */
+    public function tieneColumnasSuscripcion(): bool
+    {
+        return $this->columnaExiste('suscripciones', 'reconocimiento');
+    }
+
     /** ¿Ya se aplicó 20261004_suscripciones_devengo_apertura.sql (columna origen)? */
     public function tieneOrigen(): bool
     {
@@ -367,8 +373,20 @@ class SuscripcionDevengoRepository extends BaseRepository
      *   - provisión: provisionada con asiento ≤ corte y sin facturar a esa fecha.
      * Se excluyen documentos anulados/eliminados: su asiento anulado tampoco está en el mayor.
      */
-    public function getSaldosAlCorte(int $idEmpresa, string $fechaCorte): array
+    public function getSaldosAlCorte(int $idEmpresa, string $fechaCorte, ?int $idCliente = null, ?int $idUsuarioFiltro = null): array
     {
+        // Filtros opcionales del reporte: un cliente, y registros propios (§6: sin acceso total,
+        // solo las suscripciones que registró el usuario).
+        $extra = '';
+        $paramsExtra = [];
+        if ($idCliente) {
+            $extra .= ' AND s.id_cliente = :id_cliente';
+            $paramsExtra[':id_cliente'] = $idCliente;
+        }
+        if ($idUsuarioFiltro !== null) {
+            $extra .= ' AND s.created_by = :id_usuario_filtro';
+            $paramsExtra[':id_usuario_filtro'] = $idUsuarioFiltro;
+        }
         $origen  = $this->tieneOrigen();
         $joinAp  = $origen ? 'LEFT JOIN asientos_contables_cabecera aap ON aap.id = d.id_asiento_apertura AND aap.estado <> \'anulado\'' : '';
         $fechaPasivo = $origen
@@ -385,7 +403,7 @@ class SuscripcionDevengoRepository extends BaseRepository
                         WHEN 'recibo'  THEN r.establecimiento || '-' || r.punto_emision || '-' || r.secuencial
                     END AS numero,
                     COALESCE(v.fecha_emision, r.fecha_emision) AS fecha_documento,
-                    c.nombre AS cliente, c.identificacion
+                    c.nombre AS cliente, c.identificacion, s.id_cliente
              FROM suscripciones_devengos d
              JOIN suscripciones s ON s.id = d.id_suscripcion AND s.id_empresa = d.id_empresa
              LEFT JOIN clientes c ON c.id = s.id_cliente
@@ -410,10 +428,32 @@ class SuscripcionDevengoRepository extends BaseRepository
                      AND adev.estado <> 'anulado' AND adev.fecha_asiento <= :f4
                      AND (d.estado = 'devengado'
                           OR (d.estado = 'facturado' AND COALESCE(v.fecha_emision, r.fecha_emision) > :f5)))
-               )
+               ){$extra}
              ORDER BY c.nombre, d.id_suscripcion, d.tipo_documento, d.id_documento, d.periodo"
         );
-        $st->execute([':e' => $idEmpresa, ':f1' => $fechaCorte, ':f2' => $fechaCorte, ':f3' => $fechaCorte, ':f4' => $fechaCorte, ':f5' => $fechaCorte]);
+        $st->execute($paramsExtra + [':e' => $idEmpresa, ':f1' => $fechaCorte, ':f2' => $fechaCorte, ':f3' => $fechaCorte, ':f4' => $fechaCorte, ':f5' => $fechaCorte]);
+        return $st->fetchAll(PDO::FETCH_ASSOC);
+    }
+
+    /** Clientes con alguna suscripción (buscador del reporte), por nombre o identificación. */
+    public function buscarClientesConSuscripcion(int $idEmpresa, string $q, ?int $idUsuarioFiltro = null, int $limite = 20): array
+    {
+        $params = [':e' => $idEmpresa, ':q' => '%' . $q . '%', ':q2' => '%' . $q . '%'];
+        $propios = '';
+        if ($idUsuarioFiltro !== null) {
+            $propios = ' AND s.created_by = :u';
+            $params[':u'] = $idUsuarioFiltro;
+        }
+        $st = $this->db->prepare(
+            "SELECT DISTINCT c.id, c.nombre, c.identificacion
+             FROM suscripciones s
+             JOIN clientes c ON c.id = s.id_cliente
+             WHERE s.id_empresa = :e AND s.eliminado = false {$propios}
+               AND (c.nombre ILIKE :q OR c.identificacion ILIKE :q2)
+             ORDER BY c.nombre
+             LIMIT " . max(1, min(50, $limite))
+        );
+        $st->execute($params);
         return $st->fetchAll(PDO::FETCH_ASSOC);
     }
 
@@ -433,6 +473,82 @@ class SuscripcionDevengoRepository extends BaseRepository
         );
         $st->execute([':e' => $idEmpresa, ':c' => $idCuenta, ':f' => $fechaCorte, ':e2' => $idEmpresa]);
         return round((float) $st->fetchColumn(), 2);
+    }
+
+    // ── Auditoría Contable ──────────────────────────────────────────────────
+
+    /**
+     * Por cada factura/recibo con cronograma: lo que su asiento DEBERÍA acreditar a Ingresos
+     * diferidos y a por facturar (mismas filas que usa AsientoBuilderService::devengoSuscripcionDocumento)
+     * y lo que su asiento vivo REALMENTE acredita a esas cuentas. Documentos vivos con asiento del
+     * ambiente dado; $desde/$hasta acotan por fecha de emisión.
+     */
+    public function auditoriaAsientoVsCronograma(int $idEmpresa, string $ambiente, int $idCuentaDif, int $idCuentaPf, ?string $desde, ?string $hasta): array
+    {
+        $soloDoc = $this->tieneOrigen() ? "AND d.origen = 'documento'" : '';
+        $ramas = [];
+        $params = [':e' => $idEmpresa, ':amb' => $ambiente, ':cdif' => $idCuentaDif, ':cpf' => $idCuentaPf];
+        foreach (['factura' => 'ventas_cabecera', 'recibo' => 'recibos_venta_cabecera'] as $tipo => $tabla) {
+            $rango = '';
+            if ($desde) { $rango .= " AND doc.fecha_emision >= :desde_{$tipo}"; $params[":desde_{$tipo}"] = $desde; }
+            if ($hasta) { $rango .= " AND doc.fecha_emision <= :hasta_{$tipo}"; $params[":hasta_{$tipo}"] = $hasta; }
+            $ramas[] = "SELECT '{$tipo}' AS tipo_documento, doc.id AS id_documento, doc.id_asiento_contable AS id_asiento,
+                               doc.fecha_emision,
+                               doc.establecimiento || '-' || doc.punto_emision || '-' || doc.secuencial AS numero,
+                               c.nombre AS cliente, esp.dif AS esperado_dif, esp.pf AS esperado_pf,
+                               COALESCE((SELECT SUM(det.haber - det.debe) FROM asientos_contables_detalle det
+                                         WHERE det.id_asiento = ac.id AND det.eliminado = false AND det.id_cuenta_contable = :cdif), 0) AS asiento_dif,
+                               COALESCE((SELECT SUM(det.haber - det.debe) FROM asientos_contables_detalle det
+                                         WHERE det.id_asiento = ac.id AND det.eliminado = false AND det.id_cuenta_contable = :cpf), 0) AS asiento_pf
+                        FROM (SELECT d.id_documento,
+                                     SUM(CASE WHEN d.tipo = 'diferido'  THEN d.monto ELSE 0 END) AS dif,
+                                     SUM(CASE WHEN d.tipo = 'provision' THEN d.monto ELSE 0 END) AS pf
+                              FROM suscripciones_devengos d
+                              WHERE d.id_empresa = :e AND d.eliminado = false AND d.tipo_documento = '{$tipo}'
+                                AND ((d.tipo = 'diferido' AND (d.estado <> 'anulado' OR d.id_nota_credito IS NOT NULL))
+                                  OR (d.tipo = 'provision' AND d.estado = 'facturado'))
+                                {$soloDoc}
+                              GROUP BY d.id_documento) esp
+                        JOIN {$tabla} doc ON doc.id = esp.id_documento AND doc.id_empresa = :e
+                        JOIN asientos_contables_cabecera ac ON ac.id = doc.id_asiento_contable
+                             AND ac.estado <> 'anulado' AND ac.tipo_ambiente = :amb
+                        LEFT JOIN clientes c ON c.id = doc.id_cliente
+                        WHERE doc.eliminado = false AND doc.estado <> 'anulado' {$rango}";
+        }
+        $st = $this->db->prepare(implode(' UNION ALL ', $ramas));
+        $st->execute($params);
+        return $st->fetchAll(PDO::FETCH_ASSOC);
+    }
+
+    /**
+     * Documentos con meses YA cumplidos (anteriores a $periodoLimite) que siguen por devengar
+     * aunque su documento tiene asiento: se olvidó correr «Devengar mes».
+     */
+    public function auditoriaMesesSinDevengar(int $idEmpresa, string $ambiente, string $periodoLimite, ?string $desde, ?string $hasta): array
+    {
+        $ramas = [];
+        $params = [':e' => $idEmpresa, ':amb' => $ambiente, ':lim' => $periodoLimite];
+        foreach (['factura' => 'ventas_cabecera', 'recibo' => 'recibos_venta_cabecera'] as $tipo => $tabla) {
+            $rango = '';
+            if ($desde) { $rango .= " AND doc.fecha_emision >= :desde_{$tipo}"; $params[":desde_{$tipo}"] = $desde; }
+            if ($hasta) { $rango .= " AND doc.fecha_emision <= :hasta_{$tipo}"; $params[":hasta_{$tipo}"] = $hasta; }
+            $ramas[] = "SELECT '{$tipo}' AS tipo_documento, doc.id AS id_documento, doc.fecha_emision,
+                               doc.establecimiento || '-' || doc.punto_emision || '-' || doc.secuencial AS numero,
+                               c.nombre AS cliente, COUNT(DISTINCT d.periodo) AS meses, SUM(d.monto) AS monto,
+                               MIN(d.periodo) AS desde, MAX(d.periodo) AS hasta
+                        FROM suscripciones_devengos d
+                        JOIN {$tabla} doc ON doc.id = d.id_documento AND doc.id_empresa = d.id_empresa
+                        JOIN asientos_contables_cabecera ac ON ac.id = doc.id_asiento_contable
+                             AND ac.estado <> 'anulado' AND ac.tipo_ambiente = :amb
+                        LEFT JOIN clientes c ON c.id = doc.id_cliente
+                        WHERE d.id_empresa = :e AND d.eliminado = false AND d.tipo_documento = '{$tipo}'
+                          AND d.tipo = 'diferido' AND d.estado = 'pendiente' AND d.periodo < :lim
+                          AND doc.eliminado = false AND doc.estado <> 'anulado' {$rango}
+                        GROUP BY doc.id, doc.fecha_emision, doc.establecimiento, doc.punto_emision, doc.secuencial, c.nombre";
+        }
+        $st = $this->db->prepare(implode(' UNION ALL ', $ramas));
+        $st->execute($params);
+        return $st->fetchAll(PDO::FETCH_ASSOC);
     }
 
     // ── Proceso mensual ─────────────────────────────────────────────────────
@@ -492,6 +608,29 @@ class SuscripcionDevengoRepository extends BaseRepository
         );
         $st->execute([':id_empresa' => $idEmpresa, ':periodo' => $periodo]);
         return $st->fetch(PDO::FETCH_ASSOC) ?: ['filas' => 0, 'monto' => 0];
+    }
+
+    /**
+     * Empresas activas con algo que devengar automáticamente: filas diferidas pendientes de un
+     * mes ya cumplido, o suscripciones activas de mes caído que reconocen durante el período
+     * (cuyo cierre de mes se provisiona). Para el devengo diario del cron (sin configurar nada).
+     */
+    public function getEmpresasConDevengo(): array
+    {
+        $st = $this->db->query(
+            "SELECT x.id_empresa FROM (
+                 SELECT DISTINCT d.id_empresa FROM suscripciones_devengos d
+                 WHERE d.eliminado = false AND d.tipo = 'diferido' AND d.estado = 'pendiente'
+                   AND d.periodo < date_trunc('month', CURRENT_DATE)
+                 UNION
+                 SELECT DISTINCT s.id_empresa FROM suscripciones s
+                 WHERE s.eliminado = false AND s.estado = 'activo'
+                   AND s.modalidad_cobro = 'vencido' AND s.reconocimiento = 'diferido'
+             ) x
+             JOIN empresas e ON e.id = x.id_empresa AND e.estado = '1' AND e.eliminado = false
+             ORDER BY x.id_empresa"
+        );
+        return array_map('intval', $st->fetchAll(PDO::FETCH_COLUMN));
     }
 
     /** Mes más antiguo con filas diferidas pendientes (para ponerse al día), o null. */

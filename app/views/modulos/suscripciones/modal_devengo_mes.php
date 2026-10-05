@@ -24,7 +24,7 @@ $mesActual    = date('Y-m');
                     <div class="text-muted small flex-grow-1" style="min-width: 220px;">
                         Pasa al ingreso lo diferido del mes (y lo que quedó pendiente de meses anteriores) y
                         provisiona el servicio de mes caído ya prestado. Asiento con fecha del último día del mes.
-                        <br><a href="#" class="small" onclick="event.preventDefault(); bootstrap.Modal.getInstance(document.getElementById('modalDevengoMes'))?.hide(); SuscIngresosDiferidos.abrirApertura();">
+                        <br><a href="#" class="small" onclick="event.preventDefault(); bootstrap.Modal.getInstance(document.getElementById('modalDevengoMes'))?.hide(); SuscAperturaDevengo.abrir();">
                             <i class="bi bi-box-arrow-in-right"></i> Apertura: facturas emitidas antes de activar el devengado</a>
                     </div>
                 </div>

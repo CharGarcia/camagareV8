@@ -564,49 +564,6 @@ class SuscripcionesController extends BaseModuloController
         }
     }
 
-    /** Reporte de ingresos diferidos al cierre de un mes, con conciliación (?mes=YYYY-MM). */
-    public function ingresosDiferidosAjax(): void
-    {
-        $this->requireLeer();
-        header('Content-Type: application/json');
-        try {
-            $res = \App\Services\modulos\SuscripcionDevengoService::crear()
-                ->reporteSaldos((int) $_SESSION['id_empresa'], trim((string) ($_GET['mes'] ?? '')));
-            echo json_encode(['ok' => true] + $res, JSON_INVALID_UTF8_SUBSTITUTE);
-        } catch (\InvalidArgumentException | \RuntimeException $e) {
-            echo json_encode(['ok' => false, 'mensaje' => $e->getMessage()], JSON_INVALID_UTF8_SUBSTITUTE);
-        } catch (\Throwable $e) {
-            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
-            echo json_encode(['ok' => false, 'mensaje' => 'No se pudo generar el reporte.']);
-        }
-    }
-
-    /** Excel del reporte de ingresos diferidos (?mes=YYYY-MM). */
-    public function ingresosDiferidosExcel(): void
-    {
-        $this->requireLeer();
-        try {
-            $autoload = MVC_ROOT . '/vendor/autoload.php';
-            if (file_exists($autoload)) {
-                require_once $autoload;
-            }
-            $idEmpresa = (int) $_SESSION['id_empresa'];
-            $empresa   = (new \App\models\Empresa())->getPorId($idEmpresa);
-            $libro = \App\Services\modulos\SuscripcionDevengoService::crear()
-                ->reporteSaldosExcel($idEmpresa, trim((string) ($_GET['mes'] ?? '')), (string) ($empresa['nombre'] ?? ''));
-            (new \App\Services\ReportService())->descargarSpreadsheet($libro, 'Ingresos_diferidos');
-            exit;
-        } catch (\Throwable $e) {
-            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
-            if (!headers_sent()) {
-                header('Content-Type: application/json');
-                http_response_code(400);
-                echo json_encode(['error' => $e->getMessage()], JSON_INVALID_UTF8_SUBSTITUTE);
-            }
-            exit;
-        }
-    }
-
     public function facturasClienteAjax(): void
     {
         $this->requireLeer();

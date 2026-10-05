@@ -275,6 +275,110 @@ class SuscripcionDevengoService
         }
     }
 
+    // ── Auditoría Contable ──────────────────────────────────────────────────
+
+    /** Origen de los hallazgos globales (conciliación) en Auditoría Contable. */
+    public const ORIGEN_AUDITORIA = 'suscripcion_devengo';
+
+    /**
+     * Hallazgos del devengado para Auditoría Contable (tipo 'devengo_suscripcion'), con el
+     * formato de AuditoriaContableRepository::normalizar():
+     *   1. Factura/recibo cuyo asiento no acredita a Ingresos diferidos / por facturar lo que dice
+     *      su cronograma (clave: documento + su asiento).
+     *   2. Factura/recibo con meses ya cumplidos sin devengar (clave: documento, sin asiento).
+     *   3. Cronograma ≠ mayor en cada cuenta de «Suscripciones - Devengo» al cierre del mes de
+     *      $hasta (u hoy); origen 'suscripcion_devengo', uno por cuenta (id_documento 1 / 2).
+     * Con $soloOrigen, solo lo de ese origen (factura_venta, recibo_venta o suscripcion_devengo).
+     */
+    public function hallazgosAuditoria(int $idEmpresa, string $ambiente, ?string $soloOrigen, ?string $desde, ?string $hasta): array
+    {
+        if (!$this->repo->disponible()) {
+            return [];
+        }
+        $origenDoc = ['factura' => 'factura_venta', 'recibo' => 'recibo_venta'];
+        $quiere = fn(string $o): bool => $soloOrigen === null || $soloOrigen === $o;
+        $hallazgo = fn(string $origen, ?int $idDoc, ?int $idAsiento, ?float $mDoc, ?float $mAs, ?float $dif, string $detalle, ?string $fecha, ?string $numero, ?string $entidad) => [
+            'tipo_hallazgo'    => 'devengo_suscripcion',
+            'modulo_origen'    => $origen,
+            'id_documento'     => $idDoc,
+            'id_asiento'       => $idAsiento,
+            'monto_documento'  => $mDoc,
+            'monto_asiento'    => $mAs,
+            'diferencia'       => $dif,
+            'detalle'          => $detalle,
+            'fecha_documento'  => $fecha !== null ? substr($fecha, 0, 10) : null,
+            'documento_numero' => $numero,
+            'entidad_nombre'   => $entidad,
+        ];
+
+        $cuentas = [];
+        foreach ((new \App\repositories\modulos\AsientoProgramadoRepository())->getReglasGeneralesPorConcepto($idEmpresa, 'suscripciones_devengo') as $r) {
+            $cuentas[(string) $r['codigo']] = (int) ($r['id_cuenta'] ?? 0);
+        }
+        $idDif = $cuentas['INGRESODIFERIDOSUSCRIPCION'] ?? 0;
+        $idPf  = $cuentas['INGRESOPORFACTURARSUSCRIPCION'] ?? 0;
+        $out = [];
+
+        // 1. Asiento del documento vs su cronograma.
+        if ($quiere('factura_venta') || $quiere('recibo_venta')) {
+            foreach ($this->repo->auditoriaAsientoVsCronograma($idEmpresa, $ambiente, $idDif, $idPf, $desde, $hasta) as $f) {
+                $origen = $origenDoc[$f['tipo_documento']];
+                if (!$quiere($origen)) {
+                    continue;
+                }
+                $esp = round((float) $f['esperado_dif'] + (float) $f['esperado_pf'], 2);
+                $real = round(($idDif > 0 ? (float) $f['asiento_dif'] : 0) + ($idPf > 0 ? (float) $f['asiento_pf'] : 0), 2);
+                if (abs($esp - $real) < 0.01) {
+                    continue;
+                }
+                $partes = [];
+                if (abs((float) $f['esperado_dif'] - (float) $f['asiento_dif']) >= 0.01) {
+                    $partes[] = 'Ingresos diferidos: cronograma $' . number_format((float) $f['esperado_dif'], 2) . ', asiento $' . number_format((float) $f['asiento_dif'], 2);
+                }
+                if (abs((float) $f['esperado_pf'] - (float) $f['asiento_pf']) >= 0.01) {
+                    $partes[] = 'Por facturar: cronograma $' . number_format((float) $f['esperado_pf'], 2) . ', asiento $' . number_format((float) $f['asiento_pf'], 2);
+                }
+                $out[] = $hallazgo($origen, (int) $f['id_documento'], (int) $f['id_asiento'], $esp, $real, round($real - $esp, 2),
+                    'El asiento no refleja el devengado de la suscripción (' . implode('; ', $partes)
+                    . '). Vuelva a generar el asiento del documento' . ($idDif > 0 ? '' : ' después de configurar la cuenta de Ingresos diferidos') . '.',
+                    $f['fecha_emision'], $f['numero'], $f['cliente']);
+            }
+        }
+
+        // 2. Meses cumplidos sin devengar.
+        $limite = (new \DateTimeImmutable('first day of this month'))->format('Y-m-d');
+        foreach ($this->repo->auditoriaMesesSinDevengar($idEmpresa, $ambiente, $limite, $desde, $hasta) as $f) {
+            $origen = $origenDoc[$f['tipo_documento']];
+            if (!$quiere($origen)) {
+                continue;
+            }
+            $out[] = $hallazgo($origen, (int) $f['id_documento'], null, round((float) $f['monto'], 2), null, null,
+                (int) $f['meses'] . ' mes(es) ya cumplido(s) sin devengar ($' . number_format((float) $f['monto'], 2) . '), de ' . substr((string) $f['desde'], 0, 7)
+                . ' a ' . substr((string) $f['hasta'], 0, 7) . '. El devengo automático diario debería tomarlos: revise la cuenta de Ingresos diferidos y que el período no esté cerrado, o use Suscripciones → Devengar mes.',
+                $f['fecha_emision'], $f['numero'], $f['cliente']);
+        }
+
+        // 3. Conciliación del cronograma con el mayor.
+        if ($quiere(self::ORIGEN_AUDITORIA)) {
+            $mes = $hasta ? substr($hasta, 0, 7) : date('Y-m');
+            if ($mes > date('Y-m')) {
+                $mes = date('Y-m');
+            }
+            $rep = $this->reporteSaldos($idEmpresa, $mes);
+            foreach ($rep['conciliacion'] as $i => $c) {
+                if ($c['diferencia'] === null || abs((float) $c['diferencia']) < 0.01) {
+                    continue;
+                }
+                $out[] = $hallazgo(self::ORIGEN_AUDITORIA, $i + 1, null, (float) $c['cronograma'], (float) $c['mayor'], (float) $c['diferencia'],
+                    "{$c['concepto']} ({$c['cuenta']}): el cronograma suma $" . number_format((float) $c['cronograma'], 2)
+                    . ' y el mayor $' . number_format((float) $c['mayor'], 2) . ' al ' . date('d-m-Y', strtotime($rep['fecha_corte']))
+                    . '. Revise asientos manuales en esa cuenta o documentos sin asiento (Reporte de Ingresos Diferidos).',
+                    $rep['fecha_corte'], $c['concepto'], null);
+            }
+        }
+        return $out;
+    }
+
     // ── Reporte de ingresos diferidos y conciliación con el mayor ───────────
 
     /**
@@ -285,7 +389,7 @@ class SuscripcionDevengoService
      * (Configuración Contable → Suscripciones - Devengo). Una diferencia indica asientos hechos
      * a mano sobre esas cuentas, documentos sin asiento o un cambio de cuenta a mitad de camino.
      */
-    public function reporteSaldos(int $idEmpresa, string $mes): array
+    public function reporteSaldos(int $idEmpresa, string $mes, ?int $idCliente = null, ?int $idUsuarioFiltro = null): array
     {
         $periodo = $this->validarMes($mes);
         if (!$this->repo->disponible()) {
@@ -296,14 +400,17 @@ class SuscripcionDevengoService
 
         $porDoc = [];
         $tot = ['corriente' => 0.0, 'no_corriente' => 0.0, 'por_facturar' => 0.0];
-        foreach ($this->repo->getSaldosAlCorte($idEmpresa, $corte) as $f) {
+        foreach ($this->repo->getSaldosAlCorte($idEmpresa, $corte, $idCliente, $idUsuarioFiltro) as $f) {
             $clave = $f['tipo'] === 'provision' && empty($f['id_documento'])
                 ? 'prov:' . $f['id_suscripcion']
                 : $f['tipo_documento'] . ':' . $f['id_documento'];
             $porDoc[$clave] ??= [
                 'cliente'        => (string) ($f['cliente'] ?? ''),
                 'identificacion' => (string) ($f['identificacion'] ?? ''),
+                'id_cliente'     => (int) ($f['id_cliente'] ?? 0),
                 'id_suscripcion' => (int) $f['id_suscripcion'],
+                'tipo_documento' => (string) ($f['tipo_documento'] ?? ''),
+                'id_documento'   => (int) ($f['id_documento'] ?? 0),
                 'documento'      => !empty($f['numero'])
                     ? (($f['tipo_documento'] === 'recibo' ? 'REC ' : 'FAC ') . $f['numero'])
                     : 'Sin facturar (mes caído)',
@@ -324,7 +431,10 @@ class SuscripcionDevengoService
             $tot[$col] = round($tot[$col] + $monto, 2);
         }
 
-        // Conciliación con el mayor (diferido es pasivo: saldo acreedor = −deudor).
+        // Conciliación con el mayor (diferido es pasivo: saldo acreedor = −deudor). Solo sin
+        // filtros: el mayor es de toda la empresa, contra una parte del cronograma siempre
+        // daría diferencia.
+        $filtrado = $idCliente || $idUsuarioFiltro !== null;
         $cuentas = [];
         foreach ((new \App\repositories\modulos\AsientoProgramadoRepository())->getReglasGeneralesPorConcepto($idEmpresa, 'suscripciones_devengo') as $r) {
             $cuentas[(string) $r['codigo']] = $r;
@@ -335,7 +445,7 @@ class SuscripcionDevengoService
             'INGRESOPORFACTURARSUSCRIPCION' => ['Ingresos devengados por facturar', $tot['por_facturar'], 1],
         ] as $codigo => [$nombre, $cronograma, $signo]) {
             $r = $cuentas[$codigo] ?? [];
-            $mayor = !empty($r['id_cuenta'])
+            $mayor = !empty($r['id_cuenta']) && !$filtrado
                 ? round($signo * $this->repo->getSaldoMayor($idEmpresa, (int) $r['id_cuenta'], $corte), 2)
                 : null;
             $conciliacion[] = [
@@ -353,13 +463,25 @@ class SuscripcionDevengoService
             'filas'        => array_values($porDoc),
             'totales'      => $tot,
             'conciliacion' => $conciliacion,
+            // Motivo por el que el mayor no se compara (filtro activo), o null.
+            'conciliacion_nota' => $filtrado
+                ? ($idUsuarioFiltro !== null
+                    ? 'Solo ve sus propias suscripciones: el mayor (de toda la empresa) no se compara.'
+                    : 'Con un cliente elegido el mayor (de toda la empresa) no se compara.')
+                : null,
         ];
     }
 
-    /** Libro de Excel del reporte (hoja de detalle + hoja de conciliación). */
-    public function reporteSaldosExcel(int $idEmpresa, string $mes, string $nombreEmpresa): \PhpOffice\PhpSpreadsheet\Spreadsheet
+    /** Buscador de clientes con suscripciones (reporte de ingresos diferidos). */
+    public function buscarClientes(int $idEmpresa, string $q, ?int $idUsuarioFiltro = null): array
     {
-        $rep = $this->reporteSaldos($idEmpresa, $mes);
+        return $this->repo->buscarClientesConSuscripcion($idEmpresa, mb_substr(trim($q), 0, 100), $idUsuarioFiltro);
+    }
+
+    /** Libro de Excel del reporte (hoja de detalle + hoja de conciliación). */
+    public function reporteSaldosExcel(int $idEmpresa, string $mes, string $nombreEmpresa, ?int $idCliente = null, ?int $idUsuarioFiltro = null): \PhpOffice\PhpSpreadsheet\Spreadsheet
+    {
+        $rep = $this->reporteSaldos($idEmpresa, $mes, $idCliente, $idUsuarioFiltro);
         $filas = array_map(fn($f) => [
             $f['cliente'], $f['identificacion'], $f['id_suscripcion'], $f['documento'], $f['fecha'],
             $f['ultimo_mes'], $f['corriente'], $f['no_corriente'], $f['por_facturar'],
@@ -830,6 +952,33 @@ class SuscripcionDevengoService
             $msg .= ' Avisos: ' . implode(' | ', $avisos);
         }
         return ['meses' => count($hechos), 'mensaje' => $msg];
+    }
+
+    /**
+     * Devengo AUTOMÁTICO de todas las empresas (lo llama el cron una vez al día, sin que nadie
+     * lo configure): por cada empresa con algo pendiente, ponerseAlDia() hasta el mes anterior.
+     * Correrlo varias veces no duplica nada (cada mes toma solo lo pendiente). Una empresa con
+     * error (cuenta sin configurar, período cerrado) no detiene a las demás.
+     *
+     * @return array<int, string> Mensaje por empresa procesada (solo las que hicieron o avisaron algo)
+     */
+    public function devengoAutomatico(): array
+    {
+        if (!$this->repo->disponible() || !$this->repo->tieneColumnasSuscripcion()) {
+            return [];
+        }
+        $out = [];
+        foreach ($this->repo->getEmpresasConDevengo() as $idEmpresa) {
+            try {
+                $r = $this->ponerseAlDia($idEmpresa, 0);
+                if ($r['meses'] > 0 || str_contains($r['mensaje'], 'Avisos')) {
+                    $out[$idEmpresa] = $r['mensaje'];
+                }
+            } catch (\Throwable $e) {
+                $out[$idEmpresa] = 'Error: ' . $e->getMessage();
+            }
+        }
+        return $out;
     }
 
     /**

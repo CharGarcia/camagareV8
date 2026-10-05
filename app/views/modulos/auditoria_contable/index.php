@@ -46,11 +46,12 @@ $from = $total > 0 ? (($page - 1) * $perPage) + 1 : 0;
 $to   = $total > 0 ? min($page * $perPage, $total) : 0;
 
 // Etiquetas de tipo (para tarjetas-resumen) y colores
-$tipoOrden = ['faltante','duplicado','monto_no_coincide','descuadrado','cab_vs_detalle','huerfano','estado_incoherente','ambiente_incoherente','monto_informativo'];
+$tipoOrden = ['faltante','duplicado','monto_no_coincide','descuadrado','cab_vs_detalle','huerfano','estado_incoherente','ambiente_incoherente','devengo_suscripcion','monto_informativo'];
 $tipoColor = [
     'faltante' => 'danger', 'duplicado' => 'warning', 'monto_no_coincide' => 'warning',
     'descuadrado' => 'danger', 'cab_vs_detalle' => 'danger', 'huerfano' => 'secondary',
     'estado_incoherente' => 'primary', 'ambiente_incoherente' => 'info',
+    'devengo_suscripcion' => 'warning',
     // Informativo: se muestra para revisión pero no cuenta como error de cuadre.
     'monto_informativo' => 'secondary',
 ];

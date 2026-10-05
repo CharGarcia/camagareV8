@@ -5571,8 +5571,11 @@ class AsientoBuilderService
                  WHERE table_schema = 'public' AND table_name = 'suscripciones_devengos' AND column_name = 'origen'"
             )->fetchColumn();
         }
+        // Las filas que luego tomó una NOTA DE CRÉDITO sí cuentan: al emitirse, la factura difirió
+        // ese monto, y es el asiento de la NC el que lo debita del pasivo. Si se excluyeran, volver
+        // a contabilizar la factura después de la NC descontaría ese diferido dos veces.
         $filtro = "AND sd.eliminado = false
-                   AND ((sd.tipo = 'diferido' AND sd.estado <> 'anulado')
+                   AND ((sd.tipo = 'diferido' AND (sd.estado <> 'anulado' OR sd.id_nota_credito IS NOT NULL))
                      OR (sd.tipo = 'provision' AND sd.estado = 'facturado'))"
                 . ($hayOrigen ? " AND sd.origen = 'documento'" : '');
         $st = $db->prepare(

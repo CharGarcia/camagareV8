@@ -1090,6 +1090,23 @@ class AuditoriaContableRepository extends BaseRepository
     }
 
     /** Normaliza un hallazgo al formato uniforme usado por el Service. */
+    /**
+     * ¿El CHECK de auditoria_contable_incidencias ya admite este tipo de hallazgo? Los tipos
+     * nuevos llegan con su SQL (p. ej. 'devengo_suscripcion'); mientras no se aplique, el
+     * motor omite esa revisión en vez de reventar al guardar la incidencia.
+     */
+    public function aceptaTipoHallazgo(string $tipo): bool
+    {
+        static $cache = [];
+        if (!isset($cache[$tipo])) {
+            $st = $this->db->prepare("SELECT pg_get_constraintdef(oid) FROM pg_constraint WHERE conname = 'chk_aci_tipo' LIMIT 1");
+            $st->execute();
+            $def = (string) $st->fetchColumn();
+            $cache[$tipo] = $def === '' || str_contains($def, "'" . $tipo . "'");
+        }
+        return $cache[$tipo];
+    }
+
     private function normalizar(string $tipo, string $origen, ?int $idDoc, ?int $idAsiento,
         ?float $montoDoc, ?float $montoAsiento, ?float $diferencia, string $detalle, ?string $fecha): array
     {

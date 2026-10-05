@@ -47,6 +47,7 @@ class AuditoriaContableController extends BaseModuloController
         'huerfano'             => 'Huérfano',
         'estado_incoherente'   => 'Estado incoherente',
         'ambiente_incoherente' => 'Ambiente incoherente',
+        'devengo_suscripcion'  => 'Devengo de suscripción',
     ];
 
     private const TIPO_CLASE = [
@@ -59,6 +60,7 @@ class AuditoriaContableController extends BaseModuloController
         'huerfano'             => 'bg-secondary bg-opacity-10 text-secondary border-secondary',
         'estado_incoherente'   => 'bg-primary bg-opacity-10 text-primary border-primary',
         'ambiente_incoherente' => 'bg-info bg-opacity-10 text-info border-info',
+        'devengo_suscripcion'  => 'bg-warning bg-opacity-10 text-warning border-warning',
     ];
 
     private const ORIGEN_LABEL = [
@@ -76,6 +78,7 @@ class AuditoriaContableController extends BaseModuloController
         'cambio_producto_cv' => 'Cambio de producto',
         'FACTURACION_CV'     => 'Facturación de consignación',
         'nomina'             => 'Rol de pagos (nómina)',
+        'suscripcion_devengo' => 'Devengo de suscripciones (cuadre con el mayor)',
     ];
 
     private const REVISION_LABEL = [
@@ -326,7 +329,10 @@ class AuditoriaContableController extends BaseModuloController
             $btns[] = '<button class="btn btn-sm btn-outline-danger js-aud-huerfano" title="Anular este asiento (su documento está anulado)"><i class="bi bi-slash-circle"></i></button>';
         }
         // Regenerar solo donde el módulo de origen sabe rehacer su asiento.
-        if (in_array($tipo, ['monto_no_coincide', 'descuadrado', 'cab_vs_detalle'], true)
+        // Devengo de suscripción con asiento: el asiento no refleja el cronograma → regenerarlo.
+        // (Sin asiento = meses sin devengar o cuadre con el mayor: se corrige desde Suscripciones.)
+        $devengoConAsiento = $tipo === 'devengo_suscripcion' && !empty($r['id_asiento']);
+        if ((in_array($tipo, ['monto_no_coincide', 'descuadrado', 'cab_vs_detalle'], true) || $devengoConAsiento)
             && !empty($perm['eliminar'])
             && $this->service->esOrigenRegenerable((string) $r['modulo_origen'])) {
             $btns[] = '<button class="btn btn-sm btn-outline-danger js-aud-regen-doc" title="Regenerar este asiento"><i class="bi bi-arrow-clockwise"></i></button>';

@@ -47,10 +47,6 @@ $estadoClases = [
 <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-3">
     <h5 class="mb-0 fw-bold"><i class="bi bi-arrow-repeat text-primary me-2"></i><?= htmlspecialchars($titulo) ?></h5>
     <div class="d-flex gap-2">
-        <button type="button" class="btn btn-outline-secondary btn-sm px-3" onclick="SuscIngresosDiferidos.abrirReporte()"
-                title="Saldos de ingresos diferidos y por facturar al cierre de un mes, con conciliación contra el mayor">
-            <i class="bi bi-hourglass-split"></i> Ingresos diferidos
-        </button>
         <?php if ($perm['crear']): ?>
             <button type="button" class="btn btn-outline-secondary btn-sm px-3" onclick="SuscDevengoMes.abrir()"
                     title="Asiento mensual del ingreso diferido y de la provisión de mes caído (NIIF 15)">
@@ -276,7 +272,7 @@ $estadoClases = [
 <?php include 'modal_suscripcion.php'; ?>
 <?php include 'modal_generar_documentos.php'; ?>
 <?php if ($perm['crear'] ?? false) { include 'modal_devengo_mes.php'; } ?>
-<?php include 'modal_ingresos_diferidos.php'; ?>
+<?php if ($perm['crear'] ?? false) { include 'modal_apertura_devengo.php'; } ?>
 <?php include 'modal_pagos.php'; ?>
 
 <?php // Modales compartidos para crear cliente / producto desde la suscripción ?>

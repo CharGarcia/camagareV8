@@ -6,7 +6,7 @@ ruta_modulo: modulos/suscripciones
 tipo: modulo
 visibilidad: todos
 etiquetas: suscripciones, suscripcion, cobro recurrente, facturacion recurrente, factura recurrente, mensualidad, pension, plan mensual, membresia, renovacion, periodicidad, proximo cobro, generar documentos, generar facturas, facturacion automatica, facturas del cliente, facturas emitidas, historial de facturas, detalle de facturas, recibos del cliente, que le facture, saldo del cliente, facturas pendientes, facturas pagadas, facturas abonadas, cobro con tarjeta, debito automatico, nuvei, kushki, aviso de vencimiento, imprimir, impresora, excel, exportar, resumen de valores, total por periodicidad, proyeccion anual, ingresos recurrentes, iva por tarifa, resumen por concepto, detalle por cliente, que se le factura a cada cliente, items por cliente, informacion adicional en excel, resumen en pdf, detalle por cliente en pdf, pdf de la suscripcion, imprimir suscripcion, contrato, ficha de la suscripcion, detalle de la suscripcion en pdf, devengado, devengo, ingreso diferido, ingresos diferidos, ingreso anticipado, cobro por adelantado, mes caido, mes vencido, facturacion vencida, niif 15, seccion 23, reconocimiento de ingresos, provision de ingresos, ingresos por facturar
-version: 1.19
+version: 1.20
 orden: 0
 estado: activo
 ---
@@ -203,13 +203,16 @@ del mes):
 La cuenta de ingreso de cada servicio es la misma que usa su factura (por cliente,
 producto, categoría, marca, tipo de producción o General).
 
-- **A mano**: botón **Devengar mes** del listado. Elija el mes; la ventana muestra
-  cuánto se devenga, cuánto viene de meses anteriores, la provisión de mes caído, lo
-  que todavía espera asiento y el asiento que se generará. Pulse **Generar asiento**.
-- **Automáticamente**: automatización **Suscripciones → Devengar ingresos del mes**.
-  Procesa hasta el mes anterior y se pone al día con los meses pendientes. Prográmela
-  el día 1, **antes** de *Generar facturación*: la provisión de mes caído debe existir
-  cuando se emite la factura que la cancela.
+- **Es automático**: el sistema lo hace solo todos los días, en todas las empresas, sin
+  configurar nada. Procesa hasta el mes anterior y se pone al día con los meses que
+  hayan quedado pendientes. Corre antes que las automatizaciones de la empresa, así que
+  el día 1 la provisión de mes caído ya existe cuando *Generar facturación* emite la
+  factura que la cancela. Si a la empresa le falta una cuenta o el período está cerrado,
+  ese mes queda pendiente y se reintenta al día siguiente.
+- **Botón Devengar mes** (opcional): para ver la vista previa de un mes, generarlo antes
+  de tiempo (por ejemplo, el mes en curso al cerrarlo) o revertirlo. Muestra cuánto se
+  devenga, cuánto viene de meses anteriores, la provisión de mes caído, lo que todavía
+  espera asiento y el asiento que se generará.
 - **Revertir mes**: anula los asientos de devengo del mes; lo diferido vuelve a *Por
   devengar* y las provisiones se dan de baja. No se puede si el período contable está
   cerrado o si una factura ya canceló alguna provisión del mes.
@@ -228,20 +231,11 @@ Reglas:
   contabilizan*, no se difiere nada nuevo ni se provisiona el mes caído; lo ya
   diferido se sigue devengando.
 
-## Reporte de ingresos diferidos y conciliación con el mayor
+## Saldos de ingresos diferidos
 
-Botón **Ingresos diferidos** del listado. Elija el mes: muestra los saldos **al cierre
-de ese mes**, reconstruidos con las fechas de los asientos (sirve también para meses
-pasados):
-
-- **Diferido corriente** (se devenga en los 12 meses siguientes) y **no corriente**
-  (después): para presentarlos por separado en el balance.
-- **Por facturar**: servicio de mes caído provisionado y aún sin facturar a esa fecha.
-- **Conciliación**: el total del cronograma contra el saldo del **mayor** de cada
-  cuenta de *Suscripciones - Devengo*. Una diferencia (en rojo) indica asientos hechos a
-  mano sobre esas cuentas, documentos sin asiento o un cambio de cuenta a mitad de camino.
-- **Detalle por documento** y descarga en **Excel** (hoja de detalle y hoja de
-  conciliación).
+Los saldos al cierre de un mes (diferido corriente y no corriente, por facturar) y su
+cuadre con el mayor se consultan en el
+[Reporte de Ingresos Diferidos](modulos/reporte_ingresos_diferidos).
 
 ## Apertura: facturas emitidas antes de activar el devengado
 
@@ -423,6 +417,10 @@ registrados*.
   registrado en Ingresos, o se registró en otro documento.
 
 ## Historial de cambios
+
+- **1.20** — El devengo mensual es **automático** (todos los días, sin configurar nada); el botón
+  *Devengar mes* queda para la vista previa, adelantar o revertir. El reporte de saldos pasa a su
+  propio módulo, [Reporte de Ingresos Diferidos](modulos/reporte_ingresos_diferidos).
 
 - **1.19** — Botón **Ingresos diferidos**: saldos corriente / no corriente / por facturar al
   cierre de un mes, conciliación con el mayor y Excel. **Apertura** para las facturas emitidas

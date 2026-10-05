@@ -5,8 +5,8 @@ categoria: Contabilidad
 ruta_modulo: modulos/auditoria_contable
 tipo: modulo
 visibilidad: admin
-etiquetas: auditoria contable, revisar asientos, documentos sin asiento, descuadres, regenerar contabilidad, hallazgos, monto no coincide, cartera del asiento, diferencia asiento documento
-version: 1.2
+etiquetas: auditoria contable, revisar asientos, documentos sin asiento, descuadres, regenerar contabilidad, hallazgos, monto no coincide, cartera del asiento, diferencia asiento documento, ingresos diferidos, devengo de suscripciones, meses sin devengar, cuadre con el mayor
+version: 1.3
 orden: 70
 estado: activo
 ---
@@ -42,6 +42,28 @@ Si aparece, las causas habituales son: el documento se modificó después y su
 asiento no se actualizó, el asiento se editó a mano, o la Cuenta por Cobrar/Pagar
 que usa el asiento ya no es la configurada hoy.
 
+## Devengo de suscripción
+
+Revisa el ingreso diferido de las [suscripciones](modulos/suscripciones) que reconocen
+el ingreso durante el período (NIIF 15). Hay tres casos:
+
+- **Factura o recibo cuyo asiento no refleja su cronograma**: lo que el asiento
+  acredita a *Ingresos diferidos* (o a *Ingresos devengados por facturar*) no es lo que
+  dice el cronograma. Pasa si el asiento se generó antes que el cronograma, si se
+  cambió la cuenta o si se editó a mano. Se corrige con el botón **Regenerar** de la fila.
+- **Meses ya cumplidos sin devengar** (sin asiento en la fila): el devengo automático
+  diario no pudo hacerlos, casi siempre porque falta la cuenta de Ingresos diferidos o el
+  período está cerrado. Corrija eso; el devengo los toma al día siguiente, o en el momento
+  desde Suscripciones → **Devengar mes**.
+- **Cuadre con el mayor** (origen *Devengo de suscripciones*): al cierre del mes, el
+  saldo del cronograma no coincide con el del mayor en la cuenta de ingresos diferidos o
+  en la de por facturar. Suele deberse a asientos manuales en esa cuenta. El detalle está
+  en el [Reporte de Ingresos Diferidos](modulos/reporte_ingresos_diferidos).
+
+Al corregir, la siguiente revisión los marca como resueltos. Requiere el SQL
+`database/migrations/20261004_auditoria_tipo_devengo_suscripcion.sql`; sin él, esta
+revisión simplemente no se hace.
+
 ## Regenerar toda la contabilidad
 
 Existe la opción de **regenerar toda la contabilidad** por lotes: borra y vuelve
@@ -68,6 +90,8 @@ aparecerán como "documentos sin asiento".
   descuadre mayor indica un problema real en el documento.
 
 ## Historial de cambios
+
+- **1.3** — Nuevo hallazgo **Devengo de suscripción**: asiento vs cronograma, meses cumplidos sin devengar y cuadre con el mayor de las cuentas de ingresos diferidos.
 
 - **1.2** — *Monto no coincide* en ventas, recibos, compras y liquidaciones compara la Cuenta por Cobrar o por Pagar del asiento, no el Debe total: antes marcaba como error toda factura con costo de ventas.
 - **1.1** — **Regenerar** ya no toca los documentos cuya contabilidad vino de la migración aunque el documento haya existido antes de migrar (la migración solo lo enlazó a su asiento histórico): se avisa que su contabilidad es la del histórico migrado. Al anular asientos duplicados o regenerar, nunca se suelta el enlace del documento con su asiento migrado.

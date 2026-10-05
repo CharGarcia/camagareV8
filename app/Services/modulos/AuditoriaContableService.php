@@ -53,6 +53,20 @@ class AuditoriaContableService
             $abiertas  = $this->repo->getIncidenciasAbiertas($idEmpresa, $ambiente, $fechaDesde, $fechaHasta);
             $hallazgos = $this->repo->detectarTodos($idEmpresa, $soloOrigen, $fechaDesde, $fechaHasta);
 
+            // Devengado de suscripciones (NIIF 15): asiento vs cronograma, meses sin devengar y
+            // cronograma vs mayor. Solo si ya se aplicó el SQL que admite el tipo de hallazgo; un
+            // fallo aquí no detiene el resto de la auditoría.
+            $devengoRevisado = false;
+            if ($this->repo->aceptaTipoHallazgo('devengo_suscripcion')) {
+                try {
+                    $hallazgos = array_merge($hallazgos, SuscripcionDevengoService::crear()
+                        ->hallazgosAuditoria($idEmpresa, $ambiente, $soloOrigen, $fechaDesde, $fechaHasta));
+                    $devengoRevisado = true;
+                } catch (\Throwable $eDev) {
+                    \App\Services\ErrorLogService::registrar($eDev, ['ruta' => static::class, 'accion' => 'ejecutarAuditoria#devengo_suscripcion']);
+                }
+            }
+
             $clavesVigentes = [];
             foreach ($hallazgos as $h) {
                 $this->repo->upsertIncidencia($idEmpresa, $ambiente, $h, $idUsuario);
@@ -64,6 +78,10 @@ class AuditoriaContableService
             $idsResolver = [];
             foreach ($abiertas as $clave => $id) {
                 if (isset($clavesVigentes[$clave])) {
+                    continue;
+                }
+                // Si la revisión del devengado no corrió, sus incidencias no se dan por resueltas.
+                if (!$devengoRevisado && str_starts_with($clave, 'devengo_suscripcion|')) {
                     continue;
                 }
                 if ($soloOrigen !== null) {

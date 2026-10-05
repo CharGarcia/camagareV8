@@ -166,6 +166,26 @@ try {
     echo "[" . date('Y-m-d H:i:s') . "] Error en aviso de caducidad de firma electrónica: " . $e->getMessage() . "\n";
 }
 
+// ── Devengo de ingresos de suscripciones, NIIF 15 (FIJO, 1 vez al día) ───────
+//    Pasa al ingreso lo diferido de los meses ya cumplidos y provisiona el mes caído,
+//    en TODAS las empresas que tienen algo pendiente, sin que nadie lo configure.
+//    Corre antes que las automatizaciones de cada empresa: el día 1 la provisión de mes
+//    caído ya existe cuando «Generar facturación» emite la factura que la cancela.
+//    Idempotente: correrlo de nuevo no duplica (cada mes toma solo lo pendiente).
+try {
+    $marcaDevengo = sys_get_temp_dir() . '/sistema_devengo_suscripciones.txt';
+    $hoyDevengo   = date('Y-m-d');
+    if (@file_get_contents($marcaDevengo) !== $hoyDevengo) {
+        $resDevengo = \App\Services\modulos\SuscripcionDevengoService::crear()->devengoAutomatico();
+        file_put_contents($marcaDevengo, $hoyDevengo);
+        foreach ($resDevengo as $idEmp => $msg) {
+            echo "[" . date('Y-m-d H:i:s') . "] Devengo suscripciones (empresa {$idEmp}): {$msg}\n";
+        }
+    }
+} catch (\Throwable $e) {
+    echo "[" . date('Y-m-d H:i:s') . "] Error en devengo de suscripciones: " . $e->getMessage() . "\n";
+}
+
 // ── Ejecutar ──────────────────────────────────────────────────────────────────
 try {
     $repository = new AutomatizacionesRepository();

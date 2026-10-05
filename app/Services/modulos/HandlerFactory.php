@@ -285,7 +285,7 @@ class HandlerFactory
                     ],
                     'devengar_ingresos' => [
                         'label'       => 'Devengar ingresos del mes',
-                        'descripcion' => 'Genera el asiento de devengo (NIIF 15) de las suscripciones que reconocen el ingreso durante el período: pasa al ingreso lo diferido de cada mes y provisiona el servicio de mes caído ya prestado y aún sin facturar. Procesa hasta el mes anterior y se pone al día con los meses pendientes. Prográmela el día 1 de cada mes, ANTES de «Generar facturación».',
+                        'descripcion' => 'NO hace falta programarla: el sistema ya devenga solo, todos los días, en todas las empresas (asiento NIIF 15 que pasa al ingreso lo diferido de los meses cumplidos y provisiona el mes caído). Esta acción solo sirve para forzar una corrida en un horario propio; correrla de más no duplica nada.',
                         'handler'     => Handlers\SuscripcionesHandler::class,
                         'parametros'  => [],
                     ],
