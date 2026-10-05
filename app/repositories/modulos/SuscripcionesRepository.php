@@ -13,7 +13,7 @@ class SuscripcionesRepository extends BaseRepository
 {
     use AmbienteEmpresaTrait;
 
-    public const COLUMNAS_ORDEN = ['nombre_cliente', 'nombre_periodicidad', 'tipo_comprobante', 'forma_cobro', 'modalidad_cobro', 'reconocimiento', 'proximo_cobro', 'fecha_inicio', 'fecha_fin', 'estado', 'created_at'];
+    public const COLUMNAS_ORDEN = ['nombre_cliente', 'nombre_periodicidad', 'tipo_comprobante', 'forma_cobro', 'modalidad_cobro', 'reconocimiento', 'monto_total', 'proximo_cobro', 'fecha_inicio', 'fecha_fin', 'estado', 'created_at'];
 
     public function __construct()
     {
@@ -150,6 +150,7 @@ class SuscripcionesRepository extends BaseRepository
             $orderExpr = match ($ordenCol) {
                 'nombre_cliente'      => 'c.nombre',
                 'nombre_periodicidad' => 'per.nombre',
+                'monto_total'         => $exprMonto,
                 default               => "s.{$ordenCol}",
             };
 
@@ -165,7 +166,8 @@ class SuscripcionesRepository extends BaseRepository
                            (SELECT COUNT(*) FROM suscripciones_pagos
                             WHERE id_suscripcion = s.id AND eliminado = false) AS total_pagos,
                            (SELECT COUNT(*) FROM suscripciones_detalle
-                            WHERE id_suscripcion = s.id AND eliminado = false) AS total_items
+                            WHERE id_suscripcion = s.id AND eliminado = false) AS total_items,
+                           {$exprMonto} AS monto_total
                     FROM {$this->table} s
                     LEFT JOIN clientes c   ON c.id  = s.id_cliente
                     LEFT JOIN suscripcion_periodicidades per ON per.id = s.id_periodicidad

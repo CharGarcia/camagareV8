@@ -6,7 +6,7 @@ ruta_modulo: modulos/suscripciones
 tipo: modulo
 visibilidad: todos
 etiquetas: suscripciones, suscripcion, cobro recurrente, facturacion recurrente, factura recurrente, mensualidad, pension, plan mensual, membresia, renovacion, periodicidad, proximo cobro, generar documentos, generar facturas, facturacion automatica, facturas del cliente, facturas emitidas, historial de facturas, detalle de facturas, recibos del cliente, que le facture, saldo del cliente, facturas pendientes, facturas pagadas, facturas abonadas, cobro con tarjeta, debito automatico, nuvei, kushki, aviso de vencimiento, imprimir, impresora, excel, exportar, resumen de valores, total por periodicidad, proyeccion anual, ingresos recurrentes, iva por tarifa, resumen por concepto, detalle por cliente, que se le factura a cada cliente, items por cliente, informacion adicional en excel, resumen en pdf, detalle por cliente en pdf, pdf de la suscripcion, imprimir suscripcion, contrato, ficha de la suscripcion, detalle de la suscripcion en pdf, devengado, devengo, ingreso diferido, ingresos diferidos, ingreso anticipado, cobro por adelantado, mes caido, mes vencido, facturacion vencida, niif 15, seccion 23, reconocimiento de ingresos, provision de ingresos, ingresos por facturar
-version: 1.21
+version: 1.23
 orden: 0
 estado: activo
 ---
@@ -413,6 +413,12 @@ registrados*.
   registrado en Ingresos, o se registró en otro documento.
 
 ## Historial de cambios
+
+- **1.23** — Nueva columna **Total** en el listado (lo que se cobra en cada período: ítems con su IVA),
+  ordenable y también en PDF y Excel.
+- **1.22** — Corregido: al abrir una suscripción sin fecha fin (o sin fecha de inicio, comprobante,
+  periodicidad o próximo cobro) el modal conservaba el valor de la suscripción abierta antes, y al
+  guardar se grababa en esta.
 
 - **1.21** — El botón *Devengar mes* y la *Apertura* salen de Suscripciones: están en el
   [Reporte de Ingresos Diferidos](modulos/reporte_ingresos_diferidos). El listado muestra las columnas

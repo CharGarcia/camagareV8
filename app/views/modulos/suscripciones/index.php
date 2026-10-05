@@ -183,6 +183,7 @@ $estadoClases = [
                     'proximo_cobro'          => 'Próx. Cobro',
                     'fecha_inicio'           => 'Inicio',
                     'total_items'            => 'Ítems',
+                    'monto_total'            => 'Total',
                     'fecha_fin'              => 'Fin',
                     'estado'                 => 'Estado'
                 ];
@@ -228,13 +229,14 @@ $estadoClases = [
                         <th class="text-center sortable-header" role="button" data-sort="proximo_cobro" data-col="proximo_cobro">Próx. Cobro <i class="bi bi-arrow-down-up small text-muted ms-1"></i></th>
                         <th class="text-center sortable-header" role="button" data-sort="fecha_inicio" data-col="fecha_inicio">Inicio <i class="bi bi-arrow-down-up small text-muted ms-1"></i></th>
                         <th class="text-center" data-col="total_items">Ítems</th>
+                        <th class="text-end sortable-header" role="button" data-sort="monto_total" data-col="monto_total" title="Total de cada cobro: suma de los ítems con su IVA">Total <i class="bi bi-arrow-down-up small text-muted ms-1"></i></th>
                         <th class="text-center sortable-header" role="button" data-sort="fecha_fin" data-col="fecha_fin">Fin <i class="bi bi-arrow-down-up small text-muted ms-1"></i></th>
                         <th class="text-center pe-3 sortable-header" role="button" data-sort="estado" data-col="estado">Estado <i class="bi bi-arrow-down-up small text-muted ms-1"></i></th>
                     </tr>
                 </thead>
                 <tbody id="tbodySusc">
                     <?php if (empty($rows)): ?>
-                        <tr><td colspan="12" class="text-center py-5 text-muted">No se encontraron suscripciones.</td></tr>
+                        <tr><td colspan="13" class="text-center py-5 text-muted">No se encontraron suscripciones.</td></tr>
                     <?php else: ?>
                         <?php foreach ($rows as $r): ?>
                             <?php
@@ -265,6 +267,7 @@ $estadoClases = [
                                         <?= $totalItems ?> ítem<?= $totalItems !== 1 ? 's' : '' ?>
                                     </span>
                                 </td>
+                                <td class="text-end fw-medium" data-col="monto_total">$<?= number_format((float) ($r['monto_total'] ?? 0), 2) ?></td>
                                 <td class="text-center" data-col="fecha_fin"><?= $fin ?></td>
                                 <td class="text-center pe-3" data-col="estado">
                                     <span class="badge bg-<?= $cls ?> bg-opacity-10 text-<?= $cls ?> border border-<?= $cls ?> border-opacity-25"><?= $lbl ?></span>

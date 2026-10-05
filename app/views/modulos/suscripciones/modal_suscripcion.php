@@ -138,36 +138,34 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosPestanasOcultas($vistaConfigS
                         <div class="tab-pane fade show active" id="pane-susc-servicios" role="tabpanel">
 
                             <!-- Cabecera: cliente + fechas + periodicidad -->
-                            <div class="p-3 bg-white border-bottom">
+                            <!-- Sin relleno arriba: el contenedor de las pestañas (tab-content) ya lo pone. -->
+                            <div class="px-3 pt-0 pb-3 bg-white border-bottom">
                                 <div class="row g-2">
 
-                                    <!-- Buscador de cliente -->
-                                    <div class="col-md-9 align-self-end">
-                                        <div class="p-2 border rounded-3 bg-light bg-opacity-10">
-                                            <div class="row g-2 align-items-center">
-                                                <div class="col-md-12 position-relative">
-                                                    <div class="input-group input-group-sm rounded-pill overflow-hidden border bg-white">
-                                                        <span class="input-group-text bg-white border-0 text-primary"><i class="bi bi-search"></i></span>
-                                                        <input type="text" class="form-control border-0 px-1"
-                                                               id="susc_search_cliente"
-                                                               placeholder="Buscar cliente por RUC o razón social..."
-                                                               autocomplete="off">
-                                                        <input type="hidden" name="id_cliente" id="susc_id_cliente">
-                                                    </div>
-                                                    <div id="susc_dropdown_clientes"
-                                                         class="list-group shadow dropdown-predictivo position-absolute d-none"
-                                                         style="z-index:1090; width:100%; max-height:250px; overflow-y:auto; top:35px; left:0;"></div>
-                                                </div>
-                                                <div class="col-12 d-none px-2 mt-1" id="susc_info_cliente" style="font-size:.72rem; color:#6c757d;">
-                                                    <span class="fw-bold text-dark border-end pe-2 me-1" id="susc_lbl_cli_ruc"></span>
-                                                    <i class="bi bi-envelope me-1"></i><span id="susc_lbl_cli_email"></span>
-                                                </div>
+                                    <!-- Buscador de cliente (con etiqueta, a la misma altura que Comprobante) -->
+                                    <div class="col-md-9">
+                                        <label for="susc_search_cliente">Cliente *</label>
+                                        <div class="position-relative">
+                                            <div class="input-group input-group-sm rounded-pill overflow-hidden border bg-white">
+                                                <span class="input-group-text bg-white border-0 text-primary"><i class="bi bi-search"></i></span>
+                                                <input type="text" class="form-control border-0 px-1"
+                                                       id="susc_search_cliente"
+                                                       placeholder="Buscar cliente por RUC o razón social..."
+                                                       autocomplete="off">
+                                                <input type="hidden" name="id_cliente" id="susc_id_cliente">
                                             </div>
+                                            <div id="susc_dropdown_clientes"
+                                                 class="list-group shadow dropdown-predictivo position-absolute d-none"
+                                                 style="z-index:1090; width:100%; max-height:250px; overflow-y:auto; top:100%; left:0;"></div>
+                                        </div>
+                                        <div class="d-none px-2 mt-1" id="susc_info_cliente" style="font-size:.72rem; color:#6c757d;">
+                                            <span class="fw-bold text-dark border-end pe-2 me-1" id="susc_lbl_cli_ruc"></span>
+                                            <i class="bi bi-envelope me-1"></i><span id="susc_lbl_cli_email"></span>
                                         </div>
                                     </div>
 
                                     <!-- Comprobante (junto al buscador de cliente) -->
-                                    <div class="col-md-3 align-self-end">
+                                    <div class="col-md-3">
                                         <label class="d-flex align-items-center">Comprobante * <?= \App\Helpers\PreferenciasHelper::renderEstrellaFavorito('suscripciones', 'susc_tipo_comprobante', 'tipo_comprobante') ?></label>
                                         <select class="form-select form-select-sm" name="tipo_comprobante" id="susc_tipo_comprobante" required>
                                             <option value="factura">Factura de Venta</option>
@@ -1170,11 +1168,13 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosPestanasOcultas($vistaConfigS
         const s = JSON.parse(el.dataset.susc);
 
         document.getElementById('susc_id').value                = s.id;
-        if (s.tipo_comprobante) document.getElementById('susc_tipo_comprobante').value = s.tipo_comprobante;
-        if (s.fecha_inicio) document.getElementById('susc_fecha_inicio').value = s.fecha_inicio;
-        if (s.fecha_fin) document.getElementById('susc_fecha_fin').value = s.fecha_fin;
-        if (s.id_periodicidad) document.getElementById('susc_id_periodicidad').value = s.id_periodicidad;
-        if (s.proximo_cobro) document.getElementById('susc_proximo_cobro').value = s.proximo_cobro;
+        // Siempre se asignan (también vacíos): con un `if (valor)` el campo conservaba lo de la
+        // suscripción abierta antes —p. ej. su fecha fin— y al guardar se grababa en esta.
+        document.getElementById('susc_tipo_comprobante').value  = s.tipo_comprobante || 'factura';
+        document.getElementById('susc_fecha_inicio').value      = s.fecha_inicio || '';
+        document.getElementById('susc_fecha_fin').value         = s.fecha_fin || '';
+        document.getElementById('susc_id_periodicidad').value   = s.id_periodicidad || '';
+        document.getElementById('susc_proximo_cobro').value     = s.proximo_cobro || '';
         document.getElementById('susc_forma_cobro').value       = s.forma_cobro ?? 'credito';
         document.getElementById('susc_estado').value            = s.estado ?? 'activo';
         document.getElementById('susc_observaciones').value     = s.observaciones ?? '';

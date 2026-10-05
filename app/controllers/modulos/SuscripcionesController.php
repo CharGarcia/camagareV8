@@ -179,6 +179,7 @@ class SuscripcionesController extends BaseModuloController
             echo '<td class="text-center fw-medium" data-col="proximo_cobro">' . $proxCobro . '</td>';
             echo '<td class="text-center" data-col="fecha_inicio">' . $fechaIni . '</td>';
             echo '<td class="text-center" data-col="total_items"><span class="badge bg-secondary bg-opacity-10 text-secondary border">' . $totalItems . ' ítem' . ($totalItems !== 1 ? 's' : '') . '</span></td>';
+            echo '<td class="text-end fw-medium" data-col="monto_total">$' . number_format((float) ($r['monto_total'] ?? 0), 2) . '</td>';
             $fin        = !empty($r['fecha_fin'])     ? date('d-m-Y', strtotime($r['fecha_fin']))     : '—';
             echo '<td class="text-center" data-col="fecha_fin">' . $fin . '</td>';
             echo '<td class="text-center pe-3" data-col="estado">';
@@ -961,7 +962,7 @@ class SuscripcionesController extends BaseModuloController
     private const CABECERAS_EXPORT = [
         'Cliente', 'Identificación', 'Periodicidad', 'Comprobante', 'Forma de cobro',
         'Modalidad', 'Reconocimiento',
-        'Próximo cobro', 'Fecha inicio', 'Fecha fin', 'Ítems', 'Estado',
+        'Próximo cobro', 'Fecha inicio', 'Fecha fin', 'Ítems', 'Total', 'Estado',
     ];
 
     /** Una fila del listado a array de celdas, en el orden de CABECERAS_EXPORT. */
@@ -980,6 +981,7 @@ class SuscripcionesController extends BaseModuloController
             $fecha($r['fecha_inicio'] ?? null),
             $fecha($r['fecha_fin'] ?? null),
             (string) ((int) ($r['total_items'] ?? 0)),
+            number_format((float) ($r['monto_total'] ?? 0), 2, '.', ''),
             ucfirst((string) ($r['estado'] ?? 'activo')),
         ];
     }
@@ -999,7 +1001,7 @@ class SuscripcionesController extends BaseModuloController
                 require_once $autoload;
             }
 
-            $anchos = ['17%', '11%', '8%', '8%', '7%', '8%', '9%', '8%', '7%', '7%', '4%', '6%'];
+            $anchos = ['16%', '10%', '8%', '7%', '7%', '8%', '9%', '7%', '7%', '7%', '4%', '5%', '5%'];
 
             // Resumen de valores (mismas suscripciones del listado = filtro de búsqueda).
             $filtro      = trim($_GET['b'] ?? $_POST['b'] ?? '');
