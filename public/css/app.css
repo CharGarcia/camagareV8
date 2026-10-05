@@ -1409,7 +1409,7 @@ th[data-det-col] .cmg-resizer {
    Reserva siempre su ancho, con o sin descuento, para que el valor de al lado no se mueva. */
 .cmg-pct-desc {
     display: inline-block;
-    min-width: 4.6em;
+    min-width: 4.1em; /* justo lo que mide "(33.33%)", el texto más largo posible */
     text-align: right;
     white-space: nowrap;
 }
