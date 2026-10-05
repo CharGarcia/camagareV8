@@ -54,7 +54,7 @@ el ingreso durante el período (NIIF 15). Hay tres casos:
 - **Meses ya cumplidos sin devengar** (sin asiento en la fila): el devengo automático
   diario no pudo hacerlos, casi siempre porque falta la cuenta de Ingresos diferidos o el
   período está cerrado. Corrija eso; el devengo los toma al día siguiente, o en el momento
-  desde Suscripciones → **Devengar mes**.
+  desde el Reporte de Ingresos Diferidos → **Devengo del mes**.
 - **Cuadre con el mayor** (origen *Devengo de suscripciones*): al cierre del mes, el
   saldo del cronograma no coincide con el del mayor en la cuenta de ingresos diferidos o
   en la de por facturar. Suele deberse a asientos manuales en esa cuenta. El detalle está

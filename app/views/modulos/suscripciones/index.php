@@ -48,10 +48,6 @@ $estadoClases = [
     <h5 class="mb-0 fw-bold"><i class="bi bi-arrow-repeat text-primary me-2"></i><?= htmlspecialchars($titulo) ?></h5>
     <div class="d-flex gap-2">
         <?php if ($perm['crear']): ?>
-            <button type="button" class="btn btn-outline-secondary btn-sm px-3" onclick="SuscDevengoMes.abrir()"
-                    title="Asiento mensual del ingreso diferido y de la provisión de mes caído (NIIF 15)">
-                <i class="bi bi-calendar-check"></i> Devengar mes
-            </button>
             <button type="button" class="btn btn-primary btn-sm px-3" onclick="abrirModalSuscCrear()">
                 <i class="bi bi-plus-lg"></i> Nueva
             </button>
@@ -91,6 +87,14 @@ $estadoClases = [
                 ['tab' => $tS, 'key' => 'forma_cobro',   'label' => 'Forma de cobro',    'icon' => 'bi-credit-card',     'type' => 'select',       'grupo' => 'Suscripción', 'col' => 3, 'options' => [
                     ['v' => 'credito', 'l' => 'Crédito'],
                     ['v' => 'tarjeta', 'l' => 'Tarjeta'],
+                ]],
+                ['tab' => $tS, 'key' => 'modalidad',     'label' => 'Modalidad de cobro', 'icon' => 'bi-calendar2-range', 'type' => 'select',      'grupo' => 'Suscripción', 'col' => 3, 'options' => [
+                    ['v' => 'anticipado', 'l' => 'Por adelantado'],
+                    ['v' => 'vencido',    'l' => 'Mes caído'],
+                ]],
+                ['tab' => $tS, 'key' => 'reconocimiento', 'label' => 'Reconocimiento del ingreso', 'icon' => 'bi-hourglass-split', 'type' => 'select', 'grupo' => 'Suscripción', 'col' => 3, 'options' => [
+                    ['v' => 'inmediato', 'l' => 'Al facturar'],
+                    ['v' => 'diferido',  'l' => 'Durante el período'],
                 ]],
                 ['tab' => $tS, 'key' => 'pasarela',      'label' => 'Pasarela de tarjeta', 'icon' => 'bi-shield-lock',   'type' => 'select',       'grupo' => 'Suscripción', 'col' => 3, 'options' => [
                     ['v' => 'kushki', 'l' => 'Kushki'],
@@ -174,6 +178,8 @@ $estadoClases = [
                     'nombre_periodicidad'    => 'Periodicidad',
                     'tipo_comprobante'       => 'Comprobante',
                     'forma_cobro'            => 'Cobro',
+                    'modalidad_cobro'        => 'Modalidad',
+                    'reconocimiento'         => 'Reconocimiento',
                     'proximo_cobro'          => 'Próx. Cobro',
                     'fecha_inicio'           => 'Inicio',
                     'total_items'            => 'Ítems',
@@ -217,6 +223,8 @@ $estadoClases = [
                         <th class="sortable-header" role="button" data-sort="nombre_periodicidad" data-col="nombre_periodicidad">Periodicidad <i class="bi bi-arrow-down-up small text-muted ms-1"></i></th>
                         <th class="text-center sortable-header" role="button" data-sort="tipo_comprobante" data-col="tipo_comprobante">Comprobante <i class="bi bi-arrow-down-up small text-muted ms-1"></i></th>
                         <th class="text-center sortable-header" role="button" data-sort="forma_cobro" data-col="forma_cobro">Cobro <i class="bi bi-arrow-down-up small text-muted ms-1"></i></th>
+                        <th class="text-center sortable-header" role="button" data-sort="modalidad_cobro" data-col="modalidad_cobro" title="Por adelantado o mes caído (vencido)">Modalidad <i class="bi bi-arrow-down-up small text-muted ms-1"></i></th>
+                        <th class="text-center sortable-header" role="button" data-sort="reconocimiento" data-col="reconocimiento" title="Reconocimiento del ingreso: al facturar o durante el período (devengado)">Reconocimiento <i class="bi bi-arrow-down-up small text-muted ms-1"></i></th>
                         <th class="text-center sortable-header" role="button" data-sort="proximo_cobro" data-col="proximo_cobro">Próx. Cobro <i class="bi bi-arrow-down-up small text-muted ms-1"></i></th>
                         <th class="text-center sortable-header" role="button" data-sort="fecha_inicio" data-col="fecha_inicio">Inicio <i class="bi bi-arrow-down-up small text-muted ms-1"></i></th>
                         <th class="text-center" data-col="total_items">Ítems</th>
@@ -226,7 +234,7 @@ $estadoClases = [
                 </thead>
                 <tbody id="tbodySusc">
                     <?php if (empty($rows)): ?>
-                        <tr><td colspan="10" class="text-center py-5 text-muted">No se encontraron suscripciones.</td></tr>
+                        <tr><td colspan="12" class="text-center py-5 text-muted">No se encontraron suscripciones.</td></tr>
                     <?php else: ?>
                         <?php foreach ($rows as $r): ?>
                             <?php
@@ -248,6 +256,8 @@ $estadoClases = [
                                 <td data-col="nombre_periodicidad"><?= htmlspecialchars($r['nombre_periodicidad'] ?? '-') ?></td>
                                 <td class="text-center" data-col="tipo_comprobante"><small class="text-muted"><?= htmlspecialchars(ucwords(str_replace('_', ' ', $r['tipo_comprobante'] ?? 'Factura'))) ?></small></td>
                                 <td class="text-center" data-col="forma_cobro"><?= $iconCobro ?> <?= ucfirst($r['forma_cobro'] ?? '') ?></td>
+                                <td class="text-center" data-col="modalidad_cobro"><small class="text-muted"><?= htmlspecialchars(\App\controllers\modulos\SuscripcionesController::MODALIDAD_LABEL[$r['modalidad_cobro'] ?? 'anticipado'] ?? '—') ?></small></td>
+                                <td class="text-center" data-col="reconocimiento"><small class="<?= ($r['reconocimiento'] ?? '') === 'diferido' ? 'text-primary' : 'text-muted' ?>"><?= htmlspecialchars(\App\controllers\modulos\SuscripcionesController::RECONOCIMIENTO_LABEL[$r['reconocimiento'] ?? 'inmediato'] ?? '—') ?></small></td>
                                 <td class="text-center fw-medium" data-col="proximo_cobro"><?= $proxCobro ?></td>
                                 <td class="text-center" data-col="fecha_inicio"><?= $inicio ?></td>
                                 <td class="text-center" data-col="total_items">
@@ -271,8 +281,6 @@ $estadoClases = [
 <script>window.BASE_URL = '<?= $base ?>';</script>
 <?php include 'modal_suscripcion.php'; ?>
 <?php include 'modal_generar_documentos.php'; ?>
-<?php if ($perm['crear'] ?? false) { include 'modal_devengo_mes.php'; } ?>
-<?php if ($perm['crear'] ?? false) { include 'modal_apertura_devengo.php'; } ?>
 <?php include 'modal_pagos.php'; ?>
 
 <?php // Modales compartidos para crear cliente / producto desde la suscripción ?>

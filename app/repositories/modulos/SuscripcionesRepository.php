@@ -13,7 +13,7 @@ class SuscripcionesRepository extends BaseRepository
 {
     use AmbienteEmpresaTrait;
 
-    public const COLUMNAS_ORDEN = ['nombre_cliente', 'nombre_periodicidad', 'tipo_comprobante', 'forma_cobro', 'proximo_cobro', 'fecha_inicio', 'fecha_fin', 'estado', 'created_at'];
+    public const COLUMNAS_ORDEN = ['nombre_cliente', 'nombre_periodicidad', 'tipo_comprobante', 'forma_cobro', 'modalidad_cobro', 'reconocimiento', 'proximo_cobro', 'fecha_inicio', 'fecha_fin', 'estado', 'created_at'];
 
     public function __construct()
     {
@@ -24,7 +24,10 @@ class SuscripcionesRepository extends BaseRepository
 
     public function getListado(int $idEmpresa, string $buscar, int $page, int $perPage, string $ordenCol, string $ordenDir, ?int $idUsuarioFiltro = null): array
     {
-        if (!in_array($ordenCol, self::COLUMNAS_ORDEN, true)) {
+        // Modalidad / reconocimiento solo existen con el SQL del devengo aplicado.
+        $devengo = $this->tieneColumnasDevengo();
+        if (!in_array($ordenCol, self::COLUMNAS_ORDEN, true)
+            || (!$devengo && in_array($ordenCol, ['modalidad_cobro', 'reconocimiento'], true))) {
             $ordenCol = 'proximo_cobro';
         }
         $ordenDir = strtoupper($ordenDir) === 'DESC' ? 'DESC' : 'ASC';
@@ -100,6 +103,10 @@ class SuscripcionesRepository extends BaseRepository
                 'comprobante'  => 's.tipo_comprobante',
                 'forma_cobro'  => 's.forma_cobro',
                 'pasarela'     => 's.pasarela_tarjeta',
+            ] + ($devengo ? [
+                'modalidad'      => 's.modalidad_cobro',
+                'reconocimiento' => 's.reconocimiento',
+            ] : []) + [
                 'usuario'      => 's.created_by',
                 // con_pagos:si / con_pagos:no (ya tiene cobros registrados)
                 'con_pagos'    => "CASE WHEN EXISTS (SELECT 1 FROM suscripciones_pagos spx WHERE spx.id_suscripcion = s.id AND spx.eliminado = false) THEN 'si' ELSE 'no' END",

@@ -1,6 +1,6 @@
 /**
- * Modal «Apertura de ingresos diferidos» de Suscripciones
- * (app/views/modulos/suscripciones/modal_apertura_devengo.php). Se abre desde «Devengar mes».
+ * Modal «Apertura de ingresos diferidos» del Reporte de Ingresos Diferidos
+ * (app/views/modulos/reporte_ingresos_diferidos/modal_apertura.php).
  *
  * SuscAperturaDevengo.iniciar({ urlApPreview, urlApAplicar, urlApRevertir });
  * Abrir: SuscAperturaDevengo.abrir(). Controles por atributo data-apd.
@@ -90,6 +90,7 @@ window.SuscAperturaDevengo = (function () {
             const r = await fetch(url, { method: 'POST', body: fd, headers: { 'X-Requested-With': 'XMLHttpRequest' } });
             const res = await r.json();
             await Swal.fire({ icon: res.ok ? 'success' : 'error', title: res.ok ? 'Listo' : 'No se pudo', text: res.mensaje || '', target: modal });
+            if (res.ok && typeof cfg.alCambiar === 'function') cfg.alCambiar(); // el reporte se recarga
         } catch (e) {
             await Swal.fire({ icon: 'error', title: 'No se pudo', text: 'Error de comunicación con el servidor.', target: modal });
         }
@@ -113,6 +114,8 @@ window.SuscAperturaDevengo = (function () {
         bootstrap.Modal.getOrCreateInstance(document.getElementById('modalAperturaDevengo')).show();
         cargar();
     }
+    // Opcional: callback del reporte para recargarse tras registrar o revertir.
+    function alCambiar(fn) { if (cfg) cfg.alCambiar = fn; }
 
-    return { iniciar, abrir };
+    return { iniciar, abrir, alCambiar };
 })();

@@ -1,5 +1,5 @@
 /**
- * Modal «Devengar mes» de Suscripciones (app/views/modulos/suscripciones/modal_devengo_mes.php).
+ * Modal «Devengar mes» del Reporte de Ingresos Diferidos (app/views/modulos/reporte_ingresos_diferidos/modal_devengo_mes.php).
  * Al abrir o cambiar el mes pide la vista previa; «Generar asiento» registra el devengo y
  * «Revertir mes» anula los asientos de devengo del mes. Controles por atributo data-dm.
  *
@@ -100,6 +100,7 @@ window.SuscDevengoMes = (function () {
             const r = await fetch(url, { method: 'POST', body: fd, headers: { 'X-Requested-With': 'XMLHttpRequest' } });
             const res = await r.json();
             await Swal.fire({ icon: res.ok ? 'success' : 'error', title: res.ok ? 'Listo' : 'No se pudo', text: res.mensaje || '', target: modal() });
+            if (res.ok && typeof cfg.alCambiar === 'function') cfg.alCambiar(); // el reporte se recarga
         } catch (e) {
             await Swal.fire({ icon: 'error', title: 'No se pudo', text: 'Error de comunicación con el servidor.', target: modal() });
         }
@@ -120,10 +121,13 @@ window.SuscDevengoMes = (function () {
             'Se anularán los asientos de devengo del mes: lo diferido vuelve a «por devengar» y las provisiones de mes caído se dan de baja.', 'warning'));
     }
 
-    function abrir() {
+    /** @param {string} [mes] YYYY-MM con que abrir (el elegido en el reporte). */
+    function abrir(mes) {
+        const inp = document.getElementById('dm_mes');
+        if (mes && inp && (!inp.max || mes <= inp.max)) inp.value = mes;
         bootstrap.Modal.getOrCreateInstance(modal()).show();
         cargar();
     }
 
-    return { iniciar, abrir };
+    return { iniciar, abrir, alCambiar: fn => { if (cfg) cfg.alCambiar = fn; } };
 })();

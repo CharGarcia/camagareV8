@@ -148,6 +148,16 @@ $columnasTabla = [
                         <?= \App\Helpers\PreferenciasHelper::renderDropdownColumnas($columnasTabla, $vistaConfig ?? [], $rutaModulo) ?>
                         <button type="button" class="btn btn-outline-danger" id="ridBtnPdf" disabled><i class="bi bi-file-earmark-pdf"></i> PDF</button>
                         <button type="button" class="btn btn-outline-success" id="ridBtnExcel" disabled><i class="bi bi-file-earmark-spreadsheet"></i> Excel</button>
+                        <?php if (!empty($perm['crear']) || !empty($perm['eliminar'])): ?>
+                            <button type="button" class="btn btn-outline-primary" onclick="SuscDevengoMes.abrir(document.getElementById('rid-mes').value)"
+                                    title="El sistema devenga solo cada día hasta el mes anterior. Aquí puede adelantar un mes (p. ej. el mes en curso) o revertirlo.">
+                                <i class="bi bi-calendar-check"></i> Devengo del mes
+                            </button>
+                            <button type="button" class="btn btn-outline-primary" onclick="SuscAperturaDevengo.abrir()"
+                                    title="Facturas de suscripción emitidas antes de activar el devengado: pasar a ingresos diferidos los meses que les faltan">
+                                <i class="bi bi-box-arrow-in-right"></i> Apertura
+                            </button>
+                        <?php endif; ?>
                     </div>
                 </div>
                 <div class="d-flex align-items-center gap-2">
@@ -193,9 +203,22 @@ $columnasTabla = [
 <?php // Panel lateral con el detalle de la factura/recibo (clic sobre una fila)
 require_once MVC_APP . '/views/partials/offcanvas_doc_preview.php'; ?>
 
+<?php // Acciones del contador: adelantar/revertir el devengo de un mes y la apertura.
+if (!empty($perm['crear']) || !empty($perm['eliminar'])) {
+    include __DIR__ . '/modal_devengo_mes.php';
+    include __DIR__ . '/modal_apertura.php';
+} ?>
+
 <?= \App\Helpers\PreferenciasHelper::getJavascriptVariables($rutaModulo) ?>
 <script>
     const RUTA_MODULO_RID = "<?= $rutaModulo ?>";
     const RID_MES_DEFECTO = "<?= htmlspecialchars($mesDefecto) ?>";
 </script>
 <script src="<?= $base ?>/js/modulos/reporte_ingresos_diferidos.js?v=<?= asset_ver('/js/modulos/reporte_ingresos_diferidos.js') ?>"></script>
+<script>
+    // Tras generar/revertir un mes o la apertura, el reporte se recarga con los saldos nuevos.
+    document.addEventListener('DOMContentLoaded', () => {
+        window.SuscDevengoMes?.alCambiar(() => RID_cargar());
+        window.SuscAperturaDevengo?.alCambiar(() => RID_cargar());
+    });
+</script>

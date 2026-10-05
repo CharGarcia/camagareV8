@@ -86,6 +86,89 @@ class ReporteIngresosDiferidosController extends BaseModuloController
         )]);
     }
 
+    // ── Acciones del contador: devengo del mes y apertura ───────────────────
+    // El devengo corre solo cada día (cron). Estas acciones sirven para adelantar un mes,
+    // revertirlo o registrar la apertura; los permisos son los de este módulo.
+
+    /** Respuesta de error de una acción: los errores de negocio se muestran tal cual; el resto se registra. */
+    private function errorAccion(\Throwable $e): never
+    {
+        if (!($e instanceof \DomainException || $e instanceof \InvalidArgumentException || $e instanceof \RuntimeException)) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => debug_backtrace(DEBUG_BACKTRACE_IGNORE_ARGS, 2)[1]['function'] ?? '']);
+        }
+        $this->json(['ok' => false, 'mensaje' => $e->getMessage()]);
+    }
+
+    /** Vista previa del devengo de un mes (?mes=YYYY-MM). */
+    public function devengoMesPreviewAjax(): void
+    {
+        $this->requireLeer();
+        try {
+            $this->json(['ok' => true] + $this->service->previsualizarMes((int) $_SESSION['id_empresa'], trim((string) ($_GET['mes'] ?? ''))));
+        } catch (\Throwable $e) {
+            $this->errorAccion($e);
+        }
+    }
+
+    /** Genera (adelanta) el asiento de devengo del mes (POST mes=YYYY-MM). */
+    public function devengarMesAjax(): void
+    {
+        $this->requireCrear();
+        try {
+            $res = $this->service->devengarMes((int) $_SESSION['id_empresa'], (int) $_SESSION['id_usuario'], trim((string) ($_POST['mes'] ?? '')));
+            $this->json(['ok' => true, 'mensaje' => 'Devengo del mes registrado.'] + $res);
+        } catch (\Throwable $e) {
+            $this->errorAccion($e);
+        }
+    }
+
+    /** Revierte el devengo de un mes: anula sus asientos (POST mes=YYYY-MM). */
+    public function revertirDevengoMesAjax(): void
+    {
+        $this->requireEliminar();
+        try {
+            $res = $this->service->revertirMes((int) $_SESSION['id_empresa'], (int) $_SESSION['id_usuario'], trim((string) ($_POST['mes'] ?? '')));
+            $this->json(['ok' => true, 'mensaje' => 'Devengo del mes revertido.'] + $res);
+        } catch (\Throwable $e) {
+            $this->errorAccion($e);
+        }
+    }
+
+    /** Vista previa de la apertura al cierre de un mes (?mes=YYYY-MM). */
+    public function aperturaPreviewAjax(): void
+    {
+        $this->requireLeer();
+        try {
+            $this->json(['ok' => true] + $this->service->previsualizarApertura((int) $_SESSION['id_empresa'], trim((string) ($_GET['mes'] ?? ''))));
+        } catch (\Throwable $e) {
+            $this->errorAccion($e);
+        }
+    }
+
+    /** Registra la apertura (POST mes=YYYY-MM). */
+    public function aplicarAperturaAjax(): void
+    {
+        $this->requireCrear();
+        try {
+            $res = $this->service->aplicarApertura((int) $_SESSION['id_empresa'], (int) $_SESSION['id_usuario'], trim((string) ($_POST['mes'] ?? '')));
+            $this->json(['ok' => true, 'mensaje' => 'Apertura registrada.'] + $res);
+        } catch (\Throwable $e) {
+            $this->errorAccion($e);
+        }
+    }
+
+    /** Revierte la apertura de un mes de corte (POST mes=YYYY-MM). */
+    public function revertirAperturaAjax(): void
+    {
+        $this->requireEliminar();
+        try {
+            $res = $this->service->revertirApertura((int) $_SESSION['id_empresa'], (int) $_SESSION['id_usuario'], trim((string) ($_POST['mes'] ?? '')));
+            $this->json(['ok' => true, 'mensaje' => 'Apertura revertida.'] + $res);
+        } catch (\Throwable $e) {
+            $this->errorAccion($e);
+        }
+    }
+
     // ── Exportaciones ────────────────────────────────────────────────────────
 
     public function exportExcel(): void

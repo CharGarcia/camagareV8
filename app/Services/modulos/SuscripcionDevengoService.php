@@ -354,7 +354,7 @@ class SuscripcionDevengoService
             }
             $out[] = $hallazgo($origen, (int) $f['id_documento'], null, round((float) $f['monto'], 2), null, null,
                 (int) $f['meses'] . ' mes(es) ya cumplido(s) sin devengar ($' . number_format((float) $f['monto'], 2) . '), de ' . substr((string) $f['desde'], 0, 7)
-                . ' a ' . substr((string) $f['hasta'], 0, 7) . '. El devengo automático diario debería tomarlos: revise la cuenta de Ingresos diferidos y que el período no esté cerrado, o use Suscripciones → Devengar mes.',
+                . ' a ' . substr((string) $f['hasta'], 0, 7) . '. El devengo automático diario debería tomarlos: revise la cuenta de Ingresos diferidos y que el período no esté cerrado, o use Reporte de Ingresos Diferidos → Devengo del mes.',
                 $f['fecha_emision'], $f['numero'], $f['cliente']);
         }
 
@@ -1280,7 +1280,7 @@ class SuscripcionDevengoService
         try {
             $this->repo->bloquear('susc_devengo_doc:' . $tipoDocumento . ':' . $idDocumento);
             if ($this->repo->getFilasDocumento($tipoDocumento, $idDocumento, $idEmpresa, 'diferido', ['devengado'])) {
-                throw new \DomainException('Este documento ya tiene meses de ingreso devengados (Suscripciones → Devengar mes). Revierta esos meses antes de modificarlo.');
+                throw new \DomainException('Este documento ya tiene meses de ingreso devengados. Revierta esos meses (Reporte de Ingresos Diferidos → Devengo del mes) antes de modificarlo.');
             }
             foreach ($this->repo->getFilasDocumento($tipoDocumento, $idDocumento, $idEmpresa, 'diferido', ['pendiente', 'anulado']) as $f) {
                 $this->repo->darDeBaja((int) $f['id'], $idUsuario);

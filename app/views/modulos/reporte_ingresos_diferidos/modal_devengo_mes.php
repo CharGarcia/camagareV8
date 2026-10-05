@@ -2,9 +2,9 @@
 /**
  * Modal «Devengar mes» (NIIF 15): asiento consolidado del mes con lo diferido que pasa al
  * ingreso y la provisión de mes caído. Vista previa antes de generar; revertir si el mes ya
- * tiene asiento. Lógica en public/js/modulos/suscripciones_devengo_mes.js.
+ * tiene asiento. Lógica en public/js/modulos/reporte_ingresos_diferidos_devengo.js.
  */
-$urlSuscDev   = rtrim(BASE_URL, '/') . '/modulos/suscripciones';
+$urlSuscDev   = rtrim(BASE_URL, '/') . '/modulos/reporte_ingresos_diferidos';
 $mesAnterior  = (new \DateTimeImmutable('first day of this month'))->modify('-1 month')->format('Y-m');
 $mesActual    = date('Y-m');
 ?>
@@ -22,10 +22,9 @@ $mesActual    = date('Y-m');
                         <input type="month" class="form-control form-control-sm" id="dm_mes" value="<?= $mesAnterior ?>" max="<?= $mesActual ?>">
                     </div>
                     <div class="text-muted small flex-grow-1" style="min-width: 220px;">
-                        Pasa al ingreso lo diferido del mes (y lo que quedó pendiente de meses anteriores) y
-                        provisiona el servicio de mes caído ya prestado. Asiento con fecha del último día del mes.
-                        <br><a href="#" class="small" onclick="event.preventDefault(); bootstrap.Modal.getInstance(document.getElementById('modalDevengoMes'))?.hide(); SuscAperturaDevengo.abrir();">
-                            <i class="bi bi-box-arrow-in-right"></i> Apertura: facturas emitidas antes de activar el devengado</a>
+                        El sistema devenga solo cada día hasta el mes anterior. Use esta ventana para
+                        adelantar un mes (por ejemplo, el mes en curso al cerrarlo) o para revertirlo.
+                        Asiento con fecha del último día del mes.
                     </div>
                 </div>
 
@@ -112,7 +111,7 @@ $mesActual    = date('Y-m');
         </div>
     </div>
 </div>
-<script src="<?= rtrim(BASE_URL, '/') ?>/js/modulos/suscripciones_devengo_mes.js?v=<?= asset_ver('/js/modulos/suscripciones_devengo_mes.js') ?>"></script>
+<script src="<?= rtrim(BASE_URL, '/') ?>/js/modulos/reporte_ingresos_diferidos_devengo.js?v=<?= asset_ver('/js/modulos/reporte_ingresos_diferidos_devengo.js') ?>"></script>
 <script>
     SuscDevengoMes.iniciar({
         modalId:     'modalDevengoMes',

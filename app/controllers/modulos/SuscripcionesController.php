@@ -25,6 +25,10 @@ class SuscripcionesController extends BaseModuloController
         'RECIBO'  => 'modulos/recibo-venta',
     ];
 
+    /** Etiquetas de las columnas Modalidad y Reconocimiento (listado, AJAX, PDF y Excel). */
+    public const MODALIDAD_LABEL      = ['anticipado' => 'Por adelantado', 'vencido' => 'Mes caído'];
+    public const RECONOCIMIENTO_LABEL = ['inmediato' => 'Al facturar', 'diferido' => 'Durante el período'];
+
     public function __construct()
     {
         parent::__construct();
@@ -170,6 +174,8 @@ class SuscripcionesController extends BaseModuloController
             echo '<td data-col="nombre_periodicidad">' . htmlspecialchars($r['nombre_periodicidad'] ?? '—') . '</td>';
             echo '<td class="text-center" data-col="tipo_comprobante"><small class="text-muted">' . htmlspecialchars(ucwords(str_replace('_', ' ', $r['tipo_comprobante'] ?? 'Factura'))) . '</small></td>';
             echo '<td class="text-center" data-col="forma_cobro">' . $iconoCobro . ' ' . ucfirst($r['forma_cobro'] ?? '') . '</td>';
+            echo '<td class="text-center" data-col="modalidad_cobro"><small class="text-muted">' . htmlspecialchars(self::MODALIDAD_LABEL[$r['modalidad_cobro'] ?? 'anticipado'] ?? '—') . '</small></td>';
+            echo '<td class="text-center" data-col="reconocimiento"><small class="' . (($r['reconocimiento'] ?? '') === 'diferido' ? 'text-primary' : 'text-muted') . '">' . htmlspecialchars(self::RECONOCIMIENTO_LABEL[$r['reconocimiento'] ?? 'inmediato'] ?? '—') . '</small></td>';
             echo '<td class="text-center fw-medium" data-col="proximo_cobro">' . $proxCobro . '</td>';
             echo '<td class="text-center" data-col="fecha_inicio">' . $fechaIni . '</td>';
             echo '<td class="text-center" data-col="total_items"><span class="badge bg-secondary bg-opacity-10 text-secondary border">' . $totalItems . ' ítem' . ($totalItems !== 1 ? 's' : '') . '</span></td>';
@@ -457,110 +463,6 @@ class SuscripcionesController extends BaseModuloController
         } catch (\Throwable $e) {
             \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             echo json_encode(['ok' => false, 'mensaje' => 'No se pudo cargar el devengo.']);
-        }
-    }
-
-    // ── Devengo mensual (NIIF 15) ───────────────────────────────────────────
-
-    /** Vista previa del devengo de un mes (?mes=YYYY-MM): qué se devenga/provisiona y su asiento. */
-    public function devengoMesPreviewAjax(): void
-    {
-        $this->requireLeer();
-        header('Content-Type: application/json');
-        try {
-            $res = \App\Services\modulos\SuscripcionDevengoService::crear()
-                ->previsualizarMes((int) $_SESSION['id_empresa'], trim((string) ($_GET['mes'] ?? '')));
-            echo json_encode(['ok' => true] + $res, JSON_INVALID_UTF8_SUBSTITUTE);
-        } catch (\InvalidArgumentException | \RuntimeException $e) {
-            echo json_encode(['ok' => false, 'mensaje' => $e->getMessage()]);
-        } catch (\Throwable $e) {
-            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
-            echo json_encode(['ok' => false, 'mensaje' => 'No se pudo calcular el devengo del mes.']);
-        }
-    }
-
-    /** Genera el asiento de devengo del mes (POST mes=YYYY-MM). */
-    public function devengarMesAjax(): void
-    {
-        $this->requireCrear();
-        header('Content-Type: application/json');
-        try {
-            $res = \App\Services\modulos\SuscripcionDevengoService::crear()
-                ->devengarMes((int) $_SESSION['id_empresa'], (int) $_SESSION['id_usuario'], trim((string) ($_POST['mes'] ?? '')));
-            echo json_encode(['ok' => true, 'mensaje' => 'Devengo del mes registrado.'] + $res, JSON_INVALID_UTF8_SUBSTITUTE);
-        } catch (\Throwable $e) {
-            if (!($e instanceof \DomainException || $e instanceof \InvalidArgumentException)) {
-                \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
-            }
-            echo json_encode(['ok' => false, 'mensaje' => $e->getMessage()], JSON_INVALID_UTF8_SUBSTITUTE);
-        }
-    }
-
-    /** Revierte el devengo de un mes: anula sus asientos (POST mes=YYYY-MM). */
-    public function revertirDevengoMesAjax(): void
-    {
-        $this->requireEliminar();
-        header('Content-Type: application/json');
-        try {
-            $res = \App\Services\modulos\SuscripcionDevengoService::crear()
-                ->revertirMes((int) $_SESSION['id_empresa'], (int) $_SESSION['id_usuario'], trim((string) ($_POST['mes'] ?? '')));
-            echo json_encode(['ok' => true, 'mensaje' => 'Devengo del mes revertido.'] + $res, JSON_INVALID_UTF8_SUBSTITUTE);
-        } catch (\Throwable $e) {
-            if (!($e instanceof \DomainException || $e instanceof \InvalidArgumentException)) {
-                \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
-            }
-            echo json_encode(['ok' => false, 'mensaje' => $e->getMessage()], JSON_INVALID_UTF8_SUBSTITUTE);
-        }
-    }
-
-    /** Vista previa de la apertura al cierre de un mes (?mes=YYYY-MM). */
-    public function aperturaPreviewAjax(): void
-    {
-        $this->requireLeer();
-        header('Content-Type: application/json');
-        try {
-            $res = \App\Services\modulos\SuscripcionDevengoService::crear()
-                ->previsualizarApertura((int) $_SESSION['id_empresa'], trim((string) ($_GET['mes'] ?? '')));
-            echo json_encode(['ok' => true] + $res, JSON_INVALID_UTF8_SUBSTITUTE);
-        } catch (\InvalidArgumentException | \RuntimeException $e) {
-            echo json_encode(['ok' => false, 'mensaje' => $e->getMessage()], JSON_INVALID_UTF8_SUBSTITUTE);
-        } catch (\Throwable $e) {
-            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
-            echo json_encode(['ok' => false, 'mensaje' => 'No se pudo calcular la apertura.']);
-        }
-    }
-
-    /** Registra la apertura (POST mes=YYYY-MM). */
-    public function aplicarAperturaAjax(): void
-    {
-        $this->requireCrear();
-        header('Content-Type: application/json');
-        try {
-            $res = \App\Services\modulos\SuscripcionDevengoService::crear()
-                ->aplicarApertura((int) $_SESSION['id_empresa'], (int) $_SESSION['id_usuario'], trim((string) ($_POST['mes'] ?? '')));
-            echo json_encode(['ok' => true, 'mensaje' => 'Apertura registrada.'] + $res, JSON_INVALID_UTF8_SUBSTITUTE);
-        } catch (\Throwable $e) {
-            if (!($e instanceof \DomainException || $e instanceof \InvalidArgumentException || $e instanceof \RuntimeException)) {
-                \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
-            }
-            echo json_encode(['ok' => false, 'mensaje' => $e->getMessage()], JSON_INVALID_UTF8_SUBSTITUTE);
-        }
-    }
-
-    /** Revierte la apertura de un mes de corte (POST mes=YYYY-MM). */
-    public function revertirAperturaAjax(): void
-    {
-        $this->requireEliminar();
-        header('Content-Type: application/json');
-        try {
-            $res = \App\Services\modulos\SuscripcionDevengoService::crear()
-                ->revertirApertura((int) $_SESSION['id_empresa'], (int) $_SESSION['id_usuario'], trim((string) ($_POST['mes'] ?? '')));
-            echo json_encode(['ok' => true, 'mensaje' => 'Apertura revertida.'] + $res, JSON_INVALID_UTF8_SUBSTITUTE);
-        } catch (\Throwable $e) {
-            if (!($e instanceof \DomainException || $e instanceof \InvalidArgumentException)) {
-                \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
-            }
-            echo json_encode(['ok' => false, 'mensaje' => $e->getMessage()], JSON_INVALID_UTF8_SUBSTITUTE);
         }
     }
 
@@ -1058,6 +960,7 @@ class SuscripcionesController extends BaseModuloController
 
     private const CABECERAS_EXPORT = [
         'Cliente', 'Identificación', 'Periodicidad', 'Comprobante', 'Forma de cobro',
+        'Modalidad', 'Reconocimiento',
         'Próximo cobro', 'Fecha inicio', 'Fecha fin', 'Ítems', 'Estado',
     ];
 
@@ -1071,6 +974,8 @@ class SuscripcionesController extends BaseModuloController
             (string) ($r['nombre_periodicidad'] ?? '-'),
             ucfirst((string) ($r['tipo_comprobante'] ?? 'factura')),
             ucfirst((string) ($r['forma_cobro'] ?? '')),
+            self::MODALIDAD_LABEL[$r['modalidad_cobro'] ?? 'anticipado'] ?? '-',
+            self::RECONOCIMIENTO_LABEL[$r['reconocimiento'] ?? 'inmediato'] ?? '-',
             $fecha($r['proximo_cobro'] ?? null),
             $fecha($r['fecha_inicio'] ?? null),
             $fecha($r['fecha_fin'] ?? null),
@@ -1094,7 +999,7 @@ class SuscripcionesController extends BaseModuloController
                 require_once $autoload;
             }
 
-            $anchos = ['22%', '13%', '10%', '9%', '9%', '9%', '9%', '9%', '4%', '6%'];
+            $anchos = ['17%', '11%', '8%', '8%', '7%', '8%', '9%', '8%', '7%', '7%', '4%', '6%'];
 
             // Resumen de valores (mismas suscripciones del listado = filtro de búsqueda).
             $filtro      = trim($_GET['b'] ?? $_POST['b'] ?? '');

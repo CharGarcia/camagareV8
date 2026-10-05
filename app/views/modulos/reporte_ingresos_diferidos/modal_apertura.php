@@ -2,10 +2,10 @@
 /**
  * Modal «Apertura de ingresos diferidos» (NIIF 15): facturas/recibos de suscripción emitidos antes
  * de activar el devengado; arma su cronograma para los meses que faltan con un asiento de
- * reclasificación. Se abre desde «Devengar mes». Lógica en public/js/modulos/suscripciones_apertura_devengo.js.
- * El reporte de saldos vive en su propio módulo: modulos/reporte_ingresos_diferidos.
+ * reclasificación. Se abre con el botón «Apertura» del Reporte de Ingresos Diferidos.
+ * Lógica en public/js/modulos/reporte_ingresos_diferidos_apertura.js.
  */
-$urlSuscId    = rtrim(BASE_URL, '/') . '/modulos/suscripciones';
+$urlSuscId    = rtrim(BASE_URL, '/') . '/modulos/reporte_ingresos_diferidos';
 $mesAnteriorI = (new \DateTimeImmutable('first day of this month'))->modify('-1 month')->format('Y-m');
 $mesActualI   = date('Y-m');
 ?>
@@ -83,7 +83,7 @@ $mesActualI   = date('Y-m');
     </div>
 </div>
 
-<script src="<?= rtrim(BASE_URL, '/') ?>/js/modulos/suscripciones_apertura_devengo.js?v=<?= asset_ver('/js/modulos/suscripciones_apertura_devengo.js') ?>"></script>
+<script src="<?= rtrim(BASE_URL, '/') ?>/js/modulos/reporte_ingresos_diferidos_apertura.js?v=<?= asset_ver('/js/modulos/reporte_ingresos_diferidos_apertura.js') ?>"></script>
 <script>
     SuscAperturaDevengo.iniciar({
         urlApPreview: <?= json_encode($urlSuscId . '/aperturaPreviewAjax') ?>,

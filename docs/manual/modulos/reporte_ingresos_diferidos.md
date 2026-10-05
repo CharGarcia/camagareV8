@@ -5,7 +5,7 @@ categoria: Reportes
 ruta_modulo: modulos/reporte_ingresos_diferidos
 tipo: modulo
 visibilidad: todos
-etiquetas: ingresos diferidos, ingreso diferido, ingresos anticipados, cobrado por adelantado, pasivo del contrato, devengado, devengo, niif 15, seccion 23, suscripciones, por facturar, ingresos devengados por facturar, mes caido, corriente, no corriente, conciliacion, cuadre con el mayor, saldo diferido
+etiquetas: ingresos diferidos, ingreso diferido, ingresos anticipados, cobrado por adelantado, pasivo del contrato, devengado, devengo, niif 15, seccion 23, suscripciones, por facturar, ingresos devengados por facturar, mes caido, corriente, no corriente, conciliacion, cuadre con el mayor, saldo diferido, devengar mes, adelantar devengo, revertir devengo, apertura de ingresos diferidos, facturas anteriores al devengado
 version: 1.0
 orden: 0
 estado: activo
@@ -56,11 +56,40 @@ el sistema la pasa al ingreso cada mes de forma automática. Este reporte respon
   encabezado), páginas de 50 filas y columnas que se pueden ocultar.
 - **PDF** y **Excel** (con una hoja de conciliación) del filtro vigente.
 
+## Devengo del mes (adelantar o revertir)
+
+El sistema **devenga solo**, todos los días, hasta el mes anterior: pasa al ingreso lo
+diferido de los meses cumplidos y provisiona el mes caído. No hay que hacer nada.
+
+El botón **Devengo del mes** (junto a PDF y Excel) es para el contador:
+
+- **Vista previa** del mes elegido: cuánto se devenga, cuánto viene de meses anteriores,
+  la provisión de mes caído, lo que espera asiento y el asiento que se generará.
+- **Generar asiento**: adelanta un mes que el automático todavía no toma (por ejemplo, el
+  mes en curso al cerrarlo). Asiento consolidado con fecha del último día del mes:
+  Debe *Ingresos diferidos* / *Ingresos devengados por facturar*, Haber la cuenta de
+  ingreso de cada servicio.
+- **Revertir mes**: anula los asientos de devengo del mes; lo diferido vuelve a *por
+  devengar* y las provisiones se dan de baja. No se puede si el período está cerrado o si
+  una factura ya canceló alguna provisión del mes.
+
+## Apertura (facturas emitidas antes de activar el devengado)
+
+Botón **Apertura**. Las facturas y recibos de suscripción emitidos **antes** de pasar a
+*Durante el período* reconocieron todo como ingreso. Elija el **mes de corte**: se listan
+los que todavía cubren meses posteriores, con lo que se diferiría de cada uno y el
+asiento (al último día del mes de corte: Debe ingreso / Haber *Ingresos diferidos*).
+**Registrar apertura** arma su cronograma; desde el mes siguiente el devengo automático
+los toma. **Revertir apertura** la deshace mientras no se haya devengado nada de ella.
+Detalle en [Suscripciones](modulos/suscripciones).
+
 ## Permisos
 
 | Permiso | Qué permite |
 |---------|-------------|
-| Ver | Abrir el reporte, exportar a PDF y Excel. |
+| Ver | Abrir el reporte, exportar a PDF y Excel, ver las vistas previas. |
+| Crear | Generar (adelantar) el devengo de un mes y registrar la apertura. |
+| Eliminar | Revertir el devengo de un mes o una apertura. |
 | Acceso total | Ver las suscripciones de toda la empresa (sin él, solo las que usted registró). |
 
 ## Reglas de negocio
@@ -91,4 +120,5 @@ el sistema la pasa al ingreso cada mes de forma automática. Este reporte respon
 
 ## Historial de cambios
 
-- **1.0** — Versión inicial (antes era un botón dentro de Suscripciones).
+- **1.0** — Versión inicial (antes era un botón dentro de Suscripciones). Incluye las acciones
+  *Devengo del mes* (adelantar o revertir) y *Apertura*, que antes estaban en Suscripciones.

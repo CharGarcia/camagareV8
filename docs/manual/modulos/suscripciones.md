@@ -6,7 +6,7 @@ ruta_modulo: modulos/suscripciones
 tipo: modulo
 visibilidad: todos
 etiquetas: suscripciones, suscripcion, cobro recurrente, facturacion recurrente, factura recurrente, mensualidad, pension, plan mensual, membresia, renovacion, periodicidad, proximo cobro, generar documentos, generar facturas, facturacion automatica, facturas del cliente, facturas emitidas, historial de facturas, detalle de facturas, recibos del cliente, que le facture, saldo del cliente, facturas pendientes, facturas pagadas, facturas abonadas, cobro con tarjeta, debito automatico, nuvei, kushki, aviso de vencimiento, imprimir, impresora, excel, exportar, resumen de valores, total por periodicidad, proyeccion anual, ingresos recurrentes, iva por tarifa, resumen por concepto, detalle por cliente, que se le factura a cada cliente, items por cliente, informacion adicional en excel, resumen en pdf, detalle por cliente en pdf, pdf de la suscripcion, imprimir suscripcion, contrato, ficha de la suscripcion, detalle de la suscripcion en pdf, devengado, devengo, ingreso diferido, ingresos diferidos, ingreso anticipado, cobro por adelantado, mes caido, mes vencido, facturacion vencida, niif 15, seccion 23, reconocimiento de ingresos, provision de ingresos, ingresos por facturar
-version: 1.20
+version: 1.21
 orden: 0
 estado: activo
 ---
@@ -209,13 +209,9 @@ producto, categoría, marca, tipo de producción o General).
   el día 1 la provisión de mes caído ya existe cuando *Generar facturación* emite la
   factura que la cancela. Si a la empresa le falta una cuenta o el período está cerrado,
   ese mes queda pendiente y se reintenta al día siguiente.
-- **Botón Devengar mes** (opcional): para ver la vista previa de un mes, generarlo antes
-  de tiempo (por ejemplo, el mes en curso al cerrarlo) o revertirlo. Muestra cuánto se
-  devenga, cuánto viene de meses anteriores, la provisión de mes caído, lo que todavía
-  espera asiento y el asiento que se generará.
-- **Revertir mes**: anula los asientos de devengo del mes; lo diferido vuelve a *Por
-  devengar* y las provisiones se dan de baja. No se puede si el período contable está
-  cerrado o si una factura ya canceló alguna provisión del mes.
+- Para **adelantar** un mes (por ejemplo, el mes en curso al cerrarlo), ver su vista
+  previa o **revertirlo**: [Reporte de Ingresos Diferidos](modulos/reporte_ingresos_diferidos)
+  → **Devengo del mes**.
 
 Reglas:
 
@@ -241,7 +237,7 @@ cuadre con el mayor se consultan en el
 
 Las facturas y recibos que una suscripción emitió **antes** de pasar a *Durante el
 período* ya reconocieron todo como ingreso. Para llevar al pasivo la parte de los meses
-que faltan: **Devengar mes** → enlace **Apertura**.
+que faltan: [Reporte de Ingresos Diferidos](modulos/reporte_ingresos_diferidos) → **Apertura**.
 
 - Elija el **mes de corte**: se listan los documentos de suscripciones que hoy reconocen
   durante el período (por adelantado, mensual o mayor), ya contabilizados y sin
@@ -272,7 +268,7 @@ Requiere el SQL `database/migrations/20261004_suscripciones_devengo_apertura.sql
   que el documento cancelaba vuelven a *por facturar*.
 - **Modificar** una factura o recibo en borrador: el cronograma se rehace con las
   líneas nuevas. Si ya tiene meses devengados, no se puede modificar: primero revierta
-  esos meses en **Devengar mes**.
+  esos meses en el Reporte de Ingresos Diferidos → **Devengo del mes**.
 
 ## Cobro con tarjeta
 
@@ -311,7 +307,7 @@ aparecen.
 El cuadro de búsqueda busca en las columnas del listado, en los productos de cada
 suscripción, en sus observaciones e información adicional y en los números de los
 documentos generados. El botón del embudo abre los filtros (próximo cobro, estado,
-periodicidad, comprobante, forma de cobro, monto, etc.). El listado se exporta a PDF
+periodicidad, comprobante, forma de cobro, modalidad de cobro, reconocimiento del ingreso, monto, etc.). El listado se exporta a PDF
 y Excel con los filtros aplicados.
 
 Las **tres hojas** del Excel (listado, Resumen y Detalle por cliente) toman exactamente
@@ -418,6 +414,9 @@ registrados*.
 
 ## Historial de cambios
 
+- **1.21** — El botón *Devengar mes* y la *Apertura* salen de Suscripciones: están en el
+  [Reporte de Ingresos Diferidos](modulos/reporte_ingresos_diferidos). El listado muestra las columnas
+  **Modalidad** y **Reconocimiento** (también en PDF y Excel), con orden y filtro por ambas.
 - **1.20** — El devengo mensual es **automático** (todos los días, sin configurar nada); el botón
   *Devengar mes* queda para la vista previa, adelantar o revertir. El reporte de saldos pasa a su
   propio módulo, [Reporte de Ingresos Diferidos](modulos/reporte_ingresos_diferidos).
