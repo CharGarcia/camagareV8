@@ -6,7 +6,7 @@ ruta_modulo: modulos/factura-venta
 tipo: modulo
 visibilidad: todos
 etiquetas: factura, facturar, venta, buscar factura, buscador, aparecen facturas que no busque, resultados que no corresponden, la busqueda trae otras facturas, buscar por clave de acceso, filtros, filtrar facturas, buscar por producto vendido, buscar por forma de pago, filtro de fechas, saldo pendiente, chips, ordenar por dos columnas, ordenar por estado de pago, ordenar por cliente y fecha, sri, comprobante electronico, xml, excel, anular, nota de credito, whatsapp, link de pago, payphone, nuvei, serie vacia, sin puntos de emision, secuencial repetido, secuencial ya existe, punto de emision, ambiente, pruebas, produccion, cambio de ambiente, clave de acceso en procesamiento, error 70, comprobante devuelto, reintento automatico, saldo, stock, existencias, cuanto queda, disponible, buscador de productos, lote, vencimiento, caducidad, fecha de vencimiento, lote y vencimiento, pdf, ride, columnas del pdf, subsidio, irbpnr, servicio, propina, codigo cortado, detalle adicional, forma de pago, plazo, dias credito, unidad de tiempo, meses, anios, informacion adicional, vendedor, cajero, no sale el vendedor, falta informacion en el pdf, se cierra el modal, autorizar, bloquear factura, no puedo editar, letra pequena, tamano de letra, fuente del pdf, letra del pdf, no se lee el pdf, ancho de columna, agrandar columna, ensanchar, codigo cortado en el modal, descripcion cortada, no se ve la descripcion completa, redimensionar, precio con impuestos, precio con iva, sale en cero, columna descuento, tipo de identificacion, tipo de documento del cliente, ruc o cedula, es ruc o cedula, cedula o pasaporte, consumidor final, no se cual identificacion tiene el cliente, buscador de clientes, buscar cliente, elegir cliente, datos del cliente, informacion adicional larga, limite de caracteres, maximo 300 caracteres, value too long, no se pudo guardar la factura, imprimir, impresora, iva al subtotal, iva sobre el subtotal, iva linea por linea, calculo del iva, iva no cuadra, iva mal calculado, centavos de diferencia, factura grande, muchas lineas, muchos items, factura lenta, tarda en abrir, tarda en cargar, peso del xml, tamano del xml, 320 kb, crear cliente desde la factura, nuevo cliente, crear producto desde la factura, nuevo producto, no aparece el boton de crear cliente, falta el boton nuevo producto, aviso, avisos, novedad sri, documentos con novedad, devuelto, no autorizado, pendientes de enviar, borrador, borradores
-version: 2.36
+version: 2.37
 orden: 20
 estado: activo
 ---
@@ -327,6 +327,27 @@ devuelto, corrija lo que indique el mensaje y vuelva a enviar.
 Cuando hay muchos documentos pendientes conviene usar el envío en lote, que los
 procesa en segundo plano.
 
+### Factura con fecha anterior que ya está autorizada
+
+El SRI solo recibe comprobantes con la **fecha de hoy**. Si la factura tiene otra
+fecha, al pulsar **Enviar al SRI** aparece el aviso *La fecha de emisión no es la
+de hoy*, con dos caminos:
+
+- **Es una factura nueva**: cancele, cambie la fecha de emisión a hoy y envíela.
+- **Ya fue autorizada otro día** (por ejemplo, la emitió el sistema anterior y
+  llegó como borrador en la migración): pulse **Verificar en el SRI**. El sistema
+  consulta el SRI con la **clave de acceso guardada** y, si está autorizada, deja
+  la factura como autorizada, con el XML del SRI, sin volver a enviarla. Si no lo
+  está, no se envía nada y se muestra el aviso de la fecha.
+
+Para un documento que llegó como borrador desde el **sistema anterior** y que el
+SRI rechaza con *SECUENCIAL REGISTRADO*: ponga en la factura la **fecha en que se
+autorizó** en el SRI, guarde y pulse **Enviar al SRI** → **Verificar en el SRI**.
+El sistema prueba la clave de esa fecha, también con el código numérico que usaba
+el sistema anterior. Si el SRI la tiene autorizada, guarda esa clave y deja la
+factura autorizada. Si no, aparece el aviso de que la fecha de emisión debe ser
+la de hoy: o la fecha no es la correcta, o el comprobante no se autorizó ese día.
+
 ## Anular una factura
 
 Una factura **autorizada** no se elimina: se anula, y esa anulación se informa al
@@ -516,6 +537,9 @@ la operación de inmediato.
 
 ## Historial de cambios
 
+- **2.37** — Una factura con fecha distinta de hoy ya no se bloquea al pulsar **Enviar al
+  SRI**: se ofrece **Verificar en el SRI**, que la registra como autorizada si el SRI ya la
+  autorizó con su clave de acceso. Ver *Factura con fecha anterior que ya está autorizada*.
 - **2.36** — Anular o eliminar una factura de [suscripción](modulos/suscripciones) con ingreso
   diferido anula su cronograma y, si ya había meses devengados, registra un asiento de reverso;
   modificar una factura en borrador rehace el cronograma (no se permite si ya tiene meses devengados).

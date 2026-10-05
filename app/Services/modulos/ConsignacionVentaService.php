@@ -109,6 +109,53 @@ class ConsignacionVentaService
         }
     }
 
+    /**
+     * Revalida EN EL SERVIDOR que ninguna línea de pedido se consigne por encima de su saldo.
+     * El modal solo filtra lo pendiente al cargar el pedido: con dos modales abiertos sobre el
+     * mismo pedido, ambos veían todo pendiente y el servidor aceptaba los dos guardados (caso
+     * 001-101-52654 / 52655 del pedido 001-101-37565, 25-09-2026). Debe llamarse DENTRO de la
+     * transacción del guardado y antes de tomar otros candados: el bloqueo por línea hace que el
+     * segundo guardado espere al primero y lea el saldo ya descontado.
+     *
+     * Al editar ($idConsignacion > 0) la propia consignación no cuenta como consumo, y una línea
+     * que ya estaba sobreconsignada (datos anteriores a esta validación) se tolera mientras la
+     * edición no aumente la cantidad que esta consignación tenía de ella: así no se bloquea la
+     * edición de documentos viejos que no empeoran el saldo.
+     *
+     * @param array<int,float> $cantidadesPrevias [id_pedido_detalle => cantidad que ya tenía esta consignación]
+     */
+    private function validarSaldoPedidos(array $detalles, int $idEmpresa, int $idConsignacion = 0, array $cantidadesPrevias = []): void
+    {
+        $porLinea = [];
+        foreach ($detalles as $det) {
+            $idPd = (int) ($det['id_pedido_detalle'] ?? 0);
+            if ($idPd <= 0 || empty($det['id_producto'])) continue;
+            $porLinea[$idPd] = ($porLinea[$idPd] ?? 0.0) + (float) ($det['cantidad'] ?? 0);
+        }
+        if (empty($porLinea)) return;
+
+        $this->repository->lockPedidoDetalles(array_keys($porLinea));
+        $saldos = $this->repository->getSaldoPedidoDetalles(array_keys($porLinea), $idEmpresa, $idConsignacion);
+
+        $fmt = static fn(float $n): string => rtrim(rtrim(number_format($n, 4, ',', '.'), '0'), ',');
+        foreach ($porLinea as $idPd => $cantidad) {
+            $s = $saldos[$idPd] ?? null;
+            if ($s === null) {
+                throw new Exception("Una de las líneas cargadas ya no pertenece a un pedido de la empresa. Vuelva a cargar el pedido.");
+            }
+            $pendiente = max(0.0, $s['cantidad_pedido'] - $s['consignado']);
+            if ($cantidad <= $pendiente + 0.000001) continue;
+            if ($cantidad <= ($cantidadesPrevias[$idPd] ?? 0.0) + 0.000001) continue;
+
+            $donde = $s['consignaciones'] !== '' ? " en la consignación {$s['consignaciones']}" : '';
+            throw new Exception(
+                "La línea {$s['producto']} del pedido {$s['pedido']} pide {$fmt($s['cantidad_pedido'])} y ya tiene "
+                . "{$fmt($s['consignado'])} consignado{$donde}: quedan {$fmt($pendiente)} pendientes y se intenta consignar "
+                . "{$fmt($cantidad)}. Vuelva a cargar el pedido para ver el saldo actualizado."
+            );
+        }
+    }
+
     public function getListado(int $idEmpresa, string $buscar, int $page, int $perPage, string $ordenCol, string $ordenDir, ?int $idUsuarioFiltro): array
     {
         return $this->repository->getListado($idEmpresa, $buscar, $page, $perPage, $ordenCol, $ordenDir, $idUsuarioFiltro);
@@ -243,6 +290,9 @@ class ConsignacionVentaService
 
         try {
             $db->beginTransaction();
+
+            // Saldo de los pedidos, bajo candado y antes del secuencial y del stock.
+            $this->validarSaldoPedidos($data['detalles'] ?? [], (int) $idEmpresa);
 
             // Número del documento: lo decide el SERVIDOR, dentro de esta transacción.
             // Lo que manda el navegador es solo la vista previa que se cargó al abrir el modal.
@@ -434,6 +484,17 @@ class ConsignacionVentaService
             //    reverso SIN costo y las salidas viejas seguían vigentes: el asiento sumaba ambas
             //    tandas (costo duplicado) y la entrada a costo 0 bajaba el costo promedio.
             $detallesAntiguos = $this->repository->getDetalles($id, $idEmpresa);
+
+            // Saldo de los pedidos, bajo candado y antes de tocar inventario (ver validarSaldoPedidos).
+            $cantidadesPrevias = [];
+            foreach ($detallesAntiguos as $da) {
+                $idPd = (int) ($da['id_pedido_detalle'] ?? 0);
+                if ($idPd > 0) {
+                    $cantidadesPrevias[$idPd] = ($cantidadesPrevias[$idPd] ?? 0.0) + (float) $da['cantidad'];
+                }
+            }
+            $this->validarSaldoPedidos($data['detalles'] ?? [], $idEmpresa, $id, $cantidadesPrevias);
+
             $this->revertirInventarioConsignacion($id, $idEmpresa, $idUsuario);
 
             // 2. Eliminar detalles lógicamente

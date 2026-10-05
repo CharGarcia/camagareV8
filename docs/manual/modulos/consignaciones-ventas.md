@@ -5,8 +5,8 @@ categoria: Ventas
 ruta_modulo: modulos/consignaciones-ventas
 tipo: modulo
 visibilidad: todos
-etiquetas: consignacion, consignaciones, buscar consignacion, buscador, filtros, filtrar consignaciones, buscar por producto, buscar por lote, buscar por NUP, chips, asesor, vendedor, vendedor del cliente, asesor automatico, mercaderia en consignacion, entrega, deposito, liquidar, facturar consignacion, numeracion por fecha, numero con el año, reiniciar numeracion, reinicio anual, reinicio mensual, correlativo por año, correlativo por mes, modo de numeracion, cargar desde pedido, llamar pedido, lote, vencimiento, caducidad, fecha de vencimiento, NUP, acceso total, registros propios, solo mis documentos, quien ve que, permiso actualizar, no puedo guardar, boton guardar no aparece, no tengo permiso para esta accion, demora al guardar, guardar lento, se queda guardando, estado del pedido, pedido procesado, pedido pendiente, eliminar consignacion, editar consignacion, no puedo eliminar la consignacion, documentos relacionados, el stock no volvio, devolver stock, costo promedio, kardex anulado, pestana pedidos, pedidos relacionados, pedido de la consignacion, pendiente del pedido, asiento no generado, faltan cuentas, asiento incompleto, aparecen documentos que no busque, resultados que no corresponden, buscar por producto en el listado, codigo del producto, codigo de producto, ver codigo, NUP repetido, nup duplicado, serie repetida, el nup no puede repetirse, mismo nup dos productos, nup por lote, cada unidad su nup, numero de serie repetido, el modal se cierra al guardar, no se cierra el modal, seguir en la consignacion, imprimir despues de guardar, guardar y seguir, no contabilizar consignaciones, sin asiento de consignacion, apagar asiento, modulos que contabilizan, enfoque sin reclasificacion, consignacion sin asiento, aviso de asientos pendientes, asiento de documento anulado, asiento sigue contabilizado, no se anulo el asiento, no se pudo anular el asiento contable
-version: 1.33
+etiquetas: consignacion, consignaciones, buscar consignacion, buscador, filtros, filtrar consignaciones, buscar por producto, buscar por lote, buscar por NUP, chips, asesor, vendedor, vendedor del cliente, asesor automatico, mercaderia en consignacion, entrega, deposito, liquidar, facturar consignacion, numeracion por fecha, numero con el año, reiniciar numeracion, reinicio anual, reinicio mensual, correlativo por año, correlativo por mes, modo de numeracion, cargar desde pedido, llamar pedido, lote, vencimiento, caducidad, fecha de vencimiento, NUP, acceso total, registros propios, solo mis documentos, quien ve que, permiso actualizar, no puedo guardar, boton guardar no aparece, no tengo permiso para esta accion, demora al guardar, guardar lento, se queda guardando, estado del pedido, pedido procesado, pedido pendiente, eliminar consignacion, editar consignacion, no puedo eliminar la consignacion, documentos relacionados, el stock no volvio, devolver stock, costo promedio, kardex anulado, pestana pedidos, pedidos relacionados, pedido de la consignacion, pendiente del pedido, asiento no generado, faltan cuentas, asiento incompleto, aparecen documentos que no busque, resultados que no corresponden, buscar por producto en el listado, codigo del producto, codigo de producto, ver codigo, NUP repetido, nup duplicado, serie repetida, el nup no puede repetirse, mismo nup dos productos, nup por lote, cada unidad su nup, numero de serie repetido, el modal se cierra al guardar, no se cierra el modal, seguir en la consignacion, imprimir despues de guardar, guardar y seguir, no contabilizar consignaciones, sin asiento de consignacion, apagar asiento, modulos que contabilizan, enfoque sin reclasificacion, consignacion sin asiento, aviso de asientos pendientes, asiento de documento anulado, asiento sigue contabilizado, no se anulo el asiento, no se pudo anular el asiento contable, consignacion duplicada, pedido consignado dos veces, dos consignaciones del mismo pedido, ya tiene consignado, saldo del pedido, pedido en dos ventanas
+version: 1.34
 orden: 45
 estado: activo
 ---
@@ -98,6 +98,25 @@ desmarcarla en cantidades grandes.
 No es todo o nada: las filas a las que les falte lote, vencimiento o NUP (cuando
 la empresa los exige) se omiten y se listan al final, pero las filas completas sí
 se agregan.
+
+### Un pedido no se puede consignar dos veces
+
+Al guardar, el sistema vuelve a comprobar el **saldo de cada línea del pedido**:
+lo pedido menos lo que ya está en otras consignaciones vigentes. Si la cantidad
+supera lo pendiente, la consignación **no se guarda** y el mensaje dice qué
+producto, de qué pedido, cuánto queda y en qué consignación ya se consignó. Por
+ejemplo: *«La línea ILCM 3510N IMPLANTE CM 3,5X10,0MM del pedido 001-101-000037565
+pide 2 y ya tiene 2 consignado en la consignación 001-101-000052654: quedan 0
+pendientes…»*.
+
+Esto cubre el caso de tener el **mismo pedido cargado en dos ventanas** (dos
+pestañas, dos equipos o un formulario que quedó abierto): las dos muestran todo
+pendiente, pero solo la primera que se guarda lo consigna. La otra recibe el
+aviso. Vuelva a cargar el pedido para ver el saldo real.
+
+Al **editar** una consignación, sus propias líneas no cuentan como consumo. Si el
+pedido ya estaba consignado de más desde antes de este control, se puede seguir
+editando mientras no se aumente la cantidad de esa línea.
 
 ### El pedido cambia de estado solo
 
@@ -350,6 +369,14 @@ documentos **anulados** no cuentan.
   relacionados»**: la consignación ya tiene retornos, facturaciones o cambios de
   productos vigentes. Anule o elimine los documentos que nombra el mensaje y
   vuelva a intentarlo.
+- **«La línea … del pedido … ya tiene … consignado»**: esa línea del pedido ya
+  se despachó en otra consignación (la que nombra el mensaje), normalmente
+  porque el pedido estaba abierto en otra ventana. Vuelva a cargar el pedido; si
+  de verdad hay que enviar más, aumente primero la cantidad en el pedido.
+- **Hay dos consignaciones del mismo pedido**: si se crearon antes de este
+  control, la que sobra se corrige con un **Retorno CV** de sus productos (una
+  consignación *Entregada* no se puede eliminar, y pasarla a *Anulada* no
+  devuelve el stock).
 - **La consignación no aparece en ventas**: es correcto, no es una venta hasta
   que se factura.
 - **El stock bajó pero no hay venta**: es el comportamiento esperado; la
@@ -459,6 +486,12 @@ Contables**; reabrir el período permite la operación de inmediato.
 
 ## Historial de cambios
 
+- **1.34** — Corrección: un pedido **ya no se puede consignar dos veces**. Al
+  guardar, el sistema vuelve a comprobar el saldo de cada línea del pedido y
+  rechaza lo que exceda lo pendiente, indicando en qué consignación ya se
+  despachó. Antes ese saldo solo se revisaba al cargar el pedido en la ventana, y
+  con el mismo pedido abierto en dos ventanas se guardaban las dos. Nueva sección
+  *Un pedido no se puede consignar dos veces*.
 - **1.33** — Corrección: al eliminar una consignación, su asiento se anula en la
   misma operación. Antes se anulaba después y, si fallaba por un motivo distinto del
   período cerrado, la consignación quedaba eliminada con su asiento contabilizado.

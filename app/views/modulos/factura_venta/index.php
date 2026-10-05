@@ -3112,26 +3112,36 @@ $totalPages = $totalPagesOriginal;
         const id = parseInt(FV_ID_ACTIVO) || 0;
         if (!id) return;
 
-        // Validar fecha de emisión antes de continuar
+        // Fecha de emisión distinta de hoy: el SRI solo recibe comprobantes del día, pero el
+        // comprobante puede estar YA AUTORIZADO con esa fecha (enviado otro día, p. ej. desde
+        // el sistema anterior). El servidor consulta primero la clave guardada y, si está
+        // autorizada, la registra sin reenviar; si no, rechaza el envío por la fecha. Por eso
+        // aquí no se bloquea: se avisa y se deja verificar.
         const hoy = CMG_fechaLocal();
-        if (FV_FECHA_EMISION && FV_FECHA_EMISION !== hoy) {
+        const fechaNoEsHoy = !!FV_FECHA_EMISION && FV_FECHA_EMISION !== hoy;
+        if (fechaNoEsHoy) {
             const fechaFmt = FV_FECHA_EMISION.split('-').reverse().join('-');
             const hoyFmt   = hoy.split('-').reverse().join('-');
-            await Swal.fire({
+            const verificar = await Swal.fire({
                 icon: 'warning',
-                title: 'Fecha de emisión incorrecta',
-                html: `<p>El SRI solo acepta comprobantes cuya fecha de emisión sea <strong>la fecha actual</strong>.</p>
+                title: 'La fecha de emisión no es la de hoy',
+                html: `<p>El SRI solo recibe comprobantes cuya fecha de emisión sea <strong>la fecha actual</strong>.</p>
                        <p class="mb-1">Fecha del documento: <code>${fechaFmt}</code></p>
                        <p class="mb-0">Fecha actual: <code>${hoyFmt}</code></p>
                        <hr class="my-2">
-                       <small class="text-muted">Edita el comprobante, actualiza la fecha de emisión a hoy y vuelve a intentarlo.</small>`,
-                confirmButtonText: 'Entendido',
+                       <small class="text-muted">Si este comprobante <strong>ya fue autorizado</strong> por el SRI con esa fecha,
+                       pulse <strong>Verificar en el SRI</strong>: el sistema lo consultará con su clave de acceso y, si está
+                       autorizado, lo registrará como autorizado sin volver a enviarlo. Si es un comprobante nuevo,
+                       cancele, actualice la fecha de emisión a hoy y envíelo.</small>`,
+                showCancelButton: true,
+                confirmButtonText: '<i class="bi bi-search me-1"></i> Verificar en el SRI',
+                cancelButtonText: 'Cancelar',
                 confirmButtonColor: '#f39c12',
             });
-            return;
+            if (!verificar.isConfirmed) return;
         }
 
-        const confirmar = await Swal.fire({
+        const confirmar = fechaNoEsHoy ? { isConfirmed: true } : await Swal.fire({
             icon: 'question',
             title: 'Enviar al SRI',
             html: 'Se firmará el comprobante con el certificado de la empresa y se enviará al SRI para su autorización.<br><small class="text-muted">Este proceso puede tardar unos segundos.</small>',

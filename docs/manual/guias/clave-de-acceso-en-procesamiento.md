@@ -5,7 +5,7 @@ categoria: Ventas
 tipo: guia
 visibilidad: todos
 etiquetas: clave de acceso en procesamiento, error 70, error 45, error 43, secuencial registrado, clave acceso registrada, comprobante devuelto, el sri devolvio el comprobante con errores, reenviar al sri, reintento automatico, en cola, sin autorizacion, factura devuelta, nota de credito devuelta, retencion devuelta, guia devuelta, no aparece en el portal, ambiente de pruebas, numero ya usado, no se puede eliminar, tarda mucho, se queda enviando, enviando al sri, tiempo restante, cuenta regresiva, cancelar envio, seguir en segundo plano, tiempo de espera agotado, ya se esta enviando
-version: 1.2
+version: 1.3
 orden: 30
 estado: activo
 ---
@@ -123,7 +123,28 @@ pruebas, cambiar el ambiente en la ficha de la empresa y volver a guardar el
 borrador: la clave se regenera con el ambiente nuevo y en producción ese número
 está libre.
 
+### Si el comprobante ya está autorizado en el SRI
+
+Cuando el número lo ocupa **este mismo documento**, autorizado otro día (típico
+de documentos que llegaron como borrador desde el sistema anterior), no hay que
+cambiar el secuencial:
+
+1. Ponga en el documento la **fecha en que se autorizó** en el SRI y guarde.
+2. Pulse **Enviar al SRI**. Si la fecha no es la de hoy, la factura ofrece
+   **Verificar en el SRI**.
+3. El sistema consulta la clave de esa fecha, también con el código numérico
+   fijo que usaba el sistema anterior (`12345678`). Si está autorizada, guarda esa
+   clave y registra el documento como autorizado, sin reenviarlo. Si no lo está,
+   avisa que la fecha de emisión debe ser la de hoy y no envía nada.
+
+Esto aplica a facturas, notas de crédito y débito, retenciones, liquidaciones de
+compra, guías de remisión y facturas de reembolso.
+
 ## Historial de cambios
+
+- **1.3** — Error 45 con un comprobante ya autorizado otro día: al poner su fecha
+  original y enviar, el sistema prueba también la clave del sistema anterior y,
+  si está autorizada, registra el documento como autorizado.
 
 - **1.2** — El envío al SRI espera como máximo 90 segundos, con cuenta regresiva
   y botón *Seguir en segundo plano*. Un documento no puede enviarse dos veces al

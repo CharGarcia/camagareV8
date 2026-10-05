@@ -5,8 +5,8 @@ categoria: Configuración global
 ruta_modulo: config/migrar-mysql
 tipo: modulo
 visibilidad: superadmin
-etiquetas: migracion, migrar, sistema anterior, mysql, vendedor asignado, vendedor del cliente, clientes sin vendedor, vendedores migracion, asignacion de vendedor, migrar empresas, establecimientos migracion, ruc base, elegir establecimiento, fusionar establecimientos, cliente separado, serie, series, punto de emision, secuencial, numeracion, numero repetido, ingresos sin serie, egresos sin serie, pedidos sin serie, liquidacion pendiente de pago, liquidaciones de compra migradas, pagos migrados, egresos migrados, pago no aparece, cuentas por pagar migradas, compra pendiente de pago, compra pagada sale pendiente, pago no cruza, retencion en borrador, marcas, marca del producto, productos sin marca, catalogo de marcas, migrar marcas, cambios de productos migrados, cambio sin factura, factura del cambio, nup del cambio, recambio, registro de cambio, facturacion de consignacion migrada, unidad duplicada para devolver, iva inflado, iva multiplicado, iva x1000, asiento de compra mal, iva del asiento mayor, nota de credito compra asiento, contabilidad migrada, alumnos, migrar alumnos, estudiantes, campus, niveles, cursos, horarios, pension, servicios del alumno, descuento del alumno, alumnos activos, alumnos pasivos, representante del alumno, vehiculos, migrar vehiculos, placas, placa, chasis, chasis 123456789, año 2022, propietario privado, vehiculos faltantes, vehiculo sin orden, car wash migracion, cobros de recibos, recibo pendiente migrado, recibo sin abono, pago de recibo no cruza, recibos de venta migrados, saldo de recibo, liquidaciones 2020, liquidaciones antiguas pendientes, pagada en el sistema anterior, liquidacion sin pago migrada, egreso sin asiento, asiento no migrado, asiento contable faltante, desde, re-sincronizar contabilidad, registrado tarde, anulado en el sistema anterior, ingreso anulado con asiento, egreso anulado con asiento, asiento migrado vivo, asiento de documento anulado, categorias, categoria del producto, productos sin categoria, grupo de producto, grupo familiar, migrar categorias
-version: 1.19
+etiquetas: migracion, migrar, sistema anterior, mysql, vendedor asignado, vendedor del cliente, clientes sin vendedor, vendedores migracion, asignacion de vendedor, migrar empresas, establecimientos migracion, ruc base, elegir establecimiento, fusionar establecimientos, cliente separado, serie, series, punto de emision, secuencial, numeracion, numero repetido, ingresos sin serie, egresos sin serie, pedidos sin serie, liquidacion pendiente de pago, liquidaciones de compra migradas, pagos migrados, egresos migrados, pago no aparece, cuentas por pagar migradas, compra pendiente de pago, compra pagada sale pendiente, pago no cruza, retencion en borrador, marcas, marca del producto, productos sin marca, catalogo de marcas, migrar marcas, cambios de productos migrados, cambio sin factura, factura del cambio, nup del cambio, recambio, registro de cambio, facturacion de consignacion migrada, unidad duplicada para devolver, iva inflado, iva multiplicado, iva x1000, asiento de compra mal, iva del asiento mayor, nota de credito compra asiento, contabilidad migrada, alumnos, migrar alumnos, estudiantes, campus, niveles, cursos, horarios, pension, servicios del alumno, descuento del alumno, alumnos activos, alumnos pasivos, representante del alumno, vehiculos, migrar vehiculos, placas, placa, chasis, chasis 123456789, año 2022, propietario privado, vehiculos faltantes, vehiculo sin orden, car wash migracion, cobros de recibos, recibo pendiente migrado, recibo sin abono, pago de recibo no cruza, recibos de venta migrados, saldo de recibo, liquidaciones 2020, liquidaciones antiguas pendientes, pagada en el sistema anterior, liquidacion sin pago migrada, egreso sin asiento, asiento no migrado, asiento contable faltante, desde, re-sincronizar contabilidad, registrado tarde, anulado en el sistema anterior, ingreso anulado con asiento, egreso anulado con asiento, asiento migrado vivo, asiento de documento anulado, categorias, categoria del producto, productos sin categoria, grupo de producto, grupo familiar, migrar categorias, suscripciones, facturas programadas, recibos programados, facturacion recurrente, migrar suscripciones, cobro periodico
+version: 1.20
 orden: 2
 estado: activo
 ---
@@ -379,6 +379,37 @@ egreso o ingreso):
 Diagnóstico de solo lectura para producción:
 `database/diagnosticos/20261001_egresos_migrados_sin_asiento.sql`.
 
+## Facturas y recibos programados → Suscripciones
+
+Las **facturas programadas** y los **recibos programados** del sistema anterior
+se migran al módulo **Suscripciones** con dos entidades: *Suscripciones:
+facturas programadas* y *Suscripciones: recibos programados*. Ejecútelas
+**después de Clientes y Productos**.
+
+- **Una suscripción por cada cliente programado**, con sus productos, cantidades
+  y precios. El IVA es el del producto. El tipo de comprobante es *factura* o
+  *recibo*, según de dónde venga.
+- **Periodicidad:** Semanal, Quincenal, Mensual, Trimestral, Semestral o Anual,
+  igual que en el sistema anterior. Las líneas *Una sola vez* no tienen
+  equivalente y se omiten.
+- Quedan **activas**, a crédito y con cobro anticipado. La fecha de inicio es la
+  fecha en que se programó el cliente en el sistema anterior.
+- **Próximo cobro:** el sistema anterior no lo guarda (allí se facturaba a mano
+  cada mes). Se calcula como el periodo siguiente a la **última factura o recibo
+  del cliente** y nunca queda en una fecha pasada. Así la facturación automática
+  no vuelve a cobrar periodos que ya se cobraron en el sistema anterior.
+- **No se migran:** los programas **sin productos** y los de clientes **sin
+  facturas ni recibos desde 2025** (programas en desuso). El resultado los
+  cuenta por separado.
+- **Aviso:** si el cliente ya tenía una suscripción creada en este sistema, se
+  migra igual pero el resultado lo advierte con el nombre del cliente. Revíselo
+  para no facturarle dos veces.
+- **Cuidado:** desde que quedan activas, este sistema las factura en su próximo
+  cobro. Si todavía factura esos clientes en el sistema anterior, deje de
+  hacerlo allí o pause las suscripciones aquí, para no facturar dos veces.
+- Se puede ejecutar varias veces sin duplicar nada: una suscripción ya migrada
+  no se vuelve a tocar, porque pudo editarse o facturarse aquí.
+
 ## Vehículos: uno por placa
 
 La entidad **Vehículos (uno por placa)** trae al módulo **Vehículos** todas las
@@ -544,6 +575,10 @@ sistema anterior tampoco los aplicaba al facturar por alumno).
 
 ## Historial de cambios
 
+- **1.20** — Nuevas entidades **Suscripciones: facturas programadas** y
+  **Suscripciones: recibos programados**: migran los documentos programados del
+  sistema anterior al módulo Suscripciones (activas, con el próximo cobro
+  calculado desde el último documento del cliente).
 - **1.19** — **Productos y servicios**: se migra la **categoría** de cada
   producto (grupos de producto del sistema anterior), creando las categorías
   que falten.

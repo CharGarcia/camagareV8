@@ -722,6 +722,14 @@ $base = BASE_URL;
                 }
                 // Marcas: el viejo guarda la marca del producto en una tabla aparte; al migrarla se
                 // escribe en el producto (también en los productos migrados en corridas anteriores).
+                // Suscripciones (facturas/recibos programados): detalle de lo que no se migró.
+                if ((ent === 'suscripciones_fact' || ent === 'suscripciones_rec') && (d.omitidos_sin_productos > 0 || d.omitidos_antiguos > 0 || d.lineas_una_vez > 0)) {
+                    html += `<br><span class="text-info small">ℹ No migrados: ${fmt(d.omitidos_sin_productos || 0)} sin productos y ${fmt(d.omitidos_antiguos || 0)} sin documentos del cliente desde 2025${d.lineas_una_vez ? ` · ${fmt(d.lineas_una_vez)} línea(s) "una sola vez" omitida(s)` : ''}. Las migradas quedan ACTIVAS con el próximo cobro calculado.</span>`;
+                }
+                if (d.clientes_con_suscripcion_previa > 0) {
+                    const muestra = (d.clientes_con_suscripcion_previa_muestra || []).map(x => String(x).replace(/</g, '&lt;')).join(', ');
+                    html += `<br><span class="text-warning small">⚠ ${fmt(d.clientes_con_suscripcion_previa)} suscripción(es) migrada(s) de clientes que YA tenían una suscripción creada en este sistema: revise que no se facture dos veces${muestra ? ': ' + muestra : ''}${d.clientes_con_suscripcion_previa > (d.clientes_con_suscripcion_previa_muestra || []).length ? '…' : ''}.</span>`;
+                }
                 // Productos: categoría del sistema anterior (grupo_familiar_producto).
                 if (d.productos_categorizados > 0 || d.categorias_creadas > 0) {
                     html += `<br><span class="text-success small">🗂 ${fmt(d.productos_categorizados || 0)} producto(s) quedaron con su categoría${d.categorias_creadas ? ` (${fmt(d.categorias_creadas)} categoría(s) creada(s))` : ''}.</span>`;

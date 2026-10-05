@@ -1629,6 +1629,27 @@ class SriEnvioService
             );
         }
 
+        // Documento con fecha distinta de hoy: puede que el SRI ya lo haya autorizado ese día
+        // con una clave que no es la guardada. El caso conocido es el sistema anterior, que
+        // generaba la clave con el código numérico fijo 12345678: un documento migrado como
+        // borrador trae otra clave y, aunque el usuario ponga la fecha original, la clave que
+        // arma el sistema conserva el código del borrador. Se prueba también esa variante.
+        if ($estado !== 'AUTORIZADO') {
+            $alternativa = $this->claveSistemaAnteriorAutorizada($claveAcceso, $tipoAmbiente);
+            if ($alternativa !== null) {
+                [$claveAlt, $consultaAlt] = $alternativa;
+                Database::getConnection()
+                    ->prepare("UPDATE {$tabla} SET clave_acceso = ?, updated_by = ?, updated_at = NOW() WHERE id = ?")
+                    ->execute([$claveAlt, $idUsuario, $id]);
+                return $this->finalizarPreVerificacionAutorizada(
+                    $tabla, $id, $claveAlt, $tipoAmbiente, $tipoComprobante, $idEmpresa, $idUsuario,
+                    $estadoAutorizado, $onAutorizado, $consultaAlt,
+                    "Comprobante ya autorizado en el SRI con la clave {$claveAlt} (código numérico del sistema anterior); "
+                    . "se reemplazó la clave {$claveAcceso} y se registró sin reenviarlo."
+                );
+            }
+        }
+
         // Si el SRI ya tiene un registro de esta clave de acceso -en procesamiento por un
         // envío anterior, o PPR- reenviarla al WS de recepción es rechazado con el error
         // 70 "CLAVE DE ACCESO EN PROCESAMIENTO". En ese caso NO se debe reenviar: hay que
@@ -1706,6 +1727,64 @@ class SriEnvioService
         }
 
         return null; // Sin registro previo en el SRI — continuar con el envío normal
+    }
+
+    /** Código numérico fijo con el que el sistema anterior generaba las claves de acceso. */
+    private const CODIGO_NUMERICO_SISTEMA_ANTERIOR = '12345678';
+
+    /**
+     * Si la clave es de un día distinto de hoy, prueba la misma clave (mismo RUC, tipo,
+     * ambiente, serie, número y FECHA) con el código numérico del sistema anterior. Devuelve
+     * [clave, consulta] si el SRI la tiene AUTORIZADA; null en cualquier otro caso.
+     *
+     * Solo se intenta con fecha distinta de hoy: un documento con fecha de hoy es un envío
+     * nuevo y no debe pagar una consulta extra al SRI. Como la clave fija el número y la
+     * fecha, lo que se encuentra es el comprobante que el SRI tiene con ese número ese día.
+     *
+     * @return array{0:string, 1:array}|null
+     */
+    private function claveSistemaAnteriorAutorizada(string $claveAcceso, string $tipoAmbiente): ?array
+    {
+        if (strlen($claveAcceso) !== 49 || !ctype_digit($claveAcceso)) {
+            return null;
+        }
+        $fecha = \DateTime::createFromFormat('dmY', substr($claveAcceso, 0, 8));
+        if (!$fecha || $fecha->format('Y-m-d') === (new \DateTime())->format('Y-m-d')) {
+            return null;
+        }
+        if (substr($claveAcceso, 39, 8) === self::CODIGO_NUMERICO_SISTEMA_ANTERIOR) {
+            return null; // Es la misma clave que ya se consultó.
+        }
+
+        try {
+            $claveAlt = \App\Services\ClaveAccesoService::generar(
+                $fecha->format('Y-m-d'),
+                substr($claveAcceso, 8, 2),   // tipo de comprobante
+                substr($claveAcceso, 10, 13), // RUC
+                substr($claveAcceso, 23, 1),  // ambiente
+                substr($claveAcceso, 24, 3),  // establecimiento
+                substr($claveAcceso, 27, 3),  // punto de emisión
+                substr($claveAcceso, 30, 9),  // secuencial
+                substr($claveAcceso, 47, 1),  // tipo de emisión
+                self::CODIGO_NUMERICO_SISTEMA_ANTERIOR
+            );
+        } catch (\Throwable $e) {
+            return null;
+        }
+
+        $limiteEnvio = $this->ws->getLimite();
+        $limitePre   = microtime(true) + self::TIEMPO_MAXIMO_PRE_VERIFICACION;
+        $this->ws->setLimite($limiteEnvio === null ? $limitePre : min($limiteEnvio, $limitePre));
+        try {
+            $consulta = $this->ws->consultarAutorizacion($claveAlt, $tipoAmbiente);
+        } catch (\Throwable $e) {
+            error_log('[SRI preVerificar] No se pudo consultar la clave del sistema anterior: ' . $e->getMessage());
+            return null;
+        } finally {
+            $this->ws->setLimite($limiteEnvio);
+        }
+
+        return strtoupper($consulta['estado'] ?? '') === 'AUTORIZADO' ? [$claveAlt, $consulta] : null;
     }
 
     /**

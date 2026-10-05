@@ -69,6 +69,11 @@ class MigracionMysqlService
         // DEBEN ir antes de ingresos/egresos: sus pagos enlazan a estas formas.
         'formas_pago'       => ['label' => 'Formas de cobro/pago (efectivo, caja…)', 'tabla' => 'opciones_cobros_pagos', 'fecha' => null,             'tipo' => 'catalogo'],
         'cuentas_bancarias' => ['label' => 'Cuentas bancarias (formas de pago)', 'tabla' => 'cuentas_bancarias',        'fecha' => null,             'tipo' => 'catalogo'],
+        // Facturas y recibos PROGRAMADOS del viejo (clientes_*_programados + detalle_por_facturar con
+        // referencia CLIENTE{id} / RECIBO{id}) → módulo Suscripciones. Después de Clientes y Productos.
+        // Solo programas con productos y cuyo cliente tuvo documentos desde 2025 (ver migrarSuscripciones).
+        'suscripciones_fact' => ['label' => 'Suscripciones: facturas programadas', 'tabla' => 'clientes_facturas_programadas', 'fecha' => null, 'tipo' => 'catalogo'],
+        'suscripciones_rec'  => ['label' => 'Suscripciones: recibos programados',  'tabla' => 'clientes_recibos_programados',  'fecha' => null, 'tipo' => 'catalogo'],
         'facturas'          => ['label' => 'Facturas de venta',                'tabla' => 'encabezado_factura',         'fecha' => 'fecha_factura',  'tipo' => 'documento'],
         'notas_credito'     => ['label' => 'Notas de crédito',                 'tabla' => 'encabezado_nc',              'fecha' => 'fecha_nc',       'tipo' => 'documento'],
         'retenciones_venta' => ['label' => 'Retenciones en venta',             'tabla' => 'encabezado_retencion_venta', 'fecha' => 'fecha_emision',  'tipo' => 'documento'],
@@ -369,6 +374,10 @@ class MigracionMysqlService
                 return $this->migrarConsignacionesDerivado($idEmpresa, $ruc, $idUsuario, $limite, $desde, $hasta, 'DEVOLUCION');
             case 'cambios_producto':
                 return $this->migrarCambiosProducto($idEmpresa, $ruc, $idUsuario, $limite, $desde, $hasta);
+            case 'suscripciones_fact':
+                return $this->migrarSuscripciones('factura', $idEmpresa, $ruc, $idUsuario);
+            case 'suscripciones_rec':
+                return $this->migrarSuscripciones('recibo', $idEmpresa, $ruc, $idUsuario);
             case 'carwash':
                 return $this->migrarCarwash($idEmpresa, $ruc, $idUsuario, $limite, $desde, $hasta);
             case 'cargas_inventario':
@@ -465,7 +474,7 @@ class MigracionMysqlService
         'proformas' => 'proformas_cabecera', 'consignaciones' => 'consignaciones_ventas',
         'consignaciones_fact' => 'consignaciones_facturas', 'consignaciones_ret' => 'retornos_cv',
         'cambios_producto' => 'cambios_producto_cv', 'pedidos' => 'pedidos_cabecera',
-        'cargas_inventario' => 'inventario_cargas', 'carwash' => 'carwash_ordenes',
+        'cargas_inventario' => 'inventario_cargas', 'carwash' => 'carwash_ordenes', 'suscripciones_fact' => 'suscripciones', 'suscripciones_rec' => 'suscripciones',
     ];
 
     /**
@@ -542,7 +551,7 @@ class MigracionMysqlService
     }
 
     /** Catálogos: NO se eliminan con esta herramienta (se auto-corrigen al re-migrar por reconciliación). */
-    private const ELIMINAR_VEDADAS = ['plan_cuentas', 'clientes', 'productos', 'marcas', 'proveedores', 'vendedores', 'bodegas', 'empleados', 'novedades', 'cuentas_bancarias', 'formas_pago', 'alumnos_campus', 'alumnos_niveles', 'alumnos', 'vehiculos'];
+    private const ELIMINAR_VEDADAS = ['plan_cuentas', 'clientes', 'productos', 'marcas', 'proveedores', 'vendedores', 'bodegas', 'empleados', 'novedades', 'cuentas_bancarias', 'formas_pago', 'alumnos_campus', 'alumnos_niveles', 'alumnos', 'vehiculos', 'suscripciones_fact', 'suscripciones_rec'];
 
     /**
      * Cuántos registros ELIMINARÍA por entidad (para la confirmación previa). Solo cuenta lo que la
@@ -3625,6 +3634,182 @@ class MigracionMysqlService
                 $cliPorIdent = $snapCli;
                 $res['errores']++;
                 if (empty($res['error_muestra'])) { $res['error_muestra'] = 'Placa ' . $placa . ': ' . substr($ex->getMessage(), 0, 180); }
+            }
+        }
+        return $res;
+    }
+
+    /** Programas viejos sin documentos del cliente desde esta fecha no se migran (están en desuso). */
+    private const SUSC_ULTIMO_DOC_DESDE = '2025-01-01';
+
+    /** Periodicidad vieja (periodo_a_facturar.codigo_periodo) → código de suscripcion_periodicidades. '03' (Una sola vez) no tiene equivalente. */
+    private const SUSC_PERIODICIDAD = ['01' => 'semanal', '02' => 'mensual', '04' => 'trimestral', '05' => 'semestral', '06' => 'anual', '07' => 'quincenal'];
+
+    /**
+     * Facturas o recibos PROGRAMADOS del sistema anterior → módulo Suscripciones (una por programa).
+     *
+     * Origen: `clientes_facturas_programadas` / `clientes_recibos_programados` (id_fp, cliente, fecha de
+     * alta) y sus productos en `detalle_por_facturar` con id_referencia 'CLIENTE{id_fp}' (facturas) o
+     * 'RECIBO{id_fp}' (recibos): producto, cantidad, precio y periodicidad (cuando_facturar). Cada
+     * programa tiene una sola periodicidad. El viejo no guarda la próxima fecha de cobro (se factura a mano
+     * por mes): se calcula como el periodo siguiente al ÚLTIMO documento (factura/recibo) del cliente y
+     * nunca queda en el pasado, para que la facturación automática no "se ponga al día" con periodos que
+     * ya se facturaron en el viejo.
+     *
+     * Se OMITEN (decisión del usuario, 2026-10-05): programas sin productos y programas cuyo cliente no
+     * tiene documentos desde SUSC_ULTIMO_DOC_DESDE. Se crean ACTIVAS, crédito, cobro anticipado, vía
+     * SuscripcionesService::crear() (mismas validaciones y auditoría que el alta manual / carga masiva).
+     * Idempotente: una suscripción ya migrada no se vuelve a tocar (pudo editarse o facturarse aquí).
+     */
+    private function migrarSuscripciones(string $tipo, int $idEmpresa, string $ruc, int $idUsuario): array
+    {
+        $esRecibo = $tipo === 'recibo';
+        $entidad  = $esRecibo ? 'suscripciones_rec' : 'suscripciones_fact';
+        $tabla    = $esRecibo ? 'clientes_recibos_programados' : 'clientes_facturas_programadas';
+        $prefijo  = $esRecibo ? 'RECIBO' : 'CLIENTE';
+        $base  = substr(preg_replace('/\D+/', '', $ruc), 0, 10);
+        $mysql = LegacyMysqlConnection::get();
+        $pg    = Database::getConnection();
+        $qBase = $mysql->quote($base . '%');
+
+        $res = ['entidad' => $entidad, 'total' => 0, 'migrados' => 0, 'ya_migrados' => 0, 'omitidos' => 0, 'errores' => 0,
+                'omitidos_sin_productos' => 0, 'omitidos_antiguos' => 0, 'lineas_una_vez' => 0,
+                'omitidos_motivo' => 'programa sin productos, o cliente sin facturas/recibos desde ' . substr(self::SUSC_ULTIMO_DOC_DESDE, 0, 4)];
+
+        $done        = $this->idsMigrados($pg, $idEmpresa, $entidad);
+        $insMap      = $this->stmtMap($pg, $entidad);
+        $mapCliente  = $this->mapaDe($pg, $idEmpresa, 'clientes');
+        $mapProd     = $this->mapaDe($pg, $idEmpresa, 'productos');
+        $cliPorIdent = $this->clientesPorIdentificacion($pg, $idEmpresa);
+        $prodPorCod  = $this->productosPorCodigo($pg, $idEmpresa);
+
+        // Periodicidades del sistema nuevo (catálogo global) por código.
+        $perPorCodigo = [];
+        foreach ($pg->query("SELECT id, codigo, meses FROM suscripcion_periodicidades") as $p) {
+            $perPorCodigo[strtolower(trim((string) $p['codigo']))] = ['id' => (int) $p['id'], 'meses' => (int) $p['meses'], 'codigo' => (string) $p['codigo']];
+        }
+
+        // Programas, sus líneas, los productos viejos involucrados y el último documento de cada cliente.
+        $programas = $mysql->query("SELECT id_fp, ruc_empresa, id_cliente, fecha_agregado FROM $tabla
+                                     WHERE ruc_empresa LIKE $qBase" . $this->clausulaEstabOrigen('ruc_empresa', $base, $mysql) . " ORDER BY id_fp")->fetchAll(PDO::FETCH_ASSOC);
+        $lineas = [];
+        foreach ($mysql->query("SELECT id_referencia, id_producto, cant_producto, precio_producto, cuando_facturar
+                                  FROM detalle_por_facturar WHERE ruc_empresa LIKE $qBase AND id_referencia LIKE " . $mysql->quote($prefijo . '%') . " ORDER BY id_detalle_pf") as $l) {
+            $lineas[(string) $l['id_referencia']][] = $l;
+        }
+        $idsProd = [];
+        foreach ($lineas as $ls) { foreach ($ls as $l) { $idsProd[(int) $l['id_producto']] = true; } }
+        $prodViejo = [];
+        foreach (array_chunk(array_keys($idsProd), 1000) as $lote) {
+            foreach ($mysql->query("SELECT id, codigo_producto, nombre_producto, tarifa_iva FROM productos_servicios WHERE id IN (" . implode(',', array_map('intval', $lote)) . ")") as $p) {
+                $prodViejo[(int) $p['id']] = $p;
+            }
+        }
+        $docTabla = $esRecibo ? 'encabezado_recibo' : 'encabezado_factura';
+        $docFecha = $esRecibo ? 'fecha_recibo' : 'fecha_factura';
+        $ultimoDoc = [];
+        foreach ($mysql->query("SELECT id_cliente, MAX(DATE($docFecha)) f FROM $docTabla WHERE ruc_empresa LIKE $qBase GROUP BY id_cliente") as $d) {
+            $ultimoDoc[(int) $d['id_cliente']] = (string) $d['f'];
+        }
+
+        // Aviso (no bloqueo, como en la carga masiva): el cliente ya tiene una suscripción viva creada en el
+        // sistema nuevo (no migrada) → riesgo de facturarle dos veces.
+        $res['clientes_con_suscripcion_previa'] = 0;
+        $res['clientes_con_suscripcion_previa_muestra'] = [];
+        $qPrevia = $pg->prepare("SELECT 1 FROM suscripciones s
+                                  WHERE s.id_empresa = ? AND s.id_cliente = ? AND s.eliminado = false AND s.estado <> 'cancelado'
+                                    AND NOT EXISTS (SELECT 1 FROM migracion_mysql_map m WHERE m.id_empresa = s.id_empresa
+                                                     AND m.entidad IN ('suscripciones_fact', 'suscripciones_rec') AND m.id_destino = s.id)
+                                  LIMIT 1");
+
+        $suscService = new \App\Services\modulos\SuscripcionesService(
+            new \App\repositories\modulos\SuscripcionesRepository(), new \App\Rules\modulos\SuscripcionesRules(), new \App\Services\LogSistemaService()
+        );
+        $hoy = date('Y-m-d');
+
+        foreach ($programas as $pr) {
+            $res['total']++;
+            $old = (int) $pr['id_fp'];
+            if (isset($done[(string) $old])) { $res['ya_migrados']++; continue; }
+
+            // Líneas con periodicidad conocida ('03' = Una sola vez no tiene equivalente: se omite la línea).
+            $ls = [];
+            foreach ($lineas[$prefijo . $old] ?? [] as $l) {
+                $cod = str_pad(trim((string) $l['cuando_facturar']), 2, '0', STR_PAD_LEFT);
+                $per = $perPorCodigo[self::SUSC_PERIODICIDAD[$cod] ?? ''] ?? null;
+                if ($per === null) { $res['lineas_una_vez']++; continue; }
+                if ((float) $l['cant_producto'] <= 0) { continue; }
+                $ls[] = $l + ['per' => $per];
+            }
+            if (!$ls) { $res['omitidos']++; $res['omitidos_sin_productos']++; continue; }
+
+            $ult = $ultimoDoc[(int) $pr['id_cliente']] ?? null;
+            if ($ult === null || $ult < self::SUSC_ULTIMO_DOC_DESDE) { $res['omitidos']++; $res['omitidos_antiguos']++; continue; }
+
+            try {
+                // Cliente y productos (se crean si faltan, como en el resto de la migración).
+                $idCliente = $this->resolverOCrearCliente($cliPorIdent, $mapCliente, (int) $pr['id_cliente'], $idEmpresa, $idUsuario, $mysql, $pg);
+                if (!$idCliente) { $res['omitidos']++; $res['omitidos_sin_productos']++; continue; }
+                $qPrevia->execute([$idEmpresa, $idCliente]);
+                if ($qPrevia->fetchColumn()) {
+                    $res['clientes_con_suscripcion_previa']++;
+                    if (count($res['clientes_con_suscripcion_previa_muestra']) < 8) {
+                        $res['clientes_con_suscripcion_previa_muestra'][] = (string) ($pg->query("SELECT nombre FROM clientes WHERE id = " . (int) $idCliente)->fetchColumn() ?: $idCliente);
+                    }
+                }
+                $per = $ls[0]['per'];
+                $detalle = [];
+                foreach ($ls as $i => $l) {
+                    $pv = $prodViejo[(int) $l['id_producto']] ?? [];
+                    $codIva = trim((string) ($pv['tarifa_iva'] ?? '0'));
+                    $idProd = $this->resolverOCrearProducto($prodPorCod, $mapProd, (int) $l['id_producto'],
+                        (string) ($pv['codigo_producto'] ?? ''), (string) ($pv['nombre_producto'] ?? ''), $codIva, $idEmpresa, $idUsuario, $pg);
+                    $detalle[] = [
+                        'id_producto'     => $idProd,
+                        'descripcion'     => mb_substr(trim((string) ($pv['nombre_producto'] ?? '')) ?: 'ITEM', 0, 300),
+                        'cantidad'        => (float) $l['cant_producto'],
+                        'precio_unitario' => (float) $l['precio_producto'],
+                        'id_tarifa_iva'   => $this->ivaIdPorCodigo($pg, $codIva),
+                        'porcentaje_iva'  => (float) (self::IVA_PCT[$codIva] ?? 0),
+                        'orden'           => $i,
+                        'id_usuario'      => $idUsuario,
+                    ];
+                }
+
+                // Próximo cobro: el periodo siguiente al último documento, nunca en el pasado.
+                $prox = $suscService->calcularProximoCobro($ult, $per['meses'], strtoupper($per['codigo']));
+                for ($guard = 0; $prox < $hoy && $guard < 2000; $guard++) {
+                    $prox = $suscService->calcularProximoCobro($prox, $per['meses'], strtoupper($per['codigo']));
+                }
+                $inicio = self::fechaCorta($pr['fecha_agregado']) ?? $ult;
+
+                // crear() abre y cierra su propia transacción (BaseRepository no anida): el mapa se graba
+                // inmediatamente después para que una re-corrida no la duplique.
+                $idSusc = $suscService->crear([
+                    'id_empresa'       => $idEmpresa,
+                    'id_usuario'       => $idUsuario,
+                    'created_by'       => $idUsuario,
+                    'id_cliente'       => $idCliente,
+                    'id_periodicidad'  => $per['id'],
+                    'fecha_inicio'     => $inicio,
+                    'fecha_fin'        => null,
+                    'proximo_cobro'    => $prox,
+                    'forma_cobro'      => 'credito',
+                    'estado'           => 'activo',
+                    'tipo_comprobante' => $tipo,
+                    'modalidad_cobro'  => 'anticipado',
+                    'reconocimiento'   => 'inmediato',
+                    'observaciones'    => 'Migrada del sistema anterior (' . ($esRecibo ? 'recibo' : 'factura') . ' programada N° ' . $old . ').',
+                    'info_adicional'   => [],
+                    'detalle'          => $detalle,
+                ]);
+                $insMap->execute([':e' => $idEmpresa, ':o' => $old, ':d' => $idSusc, ':cn' => $prefijo . $old, ':vin' => 'f', ':cb' => $idUsuario]);
+                $done[(string) $old] = true;
+                $res['migrados']++;
+            } catch (Throwable $ex) {
+                if ($pg->inTransaction()) { $pg->rollBack(); }
+                $res['errores']++;
+                if (empty($res['error_muestra'])) { $res['error_muestra'] = "Programa $old: " . substr($ex->getMessage(), 0, 180); }
             }
         }
         return $res;

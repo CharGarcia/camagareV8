@@ -871,6 +871,81 @@ class ConsignacionVentaRepository extends BaseRepository
     }
 
     /**
+     * Candado transaccional por línea de pedido (CLAUDE.md §8): serializa dos guardados que
+     * consignan la misma línea, para que el segundo lea el saldo ya descontado por el primero.
+     * Se libera solo al COMMIT/ROLLBACK; exige una transacción abierta. Orden ascendente para que
+     * dos guardados con varias líneas en común no se bloqueen mutuamente.
+     *
+     * @param int[] $idsPedidoDetalle
+     */
+    public function lockPedidoDetalles(array $idsPedidoDetalle): void
+    {
+        $ids = array_values(array_unique(array_filter(array_map('intval', $idsPedidoDetalle))));
+        sort($ids);
+        if (empty($ids)) {
+            return;
+        }
+        $st = $this->db->prepare("SELECT pg_advisory_xact_lock(hashtext('consig_pedido_detalle:' || :id))");
+        foreach ($ids as $id) {
+            $st->execute([':id' => (string) $id]);
+        }
+    }
+
+    /**
+     * Saldo de cada línea de pedido: cantidad pedida, ya consignada en consignaciones vigentes
+     * (sin contar $idConsignacionExcluir, la que se está editando) y los números de esas
+     * consignaciones, para el mensaje de rechazo. Mismo criterio que el saldo que muestra el
+     * modal al cargar el pedido (ConsignacionesVentasController::cargarPedidoDetalleAjax).
+     *
+     * @param int[] $idsPedidoDetalle
+     * @return array<int,array{cantidad_pedido:float,consignado:float,pedido:string,producto:string,consignaciones:string}>
+     */
+    public function getSaldoPedidoDetalles(array $idsPedidoDetalle, int $idEmpresa, int $idConsignacionExcluir = 0): array
+    {
+        $ids = array_values(array_unique(array_filter(array_map('intval', $idsPedidoDetalle))));
+        if (empty($ids)) {
+            return [];
+        }
+        $params = [':e' => $idEmpresa, ':excl' => $idConsignacionExcluir];
+        $in = [];
+        foreach ($ids as $i => $id) {
+            $in[] = ":pd{$i}";
+            $params[":pd{$i}"] = $id;
+        }
+        $sql = "SELECT pd.id,
+                       pd.cantidad AS cantidad_pedido,
+                       pc.establecimiento || '-' || pc.punto_emision || '-' || pc.secuencial AS pedido,
+                       TRIM(CONCAT_WS(' ', NULLIF(pr.codigo, ''), pr.nombre)) AS producto,
+                       COALESCE(SUM(cvd.cantidad) FILTER (WHERE cv.id IS NOT NULL), 0) AS consignado,
+                       COALESCE(STRING_AGG(DISTINCT cv.serie || '-' || cv.secuencial, ', ')
+                                FILTER (WHERE cv.id IS NOT NULL), '') AS consignaciones
+                  FROM pedidos_detalle pd
+                  JOIN pedidos_cabecera pc ON pc.id = pd.id_pedido AND pc.id_empresa = :e
+                  LEFT JOIN productos pr ON pr.id = pd.id_producto
+                  LEFT JOIN consignaciones_ventas_detalles cvd
+                         ON cvd.id_pedido_detalle = pd.id AND cvd.eliminado = false
+                        AND cvd.id_consignacion <> :excl
+                  LEFT JOIN consignaciones_ventas cv
+                         ON cv.id = cvd.id_consignacion AND cv.id_empresa = :e AND cv.eliminado = false
+                 WHERE pd.id IN (" . implode(', ', $in) . ")
+                 GROUP BY pd.id, pd.cantidad, pc.establecimiento, pc.punto_emision, pc.secuencial, pr.codigo, pr.nombre";
+        $st = $this->db->prepare($sql);
+        $st->execute($params);
+
+        $out = [];
+        foreach ($st->fetchAll(PDO::FETCH_ASSOC) as $r) {
+            $out[(int) $r['id']] = [
+                'cantidad_pedido' => (float) $r['cantidad_pedido'],
+                'consignado'      => (float) $r['consignado'],
+                'pedido'          => (string) $r['pedido'],
+                'producto'        => (string) $r['producto'],
+                'consignaciones'  => (string) $r['consignaciones'],
+            ];
+        }
+        return $out;
+    }
+
+    /**
      * Pedidos de los que se cargaron líneas en la consignación (pestaña Pedidos del modal): una
      * fila por línea de cada pedido —todas, no solo las cargadas aquí, para ver qué quedó
      * pendiente— con lo tomado en ESTA consignación. Solo pedidos de la empresa y no eliminados;
