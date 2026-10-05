@@ -112,7 +112,7 @@ class ProyectosController extends BaseModuloController
 
         ob_start();
         if (empty($rows)) {
-            echo '<tr><td colspan="5" class="text-center py-5 text-muted"><i class="bi bi-briefcase fs-3 d-block mb-2"></i>No se encontraron proyectos.</td></tr>';
+            echo '<tr><td colspan="9" class="text-center py-5 text-muted"><i class="bi bi-briefcase fs-3 d-block mb-2"></i>No se encontraron proyectos.</td></tr>';
         } else {
             foreach ($rows as $r) {
                 if (!empty($r['created_at'])) $r['created_at'] = date('d-m-Y H:i:s', strtotime($r['created_at']));
