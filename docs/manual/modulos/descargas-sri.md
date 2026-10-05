@@ -77,19 +77,24 @@ se escribe una nueva; no hay forma de recuperarla desde el sistema.
 - **"XML obtenido pero error en registro: el código del documento de sustento es
   obligatorio"**: ocurría al registrar retenciones cuyo XML no incluye el código
   del documento de sustento (el SRI lo permite: en la versión 1.0.0 del
-  comprobante de retención ese dato es opcional). Ya no bloquea: si el XML no lo
-  trae, el sistema toma el código presente en el propio comprobante y, si no hay
-  ninguno, asume **01 – Factura**. Puede corregirlo después desde la retención.
+  comprobante de retención ese dato es opcional). Ya no bloquea: el dato se guarda
+  **tal como viene en el XML**; si la línea no lo trae, queda **vacío** (hasta la
+  versión 1.10 se asumía *01 – Factura*; ya no).
 - **"XML obtenido pero error en registro: Línea 1: la fecha del documento de
-  sustento es obligatoria"**: ocurría con retenciones cuyo XML no incluye la
-  fecha del documento de sustento. Es típico de los **bancos** cuando retienen
-  sobre rendimientos financieros (intereses): el sustento es el código **12 –
-  Documento emitido por institución financiera**, el número viene en ceros y la
-  fecha no se informa (en la versión 1.0.0 del comprobante ese dato es opcional).
-  No es un problema de versión del comprobante. Ya no bloquea: si el XML no trae
-  la fecha, el sistema usa la primera fecha de sustento que exista en el propio
-  comprobante y, si no hay ninguna, la **fecha de emisión de la retención**.
-  Puede corregirla después desde la retención.
+  sustento es obligatoria"** o **"…el número del documento de sustento es
+  obligatorio"**: ocurría con retenciones cuyo XML no incluye la fecha o el
+  número del documento de sustento. Es típico de los **bancos**: al retener
+  sobre rendimientos financieros (intereses) el sustento es el código **12 –
+  Documento emitido por institución financiera**, con número en ceros y sin
+  fecha; al retener **ISD** por una transferencia al exterior no hay comprobante
+  de respaldo (sustento **00**, sin número ni fecha). En la versión 1.0.0 del
+  comprobante ambos datos son opcionales; no es un problema de versión. Ya no
+  bloquea: los datos se guardan **tal como vienen en el XML** y, si el
+  comprobante no trae el número o la fecha del sustento, esa línea queda con
+  ese dato **vacío**. No se completa con la fecha de la retención ni con un
+  número en ceros. Lo mismo aplica al **código** del documento de sustento.
+  Requiere aplicar en la base
+  `database/20261005_retencion_venta_detalle_sustento_opcional.sql`.
 - **Un XML válido se marca como ERROR al subirlo**: ocurría con archivos en los
   que el emisor deja un salto de línea entre `<comprobante>` y el bloque `CDATA`
   del sobre de autorización. El lector exigía que el comprobante empezara justo
@@ -166,10 +171,13 @@ se escribe una nueva; no hay forma de recuperarla desde el sistema.
 ## Historial de cambios
 
 - **1.11** — El registro de retenciones ya no falla con *la fecha del documento de
-  sustento es obligatoria* cuando el XML del SRI omite esa fecha (retenciones de
-  bancos sobre intereses, sustento **12**, dato opcional en la versión 1.0.0): se
-  toma la fecha de sustento presente en el comprobante o, en su defecto, la fecha
-  de emisión de la retención. Aplica a retenciones recibidas y emitidas.
+  sustento es obligatoria* ni con *el número del documento de sustento es
+  obligatorio* cuando el XML del SRI omite esos datos (retenciones de bancos sobre
+  intereses, sustento **12**, o de ISD por transferencias al exterior, sustento
+  **00**; opcionales en la versión 1.0.0). El código, el número y la fecha del
+  documento de sustento se guardan tal como vienen en el XML: lo que no viene
+  queda vacío (el código ya no se asume como *01 – Factura*). Exige el SQL
+  `database/20261005_retencion_venta_detalle_sustento_opcional.sql`.
 - **1.10** — Corregido el error *retencion_compra_cabecera_estado_check* al
   cargar retenciones emitidas por la empresa. Si el XML es el sobre de
   autorización del SRI con estado **AUTORIZADO**, la retención se registra como

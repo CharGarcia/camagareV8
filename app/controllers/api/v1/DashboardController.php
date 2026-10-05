@@ -58,10 +58,17 @@ class DashboardController extends ApiBaseController
             'label_periodo'        => $data['label_periodo'],
             'anio'                 => $data['anio'],
             'mes'                  => $data['mes'],
-            'ventas_mes_actual'    => $data['ventas_mes_actual'],
-            'ventas_mes_anterior'  => $data['ventas_mes_anterior'],
-            'compras_mes_actual'   => $data['compras_mes_actual'],
-            'compras_mes_anterior' => $data['compras_mes_anterior'],
+            // Contrato de la app móvil: `ventas_*`/`compras_*` siguen siendo el total CON
+            // impuestos (como siempre; ahora con las notas de crédito restadas). El neto
+            // sin IVA, que es lo que muestra el tablero web, viaja en `*_sin_iva`.
+            'ventas_mes_actual'            => $data['ventas_mes_actual_con_iva'],
+            'ventas_mes_anterior'          => $data['ventas_mes_anterior_con_iva'],
+            'ventas_sin_iva_mes_actual'    => $data['ventas_mes_actual'],
+            'ventas_sin_iva_mes_anterior'  => $data['ventas_mes_anterior'],
+            'compras_mes_actual'           => $data['compras_mes_actual_con_iva'],
+            'compras_mes_anterior'         => $data['compras_mes_anterior_con_iva'],
+            'compras_sin_iva_mes_actual'   => $data['compras_mes_actual'],
+            'compras_sin_iva_mes_anterior' => $data['compras_mes_anterior'],
             'cxc_total'            => $data['cxc_total'],
             'cxp_total'            => $data['cxp_total'],
         ]);

@@ -1708,20 +1708,22 @@ class DocumentoAutomatedRegisterService
                     'base_imponible' => (float)$imp->baseImponible,
                     'porcentaje_retener' => (float)$imp->porcentajeRetener,
                     'valor_retenido' => (float)$imp->valorRetenido,
-                    // <codDocSustento> es opcional en el esquema 1.0.0: si la linea no lo
-                    // trae se usa el del documento (o factura por defecto), igual que la cabecera.
+                    // <codDocSustento> es opcional en el esquema 1.0.0: la linea se guarda tal
+                    // como viene; si no lo trae se usa el de la cabecera (que tambien sale del
+                    // XML) y, si tampoco, queda vacio.
                     'cod_doc_sustento' => trim((string)$imp->codDocSustento) !== ''
                         ? trim((string)$imp->codDocSustento)
-                        : (($tipoDocSustento ?: '01')),
+                        : $tipoDocSustento,
                     // `??` sobre SimpleXML no sirve de respaldo: un hijo ausente es un
-                    // elemento vacio, no null. Se compara el texto; sin fecha en la linea ni
-                    // en la cabecera se usa la fecha de emision de la retencion.
+                    // elemento vacio, no null. Se compara el texto. Los datos se guardan
+                    // tal como vienen en el XML: si la linea no los trae, se usa el de la
+                    // cabecera (que tambien sale del XML) y, si tampoco, quedan vacios.
                     'num_doc_sustento' => trim((string)$imp->numDocSustento) !== ''
                         ? $this->formatearNumDocSustento((string)$imp->numDocSustento)
-                        : ($numDocSustento ?? ''),
+                        : $numDocSustento,
                     'fecha_emision_doc_sustento' => trim((string)$imp->fechaEmisionDocSustento) !== ''
                         ? $this->formatearFecha(trim((string)$imp->fechaEmisionDocSustento))
-                        : ($fechaSustento ?: $fechaEmision)
+                        : $fechaSustento
                 ];
             }
         }
@@ -1731,11 +1733,11 @@ class DocumentoAutomatedRegisterService
             foreach ($xml->docsSustento->docSustento as $doc) {
                 $codSustento = trim((string)$doc->codDocSustento) !== ''
                     ? trim((string)$doc->codDocSustento)
-                    : ($tipoDocSustento ?: '01');
+                    : $tipoDocSustento;
                 $numSustento = $this->formatearNumDocSustento((string)$doc->numDocSustento);
                 $fecSustento = trim((string)$doc->fechaEmisionDocSustento) !== ''
                     ? $this->formatearFecha(trim((string)$doc->fechaEmisionDocSustento))
-                    : ($fechaSustento ?: $fechaEmision);
+                    : $fechaSustento;
 
                 if (isset($doc->retenciones->retencion)) {
                     foreach ($doc->retenciones->retencion as $ret) {
@@ -1772,7 +1774,7 @@ class DocumentoAutomatedRegisterService
             'periodo_fiscal'             => (string)$info->periodoFiscal,
             'tipo_doc_sustento'          => $tipoDocSustento ?: '01',
             'num_doc_sustento'           => $numDocSustento,
-            'fecha_emision_doc_sustento' => $fechaSustento ?: $fechaEmision,
+            'fecha_emision_doc_sustento' => $fechaSustento,
             'id_compra'                  => $idCompra,
             'id_liquidacion'             => $idLiquidacion,
             // retencion_compra_cabecera.estado tiene CHECK en femenino
@@ -1928,12 +1930,14 @@ class DocumentoAutomatedRegisterService
         $xmlString = ($this->xmlOriginal ?? $xml->asXML());
 
         // Helper: codigo de impuesto SRI -> nombre interno
+        // Codigos del XML de retencion del SRI: 1 renta, 2 IVA, 6 ISD. El '3' se conserva
+        // por compatibilidad con registros antiguos.
         $mapImpuesto = static function (string $cod): string {
-            return match ($cod) {
+            return match (trim($cod)) {
                 '1'     => 'RENTA',
                 '2'     => 'IVA',
-                '3'     => 'ISD',
-                default => strtoupper($cod),
+                '6', '3' => 'ISD',
+                default => strtoupper(trim($cod)),
             };
         };
 
@@ -1975,55 +1979,14 @@ class DocumentoAutomatedRegisterService
             }
         }
 
-        // Codigo del documento de sustento por defecto.
-        // En el esquema 1.0.0 del SRI <codDocSustento> es OPCIONAL, asi que muchos emisores
-        // envian la retencion solo con numDocSustento/fechaEmisionDocSustento. Sin este
-        // respaldo la validacion de RetencionVentaRules rechazaba el XML autorizado con
-        // "el codigo del documento de sustento es obligatorio". Se toma el primer codigo
-        // presente en el propio XML y, si no hay ninguno, se asume factura ('01'), que es
-        // el unico sustento posible para una retencion recibida sobre nuestras ventas
-        // (mismo criterio que generarRetencionAutomatica()).
-        $codSustentoDefault = '';
-        if (isset($xml->impuestos->impuesto)) {
-            foreach ($xml->impuestos->impuesto as $imp) {
-                $c = trim((string)$imp->codDocSustento);
-                if ($c !== '') { $codSustentoDefault = $c; break; }
-            }
-        }
-        if ($codSustentoDefault === '' && isset($xml->docsSustento->docSustento)) {
-            foreach ($xml->docsSustento->docSustento as $doc) {
-                $c = trim((string)$doc->codDocSustento);
-                if ($c !== '') { $codSustentoDefault = $c; break; }
-            }
-        }
-        if ($codSustentoDefault === '') {
-            $codSustentoDefault = '01';
-        }
-
-        // Fecha del documento de sustento por defecto.
-        // En la version 1.0.0 <fechaEmisionDocSustento> tambien es OPCIONAL. Los bancos la
-        // omiten en las retenciones sobre rendimientos financieros (codDocSustento 12,
-        // numDocSustento en ceros, p. ej. Banco ProCredit, codigo 323B1): la linea quedaba
-        // con fecha vacia y RetencionVentaRules rechazaba el XML autorizado con "la fecha
-        // del documento de sustento es obligatoria". Se toma la primera fecha de sustento
-        // presente en el XML y, si no hay ninguna, la fecha de emision de la propia
-        // retencion (la columna en BD es NOT NULL).
-        $fechaSustentoDefault = $fechaSustento ?? '';
-        if ($fechaSustentoDefault === '' && isset($xml->impuestos->impuesto)) {
-            foreach ($xml->impuestos->impuesto as $imp) {
-                $fs = trim((string)$imp->fechaEmisionDocSustento);
-                if ($fs !== '') { $fechaSustentoDefault = $this->formatearFecha($fs); break; }
-            }
-        }
-        if ($fechaSustentoDefault === '' && isset($xml->docsSustento->docSustento)) {
-            foreach ($xml->docsSustento->docSustento as $doc) {
-                $fs = trim((string)$doc->fechaEmisionDocSustento);
-                if ($fs !== '') { $fechaSustentoDefault = $this->formatearFecha($fs); break; }
-            }
-        }
-        if ($fechaSustentoDefault === '') {
-            $fechaSustentoDefault = $fechaEmision;
-        }
+        // Codigo, numero y fecha del documento de sustento: en la version 1.0.0 del SRI los
+        // tres son OPCIONALES y los bancos los omiten (retenciones sobre intereses con
+        // sustento 12 y numero en ceros; ISD por transferencias al exterior con sustento 00
+        // y sin numero ni fecha; emisores que mandan la linea sin codDocSustento). Se guardan
+        // TAL COMO VIENEN en cada linea del XML: si no vienen quedan en NULL
+        // (RetencionVentaRules los exige solo en captura manual; las columnas admiten NULL
+        // desde database/20261005_retencion_venta_detalle_sustento_opcional.sql). No se
+        // rellenan con '01', con la fecha de la retencion ni con un numero en ceros.
 
         // 1. Extraer lineas de retencion (Soporta v1.0 y v2.0)
         $lineas = [];
@@ -2039,11 +2002,11 @@ class DocumentoAutomatedRegisterService
                     'base_imponible'             => (float)$imp->baseImponible,
                     'porcentaje_retencion'       => (float)$imp->porcentajeRetener,
                     'valor_retenido'             => (float)$imp->valorRetenido,
-                    'cod_doc_sustento'           => $codDoc !== '' ? $codDoc : $codSustentoDefault,
-                    'num_doc_sustento'           => $numDoc !== '' ? $numDoc : ($numDocSustento ?? ''),
+                    'cod_doc_sustento'           => $codDoc !== '' ? $codDoc : null,
+                    'num_doc_sustento'           => $numDoc !== '' ? $numDoc : null,
                     'fecha_emision_doc_sustento' => trim((string)$imp->fechaEmisionDocSustento) !== ''
                         ? $this->formatearFecha(trim((string)$imp->fechaEmisionDocSustento))
-                        : $fechaSustentoDefault,
+                        : null,
                 ];
             }
         }
@@ -2051,12 +2014,11 @@ class DocumentoAutomatedRegisterService
         // Version 2.0.0 (docsSustento/docSustento/retenciones/retencion)
         if (isset($xml->docsSustento->docSustento)) {
             foreach ($xml->docsSustento->docSustento as $doc) {
-                $codSustento = trim((string)$doc->codDocSustento);
-                if ($codSustento === '') { $codSustento = $codSustentoDefault; }
-                $numSustento = !empty((string)$doc->numDocSustento) ? $fmtDoc((string)$doc->numDocSustento) : '';
+                $codSustento = trim((string)$doc->codDocSustento) !== '' ? trim((string)$doc->codDocSustento) : null;
+                $numSustento = trim((string)$doc->numDocSustento) !== '' ? $fmtDoc((string)$doc->numDocSustento) : null;
                 $fecSustento = trim((string)$doc->fechaEmisionDocSustento) !== ''
                     ? $this->formatearFecha(trim((string)$doc->fechaEmisionDocSustento))
-                    : $fechaSustentoDefault;
+                    : null;
 
                 if (isset($doc->retenciones->retencion)) {
                     foreach ($doc->retenciones->retencion as $ret) {

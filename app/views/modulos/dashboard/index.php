@@ -17,6 +17,7 @@ $mesActual  = (int) date('n');
 .db-metric-value { font-size:1.6rem;font-weight:700;color:#111827;line-height:1.2; }
 .db-metric-label { font-size:.8rem;color:#6b7280;font-weight:500; }
 .db-metric-change { font-size:.73rem;font-weight:600; }
+.db-metric-sub    { font-size:.72rem;font-weight:500;color:#6b7280;line-height:1.2;margin-top:2px; }
 .ch-up{color:#059669} .ch-dn{color:#dc2626} .ch-neu{color:#6b7280}
 .db-panel { background:#fff;border-radius:10px;box-shadow:0 2px 8px rgba(0,0,0,.06);border:1px solid rgba(0,0,0,.05);overflow:hidden; }
 .db-panel-header { padding:.9rem 1.25rem;border-bottom:1px solid #f3f4f6;background:#fafafa;display:flex;align-items:center;justify-content:space-between; }
@@ -208,8 +209,9 @@ $mesActual  = (int) date('n');
     <?php
     // Indicadores. `w` = ancho por defecto en columnas de 12.
     $metricas = [
-        ['k'=>'ventas',   'w'=>2, 'lbl'=>'Ventas',         'val'=>'mValVentas',   'chg'=>'mChgVentas',   'ico'=>'bi-receipt',        'color'=>'primary',   'ini'=>'$0.00'],
-        ['k'=>'compras',  'w'=>2, 'lbl'=>'Compras',        'val'=>'mValCompras',  'chg'=>'mChgCompras',  'ico'=>'bi-cart3',          'color'=>'danger',    'ini'=>'$0.00'],
+        // Ventas y Compras: valor principal SIN IVA (menos notas de crédito); `sub` muestra el total con impuestos en letra pequeña.
+        ['k'=>'ventas',   'w'=>2, 'lbl'=>'Ventas (sin IVA)',  'val'=>'mValVentas',   'chg'=>'mChgVentas',   'sub'=>'mSubVentas',  'ico'=>'bi-receipt',        'color'=>'primary',   'ini'=>'$0.00'],
+        ['k'=>'compras',  'w'=>2, 'lbl'=>'Compras (sin IVA)', 'val'=>'mValCompras',  'chg'=>'mChgCompras',  'sub'=>'mSubCompras', 'ico'=>'bi-cart3',          'color'=>'danger',    'ini'=>'$0.00'],
         ['k'=>'nomina',   'w'=>2, 'lbl'=>'Nómina',         'val'=>'mValNomina',   'chg'=>'mChgNomina',   'ico'=>'bi-people',         'color'=>'secondary', 'ini'=>'$0.00'],
         ['k'=>'utilidad', 'w'=>2, 'lbl'=>'Utilidad Bruta', 'val'=>'mValUtilidad', 'chg'=>'mChgUtilidad', 'ico'=>'bi-graph-up-arrow', 'color'=>'success',   'ini'=>'$0.00'],
         ['k'=>'margen',   'w'=>2, 'lbl'=>'Margen',         'val'=>'mValMargen',   'chg'=>'mChgMargen',   'ico'=>'bi-percent',        'color'=>'info',      'ini'=>'0%'],
@@ -227,6 +229,9 @@ $mesActual  = (int) date('n');
                 <div>
                     <p class="db-metric-label mb-1"><?= $m['lbl'] ?></p>
                     <div class="db-metric-value text-tr sk" id="<?= $m['val'] ?>"><?= $m['ini'] ?></div>
+                    <?php if (isset($m['sub'])): ?>
+                    <div class="db-metric-sub text-tr sk" id="<?= $m['sub'] ?>" title="Total con impuestos (IVA, ICE), menos notas de crédito">Con IVA: $0.00</div>
+                    <?php endif; ?>
                 </div>
                 <div class="db-metric-icon bg-<?= $m['color'] ?> bg-opacity-10 text-<?= $m['color'] ?>"><i class="bi <?= $m['ico'] ?>"></i></div>
             </div>
@@ -284,7 +289,9 @@ $mesActual  = (int) date('n');
         <span class="db-resize-handle" title="Arrastrar para cambiar el ancho"></span>
         <div class="db-panel">
             <div class="db-panel-header flex-wrap gap-2">
-                <h6 class="db-panel-title"><i class="bi bi-bar-chart-line me-2 text-primary"></i>Comparativo mensual</h6>
+                <h6 class="db-panel-title"><i class="bi bi-bar-chart-line me-2 text-primary"></i>Comparativo mensual
+                    <span class="db-metric-sub d-block" title="Las barras de Ventas y Compras van sin IVA (menos notas de crédito); al pasar el cursor se ve también el total con IVA">Ventas y Compras sin IVA · con IVA en el detalle</span>
+                </h6>
                 <div id="cmpSeries" class="d-flex flex-wrap gap-2">
                     <?php
                     $series = [
@@ -314,7 +321,9 @@ $mesActual  = (int) date('n');
         <span class="db-resize-handle" title="Arrastrar para cambiar el ancho"></span>
         <div class="db-panel">
             <div class="db-panel-header">
-                <h6 class="db-panel-title"><i class="bi bi-box-seam me-2 text-warning"></i>Top Productos</h6>
+                <h6 class="db-panel-title"><i class="bi bi-box-seam me-2 text-warning"></i>Top Productos
+                    <span class="db-metric-sub d-block" title="Ventas sin IVA por producto (las notas de crédito restan); al pasar el cursor se ve también el total con IVA">Sin IVA · con IVA en el detalle</span>
+                </h6>
             </div>
             <div class="p-3" style="height:280px"><canvas id="chartTopProductos"></canvas></div>
         </div>
@@ -326,7 +335,9 @@ $mesActual  = (int) date('n');
         <span class="db-resize-handle" title="Arrastrar para cambiar el ancho"></span>
         <div class="db-panel">
             <div class="db-panel-header">
-                <h6 class="db-panel-title"><i class="bi bi-truck me-2 text-danger"></i>Top Proveedores (compras)</h6>
+                <h6 class="db-panel-title"><i class="bi bi-truck me-2 text-danger"></i>Top Proveedores (compras)
+                    <span class="db-metric-sub d-block" title="Compras sin IVA (las notas de crédito restan); al pasar el cursor se ve también el total con IVA">Sin IVA · con IVA en el detalle</span>
+                </h6>
             </div>
             <div class="p-3" style="height:260px"><canvas id="chartTopProveedores"></canvas></div>
         </div>
@@ -350,7 +361,9 @@ $mesActual  = (int) date('n');
         <span class="db-resize-handle" title="Arrastrar para cambiar el ancho"></span>
         <div class="db-panel">
             <div class="db-panel-header">
-                <h6 class="db-panel-title"><i class="bi bi-people me-2 text-info"></i>Top Clientes</h6>
+                <h6 class="db-panel-title"><i class="bi bi-people me-2 text-info"></i>Top Clientes
+                    <span class="db-metric-sub d-block" title="Ventas sin IVA (las notas de crédito restan); al pasar el cursor se ve también el total con IVA">Sin IVA · con IVA en el detalle</span>
+                </h6>
             </div>
             <div class="p-3" style="height:240px"><canvas id="chartTopClientes"></canvas></div>
         </div>
@@ -669,7 +682,24 @@ function renderTendencia(data, tipo){
         interaction:{mode:'index',intersect:false},
         plugins:{
             legend:{position:'top',align:'end',labels:{boxWidth:11,usePointStyle:true,font:{size:12}}},
-            tooltip:{callbacks:{label:c=>` ${c.dataset.label}: ${fmt(isRadar?c.parsed.r:c.parsed.y)}`}}
+            tooltip:{
+                footerFont:{size:10, weight:'normal'},
+                footerColor:'#d1d5db',
+                callbacks:{
+                    label:c=>` ${c.dataset.label}: ${fmt(isRadar?c.parsed.r:c.parsed.y)}`,
+                    // Sub-dato con impuestos (letra más pequeña) para Ventas y Compras,
+                    // igual que en las tarjetas: la barra es sin IVA, el pie dice el total con IVA.
+                    footer:items=>{
+                        if(!items.length) return '';
+                        const d = data[items[0].dataIndex] || {};
+                        const sel = seriesSeleccionadas();
+                        const partes = [];
+                        if(sel.includes('ventas'))  partes.push(`Ventas ${fmt(+d.ventas_con_iva||0)}`);
+                        if(sel.includes('compras')) partes.push(`Compras ${fmt(+d.compras_con_iva||0)}`);
+                        return partes.length ? 'Con IVA: ' + partes.join(' · ') : '';
+                    }
+                }
+            }
         }
     };
     if(isRadar){
@@ -697,7 +727,17 @@ function renderTopProveedores(data){
         },
         options:{
             indexAxis:'y',responsive:true,maintainAspectRatio:false,
-            plugins:{legend:{display:false},tooltip:{callbacks:{label:c=>` ${fmt(c.parsed.x)}`}}},
+            plugins:{
+                legend:{display:false},
+                tooltip:{
+                    footerFont:{size:10, weight:'normal'}, footerColor:'#d1d5db',
+                    callbacks:{
+                        label:c=>` ${fmt(c.parsed.x)}`,
+                        // Sub-dato con impuestos (letra pequeña), igual que en las tarjetas
+                        footer:items=>items.length ? 'Con IVA: ' + fmt(+(data[items[0].dataIndex]||{}).total_con_iva||0) : ''
+                    }
+                }
+            },
             scales:{x:{beginAtZero:true,ticks:{callback:v=>v>=1000?'$'+(v/1000)+'k':'$'+v}},y:{ticks:{font:{size:11}}}}
         }
     });
@@ -739,7 +779,17 @@ function renderTopProductos(data){
         },
         options:{
             indexAxis:'y',responsive:true,maintainAspectRatio:false,
-            plugins:{legend:{display:false},tooltip:{callbacks:{label:c=>` ${fmt(c.parsed.x)}`}}},
+            plugins:{
+                legend:{display:false},
+                tooltip:{
+                    footerFont:{size:10, weight:'normal'}, footerColor:'#d1d5db',
+                    callbacks:{
+                        label:c=>` ${fmt(c.parsed.x)}`,
+                        // Sub-dato con impuestos (letra pequeña), igual que en las tarjetas
+                        footer:items=>items.length ? 'Con IVA: ' + fmt(+(data[items[0].dataIndex]||{}).total_con_iva||0) : ''
+                    }
+                }
+            },
             scales:{x:{beginAtZero:true,ticks:{callback:v=>v>=1000?'$'+(v/1000)+'k':'$'+v}},y:{ticks:{font:{size:11}}}}
         }
     });
@@ -760,7 +810,14 @@ function renderTopClientes(data){
             responsive:true,maintainAspectRatio:false,
             plugins:{
                 legend:{position:'bottom',labels:{boxWidth:11,font:{size:11}}},
-                tooltip:{callbacks:{label:c=>` ${fmt(c.raw)}`}}
+                tooltip:{
+                    footerFont:{size:10, weight:'normal'}, footerColor:'#d1d5db',
+                    callbacks:{
+                        label:c=>` ${fmt(c.raw)}`,
+                        // Sub-dato con impuestos (letra pequeña), igual que en las tarjetas
+                        footer:items=>items.length ? 'Con IVA: ' + fmt(+(data[items[0].dataIndex]||{}).total_con_iva||0) : ''
+                    }
+                }
             }
         }
     });
@@ -804,7 +861,7 @@ async function applyFilters(){
     const meses = $('fMeses').value;
     const tipo  = $('fTipoChart').value;
 
-    setSk(['mValVentas','mChgVentas','mValCompras','mChgCompras',
+    setSk(['mValVentas','mChgVentas','mSubVentas','mValCompras','mChgCompras','mSubCompras',
            'mValNomina','mChgNomina',
            'mValUtilidad','mChgUtilidad','mValMargen','mChgMargen',
            'mValIngresos','mChgIngresos','mValEgresos','mChgEgresos',
@@ -848,13 +905,16 @@ async function applyFilters(){
         const mrgn = d.ventas_mes_actual>0?(util/d.ventas_mes_actual)*100:0;
         const mrgnAnt = d.ventas_mes_anterior>0?(utilAnt/d.ventas_mes_anterior)*100:0;
 
-        clrSk(['mValVentas','mChgVentas','mValCompras','mChgCompras',
+        clrSk(['mValVentas','mChgVentas','mSubVentas','mValCompras','mChgCompras','mSubCompras',
                'mValNomina','mChgNomina',
                'mValUtilidad','mChgUtilidad','mValMargen','mChgMargen']);
 
+        // Valor principal sin IVA; el total con impuestos va debajo en letra pequeña.
         $('mValVentas').textContent   = fmt(d.ventas_mes_actual);
+        $('mSubVentas').textContent   = 'Con IVA: ' + fmt(d.ventas_mes_actual_con_iva ?? 0);
         $('mChgVentas').innerHTML     = chg(d.ventas_mes_actual, d.ventas_mes_anterior);
         $('mValCompras').textContent  = fmt(d.compras_mes_actual);
+        $('mSubCompras').textContent  = 'Con IVA: ' + fmt(d.compras_mes_actual_con_iva ?? 0);
         $('mChgCompras').innerHTML    = chg(d.compras_mes_actual, d.compras_mes_anterior);
         $('mValNomina').textContent   = fmt(d.nomina_mes_actual);
         $('mChgNomina').innerHTML     = chg(d.nomina_mes_actual, d.nomina_mes_anterior);

@@ -460,9 +460,10 @@ class RetencionVentaRepository extends BaseRepository
         $st = $this->db->prepare($sql);
         $st->execute([
             ':ir'   => $d['id_retencion'],
-            ':cds'  => $d['cod_doc_sustento'],
-            ':nds'  => $d['num_doc_sustento'] ?? null,
-            ':feds' => $d['fecha_emision_doc_sustento'],
+            // Vacío => NULL (una cadena vacía no es una fecha válida para PostgreSQL)
+            ':cds'  => ($d['cod_doc_sustento'] ?? '') !== '' ? $d['cod_doc_sustento'] : null,
+            ':nds'  => ($d['num_doc_sustento'] ?? '') !== '' ? $d['num_doc_sustento'] : null,
+            ':feds' => ($d['fecha_emision_doc_sustento'] ?? '') !== '' ? $d['fecha_emision_doc_sustento'] : null,
             ':ci'   => $d['codigo_impuesto'],
             ':cr'   => $d['codigo_retencion'],
             ':bi'   => $d['base_imponible'],

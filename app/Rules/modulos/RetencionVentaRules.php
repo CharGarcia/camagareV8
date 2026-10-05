@@ -27,6 +27,10 @@ class RetencionVentaRules
         // Documentos importados desde el SRI (XML autorizado) se registran tal cual llegan:
         // el SRI permite líneas de retención con base imponible 0, así que aquí solo se exige
         // que el dato exista y no sea negativo. Para captura manual se mantiene la exigencia > 0.
+        // Por la misma razón, el código, el número y la fecha del documento de sustento solo se
+        // exigen en captura manual: en la versión 1.0.0 del comprobante son opcionales y los
+        // bancos los omiten (intereses con sustento 12, ISD con sustento 00); si el XML no los
+        // trae, quedan vacíos.
         $esElectronico = ($data['origen'] ?? '') === 'electronico';
 
         if (empty($data['lineas']) || !is_array($data['lineas'])) {
@@ -34,11 +38,11 @@ class RetencionVentaRules
         } else {
             foreach ($data['lineas'] as $i => $linea) {
                 $n = $i + 1;
-                if (empty($linea['cod_doc_sustento']))
+                if (!$esElectronico && empty($linea['cod_doc_sustento']))
                     $errores[] = "Línea {$n}: el código del documento de sustento es obligatorio.";
-                if (empty($linea['num_doc_sustento']))
+                if (!$esElectronico && empty($linea['num_doc_sustento']))
                     $errores[] = "Línea {$n}: el número del documento de sustento es obligatorio.";
-                if (empty($linea['fecha_emision_doc_sustento']))
+                if (!$esElectronico && empty($linea['fecha_emision_doc_sustento']))
                     $errores[] = "Línea {$n}: la fecha del documento de sustento es obligatoria.";
                 if (empty($linea['codigo_retencion']))
                     $errores[] = "Línea {$n}: el código de retención es obligatorio.";

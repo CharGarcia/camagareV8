@@ -5,8 +5,8 @@ categoria: Primeros pasos
 ruta_modulo: modulos/dashboard
 tipo: modulo
 visibilidad: todos
-etiquetas: tablero, dashboard, inicio, resumen, indicadores, avisos, pantalla principal, home, ordenar tarjetas, mover tarjetas, arrastrar, reubicar, personalizar tablero, filtros fijos, ancho de tarjetas, redimensionar, cambiar tamaño, columnas, saldo cxc, saldo cxp, cartera, cuentas por cobrar, cuentas por pagar, comparativo mensual, nómina
-version: 1.3
+etiquetas: tablero, dashboard, inicio, resumen, indicadores, avisos, pantalla principal, home, ordenar tarjetas, mover tarjetas, arrastrar, reubicar, personalizar tablero, filtros fijos, ancho de tarjetas, redimensionar, cambiar tamaño, columnas, saldo cxc, saldo cxp, cartera, cuentas por cobrar, cuentas por pagar, comparativo mensual, nómina, sin iva, con iva, notas de crédito, ventas netas
+version: 1.4
 orden: 2
 estado: activo
 ---
@@ -24,8 +24,8 @@ requieren acción.
 
 | Indicador | Qué suma |
 |---|---|
-| Ventas | Facturas **autorizadas** emitidas en el período (igual que el Reporte de Ventas). Los borradores, las pendientes de envío y las rechazadas no cuentan. |
-| Compras | Comprobantes de compra del período; las **notas de crédito restan**. Las compras anuladas o rechazadas no cuentan. |
+| Ventas (sin IVA) | Facturas **autorizadas** emitidas en el período **menos las notas de crédito autorizadas** (igual que el Reporte de Ventas, *Facturas − NC*). El valor grande es **sin IVA** (la base imponible, ya con descuentos); debajo, en letra pequeña, se ve el total **con impuestos**. Los borradores, las pendientes de envío y las rechazadas no cuentan. |
+| Compras (sin IVA) | Comprobantes de compra del período; las **notas de crédito restan**. El valor grande es **sin IVA** y debajo se ve el total con impuestos. Las compras anuladas o rechazadas no cuentan. |
 | Nómina | Total devengado de los roles de pago del período (sin borradores ni anulados). |
 | Ingresos / Egresos (caja) | Ingresos y egresos del período, sin los anulados. |
 | CxC Pendiente | **El mismo saldo que muestra Cuentas por Cobrar** con su Fecha Hasta en la fecha de corte: facturas, recibos de venta y saldos iniciales, con cobros, retenciones, notas de crédito y notas de débito. |
@@ -36,6 +36,17 @@ La **fecha de corte** de la cartera es el último día del período elegido o ho
 lo que ocurra primero; se ve debajo del valor ("Saldo por cobrar al…"). Con el
 mes en curso es hoy, igual que la Fecha Hasta con la que se abren Cuentas por
 Cobrar y Cuentas por Pagar, así que los tres muestran el mismo valor.
+
+La **Utilidad Bruta** y el **Margen** se calculan con esos mismos valores sin
+IVA (Ventas − Compras), así el impuesto cobrado y el pagado no inflan ni
+distorsionan el resultado. El **Comparativo mensual**, el **Top de clientes**,
+el **Top de proveedores** y el **Top de productos** usan el mismo criterio:
+sin IVA y con las notas de crédito restadas. En el comparativo, al pasar el
+cursor por un mes, el pie del detalle muestra en letra pequeña el total **con
+IVA** de Ventas y de Compras de ese mes; en el Top de clientes y el Top de
+proveedores y en el Top de productos, el detalle de cada barra o porción indica igualmente el total con
+IVA de ese cliente o proveedor. La tabla *Últimas Ventas* sí muestra
+el total de cada factura tal como se emitió (con impuestos).
 
 El **Comparativo mensual** arranca con Ventas y Compras marcadas; Nómina,
 Ingresos, Egresos y Utilidad se marcan en las casillas de la tarjeta.
@@ -117,6 +128,12 @@ Suele ser una de tres cosas:
 
 ## Historial de cambios
 
+- **1.4** — *Ventas* y *Compras* muestran ahora el valor **sin IVA** como cifra
+  principal y, debajo en letra pequeña, el total con impuestos. En *Ventas* las
+  **notas de crédito autorizadas restan** (antes no se descontaban y la tarjeta
+  mostraba el total facturado con IVA). El comparativo mensual, los tops de
+  clientes y proveedores, la Utilidad Bruta y el Margen usan el mismo criterio;
+  el detalle de cada mes del comparativo y de cada cliente, proveedor o producto en los tops también indica el total con IVA. En el Top de productos las notas de crédito ahora restan (antes solo sumaba facturas).
 - **1.3** — *CxC Pendiente* y *CxP Pendiente* muestran ahora el mismo saldo que
   Cuentas por Cobrar y Cuentas por Pagar: antes solo sumaban lo emitido en el
   período y dejaban fuera recibos de venta, notas de débito, liquidaciones,

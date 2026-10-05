@@ -535,15 +535,19 @@
 
 
         tbody.innerHTML = lineasData.map((l, i) => {
-            let options = comprobantesAutorizados.map(c => 
-                `<option value="${c.codigo_comprobante}" ${l.cod_doc_sustento == c.codigo_comprobante ? 'selected' : ''}>${c.codigo_comprobante} - ${c.comprobante}</option>`
-            ).join('');
-
-            if (!options) {
-                options = l.cod_doc_sustento 
-                    ? `<option value="${l.cod_doc_sustento}" selected>${l.cod_doc_sustento}</option>`
-                    : '<option value="">Cargando...</option>';
+            // El codigo de sustento se guarda tal como viene en el XML: puede estar vacio
+            // (el SRI lo permite en la version 1.0.0) o ser uno que no esta en el catalogo
+            // (p. ej. 00 o 12 en retenciones de bancos). Sin opcion vacia, el navegador
+            // mostraria la primera del catalogo como si fuera el valor guardado.
+            const codLinea = (l.cod_doc_sustento ?? '').toString().trim();
+            const enCatalogo = comprobantesAutorizados.some(c => codLinea !== '' && codLinea == c.codigo_comprobante);
+            let options = `<option value="" ${codLinea === '' ? 'selected' : ''}></option>`;
+            if (codLinea !== '' && !enCatalogo) {
+                options += `<option value="${escHtml(codLinea)}" selected>${escHtml(codLinea)}</option>`;
             }
+            options += comprobantesAutorizados.map(c => 
+                `<option value="${c.codigo_comprobante}" ${codLinea == c.codigo_comprobante ? 'selected' : ''}>${c.codigo_comprobante} - ${c.comprobante}</option>`
+            ).join('');
 
             return `
             <tr>

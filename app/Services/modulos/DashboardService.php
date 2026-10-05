@@ -65,13 +65,25 @@ class DashboardService
         $alcanceCxc = $alcanceCartera['cxc'] ?? [];
         $alcanceCxp = $alcanceCartera['cxp'] ?? [];
 
+        // Ventas y Compras: el valor principal es SIN IVA (base imponible, ya con
+        // descuentos) y las notas de crédito restan. El total con impuestos viaja
+        // aparte (*_con_iva) para mostrarlo como dato secundario.
+        $vAct = $this->sumVentas($idEmpresa, $tipoAmbiente, $desde, $hasta);
+        $vAnt = $this->sumVentas($idEmpresa, $tipoAmbiente, $antDes, $antHas);
+        $cAct = $this->sumCompras($idEmpresa, $tipoAmbiente, $desde, $hasta);
+        $cAnt = $this->sumCompras($idEmpresa, $tipoAmbiente, $antDes, $antHas);
+
         return [
-            // Ventas
-            'ventas_mes_actual'     => $this->sumVentas($idEmpresa, $tipoAmbiente, $desde, $hasta),
-            'ventas_mes_anterior'   => $this->sumVentas($idEmpresa, $tipoAmbiente, $antDes, $antHas),
-            // Compras
-            'compras_mes_actual'    => $this->sumCompras($idEmpresa, $tipoAmbiente, $desde, $hasta),
-            'compras_mes_anterior'  => $this->sumCompras($idEmpresa, $tipoAmbiente, $antDes, $antHas),
+            // Ventas (sin IVA, menos notas de crédito)
+            'ventas_mes_actual'           => $vAct['neto'],
+            'ventas_mes_anterior'         => $vAnt['neto'],
+            'ventas_mes_actual_con_iva'   => $vAct['total'],
+            'ventas_mes_anterior_con_iva' => $vAnt['total'],
+            // Compras (sin IVA, menos notas de crédito)
+            'compras_mes_actual'           => $cAct['neto'],
+            'compras_mes_anterior'         => $cAnt['neto'],
+            'compras_mes_actual_con_iva'   => $cAct['total'],
+            'compras_mes_anterior_con_iva' => $cAnt['total'],
             // Ingresos
             'ingresos_mes_actual'   => $this->sumIngresos($idEmpresa, $tipoAmbiente, $desde, $hasta),
             'ingresos_mes_anterior' => $this->sumIngresos($idEmpresa, $tipoAmbiente, $antDes, $antHas),
@@ -196,15 +208,26 @@ class DashboardService
     }
 
     /**
+     * Nota de crédito de venta vigente: solo AUTORIZADA, igual que la factura
+     * (`condVentaValida`). Las NC restan de las ventas, como en el Reporte de
+     * Ventas ("Facturas − NC").
+     */
+    private function condNotaCreditoValida(string $alias = ''): string
+    {
+        return $this->condVentaValida($alias);
+    }
+
+    /**
      * Valor neto de un comprobante de compra: las notas de crédito (04 y afines) RESTAN,
      * como en el Reporte de Compras. Antes se sumaban como una compra más y
      * la nota de crédito inflaba las compras en vez de reducirlas.
+     * `$col`: `importe_total` (con impuestos) o `total_sin_impuestos` (sin IVA).
      */
-    private function exprCompraNeta(string $alias = ''): string
+    private function exprCompraNeta(string $alias = '', string $col = 'importe_total'): string
     {
         $p  = $alias !== '' ? "{$alias}." : '';
         $nc = "'" . implode("','", TiposComprobanteCompra::NOTAS_CREDITO) . "'";
-        return "CASE WHEN {$p}tipo_comprobante IN ({$nc}) THEN -{$p}importe_total ELSE {$p}importe_total END";
+        return "CASE WHEN {$p}tipo_comprobante IN ({$nc}) THEN -COALESCE({$p}{$col},0) ELSE COALESCE({$p}{$col},0) END";
     }
 
     /** Compra vigente: fuera las anuladas y rechazadas (mismo criterio que Cuentas por Pagar). */
@@ -216,30 +239,51 @@ class DashboardService
 
     // ── Sumas de período ──────────────────────────────────────────────────────
 
-    private function sumVentas(int $e, string $ta, string $d, string $h): float
+    /**
+     * Ventas del período: facturas autorizadas MENOS notas de crédito autorizadas.
+     * Devuelve `neto` (sin IVA: total_sin_impuestos, ya con descuento) y `total`
+     * (con impuestos: importe_total).
+     */
+    private function sumVentas(int $e, string $ta, string $d, string $h): array
     {
         $st = $this->db->prepare(
-            "SELECT COALESCE(SUM(importe_total), 0)
-             FROM ventas_cabecera
-             WHERE id_empresa = ? AND eliminado = false AND {$this->condVentaValida()}
-               AND {$this->condAmbiente('tipo_ambiente', $ta)}
-               AND CAST(fecha_emision AS DATE) BETWEEN ? AND ?"
+            "SELECT COALESCE(SUM(neto), 0) AS neto, COALESCE(SUM(total), 0) AS total
+             FROM (
+                 SELECT COALESCE(total_sin_impuestos,0) AS neto, COALESCE(importe_total,0) AS total
+                 FROM ventas_cabecera
+                 WHERE id_empresa = ? AND eliminado = false AND {$this->condVentaValida()}
+                   AND {$this->condAmbiente('tipo_ambiente', $ta)}
+                   AND CAST(fecha_emision AS DATE) BETWEEN ? AND ?
+                 UNION ALL
+                 SELECT -COALESCE(total_sin_impuestos,0), -COALESCE(importe_total,0)
+                 FROM notas_credito_cabecera
+                 WHERE id_empresa = ? AND eliminado = false AND {$this->condNotaCreditoValida()}
+                   AND {$this->condAmbiente('tipo_ambiente', $ta)}
+                   AND CAST(fecha_emision AS DATE) BETWEEN ? AND ?
+             ) x"
         );
-        $st->execute([$e, $d, $h]);
-        return (float) $st->fetchColumn();
+        $st->execute([$e, $d, $h, $e, $d, $h]);
+        $r = $st->fetch(PDO::FETCH_ASSOC) ?: [];
+        return ['neto' => round((float) ($r['neto'] ?? 0), 2), 'total' => round((float) ($r['total'] ?? 0), 2)];
     }
 
-    private function sumCompras(int $e, string $ta, string $d, string $h): float
+    /**
+     * Compras del período (las notas de crédito restan). Devuelve `neto` (sin IVA)
+     * y `total` (con impuestos), igual que sumVentas().
+     */
+    private function sumCompras(int $e, string $ta, string $d, string $h): array
     {
         $st = $this->db->prepare(
-            "SELECT COALESCE(SUM({$this->exprCompraNeta()}), 0)
+            "SELECT COALESCE(SUM({$this->exprCompraNeta('', 'total_sin_impuestos')}), 0) AS neto,
+                    COALESCE(SUM({$this->exprCompraNeta()}), 0) AS total
              FROM compras_cabecera
              WHERE id_empresa = ? AND eliminado = false AND {$this->condCompraVigente()}
                AND {$this->condAmbiente('tipo_ambiente', $ta)}
                AND CAST(fecha_emision AS DATE) BETWEEN ? AND ?"
         );
         $st->execute([$e, $d, $h]);
-        return (float) $st->fetchColumn();
+        $r = $st->fetch(PDO::FETCH_ASSOC) ?: [];
+        return ['neto' => round((float) ($r['neto'] ?? 0), 2), 'total' => round((float) ($r['total'] ?? 0), 2)];
     }
 
     private function sumIngresos(int $e, string $ta, string $d, string $h): float
@@ -757,6 +801,8 @@ class DashboardService
             $data[$key] = [
                 'mes'      => date('M Y', $ts),
                 'ventas'   => 0, 'compras'  => 0,
+                // Totales con impuestos (dato secundario del tooltip)
+                'ventas_con_iva' => 0, 'compras_con_iva' => 0,
                 'ingresos' => 0, 'egresos'  => 0,
                 'nomina'   => 0,
             ];
@@ -777,19 +823,41 @@ class DashboardService
             if (isset($data[$r['k']])) $data[$r['k']]['nomina'] = (float) $r['t'];
         }
 
-        // Ventas y Compras: mismo criterio que las tarjetas (sumVentas / sumCompras)
-        foreach ([
-            'ventas'  => "SELECT TO_CHAR(CAST(fecha_emision AS DATE),'YYYY-MM') k, SUM(importe_total) t
-                          FROM ventas_cabecera WHERE id_empresa=? AND eliminado=false AND {$this->condVentaValida()}
-                            AND {$this->condAmbiente('tipo_ambiente', $ta)} AND CAST(fecha_emision AS DATE)>=? GROUP BY k",
-            'compras' => "SELECT TO_CHAR(CAST(fecha_emision AS DATE),'YYYY-MM') k, SUM({$this->exprCompraNeta()}) t
-                          FROM compras_cabecera WHERE id_empresa=? AND eliminado=false AND {$this->condCompraVigente()}
-                            AND {$this->condAmbiente('tipo_ambiente', $ta)} AND CAST(fecha_emision AS DATE)>=? GROUP BY k",
-        ] as $campo => $sql) {
-            $st = $this->db->prepare($sql);
-            $st->execute([$e, $desde]);
-            foreach ($st->fetchAll(PDO::FETCH_ASSOC) as $r) {
-                if (isset($data[$r['k']])) $data[$r['k']][$campo] = (float) $r['t'];
+        // Ventas y Compras: mismo criterio que las tarjetas (sumVentas / sumCompras):
+        // SIN IVA y las notas de crédito restan.
+        $stV = $this->db->prepare(
+            "SELECT k, SUM(t) t, SUM(ti) ti FROM (
+                 SELECT TO_CHAR(CAST(fecha_emision AS DATE),'YYYY-MM') k,
+                        COALESCE(total_sin_impuestos,0) t, COALESCE(importe_total,0) ti
+                 FROM ventas_cabecera WHERE id_empresa=? AND eliminado=false AND {$this->condVentaValida()}
+                   AND {$this->condAmbiente('tipo_ambiente', $ta)} AND CAST(fecha_emision AS DATE)>=?
+                 UNION ALL
+                 SELECT TO_CHAR(CAST(fecha_emision AS DATE),'YYYY-MM') k,
+                        -COALESCE(total_sin_impuestos,0) t, -COALESCE(importe_total,0) ti
+                 FROM notas_credito_cabecera WHERE id_empresa=? AND eliminado=false AND {$this->condNotaCreditoValida()}
+                   AND {$this->condAmbiente('tipo_ambiente', $ta)} AND CAST(fecha_emision AS DATE)>=?
+             ) x GROUP BY k"
+        );
+        $stV->execute([$e, $desde, $e, $desde]);
+        foreach ($stV->fetchAll(PDO::FETCH_ASSOC) as $r) {
+            if (isset($data[$r['k']])) {
+                $data[$r['k']]['ventas']         = (float) $r['t'];
+                $data[$r['k']]['ventas_con_iva'] = (float) $r['ti'];
+            }
+        }
+
+        $stC = $this->db->prepare(
+            "SELECT TO_CHAR(CAST(fecha_emision AS DATE),'YYYY-MM') k,
+                    SUM({$this->exprCompraNeta('', 'total_sin_impuestos')}) t,
+                    SUM({$this->exprCompraNeta()}) ti
+             FROM compras_cabecera WHERE id_empresa=? AND eliminado=false AND {$this->condCompraVigente()}
+               AND {$this->condAmbiente('tipo_ambiente', $ta)} AND CAST(fecha_emision AS DATE)>=? GROUP BY k"
+        );
+        $stC->execute([$e, $desde]);
+        foreach ($stC->fetchAll(PDO::FETCH_ASSOC) as $r) {
+            if (isset($data[$r['k']])) {
+                $data[$r['k']]['compras']         = (float) $r['t'];
+                $data[$r['k']]['compras_con_iva'] = (float) $r['ti'];
             }
         }
 
@@ -816,38 +884,74 @@ class DashboardService
 
     private function getTopProductos(int $e, string $ta, string $d, string $h, int $lim): array
     {
+        // Mismo criterio que la tarjeta Ventas: sin IVA y las líneas de las notas de
+        // crédito autorizadas restan (cantidad y valor). `total_con_iva` suma a la base
+        // de cada línea los impuestos guardados de esa línea (IVA, ICE), sin recalcular.
         $st = $this->db->prepare(
-            "SELECT COALESCE(p.nombre, det.descripcion) AS nombre,
-                    SUM(det.cantidad) AS cantidad,
-                    SUM(det.precio_total_sin_impuesto) AS total
-             FROM ventas_detalle det
-             INNER JOIN ventas_cabecera v ON v.id = det.id_venta
-             LEFT JOIN productos p ON p.id = det.id_producto
-             WHERE v.id_empresa = ? AND v.eliminado = false AND {$this->condVentaValida('v')}
-               AND {$this->condAmbiente('v.tipo_ambiente', $ta)}
-               AND CAST(v.fecha_emision AS DATE) BETWEEN ? AND ?
-             GROUP BY COALESCE(p.nombre, det.descripcion)
+            "SELECT x.nombre,
+                    SUM(x.cantidad) AS cantidad,
+                    SUM(x.total) AS total,
+                    SUM(x.total_con_iva) AS total_con_iva
+             FROM (
+                 SELECT COALESCE(p.nombre, det.descripcion) AS nombre,
+                        det.cantidad,
+                        COALESCE(det.precio_total_sin_impuesto,0) AS total,
+                        COALESCE(det.precio_total_sin_impuesto,0)
+                          + COALESCE((SELECT SUM(i.valor) FROM ventas_detalle_impuestos i WHERE i.id_venta_detalle = det.id),0) AS total_con_iva
+                 FROM ventas_detalle det
+                 INNER JOIN ventas_cabecera v ON v.id = det.id_venta
+                 LEFT JOIN productos p ON p.id = det.id_producto
+                 WHERE v.id_empresa = ? AND v.eliminado = false AND {$this->condVentaValida('v')}
+                   AND {$this->condAmbiente('v.tipo_ambiente', $ta)}
+                   AND CAST(v.fecha_emision AS DATE) BETWEEN ? AND ?
+                 UNION ALL
+                 SELECT COALESCE(p.nombre, det.descripcion),
+                        -det.cantidad,
+                        -COALESCE(det.precio_total_sin_impuesto,0),
+                        -(COALESCE(det.precio_total_sin_impuesto,0)
+                          + COALESCE((SELECT SUM(i.valor) FROM notas_credito_detalle_impuestos i WHERE i.id_nota_credito_detalle = det.id),0))
+                 FROM notas_credito_detalle det
+                 INNER JOIN notas_credito_cabecera n ON n.id = det.id_nota_credito
+                 LEFT JOIN productos p ON p.id = det.id_producto
+                 WHERE n.id_empresa = ? AND n.eliminado = false AND {$this->condNotaCreditoValida('n')}
+                   AND {$this->condAmbiente('n.tipo_ambiente', $ta)}
+                   AND CAST(n.fecha_emision AS DATE) BETWEEN ? AND ?
+             ) x
+             GROUP BY x.nombre
+             HAVING SUM(x.total) <> 0
              ORDER BY total DESC
              LIMIT ?"
         );
-        $st->execute([$e, $d, $h, $lim]);
+        $st->execute([$e, $d, $h, $e, $d, $h, $lim]);
         return $st->fetchAll(PDO::FETCH_ASSOC);
     }
 
     private function getTopClientes(int $e, string $ta, string $d, string $h, int $lim): array
     {
+        // Mismo criterio que la tarjeta Ventas: sin IVA y las notas de crédito del
+        // cliente restan (no cuentan como factura).
         $st = $this->db->prepare(
-            "SELECT cl.nombre, SUM(v.importe_total) AS total, COUNT(v.id) AS facturas
-             FROM ventas_cabecera v
-             INNER JOIN clientes cl ON cl.id = v.id_cliente
-             WHERE v.id_empresa = ? AND v.eliminado = false AND {$this->condVentaValida('v')}
-               AND {$this->condAmbiente('v.tipo_ambiente', $ta)}
-               AND CAST(v.fecha_emision AS DATE) BETWEEN ? AND ?
+            "SELECT cl.nombre, SUM(x.total) AS total, SUM(x.total_con_iva) AS total_con_iva, SUM(x.es_factura) AS facturas
+             FROM (
+                 SELECT v.id_cliente, COALESCE(v.total_sin_impuestos,0) AS total,
+                        COALESCE(v.importe_total,0) AS total_con_iva, 1 AS es_factura
+                 FROM ventas_cabecera v
+                 WHERE v.id_empresa = ? AND v.eliminado = false AND {$this->condVentaValida('v')}
+                   AND {$this->condAmbiente('v.tipo_ambiente', $ta)}
+                   AND CAST(v.fecha_emision AS DATE) BETWEEN ? AND ?
+                 UNION ALL
+                 SELECT n.id_cliente, -COALESCE(n.total_sin_impuestos,0), -COALESCE(n.importe_total,0), 0
+                 FROM notas_credito_cabecera n
+                 WHERE n.id_empresa = ? AND n.eliminado = false AND {$this->condNotaCreditoValida('n')}
+                   AND {$this->condAmbiente('n.tipo_ambiente', $ta)}
+                   AND CAST(n.fecha_emision AS DATE) BETWEEN ? AND ?
+             ) x
+             INNER JOIN clientes cl ON cl.id = x.id_cliente
              GROUP BY cl.nombre
              ORDER BY total DESC
              LIMIT ?"
         );
-        $st->execute([$e, $d, $h, $lim]);
+        $st->execute([$e, $d, $h, $e, $d, $h, $lim]);
         return $st->fetchAll(PDO::FETCH_ASSOC);
     }
 
@@ -855,7 +959,10 @@ class DashboardService
     private function getTopProveedores(int $e, string $ta, string $d, string $h, int $lim): array
     {
         $st = $this->db->prepare(
-            "SELECT p.razon_social AS nombre, SUM({$this->exprCompraNeta('c')}) AS total, COUNT(c.id) AS compras
+            "SELECT p.razon_social AS nombre,
+                    SUM({$this->exprCompraNeta('c', 'total_sin_impuestos')}) AS total,
+                    SUM({$this->exprCompraNeta('c')}) AS total_con_iva,
+                    COUNT(c.id) AS compras
              FROM compras_cabecera c
              INNER JOIN proveedores p ON p.id = c.id_proveedor
              WHERE c.id_empresa = ? AND c.eliminado = false AND {$this->condCompraVigente('c')}
