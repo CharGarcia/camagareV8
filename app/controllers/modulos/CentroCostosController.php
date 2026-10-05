@@ -39,13 +39,15 @@ class CentroCostosController extends BaseModuloController
 
         $buscar   = trim($_GET['b'] ?? $_POST['b'] ?? $_GET['buscar'] ?? $_POST['buscar'] ?? '');
         $page     = max(1, (int) ($_GET['page'] ?? $_POST['page'] ?? 1));
-        $ordenCol = trim($_GET['sort'] ?? $_POST['sort'] ?? $prefsVista['__ordenCol__'] ?? 'nombre');
-        $ordenDir = strtoupper(trim($_GET['dir'] ?? $_POST['dir'] ?? $prefsVista['__ordenDir__'] ?? 'asc'));
+        // Orden múltiple (Shift+clic): la vista lo manda como `orden=col:DIR,col:DIR`.
+        $orden    = \App\Helpers\OrdenListado::leer($prefsVista, 'nombre');
+        $ordenCol = \App\Helpers\OrdenListado::primeraCol($orden, 'nombre');
+        $ordenDir = \App\Helpers\OrdenListado::primeraDir($orden);
         $perPage  = 20;
 
         $idUsuarioFiltro = empty($perm['todo']) ? (int)$_SESSION['id_usuario'] : null;
 
-        $result = $this->service->getListado($idEmpresa, $buscar, $page, $perPage, $ordenCol, $ordenDir, $idUsuarioFiltro);
+        $result = $this->service->getListado($idEmpresa, $buscar, $page, $perPage, $ordenCol, $ordenDir, $idUsuarioFiltro, $orden);
         $rows = $result['rows'];
         $total = $result['total'];
 
@@ -69,8 +71,12 @@ class CentroCostosController extends BaseModuloController
             'buscar'     => $buscar,
             'ordenCol'   => $ordenCol,
             'ordenDir'   => $ordenDir,
+            'ordenJson'  => \App\Helpers\OrdenListado::aJson($orden),
+            'ordenParam' => \App\Helpers\OrdenListado::aCadena($orden),
             'vistaConfig'=> $prefsVista,
             'fullWidth'  => true,
+            // Selects del modal de filtros: solo valores usados en la empresa.
+            'opcionesFiltro' => $this->service->getOpcionesFiltroListado($idEmpresa),
         ]);
     }
 
@@ -83,14 +89,15 @@ class CentroCostosController extends BaseModuloController
         $prefsVista = \App\Helpers\PreferenciasHelper::getPreferenciasVista(self::RUTA_MODULO);
         $buscar    = trim($_GET['b'] ?? $_POST['b'] ?? '');
         $page      = max(1, (int) ($_GET['page'] ?? $_POST['page'] ?? 1));
-        $ordenCol  = trim($_GET['sort'] ?? $_POST['sort'] ?? $prefsVista['__ordenCol__'] ?? 'nombre');
-        $ordenDir  = strtoupper(trim($_GET['dir'] ?? $_POST['dir'] ?? $prefsVista['__ordenDir__'] ?? 'asc'));
+        $orden     = \App\Helpers\OrdenListado::leer($prefsVista, 'nombre');
+        $ordenCol  = \App\Helpers\OrdenListado::primeraCol($orden, 'nombre');
+        $ordenDir  = \App\Helpers\OrdenListado::primeraDir($orden);
         $perPage   = 20;
 
         $perm = $this->getPermisos();
         $idUsuarioFiltro = empty($perm['todo']) ? (int)$_SESSION['id_usuario'] : null;
 
-        $result = $this->service->getListado($idEmpresa, $buscar, $page, $perPage, $ordenCol, $ordenDir, $idUsuarioFiltro);
+        $result = $this->service->getListado($idEmpresa, $buscar, $page, $perPage, $ordenCol, $ordenDir, $idUsuarioFiltro, $orden);
         $rows = $result['rows'];
         $total = $result['total'];
         $totalPages = $perPage > 0 ? (int) ceil($total / $perPage) : 1;
@@ -111,7 +118,7 @@ class CentroCostosController extends BaseModuloController
                     ? '<span class="badge bg-success bg-opacity-10 text-success border border-success border-opacity-25">Activo</span>'
                     : '<span class="badge bg-secondary bg-opacity-10 text-secondary border border-secondary border-opacity-25">Inactivo</span>';
 
-                echo '<tr class="centro-costo-row" role="button" tabindex="0" data-row=\'' . $dataJson . '\' onclick="abrirModalEditar(this)">
+                echo '<tr class="cc-row" role="button" tabindex="0" data-row=\'' . $dataJson . '\' onclick="abrirModalEditar(this)">
                         <td class="ps-3" data-col="codigo"><code class="text-secondary">' . htmlspecialchars($r['codigo'] ?? '—') . '</code></td>
                         <td class="fw-medium" data-col="nombre">' . htmlspecialchars($r['nombre'] ?? '') . '</td>
                         <td class="text-truncate" data-col="descripcion" style="max-width:250px">' . htmlspecialchars($r['descripcion'] ?? '—') . '</td>
@@ -136,8 +143,8 @@ class CentroCostosController extends BaseModuloController
             'pagination' => $paginationHtml,
             'info'       => "$from-$to/$total",
             'total'      => $total,
-            'pdf_url'    => BASE_URL . '/' . self::RUTA_MODULO . '/export-pdf?b=' . urlencode($buscar) . "&sort=$ordenCol&dir=$ordenDir",
-            'excel_url'  => BASE_URL . '/' . self::RUTA_MODULO . '/export-excel?b=' . urlencode($buscar) . "&sort=$ordenCol&dir=$ordenDir"
+            'pdf_url'    => BASE_URL . '/' . self::RUTA_MODULO . '/export-pdf?b=' . urlencode($buscar) . '&orden=' . urlencode(\App\Helpers\OrdenListado::aCadena($orden)),
+            'excel_url'  => BASE_URL . '/' . self::RUTA_MODULO . '/export-excel?b=' . urlencode($buscar) . '&orden=' . urlencode(\App\Helpers\OrdenListado::aCadena($orden))
         ]);
         exit;
     }
@@ -243,13 +250,16 @@ class CentroCostosController extends BaseModuloController
         $this->requireLeer();
         $idEmpresa = (int) $_SESSION['id_empresa'];
         $buscar    = trim($_GET['b'] ?? $_POST['b'] ?? '');
-        $ordenCol  = trim($_GET['sort'] ?? $_POST['sort'] ?? 'nombre');
-        $ordenDir  = strtoupper(trim($_GET['dir'] ?? $_POST['dir'] ?? 'asc'));
+        // El enlace de exportar lleva el orden de pantalla en `orden=`; sin parámetros,
+        // se respeta la preferencia guardada del usuario.
+        $orden     = \App\Helpers\OrdenListado::leer(\App\Helpers\PreferenciasHelper::getPreferenciasVista(self::RUTA_MODULO), 'nombre');
+        $ordenCol  = \App\Helpers\OrdenListado::primeraCol($orden, 'nombre');
+        $ordenDir  = \App\Helpers\OrdenListado::primeraDir($orden);
 
         $perm = $this->getPermisos();
         $idUsuarioFiltro = empty($perm['todo']) ? (int)$_SESSION['id_usuario'] : null;
 
-        $data = $this->service->getListado($idEmpresa, $buscar, 1, 0, $ordenCol, $ordenDir, $idUsuarioFiltro);
+        $data = $this->service->getListado($idEmpresa, $buscar, 1, 0, $ordenCol, $ordenDir, $idUsuarioFiltro, $orden);
         $rows = $data['rows'];
 
         try {
@@ -312,13 +322,16 @@ class CentroCostosController extends BaseModuloController
         $this->requireLeer();
         $idEmpresa = (int) $_SESSION['id_empresa'];
         $buscar    = trim($_GET['b'] ?? $_POST['b'] ?? '');
-        $ordenCol  = trim($_GET['sort'] ?? $_POST['sort'] ?? 'nombre');
-        $ordenDir  = strtoupper(trim($_GET['dir'] ?? $_POST['dir'] ?? 'asc'));
+        // El enlace de exportar lleva el orden de pantalla en `orden=`; sin parámetros,
+        // se respeta la preferencia guardada del usuario.
+        $orden     = \App\Helpers\OrdenListado::leer(\App\Helpers\PreferenciasHelper::getPreferenciasVista(self::RUTA_MODULO), 'nombre');
+        $ordenCol  = \App\Helpers\OrdenListado::primeraCol($orden, 'nombre');
+        $ordenDir  = \App\Helpers\OrdenListado::primeraDir($orden);
 
         $perm = $this->getPermisos();
         $idUsuarioFiltro = empty($perm['todo']) ? (int)$_SESSION['id_usuario'] : null;
 
-        $data = $this->service->getListado($idEmpresa, $buscar, 1, 0, $ordenCol, $ordenDir, $idUsuarioFiltro);
+        $data = $this->service->getListado($idEmpresa, $buscar, 1, 0, $ordenCol, $ordenDir, $idUsuarioFiltro, $orden);
         $rows = $data['rows'];
 
         try {

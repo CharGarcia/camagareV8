@@ -1133,7 +1133,7 @@ class ReciboVentaController extends BaseModuloController
             ? '<span class="badge bg-info bg-opacity-10 text-info border border-info border-opacity-25">Con impuestos</span>'
             : '<span class="badge bg-secondary bg-opacity-10 text-secondary border border-secondary border-opacity-25">Sin impuestos</span>';
 
-        $ivaCalc = max(0, (float)($r['importe_total'] ?? 0) - (float)($r['total_sin_impuestos'] ?? 0) + (float)($r['total_descuento'] ?? 0) - (float)($r['total_ice'] ?? 0) - (float)($r['propina'] ?? 0));
+        $ivaCalc = max(0, (float)($r['importe_total'] ?? 0) - (float)($r['total_sin_impuestos'] ?? 0) - (float)($r['total_ice'] ?? 0) - (float)($r['propina'] ?? 0));
 
         $importeTotal = (float)($r['importe_total'] ?? 0);
         $cobrado      = (float)($r['total_cobrado'] ?? 0);

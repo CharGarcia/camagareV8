@@ -177,11 +177,6 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                                 <i class="bi bi-card-text me-1"></i> General
                             </button>
                         </li>
-                        <li class="nav-item" role="presentation">
-                            <button class="nav-link fw-medium" id="tab-info-btn" data-bs-toggle="tab" data-bs-target="#pane-info" type="button" role="tab">
-                                <i class="bi bi-info-circle me-1"></i> Información
-                            </button>
-                        </li>
                     </ul>
 
                     <div class="tab-content pb-3">
@@ -209,35 +204,6 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                             </div>
                         </div>
 
-                        <div class="tab-pane fade" id="pane-info" role="tabpanel">
-                            <!-- Tarjeta de Permisos -->
-                            <div class="col-12 px-3">
-                                <div class="p-2 border rounded-3 bg-white shadow-sm mt-0 mb-3 mx-3">
-                                    <div class="small fw-bold text-muted mb-2 d-flex align-items-center" style="font-size: 0.7rem;">
-                                        <i class="bi bi-key-fill text-warning me-2"></i> MIS PERMISOS EN ESTE MÓDULO
-                                    </div>
-                                    <div class="d-flex flex-wrap gap-2">
-                                        <span class="badge bg-<?= $perm['ver'] ? 'success' : 'secondary text-opacity-50' ?> bg-opacity-10 text-<?= $perm['ver'] ? 'success' : 'secondary' ?> border border-<?= $perm['ver'] ? 'success' : 'secondary' ?> border-opacity-25" style="font-size: 0.65rem;">VER</span>
-                                        <span class="badge bg-<?= $perm['crear'] ? 'success' : 'secondary text-opacity-50' ?> bg-opacity-10 text-<?= $perm['crear'] ? 'success' : 'secondary' ?> border border-<?= $perm['crear'] ? 'success' : 'secondary' ?> border-opacity-25" style="font-size: 0.65rem;">CREAR</span>
-                                        <span class="badge bg-<?= $perm['actualizar'] ? 'success' : 'secondary text-opacity-50' ?> bg-opacity-10 text-<?= $perm['actualizar'] ? 'success' : 'secondary' ?> border border-<?= $perm['actualizar'] ? 'success' : 'secondary' ?> border-opacity-25" style="font-size: 0.65rem;">MODIFICAR</span>
-                                        <span class="badge bg-<?= $perm['eliminar'] ? 'success' : 'secondary text-opacity-50' ?> bg-opacity-10 text-<?= $perm['eliminar'] ? 'success' : 'secondary' ?> border border-<?= $perm['eliminar'] ? 'success' : 'secondary' ?> border-opacity-25" style="font-size: 0.65rem;">ELIMINAR</span>
-                                        <?php if ($perm['todo']): ?>
-                                            <span class="badge bg-info bg-opacity-10 text-info border border-info border-opacity-25" style="font-size: 0.65rem;">ACCESO TOTAL</span>
-                                        <?php endif; ?>
-                                    </div>
-                                </div>
-                            </div>
-
-                            <div class="bg-light rounded-3 p-3 border mb-3 mx-3">
-                                <h6 class="text-primary mb-3 small fw-bold"><i class="bi bi-clock-history me-2"></i>Historial de Cambios</h6>
-                                <div id="auditoriaTimelinePeriodo" class="position-relative mt-2" style="max-height: 250px; overflow-y: auto; padding-right: 5px;">
-                                    <div class="text-center py-4 text-muted small">
-                                        <div class="spinner-border spinner-border-sm mb-2" role="status"></div>
-                                        <div class="d-block">Cargando historial...</div>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
                     </div>
                 </div>
                 <div class="modal-footer justify-content-between bg-light">
@@ -370,8 +336,6 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
             if (typeof bootstrap !== 'undefined') {
                 bootstrap.Tab.getInstance(document.getElementById('tab-general-btn'))?.show() || new bootstrap.Tab(document.getElementById('tab-general-btn')).show();
             }
-            resetearInfoExtra();
-            document.getElementById('tab-info-btn').classList.add('disabled');
 
             const mo = document.getElementById('modalAlert');
             if (mo) mo.classList.add('d-none');
@@ -402,34 +366,12 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
             if (typeof bootstrap !== 'undefined') {
                 bootstrap.Tab.getInstance(document.getElementById('tab-general-btn'))?.show() || new bootstrap.Tab(document.getElementById('tab-general-btn')).show();
             }
-            document.getElementById('tab-info-btn').classList.remove('disabled');
 
             const mo = document.getElementById('modalAlert');
             if (mo) mo.classList.add('d-none');
 
-            fetchInformacionExtra(data.id);
             getModal().show();
         };
-
-        async function fetchInformacionExtra(id) {
-            resetearInfoExtra('Cargando...');
-            try {
-                const resp = await fetch(`${urlBase}/getDetalleAjax?id=${id}`);
-                const json = await resp.json();
-                if (json.ok) {
-                    fetchHistorialPeriodo(id);
-                } else {
-                    resetearInfoExtra('Error al cargar');
-                }
-            } catch (e) {
-                resetearInfoExtra('Error de red');
-            }
-        }
-
-        function resetearInfoExtra(msg = '-') {
-            const timeline = document.getElementById('auditoriaTimelinePeriodo');
-            if (timeline) timeline.innerHTML = '<div class="text-center py-4 text-muted small">No hay historial de cambios.</div>';
-        }
 
         form.addEventListener('submit', async (e) => {
             e.preventDefault();
@@ -502,69 +444,6 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
             }
         };
 
-        async function fetchHistorialPeriodo(id) {
-            const container = document.getElementById('auditoriaTimelinePeriodo');
-            if (!container || !id) return;
-
-            try {
-                const resp = await fetch(`${urlBase}/getHistorialAjax?id=${id}&tabla=periodos_contables`);
-                const json = await resp.json();
-
-                if (json.ok && json.data.length > 0) {
-                    let html = '<div class="timeline-border position-absolute h-100 border-start border-2 border-primary border-opacity-10" style="left: 10px; top: 0;"></div>';
-
-                    json.data.forEach(log => {
-                        const icon = log.accion.includes('Crear') ? 'bi-plus-circle-fill text-success' :
-                            log.accion.includes('Actualizar') ? 'bi-pencil-fill text-primary' :
-                            log.accion.includes('Eliminar') ? 'bi-trash-fill text-danger' :
-                            'bi-clock-history text-secondary';
-
-                        html += `
-                            <div class="timeline-item position-relative mb-3 ps-4">
-                                <div class="timeline-icon position-absolute rounded-circle bg-white d-flex align-items-center justify-content-center shadow-sm border" 
-                                     style="left: 0; top: 0; width: 22px; height: 22px; z-index: 2;">
-                                    <i class="bi ${icon}" style="font-size: 0.7rem;"></i>
-                                </div>
-                                <div class="timeline-content">
-                                    <div class="d-flex justify-content-between align-items-center mb-0">
-                                        <span class="fw-bold" style="font-size: 0.75rem;">${log.accion}</span>
-                                        <span class="text-muted" style="font-size: 0.65rem;">${log.created_at}</span>
-                                    </div>
-                                    <div class="text-muted mb-1" style="font-size: 0.7rem;">
-                                        <i class="bi bi-person me-1"></i> ${log.usuario_nombre || 'SISTEMA'}
-                                    </div>
-                                    <div class="bg-light rounded p-1 border border-light-subtle shadow-sm" style="font-size: 0.65rem;">
-                                        ${renderDetalleHistorialPeriodo(log.detalles)}
-                                    </div>
-                                </div>
-                            </div>
-                        `;
-                    });
-                    container.innerHTML = html;
-                } else {
-                    container.innerHTML = `<div class="text-center py-4 text-muted small">No hay historial de cambios.</div>`;
-                }
-            } catch (e) {
-                container.innerHTML = `<div class="text-center py-3 text-danger small">Error de carga.</div>`;
-            }
-        }
-
-        function renderDetalleHistorialPeriodo(detalle) {
-            if (!detalle || detalle.length === 0) return '<span class="text-muted">Sin detalles específicos</span>';
-            if (typeof detalle === 'string') return detalle;
-            if (Array.isArray(detalle)) {
-                return `<ul class="list-unstyled mb-0">
-                    ${detalle.map(d => {
-                        if (typeof d === 'object') {
-                            const antes = d.antes !== null ? `<span class="text-decoration-line-through text-muted">${d.antes}</span> ` : '';
-                            return `<li><i class="bi bi-dot"></i> <span class="fw-bold">${d.campo}:</span> ${antes}<i class="bi bi-arrow-right mx-1"></i> ${d.despues}</li>`;
-                        }
-                        return ` < li > < i class = "bi bi-dot" > < /i> ${d}</li > `;
-                    }).join('')}
-                </ul>`;
-            }
-            return '<span class="text-muted">Acción registrada</span>';
-        }
 
     })();
 </script>

@@ -87,7 +87,12 @@
 
     // ── Formulario / modal ───────────────────────────────────────────────────
 
+    // Guardado único (CLAUDE.md §8): clave del formulario nuevo y bandera de guardado en curso.
+    let trpTokenGuardado = '';
+    let trpGuardando = false;
+
     function resetForm() {
+        trpTokenGuardado = window.CMG_nuevoTokenGuardado ? window.CMG_nuevoTokenGuardado() : '';
         const f = document.getElementById('formTraspasoModal');
         f.reset();
         document.getElementById('trp-input-id').value = '';
@@ -269,6 +274,21 @@
     // ── Guardar / anular ──────────────────────────────────────────────────────
 
     window.TRP_guardar = async function () {
+        // Un guardado a la vez: antes el botón se desactivaba recién después de verificar el
+        // periodo (await) y un doble clic en esa espera mandaba dos guardados.
+        if (trpGuardando) return;
+        trpGuardando = true;
+        const btnG = document.getElementById('trp-btn-guardar');
+        if (btnG) btnG.disabled = true;
+        try {
+            await trpGuardarInterno();
+        } finally {
+            trpGuardando = false;
+            if (btnG) btnG.disabled = false;
+        }
+    };
+
+    async function trpGuardarInterno() {
         const form = document.getElementById('formTraspasoModal');
         if (!form.reportValidity()) return;
 
@@ -290,6 +310,7 @@
             id_forma_destino:  document.getElementById('trp-select-destino').value,
             monto:             parseFloat(document.getElementById('trp-input-monto').value || 0),
             observaciones:     document.getElementById('trp-input-obs').value,
+            token_guardado:    _esNuevo ? trpTokenGuardado : '',
         };
 
         if (!data.id_forma_origen || !data.id_forma_destino) {
@@ -313,14 +334,11 @@
             return;
         }
 
-        const btn = document.getElementById('trp-btn-guardar');
-        btn.disabled = true;
-        fetch(`${TRP_URL}/guardarAjax`, {
+        return fetch(`${TRP_URL}/guardarAjax`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
             body: 'data=' + encodeURIComponent(JSON.stringify(data))
         }).then(r => r.json()).then(res => {
-            btn.disabled = false;
             if (res.ok) {
                 bootstrap.Modal.getInstance(document.getElementById('modalTraspaso'))?.hide();
                 window.TRP_fetchSearch(window.TRP_PAGE || 1);
@@ -329,10 +347,9 @@
                 Swal.fire('Error al guardar', res.mensaje, 'error');
             }
         }).catch(() => {
-            btn.disabled = false;
-            Swal.fire('Error de Red', 'No se pudo completar la operación en este momento.', 'error');
+            Swal.fire('Error de Red', 'No se recibió respuesta del servidor. Vuelva a pulsar Guardar: si el traspaso ya se había registrado, no se creará otro.', 'error');
         });
-    };
+    }
 
     window.TRP_anular = function () {
         const id = document.getElementById('trp-btn-anular')?.dataset.id;

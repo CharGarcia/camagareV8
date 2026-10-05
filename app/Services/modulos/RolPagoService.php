@@ -206,14 +206,26 @@ class RolPagoService
     {
         $this->rules->validateCabecera($data);
         $idEmpresa = (int) $data['id_empresa'];
-        if ($this->repo->existsCorrida($idEmpresa, $data['tipo_rol'], (int) $data['periodo_anio'], (int) $data['periodo_mes'], (int) ($data['numero_periodo'] ?? 0))) {
-            throw new Exception('Ya existe una corrida para ese tipo y período.');
-        }
+        $token = $data['token_guardado'] ?? '';
+        unset($data['token_guardado']); // no es columna de rol_cabecera
+        $guardado = new \App\Services\GuardadoUnicoService();
 
         $this->repo->beginTransaction();
         try {
+            // Guardado único (CLAUDE.md §8): un reintento del mismo formulario devuelve la corrida
+            // ya creada (y el navegador sigue con "generar" sobre ella) en vez de chocar con
+            // "Ya existe una corrida". Va antes de esa validación.
+            if ($previo = $guardado->previo($token, $idEmpresa, 'roles_pago')) {
+                $this->repo->rollBack();
+                return $previo['id_registro'];
+            }
+            if ($this->repo->existsCorrida($idEmpresa, $data['tipo_rol'], (int) $data['periodo_anio'], (int) $data['periodo_mes'], (int) ($data['numero_periodo'] ?? 0))) {
+                throw new Exception('Ya existe una corrida para ese tipo y período.');
+            }
+
             $id = $this->repo->createCabecera($data);
             $this->log->registrar((int) $data['id_usuario'], $idEmpresa, 'CREAR', 'rol_cabecera', $id, null, $data);
+            $guardado->registrar($token, $idEmpresa, 'roles_pago', (int) $id, null, (int) $data['id_usuario']);
             $this->repo->commit();
             return $id;
         } catch (Exception $e) {

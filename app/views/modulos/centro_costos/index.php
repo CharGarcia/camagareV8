@@ -44,18 +44,54 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
 
 <div class="card cmg-table-card w-100 border-0 shadow-sm rounded-3">
     <div class="card-header bg-white py-2 px-3 border-bottom d-flex justify-content-between align-items-center flex-wrap gap-2">
-        <div class="d-flex align-items-center gap-2">
-            <form method="POST" action="<?= $urlBaseCC ?>" class="d-flex align-items-center m-0" onsubmit="event.preventDefault(); fetchSearch(1);">
-                <div class="input-group input-group-sm" style="width: 300px;">
-                    <span class="input-group-text bg-white border-end-0 text-muted"><i class="bi bi-search"></i></span>
-                    <input type="text" name="b" id="buscarCC" class="form-control border-start-0 ps-0 shadow-none border" placeholder="Buscar nombre o código..." value="<?= htmlspecialchars($buscar) ?>" autocomplete="off" onkeyup="if(event.key === 'Enter') fetchSearch(1);">
-                    <?php if ($buscar !== ''): ?>
-                        <a href="<?= $urlBaseCC ?>" class="btn border border-start-0 text-muted" title="Limpiar"><i class="bi bi-x-lg"></i></a>
-                    <?php endif; ?>
-                </div>
-            </form>
+        <!-- Buscador y Exportación -->
+        <div class="d-flex align-items-center gap-2 flex-wrap">
+            <?php
+            // Buscador estándar (FiltrosModal): texto libre sobre las columnas del listado +
+            // botón embudo que abre un modal con todos los filtros + chips de los activos.
+            // Las claves (key) deben existir en los mapas de CentroCostoRepository::getListado().
+            $opcFiltro = $opcionesFiltro ?? [];
+            $opcIdNombre = fn(string $k) => array_map(fn($x) => ['v' => (string) $x['id'], 'l' => (string) $x['nombre']], $opcFiltro[$k] ?? []);
+            $tCC = 'Centro de costo';
+            // Filas de 12 columnas:
+            //   Datos:    [Código 4][Nombre 4][Descripción 4]
+            //   Estado:   [Estado 12]
+            //   Registro: [Fecha de registro 6][Usuario 6]
+            $filtrosCC = [
+                ['tab' => $tCC, 'key' => 'codigo',      'label' => 'Código',      'icon' => 'bi-hash',      'type' => 'text', 'grupo' => 'Datos', 'col' => 4],
+                ['tab' => $tCC, 'key' => 'nombre',      'label' => 'Nombre',      'icon' => 'bi-diagram-3', 'type' => 'text', 'grupo' => 'Datos', 'col' => 4],
+                ['tab' => $tCC, 'key' => 'descripcion', 'label' => 'Descripción', 'icon' => 'bi-card-text', 'type' => 'text', 'grupo' => 'Datos', 'col' => 4],
+                ['tab' => $tCC, 'key' => 'estado',      'label' => 'Estado',      'icon' => 'bi-flag',      'type' => 'select', 'grupo' => 'Estado', 'col' => 12, 'options' => [
+                    ['v' => 'activo',   'l' => 'Activo'],
+                    ['v' => 'inactivo', 'l' => 'Inactivo'],
+                ]],
+                ['tab' => $tCC, 'key' => 'registro', 'label' => 'Fecha de registro',    'icon' => 'bi-calendar-event', 'type' => 'date_range', 'grupo' => 'Registro', 'col' => 6, 'atajos' => true],
+                ['tab' => $tCC, 'key' => 'usuario',  'label' => 'Usuario que registró', 'icon' => 'bi-person-gear',    'type' => 'select',     'grupo' => 'Registro', 'col' => 6, 'options' => $opcIdNombre('usuarios')],
+            ];
+            ?>
+            <link rel="stylesheet" href="<?= rtrim(BASE_URL, '/') ?>/css/components/filtros_modal.css?v=<?= asset_ver('/css/components/filtros_modal.css') ?>">
+            <script src="<?= rtrim(BASE_URL, '/') ?>/js/components/filtros_modal.js?v=<?= asset_ver('/js/components/filtros_modal.js') ?>"></script>
+            <div id="fmBuscadorCC"></div>
+            <input type="hidden" id="buscarCC" value="<?= htmlspecialchars($buscar) ?>">
+            <script>
+                document.addEventListener('DOMContentLoaded', () => {
+                    if (!window.FiltrosModal) return;
+                    new FiltrosModal({
+                        containerId: 'fmBuscadorCC',
+                        hiddenInputId: 'buscarCC',
+                        placeholder: 'Buscar en todas las columnas...',
+                        titulo: 'Filtros de centros de costo',
+                        inputWidth: 420,
+                        extraId: 'fmExtraCC',   // columnas + PDF + Excel, pegados al final del grupo
+                        fields: <?= json_encode($filtrosCC, JSON_UNESCAPED_UNICODE | JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS) ?>,
+                        loadingTarget: '#tbodyCC',   // se atenúa mientras se busca
+                        onApply: () => window.fetchSearch && window.fetchSearch(1),
+                    }).init();
+                });
+            </script>
 
-            <div class="btn-group btn-group-sm">
+            <?php // FiltrosModal (extraId) mueve estos botones dentro del input-group del buscador; si el JS no corre, quedan aquí. ?>
+            <div id="fmExtraCC" class="btn-group btn-group-sm">
                 <?php
                 $columnasTabla = [
                     'codigo' => 'Código',
@@ -65,16 +101,17 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                 ];
                 ?>
                 <?= \App\Helpers\PreferenciasHelper::renderDropdownColumnas($columnasTabla, $vistaConfig ?? [], $rutaModulo) ?>
-                
-                <a id="btnExportPdf" href="<?= $urlBaseCC ?>/export-pdf?b=<?= urlencode($buscar) ?>&sort=<?= urlencode($ordenCol) ?>&dir=<?= urlencode($ordenDir) ?>" class="btn btn-outline-danger" title="Descargar PDF">
-                    <i class="bi bi-file-earmark-pdf"></i> PDF
+
+                <a id="btnExportPdf" href="<?= $urlBaseCC ?>/export-pdf?b=<?= urlencode($buscar) ?>&orden=<?= urlencode($ordenParam ?? '') ?>" class="btn btn-outline-danger" title="Descargar PDF">
+                    <i class="bi bi-file-earmark-pdf"></i><span class="d-none d-md-inline"> PDF</span>
                 </a>
-                <a id="btnExportExcel" href="<?= $urlBaseCC ?>/export-excel?b=<?= urlencode($buscar) ?>&sort=<?= urlencode($ordenCol) ?>&dir=<?= urlencode($ordenDir) ?>" class="btn btn-outline-success" title="Descargar Excel">
-                    <i class="bi bi-file-earmark-spreadsheet"></i> Excel
+                <a id="btnExportExcel" href="<?= $urlBaseCC ?>/export-excel?b=<?= urlencode($buscar) ?>&orden=<?= urlencode($ordenParam ?? '') ?>" class="btn btn-outline-success" title="Descargar Excel">
+                    <i class="bi bi-file-earmark-spreadsheet"></i><span class="d-none d-md-inline"> Excel</span>
                 </a>
             </div>
         </div>
 
+        <!-- Paginación -->
         <div class="d-flex align-items-center gap-3">
             <span id="paginationInfo" class="text-muted small fw-medium"><?= $from ?>-<?= $to ?>/<?= $total ?></span>
             <div id="paginationContainer" class="btn-group btn-group-sm">
@@ -89,16 +126,10 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
             <table class="table table-hover table-sm mb-0">
                 <thead class="table-light">
                     <tr>
-                        <th class="ps-3 sortable-header" role="button" data-sort="codigo" onclick="ordenar('codigo')" data-col="codigo">
-                            Código <i class="bi <?= $ordenCol === 'codigo' ? ($ordenDir === 'ASC' ? 'bi-sort-alpha-down text-primary' : 'bi-sort-alpha-up text-primary') : 'bi-arrow-down-up text-muted' ?> small ms-1"></i>
-                        </th>
-                        <th class="sortable-header" role="button" data-sort="nombre" onclick="ordenar('nombre')" data-col="nombre">
-                            Nombre <i class="bi <?= $ordenCol === 'nombre' ? ($ordenDir === 'ASC' ? 'bi-sort-alpha-down text-primary' : 'bi-sort-alpha-up text-primary') : 'bi-arrow-down-up text-muted' ?> small ms-1"></i>
-                        </th>
-                        <th data-col="descripcion">Descripción</th>
-                        <th class="text-center pe-3 sortable-header" role="button" data-sort="estado" onclick="ordenar('estado')" data-col="estado">
-                            Estado <i class="bi <?= $ordenCol === 'estado' ? ($ordenDir === 'ASC' ? 'bi-sort-alpha-down text-primary' : 'bi-sort-alpha-up text-primary') : 'bi-arrow-down-up text-muted' ?> small ms-1"></i>
-                        </th>
+                        <th class="ps-3 sortable-header" role="button" data-sort="codigo" data-col="codigo">Código <i class="bi bi-arrow-down-up small text-muted ms-1"></i></th>
+                        <th class="sortable-header" role="button" data-sort="nombre" data-col="nombre">Nombre <i class="bi bi-arrow-down-up small text-muted ms-1"></i></th>
+                        <th class="sortable-header" role="button" data-sort="descripcion" data-col="descripcion">Descripción <i class="bi bi-arrow-down-up small text-muted ms-1"></i></th>
+                        <th class="text-center pe-3 sortable-header" role="button" data-sort="estado" data-col="estado">Estado <i class="bi bi-arrow-down-up small text-muted ms-1"></i></th>
                     </tr>
                 </thead>
                 <tbody id="tbodyCC">
@@ -142,9 +173,6 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                             <li class="nav-item">
                                 <a class="nav-link active py-2 small" id="tab-general-btn" data-bs-toggle="tab" href="#tab-general" role="tab">General</a>
                             </li>
-                            <li class="nav-item">
-                                <a class="nav-link py-2 small disabled" id="tab-info-btn" data-bs-toggle="tab" href="#tab-info" role="tab">Información</a>
-                            </li>
                         </ul>
                     </div>
                     <div class="border-bottom mx-3 mb-3"></div>
@@ -169,16 +197,6 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                                     <div class="form-check form-switch mt-1">
                                         <input class="form-check-input" type="checkbox" role="switch" name="estado" id="cc_estado" value="1" checked>
                                         <label class="form-check-label small" for="cc_estado">Activo</label>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-                        <div class="tab-pane fade" id="tab-info" role="tabpanel">
-                            <div class="audit-timeline-container" style="max-height: 300px; overflow-y: auto; padding: 10px;">
-                                <div id="auditoriaTimelineCC" class="position-relative">
-                                    <div class="text-center py-4 text-muted">
-                                        <div class="spinner-border spinner-border-sm mb-2" role="status"></div>
-                                        <div class="small">Cargando historial...</div>
                                     </div>
                                 </div>
                             </div>
@@ -214,8 +232,12 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
         const form = document.getElementById('formCC');
         let modalInst = null;
         let currentPage = <?= $page ?>;
-        let currentSort = '<?= $ordenCol ?>';
-        let currentDir = '<?= $ordenDir ?>';
+        window.currentSort = '<?= $ordenCol ?>';
+        window.currentDir  = '<?= $ordenDir ?>';
+        // Orden múltiple (Shift+clic): lista completa de criterios, en el formato que lee
+        // OrdenListado en PHP. currentSort/currentDir quedan como el principal.
+        window.currentSorts = <?= $ordenJson ?? '[]' ?>;
+        let sorter = null;
 
         function getModal() {
             if (!modalInst) modalInst = new bootstrap.Modal(document.getElementById('modalCC'));
@@ -229,7 +251,6 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
             document.getElementById('modalAlert').classList.add('d-none');
             document.getElementById('btnEliminar')?.classList.add('d-none');
             document.getElementById('cc_estado').checked = true;
-            document.getElementById('tab-info-btn').classList.add('disabled');
             const tabGen = document.getElementById('tab-general-btn');
             if (tabGen) (bootstrap.Tab.getInstance(tabGen) || new bootstrap.Tab(tabGen)).show();
             getModal().show();
@@ -247,78 +268,11 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
             document.getElementById('tituloModal').textContent = 'Editar Centro de Costo';
             document.getElementById('modalAlert').classList.add('d-none');
             document.getElementById('btnEliminar')?.classList.remove('d-none');
-            document.getElementById('tab-info-btn').classList.remove('disabled');
             const tabGen = document.getElementById('tab-general-btn');
             if (tabGen) (bootstrap.Tab.getInstance(tabGen) || new bootstrap.Tab(tabGen)).show();
-            
-            fetchHistorialCC(data.id);
 
             getModal().show();
         };
-
-        async function fetchHistorialCC(id) {
-            const container = document.getElementById('auditoriaTimelineCC');
-            if (!container || !id) return;
-
-            try {
-                const resp = await fetch(`${urlBase}/getHistorialAjax?id=${id}&tabla=centro_costos`);
-                const json = await resp.json();
-
-                if (json.ok && json.data.length > 0) {
-                    let html = '<div class="timeline-border position-absolute h-100 border-start border-2 border-primary border-opacity-10" style="left: 10px; top: 0;"></div>';
-
-                    json.data.forEach(log => {
-                        const icon = log.accion.includes('Crear') ? 'bi-plus-circle-fill text-success' :
-                                   log.accion.includes('Actualizar') ? 'bi-pencil-fill text-primary' :
-                                   log.accion.includes('Eliminar') ? 'bi-trash-fill text-danger' :
-                                   'bi-clock-history text-secondary';
-
-                        html += `
-                            <div class="timeline-item position-relative mb-3 ps-4">
-                                <div class="timeline-icon position-absolute rounded-circle bg-white d-flex align-items-center justify-content-center shadow-sm border" 
-                                     style="left: 0; top: 0; width: 22px; height: 22px; z-index: 2;">
-                                    <i class="bi ${icon}" style="font-size: 0.7rem;"></i>
-                                </div>
-                                <div class="timeline-content">
-                                    <div class="d-flex justify-content-between align-items-center mb-0">
-                                        <span class="fw-bold" style="font-size: 0.75rem;">${log.accion}</span>
-                                        <span class="text-muted" style="font-size: 0.65rem;">${log.created_at}</span>
-                                    </div>
-                                    <div class="text-muted mb-1" style="font-size: 0.7rem;">
-                                        <i class="bi bi-person me-1"></i> ${log.usuario_nombre || 'SISTEMA'}
-                                    </div>
-                                    <div class="bg-light rounded p-1 border border-light-subtle shadow-sm" style="font-size: 0.65rem;">
-                                        ${renderDetalleHistorialCC(log.detalles)}
-                                    </div>
-                                </div>
-                            </div>
-                        `;
-                    });
-                    container.innerHTML = html;
-                } else {
-                    container.innerHTML = '<div class="text-center py-4 text-muted small">No hay historial de cambios.</div>';
-                }
-            } catch (e) {
-                container.innerHTML = '<div class="text-center py-3 text-danger small">Error de carga.</div>';
-            }
-        }
-
-        function renderDetalleHistorialCC(detalle) {
-            if (!detalle || detalle.length === 0) return '<span class="text-muted small">Sin detalles específicos.</span>';
-            if (typeof detalle === 'string') return detalle;
-            if (Array.isArray(detalle)) {
-                return `<ul class="list-unstyled mb-0">
-                    ${detalle.map(d => {
-                        if (typeof d === 'object') {
-                            const antes = d.antes !== null ? `<span class="text-decoration-line-through text-muted">${d.antes}</span> ` : '';
-                            return `<li><i class="bi bi-dot"></i> <span class="fw-bold">${d.campo}:</span> ${antes}<i class="bi bi-arrow-right mx-1"></i> ${d.despues}</li>`;
-                        }
-                        return `<li><i class="bi bi-dot"></i> ${d}</li>`;
-                    }).join('')}
-                </ul>`;
-            }
-            return '<span class="text-muted">Acción registrada</span>';
-        }
 
         form.addEventListener('submit', async (e) => {
             e.preventDefault();
@@ -358,45 +312,41 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
 
         window.fetchSearch = async function(page = 1) {
             currentPage = page;
-            const buscar = document.getElementById('buscarCC').value;
-            const url = `${urlBase}/searchAjax?b=${encodeURIComponent(buscar)}&page=${page}&sort=${currentSort}&dir=${currentDir}`;
+            const buscar = document.getElementById('buscarCC').value.trim();
+            const orden  = window.CMG_ordenParam(window.currentSorts || []);
+            const url = `${urlBase}/searchAjax?b=${encodeURIComponent(buscar)}&page=${page}&orden=${encodeURIComponent(orden)}`;
+            // Mismo indicador que el buscador (FiltrosModal): la tabla se atenúa mientras
+            // carga, también al paginar u ordenar.
+            const tbody = document.getElementById('tbodyCC');
+            if (tbody) tbody.classList.add('fm-cargando-target');
             try {
                 const resp = await fetch(url);
                 const json = await resp.json();
                 if (json.ok) {
-                    document.getElementById('tbodyCC').innerHTML = json.rows;
+                    tbody.innerHTML = json.rows;
                     document.getElementById('paginationContainer').innerHTML = json.pagination;
                     document.getElementById('paginationInfo').textContent = json.info;
                     document.getElementById('btnExportPdf').href = json.pdf_url;
                     document.getElementById('btnExportExcel').href = json.excel_url;
+                    // Los iconos (incluida la prioridad 1/2/3 del orden múltiple) los
+                    // repinta el motor global; aquí solo se le pide que se refresque.
+                    if (sorter) sorter.refreshIcons();
                 }
             } catch (e) { console.error(e); }
+            finally { if (tbody) tbody.classList.remove('fm-cargando-target'); }
         };
 
         window.cambiarPaginaAjax = (p) => fetchSearch(p);
 
-        window.ordenar = function(col) {
-            if (currentSort === col) {
-                currentDir = (currentDir === 'ASC') ? 'DESC' : 'ASC';
-            } else {
-                currentSort = col;
-                currentDir = 'ASC';
-            }
-            // Update UI sort icons
-            document.querySelectorAll('.sortable-header i').forEach(i => {
-                i.className = 'bi bi-arrow-down-up text-muted small ms-1';
-            });
-            const th = document.querySelector(`th[data-sort="${col}"] i`);
-            if (th) {
-                th.className = (currentDir === 'ASC') ? 'bi bi-sort-alpha-down text-primary small ms-1' : 'bi bi-sort-alpha-up text-primary small ms-1';
-            }
-            
-            if (typeof window.guardarOrdenacionVista === 'function') {
-                window.guardarOrdenacionVista('centro-costos', currentSort, currentDir);
-            }
-
+        // multi: clic normal ordena por una columna; Shift+clic encadena hasta 3
+        // (ASC -> DESC -> fuera del orden), con la prioridad numerada en cada encabezado.
+        // reload:false porque fetchSearch repinta todo lo que depende del orden.
+        sorter = window.CMG_initSort('centro-costos', (col, dir, sorts) => {
+            window.currentSort  = col;
+            window.currentDir   = dir;
+            window.currentSorts = sorts;
             fetchSearch(1);
-        };
+        }, { sorts: window.currentSorts, multi: true, container: '.cc-scroll', reload: false });
 
         window.eliminarRegistro = async function() {
             if (!confirm('¿Seguro que desea eliminar este centro de costo?')) return;

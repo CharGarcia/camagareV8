@@ -80,8 +80,8 @@
     window.GR_abrirEditar = function (data) {
         const r = (data instanceof HTMLElement) ? JSON.parse(data.dataset.row) : data;
         window.GR_resetModal();
-        
-        fetch(urlBaseGR + '/get-guia-ajax?id=' + r.id)
+
+        return fetch(urlBaseGR + '/get-guia-ajax?id=' + r.id)
             .then(r => r.json())
             .then(json => {
                 if (json.ok) {
@@ -889,7 +889,7 @@
         })
         .then(r => r.json())
         .then(d => {
-            if (btn) { btn.disabled = false; btn.innerHTML = '<i class="bi bi-check2-circle me-1"></i> Guardar'; }
+            const liberarBoton = () => { if (btn) { btn.disabled = false; btn.innerHTML = '<i class="bi bi-check2-circle me-1"></i> Guardar'; } };
             if (d.ok) {
                 // Capturar antes de recargar (el reload resetea gr-id).
                 const idPrevio   = parseInt(document.getElementById('gr-id')?.value || '0');
@@ -899,11 +899,22 @@
                 // NO se cierra el modal: el usuario lo cierra a mano (para corregir
                 // fecha y reenviar al SRI sin reabrir). Refrescar y recargar en edición.
                 if (typeof window.GR_cargar === 'function') window.GR_cargar(window.GR_page || 1);
-                if (idGuardado > 0 && typeof window.GR_abrirEditar === 'function') {
-                    window.GR_abrirEditar({ id: idGuardado });
-                }
                 Swal.fire({ toast: true, position: 'top-end', icon: 'success', title: d.mensaje || 'Guardado', showConfirmButton: false, timer: 2500, timerProgressBar: true });
+                if (idGuardado > 0 && typeof window.GR_abrirEditar === 'function') {
+                    // El botón se libera cuando la guía ya está cargada con su id: mientras
+                    // GR_resetModal deja gr-id vacío, un clic en Guardar crearía otra guía.
+                    Promise.resolve(window.GR_abrirEditar({ id: idGuardado })).then(liberarBoton, () => {
+                        // Sin recarga: se deja puesto su id para que el siguiente Guardar la ACTUALICE.
+                        document.getElementById('gr-id').value = idGuardado;
+                        idActual = idGuardado;
+                        liberarBoton();
+                        Swal.fire({ icon: 'warning', title: 'Guía guardada', text: 'La guía se registró, pero no se pudo volver a abrir. Ábrala desde el listado.' });
+                    });
+                } else {
+                    liberarBoton();
+                }
             } else {
+                liberarBoton();
                 Swal.fire({ icon: 'error', title: 'Error al guardar', text: d.mensaje || 'Error al guardar.' });
             }
         })

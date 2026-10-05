@@ -1595,7 +1595,7 @@ class FacturaVentaController extends BaseModuloController
                     <tbody>
                     <?php foreach ($rows as $r):
                         $numero = ($r['establecimiento'] ?? '') . '-' . ($r['punto_emision'] ?? '') . '-' . ($r['secuencial'] ?? '');
-                        $iva = max(0, (float) ($r['importe_total'] ?? 0) - (float) ($r['total_sin_impuestos'] ?? 0) + (float) ($r['total_descuento'] ?? 0) - (float) ($r['total_ice'] ?? 0) - (float) ($r['propina'] ?? 0));
+                        $iva = max(0, (float) ($r['importe_total'] ?? 0) - (float) ($r['total_sin_impuestos'] ?? 0) - (float) ($r['total_ice'] ?? 0) - (float) ($r['propina'] ?? 0));
                     ?>
                         <tr>
                             <td><?= htmlspecialchars($numero) ?></td>
@@ -1652,7 +1652,7 @@ class FacturaVentaController extends BaseModuloController
             $exportData = [];
             foreach ($rows as $r) {
                 $numero = ($r['establecimiento'] ?? '') . '-' . ($r['punto_emision'] ?? '') . '-' . ($r['secuencial'] ?? '');
-                $iva = max(0, (float) ($r['importe_total'] ?? 0) - (float) ($r['total_sin_impuestos'] ?? 0) + (float) ($r['total_descuento'] ?? 0) - (float) ($r['total_ice'] ?? 0) - (float) ($r['propina'] ?? 0));
+                $iva = max(0, (float) ($r['importe_total'] ?? 0) - (float) ($r['total_sin_impuestos'] ?? 0) - (float) ($r['total_ice'] ?? 0) - (float) ($r['propina'] ?? 0));
 
                 // Mismo cálculo que la columna "Saldo" del listado principal: anulada
                 // siempre muestra 0 (no tiene saldo pendiente que cobrar).
@@ -3531,7 +3531,7 @@ class FacturaVentaController extends BaseModuloController
             ? 'bg-success bg-opacity-10 text-success border-success'
             : 'bg-warning bg-opacity-10 text-warning border-warning';
         $correoBadge  = '<span class="badge ' . $correoClass . ' border border-opacity-25">' . ucfirst($estadoCorreo) . '</span>';
-        $ivaCalc      = max(0, (float)($r['importe_total'] ?? 0) - (float)($r['total_sin_impuestos'] ?? 0) + (float)($r['total_descuento'] ?? 0) - (float)($r['total_ice'] ?? 0) - (float)($r['propina'] ?? 0));
+        $ivaCalc      = max(0, (float)($r['importe_total'] ?? 0) - (float)($r['total_sin_impuestos'] ?? 0) - (float)($r['total_ice'] ?? 0) - (float)($r['propina'] ?? 0));
 
         // Calcular estado de pago
         $importeTotal = (float)($r['importe_total'] ?? 0);

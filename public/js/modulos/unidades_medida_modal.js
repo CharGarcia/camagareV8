@@ -31,8 +31,6 @@
         if (idInput) idInput.value = '';
         const titulo = document.getElementById('tituloModalTipo');
         if (titulo) titulo.textContent = 'Nuevo Tipo de Medida';
-        const tabBtn = document.getElementById('tab-tipo-info-btn');
-        if (tabBtn) tabBtn.classList.add('disabled');
         const btnEliminar = document.getElementById('btnEliminarTipoModal');
         if (btnEliminar) btnEliminar.classList.add('d-none');
         resetAlertTipo();
@@ -62,8 +60,6 @@
         
         const titulo = document.getElementById('tituloModalTipo');
         if (titulo) titulo.textContent = 'Editar Tipo de Medida';
-        const tabBtn = document.getElementById('tab-tipo-info-btn');
-        if (tabBtn) tabBtn.classList.remove('disabled');
         const btnEliminar = document.getElementById('btnEliminarTipoModal');
         if (btnEliminar) btnEliminar.classList.remove('d-none');
         
@@ -73,64 +69,9 @@
             new bootstrap.Tab(tabGen).show();
         }
         
-        fetchDetalleTipo(data.id);
-        fetchHistorialTipo(data.id);
         const m = getModalTipo();
         if (m) m.show();
     };
-
-    async function fetchDetalleTipo(id) {
-        try {
-            const r = await fetch(`${urlBaseTipo}/getDetalleTipoAjax?id=${id}`);
-            const j = await r.json();
-            if (j.ok) {
-                const uSpan = document.getElementById('info_tipo_unidades');
-                if (uSpan) uSpan.textContent = j.data.total_unidades ?? '0';
-                const cSpan = document.getElementById('info_tipo_created_at');
-                if (cSpan) cSpan.textContent = j.data.creado_at ?? '—';
-                const cbSpan = document.getElementById('info_tipo_created_by');
-                if (cbSpan) cbSpan.textContent = j.data.creado_por ?? '—';
-                const uatSpan = document.getElementById('info_tipo_updated_at');
-                if (uatSpan) uatSpan.textContent = j.data.actualizado_at ?? '—';
-            }
-        } catch (e) {}
-    }
-
-    async function fetchHistorialTipo(id) {
-        const c = document.getElementById('historialTipoContainer');
-        if (!c) return;
-        try {
-            const r = await fetch(`${urlBaseTipo}/getHistorialAjax?id=${id}&tabla=tipo_medida`);
-            const j = await r.json();
-            if (j.ok && j.data.length > 0) {
-                let html = '<div class="timeline-border position-absolute h-100 border-start border-2 border-primary border-opacity-10" style="left:10px;top:0;"></div>';
-                j.data.forEach(log => {
-                    const icon = log.accion.includes('Crear') ? 'bi-plus-circle-fill text-success' :
-                        log.accion.includes('Actualizar') ? 'bi-pencil-fill text-primary' :
-                        log.accion.includes('Eliminar') ? 'bi-trash-fill text-danger' :
-                        'bi-clock-history text-secondary';
-                    html += `<div class="timeline-item position-relative mb-3 ps-4">
-                        <div class="timeline-icon position-absolute rounded-circle bg-white d-flex align-items-center justify-content-center shadow-sm border"
-                             style="left:0;top:0;width:22px;height:22px;z-index:2;">
-                            <i class="bi ${icon}" style="font-size:0.7rem;"></i>
-                        </div>
-                        <div class="timeline-content">
-                            <div class="d-flex justify-content-between align-items-center mb-0">
-                                <span class="fw-bold" style="font-size:0.75rem;">${log.accion}</span>
-                                <span class="text-muted" style="font-size:0.65rem;">${log.created_at}</span>
-                            </div>
-                            <div class="text-muted mb-1" style="font-size:0.7rem;"><i class="bi bi-person me-1"></i>${log.usuario_nombre || 'SISTEMA'}</div>
-                        </div>
-                    </div>`;
-                });
-                c.innerHTML = html;
-            } else {
-                c.innerHTML = '<div class="text-center py-3 text-muted small">Sin historial.</div>';
-            }
-        } catch (e) {
-            c.innerHTML = '<div class="text-center py-2 text-danger small">Error al cargar.</div>';
-        }
-    }
 
     window.guardarTipoModal = async function () {
         const form = document.getElementById('formTipoModal');
@@ -254,8 +195,6 @@
         if (wrapperFactor) wrapperFactor.style.display = '';
         const titulo = document.getElementById('tituloModalUnidad');
         if (titulo) titulo.textContent = 'Nueva Unidad de Medida';
-        const tabInfoBtn = document.getElementById('tab-uni-info-btn');
-        if (tabInfoBtn) tabInfoBtn.classList.add('disabled');
         const btnEliminar = document.getElementById('btnEliminarUnidadModal');
         if (btnEliminar) btnEliminar.classList.add('d-none');
         
@@ -303,8 +242,6 @@
         
         const titulo = document.getElementById('tituloModalUnidad');
         if (titulo) titulo.textContent = 'Editar Unidad de Medida';
-        const tabInfoBtn = document.getElementById('tab-uni-info-btn');
-        if (tabInfoBtn) tabInfoBtn.classList.remove('disabled');
         const btnEliminar = document.getElementById('btnEliminarUnidadModal');
         if (btnEliminar) btnEliminar.classList.remove('d-none');
         
@@ -314,64 +251,9 @@
             new bootstrap.Tab(tabGen).show();
         }
         
-        fetchDetalleUnidad(data.id);
-        fetchHistorialUnidad(data.id);
         const m = getModalUnidad();
         if (m) m.show();
     };
-
-    async function fetchDetalleUnidad(id) {
-        try {
-            const r = await fetch(`${urlBaseUnidad}/getDetalleUnidadAjax?id=${id}`);
-            const j = await r.json();
-            if (j.ok) {
-                const tSpan = document.getElementById('info_uni_tipo');
-                if (tSpan) tSpan.textContent = j.data.tipo_nombre ?? '—';
-                const cSpan = document.getElementById('info_uni_created_at');
-                if (cSpan) cSpan.textContent = j.data.creado_at ?? '—';
-                const cbSpan = document.getElementById('info_uni_created_by');
-                if (cbSpan) cbSpan.textContent = j.data.creado_por ?? '—';
-                const uatSpan = document.getElementById('info_uni_updated_at');
-                if (uatSpan) uatSpan.textContent = j.data.actualizado_at ?? '—';
-            }
-        } catch (e) {}
-    }
-
-    async function fetchHistorialUnidad(id) {
-        const c = document.getElementById('historialUnidadContainer');
-        if (!c) return;
-        try {
-            const r = await fetch(`${urlBaseUnidad}/getHistorialAjax?id=${id}&tabla=unidades_medida`);
-            const j = await r.json();
-            if (j.ok && j.data.length > 0) {
-                let html = '<div class="timeline-border position-absolute h-100 border-start border-2 border-primary border-opacity-10" style="left:10px;top:0;"></div>';
-                j.data.forEach(log => {
-                    const icon = log.accion.includes('Crear') ? 'bi-plus-circle-fill text-success' :
-                        log.accion.includes('Actualizar') ? 'bi-pencil-fill text-primary' :
-                        log.accion.includes('Eliminar') ? 'bi-trash-fill text-danger' :
-                        'bi-clock-history text-secondary';
-                    html += `<div class="timeline-item position-relative mb-3 ps-4">
-                        <div class="timeline-icon position-absolute rounded-circle bg-white d-flex align-items-center justify-content-center shadow-sm border"
-                             style="left:0;top:0;width:22px;height:22px;z-index:2;">
-                            <i class="bi ${icon}" style="font-size:0.7rem;"></i>
-                        </div>
-                        <div class="timeline-content">
-                            <div class="d-flex justify-content-between align-items-center mb-0">
-                                <span class="fw-bold" style="font-size:0.75rem;">${log.accion}</span>
-                                <span class="text-muted" style="font-size:0.65rem;">${log.created_at}</span>
-                            </div>
-                            <div class="text-muted mb-1" style="font-size:0.7rem;"><i class="bi bi-person me-1"></i>${log.usuario_nombre || 'SISTEMA'}</div>
-                        </div>
-                    </div>`;
-                });
-                c.innerHTML = html;
-            } else {
-                c.innerHTML = '<div class="text-center py-3 text-muted small">Sin historial.</div>';
-            }
-        } catch (e) {
-            c.innerHTML = '<div class="text-center py-2 text-danger small">Error al cargar.</div>';
-        }
-    }
 
     window.guardarUnidadModal = async function () {
         const form = document.getElementById('formUnidadModal');

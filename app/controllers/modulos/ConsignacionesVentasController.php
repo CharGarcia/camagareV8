@@ -446,7 +446,9 @@ class ConsignacionesVentasController extends BaseModuloController
                 $numero = $this->service->getUltimoNumeroGenerado();
                 echo json_encode([
                     'ok'     => true,
-                    'msg'    => 'Consignación de Venta ' . ($numero ?? '') . ' registrada correctamente.',
+                    'msg'    => $this->service->isUltimoGuardadoRepetido()
+                        ? 'La Consignación de Venta ' . ($numero ?? '') . ' ya estaba registrada; no se creó otra.'
+                        : 'Consignación de Venta ' . ($numero ?? '') . ' registrada correctamente.',
                     'id'     => $id,
                     'numero' => $numero,
                 ]);

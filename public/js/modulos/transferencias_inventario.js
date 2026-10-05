@@ -20,6 +20,7 @@
     let lineas   = [];          // líneas en edición
     let seqLinea = 0;
     let soloLectura = false;
+    let tokenGuardado = ''; // clave del formulario nuevo (TRI_nueva)
     let timerBusquedaProducto = null;
 
     // ── Utilidades ───────────────────────────────────────────────────────────
@@ -169,6 +170,7 @@
         el('tri-btn-anular').classList.add('d-none');
         el('tri-btn-eliminar').classList.add('d-none');
         el('tri-btn-guardar').classList.remove('d-none');
+        el('tri-btn-guardar').disabled = false; // TRI_guardar lo deja desactivado tras registrar
         el('tri-btn-guardar').innerHTML = textoBotonGuardar();
         el('tri-zona-agregar').classList.remove('d-none');
         el('tri-info-auditoria').innerHTML = '';
@@ -190,6 +192,8 @@
     window.TRI_nueva = function () {
         if (!PERM.crear) { aviso('warning', 'Sin permiso', 'No tiene permiso para crear transferencias.'); return; }
         resetModal();
+        // Guardado único (CLAUDE.md §8): clave de este formulario nuevo, viaja en cada intento.
+        tokenGuardado = window.CMG_nuevoTokenGuardado ? window.CMG_nuevoTokenGuardado() : '';
         getModal().show();
     };
 
@@ -583,21 +587,29 @@
         fd.append('responsable_recibe', el('tri-resp-recibe').value);
         fd.append('observaciones', el('tri-observaciones').value);
         fd.append('detalles', JSON.stringify(detalles));
+        fd.append('token_guardado', tokenGuardado);
 
         const btn = el('tri-btn-guardar');
         btn.disabled = true;
         btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span> Guardando…';
 
+        // Tras registrar, el botón NO se reactiva: hasta que TRI_verTransferencia abre el documento
+        // en solo lectura (y oculta el botón) un clic crearía otra transferencia con el stock
+        // movido dos veces (el número lo asigna el servidor, no frena el duplicado).
+        let registrada = false;
         fetch(`${URL}/guardar-ajax`, { method: 'POST', body: fd })
             .then(r => r.json())
             .then(res => {
                 if (!res.ok) { aviso('error', 'No se registró', res.mensaje || 'Error desconocido.'); return; }
+                registrada = true;
+                btn.innerHTML = '<i class="bi bi-check-lg me-1"></i> Registrada';
                 aviso('success', 'Transferencia registrada', res.mensaje);
                 window.TRI_buscar(pagina);
                 window.TRI_verTransferencia(res.id);
             })
-            .catch(e => { console.error(e); aviso('error', 'Error', 'No se pudo registrar la transferencia.'); })
+            .catch(e => { console.error(e); aviso('error', 'Error', 'No se recibió respuesta del servidor. Vuelva a pulsar Guardar: si la transferencia ya se había registrado, se abrirá la misma, sin mover el stock otra vez.'); })
             .finally(() => {
+                if (registrada) return;
                 btn.disabled = false;
                 btn.innerHTML = textoBotonGuardar();
             });

@@ -50,8 +50,13 @@
         cont.classList.remove('d-none');
     };
 
+    // Guardado único (CLAUDE.md §8): clave del formulario de corrida nueva + bandera en curso.
+    let rolTokenGuardado = '';
+    let rolGenerando = false;
+
     window.abrirModalCrear = function () {
         if (!form) return;
+        rolTokenGuardado = window.CMG_nuevoTokenGuardado ? window.CMG_nuevoTokenGuardado() : '';
         form.reset();
         $('rol_id').value = '';
         window.rolToggleNumero();
@@ -80,11 +85,25 @@
     }
 
     window.generarRol = async function () {
+        // Un generado a la vez: el aviso de jornadas (fetch + Swal) corre antes de desactivar el
+        // botón, y un doble clic en esa espera creaba dos corridas.
+        if (rolGenerando) return;
+        rolGenerando = true;
+        try {
+            await generarRolInterno();
+        } finally {
+            rolGenerando = false;
+        }
+    };
+
+    async function generarRolInterno() {
         if (!(await avisarJornadasIncompletas())) return;
         const btn = $('btnGenerarRol');
         btn.disabled = true; btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Generando...';
         try {
-            const respC = await fetch(`${urlModulo}/store`, { method: 'POST', body: new FormData(form) });
+            const fdC = new FormData(form);
+            fdC.append('token_guardado', rolTokenGuardado);
+            const respC = await fetch(`${urlModulo}/store`, { method: 'POST', body: fdC });
             const jsonC = await respC.json();
             if (!jsonC.ok) { Swal.fire({ icon: 'error', title: 'Atención', text: jsonC.error || 'No se pudo crear.' }); btn.disabled = false; btn.innerHTML = '<i class="bi bi-gear-fill me-1"></i> Generar'; return; }
             const fd = new FormData(); fd.append('id', jsonC.id);
@@ -100,10 +119,10 @@
                 Swal.fire({ icon: 'error', title: 'Atención', text: json.error || 'No se pudo generar.' });
             }
         } catch (e) {
-            Swal.fire({ icon: 'error', title: 'Error de Red', text: 'No se pudo conectar con el servidor.' });
+            Swal.fire({ icon: 'error', title: 'Error de Red', text: 'No se recibió respuesta del servidor. Vuelva a pulsar Generar: si la corrida ya se había creado, se usará la misma.' });
         }
         btn.disabled = false; btn.innerHTML = '<i class="bi bi-gear-fill me-1"></i> Generar';
-    };
+    }
 
     // Botones del footer que dependen de rolActual: mientras se carga/recalcula un
     // rol (getDetalleAjax siempre intenta refrescarlo primero, ver refrescarSiCorresponde

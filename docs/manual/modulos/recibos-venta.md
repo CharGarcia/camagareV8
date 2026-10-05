@@ -5,8 +5,8 @@ categoria: Ventas
 ruta_modulo: modulos/recibo-venta
 tipo: modulo
 visibilidad: todos
-etiquetas: recibo de venta, recibos, buscar recibos, buscador, filtros, filtrar recibos, buscar por cliente, buscar por producto, estado de pago, saldo pendiente, nota de venta, venta sin factura, documento interno, sin impuestos, numeracion por fecha, numero con el año, reiniciar numeracion, reinicio anual, reinicio mensual, correlativo por año, correlativo por mes, modo de numeracion, lote, vencimiento, caducidad, fecha de vencimiento, lote y vencimiento, ancho de columna, agrandar columna, ensanchar, codigo cortado, descripcion cortada, no se ve la descripcion completa, redimensionar, precio con impuestos, precio con iva, sale en cero, tipo de identificacion, tipo de documento del cliente, ruc o cedula, es ruc o cedula, cedula o pasaporte, consumidor final, no se cual identificacion tiene el cliente, buscador de clientes, buscar cliente, elegir cliente, datos del cliente, imprimir, impresora, estado del recibo, borrador, emitido, recibo pagado sigue en borrador, no cambia a emitido, recibo sin asiento, asiento del recibo, cuando se emite, no puedo modificar el recibo, no aparece actualizar, editar recibo emitido, corregir recibo
-version: 1.24
+etiquetas: recibo de venta, recibos, buscar recibos, buscador, filtros, filtrar recibos, buscar por cliente, buscar por producto, estado de pago, saldo pendiente, nota de venta, venta sin factura, documento interno, sin impuestos, numeracion por fecha, numero con el año, reiniciar numeracion, reinicio anual, reinicio mensual, correlativo por año, correlativo por mes, modo de numeracion, lote, vencimiento, caducidad, fecha de vencimiento, lote y vencimiento, ancho de columna, agrandar columna, ensanchar, codigo cortado, descripcion cortada, no se ve la descripcion completa, redimensionar, precio con impuestos, precio con iva, sale en cero, tipo de identificacion, tipo de documento del cliente, ruc o cedula, es ruc o cedula, cedula o pasaporte, consumidor final, no se cual identificacion tiene el cliente, buscador de clientes, buscar cliente, elegir cliente, datos del cliente, imprimir, impresora, estado del recibo, borrador, emitido, recibo pagado sigue en borrador, no cambia a emitido, recibo sin asiento, asiento del recibo, cuando se emite, no puedo modificar el recibo, no aparece actualizar, editar recibo emitido, corregir recibo, iva del listado, iva diferente, iva no coincide, iva con descuento, columna iva
+version: 1.25
 orden: 35
 estado: activo
 ---
@@ -200,6 +200,9 @@ Si la operación requiere comprobante válido para el cliente, hay que emitir
 - **El recibo emitido no tiene asiento**: falta la cuenta en *Configuración
   Contable* (recibos de venta). Configúrela y abra Recibos de Venta, o sincronice
   desde *Asientos Contables*.
+- **El IVA del listado no coincide con el del recibo** (sale más alto, justo en el valor del
+  descuento): error de la columna calculada en recibos con descuento, corregido en la versión
+  1.25. El documento y su PDF siempre tuvieron el IVA correcto.
 
 ## Numeración por fecha de emisión
 
@@ -238,6 +241,9 @@ la operación de inmediato.
 
 ## Historial de cambios
 
+- **1.25** — La columna **IVA** del listado mostraba un valor mayor al del documento en los
+  recibos **con descuento** (sumaba el descuento otra vez al deducir el IVA desde los totales).
+  Corregido; mismo arreglo que en Facturas de Venta 2.38.
 - **1.24** — Anular, eliminar o modificar un recibo de suscripción con ingreso diferido: mismo
   tratamiento que la factura (cronograma anulado o rehecho y reverso de lo ya devengado).
 - **1.23** — Recibos generados por una [suscripción](modulos/suscripciones) que reconoce el

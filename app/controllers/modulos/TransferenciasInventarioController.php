@@ -260,12 +260,15 @@ class TransferenciasInventarioController extends BaseModuloController
                 'responsable_recibe'  => trim($_POST['responsable_recibe'] ?? ''),
                 'observaciones'       => trim($_POST['observaciones'] ?? ''),
                 'detalles'            => $detalles,
+                'token_guardado'      => (string) ($_POST['token_guardado'] ?? ''),
             ]);
 
             echo json_encode([
                 'ok'      => true,
                 'id'      => $id,
-                'mensaje' => 'Transferencia registrada. El stock ya se movió entre las bodegas.',
+                'mensaje' => $this->service->isUltimoGuardadoRepetido()
+                    ? 'Esta transferencia ya estaba registrada; no se creó otra.'
+                    : 'Transferencia registrada. El stock ya se movió entre las bodegas.',
             ]);
         } catch (\Throwable $e) {
             \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);

@@ -86,8 +86,16 @@ class PedidoService {
             }
         }
 
+        $guardado = new \App\Services\GuardadoUnicoService();
         try {
             $this->db->beginTransaction();
+
+            // Guardado único (CLAUDE.md §8): un reintento del mismo formulario nuevo devuelve el
+            // pedido ya creado. Va antes del candado del secuencial.
+            if (empty($cabecera['id']) && ($previo = $guardado->previo($cabecera['token_guardado'] ?? '', (int) $id_empresa, 'pedidos'))) {
+                $this->db->rollBack();
+                return $previo['id_registro'];
+            }
 
             $fecha_entrega = !empty($cabecera['fecha_entrega']) ? $cabecera['fecha_entrega'] : null;
             $hora_inicial_entrega = !empty($cabecera['hora_inicial_entrega']) ? $cabecera['hora_inicial_entrega'] : null;
@@ -276,6 +284,8 @@ class PedidoService {
                     'total' => $det['total'] ?? 0
                 ]);
             }
+
+            $guardado->registrar($cabecera['token_guardado'] ?? '', (int) $id_empresa, 'pedidos', (int) $id_pedido, $secuencial, (int) $id_usuario);
 
             $this->db->commit();
             return $id_pedido;

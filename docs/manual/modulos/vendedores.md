@@ -6,7 +6,7 @@ ruta_modulo: modulos/vendedores
 tipo: modulo
 visibilidad: todos
 etiquetas: vendedores, buscar vendedor, buscador, filtros, filtrar vendedores, vendedores sin clientes, chips, vendedor, comercial, agente, asesor, comision, ventas por vendedor, importar vendedores, carga masiva, excel, vincular usuario con vendedor, usuario del sistema, que el asesor vea solo sus ventas, quien es cada vendedor, cartera del vendedor, clientes asignados
-version: 1.4
+version: 1.5
 orden: 50
 estado: activo
 ---
@@ -108,6 +108,9 @@ la guía *Importar datos desde Excel*.
 
 ## Historial de cambios
 
+- **1.5** — El modal ya no tiene pestaña *Información*; el número de clientes asignados se
+  muestra al pie de la pestaña **General**. El historial del registro se consulta en
+  el log del sistema.
 - **1.4** — Nuevo buscador del listado: lo que se escribe se busca por palabras
   sueltas, en cualquier orden y sin tildes, en nombre, identificación, correo,
   teléfono, dirección y usuario que registró (antes solo la frase completa en

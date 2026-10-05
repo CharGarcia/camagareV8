@@ -2303,23 +2303,32 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
             })
             .then(r => r.json())
             .then(res => {
-                btn.disabled = false;
-                btn.innerHTML = oldHtml;
                 if (res.ok) {
-                    // El modal NO se cierra: se recarga en el mismo lugar con el ingreso ya guardado
-                    // (número asignado, botones de PDF/correo, pestaña Asiento), para seguir
-                    // trabajando sobre él. abrirModalIngreso() usa getOrCreateInstance, así que el
-                    // show() sobre el modal ya abierto no duplica el fondo.
-                    abrirModalIngresoVer(res.id);
-
                     // Actualizar el registro en el listado (misma página, orden y filtros)
                     ING_mostrarRegistroGuardado(res.id, res.fila);
 
                     // Alerta visual atractiva
                     Toast.fire({ icon: 'success', title: res.mensaje });
-                } else {
-                    Swal.fire('Error', res.mensaje, 'error');
+
+                    // El modal NO se cierra: se recarga en el mismo lugar con el ingreso ya guardado
+                    // (número asignado, botones de PDF/correo, pestaña Asiento), para seguir
+                    // trabajando sobre él. abrirModalIngreso() usa getOrCreateInstance, así que el
+                    // show() sobre el modal ya abierto no duplica el fondo.
+                    // Se ESPERA la recarga: hasta que m-input-id tiene el id del ingreso creado, otro
+                    // clic en Guardar crearía un segundo ingreso (ingGuardando lo impide mientras tanto).
+                    return Promise.resolve(abrirModalIngresoVer(res.id)).then(() => {
+                        btn.disabled = false;
+                        btn.innerHTML = oldHtml;
+                    }, () => {
+                        // Guardado pero sin poder recargarlo: se oculta Guardar para no crear otro.
+                        btn.classList.add('d-none');
+                        btn.innerHTML = oldHtml;
+                        Swal.fire('Ingreso guardado', 'El ingreso se registró, pero no se pudo volver a abrir. Ábralo desde el listado para seguir trabajando en él.', 'warning');
+                    });
                 }
+                btn.disabled = false;
+                btn.innerHTML = oldHtml;
+                Swal.fire('Error', res.mensaje, 'error');
             })
             .catch(e => {
                 btn.disabled = false;
@@ -2376,7 +2385,7 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
     }
 
     function abrirModalIngresoVer(id) {
-        fetch(`<?= BASE_URL ?>/<?= $rutaModulo ?>/getIngresoAjax?id=${id}`)
+        return fetch(`<?= BASE_URL ?>/<?= $rutaModulo ?>/getIngresoAjax?id=${id}`)
             .then(r => r.json())
             .then(res => {
                 if (!res.ok) {

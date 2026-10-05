@@ -1633,7 +1633,8 @@ window.addEventListener('pageshow', function (e) {
         fd.append('lote', lote);
         fd.append('caducidad', caducidad);
         fd.append('nup', nup);
-        return fetch(AJAX + '/agregarLineaAjax', { method: 'POST', body: fd })
+        // Tocar dos veces el producto = dos unidades: se excluye de anti-doble-envio.js.
+        return fetch(AJAX + '/agregarLineaAjax', { method: 'POST', body: fd, headers: { 'X-Permitir-Repetido': '1' } })
             .then(r => r.json())
             .then(async (d) => {
                 if (!d.ok) { swalError(d.error || 'No se pudo agregar el ítem.'); return; }

@@ -31,6 +31,9 @@ class ConsignacionVentaService
     /** Número (serie-secuencial) que el servidor asignó en el último crear(); lo muestra el controlador. */
     private ?string $ultimoNumeroGenerado = null;
 
+    /** true si el último crear() no creó nada: devolvió la consignación ya guardada con la misma clave de formulario. */
+    private bool $ultimoGuardadoRepetido = false;
+
     public function __construct(
         ConsignacionVentaRepository $repository,
         ConsignacionVentaRules $rules,
@@ -218,6 +221,11 @@ class ConsignacionVentaService
         return $this->ultimoNumeroGenerado;
     }
 
+    public function isUltimoGuardadoRepetido(): bool
+    {
+        return $this->ultimoGuardadoRepetido;
+    }
+
     /**
      * Reserva el número de la consignación: serie y secuencial los decide el SERVIDOR.
      *
@@ -288,8 +296,30 @@ class ConsignacionVentaService
         $idUsuario = $data['id_usuario'];
         $this->verificarPedidosLibres($data['detalles'] ?? [], (int) $idEmpresa, (int) $idUsuario);
 
+        $token = preg_replace('/[^A-Za-z0-9\-]/', '', (string) ($data['token_guardado'] ?? ''));
+        $token = ($token !== '' && strlen($token) <= 64 && $this->repository->columnaTokenGuardadoExiste()) ? $token : '';
+        $this->ultimoGuardadoRepetido = false;
+
         try {
             $db->beginTransaction();
+
+            // Mismo formulario guardado dos veces (doble clic, o reintento tras perderse la
+            // respuesta): se devuelve la consignación que ya creó, sin crear otra. Va PRIMERO,
+            // antes del saldo de pedidos, que si no rechazaría el reintento como "ya consignado".
+            if ($token !== '') {
+                $this->repository->lockTokenGuardado($token, (int) $idEmpresa);
+                $previa = $this->repository->findPorTokenGuardado($token, (int) $idEmpresa);
+                if ($previa) {
+                    if (!empty($previa['eliminado']) && $previa['eliminado'] !== 'f') {
+                        // El catch de abajo hace el rollback.
+                        throw new Exception("Esta consignación ya se había guardado como {$previa['serie']}-{$previa['secuencial']} y luego se eliminó. Abra una consignación nueva.");
+                    }
+                    $db->rollBack(); // no se escribió nada: solo libera el candado
+                    $this->ultimoNumeroGenerado = $previa['serie'] . '-' . $previa['secuencial'];
+                    $this->ultimoGuardadoRepetido = true;
+                    return (int) $previa['id'];
+                }
+            }
 
             // Saldo de los pedidos, bajo candado y antes del secuencial y del stock.
             $this->validarSaldoPedidos($data['detalles'] ?? [], (int) $idEmpresa);
@@ -324,6 +354,9 @@ class ConsignacionVentaService
                 'created_by' => $idUsuario,
                 'updated_by' => $idUsuario,
             ];
+            if ($token !== '') {
+                $cabecera['token_guardado'] = $token;
+            }
 
             try {
                 $idConsignacion = $this->repository->create($cabecera);

@@ -396,6 +396,17 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosPestanasOcultas($vistaConfigC
     }
     let CONS_BLOQUEAR_SECUENCIAL = false;
 
+    // Clave de este formulario de consignación NUEVA: viaja en cada intento de guardado y el
+    // servidor la usa para no crear dos consignaciones del mismo formulario (doble clic, o un
+    // reintento después de un "Error al guardar" en que el servidor sí había guardado: en vez de
+    // otra consignación devuelve la ya creada). Se renueva solo al abrir otra consignación nueva.
+    let CONS_TOKEN_GUARDADO = '';
+    let CONS_GUARDANDO = false;
+    function consNuevoTokenGuardado() {
+        try { if (window.crypto && crypto.randomUUID) return crypto.randomUUID(); } catch (e) {}
+        return Date.now().toString(36) + '-' + Math.random().toString(36).slice(2) + Math.random().toString(36).slice(2);
+    }
+
     // Permisos del usuario en este módulo: los MISMOS que valida el backend en cada
     // endpoint (store / cambiarEstadoAjax / eliminar). Sin esto el modal decidía solo
     // por el estado del documento, así que alguien con permiso de solo lectura veía
@@ -439,6 +450,7 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosPestanasOcultas($vistaConfigC
         window._CONS_SKIP_BORRADOR = false;
 
         CONS_BLOQUEAR_SECUENCIAL = false;
+        CONS_TOKEN_GUARDADO = consNuevoTokenGuardado();
         document.getElementById('formConsignacion').reset();
         document.getElementById('cons_id').value = '';
         document.getElementById('cons_id_cliente').value = '';
@@ -1470,7 +1482,9 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosPestanasOcultas($vistaConfigC
 
     async function guardarConsignacion(e) {
         if (e) e.preventDefault();
-        
+        // Un guardado a la vez: ignora clics o Enter mientras el anterior sigue en curso.
+        if (CONS_GUARDANDO) return;
+
         if (!document.getElementById('cons_id_cliente').value) {
             Swal.fire('Atención', 'Debe seleccionar un cliente.', 'warning').then(() => {
                 const searchInput = document.getElementById('cons_cliente_busqueda');
@@ -1596,12 +1610,15 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosPestanasOcultas($vistaConfigC
             return;
         }
 
+        if (CONS_GUARDANDO) return; // otro clic llegó mientras se mostraba un aviso
+        CONS_GUARDANDO = true;
         const btn = document.getElementById('btnGuardarConsignacion');
         btn.disabled = true;
         btn.innerHTML = '<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> Guardando...';
 
         const payload = {
             id: document.getElementById('cons_id').value || null,
+            token_guardado: document.getElementById('cons_id').value ? '' : CONS_TOKEN_GUARDADO,
             fecha_emision: document.getElementById('cons_fecha_emision').value,
             id_punto_emision: document.getElementById('cons_id_punto_emision').value,
             establecimiento: document.getElementById('cons_establecimiento').value,
@@ -1679,8 +1696,11 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosPestanasOcultas($vistaConfigC
                 Swal.fire('Error', data.error, 'error');
             }
         } catch(e) {
-            Swal.fire('Error', 'Error al guardar.', 'error');
+            // Puede que el servidor sí haya guardado y solo se perdió la respuesta: volver a pulsar
+            // Guardar es seguro (misma clave del formulario → devuelve la consignación ya creada).
+            Swal.fire('Error', 'No se recibió respuesta del servidor. Vuelva a pulsar Guardar: si la consignación ya se había registrado, se abrirá la misma, sin duplicarla.', 'error');
         } finally {
+            CONS_GUARDANDO = false;
             btn.disabled = false;
             btn.innerHTML = '<i class="bi bi-check2-circle me-1"></i> Guardar';
         }

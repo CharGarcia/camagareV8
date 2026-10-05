@@ -449,7 +449,12 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 });
 
+// Guardado único (CLAUDE.md §8): clave del formulario de pedido NUEVO, viaja en cada intento.
+let PED_TOKEN_GUARDADO = '';
+let PED_GUARDANDO = false;
+
 function nuevoPedido() {
+    PED_TOKEN_GUARDADO = window.CMG_nuevoTokenGuardado ? window.CMG_nuevoTokenGuardado() : '';
     const form = document.getElementById('form-pedido-cabecera');
     if (form) form.reset();
 
@@ -1109,9 +1114,14 @@ async function guardarPedido() {
         return;
     }
 
+    if (PED_GUARDANDO) return;
+    PED_GUARDANDO = true;
+    const btnGuardar = document.getElementById('btn-guardar-pedido');
+    if (btnGuardar) btnGuardar.disabled = true;
     try {
         const formData = new FormData();
         formData.append('cabecera[id]', cabecera.id);
+        formData.append('cabecera[token_guardado]', cabecera.id ? '' : PED_TOKEN_GUARDADO);
         formData.append('cabecera[id_cliente]', cabecera.id_cliente);
         formData.append('cabecera[fecha_pedido]', cabecera.fecha_pedido);
         formData.append('cabecera[id_establecimiento]', cabecera.id_establecimiento);
@@ -1153,7 +1163,10 @@ async function guardarPedido() {
         }
     } catch (err) {
         console.error('Error al guardar:', err);
-        Swal.fire({ icon: 'error', title: 'Error', text: 'Ocurrió un error inesperado al guardar el pedido.' });
+        Swal.fire({ icon: 'error', title: 'Error', text: 'No se recibió respuesta del servidor. Vuelva a pulsar Guardar: si el pedido ya se había registrado, no se creará otro.' });
+    } finally {
+        PED_GUARDANDO = false;
+        if (btnGuardar) btnGuardar.disabled = false;
     }
 }
 

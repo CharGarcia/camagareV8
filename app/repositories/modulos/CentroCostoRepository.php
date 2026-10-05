@@ -9,6 +9,19 @@ use PDO;
 
 class CentroCostoRepository extends BaseRepository
 {
+    /**
+     * Columnas ordenables del listado: clave que manda la vista (`data-sort`) =>
+     * expresión SQL. Es la whitelist del ORDER BY y el mapa que necesita
+     * `OrdenListado::clausula()` para encadenar varias columnas.
+     */
+    public const MAPA_ORDEN = [
+        'codigo'      => 'cc.codigo',
+        'nombre'      => 'cc.nombre',
+        'descripcion' => 'cc.descripcion',
+        'estado'      => 'cc.estado',
+    ];
+
+    /** @deprecated Usar MAPA_ORDEN; se conserva por compatibilidad. */
     public const COLUMNAS_ORDEN = ['codigo', 'nombre', 'estado'];
 
     public function __construct()
@@ -23,12 +36,15 @@ class CentroCostoRepository extends BaseRepository
         int $perPage,
         string $ordenCol,
         string $ordenDir,
-        ?int $idUsuarioFiltro = null
+        ?int $idUsuarioFiltro = null,
+        array $ordenMulti = []
     ): array {
-        if (!in_array($ordenCol, self::COLUMNAS_ORDEN, true)) {
-            $ordenCol = 'nombre';
-        }
-        $dir = strtoupper($ordenDir) === 'DESC' ? 'DESC' : 'ASC';
+        // Una o varias columnas (Shift+clic), validadas contra MAPA_ORDEN, con cc.id
+        // como desempate para que las filas empatadas no bailen entre páginas.
+        $ordenMulti = \App\Helpers\OrdenListado::normalizar(
+            $ordenMulti !== [] ? $ordenMulti : [['col' => $ordenCol, 'dir' => $ordenDir]]
+        );
+        $orderBy = \App\Helpers\OrdenListado::clausula($ordenMulti, self::MAPA_ORDEN, 'cc.nombre', 'cc.id DESC');
 
         $whereSql = $this->getBaseWhere($idEmpresa, 'cc', $idUsuarioFiltro);
         $params   = [':id_empresa' => $idEmpresa];
@@ -36,10 +52,35 @@ class CentroCostoRepository extends BaseRepository
             $params[':id_usuario_filtro'] = $idUsuarioFiltro;
         }
 
-        if ($buscar !== '') {
-            $whereSql .= " AND (cc.codigo ILIKE :b OR cc.nombre ILIKE :b OR cc.descripcion ILIKE :b)";
-            $params[':b'] = '%' . $buscar . '%';
+        $parsed = \App\Helpers\FiltrosBusqueda::parsear($buscar);
+        if ($parsed['texto_libre'] !== '') {
+            // Texto libre sobre las columnas visibles (por palabras, sin tildes). Estado
+            // queda fuera: se filtra desde el modal (estado:activo).
+            $cond = \App\Helpers\FiltrosBusqueda::condicionTexto([
+                'cc.codigo',
+                'cc.nombre',
+                'cc.descripcion',
+            ], $parsed['texto_libre'], $params, 'cc_b');
+            if ($cond !== '') {
+                $whereSql .= ' AND ' . $cond;
+            }
         }
+
+        \App\Helpers\FiltrosBusqueda::aplicarFiltros($whereSql, $params, $parsed['filtros'], [
+            'texto'  => [
+                'codigo'      => 'cc.codigo',
+                'nombre'      => 'cc.nombre',
+                'descripcion' => 'cc.descripcion',
+            ],
+            'exacto' => [
+                'estado'  => 'cc.estado',
+                'usuario' => 'cc.created_by',
+            ],
+            'fecha'  => [
+                'registro'   => 'cc.created_at',
+                'created_at' => 'cc.created_at',
+            ],
+        ]);
 
         // 1. Contar total
         $sqlCount = "SELECT COUNT(*) FROM {$this->table} cc {$whereSql}";
@@ -49,9 +90,9 @@ class CentroCostoRepository extends BaseRepository
 
         // 2. Obtener filas
         $offset = ($page - 1) * $perPage;
-        
-        $sqlRows = "SELECT cc.* FROM {$this->table} cc {$whereSql} ORDER BY cc.{$ordenCol} {$dir}, cc.id DESC";
-                    
+
+        $sqlRows = "SELECT cc.* FROM {$this->table} cc {$whereSql} {$orderBy}";
+
         if ($perPage > 0) {
             $sqlRows .= " LIMIT " . (int)$perPage . " OFFSET " . (int)$offset;
         }
@@ -64,6 +105,25 @@ class CentroCostoRepository extends BaseRepository
             'total' => $total,
             'rows'  => $rows
         ];
+    }
+
+    /**
+     * Opciones de los selects del modal de filtros: solo los usuarios que realmente
+     * registraron centros de costo en la empresa.
+     *
+     * @return array{usuarios: array}
+     */
+    public function getOpcionesFiltroListado(int $idEmpresa): array
+    {
+        $st = $this->db->prepare(
+            "SELECT DISTINCT u.id, u.nombre
+               FROM {$this->table} cc
+               JOIN usuarios u ON u.id = cc.created_by
+              WHERE cc.id_empresa = :id_empresa AND cc.eliminado = false
+              ORDER BY u.nombre"
+        );
+        $st->execute([':id_empresa' => $idEmpresa]);
+        return ['usuarios' => $st->fetchAll(PDO::FETCH_ASSOC)];
     }
 
     public function create(array $data): int

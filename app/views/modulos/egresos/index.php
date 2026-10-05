@@ -2361,17 +2361,23 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
             method:'POST', headers:{'Content-Type':'application/x-www-form-urlencoded'},
             body: 'data=' + encodeURIComponent(JSON.stringify(data))
         }).then(r=>r.json()).then(res => {
-            b.disabled = false;
             if(res.ok) {
+                // Actualizar el registro en el listado (misma página, orden y filtros)
+                EGR_mostrarRegistroGuardado(res.id, res.fila);
+                Toast.fire({ icon: 'success', title: res.mensaje });
                 // El modal NO se cierra: se recarga en el mismo lugar con el egreso ya guardado
                 // (número asignado, botones de PDF/correo/cheques, pestaña Asiento), para seguir
                 // trabajando sobre él. abrirModalEgreso() usa getOrCreateInstance, así que el
                 // show() sobre el modal ya abierto no duplica el fondo.
-                abrirModalEgresoVer(res.id);
-                // Actualizar el registro en el listado (misma página, orden y filtros)
-                EGR_mostrarRegistroGuardado(res.id, res.fila);
-                Toast.fire({ icon: 'success', title: res.mensaje });
+                // Se ESPERA la recarga: hasta que deja el botón en "Actualizar", egGuardando y el
+                // botón desactivado impiden que otro clic cree un segundo egreso.
+                return abrirModalEgresoVer(res.id).catch(() => {
+                    // Guardado pero sin poder recargarlo: se oculta Guardar para no crear otro.
+                    b.classList.add('d-none');
+                    Swal.fire('Egreso guardado', 'El egreso se registró, pero no se pudo volver a abrir. Ábralo desde el listado para seguir trabajando en él.', 'warning');
+                });
             } else {
+                b.disabled = false;
                 Swal.fire('Error al guardar', res.mensaje, 'error');
             }
         }).catch(e=> { 
@@ -2428,7 +2434,7 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
     }
 
     function abrirModalEgresoVer(id) {
-        fetch(`${EGR_URL}/getEgresoAjax?id=${id}`).then(r=>r.json()).then(res => {
+        return fetch(`${EGR_URL}/getEgresoAjax?id=${id}`).then(r=>r.json()).then(res => {
             if(!res.ok) return alert(res.mensaje);
             const e = res.data;
             abrirModalEgreso(false);

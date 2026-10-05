@@ -247,7 +247,13 @@ class TraspasosController extends BaseModuloController
 
             $id = $this->service->registrar($data);
 
-            echo json_encode(['ok' => true, 'mensaje' => 'Traspaso registrado satisfactoriamente.', 'id' => $id]);
+            echo json_encode([
+                'ok'      => true,
+                'mensaje' => $this->service->isUltimoGuardadoRepetido()
+                    ? 'Este traspaso ya estaba registrado; no se creó otro.'
+                    : 'Traspaso registrado satisfactoriamente.',
+                'id'      => $id,
+            ]);
         } catch (\Throwable $e) {
             \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             echo json_encode(['ok' => false, 'mensaje' => $e->getMessage()]);

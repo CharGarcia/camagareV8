@@ -6,7 +6,7 @@ ruta_modulo: modulos/videollamadas
 tipo: modulo
 visibilidad: todos
 etiquetas: videollamada, video llamada, videoconferencia, reunion, reuniones, meet, zoom, llamada, conferencia, camara, microfono, sala, sala de espera, juntas, capacitacion, compartir pantalla, chat, levantar la mano, reunion abierta, en curso, finalizar, cerrar reunion, se quedo abierta, reunion colgada, inactividad, volver a entrar, reingresar, se me cayo la reunion
-version: 1.6
+version: 1.7
 orden: 0
 estado: activo
 ---
@@ -99,7 +99,7 @@ no son intercambiables:
 
 | Quién entra | De dónde se saca | ¿Necesita cuenta? |
 |---|---|---|
-| Usuario de CaMaGaRe | Pestaña **Información** → *Enlace para usuarios del sistema* | **Sí**, con sesión iniciada y estando invitado a esa reunión |
+| Usuario de CaMaGaRe | Pestaña **General** → bloque de datos de la sala, *Enlace para usuarios del sistema* | **Sí**, con sesión iniciada y estando invitado a esa reunión |
 | Cualquier persona | Pestaña **Participantes** → botón de **cadena** junto a ese invitado | **No**, entra desde cualquier computador |
 
 Si le manda a alguien de fuera el enlace de usuarios del sistema, le va a aparecer
@@ -360,6 +360,8 @@ El nivel 3 (superadministrador) siempre ve todo.
 
 ## Historial de cambios
 
+- **1.7** — El modal ya no tiene pestaña *Información*: el código de sala, estado, creador,
+  fecha y el enlace para usuarios del sistema están al pie de la pestaña **General**.
 - **1.6** — Las reuniones que quedan en curso sin nadie dentro se finalizan solas
   a los diez minutos, y los participantes que se quedaron colgados por cerrar la
   ventana sin pulsar Colgar se cierran junto con ellas. Mientras haya alguien

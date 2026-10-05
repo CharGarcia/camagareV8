@@ -34,18 +34,7 @@ $tiposSelect     = $tiposSelect ?? [];
                                     <i class="bi bi-card-list me-1"></i> General
                                 </button>
                             </li>
-                            <li class="nav-item">
-                                <button class="nav-link fw-medium py-2 disabled" id="tab-uni-info-btn"
-                                        data-bs-toggle="tab" data-bs-target="#tab-uni-info"
-                                        type="button" role="tab" style="white-space:nowrap;">
-                                    <i class="bi bi-info-circle me-1"></i> Información
-                                </button>
-                            </li>
                         </ul>
-                        <?php
-                        $pestanasUni = ['tab-uni-info-btn' => 'Información'];
-                        echo \App\Helpers\PreferenciasHelper::renderDropdownPestanas($pestanasUni, $vistaConfig ?? [], 'modulos/unidades-medida_unidad');
-                        ?>
                     </div>
                     <div class="border-bottom mb-3 mx-3"></div>
 
@@ -126,62 +115,6 @@ $tiposSelect     = $tiposSelect ?? [];
                                     </select>
                                 </div>
 
-                            </div>
-                        </div>
-
-                        <!-- ── Pestaña Información ── -->
-                        <div class="tab-pane fade" id="tab-uni-info" role="tabpanel">
-
-                            <!-- Tarjeta de Permisos -->
-                            <div class="col-12 px-3">
-                                <div class="p-2 border rounded-3 bg-white shadow-sm mt-0 mb-3">
-                                    <div class="small fw-bold text-muted mb-2 d-flex align-items-center" style="font-size:0.7rem;">
-                                        <i class="bi bi-key-fill text-warning me-2"></i> MIS PERMISOS EN ESTE MÓDULO
-                                    </div>
-                                    <div class="d-flex flex-wrap gap-2">
-                                        <span class="badge bg-<?= $perm['ver']       ? 'success' : 'secondary text-opacity-50' ?> bg-opacity-10 text-<?= $perm['ver']       ? 'success' : 'secondary' ?> border border-<?= $perm['ver']       ? 'success' : 'secondary' ?> border-opacity-25" style="font-size:0.65rem;">VER</span>
-                                        <span class="badge bg-<?= $perm['crear']     ? 'success' : 'secondary text-opacity-50' ?> bg-opacity-10 text-<?= $perm['crear']     ? 'success' : 'secondary' ?> border border-<?= $perm['crear']     ? 'success' : 'secondary' ?> border-opacity-25" style="font-size:0.65rem;">CREAR</span>
-                                        <span class="badge bg-<?= $perm['actualizar']? 'success' : 'secondary text-opacity-50' ?> bg-opacity-10 text-<?= $perm['actualizar']? 'success' : 'secondary' ?> border border-<?= $perm['actualizar']? 'success' : 'secondary' ?> border-opacity-25" style="font-size:0.65rem;">MODIFICAR</span>
-                                        <span class="badge bg-<?= $perm['eliminar']  ? 'success' : 'secondary text-opacity-50' ?> bg-opacity-10 text-<?= $perm['eliminar']  ? 'success' : 'secondary' ?> border border-<?= $perm['eliminar']  ? 'success' : 'secondary' ?> border-opacity-25" style="font-size:0.65rem;">ELIMINAR</span>
-                                        <?php if ($perm['todo']): ?>
-                                        <span class="badge bg-info bg-opacity-10 text-info border border-info border-opacity-25" style="font-size:0.65rem;">ACCESO TOTAL</span>
-                                        <?php endif; ?>
-                                    </div>
-                                </div>
-                            </div>
-
-                            <!-- Datos de registro -->
-                            <div class="bg-light rounded-3 p-3 border mb-3 mx-3">
-                                <h6 class="text-primary mb-3 small fw-bold"><i class="bi bi-info-circle me-2"></i>Datos del Registro</h6>
-                                <div class="row g-2">
-                                    <div class="col-6">
-                                        <span class="small text-muted d-block">Tipo de medida:</span>
-                                        <span class="small fw-medium" id="info_uni_tipo">-</span>
-                                    </div>
-                                    <div class="col-6">
-                                        <span class="small text-muted d-block">Creado:</span>
-                                        <span class="small fw-medium" id="info_uni_created_at">-</span>
-                                    </div>
-                                    <div class="col-6">
-                                        <span class="small text-muted d-block">Creado por:</span>
-                                        <span class="small fw-medium" id="info_uni_created_by">-</span>
-                                    </div>
-                                    <div class="col-6">
-                                        <span class="small text-muted d-block">Última modificación:</span>
-                                        <span class="small fw-medium" id="info_uni_updated_at">-</span>
-                                    </div>
-                                </div>
-                            </div>
-
-                            <!-- Historial -->
-                            <div class="bg-light rounded-3 p-3 border mx-3">
-                                <h6 class="text-primary mb-2 small fw-bold"><i class="bi bi-list-ul me-2"></i>Historial de cambios</h6>
-                                <div id="historialUnidadContainer" style="max-height:200px;overflow-y:auto;">
-                                    <div class="text-center py-3 text-muted small">
-                                        <div class="spinner-border spinner-border-sm mb-1" role="status"></div>
-                                        <div>Cargando...</div>
-                                    </div>
-                                </div>
                             </div>
                         </div>
 

@@ -174,6 +174,41 @@ eliminado (boolean), deleted_at, deleted_by
   Repository/Service (rompe además la regla de §3): si hace falta escribir stock, usar
   `InventarioRepository`/`InventarioService`, no reescribir el `INSERT`/`UPDATE` a mano.
 
+**Un guardado = un registro (doble clic y reintentos) — obligatorio en todo módulo que cree documentos**
+- Origen: la consignación 001-101-52654/52655 (05-10-2026) quedó duplicada desde el mismo pedido.
+  Un doble clic, un Enter repetido o un reintento después de "Error de conexión" (el servidor sí
+  guardó, se perdió la respuesta) **nunca** debe crear dos registros. Tres capas:
+- **1. Navegador, global (ya implementado, no reinventar)**: `public/js/anti-doble-envio.js`, cargado
+  en `partials/csrf.php` (layout estándar y vistas standalone). Si sale un POST/PUT/PATCH/DELETE
+  idéntico (misma URL y cuerpo) mientras el primero sigue en curso, no se envía: reutiliza la
+  respuesta. Un submit nativo repetido se ignora. **Excepción**: si repetir es intencional (tocar dos
+  veces un producto = dos unidades), el `fetch` lleva la cabecera `X-Permitir-Repetido: 1`.
+- **2. Navegador, en el módulo**: el botón Guardar se desactiva y se usa una bandera "en curso"
+  (`if (guardando) return; guardando = true; … finally { guardando = false; }`) **antes del primer
+  `await`** (verificar periodo, confirmaciones). Tras crear un registro, el botón **no** se reactiva
+  hasta que el formulario ya tiene el id del registro creado (`await` de la recarga del modal o fijar
+  el id en el acto); si no, el siguiente clic crea otro. Si la recarga falla, dejar puesto el id o
+  esconder Guardar. Ref.: `guardarConsignacion()` (`consignaciones_ventas/modal_consignacion.php`),
+  `guardarEgreso()` (`egresos/index.php`), `pvCobrando` (`caja_sesion/venta.php`).
+- **3. Servidor, guardado único por formulario (`App\Services\GuardadoUnicoService`)**: cubre el
+  reintento tras perderse la respuesta, que el navegador no puede resolver.
+  - Al abrir un formulario de documento **nuevo**: `token = CMG_nuevoTokenGuardado()` (de
+    `anti-doble-envio.js`); viaja como `token_guardado` en **todos** sus intentos y se renueva solo
+    al abrir otro documento nuevo (en el POS: por venta/ticket, y se descarta al vaciar el carrito).
+  - En el Service, dentro de la transacción: `previo($token, $idEmpresa, 'modulo')` **primero**
+    —antes de validar secuencial, saldo o stock, que si no rechazarían el reintento con "ya existe"—;
+    si devuelve algo, `rollBack()` y devolver ese `id_registro`. Al final, en la misma transacción,
+    `registrar($token, $idEmpresa, 'modulo', $id, $numero, $idUsuario[, $respuesta])`.
+  - El controller pasa `$_POST['token_guardado']` y, si el Service devolvió uno ya existente, avisa
+    *"ya estaba registrado; no se creó otro"*.
+  - Tabla común `guardados_formulario` (`database/20261005_guardados_formulario.sql`): **no**
+    agregar una columna por tabla. Sin clave o sin la tabla el Service no hace nada (degrada).
+  - Ya lo usan: Pedidos, Transferencias de inventario, Traspasos, Roles de pago (crear corrida),
+    cobro del POS. Consignaciones de venta usa su propia columna `token_guardado` (anterior).
+- Además, toda validación que dependa de un saldo/consumo compartido (p. ej. lo pendiente de un
+  pedido) se **revalida en el servidor bajo candado** al guardar; lo que muestra el modal al abrir
+  no basta (ref.: `ConsignacionVentaService::validarSaldoPedidos()`).
+
 ---
 
 ## 9. Estándar de UI/UX
@@ -310,7 +345,7 @@ Todo módulo nuevo debe contemplar desde el diseño: **multiempresa, permisos, a
 1. **Base de datos** (`database/` o `app/migrations/`): crear la tabla operativa con `id_empresa`, los campos de auditoría obligatorios (§5), `eliminado` y, si aplica, `estado`.
 2. **Repository** en `app/repositories/modulos/{Nombre}Repository.php`: extiende `BaseRepository`, PDO con consultas preparadas. Usar `getBaseWhere($idEmpresa, $alias, $idUsuarioFiltro)` para filtrar siempre por `id_empresa` + `eliminado = false` (y registros propios cuando aplique), y `FiltrosBusqueda` para el buscador (ver §9).
 3. **Rules** en `app/Rules/modulos/{Nombre}Rules.php`: validaciones de negocio.
-4. **Service** en `app/Services/modulos/{Nombre}Service.php`: lógica de negocio, **transacciones** y **auditoría** (`LogSistemaService`).
+4. **Service** en `app/Services/modulos/{Nombre}Service.php`: lógica de negocio, **transacciones** y **auditoría** (`LogSistemaService`). Si crea documentos: **guardado único** con `GuardadoUnicoService` (`previo()` al inicio de la transacción, `registrar()` antes del commit) y, en la vista, botón con bandera "en curso" + `token_guardado = CMG_nuevoTokenGuardado()` al abrir un documento nuevo (§8, *Un guardado = un registro*).
 5. **Model** en `app/models/` solo si se necesita acceso a datos adicional (extiende `BaseModel`).
 6. **Controller** en `app/controllers/modulos/{Nombre}Controller.php`: extiende `BaseModuloController`, implementa `getRutaModulo()` (p. ej. `'modulos/productos'`) y llama `requireLeer/requireCrear/requireActualizar/requireEliminar` en cada acción. Para el listado, calcular `$idUsuarioFiltro = empty($this->getPermisos()['todo']) ? (int)$_SESSION['id_usuario'] : null` y pasarlo al repository (registros propios). Sin lógica de negocio.
 7. **Vista** en `app/views/modulos/{nombre}/`: tabla estándar (§9) y modales estándar (§9). El botón PDF del modal usa `CMG_pdfDocumento(url)` (§9, *PDF de un documento desde un modal*). Para columnas visibles/anchos, pestañas y favoritos usar `PreferenciasHelper` (ver §9, *Preferencias de usuario*).

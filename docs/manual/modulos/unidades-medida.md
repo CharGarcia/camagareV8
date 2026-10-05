@@ -6,7 +6,7 @@ ruta_modulo: modulos/unidades-medida
 tipo: modulo
 visibilidad: todos
 etiquetas: unidades, unidad de medida, medidas, kilo, litro, caja, unidad, peso, volumen, longitud, area, tiempo, empaque, quintal, arroba, libra, galon, caneca, factor, conversion, unidad base, importar medidas, vender por caja, caja x100, presentacion, comprar por unidad, contenido de la caja
-version: 1.3
+version: 1.4
 orden: 60
 estado: activo
 ---
@@ -169,6 +169,9 @@ creó el propio usuario.
 
 ## Historial de cambios
 
+- **1.4** — Los modales de tipo de medida y de unidad ya no tienen pestaña *Información*
+  (permisos, datos de registro e historial); los permisos se administran en
+  Configuración → Permisos y el historial en el log del sistema.
 - **1.3** — Las ventas en otra unidad (caja, docena, ciento) descuentan el stock
   convertido por el factor, y la entrada de una compra en otra unidad también se
   convierte (cantidad × factor, costo ÷ factor). Nueva sección *Comprar y vender

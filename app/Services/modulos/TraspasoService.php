@@ -23,6 +23,14 @@ class TraspasoService
     private LogSistemaService $logService;
     private PeriodosContablesService $periodosService;
 
+    /** true si el último registrar() devolvió un traspaso ya creado con la misma clave de formulario. */
+    private bool $ultimoGuardadoRepetido = false;
+
+    public function isUltimoGuardadoRepetido(): bool
+    {
+        return $this->ultimoGuardadoRepetido;
+    }
+
     public function __construct(
         TraspasoRepository $repository,
         TraspasoRules $rules,
@@ -84,23 +92,34 @@ class TraspasoService
 
     public function registrar(array $data): int
     {
-        // 1. Validar reglas de negocio
-        $this->rules->validar($data);
-
-        // 2. Validar secuencial duplicado
-        $this->validarSecuencial($data);
-
-        // 3. Validar saldo suficiente en la forma de origen
-        $this->validarSaldoSuficiente($data);
-
-        // 4. Validar periodo contable
-        $this->validarPeriodo($data, 'No se puede registrar el traspaso porque el periodo contable está cerrado.');
-
         $db = Database::getConnection();
         $inTrans = $db->inTransaction();
         if (!$inTrans) $db->beginTransaction();
 
+        $this->ultimoGuardadoRepetido = false;
+        $guardado = new \App\Services\GuardadoUnicoService();
         try {
+            // 0. Guardado único (CLAUDE.md §8): un reintento del mismo formulario devuelve el
+            //    traspaso ya registrado. Va ANTES de validar el secuencial, que si no rechazaría
+            //    el reintento con "el secuencial ya existe".
+            if ($previo = $guardado->previo($data['token_guardado'] ?? '', (int) $data['id_empresa'], 'traspasos')) {
+                if (!$inTrans) $db->rollBack();
+                $this->ultimoGuardadoRepetido = true;
+                return $previo['id_registro'];
+            }
+
+            // 1. Validar reglas de negocio
+            $this->rules->validar($data);
+
+            // 2. Validar secuencial duplicado
+            $this->validarSecuencial($data);
+
+            // 3. Validar saldo suficiente en la forma de origen
+            $this->validarSaldoSuficiente($data);
+
+            // 4. Validar periodo contable
+            $this->validarPeriodo($data, 'No se puede registrar el traspaso porque el periodo contable está cerrado.');
+
             $idTraspaso = $this->repository->insertCabecera($data);
 
             $this->logService->registrar(
@@ -116,6 +135,8 @@ class TraspasoService
                     'id_forma_destino' => $data['id_forma_destino'],
                 ]
             );
+
+            $guardado->registrar($data['token_guardado'] ?? '', (int) $data['id_empresa'], 'traspasos', (int) $idTraspaso, (string) ($data['numero_traspaso'] ?? ''), (int) $data['usuario_id']);
 
             if (!$inTrans) $db->commit();
         } catch (\Throwable $e) {

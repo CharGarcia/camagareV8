@@ -64,7 +64,7 @@ class ReciboVentaRepository extends BaseRepository
             . "AND inc.estado != 'anulado' AND inc.eliminado = false)";
         $saldo = "(v.importe_total - $sqlAbonos)";
         // IVA: no es columna, se deduce de los totales (misma fórmula que la vista).
-        $ivaCalc = '(v.importe_total - v.total_sin_impuestos + v.total_descuento - COALESCE(v.total_ice,0) - COALESCE(v.propina,0))';
+        $ivaCalc = '(v.importe_total - v.total_sin_impuestos - COALESCE(v.total_ice,0) - COALESCE(v.propina,0))';
         // Nº de la factura generada desde el recibo (documento relacionado).
         $numFacturaOrigen = "(SELECT CONCAT(fo.establecimiento,'-',fo.punto_emision,'-',fo.secuencial) FROM ventas_cabecera fo WHERE fo.id = v.id_factura_origen)";
 
@@ -175,7 +175,7 @@ class ReciboVentaRepository extends BaseRepository
                 'descuento' => 'v.total_descuento',
                 'ice'       => 'COALESCE(v.total_ice,0)',
                 'propina'   => 'COALESCE(v.propina,0)',
-                'iva'       => '(v.importe_total - v.total_sin_impuestos + v.total_descuento - COALESCE(v.total_ice,0) - COALESCE(v.propina,0))',
+                'iva'       => '(v.importe_total - v.total_sin_impuestos - COALESCE(v.total_ice,0) - COALESCE(v.propina,0))',
                 'saldo'     => $saldo,
                 'dias_credito' => 'COALESCE(v.dias_credito,0)',
                 // Comparación numérica: "298" encuentra "000000298" sin que el
@@ -200,7 +200,7 @@ class ReciboVentaRepository extends BaseRepository
             'cliente_ruc'     => 'c.identificacion',
             'vendedor_nombre' => 'ven.nombre',
             'usuario_nombre'  => 'u.nombre',
-            'iva'             => '(v.importe_total - v.total_sin_impuestos + v.total_descuento - COALESCE(v.total_ice,0) - COALESCE(v.propina,0))',
+            'iva'             => '(v.importe_total - v.total_sin_impuestos - COALESCE(v.total_ice,0) - COALESCE(v.propina,0))',
             'numero'          => 'v.secuencial',
             default           => "v.$ordenCol",
         };

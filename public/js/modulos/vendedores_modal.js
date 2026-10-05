@@ -58,8 +58,6 @@
         if (!formV) return;
         formV.reset();
         cargarUsuariosVinculablesV(0, null);
-        const timelineV = document.getElementById('auditoriaTimelineV');
-        if (timelineV) timelineV.innerHTML = '<div class="text-center py-5 text-muted small">Aún no existe historial.</div>';
         
         const vid = document.getElementById('vendedor_id');
         if (vid) vid.value = '';
@@ -75,8 +73,6 @@
             if (tabEl) (bootstrap.Tab.getInstance(tabEl) || new bootstrap.Tab(tabEl)).show();
         }
         resetearInfoExtraV();
-        const tabInfo = document.getElementById('tab-info-vendedor-btn');
-        if (tabInfo) tabInfo.classList.add('disabled');
 
         if (typeof window.aplicarFavoritosModal === 'function') {
             window.aplicarFavoritosModal('#modalVendedor');
@@ -133,11 +129,7 @@
             if (tabEl) (bootstrap.Tab.getInstance(tabEl) || new bootstrap.Tab(tabEl)).show();
         }
         
-        const tabInfo = document.getElementById('tab-info-vendedor-btn');
-        if (tabInfo) tabInfo.classList.remove('disabled');
-        
         fetchInformacionExtraV(data.id);
-        fetchHistorialV(data.id);
 
         const alertEl = document.getElementById('modalAlertVendedor');
         if (alertEl) alertEl.classList.add('d-none');
@@ -154,7 +146,6 @@
                 const d = json.data;
                 const elCount = document.getElementById('info_clientes_count_v');
                 if (elCount) elCount.textContent = `${d.clientes_count} clientes`;
-                fetchHistorialV(id);
             } else {
                 resetearInfoExtraV('Error al cargar');
             }
@@ -166,76 +157,7 @@
     function resetearInfoExtraV(msg = '—') {
         const elCount = document.getElementById('info_clientes_count_v');
         if (elCount) elCount.textContent = msg === '—' ? '0 clientes' : msg;
-        
-        const timeline = document.getElementById('auditoriaTimelineV');
-        if (timeline && msg === '—') {
-            timeline.innerHTML = '<div class="text-center py-5 text-muted small">Aún no existe historial.</div>';
-        }
     }
-
-    async function fetchHistorialV(id) {
-        const container = document.getElementById('auditoriaTimelineV');
-        if (!container || !id) return;
-
-        try {
-            const resp = await fetch(`${urlBaseVendedores}/getHistorialAjax?id=${id}&tabla=vendedores`);
-            const json = await resp.json();
-            
-            if (json.ok && json.data.length > 0) {
-                let html = '<div class="timeline-border position-absolute h-100 border-start border-2 border-primary border-opacity-10" style="left: 10px; top: 0;"></div>';
-                
-                json.data.forEach(log => {
-                    const icon = log.accion.includes('Crear') ? 'bi-plus-circle-fill text-success' : 
-                               log.accion.includes('Actualizar') ? 'bi-pencil-fill text-primary' : 
-                               log.accion.includes('Eliminar') ? 'bi-trash-fill text-danger' : 
-                               'bi-clock-history text-secondary';
-
-                    html += `
-                        <div class="timeline-item position-relative mb-3 ps-4">
-                            <div class="timeline-icon position-absolute rounded-circle bg-white d-flex align-items-center justify-content-center shadow-sm border" 
-                                 style="left: 0; top: 0; width: 22px; height: 22px; z-index: 2;">
-                                <i class="bi ${icon}" style="font-size: 0.7rem;"></i>
-                            </div>
-                            <div class="timeline-content">
-                                <div class="d-flex justify-content-between align-items-center mb-0">
-                                    <span class="fw-bold" style="font-size: 0.75rem;">${log.accion}</span>
-                                    <span class="text-muted" style="font-size: 0.65rem;">${log.created_at}</span>
-                                </div>
-                                <div class="text-muted mb-1" style="font-size: 0.7rem;">
-                                    <i class="bi bi-person me-1"></i> ${log.usuario_nombre || 'SISTEMA'}
-                                </div>
-                                <div class="bg-light rounded p-1 border border-light-subtle shadow-sm" style="font-size: 0.65rem;">
-                                    ${window.renderDetalleHistorialV(log.detalles)}
-                                </div>
-                            </div>
-                        </div>
-                    `;
-                });
-                container.innerHTML = html;
-            } else {
-                container.innerHTML = '<div class="text-center py-4 text-muted small">No hay historial de cambios.</div>';
-            }
-        } catch (e) {
-            container.innerHTML = '<div class="text-center py-3 text-danger small">Error de carga.</div>';
-        }
-    }
-
-    window.renderDetalleHistorialV = function(detalle) {
-        if (!detalle || detalle.length === 0) return '<span class="text-muted small">Sin detalles.</span>';
-        if (typeof detalle === 'string') return detalle;
-        if (Array.isArray(detalle)) {
-            return `<ul class="list-unstyled mb-0">
-                ${detalle.map(d => {
-                    if (typeof d === 'object') {
-                        const antes = d.antes !== null ? `<span class="text-decoration-line-through text-muted">${d.antes}</span> ` : '';
-                        return `<li><i class="bi bi-dot"></i> <span class="fw-bold">${d.campo}:</span> ${antes}<i class="bi bi-arrow-right mx-1"></i> ${d.despues}</li>`;
-                    }
-                    return `<li><i class="bi bi-dot"></i> ${d}</li>`;
-                }).join('')}
-            </ul>`;
-        }
-        return '<span class="text-muted">Acción registrada</span>';
-    };
 
     window.eliminarVendedor = async function() {
         const id = document.getElementById('vendedor_id')?.value;

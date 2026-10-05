@@ -16,3 +16,5 @@
     window.CSRF_TOKEN = '<?= htmlspecialchars(\App\Helpers\Csrf::token(), ENT_QUOTES) ?>';
 </script>
 <script src="<?= rtrim(BASE_URL ?? '', '/') ?>/js/csrf.js?v=<?= asset_ver('/js/csrf.js') ?>"></script>
+<?php /* Evita que un doble clic guarde dos registros (fetch idéntico en curso / submit nativo repetido). */ ?>
+<script src="<?= rtrim(BASE_URL ?? '', '/') ?>/js/anti-doble-envio.js?v=<?= asset_ver('/js/anti-doble-envio.js') ?>"></script>

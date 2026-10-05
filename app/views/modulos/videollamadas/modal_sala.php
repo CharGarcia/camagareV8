@@ -58,17 +58,11 @@
                                 <i class="bi bi-people me-1"></i> Participantes
                             </a>
                         </li>
-                        <li class="nav-item">
-                            <a class="nav-link py-2 small fw-bold" data-bs-toggle="tab" data-bs-target="#vc-tab-info" href="#vc-tab-info" role="tab">
-                                <i class="bi bi-info-circle me-1"></i> Información
-                            </a>
-                        </li>
                     </ul>
                     <div class="ms-2">
                         <?php
                         $pestanasConfig = [
                             'vc-tab-participantes' => 'Participantes',
-                            'vc-tab-info'          => 'Información',
                         ];
                         echo \App\Helpers\PreferenciasHelper::renderDropdownPestanas($pestanasConfig, $vistaConfig ?? [], 'videollamadas');
                         ?>
@@ -169,44 +163,7 @@
                                 registrada en la bitácora. Estará disponible cuando se habilite la grabación en la
                                 configuración del módulo.
                             </div>
-                        </div>
-
-                        <!-- ─── PARTICIPANTES ───────────────────────────────── -->
-                        <div class="tab-pane fade p-3" id="vc-tab-participantes" role="tabpanel">
-                            <div class="d-flex justify-content-between align-items-center mb-2">
-                                <div class="small text-muted">
-                                    El anfitrión se agrega automáticamente.
-                                </div>
-                                <div class="btn-group btn-group-sm">
-                                    <button type="button" class="btn btn-outline-primary btn-sm" onclick="VC_agregarParticipante('usuario')">
-                                        <i class="bi bi-person-plus me-1"></i> Usuario
-                                    </button>
-                                    <button type="button" class="btn btn-outline-secondary btn-sm" id="vcBtnAgregarInvitado"
-                                            onclick="VC_agregarParticipante('invitado')">
-                                        <i class="bi bi-person-badge me-1"></i> Invitado
-                                    </button>
-                                </div>
-                            </div>
-
-                            <div class="table-responsive border rounded">
-                                <table class="table table-sm mb-0 align-middle">
-                                    <thead class="table-light">
-                                        <tr>
-                                            <th style="width:45%;" class="small">Participante</th>
-                                            <th style="width:30%;" class="small">Correo</th>
-                                            <th style="width:20%;" class="small">Rol</th>
-                                            <th style="width:5%;"></th>
-                                        </tr>
-                                    </thead>
-                                    <tbody id="vcTbodyParticipantes"></tbody>
-                                </table>
-                            </div>
-                            <div class="small text-muted mt-2" id="vc-contador-participantes"></div>
-                        </div>
-
-                        <!-- ─── INFORMACIÓN ─────────────────────────────────── -->
-                        <div class="tab-pane fade" id="vc-tab-info" role="tabpanel">
-                            <div class="bg-light rounded-3 p-3 border mt-3 mb-3 mx-3">
+                            <div class="bg-light rounded-3 p-3 border mt-3 mb-0">
                                 <div class="row g-3 small">
                                     <div class="col-md-6">
                                         <div class="text-muted" style="font-size:.7rem;">CÓDIGO DE SALA</div>
@@ -242,6 +199,39 @@
                                     </div>
                                 </div>
                             </div>
+                        </div>
+
+                        <!-- ─── PARTICIPANTES ───────────────────────────────── -->
+                        <div class="tab-pane fade p-3" id="vc-tab-participantes" role="tabpanel">
+                            <div class="d-flex justify-content-between align-items-center mb-2">
+                                <div class="small text-muted">
+                                    El anfitrión se agrega automáticamente.
+                                </div>
+                                <div class="btn-group btn-group-sm">
+                                    <button type="button" class="btn btn-outline-primary btn-sm" onclick="VC_agregarParticipante('usuario')">
+                                        <i class="bi bi-person-plus me-1"></i> Usuario
+                                    </button>
+                                    <button type="button" class="btn btn-outline-secondary btn-sm" id="vcBtnAgregarInvitado"
+                                            onclick="VC_agregarParticipante('invitado')">
+                                        <i class="bi bi-person-badge me-1"></i> Invitado
+                                    </button>
+                                </div>
+                            </div>
+
+                            <div class="table-responsive border rounded">
+                                <table class="table table-sm mb-0 align-middle">
+                                    <thead class="table-light">
+                                        <tr>
+                                            <th style="width:45%;" class="small">Participante</th>
+                                            <th style="width:30%;" class="small">Correo</th>
+                                            <th style="width:20%;" class="small">Rol</th>
+                                            <th style="width:5%;"></th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="vcTbodyParticipantes"></tbody>
+                                </table>
+                            </div>
+                            <div class="small text-muted mt-2" id="vc-contador-participantes"></div>
                         </div>
 
                     </div>

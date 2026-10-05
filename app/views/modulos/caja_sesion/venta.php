@@ -499,6 +499,9 @@ $rutaAjax = $base . '/' . $rutaModulo;
     const $buscar = document.getElementById('pv-buscar');
     const $lineas = document.getElementById('pv-lineas');
     const $btnCobrar = document.getElementById('pv-btn-cobrar');
+    // Cobro en curso: renderCart() no debe reactivar el botón (escanear o editar una línea
+    // mientras espera al servidor/SRI dejaba cobrar otra vez → segundo comprobante).
+    let pvCobrando = false;
     const $btnVistaPrevia = document.getElementById('pv-btn-vista-previa');
     const $tickets = document.getElementById('pv-tickets');
     const $btnNuevoTicket = document.getElementById('pv-btn-nuevo-ticket');
@@ -1745,6 +1748,12 @@ $rutaAjax = $base . '/' . $rutaModulo;
     }
 
     function renderCart() {
+        // Carrito vacío = no hay venta en curso: se descarta la clave del cobro para que la
+        // próxima venta de esta pestaña no se confunda con la anterior (ver tokenCobroActivo).
+        if (!cart.length && !pvCobrando) {
+            const tAct = tickets.find(x => x.id === ticketActivoId);
+            if (tAct) tAct.tokenGuardado = '';
+        }
         if (!cart.length) {
             $lineas.innerHTML = '<div class="text-center py-4 pv-empty small">El carrito está vacío.<br>Toca un producto para agregarlo.</div>';
         } else {
@@ -1799,8 +1808,10 @@ $rutaAjax = $base . '/' . $rutaModulo;
             $avisoCf.classList.add('d-none');
         }
 
-        $btnCobrar.innerHTML = '<i class="bi bi-check-circle-fill me-1"></i>Cobrar ' + money(total);
-        $btnCobrar.disabled = cart.length === 0 || superaLimiteSinCliente || !getTipoDocumento();
+        if (!pvCobrando) {
+            $btnCobrar.innerHTML = '<i class="bi bi-check-circle-fill me-1"></i>Cobrar ' + money(total);
+            $btnCobrar.disabled = cart.length === 0 || superaLimiteSinCliente || !getTipoDocumento();
+        }
         $btnVistaPrevia.disabled = cart.length === 0;
 
         renderTickets();
@@ -1983,6 +1994,23 @@ $rutaAjax = $base . '/' . $rutaModulo;
     window.addEventListener('focus', cargarPagosPendientes);
 
     // ─── Pestañas de venta ──────────────────────────────────────────────
+    /**
+     * Clave del cobro de la venta abierta en la pestaña activa (guardado único, CLAUDE.md §8).
+     * Se crea en el primer intento de cobro y se conserva mientras el carrito tenga productos:
+     * si se perdió la conexión y el cajero vuelve a cobrar, el servidor reconoce la misma venta y
+     * no emite otro comprobante. Vive en el ticket, así que también sobrevive a recargar la página
+     * (los tickets se guardan en localStorage). renderCart() la descarta al quedar vacío el carrito.
+     */
+    function tokenCobroActivo() {
+        const t = tickets.find(x => x.id === ticketActivoId);
+        if (!t) return '';
+        if (!t.tokenGuardado) {
+            t.tokenGuardado = window.CMG_nuevoTokenGuardado ? window.CMG_nuevoTokenGuardado() : '';
+            guardarTicketsStorage();
+        }
+        return t.tokenGuardado;
+    }
+
     function snapshotTicketActual() {
         const t = tickets.find(x => x.id === ticketActivoId);
         if (!t) return;
@@ -2164,7 +2192,7 @@ $rutaAjax = $base . '/' . $rutaModulo;
     $btnVistaPrevia.addEventListener('click', imprimirVistaPreviaPos);
 
     $btnCobrar.addEventListener('click', async () => {
-        if (!cart.length) return;
+        if (pvCobrando || !cart.length) return;
 
         // El cobro necesita una forma de pago real de la empresa: de ella sale
         // el Ingreso que cancela la Cuenta por Cobrar del documento.
@@ -2180,6 +2208,7 @@ $rutaAjax = $base . '/' . $rutaModulo;
             return;
         }
 
+        pvCobrando = true;
         $btnCobrar.disabled = true;
         // Con factura el cobro espera además la autorización del SRI, así que
         // tarda unos segundos más: el botón lo dice, o parece que se colgó. Un
@@ -2199,6 +2228,7 @@ $rutaAjax = $base . '/' . $rutaModulo;
         // quitarlo los resuelve el servidor desde la configuración.
         fd.append('aplica_servicio', aplicaServicio ? '1' : '0');
         fd.append('tipo_entrega', esDomicilio() ? 'domicilio' : 'local');
+        fd.append('token_guardado', tokenCobroActivo());
         if (bancoVisible) {
             fd.append('tipo_operacion_bancaria', $tipoOpBanco.value);
             fd.append('numero_operacion', $numOpBanco.value.trim());
@@ -2273,7 +2303,8 @@ $rutaAjax = $base . '/' . $rutaModulo;
 
             Swal.fire({
                 icon: 'success',
-                title: 'Venta registrada',
+                // Reintento tras perder la conexión: el servidor devolvió la venta ya emitida.
+                title: json.data.repetido ? 'Esta venta ya estaba registrada (no se emitió otra)' : 'Venta registrada',
                 html: etiquetaDoc + ' <b>' + escapeHtml(json.data.numero_documento) + '</b> por <b>' + money(json.data.importe_total) + '</b>.' +
                       notaPie + sriHtml +
                       '<div class="d-flex gap-2 justify-content-center mt-3">' +
@@ -2305,10 +2336,13 @@ $rutaAjax = $base . '/' . $rutaModulo;
             // comprobante del mismo consumo, así que se avisa antes de repetir.
             swalWarning(
                 'Se perdió la conexión antes de recibir la respuesta.<br><br>' +
-                '<b>La venta pudo haberse registrado igual.</b> Revísela en ' +
-                (getTipoDocumento() === 'FACTURA' ? 'Facturas de Venta' : 'Recibos de Venta') +
-                ' antes de volver a cobrar: si el documento ya está emitido, cobrar otra vez generaría uno duplicado.'
+                '<b>La venta pudo haberse registrado igual.</b> Puede volver a pulsar <b>Cobrar</b> sin cambiar el carrito: ' +
+                'si ya se había registrado, se mostrará la misma venta y no se emitirá otro comprobante. ' +
+                'Si cambia el carrito antes de cobrar, revise primero ' +
+                (getTipoDocumento() === 'FACTURA' ? 'Facturas de Venta' : 'Recibos de Venta') + '.'
             );
+        } finally {
+            pvCobrando = false;
             renderCart();
         }
     });

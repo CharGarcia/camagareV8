@@ -40,6 +40,14 @@ class TransferenciaInventarioService
     private LogSistemaService $log;
     private ?InventarioService $inventarioService = null;
 
+    /** true si el último registrar() devolvió una transferencia ya creada con la misma clave de formulario. */
+    private bool $ultimoGuardadoRepetido = false;
+
+    public function isUltimoGuardadoRepetido(): bool
+    {
+        return $this->ultimoGuardadoRepetido;
+    }
+
     public function __construct(
         TransferenciaInventarioRepository $repo,
         InventarioRepository $inventarioRepo,
@@ -145,7 +153,19 @@ class TransferenciaInventarioService
             $db->beginTransaction();
         }
 
+        $this->ultimoGuardadoRepetido = false;
+        $guardado = new \App\Services\GuardadoUnicoService();
         try {
+            // 0) Guardado único (CLAUDE.md §8): un reintento del mismo formulario devuelve la
+            //    transferencia ya registrada, sin mover el stock otra vez. Antes de los candados.
+            if ($previo = $guardado->previo($data['token_guardado'] ?? '', $idEmpresa, 'transferencias_inventario')) {
+                if ($manejaTransaccion) {
+                    $db->rollBack();
+                }
+                $this->ultimoGuardadoRepetido = true;
+                return $previo['id_registro'];
+            }
+
             // 1) Candados de stock ANTES de leer nada (orden determinista para
             //    no generar interbloqueos entre transferencias cruzadas).
             $this->bloquearStocks($data['detalles'], $origen, $destino, $idEmpresa);
@@ -223,6 +243,8 @@ class TransferenciaInventarioService
                     'lineas'                 => count($data['detalles']),
                 ]
             );
+
+            $guardado->registrar($data['token_guardado'] ?? '', $idEmpresa, 'transferencias_inventario', $idTransferencia, $numero, $idUsuario);
 
             if ($manejaTransaccion) {
                 $db->commit();

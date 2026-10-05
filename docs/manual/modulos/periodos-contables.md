@@ -6,7 +6,7 @@ ruta_modulo: modulos/periodos_contables
 tipo: modulo
 visibilidad: todos
 etiquetas: periodos contables, cerrar mes, periodo cerrado, abrir periodo, bloqueo de fechas, cierre mensual
-version: 1.0
+version: 1.1
 orden: 30
 estado: activo
 ---
@@ -53,4 +53,6 @@ el ajuste en el periodo abierto.
 
 ## Historial de cambios
 
+- **1.1** — El modal ya no tiene pestaña *Información* (historial de cambios); el historial
+  del registro se consulta en el log del sistema.
 - **1.0** — Versión inicial.

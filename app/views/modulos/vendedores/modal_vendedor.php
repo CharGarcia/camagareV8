@@ -43,18 +43,7 @@ $urlBaseVendShared = BASE_URL . '/modulos/vendedores';
                             <li class="nav-item">
                                 <a class="nav-link active py-2 small" id="tab-general-vendedor-btn" data-bs-toggle="tab" href="#pane-general-vendedor" role="tab"><i class="bi bi-card-text me-1"></i>General</a>
                             </li>
-                            <li class="nav-item">
-                                <a class="nav-link py-2 small" id="tab-info-vendedor-btn" data-bs-toggle="tab" href="#pane-info-vendedor" role="tab"><i class="bi bi-info-circle me-1"></i>Información</a>
-                            </li>
                         </ul>
-                        <div class="ms-auto pb-1">
-                            <?php
-                            $pestanasConfigVend = [
-                                'tab-info-vendedor-btn' => 'Información'
-                            ];
-                            echo \App\Helpers\PreferenciasHelper::renderDropdownPestanas($pestanasConfigVend, $vistaConfigVend ?? [], 'vendedores');
-                            ?>
-                        </div>
                     </div>
                     <div class="border-bottom bg-light mb-0"></div>
 
@@ -95,31 +84,9 @@ $urlBaseVendShared = BASE_URL . '/modulos/vendedores';
                                         sin vincular, se resuelve por la cédula.
                                     </div>
                                 </div>
-                            </div>
-                        </div>
-
-                        <div class="tab-pane fade" id="pane-info-vendedor" role="tabpanel">
-                            <div class="p-2 border rounded-3 bg-white shadow-sm mb-3">
-                                <div class="small fw-bold text-muted mb-2 d-flex align-items-center" style="font-size: 0.7rem;"><i class="bi bi-key-fill text-warning me-2"></i> PERMISOS</div>
-                                <div class="d-flex flex-wrap gap-2">
-                                    <span class="badge bg-<?= ($permVend['ver'] ?? true) ? 'success' : 'secondary text-opacity-50' ?> bg-opacity-10 text-<?= ($permVend['ver'] ?? true) ? 'success' : 'secondary' ?> border border-<?= ($permVend['ver'] ?? true) ? 'success' : 'secondary' ?> border-opacity-25 px-2" style="font-size: 0.65rem;">VER</span>
-                                    <span class="badge bg-<?= ($permVend['crear'] ?? true) ? 'success' : 'secondary text-opacity-50' ?> bg-opacity-10 text-<?= ($permVend['crear'] ?? true) ? 'success' : 'secondary' ?> border border-<?= ($permVend['crear'] ?? true) ? 'success' : 'secondary' ?> border-opacity-25 px-2" style="font-size: 0.65rem;">CREAR</span>
-                                    <span class="badge bg-<?= ($permVend['actualizar'] ?? true) ? 'success' : 'secondary text-opacity-50' ?> bg-opacity-10 text-<?= ($permVend['actualizar'] ?? true) ? 'success' : 'secondary' ?> border border-<?= ($permVend['actualizar'] ?? true) ? 'success' : 'secondary' ?> border-opacity-25 px-2" style="font-size: 0.65rem;">MODIFICAR</span>
-                                    <span class="badge bg-<?= ($permVend['eliminar'] ?? true) ? 'success' : 'secondary text-opacity-50' ?> bg-opacity-10 text-<?= ($permVend['eliminar'] ?? true) ? 'success' : 'secondary' ?> border border-<?= ($permVend['eliminar'] ?? true) ? 'success' : 'secondary' ?> border-opacity-25 px-2" style="font-size: 0.65rem;">ELIMINAR</span>
-                                </div>
-                            </div>
-
-                            <div class="bg-light rounded-3 p-3 border mb-3">
-                                <h6 class="text-primary mb-3 small fw-bold"><i class="bi bi-people-fill me-2"></i>Resumen</h6>
-                                <div class="d-flex justify-content-between align-items-center mb-1">
-                                    <span class="small text-muted">Clientes asignados:</span>
-                                    <span class="fw-bold text-dark" id="info_clientes_count_v">0</span>
-                                </div>
-                            </div>
-                            <div class="bg-light rounded-3 p-3 border">
-                                <h6 class="text-primary mb-3 small fw-bold"><i class="bi bi-clock-history me-2"></i>Historial</h6>
-                                <div id="auditoriaTimelineV" class="position-relative mt-2" style="max-height: 200px; overflow-y: auto;">
-                                    <div class="text-center py-3 text-muted small">Cargando...</div>
+                                <?php // Dato de registro al pie del contenido (sin pestaña Información). ?>
+                                <div class="col-md-12 text-muted" style="font-size:.72rem;">
+                                    <i class="bi bi-people-fill me-1"></i>Clientes asignados: <span class="fw-bold text-dark" id="info_clientes_count_v">0 clientes</span>
                                 </div>
                             </div>
                         </div>

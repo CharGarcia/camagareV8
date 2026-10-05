@@ -494,9 +494,15 @@ class CajaPosController extends BaseModuloController
                 // con el número de autorización. Solo aplica a facturas; el
                 // recibo de venta no es comprobante electrónico.
                 'autorizar_sri' => true,
+                // Clave del cobro (guardado único, CLAUDE.md §8): misma clave = misma venta.
+                'token_guardado' => (string) ($_POST['token_guardado'] ?? ''),
             ], $this->getEmpresaConfig($idEmpresa));
 
-            $this->json(['ok' => true, 'msg' => 'Venta registrada correctamente.', 'data' => $res]);
+            $this->json([
+                'ok'   => true,
+                'msg'  => !empty($res['repetido']) ? 'Esta venta ya estaba registrada; no se emitió otro comprobante.' : 'Venta registrada correctamente.',
+                'data' => $res,
+            ]);
         } catch (\Throwable $e) {
             \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             $this->json(['ok' => false, 'error' => $e->getMessage()]);

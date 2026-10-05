@@ -55,7 +55,7 @@ class FacturaVentaRepository extends BaseRepository
             // cuánto se ha abonado (1 sin cobrar, 2 parcial, 3 pagada, 4 anulada).
             // ab.abonos sale del LEFT JOIN LATERAL que arma getListado() (alias "ab",
             // ver ahí) — la fórmula de abonos ya no se repite aquí.
-            'iva'                 => '(v.importe_total - v.total_sin_impuestos + v.total_descuento - COALESCE(v.total_ice,0) - COALESCE(v.propina,0))',
+            'iva'                 => '(v.importe_total - v.total_sin_impuestos - COALESCE(v.total_ice,0) - COALESCE(v.propina,0))',
             'estado_pago'         => "CASE WHEN v.estado = 'anulado' THEN 4 "
                                      . "WHEN (v.importe_total - ab.abonos) <= 0 THEN 3 "
                                      . "WHEN ab.abonos > 0 THEN 2 ELSE 1 END",
@@ -93,7 +93,7 @@ class FacturaVentaRepository extends BaseRepository
              . " || ' ' || " . $m::fechaIso("{$a}fecha_emision")
              . " || ' ' || COALESCE({$a}total_sin_impuestos::text, '')"
              . " || ' ' || COALESCE({$a}total_descuento::text, '')"
-             . " || ' ' || COALESCE(({$a}importe_total - {$a}total_sin_impuestos + {$a}total_descuento - COALESCE({$a}total_ice, 0) - COALESCE({$a}propina, 0))::text, '')"
+             . " || ' ' || COALESCE(({$a}importe_total - {$a}total_sin_impuestos - COALESCE({$a}total_ice, 0) - COALESCE({$a}propina, 0))::text, '')"
              . " || ' ' || COALESCE({$a}total_ice::text, '')"
              . " || ' ' || COALESCE({$a}propina::text, '')"
              . " || ' ' || COALESCE({$a}importe_total::text, '')";
@@ -134,7 +134,7 @@ class FacturaVentaRepository extends BaseRepository
             // punto, así que esa forma se compara aparte y solo para palabras de ese tipo.
             [
                 'expr'  => "CONCAT_WS(' ', v.fecha_emision, v.total_sin_impuestos, v.total_descuento,
-                                      (v.importe_total - v.total_sin_impuestos + v.total_descuento - COALESCE(v.total_ice, 0) - COALESCE(v.propina, 0)),
+                                      (v.importe_total - v.total_sin_impuestos - COALESCE(v.total_ice, 0) - COALESCE(v.propina, 0)),
                                       v.total_ice, v.propina, v.importe_total)",
                 'crudo' => true,
                 'si'    => '/^\d+,\d{1,2}$/',
@@ -303,7 +303,7 @@ class FacturaVentaRepository extends BaseRepository
                 'descuento' => 'v.total_descuento',
                 'ice'       => 'COALESCE(v.total_ice,0)',
                 'propina'   => 'COALESCE(v.propina,0)',
-                'iva'       => '(v.importe_total - v.total_sin_impuestos + v.total_descuento - COALESCE(v.total_ice,0) - COALESCE(v.propina,0))',
+                'iva'       => '(v.importe_total - v.total_sin_impuestos - COALESCE(v.total_ice,0) - COALESCE(v.propina,0))',
                 'saldo'     => $saldo,
                 'dias_credito' => 'COALESCE(v.dias_credito,0)',
                 // Comparación numérica: "298" encuentra "000000298" sin que el

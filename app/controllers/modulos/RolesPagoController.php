@@ -179,6 +179,7 @@ class RolesPagoController extends BaseModuloController
         $data = $this->recogerCabecera();
         $data['id_empresa'] = (int) $_SESSION['id_empresa'];
         $data['id_usuario'] = (int) $_SESSION['id_usuario'];
+        $data['token_guardado'] = (string) ($_POST['token_guardado'] ?? '');
         try {
             $id = $this->service->crear($data);
             echo json_encode(['ok' => true, 'msg' => 'Corrida creada. Ahora puede generarla.', 'id' => $id]);

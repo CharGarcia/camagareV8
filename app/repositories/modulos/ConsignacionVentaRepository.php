@@ -870,6 +870,42 @@ class ConsignacionVentaRepository extends BaseRepository
         return array_map('intval', $st->fetchAll(PDO::FETCH_COLUMN));
     }
 
+    /** Caché por request: ¿ya se aplicó database/20261005_consignaciones_token_guardado.sql? */
+    private ?bool $columnaTokenGuardadoExiste = null;
+
+    /** Degradación segura: sin la columna, el guardado funciona como antes (sin protección por clave). */
+    public function columnaTokenGuardadoExiste(): bool
+    {
+        if ($this->columnaTokenGuardadoExiste === null) {
+            $sql = "SELECT EXISTS (SELECT 1 FROM information_schema.columns
+                                    WHERE table_name = 'consignaciones_ventas' AND column_name = 'token_guardado')";
+            $this->columnaTokenGuardadoExiste = (bool) $this->db->query($sql)->fetchColumn();
+        }
+        return $this->columnaTokenGuardadoExiste;
+    }
+
+    /**
+     * Candado transaccional por clave de formulario: dos peticiones del mismo formulario (doble
+     * clic, reintento) se serializan y la segunda encuentra la consignación que creó la primera.
+     */
+    public function lockTokenGuardado(string $token, int $idEmpresa): void
+    {
+        $st = $this->db->prepare("SELECT pg_advisory_xact_lock(hashtext('consig_token:' || :e || ':' || :t))");
+        $st->execute([':e' => (string) $idEmpresa, ':t' => $token]);
+    }
+
+    /** Consignación ya creada con esa clave de formulario (incluidas las eliminadas), o null. */
+    public function findPorTokenGuardado(string $token, int $idEmpresa): ?array
+    {
+        $st = $this->db->prepare("SELECT id, serie, secuencial, eliminado
+                                    FROM consignaciones_ventas
+                                   WHERE id_empresa = :e AND token_guardado = :t
+                                   ORDER BY id LIMIT 1");
+        $st->execute([':e' => $idEmpresa, ':t' => $token]);
+        $row = $st->fetch(PDO::FETCH_ASSOC);
+        return $row ?: null;
+    }
+
     /**
      * Candado transaccional por línea de pedido (CLAUDE.md §8): serializa dos guardados que
      * consignan la misma línea, para que el segundo lea el saldo ya descontado por el primero.

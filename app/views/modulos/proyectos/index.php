@@ -71,15 +71,61 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
 
 <div class="card cmg-table-card w-100 border-0 shadow-sm rounded-3">
     <div class="card-header bg-white py-2 px-3 border-bottom d-flex justify-content-between align-items-center flex-wrap gap-2">
-        <div class="d-flex align-items-center gap-2">
-            <form method="POST" action="<?= $urlBasePR ?>" class="d-flex align-items-center m-0" onsubmit="event.preventDefault(); fetchSearch(1);">
-                <div class="input-group input-group-sm" style="width: 300px;">
-                    <span class="input-group-text bg-white border-end-0 text-muted"><i class="bi bi-search"></i></span>
-                    <input type="text" name="b" id="buscarPR" class="form-control border-start-0 ps-0 shadow-none border" placeholder="Buscar..." value="<?= htmlspecialchars($buscar) ?>" autocomplete="off">
-                </div>
-            </form>
+        <!-- Buscador y Exportación -->
+        <div class="d-flex align-items-center gap-2 flex-wrap">
+            <?php
+            // Buscador estándar (FiltrosModal): texto libre sobre las columnas del listado +
+            // botón embudo que abre un modal con todos los filtros + chips de los activos.
+            // Las claves (key) deben existir en los mapas de ProyectoRepository::getListado().
+            $opcFiltro = $opcionesFiltro ?? [];
+            $opcIdNombre = fn(string $k) => array_map(fn($x) => ['v' => (string) $x['id'], 'l' => (string) $x['nombre']], $opcFiltro[$k] ?? []);
+            $tPR = 'Proyecto';
+            // Filas de 12 columnas:
+            //   Datos:     [Código 4][Nombre 4][Descripción 4]
+            //   Cliente:   [Cliente 8][Estado 4]
+            //   Avance:    [Presupuesto 6][% Ejecución 6]
+            //   Fechas:    [Fecha de inicio 6][Fecha de fin 6]
+            //   Registro:  [Fecha de registro 6][Usuario 6]
+            $filtrosPR = [
+                ['tab' => $tPR, 'key' => 'codigo',      'label' => 'Código',      'icon' => 'bi-hash',       'type' => 'text', 'grupo' => 'Datos', 'col' => 4],
+                ['tab' => $tPR, 'key' => 'nombre',      'label' => 'Nombre',      'icon' => 'bi-briefcase',  'type' => 'text', 'grupo' => 'Datos', 'col' => 4],
+                ['tab' => $tPR, 'key' => 'descripcion', 'label' => 'Descripción', 'icon' => 'bi-card-text',  'type' => 'text', 'grupo' => 'Datos', 'col' => 4],
+                ['tab' => $tPR, 'key' => 'id_cliente',  'label' => 'Cliente',     'icon' => 'bi-person',     'type' => 'select', 'grupo' => 'Cliente', 'col' => 8, 'options' => $opcIdNombre('clientes')],
+                ['tab' => $tPR, 'key' => 'estado',      'label' => 'Estado',      'icon' => 'bi-flag',       'type' => 'select', 'grupo' => 'Cliente', 'col' => 4, 'options' => [
+                    ['v' => 'activo',   'l' => 'Activo'],
+                    ['v' => 'inactivo', 'l' => 'Inactivo'],
+                ]],
+                ['tab' => $tPR, 'key' => 'presupuesto', 'label' => 'Presupuesto',  'icon' => 'bi-cash-stack', 'type' => 'number_range', 'grupo' => 'Avance', 'col' => 6],
+                ['tab' => $tPR, 'key' => 'ejecucion',   'label' => '% de ejecución', 'icon' => 'bi-percent',  'type' => 'number_range', 'grupo' => 'Avance', 'col' => 6],
+                ['tab' => $tPR, 'key' => 'inicio',   'label' => 'Fecha de inicio',     'icon' => 'bi-calendar-check', 'type' => 'date_range', 'grupo' => 'Fechas', 'col' => 6, 'atajos' => true],
+                ['tab' => $tPR, 'key' => 'fin',      'label' => 'Fecha de fin',        'icon' => 'bi-calendar-x',     'type' => 'date_range', 'grupo' => 'Fechas', 'col' => 6, 'atajos' => true],
+                ['tab' => $tPR, 'key' => 'registro', 'label' => 'Fecha de registro',   'icon' => 'bi-calendar-event', 'type' => 'date_range', 'grupo' => 'Registro', 'col' => 6, 'atajos' => true],
+                ['tab' => $tPR, 'key' => 'usuario',  'label' => 'Usuario que registró','icon' => 'bi-person-gear',    'type' => 'select',     'grupo' => 'Registro', 'col' => 6, 'options' => $opcIdNombre('usuarios')],
+            ];
+            ?>
+            <link rel="stylesheet" href="<?= rtrim(BASE_URL, '/') ?>/css/components/filtros_modal.css?v=<?= asset_ver('/css/components/filtros_modal.css') ?>">
+            <script src="<?= rtrim(BASE_URL, '/') ?>/js/components/filtros_modal.js?v=<?= asset_ver('/js/components/filtros_modal.js') ?>"></script>
+            <div id="fmBuscadorPR"></div>
+            <input type="hidden" id="buscarPR" value="<?= htmlspecialchars($buscar) ?>">
+            <script>
+                document.addEventListener('DOMContentLoaded', () => {
+                    if (!window.FiltrosModal) return;
+                    new FiltrosModal({
+                        containerId: 'fmBuscadorPR',
+                        hiddenInputId: 'buscarPR',
+                        placeholder: 'Buscar en todas las columnas...',
+                        titulo: 'Filtros de proyectos',
+                        inputWidth: 420,
+                        extraId: 'fmExtraPR',   // columnas + PDF + Excel, pegados al final del grupo
+                        fields: <?= json_encode($filtrosPR, JSON_UNESCAPED_UNICODE | JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS) ?>,
+                        loadingTarget: '#tbodyPR',   // se atenúa mientras se busca
+                        onApply: () => window.fetchSearch && window.fetchSearch(1),
+                    }).init();
+                });
+            </script>
 
-            <div class="btn-group btn-group-sm">
+            <?php // FiltrosModal (extraId) mueve estos botones dentro del input-group del buscador; si el JS no corre, quedan aquí. ?>
+            <div id="fmExtraPR" class="btn-group btn-group-sm">
                 <?php
                 $columnasTabla = [
                     'codigo' => 'Código',
@@ -95,15 +141,16 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                 ?>
                 <?= \App\Helpers\PreferenciasHelper::renderDropdownColumnas($columnasTabla, $vistaConfig ?? [], $rutaModulo) ?>
 
-                <a id="btnExportPdf" href="<?= $urlBasePR ?>/export-pdf?b=<?= urlencode($buscar) ?>&sort=<?= urlencode($ordenCol) ?>&dir=<?= urlencode($ordenDir) ?>" class="btn btn-outline-danger" title="PDF">
-                    <i class="bi bi-file-earmark-pdf"></i> PDF
+                <a id="btnExportPdf" href="<?= $urlBasePR ?>/export-pdf?b=<?= urlencode($buscar) ?>&orden=<?= urlencode($ordenParam ?? '') ?>" class="btn btn-outline-danger" title="Descargar PDF">
+                    <i class="bi bi-file-earmark-pdf"></i><span class="d-none d-md-inline"> PDF</span>
                 </a>
-                <a id="btnExportExcel" href="<?= $urlBasePR ?>/export-excel?b=<?= urlencode($buscar) ?>&sort=<?= urlencode($ordenCol) ?>&dir=<?= urlencode($ordenDir) ?>" class="btn btn-outline-success" title="Excel">
-                    <i class="bi bi-file-earmark-spreadsheet"></i> Excel
+                <a id="btnExportExcel" href="<?= $urlBasePR ?>/export-excel?b=<?= urlencode($buscar) ?>&orden=<?= urlencode($ordenParam ?? '') ?>" class="btn btn-outline-success" title="Descargar Excel">
+                    <i class="bi bi-file-earmark-spreadsheet"></i><span class="d-none d-md-inline"> Excel</span>
                 </a>
             </div>
         </div>
 
+        <!-- Paginación -->
         <div class="d-flex align-items-center gap-3">
             <span id="paginationInfo" class="text-muted small fw-medium"><?= $from ?>-<?= $to ?>/<?= $total ?></span>
             <div id="paginationContainer" class="btn-group btn-group-sm">
@@ -118,23 +165,15 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
             <table class="table table-hover table-sm mb-0">
                 <thead class="table-light">
                     <tr>
-                        <th class="ps-3 sortable-header" role="button" data-sort="codigo" onclick="ordenar('codigo')" data-col="codigo">
-                            Código <i class="bi <?= $ordenCol === 'codigo' ? ($ordenDir === 'ASC' ? 'bi-sort-alpha-down text-primary' : 'bi-sort-alpha-up text-primary') : 'bi-arrow-down-up text-muted' ?> small ms-1"></i>
-                        </th>
-                        <th class="sortable-header" role="button" data-sort="nombre" onclick="ordenar('nombre')" data-col="nombre">
-                            Nombre <i class="bi <?= $ordenCol === 'nombre' ? ($ordenDir === 'ASC' ? 'bi-sort-alpha-down text-primary' : 'bi-sort-alpha-up text-primary') : 'bi-arrow-down-up text-muted' ?> small ms-1"></i>
-                        </th>
-                        <th data-col="descripcion">Descripción</th>
-                        <th class="sortable-header" role="button" data-sort="cliente_nombre" onclick="ordenar('cliente_nombre')" data-col="cliente_nombre">
-                            Cliente <i class="bi <?= $ordenCol === 'cliente_nombre' ? ($ordenDir === 'ASC' ? 'bi-sort-alpha-down text-primary' : 'bi-sort-alpha-up text-primary') : 'bi-arrow-down-up text-muted' ?> small ms-1"></i>
-                        </th>
-                        <th class="text-end" data-col="presupuesto">Presupuesto</th>
-                        <th class="text-center" data-col="porcentaje_ejecucion">% Ejec.</th>
-                        <th data-col="fecha_inicio">F. Inicio</th>
-                        <th data-col="fecha_fin">F. Fin</th>
-                        <th class="text-center pe-3 sortable-header" role="button" data-sort="estado" onclick="ordenar('estado')" data-col="estado">
-                            Estado <i class="bi <?= $ordenCol === 'estado' ? ($ordenDir === 'ASC' ? 'bi-sort-alpha-down text-primary' : 'bi-sort-alpha-up text-primary') : 'bi-arrow-down-up text-muted' ?> small ms-1"></i>
-                        </th>
+                        <th class="ps-3 sortable-header" role="button" data-sort="codigo" data-col="codigo">Código <i class="bi bi-arrow-down-up small text-muted ms-1"></i></th>
+                        <th class="sortable-header" role="button" data-sort="nombre" data-col="nombre">Nombre <i class="bi bi-arrow-down-up small text-muted ms-1"></i></th>
+                        <th class="sortable-header" role="button" data-sort="descripcion" data-col="descripcion">Descripción <i class="bi bi-arrow-down-up small text-muted ms-1"></i></th>
+                        <th class="sortable-header" role="button" data-sort="cliente_nombre" data-col="cliente_nombre">Cliente <i class="bi bi-arrow-down-up small text-muted ms-1"></i></th>
+                        <th class="text-end sortable-header" role="button" data-sort="presupuesto" data-col="presupuesto">Presupuesto <i class="bi bi-arrow-down-up small text-muted ms-1"></i></th>
+                        <th class="text-center sortable-header" role="button" data-sort="porcentaje_ejecucion" data-col="porcentaje_ejecucion">% Ejec. <i class="bi bi-arrow-down-up small text-muted ms-1"></i></th>
+                        <th class="sortable-header" role="button" data-sort="fecha_inicio" data-col="fecha_inicio">F. Inicio <i class="bi bi-arrow-down-up small text-muted ms-1"></i></th>
+                        <th class="sortable-header" role="button" data-sort="fecha_fin" data-col="fecha_fin">F. Fin <i class="bi bi-arrow-down-up small text-muted ms-1"></i></th>
+                        <th class="text-center pe-3 sortable-header" role="button" data-sort="estado" data-col="estado">Estado <i class="bi bi-arrow-down-up small text-muted ms-1"></i></th>
                     </tr>
                 </thead>
                 <tbody id="tbodyPR">
@@ -188,9 +227,6 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                         <ul class="nav nav-tabs border-bottom-0 flex-grow-1 tab-pestaña" id="tabsPR" role="tablist">
                             <li class="nav-item">
                                 <a class="nav-link active py-2 small" id="tab-general-btn" data-bs-toggle="tab" href="#tab-general" role="tab">General</a>
-                            </li>
-                            <li class="nav-item">
-                                <a class="nav-link py-2 small disabled" id="tab-info-btn" data-bs-toggle="tab" href="#tab-info" role="tab">Información</a>
                             </li>
                         </ul>
                     </div>
@@ -251,17 +287,6 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                                 </div>
                             </div>
                         </div>
-                        <div class="tab-pane fade" id="tab-info" role="tabpanel">
-                             <div class="bg-light rounded-3 p-3 border mb-3">
-                                <h6 class="text-primary mb-3 small fw-bold"><i class="bi bi-clock-history me-2"></i>Historial de Cambios</h6>
-                                <div id="auditoriaTimelinePR" class="position-relative mt-2" style="max-height: 350px; overflow-y: auto; padding-right: 5px;">
-                                    <div class="text-center py-3 text-muted small">
-                                        <div class="spinner-border spinner-border-sm mb-2" role="status"></div>
-                                        <div class="d-block">Cargando historial...</div>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
                     </div>
                 </div>
                 <div class="modal-footer justify-content-between bg-light border-top p-2">
@@ -293,8 +318,12 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
         const form = document.getElementById('formPR');
         let modalInst = null;
         let currentPage = <?= $page ?>;
-        let currentSort = '<?= $ordenCol ?>';
-        let currentDir = '<?= $ordenDir ?>';
+        window.currentSort = '<?= $ordenCol ?>';
+        window.currentDir  = '<?= $ordenDir ?>';
+        // Orden múltiple (Shift+clic): lista completa de criterios, en el formato que lee
+        // OrdenListado en PHP. currentSort/currentDir quedan como el principal.
+        window.currentSorts = <?= $ordenJson ?? '[]' ?>;
+        let sorter = null;
 
         function getModal() {
             if (!modalInst) modalInst = new bootstrap.Modal(document.getElementById('modalPR'));
@@ -308,7 +337,6 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
             document.getElementById('modalAlert').classList.add('d-none');
             document.getElementById('btnEliminar')?.classList.add('d-none');
             document.getElementById('pr_estado').checked = true;
-            document.getElementById('tab-info-btn').classList.add('disabled');
             bootstrap.Tab.getInstance(document.getElementById('tab-general-btn')).show();
             getModal().show();
             setTimeout(() => document.getElementById('pr_nombre').focus(), 400);
@@ -330,10 +358,7 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
             document.getElementById('tituloModal').textContent = 'Editar Proyecto';
             document.getElementById('modalAlert').classList.add('d-none');
             document.getElementById('btnEliminar')?.classList.remove('d-none');
-            document.getElementById('tab-info-btn').classList.remove('disabled');
             bootstrap.Tab.getInstance(document.getElementById('tab-general-btn')).show();
-
-            fetchHistorialPR(data.id);
             getModal().show();
         };
 
@@ -378,39 +403,41 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
 
         window.fetchSearch = async function(page = 1) {
             currentPage = page;
-            const buscar = document.getElementById('buscarPR').value;
-            const url = `${urlBase}/searchAjax?b=${encodeURIComponent(buscar)}&page=${page}&sort=${currentSort}&dir=${currentDir}`;
+            const buscar = document.getElementById('buscarPR').value.trim();
+            const orden  = window.CMG_ordenParam(window.currentSorts || []);
+            const url = `${urlBase}/searchAjax?b=${encodeURIComponent(buscar)}&page=${page}&orden=${encodeURIComponent(orden)}`;
+            // Mismo indicador que el buscador (FiltrosModal): la tabla se atenúa mientras
+            // carga, también al paginar u ordenar.
+            const tbody = document.getElementById('tbodyPR');
+            if (tbody) tbody.classList.add('fm-cargando-target');
             try {
                 const resp = await fetch(url);
                 const json = await resp.json();
                 if (json.ok) {
-                    document.getElementById('tbodyPR').innerHTML = json.rows;
+                    tbody.innerHTML = json.rows;
                     document.getElementById('paginationContainer').innerHTML = json.pagination;
                     document.getElementById('paginationInfo').textContent = json.info;
                     document.getElementById('btnExportPdf').href = json.pdf_url;
                     document.getElementById('btnExportExcel').href = json.excel_url;
+                    // Los iconos (incluida la prioridad 1/2/3 del orden múltiple) los
+                    // repinta el motor global; aquí solo se le pide que se refresque.
+                    if (sorter) sorter.refreshIcons();
                 }
-            } catch (e) {
-                console.error(e);
-            }
+            } catch (e) { console.error(e); }
+            finally { if (tbody) tbody.classList.remove('fm-cargando-target'); }
         };
 
         window.cambiarPaginaAjax = (p) => fetchSearch(p);
 
-        window.ordenar = function(col) {
-            if (currentSort === col) {
-                currentDir = (currentDir === 'ASC') ? 'DESC' : 'ASC';
-            } else {
-                currentSort = col;
-                currentDir = 'ASC';
-            }
-
-            if (typeof window.guardarOrdenacionVista === 'function') {
-                window.guardarOrdenacionVista('proyectos', currentSort, currentDir);
-            }
-
+        // multi: clic normal ordena por una columna; Shift+clic encadena hasta 3
+        // (ASC -> DESC -> fuera del orden), con la prioridad numerada en cada encabezado.
+        // reload:false porque fetchSearch repinta todo lo que depende del orden.
+        sorter = window.CMG_initSort('proyectos', (col, dir, sorts) => {
+            window.currentSort  = col;
+            window.currentDir   = dir;
+            window.currentSorts = sorts;
             fetchSearch(1);
-        };
+        }, { sorts: window.currentSorts, multi: true, container: '.pr-scroll', reload: false });
 
         window.eliminarRegistro = async function() {
             if (!confirm('¿Seguro que desea eliminar este proyecto?')) return;
@@ -433,69 +460,5 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                 alert('Error de conexión');
             }
         };
-        async function fetchHistorialPR(id) {
-            const container = document.getElementById('auditoriaTimelinePR');
-            if (!container || !id) return;
-
-            try {
-                const resp = await fetch(`${urlBase}/getHistorialAjax?id=${id}&tabla=proyectos`);
-                const json = await resp.json();
-
-                if (json.ok && json.data.length > 0) {
-                    let html = '<div class="timeline-border position-absolute h-100 border-start border-2 border-primary border-opacity-10" style="left: 10px; top: 0;"></div>';
-
-                    json.data.forEach(log => {
-                        const icon = log.accion.includes('Crear') ? 'bi-plus-circle-fill text-success' :
-                                   log.accion.includes('Actualizar') ? 'bi-pencil-fill text-primary' :
-                                   log.accion.includes('Eliminar') ? 'bi-trash-fill text-danger' :
-                                   'bi-clock-history text-secondary';
-
-                        html += `
-                            <div class="timeline-item position-relative mb-3 ps-4">
-                                <div class="timeline-icon position-absolute rounded-circle bg-white d-flex align-items-center justify-content-center shadow-sm border" 
-                                     style="left: 0; top: 0; width: 22px; height: 22px; z-index: 2;">
-                                    <i class="bi ${icon}" style="font-size: 0.7rem;"></i>
-                                </div>
-                                <div class="timeline-content">
-                                    <div class="d-flex justify-content-between align-items-center mb-0">
-                                        <span class="fw-bold" style="font-size: 0.75rem;">${log.accion}</span>
-                                        <span class="text-muted" style="font-size: 0.65rem;">${log.created_at}</span>
-                                    </div>
-                                    <div class="text-muted mb-1" style="font-size: 0.7rem;">
-                                        <i class="bi bi-person me-1"></i> ${log.usuario_nombre || 'SISTEMA'}
-                                    </div>
-                                    <div class="bg-light rounded p-1 border border-light-subtle shadow-sm" style="font-size: 0.65rem;">
-                                        ${renderDetalleHistorialPR(log.detalles)}
-                                    </div>
-                                </div>
-                            </div>
-                        `;
-                    });
-                    container.innerHTML = html;
-                } else {
-                    container.innerHTML = `<div class="text-center py-4 text-muted small">No hay historial de cambios.</div>`;
-                }
-            } catch (e) {
-                container.innerHTML = `<div class="text-center py-3 text-danger small">Error de carga.</div>`;
-            }
-        }
-
-        function renderDetalleHistorialPR(detalle) {
-            if (!detalle || detalle.length === 0) return '<span class="text-muted">Sin detalles específicos</span>';
-            if (typeof detalle === 'string') return detalle;
-            if (Array.isArray(detalle)) {
-                return `<ul class="list-unstyled mb-0">
-                    ${detalle.map(d => {
-                        if (typeof d === 'object') {
-                            const antes = d.antes !== null ? `<span class="text-decoration-line-through text-muted">${d.antes}</span> ` : '';
-                            return `<li><i class="bi bi-dot"></i> <span class="fw-bold">${d.campo}:</span> ${antes}<i class="bi bi-arrow-right mx-1"></i> ${d.despues}</li>`;
-                        }
-                        return `<li><i class="bi bi-dot"></i> ${d}</li>`;
-                    }).join('')}
-                </ul>`;
-            }
-            return '<span class="text-muted">Acción registrada</span>';
-        }
-
     })();
 </script>

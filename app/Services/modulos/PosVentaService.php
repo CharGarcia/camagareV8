@@ -433,7 +433,22 @@ class PosVentaService
             $this->db->beginTransaction();
         }
 
+        $guardado = new \App\Services\GuardadoUnicoService();
         try {
+        // Guardado único (CLAUDE.md §8): el mismo cobro repetido —el cajero vuelve a pulsar
+        // Cobrar después de "Se perdió la conexión", con el mismo carrito— devuelve la venta ya
+        // emitida en vez de emitir un segundo comprobante. Va antes del secuencial y del stock.
+        if ($previo = $guardado->previo($data['token_guardado'] ?? '', $idEmpresa, 'pos_cobro')) {
+            if ($managedTransaction) {
+                $this->db->rollBack();
+            }
+            return array_merge((array) $previo['respuesta'], [
+                'repetido'      => true,
+                'aviso_ingreso' => null,
+                'sri'           => null,
+            ]);
+        }
+
         $tipoDocSec = $tipoDocumento === 'FACTURA' ? 'Facturas de venta' : 'Recibos de venta';
         $sec = (new SecuencialService())->obtenerSiguienteSecuencial($idPuntoEmision, $tipoDocSec, date('Y-m-d'));
         $secuencial = $sec['formateado'];
@@ -507,6 +522,14 @@ class PosVentaService
             );
             $idDoc = $svc->crear($payload);
         }
+        $guardado->registrar($data['token_guardado'] ?? '', $idEmpresa, 'pos_cobro', (int) $idDoc, $numeroDoc, $idUsuario, [
+            'id_documento'     => $idDoc,
+            'tipo_documento'   => $tipoDocumento,
+            'numero_documento' => $numeroDoc,
+            'importe_total'    => $importeTotal,
+            'forma_pago'       => $formaPago,
+            'id_ingreso'       => null,
+        ]);
         if ($managedTransaction) {
             $this->db->commit();
         }
