@@ -6,7 +6,7 @@ ruta_modulo: modulos/empresa
 tipo: modulo
 visibilidad: admin
 etiquetas: empresa, datos de la empresa, ruc, establecimiento, punto de emision, logo, logo por punto de emision, logo de la caja, logo por sucursal, otra marca, quitar logo, ambiente, pruebas, produccion, configuracion, correo, email, smtp, envio de correos, cuerpo del correo, asunto, plantilla de correo, remitente, documentos legales, acuerdo de uso de datos, contrato de uso del sistema, aceptacion de documentos, documentos firmados, documentos cargados, archivos de la empresa, secuenciales, numeracion, tipos de documento, codDoc, eliminar secuencial, crear secuenciales, agregar todos los faltantes, facturas de reembolso, punto unico por empresa, punto inactivo, eliminar punto de emision con documentos, puntos duplicados, secuencial inicial, numero inicial, hueco, huecos, rellenar hueco, salto de numeracion, siguiente numero, retomar numeracion, presentacion de los items, agrupar items, agrupar por nombre, agrupar por lote, agrupar por nup, agrupar por serie, juntar lineas repetidas, sumar items iguales, mostrar lote en la factura, mostrar caducidad, mostrar unidad de medida, mostrar nup, descripcion del item, tirilla, ticket, impresion termica, modo de numeracion, numeracion por fecha, secuencial por fecha, reiniciar numeracion, reinicio anual, reinicio mensual, numeracion anual, numeracion mensual, correlativo por año, correlativo por mes, empezar de cero cada año, prefijo del año, numero con el año, volver a empezar la numeracion
-version: 1.29
+version: 1.30
 orden: 5
 estado: activo
 ---
@@ -174,6 +174,15 @@ razón social si no tiene nombre comercial).
 
 En ambos modos el correo lleva adjuntos el **PDF** y el **XML** autorizado del
 comprobante.
+
+## Columna Adicional en el modal de factura
+
+En la pestaña **Facturación**, el interruptor **¿Mostrar la columna Adicional en los ítems de
+la factura?** decide si la tabla de productos del modal de Factura de Venta muestra la columna
+*Adicional* (detalle adicional por ítem), y lo mismo en el modal de Recibos de Venta. Viene
+**encendido**; apáguelo si su empresa no usa ese
+dato y quiere más espacio para las demás columnas. Solo cambia la pantalla: lo que ya está
+guardado en cada línea se conserva y sigue saliendo en el PDF y el XML cuando tiene contenido.
 
 ## Presentación de los ítems en el comprobante
 
@@ -392,6 +401,10 @@ de taxis.
 
 ## Historial de cambios
 
+- **1.30** — Nuevo interruptor en **Facturación**: *¿Mostrar la columna Adicional en los ítems
+  de la factura?* Encendido por defecto; apagado, la tabla de productos del modal de Factura de
+  Venta ya no muestra la columna *Adicional* (lo guardado y el PDF no cambian). Requiere el SQL
+  `database/20261005_establecimiento_mostrar_columna_adicional.sql`.
 - **1.29** — El **Cálculo del IVA** de Facturación aplica a los documentos
   emitidos con las series de ese establecimiento (antes los módulos usaban la del
   primer establecimiento). Ver [Cómo se calcula el

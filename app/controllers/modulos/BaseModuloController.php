@@ -36,6 +36,17 @@ abstract class BaseModuloController extends Controller
     abstract protected function getRutaModulo(): string;
 
     /**
+     * Filas por página del listado principal del módulo: la preferencia del usuario
+     * (selector junto al paginador, clave __por_pagina__ de la vista) o $defecto.
+     * Usar en index() y en el searchAjax: `$perPage = $this->porPagina();`. El selector
+     * lo pinta favoritos.js solo; la vista no necesita nada.
+     */
+    protected function porPagina(int $defecto = 25): int
+    {
+        return \App\Helpers\PreferenciasHelper::porPaginaModulo($this->getRutaModulo(), $defecto);
+    }
+
+    /**
      * Verifica sesión + permiso de lectura (r=1).
      * Usar en index() y en las acciones que muestran datos.
      */

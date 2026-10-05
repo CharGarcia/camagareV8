@@ -33,6 +33,8 @@ class PlantillasWhatsappController extends BaseModuloController
     public function index(): void
     {
         $this->requireLeer();
+        // Registra la preferencia "filas por página" para que favoritos.js pinte el selector junto al paginador.
+        $this->porPagina();
         
         $idEmpresa = (int) $_SESSION['id_empresa'];
         
@@ -62,7 +64,7 @@ class PlantillasWhatsappController extends BaseModuloController
         $page      = max(1, (int) ($_GET['page'] ?? $_POST['page'] ?? 1));
         $ordenCol  = trim($_GET['sort'] ?? $_POST['sort'] ?? 'nombre');
         $ordenDir  = strtoupper(trim($_GET['dir'] ?? $_POST['dir'] ?? 'asc'));
-        $perPage   = 20;
+        $perPage = $this->porPagina();
 
         $model = new \App\models\WhatsappPlantilla();
         $result = $model->getFiltradas($idEmpresa, $buscar, $page, $perPage, $ordenCol, $ordenDir);

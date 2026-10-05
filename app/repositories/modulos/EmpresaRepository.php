@@ -537,6 +537,11 @@ class EmpresaRepository extends BaseModel
     public function getEstablecimientoConfig(int $idEst): ?array
     {
         $id = (int) $idEst;
+        // Columnas agregadas después del despliegue inicial: se piden solo si ya existen, para
+        // que la facturación no se caiga si el código llega antes que su SQL (ver
+        // getConfigServicioRestaurante). Si falta, la vista asume su valor por defecto.
+        $colAdicional = $this->tieneColumnaEstablecimiento('mostrar_columna_adicional_factura')
+            ? ', mostrar_columna_adicional_factura' : '';
         $sql = "SELECT id, decimales_cantidad, decimales_precio, calculo_iva_facturacion,
                        facturacion_inventario, metodo_costeo, facturacion_libre,
                        id_tarifa_iva_defecto_libre,
@@ -551,11 +556,32 @@ class EmpresaRepository extends BaseModel
                        factura_item_mostrar_lote, factura_item_mostrar_caducidad,
                        factura_item_mostrar_nup,
                        inv_requiere_aprobacion, inv_notificar_correo, inv_usuarios_aprobadores,
-                       transf_requiere_aprobacion, transf_notificar_correo, transf_usuarios_aprobadores
+                       transf_requiere_aprobacion, transf_notificar_correo, transf_usuarios_aprobadores{$colAdicional}
                 FROM empresa_establecimiento
                 WHERE id = {$id} AND eliminado = false";
         $res = $this->query($sql);
         return $res[0] ?? null;
+    }
+
+    /**
+     * ¿Existe la columna en empresa_establecimiento? Cacheado por request (el esquema no
+     * cambia a media petición). Para columnas que llegan por SQL después del código.
+     */
+    public function tieneColumnaEstablecimiento(string $columna): bool
+    {
+        static $cache = [];
+        if (!array_key_exists($columna, $cache)) {
+            try {
+                $col = $this->escape($columna);
+                $res = $this->query("SELECT 1 FROM information_schema.columns
+                                     WHERE table_name = 'empresa_establecimiento'
+                                       AND column_name = '{$col}'");
+                $cache[$columna] = !empty($res);
+            } catch (\Throwable $e) {
+                $cache[$columna] = false;
+            }
+        }
+        return $cache[$columna];
     }
 
     /**
@@ -641,7 +667,7 @@ class EmpresaRepository extends BaseModel
             'mostrar_unidad_medida', 'valor_limite_consumidor_final',
             'id_forma_pago_sri_def',
             'editar_precio_factura', 'editar_iva_factura', 'editar_descuento_factura',
-            'mostrar_propina_factura',
+            'mostrar_propina_factura', 'mostrar_columna_adicional_factura',
             'servicio_restaurante', 'servicio_restaurante_porcentaje', 'id_producto_propina',
             'factura_agrupar_items', 'factura_item_mostrar_unidad',
             'factura_item_mostrar_lote', 'factura_item_mostrar_caducidad',
@@ -653,8 +679,12 @@ class EmpresaRepository extends BaseModel
         // Campos numéricos que admiten NULL
         $numericNullable = ['valor_limite_consumidor_final', 'id_forma_pago_sri_def', 'id_tarifa_iva_defecto_libre', 'id_producto_propina'];
 
+        // Columnas que pueden no existir todavía (SQL pendiente): se omiten en vez de tumbar el guardado.
+        $opcionales = ['mostrar_columna_adicional_factura'];
+
         $sets = [];
         foreach ($data as $k => $v) {
+            if (in_array($k, $opcionales, true) && !$this->tieneColumnaEstablecimiento($k)) continue;
             if (in_array($k, $allowed, true)) {
                 if (in_array($k, $numericNullable, true) && ($v === 'NULL' || $v === null || $v === '')) {
                     $sets[] = "{$k} = NULL";

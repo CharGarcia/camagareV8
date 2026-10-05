@@ -269,7 +269,7 @@ class EmpleadosController extends BaseModuloController
         $page     = max(1, (int) ($_GET['page'] ?? $_POST['page'] ?? 1));
         $ordenCol = trim($_GET['sort'] ?? $_POST['sort'] ?? $prefsVista['__ordenCol__'] ?? 'nombres_apellidos');
         $ordenDir = strtoupper(trim($_GET['dir'] ?? $_POST['dir'] ?? $prefsVista['__ordenDir__'] ?? 'ASC'));
-        $perPage  = 20;
+        $perPage = $this->porPagina();
 
         $idUsuarioFiltro = empty($perm['todo']) ? (int)$_SESSION['id_usuario'] : null;
 
@@ -313,7 +313,7 @@ class EmpleadosController extends BaseModuloController
         $page      = max(1, (int) ($_GET['page'] ?? $_POST['page'] ?? 1));
         $ordenCol  = trim($_GET['sort'] ?? $_POST['sort'] ?? $prefsVista['__ordenCol__'] ?? 'nombres_apellidos');
         $ordenDir  = strtoupper(trim($_GET['dir'] ?? $_POST['dir'] ?? $prefsVista['__ordenDir__'] ?? 'ASC'));
-        $perPage   = 20;
+        $perPage = $this->porPagina();
 
         $perm = $this->getPermisos();
         $idUsuarioFiltro = empty($perm['todo']) ? (int)$_SESSION['id_usuario'] : null;

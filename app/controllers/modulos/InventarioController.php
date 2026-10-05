@@ -40,7 +40,7 @@ class InventarioController extends BaseModuloController
         $page      = max(1, (int) ($_GET['page'] ?? 1));
         $ordenCol  = trim($_GET['sort'] ?? $prefsVista['__ordenCol__'] ?? 'fecha_movimiento');
         $ordenDir  = strtoupper(trim($_GET['dir'] ?? $prefsVista['__ordenDir__'] ?? 'desc'));
-        $perPage   = 20;
+        $perPage = $this->porPagina();
 
         $empresa   = (new Empresa())->getPorId($idEmpresa) ?? [];
 
@@ -106,7 +106,7 @@ class InventarioController extends BaseModuloController
         $page      = max(1, (int) ($_GET['page'] ?? $_POST['page'] ?? 1));
         $ordenCol  = trim($_GET['sort'] ?? $_POST['sort'] ?? $prefsVista['__ordenCol__'] ?? 'fecha_movimiento');
         $ordenDir  = strtoupper(trim($_GET['dir'] ?? $_POST['dir'] ?? $prefsVista['__ordenDir__'] ?? 'desc'));
-        $perPage   = 20;
+        $perPage = $this->porPagina();
 
         $filtros = $this->getFiltrosDesdeRequest($buscar, $ordenCol, $ordenDir);
 

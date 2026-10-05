@@ -66,7 +66,7 @@ class EntregasConsignacionesController extends BaseModuloController
         $buscar  = trim($_GET['b'] ?? '');
         $page    = max(1, (int) ($_GET['page'] ?? 1));
         $orden   = OrdenListado::leer($prefsVista, self::ORDEN_COL_DEFECTO, self::ORDEN_DIR_DEFECTO);
-        $perPage = 20;
+        $perPage = $this->porPagina();
 
         $idsResponsables = $this->filtroResponsablesActual();
 
@@ -125,7 +125,7 @@ class EntregasConsignacionesController extends BaseModuloController
         $buscar     = trim($_GET['b'] ?? $_GET['q'] ?? '');
         $page       = max(1, (int) ($_GET['page'] ?? 1));
         $orden      = OrdenListado::leer($prefsVista, self::ORDEN_COL_DEFECTO, self::ORDEN_DIR_DEFECTO);
-        $perPage    = 20;
+        $perPage = $this->porPagina();
 
         $idsResponsables = $this->filtroResponsablesActual();
 

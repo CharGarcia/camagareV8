@@ -1564,6 +1564,11 @@ $warnIcon = '<i class="bi bi-exclamation-circle-fill text-warning ms-1" title="C
                                             <div class="form-text mt-0 sub-text" style="font-size:0.65rem;">Habilita la edición manual del valor de descuento por cada ítem.</div>
                                         </div>
                                         <div class="form-check form-switch mb-3">
+                                            <input class="form-check-input" type="checkbox" role="switch" name="mostrar_columna_adicional_factura" id="sw_col_adicional" <?= (($empresa['mostrar_columna_adicional_factura'] ?? true) === 'true' || ($empresa['mostrar_columna_adicional_factura'] ?? true) === true) ? 'checked' : '' ?>>
+                                            <label class="form-check-label small fw-bold" for="sw_col_adicional">¿Mostrar la columna Adicional en los ítems de la factura?</label>
+                                            <div class="form-text mt-0 sub-text" style="font-size:0.65rem;">Columna "Adicional" (detalle adicional por ítem) de la tabla de productos del modal. Encendida por defecto; apáguela si no la usa. No afecta lo ya guardado ni el PDF.</div>
+                                        </div>
+                                        <div class="form-check form-switch mb-3">
                                             <input class="form-check-input" type="checkbox" role="switch" name="mostrar_propina_factura" id="sw_propina" <?= (($empresa['mostrar_propina_factura'] ?? false) === 'true' || ($empresa['mostrar_propina_factura'] ?? false) === true) ? 'checked' : '' ?>>
                                             <label class="form-check-label small fw-bold" for="sw_propina">¿Mostrar el campo de propina en la factura?</label>
                                             <div class="form-text mt-0 sub-text" style="font-size:0.65rem;">Habilita el campo de propina en el pie de la factura (aplicable a ciertos sectores).</div>

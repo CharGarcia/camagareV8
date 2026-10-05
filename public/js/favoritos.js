@@ -463,11 +463,69 @@ window.CMG_guardarVista = function(modulo, payload, opts) {
     const fd = new FormData();
     fd.append('modulo', moduloLimpio);
     fd.append('vistaPayload', JSON.stringify(payload || {}));
-    fetch(url, { method: 'POST', body: fd })
+    // Devuelve la promesa: quien no recarga la página puede encadenar su propio repintado.
+    return fetch(url, { method: 'POST', body: fd })
         .then(res => res.json())
-        .then(json => { if (json && json.ok && recargar) _cmgReloadPagina(); })
+        .then(json => { if (json && json.ok && recargar) _cmgReloadPagina(); return json; })
         .catch(err => console.error('Error guardando vista:', err));
 };
+
+/**
+ * Selector "Filas por página" automático (25/50/75/100) en todos los listados.
+ *
+ * El servidor deja window.CMG_POR_PAGINA = {modulo, actual, opciones} (partials/scripts.php,
+ * vía PreferenciasHelper::jsPorPagina) solo en las páginas cuyo controlador pidió sus filas
+ * por página con porPagina()/porPaginaModulo(). Aquí se inserta el <select> justo después
+ * del paginador (el primero que haya fuera de un modal) y, al cambiarlo, se guarda la
+ * preferencia del usuario (__por_pagina__ de la vista) y se recarga la página para que el
+ * controlador la aplique. Una vista que ya pinta su propio selector (data-cmg-por-pagina,
+ * p. ej. Facturas de Venta, que repinta por AJAX sin recargar) no recibe otro.
+ */
+window.CMG_initPorPagina = function() {
+    const cfg = window.CMG_POR_PAGINA;
+    if (!cfg || !cfg.modulo) return;
+    if (document.querySelector('select[data-cmg-por-pagina]')) return;
+    const fueraDeModal = el => el && !el.closest('.modal');
+    let pag = ['#paginationContainer', '#wrapper-pagination', '#pagination-controls']
+        .map(sel => document.querySelector(sel)).find(fueraDeModal) || null;
+    if (!pag) {
+        // Cualquier otro paginador: el primer grupo de botones con flechas fuera de un modal.
+        pag = Array.from(document.querySelectorAll('.btn-group')).find(g =>
+            fueraDeModal(g) && g.querySelector('.bi-chevron-left, .bi-chevron-right')) || null;
+    }
+    if (!pag) return;
+    const opciones = Array.isArray(cfg.opciones) && cfg.opciones.length ? cfg.opciones : [25, 50, 75, 100];
+    const sel = document.createElement('select');
+    sel.setAttribute('data-cmg-por-pagina', '1');
+    sel.className = 'form-select form-select-sm';
+    sel.style.width = 'auto';
+    sel.title = 'Filas por página';
+    sel.setAttribute('aria-label', 'Filas por página');
+    opciones.forEach(n => {
+        const o = document.createElement('option');
+        o.value = String(n); o.textContent = String(n);
+        if (parseInt(cfg.actual, 10) === n) o.selected = true;
+        sel.appendChild(o);
+    });
+    sel.addEventListener('change', () => {
+        const n = parseInt(sel.value, 10);
+        if (!n) return;
+        sel.disabled = true;
+        window.CMG_guardarVista(cfg.modulo, { '__por_pagina__': n }, { reload: true });
+    });
+    // Pegado a las flechas: paginador y selector dentro de un mismo bloque (el id del
+    // paginador se conserva, así el repintado AJAX de cada módulo lo sigue encontrando).
+    const wrap = document.createElement('div');
+    wrap.className = 'cmg-paginador-con-selector d-inline-flex align-items-stretch';
+    pag.parentNode.insertBefore(wrap, pag);
+    wrap.appendChild(pag);
+    wrap.appendChild(sel);
+};
+if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', () => window.CMG_initPorPagina());
+} else {
+    window.CMG_initPorPagina();
+}
 
 let _timerOrdenVista = {};
 /**

@@ -48,7 +48,7 @@ class ProformasController extends BaseModuloController
         $orden    = \App\Helpers\OrdenListado::leer($prefsVista, 'fecha_emision', 'DESC');
         $ordenCol = \App\Helpers\OrdenListado::primeraCol($orden, 'fecha_emision');
         $ordenDir = \App\Helpers\OrdenListado::primeraDir($orden, 'DESC');
-        $perPage  = 20;
+        $perPage = $this->porPagina();
 
         $perm = $this->getPermisos();
         $idUsuarioFiltro = empty($perm['todo']) ? (int) $_SESSION['id_usuario'] : null;
@@ -160,7 +160,7 @@ class ProformasController extends BaseModuloController
         $orden      = \App\Helpers\OrdenListado::leer($prefsVista, 'fecha_emision', 'DESC');
         $ordenCol   = \App\Helpers\OrdenListado::primeraCol($orden, 'fecha_emision');
         $ordenDir   = \App\Helpers\OrdenListado::primeraDir($orden, 'DESC');
-        $perPage    = 20;
+        $perPage = $this->porPagina();
 
         $perm = $this->getPermisos();
         $idUsuarioFiltro = empty($perm['todo']) ? (int) $_SESSION['id_usuario'] : null;

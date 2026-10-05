@@ -349,7 +349,7 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosPestanasOcultas($vistaConfigP
                                                 <th class="py-2 small fw-bold text-muted pf-col-sel" style="width:12%;">Precios</th>
                                                 <th class="py-2 small fw-bold text-muted text-end pf-col-num" style="width:8%;">P. Sin Imp.</th>
                                                 <th class="py-2 small fw-bold text-muted text-end pf-col-num" style="width:8%;">P. Con Imp.</th>
-                                                <th class="py-2 small fw-bold text-muted text-end pf-col-num" style="width:7%;">Desc.</th>
+                                                <th class="py-2 small fw-bold text-muted text-center pf-col-num" style="width:7%; min-width:160px;">Desc.</th>
                                                 <th class="py-2 small fw-bold text-muted text-center pf-col-sel" style="width:7%;">Iva</th>
                                                 <th class="py-2 small fw-bold text-muted text-end pe-4 pf-col-num" style="width:11%;">Subtotal</th>
                                                 <th style="width:40px;"></th>
@@ -467,7 +467,7 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosPestanasOcultas($vistaConfigP
                                         <div id="pf_subtotalesIva" class="mb-1"></div>
                                         <div class="d-flex justify-content-between align-items-center mb-1">
                                             <span class="text-muted">(-) Descuento</span>
-                                            <span class="fw-bold text-dark" id="pf_totalDescuento">0.00</span>
+                                            <span class="fw-bold text-dark"><small id="pf_totalDescuentoPct" class="text-muted fw-normal me-1 d-none" title="Porcentaje sobre el subtotal antes del descuento"></small><span id="pf_totalDescuento">0.00</span></span>
                                         </div>
                                         <div id="pf_ivasGrupo" class="mb-1"></div>
                                         <hr class="my-1 opacity-25">

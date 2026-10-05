@@ -96,7 +96,7 @@ class VideollamadasController extends BaseModuloController
         $page     = max(1, (int) ($_GET['page'] ?? 1));
         $ordenCol = trim($_GET['sort'] ?? $prefsVista['__ordenCol__'] ?? 'fecha_inicio');
         $ordenDir = strtoupper(trim($_GET['dir'] ?? $prefsVista['__ordenDir__'] ?? 'DESC'));
-        $perPage  = 20;
+        $perPage = $this->porPagina();
 
         $perm = $this->getPermisos();
 
@@ -143,7 +143,7 @@ class VideollamadasController extends BaseModuloController
         $page       = max(1, (int) ($_GET['page'] ?? 1));
         $ordenCol   = trim($_GET['sort'] ?? $prefsVista['__ordenCol__'] ?? 'fecha_inicio');
         $ordenDir   = strtoupper(trim($_GET['dir'] ?? $prefsVista['__ordenDir__'] ?? 'DESC'));
-        $perPage    = 20;
+        $perPage = $this->porPagina();
 
         $perm            = $this->getPermisos();
         $idUsuarioFiltro = empty($perm['todo']) ? (int) $_SESSION['id_usuario'] : null;

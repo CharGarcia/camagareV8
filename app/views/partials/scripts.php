@@ -86,6 +86,8 @@
 <!-- favoritos.js ahora se carga en <head> (ver head.php) para que CMG_initSort esté
      disponible antes de los scripts inline de las vistas. -->
 <?= \App\Helpers\PreferenciasHelper::getJavascriptVariables($rutaModulo ?? '') ?>
+<!-- Filas por página: solo sale si el controlador de esta página pidió su preferencia (PreferenciasHelper::porPaginaModulo). -->
+<?= \App\Helpers\PreferenciasHelper::jsPorPagina() ?>
 <script>
 (function() {
     /* ----------------------------------------------------------------

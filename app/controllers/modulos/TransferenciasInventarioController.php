@@ -56,7 +56,7 @@ class TransferenciasInventarioController extends BaseModuloController
         $page     = max(1, (int) ($_GET['page'] ?? 1));
         $ordenCol = trim($_GET['sort'] ?? $prefs['__ordenCol__'] ?? 'fecha_transferencia');
         $ordenDir = strtoupper(trim($_GET['dir'] ?? $prefs['__ordenDir__'] ?? 'DESC'));
-        $perPage  = 20;
+        $perPage = $this->porPagina();
 
         $filtros         = $this->getFiltrosDesdeRequest();
         $idUsuarioFiltro = $this->getIdUsuarioFiltro($perm);
@@ -114,7 +114,7 @@ class TransferenciasInventarioController extends BaseModuloController
         $page     = max(1, (int) ($_GET['page'] ?? 1));
         $ordenCol = trim($_GET['sort'] ?? $prefs['__ordenCol__'] ?? 'fecha_transferencia');
         $ordenDir = strtoupper(trim($_GET['dir'] ?? $prefs['__ordenDir__'] ?? 'DESC'));
-        $perPage  = 20;
+        $perPage = $this->porPagina();
 
         $filtros         = $this->getFiltrosDesdeRequest();
         $idUsuarioFiltro = $this->getIdUsuarioFiltro($perm);

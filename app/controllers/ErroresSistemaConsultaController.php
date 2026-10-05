@@ -28,6 +28,8 @@ class ErroresSistemaConsultaController extends Controller
     {
         $this->requireAuth();
         $this->requireNivel(3);
+        // Registra la preferencia "filas por página" para que favoritos.js pinte el selector junto al paginador.
+        \App\Helpers\PreferenciasHelper::porPaginaModulo('errores_sistema');
 
         $this->viewWithLayout('layouts.main', 'config.errores_sistema', [
             'titulo' => 'Errores del sistema',
@@ -43,7 +45,7 @@ class ErroresSistemaConsultaController extends Controller
         $page     = max(1, (int) ($_GET['page'] ?? $_POST['page'] ?? 1));
         $ordenCol = trim($_GET['sort'] ?? $_POST['sort'] ?? 'created_at');
         $ordenDir = strtoupper(trim($_GET['dir'] ?? $_POST['dir'] ?? 'DESC'));
-        $perPage  = 25;
+        $perPage = \App\Helpers\PreferenciasHelper::porPaginaModulo('errores_sistema');
 
         if (!in_array($ordenCol, self::COLUMNAS_ORDEN, true)) {
             $ordenCol = 'created_at';

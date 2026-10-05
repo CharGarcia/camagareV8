@@ -215,6 +215,7 @@ eliminado (boolean), deleted_at, deleted_by
 
 **Tablas y vistas (listados principales)**
 - Deben incluir: **ordenamiento, buscador, paginación, exportación a PDF y Excel**, y opción de **filtrar/mostrar columnas por usuario**.
+- **Filas por página (automático, no reinventar)**: el controlador toma el tamaño de página con `$perPage = $this->porPagina();` (`BaseModuloController`; en `index()` **y** en el `searchAjax`). Eso lee la preferencia del usuario (`__por_pagina__` de la vista, opciones 25/50/75/100, por defecto 25) y deja registrado el módulo; `partials/scripts.php` lo expone como `window.CMG_POR_PAGINA` y `favoritos.js` (`CMG_initPorPagina`) inserta el selector pegado a las flechas del paginador. La vista no hace nada. Un controlador que no extiende `BaseModuloController` llama `PreferenciasHelper::porPaginaModulo('clave')`. Si el listado se carga solo por AJAX, `index()` también debe llamar `porPagina()` (si no, el selector no aparece). Una vista que repinta por AJAX sin recargar puede pintar su propio selector con `PreferenciasHelper::renderSelectorPorPagina()` (ref.: Facturas de Venta); el automático la detecta y no agrega otro. Nunca volver a fijar `$perPage = 20;` a mano. Manual: `docs/manual/guias/filas-por-pagina.md`.
 - **Redimensionamiento de columnas**: los `<th>` usan `data-col`; el ancho se persiste por usuario con la clave `__columnas_anchos__` en preferencias.
 - **Formato de celdas personalizadas**: `text-overflow: ellipsis`, `white-space: nowrap` cuando la celda tenga un ancho acotado (`max-width`/`data-col`).
 

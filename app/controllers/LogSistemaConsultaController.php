@@ -33,6 +33,8 @@ class LogSistemaConsultaController extends Controller
     {
         $this->requireAuth();
         $this->requireNivel(2);
+        // Registra la preferencia "filas por página" para que favoritos.js pinte el selector junto al paginador.
+        \App\Helpers\PreferenciasHelper::porPaginaModulo('log_sistema');
 
         $opciones = $this->service->getOpcionesFiltros($this->getScope());
 
@@ -52,7 +54,7 @@ class LogSistemaConsultaController extends Controller
         $page     = max(1, (int) ($_GET['page'] ?? $_POST['page'] ?? 1));
         $ordenCol = trim($_GET['sort'] ?? $_POST['sort'] ?? 'created_at');
         $ordenDir = strtoupper(trim($_GET['dir'] ?? $_POST['dir'] ?? 'DESC'));
-        $perPage  = 25;
+        $perPage = \App\Helpers\PreferenciasHelper::porPaginaModulo('log_sistema');
 
         if (!in_array($ordenCol, self::COLUMNAS_ORDEN, true)) {
             $ordenCol = 'created_at';
@@ -116,7 +118,7 @@ class LogSistemaConsultaController extends Controller
         $page     = max(1, (int) ($_GET['page'] ?? $_POST['page'] ?? 1));
         $ordenCol = trim($_GET['sort'] ?? $_POST['sort'] ?? 'created_at');
         $ordenDir = strtoupper(trim($_GET['dir'] ?? $_POST['dir'] ?? 'DESC'));
-        $perPage  = 25;
+        $perPage = \App\Helpers\PreferenciasHelper::porPaginaModulo('log_sistema');
 
         if (!in_array($ordenCol, self::COLUMNAS_ORDEN_INTENTOS, true)) {
             $ordenCol = 'created_at';

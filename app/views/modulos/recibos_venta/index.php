@@ -685,14 +685,14 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                                                 <tr class="table-light border-bottom">
                                                     <th class="ps-3 py-2 small fw-bold text-muted" data-det-col="codigo" style="width: 9%;">Código</th>
                                                     <th class="py-2 small fw-bold text-muted" data-det-col="descripcion" style="width: 26%;">Descripción</th>
-                                                    <th class="py-2 small fw-bold text-muted" style="width: 7%;">Adicional</th>
+                                                    <?php $rvColAdicional = (($empresa['mostrar_columna_adicional_factura'] ?? true) === 'true' || ($empresa['mostrar_columna_adicional_factura'] ?? true) === true); ?>
+                                                    <th class="py-2 small fw-bold text-muted col-adicional<?= $rvColAdicional ? '' : ' d-none' ?>" style="width: 7%;">Adicional</th>
                                                     <th class="py-2 small fw-bold text-muted col-medida-header col-medida d-none" style="width: 8%;">Medida</th>
                                                     <th class="py-2 small fw-bold text-muted text-center" style="width: 6%;">Cant.</th>
                                                     <th class="py-2 small fw-bold text-muted col-lista-precios d-none" style="width: 12%;">Precios</th>
                                                     <th class="py-2 small fw-bold text-muted text-end" style="width: 8%;">P. Sin Imp.</th>
                                                     <th class="py-2 small fw-bold text-muted text-end" style="width: 8%;">P. Con Imp.</th>
-                                                    <th class="py-2 small fw-bold text-muted text-end" style="width: 10%;">Desc.</th>
-                                                    <th class="py-2 small fw-bold text-muted text-center" style="width: 7%;">Iva</th>
+                                                    <th class="py-2 small fw-bold text-muted text-center" style="width: 10%; min-width: 160px;">Desc.</th>
                                                     <?php if (!empty($empresa['obligatorio_lotes']) && ($empresa['obligatorio_lotes'] === 'true' || $empresa['obligatorio_lotes'] === true)): ?>
                                                         <th class="py-2 small fw-bold text-muted text-center" style="width:8%;">Lote</th>
                                                     <?php endif; ?>
@@ -702,6 +702,7 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                                                     <?php if (!empty($empresa['obligatorio_nup']) && ($empresa['obligatorio_nup'] === 'true' || $empresa['obligatorio_nup'] === true)): ?>
                                                         <th class="py-2 small fw-bold text-muted text-center" style="width:9%;">NUP / Serial</th>
                                                     <?php endif; ?>
+                                                    <th class="py-2 small fw-bold text-muted text-center" style="width: 7%;">Iva</th>
                                                     <th class="py-2 small fw-bold text-muted text-end pe-4" style="width: 78px; min-width: 78px;">Subtotal</th>
                                                     <th style="width: 40px;"></th>
                                                 </tr>
@@ -772,7 +773,7 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                                             <!-- Total Descuento (informativo: ya está restado dentro del Subtotal de arriba) -->
                                             <div class="d-flex justify-content-between align-items-center mb-1">
                                                 <span class="text-muted">(-) Descuento</span>
-                                                <span class="fw-bold text-dark" id="m-lbl-descuento">0.00</span>
+                                                <span class="fw-bold text-dark"><small id="m-lbl-descuento-pct" class="text-muted fw-normal me-1 d-none" title="Porcentaje sobre el subtotal antes del descuento"></small><span id="m-lbl-descuento">0.00</span></span>
                                             </div>
 
                                             <!-- IVA agrupado por tarifa (solo los > 0) -->
@@ -1122,6 +1123,20 @@ $totalPages = $totalPagesOriginal;
     function rvModoIva() {
         return CMG_modoIvaPunto(document.getElementById('m-select-puntos')?.value, EMPRESA_CONFIG.calculo_iva);
     }
+
+    // Porcentaje de descuento junto al valor en el modal (solo informativo y solo si es > 0):
+    // descuento / subtotal bruto (neto + descuento). No viaja al servidor ni al PDF.
+    function rvMostrarPctDescuento(descuento, subtotalNeto) {
+        const el = document.getElementById('m-lbl-descuento-pct');
+        if (!el) return;
+        descuento = parseFloat(descuento) || 0;
+        const bruto = descuento + (parseFloat(subtotalNeto) || 0);
+        if (!(descuento > 0) || !(bruto > 0)) { el.textContent = ''; el.classList.add('d-none'); return; }
+        const pct = descuento / bruto * 100;
+        const txt = Math.abs(pct - Math.round(pct)) < 0.005 ? String(Math.round(pct)) : pct.toFixed(2).replace(/0$/, '');
+        el.textContent = '(' + txt + '%)';
+        el.classList.remove('d-none');
+    }
     const EMPRESA_CONFIG = {
         facturacion_libre: <?= (($empresa['facturacion_libre'] ?? false) === 'true' || ($empresa['facturacion_libre'] ?? false) === true) ? 'true' : 'false' ?>,
         facturacion_inventario: <?= (($empresa['facturacion_inventario'] ?? true) === 'true'  || ($empresa['facturacion_inventario'] ?? true)  === true)  ? 'true' : 'false' ?>,
@@ -1130,6 +1145,8 @@ $totalPages = $totalPagesOriginal;
         obligatorio_nup: <?= (($empresa['obligatorio_nup'] ?? false) === 'true'       || ($empresa['obligatorio_nup'] ?? false)       === true)       ? 'true' : 'false' ?>,
         mostrar_cajero_factura: <?= (($empresa['mostrar_cajero_factura'] ?? false) === 'true' || ($empresa['mostrar_cajero_factura'] ?? false) === true) ? 'true' : 'false' ?>,
         mostrar_vendedor_factura: <?= (($empresa['mostrar_vendedor_factura'] ?? false) === 'true' || ($empresa['mostrar_vendedor_factura'] ?? false) === true) ? 'true' : 'false' ?>,
+        // Columna "Adicional" de la tabla de ítems: mismo interruptor que la factura (Empresa → Facturación).
+        mostrar_columna_adicional_factura: <?= (($empresa['mostrar_columna_adicional_factura'] ?? true) === 'true' || ($empresa['mostrar_columna_adicional_factura'] ?? true) === true) ? 'true' : 'false' ?>,
         metodo_costeo: '<?= $empresa['metodo_costeo'] ?? 'promedio' ?>',
         decimales_precio: <?= (int) ($empresa['decimales_precio'] ?? 2) ?>,
         decimales_cantidad: <?= (int) ($empresa['decimales_cantidad'] ?? 2) ?>,
@@ -3377,7 +3394,7 @@ $totalPages = $totalPagesOriginal;
                     <i class="bi bi-geo-alt-fill text-secondary"></i>
                 </span>
             </td>
-            <td><input type="text" class="form-control form-control-sm input-detalle input-adicional text-muted fst-italic" placeholder="Info adicional"></td>
+            <td class="col-adicional${EMPRESA_CONFIG.mostrar_columna_adicional_factura ? '' : ' d-none'}"><input type="text" class="form-control form-control-sm input-detalle input-adicional text-muted fst-italic" placeholder="Info adicional"></td>
             <td class="col-medida d-none">
                 <select class="form-select form-select-sm input-detalle input-medida d-none">
                     <option value="">Medida</option>
@@ -3395,16 +3412,12 @@ $totalPages = $totalPagesOriginal;
             <td><input type="number" class="form-control form-control-sm input-detalle text-end input-precio-iva" value="${(0).toFixed(DEC_PRECIO)}" step="any" oninput="calcConImp(this)" onblur="this.value=parseFloat(this.value||0).toFixed(DEC_PRECIO)" ${EMPRESA_CONFIG.editar_precio_factura ? '' : 'readonly'}></td>
             <td>
                 <div class="d-flex align-items-center">
-                    <input type="number" class="form-control form-control-sm input-detalle text-end text-danger input-desc" value="0.00" step="any" oninput="calcFila(this)" ${EMPRESA_CONFIG.editar_descuento_factura ? '' : 'readonly'}>
+                    <input type="number" class="form-control form-control-sm input-detalle text-end text-danger input-desc" value="0.00" step="any" style="min-width:85px;" oninput="calcFila(this)" ${EMPRESA_CONFIG.editar_descuento_factura ? '' : 'readonly'}>
+                    <small class="desc-pct text-muted ms-1 d-none" style="font-size:.7rem;white-space:nowrap" title="Porcentaje de descuento de la línea"></small>
                     <button type="button" class="btn btn-link btn-sm p-1 text-primary shadow-none border-0 ${EMPRESA_CONFIG.editar_descuento_factura ? '' : 'd-none'}" onclick="abrirModalDescuento(this)" title="Aplicar descuento rápido">
                         <i class="bi bi-plus-circle"></i>
                     </button>
                 </div>
-            </td>
-            <td>
-                <select class="form-select form-select-sm input-detalle text-center input-iva" onchange="syncPrecioIva(this)" ${EMPRESA_CONFIG.editar_iva_factura ? '' : 'disabled'}>
-                    ${TARIFAS_IVA.map(t => `<option value="${t.porcentaje_iva}" data-codigo="${t.codigo}" data-id="${t.id}">${t.tarifa}</option>`).join('')}
-                </select>
             </td>
             ${EMPRESA_CONFIG.obligatorio_lotes ? `
             <td class="align-middle" style="min-width:120px;">
@@ -3422,6 +3435,11 @@ $totalPages = $totalPagesOriginal;
                 <td class="align-middle" style="min-width:100px;">
                     <input type="text" class="form-control form-control-sm input-detalle input-nup d-none" placeholder="NUP/Serial" style="font-size:0.75rem;">
                 </td>` : ''}
+            <td>
+                <select class="form-select form-select-sm input-detalle text-center input-iva" onchange="syncPrecioIva(this)" ${EMPRESA_CONFIG.editar_iva_factura ? '' : 'disabled'}>
+                    ${TARIFAS_IVA.map(t => `<option value="${t.porcentaje_iva}" data-codigo="${t.codigo}" data-id="${t.id}">${t.tarifa}</option>`).join('')}
+                </select>
+            </td>
             <td class="text-end pe-4 align-middle">
                 <span class="subtotal-line">0.00</span>
             </td>
@@ -4244,6 +4262,7 @@ $totalPages = $totalPagesOriginal;
 
         const subtotalBruto = r2(cant * prec);
         const subtotalNeto = r2(subtotalBruto - desc);
+        CMG_pctDescuentoLinea(tr, desc, subtotalBruto); // % de la línea, solo en pantalla
 
         // ICE: tarifa < 1 †’ específico ($ por unidad); tarifa >= 1 †’ ad-valorem (% sobre neto)
         const iceTarifa = parseFloat(tr.querySelector('.input-ice-pct').value) || 0;
@@ -4438,6 +4457,7 @@ $totalPages = $totalPagesOriginal;
         // Descuento total
         const lblDesc = document.getElementById('m-lbl-descuento');
         if (lblDesc) lblDesc.textContent = descuentoTotal.toFixed(2);
+        rvMostrarPctDescuento(descuentoTotal, subtotalGeneral);
 
         // IVA por tarifa (solo tarifas > 0 con valor > 0)
         const contIvas = document.getElementById('m-lbl-ivas-grupo');
@@ -5338,6 +5358,7 @@ $totalPages = $totalPagesOriginal;
 
                 const lblDescElem = document.getElementById('m-lbl-descuento');
                 if (lblDescElem) lblDescElem.textContent = totDesc.toFixed(2);
+                rvMostrarPctDescuento(totDesc, totSinImp);
 
                 const iceRowElem = document.getElementById('m-lbl-ice-row');
                 const lblIceElem = document.getElementById('m-lbl-ice');

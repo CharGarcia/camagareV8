@@ -59,6 +59,8 @@ class TareasObligacionesController extends Controller
     public function index(): void
     {
         $this->requireAuth();
+        // Registra la preferencia "filas por página" para que favoritos.js pinte el selector junto al paginador.
+        \App\Helpers\PreferenciasHelper::porPaginaModulo('tareas_obligaciones');
 
         $tab      = $_GET['tab'] ?? 'tareas';
         $idUsuario = (int) ($_SESSION['id_usuario'] ?? 0);
@@ -122,7 +124,7 @@ class TareasObligacionesController extends Controller
         $page     = max(1, (int) ($_GET['page'] ?? $_POST['page'] ?? 1));
         $ordenCol = trim($_GET['sort'] ?? $_POST['sort'] ?? 'nombre');
         $ordenDir = strtoupper(trim($_GET['dir'] ?? $_POST['dir'] ?? 'ASC'));
-        $perPage  = 20;
+        $perPage = \App\Helpers\PreferenciasHelper::porPaginaModulo('tareas_obligaciones');
 
         $result     = $this->obligacionService->getListado($buscar, $page, $perPage, $ordenCol, $ordenDir);
         $rows       = $result['rows'];
@@ -250,7 +252,7 @@ class TareasObligacionesController extends Controller
         $incluirArchivadas  = (int) ($_GET['archivadas'] ?? 0) === 1;
         $idUsuario          = (int) ($_SESSION['id_usuario'] ?? 0);
         $nivel              = (int) ($_SESSION['nivel'] ?? 1);
-        $perPage            = 20;
+        $perPage = \App\Helpers\PreferenciasHelper::porPaginaModulo('tareas_obligaciones');
 
         $filtros = [
             'desde'          => trim($_GET['desde'] ?? ''),
@@ -726,7 +728,7 @@ class TareasObligacionesController extends Controller
         $page      = max(1, (int) ($_GET['page'] ?? $_POST['page'] ?? 1));
         $ordenCol  = trim($_GET['sort'] ?? $_POST['sort'] ?? 'nombre');
         $ordenDir  = strtoupper(trim($_GET['dir'] ?? $_POST['dir'] ?? 'ASC'));
-        $perPage   = 20;
+        $perPage = \App\Helpers\PreferenciasHelper::porPaginaModulo('tareas_obligaciones');
         $idUsuario = (int) ($_SESSION['id_usuario'] ?? 0);
         $nivel     = (int) ($_SESSION['nivel'] ?? 1);
 

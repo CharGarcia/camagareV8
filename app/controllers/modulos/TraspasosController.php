@@ -43,7 +43,7 @@ class TraspasosController extends BaseModuloController
         $page     = max(1, (int) ($_GET['page'] ?? 1));
         $ordenCol = trim($_GET['sort'] ?? $prefsVista['__ordenCol__'] ?? 'fecha_emision');
         $ordenDir = strtoupper(trim($_GET['dir'] ?? $prefsVista['__ordenDir__'] ?? 'DESC'));
-        $perPage  = 20;
+        $perPage = $this->porPagina();
 
         $perm = $this->getPermisos();
 
@@ -122,7 +122,7 @@ class TraspasosController extends BaseModuloController
         $page       = max(1, (int) ($_GET['page'] ?? 1));
         $ordenCol   = trim($_GET['sort'] ?? $prefsVista['__ordenCol__'] ?? 'fecha_emision');
         $ordenDir   = strtoupper(trim($_GET['dir'] ?? $prefsVista['__ordenDir__'] ?? 'DESC'));
-        $perPage    = 20;
+        $perPage = $this->porPagina();
 
         $result     = $this->service->getListado($idEmpresa, $buscar, $page, $perPage, $ordenCol, $ordenDir);
         $rows       = $result['rows'];

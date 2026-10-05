@@ -746,6 +746,29 @@ window.CMG_Identificacion = (function () {
     };
 
     /**
+     * Porcentaje de descuento como texto para mostrar junto a un valor: '(10%)', '(12.5%)',
+     * '(33.33%)'. Devuelve '' si no hay descuento o no hay base. Solo informativo (modales de
+     * Factura, Recibo y Proforma); no se guarda ni se imprime.
+     */
+    window.CMG_pctDescuento = function (descuento, bruto) {
+        descuento = parseFloat(descuento) || 0;
+        bruto = parseFloat(bruto) || 0;
+        if (!(descuento > 0) || !(bruto > 0)) return '';
+        const pct = descuento / bruto * 100;
+        const txt = Math.abs(pct - Math.round(pct)) < 0.005 ? String(Math.round(pct)) : pct.toFixed(2).replace(/0$/, '');
+        return '(' + txt + '%)';
+    };
+
+    /** Pinta el porcentaje de descuento de una fila del detalle en su <small class="desc-pct">. */
+    window.CMG_pctDescuentoLinea = function (tr, descuento, bruto) {
+        const el = tr && tr.querySelector ? tr.querySelector('.desc-pct') : null;
+        if (!el) return;
+        const txt = window.CMG_pctDescuento(descuento, bruto);
+        el.textContent = txt;
+        el.classList.toggle('d-none', txt === '');
+    };
+
+    /**
      * IVA "al subtotal" (Empresa → Facturación → calculo_iva_facturacion = 'subtotal').
      * El IVA de cada tarifa es r2(Σ bases × %), pero el documento guarda además el IVA de
      * cada línea; redondeando cada línea por su cuenta la suma difiere del IVA al subtotal

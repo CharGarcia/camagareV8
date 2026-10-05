@@ -1373,3 +1373,34 @@ th[data-det-col] .cmg-resizer {
     text-transform: uppercase;
     white-space: nowrap;
 }
+
+/* ── Selector "Filas por página" pegado al paginador ─────────────────────────
+   favoritos.js (CMG_initPorPagina) envuelve el grupo de flechas y el <select> en
+   .cmg-paginador-con-selector; aquí se unen los bordes para que parezca un botón
+   más del grupo (mismo alto, color y radio que .btn-outline-secondary.btn-sm). */
+.cmg-paginador-con-selector > .btn-group > .btn:last-child {
+    border-top-right-radius: 0;
+    border-bottom-right-radius: 0;
+}
+.cmg-paginador-con-selector > select[data-cmg-por-pagina] {
+    /* Angosto: solo cabe el número y la flecha (sin el relleno derecho de 2.25rem de .form-select). */
+    width: auto;
+    padding-left: .4rem;
+    padding-right: 1.25rem;
+    background-position: right .3rem center;
+    background-size: 12px 9px;
+    margin-left: -1px;
+    border-top-left-radius: 0;
+    border-bottom-left-radius: 0;
+    border-color: #6c757d;
+    color: #6c757d;
+    font-size: .875rem;
+    padding-top: .25rem;
+    padding-bottom: .25rem;
+    height: auto;
+    box-shadow: none;
+}
+.cmg-paginador-con-selector > select[data-cmg-por-pagina]:focus {
+    border-color: #6c757d;
+    z-index: 1;
+}

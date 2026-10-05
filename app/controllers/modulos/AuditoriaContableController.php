@@ -128,7 +128,7 @@ class AuditoriaContableController extends BaseModuloController
         $page     = max(1, (int) ($_GET['page'] ?? 1));
         $ordenCol = trim($_GET['sort'] ?? $prefsVista['__ordenCol__'] ?? 'detectado_at');
         $ordenDir = strtoupper(trim($_GET['dir'] ?? $prefsVista['__ordenDir__'] ?? 'DESC'));
-        $perPage  = 20;
+        $perPage = $this->porPagina();
 
         // Al entrar al módulo (sin parámetros en la URL) se acota por defecto al año en curso:
         // del 1 de enero a hoy. Si el usuario manda los parámetros —aunque vengan vacíos porque
@@ -199,7 +199,7 @@ class AuditoriaContableController extends BaseModuloController
         $page     = max(1, (int) ($_GET['page'] ?? $_POST['page'] ?? 1));
         $ordenCol = trim($_GET['sort'] ?? $_POST['sort'] ?? $prefsVista['__ordenCol__'] ?? 'detectado_at');
         $ordenDir = strtoupper(trim($_GET['dir'] ?? $_POST['dir'] ?? $prefsVista['__ordenDir__'] ?? 'DESC'));
-        $perPage  = 20;
+        $perPage = $this->porPagina();
 
         $fechaDesde = $this->normalizarFecha($_GET['fecha_desde'] ?? $_POST['fecha_desde'] ?? null);
         $fechaHasta = $this->normalizarFecha($_GET['fecha_hasta'] ?? $_POST['fecha_hasta'] ?? null);

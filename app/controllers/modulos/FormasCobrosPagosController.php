@@ -39,7 +39,7 @@ class FormasCobrosPagosController extends BaseModuloController
         $orden    = OrdenListado::leer($prefsVista, 'nombre');
         $ordenCol = $estado['sort'] !== '' ? $estado['sort'] : OrdenListado::primeraCol($orden, 'nombre');
         $ordenDir = $estado['dir'] !== '' ? $estado['dir'] : OrdenListado::primeraDir($orden);
-        $perPage  = 20;
+        $perPage = $this->porPagina();
 
         $result = $this->service->getListado($idEmpresa, $buscar, $page, $perPage, $ordenCol, $ordenDir);
         $totalPages = (int) ceil($result['total'] / $perPage);

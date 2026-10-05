@@ -2291,6 +2291,7 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
 
         const btn = document.getElementById('btnGuardarIngreso');
         const oldHtml = btn.innerHTML;
+        const eraNuevo = !data.id; // "Registrar nuevo" se ofrece solo al crear, no al actualizar
         btn.disabled = true;
         btn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Procesando...';
 
@@ -2307,8 +2308,8 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                     // Actualizar el registro en el listado (misma página, orden y filtros)
                     ING_mostrarRegistroGuardado(res.id, res.fila);
 
-                    // Alerta visual atractiva
-                    Toast.fire({ icon: 'success', title: res.mensaje });
+                    // Alerta visual atractiva (al crear uno nuevo la reemplaza la pregunta de abajo)
+                    if (!eraNuevo) Toast.fire({ icon: 'success', title: res.mensaje });
 
                     // El modal NO se cierra: se recarga en el mismo lugar con el ingreso ya guardado
                     // (número asignado, botones de PDF/correo, pestaña Asiento), para seguir
@@ -2319,6 +2320,9 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                     return Promise.resolve(abrirModalIngresoVer(res.id)).then(() => {
                         btn.disabled = false;
                         btn.innerHTML = oldHtml;
+                        // Ingreso nuevo ya recargado (m-input-id con el id creado): ofrecer seguir
+                        // con otro en el mismo modal sin cerrar y volver a pulsar "Nuevo".
+                        if (eraNuevo) ingPreguntarRegistrarOtro(res.mensaje);
                     }, () => {
                         // Guardado pero sin poder recargarlo: se oculta Guardar para no crear otro.
                         btn.classList.add('d-none');
@@ -2335,6 +2339,23 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                 btn.innerHTML = oldHtml;
                 Swal.fire('Error de Red', e.message, 'error');
             });
+    }
+
+    // Tras crear un ingreso: "Registrar nuevo" limpia el modal (abrirModalIngreso) para empezar
+    // uno nuevo en el acto; "Seguir en este" deja abierto el recién guardado (PDF, correo, asiento).
+    function ingPreguntarRegistrarOtro(mensaje) {
+        Swal.fire({
+            icon: 'success',
+            title: mensaje || 'Ingreso guardado',
+            text: '¿Desea registrar un nuevo ingreso o seguir en este?',
+            showCancelButton: true,
+            confirmButtonText: '<i class="bi bi-plus-circle me-1"></i> Registrar nuevo',
+            cancelButtonText: 'Seguir en este',
+            reverseButtons: true,
+            allowOutsideClick: false
+        }).then(r => {
+            if (r.isConfirmed) abrirModalIngreso();
+        });
     }
 
     function abrirPdfIngreso() {

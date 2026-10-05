@@ -2357,6 +2357,7 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
         }
 
         const b = document.getElementById('btnGuardarEgreso'); b.disabled = true;
+        const eraNuevo = !document.getElementById('eg-input-id').value; // "Registrar nuevo" solo al crear
         return fetch(`${EGR_URL}/guardarAjax`, {
             method:'POST', headers:{'Content-Type':'application/x-www-form-urlencoded'},
             body: 'data=' + encodeURIComponent(JSON.stringify(data))
@@ -2364,14 +2365,19 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
             if(res.ok) {
                 // Actualizar el registro en el listado (misma página, orden y filtros)
                 EGR_mostrarRegistroGuardado(res.id, res.fila);
-                Toast.fire({ icon: 'success', title: res.mensaje });
+                // Al crear uno nuevo, el aviso lo da la pregunta "Registrar nuevo / Seguir en este".
+                if (!eraNuevo) Toast.fire({ icon: 'success', title: res.mensaje });
                 // El modal NO se cierra: se recarga en el mismo lugar con el egreso ya guardado
                 // (número asignado, botones de PDF/correo/cheques, pestaña Asiento), para seguir
                 // trabajando sobre él. abrirModalEgreso() usa getOrCreateInstance, así que el
                 // show() sobre el modal ya abierto no duplica el fondo.
                 // Se ESPERA la recarga: hasta que deja el botón en "Actualizar", egGuardando y el
                 // botón desactivado impiden que otro clic cree un segundo egreso.
-                return abrirModalEgresoVer(res.id).catch(() => {
+                return abrirModalEgresoVer(res.id).then(() => {
+                    // Egreso nuevo ya recargado (eg-input-id con el id creado): ofrecer seguir
+                    // con otro en el mismo modal sin cerrar y volver a pulsar "Nuevo".
+                    if (eraNuevo) egPreguntarRegistrarOtro(res.mensaje);
+                }, () => {
                     // Guardado pero sin poder recargarlo: se oculta Guardar para no crear otro.
                     b.classList.add('d-none');
                     Swal.fire('Egreso guardado', 'El egreso se registró, pero no se pudo volver a abrir. Ábralo desde el listado para seguir trabajando en él.', 'warning');
@@ -2383,6 +2389,23 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
         }).catch(e=> { 
             b.disabled = false; 
             Swal.fire('Error de Red', 'No se pudo completar la operación en este momento.', 'error'); 
+        });
+    }
+
+    // Tras crear un egreso: "Registrar nuevo" limpia el modal (abrirModalEgreso) para empezar
+    // uno nuevo en el acto; "Seguir en este" deja abierto el recién guardado (PDF, cheques, asiento).
+    function egPreguntarRegistrarOtro(mensaje) {
+        Swal.fire({
+            icon: 'success',
+            title: mensaje || 'Egreso guardado',
+            text: '¿Desea registrar un nuevo egreso o seguir en este?',
+            showCancelButton: true,
+            confirmButtonText: '<i class="bi bi-plus-circle me-1"></i> Registrar nuevo',
+            cancelButtonText: 'Seguir en este',
+            reverseButtons: true,
+            allowOutsideClick: false
+        }).then(r => {
+            if (r.isConfirmed) abrirModalEgreso();
         });
     }
 

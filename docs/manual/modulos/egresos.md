@@ -5,8 +5,8 @@ categoria: Tesorería
 ruta_modulo: modulos/egresos
 tipo: modulo
 visibilidad: todos
-etiquetas: egresos, egreso, pago, buscar egreso, buscador, filtros, filtrar egresos, buscar cheque, buscar por compra pagada, buscar por beneficiario, filtro de fechas, chips, editar egreso, modificar egreso, corregir egreso, cambiar monto pagado, quitar factura del egreso, cambiar beneficiario, periodo cerrado, solo lectura, no deja editar, no puedo modificar, ordenar por dos columnas, ordenar por beneficiario y fecha, pagar, dinero que sale, proveedor, empleado, cheque, transferencia, comprobante de egreso, excel, exportar, anular cheque, cheque anulado, cheque dañado, reimprimir cheque, combinar conceptos, mezclar conceptos, otros conceptos, varios documentos, gasto sin factura, tipo real, tipo de egreso, decimo cuarto, decimo tercero, prestamos, rol de pago, numero de egreso, serie, secuencial, numero repetido, numero duplicado, numeracion por fecha, numero con el año, reiniciar numeracion, reinicio anual, reinicio mensual, correlativo por año, correlativo por mes, modo de numeracion, orden de formas de pago, saldo de la forma de pago, saldo disponible, ocultar saldo, aparecen documentos que no busque, resultados que no corresponden, buscar por numero de documento cobrado, cuenta del anticipo, anticipo sin cuenta, anticipo a proveedor, cuenta contable del concepto, cuenta por defecto, falta cuenta contable, pagar compra y dar anticipo, listado no se actualiza, no aparece el egreso guardado, no se ve el cambio, vuelve a la primera pagina, se pierde la pagina, refrescar listado, recargar tabla, fila resaltada, observaciones automaticas, observaciones se llenan solas, observaciones se completan solas, glosa del egreso, concepto del comprobante, descripcion del pago, pago factura de compra, falta un centavo, centavo pendiente, no puedo pagar el centavo, diferencia de un centavo, saldo de 0.01, queda un centavo, referencia muy larga, no guarda el egreso, no se guarda el pago, error al guardar egreso, value too long, texto demasiado largo, se corta la referencia, limite de caracteres, saldo equivocado, valor a pagar incorrecto, saldo menor al real, nota de venta, retencion de otro proveedor, descuenta una retencion que no es, imprimir, impresora, siguiente egreso, egreso anterior, navegar entre egresos, pasar al siguiente, flechas del modal, recorrer egresos, pago duplicado, pagar dos veces, doble pago, doble clic, egreso duplicado, ya no tiene saldo suficiente, declaracion ya pagada, crear proveedor desde el egreso, nuevo proveedor, nuevo empleado, registrar proveedor, registrar empleado, crear forma de pago, crear concepto, no aparece el boton de crear proveedor, falta el boton nuevo proveedor, asiento de documento anulado, asiento sigue contabilizado, no se anulo el asiento, no se pudo anular el asiento contable
-version: 1.39
+etiquetas: egresos, egreso, pago, buscar egreso, buscador, filtros, filtrar egresos, buscar cheque, buscar por compra pagada, buscar por beneficiario, filtro de fechas, chips, editar egreso, modificar egreso, corregir egreso, cambiar monto pagado, quitar factura del egreso, cambiar beneficiario, periodo cerrado, solo lectura, no deja editar, no puedo modificar, ordenar por dos columnas, ordenar por beneficiario y fecha, pagar, dinero que sale, proveedor, empleado, cheque, transferencia, comprobante de egreso, excel, exportar, anular cheque, cheque anulado, cheque dañado, reimprimir cheque, combinar conceptos, mezclar conceptos, otros conceptos, varios documentos, gasto sin factura, tipo real, tipo de egreso, decimo cuarto, decimo tercero, prestamos, rol de pago, numero de egreso, serie, secuencial, numero repetido, numero duplicado, numeracion por fecha, numero con el año, reiniciar numeracion, reinicio anual, reinicio mensual, correlativo por año, correlativo por mes, modo de numeracion, orden de formas de pago, saldo de la forma de pago, saldo disponible, ocultar saldo, aparecen documentos que no busque, resultados que no corresponden, buscar por numero de documento cobrado, cuenta del anticipo, anticipo sin cuenta, anticipo a proveedor, cuenta contable del concepto, cuenta por defecto, falta cuenta contable, pagar compra y dar anticipo, listado no se actualiza, no aparece el egreso guardado, no se ve el cambio, vuelve a la primera pagina, se pierde la pagina, refrescar listado, recargar tabla, fila resaltada, observaciones automaticas, observaciones se llenan solas, observaciones se completan solas, glosa del egreso, concepto del comprobante, descripcion del pago, pago factura de compra, falta un centavo, centavo pendiente, no puedo pagar el centavo, diferencia de un centavo, saldo de 0.01, queda un centavo, referencia muy larga, no guarda el egreso, no se guarda el pago, error al guardar egreso, value too long, texto demasiado largo, se corta la referencia, limite de caracteres, saldo equivocado, valor a pagar incorrecto, saldo menor al real, nota de venta, retencion de otro proveedor, descuenta una retencion que no es, imprimir, impresora, siguiente egreso, egreso anterior, navegar entre egresos, pasar al siguiente, flechas del modal, recorrer egresos, pago duplicado, pagar dos veces, doble pago, doble clic, egreso duplicado, ya no tiene saldo suficiente, declaracion ya pagada, crear proveedor desde el egreso, nuevo proveedor, nuevo empleado, registrar proveedor, registrar empleado, crear forma de pago, crear concepto, no aparece el boton de crear proveedor, falta el boton nuevo proveedor, asiento de documento anulado, asiento sigue contabilizado, no se anulo el asiento, no se pudo anular el asiento contable, registrar otro egreso, guardar y nuevo, guardar y crear otro, seguir en este, varios egresos seguidos, no cerrar el modal, continuar registrando
+version: 1.40
 orden: 20
 estado: activo
 ---
@@ -266,6 +266,21 @@ Si ese egreso no cae en la página que se está viendo —por ejemplo, uno nuevo
 mientras se ve la página 3, o uno que ya no cumple el filtro activo—, se muestra
 igual arriba de todo para que se vea qué se guardó. Al buscar, filtrar o cambiar
 de página vuelve a su lugar.
+
+### Registrar varios egresos seguidos
+
+Al guardar un egreso **nuevo**, en cuanto queda registrado aparece la pregunta
+*"¿Desea registrar un nuevo egreso o seguir en este?"* con dos opciones:
+
+- **Registrar nuevo**: el mismo modal se limpia y queda listo para el siguiente
+  egreso (fecha de hoy, serie y favoritos del usuario ya puestos), sin cerrarlo
+  ni volver a pulsar *Nuevo*. Útil cuando se registran muchos pagos de corrido.
+- **Seguir en este**: el modal se queda con el egreso recién guardado para
+  imprimirlo, imprimir el cheque, enviarlo por correo o revisar su asiento.
+
+La pregunta solo sale al **crear**; al pulsar *Actualizar* sobre un egreso ya
+existente no aparece. El egreso guardado ya está en el listado antes de elegir,
+así que ninguna de las dos opciones lo deshace.
 
 ## El periodo contable manda
 
@@ -631,6 +646,8 @@ proveedores), pasa por la misma revisión al guardar:
 
 ## Historial de cambios
 
+- **1.40** — Al guardar un egreso nuevo se pregunta *Registrar nuevo / Seguir en
+  este*: la primera opción limpia el modal para el siguiente egreso sin cerrarlo.
 - **1.39** — Corregido: anular un cheque se guardaba al instante y, si no se agregaba
   otra forma de pago, el egreso quedaba descubierto con la compra figurando pagada. Ahora
   la anulación se aplica al **Guardar**, junto con el pago que la reemplaza o con la baja

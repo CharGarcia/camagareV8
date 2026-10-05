@@ -64,7 +64,7 @@ class CambioProductoCvController extends BaseModuloController
         $orden    = OrdenListado::leer($prefsVista, 'fecha_cambio', 'DESC');
         $ordenCol = OrdenListado::primeraCol($orden, 'fecha_cambio');
         $ordenDir = OrdenListado::primeraDir($orden);
-        $perPage  = 20;
+        $perPage = $this->porPagina();
 
         $idUsuarioFiltro = empty($perm['todo']) ? (int) $_SESSION['id_usuario'] : null;
 
@@ -131,7 +131,7 @@ class CambioProductoCvController extends BaseModuloController
         $orden    = OrdenListado::leer($prefsVista, 'fecha_cambio', 'DESC');
         $ordenCol = OrdenListado::primeraCol($orden, 'fecha_cambio');
         $ordenDir = OrdenListado::primeraDir($orden);
-        $perPage  = 20;
+        $perPage = $this->porPagina();
 
         $perm = $this->getPermisos();
         $idUsuarioFiltro = empty($perm['todo']) ? (int) $_SESSION['id_usuario'] : null;

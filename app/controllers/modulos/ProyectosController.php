@@ -43,7 +43,7 @@ class ProyectosController extends BaseModuloController
         $orden    = \App\Helpers\OrdenListado::leer($prefsVista, 'nombre');
         $ordenCol = \App\Helpers\OrdenListado::primeraCol($orden, 'nombre');
         $ordenDir = \App\Helpers\OrdenListado::primeraDir($orden);
-        $perPage  = 20;
+        $perPage = $this->porPagina();
 
         $idUsuarioFiltro = empty($perm['todo']) ? (int)$_SESSION['id_usuario'] : null;
 
@@ -97,7 +97,7 @@ class ProyectosController extends BaseModuloController
         $orden     = \App\Helpers\OrdenListado::leer($prefsVista, 'nombre');
         $ordenCol  = \App\Helpers\OrdenListado::primeraCol($orden, 'nombre');
         $ordenDir  = \App\Helpers\OrdenListado::primeraDir($orden);
-        $perPage   = 20;
+        $perPage = $this->porPagina();
 
         $perm = $this->getPermisos();
         $idUsuarioFiltro = empty($perm['todo']) ? (int)$_SESSION['id_usuario'] : null;

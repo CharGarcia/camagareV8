@@ -50,7 +50,7 @@ class TallerChecklistController extends BaseModuloController
         $page     = max(1, (int) ($_GET['page'] ?? 1));
         $ordenCol = trim($_GET['sort'] ?? $prefsVista['__ordenCol__'] ?? 'orden');
         $ordenDir = strtoupper(trim($_GET['dir'] ?? $prefsVista['__ordenDir__'] ?? 'asc'));
-        $perPage  = 100; // el checklist es corto: cabe entero en una pantalla
+        $perPage = $this->porPagina(100); // el checklist es corto: cabe entero en una pantalla
 
         $idUsuarioFiltro = empty($perm['todo']) ? (int) $_SESSION['id_usuario'] : null;
 

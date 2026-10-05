@@ -47,7 +47,7 @@ class PlantillasPdfController extends BaseModuloController
         $buscar    = trim($_GET['b'] ?? '');
         $tipo      = trim($_GET['tipo'] ?? '');
         $page      = max(1, (int)($_GET['page'] ?? 1));
-        $perPage   = 20;
+        $perPage = $this->porPagina();
 
         $result     = $this->service->listar($idEmpresa, $buscar, $tipo, $page, $perPage);
         $total      = $result['total'];

@@ -49,7 +49,7 @@ class FirmasElectronicasController extends BaseModuloController
         $page       = max(1, (int) ($_GET['page'] ?? 1));
         $ordenCol   = trim($_GET['sort'] ?? $prefsVista['__ordenCol__'] ?? 'created_at');
         $ordenDir   = strtoupper(trim($_GET['dir']  ?? $prefsVista['__ordenDir__'] ?? 'desc'));
-        $perPage    = 20;
+        $perPage = $this->porPagina();
 
         $idUsuarioFiltro = empty($perm['todo']) ? (int)$_SESSION['id_usuario'] : null;
 

@@ -39,7 +39,7 @@ class AutomatizacionesController extends BaseModuloController
         $page     = max(1, (int)($_GET['page'] ?? 1));
         $ordenCol = trim($_GET['sort'] ?? $prefsVista['__ordenCol__'] ?? 'nombre');
         $ordenDir = strtoupper(trim($_GET['dir'] ?? $prefsVista['__ordenDir__'] ?? 'asc'));
-        $perPage  = 25;
+        $perPage = $this->porPagina();
 
         $idUsuarioFiltro = empty($perm['todo']) ? (int)$_SESSION['id_usuario'] : null;
 
@@ -96,7 +96,7 @@ class AutomatizacionesController extends BaseModuloController
         $page       = max(1, (int)($_GET['page'] ?? 1));
         $ordenCol   = trim($_GET['sort'] ?? $prefsVista['__ordenCol__'] ?? 'nombre');
         $ordenDir   = strtoupper(trim($_GET['dir'] ?? $prefsVista['__ordenDir__'] ?? 'ASC'));
-        $perPage    = 25;
+        $perPage = $this->porPagina();
 
         $perm            = $this->getPermisos();
         $idUsuarioFiltro = empty($perm['todo']) ? (int)$_SESSION['id_usuario'] : null;

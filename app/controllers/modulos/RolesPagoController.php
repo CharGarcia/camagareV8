@@ -43,7 +43,7 @@ class RolesPagoController extends BaseModuloController
         $orden    = \App\Helpers\OrdenListado::leer($prefsVista, 'periodo', 'DESC');
         $ordenCol = \App\Helpers\OrdenListado::primeraCol($orden, 'periodo');
         $ordenDir = \App\Helpers\OrdenListado::primeraDir($orden, 'DESC');
-        $perPage  = 20;
+        $perPage = $this->porPagina();
 
         $idUsuarioFiltro = empty($perm['todo']) ? (int) $_SESSION['id_usuario'] : null;
         $result     = $this->service->getListado($idEmpresa, $buscar, $page, $perPage, $ordenCol, $ordenDir, $idUsuarioFiltro, (int) $_SESSION['id_usuario'], $orden);
@@ -121,7 +121,7 @@ class RolesPagoController extends BaseModuloController
         $orden      = \App\Helpers\OrdenListado::leer($prefsVista, 'periodo', 'DESC');
         $ordenCol   = \App\Helpers\OrdenListado::primeraCol($orden, 'periodo');
         $ordenDir   = \App\Helpers\OrdenListado::primeraDir($orden, 'DESC');
-        $perPage    = 20;
+        $perPage = $this->porPagina();
         $perm = $this->getPermisos();
         $idUsuarioFiltro = empty($perm['todo']) ? (int) $_SESSION['id_usuario'] : null;
 

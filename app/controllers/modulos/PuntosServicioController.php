@@ -47,7 +47,7 @@ class PuntosServicioController extends BaseModuloController
         $page     = max(1, (int) ($_GET['page'] ?? 1));
         $ordenCol = trim($_GET['sort'] ?? 'nombre');
         $ordenDir = strtoupper(trim($_GET['dir'] ?? 'ASC'));
-        $perPage  = 20;
+        $perPage = $this->porPagina();
 
         $idUsuarioFiltro = empty($perm['todo']) ? (int) $_SESSION['id_usuario'] : null;
         $result     = $this->puntoService->getListado($idEmpresa, $buscar, $page, $perPage, $ordenCol, $ordenDir, $idUsuarioFiltro);
@@ -81,7 +81,7 @@ class PuntosServicioController extends BaseModuloController
         $page      = max(1, (int) ($_GET['page'] ?? 1));
         $ordenCol  = trim($_GET['sort'] ?? 'nombre');
         $ordenDir  = strtoupper(trim($_GET['dir'] ?? 'ASC'));
-        $perPage   = 20;
+        $perPage = $this->porPagina();
 
         $perm = $this->getPermisos();
         $idUsuarioFiltro = empty($perm['todo']) ? (int) $_SESSION['id_usuario'] : null;

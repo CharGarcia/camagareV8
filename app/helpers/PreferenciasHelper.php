@@ -239,4 +239,79 @@ class PreferenciasHelper
 
         return $html;
     }
+
+    /** Opciones del selector "Filas por página" de los listados. */
+    public const POR_PAGINA_OPCIONES = [25, 50, 75, 100];
+
+    /**
+     * Último listado que pidió sus filas por página en esta petición (módulo y valor).
+     * Lo lee jsPorPagina() desde partials/scripts.php para que favoritos.js inserte el
+     * selector junto al paginador con la clave correcta, sin que cada vista haga nada.
+     */
+    private static ?array $porPaginaUso = null;
+
+    /**
+     * Filas por página de un listado a partir de su ruta de módulo ('modulos/clientes',
+     * 'tareas_obligaciones'…): lee la preferencia del usuario y deja registrado el módulo
+     * para el selector automático. Los controladores de módulo la usan vía
+     * BaseModuloController::porPagina(); los globales la llaman directo con su clave.
+     */
+    public static function porPaginaModulo(string $modulo, int $defecto = 25): int
+    {
+        $clave = str_replace('-', '_', basename($modulo));
+        $n = self::porPagina(self::getPreferenciasVista($modulo), $defecto);
+        self::$porPaginaUso = ['modulo' => $clave, 'actual' => $n];
+        return $n;
+    }
+
+    /**
+     * <script> con window.CMG_POR_PAGINA = {modulo, actual, opciones} si algún listado pidió
+     * sus filas por página en esta petición; '' en cualquier otra página. Lo imprime
+     * partials/scripts.php; favoritos.js (CMG_initPorPagina) pinta el selector.
+     */
+    public static function jsPorPagina(): string
+    {
+        if (self::$porPaginaUso === null || empty($_SESSION['id_usuario'])) {
+            return '';
+        }
+        $cfg = self::$porPaginaUso + ['opciones' => self::POR_PAGINA_OPCIONES];
+        return '<script>window.CMG_POR_PAGINA = ' . json_encode($cfg) . ';</script>';
+    }
+
+    /**
+     * Filas por página de un listado: la preferencia del usuario (`__por_pagina__` en
+     * `__vista__`) o, si la petición trae `per_page` (el selector recién cambiado, antes de
+     * que la preferencia termine de guardarse), ese valor. Solo se aceptan las opciones del
+     * selector; cualquier otra cosa cae al valor por defecto.
+     *
+     * @param array $vista   Lo que devuelve getPreferenciasVista($modulo).
+     * @param int   $defecto Valor cuando el usuario aún no eligió (debe estar en las opciones).
+     */
+    public static function porPagina(array $vista, int $defecto = 25): int
+    {
+        $pedido = (int) ($_GET['per_page'] ?? $_POST['per_page'] ?? 0);
+        if (in_array($pedido, self::POR_PAGINA_OPCIONES, true)) {
+            return $pedido;
+        }
+        $pref = (int) ($vista['__por_pagina__'] ?? 0);
+        if (in_array($pref, self::POR_PAGINA_OPCIONES, true)) {
+            return $pref;
+        }
+        return in_array($defecto, self::POR_PAGINA_OPCIONES, true) ? $defecto : self::POR_PAGINA_OPCIONES[0];
+    }
+
+    /**
+     * Selector compacto "Filas por página" para poner junto al paginador. El `onchange`
+     * recibe el valor elegido (p. ej. `window.FV_cambiarPorPagina(this.value)`); el módulo
+     * guarda la preferencia con CMG_guardarVista(modulo, {__por_pagina__: n}) y recarga.
+     */
+    public static function renderSelectorPorPagina(int $actual, string $id, string $onchange): string
+    {
+        // data-cmg-por-pagina: así favoritos.js no inserta un segundo selector automático.
+        $html = '<select id="' . htmlspecialchars($id) . '" data-cmg-por-pagina="1" class="form-select form-select-sm" style="width:auto;" title="Filas por página" aria-label="Filas por página" onchange="' . htmlspecialchars($onchange) . '">';
+        foreach (self::POR_PAGINA_OPCIONES as $n) {
+            $html .= '<option value="' . $n . '"' . ($n === $actual ? ' selected' : '') . '>' . $n . '</option>';
+        }
+        return $html . '</select>';
+    }
 }

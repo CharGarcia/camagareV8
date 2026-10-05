@@ -76,7 +76,7 @@ class FacturaExpressSolicitudesController extends BaseModuloController
         $page     = max(1, (int) ($_GET['page'] ?? 1));
         $ordenCol = trim($_GET['sort'] ?? $prefsVista['__ordenCol__'] ?? 'created_at');
         $ordenDir = strtoupper(trim($_GET['dir'] ?? $prefsVista['__ordenDir__'] ?? 'DESC'));
-        $perPage  = 20;
+        $perPage = $this->porPagina();
 
         $result     = $this->service->getListadoSolicitudes($idEmpresa, $buscar, $estado, $page, $perPage, $ordenCol, $ordenDir);
         $totalPages = $perPage > 0 ? (int) ceil($result['total'] / $perPage) : 1;
@@ -125,7 +125,7 @@ class FacturaExpressSolicitudesController extends BaseModuloController
             $page      = max(1, (int) ($_GET['page'] ?? 1));
             $ordenCol  = trim($_GET['sort'] ?? 'created_at');
             $ordenDir  = strtoupper(trim($_GET['dir'] ?? 'DESC'));
-            $perPage   = 20;
+            $perPage = $this->porPagina();
 
             $result     = $this->service->getListadoSolicitudes($idEmpresa, $buscar, $estado, $page, $perPage, $ordenCol, $ordenDir);
             $total      = $result['total'];

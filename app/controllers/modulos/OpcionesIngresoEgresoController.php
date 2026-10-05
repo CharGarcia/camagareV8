@@ -36,7 +36,7 @@ class OpcionesIngresoEgresoController extends BaseModuloController
         $page     = $estado['page'];
         $ordenCol = $estado['sort'] !== '' ? $estado['sort'] : trim($prefsVista['__ordenCol__'] ?? 'nombre');
         $ordenDir = $estado['dir'] !== '' ? $estado['dir'] : strtoupper(trim($prefsVista['__ordenDir__'] ?? 'ASC'));
-        $perPage  = 20;
+        $perPage = $this->porPagina();
 
         $result = $this->service->getListado($idEmpresa, $buscar, $page, $perPage, $ordenCol, $ordenDir);
         $totalPages = (int) ceil($result['total'] / $perPage);

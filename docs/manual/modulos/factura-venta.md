@@ -5,7 +5,7 @@ categoria: Ventas
 ruta_modulo: modulos/factura-venta
 tipo: modulo
 visibilidad: todos
-etiquetas: factura, facturar, venta, buscar factura, buscador, aparecen facturas que no busque, resultados que no corresponden, la busqueda trae otras facturas, buscar por clave de acceso, filtros, filtrar facturas, buscar por producto vendido, buscar por forma de pago, filtro de fechas, saldo pendiente, chips, ordenar por dos columnas, ordenar por estado de pago, ordenar por cliente y fecha, sri, comprobante electronico, xml, excel, anular, nota de credito, whatsapp, link de pago, payphone, nuvei, serie vacia, sin puntos de emision, secuencial repetido, secuencial ya existe, punto de emision, ambiente, pruebas, produccion, cambio de ambiente, clave de acceso en procesamiento, error 70, comprobante devuelto, reintento automatico, saldo, stock, existencias, cuanto queda, disponible, buscador de productos, lote, vencimiento, caducidad, fecha de vencimiento, lote y vencimiento, pdf, ride, columnas del pdf, subsidio, irbpnr, servicio, propina, codigo cortado, detalle adicional, forma de pago, plazo, dias credito, unidad de tiempo, meses, anios, informacion adicional, vendedor, cajero, no sale el vendedor, falta informacion en el pdf, se cierra el modal, autorizar, bloquear factura, no puedo editar, letra pequena, tamano de letra, fuente del pdf, letra del pdf, no se lee el pdf, ancho de columna, agrandar columna, ensanchar, codigo cortado en el modal, descripcion cortada, no se ve la descripcion completa, redimensionar, precio con impuestos, precio con iva, sale en cero, columna descuento, tipo de identificacion, tipo de documento del cliente, ruc o cedula, es ruc o cedula, cedula o pasaporte, consumidor final, no se cual identificacion tiene el cliente, buscador de clientes, buscar cliente, elegir cliente, datos del cliente, informacion adicional larga, limite de caracteres, maximo 300 caracteres, value too long, no se pudo guardar la factura, imprimir, impresora, iva al subtotal, iva sobre el subtotal, iva linea por linea, calculo del iva, iva no cuadra, iva mal calculado, centavos de diferencia, factura grande, muchas lineas, muchos items, factura lenta, tarda en abrir, tarda en cargar, peso del xml, tamano del xml, 320 kb, crear cliente desde la factura, nuevo cliente, crear producto desde la factura, nuevo producto, no aparece el boton de crear cliente, falta el boton nuevo producto, aviso, avisos, novedad sri, documentos con novedad, devuelto, no autorizado, pendientes de enviar, borrador, borradores, iva del listado, iva diferente, iva no coincide, iva distinto al documento, iva con descuento, columna iva
+etiquetas: factura, facturar, venta, buscar factura, buscador, aparecen facturas que no busque, resultados que no corresponden, la busqueda trae otras facturas, buscar por clave de acceso, filtros, filtrar facturas, buscar por producto vendido, buscar por forma de pago, filtro de fechas, saldo pendiente, chips, ordenar por dos columnas, ordenar por estado de pago, ordenar por cliente y fecha, sri, comprobante electronico, xml, excel, anular, nota de credito, whatsapp, link de pago, payphone, nuvei, serie vacia, sin puntos de emision, secuencial repetido, secuencial ya existe, punto de emision, ambiente, pruebas, produccion, cambio de ambiente, clave de acceso en procesamiento, error 70, comprobante devuelto, reintento automatico, saldo, stock, existencias, cuanto queda, disponible, buscador de productos, lote, vencimiento, caducidad, fecha de vencimiento, lote y vencimiento, pdf, ride, columnas del pdf, subsidio, irbpnr, servicio, propina, codigo cortado, detalle adicional, forma de pago, plazo, dias credito, unidad de tiempo, meses, anios, informacion adicional, vendedor, cajero, no sale el vendedor, falta informacion en el pdf, se cierra el modal, autorizar, bloquear factura, no puedo editar, letra pequena, tamano de letra, fuente del pdf, letra del pdf, no se lee el pdf, ancho de columna, agrandar columna, ensanchar, codigo cortado en el modal, descripcion cortada, no se ve la descripcion completa, redimensionar, precio con impuestos, precio con iva, sale en cero, columna descuento, tipo de identificacion, tipo de documento del cliente, ruc o cedula, es ruc o cedula, cedula o pasaporte, consumidor final, no se cual identificacion tiene el cliente, buscador de clientes, buscar cliente, elegir cliente, datos del cliente, informacion adicional larga, limite de caracteres, maximo 300 caracteres, value too long, no se pudo guardar la factura, imprimir, impresora, iva al subtotal, iva sobre el subtotal, iva linea por linea, calculo del iva, iva no cuadra, iva mal calculado, centavos de diferencia, factura grande, muchas lineas, muchos items, factura lenta, tarda en abrir, tarda en cargar, peso del xml, tamano del xml, 320 kb, crear cliente desde la factura, nuevo cliente, crear producto desde la factura, nuevo producto, no aparece el boton de crear cliente, falta el boton nuevo producto, aviso, avisos, novedad sri, documentos con novedad, devuelto, no autorizado, pendientes de enviar, borrador, borradores, iva del listado, iva diferente, iva no coincide, iva distinto al documento, iva con descuento, columna iva, filas por pagina, registros por pagina, cuantas filas, mostrar mas filas, paginador, 25 50 75 100
 version: 2.38
 orden: 20
 estado: activo
@@ -480,6 +480,15 @@ pago** va de pendiente a pagada y anulada al final (no alfabéticamente), y el
 El orden se guarda para usted y los botones de **PDF** y **Excel** exportan con
 ese mismo orden. Detalles en *Cómo ordenar los listados*.
 
+### Filas por página
+
+Junto a las flechas del paginador hay un selector con **25, 50, 75 y 100** filas por
+página. Al cambiarlo el listado se repinta desde la primera página con esa cantidad y
+la elección queda guardada **para usted** (por empresa): la próxima vez que abra
+Facturas de Venta se usa la misma cantidad sin tener que volver a elegirla. De
+fábrica se muestran 25. El mismo selector existe en todos los listados del sistema;
+ver la guía [Elegir cuántas filas se muestran por página](guias/filas-por-pagina).
+
 ## Errores frecuentes
 
 - **Firma caducada**: renueve el certificado y vuelva a cargarlo en la empresa.
@@ -546,6 +555,15 @@ la operación de inmediato.
   desde los totales de la cabecera. Corregido; el valor ya coincide con el del documento y
   del RIDE. El buscador por texto encuentra la factura por el IVA correcto (requiere recrear
   el índice con `database/20261005_iva_listado_facturas_indice.sql`).
+  Además, en el modal de la factura el total **(-) Descuento** muestra a su lado el porcentaje
+  que representa sobre el subtotal antes del descuento, p. ej. `(10%) 1.00`, y cada línea del
+  detalle muestra junto a su descuento el porcentaje de esa línea. Solo aparece cuando hay
+  descuento y solo en pantalla (no en el PDF ni en el listado).
+  En la tabla de ítems, la columna **Iva** pasa a quedar junto a **Subtotal** (después de Lote,
+  Caducidad y NUP cuando la empresa los usa), y la columna **Adicional** se puede ocultar desde
+  Empresa → Facturación (interruptor *¿Mostrar la columna Adicional…?*, encendido por defecto).
+  Junto al paginador del listado hay un selector de **filas por página** (25/50/75/100) que se
+  guarda como preferencia del usuario; ver *Filas por página*.
 - **2.37** — Una factura con fecha distinta de hoy ya no se bloquea al pulsar **Enviar al
   SRI**: se ofrece **Verificar en el SRI**, que la registra como autorizada si el SRI ya la
   autorizó con su clave de acceso. Ver *Factura con fecha anterior que ya está autorizada*.

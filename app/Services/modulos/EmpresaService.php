@@ -407,7 +407,7 @@ class EmpresaService
             'mostrar_cajero_factura', 'mostrar_vendedor_factura',
             'mostrar_unidad_medida',
             'editar_precio_factura', 'editar_iva_factura', 'editar_descuento_factura',
-            'mostrar_propina_factura',
+            'mostrar_propina_factura', 'mostrar_columna_adicional_factura',
             'factura_item_mostrar_unidad', 'factura_item_mostrar_lote',
             'factura_item_mostrar_caducidad', 'factura_item_mostrar_nup',
         ];

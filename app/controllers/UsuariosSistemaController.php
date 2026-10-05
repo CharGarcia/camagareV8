@@ -34,7 +34,7 @@ class UsuariosSistemaController extends Controller
         $page = max(1, (int) ($_GET['page'] ?? $_POST['page'] ?? 1));
         $ordenCol = trim($_GET['sort'] ?? $_POST['sort'] ?? 'nombre');
         $ordenDir = strtoupper(trim($_GET['dir'] ?? $_POST['dir'] ?? 'asc'));
-        $perPage = 20;
+        $perPage = \App\Helpers\PreferenciasHelper::porPaginaModulo('usuarios_sistema');
 
         if (!in_array($ordenCol, Usuario::COLUMNAS_ORDEN, true)) {
             $ordenCol = 'nombre';
@@ -100,7 +100,7 @@ class UsuariosSistemaController extends Controller
         $page = max(1, (int) ($_GET['page'] ?? $_POST['page'] ?? 1));
         $ordenCol = trim($_GET['sort'] ?? $_POST['sort'] ?? 'nombre');
         $ordenDir = strtoupper(trim($_GET['dir'] ?? $_POST['dir'] ?? 'ASC'));
-        $perPage = 20;
+        $perPage = \App\Helpers\PreferenciasHelper::porPaginaModulo('usuarios_sistema');
 
         if (!in_array($ordenCol, Usuario::COLUMNAS_ORDEN, true)) {
             $ordenCol = 'nombre';
