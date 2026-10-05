@@ -460,6 +460,153 @@ class SuscripcionesController extends BaseModuloController
         }
     }
 
+    // ── Devengo mensual (NIIF 15) ───────────────────────────────────────────
+
+    /** Vista previa del devengo de un mes (?mes=YYYY-MM): qué se devenga/provisiona y su asiento. */
+    public function devengoMesPreviewAjax(): void
+    {
+        $this->requireLeer();
+        header('Content-Type: application/json');
+        try {
+            $res = \App\Services\modulos\SuscripcionDevengoService::crear()
+                ->previsualizarMes((int) $_SESSION['id_empresa'], trim((string) ($_GET['mes'] ?? '')));
+            echo json_encode(['ok' => true] + $res, JSON_INVALID_UTF8_SUBSTITUTE);
+        } catch (\InvalidArgumentException | \RuntimeException $e) {
+            echo json_encode(['ok' => false, 'mensaje' => $e->getMessage()]);
+        } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
+            echo json_encode(['ok' => false, 'mensaje' => 'No se pudo calcular el devengo del mes.']);
+        }
+    }
+
+    /** Genera el asiento de devengo del mes (POST mes=YYYY-MM). */
+    public function devengarMesAjax(): void
+    {
+        $this->requireCrear();
+        header('Content-Type: application/json');
+        try {
+            $res = \App\Services\modulos\SuscripcionDevengoService::crear()
+                ->devengarMes((int) $_SESSION['id_empresa'], (int) $_SESSION['id_usuario'], trim((string) ($_POST['mes'] ?? '')));
+            echo json_encode(['ok' => true, 'mensaje' => 'Devengo del mes registrado.'] + $res, JSON_INVALID_UTF8_SUBSTITUTE);
+        } catch (\Throwable $e) {
+            if (!($e instanceof \DomainException || $e instanceof \InvalidArgumentException)) {
+                \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
+            }
+            echo json_encode(['ok' => false, 'mensaje' => $e->getMessage()], JSON_INVALID_UTF8_SUBSTITUTE);
+        }
+    }
+
+    /** Revierte el devengo de un mes: anula sus asientos (POST mes=YYYY-MM). */
+    public function revertirDevengoMesAjax(): void
+    {
+        $this->requireEliminar();
+        header('Content-Type: application/json');
+        try {
+            $res = \App\Services\modulos\SuscripcionDevengoService::crear()
+                ->revertirMes((int) $_SESSION['id_empresa'], (int) $_SESSION['id_usuario'], trim((string) ($_POST['mes'] ?? '')));
+            echo json_encode(['ok' => true, 'mensaje' => 'Devengo del mes revertido.'] + $res, JSON_INVALID_UTF8_SUBSTITUTE);
+        } catch (\Throwable $e) {
+            if (!($e instanceof \DomainException || $e instanceof \InvalidArgumentException)) {
+                \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
+            }
+            echo json_encode(['ok' => false, 'mensaje' => $e->getMessage()], JSON_INVALID_UTF8_SUBSTITUTE);
+        }
+    }
+
+    /** Vista previa de la apertura al cierre de un mes (?mes=YYYY-MM). */
+    public function aperturaPreviewAjax(): void
+    {
+        $this->requireLeer();
+        header('Content-Type: application/json');
+        try {
+            $res = \App\Services\modulos\SuscripcionDevengoService::crear()
+                ->previsualizarApertura((int) $_SESSION['id_empresa'], trim((string) ($_GET['mes'] ?? '')));
+            echo json_encode(['ok' => true] + $res, JSON_INVALID_UTF8_SUBSTITUTE);
+        } catch (\InvalidArgumentException | \RuntimeException $e) {
+            echo json_encode(['ok' => false, 'mensaje' => $e->getMessage()], JSON_INVALID_UTF8_SUBSTITUTE);
+        } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
+            echo json_encode(['ok' => false, 'mensaje' => 'No se pudo calcular la apertura.']);
+        }
+    }
+
+    /** Registra la apertura (POST mes=YYYY-MM). */
+    public function aplicarAperturaAjax(): void
+    {
+        $this->requireCrear();
+        header('Content-Type: application/json');
+        try {
+            $res = \App\Services\modulos\SuscripcionDevengoService::crear()
+                ->aplicarApertura((int) $_SESSION['id_empresa'], (int) $_SESSION['id_usuario'], trim((string) ($_POST['mes'] ?? '')));
+            echo json_encode(['ok' => true, 'mensaje' => 'Apertura registrada.'] + $res, JSON_INVALID_UTF8_SUBSTITUTE);
+        } catch (\Throwable $e) {
+            if (!($e instanceof \DomainException || $e instanceof \InvalidArgumentException || $e instanceof \RuntimeException)) {
+                \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
+            }
+            echo json_encode(['ok' => false, 'mensaje' => $e->getMessage()], JSON_INVALID_UTF8_SUBSTITUTE);
+        }
+    }
+
+    /** Revierte la apertura de un mes de corte (POST mes=YYYY-MM). */
+    public function revertirAperturaAjax(): void
+    {
+        $this->requireEliminar();
+        header('Content-Type: application/json');
+        try {
+            $res = \App\Services\modulos\SuscripcionDevengoService::crear()
+                ->revertirApertura((int) $_SESSION['id_empresa'], (int) $_SESSION['id_usuario'], trim((string) ($_POST['mes'] ?? '')));
+            echo json_encode(['ok' => true, 'mensaje' => 'Apertura revertida.'] + $res, JSON_INVALID_UTF8_SUBSTITUTE);
+        } catch (\Throwable $e) {
+            if (!($e instanceof \DomainException || $e instanceof \InvalidArgumentException)) {
+                \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
+            }
+            echo json_encode(['ok' => false, 'mensaje' => $e->getMessage()], JSON_INVALID_UTF8_SUBSTITUTE);
+        }
+    }
+
+    /** Reporte de ingresos diferidos al cierre de un mes, con conciliación (?mes=YYYY-MM). */
+    public function ingresosDiferidosAjax(): void
+    {
+        $this->requireLeer();
+        header('Content-Type: application/json');
+        try {
+            $res = \App\Services\modulos\SuscripcionDevengoService::crear()
+                ->reporteSaldos((int) $_SESSION['id_empresa'], trim((string) ($_GET['mes'] ?? '')));
+            echo json_encode(['ok' => true] + $res, JSON_INVALID_UTF8_SUBSTITUTE);
+        } catch (\InvalidArgumentException | \RuntimeException $e) {
+            echo json_encode(['ok' => false, 'mensaje' => $e->getMessage()], JSON_INVALID_UTF8_SUBSTITUTE);
+        } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
+            echo json_encode(['ok' => false, 'mensaje' => 'No se pudo generar el reporte.']);
+        }
+    }
+
+    /** Excel del reporte de ingresos diferidos (?mes=YYYY-MM). */
+    public function ingresosDiferidosExcel(): void
+    {
+        $this->requireLeer();
+        try {
+            $autoload = MVC_ROOT . '/vendor/autoload.php';
+            if (file_exists($autoload)) {
+                require_once $autoload;
+            }
+            $idEmpresa = (int) $_SESSION['id_empresa'];
+            $empresa   = (new \App\models\Empresa())->getPorId($idEmpresa);
+            $libro = \App\Services\modulos\SuscripcionDevengoService::crear()
+                ->reporteSaldosExcel($idEmpresa, trim((string) ($_GET['mes'] ?? '')), (string) ($empresa['nombre'] ?? ''));
+            (new \App\Services\ReportService())->descargarSpreadsheet($libro, 'Ingresos_diferidos');
+            exit;
+        } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
+            if (!headers_sent()) {
+                header('Content-Type: application/json');
+                http_response_code(400);
+                echo json_encode(['error' => $e->getMessage()], JSON_INVALID_UTF8_SUBSTITUTE);
+            }
+            exit;
+        }
+    }
+
     public function facturasClienteAjax(): void
     {
         $this->requireLeer();

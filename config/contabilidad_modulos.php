@@ -72,18 +72,22 @@ declare(strict_types=1);
 return [
 
     // ─── Ventas ─────────────────────────────────────────────────────────────
+    // 'suscripciones_devengo' va en la firma: una factura de suscripción con ingreso diferido
+    // no se contabiliza sin la cuenta de Ingresos diferidos; al asignarla, se reintenta.
     'facturas_venta' => [
-        'nombre'    => 'Facturas de Venta',
-        'grupo'     => 'Ventas',
-        'rutas'     => ['modulos/factura-venta'],
-        'conceptos' => ['ventas_factura'],
+        'nombre'          => 'Facturas de Venta',
+        'grupo'           => 'Ventas',
+        'rutas'           => ['modulos/factura-venta'],
+        'conceptos'       => ['ventas_factura'],
+        'conceptos_firma' => ['suscripciones_devengo'],
     ],
 
     'recibos_venta' => [
-        'nombre'    => 'Recibos de Venta',
-        'grupo'     => 'Ventas',
-        'rutas'     => ['modulos/recibo-venta'],
-        'conceptos' => ['recibos_venta'],
+        'nombre'          => 'Recibos de Venta',
+        'grupo'           => 'Ventas',
+        'rutas'           => ['modulos/recibo-venta'],
+        'conceptos'       => ['recibos_venta'],
+        'conceptos_firma' => ['suscripciones_devengo'],
     ],
 
     // Las NC de venta se arman con el catálogo de cuentas de la factura
@@ -102,6 +106,18 @@ return [
         'grupo'     => 'Ventas',
         'rutas'     => ['modulos/nota_debito'],
         'conceptos' => ['ventas_factura'],
+    ],
+
+    // Devengo NIIF 15 de suscripciones. No tiene trabajo en SincronizadorAsientosService: su
+    // asiento lo genera el proceso mensual («Devengar mes» / automatización). El interruptor lo
+    // respeta SuscripcionDevengoService: apagado, no arma cronogramas nuevos ni provisiones de
+    // mes caído; lo ya diferido se sigue devengando para no dejarlo varado en el pasivo.
+    'suscripciones_devengo' => [
+        'nombre'    => 'Suscripciones (devengo de ingresos)',
+        'grupo'     => 'Ventas',
+        'rutas'     => ['modulos/suscripciones'],
+        'conceptos' => ['suscripciones_devengo'],
+        'ayuda'     => 'Apagado, las facturas nuevas de suscripciones reconocen todo el ingreso al facturar y no se provisiona el mes caído. Lo que ya estaba diferido se sigue devengando mes a mes.',
     ],
 
     // La cuenta puente de terceros solo existe en 'factura_reembolso'; CxC e ingresos

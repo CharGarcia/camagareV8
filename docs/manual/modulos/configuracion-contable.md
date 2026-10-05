@@ -6,7 +6,7 @@ ruta_modulo: modulos/configuracion-contable
 tipo: modulo
 visibilidad: admin
 etiquetas: configuracion contable, cuentas por documento, asiento automatico, parametrizacion, ventas, compras, cierre, tipo de produccion, bien, servicio, filtro por año, periodo, listado de proveedores, listado de clientes, cobros y pagos, ingresos y egresos, forma de pago, cuenta bancaria, efectivo, misma cuenta en los dos bloques, formas hermanas, cheques y transferencias, mismo banco, numero de cuenta, nomina, rol de pagos, prestamo quirografario, prestamo hipotecario, prestamo empresa, prestamos iess, cuentas opcionales, costo de ventas, costo de venta, inventario, asiento sin costo, no sale el costo, cuenta de iva del cliente, reglas por cliente, buscar proveedor, buscar cliente, buscar ficha, filtrar fichas, muchos proveedores, cuentas faltantes, modulos que contabilizan, apagar asientos, no generar asientos, no contabilizar, desactivar contabilidad, interruptor, consignaciones sin asiento, aviso de asientos pendientes, asientos pendientes en el balance, proveedores sin cuentas, clientes sin cuentas, productos sin cuentas, pendientes de configurar, retenciones en venta, retenciones en compra, retencion de renta, no aparecen las retenciones, codigo de retencion, catalogo de retenciones sri, codigo ats, codigo del anexo, retencion mal asignada, codigo de retencion no existe, en que documento esta el error, retencion con codigo invalido, sugerencias, sugerir cuentas, proveedores que compran lo mismo, copiar cuentas de otro proveedor, misma cuenta para varios proveedores, gasolineras, proveedores parecidos, subtotal de compras, cuenta de gasto del proveedor, mostrar las demas cuentas, ver todas las cuentas, tipo de asiento no aparece, falta tipo de asiento en el selector, modulo apagado, personalizar asiento contable, tabla de proveedores, detalle de compras, cuenta de subtotal por proveedor, recibos de venta, copiar configuracion de facturas, recibos con otras cuentas, recibo sin asiento, igualar recibos y facturas
-version: 1.35
+version: 1.36
 orden: 5
 estado: activo
 ---
@@ -23,6 +23,13 @@ Sin esto configurado, los documentos no generan asiento.
 Cada tipo de operación (venta con factura, compra, cobro, pago, traspaso,
 consignación, cierre del ejercicio…) tiene su configuración con las cuentas que
 necesita.
+
+El selector **Seleccionar Tipo de Asiento** solo lista los tipos que la empresa usa:
+los que tienen algún registro en su módulo (por ejemplo, *Suscripciones - Devengo*
+aparece cuando hay al menos una suscripción) o que ya tienen alguna cuenta
+configurada. *Cierre del Ejercicio* aparece siempre. Si llega desde el aviso de
+asientos pendientes con **Configurar**, el tipo pedido se muestra aunque no cumpla
+esa regla.
 
 ## De lo general a lo específico
 
@@ -252,8 +259,12 @@ suscripciones que reconocen el ingreso *durante el período* (ver
 - **Ingresos devengados por facturar** (activo): el servicio de mes caído ya prestado
   que aún no se factura; la factura del período la cancela.
 
-Se configuran solo en **General** (toda la empresa). Sin ellas, las facturas de esas
-suscripciones reconocen todo el ingreso al facturar.
+Se configuran solo en **General** (toda la empresa). En el asiento de la factura o del
+recibo, la cuenta de ingreso recibe solo la parte que corresponde al mes de emisión, y el
+resto va a estas cuentas. Si una factura tiene ingreso diferido y falta la cuenta, su
+asiento **no se genera**: aparece en el aviso de asientos pendientes indicando la cuenta, y
+se genera solo al asignarla. Si se reconociera como ingreso, se duplicaría con el que luego
+registra el devengo mensual.
 
 ## Buscar en las tablas y en las tarjetas
 
@@ -454,8 +465,12 @@ Con un módulo apagado:
   Productos; *Cobros y Pagos*, si lo están Ingresos, Egresos, Conciliación de
   Tarjetas y Traspasos. El selector se actualiza en el momento; al volver a
   encender un módulo, su tipo de asiento reaparece. *Cierre del Ejercicio* y
-  *Activos Fijos - Depreciación* y *Suscripciones - Devengo* no dependen de ningún
-  interruptor y siempre se muestran.
+  *Activos Fijos - Depreciación* no dependen de ningún interruptor y siempre se
+  muestran.
+- **Suscripciones (devengo de ingresos)**, en el grupo Ventas: apagado, las facturas
+  nuevas de suscripciones reconocen todo el ingreso al facturar y el cierre no
+  provisiona el mes caído. Lo que ya estaba diferido se sigue devengando mes a mes,
+  para que no quede detenido en el pasivo.
 
 **Retornos** y **Facturación de consignaciones** no tienen interruptor propio:
 aparecen con la etiqueta *Sigue a Consignaciones en Ventas*. Su asiento es el
@@ -545,8 +560,12 @@ ingresos o egresos. Solo falta asignar la cuenta.
 
 ## Historial de cambios
 
+- **1.36** — El selector de tipos de asiento solo lista los que la empresa usa (con registros
+  en su módulo o con alguna cuenta configurada).
+
 - **1.35** — Nuevo tipo de asiento **Suscripciones - Devengo**: cuentas de ingresos diferidos
   (pasivo) e ingresos devengados por facturar (activo) para el devengado de suscripciones.
+  En **Módulos que contabilizan**, nuevo interruptor *Suscripciones (devengo de ingresos)*.
 
 - **1.34** — Cobros y Pagos: cuentas de **cheques posfechados** por cobrar y por pagar.
 - **1.33** — En Recibos de Venta, botón **Copiar configuración de Facturas de Venta**: compara las

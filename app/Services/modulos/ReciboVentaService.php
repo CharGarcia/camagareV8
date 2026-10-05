@@ -437,6 +437,10 @@ class ReciboVentaService
                 $idEmpresa, $idUsuario, "Recibo # $numRecibo", true, self::REF_TIPO
             );
 
+            // Devengado de suscripciones (NIIF 15): las líneas se reemplazaron, el cronograma
+            // del recibo (si lo generó una suscripción) se rehace con las líneas nuevas.
+            SuscripcionDevengoService::crear()->rehacerCronogramaDocumento($idEmpresa, $idUsuario, 'recibo', $id);
+
             if ($managedTransaction) $db->commit();
         } catch (\Throwable $e) {
             if ($managedTransaction && $db->inTransaction()) $db->rollBack();
@@ -551,6 +555,8 @@ class ReciboVentaService
         try {
             $this->anularCobrosVinculados($id, $idEmpresa, $idUsuario);
             $this->anularAsiento($cabecera, $idEmpresa, $idUsuario);
+            // Devengado de suscripciones (NIIF 15): anular cronograma y revertir lo devengado.
+            SuscripcionDevengoService::crear()->anularDocumento($idEmpresa, $idUsuario, 'recibo', $id);
             $this->repository->actualizarEstado($id, 'anulado', $idUsuario);
             // El saldo realmente vuelve al inventario al anular: nunca debe bloquearse.
             $this->getInventarioService()->revertirMovimientosPorReferencia(self::REF_TIPO, $id, $idEmpresa, $idUsuario, true);
@@ -591,6 +597,8 @@ class ReciboVentaService
             // Revertir todo antes de eliminar lógicamente.
             $this->anularCobrosVinculados($id, $idEmpresa, $idUsuario);
             $this->anularAsiento($cabecera, $idEmpresa, $idUsuario);
+            // Devengado de suscripciones (NIIF 15): igual que anular().
+            SuscripcionDevengoService::crear()->anularDocumento($idEmpresa, $idUsuario, 'recibo', $id);
             // El saldo realmente vuelve al inventario al eliminar: nunca debe bloquearse.
             $this->getInventarioService()->revertirMovimientosPorReferencia(self::REF_TIPO, $id, $idEmpresa, $idUsuario, true);
             $this->repository->eliminarLogico($id, $idUsuario);

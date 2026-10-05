@@ -675,6 +675,48 @@ class AsientoProgramadoService
     /**
      * Obtiene la preferencia de método de contabilización de la empresa para un tipo de asiento.
      */
+    /**
+     * Tablas cuyos registros «usan» cada tipo de asiento del selector de Configuración Contable.
+     * Un tipo sin entrada aquí (p. ej. Cierre del Ejercicio) se muestra siempre.
+     */
+    public const TABLAS_POR_TIPO_ASIENTO = [
+        'ventas_factura'             => ['ventas_cabecera', 'notas_credito_cabecera', 'nota_debito_cabecera'],
+        'factura_reembolso'          => ['factura_reembolso_cabecera'],
+        'recibos_venta'              => ['recibos_venta_cabecera'],
+        'consignacion_venta'         => ['consignaciones_ventas'],
+        'adquisiciones_compras'      => ['compras_cabecera', 'liquidaciones_cabecera'],
+        'adquisiciones_importacion'  => ['importaciones_cabecera'],
+        'retenciones_venta'          => ['retencion_venta_cabecera'],
+        'retenciones_compra'         => ['retencion_compra_cabecera'],
+        'ingresos_egresos'           => ['ingresos_cabecera', 'egresos_cabecera'],
+        'cobros_pagos'               => ['ingresos_cabecera', 'egresos_cabecera', 'traspasos_cabecera'],
+        'nomina'                     => ['rol_cabecera'],
+        'activos_fijos_alta'         => ['activos_fijos'],
+        'activos_fijos_depreciacion' => ['activos_fijos'],
+        'suscripciones_devengo'      => ['suscripciones'],
+    ];
+
+    /**
+     * Tipos de asiento que la empresa todavía no usa: su módulo no tiene ningún registro y no
+     * tienen ninguna cuenta configurada. El selector de Configuración Contable no los lista
+     * (pedido del usuario: «Suscripciones - Devengo» solo si hay alguna suscripción, y lo mismo
+     * para los demás). Con una cuenta configurada se siguen mostrando, para poder corregirla.
+     *
+     * @return string[]
+     */
+    public function tiposAsientoSinUso(int $idEmpresa): array
+    {
+        $conDatos   = $this->repo->tablasConRegistros($idEmpresa, array_merge(...array_values(self::TABLAS_POR_TIPO_ASIENTO)));
+        $conCuentas = $this->repo->tiposAsientoConCuentas($idEmpresa);
+        $sinUso = [];
+        foreach (self::TABLAS_POR_TIPO_ASIENTO as $tipo => $tablas) {
+            if (!array_intersect($tablas, $conDatos) && !in_array($tipo, $conCuentas, true)) {
+                $sinUso[] = $tipo;
+            }
+        }
+        return $sinUso;
+    }
+
     public function getMetodoPreferencia(int $idEmpresa, string $tipoAsiento): string
     {
         return $this->repo->getMetodoPreferencia($idEmpresa, $tipoAsiento);

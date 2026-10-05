@@ -3,7 +3,7 @@ titulo: Carga de Suscripciones por Excel
 slug: modulos/carga-suscripciones
 etiquetas: [suscripciones, excel, carga masiva, importar, plantilla, xlsx, alta masiva, recurrente]
 visibilidad: usuario
-version: 1.1
+version: 1.2
 ---
 
 ## Qué es
@@ -61,6 +61,8 @@ existentes.
 | ESTADO | No | Activo, Pausado, Suspendido o Cancelado (por defecto Activo). |
 | OBSERVACIONES | No | Texto libre. |
 | INFO_CONCEPTO / INFO_DETALLE | No | Información adicional (un par concepto/detalle). Se llenan juntos o se dejan ambos vacíos. |
+| MODALIDAD_COBRO | No | *Por adelantado* o *Mes caido*. Vacía = Por adelantado. Puede faltar en plantillas descargadas antes. |
+| RECONOCIMIENTO | No | *Al facturar* o *Durante el periodo* (devengado NIIF 15). Vacía = Al facturar. Puede faltar en plantillas descargadas antes. |
 
 ### Hoja Detalle (productos/servicios)
 
@@ -131,6 +133,9 @@ Estos mensajes aparecen como **AVISO**: no impiden la carga y la suscripción se
   cliente. Si no fue intencional, deje solo una.
 
 ## Historial de cambios
+
+- **1.2** — Columnas **MODALIDAD_COBRO** y **RECONOCIMIENTO** (devengado de ingresos) al final
+  de la hoja Suscripciones. Son opcionales: las plantillas descargadas antes se siguen cargando.
 
 - **1.1** — Los posibles duplicados (mismo cliente con el mismo conjunto de
   productos, en la base o dentro del archivo) pasan a ser **avisos**: ya no bloquean

@@ -2131,6 +2131,56 @@ class AsientoProgramadoRepository extends BaseRepository
         $st->execute([':e' => $idEmpresa, ':ta' => $tipoAsiento]);
     }
 
+    /**
+     * De las tablas operativas dadas, cuáles tienen al menos un registro vivo de la empresa.
+     * Los nombres de tabla vienen de una lista fija del código (AsientoProgramadoService::
+     * TABLAS_POR_TIPO_ASIENTO), nunca del usuario; una tabla que no existe cuenta como vacía.
+     *
+     * @param string[] $tablas
+     * @return string[]
+     */
+    public function tablasConRegistros(int $idEmpresa, array $tablas): array
+    {
+        $ramas = [];
+        foreach (array_unique($tablas) as $t) {
+            if (!preg_match('/^[a-z_]+$/', $t) || !$this->tablaExiste($t)) {
+                continue;
+            }
+            $ramas[] = "SELECT '{$t}' AS tabla WHERE EXISTS (SELECT 1 FROM {$t} WHERE id_empresa = :e AND eliminado = false)";
+        }
+        if (!$ramas) {
+            return [];
+        }
+        $st = $this->db->prepare(implode(' UNION ALL ', $ramas));
+        $st->execute([':e' => $idEmpresa]);
+        return $st->fetchAll(PDO::FETCH_COLUMN);
+    }
+
+    /**
+     * Tipos de asiento (asientos_tipo.tipo_asiento) con al menos una cuenta configurada en la
+     * empresa, más los que se configuran por referencia (formas de cobro/pago y conceptos de
+     * Ingresos/Egresos no pasan por asientos_tipo).
+     *
+     * @return string[]
+     */
+    public function tiposAsientoConCuentas(int $idEmpresa): array
+    {
+        $st = $this->db->prepare(
+            "SELECT DISTINCT at.tipo_asiento
+             FROM {$this->table} ap
+             JOIN asientos_tipo at ON at.id = ap.id_asiento_tipo AND at.eliminado = false
+             WHERE ap.id_empresa = :e AND ap.eliminado = false AND ap.id_cuenta IS NOT NULL
+             UNION
+             SELECT CASE WHEN ap.tipo_referencia IN ('opcion_ingreso', 'opcion_egreso') THEN 'ingresos_egresos'
+                         ELSE 'cobros_pagos' END
+             FROM {$this->table} ap
+             WHERE ap.id_empresa = :e2 AND ap.eliminado = false AND ap.id_cuenta IS NOT NULL
+               AND ap.tipo_referencia IN ('opcion_ingreso', 'opcion_egreso', 'forma_cobro', 'forma_pago')"
+        );
+        $st->execute([':e' => $idEmpresa, ':e2' => $idEmpresa]);
+        return $st->fetchAll(PDO::FETCH_COLUMN);
+    }
+
     /** Razón social del proveedor si pertenece a la empresa y no está eliminado; null si no. */
     public function getNombreProveedorEmpresa(int $idEmpresa, int $idProveedor): ?string
     {

@@ -283,6 +283,12 @@ class HandlerFactory
                              'ayuda' => 'Sobrescribe texto ítem, concepto y detalle para una periodicidad específica. Lo que deje vacío usará el valor general de arriba.'],
                         ],
                     ],
+                    'devengar_ingresos' => [
+                        'label'       => 'Devengar ingresos del mes',
+                        'descripcion' => 'Genera el asiento de devengo (NIIF 15) de las suscripciones que reconocen el ingreso durante el período: pasa al ingreso lo diferido de cada mes y provisiona el servicio de mes caído ya prestado y aún sin facturar. Procesa hasta el mes anterior y se pone al día con los meses pendientes. Prográmela el día 1 de cada mes, ANTES de «Generar facturación».',
+                        'handler'     => Handlers\SuscripcionesHandler::class,
+                        'parametros'  => [],
+                    ],
                     'cobrar_suscripciones_nuvei' => [
                         'label'       => 'Cobrar suscripciones (Nuvei)',
                         'descripcion' => 'Cobra con la tarjeta guardada (Nuvei) los períodos ya generados que quedaron pendientes de cobro. Si el cobro es aprobado, registra el Ingreso (con su asiento contable) y avisa al cliente. Si es rechazado, avisa al cliente y a la empresa, y reintenta en las próximas corridas hasta el tope de intentos.',

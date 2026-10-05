@@ -6,7 +6,7 @@ ruta_modulo: modulos/suscripciones
 tipo: modulo
 visibilidad: todos
 etiquetas: suscripciones, suscripcion, cobro recurrente, facturacion recurrente, factura recurrente, mensualidad, pension, plan mensual, membresia, renovacion, periodicidad, proximo cobro, generar documentos, generar facturas, facturacion automatica, facturas del cliente, facturas emitidas, historial de facturas, detalle de facturas, recibos del cliente, que le facture, saldo del cliente, facturas pendientes, facturas pagadas, facturas abonadas, cobro con tarjeta, debito automatico, nuvei, kushki, aviso de vencimiento, imprimir, impresora, excel, exportar, resumen de valores, total por periodicidad, proyeccion anual, ingresos recurrentes, iva por tarifa, resumen por concepto, detalle por cliente, que se le factura a cada cliente, items por cliente, informacion adicional en excel, resumen en pdf, detalle por cliente en pdf, pdf de la suscripcion, imprimir suscripcion, contrato, ficha de la suscripcion, detalle de la suscripcion en pdf, devengado, devengo, ingreso diferido, ingresos diferidos, ingreso anticipado, cobro por adelantado, mes caido, mes vencido, facturacion vencida, niif 15, seccion 23, reconocimiento de ingresos, provision de ingresos, ingresos por facturar
-version: 1.16
+version: 1.19
 orden: 0
 estado: activo
 ---
@@ -43,11 +43,18 @@ Para dar de alta muchas suscripciones a la vez existe la
 ## Cómo se usa
 
 1. Pulse **Nueva**.
-2. En la pestaña **Detalle suscripción** busque el cliente por RUC o razón social,
-   elija el comprobante, las fechas y la periodicidad. El **próximo cobro** se
-   calcula solo a partir de la fecha de inicio (puede cambiarlo).
+2. En la pestaña **Detalle suscripción** busque el cliente por RUC o razón social y,
+   a su derecha, elija el comprobante. Debajo: modalidad de cobro, reconocimiento del
+   ingreso, fechas y periodicidad. El **próximo cobro** se calcula solo a partir de la
+   fecha de inicio (puede cambiarlo). El **Estado** está a la derecha de la barra
+   superior del modal.
 3. Agregue los productos o servicios con **Agregar línea** (cantidad, precio e IVA).
-   Los totales se calculan igual que en la factura.
+   Puede escribir el precio sin impuesto o el **precio con impuesto** (columna *P. con
+   Imp.*): el otro se calcula con el IVA de la línea, igual que en la factura. Los
+   totales se calculan igual que en la factura.
+
+La **estrella** junto a Comprobante, Modalidad de cobro, Reconocimiento del ingreso y
+Periodicidad guarda ese valor como favorito: cada suscripción nueva lo trae ya elegido.
 4. En la pestaña **Forma de pago** elija crédito o tarjeta y, si quiere, escriba
    observaciones.
 5. Pulse **Guardar**. Para modificarla, haga clic en su fila del listado.
@@ -138,7 +145,7 @@ Haga clic en los títulos **Fecha**, **Documento**, **Total**, **Cobrado** o
 
 Los documentos de cada período se pueden generar de dos formas:
 
-- **A mano**: botón **Generar Documentos** del listado. Elija la **serie** y la
+- **A mano**: botón **Generar Documentos** del listado (junto a PDF y Excel). Elija la **serie** y la
   **periodicidad** a ejecutar; opcionalmente un texto que se agrega a cada ítem y una
   línea de información adicional. Se generan los documentos de las suscripciones
   **activas** de esa periodicidad cuyo **próximo cobro ya venció**, dentro de sus
@@ -181,6 +188,97 @@ Muestra el cronograma de la suscripción: una fila por mes y documento, con el m
 su estado (**Por devengar**, **Devengado**, **Facturado** o **Anulado**) y el asiento que
 lo registró. Arriba, los totales diferido, devengado, por devengar y anulado. Es solo
 de consulta.
+
+## Devengar el mes (asiento mensual)
+
+Lo diferido pasa al ingreso con un **asiento consolidado por mes** (fecha: último día
+del mes):
+
+| Cuenta | Debe | Haber |
+|---|---|---|
+| Ingresos diferidos por suscripciones | lo diferido del mes | |
+| Ingresos devengados por facturar | provisión de mes caído | |
+| Ingreso de cada servicio | | la suma |
+
+La cuenta de ingreso de cada servicio es la misma que usa su factura (por cliente,
+producto, categoría, marca, tipo de producción o General).
+
+- **A mano**: botón **Devengar mes** del listado. Elija el mes; la ventana muestra
+  cuánto se devenga, cuánto viene de meses anteriores, la provisión de mes caído, lo
+  que todavía espera asiento y el asiento que se generará. Pulse **Generar asiento**.
+- **Automáticamente**: automatización **Suscripciones → Devengar ingresos del mes**.
+  Procesa hasta el mes anterior y se pone al día con los meses pendientes. Prográmela
+  el día 1, **antes** de *Generar facturación*: la provisión de mes caído debe existir
+  cuando se emite la factura que la cancela.
+- **Revertir mes**: anula los asientos de devengo del mes; lo diferido vuelve a *Por
+  devengar* y las provisiones se dan de baja. No se puede si el período contable está
+  cerrado o si una factura ya canceló alguna provisión del mes.
+
+Reglas:
+
+- Solo se devenga lo de facturas o recibos que **ya tienen asiento**. Lo de documentos
+  en borrador o sin asiento espera y se devenga en una corrida posterior (aparece
+  como *Esperando asiento*).
+- Se puede correr más de una vez en el mes: cada corrida toma lo que quedó pendiente.
+- **Mes caído**: al cierre de cada mes ya prestado y aún no facturado se provisiona su
+  porción (base del servicio ÷ meses de la periodicidad). Cuando se genera la factura
+  del período, la provisión queda **Facturada** y la factura acredita *Ingresos
+  devengados por facturar* en vez del ingreso.
+- Con el interruptor **Suscripciones (devengo de ingresos)** apagado en *Módulos que
+  contabilizan*, no se difiere nada nuevo ni se provisiona el mes caído; lo ya
+  diferido se sigue devengando.
+
+## Reporte de ingresos diferidos y conciliación con el mayor
+
+Botón **Ingresos diferidos** del listado. Elija el mes: muestra los saldos **al cierre
+de ese mes**, reconstruidos con las fechas de los asientos (sirve también para meses
+pasados):
+
+- **Diferido corriente** (se devenga en los 12 meses siguientes) y **no corriente**
+  (después): para presentarlos por separado en el balance.
+- **Por facturar**: servicio de mes caído provisionado y aún sin facturar a esa fecha.
+- **Conciliación**: el total del cronograma contra el saldo del **mayor** de cada
+  cuenta de *Suscripciones - Devengo*. Una diferencia (en rojo) indica asientos hechos a
+  mano sobre esas cuentas, documentos sin asiento o un cambio de cuenta a mitad de camino.
+- **Detalle por documento** y descarga en **Excel** (hoja de detalle y hoja de
+  conciliación).
+
+## Apertura: facturas emitidas antes de activar el devengado
+
+Las facturas y recibos que una suscripción emitió **antes** de pasar a *Durante el
+período* ya reconocieron todo como ingreso. Para llevar al pasivo la parte de los meses
+que faltan: **Devengar mes** → enlace **Apertura**.
+
+- Elija el **mes de corte**: se listan los documentos de suscripciones que hoy reconocen
+  durante el período (por adelantado, mensual o mayor), ya contabilizados y sin
+  cronograma, que todavía cubren meses posteriores al corte. Lo de los meses hasta el
+  corte se queda como ingreso.
+- **Registrar apertura** arma su cronograma y registra un asiento al último día del mes
+  de corte: Debe ingreso / Haber *Ingresos diferidos*. Desde el mes siguiente, el
+  devengo mensual los pasa al ingreso como cualquier otro.
+- El período de servicio se toma del documento; en los anteriores al devengado (que no
+  lo guardaban) se cuenta desde la **fecha de emisión**.
+- **Revertir apertura** la deshace, salvo que ya se haya devengado algún mes de esas
+  filas o una nota de crédito las haya tomado.
+- Si se vuelve a contabilizar una de esas facturas (Sincronizar, Auditoría Contable), su
+  asiento no cambia: el pasivo de la apertura vive en su propio asiento.
+
+Requiere el SQL `database/migrations/20261004_suscripciones_devengo_apertura.sql`.
+
+## Notas de crédito, anulación y edición de documentos con ingreso diferido
+
+- **Nota de crédito** sobre la factura: lo que devuelve de un servicio sale primero de
+  lo **aún no devengado**, del último mes hacia atrás (en la pestaña Devengo esos meses
+  quedan *Anulado*). Su asiento debita *Ingresos diferidos* por esa parte; solo lo que
+  exceda reduce la cuenta de ingreso. Al anular o eliminar la NC, todo vuelve a *Por
+  devengar*.
+- **Anular o eliminar** la factura o el recibo: el cronograma queda *Anulado*. Si ya
+  había meses devengados, se registra con la fecha del día un asiento de **reverso**
+  (Debe ingreso / Haber Ingresos diferidos) por ese monto. Las provisiones de mes caído
+  que el documento cancelaba vuelven a *por facturar*.
+- **Modificar** una factura o recibo en borrador: el cronograma se rehace con las
+  líneas nuevas. Si ya tiene meses devengados, no se puede modificar: primero revierta
+  esos meses en **Devengar mes**.
 
 ## Cobro con tarjeta
 
@@ -305,6 +403,14 @@ registrados*.
 
 ## Errores frecuentes
 
+- **La factura de una suscripción no genera su asiento («falta Ingresos diferidos por
+  suscripciones»)**: la suscripción reconoce el ingreso durante el período y la empresa no
+  tiene la cuenta configurada. Asígnela en Configuración Contable → **Suscripciones -
+  Devengo**; el asiento se genera solo en la siguiente sincronización.
+- **La pestaña Devengo está vacía**: la suscripción reconoce el ingreso al facturar, es de
+  mes caído, es diaria/semanal/quincenal, solo factura bienes, o cada documento se emitió
+  dentro del mismo mes que cubre (no hay meses futuros que diferir).
+
 - **No veo la pestaña Facturas**: le falta permiso para ver Facturas de Venta o
   Recibos de Venta, o la ocultó desde el menú de pestañas del modal (ícono de
   configuración a la derecha de las pestañas).
@@ -318,11 +424,28 @@ registrados*.
 
 ## Historial de cambios
 
+- **1.19** — Botón **Ingresos diferidos**: saldos corriente / no corriente / por facturar al
+  cierre de un mes, conciliación con el mayor y Excel. **Apertura** para las facturas emitidas
+  antes de activar el devengado. La carga por Excel acepta Modalidad de cobro y Reconocimiento.
+
+- **1.18** — Notas de crédito, anulación, eliminación y edición de documentos con ingreso
+  diferido: la NC sale primero de lo no devengado, anular revierte lo devengado con un
+  asiento propio y editar un borrador rehace el cronograma.
+
+- **1.17** — Botón **Devengar mes** y automatización *Devengar ingresos del mes*:
+  asiento mensual del ingreso diferido y provisión de mes caído; se puede revertir.
+  En el modal: el **Estado** pasa a la barra superior, el **Comprobante** junto al
+  buscador de cliente, nueva columna **P. con Imp.** en el detalle y **favoritos** en
+  Comprobante, Modalidad de cobro, Reconocimiento del ingreso y Periodicidad. El botón
+  **Generar Documentos** pasa junto a PDF y Excel.
+
 - **1.16** — Reconocimiento del ingreso por devengado (NIIF 15): campos **Modalidad de
   cobro** (por adelantado o mes caído) y **Reconocimiento del ingreso**, cronograma
   mensual de los servicios facturados por adelantado y nueva pestaña **Devengo**. Cada
   documento generado guarda el período de servicio que cubre. Con mes caído, el último
-  período (el que contiene la fecha de fin) ahora sí se factura.
+  período (el que contiene la fecha de fin) ahora sí se factura. El asiento de la factura o
+  recibo acredita a **Ingresos diferidos** la parte de meses futuros (y a *Ingresos
+  devengados por facturar* la provisión de mes caído que cancela), y al ingreso solo el resto.
 
 - **1.15** — El PDF de la suscripción calcula el IVA con la configuración de
   facturación (al subtotal o línea por línea), igual que la pantalla (antes, siempre

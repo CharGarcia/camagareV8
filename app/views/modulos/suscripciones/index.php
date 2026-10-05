@@ -47,9 +47,14 @@ $estadoClases = [
 <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-3">
     <h5 class="mb-0 fw-bold"><i class="bi bi-arrow-repeat text-primary me-2"></i><?= htmlspecialchars($titulo) ?></h5>
     <div class="d-flex gap-2">
+        <button type="button" class="btn btn-outline-secondary btn-sm px-3" onclick="SuscIngresosDiferidos.abrirReporte()"
+                title="Saldos de ingresos diferidos y por facturar al cierre de un mes, con conciliación contra el mayor">
+            <i class="bi bi-hourglass-split"></i> Ingresos diferidos
+        </button>
         <?php if ($perm['crear']): ?>
-            <button type="button" class="btn btn-outline-secondary btn-sm px-3" onclick="abrirModalGenerarDocumentos()">
-                <i class="bi bi-file-earmark-text"></i> Generar Documentos
+            <button type="button" class="btn btn-outline-secondary btn-sm px-3" onclick="SuscDevengoMes.abrir()"
+                    title="Asiento mensual del ingreso diferido y de la provisión de mes caído (NIIF 15)">
+                <i class="bi bi-calendar-check"></i> Devengar mes
             </button>
             <button type="button" class="btn btn-primary btn-sm px-3" onclick="abrirModalSuscCrear()">
                 <i class="bi bi-plus-lg"></i> Nueva
@@ -190,6 +195,11 @@ $estadoClases = [
                     class="btn btn-outline-success" title="Descargar Excel">
                     <i class="bi bi-file-earmark-spreadsheet"></i><span class="d-none d-md-inline"> Excel</span>
                 </a>
+                <?php if ($perm['crear']): ?>
+                <button type="button" class="btn btn-outline-secondary" onclick="abrirModalGenerarDocumentos()" title="Generar los documentos del período">
+                    <i class="bi bi-file-earmark-text"></i><span class="d-none d-md-inline"> Generar Documentos</span>
+                </button>
+                <?php endif; ?>
             </div>
         </div>
         <div class="d-flex align-items-center gap-3">
@@ -265,6 +275,8 @@ $estadoClases = [
 <script>window.BASE_URL = '<?= $base ?>';</script>
 <?php include 'modal_suscripcion.php'; ?>
 <?php include 'modal_generar_documentos.php'; ?>
+<?php if ($perm['crear'] ?? false) { include 'modal_devengo_mes.php'; } ?>
+<?php include 'modal_ingresos_diferidos.php'; ?>
 <?php include 'modal_pagos.php'; ?>
 
 <?php // Modales compartidos para crear cliente / producto desde la suscripción ?>

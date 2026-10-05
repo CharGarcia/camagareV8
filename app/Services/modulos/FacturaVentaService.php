@@ -889,6 +889,10 @@ class FacturaVentaService
                 true // esEdicion
             );
 
+            // Devengado de suscripciones (NIIF 15): las líneas se reemplazaron, el cronograma
+            // de la factura (si la generó una suscripción) se rehace con las líneas nuevas.
+            \App\Services\modulos\SuscripcionDevengoService::crear()->rehacerCronogramaDocumento($idEmpresa, $idUsuario, 'factura', $id);
+
             if ($managedTransaction) $db->commit();
 
             // Generar XML y persistir en detalle_xml FUERA de la transacción principal. Solo
@@ -1313,6 +1317,10 @@ class FacturaVentaService
             (new \App\repositories\modulos\CosteoVentaSeguimientoRepository())
                 ->eliminar($idEmpresa, 'factura_venta', $id, $idUsuario);
 
+            // 4.2 Devengado de suscripciones (NIIF 15): anular su cronograma, revertir lo ya
+            // devengado y devolver a «por facturar» las provisiones de mes caído que cancelaba.
+            \App\Services\modulos\SuscripcionDevengoService::crear()->anularDocumento($idEmpresa, $idUsuario, 'factura', $id);
+
             // 5. Anular la factura
             $this->repository->actualizarEstado($id, 'anulado', $idUsuario);
 
@@ -1460,6 +1468,9 @@ class FacturaVentaService
 
             (new \App\repositories\modulos\CosteoVentaSeguimientoRepository())
                 ->eliminar($idEmpresa, 'factura_venta', $id, $idUsuario);
+
+            // Devengado de suscripciones (NIIF 15): igual que anular().
+            \App\Services\modulos\SuscripcionDevengoService::crear()->anularDocumento($idEmpresa, $idUsuario, 'factura', $id);
 
             $this->repository->eliminarLogico($id, $idUsuario);
 

@@ -118,6 +118,9 @@ class CargaSuscripcionesPlantillaService
         $this->listaDesplegable($h, 7, 2, $margen, '"Credito,Tarjeta"', true);
         $this->listaDesplegable($h, 8, 2, $margen, '"Factura,Recibo"', true);
         $this->listaDesplegable($h, 9, 2, $margen, '"Activo,Pausado,Suspendido,Cancelado"', true);
+        // MODALIDAD_COBRO (col 13) y RECONOCIMIENTO (col 14): devengado NIIF 15.
+        $this->listaDesplegable($h, 13, 2, $margen, '"Por adelantado,Mes caido"', true);
+        $this->listaDesplegable($h, 14, 2, $margen, '"Al facturar,Durante el periodo"', true);
 
         // Formato de fecha visible en las columnas de fecha (informativo).
         foreach ([4, 5, 6] as $col) {

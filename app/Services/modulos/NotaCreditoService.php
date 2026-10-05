@@ -252,6 +252,10 @@ class NotaCreditoService
             // Sincronizar con casilleros SRI 104
             $this->sincronizarCasilleros($idNC, $data);
 
+            // Devengado de suscripciones (NIIF 15): lo que devuelve de un servicio facturado por
+            // adelantado sale primero de lo aún no devengado (ver SuscripcionDevengoService).
+            SuscripcionDevengoService::crear()->aplicarNotaCredito((int) $data['id_empresa'], (int) $data['id_usuario'], $idNC);
+
             $db->commit();
             // Info adicional fuera de la transacción: si la tabla no existe (BD sin
             // migrar) NO debe impedir que la NC se guarde.
@@ -481,6 +485,9 @@ class NotaCreditoService
             // Sincronizar con casilleros SRI 104
             $this->sincronizarCasilleros($id, $data);
 
+            // Devengado de suscripciones: se recalcula con las líneas nuevas de la NC.
+            SuscripcionDevengoService::crear()->aplicarNotaCredito((int) $data['id_empresa'], (int) $data['id_usuario'], $id);
+
             $db->commit();
             // Info adicional fuera de la transacción (no debe bloquear el guardado).
             $this->guardarInfoAdicional($id, $data['info_adicional'] ?? []);
@@ -619,6 +626,9 @@ class NotaCreditoService
             // la NC llegó a estar autorizada y a marcar algún casillero.
             $this->limpiarCasillerosDeclaracion($idEmpresa, $id);
 
+            // Devengado de suscripciones: lo que esta NC tomó del diferido vuelve a «por devengar».
+            SuscripcionDevengoService::crear()->restaurarNotaCredito($idEmpresa, $idUsuario, $id);
+
             $this->repository->eliminarLogico($id, $idUsuario);
 
             $this->logService->registrar(
@@ -692,6 +702,9 @@ class NotaCreditoService
 
             (new \App\repositories\modulos\CosteoVentaSeguimientoRepository())
                 ->eliminar($idEmpresa, 'nota_credito_venta', $id, $idUsuario);
+
+            // Devengado de suscripciones: lo que esta NC tomó del diferido vuelve a «por devengar».
+            SuscripcionDevengoService::crear()->restaurarNotaCredito($idEmpresa, $idUsuario, $id);
 
             $this->repository->updateEstado($id, 'anulado');
 

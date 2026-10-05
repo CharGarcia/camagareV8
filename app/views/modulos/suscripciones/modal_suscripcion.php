@@ -78,6 +78,16 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosPestanasOcultas($vistaConfigS
                         <?php endif; ?>
                         <div class="vr mx-1"></div>
                         <button type="button" class="btn btn-outline-danger btn-sm px-2" onclick="suscPdf()" title="PDF de la suscripción"><i class="bi bi-file-earmark-pdf fs-6"></i></button>
+                        <!-- Estado de la suscripción (a la derecha de la barra) -->
+                        <div class="ms-auto d-flex align-items-center gap-2">
+                            <label for="susc_estado" class="mb-0">Estado</label>
+                            <select class="form-select form-select-sm" name="estado" id="susc_estado" style="width: 130px;">
+                                <option value="activo">Activo</option>
+                                <option value="pausado">Pausado</option>
+                                <option value="suspendido">Suspendido</option>
+                                <option value="cancelado">Cancelado</option>
+                            </select>
+                        </div>
                     </div>
 
                     <!-- Pestañas -->
@@ -132,7 +142,7 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosPestanasOcultas($vistaConfigS
                                 <div class="row g-2">
 
                                     <!-- Buscador de cliente -->
-                                    <div class="col-12">
+                                    <div class="col-md-9 align-self-end">
                                         <div class="p-2 border rounded-3 bg-light bg-opacity-10">
                                             <div class="row g-2 align-items-center">
                                                 <div class="col-md-12 position-relative">
@@ -156,25 +166,34 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosPestanasOcultas($vistaConfigS
                                         </div>
                                     </div>
 
-                                    <!-- Estado (junto al buscador de cliente) -->
-                                    <div class="col-md-2">
-                                        <label>Estado</label>
-                                        <select class="form-select form-select-sm" name="estado" id="susc_estado">
-                                            <option value="activo">Activo</option>
-                                            <option value="pausado">Pausado</option>
-                                            <option value="suspendido">Suspendido</option>
-                                            <option value="cancelado">Cancelado</option>
-                                        </select>
-                                    </div>
-
-                                    <!-- Fechas y periodicidad -->
-                                    <div class="col-md-2">
-                                        <label>Comprobante *</label>
+                                    <!-- Comprobante (junto al buscador de cliente) -->
+                                    <div class="col-md-3 align-self-end">
+                                        <label class="d-flex align-items-center">Comprobante * <?= \App\Helpers\PreferenciasHelper::renderEstrellaFavorito('suscripciones', 'susc_tipo_comprobante', 'tipo_comprobante') ?></label>
                                         <select class="form-select form-select-sm" name="tipo_comprobante" id="susc_tipo_comprobante" required>
                                             <option value="factura">Factura de Venta</option>
                                             <option value="recibo">Recibo de Venta</option>
                                         </select>
                                     </div>
+
+                                    <!-- Devengado (NIIF 15): qué período cubre cada documento y cuándo se reconoce el ingreso -->
+                                    <div class="col-md-2">
+                                        <label class="d-flex align-items-center">Modalidad de cobro <?= \App\Helpers\PreferenciasHelper::renderEstrellaFavorito('suscripciones', 'susc_modalidad_cobro', 'modalidad_cobro') ?></label>
+                                        <select class="form-select form-select-sm" name="modalidad_cobro" id="susc_modalidad_cobro" onchange="suscOnModalidadCobro()"
+                                                title="Por adelantado: cada documento cubre el período que empieza en el próximo cobro. Mes caído: cubre el período que termina el día anterior al próximo cobro.">
+                                            <option value="anticipado">Por adelantado</option>
+                                            <option value="vencido">Mes caído (vencido)</option>
+                                        </select>
+                                    </div>
+                                    <div class="col-md-2">
+                                        <label class="d-flex align-items-center text-nowrap">Reconoc. del ingreso <?= \App\Helpers\PreferenciasHelper::renderEstrellaFavorito('suscripciones', 'susc_reconocimiento', 'reconocimiento') ?></label>
+                                        <select class="form-select form-select-sm" name="reconocimiento" id="susc_reconocimiento"
+                                                title="Reconocimiento del ingreso. Durante el período: el ingreso de los servicios se reconoce mes a mes (lo facturado por adelantado queda como ingreso diferido). Los bienes siempre se reconocen al facturar.">
+                                            <option value="inmediato">Al facturar</option>
+                                            <option value="diferido">Durante el período</option>
+                                        </select>
+                                    </div>
+
+                                    <!-- Fechas y periodicidad -->
                                     <div class="col-md-2">
                                         <label>Fecha Inicio *</label>
                                         <input type="date" class="form-control form-control-sm" name="fecha_inicio" id="susc_fecha_inicio" required onchange="suscRecalcularProximoCobro()">
@@ -184,7 +203,7 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosPestanasOcultas($vistaConfigS
                                         <input type="date" class="form-control form-control-sm" name="fecha_fin" id="susc_fecha_fin">
                                     </div>
                                     <div class="col-md-2">
-                                        <label>Periodicidad *</label>
+                                        <label class="d-flex align-items-center">Periodicidad * <?= \App\Helpers\PreferenciasHelper::renderEstrellaFavorito('suscripciones', 'susc_id_periodicidad', 'id_periodicidad') ?></label>
                                         <select class="form-select form-select-sm" name="id_periodicidad" id="susc_id_periodicidad" required onchange="suscRecalcularProximoCobro()">
                                             <option value="">- Seleccione -</option>
                                             <?php foreach ($periodicidades ?? [] as $p): ?>
@@ -198,24 +217,6 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosPestanasOcultas($vistaConfigS
                                         <label>Próximo Cobro</label>
                                         <input type="date" class="form-control form-control-sm" name="proximo_cobro" id="susc_proximo_cobro" required>
                                     </div>
-
-                                    <!-- Devengado (NIIF 15): qué período cubre cada documento y cuándo se reconoce el ingreso -->
-                                    <div class="col-md-3">
-                                        <label>Modalidad de cobro</label>
-                                        <select class="form-select form-select-sm" name="modalidad_cobro" id="susc_modalidad_cobro" onchange="suscOnModalidadCobro()"
-                                                title="Por adelantado: cada documento cubre el período que empieza en el próximo cobro. Mes caído: cubre el período que termina el día anterior al próximo cobro.">
-                                            <option value="anticipado">Por adelantado</option>
-                                            <option value="vencido">Mes caído (vencido)</option>
-                                        </select>
-                                    </div>
-                                    <div class="col-md-3">
-                                        <label>Reconocimiento del ingreso</label>
-                                        <select class="form-select form-select-sm" name="reconocimiento" id="susc_reconocimiento"
-                                                title="Durante el período: el ingreso de los servicios se reconoce mes a mes (lo facturado por adelantado queda como ingreso diferido). Los bienes siempre se reconocen al facturar.">
-                                            <option value="inmediato">Al facturar</option>
-                                            <option value="diferido">Durante el período</option>
-                                        </select>
-                                    </div>
                                 </div>
                             </div>
 
@@ -226,17 +227,18 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosPestanasOcultas($vistaConfigS
                                         <table class="table table-sm table-detalle mb-0 text-nowrap">
                                             <thead>
                                                 <tr class="table-light border-bottom">
-                                                    <th class="ps-3 py-2 small fw-bold text-muted" style="width:40%;">Descripción</th>
-                                                    <th class="py-2 small fw-bold text-muted text-center" style="width:10%;">Cant.</th>
-                                                    <th class="py-2 small fw-bold text-muted text-end" style="width:15%;">Precio Unit.</th>
-                                                    <th class="py-2 small fw-bold text-muted text-center" style="width:15%;">IVA</th>
-                                                    <th class="py-2 small fw-bold text-muted text-end pe-4" style="width:15%;">Subtotal</th>
+                                                    <th class="ps-3 py-2 small fw-bold text-muted" style="width:35%;">Descripción</th>
+                                                    <th class="py-2 small fw-bold text-muted text-center" style="width:9%;">Cant.</th>
+                                                    <th class="py-2 small fw-bold text-muted text-end" style="width:13%;">Precio Unit.</th>
+                                                    <th class="py-2 small fw-bold text-muted text-end" style="width:13%;" title="Precio unitario con el IVA de la línea. Si lo cambia, se recalcula el precio sin impuesto.">P. con Imp.</th>
+                                                    <th class="py-2 small fw-bold text-muted text-center" style="width:13%;">IVA</th>
+                                                    <th class="py-2 small fw-bold text-muted text-end pe-4" style="width:12%;">Subtotal</th>
                                                     <th style="width:5%;"></th>
                                                 </tr>
                                             </thead>
                                             <tbody id="susc_tbody_detalle">
                                                 <tr id="susc_row_vacia">
-                                                    <td colspan="6" class="text-center text-muted py-3 small">
+                                                    <td colspan="7" class="text-center text-muted py-3 small">
                                                         <i class="bi bi-box-seam me-1"></i>Agregue productos o servicios
                                                     </td>
                                                 </tr>
@@ -724,6 +726,11 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosPestanasOcultas($vistaConfigS
                        value="${parseFloat(item.precio_unitario ?? 0).toFixed(SUSC_DEC_PRECIO)}" min="0" step="${suscStepDec(SUSC_DEC_PRECIO)}"
                        oninput="suscRecalcFila(this)" onblur="this.value=parseFloat(this.value||0).toFixed(SUSC_DEC_PRECIO)">
             </td>
+            <td class="text-end">
+                <input type="number" class="form-control form-control-sm input-detalle text-end det-price-iva"
+                       value="0" min="0" step="${suscStepDec(SUSC_DEC_PRECIO)}"
+                       oninput="suscCalcDesdeConImp(this)" onblur="this.value=parseFloat(this.value||0).toFixed(SUSC_DEC_PRECIO)">
+            </td>
             <td class="text-center align-middle">
                 <input type="hidden" class="det-porcentaje-iva" name="detalle[${idx}][porcentaje_iva]" value="${parseFloat(item.porcentaje_iva ?? 0)}">
                 <select class="form-select form-select-sm input-detalle text-center det-iva" name="detalle[${idx}][id_tarifa_iva]" onchange="suscOnCambiarIva(this)">
@@ -750,7 +757,7 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosPestanasOcultas($vistaConfigS
             const hidPct = tr.querySelector('.det-porcentaje-iva');
             if (hidPct) hidPct.value = parseFloat(selIvaEl.options[selIvaEl.selectedIndex]?.dataset?.porcentaje ?? 0);
         }
-        suscRecalcTotales();
+        suscRecalcFila(tr.querySelector('.det-qty')); // subtotal + precio con impuesto + totales
 
         if(!item.id_producto) {
             setTimeout(() => tr.querySelector('.det-desc').focus(), 50);
@@ -761,17 +768,38 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosPestanasOcultas($vistaConfigS
         btn.closest('tr').remove();
         if (!document.querySelector('#susc_tbody_detalle tr')) {
             document.getElementById('susc_tbody_detalle').innerHTML =
-                '<tr id="susc_row_vacia"><td colspan="6" class="text-center text-muted py-3 small"><i class="bi bi-box-seam me-1"></i>Agregue productos o servicios</td></tr>';
+                '<tr id="susc_row_vacia"><td colspan="7" class="text-center text-muted py-3 small"><i class="bi bi-box-seam me-1"></i>Agregue productos o servicios</td></tr>';
         }
         suscRecalcTotales();
     };
+
+    /** % de IVA de la línea según la tarifa elegida. */
+    function suscPctIvaFila(tr) {
+        const sel = tr.querySelector('.det-iva');
+        return parseFloat(sel?.options[sel.selectedIndex]?.dataset?.porcentaje ?? 0) || 0;
+    }
 
     window.suscRecalcFila = function(input) {
         const tr  = input.closest('tr');
         const qty = parseFloat(tr.querySelector('.det-qty').value) || 0;
         const prc = parseFloat(tr.querySelector('.det-price').value) || 0;
         tr.querySelector('.det-subtotal').textContent = '$' + (qty * prc).toFixed(2);
+        // Precio con impuesto = precio × (1 + IVA%), igual que Facturas de Venta (syncPrecioIva).
+        // No se reescribe mientras el usuario está escribiendo en esa misma celda.
+        const conImp = tr.querySelector('.det-price-iva');
+        if (conImp && input !== conImp) {
+            conImp.value = (prc * (1 + suscPctIvaFila(tr) / 100)).toFixed(SUSC_DEC_PRECIO);
+        }
         suscRecalcTotales();
+    };
+
+    /** Al escribir el precio con impuesto se despeja el precio sin impuesto (Facturas de Venta: calcConImp). */
+    window.suscCalcDesdeConImp = function(input) {
+        if (input.value !== '' && parseFloat(input.value) < 0) input.value = 0;
+        const tr   = input.closest('tr');
+        const pCon = parseFloat(input.value) || 0;
+        tr.querySelector('.det-price').value = (pCon / (1 + suscPctIvaFila(tr) / 100)).toFixed(SUSC_DEC_PRECIO);
+        suscRecalcFila(input);
     };
 
     window.suscOnCambiarIva = function(sel) {
@@ -929,6 +957,8 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosPestanasOcultas($vistaConfigS
     window.suscProponerReconocimiento = function () {
         const sel = document.getElementById('susc_reconocimiento');
         if (!sel || document.getElementById('susc_id').value || sel.dataset.manual === '1') return;
+        // El favorito del usuario manda sobre la propuesta.
+        if (typeof APP_FAVORITOS !== 'undefined' && APP_FAVORITOS.reconocimiento) return;
         const selPer = document.getElementById('susc_id_periodicidad');
         const codigo = selPer.options[selPer.selectedIndex]?.dataset.codigo ?? '';
         if (selPer.value === '') return;
@@ -1069,7 +1099,7 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosPestanasOcultas($vistaConfigS
     function suscLimpiarDetalle() {
         suscDetLineIdx = 0;
         document.getElementById('susc_tbody_detalle').innerHTML =
-            '<tr id="susc_row_vacia"><td colspan="6" class="text-center text-muted py-3 small"><i class="bi bi-box-seam me-1"></i>Agregue productos o servicios</td></tr>';
+            '<tr id="susc_row_vacia"><td colspan="7" class="text-center text-muted py-3 small"><i class="bi bi-box-seam me-1"></i>Agregue productos o servicios</td></tr>';
         suscRecalcTotales();
     }
 
@@ -1105,9 +1135,12 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosPestanasOcultas($vistaConfigS
         document.getElementById('susc_forma_cobro').value       = 'credito';
         document.getElementById('susc_estado').value            = 'activo';
         document.getElementById('susc_observaciones').value     = '';
+        document.getElementById('susc_tipo_comprobante').value  = 'factura';
         document.getElementById('susc_modalidad_cobro').value   = 'anticipado';
         document.getElementById('susc_reconocimiento').value    = 'inmediato';
         delete document.getElementById('susc_reconocimiento').dataset.manual;
+        // Favoritos del usuario (estrella junto a Comprobante, Modalidad, Reconocimiento y Periodicidad).
+        if (typeof window.aplicarFavoritosModal === 'function') window.aplicarFavoritosModal('#modalSusc');
         document.getElementById('tituloModalSusc').textContent  = 'Nueva Suscripción';
         document.getElementById('btnEliminarSusc')?.classList.add('d-none');
         document.getElementById('btnVerPagosSusc')?.classList.add('d-none');

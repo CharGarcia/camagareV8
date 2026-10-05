@@ -42,6 +42,8 @@ final class OrigenAsiento
         'activos_fijos_alta'         => 'Activo fijo: alta',
         'activos_fijos_depreciacion' => 'Activo fijo: depreciación',
         'suscripcion_devengo'        => 'Suscripción: devengo mensual',
+        'suscripcion_devengo_reverso' => 'Suscripción: reverso de devengo',
+        'suscripcion_devengo_apertura' => 'Suscripción: apertura de ingresos diferidos',
         'declaracion_iva'            => 'Declaración de IVA',
         'declaracion_retenciones'    => 'Declaración de retenciones',
         'manual'                     => 'Asiento manual',

@@ -2045,6 +2045,9 @@ class AsientoBuilderService
                 ON kc.referencia_tipo = 'factura_venta' AND kc.referencia_id = d.id_venta
                AND kc.id_producto = d.id_producto AND kc.tipo_movimiento = 'salida' AND kc.eliminado = false";
 
+        // Devengado de suscripciones (NIIF 15): parte del subtotal que no es ingreso todavía.
+        $devengoSusc = $this->devengoSuscripcionDocumento($db, $idEmpresa, 'factura', $idVenta);
+
         foreach ($reglas as $r) {
             $codigo   = strtoupper($r['asiento_tipo_codigo']     ?? $r['codigo']    ?? '');
             $concepto = strtolower($r['asiento_tipo_referencia'] ?? $r['concepto']  ?? $r['referencia'] ?? '');
@@ -2136,16 +2139,19 @@ class AsientoBuilderService
             if ($esSubtotal) {
                 $valorMapeado = $tieneReglaDescuento ? ($subtotal + $descuento) : $subtotal;
                 if ($valorMapeado <= 0) continue;
+                // Devengado de suscripciones: lo diferido / provisionado no es ingreso de esta
+                // factura (va a sus cuentas aparte, ver lineasDevengoSuscripcion()).
+                $valorIngreso = round($valorMapeado - $devengoSusc['diferido'] - $devengoSusc['por_facturar'], 2);
                 if ($porLinea) {
                     $this->aplicarRepartoPorCategoria(
-                        $db, $idEmpresa, $idVenta, $r, $valorMapeado,
-                        'd.precio_total_sin_impuesto', '',
+                        $db, $idEmpresa, $idVenta, $r, $valorIngreso,
+                        $devengoSusc['expr'], $devengoSusc['join'],
                         $refBase, false, $detalles, $costoLineas, $reglasSinCuenta
                     );
-                } elseif (!empty($r['id_cuenta'])) {
+                } elseif (!empty($r['id_cuenta']) && $valorIngreso > 0) {
                     $detalles[] = [
                         'id_cuenta_contable' => (int)$r['id_cuenta'], 'cuenta_codigo' => $r['cuenta_codigo'], 'cuenta_nombre' => $r['cuenta_nombre'],
-                        'debe' => $lado === 'debe' ? round($valorMapeado, 2) : 0.0, 'haber' => $lado === 'debe' ? 0.0 : round($valorMapeado, 2),
+                        'debe' => $lado === 'debe' ? round($valorIngreso, 2) : 0.0, 'haber' => $lado === 'debe' ? 0.0 : round($valorIngreso, 2),
                         'referencia_detalle' => $refBase,
                     ];
                 }
@@ -2221,6 +2227,9 @@ class AsientoBuilderService
                 continue;
             }
         }
+
+        // Haber de Ingresos diferidos / Ingresos devengados por facturar (suscripciones).
+        $this->lineasDevengoSuscripcion($idEmpresa, $devengoSusc, $detalles, $reglasSinCuenta);
 
         // ── 5.1 Bloque de costo: solo se agrega si está COMPLETO y CUADRADO ──
         // Si están las dos cuentas (Costo de Ventas e Inventario) y suman igual en Debe/Haber,
@@ -2516,6 +2525,9 @@ class AsientoBuilderService
                 ON kc.referencia_tipo = 'recibo_venta' AND kc.referencia_id = d.id_recibo
                AND kc.id_producto = d.id_producto AND kc.tipo_movimiento = 'salida' AND kc.eliminado = false";
 
+        // Devengado de suscripciones (NIIF 15): parte del subtotal que no es ingreso todavía.
+        $devengoSusc = $this->devengoSuscripcionDocumento($db, $idEmpresa, 'recibo', $idRecibo);
+
         foreach ($reglas as $r) {
             $codigo   = strtoupper($r['asiento_tipo_codigo']     ?? $r['codigo']    ?? '');
             $concepto = strtolower($r['asiento_tipo_referencia'] ?? $r['concepto']  ?? $r['referencia'] ?? '');
@@ -2590,16 +2602,19 @@ class AsientoBuilderService
             if ($esSubtotal) {
                 $valorMapeado = $tieneReglaDescuento ? ($subtotal + $descuento) : $subtotal;
                 if ($valorMapeado <= 0) continue;
+                // Devengado de suscripciones: lo diferido / provisionado no es ingreso de este
+                // recibo (va a sus cuentas aparte, ver lineasDevengoSuscripcion()).
+                $valorIngreso = round($valorMapeado - $devengoSusc['diferido'] - $devengoSusc['por_facturar'], 2);
                 if ($porLinea) {
                     $this->aplicarRepartoPorCategoriaRecibos(
-                        $db, $idEmpresa, $idRecibo, $r, $valorMapeado,
-                        'd.precio_total_sin_impuesto', '',
+                        $db, $idEmpresa, $idRecibo, $r, $valorIngreso,
+                        $devengoSusc['expr'], $devengoSusc['join'],
                         $refBase, false, $detalles, $costoLineas, $reglasSinCuenta
                     );
-                } elseif (!empty($r['id_cuenta'])) {
+                } elseif (!empty($r['id_cuenta']) && $valorIngreso > 0) {
                     $detalles[] = [
                         'id_cuenta_contable' => (int)$r['id_cuenta'], 'cuenta_codigo' => $r['cuenta_codigo'], 'cuenta_nombre' => $r['cuenta_nombre'],
-                        'debe' => $lado === 'debe' ? round($valorMapeado, 2) : 0.0, 'haber' => $lado === 'debe' ? 0.0 : round($valorMapeado, 2),
+                        'debe' => $lado === 'debe' ? round($valorIngreso, 2) : 0.0, 'haber' => $lado === 'debe' ? 0.0 : round($valorIngreso, 2),
                         'referencia_detalle' => $refBase,
                     ];
                 }
@@ -2669,6 +2684,9 @@ class AsientoBuilderService
                 continue;
             }
         }
+
+        // Haber de Ingresos diferidos / Ingresos devengados por facturar (suscripciones).
+        $this->lineasDevengoSuscripcion($idEmpresa, $devengoSusc, $detalles, $reglasSinCuenta);
 
         // ── 5.1 Bloque de costo: solo se agrega si está COMPLETO y CUADRADO ──
         $costoGenerado = false;
@@ -3746,6 +3764,9 @@ class AsientoBuilderService
                 ON kc.referencia_tipo = 'nota_credito' AND kc.referencia_id = d.id_nota_credito
                AND kc.id_producto = d.id_producto AND kc.tipo_movimiento = 'entrada' AND kc.eliminado = false";
 
+        // Devengado de suscripciones (NIIF 15): parte de la NC que devuelve servicio no prestado.
+        $devengoSusc = $this->devengoSuscripcionNotaCredito($db, $idEmpresa, $idNotaCredito);
+
         $reglasSinCuenta = [];
         foreach ($reglas as $r) {
             $codigo   = strtoupper($r['codigo']   ?? '');
@@ -3787,17 +3808,20 @@ class AsientoBuilderService
                 }
             } elseif ($esSubtotal) {
                 if ($subtotal <= 0) continue;
+                // Devengado de suscripciones: lo que la NC tomó del diferido no reduce el ingreso
+                // (va a Ingresos diferidos, ver lineasDevengoSuscripcion() más abajo).
+                $valorIngreso = round($subtotal - $devengoSusc['diferido'], 2);
                 if ($porLinea) {
                     $this->aplicarRepartoPorCategoriaNC(
-                        $db, $idEmpresa, $idNotaCredito, $r, $subtotal,
-                        'd.precio_total_sin_impuesto', '',
+                        $db, $idEmpresa, $idNotaCredito, $r, $valorIngreso,
+                        $devengoSusc['expr'], $devengoSusc['join'],
                         $refBase, false, $comercial, $costoLineas, $reglasSinCuenta
                     );
-                } elseif (!empty($r['id_cuenta'])) {
+                } elseif (!empty($r['id_cuenta']) && $valorIngreso > 0) {
                     $lado = (($r['debe_haber'] ?? 'debe') === 'debe') ? 'debe' : 'haber';
                     $comercial[] = [
                         'id_cuenta_contable' => (int)$r['id_cuenta'], 'cuenta_codigo' => $r['cuenta_codigo'] ?? '', 'cuenta_nombre' => $r['cuenta_nombre'] ?? '',
-                        'debe' => $lado === 'debe' ? round($subtotal, 2) : 0.0, 'haber' => $lado === 'debe' ? 0.0 : round($subtotal, 2),
+                        'debe' => $lado === 'debe' ? round($valorIngreso, 2) : 0.0, 'haber' => $lado === 'debe' ? 0.0 : round($valorIngreso, 2),
                         'referencia_detalle' => $refBase,
                     ];
                 }
@@ -3819,6 +3843,10 @@ class AsientoBuilderService
                 }
             }
         }
+
+        // Haber (lado natural) de Ingresos diferidos por lo que la NC tomó del diferido; al
+        // invertir queda en el DEBE: la NC reduce el pasivo, no el ingreso.
+        $this->lineasDevengoSuscripcion($idEmpresa, $devengoSusc, $comercial, $reglasSinCuenta);
 
         // El bloque de costo solo entra si está COMPLETO y CUADRADO (ambas cuentas configuradas).
         $detallesNatural = $comercial;
@@ -5247,6 +5275,381 @@ class AsientoBuilderService
     }
 
     /** Cuenta configurada (asientos_programados) para un código de asientos_tipo puntual; 0 si no está configurada. */
+    /**
+     * Asiento CONSOLIDADO del devengo mensual de suscripciones (NIIF 15), una línea por cuenta:
+     *   DEBE  Ingresos diferidos por suscripciones       = Σ filas 'diferido' del mes
+     *   DEBE  Ingresos devengados por facturar           = Σ filas 'provision' del mes (mes caído)
+     *   HABER Ingreso de cada servicio (cuenta Subtotal) = por la cuenta que le corresponde
+     *
+     * La cuenta de ingreso de cada fila sale de la MISMA cascada que usa la factura para su Subtotal
+     * (ver cuentaIngresoSuscripcion()), así lo que la factura dejó de acreditar al ingreso se acredita
+     * ahora en la misma cuenta.
+     *
+     * @param array<int|string, array{tipo:string, monto:float|string, id_producto:?int, id_cliente:int, tipo_asiento:string, descripcion?:string}> $filas
+     * @return array{detalles: array<int,array>, cuenta_por_fila: array<int|string,int>}
+     * @throws \Exception si falta alguna cuenta (nombra cuál y dónde configurarla).
+     */
+    public function generarAsientoDevengoSuscripciones(int $idEmpresa, array $filas): array
+    {
+        $reglasDev = [];
+        foreach ($this->programadoRepo->getReglasGeneralesPorConcepto($idEmpresa, 'suscripciones_devengo') as $r) {
+            $reglasDev[(string) ($r['codigo'] ?? '')] = $r;
+        }
+
+        $cache = [];
+        $haber = [];       // id_cuenta => línea
+        $cuentaFila = [];
+        $sinIngreso = [];
+        $debe = ['INGRESODIFERIDOSUSCRIPCION' => 0.0, 'INGRESOPORFACTURARSUSCRIPCION' => 0.0];
+
+        foreach ($filas as $k => $f) {
+            $monto = round((float) $f['monto'], 2);
+            if ($monto <= 0) {
+                continue;
+            }
+            $cta = $this->cuentaIngresoSuscripcion($idEmpresa, (string) $f['tipo_asiento'], (int) $f['id_cliente'], (int) ($f['id_producto'] ?? 0), $cache);
+            if ($cta === null) {
+                $sinIngreso[] = (string) ($f['descripcion'] ?? ('producto #' . (int) ($f['id_producto'] ?? 0)));
+                continue;
+            }
+            $cuentaFila[$k] = $cta['id_cuenta'];
+            $haber[$cta['id_cuenta']] ??= [
+                'id_cuenta_contable' => $cta['id_cuenta'], 'cuenta_codigo' => $cta['cuenta_codigo'], 'cuenta_nombre' => $cta['cuenta_nombre'],
+                'debe' => 0.0, 'haber' => 0.0, 'referencia_detalle' => 'Ingreso devengado de suscripciones',
+            ];
+            $haber[$cta['id_cuenta']]['haber'] = round($haber[$cta['id_cuenta']]['haber'] + $monto, 2);
+            $debe[$f['tipo'] === 'provision' ? 'INGRESOPORFACTURARSUSCRIPCION' : 'INGRESODIFERIDOSUSCRIPCION'] += $monto;
+        }
+
+        if ($sinIngreso) {
+            throw new \Exception('Falta la cuenta de ingreso (concepto Subtotal de Ventas con Factura / Recibos de Venta) para: '
+                . implode(', ', array_unique($sinIngreso)) . '. Configúrela en Contabilidad → Configuración Contable.');
+        }
+
+        $detalles = [];
+        foreach ($debe as $codigo => $monto) {
+            $monto = round($monto, 2);
+            if ($monto <= 0) {
+                continue;
+            }
+            $r = $reglasDev[$codigo] ?? null;
+            if (empty($r['id_cuenta'])) {
+                $nombre = $codigo === 'INGRESODIFERIDOSUSCRIPCION' ? 'Ingresos diferidos por suscripciones' : 'Ingresos devengados por facturar';
+                throw new \Exception("Falta la cuenta «{$nombre}». Configúrela en Contabilidad → Configuración Contable → Suscripciones - Devengo.");
+            }
+            $detalles[] = [
+                'id_cuenta_contable' => (int) $r['id_cuenta'], 'cuenta_codigo' => $r['cuenta_codigo'] ?? '', 'cuenta_nombre' => $r['cuenta_nombre'] ?? '',
+                'debe' => $monto, 'haber' => 0.0, 'referencia_detalle' => (string) ($r['concepto'] ?? $codigo),
+            ];
+        }
+
+        return ['detalles' => array_merge($detalles, array_values($haber)), 'cuenta_por_fila' => $cuentaFila];
+    }
+
+    /**
+     * Reverso del ingreso YA devengado de una factura/recibo de suscripción que se anula o elimina:
+     *   DEBE  la cuenta de ingreso que acreditó cada devengo (suscripciones_devengos.id_cuenta_ingreso)
+     *   HABER Ingresos diferidos por suscripciones
+     * Anular el asiento de la factura devolvió todo el diferido; los devengos mensuales ya habían
+     * debitado parte de él contra el ingreso, y este asiento deshace esa parte.
+     *
+     * Filas de APERTURA aún por devengar ($filasApertura) van al revés: su pasivo lo creó el
+     * asiento de apertura (DEBE ingreso / HABER diferido), que anular la factura no deshace; se
+     * revierten con DEBE diferido / HABER ingreso. Las dos cosas se netean por cuenta.
+     *
+     * @param array<int, array{monto:float|string, id_cuenta_ingreso:?int, descripcion?:string}> $filas
+     * @param array<int, array{monto:float|string, id_cuenta_ingreso:?int, descripcion?:string}> $filasApertura
+     */
+    public function generarAsientoReversoDevengoSuscripciones(int $idEmpresa, array $filas, array $filasApertura = []): array
+    {
+        $idDiferido = $this->cuentaProgramadaPorCodigo($idEmpresa, 'suscripciones_devengo', 'INGRESODIFERIDOSUSCRIPCION');
+        if ($idDiferido <= 0) {
+            throw new \Exception('Falta la cuenta «Ingresos diferidos por suscripciones». Configúrela en Contabilidad → Configuración Contable → Suscripciones - Devengo.');
+        }
+        // Saldo neto por cuenta de ingreso: + al DEBE (reverso de lo devengado), − al HABER (apertura pendiente).
+        $neto = [];
+        $diferido = 0.0;
+        foreach ([[$filas, 1], [$filasApertura, -1]] as [$lista, $signo]) {
+            foreach ($lista as $f) {
+                $monto = round((float) $f['monto'], 2);
+                $idCuenta = (int) ($f['id_cuenta_ingreso'] ?? 0);
+                if ($monto <= 0) {
+                    continue;
+                }
+                if ($idCuenta <= 0) {
+                    throw new \Exception('No se encontró la cuenta de ingreso de «' . ($f['descripcion'] ?? 'un servicio') . '».');
+                }
+                $neto[$idCuenta] = round(($neto[$idCuenta] ?? 0) + $signo * $monto, 2);
+                $diferido += $signo * $monto;
+            }
+        }
+        $detalles = [];
+        foreach ($neto as $idCuenta => $monto) {
+            if (abs($monto) < 0.005) {
+                continue;
+            }
+            $detalles[] = ['id_cuenta_contable' => $idCuenta, 'debe' => max($monto, 0.0), 'haber' => max(-$monto, 0.0),
+                           'referencia_detalle' => 'Reverso de ingreso de suscripciones'];
+        }
+        $diferido = round($diferido, 2);
+        if (abs($diferido) >= 0.005) {
+            $detalles[] = ['id_cuenta_contable' => $idDiferido, 'debe' => max(-$diferido, 0.0), 'haber' => max($diferido, 0.0),
+                           'referencia_detalle' => 'Ingresos diferidos por suscripciones'];
+        }
+        return $detalles;
+    }
+
+    /**
+     * Devengado de suscripciones en una NOTA DE CRÉDITO: la parte que la NC tomó de lo diferido
+     * por devengar de la factura (filas anuladas con esta NC, SuscripcionDevengoService::aplicarNotaCredito).
+     * En el lado natural de venta (el asiento de la NC se arma así y luego se invierte) esa parte
+     * va al HABER de Ingresos diferidos en vez de la cuenta de ingreso. Por línea de la NC, vía
+     * id_venta_detalle; si varias líneas de la NC devuelven la misma línea de factura, la resta
+     * se aplica a la primera (el total no cambia).
+     *
+     * @return array{diferido: float, por_facturar: float, expr: string, join: string}
+     */
+    private function devengoSuscripcionNotaCredito(\PDO $db, int $idEmpresa, int $idNotaCredito): array
+    {
+        $vacio = ['diferido' => 0.0, 'por_facturar' => 0.0, 'expr' => 'd.precio_total_sin_impuesto', 'join' => ''];
+        if ($idNotaCredito <= 0) {
+            return $vacio;
+        }
+        static $hayTabla = null;
+        if ($hayTabla === null) {
+            $hayTabla = (bool) $db->query("SELECT to_regclass('public.suscripciones_devengos') IS NOT NULL")->fetchColumn();
+        }
+        if (!$hayTabla) {
+            return $vacio;
+        }
+        $st = $db->prepare(
+            "SELECT COALESCE(SUM(monto), 0) FROM suscripciones_devengos
+             WHERE id_empresa = :e AND id_nota_credito = :nc AND tipo = 'diferido' AND estado = 'anulado' AND eliminado = false"
+        );
+        $st->execute([':e' => $idEmpresa, ':nc' => $idNotaCredito]);
+        $diferido = round((float) $st->fetchColumn(), 2);
+        if ($diferido <= 0) {
+            return $vacio;
+        }
+        $idEmp = (int) $idEmpresa;
+        $idNc  = (int) $idNotaCredito;
+        return [
+            'diferido'     => $diferido,
+            'por_facturar' => 0.0,
+            'expr'         => '(d.precio_total_sin_impuesto - COALESCE(sdv.monto, 0))',
+            'join'         => "LEFT JOIN LATERAL (
+                    SELECT SUM(sd.monto) AS monto
+                    FROM suscripciones_devengos sd
+                    WHERE sd.id_empresa = {$idEmp} AND sd.id_nota_credito = {$idNc}
+                      AND sd.tipo = 'diferido' AND sd.estado = 'anulado' AND sd.eliminado = false
+                      AND sd.tipo_documento = 'factura' AND sd.id_documento_detalle = d.id_venta_detalle
+                      AND d.id = (SELECT MIN(d2.id) FROM notas_credito_detalle d2
+                                  WHERE d2.id_nota_credito = d.id_nota_credito AND d2.id_venta_detalle = d.id_venta_detalle)
+                ) sdv ON true",
+        ];
+    }
+
+    /**
+     * Cuenta de ingreso (concepto Subtotal) de un servicio de suscripción, con la misma cascada que
+     * el Subtotal de la factura/recibo (generarAsientoSugerido + repartirVentasCascada):
+     *   1. Si el cliente tiene reglas propias en ese tipo de asiento, manda el cliente: su cuenta de
+     *      Subtotal o, si no la configuró, la General (sin reparto por producto).
+     *   2. Si no: producto → categoría → marca → tipo de producción → General.
+     * Única diferencia conocida: una factura con descuento y cuenta de Descuento configurada no
+     * reparte su Subtotal por producto; el devengo sí (el monto diferido es el mismo).
+     *
+     * @return array{id_cuenta:int, cuenta_codigo:string, cuenta_nombre:string}|null
+     */
+    private function cuentaIngresoSuscripcion(int $idEmpresa, string $tipoAsiento, int $idCliente, int $idProducto, array &$cache): ?array
+    {
+        $tipoAsiento = $tipoAsiento === 'recibos_venta' ? 'recibos_venta' : 'ventas_factura';
+        $clave = "{$tipoAsiento}|{$idCliente}|{$idProducto}";
+        if (array_key_exists($clave, $cache)) {
+            return $cache[$clave];
+        }
+
+        // Concepto Subtotal del tipo de asiento (y su cuenta General).
+        $cache["__subtotal_{$tipoAsiento}"] ??= (function () use ($idEmpresa, $tipoAsiento) {
+            foreach ($this->programadoRepo->getReglasGeneralesPorConcepto($idEmpresa, $tipoAsiento) as $r) {
+                if (str_contains(strtoupper((string) ($r['codigo'] ?? '')), 'SUBTOTAL')) {
+                    return $r;
+                }
+            }
+            return [];
+        })();
+        $subtotal = $cache["__subtotal_{$tipoAsiento}"];
+        if (!$subtotal) {
+            return $cache[$clave] = null;
+        }
+        $idTipo  = (int) $subtotal['id_asiento_tipo'];
+        $general = !empty($subtotal['id_cuenta'])
+            ? ['id_cuenta' => (int) $subtotal['id_cuenta'], 'cuenta_codigo' => (string) $subtotal['cuenta_codigo'], 'cuenta_nombre' => (string) $subtotal['cuenta_nombre']]
+            : null;
+
+        // 1. El cliente manda si tiene reglas propias.
+        $cache["__cliente_{$tipoAsiento}_{$idCliente}"] ??= $this->resolverCuentasPorMetodo($idEmpresa, $tipoAsiento, 'cliente', ['id_cliente' => $idCliente]);
+        $custom = $cache["__cliente_{$tipoAsiento}_{$idCliente}"];
+        if ($custom) {
+            $c = $custom[$idTipo] ?? null;
+            return $cache[$clave] = $c
+                ? ['id_cuenta' => (int) $c['id_cuenta'], 'cuenta_codigo' => (string) $c['cuenta_codigo'], 'cuenta_nombre' => (string) $c['cuenta_nombre']]
+                : $general;
+        }
+
+        // 2. Producto → categoría → marca → tipo de producción (mismo orden que repartirVentasCascada).
+        if ($idProducto > 0) {
+            $db = \App\core\Database::getConnection();
+            $st = $db->prepare(
+                "SELECT pc.id AS id_cuenta, pc.codigo AS cuenta_codigo, pc.nombre AS cuenta_nombre
+                 FROM productos p
+                 LEFT JOIN asientos_programados ap_p
+                        ON ap_p.id_referencia = p.id AND ap_p.tipo_referencia = 'producto'
+                       AND ap_p.id_asiento_tipo = :t1 AND ap_p.id_empresa = :e1 AND ap_p.eliminado = false
+                 LEFT JOIN asientos_programados ap_c
+                        ON ap_c.id_referencia = p.id_categoria AND ap_c.tipo_referencia = 'categoria'
+                       AND ap_c.id_asiento_tipo = :t2 AND ap_c.id_empresa = :e2 AND ap_c.eliminado = false
+                 LEFT JOIN asientos_programados ap_m
+                        ON ap_m.id_referencia = p.id_marca AND ap_m.tipo_referencia = 'marca'
+                       AND ap_m.id_asiento_tipo = :t3 AND ap_m.id_empresa = :e3 AND ap_m.eliminado = false
+                 LEFT JOIN asientos_programados ap_tp
+                        ON ap_tp.tipo_referencia = 'tipo_produccion'
+                       AND ap_tp.id_referencia = (CASE WHEN p.tipo_produccion = '02' THEN 2 WHEN p.tipo_produccion = '01' THEN 1 END)
+                       AND ap_tp.id_asiento_tipo = :t4 AND ap_tp.id_empresa = :e4 AND ap_tp.eliminado = false
+                 JOIN plan_cuentas pc ON pc.id = COALESCE(ap_p.id_cuenta, ap_c.id_cuenta, ap_m.id_cuenta, ap_tp.id_cuenta)
+                 WHERE p.id = :id_producto
+                 LIMIT 1"
+            );
+            $st->execute([
+                ':t1' => $idTipo, ':e1' => $idEmpresa, ':t2' => $idTipo, ':e2' => $idEmpresa,
+                ':t3' => $idTipo, ':e3' => $idEmpresa, ':t4' => $idTipo, ':e4' => $idEmpresa,
+                ':id_producto' => $idProducto,
+            ]);
+            $row = $st->fetch(\PDO::FETCH_ASSOC);
+            if ($row) {
+                return $cache[$clave] = ['id_cuenta' => (int) $row['id_cuenta'], 'cuenta_codigo' => (string) $row['cuenta_codigo'], 'cuenta_nombre' => (string) $row['cuenta_nombre']];
+            }
+        }
+
+        return $cache[$clave] = $general;
+    }
+
+    /**
+     * Devengado de suscripciones (NIIF 15): cuánto del subtotal de una factura/recibo generado por
+     * una suscripción NO es ingreso en este documento, según su cronograma (suscripciones_devengos):
+     *   - diferido:     meses posteriores al de emisión (cobro por adelantado) → pasivo
+     *                   «Ingresos diferidos»; el devengo mensual lo pasa al ingreso.
+     *   - por_facturar: provisión de mes caído ya registrada al cierre que esta factura cancela →
+     *                   activo «Ingresos devengados por facturar».
+     * Devuelve además la expresión/JOIN por línea para que el reparto del Subtotal (cascada
+     * producto → categoría → … → General) acredite el ingreso NETO de cada línea.
+     * Sin cronograma (o sin la tabla todavía) todo queda en cero y el asiento es el de siempre.
+     *
+     * @return array{diferido: float, por_facturar: float, expr: string, join: string}
+     */
+    private function devengoSuscripcionDocumento(\PDO $db, int $idEmpresa, string $tipoDocumento, int $idDocumento): array
+    {
+        $vacio = ['diferido' => 0.0, 'por_facturar' => 0.0, 'expr' => 'd.precio_total_sin_impuesto', 'join' => ''];
+        if ($idDocumento <= 0 || !in_array($tipoDocumento, ['factura', 'recibo'], true)) {
+            return $vacio;
+        }
+        static $hayTabla = null;
+        if ($hayTabla === null) {
+            // to_regclass no lanza si la tabla falta: seguro dentro de una transacción.
+            $hayTabla = (bool) $db->query("SELECT to_regclass('public.suscripciones_devengos') IS NOT NULL")->fetchColumn();
+        }
+        if (!$hayTabla) {
+            return $vacio;
+        }
+
+        // Filas que salen del ingreso de ESTE documento (idéntico filtro en el total y por línea).
+        // Las de 'apertura' no: su pasivo lo creó el asiento de apertura, no el de la factura
+        // (documento emitido antes del devengado, cuyo asiento acreditó todo al ingreso).
+        static $hayOrigen = null;
+        if ($hayOrigen === null) {
+            $hayOrigen = (bool) $db->query(
+                "SELECT 1 FROM information_schema.columns
+                 WHERE table_schema = 'public' AND table_name = 'suscripciones_devengos' AND column_name = 'origen'"
+            )->fetchColumn();
+        }
+        $filtro = "AND sd.eliminado = false
+                   AND ((sd.tipo = 'diferido' AND sd.estado <> 'anulado')
+                     OR (sd.tipo = 'provision' AND sd.estado = 'facturado'))"
+                . ($hayOrigen ? " AND sd.origen = 'documento'" : '');
+        $st = $db->prepare(
+            "SELECT COALESCE(SUM(sd.monto) FILTER (WHERE sd.tipo = 'diferido'), 0)  AS diferido,
+                    COALESCE(SUM(sd.monto) FILTER (WHERE sd.tipo = 'provision'), 0) AS por_facturar
+             FROM suscripciones_devengos sd
+             WHERE sd.id_empresa = :id_empresa AND sd.tipo_documento = :tipo AND sd.id_documento = :id
+             {$filtro}"
+        );
+        $st->execute([':id_empresa' => $idEmpresa, ':tipo' => $tipoDocumento, ':id' => $idDocumento]);
+        $row = $st->fetch(\PDO::FETCH_ASSOC) ?: [];
+        $diferido    = round((float) ($row['diferido'] ?? 0), 2);
+        $porFacturar = round((float) ($row['por_facturar'] ?? 0), 2);
+        if ($diferido <= 0 && $porFacturar <= 0) {
+            return $vacio;
+        }
+
+        // $idEmpresa es int y $tipoDocumento sale de la lista blanca de arriba: interpolarlos es
+        // seguro (el reparto arma su SQL con este fragmento y sus propios parámetros).
+        $idEmp = (int) $idEmpresa;
+        return [
+            'diferido'     => $diferido,
+            'por_facturar' => $porFacturar,
+            'expr'         => '(d.precio_total_sin_impuesto - COALESCE(sdv.monto, 0))',
+            'join'         => "LEFT JOIN LATERAL (
+                    SELECT SUM(sd.monto) AS monto
+                    FROM suscripciones_devengos sd
+                    WHERE sd.id_empresa = {$idEmp} AND sd.tipo_documento = '{$tipoDocumento}'
+                      AND sd.id_documento_detalle = d.id
+                      {$filtro}
+                ) sdv ON true",
+        ];
+    }
+
+    /**
+     * Agrega al asiento de la factura/recibo el HABER de Ingresos diferidos y de Ingresos
+     * devengados por facturar (cuentas de Configuración Contable → «Suscripciones - Devengo»).
+     * Sin la cuenta, la línea se reporta como faltante y el asiento NO se genera: reconocer ese
+     * monto como ingreso duplicaría el que luego registra el devengo mensual / la provisión.
+     */
+    private function lineasDevengoSuscripcion(int $idEmpresa, array $devengo, array &$detalles, array &$reglasSinCuenta): void
+    {
+        $montos = [
+            'INGRESODIFERIDOSUSCRIPCION'    => (float) ($devengo['diferido'] ?? 0),
+            'INGRESOPORFACTURARSUSCRIPCION' => (float) ($devengo['por_facturar'] ?? 0),
+        ];
+        if (max($montos) <= 0) {
+            return;
+        }
+        $reglas = [];
+        foreach ($this->programadoRepo->getReglasGeneralesPorConcepto($idEmpresa, 'suscripciones_devengo') as $r) {
+            $reglas[(string) ($r['codigo'] ?? '')] = $r;
+        }
+        foreach ($montos as $codigo => $monto) {
+            $monto = round($monto, 2);
+            if ($monto <= 0) {
+                continue;
+            }
+            $r = $reglas[$codigo] ?? null;
+            $nombre = (string) ($r['concepto'] ?? ($codigo === 'INGRESODIFERIDOSUSCRIPCION'
+                ? 'Ingresos diferidos por suscripciones' : 'Ingresos devengados por facturar'));
+            if (empty($r['id_cuenta'])) {
+                $reglasSinCuenta[] = self::LINEA_SIN_CUENTA . $nombre
+                    . ' (Configuración Contable → Suscripciones - Devengo)';
+                continue;
+            }
+            $detalles[] = [
+                'id_cuenta_contable' => (int) $r['id_cuenta'],
+                'cuenta_codigo'      => $r['cuenta_codigo'] ?? '',
+                'cuenta_nombre'      => $r['cuenta_nombre'] ?? '',
+                'debe'               => 0.0,
+                'haber'              => $monto,
+                'referencia_detalle' => $nombre,
+            ];
+        }
+    }
+
     private function cuentaProgramadaPorCodigo(int $idEmpresa, string $tipoAsiento, string $codigo): int
     {
         foreach ($this->programadoRepo->getReglasGeneralesPorConcepto($idEmpresa, $tipoAsiento) as $r) {

@@ -61,6 +61,8 @@ class CargaSuscripcionesEsquema
                     'OBSERVACIONES',
                     'INFO_CONCEPTO',
                     'INFO_DETALLE',
+                    'MODALIDAD_COBRO',
+                    'RECONOCIMIENTO',
                 ],
             ],
             self::HOJA_DETALLE => [
@@ -107,6 +109,13 @@ class CargaSuscripcionesEsquema
         return self::hojasDatos()[$hoja]['columnas'] ?? [];
     }
 
+    /**
+     * Columnas agregadas al final después de publicada la plantilla (devengado NIIF 15). Un
+     * archivo descargado antes no las trae: su encabezado puede faltar y se usan los valores
+     * por defecto (por adelantado / al facturar).
+     */
+    public const COLUMNAS_OPCIONALES_FINALES = ['MODALIDAD_COBRO', 'RECONOCIMIENTO'];
+
     /** Estados válidos de una suscripción (columna ESTADO). */
     public static function estadosValidos(): array
     {
@@ -151,6 +160,9 @@ class CargaSuscripcionesEsquema
             '- FORMA_COBRO: Credito o Tarjeta. TIPO_COMPROBANTE: Factura o Recibo.',
             '- ESTADO: Activo, Pausado, Suspendido o Cancelado (por defecto Activo).',
             '- INFO_CONCEPTO / INFO_DETALLE: información adicional opcional (un solo par).',
+            '- MODALIDAD_COBRO: Por adelantado o Mes caido (por defecto Por adelantado).',
+            '- RECONOCIMIENTO: Al facturar o Durante el periodo (por defecto Al facturar). Con',
+            '  "Durante el periodo" el ingreso de los servicios se reconoce mes a mes (devengado).',
             '',
             'DETALLE (hoja Detalle)',
             '- La columna CLAVE trae una fórmula en las primeras filas que copia la clave',

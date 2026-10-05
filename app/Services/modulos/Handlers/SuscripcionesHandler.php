@@ -24,10 +24,21 @@ class SuscripcionesHandler extends BaseHandler
         return match ($this->accion) {
             'generar_facturacion'               => $this->generarFacturacion($idEmpresa, $idUsuario, $parametros),
             'cobrar_suscripciones_nuvei'        => $this->cobrarSuscripcionesNuvei($idEmpresa, $idUsuario, $parametros),
+            'devengar_ingresos'                 => $this->devengarIngresos($idEmpresa, $idUsuario),
             'enviar_aviso_vencimiento'          => $this->enviarAvisoVencimiento($idEmpresa, $parametros),
             'enviar_aviso_vencimiento_whatsapp' => $this->enviarAvisoVencimientoWhatsapp($idEmpresa, $parametros),
             default                             => throw new \RuntimeException("Acción '{$this->accion}' no implementada en SuscripcionesHandler."),
         };
+    }
+
+    // ── Devengar ingresos (NIIF 15) ───────────────────────────────────────────
+    // Asiento mensual de devengo: diferido → ingreso y provisión de mes caído. Va hasta el mes
+    // anterior y recupera los pendientes. Debe correr ANTES de «Generar facturación» el día 1,
+    // para que la provisión de mes caído exista cuando se emita la factura que la cancela.
+    private function devengarIngresos(int $idEmpresa, int $idUsuario): array
+    {
+        $res = SuscripcionDevengoService::crear()->ponerseAlDia($idEmpresa, $idUsuario);
+        return ['registros' => $res['meses'], 'mensaje' => $res['mensaje']];
     }
 
     // ── Generar facturación ───────────────────────────────────────────────────

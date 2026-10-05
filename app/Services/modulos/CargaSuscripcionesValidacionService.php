@@ -223,6 +223,12 @@ class CargaSuscripcionesValidacionService
             foreach (array_keys($esperadas) as $i) {
                 $reales[] = strtoupper(trim((string) $hoja->getCell([$i + 1, 1])->getValue()));
             }
+            // Las columnas opcionales del final pueden faltar (plantillas descargadas antes).
+            foreach ($esperadas as $i => $col) {
+                if ($reales[$i] === '' && in_array($col, CargaSuscripcionesEsquema::COLUMNAS_OPCIONALES_FINALES, true)) {
+                    $reales[$i] = strtoupper($col);
+                }
+            }
             if ($reales !== array_map('strtoupper', $esperadas)) {
                 $errores[] = 'Los encabezados de la hoja "' . $nombreHoja
                     . '" fueron modificados. Se esperaba: ' . implode(' | ', $esperadas) . '.';
@@ -264,6 +270,8 @@ class CargaSuscripcionesValidacionService
                 'observaciones'    => $this->texto($c[9] ?? ''),
                 'info_concepto'    => $this->texto($c[10] ?? ''),
                 'info_detalle'     => $this->texto($c[11] ?? ''),
+                'modalidad_cobro'  => $this->aModalidadCobro($c[12] ?? ''),
+                'reconocimiento'   => $this->aReconocimiento($c[13] ?? ''),
             ];
 
             $errores = $this->rules->validarSuscripcion($f);
@@ -566,6 +574,32 @@ class CargaSuscripcionesValidacionService
         }
         if (in_array($v, ['recibo', 'recibo de venta', 'r'], true)) {
             return CargaSuscripcionesEsquema::TIPO_RECIBO;
+        }
+        return null;
+    }
+
+    /** "Por adelantado"/"Mes caido" => 'anticipado'/'vencido'; null si no se reconoce. Vacío = anticipado. */
+    private function aModalidadCobro($valor): ?string
+    {
+        $v = mb_strtolower(trim((string) $valor));
+        if ($v === '' || in_array($v, ['por adelantado', 'adelantado', 'anticipado', 'a'], true)) {
+            return 'anticipado';
+        }
+        if (in_array($v, ['mes caido', 'mes caído', 'vencido', 'mes caido (vencido)', 'mes caído (vencido)', 'v'], true)) {
+            return 'vencido';
+        }
+        return null;
+    }
+
+    /** "Al facturar"/"Durante el periodo" => 'inmediato'/'diferido'; null si no se reconoce. Vacío = inmediato. */
+    private function aReconocimiento($valor): ?string
+    {
+        $v = mb_strtolower(trim((string) $valor));
+        if ($v === '' || in_array($v, ['al facturar', 'inmediato', 'f'], true)) {
+            return 'inmediato';
+        }
+        if (in_array($v, ['durante el periodo', 'durante el período', 'diferido', 'devengado', 'd'], true)) {
+            return 'diferido';
         }
         return null;
     }

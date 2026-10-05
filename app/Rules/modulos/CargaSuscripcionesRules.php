@@ -77,6 +77,14 @@ class CargaSuscripcionesRules
             $e[] = 'ESTADO debe ser Activo, Pausado, Suspendido o Cancelado.';
         }
 
+        if (array_key_exists('modalidad_cobro', $f) && $f['modalidad_cobro'] === null) {
+            $e[] = 'MODALIDAD_COBRO debe ser "Por adelantado" o "Mes caido".';
+        }
+
+        if (array_key_exists('reconocimiento', $f) && $f['reconocimiento'] === null) {
+            $e[] = 'RECONOCIMIENTO debe ser "Al facturar" o "Durante el periodo".';
+        }
+
         if (mb_strlen($f['observaciones']) > self::MAX_OBSERVACION) {
             $e[] = 'OBSERVACIONES no puede exceder ' . self::MAX_OBSERVACION . ' caracteres.';
         }

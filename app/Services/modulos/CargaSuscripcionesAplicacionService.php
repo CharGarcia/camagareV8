@@ -115,6 +115,8 @@ class CargaSuscripcionesAplicacionService
             'forma_cobro'      => $s['forma_cobro'],
             'estado'           => $s['estado'],
             'tipo_comprobante' => $s['tipo_comprobante'],
+            'modalidad_cobro'  => $s['modalidad_cobro'] ?? 'anticipado',
+            'reconocimiento'   => $s['reconocimiento'] ?? 'inmediato',
             'observaciones'    => $s['observaciones'],
             'info_adicional'   => $infoAdicional,
             'detalle'          => $detalle,

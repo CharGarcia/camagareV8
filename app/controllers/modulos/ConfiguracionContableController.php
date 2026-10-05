@@ -102,9 +102,22 @@ class ConfiguracionContableController extends BaseModuloController
             $tiposInactivos = [];
         }
 
+        // Tipos de asiento que la empresa no usa (sin registros en su módulo y sin cuentas): no
+        // se listan en el selector. El que se pide abrir desde el aviso se muestra igual.
+        try {
+            $tiposSinUso = $this->service->tiposAsientoSinUso($idEmpresa);
+        } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
+            $tiposSinUso = [];
+        }
+        if (is_array($abrirSeccion) && !empty($abrirSeccion['tipo'])) {
+            $tiposSinUso = array_values(array_diff($tiposSinUso, [$abrirSeccion['tipo']]));
+        }
+
         $this->viewWithLayout('layouts.main', 'modulos.configuracion_contable.index', [
             'abrirSeccion' => is_array($abrirSeccion) ? $abrirSeccion : null,
             'tiposInactivos' => $tiposInactivos,
+            'tiposSinUso'    => $tiposSinUso,
             'titulo'       => 'Configuración Contable',
             'perm'         => $perm,
             'rutaModulo'   => self::RUTA_MODULO,
