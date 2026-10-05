@@ -1713,8 +1713,15 @@ class DocumentoAutomatedRegisterService
                     'cod_doc_sustento' => trim((string)$imp->codDocSustento) !== ''
                         ? trim((string)$imp->codDocSustento)
                         : (($tipoDocSustento ?: '01')),
-                    'num_doc_sustento' => $this->formatearNumDocSustento((string)($imp->numDocSustento ?? $numDocSustento)),
-                    'fecha_emision_doc_sustento' => $this->formatearFecha((string)($imp->fechaEmisionDocSustento ?? $fechaSustento))
+                    // `??` sobre SimpleXML no sirve de respaldo: un hijo ausente es un
+                    // elemento vacio, no null. Se compara el texto; sin fecha en la linea ni
+                    // en la cabecera se usa la fecha de emision de la retencion.
+                    'num_doc_sustento' => trim((string)$imp->numDocSustento) !== ''
+                        ? $this->formatearNumDocSustento((string)$imp->numDocSustento)
+                        : ($numDocSustento ?? ''),
+                    'fecha_emision_doc_sustento' => trim((string)$imp->fechaEmisionDocSustento) !== ''
+                        ? $this->formatearFecha(trim((string)$imp->fechaEmisionDocSustento))
+                        : ($fechaSustento ?: $fechaEmision)
                 ];
             }
         }
@@ -1726,7 +1733,9 @@ class DocumentoAutomatedRegisterService
                     ? trim((string)$doc->codDocSustento)
                     : ($tipoDocSustento ?: '01');
                 $numSustento = $this->formatearNumDocSustento((string)$doc->numDocSustento);
-                $fecSustento = $this->formatearFecha((string)$doc->fechaEmisionDocSustento);
+                $fecSustento = trim((string)$doc->fechaEmisionDocSustento) !== ''
+                    ? $this->formatearFecha(trim((string)$doc->fechaEmisionDocSustento))
+                    : ($fechaSustento ?: $fechaEmision);
 
                 if (isset($doc->retenciones->retencion)) {
                     foreach ($doc->retenciones->retencion as $ret) {
@@ -1763,7 +1772,7 @@ class DocumentoAutomatedRegisterService
             'periodo_fiscal'             => (string)$info->periodoFiscal,
             'tipo_doc_sustento'          => $tipoDocSustento ?: '01',
             'num_doc_sustento'           => $numDocSustento,
-            'fecha_emision_doc_sustento' => $fechaSustento,
+            'fecha_emision_doc_sustento' => $fechaSustento ?: $fechaEmision,
             'id_compra'                  => $idCompra,
             'id_liquidacion'             => $idLiquidacion,
             // retencion_compra_cabecera.estado tiene CHECK en femenino
@@ -1991,6 +2000,31 @@ class DocumentoAutomatedRegisterService
             $codSustentoDefault = '01';
         }
 
+        // Fecha del documento de sustento por defecto.
+        // En la version 1.0.0 <fechaEmisionDocSustento> tambien es OPCIONAL. Los bancos la
+        // omiten en las retenciones sobre rendimientos financieros (codDocSustento 12,
+        // numDocSustento en ceros, p. ej. Banco ProCredit, codigo 323B1): la linea quedaba
+        // con fecha vacia y RetencionVentaRules rechazaba el XML autorizado con "la fecha
+        // del documento de sustento es obligatoria". Se toma la primera fecha de sustento
+        // presente en el XML y, si no hay ninguna, la fecha de emision de la propia
+        // retencion (la columna en BD es NOT NULL).
+        $fechaSustentoDefault = $fechaSustento ?? '';
+        if ($fechaSustentoDefault === '' && isset($xml->impuestos->impuesto)) {
+            foreach ($xml->impuestos->impuesto as $imp) {
+                $fs = trim((string)$imp->fechaEmisionDocSustento);
+                if ($fs !== '') { $fechaSustentoDefault = $this->formatearFecha($fs); break; }
+            }
+        }
+        if ($fechaSustentoDefault === '' && isset($xml->docsSustento->docSustento)) {
+            foreach ($xml->docsSustento->docSustento as $doc) {
+                $fs = trim((string)$doc->fechaEmisionDocSustento);
+                if ($fs !== '') { $fechaSustentoDefault = $this->formatearFecha($fs); break; }
+            }
+        }
+        if ($fechaSustentoDefault === '') {
+            $fechaSustentoDefault = $fechaEmision;
+        }
+
         // 1. Extraer lineas de retencion (Soporta v1.0 y v2.0)
         $lineas = [];
 
@@ -2007,9 +2041,9 @@ class DocumentoAutomatedRegisterService
                     'valor_retenido'             => (float)$imp->valorRetenido,
                     'cod_doc_sustento'           => $codDoc !== '' ? $codDoc : $codSustentoDefault,
                     'num_doc_sustento'           => $numDoc !== '' ? $numDoc : ($numDocSustento ?? ''),
-                    'fecha_emision_doc_sustento' => !empty((string)$imp->fechaEmisionDocSustento)
-                        ? $this->formatearFecha((string)$imp->fechaEmisionDocSustento)
-                        : ($fechaSustento ?? ''),
+                    'fecha_emision_doc_sustento' => trim((string)$imp->fechaEmisionDocSustento) !== ''
+                        ? $this->formatearFecha(trim((string)$imp->fechaEmisionDocSustento))
+                        : $fechaSustentoDefault,
                 ];
             }
         }
@@ -2020,7 +2054,9 @@ class DocumentoAutomatedRegisterService
                 $codSustento = trim((string)$doc->codDocSustento);
                 if ($codSustento === '') { $codSustento = $codSustentoDefault; }
                 $numSustento = !empty((string)$doc->numDocSustento) ? $fmtDoc((string)$doc->numDocSustento) : '';
-                $fecSustento = $this->formatearFecha((string)$doc->fechaEmisionDocSustento);
+                $fecSustento = trim((string)$doc->fechaEmisionDocSustento) !== ''
+                    ? $this->formatearFecha(trim((string)$doc->fechaEmisionDocSustento))
+                    : $fechaSustentoDefault;
 
                 if (isset($doc->retenciones->retencion)) {
                     foreach ($doc->retenciones->retencion as $ret) {

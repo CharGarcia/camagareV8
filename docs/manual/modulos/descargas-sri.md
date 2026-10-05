@@ -6,7 +6,7 @@ ruta_modulo: modulos/descargas-sri
 tipo: modulo
 visibilidad: todos
 etiquetas: descargas sri, comprobantes recibidos, xml, facturas de proveedores, importar compras, portal sri
-version: 1.10
+version: 1.11
 orden: 50
 estado: activo
 ---
@@ -80,6 +80,16 @@ se escribe una nueva; no hay forma de recuperarla desde el sistema.
   comprobante de retención ese dato es opcional). Ya no bloquea: si el XML no lo
   trae, el sistema toma el código presente en el propio comprobante y, si no hay
   ninguno, asume **01 – Factura**. Puede corregirlo después desde la retención.
+- **"XML obtenido pero error en registro: Línea 1: la fecha del documento de
+  sustento es obligatoria"**: ocurría con retenciones cuyo XML no incluye la
+  fecha del documento de sustento. Es típico de los **bancos** cuando retienen
+  sobre rendimientos financieros (intereses): el sustento es el código **12 –
+  Documento emitido por institución financiera**, el número viene en ceros y la
+  fecha no se informa (en la versión 1.0.0 del comprobante ese dato es opcional).
+  No es un problema de versión del comprobante. Ya no bloquea: si el XML no trae
+  la fecha, el sistema usa la primera fecha de sustento que exista en el propio
+  comprobante y, si no hay ninguna, la **fecha de emisión de la retención**.
+  Puede corregirla después desde la retención.
 - **Un XML válido se marca como ERROR al subirlo**: ocurría con archivos en los
   que el emisor deja un salto de línea entre `<comprobante>` y el bloque `CDATA`
   del sobre de autorización. El lector exigía que el comprobante empezara justo
@@ -155,6 +165,11 @@ se escribe una nueva; no hay forma de recuperarla desde el sistema.
 
 ## Historial de cambios
 
+- **1.11** — El registro de retenciones ya no falla con *la fecha del documento de
+  sustento es obligatoria* cuando el XML del SRI omite esa fecha (retenciones de
+  bancos sobre intereses, sustento **12**, dato opcional en la versión 1.0.0): se
+  toma la fecha de sustento presente en el comprobante o, en su defecto, la fecha
+  de emisión de la retención. Aplica a retenciones recibidas y emitidas.
 - **1.10** — Corregido el error *retencion_compra_cabecera_estado_check* al
   cargar retenciones emitidas por la empresa. Si el XML es el sobre de
   autorización del SRI con estado **AUTORIZADO**, la retención se registra como
