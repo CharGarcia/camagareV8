@@ -1404,3 +1404,12 @@ th[data-det-col] .cmg-resizer {
     border-color: #6c757d;
     z-index: 1;
 }
+
+/* ── Porcentaje de descuento junto a un valor (modales de Factura, Recibo y Proforma) ──
+   Reserva siempre su ancho, con o sin descuento, para que el valor de al lado no se mueva. */
+.cmg-pct-desc {
+    display: inline-block;
+    min-width: 4.6em;
+    text-align: right;
+    white-space: nowrap;
+}

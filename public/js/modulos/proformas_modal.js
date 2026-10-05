@@ -556,7 +556,7 @@
             <div class="d-flex align-items-center">
                 <input type="number" class="form-control form-control-sm input-detalle text-end text-danger input-desc"
                     value="${desc.toFixed(2)}" step="any" min="0" style="min-width:85px;">
-                <small class="desc-pct text-muted ms-1 d-none" style="font-size:.7rem;white-space:nowrap" title="Porcentaje de descuento de la línea"></small>
+                <small class="desc-pct text-muted ms-1 cmg-pct-desc" style="font-size:.7rem;white-space:nowrap" title="Porcentaje de descuento de la línea"></small>
                 <button type="button" class="btn btn-link btn-sm p-1 text-primary shadow-none border-0"
                     onclick="PF._abrirDescuento(this)" title="Aplicar descuento">
                     <i class="bi bi-plus-circle"></i>
@@ -853,10 +853,8 @@
             if (totalDesc > 0 && subtotalBrutoTotal > 0) {
                 const pct = totalDesc / subtotalBrutoTotal * 100;
                 elDescPct.textContent = '(' + (Math.abs(pct - Math.round(pct)) < 0.005 ? String(Math.round(pct)) : pct.toFixed(2).replace(/0$/, '')) + '%)';
-                elDescPct.classList.remove('d-none');
             } else {
                 elDescPct.textContent = '';
-                elDescPct.classList.add('d-none');
             }
         }
 

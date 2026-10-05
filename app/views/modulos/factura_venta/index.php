@@ -915,7 +915,7 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                                             <!-- Total Descuento (informativo: ya está restado dentro del Subtotal de arriba) -->
                                             <div class="d-flex justify-content-between align-items-center mb-1">
                                                 <span class="text-muted">(-) Descuento</span>
-                                                <span class="fw-bold text-dark"><small id="m-lbl-descuento-pct" class="text-muted fw-normal me-1 d-none" title="Porcentaje sobre el subtotal antes del descuento"></small><span id="m-lbl-descuento">0.00</span></span>
+                                                <span class="fw-bold text-dark"><small id="m-lbl-descuento-pct" class="text-muted fw-normal me-1 cmg-pct-desc" title="Porcentaje sobre el subtotal antes del descuento"></small><span id="m-lbl-descuento">0.00</span></span>
                                             </div>
 
                                             <!-- IVA agrupado por tarifa (solo los > 0) -->
@@ -1543,11 +1543,10 @@ $totalPages = $totalPagesOriginal;
         if (!el) return;
         descuento = parseFloat(descuento) || 0;
         const bruto = descuento + (parseFloat(subtotalNeto) || 0);
-        if (!(descuento > 0) || !(bruto > 0)) { el.textContent = ''; el.classList.add('d-none'); return; }
+        if (!(descuento > 0) || !(bruto > 0)) { el.textContent = ''; return; }
         const pct = descuento / bruto * 100;
         const txt = Math.abs(pct - Math.round(pct)) < 0.005 ? String(Math.round(pct)) : pct.toFixed(2).replace(/0$/, '');
         el.textContent = '(' + txt + '%)';
-        el.classList.remove('d-none');
     }
     const EMPRESA_CONFIG = {
         facturacion_libre: <?= (($empresa['facturacion_libre'] ?? false) === 'true' || ($empresa['facturacion_libre'] ?? false) === true) ? 'true' : 'false' ?>,
@@ -4360,7 +4359,7 @@ $totalPages = $totalPagesOriginal;
             <td>
                 <div class="d-flex align-items-center">
                     <input type="number" class="form-control form-control-sm input-detalle text-end text-danger input-desc" value="0.00" step="any" min="0" style="min-width:85px;" oninput="calcFila(this)" ${EMPRESA_CONFIG.editar_descuento_factura ? '' : 'readonly'}>
-                    <small class="desc-pct text-muted ms-1 d-none" style="font-size:.7rem;white-space:nowrap" title="Porcentaje de descuento de la línea"></small>
+                    <small class="desc-pct text-muted ms-1 cmg-pct-desc" style="font-size:.7rem;white-space:nowrap" title="Porcentaje de descuento de la línea"></small>
                     <button type="button" class="btn btn-link btn-sm p-1 text-primary shadow-none border-0 ${EMPRESA_CONFIG.editar_descuento_factura ? '' : 'd-none'}" onclick="abrirModalDescuento(this)" title="Aplicar descuento rápido">
                         <i class="bi bi-plus-circle"></i>
                     </button>

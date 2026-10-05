@@ -467,7 +467,7 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosPestanasOcultas($vistaConfigP
                                         <div id="pf_subtotalesIva" class="mb-1"></div>
                                         <div class="d-flex justify-content-between align-items-center mb-1">
                                             <span class="text-muted">(-) Descuento</span>
-                                            <span class="fw-bold text-dark"><small id="pf_totalDescuentoPct" class="text-muted fw-normal me-1 d-none" title="Porcentaje sobre el subtotal antes del descuento"></small><span id="pf_totalDescuento">0.00</span></span>
+                                            <span class="fw-bold text-dark"><small id="pf_totalDescuentoPct" class="text-muted fw-normal me-1 cmg-pct-desc" title="Porcentaje sobre el subtotal antes del descuento"></small><span id="pf_totalDescuento">0.00</span></span>
                                         </div>
                                         <div id="pf_ivasGrupo" class="mb-1"></div>
                                         <hr class="my-1 opacity-25">

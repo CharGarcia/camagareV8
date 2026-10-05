@@ -764,8 +764,7 @@ window.CMG_Identificacion = (function () {
         const el = tr && tr.querySelector ? tr.querySelector('.desc-pct') : null;
         if (!el) return;
         const txt = window.CMG_pctDescuento(descuento, bruto);
-        el.textContent = txt;
-        el.classList.toggle('d-none', txt === '');
+        el.textContent = txt; // vacío = sin descuento; el espacio se conserva (cmg-pct-desc)
     };
 
     /**
