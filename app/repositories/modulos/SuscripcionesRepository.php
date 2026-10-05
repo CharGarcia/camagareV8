@@ -927,22 +927,44 @@ class SuscripcionesRepository extends BaseRepository
 
     // ── CRUD suscripción ──────────────────────────────────────────────────────
 
+    /**
+     * ¿Ya se aplicó database/migrations/20261004_suscripciones_devengo.sql? Mientras no, la
+     * suscripción se guarda como siempre (sin modalidad ni reconocimiento) en vez de fallar.
+     */
+    public function tieneColumnasDevengo(): bool
+    {
+        return $this->columnaExiste('suscripciones', 'reconocimiento')
+            && $this->columnaExiste('suscripciones_pagos', 'servicio_desde');
+    }
+
+    /** Valores de modalidad/reconocimiento listos para el INSERT/UPDATE (con sus defaults). */
+    private function paramsDevengo(array $data): array
+    {
+        return [
+            ':modalidad_cobro' => ($data['modalidad_cobro'] ?? '') === 'vencido' ? 'vencido' : 'anticipado',
+            ':reconocimiento'  => ($data['reconocimiento'] ?? '') === 'diferido' ? 'diferido' : 'inmediato',
+        ];
+    }
+
     public function create(array $data): int
     {
+        $devengo  = $this->tieneColumnasDevengo();
+        $colsDev  = $devengo ? ', modalidad_cobro, reconocimiento' : '';
+        $valsDev  = $devengo ? ', :modalidad_cobro, :reconocimiento' : '';
         $sql = "INSERT INTO {$this->table}
                     (id_empresa, id_cliente, id_periodicidad,
                      fecha_inicio, fecha_fin, proximo_cobro,
                      forma_cobro, pasarela_tarjeta, estado, tipo_comprobante,
                      kushki_token, kushki_card_last4, kushki_card_brand, kushki_card_name,
-                     observaciones, info_adicional, created_by, created_at, eliminado)
+                     observaciones, info_adicional, created_by, created_at, eliminado{$colsDev})
                 VALUES
                     (:id_empresa, :id_cliente, :id_periodicidad,
                      :fecha_inicio, :fecha_fin, :proximo_cobro,
                      :forma_cobro, :pasarela_tarjeta, :estado, :tipo_comprobante,
                      :kushki_token, :kushki_card_last4, :kushki_card_brand, :kushki_card_name,
-                     :observaciones, :info_adicional, :created_by, CURRENT_TIMESTAMP, false)";
+                     :observaciones, :info_adicional, :created_by, CURRENT_TIMESTAMP, false{$valsDev})";
         $st = $this->db->prepare($sql);
-        $st->execute([
+        $st->execute(($devengo ? $this->paramsDevengo($data) : []) + [
             ':id_empresa'        => $data['id_empresa'],
             ':id_cliente'        => $data['id_cliente'],
             ':id_periodicidad'   => $data['id_periodicidad'],
@@ -966,7 +988,10 @@ class SuscripcionesRepository extends BaseRepository
 
     public function update(int $id, int $idEmpresa, array $data): bool
     {
+        $devengo = $this->tieneColumnasDevengo();
+        $setDev  = $devengo ? 'modalidad_cobro = :modalidad_cobro, reconocimiento = :reconocimiento,' : '';
         $sql = "UPDATE {$this->table} SET
+                    {$setDev}
                     id_cliente      = :id_cliente,
                     id_periodicidad = :id_periodicidad,
                     fecha_inicio    = :fecha_inicio,
@@ -982,7 +1007,7 @@ class SuscripcionesRepository extends BaseRepository
                     updated_at      = CURRENT_TIMESTAMP
                 WHERE id = :id AND id_empresa = :id_empresa AND eliminado = false";
         $st = $this->db->prepare($sql);
-        return $st->execute([
+        return $st->execute(($devengo ? $this->paramsDevengo($data) : []) + [
             ':id_cliente'      => $data['id_cliente'],
             ':id_periodicidad' => $data['id_periodicidad'],
             ':fecha_inicio'    => $data['fecha_inicio'],
@@ -1093,6 +1118,7 @@ class SuscripcionesRepository extends BaseRepository
     public function getDetalle(int $idSuscripcion): array
     {
         $sql = "SELECT sd.*, p.nombre AS nombre_producto, p.codigo AS codigo_producto,
+                       p.tipo_produccion,
                        ti.codigo AS codigo_porcentaje
                 FROM suscripciones_detalle sd
                 LEFT JOIN productos p ON p.id = sd.id_producto
@@ -1139,16 +1165,23 @@ class SuscripcionesRepository extends BaseRepository
 
     public function insertPago(array $data): int
     {
+        // Período de servicio que cubre el documento (solo si ya se aplicó el SQL del devengo).
+        $periodo  = $this->tieneColumnasDevengo();
+        $colsPer  = $periodo ? ', servicio_desde, servicio_hasta' : '';
+        $valsPer  = $periodo ? ', :servicio_desde, :servicio_hasta' : '';
         $sql = "INSERT INTO suscripciones_pagos
                     (id_suscripcion, id_empresa, fecha_cobro, monto, estado, id_factura, id_recibo,
                      kushki_transaction_id, kushki_response, nuvei_transaction_id, nuvei_response,
-                     intentos, created_by, created_at, eliminado)
+                     intentos, created_by, created_at, eliminado{$colsPer})
                 VALUES
                     (:id_suscripcion, :id_empresa, :fecha_cobro, :monto, :estado, :id_factura, :id_recibo,
                      :kushki_transaction_id, :kushki_response, :nuvei_transaction_id, :nuvei_response,
-                     :intentos, :created_by, CURRENT_TIMESTAMP, false)";
+                     :intentos, :created_by, CURRENT_TIMESTAMP, false{$valsPer})";
         $st = $this->db->prepare($sql);
-        $st->execute([
+        $st->execute(($periodo ? [
+            ':servicio_desde' => $data['servicio_desde'] ?? null,
+            ':servicio_hasta' => $data['servicio_hasta'] ?? null,
+        ] : []) + [
             ':id_suscripcion'        => $data['id_suscripcion'],
             ':id_empresa'            => $data['id_empresa'],
             ':fecha_cobro'           => $data['fecha_cobro'] ?? date('Y-m-d'),
@@ -1293,6 +1326,26 @@ class SuscripcionesRepository extends BaseRepository
         return $this->db->query($sql)->fetchAll(PDO::FETCH_ASSOC);
     }
 
+    /**
+     * Mes caído: el documento que vence en proximo_cobro cubre el período ANTERIOR, así que el
+     * último período (el que contiene fecha_fin) se factura después de fecha_fin. Condición extra
+     * para los filtros por fecha_fin: el período que cubre empieza antes o en fecha_fin.
+     * Vacía mientras no se aplique el SQL del devengo (la columna no existe todavía).
+     * Requiere los alias `s` (suscripciones) y `per` (suscripcion_periodicidades).
+     */
+    private function orUltimoPeriodoVencido(): string
+    {
+        if (!$this->tieneColumnasDevengo()) {
+            return '';
+        }
+        return " OR (s.modalidad_cobro = 'vencido' AND (CASE per.codigo
+                        WHEN 'DIARIO'    THEN s.proximo_cobro - 1
+                        WHEN 'SEMANAL'   THEN s.proximo_cobro - 7
+                        WHEN 'QUINCENAL' THEN s.proximo_cobro - 15
+                        ELSE (s.proximo_cobro - make_interval(months => per.meses))::date
+                     END) <= s.fecha_fin)";
+    }
+
     public function getParaGeneracionManual(int $idEmpresa, int $idPeriodicidad): array
     {
         $sql = "SELECT s.*,
@@ -1312,7 +1365,7 @@ class SuscripcionesRepository extends BaseRepository
                   AND s.eliminado = false 
                   AND s.proximo_cobro <= CURRENT_DATE
                   AND (s.fecha_inicio IS NULL OR s.fecha_inicio <= CURRENT_DATE)
-                  AND (s.fecha_fin IS NULL OR s.fecha_fin >= CURRENT_DATE)
+                  AND (s.fecha_fin IS NULL OR s.fecha_fin >= CURRENT_DATE{$this->orUltimoPeriodoVencido()})
                 ORDER BY s.proximo_cobro ASC";
         $st = $this->db->prepare($sql);
         $st->execute([':id_empresa' => $idEmpresa, ':id_per' => $idPeriodicidad]);
@@ -1343,7 +1396,7 @@ class SuscripcionesRepository extends BaseRepository
                   AND s.eliminado = false
                   AND s.proximo_cobro <= CURRENT_DATE
                   AND (s.fecha_inicio IS NULL OR s.fecha_inicio <= CURRENT_DATE)
-                  AND (s.fecha_fin IS NULL OR s.proximo_cobro <= s.fecha_fin)
+                  AND (s.fecha_fin IS NULL OR s.proximo_cobro <= s.fecha_fin{$this->orUltimoPeriodoVencido()})
                 ORDER BY s.proximo_cobro ASC";
         $st = $this->db->prepare($sql);
         $st->execute([':id_empresa' => $idEmpresa]);
@@ -1373,7 +1426,7 @@ class SuscripcionesRepository extends BaseRepository
                   AND s.estado = 'activo'
                   AND s.eliminado = false
                   AND s.proximo_cobro = CURRENT_DATE + CAST(:dias AS INTEGER)
-                  AND (s.fecha_fin IS NULL OR s.proximo_cobro <= s.fecha_fin)
+                  AND (s.fecha_fin IS NULL OR s.proximo_cobro <= s.fecha_fin{$this->orUltimoPeriodoVencido()})
                 ORDER BY s.proximo_cobro ASC";
         $st = $this->db->prepare($sql);
         $st->execute([':id_empresa' => $idEmpresa, ':dias' => $dias]);

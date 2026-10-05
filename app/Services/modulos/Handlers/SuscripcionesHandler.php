@@ -12,6 +12,7 @@ use App\Services\LogSistemaService;
 use App\Services\SecuencialService;
 use App\Services\modulos\FacturaVentaService;
 use App\Services\modulos\ReciboVentaService;
+use App\Services\modulos\SuscripcionDevengoService;
 use App\Services\modulos\SuscripcionFacturacionService;
 use App\Services\modulos\SuscripcionesService;
 use App\Rules\modulos\SuscripcionesRules;
@@ -75,6 +76,7 @@ class SuscripcionesHandler extends BaseHandler
         $hoy       = date('Y-m-d');
         $generadas = 0;
         $errores   = 0;
+        $devengo   = SuscripcionDevengoService::crear();
 
         foreach ($vencidas as $susc) {
             $idSusc  = (int)$susc['id'];
@@ -97,8 +99,11 @@ class SuscripcionesHandler extends BaseHandler
             ];
 
             // Bucle de "ponerse al día": una factura por cada período vencido,
-            // sin pasar la fecha_fin de la suscripción.
-            while ($proximo <= $hoy && ($fechaFin === null || $proximo <= $fechaFin)) {
+            // sin pasar la fecha_fin de la suscripción. En mes caído el documento cubre el
+            // período ANTERIOR, así que el último (el que contiene fecha_fin) se factura después.
+            $esVencido = ($susc['modalidad_cobro'] ?? 'anticipado') === 'vencido';
+            while ($proximo <= $hoy && ($fechaFin === null
+                    || ($esVencido ? $devengo->periodoVencidoDentroDelContrato($susc, $proximo) : $proximo <= $fechaFin))) {
                 // Calcular el siguiente período ANTES de crear la factura.
                 // Protección anti-bucle: la fecha SIEMPRE debe avanzar.
                 $nuevoProximo = $suscService->calcularProximoCobro($proximo, $meses, $codigo);
@@ -126,7 +131,10 @@ class SuscripcionesHandler extends BaseHandler
                         && ($susc['pasarela_tarjeta'] ?? '') === 'nuvei'
                         && !empty($susc['id_nuvei_tarjeta']);
 
-                    $suscRepo->insertPago([
+                    // Período de servicio que cubre el documento (adelantado o mes caído).
+                    $servicio = $devengo->periodoServicio($susc, $proximo, $nuevoProximo);
+
+                    $idPago = $suscRepo->insertPago([
                         'id_suscripcion' => $idSusc,
                         'id_empresa'     => $idEmpresa,
                         'id_factura'     => $res['id_factura'],
@@ -135,7 +143,20 @@ class SuscripcionesHandler extends BaseHandler
                         'monto'          => $res['importe'],
                         'estado'         => $esNuveiTarjeta ? 'pendiente' : 'exitoso',
                         'id_usuario'     => $idUsuario,
+                        'servicio_desde' => $servicio['desde'],
+                        'servicio_hasta' => $servicio['hasta'],
                     ]);
+
+                    // Cronograma de devengo (solo si la suscripción reconoce durante el período).
+                    // El documento ya existe: si esto falla se registra y se sigue, nunca se repite.
+                    try {
+                        $devengo->crearCronogramaDocumento($idEmpresa, $idUsuario, $susc, $idPago, $res, $servicio['desde'], $hoy);
+                    } catch (\Throwable $eDev) {
+                        \App\Services\ErrorLogService::registrar($eDev, [
+                            'ruta'   => static::class,
+                            'accion' => 'generarFacturacion#devengo_suscripcion_' . $idSusc,
+                        ]);
+                    }
 
                     $generadas++;
                     $proximo = $nuevoProximo;

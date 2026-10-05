@@ -115,6 +115,7 @@ $base = BASE_URL;
                         'cierre_ejercicio'           => 'Cierre del Ejercicio',
                         'activos_fijos_alta'         => 'Activos Fijos - Alta',
                         'activos_fijos_depreciacion' => 'Activos Fijos - Depreciación',
+                        'suscripciones_devengo'      => 'Suscripciones - Devengo',
                     ];
                     $tiposInactivos = $tiposInactivos ?? [];
                     foreach ($tiposAsientoSelector as $tipoValor => $tipoEtiqueta):

@@ -5,8 +5,8 @@ categoria: Ventas
 ruta_modulo: modulos/suscripciones
 tipo: modulo
 visibilidad: todos
-etiquetas: suscripciones, suscripcion, cobro recurrente, facturacion recurrente, factura recurrente, mensualidad, pension, plan mensual, membresia, renovacion, periodicidad, proximo cobro, generar documentos, generar facturas, facturacion automatica, facturas del cliente, facturas emitidas, historial de facturas, detalle de facturas, recibos del cliente, que le facture, saldo del cliente, facturas pendientes, facturas pagadas, facturas abonadas, cobro con tarjeta, debito automatico, nuvei, kushki, aviso de vencimiento, imprimir, impresora, excel, exportar, resumen de valores, total por periodicidad, proyeccion anual, ingresos recurrentes, iva por tarifa, resumen por concepto, detalle por cliente, que se le factura a cada cliente, items por cliente, informacion adicional en excel, resumen en pdf, detalle por cliente en pdf, pdf de la suscripcion, imprimir suscripcion, contrato, ficha de la suscripcion, detalle de la suscripcion en pdf
-version: 1.15
+etiquetas: suscripciones, suscripcion, cobro recurrente, facturacion recurrente, factura recurrente, mensualidad, pension, plan mensual, membresia, renovacion, periodicidad, proximo cobro, generar documentos, generar facturas, facturacion automatica, facturas del cliente, facturas emitidas, historial de facturas, detalle de facturas, recibos del cliente, que le facture, saldo del cliente, facturas pendientes, facturas pagadas, facturas abonadas, cobro con tarjeta, debito automatico, nuvei, kushki, aviso de vencimiento, imprimir, impresora, excel, exportar, resumen de valores, total por periodicidad, proyeccion anual, ingresos recurrentes, iva por tarifa, resumen por concepto, detalle por cliente, que se le factura a cada cliente, items por cliente, informacion adicional en excel, resumen en pdf, detalle por cliente en pdf, pdf de la suscripcion, imprimir suscripcion, contrato, ficha de la suscripcion, detalle de la suscripcion en pdf, devengado, devengo, ingreso diferido, ingresos diferidos, ingreso anticipado, cobro por adelantado, mes caido, mes vencido, facturacion vencida, niif 15, seccion 23, reconocimiento de ingresos, provision de ingresos, ingresos por facturar
+version: 1.16
 orden: 0
 estado: activo
 ---
@@ -63,6 +63,8 @@ Para dar de alta muchas suscripciones a la vez existe la
 | Fecha fin | No | Hasta cuándo; debe ser posterior al inicio. Vacía = sin fin. |
 | Periodicidad | Sí | Cada cuánto se cobra. |
 | Próximo cobro | Sí | Fecha del siguiente período por facturar. Avanza sola cada vez que se genera el documento. |
+| Modalidad de cobro | Sí | **Por adelantado**: cada documento cubre el período que empieza en el próximo cobro. **Mes caído (vencido)**: cubre el período que termina el día anterior al próximo cobro (se factura lo ya prestado). |
+| Reconocimiento del ingreso | Sí | **Al facturar**: todo el ingreso se registra el día de la factura. **Durante el período**: el ingreso de los servicios se reconoce mes a mes (ver *Reconocimiento del ingreso*). Al crear se propone *Durante el período* para las periodicidades de un mes o más. |
 | Productos / servicios | Sí | Al menos una línea con producto, cantidad mayor a cero y precio no negativo. |
 | Información adicional | No | Pares concepto / detalle que se copian a cada documento generado. |
 | Forma de cobro | Sí | Crédito (pago manual) o Tarjeta (cobro automático con Kushki o Nuvei). |
@@ -151,6 +153,34 @@ queda enlazado a ella: por eso aparece marcado en la pestaña **Facturas**.
 En el texto del ítem y en la información adicional se pueden usar marcadores del
 período facturado, por ejemplo `{mes}`, `{MES}`, `{anio}`, `{mes_anio}`, `{fecha}` y
 sus equivalentes del período anterior (`{mes_ant}`, `{anio_ant}`…).
+
+## Reconocimiento del ingreso (devengado)
+
+Las normas contables (NIIF 15 y NIIF para PYMES, Sección 23) piden reconocer el
+ingreso de un servicio **a medida que se presta**, no el día en que se factura. Una
+suscripción anual facturada en enero es ingreso de enero a diciembre, un mes a la vez.
+
+Con **Reconocimiento del ingreso = Durante el período**:
+
+- **Cobro por adelantado**: de cada documento, la parte que corresponde a **meses
+  posteriores** al de la factura queda como **Ingreso diferido** (un pasivo) y pasa
+  al ingreso mes a mes. Lo del mes de la factura se reconoce de inmediato.
+- **Mes caído**: el servicio ya prestado y aún no facturado se registra al cierre del
+  mes como **Ingreso devengado por facturar**; la factura del período lo cancela.
+- Solo se difieren los **servicios**. Los **bienes** se reconocen siempre al facturar.
+- Las periodicidades diaria, semanal y quincenal se reconocen al facturar.
+- El **IVA no cambia**: se declara en el mes de la factura, por el valor completo.
+
+Las dos cuentas (Ingresos diferidos e Ingresos devengados por facturar) se
+configuran en [Configuración Contable](modulos/configuracion-contable), tipo de asiento
+**Suscripciones - Devengo**.
+
+### Pestaña Devengo
+
+Muestra el cronograma de la suscripción: una fila por mes y documento, con el monto,
+su estado (**Por devengar**, **Devengado**, **Facturado** o **Anulado**) y el asiento que
+lo registró. Arriba, los totales diferido, devengado, por devengar y anulado. Es solo
+de consulta.
 
 ## Cobro con tarjeta
 
@@ -287,6 +317,12 @@ registrados*.
   registrado en Ingresos, o se registró en otro documento.
 
 ## Historial de cambios
+
+- **1.16** — Reconocimiento del ingreso por devengado (NIIF 15): campos **Modalidad de
+  cobro** (por adelantado o mes caído) y **Reconocimiento del ingreso**, cronograma
+  mensual de los servicios facturados por adelantado y nueva pestaña **Devengo**. Cada
+  documento generado guarda el período de servicio que cubre. Con mes caído, el último
+  período (el que contiene la fecha de fin) ahora sí se factura.
 
 - **1.15** — El PDF de la suscripción calcula el IVA con la configuración de
   facturación (al subtotal o línea por línea), igual que la pantalla (antes, siempre

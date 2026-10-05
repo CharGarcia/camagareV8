@@ -36,7 +36,7 @@ class ConfiguracionContableController extends BaseModuloController
     private const TIPOS_ABRIR = [
         'ventas_factura', 'factura_reembolso', 'recibos_venta', 'consignacion_venta', 'adquisiciones_compras',
         'adquisiciones_importacion', 'retenciones_venta', 'retenciones_compra', 'ingresos_egresos', 'cobros_pagos',
-        'nomina', 'cierre_ejercicio', 'activos_fijos_alta', 'activos_fijos_depreciacion',
+        'nomina', 'cierre_ejercicio', 'activos_fijos_alta', 'activos_fijos_depreciacion', 'suscripciones_devengo',
     ];
     private const SECCIONES_ABRIR = ['general', 'cliente', 'proveedor', 'empleado', 'ingresos', 'egresos', 'cobros', 'pagos'];
 
@@ -160,6 +160,7 @@ class ConfiguracionContableController extends BaseModuloController
             'declaracion_retenciones' => 'Declaración de Retenciones',
             'activos_fijos_alta' => 'Activos Fijos - Alta',
             'activos_fijos_depreciacion' => 'Activos Fijos - Depreciación',
+            'suscripciones_devengo' => 'Suscripciones - Devengo',
         ];
 
         ob_start();

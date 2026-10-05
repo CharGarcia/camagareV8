@@ -433,6 +433,33 @@ class SuscripcionesController extends BaseModuloController
      * (alcance=suscripcion), con su estado de cobro y el detalle de productos/servicios.
      * Solo lectura; paginado en el servidor.
      */
+    /**
+     * Pestaña «Devengo»: cronograma mensual del ingreso diferido de la suscripción
+     * (una fila por mes y documento). Solo lectura.
+     */
+    public function devengoAjax(): void
+    {
+        $this->requireLeer();
+        header('Content-Type: application/json');
+
+        $idEmpresa = (int) $_SESSION['id_empresa'];
+        $idSusc    = (int) ($_GET['id'] ?? 0);
+        if ($idSusc <= 0) {
+            echo json_encode(['ok' => false, 'mensaje' => 'Guarde la suscripción para ver su devengo.']);
+            return;
+        }
+        // Registros propios (§6): sin acceso total en Suscripciones, solo las que registró.
+        $this->requireRegistroPropio($this->service->getSuscripcion($idSusc, $idEmpresa));
+
+        try {
+            $rows = \App\Services\modulos\SuscripcionDevengoService::crear()->getPorSuscripcion($idSusc, $idEmpresa);
+            echo json_encode(['ok' => true, 'rows' => $rows], JSON_INVALID_UTF8_SUBSTITUTE);
+        } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
+            echo json_encode(['ok' => false, 'mensaje' => 'No se pudo cargar el devengo.']);
+        }
+    }
+
     public function facturasClienteAjax(): void
     {
         $this->requireLeer();
@@ -827,6 +854,7 @@ class SuscripcionesController extends BaseModuloController
             $generadas = 0;
             $errores   = 0;
             $errorMsgs = [];
+            $devengo   = \App\Services\modulos\SuscripcionDevengoService::crear();
 
             foreach ($suscripciones as $susc) {
                 $idSusc = (int) $susc['id'];
@@ -848,16 +876,17 @@ class SuscripcionesController extends BaseModuloController
                     // está DESACOPLADA del cobro: si la suscripción usa tarjeta vía Nuvei, el
                     // cargo real lo hace la automatización "Cobrar suscripciones (Nuvei)" —
                     // aquí solo se deja el pago en 'pendiente'. Crédito y Kushki no se tocan.
-                    $suscRepo->updateProximoCobro(
-                        $idSusc,
-                        $this->service->calcularProximoCobro($periodo, $meses, $codigo)
-                    );
+                    $siguiente = $this->service->calcularProximoCobro($periodo, $meses, $codigo);
+                    $suscRepo->updateProximoCobro($idSusc, $siguiente);
 
                     $esNuveiTarjeta = ($susc['forma_cobro'] ?? '') === 'tarjeta'
                         && ($susc['pasarela_tarjeta'] ?? '') === 'nuvei'
                         && !empty($susc['id_nuvei_tarjeta']);
 
-                    $suscRepo->insertPago([
+                    // Período de servicio que cubre el documento (adelantado o mes caído).
+                    $servicio = $devengo->periodoServicio($susc, $periodo, $siguiente);
+
+                    $idPago = $suscRepo->insertPago([
                         'id_suscripcion' => $idSusc,
                         'id_empresa'     => $idEmpresa,
                         'id_factura'     => $res['id_factura'],
@@ -866,7 +895,17 @@ class SuscripcionesController extends BaseModuloController
                         'monto'          => $res['importe'],
                         'estado'         => $esNuveiTarjeta ? 'pendiente' : 'exitoso',
                         'id_usuario'     => $idUsuario,
+                        'servicio_desde' => $servicio['desde'],
+                        'servicio_hasta' => $servicio['hasta'],
                     ]);
+
+                    // Cronograma de devengo (solo si la suscripción reconoce durante el período).
+                    // El documento ya existe: si esto falla se registra y se sigue, nunca se repite.
+                    try {
+                        $devengo->crearCronogramaDocumento($idEmpresa, $idUsuario, $susc, $idPago, $res, $servicio['desde'], date('Y-m-d'));
+                    } catch (\Throwable $eDev) {
+                        \App\Services\ErrorLogService::registrar($eDev, ['ruta' => static::class, 'accion' => __FUNCTION__ . '#devengo_suscripcion_' . $idSusc]);
+                    }
 
                     $generadas++;
                 } catch (\Throwable $e) {

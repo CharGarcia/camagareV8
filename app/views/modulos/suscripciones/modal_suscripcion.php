@@ -100,6 +100,11 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosPestanasOcultas($vistaConfigS
                                 </a>
                             </li>
                             <?php endif; ?>
+                            <li class="nav-item" role="presentation">
+                                <a class="nav-link py-2 small" id="susc-tab-devengo-btn" data-bs-toggle="tab" data-bs-target="#pane-susc-devengo" href="#pane-susc-devengo" role="tab" title="Cronograma mensual del ingreso diferido">
+                                    <i class="bi bi-calendar3 me-1"></i>Devengo
+                                </a>
+                            </li>
                         </ul>
                         <div class="pb-1 flex-shrink-0">
                             <?php
@@ -110,6 +115,7 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosPestanasOcultas($vistaConfigS
                             if ($suscVerFacturas) {
                                 $pestanasConfigSusc['pane-susc-facturas'] = 'Facturas';
                             }
+                            $pestanasConfigSusc['pane-susc-devengo'] = 'Devengo';
                             echo \App\Helpers\PreferenciasHelper::renderDropdownPestanas($pestanasConfigSusc, $vistaConfigSusc ?? [], 'suscripciones');
                             ?>
                         </div>
@@ -191,6 +197,24 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosPestanasOcultas($vistaConfigS
                                     <div class="col-md-2">
                                         <label>Próximo Cobro</label>
                                         <input type="date" class="form-control form-control-sm" name="proximo_cobro" id="susc_proximo_cobro" required>
+                                    </div>
+
+                                    <!-- Devengado (NIIF 15): qué período cubre cada documento y cuándo se reconoce el ingreso -->
+                                    <div class="col-md-3">
+                                        <label>Modalidad de cobro</label>
+                                        <select class="form-select form-select-sm" name="modalidad_cobro" id="susc_modalidad_cobro" onchange="suscOnModalidadCobro()"
+                                                title="Por adelantado: cada documento cubre el período que empieza en el próximo cobro. Mes caído: cubre el período que termina el día anterior al próximo cobro.">
+                                            <option value="anticipado">Por adelantado</option>
+                                            <option value="vencido">Mes caído (vencido)</option>
+                                        </select>
+                                    </div>
+                                    <div class="col-md-3">
+                                        <label>Reconocimiento del ingreso</label>
+                                        <select class="form-select form-select-sm" name="reconocimiento" id="susc_reconocimiento"
+                                                title="Durante el período: el ingreso de los servicios se reconoce mes a mes (lo facturado por adelantado queda como ingreso diferido). Los bienes siempre se reconocen al facturar.">
+                                            <option value="inmediato">Al facturar</option>
+                                            <option value="diferido">Durante el período</option>
+                                        </select>
                                     </div>
                                 </div>
                             </div>
@@ -441,6 +465,62 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosPestanasOcultas($vistaConfigS
                             </div>
                         </div><!-- /pane-susc-facturas -->
                         <?php endif; ?>
+
+                        <!-- ══ PESTAÑA: Devengo (cronograma del ingreso diferido) ═══════════════ -->
+                        <div class="tab-pane fade" id="pane-susc-devengo" role="tabpanel">
+                            <div class="text-center text-muted small py-5" data-sd="vacio">
+                                <i class="bi bi-calendar3 fs-3 d-block mb-2"></i>
+                                <span data-sd="vacio-texto">Sin cronograma de devengo.</span>
+                            </div>
+                            <div class="d-none" data-sd="con-datos">
+                                <div class="row g-2 mb-2">
+                                    <div class="col-6 col-md-3">
+                                        <div class="card bg-light border-0 text-center p-2">
+                                            <span class="small text-muted d-block" style="font-size: 0.7rem;">DIFERIDO</span>
+                                            <h6 class="mb-0 fw-bold text-primary" data-sd="res-total">$0.00</h6>
+                                        </div>
+                                    </div>
+                                    <div class="col-6 col-md-3">
+                                        <div class="card bg-light border-0 text-center p-2">
+                                            <span class="small text-muted d-block" style="font-size: 0.7rem;">DEVENGADO</span>
+                                            <h6 class="mb-0 fw-bold text-success" data-sd="res-devengado">$0.00</h6>
+                                        </div>
+                                    </div>
+                                    <div class="col-6 col-md-3">
+                                        <div class="card bg-light border-0 text-center p-2">
+                                            <span class="small text-muted d-block" style="font-size: 0.7rem;">POR DEVENGAR</span>
+                                            <h6 class="mb-0 fw-bold text-warning" data-sd="res-pendiente">$0.00</h6>
+                                        </div>
+                                    </div>
+                                    <div class="col-6 col-md-3">
+                                        <div class="card bg-light border-0 text-center p-2">
+                                            <span class="small text-muted d-block" style="font-size: 0.7rem;">ANULADO</span>
+                                            <h6 class="mb-0 fw-bold text-secondary" data-sd="res-anulado">$0.00</h6>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="border rounded-3 bg-white susc-dev-lista" style="max-height: 360px; overflow: auto;">
+                                    <table class="table table-sm table-hover mb-0 small">
+                                        <thead class="table-light">
+                                            <tr>
+                                                <th class="ps-2 text-nowrap">Mes</th>
+                                                <th class="text-nowrap">Documento</th>
+                                                <th>Servicio</th>
+                                                <th class="text-end text-nowrap">Monto</th>
+                                                <th class="text-center text-nowrap">Estado</th>
+                                                <th class="text-nowrap pe-2">Asiento</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody data-sd="tbody"></tbody>
+                                    </table>
+                                </div>
+                                <div class="text-muted mt-2" style="font-size: .72rem;">
+                                    Solo los servicios facturados por adelantado: los meses posteriores al de la factura
+                                    quedan como ingreso diferido y pasan al ingreso con el devengo mensual. Los bienes y
+                                    el mes de la factura se reconocen al facturar.
+                                </div>
+                            </div>
+                        </div><!-- /pane-susc-devengo -->
 
                     </div><!-- /tab-content -->
                 </div><!-- /modal-body -->
@@ -826,7 +906,9 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosPestanasOcultas($vistaConfigS
         
         if (!fechaInicio || selPer.value === '') return;
         const dt = new Date(fechaInicio + 'T00:00:00');
-        
+
+        suscProponerReconocimiento();
+
         if (codigo === 'DIARIO') {
             dt.setDate(dt.getDate() + 1);
         } else if (codigo === 'SEMANAL') {
@@ -839,6 +921,27 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosPestanasOcultas($vistaConfigS
         
         document.getElementById('susc_proximo_cobro').value = CMG_fechaLocal(dt);
     };
+
+    /* ── Devengado: modalidad de cobro y reconocimiento del ingreso ──────────────
+       Al crear, se propone «Durante el período» para las periodicidades por meses
+       (mensual en adelante) y «Al facturar» para diaria/semanal/quincenal, donde
+       diferir es inmaterial. Si el usuario elige a mano, ya no se le cambia. */
+    window.suscProponerReconocimiento = function () {
+        const sel = document.getElementById('susc_reconocimiento');
+        if (!sel || document.getElementById('susc_id').value || sel.dataset.manual === '1') return;
+        const selPer = document.getElementById('susc_id_periodicidad');
+        const codigo = selPer.options[selPer.selectedIndex]?.dataset.codigo ?? '';
+        if (selPer.value === '') return;
+        sel.value = ['DIARIO', 'SEMANAL', 'QUINCENAL'].includes(codigo) ? 'inmediato' : 'diferido';
+    };
+
+    window.suscOnModalidadCobro = function () {
+        suscProponerReconocimiento();
+    };
+
+    document.getElementById('susc_reconocimiento')?.addEventListener('change', function () {
+        this.dataset.manual = '1';
+    });
 
     /* ── Forma de cobro ───────────────────────────────────────────────────────── */
     window.suscOnFormaCobro = function () {
@@ -1002,6 +1105,9 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosPestanasOcultas($vistaConfigS
         document.getElementById('susc_forma_cobro').value       = 'credito';
         document.getElementById('susc_estado').value            = 'activo';
         document.getElementById('susc_observaciones').value     = '';
+        document.getElementById('susc_modalidad_cobro').value   = 'anticipado';
+        document.getElementById('susc_reconocimiento').value    = 'inmediato';
+        delete document.getElementById('susc_reconocimiento').dataset.manual;
         document.getElementById('tituloModalSusc').textContent  = 'Nueva Suscripción';
         document.getElementById('btnEliminarSusc')?.classList.add('d-none');
         document.getElementById('btnVerPagosSusc')?.classList.add('d-none');
@@ -1039,6 +1145,8 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosPestanasOcultas($vistaConfigS
         document.getElementById('susc_forma_cobro').value       = s.forma_cobro ?? 'credito';
         document.getElementById('susc_estado').value            = s.estado ?? 'activo';
         document.getElementById('susc_observaciones').value     = s.observaciones ?? '';
+        document.getElementById('susc_modalidad_cobro').value   = s.modalidad_cobro ?? 'anticipado';
+        document.getElementById('susc_reconocimiento').value    = s.reconocimiento ?? 'inmediato';
         document.getElementById('tituloModalSusc').textContent  = 'Suscripción: ' + (s.nombre_cliente ?? '');
         document.getElementById('btnEliminarSusc')?.classList.remove('d-none');
 
@@ -1183,6 +1291,17 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosPestanasOcultas($vistaConfigS
 
 
 })();
+</script>
+
+<script src="<?= rtrim(BASE_URL, '/') ?>/js/modulos/suscripciones_devengo.js?v=<?= asset_ver('/js/modulos/suscripciones_devengo.js') ?>"></script>
+<script>
+    SuscDevengo.iniciar({
+        url:     <?= json_encode($urlBase . '/devengoAjax') ?>,
+        panel:   'pane-susc-devengo',
+        boton:   'susc-tab-devengo-btn',
+        modalId: 'modalSusc',
+        idSusc:  'susc_id',
+    });
 </script>
 
 <?php if ($suscVerFacturas): ?>

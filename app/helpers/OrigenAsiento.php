@@ -41,6 +41,7 @@ final class OrigenAsiento
         'nomina'                     => 'Rol de pagos (nómina)',
         'activos_fijos_alta'         => 'Activo fijo: alta',
         'activos_fijos_depreciacion' => 'Activo fijo: depreciación',
+        'suscripcion_devengo'        => 'Suscripción: devengo mensual',
         'declaracion_iva'            => 'Declaración de IVA',
         'declaracion_retenciones'    => 'Declaración de retenciones',
         'manual'                     => 'Asiento manual',

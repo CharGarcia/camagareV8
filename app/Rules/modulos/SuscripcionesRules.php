@@ -49,6 +49,14 @@ class SuscripcionesRules
             throw new \InvalidArgumentException('El tipo de comprobante no es válido.|#susc_tipo_comprobante');
         }
 
+        // Devengado (NIIF 15): qué período cubre cada documento y cuándo se reconoce el ingreso.
+        if (!in_array($data['modalidad_cobro'] ?? 'anticipado', ['anticipado', 'vencido'], true)) {
+            throw new \InvalidArgumentException('La modalidad de cobro no es válida.|#susc_modalidad_cobro');
+        }
+        if (!in_array($data['reconocimiento'] ?? 'inmediato', ['inmediato', 'diferido'], true)) {
+            throw new \InvalidArgumentException('El reconocimiento del ingreso no es válido.|#susc_reconocimiento');
+        }
+
         if (empty($detalle)) {
             throw new \InvalidArgumentException('Debe agregar al menos un producto o servicio a la suscripción.');
         }
