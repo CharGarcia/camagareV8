@@ -108,7 +108,6 @@ class ReporteVentasResumenDiarioService
                 'filas'    => array_map(static fn (array $r): array => [
                     'numero'  => (string) $r['numero'],
                     'cliente' => (string) $r['cliente_nombre'],
-                    'ruc'     => (string) $r['cliente_ruc'],
                     'total'   => round($signo * (float) $r['total'], 2),
                     'saldo'   => round((float) $r['saldo'], 2),
                 ], $docs),

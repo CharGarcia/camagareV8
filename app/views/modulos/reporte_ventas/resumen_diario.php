@@ -129,7 +129,7 @@ $nombreEmpresa = (string) ($empresa['nombre_comercial'] ?? '') !== '' ? $empresa
                                 <?php foreach ($g['filas'] as $d): ?>
                                     <tr>
                                         <td class="py-1 text-nowrap"><?= $e($d['numero']) ?></td>
-                                        <td class="py-1"><?= $e($d['cliente']) ?><?php if ($d['ruc'] !== ''): ?> <small class="text-muted">(<?= $e($d['ruc']) ?>)</small><?php endif; ?></td>
+                                        <td class="py-1"><?= $e($d['cliente']) ?></td>
                                         <td class="py-1 text-end text-nowrap"><?= $e($fmt($d['total'])) ?></td>
                                         <td class="py-1 text-end text-nowrap <?= $d['saldo'] > 0.004 ? 'text-danger fw-semibold' : 'text-muted' ?>"><?= $e($fmt($d['saldo'])) ?></td>
                                     </tr>
@@ -224,7 +224,7 @@ $nombreEmpresa = (string) ($empresa['nombre_comercial'] ?? '') !== '' ? $empresa
                             <?php $z = $i % 2 ? 'background:#f6f8fa;' : ''; ?>
                             <tr>
                                 <td style="width:18%;border:1px solid #c3ccd6;padding:2px 4px;<?= $z ?>"><?= $e($d['numero']) ?></td>
-                                <td style="width:54%;border:1px solid #c3ccd6;padding:2px 4px;<?= $z ?>"><?= $e($d['cliente']) ?><?= $d['ruc'] !== '' ? ' <span style="color:#6a747e;">(' . $e($d['ruc']) . ')</span>' : '' ?></td>
+                                <td style="width:54%;border:1px solid #c3ccd6;padding:2px 4px;<?= $z ?>"><?= $e($d['cliente']) ?></td>
                                 <td style="width:14%;border:1px solid #c3ccd6;padding:2px 4px;text-align:right;<?= $z ?>"><?= $e($fmt($d['total'])) ?></td>
                                 <td style="width:14%;border:1px solid #c3ccd6;padding:2px 4px;text-align:right;<?= $z ?><?= $d['saldo'] > 0.004 ? 'color:#b02a37;font-weight:bold;' : '' ?>"><?= $e($fmt($d['saldo'])) ?></td>
                             </tr>
@@ -262,17 +262,17 @@ $nombreEmpresa = (string) ($empresa['nombre_comercial'] ?? '') !== '' ? $empresa
 
         <?php // Firmas: "Realizado por" con el nombre de quien genera el resumen y "Aprobado por"
               // en blanco. nobreak: las dos firmas nunca quedan separadas de página. ?>
-        <table style="width:100%;margin-top:28mm;font-family:Arial,sans-serif;font-size:8.5pt;" nobreak="true">
+        <table style="width:100%;margin-top:15mm;font-family:Arial,sans-serif;font-size:8.5pt;" nobreak="true">
             <tr>
-                <td style="width:10%;"></td>
-                <td style="width:35%;border-top:1px solid #000;text-align:center;padding-top:3px;">
+                <td style="width:18%;"></td>
+                <td style="width:28%;border-top:1px solid #000;text-align:center;padding-top:3px;">
                     <b>Realizado por</b><br><?= $e($realizadoPor ?? '') ?>
                 </td>
-                <td style="width:10%;"></td>
-                <td style="width:35%;border-top:1px solid #000;text-align:center;padding-top:3px;">
+                <td style="width:8%;"></td>
+                <td style="width:28%;border-top:1px solid #000;text-align:center;padding-top:3px;">
                     <b>Aprobado por</b><br>&nbsp;
                 </td>
-                <td style="width:10%;"></td>
+                <td style="width:18%;"></td>
             </tr>
         </table>
     </page>
@@ -315,7 +315,7 @@ $nombreEmpresa = (string) ($empresa['nombre_comercial'] ?? '') !== '' ? $empresa
                     <?php foreach ($g['filas'] as $d): ?>
                         <tr>
                             <td style="border:1px solid #c3ccd6;padding:3px 6px;white-space:nowrap;"><?= $e($d['numero']) ?></td>
-                            <td style="border:1px solid #c3ccd6;padding:3px 6px;"><?= $e($d['cliente']) ?><?php if ($d['ruc'] !== ''): ?> <span style="color:#6a747e;">(<?= $e($d['ruc']) ?>)</span><?php endif; ?></td>
+                            <td style="border:1px solid #c3ccd6;padding:3px 6px;"><?= $e($d['cliente']) ?></td>
                             <td style="border:1px solid #c3ccd6;padding:3px 6px;text-align:right;white-space:nowrap;"><?= $e($fmt($d['total'])) ?></td>
                             <td style="border:1px solid #c3ccd6;padding:3px 6px;text-align:right;white-space:nowrap;<?= $d['saldo'] > 0.004 ? 'color:#b02a37;font-weight:bold;' : '' ?>"><?= $e($fmt($d['saldo'])) ?></td>
                         </tr>
