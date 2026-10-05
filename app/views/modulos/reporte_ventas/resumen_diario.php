@@ -14,6 +14,8 @@
  * @var array  $empresa     Ficha de la empresa (nombre, ruc)
  * @var array  $resumen     ['dias' => [...bloques], 'total' => ?bloque]
  * @var array  $filtrosTxt  Filtros aplicados, etiqueta => valor
+ * @var array  $pdf         Solo en modo pdf: css, encabezado (con logo) y filtros, del controlador
+ * @var string $realizadoPor Usuario que genera el resumen (firma "Realizado por")
  */
 $e   = static fn ($v): string => htmlspecialchars((string) $v, ENT_QUOTES, 'UTF-8');
 $fmt = static fn ($v): string => ((float) $v < 0 ? '-$' : '$') . number_format(abs((float) $v), 2);
@@ -126,27 +128,22 @@ $nombreEmpresa = (string) ($empresa['nombre_comercial'] ?? '') !== '' ? $empresa
 
 <?php elseif ($modo === 'pdf'): ?>
 
+    <?php // Mismos estilos que el PDF del reporte (htmlPdf): encabezado con logo y caja
+          // "Filtros aplicados" (CSS_FILTROS_PDF). Los arma el controlador. ?>
+    <style>
+        body { font-family: Arial, sans-serif; color: #000; }
+        table { border-collapse: collapse; }
+        .header { text-align: center; }
+        .header h2 { margin: 0 0 1px 0; font-size: 13pt; color: #1b2a3a; }
+        .header h3 { margin: 0 0 1px 0; font-size: 10pt; color: #2c4a6b; }
+        .header p  { margin: 0; font-size: 7.5pt; color: #555; }
+        table.fil-tit, table.filtros { width: 100%; table-layout: fixed; }
+        <?= $pdf['css'] ?? '' ?>
+    </style>
     <?php // Los back* se suman a los márgenes por defecto de Html2Pdf, como en exportPdf(). ?>
     <page backtop="7mm" backbottom="7mm" backleft="3mm" backright="3mm" footer="page">
-        <?php // En tabla de ancho completo: Html2Pdf no centra un <div> sin ancho declarado. ?>
-        <table style="width:100%;font-family:Arial,sans-serif;margin-bottom:6px;">
-            <tr><td style="width:100%;text-align:center;">
-                <span style="font-size:13pt;font-weight:bold;color:#1b2a3a;"><?= $e($nombreEmpresa) ?></span><br>
-                <?php if (!empty($empresa['ruc'])): ?><span style="font-size:8pt;">RUC: <?= $e($empresa['ruc']) ?></span><br><?php endif; ?>
-                <span style="font-size:10pt;color:#2c4a6b;">Resumen diario de ventas</span><br>
-                <span style="font-size:7.5pt;color:#555;">Generado: <?= date('d-m-Y H:i:s') ?></span>
-            </td></tr>
-        </table>
-        <?php if (!empty($filtrosTxt)): ?>
-            <table style="width:100%;border-collapse:collapse;font-family:Arial,sans-serif;font-size:7.5pt;margin-bottom:8px;">
-                <?php foreach ($filtrosTxt as $lbl => $val): ?>
-                    <tr>
-                        <td style="width:20%;border:1px solid #c3ccd6;background:#f8f9fa;font-weight:bold;padding:2px 4px;"><?= $e($lbl) ?>:</td>
-                        <td style="width:80%;border:1px solid #c3ccd6;padding:2px 4px;"><?= $e($val) ?></td>
-                    </tr>
-                <?php endforeach; ?>
-            </table>
-        <?php endif; ?>
+        <?= $pdf['encabezado'] ?? '' ?>
+        <?= $pdf['filtros'] ?? '' ?>
 
         <?php if (!$bloques): ?>
             <p style="font-family:Arial,sans-serif;text-align:center;">No hay ventas en el período elegido.</p>
@@ -169,6 +166,22 @@ $nombreEmpresa = (string) ($empresa['nombre_comercial'] ?? '') !== '' ? $empresa
                 </tr>
             </table>
         <?php endforeach; ?>
+
+        <?php // Firmas: "Realizado por" con el nombre de quien genera el resumen y "Aprobado por"
+              // en blanco. nobreak: las dos firmas nunca quedan separadas de página. ?>
+        <table style="width:100%;margin-top:28mm;font-family:Arial,sans-serif;font-size:8.5pt;" nobreak="true">
+            <tr>
+                <td style="width:10%;"></td>
+                <td style="width:35%;border-top:1px solid #000;text-align:center;padding-top:3px;">
+                    <b>Realizado por</b><br><?= $e($realizadoPor ?? '') ?>
+                </td>
+                <td style="width:10%;"></td>
+                <td style="width:35%;border-top:1px solid #000;text-align:center;padding-top:3px;">
+                    <b>Aprobado por</b><br>&nbsp;
+                </td>
+                <td style="width:10%;"></td>
+            </tr>
+        </table>
     </page>
 
 <?php else: /* correo */ ?>

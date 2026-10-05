@@ -38,6 +38,7 @@
                             <option value="RECIBO">Recibos de Venta</option>
                             <option value="NOTA_CREDITO">Notas de Crédito en Ventas</option>
                             <option value="FACTURA_MENOS_NC">Facturas de Ventas − NC Ventas</option>
+                            <option value="TODOS">Todos (Facturas + Recibos − NC)</option>
                         </select>
                     </div>
 
@@ -293,10 +294,15 @@
         </div>
     </div>
 
-    <!-- ── Gráficos ── -->
-    <div class="card border-0 shadow-sm mb-4" id="chart-container" style="display: none;">
-        <div class="card-header bg-white border-bottom-0 pt-4 pb-0 d-flex justify-content-between align-items-center flex-wrap gap-2">
-            <h6 class="mb-0 fw-bold text-dark" style="font-family: 'Outfit', sans-serif;"><i class="bi bi-graph-up text-primary me-2"></i>Gráfico de Ventas</h6>
+    <!-- ── Gráficos: acordeón, cerrado por defecto (el título lo abre/cierra) ── -->
+    <div class="card border-0 shadow-sm mb-3" id="chart-container" style="display: none;">
+        <div class="card-header bg-white border-bottom-0 py-2 d-flex justify-content-between align-items-center flex-wrap gap-2">
+            <button type="button" class="btn btn-link p-0 text-decoration-none text-dark fw-bold d-flex align-items-center collapsed"
+                    data-bs-toggle="collapse" data-bs-target="#rv-grafico-body" aria-expanded="false" aria-controls="rv-grafico-body"
+                    id="rv-grafico-toggle" style="font-family: 'Outfit', sans-serif;font-size:.95rem;">
+                <i class="bi bi-chevron-right me-2 small" id="rv-grafico-chevron"></i>
+                <i class="bi bi-graph-up text-primary me-2"></i>Gráfico de Ventas
+            </button>
             <div class="d-flex align-items-center gap-2">
                 <?= \App\Helpers\PreferenciasHelper::renderEstrellaFavorito($rutaModulo, 'rv-tipo-grafico', 'tipo_grafico') ?>
                 <select id="rv-tipo-grafico" class="form-select form-select-sm shadow-none border" style="width: 140px;" onchange="window.RV_cambiarTipoGrafico()">
@@ -308,8 +314,10 @@
                 </select>
             </div>
         </div>
-        <div class="card-body">
-            <canvas id="reporteChart" style="max-height: 300px;"></canvas>
+        <div class="collapse" id="rv-grafico-body">
+            <div class="card-body pt-0">
+                <canvas id="reporteChart" style="max-height: 300px;"></canvas>
+            </div>
         </div>
     </div>
 
@@ -378,7 +386,7 @@
           <div class="vr mx-1"></div>
           <button type="button" class="btn btn-sm btn-outline-info" id="rvResBtnCorreo" title="Enviar por correo" disabled><i class="bi bi-envelope"></i></button>
           <span class="ms-auto small text-muted">
-            Facturas y recibos suman, notas de crédito restan. Un día por bloque (hasta <?= (int) ($maxDiasResumen ?? 31) ?> días).
+            Según el Tipo de documento elegido: facturas y recibos suman, notas de crédito restan. Un día por bloque (hasta <?= (int) ($maxDiasResumen ?? 31) ?> días).
           </span>
         </div>
         <div id="rvResContenido"></div>

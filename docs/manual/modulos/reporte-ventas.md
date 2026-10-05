@@ -5,7 +5,7 @@ categoria: Reportes
 ruta_modulo: modulos/reporte_ventas
 tipo: modulo
 visibilidad: todos
-etiquetas: reporte de ventas, ventas, cuanto vendi, por cliente, por vendedor, por producto, estadisticas, exportar, pdf, excel, establecimientos, sucursales, matriz, mismo ruc, consolidado por ruc, borradores, borrador, facturas en borrador, incluir borradores, documentos sin autorizar, pendientes de enviar al sri, ordenar, ordenamiento, ordenar por columna, de mayor a menor, quien compro mas, saldo por cobrar, saldo x cobrar, cuanto me debe el cliente, nro facturas, numero de documentos, cartera en el reporte de ventas, acceso total, permiso de ver todos, registros propios, solo mis ventas, no veo las ventas de otro, cada usuario ve lo suyo, documentos migrados no aparecen, cartera del vendedor, mis clientes, clientes asignados, vendedor vinculado, usuario del sistema, el vendedor no ve nada, asesor solo ve sus clientes, nivel de usuario, administrador ve todo, el asesor ve las ventas de todos, imprimir el reporte, logo en el pdf, el pdf sale angosto, el pdf no ocupa la hoja, nombre del producto cortado, filtros aplicados en el pdf, encabezado del pdf, totales repetidos en el pdf, pdf horizontal, numero de pagina, boton buscar, no se actualiza, no cambia al elegir, hay que pulsar buscar, boton amarillo, filtros sin aplicar, unidades vendidas, unidades por mes, cantidades por mes, cuantas unidades vendi, ventas por producto y mes, producto por mes, rotacion mensual, tabla por meses, una columna por mes, marca, categoria, filtrar por marca, filtrar por categoria, ventas de una marca, ventas de una categoria, linea de productos, participacion por producto, porcentaje de ventas, porcentaje de unidades, % venta, % unidades, unidad de medida, total venta sin iva, producto mas vendido, cajero, por cajero, por usuario, ventas por usuario, ventas de un cajero, quien facturo, resumen diario, cierre de caja, cierre del dia, cuadre de caja, arqueo, ventas del dia, formas de pago, efectivo, tarjeta, transferencia, cuanto entro en efectivo, tirilla, ticket, enviar por correo, recibos de venta, recibos no aparecen, no salen los recibos, recibos en borrador
+etiquetas: reporte de ventas, ventas, cuanto vendi, por cliente, por vendedor, por producto, estadisticas, exportar, pdf, excel, establecimientos, sucursales, matriz, mismo ruc, consolidado por ruc, borradores, borrador, facturas en borrador, incluir borradores, documentos sin autorizar, pendientes de enviar al sri, ordenar, ordenamiento, ordenar por columna, de mayor a menor, quien compro mas, saldo por cobrar, saldo x cobrar, cuanto me debe el cliente, nro facturas, numero de documentos, cartera en el reporte de ventas, acceso total, permiso de ver todos, registros propios, solo mis ventas, no veo las ventas de otro, cada usuario ve lo suyo, documentos migrados no aparecen, cartera del vendedor, mis clientes, clientes asignados, vendedor vinculado, usuario del sistema, el vendedor no ve nada, asesor solo ve sus clientes, nivel de usuario, administrador ve todo, el asesor ve las ventas de todos, imprimir el reporte, logo en el pdf, el pdf sale angosto, el pdf no ocupa la hoja, nombre del producto cortado, filtros aplicados en el pdf, encabezado del pdf, totales repetidos en el pdf, pdf horizontal, numero de pagina, boton buscar, no se actualiza, no cambia al elegir, hay que pulsar buscar, boton amarillo, filtros sin aplicar, unidades vendidas, unidades por mes, cantidades por mes, cuantas unidades vendi, ventas por producto y mes, producto por mes, rotacion mensual, tabla por meses, una columna por mes, marca, categoria, filtrar por marca, filtrar por categoria, ventas de una marca, ventas de una categoria, linea de productos, participacion por producto, porcentaje de ventas, porcentaje de unidades, % venta, % unidades, unidad de medida, total venta sin iva, producto mas vendido, cajero, por cajero, por usuario, ventas por usuario, ventas de un cajero, quien facturo, resumen diario, cierre de caja, cierre del dia, cuadre de caja, arqueo, ventas del dia, formas de pago, efectivo, tarjeta, transferencia, cuanto entro en efectivo, tirilla, ticket, enviar por correo, recibos de venta, recibos no aparecen, no salen los recibos, recibos en borrador, todos los documentos, facturas y recibos juntos, facturas recibos y notas de credito, ventas totales, firmas, realizado por, aprobado por, grafico, ocultar grafico, acordeon
 version: 1.12
 orden: 10
 estado: activo
@@ -18,6 +18,7 @@ qué, en el periodo que se indique.
 
 | Filtro | Para qué |
 |--------|----------|
+| Tipo de documento | *Facturas*, *Recibos*, *Notas de crédito*, *Facturas − NC* o **Todos (Facturas + Recibos − NC)**: facturas y recibos suman y las notas de crédito restan. Un recibo ya facturado no se cuenta (su venta está en la factura) |
 | Fecha desde / hasta | El periodo a consultar |
 | Cliente | Ventas de un cliente concreto |
 | Vendedor | Ventas de un vendedor concreto. Las notas de crédito entran por **su propio vendedor** (el campo *Vendedor* de la nota), también en *Facturas − NC* |
@@ -332,6 +333,11 @@ Cómo se usa:
    **Enviar por correo** (sale el correo de la empresa; se puede cambiar o
    agregar otros separados por comas, y va con el PDF adjunto).
 
+El **PDF** lleva el mismo encabezado que el del reporte (logo del establecimiento,
+nombre de la empresa, RUC y fecha de generación) y la caja *Filtros aplicados*. Al
+pie, la **tirilla y el PDF** traen dos firmas: **Realizado por** (con el nombre del
+usuario que generó el resumen) y **Aprobado por** (en blanco, para firmar a mano).
+
 Cada día trae tres secciones:
 
 - **Documentos**: facturas, recibos y notas de crédito (estas restan), cuántos
@@ -345,10 +351,13 @@ Cada día trae tres secciones:
 
 A tener en cuenta:
 
-- El resumen junta **siempre** facturas, recibos y notas de crédito: no mira el
-  selector *Tipo de documento* ni *Agrupar por*. El resto de filtros sí
-  (cajero, vendedor, cliente, producto, establecimientos, borradores) y también
-  el alcance del usuario (quien solo ve lo suyo, solo resume lo suyo).
+- El resumen respeta **todos los filtros**, incluido el **Tipo de documento**: con
+  *Facturas* resume solo facturas, con *Recibos* solo recibos, con *Facturas − NC*
+  facturas menos notas de crédito, y con *Todos* las tres (facturas y recibos suman,
+  notas de crédito restan). Solo ignora *Agrupar por*. También respeta el alcance
+  del usuario (quien solo ve lo suyo, solo resume lo suyo).
+- La sección *Cobro por forma de pago* explica las facturas y recibos del resumen;
+  con *Notas de crédito* sola queda vacía.
 - La forma de pago sale del **Ingreso** con que se cobró cada documento, no del
   código SRI de la factura. Si un cobro se hizo con varias formas, se reparte
   entre ellas. Un cobro registrado sin forma de pago aparece como *Sin forma de
@@ -447,9 +456,12 @@ El PDF es la misma pantalla en hoja, pensado para imprimir o enviar por correo:
 
 ## Historial de cambios
 
-- **1.12** — Nuevo filtro **Cajero** (usuario responsable del documento) y nueva
+- **1.12** — El **gráfico de ventas** queda dentro de un acordeón, **cerrado por
+  defecto**: se abre con un clic en su título. Nuevo tipo de documento **Todos (Facturas + Recibos − NC)**, en pantalla,
+  tarjetas, gráfico, todas las agrupaciones, PDF y Excel. Nuevo filtro **Cajero** (usuario responsable del documento) y nueva
   agrupación **Por cajero**, en pantalla, gráfico, PDF y Excel. Nuevo botón
-  **Resumen diario**: un bloque por día con documentos, detalle de impuestos y
+  **Resumen diario** (respeta el tipo de documento y los demás filtros; PDF con logo y
+  firmas *Realizado por* / *Aprobado por*): un bloque por día con documentos, detalle de impuestos y
   cobro por forma de pago, con **tirilla**, **PDF** y **envío por correo** (ver
   *Resumen diario (tipo cierre de caja)*). **Corrección: los recibos de venta no
   aparecían** en el reporte, porque se exigía el estado *emitido* y los recibos

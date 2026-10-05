@@ -195,7 +195,17 @@ class ReporteVentasRepository extends BaseRepository
     /** ¿El reporte es el neto "Facturas − Notas de crédito"? */
     private function esNeto(array $filtros): bool
     {
-        return ($filtros['tipo_documento'] ?? '') === 'FACTURA_MENOS_NC';
+        return in_array($filtros['tipo_documento'] ?? '', ['FACTURA_MENOS_NC', 'TODOS'], true);
+    }
+
+    /**
+     * Fuentes que SUMAN en el neto: FACTURA_MENOS_NC = facturas; TODOS = facturas + recibos.
+     * En ambos casos las notas de crédito restan. Un recibo facturado no entra (su venta ya
+     * está en la factura que generó; ver condEstadoRecibo), así que no se duplica.
+     */
+    private function fuentesSuma(array $filtros): array
+    {
+        return ($filtros['tipo_documento'] ?? '') === 'TODOS' ? ['FACTURA', 'RECIBO'] : ['FACTURA'];
     }
 
     // ── Orden de las filas ────────────────────────────────────────────────────
@@ -356,25 +366,31 @@ class ReporteVentasRepository extends BaseRepository
     }
 
     /**
-     * Combina un método de reporte para FACTURA y NOTA_CREDITO restando la NC.
+     * Combina un método de reporte para las fuentes que suman (FACTURA y, en TODOS, también
+     * RECIBO — ver fuentesSuma()) y NOTA_CREDITO, restando la NC.
      * - $claves: columnas que identifican cada grupo (para agrupados). Si es null,
-     *   es el modo detallado: devuelve facturas (+) seguidas de NC (−).
+     *   es el modo detallado: devuelve facturas/recibos (+) seguidas de NC (−).
      * - $restar: campos monetarios (la NC se resta).
-     * - $sumar:  campos de conteo (se suman ambos: total de documentos).
+     * - $sumar:  campos de conteo (se suman todos: total de documentos).
      */
     private function combinarNeto(int|array $idEmpresa, array $filtros, string $metodo, ?array $claves, array $restar, array $sumar = []): array
     {
-        $fFac = array_merge($filtros, ['tipo_documento' => 'FACTURA']);
+        // Filas de cada fuente que suma, marcadas con su tipo (el detallado lo necesita para
+        // abrir el documento correcto: los ids de facturas y recibos se repiten entre tablas).
+        $fac = [];
+        foreach ($this->fuentesSuma($filtros) as $tipo) {
+            foreach ($this->$metodo($idEmpresa, array_merge($filtros, ['tipo_documento' => $tipo])) as $r) {
+                $r['_doc_tipo'] = $tipo;
+                $fac[] = $r;
+            }
+        }
         $fNc  = array_merge($filtros, ['tipo_documento' => 'NOTA_CREDITO']);
-        $fac  = $this->$metodo($idEmpresa, $fFac);
         $nc   = $this->$metodo($idEmpresa, $fNc);
         // El orden de cada consulta se pierde al mezclarlas: se reaplica sobre el resultado.
         $modo = self::MODO_POR_METODO[$metodo] ?? 'NINGUNO';
 
         // Modo detallado: mezclar filas, negando montos de las NC.
         if ($claves === null) {
-            foreach ($fac as &$r) { $r['_doc_tipo'] = 'FACTURA'; }
-            unset($r);
             foreach ($nc as &$r) {
                 foreach ($restar as $c) { $r[$c] = -(float)($r[$c] ?? 0); }
                 $r['_doc_tipo'] = 'NOTA_CREDITO';
@@ -390,8 +406,20 @@ class ReporteVentasRepository extends BaseRepository
             return $k;
         };
 
+        // Las fuentes que suman comparten clave (el mismo cliente o producto en una factura
+        // y en un recibo): la segunda se ACUMULA sobre la primera, no la reemplaza.
         $idx = [];
-        foreach ($fac as $r) { $idx[$keyOf($r)] = $r; }
+        foreach ($fac as $r) {
+            $k = $keyOf($r);
+            unset($r['_doc_tipo']);
+            if (!isset($idx[$k])) {
+                $idx[$k] = $r;
+                continue;
+            }
+            foreach (array_merge($restar, $sumar) as $c) {
+                $idx[$k][$c] = (float) ($idx[$k][$c] ?? 0) + (float) ($r[$c] ?? 0);
+            }
+        }
         foreach ($nc as $r) {
             $k = $keyOf($r);
             if (!isset($idx[$k])) {
@@ -1311,7 +1339,13 @@ class ReporteVentasRepository extends BaseRepository
     public function getEstadisticas(int|array $idEmpresa, array $filtros): array
     {
         if ($this->esNeto($filtros)) {
-            $sf = $this->getEstadisticas($idEmpresa, array_merge($filtros, ['tipo_documento' => 'FACTURA']));
+            // Suma de las fuentes que suman (facturas y, en TODOS, recibos) menos las NC.
+            $sf = ['total_base_0' => 0.0, 'total_base_iva' => 0.0, 'total_iva' => 0.0, 'gran_total' => 0.0, 'total_documentos' => 0];
+            foreach ($this->fuentesSuma($filtros) as $tipo) {
+                foreach ($this->getEstadisticas($idEmpresa, array_merge($filtros, ['tipo_documento' => $tipo])) as $k => $v) {
+                    $sf[$k] += $v;
+                }
+            }
             $sn = $this->getEstadisticas($idEmpresa, array_merge($filtros, ['tipo_documento' => 'NOTA_CREDITO']));
             return [
                 'total_base_0'     => $sf['total_base_0']   - $sn['total_base_0'],
@@ -1354,7 +1388,12 @@ class ReporteVentasRepository extends BaseRepository
     public function getResumenEstados(int|array $idEmpresa, array $filtros): array
     {
         if ($this->esNeto($filtros)) {
-            $rf = $this->getResumenEstados($idEmpresa, array_merge($filtros, ['tipo_documento' => 'FACTURA']));
+            $rf = ['autorizados' => 0, 'anulados' => 0, 'borradores' => 0];
+            foreach ($this->fuentesSuma($filtros) as $tipo) {
+                foreach ($this->getResumenEstados($idEmpresa, array_merge($filtros, ['tipo_documento' => $tipo])) as $k => $v) {
+                    $rf[$k] += $v;
+                }
+            }
             $rn = $this->getResumenEstados($idEmpresa, array_merge($filtros, ['tipo_documento' => 'NOTA_CREDITO']));
             return [
                 'autorizados' => $rf['autorizados'] + $rn['autorizados'],
@@ -1410,15 +1449,32 @@ class ReporteVentasRepository extends BaseRepository
 
     // ── Resumen diario (tipo cierre de caja) ──────────────────────────────────
     //
-    // A diferencia del resto del reporte, el resumen junta SIEMPRE las tres fuentes
-    // —facturas y recibos suman, notas de crédito restan— sin mirar el selector "Tipo de
-    // documento": es el cierre del día, no una vista de un tipo. Todo lo demás (período,
-    // cajero, vendedor, cliente, producto, establecimientos, borradores y el alcance del
+    // El resumen respeta el selector "Tipo de documento" (ver fuentesResumen()): Facturas,
+    // Recibos o NC solas, Facturas − NC, o Todos (facturas y recibos suman, NC restan).
+    // Todo lo demás (período, cajero, vendedor, cliente, producto, establecimientos, borradores y el alcance del
     // usuario) sale del mismo buildWhereYParams() que el resto del reporte, así que el
     // resumen nunca muestra un documento que el listado no mostraría.
 
-    /** Fuentes del resumen: tipo => signo con que entra al total. */
+    /** Fuentes posibles del resumen: tipo => signo con que entra al total. */
     private const RESUMEN_FUENTES = ['FACTURA' => 1, 'RECIBO' => 1, 'NOTA_CREDITO' => -1];
+
+    /**
+     * Fuentes del resumen según el "Tipo de documento" del formulario. Un tipo sin valor o
+     * desconocido equivale a Todos. La NC siempre entra restando.
+     *
+     * @return array<string,int> tipo => signo
+     */
+    private function fuentesResumen(array $filtros): array
+    {
+        $tipos = match ($filtros['tipo_documento'] ?? 'TODOS') {
+            'FACTURA'          => ['FACTURA'],
+            'RECIBO'           => ['RECIBO'],
+            'NOTA_CREDITO'     => ['NOTA_CREDITO'],
+            'FACTURA_MENOS_NC' => ['FACTURA', 'NOTA_CREDITO'],
+            default            => ['FACTURA', 'RECIBO', 'NOTA_CREDITO'],
+        };
+        return array_intersect_key(self::RESUMEN_FUENTES, array_flip($tipos));
+    }
 
     /**
      * CTE `docs` con los documentos del resumen: tipo, id, empresa, fecha (día), signo,
@@ -1436,7 +1492,7 @@ class ReporteVentasRepository extends BaseRepository
     {
         $partes = [];
         $params = [];
-        foreach (self::RESUMEN_FUENTES as $tipo => $signo) {
+        foreach ($this->fuentesResumen($filtros) as $tipo => $signo) {
             $fx = array_merge($filtros, ['tipo_documento' => $tipo]);
             $f  = $this->fuente($fx);
             [$where, $p] = $this->buildWhereYParams($idEmpresa, $fx, 'v', null, !$soloAnulados);
@@ -1511,7 +1567,7 @@ class ReporteVentasRepository extends BaseRepository
 
         // Una rama por fuente: líneas con sus impuestos, y líneas sin fila de IVA como 0%.
         $ramas = [];
-        foreach (self::RESUMEN_FUENTES as $tipo => $signo) {
+        foreach ($this->fuentesResumen($filtros) as $tipo => $signo) {
             $f = $this->fuente(['tipo_documento' => $tipo]);
             $ramas[] = "SELECT d.fecha, i.codigo_impuesto, i.codigo_porcentaje, i.tarifa,
                                d.signo * i.base_imponible AS base, d.signo * i.valor AS valor

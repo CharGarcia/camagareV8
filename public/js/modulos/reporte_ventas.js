@@ -337,6 +337,21 @@ window.rv_last_agrupacion = null;
 window.rv_last_meses = null;   // {'YYYY-MM': 'Ene 2026', …} del último "Unidades por Producto / Mes"
 let chartInstance = null;
 
+// Acordeón del gráfico (cerrado por defecto). Chart.js no puede medir un canvas oculto:
+// el gráfico se dibuja igual al generar el reporte y se reajusta al ancho real al abrirse.
+document.addEventListener('DOMContentLoaded', function () {
+    const cuerpo  = document.getElementById('rv-grafico-body');
+    const chevron = document.getElementById('rv-grafico-chevron');
+    if (!cuerpo) return;
+    cuerpo.addEventListener('shown.bs.collapse', function () {
+        if (chevron) chevron.className = 'bi bi-chevron-down me-2 small';
+        if (chartInstance) chartInstance.resize();
+    });
+    cuerpo.addEventListener('hidden.bs.collapse', function () {
+        if (chevron) chevron.className = 'bi bi-chevron-right me-2 small';
+    });
+});
+
 window.RV_cambiarTipoGrafico = function() {
     if (window.rv_last_raw_data) {
         RV_dibujarGrafico(window.rv_last_raw_data, window.rv_last_agrupacion);

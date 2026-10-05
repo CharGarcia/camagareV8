@@ -1361,6 +1361,7 @@ class ReporteVentasController extends BaseModuloController
             'RECIBO'           => 'Recibos de venta',
             'NOTA_CREDITO'     => 'Notas de crédito en ventas',
             'FACTURA_MENOS_NC' => 'Facturas de venta menos NC de ventas',
+            'TODOS'            => 'Todos: facturas + recibos - NC de ventas', // guion ASCII: la fuente del PDF no trae el signo menos
         ];
 
         $fmt   = static fn (string $f): string => $f !== '' ? date('d-m-Y', strtotime($f)) : '';
@@ -1479,9 +1480,8 @@ class ReporteVentasController extends BaseModuloController
     //
     // Un bloque por día con Documentos, Detalle de impuestos y Cobro por forma de pago,
     // con el formato de la tirilla del Reporte Restaurante. Toma los mismos filtros del
-    // formulario (y el mismo alcance del usuario) que el resto del reporte, salvo "Tipo de
-    // documento" y "Agrupar por": el resumen junta siempre facturas, recibos y notas de
-    // crédito. Lo arma ReporteVentasResumenDiarioService; aquí solo se presenta.
+    // formulario (y el mismo alcance del usuario) que el resto del reporte, incluido "Tipo
+    // de documento"; solo ignora "Agrupar por". Lo arma ReporteVentasResumenDiarioService; aquí solo se presenta.
 
     /**
      * Filtros, alcance y resumen ya armado, comunes a las cuatro salidas. Lanza
@@ -1498,10 +1498,11 @@ class ReporteVentasController extends BaseModuloController
         $resumen = (new \App\Services\modulos\ReporteVentasResumenDiarioService($this->repository))
             ->generar($idsEmpresa, $filtros);
 
-        // Caja de filtros: lo que acota el resumen. Fuera lo que el resumen no usa (tipo de
-        // documento, agrupación) y los filtros que se quedaron en "Todos".
+        // Caja de filtros: lo que acota el resumen. Fuera lo que el resumen no usa (la
+        // agrupación) y los filtros que se quedaron en "Todos". El tipo de documento sí va:
+        // el resumen lo respeta (ReporteVentasRepository::fuentesResumen()).
         $txt = $this->describirFiltros($idsEmpresa, $filtros, $consolidado);
-        unset($txt['Tipo de documento'], $txt['Agrupación']);
+        unset($txt['Agrupación']);
         if (!$consolidado) {
             unset($txt['Alcance']);
         }
@@ -1519,18 +1520,36 @@ class ReporteVentasController extends BaseModuloController
             'idEmpresa'  => $idEmpresa,
             'resumen'    => $resumen,
             'filtrosTxt' => $txt,
+            // Firma "Realizado por" del PDF y la tirilla: quien genera el resumen.
+            'realizadoPor' => $this->repository->getNombreUsuario((int) ($_SESSION['id_usuario'] ?? 0)),
         ];
     }
 
     /** HTML del resumen (pantalla, PDF o correo: cambia solo el estilo, no el contenido). */
     private function htmlResumenDiario(array $datos, string $modo): string
     {
+        // En el PDF, el mismo encabezado (logo del establecimiento + empresa + título + fecha)
+        // y la misma caja "Filtros aplicados" que el PDF del reporte, con sus estilos.
+        $pdf = [];
+        if ($modo === 'pdf') {
+            $nombre = (string) ($datos['empresa']['nombre'] ?? 'REPORTE DE VENTAS');
+            $ruc    = trim((string) ($datos['empresa']['ruc'] ?? ''));
+            $pdf = [
+                'css'         => self::CSS_FILTROS_PDF,
+                'encabezado'  => $this->encabezadoPdf($datos['idEmpresa'], $nombre,
+                    'Resumen diario de ventas' . ($ruc !== '' ? ' · RUC ' . $ruc : '')),
+                'filtros'     => $this->bloqueFiltrosPdf($datos['filtrosTxt']),
+            ];
+        }
+
         ob_start();
         $this->view('modulos/reporte_ventas/resumen_diario', [
             'modo'       => $modo,
             'empresa'    => $datos['empresa'],
             'resumen'    => $datos['resumen'],
             'filtrosTxt' => $datos['filtrosTxt'],
+            'pdf'        => $pdf,
+            'realizadoPor' => $datos['realizadoPor'] ?? '',
         ]);
         return (string) ob_get_clean();
     }
@@ -1583,6 +1602,7 @@ class ReporteVentasController extends BaseModuloController
             'empresa'      => $datos['empresa'],
             'resumen'      => $datos['resumen'],
             'filtrosTxt'   => $datos['filtrosTxt'],
+            'realizadoPor' => $datos['realizadoPor'] ?? '',
             'anchoTirilla' => (new \App\Services\modulos\ConfiguracionRestauranteService())
                 ->getAnchoTirilla($datos['idEmpresa']),
         ]);
