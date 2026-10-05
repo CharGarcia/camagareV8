@@ -328,7 +328,7 @@ class EmpleadosController extends BaseModuloController
 
         ob_start();
         if (empty($rows)) {
-            echo '<tr><td colspan="7" class="text-center py-5 text-muted">No se encontraron empleados.</td></tr>';
+            echo '<tr><td colspan="19" class="text-center py-5 text-muted">No se encontraron empleados.</td></tr>';
         } else {
             foreach ($rows as $r) {
                 $dataJson = htmlspecialchars(json_encode($r), ENT_QUOTES, 'UTF-8');
