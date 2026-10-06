@@ -6,8 +6,8 @@ ruta_modulo: config/permisos-modulos
 tipo: modulo
 visibilidad: superadmin
 requiere_permiso_modulo: no
-etiquetas: permisos, accesos, roles, niveles, usuarios, modulos asignados, acceso total, buscar usuario, buscar por correo, buscar por cedula, identificacion, email, buscador, buscar empresa, ruc, razon social, nombre comercial, asignar empresa, empresa no asignada, crear usuario, invitacion, correo existente, pdf, imprimir, imprimir permisos, reporte de permisos, descargar permisos, acta de permisos, vendedores que puede ver, reporte de ventas por vendedor, supervisor de ventas, ver ventas de otros vendedores, jefe de ventas, pestañas que puede ver, ocultar pestañas, pestañas por usuario, pestañas del reporte de inventarios, no ve la pestaña, quitar pestaña a un usuario
-version: 1.10
+etiquetas: permisos, accesos, roles, niveles, usuarios, modulos asignados, acceso total, buscar usuario, buscar por correo, buscar por cedula, identificacion, email, buscador, buscar empresa, ruc, razon social, nombre comercial, asignar empresa, empresa no asignada, crear usuario, invitacion, correo existente, pdf, imprimir, imprimir permisos, reporte de permisos, descargar permisos, acta de permisos, vendedores que puede ver, reporte de ventas por vendedor, supervisor de ventas, ver ventas de otros vendedores, jefe de ventas, pestañas que puede ver, ocultar pestañas, pestañas por usuario, pestañas del reporte de inventarios, no ve la pestaña, quitar pestaña a un usuario, vendedores que puede ver por reporte, ocultar vendedores a un usuario, limitar vendedores, coordinador de zona, ver solo algunos vendedores
+version: 1.11
 orden: 10
 estado: activo
 ---
@@ -116,6 +116,36 @@ con Existencias y Movimientos, sin Valorización ni Auditoría.
 Cuando otro módulo con pestañas se sume a esta configuración, su tarjeta
 aparecerá aquí sola, con el mismo funcionamiento.
 
+## Vendedores que puede ver por módulo (Reporte de Ventas)
+
+También solo para usuarios de **nivel 1**, aparece una tarjeta **Vendedores que
+puede ver** por cada módulo que admite limitar los vendedores. Hoy es uno:
+**Reporte de Ventas**. Sirve para que un usuario que ve toda la empresa en ese
+reporte vea únicamente las ventas de ciertos vendedores: por ejemplo, un
+coordinador de zona con los asesores de su zona.
+
+- **Sin configurar nada, el usuario ve las ventas de todos los vendedores.**
+  Desmarque los que no debe ver; cada casilla se guarda al instante.
+- En el reporte, las ventas de los vendedores desmarcados desaparecen de la
+  tabla, de las tarjetas de totales, de todas las agrupaciones, del PDF, del
+  Excel y del resumen de la app móvil. El selector *Vendedor* solo ofrece los
+  marcados (si queda uno solo, el filtro se fija en él).
+- Lo que no lleva vendedor cuenta por el vendedor asignado al cliente: un
+  documento sin vendedor de un cliente de un vendedor desmarcado tampoco se ve.
+- Aplica al usuario con **Ver Todo** en el submódulo *Reporte de Ventas*. Un
+  usuario sin *Ver Todo* ya ve solo lo de su propio vendedor (ver *Quién ve
+  qué* en el manual del reporte), y esta tarjeta no le cambia nada.
+- Siempre debe quedar al menos un vendedor marcado: si el usuario no debe ver
+  el reporte, quítele el permiso de **Ver**.
+- No es lo mismo que la tarjeta *Vendedores que puede ver — Reporte de Ventas
+  por Vendedor* de más arriba: aquella **suma** vendedores a un usuario que ve
+  solo lo suyo; esta **quita** vendedores a uno que ve todo.
+- No aparece para usuarios de nivel 2 o 3: ven a todos siempre. La
+  configuración es por usuario y empresa. Cada cambio queda en `log_sistema`
+  (tabla `usuarios_vendedores_ocultos`).
+- Requiere haber ejecutado `database/2026-10-06_usuarios_vendedores_ocultos.sql`;
+  si no, la tarjeta lo avisa y, mientras tanto, todos ven a todos.
+
 ## Qué alcance tiene cada quien al buscar
 
 El buscador de usuarios y el de empresas no muestran lo mismo según quién entre:
@@ -219,6 +249,9 @@ cambio se aplica en la siguiente página que abra.
 
 ## Historial de cambios
 
+- **1.11** — Nueva tarjeta **Vendedores que puede ver — Reporte de Ventas**
+  (usuarios de nivel 1): el administrador desmarca los vendedores cuyas ventas
+  el usuario no debe ver en ese reporte; sin configurar nada, ve a todos.
 - **1.10** — Nueva tarjeta **Pestañas que puede ver** (usuarios de nivel 1): una
   por cada módulo con pestañas configurables, hoy el *Reporte de Inventarios*.
   El administrador desmarca las pestañas que el usuario no debe ver; sin

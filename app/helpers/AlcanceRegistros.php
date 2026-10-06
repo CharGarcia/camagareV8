@@ -177,6 +177,49 @@ final class AlcanceRegistros
     }
 
     /**
+     * Acota el alcance de un usuario que ve TODA la empresa a los vendedores que
+     * el administrador le dejó visibles en /config/permisos-modulos ("Vendedores
+     * que puede ver — {módulo}", tabla `usuarios_vendedores_ocultos`, catálogo
+     * App\Helpers\VendedoresModulo). Sin vendedores ocultos devuelve el alcance
+     * tal cual (ve a todos). A un usuario ya restringido (§6) no le cambia nada:
+     * ya ve solo lo de su vendedor. El resultado es el modo vendedor normal
+     * (`id_vendedor_filtro` = todos los vendedores vigentes de la empresa menos
+     * los ocultos), así que los repositorios no necesitan nada nuevo: ve lo que
+     * lleva el nombre de esos vendedores y, sin vendedor, lo de sus clientes.
+     *
+     * @param int[] $idsEmpresa
+     */
+    public static function acotarAVendedoresVisibles(array $alcance, int $idUsuario, array $idsEmpresa, string $modulo): array
+    {
+        if (self::restringe($alcance) || $idUsuario <= 0 || (int) ($_SESSION['nivel'] ?? 1) >= 2) {
+            return $alcance;
+        }
+        $repo = new \App\repositories\modulos\VendedorOcultoRepository();
+        $permitidos = [];
+        $hayOcultos = false;
+        foreach ($idsEmpresa as $idEmpresa) {
+            $ocultos = $repo->getIdsOcultos((int) $idEmpresa, $idUsuario, $modulo);
+            if (!$ocultos) {
+                // Sin ocultos en este establecimiento: ve a todos los suyos.
+                $permitidos = array_merge($permitidos, $repo->getIdsVendedoresEmpresa((int) $idEmpresa));
+                continue;
+            }
+            $hayOcultos = true;
+            $permitidos = array_merge($permitidos, array_diff($repo->getIdsVendedoresEmpresa((int) $idEmpresa), $ocultos));
+        }
+        if (!$hayOcultos) {
+            return $alcance;
+        }
+        $permitidos = array_values(array_unique(array_filter(array_map('intval', $permitidos), static fn (int $id) => $id > 0)));
+        if (!$permitidos) {
+            // No debería pasar (las Rules no dejan ocultar al último), pero nunca
+            // debe degradar a "ve todo": se restringe a sus registros propios.
+            return ['id_usuario_filtro' => $idUsuario, 'id_vendedor_filtro' => []];
+        }
+        return ['id_usuario_filtro' => null, 'id_vendedor_filtro' => $permitidos];
+    }
+
+    /**
      * Filtro Vendedor de la pantalla para un usuario restringido que ve VARIOS
      * vendedores: si eligió uno de su alcance, el alcance se acota a ese
      * vendedor (conserva la regla "sin vendedor → vendedor del cliente"); si no,

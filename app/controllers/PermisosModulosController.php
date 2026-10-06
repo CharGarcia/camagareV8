@@ -1056,6 +1056,94 @@ class PermisosModulosController extends Controller
     }
 
     /**
+     * Tarjeta "Vendedores que puede ver — {módulo}" (catálogo App\Helpers\VendedoresModulo):
+     * los vendedores de la empresa, marcando los que el usuario ve en ese módulo.
+     * AJAX/JSON. Parámetros: u (usuario), e (empresa), m (ruta MVC del módulo).
+     */
+    public function vendedoresModuloJson(): void
+    {
+        $this->requireAuth();
+        $this->requireNivel(2);
+        header('Content-Type: application/json');
+
+        $idUsuario = (int) ($_GET['u'] ?? 0);
+        $idEmpresa = (int) ($_GET['e'] ?? 0);
+        $modulo    = trim((string) ($_GET['m'] ?? ''));
+        $error = $this->validarGestionUsuarioEmpresa($idUsuario, $idEmpresa);
+        if ($error === null && \App\Helpers\VendedoresModulo::definicion($modulo) === null) {
+            $error = 'Este módulo no admite limitar los vendedores por usuario.';
+        }
+        if ($error !== null) {
+            echo json_encode(['ok' => false, 'error' => $error]);
+            exit;
+        }
+
+        try {
+            echo json_encode([
+                'ok'           => true,
+                'vendedores'   => $this->vendedorOcultoService()->getVendedoresConMarca($idEmpresa, $idUsuario, $modulo),
+                'tabla_existe' => (new \App\repositories\modulos\VendedorOcultoRepository())->disponible(),
+            ]);
+        } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
+            echo json_encode(['ok' => false, 'error' => 'No se pudieron cargar los vendedores.']);
+        }
+        exit;
+    }
+
+    /** Muestra u oculta un vendedor al usuario en un módulo ("Vendedores que puede ver — {módulo}"). AJAX/JSON. */
+    public function guardarVendedorModulo(): void
+    {
+        $this->requireAuth();
+        $this->requireNivel(2);
+        header('Content-Type: application/json');
+
+        if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
+            echo json_encode(['ok' => false, 'error' => 'Método no permitido.']);
+            exit;
+        }
+
+        $idUsuario  = (int) ($_POST['id_usuario'] ?? 0);
+        $idEmpresa  = (int) ($_POST['id_empresa'] ?? 0);
+        $modulo     = trim((string) ($_POST['modulo'] ?? ''));
+        $idVendedor = (int) ($_POST['id_vendedor'] ?? 0);
+        $visible    = !empty($_POST['visible']) && $_POST['visible'] !== '0';
+
+        if ($modulo === '' || $idVendedor <= 0) {
+            echo json_encode(['ok' => false, 'error' => 'Datos incompletos.']);
+            exit;
+        }
+        $error = $this->validarGestionUsuarioEmpresa($idUsuario, $idEmpresa);
+        if ($error !== null) {
+            echo json_encode(['ok' => false, 'error' => $error]);
+            exit;
+        }
+
+        try {
+            $this->vendedorOcultoService()->establecer(
+                (int) ($_SESSION['id_usuario'] ?? 0),
+                (int) ($_SESSION['nivel'] ?? 1),
+                $idEmpresa,
+                $this->modelEmpresa->getUsuarioPorId($idUsuario),
+                $idUsuario,
+                $modulo,
+                $idVendedor,
+                $visible
+            );
+            echo json_encode(['ok' => true]);
+        } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
+            echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
+        }
+        exit;
+    }
+
+    private function vendedorOcultoService(): \App\Services\modulos\VendedorOcultoService
+    {
+        return \App\Services\modulos\VendedorOcultoService::crear();
+    }
+
+    /**
      * Quien configura debe poder gestionar al usuario y la empresa debe ser
      * accesible: el superadministrador, cualquier empresa activa; el
      * administrador, solo las que comparte con ese usuario. Null = válido.

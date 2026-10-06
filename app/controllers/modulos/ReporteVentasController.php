@@ -38,18 +38,26 @@ class ReporteVentasController extends BaseModuloController
         // Obtener los años disponibles para el filtro
         $anios = $this->repository->getAniosDisponibles($idEmpresa);
 
-        // Vendedores activos de la empresa para el selector del filtro. Restringido (§6):
-        // el filtro queda fijo en su propio vendedor (o vacío si no es vendedor) y el
-        // catálogo de asesores no se manda al HTML.
+        // Vendedores para el selector del filtro. Restringido (§6): solo su propio
+        // vendedor, fijo (o vacío si no es vendedor), y el catálogo no se manda al HTML.
+        // Con "Vendedores que puede ver" (permisos-modulos): solo los que le dejaron
+        // visibles, a elegir; si queda uno solo, también fijo.
         $alcance      = $this->alcanceUsuario([$idEmpresa]);
-        $vendedorFijo = \App\Helpers\AlcanceRegistros::restringe($alcance);
-        $vendedores   = $vendedorFijo
-            ? \App\Helpers\AlcanceRegistros::vendedorPropio($alcance, $idEmpresa, (int) $_SESSION['id_usuario'])
-            : (new \App\repositories\modulos\VendedorRepository())->getVendedoresActivos($idEmpresa);
+        $restringido  = \App\Helpers\AlcanceRegistros::restringe($alcance);
+        if (!$restringido) {
+            $vendedores = (new \App\repositories\modulos\VendedorRepository())->getVendedoresActivos($idEmpresa);
+        } elseif (\App\Helpers\AlcanceRegistros::restringe($this->alcanceBase([$idEmpresa]))) {
+            $vendedores = \App\Helpers\AlcanceRegistros::vendedorPropio($alcance, $idEmpresa, (int) $_SESSION['id_usuario']);
+        } else {
+            $vendedores = (new \App\repositories\modulos\VendedorVisibleRepository())
+                ->getVendedoresPorIds($idEmpresa, \App\Helpers\AlcanceRegistros::idsVendedor($alcance));
+        }
+        $vendedorFijo = $restringido && count($vendedores) <= 1;
 
         // Cajeros (usuario responsable del documento) para el filtro y la agrupación. Al
-        // usuario restringido no se le manda la lista: su alcance ya lo acota.
-        $cajeros = $vendedorFijo
+        // usuario restringido por su alcance propio (§6) no se le manda la lista: ya lo
+        // acota. Quien solo tiene vendedores ocultos sí la conserva.
+        $cajeros = \App\Helpers\AlcanceRegistros::restringe($this->alcanceBase([$idEmpresa]))
             ? []
             : $this->repository->getCajerosCombo($idEmpresa, (int) $_SESSION['id_usuario']);
 
@@ -145,6 +153,20 @@ class ReporteVentasController extends BaseModuloController
      */
     private function alcanceUsuario(array $idsEmpresa): array
     {
+        // Sobre el alcance base se aplica "Vendedores que puede ver — Reporte de
+        // Ventas" (permisos-modulos): a quien ve toda la empresa se le quitan los
+        // vendedores que el administrador le ocultó. Sin ocultos, queda igual.
+        return \App\Helpers\AlcanceRegistros::acotarAVendedoresVisibles(
+            $this->alcanceBase($idsEmpresa),
+            (int) ($_SESSION['id_usuario'] ?? 0),
+            $idsEmpresa,
+            $this->getRutaModulo()
+        );
+    }
+
+    /** Alcance §6 puro (nivel, acceso total y vendedor vinculado), sin los vendedores ocultos. */
+    private function alcanceBase(array $idsEmpresa): array
+    {
         return \App\Helpers\AlcanceRegistros::resolver(
             $this->getPermisos(),
             (int) ($_SESSION['id_usuario'] ?? 0),
@@ -196,14 +218,15 @@ class ReporteVentasController extends BaseModuloController
         }
         $filtros['alcance'] = $consolidado ? 'CONSOLIDADO' : 'ESTABLECIMIENTO';
         // Alcance del usuario (§6): se resuelve aquí porque en consolidado el vendedor
-        // vinculado es uno por establecimiento. A un usuario restringido no se le aplica
-        // el filtro Vendedor de la pantalla: su alcance ya lo limita a su vendedor.
-        $filtros = \App\Helpers\AlcanceRegistros::limpiarFiltroVendedor(
+        // vinculado es uno por establecimiento. A un usuario restringido el filtro
+        // Vendedor de la pantalla solo le sirve para elegir uno de los vendedores de su
+        // alcance (los que le dejaron visibles); cualquier otro id se ignora.
+        $filtros = \App\Helpers\AlcanceRegistros::acotarAVendedorElegido(
             array_merge($filtros, $this->alcanceUsuario($idsEmpresa))
         );
-        // Igual con el Cajero: al usuario restringido su alcance ya lo acota (sus propios
-        // documentos o los de su vendedor) y la pantalla no le ofrece el selector.
-        if (\App\Helpers\AlcanceRegistros::restringe($filtros)) {
+        // El Cajero se anula solo al restringido por su alcance propio (sus documentos
+        // o los de su vendedor): a ese la pantalla no le ofrece el selector.
+        if (\App\Helpers\AlcanceRegistros::restringe($this->alcanceBase($idsEmpresa))) {
             $filtros['id_cajero'] = 0;
         }
         if ($consolidado) {
@@ -1378,10 +1401,15 @@ class ReporteVentasController extends BaseModuloController
         }
 
         $vendedorTxt = 'Todos';
-        if (\App\Helpers\AlcanceRegistros::idsVendedor($filtros)) {
-            // Usuario restringido (§6): el filtro de pantalla no aplica, ve solo su vendedor.
-            $propio = \App\Helpers\AlcanceRegistros::vendedorPropio($filtros, $idEmpresa, (int) ($_SESSION['id_usuario'] ?? 0));
-            $vendedorTxt = $propio[0]['nombre'] ?? 'Su vendedor';
+        $idsAlcance  = \App\Helpers\AlcanceRegistros::idsVendedor($filtros);
+        if (count($idsAlcance) === 1) {
+            // Usuario restringido (§6) a un solo vendedor: el suyo, o el que eligió de
+            // los que le dejaron visibles.
+            $v = (new \App\repositories\modulos\VendedorRepository())->findById($idsAlcance[0], $idEmpresa);
+            $vendedorTxt = $v['nombre'] ?? 'Su vendedor';
+        } elseif ($idsAlcance) {
+            // Varios vendedores visibles ("Vendedores que puede ver") y ninguno elegido.
+            $vendedorTxt = count($idsAlcance) . ' vendedores habilitados';
         } elseif (!empty($filtros['id_vendedor'])) {
             $v = (new \App\repositories\modulos\VendedorRepository())->findById((int) $filtros['id_vendedor'], $idEmpresa);
             $vendedorTxt = $v['nombre'] ?? ('#' . (int) $filtros['id_vendedor']);

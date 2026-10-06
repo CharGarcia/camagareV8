@@ -57,6 +57,8 @@ class ConfigController extends Controller
             'guardarVendedorVisible' => 'guardarVendedorVisible',
             'pestanasModuloJson' => 'pestanasModuloJson',
             'guardarPestanaModulo' => 'guardarPestanaModulo',
+            'vendedoresModuloJson' => 'vendedoresModuloJson',
+            'guardarVendedorModulo' => 'guardarVendedorModulo',
             default => 'index',
         };
         if (method_exists($c, $method)) {

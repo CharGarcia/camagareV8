@@ -886,6 +886,184 @@ window.cmgOcultarResultadoPermisos = function() {
             });
         })();
     </script>
+
+    <?php // Vendedores que puede ver por módulo: una tarjeta por cada módulo del catálogo
+          // App\Helpers\VendedoresModulo (hoy, Reporte de Ventas). Por defecto ve a todos;
+          // desmarcar un vendedor oculta sus ventas. Solo nivel 1. ?>
+    <?php foreach (\App\Helpers\VendedoresModulo::catalogo() as $vmModulo => $vmDef): $vmSlug = preg_replace('/[^a-z0-9]+/i', '-', $vmModulo); ?>
+    <div class="card mt-3 vm-card" id="card-vendedores-<?= htmlspecialchars($vmSlug) ?>" data-modulo="<?= htmlspecialchars($vmModulo) ?>">
+        <div class="card-header bg-light py-2 d-flex justify-content-between align-items-center flex-wrap gap-2">
+            <strong><i class="bi <?= htmlspecialchars($vmDef['icono']) ?>"></i> Vendedores que puede ver <span class="text-muted fw-normal small">— <?= htmlspecialchars($vmDef['titulo']) ?></span></strong>
+            <small class="text-muted vm-conteo"></small>
+        </div>
+        <div class="card-body">
+            <p class="small text-muted mb-2">
+                <i class="bi bi-info-circle"></i>
+                Por defecto el usuario ve las ventas de <strong>todos los vendedores</strong> en <em><?= htmlspecialchars($vmDef['titulo']) ?></em>.
+                Desmarque los que no debe ver: sus ventas desaparecen del reporte y el selector <em>Vendedor</em> solo ofrece los marcados.
+                Aplica al usuario con <strong>Ver Todo</strong> en ese submódulo; sin él, ya ve solo lo de su propio vendedor.
+            </p>
+            <div class="mb-2 d-flex align-items-center gap-2">
+                <div class="input-group input-group-sm" style="max-width:350px">
+                    <span class="input-group-text"><i class="bi bi-search"></i></span>
+                    <input type="text" class="form-control vm-buscador" placeholder="Buscar vendedor...">
+                </div>
+                <span class="small vm-status"></span>
+            </div>
+            <div class="permisos-tabla-wrap" style="max-height:320px;">
+                <table class="table table-sm table-hover mb-0">
+                    <thead class="table-light">
+                        <tr>
+                            <th class="text-center" style="width:70px">Puede ver</th>
+                            <th>Vendedor</th>
+                            <th style="width:160px">Identificación</th>
+                        </tr>
+                    </thead>
+                    <tbody class="vm-tbody">
+                        <tr><td colspan="3" class="text-center text-muted py-3"><span class="spinner-border spinner-border-sm"></span> Cargando vendedores...</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+    <?php endforeach; ?>
+
+    <script>
+        (function() {
+            var base      = '<?= $base ?>';
+            var idUsuario = '<?= (int)$idUsuarioSel ?>';
+            var idEmpresa = '<?= (int)$idEmpresaSel ?>';
+
+            document.querySelectorAll('.vm-card').forEach(function(card) {
+                var modulo   = card.getAttribute('data-modulo') || '';
+                var tbody    = card.querySelector('.vm-tbody');
+                var buscador = card.querySelector('.vm-buscador');
+                var statusEl = card.querySelector('.vm-status');
+                var conteoEl = card.querySelector('.vm-conteo');
+                var statusTimer = null;
+                var total = 0;
+
+                function setStatus(tipo, texto) {
+                    clearTimeout(statusTimer);
+                    var color = tipo === 'ok' ? 'text-success' : (tipo === 'err' ? 'text-danger' : 'text-secondary');
+                    var icon  = tipo === 'ok' ? 'bi-check-circle-fill' : (tipo === 'err' ? 'bi-x-circle-fill' : 'bi-arrow-repeat');
+                    statusEl.className = 'small vm-status ' + color;
+                    statusEl.innerHTML = '<i class="bi ' + icon + '"></i> ';
+                    statusEl.appendChild(document.createTextNode(texto));
+                    if (tipo === 'ok') statusTimer = setTimeout(function() { statusEl.innerHTML = ''; }, 2000);
+                }
+
+                function mensaje(texto) {
+                    tbody.innerHTML = '';
+                    var tr = document.createElement('tr');
+                    var td = document.createElement('td');
+                    td.colSpan = 3;
+                    td.className = 'text-center text-muted py-3';
+                    td.textContent = texto;
+                    tr.appendChild(td);
+                    tbody.appendChild(tr);
+                }
+
+                function actualizarConteo() {
+                    var n = tbody.querySelectorAll('.vm-check:checked').length;
+                    conteoEl.textContent = n === total ? 'Ve a todos los vendedores' : (n + ' de ' + total + ' vendedores');
+                }
+
+                function guardar(chk) {
+                    var fd = new FormData();
+                    fd.append('id_usuario', idUsuario);
+                    fd.append('id_empresa', idEmpresa);
+                    fd.append('modulo', modulo);
+                    fd.append('id_vendedor', chk.value);
+                    fd.append('visible', chk.checked ? '1' : '0');
+                    setStatus('load', 'Guardando...');
+                    fetch(base + '/config/permisos-modulos?action=guardarVendedorModulo', {
+                        method: 'POST', body: fd, credentials: 'same-origin',
+                        headers: { 'X-Requested-With': 'XMLHttpRequest' }
+                    })
+                    .then(function(r) { return r.json(); })
+                    .then(function(j) {
+                        if (j.ok) {
+                            setStatus('ok', 'Guardado');
+                        } else {
+                            chk.checked = !chk.checked;
+                            setStatus('err', j.error || 'Error al guardar');
+                        }
+                        actualizarConteo();
+                    })
+                    .catch(function() {
+                        chk.checked = !chk.checked;
+                        setStatus('err', 'Error de conexión');
+                        actualizarConteo();
+                    });
+                }
+
+                function pintar(vendedores) {
+                    tbody.innerHTML = '';
+                    total = vendedores.length;
+                    if (!total) { mensaje('La empresa no tiene vendedores registrados.'); return; }
+                    vendedores.forEach(function(v) {
+                        var tr = document.createElement('tr');
+                        tr.className = 'vm-row';
+                        tr.style.cursor = 'pointer';
+
+                        var tdChk = document.createElement('td');
+                        tdChk.className = 'text-center align-middle';
+                        var chk = document.createElement('input');
+                        chk.type = 'checkbox';
+                        chk.className = 'form-check-input vm-check';
+                        chk.value = v.id;
+                        chk.checked = !!v.visible;
+                        chk.addEventListener('change', function() { guardar(chk); });
+                        tdChk.appendChild(chk);
+
+                        var tdNom = document.createElement('td');
+                        tdNom.className = 'align-middle';
+                        tdNom.appendChild(document.createTextNode(v.nombre || ''));
+                        if (!v.activo) {
+                            tdNom.insertAdjacentHTML('beforeend', ' <span class="badge bg-secondary bg-opacity-10 text-secondary">Inactivo</span>');
+                        }
+
+                        var tdId = document.createElement('td');
+                        tdId.className = 'align-middle small text-muted';
+                        tdId.textContent = v.identificacion || '';
+
+                        tr.appendChild(tdChk);
+                        tr.appendChild(tdNom);
+                        tr.appendChild(tdId);
+                        tr.addEventListener('click', function(e) {
+                            if (e.target === chk) return;
+                            chk.checked = !chk.checked;
+                            guardar(chk);
+                        });
+                        tbody.appendChild(tr);
+                    });
+                    actualizarConteo();
+                }
+
+                fetch(base + '/config/permisos-modulos?action=vendedoresModuloJson&u=' + encodeURIComponent(idUsuario) + '&e=' + encodeURIComponent(idEmpresa) + '&m=' + encodeURIComponent(modulo), {
+                    credentials: 'same-origin', headers: { 'X-Requested-With': 'XMLHttpRequest' }
+                })
+                .then(function(r) { return r.json(); })
+                .then(function(j) {
+                    if (!j.ok) { mensaje(j.error || 'No se pudieron cargar los vendedores.'); return; }
+                    if (!j.tabla_existe) {
+                        mensaje('Falta ejecutar database/2026-10-06_usuarios_vendedores_ocultos.sql para usar esta configuración.');
+                        return;
+                    }
+                    pintar(j.vendedores || []);
+                })
+                .catch(function() { mensaje('Error de conexión al cargar los vendedores.'); });
+
+                buscador.addEventListener('input', function() {
+                    var q = buscador.value.toLowerCase().trim();
+                    tbody.querySelectorAll('.vm-row').forEach(function(row) {
+                        row.style.display = !q || row.textContent.toLowerCase().indexOf(q) !== -1 ? '' : 'none';
+                    });
+                });
+            });
+        })();
+    </script>
     <?php endif; ?>
 
     </div><?php // fin #permisos-resultado ?>
