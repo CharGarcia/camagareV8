@@ -637,6 +637,8 @@ class ConfigController extends Controller
         $c = new EmpresasSistemaController();
         $method = match ($sub) {
             'search' => 'searchAjax',
+            'export-pdf' => 'exportPdf',
+            'export-excel' => 'exportExcel',
             'usuariosEmpresa' => 'usuariosEmpresaJson',
             'establecimientosEmpresa' => 'establecimientosEmpresaJson',
             'updateEstablecimiento' => 'updateEstablecimiento',

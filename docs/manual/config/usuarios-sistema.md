@@ -5,8 +5,8 @@ categoria: Configuración global
 ruta_modulo: config/usuarios-sistema
 tipo: modulo
 visibilidad: admin
-etiquetas: usuarios del sistema, crear usuario, asignar empresa, empresa a asignar, invitar usuario, limite de usuarios, usuario existente, que usuarios veo, no aparece el usuario, lista de usuarios, usuarios de mi empresa, cambiar cedula, editar cedula, identificacion del usuario, cedula repetida, usuario bloqueado, demasiados intentos, reiniciar intentos, desbloquear usuario, no puede iniciar sesion, reenviar invitacion, no le llego el correo, no recibio la invitacion, invitacion pendiente, reenviar correo de bienvenida, clave provisional, contrasena provisional, asignar contrasena, poner clave al usuario, cambiar nombre del usuario, editar nombre, nombre mal escrito, desaparecio el boton de invitacion, se perdio la invitacion al guardar, no me deja reenviar la invitacion, boton de invitacion en gris
-version: 1.4
+etiquetas: usuarios del sistema, crear usuario, asignar empresa, empresa a asignar, invitar usuario, limite de usuarios, usuario existente, que usuarios veo, no aparece el usuario, lista de usuarios, usuarios de mi empresa, cambiar cedula, editar cedula, identificacion del usuario, cedula repetida, usuario bloqueado, demasiados intentos, reiniciar intentos, desbloquear usuario, no puede iniciar sesion, reenviar invitacion, no le llego el correo, no recibio la invitacion, invitacion pendiente, reenviar correo de bienvenida, clave provisional, contrasena provisional, asignar contrasena, poner clave al usuario, cambiar nombre del usuario, editar nombre, nombre mal escrito, desaparecio el boton de invitacion, se perdio la invitacion al guardar, no me deja reenviar la invitacion, boton de invitacion en gris, telefono del usuario, celular, numero de telefono, editar telefono, cambiar telefono, columna telefono, app movil, puede usar la app
+version: 1.5
 orden: 3
 estado: activo
 ---
@@ -90,6 +90,22 @@ que cambiarlo no afecta su acceso.
 Se usa sobre todo para corregir el nombre de una **invitación mal escrita**,
 sin tener que borrar al usuario y volver a invitarlo. Admite hasta **100
 caracteres** y no puede quedar vacío.
+
+## Teléfono del usuario
+
+El listado muestra la columna **Teléfono** (entre **Nivel** y **Estado**),
+con el número que la persona escribió al completar su registro. Se puede
+buscar por él desde el buscador y ordenar la lista haciendo clic en el
+encabezado.
+
+En la pestaña **General** de la ficha el campo **Teléfono** es editable:
+admite hasta **20 caracteres** (números, espacios, `+`, paréntesis y
+guiones) y puede dejarse vacío. Es solo un dato de contacto: no interviene
+en el inicio de sesión ni en la app móvil.
+
+En esa misma pestaña, **Estado** y **App móvil** (este último solo lo ve el
+superadministrador) ocupan ahora la mitad del ancho que el resto de campos,
+en una sola línea.
 
 ## Clave provisional
 
@@ -232,6 +248,10 @@ cuando el usuario no tiene intentos fallidos pendientes.
 
 ## Historial de cambios
 
+- **1.5** — El listado incorpora la columna **Teléfono** (antes de **Estado**),
+  que también entra en la búsqueda y el ordenamiento. En la ficha, el
+  teléfono pasa a ser editable desde la pestaña **General**, y los controles
+  **Estado** y **App móvil** se compactaron a la mitad del ancho.
 - **1.4** — La ficha **verifica contra el servidor**, cada vez que se abre,
   si el usuario ya se activó, en lugar de fiarse del dato con el que se pintó
   el listado. Se corrigió que **guardar la ficha de un usuario invitado**

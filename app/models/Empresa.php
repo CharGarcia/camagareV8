@@ -12,7 +12,7 @@ namespace App\models;
 
 class Empresa extends BaseModel
 {
-    public const COLUMNAS_ORDEN = ['nombre', 'nombre_comercial', 'ruc', 'establecimiento', 'direccion', 'nombre_provincia', 'nombre_ciudad', 'estado'];
+    public const COLUMNAS_ORDEN = ['nombre', 'nombre_comercial', 'ruc', 'establecimiento', 'direccion', 'telefono', 'mail', 'nombre_provincia', 'nombre_ciudad', 'estado', 'usuarios', 'documentos'];
 
     /**
      * Verifica que la empresa siga habilitada (estado activo y no eliminada).
@@ -72,40 +72,141 @@ class Empresa extends BaseModel
      * Lista empresas para el módulo empresas del sistema.
      * SuperAdmin: todas. Admin: solo las que tiene asignadas.
      */
-    public function getTodosParaListado(int $idActual, int $nivel, string $buscar = '', int $page = 1, int $perPage = 20, string $ordenCol = 'nombre_comercial', string $ordenDir = 'ASC'): array
+    /**
+     * Whitelist y mapa del ordenamiento del listado (clave `data-sort` de la vista →
+     * expresión SQL). Lo único que puede llegar al ORDER BY sale de aquí
+     * (ver OrdenListado::clausula).
+     */
+    public const MAPA_ORDEN = [
+        'nombre'           => 'e.nombre',
+        'nombre_comercial' => 'e.nombre_comercial',
+        'ruc'              => 'e.ruc',
+        'establecimiento'  => 'e.establecimiento',
+        'direccion'        => 'e.direccion',
+        'telefono'         => 'e.telefono',
+        'mail'             => 'e.mail',
+        'estado'           => 'e.estado',
+        // Columnas que vienen de un JOIN / subconsulta.
+        'nombre_provincia' => 'p.nombre',
+        'nombre_ciudad'    => 'c.nombre',
+        'usuarios'         => 'usuarios_asignados',
+        'documentos'       => 'doc_estado',
+    ];
+
+    /**
+     * Listado de Empresas del sistema (config/empresas-sistema): buscador de texto
+     * libre + filtros `clave:valor` (FiltrosBusqueda) y orden de una o varias
+     * columnas (OrdenListado), igual que los listados de módulo (ref.: Proveedores).
+     *
+     * Nivel 3 ve todas las empresas; nivel 2 solo las que tiene asignadas.
+     * `$perPage = 0` devuelve todas las filas (exportación PDF/Excel).
+     */
+    public function getTodosParaListado(int $idActual, int $nivel, string $buscar = '', int $page = 1, int $perPage = 20, string $ordenCol = 'nombre_comercial', string $ordenDir = 'ASC', array $ordenMulti = []): array
     {
-        $offset = ($page - 1) * $perPage;
         $idActual = (int) $idActual;
 
-        if (!in_array($ordenCol, self::COLUMNAS_ORDEN, true)) {
-            $ordenCol = 'nombre_comercial';
-        }
-        $dir = strtoupper($ordenDir) === 'DESC' ? 'DESC' : 'ASC';
-        $colMap = [
-            'nombre_provincia' => 'p.nombre',
-            'nombre_ciudad' => 'c.nombre',
-        ];
-        $col = $colMap[$ordenCol] ?? 'e.' . $ordenCol;
+        $ordenMulti = \App\Helpers\OrdenListado::normalizar(
+            $ordenMulti !== [] ? $ordenMulti : [['col' => $ordenCol, 'dir' => $ordenDir]]
+        );
+        // Desempate por id: sin él, dos filas empatadas bailan entre páginas.
+        $orderBy = \App\Helpers\OrdenListado::clausula($ordenMulti, self::MAPA_ORDEN, 'e.nombre_comercial', 'e.id DESC');
 
-        if ($nivel >= 3) {
-            $from = 'empresas e';
-            $where = 'WHERE e.eliminado = false';
-        } else {
-            $from = 'empresa_asignada ea INNER JOIN empresas e ON e.id = ea.id_empresa';
-            $where = "WHERE ea.id_usuario = {$idActual} AND e.eliminado = false";
-        }
-        $joinProv = 'LEFT JOIN provincia p ON p.codigo = e.cod_prov';
-        $joinCiud = 'LEFT JOIN ciudad c ON c.codigo = e.cod_ciudad';
-
-        if ($buscar !== '') {
-            $b = $this->escape($buscar);
-            $where .= " AND (e.nombre ILIKE '%{$b}%' OR e.nombre_comercial ILIKE '%{$b}%' OR e.ruc ILIKE '%{$b}%' OR e.establecimiento ILIKE '%{$b}%')";
+        $params = [];
+        $where = 'WHERE e.eliminado = false';
+        if ($nivel < 3) {
+            // IN en vez de JOIN: no duplica filas y deja ordenar por expresiones
+            // que no están en el SELECT (DISTINCT no lo permitiría).
+            $where .= ' AND e.id IN (SELECT ea.id_empresa FROM empresa_asignada ea WHERE ea.id_usuario = :id_usuario)';
+            $params[':id_usuario'] = $idActual;
         }
 
-        $countSql = "SELECT COUNT(DISTINCT e.id) AS total FROM {$from} {$where}";
-        $total = (int) ($this->query($countSql)[0]['total'] ?? 0);
+        // JOINs que participan del WHERE y del ORDER BY: iguales en el COUNT y en
+        // el SELECT de filas para que ambos filtren exactamente lo mismo.
+        //  - doc: último envío de documentos legales (mismo criterio que
+        //    DocumentosLegalesRepository::getEstadoPorEmpresa, para la columna Documentos).
+        //  - ua: usuarios asignados (columna Usuarios, "n/máx").
+        $joins = "LEFT JOIN provincia p ON p.codigo = e.cod_prov
+                LEFT JOIN ciudad c ON c.codigo = e.cod_ciudad
+                LEFT JOIN LATERAL (
+                    SELECT d.estado FROM empresas_documentos_envios d
+                     WHERE d.id_empresa = e.id AND d.eliminado = false
+                     ORDER BY d.enviado_at DESC LIMIT 1
+                ) doc ON true
+                LEFT JOIN LATERAL (
+                    SELECT COUNT(*) AS n
+                      FROM empresa_asignada ea2
+                      JOIN usuarios u2 ON u2.id = ea2.id_usuario
+                     WHERE ea2.id_empresa = e.id AND COALESCE(u2.nivel, 1) < 3
+                ) ua ON true";
+        $exprDocEstado = "(CASE WHEN doc.estado = 'aceptado' THEN 'aceptado' WHEN doc.estado IS NULL THEN 'sin_enviar' ELSE 'pendiente' END)";
+        $exprUsuarios  = 'COALESCE(ua.n, 0)';
+        // Las claves de MAPA_ORDEN que apuntan a estos alias se resuelven aquí.
+        $orderBy = strtr($orderBy, ['usuarios_asignados' => $exprUsuarios, 'doc_estado' => $exprDocEstado]);
 
-        $sql = "SELECT DISTINCT e.id, e.nombre, e.nombre_comercial, e.ruc, e.establecimiento, e.direccion, e.telefono, e.mail,
+        $parsed = \App\Helpers\FiltrosBusqueda::parsear($buscar);
+        if ($parsed['texto_libre'] !== '') {
+            // Texto libre sobre las columnas visibles del listado (por palabras, sin
+            // distinguir mayúsculas ni tildes). Estado, estado de pago y documentos
+            // NO entran: se filtran desde el modal (regla general de los listados).
+            $cond = \App\Helpers\FiltrosBusqueda::condicionTexto([
+                'e.nombre',           // Razón social
+                'e.nombre_comercial', // Nombre comercial
+                'e.ruc',              // RUC
+                'e.establecimiento',  // Est.
+                'e.direccion',        // Dirección
+                'e.telefono',         // Teléfono
+                'e.mail',             // Correo
+                'p.nombre',           // Provincia
+                'c.nombre',           // Ciudad
+            ], $parsed['texto_libre'], $params, 'emp_b');
+            if ($cond !== '') {
+                $where .= ' AND ' . $cond;
+            }
+        }
+
+        \App\Helpers\FiltrosBusqueda::aplicarFiltros($where, $params, $parsed['filtros'], [
+            'texto' => [
+                'nombre'          => 'e.nombre',
+                'razon'           => 'e.nombre',
+                'comercial'       => 'e.nombre_comercial',
+                'ruc'             => 'e.ruc',
+                'establecimiento' => 'e.establecimiento',
+                'direccion'       => 'e.direccion',
+                'telefono'        => 'e.telefono',
+                'email'           => 'e.mail',
+                'correo'          => 'e.mail',
+                'provincia'       => 'p.nombre',
+                'ciudad'          => 'c.nombre',
+            ],
+            'exacto' => [
+                'estado'        => 'e.estado',                           // 1 / 0
+                'estado_pago'   => "COALESCE(e.estado_pago, 'pendiente')", // pendiente / pagado / vencido
+                'obligado'      => "UPPER(COALESCE(e.obligado_contabilidad, 'NO'))", // SI / NO
+                'documentos'    => $exprDocEstado,                       // sin_enviar / pendiente / aceptado
+                'cod_provincia' => 'e.cod_prov',
+                'cod_ciudad'    => 'e.cod_ciudad',
+                'administradora' => "CASE WHEN COALESCE(e.es_administradora_suscripciones, false) THEN 'si' ELSE 'no' END",
+                'id_administradora' => 'e.id_empresa_suscripciones',
+                'operadora'     => "CASE WHEN COALESCE(e.factura_operadora_transporte, 'false') = 'true' THEN 'si' ELSE 'no' END",
+                'cupo_lleno'    => "CASE WHEN {$exprUsuarios} >= COALESCE(e.max_usuarios, 3) THEN 'si' ELSE 'no' END",
+            ],
+            'fecha' => [
+                'vigencia_desde' => 'e.periodo_vigencia_desde',
+                'vigencia_hasta' => 'e.periodo_vigencia_hasta',
+                'registro'       => 'e.created_at',
+            ],
+            'numerico' => [
+                'valor_cobro'  => 'e.valor_cobro',
+                'max_usuarios' => 'COALESCE(e.max_usuarios, 3)',
+                'usuarios'     => $exprUsuarios,
+            ],
+        ]);
+
+        $stCount = $this->db->prepare("SELECT COUNT(*) FROM empresas e {$joins} {$where}");
+        $stCount->execute($params);
+        $total = (int) $stCount->fetchColumn();
+
+        $sql = "SELECT e.id, e.nombre, e.nombre_comercial, e.ruc, e.establecimiento, e.direccion, e.telefono, e.mail,
                 e.cod_prov, e.cod_ciudad, e.estado, e.valor_cobro, e.periodo_vigencia_desde, e.periodo_vigencia_hasta, e.estado_pago,
                 e.obligado_contabilidad, COALESCE(e.max_usuarios, 3) AS max_usuarios,
                 e.id_empresa_suscripciones, COALESCE(e.es_administradora_suscripciones, false) AS es_administradora_suscripciones,
@@ -114,21 +215,55 @@ class Empresa extends BaseModel
                 COALESCE(e.factura_operadora_transporte, 'false') AS factura_operadora_transporte,
                 COALESCE(NULLIF(ctrl.nombre_comercial,''), ctrl.nombre) AS ctrl_nombre, ctrl.ruc AS ctrl_ruc, ctrl.establecimiento AS ctrl_estab,
                 cli.nombre AS cli_nombre, cli.identificacion AS cli_identificacion,
-                p.nombre AS nombre_provincia, c.nombre AS nombre_ciudad
-            FROM {$from} {$joinProv} {$joinCiud}
+                p.nombre AS nombre_provincia, c.nombre AS nombre_ciudad,
+                {$exprDocEstado} AS doc_estado
+            FROM empresas e {$joins}
                 LEFT JOIN empresas ctrl ON ctrl.id = e.id_empresa_suscripciones
                 LEFT JOIN clientes cli  ON cli.id = e.id_cliente_facturado
             {$where}
-            ORDER BY {$col} {$dir}
-            LIMIT {$perPage} OFFSET {$offset}";
-        $rows = $this->query($sql);
+            {$orderBy}";
+        if ($perPage > 0) {
+            $sql .= ' LIMIT ' . (int) $perPage . ' OFFSET ' . (int) (($page - 1) * $perPage);
+        }
+        $st = $this->db->prepare($sql);
+        $st->execute($params);
+        $rows = $st->fetchAll(\PDO::FETCH_ASSOC);
 
         $empAsignada = new EmpresaAsignada();
         foreach ($rows as &$r) {
             $r['usuarios'] = $empAsignada->getUsuariosDeEmpresa((int) $r['id'], true);
         }
+        unset($r);
 
         return ['rows' => $rows, 'total' => $total];
+    }
+
+    /**
+     * Opciones de los selects del modal de filtros del listado: solo los valores
+     * que usan las empresas visibles para quien consulta.
+     */
+    public function getOpcionesFiltroListado(int $idActual, int $nivel): array
+    {
+        $params = [];
+        $where = 'WHERE e.eliminado = false';
+        if ($nivel < 3) {
+            $where .= ' AND e.id IN (SELECT ea.id_empresa FROM empresa_asignada ea WHERE ea.id_usuario = :id_usuario)';
+            $params[':id_usuario'] = (int) $idActual;
+        }
+        $leer = function (string $select, string $join, string $orden) use ($params, $where): array {
+            $st = $this->db->prepare("SELECT DISTINCT {$select} FROM empresas e {$join} {$where} ORDER BY {$orden}");
+            $st->execute($params);
+            return $st->fetchAll(\PDO::FETCH_ASSOC);
+        };
+
+        return [
+            'provincias' => $leer('p.codigo, p.nombre', 'JOIN provincia p ON p.codigo = e.cod_prov', 'p.nombre'),
+            'ciudades'   => $leer('c.codigo, c.nombre, p.nombre AS provincia',
+                                  'JOIN ciudad c ON c.codigo = e.cod_ciudad LEFT JOIN provincia p ON p.codigo = e.cod_prov',
+                                  'c.nombre, provincia'),
+            'administradoras' => $leer("a.id, COALESCE(NULLIF(a.nombre_comercial, ''), a.nombre) AS nombre",
+                                       'JOIN empresas a ON a.id = e.id_empresa_suscripciones', 'nombre'),
+        ];
     }
 
     public function getPorId(int $id): ?array

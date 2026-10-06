@@ -6,7 +6,7 @@ ruta_modulo: modulos/cambio-producto-cv
 tipo: modulo
 visibilidad: todos
 etiquetas: cambio de producto, cambios de productos, listado de cambios, producto que entra, producto que sale, entra y sale, buscar cambio, buscador, filtros, filtrar cambios, buscar por producto, documento de origen, chips, garantia, reposicion, devolucion con reposicion, canje, buscar por nup, nup, serial, numero de serie, lote, buscar por factura, numero de factura, factura de venta, numero de factura de venta, factura de consignacion, facturacion de consignaciones, buscar por consignacion, numero de consignacion, entregar desde consignacion, existencias, catalogo, bodega, bodega de origen, diferencia a favor, saldo de consignacion, mercaderia en consignacion, inventario, asiento a costo, pdf del cambio, exportar excel, registro en facturacion de consignaciones, facturado por cambio, reposicion facturada, secuencial facturacion consignaciones, sin factura, fecha de emision, fecha del cambio, cambios migrados, nup en el listado, columna nup, iva, impuesto, iva del producto, tarifa de iva, descuento de la factura, aparecen documentos que no busque, resultados que no corresponden, buscar por producto en el listado, consignacion de otro cliente, otro cliente, no aparece la consignacion, no contabilizar cambios, modulos que contabilizan, consignacion sin asiento, imprimir, impresora, asiento de documento anulado, asiento sigue contabilizado, no se anulo el asiento, no se pudo anular el asiento contable
-version: 1.26
+version: 1.27
 orden: 47
 estado: activo
 ---
@@ -268,6 +268,14 @@ búsqueda**. La **×** quita solo ese filtro, y con el cuadro vacío la tecla
 - **Eliminar**: eliminar el documento (revierte inventario y asiento).
 - **Acceso total**: ve los cambios de toda la empresa. Sin él, el usuario solo
   ve y gestiona los que creó. El superadministrador siempre ve todo.
+- **Bodegas**: el selector de bodega de una entrega muestra solo las bodegas a
+  las que el usuario tiene acceso (*Bodegas → Accesos*; los administradores y el
+  superadministrador ven todas), igual que en Consignaciones de Ventas. Para
+  **devolver** o **entregar desde una consignación** no hace falta tener acceso a
+  la bodega: esa bodega no la elige quien registra el cambio, es la de la línea
+  de origen y el sistema la fija solo. En el modal aparece igual, bloqueada, con
+  el aviso *La bodega es la de la consignación*, aunque el usuario no la tenga
+  permitida.
 
 ## Reglas de negocio
 
@@ -418,6 +426,13 @@ búsqueda**. La **×** quita solo ese filtro, y con el cuadro vacío la tecla
 
 ## Historial de cambios
 
+- **1.27** — El selector de bodega de las entregas muestra solo las **bodegas
+  permitidas** al usuario (*Bodegas → Accesos*), como en Consignaciones de
+  Ventas; antes listaba todas las de la empresa. Las líneas que vienen de una
+  consignación, o una entrega ya guardada, siguen mostrando su bodega de origen
+  aunque el usuario no la tenga permitida: no hace falta acceso a esa bodega para
+  devolver ni para entregar desde una consignación. Nueva nota *Bodegas* en
+  *Permisos*.
 - **1.26** — Corrección: al eliminar un cambio, o pasarlo de Emitida a Borrador o
   Anulada, su asiento se anula en la misma operación. Al **eliminar** un cambio
   emitido, su asiento quedaba contabilizado (no se encontraba porque el cambio ya

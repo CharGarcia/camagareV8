@@ -395,13 +395,18 @@
         l.monto_aplicar = valor;
     };
 
-    CC.confirmarLinea = async function (idLinea) {
-        const l = state.lineas[idLinea];
-        if (!l || !l.id_cliente_sugerido || !l.tipo_documento_sugerido || !l.id_documento_sugerido) {
-            alertError('Falta información', 'Selecciona el cliente y el documento a cobrar antes de confirmar (botón de lupa).');
-            return;
-        }
+    /** Otras partes del mismo depósito, del mismo cliente, aún sugeridas y con documento (sin la línea dada). */
+    function partesHermanasSugeridas(l) {
+        if (!l || !l.id_linea_origen) return [];
+        return Object.values(state.lineas).filter((o) => o.id !== l.id
+            && Number(o.id_linea_origen) === Number(l.id_linea_origen)
+            && Number(o.id_cliente_sugerido) === Number(l.id_cliente_sugerido)
+            && o.estado === 'SUGERIDO' && o.tipo_documento_sugerido && o.id_documento_sugerido);
+    }
 
+    /** Confirma una línea en el servidor y actualiza su estado local. Devuelve true si se confirmó. */
+    async function confirmarUna(idLinea) {
+        const l = state.lineas[idLinea];
         const json = await postJson(`${CC_URL_BASE}/confirmarLineaAjax`, {
             id_linea: idLinea,
             id_cliente: l.id_cliente_sugerido,
@@ -409,13 +414,51 @@
             id_documento: l.id_documento_sugerido,
             monto_aplicar: l.monto_aplicar != null ? l.monto_aplicar : l.monto,
         });
-
         if (!json.ok) {
-            alertError('No se pudo confirmar', json.error);
+            alertError('No se pudo confirmar', `${l.documento_numero ? l.documento_numero + ': ' : ''}${json.error || ''}`);
+            return false;
+        }
+        state.lineas[idLinea] = Object.assign({}, l, json.data);
+        return true;
+    }
+
+    /**
+     * Confirma la línea. Si es una parte de un depósito repartido por antigüedad y el mismo
+     * cliente tiene otras partes todavía sugeridas, ofrece confirmarlas todas de una vez: así,
+     * al generar, el depósito se cobra en UN solo ingreso con todos sus documentos. Con
+     * `soloEsta` no pregunta (p. ej. al reconfirmar desde la lupa).
+     */
+    CC.confirmarLinea = async function (idLinea, soloEsta = false) {
+        const l = state.lineas[idLinea];
+        if (!l || !l.id_cliente_sugerido || !l.tipo_documento_sugerido || !l.id_documento_sugerido) {
+            alertError('Falta información', 'Selecciona el cliente y el documento a cobrar antes de confirmar (botón de lupa).');
             return;
         }
 
-        state.lineas[idLinea] = Object.assign({}, l, json.data);
+        let ids = [idLinea];
+        const hermanas = soloEsta ? [] : partesHermanasSugeridas(l);
+        if (hermanas.length) {
+            const total = hermanas.length + 1;
+            const texto = `Este depósito está repartido en ${total} documentos de ${l.cliente_sugerido_nombre || 'este cliente'}. `
+                + `Si confirma todas las partes, al generar se creará UN solo ingreso con los ${total} documentos y un solo pago.`;
+            let todas;
+            if (window.Swal) {
+                const r = await Swal.fire({
+                    icon: 'question', title: '¿Confirmar todas las partes del depósito?', text: texto,
+                    showCancelButton: true, showDenyButton: true,
+                    confirmButtonText: `Confirmar las ${total}`, denyButtonText: 'Solo esta', cancelButtonText: 'Cancelar',
+                });
+                if (r.isDismissed) return;
+                todas = r.isConfirmed;
+            } else {
+                todas = confirm(texto + '\n\nAceptar: confirmar todas. Cancelar: solo esta.');
+            }
+            if (todas) ids = ids.concat(hermanas.map((o) => o.id));
+        }
+
+        for (const id of ids) {
+            if (!(await confirmarUna(id))) break;
+        }
         CC.renderLineas();
     };
 
@@ -523,6 +566,109 @@
             .find((el) => el.dataset.docKey === clave) || null;
     }
 
+    // ── Buscador de cliente del modal ──────────────────────────────────────
+    // Autocompletar sobre CC_CLIENTES (solo clientes con cartera pendiente, ya cargados con la
+    // página): multi-palabra en cualquier orden e insensible a tildes, por nombre o
+    // identificación. Con un cliente fijado, Backspace/Delete limpia la selección completa.
+    const normalizarTexto = (t) => String(t ?? '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toUpperCase();
+
+    function filtrarClientes(q) {
+        const palabras = normalizarTexto(q).split(/\s+/).filter(Boolean);
+        if (!palabras.length) return [];
+        return (window.CC_CLIENTES || []).filter((c) => {
+            const texto = normalizarTexto(c.nombre) + ' ' + normalizarTexto(c.identificacion);
+            return palabras.every((p) => texto.includes(p));
+        }).slice(0, 15);
+    }
+
+    const etiquetaCliente = (c) => c.identificacion ? `${c.nombre} (${c.identificacion})` : c.nombre;
+
+    function cerrarDropdownClientes() {
+        const d = document.getElementById('cc-buscar-cliente-dropdown');
+        d.style.display = 'none';
+        d.innerHTML = '';
+        d._items = [];
+    }
+
+    /** Fija (o limpia, con null) el cliente elegido en el buscador del modal. */
+    function fijarClienteBuscar(c) {
+        document.getElementById('cc-buscar-cliente').value = c ? String(c.id) : '';
+        document.getElementById('cc-buscar-cliente-texto').value = c ? etiquetaCliente(c) : '';
+        cerrarDropdownClientes();
+    }
+
+    function initBuscadorCliente() {
+        const input = document.getElementById('cc-buscar-cliente-texto');
+        const hidden = document.getElementById('cc-buscar-cliente');
+        const dropdown = document.getElementById('cc-buscar-cliente-dropdown');
+        if (!input || input.dataset.init) return;
+        input.dataset.init = '1';
+
+        let activo = -1;
+        const resaltar = () => dropdown.querySelectorAll('a[data-idx]').forEach((a, i) => a.classList.toggle('active', i === activo));
+        const pintar = (items) => {
+            activo = -1;
+            dropdown._items = items;
+            dropdown.innerHTML = items.length
+                ? items.map((c, i) => `<a href="#" class="list-group-item list-group-item-action py-1 px-2 small" data-idx="${i}">${escHtml(etiquetaCliente(c))}</a>`).join('')
+                : '<span class="list-group-item small text-muted py-1 px-2">Ningún cliente con cartera pendiente coincide.</span>';
+            dropdown.style.display = 'block';
+        };
+        const elegir = (c) => {
+            if (!c) return;
+            fijarClienteBuscar(c);
+            CC.buscarDocumentosDeCliente();
+        };
+
+        input.addEventListener('keydown', (e) => {
+            if (hidden.value !== '') {
+                // Selección activa: Backspace/Delete la limpia entera; una letra empieza otra búsqueda.
+                if (e.key === 'Backspace' || e.key === 'Delete') {
+                    e.preventDefault();
+                    fijarClienteBuscar(null);
+                    CC.buscarDocumentosDeCliente();
+                    return;
+                }
+                if (e.key.length === 1 && !e.ctrlKey && !e.metaKey && !e.altKey) {
+                    fijarClienteBuscar(null);
+                    CC.buscarDocumentosDeCliente();
+                }
+                return;
+            }
+            const items = dropdown._items || [];
+            if (e.key === 'ArrowDown' && items.length) {
+                e.preventDefault(); activo = Math.min(activo + 1, items.length - 1); resaltar();
+            } else if (e.key === 'ArrowUp' && items.length) {
+                e.preventDefault(); activo = Math.max(activo - 1, 0); resaltar();
+            } else if (e.key === 'Enter' && dropdown.style.display !== 'none') {
+                e.preventDefault(); elegir(items[activo >= 0 ? activo : 0]);
+            } else if (e.key === 'Escape') {
+                cerrarDropdownClientes();
+            }
+        });
+        input.addEventListener('input', () => {
+            const q = input.value.trim();
+            if (!q) { cerrarDropdownClientes(); return; }
+            pintar(filtrarClientes(q));
+        });
+        input.addEventListener('focus', () => {
+            if (!hidden.value && input.value.trim()) pintar(filtrarClientes(input.value.trim()));
+        });
+        // mousedown (no click): el blur del input no debe cerrar la lista antes de elegir.
+        dropdown.addEventListener('mousedown', (e) => {
+            const a = e.target.closest('a[data-idx]');
+            if (!a) return;
+            e.preventDefault();
+            elegir((dropdown._items || [])[Number(a.dataset.idx)]);
+        });
+        document.addEventListener('click', (e) => {
+            if (e.target !== input && !dropdown.contains(e.target)) cerrarDropdownClientes();
+        });
+        document.getElementById('cc-modal-buscar-doc').addEventListener('shown.bs.modal', () => {
+            if (!hidden.value) input.focus();
+        });
+    }
+
     CC.abrirBuscarDoc = function (idLinea) {
         const l = state.lineas[idLinea];
         if (!l) return;
@@ -550,16 +696,21 @@
         document.getElementById('cc-buscar-desc').textContent = `${fmtDate(l.fecha_movimiento)} · ${l.descripcion_original || ''}`;
         document.getElementById('cc-buscar-monto').textContent = fmtMoney(buscar.montoLinea);
 
-        const select = document.getElementById('cc-buscar-cliente');
-        select.innerHTML = '<option value="">— Seleccione —</option>' +
-            (window.CC_CLIENTES || []).map((c) => `<option value="${c.id}">${escHtml(c.nombre)}</option>`).join('');
-        select.value = l.id_cliente_sugerido ? String(l.id_cliente_sugerido) : '';
+        initBuscadorCliente();
+        // Si la línea ya tiene cliente, llega fijado en el buscador (aunque ya no tenga cartera
+        // pendiente en la lista: se muestra con el nombre que trae la línea).
+        let clientePre = null;
+        if (l.id_cliente_sugerido) {
+            clientePre = (window.CC_CLIENTES || []).find((c) => c.id === Number(l.id_cliente_sugerido))
+                || { id: Number(l.id_cliente_sugerido), nombre: l.cliente_sugerido_nombre || '', identificacion: '' };
+        }
+        fijarClienteBuscar(clientePre);
 
         document.getElementById('cc-buscar-docs-tbody').innerHTML =
-            '<tr><td colspan="5" class="text-center text-muted py-3">Seleccione un cliente.</td></tr>';
+            '<tr><td colspan="5" class="text-center text-muted py-3">Busque un cliente.</td></tr>';
         CC.renderSeleccion();
 
-        if (select.value) {
+        if (clientePre) {
             CC.buscarDocumentosDeCliente();
         }
 
@@ -570,7 +721,7 @@
         const idCliente = parseInt(document.getElementById('cc-buscar-cliente').value || '0', 10);
         const tbody = document.getElementById('cc-buscar-docs-tbody');
         if (!idCliente) {
-            tbody.innerHTML = '<tr><td colspan="5" class="text-center text-muted py-3">Seleccione un cliente.</td></tr>';
+            tbody.innerHTML = '<tr><td colspan="5" class="text-center text-muted py-3">Busque un cliente.</td></tr>';
             return;
         }
 
@@ -588,7 +739,9 @@
             return;
         }
 
-        const clienteNombre = nombreCliente(idCliente);
+        const clienteNombre = nombreCliente(idCliente)
+            || (state.lineas[buscar.idLinea] && Number(state.lineas[buscar.idLinea].id_cliente_sugerido) === idCliente
+                ? state.lineas[buscar.idLinea].cliente_sugerido_nombre : '') || '';
         tbody.innerHTML = json.data.map((d) => {
             const clave = claveDoc(d.tipo_documento, d.id);
             buscar.docs[clave] = Object.assign({}, d, { id_cliente: idCliente, cliente_nombre: clienteNombre });
@@ -717,7 +870,7 @@
             // Si ya estaba confirmada, se reconfirma con el documento nuevo: si no, el servidor
             // seguiría con el documento anterior aunque la pantalla muestre el nuevo.
             if (eraConfirmada) {
-                await CC.confirmarLinea(l.id);
+                await CC.confirmarLinea(l.id, true);
             } else {
                 CC.renderLineas();
             }

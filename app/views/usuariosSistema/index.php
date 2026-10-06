@@ -134,7 +134,7 @@ $rowsHtml = $rowsHtml ?? '';
 <div class="d-flex justify-content-between align-items-center gap-2 mb-2 flex-wrap">
     <div class="input-group input-group-sm" style="max-width: 320px;">
         <span class="input-group-text"><i class="bi bi-search"></i></span>
-        <input type="text" id="input-buscar-usuarios" class="form-control" placeholder="Buscar por nombre, cédula, correo, nivel o estado..." value="<?= htmlspecialchars($buscar) ?>" autocomplete="off">
+        <input type="text" id="input-buscar-usuarios" class="form-control" placeholder="Buscar por nombre, cédula, correo, teléfono, nivel o estado..." value="<?= htmlspecialchars($buscar) ?>" autocomplete="off">
     </div>
     <div class="d-flex align-items-center gap-2" id="usrSisPagWrap">
         <span class="text-muted small" id="usrSisPagInfo"><?= $from ?>-<?= $to ?>/<?= $total ?></span>
@@ -155,6 +155,7 @@ $rowsHtml = $rowsHtml ?? '';
                         <th class="sortable-header" data-sort="cedula" role="button">Cédula <i class="bi bi-arrow-down-up small text-muted ms-1"></i></th>
                         <th class="sortable-header" data-sort="mail" role="button">Correo <i class="bi bi-arrow-down-up small text-muted ms-1"></i></th>
                         <th class="sortable-header" data-sort="nivel" role="button">Nivel <i class="bi bi-arrow-down-up small text-muted ms-1"></i></th>
+                        <th class="sortable-header" data-sort="telefono" role="button">Teléfono <i class="bi bi-arrow-down-up small text-muted ms-1"></i></th>
                         <th class="sortable-header" data-sort="estado" role="button">Estado <i class="bi bi-arrow-down-up small text-muted ms-1"></i></th>
                         <th class="sortable-header text-center" data-sort="puede_app_movil" role="button">App Móvil <i class="bi bi-arrow-down-up small text-muted ms-1"></i></th>
                         <th class="text-center">Empresas</th>
@@ -286,6 +287,10 @@ $rowsHtml = $rowsHtml ?? '';
                                     </select>
                                 </div>
                                 <div class="col-md-6">
+                                    <label for="edit-telefono" class="form-label">Teléfono</label>
+                                    <input type="tel" id="edit-telefono" name="telefono" class="form-control form-control-sm" maxlength="20" autocomplete="off" placeholder="0991234567">
+                                </div>
+                                <div class="col-md-3 col-6">
                                     <label for="edit-estado" class="form-label">Estado</label>
                                     <select id="edit-estado" name="estado" class="form-select form-select-sm">
                                         <option value="1">Activo</option>
@@ -293,10 +298,11 @@ $rowsHtml = $rowsHtml ?? '';
                                     </select>
                                 </div>
                                 <?php if ($nivel >= 3): ?>
-                                <div class="col-md-6">
-                                    <div class="form-check form-switch mt-4">
+                                <div class="col-md-3 col-6">
+                                    <label for="edit-puede-app-movil" class="form-label d-block">App móvil</label>
+                                    <div class="form-check form-switch mb-0">
                                         <input class="form-check-input" type="checkbox" id="edit-puede-app-movil" name="puede_app_movil" value="1">
-                                        <label class="form-check-label" for="edit-puede-app-movil">Puede usar la app móvil</label>
+                                        <label class="form-check-label small" for="edit-puede-app-movil">Puede usar</label>
                                     </div>
                                 </div>
                                 <?php endif; ?>
@@ -560,6 +566,7 @@ $rowsHtml = $rowsHtml ?? '';
                 : 'Con este número inicia sesión el usuario.';
             mailOriginal = el.dataset.mail || '';
             document.getElementById('edit-mail').value = mailOriginal;
+            document.getElementById('edit-telefono').value = el.dataset.telefono || '';
             document.getElementById('edit-nivel').value = el.dataset.nivel || '1';
             document.getElementById('edit-estado').value = el.dataset.estado === '1' ? '1' : '0';
 

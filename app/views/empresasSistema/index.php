@@ -48,17 +48,14 @@ function estadoPagoBadge($estado) {
 .documentos-empresa-scroll { max-height: 280px; overflow-y: auto; }
 .documentos-empresa-scroll thead th { position: sticky; top: 0; z-index: 1; background: #fff; box-shadow: 0 1px 0 #dee2e6; }
 </style>
+<?= \App\Helpers\PreferenciasHelper::renderEstilosColumnasOcultas($vistaConfig ?? []) ?>
+
 <div class="empresas-sistema-header d-flex justify-content-between align-items-center flex-wrap gap-2 mb-3">
-    <div>
-        <h5 class="mb-0"><i class="bi bi-building"></i> <?= htmlspecialchars($titulo) ?></h5>
-        <p class="text-muted mb-0 small">
-            <?= $nivel >= 3 ? 'Todas las empresas. Clic en fila para ver ficha.' : 'Empresas que tiene asignadas. Clic en fila para ver ficha.' ?>
-        </p>
-    </div>
+    <h5 class="mb-0 fw-bold"><i class="bi bi-building"></i> <?= htmlspecialchars($titulo) ?></h5>
     <div class="d-flex gap-2">
         <a href="<?= $base ?>/config" class="btn btn-outline-secondary btn-sm"><i class="bi bi-arrow-left"></i> Volver</a>
         <?php if ($nivel >= 3): ?>
-        <button type="button" class="btn btn-primary btn-sm" data-bs-toggle="modal" data-bs-target="#modalCrearEmpresa"><i class="bi bi-plus-lg"></i> Crear empresa</button>
+        <button type="button" class="btn btn-primary btn-sm px-3" data-bs-toggle="modal" data-bs-target="#modalCrearEmpresa"><i class="bi bi-plus-lg"></i> Nueva</button>
         <?php endif; ?>
     </div>
 </div>
@@ -70,37 +67,162 @@ function estadoPagoBadge($estado) {
 </div>
 <?php endif; ?>
 
-<div class="d-flex justify-content-between align-items-center gap-2 mb-2 flex-wrap">
-    <div class="input-group input-group-sm" style="max-width: 320px;">
-        <span class="input-group-text"><i class="bi bi-search"></i></span>
-        <input type="text" id="input-buscar-empresas" class="form-control" placeholder="Buscar por razón social, RUC, establecimiento..." value="<?= htmlspecialchars($buscar) ?>" autocomplete="off">
-    </div>
-    <div class="d-flex align-items-center gap-2" id="empSisPagWrap">
-        <span class="text-muted small" id="empSisPagInfo"><?= $from ?>-<?= $to ?>/<?= $total ?></span>
-        <div id="empSisPagBtns" class="d-flex align-items-center gap-2">
-            <button type="button" class="btn btn-sm btn-outline-secondary" <?= $page <= 1 ? 'disabled' : '' ?> onclick="EMPSIS_cambiarPagina(<?= $page - 1 ?>)" aria-label="Anterior"><i class="fas fa-angle-left"></i></button>
-            <button type="button" class="btn btn-sm btn-outline-secondary" <?= $page >= $totalPages ? 'disabled' : '' ?> onclick="EMPSIS_cambiarPagina(<?= $page + 1 ?>)" aria-label="Siguiente"><i class="fas fa-angle-right"></i></button>
+<div class="card cmg-table-card w-100 border-0 shadow-sm rounded-3">
+    <div class="card-header bg-white py-2 px-3 border-bottom d-flex justify-content-between align-items-center flex-wrap gap-2">
+        <!-- Buscador y Exportación -->
+        <div class="d-flex align-items-center gap-2 flex-wrap">
+            <?php
+            // Buscador estándar (FiltrosModal), igual que Proveedores: texto libre sobre
+            // las columnas del listado + botón embudo que abre el modal con todos los
+            // filtros + chips de los activos. Las claves (key) deben existir en los mapas
+            // de Empresa::getTodosParaListado().
+            $opcFiltro = $opcionesFiltro ?? [];
+            $opcionesProvincia = array_map(fn($p) => ['v' => (string) $p['codigo'], 'l' => (string) $p['nombre']], $opcFiltro['provincias'] ?? []);
+            $opcionesCiudad    = array_map(fn($c) => ['v' => (string) $c['codigo'], 'l' => $c['nombre'] . (!empty($c['provincia']) ? ' (' . $c['provincia'] . ')' : '')], $opcFiltro['ciudades'] ?? []);
+            $opcionesAdmin     = array_map(fn($a) => ['v' => (string) $a['id'], 'l' => (string) $a['nombre']], $opcFiltro['administradoras'] ?? []);
+            $opcionesSiNo = fn(string $si, string $no) => [['v' => 'si', 'l' => $si], ['v' => 'no', 'l' => $no]];
+            $tE = 'Empresa';
+            // Filas de 12 columnas:
+            //   Identificación: [Razón social 3][Nombre comercial 3][RUC 3][Establecimiento 3]
+            //   Contacto:       [Correo 4][Teléfono 4][Dirección 4]
+            //   Ubicación:      [Provincia 6][Ciudad 6]
+            //   Situación:      [Estado 3][Documentos legales 3][Obligado a contabilidad 3][Cupo de usuarios 3]
+            //   Cobro (nivel 3):[Estado de pago 4][Vigencia desde 4][Vigencia hasta 4][Valor de cobro 4][Administra suscripciones 4][Administradora 4]
+            //   Registro:       [Fecha de registro 6][Operadora de transporte 6]
+            $filtrosEmpresas = [
+                // ── Identificación ──
+                ['tab' => $tE, 'key' => 'nombre',          'label' => 'Razón social',    'icon' => 'bi-building',  'type' => 'text', 'grupo' => 'Identificación', 'col' => 3],
+                ['tab' => $tE, 'key' => 'comercial',       'label' => 'Nombre comercial','icon' => 'bi-shop',      'type' => 'text', 'grupo' => 'Identificación', 'col' => 3],
+                ['tab' => $tE, 'key' => 'ruc',             'label' => 'RUC',             'icon' => 'bi-card-text', 'type' => 'text', 'grupo' => 'Identificación', 'col' => 3],
+                ['tab' => $tE, 'key' => 'establecimiento', 'label' => 'Establecimiento', 'icon' => 'bi-123',       'type' => 'text', 'grupo' => 'Identificación', 'col' => 3],
+                // ── Contacto ──
+                ['tab' => $tE, 'key' => 'email',     'label' => 'Correo',    'icon' => 'bi-envelope',  'type' => 'text', 'grupo' => 'Contacto', 'col' => 4],
+                ['tab' => $tE, 'key' => 'telefono',  'label' => 'Teléfono',  'icon' => 'bi-telephone', 'type' => 'text', 'grupo' => 'Contacto', 'col' => 4],
+                ['tab' => $tE, 'key' => 'direccion', 'label' => 'Dirección', 'icon' => 'bi-geo',       'type' => 'text', 'grupo' => 'Contacto', 'col' => 4],
+                // ── Ubicación ──
+                ['tab' => $tE, 'key' => 'cod_provincia', 'label' => 'Provincia', 'icon' => 'bi-map',     'type' => 'select', 'grupo' => 'Ubicación', 'col' => 6, 'options' => $opcionesProvincia],
+                ['tab' => $tE, 'key' => 'cod_ciudad',    'label' => 'Ciudad',    'icon' => 'bi-geo-alt', 'type' => 'select', 'grupo' => 'Ubicación', 'col' => 6, 'options' => $opcionesCiudad],
+                // ── Situación ──
+                ['tab' => $tE, 'key' => 'estado',     'label' => 'Estado',             'icon' => 'bi-flag',            'type' => 'select', 'grupo' => 'Situación', 'col' => 3, 'options' => [
+                    ['v' => '1', 'l' => 'Activa'],
+                    ['v' => '0', 'l' => 'Inactiva'],
+                ]],
+                ['tab' => $tE, 'key' => 'documentos', 'label' => 'Documentos legales',  'icon' => 'bi-file-earmark-check', 'type' => 'select', 'grupo' => 'Situación', 'col' => 3, 'options' => [
+                    ['v' => 'sin_enviar', 'l' => 'Sin enviar'],
+                    ['v' => 'pendiente',  'l' => 'Pendiente de aceptación'],
+                    ['v' => 'aceptado',   'l' => 'Aceptados'],
+                ]],
+                ['tab' => $tE, 'key' => 'obligado',   'label' => 'Obligado a contabilidad', 'icon' => 'bi-journal-check', 'type' => 'select', 'grupo' => 'Situación', 'col' => 3, 'options' => [
+                    ['v' => 'SI', 'l' => 'Sí'],
+                    ['v' => 'NO', 'l' => 'No'],
+                ]],
+                ['tab' => $tE, 'key' => 'cupo_lleno', 'label' => 'Cupo de usuarios',   'icon' => 'bi-people',          'type' => 'select', 'grupo' => 'Situación', 'col' => 3, 'options' => $opcionesSiNo('Cupo lleno', 'Con cupo disponible')],
+            ];
+            if ($nivel >= 3) {
+                // Datos de cobro/vigencia: solo los ve y gestiona el superadministrador.
+                $filtrosEmpresas = array_merge($filtrosEmpresas, [
+                    ['tab' => $tE, 'key' => 'estado_pago',    'label' => 'Estado de pago',  'icon' => 'bi-cash-coin',      'type' => 'select',       'grupo' => 'Cobro y vigencia', 'col' => 4, 'options' => [
+                        ['v' => 'pendiente', 'l' => 'Pendiente'],
+                        ['v' => 'pagado',    'l' => 'Pagado'],
+                        ['v' => 'vencido',   'l' => 'Vencido'],
+                    ]],
+                    ['tab' => $tE, 'key' => 'vigencia_desde', 'label' => 'Vigencia desde',  'icon' => 'bi-calendar-event', 'type' => 'date_range',   'grupo' => 'Cobro y vigencia', 'col' => 4, 'atajos' => true],
+                    ['tab' => $tE, 'key' => 'vigencia_hasta', 'label' => 'Vigencia hasta',  'icon' => 'bi-calendar-x',     'type' => 'date_range',   'grupo' => 'Cobro y vigencia', 'col' => 4, 'atajos' => true],
+                    ['tab' => $tE, 'key' => 'valor_cobro',    'label' => 'Valor de cobro',  'icon' => 'bi-currency-dollar','type' => 'number_range', 'grupo' => 'Cobro y vigencia', 'col' => 4],
+                    ['tab' => $tE, 'key' => 'administradora', 'label' => 'Administra suscripciones', 'icon' => 'bi-diagram-3', 'type' => 'select', 'grupo' => 'Cobro y vigencia', 'col' => 4, 'options' => $opcionesSiNo('Sí', 'No')],
+                    ['tab' => $tE, 'key' => 'id_administradora', 'label' => 'Empresa administradora', 'icon' => 'bi-building-gear', 'type' => 'select', 'grupo' => 'Cobro y vigencia', 'col' => 4, 'options' => $opcionesAdmin],
+                ]);
+            }
+            $filtrosEmpresas = array_merge($filtrosEmpresas, [
+                // ── Registro ──
+                ['tab' => $tE, 'key' => 'registro',  'label' => 'Fecha de registro',      'icon' => 'bi-calendar-event', 'type' => 'date_range', 'grupo' => 'Registro', 'col' => 6, 'atajos' => true],
+                ['tab' => $tE, 'key' => 'operadora', 'label' => 'Operadora de transporte', 'icon' => 'bi-truck',         'type' => 'select',     'grupo' => 'Registro', 'col' => 6, 'options' => $opcionesSiNo('Sí', 'No')],
+            ]);
+            ?>
+            <link rel="stylesheet" href="<?= rtrim(BASE_URL, '/') ?>/css/components/filtros_modal.css?v=<?= asset_ver('/css/components/filtros_modal.css') ?>">
+            <script src="<?= rtrim(BASE_URL, '/') ?>/js/components/filtros_modal.js?v=<?= asset_ver('/js/components/filtros_modal.js') ?>"></script>
+            <div id="fmBuscadorEMPSIS"></div>
+            <input type="hidden" id="input-buscar-empresas" value="<?= htmlspecialchars($buscar) ?>">
+            <script>
+                document.addEventListener('DOMContentLoaded', () => {
+                    if (!window.FiltrosModal) return;
+                    new FiltrosModal({
+                        containerId: 'fmBuscadorEMPSIS',
+                        hiddenInputId: 'input-buscar-empresas',
+                        placeholder: 'Buscar en todas las columnas...',
+                        titulo: 'Filtros de empresas',
+                        inputWidth: 420,
+                        extraId: 'fmExtraEMPSIS',   // columnas + PDF + Excel, pegados al final del grupo
+                        fields: <?= json_encode($filtrosEmpresas, JSON_UNESCAPED_UNICODE | JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS) ?>,
+                        loadingTarget: '#tbodyEmpresas',   // se atenúa mientras se busca
+                        onApply: () => window.fetchSearch && window.fetchSearch(1),
+                    }).init();
+                });
+            </script>
+
+            <?php // FiltrosModal (extraId) mueve estos botones dentro del input-group del buscador; si el JS no corre, quedan aquí. ?>
+            <div id="fmExtraEMPSIS" class="btn-group btn-group-sm">
+                <?php
+                $columnasTabla = [
+                    'nombre'           => 'Razón social',
+                    'nombre_comercial' => 'Nombre comercial',
+                    'ruc'              => 'RUC',
+                    'establecimiento'  => 'Est.',
+                    'direccion'        => 'Dirección',
+                    'telefono'         => 'Teléfono',
+                    'mail'             => 'Correo',
+                    'nombre_provincia' => 'Provincia',
+                    'nombre_ciudad'    => 'Ciudad',
+                    'estado'           => 'Estado',
+                    'usuarios'         => 'Usuarios',
+                    'documentos'       => 'Documentos',
+                ];
+                $urlExportBase = $urlBaseEmpresas . '?action=';
+                $qsExport = '&b=' . urlencode($buscar) . '&orden=' . urlencode($ordenParam ?? '');
+                ?>
+                <?= \App\Helpers\PreferenciasHelper::renderDropdownColumnas($columnasTabla, $vistaConfig ?? [], $rutaModulo ?? 'config/empresas-sistema') ?>
+
+                <?php // La URL va con `?action=`, que el listener global de /export-pdf no reconoce: se llama CMG_descargar a mano. ?>
+                <a id="btnExportPdf" href="<?= $urlExportBase ?>export-pdf<?= $qsExport ?>" onclick="CMG_descargar(this.href, {nombre: 'PDF'}); return false;"
+                    class="btn btn-outline-danger" title="Descargar PDF">
+                    <i class="bi bi-file-earmark-pdf"></i><span class="d-none d-md-inline"> PDF</span>
+                </a>
+                <a id="btnExportExcel" href="<?= $urlExportBase ?>export-excel<?= $qsExport ?>" onclick="CMG_descargar(this.href, {nombre: 'Excel'}); return false;"
+                    class="btn btn-outline-success" title="Descargar Excel">
+                    <i class="bi bi-file-earmark-spreadsheet"></i><span class="d-none d-md-inline"> Excel</span>
+                </a>
+            </div>
+        </div>
+
+        <!-- Paginación -->
+        <div class="d-flex align-items-center gap-3">
+            <span id="paginationInfo" class="text-muted small fw-medium"><?= $from ?>-<?= $to ?>/<?= $total ?></span>
+            <div id="paginationContainer" class="btn-group btn-group-sm">
+                <button type="button" class="btn btn-outline-secondary" <?= $page <= 1 ? 'disabled' : '' ?> onclick="cambiarPaginaAjax(<?= $page - 1 ?>)" aria-label="Anterior"><i class="bi bi-chevron-left"></i></button>
+                <button type="button" class="btn btn-outline-secondary" <?= $page >= $totalPages ? 'disabled' : '' ?> onclick="cambiarPaginaAjax(<?= $page + 1 ?>)" aria-label="Siguiente"><i class="bi bi-chevron-right"></i></button>
+            </div>
         </div>
     </div>
-</div>
 
-<div class="card cmg-table-card">
+    <!-- Tabla -->
     <div class="card-body p-0">
-        <div class="empresas-sistema-scroll">
+        <div class="empresas-sistema-scroll w-100">
             <table class="table table-hover table-sm mb-0">
                 <thead class="table-light">
                     <tr>
-                        <th class="sortable-header" data-sort="nombre" role="button">Razón social <i class="bi bi-arrow-down-up small text-muted ms-1"></i></th>
-                        <th class="sortable-header" data-sort="nombre_comercial" role="button">Nombre comercial <i class="bi bi-arrow-down-up small text-muted ms-1"></i></th>
-                        <th class="sortable-header" data-sort="ruc" role="button">RUC <i class="bi bi-arrow-down-up small text-muted ms-1"></i></th>
-                        <th class="sortable-header" data-sort="establecimiento" role="button">Est. <i class="bi bi-arrow-down-up small text-muted ms-1"></i></th>
-                        <th class="sortable-header" data-sort="direccion" role="button">Dirección <i class="bi bi-arrow-down-up small text-muted ms-1"></i></th>
-                        <th class="sortable-header" data-sort="nombre_provincia" role="button">Provincia <i class="bi bi-arrow-down-up small text-muted ms-1"></i></th>
-                        <th class="sortable-header" data-sort="nombre_ciudad" role="button">Ciudad <i class="bi bi-arrow-down-up small text-muted ms-1"></i></th>
-                        <th class="sortable-header" data-sort="estado" role="button">Estado <i class="bi bi-arrow-down-up small text-muted ms-1"></i></th>
-                        <th class="text-center">Usuarios</th>
-                        <th class="text-center">Documentos</th>
-                        <?php if ($nivel >= 3): ?><th class="text-center">Acciones</th><?php endif; ?>
+                        <th class="ps-3 sortable-header" role="button" data-sort="nombre" data-col="nombre">Razón social <i class="bi bi-arrow-down-up small text-muted ms-1"></i></th>
+                        <th class="sortable-header" role="button" data-sort="nombre_comercial" data-col="nombre_comercial">Nombre comercial <i class="bi bi-arrow-down-up small text-muted ms-1"></i></th>
+                        <th class="sortable-header" role="button" data-sort="ruc" data-col="ruc">RUC <i class="bi bi-arrow-down-up small text-muted ms-1"></i></th>
+                        <th class="sortable-header text-center" role="button" data-sort="establecimiento" data-col="establecimiento">Est. <i class="bi bi-arrow-down-up small text-muted ms-1"></i></th>
+                        <th class="sortable-header" role="button" data-sort="direccion" data-col="direccion">Dirección <i class="bi bi-arrow-down-up small text-muted ms-1"></i></th>
+                        <th class="sortable-header" role="button" data-sort="telefono" data-col="telefono">Teléfono <i class="bi bi-arrow-down-up small text-muted ms-1"></i></th>
+                        <th class="sortable-header" role="button" data-sort="mail" data-col="mail">Correo <i class="bi bi-arrow-down-up small text-muted ms-1"></i></th>
+                        <th class="sortable-header" role="button" data-sort="nombre_provincia" data-col="nombre_provincia">Provincia <i class="bi bi-arrow-down-up small text-muted ms-1"></i></th>
+                        <th class="sortable-header" role="button" data-sort="nombre_ciudad" data-col="nombre_ciudad">Ciudad <i class="bi bi-arrow-down-up small text-muted ms-1"></i></th>
+                        <th class="sortable-header text-center" role="button" data-sort="estado" data-col="estado">Estado <i class="bi bi-arrow-down-up small text-muted ms-1"></i></th>
+                        <th class="sortable-header text-center" role="button" data-sort="usuarios" data-col="usuarios">Usuarios <i class="bi bi-arrow-down-up small text-muted ms-1"></i></th>
+                        <th class="sortable-header text-center<?= $nivel >= 3 ? '' : ' pe-3' ?>" role="button" data-sort="documentos" data-col="documentos">Documentos <i class="bi bi-arrow-down-up small text-muted ms-1"></i></th>
+                        <?php if ($nivel >= 3): ?><th class="text-center pe-3">Acciones</th><?php endif; ?>
                     </tr>
                 </thead>
                 <tbody id="tbodyEmpresas"><?= $rowsHtml ?></tbody>
@@ -1345,64 +1467,60 @@ function estadoPagoBadge($estado) {
     }
 
     // Búsqueda, orden y paginación en tiempo real: reemplazan solo la tabla vía
-    // AJAX, sin recargar la página (el input nunca pierde el foco). Mismo patrón
-    // que ASIENTOTIPO_cargarListado (public/js/modulos/asientos_tipo_modal.js).
+    // AJAX, sin recargar la página. Mismo patrón que Proveedores
+    // (app/views/modulos/proveedores/index.php): FiltrosModal llama a fetchSearch
+    // al aplicar; el orden múltiple (Shift+clic) lo maneja CMG_initSort.
     (function() {
-        var timer = null;
-        window.EMPSIS_currentSort = '<?= htmlspecialchars($ordenCol) ?>';
-        window.EMPSIS_currentDir = '<?= htmlspecialchars($ordenDir) ?>';
-        window.EMPSIS_currentPage = <?= (int) $page ?>;
+        'use strict';
+        const urlBase = '<?= $urlBaseEmpresas ?>';
+        const inputBuscar = document.getElementById('input-buscar-empresas');
+        window.currentSort = '<?= htmlspecialchars($ordenCol) ?>';
+        window.currentDir = '<?= htmlspecialchars($ordenDir) ?>';
+        // Lista completa de criterios, en el formato que lee OrdenListado en PHP.
+        window.currentSorts = <?= $ordenJson ?? '[]' ?>;
+        window.currentPage = <?= (int) $page ?>;
+        let sorter = null;
 
-        window.EMPSIS_cargarListado = function(page) {
-            page = page || 1;
-            window.EMPSIS_currentPage = page;
-            var inputB = document.getElementById('input-buscar-empresas');
-            var b = inputB ? inputB.value.trim() : '';
-            var tbodyEl = document.getElementById('tbodyEmpresas');
-            var colspan = <?= $nivel >= 3 ? 11 : 10 ?>;
-            if (tbodyEl) tbodyEl.innerHTML = '<tr><td colspan="' + colspan + '" class="text-center py-4"><span class="spinner-border spinner-border-sm text-primary"></span> Cargando...</td></tr>';
+        window.cambiarPaginaAjax = (n) => window.fetchSearch(n);
+        // Nombres anteriores, por si algún enlace viejo los invoca.
+        window.EMPSIS_cargarListado = (n) => window.fetchSearch(n || 1);
+        window.EMPSIS_cambiarPagina = (n) => { if (n >= 1) window.fetchSearch(n); };
 
-            fetch(base + '/config/empresas-sistema?action=search&b=' + encodeURIComponent(b) + '&page=' + page + '&sort=' + window.EMPSIS_currentSort + '&dir=' + window.EMPSIS_currentDir, {
-                    credentials: 'same-origin'
-                })
-                .then(function(r) { return r.json(); })
-                .then(function(data) {
-                    if (!data.ok) return;
-                    if (tbodyEl) tbodyEl.innerHTML = data.rows;
-                    var info = document.getElementById('empSisPagInfo');
-                    if (info) info.textContent = data.info;
-                    var btns = document.getElementById('empSisPagBtns');
-                    if (btns) btns.innerHTML = data.pagination || (
-                        '<button type="button" class="btn btn-sm btn-outline-secondary" disabled aria-label="Anterior"><i class="fas fa-angle-left"></i></button>' +
-                        '<button type="button" class="btn btn-sm btn-outline-secondary" disabled aria-label="Siguiente"><i class="fas fa-angle-right"></i></button>'
-                    );
-                })
-                .catch(function() {
-                    if (tbodyEl) tbodyEl.innerHTML = '<tr><td colspan="' + colspan + '" class="text-center text-danger py-4">Error al cargar.</td></tr>';
-                });
+        window.fetchSearch = async (page = 1) => {
+            const term = inputBuscar ? inputBuscar.value.trim() : '';
+            const orden = window.CMG_ordenParam(window.currentSorts || []);
+            const uri = `${urlBase}?action=search&b=${encodeURIComponent(term)}&page=${page}&orden=${encodeURIComponent(orden)}`;
+            // La tabla se atenúa mientras carga (mismo indicador del buscador).
+            const tbody = document.getElementById('tbodyEmpresas');
+            if (tbody) tbody.classList.add('fm-cargando-target');
+            try {
+                const resp = await fetch(uri, { credentials: 'same-origin' });
+                const data = await resp.json();
+                if (data.ok) {
+                    window.currentPage = page;
+                    if (tbody) tbody.innerHTML = data.rows;
+                    document.getElementById('paginationContainer').innerHTML = data.pagination;
+                    document.getElementById('paginationInfo').textContent = data.info;
+                    document.getElementById('btnExportPdf').href = data.pdf_url;
+                    document.getElementById('btnExportExcel').href = data.excel_url;
+                    if (sorter) sorter.refreshIcons();
+                }
+            } catch (e) {
+                console.error('Error en búsqueda de empresas:', e);
+            } finally {
+                if (tbody) tbody.classList.remove('fm-cargando-target');
+            }
         };
 
-        window.EMPSIS_cambiarPagina = function(page) {
-            if (page < 1) return;
-            EMPSIS_cargarListado(page);
-        };
-
-        var inputBuscar = document.getElementById('input-buscar-empresas');
-        if (inputBuscar) {
-            inputBuscar.addEventListener('input', function() {
-                clearTimeout(timer);
-                timer = setTimeout(function() {
-                    EMPSIS_cargarListado(1);
-                }, 400);
-            });
-        }
-
+        // multi: clic normal ordena por una columna; Shift+clic encadena hasta 3.
+        // reload:false porque fetchSearch repinta todo lo que depende del orden.
         if (window.CMG_initSort) {
-            window.CMG_initSort('empresas-sistema', function(col, dir) {
-                window.EMPSIS_currentSort = col;
-                window.EMPSIS_currentDir = dir;
-                EMPSIS_cargarListado(1);
-            }, { col: window.EMPSIS_currentSort, dir: window.EMPSIS_currentDir });
+            sorter = window.CMG_initSort('empresas-sistema', (col, dir, sorts) => {
+                window.currentSort = col;
+                window.currentDir = dir;
+                window.currentSorts = sorts;
+                fetchSearch(1);
+            }, { sorts: window.currentSorts, multi: true, container: '.empresas-sistema-scroll', reload: false });
         }
     })();
 

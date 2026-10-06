@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\controllers\modulos;
 
 use App\Helpers\OrdenListado;
+use App\repositories\modulos\BodegaRepository;
 use App\repositories\modulos\CambioProductoCvRepository;
 use App\Rules\modulos\CambioProductoCvRules;
 use App\Services\LogSistemaService;
@@ -994,10 +995,18 @@ class CambioProductoCvController extends BaseModuloController
 
         $idEmpresa = (int) $_SESSION['id_empresa'];
         try {
-            $db = \App\Core\Database::getConnection();
-            $st = $db->prepare("SELECT id, nombre FROM bodegas WHERE id_empresa = :e AND eliminado = false ORDER BY nombre ASC");
-            $st->execute([':e' => $idEmpresa]);
-            echo json_encode(['ok' => true, 'data' => $st->fetchAll(\PDO::FETCH_ASSOC)]);
+            // Solo las bodegas a las que este usuario tiene acceso (Bodegas → Accesos; niveles
+            // 2 y 3 ven todas), como el selector de Consignaciones de Ventas. Es la lista para
+            // ELEGIR la bodega de una entrega; la bodega de una línea que viene de una
+            // consignación no se elige (la fija el servidor desde esa línea) y el modal la
+            // muestra aunque no esté aquí (ver bodegaOptions() en modal_cambio.php).
+            $bodegas = (new BodegaRepository())->getBodegasPermitidas(
+                (int) $_SESSION['id_usuario'],
+                $idEmpresa,
+                (int) ($_SESSION['nivel'] ?? 1)
+            );
+            $data = array_map(fn (array $b) => ['id' => (int) $b['id'], 'nombre' => (string) $b['nombre']], $bodegas);
+            echo json_encode(['ok' => true, 'data' => $data]);
         } catch (\Throwable $e) {
             \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             echo json_encode(['ok' => false, 'error' => $e->getMessage()]);

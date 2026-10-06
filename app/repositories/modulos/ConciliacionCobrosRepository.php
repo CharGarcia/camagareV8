@@ -389,6 +389,13 @@ class ConciliacionCobrosRepository extends BaseRepository
         ]);
     }
 
+    /** Fija el depósito de origen de una línea (las partes de un mismo depósito comparten id_linea_origen). */
+    public function fijarLineaOrigen(int $id, int $idOrigen): void
+    {
+        $st = $this->db->prepare("UPDATE conciliacion_lineas SET id_linea_origen = :origen, updated_at = CURRENT_TIMESTAMP WHERE id = :id");
+        $st->execute([':id' => $id, ':origen' => $idOrigen]);
+    }
+
     public function marcarLineaIgnorada(int $id): void
     {
         $sql = "UPDATE conciliacion_lineas SET estado = 'IGNORADO', updated_at = CURRENT_TIMESTAMP WHERE id = :id";

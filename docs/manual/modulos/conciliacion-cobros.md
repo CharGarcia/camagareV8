@@ -5,8 +5,8 @@ categoria: Tesorería
 ruta_modulo: modulos/conciliacion-cobros
 tipo: modulo
 visibilidad: todos
-etiquetas: conciliacion de cobros, cuadrar cobros, banco, deposito, tarjeta, liquidacion, diferencias, serie, punto de emision, serie inactiva, generar ingresos, extracto bancario, formato del banco, perfil de mapeo, formato de extracto, varias facturas, varios clientes, repartir deposito, dividir linea, un deposito varias facturas, cargas anteriores, cobro duplicado, cobrar dos veces, saldo disponible, saldo apartado, movimiento repetido, extracto repetido, doble cobro
-version: 1.5
+etiquetas: conciliacion de cobros, cuadrar cobros, banco, deposito, tarjeta, liquidacion, diferencias, serie, punto de emision, serie inactiva, generar ingresos, extracto bancario, formato del banco, perfil de mapeo, formato de extracto, varias facturas, varios clientes, repartir deposito, dividir linea, un deposito varias facturas, cargas anteriores, cobro duplicado, cobrar dos veces, saldo disponible, saldo apartado, movimiento repetido, extracto repetido, doble cobro, factura mas antigua, documento sugerido, orden de cobro, primero en vencer, buscar cliente, autocompletar cliente, un solo ingreso, partes del deposito, confirmar todas las partes
+version: 1.6
 orden: 65
 estado: activo
 ---
@@ -26,6 +26,36 @@ Mientras eso no se cruce, el saldo contable no es el saldo real.
 1. Cargue o consulte los movimientos del banco del periodo.
 2. Cruce cada uno con el cobro que le corresponde.
 3. Revise lo que queda sin cruzar por ambos lados.
+
+## Qué documento se sugiere: el más antiguo
+
+Al subir el extracto, el sistema identifica al cliente por el texto de la
+descripción del banco (nombre o identificación) y propone sus documentos
+pendientes **del más antiguo al más reciente**, en el orden en que se cobra la
+cartera. **Ni el valor del depósito ni el texto del banco deciden qué factura se
+sugiere**: aunque el monto coincida exactamente con una factura reciente, o la
+descripción mencione el número de otra factura, se propone siempre la más
+antigua. Si el pago corresponde a otro documento, se cambia desde la lupa.
+
+Si el depósito **cubre más de un documento**, la línea del banco llega ya
+**repartida en partes**, una por documento (con la nota *(parte 1/3 del
+depósito de $…)*): las facturas más antiguas se cubren completas y la última
+toma lo que queda. Si el depósito supera toda la cartera del cliente, la
+diferencia queda como una parte más **sin asignar**. Todas las partes son solo
+una sugerencia, cada una se confirma con su ✓ o se cambia desde la lupa.
+
+- Cuando el mismo extracto trae **dos depósitos del mismo cliente**, el segundo
+  se sugiere sobre los documentos que el primero no cubrió, no sobre la misma
+  factura dos veces.
+- Al confirmar una parte, si el cliente tiene **otras partes del mismo depósito
+  aún sugeridas**, el sistema pregunta si confirma todas de una vez
+  (**Confirmar las N**) o **Solo esta**. Confirmarlas todas es lo normal: así, al
+  generar, el depósito se cobra en **un solo ingreso** con todos sus documentos
+  y un solo pago (ver *Un solo ingreso por depósito y cliente*).
+- Si confirma solo algunas partes y genera, el ingreso lleva únicamente esas;
+  las demás seguirán pendientes y, al confirmarlas y generar después, formarán
+  **otro** ingreso. Para que todo el depósito salga en un solo ingreso, confirme
+  todas sus partes antes de pulsar **Generar ingresos**.
 
 ## Qué mirar en las diferencias
 
@@ -57,8 +87,13 @@ clientes distintos, se reparte desde la lupa de la línea:
 
 1. Pulse la **lupa** de la línea. Arriba se ven el monto **Recibido**, lo
    **Asignado** y lo **Restante**.
-2. Elija un cliente y **marque** sus documentos (clic en la fila o en su casilla). Puede cambiar a otro cliente y
-   seguir marcando: lo marcado se conserva en **Documentos seleccionados**.
+2. En **Cliente**, **escriba** parte del nombre o la identificación y elija el
+   cliente en la lista que aparece (busca por varias palabras en cualquier orden
+   y sin importar tildes; solo ofrece clientes con documentos pendientes de
+   cobro). Con un cliente ya elegido, **Retroceso** o **Suprimir** lo quita de
+   una vez para buscar otro. Luego **marque** sus documentos (clic en la fila o
+   en su casilla). Puede buscar otro cliente y seguir marcando: lo marcado se
+   conserva en **Documentos seleccionados**.
 3. Al marcar un documento se propone el menor entre su saldo pendiente y lo que
    falta por asignar. El **Monto a Aplicar** se puede corregir; no puede superar
    el saldo del documento ni lo que queda del depósito.
@@ -167,6 +202,15 @@ monto de cada movimiento.
   cobros.
 
 ## Historial de cambios
+- **1.6** — El **Documento Sugerido** ya no se elige por el valor del depósito:
+  se propone el documento pendiente **más antiguo** del cliente (nueva sección
+  *Qué documento se sugiere: el más antiguo*), y si el depósito cubre varios, la
+  línea llega **repartida en partes** que, al confirmarlas (el sistema ofrece
+  **Confirmar las N** de una vez), se cobran en **un solo ingreso** con todos
+  los documentos y un solo pago. La diferencia de un pago parcial también se
+  sugiere por antigüedad. En la lupa, el campo **Cliente** pasa de una lista
+  desplegable con todos los clientes a un **buscador**: se escribe el nombre o
+  la identificación y se elige de las coincidencias.
 - **1.5** — No se puede cobrar dos veces lo mismo: cada confirmación se valida  contra el saldo de la cuenta por cobrar menos lo ya apartado por otras líneas  confirmadas (columna **Saldo Disponible** en la lupa), **Generar ingresos** no  corre dos veces a la vez sobre la misma carga, y los movimientos que ya estaban  en otro extracto de la misma cuenta entran como **REPETIDO**. Nueva sección  *Cómo se evita cobrar dos veces lo mismo*.
 - **1.4** — La lupa de una línea permite marcar **varios documentos, de uno o
   varios clientes**, y repartir el depósito entre ellos (nueva sección *Un

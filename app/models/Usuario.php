@@ -570,7 +570,7 @@ class Usuario extends BaseModel
      * @param ?string $cedula null deja la identificación intacta.
      * @param ?string $nombre null deja el nombre intacto.
      */
-    public function actualizar(int $id, string $mail, int $nivel, int $estado, ?bool $puedeAppMovil = null, ?string $cedula = null, ?string $nombre = null): bool
+    public function actualizar(int $id, string $mail, int $nivel, int $estado, ?bool $puedeAppMovil = null, ?string $cedula = null, ?string $nombre = null, ?string $telefono = null): bool
     {
         $id = (int) $id;
         $mail = trim($mail);
@@ -651,7 +651,20 @@ class Usuario extends BaseModel
         }
 
         $movilSet = $puedeAppMovil === null ? '' : (', puede_app_movil = ' . ($puedeAppMovil ? 'true' : 'false'));
-        $sql = "UPDATE usuarios SET mail = '{$mailEsc}', nivel = {$nivel}, estado = {$estado}{$movilSet}{$cedulaSet}{$nombreSet} WHERE id = {$id}";
+        // Teléfono: dato de contacto, no credencial. null = el formulario no lo envió,
+        // se conserva el actual; vacío = se borra. La columna es VARCHAR(20).
+        $telefonoSet = '';
+        if ($telefono !== null) {
+            $telefono = trim(preg_replace('/\s+/u', ' ', $telefono));
+            if (mb_strlen($telefono) > 20) {
+                throw new \InvalidArgumentException('El teléfono no puede superar los 20 caracteres.');
+            }
+            if ($telefono !== '' && !preg_match('/^[0-9+\s().-]+$/', $telefono)) {
+                throw new \InvalidArgumentException('El teléfono solo admite números, espacios, +, paréntesis y guiones.');
+            }
+            $telefonoSet = ", telefono = '" . $this->escape($telefono) . "'";
+        }
+        $sql = "UPDATE usuarios SET mail = '{$mailEsc}', nivel = {$nivel}, estado = {$estado}{$movilSet}{$cedulaSet}{$nombreSet}{$telefonoSet} WHERE id = {$id}";
         return $this->execute($sql);
     }
 
@@ -721,7 +734,7 @@ class Usuario extends BaseModel
     }
 
     /** Columnas ordenables */
-    public const COLUMNAS_ORDEN = ['nombre', 'cedula', 'mail', 'nivel', 'estado', 'puede_app_movil'];
+    public const COLUMNAS_ORDEN = ['nombre', 'cedula', 'mail', 'nivel', 'telefono', 'estado', 'puede_app_movil'];
 
     /**
      * Lista usuarios para el módulo de usuarios del sistema.
@@ -756,7 +769,7 @@ class Usuario extends BaseModel
             // (Nivel: Usuario/Administrador/Super Admin; Estado: Activo/Inactivo/Pendiente registro).
             $nivelTexto = "(CASE WHEN u.nivel >= 3 THEN 'Super Admin' WHEN u.nivel >= 2 THEN 'Administrador' ELSE 'Usuario' END)";
             $estadoTexto = "(CASE WHEN NOT " . self::sqlRegistrado('u') . " THEN 'Pendiente registro' WHEN u.estado = 1 THEN 'Activo' ELSE 'Inactivo' END)";
-            $where .= " AND (u.nombre ILIKE '%{$b}%' OR u.cedula ILIKE '%{$b}%' OR u.mail ILIKE '%{$b}%'
+            $where .= " AND (u.nombre ILIKE '%{$b}%' OR u.cedula ILIKE '%{$b}%' OR u.mail ILIKE '%{$b}%' OR u.telefono ILIKE '%{$b}%'
                 OR {$nivelTexto} ILIKE '%{$b}%' OR {$estadoTexto} ILIKE '%{$b}%')";
         }
 
@@ -764,7 +777,7 @@ class Usuario extends BaseModel
         $total = (int) ($this->query($countSql)[0]['total'] ?? 0);
 
         // Estado de registro: ver self::sqlRegistrado().
-        $sql = "SELECT DISTINCT u.id, u.nombre, u.cedula, u.nivel, u.estado, u.mail, u.token, u.puede_app_movil,
+        $sql = "SELECT DISTINCT u.id, u.nombre, u.cedula, u.nivel, u.estado, u.mail, u.telefono, u.token, u.puede_app_movil,
                 " . self::sqlRegistrado('u') . " AS registrado
             FROM {$from} {$where}
             ORDER BY {$col} {$dir}

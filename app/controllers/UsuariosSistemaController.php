@@ -145,7 +145,7 @@ class UsuariosSistemaController extends Controller
     private function renderFilasHtml(array $rows): string
     {
         if (empty($rows)) {
-            return '<tr><td colspan="6" class="text-center py-5 text-muted"><i class="bi bi-people fs-3 d-block mb-2"></i>No hay usuarios registrados.</td></tr>';
+            return '<tr><td colspan="8" class="text-center py-5 text-muted"><i class="bi bi-people fs-3 d-block mb-2"></i>No hay usuarios registrados.</td></tr>';
         }
         $html = '';
         foreach ($rows as $r) {
@@ -174,6 +174,7 @@ class UsuariosSistemaController extends Controller
             . ' data-nombre="' . htmlspecialchars($r['nombre'] ?? '') . '"'
             . ' data-cedula="' . htmlspecialchars($r['cedula'] ?? '') . '"'
             . ' data-mail="' . htmlspecialchars($r['mail'] ?? '') . '"'
+            . ' data-telefono="' . htmlspecialchars($r['telefono'] ?? '') . '"'
             . ' data-nivel="' . $nivelU . '"'
             . ' data-estado="' . $estado . '"'
             . ' data-empresas="' . count($empresas) . '"'
@@ -185,6 +186,8 @@ class UsuariosSistemaController extends Controller
         $html .= '<td><code>' . htmlspecialchars($r['cedula'] ?? '') . '</code></td>';
         $html .= '<td>' . htmlspecialchars($r['mail'] ?? '-') . '</td>';
         $html .= '<td><span class="badge bg-' . $nivelClase . '">' . $nivelTexto . '</span></td>';
+        $telefono = trim((string) ($r['telefono'] ?? ''));
+        $html .= '<td>' . ($telefono !== '' ? htmlspecialchars($telefono) : '<span class="text-muted">-</span>') . '</td>';
         $html .= '<td>';
         if (!$registrado) {
             $html .= '<span class="badge bg-warning bg-opacity-10 text-warning border border-warning" title="El usuario aún no ha completado su registro">'
@@ -232,6 +235,8 @@ class UsuariosSistemaController extends Controller
         // La identificación la editan tanto el administrador como el superadmin;
         // si el campo no viene en el POST, null le dice al modelo que no la toque.
         $cedula = array_key_exists('cedula', $_POST) ? trim((string) $_POST['cedula']) : null;
+        // Teléfono de contacto: igual, null si el formulario no lo envía.
+        $telefono = array_key_exists('telefono', $_POST) ? trim((string) $_POST['telefono']) : null;
 
         if ($id <= 0) {
             $this->json(['ok' => false, 'msg' => 'ID inválido.']);
@@ -250,7 +255,7 @@ class UsuariosSistemaController extends Controller
         $puedeAppMovil = $nivelActual >= 3 ? !empty($_POST['puede_app_movil']) : null;
 
         try {
-            if ($this->model->actualizar($id, $mail, $nivel, $estado ? 1 : 0, $puedeAppMovil, $cedula, $nombre)) {
+            if ($this->model->actualizar($id, $mail, $nivel, $estado ? 1 : 0, $puedeAppMovil, $cedula, $nombre, $telefono)) {
                 $this->json(['ok' => true, 'msg' => 'Usuario actualizado correctamente.']);
             } else {
                 $this->json(['ok' => false, 'msg' => 'No se realizaron cambios o hubo un error al actualizar.']);

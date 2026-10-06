@@ -22,6 +22,8 @@ class EmpresasSistemaController extends Controller
 {
     private Empresa $model;
     private const BASE_PATH = '/config/empresas-sistema';
+    /** Clave de preferencias de vista (columnas, anchos, orden): basename → `empresas_sistema`. */
+    private const RUTA_MODULO = 'config/empresas-sistema';
 
     public function __construct()
     {
@@ -38,18 +40,16 @@ class EmpresasSistemaController extends Controller
         $nivel = (int) ($_SESSION['nivel'] ?? 1);
         $buscar = trim($_GET['b'] ?? $_POST['b'] ?? $_GET['buscar'] ?? $_POST['buscar'] ?? '');
         $page = max(1, (int) ($_GET['page'] ?? $_POST['page'] ?? 1));
-        $ordenCol = trim($_GET['sort'] ?? $_POST['sort'] ?? 'nombre');
-        $ordenDir = strtoupper(trim($_GET['dir'] ?? $_POST['dir'] ?? 'asc'));
         $perPage = \App\Helpers\PreferenciasHelper::porPaginaModulo('empresas_sistema');
 
-        if (!in_array($ordenCol, Empresa::COLUMNAS_ORDEN, true)) {
-            $ordenCol = 'nombre_comercial';
-        }
-        if ($ordenDir !== 'ASC' && $ordenDir !== 'DESC') {
-            $ordenDir = 'ASC';
-        }
+        // Orden de una o varias columnas (Shift+clic): la vista lo manda como
+        // `orden=col:DIR,col:DIR`; si no viene, se respeta la preferencia guardada.
+        $prefsVista = \App\Helpers\PreferenciasHelper::getPreferenciasVista(self::RUTA_MODULO);
+        $orden    = \App\Helpers\OrdenListado::leer($prefsVista, 'nombre_comercial');
+        $ordenCol = \App\Helpers\OrdenListado::primeraCol($orden, 'nombre_comercial');
+        $ordenDir = \App\Helpers\OrdenListado::primeraDir($orden);
 
-        $result = $this->model->getTodosParaListado($idActual, $nivel, $buscar, $page, $perPage, $ordenCol, $ordenDir);
+        $result = $this->model->getTodosParaListado($idActual, $nivel, $buscar, $page, $perPage, $ordenCol, $ordenDir, $orden);
         $rows = $result['rows'];
         $total = $result['total'];
         $totalPages = $perPage > 0 ? (int) ceil($total / $perPage) : 1;
@@ -61,6 +61,7 @@ class EmpresasSistemaController extends Controller
         $this->viewWithLayout('layouts.main', 'empresasSistema.index', [
             'titulo' => 'Empresas del sistema',
             'fullWidth' => true,
+            'rutaModulo' => self::RUTA_MODULO,
             'estadoDocs' => $estadoDocs,
             'combosSubmodulos' => (new \App\models\ComboSubmodulo())->getActivos(),
             'rows' => $rows,
@@ -73,9 +74,177 @@ class EmpresasSistemaController extends Controller
             'nivel' => $nivel,
             'ordenCol' => $ordenCol,
             'ordenDir' => $ordenDir,
+            'ordenJson' => \App\Helpers\OrdenListado::aJson($orden),
+            'ordenParam' => \App\Helpers\OrdenListado::aCadena($orden),
+            'vistaConfig' => $prefsVista,
+            // Selects del modal de filtros: solo valores que usan las empresas visibles.
+            'opcionesFiltro' => $this->model->getOpcionesFiltroListado($idActual, $nivel),
             'empresasLista' => $empresasLista,
             'idAdminSuscripciones' => $idAdminSuscripciones,
         ]);
+    }
+
+    /** URL de exportación del listado con el buscador y el orden vigentes. */
+    private function urlExport(string $accion, string $buscar, array $orden): string
+    {
+        return BASE_URL . self::BASE_PATH . '?action=' . $accion
+            . '&b=' . urlencode($buscar)
+            . '&orden=' . urlencode(\App\Helpers\OrdenListado::aCadena($orden));
+    }
+
+    /**
+     * Filas del listado sin paginar, con el buscador y el orden de pantalla
+     * (los enlaces PDF/Excel viajan con `b=` y `orden=`), para exportar.
+     */
+    private function filasParaExportar(): array
+    {
+        $idActual = (int) ($_SESSION['id_usuario'] ?? 0);
+        $nivel = (int) ($_SESSION['nivel'] ?? 1);
+        $buscar = trim($_GET['b'] ?? $_POST['b'] ?? '');
+        $orden = \App\Helpers\OrdenListado::leer(
+            \App\Helpers\PreferenciasHelper::getPreferenciasVista(self::RUTA_MODULO),
+            'nombre_comercial'
+        );
+        $result = $this->model->getTodosParaListado(
+            $idActual,
+            $nivel,
+            $buscar,
+            1,
+            0,
+            \App\Helpers\OrdenListado::primeraCol($orden, 'nombre_comercial'),
+            \App\Helpers\OrdenListado::primeraDir($orden),
+            $orden
+        );
+        return $result['rows'];
+    }
+
+    private static function textoDocumentos(?string $docEstado): string
+    {
+        return match ($docEstado) {
+            'aceptado'  => 'Aceptado',
+            'pendiente' => 'Pendiente',
+            default     => 'Sin enviar',
+        };
+    }
+
+    /** Exportación PDF del listado (mismo buscador/orden de pantalla). */
+    public function exportPdf(): void
+    {
+        $this->requireAuth();
+        $this->requireNivel(2);
+        $rows = $this->filasParaExportar();
+
+        try {
+            $autoload = MVC_ROOT . '/vendor/autoload.php';
+            if (file_exists($autoload)) {
+                require_once $autoload;
+            }
+
+            ob_start();
+?>
+            <style>
+                table { width: 100%; border-collapse: collapse; font-family: Arial, sans-serif; font-size: 8pt; table-layout: fixed; }
+                th { background: #f2f2f2; border: 1px solid #ccc; padding: 4px; text-align: left; }
+                td { border: 1px solid #ccc; padding: 4px; overflow: hidden; word-wrap: break-word; }
+                .header { text-align: center; margin-bottom: 15px; width: 100%; }
+                h1 { margin: 0; font-size: 14pt; color: #333; }
+                h2 { margin: 3px 0 0 0; color: #666; font-size: 10pt; text-transform: uppercase; }
+            </style>
+            <page backtop="10mm" backbottom="10mm" backleft="10mm" backright="10mm" orientation="landscape">
+                <div class="header">
+                    <h1>Empresas del sistema</h1>
+                    <h2>Listado de empresas (<?= count($rows) ?>)</h2>
+                </div>
+                <table>
+                    <thead>
+                        <tr>
+                            <th style="width: 20%">Razón social</th>
+                            <th style="width: 16%">Nombre comercial</th>
+                            <th style="width: 10%">RUC</th>
+                            <th style="width: 4%">Est.</th>
+                            <th style="width: 12%">Teléfono / Correo</th>
+                            <th style="width: 9%">Provincia</th>
+                            <th style="width: 9%">Ciudad</th>
+                            <th style="width: 6%">Estado</th>
+                            <th style="width: 6%">Usuarios</th>
+                            <th style="width: 8%">Documentos</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <?php foreach ($rows as $r): ?>
+                            <tr>
+                                <td><?= htmlspecialchars((string) ($r['nombre'] ?? '')) ?></td>
+                                <td><?= htmlspecialchars((string) ($r['nombre_comercial'] ?? '')) ?></td>
+                                <td><?= htmlspecialchars((string) ($r['ruc'] ?? '')) ?></td>
+                                <td><?= htmlspecialchars((string) ($r['establecimiento'] ?? '')) ?></td>
+                                <td><?= htmlspecialchars(trim((string) ($r['telefono'] ?? '') . ' ' . (string) ($r['mail'] ?? ''))) ?></td>
+                                <td><?= htmlspecialchars((string) ($r['nombre_provincia'] ?? '')) ?></td>
+                                <td><?= htmlspecialchars((string) ($r['nombre_ciudad'] ?? '')) ?></td>
+                                <td><?= (($r['estado'] ?? '1') === '1') ? 'Activo' : 'Inactivo' ?></td>
+                                <td><?= count($r['usuarios'] ?? []) ?>/<?= (int) ($r['max_usuarios'] ?? 3) ?></td>
+                                <td><?= self::textoDocumentos($r['doc_estado'] ?? null) ?></td>
+                            </tr>
+                        <?php endforeach; ?>
+                    </tbody>
+                </table>
+            </page>
+<?php
+            $content = ob_get_clean();
+
+            $html2pdf = new \Spipu\Html2Pdf\Html2Pdf('L', 'A4', 'es');
+            $html2pdf->writeHTML($content);
+            $html2pdf->output('Empresas_' . date('Ymd_His') . '.pdf', 'D');
+            exit;
+        } catch (\Throwable $e) {
+            if (ob_get_level() > 0) {
+                ob_end_clean();
+            }
+            header('Content-Type: application/json');
+            echo json_encode(['error' => 'Error al generar PDF: ' . $e->getMessage()]);
+            exit;
+        }
+    }
+
+    /** Exportación Excel del listado (mismo buscador/orden de pantalla). */
+    public function exportExcel(): void
+    {
+        $this->requireAuth();
+        $this->requireNivel(2);
+        $rows = $this->filasParaExportar();
+
+        try {
+            $autoload = MVC_ROOT . '/vendor/autoload.php';
+            if (file_exists($autoload)) {
+                require_once $autoload;
+            }
+
+            $headers = ['Razón social', 'Nombre comercial', 'RUC', 'Est.', 'Dirección', 'Teléfono', 'Correo', 'Provincia', 'Ciudad', 'Estado', 'Usuarios', 'Máx. usuarios', 'Documentos legales'];
+            $exportData = [];
+            foreach ($rows as $r) {
+                $exportData[] = [
+                    (string) ($r['nombre'] ?? ''),
+                    (string) ($r['nombre_comercial'] ?? ''),
+                    (string) ($r['ruc'] ?? ''),
+                    (string) ($r['establecimiento'] ?? ''),
+                    (string) ($r['direccion'] ?? ''),
+                    (string) ($r['telefono'] ?? ''),
+                    (string) ($r['mail'] ?? ''),
+                    (string) ($r['nombre_provincia'] ?? ''),
+                    (string) ($r['nombre_ciudad'] ?? ''),
+                    (($r['estado'] ?? '1') === '1') ? 'Activo' : 'Inactivo',
+                    (string) count($r['usuarios'] ?? []),
+                    (string) (int) ($r['max_usuarios'] ?? 3),
+                    self::textoDocumentos($r['doc_estado'] ?? null),
+                ];
+            }
+
+            (new \App\Services\ReportService())->exportToExcel('Empresas', $headers, $exportData, 'Empresas del sistema', 'Empresas del sistema');
+            exit;
+        } catch (\Throwable $e) {
+            header('Content-Type: application/json');
+            echo json_encode(['error' => 'Error al generar Excel: ' . $e->getMessage()]);
+            exit;
+        }
     }
 
     /**
@@ -93,18 +262,14 @@ class EmpresasSistemaController extends Controller
         $nivel = (int) ($_SESSION['nivel'] ?? 1);
         $buscar = trim($_GET['b'] ?? $_POST['b'] ?? '');
         $page = max(1, (int) ($_GET['page'] ?? $_POST['page'] ?? 1));
-        $ordenCol = trim($_GET['sort'] ?? $_POST['sort'] ?? 'nombre');
-        $ordenDir = strtoupper(trim($_GET['dir'] ?? $_POST['dir'] ?? 'ASC'));
         $perPage = \App\Helpers\PreferenciasHelper::porPaginaModulo('empresas_sistema');
 
-        if (!in_array($ordenCol, Empresa::COLUMNAS_ORDEN, true)) {
-            $ordenCol = 'nombre_comercial';
-        }
-        if ($ordenDir !== 'ASC' && $ordenDir !== 'DESC') {
-            $ordenDir = 'ASC';
-        }
+        $prefsVista = \App\Helpers\PreferenciasHelper::getPreferenciasVista(self::RUTA_MODULO);
+        $orden    = \App\Helpers\OrdenListado::leer($prefsVista, 'nombre_comercial');
+        $ordenCol = \App\Helpers\OrdenListado::primeraCol($orden, 'nombre_comercial');
+        $ordenDir = \App\Helpers\OrdenListado::primeraDir($orden);
 
-        $result = $this->model->getTodosParaListado($idActual, $nivel, $buscar, $page, $perPage, $ordenCol, $ordenDir);
+        $result = $this->model->getTodosParaListado($idActual, $nivel, $buscar, $page, $perPage, $ordenCol, $ordenDir, $orden);
         $rows = $result['rows'];
         $total = $result['total'];
         $totalPages = $perPage > 0 ? (int) ceil($total / $perPage) : 1;
@@ -114,21 +279,21 @@ class EmpresasSistemaController extends Controller
         $estadoDocs = (new \App\Services\DocumentosLegalesService())->getEstadoPorEmpresa();
         $rowsHtml = $this->renderFilasHtml($rows, $estadoDocs, $nivel);
 
-        ob_start();
-        if ($totalPages > 1) {
-            $prevDisabled = ($page <= 1) ? 'disabled' : '';
-            $nextDisabled = ($page >= $totalPages) ? 'disabled' : '';
-            echo '<button type="button" class="btn btn-sm btn-outline-secondary" ' . $prevDisabled . ' onclick="EMPSIS_cambiarPagina(' . ($page - 1) . ')" aria-label="Anterior"><i class="fas fa-angle-left"></i></button>'
-               . '<button type="button" class="btn btn-sm btn-outline-secondary" ' . $nextDisabled . ' onclick="EMPSIS_cambiarPagina(' . ($page + 1) . ')" aria-label="Siguiente"><i class="fas fa-angle-right"></i></button>';
-        }
-        $paginationHtml = ob_get_clean();
+        // Mismo marcado que la paginación inicial de la vista (btn-group del card-header).
+        $prevDisabled = ($page <= 1) ? 'disabled' : '';
+        $nextDisabled = ($page >= $totalPages) ? 'disabled' : '';
+        $paginationHtml = '<button type="button" class="btn btn-outline-secondary" ' . $prevDisabled . ' onclick="cambiarPaginaAjax(' . ($page - 1) . ')" aria-label="Anterior"><i class="bi bi-chevron-left"></i></button>'
+            . '<button type="button" class="btn btn-outline-secondary" ' . $nextDisabled . ' onclick="cambiarPaginaAjax(' . ($page + 1) . ')" aria-label="Siguiente"><i class="bi bi-chevron-right"></i></button>';
 
         echo json_encode([
             'ok' => true,
             'rows' => $rowsHtml,
             'pagination' => $paginationHtml,
             'info' => "$from-$to/$total",
+            'total' => $total,
             'totalPages' => $totalPages,
+            'pdf_url' => $this->urlExport('export-pdf', $buscar, $orden),
+            'excel_url' => $this->urlExport('export-excel', $buscar, $orden),
         ]);
         exit;
     }
@@ -140,9 +305,9 @@ class EmpresasSistemaController extends Controller
      */
     private function renderFilasHtml(array $rows, array $estadoDocs, int $nivel): string
     {
-        $colspan = $nivel >= 3 ? 11 : 10;
+        $colspan = $nivel >= 3 ? 13 : 12;
         if (empty($rows)) {
-            return '<tr><td colspan="' . $colspan . '" class="text-center py-5 text-muted"><i class="bi bi-building fs-3 d-block mb-2"></i>No hay empresas registradas.</td></tr>';
+            return '<tr><td colspan="' . $colspan . '" class="text-center py-5 text-muted"><i class="bi bi-building fs-3 d-block mb-2"></i>No se encontraron empresas.</td></tr>';
         }
         $html = '';
         foreach ($rows as $r) {
@@ -191,19 +356,28 @@ class EmpresasSistemaController extends Controller
             . ' data-fact-label="' . htmlspecialchars(trim(($r['cli_nombre'] ?? '') . (!empty($r['cli_identificacion']) ? ' — ' . $r['cli_identificacion'] : ''))) . '"'
             . ' data-usuarios="' . count($usuarios) . '">';
 
-        $html .= '<td>' . htmlspecialchars($r['nombre'] ?? '-') . '</td>';
-        $html .= '<td>' . htmlspecialchars($r['nombre_comercial'] ?? '-') . '</td>';
-        $html .= '<td><code>' . htmlspecialchars($r['ruc'] ?? '') . '</code></td>';
-        $html .= '<td class="text-center"><code>' . htmlspecialchars($r['establecimiento'] ?? '001') . '</code></td>';
-        $html .= '<td class="text-truncate" style="max-width: 180px;">' . htmlspecialchars($r['direccion'] ?? '-') . '</td>';
-        $html .= '<td>' . htmlspecialchars($r['nombre_provincia'] ?? '-') . '</td>';
-        $html .= '<td>' . htmlspecialchars($r['nombre_ciudad'] ?? '-') . '</td>';
-        $html .= '<td>' . ($estado === '1' ? '<span class="badge bg-success">Activo</span>' : '<span class="badge bg-secondary">Inactivo</span>') . '</td>';
+        // Cada celda lleva data-col: el usuario oculta columnas y fija anchos desde el
+        // dropdown de columnas (PreferenciasHelper), igual que en Proveedores.
+        $txt = static fn($v) => ($v === null || trim((string) $v) === '') ? '<span class="text-muted">-</span>' : htmlspecialchars((string) $v);
+        $html .= '<td class="ps-3 fw-medium text-truncate" style="max-width:300px" data-col="nombre">' . $txt($r['nombre'] ?? '') . '</td>';
+        $html .= '<td class="text-truncate" style="max-width:200px" data-col="nombre_comercial">' . $txt($r['nombre_comercial'] ?? '') . '</td>';
+        $html .= '<td data-col="ruc"><code class="text-secondary">' . htmlspecialchars($r['ruc'] ?? '') . '</code></td>';
+        $html .= '<td class="text-center" data-col="establecimiento"><code class="text-secondary">' . htmlspecialchars($r['establecimiento'] ?? '001') . '</code></td>';
+        $html .= '<td class="text-truncate" style="max-width:200px" data-col="direccion">' . $txt($r['direccion'] ?? '') . '</td>';
+        $html .= '<td data-col="telefono">' . $txt($r['telefono'] ?? '') . '</td>';
+        $html .= '<td data-col="mail">' . $txt($r['mail'] ?? '') . '</td>';
+        $html .= '<td data-col="nombre_provincia">' . $txt($r['nombre_provincia'] ?? '') . '</td>';
+        $html .= '<td data-col="nombre_ciudad">' . $txt($r['nombre_ciudad'] ?? '') . '</td>';
+        $html .= '<td class="text-center" data-col="estado">' . ($estado === '1'
+            ? '<span class="badge bg-success bg-opacity-10 text-success border border-success border-opacity-25">Activo</span>'
+            : '<span class="badge bg-secondary bg-opacity-10 text-secondary border border-secondary border-opacity-25">Inactivo</span>') . '</td>';
 
         $maxUsu = (int) ($r['max_usuarios'] ?? 3);
         $cntUsu = count($usuarios);
-        $clsUsu = $cntUsu >= $maxUsu ? 'bg-danger' : 'bg-light text-dark';
-        $html .= '<td class="text-center"><span class="badge ' . $clsUsu . '" title="' . $cntUsu . ' de ' . $maxUsu . ' permitidos">' . $cntUsu . '/' . $maxUsu . '</span></td>';
+        $clsUsu = $cntUsu >= $maxUsu
+            ? 'bg-danger bg-opacity-10 text-danger border border-danger border-opacity-25'
+            : 'bg-light text-dark border';
+        $html .= '<td class="text-center" data-col="usuarios"><span class="badge ' . $clsUsu . '" title="' . $cntUsu . ' de ' . $maxUsu . ' permitidos">' . $cntUsu . '/' . $maxUsu . '</span></td>';
 
         $ed = $estadoDocs[$id] ?? null;
         if ($ed === null) {
@@ -225,11 +399,11 @@ class EmpresasSistemaController extends Controller
             $docIco = 'hourglass-split';
             $docBtn = 'btn-warning';
         }
-        $html .= '<td class="text-center"><span class="badge ' . $docBadge . '" title="' . htmlspecialchars($docTit) . '" style="font-size:.72rem;"><i class="bi bi-' . $docIco . ' me-1"></i>' . $docTxt . '</span></td>';
+        $html .= '<td class="text-center' . ($nivel >= 3 ? '' : ' pe-3') . '" data-col="documentos"><span class="badge ' . $docBadge . '" title="' . htmlspecialchars($docTit) . '" style="font-size:.72rem;"><i class="bi bi-' . $docIco . ' me-1"></i>' . $docTxt . '</span></td>';
 
         if ($nivel >= 3) {
             $accion = $ed === null ? 'enviar' : 'reenviar';
-            $html .= '<td class="text-center" onclick="event.stopPropagation()">'
+            $html .= '<td class="text-center pe-3 text-nowrap" onclick="event.stopPropagation()">'
                 . '<button class="btn btn-sm ' . $docBtn . '" title="' . htmlspecialchars($docTit) . ' Clic para ' . $accion . '." onclick="enviarDocumentosLegales(' . $id . ', this)"><i class="bi bi-envelope-fill"></i></button> '
                 . '<button class="btn btn-sm btn-outline-danger" onclick="eliminarEmpresa(' . $id . ')" title="Eliminar empresa"><i class="bi bi-trash"></i></button>'
                 . '</td>';

@@ -265,8 +265,17 @@
             camBodegas = (data.ok && data.data) ? data.data : [];
         } catch (e) { camBodegas = []; }
     }
-    function bodegaOptions(sel) {
-        return camBodegas.map(b => `<option value="${b.id}" ${String(b.id) === String(sel) ? 'selected' : ''}>${esc(b.nombre)}</option>`).join('');
+    // camBodegas trae solo las bodegas PERMITIDAS al usuario (Bodegas → Accesos). Una línea que
+    // viene de una consignación (o una entrega ya guardada) puede estar en una bodega que el
+    // usuario no tiene permitida: esa bodega no la elige él, la fija el servidor desde la línea
+    // de origen, así que aquí se muestra igual (opción extra, seleccionada) en vez de dejar el
+    // selector sin valor y enviar id_bodega = 0.
+    function bodegaOptions(sel, nombreSel) {
+        let html = camBodegas.map(b => `<option value="${b.id}" ${String(b.id) === String(sel) ? 'selected' : ''}>${esc(b.nombre)}</option>`).join('');
+        if (sel && !camBodegas.some(b => String(b.id) === String(sel))) {
+            html += `<option value="${esc(String(sel))}" selected>${esc(nombreSel || 'Bodega sin acceso')}</option>`;
+        }
+        return html;
     }
 
     window.abrirModalCambioNuevo = async function () {
@@ -820,7 +829,7 @@
         tr.innerHTML = `
             <td class="small">${camBadgeOrigenConsignacion(o.doc_numero)}</td>
             <td class="small">${esc(o.producto_codigo ? o.producto_codigo + ' · ' : '')}${esc(o.producto_nombre)}</td>
-            <td class="p-0"><select class="form-select form-select-sm cam-ent-bodega" disabled title="La bodega es la de la consignación" style="height:26px;font-size:.78rem;">${bodegaOptions(o.id_bodega || '')}</select></td>
+            <td class="p-0"><select class="form-select form-select-sm cam-ent-bodega" disabled title="La bodega es la de la consignación" style="height:26px;font-size:.78rem;">${bodegaOptions(o.id_bodega || '', o.bodega_nombre)}</select></td>
             <td class="p-0"><input type="text" class="form-control form-control-sm cam-ent-lote" placeholder="Lote" value="${esc(o.lote || '')}" readonly style="height:26px;font-size:.75rem;"></td>
             <td class="p-0"><input type="text" class="form-control form-control-sm cam-ent-nup" placeholder="NUP" value="${esc(o.nup || '')}" readonly style="height:26px;font-size:.75rem;"></td>
             <td class="small text-nowrap">${camFechaCad(o.fecha_caducidad)}</td>
@@ -950,7 +959,7 @@
             tr.innerHTML = `
                 <td class="small">${origenCell}</td>
                 <td class="small">${esc(d.producto_codigo ? d.producto_codigo + ' · ' : '')}${esc(d.producto_nombre)}</td>
-                <td class="p-0"><select class="form-select form-select-sm cam-ent-bodega" ${esConsig ? 'disabled title="La bodega es la de la consignación"' : ''} style="height:26px;font-size:.78rem;">${bodegaOptions(d.id_bodega)}</select></td>
+                <td class="p-0"><select class="form-select form-select-sm cam-ent-bodega" ${esConsig ? 'disabled title="La bodega es la de la consignación"' : ''} style="height:26px;font-size:.78rem;">${bodegaOptions(d.id_bodega, d.bodega_nombre)}</select></td>
                 <td class="p-0"><input type="text" class="form-control form-control-sm cam-ent-lote" placeholder="Lote" value="${esc(d.lote || '')}" ${esConsig ? 'readonly' : ''} style="height:26px;font-size:.75rem;"></td>
                 <td class="p-0"><input type="text" class="form-control form-control-sm cam-ent-nup" placeholder="NUP" value="${esc(d.nup || '')}" ${esConsig ? 'readonly' : ''} style="height:26px;font-size:.75rem;"></td>
                 <td class="small text-nowrap">${camFechaCad(d.fecha_caducidad)}</td>

@@ -5,8 +5,8 @@ categoria: Configuración global
 ruta_modulo: config/empresas-sistema
 tipo: modulo
 visibilidad: superadmin
-etiquetas: empresas del sistema, crear empresa, alta de empresa, establecimientos, sucursales, matriz, usuarios asignados, documentos legales, suscripcion, empresas del grupo, eliminar establecimiento, establecimiento activo, un solo establecimiento activo
-version: 1.6
+etiquetas: empresas del sistema, crear empresa, alta de empresa, establecimientos, sucursales, matriz, usuarios asignados, documentos legales, suscripcion, empresas del grupo, eliminar establecimiento, establecimiento activo, un solo establecimiento activo, buscar empresa, filtrar empresas, filtros de empresas, exportar empresas, pdf de empresas, excel de empresas, ordenar empresas, columnas del listado, telefono de la empresa, correo de la empresa
+version: 1.7
 orden: 1
 estado: activo
 ---
@@ -27,6 +27,35 @@ documentos legales), y para intervenir en la configuración de una empresa ya
 existente cuando hace falta ayuda que el propio cliente no puede resolver
 desde el módulo Empresa: agregar/quitar establecimientos, revisar usuarios
 asignados, reenviar documentos legales, etc.
+
+## Buscar, filtrar y exportar el listado
+
+El listado tiene el mismo diseño que los módulos operativos (por ejemplo
+Proveedores): el buscador, los filtros, el selector de columnas, los botones
+**PDF** y **Excel** y la paginación van en la cabecera de la tarjeta de la
+tabla.
+
+- **Buscar**: lo que se escribe en la caja busca a la vez en razón social,
+  nombre comercial, RUC, establecimiento, dirección, teléfono, correo,
+  provincia y ciudad, por palabras y sin distinguir mayúsculas ni tildes.
+  Las columnas **Estado**, **Documentos** y los datos de cobro **no** entran
+  en esa búsqueda: se filtran desde el modal.
+- **Filtros**: el botón del embudo abre un modal con todos los filtros
+  (identificación, contacto, provincia y ciudad, estado, documentos legales,
+  obligado a contabilidad, cupo de usuarios, fecha de registro y operadora de
+  transporte). El superadministrador ve además el grupo **Cobro y vigencia**
+  (estado de pago, vigencia desde/hasta, valor de cobro, empresa
+  administradora de suscripciones). Se aplican con **Aplicar** y quedan como
+  chips junto a la caja; cada chip se quita con su «×».
+- **Columnas**: el botón de columnas permite ocultar o mostrar cualquier
+  columna (incluidas las nuevas **Teléfono** y **Correo**) y el ancho que se
+  arrastre en cada encabezado se recuerda por usuario.
+- **Ordenar**: clic en un encabezado ordena por esa columna; **Shift + clic**
+  encadena hasta tres columnas (cada encabezado muestra su prioridad). También
+  se puede ordenar por **Usuarios** (asignados) y **Documentos** (estado del
+  envío de documentos legales).
+- **PDF / Excel**: descargan el listado completo con el buscador, los filtros
+  y el orden que están en pantalla (no solo la página visible).
 
 ## Establecimientos de una empresa
 
@@ -89,6 +118,13 @@ las empresas que ese usuario tiene asignadas.
 
 ## Historial de cambios
 
+- **1.7** — El listado adopta el diseño estándar de los listados de módulo
+  (como Proveedores): buscador de texto libre en todas las columnas, modal de
+  **filtros** con chips, selector de **columnas** por usuario, orden de hasta
+  **tres columnas** (Shift + clic) y exportación a **PDF** y **Excel** con los
+  filtros y el orden de pantalla. Se agregaron las columnas **Teléfono** y
+  **Correo**, y las columnas Usuarios y Documentos pasan a ser ordenables.
+  Nueva sección «Buscar, filtrar y exportar el listado».
 - **1.6** — La pestaña **Establecimientos** de la ficha de empresa (en este
   módulo) pasa a llamarse **Establecimiento** (singular), igual que en el
   módulo Empresa (autoservicio). Corregido además el sentido inverso del fix

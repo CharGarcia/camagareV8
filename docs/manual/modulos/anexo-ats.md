@@ -6,7 +6,7 @@ ruta_modulo: modulos/anexo-ats
 tipo: modulo
 visibilidad: todos
 etiquetas: ats, anexo transaccional, xml, dimm, declaracion, compras, ventas, anulados, sri, sin ventas, solo compras
-version: 1.6
+version: 1.7
 orden: 30
 estado: activo
 ---
@@ -145,8 +145,26 @@ anexo antes de presentarlo.
   de comprobante o sin número de autorización. Regístrela o corríjala en
   **Compras** y vuelva a generar el anexo. Mientras tanto la nota sale con
   autorización 9999999999, que no es un dato real.
+- **"Al menos una base (baseNoGraIva, baseImponible, baseImpGrav o baseImpExe)
+  debe ser mayor a 0.00"**: la compra no tiene ninguna base de IVA en su
+  detalle, así que el anexo la reporta con las cuatro bases en cero y el SRI la
+  rechaza. El aviso *Compras: N comprobante(s) tipo NN sin ninguna base de IVA*
+  lista los documentos afectados. Abra cada uno en **Compras** y registre sus
+  líneas con la tarifa de IVA que indica el comprobante. Caso frecuente: las
+  **notas de débito (tipo 05)** que llegaron del SRI antes del 11-09-2026 se
+  registraron solo con su total, sin detalle ni impuestos, porque su XML no trae
+  líneas sino *motivos*. Para esas, el administrador del sistema puede ejecutar
+  la reparación `database/2026-10-06_compras_nota_debito_detalle_desde_xml.sql`,
+  que reconstruye el detalle y el IVA desde el XML autorizado guardado en la
+  compra; las que no tengan XML se completan a mano.
 
 ## Historial de cambios
+
+- **1.7** — Nuevo aviso *Compras: N comprobante(s) sin ninguna base de IVA en su
+  detalle*, con la lista de documentos y qué hacer, para explicar el error del
+  SRI "al menos una base debe ser mayor a 0.00". Reparación de las notas de
+  débito de compra registradas sin detalle desde el XML del SRI (ver *Errores
+  frecuentes*).
 
 - **1.6** — En las compras, el código de retención de renta (`codRetAir`) se informa
   siempre con el código del **Catálogo del ATS** (Tablas 3.x, p. ej. 312A), aunque la

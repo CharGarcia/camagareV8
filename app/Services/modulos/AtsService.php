@@ -69,6 +69,17 @@ class AtsService
      */
     private array $sinSustento = [];
 
+    /**
+     * Compras del período cuyo detalle no tiene ninguna base de IVA (las cuatro
+     * bases del ATS en 0,00). El SRI las rechaza ("al menos una base debe ser
+     * mayor a 0.00"); el validador ya lo marca como error, pero aquí se explica
+     * la causa y qué hacer. Caso típico: notas de débito (05) que llegaron del
+     * SRI antes de que el registro automático guardara su detalle e impuestos.
+     *
+     * @var array<string, array<string, string>>  tipoComp => serie => serie
+     */
+    private array $sinBases = [];
+
     public function __construct(
         private AtsRepository $repo,
         private XmlAtsService $xml,
@@ -180,6 +191,7 @@ class AtsService
         // Catálogo de sustentos (global): se carga una vez por recopilación.
         $this->sustentoTipos = $this->repo->getSustentosPermitidos();
         $this->sinSustento   = [];
+        $this->sinBases      = [];
 
         // El ATS se presenta por RUC completo, no por establecimiento: se consolidan todas las
         // filas de `empresas` con el mismo RUC a las que el usuario tenga acceso. Los queries de
@@ -524,6 +536,27 @@ class AtsService
                 count($series) > count($muestra) ? ', …' : ''
             );
         }
+
+        ksort($this->sinBases);
+        foreach ($this->sinBases as $tipoComp => $series) {
+            $series  = array_values($series);
+            sort($series);
+            $muestra = array_slice($series, 0, 5);
+            $out[] = sprintf(
+                'Compras: %d comprobante(s) tipo %s sin ninguna base de IVA en su detalle (las cuatro '
+                . 'bases salen en 0,00 y el SRI los rechaza). Abra cada compra en el módulo Compras y '
+                . 'registre sus líneas con la tarifa de IVA que indica el comprobante.%s Ejemplo(s): %s%s',
+                count($series),
+                $tipoComp,
+                $tipoComp === '05'
+                    ? ' Si la nota de débito llegó del SRI (XML) antes del 11-09-2026, se registró sin '
+                      . 'detalle: pida al administrador del sistema ejecutar la reparación de notas de '
+                      . 'débito, que reconstruye el detalle desde el XML autorizado.'
+                    : '',
+                implode(', ', $muestra),
+                count($series) > count($muestra) ? ', …' : ''
+            );
+        }
         return $out;
     }
 
@@ -615,6 +648,14 @@ class AtsService
         $baseExe  = ($reemb === null || $incluirBasePropia) ? (float) $doc['base_imponible_exe']   : 0.0;
         $montoIceDoc = ($reemb === null || $incluirBasePropia) ? (float) $doc['monto_ice'] : 0.0;
         $montoIvaDoc = ($reemb === null || $incluirBasePropia) ? (float) $doc['monto_iva'] : 0.0;
+
+        // Compra sin ninguna base de IVA en su detalle: el SRI la rechaza. Se deja
+        // constancia para explicar la causa en las advertencias (solo la fila que
+        // lleva las bases propias; las de terceros reembolsados van en 0 a propósito).
+        if ($incluirBasePropia && $baseGrav <= 0 && $base0 <= 0 && $baseNoG <= 0 && $baseExe <= 0) {
+            $serieDoc = "{$estab}-{$pto}-{$sec}";
+            $this->sinBases[$tipoComp][$serieDoc] = $serieDoc;
+        }
 
         // Retenciones IVA por porcentaje + líneas AIR (Renta)
         $iva = ['10' => 0.0, '20' => 0.0, '30' => 0.0, '50' => 0.0, '70' => 0.0, '100' => 0.0];

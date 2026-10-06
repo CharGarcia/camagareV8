@@ -1540,20 +1540,52 @@
 
     // ─── Modales auxiliares (crear entidades al vuelo) ───────────────────────
 
+    // Los modales de Vehículo/Cliente/Producto exponen `abrirModal*Crear()`, que limpian el
+    // formulario antes de mostrarlo. Antes se llamaba a funciones que no existían y el respaldo
+    // mostraba el modal sin limpiar (quedaban los datos del último vehículo/cliente tecleado).
     window.tllCrearVehiculo = function () {
-        if (typeof abrirModalVehiculo === 'function') abrirModalVehiculo();
-        else new bootstrap.Modal($('modalVehiculo')).show();
+        if (typeof window.abrirModalVehiculoCrear === 'function') window.abrirModalVehiculoCrear();
+        else error('No se pudo abrir el formulario de vehículo.');
     };
 
     window.tllCrearCliente = function () {
-        if (typeof abrirModalCliente === 'function') abrirModalCliente();
-        else new bootstrap.Modal($('modalCliente')).show();
+        if (typeof window.abrirModalClienteCrear === 'function') window.abrirModalClienteCrear();
+        else error('No se pudo abrir el formulario de cliente.');
     };
 
     window.tllCrearProducto = function () {
-        if (typeof abrirModalProducto === 'function') abrirModalProducto();
-        else new bootstrap.Modal($('modalProducto')).show();
+        if (typeof window.abrirModalProductoCrear === 'function') window.abrirModalProductoCrear();
+        else error('No se pudo abrir el formulario de producto.');
     };
+
+    // Seleccionar en la orden la entidad recién creada, SOLO si la orden está abierta: creado
+    // desde otro sitio no debe quedar "pegado" en el formulario oculto y colarse en la siguiente
+    // orden que se abra (mismo error que tuvo Car-Wash).
+    const tllOrdenAbierta = () => $('modalOrdenTaller')?.classList.contains('show');
+
+    window.addEventListener('vehiculoGuardado', async (e) => {
+        if (!tllOrdenAbierta()) return;
+        const j = e.detail || {}; const id = parseInt((j.data || j).id || 0, 10);
+        if (!id) return;
+        // El guardado del vehículo responde solo {ok, id}: se vuelve a leer el vehículo por su
+        // placa para tener la copia completa (marca, modelo, año, color, chasis, motor).
+        const placa = (($('vehiculo_placa') || {}).value || '').trim();
+        try {
+            const res = await fetch(`${RUTA}/buscarVehiculosAjax?q=${encodeURIComponent(placa)}`);
+            const data = await res.json();
+            const v = (data.data || []).find((x) => parseInt(x.id, 10) === id);
+            if (v) { seleccionarVehiculo(v); return; }
+        } catch (err) { /* cae al respaldo */ }
+        setVal('tll_vehiculo_busqueda', placa);
+        tllBuscarVehiculos(placa);
+    });
+
+    document.addEventListener('clienteGuardado', (e) => {
+        if (!tllOrdenAbierta()) return;
+        const j = e.detail || {}; const c = j.data || j;
+        if (!c || !c.id) return;
+        seleccionarCliente({ id: c.id, nombre: c.nombre || j.nombre || '', telefono: c.telefono || '', correo: c.correo || c.email || '' });
+    });
 
     // ─── Alta rápida de departamento ─────────────────────────────────────────
 

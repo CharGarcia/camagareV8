@@ -50,6 +50,8 @@ $urlBase = rtrim($base, '/') . '/' . ltrim($rutaModulo, '/');
     .cc-buscar-lista thead th { position: sticky; top: 0; background: #f8f9fa; z-index: 1; }
     .cc-buscar-lista td, .cc-buscar-lista th { font-size: .78rem; }
     .cc-doc-fila { cursor: pointer; user-select: none; }
+    /* Autocompletar de cliente del modal: por encima del encabezado fijo de la lista de documentos. */
+    .cc-cliente-dropdown { z-index: 20; max-height: 240px; overflow: auto; }
 </style>
 
 <div class="container-fluid pt-2 pb-3 px-0 px-md-3" id="modulo-conciliacion_cobros">
@@ -194,9 +196,14 @@ $urlBase = rtrim($base, '/') . '/' . ltrim($rutaModulo, '/');
                     <div>Restante: <strong id="cc-buscar-restante">$0.00</strong></div>
                 </div>
                 <div class="mb-2">
-                    <label class="form-label small fw-bold text-muted mb-1 d-block">Cliente</label>
-                    <select id="cc-buscar-cliente" class="form-select form-select-sm" onchange="CC.buscarDocumentosDeCliente()"></select>
-                    <small class="text-muted">Marque uno o varios documentos. Puede cambiar de cliente y seguir marcando: lo marcado se conserva abajo.</small>
+                    <label class="form-label small fw-bold text-muted mb-1 d-block" for="cc-buscar-cliente-texto">Cliente</label>
+                    <div class="position-relative">
+                        <input type="text" id="cc-buscar-cliente-texto" class="form-control form-control-sm" autocomplete="off"
+                               placeholder="Escriba el nombre o la identificación del cliente…">
+                        <input type="hidden" id="cc-buscar-cliente">
+                        <div id="cc-buscar-cliente-dropdown" class="list-group position-absolute w-100 shadow cc-cliente-dropdown" style="display:none;"></div>
+                    </div>
+                    <small class="text-muted">Solo se ofrecen clientes con documentos pendientes de cobro. Marque uno o varios documentos; puede buscar otro cliente y seguir marcando: lo marcado se conserva abajo.</small>
                 </div>
                 <div class="cc-buscar-lista border rounded-2 mb-3">
                     <table class="table table-sm table-hover mb-0">
@@ -226,7 +233,9 @@ $urlBase = rtrim($base, '/') . '/' . ltrim($rutaModulo, '/');
 <script>
     const CC_URL_BASE = "<?= $urlBase ?>";
     const CC_PERM_CREAR = <?= !empty($perm['crear']) ? 'true' : 'false' ?>;
-    window.CC_CLIENTES = <?= json_encode(array_map(fn ($c) => ['id' => (int) $c['id'], 'nombre' => $c['nombre']], $clientes), JSON_UNESCAPED_UNICODE | JSON_HEX_TAG | JSON_INVALID_UTF8_SUBSTITUTE) ?>;
+    // Clientes con cartera pendiente (los únicos que ofrece el buscador de la lupa); con la
+    // identificación para poder buscarlos también por cédula/RUC.
+    window.CC_CLIENTES = <?= json_encode(array_map(fn ($c) => ['id' => (int) $c['id'], 'nombre' => $c['nombre'], 'identificacion' => (string) ($c['identificacion'] ?? '')], $clientes), JSON_UNESCAPED_UNICODE | JSON_HEX_TAG | JSON_INVALID_UTF8_SUBSTITUTE) ?>;
     // Formatos de banco (perfiles de mapeo) del catálogo global config/conciliacion-perfiles.
     window.CC_PERFILES = <?= json_encode(array_map(fn ($p) => [
         'id' => (int) $p['id'],

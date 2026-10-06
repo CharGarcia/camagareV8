@@ -151,20 +151,12 @@ class ConciliacionCobrosService
                 }
 
                 $sugerencia = $this->matchService->sugerir($fila, $clientes, $idEmpresa);
-                $this->repository->insertLinea([
-                    'id_carga' => $idCarga,
-                    'id_empresa' => $idEmpresa,
+                $this->insertarLineasSugeridas($idCarga, $idEmpresa, $idUsuario, [
                     'fecha_movimiento' => $fila['fecha'],
                     'descripcion_original' => $fila['descripcion'],
-                    'monto' => $fila['monto'],
+                    'monto' => (float) $fila['monto'],
                     'referencia_banco' => $fila['referencia'],
-                    'estado' => $sugerencia['estado'],
-                    'id_cliente_sugerido' => $sugerencia['id_cliente'],
-                    'score_match' => $sugerencia['score'],
-                    'tipo_documento_sugerido' => $sugerencia['tipo_documento'],
-                    'id_documento_sugerido' => $sugerencia['id_documento'],
-                    'usuario_id' => $idUsuario,
-                ]);
+                ], $sugerencia, null);
             }
 
             $this->repository->actualizarEstadoCarga($idCarga, 'pendiente_revision', null, $resultado['total_validas']);
@@ -177,6 +169,91 @@ class ConciliacionCobrosService
         $this->logService->registrar($idUsuario, $idEmpresa, 'crear', 'conciliacion_cargas', $idCarga, null, $carga);
 
         return $carga ?? [];
+    }
+
+    /**
+     * Inserta la línea de un movimiento del banco con su sugerencia. Si el cliente quedó
+     * identificado y el depósito cubre MÁS de un documento, se reparte por antigüedad
+     * (ConciliacionMatchService::repartirPorAntiguedad) y se inserta una línea SUGERIDO por
+     * documento, todas con el mismo id_linea_origen: al confirmarlas, generarIngresos() las
+     * cobra en UN solo ingreso del cliente con un solo pago, igual que un reparto manual desde
+     * la lupa. Si tras cubrir toda la cartera sobra dinero, queda una parte más SIN_MATCH con el
+     * cliente sugerido. Con un solo documento (o sin sugerencia) se inserta una línea normal.
+     *
+     * $idOrigen: origen a heredar (línea de diferencia de un depósito ya repartido); null para
+     * que las partes nuevas tomen como origen la primera de ellas.
+     *
+     * @param array $mov ['fecha_movimiento', 'descripcion_original', 'monto', 'referencia_banco']
+     * @return int[] ids de las líneas insertadas
+     */
+    private function insertarLineasSugeridas(int $idCarga, int $idEmpresa, int $idUsuario, array $mov, array $sugerencia, ?int $idOrigen, string $sufijoFijo = ''): array
+    {
+        $comun = [
+            'id_carga' => $idCarga,
+            'id_empresa' => $idEmpresa,
+            'fecha_movimiento' => $mov['fecha_movimiento'],
+            'referencia_banco' => $mov['referencia_banco'] ?? null,
+            'usuario_id' => $idUsuario,
+        ];
+        $monto = round((float) $mov['monto'], 2);
+        $descripcion = (string) $mov['descripcion_original'];
+
+        $reparto = ['asignaciones' => [], 'sobrante' => $monto];
+        if (!empty($sugerencia['id_cliente']) && !empty($sugerencia['id_documento'])) {
+            $reparto = $this->matchService->repartirPorAntiguedad((int) $sugerencia['id_cliente'], $monto, $idEmpresa);
+        }
+
+        $partes = count($reparto['asignaciones']) + ($reparto['sobrante'] > 0.009 ? 1 : 0);
+        if ($partes <= 1) {
+            // Un solo documento que absorbe todo el depósito, o nada que sugerir: línea normal.
+            $unica = $reparto['asignaciones'][0] ?? null;
+            return [$this->repository->insertLinea($comun + [
+                'descripcion_original' => $descripcion . $sufijoFijo,
+                'monto' => $monto,
+                'estado' => $sugerencia['estado'],
+                'id_cliente_sugerido' => $sugerencia['id_cliente'],
+                'score_match' => $sugerencia['score'],
+                'tipo_documento_sugerido' => $unica['tipo_documento'] ?? $sugerencia['tipo_documento'],
+                'id_documento_sugerido' => $unica['id_documento'] ?? $sugerencia['id_documento'],
+                'monto_aplicar' => $unica['monto'] ?? $monto,
+                'id_linea_origen' => $idOrigen,
+            ])];
+        }
+
+        // Mismo formato de sufijo que dividirLinea(): descripcionDeposito() y
+        // buscarMovimientoRepetido() lo reconocen para tratar las partes como un solo depósito.
+        $sufijo = fn (int $n) => " (parte {$n}/{$partes} del depósito de $" . number_format($monto, 2) . ')';
+        $ids = [];
+        foreach ($reparto['asignaciones'] as $i => $a) {
+            $ids[] = $this->repository->insertLinea($comun + [
+                'descripcion_original' => $descripcion . $sufijo($i + 1) . $sufijoFijo,
+                'monto' => $a['monto'],
+                'estado' => 'SUGERIDO',
+                'id_cliente_sugerido' => (int) $sugerencia['id_cliente'],
+                'score_match' => $sugerencia['score'],
+                'tipo_documento_sugerido' => $a['tipo_documento'],
+                'id_documento_sugerido' => $a['id_documento'],
+                'monto_aplicar' => $a['monto'],
+                'id_linea_origen' => $idOrigen ?? ($ids[0] ?? null),
+            ]);
+            if ($idOrigen === null && count($ids) === 1) {
+                // La primera parte es el origen del depósito: se apunta a sí misma, como hace
+                // dividirLinea() con la línea original.
+                $idOrigen = $ids[0];
+                $this->repository->fijarLineaOrigen($ids[0], $ids[0]);
+            }
+        }
+        if ($reparto['sobrante'] > 0.009) {
+            $ids[] = $this->repository->insertLinea($comun + [
+                'descripcion_original' => $descripcion . $sufijo($partes) . ' — saldo sin asignar' . $sufijoFijo,
+                'monto' => $reparto['sobrante'],
+                'estado' => 'SIN_MATCH',
+                'id_cliente_sugerido' => (int) $sugerencia['id_cliente'],
+                'score_match' => $sugerencia['score'],
+                'id_linea_origen' => $idOrigen,
+            ]);
+        }
+        return $ids;
     }
 
     public function listarCargas(int $idEmpresa): array
@@ -788,23 +865,18 @@ class ConciliacionCobrosService
             $idEmpresa
         );
 
-        return $this->repository->insertLinea([
-            'id_carga' => $idCarga,
-            'id_empresa' => $idEmpresa,
+        // Sigue siendo parte del mismo depósito: si la diferencia cubre varios documentos, sus
+        // partes comparten origen con la línea cobrada y entre sí, y se cobran en un solo
+        // ingreso del cliente. El sufijo "(diferencia de pago parcial)" va al final en todas,
+        // porque buscarMovimientoRepetido() las excluye por ese texto.
+        $ids = $this->insertarLineasSugeridas($idCarga, $idEmpresa, $idUsuario, [
             'fecha_movimiento' => $lineaOriginal['fecha_movimiento'],
-            'descripcion_original' => $lineaOriginal['descripcion_original'] . ' (diferencia de pago parcial)',
+            'descripcion_original' => $this->descripcionDeposito((string) $lineaOriginal['descripcion_original']),
             'monto' => $diferencia,
             'referencia_banco' => $lineaOriginal['referencia_banco'] ?? null,
-            'estado' => $sugerencia['estado'],
-            'id_cliente_sugerido' => $sugerencia['id_cliente'],
-            'score_match' => $sugerencia['score'],
-            'tipo_documento_sugerido' => $sugerencia['tipo_documento'],
-            'id_documento_sugerido' => $sugerencia['id_documento'],
-            // Sigue siendo parte del mismo depósito: si se cobra junto con sus hermanas, va al
-            // mismo ingreso del cliente.
-            'id_linea_origen' => !empty($lineaOriginal['id_linea_origen']) ? (int) $lineaOriginal['id_linea_origen'] : null,
-            'usuario_id' => $idUsuario,
-        ]);
+        ], $sugerencia, !empty($lineaOriginal['id_linea_origen']) ? (int) $lineaOriginal['id_linea_origen'] : (int) $lineaOriginal['id'], ' (diferencia de pago parcial)');
+
+        return $ids[0];
     }
 
     /**
