@@ -560,7 +560,12 @@ window.cmgOcultarResultadoPermisos = function() {
     <?php if ((int)($usuarioSel['nivel'] ?? 0) === 1): ?>
     <div class="card mt-3" id="card-vendedores-visibles">
         <div class="card-header bg-light py-2 d-flex justify-content-between align-items-center flex-wrap gap-2">
-            <strong><i class="bi bi-person-badge"></i> Vendedores que puede ver <span class="text-muted fw-normal small">— Reporte de Ventas por Vendedor</span></strong>
+            <div class="d-flex align-items-center flex-wrap gap-2">
+                <strong><i class="bi bi-person-badge"></i> Vendedores que puede ver</strong>
+                <span class="text-secondary"><i class="bi bi-person-fill"></i> <?= htmlspecialchars($usuarioSel['nombre'] ?? '') ?></span>
+                <span class="text-secondary">en el módulo de</span>
+                <span class="badge bg-primary bg-opacity-10 text-primary border border-primary border-opacity-25 fw-semibold" style="font-size:.85rem;">Reporte de Ventas por Vendedor</span>
+            </div>
             <small id="vv-conteo" class="text-muted"></small>
         </div>
         <div class="card-body">
@@ -738,6 +743,7 @@ window.cmgOcultarResultadoPermisos = function() {
             <div class="d-flex align-items-center flex-wrap gap-2">
                 <strong><i class="bi <?= htmlspecialchars($pmDef['icono']) ?>"></i> Pestañas que puede ver</strong>
                 <span class="text-secondary"><i class="bi bi-person-fill"></i> <?= htmlspecialchars($usuarioSel['nombre'] ?? '') ?></span>
+                <span class="text-secondary">en el módulo de</span>
                 <span class="badge bg-primary bg-opacity-10 text-primary border border-primary border-opacity-25 fw-semibold" style="font-size:.85rem;"><?= htmlspecialchars($pmDef['titulo']) ?></span>
             </div>
             <small class="text-muted pm-conteo"></small>
@@ -900,6 +906,7 @@ window.cmgOcultarResultadoPermisos = function() {
             <div class="d-flex align-items-center flex-wrap gap-2">
                 <strong><i class="bi <?= htmlspecialchars($vmDef['icono']) ?>"></i> Vendedores que puede ver</strong>
                 <span class="text-secondary"><i class="bi bi-person-fill"></i> <?= htmlspecialchars($usuarioSel['nombre'] ?? '') ?></span>
+                <span class="text-secondary">en el módulo de</span>
                 <span class="badge bg-primary bg-opacity-10 text-primary border border-primary border-opacity-25 fw-semibold" style="font-size:.85rem;"><?= htmlspecialchars($vmDef['titulo']) ?></span>
             </div>
             <small class="text-muted vm-conteo"></small>
