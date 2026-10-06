@@ -6,7 +6,7 @@ ruta_modulo: modulos/car-wash
 tipo: modulo
 visibilidad: todos
 etiquetas: car wash, lavado, lavadora de autos, lubricadora, cambio de aceite, mecanica, taller, orden de servicio, orden mecanica, orden de trabajo, vehiculo, placa, historial del vehiculo, historial del cliente, visitas, ultima visita, facturar orden, recibo de venta, refacturar, factura anulada, proxima cita, proximo chequeo, migracion, sistema anterior, numeracion por fecha, numero con el año, reiniciar numeracion, reinicio anual, reinicio mensual, correlativo por año, correlativo por mes, modo de numeracion, buscar orden, buscar placa, buscador, filtros, filtrar ordenes, filtro de fechas, buscar por servicio, chips, imprimir, impresora, aviso, avisos, ordenes en borrador, ordenes sin facturar, pendientes de facturar, barra superior
-version: 1.12
+version: 1.13
 orden: 10
 estado: activo
 ---
@@ -42,9 +42,14 @@ se le entrega al cliente.
 ## Cómo se usa
 
 1. Pulse **Nuevo** para abrir la orden. El cursor empieza en **Vehículo**: escriba
-   la placa, la marca o el propietario y elija.
+   la placa, la marca o el propietario y elija. Si el vehículo no existe, pulse el
+   botón **Vehículo** de la barra superior: al guardarlo queda **asignado a la orden
+   de inmediato**, siempre que la orden todavía no tenga un vehículo elegido. Si ya
+   había uno, el nuevo solo se crea (se puede elegir después desde el buscador).
 2. Elija el **cliente** (opcional al registrar, obligatorio para facturar), la
-   **bodega** y, si quiere, kilometraje, combustible y **próxima cita**.
+   **bodega** y, si quiere, kilometraje, combustible y **próxima cita**. El botón
+   **Cliente** funciona igual: el cliente recién creado se asigna solo si la orden
+   aún no tiene cliente.
 3. Agregue los **servicios y productos** en la grilla (igual que en una factura).
 4. Anote las novedades en **Info. Adicional** y pulse **Guardar**.
 5. Para cobrar, abra la orden y pulse **Factura** o **Recibo** en la barra superior y
@@ -360,6 +365,11 @@ documentos admite cada periodo) está en el manual de **Empresa**, sección
 
 ## Historial de cambios
 
+- **1.13** — Al **crear un vehículo o un cliente** desde la orden (botones *Vehículo* /
+  *Cliente*), el registro nuevo se **asigna de inmediato a la orden** si esta aún no
+  tenía vehículo o cliente. Si la orden ya tenía uno elegido, no se reemplaza: el
+  nuevo queda creado y disponible en el buscador. Editar una ficha ya existente no
+  cambia lo asignado.
 - **1.12** — Corregido: tras **crear un vehículo** (botón *Vehículo* de la orden), las
   órdenes en borrador que se abrían y guardaban después quedaban con la **placa, marca
   y modelo de ese vehículo nuevo**, aunque conservaban su vehículo real. La pantalla

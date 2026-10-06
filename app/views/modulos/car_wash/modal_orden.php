@@ -1909,22 +1909,35 @@
         else Swal.fire('Atención', 'No se pudo abrir el formulario de producto.', 'warning');
     };
 
-    // Autoseleccionar la entidad recién creada (best-effort según el payload del evento).
+    // Entidad recién CREADA desde la orden: se asigna directo a la orden, pero solo si la
+    // orden aún no tiene una (vehículo o cliente). Si ya hay uno elegido, no se reemplaza:
+    // el nuevo registro queda creado y disponible en el buscador. Al editar (vehiculo_id /
+    // cliente_id con valor) no se asigna nada.
+    const cwOrdenAbierta = () => document.getElementById('modalOrdenCW').classList.contains('show');
+    const campo = id => ((document.getElementById(id) || {}).value || '').trim();
     window.addEventListener('vehiculoGuardado', (e) => {
         // Solo si la orden está abierta: el vehículo creado desde el listado no debe quedar
         // "pegado" en el formulario oculto y colarse en la siguiente orden que se abra.
-        if (!document.getElementById('modalOrdenCW').classList.contains('show')) return;
+        if (!cwOrdenAbierta()) return;
+        if (campo('vehiculo_id')) return;            // fue una edición, no un vehículo nuevo
+        if (campo('cw_id_vehiculo')) return;         // la orden ya tiene vehículo: no se reemplaza
         const j = e.detail || {}; const v = j.data || j;
+        if (!v || !v.id) return;
         // El guardado del vehículo responde solo {ok, id}: la placa y la marca se toman del
         // formulario del vehículo para mostrarlas en el buscador (el servidor las vuelve a
         // leer del vehículo al guardar la orden).
-        const campo = id => ((document.getElementById(id) || {}).value || '').trim();
-        if (v && v.id) cwSeleccionarVehiculo({ id: v.id, placa: v.placa || campo('vehiculo_placa').toUpperCase(), marca: v.marca || campo('vehiculo_marca'), modelo: v.modelo || '' });
-        else if (v && v.placa) { document.getElementById('cw_vehiculo_busqueda').value = v.placa; cwBuscarVehiculos(v.placa); }
+        cwSeleccionarVehiculo({ id: v.id, placa: v.placa || campo('vehiculo_placa').toUpperCase(), marca: v.marca || campo('vehiculo_marca'), modelo: v.modelo || '' });
     });
     document.addEventListener('clienteGuardado', (e) => {
+        if (!cwOrdenAbierta()) return;
+        if (campo('cw_id_cliente')) return;          // la orden ya tiene cliente: no se reemplaza
         const j = e.detail || {}; const c = j.data || j;
-        if (c && c.id) cwSeleccionarCliente({ id: c.id, nombre: c.nombre || j.nombre, identificacion: c.identificacion, direccion: c.direccion, correo: c.correo || c.email, telefono: c.telefono });
+        if (!c || !c.id) return;
+        // 'nuevo' lo manda clientes_modal.js; si no viene, se mira el id del formulario
+        // (vacío al crear; el modal de cliente no se cierra y lo rellena después del evento).
+        const esNuevo = (typeof j.nuevo === 'boolean') ? j.nuevo : !campo('cliente_id');
+        if (!esNuevo) return;
+        cwSeleccionarCliente({ id: c.id, nombre: c.nombre || j.nombre, identificacion: c.identificacion, direccion: c.direccion, correo: c.correo || c.email, telefono: c.telefono });
     });
     document.addEventListener('productoGuardado', () => {
         // El nuevo producto queda disponible en el buscador de líneas; nada que autoseleccionar aquí.
