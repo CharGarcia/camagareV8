@@ -186,6 +186,24 @@ try {
     echo "[" . date('Y-m-d H:i:s') . "] Error en devengo de suscripciones: " . $e->getMessage() . "\n";
 }
 
+// ── Condominios: reajustes de cuotas programados (FIJO, 1 vez al día) ─────────
+//    Un reajuste masivo programado para una fecha («desde el 1 de enero») se aplica ese día a
+//    las suscripciones de los inmuebles, en todas las empresas. Idempotente: solo toma los
+//    pendientes con fecha cumplida y los deja en 'aplicado' (o 'error').
+try {
+    $marcaReaj = sys_get_temp_dir() . '/sistema_condominios_reajustes.txt';
+    $hoyReaj   = date('Y-m-d');
+    if (@file_get_contents($marcaReaj) !== $hoyReaj) {
+        $resReaj = \App\Services\modulos\CondominioService::crear()->aplicarReajustesProgramados();
+        file_put_contents($marcaReaj, $hoyReaj);
+        foreach ($resReaj as $idReaj => $msg) {
+            echo "[" . date('Y-m-d H:i:s') . "] Reajuste condominio #{$idReaj}: {$msg}\n";
+        }
+    }
+} catch (\Throwable $e) {
+    echo "[" . date('Y-m-d H:i:s') . "] Error en reajustes de condominios: " . $e->getMessage() . "\n";
+}
+
 // ── Ejecutar ──────────────────────────────────────────────────────────────────
 try {
     $repository = new AutomatizacionesRepository();

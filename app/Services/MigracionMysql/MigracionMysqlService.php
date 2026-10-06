@@ -5029,7 +5029,11 @@ class MigracionMysqlService
             : "UPDATE inventario_kardex SET cantidad = :cant, fecha_caducidad = :cad, referencia_tipo = COALESCE(:rt, referencia_tipo), referencia_id = COALESCE(:rid, referencia_id), updated_at = now(), updated_by = :u WHERE id = :id");
 
         $sql = "SELECT id_inventario, id_producto, id_bodega, codigo_producto, nombre_producto, cantidad_entrada, cantidad_salida, costo_unitario, precio, operacion, fecha_registro, referencia, lote, fecha_vencimiento
-                  FROM inventarios WHERE ruc_empresa LIKE " . $mysql->quote($base . '%') . $this->clausulaEstabOrigen('ruc_empresa', $base, $mysql) . $this->clausulaFecha('fecha_registro', $desde, $hasta, $mysql) . " ORDER BY fecha_registro, id_inventario";
+                  FROM inventarios WHERE ruc_empresa LIKE " . $mysql->quote($base . '%') . $this->clausulaEstabOrigen('ruc_empresa', $base, $mysql)
+               // "Desde" incluye también lo REGISTRADO desde ese día con fecha anterior (fecha_agregado): una
+               // compra del 16-07 ingresada el 21-07 quedaba fuera de una re-sincronización "Desde 20-07" y el
+               // saldo migrado quedaba corto (caso BAU-3084C de 1002282687001). Ver clausulaFechaConRegistro.
+               . $this->clausulaFechaConRegistro('fecha_registro', 'fecha_agregado', $desde, $hasta, $mysql) . " ORDER BY fecha_registro, id_inventario";
         if ($limite > 0) { $sql .= " LIMIT " . (int) $limite; }
         $stmt = $mysql->query($sql);
 

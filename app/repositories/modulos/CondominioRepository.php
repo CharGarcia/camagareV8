@@ -479,6 +479,141 @@ class CondominioRepository extends BaseRepository
         return $rows;
     }
 
+    // ── Reajuste masivo de cuotas de las suscripciones ───────────────────────
+
+    /** Conceptos (productos) presentes en las suscripciones activas de la empresa. */
+    public function getProductosEnSuscripciones(int $idEmpresa): array
+    {
+        $st = $this->db->prepare(
+            "SELECT p.id, p.nombre, p.codigo, COUNT(DISTINCT s.id) AS suscripciones
+               FROM suscripciones_detalle d
+               JOIN suscripciones s ON s.id = d.id_suscripcion AND s.eliminado = false AND s.estado IN ('activo', 'pausado')
+               JOIN productos p ON p.id = d.id_producto
+              WHERE d.id_empresa = :e AND d.eliminado = false
+              GROUP BY p.id, p.nombre, p.codigo ORDER BY suscripciones DESC, p.nombre"
+        );
+        $st->execute([':e' => $idEmpresa]);
+        return $st->fetchAll(PDO::FETCH_ASSOC);
+    }
+
+    /** Un producto con lo necesario para crear una línea de suscripción (IVA incluido). */
+    public function getProductoLinea(int $idProducto, int $idEmpresa): ?array
+    {
+        $st = $this->db->prepare(
+            "SELECT p.id, p.nombre, p.codigo, p.tarifa_iva AS id_tarifa_iva, COALESCE(ti.porcentaje_iva, 0) AS porcentaje_iva
+               FROM productos p LEFT JOIN tarifa_iva ti ON ti.id = p.tarifa_iva
+              WHERE p.id = :id AND p.id_empresa = :e AND p.eliminado = false"
+        );
+        $st->execute([':id' => $idProducto, ':e' => $idEmpresa]);
+        return $st->fetch(PDO::FETCH_ASSOC) ?: null;
+    }
+
+    /**
+     * Suscripciones activas/pausadas de la empresa con la línea del concepto (si la tienen) y su
+     * inmueble (si está enlazado): la materia prima del reajuste. Sin el SQL de Condominios en
+     * `suscripciones` (id_unidad) solo se devuelven suscripciones sin inmueble.
+     */
+    public function getSuscripcionesParaReajuste(int $idEmpresa, int $idProducto, bool $incluirSinInmueble): array
+    {
+        $conUnidad = $this->columnaExiste('suscripciones', 'id_unidad');
+        $joinU  = $conUnidad ? "LEFT JOIN condominios_unidades u ON u.id = s.id_unidad AND u.eliminado = false" : '';
+        $selU   = $conUnidad
+            ? "u.id AS id_unidad, u.codigo AS unidad_codigo, u.nombre AS unidad_nombre, u.tipo AS unidad_tipo, u.torre_bloque, u.area_m2, u.alicuota_pct, u.metodo_alicuota, u.monto_manual, u.fondo_reserva_valor_propio,"
+            : "NULL::int AS id_unidad, NULL::text AS unidad_codigo, NULL::text AS unidad_nombre, NULL::text AS unidad_tipo, NULL::text AS torre_bloque, NULL::numeric AS area_m2, NULL::numeric AS alicuota_pct, NULL::text AS metodo_alicuota, NULL::numeric AS monto_manual, NULL::numeric AS fondo_reserva_valor_propio,";
+        $filtroU = $incluirSinInmueble || !$conUnidad ? '' : ' AND s.id_unidad IS NOT NULL';
+        $st = $this->db->prepare(
+            "SELECT s.id AS id_suscripcion, s.estado, c.nombre AS cliente, c.identificacion,
+                    {$selU}
+                    d.id AS id_detalle, d.precio_unitario AS actual, d.cantidad, d.descripcion AS linea_descripcion
+               FROM suscripciones s
+               JOIN clientes c ON c.id = s.id_cliente
+               {$joinU}
+               LEFT JOIN LATERAL (SELECT d.id, d.precio_unitario, d.cantidad, d.descripcion FROM suscripciones_detalle d
+                                   WHERE d.id_suscripcion = s.id AND d.eliminado = false AND d.id_producto = :p
+                                   ORDER BY d.orden, d.id LIMIT 1) d ON true
+              WHERE s.id_empresa = :e AND s.eliminado = false AND s.estado IN ('activo', 'pausado'){$filtroU}
+              ORDER BY " . ($conUnidad ? 'u.torre_bloque, u.codigo NULLS LAST, ' : '') . "c.nombre, s.id"
+        );
+        $st->execute([':e' => $idEmpresa, ':p' => $idProducto]);
+        return $st->fetchAll(PDO::FETCH_ASSOC);
+    }
+
+    public function tieneReajustes(): bool
+    {
+        return $this->tablaExiste('condominios_reajustes');
+    }
+
+    public function insertReajuste(int $idEmpresa, array $r, int $idUsuario): int
+    {
+        $st = $this->db->prepare(
+            "INSERT INTO condominios_reajustes
+                    (id_empresa, descripcion, id_producto, forma, parametro, incluir_sin_inmueble, fecha_aplicar, estado, filas, total_filas, suma_actual, suma_nueva, created_by, created_at)
+             VALUES (:e, :d, :p, :f, :par, :inc, :fa, :est, :filas::jsonb, :n, :sa, :sn, :u, CURRENT_TIMESTAMP) RETURNING id"
+        );
+        $st->execute([':e' => $idEmpresa, ':d' => $r['descripcion'], ':p' => $r['id_producto'], ':f' => $r['forma'], ':par' => $r['parametro'],
+                      ':inc' => $r['incluir_sin_inmueble'] ? 'true' : 'false', ':fa' => $r['fecha_aplicar'], ':est' => $r['estado'],
+                      ':filas' => json_encode($r['filas'], JSON_UNESCAPED_UNICODE), ':n' => count($r['filas']), ':sa' => $r['suma_actual'], ':sn' => $r['suma_nueva'], ':u' => $idUsuario]);
+        return (int) $st->fetchColumn();
+    }
+
+    public function marcarReajuste(int $id, string $estado, ?string $resultado, int $idUsuario): void
+    {
+        $this->db->prepare(
+            "UPDATE condominios_reajustes
+                SET estado = :est, resultado = :res, aplicado_at = CASE WHEN :est2 = 'aplicado' THEN CURRENT_TIMESTAMP ELSE aplicado_at END,
+                    aplicado_por = CASE WHEN :est3 = 'aplicado' THEN :u ELSE aplicado_por END, updated_by = :u2, updated_at = CURRENT_TIMESTAMP
+              WHERE id = :id AND eliminado = false"
+        )->execute([':est' => $estado, ':res' => $resultado, ':est2' => $estado, ':est3' => $estado, ':u' => $idUsuario, ':u2' => $idUsuario, ':id' => $id]);
+    }
+
+    public function getReajustes(int $idEmpresa): array
+    {
+        if (!$this->tieneReajustes()) {
+            return [];
+        }
+        $st = $this->db->prepare(
+            "SELECT r.*, p.nombre AS producto_nombre, us.nombre AS usuario_nombre
+               FROM condominios_reajustes r LEFT JOIN productos p ON p.id = r.id_producto LEFT JOIN usuarios us ON us.id = r.created_by
+              WHERE r.id_empresa = :e AND r.eliminado = false
+              ORDER BY (r.estado = 'pendiente') DESC, r.fecha_aplicar DESC, r.id DESC LIMIT 100"
+        );
+        $st->execute([':e' => $idEmpresa]);
+        $rows = $st->fetchAll(PDO::FETCH_ASSOC);
+        foreach ($rows as &$r) {
+            $r['filas'] = json_decode((string) $r['filas'], true) ?: [];
+        }
+        unset($r);
+        return $rows;
+    }
+
+    public function getReajuste(int $id, int $idEmpresa): ?array
+    {
+        $st = $this->db->prepare("SELECT * FROM condominios_reajustes WHERE id = :id AND id_empresa = :e AND eliminado = false");
+        $st->execute([':id' => $id, ':e' => $idEmpresa]);
+        $r = $st->fetch(PDO::FETCH_ASSOC);
+        if ($r) {
+            $r['filas'] = json_decode((string) $r['filas'], true) ?: [];
+        }
+        return $r ?: null;
+    }
+
+    /** Reajustes programados cuya fecha ya llegó, de TODAS las empresas (cron fijo diario). */
+    public function getReajustesVencidos(): array
+    {
+        if (!$this->tieneReajustes()) {
+            return [];
+        }
+        $st = $this->db->query(
+            "SELECT * FROM condominios_reajustes WHERE eliminado = false AND estado = 'pendiente' AND fecha_aplicar <= CURRENT_DATE ORDER BY fecha_aplicar, id"
+        );
+        $rows = $st->fetchAll(PDO::FETCH_ASSOC);
+        foreach ($rows as &$r) {
+            $r['filas'] = json_decode((string) $r['filas'], true) ?: [];
+        }
+        unset($r);
+        return $rows;
+    }
+
     // ── Restricción de áreas comunes ─────────────────────────────────────────
 
     public function setRestriccion(int $idUnidad, int $idEmpresa, bool $restringida, ?string $desde, ?string $motivo, int $idUsuario, bool $automatico = false): void

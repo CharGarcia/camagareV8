@@ -538,6 +538,230 @@ class CondominioService
         return ['filas' => $filas, 'totales' => $tot];
     }
 
+    // ── Reajuste masivo de cuotas de las suscripciones ───────────────────────
+
+    public const REAJUSTE_FORMAS = ['fijo', 'porcentaje', 'inmueble'];
+
+    public function opcionesReajuste(int $idEmpresa): array
+    {
+        return [
+            'productos' => $this->repo->getProductosEnSuscripciones($idEmpresa),
+            'reajustes' => $this->repo->getReajustes($idEmpresa),
+            'instalado' => $this->repo->tieneReajustes(),
+        ];
+    }
+
+    /** Normaliza lo que llega del formulario de reajuste. */
+    private function normalizarReajuste(array $d, int $idEmpresa): array
+    {
+        $idProducto = (int) ($d['id_producto'] ?? 0);
+        if ($idProducto <= 0 || !$this->repo->getProductoLinea($idProducto, $idEmpresa)) {
+            throw new \InvalidArgumentException('Elija el concepto (producto) que se va a reajustar.|#reaj_id_producto');
+        }
+        $forma = (string) ($d['forma'] ?? 'fijo');
+        if (!in_array($forma, self::REAJUSTE_FORMAS, true)) {
+            throw new \InvalidArgumentException('La forma de reajuste no es válida.|#reaj_forma');
+        }
+        $par = round((float) str_replace(',', '.', (string) ($d['parametro'] ?? 0)), 4);
+        if ($forma === 'fijo' && $par < 0) {
+            throw new \InvalidArgumentException('El monto fijo no puede ser negativo.|#reaj_parametro');
+        }
+        if ($forma === 'porcentaje' && ($par <= -100 || $par == 0)) {
+            throw new \InvalidArgumentException('Indique el % de aumento (o de rebaja, negativo, mayor que −100).|#reaj_parametro');
+        }
+        $fecha = CondominioRules::fecha($d['fecha_aplicar'] ?? date('Y-m-d'), 'aplicación', '#reaj_fecha_aplicar');
+        if ($fecha < date('Y-m-d')) {
+            throw new \InvalidArgumentException('La fecha de aplicación no puede ser pasada.|#reaj_fecha_aplicar');
+        }
+        $desc = trim((string) ($d['descripcion'] ?? ''));
+        if ($desc === '') {
+            throw new \InvalidArgumentException('Describa el reajuste (p. ej. «Reajuste 2027, acta N.º 5»).|#reaj_descripcion');
+        }
+        $excluir = array_map('intval', is_array($d['excluir'] ?? null) ? $d['excluir'] : array_filter(explode(',', (string) ($d['excluir'] ?? ''))));
+        return ['id_producto' => $idProducto, 'forma' => $forma, 'parametro' => $par, 'fecha_aplicar' => $fecha, 'descripcion' => mb_substr($desc, 0, 200),
+                'incluir_sin_inmueble' => in_array($d['incluir_sin_inmueble'] ?? '', ['1', 'true', 'on'], true), 'excluir' => $excluir];
+    }
+
+    /**
+     * Vista previa del reajuste: una fila por suscripción con valor actual → nuevo. Nada se graba.
+     * - fijo: todas quedan en el monto (si no tienen la línea, se agregará).
+     * - porcentaje: actual × (1 + %/100); sin línea → se omite (no hay base).
+     * - inmueble: cuota calculada con el valor que rige en la fecha de aplicación; sin inmueble → se omite.
+     */
+    public function previsualizarReajuste(array $d, int $idEmpresa): array
+    {
+        $cfg = $this->exigirConfig($idEmpresa);
+        $r = $this->normalizarReajuste($d, $idEmpresa);
+        $susc = $this->repo->getSuscripcionesParaReajuste($idEmpresa, $r['id_producto'], $r['incluir_sin_inmueble']);
+        $cuotas = [];
+        if ($r['forma'] === 'inmueble') {
+            $valor = $this->repo->getValorVigente($idEmpresa, $r['fecha_aplicar']);
+            foreach ($this->calcularCuotas($this->repo->getUnidadesParaCuota($idEmpresa), $cfg, $valor)['filas'] as $f) {
+                $cuotas[(int) $f['id']] = $f['cuota'];
+            }
+        }
+        $filas = [];
+        $omitidas = 0;
+        $sumA = 0.0;
+        $sumN = 0.0;
+        foreach ($susc as $s) {
+            $actual = $s['id_detalle'] ? round((float) $s['actual'], 2) : null;
+            $nuevo = null;
+            $motivo = null;
+            if ($r['forma'] === 'fijo') {
+                $nuevo = round($r['parametro'], 2);
+            } elseif ($r['forma'] === 'porcentaje') {
+                if ($actual === null) {
+                    $motivo = 'Sin línea del concepto: no hay base para el %';
+                } else {
+                    $nuevo = round($actual * (1 + $r['parametro'] / 100), 2);
+                }
+            } else {
+                if (empty($s['id_unidad'])) {
+                    $motivo = 'Sin inmueble enlazado';
+                } elseif (!isset($cuotas[(int) $s['id_unidad']]) || $cuotas[(int) $s['id_unidad']] === null) {
+                    $motivo = 'El inmueble no tiene cuota con el valor vigente';
+                } else {
+                    $nuevo = $cuotas[(int) $s['id_unidad']];
+                }
+            }
+            $excluida = in_array((int) $s['id_suscripcion'], $r['excluir'], true);
+            if ($nuevo === null) {
+                $omitidas++;
+            }
+            $filas[] = [
+                'id_suscripcion' => (int) $s['id_suscripcion'], 'id_detalle' => $s['id_detalle'] ? (int) $s['id_detalle'] : null,
+                'id_unidad' => $s['id_unidad'] ? (int) $s['id_unidad'] : null, 'cliente' => $s['cliente'], 'identificacion' => $s['identificacion'],
+                'inmueble' => $s['unidad_codigo'] ? trim($s['unidad_codigo'] . ' · ' . $s['unidad_nombre']) : null,
+                'actual' => $actual, 'nuevo' => $nuevo, 'cambia' => $nuevo !== null && $nuevo !== $actual, 'motivo' => $motivo, 'excluida' => $excluida,
+            ];
+            if ($nuevo !== null && !$excluida) {
+                $sumA += (float) $actual;
+                $sumN += $nuevo;
+            }
+        }
+        $aplicables = array_filter($filas, fn($f) => $f['nuevo'] !== null && !$f['excluida']);
+        return [
+            'reajuste' => $r,
+            'filas'    => $filas,
+            'totales'  => ['total' => count($filas), 'aplicables' => count($aplicables), 'omitidas' => $omitidas, 'excluidas' => count($r['excluir']),
+                           'suma_actual' => round($sumA, 2), 'suma_nueva' => round($sumN, 2), 'diferencia' => round($sumN - $sumA, 2),
+                           'programado' => $r['fecha_aplicar'] > date('Y-m-d')],
+        ];
+    }
+
+    /**
+     * Aplica (hoy) o programa (fecha futura) el reajuste. Siempre recalcula en el servidor: lo que
+     * se graba es lo que la vista previa mostró, menos las filas que el usuario destildó.
+     */
+    public function aplicarReajuste(array $d, int $idEmpresa, int $idUsuario): array
+    {
+        if (!$this->repo->tieneReajustes()) {
+            throw new \DomainException('Falta aplicar database/migrations/20261006_condominios_reajustes.sql.');
+        }
+        $prev = $this->previsualizarReajuste($d, $idEmpresa);
+        $filas = array_values(array_filter($prev['filas'], fn($f) => $f['nuevo'] !== null && !$f['excluida']));
+        if (!$filas) {
+            throw new \DomainException('No hay suscripciones a las que aplicar el reajuste.');
+        }
+        $r = $prev['reajuste'] + ['filas' => $filas, 'suma_actual' => $prev['totales']['suma_actual'], 'suma_nueva' => $prev['totales']['suma_nueva']];
+        $programado = $prev['totales']['programado'];
+        $r['estado'] = 'pendiente';
+
+        $this->repo->beginTransaction();
+        try {
+            $id = $this->repo->insertReajuste($idEmpresa, $r, $idUsuario);
+            $this->log->registrar($idUsuario, $idEmpresa, $programado ? 'Programar reajuste de cuotas' : 'Aplicar reajuste de cuotas', 'condominios_reajustes', $id, null,
+                ['descripcion' => $r['descripcion'], 'forma' => $r['forma'], 'parametro' => $r['parametro'], 'fecha_aplicar' => $r['fecha_aplicar'], 'suscripciones' => count($filas), 'suma_actual' => $r['suma_actual'], 'suma_nueva' => $r['suma_nueva']]);
+            $resultado = null;
+            if (!$programado) {
+                $resultado = $this->ejecutarReajuste($idEmpresa, $id, $filas, $r['id_producto'], $idUsuario);
+            }
+            $this->repo->commit();
+        } catch (\Throwable $e) {
+            $this->repo->rollBack();
+            throw $e;
+        }
+        return ['id' => $id, 'programado' => $programado, 'suscripciones' => count($filas), 'resultado' => $resultado];
+    }
+
+    /**
+     * Escribe el valor nuevo en cada suscripción (línea existente → precio; sin línea → se agrega
+     * con el producto, IVA del producto y cantidad 1). Deja el reajuste en 'aplicado'. Debe
+     * llamarse dentro de una transacción.
+     */
+    private function ejecutarReajuste(int $idEmpresa, int $idReajuste, array $filas, int $idProducto, int $idUsuario): string
+    {
+        $suscRepo = new \App\repositories\modulos\SuscripcionesRepository();
+        $prod = $this->repo->getProductoLinea($idProducto, $idEmpresa);
+        if (!$prod) {
+            throw new \DomainException('El producto del reajuste ya no existe.');
+        }
+        $actualizadas = 0;
+        $agregadas = 0;
+        foreach ($filas as $f) {
+            $nuevo = round((float) $f['nuevo'], 2);
+            if (!empty($f['id_detalle'])) {
+                $suscRepo->updatePrecioDetalle((int) $f['id_detalle'], $idEmpresa, $nuevo, $idUsuario);
+                $actualizadas++;
+            } else {
+                $suscRepo->insertDetalle([
+                    'id_suscripcion' => (int) $f['id_suscripcion'], 'id_empresa' => $idEmpresa, 'id_producto' => $idProducto,
+                    'descripcion' => $prod['nombre'], 'cantidad' => 1, 'precio_unitario' => $nuevo,
+                    'porcentaje_iva' => (float) $prod['porcentaje_iva'], 'id_tarifa_iva' => $prod['id_tarifa_iva'], 'orden' => 99, 'id_usuario' => $idUsuario,
+                ]);
+                $agregadas++;
+            }
+            $this->log->registrar($idUsuario, $idEmpresa, 'Reajuste de cuota (condominio)', 'suscripciones', (int) $f['id_suscripcion'],
+                ['precio_unitario' => $f['actual']], ['precio_unitario' => $nuevo, 'id_reajuste' => $idReajuste]);
+        }
+        $res = "{$actualizadas} línea(s) actualizada(s), {$agregadas} agregada(s).";
+        $this->repo->marcarReajuste($idReajuste, 'aplicado', $res, $idUsuario);
+        return $res;
+    }
+
+    public function cancelarReajuste(int $id, int $idEmpresa, int $idUsuario): void
+    {
+        $r = $this->repo->getReajuste($id, $idEmpresa);
+        if (!$r) {
+            throw new \DomainException('El reajuste no existe.');
+        }
+        if ($r['estado'] !== 'pendiente') {
+            throw new \DomainException('Solo se cancelan reajustes programados que aún no se aplicaron.');
+        }
+        $this->repo->marcarReajuste($id, 'cancelado', 'Cancelado por el usuario.', $idUsuario);
+        $this->log->registrar($idUsuario, $idEmpresa, 'Cancelar reajuste programado', 'condominios_reajustes', $id, ['estado' => 'pendiente'], ['estado' => 'cancelado']);
+    }
+
+    /**
+     * Cron fijo diario: aplica los reajustes programados cuya fecha llegó, de todas las empresas.
+     * Cada uno en su propia transacción; un error no detiene a los demás (queda en 'error').
+     * @return array<int,string> id_reajuste => mensaje
+     */
+    public function aplicarReajustesProgramados(): array
+    {
+        $out = [];
+        foreach ($this->repo->getReajustesVencidos() as $r) {
+            $idEmpresa = (int) $r['id_empresa'];
+            $this->repo->beginTransaction();
+            try {
+                $res = $this->ejecutarReajuste($idEmpresa, (int) $r['id'], $r['filas'], (int) $r['id_producto'], (int) ($r['created_by'] ?? 0));
+                $this->log->registrar((int) ($r['created_by'] ?? 0), $idEmpresa, 'Aplicar reajuste programado (automático)', 'condominios_reajustes', (int) $r['id'], null, ['resultado' => $res]);
+                $this->repo->commit();
+                $out[(int) $r['id']] = "Empresa {$idEmpresa}: {$r['descripcion']} → {$res}";
+            } catch (\Throwable $e) {
+                $this->repo->rollBack();
+                try {
+                    $this->repo->marcarReajuste((int) $r['id'], 'error', $e->getMessage(), (int) ($r['created_by'] ?? 0));
+                } catch (\Throwable $e2) {
+                    // sin más remedio: queda pendiente y se reintenta mañana
+                }
+                $out[(int) $r['id']] = "Empresa {$idEmpresa}: ERROR {$e->getMessage()}";
+            }
+        }
+        return $out;
+    }
+
     // ── Valores que rigen ────────────────────────────────────────────────────
 
     public function listarValores(int $idEmpresa): array

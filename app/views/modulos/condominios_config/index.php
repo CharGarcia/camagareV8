@@ -6,6 +6,7 @@ $pestanasCfg = [
     'pane-cfg-general'    => 'Condominio',
     'pane-cfg-alicuota'   => 'Alícuota y fondo',
     'pane-cfg-mora'       => 'Mora y multas',
+    'pane-cfg-reajuste'   => 'Reajuste de cuotas',
     'pane-cfg-descuentos' => 'Descuentos',
 ];
 $puedeGuardar = !empty($perm['actualizar']);
@@ -57,6 +58,7 @@ $prodChip = function (string $id, string $label, string $campo, string $ayuda) u
             <li class="nav-item"><a class="nav-link active py-2 small" id="cfg-tab-general-btn" data-bs-toggle="tab" href="#pane-cfg-general" role="tab"><i class="bi bi-buildings me-1"></i>Condominio</a></li>
             <li class="nav-item"><a class="nav-link py-2 small" data-bs-toggle="tab" href="#pane-cfg-alicuota" role="tab"><i class="bi bi-calculator me-1"></i>Alícuota y fondo</a></li>
             <li class="nav-item"><a class="nav-link py-2 small" data-bs-toggle="tab" href="#pane-cfg-mora" role="tab"><i class="bi bi-hourglass-split me-1"></i>Mora y multas</a></li>
+            <li class="nav-item"><a class="nav-link py-2 small" data-bs-toggle="tab" href="#pane-cfg-reajuste" role="tab"><i class="bi bi-arrow-repeat me-1"></i>Reajuste de cuotas</a></li>
             <li class="nav-item"><a class="nav-link py-2 small" data-bs-toggle="tab" href="#pane-cfg-descuentos" role="tab"><i class="bi bi-percent me-1"></i>Descuentos</a></li>
         </ul>
         <div class="flex-shrink-0">
@@ -281,6 +283,72 @@ $prodChip = function (string $id, string $label, string $campo, string $ayuda) u
                 <table class="table table-sm table-hover mb-0 small">
                     <thead class="table-light"><tr><th class="ps-2">Multa</th><th>Descripción</th><th class="text-end">Valor</th><th>Producto</th><th>Estado</th><th class="pe-2"></th></tr></thead>
                     <tbody id="multas-body"><tr><td colspan="6" class="text-center text-muted py-3">—</td></tr></tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- ══ Reajuste de cuotas (masivo, con programación por fecha) ══ -->
+        <div class="tab-pane fade" id="pane-cfg-reajuste" role="tabpanel">
+            <p class="small text-muted mb-2"><i class="bi bi-info-circle me-1"></i>Cambia el valor de un concepto en muchas suscripciones a la vez (p. ej. la alícuota de 500 condóminos para el próximo año). Nada se graba hasta pulsar <b>Aplicar</b>; con una fecha futura queda <b>programado</b> y se aplica solo ese día.</p>
+            <div class="border rounded-3 p-2 bg-light mb-2">
+                <div class="row g-2">
+                    <div class="col-md-3">
+                        <label for="reaj_id_producto">Concepto *</label>
+                        <select class="form-select form-select-sm" id="reaj_id_producto"><option value="">— Cargando… —</option></select>
+                        <div class="form-text">Productos presentes en las suscripciones.</div>
+                    </div>
+                    <div class="col-md-2">
+                        <label for="reaj_forma">Forma *</label>
+                        <select class="form-select form-select-sm" id="reaj_forma" onchange="CONDCFG.reajusteForma()">
+                            <option value="fijo">Monto fijo para todas</option>
+                            <option value="porcentaje">Aumento % sobre el actual</option>
+                            <option value="inmueble">Según el inmueble (valor que rige)</option>
+                        </select>
+                    </div>
+                    <div class="col-md-2">
+                        <label for="reaj_parametro" id="reaj_parametro_lbl">Monto *</label>
+                        <input type="number" class="form-control form-control-sm text-end" id="reaj_parametro" step="0.01" placeholder="0.00">
+                    </div>
+                    <div class="col-md-2">
+                        <label for="reaj_fecha_aplicar">Aplicar desde *</label>
+                        <input type="date" class="form-control form-control-sm" id="reaj_fecha_aplicar" value="<?= date('Y-m-d') ?>">
+                        <div class="form-text">Hoy = en el acto; futura = programado.</div>
+                    </div>
+                    <div class="col-md-3">
+                        <label for="reaj_descripcion">Descripción / acta *</label>
+                        <input type="text" class="form-control form-control-sm" id="reaj_descripcion" maxlength="200" placeholder="Reajuste 2027, acta N.º 5">
+                    </div>
+                    <div class="col-md-9 d-flex align-items-center">
+                        <div class="form-check form-switch">
+                            <input class="form-check-input" type="checkbox" id="reaj_incluir_sin_inmueble">
+                            <label class="form-check-label" for="reaj_incluir_sin_inmueble">Incluir también suscripciones sin inmueble enlazado</label>
+                        </div>
+                    </div>
+                    <div class="col-md-3 d-flex align-items-end justify-content-end">
+                        <button type="button" class="btn btn-outline-primary btn-sm" onclick="CONDCFG.reajustePreview()"><i class="bi bi-eye me-1"></i>Vista previa</button>
+                    </div>
+                </div>
+            </div>
+            <div id="reaj-preview" class="d-none">
+                <div class="row g-2 mb-2" id="reaj-kpis"></div>
+                <div class="border rounded-3 bg-white" style="max-height: 40vh; overflow: auto;">
+                    <table class="table table-sm table-hover mb-0 small">
+                        <thead class="table-light"><tr><th class="ps-2" style="width:28px"><input type="checkbox" class="form-check-input" id="reaj-todas" checked onchange="CONDCFG.reajusteTodas(this.checked)"></th><th>Cliente</th><th>Inmueble</th><th class="text-end">Actual</th><th class="text-end">Nuevo</th><th class="pe-2">Nota</th></tr></thead>
+                        <tbody id="reaj-body"></tbody>
+                    </table>
+                </div>
+                <div class="d-flex justify-content-end mt-2">
+                    <?php if ($puedeGuardar): ?>
+                        <button type="button" class="btn btn-primary btn-sm px-3" id="reaj-btn-aplicar" onclick="CONDCFG.reajusteAplicar()"><i class="bi bi-check2-circle me-1"></i>Aplicar</button>
+                    <?php endif; ?>
+                </div>
+            </div>
+            <hr class="my-3">
+            <h6 class="fw-bold small mb-2"><i class="bi bi-clock-history me-1 text-primary"></i>Reajustes realizados y programados</h6>
+            <div class="border rounded-3 bg-white">
+                <table class="table table-sm table-hover mb-0 small">
+                    <thead class="table-light"><tr><th class="ps-2">Aplicar desde</th><th>Descripción</th><th>Concepto</th><th>Forma</th><th class="text-end">Suscr.</th><th class="text-end">Σ actual</th><th class="text-end">Σ nuevo</th><th>Estado</th><th>Registró</th><th class="pe-2"></th></tr></thead>
+                    <tbody id="reaj-hist-body"><tr><td colspan="10" class="text-center text-muted py-3">—</td></tr></tbody>
                 </table>
             </div>
         </div>

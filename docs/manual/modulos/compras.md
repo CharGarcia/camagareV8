@@ -6,7 +6,7 @@ ruta_modulo: modulos/compras
 tipo: modulo
 visibilidad: todos
 etiquetas: compras, compra, factura de compra, buscar compra, buscador, aparecen compras que no busque, resultados que no corresponden, la busqueda trae otras compras, buscar por numero de autorizacion, filtros, filtrar compras, buscar por producto comprado, filtro de fechas, saldo pendiente, estado de pago, chips, ordenar por dos columnas, ordenar por proveedor y fecha, asiento contable, editar asiento, pestaña asiento, proveedor, xml, sri, entrada de mercaderia, vincular producto, retencion, orden de compra, vincular orden, pedido a proveedor, comparar pedido vs facturado, entrega parcial, recibido parcial, cerrar orden, sustento tributario, codigo de sustento, autorizacion, fecha de caducidad, ats, persona natural, obligada a llevar contabilidad, tipo de contribuyente, registro manual, compra fisica, pagar la compra, pestaña pagos, saldo pendiente, valores de terceros, otros conceptos, valores adicionales, bomberos, tasa de basura, recoleccion de basura, planilla de luz, planilla de agua, servicios basicos, informacion adicional, info adicional, nombre muy largo, limite de caracteres, value too long, no se pudo guardar la compra, imprimir, impresora, retencion antes de la factura, enlazar retencion
-version: 2.25
+version: 2.26
 orden: 20
 estado: activo
 ---
@@ -593,6 +593,11 @@ aprobaciones pasa, así que no se paga dos veces.
 
 ## Historial de cambios
 
+- **2.26** — El asiento contable de la factura de compra ya incluye el **ICE** (al
+  Debe, cuenta *ice factura compra* de Configuración Contable → Adquisiciones de
+  Compras). Antes una factura con ICE (bebidas, por ejemplo) no se podía
+  contabilizar: descuadraba por el valor del ICE y el aviso pedía configurar
+  cuentas que ya estaban. Si esa cuenta no está asignada, el aviso ahora la nombra.
 - **2.25** — Notas de débito del SRI cuyo impuesto viene con base 0,00 aunque el
   total sin impuestos sea mayor: el sistema registra como base ese total (si es el
   único impuesto de IVA y cuadra) y lo anota en las Observaciones de la compra. Antes

@@ -6,7 +6,7 @@ ruta_modulo: modulos/asientos_contables
 tipo: modulo
 visibilidad: todos
 etiquetas: asientos, asiento contable, diario, debe, haber, partida doble, cuadrado, comprobante, contabilidad, imprimir, pdf, excel, documento origen, cuadre con el documento, total de la factura, cuenta por cobrar, cartera, editar asiento desde el documento, pestaña asiento contable, editado a mano, restaurar asiento automático, permisos de contabilidad, documentos migrados, migración, sistema anterior, buscar asiento, buscador, filtros, filtrar asientos, buscar por cuenta, buscar por referencia, libro diario, chips, asiento descuadrado, búsqueda lenta, se queda buscando, filtrar por origen, origen del asiento, módulo de origen, vista previa, costo de ventas, asiento sin costo, duplicar asiento, copiar asiento, clonar asiento, repetir asiento
-version: 1.35
+version: 1.36
 orden: 20
 estado: activo
 ---
@@ -271,6 +271,17 @@ cuenta que falta se asigna en su fila de *Reglas por Proveedores* o *Reglas por
 Clientes* (o en la General, que la complementa). Cuando el motivo no permite saber
 qué cuenta exacta falta, el detalle muestra solo los documentos y de quién son.
 
+Hay dos casos que **no son de configuración** y el aviso los distingue, sin
+enlace *Configurar*:
+
+- **«… no cuadran aunque las cuentas estén configuradas»**: el importe total del
+  documento no es subtotal + IVA + ICE (un impuesto que el asiento no contempla,
+  o un comprobante con totales inconsistentes por más del tope de redondeo).
+  Abra el documento y vaya a la pestaña **Asiento contable**: ahí se ve el
+  mensaje exacto con el Debe, el Haber y la diferencia.
+- **«… no tienen líneas con valor»**: el documento no tiene detalle o lo tiene en
+  cero, así que no hay nada que contabilizar.
+
 Otros ejemplos de líneas:
 
 - Falta configurar la Cuenta por Pagar en Adquisiciones de Compras.
@@ -367,9 +378,11 @@ Un descuadre mayor que un redondeo sí detiene el proceso: eso indica un error
 real, casi siempre una cuenta sin asignar o un documento cuyos totales no
 coinciden con sus líneas.
 
-**Cuánto se tolera.** Hasta **3 centavos** en todos los documentos. En **facturas
-de compra y liquidaciones de compra** el margen crece con el tamaño del documento:
-**1 centavo por cada línea con IVA**, con un mínimo de 3. Una factura de proveedor
+**Cuánto se tolera.** Hasta **5 centavos** en todos los documentos (hasta octubre
+de 2026 eran 3; una factura de banco autorizada por el SRI con el total 4 centavos
+por debajo de subtotal + IVA no se podía contabilizar). En **facturas de compra y
+liquidaciones de compra** el margen crece con el tamaño del documento:
+**1 centavo por cada línea con IVA**, con un mínimo de 5. Una factura de proveedor
 de 20 líneas tolera hasta 20 centavos, porque el IVA sumado línea a línea puede
 alejarse legítimamente del total de cabecera cuando el emisor redondea distinto.
 El ajuste queda visible como una línea más del asiento, contra la cuenta de
@@ -503,6 +516,15 @@ tienen un documento individual con tercero que mostrar.
 
 ## Historial de cambios
 
+- **1.36** — El asiento de **facturas de compra** ya contabiliza el **ICE** (al
+  Debe, con la cuenta *ice factura compra* de Adquisiciones de Compras, que existía
+  en Configuración Contable pero no se usaba); antes una factura con ICE
+  descuadraba por ese valor. El tope de redondeo sube de 3 a 5 centavos. Y el
+  aviso de asientos pendientes ya no reporta como «Falta configurar cuentas … en
+  proveedores con cuentas propias» un asiento que **no cuadra** por el importe
+  del documento ni un documento **sin líneas con valor**: dice lo que es y remite
+  a la pestaña Asiento contable del documento. Ver *Qué dice el aviso cuando
+  quedan asientos sin generar*.
 - **1.35** — El detalle de cada línea tiene su propia columna **Detalle** en el
   modal del asiento (editable), en el PDF y en el Excel. Antes solo se veía
   *Documento/Ref*, así que el detalle por línea de los asientos migrados y de

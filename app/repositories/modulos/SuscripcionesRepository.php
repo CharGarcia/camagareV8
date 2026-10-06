@@ -1157,6 +1157,16 @@ class SuscripcionesRepository extends BaseRepository
         return $st->fetchAll(PDO::FETCH_ASSOC);
     }
 
+    /** Cambia el precio de una línea del detalle (reajuste masivo de cuotas de Condominios). */
+    public function updatePrecioDetalle(int $idDetalle, int $idEmpresa, float $precio, int $idUsuario): bool
+    {
+        $st = $this->db->prepare(
+            "UPDATE suscripciones_detalle SET precio_unitario = :p, updated_by = :u, updated_at = CURRENT_TIMESTAMP
+              WHERE id = :id AND id_empresa = :e AND eliminado = false"
+        );
+        return $st->execute([':p' => $precio, ':u' => $idUsuario, ':id' => $idDetalle, ':e' => $idEmpresa]);
+    }
+
     public function insertDetalle(array $data): int
     {
         $sql = "INSERT INTO suscripciones_detalle

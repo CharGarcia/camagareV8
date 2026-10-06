@@ -162,6 +162,57 @@ class CondominiosConfigController extends BaseModuloController
         }
     }
 
+    // ── Reajuste masivo de cuotas ────────────────────────────────────────────
+
+    public function reajusteOpcionesAjax(): void
+    {
+        $this->requireLeer();
+        [$idEmpresa] = $this->sesion();
+        try {
+            $this->json(['ok' => true] + $this->service->opcionesReajuste($idEmpresa));
+        } catch (\Throwable $e) {
+            $this->error($e, __FUNCTION__);
+        }
+    }
+
+    public function reajustePreviewAjax(): void
+    {
+        $this->requireLeer();
+        [$idEmpresa] = $this->sesion();
+        try {
+            $this->json(['ok' => true] + $this->service->previsualizarReajuste($_POST, $idEmpresa));
+        } catch (\Throwable $e) {
+            $this->error($e, __FUNCTION__);
+        }
+    }
+
+    public function reajusteAplicarAjax(): void
+    {
+        $this->requireActualizar();
+        [$idEmpresa, $idUsuario] = $this->sesion();
+        try {
+            $res = $this->service->aplicarReajuste($_POST, $idEmpresa, $idUsuario);
+            $msg = $res['programado']
+                ? "Reajuste programado para {$res['suscripciones']} suscripción(es). Se aplicará automáticamente ese día."
+                : "Reajuste aplicado a {$res['suscripciones']} suscripción(es): {$res['resultado']}";
+            $this->json(['ok' => true, 'mensaje' => $msg, 'reajustes' => $this->service->repo()->getReajustes($idEmpresa)] + $res);
+        } catch (\Throwable $e) {
+            $this->error($e, __FUNCTION__);
+        }
+    }
+
+    public function reajusteCancelarAjax(): void
+    {
+        $this->requireActualizar();
+        [$idEmpresa, $idUsuario] = $this->sesion();
+        try {
+            $this->service->cancelarReajuste((int) ($_POST['id'] ?? 0), $idEmpresa, $idUsuario);
+            $this->json(['ok' => true, 'mensaje' => 'Reajuste cancelado.', 'reajustes' => $this->service->repo()->getReajustes($idEmpresa)]);
+        } catch (\Throwable $e) {
+            $this->error($e, __FUNCTION__);
+        }
+    }
+
     /** Servicios activos de la empresa para los selectores de concepto (buscador tipo chip). */
     public function buscarServiciosAjax(): void
     {

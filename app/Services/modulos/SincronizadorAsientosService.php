@@ -1839,6 +1839,25 @@ class SincronizadorAsientosService
             $this->agregarAccion('', '', "Algunos documentos de {$nombreModulo} son de un período contable cerrado: reábralo si deben contabilizarse");
             return;
         }
+        // Descuadre por encima del tope de redondeo con TODAS las cuentas asignadas
+        // (AsientoBuilderService::aplicarAjusteRedondeo, rama sin $reglasSinCuenta): el importe
+        // total del documento no es subtotal + IVA (ICE u otro impuesto que el asiento no
+        // contempla, totales inconsistentes del comprobante). No es configuración: mandar al
+        // usuario a "configurar cuentas en proveedores con cuentas propias" (que ya están) lo
+        // hacía perseguir un problema inexistente. Se dice lo que es, sin enlace.
+        if (str_contains($m, 'supera el máximo de ajuste')) {
+            $this->agregarAccion('', '', "Algunos asientos de {$nombreModulo} no cuadran aunque las cuentas estén configuradas: "
+                . 'el importe total no es subtotal + IVA (ICE u otro impuesto, o totales del comprobante inconsistentes). '
+                . 'Abra el documento → pestaña Asiento contable para ver el detalle exacto');
+            return;
+        }
+        // Asiento sin ninguna línea con valor con las cuentas ya asignadas (ensamblarAdquisicion):
+        // el documento no tiene detalle, o lo tiene en cero. Tampoco es configuración.
+        if (str_contains($m, 'el detalle está vacío o en cero')) {
+            $this->agregarAccion('', '', "Algunos documentos de {$nombreModulo} no tienen líneas con valor (detalle vacío o en cero): "
+                . 'revise el documento; si está bien, comuníquese con soporte');
+            return;
+        }
         // "El asiento no está cuadrado" / "no cuadra" también es configuración: el builder omite la
         // línea cuya cuenta no encontró y el asiento queda cojo. Cae a la acción de la sección.
         if (!str_contains($m, 'cuenta') && !str_contains($m, 'configur') && !str_contains($m, 'cuadr')) {

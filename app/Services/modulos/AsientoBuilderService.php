@@ -20,8 +20,11 @@ class AsientoBuilderService
      * Diferencia máxima (en valor absoluto) que se acepta como redondeo y se lleva a la
      * cuenta de Ajuste por redondeo. Un descuadre mayor se considera error real de
      * configuración (cuenta/impuesto faltante) y lanza excepción.
+     * 0.05 desde 06-10-2026 (antes 0.03): una factura de banco de 2 líneas (001-007-009745638)
+     * vino autorizada por el SRI con importe total 0.04 menor que subtotal + IVA; el XML se guarda
+     * tal cual y 4 centavos siguen siendo redondeo, no un error de cuentas.
      */
-    private const TOPE_AJUSTE_REDONDEO = 0.03;
+    private const TOPE_AJUSTE_REDONDEO = 0.05;
 
     /**
      * tipo_documento (egresos_detalle) => código (asientos_tipo, tipo 'nomina') cuyo pasivo
@@ -1643,7 +1646,7 @@ class AsientoBuilderService
      *
      * Salvaguardas:
      *   - |diff| > tope → excepción: descuadre real de configuración, NO se enmascara en la
-     *     cuenta de ajuste. El tope es TOPE_AJUSTE_REDONDEO (0.03) o 1 centavo por línea con IVA
+     *     cuenta de ajuste. El tope es TOPE_AJUSTE_REDONDEO (0.05) o 1 centavo por línea con IVA
      *     del documento ($numLineasIva, hoy solo lo informan compras y liquidaciones de compra),
      *     el que sea mayor.
      *   - Descuadre dentro del tope pero sin cuenta de ajuste configurada → excepción pidiendo
@@ -2804,6 +2807,7 @@ class AsientoBuilderService
                 "SELECT importe_total,
                         total_sin_impuestos,
                         COALESCE(propina, 0)          AS propina,
+                        COALESCE(total_ice, 0)        AS total_ice,
                         COALESCE(tipo_comprobante,'01') AS tipo_comprobante
                  FROM compras_cabecera WHERE id = ?"
             );
@@ -2853,6 +2857,28 @@ class AsientoBuilderService
         $diferencia = round($subtotal - ($subInventario + $subGasto), 2);
         if (abs($diferencia) >= 0.01) {
             $subGasto = round($subGasto + $diferencia, 2);
+        }
+
+        // ── 2b. ICE (impuesto código 3). El importe total del comprobante lo incluye (y la base del
+        // IVA también), pero total_sin_impuestos no: si el asiento no lo contabiliza, Por Pagar
+        // (importe total) queda mayor que Gasto + IVA por el ICE y el asiento descuadra (caso real:
+        // factura de cervecería 003-001-000101113, ICE 0.16, reportada como "falta configurar
+        // cuentas en proveedores con cuentas propias"). Va al Debe con la regla ICEFACTURACOMPRA
+        // (ice factura compra), que existía en el catálogo pero no se usaba. Fuente: las líneas de
+        // impuestos; si no traen ICE pero la cabecera sí (XML sin detalle), se usa total_ice.
+        $ice = 0.0;
+        if ($idCompra > 0) {
+            $stIce = $db->prepare(
+                "SELECT COALESCE(SUM(i.valor), 0)
+                 FROM compras_detalle_impuestos i
+                 JOIN compras_detalle d ON i.id_compra_detalle = d.id
+                 WHERE d.id_compra = ? AND i.codigo_impuesto = '3'"
+            );
+            $stIce->execute([$idCompra]);
+            $ice = round((float) $stIce->fetchColumn(), 2);
+            if ($ice <= 0.0 && isset($cab['total_ice'])) {
+                $ice = round((float) $cab['total_ice'], 2);
+            }
         }
 
         // ── 3. IVA crédito tributario por tarifa (cuenta configurada en iva_compras_factura). Cascada
@@ -2927,7 +2953,7 @@ class AsientoBuilderService
             );
         }
 
-        return $this->ensamblarAdquisicion($reglas, $importeTotal, $subInventario, $subGasto, $propina, $ivaRows, $reversa, $gastoLineas, $porPagarLineas, $inventarioLineas, $sinCuentaExtra);
+        return $this->ensamblarAdquisicion($reglas, $importeTotal, $subInventario, $subGasto, $propina, $ivaRows, $reversa, $gastoLineas, $porPagarLineas, $inventarioLineas, $sinCuentaExtra, $ice);
     }
 
     /**
@@ -2949,11 +2975,11 @@ class AsientoBuilderService
         }
 
         // LATERAL por línea, no subconsulta agregada sobre toda la tabla: mismo motivo que en
-        // armarDistribucionVentasFactura().
+        // armarDistribucionVentasFactura(). IVA (2) e ICE (3): lo que se paga por la línea.
         $joinImpuestosPorLinea = "LEFT JOIN LATERAL (
                 SELECT SUM(i.valor) AS total_impuestos
                 FROM {$tablaImpuestos} i
-                WHERE i.{$colImpDetalle} = d.id AND i.codigo_impuesto = '2'
+                WHERE i.{$colImpDetalle} = d.id AND i.codigo_impuesto IN ('2', '3')
             ) imp_pp ON true";
 
         foreach ($reglas as $rr) {
@@ -3006,7 +3032,7 @@ class AsientoBuilderService
      *
      * @param array $ivaRows [['id_cuenta','cuenta_codigo','cuenta_nombre','valor'], ...]
      */
-    private function ensamblarAdquisicion(array $reglas, float $importeTotal, float $subInventario, float $subGasto, float $propina, array $ivaRows, bool $reversa, ?array $gastoLineas = null, ?array $porPagarLineas = null, ?array $inventarioLineas = null, array $sinCuentaExtra = []): array
+    private function ensamblarAdquisicion(array $reglas, float $importeTotal, float $subInventario, float $subGasto, float $propina, array $ivaRows, bool $reversa, ?array $gastoLineas = null, ?array $porPagarLineas = null, ?array $inventarioLineas = null, array $sinCuentaExtra = [], float $ice = 0.0): array
     {
         $detalles = [];
         // Reglas/tarifas activas sin cuenta configurada: se saltan, pero se recuerdan para poder
@@ -3056,6 +3082,14 @@ class AsientoBuilderService
             $esPorPagar   = str_contains($codigo, 'PORPAGAR')   || str_contains($concepto, 'pagar');
             $esInventario = str_contains($codigo, 'INVENTARIO') || str_contains($concepto, 'inventario');
             $esSubtotal   = str_contains($codigo, 'SUBTOTAL')   || str_contains($concepto, 'subtotal');
+            $esIce        = str_starts_with($codigo, 'ICE')     || preg_match('/\bice\b/', $concepto) === 1;
+            // Una regla sin monto en este documento no participa ni cuenta como "sin cuenta":
+            // si no, el mensaje de descuadre pedía configurar «descuentos en compras»,
+            // «propina», «Cuenta para inventario» en una factura que no tiene nada de eso.
+            if ($esIce && $ice <= 0.0) continue;
+            if (str_contains($codigo, 'DESCUENTO') || str_contains($concepto, 'descuento')) continue; // no se usa en v1
+            if ((str_contains($codigo, 'PROPINA') || str_contains($concepto, 'propina')) && $propina <= 0.0) continue;
+            if ($esInventario && $subInventario <= 0.0 && $inventarioLineas === null) continue;
             // Si NO hay cuenta base para este concepto, solo se perdona cuando su reparto por línea
             // ya viene calculado (puede que la cuenta exista solo en Ítem/Categoría/Marca) — mismo
             // criterio que ventas/recibos/NC.
@@ -3113,8 +3147,11 @@ class AsientoBuilderService
                 $push($r, $subGasto, $ladoNatural, $refConcepto);
             } elseif (str_contains($codigo, 'PROPINA') || str_contains($concepto, 'propina')) {
                 $push($r, $propina, $ladoNatural, $refConcepto);
+            } elseif ($esIce) {
+                // ICE pagado en la compra: costo/gasto al Debe (se invierte en notas de crédito).
+                $push($r, $ice, $ladoNatural, ($refConcepto ?: 'ICE'));
             }
-            // DESCUENTO e ICE: el subtotal ya viene neto por línea; se omiten en v1.
+            // DESCUENTO: el subtotal ya viene neto por línea; se omite en v1.
         }
 
         // ── Validación de balance + cuadre por cuenta de Ajuste por redondeo ──
@@ -3131,6 +3168,12 @@ class AsientoBuilderService
                     implode(', ', array_unique(self::sinMarcaLinea($reglasSinCuenta))) .
                     ". Configúrela en Contabilidad → Configuración contable, concepto «compras»."
                 );
+            }
+            // Con reglas y cuentas asignadas pero sin una sola línea con valor, el problema es el
+            // documento (detalle vacío o en cero), no la configuración. El texto es estable (sin
+            // montos) y SincronizadorAsientosService lo reconoce para no mandar a "configurar".
+            if (!empty($reglas)) {
+                throw new \Exception("No se generó ninguna línea del asiento: el documento no tiene líneas con valor (el detalle está vacío o en cero).");
             }
             throw new \Exception("No se ha configurado ninguna cuenta para el asiento de adquisición o los montos son cero.");
         }

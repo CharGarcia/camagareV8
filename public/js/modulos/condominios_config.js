@@ -225,7 +225,97 @@ window.CONDCFG = (function () {
         pintarValores(res.valores || []);
     }
 
+    // ── Reajuste masivo de cuotas ──
+    const R = { filas: [], excluir: new Set(), previewOk: false };
+    const fechaD = iso => { const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(iso || ''); return m ? `${m[3]}-${m[2]}-${m[1]}` : (iso || ''); };
+    const FORMA_LBL = { fijo: 'Monto fijo', porcentaje: 'Aumento %', inmueble: 'Según inmueble' };
+    const ESTADO_REAJ = { pendiente: ['warning', 'Programado'], aplicado: ['success', 'Aplicado'], cancelado: ['secondary', 'Cancelado'], error: ['danger', 'Error'] };
+
+    async function cargarReajuste() {
+        if (!$('reaj_id_producto')) return;
+        const res = await pedir(`${CFG.url}/reajusteOpcionesAjax`);
+        if (!res.ok) return;
+        $('reaj_id_producto').innerHTML = '<option value="">— Elija el concepto —</option>' + (res.productos || []).map(p => `<option value="${p.id}">${esc(p.nombre)} (${p.suscripciones} suscr.)</option>`).join('');
+        if (res.instalado === false) $('reaj-hist-body').innerHTML = '<tr><td colspan="10" class="text-center text-warning py-3">Falta aplicar database/migrations/20261006_condominios_reajustes.sql.</td></tr>';
+        else pintarReajustes(res.reajustes || []);
+        reajusteForma();
+    }
+    function reajusteForma() {
+        const f = $('reaj_forma').value;
+        $('reaj_parametro_lbl').textContent = f === 'fijo' ? 'Monto *' : (f === 'porcentaje' ? '% aumento *' : 'Parámetro');
+        $('reaj_parametro').disabled = f === 'inmueble';
+        $('reaj_parametro').placeholder = f === 'fijo' ? '0.00' : (f === 'porcentaje' ? 'p. ej. 8 (o -5)' : 'Usa el valor que rige');
+        ocultarReajPreview();
+    }
+    function ocultarReajPreview() { $('reaj-preview').classList.add('d-none'); R.previewOk = false; }
+    function datosReajuste() {
+        return { id_producto: $('reaj_id_producto').value, forma: $('reaj_forma').value, parametro: $('reaj_parametro').value, fecha_aplicar: $('reaj_fecha_aplicar').value,
+                 descripcion: $('reaj_descripcion').value, incluir_sin_inmueble: $('reaj_incluir_sin_inmueble').checked ? '1' : '0', excluir: Array.from(R.excluir).join(',') };
+    }
+    async function reajustePreview() {
+        const res = await post('reajustePreviewAjax', datosReajuste());
+        if (!res.ok) return errorForm(res.mensaje);
+        R.filas = res.filas || [];
+        pintarReajPreview(res.totales);
+    }
+    function pintarReajPreview(t) {
+        const kpi = (lbl, val, sub) => `<div class="col-6 col-md-3"><div class="border rounded-3 p-2 bg-light"><div class="text-muted" style="font-size:.7rem">${lbl}</div><div class="fw-bold">${val}</div>${sub ? `<div class="text-muted" style="font-size:.7rem">${sub}</div>` : ''}</div></div>`;
+        const aplicables = R.filas.filter(f => f.nuevo !== null && !R.excluir.has(f.id_suscripcion));
+        const sumA = aplicables.reduce((s, f) => s + (parseFloat(f.actual) || 0), 0), sumN = aplicables.reduce((s, f) => s + (parseFloat(f.nuevo) || 0), 0);
+        $('reaj-kpis').innerHTML = kpi('Suscripciones', `${aplicables.length} de ${R.filas.length}`, `${t.omitidas} sin valor posible · ${R.excluir.size} destildadas`)
+            + kpi('Σ actual', money(sumA)) + kpi('Σ nuevo', money(sumN), `${sumN - sumA >= 0 ? '+' : ''}${money(sumN - sumA)} por período`)
+            + kpi('Cuándo', t.programado ? `<span class="text-warning">Programado</span>` : 'En el acto', fechaD($('reaj_fecha_aplicar').value));
+        $('reaj-body').innerHTML = R.filas.map(f => `<tr class="${f.nuevo === null ? 'table-warning' : (R.excluir.has(f.id_suscripcion) ? 'text-muted' : '')}">
+            <td class="ps-2">${f.nuevo === null ? '' : `<input type="checkbox" class="form-check-input" ${R.excluir.has(f.id_suscripcion) ? '' : 'checked'} onchange="CONDCFG.reajusteToggle(${f.id_suscripcion}, this.checked)">`}</td>
+            <td>${esc(f.cliente)} <small class="text-muted">${esc(f.identificacion || '')}</small> <small class="text-muted">#${f.id_suscripcion}</small></td>
+            <td>${esc(f.inmueble || '—')}</td>
+            <td class="text-end">${f.actual === null ? '<span class="text-muted" title="Sin línea del concepto">—</span>' : money(f.actual)}</td>
+            <td class="text-end fw-medium">${f.nuevo === null ? '—' : money(f.nuevo)}${f.actual === null && f.nuevo !== null ? ' <span class="badge bg-info bg-opacity-10 text-info border border-info border-opacity-25">nueva línea</span>' : ''}</td>
+            <td class="pe-2 small text-muted">${esc(f.motivo || (f.cambia ? '' : (f.nuevo === null ? '' : 'Sin cambio')))}</td></tr>`).join('')
+            || '<tr><td colspan="6" class="text-center text-muted py-3">No hay suscripciones para este concepto.</td></tr>';
+        $('reaj-todas').checked = R.excluir.size === 0;
+        $('reaj-preview').classList.remove('d-none'); R.previewOk = true;
+    }
+    function reajusteToggle(id, on) { if (on) R.excluir.delete(id); else R.excluir.add(id); pintarReajPreview({ omitidas: R.filas.filter(f => f.nuevo === null).length, programado: $('reaj_fecha_aplicar').value > new Date().toISOString().slice(0, 10) }); }
+    function reajusteTodas(on) { R.excluir = new Set(on ? [] : R.filas.filter(f => f.nuevo !== null).map(f => f.id_suscripcion)); reajusteToggle(-1, true); }
+    async function reajusteAplicar() {
+        if (!R.previewOk) return aviso('info', 'Vea la vista previa', 'Revise primero qué suscripciones cambian.');
+        const n = R.filas.filter(f => f.nuevo !== null && !R.excluir.has(f.id_suscripcion)).length;
+        const prog = $('reaj_fecha_aplicar').value > new Date().toISOString().slice(0, 10);
+        const c = await Swal.fire({ icon: 'warning', title: prog ? `¿Programar el reajuste de ${n} suscripción(es)?` : `¿Aplicar el reajuste a ${n} suscripción(es)?`,
+            text: prog ? `Se aplicará automáticamente el ${fechaD($('reaj_fecha_aplicar').value)}. Hasta entonces se sigue cobrando el valor actual.` : 'Los valores nuevos rigen desde el próximo documento que se genere.',
+            showCancelButton: true, confirmButtonText: prog ? 'Sí, programar' : 'Sí, aplicar', cancelButtonText: 'Cancelar' });
+        if (!c.isConfirmed) return;
+        const btn = $('reaj-btn-aplicar'); btn.disabled = true;
+        try {
+            const res = await post('reajusteAplicarAjax', datosReajuste());
+            if (!res.ok) return errorForm(res.mensaje);
+            ocultarReajPreview(); R.excluir = new Set(); $('reaj_descripcion').value = '';
+            pintarReajustes(res.reajustes || []);
+            aviso('success', 'Listo', res.mensaje);
+        } finally { btn.disabled = false; }
+    }
+    function pintarReajustes(rs) {
+        $('reaj-hist-body').innerHTML = rs.length ? rs.map(r => { const [cls, lbl] = ESTADO_REAJ[r.estado] || ['secondary', r.estado]; return `<tr>
+            <td class="ps-2">${fechaD(r.fecha_aplicar)}</td><td class="fw-medium">${esc(r.descripcion)}</td><td>${esc(r.producto_nombre || '')}</td>
+            <td>${FORMA_LBL[r.forma] || r.forma}${r.forma !== 'inmueble' ? ` <span class="text-muted">${r.forma === 'porcentaje' ? (+r.parametro) + ' %' : money(r.parametro)}</span>` : ''}</td>
+            <td class="text-end">${r.total_filas}</td><td class="text-end">${money(r.suma_actual)}</td><td class="text-end">${money(r.suma_nueva)}</td>
+            <td><span class="badge bg-${cls} bg-opacity-10 text-${cls} border border-${cls} border-opacity-25" title="${esc(r.resultado || '')}">${lbl}</span></td>
+            <td class="text-muted">${esc(r.usuario_nombre || '')}</td>
+            <td class="text-end pe-2">${r.estado === 'pendiente' && CFG.perm.actualizar ? `<button type="button" class="btn btn-link btn-sm p-0 text-danger" title="Cancelar" onclick="CONDCFG.reajusteCancelar(${r.id})"><i class="bi bi-x-circle"></i></button>` : ''}</td></tr>`; }).join('')
+            : '<tr><td colspan="10" class="text-center text-muted py-3">Sin reajustes.</td></tr>';
+    }
+    async function reajusteCancelar(id) {
+        const c = await Swal.fire({ icon: 'warning', title: '¿Cancelar este reajuste programado?', showCancelButton: true, confirmButtonText: 'Sí, cancelar', cancelButtonText: 'No' });
+        if (!c.isConfirmed) return;
+        const res = await post('reajusteCancelarAjax', { id });
+        if (!res.ok) return aviso('error', 'No se pudo', res.mensaje);
+        pintarReajustes(res.reajustes || []);
+    }
+
     document.addEventListener('DOMContentLoaded', () => {
+        if (CFG.config) cargarReajuste();
+        ['reaj_id_producto', 'reaj_parametro', 'reaj_fecha_aplicar', 'reaj_incluir_sin_inmueble'].forEach(id => $(id)?.addEventListener('change', ocultarReajPreview));
         if (CFG.config) cargarValores();
         $('val_vigente_desde')?.addEventListener('change', valorPresupuesto);
         $('formCondConfig').addEventListener('submit', guardar);
@@ -240,5 +330,6 @@ window.CONDCFG = (function () {
     });
 
     return { onFondo, onIntereses, multaLimpiar, multaEditar, multaGuardar, multaEliminar,
-             nuevoValor, valorPresupuesto, valorPreview, valorGuardar, valorEliminar };
+             nuevoValor, valorPresupuesto, valorPreview, valorGuardar, valorEliminar,
+             reajusteForma, reajustePreview, reajusteToggle, reajusteTodas, reajusteAplicar, reajusteCancelar };
 })();

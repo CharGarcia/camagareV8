@@ -6,7 +6,7 @@ ruta_modulo: modulos/condominios-config
 tipo: modulo
 visibilidad: todos
 etiquetas: condominio, configuracion condominio, administrador del condominio, alicuota, fondo de reserva, intereses de mora, tasa legal, multas, reglamento, pronto pago, pago anticipado, dia de vencimiento, dias de gracia, restriccion areas comunes, activar condominios
-version: 1.1
+version: 1.2
 orden: 1
 estado: activo
 ---
@@ -48,6 +48,13 @@ el módulo Condominios** para la empresa; sin ella no se pueden registrar inmueb
    desde…**, que muestra una **vista previa** de la cuota de cada inmueble (y del fondo) antes de
    guardar; el monto a repartir también puede **tomarse de un presupuesto aprobado** (módulo
    Presupuestos: costos y gastos presupuestados del mes). Los valores anteriores nunca se editan.
+   **Reajuste de cuotas** (pestaña propia): cambia el valor de un concepto en muchas suscripciones
+   a la vez — monto fijo para todas, aumento % sobre el valor actual, o según el inmueble (valor
+   que rige). Elija el concepto, la forma, desde cuándo y una descripción; **Vista previa** muestra
+   cada suscripción con su valor actual → nuevo (se pueden destildar); **Aplicar** cambia la línea
+   del concepto en cada suscripción (si no la tiene, la agrega). Con una **fecha futura** queda
+   **programado** y se aplica solo ese día (p. ej. «desde el 1 de enero»); hasta entonces se
+   sigue cobrando el valor actual, y se puede cancelar. Todo queda en el historial de la pestaña.
 3. **Mora y multas**: interruptor de intereses (tasa legal vigente o % mensual fijo; en el
    siguiente recibo o en uno aparte; con su producto), interruptor de multas, restricción
    automática de áreas comunes al superar N meses de mora, **días de gracia** y el **catálogo de multas** del
@@ -70,6 +77,7 @@ el módulo Condominios** para la empresa; sin ella no se pueden registrar inmueb
 | Manuales con presupuesto | — | Solo cuando el monto a repartir sale de un presupuesto aprobado: *repartir el resto* (por defecto) o *manuales aparte*. |
 | Fondo de reserva | — | No / % sobre la alícuota ordinaria / monto fijo por inmueble. Línea separada en el recibo; exige su producto. |
 | Valores que rigen | — | Tarifa por m² y monto mensual a repartir, cada uno con el mes desde el que rige. Cada inmueble usa el valor vigente en el mes que se cobra. Con base en un presupuesto y «repartir el resto», a los inmuebles por % se les reparte el monto menos los manuales; los centavos van al de mayor alícuota. |
+| Reajuste de cuotas | — | Concepto (producto presente en las suscripciones), forma (fijo / % / según inmueble), parámetro, fecha de aplicación (hoy o futura = programado), descripción o acta, incluir suscripciones sin inmueble. |
 | Cobra intereses de mora | — | Apagado por defecto. Tasa legal vigente (tabla global) o % mensual fijo (0,01–20). Interés simple sobre el capital vencido, proporcional a los días, nunca sobre intereses. Exige su producto. |
 | Dónde se cobra el interés | — | Línea en el siguiente recibo o recibo aparte. |
 | Cobra multas | — | Apagado por defecto. Habilita cargar multas del catálogo a un inmueble. |
@@ -86,7 +94,7 @@ por fila, independiente del botón Guardar de la configuración.
 |---|---|
 | Ver | Consultar la configuración y el catálogo de multas. |
 | Crear | Crear multas en el catálogo. |
-| Actualizar | **Guardar la configuración** y editar multas. |
+| Actualizar | **Guardar la configuración**, editar multas, registrar valores que rigen y **aplicar o programar reajustes de cuotas**. |
 | Eliminar | Eliminar multas del catálogo. |
 
 ## Reglas de negocio
@@ -98,6 +106,10 @@ por fila, independiente del botón Guardar de la configuración.
 - Con tasa fija, el % mensual debe estar entre 0,01 y 20. Pronto pago y anticipado exigen un %
   entre 0,01 y 100 cuando están activos.
 - Todo cambio queda en `log_sistema` con los valores anteriores y nuevos.
+- Un reajuste siempre se recalcula en el servidor al aplicar: lo que se graba es lo que mostró la
+  vista previa menos las filas destildadas. Con «aumento %», las suscripciones sin la línea del
+  concepto se omiten (no hay base); con «monto fijo» se les agrega la línea. Los reajustes
+  programados los aplica el cron diario; si uno falla queda en estado *Error* con el motivo.
 - No puede haber dos valores que rijan desde el mismo mes. Eliminar un valor hace que vuelva a
   regir el anterior en ese período.
 - Sin un valor vigente, los inmuebles por % y por m² no tienen cuota (los manuales sí); el
@@ -110,6 +122,8 @@ por fila, independiente del botón Guardar de la configuración.
 - **Condominios (Inmuebles)**: usa esta configuración para validar y calcular las cuotas; su
   listado avisa qué falta para emitir y enlaza aquí.
 - **Productos**: fuente de los conceptos.
+- **Suscripciones**: el reajuste de cuotas escribe el precio de la línea del concepto en cada
+  suscripción (o la agrega); la emisión sigue siendo de Suscripciones.
 - **Suscripciones / Ingresos / Cuentas por Cobrar**: emisión, cobro y cartera, como siempre.
 
 ## Errores frecuentes
@@ -125,6 +139,9 @@ por fila, independiente del botón Guardar de la configuración.
 
 ## Historial de cambios
 
+- **1.2** — Pestaña **Reajuste de cuotas**: cambio masivo del valor de un concepto en las suscripciones
+  (fijo, % o según inmueble), con vista previa, exclusiones, programación por fecha (cron diario) e
+  historial.
 - **1.1** — **Valores que rigen** (tarifa por m² y monto a repartir con mes de inicio), vista previa de
   la cuota por inmueble, base desde un presupuesto aprobado y reparto del resto. Sin pestaña Emisión.
 - **1.0** — Versión inicial: configuración del condominio en cuatro pestañas (Condominio, Alícuota
