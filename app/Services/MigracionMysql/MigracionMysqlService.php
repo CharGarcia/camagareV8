@@ -6947,7 +6947,12 @@ class MigracionMysqlService
              VALUES (:d, '2', :cp, :tar, :base, :val)"
         );
         $cuerpoStmt = $mysql->prepare("SELECT id_producto, cantidad_nc, valor_unitario_nc, subtotal_nc, descuento, tarifa_iva, codigo_producto, nombre_producto FROM cuerpo_nc WHERE ruc_empresa = :r AND serie_nc = :s AND secuencial_nc = :sec");
-        $updEstadoNc = $pg->prepare("UPDATE notas_credito_cabecera SET estado = ?, estado_correo = ?, updated_at = now(), updated_by = ? WHERE id = ?");
+        // Ambiente: el de la EMPRESA, como el resto de documentos migrados. Antes se tomaba
+        // encabezado_nc.ambiente ('2' → producción, cualquier otro → pruebas), pero el viejo deja
+        // ambiente = 0 en NC autorizadas (p. ej. 001-101-000002406 de 1792708389001): se migraban en
+        // pruebas y no aparecían en el listado de una empresa en producción. Al re-correr se corrige.
+        $ambNc = $this->ambienteEmpresa($pg, $idEmpresa);
+        $updEstadoNc = $pg->prepare("UPDATE notas_credito_cabecera SET estado = ?, estado_correo = ?, tipo_ambiente = ?, updated_at = now(), updated_by = ? WHERE id = ?");
 
         $sql = "SELECT id_encabezado_nc, ruc_empresa, fecha_nc, serie_nc, secuencial_nc, factura_modificada, id_cliente, estado_sri, total_nc, ambiente, aut_sri, motivo, fecha_factura
                   FROM encabezado_nc WHERE ruc_empresa LIKE " . $mysql->quote($base . '%') . $this->clausulaEstabOrigen('ruc_empresa', $base, $mysql) . $this->clausulaFecha('fecha_nc', $desde, $hasta, $mysql) . " ORDER BY id_encabezado_nc";
@@ -6964,7 +6969,7 @@ class MigracionMysqlService
                     $pg->beginTransaction();
                     $migrarAdicNc($mapNc[(string) $old], $ec);
                     $estadoNcRec = $this->estadoFacturaSri((string) $ec['estado_sri']);
-                    $updEstadoNc->execute([$estadoNcRec, $this->estadoCorreoSri($estadoNcRec), $idUsuario, $mapNc[(string) $old]]);
+                    $updEstadoNc->execute([$estadoNcRec, $this->estadoCorreoSri($estadoNcRec), $ambNc, $idUsuario, $mapNc[(string) $old]]);
                     $pg->commit();
                     $res['ya_migrados']++;
                 } catch (Throwable $ex) {
@@ -7004,7 +7009,7 @@ class MigracionMysqlService
                     ':fds' => $fds, ':mot' => (string) ($ec['motivo'] ?: 'Migración'), ':tsi' => round($tsi, 2), ':tdes' => round($tdes, 2),
                     ':tot' => (float) $ec['total_nc'], ':estado' => ($estadoNc = $this->estadoFacturaSri((string) $ec['estado_sri'])),
                     ':ecorreo' => $this->estadoCorreoSri($estadoNc),
-                    ':clave' => self::claveAcceso($ec['aut_sri']), ':amb' => ((string) $ec['ambiente'] === '2') ? '2' : '1', ':cb' => $idUsuario,
+                    ':clave' => self::claveAcceso($ec['aut_sri']), ':amb' => $ambNc, ':cb' => $idUsuario,
                 ]);
                 $idNc = (int) $insCab->fetchColumn();
 
