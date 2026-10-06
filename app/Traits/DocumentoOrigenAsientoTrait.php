@@ -17,7 +17,11 @@ use PDO;
  * numero_documento, y debe resolver sus columnas en cascada, por ejemplo:
  *
  *   COALESCE(ad.tipo_entidad, doc.tipo_entidad)
- *   COALESCE(NULLIF(ad.documento_referencia, ''), NULLIF(doc.numero_documento, ''), ac.numero_comprobante)
+ *   COALESCE(NULLIF(ad.documento_referencia, ''), doc.numero_documento)
+ *
+ * El documento NO cae de respaldo al numero_comprobante del asiento: un asiento sin
+ * documento (diario manual, apertura, migrado sin documento) muestra la columna vacía;
+ * si no, repetía el mismo número en Comprobante y en Documento Ref.
  *
  * Requiere en la consulta los alias `ad` (línea), `ac` (cabecera del asiento) y que la cabecera
  * traiga modulo_origen / id_referencia_origen / id_empresa.

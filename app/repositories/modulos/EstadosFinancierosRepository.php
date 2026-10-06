@@ -503,7 +503,7 @@ class EstadosFinancierosRepository
                     ac.numero_comprobante,
                     ac.concepto,
                     COALESCE(NULLIF(ad.referencia_detalle, ''), ac.concepto) AS referencia_detalle,
-                    COALESCE(NULLIF(ad.documento_referencia, ''), NULLIF(doc.numero_documento, ''), ac.numero_comprobante) AS documento_referencia,
+                    COALESCE(NULLIF(ad.documento_referencia, ''), doc.numero_documento) AS documento_referencia,
                     ad.debe,
                     ad.haber,
                     pc.codigo as codigo_cuenta,

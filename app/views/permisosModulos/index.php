@@ -249,9 +249,22 @@ window.cmgUsuarioTomSelect = function() {
     selectEmpresa.addEventListener('change', function() {
         empresaMsg.classList.add('d-none');
     });
+
+    // Al cambiar el usuario o la empresa, lo que está abajo (lista de módulos,
+    // vendedores y pestañas que puede ver) corresponde a la selección anterior:
+    // se oculta hasta que el usuario pulse «Mostrar módulos» y la página recargue
+    // con la nueva combinación.
+    var resultado = document.getElementById('permisos-resultado');
+    var selectUsuario = document.getElementById('select-usuario');
+    function ocultarResultado() {
+        if (resultado) resultado.classList.add('d-none');
+    }
+    if (selectUsuario) selectUsuario.addEventListener('change', ocultarResultado);
+    selectEmpresa.addEventListener('change', ocultarResultado);
 })();
 </script>
 
+<?php if (!empty($modulos)): ?><div id="permisos-resultado"><?php endif; ?>
 <?php if (!empty($modulos) && !$empresaAsignada): ?>
     <div class="alert alert-warning d-flex align-items-center justify-content-between flex-wrap gap-2 py-2 px-3" role="alert" id="alerta-empresa-no-asignada">
         <div class="small">
@@ -876,6 +889,8 @@ window.cmgUsuarioTomSelect = function() {
         })();
     </script>
     <?php endif; ?>
+
+    </div><?php // fin #permisos-resultado ?>
 
     <!-- Modal Aplicar combo -->
     <?php if ($nivel >= 3 && !empty($combosActivos)): ?>

@@ -6,7 +6,7 @@ ruta_modulo: modulos/mayores
 tipo: modulo
 visibilidad: todos
 etiquetas: mayor, mayores, libro mayor, movimientos de cuenta, saldo de cuenta, auxiliar, cuadre, pdf mayor, imprimir mayor
-version: 1.2
+version: 1.3
 orden: 40
 estado: activo
 ---
@@ -55,6 +55,16 @@ Cada línea del mayor indica de qué documento salió. Desde la columna de
 informe. Es la forma rápida de auditar un movimiento que no cuadra: del saldo se
 llega a la línea, y de la línea a la factura o al egreso que la generó.
 
+Si el asiento no nació de un documento (un asiento de diario manual, el balance
+inicial, o un asiento migrado del sistema anterior sin documento), la columna
+**Documento** queda vacía: el movimiento se identifica por su **Comprobante**.
+
+Los asientos manuales que vienen de la migración del sistema anterior se
+muestran con el comprobante `DIARIO-número` o `APERTURA-número`, donde el
+número es el id que tenía ese asiento en el sistema anterior (sirve para
+ubicarlo allá). Los asientos de documentos migrados conservan su código de
+origen (p. ej. `FAC145065`, `EGR67320`).
+
 ## Asientos pendientes
 
 Al abrir el módulo, si hay documentos sin su asiento contable generado, el
@@ -77,6 +87,12 @@ exportaciones quedan bloqueados.
 
 ## Historial de cambios
 
+- **1.3** — La columna **Documento** queda vacía cuando el asiento no tiene
+  documento de origen (antes repetía el número del comprobante). Los asientos
+  manuales migrados del sistema anterior, que mostraban un código aleatorio
+  (`sJCe1fMeygv5Xdx8STC3`), pasan a mostrarse como `DIARIO-número` /
+  `APERTURA-número` con el id del asiento en el sistema anterior. Aplica
+  también al mayor auxiliar de Estados Financieros.
 - **1.2** — Los filtros pasan a una tarjeta fija con un resumen al pie y botón
   **Limpiar**; C. Costo y Proyecto solo se muestran si la empresa los usa. El PDF
   y el Excel adoptan el formato común de reportes (logo en el PDF, filtros aplicados,

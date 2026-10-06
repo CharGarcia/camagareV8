@@ -6,7 +6,7 @@ ruta_modulo: config/migrar-mysql
 tipo: modulo
 visibilidad: superadmin
 etiquetas: migracion, migrar, sistema anterior, mysql, vendedor asignado, vendedor del cliente, clientes sin vendedor, vendedores migracion, asignacion de vendedor, migrar empresas, establecimientos migracion, ruc base, elegir establecimiento, fusionar establecimientos, cliente separado, serie, series, punto de emision, secuencial, numeracion, numero repetido, ingresos sin serie, egresos sin serie, pedidos sin serie, liquidacion pendiente de pago, liquidaciones de compra migradas, pagos migrados, egresos migrados, pago no aparece, cuentas por pagar migradas, compra pendiente de pago, compra pagada sale pendiente, pago no cruza, retencion en borrador, marcas, marca del producto, productos sin marca, catalogo de marcas, migrar marcas, cambios de productos migrados, cambio sin factura, factura del cambio, nup del cambio, recambio, registro de cambio, facturacion de consignacion migrada, unidad duplicada para devolver, iva inflado, iva multiplicado, iva x1000, asiento de compra mal, iva del asiento mayor, nota de credito compra asiento, contabilidad migrada, alumnos, migrar alumnos, estudiantes, campus, niveles, cursos, horarios, pension, servicios del alumno, descuento del alumno, alumnos activos, alumnos pasivos, representante del alumno, vehiculos, migrar vehiculos, placas, placa, chasis, chasis 123456789, año 2022, propietario privado, vehiculos faltantes, vehiculo sin orden, car wash migracion, cobros de recibos, recibo pendiente migrado, recibo sin abono, pago de recibo no cruza, recibos de venta migrados, saldo de recibo, liquidaciones 2020, liquidaciones antiguas pendientes, pagada en el sistema anterior, liquidacion sin pago migrada, egreso sin asiento, asiento no migrado, asiento contable faltante, desde, re-sincronizar contabilidad, registrado tarde, anulado en el sistema anterior, ingreso anulado con asiento, egreso anulado con asiento, asiento migrado vivo, asiento de documento anulado, categorias, categoria del producto, productos sin categoria, grupo de producto, grupo familiar, migrar categorias, suscripciones, facturas programadas, recibos programados, facturacion recurrente, migrar suscripciones, cobro periodico
-version: 1.20
+version: 1.21
 orden: 2
 estado: activo
 ---
@@ -339,6 +339,24 @@ asiento venía mal.
   usar el script `database/migrations/20260923_corregir_iva_x1000_asientos_migrados.sql`
   sin volver a migrar.
 
+## Asientos manuales migrados: número de comprobante
+
+En el sistema anterior, los asientos de **diario** hechos a mano y los de
+**balance inicial** no tenían número: llevaban un código interno aleatorio de 20
+caracteres (p. ej. `sJCe1fMeygv5Xdx8STC3`). Al migrar **Contabilidad** ese
+código salía como comprobante del asiento en Mayores y en Asientos Contables, y
+no decía nada.
+
+- Ahora esos asientos se numeran como `DIARIO-número` o `APERTURA-número`,
+  donde el número es el **id que tenía el asiento en el sistema anterior**: con
+  él se lo puede buscar allá.
+- Los asientos de documentos (facturas, compras, egresos, retenciones...)
+  conservan su código de origen (`FAC145065`, `EGR67320`, `RETVEN65096`), que ya
+  es legible y es el que muestran los avisos de verificación.
+- Para los asientos migrados **antes** de este cambio, basta volver a correr
+  **Contabilidad** (la re-migración actualiza el número) o ejecutar una sola vez
+  `database/2026-10-06_asientos_migrados_numero_legible.sql`, sin volver a migrar.
+
 ## Asientos de pagos y cobros, y el filtro "Desde"
 
 El asiento de cada pago (egreso) o cobro (ingreso) del sistema anterior se migra
@@ -575,6 +593,11 @@ sistema anterior tampoco los aplicaba al facturar por alumno).
 
 ## Historial de cambios
 
+- **1.21** — **Contabilidad**: los asientos manuales del sistema anterior
+  (diario y balance inicial), que llegaban con un código aleatorio como
+  comprobante, se numeran `DIARIO-número` / `APERTURA-número` con el id del
+  asiento en el sistema anterior. La re-migración corrige los ya migrados; hay
+  SQL alternativo. Ver *Asientos manuales migrados: número de comprobante*.
 - **1.20** — Nuevas entidades **Suscripciones: facturas programadas** y
   **Suscripciones: recibos programados**: migran los documentos programados del
   sistema anterior al módulo Suscripciones (activas, con el próximo cobro

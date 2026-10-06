@@ -28,7 +28,9 @@ class MayoresRepository
      * guardan (los asientos del sincronizador y los migrados llegan con esas columnas en
      * NULL, ver getSqlDocumentoOrigen()):
      *   - Tercero:   línea → documento origen del asiento.
-     *   - Documento: línea → número del documento origen → número de comprobante del asiento.
+     *   - Documento: línea → número del documento origen. Si el asiento no tiene documento
+     *                (diario manual, apertura, migrados sin documento) queda VACÍO: antes caía
+     *                al número de comprobante y la columna repetía lo mismo que Comprobante.
      *   - Glosa:     línea → concepto del asiento.
      * El filtro por tercero usa la misma cascada, para que filtrar y ver den lo mismo.
      *
@@ -106,7 +108,7 @@ class MayoresRepository
                     ac.numero_comprobante,
                     ac.concepto,
                     COALESCE(NULLIF(ad.referencia_detalle, ''), ac.concepto) AS referencia_detalle,
-                    COALESCE(NULLIF(ad.documento_referencia, ''), NULLIF(doc.numero_documento, ''), ac.numero_comprobante) AS documento_referencia,
+                    COALESCE(NULLIF(ad.documento_referencia, ''), doc.numero_documento) AS documento_referencia,
                     ad.debe,
                     ad.haber,
                     COALESCE(ad.tipo_entidad, doc.tipo_entidad) AS tipo_entidad,

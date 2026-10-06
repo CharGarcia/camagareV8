@@ -55,6 +55,8 @@ class ConfigController extends Controller
             'exportPdf' => 'exportPdf',
             'vendedoresVisiblesJson' => 'vendedoresVisiblesJson',
             'guardarVendedorVisible' => 'guardarVendedorVisible',
+            'pestanasModuloJson' => 'pestanasModuloJson',
+            'guardarPestanaModulo' => 'guardarPestanaModulo',
             default => 'index',
         };
         if (method_exists($c, $method)) {

@@ -220,7 +220,9 @@ cambio se aplica en la siguiente página que abra.
 - **1.10** — Nueva tarjeta **Pestañas que puede ver** (usuarios de nivel 1): una
   por cada módulo con pestañas configurables, hoy el *Reporte de Inventarios*.
   El administrador desmarca las pestañas que el usuario no debe ver; sin
-  configurar nada, las ve todas.
+  configurar nada, las ve todas. Además, al cambiar el usuario o la empresa en
+  los selectores, la lista de módulos y las tarjetas de abajo se ocultan hasta
+  pulsar **Mostrar módulos**, para no confundirlas con la selección anterior.
 - **1.9** — Selector rediseñado: **usuario y empresa en la misma fila** (ya no
   hay paso «Seleccionar empresa»; elegir el usuario carga sus empresas), la
   pantalla usa **todo el ancho**, el botón **Mostrar módulos** es compacto y, para

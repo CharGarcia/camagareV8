@@ -4399,7 +4399,7 @@ class MigracionMysqlService
         // Reconcile COMPLETO (re-migrar): actualiza toda la cabecera y RECONSTRUYE el detalle, para que un
         // asiento editado en el viejo (fecha/valores/líneas) se corrija al volver a migrar. Antes solo se
         // actualizaba ambiente/estado/tipo, así que los editados quedaban con los datos de la 1ª migración.
-        $updCabFull = $pg->prepare("UPDATE asientos_contables_cabecera SET fecha_asiento = ?, tipo_comprobante = ?, concepto = ?, estado = ?, total_debe = ?, total_haber = ?, tipo_ambiente = ?, updated_at = now(), updated_by = ? WHERE id = ?");
+        $updCabFull = $pg->prepare("UPDATE asientos_contables_cabecera SET fecha_asiento = ?, tipo_comprobante = ?, numero_comprobante = ?, concepto = ?, estado = ?, total_debe = ?, total_haber = ?, tipo_ambiente = ?, updated_at = now(), updated_by = ? WHERE id = ?");
         $delDet     = $pg->prepare("DELETE FROM asientos_contables_detalle WHERE id_asiento = ?");
 
         // Enlace documento ↔ asiento migrado. `docDeDiario()` resuelve el documento nuevo por el
@@ -4527,6 +4527,20 @@ class MigracionMysqlService
                 $fe   = substr((string) $e['fecha_asiento'], 0, 10);
                 $conc = (self::nz($e['concepto_general']) !== null ? (string) $e['concepto_general'] : (string) $e['codigo_unico']);
                 $amb  = $this->ambienteEmpresa($pg, $idEmpresa);
+                // Número de comprobante del asiento nuevo. Los asientos de documentos traen un
+                // codigo_unico legible (prefijo + id del documento viejo: FAC145065, EGR67320,
+                // RETVEN65096) y se conserva. Los asientos MANUALES del viejo (DIARIO,
+                // BALANCE_INICIAL) traen un token aleatorio de 20 caracteres
+                // ('sJCe1fMeygv5Xdx8STC3') que en Mayores/Asientos no identifica nada: para esos
+                // se arma TIPO-id_diario (DIARIO-682949, APERTURA-1234), que sí referencia al
+                // asiento y permite ubicarlo en el sistema viejo. No usar el prefijo corto del
+                // numerador nuevo ('DI-'): generarNumeroComprobante() toma el mayor 'DI-NNN' de
+                // la empresa y seguiría contando desde el id viejo. El mapa de migración sigue
+                // guardando el codigo_unico como clave natural (no cambia la deduplicación).
+                // Mismo criterio que database/2026-10-06_asientos_migrados_numero_legible.sql.
+                $numComp = preg_match('/^[A-Z]+\d+$/', (string) $e['codigo_unico'])
+                    ? (string) $e['codigo_unico']
+                    : mb_substr(strtoupper($tcomp) . '-' . $old, 0, 50);
                 // Documento de referencia por línea (mismo doc para todo el asiento): el número legible
                 // (EEE-PPP-SSSSSSSSS) que trae el concepto viejo; si no, el código de documento (id_documento).
                 $docRef = null;
@@ -4538,11 +4552,11 @@ class MigracionMysqlService
                 }
                 if ($idExist) {
                     // Re-migrar: actualiza cabecera COMPLETA + reconstruye el detalle (corrige editados).
-                    $updCabFull->execute([$fe, $tcomp, $conc, $est, $td, $th, $amb, $idUsuario, $idExist]);
+                    $updCabFull->execute([$fe, $tcomp, $numComp, $conc, $est, $td, $th, $amb, $idUsuario, $idExist]);
                     $delDet->execute([$idExist]);
                     $idAsiento = $idExist;
                 } else {
-                    $insCab->execute([$idEmpresa, $fe, $tcomp, (string) $e['codigo_unico'], $conc, $est, $td, $th, $amb, $idUsuario]);
+                    $insCab->execute([$idEmpresa, $fe, $tcomp, $numComp, $conc, $est, $td, $th, $amb, $idUsuario]);
                     $idAsiento = (int) $insCab->fetchColumn();
                     $insMap->execute([':e' => $idEmpresa, ':o' => $old, ':d' => $idAsiento, ':cn' => (string) $e['codigo_unico'], ':vin' => 'f', ':cb' => $idUsuario]);
                 }
