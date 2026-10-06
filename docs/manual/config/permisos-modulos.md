@@ -58,8 +58,10 @@ ha creado nada y no tiene acceso total.
    buscador; se habilita en cuanto hay un usuario elegido y carga sus empresas
    solo). Se puede escribir parte del **nombre comercial**, de la **razón
    social** o del **RUC**; cada opción muestra el nombre comercial con el RUC y,
-   debajo, la razón social cuando es distinta. Si el usuario tiene una sola
-   empresa asignada, se selecciona sola.
+   debajo, la razón social cuando es distinta. Al elegir o cambiar el usuario,
+   la empresa queda **vacía** aunque tenga una sola asignada: hay que elegirla
+   siempre. Y al cambiar el usuario o la empresa, la lista de módulos y las
+   tarjetas de abajo se ocultan hasta pulsar **Mostrar módulos**.
    - Para el **superadministrador** el desplegable muestra primero las empresas
      que el usuario **ya tiene asignadas**, en negrita, con el check verde y la
      marca **Asignada**; debajo, atenuadas y con la marca **No asignada**, el

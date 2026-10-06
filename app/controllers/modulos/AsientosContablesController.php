@@ -415,11 +415,11 @@ class AsientosContablesController extends BaseModuloController
             $sheet->setTitle('Asiento');
 
             $sheet->setCellValue('A1', strtoupper((string)($empresa['nombre'] ?? '')));
-            $sheet->mergeCells('A1:F1');
+            $sheet->mergeCells('A1:G1');
             $sheet->getStyle('A1')->getFont()->setBold(true)->setSize(12);
 
             $sheet->setCellValue('A2', 'ASIENTO CONTABLE N.° ' . ($asiento['numero_comprobante'] ?? ''));
-            $sheet->mergeCells('A2:F2');
+            $sheet->mergeCells('A2:G2');
             $sheet->getStyle('A2')->getFont()->setBold(true);
 
             $fecha = !empty($asiento['fecha_asiento']) ? date('d-m-Y', strtotime((string)$asiento['fecha_asiento'])) : '';
@@ -428,10 +428,10 @@ class AsientosContablesController extends BaseModuloController
             $sheet->setCellValue('E3', 'Estado: ' . ucfirst((string)($asiento['estado'] ?? '')));
 
             $sheet->setCellValue('A4', 'Concepto: ' . (string)($asiento['concepto'] ?? ''));
-            $sheet->mergeCells('A4:F4');
+            $sheet->mergeCells('A4:G4');
 
             $headerRow = 6;
-            $headers = ['Cuenta Contable', 'Centro Costo', 'Proyecto', 'Documento/Ref', 'Debe', 'Haber'];
+            $headers = ['Cuenta Contable', 'Centro Costo', 'Proyecto', 'Documento/Ref', 'Detalle', 'Debe', 'Haber'];
             $col = 'A';
             foreach ($headers as $h) {
                 $sheet->setCellValue($col . $headerRow, $h);
@@ -441,7 +441,7 @@ class AsientosContablesController extends BaseModuloController
                 'font' => ['bold' => true, 'color' => ['rgb' => 'FFFFFF']],
                 'fill' => ['fillType' => \PhpOffice\PhpSpreadsheet\Style\Fill::FILL_SOLID, 'startColor' => ['rgb' => '3C465A']],
             ];
-            $sheet->getStyle('A' . $headerRow . ':F' . $headerRow)->applyFromArray($headerStyle);
+            $sheet->getStyle('A' . $headerRow . ':G' . $headerRow)->applyFromArray($headerStyle);
 
             $row = $headerRow + 1;
             $totDebe = 0.0;
@@ -457,19 +457,20 @@ class AsientosContablesController extends BaseModuloController
                 $sheet->setCellValueExplicit('B' . $row, (string)($d['nombre_centro_costo'] ?? ''), \PhpOffice\PhpSpreadsheet\Cell\DataType::TYPE_STRING);
                 $sheet->setCellValueExplicit('C' . $row, (string)($d['nombre_proyecto'] ?? ''), \PhpOffice\PhpSpreadsheet\Cell\DataType::TYPE_STRING);
                 $sheet->setCellValueExplicit('D' . $row, (string)($d['documento_referencia'] ?? ''), \PhpOffice\PhpSpreadsheet\Cell\DataType::TYPE_STRING);
-                $sheet->setCellValue('E' . $row, $debe > 0 ? $debe : null);
-                $sheet->setCellValue('F' . $row, $haber > 0 ? $haber : null);
+                $sheet->setCellValueExplicit('E' . $row, (string)($d['referencia_detalle'] ?? ''), \PhpOffice\PhpSpreadsheet\Cell\DataType::TYPE_STRING);
+                $sheet->setCellValue('F' . $row, $debe > 0 ? $debe : null);
+                $sheet->setCellValue('G' . $row, $haber > 0 ? $haber : null);
                 $row++;
             }
 
-            $sheet->setCellValue('D' . $row, 'TOTALES');
-            $sheet->getStyle('D' . $row)->getFont()->setBold(true);
-            $sheet->setCellValue('E' . $row, $totDebe);
-            $sheet->setCellValue('F' . $row, $totHaber);
-            $sheet->getStyle('E' . $row . ':F' . $row)->getFont()->setBold(true);
+            $sheet->setCellValue('E' . $row, 'TOTALES');
+            $sheet->getStyle('E' . $row)->getFont()->setBold(true);
+            $sheet->setCellValue('F' . $row, $totDebe);
+            $sheet->setCellValue('G' . $row, $totHaber);
+            $sheet->getStyle('F' . $row . ':G' . $row)->getFont()->setBold(true);
 
-            $sheet->getStyle('E' . ($headerRow + 1) . ':F' . $row)->getNumberFormat()->setFormatCode('#,##0.00');
-            foreach (['A', 'B', 'C', 'D', 'E', 'F'] as $c) {
+            $sheet->getStyle('F' . ($headerRow + 1) . ':G' . $row)->getNumberFormat()->setFormatCode('#,##0.00');
+            foreach (['A', 'B', 'C', 'D', 'E', 'F', 'G'] as $c) {
                 $sheet->getColumnDimension($c)->setAutoSize(true);
             }
 

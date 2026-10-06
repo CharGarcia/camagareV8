@@ -65,7 +65,8 @@
             .forEach(el => el.classList.toggle('d-none', !mostrarCentro));
         document.querySelectorAll('#tablaAsientoDetalles .asiento-col-proyecto')
             .forEach(el => el.classList.toggle('d-none', !mostrarProyecto));
-        const colspan = 2 + (mostrarCentro ? 1 : 0) + (mostrarProyecto ? 1 : 0);
+        // Cuenta + Documento/Ref + Detalle, más las opcionales.
+        const colspan = 3 + (mostrarCentro ? 1 : 0) + (mostrarProyecto ? 1 : 0);
         document.querySelectorAll('#tablaAsientoDetalles .asiento-colspan-etiqueta')
             .forEach(el => { el.colSpan = colspan; });
     }
@@ -375,6 +376,11 @@
         const idCentro = datos ? datos.id_centro_costo : '';
         const idProyecto = datos ? datos.id_proyecto : '';
         const docRef = datos ? (datos.documento_referencia || '') : '';
+        // Detalle de la línea (referencia_detalle): es la "Glosa" del Mayor. Lo traen los
+        // asientos migrados (detalle de cada línea del sistema anterior) y los que generan los
+        // módulos (p. ej. "Gasto depreciación - Equipo de computación"); sin esta columna el
+        // modal no lo mostraba y el usuario tampoco podía escribirlo en un asiento de diario.
+        const refDet = datos ? (datos.referencia_detalle || '') : '';
         const debe = datos ? parseFloat(datos.debe).toFixed(2) : '0.00';
         const haber = datos ? parseFloat(datos.haber).toFixed(2) : '0.00';
 
@@ -397,6 +403,7 @@
                 </select>
             </td>
             <td><input type="text" class="form-control form-control-sm doc-ref" value="${docRef}"></td>
+            <td><input type="text" class="form-control form-control-sm ref-detalle" value="${refDet}" maxlength="500" placeholder="Detalle de la línea"></td>
             <td><input type="number" step="0.01" min="0" class="form-control form-control-sm text-end input-debe" value="${debe}" onfocus="this.select()"></td>
             <td><input type="number" step="0.01" min="0" class="form-control form-control-sm text-end input-haber" value="${haber}" onfocus="this.select()"></td>
             <td class="text-center">
@@ -631,6 +638,7 @@
                 id_centro_costo: tr.querySelector('.centro-costo').value,
                 id_proyecto: tr.querySelector('.proyecto').value,
                 documento_referencia: tr.querySelector('.doc-ref').value,
+                referencia_detalle: tr.querySelector('.ref-detalle').value,
                 debe: tr.querySelector('.input-debe').value,
                 haber: tr.querySelector('.input-haber').value
             });

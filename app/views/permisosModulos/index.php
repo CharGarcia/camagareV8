@@ -250,18 +250,16 @@ window.cmgUsuarioTomSelect = function() {
         empresaMsg.classList.add('d-none');
     });
 
-    // Al cambiar el usuario o la empresa, lo que está abajo (lista de módulos,
-    // vendedores y pestañas que puede ver) corresponde a la selección anterior:
-    // se oculta hasta que el usuario pulse «Mostrar módulos» y la página recargue
-    // con la nueva combinación.
-    var resultado = document.getElementById('permisos-resultado');
-    var selectUsuario = document.getElementById('select-usuario');
-    function ocultarResultado() {
-        if (resultado) resultado.classList.add('d-none');
-    }
-    if (selectUsuario) selectUsuario.addEventListener('change', ocultarResultado);
-    selectEmpresa.addEventListener('change', ocultarResultado);
 })();
+
+// Al cambiar el usuario o la empresa, lo que está abajo (lista de módulos,
+// vendedores y pestañas que puede ver) corresponde a la selección anterior: se
+// oculta hasta que se pulse «Mostrar módulos» y la página recargue con la nueva
+// combinación. Lo llaman los eventos de TomSelect de ambos selectores (más abajo).
+window.cmgOcultarResultadoPermisos = function() {
+    var resultado = document.getElementById('permisos-resultado');
+    if (resultado) resultado.classList.add('d-none');
+};
 </script>
 
 <?php if (!empty($modulos)): ?><div id="permisos-resultado"><?php endif; ?>
@@ -1586,6 +1584,8 @@ window.cmgUsuarioTomSelect = function() {
         }
 
         tsEmpresa.on('change', function(valor) {
+            // Otra empresa (o ninguna): la lista de módulos de abajo ya no corresponde.
+            window.cmgOcultarResultadoPermisos();
             if (!avisoNoAsignada) return;
             var opt = tsEmpresa.options[valor] || tsEmpresa.options[String(valor)];
             if (opt && opt.asignada === false) {
@@ -1614,38 +1614,24 @@ window.cmgUsuarioTomSelect = function() {
                 })
                 .then(function(data) {
                     if (!Array.isArray(data) || data.length === 0) return;
+                    // Solo se cargan las opciones: la empresa queda vacía a propósito,
+                    // aunque el usuario tenga una sola asignada. Elegirla y pulsar
+                    // «Mostrar módulos» es siempre decisión de quien administra; antes
+                    // se preseleccionaba (y con una sola empresa hasta se enviaba el
+                    // formulario solo), y eso mostraba módulos de una combinación que
+                    // el administrador no había confirmado.
                     tsEmpresa.addOptions(data);
                     tsEmpresa.refreshOptions(false);
-
-                    if (esSuper) {
-                        // El superadministrador siempre recibe todas las empresas del
-                        // sistema, así que no se puede avanzar solo por el conteo: se
-                        // preselecciona la única que el usuario ya tiene asignada y él
-                        // decide si la cambia por otra.
-                        var asignadas = data.filter(function(o) { return o.asignada === true; });
-                        if (asignadas.length === 1) {
-                            tsEmpresa.setValue(asignadas[0].value, true);
-                        }
-                        return;
-                    }
-
-                    // Si el usuario solo tiene una empresa asignada, se selecciona
-                    // automáticamente y se avanza directo a mostrar los submódulos.
-                    if (data.length === 1) {
-                        tsEmpresa.setValue(data[0].value, true);
-                        var empresaMsgEl = document.getElementById('empresa-msg');
-                        if (empresaMsgEl) empresaMsgEl.classList.add('d-none');
-                        var formBuscar = document.getElementById('form-permisos-buscar');
-                        if (formBuscar) formBuscar.submit();
-                    }
                 })
                 .catch(function() {});
         }
 
-        // Elegir (o cambiar) el usuario carga sus empresas en el selector de al lado.
+        // Elegir (o cambiar) el usuario vacía la empresa, carga las empresas de ese
+        // usuario en el selector de al lado y oculta la lista de módulos anterior.
         tsUsuario.on('change', function(valor) {
             var idU = valor || '';
             inputU.value = idU;
+            window.cmgOcultarResultadoPermisos();
             cargarEmpresas(idU);
         });
 

@@ -150,11 +150,13 @@ class AsientoContablePdfService
 
         $cols = [
             ['t' => 'Cuenta Contable', 'w' => 0,  'a' => 'L'],
-            ['t' => 'Centro Costo',    'w' => 28, 'a' => 'L'],
-            ['t' => 'Proyecto',        'w' => 26, 'a' => 'L'],
-            ['t' => 'Documento/Ref',   'w' => 26, 'a' => 'L'],
-            ['t' => 'Debe',            'w' => 26, 'a' => 'R'],
-            ['t' => 'Haber',           'w' => 26, 'a' => 'R'],
+            // Anchos fijos: 142 mm de los 186 disponibles; la cuenta toma el resto (44 mm).
+            ['t' => 'Centro Costo',    'w' => 20, 'a' => 'L'],
+            ['t' => 'Proyecto',        'w' => 20, 'a' => 'L'],
+            ['t' => 'Documento/Ref',   'w' => 32, 'a' => 'L'],
+            ['t' => 'Detalle',         'w' => 30, 'a' => 'L'],
+            ['t' => 'Debe',            'w' => 20, 'a' => 'R'],
+            ['t' => 'Haber',           'w' => 20, 'a' => 'R'],
         ];
         $fixed = 0.0;
         foreach ($cols as $c) { $fixed += $c['w']; }
@@ -191,6 +193,7 @@ class AsientoContablePdfService
                 (string)($d['nombre_centro_costo'] ?? ''),
                 (string)($d['nombre_proyecto'] ?? ''),
                 (string)($d['documento_referencia'] ?? ''),
+                (string)($d['referencia_detalle'] ?? ''),
                 (float)($d['debe'] ?? 0) > 0 ? number_format((float)$d['debe'], 2) : '',
                 (float)($d['haber'] ?? 0) > 0 ? number_format((float)$d['haber'], 2) : '',
             ];

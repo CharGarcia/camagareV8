@@ -539,7 +539,9 @@ class AsientoContableService
                     'id_proyecto' => !empty($det['id_proyecto']) ? (int)$det['id_proyecto'] : null,
                     'debe' => round((float)($det['debe'] ?? 0), 2),
                     'haber' => round((float)($det['haber'] ?? 0), 2),
-                    'referencia_detalle' => $det['referencia_detalle'] ?? null,
+                    // varchar(500): el modal manda lo que escribió el usuario; se capa por si acaso.
+                    'referencia_detalle' => isset($det['referencia_detalle']) && trim((string) $det['referencia_detalle']) !== ''
+                        ? mb_substr(trim((string) $det['referencia_detalle']), 0, 500) : null,
                     'documento_referencia' => $det['documento_referencia'] ?? null,
                     'id_entidad' => !empty($det['id_entidad']) ? (int)$det['id_entidad'] : null,
                     'tipo_entidad' => $det['tipo_entidad'] ?? null,

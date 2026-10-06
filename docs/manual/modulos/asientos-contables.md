@@ -6,7 +6,7 @@ ruta_modulo: modulos/asientos_contables
 tipo: modulo
 visibilidad: todos
 etiquetas: asientos, asiento contable, diario, debe, haber, partida doble, cuadrado, comprobante, contabilidad, imprimir, pdf, excel, documento origen, cuadre con el documento, total de la factura, cuenta por cobrar, cartera, editar asiento desde el documento, pestaña asiento contable, editado a mano, restaurar asiento automático, permisos de contabilidad, documentos migrados, migración, sistema anterior, buscar asiento, buscador, filtros, filtrar asientos, buscar por cuenta, buscar por referencia, libro diario, chips, asiento descuadrado, búsqueda lenta, se queda buscando, filtrar por origen, origen del asiento, módulo de origen, vista previa, costo de ventas, asiento sin costo, duplicar asiento, copiar asiento, clonar asiento, repetir asiento
-version: 1.34
+version: 1.35
 orden: 20
 estado: activo
 ---
@@ -93,6 +93,24 @@ aparecen si la empresa tiene al menos un centro de costo o un proyecto
 **activo**, respectivamente. Si no tiene ninguno, la columna no se muestra (no
 habría nada que elegir). Al crear el primero, la columna vuelve a aparecer la
 próxima vez que se cargue la página.
+
+### Columnas Documento/Ref y Detalle
+
+Cada línea del asiento tiene dos textos libres, además de la cuenta y los
+valores:
+
+- **Documento/Ref**: el documento que respalda la línea (número de factura,
+  cheque, transferencia, etc.). En los asientos que nacen de un documento se
+  llena solo con su número.
+- **Detalle**: la explicación de esa línea en particular (por ejemplo «Gasto
+  depreciación - Equipo de computación» o «Pago de arriendo de octubre»). Es el
+  texto que el **Mayor** muestra como *Glosa* de cada movimiento, y lo traen
+  tanto los asientos generados por los módulos como los asientos migrados del
+  sistema anterior (donde se escribía un detalle por línea). En un asiento de
+  diario se escribe a mano; si se deja vacío, el Mayor muestra el concepto
+  general del asiento.
+
+Ambas columnas salen en el PDF y en el Excel del asiento.
 
 ## Asientos automáticos frente a asientos de diario
 
@@ -485,6 +503,11 @@ tienen un documento individual con tercero que mostrar.
 
 ## Historial de cambios
 
+- **1.35** — El detalle de cada línea tiene su propia columna **Detalle** en el
+  modal del asiento (editable), en el PDF y en el Excel. Antes solo se veía
+  *Documento/Ref*, así que el detalle por línea de los asientos migrados y de
+  los generados por los módulos no se mostraba, y en un asiento de diario no
+  había dónde escribirlo. Ver *Columnas Documento/Ref y Detalle*.
 - **1.34** — Los egresos de nómina que pagan un **anticipo** a empleado o el **desembolso de un
   Préstamo Empresa** ya generan su asiento (a *Anticipos y Descuentos* y a *Préstamos Empresa por
   Cobrar*). Antes no se contabilizaban y el aviso pedía «Sueldos por Pagar», «Anticipos y
