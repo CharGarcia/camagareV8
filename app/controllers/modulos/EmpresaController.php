@@ -223,6 +223,12 @@ class EmpresaController extends BaseModuloController
                 exit;
             }
 
+            // Soltar el candado de la sesión antes de esperar al servidor SMTP: si el host,
+            // puerto o clave están mal, la conexión puede tardar en fallar y, con la sesión
+            // bloqueada, todas las demás peticiones del usuario quedan en fila (el sistema
+            // parece "colgado").
+            session_write_close();
+
             $res = $this->service->testCorreo($idEmpresa, $_POST, $destino);
             echo json_encode($res);
         } catch (\Throwable $e) {

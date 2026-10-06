@@ -899,8 +899,8 @@ window.cmgOcultarResultadoPermisos = function() {
         <div class="card-body">
             <p class="small text-muted mb-2">
                 <i class="bi bi-info-circle"></i>
-                Por defecto el usuario ve las ventas de <strong>todos los vendedores</strong> en <em><?= htmlspecialchars($vmDef['titulo']) ?></em>.
-                Desmarque los que no debe ver: sus ventas desaparecen del reporte y el selector <em>Vendedor</em> solo ofrece los marcados.
+                Por defecto el usuario ve la información de <strong>todos los vendedores</strong> en <em><?= htmlspecialchars($vmDef['titulo']) ?></em>.
+                Desmarque los que no debe ver: sus documentos desaparecen del módulo y el selector <em>Vendedor</em> solo ofrece los marcados.
                 Aplica al usuario con <strong>Ver Todo</strong> en ese submódulo; sin él, ya ve solo lo de su propio vendedor.
             </p>
             <div class="mb-2 d-flex align-items-center gap-2">

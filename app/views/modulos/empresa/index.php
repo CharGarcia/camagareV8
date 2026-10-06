@@ -2950,10 +2950,17 @@ $warnIcon = '<i class="bi bi-exclamation-circle-fill text-warning ms-1" title="C
             const formData = new FormData(form);
             formData.set('destino', destino);
 
+            // Respaldo: el servidor ya corta la conexión SMTP a los 15 s por intento, pero si
+            // algo se queda atascado el navegador no debe esperar indefinidamente.
+            const abortCtrl = new AbortController();
+            const temporizador = setTimeout(() => abortCtrl.abort(), 90000);
+
             const response = await fetch('<?= $base ?>/modulos/empresa/testCorreo', {
                 method: 'POST',
-                body: formData
+                body: formData,
+                signal: abortCtrl.signal
             });
+            clearTimeout(temporizador);
             const res = await response.json();
             Swal.close();
 
@@ -2964,7 +2971,11 @@ $warnIcon = '<i class="bi bi-exclamation-circle-fill text-warning ms-1" title="C
             }
         } catch (err) {
             Swal.close();
-            swalError('Error de conexión con el servidor');
+            if (err && err.name === 'AbortError') {
+                swalError('El servidor de correo no respondió a tiempo. Verifique el host, el puerto y la opción SSL/TLS.');
+            } else {
+                swalError('Error de conexión con el servidor');
+            }
         }
     }
 

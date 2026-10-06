@@ -6,7 +6,7 @@ ruta_modulo: modulos/empresa
 tipo: modulo
 visibilidad: admin
 etiquetas: empresa, datos de la empresa, ruc, establecimiento, punto de emision, logo, logo por punto de emision, logo de la caja, logo por sucursal, otra marca, quitar logo, ambiente, pruebas, produccion, configuracion, correo, email, smtp, envio de correos, cuerpo del correo, asunto, plantilla de correo, remitente, documentos legales, acuerdo de uso de datos, contrato de uso del sistema, aceptacion de documentos, documentos firmados, documentos cargados, archivos de la empresa, secuenciales, numeracion, tipos de documento, codDoc, eliminar secuencial, crear secuenciales, agregar todos los faltantes, facturas de reembolso, punto unico por empresa, punto inactivo, eliminar punto de emision con documentos, puntos duplicados, secuencial inicial, numero inicial, hueco, huecos, rellenar hueco, salto de numeracion, siguiente numero, retomar numeracion, presentacion de los items, agrupar items, agrupar por nombre, agrupar por lote, agrupar por nup, agrupar por serie, juntar lineas repetidas, sumar items iguales, mostrar lote en la factura, mostrar caducidad, mostrar unidad de medida, mostrar nup, descripcion del item, tirilla, ticket, impresion termica, modo de numeracion, numeracion por fecha, secuencial por fecha, reiniciar numeracion, reinicio anual, reinicio mensual, numeracion anual, numeracion mensual, correlativo por año, correlativo por mes, empezar de cero cada año, prefijo del año, numero con el año, volver a empezar la numeracion
-version: 1.30
+version: 1.31
 orden: 5
 estado: activo
 ---
@@ -145,7 +145,13 @@ y débito, retenciones, guías de remisión y liquidaciones de compra).
 
 - **Tipo de correo**: usar el correo de Camagare o el correo propio de la
   empresa (host, puerto, SSL, usuario y contraseña). Use **Probar Envío** antes
-  de activar el envío automático.
+  de activar el envío automático: pide un correo de destino y envía un mensaje
+  con los datos que están en pantalla (no hace falta guardar antes). Si el
+  servidor no responde o rechaza los datos, la prueba se corta en pocos
+  segundos y el mensaje indica qué revisar (host y puerto, SSL/TLS, usuario o
+  contraseña) junto con el detalle técnico. Gmail y Outlook exigen una
+  *contraseña de aplicación*, no la clave normal de la cuenta; el puerto 587 va
+  con SSL/TLS activado y el 465 usa SSL implícito.
 - **Enviar correos de forma automática**: si está apagado, el comprobante no se
   envía solo al autorizarse; igual se puede enviar a mano desde el documento.
 - **Asunto predeterminado del correo**: si se deja vacío, el sistema usa
@@ -401,6 +407,9 @@ de taxis.
 
 ## Historial de cambios
 
+- **1.31** — **Probar Envío** (Configuración Correo) ya no deja el sistema colgado cuando el
+  host, el puerto o la clave están mal: la prueba se corta a los pocos segundos, el resto de la
+  sesión sigue respondiendo mientras tanto y el error explica qué revisar.
 - **1.30** — Nuevo interruptor en **Facturación**: *¿Mostrar la columna Adicional en los ítems
   de la factura?* Encendido por defecto; apagado, la tabla de productos del modal de Factura de
   Venta ya no muestra la columna *Adicional* (lo guardado y el PDF no cambian). Requiere el SQL

@@ -30,6 +30,10 @@ final class VendedoresModulo
             'titulo' => 'Reporte de Ventas',
             'icono'  => 'bi-file-earmark-bar-graph',
         ],
+        'modulos/cuentas_por_cobrar' => [
+            'titulo' => 'Cuentas por Cobrar',
+            'icono'  => 'bi-wallet2',
+        ],
     ];
 
     public static function catalogo(): array

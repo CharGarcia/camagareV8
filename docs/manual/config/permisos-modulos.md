@@ -119,16 +119,19 @@ aparecerá aquí sola, con el mismo funcionamiento.
 ## Vendedores que puede ver por módulo (Reporte de Ventas)
 
 También solo para usuarios de **nivel 1**, aparece una tarjeta **Vendedores que
-puede ver** por cada módulo que admite limitar los vendedores. Hoy es uno:
-**Reporte de Ventas**. Sirve para que un usuario que ve toda la empresa en ese
-reporte vea únicamente las ventas de ciertos vendedores: por ejemplo, un
-coordinador de zona con los asesores de su zona.
+puede ver** por cada módulo que admite limitar los vendedores. Hoy son dos:
+**Reporte de Ventas** y **Cuentas por Cobrar**, cada uno con su propia lista.
+Sirve para que un usuario que ve toda la empresa en ese módulo vea únicamente
+los documentos de ciertos vendedores: por ejemplo, un coordinador de zona con
+los asesores de su zona.
 
 - **Sin configurar nada, el usuario ve las ventas de todos los vendedores.**
   Desmarque los que no debe ver; cada casilla se guarda al instante.
-- En el reporte, las ventas de los vendedores desmarcados desaparecen de la
-  tabla, de las tarjetas de totales, de todas las agrupaciones, del PDF, del
-  Excel y del resumen de la app móvil. El selector *Vendedor* solo ofrece los
+- En el módulo, los documentos de los vendedores desmarcados desaparecen de la
+  tabla, de las tarjetas de totales, de todas las agrupaciones y vistas, del
+  PDF y del Excel (y, en el Reporte de Ventas, del resumen de la app móvil). En
+  Cuentas por Cobrar tampoco se puede cobrar, ver el historial ni notificar un
+  documento de un vendedor desmarcado. El selector *Vendedor* solo ofrece los
   marcados (si queda uno solo, el filtro se fija en él).
 - Lo que no lleva vendedor cuenta por el vendedor asignado al cliente: un
   documento sin vendedor de un cliente de un vendedor desmarcado tampoco se ve.
@@ -249,9 +252,10 @@ cambio se aplica en la siguiente página que abra.
 
 ## Historial de cambios
 
-- **1.11** — Nueva tarjeta **Vendedores que puede ver — Reporte de Ventas**
-  (usuarios de nivel 1): el administrador desmarca los vendedores cuyas ventas
-  el usuario no debe ver en ese reporte; sin configurar nada, ve a todos.
+- **1.11** — Nuevas tarjetas **Vendedores que puede ver — Reporte de Ventas** y
+  **— Cuentas por Cobrar** (usuarios de nivel 1): el administrador desmarca los
+  vendedores cuyos documentos el usuario no debe ver en ese módulo; sin
+  configurar nada, ve a todos.
 - **1.10** — Nueva tarjeta **Pestañas que puede ver** (usuarios de nivel 1): una
   por cada módulo con pestañas configurables, hoy el *Reporte de Inventarios*.
   El administrador desmarca las pestañas que el usuario no debe ver; sin

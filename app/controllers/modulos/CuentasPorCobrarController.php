@@ -63,12 +63,20 @@ class CuentasPorCobrarController extends BaseModuloController
         // Catálogo para el filtro Vendedor (incluye inactivos: pueden tener cartera pendiente).
         // Restringido (§6): el filtro queda fijo en su propio vendedor (o vacío si no es
         // vendedor) y el catálogo de asesores no se manda al HTML.
+        // Con "Vendedores que puede ver" (permisos-modulos): solo los que le dejaron
+        // visibles, a elegir; si queda uno solo, también fijo.
         $alcance      = $this->alcanceUsuario([$idEmpresa]);
-        $vendedorFijo = \App\Helpers\AlcanceRegistros::restringe($alcance);
-        $vendedores   = $vendedorFijo
-            ? \App\Helpers\AlcanceRegistros::vendedorPropio($alcance, $idEmpresa, (int) $_SESSION['id_usuario'])
-            : ((new \App\repositories\modulos\VendedorRepository())
-                ->getListado($idEmpresa, '', 1, 0, 'nombre', 'ASC')['rows'] ?? []);
+        $restringido  = \App\Helpers\AlcanceRegistros::restringe($alcance);
+        if (!$restringido) {
+            $vendedores = (new \App\repositories\modulos\VendedorRepository())
+                ->getListado($idEmpresa, '', 1, 0, 'nombre', 'ASC')['rows'] ?? [];
+        } elseif (\App\Helpers\AlcanceRegistros::restringe($this->alcanceBase([$idEmpresa]))) {
+            $vendedores = \App\Helpers\AlcanceRegistros::vendedorPropio($alcance, $idEmpresa, (int) $_SESSION['id_usuario']);
+        } else {
+            $vendedores = (new \App\repositories\modulos\VendedorVisibleRepository())
+                ->getVendedoresPorIds($idEmpresa, \App\Helpers\AlcanceRegistros::idsVendedor($alcance));
+        }
+        $vendedorFijo = $restringido && count($vendedores) <= 1;
         $prefsVista   = \App\Helpers\PreferenciasHelper::getPreferenciasVista($this->getRutaModulo());
 
         // Consolidado por RUC (fase 1, SOLO LECTURA): el selector de alcance aparece únicamente
@@ -741,7 +749,9 @@ class CuentasPorCobrarController extends BaseModuloController
         // Alcance del usuario (§6): se resuelve aquí porque en consolidado el vendedor
         // vinculado es uno por establecimiento. A un usuario restringido no se le aplica
         // el filtro Vendedor de la pantalla: su alcance ya lo limita a su vendedor.
-        $filtros = \App\Helpers\AlcanceRegistros::limpiarFiltroVendedor(
+        // Al restringido, el filtro Vendedor de la pantalla solo le sirve para elegir uno
+        // de los vendedores de su alcance (los que le dejaron visibles); otro id se ignora.
+        $filtros = \App\Helpers\AlcanceRegistros::acotarAVendedorElegido(
             array_merge($filtros, $this->alcanceUsuario($idsEmpresa))
         );
         if (!empty($filtros['id_cliente'])) {
@@ -2507,11 +2517,27 @@ $plantillasFiltradas = [];
      * listado, guardas por id…).
      */
     private array $alcanceCache = [];
+    private array $alcanceBaseCache = [];
 
     private function alcanceUsuario(array $idsEmpresa): array
     {
+        // Sobre el alcance base se aplica "Vendedores que puede ver — Cuentas por
+        // Cobrar" (permisos-modulos): a quien ve toda la cartera se le quitan los
+        // vendedores que el administrador le ocultó. Sin ocultos, queda igual.
         $k = implode(',', array_map('intval', $idsEmpresa));
-        return $this->alcanceCache[$k] ??= \App\Helpers\AlcanceRegistros::resolver(
+        return $this->alcanceCache[$k] ??= \App\Helpers\AlcanceRegistros::acotarAVendedoresVisibles(
+            $this->alcanceBase($idsEmpresa),
+            (int) ($_SESSION['id_usuario'] ?? 0),
+            $idsEmpresa,
+            $this->getRutaModulo()
+        );
+    }
+
+    /** Alcance §6 puro (nivel, acceso total y vendedor vinculado), sin los vendedores ocultos. */
+    private function alcanceBase(array $idsEmpresa): array
+    {
+        $k = implode(',', array_map('intval', $idsEmpresa));
+        return $this->alcanceBaseCache[$k] ??= \App\Helpers\AlcanceRegistros::resolver(
             $this->getPermisos(),
             (int) ($_SESSION['id_usuario'] ?? 0),
             $idsEmpresa
@@ -2606,8 +2632,10 @@ $plantillasFiltradas = [];
      */
     private function filtraPorVendedor(array $filtros): bool
     {
+        // Con varios vendedores visibles ("Vendedores que puede ver") y ninguno elegido,
+        // la columna sí hace falta: las filas son de distintos asesores.
         return !empty($filtros['id_vendedor'])
-            || \App\Helpers\AlcanceRegistros::idsVendedor($filtros) !== [];
+            || count(\App\Helpers\AlcanceRegistros::idsVendedor($filtros)) === 1;
     }
 
     /**
@@ -2693,10 +2721,14 @@ $plantillasFiltradas = [];
         }
 
         $vendedorTxt = 'Todos';
-        if (\App\Helpers\AlcanceRegistros::idsVendedor($filtros)) {
-            // Restringido a su vendedor: el filtro de pantalla no aplica (ver resolverAlcance()).
-            $propio = \App\Helpers\AlcanceRegistros::vendedorPropio($filtros, $idEmpresa, (int) ($_SESSION['id_usuario'] ?? 0));
-            $vendedorTxt = $propio[0]['nombre'] ?? 'Su vendedor';
+        $idsAlcance  = \App\Helpers\AlcanceRegistros::idsVendedor($filtros);
+        if (count($idsAlcance) === 1) {
+            // Restringido a un solo vendedor: el suyo, o el que eligió de los visibles.
+            $v = (new \App\repositories\modulos\VendedorRepository())->findById($idsAlcance[0], $idEmpresa);
+            $vendedorTxt = $v['nombre'] ?? 'Su vendedor';
+        } elseif ($idsAlcance) {
+            // Varios vendedores visibles ("Vendedores que puede ver") y ninguno elegido.
+            $vendedorTxt = count($idsAlcance) . ' vendedores habilitados';
         } elseif (!empty($filtros['id_vendedor'])) {
             $v = (new \App\repositories\modulos\VendedorRepository())->findById((int)$filtros['id_vendedor'], $idEmpresa);
             $vendedorTxt = $v['nombre'] ?? ('#' . (int)$filtros['id_vendedor']);

@@ -310,6 +310,10 @@ class EnvioDocumentosSRIService
         require_once $docMailDir . '/smtp.php';
         require_once $docMailDir . '/exception.php';
 
+        // Es una prueba interactiva: el usuario está esperando con la pantalla bloqueada.
+        // PHPMailer espera por defecto 300 s para conectar y para cada respuesta del servidor;
+        // con un host/puerto equivocado eso deja la pantalla "colgada" varios minutos.
+        $timeoutSeg = 15;
         $mail = new PHPMailer(true);
         try {
             $mail->isSMTP();
@@ -320,6 +324,9 @@ class EnvioDocumentosSRIService
             $mail->SMTPSecure = $smtpData['smtpSecure'] ?? 'tls';
             $mail->Port       = $smtpData['port'];
             $mail->CharSet    = 'UTF-8';
+            $mail->Timeout    = $timeoutSeg;                     // conexión y lectura de cada respuesta
+            $mail->getSMTPInstance()->Timelimit = $timeoutSeg;   // tope total de cada lectura
+            set_time_limit($timeoutSeg * 4 + 10);
 
             $config = require MVC_CONFIG . '/app.php';
             if (!empty($config['mail_smtp_options'])) {
@@ -339,8 +346,45 @@ class EnvioDocumentosSRIService
             $mail->send();
             return ['ok' => true];
         } catch (Exception $e) {
-            return ['ok' => false, 'error' => $mail->ErrorInfo ?: $e->getMessage()];
+            return ['ok' => false, 'error' => self::explicarErrorSmtpPrueba($mail->ErrorInfo ?: $e->getMessage(), $smtpData)];
         }
+    }
+
+    /**
+     * Traduce el error técnico de PHPMailer a una explicación útil para quien está
+     * configurando el correo propio (host, puerto, SSL/TLS, usuario o clave).
+     */
+    private static function explicarErrorSmtpPrueba(string $errorTecnico, array $smtpData): string
+    {
+        $host   = (string) ($smtpData['host'] ?? '');
+        $port   = (int) ($smtpData['port'] ?? 0);
+        $secure = (string) ($smtpData['smtpSecure'] ?? '');
+        $e      = strtolower($errorTecnico);
+
+        if (str_contains($e, 'could not authenticate') || str_contains($e, 'authentication') || str_contains($e, '535') || str_contains($e, '534')) {
+            $msg = 'El servidor de correo rechazó el usuario o la contraseña. Verifique el correo emisor y su clave'
+                 . ' (Gmail y Outlook exigen una "contraseña de aplicación", no la clave normal de la cuenta).';
+        } elseif (str_contains($e, 'connect() failed') || str_contains($e, 'could not connect') || str_contains($e, 'timed-out') || str_contains($e, 'timed out')
+               || str_contains($e, 'timelimit') || str_contains($e, 'getaddrinfo') || str_contains($e, 'connection refused')) {
+            $msg = "No se pudo conectar con el servidor de correo {$host}" . ($port ? ":{$port}" : '')
+                 . '. Verifique el host y el puerto';
+            if ($port === 465 && $secure === 'tls') {
+                $msg .= ' (el puerto 465 normalmente requiere SSL implícito; para TLS use el puerto 587)';
+            } elseif ($port === 587 && $secure === '') {
+                $msg .= ' (el puerto 587 normalmente requiere activar SSL/TLS)';
+            }
+            $msg .= ', y que el servidor permita conexiones desde esta dirección.';
+        } elseif (str_contains($e, 'certificate') || str_contains($e, 'ssl') || str_contains($e, 'tls') || str_contains($e, 'starttls')) {
+            $msg = 'No se pudo establecer la conexión segura (SSL/TLS) con el servidor de correo.'
+                 . ' Revise la opción SSL/TLS y el puerto (587 para TLS, 465 para SSL).';
+        } elseif (str_contains($e, 'invalid address') || str_contains($e, 'sender') || str_contains($e, 'from')) {
+            $msg = 'El servidor no aceptó el correo emisor como remitente. Verifique que el correo emisor'
+                 . ' corresponda a la cuenta con la que se autentica.';
+        } else {
+            $msg = 'No se pudo enviar el correo de prueba.';
+        }
+
+        return $msg . ' Detalle técnico: ' . trim($errorTecnico);
     }
 
     /**
