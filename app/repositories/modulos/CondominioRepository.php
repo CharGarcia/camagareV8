@@ -54,11 +54,9 @@ class CondominioRepository extends BaseRepository
         }
         $st = $this->db->prepare(
             "SELECT c.*,
-                    po.nombre AS producto_ordinaria_nombre,
                     pf.nombre AS producto_fondo_nombre,
                     pi.nombre AS producto_interes_nombre
                FROM condominios_config c
-               LEFT JOIN productos po ON po.id = c.id_producto_ordinaria
                LEFT JOIN productos pf ON pf.id = c.id_producto_fondo
                LEFT JOIN productos pi ON pi.id = c.id_producto_interes
               WHERE c.id_empresa = :e AND c.eliminado = false"
@@ -72,7 +70,7 @@ class CondominioRepository extends BaseRepository
         'nombre_condominio', 'direccion',
         'administrador_nombre', 'administrador_cedula', 'administrador_cargo', 'presidente_nombre', 'presidente_cedula',
         'dias_gracia',
-        'id_producto_ordinaria', 'id_producto_fondo', 'id_producto_interes',
+        'id_producto_fondo', 'id_producto_interes',
         'metodo_alicuota', 'reparto_manuales',
         'fondo_reserva_tipo', 'fondo_reserva_valor',
         'cobra_intereses', 'interes_tipo', 'interes_tasa_mensual', 'interes_destino',

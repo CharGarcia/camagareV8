@@ -6,7 +6,7 @@ ruta_modulo: modulos/condominios-config
 tipo: modulo
 visibilidad: todos
 etiquetas: condominio, configuracion condominio, administrador del condominio, alicuota, fondo de reserva, intereses de mora, tasa legal, multas, reglamento, pronto pago, pago anticipado, dia de vencimiento, dias de gracia, restriccion areas comunes, activar condominios
-version: 1.2
+version: 1.3
 orden: 1
 estado: activo
 ---
@@ -39,8 +39,7 @@ el módulo Condominios** para la empresa; sin ella no se pueden registrar inmueb
 1. **Condominio**: nombre, dirección, **administrador/a** (obligatorio: firma la liquidación para
    cobro judicial, art. 13 LPH), presidente de la asamblea (opcional), desde cuántas expensas
    vencidas se habilita la liquidación.
-2. **Alícuota y fondo**: elija con el buscador el **producto para la alícuota** (escriba parte
-   del nombre; el botón de al lado abre Productos para crearlo). Método de alícuota del
+2. **Alícuota y fondo**: método de alícuota del
    condominio (por %, por m² o manual; cada inmueble puede tener el suyo). Fondo de reserva: no
    / % sobre la alícuota / monto fijo, con su producto.
    Debajo, **Valores que rigen**: la tarifa por m² (inmuebles por m²) y el monto mensual a repartir
@@ -72,7 +71,6 @@ el módulo Condominios** para la empresa; sin ella no se pueden registrar inmueb
 | Presidente/a de la asamblea | No | Segunda firma opcional en la liquidación. |
 | Liquidación judicial desde | Sí | Expensas vencidas mínimas para habilitar el PDF de liquidación (por defecto 1). |
 | Días de gracia | Sí | 0–60, contados desde el vencimiento del recibo (que sale del plazo del cliente). Si paga dentro no hay interés; si no, el interés corre desde el vencimiento. |
-| Producto para la alícuota | Sí | Servicio de Productos. Su nombre sale en el recibo: «Alícuotas – Dpto 302 – octubre 2026». |
 | Método de alícuota | Sí | **Por %**: monto a repartir × % del inmueble. **Por m²**: tarifa × área. **Manual**: monto acordado por inmueble. |
 | Manuales con presupuesto | — | Solo cuando el monto a repartir sale de un presupuesto aprobado: *repartir el resto* (por defecto) o *manuales aparte*. |
 | Fondo de reserva | — | No / % sobre la alícuota ordinaria / monto fijo por inmueble. Línea separada en el recibo; exige su producto. |
@@ -128,8 +126,6 @@ por fila, independiente del botón Guardar de la configuración.
 
 ## Errores frecuentes
 
-- **«Elija el producto (servicio) con el que se factura la alícuota»**: créelo en Productos
-  como servicio y búsquelo por su nombre; el botón junto al campo abre Productos.
 - **«El producto elegido … debe ser un servicio»**: el producto es un bien; cree uno de tipo
   servicio.
 - **¿Dónde se define si es recibo o factura, la serie y el día de cobro?** En la suscripción de cada
@@ -139,6 +135,8 @@ por fila, independiente del botón Guardar de la configuración.
 
 ## Historial de cambios
 
+- **1.3** — Se retira «Producto para la alícuota ordinaria»: lo define cada suscripción; el producto del
+  fondo de reserva pasa a ser opcional.
 - **1.2** — Pestaña **Reajuste de cuotas**: cambio masivo del valor de un concepto en las suscripciones
   (fijo, % o según inmueble), con vista previa, exclusiones, programación por fecha (cron diario) e
   historial.

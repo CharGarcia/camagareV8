@@ -16,3 +16,9 @@ ALTER TABLE condominios_unidades DROP COLUMN IF EXISTS comprobante;
 ALTER TABLE condominios_unidades DROP COLUMN IF EXISTS id_punto_emision;
 ALTER TABLE condominios_unidades DROP COLUMN IF EXISTS dia_vencimiento_propio;
 COMMIT;
+
+-- 06-10-2026 (2.ª parte): el producto de la alícuota se elige en cada suscripción; sobra aquí.
+BEGIN;
+ALTER TABLE condominios_config DROP COLUMN IF EXISTS id_producto_ordinaria;
+ALTER TABLE condominios_config DROP CONSTRAINT IF EXISTS chk_cond_cfg_fondo_prod;
+COMMIT;

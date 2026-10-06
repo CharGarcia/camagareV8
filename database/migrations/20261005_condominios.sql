@@ -45,8 +45,8 @@ CREATE TABLE IF NOT EXISTS condominios_config (
     -- La emisión (comprobante, serie, periodicidad, día de cobro, correo) la define cada
     -- suscripción en el módulo Suscripciones; aquí solo lo que Suscripciones no sabe.
     dias_gracia                 SMALLINT      NOT NULL DEFAULT 0,            -- tras el vencimiento, antes de cobrar interés
-    -- Productos (servicios creados en el módulo Productos) con los que se factura cada concepto
-    id_producto_ordinaria       INTEGER       NOT NULL,
+    -- Productos (servicios creados en Productos) para los conceptos que genera el módulo. El de la
+    -- alícuota NO va aquí: lo elige cada suscripción (concepto «Alícuota») en Suscripciones.
     id_producto_fondo           INTEGER,                                     -- obligatorio si hay fondo
     id_producto_interes         INTEGER,                                     -- obligatorio si cobra intereses
     -- Alícuota ordinaria
@@ -86,7 +86,6 @@ CREATE TABLE IF NOT EXISTS condominios_config (
     CONSTRAINT chk_cond_cfg_metodo      CHECK (metodo_alicuota IN ('porcentaje', 'm2', 'manual')),
     CONSTRAINT chk_cond_cfg_reparto     CHECK (reparto_manuales IN ('repartir_resto', 'aparte')),
     CONSTRAINT chk_cond_cfg_fondo_tipo  CHECK (fondo_reserva_tipo IN ('no', 'porcentaje', 'fijo')),
-    CONSTRAINT chk_cond_cfg_fondo_prod  CHECK (fondo_reserva_tipo = 'no' OR id_producto_fondo IS NOT NULL),
     CONSTRAINT chk_cond_cfg_int_tipo    CHECK (interes_tipo IN ('legal', 'fijo')),
     CONSTRAINT chk_cond_cfg_int_destino CHECK (interes_destino IN ('siguiente_recibo', 'recibo_aparte')),
     CONSTRAINT chk_cond_cfg_int_prod    CHECK (cobra_intereses = false OR id_producto_interes IS NOT NULL),

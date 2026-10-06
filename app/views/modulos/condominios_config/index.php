@@ -34,7 +34,6 @@ $prodChip = function (string $id, string $label, string $campo, string $ayuda) u
     <h5 class="mb-0 fw-bold"><i class="bi bi-gear text-primary me-2"></i><?= htmlspecialchars($titulo) ?>
         <?php if ($config): ?><span class="text-muted fw-normal fs-6 ms-2"><?= htmlspecialchars((string) ($config['nombre_condominio'] ?: '')) ?></span><?php endif; ?>
     </h5>
-    <a href="<?= rtrim($base, '/') ?>/modulos/condominios" class="btn btn-outline-secondary btn-sm"><i class="bi bi-door-open me-1"></i>Ir a Inmuebles</a>
 </div>
 
 <?php if (!$instalado): ?>
@@ -124,17 +123,14 @@ $prodChip = function (string $id, string $label, string $campo, string $ayuda) u
         <!-- ══ Alícuota y fondo ══ -->
         <div class="tab-pane fade" id="pane-cfg-alicuota" role="tabpanel">
             <div class="row g-2">
-                <div class="col-md-6 position-relative">
-                    <?= $prodChip('cfg_prod_ordinaria', 'Producto para la alícuota ordinaria *', 'id_producto_ordinaria', 'Servicio creado en Productos (p. ej. «Alícuotas»). Su nombre, IVA y cuenta contable se usan en el recibo.') ?>
-                </div>
-                <div class="col-md-3">
+                <div class="col-md-6">
                     <label for="cfg_metodo_alicuota">Método de alícuota *</label>
                     <select class="form-select form-select-sm" id="cfg_metodo_alicuota" name="metodo_alicuota">
                         <?php foreach ($metodos as $k => $v): ?><option value="<?= $k ?>"><?= htmlspecialchars($v) ?></option><?php endforeach; ?>
                     </select>
                     <div class="form-text">Cada inmueble puede tener el suyo.</div>
                 </div>
-                <div class="col-md-3">
+                <div class="col-md-6">
                     <label for="cfg_reparto_manuales">Manuales con presupuesto</label>
                     <select class="form-select form-select-sm" id="cfg_reparto_manuales" name="reparto_manuales">
                         <option value="repartir_resto">Repartir el resto entre las demás</option>

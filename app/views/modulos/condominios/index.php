@@ -79,7 +79,7 @@ $filtrosUnidades = [
     </div>
 <?php elseif (!$config): ?>
     <div class="alert alert-info cond-aviso py-2"><i class="bi bi-info-circle me-1"></i>
-        Este condominio aún no está configurado. Vaya a <a href="<?= rtrim($base, '/') ?>/modulos/condominios-config"><b>Configuración de condominios</b></a>, indique el administrador y el producto «Alícuotas» (créelo antes en Productos) para activar el módulo.
+        Este condominio aún no está configurado. Vaya a <a href="<?= rtrim($base, '/') ?>/modulos/condominios-config"><b>Configuración de condominios</b></a>, indique el administrador y guarde para activar el módulo.
     </div>
 <?php elseif ($pendientes): ?>
     <div class="alert alert-warning cond-aviso py-2 mb-2" id="cond-aviso-pendientes"><i class="bi bi-exclamation-triangle me-1"></i>

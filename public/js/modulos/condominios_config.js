@@ -74,7 +74,6 @@ window.CONDCFG = (function () {
             // cuando la configuración guardada los tiene vacíos: no pisarlos con ''.
             if (c[el.name] !== undefined && c[el.name] !== null && !(c[el.name] === '' && ['nombre_condominio', 'direccion', 'administrador_nombre', 'administrador_cedula'].includes(el.name))) el.value = c[el.name];
         });
-        setChip('cfg_prod_ordinaria_txt', 'cfg_prod_ordinaria', c.id_producto_ordinaria, c.producto_ordinaria_nombre);
         setChip('cfg_prod_fondo_txt', 'cfg_prod_fondo', c.id_producto_fondo, c.producto_fondo_nombre);
         setChip('cfg_prod_interes_txt', 'cfg_prod_interes', c.id_producto_interes, c.producto_interes_nombre);
         onFondo(); onIntereses();
@@ -319,7 +318,6 @@ window.CONDCFG = (function () {
         if (CFG.config) cargarValores();
         $('val_vigente_desde')?.addEventListener('change', valorPresupuesto);
         $('formCondConfig').addEventListener('submit', guardar);
-        chip('cfg_prod_ordinaria_txt', 'cfg_prod_ordinaria', 'cfg_prod_ordinaria_dd', buscarServicios, lblServicio);
         chip('cfg_prod_fondo_txt', 'cfg_prod_fondo', 'cfg_prod_fondo_dd', buscarServicios, lblServicio);
         chip('cfg_prod_interes_txt', 'cfg_prod_interes', 'cfg_prod_interes_dd', buscarServicios, lblServicio);
         chip('multa_prod_txt', 'multa_id_producto', 'multa_prod_dd', buscarServicios, lblServicio);

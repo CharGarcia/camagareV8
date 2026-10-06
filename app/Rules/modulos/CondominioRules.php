@@ -56,10 +56,8 @@ class CondominioRules
             throw new InvalidArgumentException('Los días de gracia deben estar entre 0 y 60.|#cfg_dias_gracia');
         }
 
-        $c['id_producto_ordinaria'] = (int) ($d['id_producto_ordinaria'] ?? 0);
-        if ($c['id_producto_ordinaria'] <= 0) {
-            throw new \InvalidArgumentException('Elija el producto (servicio) con el que se factura la alícuota ordinaria. Si no existe, créelo en Productos.|#cfg_prod_ordinaria_txt');
-        }
+        // El producto de la alícuota lo elige cada suscripción (Suscripciones); aquí solo los
+        // conceptos que genera el módulo (fondo, intereses), y el del fondo es opcional.
         $c['id_producto_fondo']   = (int) ($d['id_producto_fondo'] ?? 0) ?: null;
         $c['id_producto_interes'] = (int) ($d['id_producto_interes'] ?? 0) ?: null;
 
@@ -80,9 +78,6 @@ class CondominioRules
             }
             if ($c['fondo_reserva_tipo'] === 'porcentaje' && $c['fondo_reserva_valor'] > 100) {
                 throw new \InvalidArgumentException('El % del fondo de reserva no puede pasar de 100.|#cfg_fondo_reserva_valor');
-            }
-            if ($c['id_producto_fondo'] === null) {
-                throw new \InvalidArgumentException('Elija el producto con el que se factura el fondo de reserva.|#cfg_prod_fondo_txt');
             }
         }
 

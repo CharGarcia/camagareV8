@@ -38,10 +38,9 @@ se habilitan en las fases siguientes y usan lo que aquí se registra.
 ## Requisitos previos
 
 - La empresa debe ser el condominio (RUC, establecimiento y serie propios).
-- En **Productos**, crear como **servicio** cada concepto que se vaya a cobrar: al menos uno para
-  la alícuota ordinaria (p. ej. «Alícuotas»); y, si aplica, «Fondo común de reserva»,
-  «Intereses por mora» y las multas. El módulo **no crea productos**: solo los elige. El IVA
-  (normalmente 0 %) y la cuenta contable salen del producto.
+- Los conceptos que se cobran (p. ej. «Alícuotas», IVA 0 %) son **servicios de Productos** que se
+  eligen en cada suscripción; el módulo **no crea productos**. El IVA y la cuenta contable salen del
+  producto.
 - Los condóminos (propietarios y arrendatarios) son **clientes**. Si no existen, la carga por
   Excel los crea.
 - Haber guardado la **Configuración de condominios** (submódulo propio del menú Condominios): sin ella

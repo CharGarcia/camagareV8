@@ -73,7 +73,6 @@ class CondominioService
     {
         $this->exigirInstalado();
         $c = $this->rules->validarConfig($data);
-        $this->validarProducto($c['id_producto_ordinaria'], $idEmpresa, 'la alícuota ordinaria', '#cfg_prod_ordinaria_txt');
         if ($c['id_producto_fondo']) {
             $this->validarProducto($c['id_producto_fondo'], $idEmpresa, 'el fondo de reserva', '#cfg_prod_fondo_txt');
         }
@@ -108,12 +107,6 @@ class CondominioService
             return ['Guarde la configuración del condominio para activar el módulo.'];
         }
         $p = [];
-        if (empty($cfg['id_producto_ordinaria'])) {
-            $p[] = 'Falta el producto para la alícuota ordinaria; créelo en Productos y elíjalo en la configuración.';
-        }
-        if (($cfg['fondo_reserva_tipo'] ?? 'no') !== 'no' && empty($cfg['id_producto_fondo'])) {
-            $p[] = 'Falta el producto para el fondo de reserva.';
-        }
         if ($this->esTrue($cfg['cobra_intereses'] ?? false) && empty($cfg['id_producto_interes'])) {
             $p[] = 'Falta el producto para los intereses de mora.';
         }
