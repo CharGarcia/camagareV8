@@ -473,16 +473,18 @@ class ConsignacionVentaPdfService
         $mL  = $this->marginL;
         $colW = $this->contentW / 3;
 
-        // Alto del bloque completo: 22 mm hasta la línea de firmas, 14 más hasta la de
+        // Alto del bloque completo: 12 mm hasta la línea de firmas (espacio para firmar a
+        // mano, sin dejar un hueco grande bajo las observaciones), 14 más hasta la de
         // acondicionamiento y 5 para su etiqueta. Si no cabe entero en lo que queda de
         // página, las firmas pasan a una hoja nueva en vez de partirse o dibujarse encima
         // de la tabla o de las observaciones.
-        $altoBloque = 22.0 + 14.0 + 5.0;
+        $espacioFirma = 12.0;
+        $altoBloque   = $espacioFirma + 14.0 + 5.0;
         if ($y + $altoBloque > $pdf->getPageHeight() - $pdf->getBreakMargin()) {
             $pdf->AddPage();
             $y = $pdf->GetY();
         }
-        $yLinea = $y + 22;
+        $yLinea = $y + $espacioFirma;
 
         // "Emitido por" lleva el usuario que REGISTRÓ la consignación (no la empresa ni quien
         // imprime): es el responsable de la emisión del documento.

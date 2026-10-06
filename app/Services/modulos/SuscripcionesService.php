@@ -130,12 +130,30 @@ class SuscripcionesService
         );
     }
 
+    /**
+     * Condominios: inmueble de la suscripción. Si el usuario eligió uno se valida que el cliente
+     * lo pague; si no eligió y el cliente paga un solo inmueble, se asocia solo. Fuera de un
+     * condominio (o sin el SQL de Condominios) devuelve null y nada cambia.
+     */
+    private function resolverInmueble(array $data): ?int
+    {
+        if (!$this->repository->tieneInmueble()) {
+            return null;
+        }
+        return \App\Services\modulos\CondominioService::crear()->resolverInmuebleSuscripcion(
+            (int) ($data['id_cliente'] ?? 0),
+            (int) ($data['id_unidad'] ?? 0) ?: null,
+            (int) $data['id_empresa']
+        );
+    }
+
     public function crear(array $data): int
     {
         $detalle = $this->_extraerDetalle($data);
         $data['info_adicional'] = $this->_extraerInfoAdicional($data);
         $this->rules->validar($data, $detalle);
         $data['proximo_cobro'] = $data['proximo_cobro'] ?? $data['fecha_inicio'];
+        $data['id_unidad'] = $this->resolverInmueble($data);
 
         $this->repository->beginTransaction();
         try {
@@ -143,6 +161,9 @@ class SuscripcionesService
 
             $idEmpresa = (int) $data['id_empresa'];
             $idUsuario = (int) $data['id_usuario'];
+            if ($data['id_unidad']) {
+                \App\Services\modulos\CondominioService::crear()->espejarSuscripcion($id, $data['id_unidad'], $idEmpresa);
+            }
 
             foreach ($detalle as $item) {
                 $item['id_suscripcion'] = $id;
@@ -173,10 +194,14 @@ class SuscripcionesService
         }
 
         $idUsuario = (int) $data['id_usuario'];
+        $data['id_unidad'] = $this->resolverInmueble($data);
 
         $this->repository->beginTransaction();
         try {
             $this->repository->update($id, $idEmpresa, $data);
+            if ($this->repository->tieneInmueble()) {
+                \App\Services\modulos\CondominioService::crear()->espejarSuscripcion($id, $data['id_unidad'], $idEmpresa);
+            }
 
             // Reemplazar detalle: soft-delete los existentes e insertar los nuevos
             $this->repository->deleteDetalle($id, $idUsuario);

@@ -13,7 +13,7 @@ class SuscripcionesRepository extends BaseRepository
 {
     use AmbienteEmpresaTrait;
 
-    public const COLUMNAS_ORDEN = ['nombre_cliente', 'nombre_periodicidad', 'tipo_comprobante', 'forma_cobro', 'modalidad_cobro', 'reconocimiento', 'monto_total', 'proximo_cobro', 'fecha_inicio', 'fecha_fin', 'estado', 'created_at'];
+    public const COLUMNAS_ORDEN = ['nombre_cliente', 'inmueble', 'nombre_periodicidad', 'tipo_comprobante', 'forma_cobro', 'modalidad_cobro', 'reconocimiento', 'monto_total', 'proximo_cobro', 'fecha_inicio', 'fecha_fin', 'estado', 'created_at'];
 
     public function __construct()
     {
@@ -27,7 +27,8 @@ class SuscripcionesRepository extends BaseRepository
         // Modalidad / reconocimiento solo existen con el SQL del devengo aplicado.
         $devengo = $this->tieneColumnasDevengo();
         if (!in_array($ordenCol, self::COLUMNAS_ORDEN, true)
-            || (!$devengo && in_array($ordenCol, ['modalidad_cobro', 'reconocimiento'], true))) {
+            || (!$devengo && in_array($ordenCol, ['modalidad_cobro', 'reconocimiento'], true))
+            || (!$this->tieneInmueble() && $ordenCol === 'inmueble')) {
             $ordenCol = 'proximo_cobro';
         }
         $ordenDir = strtoupper($ordenDir) === 'DESC' ? 'DESC' : 'ASC';
@@ -40,6 +41,10 @@ class SuscripcionesRepository extends BaseRepository
 
         // Expresiones calculadas (subconsultas: el COUNT solo une `clientes`).
         $exprItems = "(SELECT COUNT(*) FROM suscripciones_detalle sdi WHERE sdi.id_suscripcion = s.id AND sdi.eliminado = false)";
+        // Inmueble del condominio (Condominios): la columna id_unidad existe solo con su SQL aplicado.
+        $exprInmueble = $this->tieneInmueble()
+            ? "(SELECT CONCAT_WS(' · ', cu.codigo, cu.nombre) FROM condominios_unidades cu WHERE cu.id = s.id_unidad)"
+            : "NULL::text";
         // Monto de cada cobro: suma de los ítems con su IVA (igual que la ficha de empresa).
         $exprMonto = "ROUND(COALESCE((SELECT SUM(sdm.cantidad * sdm.precio_unitario * (1 + sdm.porcentaje_iva / 100))
                                       FROM suscripciones_detalle sdm
@@ -55,6 +60,7 @@ class SuscripcionesRepository extends BaseRepository
                 [
                     'c.nombre',                                                   // Cliente
                     'c.identificacion',                                           // RUC/Cédula
+                    $exprInmueble,                                               // Inmueble (condominios)
                     "TO_CHAR(s.proximo_cobro, 'DD-MM-YYYY')",                     // Próx. Cobro (como se muestra)
                     's.proximo_cobro::text',
                     "TO_CHAR(s.fecha_inicio, 'DD-MM-YYYY')",                      // Inicio
@@ -92,6 +98,7 @@ class SuscripcionesRepository extends BaseRepository
         \App\Helpers\FiltrosBusqueda::aplicarFiltros($where, $params, $parsed['filtros'], [
             'texto' => [
                 'cliente'        => 'c.nombre',
+                'inmueble'       => $exprInmueble,
                 'ruc'            => 'c.identificacion',
                 'identificacion' => 'c.identificacion',
                 'observaciones'  => "CONCAT_WS(' ', s.observaciones, s.info_adicional::text)",
@@ -149,6 +156,7 @@ class SuscripcionesRepository extends BaseRepository
 
             $orderExpr = match ($ordenCol) {
                 'nombre_cliente'      => 'c.nombre',
+                'inmueble'            => $exprInmueble,
                 'nombre_periodicidad' => 'per.nombre',
                 'monto_total'         => $exprMonto,
                 default               => "s.{$ordenCol}",
@@ -158,6 +166,7 @@ class SuscripcionesRepository extends BaseRepository
                            c.nombre         AS nombre_cliente,
                            c.identificacion AS identificacion_cliente,
                            c.email          AS email_cliente,
+                           {$exprInmueble} AS inmueble,
                            per.nombre       AS nombre_periodicidad,
                            per.meses        AS periodicidad_meses,
                            per.codigo       AS codigo_periodicidad,
@@ -946,6 +955,12 @@ class SuscripcionesRepository extends BaseRepository
             && $this->columnaExiste('suscripciones_pagos', 'servicio_desde');
     }
 
+    /** ¿Está aplicado el SQL de Condominios (columna suscripciones.id_unidad)? */
+    public function tieneInmueble(): bool
+    {
+        return $this->columnaExiste('suscripciones', 'id_unidad');
+    }
+
     /** Valores de modalidad/reconocimiento listos para el INSERT/UPDATE (con sus defaults). */
     private function paramsDevengo(array $data): array
     {
@@ -958,8 +973,9 @@ class SuscripcionesRepository extends BaseRepository
     public function create(array $data): int
     {
         $devengo  = $this->tieneColumnasDevengo();
-        $colsDev  = $devengo ? ', modalidad_cobro, reconocimiento' : '';
-        $valsDev  = $devengo ? ', :modalidad_cobro, :reconocimiento' : '';
+        $inmueble = $this->tieneInmueble();
+        $colsDev  = ($devengo ? ', modalidad_cobro, reconocimiento' : '') . ($inmueble ? ', id_unidad' : '');
+        $valsDev  = ($devengo ? ', :modalidad_cobro, :reconocimiento' : '') . ($inmueble ? ', :id_unidad' : '');
         $sql = "INSERT INTO {$this->table}
                     (id_empresa, id_cliente, id_periodicidad,
                      fecha_inicio, fecha_fin, proximo_cobro,
@@ -973,7 +989,7 @@ class SuscripcionesRepository extends BaseRepository
                      :kushki_token, :kushki_card_last4, :kushki_card_brand, :kushki_card_name,
                      :observaciones, :info_adicional, :created_by, CURRENT_TIMESTAMP, false{$valsDev})";
         $st = $this->db->prepare($sql);
-        $st->execute(($devengo ? $this->paramsDevengo($data) : []) + [
+        $st->execute(($devengo ? $this->paramsDevengo($data) : []) + ($inmueble ? [':id_unidad' => (int) ($data['id_unidad'] ?? 0) ?: null] : []) + [
             ':id_empresa'        => $data['id_empresa'],
             ':id_cliente'        => $data['id_cliente'],
             ':id_periodicidad'   => $data['id_periodicidad'],
@@ -997,8 +1013,10 @@ class SuscripcionesRepository extends BaseRepository
 
     public function update(int $id, int $idEmpresa, array $data): bool
     {
-        $devengo = $this->tieneColumnasDevengo();
-        $setDev  = $devengo ? 'modalidad_cobro = :modalidad_cobro, reconocimiento = :reconocimiento,' : '';
+        $devengo  = $this->tieneColumnasDevengo();
+        $inmueble = $this->tieneInmueble();
+        $setDev   = ($devengo ? 'modalidad_cobro = :modalidad_cobro, reconocimiento = :reconocimiento,' : '')
+                  . ($inmueble ? ' id_unidad = :id_unidad,' : '');
         $sql = "UPDATE {$this->table} SET
                     {$setDev}
                     id_cliente      = :id_cliente,
@@ -1016,7 +1034,7 @@ class SuscripcionesRepository extends BaseRepository
                     updated_at      = CURRENT_TIMESTAMP
                 WHERE id = :id AND id_empresa = :id_empresa AND eliminado = false";
         $st = $this->db->prepare($sql);
-        return $st->execute(($devengo ? $this->paramsDevengo($data) : []) + [
+        return $st->execute(($devengo ? $this->paramsDevengo($data) : []) + ($inmueble ? [':id_unidad' => (int) ($data['id_unidad'] ?? 0) ?: null] : []) + [
             ':id_cliente'      => $data['id_cliente'],
             ':id_periodicidad' => $data['id_periodicidad'],
             ':fecha_inicio'    => $data['fecha_inicio'],

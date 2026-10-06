@@ -117,6 +117,9 @@ class SuscripcionesController extends BaseModuloController
             'ordenDir'       => $ordenDir,
             'vistaConfig'    => $prefsVista,
             'periodicidades' => $periodicidades,
+            // Condominios activo en esta empresa: el modal muestra el selector de inmueble y el
+            // listado la columna Inmueble.
+            'esCondominio'   => \App\Services\modulos\CondominioService::activo($idEmpresa),
             // Selects del modal de filtros (solo valores usados por la empresa).
             'opcionesFiltro' => $this->service->getOpcionesFiltro($idEmpresa),
             'tarifasIva'     => $tarifasIva,
@@ -171,6 +174,7 @@ class SuscripcionesController extends BaseModuloController
             echo '<tr class="susc-row" role="button" data-susc=\'' . htmlspecialchars(json_encode($r), ENT_QUOTES) . '\' onclick="abrirModalSuscEditar(this)">';
             echo '<td class="ps-3 fw-medium" data-col="nombre_cliente">' . htmlspecialchars($r['nombre_cliente'] ?? '') . '</td>';
             echo '<td data-col="identificacion_cliente"><small class="text-muted">' . htmlspecialchars($r['identificacion_cliente'] ?? '') . '</small></td>';
+            echo '<td data-col="inmueble"><small>' . htmlspecialchars($r['inmueble'] ?? '—') . '</small></td>';
             echo '<td data-col="nombre_periodicidad">' . htmlspecialchars($r['nombre_periodicidad'] ?? '—') . '</td>';
             echo '<td class="text-center" data-col="tipo_comprobante"><small class="text-muted">' . htmlspecialchars(ucwords(str_replace('_', ' ', $r['tipo_comprobante'] ?? 'Factura'))) . '</small></td>';
             echo '<td class="text-center" data-col="forma_cobro">' . $iconoCobro . ' ' . ucfirst($r['forma_cobro'] ?? '') . '</td>';
@@ -757,6 +761,17 @@ class SuscripcionesController extends BaseModuloController
         exit;
     }
 
+    /**
+     * Condominios: inmuebles que paga el cliente elegido (para el selector del modal). Vacío si
+     * la empresa no es condominio. Con uno solo, la suscripción lo toma sola al guardar.
+     */
+    public function getInmueblesClienteAjax(): void
+    {
+        $this->requireLeer();
+        $idEmpresa = (int) $_SESSION['id_empresa'];
+        $this->json(['ok' => true, 'rows' => \App\Services\modulos\CondominioService::crear()->inmueblesDeCliente((int) ($_GET['id_cliente'] ?? 0), $idEmpresa)]);
+    }
+
     public function getProductosAjax(): void
     {
         $this->requireLeer();
@@ -960,7 +975,7 @@ class SuscripcionesController extends BaseModuloController
     }
 
     private const CABECERAS_EXPORT = [
-        'Cliente', 'Identificación', 'Periodicidad', 'Comprobante', 'Forma de cobro',
+        'Cliente', 'Identificación', 'Inmueble', 'Periodicidad', 'Comprobante', 'Forma de cobro',
         'Modalidad', 'Reconocimiento',
         'Próximo cobro', 'Fecha inicio', 'Fecha fin', 'Ítems', 'Total', 'Estado',
     ];
@@ -972,6 +987,7 @@ class SuscripcionesController extends BaseModuloController
         return [
             (string) ($r['nombre_cliente'] ?? ''),
             (string) ($r['identificacion_cliente'] ?? ''),
+            (string) ($r['inmueble'] ?? '-'),
             (string) ($r['nombre_periodicidad'] ?? '-'),
             ucfirst((string) ($r['tipo_comprobante'] ?? 'factura')),
             ucfirst((string) ($r['forma_cobro'] ?? '')),

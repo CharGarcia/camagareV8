@@ -563,6 +563,22 @@ return [
         'legacy_rutas' => [],
     ],
 
+    // ─── CONDOMINIOS ─────────────────────────────────────────────────────────
+    // Dos submódulos bajo el módulo de menú «Condominios», con permisos independientes.
+    // El id se resuelve por la ruta (submodulos_menu.ruta); no hace falta fijarlo aquí.
+    // Inmuebles: departamentos, locales, parqueaderos, bodegas… con propietario, pagador,
+    // alícuota, historial, restricción de áreas comunes y carga Excel.
+    'modulos/condominios' => [
+        'id_submodulo' => 0,
+        'legacy_rutas' => [],
+    ],
+    // Configuración del condominio (administrador, emisión, productos de los conceptos, fondo,
+    // intereses, catálogo de multas, descuentos). Guardarla activa el módulo para la empresa.
+    'modulos/condominios-config' => [
+        'id_submodulo' => 0,
+        'legacy_rutas' => [],
+    ],
+
     // ─── FACTURA EXPRESS QR ──────────────────────────────────────────────────
     // Dos submódulos independientes con permisos separados.
     // Registrar cada id_submodulo tras insertar en submodulos_menu.

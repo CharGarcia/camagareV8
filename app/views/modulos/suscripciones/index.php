@@ -175,6 +175,7 @@ $estadoClases = [
                 $columnasTabla = [
                     'nombre_cliente'         => 'Cliente',
                     'identificacion_cliente' => 'RUC/Cédula',
+                    'inmueble'               => 'Inmueble',
                     'nombre_periodicidad'    => 'Periodicidad',
                     'tipo_comprobante'       => 'Comprobante',
                     'forma_cobro'            => 'Cobro',
@@ -221,6 +222,7 @@ $estadoClases = [
                     <tr>
                         <th class="ps-3 sortable-header" role="button" data-sort="nombre_cliente" data-col="nombre_cliente">Cliente <i class="bi bi-arrow-down-up small text-muted ms-1"></i></th>
                         <th data-col="identificacion_cliente">RUC/Cédula</th>
+                        <th class="sortable-header" role="button" data-sort="inmueble" data-col="inmueble" title="Inmueble del condominio al que pertenece la expensa">Inmueble <i class="bi bi-arrow-down-up small text-muted ms-1"></i></th>
                         <th class="sortable-header" role="button" data-sort="nombre_periodicidad" data-col="nombre_periodicidad">Periodicidad <i class="bi bi-arrow-down-up small text-muted ms-1"></i></th>
                         <th class="text-center sortable-header" role="button" data-sort="tipo_comprobante" data-col="tipo_comprobante">Comprobante <i class="bi bi-arrow-down-up small text-muted ms-1"></i></th>
                         <th class="text-center sortable-header" role="button" data-sort="forma_cobro" data-col="forma_cobro">Cobro <i class="bi bi-arrow-down-up small text-muted ms-1"></i></th>
@@ -236,7 +238,7 @@ $estadoClases = [
                 </thead>
                 <tbody id="tbodySusc">
                     <?php if (empty($rows)): ?>
-                        <tr><td colspan="13" class="text-center py-5 text-muted">No se encontraron suscripciones.</td></tr>
+                        <tr><td colspan="14" class="text-center py-5 text-muted">No se encontraron suscripciones.</td></tr>
                     <?php else: ?>
                         <?php foreach ($rows as $r): ?>
                             <?php

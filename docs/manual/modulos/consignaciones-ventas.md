@@ -6,7 +6,7 @@ ruta_modulo: modulos/consignaciones-ventas
 tipo: modulo
 visibilidad: todos
 etiquetas: consignacion, consignaciones, buscar consignacion, buscador, filtros, filtrar consignaciones, buscar por producto, buscar por lote, buscar por NUP, chips, asesor, vendedor, vendedor del cliente, asesor automatico, mercaderia en consignacion, entrega, deposito, liquidar, facturar consignacion, numeracion por fecha, numero con el año, reiniciar numeracion, reinicio anual, reinicio mensual, correlativo por año, correlativo por mes, modo de numeracion, cargar desde pedido, llamar pedido, lote, vencimiento, caducidad, fecha de vencimiento, NUP, acceso total, registros propios, solo mis documentos, quien ve que, permiso actualizar, no puedo guardar, boton guardar no aparece, no tengo permiso para esta accion, demora al guardar, guardar lento, se queda guardando, estado del pedido, pedido procesado, pedido pendiente, eliminar consignacion, editar consignacion, no puedo eliminar la consignacion, documentos relacionados, el stock no volvio, devolver stock, costo promedio, kardex anulado, pestana pedidos, pedidos relacionados, pedido de la consignacion, pendiente del pedido, asiento no generado, faltan cuentas, asiento incompleto, aparecen documentos que no busque, resultados que no corresponden, buscar por producto en el listado, codigo del producto, codigo de producto, ver codigo, NUP repetido, nup duplicado, serie repetida, el nup no puede repetirse, mismo nup dos productos, nup por lote, cada unidad su nup, numero de serie repetido, el modal se cierra al guardar, no se cierra el modal, seguir en la consignacion, imprimir despues de guardar, guardar y seguir, no contabilizar consignaciones, sin asiento de consignacion, apagar asiento, modulos que contabilizan, enfoque sin reclasificacion, consignacion sin asiento, aviso de asientos pendientes, asiento de documento anulado, asiento sigue contabilizado, no se anulo el asiento, no se pudo anular el asiento contable, consignacion duplicada, pedido consignado dos veces, dos consignaciones del mismo pedido, ya tiene consignado, saldo del pedido, pedido en dos ventanas, doble clic, guardar dos veces, se guardo dos veces, no se recibio respuesta del servidor, error al guardar
-version: 1.34
+version: 1.35
 orden: 45
 estado: activo
 ---
@@ -240,8 +240,10 @@ el comprobante, así que reimprimirlo meses después sigue mostrando a quien lo
 emitió. *Recibí conforme* y la verificación de acondicionamiento van **sin
 nombre impreso**: los escribe y firma a mano quien recibe la mercadería.
 
-Si el contenido llega muy abajo, las firmas pasan a una página nueva en vez de
-montarse sobre la tabla.
+Las líneas de firma quedan a poco más de un centímetro bajo las observaciones
+(o bajo la tabla, si no hay observaciones): espacio suficiente para firmar a
+mano sin dejar un hueco grande en el comprobante. Si el contenido llega muy
+abajo, las firmas pasan a una página nueva en vez de montarse sobre la tabla.
 
 Cuando la consignación tiene **muchos productos**, el listado continúa en las
 páginas siguientes y **cada página repite la fila de encabezados** (Código,
@@ -496,6 +498,11 @@ Contables**; reabrir el período permite la operación de inmediato.
 
 ## Historial de cambios
 
+- **1.35** — PDF del documento: se acerca el bloque de firmas (*Emitido por*,
+  *Responsable de traslado*, *Recibí conforme* y verificación de
+  acondicionamiento) a las observaciones. Antes quedaba un espacio en blanco de
+  más de dos centímetros entre ambos; ahora es de poco más de uno, suficiente
+  para firmar a mano.
 - **1.34** — Corrección: un pedido **ya no se puede consignar dos veces**. Al
   guardar, el sistema vuelve a comprobar el saldo de cada línea del pedido y
   rechaza lo que exceda lo pendiente, indicando en qué consignación ya se

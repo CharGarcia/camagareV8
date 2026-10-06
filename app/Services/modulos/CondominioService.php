@@ -1,0 +1,700 @@
+<?php
+declare(strict_types=1);
+
+namespace App\Services\modulos;
+
+use App\repositories\modulos\ClienteRepository;
+use App\repositories\modulos\CondominioRepository;
+use App\Rules\modulos\CondominioRules;
+use App\Services\LogSistemaService;
+
+/**
+ * Condominios — fase 1 (módulo base): configuración del condominio, inmuebles (inmuebles) con
+ * su historial de propietarios, catálogo de multas, restricción de áreas comunes y enlace de
+ * suscripciones (programados migrados) a un inmueble.
+ *
+ * Reglas:
+ *  - Guardar la configuración ACTIVA el módulo para la empresa (`activo()`); los demás módulos
+ *    solo muestran lo de condominios cuando está activo.
+ *  - Los conceptos (alícuota, fondo, intereses, multas) se facturan con productos que el usuario
+ *    crea en Productos; aquí solo se guardan sus id y se valida que existan y sean servicios.
+ *  - Cada cambio de propietario/arrendatario/pagador abre una fila en el historial: la deuda es
+ *    del inmueble, no de la persona.
+ *  - Un inmueble con cargos emitidos no se elimina (se inactiva).
+ */
+class CondominioService
+{
+    /** Cache por proceso: la pregunta «¿es condominio?» la hacen varios módulos por petición. */
+    private static array $activoCache = [];
+
+    public function __construct(
+        private CondominioRepository $repo,
+        private CondominioRules $rules,
+        private LogSistemaService $log
+    ) {
+    }
+
+    public static function crear(): self
+    {
+        return new self(new CondominioRepository(), new CondominioRules(), new LogSistemaService());
+    }
+
+    public function repo(): CondominioRepository
+    {
+        return $this->repo;
+    }
+
+    /** ¿La empresa tiene el módulo Condominios activo (configuración guardada)? */
+    public static function activo(int $idEmpresa): bool
+    {
+        if (!isset(self::$activoCache[$idEmpresa])) {
+            try {
+                self::$activoCache[$idEmpresa] = (new CondominioRepository())->getConfig($idEmpresa) !== null;
+            } catch (\Throwable $e) {
+                self::$activoCache[$idEmpresa] = false;
+            }
+        }
+        return self::$activoCache[$idEmpresa];
+    }
+
+    public function instalado(): bool
+    {
+        return $this->repo->instalado();
+    }
+
+    // ── Configuración ────────────────────────────────────────────────────────
+
+    public function getConfig(int $idEmpresa): ?array
+    {
+        return $this->repo->getConfig($idEmpresa);
+    }
+
+    public function guardarConfig(array $data, int $idEmpresa, int $idUsuario): array
+    {
+        $this->exigirInstalado();
+        $c = $this->rules->validarConfig($data);
+        $this->validarProducto($c['id_producto_ordinaria'], $idEmpresa, 'la alícuota ordinaria', '#cfg_prod_ordinaria_txt');
+        if ($c['id_producto_fondo']) {
+            $this->validarProducto($c['id_producto_fondo'], $idEmpresa, 'el fondo de reserva', '#cfg_prod_fondo_txt');
+        }
+        if ($c['id_producto_interes']) {
+            $this->validarProducto($c['id_producto_interes'], $idEmpresa, 'los intereses de mora', '#cfg_prod_interes_txt');
+        }
+        $antes = $this->repo->getConfig($idEmpresa);
+        $this->repo->beginTransaction();
+        try {
+            if ($antes) {
+                $this->repo->updateConfig($idEmpresa, $c, $idUsuario);
+                $id = (int) $antes['id'];
+                $accion = 'Actualizar configuración de condominio';
+            } else {
+                $id = $this->repo->insertConfig($idEmpresa, $c, $idUsuario);
+                $accion = 'Activar módulo Condominios';
+            }
+            $this->log->registrar($idUsuario, $idEmpresa, $accion, 'condominios_config', $id, $antes ? $this->soloCampos($antes, CondominioRepository::CAMPOS_CONFIG) : null, $c);
+            $this->repo->commit();
+        } catch (\Throwable $e) {
+            $this->repo->rollBack();
+            throw $e;
+        }
+        unset(self::$activoCache[$idEmpresa]);
+        return $this->repo->getConfig($idEmpresa) ?? [];
+    }
+
+    /** Qué le falta a la configuración para poder emitir (se muestra como aviso en pantalla). */
+    public function pendientesConfig(?array $cfg): array
+    {
+        if (!$cfg) {
+            return ['Guarde la configuración del condominio para activar el módulo.'];
+        }
+        $p = [];
+        if (empty($cfg['id_producto_ordinaria'])) {
+            $p[] = 'Falta el producto para la alícuota ordinaria; créelo en Productos y elíjalo en la configuración.';
+        }
+        if (($cfg['fondo_reserva_tipo'] ?? 'no') !== 'no' && empty($cfg['id_producto_fondo'])) {
+            $p[] = 'Falta el producto para el fondo de reserva.';
+        }
+        if ($this->esTrue($cfg['cobra_intereses'] ?? false) && empty($cfg['id_producto_interes'])) {
+            $p[] = 'Falta el producto para los intereses de mora.';
+        }
+        return $p;
+    }
+
+    // ── Inmuebles ─────────────────────────────────────────────────────────────
+
+    public function getListado(int $idEmpresa, string $buscar, int $page, int $perPage, array $orden, ?int $idUsuarioFiltro): array
+    {
+        if (!$this->repo->instalado()) {
+            return ['total' => 0, 'rows' => []];
+        }
+        $res = $this->repo->getListado($idEmpresa, $buscar, $page, $perPage, $orden, $idUsuarioFiltro);
+        $cfg = $this->repo->getConfig($idEmpresa);
+        foreach ($res['rows'] as &$r) {
+            $r['tipo_label']   = CondominioRules::TIPOS_LABEL[$r['tipo']] ?? $r['tipo'];
+            $r['metodo_label'] = CondominioRules::METODOS_LABEL[$r['metodo_efectivo'] ?? ''] ?? '—';
+            $r['restringida']  = $this->esTrue($r['restringida'] ?? false);
+            $r['cuota_estimada'] = $cfg ? $this->cuotaOrdinaria($r, $cfg, null) : null;
+        }
+        unset($r);
+        return $res;
+    }
+
+    public function getUnidad(int $id, int $idEmpresa): array
+    {
+        $u = $this->repo->getUnidad($id, $idEmpresa);
+        if (!$u) {
+            throw new \DomainException('El inmueble no existe.');
+        }
+        $u['restringida'] = $this->esTrue($u['restringida'] ?? false);
+        $u['tipo_label']   = CondominioRules::TIPOS_LABEL[$u['tipo']] ?? $u['tipo'];
+        return [
+            'unidad'          => $u,
+            'historial'     => $this->repo->getHistorialPropietarios($id, $idEmpresa),
+            'restricciones' => $this->repo->getRestriccionesLog($id, $idEmpresa),
+            'suscripciones_enlazables' => $this->repo->getSuscripcionesSinUnidad((int) ($u['pagador'] === 'arrendatario' && $u['id_arrendatario'] ? $u['id_arrendatario'] : $u['id_propietario']), $idEmpresa),
+        ];
+    }
+
+    public function crearUnidad(array $data, int $idEmpresa, int $idUsuario): int
+    {
+        $cfg = $this->exigirConfig($idEmpresa);
+        $u = $this->rules->validarUnidad($data, $cfg);
+        $this->validarPersonas($u, $idEmpresa);
+        if ($this->repo->existeCodigo($idEmpresa, $u['codigo'])) {
+            throw new \InvalidArgumentException("Ya existe un inmueble con el código «{$u['codigo']}».|#uni_codigo");
+        }
+        $desde = CondominioRules::fecha($data['propietario_desde'] ?? date('Y-m-d'), 'inicio del propietario', '#uni_propietario_desde');
+
+        $this->repo->beginTransaction();
+        try {
+            $id = $this->repo->insertUnidad($idEmpresa, $u, $idUsuario);
+            $this->repo->abrirPropietario($id, $idEmpresa, $u['id_propietario'], $u['id_arrendatario'], $u['pagador'], $desde, null, $idUsuario);
+            $this->log->registrar($idUsuario, $idEmpresa, 'Crear inmueble de condominio', 'condominios_unidades', $id, null, $u);
+            $this->repo->commit();
+            return $id;
+        } catch (\Throwable $e) {
+            $this->repo->rollBack();
+            throw $e;
+        }
+    }
+
+    public function actualizarUnidad(int $id, array $data, int $idEmpresa, int $idUsuario): void
+    {
+        $cfg = $this->exigirConfig($idEmpresa);
+        $antes = $this->repo->getUnidad($id, $idEmpresa);
+        if (!$antes) {
+            throw new \DomainException('El inmueble no existe.');
+        }
+        $u = $this->rules->validarUnidad($data, $cfg);
+        $this->validarPersonas($u, $idEmpresa);
+        if ($this->repo->existeCodigo($idEmpresa, $u['codigo'], $id)) {
+            throw new \InvalidArgumentException("Ya existe otro inmueble con el código «{$u['codigo']}».|#uni_codigo");
+        }
+        $cambioPersonas = (int) $antes['id_propietario'] !== $u['id_propietario']
+            || (int) ($antes['id_arrendatario'] ?? 0) !== (int) ($u['id_arrendatario'] ?? 0)
+            || $antes['pagador'] !== $u['pagador'];
+        $desde = $cambioPersonas
+            ? CondominioRules::fecha($data['propietario_desde'] ?? date('Y-m-d'), 'inicio del nuevo propietario/pagador', '#uni_propietario_desde')
+            : null;
+
+        $this->repo->beginTransaction();
+        try {
+            $this->repo->updateUnidad($id, $idEmpresa, $u, $idUsuario);
+            if ($cambioPersonas) {
+                $this->repo->abrirPropietario($id, $idEmpresa, $u['id_propietario'], $u['id_arrendatario'], $u['pagador'], $desde, trim((string) ($data['propietario_observacion'] ?? '')) ?: null, $idUsuario);
+            }
+            $this->log->registrar($idUsuario, $idEmpresa, 'Actualizar inmueble de condominio', 'condominios_unidades', $id,
+                $this->soloCampos($antes, CondominioRepository::CAMPOS_UNIDAD), $u);
+            $this->repo->commit();
+        } catch (\Throwable $e) {
+            $this->repo->rollBack();
+            throw $e;
+        }
+    }
+
+    public function eliminarUnidad(int $id, int $idEmpresa, int $idUsuario): void
+    {
+        $u = $this->repo->getUnidad($id, $idEmpresa);
+        if (!$u) {
+            throw new \DomainException('El inmueble no existe.');
+        }
+        if ($this->repo->tieneCargosEmitidos($id, $idEmpresa)) {
+            throw new \DomainException('El inmueble ya tiene expensas emitidas: no se puede eliminar. Márquela como inactiva para que deje de emitir.');
+        }
+        $this->repo->beginTransaction();
+        try {
+            if (!empty($u['id_suscripcion'])) {
+                $this->repo->enlazarSuscripcion((int) $u['id_suscripcion'], $idEmpresa, null, $idUsuario);
+            }
+            $this->repo->deleteUnidad($id, $idEmpresa, $idUsuario);
+            $this->log->registrar($idUsuario, $idEmpresa, 'Eliminar inmueble de condominio', 'condominios_unidades', $id,
+                $this->soloCampos($u, CondominioRepository::CAMPOS_UNIDAD), null);
+            $this->repo->commit();
+        } catch (\Throwable $e) {
+            $this->repo->rollBack();
+            throw $e;
+        }
+    }
+
+    /** Marca o quita la restricción de áreas comunes (notificación previa obligatoria al marcar). */
+    public function restringir(int $id, bool $restringir, ?string $fecha, ?string $motivo, int $idEmpresa, int $idUsuario): void
+    {
+        $u = $this->repo->getUnidad($id, $idEmpresa);
+        if (!$u) {
+            throw new \DomainException('El inmueble no existe.');
+        }
+        $f = CondominioRules::fecha($fecha ?: date('Y-m-d'), $restringir ? 'notificación' : 'levantamiento', '#restr_fecha');
+        $motivo = trim((string) $motivo);
+        if ($restringir && $motivo === '') {
+            throw new \InvalidArgumentException('Indique el motivo que se notificó al condómino.|#restr_motivo');
+        }
+        $this->repo->beginTransaction();
+        try {
+            $this->repo->setRestriccion($id, $idEmpresa, $restringir, $f, $motivo ?: null, $idUsuario);
+            $this->log->registrar($idUsuario, $idEmpresa, $restringir ? 'Restringir áreas comunes' : 'Levantar restricción de áreas comunes',
+                'condominios_unidades', $id, ['restringida' => $this->esTrue($u['restringida'])], ['restringida' => $restringir, 'fecha' => $f, 'motivo' => $motivo]);
+            $this->repo->commit();
+        } catch (\Throwable $e) {
+            $this->repo->rollBack();
+            throw $e;
+        }
+    }
+
+    /** Enlaza (o desenlaza con $idSuscripcion = 0) una suscripción existente como expensa del inmueble. */
+    public function enlazarSuscripcion(int $idUnidad, int $idSuscripcion, int $idEmpresa, int $idUsuario): void
+    {
+        $u = $this->repo->getUnidad($idUnidad, $idEmpresa);
+        if (!$u) {
+            throw new \DomainException('El inmueble no existe.');
+        }
+        $this->repo->beginTransaction();
+        try {
+            if (!empty($u['id_suscripcion'])) {
+                $this->repo->enlazarSuscripcion((int) $u['id_suscripcion'], $idEmpresa, null, $idUsuario);
+            }
+            if ($idSuscripcion > 0) {
+                $s = $this->repo->getSuscripcion($idSuscripcion, $idEmpresa);
+                if (!$s) {
+                    throw new \DomainException('La suscripción no existe.');
+                }
+                if (!empty($s['id_unidad']) && (int) $s['id_unidad'] !== $idUnidad) {
+                    throw new \DomainException('Esa suscripción ya pertenece a otro inmueble.');
+                }
+                $pagador = (int) ($u['pagador'] === 'arrendatario' && $u['id_arrendatario'] ? $u['id_arrendatario'] : $u['id_propietario']);
+                if ((int) $s['id_cliente'] !== $pagador) {
+                    throw new \DomainException('La suscripción es de otro cliente; debe ser del pagador del inmueble.');
+                }
+                $this->repo->enlazarSuscripcion($idSuscripcion, $idEmpresa, $idUnidad, $idUsuario);
+            }
+            $this->repo->setSuscripcionUnidad($idUnidad, $idEmpresa, $idSuscripcion > 0 ? $idSuscripcion : null);
+            $this->log->registrar($idUsuario, $idEmpresa, $idSuscripcion > 0 ? 'Enlazar suscripción a inmueble' : 'Desenlazar suscripción de inmueble',
+                'condominios_unidades', $idUnidad, ['id_suscripcion' => $u['id_suscripcion']], ['id_suscripcion' => $idSuscripcion ?: null]);
+            $this->repo->commit();
+        } catch (\Throwable $e) {
+            $this->repo->rollBack();
+            throw $e;
+        }
+    }
+
+    // ── Enlace con Suscripciones ─────────────────────────────────────────────
+
+    /** Inmuebles que paga el cliente (para el selector del modal de Suscripciones). */
+    public function inmueblesDeCliente(int $idCliente, int $idEmpresa): array
+    {
+        if ($idCliente <= 0 || !self::activo($idEmpresa)) {
+            return [];
+        }
+        return array_map(function (array $u) {
+            $u['etiqueta'] = trim($u['codigo'] . ' · ' . $u['nombre'] . ($u['torre_bloque'] ? ' · ' . $u['torre_bloque'] : ''));
+            return $u;
+        }, $this->repo->getUnidadesPorCliente($idCliente, $idEmpresa));
+    }
+
+    /**
+     * Resuelve el inmueble de una suscripción al guardarla: si el usuario eligió uno, se valida
+     * que el cliente lo pague; si no eligió y el cliente paga exactamente UN inmueble, se asocia
+     * solo. Devuelve null si la empresa no es condominio o no hay inmueble que asociar.
+     */
+    public function resolverInmuebleSuscripcion(int $idCliente, ?int $idUnidadElegido, int $idEmpresa): ?int
+    {
+        if (!self::activo($idEmpresa)) {
+            return null;
+        }
+        $propios = $this->repo->getUnidadesPorCliente($idCliente, $idEmpresa);
+        if ($idUnidadElegido) {
+            foreach ($propios as $u) {
+                if ((int) $u['id'] === $idUnidadElegido) {
+                    return $idUnidadElegido;
+                }
+            }
+            throw new \InvalidArgumentException('El inmueble elegido no lo paga este cliente. Revise el pagador del inmueble en Condominios.|#susc_id_unidad');
+        }
+        return count($propios) === 1 ? (int) $propios[0]['id'] : null;
+    }
+
+    /** Espeja el enlace en el inmueble (`id_suscripcion`) después de guardar la suscripción. */
+    public function espejarSuscripcion(int $idSuscripcion, ?int $idUnidad, int $idEmpresa): void
+    {
+        if (self::activo($idEmpresa)) {
+            $this->repo->espejarSuscripcionEnUnidad($idSuscripcion, $idUnidad, $idEmpresa);
+        }
+    }
+
+    /**
+     * Filas de «Información adicional» del recibo/factura de un inmueble: Inmueble, Propietario
+     * y Período. Salen en el RIDE, el XML y el correo sin tocar la facturación.
+     */
+    public function infoAdicionalInmueble(int $idUnidad, int $idEmpresa, string $periodoTexto = ''): array
+    {
+        $u = $this->repo->getUnidad($idUnidad, $idEmpresa);
+        if (!$u) {
+            return [];
+        }
+        $ubic = array_filter([
+            (CondominioRules::TIPOS_LABEL[$u['tipo']] ?? $u['tipo']) . ' ' . $u['nombre'],
+            $u['torre_bloque'] ? 'Torre/Bloque ' . $u['torre_bloque'] : null,
+            $u['piso'] !== null && $u['piso'] !== '' ? 'Piso ' . $u['piso'] : null,
+        ]);
+        $filas = [
+            ['nombre' => 'Inmueble', 'valor' => implode(' · ', $ubic)],
+            ['nombre' => 'Propietario', 'valor' => (string) ($u['propietario_nombre'] ?? '')],
+        ];
+        if ($periodoTexto !== '') {
+            $filas[] = ['nombre' => 'Período', 'valor' => $periodoTexto];
+        }
+        return array_values(array_filter($filas, fn($f) => trim($f['valor']) !== ''));
+    }
+
+    // ── Multas ───────────────────────────────────────────────────────────────
+
+    public function guardarMulta(array $data, int $idEmpresa, int $idUsuario): int
+    {
+        $this->exigirConfig($idEmpresa);
+        $m = $this->rules->validarMulta($data);
+        $this->validarProducto($m['id_producto'], $idEmpresa, 'la multa', '#multa_prod_txt');
+        $id = (int) ($data['id'] ?? 0);
+        $this->repo->beginTransaction();
+        try {
+            if ($id > 0) {
+                $antes = $this->repo->getMulta($id, $idEmpresa);
+                if (!$antes) {
+                    throw new \DomainException('La multa no existe.');
+                }
+                $this->repo->updateMulta($id, $idEmpresa, $m, $idUsuario);
+                $this->log->registrar($idUsuario, $idEmpresa, 'Actualizar multa de condominio', 'condominios_multas_catalogo', $id, $antes, $m);
+            } else {
+                $id = $this->repo->insertMulta($idEmpresa, $m, $idUsuario);
+                $this->log->registrar($idUsuario, $idEmpresa, 'Crear multa de condominio', 'condominios_multas_catalogo', $id, null, $m);
+            }
+            $this->repo->commit();
+            return $id;
+        } catch (\Throwable $e) {
+            $this->repo->rollBack();
+            throw $e;
+        }
+    }
+
+    public function eliminarMulta(int $id, int $idEmpresa, int $idUsuario): void
+    {
+        $antes = $this->repo->getMulta($id, $idEmpresa);
+        if (!$antes) {
+            throw new \DomainException('La multa no existe.');
+        }
+        $this->repo->deleteMulta($id, $idEmpresa, $idUsuario);
+        $this->log->registrar($idUsuario, $idEmpresa, 'Eliminar multa de condominio', 'condominios_multas_catalogo', $id, $antes, null);
+    }
+
+    // ── Cálculo de la cuota ordinaria (vista previa en pantalla) ─────────────
+
+    /**
+     * Cuota ordinaria mensual de un inmueble según su método efectivo. $valores = fila de
+     * condominios_alicuotas_valores vigente (tarifa_m2 / monto_a_repartir); si es null, solo
+     * se puede resolver el método manual (los otros devuelven null = «sin valor vigente»).
+     */
+    public function cuotaOrdinaria(array $u, array $cfg, ?array $valores): ?float
+    {
+        $metodo = $u['metodo_alicuota'] ?? $cfg['metodo_alicuota'] ?? 'porcentaje';
+        if ($metodo === 'manual') {
+            return $u['monto_manual'] === null ? null : round((float) $u['monto_manual'], 2);
+        }
+        if (!$valores) {
+            return null;
+        }
+        if ($metodo === 'm2') {
+            return round((float) $valores['tarifa_m2'] * (float) $u['area_m2'], 2);
+        }
+        return round((float) $valores['monto_a_repartir'] * (float) $u['alicuota_pct'] / 100, 2);
+    }
+
+    // ── Apoyo ────────────────────────────────────────────────────────────────
+
+    private function exigirInstalado(): void
+    {
+        if (!$this->repo->instalado()) {
+            throw new \DomainException('El módulo Condominios aún no está instalado en la base de datos (falta aplicar database/migrations/20261005_condominios.sql).');
+        }
+    }
+
+    private function exigirConfig(int $idEmpresa): array
+    {
+        $this->exigirInstalado();
+        $cfg = $this->repo->getConfig($idEmpresa);
+        if (!$cfg) {
+            throw new \DomainException('Primero guarde la configuración del condominio.');
+        }
+        return $cfg;
+    }
+
+    private function validarProducto(int $idProducto, int $idEmpresa, string $para, string $sel): void
+    {
+        $p = $this->repo->getProducto($idProducto, $idEmpresa);
+        if (!$p) {
+            throw new \InvalidArgumentException("El producto elegido para {$para} no existe en esta empresa.|{$sel}");
+        }
+        if (($p['tipo_produccion'] ?? '') !== '02') {
+            throw new \InvalidArgumentException("El producto elegido para {$para} debe ser un servicio (en Productos, tipo «Servicio»).|{$sel}");
+        }
+    }
+
+    private function validarPersonas(array $u, int $idEmpresa): void
+    {
+        if (!$this->repo->getCliente($u['id_propietario'], $idEmpresa)) {
+            throw new \InvalidArgumentException('El propietario no existe como cliente en esta empresa.|#uni_propietario_txt');
+        }
+        if ($u['id_arrendatario'] && !$this->repo->getCliente($u['id_arrendatario'], $idEmpresa)) {
+            throw new \InvalidArgumentException('El arrendatario no existe como cliente en esta empresa.|#uni_arrendatario_txt');
+        }
+    }
+
+    private function soloCampos(array $fila, array $campos): array
+    {
+        return array_intersect_key($fila, array_flip($campos));
+    }
+
+    public function esTrue(mixed $v): bool
+    {
+        return in_array($v, [true, 1, '1', 't', 'true'], true);
+    }
+
+    // ── Excel de inmuebles ────────────────────────────────────────────────────
+
+    public const EXCEL_CABECERAS = [
+        'CODIGO', 'NOMBRE', 'TIPO', 'TORRE_BLOQUE', 'PISO', 'AREA_M2', 'ALICUOTA_PCT',
+        'PROPIETARIO_IDENTIFICACION', 'PROPIETARIO_NOMBRE', 'PROPIETARIO_EMAIL', 'PROPIETARIO_TELEFONO',
+        'ARRENDATARIO_IDENTIFICACION', 'ARRENDATARIO_NOMBRE', 'PAGADOR', 'METODO', 'MONTO_MANUAL',
+        'FONDO_RESERVA_PROPIO', 'OBSERVACIONES',
+    ];
+
+    public function plantillaExcel(int $idEmpresa): \PhpOffice\PhpSpreadsheet\Spreadsheet
+    {
+        $libro = new \PhpOffice\PhpSpreadsheet\Spreadsheet();
+        $h = $libro->getActiveSheet();
+        $h->setTitle('Inmuebles');
+        $h->fromArray([self::EXCEL_CABECERAS], null, 'A1');
+        $ultima = \PhpOffice\PhpSpreadsheet\Cell\Coordinate::stringFromColumnIndex(count(self::EXCEL_CABECERAS));
+        $h->getStyle("A1:{$ultima}1")->getFont()->setBold(true);
+        $h->fromArray([
+            ['DPTO-101', 'Dpto 101', 'departamento', 'Torre A', '1', 95.50, 1.250000, '1712345678', 'Juan Pérez', 'juan@correo.com', '0991234567', '', '', 'propietario', '', '', '', ''],
+            ['P-12', 'Parqueadero 12', 'parqueadero', 'Subsuelo', '-1', 12.00, 0.150000, '1712345678', 'Juan Pérez', '', '', '', '', 'propietario', '', '', '', ''],
+            ['LOCAL-1', 'Local 1', 'local', 'Planta baja', '0', 60.00, 0.900000, '1790012345001', 'Comercial XYZ S.A.', '', '', '0987654321', 'María López', 'arrendatario', 'manual', 350.00, '', 'Monto acordado en asamblea 2026'],
+        ], null, 'A2');
+        foreach (range('A', $ultima) as $col) {
+            $h->getColumnDimension($col)->setAutoSize(true);
+        }
+        $h->getStyle('A2:A1000')->getNumberFormat()->setFormatCode('@');
+        $h->getStyle('H2:H1000')->getNumberFormat()->setFormatCode('@');
+        $h->getStyle('L2:L1000')->getNumberFormat()->setFormatCode('@');
+
+        $inst = $libro->createSheet();
+        $inst->setTitle('Instrucciones');
+        $inst->fromArray([
+            ['CARGA DE UNIDADES DEL CONDOMINIO'],
+            ['- Una fila por inmueble (departamento, local, oficina, parqueadero, bodega, casa, otro). Cada inmueble emite su propio recibo o factura.'],
+            ['- CODIGO único por condominio (DPTO-302, P-12). NOMBRE opcional (si falta, se usa el código).'],
+            ['- TIPO: departamento | local | oficina | parqueadero | bodega | casa | otro.'],
+            ['- AREA_M2 y ALICUOTA_PCT según la escritura. La suma de ALICUOTA_PCT debería dar 100 (se avisa si no).'],
+            ['- PROPIETARIO_IDENTIFICACION es obligatoria: se cruza con Clientes por cédula/RUC. Si el cliente no existe se crea con PROPIETARIO_NOMBRE (obligatorio en ese caso), EMAIL y TELEFONO.'],
+            ['- ARRENDATARIO_* es opcional; igual cruce con Clientes. PAGADOR: propietario | arrendatario (vacío = propietario).'],
+            ['- METODO: porcentaje | m2 | manual | vacío (= el del condominio). MONTO_MANUAL solo si METODO = manual. El comprobante (recibo/factura) se define en la suscripción del inmueble.'],
+            ['- FONDO_RESERVA_PROPIO: valor propio del inmueble (vacío = regla del condominio).'],
+            ['- Las filas de ejemplo se pueden borrar. No cambie los encabezados.'],
+            ['- Si un inmueble ya existe (mismo CODIGO), se ACTUALIZA con los datos del archivo.'],
+        ], null, 'A1');
+        $inst->getColumnDimension('A')->setWidth(130);
+        $libro->setActiveSheetIndex(0);
+        return $libro;
+    }
+
+    /**
+     * Lee el Excel y devuelve una vista previa: filas normalizadas con su acción (crear/actualizar),
+     * avisos y errores por fila. No graba nada; `aplicarExcel()` graba lo aprobado.
+     */
+    public function leerExcel(string $ruta, int $idEmpresa): array
+    {
+        $cfg = $this->exigirConfig($idEmpresa);
+        try {
+            $libro = \PhpOffice\PhpSpreadsheet\IOFactory::load($ruta);
+        } catch (\Throwable $e) {
+            throw new \RuntimeException('El archivo no es un Excel válido o está dañado.');
+        }
+        $h = $libro->getSheetByName('Inmuebles') ?? $libro->getSheet(0);
+        $datos = $h->toArray(null, true, false, false);
+        $cab = array_map(fn($v) => strtoupper(trim((string) $v)), $datos[0] ?? []);
+        $idx = [];
+        foreach (self::EXCEL_CABECERAS as $nombre) {
+            $pos = array_search($nombre, $cab, true);
+            if ($pos === false && in_array($nombre, ['CODIGO', 'TIPO', 'PROPIETARIO_IDENTIFICACION'], true)) {
+                throw new \RuntimeException("Falta la columna {$nombre} en el Excel. Descargue la plantilla del módulo.");
+            }
+            $idx[$nombre] = $pos === false ? null : $pos;
+        }
+        $leer = fn(array $fila, string $col) => $idx[$col] === null ? '' : trim((string) ($fila[$idx[$col]] ?? ''));
+
+        $clientes = new ClienteRepository();
+        $filas = [];
+        $errores = [];
+        $codigos = [];
+        $sumaPct = 0.0;
+        foreach (array_slice($datos, 1) as $i => $fila) {
+            $n = $i + 2;
+            if (trim(implode('', array_map(fn($v) => (string) $v, $fila))) === '') {
+                continue;
+            }
+            $codigo = $leer($fila, 'CODIGO');
+            if ($codigo === '') {
+                $errores[] = "Fila {$n}: falta el código.";
+                continue;
+            }
+            if (isset($codigos[strtoupper($codigo)])) {
+                $errores[] = "Fila {$n}: el código «{$codigo}» está repetido en el archivo.";
+                continue;
+            }
+            $codigos[strtoupper($codigo)] = true;
+
+            $identProp = preg_replace('/\D/', '', $leer($fila, 'PROPIETARIO_IDENTIFICACION'));
+            if ($identProp === '') {
+                $errores[] = "Fila {$n} ({$codigo}): falta la identificación del propietario.";
+                continue;
+            }
+            $prop = $clientes->findByIdentificacion($idEmpresa, $identProp);
+            $propNombre = $leer($fila, 'PROPIETARIO_NOMBRE');
+            if (!$prop && $propNombre === '') {
+                $errores[] = "Fila {$n} ({$codigo}): el propietario {$identProp} no existe como cliente y no viene su nombre para crearlo.";
+                continue;
+            }
+            $identArr = preg_replace('/\D/', '', $leer($fila, 'ARRENDATARIO_IDENTIFICACION'));
+            $arr = $identArr !== '' ? $clientes->findByIdentificacion($idEmpresa, $identArr) : null;
+            $arrNombre = $leer($fila, 'ARRENDATARIO_NOMBRE');
+            if ($identArr !== '' && !$arr && $arrNombre === '') {
+                $errores[] = "Fila {$n} ({$codigo}): el arrendatario {$identArr} no existe como cliente y no viene su nombre para crearlo.";
+                continue;
+            }
+
+            $d = [
+                'codigo' => $codigo,
+                'nombre' => $leer($fila, 'NOMBRE'),
+                'tipo'   => strtolower($leer($fila, 'TIPO')) ?: 'departamento',
+                'torre_bloque' => $leer($fila, 'TORRE_BLOQUE'),
+                'piso' => $leer($fila, 'PISO'),
+                'area_m2' => $leer($fila, 'AREA_M2'),
+                'alicuota_pct' => $leer($fila, 'ALICUOTA_PCT'),
+                'id_propietario' => $prop ? (int) $prop['id'] : -1, // -1 = se creará
+                'id_arrendatario' => $arr ? (int) $arr['id'] : ($identArr !== '' ? -1 : 0),
+                'pagador' => strtolower($leer($fila, 'PAGADOR')) ?: 'propietario',
+                'metodo_alicuota' => strtolower($leer($fila, 'METODO')) === 'porcentaje' ? 'porcentaje' : (strtolower($leer($fila, 'METODO')) ?: null),
+                'monto_manual' => $leer($fila, 'MONTO_MANUAL'),
+                'fondo_reserva_valor_propio' => $leer($fila, 'FONDO_RESERVA_PROPIO'),
+                'observaciones' => $leer($fila, 'OBSERVACIONES'),
+                'estado' => 'activo',
+            ];
+            try {
+                // Validación con ids provisionales (los -1 pasan como "existe"); la definitiva es al aplicar.
+                $v = $this->rules->validarUnidad(array_merge($d, ['id_propietario' => $d['id_propietario'] === -1 ? 999999999 : $d['id_propietario'],
+                    'id_arrendatario' => $d['id_arrendatario'] === -1 ? 999999998 : $d['id_arrendatario']]), $cfg);
+            } catch (\InvalidArgumentException $e) {
+                $errores[] = "Fila {$n} ({$codigo}): " . explode('|', $e->getMessage())[0];
+                continue;
+            }
+            $sumaPct += $v['alicuota_pct'];
+            $existe = $this->repo->existeCodigo($idEmpresa, $codigo);
+            $filas[] = [
+                'fila' => $n,
+                'accion' => $existe ? 'actualizar' : 'crear',
+                'datos' => $d,
+                'propietario' => ['identificacion' => $identProp, 'nombre' => $prop ? $prop['nombre'] : $propNombre, 'crear' => !$prop,
+                                  'email' => $leer($fila, 'PROPIETARIO_EMAIL'), 'telefono' => $leer($fila, 'PROPIETARIO_TELEFONO')],
+                'arrendatario' => $identArr === '' ? null : ['identificacion' => $identArr, 'nombre' => $arr ? $arr['nombre'] : $arrNombre, 'crear' => !$arr],
+                'cuota' => $v['metodo_alicuota'] === 'manual' || (!$v['metodo_alicuota'] && $cfg['metodo_alicuota'] === 'manual') ? $v['monto_manual'] : null,
+            ];
+        }
+        $avisos = [];
+        if ($filas && abs($sumaPct - 100) > 0.0001) {
+            $avisos[] = 'La suma de alícuotas del archivo es ' . number_format($sumaPct, 4) . ' % (lo normal es 100 %). Revise la escritura si el método es por %.';
+        }
+        return ['filas' => $filas, 'errores' => $errores, 'avisos' => $avisos, 'total' => count($filas),
+                'crear' => count(array_filter($filas, fn($f) => $f['accion'] === 'crear')),
+                'clientes_nuevos' => count(array_filter($filas, fn($f) => $f['propietario']['crear'] || ($f['arrendatario']['crear'] ?? false)))];
+    }
+
+    /** Graba las filas de la vista previa (JSON de leerExcel) en una sola transacción. */
+    public function aplicarExcel(array $filas, int $idEmpresa, int $idUsuario): array
+    {
+        $cfg = $this->exigirConfig($idEmpresa);
+        $clientes = new ClienteRepository();
+        $creadas = 0;
+        $actualizadas = 0;
+        $clientesNuevos = 0;
+        $this->repo->beginTransaction();
+        try {
+            foreach ($filas as $f) {
+                $d = $f['datos'];
+                $d['id_propietario'] = $this->resolverCliente($clientes, $f['propietario'], $idEmpresa, $idUsuario, $clientesNuevos);
+                $d['id_arrendatario'] = $f['arrendatario'] ? $this->resolverCliente($clientes, $f['arrendatario'], $idEmpresa, $idUsuario, $clientesNuevos) : 0;
+                $u = $this->rules->validarUnidad($d, $cfg);
+                $existente = $this->repo->getUnidadPorCodigo($idEmpresa, $u['codigo']);
+                if ($existente) {
+                    $this->repo->updateUnidad((int) $existente['id'], $idEmpresa, $u, $idUsuario);
+                    $vig = $this->repo->getPropietarioVigente((int) $existente['id'], $idEmpresa);
+                    if (!$vig || (int) $vig['id_propietario'] !== $u['id_propietario'] || (int) ($vig['id_arrendatario'] ?? 0) !== (int) ($u['id_arrendatario'] ?? 0) || $vig['pagador'] !== $u['pagador']) {
+                        $this->repo->abrirPropietario((int) $existente['id'], $idEmpresa, $u['id_propietario'], $u['id_arrendatario'], $u['pagador'], date('Y-m-d'), 'Carga Excel', $idUsuario);
+                    }
+                    $actualizadas++;
+                } else {
+                    $id = $this->repo->insertUnidad($idEmpresa, $u, $idUsuario);
+                    $this->repo->abrirPropietario($id, $idEmpresa, $u['id_propietario'], $u['id_arrendatario'], $u['pagador'], date('Y-m-d'), 'Carga Excel', $idUsuario);
+                    $creadas++;
+                }
+            }
+            $this->log->registrar($idUsuario, $idEmpresa, 'Carga Excel de inmuebles', 'condominios_unidades', null, null,
+                ['creadas' => $creadas, 'actualizadas' => $actualizadas, 'clientes_nuevos' => $clientesNuevos]);
+            $this->repo->commit();
+        } catch (\Throwable $e) {
+            $this->repo->rollBack();
+            throw $e;
+        }
+        return ['creadas' => $creadas, 'actualizadas' => $actualizadas, 'clientes_nuevos' => $clientesNuevos];
+    }
+
+    /** Cliente por identificación; si no existe, lo crea con los datos mínimos del Excel. */
+    private function resolverCliente(ClienteRepository $clientes, array $p, int $idEmpresa, int $idUsuario, int &$nuevos): int
+    {
+        $c = $clientes->findByIdentificacion($idEmpresa, $p['identificacion']);
+        if ($c) {
+            return (int) $c['id'];
+        }
+        $nombre = trim((string) ($p['nombre'] ?? ''));
+        if ($nombre === '') {
+            throw new \DomainException("El cliente {$p['identificacion']} no existe y no viene su nombre para crearlo.");
+        }
+        $len = strlen($p['identificacion']);
+        $tipoId = $len === 13 ? '04' : ($len === 10 ? '05' : '06');
+        $id = $clientes->create([
+            'id_empresa' => $idEmpresa, 'id_usuario' => $idUsuario, 'nombre' => $nombre, 'tipo_id' => $tipoId,
+            'identificacion' => $p['identificacion'], 'telefono' => $p['telefono'] ?? null, 'email' => $p['email'] ?? null,
+            'direccion' => null, 'plazo' => 0, 'provincia' => null, 'ciudad' => null, 'status' => 1, 'id_vendedor' => null,
+        ]);
+        $this->log->registrar($idUsuario, $idEmpresa, 'Crear cliente (carga de inmuebles)', 'clientes', $id, null, ['nombre' => $nombre, 'identificacion' => $p['identificacion']]);
+        $nuevos++;
+        return $id;
+    }
+}
