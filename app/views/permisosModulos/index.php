@@ -1614,14 +1614,21 @@ window.cmgOcultarResultadoPermisos = function() {
                 })
                 .then(function(data) {
                     if (!Array.isArray(data) || data.length === 0) return;
-                    // Solo se cargan las opciones: la empresa queda vacía a propósito,
-                    // aunque el usuario tenga una sola asignada. Elegirla y pulsar
-                    // «Mostrar módulos» es siempre decisión de quien administra; antes
-                    // se preseleccionaba (y con una sola empresa hasta se enviaba el
-                    // formulario solo), y eso mostraba módulos de una combinación que
-                    // el administrador no había confirmado.
                     tsEmpresa.addOptions(data);
                     tsEmpresa.refreshOptions(false);
+
+                    // Se preselecciona la primera empresa ASIGNADA al usuario (el
+                    // servidor las manda primero; el superadministrador recibe además
+                    // las no asignadas, marcadas con asignada=false, que no cuentan).
+                    // Solo se rellena el selector: los módulos se muestran únicamente
+                    // al pulsar «Mostrar módulos».
+                    var asignada = data.find(function(o) { return o.asignada !== false; });
+                    if (asignada) {
+                        tsEmpresa.setValue(asignada.value, true);
+                        if (avisoNoAsignada) avisoNoAsignada.classList.add('d-none');
+                        var empresaMsgEl = document.getElementById('empresa-msg');
+                        if (empresaMsgEl) empresaMsgEl.classList.add('d-none');
+                    }
                 })
                 .catch(function() {});
         }
