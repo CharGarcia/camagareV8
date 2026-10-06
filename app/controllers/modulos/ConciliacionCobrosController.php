@@ -126,28 +126,11 @@ class ConciliacionCobrosController extends BaseModuloController
         exit;
     }
 
+    /**
+     * Confirma una línea con los documentos que la completan (`asignaciones`: uno o varios, de
+     * uno o varios clientes). Sin `asignaciones`, se confirma con los que ya tenía sugeridos.
+     */
     public function confirmarLineaAjax(): void
-    {
-        $this->requireCrear();
-        header('Content-Type: application/json');
-
-        $idEmpresa = (int) $_SESSION['id_empresa'];
-        $idUsuario = (int) $_SESSION['id_usuario'];
-        $data = json_decode(file_get_contents('php://input') ?: '[]', true) ?: $_POST;
-        $idLinea = (int) ($data['id_linea'] ?? 0);
-
-        try {
-            $linea = $this->service->confirmarLinea($idEmpresa, $idUsuario, $idLinea, $data);
-            echo json_encode(['ok' => true, 'data' => $linea]);
-        } catch (\Throwable $e) {
-            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
-            echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
-        }
-        exit;
-    }
-
-    /** Reparte una línea del banco entre varios documentos pendientes (de uno o varios clientes). */
-    public function dividirLineaAjax(): void
     {
         $this->requireCrear();
         header('Content-Type: application/json');
@@ -159,8 +142,8 @@ class ConciliacionCobrosController extends BaseModuloController
         $asignaciones = is_array($data['asignaciones'] ?? null) ? $data['asignaciones'] : [];
 
         try {
-            $resultado = $this->service->dividirLinea($idEmpresa, $idUsuario, $idLinea, $asignaciones);
-            echo json_encode(['ok' => true, 'data' => $resultado]);
+            $linea = $this->service->confirmarLinea($idEmpresa, $idUsuario, $idLinea, $asignaciones);
+            echo json_encode(['ok' => true, 'data' => $linea]);
         } catch (\Throwable $e) {
             \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             echo json_encode(['ok' => false, 'error' => $e->getMessage()]);

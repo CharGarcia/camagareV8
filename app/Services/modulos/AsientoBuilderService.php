@@ -5128,19 +5128,26 @@ class AsientoBuilderService
      */
     private function contrapartidaCarteraVentas(\PDO $db, int $idEmpresa, int $idIngreso): array
     {
-        $sql = "SELECT tipo_documento, id_referencia_documento, SUM(monto_cobrado) AS total_cobrado,
-                       MAX(numero_documento) AS numero_documento
-                FROM ingresos_detalle
-                WHERE id_ingreso = :id
-                  AND tipo_documento IN ('FACTURA','RECIBO')
-                  AND id_referencia_documento IS NOT NULL
-                GROUP BY tipo_documento, id_referencia_documento";
+        // El cliente de cada documento viaja a su línea del Haber (tipo_entidad/id_entidad): un
+        // ingreso puede cobrar documentos de varios clientes (p. ej. un depósito conciliado que
+        // paga facturas de distintos clientes) y la cabecera queda sin cliente; sin esto, el
+        // Mayor por tercero no vería ese cobro. Las líneas se funden por cuenta Y cliente.
+        $sql = "SELECT d.tipo_documento, d.id_referencia_documento, SUM(d.monto_cobrado) AS total_cobrado,
+                       MAX(d.numero_documento) AS numero_documento,
+                       COALESCE(v.id_cliente, rv.id_cliente) AS id_cliente
+                FROM ingresos_detalle d
+                LEFT JOIN ventas_cabecera v         ON d.tipo_documento = 'FACTURA' AND v.id = d.id_referencia_documento
+                LEFT JOIN recibos_venta_cabecera rv ON d.tipo_documento = 'RECIBO'  AND rv.id = d.id_referencia_documento
+                WHERE d.id_ingreso = :id
+                  AND d.tipo_documento IN ('FACTURA','RECIBO')
+                  AND d.id_referencia_documento IS NOT NULL
+                GROUP BY d.tipo_documento, d.id_referencia_documento, COALESCE(v.id_cliente, rv.id_cliente)";
         $st = $db->prepare($sql);
         $st->execute([':id' => $idIngreso]);
         $documentos = $st->fetchAll(\PDO::FETCH_ASSOC);
 
-        $lineasPorCuenta = [];
-        $docsPorCuenta   = []; // id_cuenta => tipo_documento => [secuencial corto => true]
+        $lineasPorCuenta = []; // "id_cuenta:id_cliente" => línea del Haber
+        $docsPorCuenta   = []; // "id_cuenta:id_cliente" => tipo_documento => [secuencial corto => true]
         $docsNoResueltos = []; // tipo_documento => [secuencial corto => true] (sin asiento propio)
         $montoNoResuelto = []; // tipo_documento => monto cobrado de documentos sin asiento propio
         $totalResuelto = 0.0;
@@ -5191,21 +5198,27 @@ class AsientoBuilderService
             // 1, 2; recibo de venta 4" con los documentos que cayeron en cada cuenta.
             $referencia = self::NOMBRE_CONTRAPARTIDA_CARTERA_VENTAS[$tipoDoc] ?? $tipoDoc;
             $numCorto   = self::secuencialCorto((string) ($doc['numero_documento'] ?? ''));
+            $idClienteDoc = (int) ($doc['id_cliente'] ?? 0);
             $acumuladoDoc = 0.0;
             $ultimaCuentaDoc = null;
             foreach ($debeLineas as $dl) {
                 $idCuenta   = (int) $dl['id_cuenta_contable'];
+                $claveLinea = $idCuenta . ':' . $idClienteDoc;
                 $proporcion = round((float) $dl['monto'], 2) / $totalDebeDoc;
                 $monto      = round($totalCobrado * $proporcion, 2);
-                if (!isset($lineasPorCuenta[$idCuenta])) {
-                    $lineasPorCuenta[$idCuenta] = ['id_cuenta_contable' => $idCuenta, 'debe' => 0.0, 'haber' => 0.0, 'referencia_detalle' => $referencia];
+                if (!isset($lineasPorCuenta[$claveLinea])) {
+                    $lineasPorCuenta[$claveLinea] = ['id_cuenta_contable' => $idCuenta, 'debe' => 0.0, 'haber' => 0.0, 'referencia_detalle' => $referencia];
+                    if ($idClienteDoc > 0) {
+                        $lineasPorCuenta[$claveLinea]['id_entidad']   = $idClienteDoc;
+                        $lineasPorCuenta[$claveLinea]['tipo_entidad'] = 'cliente';
+                    }
                 }
                 if ($numCorto !== '') {
-                    $docsPorCuenta[$idCuenta][$tipoDoc][$numCorto] = true;
+                    $docsPorCuenta[$claveLinea][$tipoDoc][$numCorto] = true;
                 }
-                $lineasPorCuenta[$idCuenta]['haber'] = round($lineasPorCuenta[$idCuenta]['haber'] + $monto, 2);
+                $lineasPorCuenta[$claveLinea]['haber'] = round($lineasPorCuenta[$claveLinea]['haber'] + $monto, 2);
                 $acumuladoDoc = round($acumuladoDoc + $monto, 2);
-                $ultimaCuentaDoc = $idCuenta;
+                $ultimaCuentaDoc = $claveLinea;
             }
             // Conciliar el redondeo de ESTE documento contra su propio monto cobrado (no el total
             // del ingreso completo, para no mezclar el ajuste entre documentos distintos).
@@ -5217,8 +5230,8 @@ class AsientoBuilderService
             $totalResuelto = round($totalResuelto + $totalCobrado, 2);
         }
 
-        foreach ($lineasPorCuenta as $idCuenta => &$linea) {
-            $ref = self::referenciaCartera('Cobro', self::ETIQUETA_DOC_CARTERA_VENTAS, $docsPorCuenta[$idCuenta] ?? []);
+        foreach ($lineasPorCuenta as $claveLinea => &$linea) {
+            $ref = self::referenciaCartera('Cobro', self::ETIQUETA_DOC_CARTERA_VENTAS, $docsPorCuenta[$claveLinea] ?? []);
             if ($ref !== '') {
                 $linea['referencia_detalle'] = $ref;
             }

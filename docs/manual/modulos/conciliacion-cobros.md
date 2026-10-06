@@ -5,8 +5,8 @@ categoria: Tesorería
 ruta_modulo: modulos/conciliacion-cobros
 tipo: modulo
 visibilidad: todos
-etiquetas: conciliacion de cobros, cuadrar cobros, banco, deposito, tarjeta, liquidacion, diferencias, serie, punto de emision, serie inactiva, generar ingresos, extracto bancario, formato del banco, perfil de mapeo, formato de extracto, varias facturas, varios clientes, repartir deposito, dividir linea, un deposito varias facturas, cargas anteriores, cobro duplicado, cobrar dos veces, saldo disponible, saldo apartado, movimiento repetido, extracto repetido, doble cobro, factura mas antigua, documento sugerido, orden de cobro, primero en vencer, buscar cliente, autocompletar cliente, un solo ingreso, partes del deposito, confirmar todas las partes
-version: 1.6
+etiquetas: conciliacion de cobros, cuadrar cobros, banco, deposito, tarjeta, liquidacion, diferencias, serie, punto de emision, serie inactiva, generar ingresos, extracto bancario, formato del banco, perfil de mapeo, formato de extracto, varias facturas, varios clientes, completar deposito, un deposito varias facturas, cargas anteriores, cobro duplicado, cobrar dos veces, saldo disponible, saldo apartado, movimiento repetido, extracto repetido, doble cobro, factura mas antigua, documento sugerido, orden de cobro, primero en vencer, buscar cliente, autocompletar cliente, un solo ingreso, ingreso varios clientes, no dividir la linea, sin asignar, diferencia de pago parcial
+version: 1.7
 orden: 65
 estado: activo
 ---
@@ -37,25 +37,22 @@ sugiere**: aunque el monto coincida exactamente con una factura reciente, o la
 descripción mencione el número de otra factura, se propone siempre la más
 antigua. Si el pago corresponde a otro documento, se cambia desde la lupa.
 
-Si el depósito **cubre más de un documento**, la línea del banco llega ya
-**repartida en partes**, una por documento (con la nota *(parte 1/3 del
-depósito de $…)*): las facturas más antiguas se cubren completas y la última
-toma lo que queda. Si el depósito supera toda la cartera del cliente, la
-diferencia queda como una parte más **sin asignar**. Todas las partes son solo
-una sugerencia, cada una se confirma con su ✓ o se cambia desde la lupa.
+Si el depósito **cubre más de un documento**, la línea del banco **no se
+divide**: conserva el monto tal como vino en el archivo y, en la columna
+**Documento Sugerido**, lista todos los documentos que lo completan, cada uno
+con su monto. Las facturas más antiguas se cubren completas y la última toma lo
+que queda. Si el depósito supera toda la cartera del cliente, en **Monto a
+Aplicar** se ve el total asignado y cuánto queda **sin asignar**; ese resto se
+completa desde la lupa con documentos de otros clientes o, al generar, se
+agrega como línea nueva (ver *Diferencia de pago parcial*). Todo es solo una
+sugerencia: la línea se confirma con su ✓ o se cambia desde la lupa.
 
 - Cuando el mismo extracto trae **dos depósitos del mismo cliente**, el segundo
   se sugiere sobre los documentos que el primero no cubrió, no sobre la misma
   factura dos veces.
-- Al confirmar una parte, si el cliente tiene **otras partes del mismo depósito
-  aún sugeridas**, el sistema pregunta si confirma todas de una vez
-  (**Confirmar las N**) o **Solo esta**. Confirmarlas todas es lo normal: así, al
-  generar, el depósito se cobra en **un solo ingreso** con todos sus documentos
-  y un solo pago (ver *Un solo ingreso por depósito y cliente*).
-- Si confirma solo algunas partes y genera, el ingreso lleva únicamente esas;
-  las demás seguirán pendientes y, al confirmarlas y generar después, formarán
-  **otro** ingreso. Para que todo el depósito salga en un solo ingreso, confirme
-  todas sus partes antes de pulsar **Generar ingresos**.
+- Con un solo documento, el **Monto a Aplicar** se puede corregir en la misma
+  fila antes de confirmar. Con varios documentos, los montos se corrigen desde
+  la lupa.
 
 ## Qué mirar en las diferencias
 
@@ -83,7 +80,9 @@ inactivos no aparecen.
 ## Un depósito que paga varias facturas o varios clientes
 
 Si una sola línea del banco cubre varias facturas, del mismo cliente o de
-clientes distintos, se reparte desde la lupa de la línea:
+clientes distintos, se completa desde la lupa de la línea. **La línea del banco
+nunca se divide**: sigue siendo un solo movimiento con el monto del extracto,
+al que se le asignan uno o varios documentos.
 
 1. Pulse la **lupa** de la línea. Arriba se ven el monto **Recibido**, lo
    **Asignado** y lo **Restante**.
@@ -97,29 +96,42 @@ clientes distintos, se reparte desde la lupa de la línea:
 3. Al marcar un documento se propone el menor entre su saldo pendiente y lo que
    falta por asignar. El **Monto a Aplicar** se puede corregir; no puede superar
    el saldo del documento ni lo que queda del depósito.
-4. Pulse **Aplicar a N documentos** y confirme.
+4. Pulse **Confirmar con N documentos**. Si marcó varios documentos o dejó
+   parte del monto sin asignar, el sistema resume lo que va a hacer y pide
+   confirmar.
 
-La línea se divide en una línea por documento, ya **confirmadas**, con la
-descripción del banco y la nota *(parte 1/3 del depósito de $…)*. Si lo
-asignado es menor a lo recibido, se agrega otra línea con el **saldo sin
-asignar** para seguir conciliándola.
+La línea queda **confirmada** con todos los documentos marcados (en la grilla
+se listan en **Documento Sugerido**, y **Cliente Sugerido** muestra cuántos
+clientes son). Si lo asignado es menor a lo recibido, la diferencia se muestra
+como **sin asignar** y, al generar, se agrega como línea nueva.
 
-### Un solo ingreso por depósito y cliente
+### Un solo ingreso por depósito
 
-Al pulsar **Generar ingresos de las líneas confirmadas**, las partes del mismo
-depósito se cobran **juntas**: se crea **un solo ingreso por cliente**, con todos
-sus documentos en el detalle y **un solo pago** por el total, con la referencia
-del banco. Así el cobro coincide con el depósito.
+Al pulsar **Generar ingresos de las líneas confirmadas**, cada línea confirmada
+se cobra en **un solo ingreso**, con todos sus documentos en el detalle y **un
+solo pago** por el total asignado, con la referencia del banco. Así el cobro
+coincide con el depósito, **aunque los documentos sean de clientes distintos**.
 
-- **Depósito de un solo cliente**: un único ingreso. Por ejemplo, un depósito
-  de $51,50 que paga una factura de $11,50 y un saldo inicial de $40 genera un
-  ingreso con esos dos documentos y un pago de $51,50.
-- **Depósito de varios clientes**: un ingreso por cliente, porque cada ingreso
-  pertenece a un solo cliente (su cartera y su asiento van a su nombre). La suma
-  de los pagos de esos ingresos es igual al depósito.
-- Si una parte se desconfirma y se genera después, sale en un ingreso aparte.
-- Si se anula ese ingreso, todas sus partes quedan disponibles para reactivarlas
-  y volver a generarlo.
+- **Depósito de un solo cliente**: el ingreso va a nombre de ese cliente. Por
+  ejemplo, un depósito de $51,50 que paga una factura de $11,50 y un saldo
+  inicial de $40 genera un ingreso con esos dos documentos y un pago de $51,50.
+- **Depósito de varios clientes**: un único ingreso igual. La cabecera queda
+  **sin cliente** (como un cobro de varios clientes registrado a mano en
+  Ingresos) y **Recibo de** lista los nombres de todos. En el detalle, cada
+  documento muestra su cliente; en la cuenta por cobrar y en el estado de
+  cuenta de cada cliente el cobro aparece solo por sus documentos, y en el
+  asiento contable cada línea de cartera lleva el tercero que corresponde.
+- Si se anula ese ingreso, la línea queda disponible para reactivarla y volver a
+  generarlo.
+
+### Diferencia de pago parcial
+
+Si al generar lo recibido en el banco es mayor a lo asignado a los documentos,
+la diferencia se agrega como una **línea nueva** en la misma carga, con la nota
+*(diferencia de pago parcial)* y, si el cliente de la línea tiene más documentos
+pendientes, con el más antiguo sugerido. Esa línea se concilia como cualquier
+otra (otro cliente, ignorarla, etc.). Para que un depósito salga completo en un
+solo ingreso, asigne todo el monto antes de generar.
 
 ## Observaciones del ingreso generado
 
@@ -132,10 +144,11 @@ luego agrega los datos del extracto para rastrear el movimiento. Por ejemplo:
 > Descripción banco: … Referencia/documento banco: 4455. Fecha movimiento
 > banco: 20-09-2026.
 
-- Con **un solo** documento marcado, la lupa funciona como siempre: asigna el
-  documento a la línea y se confirma con el botón ✓.
-- Una parte confirmada por error se puede quitar (↺) o ignorar (✗) como
-  cualquier otra línea.
+- Con **un solo** documento marcado, la lupa también confirma la línea de una
+  vez (**Confirmar con este documento**).
+- Una línea confirmada por error se puede quitar (↺) o ignorar (✗) como
+  cualquier otra; al quitar la confirmación conserva los documentos elegidos
+  para corregirlos desde la lupa.
 
 ## Cómo se evita cobrar dos veces lo mismo
 
@@ -202,6 +215,16 @@ monto de cada movimiento.
   cobros.
 
 ## Historial de cambios
+- **1.7** — **La línea del banco ya no se divide.** Un depósito es siempre una
+  sola línea con el monto del extracto; los documentos que lo completan (uno o
+  varios, de uno o **varios clientes**) se listan en **Documento Sugerido** y se
+  eligen desde la lupa, cuyo botón pasa a **Confirmar con N documentos** (ya no
+  hace falta el ✓ después). Al generar, cada línea confirmada crea **un solo
+  ingreso** con todos sus documentos y un solo pago, también cuando son de
+  clientes distintos (cabecera sin cliente, **Recibo de** con todos los
+  nombres, tercero por documento en el asiento). Desaparecen las *partes
+  (1/3 del depósito…)* y la pregunta **Confirmar las N / Solo esta**. Nueva
+  sección *Diferencia de pago parcial*.
 - **1.6** — El **Documento Sugerido** ya no se elige por el valor del depósito:
   se propone el documento pendiente **más antiguo** del cliente (nueva sección
   *Qué documento se sugiere: el más antiguo*), y si el depósito cubre varios, la

@@ -796,7 +796,10 @@ class IngresoService
             if ($refLinea !== '') {
                 $d['referencia_detalle'] = mb_substr($refLinea, 0, 500);
             }
-            if (!empty($ingreso['id_cliente'])) {
+            // Las líneas de cartera ya traen el tercero del documento que cobran (un ingreso
+            // puede cobrar documentos de varios clientes: cabecera sin cliente); el resto hereda
+            // el cliente de la cabecera, si lo hay.
+            if (!empty($ingreso['id_cliente']) && empty($d['id_entidad'])) {
                 $d['id_entidad']   = (int) $ingreso['id_cliente'];
                 $d['tipo_entidad'] = 'cliente';
             }

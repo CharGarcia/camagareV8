@@ -6,7 +6,7 @@ ruta_modulo: modulos/consignaciones-ventas
 tipo: modulo
 visibilidad: todos
 etiquetas: consignacion, consignaciones, buscar consignacion, buscador, filtros, filtrar consignaciones, buscar por producto, buscar por lote, buscar por NUP, chips, asesor, vendedor, vendedor del cliente, asesor automatico, mercaderia en consignacion, entrega, deposito, liquidar, facturar consignacion, numeracion por fecha, numero con el año, reiniciar numeracion, reinicio anual, reinicio mensual, correlativo por año, correlativo por mes, modo de numeracion, cargar desde pedido, llamar pedido, lote, vencimiento, caducidad, fecha de vencimiento, NUP, acceso total, registros propios, solo mis documentos, quien ve que, permiso actualizar, no puedo guardar, boton guardar no aparece, no tengo permiso para esta accion, demora al guardar, guardar lento, se queda guardando, estado del pedido, pedido procesado, pedido pendiente, eliminar consignacion, editar consignacion, no puedo eliminar la consignacion, documentos relacionados, el stock no volvio, devolver stock, costo promedio, kardex anulado, pestana pedidos, pedidos relacionados, pedido de la consignacion, pendiente del pedido, asiento no generado, faltan cuentas, asiento incompleto, aparecen documentos que no busque, resultados que no corresponden, buscar por producto en el listado, codigo del producto, codigo de producto, ver codigo, NUP repetido, nup duplicado, serie repetida, el nup no puede repetirse, mismo nup dos productos, nup por lote, cada unidad su nup, numero de serie repetido, el modal se cierra al guardar, no se cierra el modal, seguir en la consignacion, imprimir despues de guardar, guardar y seguir, no contabilizar consignaciones, sin asiento de consignacion, apagar asiento, modulos que contabilizan, enfoque sin reclasificacion, consignacion sin asiento, aviso de asientos pendientes, asiento de documento anulado, asiento sigue contabilizado, no se anulo el asiento, no se pudo anular el asiento contable, consignacion duplicada, pedido consignado dos veces, dos consignaciones del mismo pedido, ya tiene consignado, saldo del pedido, pedido en dos ventanas, doble clic, guardar dos veces, se guardo dos veces, no se recibio respuesta del servidor, error al guardar
-version: 1.36
+version: 1.37
 orden: 45
 estado: activo
 ---
@@ -72,6 +72,12 @@ se toman del pedido la **Fecha Entrega** y el horario (**Hora Desde** / **Hora
 Hasta**), reemplazando la fecha y hora actuales con las que se abre el formulario.
 Si el pedido no tiene alguno de esos datos, se conserva el valor que ya estaba. En
 una consignación ya guardada no se modifican.
+
+**Lote por defecto solo cuando no hay nada que elegir.** Al agregar un producto
+(a mano o desde un pedido), si en esa bodega tiene **un solo lote**, el lote y su
+vencimiento se llenan solos. Si tiene **dos o más lotes**, la línea queda en
+*Lote...* y hay que **elegir cuál sale**: el sistema no adivina. Si la empresa
+exige lote, no se puede guardar hasta elegirlo.
 
 **El vencimiento depende del lote**, igual que al cargar una línea a mano en el
 detalle de la consignación. Mientras no se elija lote, la lista muestra todas las
@@ -498,6 +504,11 @@ Contables**; reabrir el período permite la operación de inmediato.
 
 ## Historial de cambios
 
+- **1.37** — Al agregar un producto a la consignación, el **lote se llena solo
+  únicamente si el producto tiene un solo lote** en la bodega. Con dos o más
+  lotes la línea queda en *Lote...* para elegir cuál sale. Antes se
+  preseleccionaba siempre el más antiguo, y si no se revisaba se consignaba un
+  lote distinto al que se estaba entregando.
 - **1.36** — PDF del documento: la caja del encabezado (número y estado, arriba a
   la derecha) se ajusta ahora a su contenido. Antes tenía un alto fijo que dejaba
   casi un centímetro en blanco bajo *Estado: Emitida*, y el bloque de datos del

@@ -1285,10 +1285,15 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosPestanasOcultas($vistaConfigC
                 // una combinación lote/fecha que no exista en bodega.
                 consSincronizarLoteVencimiento(selLote, selCad, json.data, selCad ? selCad.innerHTML : '');
 
-                // Por defecto, el lote más antiguo (el primero de la lista) con su vencimiento.
-                if (selLote && selLote.options.length > 1) {
+                // Lote por defecto SOLO si el producto tiene un único lote en esa bodega: no hay
+                // nada que decidir y se evita un clic. Con dos o más lotes la línea queda en
+                // "Lote..." para que quien consigna elija cuál sale: antes se preseleccionaba el
+                // primero de la lista (el más antiguo) y, si el usuario no se fijaba, se
+                // consignaba un lote que no era el que tenía en la mano. Si la empresa exige lote,
+                // el guardado lo reclama (validación en pantalla y en ConsignacionVentaRules).
+                if (selLote && json.data.length === 1) {
                     selLote.selectedIndex = 1;
-                    consAcotarVencimiento(selCad, json.data[0] ? (json.data[0].fecha_caducidad || '') : '');
+                    consAcotarVencimiento(selCad, json.data[0].fecha_caducidad || '');
                 }
             }
         } catch (e) {

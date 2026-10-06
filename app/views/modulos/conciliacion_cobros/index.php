@@ -218,12 +218,12 @@ $urlBase = rtrim($base, '/') . '/' . ltrim($rutaModulo, '/');
                         <tbody id="cc-buscar-sel-tbody"><tr><td colspan="5" class="text-center text-muted py-3">Ningún documento seleccionado.</td></tr></tbody>
                     </table>
                 </div>
-                <small class="text-muted d-block mt-2">Con varios documentos, la línea del banco se divide en una línea por documento (ya confirmadas). Al generar, se crea un solo ingreso por cliente con todos sus documentos y un solo pago por el total. Si sobra monto, queda una línea aparte con el saldo sin asignar.</small>
+                <small class="text-muted d-block mt-2">La línea del banco no se divide: queda confirmada con todos los documentos marcados, aunque sean de clientes distintos. Al generar, se crea <strong>un solo ingreso</strong> con todos ellos y un pago por el total asignado. Si se asigna menos de lo recibido, la diferencia se agrega como línea nueva al generar.</small>
             </div>
             <div class="modal-footer">
                 <button type="button" class="btn btn-outline-secondary btn-sm" data-bs-dismiss="modal">Cancelar</button>
                 <button type="button" class="btn btn-primary btn-sm" id="cc-buscar-aplicar" onclick="CC.aplicarSeleccion()">
-                    <i class="bi bi-check2 me-1"></i> Aplicar selección
+                    <i class="bi bi-check2 me-1"></i> Confirmar con este documento
                 </button>
             </div>
         </div>

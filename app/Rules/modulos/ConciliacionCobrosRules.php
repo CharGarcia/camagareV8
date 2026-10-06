@@ -17,15 +17,15 @@ class ConciliacionCobrosRules
     }
 
     /**
-     * Valida el reparto de una línea del banco entre varios documentos (de uno o varios
-     * clientes): al menos dos documentos, sin repetir ninguno, y la suma de lo asignado no
-     * puede superar lo recibido en el banco. Cada asignación se valida además contra el saldo
+     * Valida los documentos con los que se completa una línea del banco (uno o varios, de uno
+     * o varios clientes): al menos uno, sin repetir ninguno, y la suma de lo asignado no puede
+     * superar lo recibido en el banco. Cada asignación se valida además contra el saldo
      * pendiente actual de su documento con validarMatchLinea().
      */
-    public function validarDivision(array $asignaciones, float $montoLinea): void
+    public function validarAsignaciones(array $asignaciones, float $montoLinea): void
     {
-        if (count($asignaciones) < 2) {
-            throw new \Exception('Seleccione al menos dos documentos para repartir el depósito.');
+        if (count($asignaciones) < 1) {
+            throw new \Exception('Selecciona el cliente y el documento a cobrar antes de confirmar (botón de lupa).');
         }
 
         $vistos = [];

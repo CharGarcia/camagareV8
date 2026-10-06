@@ -310,17 +310,51 @@
         };
         const claseFila = clasesPorEstado[l.estado] || '';
 
-        const clienteTxt = l.cliente_sugerido_nombre ? escHtml(l.cliente_sugerido_nombre) : '<span class="text-muted">— sin identificar —</span>';
-        const docTxt = l.documento_numero
-            ? `${escHtml(l.tipo_documento_sugerido)} ${escHtml(l.documento_numero)} <br><small class="text-muted">saldo: ${fmtMoney(l.documento_saldo_pendiente)}</small>`
-            : '<span class="text-muted">— sin documento —</span>';
+        // Una línea = un depósito con uno o varios documentos (de uno o varios clientes).
+        const detalles = Array.isArray(l.detalles) ? l.detalles : [];
+        const unico = detalles.length === 1 ? detalles[0] : null;
 
-        // Tope real del monto a aplicar: no puede superar ni lo recibido en el banco ni el
-        // saldo pendiente del documento elegido (si ya hay uno sugerido/seleccionado).
-        const topeMonto = l.documento_saldo_pendiente != null
-            ? Math.min(Number(l.monto), Number(l.documento_saldo_pendiente))
+        const nombresClientes = (l.clientes_nombres && l.clientes_nombres.length)
+            ? l.clientes_nombres
+            : (l.cliente_sugerido_nombre ? [l.cliente_sugerido_nombre] : []);
+        let clienteTxt;
+        if (!nombresClientes.length) {
+            clienteTxt = '<span class="text-muted">— sin identificar —</span>';
+        } else if (nombresClientes.length === 1) {
+            clienteTxt = escHtml(nombresClientes[0]);
+        } else {
+            clienteTxt = `<span class="badge bg-primary bg-opacity-10 text-primary me-1" title="${escHtml(nombresClientes.join(', '))}">${nombresClientes.length} clientes</span>`
+                + `<small>${nombresClientes.map(escHtml).join('<br>')}</small>`;
+        }
+
+        let docTxt;
+        if (!detalles.length) {
+            docTxt = '<span class="text-muted">— sin documento —</span>';
+        } else if (unico) {
+            docTxt = `${escHtml(unico.tipo_documento)} ${escHtml(unico.numero_documento || '')}`
+                + (unico.saldo_pendiente != null ? ` <br><small class="text-muted">saldo: ${fmtMoney(unico.saldo_pendiente)}</small>` : '');
+        } else {
+            docTxt = `<small>${detalles.map((d) => `${escHtml(d.tipo_documento)} ${escHtml(d.numero_documento || '')}`
+                + (detalles.length > 1 && nombresClientes.length > 1 ? ` <span class="text-muted">· ${escHtml(d.cliente_nombre || '')}</span>` : '')
+                + ` <span class="text-nowrap">${fmtMoney(d.monto_aplicar)}</span>`).join('<br>')}</small>`;
+        }
+
+        // Tope real del monto a aplicar (un solo documento): no puede superar ni lo recibido
+        // en el banco ni el saldo pendiente del documento elegido.
+        const topeMonto = unico && unico.saldo_pendiente != null
+            ? Math.min(Number(l.monto), Number(unico.saldo_pendiente))
             : Number(l.monto);
-        const montoAplicar = Math.min(l.monto_aplicar != null ? Number(l.monto_aplicar) : Number(l.monto), topeMonto);
+        const montoAplicar = Math.min(unico ? Number(unico.monto_aplicar) : Number(l.monto), topeMonto);
+        const montoAsignado = detalles.reduce((t, d) => t + Number(d.monto_aplicar || 0), 0);
+        const restante = r2(Number(l.monto) - montoAsignado);
+
+        // Con varios documentos el monto se edita desde la lupa: aquí se muestra el total.
+        const montoCelda = detalles.length > 1
+            ? `<div class="text-nowrap"><strong>${fmtMoney(montoAsignado)}</strong><br><small class="text-muted">${detalles.length} documentos</small>`
+                + (restante > 0 ? `<br><small class="text-warning-emphasis" title="Lo recibido supera lo asignado; al generar, la diferencia queda como línea nueva">sin asignar: ${fmtMoney(restante)}</small>` : '') + '</div>'
+            : `<input type="number" step="0.01" min="0.01" max="${topeMonto}" class="form-control form-control-sm text-end"
+                       style="max-width:120px; display:inline-block;" value="${montoAplicar.toFixed(2)}"
+                       ${bloqueada ? 'disabled' : ''} onchange="CC.actualizarMontoAplicar(${l.id}, this)">`;
 
         let acciones;
         if (l.estado === 'APLICADO' && l.ingreso_valido === false) {
@@ -368,21 +402,19 @@
             <td class="text-end" data-col="monto">${fmtMoney(l.monto)}</td>
             <td data-col="cliente">${clienteTxt}</td>
             <td data-col="documento">${docTxt}</td>
-            <td class="text-end" data-col="monto_aplicar">
-                <input type="number" step="0.01" min="0.01" max="${topeMonto}" class="form-control form-control-sm text-end"
-                       style="max-width:120px; display:inline-block;" value="${montoAplicar.toFixed(2)}"
-                       ${bloqueada ? 'disabled' : ''} onchange="CC.actualizarMontoAplicar(${l.id}, this)">
-            </td>
+            <td class="text-end" data-col="monto_aplicar">${montoCelda}</td>
             <td class="text-center pe-3" data-col="acciones">${acciones}</td>
         </tr>`;
     };
 
+    /** Monto a aplicar editado en la grilla (solo líneas con un único documento). */
     CC.actualizarMontoAplicar = function (idLinea, input) {
         const l = state.lineas[idLinea];
         if (!l) return;
+        const unico = Array.isArray(l.detalles) && l.detalles.length === 1 ? l.detalles[0] : null;
 
-        const tope = l.documento_saldo_pendiente != null
-            ? Math.min(Number(l.monto), Number(l.documento_saldo_pendiente))
+        const tope = unico && unico.saldo_pendiente != null
+            ? Math.min(Number(l.monto), Number(unico.saldo_pendiente))
             : Number(l.monto);
         let valor = parseFloat(input.value) || 0;
 
@@ -392,30 +424,29 @@
             alertError('Monto ajustado', `El monto a aplicar no puede superar ${fmtMoney(tope)} (saldo pendiente del documento o monto recibido).`);
         }
 
+        if (unico) unico.monto_aplicar = valor;
         l.monto_aplicar = valor;
     };
 
-    /** Otras partes del mismo depósito, del mismo cliente, aún sugeridas y con documento (sin la línea dada). */
-    function partesHermanasSugeridas(l) {
-        if (!l || !l.id_linea_origen) return [];
-        return Object.values(state.lineas).filter((o) => o.id !== l.id
-            && Number(o.id_linea_origen) === Number(l.id_linea_origen)
-            && Number(o.id_cliente_sugerido) === Number(l.id_cliente_sugerido)
-            && o.estado === 'SUGERIDO' && o.tipo_documento_sugerido && o.id_documento_sugerido);
+    /** Asignaciones (cliente/documento/monto) que se envían al servidor al confirmar. */
+    function asignacionesDe(items) {
+        return items.map((d) => ({
+            id_cliente: Number(d.id_cliente),
+            tipo_documento: d.tipo_documento,
+            id_documento: Number(d.id_documento),
+            monto_aplicar: r2(d.monto_aplicar != null ? d.monto_aplicar : d.monto),
+        }));
     }
 
-    /** Confirma una línea en el servidor y actualiza su estado local. Devuelve true si se confirmó. */
-    async function confirmarUna(idLinea) {
+    /**
+     * Confirma una línea en el servidor con los documentos dados (o con los que ya tiene) y
+     * actualiza su estado local. Devuelve true si se confirmó.
+     */
+    async function confirmarEnServidor(idLinea, asignaciones) {
         const l = state.lineas[idLinea];
-        const json = await postJson(`${CC_URL_BASE}/confirmarLineaAjax`, {
-            id_linea: idLinea,
-            id_cliente: l.id_cliente_sugerido,
-            tipo_documento: l.tipo_documento_sugerido,
-            id_documento: l.id_documento_sugerido,
-            monto_aplicar: l.monto_aplicar != null ? l.monto_aplicar : l.monto,
-        });
+        const json = await postJson(`${CC_URL_BASE}/confirmarLineaAjax`, { id_linea: idLinea, asignaciones });
         if (!json.ok) {
-            alertError('No se pudo confirmar', `${l.documento_numero ? l.documento_numero + ': ' : ''}${json.error || ''}`);
+            alertError('No se pudo confirmar', json.error || '');
             return false;
         }
         state.lineas[idLinea] = Object.assign({}, l, json.data);
@@ -423,43 +454,20 @@
     }
 
     /**
-     * Confirma la línea. Si es una parte de un depósito repartido por antigüedad y el mismo
-     * cliente tiene otras partes todavía sugeridas, ofrece confirmarlas todas de una vez: así,
-     * al generar, el depósito se cobra en UN solo ingreso con todos sus documentos. Con
-     * `soloEsta` no pregunta (p. ej. al reconfirmar desde la lupa).
+     * Confirma la línea con los documentos que ya tiene asignados (la sugerencia, o lo elegido
+     * en la lupa). Al generar, cada línea confirmada se cobra en UN solo ingreso con todos sus
+     * documentos, aunque sean de clientes distintos.
      */
-    CC.confirmarLinea = async function (idLinea, soloEsta = false) {
+    CC.confirmarLinea = async function (idLinea) {
         const l = state.lineas[idLinea];
-        if (!l || !l.id_cliente_sugerido || !l.tipo_documento_sugerido || !l.id_documento_sugerido) {
+        const detalles = l && Array.isArray(l.detalles) ? l.detalles : [];
+        if (!l || !detalles.length) {
             alertError('Falta información', 'Selecciona el cliente y el documento a cobrar antes de confirmar (botón de lupa).');
             return;
         }
-
-        let ids = [idLinea];
-        const hermanas = soloEsta ? [] : partesHermanasSugeridas(l);
-        if (hermanas.length) {
-            const total = hermanas.length + 1;
-            const texto = `Este depósito está repartido en ${total} documentos de ${l.cliente_sugerido_nombre || 'este cliente'}. `
-                + `Si confirma todas las partes, al generar se creará UN solo ingreso con los ${total} documentos y un solo pago.`;
-            let todas;
-            if (window.Swal) {
-                const r = await Swal.fire({
-                    icon: 'question', title: '¿Confirmar todas las partes del depósito?', text: texto,
-                    showCancelButton: true, showDenyButton: true,
-                    confirmButtonText: `Confirmar las ${total}`, denyButtonText: 'Solo esta', cancelButtonText: 'Cancelar',
-                });
-                if (r.isDismissed) return;
-                todas = r.isConfirmed;
-            } else {
-                todas = confirm(texto + '\n\nAceptar: confirmar todas. Cancelar: solo esta.');
-            }
-            if (todas) ids = ids.concat(hermanas.map((o) => o.id));
+        if (await confirmarEnServidor(idLinea, asignacionesDe(detalles))) {
+            CC.renderLineas();
         }
-
-        for (const id of ids) {
-            if (!(await confirmarUna(id))) break;
-        }
-        CC.renderLineas();
     };
 
     CC.desconfirmarLinea = async function (idLinea) {
@@ -537,8 +545,8 @@
     // ── Búsqueda manual de cliente/documento(s) ─────────────────────────────
     // Se pueden marcar uno o varios documentos, incluso de clientes distintos (un solo
     // depósito que paga facturas de varios clientes). Lo marcado vive en `buscar.sel` y se
-    // conserva al cambiar de cliente. Con un documento la línea se asigna como siempre; con
-    // varios, el servidor la divide en una línea por documento (dividirLineaAjax).
+    // conserva al cambiar de cliente. Al aplicar, la línea se confirma con esos documentos
+    // (confirmarLineaAjax) sin dividirse: al generar, se cobra en UN solo ingreso.
 
     const buscar = {
         idLinea: null,
@@ -679,19 +687,19 @@
         buscar.docs = {};
         buscar.sel = new Map();
 
-        // Si la línea ya tiene un documento elegido, llega preseleccionado.
-        if (l.id_cliente_sugerido && l.tipo_documento_sugerido && l.id_documento_sugerido && l.documento_numero) {
-            const saldo = l.documento_saldo_pendiente != null ? Number(l.documento_saldo_pendiente) : Number(l.monto);
-            buscar.sel.set(claveDoc(l.tipo_documento_sugerido, l.id_documento_sugerido), {
-                id_cliente: Number(l.id_cliente_sugerido),
-                cliente_nombre: l.cliente_sugerido_nombre || nombreCliente(l.id_cliente_sugerido),
-                tipo_documento: l.tipo_documento_sugerido,
-                id_documento: Number(l.id_documento_sugerido),
-                numero_documento: l.documento_numero,
+        // Los documentos que la línea ya tiene asignados llegan preseleccionados.
+        (Array.isArray(l.detalles) ? l.detalles : []).forEach((d) => {
+            const saldo = d.saldo_pendiente != null ? Number(d.saldo_pendiente) : Number(d.monto_aplicar);
+            buscar.sel.set(claveDoc(d.tipo_documento, d.id_documento), {
+                id_cliente: Number(d.id_cliente),
+                cliente_nombre: d.cliente_nombre || nombreCliente(d.id_cliente),
+                tipo_documento: d.tipo_documento,
+                id_documento: Number(d.id_documento),
+                numero_documento: d.numero_documento || '',
                 saldo: saldo,
-                monto: r2(Math.min(l.monto_aplicar != null ? Number(l.monto_aplicar) : Number(l.monto), saldo, Number(l.monto))),
+                monto: r2(Math.min(Number(d.monto_aplicar), saldo, Number(l.monto))),
             });
-        }
+        });
 
         document.getElementById('cc-buscar-desc').textContent = `${fmtDate(l.fecha_movimiento)} · ${l.descripcion_original || ''}`;
         document.getElementById('cc-buscar-monto').textContent = fmtMoney(buscar.montoLinea);
@@ -831,10 +839,16 @@
 
         const btn = document.getElementById('cc-buscar-aplicar');
         btn.innerHTML = items.length > 1
-            ? `<i class="bi bi-diagram-3 me-1"></i> Aplicar a ${items.length} documentos`
-            : '<i class="bi bi-check2 me-1"></i> Aplicar selección';
+            ? `<i class="bi bi-check2-all me-1"></i> Confirmar con ${items.length} documentos`
+            : '<i class="bi bi-check2 me-1"></i> Confirmar con este documento';
     };
 
+    /**
+     * Confirma la línea con los documentos marcados (uno o varios, de uno o varios clientes).
+     * La línea del banco no se divide: al generar, se crea UN solo ingreso con todos ellos y
+     * un pago por el total asignado; si se asignó menos de lo recibido, la diferencia queda
+     * como línea nueva al generar.
+     */
     CC.aplicarSeleccion = async function () {
         const l = state.lineas[buscar.idLinea];
         if (!l) return;
@@ -849,69 +863,34 @@
             return;
         }
 
-        const modal = bootstrap.Modal.getOrCreateInstance(document.getElementById('cc-modal-buscar-doc'));
-
-        // Un solo documento: se asigna a la línea como siempre (se confirma con el botón ✓).
-        if (items.length === 1) {
-            const s = items[0];
-            const eraConfirmada = l.estado === 'CONFIRMADO';
-            Object.assign(l, {
-                id_cliente_sugerido: s.id_cliente,
-                cliente_sugerido_nombre: s.cliente_nombre || l.cliente_sugerido_nombre,
-                tipo_documento_sugerido: s.tipo_documento,
-                id_documento_sugerido: s.id_documento,
-                documento_numero: s.numero_documento,
-                documento_saldo_pendiente: s.saldo,
-                monto_aplicar: s.monto,
-            });
-            if (l.estado === 'SIN_MATCH' || l.estado === 'ERROR') l.estado = 'SUGERIDO';
-
-            modal.hide();
-            // Si ya estaba confirmada, se reconfirma con el documento nuevo: si no, el servidor
-            // seguiría con el documento anterior aunque la pantalla muestre el nuevo.
-            if (eraConfirmada) {
-                await CC.confirmarLinea(l.id, true);
-            } else {
-                CC.renderLineas();
+        const asignado = totalAsignado();
+        const sobrante = r2(buscar.montoLinea - asignado);
+        if (items.length > 1 || sobrante > 0) {
+            const clientes = new Set(items.map((s) => s.id_cliente)).size;
+            const texto = `La línea de ${fmtMoney(buscar.montoLinea)} se confirmará con ${items.length} documento(s)`
+                + (clientes > 1 ? ` de ${clientes} clientes` : '')
+                + `. Al generar, se creará UN solo ingreso con un pago de ${fmtMoney(asignado)}`
+                + (sobrante > 0 ? ` y quedarán ${fmtMoney(sobrante)} sin asignar (al generar, esa diferencia se agrega como línea nueva).` : '.');
+            if (window.Swal) {
+                const r = await Swal.fire({ icon: 'question', title: '¿Confirmar la línea?', text: texto, showCancelButton: true, confirmButtonText: 'Sí, confirmar', cancelButtonText: 'Cancelar' });
+                if (!r.isConfirmed) return;
+            } else if (!confirm(texto)) {
+                return;
             }
-            return;
-        }
-
-        // Varios documentos: la línea se divide en el servidor.
-        const sobrante = r2(buscar.montoLinea - totalAsignado());
-        // Al generar, las partes se cobran juntas: un ingreso por cliente con un solo pago.
-        const clientes = new Set(items.map((s) => s.id_cliente)).size;
-        const texto = `La línea de ${fmtMoney(buscar.montoLinea)} se dividirá en ${items.length} líneas confirmadas (una por documento)`
-            + (sobrante > 0 ? ` y una línea más con ${fmtMoney(sobrante)} sin asignar.` : '.')
-            + (clientes === 1
-                ? ` Al generar, se creará UN solo ingreso con los ${items.length} documentos y un pago de ${fmtMoney(totalAsignado())}.`
-                : ` Al generar, se creará un ingreso por cliente (${clientes}), cada uno con sus documentos y un solo pago.`);
-        if (window.Swal) {
-            const r = await Swal.fire({ icon: 'question', title: '¿Repartir el depósito?', text: texto, showCancelButton: true, confirmButtonText: 'Sí, repartir', cancelButtonText: 'Cancelar' });
-            if (!r.isConfirmed) return;
-        } else if (!confirm(texto)) {
-            return;
         }
 
         const btn = document.getElementById('cc-buscar-aplicar');
         btn.disabled = true;
         try {
-            const json = await postJson(`${CC_URL_BASE}/dividirLineaAjax`, {
-                id_linea: l.id,
-                asignaciones: items.map((s) => ({
-                    id_cliente: s.id_cliente,
-                    tipo_documento: s.tipo_documento,
-                    id_documento: s.id_documento,
-                    monto_aplicar: s.monto,
-                })),
-            });
-            if (!json.ok) {
-                alertError('No se pudo repartir la línea', json.error);
-                return;
-            }
-            modal.hide();
-            await CC.cargarLineas(state.idCargaActual);
-            alertOk('Línea repartida', `Se generaron ${json.data.ids.length} líneas. Pulse «Generar ingresos» cuando termine de revisar.`);
+            const ok = await confirmarEnServidor(l.id, items.map((s) => ({
+                id_cliente: s.id_cliente,
+                tipo_documento: s.tipo_documento,
+                id_documento: s.id_documento,
+                monto_aplicar: s.monto,
+            })));
+            if (!ok) return;
+            bootstrap.Modal.getOrCreateInstance(document.getElementById('cc-modal-buscar-doc')).hide();
+            CC.renderLineas();
         } finally {
             btn.disabled = false;
         }

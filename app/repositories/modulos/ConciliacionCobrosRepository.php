@@ -206,6 +206,10 @@ class ConciliacionCobrosRepository extends BaseRepository
         return $row ?: null;
     }
 
+    /**
+     * Actualiza el estado y el resumen de la línea. El cliente/documento de la línea son el
+     * espejo del PRIMER detalle (ver reemplazarDetalles) y monto_aplicar la SUMA de los detalles.
+     */
     public function actualizarMatchLinea(int $id, array $data): void
     {
         $sql = "UPDATE conciliacion_lineas SET
@@ -214,6 +218,8 @@ class ConciliacionCobrosRepository extends BaseRepository
                     tipo_documento_sugerido = :tipo_documento_sugerido,
                     id_documento_sugerido = :id_documento_sugerido,
                     monto_aplicar = :monto_aplicar,
+                    mensaje_error = NULL,
+                    updated_by = COALESCE(:usuario, updated_by),
                     updated_at = CURRENT_TIMESTAMP
                 WHERE id = :id";
         $st = $this->db->prepare($sql);
@@ -224,13 +230,102 @@ class ConciliacionCobrosRepository extends BaseRepository
             ':tipo_documento_sugerido' => $data['tipo_documento_sugerido'] ?? null,
             ':id_documento_sugerido' => $data['id_documento_sugerido'] ?? null,
             ':monto_aplicar' => $data['monto_aplicar'] ?? null,
+            ':usuario' => $data['usuario_id'] ?? null,
         ]);
+    }
+
+    // ── Detalle de cada línea: documentos con los que se completa el depósito ────────────
+
+    /**
+     * Documentos asignados a varias líneas, con el nombre del cliente, agrupados por línea.
+     *
+     * @param int[] $idsLineas
+     * @return array<int, array<int, array<string, mixed>>> id_linea => detalles en orden
+     */
+    public function getDetallesPorLineas(array $idsLineas, int $idEmpresa): array
+    {
+        $ids = array_values(array_unique(array_filter(array_map('intval', $idsLineas))));
+        if (!$ids) {
+            return [];
+        }
+        $sql = "SELECT d.id, d.id_linea, d.id_cliente, d.tipo_documento, d.id_documento, d.numero_documento,
+                       d.monto_aplicar, d.orden, cli.nombre AS cliente_nombre
+                FROM conciliacion_lineas_detalle d
+                LEFT JOIN clientes cli ON cli.id = d.id_cliente
+                WHERE d.id_linea = ANY(CAST(:ids AS int[])) AND d.id_empresa = :id_empresa AND d.eliminado = FALSE
+                ORDER BY d.id_linea ASC, d.orden ASC, d.id ASC";
+        $st = $this->db->prepare($sql);
+        $st->execute([':ids' => '{' . implode(',', $ids) . '}', ':id_empresa' => $idEmpresa]);
+
+        $porLinea = [];
+        foreach ($st->fetchAll(PDO::FETCH_ASSOC) as $r) {
+            $r['id'] = (int) $r['id'];
+            $r['id_linea'] = (int) $r['id_linea'];
+            $r['id_cliente'] = (int) $r['id_cliente'];
+            $r['id_documento'] = (int) $r['id_documento'];
+            $r['monto_aplicar'] = round((float) $r['monto_aplicar'], 2);
+            $porLinea[$r['id_linea']][] = $r;
+        }
+        return $porLinea;
+    }
+
+    /** @return array<int, array<string, mixed>> */
+    public function getDetallesPorLinea(int $idLinea, int $idEmpresa): array
+    {
+        return $this->getDetallesPorLineas([$idLinea], $idEmpresa)[$idLinea] ?? [];
+    }
+
+    /**
+     * Sustituye los documentos asignados a la línea (baja lógica de los anteriores + alta de
+     * los nuevos, en el orden recibido) y deja en la línea el espejo: cliente/documento del
+     * primer detalle y monto_aplicar = suma. Llamar dentro de la transacción que ya tomó
+     * lockLinea().
+     *
+     * @param array $detalles [['id_cliente', 'tipo_documento', 'id_documento', 'numero_documento', 'monto_aplicar'], ...]
+     */
+    public function reemplazarDetalles(int $idLinea, int $idEmpresa, array $detalles, int $idUsuario): void
+    {
+        $st = $this->db->prepare("UPDATE conciliacion_lineas_detalle
+                                  SET eliminado = TRUE, deleted_at = CURRENT_TIMESTAMP, deleted_by = :usuario, updated_at = CURRENT_TIMESTAMP
+                                  WHERE id_linea = :id_linea AND eliminado = FALSE");
+        $st->execute([':id_linea' => $idLinea, ':usuario' => $idUsuario]);
+
+        $ins = $this->db->prepare("INSERT INTO conciliacion_lineas_detalle (
+                    id_linea, id_empresa, id_cliente, tipo_documento, id_documento, numero_documento, monto_aplicar, orden, created_by, updated_by
+                ) VALUES (
+                    :id_linea, :id_empresa, :id_cliente, :tipo_documento, :id_documento, :numero_documento, :monto_aplicar, :orden, :usuario, :usuario
+                )");
+        foreach (array_values($detalles) as $i => $d) {
+            $ins->execute([
+                ':id_linea' => $idLinea,
+                ':id_empresa' => $idEmpresa,
+                ':id_cliente' => (int) $d['id_cliente'],
+                ':tipo_documento' => strtoupper((string) $d['tipo_documento']),
+                ':id_documento' => (int) $d['id_documento'],
+                ':numero_documento' => isset($d['numero_documento']) ? mb_substr((string) $d['numero_documento'], 0, 50) : null,
+                ':monto_aplicar' => round((float) $d['monto_aplicar'], 2),
+                ':orden' => $i,
+                ':usuario' => $idUsuario,
+            ]);
+        }
+    }
+
+    /** Espejo de resumen para una línea a partir de sus detalles (primer documento + suma). */
+    public static function resumenDeDetalles(array $detalles, ?int $idClienteRespaldo = null): array
+    {
+        $primero = $detalles[0] ?? null;
+        return [
+            'id_cliente_sugerido' => $primero ? (int) $primero['id_cliente'] : $idClienteRespaldo,
+            'tipo_documento_sugerido' => $primero ? strtoupper((string) $primero['tipo_documento']) : null,
+            'id_documento_sugerido' => $primero ? (int) $primero['id_documento'] : null,
+            'monto_aplicar' => $primero ? round(array_sum(array_map(fn ($d) => (float) $d['monto_aplicar'], $detalles)), 2) : null,
+        ];
     }
 
     /**
      * Candado transaccional sobre una línea del extracto (CLAUDE.md §8): se toma antes de
-     * releerla al dividirla entre varios documentos, para que dos usuarios no la repartan a la
-     * vez. Se libera solo al COMMIT/ROLLBACK de la transacción del llamador.
+     * releerla al confirmarla o cobrarla, para que dos usuarios no le cambien los documentos
+     * a la vez. Se libera solo al COMMIT/ROLLBACK de la transacción del llamador.
      */
     public function lockLinea(int $id): void
     {
@@ -251,8 +346,9 @@ class ConciliacionCobrosRepository extends BaseRepository
 
     /**
      * Monto ya apartado para cada documento por líneas CONFIRMADO que todavía no generaron su
-     * ingreso (de cualquier carga de la empresa). Ese monto aún no descuenta el saldo de la
-     * cuenta por cobrar, así que hay que restarlo para no cobrar el mismo saldo dos veces.
+     * ingreso (de cualquier carga de la empresa), sumando los detalles de esas líneas. Ese
+     * monto aún no descuenta el saldo de la cuenta por cobrar, así que hay que restarlo para no
+     * cobrar el mismo saldo dos veces.
      *
      * @param int[] $excluirLineas Líneas que no cuentan (la que se está editando).
      * @return array<string,float> 'TIPO:id' => monto apartado
@@ -262,7 +358,7 @@ class ConciliacionCobrosRepository extends BaseRepository
         $params = [':id_empresa' => $idEmpresa];
         $filtro = '';
         if ($tipoDocumento !== null && $idDocumento !== null) {
-            $filtro .= ' AND l.tipo_documento_sugerido = :tipo AND l.id_documento_sugerido = :id_doc';
+            $filtro .= ' AND d.tipo_documento = :tipo AND d.id_documento = :id_doc';
             $params[':tipo'] = $tipoDocumento;
             $params[':id_doc'] = $idDocumento;
         }
@@ -272,14 +368,13 @@ class ConciliacionCobrosRepository extends BaseRepository
             $params[':excluir'] = '{' . implode(',', $excluir) . '}';
         }
 
-        $sql = "SELECT l.tipo_documento_sugerido AS tipo, l.id_documento_sugerido AS id_doc, SUM(l.monto_aplicar) AS apartado
-                FROM conciliacion_lineas l
+        $sql = "SELECT d.tipo_documento AS tipo, d.id_documento AS id_doc, SUM(d.monto_aplicar) AS apartado
+                FROM conciliacion_lineas_detalle d
+                INNER JOIN conciliacion_lineas l ON l.id = d.id_linea AND l.eliminado = FALSE AND l.estado = 'CONFIRMADO'
                 INNER JOIN conciliacion_cargas c ON c.id = l.id_carga AND c.eliminado = FALSE
-                WHERE l.id_empresa = :id_empresa AND l.eliminado = FALSE
-                  AND l.estado = 'CONFIRMADO'
-                  AND l.id_documento_sugerido IS NOT NULL
+                WHERE d.id_empresa = :id_empresa AND d.eliminado = FALSE
                   {$filtro}
-                GROUP BY l.tipo_documento_sugerido, l.id_documento_sugerido";
+                GROUP BY d.tipo_documento, d.id_documento";
         $st = $this->db->prepare($sql);
         $st->execute($params);
 
@@ -312,9 +407,9 @@ class ConciliacionCobrosRepository extends BaseRepository
     /**
      * ¿Este movimiento del banco ya está en OTRA carga de la misma cuenta? Pasa al subir
      * extractos que se solapan en fechas. Se compara por fecha, referencia, descripción del
-     * banco y monto; un depósito repartido entre varios documentos cuenta como uno solo
-     * (sus partes comparten id_linea_origen y se suman). No cuentan las cargas eliminadas ni
-     * los movimientos cuyas líneas quedaron todas ignoradas.
+     * banco y monto. Las líneas históricas que se dividieron en partes (antes del detalle por
+     * línea) comparten id_linea_origen y se suman para contar como un solo depósito. No cuentan
+     * las cargas eliminadas ni los movimientos cuyas líneas quedaron todas ignoradas.
      *
      * @return array|null ['id_carga', 'nombre_archivo', 'created_at', 'id_ingreso'] de la primera coincidencia
      */
@@ -353,47 +448,6 @@ class ConciliacionCobrosRepository extends BaseRepository
         ]);
         $row = $st->fetch(PDO::FETCH_ASSOC);
         return $row ?: null;
-    }
-
-    /**
-     * Convierte la línea original en la primera parte de una división: ajusta su monto y
-     * descripción al documento asignado y la deja confirmada.
-     */
-    public function actualizarParteLinea(int $id, array $data): void
-    {
-        $sql = "UPDATE conciliacion_lineas SET
-                    descripcion_original = :descripcion_original,
-                    monto = :monto,
-                    estado = :estado,
-                    id_cliente_sugerido = :id_cliente_sugerido,
-                    tipo_documento_sugerido = :tipo_documento_sugerido,
-                    id_documento_sugerido = :id_documento_sugerido,
-                    monto_aplicar = :monto_aplicar,
-                    mensaje_error = NULL,
-                    id_linea_origen = :id_linea_origen,
-                    updated_by = :usuario,
-                    updated_at = CURRENT_TIMESTAMP
-                WHERE id = :id";
-        $st = $this->db->prepare($sql);
-        $st->execute([
-            ':id' => $id,
-            ':descripcion_original' => $data['descripcion_original'],
-            ':monto' => $data['monto'],
-            ':estado' => $data['estado'],
-            ':id_cliente_sugerido' => $data['id_cliente_sugerido'] ?? null,
-            ':tipo_documento_sugerido' => $data['tipo_documento_sugerido'] ?? null,
-            ':id_documento_sugerido' => $data['id_documento_sugerido'] ?? null,
-            ':monto_aplicar' => $data['monto_aplicar'] ?? $data['monto'],
-            ':id_linea_origen' => $data['id_linea_origen'] ?? null,
-            ':usuario' => $data['usuario_id'],
-        ]);
-    }
-
-    /** Fija el depósito de origen de una línea (las partes de un mismo depósito comparten id_linea_origen). */
-    public function fijarLineaOrigen(int $id, int $idOrigen): void
-    {
-        $st = $this->db->prepare("UPDATE conciliacion_lineas SET id_linea_origen = :origen, updated_at = CURRENT_TIMESTAMP WHERE id = :id");
-        $st->execute([':id' => $id, ':origen' => $idOrigen]);
     }
 
     public function marcarLineaIgnorada(int $id): void

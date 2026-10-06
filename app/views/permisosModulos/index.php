@@ -581,7 +581,7 @@ window.cmgOcultarResultadoPermisos = function() {
                 <table class="table table-sm table-hover mb-0">
                     <thead class="table-light">
                         <tr>
-                            <th class="text-center" style="width:70px">Puede ver</th>
+                            <th class="text-center text-nowrap" style="width:110px">Puede ver</th>
                             <th>Vendedor</th>
                             <th style="width:160px">Identificación</th>
                         </tr>
@@ -735,7 +735,11 @@ window.cmgOcultarResultadoPermisos = function() {
     <?php foreach (\App\Helpers\PestanasModulo::catalogo() as $pmModulo => $pmDef): $pmSlug = preg_replace('/[^a-z0-9]+/i', '-', $pmModulo); ?>
     <div class="card mt-3 pm-card" id="card-pestanas-<?= htmlspecialchars($pmSlug) ?>" data-modulo="<?= htmlspecialchars($pmModulo) ?>">
         <div class="card-header bg-light py-2 d-flex justify-content-between align-items-center flex-wrap gap-2">
-            <strong><i class="bi <?= htmlspecialchars($pmDef['icono']) ?>"></i> Pestañas que puede ver <span class="text-muted fw-normal small">— <?= htmlspecialchars($pmDef['titulo']) ?></span></strong>
+            <div class="d-flex align-items-center flex-wrap gap-2">
+                <strong><i class="bi <?= htmlspecialchars($pmDef['icono']) ?>"></i> Pestañas que puede ver</strong>
+                <span class="text-secondary"><i class="bi bi-person-fill"></i> <?= htmlspecialchars($usuarioSel['nombre'] ?? '') ?></span>
+                <span class="badge bg-primary bg-opacity-10 text-primary border border-primary border-opacity-25 fw-semibold" style="font-size:.85rem;"><?= htmlspecialchars($pmDef['titulo']) ?></span>
+            </div>
             <small class="text-muted pm-conteo"></small>
         </div>
         <div class="card-body">
@@ -752,7 +756,7 @@ window.cmgOcultarResultadoPermisos = function() {
                 <table class="table table-sm table-hover mb-0">
                     <thead class="table-light">
                         <tr>
-                            <th class="text-center" style="width:70px">Puede ver</th>
+                            <th class="text-center text-nowrap" style="width:110px">Puede ver</th>
                             <th>Pestaña</th>
                         </tr>
                     </thead>
@@ -893,7 +897,11 @@ window.cmgOcultarResultadoPermisos = function() {
     <?php foreach (\App\Helpers\VendedoresModulo::catalogo() as $vmModulo => $vmDef): $vmSlug = preg_replace('/[^a-z0-9]+/i', '-', $vmModulo); ?>
     <div class="card mt-3 vm-card" id="card-vendedores-<?= htmlspecialchars($vmSlug) ?>" data-modulo="<?= htmlspecialchars($vmModulo) ?>">
         <div class="card-header bg-light py-2 d-flex justify-content-between align-items-center flex-wrap gap-2">
-            <strong><i class="bi <?= htmlspecialchars($vmDef['icono']) ?>"></i> Vendedores que puede ver <span class="text-muted fw-normal small">— <?= htmlspecialchars($vmDef['titulo']) ?></span></strong>
+            <div class="d-flex align-items-center flex-wrap gap-2">
+                <strong><i class="bi <?= htmlspecialchars($vmDef['icono']) ?>"></i> Vendedores que puede ver</strong>
+                <span class="text-secondary"><i class="bi bi-person-fill"></i> <?= htmlspecialchars($usuarioSel['nombre'] ?? '') ?></span>
+                <span class="badge bg-primary bg-opacity-10 text-primary border border-primary border-opacity-25 fw-semibold" style="font-size:.85rem;"><?= htmlspecialchars($vmDef['titulo']) ?></span>
+            </div>
             <small class="text-muted vm-conteo"></small>
         </div>
         <div class="card-body">
@@ -914,7 +922,7 @@ window.cmgOcultarResultadoPermisos = function() {
                 <table class="table table-sm table-hover mb-0">
                     <thead class="table-light">
                         <tr>
-                            <th class="text-center" style="width:70px">Puede ver</th>
+                            <th class="text-center text-nowrap" style="width:110px">Puede ver</th>
                             <th>Vendedor</th>
                             <th style="width:160px">Identificación</th>
                         </tr>
