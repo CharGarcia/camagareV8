@@ -78,13 +78,10 @@ $rowsHtml = $rowsHtml ?? '';
         box-shadow: 0 1px 0 #dee2e6;
     }
 </style>
+<?= \App\Helpers\PreferenciasHelper::renderEstilosColumnasOcultas($vistaConfig ?? []) ?>
+
 <div class="usuarios-sistema-header d-flex justify-content-between align-items-center flex-wrap gap-2 mb-3">
-    <div>
-        <h5 class="mb-0"><i class="bi bi-people"></i> <?= htmlspecialchars($titulo) ?></h5>
-        <p class="text-muted mb-0 small">
-            <?= $nivel >= 3 ? 'Todos los usuarios del sistema. Clic en fila para ver detalles.' : 'Usuarios que tiene asignados. Clic en fila para ver detalles.' ?>
-        </p>
-    </div>
+    <h5 class="mb-0 fw-bold"><i class="bi bi-people"></i> <?= htmlspecialchars($titulo) ?></h5>
     <div class="d-flex align-items-center gap-2">
         <?php if ($limiteUsuarios !== null): ?>
             <?php
@@ -131,34 +128,130 @@ $rowsHtml = $rowsHtml ?? '';
 </div>
 <?php endif; ?>
 
-<div class="d-flex justify-content-between align-items-center gap-2 mb-2 flex-wrap">
-    <div class="input-group input-group-sm" style="max-width: 320px;">
-        <span class="input-group-text"><i class="bi bi-search"></i></span>
-        <input type="text" id="input-buscar-usuarios" class="form-control" placeholder="Buscar por nombre, cédula, correo, teléfono, nivel o estado..." value="<?= htmlspecialchars($buscar) ?>" autocomplete="off">
-    </div>
-    <div class="d-flex align-items-center gap-2" id="usrSisPagWrap">
-        <span class="text-muted small" id="usrSisPagInfo"><?= $from ?>-<?= $to ?>/<?= $total ?></span>
-        <div id="usrSisPagBtns" class="d-flex align-items-center gap-2">
-            <button type="button" class="btn btn-sm btn-outline-secondary" <?= $page <= 1 ? 'disabled' : '' ?> onclick="USRSIS_cambiarPagina(<?= $page - 1 ?>)" aria-label="Anterior"><i class="fas fa-angle-left"></i></button>
-            <button type="button" class="btn btn-sm btn-outline-secondary" <?= $page >= $totalPages ? 'disabled' : '' ?> onclick="USRSIS_cambiarPagina(<?= $page + 1 ?>)" aria-label="Siguiente"><i class="fas fa-angle-right"></i></button>
+<div class="card cmg-table-card w-100 border-0 shadow-sm rounded-3">
+    <div class="card-header bg-white py-2 px-3 border-bottom d-flex justify-content-between align-items-center flex-wrap gap-2">
+        <!-- Buscador y Exportación -->
+        <div class="d-flex align-items-center gap-2 flex-wrap">
+            <?php
+            // Buscador estándar (FiltrosModal), igual que Proveedores: texto libre sobre
+            // las columnas del listado + botón embudo que abre el modal con todos los
+            // filtros + chips de los activos. Las claves (key) deben existir en los mapas
+            // de Usuario::getTodosParaListado().
+            $opcionesEmpresa = array_map(
+                fn($e) => ['v' => (string) (int) ($e['id_empresa'] ?? 0), 'l' => (string) ($e['nombre_comercial'] ?? '') . (!empty($e['ruc']) ? ' (' . $e['ruc'] . ')' : '')],
+                $empresasParaCrear
+            );
+            $opcionesSiNo = fn(string $si, string $no) => [['v' => 'si', 'l' => $si], ['v' => 'no', 'l' => $no]];
+            $opcionesNivel = [['v' => '1', 'l' => 'Usuario']];
+            if ($nivel >= 3) {
+                $opcionesNivel[] = ['v' => '2', 'l' => 'Administrador'];
+                $opcionesNivel[] = ['v' => '3', 'l' => 'Super administrador'];
+            }
+            $tU = 'Usuario';
+            // Filas de 12 columnas:
+            //   Identificación: [Nombre 4][Cédula 4][Correo 4]
+            //   Contacto:       [Teléfono 4][Correo registrado 4][Teléfono registrado 4]
+            //   Acceso:         [Nivel 3][Estado 3][Registro 3][App móvil 3]
+            //   Empresas:       [Empresa 6][Cantidad de empresas 6]
+            //   Registro:       [Fecha de alta 6]
+            $filtrosUsuarios = [
+                // ── Identificación ──
+                ['tab' => $tU, 'key' => 'nombre', 'label' => 'Nombre',  'icon' => 'bi-person',    'type' => 'text', 'grupo' => 'Identificación', 'col' => 4],
+                ['tab' => $tU, 'key' => 'cedula', 'label' => 'Cédula / identificación', 'icon' => 'bi-card-text', 'type' => 'text', 'grupo' => 'Identificación', 'col' => 4],
+                ['tab' => $tU, 'key' => 'email',  'label' => 'Correo',  'icon' => 'bi-envelope',  'type' => 'text', 'grupo' => 'Identificación', 'col' => 4],
+                // ── Contacto ──
+                ['tab' => $tU, 'key' => 'telefono',     'label' => 'Teléfono',            'icon' => 'bi-telephone',       'type' => 'text',   'grupo' => 'Contacto', 'col' => 4],
+                ['tab' => $tU, 'key' => 'con_email',    'label' => 'Correo registrado',   'icon' => 'bi-envelope-check',  'type' => 'select', 'grupo' => 'Contacto', 'col' => 4, 'options' => $opcionesSiNo('Con correo', 'Sin correo')],
+                ['tab' => $tU, 'key' => 'con_telefono', 'label' => 'Teléfono registrado', 'icon' => 'bi-telephone-plus',  'type' => 'select', 'grupo' => 'Contacto', 'col' => 4, 'options' => $opcionesSiNo('Con teléfono', 'Sin teléfono')],
+                // ── Acceso ──
+                ['tab' => $tU, 'key' => 'nivel',     'label' => 'Nivel',     'icon' => 'bi-shield-lock',     'type' => 'select', 'grupo' => 'Acceso', 'col' => 3, 'options' => $opcionesNivel],
+                ['tab' => $tU, 'key' => 'estado',    'label' => 'Estado',    'icon' => 'bi-flag',            'type' => 'select', 'grupo' => 'Acceso', 'col' => 3, 'options' => [
+                    ['v' => 'activo',   'l' => 'Activo'],
+                    ['v' => 'inactivo', 'l' => 'Inactivo'],
+                ]],
+                ['tab' => $tU, 'key' => 'registro',  'label' => 'Registro',  'icon' => 'bi-hourglass-split', 'type' => 'select', 'grupo' => 'Acceso', 'col' => 3, 'options' => $opcionesSiNo('Registrado', 'Pendiente de registro')],
+                ['tab' => $tU, 'key' => 'app_movil', 'label' => 'App móvil', 'icon' => 'bi-phone',           'type' => 'select', 'grupo' => 'Acceso', 'col' => 3, 'options' => $opcionesSiNo('Puede usar la app', 'No puede usar la app')],
+                // ── Empresas ──
+                ['tab' => $tU, 'key' => 'id_empresa', 'label' => 'Con acceso a la empresa', 'icon' => 'bi-building', 'type' => 'select',       'grupo' => 'Empresas', 'col' => 6, 'options' => $opcionesEmpresa],
+                ['tab' => $tU, 'key' => 'empresas',   'label' => 'Cantidad de empresas',    'icon' => 'bi-buildings', 'type' => 'number_range', 'grupo' => 'Empresas', 'col' => 6],
+                // ── Registro ──
+                ['tab' => $tU, 'key' => 'alta', 'label' => 'Fecha de alta', 'icon' => 'bi-calendar-event', 'type' => 'date_range', 'grupo' => 'Registro', 'col' => 6, 'atajos' => true],
+            ];
+            ?>
+            <link rel="stylesheet" href="<?= rtrim(BASE_URL, '/') ?>/css/components/filtros_modal.css?v=<?= asset_ver('/css/components/filtros_modal.css') ?>">
+            <script src="<?= rtrim(BASE_URL, '/') ?>/js/components/filtros_modal.js?v=<?= asset_ver('/js/components/filtros_modal.js') ?>"></script>
+            <div id="fmBuscadorUSRSIS"></div>
+            <input type="hidden" id="input-buscar-usuarios" value="<?= htmlspecialchars($buscar) ?>">
+            <script>
+                document.addEventListener('DOMContentLoaded', () => {
+                    if (!window.FiltrosModal) return;
+                    new FiltrosModal({
+                        containerId: 'fmBuscadorUSRSIS',
+                        hiddenInputId: 'input-buscar-usuarios',
+                        placeholder: 'Buscar en todas las columnas...',
+                        titulo: 'Filtros de usuarios',
+                        inputWidth: 420,
+                        extraId: 'fmExtraUSRSIS',   // columnas + PDF + Excel, pegados al final del grupo
+                        fields: <?= json_encode($filtrosUsuarios, JSON_UNESCAPED_UNICODE | JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS) ?>,
+                        loadingTarget: '#tbodyUsuarios',   // se atenúa mientras se busca
+                        onApply: () => window.fetchSearch && window.fetchSearch(1),
+                    }).init();
+                });
+            </script>
+
+            <?php // FiltrosModal (extraId) mueve estos botones dentro del input-group del buscador; si el JS no corre, quedan aquí. ?>
+            <div id="fmExtraUSRSIS" class="btn-group btn-group-sm">
+                <?php
+                $columnasTabla = [
+                    'nombre'          => 'Nombre',
+                    'cedula'          => 'Cédula',
+                    'mail'            => 'Correo',
+                    'nivel'           => 'Nivel',
+                    'telefono'        => 'Teléfono',
+                    'estado'          => 'Estado',
+                    'puede_app_movil' => 'App Móvil',
+                    'empresas'        => 'Empresas',
+                ];
+                $qsExport = '?b=' . urlencode($buscar) . '&orden=' . urlencode($ordenParam ?? '');
+                ?>
+                <?= \App\Helpers\PreferenciasHelper::renderDropdownColumnas($columnasTabla, $vistaConfig ?? [], $rutaModulo ?? 'config/usuarios-sistema') ?>
+
+                <?php // La URL termina en `-export-pdf`, que el listener global de /export-pdf no reconoce: se llama CMG_descargar a mano. ?>
+                <a id="btnExportPdf" href="<?= $urlBaseUsuarios ?>-export-pdf<?= $qsExport ?>" onclick="CMG_descargar(this.href, {nombre: 'PDF'}); return false;"
+                    class="btn btn-outline-danger" title="Descargar PDF">
+                    <i class="bi bi-file-earmark-pdf"></i><span class="d-none d-md-inline"> PDF</span>
+                </a>
+                <a id="btnExportExcel" href="<?= $urlBaseUsuarios ?>-export-excel<?= $qsExport ?>" onclick="CMG_descargar(this.href, {nombre: 'Excel'}); return false;"
+                    class="btn btn-outline-success" title="Descargar Excel">
+                    <i class="bi bi-file-earmark-spreadsheet"></i><span class="d-none d-md-inline"> Excel</span>
+                </a>
+            </div>
+        </div>
+
+        <!-- Paginación -->
+        <div class="d-flex align-items-center gap-3">
+            <span id="paginationInfo" class="text-muted small fw-medium"><?= $from ?>-<?= $to ?>/<?= $total ?></span>
+            <div id="paginationContainer" class="btn-group btn-group-sm">
+                <button type="button" class="btn btn-outline-secondary" <?= $page <= 1 ? 'disabled' : '' ?> onclick="cambiarPaginaAjax(<?= $page - 1 ?>)" aria-label="Anterior"><i class="bi bi-chevron-left"></i></button>
+                <button type="button" class="btn btn-outline-secondary" <?= $page >= $totalPages ? 'disabled' : '' ?> onclick="cambiarPaginaAjax(<?= $page + 1 ?>)" aria-label="Siguiente"><i class="bi bi-chevron-right"></i></button>
+            </div>
         </div>
     </div>
-</div>
 
-<div class="card cmg-table-card">
+    <!-- Tabla -->
     <div class="card-body p-0">
-        <div class="usuarios-sistema-scroll">
+        <div class="usuarios-sistema-scroll w-100">
             <table class="table table-hover table-sm mb-0">
                 <thead class="table-light">
                     <tr>
-                        <th class="sortable-header" data-sort="nombre" role="button">Nombre <i class="bi bi-arrow-down-up small text-muted ms-1"></i></th>
-                        <th class="sortable-header" data-sort="cedula" role="button">Cédula <i class="bi bi-arrow-down-up small text-muted ms-1"></i></th>
-                        <th class="sortable-header" data-sort="mail" role="button">Correo <i class="bi bi-arrow-down-up small text-muted ms-1"></i></th>
-                        <th class="sortable-header" data-sort="nivel" role="button">Nivel <i class="bi bi-arrow-down-up small text-muted ms-1"></i></th>
-                        <th class="sortable-header" data-sort="telefono" role="button">Teléfono <i class="bi bi-arrow-down-up small text-muted ms-1"></i></th>
-                        <th class="sortable-header" data-sort="estado" role="button">Estado <i class="bi bi-arrow-down-up small text-muted ms-1"></i></th>
-                        <th class="sortable-header text-center" data-sort="puede_app_movil" role="button">App Móvil <i class="bi bi-arrow-down-up small text-muted ms-1"></i></th>
-                        <th class="text-center">Empresas</th>
+                        <th class="ps-3 sortable-header" role="button" data-sort="nombre" data-col="nombre">Nombre <i class="bi bi-arrow-down-up small text-muted ms-1"></i></th>
+                        <th class="sortable-header" role="button" data-sort="cedula" data-col="cedula">Cédula <i class="bi bi-arrow-down-up small text-muted ms-1"></i></th>
+                        <th class="sortable-header" role="button" data-sort="mail" data-col="mail">Correo <i class="bi bi-arrow-down-up small text-muted ms-1"></i></th>
+                        <th class="sortable-header" role="button" data-sort="nivel" data-col="nivel">Nivel <i class="bi bi-arrow-down-up small text-muted ms-1"></i></th>
+                        <th class="sortable-header" role="button" data-sort="telefono" data-col="telefono">Teléfono <i class="bi bi-arrow-down-up small text-muted ms-1"></i></th>
+                        <th class="sortable-header" role="button" data-sort="estado" data-col="estado">Estado <i class="bi bi-arrow-down-up small text-muted ms-1"></i></th>
+                        <th class="sortable-header text-center" role="button" data-sort="puede_app_movil" data-col="puede_app_movil">App Móvil <i class="bi bi-arrow-down-up small text-muted ms-1"></i></th>
+                        <th class="sortable-header text-center pe-3" role="button" data-sort="empresas" data-col="empresas">Empresas <i class="bi bi-arrow-down-up small text-muted ms-1"></i></th>
                     </tr>
                 </thead>
                 <tbody id="tbodyUsuarios"><?= $rowsHtml ?></tbody>
@@ -1401,64 +1494,60 @@ $rowsHtml = $rowsHtml ?? '';
     })();
 
     // Búsqueda, orden y paginación en tiempo real: reemplazan solo la tabla vía
-    // AJAX, sin recargar la página (el input nunca pierde el foco). Mismo patrón
-    // que ASIENTOTIPO_cargarListado (public/js/modulos/asientos_tipo_modal.js).
+    // AJAX, sin recargar la página. Mismo patrón que Proveedores
+    // (app/views/modulos/proveedores/index.php): FiltrosModal llama a fetchSearch
+    // al aplicar; el orden múltiple (Shift+clic) lo maneja CMG_initSort.
     (function() {
-        var base = '<?= $base ?>';
-        var timer = null;
-        window.USRSIS_currentSort = '<?= htmlspecialchars($ordenCol) ?>';
-        window.USRSIS_currentDir = '<?= htmlspecialchars($ordenDir) ?>';
-        window.USRSIS_currentPage = <?= (int) $page ?>;
+        'use strict';
+        const urlBase = '<?= $urlBaseUsuarios ?>';
+        const inputBuscar = document.getElementById('input-buscar-usuarios');
+        window.currentSort = '<?= htmlspecialchars($ordenCol) ?>';
+        window.currentDir = '<?= htmlspecialchars($ordenDir) ?>';
+        // Lista completa de criterios, en el formato que lee OrdenListado en PHP.
+        window.currentSorts = <?= $ordenJson ?? '[]' ?>;
+        window.currentPage = <?= (int) $page ?>;
+        let sorter = null;
 
-        window.USRSIS_cargarListado = function(page) {
-            page = page || 1;
-            window.USRSIS_currentPage = page;
-            var inputB = document.getElementById('input-buscar-usuarios');
-            var b = inputB ? inputB.value.trim() : '';
-            var tbodyEl = document.getElementById('tbodyUsuarios');
-            if (tbodyEl) tbodyEl.innerHTML = '<tr><td colspan="6" class="text-center py-4"><span class="spinner-border spinner-border-sm text-primary"></span> Cargando...</td></tr>';
+        window.cambiarPaginaAjax = (n) => window.fetchSearch(n);
+        // Nombres anteriores, por si algún enlace viejo los invoca.
+        window.USRSIS_cargarListado = (n) => window.fetchSearch(n || 1);
+        window.USRSIS_cambiarPagina = (n) => { if (n >= 1) window.fetchSearch(n); };
 
-            fetch(base + '/config/usuarios-sistema-search?b=' + encodeURIComponent(b) + '&page=' + page + '&sort=' + window.USRSIS_currentSort + '&dir=' + window.USRSIS_currentDir, {
-                    credentials: 'same-origin'
-                })
-                .then(function(r) { return r.json(); })
-                .then(function(data) {
-                    if (!data.ok) return;
-                    if (tbodyEl) tbodyEl.innerHTML = data.rows;
-                    var info = document.getElementById('usrSisPagInfo');
-                    if (info) info.textContent = data.info;
-                    var btns = document.getElementById('usrSisPagBtns');
-                    if (btns) btns.innerHTML = data.pagination || (
-                        '<button type="button" class="btn btn-sm btn-outline-secondary" disabled aria-label="Anterior"><i class="fas fa-angle-left"></i></button>' +
-                        '<button type="button" class="btn btn-sm btn-outline-secondary" disabled aria-label="Siguiente"><i class="fas fa-angle-right"></i></button>'
-                    );
-                })
-                .catch(function() {
-                    if (tbodyEl) tbodyEl.innerHTML = '<tr><td colspan="6" class="text-center text-danger py-4">Error al cargar.</td></tr>';
-                });
+        window.fetchSearch = async (page = 1) => {
+            const term = inputBuscar ? inputBuscar.value.trim() : '';
+            const orden = window.CMG_ordenParam(window.currentSorts || []);
+            const uri = `${urlBase}-search?b=${encodeURIComponent(term)}&page=${page}&orden=${encodeURIComponent(orden)}`;
+            // La tabla se atenúa mientras carga (mismo indicador del buscador).
+            const tbody = document.getElementById('tbodyUsuarios');
+            if (tbody) tbody.classList.add('fm-cargando-target');
+            try {
+                const resp = await fetch(uri, { credentials: 'same-origin' });
+                const data = await resp.json();
+                if (data.ok) {
+                    window.currentPage = page;
+                    if (tbody) tbody.innerHTML = data.rows;
+                    document.getElementById('paginationContainer').innerHTML = data.pagination;
+                    document.getElementById('paginationInfo').textContent = data.info;
+                    document.getElementById('btnExportPdf').href = data.pdf_url;
+                    document.getElementById('btnExportExcel').href = data.excel_url;
+                    if (sorter) sorter.refreshIcons();
+                }
+            } catch (e) {
+                console.error('Error en búsqueda de usuarios:', e);
+            } finally {
+                if (tbody) tbody.classList.remove('fm-cargando-target');
+            }
         };
 
-        window.USRSIS_cambiarPagina = function(page) {
-            if (page < 1) return;
-            USRSIS_cargarListado(page);
-        };
-
-        var inputBuscar = document.getElementById('input-buscar-usuarios');
-        if (inputBuscar) {
-            inputBuscar.addEventListener('input', function() {
-                clearTimeout(timer);
-                timer = setTimeout(function() {
-                    USRSIS_cargarListado(1);
-                }, 400);
-            });
-        }
-
+        // multi: clic normal ordena por una columna; Shift+clic encadena hasta 3.
+        // reload:false porque fetchSearch repinta todo lo que depende del orden.
         if (window.CMG_initSort) {
-            window.CMG_initSort('usuarios-sistema', function(col, dir) {
-                window.USRSIS_currentSort = col;
-                window.USRSIS_currentDir = dir;
-                USRSIS_cargarListado(1);
-            }, { col: window.USRSIS_currentSort, dir: window.USRSIS_currentDir });
+            sorter = window.CMG_initSort('usuarios-sistema', (col, dir, sorts) => {
+                window.currentSort = col;
+                window.currentDir = dir;
+                window.currentSorts = sorts;
+                fetchSearch(1);
+            }, { sorts: window.currentSorts, multi: true, container: '.usuarios-sistema-scroll', reload: false });
         }
     })();
 

@@ -734,7 +734,7 @@ class Usuario extends BaseModel
     }
 
     /** Columnas ordenables */
-    public const COLUMNAS_ORDEN = ['nombre', 'cedula', 'mail', 'nivel', 'telefono', 'estado', 'puede_app_movil'];
+    public const COLUMNAS_ORDEN = ['nombre', 'cedula', 'mail', 'nivel', 'telefono', 'estado', 'puede_app_movil', 'empresas'];
 
     /**
      * Lista usuarios para el módulo de usuarios del sistema.
@@ -745,49 +745,122 @@ class Usuario extends BaseModel
      * directamente en usuario_asignado (p. ej. invitados que aún no tienen
      * empresa) y él mismo. Un admin nunca ve superadministradores.
      */
-    public function getTodosParaListado(int $idActual, int $nivel, string $buscar = '', int $page = 1, int $perPage = 20, string $ordenCol = 'nombre', string $ordenDir = 'ASC'): array
+    /**
+     * Whitelist y mapa del ordenamiento del listado (clave `data-sort` de la vista →
+     * expresión SQL). Lo único que puede llegar al ORDER BY sale de aquí
+     * (ver OrdenListado::clausula). `estado_listado` y `empresas_asignadas` son
+     * alias que getTodosParaListado() resuelve a sus expresiones.
+     */
+    public const MAPA_ORDEN = [
+        'nombre'          => 'u.nombre',
+        'cedula'          => 'u.cedula',
+        'mail'            => 'u.mail',
+        'telefono'        => 'u.telefono',
+        'nivel'           => 'u.nivel',
+        'estado'          => 'estado_listado',
+        'puede_app_movil' => 'COALESCE(u.puede_app_movil, false)',
+        'empresas'        => 'empresas_asignadas',
+    ];
+
+    /**
+     * Listado de Usuarios del sistema (config/usuarios-sistema): buscador de texto
+     * libre + filtros `clave:valor` (FiltrosBusqueda) y orden de una o varias
+     * columnas (OrdenListado), igual que los listados de módulo (ref.: Proveedores).
+     *
+     * Nivel 3 ve todos los usuarios; nivel 2 solo los de sus empresas (ver
+     * whereVisiblesParaAdmin). `$perPage = 0` devuelve todas las filas (exportar).
+     */
+    public function getTodosParaListado(int $idActual, int $nivel, string $buscar = '', int $page = 1, int $perPage = 20, string $ordenCol = 'nombre', string $ordenDir = 'ASC', array $ordenMulti = []): array
     {
-        $offset = ($page - 1) * $perPage;
         $idActual = (int) $idActual;
 
-        if (!in_array($ordenCol, self::COLUMNAS_ORDEN, true)) {
-            $ordenCol = 'nombre';
-        }
-        $dir = strtoupper($ordenDir) === 'DESC' ? 'DESC' : 'ASC';
-        $col = $ordenCol === 'nombre' ? 'u.nombre' : 'u.' . $ordenCol;
+        $ordenMulti = \App\Helpers\OrdenListado::normalizar(
+            $ordenMulti !== [] ? $ordenMulti : [['col' => $ordenCol, 'dir' => $ordenDir]]
+        );
+        // Desempate por id: sin él, dos filas empatadas bailan entre páginas.
+        $orderBy = \App\Helpers\OrdenListado::clausula($ordenMulti, self::MAPA_ORDEN, 'u.nombre', 'u.id DESC');
 
-        $from = 'usuarios u';
-        if ($nivel >= 3) {
-            $where = "WHERE u.eliminado = false";
-        } else {
-            $where = "WHERE u.eliminado = false AND u.nivel < 3 AND (" . self::whereVisiblesParaAdmin($idActual) . ")";
-        }
+        // Estado tal como se pinta en la tabla: pendiente de registro < inactivo < activo.
+        $exprRegistrado = self::sqlRegistrado('u');
+        $exprEstado     = "(CASE WHEN NOT {$exprRegistrado} THEN 0 WHEN u.estado = 1 THEN 2 ELSE 1 END)";
+        $exprEmpresas   = 'COALESCE(ue.n, 0)';
+        $orderBy = strtr($orderBy, ['estado_listado' => $exprEstado, 'empresas_asignadas' => $exprEmpresas]);
 
-        if ($buscar !== '') {
-            $b = $this->escape($buscar);
-            // Nivel y Estado se buscan por su texto tal como se muestran en la tabla
-            // (Nivel: Usuario/Administrador/Super Admin; Estado: Activo/Inactivo/Pendiente registro).
-            $nivelTexto = "(CASE WHEN u.nivel >= 3 THEN 'Super Admin' WHEN u.nivel >= 2 THEN 'Administrador' ELSE 'Usuario' END)";
-            $estadoTexto = "(CASE WHEN NOT " . self::sqlRegistrado('u') . " THEN 'Pendiente registro' WHEN u.estado = 1 THEN 'Activo' ELSE 'Inactivo' END)";
-            $where .= " AND (u.nombre ILIKE '%{$b}%' OR u.cedula ILIKE '%{$b}%' OR u.mail ILIKE '%{$b}%' OR u.telefono ILIKE '%{$b}%'
-                OR {$nivelTexto} ILIKE '%{$b}%' OR {$estadoTexto} ILIKE '%{$b}%')";
+        $params = [];
+        $where = 'WHERE u.eliminado = false';
+        if ($nivel < 3) {
+            $where .= ' AND u.nivel < 3 AND (' . self::whereVisiblesParaAdmin($idActual) . ')';
         }
 
-        $countSql = "SELECT COUNT(DISTINCT u.id) AS total FROM {$from} {$where}";
-        $total = (int) ($this->query($countSql)[0]['total'] ?? 0);
+        // Empresas asignadas (columna Empresas): mismo JOIN en el COUNT y en las filas.
+        $joins = 'LEFT JOIN LATERAL (SELECT COUNT(*) AS n FROM empresa_asignada ea_n WHERE ea_n.id_usuario = u.id) ue ON true';
+
+        $parsed = \App\Helpers\FiltrosBusqueda::parsear($buscar);
+        if ($parsed['texto_libre'] !== '') {
+            // Texto libre sobre las columnas de datos del listado (por palabras, sin
+            // distinguir mayúsculas ni tildes). Nivel, Estado y App móvil NO entran:
+            // se filtran desde el modal (regla general de los listados).
+            $cond = \App\Helpers\FiltrosBusqueda::condicionTexto([
+                'u.nombre',
+                'u.cedula',
+                'u.mail',
+                'u.telefono',
+            ], $parsed['texto_libre'], $params, 'usr_b');
+            if ($cond !== '') {
+                $where .= ' AND ' . $cond;
+            }
+        }
+
+        \App\Helpers\FiltrosBusqueda::aplicarFiltros($where, $params, $parsed['filtros'], [
+            'texto' => [
+                'nombre'         => 'u.nombre',
+                'cedula'         => 'u.cedula',
+                'identificacion' => 'u.cedula',
+                'email'          => 'u.mail',
+                'correo'         => 'u.mail',
+                'telefono'       => 'u.telefono',
+            ],
+            'exacto' => [
+                'nivel'        => 'u.nivel::text',                                        // 1 / 2 / 3
+                'estado'       => "(CASE WHEN u.estado = 1 THEN 'activo' ELSE 'inactivo' END)",
+                'registro'     => "(CASE WHEN {$exprRegistrado} THEN 'si' ELSE 'no' END)", // registrado / pendiente
+                'app_movil'    => "(CASE WHEN COALESCE(u.puede_app_movil, false) THEN 'si' ELSE 'no' END)",
+                'con_email'    => "(CASE WHEN NULLIF(TRIM(COALESCE(u.mail, '')), '') IS NULL THEN 'no' ELSE 'si' END)",
+                'con_telefono' => "(CASE WHEN NULLIF(TRIM(COALESCE(u.telefono, '')), '') IS NULL THEN 'no' ELSE 'si' END)",
+            ],
+            'existe' => [
+                // Usuarios con acceso a una empresa concreta (select del modal).
+                'id_empresa' => [
+                    'sql'  => 'EXISTS (SELECT 1 FROM empresa_asignada ea_f WHERE ea_f.id_usuario = u.id AND {cond})',
+                    'col'  => 'ea_f.id_empresa::text',
+                    'tipo' => 'exacto',
+                ],
+            ],
+            'fecha' => [
+                'alta' => 'u.created_at',
+            ],
+            'numerico' => [
+                'empresas' => $exprEmpresas,
+            ],
+        ]);
+
+        $stCount = $this->db->prepare("SELECT COUNT(*) FROM usuarios u {$joins} {$where}");
+        $stCount->execute($params);
+        $total = (int) $stCount->fetchColumn();
 
         // Estado de registro: ver self::sqlRegistrado().
-        $sql = "SELECT DISTINCT u.id, u.nombre, u.cedula, u.nivel, u.estado, u.mail, u.telefono, u.token, u.puede_app_movil,
-                " . self::sqlRegistrado('u') . " AS registrado
-            FROM {$from} {$where}
-            ORDER BY {$col} {$dir}
-            LIMIT {$perPage} OFFSET {$offset}";
-        $rows = $this->query($sql);
-
-        $empresaModel = new EmpresaAsignada();
-        foreach ($rows as &$r) {
-            $r['empresas'] = $empresaModel->getEmpresasDeUsuario((int) $r['id']);
+        $sql = "SELECT u.id, u.nombre, u.cedula, u.nivel, u.estado, u.mail, u.telefono, u.puede_app_movil, u.created_at,
+                {$exprRegistrado} AS registrado,
+                {$exprEmpresas} AS empresas_asignadas
+            FROM usuarios u {$joins}
+            {$where}
+            {$orderBy}";
+        if ($perPage > 0) {
+            $sql .= ' LIMIT ' . (int) $perPage . ' OFFSET ' . (int) (($page - 1) * $perPage);
         }
+        $st = $this->db->prepare($sql);
+        $st->execute($params);
+        $rows = $st->fetchAll(\PDO::FETCH_ASSOC);
 
         return ['rows' => $rows, 'total' => $total];
     }

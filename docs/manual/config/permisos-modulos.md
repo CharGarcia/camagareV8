@@ -6,8 +6,8 @@ ruta_modulo: config/permisos-modulos
 tipo: modulo
 visibilidad: superadmin
 requiere_permiso_modulo: no
-etiquetas: permisos, accesos, roles, niveles, usuarios, modulos asignados, acceso total, buscar usuario, buscar por correo, buscar por cedula, identificacion, email, buscador, buscar empresa, ruc, razon social, nombre comercial, asignar empresa, empresa no asignada, crear usuario, invitacion, correo existente, pdf, imprimir, imprimir permisos, reporte de permisos, descargar permisos, acta de permisos, vendedores que puede ver, reporte de ventas por vendedor, supervisor de ventas, ver ventas de otros vendedores, jefe de ventas
-version: 1.8
+etiquetas: permisos, accesos, roles, niveles, usuarios, modulos asignados, acceso total, buscar usuario, buscar por correo, buscar por cedula, identificacion, email, buscador, buscar empresa, ruc, razon social, nombre comercial, asignar empresa, empresa no asignada, crear usuario, invitacion, correo existente, pdf, imprimir, imprimir permisos, reporte de permisos, descargar permisos, acta de permisos, vendedores que puede ver, reporte de ventas por vendedor, supervisor de ventas, ver ventas de otros vendedores, jefe de ventas, pestañas que puede ver, ocultar pestañas, pestañas por usuario, pestañas del reporte de inventarios, no ve la pestaña, quitar pestaña a un usuario
+version: 1.10
 orden: 10
 estado: activo
 ---
@@ -54,13 +54,21 @@ ha creado nada y no tiene acceso total.
    podía cambiar). Si el usuario no
    aparece entre los primeros de la lista, siga escribiendo: al teclear dos o más
    letras se consulta el resto de usuarios.
-2. Pulse **Seleccionar empresa** y elija la empresa (también es un buscador).
-   Se puede escribir parte del **nombre comercial**, de la **razón social** o del
-   **RUC**; cada opción muestra el nombre comercial con el RUC y, debajo, la razón
-   social cuando es distinta. Si el usuario tiene una sola empresa asignada, se
-   selecciona sola.
-3. Marque los permisos submódulo por submódulo.
-4. Guarde. El cambio se aplica en la siguiente pantalla que abra el usuario.
+2. Elija la empresa en el segundo campo de la **misma fila** (también es un
+   buscador; se habilita en cuanto hay un usuario elegido y carga sus empresas
+   solo). Se puede escribir parte del **nombre comercial**, de la **razón
+   social** o del **RUC**; cada opción muestra el nombre comercial con el RUC y,
+   debajo, la razón social cuando es distinta. Si el usuario tiene una sola
+   empresa asignada, se selecciona sola.
+   - Para el **superadministrador** el desplegable muestra primero las empresas
+     que el usuario **ya tiene asignadas**, en negrita, con el check verde y la
+     marca **Asignada**; debajo, atenuadas y con la marca **No asignada**, el
+     resto de empresas del sistema (se le asignan al guardar los permisos).
+     La marca también queda visible en el campo una vez elegida la empresa.
+3. Pulse **Mostrar módulos**. El botón **Limpiar** vacía la selección y vuelve
+   a empezar.
+4. Marque los permisos submódulo por submódulo.
+5. Guarde. El cambio se aplica en la siguiente pantalla que abra el usuario.
 
 ## Vendedores que puede ver (Reporte de Ventas por Vendedor)
 
@@ -79,6 +87,32 @@ abriría las de todos.
 - Solo afecta a ese reporte. Cada cambio queda en `log_sistema`.
 - Requiere haber ejecutado `database/usuarios_vendedores_visibles.sql`; si no,
   la tarjeta lo avisa.
+
+## Pestañas que puede ver (pestañas de un módulo por usuario)
+
+Debajo de la tarjeta anterior, también solo para usuarios de **nivel 1**,
+aparece una tarjeta **Pestañas que puede ver** por cada módulo que admite esta
+configuración. Hoy es uno: **Reporte de Inventarios** (Existencias, Movimientos,
+Valorización, Consignaciones y Auditoría). Sirve para que un usuario entre al
+reporte pero vea solo las pestañas que le corresponden: por ejemplo, un bodeguero
+con Existencias y Movimientos, sin Valorización ni Auditoría.
+
+- **Sin configurar nada, el usuario ve todas las pestañas.** Desmarque las que
+  no debe ver; cada casilla se guarda al instante.
+- Para entrar al reporte sigue necesitando el permiso de **Ver** sobre ese
+  submódulo, en la tabla de permisos de arriba. Esta tarjeta solo decide qué
+  pestañas aparecen dentro.
+- Una pestaña oculta no se puede abrir escribiendo la dirección a mano: sus
+  datos, su PDF y su Excel responden *No tiene permiso para esta acción*.
+- No aparece para usuarios de nivel 2 o 3: ven todas las pestañas siempre.
+- La configuración es por **usuario y empresa**: lo que se oculta en una empresa
+  no afecta a las demás.
+- Cada cambio queda en `log_sistema` (tabla `usuarios_pestanas_ocultas`).
+- Requiere haber ejecutado `database/2026-10-06_usuarios_pestanas_ocultas.sql`;
+  si no, la tarjeta lo avisa y, mientras tanto, todos ven todas las pestañas.
+
+Cuando otro módulo con pestañas se sume a esta configuración, su tarjeta
+aparecerá aquí sola, con el mismo funcionamiento.
 
 ## Qué alcance tiene cada quien al buscar
 
@@ -183,6 +217,16 @@ cambio se aplica en la siguiente página que abra.
 
 ## Historial de cambios
 
+- **1.10** — Nueva tarjeta **Pestañas que puede ver** (usuarios de nivel 1): una
+  por cada módulo con pestañas configurables, hoy el *Reporte de Inventarios*.
+  El administrador desmarca las pestañas que el usuario no debe ver; sin
+  configurar nada, las ve todas.
+- **1.9** — Selector rediseñado: **usuario y empresa en la misma fila** (ya no
+  hay paso «Seleccionar empresa»; elegir el usuario carga sus empresas), la
+  pantalla usa **todo el ancho**, el botón **Mostrar módulos** es compacto y, para
+  el superadministrador, el desplegable de empresas **distingue con claridad** las
+  que el usuario ya tiene asignadas (negrita, check verde y marca «Asignada») de
+  las demás (atenuadas, marca «No asignada»). Nuevo botón **Limpiar**.
 - **1.8** — Nueva tarjeta **Vendedores que puede ver** (usuarios de nivel 1): el
   administrador elige qué vendedores, además del suyo, puede consultar el usuario
   en el *Reporte de Ventas por Vendedor*.

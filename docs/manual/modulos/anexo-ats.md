@@ -150,13 +150,19 @@ anexo antes de presentarlo.
   detalle, así que el anexo la reporta con las cuatro bases en cero y el SRI la
   rechaza. El aviso *Compras: N comprobante(s) tipo NN sin ninguna base de IVA*
   lista los documentos afectados. Abra cada uno en **Compras** y registre sus
-  líneas con la tarifa de IVA que indica el comprobante. Caso frecuente: las
-  **notas de débito (tipo 05)** que llegaron del SRI antes del 11-09-2026 se
-  registraron solo con su total, sin detalle ni impuestos, porque su XML no trae
-  líneas sino *motivos*. Para esas, el administrador del sistema puede ejecutar
-  la reparación `database/2026-10-06_compras_nota_debito_detalle_desde_xml.sql`,
-  que reconstruye el detalle y el IVA desde el XML autorizado guardado en la
-  compra; las que no tengan XML se completan a mano.
+  líneas con la tarifa de IVA que indica el comprobante. Dos casos frecuentes,
+  ambos en **notas de débito (tipo 05)** del SRI:
+  - El emisor declaró el impuesto con **base 0,00** aunque el total sin impuestos
+    sea mayor (intereses por mora, código 6 = no objeto de IVA). Desde la versión
+    2.25 de Compras el sistema corrige la base al registrar la nota y lo anota en
+    sus Observaciones; para las ya registradas, el administrador ejecuta
+    `database/2026-10-06_compras_nota_debito_base_cero.sql`.
+  - La nota llegó antes del 11-09-2026 y quedó **sin detalle ni impuestos**,
+    porque su XML no trae líneas sino *motivos*. El administrador ejecuta
+    `database/2026-10-06_compras_nota_debito_detalle_desde_xml.sql`, que
+    reconstruye el detalle desde el XML autorizado guardado en la compra (y
+    después el anterior, por si esa nota también traía base 0,00). Las que no
+    tengan XML se completan a mano.
 
 ## Historial de cambios
 

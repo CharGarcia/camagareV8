@@ -378,22 +378,22 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosPestanasOcultas($vistaConfigP
                                 <div class="col-md-8">
                                     <ul class="nav nav-tabs nav-tabs-sm mb-2" role="tablist">
                                         <li class="nav-item">
-                                            <button class="nav-link active py-1 small"
-                                                data-bs-toggle="tab" data-bs-target="#pf-subtab-info" type="button">
+                                            <a class="nav-link active py-1 small" href="#pf-subtab-info" role="tab"
+                                                data-bs-toggle="tab" data-bs-target="#pf-subtab-info">
                                                 Info. Adicional
-                                            </button>
+                                            </a>
                                         </li>
                                         <li class="nav-item">
-                                            <button class="nav-link py-1 small"
-                                                data-bs-toggle="tab" data-bs-target="#pf-subtab-vigencia" type="button">
+                                            <a class="nav-link py-1 small" href="#pf-subtab-vigencia" role="tab"
+                                                data-bs-toggle="tab" data-bs-target="#pf-subtab-vigencia">
                                                 Vigencia
-                                            </button>
+                                            </a>
                                         </li>
                                         <li class="nav-item">
-                                            <button class="nav-link py-1 small"
-                                                data-bs-toggle="tab" data-bs-target="#pf-subtab-condiciones" type="button">
+                                            <a class="nav-link py-1 small" href="#pf-subtab-condiciones" role="tab"
+                                                data-bs-toggle="tab" data-bs-target="#pf-subtab-condiciones">
                                                 Condiciones
-                                            </button>
+                                            </a>
                                         </li>
                                     </ul>
                                     <div class="tab-content bg-white border p-2 rounded-bottom" style="min-height:120px;">
@@ -447,10 +447,10 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosPestanasOcultas($vistaConfigP
                                                     Condiciones adicionales de la cotización. Se generan como un PDF anexo
                                                     que acompaña a la proforma al enviarla por correo.
                                                 </span>
-                                                <button type="button" class="btn btn-outline-danger btn-sm px-2 ms-auto flex-shrink-0"
-                                                    onclick="PF.imprimirCondiciones()" title="Descargar PDF de las condiciones">
+                                                <a href="#" role="button" class="btn btn-outline-danger btn-sm px-2 ms-auto flex-shrink-0"
+                                                    onclick="event.preventDefault(); PF.imprimirCondiciones()" title="Descargar PDF de las condiciones">
                                                     <i class="bi bi-file-earmark-pdf me-1"></i>Descargar PDF
-                                                </button>
+                                                </a>
                                             </div>
                                             <div id="pf_condicionesEditor" class="pf-quill bg-white"></div>
                                         </div>

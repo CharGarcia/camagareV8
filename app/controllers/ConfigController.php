@@ -621,6 +621,16 @@ class ConfigController extends Controller
         (new UsuariosSistemaController())->searchAjax();
     }
 
+    public function usuariosSistemaExportPdf(): void
+    {
+        (new UsuariosSistemaController())->exportPdf();
+    }
+
+    public function usuariosSistemaExportExcel(): void
+    {
+        (new UsuariosSistemaController())->exportExcel();
+    }
+
     public function usuariosSistemaIntentosEstado(): void
     {
         (new UsuariosSistemaController())->intentosEstado();

@@ -153,6 +153,10 @@
         // Solo se puede editar en borrador: fuera de ahí se bloquea todo el detalle
         // (cliente, ítems, info adicional, vigencia) y no tiene sentido ofrecer
         // aplicar una plantilla que de todos modos no se podría guardar.
+        // Ojo: un fieldset deshabilitado también deshabilita los <button> que contiene;
+        // por eso las sub-pestañas Info. Adicional / Vigencia / Condiciones y el botón
+        // "Descargar PDF" de condiciones son <a>, no <button>: en una proforma aprobada
+        // se deben poder seguir consultando (solo lectura).
         const editable = estado === 'borrador';
         const fieldset = $id('pf_fieldsetEditable');
         if (fieldset) fieldset.disabled = !editable;

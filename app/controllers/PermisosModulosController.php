@@ -137,6 +137,9 @@ class PermisosModulosController extends Controller
 
         $this->viewWithLayout('layouts.main', 'permisosModulos.index', [
             'titulo' => 'Permisos de módulos a usuarios',
+            // Ancho completo: los selectores de usuario y empresa van en la misma
+            // fila y la tabla de módulos aprovecha toda la pantalla.
+            'fullWidth' => true,
             'nivel' => $nivel,
             'idUsuarioSel' => $idUsuarioSel,
             'idEmpresaSel' => $idEmpresaSel,
@@ -897,7 +900,7 @@ class PermisosModulosController extends Controller
 
         $idUsuario = (int) ($_GET['u'] ?? 0);
         $idEmpresa = (int) ($_GET['e'] ?? 0);
-        $error = $this->validarGestionVendedoresVisibles($idUsuario, $idEmpresa);
+        $error = $this->validarGestionUsuarioEmpresa($idUsuario, $idEmpresa);
         if ($error !== null) {
             echo json_encode(['ok' => false, 'error' => $error]);
             exit;
@@ -940,7 +943,7 @@ class PermisosModulosController extends Controller
             echo json_encode(['ok' => false, 'error' => 'Datos incompletos.']);
             exit;
         }
-        $error = $this->validarGestionVendedoresVisibles($idUsuario, $idEmpresa);
+        $error = $this->validarGestionUsuarioEmpresa($idUsuario, $idEmpresa);
         if ($error !== null) {
             echo json_encode(['ok' => false, 'error' => $error]);
             exit;
@@ -965,11 +968,100 @@ class PermisosModulosController extends Controller
     }
 
     /**
+     * Tarjeta "Pestañas que puede ver" (un módulo del catálogo
+     * App\Helpers\PestanasModulo): sus pestañas, marcando las que el usuario ve.
+     * AJAX/JSON. Parámetros: u (usuario), e (empresa), m (ruta MVC del módulo).
+     */
+    public function pestanasModuloJson(): void
+    {
+        $this->requireAuth();
+        $this->requireNivel(2);
+        header('Content-Type: application/json');
+
+        $idUsuario = (int) ($_GET['u'] ?? 0);
+        $idEmpresa = (int) ($_GET['e'] ?? 0);
+        $modulo    = trim((string) ($_GET['m'] ?? ''));
+        $error = $this->validarGestionUsuarioEmpresa($idUsuario, $idEmpresa);
+        if ($error === null && \App\Helpers\PestanasModulo::definicion($modulo) === null) {
+            $error = 'Este módulo no tiene pestañas configurables.';
+        }
+        if ($error !== null) {
+            echo json_encode(['ok' => false, 'error' => $error]);
+            exit;
+        }
+
+        try {
+            echo json_encode([
+                'ok'           => true,
+                'pestanas'     => $this->pestanasModuloService()->getPestanasConMarca($idEmpresa, $idUsuario, $modulo),
+                'tabla_existe' => (new \App\repositories\modulos\PestanasModuloRepository())->disponible(),
+            ]);
+        } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
+            echo json_encode(['ok' => false, 'error' => 'No se pudieron cargar las pestañas.']);
+        }
+        exit;
+    }
+
+    /** Muestra u oculta una pestaña de un módulo al usuario ("Pestañas que puede ver"). AJAX/JSON. */
+    public function guardarPestanaModulo(): void
+    {
+        $this->requireAuth();
+        $this->requireNivel(2);
+        header('Content-Type: application/json');
+
+        if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
+            echo json_encode(['ok' => false, 'error' => 'Método no permitido.']);
+            exit;
+        }
+
+        $idUsuario = (int) ($_POST['id_usuario'] ?? 0);
+        $idEmpresa = (int) ($_POST['id_empresa'] ?? 0);
+        $modulo    = trim((string) ($_POST['modulo'] ?? ''));
+        $pestana   = trim((string) ($_POST['pestana'] ?? ''));
+        $visible   = !empty($_POST['visible']) && $_POST['visible'] !== '0';
+
+        if ($modulo === '' || $pestana === '') {
+            echo json_encode(['ok' => false, 'error' => 'Datos incompletos.']);
+            exit;
+        }
+        $error = $this->validarGestionUsuarioEmpresa($idUsuario, $idEmpresa);
+        if ($error !== null) {
+            echo json_encode(['ok' => false, 'error' => $error]);
+            exit;
+        }
+
+        try {
+            $this->pestanasModuloService()->establecer(
+                (int) ($_SESSION['id_usuario'] ?? 0),
+                (int) ($_SESSION['nivel'] ?? 1),
+                $idEmpresa,
+                $this->modelEmpresa->getUsuarioPorId($idUsuario),
+                $idUsuario,
+                $modulo,
+                $pestana,
+                $visible
+            );
+            echo json_encode(['ok' => true]);
+        } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
+            echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
+        }
+        exit;
+    }
+
+    private function pestanasModuloService(): \App\Services\modulos\PestanasModuloService
+    {
+        return \App\Services\modulos\PestanasModuloService::crear();
+    }
+
+    /**
      * Quien configura debe poder gestionar al usuario y la empresa debe ser
      * accesible: el superadministrador, cualquier empresa activa; el
      * administrador, solo las que comparte con ese usuario. Null = válido.
+     * Lo comparten las tarjetas "Vendedores que puede ver" y "Pestañas que puede ver".
      */
-    private function validarGestionVendedoresVisibles(int $idUsuario, int $idEmpresa): ?string
+    private function validarGestionUsuarioEmpresa(int $idUsuario, int $idEmpresa): ?string
     {
         $idActual = (int) ($_SESSION['id_usuario'] ?? 0);
         $nivel = (int) ($_SESSION['nivel'] ?? 1);

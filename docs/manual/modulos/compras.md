@@ -6,7 +6,7 @@ ruta_modulo: modulos/compras
 tipo: modulo
 visibilidad: todos
 etiquetas: compras, compra, factura de compra, buscar compra, buscador, aparecen compras que no busque, resultados que no corresponden, la busqueda trae otras compras, buscar por numero de autorizacion, filtros, filtrar compras, buscar por producto comprado, filtro de fechas, saldo pendiente, estado de pago, chips, ordenar por dos columnas, ordenar por proveedor y fecha, asiento contable, editar asiento, pestaña asiento, proveedor, xml, sri, entrada de mercaderia, vincular producto, retencion, orden de compra, vincular orden, pedido a proveedor, comparar pedido vs facturado, entrega parcial, recibido parcial, cerrar orden, sustento tributario, codigo de sustento, autorizacion, fecha de caducidad, ats, persona natural, obligada a llevar contabilidad, tipo de contribuyente, registro manual, compra fisica, pagar la compra, pestaña pagos, saldo pendiente, valores de terceros, otros conceptos, valores adicionales, bomberos, tasa de basura, recoleccion de basura, planilla de luz, planilla de agua, servicios basicos, informacion adicional, info adicional, nombre muy largo, limite de caracteres, value too long, no se pudo guardar la compra, imprimir, impresora, retencion antes de la factura, enlazar retencion
-version: 2.24
+version: 2.25
 orden: 20
 estado: activo
 ---
@@ -304,6 +304,18 @@ módulo y quedan vinculadas al documento que modifican. En Cuentas por Pagar no
 aparecen como documentos sueltos: se restan del saldo de la factura a la que
 corresponden.
 
+**Notas de débito que llegan del SRI.** Su XML no trae líneas de detalle como una
+factura, sino *motivos* (razón y valor) y un único bloque de impuestos en la
+cabecera. El sistema crea una línea por motivo y adjunta los impuestos a la
+primera. Algunos emisores declaran ese impuesto con **base 0,00** aunque el total
+sin impuestos sea mayor (típico en intereses por mora, código 6 = no objeto de
+IVA). Como el SRI rechaza en el ATS un comprobante sin ninguna base, el sistema
+registra como base el total sin impuestos cuando el caso es inequívoco (un solo
+impuesto de IVA y el valor del IVA cuadra con ese total) y lo deja escrito en las
+**Observaciones** de la compra, empezando por *"XML del SRI inconsistente"*. Si
+hay varios impuestos o el IVA no cuadra, se guarda tal como vino y la observación
+pide revisarlo a mano.
+
 ## Planillas de luz y agua: valores de terceros
 
 Las facturas de servicios básicos cobran, además de su propio importe, rubros que
@@ -581,6 +593,11 @@ aprobaciones pasa, así que no se paga dos veces.
 
 ## Historial de cambios
 
+- **2.25** — Notas de débito del SRI cuyo impuesto viene con base 0,00 aunque el
+  total sin impuestos sea mayor: el sistema registra como base ese total (si es el
+  único impuesto de IVA y cuadra) y lo anota en las Observaciones de la compra. Antes
+  la nota salía con las cuatro bases en cero en el ATS y el SRI la rechazaba. Ver
+  *Notas de crédito y débito de compra*.
 - **2.24** — Al registrar (o corregir) una compra, si ya existía una retención emitida
   a ese proveedor sobre ese mismo número de documento, la retención se enlaza sola a
   la compra y su valor se descuenta del saldo.

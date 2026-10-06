@@ -813,16 +813,20 @@ class DocumentoAutomatedRegisterService
                         $primerDetalle = $idDetalle;
                     }
                 }
-                if ($primerDetalle !== null && isset($info->impuestos->impuesto)) {
-                    foreach ($info->impuestos->impuesto as $imp) {
-                        $this->compraRepo->insertImpuesto([
-                            'id_compra_detalle' => $primerDetalle,
-                            'codigo_impuesto' => (string)$imp->codigo,
-                            'codigo_porcentaje' => (string)$imp->codigoPorcentaje,
-                            'tarifa' => (float)$imp->tarifa,
-                            'base_imponible' => (float)$imp->baseImponible,
-                            'valor' => (float)$imp->valor
-                        ]);
+                if ($primerDetalle !== null) {
+                    // Impuestos de cabecera. NotaDebitoXmlHelper corrige el caso de emisores
+                    // que declaran el impuesto con base 0.00 aunque totalSinImpuestos > 0
+                    // (la ND salía con las cuatro bases en 0,00 en el ATS y el SRI la
+                    // rechazaba) y deja constancia en las observaciones de la compra.
+                    $impND = \App\Helpers\NotaDebitoXmlHelper::impuestosCabecera($info);
+                    foreach ($impND['impuestos'] as $imp) {
+                        $this->compraRepo->insertImpuesto(array_merge(
+                            ['id_compra_detalle' => $primerDetalle],
+                            $imp
+                        ));
+                    }
+                    if ($impND['observacion'] !== null) {
+                        $this->compraRepo->updateObservaciones($idCompra, $impND['observacion']);
                     }
                 }
             }

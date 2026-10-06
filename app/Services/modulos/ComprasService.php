@@ -916,17 +916,15 @@ class ComprasService
         // Mismo criterio que insertarCompra(): una línea por motivo, con los impuestos
         // de cabecera adjuntos a la primera (para que el PDF calcule subtotal/IVA/ICE).
         if ($codDoc === '05' && isset($xml->motivos->motivo)) {
-            $impuestosCabecera = [];
-            if (isset($info->impuestos->impuesto)) {
-                foreach ($info->impuestos->impuesto as $imp) {
-                    $impuestosCabecera[] = [
-                        'codigo_impuesto'   => (string) $imp->codigo,
-                        'codigo_porcentaje' => (string) $imp->codigoPorcentaje,
-                        'tarifa'            => (float) $imp->tarifa,
-                        'base_imponible'    => (float) $imp->baseImponible,
-                        'valor'             => (float) $imp->valor,
-                    ];
-                }
+            // Mismo helper que el registro automático: corrige la base 0.00 de emisores
+            // inconsistentes (ver NotaDebitoXmlHelper), así el PDF/Excel generado desde
+            // el XML muestra la misma base que quedó registrada. La observación viaja en
+            // la cabecera parseada para quien la quiera mostrar (el controlador del PDF
+            // la reemplaza por las observaciones de la compra guardada).
+            $impND             = \App\Helpers\NotaDebitoXmlHelper::impuestosCabecera($info);
+            $impuestosCabecera = $impND['impuestos'];
+            if ($impND['observacion'] !== null) {
+                $cabecera['observaciones'] = $impND['observacion'];
             }
             $primero = true;
             foreach ($xml->motivos->motivo as $m) {

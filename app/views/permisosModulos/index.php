@@ -91,59 +91,69 @@ $limiteLleno = $limiteUsuarios !== null && $limiteUsuarios['actual'] >= $limiteU
         <form method="GET" action="<?= $base ?>/config/permisos-modulos" id="form-permisos-buscar">
             <input type="hidden" name="mostrar" value="1">
             <input type="hidden" name="u" id="input-u" value="<?= (int)$idUsuarioSel ?>">
-            <div id="paso1" style="display:<?= ($idUsuarioSel && $idEmpresaSel) ? 'none' : 'block' ?>;">
-                <?php if ($esSuper): ?>
-                <div class="text-muted small mb-2">
-                    <i class="bi bi-info-circle"></i>
-                    Puede buscar <strong>cualquier usuario activo</strong> y <strong>cualquier empresa activa</strong> del sistema;
-                    si la empresa no está asignada al usuario, se le asigna al guardar los permisos.
+            <?php
+            // El usuario que se está mostrando debe figurar en el selector aunque haya
+            // quedado fuera de los 500 precargados (si no, el selector se vería vacío).
+            if ($idUsuarioSel > 0 && !empty($usuarioSel)) {
+                $yaEsta = false;
+                foreach ($opcionesUsuarios as $o) {
+                    if ((int) ($o['value'] ?? 0) === $idUsuarioSel) { $yaEsta = true; break; }
+                }
+                if (!$yaEsta) {
+                    array_unshift($opcionesUsuarios, [
+                        'value' => $idUsuarioSel,
+                        'text'  => ($usuarioSel['nombre'] ?? '') . ' (' . ($usuarioSel['cedula'] ?? '') . ')',
+                        'mail'  => trim((string) ($usuarioSel['mail'] ?? '')),
+                    ]);
+                }
+            }
+            ?>
+            <?php // Usuario y empresa en la misma fila: elegir el usuario carga sus empresas
+                  // en el segundo selector; Mostrar carga los módulos. ?>
+            <div class="d-flex flex-wrap align-items-start gap-2" id="fila-permisos-selectores">
+                <div class="flex-grow-1" style="flex-basis:360px;min-width:260px;">
+                    <label class="form-label small mb-1 d-block" for="select-usuario"><i class="bi bi-person"></i> Usuario</label>
+                    <select id="select-usuario" class="form-select form-select-sm">
+                        <option value="">Buscar usuario por nombre, cédula, identificación o correo...</option>
+                        <?php foreach ($opcionesUsuarios as $opt): ?>
+                            <option value="<?= (int)$opt['value'] ?>" data-mail="<?= htmlspecialchars($opt['mail'] ?? '') ?>" <?= ($opt['value'] ?? 0) == $idUsuarioSel ? 'selected' : '' ?>><?= htmlspecialchars($opt['text'] ?? '') ?></option>
+                        <?php endforeach; ?>
+                    </select>
                 </div>
-                <?php endif; ?>
-                <div class="row g-3 align-items-end">
-                    <div class="col-md-9">
-                        <label class="form-label small" for="select-usuario"><i class="bi bi-search"></i> Buscar usuario</label>
-                        <select id="select-usuario" class="form-select">
-                            <option value="">Buscar usuario por nombre, cédula, identificación o correo...</option>
-                            <?php foreach ($opcionesUsuarios as $opt): ?>
-                                <option value="<?= (int)$opt['value'] ?>" data-mail="<?= htmlspecialchars($opt['mail'] ?? '') ?>" <?= ($opt['value'] ?? 0) == $idUsuarioSel ? 'selected' : '' ?>><?= htmlspecialchars($opt['text'] ?? '') ?></option>
-                            <?php endforeach; ?>
-                        </select>
+                <div class="flex-grow-1" style="flex-basis:360px;min-width:260px;">
+                    <label class="form-label small mb-1 d-block" for="select-empresa"><i class="bi bi-building"></i> Empresa</label>
+                    <select id="select-empresa" name="e" class="form-select form-select-sm">
+                        <option value="">Primero elija un usuario...</option>
+                        <?php foreach ($opcionesEmpresas as $opt): ?>
+                            <option value="<?= (int)$opt['value'] ?>" <?= ($opt['value'] ?? 0) == $idEmpresaSel ? 'selected' : '' ?>><?= htmlspecialchars($opt['text'] ?? '') ?></option>
+                        <?php endforeach; ?>
+                    </select>
+                    <div id="empresa-msg" class="text-danger small mt-1 d-none"><i class="bi bi-exclamation-circle"></i> Debe seleccionar una empresa.</div>
+                    <?php if ($esSuper): ?>
+                    <div id="empresa-no-asignada-aviso" class="small mt-1 d-none text-warning-emphasis">
+                        <i class="bi bi-info-circle"></i> Esta empresa <strong>no está asignada</strong> al usuario. Se le asignará al guardar los permisos.
                     </div>
-                    <div class="col-md-3">
-                        <button type="button" id="btn-siguiente" class="btn btn-primary w-100"><i class="bi bi-arrow-right"></i> Seleccionar empresa</button>
+                    <?php endif; ?>
+                </div>
+                <div>
+                    <?php // Etiqueta invisible: iguala la altura de las etiquetas de los selectores
+                          // para que los botones arranquen a la misma altura que los controles. ?>
+                    <label class="form-label small mb-1 d-block">&nbsp;</label>
+                    <div class="d-flex gap-2">
+                        <button type="submit" class="btn btn-primary btn-sm text-nowrap" id="btn-mostrar-modulos"><i class="bi bi-search"></i> Mostrar módulos</button>
+                        <button type="button" id="btn-anterior" class="btn btn-outline-secondary btn-sm text-nowrap" title="Limpiar la selección y empezar de nuevo"><i class="bi bi-x-lg"></i> Limpiar</button>
                     </div>
                 </div>
             </div>
-            <div id="paso2" style="display:<?= ($idUsuarioSel && $idEmpresaSel) ? 'block' : 'none' ?>;">
-                <div class="row g-3">
-                    <div class="col-12 d-flex align-items-end gap-2">
-                        <div class="flex-grow-1">
-                            <label class="form-label small">Usuario</label>
-                            <input type="text" id="usuario-texto" class="form-control bg-light" readonly value="<?= htmlspecialchars(($usuarioSel['nombre'] ?? '') . ' (' . ($usuarioSel['cedula'] ?? '') . ')') ?>">
-                        </div>
-                        <button type="button" id="btn-anterior" class="btn btn-outline-secondary btn-sm"><i class="bi bi-arrow-left"></i> Empezar de nuevo</button>
-                    </div>
-                </div>
-                <div class="row g-3 mt-1 align-items-end">
-                    <div class="col-md-8">
-                        <label class="form-label small">Empresa</label>
-                        <select id="select-empresa" name="e" class="form-select">
-                            <?php foreach ($opcionesEmpresas as $opt): ?>
-                                <option value="<?= (int)$opt['value'] ?>" <?= ($opt['value'] ?? 0) == $idEmpresaSel ? 'selected' : '' ?>><?= htmlspecialchars($opt['text'] ?? '') ?></option>
-                            <?php endforeach; ?>
-                        </select>
-                        <div id="empresa-msg" class="text-danger small mt-1 d-none"><i class="bi bi-exclamation-circle"></i> Debe seleccionar una empresa.</div>
-                        <?php if ($esSuper): ?>
-                        <div id="empresa-no-asignada-aviso" class="small mt-1 d-none text-warning-emphasis">
-                            <i class="bi bi-info-circle"></i> Esta empresa <strong>no está asignada</strong> al usuario. Se le asignará al guardar los permisos.
-                        </div>
-                        <?php endif; ?>
-                    </div>
-                    <div class="col-md-4 d-flex align-items-end">
-                        <button type="submit" class="btn btn-primary btn-lg w-100"><i class="bi bi-eye"></i> Mostrar módulos</button>
-                    </div>
-                </div>
+            <?php if ($esSuper): ?>
+            <div class="text-muted small mt-2">
+                <i class="bi bi-info-circle"></i>
+                Puede buscar <strong>cualquier usuario activo</strong> y <strong>cualquier empresa activa</strong> del sistema.
+                En el desplegable, las empresas que el usuario <strong>ya tiene asignadas</strong> van primero y con la marca
+                <span class="badge bg-success bg-opacity-10 text-success border border-success border-opacity-25"><i class="bi bi-check-circle"></i> Asignada</span>;
+                las demás se le asignan al guardar los permisos.
             </div>
+            <?php endif; ?>
         </form>
     </div>
 </div>
@@ -158,15 +168,32 @@ window.cmgEmpresaTomSelect = function() {
         return String(s == null ? '' : s)
             .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
     }
+    // Marca "Asignada" / "No asignada": solo cuando la opción trae el dato (listas
+    // del superadministrador). El administrador solo ve empresas asignadas, así
+    // que ahí no se pinta nada.
+    function marcaAsignada(data) {
+        if (data.asignada === true) {
+            return ' <span class="badge bg-success bg-opacity-10 text-success border border-success border-opacity-25 ms-1" style="font-size:.68rem;"><i class="bi bi-check-circle"></i> Asignada</span>';
+        }
+        if (data.asignada === false) {
+            return ' <span class="badge bg-secondary bg-opacity-10 text-secondary border border-secondary border-opacity-25 ms-1" style="font-size:.68rem;">No asignada</span>';
+        }
+        return '';
+    }
     return {
         searchField: ['text', 'razon_social', 'ruc'],
         render: {
             option: function(data, escape) {
-                var html = '<div>' + esc(data.text);
+                var html = '<div class="d-flex align-items-start gap-1' + (data.asignada === true ? ' fw-semibold' : (data.asignada === false ? ' text-muted' : '')) + '">'
+                    + (data.asignada === true ? '<i class="bi bi-check-circle-fill text-success mt-1"></i>' : (data.asignada === false ? '<i class="bi bi-circle text-secondary opacity-50 mt-1"></i>' : ''))
+                    + '<div>' + esc(data.text) + marcaAsignada(data);
                 if (data.razon_social && data.razon_social !== data.text.replace(/\s*\([^)]*\)\s*$/, '')) {
-                    html += '<div class="small text-muted">' + esc(data.razon_social) + '</div>';
+                    html += '<div class="small text-muted fw-normal">' + esc(data.razon_social) + '</div>';
                 }
-                return html + '</div>';
+                return html + '</div></div>';
+            },
+            item: function(data, escape) {
+                return '<div>' + esc(data.text) + marcaAsignada(data) + '</div>';
             }
         }
     };
@@ -200,6 +227,16 @@ window.cmgUsuarioTomSelect = function() {
     if (!form || !selectEmpresa || !empresaMsg) return;
 
     form.addEventListener('submit', function(e) {
+        var inputU = document.getElementById('input-u');
+        if (inputU && !inputU.value) {
+            e.preventDefault();
+            if (typeof Swal !== 'undefined') {
+                Swal.fire({ icon: 'info', title: 'Seleccione un usuario', text: 'Primero elija el usuario y luego la empresa.' });
+            } else {
+                alert('Seleccione un usuario.');
+            }
+            return;
+        }
         if (!selectEmpresa.value) {
             e.preventDefault();
             empresaMsg.classList.remove('d-none');
@@ -677,6 +714,164 @@ window.cmgUsuarioTomSelect = function() {
                 tbody.querySelectorAll('.vv-row').forEach(function(row) {
                     row.style.display = !q || row.textContent.toLowerCase().indexOf(q) !== -1 ? '' : 'none';
                 });
+            });
+        })();
+    </script>
+
+    <?php // Pestañas que puede ver: una tarjeta por cada módulo del catálogo
+          // App\Helpers\PestanasModulo (hoy, Reporte de Inventarios). Sin configuración
+          // el usuario ve todas; desmarcar una la oculta. Solo nivel 1, como vendedores. ?>
+    <?php foreach (\App\Helpers\PestanasModulo::catalogo() as $pmModulo => $pmDef): $pmSlug = preg_replace('/[^a-z0-9]+/i', '-', $pmModulo); ?>
+    <div class="card mt-3 pm-card" id="card-pestanas-<?= htmlspecialchars($pmSlug) ?>" data-modulo="<?= htmlspecialchars($pmModulo) ?>">
+        <div class="card-header bg-light py-2 d-flex justify-content-between align-items-center flex-wrap gap-2">
+            <strong><i class="bi <?= htmlspecialchars($pmDef['icono']) ?>"></i> Pestañas que puede ver <span class="text-muted fw-normal small">— <?= htmlspecialchars($pmDef['titulo']) ?></span></strong>
+            <small class="text-muted pm-conteo"></small>
+        </div>
+        <div class="card-body">
+            <p class="small text-muted mb-2">
+                <i class="bi bi-info-circle"></i>
+                Por defecto el usuario ve <strong>todas las pestañas</strong> de <em><?= htmlspecialchars($pmDef['titulo']) ?></em>.
+                Desmarque las que no debe ver; cada casilla se guarda al instante. Necesita además permiso de <strong>Ver</strong>
+                sobre ese submódulo para entrar al reporte.
+            </p>
+            <div class="mb-2 d-flex align-items-center gap-2">
+                <span class="small pm-status"></span>
+            </div>
+            <div class="permisos-tabla-wrap" style="max-height:320px;">
+                <table class="table table-sm table-hover mb-0">
+                    <thead class="table-light">
+                        <tr>
+                            <th class="text-center" style="width:70px">Puede ver</th>
+                            <th>Pestaña</th>
+                        </tr>
+                    </thead>
+                    <tbody class="pm-tbody">
+                        <tr><td colspan="2" class="text-center text-muted py-3"><span class="spinner-border spinner-border-sm"></span> Cargando pestañas...</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+    <?php endforeach; ?>
+
+    <script>
+        (function() {
+            var base      = '<?= $base ?>';
+            var idUsuario = '<?= (int)$idUsuarioSel ?>';
+            var idEmpresa = '<?= (int)$idEmpresaSel ?>';
+
+            document.querySelectorAll('.pm-card').forEach(function(card) {
+                var modulo   = card.getAttribute('data-modulo') || '';
+                var tbody    = card.querySelector('.pm-tbody');
+                var statusEl = card.querySelector('.pm-status');
+                var conteoEl = card.querySelector('.pm-conteo');
+                var statusTimer = null;
+                var total = 0;
+
+                function setStatus(tipo, texto) {
+                    clearTimeout(statusTimer);
+                    var color = tipo === 'ok' ? 'text-success' : (tipo === 'err' ? 'text-danger' : 'text-secondary');
+                    var icon  = tipo === 'ok' ? 'bi-check-circle-fill' : (tipo === 'err' ? 'bi-x-circle-fill' : 'bi-arrow-repeat');
+                    statusEl.className = 'small pm-status ' + color;
+                    statusEl.innerHTML = '<i class="bi ' + icon + '"></i> ';
+                    statusEl.appendChild(document.createTextNode(texto));
+                    if (tipo === 'ok') statusTimer = setTimeout(function() { statusEl.innerHTML = ''; }, 2000);
+                }
+
+                function mensaje(texto) {
+                    tbody.innerHTML = '';
+                    var tr = document.createElement('tr');
+                    var td = document.createElement('td');
+                    td.colSpan = 2;
+                    td.className = 'text-center text-muted py-3';
+                    td.textContent = texto;
+                    tr.appendChild(td);
+                    tbody.appendChild(tr);
+                }
+
+                function actualizarConteo() {
+                    var n = tbody.querySelectorAll('.pm-check:checked').length;
+                    conteoEl.textContent = n === total ? 'Ve todas las pestañas' : (n === 0 ? 'Ninguna pestaña' : (n + ' de ' + total + ' pestañas'));
+                }
+
+                function guardar(chk) {
+                    var fd = new FormData();
+                    fd.append('id_usuario', idUsuario);
+                    fd.append('id_empresa', idEmpresa);
+                    fd.append('modulo', modulo);
+                    fd.append('pestana', chk.value);
+                    fd.append('visible', chk.checked ? '1' : '0');
+                    setStatus('load', 'Guardando...');
+                    fetch(base + '/config/permisos-modulos?action=guardarPestanaModulo', {
+                        method: 'POST', body: fd, credentials: 'same-origin',
+                        headers: { 'X-Requested-With': 'XMLHttpRequest' }
+                    })
+                    .then(function(r) { return r.json(); })
+                    .then(function(j) {
+                        if (j.ok) {
+                            setStatus('ok', 'Guardado');
+                            actualizarConteo();
+                        } else {
+                            chk.checked = !chk.checked;
+                            setStatus('err', j.error || 'Error al guardar');
+                        }
+                    })
+                    .catch(function() {
+                        chk.checked = !chk.checked;
+                        setStatus('err', 'Error de conexión');
+                    });
+                }
+
+                function pintar(pestanas) {
+                    tbody.innerHTML = '';
+                    total = pestanas.length;
+                    if (!total) { mensaje('Este módulo no tiene pestañas configurables.'); return; }
+                    pestanas.forEach(function(p) {
+                        var tr = document.createElement('tr');
+                        tr.style.cursor = 'pointer';
+
+                        var tdChk = document.createElement('td');
+                        tdChk.className = 'text-center align-middle';
+                        var chk = document.createElement('input');
+                        chk.type = 'checkbox';
+                        chk.className = 'form-check-input pm-check';
+                        chk.value = p.clave;
+                        chk.checked = !!p.visible;
+                        chk.addEventListener('change', function() { guardar(chk); });
+                        tdChk.appendChild(chk);
+
+                        var tdNom = document.createElement('td');
+                        tdNom.className = 'align-middle';
+                        var ico = document.createElement('i');
+                        ico.className = 'bi ' + (p.icono || 'bi-folder2') + ' me-2 text-muted';
+                        tdNom.appendChild(ico);
+                        tdNom.appendChild(document.createTextNode(p.titulo || p.clave));
+
+                        tr.appendChild(tdChk);
+                        tr.appendChild(tdNom);
+                        tr.addEventListener('click', function(e) {
+                            if (e.target === chk) return;
+                            chk.checked = !chk.checked;
+                            guardar(chk);
+                        });
+                        tbody.appendChild(tr);
+                    });
+                    actualizarConteo();
+                }
+
+                fetch(base + '/config/permisos-modulos?action=pestanasModuloJson&u=' + encodeURIComponent(idUsuario) + '&e=' + encodeURIComponent(idEmpresa) + '&m=' + encodeURIComponent(modulo), {
+                    credentials: 'same-origin', headers: { 'X-Requested-With': 'XMLHttpRequest' }
+                })
+                .then(function(r) { return r.json(); })
+                .then(function(j) {
+                    if (!j.ok) { mensaje(j.error || 'No se pudieron cargar las pestañas.'); return; }
+                    if (!j.tabla_existe) {
+                        mensaje('Falta ejecutar database/2026-10-06_usuarios_pestanas_ocultas.sql para usar esta configuración.');
+                        return;
+                    }
+                    pintar(j.pestanas || []);
+                })
+                .catch(function() { mensaje('Error de conexión al cargar las pestañas.'); });
             });
         })();
     </script>
@@ -1301,16 +1496,11 @@ window.cmgUsuarioTomSelect = function() {
         if (window.location.search.indexOf('v=1') !== -1) {
             history.replaceState({}, '', base + '/config/permisos-modulos');
         }
-        var paso1 = document.getElementById('paso1');
-        var paso2 = document.getElementById('paso2');
         var selectUsuario = document.getElementById('select-usuario');
         var selectEmpresa = document.getElementById('select-empresa');
         var inputU = document.getElementById('input-u');
-        var usuarioTexto = document.getElementById('usuario-texto');
-        var btnSiguiente = document.getElementById('btn-siguiente');
         var btnAnterior = document.getElementById('btn-anterior');
         if (!selectUsuario || typeof TomSelect === 'undefined') return;
-        if (!btnSiguiente) return;
 
         var tsUsuario = new TomSelect('#select-usuario', Object.assign(window.cmgUsuarioTomSelect(), {
             create: false,
@@ -1390,16 +1580,16 @@ window.cmgUsuarioTomSelect = function() {
             }
         });
 
-        function actualizarUsuarioPaso2() {
-            var idU = tsUsuario.getValue() || '';
-            var opt = tsUsuario.options[idU] || tsUsuario.options[String(idU)];
-            usuarioTexto.value = (opt && opt.text) ? opt.text : '';
-            inputU.value = idU;
+        // Sin usuario no hay empresas que elegir: el selector de empresa espera.
+        function habilitarEmpresa(si) {
+            if (si) tsEmpresa.enable(); else tsEmpresa.disable();
         }
+        habilitarEmpresa(!!(inputU.value || tsUsuario.getValue()));
 
         function cargarEmpresas(idU) {
             tsEmpresa.clear();
             tsEmpresa.clearOptions();
+            habilitarEmpresa(!!idU);
             if (!idU) return;
             fetch(base + '/config/permisos-modulos?action=empresasJson&u=' + encodeURIComponent(idU) + '&q=', {
                     credentials: 'same-origin'
@@ -1437,20 +1627,17 @@ window.cmgUsuarioTomSelect = function() {
                 .catch(function() {});
         }
 
-        btnSiguiente.addEventListener('click', function() {
-            var idU = tsUsuario.getValue() || '';
-            if (!idU) {
-                alert('Seleccione un usuario.');
-                return;
-            }
-            actualizarUsuarioPaso2();
-            paso1.style.display = 'none';
-            paso2.style.display = 'block';
+        // Elegir (o cambiar) el usuario carga sus empresas en el selector de al lado.
+        tsUsuario.on('change', function(valor) {
+            var idU = valor || '';
+            inputU.value = idU;
             cargarEmpresas(idU);
         });
 
-        btnAnterior.addEventListener('click', function() {
-            window.location = base + '/config/permisos-modulos?limpiar=1';
-        });
+        if (btnAnterior) {
+            btnAnterior.addEventListener('click', function() {
+                window.location = base + '/config/permisos-modulos?limpiar=1';
+            });
+        }
     });
 </script>

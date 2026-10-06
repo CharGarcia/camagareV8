@@ -5,8 +5,8 @@ categoria: Configuración global
 ruta_modulo: config/usuarios-sistema
 tipo: modulo
 visibilidad: admin
-etiquetas: usuarios del sistema, crear usuario, asignar empresa, empresa a asignar, invitar usuario, limite de usuarios, usuario existente, que usuarios veo, no aparece el usuario, lista de usuarios, usuarios de mi empresa, cambiar cedula, editar cedula, identificacion del usuario, cedula repetida, usuario bloqueado, demasiados intentos, reiniciar intentos, desbloquear usuario, no puede iniciar sesion, reenviar invitacion, no le llego el correo, no recibio la invitacion, invitacion pendiente, reenviar correo de bienvenida, clave provisional, contrasena provisional, asignar contrasena, poner clave al usuario, cambiar nombre del usuario, editar nombre, nombre mal escrito, desaparecio el boton de invitacion, se perdio la invitacion al guardar, no me deja reenviar la invitacion, boton de invitacion en gris, telefono del usuario, celular, numero de telefono, editar telefono, cambiar telefono, columna telefono, app movil, puede usar la app
-version: 1.5
+etiquetas: usuarios del sistema, crear usuario, asignar empresa, empresa a asignar, invitar usuario, limite de usuarios, usuario existente, que usuarios veo, no aparece el usuario, lista de usuarios, usuarios de mi empresa, cambiar cedula, editar cedula, identificacion del usuario, cedula repetida, usuario bloqueado, demasiados intentos, reiniciar intentos, desbloquear usuario, no puede iniciar sesion, reenviar invitacion, no le llego el correo, no recibio la invitacion, invitacion pendiente, reenviar correo de bienvenida, clave provisional, contrasena provisional, asignar contrasena, poner clave al usuario, cambiar nombre del usuario, editar nombre, nombre mal escrito, desaparecio el boton de invitacion, se perdio la invitacion al guardar, no me deja reenviar la invitacion, boton de invitacion en gris, telefono del usuario, celular, numero de telefono, editar telefono, cambiar telefono, columna telefono, app movil, puede usar la app, buscar usuario, filtrar usuarios, filtros de usuarios, exportar usuarios, pdf de usuarios, excel de usuarios, ordenar usuarios, columnas del listado
+version: 1.6
 orden: 3
 estado: activo
 ---
@@ -37,6 +37,31 @@ mismo conjunto de usuarios en ambas pantallas.
 Lo que un administrador **ve** es también lo único que puede **modificar**:
 editar la ficha, activar/desactivar, reenviar la invitación o eliminar solo
 funcionan sobre usuarios de sus empresas.
+
+## Buscar, filtrar y exportar el listado
+
+El listado tiene el mismo diseño que los módulos operativos (por ejemplo
+Proveedores): el buscador, los filtros, el selector de columnas, los botones
+**PDF** y **Excel** y la paginación van en la cabecera de la tarjeta de la
+tabla.
+
+- **Buscar**: lo que se escribe en la caja busca a la vez en nombre, cédula,
+  correo y teléfono, por palabras y sin distinguir mayúsculas ni tildes. Las
+  columnas **Nivel**, **Estado** y **App móvil** **no** entran en esa
+  búsqueda: se filtran desde el modal.
+- **Filtros**: el botón del embudo abre un modal con todos los filtros
+  (nombre, cédula, correo, teléfono, correo o teléfono registrado, nivel,
+  estado, registro completado o pendiente, app móvil, acceso a una empresa
+  concreta, cantidad de empresas y fecha de alta). Se aplican con **Aplicar**
+  y quedan como chips junto a la caja; cada chip se quita con su «×».
+- **Columnas**: el botón de columnas permite ocultar o mostrar cualquier
+  columna y el ancho que se arrastre en cada encabezado se recuerda por
+  usuario.
+- **Ordenar**: clic en un encabezado ordena por esa columna; **Shift + clic**
+  encadena hasta tres columnas (cada encabezado muestra su prioridad). La
+  columna **Empresas** también se puede ordenar.
+- **PDF / Excel**: descargan el listado completo con el buscador, los filtros
+  y el orden que están en pantalla (no solo la página visible).
 
 ## Crear un usuario
 
@@ -248,6 +273,12 @@ cuando el usuario no tiene intentos fallidos pendientes.
 
 ## Historial de cambios
 
+- **1.6** — El listado adopta el diseño estándar de los listados de módulo
+  (como Proveedores): buscador de texto libre, modal de **filtros** con chips,
+  selector de **columnas** por usuario, orden de hasta **tres columnas**
+  (Shift + clic, incluida la columna Empresas) y exportación a **PDF** y
+  **Excel** con los filtros y el orden de pantalla. Nueva sección «Buscar,
+  filtrar y exportar el listado».
 - **1.5** — El listado incorpora la columna **Teléfono** (antes de **Estado**),
   que también entra en la búsqueda y el ordenamiento. En la ficha, el
   teléfono pasa a ser editable desde la pestaña **General**, y los controles

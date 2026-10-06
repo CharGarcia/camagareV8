@@ -13,7 +13,9 @@ use App\repositories\modulos\VendedorRepository;
 use App\repositories\modulos\ProductoRepository;
 use App\repositories\modulos\ClienteRepository;
 use App\Services\modulos\InventarioService;
+use App\Services\modulos\PestanasModuloService;
 use App\Services\LogSistemaService;
+use App\Helpers\PestanasModulo;
 use App\models\Empresa;
 
 class ReporteInventariosController extends BaseModuloController
@@ -37,39 +39,34 @@ class ReporteInventariosController extends BaseModuloController
     }
 
     /**
-     * Módulos dueños de la información de cada pestaña. El permiso de VER el
-     * reporte abre la página, pero cada pestaña se muestra solo si el usuario
-     * puede VER el módulo del que sale su información: Existencias, Movimientos,
-     * Valorización y Auditoría leen el kardex/stock (Inventario); Consignaciones
-     * lee las consignaciones de venta. Nivel 3 ve todo (Permisos::porRuta).
-     * Las rutas son las de getRutaModulo() de InventarioController y
-     * ConsignacionesVentasController.
+     * Pestañas que ve el usuario de la sesión (clave => bool, en el orden de la
+     * barra), resueltas una vez por petición. El permiso de VER el reporte abre la
+     * página; qué pestañas aparecen lo decide la tarjeta "Pestañas que puede ver"
+     * de /config/permisos-modulos (PestanasModuloService): sin configuración se
+     * ven todas, y los niveles 2 y 3 las ven todas siempre. El catálogo de
+     * pestañas es App\Helpers\PestanasModulo.
      */
-    private const RUTA_INVENTARIO     = 'modulos/inventario';
-    private const RUTA_CONSIGNACIONES = 'modulos/consignaciones-ventas';
-    private const MODULO_POR_PESTANA  = [
-        'existencias'    => self::RUTA_INVENTARIO,
-        'movimientos'    => self::RUTA_INVENTARIO,
-        'valorizacion'   => self::RUTA_INVENTARIO,
-        'consignaciones' => self::RUTA_CONSIGNACIONES,
-        'auditoria'      => self::RUTA_INVENTARIO,
-    ];
+    private ?array $pestanasVisibles = null;
 
     /** Pestaña pedida por la URL; cualquier valor desconocido cae en Existencias (como el dispatcher). */
     private function normalizarPestana(?string $tab): string
     {
         $tab = (string) $tab;
-        return isset(self::MODULO_POR_PESTANA[$tab]) ? $tab : 'existencias';
+        return PestanasModulo::existe(self::RUTA_MODULO, $tab) ? $tab : 'existencias';
     }
 
     /** @return array<string,bool> pestaña => si el usuario puede verla (en el orden de la barra). */
     private function pestanasPermitidas(): array
     {
-        $out = [];
-        foreach (self::MODULO_POR_PESTANA as $tab => $ruta) {
-            $out[$tab] = !empty($this->permisosModuloPorRuta($ruta)['ver']);
+        if ($this->pestanasVisibles === null) {
+            $this->pestanasVisibles = PestanasModuloService::crear()->visibles(
+                (int) ($_SESSION['id_empresa'] ?? 0),
+                (int) ($_SESSION['id_usuario'] ?? 0),
+                (int) ($_SESSION['nivel'] ?? 1),
+                self::RUTA_MODULO
+            );
         }
-        return $out;
+        return $this->pestanasVisibles;
     }
 
     /**
@@ -79,7 +76,13 @@ class ReporteInventariosController extends BaseModuloController
      */
     private function requirePestana(string $tab): void
     {
-        $this->requirePermisoVerModulo(self::MODULO_POR_PESTANA[$this->normalizarPestana($tab)]);
+        if (!empty($this->pestanasPermitidas()[$this->normalizarPestana($tab)])) {
+            return;
+        }
+        if ($this->esAjaxRequest()) {
+            $this->json(['ok' => false, 'error' => 'No tiene permiso para esta acción.'], 403);
+        }
+        $this->redirect(rtrim(BASE_URL, '/') . '/home/index');
     }
 
     public function __construct()
@@ -171,7 +174,8 @@ class ReporteInventariosController extends BaseModuloController
         $anios         = $this->repository->getAniosMovimientos($idEmpresa);
         $responsables  = (new \App\repositories\modulos\ResponsableTrasladoRepository())->listarPorEmpresa($idEmpresa);
 
-        // Pestañas visibles y cuál arranca activa (la primera permitida, en el orden de la barra).
+        // Pestañas visibles (configuradas por usuario en /config/permisos-modulos) y cuál
+        // arranca activa: la primera visible, en el orden de la barra.
         $pestanas       = $this->pestanasPermitidas();
         $pestanaInicial = (string) (array_key_first(array_filter($pestanas)) ?? '');
 
@@ -422,9 +426,9 @@ class ReporteInventariosController extends BaseModuloController
         // está activo, "Agrupar por" no pinta nada — la vista lo deshabilita.
         $limite = ReporteInventarioRepository::LIMITE_FILAS_PANTALLA;
         if ($desglose === self::DESGLOSE_CONSIGNACION) {
-            // Este desglose sirve datos de consignaciones desde una pestaña que solo exige
-            // Inventario: se pide además el permiso del módulo dueño, como hace requirePestana().
-            $this->requirePermisoVerModulo(self::RUTA_CONSIGNACIONES);
+            // Este desglose sirve datos de consignaciones desde Existencias: se exige
+            // además ver la pestaña Consignaciones (la vista solo ofrece la opción si la ve).
+            $this->requirePestana('consignaciones');
             $modo = $desglose;
             $rows = $this->repository->getConsignacionesDetalle(
                 $idEmpresa,
@@ -2232,7 +2236,7 @@ class ReporteInventariosController extends BaseModuloController
                 if ($desglose === self::DESGLOSE_CONSIGNACION) {
                     // Mismo guard que en pantalla: la exportación no puede servir lo que
                     // la pestaña no dejaría ver (ver generarExistencias()).
-                    $this->requirePermisoVerModulo(self::RUTA_CONSIGNACIONES);
+                    $this->requirePestana('consignaciones');
                     $modo = $desglose;
                     $rows = $this->repository->getConsignacionesDetalle(
                         $idEmpresa,

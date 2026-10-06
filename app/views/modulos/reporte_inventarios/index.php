@@ -1,19 +1,13 @@
 <?php $idModulo = basename($rutaModulo); ?>
 <?php
-// Pestañas visibles según el permiso de VER de los módulos dueños de la información
-// (ReporteInventariosController::pestanasPermitidas): Existencias, Movimientos,
-// Valorización y Auditoría dependen de Inventario; Consignaciones, de Consignaciones
-// de Ventas. La barra solo dibuja las permitidas y arranca en la primera de ellas;
-// si no hay ninguna, se muestra un aviso en su lugar.
+// Pestañas visibles para el usuario (ReporteInventariosController::pestanasPermitidas):
+// las decide la tarjeta "Pestañas que puede ver" de /config/permisos-modulos; sin
+// configuración se ven todas. La definición (orden, ícono, título) sale del catálogo
+// App\Helpers\PestanasModulo, el mismo que usa esa tarjeta. La barra solo dibuja las
+// visibles y arranca en la primera de ellas; si no hay ninguna, muestra un aviso.
 $pestanas       = $pestanas ?? [];
 $pestanaInicial = $pestanaInicial ?? "";
-$pestanasDef = [
-    "existencias"    => ["icono" => "bi-box-seam",         "titulo" => "Existencias"],
-    "movimientos"    => ["icono" => "bi-arrow-left-right", "titulo" => "Movimientos (Kardex)"],
-    "valorizacion"   => ["icono" => "bi-cash-coin",        "titulo" => "Valorización"],
-    "consignaciones" => ["icono" => "bi-truck",            "titulo" => "Consignaciones"],
-    "auditoria"      => ["icono" => "bi-shield-check",     "titulo" => "Auditoría"],
-];
+$pestanasDef    = \App\Helpers\PestanasModulo::pestanas($rutaModulo);
 $riActiva  = static fn(string $t): string => $t === $pestanaInicial ? " active" : "";
 $riShow    = static fn(string $t): string => $t === $pestanaInicial ? " show active" : "";
 $riNombres = array_map(static fn($k) => mb_strtolower($pestanasDef[$k]["titulo"]), array_keys(array_filter($pestanas)));
@@ -82,9 +76,9 @@ $riSubtitulo = count($riNombres) > 1
     </ul>
     <?php else: ?>
     <div class="alert alert-warning shadow-sm rounded-3 mb-3" role="alert">
-        <i class="bi bi-lock-fill me-2"></i><strong>No tiene acceso a ninguna pestaña de este reporte.</strong>
-        <div class="small mt-1">Existencias, Movimientos, Valorización y Auditoría requieren permiso de <em>ver</em> en <strong>Inventario</strong>;
-        Consignaciones, en <strong>Consignaciones de Ventas</strong>. Pida al administrador que se lo asigne en <em>Configuración → Permisos por módulo</em>.</div>
+        <i class="bi bi-lock-fill me-2"></i><strong>No tiene habilitada ninguna pestaña de este reporte.</strong>
+        <div class="small mt-1">El administrador decide qué pestañas ve cada usuario en <em>Configuración → Permisos por módulo</em>,
+        tarjeta <strong>Pestañas que puede ver</strong>. Pídale que le habilite las que necesita.</div>
     </div>
     <?php endif; ?>
 
@@ -109,7 +103,7 @@ $riSubtitulo = count($riNombres) > 1
                                     <option value="LOTE">Por lotes</option>
                                     <option value="CADUCIDAD">Por caducidad</option>
                                     <option value="LOTE_CADUCIDAD">Lote + caducidad</option>
-                                    <?php /* Sirve datos de consignaciones: solo para quien también puede ver ese módulo. */ ?>
+                                    <?php /* Sirve datos de consignaciones: solo para quien también ve esa pestaña. */ ?>
                                     <?php if (!empty($pestanas["consignaciones"])): ?>
                                     <option value="LOTE_CONSIGNACION">Lote + consignación</option>
                                     <?php endif; ?>

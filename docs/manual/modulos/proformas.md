@@ -6,7 +6,7 @@ ruta_modulo: modulos/proformas
 tipo: modulo
 visibilidad: todos
 etiquetas: proforma, proformas, ordenar por dos columnas, ordenar por estado y fecha, cotizacion, cotizar, presupuesto, oferta, duplicar, duplicar proforma, copiar proforma, repetir cotizacion, volver a cotizar, regresar a borrador, volver a borrador, reabrir proforma, reabrir, desaprobar, quitar aprobacion, editar proforma aprobada, convertir a factura, enviar a pedidos, generar pedido, pasar a pedido, crear pedido desde proforma, despacho, orden de despacho, items sin producto, concepto libre, linea sin producto, pestana pedidos, enviar por whatsapp, exportar excel, info productos, ficha de productos, catalogo, imagenes de productos, informacion adicional, plantillas, plantilla de proforma, guardar como plantilla, condiciones, terminos y condiciones, anexo, pdf de condiciones, texto con formato, clausulas, numeracion por fecha, numero con el año, reiniciar numeracion, reinicio anual, reinicio mensual, correlativo por año, correlativo por mes, modo de numeracion, pdf de la proforma, codigo del producto en el pdf, columna codigo, buscar por codigo, codigo en el detalle, columna codigo en la proforma, observaciones en el pdf, numero repetido, secuencial repetido, secuencial duplicado, dos proformas con el mismo numero, buscar proforma, buscador, filtros, filtrar proformas, buscar por producto, proformas vencidas, proformas sin facturar, filtro de fechas, chips, imprimir, impresora, vendedor del cliente, vendedor asignado, vendedor por defecto, celular, movil, telefono, columnas cortadas, descripcion completa, iva al subtotal, iva item por item, iva linea por linea, calculo del iva
-version: 1.28
+version: 1.29
 orden: 15
 estado: activo
 ---
@@ -503,6 +503,10 @@ documentos admite cada periodo) está en el manual de **Empresa**, sección
 
 ## Historial de cambios
 
+- **1.29** — En una proforma **aprobada, facturada, rechazada o anulada** las pestañas
+  **Vigencia** y **Condiciones** del pie del modal vuelven a poder abrirse para consultar
+  su contenido (y descargar el PDF de condiciones); antes quedaban bloqueadas junto con
+  los campos y solo se veía Info. Adicional. Los campos siguen en solo lectura.
 - **1.28** — En el modal, el total **(-) Descuento** y el descuento de cada línea muestran a su
   lado el porcentaje que representan (sobre el subtotal bruto y sobre cantidad × precio,
   respectivamente). Solo si hay descuento y solo en pantalla, no en el PDF.

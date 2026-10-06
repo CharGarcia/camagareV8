@@ -16,6 +16,8 @@ class UsuariosSistemaController extends Controller
 {
     private Usuario $model;
     private const BASE_PATH = '/config/usuarios-sistema';
+    /** Clave de preferencias de vista (columnas, anchos, orden): basename → `usuarios_sistema`. */
+    private const RUTA_MODULO = 'config/usuarios-sistema';
 
     public function __construct()
     {
@@ -32,18 +34,16 @@ class UsuariosSistemaController extends Controller
         $nivel = (int) ($_SESSION['nivel'] ?? 1);
         $buscar = trim($_GET['b'] ?? $_POST['b'] ?? $_GET['buscar'] ?? $_POST['buscar'] ?? '');
         $page = max(1, (int) ($_GET['page'] ?? $_POST['page'] ?? 1));
-        $ordenCol = trim($_GET['sort'] ?? $_POST['sort'] ?? 'nombre');
-        $ordenDir = strtoupper(trim($_GET['dir'] ?? $_POST['dir'] ?? 'asc'));
         $perPage = \App\Helpers\PreferenciasHelper::porPaginaModulo('usuarios_sistema');
 
-        if (!in_array($ordenCol, Usuario::COLUMNAS_ORDEN, true)) {
-            $ordenCol = 'nombre';
-        }
-        if ($ordenDir !== 'ASC' && $ordenDir !== 'DESC') {
-            $ordenDir = 'ASC';
-        }
+        // Orden de una o varias columnas (Shift+clic): la vista lo manda como
+        // `orden=col:DIR,col:DIR`; si no viene, se respeta la preferencia guardada.
+        $prefsVista = \App\Helpers\PreferenciasHelper::getPreferenciasVista(self::RUTA_MODULO);
+        $orden    = \App\Helpers\OrdenListado::leer($prefsVista, 'nombre');
+        $ordenCol = \App\Helpers\OrdenListado::primeraCol($orden, 'nombre');
+        $ordenDir = \App\Helpers\OrdenListado::primeraDir($orden);
 
-        $result = $this->model->getTodosParaListado($idActual, $nivel, $buscar, $page, $perPage, $ordenCol, $ordenDir);
+        $result = $this->model->getTodosParaListado($idActual, $nivel, $buscar, $page, $perPage, $ordenCol, $ordenDir, $orden);
         $rows = $result['rows'];
         $total = $result['total'];
         $totalPages = $perPage > 0 ? (int) ceil($total / $perPage) : 1;
@@ -77,10 +77,181 @@ class UsuariosSistemaController extends Controller
             'nivel' => $nivel,
             'ordenCol' => $ordenCol,
             'ordenDir' => $ordenDir,
+            'ordenJson' => \App\Helpers\OrdenListado::aJson($orden),
+            'ordenParam' => \App\Helpers\OrdenListado::aCadena($orden),
+            'vistaConfig' => $prefsVista,
+            'rutaModulo' => self::RUTA_MODULO,
             'msg' => $msg,
             'limiteUsuarios' => $limiteUsuarios,
             'empresasParaCrear' => $empresasParaCrear,
         ]);
+    }
+
+    /** URL de exportación del listado con el buscador y el orden vigentes. */
+    private function urlExport(string $sufijo, string $buscar, array $orden): string
+    {
+        return BASE_URL . self::BASE_PATH . '-' . $sufijo
+            . '?b=' . urlencode($buscar)
+            . '&orden=' . urlencode(\App\Helpers\OrdenListado::aCadena($orden));
+    }
+
+    /**
+     * Filas del listado sin paginar, con el buscador y el orden de pantalla
+     * (los enlaces PDF/Excel viajan con `b=` y `orden=`), para exportar.
+     */
+    private function filasParaExportar(): array
+    {
+        $idActual = (int) ($_SESSION['id_usuario'] ?? 0);
+        $nivel = (int) ($_SESSION['nivel'] ?? 1);
+        $buscar = trim($_GET['b'] ?? $_POST['b'] ?? '');
+        $orden = \App\Helpers\OrdenListado::leer(
+            \App\Helpers\PreferenciasHelper::getPreferenciasVista(self::RUTA_MODULO),
+            'nombre'
+        );
+        $result = $this->model->getTodosParaListado(
+            $idActual,
+            $nivel,
+            $buscar,
+            1,
+            0,
+            \App\Helpers\OrdenListado::primeraCol($orden, 'nombre'),
+            \App\Helpers\OrdenListado::primeraDir($orden),
+            $orden
+        );
+        return $result['rows'];
+    }
+
+    private static function textoNivel(int $nivel): string
+    {
+        return $nivel >= 3 ? 'Super Admin' : ($nivel >= 2 ? 'Administrador' : 'Usuario');
+    }
+
+    private static function textoEstado(array $r): string
+    {
+        $rv = $r['registrado'] ?? false;
+        $registrado = ($rv === true || $rv === 't' || $rv === '1' || $rv === 1 || $rv === 'true');
+        if (!$registrado) {
+            return 'Pendiente registro';
+        }
+        return (int) ($r['estado'] ?? 1) === 1 ? 'Activo' : 'Inactivo';
+    }
+
+    private static function esAppMovil(array $r): bool
+    {
+        $mv = $r['puede_app_movil'] ?? false;
+        return ($mv === true || $mv === 't' || $mv === '1' || $mv === 1 || $mv === 'true');
+    }
+
+    /** Exportación PDF del listado (mismo buscador/orden de pantalla). */
+    public function exportPdf(): void
+    {
+        $this->requireAuth();
+        $this->requireNivel(2);
+        $rows = $this->filasParaExportar();
+
+        try {
+            $autoload = MVC_ROOT . '/vendor/autoload.php';
+            if (file_exists($autoload)) {
+                require_once $autoload;
+            }
+
+            ob_start();
+?>
+            <style>
+                table { width: 100%; border-collapse: collapse; font-family: Arial, sans-serif; font-size: 8pt; table-layout: fixed; }
+                th { background: #f2f2f2; border: 1px solid #ccc; padding: 4px; text-align: left; }
+                td { border: 1px solid #ccc; padding: 4px; overflow: hidden; word-wrap: break-word; }
+                .header { text-align: center; margin-bottom: 15px; width: 100%; }
+                h1 { margin: 0; font-size: 14pt; color: #333; }
+                h2 { margin: 3px 0 0 0; color: #666; font-size: 10pt; text-transform: uppercase; }
+            </style>
+            <page backtop="10mm" backbottom="10mm" backleft="10mm" backright="10mm">
+                <div class="header">
+                    <h1>Usuarios del sistema</h1>
+                    <h2>Listado de usuarios (<?= count($rows) ?>)</h2>
+                </div>
+                <table>
+                    <thead>
+                        <tr>
+                            <th style="width: 24%">Nombre</th>
+                            <th style="width: 12%">Cédula</th>
+                            <th style="width: 24%">Correo</th>
+                            <th style="width: 11%">Teléfono</th>
+                            <th style="width: 10%">Nivel</th>
+                            <th style="width: 11%">Estado</th>
+                            <th style="width: 4%">App</th>
+                            <th style="width: 4%">Emp.</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <?php foreach ($rows as $r): ?>
+                            <tr>
+                                <td><?= htmlspecialchars((string) ($r['nombre'] ?? '')) ?></td>
+                                <td><?= htmlspecialchars((string) ($r['cedula'] ?? '')) ?></td>
+                                <td><?= htmlspecialchars((string) ($r['mail'] ?? '')) ?></td>
+                                <td><?= htmlspecialchars((string) ($r['telefono'] ?? '')) ?></td>
+                                <td><?= self::textoNivel((int) ($r['nivel'] ?? 1)) ?></td>
+                                <td><?= self::textoEstado($r) ?></td>
+                                <td><?= self::esAppMovil($r) ? 'Sí' : 'No' ?></td>
+                                <td><?= (int) ($r['empresas_asignadas'] ?? 0) ?></td>
+                            </tr>
+                        <?php endforeach; ?>
+                    </tbody>
+                </table>
+            </page>
+<?php
+            $content = ob_get_clean();
+
+            $html2pdf = new \Spipu\Html2Pdf\Html2Pdf('P', 'A4', 'es');
+            $html2pdf->writeHTML($content);
+            $html2pdf->output('Usuarios_' . date('Ymd_His') . '.pdf', 'D');
+            exit;
+        } catch (\Throwable $e) {
+            if (ob_get_level() > 0) {
+                ob_end_clean();
+            }
+            header('Content-Type: application/json');
+            echo json_encode(['error' => 'Error al generar PDF: ' . $e->getMessage()]);
+            exit;
+        }
+    }
+
+    /** Exportación Excel del listado (mismo buscador/orden de pantalla). */
+    public function exportExcel(): void
+    {
+        $this->requireAuth();
+        $this->requireNivel(2);
+        $rows = $this->filasParaExportar();
+
+        try {
+            $autoload = MVC_ROOT . '/vendor/autoload.php';
+            if (file_exists($autoload)) {
+                require_once $autoload;
+            }
+
+            $headers = ['Nombre', 'Cédula', 'Correo', 'Teléfono', 'Nivel', 'Estado', 'App móvil', 'Empresas', 'Fecha de alta'];
+            $exportData = [];
+            foreach ($rows as $r) {
+                $exportData[] = [
+                    (string) ($r['nombre'] ?? ''),
+                    (string) ($r['cedula'] ?? ''),
+                    (string) ($r['mail'] ?? ''),
+                    (string) ($r['telefono'] ?? ''),
+                    self::textoNivel((int) ($r['nivel'] ?? 1)),
+                    self::textoEstado($r),
+                    self::esAppMovil($r) ? 'Sí' : 'No',
+                    (string) (int) ($r['empresas_asignadas'] ?? 0),
+                    !empty($r['created_at']) ? date('d-m-Y H:i:s', strtotime((string) $r['created_at'])) : '',
+                ];
+            }
+
+            (new \App\Services\ReportService())->exportToExcel('Usuarios', $headers, $exportData, 'Usuarios del sistema', 'Usuarios del sistema');
+            exit;
+        } catch (\Throwable $e) {
+            header('Content-Type: application/json');
+            echo json_encode(['error' => 'Error al generar Excel: ' . $e->getMessage()]);
+            exit;
+        }
     }
 
     /**
@@ -98,18 +269,14 @@ class UsuariosSistemaController extends Controller
         $nivel = (int) ($_SESSION['nivel'] ?? 1);
         $buscar = trim($_GET['b'] ?? $_POST['b'] ?? '');
         $page = max(1, (int) ($_GET['page'] ?? $_POST['page'] ?? 1));
-        $ordenCol = trim($_GET['sort'] ?? $_POST['sort'] ?? 'nombre');
-        $ordenDir = strtoupper(trim($_GET['dir'] ?? $_POST['dir'] ?? 'ASC'));
         $perPage = \App\Helpers\PreferenciasHelper::porPaginaModulo('usuarios_sistema');
 
-        if (!in_array($ordenCol, Usuario::COLUMNAS_ORDEN, true)) {
-            $ordenCol = 'nombre';
-        }
-        if ($ordenDir !== 'ASC' && $ordenDir !== 'DESC') {
-            $ordenDir = 'ASC';
-        }
+        $prefsVista = \App\Helpers\PreferenciasHelper::getPreferenciasVista(self::RUTA_MODULO);
+        $orden    = \App\Helpers\OrdenListado::leer($prefsVista, 'nombre');
+        $ordenCol = \App\Helpers\OrdenListado::primeraCol($orden, 'nombre');
+        $ordenDir = \App\Helpers\OrdenListado::primeraDir($orden);
 
-        $result = $this->model->getTodosParaListado($idActual, $nivel, $buscar, $page, $perPage, $ordenCol, $ordenDir);
+        $result = $this->model->getTodosParaListado($idActual, $nivel, $buscar, $page, $perPage, $ordenCol, $ordenDir, $orden);
         $rows = $result['rows'];
         $total = $result['total'];
         $totalPages = $perPage > 0 ? (int) ceil($total / $perPage) : 1;
@@ -118,21 +285,21 @@ class UsuariosSistemaController extends Controller
 
         $rowsHtml = $this->renderFilasHtml($rows);
 
-        ob_start();
-        if ($totalPages > 1) {
-            $prevDisabled = ($page <= 1) ? 'disabled' : '';
-            $nextDisabled = ($page >= $totalPages) ? 'disabled' : '';
-            echo '<button type="button" class="btn btn-sm btn-outline-secondary" ' . $prevDisabled . ' onclick="USRSIS_cambiarPagina(' . ($page - 1) . ')" aria-label="Anterior"><i class="fas fa-angle-left"></i></button>'
-               . '<button type="button" class="btn btn-sm btn-outline-secondary" ' . $nextDisabled . ' onclick="USRSIS_cambiarPagina(' . ($page + 1) . ')" aria-label="Siguiente"><i class="fas fa-angle-right"></i></button>';
-        }
-        $paginationHtml = ob_get_clean();
+        // Mismo marcado que la paginación inicial de la vista (btn-group del card-header).
+        $prevDisabled = ($page <= 1) ? 'disabled' : '';
+        $nextDisabled = ($page >= $totalPages) ? 'disabled' : '';
+        $paginationHtml = '<button type="button" class="btn btn-outline-secondary" ' . $prevDisabled . ' onclick="cambiarPaginaAjax(' . ($page - 1) . ')" aria-label="Anterior"><i class="bi bi-chevron-left"></i></button>'
+            . '<button type="button" class="btn btn-outline-secondary" ' . $nextDisabled . ' onclick="cambiarPaginaAjax(' . ($page + 1) . ')" aria-label="Siguiente"><i class="bi bi-chevron-right"></i></button>';
 
         echo json_encode([
             'ok' => true,
             'rows' => $rowsHtml,
             'pagination' => $paginationHtml,
             'info' => "$from-$to/$total",
+            'total' => $total,
             'totalPages' => $totalPages,
+            'pdf_url' => $this->urlExport('export-pdf', $buscar, $orden),
+            'excel_url' => $this->urlExport('export-excel', $buscar, $orden),
         ]);
         exit;
     }
@@ -145,7 +312,7 @@ class UsuariosSistemaController extends Controller
     private function renderFilasHtml(array $rows): string
     {
         if (empty($rows)) {
-            return '<tr><td colspan="8" class="text-center py-5 text-muted"><i class="bi bi-people fs-3 d-block mb-2"></i>No hay usuarios registrados.</td></tr>';
+            return '<tr><td colspan="8" class="text-center py-5 text-muted"><i class="bi bi-people fs-3 d-block mb-2"></i>No se encontraron usuarios.</td></tr>';
         }
         $html = '';
         foreach ($rows as $r) {
@@ -161,12 +328,12 @@ class UsuariosSistemaController extends Controller
     {
         $nivelU = (int) ($r['nivel'] ?? 1);
         $estado = (int) ($r['estado'] ?? 1);
-        $empresas = $r['empresas'] ?? [];
+        // Empresas asignadas: cuenta calculada en la consulta del listado.
+        $nEmpresas = (int) ($r['empresas_asignadas'] ?? count($r['empresas'] ?? []));
         $rv = $r['registrado'] ?? false;
         $registrado = ($rv === true || $rv === 't' || $rv === '1' || $rv === 1 || $rv === 'true');
-        $mv = $r['puede_app_movil'] ?? false;
-        $puedeAppMovil = ($mv === true || $mv === 't' || $mv === '1' || $mv === 1 || $mv === 'true');
-        $nivelTexto = $nivelU >= 3 ? 'Super Admin' : ($nivelU >= 2 ? 'Administrador' : 'Usuario');
+        $puedeAppMovil = self::esAppMovil($r);
+        $nivelTexto = self::textoNivel($nivelU);
         $nivelClase = $nivelU >= 3 ? 'danger' : ($nivelU >= 2 ? 'info' : 'secondary');
 
         $html = '<tr class="usuario-row" role="button" tabindex="0"'
@@ -177,39 +344,41 @@ class UsuariosSistemaController extends Controller
             . ' data-telefono="' . htmlspecialchars($r['telefono'] ?? '') . '"'
             . ' data-nivel="' . $nivelU . '"'
             . ' data-estado="' . $estado . '"'
-            . ' data-empresas="' . count($empresas) . '"'
+            . ' data-empresas="' . $nEmpresas . '"'
             . ' data-puede-app-movil="' . ($puedeAppMovil ? '1' : '0') . '"'
             // El token NO se publica en el HTML: sirve para registrarse o para cambiar
             // la contraseña. El modal solo necesita saber si el registro está pendiente.
             . ' data-registrado="' . ($registrado ? '1' : '0') . '">';
-        $html .= '<td>' . htmlspecialchars($r['nombre'] ?? '') . '</td>';
-        $html .= '<td><code>' . htmlspecialchars($r['cedula'] ?? '') . '</code></td>';
-        $html .= '<td>' . htmlspecialchars($r['mail'] ?? '-') . '</td>';
-        $html .= '<td><span class="badge bg-' . $nivelClase . '">' . $nivelTexto . '</span></td>';
-        $telefono = trim((string) ($r['telefono'] ?? ''));
-        $html .= '<td>' . ($telefono !== '' ? htmlspecialchars($telefono) : '<span class="text-muted">-</span>') . '</td>';
-        $html .= '<td>';
+        // Cada celda lleva data-col: el usuario oculta columnas y fija anchos desde el
+        // dropdown de columnas (PreferenciasHelper), igual que en Proveedores.
+        $txt = static fn($v) => ($v === null || trim((string) $v) === '') ? '<span class="text-muted">-</span>' : htmlspecialchars((string) $v);
+        $html .= '<td class="ps-3 fw-medium text-truncate" style="max-width:300px" data-col="nombre">' . $txt($r['nombre'] ?? '') . '</td>';
+        $html .= '<td data-col="cedula"><code class="text-secondary">' . htmlspecialchars($r['cedula'] ?? '') . '</code></td>';
+        $html .= '<td class="text-truncate" style="max-width:260px" data-col="mail">' . $txt($r['mail'] ?? '') . '</td>';
+        $html .= '<td data-col="nivel"><span class="badge bg-' . $nivelClase . ' bg-opacity-10 text-' . $nivelClase . ' border border-' . $nivelClase . ' border-opacity-25">' . $nivelTexto . '</span></td>';
+        $html .= '<td data-col="telefono">' . $txt($r['telefono'] ?? '') . '</td>';
+        $html .= '<td class="text-nowrap" data-col="estado">';
         if (!$registrado) {
-            $html .= '<span class="badge bg-warning bg-opacity-10 text-warning border border-warning" title="El usuario aún no ha completado su registro">'
+            $html .= '<span class="badge bg-warning bg-opacity-10 text-warning border border-warning border-opacity-25" title="El usuario aún no ha completado su registro">'
                 . '<i class="bi bi-hourglass-split"></i> Pendiente registro</span>'
                 . '<button type="button" class="btn btn-sm btn-outline-primary py-0 px-1 ms-1"'
                 . ' title="Reenviar correo de invitación a ' . htmlspecialchars($r['mail'] ?? '') . '"'
                 . ' onclick="event.stopPropagation(); reenviarInvitacionUsuario(' . (int) ($r['id'] ?? 0) . ', this);">'
                 . '<i class="bi bi-send"></i></button>';
         } elseif ($estado) {
-            $html .= '<span class="badge bg-success">Activo</span>';
+            $html .= '<span class="badge bg-success bg-opacity-10 text-success border border-success border-opacity-25">Activo</span>';
         } else {
-            $html .= '<span class="badge bg-secondary">Inactivo</span>';
+            $html .= '<span class="badge bg-secondary bg-opacity-10 text-secondary border border-secondary border-opacity-25">Inactivo</span>';
         }
         $html .= '</td>';
-        $html .= '<td class="text-center">';
+        $html .= '<td class="text-center" data-col="puede_app_movil">';
         if ($puedeAppMovil) {
-            $html .= '<span class="badge bg-success bg-opacity-10 text-success border border-success" title="Puede iniciar sesión en la app móvil"><i class="bi bi-phone"></i> Sí</span>';
+            $html .= '<span class="badge bg-success bg-opacity-10 text-success border border-success border-opacity-25" title="Puede iniciar sesión en la app móvil"><i class="bi bi-phone"></i> Sí</span>';
         } else {
-            $html .= '<span class="badge bg-secondary bg-opacity-10 text-secondary border border-secondary">No</span>';
+            $html .= '<span class="badge bg-secondary bg-opacity-10 text-secondary border border-secondary border-opacity-25">No</span>';
         }
         $html .= '</td>';
-        $html .= '<td class="text-center"><span class="badge bg-light text-dark">' . count($empresas) . '</span></td>';
+        $html .= '<td class="text-center pe-3" data-col="empresas"><span class="badge bg-light text-dark border">' . $nEmpresas . '</span></td>';
         $html .= '</tr>';
 
         return $html;
