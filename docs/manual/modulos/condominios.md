@@ -6,7 +6,7 @@ ruta_modulo: modulos/condominios
 tipo: modulo
 visibilidad: todos
 etiquetas: condominio, condominios, edificio, conjunto, urbanizacion, expensas, alicuota, alicuotas, cuota de mantenimiento, propiedad horizontal, inmuebles, departamento, parqueadero, bodega, local, propietario, arrendatario, inquilino, condomino, fondo de reserva, intereses de mora, multas, areas comunes, administrador, cargar inmuebles excel
-version: 1.0
+version: 1.1
 orden: 0
 estado: activo
 ---
@@ -85,6 +85,11 @@ método, fondo, intereses, multas, descuentos) se documenta en **Configuración 
 | Método / Monto manual | No | Vacío = el del condominio. Con método manual el monto es obligatorio. |
 | Fondo de reserva propio | No | Valor propio del inmueble; vacío = regla del condominio. |
 | Estado | Sí | Inactivo = no emite. |
+
+**Cuota**: la columna *Cuota* del listado y la «cuota ordinaria estimada» de la ficha se calculan con
+el **valor que rige hoy** (Configuración de condominios → Valores que rigen): manual = su monto;
+por m² = tarifa × área; por % = monto a repartir × % (o reparto del resto si la base es un
+presupuesto). Sin valor vigente aparece «—».
 
 ## Buscar y filtrar el listado
 
@@ -185,6 +190,9 @@ los usuarios con permiso ven todos los inmuebles.
 
 ## Historial de cambios
 
+- **1.1** — La cuota del listado y de la ficha se calcula con el valor que rige (tarifa por m² o monto
+  a repartir de la configuración); sin campos de comprobante/serie/vencimiento propios (viven en la
+  suscripción); asociación con la suscripción desde Suscripciones.
 - **1.0** — Fase 1: inmuebles con historial de propietarios,
   restricción de áreas comunes, catálogo de multas, enlace de suscripciones, carga por Excel,
   listado con filtros, orden múltiple, PDF y Excel.

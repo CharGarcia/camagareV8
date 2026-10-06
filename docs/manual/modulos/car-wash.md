@@ -6,7 +6,7 @@ ruta_modulo: modulos/car-wash
 tipo: modulo
 visibilidad: todos
 etiquetas: car wash, lavado, lavadora de autos, lubricadora, cambio de aceite, mecanica, taller, orden de servicio, orden mecanica, orden de trabajo, vehiculo, placa, historial del vehiculo, historial del cliente, visitas, ultima visita, facturar orden, recibo de venta, refacturar, factura anulada, proxima cita, proximo chequeo, migracion, sistema anterior, numeracion por fecha, numero con el año, reiniciar numeracion, reinicio anual, reinicio mensual, correlativo por año, correlativo por mes, modo de numeracion, buscar orden, buscar placa, buscador, filtros, filtrar ordenes, filtro de fechas, buscar por servicio, chips, imprimir, impresora, aviso, avisos, ordenes en borrador, ordenes sin facturar, pendientes de facturar, barra superior
-version: 1.11
+version: 1.12
 orden: 10
 estado: activo
 ---
@@ -334,6 +334,10 @@ solo los suyos.
   primero ese documento en Facturas o Recibos de venta.
 - **"No se permite el ingreso de ítems libres"**: la empresa no admite servicios
   escritos a mano; use un servicio del catálogo (botón de la caja para crearlo).
+- **Varias órdenes en borrador muestran la placa de un vehículo recién creado**: era un
+  error de la pantalla corregido en la versión 1.12. Las órdenes afectadas se reparan
+  con el SQL indicado en el historial; desde entonces la placa, marca y modelo de la
+  orden salen siempre del vehículo elegido.
 - **No puedo editar una orden migrada del sistema anterior**: si estaba cerrada allá,
   llega como Facturado y queda bloqueada, igual que las facturadas aquí.
 
@@ -356,6 +360,13 @@ documentos admite cada periodo) está en el manual de **Empresa**, sección
 
 ## Historial de cambios
 
+- **1.12** — Corregido: tras **crear un vehículo** (botón *Vehículo* de la orden), las
+  órdenes en borrador que se abrían y guardaban después quedaban con la **placa, marca
+  y modelo de ese vehículo nuevo**, aunque conservaban su vehículo real. La pantalla
+  arrastraba los datos del último vehículo elegido o creado. Ahora la placa, marca y
+  modelo que se guardan en la orden se leen **siempre del vehículo seleccionado** y el
+  formulario se limpia al abrir cada orden. Las órdenes ya afectadas se reparan con el
+  SQL `database/20261006_carwash_placa_ordenes_borrador.sql`.
 - **1.11** — Nuevo aviso en la barra superior con las **órdenes en borrador**
   (sin factura ni recibo); al hacer clic abre el listado filtrado por ellas.
 - **1.10** — El listado de órdenes muestra la columna **Marca** junto a la placa;

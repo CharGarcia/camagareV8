@@ -519,6 +519,9 @@
         CW_BORR_ON = false;
         document.getElementById('formOrdenCW').reset();
         ['cw_id','cw_id_vehiculo','cw_id_cliente','cw_serie','cw_id_punto_emision','cw_id_establecimiento','cw_numero_orden'].forEach(id => document.getElementById(id).value = '');
+        // form.reset() no toca los data-* del buscador de vehículo: si quedaban los del último
+        // vehículo elegido/creado, el Guardar los mandaba como placa/marca/modelo de OTRA orden.
+        cwSetVehiculoDatos('', '', '');
         document.getElementById('cw_secuencial').value = '';
         document.getElementById('cw_secuencial').dataset.sec = '';
         const selSerie = document.getElementById('cw_select_serie');
@@ -622,6 +625,9 @@
             if (o.fecha_ingreso) document.getElementById('cw_fecha_ingreso').value = String(o.fecha_ingreso).replace(' ', 'T').slice(0, 16);
             document.getElementById('cw_id_vehiculo').value = o.id_vehiculo || '';
             document.getElementById('cw_vehiculo_busqueda').value = (o.placa || '') + (o.marca ? ' — ' + o.marca : '');
+            // Los data-* que lee el Guardar deben ser los de ESTA orden (antes quedaban los del
+            // último vehículo elegido o creado en otra orden).
+            cwSetVehiculoDatos(o.placa, o.marca, o.modelo);
             document.getElementById('cw_id_cliente').value = o.id_cliente || '';
             document.getElementById('cw_cliente_busqueda').value = o.id_cliente ? ((o.cliente_identificacion || '') + ' — ' + (o.cliente_nombre || '')) : '';
             cwPintarInfoCliente(o);
@@ -755,16 +761,20 @@
             dd.classList.remove('d-none');
         }, 300);
     };
+    // Copia de placa/marca/modelo que viaja al Guardar. Se fija al elegir un vehículo, al abrir
+    // una orden guardada (con lo de esa orden) y se limpia al resetear el formulario.
+    function cwSetVehiculoDatos(placa, marca, modelo) {
+        const inp = document.getElementById('cw_vehiculo_busqueda');
+        inp.dataset.placa = placa || '';
+        inp.dataset.marca = marca || '';
+        inp.dataset.modelo = modelo || '';
+    }
     function cwSeleccionarVehiculo(v) {
         cwBorradorCambio();
         document.getElementById('cw_id_vehiculo').value = v.id;
         document.getElementById('cw_vehiculo_busqueda').value = (v.placa || '') + (v.marca ? ' — ' + v.marca : '');
         document.getElementById('cw_veh_dropdown').classList.add('d-none');
-        // snapshot en dataset para el guardado
-        const inp = document.getElementById('cw_vehiculo_busqueda');
-        inp.dataset.placa = v.placa || '';
-        inp.dataset.marca = v.marca || '';
-        inp.dataset.modelo = v.modelo || '';
+        cwSetVehiculoDatos(v.placa, v.marca, v.modelo);
     }
 
     // ─── Cliente ──────────────────────────────────────────────────────────────
@@ -1901,8 +1911,15 @@
 
     // Autoseleccionar la entidad recién creada (best-effort según el payload del evento).
     window.addEventListener('vehiculoGuardado', (e) => {
+        // Solo si la orden está abierta: el vehículo creado desde el listado no debe quedar
+        // "pegado" en el formulario oculto y colarse en la siguiente orden que se abra.
+        if (!document.getElementById('modalOrdenCW').classList.contains('show')) return;
         const j = e.detail || {}; const v = j.data || j;
-        if (v && v.id) cwSeleccionarVehiculo({ id: v.id, placa: v.placa, marca: v.marca, modelo: v.modelo });
+        // El guardado del vehículo responde solo {ok, id}: la placa y la marca se toman del
+        // formulario del vehículo para mostrarlas en el buscador (el servidor las vuelve a
+        // leer del vehículo al guardar la orden).
+        const campo = id => ((document.getElementById(id) || {}).value || '').trim();
+        if (v && v.id) cwSeleccionarVehiculo({ id: v.id, placa: v.placa || campo('vehiculo_placa').toUpperCase(), marca: v.marca || campo('vehiculo_marca'), modelo: v.modelo || '' });
         else if (v && v.placa) { document.getElementById('cw_vehiculo_busqueda').value = v.placa; cwBuscarVehiculos(v.placa); }
     });
     document.addEventListener('clienteGuardado', (e) => {

@@ -403,6 +403,23 @@ class OrdenCarWashService
         return $this->esEditable($cab);
     }
 
+    /**
+     * Placa, marca y modelo que guarda la cabecera: copia del vehículo elegido (id_vehiculo),
+     * leída de la base. Antes se tomaban tal cual de la pantalla, y un dato viejo que el
+     * navegador arrastraba (el último vehículo creado) pisó la placa de varias órdenes en
+     * borrador al editarlas. Si el vehículo ya no existe (orden migrada cuyo vehículo se
+     * eliminó) se conserva lo enviado.
+     */
+    private function datosVehiculo(int $idVehiculo, int $idEmpresa, array $data): array
+    {
+        $v = $this->repository->getVehiculo($idVehiculo, $idEmpresa);
+        return [
+            'placa'  => $v ? ($v['placa'] ?? null)  : ($data['placa'] ?? null),
+            'marca'  => $v ? ($v['marca'] ?? null)  : ($data['marca'] ?? null),
+            'modelo' => $v ? ($v['modelo'] ?? null) : ($data['modelo'] ?? null),
+        ];
+    }
+
     // ─── Crear ────────────────────────────────────────────────────────────────
 
     public function crear(array $data): int
@@ -445,9 +462,7 @@ class OrdenCarWashService
                 'id_vehiculo'       => (int) $data['id_vehiculo'],
                 'id_cliente'        => empty($data['id_cliente']) ? null : (int) $data['id_cliente'],
                 'id_bodega'         => empty($data['id_bodega']) ? null : (int) $data['id_bodega'],
-                'placa'             => $data['placa'] ?? null,
-                'marca'             => $data['marca'] ?? null,
-                'modelo'            => $data['modelo'] ?? null,
+            ] + $this->datosVehiculo((int) $data['id_vehiculo'], $idEmpresa, $data) + [
                 'kilometraje'       => ($data['kilometraje'] ?? '') === '' ? null : (int) $data['kilometraje'],
                 'nivel_combustible' => $data['nivel_combustible'] ?? null,
                 'fecha_ingreso'     => $data['fecha_ingreso'],
@@ -528,9 +543,7 @@ class OrdenCarWashService
                 'id_vehiculo'       => (int) $data['id_vehiculo'],
                 'id_cliente'        => empty($data['id_cliente']) ? null : (int) $data['id_cliente'],
                 'id_bodega'         => empty($data['id_bodega']) ? null : (int) $data['id_bodega'],
-                'placa'             => $data['placa'] ?? null,
-                'marca'             => $data['marca'] ?? null,
-                'modelo'            => $data['modelo'] ?? null,
+            ] + $this->datosVehiculo((int) $data['id_vehiculo'], $idEmpresa, $data) + [
                 'kilometraje'       => ($data['kilometraje'] ?? '') === '' ? null : (int) $data['kilometraje'],
                 'nivel_combustible' => $data['nivel_combustible'] ?? null,
                 'fecha_ingreso'     => $data['fecha_ingreso'],

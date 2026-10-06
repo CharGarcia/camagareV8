@@ -113,6 +113,55 @@ class CondominiosConfigController extends BaseModuloController
         }
     }
 
+    // ── Valores que rigen (tarifa por m² / monto a repartir) ─────────────────
+
+    public function valoresAjax(): void
+    {
+        $this->requireLeer();
+        [$idEmpresa] = $this->sesion();
+        try {
+            $this->json(['ok' => true, 'valores' => $this->service->listarValores($idEmpresa), 'presupuestos' => $this->service->presupuestosParaValor($idEmpresa)]);
+        } catch (\Throwable $e) {
+            $this->error($e, __FUNCTION__);
+        }
+    }
+
+    /** Cuota de cada inmueble con el valor propuesto; nada se graba. */
+    public function valorPreviewAjax(): void
+    {
+        $this->requireLeer();
+        [$idEmpresa] = $this->sesion();
+        try {
+            $this->json(['ok' => true] + $this->service->previsualizarValor($_POST, $idEmpresa));
+        } catch (\Throwable $e) {
+            $this->error($e, __FUNCTION__);
+        }
+    }
+
+    public function guardarValorAjax(): void
+    {
+        $this->requireActualizar();
+        [$idEmpresa, $idUsuario] = $this->sesion();
+        try {
+            $id = $this->service->guardarValor($_POST, $idEmpresa, $idUsuario);
+            $this->json(['ok' => true, 'id' => $id, 'valores' => $this->service->listarValores($idEmpresa), 'mensaje' => 'Valor guardado. Rige desde el mes indicado; los recibos de ese mes en adelante salen con la cuota nueva.']);
+        } catch (\Throwable $e) {
+            $this->error($e, __FUNCTION__);
+        }
+    }
+
+    public function eliminarValorAjax(): void
+    {
+        $this->requireEliminar();
+        [$idEmpresa, $idUsuario] = $this->sesion();
+        try {
+            $this->service->eliminarValor((int) ($_POST['id'] ?? 0), $idEmpresa, $idUsuario);
+            $this->json(['ok' => true, 'valores' => $this->service->listarValores($idEmpresa), 'mensaje' => 'Valor eliminado.']);
+        } catch (\Throwable $e) {
+            $this->error($e, __FUNCTION__);
+        }
+    }
+
     /** Servicios activos de la empresa para los selectores de concepto (buscador tipo chip). */
     public function buscarServiciosAjax(): void
     {

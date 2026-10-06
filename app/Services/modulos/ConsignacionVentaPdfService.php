@@ -87,9 +87,11 @@ class ConsignacionVentaPdfService
         // Logo (opcional)
         $logoPath = $this->resolverLogo($empresa);
         $textoX   = $mL;
+        $yLogo    = $y0;
         if ($logoPath !== '') {
             $pdf->Image($logoPath, $mL, $y0, 24, 0, '', '', 'T', false, 300);
             $textoX = $mL + 27;
+            $yLogo  = (float)$pdf->getImageRBY();
         }
 
         // Datos de la empresa
@@ -108,9 +110,12 @@ class ConsignacionVentaPdfService
             $pdf->SetX($textoX);
             $pdf->MultiCell($mL + $izqW - $textoX, 4, $ln, 0, 'L', false, 1);
         }
+        $yIzq = $pdf->GetY();
 
-        // Caja del comprobante (derecha)
-        $boxH = 30;
+        // Caja del comprobante (derecha). Su alto es exactamente el del contenido
+        // (título 5 + "N.°" 4 + número 6 + estado 5, más 2 mm arriba y 1.5 abajo): antes
+        // medía 30 mm fijos y quedaba un hueco de 8 mm en blanco bajo "Estado".
+        $boxH = 2 + 5 + 4 + 6 + 5 + 1.5;
         $pdf->SetLineWidth(0.3);
         $pdf->SetDrawColor(60, 60, 60);
         $pdf->RoundedRect($derX, $y0, $derW, $boxH, 1.5, '1111', 'D');
@@ -132,7 +137,9 @@ class ConsignacionVentaPdfService
         $pdf->SetFont('helvetica', '', 8);
         $pdf->Cell($derW, 5, 'Estado: ' . ucfirst($estado), 0, 1, 'C');
 
-        return max($pdf->GetY(), $y0 + $boxH);
+        // El encabezado termina donde termine lo más bajo: la caja, los datos de la
+        // empresa (pueden ocupar más líneas) o el logo.
+        return max($pdf->GetY(), $y0 + $boxH, $yIzq, $yLogo);
     }
 
     private function dibujarDatosCliente(array $c, float $y): float

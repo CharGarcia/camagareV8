@@ -6,7 +6,7 @@ ruta_modulo: modulos/reporte_inventarios
 tipo: modulo
 visibilidad: todos
 etiquetas: reporte de inventario, comprobar con contabilidad, cuadrar con contabilidad, inventario vs contabilidad, kardex vs contabilidad, valor del inventario contable, cuenta de inventario, no cuadra con contabilidad, no descarga el excel, excel no descarga, excel en blanco, demasiados datos, excel muy grande, filtrar por año, no descarga el pdf, pdf en blanco, pdf muy grande, excel de la consignacion, numero de factura en el excel, numero de retorno en el excel, totales en el excel, existencias, stock por bodega, valorizacion, kardex, faltantes, exportar, auditoria, stock cacheado, corregir stock, consignaciones, stock por lote, por caducidad, que se vence, vencimientos, limpiar filtros, lento, tarda, se cuelga, tarda en abrir, tarda en entrar, busqueda lenta, se recarga la pagina, ordenar por columna, pierde el resultado, no puedo abrir otro modulo mientras carga, primeras 5000 filas, listado recortado, lote, nup, asesor, detalle de consignacion, totales del detalle, pdf del documento relacionado, permisos, pestañas, no veo la pestaña, no aparece consignaciones, no aparece existencias, acceso a inventario, permiso de inventario, permiso de consignaciones, pdf de la consignacion, estado de la consignacion, imprimir consignacion con saldo, consignacion completa, saldo en poder del cliente, no veo una bodega, bodegas asignadas, acceso a bodegas, solo mi bodega, falta una bodega, no aparece la bodega, codigo de producto en consignacion, codigo del producto en el detalle, codigo como primera columna, columna codigo, codigo de producto en el reporte, ordenar por codigo, lote mas consignacion, que lote tiene cada cliente, lote por cliente, consignacion por lote, con quien salio el lote, entregas por lote, se genera solo, se consulta solo, no muestra datos, boton mostrar, hay que pulsar mostrar, al elegir el producto se pone a cargar, al cambiar el anio se pone a cargar, no quiero que cargue solo, carga sola, consulta automatica, lotes en cero, lote agotado, no muestra lotes vacios, stock cero, lotes sin stock, filas en cero, por que no aparece el lote, lote desaparecio del reporte, boton mostrar bloqueado, no puedo pulsar mostrar, doble clic en mostrar, barra de progreso, porcentaje de avance, cuanto falta, se queda cargando, indicador de carga, stock negativo, por que esta en negativo, saldo negativo, negativo en existencias, seguimiento, trazabilidad del lote, de donde sale el negativo, lote sin entrada, lote duplicado, lote mal escrito, movimientos de otro ambiente, kardex de un lote, filtros no funcionan, no filtra, no coge los filtros, filtro de estado, filtro consignado, saldo a fecha, fecha de corte, saldo inicial, saldo anterior, saldo de arranque, saldo al inicio del mes, kardex empieza en cero, saldo empieza en cero, resumen de cuadre, cuadre de inventario, no cuadra, movimientos y existencias no coinciden, saldo distinto, reverso por cambio a borrador, retorno en borrador, reactivacion, entrada por reactivacion, correcciones, ocultar correcciones, movimientos que se anulan, el saldo no es el stock, filtro de lote en existencias, stock del lote
-version: 1.34
+version: 1.36
 orden: 40
 estado: activo
 ---
@@ -504,6 +504,26 @@ Compara, para cada producto y bodega, el stock **guardado**
 (`productos_bodegas.stock_actual`) contra el **real** (la suma en vivo del
 kardex). Solo se listan las combinaciones que difieren.
 
+**Con qué criterio se calcula el "real".** Con exactamente el mismo que usan
+los movimientos (ventas, compras, consignaciones, ajustes…) cuando recalculan
+el stock guardado: se suman solo los movimientos del **ambiente de la empresa**
+(`tipo_ambiente`) y el resultado se redondea a **dos decimales**. Ese mismo
+criterio lo aplican el botón **Corregir** y el recálculo que hace la ficha de
+producto al registrar un saldo inicial o un ajuste. Que los tres coincidan es lo
+que garantiza que, una vez corregida una fila, el siguiente movimiento no la
+vuelva a desigualar.
+
+Antes no era así: la Auditoría y Corregir sumaban **todo** el kardex, sin
+filtrar ambiente ni redondear. En una empresa con movimientos de otro ambiente
+—por ejemplo, históricos que entraron con el valor por defecto antes de que se
+guardara la columna— la pestaña marcaba una discrepancia que el recálculo nunca
+iba a incluir, Corregir la igualaba a esa suma y el siguiente movimiento la
+volvía a desigualar: la misma fila reaparecía cada vez. Los movimientos de otro
+ambiente **no son tema de la Auditoría**: se detectan y se marcan en el
+*seguimiento* de un stock negativo de la pestaña Existencias (aviso *N
+movimientos son de otro ambiente*) y se normalizan con el script
+`database/fix_inventario_kardex_tipo_ambiente.sql`.
+
 El botón **Corregir** de cada fila deja el stock guardado igual al real del
 kardex — es la única acción de escritura del módulo. Antes de corregir,
 confirme que el kardex de ese producto/bodega está completo; si el kardex
@@ -536,6 +556,23 @@ en todos los puntos donde se lee el stock antes de escribirlo (ventas,
 compras, consignaciones, retornos, cambios de producto y ajustes manuales).
 Los productos con discrepancias que ya existían antes de esta corrección
 siguen apareciendo aquí hasta que se corrigen manualmente.
+
+Otras causas, menos frecuentes:
+
+- **Migración desde el sistema anterior**: en las primeras versiones el kardex
+  migrado no actualizaba el stock guardado. Las empresas migradas antes de esa
+  corrección arrastran diferencias en todos sus productos con movimientos.
+- **Escrituras fuera del flujo estándar**: cualquier proceso que inserte o
+  anule movimientos del kardex sin pasar por el inventario del sistema deja la
+  copia guardada desfasada.
+
+**¿Si corrijo ahora, vuelve a descuadrar?** No, salvo que ocurra una de las
+causas anteriores. El bloqueo por producto/bodega evita la condición de carrera
+y, como la Auditoría, Corregir y el recálculo de los movimientos usan el mismo
+criterio, una fila corregida se mantiene igual mientras los movimientos entren
+por el sistema. Trabajar con saldos positivos (no permitir vender sin stock) es
+otra regla distinta: impide negativos, pero no tiene relación con que la copia
+guardada coincida con el kardex.
 
 ### Comprobar el inventario con la contabilidad
 
@@ -647,6 +684,17 @@ ahí.
 
 ## Historial de cambios
 
+- **1.36** — Pestaña Auditoría: el stock **real**, el botón **Corregir** y el
+  recálculo de la ficha de producto usan ahora **el mismo criterio** que los
+  movimientos al recalcular el stock guardado (solo el ambiente de la empresa,
+  dos decimales). Antes la Auditoría y Corregir sumaban todo el kardex sin
+  filtrar, con lo que una fila con movimientos de otro ambiente se marcaba,
+  se "corregía" y volvía a aparecer con el siguiente movimiento. Nueva
+  explicación *Con qué criterio se calcula el "real"* y respuesta a *¿Si
+  corrijo ahora, vuelve a descuadrar?*.
+- **1.35** — PDF **Estado de consignación** (detalle de una consignación con su
+  saldo): la caja del encabezado con el número y el estado se ajusta ahora a su
+  contenido. Antes dejaba casi un centímetro en blanco bajo *Estado: Emitida*.
 - **1.34** — Pestaña Auditoría: nuevo botón **Comprobar con Contabilidad**, que
   compara el valor del inventario según el kardex con las cuentas de inventario,
   documento por documento.

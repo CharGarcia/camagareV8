@@ -551,7 +551,10 @@
         document.getElementById('prod_codigo_auxiliar').value = data.codigo_auxiliar || '';
         document.getElementById('prod_codigo_barras').value = data.codigo_barras || '';
         document.getElementById('prod_tipo_produccion').value = data.tipo_produccion || '01';
-        document.getElementById('prod_status').value = data.status ?? 1;
+        // Igual que la columna Estado del listado: solo status = 1 es "Activo"; cualquier otro
+        // valor (0, NULL o el 2 que traen productos migrados) es "Inactivo". Si se asignara el
+        // valor crudo, un 2 no coincide con ninguna opción y el select quedaba en blanco.
+        document.getElementById('prod_status').value = (Number(data.status ?? 1) === 1) ? '1' : '0';
         document.getElementById('prod_id_categoria').value = data.id_categoria || '';
         document.getElementById('prod_id_marca').value = data.id_marca || '';
         document.getElementById('prod_ubicacion').value = data.ubicacion || '';

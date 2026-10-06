@@ -1020,19 +1020,27 @@ class ProductoRepository extends BaseRepository
         }
     }
     
-    /** Recalcula el stock_actual denormalizado para un producto/bodega desde el Kardex */
+    /**
+     * Recalcula el stock_actual denormalizado para un producto/bodega desde el Kardex.
+     *
+     * El valor sale de InventarioRepository::getStockActual() — el mismo cálculo con el que
+     * todos los movimientos recalculan la copia guardada (solo el tipo_ambiente de la
+     * empresa, 2 decimales) y con el que la pestaña Auditoría del Reporte de Inventarios la
+     * compara. Antes sumaba aquí todo el kardex sin filtrar: un criterio distinto que dejaba
+     * la copia desigualada frente al recálculo del siguiente movimiento.
+     */
     public function recalcularStockCache(int $idProducto, int $idBodega, int $idEmpresa): void
     {
-        $sql = "UPDATE productos_bodegas 
-                SET stock_actual = (
-                    SELECT COALESCE(SUM(cantidad), 0) 
-                    FROM inventario_kardex 
-                    WHERE id_producto = :p AND id_bodega = :b AND id_empresa = :e AND eliminado = false
-                ),
-                updated_at = CURRENT_TIMESTAMP
+        $inventario = new InventarioRepository();
+        $inventario->lockStock($idProducto, $idBodega, $idEmpresa);
+        $real = $inventario->getStockActual($idProducto, $idBodega, $idEmpresa);
+
+        $sql = "UPDATE productos_bodegas
+                SET stock_actual = :real,
+                    updated_at = CURRENT_TIMESTAMP
                 WHERE id_producto = :p AND id_bodega = :b AND id_empresa = :e";
         $st = $this->db->prepare($sql);
-        $st->execute([':p' => $idProducto, ':b' => $idBodega, ':e' => $idEmpresa]);
+        $st->execute([':real' => $real, ':p' => $idProducto, ':b' => $idBodega, ':e' => $idEmpresa]);
     }
 
     public function syncPrecios(int $idProducto, int $idEmpresa, array $precios, int $userId): void

@@ -275,7 +275,7 @@ class OrdenCarWashRepository extends BaseRepository
 
     public function buscarVehiculos(int $idEmpresa, string $q): array
     {
-        $sql = "SELECT id, placa, marca, chasis, anio, propietario, correo, telefono
+        $sql = "SELECT id, placa, marca, modelo, chasis, anio, propietario, correo, telefono
                 FROM vehiculos
                 WHERE id_empresa = :e AND eliminado = false AND estado = 'activo'
                   AND (placa ILIKE :q OR REPLACE(placa, '-', '') ILIKE :qp OR marca ILIKE :q OR propietario ILIKE :q)
@@ -285,6 +285,22 @@ class OrdenCarWashRepository extends BaseRepository
         // :qp — placa sin guion: "ABC1234" encuentra "ABC-1234" y viceversa.
         $st->execute([':e' => $idEmpresa, ':q' => '%' . $q . '%', ':qp' => '%' . str_replace('-', '', $q) . '%']);
         return $st->fetchAll(PDO::FETCH_ASSOC);
+    }
+
+    /**
+     * Placa, marca y modelo del vehículo de la empresa (vivo). La orden guarda esa copia
+     * en su cabecera, y debe salir SIEMPRE del vehículo elegido (id_vehiculo), nunca de lo
+     * que mande la pantalla: un dato viejo del navegador llegó a pisar la placa de varias
+     * órdenes en borrador con la del último vehículo creado.
+     */
+    public function getVehiculo(int $idVehiculo, int $idEmpresa): ?array
+    {
+        if ($idVehiculo <= 0) return null;
+        $st = $this->db->prepare("SELECT id, placa, marca, modelo FROM vehiculos
+                                  WHERE id = :id AND id_empresa = :e AND eliminado = false");
+        $st->execute([':id' => $idVehiculo, ':e' => $idEmpresa]);
+        $row = $st->fetch(PDO::FETCH_ASSOC);
+        return $row ?: null;
     }
 
     // ─── SECUENCIAL (mismas reglas que recibo de venta) ───────────────────────

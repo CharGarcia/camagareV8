@@ -159,7 +159,22 @@ $prodChip = function (string $id, string $label, string $campo, string $ayuda) u
                     <?= $prodChip('cfg_prod_fondo', 'Producto para el fondo de reserva', 'id_producto_fondo', 'Línea separada en el recibo; su cuenta contable la define el producto (normalmente un pasivo/patrimonio del condominio).') ?>
                 </div>
             </div>
-            <div class="small text-muted mt-3"><i class="bi bi-info-circle me-1"></i>Los valores que rigen (tarifa por m², monto a repartir) y los otros aportes con meta se administran desde Inmuebles, con fecha desde la que rigen.</div>
+
+            <!-- Valores que rigen: tarifa por m² (método m²) y monto a repartir (método %), con fecha desde la que rigen -->
+            <hr class="my-3">
+            <div class="d-flex align-items-center flex-wrap gap-2 mb-2">
+                <h6 class="fw-bold small mb-0"><i class="bi bi-calendar-check me-1 text-primary"></i>Valores que rigen</h6>
+                <span class="small text-muted">Tarifa por m² (método por m²) y monto mensual a repartir (método por %). Se agregan con fecha desde la que rigen; nunca se editan los anteriores.</span>
+                <?php if ($config && $puedeGuardar): ?>
+                    <button type="button" class="btn btn-outline-primary btn-sm ms-auto" onclick="CONDCFG.nuevoValor()"><i class="bi bi-plus-lg me-1"></i>Nuevo valor desde…</button>
+                <?php endif; ?>
+            </div>
+            <div class="border rounded-3 bg-white">
+                <table class="table table-sm table-hover mb-0 small">
+                    <thead class="table-light"><tr><th class="ps-2">Rige desde</th><th class="text-end">Tarifa m²</th><th class="text-end">Monto a repartir</th><th>Base</th><th>Acta</th><th>Observación</th><th>Registró</th><th class="pe-2"></th></tr></thead>
+                    <tbody id="valores-body"><tr><td colspan="8" class="text-center text-muted py-3">—</td></tr></tbody>
+                </table>
+            </div>
         </div>
 
         <!-- ══ Mora y multas ══ -->
@@ -320,6 +335,68 @@ $prodChip = function (string $id, string $label, string $campo, string $ayuda) u
     </div>
 </div>
 </form>
+
+<!-- ══ Modal: nuevo valor que rige (con vista previa de la cuota de cada inmueble) ══ -->
+<div class="modal fade condcfg" id="modalCondValor" tabindex="-1" data-bs-backdrop="static" style="z-index:1060">
+    <div class="modal-dialog modal-xl modal-dialog-centered">
+        <div class="modal-content shadow-lg border-0">
+            <div class="modal-header bg-light py-2">
+                <h5 class="modal-title fw-bold fs-6"><i class="bi bi-calendar-check text-primary me-2"></i>Nuevo valor que rige</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body p-3">
+                <div class="row g-2">
+                    <div class="col-md-2">
+                        <label for="val_vigente_desde">Rige desde (mes) *</label>
+                        <input type="month" class="form-control form-control-sm" id="val_vigente_desde">
+                    </div>
+                    <div class="col-md-2">
+                        <label for="val_tarifa_m2">Tarifa por m²</label>
+                        <input type="number" class="form-control form-control-sm text-end" id="val_tarifa_m2" step="0.0001" min="0" placeholder="0.0000">
+                        <div class="form-text">Para inmuebles por m².</div>
+                    </div>
+                    <div class="col-md-2">
+                        <label for="val_monto_a_repartir">Monto a repartir</label>
+                        <input type="number" class="form-control form-control-sm text-end" id="val_monto_a_repartir" step="0.01" min="0" placeholder="0.00">
+                        <div class="form-text">Mensual, para inmuebles por %.</div>
+                    </div>
+                    <div class="col-md-4">
+                        <label for="val_id_presupuesto">…o tomarlo de un presupuesto aprobado</label>
+                        <select class="form-select form-select-sm" id="val_id_presupuesto" onchange="CONDCFG.valorPresupuesto()">
+                            <option value="">— Monto manual —</option>
+                        </select>
+                        <div class="form-text">Costos y gastos presupuestados del mes desde el que rige (módulo Presupuestos).</div>
+                    </div>
+                    <div class="col-md-2">
+                        <label for="val_acta">Acta</label>
+                        <input type="text" class="form-control form-control-sm" id="val_acta" maxlength="120" placeholder="Asamblea N.º…">
+                    </div>
+                    <div class="col-md-10">
+                        <label for="val_observacion">Observación</label>
+                        <input type="text" class="form-control form-control-sm" id="val_observacion" maxlength="300">
+                    </div>
+                    <div class="col-md-2 d-flex align-items-end">
+                        <button type="button" class="btn btn-outline-primary btn-sm w-100" onclick="CONDCFG.valorPreview()"><i class="bi bi-eye me-1"></i>Vista previa</button>
+                    </div>
+                </div>
+                <div id="val-preview" class="d-none mt-3">
+                    <div class="row g-2 mb-2" id="val-kpis"></div>
+                    <div class="border rounded-3 bg-white" style="max-height: 45vh; overflow: auto;">
+                        <table class="table table-sm table-hover mb-0 small">
+                            <thead class="table-light"><tr><th class="ps-2">Inmueble</th><th>Propietario</th><th>Método</th><th class="text-end">m²</th><th class="text-end">%</th><th class="text-end">Cuota</th><th class="text-end">Fondo</th><th class="text-end pe-2">Total</th></tr></thead>
+                            <tbody id="val-body"></tbody>
+                        </table>
+                    </div>
+                    <div class="small text-muted mt-2" id="val-nota"></div>
+                </div>
+            </div>
+            <div class="modal-footer bg-light border-top p-2 d-flex justify-content-end gap-2">
+                <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal"><i class="fa-solid fa-xmark me-1"></i>Cancelar</button>
+                <button type="button" class="btn btn-primary btn-sm px-3 d-none" id="val-btn-guardar" onclick="CONDCFG.valorGuardar()"><i class="bi bi-check2-circle me-1"></i>Guardar valor</button>
+            </div>
+        </div>
+    </div>
+</div>
 
 <?= \App\Helpers\PreferenciasHelper::getJavascriptVariables($rutaModulo) ?>
 <script>

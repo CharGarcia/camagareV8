@@ -2093,12 +2093,21 @@ class ReporteInventarioRepository extends BaseRepository
      * lugar de una subconsulta al kardex por cada fila de productos_bodegas: con 10.000
      * pares producto×bodega eran 10.000 entradas al kardex (4,9 s medidos).
      *
+     * El "real" se calcula con EL MISMO criterio con el que los flujos que escriben stock
+     * recalculan la copia guardada (InventarioRepository::getStockActual(): solo los
+     * movimientos del tipo_ambiente de la empresa, redondeados a 2 decimales). Antes se
+     * sumaba todo el kardex sin filtrar ni redondear, y la pestaña marcaba como
+     * discrepancia movimientos de otro ambiente que el recálculo nunca iba a incluir —
+     * y "Corregir" los igualaba a esa suma, con lo que el siguiente movimiento volvía a
+     * desigualarlos. Movimientos de otro ambiente se diagnostican en el seguimiento de
+     * un negativo (getSeguimientoClave), no aquí.
+     *
      * @param int|null $limite tope de filas para pantalla; null = sin tope (exportaciones).
      */
     public function getAuditoriaStock(int $idEmpresa, array $filtros, ?int $limite = null): array
     {
         $where = "pb.id_empresa = :id_empresa AND pb.eliminado = false AND p.eliminado = false AND p.inventariable = true AND b.eliminado = false";
-        $params = [':id_empresa' => $idEmpresa];
+        $params = [':id_empresa' => $idEmpresa, ':tipo_ambiente' => $this->tipoAmbienteEmpresa($idEmpresa)];
 
         if (!empty($filtros['id_bodega'])) {
             $where .= " AND pb.id_bodega = :id_bodega";
@@ -2115,9 +2124,10 @@ class ReporteInventarioRepository extends BaseRepository
         }
 
         $sql = "WITH kardex_agg AS (
-                    SELECT id_producto, id_bodega, SUM(cantidad) AS real_kardex
+                    SELECT id_producto, id_bodega, ROUND(SUM(cantidad), 2) AS real_kardex
                     FROM inventario_kardex
                     WHERE id_empresa = :id_empresa AND eliminado = false
+                      AND tipo_ambiente = :tipo_ambiente
                     GROUP BY id_producto, id_bodega
                 )
                 SELECT * FROM (
@@ -2158,17 +2168,18 @@ class ReporteInventarioRepository extends BaseRepository
             // Mismo candado que usa el resto del sistema para leer-antes-de-escribir stock (ver
             // CLAUDE.md §8): evita corregir sobre un valor que un movimiento concurrente está
             // recalculando en este mismo instante.
-            (new InventarioRepository())->lockStock($idProducto, $idBodega, $idEmpresa);
+            $inventario = new InventarioRepository();
+            $inventario->lockStock($idProducto, $idBodega, $idEmpresa);
 
             $st = $this->db->prepare("SELECT stock_actual FROM productos_bodegas
                                        WHERE id_producto = :p AND id_bodega = :b AND id_empresa = :e AND eliminado = false");
             $st->execute([':p' => $idProducto, ':b' => $idBodega, ':e' => $idEmpresa]);
             $antes = (float) ($st->fetchColumn() ?: 0);
 
-            $stReal = $this->db->prepare("SELECT COALESCE(SUM(k.cantidad), 0) FROM inventario_kardex k
-                                           WHERE k.id_producto = :p AND k.id_bodega = :b AND k.id_empresa = :e AND k.eliminado = false");
-            $stReal->execute([':p' => $idProducto, ':b' => $idBodega, ':e' => $idEmpresa]);
-            $real = (float) $stReal->fetchColumn();
+            // El valor corregido sale del MISMO cálculo que usan los movimientos para
+            // recalcular la copia guardada (tipo_ambiente de la empresa, 2 decimales). Si aquí
+            // se sumara con otro criterio, el siguiente movimiento la volvería a desigualar.
+            $real = $inventario->getStockActual($idProducto, $idBodega, $idEmpresa);
 
             $stUpd = $this->db->prepare("UPDATE productos_bodegas
                                           SET stock_actual = :real, updated_by = :uid, updated_at = CURRENT_TIMESTAMP

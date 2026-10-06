@@ -129,14 +129,28 @@ class CondominioService
         }
         $res = $this->repo->getListado($idEmpresa, $buscar, $page, $perPage, $orden, $idUsuarioFiltro);
         $cfg = $this->repo->getConfig($idEmpresa);
+        // La cuota del listado se calcula con el valor que rige HOY y el reparto del resto (si
+        // aplica), igual que lo hará la emisión: una sola corrida sobre todos los inmuebles.
+        $cuotas = $cfg ? $this->cuotasConValorVigente($idEmpresa, $cfg) : [];
         foreach ($res['rows'] as &$r) {
             $r['tipo_label']   = CondominioRules::TIPOS_LABEL[$r['tipo']] ?? $r['tipo'];
             $r['metodo_label'] = CondominioRules::METODOS_LABEL[$r['metodo_efectivo'] ?? ''] ?? '—';
             $r['restringida']  = $this->esTrue($r['restringida'] ?? false);
-            $r['cuota_estimada'] = $cfg ? $this->cuotaOrdinaria($r, $cfg, null) : null;
+            $r['cuota_estimada'] = $cuotas[(int) $r['id']] ?? ($cfg ? $this->cuotaOrdinaria($r, $cfg, null) : null);
         }
         unset($r);
         return $res;
+    }
+
+    /** Cuota ordinaria por inmueble [id => cuota|null] con el valor vigente a hoy. */
+    private function cuotasConValorVigente(int $idEmpresa, array $cfg): array
+    {
+        $valor = $this->repo->getValorVigente($idEmpresa, date('Y-m-d'));
+        $out = [];
+        foreach ($this->calcularCuotas($this->repo->getUnidadesParaCuota($idEmpresa), $cfg, $valor)['filas'] as $f) {
+            $out[(int) $f['id']] = $f['cuota'];
+        }
+        return $out;
     }
 
     public function getUnidad(int $id, int $idEmpresa): array
@@ -146,6 +160,8 @@ class CondominioService
             throw new \DomainException('El inmueble no existe.');
         }
         $u['restringida'] = $this->esTrue($u['restringida'] ?? false);
+        $cfg = $this->repo->getConfig($idEmpresa);
+        $u['cuota_estimada'] = $cfg ? ($this->cuotasConValorVigente($idEmpresa, $cfg)[$id] ?? null) : null;
         $u['tipo_label']   = CondominioRules::TIPOS_LABEL[$u['tipo']] ?? $u['tipo'];
         return [
             'unidad'          => $u,
@@ -424,6 +440,202 @@ class CondominioService
             return round((float) $valores['tarifa_m2'] * (float) $u['area_m2'], 2);
         }
         return round((float) $valores['monto_a_repartir'] * (float) $u['alicuota_pct'] / 100, 2);
+    }
+
+    /**
+     * Cuota ordinaria de TODOS los inmuebles para un valor dado (vista previa y emisión).
+     * - manual: su monto; m²: tarifa × área; %: monto a repartir × %.
+     * - Si el monto a repartir viene de un PRESUPUESTO y la configuración dice «repartir el
+     *   resto», a los inmuebles por % se les reparte (monto − Σ manuales) normalizando su % sobre
+     *   la suma de % de los que van por %; los centavos sobrantes van al de mayor alícuota.
+     * Devuelve filas [id, codigo, nombre, metodo, base, cuota|null, fondo, total] + totales.
+     */
+    public function calcularCuotas(array $unidades, array $cfg, ?array $valor): array
+    {
+        $metodoCfg = (string) ($cfg['metodo_alicuota'] ?? 'porcentaje');
+        $tarifaM2  = $valor ? (float) $valor['tarifa_m2'] : null;
+        $monto     = $valor ? (float) $valor['monto_a_repartir'] : null;
+        $repartirResto = ($cfg['reparto_manuales'] ?? 'repartir_resto') === 'repartir_resto' && !empty($valor['id_presupuesto']);
+
+        $filas = [];
+        $sumManual = 0.0;
+        $sumPctPorPct = 0.0;
+        foreach ($unidades as $u) {
+            $m = $u['metodo_alicuota'] ?: $metodoCfg;
+            $filas[] = ['id' => (int) $u['id'], 'codigo' => $u['codigo'], 'nombre' => $u['nombre'], 'propietario' => $u['propietario_nombre'] ?? '',
+                        'metodo' => $m, 'area_m2' => (float) $u['area_m2'], 'alicuota_pct' => (float) $u['alicuota_pct'], 'monto_manual' => $u['monto_manual'],
+                        'fondo_propio' => $u['fondo_reserva_valor_propio'], 'cuota' => null, 'fondo' => 0.0];
+            if ($m === 'manual' && $u['monto_manual'] !== null) {
+                $sumManual += (float) $u['monto_manual'];
+            } elseif ($m === 'porcentaje') {
+                $sumPctPorPct += (float) $u['alicuota_pct'];
+            }
+        }
+        $montoEfectivo = $monto;
+        if ($monto !== null && $repartirResto) {
+            $montoEfectivo = max(0.0, $monto - $sumManual);
+        }
+        $idxMayor = null;
+        $sumPorPct = 0.0;
+        foreach ($filas as $i => &$f) {
+            if ($f['metodo'] === 'manual') {
+                $f['cuota'] = $f['monto_manual'] === null ? null : round((float) $f['monto_manual'], 2);
+            } elseif ($f['metodo'] === 'm2') {
+                $f['cuota'] = $tarifaM2 === null ? null : round($tarifaM2 * $f['area_m2'], 2);
+            } else {
+                if ($montoEfectivo === null) {
+                    $f['cuota'] = null;
+                } elseif ($repartirResto) {
+                    $f['cuota'] = $sumPctPorPct > 0 ? round($montoEfectivo * $f['alicuota_pct'] / $sumPctPorPct, 2) : 0.0;
+                } else {
+                    $f['cuota'] = round($montoEfectivo * $f['alicuota_pct'] / 100, 2);
+                }
+                if ($f['cuota'] !== null) {
+                    $sumPorPct += $f['cuota'];
+                    if ($idxMayor === null || $f['alicuota_pct'] > $filas[$idxMayor]['alicuota_pct']) {
+                        $idxMayor = $i;
+                    }
+                }
+            }
+        }
+        unset($f);
+        // Reparto del resto: los centavos de redondeo van al inmueble de mayor alícuota, así la
+        // suma de los que van por % cubre exactamente lo que falta del presupuesto.
+        if ($repartirResto && $idxMayor !== null && $montoEfectivo !== null) {
+            $dif = round($montoEfectivo - $sumPorPct, 2);
+            if (abs($dif) >= 0.01 && abs($dif) < 1) {
+                $filas[$idxMayor]['cuota'] = round($filas[$idxMayor]['cuota'] + $dif, 2);
+            }
+        }
+        // Fondo de reserva por inmueble (línea separada).
+        $tipoFondo = (string) ($cfg['fondo_reserva_tipo'] ?? 'no');
+        $valFondo  = (float) ($cfg['fondo_reserva_valor'] ?? 0);
+        $tot = ['cuotas' => 0.0, 'fondo' => 0.0, 'manuales' => $sumManual, 'inmuebles' => count($filas), 'sin_cuota' => 0];
+        foreach ($filas as &$f) {
+            if ($f['fondo_propio'] !== null && $f['fondo_propio'] !== '') {
+                $f['fondo'] = round((float) $f['fondo_propio'], 2);
+            } elseif ($tipoFondo === 'fijo') {
+                $f['fondo'] = round($valFondo, 2);
+            } elseif ($tipoFondo === 'porcentaje' && $f['cuota'] !== null) {
+                $f['fondo'] = round($f['cuota'] * $valFondo / 100, 2);
+            }
+            $f['total'] = $f['cuota'] === null ? null : round($f['cuota'] + $f['fondo'], 2);
+            if ($f['cuota'] === null) {
+                $tot['sin_cuota']++;
+            } else {
+                $tot['cuotas'] += $f['cuota'];
+                $tot['fondo']  += $f['fondo'];
+            }
+        }
+        unset($f);
+        $tot['cuotas'] = round($tot['cuotas'], 2);
+        $tot['fondo']  = round($tot['fondo'], 2);
+        $tot['total']  = round($tot['cuotas'] + $tot['fondo'], 2);
+        $tot['monto_a_repartir'] = $monto;
+        $tot['monto_efectivo']   = $montoEfectivo;
+        $tot['repartir_resto']   = $repartirResto;
+        $tot['diferencia']       = $monto === null ? null : round($tot['cuotas'] - $monto, 2);
+        return ['filas' => $filas, 'totales' => $tot];
+    }
+
+    // ── Valores que rigen ────────────────────────────────────────────────────
+
+    public function listarValores(int $idEmpresa): array
+    {
+        $hoy = date('Y-m-d');
+        $vig = $this->repo->getValorVigente($idEmpresa, $hoy);
+        $out = $this->repo->getValores($idEmpresa);
+        foreach ($out as &$v) {
+            $v['vigente'] = $vig && (int) $vig['id'] === (int) $v['id'];
+        }
+        unset($v);
+        return $out;
+    }
+
+    /** Normaliza lo que llega del formulario de «Nuevo valor desde…». */
+    private function normalizarValor(array $d, int $idEmpresa): array
+    {
+        $mes = trim((string) ($d['vigente_desde'] ?? ''));
+        if (preg_match('/^\d{4}-\d{2}$/', $mes)) {
+            $mes .= '-01';
+        }
+        $mes = CondominioRules::fecha($mes, 'inicio de vigencia', '#val_vigente_desde');
+        $mes = substr($mes, 0, 7) . '-01';
+        $tarifa = round((float) str_replace(',', '.', (string) ($d['tarifa_m2'] ?? 0)), 4);
+        $monto  = round((float) str_replace(',', '.', (string) ($d['monto_a_repartir'] ?? 0)), 2);
+        $idPres = (int) ($d['id_presupuesto'] ?? 0) ?: null;
+        $idVer  = null;
+        if ($idPres) {
+            $pres = null;
+            foreach ($this->repo->getPresupuestosAprobados($idEmpresa) as $p) {
+                if ((int) $p['id'] === $idPres) {
+                    $pres = $p;
+                }
+            }
+            if (!$pres) {
+                throw new \InvalidArgumentException('El presupuesto elegido no está aprobado o no existe.|#val_id_presupuesto');
+            }
+            $idVer = (int) $pres['id_version'];
+            // El monto mensual a repartir sale del presupuesto: gastos del mes desde el que rige.
+            $monto = round((float) ($pres['gastos_mes'][substr($mes, 0, 7)] ?? 0), 2);
+            if ($monto <= 0) {
+                throw new \InvalidArgumentException('El presupuesto no tiene costos ni gastos presupuestados en ' . substr($mes, 0, 7) . '.|#val_id_presupuesto');
+            }
+        }
+        if ($tarifa < 0 || $monto < 0) {
+            throw new \InvalidArgumentException('Los valores no pueden ser negativos.|#val_monto_a_repartir');
+        }
+        if ($tarifa == 0 && $monto == 0) {
+            throw new \InvalidArgumentException('Indique la tarifa por m², el monto a repartir, o elija un presupuesto.|#val_monto_a_repartir');
+        }
+        return ['vigente_desde' => $mes, 'tarifa_m2' => $tarifa, 'monto_a_repartir' => $monto, 'id_presupuesto' => $idPres, 'id_presupuesto_version' => $idVer,
+                'acta' => mb_substr(trim((string) ($d['acta'] ?? '')), 0, 120) ?: null, 'observacion' => trim((string) ($d['observacion'] ?? '')) ?: null];
+    }
+
+    /** Vista previa: cuota de cada inmueble con el valor propuesto (nada se graba). */
+    public function previsualizarValor(array $d, int $idEmpresa): array
+    {
+        $cfg = $this->exigirConfig($idEmpresa);
+        $v = $this->normalizarValor($d, $idEmpresa);
+        $calc = $this->calcularCuotas($this->repo->getUnidadesParaCuota($idEmpresa), $cfg, $v);
+        $vig  = $this->repo->getValorVigente($idEmpresa, date('Y-m-d'));
+        $calc['valor'] = $v;
+        $calc['anterior'] = $vig ? $this->calcularCuotas($this->repo->getUnidadesParaCuota($idEmpresa), $cfg, $vig)['totales'] : null;
+        return $calc;
+    }
+
+    public function guardarValor(array $d, int $idEmpresa, int $idUsuario): int
+    {
+        $this->exigirConfig($idEmpresa);
+        $v = $this->normalizarValor($d, $idEmpresa);
+        if ($this->repo->existeValorDesde($idEmpresa, $v['vigente_desde'])) {
+            throw new \InvalidArgumentException('Ya hay un valor que rige desde ese mes. Elimínelo o elija otro mes.|#val_vigente_desde');
+        }
+        $this->repo->beginTransaction();
+        try {
+            $id = $this->repo->insertValor($idEmpresa, $v, $idUsuario);
+            $this->log->registrar($idUsuario, $idEmpresa, 'Nuevo valor de alícuota que rige', 'condominios_alicuotas_valores', $id, null, $v);
+            $this->repo->commit();
+            return $id;
+        } catch (\Throwable $e) {
+            $this->repo->rollBack();
+            throw $e;
+        }
+    }
+
+    public function eliminarValor(int $id, int $idEmpresa, int $idUsuario): void
+    {
+        $v = $this->repo->getValor($id, $idEmpresa);
+        if (!$v) {
+            throw new \DomainException('El valor no existe.');
+        }
+        $this->repo->deleteValor($id, $idEmpresa, $idUsuario);
+        $this->log->registrar($idUsuario, $idEmpresa, 'Eliminar valor de alícuota que rige', 'condominios_alicuotas_valores', $id, $v, null);
+    }
+
+    public function presupuestosParaValor(int $idEmpresa): array
+    {
+        return $this->repo->getPresupuestosAprobados($idEmpresa);
     }
 
     // ── Apoyo ────────────────────────────────────────────────────────────────

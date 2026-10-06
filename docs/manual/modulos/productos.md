@@ -6,7 +6,7 @@ ruta_modulo: modulos/productos
 tipo: modulo
 visibilidad: todos
 etiquetas: productos, buscar producto, buscador, filtros, filtrar productos, productos bajo el minimo, reponer stock, buscar por variante, buscar por codigo de proveedor, kits, chips, ordenar por dos columnas, ordenar por categoria y descripcion, articulos, servicios, catalogo, precio, costo, iva, ice, stock, codigo de barras, inventariable, varios precios, lista de precios, mayorista, carga masiva, importar productos, precio editable, cambiar precio en la comanda, precio variable, envio a domicilio, delivery, servicio a domicilio, recargo por servicio, excluir propina, restaurante
-version: 1.9
+version: 1.11
 orden: 10
 estado: activo
 ---
@@ -240,6 +240,16 @@ aparecer al facturar.
 
 ## Historial de cambios
 
+- **1.11** — Al abrir la ficha de un producto **inactivo** migrado del sistema
+  anterior, el selector **Estado** quedaba en blanco (el dato venía con un valor
+  distinto de 0 y 1). Ahora la ficha lo muestra como **Inactivo**, igual que la
+  columna del listado; al guardar se normaliza a Inactivo.
+- **1.10** — El stock guardado que la ficha recalcula al registrar un **saldo
+  inicial** o un **ajuste de inventario** usa ahora el mismo criterio que el
+  resto de movimientos del sistema (solo el ambiente de la empresa, dos
+  decimales), igual que la pestaña Auditoría del Reporte de Inventarios. Antes
+  sumaba todo el kardex sin filtrar y podía dejar el stock desigualado frente a
+  esa pestaña.
 - **1.9** — En la ventana de filtros, la pestaña *Detalles* se llama ahora
   **Búsqueda por detalle**, y la ventana ya no tiene barra de desplazamiento
   vertical propia: se muestra completa.

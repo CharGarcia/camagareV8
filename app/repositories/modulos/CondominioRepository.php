@@ -362,6 +362,123 @@ class CondominioRepository extends BaseRepository
                     ':pag' => $pagador, ':desde' => $desde, ':obs' => $observacion, ':u' => $idUsuario]);
     }
 
+    // ── Valores que rigen (tarifa por m² / monto a repartir) ─────────────────
+
+    /** Historial de valores, del más reciente al más antiguo. */
+    public function getValores(int $idEmpresa): array
+    {
+        if (!$this->tablaExiste('condominios_alicuotas_valores')) {
+            return [];
+        }
+        $st = $this->db->prepare(
+            "SELECT v.*, p.nombre AS presupuesto_nombre, pv.nombre AS version_nombre, us.nombre AS usuario_nombre
+               FROM condominios_alicuotas_valores v
+               LEFT JOIN presupuestos p ON p.id = v.id_presupuesto
+               LEFT JOIN presupuestos_versiones pv ON pv.id = v.id_presupuesto_version
+               LEFT JOIN usuarios us ON us.id = v.created_by
+              WHERE v.id_empresa = :e AND v.eliminado = false
+              ORDER BY v.vigente_desde DESC, v.id DESC"
+        );
+        $st->execute([':e' => $idEmpresa]);
+        return $st->fetchAll(PDO::FETCH_ASSOC);
+    }
+
+    /** La fila que rige en una fecha: la última con vigente_desde <= fecha. */
+    public function getValorVigente(int $idEmpresa, string $fecha): ?array
+    {
+        if (!$this->tablaExiste('condominios_alicuotas_valores')) {
+            return null;
+        }
+        $st = $this->db->prepare(
+            "SELECT * FROM condominios_alicuotas_valores
+              WHERE id_empresa = :e AND eliminado = false AND vigente_desde <= :f
+              ORDER BY vigente_desde DESC, id DESC LIMIT 1"
+        );
+        $st->execute([':e' => $idEmpresa, ':f' => $fecha]);
+        return $st->fetch(PDO::FETCH_ASSOC) ?: null;
+    }
+
+    public function getValor(int $id, int $idEmpresa): ?array
+    {
+        $st = $this->db->prepare("SELECT * FROM condominios_alicuotas_valores WHERE id = :id AND id_empresa = :e AND eliminado = false");
+        $st->execute([':id' => $id, ':e' => $idEmpresa]);
+        return $st->fetch(PDO::FETCH_ASSOC) ?: null;
+    }
+
+    public function existeValorDesde(int $idEmpresa, string $vigenteDesde): bool
+    {
+        $st = $this->db->prepare("SELECT 1 FROM condominios_alicuotas_valores WHERE id_empresa = :e AND eliminado = false AND vigente_desde = :f LIMIT 1");
+        $st->execute([':e' => $idEmpresa, ':f' => $vigenteDesde]);
+        return (bool) $st->fetchColumn();
+    }
+
+    public function insertValor(int $idEmpresa, array $d, int $idUsuario): int
+    {
+        $st = $this->db->prepare(
+            "INSERT INTO condominios_alicuotas_valores
+                    (id_empresa, vigente_desde, tarifa_m2, monto_a_repartir, id_presupuesto, id_presupuesto_version, acta, observacion, created_by, created_at)
+             VALUES (:e, :f, :t, :m, :p, :pv, :a, :o, :u, CURRENT_TIMESTAMP) RETURNING id"
+        );
+        $st->execute([':e' => $idEmpresa, ':f' => $d['vigente_desde'], ':t' => $d['tarifa_m2'], ':m' => $d['monto_a_repartir'],
+                      ':p' => $d['id_presupuesto'], ':pv' => $d['id_presupuesto_version'], ':a' => $d['acta'], ':o' => $d['observacion'], ':u' => $idUsuario]);
+        return (int) $st->fetchColumn();
+    }
+
+    public function deleteValor(int $id, int $idEmpresa, int $idUsuario): void
+    {
+        $this->db->prepare(
+            "UPDATE condominios_alicuotas_valores SET eliminado = true, deleted_at = CURRENT_TIMESTAMP, deleted_by = :u
+              WHERE id = :id AND id_empresa = :e AND eliminado = false"
+        )->execute([':u' => $idUsuario, ':id' => $id, ':e' => $idEmpresa]);
+    }
+
+    /** Inmuebles activos con lo necesario para calcular su cuota (vista previa de un valor). */
+    public function getUnidadesParaCuota(int $idEmpresa): array
+    {
+        $st = $this->db->prepare(
+            "SELECT u.id, u.codigo, u.nombre, u.tipo, u.torre_bloque, u.area_m2, u.alicuota_pct, u.metodo_alicuota, u.monto_manual,
+                    u.fondo_reserva_valor_propio, cp.nombre AS propietario_nombre
+               FROM {$this->table} u LEFT JOIN clientes cp ON cp.id = u.id_propietario
+              WHERE u.id_empresa = :e AND u.eliminado = false AND u.estado = 'activo'
+              ORDER BY u.torre_bloque, u.codigo"
+        );
+        $st->execute([':e' => $idEmpresa]);
+        return $st->fetchAll(PDO::FETCH_ASSOC);
+    }
+
+    /**
+     * Presupuestos aprobados de la empresa (módulo Presupuestos) con su versión vigente y el
+     * total mensual de costos y gastos (cuentas 5 y 6) de cada mes: base del método por %.
+     * Vacío si Presupuestos no está instalado.
+     */
+    public function getPresupuestosAprobados(int $idEmpresa): array
+    {
+        if (!$this->tablaExiste('presupuestos') || !$this->tablaExiste('presupuestos_versiones')) {
+            return [];
+        }
+        $st = $this->db->prepare(
+            "SELECT p.id, p.nombre, p.periodo_desde, p.periodo_hasta, p.base_alicuotas, pv.id AS id_version, pv.nombre AS version_nombre,
+                    COALESCE((SELECT json_object_agg(to_char(val.periodo, 'YYYY-MM'), val.total)
+                              FROM (SELECT v.periodo, SUM(v.monto) AS total
+                                      FROM presupuestos_valores v
+                                      JOIN presupuestos_lineas l ON l.id = v.id_linea AND l.eliminado = false
+                                      JOIN plan_cuentas pc ON pc.id = l.id_cuenta
+                                     WHERE l.id_version = pv.id AND (pc.codigo LIKE '5%' OR pc.codigo LIKE '6%')
+                                     GROUP BY v.periodo) val), '{}'::json) AS gastos_mes
+               FROM presupuestos p
+               JOIN presupuestos_versiones pv ON pv.id_presupuesto = p.id AND pv.eliminado = false AND pv.estado = 'aprobada'
+              WHERE p.id_empresa = :e AND p.eliminado = false AND p.estado IN ('aprobado', 'cerrado')
+              ORDER BY p.base_alicuotas DESC, p.periodo_desde DESC, p.id DESC"
+        );
+        $st->execute([':e' => $idEmpresa]);
+        $rows = $st->fetchAll(PDO::FETCH_ASSOC);
+        foreach ($rows as &$r) {
+            $r['gastos_mes'] = json_decode((string) $r['gastos_mes'], true) ?: [];
+        }
+        unset($r);
+        return $rows;
+    }
+
     // ── Restricción de áreas comunes ─────────────────────────────────────────
 
     public function setRestriccion(int $idUnidad, int $idEmpresa, bool $restringida, ?string $desde, ?string $motivo, int $idUsuario, bool $automatico = false): void

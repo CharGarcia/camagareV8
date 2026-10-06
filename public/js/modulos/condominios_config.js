@@ -143,7 +143,91 @@ window.CONDCFG = (function () {
         pintarMultas(res.multas);
     }
 
+    // ── Valores que rigen ──
+    const V = { presupuestos: [], previewOk: false };
+    const fechaMes = iso => { const m = /^(\d{4})-(\d{2})/.exec(iso || ''); if (!m) return iso || ''; const M = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic']; return `${M[+m[2] - 1]}-${m[1]}`; };
+    const num = (n, d) => (parseFloat(n) || 0).toLocaleString('en-US', { minimumFractionDigits: d, maximumFractionDigits: d });
+    const modalV = () => bootstrap.Modal.getOrCreateInstance($('modalCondValor'));
+
+    async function cargarValores() {
+        if (!$('valores-body')) return;
+        const res = await pedir(`${CFG.url}/valoresAjax`);
+        if (!res.ok) { $('valores-body').innerHTML = `<tr><td colspan="8" class="text-danger text-center py-3">${esc(res.mensaje)}</td></tr>`; return; }
+        V.presupuestos = res.presupuestos || [];
+        pintarValores(res.valores || []);
+    }
+    function pintarValores(valores) {
+        $('valores-body').innerHTML = valores.length ? valores.map(v => `<tr class="${v.vigente ? 'table-success' : ''}">
+            <td class="ps-2 fw-medium">${fechaMes(v.vigente_desde)}${v.vigente ? ' <span class="badge bg-success bg-opacity-10 text-success border border-success border-opacity-25">vigente</span>' : ''}</td>
+            <td class="text-end">${+v.tarifa_m2 ? num(v.tarifa_m2, 4) : '<span class="text-muted">—</span>'}</td>
+            <td class="text-end">${+v.monto_a_repartir ? money(v.monto_a_repartir) : '<span class="text-muted">—</span>'}</td>
+            <td>${v.id_presupuesto ? `<i class="bi bi-calculator me-1"></i>${esc(v.presupuesto_nombre || 'Presupuesto')} · ${esc(v.version_nombre || '')}` : '<span class="text-muted">Manual</span>'}</td>
+            <td>${esc(v.acta || '')}</td><td class="text-muted">${esc(v.observacion || '')}</td><td class="text-muted">${esc(v.usuario_nombre || '')}</td>
+            <td class="text-end pe-2">${CFG.perm.eliminar ? `<button type="button" class="btn btn-link btn-sm p-0 text-danger" title="Eliminar" onclick="CONDCFG.valorEliminar(${v.id})"><i class="bi bi-trash3"></i></button>` : ''}</td></tr>`).join('')
+            : '<tr><td colspan="8" class="text-center text-muted py-3">Aún no hay valores. Sin un valor vigente, los inmuebles por % y por m² no tienen cuota (los manuales sí).</td></tr>';
+    }
+    function nuevoValor() {
+        ['val_tarifa_m2', 'val_monto_a_repartir', 'val_acta', 'val_observacion'].forEach(id => { $(id).value = ''; });
+        const d = new Date(); d.setMonth(d.getMonth() + 1);
+        $('val_vigente_desde').value = d.toISOString().slice(0, 7);
+        $('val_id_presupuesto').innerHTML = '<option value="">— Monto manual —</option>' + V.presupuestos.map(p => `<option value="${p.id}">${esc(p.nombre)} · ${esc(p.version_nombre)}${(p.base_alicuotas === true || p.base_alicuotas === 't') ? ' ★' : ''}</option>`).join('');
+        $('val-preview').classList.add('d-none'); $('val-btn-guardar').classList.add('d-none'); V.previewOk = false;
+        $('val_monto_a_repartir').disabled = false;
+        modalV().show();
+    }
+    function valorPresupuesto() {
+        const id = $('val_id_presupuesto').value;
+        const p = V.presupuestos.find(x => String(x.id) === id);
+        $('val_monto_a_repartir').disabled = !!p;
+        if (p) {
+            const ym = $('val_vigente_desde').value;
+            $('val_monto_a_repartir').value = p.gastos_mes && p.gastos_mes[ym] !== undefined ? (+p.gastos_mes[ym]).toFixed(2) : '';
+        }
+        $('val-preview').classList.add('d-none'); $('val-btn-guardar').classList.add('d-none'); V.previewOk = false;
+    }
+    function datosValor() {
+        return { vigente_desde: $('val_vigente_desde').value, tarifa_m2: $('val_tarifa_m2').value, monto_a_repartir: $('val_monto_a_repartir').value,
+                 id_presupuesto: $('val_id_presupuesto').value, acta: $('val_acta').value, observacion: $('val_observacion').value };
+    }
+    async function valorPreview() {
+        const res = await post('valorPreviewAjax', datosValor());
+        if (!res.ok) return errorForm(res.mensaje);
+        const t = res.totales, ant = res.anterior;
+        const kpi = (lbl, val, sub) => `<div class="col-6 col-md-3"><div class="border rounded-3 p-2 bg-light"><div class="text-muted" style="font-size:.7rem">${lbl}</div><div class="fw-bold">${val}</div>${sub ? `<div class="text-muted" style="font-size:.7rem">${sub}</div>` : ''}</div></div>`;
+        $('val-kpis').innerHTML = kpi('Inmuebles', `${t.inmuebles}${t.sin_cuota ? ` <span class="text-danger">(${t.sin_cuota} sin cuota)</span>` : ''}`)
+            + kpi('Σ cuotas ordinarias', money(t.cuotas), ant ? `antes ${money(ant.cuotas)}` : '')
+            + kpi('Σ fondo de reserva', money(t.fondo), ant ? `antes ${money(ant.fondo)}` : '')
+            + kpi(t.monto_a_repartir ? 'Frente al monto a repartir' : 'Σ total a cobrar', t.monto_a_repartir ? (t.diferencia === 0 ? '<span class="text-success">Cuadra</span>' : `<span class="${t.diferencia > 0 ? 'text-success' : 'text-danger'}">${t.diferencia > 0 ? '+' : ''}${money(t.diferencia)}</span>`) : money(t.total),
+                  t.repartir_resto ? `Resto repartido: ${money(t.monto_efectivo)} (manuales ${money(t.manuales)})` : (t.monto_a_repartir ? `Σ cuotas ${money(t.cuotas)} vs ${money(t.monto_a_repartir)}` : ''));
+        $('val-body').innerHTML = res.filas.map(f => `<tr class="${f.cuota === null ? 'table-warning' : ''}">
+            <td class="ps-2"><code>${esc(f.codigo)}</code> ${esc(f.nombre)}</td><td class="text-truncate" style="max-width:200px">${esc(f.propietario)}</td>
+            <td>${esc(({ porcentaje: 'Por %', m2: 'Por m²', manual: 'Manual' })[f.metodo] || f.metodo)}</td>
+            <td class="text-end">${num(f.area_m2, 2)}</td><td class="text-end">${num(f.alicuota_pct, 4)}</td>
+            <td class="text-end">${f.cuota === null ? '<span class="text-danger" title="Sin valor para su método">—</span>' : money(f.cuota)}</td>
+            <td class="text-end">${f.fondo ? money(f.fondo) : '<span class="text-muted">—</span>'}</td><td class="text-end pe-2 fw-medium">${f.total === null ? '—' : money(f.total)}</td></tr>`).join('');
+        $('val-nota').textContent = t.sin_cuota ? 'Las filas en amarillo no tienen cuota con este valor: su método necesita la tarifa por m² o el monto a repartir.' : '';
+        $('val-preview').classList.remove('d-none'); $('val-btn-guardar').classList.remove('d-none'); V.previewOk = true;
+    }
+    async function valorGuardar() {
+        if (!V.previewOk) return aviso('info', 'Vea la vista previa', 'Revise primero la cuota de cada inmueble.');
+        const c = await Swal.fire({ icon: 'question', title: '¿Guardar este valor?', text: `Regirá desde ${fechaMes($('val_vigente_desde').value)}. Los recibos de ese mes en adelante saldrán con la cuota nueva.`, showCancelButton: true, confirmButtonText: 'Sí, guardar', cancelButtonText: 'Cancelar' });
+        if (!c.isConfirmed) return;
+        const res = await post('guardarValorAjax', datosValor());
+        if (!res.ok) return errorForm(res.mensaje);
+        modalV().hide(); pintarValores(res.valores || []);
+        aviso('success', 'Listo', res.mensaje);
+    }
+    async function valorEliminar(id) {
+        const c = await Swal.fire({ icon: 'warning', title: '¿Eliminar este valor?', text: 'Volverá a regir el valor anterior para ese período.', showCancelButton: true, confirmButtonText: 'Sí, eliminar', cancelButtonText: 'Cancelar' });
+        if (!c.isConfirmed) return;
+        const res = await post('eliminarValorAjax', { id });
+        if (!res.ok) return aviso('error', 'No se pudo', res.mensaje);
+        pintarValores(res.valores || []);
+    }
+
     document.addEventListener('DOMContentLoaded', () => {
+        if (CFG.config) cargarValores();
+        $('val_vigente_desde')?.addEventListener('change', valorPresupuesto);
         $('formCondConfig').addEventListener('submit', guardar);
         chip('cfg_prod_ordinaria_txt', 'cfg_prod_ordinaria', 'cfg_prod_ordinaria_dd', buscarServicios, lblServicio);
         chip('cfg_prod_fondo_txt', 'cfg_prod_fondo', 'cfg_prod_fondo_dd', buscarServicios, lblServicio);
@@ -155,5 +239,6 @@ window.CONDCFG = (function () {
         if (typeof window.aplicarFavoritosModal === 'function' && !CFG.config) window.aplicarFavoritosModal('#formCondConfig');
     });
 
-    return { onFondo, onIntereses, multaLimpiar, multaEditar, multaGuardar, multaEliminar };
+    return { onFondo, onIntereses, multaLimpiar, multaEditar, multaGuardar, multaEliminar,
+             nuevoValor, valorPresupuesto, valorPreview, valorGuardar, valorEliminar };
 })();
