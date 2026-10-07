@@ -306,6 +306,20 @@ function CMG_poblarModal(d) {
 
 
     
+    // Totales DECLARADOS de la cabecera (los que trajo el XML del SRI o los que se guardaron).
+    // Mientras el detalle no se edite, el modal muestra estos valores tal cual, en vez de
+    // recalcularlos desde las líneas: la suma de líneas puede diferir por centavos del total que
+    // declaró el emisor (redondeos del proveedor) y lo que se ve debe ser lo que está guardado.
+    const modalTot = document.getElementById('modalCompra');
+    if (modalTot) {
+        modalTot.dataset.detalleEditado = '';
+        modalTot.dataset.cabTotales = d.id ? JSON.stringify({
+            sub:   parseFloat(d.total_sin_impuestos || 0) || 0,
+            desc:  parseFloat(d.total_descuento || 0) || 0,
+            total: parseFloat(d.importe_total || 0) || 0
+        }) : '';
+    }
+
     // Detalles
     document.getElementById('tbodyDetalle').innerHTML = '';
     (d.detalles || []).forEach(det => CMG_agregarFilaDetalle(det));
@@ -802,7 +816,11 @@ function CMG_resetModal() {
     // Sin esto, el bloque de valores de terceros de la compra anterior se arrastraria
     // a la siguiente que se abra en el mismo modal.
     const modalLimpio = document.getElementById('modalCompra');
-    if (modalLimpio) modalLimpio.dataset.totalTerceros = '0.00';
+    if (modalLimpio) {
+        modalLimpio.dataset.totalTerceros  = '0.00';
+        modalLimpio.dataset.cabTotales     = '';
+        modalLimpio.dataset.detalleEditado = '';
+    }
     if (document.getElementById('mcBloqueTerceros')) document.getElementById('mcBloqueTerceros').classList.add('d-none');
 
     // Compra nueva = tipo_registro 'fisica' por defecto (ver arriba); su forma de
@@ -1659,6 +1677,14 @@ function CMG_agregarFilaDetalle(det) {
     // "declarado" que respetar y se recalcula en vivo (ver los oninput/onchange de abajo).
     const esLineaExistente = !!det.id && det.precio_total_sin_impuesto !== undefined && det.precio_total_sin_impuesto !== null;
 
+    // IVA DECLARADO de la línea (compras_detalle_impuestos.valor, el del XML del SRI). Mientras
+    // la línea no se edite se usa tal cual, igual que el subtotal: recalcular neto × tarifa en el
+    // navegador puede dar un centavo distinto al que declaró el proveedor, y la compra debe
+    // mostrar y guardar lo que trae el comprobante.
+    const impIvaDet = (det.impuestos || []).find(i => String(i.codigo_impuesto) === '2');
+    const ivaOriginal = (esLineaExistente && impIvaDet && impIvaDet.valor !== undefined && impIvaDet.valor !== null && impIvaDet.valor !== '')
+        ? String(impIvaDet.valor) : '';
+
     const tr = document.createElement('tr');
     tr.className = 'row-detalle';
     tr.dataset.idx = idx;
@@ -1666,6 +1692,10 @@ function CMG_agregarFilaDetalle(det) {
     tr.dataset.productoCodigo = det.producto_codigo || '';
     tr.dataset.descripcionOriginal = det.descripcion || '';
     tr.dataset.subtotalOriginal = esLineaExistente ? String(det.precio_total_sin_impuesto) : '';
+    tr.dataset.ivaOriginal = ivaOriginal;
+    // Una línea nueva (agregada a mano o restaurada del autoguardado) ya es una edición del
+    // detalle: los totales declarados de la cabecera dejan de aplicar.
+    if (!esLineaExistente) mcMarcarDetalleEditado();
     tr.innerHTML = `
         <td class="ps-3"><input type="text" class="form-control form-control-sm input-detalle mc-det-codigo" readonly tabindex="-1"></td>
         <td>
@@ -1679,13 +1709,13 @@ function CMG_agregarFilaDetalle(det) {
             <input type="hidden" class="input-ice-cod" value="${_esc(String(iceCod))}">
             <input type="hidden" class="input-ice-pct" value="${icePct}">
         </td>
-        <td><input type="number" class="form-control form-control-sm input-detalle text-center input-cantidad" value="${det.cantidad != null ? _fmtExacto(det.cantidad) : '1'}" min="0.0001" step="any" oninput="this.closest('tr').dataset.subtotalOriginal='';CMG_recalcularFila(this)"></td>
-        <td><input type="number" class="form-control form-control-sm input-detalle text-end input-precio" value="${det.precio_unitario != null ? _fmtExacto(det.precio_unitario) : '0'}" min="0" step="any" oninput="this.closest('tr').dataset.subtotalOriginal='';CMG_recalcularFila(this)"></td>
-        <td><input type="number" class="form-control form-control-sm input-detalle text-end text-danger input-desc" value="${parseFloat(det.descuento||0).toFixed(2)}" min="0" step="any" oninput="this.closest('tr').dataset.subtotalOriginal='';CMG_recalcularFila(this)"></td>
-        <td class="text-center"><select class="form-select form-select-sm input-detalle input-iva" onchange="CMG_recalcularFila(this)">${opcIva}</select></td>
+        <td><input type="number" class="form-control form-control-sm input-detalle text-center input-cantidad" value="${det.cantidad != null ? _fmtExacto(det.cantidad) : '1'}" min="0.0001" step="any" oninput="mcMarcarFilaEditada(this);CMG_recalcularFila(this)"></td>
+        <td><input type="number" class="form-control form-control-sm input-detalle text-end input-precio" value="${det.precio_unitario != null ? _fmtExacto(det.precio_unitario) : '0'}" min="0" step="any" oninput="mcMarcarFilaEditada(this);CMG_recalcularFila(this)"></td>
+        <td><input type="number" class="form-control form-control-sm input-detalle text-end text-danger input-desc" value="${parseFloat(det.descuento||0).toFixed(2)}" min="0" step="any" oninput="mcMarcarFilaEditada(this);CMG_recalcularFila(this)"></td>
+        <td class="text-center"><select class="form-select form-select-sm input-detalle input-iva" onchange="mcMarcarIvaEditado(this);CMG_recalcularFila(this)">${opcIva}</select></td>
         <td class="text-end pe-4 align-middle fw-semibold"><span class="subtotal-line">0.00</span></td>
         <td class="text-center p-0 align-middle">
-            <button type="button" class="btn btn-sm btn-link text-danger p-0 shadow-none border-0" onclick="this.closest('tr').remove();CMG_recalcularTotales()">
+            <button type="button" class="btn btn-sm btn-link text-danger p-0 shadow-none border-0" onclick="mcMarcarDetalleEditado();this.closest('tr').remove();CMG_recalcularTotales()">
                 <i class="bi bi-trash3 fs-6"></i>
             </button>
         </td>`;
@@ -1725,6 +1755,34 @@ function mcPintarProductoDetalle(tr) {
     input.title = !codigo ? '' : (vinculado
         ? 'Código del producto vinculado: ' + codigo + (tr.dataset.productoNombre ? ' - ' + tr.dataset.productoNombre : '')
         : 'Código del proveedor (línea sin vincular a un producto)');
+}
+
+/**
+ * Marcas de edición del detalle. Mientras ninguna línea se toque, el modal muestra y guarda
+ * los valores DECLARADOS (subtotal e IVA de cada línea y totales de la cabecera, tal como los
+ * trajo el XML del SRI). En cuanto el usuario edita cantidad/precio/descuento, cambia el IVA,
+ * agrega o quita una línea, se pasa a recalcular en vivo y el servidor vuelve a totalizar.
+ */
+function mcMarcarDetalleEditado() {
+    const m = document.getElementById('modalCompra');
+    if (m) m.dataset.detalleEditado = '1';
+}
+function mcMarcarFilaEditada(el) {
+    const tr = el.closest('tr');
+    if (tr) { tr.dataset.subtotalOriginal = ''; tr.dataset.ivaOriginal = ''; }
+    mcMarcarDetalleEditado();
+}
+function mcMarcarIvaEditado(el) {
+    // Cambiar la tarifa no altera el subtotal declarado de la línea, solo su IVA.
+    const tr = el.closest('tr');
+    if (tr) tr.dataset.ivaOriginal = '';
+    mcMarcarDetalleEditado();
+}
+/** Totales declarados de la cabecera, o null si no hay compra cargada o el detalle ya se editó. */
+function mcTotalesDeclarados() {
+    const m = document.getElementById('modalCompra');
+    if (!m || !m.dataset.cabTotales || m.dataset.detalleEditado === '1') return null;
+    try { return JSON.parse(m.dataset.cabTotales); } catch (e) { return null; }
 }
 
 function CMG_recalcularFila(input) {
@@ -1792,8 +1850,13 @@ function CMG_recalcularTotales() {
             grupos[codPct] = { tarifa: tarifa, label: label, base: 0, iva: 0 };
         }
         grupos[codPct].base = r2(grupos[codPct].base + netoFila);
-        // Base del IVA = neto de la línea + su ICE (si tiene), como exige el SRI.
-        grupos[codPct].iva = r2(grupos[codPct].iva + r2((netoFila + iceFila) * (tarifa / 100)));
+        // IVA de la línea: el DECLARADO (valor del XML) mientras la línea no se edite; si se
+        // editó, base del IVA = neto de la línea + su ICE (si tiene), como exige el SRI.
+        const ivaOrig = tr.dataset.ivaOriginal;
+        const ivaFila = (original && ivaOrig !== undefined && ivaOrig !== '')
+            ? r2(parseFloat(ivaOrig))
+            : r2((netoFila + iceFila) * (tarifa / 100));
+        grupos[codPct].iva = r2(grupos[codPct].iva + ivaFila);
     });
 
     // Renderizar Subtotales por IVA
@@ -1833,8 +1896,19 @@ function CMG_recalcularTotales() {
     const propina      = r2(inputPropina ? parseFloat(inputPropina.value || 0) : 0);
 
     // Total General = Subtotal (bruto) - Descuento + IVA + ICE + Propina, tal cual se ve en pantalla.
-    const subtotalNeto = r2(subTotalBruto - totalDesc);
-    const totalFinal    = r2(subtotalNeto + totalIva + totalIce + propina);
+    let subtotalNeto = r2(subTotalBruto - totalDesc);
+    let totalFinal   = r2(subtotalNeto + totalIva + totalIce + propina);
+
+    // Compra ya guardada con el detalle intacto: manda la cabecera (lo que declaró el XML del
+    // SRI). La suma de líneas puede diferir por centavos de ese total por redondeos del emisor,
+    // y lo que se muestra debe coincidir con lo guardado, con el listado y con el PDF.
+    const declarado = mcTotalesDeclarados();
+    if (declarado) {
+        subtotalNeto  = r2(declarado.sub);
+        totalDesc     = r2(declarado.desc);
+        subTotalBruto = r2(subtotalNeto + totalDesc);
+        totalFinal    = r2(declarado.total);
+    }
 
     const modalEl = document.getElementById('modalCompra');
     if (modalEl) {
@@ -1930,7 +2004,12 @@ window.CMG_guardar = async function() {
         // ICE de la línea: valor fijo del comprobante (no se recalcula aquí, ver
         // CMG_agregarFilaDetalle/CMG_recalcularTotales). Aumenta la base del IVA.
         const iceVal = _r2(parseFloat(tr.querySelector('.input-ice-val')?.value || 0));
-        const ivaVal = _r2((neto + iceVal) * tarifa / 100);
+        // IVA: el declarado en el comprobante si la línea no se editó (mismo criterio que el
+        // subtotal); recalculado solo cuando el usuario cambió la línea o su tarifa.
+        const ivaOrig = tr.dataset.ivaOriginal;
+        const ivaVal = (tr.dataset.subtotalOriginal && ivaOrig !== undefined && ivaOrig !== '')
+            ? _r2(parseFloat(ivaOrig))
+            : _r2((neto + iceVal) * tarifa / 100);
 
         const impuestos = [{ codigo_impuesto:'2', codigo_porcentaje: codPct, tarifa, base_imponible: _r2(neto + iceVal), valor: ivaVal }];
         if (iceVal > 0) {

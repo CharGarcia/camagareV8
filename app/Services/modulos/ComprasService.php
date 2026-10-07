@@ -1199,8 +1199,20 @@ class ComprasService
             $idEmpresa = (int) $data['id_empresa'];
             $idUsuario = (int) $data['id_usuario'];
 
-            $data = $this->calcularTotales($data);
-            
+            // Compra electrónica: el XML autorizado es la fuente de verdad. Si el detalle
+            // llega igual al guardado (el modal lo bloquea, pero se verifica aquí), se
+            // conservan los totales y los impuestos declarados en vez de recalcularlos.
+            $guardadasPorId = [];
+            foreach ($this->repository->getDetalles($id) as $g) {
+                $guardadasPorId[(int) $g['id']] = $g;
+            }
+            $esElectronica = (string) ($cabecera['tipo_registro'] ?? 'fisica') === 'electronico';
+            if ($esElectronica && $guardadasPorId !== [] && $this->detalleCoincideConGuardado($guardadasPorId, $data['detalles'] ?? [])) {
+                $data = $this->aplicarDetalleGuardado($data, $cabecera, $guardadasPorId);
+            } else {
+                $data = $this->calcularTotales($data);
+            }
+
             // 1. Actualizar cabecera. Si falla, el catch capturará el error REAL.
             $this->repository->updateCabecera($id, $data);
 
@@ -1483,20 +1495,37 @@ class ComprasService
         );
     }
 
+    /**
+     * Totaliza la cabecera a partir de las líneas, redondeando a centavos POR LÍNEA.
+     *
+     * Antes se sumaba cantidad × precio sin redondear y se restaba el descuento al final:
+     * con precios de 4 decimales (habituales en los XML del SRI) la cabecera quedaba un
+     * centavo arriba o abajo de la suma de los subtotales de las líneas, y una compra con
+     * descuento cambiaba de total con solo abrirla y guardarla. Ahora el subtotal de cada
+     * línea es el declarado (precio_total_sin_impuesto) y, si no viene, cantidad × precio −
+     * descuento a dos decimales; el total es subtotal + impuestos + propina, también a dos.
+     *
+     * Para una compra electrónica cuyo detalle no se tocó NO se llama a esto: se conservan
+     * los totales que trajo el XML (ver actualizar() y detalleCoincideConGuardado()).
+     */
     private function calcularTotales(array $data): array
     {
-        $subtotal = 0;
-        $descuento = 0;
-        $totalImpuestos = 0;
-        $totalIce = 0;
+        $subtotal = 0.0;
+        $descuento = 0.0;
+        $totalImpuestos = 0.0;
+        $totalIce = 0.0;
 
         foreach ($data['detalles'] ?? [] as $det) {
             $cant = (float)($det['cantidad'] ?? 0);
             $prec = (float)($det['precio_unitario'] ?? 0);
-            $desc = (float)($det['descuento'] ?? 0);
+            $desc = round((float)($det['descuento'] ?? 0), 2);
 
-            $sub = $cant * $prec;
-            $subtotal += $sub;
+            $declarado = $det['precio_total_sin_impuesto'] ?? null;
+            $neto = ($declarado !== null && $declarado !== '')
+                ? round((float)$declarado, 2)
+                : round(round($cant * $prec, 2) - $desc, 2);
+
+            $subtotal  += $neto;
             $descuento += $desc;
 
             // Sumar impuestos del detalle, separando ICE (código 3) del resto (IVA,
@@ -1504,7 +1533,7 @@ class ComprasService
             // importe_total sigue siendo la suma de TODOS los impuestos, como antes.
             if (!empty($det['impuestos'])) {
                 foreach ($det['impuestos'] as $imp) {
-                    $valor = (float)($imp['valor'] ?? 0);
+                    $valor = round((float)($imp['valor'] ?? 0), 2);
                     $totalImpuestos += $valor;
                     if ((string)($imp['codigo_impuesto'] ?? '') === '3') {
                         $totalIce += $valor;
@@ -1513,10 +1542,71 @@ class ComprasService
             }
         }
 
-        $data['total_sin_impuestos'] = $subtotal - $descuento;
-        $data['total_descuento']     = $descuento;
-        $data['total_ice']           = $totalIce;
-        $data['importe_total']       = $data['total_sin_impuestos'] + $totalImpuestos + (float)($data['propina'] ?? 0);
+        $data['total_sin_impuestos'] = round($subtotal, 2);
+        $data['total_descuento']     = round($descuento, 2);
+        $data['total_ice']           = round($totalIce, 2);
+        $data['importe_total']       = round($data['total_sin_impuestos'] + $totalImpuestos + (float)($data['propina'] ?? 0), 2);
+
+        return $data;
+    }
+
+    /**
+     * ¿Las líneas recibidas son las mismas que están guardadas (mismos ids, misma cantidad,
+     * precio y descuento)? Si sí, el detalle no se editó y la compra debe conservar lo que
+     * declaró el XML del SRI. Una línea nueva, una quitada o un número distinto = editado.
+     */
+    private function detalleCoincideConGuardado(array $guardadasPorId, array $recibidas): bool
+    {
+        if (count($guardadasPorId) !== count($recibidas)) {
+            return false;
+        }
+        $vistos = [];
+        foreach ($recibidas as $det) {
+            $id = !empty($det['id']) ? (int) $det['id'] : 0;
+            if ($id <= 0 || !isset($guardadasPorId[$id]) || isset($vistos[$id])) {
+                return false;
+            }
+            $vistos[$id] = true;
+            $g = $guardadasPorId[$id];
+            if (abs((float) ($det['cantidad'] ?? 0) - (float) $g['cantidad']) > 0.000001
+                || abs((float) ($det['precio_unitario'] ?? 0) - (float) $g['precio_unitario']) > 0.000001
+                || abs((float) ($det['descuento'] ?? 0) - (float) $g['descuento']) > 0.005) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    /**
+     * Compra electrónica con el detalle intacto: los números de cada línea (cantidad, precio,
+     * descuento, subtotal e impuestos) se toman de lo guardado, no de lo que mandó el
+     * navegador, y la cabecera conserva sus totales. Lo único que viaja del formulario para
+     * esas líneas es lo que sí se edita (producto vinculado, descripción). Así "abrir y
+     * guardar" nunca reescribe lo que declaró el XML, aunque el navegador redondee distinto.
+     */
+    private function aplicarDetalleGuardado(array $data, array $cabecera, array $guardadasPorId): array
+    {
+        foreach ($data['detalles'] as &$det) {
+            $g = $guardadasPorId[(int) $det['id']];
+            $det['cantidad']                  = $g['cantidad'];
+            $det['precio_unitario']           = $g['precio_unitario'];
+            $det['descuento']                 = $g['descuento'];
+            $det['precio_total_sin_impuesto'] = $g['precio_total_sin_impuesto'];
+            $det['impuestos'] = array_map(static fn(array $i) => [
+                'codigo_impuesto'   => $i['codigo_impuesto'],
+                'codigo_porcentaje' => $i['codigo_porcentaje'],
+                'tarifa'            => $i['tarifa'],
+                'base_imponible'    => $i['base_imponible'],
+                'valor'             => $i['valor'],
+            ], $this->repository->getImpuestosDetalle((int) $det['id']));
+        }
+        unset($det);
+
+        $data['total_sin_impuestos'] = (float) ($cabecera['total_sin_impuestos'] ?? 0);
+        $data['total_descuento']     = (float) ($cabecera['total_descuento'] ?? 0);
+        $data['total_ice']           = (float) ($cabecera['total_ice'] ?? 0);
+        $data['propina']             = (float) ($cabecera['propina'] ?? 0);
+        $data['importe_total']       = (float) ($cabecera['importe_total'] ?? 0);
 
         return $data;
     }

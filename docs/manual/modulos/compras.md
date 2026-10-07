@@ -6,7 +6,7 @@ ruta_modulo: modulos/compras
 tipo: modulo
 visibilidad: todos
 etiquetas: compras, compra, factura de compra, buscar compra, buscador, aparecen compras que no busque, resultados que no corresponden, la busqueda trae otras compras, buscar por numero de autorizacion, filtros, filtrar compras, buscar por producto comprado, filtro de fechas, saldo pendiente, estado de pago, chips, ordenar por dos columnas, ordenar por proveedor y fecha, asiento contable, editar asiento, pestaña asiento, proveedor, xml, sri, entrada de mercaderia, vincular producto, retencion, orden de compra, vincular orden, pedido a proveedor, comparar pedido vs facturado, entrega parcial, recibido parcial, cerrar orden, sustento tributario, codigo de sustento, autorizacion, fecha de caducidad, ats, persona natural, obligada a llevar contabilidad, tipo de contribuyente, registro manual, compra fisica, pagar la compra, pestaña pagos, saldo pendiente, valores de terceros, otros conceptos, valores adicionales, bomberos, tasa de basura, recoleccion de basura, planilla de luz, planilla de agua, servicios basicos, informacion adicional, info adicional, nombre muy largo, limite de caracteres, value too long, no se pudo guardar la compra, imprimir, impresora, retencion antes de la factura, enlazar retencion
-version: 2.26
+version: 2.27
 orden: 20
 estado: activo
 ---
@@ -365,6 +365,21 @@ datos de la compra que se acaba de abrir; las demás pestañas cargan su
 información al entrar en ellas. Si abre dos compras seguidas muy rápido, se
 muestra siempre la última que eligió.
 
+### Los totales son los del comprobante
+
+En una compra cargada desde el XML del SRI, el subtotal, el descuento, el IVA y
+el total que se ven en la ventana son **los que declaró el proveedor en el
+comprobante**, los mismos del listado y del PDF. El sistema no los vuelve a
+calcular a partir de las líneas: en facturas con descuento o con precios de
+varios decimales, la suma de las líneas puede diferir por un centavo del total
+declarado, y lo que manda es el XML.
+
+Lo mismo aplica al guardar: abrir una compra electrónica y pulsar **Guardar**
+(por ejemplo para vincular productos o cambiar el sustento tributario) conserva
+exactamente los valores del XML. Solo en una compra **manual**, donde las líneas sí
+se editan, los totales se recalculan a partir de lo que se escribe, redondeando
+cada línea a dos decimales.
+
 ## Documentos del módulo
 
 Desde la compra guardada se puede generar el **PDF** del documento, exportarlo a
@@ -593,6 +608,12 @@ aprobaciones pasa, así que no se paga dos veces.
 
 ## Historial de cambios
 
+- **2.27** — Compras con **descuento** cargadas desde el XML: la ventana mostraba un
+  subtotal, IVA o total distinto al del listado (recalculaba desde las líneas y el
+  IVA línea por línea), y abrir y guardar la compra sin tocar nada podía cambiar el
+  total guardado en un centavo, que luego aparecía como saldo pendiente. Ahora se
+  muestra y se conserva lo que declaró el comprobante. Ver *Los totales son los del
+  comprobante*.
 - **2.26** — El asiento contable de la factura de compra ya incluye el **ICE** (al
   Debe, cuenta *ice factura compra* de Configuración Contable → Adquisiciones de
   Compras). Antes una factura con ICE (bebidas, por ejemplo) no se podía
