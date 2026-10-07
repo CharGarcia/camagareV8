@@ -165,12 +165,15 @@ class ReporteVentasResumenDiarioService
             'impuestos' => array_values($acum),
         ]);
 
-        // Cobro por forma de pago (sumado por forma: el total del período junta días).
+        // Cobro por forma de pago (sumado por forma: el total del período junta días). Cada
+        // forma trae además cuántas facturas y cuántos recibos cobró (columnas del PDF).
         $porForma = [];
         foreach ($formas as $fp) {
             $k = (int) $fp['id_forma_pago'];
-            $porForma[$k] ??= ['concepto' => (string) $fp['forma_pago_nombre'], 'documentos' => 0, 'total' => 0.0];
+            $porForma[$k] ??= ['concepto' => (string) $fp['forma_pago_nombre'], 'documentos' => 0, 'facturas' => 0, 'recibos' => 0, 'total' => 0.0];
             $porForma[$k]['documentos'] += (int) $fp['cantidad_documentos'];
+            $porForma[$k]['facturas']   += (int) ($fp['cantidad_facturas'] ?? 0);
+            $porForma[$k]['recibos']    += (int) ($fp['cantidad_recibos'] ?? 0);
             $porForma[$k]['total']      += (float) $fp['total'];
         }
         uasort($porForma, static fn (array $a, array $b): int => $b['total'] <=> $a['total']);
@@ -179,6 +182,8 @@ class ReporteVentasResumenDiarioService
             $lineasCobro[] = [
                 'concepto' => $fp['concepto'],
                 'detalle'  => $fp['documentos'] . ' documento(s)',
+                'facturas' => $fp['facturas'],
+                'recibos'  => $fp['recibos'],
                 'total'    => round($fp['total'], 2),
             ];
         }

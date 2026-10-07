@@ -1629,6 +1629,8 @@ class ReporteVentasRepository extends BaseRepository
                    COALESCE(fp.id, 0) AS id_forma_pago,
                    COALESCE(MAX(fp.nombre), 'Sin forma de pago registrada') AS forma_pago_nombre,
                    COUNT(DISTINCT c.tipo || ':' || c.id) AS cantidad_documentos,
+                   COUNT(DISTINCT c.id) FILTER (WHERE c.tipo = 'FACTURA') AS cantidad_facturas,
+                   COUNT(DISTINCT c.id) FILTER (WHERE c.tipo = 'RECIBO') AS cantidad_recibos,
                    COALESCE(SUM(c.monto), 0) AS total
               FROM cobros c
               LEFT JOIN empresa_formas_pago fp ON fp.id = c.id_forma_cobro

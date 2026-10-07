@@ -6,7 +6,7 @@ ruta_modulo: modulos/reporte_ventas
 tipo: modulo
 visibilidad: todos
 etiquetas: reporte de ventas, ventas, cuanto vendi, por cliente, por vendedor, por producto, estadisticas, exportar, pdf, excel, establecimientos, sucursales, matriz, mismo ruc, consolidado por ruc, borradores, borrador, facturas en borrador, incluir borradores, documentos sin autorizar, pendientes de enviar al sri, ordenar, ordenamiento, ordenar por columna, de mayor a menor, quien compro mas, saldo por cobrar, saldo x cobrar, cuanto me debe el cliente, nro facturas, numero de documentos, cartera en el reporte de ventas, acceso total, permiso de ver todos, registros propios, solo mis ventas, no veo las ventas de otro, cada usuario ve lo suyo, documentos migrados no aparecen, cartera del vendedor, mis clientes, clientes asignados, vendedor vinculado, usuario del sistema, el vendedor no ve nada, asesor solo ve sus clientes, nivel de usuario, administrador ve todo, el asesor ve las ventas de todos, imprimir el reporte, logo en el pdf, el pdf sale angosto, el pdf no ocupa la hoja, nombre del producto cortado, filtros aplicados en el pdf, encabezado del pdf, totales repetidos en el pdf, pdf horizontal, numero de pagina, boton buscar, no se actualiza, no cambia al elegir, hay que pulsar buscar, boton amarillo, filtros sin aplicar, unidades vendidas, unidades por mes, cantidades por mes, cuantas unidades vendi, ventas por producto y mes, producto por mes, rotacion mensual, tabla por meses, una columna por mes, marca, categoria, filtrar por marca, filtrar por categoria, ventas de una marca, ventas de una categoria, linea de productos, participacion por producto, porcentaje de ventas, porcentaje de unidades, % venta, % unidades, unidad de medida, total venta sin iva, producto mas vendido, cajero, por cajero, por usuario, ventas por usuario, ventas de un cajero, quien facturo, resumen diario, cierre de caja, cierre del dia, cuadre de caja, arqueo, ventas del dia, formas de pago, efectivo, tarjeta, transferencia, cuanto entro en efectivo, tirilla, ticket, enviar por correo, recibos de venta, recibos no aparecen, no salen los recibos, recibos en borrador, todos los documentos, facturas y recibos juntos, facturas recibos y notas de credito, ventas totales, firmas, realizado por, aprobado por, grafico, ocultar grafico, acordeon, detalle de facturas del dia, listado de recibos, saldo por factura, vendedores que puede ver, solo algunos vendedores, ocultar vendedores, coordinador de zona, ver las ventas de ciertos vendedores
-version: 1.13
+version: 1.14
 orden: 10
 estado: activo
 ---
@@ -349,11 +349,16 @@ La **ventana del resumen, el PDF y el correo** traen, en cada día, primero el *
 documentos**: la lista de **facturas** y la
 de **recibos** (y la de notas de crédito, si el tipo de documento las incluye) con
 número, cliente, total y **saldo pendiente** (en rojo si el cliente aún debe), cada
-una con su total; y después el resumen del día con las tres secciones de abajo. Al
+una con su total; y después el resumen del día. En la **ventana** y el **correo** ese
+resumen son las tres secciones de abajo. En el **PDF**, en cambio, el resumen del día
+es una sola tabla a todo el ancho, **Resumen de cobros**: una fila por forma de
+cobro (efectivo, tarjeta, transferencia, etc.) con cuántas **facturas** y cuántos
+**recibos** se cobraron con ella y el valor cobrado, y al final la fila **Total
+cobrado**. El PDF no lleva las secciones *Documentos* ni *Detalle de impuestos*. Al
 pie, el **PDF** trae dos firmas: **Realizado por** (con el nombre del
 usuario que generó el resumen) y **Aprobado por** (en blanco, para firmar a mano).
 
-Cada día trae tres secciones:
+Cada día trae tres secciones (ventana y correo):
 
 - **Documentos**: facturas, recibos y notas de crédito (estas restan), cuántos
   anulados hubo (no suman), el **Total neto** y el total vendido sin impuestos.
@@ -470,6 +475,14 @@ El PDF es la misma pantalla en hoja, pensado para imprimir o enviar por correo:
   que el número de sustento de la retención apunte a esa factura.
 
 ## Historial de cambios
+
+- **1.14** — El **PDF del resumen diario** cambia el resumen de cada día: ya no
+  lleva las secciones *Documentos* ni *Detalle de impuestos*; en su lugar, tras el
+  detalle de documentos, va una sola tabla a todo el ancho, **Resumen de cobros**,
+  con una fila por forma de cobro, las columnas **Facturas** y **Recibos** (cuántos
+  documentos de cada tipo se cobraron con esa forma, en lugar del texto
+  *N documento(s)*), el valor cobrado y la fila final **Total cobrado**. La ventana,
+  la tirilla y el correo no cambian.
 
 - **1.13** — **Vendedores que puede ver**: el administrador puede desmarcar, por
   usuario, los vendedores cuyas ventas no debe ver en este reporte (*Permisos

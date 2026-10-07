@@ -8,7 +8,9 @@
  *
  * Cada bloque (un día, y el total del período si hay más de uno) trae las tres
  * secciones de la tirilla del Reporte Restaurante: Documentos, Detalle de impuestos
- * y Cobro por forma de pago. Ver ReporteVentasResumenDiarioService.
+ * y Cobro por forma de pago. Ver ReporteVentasResumenDiarioService. El PDF es la
+ * excepción: tras el detalle de documentos solo lleva el "Resumen de cobros" a todo
+ * el ancho (forma de cobro, facturas, recibos, total y el total cobrado).
  *
  * @var string $modo        pantalla | pdf | correo
  * @var array  $empresa     Ficha de la empresa (nombre, ruc)
@@ -240,22 +242,42 @@ $nombreEmpresa = (string) ($empresa['nombre_comercial'] ?? '') !== '' ? $empresa
                 </table>
             <?php endforeach; ?>
 
-            <?php // 2) Resumen del día (o del período): Documentos, Detalle de impuestos y Cobro.
-                  //    nobreak: las tres columnas nunca quedan partidas entre dos páginas. ?>
-            <table style="width:100%;border-collapse:collapse;font-family:Arial,sans-serif;margin-top:5px;" nobreak="true">
-                <?php if (!empty($b['detalle'])): ?>
+            <?php // 2) Resumen de cobros del día (o del período), a todo el ancho: una fila por
+                  //    forma de cobro con cuántas facturas y cuántos recibos cobró y el valor, y al
+                  //    final el total cobrado. El PDF no lleva las secciones Documentos ni Detalle
+                  //    de impuestos (sí la pantalla y el correo). nobreak: no se parte entre páginas. ?>
+            <?php $formasCobro = $b['cobro']['formas']; ?>
+            <table style="width:100%;border-collapse:collapse;font-family:Arial,sans-serif;font-size:7.5pt;margin-top:6px;table-layout:fixed;" nobreak="true">
+                <tr>
+                    <th colspan="4" style="width:100%;text-align:left;background:#e3e9f0;border:1px solid #9aa7b4;padding:3px 5px;font-size:8.5pt;color:#1b2a3a;">
+                        RESUMEN DE COBROS<?= !empty($b['detalle']) ? ' · ' . $e($b['titulo']) : '' ?>
+                    </th>
+                </tr>
+                <tr>
+                    <th style="width:54%;background:#f4f7fa;border:1px solid #c3ccd6;padding:2px 4px;text-align:left;">Forma de cobro</th>
+                    <th style="width:16%;background:#f4f7fa;border:1px solid #c3ccd6;padding:2px 4px;text-align:right;">Facturas</th>
+                    <th style="width:16%;background:#f4f7fa;border:1px solid #c3ccd6;padding:2px 4px;text-align:right;">Recibos</th>
+                    <th style="width:14%;background:#f4f7fa;border:1px solid #c3ccd6;padding:2px 4px;text-align:right;">Total</th>
+                </tr>
+                <?php if (!$formasCobro): ?>
                     <tr>
-                        <td colspan="3" style="width:100%;padding:2px 2px 0 2px;font-size:8pt;font-weight:bold;color:#2c4a6b;">
-                            RESUMEN DEL DÍA <?= $e($b['titulo']) ?>
-                        </td>
+                        <td colspan="4" style="width:100%;border:1px solid #c3ccd6;padding:2px 4px;color:#6a747e;">Sin cobros registrados</td>
                     </tr>
                 <?php endif; ?>
+                <?php foreach ($formasCobro as $i => $f): ?>
+                    <?php $z = $i % 2 ? 'background:#f6f8fa;' : ''; ?>
+                    <tr>
+                        <td style="width:54%;border:1px solid #c3ccd6;padding:2px 4px;<?= $z ?>"><?= $e($f['concepto']) ?></td>
+                        <td style="width:16%;border:1px solid #c3ccd6;padding:2px 4px;text-align:right;<?= $z ?>"><?= (int) ($f['facturas'] ?? 0) ?></td>
+                        <td style="width:16%;border:1px solid #c3ccd6;padding:2px 4px;text-align:right;<?= $z ?>"><?= (int) ($f['recibos'] ?? 0) ?></td>
+                        <td style="width:14%;border:1px solid #c3ccd6;padding:2px 4px;text-align:right;<?= $z ?>"><?= $e($fmt($f['total'])) ?></td>
+                    </tr>
+                <?php endforeach; ?>
                 <tr>
-                    <?php foreach ($secciones($b) as [$titulo, $filas]): ?>
-                        <td style="width:33%;vertical-align:top;padding:3px 2px 0 2px;">
-                            <?= $tablaInline($titulo, $filas, '100%') ?>
-                        </td>
-                    <?php endforeach; ?>
+                    <td style="width:54%;border:1px solid #9aa7b4;background:#e3e9f0;padding:2px 4px;text-align:right;font-weight:bold;">TOTAL COBRADO:</td>
+                    <td style="width:16%;border:1px solid #9aa7b4;background:#e3e9f0;padding:2px 4px;text-align:right;font-weight:bold;"><?= array_sum(array_map(static fn (array $f): int => (int) ($f['facturas'] ?? 0), $formasCobro)) ?></td>
+                    <td style="width:16%;border:1px solid #9aa7b4;background:#e3e9f0;padding:2px 4px;text-align:right;font-weight:bold;"><?= array_sum(array_map(static fn (array $f): int => (int) ($f['recibos'] ?? 0), $formasCobro)) ?></td>
+                    <td style="width:14%;border:1px solid #9aa7b4;background:#e3e9f0;padding:2px 4px;text-align:right;font-weight:bold;"><?= $e($fmt($b['cobro']['cobrado'])) ?></td>
                 </tr>
             </table>
         <?php endforeach; ?>
