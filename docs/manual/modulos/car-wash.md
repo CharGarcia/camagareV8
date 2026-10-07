@@ -6,7 +6,7 @@ ruta_modulo: modulos/car-wash
 tipo: modulo
 visibilidad: todos
 etiquetas: car wash, lavado, lavadora de autos, lubricadora, cambio de aceite, mecanica, taller, orden de servicio, orden mecanica, orden de trabajo, vehiculo, placa, historial del vehiculo, historial del cliente, visitas, ultima visita, facturar orden, recibo de venta, refacturar, factura anulada, proxima cita, proximo chequeo, migracion, sistema anterior, numeracion por fecha, numero con el año, reiniciar numeracion, reinicio anual, reinicio mensual, correlativo por año, correlativo por mes, modo de numeracion, buscar orden, buscar placa, buscador, filtros, filtrar ordenes, filtro de fechas, buscar por servicio, chips, imprimir, impresora, aviso, avisos, ordenes en borrador, ordenes sin facturar, pendientes de facturar, barra superior, sin saldo, sin stock, productos similares, sugerir otro producto, misma categoria, usar este
-version: 1.15
+version: 1.16
 orden: 10
 estado: activo
 ---
@@ -89,6 +89,17 @@ la configurada para ese ambiente.
 La bodega se elige **una vez**, en la cabecera, y aplica a todos los productos de la
 orden: de ahí se descuenta el inventario al guardar y de ahí sale la factura o el
 recibo. Las líneas ya no tienen una columna de bodega propia.
+
+Al abrir una **orden nueva** la bodega ya viene marcada, igual que en Consignaciones,
+con este orden de prioridad:
+
+1. La **bodega favorita** del usuario (la estrella junto al campo), si la fijó.
+2. La **bodega asignada** al usuario en Bodegas → pestaña *Accesos* (predeterminada).
+3. Si el usuario solo tiene **una bodega**, esa.
+
+Si ninguna aplica (varias bodegas, sin favorita ni asignada), el campo queda en
+*Seleccione...* y hay que elegirla a mano. Si la favorita ya no está disponible
+(bodega inactiva o acceso revocado) se usa la asignada o la única.
 
 ## La grilla de servicios y productos
 
@@ -199,7 +210,7 @@ rastro completo.
 | Vehículo | Placa del vehículo atendido. Obligatorio. |
 | Kilometraje / Combustible | Estado del vehículo al ingresar. |
 | Próx. cita | Fecha sugerida para la siguiente visita (no puede ser anterior a hoy al crear la orden). |
-| Bodega | De dónde se toman los productos. Aplica a toda la orden. |
+| Bodega | De dónde se toman los productos. Aplica a toda la orden. En una orden nueva viene marcada: la favorita, la asignada al usuario o la única que hay. |
 | Servicios / productos | Grilla igual a la de la factura: precio, descuento e IVA por línea. |
 | Info. Adicional | Novedades, observaciones y el correo del cliente; viajan a la factura. |
 
@@ -371,6 +382,9 @@ documentos admite cada periodo) está en el manual de **Empresa**, sección
 
 ## Historial de cambios
 
+- **1.16** — Al abrir una **orden nueva** la **bodega** ya viene seleccionada, como
+  en Consignaciones: la favorita del usuario (estrella); si no hay, la asignada al
+  usuario en Bodegas → Accesos; y si solo tiene una bodega, esa.
 - **1.15** — La ventana de **productos similares con saldo** solo se abre cuando la
   empresa, además de afectar el inventario, tiene marcado **"¿Trabajar con stock
   positivo?"**. Si se permite stock negativo, el producto sin saldo se agrega sin aviso.

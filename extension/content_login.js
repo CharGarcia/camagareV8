@@ -33,11 +33,18 @@
     }
 
     // Escribe tecleando carácter por carácter (el SRI bloquea pegar; algunos campos validan el tecleo).
+    // Antes de teclear LIMPIA de verdad lo que ya tenga el campo (un RUC/clave de otra empresa que el
+    // navegador recordó): seleccionar todo + Borrar + valor vacío. Si no, el SRI recibía la clave vieja
+    // y respondía "clave incorrecta".
     function escribir(input, valor) {
         const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set;
+        try { input.setAttribute('autocomplete', 'off'); } catch (e) {}
         input.focus();
+        try { input.select(); } catch (e) {}
+        input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Backspace', bubbles: true }));
         setter.call(input, '');
         input.dispatchEvent(new Event('input', { bubbles: true }));
+        input.dispatchEvent(new KeyboardEvent('keyup', { key: 'Backspace', bubbles: true }));
         for (const ch of String(valor)) {
             input.dispatchEvent(new KeyboardEvent('keydown', { key: ch, bubbles: true }));
             setter.call(input, input.value + ch);
@@ -46,6 +53,30 @@
         }
         input.dispatchEvent(new Event('change', { bubbles: true }));
         input.blur();
+    }
+
+    // Escribe RUC y clave y COMPRUEBA que los campos quedaron exactamente con lo que mandó el
+    // sistema. El autocompletado del navegador puede volver a poner el RUC/clave que tenía guardado
+    // (de otra empresa) justo después de que los limpiamos; en ese caso se reescribe. Resuelve true
+    // solo cuando ambos campos coinciden tras un pequeño tiempo de espera (si el navegador iba a
+    // autocompletar, ya lo hizo). Tras varios intentos sin lograrlo resuelve false.
+    function llenarYVerificar(u, p, ruc, clave) {
+        return new Promise((resolve) => {
+            const form = u.closest('form');
+            if (form) { try { form.setAttribute('autocomplete', 'off'); } catch (e) {} }
+            let intentos = 0;
+            const paso = () => {
+                intentos++;
+                if (u.value !== ruc) escribir(u, ruc);
+                if (p.value !== clave) escribir(p, clave);
+                setTimeout(() => {
+                    if (u.value === ruc && p.value === clave) { resolve(true); return; }
+                    if (intentos >= 6) { resolve(false); return; }
+                    paso();
+                }, 250);
+            };
+            paso();
+        });
     }
 
     // Ventana para considerar "reciente" un intento de login previo (igual a la del servidor).
@@ -85,14 +116,29 @@
             // Sin descarga marcada (o error): no interferir con el uso normal del SRI.
             if (!resp || !resp.ok) return;
             banner('CaMaGaRe: ingresando al SRI…', '#198754');
-            escribir(u, resp.ruc);
-            escribir(p, resp.clave);
-            // Marca de UN SOLO USO para saltar a comprobantes desde la primera página logueada,
-            // y marca de "ya se intentó" para detectar en la próxima carga si el login falló.
-            chrome.storage.local.set({ cmg_ir: Date.now(), cmg_login_intento: Date.now() }, () => {
-                const btn = document.querySelector('#kc-login');
-                if (btn) btn.click();
-                else { const f = u.closest('form'); if (f) f.submit(); }
+            const ruc = String(resp.ruc || '');
+            const clave = String(resp.clave || '');
+            llenarYVerificar(u, p, ruc, clave).then((ok) => {
+                if (!ok) {
+                    // No se pudo dejar el RUC/clave del sistema en los campos (el navegador insiste en
+                    // su autocompletado). No enviar la clave equivocada: que el usuario escriba a mano.
+                    // Se deja la marca de salto para que, si entra a mano, siga a comprobantes.
+                    chrome.storage.local.set({ cmg_ir: Date.now() });
+                    banner('CaMaGaRe: el navegador vuelve a poner un RUC/clave guardados. Borre los dos campos, '
+                        + 'escriba el RUC y la clave de esta empresa y pulse Ingresar.', '#dc3545');
+                    return;
+                }
+                // Marca de UN SOLO USO para saltar a comprobantes desde la primera página logueada,
+                // y marca de "ya se intentó" para detectar en la próxima carga si el login falló.
+                chrome.storage.local.set({ cmg_ir: Date.now(), cmg_login_intento: Date.now() }, () => {
+                    // Última comprobación justo antes de enviar: si el navegador los cambió otra vez,
+                    // reescribir en el acto.
+                    if (u.value !== ruc) escribir(u, ruc);
+                    if (p.value !== clave) escribir(p, clave);
+                    const btn = document.querySelector('#kc-login');
+                    if (btn) btn.click();
+                    else { const f = u.closest('form'); if (f) f.submit(); }
+                });
             });
         });
     }

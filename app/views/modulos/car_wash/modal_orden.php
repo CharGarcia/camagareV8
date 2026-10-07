@@ -142,9 +142,16 @@
                                 <label class="x-small fw-bold text-muted mb-1">Bodega <?= \App\Helpers\PreferenciasHelper::renderEstrellaFavorito('modulos/car-wash', 'cw_id_bodega', 'id_bodega') ?></label>
                                 <select id="cw_id_bodega" name="id_bodega" class="form-select form-select-sm border-primary border-opacity-10" style="height:31px;" title="Bodega de donde se toma el inventario al facturar">
                                     <option value="">Seleccione...</option>
+                                    <?php
+                                    // Igual que Consignaciones: arranca marcada la bodega asignada al usuario
+                                    // (es_default de usuarios_bodegas) y, si solo hay una bodega, esa aunque no
+                                    // sea la predeterminada. El favorito del usuario (estrella) se aplica
+                                    // después por JS en cwAbrirNuevo (aplicarFavoritosModal + cwBodegaInicial).
+                                    $unicaBodega = isset($bodegas) && count($bodegas) === 1;
+                                    ?>
                                     <?php if (isset($bodegas)): ?>
                                         <?php foreach ($bodegas as $b): ?>
-                                            <option value="<?= $b['id'] ?>" <?= !empty($b['es_default']) ? 'selected' : '' ?>><?= htmlspecialchars($b['nombre']) ?></option>
+                                            <option value="<?= $b['id'] ?>" data-default="<?= !empty($b['es_default']) ? '1' : '0' ?>" <?= (!empty($b['es_default']) || $unicaBodega) ? 'selected' : '' ?>><?= htmlspecialchars($b['nombre']) ?></option>
                                         <?php endforeach; ?>
                                     <?php endif; ?>
                                 </select>
@@ -515,6 +522,23 @@
     window.addEventListener('beforeunload', () => { if (borrTimer) cwBorrEscribir(); });
 
     // ─── Reset / apertura ─────────────────────────────────────────────────────
+    // Bodega con la que arranca una orden nueva. form.reset() ya deja marcada la que
+    // trae `selected` del servidor (la asignada al usuario o la única que hay) y
+    // aplicarFavoritosModal pone la favorita si existe; esto solo cubre el hueco: si el
+    // favorito guardado ya no está en la lista (bodega inactiva o acceso revocado) el
+    // select queda en "Seleccione...", y ahí se vuelve a la asignada o a la única.
+    function cwBodegaInicial() {
+        const sel = document.getElementById('cw_id_bodega');
+        if (!sel || sel.value) return;
+        const opciones = Array.from(sel.options).filter(o => o.value !== '');
+        const porDefecto = opciones.find(o => o.dataset.default === '1');
+        const elegida = porDefecto || (opciones.length === 1 ? opciones[0] : null);
+        if (elegida) {
+            sel.value = elegida.value;
+            sel.dispatchEvent(new Event('change'));
+        }
+    }
+
     function resetForm() {
         CW_BORR_ON = false;
         document.getElementById('formOrdenCW').reset();
@@ -575,6 +599,8 @@
         document.getElementById('cw_fecha_ingreso').value = new Date(d.getTime() - off * 60000).toISOString().slice(0, 16);
         // Serie: arranca marcada (primer punto o favorito) y carga el secuencial (como factura).
         if (typeof window.aplicarFavoritosModal === 'function') { try { window.aplicarFavoritosModal('#modalOrdenCW'); } catch (e) {} }
+        // Bodega: favorito > bodega asignada al usuario > única bodega (como Consignaciones).
+        cwBodegaInicial();
         const selSerie = document.getElementById('cw_select_serie');
         if (selSerie.value) cwSerieChange();
         cwAgregarLinea();

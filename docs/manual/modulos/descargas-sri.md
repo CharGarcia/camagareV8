@@ -6,7 +6,7 @@ ruta_modulo: modulos/descargas-sri
 tipo: modulo
 visibilidad: todos
 etiquetas: descargas sri, comprobantes recibidos, xml, facturas de proveedores, importar compras, portal sri
-version: 1.11
+version: 1.12
 orden: 50
 estado: activo
 ---
@@ -67,6 +67,18 @@ se escribe una nueva; no hay forma de recuperarla desde el sistema.
 
 - **No descarga nada**: revise las credenciales del SRI de la empresa y el rango
   de fechas.
+- **La extensión avisa "el RUC o la clave del SRI son incorrectos" aunque en el
+  sistema están bien**: pasaba cuando el navegador tenía **guardados el RUC y la
+  clave de otra empresa** y los dejaba puestos en la pantalla de ingreso del SRI;
+  la extensión escribía encima, pero el navegador volvía a poner lo guardado y el
+  SRI recibía la clave vieja. Desde la versión **1.22.0** de la extensión, los dos
+  campos se **borran por completo** antes de escribir y se **comprueba** que
+  quedaron exactamente con el RUC y la clave que mandó el sistema antes de pulsar
+  *Ingresar*; si el navegador insiste en reponer lo guardado, la extensión no envía
+  nada y muestra un aviso rojo pidiendo escribirlos a mano. Para evitarlo del todo,
+  elimine en Chrome la contraseña guardada para `srienlinea.sri.gob.ec`
+  (*Configuración → Autocompletar y contraseñas*). Actualice la extensión desde
+  `chrome://extensions` (botón **Actualizar**) si no la tiene.
 - **"No tiene permiso para esta acción"**: pida que le asignen el submódulo en
   *Permisos de módulos*. Antes el módulo se abría sin permiso asignado; ahora lo
   exige, igual que los demás.
@@ -170,6 +182,12 @@ se escribe una nueva; no hay forma de recuperarla desde el sistema.
 
 ## Historial de cambios
 
+- **1.12** — Extensión de Chrome **1.22.0**: al ingresar al portal del SRI, la
+  extensión **borra por completo** el RUC y la clave que el navegador hubiera
+  dejado puestos (de otra empresa) y **comprueba** que los campos quedaron con
+  los datos que mandó el sistema antes de pulsar *Ingresar*. Antes el navegador
+  reponía lo guardado y el SRI respondía *clave incorrecta*. Ver *Errores
+  frecuentes*.
 - **1.11** — El registro de retenciones ya no falla con *la fecha del documento de
   sustento es obligatoria* ni con *el número del documento de sustento es
   obligatorio* cuando el XML del SRI omite esos datos (retenciones de bancos sobre
