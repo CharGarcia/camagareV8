@@ -297,7 +297,15 @@
     };
 
     window.abrirModalRetornoVer = async function (rowEl) {
-        const row = JSON.parse(rowEl.getAttribute('data-row'));
+        await retAbrirExistente(JSON.parse(rowEl.getAttribute('data-row')));
+    };
+
+    /**
+     * Carga en el modal un retorno ya guardado ({ id, estado, serie, secuencial }). Lo usa el
+     * listado al abrir una fila y retGuardar() para dejar el modal abierto —ya con el retorno
+     * Emitido y en solo lectura— después de aplicar los cambios de un Borrador.
+     */
+    async function retAbrirExistente(row) {
         const puedeActualizar = (<?= (!empty($perm['actualizar']) || !empty($perm['todo'])) ? 'true' : 'false' ?>);
         const editable = (row.estado === 'Borrador') && puedeActualizar; // solo Borrador es editable
 
@@ -337,7 +345,7 @@
         } finally {
             document.getElementById('ret-modal-loader')?.classList.add('d-none');
         }
-    };
+    }
 
     // Carga un retorno Borrador en modo edición (grilla editable con cantidades precargadas).
     async function retCargarParaEditar(row) {
@@ -763,7 +771,7 @@
         };
 
         const btn = document.getElementById('btnGuardarRetorno');
-        const labelOrig = btn.innerHTML;
+        let labelOrig = btn.innerHTML;
         btn.disabled = true; btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Guardando...';
         try {
             const res = await fetch(`${RUTA}/store`, {
@@ -771,6 +779,20 @@
             });
             const data = await res.json();
             if (!data.ok) throw new Error(data.error || 'Error al guardar');
+            if (esEdicion) {
+                // Aplicar los cambios deja el retorno Emitida y el modal NO se cierra: se
+                // recarga con el retorno ya emitido, en solo lectura (solo un Borrador se edita).
+                if (typeof cargarGrid === 'function') cargarGrid();
+                Swal.fire({ icon: 'success', title: 'Listo', text: data.msg, timer: 2200, showConfirmButton: false });
+                await retAbrirExistente({
+                    id: idRetorno,
+                    estado: data.estado || 'Emitida',
+                    serie: payload.serie,
+                    secuencial: payload.secuencial
+                });
+                labelOrig = btn.innerHTML; // el rótulo que fijó la recarga, no "Actualizar retorno"
+                return;
+            }
             getModal().hide();
             await Swal.fire('Listo', data.msg, 'success');
             if (typeof cargarGrid === 'function') cargarGrid();

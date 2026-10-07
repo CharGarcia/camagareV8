@@ -381,8 +381,11 @@ class RetornoCvService
     }
 
     /**
-     * Edita un retorno en estado Borrador (inactivo): reemplaza sus detalles y cabecera.
-     * No mueve inventario (un Borrador no tiene entrada aplicada).
+     * Edita un retorno en estado Borrador (inactivo): reemplaza sus detalles y cabecera y lo
+     * deja EMITIDO en la misma transacción. Un Borrador no tiene entrada aplicada, así que
+     * con las líneas ya reemplazadas se registra la entrada de inventario (igual que al
+     * crear) y, tras el commit, se regenera su asiento. Si algo falla, el retorno sigue en
+     * Borrador tal como estaba.
      */
     public function actualizar(int $id, int $idEmpresa, array $data): void
     {
@@ -403,7 +406,9 @@ class RetornoCvService
             throw new Exception("Solo se pueden editar retornos en estado Borrador.");
         }
 
-        $idUsuario = (int) $data['id_usuario'];
+        $idUsuario     = (int) $data['id_usuario'];
+        $empresaConfig = $data['empresa_config'] ?? [];
+        $numero        = ($cab['serie'] ?? '') . '-' . ($cab['secuencial'] ?? '');
         $db = Database::getConnection();
         try {
             $db->beginTransaction();
@@ -478,13 +483,28 @@ class RetornoCvService
                 'updated_at'    => date('Y-m-d H:i:s'),
             ]);
 
-            $this->logService->registrar($idUsuario, $idEmpresa, 'ACTUALIZAR_RETORNO_CV', 'retornos_cv', $id, $cab, $data);
+            // Aplicar los cambios = emitir: la mercadería de las líneas recién guardadas entra
+            // al inventario (el Borrador no tenía entrada) y el retorno vuelve a consumir saldo.
+            // Se usan los detalles leídos de la BD (traen inventariable/tipo_produccion).
+            foreach ($this->repository->getDetalles($id, $idEmpresa) as $det) {
+                $this->moverInventarioLinea($det, $idEmpresa, $idUsuario, $empresaConfig, 'entrada',
+                    'RETORNO_CV', $id, 'Entrada por Retorno de Consignación ' . $numero
+                    . ' (Consig. ' . ($det['consignacion_serie'] ?? '') . '-' . ($det['consignacion_secuencial'] ?? '') . ')');
+            }
+            $this->repository->updateEstado($id, $idEmpresa, 'Emitida', $idUsuario);
+
+            $despues = $data;
+            $despues['estado'] = 'Emitida';
+            $this->logService->registrar($idUsuario, $idEmpresa, 'ACTUALIZAR_RETORNO_CV', 'retornos_cv', $id, $cab, $despues);
 
             $db->commit();
         } catch (Exception $e) {
             if ($db->inTransaction()) $db->rollBack();
             throw $e;
         }
+
+        // Ya Emitida: su asiento se (re)genera fuera de la transacción, como al crear.
+        $this->procesarAsientoSeguro($id, $data);
     }
 
     public function eliminar(int $id, int $idEmpresa, int $idUsuario, array $empresaConfig = []): void

@@ -549,8 +549,15 @@ class CambioProductoCvService
         return $this->tarifasIva[$clave] ?? [null, $porcentajeRespaldo];
     }
 
-    // ─── EDITAR (solo Borrador; no mueve inventario) ──────────────────────────
+    // ─── EDITAR (solo Borrador; al aplicar los cambios queda Emitida) ─────────
 
+    /**
+     * Reemplaza las líneas y la cabecera de un cambio en Borrador y lo deja EMITIDO en la
+     * misma transacción: un Borrador no tiene inventario aplicado, así que las líneas recién
+     * guardadas mueven stock como al crear, se registra lo entregado en Facturación de
+     * consignaciones y, tras el commit, se regenera el asiento. Si algo falla, el cambio
+     * sigue en Borrador tal como estaba.
+     */
     public function actualizar(int $id, int $idEmpresa, array $data): void
     {
         $this->rules->validarCreacion($data, $this->entregasSinOrigenGuardadas($id, $idEmpresa));
@@ -570,7 +577,11 @@ class CambioProductoCvService
             throw new Exception("Solo se pueden editar cambios en estado Borrador.");
         }
 
-        $idUsuario = (int) $data['id_usuario'];
+        $idUsuario     = (int) $data['id_usuario'];
+        $empresaConfig = $data['empresa_config'] ?? [];
+        // Un cambio MIGRADO no mueve inventario por su cuenta (su efecto está en el kardex del
+        // sistema anterior; ver reversarInventario y cambiarEstado): al emitirlo tampoco.
+        $aplicaInventario = !$this->repository->esMigrado($id, $idEmpresa);
         $db = Database::getConnection();
         try {
             $db->beginTransaction();
@@ -579,8 +590,8 @@ class CambioProductoCvService
 
             $numero = ($cab['serie'] ?? '') . '-' . ($cab['secuencial'] ?? '');
             $this->bloquearSaldoConsignaciones($idEmpresa, $data['devoluciones'] ?? [], $data['entregas'] ?? []);
-            $totDev = $this->procesarLineas($id, $idEmpresa, $idUsuario, [], $data['devoluciones'] ?? [], 'devolucion', false, $numero, (int) $data['id_cliente'], (int) ($cab['id_punto_emision'] ?? 0));
-            $totEnt = $this->procesarLineas($id, $idEmpresa, $idUsuario, [], $data['entregas'] ?? [], 'entrega', false, $numero, (int) $data['id_cliente'], (int) ($cab['id_punto_emision'] ?? 0));
+            $totDev = $this->procesarLineas($id, $idEmpresa, $idUsuario, $empresaConfig, $data['devoluciones'] ?? [], 'devolucion', $aplicaInventario, $numero, (int) $data['id_cliente'], (int) ($cab['id_punto_emision'] ?? 0));
+            $totEnt = $this->procesarLineas($id, $idEmpresa, $idUsuario, $empresaConfig, $data['entregas'] ?? [], 'entrega', $aplicaInventario, $numero, (int) $data['id_cliente'], (int) ($cab['id_punto_emision'] ?? 0));
 
             $this->repository->updateCabecera($id, $idEmpresa, [
                 'fecha_cambio'       => $data['fecha_cambio'],
@@ -594,13 +605,23 @@ class CambioProductoCvService
                 'updated_at'         => date('Y-m-d H:i:s'),
             ]);
 
-            $this->logService->registrar($idUsuario, $idEmpresa, 'ACTUALIZAR_CAMBIO_PRODUCTO_CV', 'cambios_producto_cv', $id, $cab, $data);
+            // Aplicar los cambios = emitir. Lo entregado desde consignación vuelve a registrarse en
+            // Facturación de consignaciones (al pasar a Borrador se anularon los registros anteriores).
+            $this->crearRegistrosFacturacion($id, $idEmpresa, $idUsuario);
+            $this->repository->updateEstado($id, $idEmpresa, 'Emitida', $idUsuario);
+
+            $despues = $data;
+            $despues['estado'] = 'Emitida';
+            $this->logService->registrar($idUsuario, $idEmpresa, 'ACTUALIZAR_CAMBIO_PRODUCTO_CV', 'cambios_producto_cv', $id, $cab, $despues);
 
             $db->commit();
         } catch (Exception $e) {
             if ($db->inTransaction()) $db->rollBack();
             throw $e;
         }
+
+        // Ya Emitida: su asiento se (re)genera fuera de la transacción, como al crear.
+        $this->procesarAsientoSeguro($id, $data);
     }
 
     /**

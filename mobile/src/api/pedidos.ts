@@ -32,6 +32,8 @@ export type DetallePedidoInput = {
 };
 
 export type CabeceraPedidoInput = {
+  /** Guardado único (§8): misma clave en todos los intentos de un pedido nuevo. */
+  token_guardado?: string;
   id_cliente: number;
   fecha_pedido: string;
   observaciones?: string;

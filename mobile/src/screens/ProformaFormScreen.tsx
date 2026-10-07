@@ -32,6 +32,8 @@ import {
 import { mensajeError } from '../api/client';
 import SelectorFechaHora from '../components/SelectorFechaHora';
 import SelectorLista from '../components/SelectorLista';
+import { modoIva, r2, redondear, repartirIva } from '../utils/iva';
+import { generarUuid } from '../utils/uuid';
 
 type Modo = 'ver' | 'crear' | 'editar';
 
@@ -53,16 +55,26 @@ function aNumero(texto: string): number {
   return Number.isFinite(n) ? n : 0;
 }
 
-function r2(n: number): number {
-  return Math.round(n * 100) / 100;
+type Decimales = { precio: number; cantidad: number };
+
+/**
+ * Subtotal (sin IVA, ya con descuento) de una línea, con los decimales de precio y cantidad
+ * de la configuración de facturación, igual que ProformaService::normalizarImportes().
+ */
+function calcularLinea(l: Linea, dec: Decimales) {
+  const bruto = r2(redondear(aNumero(l.cantidadTexto), dec.cantidad) * redondear(aNumero(l.precioTexto), dec.precio));
+  const descuento = Math.min(Math.max(r2(aNumero(l.descuentoTexto)), 0), bruto);
+  return { bruto, descuento, subtotal: r2(bruto - descuento) };
 }
 
-/** Subtotal (sin IVA, ya con descuento) e IVA de una línea. El servidor recalcula al guardar. */
-function calcularLinea(l: Linea) {
-  const bruto = r2(aNumero(l.cantidadTexto) * aNumero(l.precioTexto));
-  const descuento = Math.min(Math.max(r2(aNumero(l.descuentoTexto)), 0), bruto);
-  const subtotal = r2(bruto - descuento);
-  return { bruto, descuento, subtotal, iva: r2((subtotal * l.ivaPct) / 100) };
+/** Líneas con su IVA según el modo de la serie (§9: al subtotal o línea por línea). El servidor recalcula al guardar. */
+function calcularTotales(lineas: Linea[], dec: Decimales, modo: string | undefined) {
+  const bases = lineas.map((l) => calcularLinea(l, dec));
+  const ivas = repartirIva(
+    bases.map((b, i) => ({ base: b.subtotal, pct: lineas[i].ivaPct })),
+    modoIva(modo)
+  );
+  return bases.map((b, i) => ({ ...b, iva: ivas[i] }));
 }
 
 function fechaISO(d: Date): string {
@@ -92,6 +104,9 @@ export default function ProformaFormScreen() {
   const [modo, setModo] = useState<Modo>(idProforma ? 'ver' : 'crear');
   const [cargando, setCargando] = useState(!!idProforma);
   const [guardando, setGuardando] = useState(false);
+  const guardandoRef = useRef(false);
+  // Guardado único (§8): una clave por proforma nueva, la misma en todos sus intentos.
+  const tokenGuardado = useRef(generarUuid());
   const [accion, setAccion] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -151,10 +166,12 @@ export default function ProformaFormScreen() {
         if (!idProforma) setDiasVigencia(String(c.dias_vigencia));
       })
       .catch(() => setVendedores([]));
-    if (idProforma) return;
+    // Las series se cargan también al editar: traen el modo de IVA y los decimales de la
+    // proforma; solo al crear se elige una.
     obtenerSeriesProforma()
       .then(({ establecimientos }) => {
         setSeries(establecimientos);
+        if (idProforma) return;
         const primero = establecimientos[0]?.puntos_emision[0]?.id_punto_emision ?? null;
         if (primero) onSerieChange(primero);
       })
@@ -269,12 +286,19 @@ export default function ProformaFormScreen() {
     setLineas((prev) => prev.map((l, i) => (i === index ? { ...l, ...cambios } : l)));
   }
 
-  const calculos = lineas.map(calcularLinea);
-  const totalDescuento = calculos.reduce((a, c) => a + c.descuento, 0);
-  const subtotal = calculos.reduce((a, c) => a + c.subtotal, 0);
-  const iva = calculos.reduce((a, c) => a + c.iva, 0);
+  // Configuración de facturación de la serie (la elegida al crear, la de la proforma al editar).
+  const idPuntoSerie = modo === 'crear' ? idPuntoEmision : cabecera?.id_punto_emision ?? null;
+  const serieActual = series.find((e) => e.puntos_emision.some((p) => p.id_punto_emision === idPuntoSerie));
+  const decimales: Decimales = { precio: serieActual?.decimales_precio ?? 2, cantidad: serieActual?.decimales_cantidad ?? 2 };
+  const modoIvaSerie = serieActual?.puntos_emision.find((p) => p.id_punto_emision === idPuntoSerie)?.calculo_iva;
+  const calculos = calcularTotales(lineas, decimales, modoIvaSerie);
+  const totalDescuento = r2(calculos.reduce((a, c) => a + c.descuento, 0));
+  const subtotal = r2(calculos.reduce((a, c) => a + c.subtotal, 0));
+  const iva = r2(calculos.reduce((a, c) => a + c.iva, 0));
 
   async function guardar() {
+    // Candado síncrono (§8): un doble toque llega antes de que React desactive el botón.
+    if (guardandoRef.current) return;
     if (!cliente) {
       Alert.alert('Falta el cliente', 'Selecciona un cliente de la lista.');
       return;
@@ -319,6 +343,8 @@ export default function ProformaFormScreen() {
       })),
     };
 
+    guardandoRef.current = true;
+    let creada = false;
     setGuardando(true);
     setError(null);
     try {
@@ -334,21 +360,42 @@ export default function ProformaFormScreen() {
           Alert.alert('Falta la serie', 'Selecciona la serie de la proforma.');
           return;
         }
-        const res = await crearProforma({ ...input, id_establecimiento: serie.idEstablecimiento, id_punto_emision: serie.id });
-        Alert.alert('Proforma guardada', `Se creó la proforma ${res.numero} como borrador.`, [
-          { text: 'OK', onPress: () => navigation.replace('ProformaForm', { id: res.id }) },
-        ]);
+        const res = await crearProforma({
+          ...input,
+          id_establecimiento: serie.idEstablecimiento,
+          id_punto_emision: serie.id,
+          token_guardado: tokenGuardado.current,
+        });
+        // Creada: el botón queda desactivado hasta abrir la proforma (otro toque crearía otra).
+        creada = true;
+        Alert.alert(
+          res.ya_existia ? 'Proforma ya registrada' : 'Proforma guardada',
+          res.ya_existia
+            ? `La proforma ${res.numero} ya se había guardado en un intento anterior; no se creó otra.`
+            : `Se creó la proforma ${res.numero} como borrador.`,
+          [{ text: 'OK', onPress: () => navigation.replace('ProformaForm', { id: res.id }) }],
+          { cancelable: false }
+        );
       }
     } catch (err) {
       setError(mensajeError(err, 'No se pudo guardar la proforma.'));
     } finally {
-      setGuardando(false);
+      if (!creada) {
+        guardandoRef.current = false;
+        setGuardando(false);
+      }
     }
   }
 
   // ── Acciones sobre una proforma guardada ─────────────────────────────
 
+  // Candado síncrono (§8): duplicar/convertir/enviar crean o envían documentos; un doble
+  // toque no debe ejecutarlos dos veces.
+  const accionRef = useRef(false);
+
   async function ejecutar(nombre: string, fn: () => Promise<void>) {
+    if (accionRef.current) return;
+    accionRef.current = true;
     setAccion(nombre);
     setError(null);
     try {
@@ -356,6 +403,7 @@ export default function ProformaFormScreen() {
     } catch (err) {
       setError(mensajeError(err, 'No se pudo completar la acción.'));
     } finally {
+      accionRef.current = false;
       setAccion(null);
     }
   }

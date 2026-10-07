@@ -8,7 +8,8 @@
 --             conexión" cuando el servidor sí había guardado) se devuelve el
 --             documento ya creado en vez de crear otro.
 --             La usan: Pedidos, Transferencias de inventario, Traspasos, Roles de
---             pago (generar) y el cobro del POS. Pieza: App\Services\GuardadoUnicoService.
+--             pago (generar), el cobro del POS, y las Facturas de venta, Proformas y
+--             Pedidos creados desde la app móvil, y el cobro de facturas de la app. Pieza: App\Services\GuardadoUnicoService.
 -- TOCA DATOS  No. Tabla nueva, vacía.
 -- ORDEN       Aplicar ANTES de desplegar el código. Si el código llega primero no
 --             se rompe: sin la tabla, cada módulo guarda como antes.

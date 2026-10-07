@@ -32,6 +32,7 @@ import { useSerie } from '../pedidos/SerieContext';
 import SelectorFechaHora from '../components/SelectorFechaHora';
 import SelectorRangoHoras from '../components/SelectorRangoHoras';
 import SelectorLista from '../components/SelectorLista';
+import { generarUuid } from '../utils/uuid';
 
 const IVA_DEFAULT = 0.15; // Simplificación v1: tarifa estándar vigente (15%). No se muestra al usuario.
 
@@ -78,6 +79,9 @@ export default function PedidoFormScreen() {
 
   const [cargando, setCargando] = useState(soloLectura);
   const [guardando, setGuardando] = useState(false);
+  const guardandoRef = useRef(false);
+  // Guardado único (§8): una clave por pedido nuevo, la misma en todos sus intentos.
+  const tokenGuardado = useRef(generarUuid());
   const [error, setError] = useState<string | null>(null);
 
   // Serie/secuencial (solo modo creación)
@@ -240,6 +244,8 @@ export default function PedidoFormScreen() {
   }
 
   async function guardar() {
+    // Candado síncrono (§8): un doble toque llega antes de que React desactive el botón.
+    if (guardandoRef.current) return;
     if (!clienteSeleccionado) {
       Alert.alert('Falta el cliente', 'Selecciona un cliente de la lista.');
       return;
@@ -263,11 +269,14 @@ export default function PedidoFormScreen() {
       );
       return;
     }
+    guardandoRef.current = true;
+    let creado = false;
     setGuardando(true);
     setError(null);
     try {
-      const res = await crearPedido(
+      await crearPedido(
         {
+          token_guardado: tokenGuardado.current,
           id_cliente: clienteSeleccionado.id,
           fecha_pedido: fechaLocalISO(fechaPedido),
           observaciones,
@@ -283,9 +292,11 @@ export default function PedidoFormScreen() {
         },
         detalles.map(({ producto_nombre, ...d }) => d)
       );
+      // Creado: el botón queda desactivado hasta salir (otro toque crearía otro pedido).
+      creado = true;
       Alert.alert('Pedido guardado', `Se creó el pedido ${serie.establecimiento}-${serie.punto_emision}-${secuencial.formateado}.`, [
         { text: 'OK', onPress: () => navigation.goBack() },
-      ]);
+      ], { cancelable: false });
     } catch (err) {
       if (codigoError(err) === 'SECUENCIAL_NO_DISPONIBLE') {
         setError('Ese número de pedido ya se usó (probablemente otro celular guardó primero). Se generó uno nuevo, revisa e intenta guardar de nuevo.');
@@ -294,7 +305,10 @@ export default function PedidoFormScreen() {
         setError(mensajeError(err, 'No se pudo guardar el pedido.'));
       }
     } finally {
-      setGuardando(false);
+      if (!creado) {
+        guardandoRef.current = false;
+        setGuardando(false);
+      }
     }
   }
 

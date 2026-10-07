@@ -306,7 +306,15 @@
     };
 
     window.abrirModalCambioVer = async function (rowEl) {
-        const row = JSON.parse(rowEl.getAttribute('data-row'));
+        await camAbrirExistente(JSON.parse(rowEl.getAttribute('data-row')));
+    };
+
+    /**
+     * Carga en el modal un cambio ya guardado ({ id, estado, serie, secuencial }). Lo usa el
+     * listado al abrir una fila y camGuardar() para dejar el modal abierto —ya con el cambio
+     * Emitido y en solo lectura— después de aplicar los cambios de un Borrador.
+     */
+    async function camAbrirExistente(row) {
         const puedeActualizar = (<?= (!empty($perm['actualizar']) || !empty($perm['todo'])) ? 'true' : 'false' ?>);
         const editable = (row.estado === 'Borrador') && puedeActualizar;
 
@@ -339,7 +347,7 @@
         document.getElementById('cam-modal-loader')?.classList.remove('d-none');
 
         await camCargarDetalle(row.id, editable);
-    };
+    }
 
     function camPintarBadge(estado) {
         const badge = document.getElementById('cam_estado_badge');
@@ -1047,7 +1055,7 @@
         };
 
         const btn = document.getElementById('btnGuardarCambio');
-        const labelOrig = btn.innerHTML;
+        let labelOrig = btn.innerHTML;
         btn.disabled = true; btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Guardando...';
         try {
             const res = await fetch(`${RUTA}/store`, {
@@ -1055,6 +1063,20 @@
             });
             const data = await res.json();
             if (!data.ok) throw new Error(data.error || 'Error al guardar');
+            if (idCambio) {
+                // Aplicar los cambios deja el documento Emitida y el modal NO se cierra: se
+                // recarga con el cambio ya emitido, en solo lectura (solo un Borrador se edita).
+                if (typeof cargarGrid === 'function') cargarGrid();
+                Swal.fire({ icon: 'success', title: 'Listo', text: data.msg, timer: 2200, showConfirmButton: false });
+                await camAbrirExistente({
+                    id: idCambio,
+                    estado: data.estado || 'Emitida',
+                    serie: payload.serie,
+                    secuencial: payload.secuencial
+                });
+                labelOrig = btn.innerHTML; // el rótulo que fijó la recarga
+                return;
+            }
             getModal().hide();
             await Swal.fire('Listo', data.msg, 'success');
             if (typeof cargarGrid === 'function') cargarGrid();

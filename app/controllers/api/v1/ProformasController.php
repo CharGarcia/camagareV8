@@ -109,12 +109,18 @@ class ProformasController extends ApiBaseController
         $resultado = [];
         foreach ($empresaModel->getEstablecimientos($idEmpresa) as $est) {
             $puntos = [];
+            $estConfig = (new \App\repositories\modulos\EmpresaRepository())->getEstablecimientoConfig((int) $est['id']) ?? [];
             foreach ($empresaModel->getPuntosEmision((int) $est['id']) as $p) {
                 $config = $secRepo->getConfigSecuencial((int) $p['id'], self::TIPO_DOCUMENTO);
                 if (empty($config['id'])) {
                     continue;
                 }
-                $puntos[] = ['id_punto_emision' => (int) $p['id'], 'punto_emision' => $p['codigo_punto']];
+                $puntos[] = [
+                    'id_punto_emision' => (int) $p['id'],
+                    'punto_emision'    => $p['codigo_punto'],
+                    // Modo del IVA del punto (§9): la vista previa de la app calcula igual que el servidor.
+                    'calculo_iva'      => \App\Helpers\IvaSubtotal::modoPunto((int) $p['id'], $idEmpresa, $estConfig),
+                ];
             }
             if (empty($puntos)) {
                 continue;
@@ -122,6 +128,8 @@ class ProformasController extends ApiBaseController
             $resultado[] = [
                 'id_establecimiento' => (int) $est['id'],
                 'establecimiento'    => $est['codigo'],
+                'decimales_precio'   => (int) ($estConfig['decimales_precio'] ?? 2),
+                'decimales_cantidad' => (int) ($estConfig['decimales_cantidad'] ?? 2),
                 'puntos_emision'     => $puntos,
             ];
         }
@@ -217,6 +225,7 @@ class ProformasController extends ApiBaseController
             'secuencial'       => 'auto',
             'condiciones_html' => null,
             'info_adicional'   => [],
+            'token_guardado'   => trim((string) ($body['token_guardado'] ?? '')),
         ]);
 
         try {
@@ -225,7 +234,12 @@ class ProformasController extends ApiBaseController
             $this->jsonError('ERROR_GUARDAR', $e->getMessage(), 422);
         }
 
-        $this->jsonOk(['id' => $id, 'numero' => ProformaDocumentoService::numero($this->repository->getPorId($id) ?? [])], [], 201);
+        // ya_existia: era un reintento y la proforma ya estaba guardada; no se creó otra.
+        $this->jsonOk([
+            'id'         => $id,
+            'numero'     => ProformaDocumentoService::numero($this->repository->getPorId($id) ?? []),
+            'ya_existia' => $this->service->ultimoGuardadoPrevio,
+        ], [], 201);
     }
 
     /**

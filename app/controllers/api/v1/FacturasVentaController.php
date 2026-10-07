@@ -260,10 +260,15 @@ class FacturasVentaController extends ApiBaseController
                 'valor_limite_consumidor_final' => isset($config['valor_limite_consumidor_final']) ? (float) $config['valor_limite_consumidor_final'] : 50.0,
                 'editar_precio_factura' => Booleano::es($config['editar_precio_factura'] ?? true),
                 'editar_descuento_factura' => Booleano::es($config['editar_descuento_factura'] ?? true),
-                'puntos_emision' => array_map(static function (array $p): array {
+                'decimales_precio' => (int) ($config['decimales_precio'] ?? 2),
+                'decimales_cantidad' => (int) ($config['decimales_cantidad'] ?? 2),
+                // Modo del IVA por punto de emisión (§9): la app calcula su vista previa igual
+                // que el servidor (al subtotal o línea por línea).
+                'puntos_emision' => array_map(static function (array $p) use ($idEmpresa, $config): array {
                     return [
                         'id_punto_emision' => (int) $p['id'],
                         'punto_emision' => $p['codigo_punto'],
+                        'calculo_iva' => \App\Helpers\IvaSubtotal::modoPunto((int) $p['id'], $idEmpresa, $config),
                     ];
                 }, $puntos),
             ];
@@ -356,9 +361,12 @@ class FacturasVentaController extends ApiBaseController
         // Revalidar que el secuencial siga disponible justo antes de insertar
         // (igual que en Pedidos): reduce, sin eliminar del todo, la ventana de
         // colisión entre dos celulares facturando casi al mismo tiempo.
+        // Con clave de guardado (§8) no se corta aquí: si es un reintento de una factura que sí
+        // se guardó, el Service la devuelve; si no, el propio Service valida el secuencial.
+        $tokenGuardado = trim((string) ($body['token_guardado'] ?? ''));
         $secuencialInt = (int) ltrim($secuencial, '0');
         $validacion = (new SecuencialService())->validarSecuencial($idPuntoEmision, self::TIPO_DOCUMENTO, $secuencialInt);
-        if (empty($validacion['disponible'])) {
+        if (empty($validacion['disponible']) && $tokenGuardado === '') {
             $this->jsonError('SECUENCIAL_NO_DISPONIBLE', $validacion['mensaje'] ?? 'El secuencial ya no está disponible, vuelve a intentar.', 409);
         }
 
@@ -370,13 +378,16 @@ class FacturasVentaController extends ApiBaseController
             'secuencial' => $secuencial,
         ]);
 
+        $data['token_guardado'] = $tokenGuardado;
+
         try {
             $id = $this->service->crear($data);
         } catch (Throwable $e) {
             $this->jsonError('ERROR_GUARDAR', $e->getMessage(), 422);
         }
 
-        $this->jsonOk(['id' => $id], [], 201);
+        // ya_existia: era un reintento y la factura ya estaba guardada; no se creó otra.
+        $this->jsonOk(['id' => $id, 'ya_existia' => $this->service->ultimoGuardadoPrevio], [], 201);
     }
 
     /**
@@ -855,6 +866,23 @@ class FacturasVentaController extends ApiBaseController
         $idEmpresa = (int) $_SESSION['id_empresa'];
         $idUsuario = (int) $_SESSION['id_usuario'];
 
+        // Guardado único (CLAUDE.md §8): la transacción se abre aquí, ANTES de validar el
+        // saldo, y lo primero es buscar la clave del formulario de cobro. Un reintento tras
+        // perderse la respuesta devuelve el ingreso ya creado; sin esto, un cobro parcial
+        // repetido pasaba la validación de saldo y se registraba dos veces (y uno total
+        // respondía "ya no tiene saldo"). Los jsonError() de abajo terminan el proceso: la
+        // conexión (no persistente) se cierra y PostgreSQL descarta la transacción abierta.
+        $tokenGuardado = (string) ($body['token_guardado'] ?? '');
+        $guardado = new \App\Services\GuardadoUnicoService();
+        $db = Database::getConnection();
+        $db->beginTransaction();
+        if ($previo = $guardado->previo($tokenGuardado, $idEmpresa, 'cobro_factura_app')) {
+            $db->rollBack();
+            $this->jsonOk(['id_ingreso' => (int) $previo['id_registro'], 'ya_existia' => true], [], 201);
+        }
+        // El saldo se lee y se cobra bajo candado por factura (§8: saldo compartido).
+        $this->repository->lockCobroFactura($idFactura, $idEmpresa);
+
         $factura = $this->repository->getPorId($idFactura);
         if (!$factura || (int) ($factura['id_empresa'] ?? 0) !== $idEmpresa) {
             $this->jsonError('NO_ENCONTRADO', 'Factura no encontrada.', 404);
@@ -875,7 +903,6 @@ class FacturasVentaController extends ApiBaseController
             );
         }
 
-        $db = Database::getConnection();
         $stForma = $db->prepare('SELECT id, tipo FROM empresa_formas_pago WHERE id = ? AND id_empresa = ? AND eliminado = false AND activo = true');
         $stForma->execute([$idFormaCobro, $idEmpresa]);
         $forma = $stForma->fetch(PDO::FETCH_ASSOC);
@@ -972,10 +999,9 @@ class FacturasVentaController extends ApiBaseController
             $fechaEmisionIngreso = date('Y-m-d');
         }
 
-        // Se abre la transacción ANTES de calcular el secuencial y se mantiene hasta el INSERT
-        // final (IngresoService::crear()): el lock de obtenerSiguienteSecuencial() se libera
-        // solo al COMMIT/ROLLBACK (CLAUDE.md §8).
-        $db->beginTransaction();
+        // La transacción (abierta al inicio) sigue abierta al calcular el secuencial y hasta el
+        // INSERT final (IngresoService::crear()): el lock de obtenerSiguienteSecuencial() se
+        // libera solo al COMMIT/ROLLBACK (CLAUDE.md §8).
         $secRes = (new SecuencialService())->obtenerSiguienteSecuencial((int) $punto['id'], 'Ingresos', $fechaEmisionIngreso);
         $numDoc = $factura['establecimiento'] . '-' . $factura['punto_emision'] . '-' . $factura['secuencial'];
 
@@ -1026,6 +1052,7 @@ class FacturasVentaController extends ApiBaseController
         try {
             $ingresoService = new IngresoService(new IngresoRepository(), new IngresoRules(), new LogSistemaService());
             $idIngreso = $ingresoService->crear($payload);
+            $guardado->registrar($tokenGuardado, $idEmpresa, 'cobro_factura_app', (int) $idIngreso, $payload['numero_ingreso'], $idUsuario);
             $db->commit();
         } catch (Throwable $e) {
             if ($db->inTransaction()) $db->rollBack();
@@ -1035,7 +1062,7 @@ class FacturasVentaController extends ApiBaseController
         // La transacción es nuestra: el asiento se genera después del COMMIT (ver IngresoService::crear).
         $ingresoService->tareasPostCommit($idIngreso, $payload);
 
-        $this->jsonOk(['id_ingreso' => $idIngreso], [], 201);
+        $this->jsonOk(['id_ingreso' => $idIngreso, 'ya_existia' => false], [], 201);
     }
 
     /**

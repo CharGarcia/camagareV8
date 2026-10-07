@@ -651,6 +651,19 @@ class FacturaVentaRepository extends BaseRepository
         return $this->query($sql, $params)->fetchAll();
     }
 
+    /**
+     * Candado transaccional del cobro de UNA factura (CLAUDE.md §8): dos cobros simultáneos
+     * sobre la misma factura quedan en fila, y el segundo lee el saldo ya con el primero.
+     * Se libera solo al COMMIT/ROLLBACK; llamar dentro de la transacción, antes de leer el saldo.
+     */
+    public function lockCobroFactura(int $idFactura, int $idEmpresa): void
+    {
+        $this->query(
+            "SELECT pg_advisory_xact_lock(hashtext('cobro_factura:' || CAST(? AS text) || ':' || CAST(? AS text)))",
+            [$idEmpresa, $idFactura]
+        );
+    }
+
     public function getPorId(int $id): ?array
     {
         $sql = "SELECT v.*,

@@ -35,6 +35,8 @@ import { ProductoListado, listarProductos } from '../api/productos';
 import { mensajeError } from '../api/client';
 import SelectorFechaHora from '../components/SelectorFechaHora';
 import SelectorLista from '../components/SelectorLista';
+import { modoIva, r2, redondear, repartirIva } from '../utils/iva';
+import { generarUuid } from '../utils/uuid';
 
 // Precio y descuento se guardan como texto mientras se editan (para poder escribir
 // "1." o dejar el campo vacío); se convierten con aNumero() al calcular y al guardar.
@@ -53,17 +55,27 @@ function aNumero(texto: string): number {
   return Number.isFinite(n) ? n : 0;
 }
 
-function redondear2(n: number): number {
-  return Math.round(n * 100) / 100;
+type Decimales = { precio: number; cantidad: number };
+
+/**
+ * Subtotal (sin IVA, ya con descuento) de una línea, con los decimales de precio y cantidad
+ * de la configuración de facturación, igual que el servidor. El IVA no va aquí: depende de
+ * todas las líneas cuando la serie calcula al subtotal (ver calcularTotales).
+ */
+function calcularLinea(l: LineaFactura, dec: Decimales) {
+  const bruto = r2(redondear(aNumero(l.precioTexto), dec.precio) * redondear(l.cantidad, dec.cantidad));
+  const descuento = Math.min(Math.max(r2(aNumero(l.descuentoTexto)), 0), bruto);
+  return { bruto, descuento, subtotal: r2(bruto - descuento) };
 }
 
-/** Subtotal (sin IVA, ya con descuento) e IVA de una línea, igual que la API. */
-function calcularLinea(l: LineaFactura) {
-  const bruto = redondear2(aNumero(l.precioTexto) * l.cantidad);
-  const descuento = Math.min(Math.max(redondear2(aNumero(l.descuentoTexto)), 0), bruto);
-  const subtotal = redondear2(bruto - descuento);
-  const iva = redondear2((subtotal * l.ivaPct) / 100);
-  return { bruto, descuento, subtotal, iva };
+/** Líneas con su IVA según el modo de la serie (§9: al subtotal o línea por línea). */
+function calcularTotales(lineas: LineaFactura[], dec: Decimales, modo: string | undefined) {
+  const bases = lineas.map((l) => calcularLinea(l, dec));
+  const ivas = repartirIva(
+    bases.map((b, i) => ({ base: b.subtotal, pct: lineas[i].ivaPct })),
+    modoIva(modo)
+  );
+  return bases.map((b, i) => ({ ...b, iva: ivas[i] }));
 }
 
 type Modo = 'ver' | 'crear' | 'editar';
@@ -104,6 +116,11 @@ export default function FacturaVentaFormScreen() {
   const [modo, setModo] = useState<Modo>(idFactura ? 'ver' : 'crear');
   const [cargando, setCargando] = useState(!!idFactura);
   const [guardando, setGuardando] = useState(false);
+  const guardandoRef = useRef(false);
+  // Guardado único (§8): una clave por factura nueva, la misma en todos sus intentos.
+  const tokenGuardado = useRef(generarUuid());
+  const cobrandoRef = useRef(false);
+  const tokenCobro = useRef(generarUuid());
   const [error, setError] = useState<string | null>(null);
 
   // Modo ver
@@ -377,7 +394,7 @@ export default function FacturaVentaFormScreen() {
       p.porcentaje_iva_final != null
         ? Number(p.porcentaje_iva_final)
         : base > 0
-          ? redondear2((Number(p.pvp ?? base) / base - 1) * 100)
+          ? r2((Number(p.pvp ?? base) / base - 1) * 100)
           : 0;
     setLineas((prev) => [
       ...prev,
@@ -407,13 +424,21 @@ export default function FacturaVentaFormScreen() {
     setLineas((prev) => prev.filter((_, i) => i !== index));
   }
 
-  const calculos = lineas.map(calcularLinea);
-  const totalDescuento = calculos.reduce((acc, c) => acc + c.descuento, 0);
-  const subtotal = calculos.reduce((acc, c) => acc + c.subtotal, 0);
-  const iva = calculos.reduce((acc, c) => acc + c.iva, 0);
-  const total = subtotal + iva;
+  // Configuración de facturación de la serie elegida: decimales y modo del IVA.
+  const decimales: Decimales = {
+    precio: configEstablecimiento?.decimales_precio ?? 2,
+    cantidad: configEstablecimiento?.decimales_cantidad ?? 2,
+  };
+  const modoIvaSerie = configEstablecimiento?.puntos_emision.find((p) => p.id_punto_emision === idPuntoEmision)?.calculo_iva;
+  const calculos = calcularTotales(lineas, decimales, modoIvaSerie);
+  const totalDescuento = r2(calculos.reduce((acc, c) => acc + c.descuento, 0));
+  const subtotal = r2(calculos.reduce((acc, c) => acc + c.subtotal, 0));
+  const iva = r2(calculos.reduce((acc, c) => acc + c.iva, 0));
+  const total = r2(subtotal + iva);
 
   async function guardar() {
+    // Candado síncrono (§8): un doble toque llega antes de que React desactive el botón.
+    if (guardandoRef.current) return;
     if (!clienteSeleccionado) {
       Alert.alert('Falta el cliente', 'Selecciona un cliente de la lista.');
       return;
@@ -432,7 +457,7 @@ export default function FacturaVentaFormScreen() {
     }
 
     for (const l of lineas) {
-      const c = calcularLinea(l);
+      const c = calcularLinea(l, decimales);
       if (aNumero(l.precioTexto) < 0) {
         Alert.alert('Precio inválido', `El precio de ${l.producto_nombre} no puede ser negativo.`);
         return;
@@ -443,6 +468,8 @@ export default function FacturaVentaFormScreen() {
       }
     }
 
+    guardandoRef.current = true;
+    let creada = false;
     setGuardando(true);
     setError(null);
     try {
@@ -452,7 +479,7 @@ export default function FacturaVentaFormScreen() {
         id_producto: l.id_producto,
         cantidad: l.cantidad,
         ...(puedeEditarPrecio ? { precio_unitario: aNumero(l.precioTexto) } : {}),
-        ...(puedeEditarDescuento ? { descuento: redondear2(aNumero(l.descuentoTexto)) } : {}),
+        ...(puedeEditarDescuento ? { descuento: r2(aNumero(l.descuentoTexto)) } : {}),
       }));
       if (modo === 'editar' && idFactura) {
         await actualizarFactura(idFactura, {
@@ -484,17 +511,27 @@ export default function FacturaVentaFormScreen() {
           id_bodega: idBodega ?? undefined,
           forma_pago: formaPago,
           detalles,
+          token_guardado: tokenGuardado.current,
         });
+        // Creada: el botón queda desactivado hasta abrir la factura (si se reactivara, otro
+        // toque crearía otra).
+        creada = true;
         Alert.alert(
-          'Factura guardada',
-          `Se creó la factura ${establecimientoCodigo}-${puntoEmisionCodigo}-${secuencial} como borrador.`,
-          [{ text: 'OK', onPress: () => navigation.replace('FacturaVentaForm', { id: res.id }) }]
+          res.ya_existia ? 'Factura ya registrada' : 'Factura guardada',
+          res.ya_existia
+            ? 'Esta factura ya se había guardado en un intento anterior; no se creó otra.'
+            : `Se creó la factura ${establecimientoCodigo}-${puntoEmisionCodigo}-${secuencial} como borrador.`,
+          [{ text: 'OK', onPress: () => navigation.replace('FacturaVentaForm', { id: res.id }) }],
+          { cancelable: false }
         );
       }
     } catch (err) {
       setError(mensajeError(err, 'No se pudo guardar la factura.'));
     } finally {
-      setGuardando(false);
+      if (!creada) {
+        guardandoRef.current = false;
+        setGuardando(false);
+      }
     }
   }
 
@@ -553,6 +590,8 @@ export default function FacturaVentaFormScreen() {
   }
 
   async function abrirFormCobro() {
+    // Clave nueva por cobro (§8): se mantiene en los reintentos de ESTE cobro.
+    tokenCobro.current = generarUuid();
     setMostrarFormCobro(true);
     setMontoCobro(saldoPendiente.toFixed(2));
     setFechaEmisionCobro(new Date());
@@ -595,6 +634,8 @@ export default function FacturaVentaFormScreen() {
   const esFormaCobroBanco = formaCobroSeleccionada?.tipo === 'BANCO';
 
   async function confirmarCobro(id: number) {
+    // Candado síncrono (§8): un doble toque llega antes de que React desactive el botón.
+    if (cobrandoRef.current) return;
     const monto = Number(montoCobro.replace(',', '.'));
     if (!monto || monto <= 0) {
       Alert.alert('Monto inválido', 'Ingresa un monto mayor a cero.');
@@ -621,10 +662,12 @@ export default function FacturaVentaFormScreen() {
       return;
     }
 
+    cobrandoRef.current = true;
     setCobrando(true);
     setError(null);
     try {
-      await registrarCobro({
+      const res = await registrarCobro({
+        token_guardado: tokenCobro.current,
         id_factura: id,
         monto,
         id_forma_cobro: idFormaCobro,
@@ -635,7 +678,13 @@ export default function FacturaVentaFormScreen() {
         numero_referencia: esFormaCobroBanco ? numeroReferenciaCobro.trim() || undefined : undefined,
         fecha_cobro: esFormaCobroBanco && tipoOperacionBancaria === 'CHEQUE' && fechaCobroCheque ? fechaLocalISO(fechaCobroCheque) : undefined,
       });
-      Alert.alert('Cobro registrado', `Se registró un cobro de $${monto.toFixed(2)}.`);
+      Alert.alert(
+        res.ya_existia ? 'Cobro ya registrado' : 'Cobro registrado',
+        res.ya_existia
+          ? 'Este cobro ya se había registrado en un intento anterior; no se registró otro.'
+          : `Se registró un cobro de ${monto.toFixed(2)}.`
+      );
+      tokenCobro.current = generarUuid();
       setMostrarFormCobro(false);
       setMontoCobro('');
       setIdFormaCobro(null);
@@ -647,6 +696,7 @@ export default function FacturaVentaFormScreen() {
     } catch (err) {
       setError(mensajeError(err, 'No se pudo registrar el cobro.'));
     } finally {
+      cobrandoRef.current = false;
       setCobrando(false);
     }
   }

@@ -90,7 +90,10 @@ export type EstablecimientoFactura = {
   /** Config de facturación del establecimiento (Empresa → Facturación), igual que la web. */
   editar_precio_factura?: boolean;
   editar_descuento_factura?: boolean;
-  puntos_emision: { id_punto_emision: number; punto_emision: string }[];
+  decimales_precio?: number;
+  decimales_cantidad?: number;
+  /** calculo_iva: modo del IVA de la serie ('subtotal' | 'linea_linea'), igual que el servidor. */
+  puntos_emision: { id_punto_emision: number; punto_emision: string; calculo_iva?: string }[];
 };
 
 export async function obtenerSeries() {
@@ -126,11 +129,14 @@ export type FacturaInput = {
   id_bodega?: number;
   forma_pago: string;
   detalles: { id_producto: number; cantidad: number; precio_unitario?: number; descuento?: number }[];
+  /** Guardado único (§8): misma clave en todos los intentos de un documento nuevo. */
+  token_guardado?: string;
 };
 
 export async function crearFactura(input: FacturaInput) {
   const resp = await api.post('/facturas-venta/crear', input);
-  return resp.data.data as { id: number };
+  // ya_existia: era un reintento y la factura ya estaba guardada (no se creó otra).
+  return resp.data.data as { id: number; ya_existia?: boolean };
 }
 
 /** Solo funciona mientras la factura sigue en 'borrador'; no permite cambiar la serie. */
@@ -195,12 +201,15 @@ export type CobroInput = {
   numero_referencia?: string;
   /** Obligatoria si tipo_operacion_bancaria === 'CHEQUE' (fecha en que se podrá cobrar). */
   fecha_cobro?: string;
+  /** Guardado único (§8): misma clave en todos los intentos de un mismo cobro. */
+  token_guardado?: string;
 };
 
 /** Solo funciona si la factura está 'autorizado' y tiene saldo pendiente > 0. */
 export async function registrarCobro(input: CobroInput) {
   const resp = await api.post('/facturas-venta/cobrar', input);
-  return resp.data.data as { id_ingreso: number };
+  // ya_existia: era un reintento y el cobro ya estaba registrado (no se creó otro).
+  return resp.data.data as { id_ingreso: number; ya_existia?: boolean };
 }
 
 /** Descarga el PDF al almacenamiento local de la app y devuelve el URI del archivo. */

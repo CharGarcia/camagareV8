@@ -30,6 +30,9 @@ class FacturaVentaService
     private bool $validarAccesoBodega = true;
     private bool $validarStock = true;
 
+    /** true si el último crear() devolvió una factura ya creada con la misma clave de guardado (reintento, §8). */
+    public bool $ultimoGuardadoPrevio = false;
+
     public function getLastAsientoWarning(): ?string
     {
         return $this->lastAsientoWarning;
@@ -919,6 +922,27 @@ class FacturaVentaService
 
     public function crear(array $data): int
     {
+        $this->ultimoGuardadoPrevio = false;
+
+        // Guardado único (CLAUDE.md §8): la transacción se abre ANTES de validar secuencial y
+        // stock, y lo primero es buscar la clave del formulario. Así, un reintento tras perderse
+        // la respuesta devuelve la factura ya creada en vez de chocar con "secuencial en uso".
+        // Sin clave (web actual, conversiones desde otros documentos) no cambia nada: la
+        // transacción se abre más abajo, como siempre.
+        $db = Database::getConnection();
+        $managedTransaction = !$db->inTransaction();
+        $guardado = new \App\Services\GuardadoUnicoService();
+        $tokenGuardado = $data['token_guardado'] ?? '';
+        $abiertaTemprano = $managedTransaction && \App\Services\GuardadoUnicoService::normalizar($tokenGuardado) !== '';
+        if ($abiertaTemprano) $db->beginTransaction();
+
+        try {
+        if ($previo = $guardado->previo($tokenGuardado, (int) ($data['id_empresa'] ?? 0), 'factura_venta')) {
+            if ($abiertaTemprano) $db->rollBack();
+            $this->ultimoGuardadoPrevio = true;
+            return (int) $previo['id_registro'];
+        }
+
         $this->validarPeriodoContable(
             $data['fecha_emision'] ?? null,
             (int) ($data['id_empresa'] ?? 0),
@@ -1060,10 +1084,13 @@ class FacturaVentaService
                 }
             }
         }
+        } catch (\Throwable $e) {
+            // Falló una validación previa: se cierra la transacción abierta al inicio.
+            if ($abiertaTemprano && $db->inTransaction()) $db->rollBack();
+            throw $e;
+        }
 
-        $db = Database::getConnection();
-        $managedTransaction = !$db->inTransaction();
-        if ($managedTransaction) $db->beginTransaction();
+        if ($managedTransaction && !$abiertaTemprano) $db->beginTransaction();
 
         try {
             $idEmpresa = (int) $data['id_empresa'];
@@ -1165,6 +1192,8 @@ class FacturaVentaService
                 'factura_venta',
                 !$this->validarStock
             );
+
+            $guardado->registrar($tokenGuardado, $idEmpresa, 'factura_venta', (int) $idVenta, $numFactura, $idUsuario);
 
             if ($managedTransaction) $db->commit();
         } catch (\Throwable $e) {

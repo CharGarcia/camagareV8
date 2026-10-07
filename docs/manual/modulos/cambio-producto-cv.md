@@ -5,8 +5,8 @@ categoria: Ventas
 ruta_modulo: modulos/cambio-producto-cv
 tipo: modulo
 visibilidad: todos
-etiquetas: cambio de producto, cambios de productos, listado de cambios, producto que entra, producto que sale, entra y sale, buscar cambio, buscador, filtros, filtrar cambios, buscar por producto, documento de origen, chips, garantia, reposicion, devolucion con reposicion, canje, buscar por nup, nup, serial, numero de serie, lote, buscar por factura, numero de factura, factura de venta, numero de factura de venta, factura de consignacion, facturacion de consignaciones, buscar por consignacion, numero de consignacion, entregar desde consignacion, existencias, catalogo, bodega, bodega de origen, diferencia a favor, saldo de consignacion, mercaderia en consignacion, inventario, asiento a costo, pdf del cambio, exportar excel, registro en facturacion de consignaciones, facturado por cambio, reposicion facturada, secuencial facturacion consignaciones, sin factura, fecha de emision, fecha del cambio, cambios migrados, nup en el listado, columna nup, iva, impuesto, iva del producto, tarifa de iva, descuento de la factura, aparecen documentos que no busque, resultados que no corresponden, buscar por producto en el listado, consignacion de otro cliente, otro cliente, no aparece la consignacion, no contabilizar cambios, modulos que contabilizan, consignacion sin asiento, imprimir, impresora, asiento de documento anulado, asiento sigue contabilizado, no se anulo el asiento, no se pudo anular el asiento contable
-version: 1.27
+etiquetas: cambio de producto, cambios de productos, actualizar cambio, editar cambio, se queda en borrador, el modal se cierra, listado de cambios, producto que entra, producto que sale, entra y sale, buscar cambio, buscador, filtros, filtrar cambios, buscar por producto, documento de origen, chips, garantia, reposicion, devolucion con reposicion, canje, buscar por nup, nup, serial, numero de serie, lote, buscar por factura, numero de factura, factura de venta, numero de factura de venta, factura de consignacion, facturacion de consignaciones, buscar por consignacion, numero de consignacion, entregar desde consignacion, existencias, catalogo, bodega, bodega de origen, diferencia a favor, saldo de consignacion, mercaderia en consignacion, inventario, asiento a costo, pdf del cambio, exportar excel, registro en facturacion de consignaciones, facturado por cambio, reposicion facturada, secuencial facturacion consignaciones, sin factura, fecha de emision, fecha del cambio, cambios migrados, nup en el listado, columna nup, iva, impuesto, iva del producto, tarifa de iva, descuento de la factura, aparecen documentos que no busque, resultados que no corresponden, buscar por producto en el listado, consignacion de otro cliente, otro cliente, no aparece la consignacion, no contabilizar cambios, modulos que contabilizan, consignacion sin asiento, imprimir, impresora, asiento de documento anulado, asiento sigue contabilizado, no se anulo el asiento, no se pudo anular el asiento contable
+version: 1.28
 orden: 47
 estado: activo
 ---
@@ -308,6 +308,12 @@ búsqueda**. La **×** quita solo ese filtro, y con el cuadro vacío la tecla
   asiento. Pasar a *Borrador* o *Anulada* los reversa y libera los saldos;
   volver a *Emitida* revalida saldos y los vuelve a aplicar. Solo se editan
   documentos en *Borrador*.
+- **Actualizar un Borrador lo emite**: al pulsar **Actualizar**, los cambios se
+  guardan y el documento queda *Emitida* en el mismo paso (mueve el inventario,
+  consume los saldos, registra lo entregado en Facturación de consignaciones y
+  vuelve a generar el asiento). No hay que cambiar el estado a mano después. El
+  modal no se cierra: muestra el cambio ya emitido, en solo lectura; para seguir
+  corrigiendo, se pasa otra vez a *Borrador* desde el selector de estado.
 - **Numeración**: el número que se ve al abrir es una vista previa; el
   definitivo se asigna al guardar y no se puede repetir en la misma serie.
 - **IVA**: lo que **sale** (desde consignación, existencias o catálogo) lleva
@@ -426,6 +432,10 @@ búsqueda**. La **×** quita solo ese filtro, y con el cuadro vacío la tecla
 
 ## Historial de cambios
 
+- **1.28** — Al **actualizar** un cambio en *Borrador* ahora queda **Emitido** en el
+  mismo guardado (antes seguía en Borrador y había que cambiarle el estado aparte,
+  y hasta entonces no movía inventario). El modal ya no se cierra al actualizar:
+  muestra el cambio emitido en solo lectura.
 - **1.27** — El selector de bodega de las entregas muestra solo las **bodegas
   permitidas** al usuario (*Bodegas → Accesos*), como en Consignaciones de
   Ventas; antes listaba todas las de la empresa. Las líneas que vienen de una

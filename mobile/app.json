@@ -2,7 +2,7 @@
   "expo": {
     "name": "CaMaGaRe",
     "slug": "camagare",
-    "version": "1.0.0",
+    "version": "1.0.1",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
@@ -27,33 +27,45 @@
       "permissions": [
         "android.permission.ACCESS_COARSE_LOCATION",
         "android.permission.ACCESS_FINE_LOCATION",
-        "android.permission.RECORD_AUDIO",
         "android.permission.CAMERA"
+      ],
+      "blockedPermissions": [
+        "android.permission.RECORD_AUDIO"
       ]
     },
     "web": {
       "favicon": "./assets/favicon.png"
     },
     "plugins": [
-      "expo-secure-store",
+      [
+        "expo-secure-store",
+        {
+          "faceIDPermission": false
+        }
+      ],
       "@react-native-community/datetimepicker",
       [
         "expo-location",
         {
-          "locationAlwaysAndWhenInUsePermission": "CaMaGaRe usa tu ubicación solo al confirmar una entrega, para registrar dónde se hizo."
+          "locationWhenInUsePermission": "CaMaGaRe usa tu ubicación solo mientras usas la app: al confirmar una entrega y al marcar tu asistencia, para registrar dónde se hizo.",
+          "locationAlwaysAndWhenInUsePermission": "CaMaGaRe usa tu ubicación solo mientras usas la app: al confirmar una entrega y al marcar tu asistencia, para registrar dónde se hizo.",
+          "locationAlwaysPermission": "CaMaGaRe usa tu ubicación solo mientras usas la app: al confirmar una entrega y al marcar tu asistencia, para registrar dónde se hizo."
         }
       ],
       [
         "expo-image-picker",
         {
           "photosPermission": "CaMaGaRe usa tus fotos solo para la imagen del producto que estás creando o editando.",
-          "cameraPermission": "CaMaGaRe usa la cámara solo para tomar la foto del producto que estás creando o editando."
+          "cameraPermission": "CaMaGaRe usa la cámara para escanear el código QR y tomar la selfie al marcar tu asistencia, y para tomar la foto de un producto que estás creando o editando.",
+          "microphonePermission": false
         }
       ],
       [
         "expo-camera",
         {
-          "cameraPermission": "CaMaGaRe usa la cámara para escanear el código QR y tomar la selfie al marcar tu asistencia."
+          "cameraPermission": "CaMaGaRe usa la cámara para escanear el código QR y tomar la selfie al marcar tu asistencia, y para tomar la foto de un producto que estás creando o editando.",
+          "microphonePermission": false,
+          "recordAudioAndroid": false
         }
       ],
       "expo-font"

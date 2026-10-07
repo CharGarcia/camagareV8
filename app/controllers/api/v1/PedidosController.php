@@ -126,8 +126,11 @@ class PedidosController extends ApiBaseController
         // lectura, no lo "reserva"): revalidar aquí que siga disponible justo antes de
         // insertar reduce (sin eliminar del todo) la ventana de colisión entre dos
         // celulares creando pedidos casi al mismo tiempo en el mismo punto de emisión.
+        // Con clave de guardado (§8, `cabecera.token_guardado`) no se corta aquí: si es un
+        // reintento de un pedido que sí se guardó, PedidoService lo devuelve; si no, el propio
+        // Service asigna y valida el secuencial bajo candado.
         $validacion = (new SecuencialService())->validarSecuencial($idPuntoEmision, self::TIPO_DOCUMENTO, $secuencial);
-        if (empty($validacion['disponible'])) {
+        if (empty($validacion['disponible']) && trim((string) ($cabecera['token_guardado'] ?? '')) === '') {
             $this->jsonError('SECUENCIAL_NO_DISPONIBLE', $validacion['mensaje'] ?? 'El secuencial ya no está disponible, vuelve a intentar.', 409);
         }
 

@@ -417,7 +417,13 @@ class RetornosCvController extends BaseModuloController
             if (!empty($input['id'])) {
                 $this->docPropioOCortar((int) $input['id']);
                 $this->service->actualizar((int) $input['id'], $input['id_empresa'], $input);
-                echo json_encode(['ok' => true, 'msg' => 'Retorno actualizado correctamente.']);
+                // Aplicar los cambios deja el retorno Emitida (el Borrador no movía inventario).
+                echo json_encode([
+                    'ok'     => true,
+                    'msg'    => 'Retorno actualizado y emitido. El inventario ha sido actualizado.',
+                    'id'     => (int) $input['id'],
+                    'estado' => 'Emitida',
+                ]);
             } else {
                 // El número lo asigna el servidor al guardar (no el que se vio al abrir el
                 // modal), así que se informa cuál quedó.

@@ -5,8 +5,8 @@ categoria: Ventas
 ruta_modulo: modulos/retornos-cv
 tipo: modulo
 visibilidad: todos
-etiquetas: retorno, retornos, saldo negativo, consignacion en negativo, ya no esta en bodega, no se puede quitar la entrada, dos usuarios a la vez, observaciones, columna observaciones, ver observaciones, notas del retorno, comentarios, columnas del listado, ordenar listado, ocultar columnas, buscar retorno, buscador, filtros, filtrar retornos, buscar por producto, buscar por lote, buscar por NUP, chips, devolucion de consignacion, mercaderia no vendida, reingreso, saldo consignado, numeracion por fecha, numero con el año, reiniciar numeracion, reinicio anual, reinicio mensual, correlativo por año, correlativo por mes, modo de numeracion, buscar por numero de consignacion, agregar consignacion, numero de consignacion, serie inactiva, punto de emision inactivo, permiso actualizar, no puedo guardar, no tengo permiso para esta accion, costo del retorno, costo promedio, retorno a costo cero, aparecen documentos que no busque, resultados que no corresponden, buscar por producto en el listado, cambiar estado, estado del retorno, anular retorno, pasar a borrador, emitir retorno, selector de estado, columna bodega en el pdf, bodega del retorno, a que bodega regresa, total de cantidades, suma de cantidades, total del pdf, fila total, vencimiento, fecha de vencimiento, caducidad, fecha de caducidad, columna vencimiento, vence, lote vencido, no se ve el vencimiento, asiento sigue a la consignacion, no contabilizar consignaciones, retorno sin asiento, modulos que contabilizan, imprimir, impresora, asiento de documento anulado, asiento sigue contabilizado, no se anulo el asiento, no se pudo anular el asiento contable
-version: 1.25
+etiquetas: retorno, retornos, actualizar retorno, editar retorno, se queda en borrador, el modal se cierra, saldo negativo, consignacion en negativo, ya no esta en bodega, no se puede quitar la entrada, dos usuarios a la vez, observaciones, columna observaciones, ver observaciones, notas del retorno, comentarios, columnas del listado, ordenar listado, ocultar columnas, buscar retorno, buscador, filtros, filtrar retornos, buscar por producto, buscar por lote, buscar por NUP, chips, devolucion de consignacion, mercaderia no vendida, reingreso, saldo consignado, numeracion por fecha, numero con el año, reiniciar numeracion, reinicio anual, reinicio mensual, correlativo por año, correlativo por mes, modo de numeracion, buscar por numero de consignacion, agregar consignacion, numero de consignacion, serie inactiva, punto de emision inactivo, permiso actualizar, no puedo guardar, no tengo permiso para esta accion, costo del retorno, costo promedio, retorno a costo cero, aparecen documentos que no busque, resultados que no corresponden, buscar por producto en el listado, cambiar estado, estado del retorno, anular retorno, pasar a borrador, emitir retorno, selector de estado, columna bodega en el pdf, bodega del retorno, a que bodega regresa, total de cantidades, suma de cantidades, total del pdf, fila total, vencimiento, fecha de vencimiento, caducidad, fecha de caducidad, columna vencimiento, vence, lote vencido, no se ve el vencimiento, asiento sigue a la consignacion, no contabilizar consignaciones, retorno sin asiento, modulos que contabilizan, imprimir, impresora, asiento de documento anulado, asiento sigue contabilizado, no se anulo el asiento, no se pudo anular el asiento contable
+version: 1.26
 orden: 46
 estado: activo
 ---
@@ -89,7 +89,13 @@ aplica en ese momento, sin pulsar Guardar.
 - Pasar a *Anulada*, o de *Emitida* a *Borrador*, pide confirmación: si el
   retorno estaba emitido, la mercadería vuelve a salir del inventario y el saldo
   queda libre para otro retorno.
-- Solo un retorno en *Borrador* se puede editar.
+- Solo un retorno en *Borrador* se puede editar. Al pulsar **Actualizar retorno**
+  los cambios se guardan y el retorno **queda Emitido en el mismo paso**: la
+  mercadería entra al inventario, el saldo de la consignación se consume y el
+  asiento se vuelve a generar. No hay que cambiar el estado a mano después.
+- Tras actualizar, **el modal no se cierra**: muestra el retorno ya emitido, en
+  solo lectura. Si hace falta seguir corrigiendo, se pasa otra vez a *Borrador*
+  desde el selector de estado.
 - Hace falta el permiso **Actualizar**; sin él, el selector se ve pero no se
   puede cambiar.
 - En un retorno nuevo el selector no aparece: primero se guarda.
@@ -275,6 +281,10 @@ Contables**; reabrir el período permite la operación de inmediato.
 
 ## Historial de cambios
 
+- **1.26** — Al **actualizar** un retorno en *Borrador* ahora queda **Emitido** en el
+  mismo guardado (antes seguía en Borrador y había que cambiarle el estado aparte,
+  y hasta entonces la mercadería no entraba al inventario). El modal ya no se
+  cierra al actualizar: muestra el retorno emitido en solo lectura.
 - **1.25** — Corrección: al eliminar un retorno, o pasarlo de Emitida a Borrador o
   Anulada, su asiento se anula en la misma operación. Al **eliminar** un retorno
   emitido, su asiento quedaba contabilizado (no se encontraba porque el retorno ya

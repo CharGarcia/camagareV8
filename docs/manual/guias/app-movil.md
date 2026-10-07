@@ -4,8 +4,8 @@ resumen: Cómo funcionan los listados, las facturas de venta y el registro de en
 categoria: Primeros pasos
 tipo: guia
 visibilidad: todos
-etiquetas: proformas en la app, cotizacion desde el celular, cotizar, enviar proforma, aprobar proforma, convertir proforma, app movil, app móvil, aplicacion, celular, telefono, iphone, android, ios, app store, play store, listado, solo veo 20, solo salen 20, ver mas filas, cargar mas, mas registros, factura desde el celular, editar precio en la app, descuento en la app, entregas en la app, observacion de entrega, comentario de entrega, repartidor
-version: 1.1
+etiquetas: total no cuadra en la app, iva en la app, se duplico la factura, factura repetida, doble toque, permisos de la app, proformas en la app, cotizacion desde el celular, cotizar, enviar proforma, aprobar proforma, convertir proforma, app movil, app móvil, aplicacion, celular, telefono, iphone, android, ios, app store, play store, listado, solo veo 20, solo salen 20, ver mas filas, cargar mas, mas registros, factura desde el celular, editar precio en la app, descuento en la app, entregas en la app, observacion de entrega, comentario de entrega, repartidor
+version: 1.2
 orden: 40
 estado: activo
 ---
@@ -86,6 +86,30 @@ Al registrar una entrega se captura la ubicación GPS y se puede escribir una
 no pide la firma de quien recibe. Ver
 [Entregas de Consignaciones](../modulos/entregas-consignaciones.md).
 
+## Totales e IVA en la app
+
+Los totales que se ven en facturas y proformas antes de guardar se calculan
+con la **configuración de facturación de la serie** elegida, igual que en la
+web: el modo del IVA (al subtotal o línea por línea) y los decimales de precio
+y cantidad. Lo que muestra la pantalla coincide con lo que se guarda y con el
+PDF. Ver [Cálculo del IVA](../conceptos/calculo-iva.md).
+
+## Guardar una sola vez
+
+Al pulsar **Guardar** el botón queda bloqueado hasta que termina, así que un
+doble toque no crea dos documentos. Si la conexión falla justo al guardar y el
+usuario vuelve a intentar, el sistema reconoce el intento: si el documento ya
+se había guardado, avisa *"ya estaba registrado; no se creó otro"* y lo abre.
+Aplica a facturas, proformas, pedidos y al **cobro de facturas** (un cobro
+repetido por un reintento no se registra dos veces).
+
+## Permisos del celular
+
+La app pide solo **cámara** (código QR y selfie de asistencia, foto de
+productos), **fotos** (imagen de un producto) y **ubicación** mientras se usa
+la app (al confirmar una entrega y al marcar asistencia). No usa el micrófono
+ni Face ID.
+
 ## Reglas de negocio
 
 - El servidor vuelve a validar todo al guardar: si el establecimiento no
@@ -122,6 +146,10 @@ no pide la firma de quien recibe. Ver
 
 ## Historial de cambios
 
+- **1.2** — Totales de facturas y proformas según la configuración de
+  facturación de la serie (modo del IVA y decimales); un doble toque o un
+  reintento ya no crea documentos ni cobros repetidos; la app deja de pedir micrófono y
+  Face ID y los avisos de permisos están en español.
 - **1.1** — Proformas en la app: listado, crear y editar borradores, aprobar,
   anular, rechazar y reabrir, PDF, envío por correo con aprobación del cliente,
   duplicar y convertir a factura o pedido.

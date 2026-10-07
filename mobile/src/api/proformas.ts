@@ -66,7 +66,10 @@ export async function obtenerProforma(id: number) {
 export type SerieProforma = {
   id_establecimiento: number;
   establecimiento: string;
-  puntos_emision: { id_punto_emision: number; punto_emision: string }[];
+  decimales_precio?: number;
+  decimales_cantidad?: number;
+  /** calculo_iva: modo del IVA de la serie ('subtotal' | 'linea_linea'), igual que el servidor. */
+  puntos_emision: { id_punto_emision: number; punto_emision: string; calculo_iva?: string }[];
 };
 
 export async function obtenerSeriesProforma() {
@@ -120,9 +123,12 @@ export type ProformaInput = {
   detalles: { id_detalle?: number; id_producto: number | null; cantidad: number; precio_unitario: number; descuento: number }[];
 };
 
-export async function crearProforma(input: ProformaInput & { id_establecimiento: number; id_punto_emision: number }) {
+export async function crearProforma(
+  input: ProformaInput & { id_establecimiento: number; id_punto_emision: number; token_guardado?: string }
+) {
   const resp = await api.post('/proformas/crear', input);
-  return resp.data.data as { id: number; numero: string };
+  // ya_existia: era un reintento y la proforma ya estaba guardada (no se creó otra).
+  return resp.data.data as { id: number; numero: string; ya_existia?: boolean };
 }
 
 export async function actualizarProforma(id: number, input: ProformaInput) {

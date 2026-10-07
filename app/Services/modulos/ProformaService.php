@@ -27,6 +27,9 @@ class ProformaService
     private ProformaRules $rules;
     private LogSistemaService $log;
 
+    /** true si el último crear() devolvió una proforma ya creada con la misma clave de guardado (reintento, §8). */
+    public bool $ultimoGuardadoPrevio = false;
+
     public function __construct(
         ProformaRepository $repository,
         ProformaRules $rules,
@@ -45,6 +48,7 @@ class ProformaService
      */
     public function crear(array $data, array $config = []): int
     {
+        $this->ultimoGuardadoPrevio = false;
         $data    = $this->normalizarImportes($data, $config, (int) ($data['id_punto_emision'] ?? 0));
         $errores = $this->rules->validar($data);
         if (!empty($errores)) {
@@ -68,8 +72,17 @@ class ProformaService
         $db = Database::getConnection();
         $managed = !$db->inTransaction();
         $secuencial = '';
+        $guardado = new \App\Services\GuardadoUnicoService();
         if ($managed) $db->beginTransaction();
         try {
+            // Guardado único (CLAUDE.md §8): un reintento del mismo formulario nuevo devuelve la
+            // proforma ya creada. Va antes del candado del secuencial.
+            if ($previo = $guardado->previo($data['token_guardado'] ?? '', $idEmpresa, 'proformas')) {
+                if ($managed) $db->rollBack();
+                $this->ultimoGuardadoPrevio = true;
+                return (int) $previo['id_registro'];
+            }
+
             $secRes     = (new SecuencialService())->obtenerSiguienteSecuencial($idPunto, 'Proformas', $data['fecha_emision'] ?? null);
             $secuencial = $secRes['formateado'] ?? str_pad((string) ($secRes['secuencial'] ?? 1), 9, '0', STR_PAD_LEFT);
             $data['secuencial'] = $secuencial;
@@ -81,6 +94,7 @@ class ProformaService
             $idProforma = $this->repository->insertCabecera($data);
             $this->guardarDetalles($idProforma, $data['detalles']);
             $this->guardarInfoAdicional($idProforma, $data['info_adicional'] ?? []);
+            $guardado->registrar($data['token_guardado'] ?? '', $idEmpresa, 'proformas', $idProforma, $secuencial, $idUsuario);
             if ($managed) $db->commit();
 
             try {
