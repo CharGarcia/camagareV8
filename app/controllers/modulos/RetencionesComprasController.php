@@ -895,9 +895,18 @@ class RetencionesComprasController extends BaseModuloController
 
         try {
             $rows = $this->repository->buscarDocumentosSustento($idEmpresa, '', null, $origen, $id, 1);
-            echo json_encode($rows
-                ? ['ok' => true, 'data' => $rows[0]]
-                : ['ok' => false, 'mensaje' => 'El documento no existe, está anulado o es de otro ambiente.']);
+            if (!$rows) {
+                echo json_encode(['ok' => false, 'mensaje' => 'El documento no existe, está anulado o es de otro ambiente.']);
+                exit;
+            }
+            // Una liquidación de compra solo se retiene ya autorizada por el SRI
+            // (misma regla que RetencionCompraRules::validarDocumentoVinculado).
+            if ($origen === 'liquidacion' && strtolower((string) ($rows[0]['estado'] ?? '')) !== 'autorizado') {
+                echo json_encode(['ok' => false, 'mensaje' => 'La liquidación de compra ' . ($rows[0]['num_comprobante'] ?? '')
+                    . ' aún no está autorizada por el SRI. Envíela y espere la autorización antes de emitir la retención.']);
+                exit;
+            }
+            echo json_encode(['ok' => true, 'data' => $rows[0]]);
         } catch (\Throwable $e) {
             \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             echo json_encode(['ok' => false, 'mensaje' => 'No se pudo cargar el documento.']);

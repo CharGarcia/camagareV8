@@ -1392,6 +1392,7 @@ class RetencionCompraRepository extends BaseRepository
             $st = $this->db->prepare(
                 "SELECT l.id, l.id_proveedor, l.estado, l.eliminado, '03' AS tipo_comprobante,
                         p.razon_social AS proveedor_razon_social,
+                        COALESCE(l.establecimiento,'') || '-' || COALESCE(l.punto_emision,'') || '-' || COALESCE(l.secuencial,'') AS numero,
                         'liquidacion' AS tipo_documento
                    FROM liquidaciones_cabecera l
                    LEFT JOIN proveedores p ON p.id = l.id_proveedor

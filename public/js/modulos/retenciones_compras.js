@@ -1683,6 +1683,11 @@
 
     const ETIQUETA_ORIGEN = { compra: 'Compra', liquidacion: 'Liquidación de compra' };
 
+    /** Una liquidación de compra solo se retiene cuando el SRI ya la autorizó. */
+    function liquidacionAutorizada(doc) {
+        return String(doc?.estado || '').toLowerCase() === 'autorizado';
+    }
+
     /**
      * Buscador del Nº Doc. Retenido: al enfocarlo con un proveedor elegido lista sus
      * compras y liquidaciones; al escribir el número/secuencial filtra (de todos los
@@ -1722,7 +1727,10 @@
             drop.innerHTML = items.map((d, i) => {
                 const esLiq = d.origen === 'liquidacion';
                 const retenida = d.tiene_retencion === true || d.tiene_retencion === 't';
-                return `<button type="button" class="list-group-item list-group-item-action py-1 small" data-idx="${i}">
+                // Una liquidación de compra solo se retiene ya autorizada por el SRI: se
+                // muestra (para que se entienda por qué no se puede elegir) pero inhabilitada.
+                const sinAutorizar = esLiq && !liquidacionAutorizada(d);
+                return `<button type="button" class="list-group-item list-group-item-action py-1 small${sinAutorizar ? ' disabled opacity-75' : ''}" data-idx="${i}"${sinAutorizar ? ' disabled aria-disabled="true"' : ''}>
                     <div class="d-flex justify-content-between gap-2">
                         <strong class="font-monospace">${escHtml(d.num_comprobante)}</strong>
                         <span class="badge ${esLiq ? 'bg-warning text-warning' : 'bg-primary text-primary'} bg-opacity-10 border border-opacity-25 ${esLiq ? 'border-warning' : 'border-primary'}">${ETIQUETA_ORIGEN[d.origen] || ''}</span>
@@ -1731,10 +1739,11 @@
                         <span class="text-truncate">${escHtml(d.proveedor_nombre || '')}</span>
                         <span class="text-nowrap">${escHtml(String(d.fecha_emision || '').substring(0, 10).split('-').reverse().join('-'))} · $${(parseFloat(d.importe_total) || 0).toFixed(2)}</span>
                     </div>
+                    ${sinAutorizar ? '<div class="text-danger" style="font-size:.7rem;"><i class="bi bi-lock me-1"></i>Sin autorizar en el SRI: no se puede retener hasta que esté autorizada</div>' : ''}
                     ${retenida ? '<div class="text-danger" style="font-size:.7rem;"><i class="bi bi-exclamation-triangle me-1"></i>Ya tiene una retención registrada</div>' : ''}
                 </button>`;
             }).join('');
-            drop.querySelectorAll('button[data-idx]').forEach((btn) => {
+            drop.querySelectorAll('button[data-idx]:not([disabled])').forEach((btn) => {
                 btn.addEventListener('mousedown', (e) => e.preventDefault()); // no perder el foco antes del click
                 btn.addEventListener('click', () => {
                     window.RET_aplicarDocumentoSustento(items[parseInt(btn.dataset.idx, 10)]);
@@ -1811,6 +1820,10 @@
      */
     window.RET_aplicarDocumentoSustento = function (doc) {
         if (!doc || !doc.id) return;
+        if (doc.origen === 'liquidacion' && !liquidacionAutorizada(doc)) {
+            mostrarAlerta(`La liquidación de compra ${doc.num_comprobante || ''} aún no está autorizada por el SRI. Envíela y espere la autorización antes de emitir la retención.`, 'warning');
+            return;
+        }
         const set = (id, v) => { const el = document.getElementById(id); if (el) el.value = v ?? ''; };
         const subtotal = (parseFloat(doc.subtotal) || 0).toFixed(2);
         const iva      = (parseFloat(doc.iva) || 0).toFixed(2);

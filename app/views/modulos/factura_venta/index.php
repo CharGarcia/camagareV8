@@ -1551,6 +1551,8 @@ $totalPages = $totalPagesOriginal;
     const EMPRESA_CONFIG = {
         facturacion_libre: <?= (($empresa['facturacion_libre'] ?? false) === 'true' || ($empresa['facturacion_libre'] ?? false) === true) ? 'true' : 'false' ?>,
         facturacion_inventario: <?= (($empresa['facturacion_inventario'] ?? true) === 'true'  || ($empresa['facturacion_inventario'] ?? true)  === true)  ? 'true' : 'false' ?>,
+        // "¿Trabajar con stock positivo?" (Empresa → Facturación): condiciona la ventana de productos similares.
+        factura_solo_stock_positivo: <?= (($empresa['factura_solo_stock_positivo'] ?? false) === 'true' || ($empresa['factura_solo_stock_positivo'] ?? false) === true) ? 'true' : 'false' ?>,
         obligatorio_lotes: <?= (($empresa['obligatorio_lotes'] ?? false) === 'true'    || ($empresa['obligatorio_lotes'] ?? false)    === true)    ? 'true' : 'false' ?>,
         obligatorio_caducidad: <?= (($empresa['obligatorio_caducidad'] ?? false) === 'true' || ($empresa['obligatorio_caducidad'] ?? false) === true) ? 'true' : 'false' ?>,
         obligatorio_nup: <?= (($empresa['obligatorio_nup'] ?? false) === 'true'       || ($empresa['obligatorio_nup'] ?? false)       === true)       ? 'true' : 'false' ?>,
@@ -4692,9 +4694,12 @@ $totalPages = $totalPagesOriginal;
         window.fvSeleccionarProductoEnFila = seleccionarProductoEnFila;
 
         // ¿El producto elegido no tiene saldo en la bodega de la cabecera? Solo aplica
-        // cuando la facturación afecta al inventario: en ese caso el buscador ya pidió
-        // stock_bodega (null en servicios y productos no inventariables).
+        // cuando la facturación afecta al inventario Y la empresa trabaja con stock
+        // positivo (si se permite stock negativo, el producto se factura igual y la
+        // ventana de similares solo estorba). El buscador ya pidió stock_bodega (null
+        // en servicios y productos no inventariables).
         const fvProductoSinSaldo = (p) => EMPRESA_CONFIG.facturacion_inventario
+            && EMPRESA_CONFIG.factura_solo_stock_positivo
             && getIdBodegaCabecera()
             && p.stock_bodega !== undefined && p.stock_bodega !== null
             && (parseFloat(p.stock_bodega) || 0) <= 0;

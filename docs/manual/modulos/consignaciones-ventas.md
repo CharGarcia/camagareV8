@@ -5,8 +5,8 @@ categoria: Ventas
 ruta_modulo: modulos/consignaciones-ventas
 tipo: modulo
 visibilidad: todos
-etiquetas: consignacion, consignaciones, buscar consignacion, buscador, filtros, filtrar consignaciones, buscar por producto, buscar por lote, buscar por NUP, chips, asesor, vendedor, vendedor del cliente, asesor automatico, mercaderia en consignacion, entrega, deposito, liquidar, facturar consignacion, numeracion por fecha, numero con el año, reiniciar numeracion, reinicio anual, reinicio mensual, correlativo por año, correlativo por mes, modo de numeracion, cargar desde pedido, llamar pedido, lote, vencimiento, caducidad, fecha de vencimiento, NUP, acceso total, registros propios, solo mis documentos, quien ve que, permiso actualizar, no puedo guardar, boton guardar no aparece, no tengo permiso para esta accion, demora al guardar, guardar lento, se queda guardando, estado del pedido, pedido procesado, pedido pendiente, eliminar consignacion, editar consignacion, no puedo eliminar la consignacion, documentos relacionados, el stock no volvio, devolver stock, costo promedio, kardex anulado, pestana pedidos, pedidos relacionados, pedido de la consignacion, pendiente del pedido, asiento no generado, faltan cuentas, asiento incompleto, aparecen documentos que no busque, resultados que no corresponden, buscar por producto en el listado, codigo del producto, codigo de producto, ver codigo, NUP repetido, nup duplicado, serie repetida, el nup no puede repetirse, mismo nup dos productos, nup por lote, cada unidad su nup, numero de serie repetido, el modal se cierra al guardar, no se cierra el modal, seguir en la consignacion, imprimir despues de guardar, guardar y seguir, no contabilizar consignaciones, sin asiento de consignacion, apagar asiento, modulos que contabilizan, enfoque sin reclasificacion, consignacion sin asiento, aviso de asientos pendientes, asiento de documento anulado, asiento sigue contabilizado, no se anulo el asiento, no se pudo anular el asiento contable, consignacion duplicada, pedido consignado dos veces, dos consignaciones del mismo pedido, ya tiene consignado, saldo del pedido, pedido en dos ventanas, doble clic, guardar dos veces, se guardo dos veces, no se recibio respuesta del servidor, error al guardar
-version: 1.37
+etiquetas: consignacion, consignaciones, buscar consignacion, buscador, filtros, filtrar consignaciones, buscar por producto, buscar por lote, buscar por NUP, chips, asesor, vendedor, vendedor del cliente, asesor automatico, mercaderia en consignacion, entrega, deposito, liquidar, facturar consignacion, numeracion por fecha, numero con el año, reiniciar numeracion, reinicio anual, reinicio mensual, correlativo por año, correlativo por mes, modo de numeracion, cargar desde pedido, llamar pedido, lote, vencimiento, caducidad, fecha de vencimiento, NUP, acceso total, registros propios, solo mis documentos, quien ve que, permiso actualizar, no puedo guardar, boton guardar no aparece, no tengo permiso para esta accion, demora al guardar, guardar lento, se queda guardando, estado del pedido, pedido procesado, pedido pendiente, eliminar consignacion, editar consignacion, no puedo eliminar la consignacion, documentos relacionados, el stock no volvio, devolver stock, costo promedio, kardex anulado, pestana pedidos, pedidos relacionados, pedido de la consignacion, pendiente del pedido, asiento no generado, faltan cuentas, asiento incompleto, aparecen documentos que no busque, resultados que no corresponden, buscar por producto en el listado, codigo del producto, codigo de producto, ver codigo, NUP repetido, nup duplicado, serie repetida, el nup no puede repetirse, mismo nup dos productos, nup por lote, cada unidad su nup, numero de serie repetido, el modal se cierra al guardar, no se cierra el modal, seguir en la consignacion, imprimir despues de guardar, guardar y seguir, no contabilizar consignaciones, sin asiento de consignacion, apagar asiento, modulos que contabilizan, enfoque sin reclasificacion, consignacion sin asiento, aviso de asientos pendientes, asiento de documento anulado, asiento sigue contabilizado, no se anulo el asiento, no se pudo anular el asiento contable, consignacion duplicada, pedido consignado dos veces, dos consignaciones del mismo pedido, ya tiene consignado, saldo del pedido, pedido en dos ventanas, doble clic, guardar dos veces, se guardo dos veces, no se recibio respuesta del servidor, error al guardar, varias bodegas, distintas bodegas, bodega por producto, bodega por linea, bodega por fila, cambiar de bodega, bodega de despacho, se borran los productos al cambiar de bodega, se pierden los productos agregados, sacar de otra bodega
+version: 1.38
 orden: 45
 estado: activo
 ---
@@ -96,10 +96,31 @@ Al **abrir una consignación ya guardada**, cada línea muestra el lote y el
 vencimiento **con los que se guardó**, aunque el inventario haya cambiado desde
 entonces: manda el documento, no el catálogo.
 
-Cada línea muestra el **stock disponible** en la bodega seleccionada (verde si
+Cada línea muestra el **stock disponible** en la bodega de esa fila (verde si
 alcanza para todo lo pendiente, rojo si no). La casilla **Desagr.** parte la
 línea en una fila por unidad, para asignar un NUP distinto a cada una; conviene
 desmarcarla en cantidades grandes.
+
+### Sacar productos de distintas bodegas en una misma carga
+
+Cada fila del pedido tiene su propia columna **Bodega**. La **Bodega de
+Despacho** de arriba es solo la bodega **por defecto** con la que arrancan las
+filas: en cualquier fila se puede elegir otra, y al hacerlo se actualizan su
+stock y sus lotes, sin tocar la cantidad ni el NUP ya escritos. Así, de un mismo
+pedido se pueden despachar unos productos de una bodega y otros de otra, y
+agregarlos todos de una sola vez.
+
+Cambiar la **Bodega de Despacho** tampoco borra nada: pasa a la nueva bodega
+únicamente las filas que todavía no se han tocado. Las filas en las que ya se
+escribió una cantidad, un lote, un NUP o se eligió una bodega a mano se quedan
+exactamente como están. Antes, cambiar la bodega reconstruía toda la tabla y se
+perdía lo configurado.
+
+En el detalle de la consignación cada línea muestra también su **Bodega** (la
+columna aparece solo si el usuario tiene más de una bodega) y se puede cambiar
+ahí mismo. La bodega de la cabecera es la bodega por defecto de las líneas que
+se agregan a mano; las líneas que vienen de un pedido conservan la bodega con la
+que se cargaron. Al guardar, el stock se descuenta de la bodega de **cada línea**.
 
 No es todo o nada: las filas a las que les falte lote, vencimiento o NUP (cuando
 la empresa los exige) se omiten y se listan al final, pero las filas completas sí
@@ -504,6 +525,13 @@ Contables**; reabrir el período permite la operación de inmediato.
 
 ## Historial de cambios
 
+- **1.38** — **Productos de distintas bodegas en una misma consignación.** Al
+  cargar desde un pedido, cada fila tiene su propia columna **Bodega**; la
+  *Bodega de Despacho* es solo la bodega por defecto. Cambiarla ya no reconstruye
+  la tabla (antes se perdían las cantidades, lotes y NUP ya escritos): solo pasa a
+  la nueva bodega las filas que todavía no se habían tocado. El detalle de la
+  consignación muestra la bodega de cada línea (si el usuario tiene más de una) y
+  permite cambiarla; el stock se descuenta de la bodega de cada línea.
 - **1.37** — Al agregar un producto a la consignación, el **lote se llena solo
   únicamente si el producto tiene un solo lote** en la bodega. Con dos o más
   lotes la línea queda en *Lote...* para elegir cuál sale. Antes se

@@ -492,6 +492,18 @@ class RetencionCompraRules
             return;
         }
 
+        // Una liquidación de compra la emite la propia empresa: hasta que el SRI la
+        // autorice no es un comprobante válido (puede ser devuelta, corregida o
+        // cambiar de número), así que la retención que la sustenta se emite solo
+        // sobre una liquidación ya autorizada. Igual que el botón de la pestaña
+        // Retenciones de la liquidación y el buscador del módulo de Retenciones.
+        if (($doc['tipo_documento'] ?? '') === 'liquidacion'
+            && strtolower((string) ($doc['estado'] ?? '')) !== 'autorizado') {
+            $errores[] = 'La liquidación de compra ' . ($doc['numero'] ?? '')
+                . ' aún no está autorizada por el SRI. Envíela y espere la autorización antes de emitir la retención.';
+            return;
+        }
+
         // La retención declara al SRI un pago a un proveedor concreto: el documento
         // que la sustenta tiene que ser de ese mismo proveedor. Si el usuario cambió
         // el proveedor después de abrir la retención desde la compra, aquí se corta.

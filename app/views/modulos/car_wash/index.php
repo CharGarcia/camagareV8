@@ -239,6 +239,7 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
     window.EMPRESA_CONFIG = {
         facturacion_libre: <?= $bt('facturacion_libre', false) ?>,
         facturacion_inventario: <?= $bt('facturacion_inventario', true) ?>,
+        factura_solo_stock_positivo: <?= $bt('factura_solo_stock_positivo', false) ?>,
         obligatorio_lotes: <?= $bt('obligatorio_lotes', false) ?>,
         obligatorio_caducidad: <?= $bt('obligatorio_caducidad', false) ?>,
         obligatorio_nup: <?= $bt('obligatorio_nup', false) ?>,

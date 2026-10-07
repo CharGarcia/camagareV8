@@ -298,6 +298,16 @@ registrado, sin ir a Compras ni a Liquidaciones:
    indicando que la retención quedó vinculada.
 
 Si el documento ya tiene una retención registrada, la lista lo avisa en rojo.
+
+**Liquidaciones de compra: solo autorizadas.** Una liquidación de compra que la
+empresa todavía no envió al SRI, o que el SRI no ha autorizado, aparece en la
+lista pero **no se puede elegir**: se ve atenuada con el aviso *Sin autorizar en
+el SRI: no se puede retener hasta que esté autorizada*. Primero autorice la
+liquidación en su módulo y luego emita la retención. Si aun así se intenta
+guardar una retención vinculada a una liquidación sin autorizar, el servidor la
+rechaza con el mensaje *"La liquidación de compra … aún no está autorizada por el
+SRI"*. Las compras (facturas de proveedores) no tienen esta restricción, porque
+las emite el proveedor y llegan ya autorizadas.
 Para quitar el vínculo pulse **Backspace** o **Supr** en el número: se borra de
 una vez y puede elegir otro documento o escribir el número a mano (documento no
 registrado en el sistema, con sus totales en la tarjeta *Documento sustento*).
@@ -461,6 +471,11 @@ El valor lo configura el superadministrador en `/config/sri-proveedor`.
 
 ## Historial de cambios
 
+- **1.27** — Una **liquidación de compra** solo se puede retener cuando ya está
+  **autorizada por el SRI**: en el buscador de **Nº Doc. Retenido** las no
+  autorizadas se ven atenuadas y no se pueden elegir, y el servidor rechaza la
+  retención vinculada a una liquidación sin autorizar. Misma regla en el botón
+  **Emitir Retención** de la liquidación.
 - **1.26** — El superadministrador puede **eliminar** una retención en cualquier
   estado, también autorizada, para volver a cargar una que entró con errores. No
   anula nada en el SRI. Ver *Eliminar una retención autorizada*.

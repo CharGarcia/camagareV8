@@ -285,6 +285,7 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosPestanasOcultas($vistaConfigC
                                                 <th class="py-2 small fw-bold text-muted" style="width:120px;">Precios</th>
                                                 <th class="py-2 small fw-bold text-muted text-end" style="width:120px;">Precio</th>
                                                 <th class="py-2 small fw-bold text-muted text-center" style="width:100px;">Cantidad</th>
+                                                <th class="py-2 small fw-bold text-muted d-none th-bodega" style="width:150px;" title="Bodega de la que sale cada línea. La bodega de la cabecera es solo la bodega por defecto.">Bodega</th>
                                                 <th class="py-2 small fw-bold text-muted d-none th-lote" style="width:120px;">Lote</th>
                                                 <th class="py-2 small fw-bold text-muted d-none th-nup" style="width:120px;">NUP</th>
                                                 <th class="py-2 small fw-bold text-muted d-none th-caducidad" style="width:120px;">Caducidad</th>
@@ -761,7 +762,7 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosPestanasOcultas($vistaConfigC
                     try {
                     for (const d of data.data.detalles) {
                         const tr = agregarFilaConsignacion();
-                        tr.dataset.idBodega = d.id_bodega || '';
+                        consSetBodegaFila(tr, d.id_bodega || '', d.bodega_nombre || '');
                         const inputDesc = tr.querySelector('.input-descripcion');
                         const inputCant = tr.querySelector('.input-cantidad');
                         const inputPrecio = tr.querySelector('.input-precio');
@@ -970,6 +971,9 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosPestanasOcultas($vistaConfigC
                 </td>
                 <td><input type="number" class="form-control form-control-sm input-detalle text-end input-precio" value="0.00" step="any" oninput="consCalcFila(this)" onblur="this.value=parseFloat(this.value||0).toFixed(EMPRESA_CONFIG.decimales_precio)"></td>
                 <td><input type="number" class="form-control form-control-sm input-detalle text-center input-cantidad" value="1" step="any" oninput="consCalcFila(this)"></td>
+                <td class="th-bodega ${consMultiBodega() ? '' : 'd-none'}">
+                    <select class="form-select form-select-sm input-detalle input-bodega" title="Bodega de la que sale esta línea"></select>
+                </td>
                 <td class="${typeof EMPRESA_CONFIG !== 'undefined' && EMPRESA_CONFIG.obligatorio_lotes ? '' : 'd-none'} th-lote">
                     <select class="form-select form-select-sm input-detalle input-lote d-none"></select>
                 </td>
@@ -985,7 +989,22 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosPestanasOcultas($vistaConfigC
                 </td>
             `;
             tbody.appendChild(tr);
-            tr.dataset.idBodega = document.getElementById('cons_id_bodega').value || '';
+
+            // Bodega por fila (ver consSetBodegaFila): el select de la línea se llena con las
+            // mismas bodegas de la cabecera y arranca en la bodega por defecto. Si el usuario la
+            // cambia a mano, la fila deja de seguir a la cabecera y recarga sus lotes.
+            const selBodegaFila = tr.querySelector('.input-bodega');
+            if (selBodegaFila) {
+                selBodegaFila.innerHTML = document.getElementById('cons_id_bodega').innerHTML;
+                selBodegaFila.onchange = () => {
+                    tr.dataset.bodegaManual = '1';
+                    consSetBodegaFila(tr, selBodegaFila.value);
+                    const esInv = (tr.dataset.inventariable == true || tr.dataset.inventariable == 'true' || tr.dataset.inventariable == 1) && tr.dataset.tipoProduccion !== '02';
+                    if (esInv && tr.dataset.idProducto) consCargarLotesFila(tr);
+                };
+            }
+            consActualizarColumnaBodega();
+            consSetBodegaFila(tr, document.getElementById('cons_id_bodega').value || '');
 
             const inputDesc = tr.querySelector('.input-descripcion');
             // Solo al agregar una fila a mano: al abrir una consignación se crean todas de
@@ -1121,7 +1140,9 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosPestanasOcultas($vistaConfigC
                 clearTimeout(timeout);
                 timeout = setTimeout(async () => {
                     try {
-                        const idBodega = document.getElementById('cons_id_bodega').value || 0;
+                        // El saldo que muestra el buscador es el de la bodega de ESTA fila (por
+                        // defecto la de la cabecera; el usuario puede cambiarla antes de buscar).
+                        const idBodega = tr.dataset.idBodega || document.getElementById('cons_id_bodega').value || 0;
                         const consId = document.getElementById('cons_id').value || 0;
                         const url = `${RUTA_MODULO_CONSIGNACION}/getProductosAjax?q=${encodeURIComponent(q)}&id_bodega=${idBodega}&id_consignacion=${consId}`;
                         const resp = await fetch(url);
@@ -1222,6 +1243,34 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosPestanasOcultas($vistaConfigC
         dropdown.classList.remove('d-none');
     }
 
+    // ---- Bodega por línea del detalle ----
+    // La bodega de la cabecera (cons_id_bodega) es solo la bodega POR DEFECTO. Cada fila guarda
+    // la suya en dataset.idBodega (es lo que viaja al servidor en cada detalle) y la muestra en
+    // su select .input-bodega, visible únicamente cuando el usuario tiene más de una bodega. Así
+    // una misma consignación puede sacar unos productos de una bodega y otros de otra.
+    function consMultiBodega() {
+        const sel = document.getElementById('cons_id_bodega');
+        return sel ? Array.from(sel.options).filter(o => o.value !== '').length > 1 : false;
+    }
+    function consActualizarColumnaBodega() {
+        const mostrar = consMultiBodega();
+        document.querySelectorAll('#consTablaDetalles thead .th-bodega').forEach(el => el.classList.toggle('d-none', !mostrar));
+    }
+    function consSetBodegaFila(tr, idBodega, nombreBodega) {
+        const valor = idBodega ? String(idBodega) : '';
+        tr.dataset.idBodega = valor;
+        const sel = tr.querySelector('.input-bodega');
+        if (!sel) return;
+        if (valor && !Array.from(sel.options).some(o => o.value === valor)) {
+            // Bodega de un registro ya guardado que el usuario no tiene permitida: se muestra igual.
+            const opt = document.createElement('option');
+            opt.value = valor;
+            opt.textContent = nombreBodega || ('Bodega ' + valor);
+            sel.appendChild(opt);
+        }
+        sel.value = valor;
+    }
+
     async function consCargarLotesFila(row) {
         const idProd = row.dataset.idProducto;
         const idBod = row.dataset.idBodega || document.getElementById('cons_id_bodega').value;
@@ -1307,10 +1356,15 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosPestanasOcultas($vistaConfigC
         if (selectBodega) {
             selectBodega.addEventListener('change', () => {
                 document.querySelectorAll('.row-detalle-cons').forEach(tr => {
+                    // Siguen a la cabecera solo las líneas agregadas a mano cuya bodega el usuario
+                    // no cambió en su propio select. Las que vienen de un pedido conservan la
+                    // bodega con la que se cargaron (puede ser distinta por línea).
                     const isManual = !tr.querySelector('.input-id-pedido-detalle') || !tr.querySelector('.input-id-pedido-detalle').value;
-                    if (isManual) {
-                        tr.dataset.idBodega = selectBodega.value;
+                    const antes = tr.dataset.idBodega || '';
+                    if (isManual && tr.dataset.bodegaManual !== '1') {
+                        consSetBodegaFila(tr, selectBodega.value);
                     }
+                    if ((tr.dataset.idBodega || '') === antes) return; // nada que recargar
                     const esInv = (tr.dataset.inventariable == true || tr.dataset.inventariable == 'true' || tr.dataset.inventariable == 1) && tr.dataset.tipoProduccion !== '02';
                     if (esInv && tr.dataset.idProducto) {
                         consCargarLotesFila(tr);
@@ -2004,12 +2058,123 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosPestanasOcultas($vistaConfigC
         }
     });
 
-    window.recargarStockLotesPedidoSeleccionado = function() {
-        if (window.ACTUAL_PEDIDO_ID) {
-            const num = document.getElementById('bp_pedido_numero').textContent;
-            const cli = document.getElementById('bp_pedido_cliente').textContent;
-            window.cargarPedidoParaPaso2(window.ACTUAL_PEDIDO_ID, num, cli);
+    // ---- Lotes y stock por producto Y bodega en el modal de pedido ----
+    // Caché por carga de pedido: cada combinación producto/bodega se pide una sola vez aunque
+    // varias filas (unidades desagregadas) la compartan. Se vacía al cargar otro pedido.
+    window._BP_LOTES_CACHE = {};
+    function bpLotesBodega(idProducto, idBodega) {
+        const clave = `${idProducto}_${idBodega}`;
+        if (!window._BP_LOTES_CACHE[clave]) {
+            window._BP_LOTES_CACHE[clave] = (async () => {
+                try {
+                    const r = await fetch(`${RUTA_MODULO_CONSIGNACION}/getLotesDisponiblesAjax?id_producto=${idProducto}&id_bodega=${idBodega}`);
+                    const j = await r.json();
+                    if (j.ok) return { lotes: j.data || [], stock: parseFloat(j.stock_total) || 0 };
+                } catch (e) { /* sin stock: la fila se muestra sin badge y sin lotes */ }
+                return { lotes: [], stock: null };
+            })();
         }
+        return window._BP_LOTES_CACHE[clave];
+    }
+    // Precarga en UNA petición (getLotesVariosAjax) los pares producto/bodega de la bodega por
+    // defecto, para que la tabla del pedido salga de una sola vez. Si falla, cada fila pide lo suyo.
+    async function bpPrecargarLotes(pares) {
+        if (!pares.length) return;
+        try {
+            const fd = new FormData();
+            fd.append('pares', JSON.stringify(pares));
+            const resp = await fetch(`${RUTA_MODULO_CONSIGNACION}/getLotesVariosAjax`, { method: 'POST', body: fd });
+            const json = await resp.json();
+            if (!json.ok || !json.data) return;
+            Object.keys(json.data).forEach(clave => {
+                const v = json.data[clave] || {};
+                window._BP_LOTES_CACHE[clave] = Promise.resolve({ lotes: v.data || [], stock: parseFloat(v.stock_total) || 0 });
+            });
+        } catch (e) {
+            console.error('Lotes en bloque: se consultan fila por fila.', e);
+        }
+    }
+    function bpPintarLotesFila(tr, lotes) {
+        const selLote = tr.querySelector('.item-lote');
+        const selVenc = tr.querySelector('.item-caducidad');
+        if (!selLote || !selVenc) return;
+        tr._bpLotes = lotes || [];
+        if (tr._bpLotes.length > 0) {
+            let lo = '<option value="">Lote...</option>';
+            let vo = '<option value="">Vencimiento...</option>';
+            tr._bpLotes.forEach(l => {
+                const lv = l.numero_lote === 'sin_lote' ? '' : l.numero_lote;
+                const c = l.fecha_caducidad || '';
+                lo += `<option value="${lv}">${lv || 'Sin Lote'}</option>`;
+                vo += `<option value="${c}">${consFechaCadTexto(c)}</option>`;
+            });
+            selLote.innerHTML = lo;
+            selVenc.innerHTML = vo;
+            tr._bpVencOptions = vo;
+        } else {
+            selLote.innerHTML = '<option value="">Sin Lote</option>';
+            selVenc.innerHTML = '<option value="">Sin Fecha</option>';
+            tr._bpVencOptions = selVenc.innerHTML;
+        }
+    }
+    // Fija la bodega de UNA fila del pedido y actualiza lo que depende de ella: el badge de
+    // stock y las listas de lote/vencimiento. Cantidad, precio y NUP no se tocan.
+    async function bpAplicarBodegaFila(tr, idBodega) {
+        const datos = tr._bpDatos;
+        if (!datos) return;
+        const valor = idBodega ? String(idBodega) : '';
+        tr.dataset.idBodega = valor;
+        const selB = tr.querySelector('.item-bodega');
+        if (selB && selB.value !== valor) selB.value = valor;
+        const badge = tr.querySelector('.bp-badge-stock');
+        if (!datos.esInv || !valor) {
+            if (badge) badge.innerHTML = '';
+            if (datos.manejaNup) bpPintarLotesFila(tr, []);
+            return;
+        }
+        const info = await bpLotesBodega(datos.item.id_producto, valor);
+        // La fila pudo cambiar de bodega o desaparecer (re-render) mientras llegaba la respuesta.
+        if (!tr.isConnected || tr.dataset.idBodega !== valor) return;
+        if (badge) {
+            if (info.stock === null) {
+                badge.innerHTML = '';
+            } else {
+                // Verde si alcanza para despachar todo lo pendiente, rojo si no.
+                const alcanza = info.stock >= datos.cantPendiente;
+                const cls = alcanza ? 'bg-success bg-opacity-10 text-success border-success' : 'bg-danger bg-opacity-10 text-danger border-danger';
+                badge.innerHTML = `<span class="badge ${cls} border border-opacity-25" title="Stock disponible en la bodega de esta fila">Stock: ${info.stock.toFixed(2)}</span>`;
+            }
+        }
+        if (datos.manejaNup) bpPintarLotesFila(tr, info.lotes);
+    }
+    // Una fila "tocada" es una que el usuario ya configuró (cantidad, precio, lote, NUP o su
+    // propia bodega). Cambiar la bodega por defecto no la altera.
+    document.addEventListener('DOMContentLoaded', () => {
+        const tbodyBp = document.getElementById('bp_items_tbody');
+        if (!tbodyBp) return;
+        const marcar = (e) => {
+            if (!e.target || e.target.classList.contains('chk-desagregar-producto')) return;
+            const tr = e.target.closest('tr');
+            if (tr) tr.dataset.tocada = '1';
+        };
+        tbodyBp.addEventListener('input', marcar);
+        tbodyBp.addEventListener('change', marcar);
+    });
+
+    // Cambiar la "Bodega de Despacho" ya NO reconstruye la tabla del pedido (antes borraba las
+    // cantidades, lotes y NUP ya escritos): solo pasa a la nueva bodega las filas que el usuario
+    // todavía no tocó. Las que ya configuró se quedan como están, con su bodega. Así se arma en
+    // una sola carga un despacho con productos de distintas bodegas.
+    window.recargarStockLotesPedidoSeleccionado = function() {
+        const idBodega = document.getElementById('buscar_pedido_bodega').value || '';
+        const filas = Array.from(document.querySelectorAll('#bp_items_tbody tr'));
+        const tocados = new Set(filas.filter(tr => tr.dataset.tocada === '1').map(tr => String(tr.dataset.itemId)));
+        const prefs = window._BP_BODEGA_PREFS || {};
+        Object.keys(prefs).forEach(k => { if (!tocados.has(String(k))) delete prefs[k]; });
+        filas.forEach(tr => {
+            if (tr.dataset.tocada === '1') return;
+            bpAplicarBodegaFila(tr, idBodega);
+        });
     };
 
     window.cargarPedidoParaPaso2 = async function(id, numero_pedido, cliente_nombre) {
@@ -2092,12 +2257,18 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosPestanasOcultas($vistaConfigC
 
                 const tbody = document.getElementById('bp_items_tbody');
                 tbody.innerHTML = '';
-                const bodegaId = document.getElementById('buscar_pedido_bodega').value || document.getElementById('cons_id_bodega').value || 0;
+                // Bodega POR DEFECTO de las filas: la del selector "Bodega de Despacho". Cada fila
+                // lleva además su propio select de bodega, así que de un mismo pedido se pueden
+                // sacar unos productos de una bodega y otros de otra, en una sola carga.
+                const bodegaId = document.getElementById('buscar_pedido_bodega').value || document.getElementById('cons_id_bodega').value || '';
+                const bodegaOptionsHtml = document.getElementById('buscar_pedido_bodega').innerHTML;
+                window._BP_LOTES_CACHE = {};
 
-                // Preparar los datos de cada producto UNA vez (lotes incluidos). La desagregación
-                // se decide por producto (checkbox "Desagr." en la tabla), no de forma global: se
-                // puede desagregar unos productos (NUP por unidad) y dejar otros en una sola fila
-                // (cantidades grandes, ej. 1000 guantes).
+                // Preparar los datos de cada producto UNA vez. La desagregación se decide por
+                // producto (checkbox "Desagr." en la tabla), no de forma global: se puede
+                // desagregar unos productos (NUP por unidad) y dejar otros en una sola fila
+                // (cantidades grandes, ej. 1000 guantes). Lotes y stock se piden por producto Y
+                // bodega (bpLotesBodega, con caché): se precargan aquí para la bodega por defecto.
                 const itemsPreparados = [];
                 for (const item of pendingItems) {
                     const cantPendiente = parseFloat(item.cantidad_pendiente) || 0;
@@ -2113,79 +2284,54 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosPestanasOcultas($vistaConfigC
                         });
                     }
 
-                    let esInv = (item.inventariable == true || item.inventariable == 'true' || item.inventariable == 1) && item.tipo_produccion !== '02';
-                    let lotesOptions = '<option value="">Lote...</option>';
-                    let vencOptions = '<option value="">Vencimiento...</option>';
-                    let lotesData = [];
-                    let stockActual = null;
+                    const esInv = (item.inventariable == true || item.inventariable == 'true' || item.inventariable == 1) && item.tipo_produccion !== '02';
                     // Si el producto maneja NUP (campo visible), el checkbox "Desagr." decide la
                     // desagregación por sí solo — no depende de que la empresa tenga el NUP marcado
                     // como "obligatorio" globalmente (puede usarse sin serlo).
                     const manejaNup = esInv && typeof EMPRESA_CONFIG !== 'undefined' && EMPRESA_CONFIG.facturacion_inventario;
 
-                    // El stock de bodega se muestra para cualquier producto inventariable (no solo
-                    // los que manejan NUP): mismo endpoint que ya trae los lotes, que además
-                    // devuelve el stock total disponible en esa bodega.
-                    if (esInv && bodegaId) {
-                        try {
-                            const resL = await fetch(`${RUTA_MODULO_CONSIGNACION}/getLotesDisponiblesAjax?id_producto=${item.id_producto}&id_bodega=${bodegaId}`);
-                            const dataL = await resL.json();
-                            if (dataL.ok) {
-                                stockActual = parseFloat(dataL.stock_total) || 0;
-                                if (manejaNup && dataL.data.length > 0) {
-                                    lotesData = dataL.data;
-                                    dataL.data.forEach(l => {
-                                        const lv = l.numero_lote === 'sin_lote' ? '' : l.numero_lote;
-                                        const c = l.fecha_caducidad || '';
-                                        lotesOptions += `<option value="${lv}">${lv || 'Sin Lote'}</option>`;
-                                        vencOptions += `<option value="${c}">${consFechaCadTexto(c)}</option>`;
-                                    });
-                                } else if (manejaNup) {
-                                    lotesOptions = '<option value="">Sin Lote</option>';
-                                    vencOptions = '<option value="">Sin Fecha</option>';
-                                }
-                            } else if (manejaNup) {
-                                lotesOptions = '<option value="">Sin Lote</option>';
-                                vencOptions = '<option value="">Sin Fecha</option>';
-                            }
-                        } catch(e) {
-                            if (manejaNup) {
-                                lotesOptions = '<option value="">Sin Lote</option>';
-                                vencOptions = '<option value="">Sin Fecha</option>';
-                            }
-                        }
-                    }
-
-                    itemsPreparados.push({
-                        item, cantPendiente, precioPedido, listaOptions, lotesOptions, vencOptions, lotesData, manejaNup, stockActual
+                    itemsPreparados.push({ item, cantPendiente, precioPedido, listaOptions, esInv, manejaNup });
+                }
+                // El stock de bodega se muestra para cualquier producto inventariable (no solo los
+                // que manejan NUP): el mismo endpoint trae lotes y stock total de esa bodega.
+                if (bodegaId) {
+                    const vistos = new Set();
+                    const pares = [];
+                    itemsPreparados.forEach(p => {
+                        if (!p.esInv || vistos.has(p.item.id_producto)) return;
+                        vistos.add(p.item.id_producto);
+                        pares.push([parseInt(p.item.id_producto, 10), parseInt(bodegaId, 10)]);
                     });
+                    await bpPrecargarLotes(pares);
                 }
 
-                // Preferencia de desagregación por producto (por defecto activada donde aplica).
+                // Preferencia de desagregación por producto (por defecto activada donde aplica) y
+                // última bodega elegida por producto (para conservarla si se vuelve a dibujar la
+                // tabla al marcar/desmarcar "Desagr.").
                 const desagregarPrefs = {};
                 itemsPreparados.forEach(p => { desagregarPrefs[p.item.id] = true; });
+                const bodegaPrefs = {};
+                window._BP_BODEGA_PREFS = bodegaPrefs;
 
                 function renderTablaPedido() {
                     tbody.innerHTML = '';
+                    const bodegaDefecto = document.getElementById('buscar_pedido_bodega').value || '';
                     itemsPreparados.forEach(datos => {
-                        const { item, cantPendiente, precioPedido, listaOptions, lotesOptions, vencOptions, lotesData, manejaNup, stockActual } = datos;
+                        const { item, cantPendiente, precioPedido, listaOptions, manejaNup } = datos;
                         const desagregarEstaFila = manejaNup && desagregarPrefs[item.id];
                         const unidades = desagregarEstaFila ? Math.max(1, Math.floor(cantPendiente)) : 1;
+                        const bodegaFila = bodegaPrefs[item.id] || bodegaDefecto;
 
-                        // Badge de stock en bodega: verde si alcanza para despachar todo lo
-                        // pendiente, rojo si no. Solo se muestra si se pudo consultar el stock.
-                        let badgeStock = '';
-                        if (stockActual !== null) {
-                            const alcanza = stockActual >= cantPendiente;
-                            const cls = alcanza ? 'bg-success bg-opacity-10 text-success border-success' : 'bg-danger bg-opacity-10 text-danger border-danger';
-                            badgeStock = `<span class="badge ${cls} border border-opacity-25" title="Stock disponible en la bodega seleccionada">Stock: ${stockActual.toFixed(2)}</span>`;
-                        }
+                        // El badge de stock y las listas de lote/vencimiento los llena
+                        // bpAplicarBodegaFila() según la bodega de CADA fila.
+                        const badgeStock = '<span class="bp-badge-stock"></span>';
+                        const bodegaHtml = `<select class="form-select form-select-sm item-bodega py-0 px-1" style="font-size: 0.8rem; height: auto;" title="Bodega de la que sale esta fila">${bodegaOptionsHtml}</select>`;
 
                         const loteHtml = manejaNup
-                            ? `<select class="form-select form-select-sm item-lote py-0 px-1" style="font-size: 0.8rem; height: auto;">${lotesOptions}</select>`
+                            ? `<select class="form-select form-select-sm item-lote py-0 px-1" style="font-size: 0.8rem; height: auto;"><option value="">Lote...</option></select>`
                             : '<span class="text-muted small">—</span>';
                         const vencHtml = manejaNup
-                            ? `<select class="form-select form-select-sm item-caducidad py-0 px-1" style="font-size: 0.8rem; height: auto;">${vencOptions}</select>`
+                            ? `<select class="form-select form-select-sm item-caducidad py-0 px-1" style="font-size: 0.8rem; height: auto;"><option value="">Vencimiento...</option></select>`
                             : '<span class="text-muted small">—</span>';
                         const nupHtml = manejaNup
                             ? `<input type="text" class="form-control form-control-sm item-nup py-0 px-1" style="font-size: 0.8rem; height: auto;" placeholder="NUP">`
@@ -2237,11 +2383,26 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosPestanasOcultas($vistaConfigC
                                 <td class="align-middle">
                                     <input type="number" class="form-control form-control-sm item-precio text-end py-0 px-1" style="font-size: 0.8rem; height: auto;" min="0.00" step="0.01" value="${precioPedido.toFixed(2)}">
                                 </td>
+                                <td class="align-middle">${bodegaHtml}</td>
                                 <td class="align-middle">${loteHtml}</td>
                                 <td class="align-middle">${vencHtml}</td>
                                 <td class="align-middle">${nupHtml}</td>
                             `;
                             tbody.appendChild(tr);
+
+                            // Bodega de la fila: arranca en la bodega por defecto (o en la última
+                            // elegida para este producto) y se puede cambiar fila por fila. Al
+                            // cambiarla se recargan su stock y sus lotes; cantidad y NUP se quedan.
+                            tr._bpDatos = datos;
+                            const selBodegaRow = tr.querySelector('.item-bodega');
+                            if (selBodegaRow) {
+                                selBodegaRow.value = bodegaFila;
+                                selBodegaRow.addEventListener('change', () => {
+                                    bodegaPrefs[item.id] = selBodegaRow.value;
+                                    bpAplicarBodegaFila(tr, selBodegaRow.value);
+                                });
+                            }
+                            bpAplicarBodegaFila(tr, bodegaFila);
 
                             if (u === 0 && manejaNup) {
                                 const chk = tr.querySelector('.chk-desagregar-producto');
@@ -2261,7 +2422,9 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosPestanasOcultas($vistaConfigC
                             // el mismo orden que lotesData, igual que en la grilla principal del modal.
                             const selLoteRow = tr.querySelector('.item-lote');
                             const selVencRow = tr.querySelector('.item-caducidad');
-                            if (selLoteRow && selVencRow && lotesData.length > 0) {
+                            if (selLoteRow && selVencRow) {
+                                // Los lotes de la fila dependen de SU bodega (tr._bpLotes, que llena
+                                // bpAplicarBodegaFila y se renueva al cambiar la bodega de la fila).
                                 // Elegido el lote, la fecha de vencimiento queda resuelta sola, así que
                                 // el único dato que falta teclear en la fila es el NUP: el cursor salta
                                 // ahí. Solo si la fecha quedó puesta — un lote sin caducidad deja ese
@@ -2271,8 +2434,9 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosPestanasOcultas($vistaConfigC
                                     if (nup) { nup.focus(); nup.select(); }
                                 };
                                 const aplicarLote = (idx, moverFoco = false) => {
-                                    if (idx <= 0) {
-                                        selVencRow.innerHTML = vencOptions;
+                                    const lotesData = tr._bpLotes || [];
+                                    if (idx <= 0 || !lotesData.length) {
+                                        selVencRow.innerHTML = tr._bpVencOptions || '<option value="">Vencimiento...</option>';
                                         selVencRow.selectedIndex = 0;
                                         return;
                                     }
@@ -2335,6 +2499,8 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosPestanasOcultas($vistaConfigC
         
         let selectedItems = [];
         let omitidos = [];
+        // Bodega por defecto (la del selector del modal): solo se usa si una fila no trae la suya.
+        const selectedBodegaId = document.getElementById('buscar_pedido_bodega').value || document.getElementById('cons_id_bodega').value || '';
 
         // No todo o nada: solo se agregan las filas COMPLETAS (cantidad válida + lote/caducidad/nup
         // cuando aplican). Las incompletas se omiten en silencio (se listan al final), en vez de
@@ -2359,6 +2525,8 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosPestanasOcultas($vistaConfigC
                 const lote = selLote ? selLote.value : '';
                 const caducidad = selCad ? selCad.value : '';
                 const nup = inpNup ? inpNup.value.trim() : '';
+                // Bodega de ESTA fila (puede ser distinta por producto); si no tiene, la del selector.
+                const idBodegaFila = tr.querySelector('.item-bodega')?.value || tr.dataset.idBodega || selectedBodegaId || '';
 
                 const detailObj = loaded.detalles.find(d => d.id === itemDetailId);
                 const maxQty = parseFloat(tr.querySelector('.item-cantidad').max) || 0;
@@ -2368,6 +2536,11 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosPestanasOcultas($vistaConfigC
                 }
 
                 let esInv = (detailObj.inventariable == true || detailObj.inventariable == 'true' || detailObj.inventariable == 1) && detailObj.tipo_produccion !== '02';
+
+                if (esInv && !idBodegaFila) {
+                    omitidos.push(`${detailObj.producto_nombre} (falta bodega)`);
+                    return;
+                }
 
                 if (esInv && typeof EMPRESA_CONFIG !== 'undefined' && EMPRESA_CONFIG.facturacion_inventario) {
                     if (EMPRESA_CONFIG.obligatorio_lotes && !lote) {
@@ -2389,6 +2562,7 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosPestanasOcultas($vistaConfigC
                 selectedItems.push({
                     id_pedido_detalle: itemDetailId,
                     id_producto: idProducto,
+                    id_bodega: idBodegaFila,
                     cantidad: qty,
                     precio_unitario: price,
                     precio_base: priceBase,
@@ -2459,8 +2633,6 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosPestanasOcultas($vistaConfigC
             if (c.hora_maxima_entrega) document.getElementById('cons_hora_entrega_hasta').value = String(c.hora_maxima_entrega).substring(0, 5);
         }
 
-        const selectedBodegaId = document.getElementById('buscar_pedido_bodega').value || document.getElementById('cons_id_bodega').value || '';
-
         const currentClientVal = document.getElementById('cons_id_cliente').value;
         if (!currentClientVal) {
             document.getElementById('cons_id_cliente').value = c.id_cliente;
@@ -2485,7 +2657,8 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosPestanasOcultas($vistaConfigC
 
         for (const item of selectedItems) {
             const tr = agregarFilaConsignacion();
-            tr.dataset.idBodega = selectedBodegaId;
+            // Cada línea sale de la bodega elegida en SU fila del pedido (no de la cabecera).
+            consSetBodegaFila(tr, item.id_bodega || selectedBodegaId);
             
             const inputDesc = tr.querySelector('.input-descripcion');
             const inputCant = tr.querySelector('.input-cantidad');
@@ -2547,7 +2720,7 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosPestanasOcultas($vistaConfigC
                 if (fCad) fCad.classList.remove('d-none');
                 if (fNup) fNup.classList.remove('d-none');
 
-                const bodegaId = selectedBodegaId || 0;
+                const bodegaId = item.id_bodega || selectedBodegaId || 0;
                 try {
                     const resLote = await fetch(`${RUTA_MODULO_CONSIGNACION}/getLotesDisponiblesAjax?id_producto=${item.id_producto}&id_bodega=${bodegaId}`);
                     const dataLote = await resLote.json();
@@ -2921,7 +3094,7 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosPestanasOcultas($vistaConfigC
             tr.dataset.idProducto     = d.id_producto || '';
             tr.dataset.inventariable  = d.inventariable;
             tr.dataset.tipoProduccion = d.tipo_produccion || '01';
-            tr.dataset.idBodega       = d.id_bodega || document.getElementById('cons_id_bodega').value || '';
+            consSetBodegaFila(tr, d.id_bodega || document.getElementById('cons_id_bodega').value || '', d.bodega_nombre || '');
 
             const pBase = parseFloat(d.precio_base) || 0;
             tr.querySelector('.input-precio-base-original').value = pBase;
@@ -3475,6 +3648,7 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosPestanasOcultas($vistaConfigC
                                             <th class="text-center" style="width: 85px;">Cant. desp.</th>
                                             <th style="width: 140px;">Lista Precios</th>
                                             <th style="width: 80px;">Precio</th>
+                                            <th style="width: 130px;" title="Bodega de la que sale esta fila. Puede ser distinta por producto.">Bodega</th>
                                             <th style="width: 100px;">Lote</th>
                                             <th style="width: 100px;">Venc.</th>
                                             <th style="width: 80px;">NUP</th>

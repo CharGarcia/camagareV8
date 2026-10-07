@@ -1481,6 +1481,10 @@
                     if (liquidacionActual) liquidacionActual.estado = 'autorizado';
                     liqAplicarBloqueoEdicion({ estado: 'autorizado' });
                     liqActualizarBadgeEstado('autorizado');
+                    // Ya autorizada: habilitar Emitir Retención si la pestaña ya se pintó.
+                    if (document.getElementById('tab-liq-retenciones')?.classList.contains('active')) {
+                        window.LC_cargarRetencionesCompra();
+                    }
                 }
                 Swal.fire({
                     icon: 'success',
@@ -1798,7 +1802,8 @@
         const idLiq = document.getElementById('liq-id').value;
         const tbody = document.getElementById('lc-tbody-retenciones');
         const btn = document.getElementById('btnNuevaRetencionLiq');
-        
+        const info = document.getElementById('lc-retenciones-info');
+
         // btn no existe si el usuario no puede crear retenciones (permisos del módulo
         // Retenciones en compras); el listado igual se muestra.
         if (!tbody) return;
@@ -1814,11 +1819,25 @@
 
         if (!idLiq) {
             if (btn) btn.disabled = true;
+            if (info) info.innerHTML = '';
             tbody.innerHTML = '<tr><td colspan="5" class="text-center py-4 text-muted">Guarda la liquidación para emitir retenciones.</td></tr>';
             return;
         }
 
-        if (btn) btn.disabled = false;
+        // La retención solo se emite sobre una liquidación ya AUTORIZADA por el SRI
+        // (misma regla en el servidor: RetencionCompraRules). En borrador o no
+        // autorizada el botón queda inhabilitado y se explica el motivo; las ya
+        // emitidas se listan igual.
+        const autorizada = liqEstaAutorizada();
+        if (btn) {
+            btn.disabled = !autorizada;
+            btn.title = autorizada ? '' : 'La liquidación debe estar autorizada por el SRI para emitir la retención.';
+        }
+        if (info) {
+            info.innerHTML = autorizada
+                ? ''
+                : '<span class="small text-warning"><i class="bi bi-lock me-1"></i>La retención se emite cuando la liquidación esté autorizada por el SRI.</span>';
+        }
         try {
             const resp = await fetch(`${B_BASE}/modulos/retenciones_compras/getPorCompraAjax?id_liquidacion=${idLiq}`);
             const res = await resp.json();
@@ -1844,9 +1863,23 @@
         }
     };
 
+    /** La liquidación abierta ya está autorizada por el SRI (única que admite retención). */
+    function liqEstaAutorizada() {
+        return String(liquidacionActual?.estado || '').toLowerCase() === 'autorizado';
+    }
+
     window.LC_nuevaRetencionDesdeLiq = function() {
         const idLiq = document.getElementById('liq-id').value;
         if (!idLiq) return;
+        if (!liqEstaAutorizada()) {
+            Swal.fire({
+                icon: 'warning',
+                title: 'Liquidación sin autorizar',
+                text: 'La retención solo se puede emitir sobre una liquidación de compra ya autorizada por el SRI. Envíela desde la pestaña SRI y espere la autorización.',
+                confirmButtonColor: '#0d6efd',
+            });
+            return;
+        }
         if (typeof window.RET_nuevaRetencionDesdeLiquidacion === 'function') {
             window.RET_nuevaRetencionDesdeLiquidacion(idLiq);
         } else {

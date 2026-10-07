@@ -256,6 +256,17 @@ genera su asiento contable como cualquier egreso.
 En la pestaña **Retenciones** de una liquidación guardada se ven las retenciones
 emitidas sobre ella y se crea una nueva con **Emitir Retención**.
 
+**La retención solo se emite sobre una liquidación ya autorizada por el SRI.**
+Mientras la liquidación esté en borrador, enviada sin respuesta o devuelta, el
+botón **Emitir Retención** queda inhabilitado y la pestaña indica el motivo:
+*La retención se emite cuando la liquidación esté autorizada por el SRI*. Primero
+envíe la liquidación desde la pestaña **SRI** y, cuando quede autorizada, el botón
+se habilita (si la pestaña Retenciones ya estaba abierta, se refresca sola). La
+razón: una liquidación sin autorizar todavía puede ser devuelta o corregida, y la
+retención debe sustentarse en el comprobante definitivo. La misma regla la aplica
+el servidor y el módulo de Retenciones (ver más abajo), así que no hay forma de
+saltársela.
+
 1. Pulse **Emitir Retención**: se abre el comprobante de retención con el
    proveedor, el número y la fecha de la liquidación, el tipo de documento
    **03 - Liquidación de compra**, el sustento tributario y los totales (subtotal
@@ -343,6 +354,11 @@ la operación de inmediato.
 
 ## Historial de cambios
 
+- **1.25** — La retención de una liquidación solo se puede emitir cuando la
+  liquidación ya está **autorizada por el SRI**. En borrador o sin autorizar, el
+  botón **Emitir Retención** queda inhabilitado con el motivo a la vista, y el
+  servidor rechaza el intento con el mensaje *"La liquidación de compra … aún no
+  está autorizada por el SRI"*. Igual desde el módulo de Retenciones.
 - **1.24** — Al hacer clic en los avisos de la barra superior (*Documentos con novedad
   del SRI* y documentos en borrador pendientes de enviar) el listado se abre ya
   filtrado con esos documentos. Nuevo filtro **Novedad SRI** en la ventana de filtros.

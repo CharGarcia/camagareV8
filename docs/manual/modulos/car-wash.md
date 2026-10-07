@@ -6,7 +6,7 @@ ruta_modulo: modulos/car-wash
 tipo: modulo
 visibilidad: todos
 etiquetas: car wash, lavado, lavadora de autos, lubricadora, cambio de aceite, mecanica, taller, orden de servicio, orden mecanica, orden de trabajo, vehiculo, placa, historial del vehiculo, historial del cliente, visitas, ultima visita, facturar orden, recibo de venta, refacturar, factura anulada, proxima cita, proximo chequeo, migracion, sistema anterior, numeracion por fecha, numero con el año, reiniciar numeracion, reinicio anual, reinicio mensual, correlativo por año, correlativo por mes, modo de numeracion, buscar orden, buscar placa, buscador, filtros, filtrar ordenes, filtro de fechas, buscar por servicio, chips, imprimir, impresora, aviso, avisos, ordenes en borrador, ordenes sin facturar, pendientes de facturar, barra superior, sin saldo, sin stock, productos similares, sugerir otro producto, misma categoria, usar este
-version: 1.14
+version: 1.15
 orden: 10
 estado: activo
 ---
@@ -152,9 +152,10 @@ categoría, después los de la misma marca o con un nombre parecido, ordenados p
 parecido y saldo (hasta ocho). Cada uno muestra su saldo y precio; **Usar este**
 reemplaza el producto en la línea. **Mantener el producto** deja el que eligió.
 
-Solo ocurre si la empresa tiene activado **"La facturación afecta al inventario"**
-(módulo Empresa → pestaña Facturación) y la orden tiene bodega. Si la facturación no
-afecta al inventario, el producto se agrega sin más. Es la misma ventana que usa
+Solo ocurre si la empresa tiene activados **"La facturación afecta al inventario"** y
+**"¿Trabajar con stock positivo?"** (módulo Empresa → pestaña Facturación) y la orden
+tiene bodega. Si la facturación no afecta al inventario o se permite stock negativo,
+el producto se agrega sin más. Es la misma ventana que usa
 **Facturas de Venta**.
 
 ## Historial por vehículo o por cliente
@@ -370,6 +371,9 @@ documentos admite cada periodo) está en el manual de **Empresa**, sección
 
 ## Historial de cambios
 
+- **1.15** — La ventana de **productos similares con saldo** solo se abre cuando la
+  empresa, además de afectar el inventario, tiene marcado **"¿Trabajar con stock
+  positivo?"**. Si se permite stock negativo, el producto sin saldo se agrega sin aviso.
 - **1.14** — La ventana de **productos similares con saldo** solo se abre cuando la
   empresa tiene activado "La facturación afecta al inventario" y la orden tiene bodega;
   antes se abría aunque la facturación no descontara inventario. La búsqueda de
