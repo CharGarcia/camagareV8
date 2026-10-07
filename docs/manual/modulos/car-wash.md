@@ -5,8 +5,8 @@ categoria: Servicios
 ruta_modulo: modulos/car-wash
 tipo: modulo
 visibilidad: todos
-etiquetas: car wash, lavado, lavadora de autos, lubricadora, cambio de aceite, mecanica, taller, orden de servicio, orden mecanica, orden de trabajo, vehiculo, placa, historial del vehiculo, historial del cliente, visitas, ultima visita, facturar orden, recibo de venta, refacturar, factura anulada, proxima cita, proximo chequeo, migracion, sistema anterior, numeracion por fecha, numero con el año, reiniciar numeracion, reinicio anual, reinicio mensual, correlativo por año, correlativo por mes, modo de numeracion, buscar orden, buscar placa, buscador, filtros, filtrar ordenes, filtro de fechas, buscar por servicio, chips, imprimir, impresora, aviso, avisos, ordenes en borrador, ordenes sin facturar, pendientes de facturar, barra superior
-version: 1.13
+etiquetas: car wash, lavado, lavadora de autos, lubricadora, cambio de aceite, mecanica, taller, orden de servicio, orden mecanica, orden de trabajo, vehiculo, placa, historial del vehiculo, historial del cliente, visitas, ultima visita, facturar orden, recibo de venta, refacturar, factura anulada, proxima cita, proximo chequeo, migracion, sistema anterior, numeracion por fecha, numero con el año, reiniciar numeracion, reinicio anual, reinicio mensual, correlativo por año, correlativo por mes, modo de numeracion, buscar orden, buscar placa, buscador, filtros, filtrar ordenes, filtro de fechas, buscar por servicio, chips, imprimir, impresora, aviso, avisos, ordenes en borrador, ordenes sin facturar, pendientes de facturar, barra superior, sin saldo, sin stock, productos similares, sugerir otro producto, misma categoria, usar este
+version: 1.14
 orden: 10
 estado: activo
 ---
@@ -147,10 +147,15 @@ Lote, caducidad, NUP y unidad pasan tal cual a la factura o al recibo.
 ## Producto sin saldo: productos similares
 
 Si elige un producto que **no tiene saldo** en la bodega de la orden, se abre una
-ventana con **productos similares que sí tienen saldo**: de la misma categoría, de
-la misma marca o con un nombre parecido, ordenados por parecido y saldo. Cada uno
-muestra su saldo y precio; **Usar este** reemplaza el producto en la línea.
-**Mantener el producto** deja el que eligió.
+ventana con **productos similares que sí tienen saldo**: primero los de la misma
+categoría, después los de la misma marca o con un nombre parecido, ordenados por
+parecido y saldo (hasta ocho). Cada uno muestra su saldo y precio; **Usar este**
+reemplaza el producto en la línea. **Mantener el producto** deja el que eligió.
+
+Solo ocurre si la empresa tiene activado **"La facturación afecta al inventario"**
+(módulo Empresa → pestaña Facturación) y la orden tiene bodega. Si la facturación no
+afecta al inventario, el producto se agrega sin más. Es la misma ventana que usa
+**Facturas de Venta**.
 
 ## Historial por vehículo o por cliente
 
@@ -365,6 +370,10 @@ documentos admite cada periodo) está en el manual de **Empresa**, sección
 
 ## Historial de cambios
 
+- **1.14** — La ventana de **productos similares con saldo** solo se abre cuando la
+  empresa tiene activado "La facturación afecta al inventario" y la orden tiene bodega;
+  antes se abría aunque la facturación no descontara inventario. La búsqueda de
+  similares ahora es compartida con Facturas de Venta.
 - **1.13** — Al **crear un vehículo o un cliente** desde la orden (botones *Vehículo* /
   *Cliente*), el registro nuevo se **asigna de inmediato a la orden** si esta aún no
   tenía vehículo o cliente. Si la orden ya tenía uno elegido, no se reemplaza: el

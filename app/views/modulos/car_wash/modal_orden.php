@@ -959,7 +959,9 @@
                                 <div class="text-nowrap">${stockBadge}<span class="badge bg-primary bg-opacity-10 text-primary border border-primary border-opacity-10">$${parseFloat(p.precio_base || 0).toFixed(2)}</span></div></div>`;
                         b.onmousedown = (evt) => {
                             evt.preventDefault();
-                            const sinStock = p.controla_stock && parseFloat(p.stock_actual || 0) <= 0;
+                            // Solo cuando la facturación afecta al inventario y hay bodega en la cabecera.
+                            const sinStock = EMPRESA_CONFIG.facturacion_inventario && parseInt(idBod, 10) > 0
+                                          && p.controla_stock && parseFloat(p.stock_actual || 0) <= 0;
                             cwSeleccionarProductoEnFila(p, tr);
                             dropdownGlobal.classList.add('d-none');
                             // Sin saldo: se ofrecen productos similares que sí tienen saldo.

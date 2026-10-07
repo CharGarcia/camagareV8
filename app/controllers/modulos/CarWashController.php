@@ -658,20 +658,9 @@ class CarWashController extends BaseModuloController
                 echo json_encode(['ok' => true, 'data' => []]);
                 exit;
             }
+            // Trae precios de lista y variantes en lote, para que "Usar este" deje la
+            // línea exactamente como si se hubiera buscado el producto.
             $rows = $this->service->productosSimilares($idProducto, $idEmpresa, $idBodega, $idOrden ?: null);
-
-            // Precios de lista y variantes EN LOTE, igual que el buscador de productos, para
-            // que "Usar este" deje la línea exactamente como si se hubiera buscado.
-            $repo = new \App\repositories\modulos\ProductoRepository();
-            $ids  = array_column($rows, 'id');
-            $preciosMap = $repo->getPreciosPorProductos($ids, $idEmpresa);
-            $variantMap = $repo->getVariantesPorProductos($ids, $idEmpresa);
-            foreach ($rows as &$p) {
-                $p['precios_lista'] = $preciosMap[(int) $p['id']] ?? [];
-                $p['variantes']     = $variantMap[(int) $p['id']] ?? [];
-            }
-            unset($p);
-
             echo json_encode(['ok' => true, 'data' => $rows]);
         } catch (\Throwable $e) {
             \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);

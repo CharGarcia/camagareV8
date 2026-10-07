@@ -262,67 +262,14 @@ class OrdenCarWashService
     }
 
     /**
-     * Productos SIMILARES con saldo en la bodega de la orden, para ofrecerlos cuando el
-     * producto elegido no tiene stock. Candidatos (sin repetir, sin el propio producto):
-     *  1. misma categoría, 2. misma marca, 3. que compartan las palabras principales del nombre.
-     * Se quedan solo los que controlan inventario y tienen saldo > 0 en esa bodega, ordenados
-     * por parecido (categoría + marca + palabras en común) y luego por saldo.
-     *
-     * @return array filas con el mismo formato del buscador de productos + stock_actual,
-     *               controla_stock y `coincide` (por qué se sugiere).
+     * Productos similares con saldo en la bodega de la orden, para ofrecerlos cuando el
+     * producto elegido no tiene stock. La lógica vive en ProductosSimilaresService (la
+     * comparten Facturas de Venta y Car-Wash); aquí solo se indica que el consumo de la
+     * propia orden (si se está editando) no cuenta para el saldo.
      */
     public function productosSimilares(int $idProducto, int $idEmpresa, int $idBodega, ?int $idOrden, int $limite = 8): array
     {
-        $base = $this->repository->getProductoBasico($idProducto, $idEmpresa);
-        if (!$base || $idBodega <= 0) return [];
-
-        $prodRepo = new \App\repositories\modulos\ProductoRepository();
-        $invRepo  = new \App\repositories\modulos\InventarioRepository();
-        $buscar = fn(string $q) => $prodRepo->getListado($idEmpresa, $q, 1, 40, 'nombre', 'ASC', null, 'venta', true)['rows'] ?? [];
-
-        // Palabras principales del nombre (sin números ni palabras cortas).
-        $norm = fn(string $s) => mb_strtoupper(trim(preg_replace('/\s+/u', ' ', $s)));
-        $palabras = array_values(array_filter(
-            explode(' ', preg_replace('/[^\p{L}\p{N} ]+/u', ' ', $norm((string) $base['nombre']))),
-            fn($w) => mb_strlen($w) >= 4 && !is_numeric($w)
-        ));
-
-        $cand = [];
-        $agregar = function (array $rows) use (&$cand, $idProducto) {
-            foreach ($rows as $r) {
-                if ((int) $r['id'] !== $idProducto && !isset($cand[(int) $r['id']])) $cand[(int) $r['id']] = $r;
-            }
-        };
-        if (!empty($base['id_categoria'])) $agregar($buscar('id_categoria:' . (int) $base['id_categoria']));
-        if (!empty($base['id_marca']))     $agregar($buscar('id_marca:' . (int) $base['id_marca']));
-        foreach (array_slice($palabras, 0, 2) as $w) $agregar($buscar($w));
-
-        // Solo los que controlan inventario; su saldo en UNA consulta.
-        $cand = array_filter($cand, fn($p) => ($p['inventariable'] === true || $p['inventariable'] === 't' || $p['inventariable'] === 'true' || $p['inventariable'] == 1)
-                                              && (($p['tipo_produccion'] ?? '01') !== '02'));
-        $stocks = $invRepo->getStockActualPorProductos(array_keys($cand), $idBodega, $idEmpresa, $idOrden ?: null, $idOrden ? self::REF_TIPO : null);
-
-        $out = [];
-        foreach ($cand as $p) {
-            $stock = (float) ($stocks[(int) $p['id']] ?? 0);
-            if ($stock <= 0) continue;
-
-            $motivos = [];
-            $puntaje = 0;
-            if (!empty($base['id_categoria']) && (int) ($p['id_categoria'] ?? 0) === (int) $base['id_categoria']) { $puntaje += 3; $motivos[] = 'categoría'; }
-            if (!empty($base['id_marca']) && (int) ($p['id_marca'] ?? 0) === (int) $base['id_marca'])             { $puntaje += 2; $motivos[] = 'marca'; }
-            $nombreP = $norm((string) $p['nombre']);
-            $comunes = count(array_filter($palabras, fn($w) => str_contains($nombreP, $w)));
-            if ($comunes > 0) { $puntaje += $comunes; $motivos[] = 'nombre'; }
-
-            $p['stock_actual']   = $stock;
-            $p['controla_stock'] = true;
-            $p['coincide']       = implode(', ', $motivos);
-            $p['_puntaje']       = $puntaje;
-            $out[] = $p;
-        }
-        usort($out, fn($a, $b) => [$b['_puntaje'], $b['stock_actual']] <=> [$a['_puntaje'], $a['stock_actual']]);
-        return array_map(function ($p) { unset($p['_puntaje']); return $p; }, array_slice($out, 0, $limite));
+        return (new ProductosSimilaresService())->buscar($idProducto, $idEmpresa, $idBodega, $idOrden ?: null, self::REF_TIPO, $limite);
     }
 
     /**

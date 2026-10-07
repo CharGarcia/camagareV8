@@ -4691,6 +4691,60 @@ $totalPages = $totalPagesOriginal;
         // búsqueda manual de productos, en vez de duplicarla.
         window.fvSeleccionarProductoEnFila = seleccionarProductoEnFila;
 
+        // ¿El producto elegido no tiene saldo en la bodega de la cabecera? Solo aplica
+        // cuando la facturación afecta al inventario: en ese caso el buscador ya pidió
+        // stock_bodega (null en servicios y productos no inventariables).
+        const fvProductoSinSaldo = (p) => EMPRESA_CONFIG.facturacion_inventario
+            && getIdBodegaCabecera()
+            && p.stock_bodega !== undefined && p.stock_bodega !== null
+            && (parseFloat(p.stock_bodega) || 0) <= 0;
+
+        // Producto sin saldo: muestra productos similares (misma categoría primero, luego
+        // misma marca o nombre parecido) que sí tienen saldo, para reemplazarlo con un clic.
+        const fvMostrarSimilares = async (p, tr) => {
+            const esc = (s) => String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+            const fmt = (n, d) => (parseFloat(n) || 0).toFixed(d);
+            const modalEl = document.getElementById('modalNuevaFactura');
+            const idBod = getIdBodegaCabecera();
+            const selBodega = document.getElementById('m-select-bodega');
+            const nomBodega = selBodega && selBodega.selectedIndex >= 0 ? selBodega.options[selBodega.selectedIndex].text : '';
+            let similares = [];
+            try {
+                let url = `${B_URL}/${RUTA_MODULO}/productosSimilaresAjax?id_producto=${encodeURIComponent(p.id)}&id_bodega=${encodeURIComponent(idBod)}`;
+                if (FV_ID_ACTIVO) url += `&id_venta=${FV_ID_ACTIVO}`;
+                const res = await fetch(url);
+                const data = await res.json();
+                similares = data.ok ? (data.data || []) : [];
+            } catch (e) { similares = []; }
+
+            if (!similares.length) {
+                Swal.fire({ icon: 'warning', title: 'Sin saldo', target: modalEl,
+                    html: `<b>${esc(p.nombre)}</b> no tiene saldo en la bodega <b>${esc(nomBodega)}</b> y no hay productos similares con saldo.` });
+                return;
+            }
+            const filas = similares.map((s, i) => `
+                <tr>
+                    <td class="text-start"><div class="fw-semibold">${esc(s.nombre)}</div><div class="text-muted" style="font-size:.72rem">${esc(s.codigo || '')}${s.coincide ? ' · coincide en ' + esc(s.coincide) : ''}</div></td>
+                    <td class="text-end"><span class="badge bg-success bg-opacity-10 text-success border border-success border-opacity-25">${fmt(s.stock_actual, DEC_CANT)}</span></td>
+                    <td class="text-end">$${fmt(s.precio_base, 2)}</td>
+                    <td class="text-center"><button type="button" class="btn btn-outline-primary btn-sm py-0 px-2 fv-usar-similar" data-i="${i}">Usar este</button></td>
+                </tr>`).join('');
+            await Swal.fire({
+                icon: 'info', title: 'Sin saldo — productos similares', width: 720, target: modalEl,
+                showConfirmButton: false, showCancelButton: true, cancelButtonText: 'Mantener el producto',
+                html: `<div class="text-start small mb-2"><b>${esc(p.nombre)}</b> no tiene saldo en la bodega <b>${esc(nomBodega)}</b>. Estos productos similares sí tienen:</div>
+                       <div style="max-height:320px;overflow:auto"><table class="table table-sm table-hover align-middle mb-0" style="font-size:.8rem">
+                       <thead class="table-light"><tr><th class="text-start">Producto</th><th class="text-end">Saldo</th><th class="text-end">Precio</th><th></th></tr></thead>
+                       <tbody>${filas}</tbody></table></div>`,
+                didOpen: (popup) => {
+                    popup.querySelectorAll('.fv-usar-similar').forEach(btn => btn.addEventListener('click', () => {
+                        seleccionarProductoEnFila(similares[parseInt(btn.dataset.i, 10)], tr);
+                        Swal.close();
+                    }));
+                }
+            });
+        };
+
         const buscarProducto = async (q, sourceInput) => {
             // ... (keep search logic similar but adjust for no inputCod)
             q = q.trim();
@@ -4725,6 +4779,7 @@ $totalPages = $totalPagesOriginal;
                         if (p.codigo === q || p.codigo_barras === q || p.codigo_auxiliar === q) {
                             seleccionarProductoEnFila(p, tr);
                             dropdownGlobal.classList.add('d-none');
+                            if (fvProductoSinSaldo(p)) fvMostrarSimilares(p, tr);
                             return;
                         }
                     }
@@ -4759,6 +4814,9 @@ $totalPages = $totalPagesOriginal;
                             evt.preventDefault();
                             seleccionarProductoEnFila(p, tr);
                             dropdownGlobal.classList.add('d-none');
+                            // Sin saldo en la bodega: se ofrecen productos de la misma
+                            // categoría (o marca / nombre parecido) que sí tienen saldo.
+                            if (fvProductoSinSaldo(p)) fvMostrarSimilares(p, tr);
                         };
                         dropdownGlobal.appendChild(b);
                     });

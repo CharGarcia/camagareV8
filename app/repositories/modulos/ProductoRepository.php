@@ -741,6 +741,15 @@ class ProductoRepository extends BaseRepository
         return $row ?: null;
     }
 
+    /** Nombre, categoría y marca de un producto (base para buscar productos similares). */
+    public function getProductoBasico(int $idProducto, int $idEmpresa): ?array
+    {
+        $st = $this->db->prepare("SELECT id, nombre, id_categoria, id_marca FROM {$this->table} WHERE id = :id AND id_empresa = :e AND eliminado = false");
+        $st->execute([':id' => $idProducto, ':e' => $idEmpresa]);
+        $row = $st->fetch(PDO::FETCH_ASSOC);
+        return $row ?: null;
+    }
+
     public function getInfoControlInventario(int $id, int $idEmpresa): array
     {
         $sql = "SELECT inventariable, tipo_produccion FROM {$this->table} WHERE id = ? AND id_empresa = ? AND eliminado = false LIMIT 1";

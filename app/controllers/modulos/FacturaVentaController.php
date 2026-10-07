@@ -1802,6 +1802,35 @@ class FacturaVentaController extends BaseModuloController
     }
 
     /**
+     * Productos similares con saldo en la bodega de la factura, para cuando el producto
+     * elegido no tiene stock (misma categoría primero, luego marca y nombre parecido).
+     * GET id_producto, id_bodega, id_venta (opcional: excluye lo ya consumido por esta factura).
+     */
+    public function productosSimilaresAjax(): void
+    {
+        $this->requireLeer();
+        header('Content-Type: application/json');
+        $this->liberarSesion();
+        try {
+            $idEmpresa  = (int) $_SESSION['id_empresa'];
+            $idProducto = (int) ($_GET['id_producto'] ?? 0);
+            $idBodega   = (int) ($_GET['id_bodega'] ?? 0);
+            $idVenta    = (int) ($_GET['id_venta'] ?? 0);
+            if (!$idProducto || !$idBodega) {
+                echo json_encode(['ok' => true, 'data' => []]);
+                exit;
+            }
+            $rows = (new \App\Services\modulos\ProductosSimilaresService())
+                ->buscar($idProducto, $idEmpresa, $idBodega, $idVenta ?: null, 'factura_venta');
+            echo json_encode(['ok' => true, 'data' => $rows]);
+        } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
+            echo json_encode(['ok' => false, 'data' => [], 'error' => $e->getMessage()]);
+        }
+        exit;
+    }
+
+    /**
      * Bien que afecta al inventario: mismo criterio que usa la vista para decidir si la
      * fila maneja lote/caducidad/stock (inventariable y tipo_produccion != '02' = servicio).
      */

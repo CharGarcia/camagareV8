@@ -613,15 +613,6 @@ class OrdenCarWashRepository extends BaseRepository
             ELSE EXISTS (SELECT 1 FROM recibos_venta_cabecera rvx
                  WHERE rvx.id = o.id_documento AND rvx.eliminado = false AND rvx.estado <> 'anulado') END";
 
-    /** Nombre, categoría y marca de un producto (base para buscar productos similares). */
-    public function getProductoBasico(int $idProducto, int $idEmpresa): ?array
-    {
-        $st = $this->db->prepare("SELECT id, nombre, id_categoria, id_marca FROM productos WHERE id = :id AND id_empresa = :e");
-        $st->execute([':id' => $idProducto, ':e' => $idEmpresa]);
-        $row = $st->fetch(PDO::FETCH_ASSOC);
-        return $row ?: null;
-    }
-
     /** ¿El cliente existe en la empresa, está activo (status = 1) y no está eliminado? */
     public function clienteActivo(int $idCliente, int $idEmpresa): bool
     {

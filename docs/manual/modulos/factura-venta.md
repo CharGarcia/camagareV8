@@ -5,8 +5,8 @@ categoria: Ventas
 ruta_modulo: modulos/factura-venta
 tipo: modulo
 visibilidad: todos
-etiquetas: factura, facturar, venta, buscar factura, buscador, aparecen facturas que no busque, resultados que no corresponden, la busqueda trae otras facturas, buscar por clave de acceso, filtros, filtrar facturas, buscar por producto vendido, buscar por forma de pago, filtro de fechas, saldo pendiente, chips, ordenar por dos columnas, ordenar por estado de pago, ordenar por cliente y fecha, sri, comprobante electronico, xml, excel, anular, nota de credito, whatsapp, link de pago, payphone, nuvei, serie vacia, sin puntos de emision, secuencial repetido, secuencial ya existe, punto de emision, ambiente, pruebas, produccion, cambio de ambiente, clave de acceso en procesamiento, error 70, comprobante devuelto, reintento automatico, saldo, stock, existencias, cuanto queda, disponible, buscador de productos, lote, vencimiento, caducidad, fecha de vencimiento, lote y vencimiento, pdf, ride, columnas del pdf, subsidio, irbpnr, servicio, propina, codigo cortado, detalle adicional, forma de pago, plazo, dias credito, unidad de tiempo, meses, anios, informacion adicional, vendedor, cajero, no sale el vendedor, falta informacion en el pdf, se cierra el modal, autorizar, bloquear factura, no puedo editar, letra pequena, tamano de letra, fuente del pdf, letra del pdf, no se lee el pdf, ancho de columna, agrandar columna, ensanchar, codigo cortado en el modal, descripcion cortada, no se ve la descripcion completa, redimensionar, precio con impuestos, precio con iva, sale en cero, columna descuento, tipo de identificacion, tipo de documento del cliente, ruc o cedula, es ruc o cedula, cedula o pasaporte, consumidor final, no se cual identificacion tiene el cliente, buscador de clientes, buscar cliente, elegir cliente, datos del cliente, informacion adicional larga, limite de caracteres, maximo 300 caracteres, value too long, no se pudo guardar la factura, imprimir, impresora, iva al subtotal, iva sobre el subtotal, iva linea por linea, calculo del iva, iva no cuadra, iva mal calculado, centavos de diferencia, factura grande, muchas lineas, muchos items, factura lenta, tarda en abrir, tarda en cargar, peso del xml, tamano del xml, 320 kb, crear cliente desde la factura, nuevo cliente, crear producto desde la factura, nuevo producto, no aparece el boton de crear cliente, falta el boton nuevo producto, aviso, avisos, novedad sri, documentos con novedad, devuelto, no autorizado, pendientes de enviar, borrador, borradores, iva del listado, iva diferente, iva no coincide, iva distinto al documento, iva con descuento, columna iva, filas por pagina, registros por pagina, cuantas filas, mostrar mas filas, paginador, 25 50 75 100
-version: 2.38
+etiquetas: factura, facturar, venta, buscar factura, buscador, aparecen facturas que no busque, resultados que no corresponden, la busqueda trae otras facturas, buscar por clave de acceso, filtros, filtrar facturas, buscar por producto vendido, buscar por forma de pago, filtro de fechas, saldo pendiente, chips, ordenar por dos columnas, ordenar por estado de pago, ordenar por cliente y fecha, sri, comprobante electronico, xml, excel, anular, nota de credito, whatsapp, link de pago, payphone, nuvei, serie vacia, sin puntos de emision, secuencial repetido, secuencial ya existe, punto de emision, ambiente, pruebas, produccion, cambio de ambiente, clave de acceso en procesamiento, error 70, comprobante devuelto, reintento automatico, saldo, stock, existencias, cuanto queda, disponible, buscador de productos, lote, vencimiento, caducidad, fecha de vencimiento, lote y vencimiento, pdf, ride, columnas del pdf, subsidio, irbpnr, servicio, propina, codigo cortado, detalle adicional, forma de pago, plazo, dias credito, unidad de tiempo, meses, anios, informacion adicional, vendedor, cajero, no sale el vendedor, falta informacion en el pdf, se cierra el modal, autorizar, bloquear factura, no puedo editar, letra pequena, tamano de letra, fuente del pdf, letra del pdf, no se lee el pdf, ancho de columna, agrandar columna, ensanchar, codigo cortado en el modal, descripcion cortada, no se ve la descripcion completa, redimensionar, precio con impuestos, precio con iva, sale en cero, columna descuento, tipo de identificacion, tipo de documento del cliente, ruc o cedula, es ruc o cedula, cedula o pasaporte, consumidor final, no se cual identificacion tiene el cliente, buscador de clientes, buscar cliente, elegir cliente, datos del cliente, informacion adicional larga, limite de caracteres, maximo 300 caracteres, value too long, no se pudo guardar la factura, imprimir, impresora, iva al subtotal, iva sobre el subtotal, iva linea por linea, calculo del iva, iva no cuadra, iva mal calculado, centavos de diferencia, factura grande, muchas lineas, muchos items, factura lenta, tarda en abrir, tarda en cargar, peso del xml, tamano del xml, 320 kb, crear cliente desde la factura, nuevo cliente, crear producto desde la factura, nuevo producto, no aparece el boton de crear cliente, falta el boton nuevo producto, aviso, avisos, novedad sri, documentos con novedad, devuelto, no autorizado, pendientes de enviar, borrador, borradores, iva del listado, iva diferente, iva no coincide, iva distinto al documento, iva con descuento, columna iva, filas por pagina, registros por pagina, cuantas filas, mostrar mas filas, paginador, 25 50 75 100, sin saldo, sin stock, producto sin existencias, productos similares, sugerir otro producto, misma categoria, reemplazar producto, usar este, mantener el producto
+version: 2.39
 orden: 20
 estado: activo
 ---
@@ -104,6 +104,29 @@ de elegir el producto, sin tener que agregarlo a la factura para enterarse.
 - Al editar una factura ya guardada, el saldo se muestra **sin contar esa misma
   factura**, es decir, el stock que habría si el documento no existiera — el mismo
   criterio que usan los lotes y la validación de cantidades.
+
+### Producto sin saldo: productos similares con saldo
+
+Si elige un producto que **no tiene saldo** en la bodega de la cabecera (saldo cero o
+negativo), el producto se coloca en la línea y enseguida se abre una ventana con
+**productos similares que sí tienen saldo**, para reemplazarlo con un clic:
+
+- Primero se sugieren los de la **misma categoría**; después, los de la **misma marca**
+  y los de **nombre parecido**. Se ordenan por parecido y luego por saldo, y se
+  muestran hasta ocho.
+- Cada sugerencia indica su código, en qué coincide (categoría, marca, nombre), su
+  **saldo** en esa bodega y su **precio**.
+- **Usar este** reemplaza el producto de la línea (precio, IVA, unidad, variantes y
+  lotes se cargan igual que si lo hubiera buscado). **Mantener el producto** deja el
+  que eligió; la factura se puede seguir armando y, al guardar, se aplican las reglas
+  de stock de siempre (si la empresa trabaja con stock positivo, el guardado se
+  rechaza con *Stock insuficiente*).
+- Solo ocurre si la empresa tiene activado **"La facturación afecta al inventario"** y
+  hay bodega en la cabecera. Los servicios y los productos no inventariables nunca
+  disparan la ventana. Si ningún producto similar tiene saldo, se avisa *Sin saldo*
+  y no se sugiere nada.
+- También se dispara cuando el producto se eligió **por código exacto** (lectura de
+  código de barras o código escrito completo), no solo al hacer clic en la lista.
 
 ### Lote y fecha de vencimiento
 
@@ -550,6 +573,11 @@ la operación de inmediato.
 
 ## Historial de cambios
 
+- **2.39** — Al elegir un producto **sin saldo** en la bodega de la cabecera (con "La
+  facturación afecta al inventario" activo), se abre una ventana con **productos
+  similares que sí tienen saldo** —misma categoría primero, luego misma marca o nombre
+  parecido— con saldo y precio, y el botón **Usar este** lo reemplaza en la línea.
+  Misma ventana que ya tenía Car-Wash; ahora la comparten ambos módulos.
 - **2.38** — La columna **IVA** del listado (y su PDF/Excel) mostraba un valor mayor al del
   documento en las facturas **con descuento**: sumaba el descuento otra vez al deducir el IVA
   desde los totales de la cabecera. Corregido; el valor ya coincide con el del documento y
