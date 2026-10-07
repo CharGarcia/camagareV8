@@ -198,3 +198,64 @@ SELECT to_char(x.fecha, 'YYYY-MM') AS mes, x.origen, COUNT(*) AS lineas, SUM(x.m
   ) x
  GROUP BY 1, 2
  ORDER BY 1, 2;
+
+
+-- ============================================================================
+-- Q4 ─ CASOS ESPECIALES: depósitos de caja al banco (3 ingresos de junio 2026)
+-- ============================================================================
+-- Q2 los saltó a propósito porque su asiento también toca la caja. Revisados a
+-- mano (02-10-2026): los tres son Debe 2271 BANCO / Haber 2268 CAJA por el mismo
+-- monto = dinero de caja depositado en el Bolivariano. El asiento está bien; la
+-- línea de pago debe ser la forma bancaria 214 con tipo DEPOSITO.
+--   ING182293  ingreso 001-001-000000004  01-06-2026   140,75
+--   ING182410  ingreso 001-001-000000005  30-06-2026  4.980,02
+--   ING182414  ingreso 001-001-000000006  30-06-2026    86,00
+-- Igual que Q2: atómico, solo líneas que sigan en Efectivo y cuyo asiento sea
+-- exactamente banco/caja por el monto del pago; deja log_sistema por línea.
+DO $$
+DECLARE
+    v_emp         INT := 24;
+    v_user        INT := 2;
+    v_forma_ef    INT := 51;
+    v_forma_banco INT := 214;
+    v_cta_banco   INT := 2271;
+    v_cta_caja    INT := 2268;
+    v_n INT;
+BEGIN
+    CREATE TEMP TABLE tmp_fix_golife_dep ON COMMIT DROP AS
+    SELECT ip.id AS id_pago, ic.numero_ingreso AS documento, ip.monto, ip.tipo_operacion_bancaria AS tipo_ant
+      FROM ingresos_pagos ip
+      JOIN ingresos_cabecera ic ON ic.id = ip.id_ingreso
+      JOIN asientos_contables_cabecera ac
+        ON ac.id_empresa = ic.id_empresa AND UPPER(ac.tipo_comprobante) = 'INGRESOS'
+       AND ac.id_referencia_origen = ic.id AND ac.estado = 'contabilizado' AND ac.eliminado = FALSE
+     WHERE ic.id_empresa = v_emp AND ic.eliminado = FALSE
+       AND ac.numero_comprobante IN ('ING182293', 'ING182410', 'ING182414')
+       AND ip.id_forma_cobro = v_forma_ef
+       AND NOT EXISTS (SELECT 1 FROM ingresos_pagos o WHERE o.id_ingreso = ic.id AND o.id_forma_cobro <> v_forma_ef)
+       -- El asiento es exactamente: Debe banco = Haber caja = monto del pago, sin otras cuentas.
+       AND (SELECT SUM(ad.debe)  FROM asientos_contables_detalle ad WHERE ad.id_asiento = ac.id AND ad.eliminado = FALSE AND ad.id_cuenta_contable = v_cta_banco) = ip.monto
+       AND (SELECT SUM(ad.haber) FROM asientos_contables_detalle ad WHERE ad.id_asiento = ac.id AND ad.eliminado = FALSE AND ad.id_cuenta_contable = v_cta_caja)  = ip.monto
+       AND NOT EXISTS (SELECT 1 FROM asientos_contables_detalle ad WHERE ad.id_asiento = ac.id AND ad.eliminado = FALSE
+                         AND ad.id_cuenta_contable NOT IN (v_cta_banco, v_cta_caja));
+
+    INSERT INTO log_sistema (id_usuario, id_empresa, accion, tabla_afectada, id_registro,
+                             datos_anteriores, datos_nuevos, ip_usuario, user_agent)
+    SELECT v_user, v_emp, 'actualizar', 'ingresos_pagos', t.id_pago,
+           jsonb_build_object('forma', v_forma_ef, 'tipo_operacion_bancaria', t.tipo_ant, 'documento', t.documento),
+           jsonb_build_object('forma', v_forma_banco, 'tipo_operacion_bancaria', 'DEPOSITO', 'documento', t.documento,
+                              'motivo', 'Depósito de caja al banco migrado como Efectivo (fix 20261002_golife…, Q4)'),
+           'sql-manual', 'pgAdmin'
+      FROM tmp_fix_golife_dep t;
+
+    UPDATE ingresos_pagos ip
+       SET id_forma_cobro = v_forma_banco, tipo_operacion_bancaria = 'DEPOSITO'
+      FROM tmp_fix_golife_dep t
+     WHERE ip.id = t.id_pago AND ip.id_forma_cobro = v_forma_ef;
+    GET DIAGNOSTICS v_n = ROW_COUNT;
+
+    IF v_n <> 3 THEN
+        RAISE EXCEPTION 'Se esperaban 3 líneas y cumplen las condiciones %. No se cambió nada.', v_n;
+    END IF;
+    RAISE NOTICE 'Corregidas % líneas (depósitos de caja al banco).', v_n;
+END $$;
