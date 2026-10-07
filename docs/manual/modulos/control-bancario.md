@@ -6,7 +6,7 @@ ruta_modulo: modulos/control-bancario
 tipo: modulo
 visibilidad: todos
 etiquetas: control bancario, traspaso, traspasos en el banco, deposito de caja al banco, traspaso no aparece en el banco, conciliacion bancaria, estado de cuenta, banco, cheques, movimientos, cuadrar banco, buscar movimiento, buscador, filtros, filtrar movimientos bancarios, buscar cheque, chips, cheques posfechados, cheque por cobrar, cheque por depositar, aviso de cheques, alerta, notificacion, vencimiento de cheques, comprobar con contabilidad, cuadrar con contabilidad, saldo contable vs banco, diferencia contable, asiento faltante, sin asiento
-version: 1.19
+version: 1.20
 orden: 60
 estado: activo
 ---
@@ -84,6 +84,10 @@ Para marcarlo:
 1. Haga clic en la fila del cheque; se abre *Clasificar Movimiento*.
 2. El modal muestra el estado y, si aún no se cobró, explica qué hacer.
 3. Llene **Fecha Banco (conciliación)** con la fecha real del banco y guarde.
+   Si el banco lo hizo efectivo el mismo día que se giró, el botón con el ícono
+   de calendario junto al campo copia la **fecha de emisión del cheque** a la
+   Fecha Banco; luego solo hay que guardar. El botón aparece únicamente en cheques
+   y, si el cheque no tiene fecha de emisión registrada, avisa para escribirla a mano.
 
 Ese dato viaja al egreso: el cheque pasa a verse como "Cobrado" y el sistema ya
 no permite cambiarle la fecha ni anularlo (ver [Egresos](egresos.md)). El campo
@@ -438,6 +442,8 @@ los dos casos.
 
 ## Historial de cambios
 
+- **1.20** — En *Clasificar Movimiento*, botón junto a **Fecha Banco** que copia la
+  fecha de emisión del cheque (solo en cheques).
 - **1.19** — El módulo se nombra **Conciliación Bancaria** en pantallas, mensajes, exportaciones
   y en este manual (antes *Control bancario*), igual que en el menú.
 - **1.18** — Fecha Banco de cheques posfechados con cuenta puente: genera el asiento

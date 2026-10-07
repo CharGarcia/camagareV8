@@ -653,6 +653,7 @@
         const ayuda = document.getElementById('cbm-ayuda-cobro');
         if (!wrap || !estado || !ayuda) return;
 
+        actualizarBotonCopiarFechaCheque(tipo);
         if (tipo !== 'CHEQUE') {
             wrap.style.display = 'none';
             ayuda.classList.add('d-none');
@@ -669,6 +670,39 @@
             ayuda.classList.remove('d-none');
         }
     }
+
+    // Fecha de emisión del cheque abierto en el modal cuando viene de un documento
+    // (egreso/ingreso): ahí el campo editable está oculto y la fecha se lee de la fila.
+    let chequeFechaEmisionDoc = null;
+
+    // El botón "copiar fecha del cheque" solo tiene sentido en cheques.
+    function actualizarBotonCopiarFechaCheque(tipo) {
+        const btn = document.getElementById('cbm-btn-copiar-fecha-cheque');
+        if (btn) btn.classList.toggle('d-none', tipo !== 'CHEQUE');
+    }
+
+    // Fecha de emisión del cheque: la del campo editable (asientos manuales) o, si está
+    // oculto porque el movimiento viene de un documento, la que trajo la fila.
+    function fechaEmisionChequeActual() {
+        const inp = document.getElementById('cbm-fecha-cheque');
+        return (inp && inp.value) ? inp.value : (chequeFechaEmisionDoc || '');
+    }
+
+    /**
+     * Copia la fecha de emisión del cheque a la Fecha Banco (conciliación). Caso común: el
+     * banco lo hizo efectivo el mismo día que se giró. Solo llena el campo; el usuario
+     * sigue teniendo que guardar.
+     */
+    window.CB_copiarFechaChequeABanco = function () {
+        const fecha = fechaEmisionChequeActual();
+        if (!fecha) {
+            Swal.fire({ icon: 'info', title: 'Sin fecha del cheque', text: 'Este cheque no tiene registrada su fecha de emisión; escriba la Fecha Banco a mano.' });
+            return;
+        }
+        const inp = document.getElementById('cbm-fecha-banco');
+        inp.value = fmtDateInput(fecha);
+        inp.focus();
+    };
 
     // Al cambiar el tipo en el modal, el bloque de estado/ayuda debe seguir al tipo elegido.
     window.CB_toggleCampoCheque = (function (original) {
@@ -722,6 +756,7 @@
         selDir.disabled = true;
         document.getElementById('cbm-numero-cheque').value = row.numero_cheque || '';
         document.getElementById('cbm-fecha-cheque').value = fmtDateInput(row.fecha_cheque);
+        chequeFechaEmisionDoc = fmtDateInput(row.fecha_cheque) || null;
         // Cheque: solo la Fecha Banco REALMENTE registrada (fecha_banco_manual). La columna
         // fecha_banco del listado cae a la fecha del movimiento cuando no se ha conciliado:
         // precargarla en un cheque dejaba el campo lleno sin que nadie lo hubiera conciliado y,

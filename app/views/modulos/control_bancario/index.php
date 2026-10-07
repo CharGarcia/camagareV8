@@ -403,7 +403,16 @@ $urlBase = rtrim($base, '/') . '/' . ltrim($rutaModulo, '/');
                 <div class="row g-2">
                     <div class="col-6">
                         <label class="form-label small fw-bold mb-1">Fecha Banco (conciliación)</label>
-                        <input type="date" id="cbm-fecha-banco" class="form-control form-control-sm shadow-none">
+                        <div class="input-group input-group-sm">
+                            <input type="date" id="cbm-fecha-banco" class="form-control form-control-sm shadow-none">
+                            <!-- Solo en cheques: copia la fecha de emisión del cheque a la Fecha Banco
+                                 (caso común: el banco lo hizo efectivo el mismo día que se giró). -->
+                            <button type="button" class="btn btn-outline-secondary d-none" id="cbm-btn-copiar-fecha-cheque"
+                                    onclick="window.CB_copiarFechaChequeABanco()"
+                                    title="Copiar la fecha de emisión del cheque a la Fecha Banco">
+                                <i class="bi bi-calendar2-check"></i>
+                            </button>
+                        </div>
                         <div class="form-text">Día en que el banco lo hizo efectivo. En un cheque, llenarla lo marca como <strong>cobrado</strong>.</div>
                     </div>
                     <!-- Solo para movimientos SIN documento detrás (asientos manuales): ahí este
