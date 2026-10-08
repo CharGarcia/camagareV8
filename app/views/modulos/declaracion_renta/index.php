@@ -26,6 +26,8 @@ $esSoc = $ctx['tipo'] === 'soc';
     .renta-tabla tr.renta-tot td { background:#f5f5f5; font-weight:700; }
     .renta-tabla tr.renta-sub td { color:#6c757d; font-size:.74rem; }
     .renta-tabla tr.renta-sub td:first-child { padding-left:28px; white-space:pre; }
+    .renta-tabla input.renta-sri { width:58px; height:22px; font-size:.72rem; padding:0 4px; display:inline-block; text-align:center; font-family:monospace; }
+    .renta-tabla select.renta-rubro { height:26px; font-size:.75rem; padding:0 6px; }
     .renta-tabla td.cas { color:#6c757d; font-family:monospace; text-align:center; white-space:nowrap; }
     .renta-tabla td.signo { text-align:center; color:#6c757d; width:30px; }
     .renta-tabla td.val { text-align:right; white-space:nowrap; font-variant-numeric:tabular-nums; }
@@ -162,6 +164,11 @@ $esSoc = $ctx['tipo'] === 'soc';
         <li class="nav-item" role="presentation">
             <button class="nav-link" data-bs-toggle="tab" data-bs-target="#tab-resumen" type="button" role="tab"><i class="bi bi-list-check me-1"></i>Resumen de documentos</button>
         </li>
+        <?php if (!$esSoc): ?>
+        <li class="nav-item" role="presentation">
+            <button class="nav-link" data-bs-toggle="tab" data-bs-target="#tab-clasificar" type="button" role="tab"><i class="bi bi-tags me-1"></i>Clasificar gastos personales <span class="badge bg-danger ms-1 d-none" id="renta-badge-sin-rubro">0</span></button>
+        </li>
+        <?php endif; ?>
         <?php if (!$esPn): ?>
         <li class="nav-item" role="presentation">
             <button class="nav-link" data-bs-toggle="tab" data-bs-target="#tab-casilleros" type="button" role="tab"><i class="bi bi-grid-3x3 me-1"></i>Casilleros (contabilidad)</button>
@@ -194,6 +201,26 @@ $esSoc = $ctx['tipo'] === 'soc';
             </div>
         </div>
 
+        <?php if (!$esSoc): ?>
+        <div class="tab-pane fade" id="tab-clasificar" role="tabpanel">
+            <div class="p-2 border-bottom d-flex align-items-center gap-2 flex-wrap">
+                <label class="small fw-bold mb-0">Mostrar</label>
+                <select id="renta-clasificar-filtro" class="form-select form-select-sm" style="width:220px;height:28px;font-size:.75rem;" onchange="RENTA_clasificar()">
+                    <option value="sin_rubro">Solo sin rubro</option>
+                    <option value="todas">Todas las de gasto personal</option>
+                </select>
+                <span class="small text-muted" id="renta-clasificar-resumen"></span>
+                <span class="small text-muted ms-auto">Elija el rubro en cada fila; se guarda al instante. <strong>Aplicar al proveedor</strong> pone ese rubro a todas las compras sin rubro del mismo proveedor en el ejercicio.</span>
+            </div>
+            <div class="renta-scroll">
+                <table class="table table-sm table-hover mb-0 renta-tabla">
+                    <thead><tr><?php if (!empty($ctx['grupo']['consolidado'])): ?><th>Establecimiento</th><?php endif; ?><th>Fecha</th><th>Tipo</th><th>Número</th><th>Proveedor</th><th>Identificación</th><th class="text-end">Total</th><th style="width:230px;">Rubro</th><th></th></tr></thead>
+                    <tbody id="renta-clasificar"><tr><td colspan="9" class="text-center text-muted py-3">Presione Mostrar para cargar.</td></tr></tbody>
+                </table>
+            </div>
+        </div>
+        <?php endif; ?>
+
         <?php if (!$esPn): ?>
         <div class="tab-pane fade" id="tab-casilleros" role="tabpanel">
             <div class="renta-scroll">
@@ -203,7 +230,7 @@ $esSoc = $ctx['tipo'] === 'soc';
                 </table>
             </div>
             <div class="px-3 py-2 small text-muted border-top">
-                El casillero de cada cuenta se configura en <a href="<?= $base ?>/modulos/plan-cuentas">Plan de cuentas</a> (campo <em>Código SRI</em>). Solo entran los asientos contabilizados del ejercicio.
+                Escriba el número de casillero en la casilla de cada cuenta y presione Enter (o salga del campo) para guardarlo; el reporte se recalcula solo. Solo entran los asientos contabilizados del ejercicio.
             </div>
         </div>
         <?php endif; ?>
@@ -230,6 +257,8 @@ $esSoc = $ctx['tipo'] === 'soc';
         ruta: <?= json_encode($rutaModulo) ?>,
         tipo: <?= json_encode($ctx['tipo']) ?>,
         consolidado: <?= !empty($ctx['grupo']['consolidado']) ? 'true' : 'false' ?>,
+        puedeEditar: <?= !empty($perm['actualizar']) ? 'true' : 'false' ?>,
+        rubros: <?= json_encode(\App\Helpers\RubrosGastoPersonal::CATALOGO, JSON_UNESCAPED_UNICODE) ?>,
         fuentes: <?= json_encode(\App\Services\modulos\DeclaracionRentaService::FUENTES_DETALLE, JSON_UNESCAPED_UNICODE) ?>
     };
 </script>

@@ -89,9 +89,19 @@ de tipo de empresa y el campo *Obligado a llevar contabilidad*):
 - **Resumen de documentos**: cuántos documentos hay en cada bloque (facturas,
   notas de crédito, notas de débito, liquidaciones, retenciones) con su base sin
   IVA y su total con IVA.
+- **Clasificar gastos personales** (personas naturales): la lista de compras de
+  gasto personal, por defecto solo las que no tienen rubro. En cada fila se
+  elige el rubro (vivienda, salud, educación, alimentación, vestimenta, turismo)
+  y se guarda al instante, sin abrir la compra. El botón **Aplicar al
+  proveedor** pone ese mismo rubro a todas las compras sin rubro del mismo
+  proveedor en el ejercicio (útil para farmacias, supermercados, colegios…). El
+  número en rojo de la pestaña indica cuántas faltan por clasificar.
 - **Casilleros (contabilidad)**: cada casillero del formulario con las cuentas
   del plan que lo alimentan y su valor. Al final, las cuentas con saldo que no
-  tienen casillero.
+  tienen casillero. Junto a cada cuenta hay una casilla con su **código SRI**:
+  escriba el número del casillero (3 o 4 dígitos) y presione Enter para
+  guardarlo sin ir a Plan de cuentas; el reporte se recalcula y la cuenta pasa
+  a su casillero. Para quitar el casillero, borre la casilla y presione Enter.
 - **Detalle de documentos**: la lista documento a documento de cada bloque,
   para cuadrar contra el módulo de origen.
 
@@ -117,10 +127,13 @@ de tipo de empresa y el campo *Obligado a llevar contabilidad*):
 
 ## Permisos
 
-Solo se necesita el permiso de **ver**. El reporte siempre muestra los datos de
-**toda la empresa** (la declaración es de la empresa, no de un usuario), sin
-importar el permiso de acceso total. No hay crear, modificar ni eliminar porque
-el módulo no guarda nada.
+Con el permiso de **ver** se consulta y exporta todo. El reporte siempre muestra
+los datos de **toda la empresa** (la declaración es de la empresa, no de un
+usuario), sin importar el permiso de acceso total. El permiso de **modificar**
+habilita las dos acciones que sí escriben: asignar el rubro de gasto personal a
+las compras y el código SRI a las cuentas del plan (ambas quedan en el
+historial del sistema, igual que si se hicieran desde Compras o Plan de
+cuentas). No hay crear ni eliminar.
 
 ## Reglas de negocio
 
@@ -234,6 +247,8 @@ con la tabla RIMPE vigente.
 
 ## Historial de cambios
 
+- **1.2** — Pestaña *Clasificar gastos personales* (rubro por compra y por
+  proveedor desde el reporte) y código SRI editable en la pestaña Casilleros.
 - **1.1** — Consolidación por RUC (varios establecimientos) y desglose de gastos
   personales por rubro (vivienda, salud, educación, alimentación, vestimenta,
   turismo) tomado del nuevo campo *Rubro gasto personal* de Compras.

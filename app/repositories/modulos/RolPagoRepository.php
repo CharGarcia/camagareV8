@@ -1008,6 +1008,74 @@ class RolPagoRepository extends BaseRepository
         return $map;
     }
 
+    /** ¿El rol vino migrado del sistema anterior (ya pagado allá, sin egreso enlazado necesariamente)? */
+    public function esRolMigrado(int $idRol, int $idEmpresa): bool
+    {
+        try {
+            $st = $this->db->prepare("SELECT 1 FROM rol_cabecera rc WHERE rc.id = :r AND rc.id_empresa = :emp
+                                      AND " . self::sqlRolMigrado('rc.id', 'rc.id_empresa'));
+            $st->execute([':r' => $idRol, ':emp' => $idEmpresa]);
+            return (bool) $st->fetchColumn();
+        } catch (\Throwable $e) {
+            return false; // sin tabla de migración → rol nativo
+        }
+    }
+
+    /**
+     * Egresos que pagan una línea (empleado) del rol, con sus formas de pago: es lo que se
+     * muestra en la pestaña «Pago» de la ficha del empleado. Incluye los anulados (marcados
+     * con su estado) para que se entienda por qué un pago ya no cuenta; el monto pagado
+     * vigente lo decide getPagadoPorDetalle(), no esta lista.
+     */
+    public function getEgresosPorDetalle(int $idDetalle, int $idEmpresa): array
+    {
+        $sql = "SELECT e.id, e.numero_egreso, e.establecimiento, e.punto_emision, e.secuencial,
+                       e.fecha_emision, e.estado, e.monto_total, e.observaciones, e.created_at,
+                       d.monto_pagado, d.numero_documento, d.descripcion,
+                       u.nombre AS usuario_nombre,
+                       COALESCE(p.razon_social, emp.nombres_apellidos, e.beneficiario_nombre, '') AS pagado_a
+                FROM egresos_detalle d
+                JOIN egresos_cabecera e ON e.id = d.id_egreso
+                LEFT JOIN usuarios u ON u.id = e.created_by
+                LEFT JOIN proveedores p ON p.id = e.id_proveedor
+                LEFT JOIN empleados emp ON emp.id = e.id_empleado
+                WHERE d.tipo_documento = 'ROL' AND d.id_referencia_documento = :det
+                  AND d.eliminado = false AND e.eliminado = false AND e.id_empresa = :emp
+                ORDER BY e.fecha_emision, e.id";
+        try {
+            $st = $this->db->prepare($sql);
+            $st->execute([':det' => $idDetalle, ':emp' => $idEmpresa]);
+            $egresos = $st->fetchAll(PDO::FETCH_ASSOC);
+        } catch (\Throwable $e) {
+            return []; // módulo de egresos ausente
+        }
+        if (!$egresos) return [];
+
+        $ids = implode(',', array_map(fn($r) => (int) $r['id'], $egresos));
+        $pagos = [];
+        try {
+            $rs = $this->db->query("SELECT ep.id_egreso, ep.monto, ep.referencia, ep.tipo_operacion_bancaria,
+                                           ep.numero_cheque, ep.fecha_cobro, ep.estado_cheque,
+                                           COALESCE(efc.nombre, 'Forma de pago no disponible') AS forma_pago_nombre,
+                                           efc.tipo AS forma_pago_tipo,
+                                           be.nombre_banco AS banco_nombre
+                                    FROM egresos_pagos ep
+                                    LEFT JOIN empresa_formas_pago efc ON efc.id = ep.id_forma_pago
+                                    LEFT JOIN bancos_ecuador be ON be.id = efc.id_banco
+                                    WHERE ep.id_egreso IN ($ids) AND ep.eliminado = false
+                                    ORDER BY ep.id");
+            foreach ($rs->fetchAll(PDO::FETCH_ASSOC) as $p) {
+                $pagos[(int) $p['id_egreso']][] = $p;
+            }
+        } catch (\Throwable $e) {
+            // sin formas de pago: se muestra solo la cabecera del egreso
+        }
+        foreach ($egresos as &$e) {
+            $e['pagos'] = $pagos[(int) $e['id']] ?? [];
+        }
+        return $egresos;
+    }
+
     public function getDetalleCompleto(int $idRol, int $idEmpresa): array
     {
         $sql = "SELECT d.*, e.nombres_apellidos, e.identificacion, e.email, e.cargo,

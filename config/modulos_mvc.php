@@ -434,6 +434,13 @@ return [
         'id_submodulo' => 0,
         'legacy_rutas' => [],
     ],
+    // ─── ANEXO RDEP (retenciones en relación de dependencia) ──────────────
+    // El submódulo lo crea database/migrations/20261008_create_anexo_rdep.sql
+    // bajo el módulo SRI. id 0: se resuelve por submodulos_menu.ruta.
+    'modulos/anexo-rdep' => [
+        'id_submodulo' => 0,
+        'legacy_rutas' => [],
+    ],
     'modulos/anexo-ats' => [
         'id_submodulo' => 27, // submodulos_menu.id donde ruta='modulos/anexo-ats' (Anexo ATS)
         'legacy_rutas' => [

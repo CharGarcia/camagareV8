@@ -268,7 +268,7 @@ class DeclaracionRentaRepository extends BaseRepository
                 $colRubro = $this->columnaExiste('compras_cabecera', 'rubro_gasto_personal')
                     ? "COALESCE(c.rubro_gasto_personal, '')"
                     : "''";
-                $sql = "SELECT c.fecha_emision,
+                $sql = "SELECT c.id, c.id_empresa, c.id_proveedor, c.fecha_emision,
                                COALESCE(c.establecimiento_prov, '') || '-' || COALESCE(c.punto_emision_prov, '') || '-' || COALESCE(c.secuencial_prov, '') AS numero,
                                p.razon_social AS tercero, p.identificacion,
                                c.total_sin_impuestos AS base, c.importe_total AS total,
@@ -309,6 +309,35 @@ class DeclaracionRentaRepository extends BaseRepository
         }
 
         return $this->query($sql, $p)->fetchAll(\PDO::FETCH_ASSOC);
+    }
+
+    /** Una compra de gasto personal (para validar antes de asignarle rubro). */
+    public function getCompraGastoPersonal(int $idCompra, int $idEmpresa): ?array
+    {
+        $colRubro = $this->columnaExiste('compras_cabecera', 'rubro_gasto_personal') ? 'rubro_gasto_personal' : 'NULL AS rubro_gasto_personal';
+        $row = $this->query(
+            "SELECT id, id_empresa, id_proveedor, fecha_emision, tipo_ambiente, deducible, {$colRubro}
+             FROM compras_cabecera WHERE id = :id AND id_empresa = :emp AND eliminado = false",
+            [':id' => $idCompra, ':emp' => $idEmpresa]
+        )->fetch(\PDO::FETCH_ASSOC);
+        return $row ?: null;
+    }
+
+    /** Ids de las compras de gasto personal SIN rubro de un proveedor en el ejercicio (misma empresa). */
+    public function getIdsGastoPersonalSinRubroProveedor(int $idEmpresa, int $idProveedor, string $desde, string $hasta, string $ambiente): array
+    {
+        if (!$this->columnaExiste('compras_cabecera', 'rubro_gasto_personal')) {
+            return [];
+        }
+        $rows = $this->query(
+            "SELECT id FROM compras_cabecera
+             WHERE id_empresa = :emp AND id_proveedor = :prov AND eliminado = false
+               AND deducible = 'gasto_personal' AND COALESCE(rubro_gasto_personal, '') = ''
+               AND fecha_emision BETWEEN :d AND :h AND tipo_ambiente = :amb
+             ORDER BY id",
+            [':emp' => $idEmpresa, ':prov' => $idProveedor, ':d' => $desde, ':h' => $hasta, ':amb' => $ambiente]
+        )->fetchAll(\PDO::FETCH_COLUMN);
+        return array_map('intval', $rows);
     }
 
     /** Normaliza una fila de totales a floats/ints. */

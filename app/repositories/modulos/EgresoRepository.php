@@ -410,12 +410,16 @@ class EgresoRepository extends BaseRepository
         $sql = "SELECT ep.id, ep.id_egreso, ep.id_forma_pago, ep.monto, ep.referencia,
                        ep.tipo_operacion_bancaria, ep.numero_cheque, ep.fecha_cobro, ep.beneficiario_cheque,
                        ep.estado_cheque, ep.motivo_anulacion_cheque, ep.anulado_cheque_at,
-                       efc.nombre AS forma_pago_nombre, efc.tipo AS forma_pago_tipo,
+                       COALESCE(efc.nombre, 'Forma de pago no disponible') AS forma_pago_nombre,
+                       efc.tipo AS forma_pago_tipo,
                        be.nombre_banco AS banco_nombre,
                        " . $this->sqlChequeConciliado('ep', 'efc') . " AS cheque_conciliado,
                        " . $this->sqlChequeFechaBanco('ep', 'efc') . " AS cheque_fecha_banco
                 FROM egresos_pagos ep
-                INNER JOIN empresa_formas_pago efc ON ep.id_forma_pago = efc.id
+                -- LEFT JOIN: si la forma de pago ya no existe (borrado físico fuera del sistema),
+                -- el pago se sigue mostrando; con INNER JOIN desaparecía y el egreso quedaba
+                -- «sin formas de pago» aunque sí tuviera el monto registrado.
+                LEFT JOIN empresa_formas_pago efc ON ep.id_forma_pago = efc.id
                 LEFT JOIN bancos_ecuador be ON be.id = efc.id_banco
                 WHERE ep.id_egreso = ? AND ep.eliminado = FALSE
                 ORDER BY ep.id ASC";
@@ -488,7 +492,7 @@ class EgresoRepository extends BaseRepository
                        e.estado AS egreso_estado, e.fecha_emision,
                        " . $this->sqlChequeConciliado('ep', 'efc') . " AS cheque_conciliado
                 FROM egresos_pagos ep
-                INNER JOIN empresa_formas_pago efc ON ep.id_forma_pago = efc.id
+                LEFT JOIN empresa_formas_pago efc ON ep.id_forma_pago = efc.id
                 INNER JOIN egresos_cabecera e ON ep.id_egreso = e.id
                 WHERE ep.id = ? AND e.id_empresa = ? AND ep.eliminado = FALSE
                 LIMIT 1";

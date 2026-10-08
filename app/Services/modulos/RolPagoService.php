@@ -179,6 +179,16 @@ class RolPagoService
             (int) ($lin['cabecera']['periodo_anio'] ?? 0),
             (int) ($lin['cabecera']['periodo_mes'] ?? 0)
         );
+        // Pestaña «Pago»: egresos que pagan esta línea + estado de pago con el mismo
+        // criterio del listado del rol (getPagadoPorDetalle: rol migrado = pagado por su neto).
+        $pagosRol = $this->repo->getPagadoPorDetalle((int) $lin['id_rol']);
+        $pagado   = round((float) ($pagosRol[(int) $lin['id']] ?? 0), 2);
+        $neto     = round((float) $lin['neto'], 2);
+        $lin['pagado']      = $pagado;
+        $lin['saldo']       = round($neto - $pagado, 2);
+        $lin['estado_pago'] = $pagado <= 0 ? 'pendiente' : ($lin['saldo'] <= 0 ? 'pagado' : 'parcial');
+        $lin['rol_migrado'] = $this->repo->esRolMigrado((int) $lin['id_rol'], $idEmpresa);
+        $lin['pagos']       = $this->repo->getEgresosPorDetalle((int) $lin['id'], $idEmpresa);
         return $lin;
     }
 

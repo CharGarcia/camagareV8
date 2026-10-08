@@ -1,5 +1,5 @@
 <div class="modal fade" id="modalRolVer" tabindex="-1" aria-hidden="true" style="z-index:1060;">
-    <div class="modal-dialog modal-lg modal-dialog-centered">
+    <div class="modal-dialog modal-xl modal-dialog-centered">
         <div class="modal-content shadow-lg border-0" style="height: 82vh;">
             <div class="modal-header bg-light py-3">
                 <h5 class="modal-title fw-bold">
@@ -28,11 +28,12 @@
                                 <th class="ps-3">Empleado</th>
                                 <th class="text-end">Ingresos</th>
                                 <th class="text-end">Egresos</th>
-                                <th class="text-end pe-3">Neto</th>
+                                <th class="text-end">Neto</th>
+                                <th class="text-center pe-3" title="Clic en el estado para ver el detalle del pago (egresos)">Pago</th>
                             </tr>
                         </thead>
                         <tbody id="rolver_lista">
-                            <tr><td colspan="4" class="text-center py-5 text-muted">Cargando…</td></tr>
+                            <tr><td colspan="5" class="text-center py-5 text-muted">Cargando…</td></tr>
                         </tbody>
                     </table>
                 </div>

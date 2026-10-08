@@ -416,7 +416,9 @@ class DeclaracionRentaService
                 }
                 $tot[$claveTotal] = round($tot[$claveTotal] + $valor, 2);
                 $cas = trim((string) ($it['codigo_sri'] ?? ''));
-                $cuenta = ['codigo' => $codigo, 'nombre' => (string) $it['nombre'], 'valor' => $valor, 'seccion' => $seccion,
+                $cuenta = ['id_cuenta' => (int) ($it['id_cuenta'] ?? 0), 'id_empresa' => $idEmp,
+                           'codigo' => $codigo, 'nombre' => (string) $it['nombre'], 'valor' => $valor, 'seccion' => $seccion,
+                           'codigo_sri' => $cas,
                            'establecimiento' => $grupo['consolidado'] ? ($etiquetas[$idEmp] ?? '') : ''];
                 if ($cas === '') {
                     $sinCasillero[] = $cuenta;
@@ -735,6 +737,88 @@ class DeclaracionRentaService
             }
         }
         return $out;
+    }
+
+    // ───────────────────────────── Clasificación desde el reporte ─────────────────────────────
+
+    /** Ids de empresa del grupo RUC que el usuario puede tocar desde este módulo. */
+    private function idsGrupoPermitidos(int $idEmpresa, int $idUsuario): array
+    {
+        return $this->grupoRuc($idEmpresa, $idUsuario)['ids'];
+    }
+
+    /**
+     * Asigna el rubro de gasto personal a una compra (y, opcionalmente, a todas las compras de
+     * gasto personal SIN rubro del mismo proveedor en el ejercicio). La compra puede ser de
+     * cualquier establecimiento del grupo RUC accesible. Devuelve cuántas compras cambiaron.
+     */
+    public function asignarRubro(int $idEmpresa, int $idUsuario, int $idCompra, int $idEmpresaCompra, $rubro, bool $todasDelProveedor, $anio): int
+    {
+        $anio = $this->rules->validarAnio($anio);
+        $rubroCod = RubrosGastoPersonal::normalizar($rubro);
+        if ($rubroCod === null && trim((string) $rubro) !== '') {
+            throw new \InvalidArgumentException('Rubro no válido.');
+        }
+        if (!in_array($idEmpresaCompra, $this->idsGrupoPermitidos($idEmpresa, $idUsuario), true)) {
+            throw new \RuntimeException('La compra pertenece a un establecimiento al que no tiene acceso.');
+        }
+        $compra = $this->repo->getCompraGastoPersonal($idCompra, $idEmpresaCompra);
+        if (!$compra) {
+            throw new \RuntimeException('Compra no encontrada.');
+        }
+        if ((string) $compra['deducible'] !== 'gasto_personal') {
+            throw new \RuntimeException('La compra no está marcada como Gasto personal; cámbielo primero en Compras.');
+        }
+
+        $comprasRepo = new \App\repositories\modulos\ComprasRepository();
+        if (!$comprasRepo->tieneRubroGastoPersonal()) {
+            throw new \RuntimeException('Falta aplicar la migración de rubros de gasto personal en la base de datos.');
+        }
+        $ids = [$idCompra];
+        if ($todasDelProveedor && $rubroCod !== null && !empty($compra['id_proveedor'])) {
+            $amb = (string) ((int) ($compra['tipo_ambiente'] ?? 1));
+            $ids = array_values(array_unique(array_merge($ids, $this->repo->getIdsGastoPersonalSinRubroProveedor(
+                $idEmpresaCompra, (int) $compra['id_proveedor'], "{$anio}-01-01", "{$anio}-12-31", $amb
+            ))));
+        }
+
+        $log = new \App\Services\LogSistemaService();
+        $this->repo->beginTransaction();
+        try {
+            foreach ($ids as $id) {
+                $antes = $id === $idCompra ? $compra : $this->repo->getCompraGastoPersonal($id, $idEmpresaCompra);
+                $comprasRepo->setRubroGastoPersonal($id, $idEmpresaCompra, $rubroCod, 'gasto_personal');
+                $log->registrar($idUsuario, $idEmpresaCompra, 'ACTUALIZAR', 'compras_cabecera', $id,
+                    ['rubro_gasto_personal' => $antes['rubro_gasto_personal'] ?? null],
+                    ['rubro_gasto_personal' => $rubroCod, 'origen' => 'declaracion_renta']);
+            }
+            $this->repo->commit();
+        } catch (\Throwable $e) {
+            $this->repo->rollBack();
+            throw $e;
+        }
+        return count($ids);
+    }
+
+    /**
+     * Cambia el código SRI (casillero) de una cuenta del plan sin salir del reporte. Reutiliza
+     * PlanCuentaService::actualizarCodigosControl (validaciones y auditoría del Plan de cuentas).
+     */
+    public function asignarCodigoSri(int $idEmpresa, int $idUsuario, int $idCuenta, int $idEmpresaCuenta, string $codigoSri): array
+    {
+        if (!in_array($idEmpresaCuenta, $this->idsGrupoPermitidos($idEmpresa, $idUsuario), true)) {
+            throw new \RuntimeException('La cuenta pertenece a un establecimiento al que no tiene acceso.');
+        }
+        $codigoSri = trim($codigoSri);
+        if ($codigoSri !== '' && !preg_match('/^[0-9]{3,4}$/', $codigoSri)) {
+            throw new \InvalidArgumentException('El casillero SRI debe tener 3 o 4 dígitos (o vacío para quitarlo).');
+        }
+        $planSvc = new PlanCuentaService(
+            new \App\repositories\modulos\PlanCuentaRepository(),
+            new \App\Rules\modulos\PlanCuentaRules(),
+            new \App\Services\LogSistemaService()
+        );
+        return $planSvc->actualizarCodigosControl($idCuenta, $idEmpresaCuenta, $idUsuario, ['codigo_sri' => $codigoSri]);
     }
 
     // ───────────────────────────── Exportaciones ─────────────────────────────

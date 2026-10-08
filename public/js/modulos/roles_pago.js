@@ -21,12 +21,15 @@
         parcial:   { c: 'warning',   t: 'Pago parcial',   i: 'bi-hourglass-split' },
         pendiente: { c: 'secondary', t: 'Pago pendiente', i: 'bi-cash-coin' }
     };
-    const pagoBadge = (d) => {
+    // Badge del estado de pago. En el listado del rol (clicable=true) abre la ficha del
+    // empleado directo en la pestaña «Pago», donde se ven los egresos que lo pagaron.
+    const pagoBadge = (d, clicable) => {
         const p = PAGO[d.estado_pago] || PAGO.pendiente;
         const pagado = money(d.pagado || 0);
         const saldo  = money(d.saldo != null ? d.saldo : d.neto);
-        const title  = `Estado de pago del rol · Pagado ${pagado} · Saldo ${saldo}`;
-        return `<span class="badge bg-${p.c} bg-opacity-10 text-${p.c} border border-${p.c} border-opacity-25 ms-2" style="font-size:0.62rem;" title="${title}"><i class="bi ${p.i} me-1"></i>${p.t}</span>`;
+        const title  = `Pagado ${pagado} · Saldo ${saldo}` + (clicable ? ' · Clic para ver el detalle del pago' : '');
+        const click  = clicable ? ` role="button" onclick="event.stopPropagation(); window.rolEmpDetalle(${d.id}, 'pago')"` : '';
+        return `<span class="badge bg-${p.c} bg-opacity-10 text-${p.c} border border-${p.c} border-opacity-25" style="font-size:0.66rem;${clicable ? 'cursor:pointer;' : ''}" title="${title}"${click}><i class="bi ${p.i} me-1"></i>${p.t}</span>`;
     };
 
     const $ = (id) => document.getElementById(id);
@@ -151,16 +154,16 @@
         // El rol puede tener muchos empleados: getDetalleAjax siempre lo recalcula
         // primero (para que quede al día con novedades/reglas actuales, aunque ya
         // esté pagado o contabilizado), así que esto puede tardar — se avisa explícito.
-        $('rolver_lista').innerHTML = '<tr><td colspan="4" class="text-center py-5 text-muted"><span class="spinner-border spinner-border-sm me-2"></span>Actualizando rol de pago…</td></tr>';
+        $('rolver_lista').innerHTML = '<tr><td colspan="5" class="text-center py-5 text-muted"><span class="spinner-border spinner-border-sm me-2"></span>Actualizando rol de pago…</td></tr>';
         $('rolver_buscar').value = '';
         modalVer()?.show();
         try {
             const resp = await fetch(`${urlModulo}/getDetalleAjax?id=${id}`);
             const res = await resp.json();
             if (res.ok) renderVer(res.data);
-            else $('rolver_lista').innerHTML = '<tr><td colspan="4" class="text-center py-4 text-danger">No se pudo cargar.</td></tr>';
+            else $('rolver_lista').innerHTML = '<tr><td colspan="5" class="text-center py-4 text-danger">No se pudo cargar.</td></tr>';
         } catch (e) {
-            $('rolver_lista').innerHTML = '<tr><td colspan="4" class="text-center py-4 text-danger">Error de red.</td></tr>';
+            $('rolver_lista').innerHTML = '<tr><td colspan="5" class="text-center py-4 text-danger">Error de red.</td></tr>';
         } finally {
             rolverBotonesCarga(false);
         }
@@ -180,15 +183,16 @@
         renderAvisos(rol.avisos || [], rol.empleados_sin_periodo || []);
 
         const det = rol.detalle || [];
-        if (!det.length) { $('rolver_lista').innerHTML = '<tr><td colspan="4" class="text-center py-4 text-muted">Sin empleados con conceptos.</td></tr>'; $('rolver_conteo').textContent = ''; return; }
+        if (!det.length) { $('rolver_lista').innerHTML = '<tr><td colspan="5" class="text-center py-4 text-muted">Sin empleados con conceptos.</td></tr>'; $('rolver_conteo').textContent = ''; return; }
 
         let rows = '';
         det.forEach(d => {
             rows += `<tr class="rolver-row" role="button" data-nombre="${esc((d.nombres_apellidos || '').toLowerCase())}" data-ident="${esc(d.identificacion || '')}" onclick="window.rolEmpDetalle(${d.id})">
-                <td class="ps-3"><b>${esc(d.nombres_apellidos)}</b> <span class="text-muted small">${esc(d.identificacion)}</span>${pagoBadge(d)}</td>
+                <td class="ps-3"><b>${esc(d.nombres_apellidos)}</b> <span class="text-muted small">${esc(d.identificacion)}</span></td>
                 <td class="text-end text-success">${money(d.total_ingresos)}</td>
                 <td class="text-end text-danger">${money(d.total_egresos)}</td>
-                <td class="text-end pe-3 fw-bold">${money(d.neto)}</td></tr>`;
+                <td class="text-end fw-bold">${money(d.neto)}</td>
+                <td class="text-center pe-3" style="white-space:nowrap;">${pagoBadge(d, true)}</td></tr>`;
         });
         $('rolver_lista').innerHTML = rows;
         $('rolver_conteo').textContent = det.length + ' empleados';
@@ -466,12 +470,18 @@
     };
 
     // ─── Detalle de un empleado (pestañas) ───────────────────────────────────
-    window.rolEmpDetalle = async function (det) {
+    // `pestana`: 'pago' abre el modal directo en la pestaña Pago (desde el badge del
+    // listado del rol); sin valor se abre en General, como siempre.
+    window.rolEmpDetalle = async function (det, pestana) {
         $('rolemp_general_body').innerHTML = '<div class="text-center py-4 text-muted">Cargando…</div>';
         $('rolemp_prov_body').innerHTML = '';
         // La pestaña del asiento solo existe con acceso a Contabilidad → Asientos Contables.
         if ($('rolemp_asiento_body')) $('rolemp_asiento_body').innerHTML = '';
         if ($('rolemp_asist_body')) $('rolemp_asist_body').innerHTML = '';
+        if ($('rolemp_pago_body')) $('rolemp_pago_body').innerHTML = '<div class="text-center py-4 text-muted">Cargando…</div>';
+        if ($('rolemp_pago_badge')) $('rolemp_pago_badge').classList.add('d-none');
+        const tabDestino = document.querySelector(pestana === 'pago' ? '#rolemp-tab-pago' : 'a[href="#rolemp-general"]');
+        if (tabDestino && typeof bootstrap !== 'undefined') bootstrap.Tab.getOrCreateInstance(tabDestino).show();
         modalEmp()?.show();
         try {
             const resp = await fetch(`${urlModulo}/getEmpleadoAjax?det=${det}`);
@@ -498,10 +508,112 @@
             renderProvisiones(d);
             renderAsiento(d);
             renderAsistencia(d);
+            renderPago(d);
         } catch (e) {
             $('rolemp_general_body').innerHTML = '<div class="text-danger">Error de red.</div>';
+            if ($('rolemp_pago_body')) $('rolemp_pago_body').innerHTML = '<div class="text-danger">Error de red.</div>';
         }
     };
+
+    // ─── Pestaña «Pago»: egresos que pagaron la línea del rol ─────────────────
+    const fechaCorta = (s) => {
+        if (!s) return '';
+        const m = String(s).match(/^(\d{4})-(\d{2})-(\d{2})/);
+        return m ? `${m[3]}-${m[2]}-${m[1]}` : esc(s);
+    };
+    const TIPO_OP = { TRANSFERENCIA: 'Transferencia', DEPOSITO: 'Depósito', CHEQUE: 'Cheque' };
+
+    function renderPago(d) {
+        const box = $('rolemp_pago_body');
+        if (!box) return;
+        const p = PAGO[d.estado_pago] || PAGO.pendiente;
+        const badgeTab = $('rolemp_pago_badge');
+        if (badgeTab) {
+            badgeTab.className = `badge ms-1 bg-${p.c} bg-opacity-10 text-${p.c} border border-${p.c} border-opacity-25`;
+            badgeTab.style.fontSize = '0.6rem';
+            badgeTab.textContent = p.t;
+        }
+        const egresos = d.pagos || [];
+        const puedeVerEgresos = !!d.puede_ver_egresos;
+
+        let html = `
+            <div class="d-flex flex-wrap align-items-center gap-3 border rounded-2 bg-light px-3 py-2 mb-3">
+                <span class="badge bg-${p.c} bg-opacity-10 text-${p.c} border border-${p.c} border-opacity-25"><i class="bi ${p.i} me-1"></i>${p.t}</span>
+                <span class="small">Neto del rol: <b>${money(d.neto)}</b></span>
+                <span class="small">Pagado: <b class="text-success">${money(d.pagado)}</b></span>
+                <span class="small">Saldo: <b class="${(parseFloat(d.saldo) || 0) > 0 ? 'text-danger' : 'text-muted'}">${money(d.saldo)}</b></span>
+            </div>`;
+
+        if (d.rol_migrado) {
+            html += `<div class="alert alert-info py-2 px-3 small mb-3">
+                <i class="bi bi-info-circle me-1"></i>
+                <b>Rol migrado del sistema anterior.</b> Se considera pagado por su neto porque ya se pagó allá;
+                ${egresos.length ? 'abajo se muestran los egresos migrados que quedaron enlazados a esta línea.' : 'no quedó ningún egreso enlazado a esta línea, por eso no hay referencia de pago que mostrar.'}
+            </div>`;
+        }
+
+        if (!egresos.length) {
+            if (!d.rol_migrado) {
+                html += `<div class="text-muted text-center py-4"><i class="bi bi-cash-coin fs-3 d-block mb-1"></i>
+                    Aún no hay ningún egreso que pague este rol.${(parseFloat(d.pagado) || 0) > 0 ? '' : ' Use <b>Generar egresos</b> en el rol o regístrelo en <b>Egresos → Nómina</b>.'}</div>`;
+            }
+            box.innerHTML = html;
+            return;
+        }
+
+        egresos.forEach(e => {
+            const anulado = String(e.estado || '').toLowerCase() === 'anulado';
+            const numero = e.numero_egreso || [e.establecimiento, e.punto_emision, e.secuencial].filter(Boolean).join('-') || ('#' + e.id);
+            let pagos = '';
+            (e.pagos || []).forEach(fp => {
+                const partes = [];
+                if (fp.banco_nombre) partes.push(esc(fp.banco_nombre));
+                if (fp.tipo_operacion_bancaria) partes.push(TIPO_OP[fp.tipo_operacion_bancaria] || esc(fp.tipo_operacion_bancaria));
+                if (fp.numero_cheque) partes.push('Cheque N° ' + esc(fp.numero_cheque));
+                if (fp.referencia) partes.push('Ref. ' + esc(fp.referencia));
+                if (fp.fecha_cobro) partes.push('Cobro ' + fechaCorta(fp.fecha_cobro));
+                if (fp.estado_cheque && String(fp.estado_cheque).toLowerCase() === 'anulado') partes.push('<span class="text-danger">cheque anulado</span>');
+                pagos += `<tr>
+                    <td class="small ps-3">${esc(fp.forma_pago_nombre)}</td>
+                    <td class="small text-muted">${partes.join(' · ') || '—'}</td>
+                    <td class="small text-end pe-3">${money(fp.monto)}</td></tr>`;
+            });
+            if (!pagos) pagos = '<tr><td colspan="3" class="small text-muted text-center py-2">Sin formas de pago registradas.</td></tr>';
+
+            const btnPdf = puedeVerEgresos
+                ? `<button type="button" class="btn btn-sm btn-outline-danger py-0 px-2" title="PDF del comprobante de egreso"
+                      onclick="CMG_pdfDocumento('${BASE_URL}/modulos/egresos/pdf?id=${parseInt(e.id, 10)}')"><i class="bi bi-file-earmark-pdf"></i> PDF</button>`
+                : '';
+
+            html += `
+            <div class="border rounded-2 mb-2 ${anulado ? 'border-danger border-opacity-50' : ''}">
+                <div class="d-flex flex-wrap align-items-center gap-2 px-3 py-2 bg-light border-bottom">
+                    <i class="bi bi-receipt text-success"></i>
+                    <b>Egreso ${esc(numero)}</b>
+                    <span class="small text-muted">${fechaCorta(e.fecha_emision)}</span>
+                    ${anulado ? '<span class="badge bg-danger bg-opacity-10 text-danger border border-danger border-opacity-25">Anulado</span>' : ''}
+                    <span class="ms-auto small">Aplicado a este rol: <b>${money(e.monto_pagado)}</b></span>
+                    <span class="small text-muted">· Total del egreso ${money(e.monto_total)}</span>
+                    ${btnPdf}
+                </div>
+                <div class="px-3 py-1 small text-muted">
+                    ${e.pagado_a ? `Pagado a <b>${esc(e.pagado_a)}</b>` : ''}
+                    ${e.usuario_nombre ? ` · Registró ${esc(e.usuario_nombre)}` : ''}
+                    ${e.observaciones ? `<div class="fst-italic">${esc(e.observaciones)}</div>` : ''}
+                </div>
+                <table class="table table-sm mb-0 align-middle">
+                    <thead class="table-light"><tr>
+                        <th class="small ps-3">Forma de pago</th><th class="small">Detalle</th><th class="small text-end pe-3">Monto</th>
+                    </tr></thead>
+                    <tbody>${pagos}</tbody>
+                </table>
+            </div>`;
+        });
+        if (!puedeVerEgresos) {
+            html += '<div class="small text-muted"><i class="bi bi-lock me-1"></i>El PDF del egreso requiere acceso al módulo Egresos.</div>';
+        }
+        box.innerHTML = html;
+    }
 
     function renderGeneral(d) {
         const ing = (d.rubros || []).filter(r => r.tipo === 'ingreso');

@@ -469,6 +469,11 @@ class RolesPagoController extends BaseModuloController
         header('Content-Type: application/json');
         $idDetalle = (int) ($_GET['det'] ?? 0);
         $data = $this->service->getEmpleadoCompleto($idDetalle, (int) $_SESSION['id_empresa'], (int) $_SESSION['id_usuario']);
+        if ($data) {
+            // El PDF del egreso lo sirve /modulos/egresos/pdf (requireLeer de Egresos): el botón
+            // solo se ofrece a quien puede entrar a ese módulo.
+            $data['puede_ver_egresos'] = \App\Helpers\Permisos::puedeVer('modulos/egresos');
+        }
         echo json_encode($data ? ['ok' => true, 'data' => $data] : ['ok' => false, 'error' => 'No encontrado']);
         exit;
     }

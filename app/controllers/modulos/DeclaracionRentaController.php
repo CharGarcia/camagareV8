@@ -115,6 +115,52 @@ class DeclaracionRentaController extends BaseModuloController
         }
     }
 
+    /**
+     * Pestaña "Clasificar gastos personales": asigna el rubro a una compra (o a todas las del
+     * proveedor sin rubro en el ejercicio). Requiere permiso de modificar en este módulo.
+     */
+    public function asignarRubroAjax(): void
+    {
+        $this->requireActualizar();
+        $idEmpresa = (int) $_SESSION['id_empresa'];
+        $idUsuario = (int) $_SESSION['id_usuario'];
+        try {
+            $n = $this->service->asignarRubro(
+                $idEmpresa,
+                $idUsuario,
+                (int) ($_POST['id_compra'] ?? 0),
+                (int) ($_POST['id_empresa_compra'] ?? $idEmpresa),
+                $_POST['rubro'] ?? '',
+                !empty($_POST['todas_proveedor']) && (string) $_POST['todas_proveedor'] !== '0',
+                $_POST['anio'] ?? 0
+            );
+            $this->json(['success' => true, 'actualizadas' => $n,
+                'message' => $n === 1 ? 'Rubro guardado.' : "Rubro guardado en {$n} compras del proveedor."]);
+        } catch (\Throwable $e) {
+            $this->json(['success' => false, 'message' => $e->getMessage()], 422);
+        }
+    }
+
+    /** Pestaña "Casilleros": cambia el código SRI de una cuenta del plan sin ir a Plan de cuentas. */
+    public function asignarCodigoSriAjax(): void
+    {
+        $this->requireActualizar();
+        $idEmpresa = (int) $_SESSION['id_empresa'];
+        $idUsuario = (int) $_SESSION['id_usuario'];
+        try {
+            $cuenta = $this->service->asignarCodigoSri(
+                $idEmpresa,
+                $idUsuario,
+                (int) ($_POST['id_cuenta'] ?? 0),
+                (int) ($_POST['id_empresa_cuenta'] ?? $idEmpresa),
+                (string) ($_POST['codigo_sri'] ?? '')
+            );
+            $this->json(['success' => true, 'cuenta' => $cuenta, 'message' => 'Casillero guardado.']);
+        } catch (\Throwable $e) {
+            $this->json(['success' => false, 'message' => $e->getMessage()], 422);
+        }
+    }
+
     private function esAjax(): bool
     {
         return strtolower((string) ($_SERVER['HTTP_X_REQUESTED_WITH'] ?? '')) === 'xmlhttprequest'

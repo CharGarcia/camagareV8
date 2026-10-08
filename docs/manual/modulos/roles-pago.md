@@ -5,8 +5,8 @@ categoria: Nómina
 ruta_modulo: modulos/roles-pago
 tipo: modulo
 visibilidad: todos
-etiquetas: rol de pago, roles, nomina, sueldo, quincena, semanal, mensual, pago de empleados, descuentos, liquido a recibir, neteo, ingresos de quincena, bono en quincena, horas extra en quincena, observacion, observaciones, detalle de novedad, motivo del descuento, asiento contable, contabilizacion, cuentas de nomina, prestamo quirografario, prestamo hipotecario, prestamo empresa, prestamos iess, aporte iess, base del iess, con iess, sin iess, bonos, comisiones, horas extra, dias no laborados, faltas, dias laborados, sueldo ganado, fondos de reserva, decimo tercero, decimo cuarto, buscar rol de pago, buscador, filtros, filtrar roles, buscar empleado en el rol, buscar rubro, chips, ordenar, ordenamiento, ordenar por periodo, ordenar columnas, orden del listado, periodo mas reciente, imprimir, impresora, eliminar rol, anular rol, rol eliminado, nomina duplicada, nomina contabilizada dos veces, gasto de nomina inflado, asiento sigue contabilizado, asiento de rol eliminado
-version: 1.14
+etiquetas: rol de pago, roles, nomina, sueldo, quincena, semanal, mensual, pago de empleados, descuentos, liquido a recibir, neteo, ingresos de quincena, bono en quincena, horas extra en quincena, observacion, observaciones, detalle de novedad, motivo del descuento, asiento contable, contabilizacion, cuentas de nomina, prestamo quirografario, prestamo hipotecario, prestamo empresa, prestamos iess, aporte iess, base del iess, con iess, sin iess, bonos, comisiones, horas extra, dias no laborados, faltas, dias laborados, sueldo ganado, fondos de reserva, decimo tercero, decimo cuarto, buscar rol de pago, buscador, filtros, filtrar roles, buscar empleado en el rol, buscar rubro, chips, ordenar, ordenamiento, ordenar por periodo, ordenar columnas, orden del listado, periodo mas reciente, imprimir, impresora, eliminar rol, anular rol, rol eliminado, nomina duplicada, nomina contabilizada dos veces, gasto de nomina inflado, asiento sigue contabilizado, asiento de rol eliminado, pagado, pago pendiente, pago parcial, estado de pago, referencia del pago, egreso del rol, ver egreso, pdf del egreso, comprobante de egreso, con que se pago, como se pago, transferencia, cheque, pestaña pago
+version: 1.15
 orden: 30
 estado: activo
 ---
@@ -133,6 +133,37 @@ se agrega dentro de la misma celda del concepto, separada por un guion:
 `Horas extra 50% (6h) — cobertura del feriado`. Aplica tanto a la hoja principal
 como a las hojas *Novedades* y *Otros Detalles*.
 
+### Pestaña Pago: con qué egreso se pagó el rol
+
+En la lista de empleados del rol, la última columna **Pago** muestra el estado de
+pago de cada uno: **Pagado**, **Pago parcial** o **Pago pendiente**. Al pasar el
+mouse se ve cuánto se pagó y cuánto falta. Al hacer **clic sobre ese estado** se
+abre la ficha del empleado directo en la pestaña **Pago** (también se puede
+abrir la ficha con clic en el nombre y luego ir a esa pestaña).
+
+La pestaña Pago muestra:
+
+- Un resumen con el **neto del rol**, lo **pagado** y el **saldo**.
+- Una tarjeta por cada **egreso** que pagó este rol, con su número, fecha, el
+  monto aplicado a este rol (si un egreso pagó varios documentos, aquí solo se
+  ve la parte que corresponde a este empleado), a quién se pagó, quién lo
+  registró y sus observaciones.
+- Dentro de cada egreso, la tabla de **formas de pago**: nombre de la forma de
+  pago, banco, tipo de operación (transferencia, depósito o cheque), número de
+  cheque, referencia o número de operación y fecha de cobro del cheque.
+- El botón **PDF** de cada egreso, que genera el comprobante de egreso igual que
+  desde el módulo *Egresos*. Solo aparece si el usuario tiene permiso de ver ese
+  módulo.
+
+Un egreso **anulado** se sigue mostrando, marcado como tal, para que se entienda
+por qué el rol volvió a quedar pendiente; su monto no cuenta como pagado.
+
+Si el rol fue **migrado del sistema anterior**, el sistema lo considera pagado
+por su neto aunque no tenga un egreso enlazado (porque ya se pagó allá). La
+pestaña lo avisa; si la migración logró enlazar los egresos viejos a esa línea,
+se muestran igual que los nativos, y si no, simplemente no hay referencia que
+mostrar.
+
 ## Asiento contable del rol mensual
 
 Solo el rol **mensual** se contabiliza; las quincenas y semanas se netean dentro
@@ -258,6 +289,11 @@ módulo. Para regresar al orden de fábrica, ordene por *Período* de mayor a me
 
 ## Historial de cambios
 
+- **1.15** — Nueva columna **Pago** en la lista de empleados del rol (ventana
+  más ancha) y pestaña **Pago** en la ficha del empleado: clic en el estado
+  *Pagado / Parcial / Pendiente* abre la ficha en esa pestaña, donde se ven los
+  egresos que pagaron el rol, sus formas de pago (banco, transferencia, cheque,
+  referencia) y el botón PDF del comprobante de egreso.
 - **1.14** — Corrección: eliminar un rol anula todos sus asientos en la misma
   operación, y anularlo también lo hace dentro de la misma operación. Antes, un rol
   contabilizado que se volvía a generar quedaba en *Generado*, se podía eliminar y
