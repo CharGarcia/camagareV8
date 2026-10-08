@@ -302,11 +302,11 @@ $vacacionesEmpleado = [
                                 <div class="col-md-3">
                                     <label class="form-label mb-1 small fw-bold text-muted" for="emp_discapacidad">Discapacidad / %</label>
                                     <div class="input-group input-group-sm">
-                                        <select class="form-select shadow-none" style="max-width: 72px;" name="discapacidad" id="emp_discapacidad" title="¿Tiene discapacidad?" onchange="window.empToggleDiscapacidad && window.empToggleDiscapacidad()">
+                                        <select class="form-select shadow-none" style="flex: 1 1 auto; min-width: 70px;" name="discapacidad" id="emp_discapacidad" title="¿Tiene discapacidad?" onchange="window.empToggleDiscapacidad && window.empToggleDiscapacidad()">
                                             <option value="no">No</option>
                                             <option value="si">Sí</option>
                                         </select>
-                                        <input type="number" class="form-control shadow-none text-end" name="porcentaje_discapacidad" id="emp_porcentaje_discapacidad" min="0" max="100" step="1" value="0" inputmode="numeric" readonly title="Porcentaje de discapacidad del carné">
+                                        <input type="number" class="form-control shadow-none text-end px-1" style="flex: 0 0 56px; width: 56px;" name="porcentaje_discapacidad" id="emp_porcentaje_discapacidad" min="0" max="100" step="1" value="0" inputmode="numeric" readonly title="Porcentaje de discapacidad del carné">
                                         <span class="input-group-text">%</span>
                                     </div>
                                 </div>
