@@ -50,6 +50,26 @@ final class CatalogoRol
         return self::TIPOS[$t] ?? $t;
     }
 
+    /**
+     * Color Bootstrap e ícono (Bootstrap Icons) de cada tipo de rol, para que el listado y
+     * el modal los distingan de un vistazo: mensual azul, quincena celeste, semanal ámbar.
+     */
+    public const ESTILO_TIPO = [
+        'MENSUAL'  => ['color' => 'primary', 'icono' => 'bi-calendar-month'],
+        'QUINCENA' => ['color' => 'info',    'icono' => 'bi-calendar2-week'],
+        'SEMANAL'  => ['color' => 'warning', 'icono' => 'bi-calendar-week'],
+    ];
+
+    /** Badge HTML (ícono + nombre) del tipo de rol, ya escapado. */
+    public static function badgeTipo(string $t): string
+    {
+        $e = self::ESTILO_TIPO[$t] ?? ['color' => 'secondary', 'icono' => 'bi-calendar'];
+        return '<span class="badge bg-' . $e['color'] . ' bg-opacity-10 text-' . $e['color']
+            . ' border border-' . $e['color'] . ' border-opacity-25 fw-medium">'
+            . '<i class="bi ' . $e['icono'] . ' me-1"></i>'
+            . htmlspecialchars(self::nombreTipo($t), ENT_QUOTES, 'UTF-8') . '</span>';
+    }
+
     public static function nombreEstado(string $e): string
     {
         return self::ESTADOS[$e] ?? $e;

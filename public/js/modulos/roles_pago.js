@@ -13,6 +13,7 @@
     const form = document.getElementById('formRol');
 
     const TIPOS = { MENSUAL: 'Rol Mensual', QUINCENA: 'Quincena', SEMANAL: 'Semanal' };
+    const ESTILO_TIPO = { MENSUAL: { c: 'primary', i: 'bi-calendar-month' }, QUINCENA: { c: 'info', i: 'bi-calendar2-week' }, SEMANAL: { c: 'warning', i: 'bi-calendar-week' } };
     const ESTADOS = { borrador: 'Borrador', generado: 'Generado', pagado: 'Pagado', contabilizado: 'Contabilizado', anulado: 'Anulado' };
     const COLOR = { borrador: 'secondary', generado: 'info', pagado: 'success', contabilizado: 'primary', anulado: 'danger' };
     const MESES = ['', 'Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'];
@@ -172,7 +173,9 @@
     function renderVer(rol) {
         const mes = MESES[parseInt(rol.periodo_mes, 10)] || rol.periodo_mes;
         const num = parseInt(rol.numero_periodo, 10) > 0 ? ' #' + rol.numero_periodo : '';
-        $('rolver_titulo').textContent = (TIPOS[rol.tipo_rol] || rol.tipo_rol);
+        // Mismo distintivo por tipo que el listado (CatalogoRol::ESTILO_TIPO).
+        const est = ESTILO_TIPO[rol.tipo_rol] || { c: 'secondary', i: 'bi-calendar' };
+        $('rolver_titulo').innerHTML = `<i class="bi ${est.i} me-1 text-${est.c}"></i>${esc(TIPOS[rol.tipo_rol] || rol.tipo_rol)}`;
         const badge = $('rolver_estado');
         badge.textContent = ESTADOS[rol.estado] || rol.estado;
         badge.className = 'badge ms-2 bg-' + (COLOR[rol.estado] || 'secondary');
@@ -793,22 +796,7 @@
         }
     };
 
-    // ─── Eliminar (fila del listado) ─────────────────────────────────────────
-    window.eliminarRegistro = async function (id) {
-        if (!id) return;
-        const r = await Swal.fire({ title: '¿Está seguro?', text: 'No podrá revertir esta acción.', icon: 'warning', showCancelButton: true, confirmButtonColor: '#d33', confirmButtonText: 'Sí, eliminar', cancelButtonText: 'Cancelar' });
-        if (!r.isConfirmed) return;
-        try {
-            const fd = new FormData(); fd.append('id_eliminar', id);
-            const resp = await fetch(`${urlModulo}/delete`, { method: 'POST', body: fd });
-            const json = await resp.json();
-            if (json.ok) {
-                Swal.fire({ icon: 'success', title: 'Eliminada', timer: 1300, showConfirmButton: false });
-                window.dispatchEvent(new CustomEvent('rolGuardado'));
-            } else {
-                Swal.fire({ icon: 'error', title: 'Error', text: json.error });
-            }
-        } catch (e) {}
-    };
+    // Eliminar una corrida se hace solo desde el botón Eliminar del modal del rol
+    // (rolEliminarModal); el listado ya no tiene columna de papelera.
 
 })(window, document);

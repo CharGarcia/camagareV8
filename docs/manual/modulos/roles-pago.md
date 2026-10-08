@@ -24,6 +24,10 @@ Un mismo módulo cubre los tres ritmos de pago:
 | Quincenal | Media quincena | **Quincena**: 1 o 2 |
 | Semanal | Una semana | **Semana**: de 1 a 5 |
 
+En el listado, la columna **Tipo** distingue cada ritmo con su propio color e
+ícono de calendario: **Rol Mensual** en azul, **Quincena** en celeste y
+**Semanal** en ámbar. El mismo distintivo encabeza la ventana del rol al abrirlo.
+
 El mes debe estar entre 1 y 12, y el año ser válido.
 
 ## Neteo entre roles
@@ -298,6 +302,10 @@ módulo. Para regresar al orden de fábrica, ordene por *Período* de mayor a me
   quincenas **migrados** ya no se dan por pagados sin más (cambia lo de 1.13):
   cuentan solo los egresos enlazados, y sin ninguno el empleado sale
   *Pendiente* y vuelve a aparecer en *Generar egresos* y en *Egresos → Nómina*.
+  El listado ya no tiene la columna con la papelera: eliminar una corrida se hace
+  desde el botón **Eliminar** del modal del rol. La columna **Tipo** muestra
+  cada tipo de rol con su color e ícono (mensual azul, quincena celeste, semanal
+  ámbar), igual que el título de la ventana del rol.
 - **1.14** — Corrección: eliminar un rol anula todos sus asientos en la misma
   operación, y anularlo también lo hace dentro de la misma operación. Antes, un rol
   contabilizado que se volvía a generar quedaba en *Generado*, se podía eliminar y

@@ -168,13 +168,12 @@ $colores = ['borrador' => 'secondary', 'generado' => 'info', 'pagado' => 'succes
                         <th class="sortable-header" data-sort="periodo" role="button" data-col="periodo">Período <i class="bi bi-arrow-down-up small text-muted ms-1"></i></th>
                         <th class="text-center sortable-header" data-sort="empleados" role="button" data-col="empleados">Empleados <i class="bi bi-arrow-down-up small text-muted ms-1"></i></th>
                         <th class="text-end sortable-header" data-sort="total_neto" role="button" data-col="neto">Neto <i class="bi bi-arrow-down-up small text-muted ms-1"></i></th>
-                        <th class="text-center sortable-header" data-sort="estado" role="button" data-col="estado">Estado <i class="bi bi-arrow-down-up small text-muted ms-1"></i></th>
-                        <th class="text-center" style="width: 40px;"></th>
+                        <th class="text-center pe-3 sortable-header" data-sort="estado" role="button" data-col="estado">Estado <i class="bi bi-arrow-down-up small text-muted ms-1"></i></th>
                     </tr>
                 </thead>
                 <tbody id="tbodyRoles">
                     <?php if (empty($rows)): ?>
-                        <tr><td colspan="6" class="text-center py-5 text-muted">No hay corridas de rol registradas.</td></tr>
+                        <tr><td colspan="5" class="text-center py-5 text-muted">No hay corridas de rol registradas.</td></tr>
                     <?php else: ?>
                         <?php foreach ($rows as $row):
                             $mes = $meses[(int) $row['periodo_mes']] ?? $row['periodo_mes'];
@@ -182,15 +181,12 @@ $colores = ['borrador' => 'secondary', 'generado' => 'info', 'pagado' => 'succes
                             $c = $colores[$row['estado']] ?? 'secondary';
                         ?>
                             <tr class="rol-row" onclick="abrirModalVer(this)" data-row='<?= htmlspecialchars(json_encode($row), ENT_QUOTES) ?>'>
-                                <td class="ps-3 fw-medium" data-col="tipo"><?= htmlspecialchars(CatalogoRol::nombreTipo((string) $row['tipo_rol'])) ?></td>
+                                <td class="ps-3" data-col="tipo"><?= CatalogoRol::badgeTipo((string) $row['tipo_rol']) ?></td>
                                 <td data-col="periodo"><?= htmlspecialchars($mes . ' ' . $row['periodo_anio'] . $num) ?></td>
                                 <td class="text-center" data-col="empleados"><?= (int) ($row['num_empleados'] ?? 0) ?></td>
                                 <td class="text-end fw-bold" data-col="neto">$<?= number_format((float) $row['total_neto'], 2) ?></td>
-                                <td class="text-center" data-col="estado">
+                                <td class="text-center pe-3" data-col="estado">
                                     <span class="badge bg-<?= $c ?> bg-opacity-10 text-<?= $c ?> border border-<?= $c ?> border-opacity-25"><?= htmlspecialchars(CatalogoRol::nombreEstado((string) $row['estado'])) ?></span>
-                                </td>
-                                <td class="text-center pe-3" onclick="event.stopPropagation()">
-                                    <button class="btn btn-outline-danger btn-xs border-0 px-2" onclick="eliminarRegistro(<?= $row['id'] ?>)" title="Eliminar"><i class="bi bi-trash"></i></button>
                                 </td>
                             </tr>
                         <?php endforeach; ?>

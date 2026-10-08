@@ -132,7 +132,7 @@ class RolesPagoController extends BaseModuloController
 
         ob_start();
         if (empty($result['rows'])) {
-            echo '<tr><td colspan="6" class="text-center py-5 text-muted">No hay corridas de rol registradas.</td></tr>';
+            echo '<tr><td colspan="5" class="text-center py-5 text-muted">No hay corridas de rol registradas.</td></tr>';
         } else {
             foreach ($result['rows'] as $r) echo $this->renderFila($r);
         }
@@ -162,14 +162,12 @@ class RolesPagoController extends BaseModuloController
         $estado = '<span class="badge bg-' . $c . ' bg-opacity-10 text-' . $c . ' border border-' . $c . ' border-opacity-25">' . $h(CatalogoRol::nombreEstado((string) $r['estado'])) . '</span>';
 
         return '<tr class="rol-row" role="button" data-row=\'' . $dataJson . '\' onclick="abrirModalVer(this)">'
-            . '<td class="ps-3 fw-medium" data-col="tipo">' . $h(CatalogoRol::nombreTipo((string) $r['tipo_rol'])) . '</td>'
+            . '<td class="ps-3" data-col="tipo">' . CatalogoRol::badgeTipo((string) $r['tipo_rol']) . '</td>'
             . '<td data-col="periodo">' . $periodo . '</td>'
             . '<td class="text-center" data-col="empleados">' . (int) ($r['num_empleados'] ?? 0) . '</td>'
             . '<td class="text-end fw-bold" data-col="neto">$' . number_format((float) $r['total_neto'], 2) . '</td>'
-            . '<td class="text-center" data-col="estado">' . $estado . '</td>'
-            . '<td class="text-center pe-3" onclick="event.stopPropagation()">'
-            . '<button class="btn btn-outline-danger btn-xs border-0 px-2" onclick="eliminarRegistro(' . (int) $r['id'] . ')" title="Eliminar"><i class="bi bi-trash"></i></button>'
-            . '</td></tr>';
+            . '<td class="text-center pe-3" data-col="estado">' . $estado . '</td>'
+            . '</tr>';
     }
 
     public function store(): void
