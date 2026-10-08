@@ -194,7 +194,7 @@ class AnexoRdepController extends BaseModuloController
     public function guardarCabeceraAjax(): void
     {
         $this->requireActualizar();
-        $this->json(function () {
+        $this->responderAccion(function () {
             $id = (int) ($_POST['id'] ?? 0);
             $this->service->guardarCabecera($id, (int) $_SESSION['id_empresa'], $_POST, (int) $_SESSION['id_usuario']);
             return ['msg' => 'Datos del anexo guardados y resumen recalculado.'];
@@ -204,7 +204,7 @@ class AnexoRdepController extends BaseModuloController
     public function importarAjax(): void
     {
         $this->requireActualizar();
-        $this->json(function () {
+        $this->responderAccion(function () {
             $id = (int) ($_POST['id'] ?? 0);
             $r = $this->service->importar($id, (int) $_SESSION['id_empresa'], (int) $_SESSION['id_usuario']);
             return ['msg' => "Nómina importada: {$r['nuevos']} trabajador(es) nuevo(s), {$r['actualizados']} actualizado(s).", 'resultado' => $r];
@@ -214,7 +214,7 @@ class AnexoRdepController extends BaseModuloController
     public function recalcularAjax(): void
     {
         $this->requireActualizar();
-        $this->json(function () {
+        $this->responderAccion(function () {
             $id = (int) ($_POST['id'] ?? 0);
             $r = $this->service->recalcular($id, (int) $_SESSION['id_empresa'], (int) $_SESSION['id_usuario']);
             return ['msg' => 'Resumen recalculado y validado.', 'resultado' => $r];
@@ -224,7 +224,7 @@ class AnexoRdepController extends BaseModuloController
     public function validarAjax(): void
     {
         $this->requireLeer();
-        $this->json(function () {
+        $this->responderAccion(function () {
             $id = (int) ($_POST['id'] ?? $_GET['id'] ?? 0);
             $r = $this->service->validar($id, (int) $_SESSION['id_empresa'], (int) $_SESSION['id_usuario']);
             return ['msg' => 'Validación terminada.', 'resultado' => $r];
@@ -234,7 +234,7 @@ class AnexoRdepController extends BaseModuloController
     public function generarAjax(): void
     {
         $this->requireActualizar();
-        $this->json(function () {
+        $this->responderAccion(function () {
             $id = (int) ($_POST['id'] ?? 0);
             $r = $this->service->generar($id, (int) $_SESSION['id_empresa'], (int) $_SESSION['id_usuario']);
             $base = BASE_URL . '/' . self::RUTA_MODULO . '/descargar?archivo=';
@@ -270,7 +270,7 @@ class AnexoRdepController extends BaseModuloController
     public function eliminarAjax(): void
     {
         $this->requireEliminar();
-        $this->json(function () {
+        $this->responderAccion(function () {
             $id = (int) ($_POST['id'] ?? 0);
             $this->service->eliminar($id, (int) $_SESSION['id_empresa'], (int) $_SESSION['id_usuario']);
             return ['msg' => 'Anexo eliminado.'];
@@ -291,7 +291,7 @@ class AnexoRdepController extends BaseModuloController
     public function guardarTrabajadorAjax(): void
     {
         $this->requireActualizar();
-        $this->json(function () {
+        $this->responderAccion(function () {
             $id = (int) ($_POST['id'] ?? 0);
             $campos = [];
             foreach (AnexoRdepRules::camposEditables() as $c) {
@@ -306,7 +306,7 @@ class AnexoRdepController extends BaseModuloController
     public function agregarTrabajadorAjax(): void
     {
         $this->requireActualizar();
-        $this->json(function () {
+        $this->responderAccion(function () {
             $idAnexo = (int) ($_POST['id_anexo'] ?? 0);
             $idEmp = (int) ($_POST['id_empleado'] ?? 0) ?: null;
             $id = $this->service->agregarTrabajador($idAnexo, (int) $_SESSION['id_empresa'], $idEmp, (int) $_SESSION['id_usuario']);
@@ -317,7 +317,7 @@ class AnexoRdepController extends BaseModuloController
     public function eliminarTrabajadorAjax(): void
     {
         $this->requireActualizar();
-        $this->json(function () {
+        $this->responderAccion(function () {
             $this->service->eliminarTrabajador((int) ($_POST['id'] ?? 0), (int) $_SESSION['id_empresa'], (int) $_SESSION['id_usuario']);
             return ['msg' => 'Trabajador quitado del anexo.'];
         });
@@ -333,7 +333,7 @@ class AnexoRdepController extends BaseModuloController
     }
 
     /** Respuesta JSON uniforme para las acciones: {ok, msg, …} o {ok:false, error}. */
-    private function json(callable $fn): void
+    private function responderAccion(callable $fn): void
     {
         header('Content-Type: application/json');
         try {
