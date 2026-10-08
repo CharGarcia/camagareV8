@@ -756,7 +756,7 @@ class ConsignacionVentaRepository extends BaseRepository
         // firma "Emitido por"; el dato es del documento, no de la sesión que lo imprime.
         $sql = "SELECT cv.*,
                        c.nombre as cliente_nombre, c.identificacion as cliente_identificacion, c.direccion as cliente_direccion,
-                       c.email as cliente_email,
+                       c.email as cliente_email, c.telefono as cliente_telefono,
                        v.nombre as vendedor_nombre,
                        rt.nombre as responsable_traslado_nombre,
                        ucre.nombre as creado_por_nombre

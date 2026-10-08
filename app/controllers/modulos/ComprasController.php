@@ -140,6 +140,40 @@ class ComprasController extends BaseModuloController
      * habilitado y lo guarda por acá para poder completar/corregir la clasificación
      * ATS sin abrir el resto del documento histórico a edición.
      */
+    /**
+     * Guarda solo «Deducible» y el rubro de gasto personal (botón propio del modal cuando la
+     * compra es de solo lectura: migrada o período cerrado). Ver
+     * ComprasService::actualizarClasificacionGasto.
+     */
+    public function actualizarClasificacionGastoAjax(): void
+    {
+        $this->requireActualizar();
+        header('Content-Type: application/json');
+
+        $idEmpresa = (int) ($_SESSION['id_empresa'] ?? 0);
+        $idUsuario = (int) ($_SESSION['id_usuario'] ?? 0);
+        $idCompra  = (int) ($_POST['id_compra'] ?? 0);
+
+        if (!$idCompra) {
+            echo json_encode(['ok' => false, 'error' => 'Compra no válida.']);
+            return;
+        }
+
+        try {
+            $res = $this->service->actualizarClasificacionGasto(
+                $idCompra, $idEmpresa, $idUsuario,
+                (string) ($_POST['deducible'] ?? ''),
+                $_POST['rubro_gasto_personal'] ?? ''
+            );
+            echo json_encode(['ok' => true, 'deducible' => $res['deducible'], 'rubro' => $res['rubro'], 'mensaje' => 'Clasificación guardada.']);
+        } catch (\Exception $e) {
+            echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
+        } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
+            echo json_encode(['ok' => false, 'error' => 'No se pudo guardar la clasificación.']);
+        }
+    }
+
     public function actualizarSustentoTributarioAjax(): void
     {
         $this->requireActualizar();
@@ -815,6 +849,67 @@ class ComprasController extends BaseModuloController
                 'id_proveedor' => (int)($compra['id_proveedor'] ?? 0),
             ]);
             echo json_encode(['ok' => true, 'detalles' => $detalles, 'es_guardado' => false]);
+        } catch (\App\Services\modulos\AsientoDescuadreDocumentoException $e) {
+            // El comprobante no cuadra consigo mismo con todas las cuentas configuradas. Si es
+            // electrónico (no se puede corregir), la pestaña ofrece registrar el asiento a mano
+            // partiendo de las líneas que el builder sí armó.
+            $manual = isset($compra) && $compra
+                ? $this->service->evaluarAsientoManual($compra, $idEmpresa)
+                : ['permitido' => false];
+            echo json_encode([
+                'ok'             => false,
+                'error'          => $e->getMessage(),
+                'permite_manual' => !empty($manual['permitido']) && \App\Helpers\AsientoPestana::puedeEditar(),
+                'detalles'       => $e->getDetalles(),
+                'diferencia'     => $e->getDiferencia(),
+            ]);
+        } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
+            echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
+        }
+        exit;
+    }
+
+    /**
+     * Registra a mano el asiento de una compra electrónica cuyo comprobante no cuadra (el importe
+     * total no es subtotal + IVA + ICE + propina). Las condiciones las decide
+     * ComprasService::evaluarAsientoManual(); acá solo permisos y entrada.
+     *
+     * Permisos: actualizar Compras y editar el asiento desde la pestaña (ver + actualizar
+     * Asientos Contables), los mismos que pinta el botón «Guardar asiento».
+     */
+    public function registrarAsientoManualAjax(): void
+    {
+        $this->requireActualizar();
+        header('Content-Type: application/json');
+
+        try {
+            if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
+                throw new \Exception('Método no permitido.');
+            }
+            if (!\App\Helpers\AsientoPestana::puedeEditar()) {
+                throw new \Exception('No tiene permiso para registrar asientos contables.');
+            }
+
+            $idCompra = (int) ($_POST['id'] ?? 0);
+            $detalles = json_decode((string) ($_POST['detalles_json'] ?? '[]'), true);
+            if ($idCompra <= 0 || !is_array($detalles)) {
+                throw new \Exception('Datos del asiento inválidos.');
+            }
+
+            $res = $this->service->registrarAsientoManual(
+                $idCompra,
+                (int) $_SESSION['id_empresa'],
+                (int) $_SESSION['id_usuario'],
+                $detalles,
+                !empty($_POST['confirmar_descuadre'])
+            );
+            if (!empty($res['ya_existia'])) {
+                $res['msg'] = 'El asiento de esta compra ya estaba registrado; no se creó otro.';
+            } elseif (!empty($res['ok'])) {
+                $res['msg'] = 'Asiento registrado a mano y enlazado a la compra.';
+            }
+            echo json_encode($res);
         } catch (\Throwable $e) {
             \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             echo json_encode(['ok' => false, 'error' => $e->getMessage()]);

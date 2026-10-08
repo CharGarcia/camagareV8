@@ -824,11 +824,6 @@ class FacturaVentaPdfService
         }
         $totalIva = array_sum($ivaMap);
 
-        if ($y > 212) {
-            $pdf->AddPage();
-            $y = 12;
-        }
-
         // Layout. La columna de totales mide 52 mm de etiqueta + 22 de valor: a
         // FUENTE_CUERPO la etiqueta más larga ("SUBTOTAL NO OBJETO DE IVA") ocupa
         // 49 mm y un importe de 9,999,999.99 unos 20.5 mm (con 18 mm, los importes
@@ -837,6 +832,27 @@ class FacturaVentaPdfService
         $izqW = $cW - $totW - 2;
         $totX = $mL + $izqW + 2;
         $lh   = 5;
+
+        $propinaActiva = in_array((string)($empresa['mostrar_propina_factura'] ?? 'false'), ['t', 'true', '1'], true)
+            || ($empresa['mostrar_propina_factura'] ?? false) === true;
+        $conPropina = $propinaActiva || abs($propina) >= 0.005;
+
+        // Salto de página del pie según su alto REAL. Antes se saltaba siempre que
+        // el detalle terminara después de y = 212 mm, aunque el pie cupiera: una
+        // factura cuyo detalle acababa en 214 mm mandaba a la hoja 2 un pie de
+        // ~45 mm que entraba de sobra antes del margen inferior (282 mm). Ahora el
+        // pie completo (la más alta de sus dos columnas) se queda en esta página si
+        // cabe, y si no, pasa entero a la siguiente, como antes.
+        $filasTotales = count($subtotMap) + 2 + 3 + 1 + count($ivaMap) + ($conPropina ? 1 : 0) + 1
+            + ($totalSubsidio > 0 ? 3 : 0);
+        $altoPie = max(
+            $filasTotales * $lh,
+            $this->altoColumnaIzquierda($cab, $infoAdicional, $pagos, $izqW, $lh)
+        );
+        if ($y + $altoPie > $pdf->getPageHeight() - $pdf->getBreakMargin()) {
+            $pdf->AddPage();
+            $y = 12;
+        }
 
         // ── Columna derecha: tabla de totales SRI ─────────────────────────────
         $yTot = $y;
@@ -888,9 +904,7 @@ class FacturaVentaPdfService
         // cuando el documento ya trae propina > 0, para que un comprobante
         // emitido con servicio nunca lo oculte aunque después se apague el
         // interruptor o la config no llegue hasta este PDF.
-        $propinaActiva = in_array((string)($empresa['mostrar_propina_factura'] ?? 'false'), ['t', 'true', '1'], true)
-            || ($empresa['mostrar_propina_factura'] ?? false) === true;
-        if ($propinaActiva || abs($propina) >= 0.005) {
+        if ($conPropina) {
             $this->filaTotales($pdf, $totX, $yTot, $lblW, $valW, $lh, 'SERVICIO', $propina);
             $yTot += $lh;
         }
@@ -1102,6 +1116,50 @@ class FacturaVentaPdfService
     }
 
     // ─── HELPERS ─────────────────────────────────────────────────────────────
+
+    /**
+     * Alto en mm de la columna izquierda del pie (Información Adicional,
+     * Observaciones y Forma de pago), medido con las mismas fuentes, anchos y
+     * reglas de alto de fila que usa dibujarPie(). Sirve para decidir si el pie
+     * entero cabe en la página antes de empezar a dibujarlo.
+     */
+    private function altoColumnaIzquierda(array $cab, array $infoAdicional, array $pagos, float $izqW, float $lh): float
+    {
+        $pdf  = $this->pdf;
+        $alto = 0.0;
+
+        if (!empty($infoAdicional)) {
+            $etiqW = 40;
+            $valIW = $izqW - $etiqW;
+            $alto += $lh; // título
+            foreach ($infoAdicional as $info) {
+                $pdf->SetFont('helvetica', 'B', self::FUENTE_CUERPO);
+                $nNom = max(1, $pdf->getNumLines((string)($info['nombre'] ?? ''), $etiqW));
+                $pdf->SetFont('helvetica', '', self::FUENTE_CUERPO);
+                $nVal = max(1, $pdf->getNumLines((string)($info['valor'] ?? ''), $valIW));
+                $alto += max(self::ALTO_MIN_FILA, max($nNom, $nVal) * self::LINEA_CUERPO);
+            }
+        }
+
+        if (!empty($cab['observaciones']) && !$this->observacionesYaEnInfoAdicional($infoAdicional, (string) $cab['observaciones'])) {
+            $pdf->SetFont('helvetica', '', self::FUENTE_CUERPO);
+            $nObs  = max(1, $pdf->getNumLines((string) $cab['observaciones'], $izqW));
+            $alto += 1 + $lh + $nObs * self::LINEA_CUERPO;
+        }
+
+        if (!empty($pagos)) {
+            $wNombre = $izqW - 24 - 21 - 16; // mismos anchos que la tabla de pagos
+            $alto   += 1 + $lh;              // separación + encabezado
+            $pdf->SetFont('helvetica', '', self::FUENTE_CUERPO);
+            foreach ($pagos as $p) {
+                $nombreP = (string)($p['nombre_forma_pago'] ?? ($p['forma_pago'] ?? ''));
+                $n       = max(1, $pdf->getNumLines($nombreP, $wNombre));
+                $alto   += max(self::ALTO_MIN_FILA, $n * self::LINEA_CUERPO);
+            }
+        }
+
+        return $alto;
+    }
 
     private function filaTotales(
         TCPDF $pdf, float $x, float $y,

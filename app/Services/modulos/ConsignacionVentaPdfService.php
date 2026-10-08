@@ -174,8 +174,8 @@ class ConsignacionVentaPdfService
             ['Cliente:', (string)($c['cliente_nombre'] ?? '—'), 'Fecha emisión:', $fmtFecha($c['fecha_emision'] ?? '')],
             ['Identificación:', (string)($c['cliente_identificacion'] ?? ''), 'Asesor:', (string)($c['vendedor_nombre'] ?? '—')],
             ['Dirección:', (string)($c['cliente_direccion'] ?? ''), 'Resp. traslado:', (string)($c['responsable_traslado_nombre'] ?? '—')],
+            ['Teléfono:', trim((string)($c['cliente_telefono'] ?? '')) !== '' ? trim((string)$c['cliente_telefono']) : '—', 'Entrega:', $entrega !== '' ? $entrega : '—'],
             ['Punto partida:', (string)($c['punto_partida'] ?? ''), 'Punto llegada:', (string)($c['punto_llegada'] ?? '')],
-            ['Entrega:', $entrega !== '' ? $entrega : '—', '', ''],
         ];
 
         // Altura real de cada fila = máximo de líneas que necesitan sus dos valores.

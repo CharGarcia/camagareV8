@@ -72,7 +72,14 @@ class NotaDebitoPdfService
         if (!empty($pagos)) {
             $y = $this->dibujarPagos($pagos, $y + 2);
         }
-        $this->dibujarPie($nd, $impuestos, $infoAdicional, $y + 2);
+        // Pie: si no cabe entero en esta hoja, pasa completo a la siguiente. Se mide
+        // dibujándolo de prueba (PdfBloque::cabe) en vez de con un umbral fijo de Y.
+        $yPie = $y + 2;
+        if (!\App\Helpers\PdfBloque::cabe($this->pdf, fn() => $this->dibujarPie($nd, $impuestos, $infoAdicional, $yPie))) {
+            $this->pdf->AddPage();
+            $yPie = 12;
+        }
+        $this->dibujarPie($nd, $impuestos, $infoAdicional, $yPie);
     }
 
     // ─── ENCABEZADO ──────────────────────────────────────────────────────────
@@ -427,15 +434,27 @@ class NotaDebitoPdfService
 
         $wRazon = $cW - 30;
         $wValor = 30;
+        $limiteY = $pdf->getPageHeight() - $pdf->getBreakMargin();
 
-        $pdf->SetFont('helvetica', 'B', 6.5);
-        $pdf->SetFillColor(230, 230, 230);
-        $pdf->SetXY($mL, $y);
-        $pdf->Cell($wRazon, 6, 'Razón de la modificación', 1, 0, 'C', true);
-        $pdf->Cell($wValor, 6, 'Valor', 1, 1, 'C', true);
-        $y += 6;
+        // Encabezado: se repite en cada hoja si la tabla sigue.
+        $dibujarEncabezado = function (float $yE) use ($pdf, $mL, $wRazon, $wValor): float {
+            $pdf->SetFont('helvetica', 'B', 6.5);
+            $pdf->SetFillColor(230, 230, 230);
+            $pdf->SetXY($mL, $yE);
+            $pdf->Cell($wRazon, 6, 'Razón de la modificación', 1, 0, 'C', true);
+            $pdf->Cell($wValor, 6, 'Valor', 1, 1, 'C', true);
+            $pdf->SetFont('helvetica', '', 7);
+            return $yE + 6;
+        };
 
-        $pdf->SetFont('helvetica', '', 7);
+        // Encabezado y primera fila juntos: que el encabezado no quede solo al pie.
+        if ($y + 6 + 5 > $limiteY) {
+            $pdf->AddPage();
+            $y = $pdf->GetY();
+        }
+        $y = $dibujarEncabezado($y);
+        $pdf->SetY($y);
+
         $altColor = false;
         foreach ($motivos as $m) {
             $bg = $altColor ? [250, 250, 250] : [255, 255, 255];
@@ -445,10 +464,19 @@ class NotaDebitoPdfService
             $razon = (string)($m['razon'] ?? '');
             $valor = (float)($m['valor'] ?? 0);
 
-            $nLineas = max(1, (int)ceil($pdf->GetStringWidth($razon) / ($wRazon - 2)));
+            // getNumLines: el ancho/columna se quedaba corto con textos en MAYÚSCULAS.
+            $nLineas = max(1, $pdf->getNumLines($razon, $wRazon));
             $ch = max(5, $nLineas * 4.5);
 
             $yRow = $pdf->GetY();
+            // Salto controlado: con el automático, la fila se partía y $yRow quedaba
+            // en la hoja anterior, así que cada fila siguiente abría una hoja nueva
+            // (40 motivos llegaban a dar 5 hojas, casi vacías).
+            if ($yRow + $ch > $limiteY) {
+                $pdf->AddPage();
+                $yRow = $dibujarEncabezado($pdf->GetY());
+                $pdf->SetFillColor($bg[0], $bg[1], $bg[2]);
+            }
             $pdf->SetXY($mL, $yRow);
             $pdf->MultiCell($wRazon, $ch, $razon, 1, 'L', true, 0, '', '', true, 0, false, true, 0, 'M');
             $pdf->SetXY($mL + $wRazon, $yRow);
@@ -473,22 +501,39 @@ class NotaDebitoPdfService
             ['titulo' => 'Unidad Tiempo', 'w' => 30],
         ];
 
-        $pdf->SetFont('helvetica', 'B', 6.5);
-        $pdf->SetFillColor(230, 230, 230);
-        $pdf->SetXY($mL, $y);
-        foreach ($cols as $c) {
-            $pdf->Cell($c['w'], 6, $c['titulo'], 1, 0, 'C', true);
-        }
-        $pdf->Ln();
-        $y += 6;
+        $limiteY = $pdf->getPageHeight() - $pdf->getBreakMargin();
+        $dibujarEncabezado = function (float $yE) use ($pdf, $mL, $cols): float {
+            $pdf->SetFont('helvetica', 'B', 6.5);
+            $pdf->SetFillColor(230, 230, 230);
+            $pdf->SetXY($mL, $yE);
+            foreach ($cols as $c) {
+                $pdf->Cell($c['w'], 6, $c['titulo'], 1, 0, 'C', true);
+            }
+            $pdf->Ln();
+            $pdf->SetFont('helvetica', '', 7);
+            return $yE + 6;
+        };
 
-        $pdf->SetFont('helvetica', '', 7);
+        // Encabezado y primera fila juntos.
+        if ($y + 6 + 5 > $limiteY) {
+            $pdf->AddPage();
+            $y = $pdf->GetY();
+        }
+        $y = $dibujarEncabezado($y);
+
         $altColor = false;
         foreach ($pagos as $p) {
             $bg = $altColor ? [250, 250, 250] : [255, 255, 255];
             $altColor = !$altColor;
             $pdf->SetFillColor($bg[0], $bg[1], $bg[2]);
 
+            // Salto controlado (con SetXY por fila, el automático dejaba la Y en la
+            // hoja anterior y cada fila abría otra hoja).
+            if ($y + 5 > $limiteY) {
+                $pdf->AddPage();
+                $y = $dibujarEncabezado($pdf->GetY());
+                $pdf->SetFillColor($bg[0], $bg[1], $bg[2]);
+            }
             $pdf->SetXY($mL, $y);
             $pdf->Cell($cols[0]['w'], 5, (string)($p['forma_pago'] ?? ''), 1, 0, 'L', true);
             $pdf->Cell($cols[1]['w'], 5, number_format((float)($p['total'] ?? 0), 2), 1, 0, 'R', true);
@@ -524,7 +569,9 @@ class NotaDebitoPdfService
         $subtotalSinImp = isset($cab['total_sin_impuestos']) ? (float)$cab['total_sin_impuestos'] : array_sum($subtotMap);
         $total = isset($cab['importe_total']) ? (float)$cab['importe_total'] : $subtotalSinImp + $totalIva;
 
-        if ($y > 230) { $pdf->AddPage(); $y = 12; }
+        // El salto de página del pie lo decide renderizar() midiendo su alto real
+        // (PdfBloque::cabe). Antes había aquí un umbral fijo que mandaba el pie
+        // a una hoja nueva aunque cupiera en la actual.
 
         $totW = 72;
         $izqW = $cW - $totW - 2;

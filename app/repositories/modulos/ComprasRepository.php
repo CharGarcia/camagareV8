@@ -984,7 +984,7 @@ class ComprasRepository extends BaseRepository
             $data['autorizacion_hasta'] ?? null,
             !empty($data['fecha_caducidad']) ? $data['fecha_caducidad'] : null,
             $data['tipo_registro'] ?? 'fisica',
-            $data['deducible'] ?? 'declaracion_iva',
+            self::normalizarDeducible($data['deducible'] ?? 'declaracion_iva'),
             $data['documento_modificado'] ?? null,
             $data['motivo'] ?? null,
             $data['observaciones'] ?? null,
@@ -1064,7 +1064,7 @@ class ComprasRepository extends BaseRepository
             $data['autorizacion_hasta'] ?? null,
             !empty($data['fecha_caducidad']) ? $data['fecha_caducidad'] : null,
             $data['tipo_registro'] ?? 'fisica',
-            $data['deducible'] ?? 'declaracion_iva',
+            self::normalizarDeducible($data['deducible'] ?? 'declaracion_iva'),
             $data['documento_modificado'] ?? null,
             $data['motivo'] ?? null,
             $data['observaciones'] ?? null,
@@ -1290,6 +1290,30 @@ class ComprasRepository extends BaseRepository
      * corregir esta clasificación en compras migradas, que por lo demás son de solo
      * lectura (ver esMigrado()) — las migradas llegan sin este dato bien clasificado.
      */
+    /** Cambia solo el campo «Deducible» de una compra (ver ComprasService::actualizarClasificacionGasto). */
+    public function updateDeducible(int $idCompra, int $idEmpresa, string $deducible, int $idUsuario): void
+    {
+        $this->query(
+            "UPDATE compras_cabecera SET deducible = ?, updated_by = ?, updated_at = NOW()
+             WHERE id = ? AND id_empresa = ? AND eliminado = false",
+            [$deducible, $idUsuario, $idCompra, $idEmpresa]
+        );
+    }
+
+    /**
+     * Valor de «Deducible» saneado para guardar: solo 'declaracion_iva' o 'gasto_personal'.
+     * Los códigos crudos del sistema anterior ('04' deducible IVA / '05' gasto personal) se
+     * traducen, y cualquier otro valor cae en 'declaracion_iva' (el valor por defecto).
+     */
+    public static function normalizarDeducible($valor): string
+    {
+        $v = trim((string) $valor);
+        if ($v === 'gasto_personal' || $v === '05') {
+            return 'gasto_personal';
+        }
+        return 'declaracion_iva';
+    }
+
     public function updateSustentoTributario(int $idCompra, int $idSustento, int $idUsuario): void
     {
         $this->query(

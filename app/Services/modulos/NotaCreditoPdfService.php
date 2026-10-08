@@ -85,7 +85,14 @@ class NotaCreditoPdfService
         $y = $this->dibujarDatosCliente($nc, $y + 2);
         $y = $this->dibujarDocModificado($nc, $y + 2);
         $y = $this->dibujarDetalle($detalles, $y + 2);
-        $this->dibujarPie($nc, $detalles, $infoAdicional, $empresa, $y + 2);
+        // Pie: si no cabe entero en esta hoja, pasa completo a la siguiente. Se mide
+        // dibujándolo de prueba (PdfBloque::cabe) en vez de con un umbral fijo de Y.
+        $yPie = $y + 2;
+        if (!\App\Helpers\PdfBloque::cabe($this->pdf, fn() => $this->dibujarPie($nc, $detalles, $infoAdicional, $empresa, $yPie))) {
+            $this->pdf->AddPage();
+            $yPie = 12;
+        }
+        $this->dibujarPie($nc, $detalles, $infoAdicional, $empresa, $yPie);
     }
 
     // ─── ENCABEZADO ──────────────────────────────────────────────────────────
@@ -710,7 +717,9 @@ class NotaCreditoPdfService
         }
         $totalIva = array_sum($ivaMap);
 
-        if ($y > 230) { $pdf->AddPage(); $y = 12; }
+        // El salto de página del pie lo decide renderizar() midiendo su alto real
+        // (PdfBloque::cabe). Antes había aquí un umbral fijo que mandaba el pie
+        // a una hoja nueva aunque cupiera en la actual.
 
         $totW = 72;
         $izqW = $cW - $totW - 2;

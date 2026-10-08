@@ -1846,9 +1846,14 @@ class SincronizadorAsientosService
         // usuario a "configurar cuentas en proveedores con cuentas propias" (que ya están) lo
         // hacía perseguir un problema inexistente. Se dice lo que es, sin enlace.
         if (str_contains($m, 'supera el máximo de ajuste')) {
+            // En compras el comprobante electrónico no se puede corregir: la pestaña deja
+            // registrar el asiento a mano (ComprasService::registrarAsientoManual).
+            $comoSeResuelve = $clave === 'compras'
+                ? 'Abra el documento → pestaña Asiento contable: si es electrónico, registre ahí el asiento a mano; si es físico, corrija sus totales'
+                : 'Abra el documento → pestaña Asiento contable para ver el detalle exacto';
             $this->agregarAccion('', '', "Algunos asientos de {$nombreModulo} no cuadran aunque las cuentas estén configuradas: "
                 . 'el importe total no es subtotal + IVA (ICE u otro impuesto, o totales del comprobante inconsistentes). '
-                . 'Abra el documento → pestaña Asiento contable para ver el detalle exacto');
+                . $comoSeResuelve);
             return;
         }
         // Asiento sin ninguna línea con valor con las cuentas ya asignadas (ensamblarAdquisicion):

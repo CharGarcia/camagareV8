@@ -1697,12 +1697,19 @@ class AsientoBuilderService
                     ". Configúrela en Contabilidad → Configuración contable, concepto «{$etiqueta}»."
                 );
             }
-            throw new \Exception(
+            // Todas las cuentas están: el descuadre es del propio documento (rubro dentro del
+            // total que no es impuesto, o totales del comprobante inconsistentes). Excepción
+            // propia —mismo mensaje, hereda de \Exception— para que Compras ofrezca registrar
+            // el asiento a mano con estas líneas en un comprobante electrónico del SRI.
+            throw new AsientoDescuadreDocumentoException(
                 "El asiento no cuadra. Debe: $" . number_format($totalDebe, 2) .
                 ", Haber: $" . number_format($totalHaber, 2) .
                 ". La diferencia ($" . number_format(abs($diff), 2) . ") supera el máximo de ajuste por " .
                 "redondeo ($" . number_format($tope, 2) . "). Revise los totales del documento (subtotal, IVA e importe total) " .
-                "y la configuración de cuentas contables para $etiqueta."
+                "y la configuración de cuentas contables para $etiqueta.",
+                $detalles,
+                $totalDebe,
+                $totalHaber
             );
         }
 

@@ -59,7 +59,17 @@ class OrdenCarWashPdfService
         $y = $this->dibujarEncabezado($empresa, $orden);
         $y = $this->dibujarDatosOrden($orden, $y + 3);
         $y = $this->dibujarTablaDetalle($orden['detalles'] ?? [], $y + 2);
-        $y = $this->dibujarPie($orden, $empresa, $y + 2);
+        // Pie + firmas: si no caben enteros en esta hoja, pasan juntos a la
+        // siguiente (las firmas no quedan solas en una hoja). Se mide dibujándolos
+        // de prueba (PdfBloque::cabe) en vez de con un umbral fijo de Y.
+        $yPie = $y + 2;
+        if (!\App\Helpers\PdfBloque::cabe($this->pdf, function () use ($orden, $empresa, $yPie) {
+            $this->dibujarFirmas($orden, $this->dibujarPie($orden, $empresa, $yPie) + 4);
+        })) {
+            $this->pdf->AddPage();
+            $yPie = $this->pdf->GetY();
+        }
+        $y = $this->dibujarPie($orden, $empresa, $yPie);
         $this->dibujarFirmas($orden, $y + 4);
 
         $nombre = 'Orden_CarWash_' . (($orden['numero_orden'] ?? '') !== '' ? $orden['numero_orden'] : 'orden') . '.pdf';
@@ -369,10 +379,9 @@ class OrdenCarWashPdfService
             }
         }
 
-        if ($y > 212) {
-            $pdf->AddPage();
-            $y = $pdf->GetY();
-        }
+        // El salto de página del pie lo decide generar() midiendo su alto real
+        // (PdfBloque::cabe). Antes había aquí un umbral fijo (y > 212) que mandaba
+        // el pie a una hoja nueva aunque cupiera en la actual.
 
         $totW = 74;
         $izqW = $cW - $totW - 2;

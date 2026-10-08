@@ -219,10 +219,19 @@
                 <label class="form-label form-label-sm mb-1 fw-semibold">
                   Deducible <?= \App\Helpers\PreferenciasHelper::renderEstrellaFavorito('compras', 'mcDeducible', 'deducible') ?>
                 </label>
-                <select id="mcDeducible" class="form-select form-select-sm" onchange="mcToggleRubroGasto()">
-                  <option value="declaracion_iva">Deducible para declaración IVA</option>
-                  <option value="gasto_personal">Gasto Personal</option>
-                </select>
+                <div class="d-flex gap-1 align-items-start">
+                  <select id="mcDeducible" class="form-select form-select-sm" onchange="mcToggleRubroGasto()">
+                    <option value="declaracion_iva">Deducible para declaración IVA</option>
+                    <option value="gasto_personal">Gasto Personal</option>
+                  </select>
+                  <!-- Guardado propio de Deducible + Rubro en compras de solo lectura
+                       (migrada / período cerrado). Ver mcGuardarClasificacion(). -->
+                  <button type="button" id="mcBtnGuardarClasificacion" class="btn btn-sm btn-outline-primary d-none flex-shrink-0"
+                          title="Guardar Deducible y Rubro" onclick="mcGuardarClasificacion()">
+                    <i class="bi bi-check-lg"></i>
+                  </button>
+                </div>
+                <div id="mcClasificacionHelp" class="form-text small text-muted d-none"></div>
               </div>
 
               <!-- Rubro del gasto personal (solo cuando Deducible = Gasto personal) -->

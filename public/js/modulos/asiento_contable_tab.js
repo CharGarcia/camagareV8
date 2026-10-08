@@ -18,6 +18,11 @@
  *     prefijo: 'mc',                                     // → mc-asiento-tbody, mc-asiento-save, …
  *     previewUrl: `${CMG_urlBase}/getAsientoSugeridoAjax`, // { ok, detalles, es_guardado, asiento, cuadre_documento, aviso? }
  *     soloRegistrado: true,                              // opcional: sin asiento registrado no hay vista previa, solo el aviso
+ *     manualUrl: `${CMG_urlBase}/registrarAsientoManualAjax`, // opcional: si la vista previa responde
+ *                                                        // { ok:false, permite_manual:true, detalles, diferencia }
+ *                                                        // (documento que no cuadra y no se puede corregir), deja
+ *                                                        // armar el asiento a mano y lo registra en esta URL
+ *                                                        // (POST id + detalles_json [+ confirmar_descuadre]). Hoy: Compras.
  *     cuentasUrl: `${BASE_URL}/modulos/plan-cuentas/searchAjaxCuentas`,
  *     asientosUrl: `${BASE_URL}/modulos/asientos-contables`,
  *     onGuardado: () => { … }                            // opcional: refrescar el documento
@@ -63,6 +68,8 @@
         let cabecera = null;       // cabecera del asiento guardado (null = vista previa)
         let cuadreDoc = null;      // importe del documento y cuentas de cartera con qué comparar
         let editable = false;      // ¿esta carga admite edición?
+        let nuevoManual = false;   // ¿se arma a mano un asiento que el sistema no pudo generar? (ver cfg.manualUrl)
+        let guardando = false;     // un guardado en curso (§8: un guardado = un registro)
         let idDocumento = 0;
 
         // ── Totales y cuadre ──────────────────────────────────────────────────────
@@ -335,6 +342,7 @@
             cuadreDoc = null;
             editable = false;
             guardable = false;
+            nuevoManual = false;
             pintarBotones();
 
             if (!idDocumento && !soloVistaPrevia) {
@@ -455,6 +463,34 @@
                         ? '<i class="bi bi-info-circle me-1"></i> Vista previa: complete las cuentas que falten; el asiento se registra al guardar el documento.'
                         : '<i class="bi bi-info-circle me-1"></i> Vista previa: este asiento se generar&aacute; al guardar el documento. Una vez generado, se podr&aacute; corregir aqu&iacute;.',
                         'text-muted');
+                } else if (!json.ok && json.permite_manual && cfg.manualUrl && ids.save && $(ids.save) && !soloVistaPrevia) {
+                    // El documento no cuadra consigo mismo con todas las cuentas configuradas y
+                    // no se puede corregir (comprobante electrónico del SRI): se deja armar el
+                    // asiento a mano partiendo de lo que el sistema sí pudo calcular, y se guarda
+                    // contra el módulo dueño (cfg.manualUrl), que lo enlaza al documento.
+                    nuevoManual = true;
+                    editable = true;
+                    guardable = true;
+                    pintarBotones();
+                    tbody.innerHTML = '';
+                    (json.detalles || []).forEach(d => agregarLinea(
+                        d.id_cuenta_contable,
+                        d.cuenta_codigo || d.codigo_cuenta || '',
+                        d.cuenta_nombre || d.nombre_cuenta || '',
+                        parseFloat(d.debe || 0),
+                        parseFloat(d.haber || 0),
+                        d.documento_referencia || d.referencia_detalle || d.referencia || ''
+                    ));
+                    if (!filas().length) placeholder('<i class="bi bi-info-circle me-1"></i> Agregue las l&iacute;neas del asiento.');
+                    manual = false;
+                    recalcular();
+                    const dif = parseFloat(json.diferencia || 0);
+                    const falta = Math.abs(dif) >= 0.005
+                        ? ' Falta ' + Math.abs(dif).toFixed(2) + ' al ' + (dif < 0 ? 'Debe' : 'Haber') + ': agregue esa l&iacute;nea con la cuenta que corresponda.'
+                        : '';
+                    setStatus('<i class="bi bi-exclamation-triangle-fill me-1"></i> El sistema no pudo generar el asiento: ' + (json.error || '')
+                        + '<br>El comprobante electr&oacute;nico no se puede corregir, as&iacute; que el asiento se registra a mano.' + falta
+                        + ' Al guardarlo queda enlazado al documento y marcado como editado a mano.', 'text-warning-emphasis');
                 } else if (!json.ok) {
                     placeholder('<i class="bi bi-exclamation-triangle-fill me-1"></i> ' + (json.error || 'No se pudo generar el asiento.'), 'text-danger');
                     setStatus('');
@@ -501,7 +537,8 @@
         }
 
         async function guardar() {
-            if (!editable || !cabecera) return;
+            if (!editable || (!cabecera && !nuevoManual)) return;
+            if (guardando) return;
 
             // Toda línea debe tener cuenta: una fila a medias se descartaría en silencio y el
             // asiento quedaría descuadrado sin que se note.
@@ -527,6 +564,11 @@
             const totalHaber = detalles.reduce((s, d) => s + d.haber, 0);
             if (Math.abs(totalDebe - totalHaber) >= 0.005) {
                 Swal.fire('El asiento no cuadra', `Debe ${totalDebe.toFixed(2)} y Haber ${totalHaber.toFixed(2)} deben ser iguales.`, 'warning');
+                return;
+            }
+
+            if (nuevoManual) {
+                await guardarNuevoManual(detalles);
                 return;
             }
 
@@ -585,6 +627,58 @@
             }
         }
 
+        /**
+         * Primer registro, a mano, del asiento de un documento que el sistema no pudo generar
+         * (cfg.manualUrl). El módulo dueño valida las condiciones, lo enlaza al documento y lo
+         * deja marcado como editado a mano. Mientras la petición está en curso otro clic no hace
+         * nada, y el servidor, bajo candado, devuelve el asiento ya registrado si llega un
+         * reintento: un segundo clic no puede crear otro.
+         */
+        async function guardarNuevoManual(detalles) {
+            guardando = true;
+            const btn = $(ids.save);
+            const htmlOrig = btn ? btn.innerHTML : '';
+            if (btn) { btn.disabled = true; btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Guardando...'; }
+
+            const fd = new FormData();
+            fd.append('id', idDocumento);
+            fd.append('detalles_json', JSON.stringify(detalles));
+            try {
+                let res = await (await fetch(cfg.manualUrl, { method: 'POST', body: fd })).json();
+                if (!res.ok && res.requiere_confirmacion) {
+                    const conf = await Swal.fire({
+                        icon: 'warning',
+                        title: 'El asiento no cuadra con el documento',
+                        text: res.mensaje,
+                        showCancelButton: true,
+                        confirmButtonText: 'Guardar de todos modos',
+                        cancelButtonText: 'Revisar el asiento',
+                        confirmButtonColor: '#d33',
+                        reverseButtons: true,
+                    });
+                    if (!conf.isConfirmed) return;
+                    fd.append('confirmar_descuadre', '1');
+                    res = await (await fetch(cfg.manualUrl, { method: 'POST', body: fd })).json();
+                }
+                if (!res.ok) {
+                    Swal.fire('No se pudo guardar', res.error || 'Error al registrar el asiento.', 'error');
+                    return;
+                }
+                manual = false;
+                await Swal.fire({ icon: res.ya_existia ? 'info' : 'success', title: 'Asiento registrado', text: res.msg || 'Asiento registrado.', timer: 2200, showConfirmButton: false });
+                if (typeof cfg.onGuardado === 'function') cfg.onGuardado(res);
+                // Recarga ANTES de soltar el botón: vuelve con el asiento ya registrado (modo
+                // edición normal), así que el botón ya no puede crear otro.
+                await cargar(idDocumento);
+            } catch (e) {
+                console.error('Registrar asiento manual:', e);
+                Swal.fire('Error de red', 'Verifique su conexión e intente nuevamente. Si el asiento llegó a guardarse, al volver a abrir la pestaña lo verá registrado.', 'error');
+            } finally {
+                guardando = false;
+                if (btn) { btn.disabled = false; btn.innerHTML = htmlOrig; }
+            }
+        }
+
         /** Descarta la edición manual y vuelve a armar el asiento con las reglas contables. */
         async function restaurar() {
             if (!cabecera) return;
@@ -632,7 +726,7 @@
             agregarLinea,
             guardar,
             limpiar: () => {
-                cabecera = null; cuadreDoc = null; editable = false; guardable = false; pintarBotones();
+                cabecera = null; cuadreDoc = null; editable = false; guardable = false; nuevoManual = false; pintarBotones();
                 placeholder('<i class="bi bi-info-circle me-1"></i> Guarda el documento para generar el asiento contable.');
                 setStatus('');
             },

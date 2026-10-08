@@ -1044,8 +1044,20 @@ class ComprasService
         if (ContabilidadInterruptorService::crear()->omitirGeneracion($idEmpresa, 'compras', 'compra', $idCompra)) {
             return;
         }
-        $fechaEmision = $data['fecha_emision'] ?? date('Y-m-d');
-        $proveedorNombre = $data['proveedor_nombre'] ?? 'Proveedor';
+
+        $asientoRepo    = new \App\repositories\modulos\AsientoContableRepository();
+        $asientoRules   = new \App\Rules\modulos\AsientoContableRules();
+        $asientoService = new \App\Services\modulos\AsientoContableService($asientoRepo, $asientoRules, $this->logService);
+
+        // Asiento corregido o registrado a mano: manda sobre el builder. guardarAsiento() ya lo
+        // respeta, pero se corta ANTES de armar el sugerido: en un comprobante electrónico cuyo
+        // total no cuadra (registrarAsientoManual) el builder lanzaría el descuadre otra vez y
+        // reguardar la compra mostraría un aviso de "asiento no generado" que no es cierto.
+        $asientoVivo = $asientoService->getAsientoPorOrigen('compra', $idCompra, $idEmpresa);
+        if ($asientoVivo && $asientoRepo->esEditadoManual((int) $asientoVivo['id'])) {
+            $this->repository->updateAsientoContable($idCompra, (int) $asientoVivo['id']);
+            return;
+        }
 
         // Siempre regenerar desde el builder con los valores actuales del documento.
         $data['id_compra'] = $idCompra;
@@ -1070,31 +1082,230 @@ class ComprasService
             return;
         }
 
-        $asientoRepo    = new \App\repositories\modulos\AsientoContableRepository();
-        $asientoRules   = new \App\Rules\modulos\AsientoContableRules();
-        $asientoService = new \App\Services\modulos\AsientoContableService($asientoRepo, $asientoRules, $this->logService);
+        $idAsiento = $asientoVivo ? (int) $asientoVivo['id'] : 0;
 
-        $asientoPrevio = $asientoService->getAsientoPorOrigen('compra', $idCompra, $idEmpresa);
-        $idAsiento = $asientoPrevio ? (int)$asientoPrevio['id'] : 0;
+        // Nota: si el asiento se corrigió a mano entre la lectura de arriba y este punto,
+        // guardarAsiento() lo vuelve a detectar bajo candado y lo devuelve intacto.
+        $cabeceraData = $this->cabeceraAsiento($idCompra, $data, $numDoc, $idAsiento);
 
-        // Nota: si el asiento se corrigió a mano (pestaña «Asiento contable» o Libro Diario),
-        // guardarAsiento() lo detecta y devuelve el asiento intacto — la corrección manda sobre
-        // el builder. La regla vive allí para valer en todos los módulos por igual.
+        $idAsientoGenerado = $asientoService->guardarAsiento($cabeceraData, $detalles, $idEmpresa, $idUsuario);
+        $this->repository->updateAsientoContable($idCompra, $idAsientoGenerado);
+    }
 
-        $cabeceraData = [
+    /** Cabecera del asiento de una compra: la misma para el automático y el registrado a mano. */
+    private function cabeceraAsiento(int $idCompra, array $data, string $numDoc, int $idAsiento): array
+    {
+        return [
             'id'                   => $idAsiento > 0 ? $idAsiento : null,
-            'fecha_asiento'        => $fechaEmision,
+            'fecha_asiento'        => $data['fecha_emision'] ?? date('Y-m-d'),
             'tipo_comprobante'     => 'compras',
             'numero_comprobante'   => '',
-            'concepto'             => "Compra # " . $numDoc . " - Proveedor: " . $proveedorNombre,
+            'concepto'             => "Compra # " . $numDoc . " - Proveedor: " . ($data['proveedor_nombre'] ?? 'Proveedor'),
             'estado'               => 'contabilizado',
             'modulo_origen'        => 'compra',
             'id_referencia_origen' => $idCompra,
             'observaciones'        => $data['observaciones'] ?? null,
         ];
+    }
 
-        $idAsientoGenerado = $asientoService->guardarAsiento($cabeceraData, $detalles, $idEmpresa, $idUsuario);
-        $this->repository->updateAsientoContable($idCompra, $idAsientoGenerado);
+    // ─────────────────────────────────────────────────────────────────────────
+    // ASIENTO MANUAL DE UN COMPROBANTE ELECTRÓNICO QUE NO CUADRA
+    // ─────────────────────────────────────────────────────────────────────────
+
+    /**
+     * ¿Se puede registrar a mano el asiento de esta compra? Solo cuando el asiento automático es
+     * imposible por el PROPIO comprobante y no hay otra forma de corregirlo:
+     *  - es electrónico (el XML autorizado por el SRI no se modifica: los datos se guardan tal cual);
+     *  - no es migrado (su contabilidad es el diario del sistema anterior);
+     *  - no está anulado, pendiente de aprobación ni rechazado (el sincronizador tampoco los toma);
+     *  - todavía no tiene asiento;
+     *  - y el builder falla con AsientoDescuadreDocumentoException: todas las cuentas están
+     *    configuradas pero el importe total no es subtotal + IVA + ICE + propina (caso real:
+     *    Ecuasanitas mete el «Seguro Campesino 0.5%» en el total; Banco Guayaquil declara IVA 1.83
+     *    en cabecera y 1.94 en las líneas). Si falla por una cuenta sin configurar, se configura.
+     *
+     * @return array{permitido: bool, motivo: string, error?: \AsientoDescuadreDocumentoException}
+     */
+    public function evaluarAsientoManual(array $compra, int $idEmpresa): array
+    {
+        $idCompra = (int) ($compra['id'] ?? 0);
+        $no = fn(string $motivo) => ['permitido' => false, 'motivo' => $motivo];
+
+        if (($compra['tipo_registro'] ?? 'fisica') !== 'electronico') {
+            return $no('Solo los comprobantes electrónicos se contabilizan a mano: en un documento físico corrija sus totales.');
+        }
+        if ($this->repository->esMigrado($idCompra, $idEmpresa)) {
+            return $no('La compra es migrada: su asiento es el del sistema anterior.');
+        }
+        $estado = strtolower(trim((string) ($compra['estado'] ?? '')));
+        if (in_array($estado, ['anulado', self::ESTADO_PENDIENTE, self::ESTADO_RECHAZADA], true)) {
+            return $no('La compra está ' . str_replace('_', ' ', $estado) . ': no lleva asiento contable.');
+        }
+        if ((int) ($compra['id_asiento_contable'] ?? 0) > 0) {
+            return $no('La compra ya tiene asiento contable: corríjalo desde la pestaña Asiento contable.');
+        }
+
+        try {
+            $detalles = (new AsientoBuilderService())->generarAsientoSugerido($idEmpresa, 'adquisiciones_compras', [
+                'id_compra'    => $idCompra,
+                'id_empresa'   => $idEmpresa,
+                'id_proveedor' => (int) ($compra['id_proveedor'] ?? 0),
+            ]);
+        } catch (AsientoDescuadreDocumentoException $e) {
+            return ['permitido' => true, 'motivo' => $e->getMessage(), 'error' => $e];
+        } catch (\Throwable $e) {
+            return $no($e->getMessage());
+        }
+
+        return $no(empty($detalles)
+            ? 'No hay reglas contables de Adquisiciones de Compras: configúrelas para contabilizar la compra.'
+            : 'El asiento de esta compra se genera automáticamente (Generar contabilidad), no hace falta registrarlo a mano.');
+    }
+
+    /**
+     * Registra a mano el asiento de una compra electrónica cuyo comprobante no cuadra (ver
+     * evaluarAsientoManual). Queda con modulo_origen 'compra', enlazado a la compra
+     * (id_asiento_contable, así el sincronizador deja de reportarla) y marcado como editado a mano
+     * (las regeneraciones automáticas lo respetan).
+     *
+     * Un guardado = un registro (§8): bajo el candado del documento se vuelve a mirar si ya tiene
+     * asiento; un doble clic o un reintento tras perderse la respuesta devuelve el existente.
+     *
+     * @param array $detalles líneas {id_cuenta_contable, debe, haber, referencia_detalle}
+     * @return array{ok: bool, id?: int, ya_existia?: bool, requiere_confirmacion?: bool, mensaje?: string}
+     */
+    public function registrarAsientoManual(int $idCompra, int $idEmpresa, int $idUsuario, array $detalles, bool $confirmarDescuadre): array
+    {
+        $compra = $this->repository->getPorId($idCompra, $idEmpresa);
+        if (!$compra) {
+            throw new \Exception('Compra no encontrada.');
+        }
+
+        // Reintento de un guardado que sí llegó (respuesta perdida, doble clic que el navegador
+        // no frenó): devuelve el asiento que ya tiene, sin error y sin tocar nada. Va antes de
+        // evaluarAsientoManual(), que rechazaría una compra con asiento.
+        $idAsientoActual = (int) ($compra['id_asiento_contable'] ?? 0);
+        if ($idAsientoActual > 0) {
+            return ['ok' => true, 'id' => $idAsientoActual, 'ya_existia' => true];
+        }
+
+        $evaluacion = $this->evaluarAsientoManual($compra, $idEmpresa);
+        if (!$evaluacion['permitido']) {
+            throw new \Exception($evaluacion['motivo']);
+        }
+
+        $lineas = $this->normalizarLineasAsientoManual($detalles, $compra);
+
+        $numDoc = ($compra['establecimiento_prov'] ?? '') . '-'
+                . ($compra['punto_emision_prov'] ?? '') . '-'
+                . ($compra['secuencial_prov'] ?? '');
+        $cabeceraData = $this->cabeceraAsiento($idCompra, $compra, $numDoc, 0);
+
+        $asientoRepo    = new \App\repositories\modulos\AsientoContableRepository();
+        $asientoService = new AsientoContableService($asientoRepo, new \App\Rules\modulos\AsientoContableRules(), $this->logService);
+
+        // Misma comprobación que el módulo de Asientos: la cuenta por pagar del asiento debe
+        // reflejar el importe total de la compra. Sin línea de cartera no se guarda; con
+        // diferencia se avisa y se deja confirmar (queda en la auditoría).
+        $cuadre = $asientoService->evaluarCuadreDocumento($cabeceraData, $lineas, $idEmpresa);
+        if ($cuadre !== null && !empty($cuadre['sin_linea_cartera'])) {
+            throw new \Exception($cuadre['mensaje']);
+        }
+        $hayDescuadre = $cuadre !== null && empty($cuadre['cuadra']);
+        if ($hayDescuadre && !$confirmarDescuadre) {
+            return ['ok' => false, 'requiere_confirmacion' => true, 'mensaje' => $cuadre['mensaje']];
+        }
+
+        // Se suma a una transacción abierta por el llamador (mismo criterio que guardarAsiento);
+        // si no la hay, abre la suya. El candado del documento se libera al cerrar la que mande.
+        $db = Database::getConnection();
+        $propia = !$db->inTransaction();
+        if ($propia) {
+            $db->beginTransaction();
+        }
+        try {
+            $asientoRepo->lockAsientoOrigen($idEmpresa, 'compra', $idCompra);
+            $previo = $asientoService->getAsientoPorOrigen('compra', $idCompra, $idEmpresa);
+            if ($previo) {
+                if ($propia) {
+                    $db->rollBack();
+                }
+                return ['ok' => true, 'id' => (int) $previo['id'], 'ya_existia' => true];
+            }
+
+            $idAsiento = $asientoService->guardarAsiento($cabeceraData, $lineas, $idEmpresa, $idUsuario, true);
+            $this->repository->updateAsientoContable($idCompra, $idAsiento);
+
+            $this->logService->registrar(
+                $idUsuario, $idEmpresa,
+                'Registrar Asiento Manual de Compra', 'compras_cabecera', $idCompra,
+                ['id_asiento_contable' => null],
+                [
+                    'id_asiento_contable' => $idAsiento,
+                    'motivo'              => $evaluacion['motivo'],
+                    'importe_total'       => (float) ($compra['importe_total'] ?? 0),
+                    'lineas'              => $lineas,
+                ]
+            );
+            if ($hayDescuadre) {
+                $asientoService->registrarDescuadreConfirmado($idAsiento, $cuadre, $idEmpresa, $idUsuario);
+            }
+
+            if ($propia) {
+                $db->commit();
+            }
+            return ['ok' => true, 'id' => $idAsiento, 'ya_existia' => false];
+        } catch (\Throwable $e) {
+            if ($propia && $db->inTransaction()) {
+                $db->rollBack();
+            }
+            throw $e;
+        }
+    }
+
+    /** Valida y normaliza las líneas que llegan de la pestaña: cuenta, un solo lado, Debe = Haber. */
+    private function normalizarLineasAsientoManual(array $detalles, array $compra): array
+    {
+        $numDoc = ($compra['establecimiento_prov'] ?? '') . '-'
+                . ($compra['punto_emision_prov'] ?? '') . '-'
+                . ($compra['secuencial_prov'] ?? '');
+        $lineas = [];
+        $totalDebe = 0.0;
+        $totalHaber = 0.0;
+        foreach ($detalles as $i => $d) {
+            $idCuenta = (int) ($d['id_cuenta_contable'] ?? 0);
+            $debe  = round((float) ($d['debe'] ?? 0), 2);
+            $haber = round((float) ($d['haber'] ?? 0), 2);
+            if ($debe == 0.0 && $haber == 0.0) {
+                continue;
+            }
+            if ($idCuenta <= 0) {
+                throw new \Exception('La línea ' . ($i + 1) . ' del asiento no tiene cuenta contable.');
+            }
+            if ($debe < 0 || $haber < 0 || ($debe > 0 && $haber > 0)) {
+                throw new \Exception('La línea ' . ($i + 1) . ' del asiento debe tener valor solo en el Debe o solo en el Haber.');
+            }
+            $ref = trim((string) ($d['referencia_detalle'] ?? ''));
+            $lineas[] = [
+                'id_cuenta_contable'   => $idCuenta,
+                'debe'                 => $debe,
+                'haber'                => $haber,
+                'referencia_detalle'   => $ref !== '' ? $ref : "Compra # $numDoc",
+                'documento_referencia' => "Compra # $numDoc",
+                'id_entidad'           => (int) ($compra['id_proveedor'] ?? 0) ?: null,
+                'tipo_entidad'         => 'proveedor',
+            ];
+            $totalDebe  += $debe;
+            $totalHaber += $haber;
+        }
+        if (count($lineas) < 2) {
+            throw new \Exception('El asiento necesita al menos una línea al Debe y una al Haber.');
+        }
+        if (abs(round($totalDebe - $totalHaber, 2)) >= 0.005) {
+            throw new \Exception('El asiento no cuadra: Debe ' . number_format($totalDebe, 2) . ' y Haber '
+                . number_format($totalHaber, 2) . ' deben ser iguales.');
+        }
+        return $lineas;
     }
 
     /**
@@ -1264,6 +1475,77 @@ class ComprasService
      * corregirla para que el ATS/Declaración de IVA la tomen bien, sin abrir el resto
      * del documento histórico a edición.
      */
+    /**
+     * Guarda SOLO la clasificación de la compra: «Deducible» (declaración de IVA / gasto
+     * personal) y el rubro del gasto personal. Es el guardado propio del modal cuando la
+     * compra es de solo lectura (migrada o período contable cerrado):
+     *  - El rubro es clasificación interna (Anexo de Gastos Personales / Declaración de
+     *    Renta): no toca montos, IVA ni asiento, se permite siempre.
+     *  - Cambiar «Deducible» decide si la compra entra a la Declaración de IVA de su mes,
+     *    así que exige que el período contable esté abierto. No regenera el asiento (el
+     *    asiento no depende de este campo) y re-sincroniza los casilleros de IVA del
+     *    documento para que la declaración quede coherente.
+     *
+     * @return array ['deducible' => …, 'rubro' => …] tal como quedaron guardados.
+     */
+    public function actualizarClasificacionGasto(int $id, int $idEmpresa, int $idUsuario, string $deducible, $rubro): array
+    {
+        $cabecera = $this->repository->getPorId($id, $idEmpresa);
+        if (!$cabecera) {
+            throw new \Exception('Compra no encontrada.');
+        }
+        if (!in_array($deducible, ['declaracion_iva', 'gasto_personal'], true)) {
+            throw new \Exception('Valor de Deducible no válido.');
+        }
+        $deducibleAntes = (string) ($cabecera['deducible'] ?? '');
+        $cambiaDeducible = $deducibleAntes !== $deducible;
+        if ($cambiaDeducible) {
+            $this->periodosService->validarFechaPermitida(
+                $cabecera['fecha_emision'],
+                $idEmpresa,
+                'No se puede cambiar el Deducible porque el periodo contable está cerrado (afecta la Declaración de IVA de ese mes). El rubro sí se puede cambiar.'
+            );
+        }
+
+        $rubroCod = null;
+        if ($deducible === 'gasto_personal') {
+            if (!$this->repository->tieneRubroGastoPersonal() && trim((string) $rubro) !== '') {
+                throw new \Exception('Falta aplicar la migración de rubros de gasto personal en la base de datos.');
+            }
+            $rubroCod = \App\Helpers\RubrosGastoPersonal::normalizar($rubro);
+            if ($rubroCod === null && trim((string) $rubro) !== '') {
+                throw new \Exception('Rubro no válido.');
+            }
+        }
+
+        $this->repository->beginTransaction();
+        try {
+            if ($cambiaDeducible) {
+                $this->repository->updateDeducible($id, $idEmpresa, $deducible, $idUsuario);
+                if ($deducible === 'declaracion_iva') {
+                    $this->sincronizarCasilleros($id);
+                } else {
+                    (new \App\repositories\modulos\DeclaracionIvaRepository())
+                        ->limpiarCasillerosDocumento($idEmpresa, 'compras', $id);
+                }
+            }
+            $this->repository->setRubroGastoPersonal($id, $idEmpresa, $rubroCod, $deducible);
+
+            $this->logService->registrar(
+                $idUsuario, $idEmpresa,
+                'MODIFICAR', 'compras_cabecera', $id,
+                ['deducible' => $deducibleAntes, 'rubro_gasto_personal' => $cabecera['rubro_gasto_personal'] ?? null],
+                ['deducible' => $deducible, 'rubro_gasto_personal' => $rubroCod]
+            );
+            $this->repository->commit();
+        } catch (\Throwable $e) {
+            $this->repository->rollBack();
+            throw $e;
+        }
+
+        return ['deducible' => $deducible, 'rubro' => (string) $rubroCod];
+    }
+
     public function actualizarSustentoTributario(int $id, int $idEmpresa, int $idUsuario, int $idSustento): void
     {
         $cabecera = $this->repository->getPorId($id, $idEmpresa);

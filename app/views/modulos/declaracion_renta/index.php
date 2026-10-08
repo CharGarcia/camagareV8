@@ -26,7 +26,7 @@ $esSoc = $ctx['tipo'] === 'soc';
     .renta-tabla tr.renta-tot td { background:#f5f5f5; font-weight:700; }
     .renta-tabla tr.renta-sub td { color:#6c757d; font-size:.74rem; }
     .renta-tabla tr.renta-sub td:first-child { padding-left:28px; white-space:pre; }
-    .renta-tabla input.renta-sri { width:58px; height:22px; font-size:.72rem; padding:0 4px; display:inline-block; text-align:center; font-family:monospace; }
+    .renta-tabla input.renta-sri { width:84px; height:22px; font-size:.72rem; padding:0 4px; display:inline-block; text-align:center; font-family:monospace; }
     .renta-tabla select.renta-rubro { height:26px; font-size:.75rem; padding:0 6px; }
     .renta-tabla td.cas { color:#6c757d; font-family:monospace; text-align:center; white-space:nowrap; }
     .renta-tabla td.signo { text-align:center; color:#6c757d; width:30px; }

@@ -60,7 +60,14 @@ class FacturaReembolsoPdfService
         if (!empty($pagos)) {
             $y = $this->dibujarPagos($pagos, $y + 2);
         }
-        $this->dibujarPie($cab, $detalles, $terceros, $infoAdicional, $y + 2);
+        // Pie: si no cabe entero en esta hoja, pasa completo a la siguiente. Se mide
+        // dibujándolo de prueba (PdfBloque::cabe) en vez de con un umbral fijo de Y.
+        $yPie = $y + 2;
+        if (!\App\Helpers\PdfBloque::cabe($this->pdf, fn() => $this->dibujarPie($cab, $detalles, $terceros, $infoAdicional, $yPie))) {
+            $this->pdf->AddPage();
+            $yPie = 12;
+        }
+        $this->dibujarPie($cab, $detalles, $terceros, $infoAdicional, $yPie);
     }
 
     // ─── ENCABEZADO ──────────────────────────────────────────────────────────
@@ -428,14 +435,6 @@ class FacturaReembolsoPdfService
         $mL  = $this->marginL;
         $cW  = $this->contentW;
 
-        if ($y > 220) { $pdf->AddPage(); $y = 12; }
-
-        $pdf->SetFont('helvetica', 'B', 7.5);
-        $pdf->SetFillColor(220, 230, 245);
-        $pdf->SetXY($mL, $y);
-        $pdf->Cell($cW, 5.5, 'Detalle de comprobante de reembolso', 1, 1, 'L', true);
-        $y += 5.5;
-
         $wFec   = 16;
         $wIdent = 24;
         $wTipo  = 22;
@@ -443,21 +442,39 @@ class FacturaReembolsoPdfService
         $wRate  = 15;
         $wImp   = 15;
         $wTotal = $cW - $wFec - $wIdent - $wTipo - $wNum - (4 * $wRate) - $wImp;
+        $hFila  = 5;
+        $limiteY = $pdf->getPageHeight() - $pdf->getBreakMargin();
 
-        $pdf->SetFont('helvetica', 'B', 6);
-        $pdf->SetFillColor(230, 230, 230);
+        // Encabezado de columnas: se repite en cada hoja si la tabla sigue.
+        $dibujarEncabezado = function (float $yE) use ($pdf, $mL, $wFec, $wIdent, $wTipo, $wNum, $wRate, $wImp, $wTotal): float {
+            $pdf->SetFont('helvetica', 'B', 6);
+            $pdf->SetFillColor(230, 230, 230);
+            $pdf->SetXY($mL, $yE);
+            $pdf->Cell($wFec, 6, 'Fecha', 1, 0, 'C', true);
+            $pdf->Cell($wIdent, 6, 'Identif.', 1, 0, 'C', true);
+            $pdf->Cell($wTipo, 6, 'Tipo', 1, 0, 'C', true);
+            $pdf->Cell($wNum, 6, 'Número', 1, 0, 'C', true);
+            $pdf->Cell($wRate, 6, 'Base 15%', 1, 0, 'C', true);
+            $pdf->Cell($wRate, 6, 'Base 5%', 1, 0, 'C', true);
+            $pdf->Cell($wRate, 6, 'Base 8%', 1, 0, 'C', true);
+            $pdf->Cell($wRate, 6, 'Base 0%', 1, 0, 'C', true);
+            $pdf->Cell($wImp, 6, 'Impuestos', 1, 0, 'C', true);
+            $pdf->Cell($wTotal, 6, 'Total', 1, 1, 'C', true);
+            $pdf->SetFont('helvetica', '', 6.5);
+            return $yE + 6;
+        };
+
+        // Título + encabezado + primera fila juntos. Antes había un umbral fijo
+        // (y > 220) que mandaba la tabla a otra hoja aunque cupiera en esta.
+        if ($y + 5.5 + 6 + $hFila > $limiteY) { $pdf->AddPage(); $y = 12; }
+
+        $pdf->SetFont('helvetica', 'B', 7.5);
+        $pdf->SetFillColor(220, 230, 245);
         $pdf->SetXY($mL, $y);
-        $pdf->Cell($wFec, 6, 'Fecha', 1, 0, 'C', true);
-        $pdf->Cell($wIdent, 6, 'Identif.', 1, 0, 'C', true);
-        $pdf->Cell($wTipo, 6, 'Tipo', 1, 0, 'C', true);
-        $pdf->Cell($wNum, 6, 'Número', 1, 0, 'C', true);
-        $pdf->Cell($wRate, 6, 'Base 15%', 1, 0, 'C', true);
-        $pdf->Cell($wRate, 6, 'Base 5%', 1, 0, 'C', true);
-        $pdf->Cell($wRate, 6, 'Base 8%', 1, 0, 'C', true);
-        $pdf->Cell($wRate, 6, 'Base 0%', 1, 0, 'C', true);
-        $pdf->Cell($wImp, 6, 'Impuestos', 1, 0, 'C', true);
-        $pdf->Cell($wTotal, 6, 'Total', 1, 1, 'C', true);
-        $y += 6;
+        $pdf->Cell($cW, 5.5, 'Detalle de comprobante de reembolso', 1, 1, 'L', true);
+        $y += 5.5;
+
+        $y = $dibujarEncabezado($y);
 
         $pdf->SetFont('helvetica', '', 6.5);
         $altColor = false;
@@ -486,6 +503,14 @@ class FacturaReembolsoPdfService
                 else $base0 += $base;
             }
             $total = $base15 + $base5 + $base8 + $base0 + $impuestos;
+
+            // Salto controlado: con el automático, la Y quedaba en la hoja anterior
+            // y cada fila siguiente abría una hoja nueva. Se repite el encabezado.
+            if ($y + $hFila > $limiteY) {
+                $pdf->AddPage();
+                $y = $dibujarEncabezado($pdf->GetY());
+                $pdf->SetFillColor($bg[0], $bg[1], $bg[2]);
+            }
 
             $pdf->SetXY($mL, $y);
             $pdf->Cell($wFec, 5, $fecha, 1, 0, 'C', true);
@@ -518,22 +543,39 @@ class FacturaReembolsoPdfService
             ['titulo' => 'Unidad Tiempo', 'w' => 30],
         ];
 
-        $pdf->SetFont('helvetica', 'B', 6.5);
-        $pdf->SetFillColor(230, 230, 230);
-        $pdf->SetXY($mL, $y);
-        foreach ($cols as $c) {
-            $pdf->Cell($c['w'], 6, $c['titulo'], 1, 0, 'C', true);
-        }
-        $pdf->Ln();
-        $y += 6;
+        $limiteY = $pdf->getPageHeight() - $pdf->getBreakMargin();
+        $dibujarEncabezado = function (float $yE) use ($pdf, $mL, $cols): float {
+            $pdf->SetFont('helvetica', 'B', 6.5);
+            $pdf->SetFillColor(230, 230, 230);
+            $pdf->SetXY($mL, $yE);
+            foreach ($cols as $c) {
+                $pdf->Cell($c['w'], 6, $c['titulo'], 1, 0, 'C', true);
+            }
+            $pdf->Ln();
+            $pdf->SetFont('helvetica', '', 7);
+            return $yE + 6;
+        };
 
-        $pdf->SetFont('helvetica', '', 7);
+        // Encabezado y primera fila juntos.
+        if ($y + 6 + 5 > $limiteY) {
+            $pdf->AddPage();
+            $y = $pdf->GetY();
+        }
+        $y = $dibujarEncabezado($y);
+
         $altColor = false;
         foreach ($pagos as $p) {
             $bg = $altColor ? [250, 250, 250] : [255, 255, 255];
             $altColor = !$altColor;
             $pdf->SetFillColor($bg[0], $bg[1], $bg[2]);
 
+            // Salto controlado (con SetXY por fila, el automático dejaba la Y en la
+            // hoja anterior y cada fila abría otra hoja).
+            if ($y + 5 > $limiteY) {
+                $pdf->AddPage();
+                $y = $dibujarEncabezado($pdf->GetY());
+                $pdf->SetFillColor($bg[0], $bg[1], $bg[2]);
+            }
             $pdf->SetXY($mL, $y);
             $pdf->Cell($cols[0]['w'], 5, (string)($p['nombre_forma_pago'] ?? $p['forma_pago'] ?? ''), 1, 0, 'L', true);
             $pdf->Cell($cols[1]['w'], 5, number_format((float)($p['total'] ?? 0), 2), 1, 0, 'R', true);
@@ -575,7 +617,9 @@ class FacturaReembolsoPdfService
             $totalReembIva  += (float)($t['impuesto_total'] ?? 0);
         }
 
-        if ($y > 220) { $pdf->AddPage(); $y = 12; }
+        // El salto de página del pie lo decide renderizar() midiendo su alto real
+        // (PdfBloque::cabe). Antes había aquí un umbral fijo que mandaba el pie
+        // a una hoja nueva aunque cupiera en la actual.
 
         $totW = 72;
         $izqW = $cW - $totW - 2;

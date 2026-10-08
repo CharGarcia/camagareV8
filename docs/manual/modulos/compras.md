@@ -5,8 +5,8 @@ categoria: Compras
 ruta_modulo: modulos/compras
 tipo: modulo
 visibilidad: todos
-etiquetas: compras, compra, factura de compra, buscar compra, buscador, aparecen compras que no busque, resultados que no corresponden, la busqueda trae otras compras, buscar por numero de autorizacion, filtros, filtrar compras, buscar por producto comprado, filtro de fechas, saldo pendiente, estado de pago, chips, ordenar por dos columnas, ordenar por proveedor y fecha, asiento contable, editar asiento, pestaña asiento, proveedor, xml, sri, entrada de mercaderia, vincular producto, retencion, orden de compra, vincular orden, pedido a proveedor, comparar pedido vs facturado, entrega parcial, recibido parcial, cerrar orden, sustento tributario, codigo de sustento, autorizacion, fecha de caducidad, ats, persona natural, obligada a llevar contabilidad, tipo de contribuyente, registro manual, compra fisica, pagar la compra, pestaña pagos, saldo pendiente, valores de terceros, otros conceptos, valores adicionales, bomberos, tasa de basura, recoleccion de basura, planilla de luz, planilla de agua, servicios basicos, informacion adicional, info adicional, nombre muy largo, limite de caracteres, value too long, no se pudo guardar la compra, imprimir, impresora, retencion antes de la factura, enlazar retencion
-version: 2.28
+etiquetas: compras, compra, factura de compra, buscar compra, buscador, aparecen compras que no busque, resultados que no corresponden, la busqueda trae otras compras, buscar por numero de autorizacion, filtros, filtrar compras, buscar por producto comprado, filtro de fechas, saldo pendiente, estado de pago, chips, ordenar por dos columnas, ordenar por proveedor y fecha, asiento contable, editar asiento, pestaña asiento, proveedor, xml, sri, entrada de mercaderia, vincular producto, retencion, orden de compra, vincular orden, pedido a proveedor, comparar pedido vs facturado, entrega parcial, recibido parcial, cerrar orden, sustento tributario, codigo de sustento, autorizacion, fecha de caducidad, ats, persona natural, obligada a llevar contabilidad, tipo de contribuyente, registro manual, compra fisica, pagar la compra, pestaña pagos, saldo pendiente, valores de terceros, otros conceptos, valores adicionales, bomberos, tasa de basura, recoleccion de basura, planilla de luz, planilla de agua, servicios basicos, informacion adicional, info adicional, nombre muy largo, limite de caracteres, value too long, no se pudo guardar la compra, imprimir, impresora, retencion antes de la factura, enlazar retencion, pdf en dos hojas, segunda hoja casi vacia, totales en otra pagina, el pdf corta la pagina, hoja de mas, asiento no cuadra, el asiento no se genera, asiento manual, registrar asiento a mano, importe total no es subtotal mas iva, supera el maximo de ajuste, xml inconsistente, iva de cabecera distinto al de las lineas, seguro campesino, generar contabilidad
+version: 2.30
 orden: 20
 estado: activo
 ---
@@ -78,6 +78,28 @@ para clasificarlas.
 
 En el listado se puede filtrar por rubro con `rubro:salud` (o `rubro:sin_rubro`
 para encontrar las que faltan por clasificar).
+
+**Compras de solo lectura** (migradas electrónicas o de un período contable
+cerrado): el resto del documento no se puede editar, pero su clasificación sí.
+Junto a *Deducible* aparece un botón de guardado propio (✓) que guarda
+*Deducible* y *Rubro* sin tocar nada más; el cambio queda en el historial.
+
+| Caso | Deducible | Rubro |
+|------|-----------|-------|
+| Compra migrada, período abierto | Editable | Editable (al elegir *Gasto personal*) |
+| Período contable cerrado | Bloqueado | Editable si la compra ya es *Gasto personal* |
+
+*Deducible* se bloquea con el período cerrado porque decide si la compra entra
+a la Declaración de IVA de ese mes. Al cambiarlo, el sistema actualiza los
+casilleros de IVA de la compra; el asiento contable no cambia (no depende de
+este campo). También se puede clasificar el rubro sin abrir la compra desde la
+pestaña *Clasificar gastos personales* de la Declaración de Renta.
+
+**Compras antiguas con Deducible «04»**: una migración anterior dejó en algunas
+compras el código del sistema anterior en vez de la opción. Se corrigen a
+*Declaración de IVA* con el SQL `20261008_compras_deducible_codigos_legados.sql`
+(deja registro en el historial); mientras tanto, el modal las muestra como
+*Declaración de IVA* y al guardarlas se graba el valor correcto.
 
 ## Sustento tributario y datos de autorización
 
@@ -526,6 +548,44 @@ corregirlo sin salir del modal.
 
 El detalle completo está en el manual de [Asientos contables](modulos/asientos-contables).
 
+### Comprobante electrónico que no cuadra: asiento a mano
+
+Algunos proveedores emiten comprobantes cuyo **importe total no es subtotal +
+IVA + ICE + propina**, y el SRI los autoriza igual. Dos casos reales:
+
+- Una medicina prepagada suma al total el aporte *Seguro Campesino 0.5%*, que
+  solo aparece en la información adicional, no como impuesto.
+- Un banco declara en la cabecera un IVA distinto del que suman sus líneas.
+
+El sistema guarda la compra **tal como viene en el XML**, sin corregirla. Pero
+el asiento automático no puede cuadrar, y *Generar contabilidad* la reporta como
+"no cuadran aunque las cuentas estén configuradas".
+
+En ese caso, al abrir la compra, la pestaña **Asiento contable** deja registrar
+el asiento a mano:
+
+1. Muestra las líneas que el sistema sí pudo calcular (gasto o inventario, IVA y
+   cuenta por pagar) y cuánto falta, y si falta al Debe o al Haber.
+2. Agregue la línea de la diferencia con la cuenta que corresponda, por ejemplo
+   el gasto del aporte o el Ajuste por redondeo.
+3. Pulse **Guardar asiento**. Se aplican las mismas comprobaciones de siempre:
+   Debe igual a Haber, todas las líneas con cuenta y la cuenta por pagar igual
+   al total de la compra.
+
+El asiento queda enlazado a la compra, así que *Generar contabilidad* deja de
+reportarla. Queda además marcado como editado a mano, por lo que el sistema no lo
+vuelve a armar, y el registro queda en la auditoría.
+
+Solo se ofrece cuando se cumplen todas estas condiciones:
+
+- La compra es **electrónica**. Una compra física se corrige editando sus totales.
+- No es migrada, ni está anulada, pendiente de aprobación o rechazada.
+- Todavía no tiene asiento.
+- **Todas las cuentas están configuradas**. Si el asiento falla porque falta una
+  cuenta, hay que configurarla en *Configuración contable*.
+- El usuario puede modificar Compras y modificar *Contabilidad → Asientos
+  Contables*.
+
 ## Permisos
 
 Con **acceso total** se ven las compras de toda la empresa; sin él, cada usuario
@@ -558,6 +618,12 @@ los de *Contabilidad → Asientos Contables* (ver la sección anterior).
   proveedor.
 - **La compra no generó asiento contable**: si está pendiente de aprobación, el
   asiento se genera al aprobarla, no al registrarla.
+- **"Algunos asientos de Facturas de Compra no cuadran aunque las cuentas estén
+  configuradas"** al generar la contabilidad: el importe total del comprobante
+  no es subtotal + IVA. No es un error de carga: la compra está tal como vino del
+  SRI. Si es electrónica, registre el asiento a mano desde la pestaña *Asiento
+  contable* (ver *Comprobante electrónico que no cuadra*). Si es física, corrija
+  sus totales.
 - **"No se puede registrar el asiento: la fecha ... corresponde a un período
   contable cerrado"** al eliminar: la eliminación anula el asiento, y eso no se
   puede hacer en un período cerrado. Reabra el período.
@@ -631,6 +697,19 @@ aprobaciones pasa, así que no se paga dos veces.
 
 ## Historial de cambios
 
+- **2.30** — Las compras **electrónicas cuyo importe total no es subtotal + IVA**
+  (rubros del emisor dentro del total, como el *Seguro Campesino 0.5%*, o IVA de
+  cabecera distinto al de las líneas) ya se pueden contabilizar: la pestaña
+  *Asiento contable* muestra las líneas calculadas y deja completar y guardar el
+  asiento a mano. Queda enlazado a la compra, marcado como editado a mano y
+  auditado, y *Generar contabilidad* deja de reportarla. La compra no se modifica.
+- **2.29** — El PDF ya no manda los **totales y la información adicional** a una segunda hoja cuando
+  caben en la primera. Antes saltaba de página siempre que el detalle pasara de cierta
+  altura, aunque quedara espacio libre; ahora mide el alto real de ese bloque y solo lo pasa
+  a la hoja siguiente si de verdad no cabe.
+- **2.29** — En compras de solo lectura (migradas / período cerrado) se puede
+  corregir *Deducible* y *Rubro* con un guardado propio; corrección de las
+  compras con Deducible «04» heredado de una migración antigua.
 - **2.28** — Nuevo campo **Rubro gasto personal** (vivienda, salud, educación,
   alimentación, vestimenta, turismo) para las compras marcadas *Gasto personal*;
   se sugiere el rubro de la última compra del proveedor, se filtra con
