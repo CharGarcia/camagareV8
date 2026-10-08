@@ -527,11 +527,17 @@
         const box = $('rolemp_pago_body');
         if (!box) return;
         const p = PAGO[d.estado_pago] || PAGO.pendiente;
+        // Icono en la pestaña, sin texto: visto verde si está pagado, reloj ámbar si es
+        // parcial, aspa roja si está pendiente (el detalle va en el title).
         const badgeTab = $('rolemp_pago_badge');
         if (badgeTab) {
-            badgeTab.className = `badge ms-1 bg-${p.c} bg-opacity-10 text-${p.c} border border-${p.c} border-opacity-25`;
-            badgeTab.style.fontSize = '0.6rem';
-            badgeTab.textContent = p.t;
+            const icono = d.estado_pago === 'pagado' ? 'bi-check-circle-fill text-success'
+                        : d.estado_pago === 'parcial' ? 'bi-hourglass-split text-warning'
+                        : 'bi-x-circle-fill text-danger';
+            badgeTab.className = 'ms-1';
+            badgeTab.style.fontSize = '';
+            badgeTab.title = `${p.t} · Pagado ${money(d.pagado)} · Saldo ${money(d.saldo)}`;
+            badgeTab.innerHTML = `<i class="bi ${icono}"></i>`;
         }
         const egresos = d.pagos || [];
         const puedeVerEgresos = !!d.puede_ver_egresos;
@@ -544,19 +550,18 @@
                 <span class="small">Saldo: <b class="${(parseFloat(d.saldo) || 0) > 0 ? 'text-danger' : 'text-muted'}">${money(d.saldo)}</b></span>
             </div>`;
 
-        if (d.rol_migrado) {
+        if (d.rol_migrado && !egresos.length) {
             html += `<div class="alert alert-info py-2 px-3 small mb-3">
                 <i class="bi bi-info-circle me-1"></i>
-                <b>Rol migrado del sistema anterior.</b> Se considera pagado por su neto porque ya se pagó allá;
-                ${egresos.length ? 'abajo se muestran los egresos migrados que quedaron enlazados a esta línea.' : 'no quedó ningún egreso enlazado a esta línea, por eso no hay referencia de pago que mostrar.'}
+                <b>Rol migrado del sistema anterior.</b> Solo cuenta como pagado lo que tenga un egreso enlazado;
+                ningún egreso migrado quedó enlazado a esta línea, así que figura pendiente. Si el pago sí existía en el
+                sistema anterior, vuelva a migrar <b>Egresos</b> para que se cruce, o regístrelo en <b>Egresos → Nómina</b>.
             </div>`;
         }
 
         if (!egresos.length) {
-            if (!d.rol_migrado) {
-                html += `<div class="text-muted text-center py-4"><i class="bi bi-cash-coin fs-3 d-block mb-1"></i>
-                    Aún no hay ningún egreso que pague este rol.${(parseFloat(d.pagado) || 0) > 0 ? '' : ' Use <b>Generar egresos</b> en el rol o regístrelo en <b>Egresos → Nómina</b>.'}</div>`;
-            }
+            html += `<div class="text-muted text-center py-4"><i class="bi bi-cash-coin fs-3 d-block mb-1"></i>
+                Aún no hay ningún egreso que pague este rol. Use <b>Generar egresos</b> en el rol o regístrelo en <b>Egresos → Nómina</b>.</div>`;
             box.innerHTML = html;
             return;
         }

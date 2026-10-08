@@ -782,7 +782,6 @@ class RolPagoRepository extends BaseRepository
         $sql = "SELECT COUNT(*)
                 FROM rol_detalle rd
                 WHERE rd.id_rol = :r AND rd.id_empresa = :e
-                  AND NOT " . self::sqlRolMigrado('rd.id_rol', 'rd.id_empresa') . "
                   AND ROUND(rd.neto - COALESCE((SELECT SUM(ed.monto_pagado)
                         FROM egresos_detalle ed JOIN egresos_cabecera ec ON ec.id = ed.id_egreso
                        WHERE ed.tipo_documento = 'ROL' AND ec.estado != 'anulado'
@@ -971,25 +970,18 @@ class RolPagoRepository extends BaseRepository
                            AND mrm.entidad IN ('roles_pago','quincenas') AND mrm.vinculado = false)";
     }
 
-    /** Monto pagado por cada línea de rol (desde egresos), para saber si un empleado está pagado. */
+    /**
+     * Monto pagado por cada línea de rol (desde egresos), para saber si un empleado está pagado.
+     *
+     * Un rol migrado del sistema anterior se trata igual que uno nativo: cuenta solo lo que
+     * tenga enlazado desde egresos (los migrados, si `cruzarEgresosConRoles` logró enlazarlos).
+     * Antes (02-10-2026) toda línea migrada se daba por pagada por su neto aunque no tuviera
+     * egreso; el usuario lo retiró el 08-10-2026 porque dejaba roles "Pagados" sin ninguna
+     * referencia de pago que mostrar — si no hay egreso enlazado, debe verse pendiente.
+     */
     public function getPagadoPorDetalle(int $idRol): array
     {
-        // Rol migrado: el sistema anterior ya lo pagó → cada línea cuenta como pagada por su neto.
-        try {
-            $st = $this->db->prepare("SELECT rd.id, rd.neto FROM rol_detalle rd JOIN rol_cabecera rc ON rc.id = rd.id_rol
-                                      WHERE rc.id = :r AND " . self::sqlRolMigrado('rc.id', 'rc.id_empresa'));
-            $st->execute([':r' => $idRol]);
-            $migradas = $st->fetchAll(PDO::FETCH_ASSOC);
-            if ($migradas) {
-                $map = [];
-                foreach ($migradas as $row) { $map[(int) $row['id']] = (float) $row['neto']; }
-                return $map;
-            }
-        } catch (\Throwable $e) {
-            // tabla de migración ausente → criterio normal por egresos
-        }
-
-        $sql = "SELECT d.id_referencia_documento AS id_detalle, COALESCE(SUM(d.monto_pagado), 0) AS pagado
+        $sql ="SELECT d.id_referencia_documento AS id_detalle, COALESCE(SUM(d.monto_pagado), 0) AS pagado
                 FROM egresos_detalle d
                 JOIN egresos_cabecera e ON e.id = d.id_egreso
                 WHERE d.tipo_documento = 'ROL' AND e.estado != 'anulado' AND e.eliminado = false AND d.eliminado = false

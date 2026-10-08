@@ -158,11 +158,12 @@ La pestaña Pago muestra:
 Un egreso **anulado** se sigue mostrando, marcado como tal, para que se entienda
 por qué el rol volvió a quedar pendiente; su monto no cuenta como pagado.
 
-Si el rol fue **migrado del sistema anterior**, el sistema lo considera pagado
-por su neto aunque no tenga un egreso enlazado (porque ya se pagó allá). La
-pestaña lo avisa; si la migración logró enlazar los egresos viejos a esa línea,
-se muestran igual que los nativos, y si no, simplemente no hay referencia que
-mostrar.
+Un rol **migrado del sistema anterior** se trata igual que uno nativo: solo
+cuenta como pagado lo que tenga un egreso enlazado. Si la migración cruzó los
+egresos viejos con esa línea, se muestran igual que los nativos; si no quedó
+ninguno enlazado, el empleado figura **pendiente de pago** y la pestaña lo
+avisa. En ese caso, vuelva a migrar *Egresos* para que se crucen, o registre el
+pago en *Egresos → Nómina*, donde ese rol sí aparece como pendiente.
 
 ## Asiento contable del rol mensual
 
@@ -293,7 +294,10 @@ módulo. Para regresar al orden de fábrica, ordene por *Período* de mayor a me
   más ancha) y pestaña **Pago** en la ficha del empleado: clic en el estado
   *Pagado / Parcial / Pendiente* abre la ficha en esa pestaña, donde se ven los
   egresos que pagaron el rol, sus formas de pago (banco, transferencia, cheque,
-  referencia) y el botón PDF del comprobante de egreso.
+  referencia) y el botón PDF del comprobante de egreso. Además, los roles y
+  quincenas **migrados** ya no se dan por pagados sin más (cambia lo de 1.13):
+  cuentan solo los egresos enlazados, y sin ninguno el empleado sale
+  *Pendiente* y vuelve a aparecer en *Generar egresos* y en *Egresos → Nómina*.
 - **1.14** — Corrección: eliminar un rol anula todos sus asientos en la misma
   operación, y anularlo también lo hace dentro de la misma operación. Antes, un rol
   contabilizado que se volvía a generar quedaba en *Generado*, se podía eliminar y
