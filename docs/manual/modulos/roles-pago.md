@@ -25,8 +25,23 @@ Un mismo módulo cubre los tres ritmos de pago:
 | Semanal | Una semana | **Semana**: de 1 a 5 |
 
 En el listado, la columna **Tipo** distingue cada ritmo con su propio color e
-ícono de calendario: **Rol Mensual** en azul, **Quincena** en gris oscuro y
+ícono de calendario: **Rol Mensual** en celeste, **Quincena** en gris oscuro y
 **Semanal** en ámbar. El mismo distintivo encabeza la ventana del rol al abrirlo.
+
+La columna **Período** dice de qué parte del mes se trata, sin números sueltos:
+
+| Tipo | Cómo se muestra |
+|------|-----------------|
+| Mensual | *Mayo 2026* |
+| Quincenal | *Quincena 1 · 1 al 15 de Mayo 2026* / *Quincena 2 · 16 al 31 de Mayo 2026* |
+| Semanal | *Semana 3 · 15 al 21 de Mayo 2026* |
+
+Los días son **por convención**, no fechas registradas: la quincena 1 va del 1
+al 15 y la 2 del 16 al último día del mes; las semanas van de 7 en 7 (1 al 7,
+8 al 14, 15 al 21, 22 al 28 y la semana 5 del 29 al fin de mes). Si la semana 5
+no cabe en el mes (febrero no bisiesto) se muestra solo *Semana 5 · Febrero
+2026*. El mismo texto aparece en la ventana del rol, en el PDF, en el Excel y
+sirve para buscar en el listado.
 
 El mes debe estar entre 1 y 12, y el año ser válido.
 
@@ -213,7 +228,8 @@ búsqueda y el botón de columnas.
 
 **Búsqueda libre.** Escriba cualquier cosa en el cuadro y el listado se filtra
 solo, sin menús ni sugerencias. Busca en las columnas de la corrida: período
-(por ejemplo *Julio 2026* o *Julio 2026 #2*), número de empleados y neto.
+(por ejemplo *Julio 2026* o *Quincena 2 · 16 al 31 de Julio 2026*), número de
+empleados y neto.
 Además busca en la descripción, la fecha de pago, el usuario que creó la
 corrida y en el **nombre e identificación de los empleados incluidos** en el
 rol. Las columnas **Tipo** y **Estado** no entran en la búsqueda libre: para
@@ -304,8 +320,11 @@ módulo. Para regresar al orden de fábrica, ordene por *Período* de mayor a me
   *Pendiente* y vuelve a aparecer en *Generar egresos* y en *Egresos → Nómina*.
   El listado ya no tiene la columna con la papelera: eliminar una corrida se hace
   desde el botón **Eliminar** del modal del rol. La columna **Tipo** muestra
-  cada tipo de rol con su color e ícono (mensual azul, quincena gris oscuro, semanal
-  ámbar), igual que el título de la ventana del rol.
+  cada tipo de rol con su color e ícono (mensual celeste, quincena gris oscuro, semanal
+  ámbar), igual que el título de la ventana del rol. La columna **Período** ya
+  no muestra *Mayo 2026 #1*: dice *Quincena 1 · 1 al 15 de Mayo 2026* o
+  *Semana 3 · 15 al 21 de Mayo 2026* (días por convención), en el listado, la
+  ventana del rol, el PDF, el Excel y la búsqueda.
 - **1.14** — Corrección: eliminar un rol anula todos sus asientos en la misma
   operación, y anularlo también lo hace dentro de la misma operación. Antes, un rol
   contabilizado que se volvía a generar quedaba en *Generado*, se podía eliminar y

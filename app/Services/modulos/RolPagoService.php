@@ -83,6 +83,8 @@ class RolPagoService
         if ($idUsuario !== null && $this->refrescarSiCorresponde($id, $idEmpresa, $idUsuario)) {
             $cab = $this->repo->findCabecera($id, $idEmpresa);
         }
+        // Texto del período tal como lo muestra el listado (el modal lo pinta tal cual).
+        $cab['periodo_texto'] = CatalogoRol::nombrePeriodo((string) $cab['tipo_rol'], (int) $cab['periodo_anio'], (int) $cab['periodo_mes'], (int) ($cab['numero_periodo'] ?? 0));
         $cab['detalle'] = $this->repo->getDetalleCompleto($id, $idEmpresa);
         // Avisos: anticipos/préstamos del período aún sin desembolsar (no se descuentan en el rol).
         $cab['avisos'] = $this->repo->getAvisosPendientes(

@@ -176,13 +176,12 @@ $colores = ['borrador' => 'secondary', 'generado' => 'info', 'pagado' => 'succes
                         <tr><td colspan="5" class="text-center py-5 text-muted">No hay corridas de rol registradas.</td></tr>
                     <?php else: ?>
                         <?php foreach ($rows as $row):
-                            $mes = $meses[(int) $row['periodo_mes']] ?? $row['periodo_mes'];
-                            $num = (int) $row['numero_periodo'] > 0 ? ' #' . (int) $row['numero_periodo'] : '';
+                            $periodoTexto = CatalogoRol::nombrePeriodo((string) $row['tipo_rol'], (int) $row['periodo_anio'], (int) $row['periodo_mes'], (int) $row['numero_periodo']);
                             $c = $colores[$row['estado']] ?? 'secondary';
                         ?>
                             <tr class="rol-row" onclick="abrirModalVer(this)" data-row='<?= htmlspecialchars(json_encode($row), ENT_QUOTES) ?>'>
                                 <td class="ps-3" data-col="tipo"><?= CatalogoRol::badgeTipo((string) $row['tipo_rol']) ?></td>
-                                <td data-col="periodo"><?= htmlspecialchars($mes . ' ' . $row['periodo_anio'] . $num) ?></td>
+                                <td data-col="periodo"><?= htmlspecialchars($periodoTexto) ?></td>
                                 <td class="text-center" data-col="empleados"><?= (int) ($row['num_empleados'] ?? 0) ?></td>
                                 <td class="text-end fw-bold" data-col="neto">$<?= number_format((float) $row['total_neto'], 2) ?></td>
                                 <td class="text-center pe-3" data-col="estado">

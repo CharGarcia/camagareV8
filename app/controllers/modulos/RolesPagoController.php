@@ -152,10 +152,8 @@ class RolesPagoController extends BaseModuloController
     {
         $h = fn($v) => htmlspecialchars((string) ($v ?? ''), ENT_QUOTES, 'UTF-8');
         $dataJson = htmlspecialchars(json_encode($r), ENT_QUOTES, 'UTF-8');
-        $mes = CatalogoNovedades::MESES[(int) $r['periodo_mes']] ?? $r['periodo_mes'];
-        $num = (int) $r['numero_periodo'] > 0 ? ' #' . (int) $r['numero_periodo'] : '';
-        $periodo = $h($mes . ' ' . $r['periodo_anio'] . $num);
-        $fpago = $r['fecha_pago'] ? date('d-m-Y', strtotime((string) $r['fecha_pago'])) : '—';
+        $periodo = $h(CatalogoRol::nombrePeriodo((string) $r['tipo_rol'], (int) $r['periodo_anio'], (int) $r['periodo_mes'], (int) $r['numero_periodo']));
+        $fpago =$r['fecha_pago'] ? date('d-m-Y', strtotime((string) $r['fecha_pago'])) : '—';
 
         $colores = ['borrador' => 'secondary', 'generado' => 'info', 'pagado' => 'success', 'contabilizado' => 'primary', 'anulado' => 'danger'];
         $c = $colores[$r['estado']] ?? 'secondary';
@@ -407,11 +405,10 @@ class RolesPagoController extends BaseModuloController
             if (!$rol) { http_response_code(404); echo 'Corrida no encontrada'; exit; }
 
             $empresa = $this->cargarEmpresaParaPdf($idEmpresa);
-            $mes = CatalogoNovedades::MESES[(int) $rol['periodo_mes']] ?? $rol['periodo_mes'];
-            $num = (int) ($rol['numero_periodo'] ?? 0) > 0 ? ' #' . (int) $rol['numero_periodo'] : '';
+            $periodoTexto = CatalogoRol::nombrePeriodo((string) $rol['tipo_rol'], (int) $rol['periodo_anio'], (int) $rol['periodo_mes'], (int) ($rol['numero_periodo'] ?? 0));
             $empNom = (string) ($empresa['razon_social'] ?? $empresa['nombre_comercial'] ?? '');
             $empRuc = (string) ($empresa['ruc'] ?? '');
-            $titulo = trim($empNom . ' (RUC ' . $empRuc . ') — ' . CatalogoRol::nombreTipo((string) $rol['tipo_rol']) . ' - ' . $mes . ' ' . $rol['periodo_anio'] . $num);
+            $titulo = trim($empNom . ' (RUC ' . $empRuc . ') — ' . CatalogoRol::nombreTipo((string) $rol['tipo_rol']) . ' - ' . $periodoTexto);
 
             // Hoja 1: resumen, un empleado por fila con el mayor detalle posible.
             $headers = ['Empleado', 'Identificación', 'Cargo', 'Días', 'Sueldo Base', 'Total Ingresos', 'Aporte IESS', 'IR', 'Otros Egresos', 'Total Egresos', 'Neto'];

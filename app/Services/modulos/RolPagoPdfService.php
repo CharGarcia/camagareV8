@@ -22,8 +22,7 @@ class RolPagoPdfService
     public function generarEmpleado(array $lin, array $empresa, string $dest = 'I')
     {
         $cab = $lin['cabecera'] ?? [];
-        $mes = CatalogoNovedades::MESES[(int) ($cab['periodo_mes'] ?? 0)] ?? ($cab['periodo_mes'] ?? '');
-        $periodo = trim($mes . ' ' . ($cab['periodo_anio'] ?? ''));
+        $periodo = CatalogoRol::nombrePeriodo((string) ($cab['tipo_rol'] ?? ''), (int) ($cab['periodo_anio'] ?? 0), (int) ($cab['periodo_mes'] ?? 0), (int) ($cab['numero_periodo'] ?? 0));
         $tipo = CatalogoRol::nombreTipo((string) ($cab['tipo_rol'] ?? ''));
 
         $pdf = new TCPDF('P', 'mm', 'A4', true, 'UTF-8', false);
@@ -126,9 +125,7 @@ class RolPagoPdfService
      */
     public function generarGeneral(array $rol, array $empresa, string $dest = 'I')
     {
-        $mes = CatalogoNovedades::MESES[(int) ($rol['periodo_mes'] ?? 0)] ?? ($rol['periodo_mes'] ?? '');
-        $num = (int) ($rol['numero_periodo'] ?? 0) > 0 ? ' #' . (int) $rol['numero_periodo'] : '';
-        $periodo = trim($mes . ' ' . ($rol['periodo_anio'] ?? '') . $num);
+        $periodo = CatalogoRol::nombrePeriodo((string) ($rol['tipo_rol'] ?? ''), (int) ($rol['periodo_anio'] ?? 0), (int) ($rol['periodo_mes'] ?? 0), (int) ($rol['numero_periodo'] ?? 0));
         $tipo = CatalogoRol::nombreTipo((string) ($rol['tipo_rol'] ?? ''));
 
         $pdf = new TCPDF('L', 'mm', 'A4', true, 'UTF-8', false);

@@ -138,15 +138,10 @@ class RolPagoRepository extends BaseRepository
         return ['rows' => $st->fetchAll(PDO::FETCH_ASSOC), 'total' => $total];
     }
 
-    /** Período como se muestra en el listado ("Julio 2026", "Julio 2026 #2"). */
+    /** Período como se muestra en el listado ("Julio 2026", "Quincena 2 · 16 al 31 de Julio 2026"). */
     private static function exprPeriodoTexto(string $a): string
     {
-        $casos = '';
-        foreach (\App\models\CatalogoNovedades::MESES as $num => $nombre) {
-            $casos .= ' WHEN ' . (int) $num . " THEN '" . str_replace("'", "''", $nombre) . "'";
-        }
-        return "CONCAT(CASE {$a}.periodo_mes{$casos} END, ' ', {$a}.periodo_anio,
-                       CASE WHEN {$a}.numero_periodo > 0 THEN CONCAT(' #', {$a}.numero_periodo) ELSE '' END)";
+        return '(' . \App\models\CatalogoRol::sqlNombrePeriodo($a) . ')';
     }
 
     /** Tipo + período de la corrida ("Rol Mensual Julio 2026"): filtro `corrida:`. */

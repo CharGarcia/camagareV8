@@ -13,7 +13,7 @@
     const form = document.getElementById('formRol');
 
     const TIPOS = { MENSUAL: 'Rol Mensual', QUINCENA: 'Quincena', SEMANAL: 'Semanal' };
-    const ESTILO_TIPO = { MENSUAL: { c: 'primary', i: 'bi-calendar-month' }, QUINCENA: { c: 'dark', i: 'bi-calendar2-week' }, SEMANAL: { c: 'warning', i: 'bi-calendar-week' } };
+    const ESTILO_TIPO = { MENSUAL: { c: 'info', i: 'bi-calendar-month' }, QUINCENA: { c: 'dark', i: 'bi-calendar2-week' }, SEMANAL: { c: 'warning', i: 'bi-calendar-week' } };
     const ESTADOS = { borrador: 'Borrador', generado: 'Generado', pagado: 'Pagado', contabilizado: 'Contabilizado', anulado: 'Anulado' };
     const COLOR = { borrador: 'secondary', generado: 'info', pagado: 'success', contabilizado: 'primary', anulado: 'danger' };
     const MESES = ['', 'Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'];
@@ -171,8 +171,11 @@
     };
 
     function renderVer(rol) {
+        // El texto del período lo arma el servidor (CatalogoRol::nombrePeriodo), igual que en
+        // el listado; el fallback solo cubre una respuesta sin ese campo.
         const mes = MESES[parseInt(rol.periodo_mes, 10)] || rol.periodo_mes;
         const num = parseInt(rol.numero_periodo, 10) > 0 ? ' #' + rol.numero_periodo : '';
+        const periodoTexto = rol.periodo_texto || `${mes} ${rol.periodo_anio}${num}`;
         // Mismo distintivo por tipo que el listado (CatalogoRol::ESTILO_TIPO).
         const est = ESTILO_TIPO[rol.tipo_rol] || { c: 'secondary', i: 'bi-calendar' };
         $('rolver_titulo').innerHTML = `<i class="bi ${est.i} me-1 text-${est.c}"></i>${esc(TIPOS[rol.tipo_rol] || rol.tipo_rol)}`;
@@ -181,7 +184,7 @@
         badge.className = 'badge ms-2 bg-' + (COLOR[rol.estado] || 'secondary');
         badge.classList.remove('d-none');
         rolActual = { id: rol.id, estado: rol.estado, tipo_rol: rol.tipo_rol };
-        $('rolver_periodo').textContent = `${mes} ${rol.periodo_anio}${num}`;
+        $('rolver_periodo').textContent = periodoTexto;
         $('rolver_totales').innerHTML = `Ingresos <b>${money(rol.total_ingresos)}</b> · Egresos <b>${money(rol.total_egresos)}</b> · Neto <b>${money(rol.total_neto)}</b>`;
         renderAvisos(rol.avisos || [], rol.empleados_sin_periodo || []);
 
