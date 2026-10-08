@@ -286,12 +286,12 @@ $vacacionesEmpleado = [
                                     <label class="form-label mb-1 small fw-bold text-muted">Teléfono</label>
                                     <input type="text" class="form-control form-control-sm shadow-none" name="telefono" id="emp_telefono">
                                 </div>
-                                <!-- Fila 3: Dirección · Contacto de Emergencia · Cargas familiares -->
-                                <div class="col-md-6">
+                                <!-- Fila 3: Dirección · Contacto de Emergencia · Cargas familiares · Discapacidad (Sí/No + %) -->
+                                <div class="col-md-4">
                                     <label class="form-label mb-1 small fw-bold text-muted">Dirección</label>
                                     <input type="text" class="form-control form-control-sm shadow-none" name="direccion" id="emp_direccion">
                                 </div>
-                                <div class="col-md-4">
+                                <div class="col-md-3">
                                     <label class="form-label mb-1 small fw-bold text-muted">Contacto de Emergencia</label>
                                     <input type="text" class="form-control form-control-sm shadow-none" name="contacto_emergencia" id="emp_contacto_emergencia" placeholder="Nombre y teléfono">
                                 </div>
@@ -299,18 +299,14 @@ $vacacionesEmpleado = [
                                     <label class="form-label mb-1 small fw-bold text-muted">Cargas familiares</label>
                                     <input type="number" class="form-control form-control-sm shadow-none" name="cargas_familiares" id="emp_cargas_familiares" min="0" max="99" step="1" value="0" inputmode="numeric">
                                 </div>
-                                <!-- Fila 4: Discapacidad · % de discapacidad -->
-                                <div class="col-md-2">
-                                    <label class="form-label mb-1 small fw-bold text-muted">Discapacidad</label>
-                                    <select class="form-select form-select-sm shadow-none" name="discapacidad" id="emp_discapacidad" onchange="window.empToggleDiscapacidad && window.empToggleDiscapacidad()">
-                                        <option value="no">No</option>
-                                        <option value="si">Sí</option>
-                                    </select>
-                                </div>
-                                <div class="col-md-2">
-                                    <label class="form-label mb-1 small fw-bold text-muted">% de discapacidad</label>
+                                <div class="col-md-3">
+                                    <label class="form-label mb-1 small fw-bold text-muted" for="emp_discapacidad">Discapacidad / %</label>
                                     <div class="input-group input-group-sm">
-                                        <input type="number" class="form-control shadow-none text-end" name="porcentaje_discapacidad" id="emp_porcentaje_discapacidad" min="0" max="100" step="1" value="0" inputmode="numeric" readonly>
+                                        <select class="form-select shadow-none" style="max-width: 72px;" name="discapacidad" id="emp_discapacidad" title="¿Tiene discapacidad?" onchange="window.empToggleDiscapacidad && window.empToggleDiscapacidad()">
+                                            <option value="no">No</option>
+                                            <option value="si">Sí</option>
+                                        </select>
+                                        <input type="number" class="form-control shadow-none text-end" name="porcentaje_discapacidad" id="emp_porcentaje_discapacidad" min="0" max="100" step="1" value="0" inputmode="numeric" readonly title="Porcentaje de discapacidad del carné">
                                         <span class="input-group-text">%</span>
                                     </div>
                                 </div>
@@ -320,7 +316,7 @@ $vacacionesEmpleado = [
                         <!-- Panel Laboral -->
                         <div class="tab-pane fade" id="tab-laboral" role="tabpanel">
                             <div class="row g-3">
-                                <!-- Fila 1: Fondos de Reserva · Décimo Tercero · Décimo Cuarto · Aporta al IESS -->
+                                <!-- Fila 1: Fondos de Reserva · Décimo Tercero · Décimo Cuarto · Aporta al IESS · Participa en utilidades -->
                                 <div class="col-md-3">
                                     <label class="form-label mb-1 small fw-bold text-muted">Fondos de Reserva <?= \App\Helpers\PreferenciasHelper::renderEstrellaFavorito('empleados', 'emp_fondos_reserva', 'fondos_reserva') ?><span id="emp_fr_aviso" class="d-none"><i id="emp_fr_aviso_icono" class="bi"></i></span></label>
                                     <select class="form-select form-select-sm shadow-none" name="fondos_reserva" id="emp_fondos_reserva"
@@ -331,7 +327,7 @@ $vacacionesEmpleado = [
                                         <option value="planilla">Planilla IESS</option>
                                     </select>
                                 </div>
-                                <div class="col-md-3">
+                                <div class="col-md-2">
                                     <label class="form-label mb-1 small fw-bold text-muted">Décimo Tercero <?= \App\Helpers\PreferenciasHelper::renderEstrellaFavorito('empleados', 'emp_decimo_tercero', 'decimo_tercero') ?></label>
                                     <select class="form-select form-select-sm shadow-none" name="decimo_tercero" id="emp_decimo_tercero">
                                         <option value="acumula">Acumula</option>
@@ -339,7 +335,7 @@ $vacacionesEmpleado = [
                                         <option value="no_recibe">No recibe</option>
                                     </select>
                                 </div>
-                                <div class="col-md-3">
+                                <div class="col-md-2">
                                     <label class="form-label mb-1 small fw-bold text-muted">Décimo Cuarto <?= \App\Helpers\PreferenciasHelper::renderEstrellaFavorito('empleados', 'emp_decimo_cuarto', 'decimo_cuarto') ?></label>
                                     <select class="form-select form-select-sm shadow-none" name="decimo_cuarto" id="emp_decimo_cuarto">
                                         <option value="acumula">Acumula</option>
@@ -347,9 +343,16 @@ $vacacionesEmpleado = [
                                         <option value="no_recibe">No recibe</option>
                                     </select>
                                 </div>
-                                <div class="col-md-3">
+                                <div class="col-md-2">
                                     <label class="form-label mb-1 small fw-bold text-muted">Aporta al IESS <?= \App\Helpers\PreferenciasHelper::renderEstrellaFavorito('empleados', 'emp_aporta_iess', 'aporta_iess') ?></label>
                                     <select class="form-select form-select-sm shadow-none" name="aporta_iess" id="emp_aporta_iess" onchange="window.toggleIessFields()">
+                                        <option value="si">Sí</option>
+                                        <option value="no">No</option>
+                                    </select>
+                                </div>
+                                <div class="col-md-3">
+                                    <label class="form-label mb-1 small fw-bold text-muted">Participa en utilidades <?= \App\Helpers\PreferenciasHelper::renderEstrellaFavorito('empleados', 'emp_participa_utilidades', 'participa_utilidades') ?></label>
+                                    <select class="form-select form-select-sm shadow-none" name="participa_utilidades" id="emp_participa_utilidades" title="No: queda fuera del reparto del 15% (p. ej. el dueño o el representante legal por mandato)">
                                         <option value="si">Sí</option>
                                         <option value="no">No</option>
                                     </select>
@@ -374,14 +377,6 @@ $vacacionesEmpleado = [
                                 <div class="col-md-2">
                                     <label class="form-label mb-1 small fw-bold text-muted">V. Quincena</label>
                                     <input type="number" step="0.01" class="form-control form-control-sm shadow-none" name="valor_quincena" id="emp_valor_quincena">
-                                </div>
-                                <!-- Fila 3: Participa en utilidades -->
-                                <div class="col-md-3">
-                                    <label class="form-label mb-1 small fw-bold text-muted">Participa en utilidades <?= \App\Helpers\PreferenciasHelper::renderEstrellaFavorito('empleados', 'emp_participa_utilidades', 'participa_utilidades') ?></label>
-                                    <select class="form-select form-select-sm shadow-none" name="participa_utilidades" id="emp_participa_utilidades" title="No: queda fuera del reparto del 15% (p. ej. el dueño o el representante legal por mandato)">
-                                        <option value="si">Sí</option>
-                                        <option value="no">No</option>
-                                    </select>
                                 </div>
                             </div>
                         </div>

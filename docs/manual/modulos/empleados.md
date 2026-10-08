@@ -72,7 +72,7 @@ valor en 0.
 
 ## Discapacidad
 
-En la pestaña **General**, debajo de las cargas familiares, se marca si el empleado
+En la pestaña **General**, en la fila de la dirección, junto a las cargas familiares, se marca si el empleado
 tiene **discapacidad** y su **porcentaje** según el carné. El porcentaje solo se
 puede escribir con *Discapacidad = Sí*; al cambiar a *No* vuelve a 0.
 
