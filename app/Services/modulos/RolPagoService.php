@@ -187,7 +187,6 @@ class RolPagoService
         $lin['pagado']      = $pagado;
         $lin['saldo']       = round($neto - $pagado, 2);
         $lin['estado_pago'] = $pagado <= 0 ? 'pendiente' : ($lin['saldo'] <= 0 ? 'pagado' : 'parcial');
-        $lin['rol_migrado'] = $this->repo->esRolMigrado((int) $lin['id_rol'], $idEmpresa);
         $lin['pagos']       = $this->repo->getEgresosPorDetalle((int) $lin['id'], $idEmpresa);
         return $lin;
     }

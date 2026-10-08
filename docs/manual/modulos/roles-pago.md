@@ -161,9 +161,9 @@ por qué el rol volvió a quedar pendiente; su monto no cuenta como pagado.
 Un rol **migrado del sistema anterior** se trata igual que uno nativo: solo
 cuenta como pagado lo que tenga un egreso enlazado. Si la migración cruzó los
 egresos viejos con esa línea, se muestran igual que los nativos; si no quedó
-ninguno enlazado, el empleado figura **pendiente de pago** y la pestaña lo
-avisa. En ese caso, vuelva a migrar *Egresos* para que se crucen, o registre el
-pago en *Egresos → Nómina*, donde ese rol sí aparece como pendiente.
+ninguno enlazado, el empleado figura **pendiente de pago**. En ese caso, vuelva
+a migrar *Egresos* para que se crucen, o registre el pago en *Egresos → Nómina*,
+donde ese rol sí aparece como pendiente.
 
 ## Asiento contable del rol mensual
 

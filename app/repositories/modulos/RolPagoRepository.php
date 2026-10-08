@@ -1000,19 +1000,6 @@ class RolPagoRepository extends BaseRepository
         return $map;
     }
 
-    /** ¿El rol vino migrado del sistema anterior (ya pagado allá, sin egreso enlazado necesariamente)? */
-    public function esRolMigrado(int $idRol, int $idEmpresa): bool
-    {
-        try {
-            $st = $this->db->prepare("SELECT 1 FROM rol_cabecera rc WHERE rc.id = :r AND rc.id_empresa = :emp
-                                      AND " . self::sqlRolMigrado('rc.id', 'rc.id_empresa'));
-            $st->execute([':r' => $idRol, ':emp' => $idEmpresa]);
-            return (bool) $st->fetchColumn();
-        } catch (\Throwable $e) {
-            return false; // sin tabla de migración → rol nativo
-        }
-    }
-
     /**
      * Egresos que pagan una línea (empleado) del rol, con sus formas de pago: es lo que se
      * muestra en la pestaña «Pago» de la ficha del empleado. Incluye los anulados (marcados

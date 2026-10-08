@@ -550,15 +550,6 @@
                 <span class="small">Saldo: <b class="${(parseFloat(d.saldo) || 0) > 0 ? 'text-danger' : 'text-muted'}">${money(d.saldo)}</b></span>
             </div>`;
 
-        if (d.rol_migrado && !egresos.length) {
-            html += `<div class="alert alert-info py-2 px-3 small mb-3">
-                <i class="bi bi-info-circle me-1"></i>
-                <b>Rol migrado del sistema anterior.</b> Solo cuenta como pagado lo que tenga un egreso enlazado;
-                ningún egreso migrado quedó enlazado a esta línea, así que figura pendiente. Si el pago sí existía en el
-                sistema anterior, vuelva a migrar <b>Egresos</b> para que se cruce, o regístrelo en <b>Egresos → Nómina</b>.
-            </div>`;
-        }
-
         if (!egresos.length) {
             html += `<div class="text-muted text-center py-4"><i class="bi bi-cash-coin fs-3 d-block mb-1"></i>
                 Aún no hay ningún egreso que pague este rol. Use <b>Generar egresos</b> en el rol o regístrelo en <b>Egresos → Nómina</b>.</div>`;
