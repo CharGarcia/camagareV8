@@ -13,7 +13,7 @@
     const form = document.getElementById('formRol');
 
     const TIPOS = { MENSUAL: 'Rol Mensual', QUINCENA: 'Quincena', SEMANAL: 'Semanal' };
-    const ESTILO_TIPO = { MENSUAL: { c: 'primary', i: 'bi-calendar-month' }, QUINCENA: { c: 'info', i: 'bi-calendar2-week' }, SEMANAL: { c: 'warning', i: 'bi-calendar-week' } };
+    const ESTILO_TIPO = { MENSUAL: { c: 'primary', i: 'bi-calendar-month' }, QUINCENA: { c: 'dark', i: 'bi-calendar2-week' }, SEMANAL: { c: 'warning', i: 'bi-calendar-week' } };
     const ESTADOS = { borrador: 'Borrador', generado: 'Generado', pagado: 'Pagado', contabilizado: 'Contabilizado', anulado: 'Anulado' };
     const COLOR = { borrador: 'secondary', generado: 'info', pagado: 'success', contabilizado: 'primary', anulado: 'danger' };
     const MESES = ['', 'Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'];

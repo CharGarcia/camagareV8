@@ -52,11 +52,11 @@ final class CatalogoRol
 
     /**
      * Color Bootstrap e ícono (Bootstrap Icons) de cada tipo de rol, para que el listado y
-     * el modal los distingan de un vistazo: mensual azul, quincena celeste, semanal ámbar.
+     * el modal los distingan de un vistazo: mensual azul, quincena gris oscuro, semanal ámbar.
      */
     public const ESTILO_TIPO = [
         'MENSUAL'  => ['color' => 'primary', 'icono' => 'bi-calendar-month'],
-        'QUINCENA' => ['color' => 'info',    'icono' => 'bi-calendar2-week'],
+        'QUINCENA' => ['color' => 'dark',    'icono' => 'bi-calendar2-week'],
         'SEMANAL'  => ['color' => 'warning', 'icono' => 'bi-calendar-week'],
     ];
 
