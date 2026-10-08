@@ -287,7 +287,7 @@ $vacacionesEmpleado = [
                                     <input type="text" class="form-control form-control-sm shadow-none" name="telefono" id="emp_telefono">
                                 </div>
                                 <!-- Fila 3: Dirección · Contacto de Emergencia · Cargas familiares · Discapacidad (Sí/No + %) -->
-                                <div class="col-md-4">
+                                <div class="col-md-5">
                                     <label class="form-label mb-1 small fw-bold text-muted">Dirección</label>
                                     <input type="text" class="form-control form-control-sm shadow-none" name="direccion" id="emp_direccion">
                                 </div>
@@ -295,9 +295,9 @@ $vacacionesEmpleado = [
                                     <label class="form-label mb-1 small fw-bold text-muted">Contacto de Emergencia</label>
                                     <input type="text" class="form-control form-control-sm shadow-none" name="contacto_emergencia" id="emp_contacto_emergencia" placeholder="Nombre y teléfono">
                                 </div>
-                                <div class="col-md-2">
-                                    <label class="form-label mb-1 small fw-bold text-muted">Cargas familiares</label>
-                                    <input type="number" class="form-control form-control-sm shadow-none" name="cargas_familiares" id="emp_cargas_familiares" min="0" max="99" step="1" value="0" inputmode="numeric">
+                                <div class="col-md-1">
+                                    <label class="form-label mb-1 small fw-bold text-muted text-nowrap" for="emp_cargas_familiares" title="Cargas familiares">Cargas</label>
+                                    <input type="number" class="form-control form-control-sm shadow-none text-center px-1" name="cargas_familiares" id="emp_cargas_familiares" min="0" max="99" step="1" value="0" inputmode="numeric" title="Cargas familiares">
                                 </div>
                                 <div class="col-md-3">
                                     <label class="form-label mb-1 small fw-bold text-muted" for="emp_discapacidad">Discapacidad / %</label>

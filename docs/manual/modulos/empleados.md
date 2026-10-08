@@ -56,8 +56,9 @@ incorrecto, revisar.»).
 
 ## Cargas familiares
 
-En la pestaña **General**, en la última fila junto al contacto de emergencia,
-se registra el **número de cargas familiares** del empleado (0 si no tiene). Es
+En la pestaña **General**, en el campo **Cargas** de la fila de la dirección
+(junto al contacto de emergencia), se registra el **número de cargas
+familiares** del empleado (0 si no tiene). Es
 un dato general de la ficha y sale en el PDF y el Excel del empleado.
 
 También se puede cargar por Excel: la plantilla del botón *Importar* del módulo
