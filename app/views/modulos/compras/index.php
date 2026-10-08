@@ -172,6 +172,7 @@ $to         = $to         ?? 0;
                     ['v' => 'declaracion_iva', 'l' => 'Declaración de IVA'],
                     ['v' => 'gasto_personal',  'l' => 'Gasto personal'],
                 ]],
+                ['tab' => $tC, 'key' => 'rubro',          'label' => 'Rubro gasto personal', 'icon' => 'bi-house-heart',   'type' => 'select',       'grupo' => 'Documento', 'col' => 3, 'options' => \App\Helpers\RubrosGastoPersonal::opciones(true)],
                 ['tab' => $tC, 'key' => 'documento_modificado', 'label' => 'Documento modificado', 'icon' => 'bi-arrow-return-left', 'type' => 'text', 'grupo' => 'Documento', 'col' => 3, 'placeholder' => 'Nº de la factura (NC)'],
                 ['tab' => $tC, 'key' => 'asiento',        'label' => 'Asiento contable',   'icon' => 'bi-journal-check',   'type' => 'select',       'grupo' => 'Documento', 'col' => 3, 'options' => $siNo('Con asiento', 'Sin asiento')],
                 ['tab' => $tC, 'key' => 'orden_compra',   'label' => 'Orden de compra',    'icon' => 'bi-clipboard-check', 'type' => 'select',       'grupo' => 'Documento', 'col' => 3, 'options' => $siNo('Con orden de compra', 'Sin orden de compra')],

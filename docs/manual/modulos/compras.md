@@ -6,7 +6,7 @@ ruta_modulo: modulos/compras
 tipo: modulo
 visibilidad: todos
 etiquetas: compras, compra, factura de compra, buscar compra, buscador, aparecen compras que no busque, resultados que no corresponden, la busqueda trae otras compras, buscar por numero de autorizacion, filtros, filtrar compras, buscar por producto comprado, filtro de fechas, saldo pendiente, estado de pago, chips, ordenar por dos columnas, ordenar por proveedor y fecha, asiento contable, editar asiento, pestaña asiento, proveedor, xml, sri, entrada de mercaderia, vincular producto, retencion, orden de compra, vincular orden, pedido a proveedor, comparar pedido vs facturado, entrega parcial, recibido parcial, cerrar orden, sustento tributario, codigo de sustento, autorizacion, fecha de caducidad, ats, persona natural, obligada a llevar contabilidad, tipo de contribuyente, registro manual, compra fisica, pagar la compra, pestaña pagos, saldo pendiente, valores de terceros, otros conceptos, valores adicionales, bomberos, tasa de basura, recoleccion de basura, planilla de luz, planilla de agua, servicios basicos, informacion adicional, info adicional, nombre muy largo, limite de caracteres, value too long, no se pudo guardar la compra, imprimir, impresora, retencion antes de la factura, enlazar retencion
-version: 2.27
+version: 2.28
 orden: 20
 estado: activo
 ---
@@ -55,6 +55,29 @@ de crédito/débito (04 / 05) entran por su vía propia — la carga del **XML d
 SRI** — y no se capturan a mano desde este selector. Una compra ya registrada con uno de esos
 códigos **conserva su tipo**: al abrirla, el modal agrega su opción y la
 muestra normalmente.
+
+## Deducible y rubro del gasto personal
+
+Cada compra lleva el campo **Deducible**, que decide a qué declaración va:
+
+- **Deducible para declaración IVA**: compras del giro del negocio. Entran en la
+  Declaración de IVA (crédito tributario) y como costos y gastos deducibles en la
+  Declaración de Renta.
+- **Gasto personal**: compras personales del dueño (persona natural). No dan
+  crédito tributario de IVA; sirven para la **rebaja por gastos personales** del
+  impuesto a la renta y para el Anexo de Gastos Personales.
+
+Cuando se elige *Gasto personal* aparece el campo **Rubro gasto personal**, con
+los rubros del formulario del SRI: **Vivienda, Salud, Educación (arte y
+cultura), Alimentación, Vestimenta y Turismo nacional**. Al escoger un proveedor,
+el sistema sugiere el rubro de la última compra de gasto personal que se le
+registró, para no tener que elegirlo cada vez; el campo tiene estrella de
+favorito por si casi siempre es el mismo. Las compras de gasto personal sin rubro
+se muestran como **Sin rubro** en la Declaración de Renta, que avisa cuántas hay
+para clasificarlas.
+
+En el listado se puede filtrar por rubro con `rubro:salud` (o `rubro:sin_rubro`
+para encontrar las que faltan por clasificar).
 
 ## Sustento tributario y datos de autorización
 
@@ -608,6 +631,10 @@ aprobaciones pasa, así que no se paga dos veces.
 
 ## Historial de cambios
 
+- **2.28** — Nuevo campo **Rubro gasto personal** (vivienda, salud, educación,
+  alimentación, vestimenta, turismo) para las compras marcadas *Gasto personal*;
+  se sugiere el rubro de la última compra del proveedor, se filtra con
+  `rubro:` y alimenta el desglose por rubro de la Declaración de Renta.
 - **2.27** — Compras con **descuento** cargadas desde el XML: la ventana mostraba un
   subtotal, IVA o total distinto al del listado (recalculaba desde las líneas y el
   IVA línea por línea), y abrir y guardar la compra sin tocar nada podía cambiar el

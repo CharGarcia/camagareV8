@@ -41,6 +41,9 @@ class AsientoBuilderService
     private const CONTRAPARTIDA_ESPECIFICA_NOMINA = [
         'DECIMO_TERCERO' => 'DECIMOTERCEROPORPAGARNOMINA',
         'DECIMO_CUARTO'  => 'DECIMOCUARTOPORPAGARNOMINA',
+        // Utilidades: el pasivo lo acredita el asiento del 31-dic que genera
+        // modulos/utilidades (botón Contabilizar), no el rol mensual.
+        'UTILIDADES'     => 'PARTICIPACIONTRABAJADORESPORPAGARNOMINA',
         'ANTICIPO'       => 'ANTICIPOSDESCUENTOSNOMINA',
         'PRESTAMO9'      => 'PRESTAMOEMPRESANOMINA',
     ];
@@ -48,6 +51,7 @@ class AsientoBuilderService
     private const NOMBRE_CONTRAPARTIDA_NOMINA = [
         'DECIMO_TERCERO' => 'Décimo Tercero por Pagar',
         'DECIMO_CUARTO'  => 'Décimo Cuarto por Pagar',
+        'UTILIDADES'     => 'Participación Trabajadores por Pagar',
         'ANTICIPO'       => 'Anticipos y Descuentos (anticipo a empleado)',
         'PRESTAMO9'      => 'Préstamos Empresa por Cobrar (desembolso)',
     ];

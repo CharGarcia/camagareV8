@@ -447,6 +447,13 @@ return [
         'id_submodulo' => 169, // submodulos_menu.id (Empleados)
         'legacy_rutas' => [],
     ],
+    // Utilidades (participación de los trabajadores, 15%). El submódulo lo crea
+    // database/migrations/20261008_create_utilidades.sql bajo Nómina; se deja en 0
+    // para que se resuelva por submodulos_menu.ruta (el id difiere por instalación).
+    'modulos/utilidades' => [
+        'id_submodulo' => 0,
+        'legacy_rutas' => [],
+    ],
     'modulos/novedades' => [
         'id_submodulo' => 170, // submodulos_menu.id (Novedades)
         'legacy_rutas' => [],

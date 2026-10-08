@@ -24,6 +24,7 @@ class TipoDocumentoHelper
         'PRESTAMO9'      => 'Préstamo Empresa',
         'DECIMO_CUARTO'  => 'Décimo Cuarto',
         'DECIMO_TERCERO' => 'Décimo Tercero',
+        'UTILIDADES'     => 'Utilidades',
         'MANUAL'         => 'Otros Conceptos',
     ];
 

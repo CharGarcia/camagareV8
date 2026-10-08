@@ -219,9 +219,22 @@
                 <label class="form-label form-label-sm mb-1 fw-semibold">
                   Deducible <?= \App\Helpers\PreferenciasHelper::renderEstrellaFavorito('compras', 'mcDeducible', 'deducible') ?>
                 </label>
-                <select id="mcDeducible" class="form-select form-select-sm">
+                <select id="mcDeducible" class="form-select form-select-sm" onchange="mcToggleRubroGasto()">
                   <option value="declaracion_iva">Deducible para declaración IVA</option>
                   <option value="gasto_personal">Gasto Personal</option>
+                </select>
+              </div>
+
+              <!-- Rubro del gasto personal (solo cuando Deducible = Gasto personal) -->
+              <div class="col-6 col-md-3 d-none" id="mcDivRubroGasto">
+                <label class="form-label form-label-sm mb-1 fw-semibold">
+                  Rubro gasto personal <?= \App\Helpers\PreferenciasHelper::renderEstrellaFavorito('compras', 'mcRubroGasto', 'rubro_gasto_personal') ?>
+                </label>
+                <select id="mcRubroGasto" class="form-select form-select-sm" title="Rubro SRI para la rebaja de gastos personales y el Anexo de Gastos Personales">
+                  <option value="">Sin rubro</option>
+                  <?php foreach (\App\Helpers\RubrosGastoPersonal::CATALOGO as $rgpCod => $rgpNom): ?>
+                    <option value="<?= $rgpCod ?>"><?= htmlspecialchars($rgpNom) ?></option>
+                  <?php endforeach; ?>
                 </select>
               </div>
 

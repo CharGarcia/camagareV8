@@ -19,6 +19,7 @@ FROM (VALUES
     ('nomina', 'Gasto Vacaciones',            'Provisión mensual de vacaciones (gasto).',                         'GASTOVACACIONESNOMINA',       'gasto',  'debe'),
     ('nomina', 'Gasto Fondos de Reserva',     'Provisión / gasto de fondos de reserva.',                          'GASTOFONDOSRESERVANOMINA',    'gasto',  'debe'),
     ('nomina', 'Gasto Desahucio',             'Provisión mensual del desahucio (gasto).',                         'GASTODESAHUCIONOMINA',        'gasto',  'debe'),
+    ('nomina', 'Gasto Participación Trabajadores', 'Gasto por el 15% de participación de los trabajadores en las utilidades (asiento del 31-dic, módulo Utilidades).', 'GASTOPARTICIPACIONTRABAJADORESNOMINA', 'gasto', 'debe'),
     -- HABER (pasivos / cuentas por pagar-cobrar)
     ('nomina', 'IESS por Pagar',              'Aporte personal + patronal del IESS por pagar.',                   'IESSPORPAGARNOMINA',          'pasivo', 'haber'),
     ('nomina', 'Décimo Tercero por Pagar',    'Provisión del décimo tercero por pagar.',                          'DECIMOTERCEROPORPAGARNOMINA', 'pasivo', 'haber'),
@@ -26,6 +27,7 @@ FROM (VALUES
     ('nomina', 'Vacaciones por Pagar',        'Provisión de vacaciones por pagar.',                               'VACACIONESPORPAGARNOMINA',    'pasivo', 'haber'),
     ('nomina', 'Fondos de Reserva por Pagar', 'Fondos de reserva por pagar.',                                     'FONDOSRESERVAPORPAGARNOMINA', 'pasivo', 'haber'),
     ('nomina', 'Desahucio por Pagar',         'Provisión del desahucio por pagar.',                               'DESAHUCIOPORPAGARNOMINA',     'pasivo', 'haber'),
+    ('nomina', 'Participación Trabajadores por Pagar', 'Participación de los trabajadores en las utilidades por pagar (15%); la cancela el egreso que paga Utilidades.', 'PARTICIPACIONTRABAJADORESPORPAGARNOMINA', 'pasivo', 'haber'),
     ('nomina', 'Anticipos y Descuentos',      'Anticipos, préstamos y descuentos recuperados del empleado.',      'ANTICIPOSDESCUENTOSNOMINA',   'activo', 'haber'),
     ('nomina', 'Bancos / Líquido a Pagar',    'Líquido a pagar al empleado (banco o caja).',                      'BANCOSNOMINA',                'activo', 'haber')
 ) AS v(tipo_asiento, referencia, detalle, codigo, tipo_cuenta, debe_haber)

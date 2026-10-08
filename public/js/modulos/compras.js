@@ -287,6 +287,8 @@ function CMG_poblarModal(d) {
     document.getElementById('mcTipoRegistro').value      = d.tipo_registro || 'fisica';
     if (typeof aplicarLimiteAutorizacion === 'function') aplicarLimiteAutorizacion();
     document.getElementById('mcDeducible').value         = d.deducible || 'declaracion_iva';
+    if (document.getElementById('mcRubroGasto')) document.getElementById('mcRubroGasto').value = d.rubro_gasto_personal || '';
+    mcToggleRubroGasto();
     document.getElementById('mcDocumentoModificado').value = d.documento_modificado || '';
     document.getElementById('mcMotivo').value            = d.motivo || '';
 
@@ -729,6 +731,7 @@ function mcActualizarBloqueoCampos() {
 
     // Especial para Deducible y Parte Relacionada (Permitidos)
     document.getElementById('mcDeducible').disabled = false;
+    if (document.getElementById('mcRubroGasto')) document.getElementById('mcRubroGasto').disabled = false;
     document.getElementById('mcMotivo').disabled = false;
     document.getElementById('mcObservaciones').disabled = false;
     document.getElementById('mcParteRelacionada').disabled = false;
@@ -800,6 +803,8 @@ function CMG_resetModal() {
     }
     if (document.getElementById('mcTipoRegistro')) document.getElementById('mcTipoRegistro').value = 'fisica';
     if (document.getElementById('mcDeducible')) document.getElementById('mcDeducible').value = 'declaracion_iva';
+    if (document.getElementById('mcRubroGasto')) document.getElementById('mcRubroGasto').value = '';
+    mcToggleRubroGasto();
     const d_now = new Date();
     const hoy = d_now.getFullYear() + '-' + String(d_now.getMonth() + 1).padStart(2, '0') + '-' + String(d_now.getDate()).padStart(2, '0');
     if (document.getElementById('mcFechaRegistro')) document.getElementById('mcFechaRegistro').value = hoy;
@@ -1171,6 +1176,17 @@ document.getElementById('mcBuscarProveedor').addEventListener('blur', function()
     }
 });
 
+/**
+ * El rubro del gasto personal (vivienda, salud…) solo tiene sentido cuando
+ * Deducible = Gasto personal: se muestra u oculta el campo según eso.
+ */
+window.mcToggleRubroGasto = function () {
+    const div = document.getElementById('mcDivRubroGasto');
+    const ded = document.getElementById('mcDeducible');
+    if (!div || !ded) return;
+    div.classList.toggle('d-none', ded.value !== 'gasto_personal');
+};
+
 async function CMG_buscarProveedores(q) {
     const lista = document.getElementById('mcListaProveedores');
     try {
@@ -1208,6 +1224,14 @@ window.CMG_seleccionarProveedor = function(p) {
     } else {
         document.getElementById('mcDeducible').value = 'declaracion_iva';
     }
+    // Rubro: el de la última compra de gasto personal de ese proveedor (si existe).
+    // Si ya tiene rubro, se asume que la compra es gasto personal aunque el proveedor tenga RUC.
+    const rubroSel = document.getElementById('mcRubroGasto');
+    if (rubroSel) {
+        rubroSel.value = p.ultimo_rubro || '';
+        if (p.ultimo_rubro) document.getElementById('mcDeducible').value = 'gasto_personal';
+    }
+    mcToggleRubroGasto();
 
     // Auto-completar Información de Crédito y Parte Relacionada
     const diasCredito = document.getElementById('mcDiasCredito');
@@ -2240,6 +2264,7 @@ window.CMG_guardar = async function() {
         fecha_caducidad: caducidadVal,
         tipo_registro: tipoRegistro,
         deducible: document.getElementById('mcDeducible').value,
+        rubro_gasto_personal: document.getElementById('mcRubroGasto')?.value || '',
         documento_modificado: document.getElementById('mcDocumentoModificado').value,
         motivo: document.getElementById('mcMotivo').value,
         fecha_emision: fechaEmision,
@@ -2401,6 +2426,7 @@ function mcCapturarEstado() {
     estado.caducidad = document.getElementById('mcFechaCaducidad')?.value || '';
     estado.tipo_registro = document.getElementById('mcTipoRegistro')?.value || '';
     estado.deducible = document.getElementById('mcDeducible')?.value || '';
+    estado.rubro_gasto_personal = document.getElementById('mcRubroGasto')?.value || '';
     estado.documento_modificado = document.getElementById('mcDocumentoModificado')?.value || '';
     estado.motivo = document.getElementById('mcMotivo')?.value || '';
     estado.fecha_emision = document.getElementById('mcFechaEmision')?.value || '';
@@ -2516,6 +2542,8 @@ async function mcEjecutarRestauracion(estado) {
     if (estado.caducidad) document.getElementById('mcFechaCaducidad').value = estado.caducidad;
     if (estado.tipo_registro) document.getElementById('mcTipoRegistro').value = estado.tipo_registro;
     if (estado.deducible) document.getElementById('mcDeducible').value = estado.deducible;
+    if (document.getElementById('mcRubroGasto')) document.getElementById('mcRubroGasto').value = estado.rubro_gasto_personal || '';
+    mcToggleRubroGasto();
     document.getElementById('mcDocumentoModificado').value = estado.documento_modificado || '';
     document.getElementById('mcMotivo').value = estado.motivo || '';
     if (estado.fecha_emision) document.getElementById('mcFechaEmision').value = estado.fecha_emision;

@@ -101,6 +101,7 @@ class ComprasService
             $data['estado'] = $cfgAprob['requiere'] ? self::ESTADO_PENDIENTE : self::ESTADO_REGISTRADO;
 
             $idCompra = $this->repository->insertCabecera($data);
+            $this->repository->setRubroGastoPersonal($idCompra, $idEmpresa, $data['rubro_gasto_personal'] ?? null, (string) ($data['deducible'] ?? ''));
 
             $this->sincronizarDetalles($idCompra, $data['detalles'] ?? []);
             $this->guardarPagos($idCompra, $data['pagos'] ?? []);
@@ -1215,6 +1216,7 @@ class ComprasService
 
             // 1. Actualizar cabecera. Si falla, el catch capturará el error REAL.
             $this->repository->updateCabecera($id, $data);
+            $this->repository->setRubroGastoPersonal($id, (int) $data['id_empresa'], $data['rubro_gasto_personal'] ?? null, (string) ($data['deducible'] ?? ''));
 
             // 2. Procesar el resto solo si la cabecera fue exitosa
             $this->sincronizarDetalles($id, $data['detalles'] ?? []);

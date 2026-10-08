@@ -597,6 +597,12 @@ class EgresoRepository extends BaseRepository
                     FROM egresos_detalle d INNER JOIN egresos_cabecera e ON d.id_egreso = e.id
                     WHERE d.tipo_documento = 'DECIMO_TERCERO' AND e.estado != 'anulado' AND e.eliminado = FALSE AND d.eliminado = FALSE
                     GROUP BY d.id_referencia_documento
+                ),
+                pagado_ut AS (
+                    SELECT d.id_referencia_documento, SUM(d.monto_pagado) AS total_pagado
+                    FROM egresos_detalle d INNER JOIN egresos_cabecera e ON d.id_egreso = e.id
+                    WHERE d.tipo_documento = 'UTILIDADES' AND e.estado != 'anulado' AND e.eliminado = FALSE AND d.eliminado = FALSE
+                    GROUP BY d.id_referencia_documento
                 )
                 SELECT 'ROL' AS tipo_doc_bd, rd.id,
                        (CASE rc.tipo_rol WHEN 'MENSUAL' THEN 'Rol Mensual' WHEN 'QUINCENA' THEN 'Quincena' WHEN 'SEMANAL' THEN 'Semanal' ELSE 'Rol' END)
@@ -676,6 +682,23 @@ class EgresoRepository extends BaseRepository
                 WHERE dtd.id_empleado = :id_emp AND dtd.id_empresa = :id_empresa
                   AND dtc.eliminado = FALSE AND dtd.mensualiza = FALSE AND dtd.valor > 0
                   AND ROUND(dtd.valor - COALESCE(pdt.total_pagado, 0), 2) > 0
+                UNION ALL
+                -- Utilidades (participación 15%): una fila por trabajador y ejercicio, calculada en
+                -- modulos/utilidades. Lo que se paga es el valor tras el tope de 24 SBU (el
+                -- excedente va al IESS, no al trabajador).
+                SELECT 'UTILIDADES' AS tipo_doc_bd, ud.id,
+                       'Utilidades ' || uc.anio AS numero_documento,
+                       uc.fecha_emision,
+                       ud.valor AS monto_total,
+                       COALESCE(put.total_pagado, 0) AS monto_pagado_previo,
+                       (ud.valor - COALESCE(put.total_pagado, 0)) AS saldo_pendiente,
+                       0 AS dias_credito
+                FROM utilidades_detalle ud
+                INNER JOIN utilidades_cabecera uc ON uc.id = ud.id_cabecera
+                LEFT JOIN pagado_ut put ON put.id_referencia_documento = ud.id
+                WHERE ud.id_empleado = :id_emp AND ud.id_empresa = :id_empresa
+                  AND uc.eliminado = FALSE AND ud.valor > 0
+                  AND ROUND(ud.valor - COALESCE(put.total_pagado, 0), 2) > 0
                 ORDER BY numero_documento ASC";
         return $this->query($sql, [':id_emp' => $idEmpleado, ':id_empresa' => $idEmpresa])->fetchAll(PDO::FETCH_ASSOC);
     }

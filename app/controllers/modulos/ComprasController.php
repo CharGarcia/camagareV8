@@ -930,6 +930,7 @@ class ComprasController extends BaseModuloController
             // Metadatos internos de la compra (no forman parte del documento del proveedor).
             $cabecera['observaciones']  = $compra['observaciones'] ?? '';
             $cabecera['deducible']      = $compra['deducible'] ?? '';
+            $cabecera['rubro_gasto_personal'] = $compra['rubro_gasto_personal'] ?? '';
             $cabecera['fecha_registro'] = $compra['fecha_registro'] ?? '';
 
             // Adquirente (comprador) = datos del receptor tomados del XML.
@@ -1399,10 +1400,19 @@ class ComprasController extends BaseModuloController
         $buscar    = trim($_GET['q'] ?? '');
 
         $db  = \App\core\Database::getConnection();
+        // Rubro de gasto personal de la última compra de ese proveedor, para sugerirlo
+        // en el modal (si la columna aún no existe en esta BD, no se consulta).
+        $ultimoRubro = (new \App\repositories\modulos\ComprasRepository())->tieneRubroGastoPersonal()
+            ? "(SELECT c.rubro_gasto_personal FROM compras_cabecera c
+                WHERE c.id_proveedor = p.id AND c.id_empresa = p.id_empresa AND c.eliminado = false
+                  AND c.rubro_gasto_personal IS NOT NULL
+                ORDER BY c.fecha_emision DESC, c.id DESC LIMIT 1)"
+            : 'NULL::varchar';
         $sql = "SELECT p.id, p.razon_social AS nombre, p.identificacion,
                        p.tipo_id_proveedor AS tipo_id, p.email, p.plazo,
                        p.relacionado, p.unidad_tiempo,
-                       COALESCE(icv.nombre, '') AS tipo_id_nombre
+                       COALESCE(icv.nombre, '') AS tipo_id_nombre,
+                       {$ultimoRubro} AS ultimo_rubro
                 FROM proveedores p
                 LEFT JOIN identificador_comprador_vendedor icv ON icv.codigo = p.tipo_id_proveedor
                 WHERE p.id_empresa = ? AND p.eliminado = false

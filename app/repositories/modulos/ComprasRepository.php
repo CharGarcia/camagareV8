@@ -231,6 +231,12 @@ class ComprasRepository extends BaseRepository
                 'id_usuario'       => 'c.created_by',
                 'tipo_registro'    => 'c.tipo_registro',       // electronico / fisica / migrado
                 'deducible'        => 'c.deducible',           // declaracion_iva / gasto_personal
+                // rubro:vivienda … / rubro:sin_rubro (compras de gasto personal sin clasificar)
+                // Solo las compras de gasto personal tienen rubro; las del negocio no
+                // responden a este filtro (ni siquiera a rubro:sin_rubro).
+                'rubro'            => $this->tieneRubroGastoPersonal()
+                    ? "CASE WHEN c.deducible = 'gasto_personal' THEN COALESCE(NULLIF(c.rubro_gasto_personal, ''), 'sin_rubro') END"
+                    : "CASE WHEN c.deducible = 'gasto_personal' THEN 'sin_rubro' END",
                 // asiento:si / asiento:no
                 'asiento'          => "CASE WHEN c.id_asiento_contable IS NULL THEN 'no' ELSE 'si' END",
                 'orden_compra'     => "CASE WHEN c.id_orden_compra IS NULL THEN 'no' ELSE 'si' END",
@@ -317,6 +323,11 @@ class ComprasRepository extends BaseRepository
                     ORDER BY cax.id LIMIT 1
                 ) ca ON TRUE";
         $limite = $perPage > 0 ? " LIMIT $perPage OFFSET $offset" : '';
+        // Rubro del gasto personal: la columna llega con la migración 20261008; mientras no
+        // esté aplicada el listado sigue funcionando (sale NULL).
+        $colRubro = $this->tieneRubroGastoPersonal()
+            ? 'c.rubro_gasto_personal'
+            : 'NULL::varchar AS rubro_gasto_personal';
         $sql = "WITH pagina AS MATERIALIZED (
                     SELECT c.id, ROW_NUMBER() OVER ($orderBy) AS __rn, COUNT(*) OVER () AS __total
                     FROM compras_cabecera c
@@ -333,7 +344,7 @@ class ComprasRepository extends BaseRepository
                        c.created_at, c.updated_at, c.created_by, c.updated_by,
                        c.eliminado, c.deleted_at, c.deleted_by,
                        c.autorizacion_desde, c.autorizacion_hasta, c.fecha_caducidad,
-                       c.tipo_registro, c.deducible, c.documento_modificado, c.motivo,
+                       c.tipo_registro, c.deducible, {$colRubro}, c.documento_modificado, c.motivo,
                        c.id_usuario, c.total_sin_impuestos, c.total_descuento, c.propina,
                        c.tipo_ambiente, c.id_asiento_contable, c.cod_doc_reembolso,
                        c.total_comprobantes_reembolso, c.total_base_imponible_reembolso,
@@ -900,6 +911,29 @@ class ComprasRepository extends BaseRepository
     // ─────────────────────────────────────────────────────────────────────────
     // INSERTS — CABECERA
     // ─────────────────────────────────────────────────────────────────────────
+
+    /** ¿Existe ya compras_cabecera.rubro_gasto_personal (migración 20261008)? */
+    public function tieneRubroGastoPersonal(): bool
+    {
+        return $this->columnaExiste('compras_cabecera', 'rubro_gasto_personal');
+    }
+
+    /**
+     * Guarda el rubro del gasto personal (vivienda, salud, educacion, alimentacion,
+     * vestimenta, turismo) de una compra. Se limpia solo cuando la compra NO es gasto
+     * personal; si la migración aún no está aplicada no hace nada (degrada).
+     */
+    public function setRubroGastoPersonal(int $idCompra, int $idEmpresa, $rubro, string $deducible): void
+    {
+        if (!$this->tieneRubroGastoPersonal()) {
+            return;
+        }
+        $valor = $deducible === 'gasto_personal' ? \App\Helpers\RubrosGastoPersonal::normalizar($rubro) : null;
+        $st = $this->db->prepare(
+            "UPDATE compras_cabecera SET rubro_gasto_personal = ? WHERE id = ? AND id_empresa = ? AND eliminado = false"
+        );
+        $st->execute([$valor, $idCompra, $idEmpresa]);
+    }
 
     public function insertCabecera(array $data): int
     {
