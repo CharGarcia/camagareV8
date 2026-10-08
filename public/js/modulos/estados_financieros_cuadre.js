@@ -75,7 +75,7 @@
             tipos: {
                 consignacion_venta: 'Consignación', retorno_cv: 'Retorno de consignación',
                 FACTURACION_CV: 'Facturación de consignación', cambio_producto_cv: 'Cambio de producto',
-                ajuste_manual: 'Ajuste manual', carga_inventario: 'Carga de inventario', migracion: 'Migración',
+                ajuste_manual: 'Ajuste manual', ajuste_inventario: 'Ajuste de inventario', carga_inventario: 'Carga de inventario', migracion: 'Migración',
                 taller_orden: 'Orden de taller',
             },
         },

@@ -32,6 +32,11 @@ class InventarioService
         return $this->repo;
     }
 
+    private function asientoAjuste(): AjusteInventarioAsientoService
+    {
+        return new AjusteInventarioAsientoService($this->repo, $this->log);
+    }
+
     private function getBodegaService(): BodegaService
     {
         if ($this->bodegaService === null) {
@@ -376,6 +381,12 @@ class InventarioService
         $isIndividual = (isset($data['is_individual']) && $data['is_individual'] == '1');
         $costoUnit    = (float) ($data['costo_unitario'] ?? 0);
         $totalQty     = abs((float) $data['cantidad']);
+        // Solo los ajustes del módulo Inventario generan asiento contable: lo pide el llamador
+        // con 'contabilizar' (la ficha de Producto, cargas, importaciones y saldos iniciales
+        // también pasan por aquí y no lo piden).
+        $contabiliza  = !empty($data['contabilizar'])
+                     && ($data['referencia_tipo'] ?? 'ajuste_manual') === 'ajuste_manual';
+        $idsKardex    = [];
 
         $db = \App\core\Database::getConnection();
         $managedTransaction = !$db->inTransaction();
@@ -404,6 +415,13 @@ class InventarioService
             // Validación de stock para salidas
             $this->repo->lockStock($idProducto, $idBodega, $idEmpresa);
             $stockActualTotal = $this->repo->getStockActual($idProducto, $idBodega, $idEmpresa);
+
+            // Salida de ajuste sin costo: se valora al costo promedio, para que el kardex y el
+            // asiento (Faltante / Inventario) queden con valor.
+            if ($contabiliza && $tipo === 'salida' && $costoUnit <= 0) {
+                $costoUnit = $this->repo->getCostoPromedio($idProducto, $idBodega, $idEmpresa);
+            }
+
             if ($tipo === 'salida') {
                 if ($totalQty > $stockActualTotal) {
                     throw new \Exception("Stock insuficiente en bodega. No se puede registrar una salida de {$totalQty} si solo hay {$stockActualTotal} unidades disponibles.");
@@ -448,9 +466,11 @@ class InventarioService
                     // fecha real del documento original); si no se pasa, registrarMovimiento()
                     // sigue usando CURRENT_TIMESTAMP como siempre.
                     'fecha_movimiento' => $data['fecha_movimiento'] ?? null,
+                    'contabiliza_ajuste' => $contabiliza,
                 ];
 
                 $lastKardexId = $this->repo->registrarMovimiento($kardexData);
+                $idsKardex[]  = $lastKardexId;
                 $this->repo->actualizarStock($idProducto, $idBodega, $idEmpresa, $stockPost, $idUsuario);
 
                 $this->log->registrar(
@@ -465,6 +485,15 @@ class InventarioService
             }
 
             if ($managedTransaction) $db->commit();
+
+            // Asiento FUERA de la transacción: un fallo contable (p. ej. falta una cuenta) no
+            // revierte el ajuste; queda pendiente y lo genera la sincronización automática.
+            // Dentro de una transacción ajena tampoco se genera aquí: lo hará esa misma vía.
+            if ($contabiliza && $managedTransaction) {
+                foreach ($idsKardex as $idK) {
+                    $this->asientoAjuste()->procesarSeguro($idK, $idEmpresa, $idUsuario);
+                }
+            }
             return $lastKardexId;
 
         } catch (\Throwable $e) {
@@ -523,6 +552,12 @@ class InventarioService
             $st = $db->prepare($sql);
             $st->execute([':id' => $id, ':uid' => $idUsuario, ':obs' => $obsAnulado]);
 
+            // Ajuste contabilizado: su asiento se anula en la misma transacción (si el período
+            // contable está cerrado, no se anula ninguno de los dos).
+            if (!empty($mov['contabiliza_ajuste'])) {
+                $this->asientoAjuste()->anularAsiento($mov, $idEmpresa, $idUsuario);
+            }
+
             $this->log->registrar($idUsuario, $idEmpresa, 'ELIMINAR_MOV', 'inventario_kardex', $id, $mov, null);
 
             if ($managedTransaction) $db->commit();
@@ -578,6 +613,11 @@ class InventarioService
             $this->log->registrar($idUsuario, $idEmpresa, 'HABILITAR_MOV', 'inventario_kardex', $id, $mov, null);
 
             if ($managedTransaction) $db->commit();
+
+            // Ajuste contabilizado que vuelve a estar vigente: se le genera de nuevo su asiento.
+            if (!empty($mov['contabiliza_ajuste']) && $managedTransaction) {
+                $this->asientoAjuste()->procesarSeguro($id, $idEmpresa, $idUsuario);
+            }
         } catch (\Throwable $e) {
             if ($managedTransaction && $db->inTransaction()) $db->rollBack();
             throw $e;
@@ -852,6 +892,14 @@ class InventarioService
                 }
             }
 
+            // 2.2 Costo: una salida de ajuste contabilizado sin costo se valora al costo promedio
+            //     (igual que al crearla), para que el asiento no quede en cero.
+            $contabiliza = !empty($movOld['contabiliza_ajuste']);
+            $costoU = (float) ($data['costo_unitario'] ?? 0);
+            if ($contabiliza && $tipo === 'salida' && $costoU <= 0) {
+                $costoU = $this->repo->getCostoPromedio((int) $data['id_producto'], (int) $data['id_bodega'], $idEmpresa);
+            }
+
             // 3. Actualizar registro
             $sql = "UPDATE inventario_kardex SET
                         id_producto = :prod, id_bodega = :bod, tipo_movimiento = :tipo,
@@ -868,8 +916,8 @@ class InventarioService
                 ':bod'        => $data['id_bodega'],
                 ':tipo'       => $tipo,
                 ':cant'       => $finalQty,
-                ':costo_u'    => $data['costo_unitario']  ?? 0,
-                ':costo_t'    => round($newQtyRaw * ($data['costo_unitario'] ?? 0), 2),
+                ':costo_u'    => $costoU,
+                ':costo_t'    => round($newQtyRaw * $costoU, 2),
                 ':stock_ant'  => $stockBase,
                 ':stock_post' => $stockPost,
                 ':lote'       => !empty($data['numero_lote'])     ? $data['numero_lote']     : null,
@@ -885,9 +933,21 @@ class InventarioService
             // 4. Actualizar stock global
             $this->repo->actualizarStock((int)$data['id_producto'], (int)$data['id_bodega'], $idEmpresa, $stockPost, $idUsuario);
 
+            // 5. Ajuste que ya tiene asiento: se actualiza en la misma transacción (si el período
+            //    está cerrado o falta una cuenta, la edición no se guarda y el asiento no se desfasa).
+            $teniaAsiento = $contabiliza && !empty($movOld['id_asiento_contable']);
+            if ($teniaAsiento) {
+                $this->asientoAjuste()->procesarAsientoContable($id, $idEmpresa, $idUsuario);
+            }
+
             $this->log->registrar($idUsuario, $idEmpresa, 'EDITAR_MOV', 'inventario_kardex', $id, $movOld, $data);
 
             if ($managedTransaction) $db->commit();
+
+            // Sin asiento previo (p. ej. faltaba una cuenta): se intenta generarlo ahora.
+            if ($contabiliza && !$teniaAsiento && $managedTransaction) {
+                $this->asientoAjuste()->procesarSeguro($id, $idEmpresa, $idUsuario);
+            }
         } catch (\Throwable $e) {
             if ($managedTransaction && $db->inTransaction()) $db->rollBack();
             throw $e;

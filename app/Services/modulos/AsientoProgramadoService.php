@@ -684,6 +684,7 @@ class AsientoProgramadoService
         'factura_reembolso'          => ['factura_reembolso_cabecera'],
         'recibos_venta'              => ['recibos_venta_cabecera'],
         'consignacion_venta'         => ['consignaciones_ventas'],
+        'ajuste_inventario'          => ['inventario_kardex'],
         'adquisiciones_compras'      => ['compras_cabecera', 'liquidaciones_cabecera'],
         'adquisiciones_importacion'  => ['importaciones_cabecera'],
         'retenciones_venta'          => ['retencion_venta_cabecera'],

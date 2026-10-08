@@ -781,6 +781,29 @@ class SincronizadorAsientosService
             'colsDoc' => ['serie', 'secuencial'],
         ];
 
+        // 7c-ter. Ajustes de inventario del módulo Inventario: una fila del kardex = un asiento.
+        //         Solo los marcados (contabiliza_ajuste, desde el 08-10-2026) y con costo. Sin las
+        //         columnas (SQL 20261008 pendiente) no se agrega el trabajo, para no mostrar un
+        //         aviso de "revise la migración" en Estados Financieros.
+        if ((new \App\repositories\modulos\InventarioRepository())->tieneColumnasAjusteContable()) {
+            $trabajos[] = [
+                'sql'    => "SELECT id FROM inventario_kardex
+                             WHERE id_empresa = ? AND eliminado = false AND contabiliza_ajuste = true
+                               AND id_asiento_contable IS NULL AND referencia_tipo = 'ajuste_manual'
+                               AND ABS(COALESCE(costo_total, 0)) >= 0.005",
+                'params' => [$idEmpresa],
+                'factory' => function() {
+                    return new \App\Services\modulos\AjusteInventarioAsientoService();
+                },
+                'clave'  => 'ajustes_inventario',
+                'nombre' => 'Ajustes de Inventario',
+                'dondeConfigurar' => 'Configuración Contable (Ajustes de Inventario)',
+                'tablaVerif' => 'inventario_kardex',
+                'colAsiento' => 'id_asiento_contable',
+                'colsDoc' => [], // sin número propio: el aviso los muestra como "#id" del movimiento
+            ];
+        }
+
         // 7d. Facturación de Consignaciones (asiento INVERSO del reingreso de inventario).
         //     Solo las ya 'facturada' lo tienen; el enlace es id_asiento_reingreso (no id_asiento_contable).
         $trabajos[] = [

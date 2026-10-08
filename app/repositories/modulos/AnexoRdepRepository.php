@@ -387,6 +387,22 @@ class AnexoRdepRepository extends BaseRepository
         return ['num_ruc' => (string) $emp['ruc'], 'razon_social' => (string) $emp['nombre'], 'estab' => $estab];
     }
 
+    /** Años con tabla de impuesto a la renta cargada (tabla global: sin id_empresa). */
+    public function aniosConTramos(): array
+    {
+        $st = $this->db->query("SELECT DISTINCT anio FROM impuesto_renta_tramos WHERE eliminado = false ORDER BY anio DESC");
+        return array_map('intval', $st->fetchAll(PDO::FETCH_COLUMN));
+    }
+
+    /** Fija la fracción básica y la canasta del anexo (las que se completaron desde la configuración). */
+    public function actualizarParametrosCalculo(int $id, int $idEmpresa, float $fraccionBasica, float $canasta, int $idUsuario): void
+    {
+        $st = $this->db->prepare("UPDATE {$this->table}
+                                     SET fraccion_basica = :fb, canasta_basica = :cb, updated_by = :u, updated_at = CURRENT_TIMESTAMP
+                                   WHERE id = :id AND id_empresa = :e");
+        $st->execute([':fb' => $fraccionBasica, ':cb' => $canasta, ':u' => $idUsuario, ':id' => $id, ':e' => $idEmpresa]);
+    }
+
     /** Firmantes del Formulario 107: representante legal y contador de la empresa. */
     public function getFirmas(int $idEmpresa): array
     {

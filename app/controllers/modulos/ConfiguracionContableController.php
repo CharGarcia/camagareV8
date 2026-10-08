@@ -37,6 +37,7 @@ class ConfiguracionContableController extends BaseModuloController
         'ventas_factura', 'factura_reembolso', 'recibos_venta', 'consignacion_venta', 'adquisiciones_compras',
         'adquisiciones_importacion', 'retenciones_venta', 'retenciones_compra', 'ingresos_egresos', 'cobros_pagos',
         'nomina', 'cierre_ejercicio', 'activos_fijos_alta', 'activos_fijos_depreciacion', 'suscripciones_devengo',
+        'ajuste_inventario',
     ];
     private const SECCIONES_ABRIR = ['general', 'cliente', 'proveedor', 'empleado', 'ingresos', 'egresos', 'cobros', 'pagos'];
 
@@ -161,6 +162,7 @@ class ConfiguracionContableController extends BaseModuloController
             'factura_reembolso' => 'Factura de Reembolso',
             'recibos_venta' => 'Ventas con Recibo',
             'consignacion_venta' => 'Consignaciones en Ventas',
+            'ajuste_inventario' => 'Ajustes de Inventario',
             'adquisiciones_compras' => 'Adquisiciones de Compras/Servicios',
             'adquisiciones_importacion' => 'Importaciones',
             'retenciones_venta' => 'Retenciones en Venta',

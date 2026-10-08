@@ -199,6 +199,8 @@ class AnexoRdepService
     {
         $cab = $this->repo->findById($idAnexo, $idEmpresa);
         if (!$cab) throw new Exception('Anexo no encontrado.');
+        $completados = $this->completarParametrosVacios($cab, $idUsuario);
+        $cab = $this->repo->findById($idAnexo, $idEmpresa) ?? $cab;
         $anio = (int) $cab['anio'];
 
         $roles    = $this->repo->getAcumuladoRoles($idEmpresa, $anio);
@@ -251,7 +253,7 @@ class AnexoRdepService
             throw $e;
         }
         $totales = $this->validar($idAnexo, $idEmpresa, $idUsuario, true);
-        return ['nuevos' => $nuevos, 'actualizados' => $actualizados, 'total' => $totales['trabajadores']];
+        return ['nuevos' => $nuevos, 'actualizados' => $actualizados, 'total' => $totales['trabajadores'], 'parametros_completados' => $completados];
     }
 
     /** Fila por defecto de un trabajador a partir de la ficha y la nómina del año. */
@@ -422,6 +424,10 @@ class AnexoRdepService
     {
         $cab = $this->repo->findById($idAnexo, $idEmpresa);
         if (!$cab) throw new Exception('Anexo no encontrado.');
+        $completados = $this->completarParametrosVacios($cab, $idUsuario);
+        if ($completados !== []) {
+            $cab = $this->repo->findById($idAnexo, $idEmpresa) ?? $cab;
+        }
         $param = $this->parametrosDeCabecera($cab);
         $this->repo->beginTransaction();
         try {
@@ -434,7 +440,52 @@ class AnexoRdepService
             $this->repo->rollBack();
             throw $e;
         }
-        return $this->validar($idAnexo, $idEmpresa, $idUsuario);
+        return $this->validar($idAnexo, $idEmpresa, $idUsuario) + ['parametros_completados' => $completados];
+    }
+
+    /**
+     * Si la fracción básica o la canasta del anexo están en cero (p. ej. el anexo se
+     * abrió antes de cargar la tabla de impuesto a la renta del ejercicio), los toma
+     * de la configuración del año. Solo completa los que están en cero: nunca reemplaza
+     * un valor escrito a mano en la pestaña Informante.
+     * @return array<string, float> parámetros completados (vacío si no hizo falta o no hay configuración)
+     */
+    private function completarParametrosVacios(array $cab, int $idUsuario): array
+    {
+        $fb = (float) $cab['fraccion_basica'];
+        $cfb = (float) $cab['canasta_basica'];
+        if ($fb > 0 && $cfb > 0) return [];
+
+        $conf = $this->parametrosDelAnio((int) $cab['anio']);
+        $out = [];
+        if ($fb <= 0 && $conf['fraccion_basica'] > 0) { $fb = (float) $conf['fraccion_basica']; $out['fraccion_basica'] = $fb; }
+        if ($cfb <= 0 && $conf['canasta_basica'] > 0) { $cfb = (float) $conf['canasta_basica']; $out['canasta_basica'] = $cfb; }
+        if ($out === []) return [];
+
+        $idEmpresa = (int) $cab['id_empresa'];
+        $this->repo->beginTransaction();
+        try {
+            $this->repo->actualizarParametrosCalculo((int) $cab['id'], $idEmpresa, $fb, $cfb, $idUsuario);
+            $this->log->registrar($idUsuario, $idEmpresa, 'COMPLETAR_PARAMETROS', 'anexo_rdep', (int) $cab['id'],
+                ['fraccion_basica' => (float) $cab['fraccion_basica'], 'canasta_basica' => (float) $cab['canasta_basica']], $out);
+            $this->repo->commit();
+        } catch (Exception $e) {
+            $this->repo->rollBack();
+            throw $e;
+        }
+        return $out;
+    }
+
+    /**
+     * Estado de la tabla de impuesto a la renta del ejercicio, para el aviso del anexo.
+     * @return array{sin_tramos: bool, anios_tramos: int[]}
+     */
+    public function estadoTablaRenta(int $anio): array
+    {
+        return [
+            'sin_tramos'   => $this->renta->getTramosAnio($anio) === [],
+            'anios_tramos' => $this->repo->aniosConTramos(),
+        ];
     }
 
     /**

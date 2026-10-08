@@ -751,6 +751,90 @@ class AsientoBuilderService
     }
 
     /**
+     * Asiento de un AJUSTE de inventario hecho desde el módulo Inventario (una fila del kardex
+     * con contabiliza_ajuste = true), a costo:
+     *   ENTRADA: DEBE Inventario            / HABER Sobrante de inventario
+     *   SALIDA : DEBE Faltante / merma      / HABER Inventario
+     * Cuentas del concepto 'ajuste_inventario' (AJUSTE_INVENTARIO, AJUSTE_SOBRANTE,
+     * AJUSTE_FALTANTE). Sin cuenta de Inventario propia se usa la de 'ventas_factura', como en
+     * Consignaciones. Una línea sin cuenta sale con id 0: el service no persiste el asiento.
+     *
+     * @return array<int,array> Líneas del asiento o [] si el movimiento no existe o no tiene costo.
+     */
+    public function generarAsientoAjusteInventario(int $idEmpresa, int $idKardex): array
+    {
+        $db = \App\core\Database::getConnection();
+        $st = $db->prepare(
+            "SELECT tipo_movimiento, cantidad, costo_total
+             FROM inventario_kardex
+             WHERE id = ? AND id_empresa = ? AND eliminado = false
+               AND referencia_tipo = 'ajuste_manual' AND contabiliza_ajuste = true"
+        );
+        $st->execute([$idKardex, $idEmpresa]);
+        $mov = $st->fetch(\PDO::FETCH_ASSOC);
+        if (!$mov) {
+            return [];
+        }
+        $costo = round(abs((float) $mov['costo_total']), 2);
+        if ($costo <= 0) {
+            return [];
+        }
+        $esSalida = $mov['tipo_movimiento'] === 'salida' || (float) $mov['cantidad'] < 0;
+
+        $cuentas = ['AJUSTE_INVENTARIO' => null, 'AJUSTE_SOBRANTE' => null, 'AJUSTE_FALTANTE' => null];
+        foreach ($this->programadoRepo->getReglasGeneralesPorConcepto($idEmpresa, 'ajuste_inventario') as $r) {
+            $codigo = strtoupper((string) ($r['codigo'] ?? ''));
+            if (array_key_exists($codigo, $cuentas) && !empty($r['id_cuenta'])) {
+                $cuentas[$codigo] = [
+                    'id_cuenta'     => (int) $r['id_cuenta'],
+                    'cuenta_codigo' => $r['cuenta_codigo'] ?? '',
+                    'cuenta_nombre' => $r['cuenta_nombre'] ?? '',
+                ];
+            }
+        }
+
+        // Respaldo de la cuenta de Inventario: la de 'ventas_factura'.
+        if ($cuentas['AJUSTE_INVENTARIO'] === null) {
+            foreach ($this->programadoRepo->getReglasGeneralesPorConcepto($idEmpresa, 'ventas_factura') as $r) {
+                if (empty($r['id_cuenta'])) continue;
+                $codigo   = strtoupper($r['codigo'] ?? '');
+                $concepto = strtolower($r['concepto'] ?? '');
+                if (str_contains($codigo, 'INVENTARIO') || str_contains($concepto, 'inventario')) {
+                    $cuentas['AJUSTE_INVENTARIO'] = [
+                        'id_cuenta'     => (int) $r['id_cuenta'],
+                        'cuenta_codigo' => $r['cuenta_codigo'] ?? '',
+                        'cuenta_nombre' => $r['cuenta_nombre'] ?? '',
+                    ];
+                    break;
+                }
+            }
+        }
+
+        // 'concepto' = nombre de la cuenta en Configuración Contable (para el aviso de cuenta faltante).
+        $linea = static function (?array $c, float $debe, float $haber, string $ref, string $concepto): array {
+            return [
+                'id_cuenta_contable' => $c['id_cuenta']     ?? 0,
+                'cuenta_codigo'      => $c['cuenta_codigo'] ?? '',
+                'cuenta_nombre'      => $c['cuenta_nombre'] ?? '',
+                'debe'               => $debe,
+                'haber'              => $haber,
+                'referencia_detalle' => $ref,
+                'concepto'           => $concepto,
+            ];
+        };
+
+        return $esSalida
+            ? [
+                $linea($cuentas['AJUSTE_FALTANTE'], $costo, 0.0, 'Faltante / merma de inventario', 'Faltante / merma de inventario'),
+                $linea($cuentas['AJUSTE_INVENTARIO'], 0.0, $costo, 'Inventario (salida por ajuste)', 'Inventario'),
+            ]
+            : [
+                $linea($cuentas['AJUSTE_INVENTARIO'], $costo, 0.0, 'Inventario (entrada por ajuste)', 'Inventario'),
+                $linea($cuentas['AJUSTE_SOBRANTE'], 0.0, $costo, 'Sobrante de inventario', 'Sobrante de inventario'),
+            ];
+    }
+
+    /**
      * Asiento de un CAMBIO DE PRODUCTOS, a costo. Refleja el neto entre lo que
      * REINGRESA (productos devueltos) y lo que SALE (productos entregados):
      *   - reingreso de lo devuelto: Debe Inventario / Haber Costo de Ventas

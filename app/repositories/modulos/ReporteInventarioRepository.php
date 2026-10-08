@@ -2226,14 +2226,23 @@ class ReporteInventarioRepository extends BaseRepository
         }
         $serie = \App\repositories\ComprobacionContableRepository::NUM_SERIE;
 
+        // Ajustes del módulo Inventario que generan asiento: el "documento" es la propia fila del
+        // kardex (modulo_origen 'ajuste_inventario', id_referencia_origen = k.id). Sin la columna
+        // (SQL 20261008 pendiente) siguen saliendo como 'ajuste_manual' sin asiento, como antes.
+        $conAjustes = (new InventarioRepository())->tieneColumnasAjusteContable();
+        $ajusteTipo = $conAjustes ? "WHEN k.referencia_tipo = 'ajuste_manual' AND k.contabiliza_ajuste THEN 'ajuste_inventario'" : '';
+        $ajusteId   = $conAjustes ? "WHEN k.referencia_tipo = 'ajuste_manual' AND k.contabiliza_ajuste THEN k.id" : '';
+
         $docs = "SELECT CASE WHEN cd.id_compra IS NOT NULL THEN 'compra'
                              WHEN idt.id_importacion IS NOT NULL THEN 'importacion'
                              WHEN k.referencia_tipo = 'SALDO_INICIAL' THEN 'saldo_inicial'
+                             {$ajusteTipo}
                              ELSE CASE k.referencia_tipo {$casos} ELSE k.referencia_tipo END
                         END AS tipo,
                         CASE WHEN cd.id_compra IS NOT NULL THEN cd.id_compra
                              WHEN idt.id_importacion IS NOT NULL THEN idt.id_importacion
                              WHEN k.referencia_tipo = 'SALDO_INICIAL' THEN 0
+                             {$ajusteId}
                              ELSE COALESCE(k.referencia_id, 0)
                         END AS id_doc,
                         k.fecha_movimiento::DATE AS fecha,
@@ -2258,13 +2267,14 @@ class ReporteInventarioRepository extends BaseRepository
 
         return [
             'patron_concepto' => 'INVENTARIO',
-            'conceptos_texto' => 'Inventario (compras, ventas, recibos, importaciones y consignaciones)',
+            'conceptos_texto' => 'Inventario (compras, ventas, recibos, importaciones, consignaciones y ajustes)',
             'signo' => 1,
             'docs' => $docs,
             'nativos' => [
                 'factura_venta' => 'factura_venta', 'recibo_venta' => 'recibo_venta', 'nota_credito' => 'nota_credito',
                 'compra' => 'compra', 'importacion' => 'importacion', 'consignacion_venta' => 'consignacion_venta',
                 'retorno_cv' => 'retorno_cv', 'FACTURACION_CV' => 'FACTURACION_CV', 'cambio_producto_cv' => 'cambio_producto_cv',
+                'ajuste_inventario' => 'ajuste_inventario',
             ],
             'migrados' => $migrados,
             'apertura' => true,
@@ -2277,6 +2287,7 @@ class ReporteInventarioRepository extends BaseRepository
                 'consignacion_venta' => ['consignaciones_ventas', $serie],
                 'retorno_cv' => ['retornos_cv', $serie],
                 'cambio_producto_cv' => ['cambios_producto_cv', $serie],
+                'ajuste_inventario' => ['inventario_kardex', "CONCAT('Ajuste #', x.id)"],
             ],
         ];
     }

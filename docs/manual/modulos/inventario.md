@@ -5,8 +5,8 @@ categoria: Inventario
 ruta_modulo: modulos/inventario
 tipo: modulo
 visibilidad: todos
-etiquetas: inventario, stock, existencias, kardex, movimientos, ajuste, entradas, salidas, bodega, costo, buscar movimientos, buscador, filtros, filtrar movimientos, buscar por lote, buscar por serial, movimientos por bodega, chips, buscar por codigo de barras, buscar por bodega, buscar movimientos de una factura, buscar por mes, imprimir movimiento, pdf del movimiento, comprobante de movimiento, ficha del movimiento, imprimir registro, imprimir un movimiento
-version: 1.8
+etiquetas: inventario, stock, existencias, kardex, movimientos, ajuste, entradas, salidas, bodega, costo, buscar movimientos, buscador, filtros, filtrar movimientos, buscar por lote, buscar por serial, movimientos por bodega, chips, buscar por codigo de barras, buscar por bodega, buscar movimientos de una factura, buscar por mes, imprimir movimiento, pdf del movimiento, comprobante de movimiento, ficha del movimiento, imprimir registro, imprimir un movimiento, asiento del ajuste, contabilidad del ajuste, merma, faltante, sobrante, perdida de inventario, baja de inventario, asiento contable inventario
+version: 1.9
 orden: 20
 estado: activo
 ---
@@ -106,6 +106,37 @@ Para cuadrar muchos productos tras un conteo físico, use una **carga de
 inventario de tipo Ajuste**: se escribe lo contado y el sistema registra solo la
 diferencia.
 
+## Asiento contable del ajuste
+
+Cada ajuste registrado en este módulo (desde la ventana, la importación CSV o la
+ventana de ajuste de la pestaña **Existencias** del Reporte de Inventarios) genera su
+**asiento contable** a costo, para que la cuenta de Inventario siga al stock:
+
+| Ajuste | Debe | Haber |
+|--------|------|-------|
+| Entrada (sobrante) | Inventario | Sobrante de inventario |
+| Salida (faltante, merma, daño) | Faltante / merma de inventario | Inventario |
+
+- **Importe**: cantidad × costo unitario. En una **salida sin costo unitario**, el
+  sistema toma el **costo promedio** del producto en esa bodega y lo deja grabado
+  en el kardex, para que el movimiento y el asiento no queden en cero.
+- **Cuentas**: se configuran en **Configuración Contable → Ajustes de
+  Inventario**. Si no se pone una cuenta de Inventario propia, se usa la de
+  *Ventas con Factura*.
+- **Sin cuentas configuradas**, el ajuste se guarda igual y queda pendiente: el
+  asiento se genera solo en cuanto se configuren las cuentas (al abrir el módulo
+  o desde Estados Financieros).
+- **Editar** el ajuste actualiza su asiento; **anularlo** anula el asiento y
+  **habilitarlo** lo vuelve a generar. Si el período contable del asiento está
+  cerrado, el ajuste no se puede editar ni anular.
+- El asiento se ve en **Asientos Contables** con el origen *Ajuste de
+  inventario* y el número **AI-000001**, **AI-000002**…
+- **No generan asiento**: los ajustes registrados antes de existir esta función,
+  los que hace la ficha de un **Producto** al cambiar su stock, las **cargas de
+  inventario**, las importaciones y los saldos iniciales.
+- Se puede apagar en **Configuración Contable → Módulos que contabilizan →
+  Ajustes de Inventario**.
+
 ## Imprimir un movimiento
 
 Abra el movimiento desde el listado. Arriba de la ventana, antes de las
@@ -153,9 +184,17 @@ problema pero no aparece en el kardex ni tiene stock.
   la entrada.
 - **El costo del kardex no es el que esperaba**: el costo entra con el documento
   que originó el movimiento; revise el precio de esa compra.
+- **El ajuste no tiene asiento contable**: faltan las cuentas en Configuración
+  Contable → Ajustes de Inventario (el aviso de Estados Financieros dice cuál), el
+  ajuste no tiene costo, o *Ajustes de Inventario* está apagado en Módulos que
+  contabilizan.
 
 ## Historial de cambios
 
+- **1.9** — Los **ajustes** del módulo generan su **asiento contable** a costo
+  (Inventario contra Sobrante o Faltante / merma), con las cuentas de
+  Configuración Contable → Ajustes de Inventario. Una salida sin costo unitario se
+  valora al costo promedio. Ver *Asiento contable del ajuste*.
 - **1.8** — Corregido: en el buscador de producto al registrar un movimiento,
   algunos productos aparecían en la lista pero no se podían seleccionar (los que
   tienen comillas en el nombre, como `TUBO 1/2"`, o no tienen código). Además, el

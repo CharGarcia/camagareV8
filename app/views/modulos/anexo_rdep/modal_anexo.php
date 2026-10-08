@@ -116,9 +116,8 @@ $sel = function (array $opciones, string $id, string $name): string {
                                     <input type="text" class="form-control form-control-sm" name="observaciones" id="rdep_c_obs" maxlength="500">
                                 </div>
                                 <div class="col-12">
-                                    <div class="alert alert-warning py-2 px-3 small mb-0 d-none" id="rdep_aviso_tramos">
-                                        <i class="bi bi-exclamation-triangle me-1"></i> No hay tabla de impuesto a la renta cargada para este ejercicio: el impuesto causado sale en cero. Cárguela en Configuración → Impuesto a la renta.
-                                    </div>
+                                    <?php // El texto lo arma anexo_rdep.js con el ejercicio, los años cargados y el enlace. ?>
+                                    <div class="alert alert-warning py-2 px-3 small mb-0 d-none" id="rdep_aviso_tramos"></div>
                                 </div>
                                 <div class="col-12 text-end">
                                     <?php if (!empty($perm['actualizar'])): ?>

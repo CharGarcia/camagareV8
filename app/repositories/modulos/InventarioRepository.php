@@ -363,6 +363,14 @@ class InventarioRepository extends BaseRepository
             $vals .= ", :id_medida";
         }
 
+        // Ajuste que genera asiento contable (solo lo marcan los ajustes del módulo Inventario).
+        // Sin la columna (SQL 20261008 pendiente) el movimiento se graba igual, sin la marca.
+        $contabiliza = !empty($data['contabiliza_ajuste']) && $this->tieneColumnasAjusteContable();
+        if ($contabiliza) {
+            $cols .= ", contabiliza_ajuste";
+            $vals .= ", true";
+        }
+
         $sql = "INSERT INTO inventario_kardex ({$cols}) VALUES ({$vals}) RETURNING id";
         $st = $this->db->prepare($sql);
 
@@ -396,6 +404,34 @@ class InventarioRepository extends BaseRepository
 
         $st->execute($params);
         return (int) $st->fetchColumn();
+    }
+
+    /**
+     * ¿Existen inventario_kardex.contabiliza_ajuste e id_asiento_contable?
+     * (database/20261008_ajustes_inventario_asiento.sql). Una vez por proceso.
+     */
+    public function tieneColumnasAjusteContable(): bool
+    {
+        static $tiene = null;
+        if ($tiene === null) {
+            $st = $this->db->query(
+                "SELECT COUNT(*) FROM information_schema.columns
+                 WHERE table_name = 'inventario_kardex'
+                   AND column_name IN ('contabiliza_ajuste', 'id_asiento_contable')"
+            );
+            $tiene = (int) $st->fetchColumn() === 2;
+        }
+        return $tiene;
+    }
+
+    /** Enlaza (o desvincula, con null) el asiento contable de un ajuste de inventario. */
+    public function updateAsientoContable(int $idKardex, int $idEmpresa, ?int $idAsiento): void
+    {
+        $st = $this->db->prepare(
+            "UPDATE inventario_kardex SET id_asiento_contable = :a
+             WHERE id = :id AND id_empresa = :e"
+        );
+        $st->execute([':a' => $idAsiento, ':id' => $idKardex, ':e' => $idEmpresa]);
     }
 
     /** Entradas ordenadas de más antigua a más nueva (FIFO) */

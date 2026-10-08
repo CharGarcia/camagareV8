@@ -186,8 +186,8 @@ class AnexoRdepController extends BaseModuloController
             'ok'       => true,
             'cabecera' => $cab,
             'detalle'  => $this->service->getDetalle($id, $idEmpresa),
-            'sin_tramos' => (new \App\Services\modulos\ImpuestoRentaEmpleadoService())->getTramosAnio((int) $cab['anio']) === [],
-        ]);
+            'url_tramos' => BASE_URL . '/config/impuesto-renta-tramos?anio=' . (int) $cab['anio'],
+        ] + $this->service->estadoTablaRenta((int) $cab['anio']));
         exit;
     }
 
@@ -207,8 +207,18 @@ class AnexoRdepController extends BaseModuloController
         $this->responderAccion(function () {
             $id = (int) ($_POST['id'] ?? 0);
             $r = $this->service->importar($id, (int) $_SESSION['id_empresa'], (int) $_SESSION['id_usuario']);
-            return ['msg' => "Nómina importada: {$r['nuevos']} trabajador(es) nuevo(s), {$r['actualizados']} actualizado(s).", 'resultado' => $r];
+            return ['msg' => "Nómina importada: {$r['nuevos']} trabajador(es) nuevo(s), {$r['actualizados']} actualizado(s)." . $this->textoParametrosCompletados($r), 'resultado' => $r];
         });
+    }
+
+    /** Aviso de los parámetros del ejercicio que se tomaron de la configuración. */
+    private function textoParametrosCompletados(array $r): string
+    {
+        $c = $r['parametros_completados'] ?? [];
+        $partes = [];
+        if (isset($c['fraccion_basica'])) $partes[] = 'fracción básica ' . number_format((float) $c['fraccion_basica'], 2);
+        if (isset($c['canasta_basica'])) $partes[] = 'canasta familiar básica ' . number_format((float) $c['canasta_basica'], 2);
+        return $partes ? ' Se tomaron de la configuración de impuesto a la renta: ' . implode(' y ', $partes) . '.' : '';
     }
 
     public function recalcularAjax(): void
@@ -217,7 +227,7 @@ class AnexoRdepController extends BaseModuloController
         $this->responderAccion(function () {
             $id = (int) ($_POST['id'] ?? 0);
             $r = $this->service->recalcular($id, (int) $_SESSION['id_empresa'], (int) $_SESSION['id_usuario']);
-            return ['msg' => 'Resumen recalculado y validado.', 'resultado' => $r];
+            return ['msg' => 'Resumen recalculado y validado.' . $this->textoParametrosCompletados($r), 'resultado' => $r];
         });
     }
 

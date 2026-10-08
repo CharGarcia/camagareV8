@@ -793,6 +793,21 @@ class AsientoContableService
                 }
             }
 
+            // Ajuste de inventario: el "documento" es la fila del kardex. Se desvincula para que,
+            // si el ajuste sigue vigente, la sincronización lo vuelva a contabilizar.
+            if ($origenDoc === 'ajuste_inventario' && !empty($asiento['id_referencia_origen'])) {
+                $this->repository->desvincularAsientoGenerico('inventario_kardex', 'id_asiento_contable', (int) $asiento['id_referencia_origen']);
+                $this->logService->registrar(
+                    idUsuario: $idUsuario,
+                    idEmpresa: $idEmpresa,
+                    accion: 'Desvincular Asiento de Ajuste de inventario',
+                    tabla: 'inventario_kardex',
+                    idRegistro: (int) $asiento['id_referencia_origen'],
+                    antes: ['id_asiento_contable' => $idAsiento],
+                    despues: ['id_asiento_contable' => null]
+                );
+            }
+
             // Si el asiento pertenece a un rol de nómina, desvincular rol_cabecera.id_asiento.
             // Un rol MENSUAL puede tener VARIOS asientos activos a la vez (modo por empleado —
             // ver RolAsientoService::contabilizar), así que se desvincula sin condicionar a que

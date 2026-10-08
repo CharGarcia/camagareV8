@@ -87,6 +87,7 @@
             cabecera = json.cabecera;
             detalle = json.detalle || [];
             pintarCabecera(json.sin_tramos);
+            pintarAvisoTramos(json);
             pintarTrabajadores();
             pintarObservaciones();
         } catch (e) {
@@ -94,6 +95,28 @@
         } finally {
             loader(false);
         }
+    }
+
+    // Aviso de tabla de impuesto a la renta: dice el ejercicio que falta, qué años
+    // están cargados y lleva directo a la pantalla de tramos de ese año. También avisa
+    // si la fracción básica o la canasta del anexo siguen en cero.
+    function pintarAvisoTramos(json) {
+        const el = $('rdep_aviso_tramos');
+        if (!el) return;
+        const c = cabecera;
+        const anios = (json.anios_tramos || []).join(', ');
+        const enlace = `<a href="${esc(json.url_tramos || '#')}" target="_blank" rel="noopener" class="alert-link">Cargar la tabla de ${esc(c.anio)}</a>`;
+        let html = '';
+        if (json.sin_tramos) {
+            html = `<i class="bi bi-exclamation-triangle me-1"></i> No hay tabla de impuesto a la renta del ejercicio <b>${esc(c.anio)}</b>`
+                + (anios ? ` (años cargados: ${esc(anios)})` : ' (no hay ningún año cargado)')
+                + `: el impuesto causado sale en cero. ${enlace}. Luego pulse <b>Recalcular</b>.`;
+        } else if ((parseFloat(c.fraccion_basica) || 0) <= 0 || (parseFloat(c.canasta_basica) || 0) <= 0) {
+            html = `<i class="bi bi-exclamation-triangle me-1"></i> La fracción básica o la canasta familiar básica del anexo están en cero y la configuración del ejercicio <b>${esc(c.anio)}</b> no las tiene. `
+                + `Escríbalas aquí o complete los parámetros en la configuración (${enlace}).`;
+        }
+        el.innerHTML = html;
+        el.classList.toggle('d-none', html === '');
     }
 
     function pintarCabecera(sinTramos) {
@@ -111,7 +134,6 @@
         $('rdep_c_pr').value = parseFloat(c.porcentaje_rebaja || 0).toFixed(2);
         $('rdep_c_ipceg').value = parseFloat(c.ipceg || 0).toFixed(3);
         $('rdep_c_obs').value = c.observaciones || '';
-        $('rdep_aviso_tramos').classList.toggle('d-none', !sinTramos);
 
         const graves = parseInt(c.total_graves, 10) || 0;
         const leves = parseInt(c.total_leves, 10) || 0;
@@ -247,6 +269,7 @@
     window.RDEP_recalcular = async function () {
         const json = await accion('recalcularAjax', { id: id() }, 'Recalculando y validando...');
         if (!json) return;
+        Swal.fire({ icon: 'success', title: 'Recalculado', text: json.msg, timer: (json.resultado && Object.keys(json.resultado.parametros_completados || {}).length) ? 3500 : 1300, showConfirmButton: false });
         await cargar(id());
         window.dispatchEvent(new CustomEvent('rdepActualizado'));
     };

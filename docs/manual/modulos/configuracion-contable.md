@@ -5,8 +5,8 @@ categoria: Contabilidad
 ruta_modulo: modulos/configuracion-contable
 tipo: modulo
 visibilidad: admin
-etiquetas: configuracion contable, cuentas por documento, asiento automatico, parametrizacion, ventas, compras, cierre, tipo de produccion, bien, servicio, filtro por año, periodo, listado de proveedores, listado de clientes, cobros y pagos, ingresos y egresos, forma de pago, cuenta bancaria, efectivo, misma cuenta en los dos bloques, formas hermanas, cheques y transferencias, mismo banco, numero de cuenta, nomina, rol de pagos, prestamo quirografario, prestamo hipotecario, prestamo empresa, prestamos iess, cuentas opcionales, costo de ventas, costo de venta, inventario, asiento sin costo, no sale el costo, cuenta de iva del cliente, reglas por cliente, buscar proveedor, buscar cliente, buscar ficha, filtrar fichas, muchos proveedores, cuentas faltantes, modulos que contabilizan, apagar asientos, no generar asientos, no contabilizar, desactivar contabilidad, interruptor, consignaciones sin asiento, aviso de asientos pendientes, asientos pendientes en el balance, proveedores sin cuentas, clientes sin cuentas, productos sin cuentas, pendientes de configurar, retenciones en venta, retenciones en compra, retencion de renta, no aparecen las retenciones, codigo de retencion, catalogo de retenciones sri, codigo ats, codigo del anexo, retencion mal asignada, codigo de retencion no existe, en que documento esta el error, retencion con codigo invalido, sugerencias, sugerir cuentas, proveedores que compran lo mismo, copiar cuentas de otro proveedor, misma cuenta para varios proveedores, gasolineras, proveedores parecidos, subtotal de compras, cuenta de gasto del proveedor, mostrar las demas cuentas, ver todas las cuentas, tipo de asiento no aparece, falta tipo de asiento en el selector, modulo apagado, personalizar asiento contable, tabla de proveedores, detalle de compras, cuenta de subtotal por proveedor, recibos de venta, copiar configuracion de facturas, recibos con otras cuentas, recibo sin asiento, igualar recibos y facturas
-version: 1.36
+etiquetas: configuracion contable, cuentas por documento, asiento automatico, parametrizacion, ventas, compras, cierre, tipo de produccion, bien, servicio, filtro por año, periodo, listado de proveedores, listado de clientes, cobros y pagos, ingresos y egresos, forma de pago, cuenta bancaria, efectivo, misma cuenta en los dos bloques, formas hermanas, cheques y transferencias, mismo banco, numero de cuenta, nomina, rol de pagos, prestamo quirografario, prestamo hipotecario, prestamo empresa, prestamos iess, cuentas opcionales, costo de ventas, costo de venta, inventario, asiento sin costo, no sale el costo, cuenta de iva del cliente, reglas por cliente, buscar proveedor, buscar cliente, buscar ficha, filtrar fichas, muchos proveedores, cuentas faltantes, modulos que contabilizan, apagar asientos, no generar asientos, no contabilizar, desactivar contabilidad, interruptor, consignaciones sin asiento, aviso de asientos pendientes, asientos pendientes en el balance, proveedores sin cuentas, clientes sin cuentas, productos sin cuentas, pendientes de configurar, retenciones en venta, retenciones en compra, retencion de renta, no aparecen las retenciones, codigo de retencion, catalogo de retenciones sri, codigo ats, codigo del anexo, retencion mal asignada, codigo de retencion no existe, en que documento esta el error, retencion con codigo invalido, sugerencias, sugerir cuentas, proveedores que compran lo mismo, copiar cuentas de otro proveedor, misma cuenta para varios proveedores, gasolineras, proveedores parecidos, subtotal de compras, cuenta de gasto del proveedor, mostrar las demas cuentas, ver todas las cuentas, tipo de asiento no aparece, falta tipo de asiento en el selector, modulo apagado, personalizar asiento contable, tabla de proveedores, detalle de compras, cuenta de subtotal por proveedor, recibos de venta, copiar configuracion de facturas, recibos con otras cuentas, recibo sin asiento, igualar recibos y facturas, ajustes de inventario, asiento de ajustes, sobrante de inventario, faltante de inventario, merma, perdida de inventario, baja de inventario
+version: 1.37
 orden: 5
 estado: activo
 ---
@@ -436,11 +436,28 @@ Los tres son **opcionales**: si se dejan vacíos, la cuota se contabiliza en
 configuran en General y también en las **Reglas por Empleado**, donde la cuenta
 del empleado manda sobre la General.
 
+## Ajustes de Inventario: sobrantes y faltantes
+
+El tipo **Ajustes de Inventario** da las cuentas del asiento que genera cada ajuste
+(entrada o salida) del módulo **Inventario**, a costo:
+
+- **Inventario**: sube con una entrada y baja con una salida. Si se deja vacía, se usa
+  la cuenta de Inventario de *Ventas con Factura*.
+- **Sobrante de inventario**: contrapartida de las **entradas** por ajuste (sobrantes
+  de un conteo físico). Normalmente una cuenta de otros ingresos.
+- **Faltante / merma de inventario**: contrapartida de las **salidas** por ajuste
+  (faltantes, mermas, daños). Normalmente una cuenta de gasto.
+
+Se configuran solo en **General**. Mientras falte una cuenta, los ajustes se guardan sin
+asiento y aparecen en el aviso de asientos pendientes con el nombre de la cuenta que
+falta; al configurarla se contabilizan solos. Ver
+[Inventario](modulos/inventario), sección *Asiento contable del ajuste*.
+
 ## Módulos que contabilizan: apagar los asientos de un módulo
 
 El botón **Módulos que contabilizan** (arriba, junto a *Configurar*)
 abre la lista de módulos que generan asientos automáticos, agrupados en Ventas,
-Compras, Tesorería, Consignaciones y Nómina. Cada uno tiene un interruptor. Por
+Compras, Tesorería, Consignaciones, Inventario y Nómina. Cada uno tiene un interruptor. Por
 defecto todos están **encendidos**.
 
 Se apaga un módulo cuando la empresa **no quiere asientos automáticos** de sus
@@ -559,6 +576,10 @@ ingresos o egresos. Solo falta asignar la cuenta.
   regla propia no se listan. Asígneles la categoría o marca en **Productos**.
 
 ## Historial de cambios
+
+- **1.37** — Nuevo tipo de asiento **Ajustes de Inventario** (Inventario, Sobrante y
+  Faltante / merma) para el asiento automático de los ajustes del módulo Inventario, y
+  su interruptor en *Módulos que contabilizan* (grupo Inventario).
 
 - **1.36** — El selector de tipos de asiento solo lista los que la empresa usa (con registros
   en su módulo o con alguna cuenta configurada).

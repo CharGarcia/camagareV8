@@ -627,6 +627,7 @@ class AsientosContablesController extends BaseModuloController
         'cambio_producto_cv' => 'cambios_producto_cv',
         'FACTURACION_CV'     => 'facturacion_cv',
         'importacion'        => 'importaciones',
+        'ajuste_inventario'  => 'ajustes_inventario',
     ];
 
     /**

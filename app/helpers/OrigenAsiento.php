@@ -38,6 +38,7 @@ final class OrigenAsiento
         'retorno_cv'                 => 'Retorno de consignación',
         'cambio_producto_cv'         => 'Cambio de productos',
         'FACTURACION_CV'             => 'Facturación de consignación',
+        'ajuste_inventario'          => 'Ajuste de inventario',
         'nomina'                     => 'Rol de pagos (nómina)',
         'activos_fijos_alta'         => 'Activo fijo: alta',
         'activos_fijos_depreciacion' => 'Activo fijo: depreciación',

@@ -6,7 +6,7 @@ ruta_modulo: modulos/anexo-rdep
 tipo: modulo
 visibilidad: todos
 etiquetas: anexo rdep, rdep, relacion de dependencia, retenciones empleados, impuesto a la renta empleados, formulario 107, anexo anual SRI, RDEP-2025.zip, dimm, sri en linea, gastos personales, rebaja gastos personales, discapacidad, tercera edad, otros empleadores, nomina, roles de pago, decimos, utilidades, xml rdep
-version: 1.3
+version: 1.4
 orden: 32
 estado: activo
 ---
@@ -220,7 +220,14 @@ mouse, muestra la fecha y el correo del último envío.
   nombres y luego los apellidos; corrija el orden en la ficha o edite el
   trabajador en el anexo.
 - **El impuesto causado sale en cero**: falta la tabla de tramos del ejercicio
-  en Configuración → Impuesto a la renta.
+  del anexo. El aviso de la pestaña Informante dice qué año falta, qué años hay
+  cargados y trae un enlace directo a esa tabla. Ojo: la pantalla de tramos
+  abre en el año actual; el anexo suele ser del año anterior. Cargue la tabla
+  del ejercicio y pulse **Recalcular**.
+- **La fracción básica o la canasta del anexo están en cero**: pasa si el anexo
+  se abrió antes de cargar la tabla del ejercicio. Al importar o recalcular se
+  toman solas de la configuración del año; si la configuración tampoco las tiene,
+  escríbalas en la pestaña Informante.
 - **"No se pudo enviar el correo"** al enviar el 107: revise la configuración de
   correo de la empresa (Empresa → Configurar correo) y el correo del empleado.
 - **"El archivo no cumple el esquema del SRI"**: algún valor no respeta el
@@ -230,6 +237,10 @@ mouse, muestra la fecha y el correo del último envío.
 
 ## Historial de cambios
 
+- **1.4** — El aviso de tabla de impuesto a la renta indica el ejercicio que falta,
+  los años cargados y un enlace directo. Al importar o recalcular, la fracción
+  básica y la canasta en cero se completan desde la configuración del año (lo
+  escrito a mano no se reemplaza).
 - **1.3** — Envío del Formulario 107 por correo, a un trabajador o a todos, con
   registro del último envío.
 - **1.2** — Formulario 107 en PDF, de un trabajador o de todos (una página por

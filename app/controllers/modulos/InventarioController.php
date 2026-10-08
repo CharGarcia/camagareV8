@@ -390,6 +390,7 @@ class InventarioController extends BaseModuloController
                 $msg = 'Ajuste actualizado correctamente.';
             } else {
                 $this->requireCrear();
+                $data['contabilizar'] = true; // genera su asiento contable (Ajustes de Inventario)
                 $idKardex = $this->service->ajusteManual($data, $idEmpresa, $idUsuario);
                 $msg = 'Ajuste registrado correctamente.';
             }
@@ -681,6 +682,7 @@ class InventarioController extends BaseModuloController
 
                 $tipoDefault = $_POST['tipo_movimiento'] ?? 'entrada';
                 $data['tipo_movimiento'] = $data['tipo_movimiento'] ?? $tipoDefault;
+                $data['contabilizar']    = true; // igual que el ajuste del modal
 
                 $this->service->ajusteManual($data, $idEmpresa, $idUsuario);
                 $procesados++;

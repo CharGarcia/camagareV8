@@ -105,6 +105,7 @@ $base = BASE_URL;
                         'factura_reembolso'          => 'Factura de Reembolso',
                         'recibos_venta'              => 'Recibos de Venta',
                         'consignacion_venta'         => 'Consignaciones en Ventas',
+                        'ajuste_inventario'          => 'Ajustes de Inventario',
                         'adquisiciones_compras'      => 'Adquisiciones de Compras/Servicios',
                         'adquisiciones_importacion'  => 'Importaciones',
                         'retenciones_venta'          => 'Retenciones en Venta',

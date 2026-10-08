@@ -6,7 +6,7 @@ ruta_modulo: modulos/reporte_inventarios
 tipo: modulo
 visibilidad: todos
 etiquetas: reporte de inventario, comprobar con contabilidad, cuadrar con contabilidad, inventario vs contabilidad, kardex vs contabilidad, valor del inventario contable, cuenta de inventario, no cuadra con contabilidad, no descarga el excel, excel no descarga, excel en blanco, demasiados datos, excel muy grande, filtrar por año, no descarga el pdf, pdf en blanco, pdf muy grande, excel de la consignacion, numero de factura en el excel, numero de retorno en el excel, totales en el excel, existencias, stock por bodega, valorizacion, kardex, faltantes, exportar, auditoria, stock cacheado, corregir stock, consignaciones, stock por lote, por caducidad, que se vence, vencimientos, limpiar filtros, lento, tarda, se cuelga, tarda en abrir, tarda en entrar, busqueda lenta, se recarga la pagina, ordenar por columna, pierde el resultado, no puedo abrir otro modulo mientras carga, primeras 5000 filas, listado recortado, lote, nup, asesor, detalle de consignacion, totales del detalle, pdf del documento relacionado, permisos, pestañas, no veo la pestaña, no aparece consignaciones, no aparece existencias, pestañas que puede ver, pestañas por usuario, ocultar pestañas, me quitaron una pestaña, pdf de la consignacion, estado de la consignacion, imprimir consignacion con saldo, consignacion completa, saldo en poder del cliente, no veo una bodega, bodegas asignadas, acceso a bodegas, solo mi bodega, falta una bodega, no aparece la bodega, codigo de producto en consignacion, codigo del producto en el detalle, codigo como primera columna, columna codigo, codigo de producto en el reporte, ordenar por codigo, lote mas consignacion, que lote tiene cada cliente, lote por cliente, consignacion por lote, con quien salio el lote, entregas por lote, se genera solo, se consulta solo, no muestra datos, boton mostrar, hay que pulsar mostrar, al elegir el producto se pone a cargar, al cambiar el anio se pone a cargar, no quiero que cargue solo, carga sola, consulta automatica, lotes en cero, lote agotado, no muestra lotes vacios, stock cero, lotes sin stock, filas en cero, por que no aparece el lote, lote desaparecio del reporte, boton mostrar bloqueado, no puedo pulsar mostrar, doble clic en mostrar, barra de progreso, porcentaje de avance, cuanto falta, se queda cargando, indicador de carga, stock negativo, por que esta en negativo, saldo negativo, negativo en existencias, seguimiento, trazabilidad del lote, de donde sale el negativo, lote sin entrada, lote duplicado, lote mal escrito, movimientos de otro ambiente, kardex de un lote, filtros no funcionan, no filtra, no coge los filtros, filtro de estado, filtro consignado, saldo a fecha, fecha de corte, saldo inicial, saldo anterior, saldo de arranque, saldo al inicio del mes, kardex empieza en cero, saldo empieza en cero, resumen de cuadre, cuadre de inventario, no cuadra, movimientos y existencias no coinciden, saldo distinto, reverso por cambio a borrador, retorno en borrador, reactivacion, entrada por reactivacion, correcciones, ocultar correcciones, movimientos que se anulan, el saldo no es el stock, filtro de lote en existencias, stock del lote
-version: 1.38
+version: 1.39
 orden: 40
 estado: activo
 ---
@@ -589,8 +589,11 @@ modifica nada.
   Valorización, que multiplica el stock por el último costo.
 - Los filtros de bodega, producto y búsqueda de la pestaña no aplican: la
   contabilidad no distingue bodega ni producto.
-- Ajustes manuales, cargas de inventario, órdenes de taller y saldos iniciales
-  del kardex no generan asiento: salen como *Documento sin asiento*. Las
+- Los **ajustes del módulo Inventario** (y los de la pestaña Existencias) tienen su
+  propio asiento y salen como *Ajuste de inventario*. Los ajustes anteriores a
+  esa función, los que hace la ficha de un producto, las cargas de inventario,
+  las órdenes de taller y los saldos iniciales del kardex no generan asiento:
+  salen como *Documento sin asiento*. Las
   **facturas migradas** del sistema anterior sí tienen asiento, pero solo de la
   venta (sin el costo contra inventario): salen como *Asiento sin cuenta de
   inventario*, con enlace a ese asiento. Una compra
@@ -696,6 +699,7 @@ ahí.
 
 ## Historial de cambios
 
+- **1.39** — **Comprobar con Contabilidad** reconoce los ajustes de inventario que ahora generan asiento (*Ajuste de inventario*); el ajuste de la ventana de la pestaña **Existencias** también genera su asiento (ver el manual de Inventario).
 - **1.38** — El reporte muestra solo documentos de **producción**, aunque la empresa esté configurada en pruebas (ver el artículo *Los reportes solo muestran documentos de producción*).
 - **1.37** — **Pestañas por usuario**: qué pestañas ve cada usuario de nivel 1
   se configura ahora en *Permisos por módulo*, tarjeta **Pestañas que puede

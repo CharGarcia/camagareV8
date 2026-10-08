@@ -1228,6 +1228,8 @@ class ReporteInventariosController extends BaseModuloController
                 'costo_unitario'  => (float) ($_REQUEST['costo_unitario'] ?? 0),
                 'observaciones'   => trim($_REQUEST['observaciones'] ?? '') ?: 'Ajuste manual',
                 'numero_lote'     => trim($_REQUEST['numero_lote'] ?? '') ?: null,
+                // Ajuste desde la pestaña Existencias: como el del módulo Inventario, genera su asiento.
+                'contabilizar'    => true,
             ];
 
             if ($data['id_producto'] <= 0 || $data['id_bodega'] <= 0) {

@@ -323,6 +323,20 @@ return [
         'sigue_a'         => 'consignaciones',
     ],
 
+    // ─── Inventario ─────────────────────────────────────────────────────────
+    // Ajustes (entradas/salidas) hechos desde el módulo Inventario: un asiento por movimiento,
+    // a costo (AjusteInventarioAsientoService). 'ventas_factura' va en la firma porque la
+    // cuenta de Inventario cae a la de Ventas con Factura si no se configura una propia.
+    'ajustes_inventario' => [
+        'nombre'          => 'Ajustes de Inventario',
+        'grupo'           => 'Inventario',
+        'rutas'           => ['modulos/inventario'],
+        'conceptos'       => ['ajuste_inventario'],
+        'conceptos_firma' => ['ventas_factura'],
+        'ayuda'           => 'Las entradas y salidas por ajuste mueven Inventario contra Sobrante o Faltante / merma. '
+                           . 'Apagado, el ajuste solo cambia el stock y la cuenta de Inventario no se entera.',
+    ],
+
     // ─── Nómina ─────────────────────────────────────────────────────────────
     'roles_pago' => [
         'nombre'    => 'Roles de Pago',
