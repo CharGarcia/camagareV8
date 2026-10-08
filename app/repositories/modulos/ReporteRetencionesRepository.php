@@ -29,7 +29,8 @@ class ReporteRetencionesRepository extends BaseRepository
     }
 
     /** Ambiente de la empresa (los documentos filtran por él). */
-    private const AMB = "(SELECT CAST(tipo_ambiente AS VARCHAR(1)) FROM empresas WHERE id = :id_empresa)";
+    /** Regla de reportes: solo documentos de PRODUCCIÓN (ver App\Helpers\AmbienteReporte). */
+    private const AMB = "'2'";
 
     /** Impuestos normalizados (valor canónico usado en las consultas y filtros). */
     public const IMPUESTOS = ['RENTA' => 'Renta', 'IVA' => 'IVA', 'ISD' => 'ISD'];

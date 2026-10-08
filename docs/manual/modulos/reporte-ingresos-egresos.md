@@ -6,7 +6,7 @@ ruta_modulo: modulos/reporte_ingresos_egresos
 tipo: modulo
 visibilidad: todos
 etiquetas: reporte de ingresos y egresos, movimiento de dinero, cobros y pagos, por tercero, forma de pago, concepto, vendedor, asesor, cobros por vendedor, comisiones, asesor del cliente, otros conceptos, saldo inicial, saldos iniciales, exportar, excel detallado, pdf, imprimir, logo en el pdf, totales en el pdf, reporte de ingresos por vendedor, reporte de egresos, pdf por vendedor
-version: 1.6
+version: 1.7
 orden: 30
 estado: activo
 ---
@@ -152,6 +152,7 @@ cobró cada vendedor, qué movimientos hubo por encima de cierto monto.
 
 ## Historial de cambios
 
+- **1.7** — El reporte muestra solo documentos de **producción**, aunque la empresa esté configurada en pruebas (ver el artículo *Los reportes solo muestran documentos de producción*).
 - **1.6** — **PDF rediseñado** con el formato del Reporte de Ventas: logo del
   establecimiento, título según el flujo y la vista (con el vendedor o tercero
   filtrado debajo), caja de filtros aplicados, indicadores, columnas Ingreso y

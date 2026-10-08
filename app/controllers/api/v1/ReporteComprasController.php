@@ -53,7 +53,9 @@ class ReporteComprasController extends ApiBaseController
             'buscar_info' => '',
         ];
 
-        $repo = new ReporteComprasRepository();
+        // App móvil: conserva el ambiente actual de la empresa (no "solo producción") hasta
+        // confirmar el impacto en la cuenta demo de los revisores de Apple (CLAUDE.md §13).
+        $repo = (new ReporteComprasRepository())->usarAmbienteEmpresa();
 
         $this->jsonOk([
             'rango' => ['desde' => $fechaDesde, 'hasta' => $fechaHasta],

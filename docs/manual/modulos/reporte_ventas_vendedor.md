@@ -6,7 +6,7 @@ ruta_modulo: modulos/reporte_ventas_vendedor
 tipo: modulo
 visibilidad: todos
 etiquetas: reporte de ventas por vendedor, reporte por asesor, comisiones, ventas netas, ventas por marca, ventas por categoría, rendimiento de vendedores, subtotal ventas menos notas de credito, subtotal sin impuestos, subtotal nc, total documentos por asesor, cuantas facturas hizo cada vendedor, saldo pendiente por vendedor, cartera por asesor, cuanto le deben a cada vendedor, facturas por cobrar por vendedor, solo mis ventas, cada asesor ve lo suyo, el vendedor no debe ver las ventas de otros, mis comisiones, acceso total, permiso de ver todos, registros propios, cartera del vendedor, mis clientes, clientes asignados, vendedor vinculado, usuario del sistema, nivel de usuario, administrador ve todo, el asesor ve las ventas de todos, filtro vendedor fijo, no ver ventas de otros vendedores, vendedores que puede ver, supervisor de ventas, jefe de ventas, ver ventas de su equipo, ver ventas de otros asesores, boton configurar, configurar vendedores visibles
-version: 2.0
+version: 2.1
 orden: 0
 estado: activo
 ---
@@ -289,6 +289,7 @@ En el filtro *Vendedor* puede elegir uno de ellos o *Todos* (todos los suyos).
 
 ## Historial de cambios
 
+- **2.1** — El reporte muestra solo documentos de **producción**, aunque la empresa esté configurada en pruebas (ver el artículo *Los reportes solo muestran documentos de producción*).
 - **2.0** — **Vendedores que puede ver**: el administrador puede habilitar a un
   usuario de nivel 1 las ventas de vendedores concretos (además del suyo), sin
   darle *Acceso total*. Se configura en *Permisos de módulos*. Se quitó el

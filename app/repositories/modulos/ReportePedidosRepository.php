@@ -40,7 +40,7 @@ class ReportePedidosRepository
     {
         $where = "{$aliasCab}.id_empresa = :id_empresa
                   AND {$aliasCab}.eliminado = false
-                  AND {$aliasCab}.tipo_ambiente = (SELECT CAST(tipo_ambiente AS VARCHAR(1)) FROM empresas WHERE id = :id_empresa)";
+                  AND {$aliasCab}.tipo_ambiente = '2'";
         $params = [':id_empresa' => $idEmpresa];
 
         if ($idUsuarioFiltro !== null) {

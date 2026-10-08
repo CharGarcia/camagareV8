@@ -148,7 +148,7 @@ class AtsRepository extends BaseRepository
                 ) modif ON true
                 WHERE c.id_empresa = :id_empresa
                   AND c.eliminado = false
-                  AND COALESCE(c.tipo_ambiente, '1') = (SELECT CAST(tipo_ambiente AS VARCHAR(1)) FROM empresas WHERE id = :id_empresa)
+                  AND COALESCE(c.tipo_ambiente, '1') = '2'
                   AND c.fecha_emision BETWEEN :desde AND :hasta
                 ORDER BY c.fecha_emision, c.id";
         return $this->query($sql, $params)->fetchAll();
@@ -203,7 +203,7 @@ class AtsRepository extends BaseRepository
                 ) imp ON true
                 WHERE l.id_empresa = :id_empresa
                   AND l.eliminado = false
-                  AND COALESCE(l.tipo_ambiente, '1') = (SELECT CAST(tipo_ambiente AS VARCHAR(1)) FROM empresas WHERE id = :id_empresa)
+                  AND COALESCE(l.tipo_ambiente, '1') = '2'
                   AND l.fecha_emision BETWEEN :desde AND :hasta
                 ORDER BY l.fecha_emision, l.id";
         return $this->query($sql, [
@@ -321,7 +321,7 @@ class AtsRepository extends BaseRepository
                 WHERE v.id_empresa = :id_empresa
                   AND v.eliminado = false
                   AND v.estado = 'autorizado'
-                  AND COALESCE(v.tipo_ambiente, '1') = (SELECT CAST(tipo_ambiente AS VARCHAR(1)) FROM empresas WHERE id = :id_empresa)
+                  AND COALESCE(v.tipo_ambiente, '1') = '2'
                   AND v.fecha_emision BETWEEN :desde AND :hasta
                 ORDER BY v.id";
         return $this->query($sql, [
@@ -406,7 +406,7 @@ class AtsRepository extends BaseRepository
                 WHERE fr.id_empresa = :id_empresa
                   AND fr.eliminado = false
                   AND fr.estado = 'autorizado'
-                  AND COALESCE(fr.tipo_ambiente, '1') = (SELECT CAST(tipo_ambiente AS VARCHAR(1)) FROM empresas WHERE id = :id_empresa)
+                  AND COALESCE(fr.tipo_ambiente, '1') = '2'
                   AND fr.fecha_emision BETWEEN :desde AND :hasta
                 ORDER BY fr.id";
         return $this->query($sql, [
@@ -502,7 +502,7 @@ class AtsRepository extends BaseRepository
                 WHERE id_empresa = :id_empresa
                   AND eliminado = false
                   AND estado IN ('anulado','anulada')
-                  AND COALESCE(tipo_ambiente, '1') = (SELECT CAST(tipo_ambiente AS VARCHAR(1)) FROM empresas WHERE id = :id_empresa)
+                  AND COALESCE(tipo_ambiente, '1') = '2'
                   AND fecha_emision BETWEEN :desde AND :hasta
                 ORDER BY establecimiento, punto_emision, secuencial";
         return $this->query($sql, [

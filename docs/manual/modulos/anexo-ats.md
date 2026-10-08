@@ -6,7 +6,7 @@ ruta_modulo: modulos/anexo-ats
 tipo: modulo
 visibilidad: todos
 etiquetas: ats, anexo transaccional, xml, dimm, declaracion, compras, ventas, anulados, sri, sin ventas, solo compras
-version: 1.7
+version: 1.8
 orden: 30
 estado: activo
 ---
@@ -166,6 +166,7 @@ anexo antes de presentarlo.
 
 ## Historial de cambios
 
+- **1.8** — El reporte muestra solo documentos de **producción**, aunque la empresa esté configurada en pruebas (ver el artículo *Los reportes solo muestran documentos de producción*).
 - **1.7** — Nuevo aviso *Compras: N comprobante(s) sin ninguna base de IVA en su
   detalle*, con la lista de documentos y qué hacer, para explicar el error del
   SRI "al menos una base debe ser mayor a 0.00". Reparación de las notas de

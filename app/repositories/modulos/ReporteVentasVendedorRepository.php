@@ -390,7 +390,7 @@ class ReporteVentasVendedorRepository extends BaseRepository
 
         $where = "{$aliasVenta}.id_empresa = :id_empresa
                   AND {$aliasVenta}.eliminado = false
-                  AND {$aliasVenta}.tipo_ambiente = (SELECT CAST(tipo_ambiente AS VARCHAR(1)) FROM empresas WHERE id = :id_empresa)";
+                  AND {$aliasVenta}.tipo_ambiente = '2'";
 
         if ($conEstado) {
             $where .= " AND " . str_replace('{alias}', $aliasVenta, $f['estado_ok']);

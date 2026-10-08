@@ -42,7 +42,8 @@ class ReporteRetencionesPendientesRepository extends BaseRepository
      */
     private function ambienteEmpresa(int $idEmpresa): string
     {
-        return "(SELECT CAST(tipo_ambiente AS VARCHAR(1)) FROM empresas WHERE id = {$idEmpresa})";
+        // Regla de reportes: solo PRODUCCIÓN (ver App\Helpers\AmbienteReporte).
+        return \App\Helpers\AmbienteReporte::literal();
     }
 
     /** Número EEE-PPP-SSSSSSSSS de la factura (alias v). */

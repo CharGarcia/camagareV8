@@ -259,7 +259,8 @@ class AnexoRdepService
     {
         [$nombres, $apellidos] = $this->partirNombreCompleto((string) $ficha['nombres_apellidos']);
         $tipoId = CatalogoRdep::TIPO_ID_DESDE_FICHA[strtolower((string) $ficha['tipo_id'])] ?? 'C';
-        $discap = $this->esVerdadero($ficha['discapacidad'] ?? false);
+        $pctDiscap = max(0, min(100, (int) ($ficha['porcentaje_discapacidad'] ?? 0)));
+        $discap = $this->esVerdadero($ficha['discapacidad'] ?? false) || $pctDiscap > 0;
         $cargas = $gp ? (int) $gp['numero_cargas_familiares'] : (int) ($ficha['cargas_familiares'] ?? 0);
 
         return [
@@ -272,9 +273,10 @@ class AnexoRdepService
             'residencia'        => '01',
             'pais_residencia'   => CatalogoPaisesSri::ECUADOR,
             'aplica_convenio'   => 'NA',
-            // La ficha solo tiene un sí/no de discapacidad: el porcentaje lo completa el usuario.
+            // Discapacidad y grado desde la ficha del empleado. Si la ficha marca la
+            // discapacidad sin porcentaje, queda en 0 y la validación lo señala como grave.
             'tipo_discap'       => $discap ? '02' : '01',
-            'porcentaje_discap' => 0,
+            'porcentaje_discap' => $discap ? $pctDiscap : 0,
             'tip_id_discap'     => 'N',
             'id_discap'         => '999',
             'ben_galapagos'     => 'NO',

@@ -6,7 +6,7 @@ ruta_modulo: modulos/reporte_ventas
 tipo: modulo
 visibilidad: todos
 etiquetas: reporte de ventas, ventas, cuanto vendi, por cliente, por vendedor, por producto, estadisticas, exportar, pdf, excel, establecimientos, sucursales, matriz, mismo ruc, consolidado por ruc, borradores, borrador, facturas en borrador, incluir borradores, documentos sin autorizar, pendientes de enviar al sri, ordenar, ordenamiento, ordenar por columna, de mayor a menor, quien compro mas, saldo por cobrar, saldo x cobrar, cuanto me debe el cliente, nro facturas, numero de documentos, cartera en el reporte de ventas, acceso total, permiso de ver todos, registros propios, solo mis ventas, no veo las ventas de otro, cada usuario ve lo suyo, documentos migrados no aparecen, cartera del vendedor, mis clientes, clientes asignados, vendedor vinculado, usuario del sistema, el vendedor no ve nada, asesor solo ve sus clientes, nivel de usuario, administrador ve todo, el asesor ve las ventas de todos, imprimir el reporte, logo en el pdf, el pdf sale angosto, el pdf no ocupa la hoja, nombre del producto cortado, filtros aplicados en el pdf, encabezado del pdf, totales repetidos en el pdf, pdf horizontal, numero de pagina, boton buscar, no se actualiza, no cambia al elegir, hay que pulsar buscar, boton amarillo, filtros sin aplicar, unidades vendidas, unidades por mes, cantidades por mes, cuantas unidades vendi, ventas por producto y mes, producto por mes, rotacion mensual, tabla por meses, una columna por mes, marca, categoria, filtrar por marca, filtrar por categoria, ventas de una marca, ventas de una categoria, linea de productos, participacion por producto, porcentaje de ventas, porcentaje de unidades, % venta, % unidades, unidad de medida, total venta sin iva, producto mas vendido, cajero, por cajero, por usuario, ventas por usuario, ventas de un cajero, quien facturo, resumen diario, cierre de caja, cierre del dia, cuadre de caja, arqueo, ventas del dia, formas de pago, efectivo, tarjeta, transferencia, cuanto entro en efectivo, tirilla, ticket, enviar por correo, recibos de venta, recibos no aparecen, no salen los recibos, recibos en borrador, todos los documentos, facturas y recibos juntos, facturas recibos y notas de credito, ventas totales, firmas, realizado por, aprobado por, grafico, ocultar grafico, acordeon, detalle de facturas del dia, listado de recibos, saldo por factura, vendedores que puede ver, solo algunos vendedores, ocultar vendedores, coordinador de zona, ver las ventas de ciertos vendedores
-version: 1.14
+version: 1.15
 orden: 10
 estado: activo
 ---
@@ -476,6 +476,7 @@ El PDF es la misma pantalla en hoja, pensado para imprimir o enviar por correo:
 
 ## Historial de cambios
 
+- **1.15** — El reporte muestra solo documentos de **producción**, aunque la empresa esté configurada en pruebas (ver el artículo *Los reportes solo muestran documentos de producción*).
 - **1.14** — El **PDF del resumen diario** cambia el resumen de cada día: ya no
   lleva las secciones *Documentos* ni *Detalle de impuestos*; en su lugar, tras el
   detalle de documentos, va una sola tabla a todo el ancho, **Resumen de cobros**,

@@ -6,7 +6,7 @@ ruta_modulo: modulos/reporte_pedidos
 tipo: modulo
 visibilidad: todos
 etiquetas: reporte de pedidos, pedidos por cliente, pedidos por producto, pedidos por estado, pedidos pendientes, pedidos procesados, exportar pedidos, cantidad pedida
-version: 1.0
+version: 1.1
 orden: 31
 estado: activo
 ---
@@ -70,4 +70,5 @@ asignados, o cuánta cantidad de un producto se ha pedido en el mes.
 
 ## Historial de cambios
 
+- **1.1** — El reporte muestra solo documentos de **producción**, aunque la empresa esté configurada en pruebas (ver el artículo *Los reportes solo muestran documentos de producción*).
 - **1.0** — Versión inicial.

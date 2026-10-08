@@ -74,7 +74,10 @@ class CuentasPorPagarRepository extends BaseRepository
      */
     private function condAmbiente(string $alias, array $ids): string
     {
-        return $this->condAmbienteDe($alias, $ids);
+        // Regla de reportes: solo documentos de PRODUCCIÓN, en todos los establecimientos
+        // del consolidado (ver App\Helpers\AmbienteReporte). Literal: el planificador
+        // estima bien la selectividad, igual que con los pares de AmbienteEmpresaTrait.
+        return \App\Helpers\AmbienteReporte::condicion($alias);
     }
 
     /**

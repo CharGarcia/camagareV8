@@ -6,7 +6,7 @@ ruta_modulo: modulos/declaracion-renta
 tipo: modulo
 visibilidad: todos
 etiquetas: impuesto a la renta, renta, declaracion de renta, formulario 101, formulario 102, sociedades, persona natural, obligado a llevar contabilidad, no obligado, ingresos, gastos, gastos deducibles, gastos personales, rebaja gastos personales, cargas familiares, canasta basica, tabla progresiva, tramos, fraccion basica, impuesto causado, retenciones que me hicieron, credito tributario, anticipo, saldo a favor, impuesto a pagar, conciliacion tributaria, participacion trabajadores, 15%, utilidad gravable, tarifa 25%, casillero, codigo sri, renta sri, xml sri, pdf, excel, deducible, declaracion de iva, gasto personal, notas de credito, liquidaciones de compra, anual, ejercicio fiscal, marzo, abril
-version: 1.0
+version: 1.3
 orden: 12
 estado: activo
 ---
@@ -247,6 +247,7 @@ con la tabla RIMPE vigente.
 
 ## Historial de cambios
 
+- **1.3** — El reporte muestra solo documentos de **producción**, aunque la empresa esté configurada en pruebas (ver el artículo *Los reportes solo muestran documentos de producción*).
 - **1.2** — Pestaña *Clasificar gastos personales* (rubro por compra y por
   proveedor desde el reporte) y código SRI editable en la pestaña Casilleros.
 - **1.1** — Consolidación por RUC (varios establecimientos) y desglose de gastos

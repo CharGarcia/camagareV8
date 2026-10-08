@@ -6,7 +6,7 @@ ruta_modulo: modulos/empleados
 tipo: modulo
 visibilidad: todos
 etiquetas: empleados, empleado, personal, trabajadores, nomina, ficha, cedula, sueldo, contratacion, credencial, qr personal, asistencia, marcar, rostro, reconocimiento facial, probar rostro, no me reconoce, vacaciones del empleado, periodos de vacaciones, saldo de vacaciones, vacaciones tomadas, vacaciones pagadas, empleados de otro sistema, horario, turno, asignar turno, punto de servicio, atrasos, tratamiento de atrasos, descuento por atrasos, solicitud de vacaciones, solicitar vacaciones, enviar solicitud por correo, aprobar vacaciones, detalle de vacaciones pdf, cedula falsa, cedula invalida, cedula incorrecta, ruc invalido, digito verificador, validar cedula, comprobar cedula, sueldo neto, cuanto gana, liquido a recibir, resumen de sueldo, imprimir, impresora
-version: 1.12
+version: 1.13
 orden: 10
 estado: activo
 ---
@@ -34,6 +34,7 @@ la ficha, el empleado no existe para ninguno de esos procesos.
 | Correo electrónico | Si se llena, debe tener formato válido |
 | Sexo | Debe ser uno de los valores admitidos |
 | Cargas familiares | Número entero, 0 o más. Vacío equivale a 0 |
+| % de discapacidad | De 0 a 100. Con *Discapacidad = Sí* es obligatorio y mayor a 0; con *No* queda en 0 |
 
 ## Aviso de cédula o RUC mal digitados (dígito verificador)
 
@@ -68,6 +69,35 @@ valor en 0.
 > No confundir con las cargas que se declaran **por año** en la pestaña de
 > gastos personales (formulario SRI-GP): esas son las que determinan la rebaja
 > del Impuesto a la Renta y se registran aparte, año por año.
+
+## Discapacidad
+
+En la pestaña **General**, debajo de las cargas familiares, se marca si el empleado
+tiene **discapacidad** y su **porcentaje** según el carné. El porcentaje solo se
+puede escribir con *Discapacidad = Sí*; al cambiar a *No* vuelve a 0.
+
+- Los módulos **Décimo Tercero** y **Décimo Cuarto** toman la marca para el
+  archivo del Ministerio del Trabajo (columna de discapacidad).
+- El **Anexo RDEP** toma la marca y el porcentaje: el trabajador sale con la
+  condición *Trabajador con discapacidad* y, desde el 30%, con la exoneración que
+  corresponde a su grado. Sin el porcentaje, el anexo lo señala como observación
+  grave.
+
+## Participa en utilidades
+
+En la pestaña **Laboral**, junto a los décimos, el campo **Participa en
+utilidades** (por defecto *Sí*) decide si el empleado entra al reparto del 15%
+en el módulo **Utilidades**. Con *No* queda fuera: no recibe y sus días no cuentan
+en el total, así el 10% y el 5% se reparten solo entre quienes tienen derecho.
+Se usa, por ejemplo, para el dueño o el representante legal nombrado por
+mandato, que no están en relación de dependencia. Ante la duda sobre un caso,
+consulte al contador. El cambio se aplica al calcular o recalcular las
+utilidades; un cálculo con pagos ya registrados no se puede recalcular.
+
+Ambos campos salen en el PDF de la ficha y se pueden cargar con la plantilla del
+botón *Importar* del módulo (columnas **PARTICIPA_UTILIDADES** y
+**PORCENTAJE_DISCAPACIDAD** al final, opcionales). El Importador desde Excel de
+Configuración crea los empleados con *Participa = Sí* y sin discapacidad.
 
 ## Ficha en PDF y Excel
 
@@ -260,6 +290,10 @@ producción**: es un catálogo maestro, siempre el mismo.
   podía abrirla.
 
 ## Historial de cambios
+
+- **1.13** — Campos **Discapacidad** y **% de discapacidad** (pestaña General) y
+  **Participa en utilidades** (pestaña Laboral). Salen en el PDF de la ficha y en la
+  plantilla de importación; los usan Utilidades y el Anexo RDEP.
 
 - **1.12** — El botón **PDF** del documento pregunta ahora si se quiere
   **Imprimir** (abre el cuadro de impresión con el documento ya cargado),

@@ -69,7 +69,7 @@ class ReporteConsolidadoRepository extends BaseRepository
     private function condEmpresa(string $alias): string
     {
         return "{$alias}.id_empresa IN ({$this->inEmp}) AND {$alias}.eliminado = false
-                              AND {$alias}.tipo_ambiente = (SELECT CAST(e.tipo_ambiente AS VARCHAR(1)) FROM empresas e WHERE e.id = {$alias}.id_empresa)";
+                              AND {$alias}.tipo_ambiente = '2'";
     }
 
     /** Código del establecimiento dueño del documento (columna `establecimiento`, para el Excel consolidado). */

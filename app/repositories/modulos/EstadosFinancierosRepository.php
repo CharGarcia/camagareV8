@@ -61,7 +61,7 @@ class EstadosFinancierosRepository
             LEFT JOIN asientos_contables_detalle ad ON pc.id = ad.id_cuenta_contable AND ad.eliminado = false
                 $centroCostoFilter
                 $proyectoFilter
-            LEFT JOIN asientos_contables_cabecera ac ON ad.id_asiento = ac.id AND ac.eliminado = false AND ac.id_empresa = pc.id_empresa AND ac.tipo_ambiente = (SELECT CAST(tipo_ambiente AS VARCHAR(1)) FROM empresas WHERE id = :id_empresa)
+            LEFT JOIN asientos_contables_cabecera ac ON ad.id_asiento = ac.id AND ac.eliminado = false AND ac.id_empresa = pc.id_empresa AND ac.tipo_ambiente = '2'
             WHERE pc.id_empresa = :id_empresa 
               AND pc.eliminado = false
             GROUP BY pc.id, pc.codigo, pc.nombre, pc.nivel, pc.codigo_sri, pc.supercias_esf, pc.supercias_eri, pc.supercias_ecp_codigo, pc.supercias_ecp_subcodigo
@@ -122,7 +122,7 @@ class EstadosFinancierosRepository
                 AND ac.estado = 'contabilizado'
                 AND ac.id_empresa = pc.id_empresa
                 AND ac.fecha_asiento BETWEEN :fecha_inicio AND :fecha_fin
-                AND ac.tipo_ambiente = (SELECT CAST(tipo_ambiente AS VARCHAR(1)) FROM empresas WHERE id = :id_empresa)
+                AND ac.tipo_ambiente = '2'
             WHERE pc.id_empresa = :id_empresa
               AND pc.eliminado = false
               AND pc.codigo LIKE '3%'
@@ -171,7 +171,7 @@ class EstadosFinancierosRepository
                 AND ac.estado = 'contabilizado'
                 AND ac.id_empresa = pc.id_empresa
                 AND ac.fecha_asiento BETWEEN :fecha_inicio AND :fecha_fin
-                AND ac.tipo_ambiente = (SELECT CAST(tipo_ambiente AS VARCHAR(1)) FROM empresas WHERE id = :id_empresa)
+                AND ac.tipo_ambiente = '2'
             WHERE pc.id_empresa = :id_empresa
               AND pc.eliminado = false
             GROUP BY pc.id, pc.codigo, pc.nombre, pc.nivel, pc.supercias_esf, pc.supercias_eri
@@ -215,7 +215,7 @@ class EstadosFinancierosRepository
               AND ac.eliminado = false
               AND ac.estado = 'contabilizado'
               AND ac.fecha_asiento BETWEEN :fecha_inicio AND :fecha_fin
-              AND ac.tipo_ambiente = (SELECT CAST(tipo_ambiente AS VARCHAR(1)) FROM empresas WHERE id = :id_empresa)
+              AND ac.tipo_ambiente = '2'
               AND COALESCE(ac.tipo_comprobante, '') <> 'apertura'
               AND EXISTS (
                     SELECT 1
@@ -254,7 +254,7 @@ class EstadosFinancierosRepository
                 AND ac.estado = 'contabilizado'
                 AND ac.id_empresa = pc.id_empresa
                 AND ac.fecha_asiento BETWEEN :fecha_inicio AND :fecha_fin
-                AND ac.tipo_ambiente = (SELECT CAST(tipo_ambiente AS VARCHAR(1)) FROM empresas WHERE id = :id_empresa)
+                AND ac.tipo_ambiente = '2'
             WHERE pc.id_empresa = :id_empresa
               AND pc.eliminado = false
             GROUP BY pc.id, pc.codigo, pc.nombre, pc.nivel, pc.codigo_sri, pc.supercias_esf, pc.supercias_eri,
@@ -283,7 +283,7 @@ class EstadosFinancierosRepository
               AND ac.estado = 'contabilizado'
               AND ac.fecha_asiento = :fecha_inicio
               AND COALESCE(ac.tipo_comprobante, '') <> 'apertura'
-              AND ac.tipo_ambiente = (SELECT CAST(tipo_ambiente AS VARCHAR(1)) FROM empresas WHERE id = :id_empresa)
+              AND ac.tipo_ambiente = '2'
             GROUP BY ac.id, ac.fecha_asiento, ac.tipo_comprobante, ac.concepto
             HAVING COUNT(ad.id) >= 4
                AND SUM(CASE WHEN pc.codigo ~ '^[4567]' THEN 1 ELSE 0 END) = 0
@@ -369,7 +369,7 @@ class EstadosFinancierosRepository
                 AND ac.estado = 'contabilizado'
                 AND ac.id_empresa = :id_empresa
                 AND ac.fecha_asiento BETWEEN :fecha_inicio AND :fecha_fin
-                AND ac.tipo_ambiente = (SELECT CAST(tipo_ambiente AS VARCHAR(1)) FROM empresas WHERE id = :id_empresa)
+                AND ac.tipo_ambiente = '2'
             WHERE ad.eliminado = false
               $centroCostoFilter
               $proyectoFilter
@@ -418,7 +418,7 @@ class EstadosFinancierosRepository
         $sql = "SELECT DISTINCT extract(year from fecha_asiento) as anio 
                 FROM asientos_contables_cabecera 
                 WHERE id_empresa = :id_empresa AND eliminado = false 
-                AND tipo_ambiente = (SELECT CAST(tipo_ambiente AS VARCHAR(1)) FROM empresas WHERE id = :id_empresa)
+                AND tipo_ambiente = '2'
                 ORDER BY anio DESC";
         $st = $this->db->prepare($sql);
         $st->execute(['id_empresa' => $idEmpresa]);
@@ -456,7 +456,7 @@ class EstadosFinancierosRepository
                      AND ac.fecha_asiento >= :f_inicio 
                      AND ac.fecha_asiento <= :f_fin 
                      AND pc.codigo LIKE :codigo_cuenta
-                     AND ac.tipo_ambiente = (SELECT CAST(tipo_ambiente AS VARCHAR(1)) FROM empresas WHERE id = :id_empresa)";
+                     AND ac.tipo_ambiente = '2'";
 
         $params = [
             ':id_empresa' => $idEmpresa,

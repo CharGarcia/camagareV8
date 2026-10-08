@@ -6,7 +6,7 @@ ruta_modulo: modulos/mayores
 tipo: modulo
 visibilidad: todos
 etiquetas: mayor, mayores, libro mayor, movimientos de cuenta, saldo de cuenta, auxiliar, cuadre, pdf mayor, imprimir mayor
-version: 1.3
+version: 1.4
 orden: 40
 estado: activo
 ---
@@ -87,6 +87,7 @@ exportaciones quedan bloqueados.
 
 ## Historial de cambios
 
+- **1.4** — El reporte muestra solo documentos de **producción**, aunque la empresa esté configurada en pruebas (ver el artículo *Los reportes solo muestran documentos de producción*).
 - **1.3** — La columna **Documento** queda vacía cuando el asiento no tiene
   documento de origen (antes repetía el número del comprobante). Los asientos
   manuales migrados del sistema anterior, que mostraban un código aleatorio

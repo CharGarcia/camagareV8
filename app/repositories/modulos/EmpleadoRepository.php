@@ -88,10 +88,37 @@ class EmpleadoRepository extends BaseRepository
     }
 
     /**
+     * Columnas de la ficha que se escriben SOLO si el dato viene en $data y la
+     * columna ya existe en la base (database/migrations/20261008_empleados_utilidades_discapacidad.sql):
+     * así un alta o edición que no las trae (importador por Excel, llamadas parciales)
+     * no las pisa con un valor por defecto, y el código no falla si se despliega antes
+     * que el SQL.
+     * @return array<string, mixed> columna => valor ya convertido para PDO
+     */
+    private function columnasOpcionales(array $data): array
+    {
+        $out = [];
+        $siNo = fn($v) => in_array(strtolower((string) $v), ['si', 'sí', '1', 't', 'true'], true) ? 'true' : 'false';
+        if (array_key_exists('participa_utilidades', $data) && $this->columnaExiste($this->table, 'participa_utilidades')) {
+            $out['participa_utilidades'] = $siNo($data['participa_utilidades']);
+        }
+        if (array_key_exists('discapacidad', $data) && $this->columnaExiste($this->table, 'discapacidad')) {
+            $out['discapacidad'] = $siNo($data['discapacidad']);
+        }
+        if (array_key_exists('porcentaje_discapacidad', $data) && $this->columnaExiste($this->table, 'porcentaje_discapacidad')) {
+            $out['porcentaje_discapacidad'] = max(0, min(100, (int) $data['porcentaje_discapacidad']));
+        }
+        return $out;
+    }
+
+    /**
      * Crear un nuevo empleado.
      */
     public function create(array $data): int
     {
+        $opcionales = $this->columnasOpcionales($data);
+        $colsOpc = $opcionales ? ', ' . implode(', ', array_keys($opcionales)) : '';
+        $valsOpc = $opcionales ? ', :' . implode(', :', array_keys($opcionales)) : '';
         $sql = "INSERT INTO {$this->table} (
                     id_empresa, tipo_id, identificacion,
                     nombres_apellidos, direccion, email, telefono,
@@ -100,7 +127,7 @@ class EmpleadoRepository extends BaseRepository
                     fondos_reserva, aporta_iess, decimo_tercero, decimo_cuarto,
                     aporte_personal, aporte_patronal, sueldo_base, valor_semanal, valor_quincena,
                     region, cargo, lugar_trabajo, horario_trabajo,
-                    departamento, codigo_sectorial_iess, atraso_modo, excluir_calculo_ir,
+                    departamento, codigo_sectorial_iess, atraso_modo, excluir_calculo_ir{$colsOpc},
                     created_by, updated_by, created_at, updated_at, eliminado
                 ) VALUES (
                     :id_empresa, :tipo_id, :identificacion,
@@ -110,12 +137,14 @@ class EmpleadoRepository extends BaseRepository
                     :fondos_reserva, :aporta_iess, :decimo_tercero, :decimo_cuarto,
                     :aporte_personal, :aporte_patronal, :sueldo_base, :valor_semanal, :valor_quincena,
                     :region, :cargo, :lugar_trabajo, :horario_trabajo,
-                    :departamento, :codigo_sectorial_iess, :atraso_modo, :excluir_calculo_ir,
+                    :departamento, :codigo_sectorial_iess, :atraso_modo, :excluir_calculo_ir{$valsOpc},
                     :id_u, :id_u, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, false
                 )";
 
         $st = $this->db->prepare($sql);
-        $st->execute([
+        $paramsOpc = [];
+        foreach ($opcionales as $c => $v) $paramsOpc[':' . $c] = $v;
+        $st->execute($paramsOpc + [
             ':id_empresa'           => $data['id_empresa'],
             ':tipo_id'              => $data['tipo_id'],
             ':identificacion'       => $data['identificacion'],
@@ -159,6 +188,9 @@ class EmpleadoRepository extends BaseRepository
      */
     public function update(int $id, int $idEmpresa, array $data): bool
     {
+        $opcionales = $this->columnasOpcionales($data);
+        $setOpc = '';
+        foreach (array_keys($opcionales) as $c) $setOpc .= "\n                    {$c} = :{$c},";
         $sql = "UPDATE {$this->table} SET
                     tipo_id = :tipo_id,
                     identificacion = :identificacion,
@@ -190,13 +222,15 @@ class EmpleadoRepository extends BaseRepository
                     departamento = :departamento,
                     codigo_sectorial_iess = :codigo_sectorial_iess,
                     atraso_modo = :atraso_modo,
-                    excluir_calculo_ir = :excluir_calculo_ir,
+                    excluir_calculo_ir = :excluir_calculo_ir,{$setOpc}
                     updated_by = :updated_by,
                     updated_at = CURRENT_TIMESTAMP
                 WHERE id = :id AND id_empresa = :id_empresa AND eliminado = false";
 
         $st = $this->db->prepare($sql);
-        return $st->execute([
+        $paramsOpc = [];
+        foreach ($opcionales as $c => $v) $paramsOpc[':' . $c] = $v;
+        return $st->execute($paramsOpc + [
             ':tipo_id'              => $data['tipo_id'],
             ':identificacion'       => $data['identificacion'],
             ':nombres_apellidos'    => mb_strtoupper($data['nombres_apellidos']),

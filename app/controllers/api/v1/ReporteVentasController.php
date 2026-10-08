@@ -68,7 +68,9 @@ class ReporteVentasController extends ApiBaseController
             'modulos/reporte_ventas'
         ));
 
-        $repo = new ReporteVentasRepository();
+        // App móvil: conserva el ambiente actual de la empresa (no "solo producción") hasta
+        // confirmar el impacto en la cuenta demo de los revisores de Apple (CLAUDE.md §13).
+        $repo = (new ReporteVentasRepository())->usarAmbienteEmpresa();
 
         $this->jsonOk([
             'rango' => ['desde' => $fechaDesde, 'hasta' => $fechaHasta],

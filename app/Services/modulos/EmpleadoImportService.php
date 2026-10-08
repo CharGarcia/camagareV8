@@ -18,7 +18,8 @@ use Exception;
  * DIRECCION, FECHA_NACIMIENTO, SEXO, CARGO, DEPARTAMENTO, SUELDO_BASE,
  * VALOR_SEMANAL, VALOR_QUINCENA, REGION, APORTA_IESS, FONDOS_RESERVA,
  * DECIMO_TERCERO, DECIMO_CUARTO, BANCO, TIPO_CUENTA, NUMERO_CUENTA, FECHA_INGRESO,
- * CARGAS_FAMILIARES (opcional; las plantillas antiguas sin esta columna siguen valiendo).
+ * CARGAS_FAMILIARES, PARTICIPA_UTILIDADES y PORCENTAJE_DISCAPACIDAD (las tres opcionales;
+ * las plantillas antiguas sin estas columnas siguen valiendo).
  */
 class EmpleadoImportService
 {
@@ -117,7 +118,28 @@ class EmpleadoImportService
             'cargas_familiares'     => max(0, (int) trim((string) ($f[22] ?? 0))),
             'estado'                => 'activo',
             'periodos'              => $periodos,
-        ];
+        ] + $this->opcionalesUtilidadesDiscapacidad($f);
+    }
+
+    /**
+     * Columnas opcionales del final de la plantilla: PARTICIPA_UTILIDADES (si/no, vacío = si)
+     * y PORCENTAJE_DISCAPACIDAD (0-100; mayor a 0 marca la discapacidad). Solo se envían
+     * si la columna trae algo, para no alterar a quien usa la plantilla antigua.
+     */
+    private function opcionalesUtilidadesDiscapacidad(array $f): array
+    {
+        $out = [];
+        $part = strtolower(trim((string) ($f[23] ?? '')));
+        if ($part !== '') {
+            $out['participa_utilidades'] = in_array($part, ['no', 'n', 'false', '0'], true) ? 'no' : 'si';
+        }
+        $pct = trim((string) ($f[24] ?? ''));
+        if ($pct !== '') {
+            $p = max(0, min(100, (int) $pct));
+            $out['discapacidad'] = $p > 0 ? 'si' : 'no';
+            $out['porcentaje_discapacidad'] = $p;
+        }
+        return $out;
     }
 
     private function resolverBanco($nombre): ?int

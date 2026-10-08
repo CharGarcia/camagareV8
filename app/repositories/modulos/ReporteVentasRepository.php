@@ -33,10 +33,26 @@ class ReporteVentasRepository extends BaseRepository
         $this->inEmp = implode(',', $ids);
     }
 
-    /** Ambiente actual de la empresa DUEÑA del documento (correlacionado por fila). */
+    /**
+     * Regla de reportes: solo documentos de PRODUCCIÓN (ver App\Helpers\AmbienteReporte).
+     * La API de la app móvil llama usarAmbienteEmpresa() y conserva el comportamiento anterior
+     * (ambiente actual de la empresa dueña del documento) hasta confirmar el impacto en la
+     * cuenta demo de los revisores de Apple (CLAUDE.md §13).
+     */
+    private bool $ambienteDeEmpresa = false;
+
+    public function usarAmbienteEmpresa(bool $si = true): static
+    {
+        $this->ambienteDeEmpresa = $si;
+        return $this;
+    }
+
     private function condAmbiente(string $alias): string
     {
-        return "{$alias}.tipo_ambiente = (SELECT CAST(e.tipo_ambiente AS VARCHAR(1)) FROM empresas e WHERE e.id = {$alias}.id_empresa)";
+        if ($this->ambienteDeEmpresa) {
+            return "{$alias}.tipo_ambiente = (SELECT CAST(e.tipo_ambiente AS VARCHAR(1)) FROM empresas e WHERE e.id = {$alias}.id_empresa)";
+        }
+        return \App\Helpers\AmbienteReporte::condicion($alias);
     }
 
     /**
@@ -494,7 +510,7 @@ class ReporteVentasRepository extends BaseRepository
         }
 
         $empresaAny = "ANY(ARRAY[{$this->inEmp}])";
-        $ambienteNota = "AND (n.tipo_ambiente IS NULL OR n.tipo_ambiente = (SELECT CAST(e.tipo_ambiente AS VARCHAR(1)) FROM empresas e WHERE e.id = n.id_empresa))";
+        $ambienteNota = "AND (n.tipo_ambiente IS NULL OR " . $this->condAmbiente('n') . ")";
 
         return $ctes
             . "\n            , retenido_sal AS (" . AbonosVentaSql::cteRetenidoPorFactura($empresaAny) . ")"
@@ -1718,7 +1734,7 @@ class ReporteVentasRepository extends BaseRepository
     private function ctePorDocResumen(): string
     {
         $empresaAny   = "ANY(ARRAY[{$this->inEmp}])";
-        $ambienteNota = "AND (n.tipo_ambiente IS NULL OR n.tipo_ambiente = (SELECT CAST(e.tipo_ambiente AS VARCHAR(1)) FROM empresas e WHERE e.id = n.id_empresa))";
+        $ambienteNota = "AND (n.tipo_ambiente IS NULL OR " . $this->condAmbiente('n') . ")";
         return ",
             cobrado AS (SELECT tipo, id, SUM(monto) AS total FROM cobros GROUP BY tipo, id),
             retenido AS (" . AbonosVentaSql::cteRetenidoPorFactura($empresaAny) . "),

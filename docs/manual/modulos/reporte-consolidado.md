@@ -6,7 +6,7 @@ ruta_modulo: modulos/reporte_consolidado
 tipo: modulo
 visibilidad: todos
 etiquetas: reporte consolidado, todas las transacciones, resumen general, compras, ventas, facturas, recibos, retenciones, notas de credito, notas de debito, liquidaciones de compra, cierre de periodo, establecimientos, sucursales, matriz, mismo ruc, consolidado por ruc
-version: 1.2
+version: 1.3
 orden: 51
 estado: activo
 ---
@@ -119,6 +119,7 @@ documentos de toda la empresa a quien tenga acceso al reporte.
 
 ## Historial de cambios
 
+- **1.3** — El reporte muestra solo documentos de **producción**, aunque la empresa esté configurada en pruebas (ver el artículo *Los reportes solo muestran documentos de producción*).
 - **1.2** — Corregido: en el detalle de retenciones, una línea cuyo código aparece más de una
   vez en el catálogo del SRI salía **duplicada**. Además, el concepto de las retenciones de
   renta se toma por su **código ATS** (antes podía mostrar otro concepto, p. ej. 323I en lugar

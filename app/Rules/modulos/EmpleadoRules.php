@@ -55,6 +55,16 @@ class EmpleadoRules
             throw new Exception('Opción de décimo cuarto no válida.');
         }
 
+        if (array_key_exists('porcentaje_discapacidad', $data)) {
+            $pct = (int) $data['porcentaje_discapacidad'];
+            if ($pct < 0 || $pct > 100) {
+                throw new Exception('El porcentaje de discapacidad debe estar entre 0 y 100.');
+            }
+            if (($data['discapacidad'] ?? 'no') === 'si' && $pct <= 0) {
+                throw new Exception('Indique el porcentaje de discapacidad que consta en el carné (lo usa el Anexo RDEP).');
+            }
+        }
+
         if (!empty($data['region']) && !in_array($data['region'], ['costa', 'sierra', 'oriente', 'insular'])) {
             throw new Exception('Región seleccionada no válida.');
         }

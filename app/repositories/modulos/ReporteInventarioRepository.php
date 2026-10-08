@@ -813,14 +813,9 @@ class ReporteInventarioRepository extends BaseRepository
      */
     private function tipoAmbienteEmpresa(int $idEmpresa): ?string
     {
-        static $cache = [];
-        if (!array_key_exists($idEmpresa, $cache)) {
-            $st = $this->db->prepare("SELECT CAST(tipo_ambiente AS VARCHAR(1)) FROM empresas WHERE id = :id");
-            $st->execute([':id' => $idEmpresa]);
-            $valor = $st->fetchColumn();
-            $cache[$idEmpresa] = $valor === false ? null : $valor;
-        }
-        return $cache[$idEmpresa];
+        // Regla de reportes: solo documentos de PRODUCCIÓN, sin importar el ambiente actual
+        // de la empresa (ver App\Helpers\AmbienteReporte).
+        return \App\Helpers\AmbienteReporte::PRODUCCION;
     }
 
     /**

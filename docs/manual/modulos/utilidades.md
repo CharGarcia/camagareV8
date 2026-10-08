@@ -6,7 +6,7 @@ ruta_modulo: modulos/utilidades
 tipo: modulo
 visibilidad: todos
 etiquetas: utilidades, participacion trabajadores, 15%, reparto de utilidades, 10% tiempo, 5% cargas familiares, cargas, ex trabajadores, tope 24 sbu, ministerio de trabajo, salarios en linea, informe empresarial, pago de utilidades, abril, asiento 31 de diciembre, participacion trabajadores por pagar
-version: 1.2
+version: 1.3
 orden: 61
 estado: activo
 ---
@@ -115,7 +115,10 @@ y Excel descargan el listado tal como está filtrado y ordenado.
 ## Reglas de negocio
 
 - **Quién participa**: todo trabajador o ex trabajador con al menos un día
-  laborado dentro del ejercicio. Los ex trabajadores se muestran en gris.
+  laborado dentro del ejercicio, salvo los que tienen **Participa en utilidades =
+  No** en su ficha (por ejemplo, el dueño o el representante legal por mandato):
+  esos no reciben y sus días no cuentan en el total. Los ex trabajadores se
+  muestran en gris.
 - **10% por tiempo**: monto × días del trabajador ÷ suma de días de todos.
 - **5% por cargas**: monto × (días × cargas del trabajador) ÷ suma de (días ×
   cargas) de todos. Si **ningún** trabajador tiene cargas, el 5% se reparte por
@@ -163,7 +166,11 @@ y Excel descargan el listado tal como está filtrado y ordenado.
 - **"La fecha corresponde a un período contable cerrado"**: diciembre del
   ejercicio está cerrado; reábralo o pida al contador que registre el asiento.
 - **Un trabajador no aparece**: no tiene período de empleo dentro del
-  ejercicio en su ficha (pestaña de períodos), o está eliminado.
+  ejercicio en su ficha (pestaña de períodos), está eliminado o tiene
+  *Participa en utilidades = No* en la pestaña Laboral de su ficha.
+- **Quiero sacar al dueño del reparto**: en su ficha de empleado, pestaña
+  Laboral, ponga *Participa en utilidades = No* y vuelva a calcular (solo si aún
+  no hay pagos registrados).
 - **El archivo del Ministerio es rechazado por las columnas**: el formato de
   carga del Sistema de Salarios en Línea puede cambiar de un año a otro.
   Compare el encabezado del CSV con la plantilla vigente del Ministerio y avise
@@ -171,6 +178,8 @@ y Excel descargan el listado tal como está filtrado y ordenado.
 
 ## Historial de cambios
 
+- **1.3** — Se excluye del reparto a los empleados con *Participa en utilidades =
+  No* en su ficha (dueño, representante legal por mandato).
 - **1.2** — Pestaña **Asiento contable** en el modal, con el asiento del 31 de
   diciembre generado por Contabilizar.
 - **1.1** — Listado con el diseño estándar (buscador con filtros, columnas por

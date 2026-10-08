@@ -6,7 +6,7 @@ ruta_modulo: modulos/balance-comprobacion
 tipo: modulo
 visibilidad: todos
 etiquetas: balance de comprobacion, balance de sumas y saldos, cuadre contable, debe haber, saldo deudor acreedor, comprobacion de saldos, sumas y saldos
-version: 1.1
+version: 1.2
 orden: 45
 estado: activo
 ---
@@ -62,6 +62,7 @@ que faltan sin que usted lo haya decidido.
 
 ## Historial de cambios
 
+- **1.2** — El reporte muestra solo documentos de **producción**, aunque la empresa esté configurada en pruebas (ver el artículo *Los reportes solo muestran documentos de producción*).
 - **1.1** — El aviso de asientos pendientes ya no muestra la sección **Otros
   avisos**; mientras el aviso no se resuelve, **Generar** y las exportaciones
   quedan bloqueados.

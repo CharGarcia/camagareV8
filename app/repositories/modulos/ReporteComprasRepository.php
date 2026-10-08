@@ -32,10 +32,25 @@ class ReporteComprasRepository extends BaseRepository
         $this->inEmp = implode(',', $ids);
     }
 
-    /** Ambiente actual de la empresa DUEÑA del documento (correlacionado por fila). */
+    /**
+     * Regla de reportes: solo documentos de PRODUCCIÓN (ver App\Helpers\AmbienteReporte).
+     * La API de la app móvil llama usarAmbienteEmpresa() y conserva el comportamiento anterior
+     * hasta confirmar el impacto en la cuenta demo de Apple (CLAUDE.md §13).
+     */
+    private bool $ambienteDeEmpresa = false;
+
+    public function usarAmbienteEmpresa(bool $si = true): static
+    {
+        $this->ambienteDeEmpresa = $si;
+        return $this;
+    }
+
     private function condAmbiente(string $alias): string
     {
-        return "{$alias}.tipo_ambiente = (SELECT CAST(e.tipo_ambiente AS VARCHAR(1)) FROM empresas e WHERE e.id = {$alias}.id_empresa)";
+        if ($this->ambienteDeEmpresa) {
+            return "{$alias}.tipo_ambiente = (SELECT CAST(e.tipo_ambiente AS VARCHAR(1)) FROM empresas e WHERE e.id = {$alias}.id_empresa)";
+        }
+        return \App\Helpers\AmbienteReporte::condicion($alias);
     }
 
     /**
@@ -501,7 +516,7 @@ class ReporteComprasRepository extends BaseRepository
                 FROM compras_cabecera c
                 LEFT JOIN comprobantes_autorizados ca ON ca.codigo_comprobante = c.tipo_comprobante
                 WHERE c.id_empresa = :id_empresa AND c.eliminado = false
-                  AND c.tipo_ambiente = (SELECT CAST(tipo_ambiente AS VARCHAR(1)) FROM empresas WHERE id = :id_empresa)
+                  AND c.tipo_ambiente = '2'
                 ORDER BY c.tipo_comprobante";
         $stmt = $this->db->prepare($sql);
         $stmt->execute([':id_empresa' => $idEmpresa]);

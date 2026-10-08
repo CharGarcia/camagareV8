@@ -46,7 +46,7 @@ class MayoresRepository
                      AND ac.fecha_asiento >= :f_inicio
                      AND ac.fecha_asiento <= :f_fin
                      AND pc.nivel = '5'
-                     AND ac.tipo_ambiente = (SELECT CAST(tipo_ambiente AS VARCHAR(1)) FROM empresas WHERE id = :id_empresa)";
+                     AND ac.tipo_ambiente = '2'";
 
         $params = [
             ':id_empresa' => $idEmpresa,
@@ -132,7 +132,7 @@ class MayoresRepository
         $sql = "SELECT DISTINCT extract(year from fecha_asiento) as anio
                 FROM asientos_contables_cabecera
                 WHERE id_empresa = :id_empresa AND eliminado = false
-                AND tipo_ambiente = (SELECT CAST(tipo_ambiente AS VARCHAR(1)) FROM empresas WHERE id = :id_empresa)
+                AND tipo_ambiente = '2'
                 ORDER BY anio DESC";
         $st = $this->db->prepare($sql);
         $st->execute(['id_empresa' => $idEmpresa]);

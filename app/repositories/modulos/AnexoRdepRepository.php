@@ -314,7 +314,9 @@ class AnexoRdepRepository extends BaseRepository
             $ph[] = ":i{$i}";
             $params[":i{$i}"] = (int) $id;
         }
-        $sql = "SELECT id, tipo_id, identificacion, nombres_apellidos, fecha_nacimiento, discapacidad, cargas_familiares, estado
+        // % de discapacidad de la ficha (columna nueva: 0 si aún no se desplegó el SQL).
+        $pct = $this->columnaExiste('empleados', 'porcentaje_discapacidad') ? 'porcentaje_discapacidad' : '0 AS porcentaje_discapacidad';
+        $sql = "SELECT id, tipo_id, identificacion, nombres_apellidos, fecha_nacimiento, discapacidad, {$pct}, cargas_familiares, estado
                 FROM empleados WHERE id_empresa = :e AND id IN (" . implode(',', $ph) . ")";
         $st = $this->db->prepare($sql);
         $st->execute($params);

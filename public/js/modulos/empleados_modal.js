@@ -32,9 +32,22 @@
         return modalInstEmp;
     }
 
+    // % de discapacidad: editable solo con Discapacidad = Sí; con No queda en 0.
+    // readonly (no disabled) para que el valor viaje siempre en el formulario.
+    window.empToggleDiscapacidad = function() {
+        const sel = document.getElementById('emp_discapacidad');
+        const pct = document.getElementById('emp_porcentaje_discapacidad');
+        if (!sel || !pct) return;
+        const si = sel.value === 'si';
+        pct.readOnly = !si;
+        pct.classList.toggle('bg-light', !si);
+        if (!si) pct.value = 0;
+    };
+
     window.abrirModalCrear = async function() {
         if (!formEmp) return;
         formEmp.reset();
+        window.empToggleDiscapacidad();
         limpiarBadgeSriEmp();
         document.getElementById('emp_id').value = '';
         document.getElementById('tituloModal').textContent = 'Nuevo Empleado';
@@ -108,6 +121,16 @@
                 document.getElementById('emp_valor_semanal').value = d.valor_semanal || 0;
                 document.getElementById('emp_valor_quincena').value = d.valor_quincena || 0;
                 window.toggleIessFields();
+
+                // Utilidades y discapacidad (columnas nuevas: si aún no existen en la base,
+                // participa por defecto y sin discapacidad).
+                var _part = document.getElementById('emp_participa_utilidades');
+                if (_part) _part.value = (d.participa_utilidades === false || d.participa_utilidades === 'f') ? 'no' : 'si';
+                var _dis = document.getElementById('emp_discapacidad');
+                if (_dis) _dis.value = (d.discapacidad === true || d.discapacidad === 't') ? 'si' : 'no';
+                var _pct = document.getElementById('emp_porcentaje_discapacidad');
+                if (_pct) _pct.value = parseInt(d.porcentaje_discapacidad || 0, 10) || 0;
+                window.empToggleDiscapacidad();
 
                 // Imp. Renta
                 var _excIr = document.getElementById('emp_excluir_calculo_ir');

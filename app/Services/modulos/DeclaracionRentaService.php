@@ -152,10 +152,13 @@ class DeclaracionRentaService
             throw new \RuntimeException('Empresa no encontrada.');
         }
         $tipo = $this->resolverTipo($empresa);
-        $ambiente = (string) ((int) ($empresa['tipo_ambiente'] ?? 1));
+        // Regla de reportes: solo documentos de PRODUCCIÓN en todos los establecimientos,
+        // sin importar el ambiente actual de la empresa (ver App\Helpers\AmbienteReporte).
+        $ambienteEmpresa = (string) ((int) ($empresa['tipo_ambiente'] ?? 1));
+        $ambiente = \App\Helpers\AmbienteReporte::PRODUCCION;
         $regimenId = (int) ($empresa['id_tipo_regimen'] ?? 0);
         $grupo = $this->grupoRuc($idEmpresa, $idUsuario);
-        $ambientes = $this->repo->getAmbientes($grupo['ids']);
+        $ambientes = array_fill_keys($grupo['ids'], $ambiente);
 
         $anios = [];
         foreach ($grupo['ids'] as $idEmp) {
@@ -167,6 +170,7 @@ class DeclaracionRentaService
         return [
             'empresa'    => $empresa,
             'ambiente'   => $ambiente,
+            'ambiente_empresa' => $ambienteEmpresa,
             'ambientes'  => $ambientes,
             'grupo'      => $grupo,
             'tipo'       => $tipo,
@@ -220,6 +224,9 @@ class DeclaracionRentaService
         $avisos = [];
 
         $grupo = $ctx['grupo'];
+        if (($ctx['ambiente_empresa'] ?? '') === \App\Helpers\AmbienteReporte::PRUEBAS) {
+            $avisos[] = ['tipo' => 'info', 'texto' => 'La empresa está configurada en ambiente de PRUEBAS. Este reporte solo considera documentos emitidos en PRODUCCIÓN; los de pruebas no tienen validez tributaria y no se incluyen.'];
+        }
         if ($grupo['faltan'] > 0) {
             $avisos[] = ['tipo' => 'warning', 'texto' => "El RUC tiene {$grupo['total_ruc']} establecimientos y usted solo tiene acceso a " . count($grupo['ids']) . ': la declaración está incompleta (faltan ' . $grupo['faltan'] . '). Pida acceso a los demás establecimientos o genere el reporte desde la matriz.'];
         }

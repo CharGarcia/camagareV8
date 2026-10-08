@@ -719,6 +719,7 @@ class EmpleadosController extends BaseModuloController
             $fila('Teléfono', $emp['telefono'] ?? '');
             $fila('Contacto Emergencia', $emp['contacto_emergencia'] ?? '');
             $fila('Cargas Familiares', (string) (int) ($emp['cargas_familiares'] ?? 0));
+            $fila('Discapacidad', $siNo($emp['discapacidad'] ?? false) . (!empty($emp['porcentaje_discapacidad']) ? ' (' . (int) $emp['porcentaje_discapacidad'] . '%)' : ''));
             $fila('Dirección', $emp['direccion'] ?? '');
             $fila('Estado', $cap($emp['estado'] ?? ''));
             $row++;
@@ -735,6 +736,7 @@ class EmpleadosController extends BaseModuloController
             $fila('Aporta IESS', $siNo($emp['aporta_iess'] ?? false));
             $fila('Décimo Tercero', $decimo($emp['decimo_tercero'] ?? ''));
             $fila('Décimo Cuarto', $decimo($emp['decimo_cuarto'] ?? ''));
+            $fila('Participa en Utilidades', $siNo($emp['participa_utilidades'] ?? true));
             $fila('Aporte Personal (%)', number_format((float) ($emp['aporte_personal'] ?? 0), 4));
             $fila('Aporte Patronal (%)', number_format((float) ($emp['aporte_patronal'] ?? 0), 4));
             $fila('Sueldo Base', number_format((float) ($emp['sueldo_base'] ?? 0), 2));
@@ -895,16 +897,16 @@ class EmpleadosController extends BaseModuloController
             'FECHA_NACIMIENTO', 'SEXO', 'CARGO', 'DEPARTAMENTO', 'SUELDO_BASE', 'VALOR_SEMANAL',
             'VALOR_QUINCENA', 'REGION', 'APORTA_IESS', 'FONDOS_RESERVA', 'DECIMO_TERCERO',
             'DECIMO_CUARTO', 'BANCO', 'TIPO_CUENTA', 'NUMERO_CUENTA', 'FECHA_INGRESO',
-            'CARGAS_FAMILIARES',
+            'CARGAS_FAMILIARES', 'PARTICIPA_UTILIDADES', 'PORCENTAJE_DISCAPACIDAD',
         ];
         $hoja->fromArray($headers, null, 'A1');
-        $hoja->getStyle('A1:W1')->getFont()->setBold(true);
+        $hoja->getStyle('A1:Y1')->getFont()->setBold(true);
         $hoja->fromArray([[
             'cedula', '1717136574', 'JUAN PEREZ', 'juan@correo.com', '0999999999', 'Av. Siempre Viva',
             '1990-05-20', 'M', 'VENDEDOR', 'VENTAS', 460, 0, 0, 'costa', 'si', 'no_se_paga',
-            'acumula', 'acumula', 'PICHINCHA', 'ahorros', '2200123456', '2020-03-01', 0,
+            'acumula', 'acumula', 'PICHINCHA', 'ahorros', '2200123456', '2020-03-01', 0, 'si', 0,
         ]], null, 'A2');
-        foreach (range('A', 'W') as $col) $hoja->getColumnDimension($col)->setAutoSize(true);
+        foreach (range('A', 'Y') as $col) $hoja->getColumnDimension($col)->setAutoSize(true);
 
         // Hoja de referencia con valores válidos
         $ref = $ss->createSheet();
@@ -923,6 +925,8 @@ class EmpleadosController extends BaseModuloController
             ['FECHA_NACIMIENTO', 'Formato AAAA-MM-DD'],
             ['FECHA_INGRESO', 'Formato AAAA-MM-DD (crea el periodo laboral)'],
             ['CARGAS_FAMILIARES', 'Número entero (0 si no tiene). Opcional'],
+            ['PARTICIPA_UTILIDADES', 'si, no (vacío = si). No = fuera del reparto del 15% (p. ej. el dueño). Opcional'],
+            ['PORCENTAJE_DISCAPACIDAD', 'Número de 0 a 100 según el carné (0 = sin discapacidad). Opcional'],
         ], null, 'A1');
         $ref->getStyle('A1:B1')->getFont()->setBold(true);
         $ref->getColumnDimension('A')->setAutoSize(true);
@@ -994,6 +998,18 @@ class EmpleadosController extends BaseModuloController
             'atraso_modo'           => trim($_POST['atraso_modo'] ?? ''),
             'excluir_calculo_ir'    => trim($_POST['excluir_calculo_ir'] ?? 'no'),
         ];
+        // Utilidades y discapacidad: solo si el formulario los trae, para que una petición
+        // que no los envía no los reinicie (el repositorio tampoco los toca en ese caso).
+        foreach (['participa_utilidades', 'discapacidad'] as $c) {
+            if (array_key_exists($c, $_POST)) $data[$c] = trim((string) $_POST[$c]) === 'si' ? 'si' : 'no';
+        }
+        if (array_key_exists('porcentaje_discapacidad', $_POST)) {
+            $data['porcentaje_discapacidad'] = (int) $_POST['porcentaje_discapacidad'];
+        }
+        // Sin discapacidad marcada el porcentaje no aplica: se limpia aunque el campo no venga.
+        if (($data['discapacidad'] ?? null) === 'no') {
+            $data['porcentaje_discapacidad'] = 0;
+        }
 
         // Manejo de arrays dinámicos (vienen como JSON desde el frontend para JS a servidor)
         if (!empty($_POST['periodos_json'])) {

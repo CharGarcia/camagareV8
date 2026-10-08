@@ -6,7 +6,7 @@ ruta_modulo: modulos/anexo-rdep
 tipo: modulo
 visibilidad: todos
 etiquetas: anexo rdep, rdep, relacion de dependencia, retenciones empleados, impuesto a la renta empleados, formulario 107, anexo anual SRI, RDEP-2025.zip, dimm, sri en linea, gastos personales, rebaja gastos personales, discapacidad, tercera edad, otros empleadores, nomina, roles de pago, decimos, utilidades, xml rdep
-version: 1.0
+version: 1.1
 orden: 32
 estado: activo
 ---
@@ -47,8 +47,8 @@ entregar a cada trabajador.
   la renta (tramos, canasta básica y porcentaje de rebaja). Sin tramos, el
   impuesto causado sale en cero y el módulo lo avisa.
 - **Ficha del empleado completa**: identificación, tipo de identificación,
-  nombres y apellidos (en ese orden), fecha de nacimiento y la marca de
-  discapacidad.
+  nombres y apellidos (en ese orden), fecha de nacimiento, y la discapacidad con
+  su porcentaje (pestaña General).
 
 ## Cómo se usa
 
@@ -61,7 +61,8 @@ entregar a cada trabajador.
    recalcular** aplica los cambios a todos los trabajadores.
 3. En **Trabajadores** revise cada fila. Haga clic en un trabajador para
    completar lo que la nómina no sabe: residencia en el exterior y convenio,
-   porcentaje de discapacidad y persona sustituida, beneficio Galápagos,
+   persona sustituida (si el trabajador es sustituto de alguien con
+   discapacidad), beneficio Galápagos,
    ingresos y aportes con otros empleadores (del formulario 107 que entrega el
    trabajador), impuesto asumido por el empleador. Lo que escriba a mano queda
    marcado y no se pierde al volver a importar.
@@ -184,6 +185,7 @@ con la diferencia que el SRI va a comparar.
 
 ## Historial de cambios
 
+- **1.1** — La discapacidad y su porcentaje se toman de la ficha del empleado.
 - **1.0** — Versión inicial: importación desde la nómina, edición por
   trabajador, cálculo del resumen impositivo según el catálogo 2024 del SRI,
   validaciones graves y leves, XML y ZIP validados contra el esquema oficial.

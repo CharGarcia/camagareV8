@@ -330,10 +330,17 @@ class UtilidadesRepository extends BaseRepository
      */
     public function getEmpleadosDelEjercicio(int $idEmpresa, string $desde, string $hasta): array
     {
+        // «Participa en utilidades = No» en la ficha (dueño, representante legal por
+        // mandato…): queda fuera del reparto y sus días no cuentan en el total. La
+        // condición solo se aplica si la columna ya existe (SQL desplegado).
+        $soloParticipan = $this->columnaExiste('empleados', 'participa_utilidades')
+            ? 'AND e.participa_utilidades = true'
+            : '';
         $sql = "SELECT e.id, e.identificacion, e.nombres_apellidos, e.sexo, e.estado,
                        e.codigo_sectorial_iess, e.discapacidad, e.cargas_familiares
                 FROM empleados e
                 WHERE e.id_empresa = :id_empresa AND e.eliminado = false
+                  {$soloParticipan}
                   AND EXISTS (
                       SELECT 1 FROM empleado_periodos p
                       WHERE p.id_empleado = e.id AND p.id_empresa = e.id_empresa AND p.eliminado = false

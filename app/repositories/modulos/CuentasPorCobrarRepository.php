@@ -82,7 +82,10 @@ class CuentasPorCobrarRepository extends BaseRepository
      */
     private function condAmbiente(string $alias, array $ids): string
     {
-        return $this->condAmbienteDe($alias, $ids);
+        // Regla de reportes: solo documentos de PRODUCCIÓN, en todos los establecimientos
+        // del consolidado (ver App\Helpers\AmbienteReporte). Literal: el planificador
+        // estima bien la selectividad, igual que con los pares de AmbienteEmpresaTrait.
+        return \App\Helpers\AmbienteReporte::condicion($alias);
     }
 
     /**
@@ -1285,11 +1288,11 @@ class CuentasPorCobrarRepository extends BaseRepository
             WHERE v.id_empresa = :id_empresa
               AND v.eliminado  = false
               AND v.estado    IN ('autorizado','autorizada')
-              AND v.tipo_ambiente = (SELECT CAST(tipo_ambiente AS VARCHAR(1)) FROM empresas WHERE id = :id_empresa_ta)
+              AND v.tipo_ambiente = '2'
               AND (v.importe_total + COALESCE(nd.total_nd, 0) - COALESCE(cb.total_cobrado, 0) - COALESCE(rt.total_retenido, 0) - COALESCE(nc.total_nc, 0)) > 0
         ";
 
-        $params = [':id_empresa' => $idEmpresa, ':id_empresa_ta' => $idEmpresa];
+        $params = [':id_empresa' => $idEmpresa];
 
         if ($soloVencidas || $diasMin > 0) {
             $sql .= " AND (CURRENT_DATE - (v.fecha_emision + INTERVAL '1 day' * v.dias_credito)::date) >= :dmin";

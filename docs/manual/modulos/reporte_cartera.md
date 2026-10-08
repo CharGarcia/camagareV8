@@ -6,7 +6,7 @@ ruta_modulo: modulos/reporte_cartera
 tipo: modulo
 visibilidad: todos
 etiquetas: cartera, estado de cuenta, filtro por documento, numero de factura, kardex de cliente, kardex de proveedor, saldo, cuentas por cobrar, cuentas por pagar, historial de pagos, historial de cobros, deuda, adeudado, cedula y ruc, cliente duplicado, proveedor duplicado, identificacion repetida, ruc es la cedula mas 001, mismo tercero dos fichas, estado de cuenta partido, acceso total, permiso de ver todos, registros propios, solo mis clientes, solo mis documentos, no veo un cliente, no aparece el proveedor en el buscador, imprimir, impresora, pdf cortado, columnas cortadas en el pdf, no sale el saldo en el pdf, falta el abono en el pdf, pdf se sale de la hoja, numero de documento montado, documento se pasa a la otra columna, recibos en borrador, no salen los recibos, recibos no aparecen
-version: 1.11
+version: 1.12
 orden: 0
 estado: activo
 ---
@@ -190,6 +190,7 @@ que los tres deben coincidir.
 
 ## Historial de cambios
 
+- **1.12** — El reporte muestra solo documentos de **producción**, aunque la empresa esté configurada en pruebas (ver el artículo *Los reportes solo muestran documentos de producción*).
 - **1.11** — **Corrección: los Recibos de Venta no entraban como deuda generada**
   (se descartaban los recibos en *borrador*, que es el estado normal de un recibo
   creado en el sistema), pero sus cobros sí se restaban como abono: el cliente

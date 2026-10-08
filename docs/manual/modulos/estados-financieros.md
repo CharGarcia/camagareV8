@@ -6,7 +6,7 @@ ruta_modulo: modulos/estados_financieros
 tipo: modulo
 visibilidad: todos
 etiquetas: estados financieros, cuadre con modulos, tarjetas por liquidar, cuenta puente de tarjetas, activos fijos vs contabilidad, depreciacion acumulada vs contabilidad, cuadre de caja, caja vs contabilidad, anticipos vs contabilidad, cuadre de anticipos, cuadrar contabilidad con modulos, contabilidad vs bancos, contabilidad vs cartera, contabilidad vs inventario, comprobar con contabilidad, no cuadra con el modulo, balance, estado de resultados, situacion financiera, perdidas y ganancias, activo pasivo patrimonio, reportes por periodos, comparativo mensual, horizontal por mes, editar cuenta desde el balance, codigo sri, supercias, entidades de control, pdf con logo, firma del contador, firma del representante legal, balances firmados, excel por niveles, columnas por nivel, exportar excel
-version: 1.12
+version: 1.13
 orden: 50
 estado: activo
 ---
@@ -389,6 +389,7 @@ los otros módulos.
 
 ## Historial de cambios
 
+- **1.13** — El reporte muestra solo documentos de **producción**, aunque la empresa esté configurada en pruebas (ver el artículo *Los reportes solo muestran documentos de producción*).
 - **1.12** — Nuevo botón **Cuadre con Módulos**: compara las cuentas contables con
   el saldo de cada cuenta bancaria, cada caja, Cuentas por Cobrar, Cuentas por
   Pagar, Inventarios y los anticipos de clientes y proveedores, con el detalle

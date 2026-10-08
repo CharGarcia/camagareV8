@@ -6,7 +6,7 @@ ruta_modulo: modulos/reporte_retenciones_pendientes
 tipo: modulo
 visibilidad: todos
 etiquetas: retenciones pendientes, facturas sin retencion, retencion de venta faltante, cliente no envio retencion, comprobante de retencion, aviso por correo, reclamar retencion, agente de retencion, credito tributario
-version: 1.0
+version: 1.1
 orden: 51
 estado: activo
 ---
@@ -171,6 +171,7 @@ aviso.
 
 ## Historial de cambios
 
+- **1.1** — El reporte muestra solo documentos de **producción**, aunque la empresa esté configurada en pruebas (ver el artículo *Los reportes solo muestran documentos de producción*).
 - **1.0** — Versión inicial: listado de facturas sin retención por año, mes
   o rango de fechas; vistas por factura, por cliente y por mes; aviso
   por correo individual y agrupado por cliente; historial de avisos; exportación

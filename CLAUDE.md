@@ -71,6 +71,12 @@ Controller → Service → Rules → Repository / Model → Base de datos
 - Las configuraciones por empresa se almacenan en una tabla independiente con `id_empresa`; las globales en una tabla sin `id_empresa`.
 - **Helper canónico**: los repositorios de módulo extienden `App\repositories\BaseRepository` y usan `getBaseWhere($idEmpresa, $alias, $idUsuarioFiltro)`, que arma el `WHERE` aplicando automáticamente `id_empresa = :id_empresa AND eliminado = false` (y el filtro de registros propios; ver §6). Usarlo en todos los listados.
 
+**Ambiente SRI (pruebas `'1'` / producción `'2'`) en reportes**
+- **Todo reporte o consulta de solo lectura muestra únicamente documentos de PRODUCCIÓN** (`tipo_ambiente = '2'`), sin importar el ambiente en que esté configurada la empresa. Usar `App\Helpers\AmbienteReporte` (`condicion($alias)`, `literal()`, `PRODUCCION`); nunca la subconsulta `(SELECT tipo_ambiente FROM empresas …)` en un reporte nuevo.
+- **No aplica** a: los listados operativos de cada módulo (siguen el ambiente actual de la empresa para poder trabajar en pruebas); los `INSERT`/`UPDATE` (cada documento se guarda con su ambiente real); las declaraciones que guardan documento, asiento o egreso (Declaración de IVA, F103, Dividendos) y Auditoría contable; los reportes de caja/comandas (POS, Restaurante), cuyas tablas no llevan ambiente.
+- La API móvil de reportes de ventas y compras llama `usarAmbienteEmpresa()` en el repositorio y conserva el ambiente de la empresa hasta revisar el impacto en la cuenta demo de Apple (§13).
+- Manual: `docs/manual/conceptos/ambiente-produccion-reportes.md`.
+
 ---
 
 ## 5. Modelo de datos

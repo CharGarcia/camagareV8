@@ -135,13 +135,13 @@ class ReporteCarteraRepository extends BaseRepository
     // HELPERS
     // ─────────────────────────────────────────────────────────────────────
 
-    /** Ambiente actual de la empresa como literal SQL seguro ('1' pruebas | '2' producción). */
+    /**
+     * Ambiente de los documentos del reporte: siempre PRODUCCIÓN ('2'), sin importar el
+     * ambiente actual de la empresa (regla de reportes, ver App\Helpers\AmbienteReporte).
+     */
     private function ambienteEmpresa(int $idEmpresa): string
     {
-        $st = $this->db->prepare("SELECT tipo_ambiente FROM empresas WHERE id = :id");
-        $st->execute([':id' => $idEmpresa]);
-        $amb = trim((string) $st->fetchColumn());
-        return ($amb === '2') ? '2' : '1';
+        return \App\Helpers\AmbienteReporte::PRODUCCION;
     }
 
     /**

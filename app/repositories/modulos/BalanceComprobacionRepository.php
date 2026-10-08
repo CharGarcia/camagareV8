@@ -54,7 +54,7 @@ class BalanceComprobacionRepository
                 $centroCostoFilter
                 $proyectoFilter
             LEFT JOIN asientos_contables_cabecera ac ON ad.id_asiento = ac.id AND ac.eliminado = false AND ac.id_empresa = pc.id_empresa
-                AND ac.tipo_ambiente = (SELECT CAST(tipo_ambiente AS VARCHAR(1)) FROM empresas WHERE id = :id_empresa)
+                AND ac.tipo_ambiente = '2'
             WHERE pc.id_empresa = :id_empresa
               AND pc.eliminado = false
             GROUP BY pc.id, pc.codigo, pc.nombre, pc.nivel
@@ -72,7 +72,7 @@ class BalanceComprobacionRepository
         $sql = "SELECT DISTINCT extract(year from fecha_asiento) as anio
                 FROM asientos_contables_cabecera
                 WHERE id_empresa = :id_empresa AND eliminado = false
-                AND tipo_ambiente = (SELECT CAST(tipo_ambiente AS VARCHAR(1)) FROM empresas WHERE id = :id_empresa)
+                AND tipo_ambiente = '2'
                 ORDER BY anio DESC";
         $st = $this->db->prepare($sql);
         $st->execute(['id_empresa' => $idEmpresa]);
