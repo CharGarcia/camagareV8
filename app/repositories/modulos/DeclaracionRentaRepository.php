@@ -265,11 +265,15 @@ class DeclaracionRentaRepository extends BaseRepository
                     'compras_personal' => "AND COALESCE(c.deducible, '') = 'gasto_personal'",
                     default            => "AND COALESCE(c.deducible, '') NOT IN ('declaracion_iva', 'gasto_personal')",
                 };
+                $colRubro = $this->columnaExiste('compras_cabecera', 'rubro_gasto_personal')
+                    ? "COALESCE(c.rubro_gasto_personal, '')"
+                    : "''";
                 $sql = "SELECT c.fecha_emision,
                                COALESCE(c.establecimiento_prov, '') || '-' || COALESCE(c.punto_emision_prov, '') || '-' || COALESCE(c.secuencial_prov, '') AS numero,
                                p.razon_social AS tercero, p.identificacion,
                                c.total_sin_impuestos AS base, c.importe_total AS total,
-                               COALESCE(c.tipo_comprobante, '') AS tipo, COALESCE(c.deducible, '') AS deducible
+                               COALESCE(c.tipo_comprobante, '') AS tipo, COALESCE(c.deducible, '') AS deducible,
+                               {$colRubro} AS rubro
                         FROM compras_cabecera c
                         LEFT JOIN proveedores p ON p.id = c.id_proveedor
                         WHERE c.id_empresa = :emp AND c.eliminado = false

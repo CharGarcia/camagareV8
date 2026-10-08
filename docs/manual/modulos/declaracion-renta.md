@@ -144,7 +144,11 @@ familiares). La rebaja nunca supera el impuesto causado.
 **Gastos personales por rubro.** Debajo del total de gastos personales, la
 liquidación y el resumen de documentos los desglosan por los rubros del SRI
 (**vivienda, salud, educación, alimentación, vestimenta y turismo**), que es lo
-que pide el Anexo de Gastos Personales. El rubro se elige en cada compra (campo
+que pide el Anexo de Gastos Personales. El Excel trae además una hoja **Gastos
+personales** con los seis rubros (aunque estén en cero), el total, el tope y la
+rebaja aplicada, y la hoja *Detalle documentos* tiene una columna **Rubro** para
+cada compra de gasto personal; en pantalla, la pestaña *Detalle de documentos*
+muestra el rubro como etiqueta (en rojo cuando falta). El rubro se elige en cada compra (campo
 *Rubro gasto personal*, visible cuando Deducible = Gasto personal). Las compras
 sin rubro aparecen como **Sin rubro (sin clasificar)** y el módulo avisa cuántas
 son; para encontrarlas, en Compras filtre con `rubro:sin_rubro`. El desglose es

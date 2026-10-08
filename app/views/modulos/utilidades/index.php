@@ -33,6 +33,15 @@ $anioActual = (int) date('Y');
     <?php endif; ?>
 </div>
 
+<?php if (isset($instalado) && !$instalado): ?>
+    <div class="alert alert-warning shadow-sm">
+        <i class="bi bi-exclamation-triangle me-2"></i>
+        <b>El módulo todavía no está instalado en esta base de datos.</b> Falta ejecutar
+        <code>database/migrations/20261008_create_utilidades.sql</code> (crea las tablas, los conceptos
+        contables y el menú). Hasta entonces no se puede calcular.
+    </div>
+<?php endif; ?>
+
 <div class="card cmg-table-card border-0 shadow-sm rounded-3">
     <div class="card-header bg-white py-2 px-3 border-bottom d-flex justify-content-between align-items-center flex-wrap gap-2">
         <div class="d-flex align-items-center gap-2">

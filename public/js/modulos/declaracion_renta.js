@@ -9,7 +9,7 @@
 
     const CFG = window.RENTA_CFG || {};
     const url = (accion) => `${CFG.base}/${CFG.ruta}/${accion}`;
-    const money = (v) => (Number(v) || 0).toLocaleString('es-EC', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    const money = (v) => (Number(v) || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
     const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
     const $ = (id) => document.getElementById(id);
 
@@ -155,7 +155,7 @@
         if (!ultimoCalculo) return;
         const fuente = $('renta-detalle-fuente').value;
         const tb = $('renta-detalle');
-        tb.innerHTML = '<tr><td colspan="7" class="text-center text-muted py-3">Cargando…</td></tr>';
+        tb.innerHTML = '<tr><td colspan="9" class="text-center text-muted py-3">Cargando…</td></tr>';
         try {
             const r = await fetch(`${url('detalleAjax')}?anio=${encodeURIComponent(ultimoCalculo.anio)}&fuente=${encodeURIComponent(fuente)}`, { headers: { 'X-Requested-With': 'XMLHttpRequest' } });
             const j = await r.json();
@@ -164,11 +164,12 @@
             const colEst = CFG.consolidado ? (x) => `<td class="small text-muted">${esc(x.establecimiento)}</td>` : () => '';
             tb.innerHTML = j.data.map((x) => {
                 base += Number(x.base) || 0; total += Number(x.total) || 0;
-                return `<tr>${colEst(x)}<td>${esc(x.fecha_emision)}</td><td>${esc(x.tipo_nombre)}</td><td>${esc(x.numero)}</td><td>${esc(x.tercero)}</td><td>${esc(x.identificacion)}</td><td class="val">${money(x.base)}</td><td class="val">${money(x.total)}</td></tr>`;
-            }).join('') || '<tr><td colspan="8" class="text-center text-muted py-3">No hay documentos en esta fuente para el ejercicio.</td></tr>';
+                const rubro = x.rubro_nombre ? `<span class="badge ${x.rubro_nombre === 'Sin rubro' ? 'bg-danger bg-opacity-10 text-danger' : 'bg-light text-muted border'}">${esc(x.rubro_nombre)}</span>` : '';
+                return `<tr>${colEst(x)}<td>${esc(x.fecha_emision)}</td><td>${esc(x.tipo_nombre)}</td><td>${rubro}</td><td>${esc(x.numero)}</td><td>${esc(x.tercero)}</td><td>${esc(x.identificacion)}</td><td class="val">${money(x.base)}</td><td class="val">${money(x.total)}</td></tr>`;
+            }).join('') || '<tr><td colspan="9" class="text-center text-muted py-3">No hay documentos en esta fuente para el ejercicio.</td></tr>';
             $('renta-detalle-resumen').textContent = `${j.data.length} documento(s) · base ${money(base)} · total ${money(total)}`;
         } catch (e) {
-            tb.innerHTML = `<tr><td colspan="7" class="text-danger py-3">${esc(e.message)}</td></tr>`;
+            tb.innerHTML = `<tr><td colspan="9" class="text-danger py-3">${esc(e.message)}</td></tr>`;
         }
     };
 

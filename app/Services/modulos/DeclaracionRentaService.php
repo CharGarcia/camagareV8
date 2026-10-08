@@ -727,6 +727,10 @@ class DeclaracionRentaService
             $amb = (string) ($ctx['ambientes'][$idEmp] ?? $ctx['ambiente']);
             foreach ($this->repo->getDetalle($idEmp, "{$anio}-01-01", "{$anio}-12-31", $amb, $fuente) as $d) {
                 $d['establecimiento'] = $ctx['grupo']['consolidado'] ? ($ctx['grupo']['etiquetas'][$idEmp] ?? '') : '';
+                // Rubro solo tiene sentido en gastos personales; en el resto va vacío.
+                $d['rubro_nombre'] = ($d['deducible'] ?? '') === 'gasto_personal'
+                    ? RubrosGastoPersonal::etiqueta($d['rubro'] ?? '')
+                    : '';
                 $out[] = $d;
             }
         }
@@ -793,6 +797,12 @@ class DeclaracionRentaService
         $m = (fn($v) => number_format((float) $v, 2));
         $emp = $calc['empresa'];
         $doc = $calc['documentos'];
+        // Html2Pdf solo respeta el ancho de columna en las celdas que lo declaran: cada <td>
+        // lleva su width, si no, las filas sin ancho se encogen o se salen de la página.
+        $wRes = ['58%', '12%', '15%', '15%'];
+        $wLiq = ['70%', '8%', '7%', '15%'];
+        $wCas = ['10%', '14%', '61%', '15%'];
+        $wSin = ['70%', '15%', '15%'];
 
         ob_start(); ?>
         <style>
@@ -819,29 +829,29 @@ class DeclaracionRentaService
 
         <h4>Resumen de documentos del ejercicio</h4>
         <table>
-            <tr><th>Bloque</th><th class="c">Documentos</th><th class="r">Base (sin IVA)</th><th class="r">Total (con IVA)</th></tr>
+            <tr><th style="width:<?= $wRes[0] ?>">Bloque</th><th class="c" style="width:<?= $wRes[1] ?>">Documentos</th><th class="r" style="width:<?= $wRes[2] ?>">Base (sin IVA)</th><th class="r" style="width:<?= $wRes[3] ?>">Total (con IVA)</th></tr>
             <?php foreach ($this->filasResumenDocumentos($doc) as $f): ?>
                 <tr class="<?= $f['total'] ? 'tot' : '' ?>">
-                    <td><?= $e($f['concepto']) ?></td>
-                    <td class="c"><?= $f['cantidad'] === null ? '' : $f['cantidad'] ?></td>
-                    <td class="r"><?= $m($f['base']) ?></td>
-                    <td class="r"><?= $m($f['monto']) ?></td>
+                    <td style="width:<?= $wRes[0] ?>"><?= $e($f['concepto']) ?></td>
+                    <td class="c" style="width:<?= $wRes[1] ?>"><?= $f['cantidad'] === null ? '' : $f['cantidad'] ?></td>
+                    <td class="r" style="width:<?= $wRes[2] ?>"><?= $m($f['base']) ?></td>
+                    <td class="r" style="width:<?= $wRes[3] ?>"><?= $m($f['monto']) ?></td>
                 </tr>
             <?php endforeach; ?>
         </table>
 
         <h4>Liquidación del impuesto</h4>
         <table>
-            <tr><th>Concepto</th><th class="c">Cas.</th><th class="c">+/-</th><th class="r">Valor</th></tr>
+            <tr><th style="width:<?= $wLiq[0] ?>">Concepto</th><th class="c" style="width:<?= $wLiq[1] ?>">Cas.</th><th class="c" style="width:<?= $wLiq[2] ?>">+/-</th><th class="r" style="width:<?= $wLiq[3] ?>">Valor</th></tr>
             <?php foreach ($calc['liquidacion']['lineas'] as $l): ?>
                 <?php if ($l['seccion']): ?>
-                    <tr class="sec"><td colspan="4"><?= $e($l['concepto']) ?></td></tr>
+                    <tr class="sec"><td colspan="4" style="width:100%"><?= $e($l['concepto']) ?></td></tr>
                 <?php else: ?>
                     <tr class="<?= $l['nivel'] === 0 ? 'tot' : '' ?>">
-                        <td><?= $e($l['concepto']) ?><?= $l['nota'] !== '' ? ' <span class="muted">(' . $e($l['nota']) . ')</span>' : '' ?></td>
-                        <td class="c"><?= $e($l['casillero']) ?></td>
-                        <td class="c"><?= $e($l['signo']) ?></td>
-                        <td class="r"><?= $m($l['valor']) ?></td>
+                        <td style="width:<?= $wLiq[0] ?>"><?= $e($l['concepto']) ?><?= $l['nota'] !== '' ? ' <span class="muted">(' . $e($l['nota']) . ')</span>' : '' ?></td>
+                        <td class="c" style="width:<?= $wLiq[1] ?>"><?= $e($l['casillero']) ?></td>
+                        <td class="c" style="width:<?= $wLiq[2] ?>"><?= $e($l['signo']) ?></td>
+                        <td class="r" style="width:<?= $wLiq[3] ?>"><?= $m($l['valor']) ?></td>
                     </tr>
                 <?php endif; ?>
             <?php endforeach; ?>
@@ -850,13 +860,13 @@ class DeclaracionRentaService
         <?php if (!empty($calc['contabilidad']['casilleros'])): ?>
             <h4>Casilleros del formulario según la contabilidad (plan de cuentas → código SRI)</h4>
             <table>
-                <tr><th class="c">Casillero</th><th>Sección</th><th>Cuentas</th><th class="r">Valor</th></tr>
+                <tr><th class="c" style="width:<?= $wCas[0] ?>">Casillero</th><th style="width:<?= $wCas[1] ?>">Sección</th><th style="width:<?= $wCas[2] ?>">Cuentas</th><th class="r" style="width:<?= $wCas[3] ?>">Valor</th></tr>
                 <?php foreach ($calc['contabilidad']['casilleros'] as $c): ?>
                     <tr>
-                        <td class="c"><?= $e($c['casillero']) ?></td>
-                        <td><?= $e($c['seccion']) ?></td>
-                        <td><?= $e(implode('; ', array_map(fn($q) => ($q['establecimiento'] !== '' ? '[' . $q['establecimiento'] . '] ' : '') . $q['codigo'] . ' ' . $q['nombre'], $c['cuentas']))) ?></td>
-                        <td class="r"><?= $m($c['valor']) ?></td>
+                        <td class="c" style="width:<?= $wCas[0] ?>"><?= $e($c['casillero']) ?></td>
+                        <td style="width:<?= $wCas[1] ?>"><?= $e($c['seccion']) ?></td>
+                        <td style="width:<?= $wCas[2] ?>"><?= $e(implode('; ', array_map(fn($q) => ($q['establecimiento'] !== '' ? '[' . $q['establecimiento'] . '] ' : '') . $q['codigo'] . ' ' . $q['nombre'], $c['cuentas']))) ?></td>
+                        <td class="r" style="width:<?= $wCas[3] ?>"><?= $m($c['valor']) ?></td>
                     </tr>
                 <?php endforeach; ?>
             </table>
@@ -865,9 +875,9 @@ class DeclaracionRentaService
         <?php if (!empty($calc['contabilidad']['sin_casillero'])): ?>
             <h4>Cuentas con saldo sin casillero SRI</h4>
             <table>
-                <tr><th>Cuenta</th><th>Sección</th><th class="r">Saldo</th></tr>
+                <tr><th style="width:<?= $wSin[0] ?>">Cuenta</th><th style="width:<?= $wSin[1] ?>">Sección</th><th class="r" style="width:<?= $wSin[2] ?>">Saldo</th></tr>
                 <?php foreach ($calc['contabilidad']['sin_casillero'] as $q): ?>
-                    <tr><td><?= $e(($q['establecimiento'] !== '' ? '[' . $q['establecimiento'] . '] ' : '') . $q['codigo'] . ' ' . $q['nombre']) ?></td><td><?= $e($q['seccion']) ?></td><td class="r"><?= $m($q['valor']) ?></td></tr>
+                    <tr><td style="width:<?= $wSin[0] ?>"><?= $e(($q['establecimiento'] !== '' ? '[' . $q['establecimiento'] . '] ' : '') . $q['codigo'] . ' ' . $q['nombre']) ?></td><td style="width:<?= $wSin[1] ?>"><?= $e($q['seccion']) ?></td><td class="r" style="width:<?= $wSin[2] ?>"><?= $m($q['valor']) ?></td></tr>
                 <?php endforeach; ?>
             </table>
         <?php endif; ?>
@@ -908,11 +918,11 @@ class DeclaracionRentaService
             $fila('Gastos personales: (+) notas de débito recibidas', $p['notas_debito']),
             $neto('GASTOS PERSONALES NETOS', $p),
         ];
-        foreach ($doc['personal_rubros'] ?? [] as $cod => $r) {
-            if ($r['cantidad'] === 0 && $r['total'] == 0.0) {
+        foreach ($doc['personal_rubros'] ?? [] as $cod => $rb) {
+            if ($rb['cantidad'] === 0 && $rb['total'] == 0.0) {
                 continue;
             }
-            $filas[] = ['concepto' => '      · Rubro ' . $r['nombre'], 'cantidad' => $r['cantidad'], 'base' => $r['base'], 'monto' => $r['total'], 'total' => false, 'rubro' => $cod];
+            $filas[] = ['concepto' => '      · Rubro ' . $rb['nombre'], 'cantidad' => $rb['cantidad'], 'base' => $rb['base'], 'monto' => $rb['total'], 'total' => false, 'rubro' => $cod];
         }
         $cantO = $o['facturas']['cantidad'] + $o['notas_credito']['cantidad'] + $o['notas_debito']['cantidad'] + $o['otros']['cantidad'];
         if ($cantO > 0) {
@@ -1040,11 +1050,56 @@ class DeclaracionRentaService
             $s->getColumnDimension('G')->setWidth(16);
         }
 
-        // Hoja 4: detalle de documentos
+        // Hoja 4: gastos personales por rubro (lo que pide el Anexo de Gastos Personales).
+        // Siempre los seis rubros del SRI, aunque estén en 0; "Sin rubro" solo si hay.
+        $s = $ss->createSheet();
+        $s->setTitle('Gastos personales');
+        $s->setCellValue('A1', 'Gastos personales del ejercicio ' . $calc['anio'] . ' por rubro (compras marcadas «Gasto personal»; facturas y notas de débito suman, notas de crédito restan)');
+        $s->getStyle('A1')->getFont()->setBold(true);
+        $s->fromArray(['Rubro', 'Documentos', 'Base (sin IVA)', 'Total (con IVA)'], null, 'A3');
+        $s->getStyle('A3:D3')->applyFromArray($header);
+        $row = 4;
+        $totRub = ['cantidad' => 0, 'base' => 0.0, 'total' => 0.0];
+        foreach ($calc['documentos']['personal_rubros'] ?? [] as $cod => $rb) {
+            $s->setCellValue("A{$row}", $rb['nombre']);
+            $s->setCellValue("B{$row}", $rb['cantidad']);
+            $s->setCellValue("C{$row}", $rb['base']);
+            $s->setCellValue("D{$row}", $rb['total']);
+            $s->getStyle("C{$row}:D{$row}")->getNumberFormat()->setFormatCode($fmt);
+            if ($cod === RubrosGastoPersonal::SIN_RUBRO) {
+                $s->getStyle("A{$row}")->getFont()->getColor()->setRGB('DC3545');
+            }
+            $totRub = self::sumarBloque($totRub, $rb);
+            $row++;
+        }
+        $s->setCellValue("A{$row}", 'TOTAL GASTOS PERSONALES');
+        $s->setCellValue("B{$row}", $totRub['cantidad']);
+        $s->setCellValue("C{$row}", $totRub['base']);
+        $s->setCellValue("D{$row}", $totRub['total']);
+        $s->getStyle("C{$row}:D{$row}")->getNumberFormat()->setFormatCode($fmt);
+        $s->getStyle("A{$row}:D{$row}")->getFont()->setBold(true);
+        $row += 2;
+        if ($calc['parametros']) {
+            $p = $calc['parametros'];
+            $s->setCellValue("A{$row}", 'Tope de gastos personales (canasta ' . number_format($p['canasta_basica'], 2) . ' x ' . $p['factor_canastas'] . ' canastas)');
+            $s->setCellValue("D{$row}", $p['tope_gastos']);
+            $s->getStyle("D{$row}")->getNumberFormat()->setFormatCode($fmt);
+            $row++;
+            $s->setCellValue("A{$row}", 'Rebaja aplicada (' . rtrim(rtrim(number_format($p['porcentaje_rebaja'], 2, '.', ''), '0'), '.') . '% del menor entre gastos y tope, sin superar el impuesto causado)');
+            $s->setCellValue("D{$row}", $calc['liquidacion']['resumen']['rebaja']);
+            $s->getStyle("D{$row}")->getNumberFormat()->setFormatCode($fmt);
+            $s->getStyle("A{$row}")->getFont()->setBold(true);
+        }
+        $s->getColumnDimension('A')->setWidth(70);
+        $s->getColumnDimension('B')->setWidth(14);
+        $s->getColumnDimension('C')->setWidth(16);
+        $s->getColumnDimension('D')->setWidth(16);
+
+        // Hoja 5: detalle de documentos
         $s = $ss->createSheet();
         $s->setTitle('Detalle documentos');
-        $s->fromArray(['Bloque', 'Establecimiento', 'Fecha', 'Tipo', 'Número', 'Tercero', 'Identificación', 'Base (sin IVA)', 'Total'], null, 'A1');
-        $s->getStyle('A1:I1')->applyFromArray($header);
+        $s->fromArray(['Bloque', 'Establecimiento', 'Fecha', 'Tipo', 'Rubro', 'Número', 'Tercero', 'Identificación', 'Base (sin IVA)', 'Total'], null, 'A1');
+        $s->getStyle('A1:J1')->applyFromArray($header);
         $row = 2;
         foreach (self::FUENTES_DETALLE as $fuente => $nombre) {
             foreach ($this->getDetalle($idEmpresa, $calc['anio'], $fuente, $idUsuario) as $d) {
@@ -1052,22 +1107,24 @@ class DeclaracionRentaService
                 $s->setCellValue("B{$row}", $d['establecimiento'] ?? '');
                 $s->setCellValue("C{$row}", $d['fecha_emision']);
                 $s->setCellValue("D{$row}", self::nombreTipoDoc((string) ($d['tipo'] ?? '')));
-                $s->setCellValueExplicit("E{$row}", (string) ($d['numero'] ?? ''), \PhpOffice\PhpSpreadsheet\Cell\DataType::TYPE_STRING);
-                $s->setCellValue("F{$row}", $d['tercero'] ?? '');
-                $s->setCellValueExplicit("G{$row}", (string) ($d['identificacion'] ?? ''), \PhpOffice\PhpSpreadsheet\Cell\DataType::TYPE_STRING);
-                $s->setCellValue("H{$row}", (float) $d['base']);
-                $s->setCellValue("I{$row}", (float) $d['total']);
-                $s->getStyle("H{$row}:I{$row}")->getNumberFormat()->setFormatCode($fmt);
+                $s->setCellValue("E{$row}", $d['rubro_nombre'] ?? '');
+                $s->setCellValueExplicit("F{$row}", (string) ($d['numero'] ?? ''), \PhpOffice\PhpSpreadsheet\Cell\DataType::TYPE_STRING);
+                $s->setCellValue("G{$row}", $d['tercero'] ?? '');
+                $s->setCellValueExplicit("H{$row}", (string) ($d['identificacion'] ?? ''), \PhpOffice\PhpSpreadsheet\Cell\DataType::TYPE_STRING);
+                $s->setCellValue("I{$row}", (float) $d['base']);
+                $s->setCellValue("J{$row}", (float) $d['total']);
+                $s->getStyle("I{$row}:J{$row}")->getNumberFormat()->setFormatCode($fmt);
                 $row++;
             }
         }
         $s->getColumnDimension('A')->setWidth(36);
         $s->getColumnDimension('B')->setWidth(28);
-        $s->getColumnDimension('E')->setWidth(20);
-        $s->getColumnDimension('F')->setWidth(40);
-        $s->getColumnDimension('G')->setWidth(16);
+        $s->getColumnDimension('E')->setWidth(22);
+        $s->getColumnDimension('F')->setWidth(20);
+        $s->getColumnDimension('G')->setWidth(40);
         $s->getColumnDimension('H')->setWidth(16);
         $s->getColumnDimension('I')->setWidth(16);
+        $s->getColumnDimension('J')->setWidth(16);
 
         $ss->setActiveSheetIndex(0);
         ob_start();

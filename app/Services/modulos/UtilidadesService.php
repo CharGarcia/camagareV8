@@ -56,6 +56,15 @@ class UtilidadesService
         return $this->repo->tienePagos($idCabecera);
     }
 
+    /** False mientras no se haya ejecutado el SQL del módulo en la base. */
+    public function instalado(): bool
+    {
+        return $this->repo->instalado();
+    }
+
+    /** Mensaje único para toda acción que necesita las tablas del módulo. */
+    public const MSG_NO_INSTALADO = 'El módulo Utilidades todavía no está instalado en esta base: ejecute database/migrations/20261008_create_utilidades.sql.';
+
     /** 15% de la utilidad líquida: lo que el modal propone como monto a repartir. */
     public function montoLegal(float $utilidadLiquida): float
     {
@@ -71,6 +80,9 @@ class UtilidadesService
      */
     public function calcular(int $idEmpresa, int $anio, float $utilidadLiquida, float $montoRepartir, int $idUsuario): int
     {
+        if (!$this->repo->instalado()) {
+            throw new Exception(self::MSG_NO_INSTALADO);
+        }
         $this->rules->validarCalculo(['anio' => $anio, 'utilidad_liquida' => $utilidadLiquida, 'monto_repartir' => $montoRepartir]);
 
         $existente = $this->repo->findCabeceraPorAnio($idEmpresa, $anio);

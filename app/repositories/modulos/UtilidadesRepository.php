@@ -35,9 +35,22 @@ class UtilidadesRepository extends BaseRepository
         parent::__construct('utilidades_cabecera');
     }
 
+    /**
+     * ¿Ya se ejecutó database/migrations/20261008_create_utilidades.sql en esta
+     * base? El código se despliega antes que el SQL: mientras falte, el módulo
+     * muestra el aviso en vez de reventar con un error 500.
+     */
+    public function instalado(): bool
+    {
+        return $this->tablaExiste('utilidades_cabecera') && $this->tablaExiste('utilidades_detalle');
+    }
+
     // ─── Listado de cabeceras ───────────────────────────────────────────────
     public function getListado(int $idEmpresa, string $buscar, int $page, int $perPage, string $ordenCol, string $ordenDir, ?int $idUsuarioFiltro = null, array $ordenMulti = []): array
     {
+        if (!$this->instalado()) {
+            return ['rows' => [], 'total' => 0];
+        }
         $ordenMulti = OrdenListado::normalizar(
             $ordenMulti !== [] ? $ordenMulti : [['col' => $ordenCol, 'dir' => $ordenDir]]
         );
@@ -71,8 +84,9 @@ class UtilidadesRepository extends BaseRepository
         $stTotal->execute($params);
         $total = (int) $stTotal->fetchColumn();
 
+        // clausula() ya devuelve el texto completo "ORDER BY ...".
         $orderBy = OrdenListado::clausula($ordenMulti, self::MAPA_ORDEN, 'c.anio', 'c.id DESC');
-        $sql = "SELECT c.* {$from} ORDER BY {$orderBy}";
+        $sql = "SELECT c.* {$from} {$orderBy}";
         if ($perPage > 0) {
             $sql .= ' LIMIT ' . (int) $perPage . ' OFFSET ' . (int) (($page - 1) * $perPage);
         }
@@ -363,6 +377,9 @@ class UtilidadesRepository extends BaseRepository
      */
     public function getPagadoPorEmpleadoEnAnio(int $idEmpresa, int $anioPago): array
     {
+        if (!$this->instalado()) {
+            return [];
+        }
         $sql = "SELECT ud.id_empleado, SUM(d.monto_pagado) AS pagado
                 FROM egresos_detalle d
                 INNER JOIN egresos_cabecera e ON e.id = d.id_egreso

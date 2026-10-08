@@ -128,27 +128,27 @@ $esSoc = $ctx['tipo'] === 'soc';
             <div class="cmg-control-card__stats">
                 <div class="cmg-control-card__stat">
                     <span class="rounded-circle d-inline-flex align-items-center justify-content-center bg-success bg-opacity-10 text-success" style="width:28px;height:28px;"><i class="bi bi-arrow-down-left-circle"></i></span>
-                    <div><div class="cmg-control-card__stat-value renta-kpi" id="kpi-ingresos">0,00</div><div class="cmg-control-card__stat-label">Ingresos gravados</div></div>
+                    <div><div class="cmg-control-card__stat-value renta-kpi" id="kpi-ingresos">0.00</div><div class="cmg-control-card__stat-label">Ingresos gravados</div></div>
                 </div>
                 <div class="cmg-control-card__stat">
                     <span class="rounded-circle d-inline-flex align-items-center justify-content-center bg-danger bg-opacity-10 text-danger" style="width:28px;height:28px;"><i class="bi bi-arrow-up-right-circle"></i></span>
-                    <div><div class="cmg-control-card__stat-value renta-kpi" id="kpi-gastos">0,00</div><div class="cmg-control-card__stat-label">Costos y gastos</div></div>
+                    <div><div class="cmg-control-card__stat-value renta-kpi" id="kpi-gastos">0.00</div><div class="cmg-control-card__stat-label">Costos y gastos</div></div>
                 </div>
                 <div class="cmg-control-card__stat">
                     <span class="rounded-circle d-inline-flex align-items-center justify-content-center bg-primary bg-opacity-10 text-primary" style="width:28px;height:28px;"><i class="bi bi-calculator"></i></span>
-                    <div><div class="cmg-control-card__stat-value renta-kpi" id="kpi-base">0,00</div><div class="cmg-control-card__stat-label">Base imponible</div></div>
+                    <div><div class="cmg-control-card__stat-value renta-kpi" id="kpi-base">0.00</div><div class="cmg-control-card__stat-label">Base imponible</div></div>
                 </div>
                 <div class="cmg-control-card__stat">
                     <span class="rounded-circle d-inline-flex align-items-center justify-content-center bg-warning bg-opacity-10 text-warning" style="width:28px;height:28px;"><i class="bi bi-percent"></i></span>
-                    <div><div class="cmg-control-card__stat-value renta-kpi" id="kpi-causado">0,00</div><div class="cmg-control-card__stat-label">Impuesto causado</div></div>
+                    <div><div class="cmg-control-card__stat-value renta-kpi" id="kpi-causado">0.00</div><div class="cmg-control-card__stat-label">Impuesto causado</div></div>
                 </div>
                 <div class="cmg-control-card__stat">
                     <span class="rounded-circle d-inline-flex align-items-center justify-content-center bg-info bg-opacity-10 text-info" style="width:28px;height:28px;"><i class="bi bi-receipt"></i></span>
-                    <div><div class="cmg-control-card__stat-value renta-kpi" id="kpi-retenciones">0,00</div><div class="cmg-control-card__stat-label">Retenciones que le hicieron</div></div>
+                    <div><div class="cmg-control-card__stat-value renta-kpi" id="kpi-retenciones">0.00</div><div class="cmg-control-card__stat-label">Retenciones que le hicieron</div></div>
                 </div>
                 <div class="cmg-control-card__stat">
                     <span class="rounded-circle d-inline-flex align-items-center justify-content-center bg-dark bg-opacity-10 text-dark" style="width:28px;height:28px;"><i class="bi bi-cash-coin"></i></span>
-                    <div><div class="cmg-control-card__stat-value renta-kpi" id="kpi-pagar">0,00</div><div class="cmg-control-card__stat-label" id="kpi-pagar-label">Impuesto a pagar</div></div>
+                    <div><div class="cmg-control-card__stat-value renta-kpi" id="kpi-pagar">0.00</div><div class="cmg-control-card__stat-label" id="kpi-pagar-label">Impuesto a pagar</div></div>
                 </div>
             </div>
         </div>
@@ -216,7 +216,7 @@ $esSoc = $ctx['tipo'] === 'soc';
             </div>
             <div class="renta-scroll">
                 <table class="table table-sm table-hover mb-0 renta-tabla">
-                    <thead><tr><?php if (!empty($ctx['grupo']['consolidado'])): ?><th>Establecimiento</th><?php endif; ?><th>Fecha</th><th>Tipo</th><th>Número</th><th>Tercero</th><th>Identificación</th><th class="text-end">Base (sin IVA)</th><th class="text-end">Total</th></tr></thead>
+                    <thead><tr><?php if (!empty($ctx['grupo']['consolidado'])): ?><th>Establecimiento</th><?php endif; ?><th>Fecha</th><th>Tipo</th><th>Rubro</th><th>Número</th><th>Tercero</th><th>Identificación</th><th class="text-end">Base (sin IVA)</th><th class="text-end">Total</th></tr></thead>
                     <tbody id="renta-detalle"></tbody>
                 </table>
             </div>

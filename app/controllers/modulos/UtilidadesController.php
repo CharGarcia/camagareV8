@@ -53,6 +53,7 @@ class UtilidadesController extends BaseModuloController
 
         $this->viewWithLayout('layouts.main', 'modulos.utilidades.index', [
             'titulo'      => 'Utilidades',
+            'instalado'   => $this->service->instalado(),
             'perm'        => $perm,
             'rutaModulo'  => self::RUTA_MODULO,
             'rows'        => $result['rows'],
@@ -153,6 +154,7 @@ class UtilidadesController extends BaseModuloController
         header('Content-Type: application/json');
         $idEmpresa = (int) $_SESSION['id_empresa'];
         $id = (int) ($_GET['id'] ?? 0);
+        if (!$this->service->instalado()) { echo json_encode(['ok' => false, 'error' => UtilidadesService::MSG_NO_INSTALADO]); exit; }
         $cab = $this->service->getCabecera($id, $idEmpresa);
         if (!$cab) { echo json_encode(['ok' => false, 'error' => 'No encontrado']); exit; }
         echo json_encode([
