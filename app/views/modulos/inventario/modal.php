@@ -67,7 +67,25 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosPestanasOcultas($vistaConfigI
                                     <i class="bi bi-box-seam me-1"></i> General
                                 </a>
                             </li>
+                            <?php if (\App\Helpers\AsientoPestana::puedeVer()): // solo con acceso a Contabilidad → Asientos Contables ?>
+                            <li class="nav-item" role="presentation">
+                                <a class="nav-link py-2 small" id="tab-inv-asiento-btn" data-bs-toggle="tab" data-bs-target="#pane-inv-asiento" href="#pane-inv-asiento" role="tab">
+                                    <i class="bi bi-calculator me-1"></i> Asiento contable
+                                </a>
+                            </li>
+                            <?php endif; ?>
                         </ul>
+                        <div class="ms-2">
+                            <?php
+                            // La pestaña del asiento solo es configurable si el usuario la ve.
+                            $pestanasConfigInv = \App\Helpers\AsientoPestana::puedeVer()
+                                ? ['pane-inv-asiento' => 'Asiento contable']
+                                : [];
+                            if ($pestanasConfigInv) {
+                                echo \App\Helpers\PreferenciasHelper::renderDropdownPestanas($pestanasConfigInv, $vistaConfigInv ?? [], 'inventario', '__pestanas_ocultas__', 'estiloVistaPestanasInv');
+                            }
+                            ?>
+                        </div>
                     </div>
                     <div class="border-bottom bg-light mb-0"></div>
 
@@ -160,6 +178,13 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosPestanasOcultas($vistaConfigI
                                 </div>
                             </div>
                         </div>
+
+                        <!-- PESTAÑA ASIENTO CONTABLE (ajustes del módulo: AjusteInventarioAsientoService) -->
+                        <?php if (\App\Helpers\AsientoPestana::puedeVer()): ?>
+                        <div class="tab-pane fade" id="pane-inv-asiento" role="tabpanel">
+                            <?php $prefijo = 'inv'; require MVC_APP . '/views/partials/asiento_tab.php'; ?>
+                        </div>
+                        <?php endif; ?>
                     </div>
 
                     <div id="ajuste_mensaje" class="alert mx-3 mb-3 py-2 small d-none shadow-sm border-0"></div>
@@ -235,6 +260,32 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosPestanasOcultas($vistaConfigI
             if (btnPdf) btnPdf.classList.toggle('d-none', !mostrar);
             if (avisoAcciones) avisoAcciones.classList.toggle('d-none', mostrar);
         }
+
+        // ── Pestaña «Asiento contable» (public/js/modulos/asiento_contable_tab.js) ──
+        // Solo existe con acceso a Contabilidad → Asientos Contables. soloRegistrado: muestra el
+        // asiento ya generado; si falta, getAsientoSugeridoAjax intenta generarlo y dice por qué no.
+        let invAsientoTab = null;
+        function cargarAsientoMovimiento(id) {
+            if (!document.getElementById('inv-asiento-tbody') || typeof window.crearAsientoTab !== 'function') return;
+            if (!invAsientoTab) {
+                invAsientoTab = window.crearAsientoTab({
+                    prefijo: 'inv',
+                    moduloOrigen: 'ajuste_inventario',
+                    soloRegistrado: true,
+                    previewUrl: `<?= BASE_URL ?>/modulos/inventario/getAsientoSugeridoAjax`,
+                    cuentasUrl: `<?= BASE_URL ?>/modulos/plan-cuentas/searchAjaxCuentas`,
+                    asientosUrl: `<?= BASE_URL ?>/modulos/asientos-contables`
+                });
+            }
+            invAsientoTab.cargar(id || 0);
+        }
+        // Enter dentro de la tabla del asiento no debe enviar el formulario del movimiento.
+        const paneAsiento = document.getElementById('pane-inv-asiento');
+        if (paneAsiento) {
+            paneAsiento.addEventListener('keydown', e => {
+                if (e.key === 'Enter' && e.target.tagName === 'INPUT') e.preventDefault();
+            });
+        }
         let timerBusqueda;
         let modalObj = null;
         const spanStock = document.getElementById('ajuste_stock_info');
@@ -273,6 +324,9 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosPestanasOcultas($vistaConfigI
                 if (btnHabilitar) btnHabilitar.classList.add('d-none');
                 mostrarAccionesDocumento(false);
                 form.querySelectorAll('input, select, textarea').forEach(el => el.disabled = false);
+                const tabGeneral = document.getElementById('tab-inv-general-btn');
+                if (tabGeneral) bootstrap.Tab.getOrCreateInstance(tabGeneral).show();
+                cargarAsientoMovimiento(id || 0);
 
                 if (id) {
                     modalLabel.innerHTML = `<i class="bi bi-pencil-square me-2"></i>Editar Movimiento`;

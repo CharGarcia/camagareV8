@@ -698,6 +698,13 @@ class AsientoProgramadoService
     ];
 
     /**
+     * Tipos cuyos conceptos los siembra una migración propia (asientos_tipo). No incluye
+     * Retenciones ni Ingresos/Egresos, que se configuran por código / opción y no tienen filas
+     * en asientos_tipo.
+     */
+    private const TIPOS_CON_CATALOGO_PROPIO = ['ajuste_inventario'];
+
+    /**
      * Tipos de asiento que la empresa todavía no usa: su módulo no tiene ningún registro y no
      * tienen ninguna cuenta configurada. El selector de Configuración Contable no los lista
      * (pedido del usuario: «Suscripciones - Devengo» solo si hay alguna suscripción, y lo mismo
@@ -707,10 +714,17 @@ class AsientoProgramadoService
      */
     public function tiposAsientoSinUso(int $idEmpresa): array
     {
-        $conDatos   = $this->repo->tablasConRegistros($idEmpresa, array_merge(...array_values(self::TABLAS_POR_TIPO_ASIENTO)));
-        $conCuentas = $this->repo->tiposAsientoConCuentas($idEmpresa);
+        $conDatos    = $this->repo->tablasConRegistros($idEmpresa, array_merge(...array_values(self::TABLAS_POR_TIPO_ASIENTO)));
+        $conCuentas  = $this->repo->tiposAsientoConCuentas($idEmpresa);
+        $conCatalogo = $this->repo->tiposAsientoConCatalogo();
         $sinUso = [];
         foreach (self::TABLAS_POR_TIPO_ASIENTO as $tipo => $tablas) {
+            // Sin sus conceptos en el catálogo (SQL de la migración aún sin aplicar) la sección
+            // saldría vacía: no hay nada que configurar.
+            if (in_array($tipo, self::TIPOS_CON_CATALOGO_PROPIO, true) && !in_array($tipo, $conCatalogo, true)) {
+                $sinUso[] = $tipo;
+                continue;
+            }
             if (!array_intersect($tablas, $conDatos) && !in_array($tipo, $conCuentas, true)) {
                 $sinUso[] = $tipo;
             }

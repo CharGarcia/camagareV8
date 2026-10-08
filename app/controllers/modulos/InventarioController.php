@@ -489,6 +489,30 @@ class InventarioController extends BaseModuloController
     }
 
     /**
+     * Pestaña «Asiento contable» del movimiento: genera el asiento del ajuste si le falta y
+     * responde { ok, es_guardado, aviso } (crearAsientoTab con soloRegistrado). El asiento en sí
+     * lo lee el componente de modulos/asientos-contables/getDetalleAjax.
+     */
+    public function getAsientoSugeridoAjax(): void
+    {
+        $this->requireLeer();
+        header('Content-Type: application/json');
+
+        try {
+            $estado = (new \App\Services\modulos\AjusteInventarioAsientoService())->estadoParaPestana(
+                (int) ($_GET['id'] ?? 0),
+                (int) $_SESSION['id_empresa'],
+                (int) $_SESSION['id_usuario']
+            );
+            echo json_encode(['ok' => true] + $estado);
+        } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
+            echo json_encode(['ok' => false, 'error' => 'No se pudo consultar el asiento contable.']);
+        }
+        exit;
+    }
+
+    /**
      * Comprobante PDF de un movimiento del kardex (ficha del registro).
      * Incluye los anulados: la ficha debe poder imprimirse igual, con su sello.
      */

@@ -162,6 +162,54 @@ class AjusteInventarioAsientoService
         $this->repo->updateAsientoContable($idKardex, $idEmpresa, null);
     }
 
+    /**
+     * Pestaña «Asiento contable» del movimiento: si el ajuste aún no tiene asiento intenta
+     * generarlo (la configuración pudo completarse después) y, si no se puede, dice por qué.
+     *
+     * @return array{es_guardado: bool, aviso: string}
+     */
+    public function estadoParaPestana(int $idKardex, int $idEmpresa, int $idUsuario): array
+    {
+        $sin = static fn(string $aviso): array => ['es_guardado' => false, 'aviso' => $aviso];
+
+        if (!$this->repo->tieneColumnasAjusteContable()) {
+            return $sin('La contabilización de los ajustes de inventario todavía no está activada en esta base de datos.');
+        }
+        $mov = $this->repo->findIncluyendoEliminados($idKardex, $idEmpresa);
+        if (!$mov) {
+            return $sin('No se encontró el movimiento.');
+        }
+        if (!empty($mov['id_asiento_contable'])) {
+            return ['es_guardado' => true, 'aviso' => ''];
+        }
+        if (!empty($mov['eliminado'])) {
+            return $sin('El movimiento está anulado: no tiene asiento contable vigente.');
+        }
+        if (($mov['referencia_tipo'] ?? '') !== 'ajuste_manual') {
+            return $sin('Este movimiento lo generó otro documento: su asiento contable, si lo tiene, está en ese documento.');
+        }
+        if (empty($mov['contabiliza_ajuste'])) {
+            return $sin('Este ajuste no genera asiento contable: se registró antes de la contabilización automática '
+                . 'de ajustes o desde la ficha del producto.');
+        }
+        if (abs((float) ($mov['costo_total'] ?? 0)) < 0.005) {
+            return $sin('El ajuste no tiene costo: no hay importe que contabilizar.');
+        }
+        if (!ContabilidadInterruptorService::crear()->contabiliza($idEmpresa, self::CLAVE)) {
+            return $sin('«Ajustes de Inventario» está apagado en Configuración Contable → Módulos que contabilizan.');
+        }
+
+        try {
+            $this->procesarAsientoContable($idKardex, $idEmpresa, $idUsuario);
+        } catch (\Throwable $e) {
+            return $sin($e->getMessage());
+        }
+        $mov = $this->repo->find($idKardex, $idEmpresa);
+        return !empty($mov['id_asiento_contable'])
+            ? ['es_guardado' => true, 'aviso' => '']
+            : $sin('Aún no se ha generado el asiento contable de este ajuste.');
+    }
+
     private function asientoService(): AsientoContableService
     {
         return new AsientoContableService(

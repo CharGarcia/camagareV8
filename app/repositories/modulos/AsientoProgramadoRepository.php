@@ -2181,6 +2181,14 @@ class AsientoProgramadoRepository extends BaseRepository
         return $st->fetchAll(PDO::FETCH_COLUMN);
     }
 
+    /** Tipos de asiento que tienen conceptos en el catálogo global (asientos_tipo). */
+    public function tiposAsientoConCatalogo(): array
+    {
+        return $this->db->query(
+            "SELECT DISTINCT tipo_asiento FROM asientos_tipo WHERE eliminado = false"
+        )->fetchAll(PDO::FETCH_COLUMN);
+    }
+
     /** Razón social del proveedor si pertenece a la empresa y no está eliminado; null si no. */
     public function getNombreProveedorEmpresa(int $idEmpresa, int $idProveedor): ?string
     {

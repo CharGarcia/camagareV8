@@ -129,8 +129,14 @@ ventana de ajuste de la pestaña **Existencias** del Reporte de Inventarios) gen
 - **Editar** el ajuste actualiza su asiento; **anularlo** anula el asiento y
   **habilitarlo** lo vuelve a generar. Si el período contable del asiento está
   cerrado, el ajuste no se puede editar ni anular.
-- El asiento se ve en **Asientos Contables** con el origen *Ajuste de
-  inventario* y el número **AI-000001**, **AI-000002**…
+- El asiento se ve en la pestaña **Asiento contable** de la ventana del
+  movimiento (solo para quien tiene acceso a Contabilidad → Asientos Contables;
+  con permiso de modificar asientos, se puede corregir ahí mismo) y en **Asientos
+  Contables**, con el origen *Ajuste de inventario* y el número **AI-000001**,
+  **AI-000002**… Si el movimiento no tiene asiento, la pestaña dice por qué (falta
+  una cuenta, no tiene costo, es de otro documento, está anulado…). Al abrirla, si
+  las cuentas ya están configuradas, el asiento que faltaba se genera en ese
+  momento. La pestaña se puede ocultar con el engranaje junto a las pestañas.
 - **No generan asiento**: los ajustes registrados antes de existir esta función,
   los que hace la ficha de un **Producto** al cambiar su stock, las **cargas de
   inventario**, las importaciones y los saldos iniciales.
@@ -194,7 +200,8 @@ problema pero no aparece en el kardex ni tiene stock.
 - **1.9** — Los **ajustes** del módulo generan su **asiento contable** a costo
   (Inventario contra Sobrante o Faltante / merma), con las cuentas de
   Configuración Contable → Ajustes de Inventario. Una salida sin costo unitario se
-  valora al costo promedio. Ver *Asiento contable del ajuste*.
+  valora al costo promedio. Nueva pestaña **Asiento contable** en la ventana del
+  movimiento. Ver *Asiento contable del ajuste*.
 - **1.8** — Corregido: en el buscador de producto al registrar un movimiento,
   algunos productos aparecían en la lista pero no se podían seleccionar (los que
   tienen comillas en el nombre, como `TUBO 1/2"`, o no tienen código). Además, el

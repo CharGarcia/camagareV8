@@ -448,7 +448,8 @@ El tipo **Ajustes de Inventario** da las cuentas del asiento que genera cada aju
 - **Faltante / merma de inventario**: contrapartida de las **salidas** por ajuste
   (faltantes, mermas, daños). Normalmente una cuenta de gasto.
 
-Se configuran solo en **General**. Mientras falte una cuenta, los ajustes se guardan sin
+Aparece en el selector cuando la empresa ya tiene movimientos de inventario (kardex) o
+alguna de estas cuentas configurada. Se configuran solo en **General**. Mientras falte una cuenta, los ajustes se guardan sin
 asiento y aparecen en el aviso de asientos pendientes con el nombre de la cuenta que
 falta; al configurarla se contabilizan solos. Ver
 [Inventario](modulos/inventario), sección *Asiento contable del ajuste*.

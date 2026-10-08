@@ -256,6 +256,9 @@ $optOrigen   = array_map(fn($t) => ['v' => $t, 'l' => ucwords(str_replace('_', '
 </div>
 
 <!-- ── Modales ── -->
+<?php if (\App\Helpers\AsientoPestana::puedeVer()): // pestaña «Asiento contable» del movimiento ?>
+<script src="<?= rtrim(BASE_URL, '/') ?>/js/modulos/asiento_contable_tab.js?v=<?= asset_ver('/js/modulos/asiento_contable_tab.js') ?>"></script>
+<?php endif; ?>
 <?php include __DIR__ . '/modal.php'; ?>
 
 <!-- ── Scripts ── -->
