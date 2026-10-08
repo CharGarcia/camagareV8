@@ -8,7 +8,12 @@
     const URL = BASE_URL + '/modulos/anexo-rdep';
     const $ = (id) => document.getElementById(id);
     const money = (v) => (parseFloat(v) || 0).toLocaleString('es-EC', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-    const fecha = (v) => v ? new Date(String(v).replace(' ', 'T')).toLocaleString('es-EC') : '-';
+    // Fechas en el formato estándar del sistema: d-m-Y H:i:s.
+    const fecha = (v) => {
+        if (!v) return '-';
+        const m = String(v).match(/^(\d{4})-(\d{2})-(\d{2})(?:[ T](\d{2}):(\d{2}):(\d{2}))?/);
+        return m ? `${m[3]}-${m[2]}-${m[1]}${m[4] ? ` ${m[4]}:${m[5]}:${m[6]}` : ''}` : String(v);
+    };
     const esc = (s) => String(s ?? '').replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;');
     const arr = (v) => { if (Array.isArray(v)) return v; try { const j = JSON.parse(v || '[]'); return Array.isArray(j) ? j : []; } catch (e) { return []; } };
     const truthy = (v) => v === true || v === 't' || v === '1' || v === 1;
@@ -135,6 +140,14 @@
         });
     }
 
+    // Botón de correo de la fila: sobre verde con fecha si ya se envió el 107.
+    function botonCorreo(d) {
+        const enviado = d.f107_enviado_at
+            ? `Enviado el ${fecha(d.f107_enviado_at)} a ${d.f107_enviado_a || ''}. Clic para reenviar.`
+            : (d.email_empleado ? `Enviar el Formulario 107 a ${d.email_empleado}` : 'Enviar el Formulario 107 por correo (el empleado no tiene correo en su ficha)');
+        return `<button type="button" class="btn btn-xs ${d.f107_enviado_at ? 'btn-outline-success' : 'btn-outline-info'} border-0 px-1" onclick="event.stopPropagation(); RDEP_enviar107(${d.id})" title="${esc(enviado)}"><i class="bi ${d.f107_enviado_at ? 'bi-envelope-check' : 'bi-envelope'}"></i></button>`;
+    }
+
     function pintarTrabajadores() {
         const tbody = $('rdep_tbody_trab');
         const filas = filasVisibles();
@@ -162,7 +175,7 @@
                 <td class="text-end">${money(d.bas_imp)}</td><td class="text-end">${money(d.imp_rent_caus)}</td><td class="text-end">${money(d.rebaja_gastos)}</td>
                 <td class="text-end fw-bold">${money(d.imp_rent_rebaja)}</td><td class="text-end fw-bold">${money(d.val_ret)}</td>
                 <td class="text-center">${obs}</td>
-                <td class="text-center"><button type="button" class="btn btn-xs btn-outline-secondary border-0 px-2" onclick="event.stopPropagation(); RDEP_editarTrabajador(${d.id})" title="Editar"><i class="bi bi-pencil"></i></button></td>
+                <td class="text-center text-nowrap"><button type="button" class="btn btn-xs btn-outline-secondary border-0 px-1" onclick="event.stopPropagation(); RDEP_editarTrabajador(${d.id})" title="Editar"><i class="bi bi-pencil"></i></button><button type="button" class="btn btn-xs btn-outline-danger border-0 px-1" onclick="event.stopPropagation(); RDEP_f107(${d.id})" title="Formulario 107 (PDF)"><i class="bi bi-file-earmark-pdf"></i></button>${botonCorreo(d)}</td>
             </tr>`;
         }).join('');
         $('rdep_tfoot_trab').innerHTML = `<td colspan="4" class="text-end">Totales (${filas.length})</td>
@@ -247,6 +260,150 @@
         const r = await Swal.fire({ icon: 'success', title: 'Archivo generado', html: `${esc(json.msg)}<br><small>${json.resultado.trabajadores} trabajador(es)${json.resultado.leves ? `, ${json.resultado.leves} observación(es) leve(s)` : ''}.</small>`, showCancelButton: true, confirmButtonText: 'Descargar ZIP', cancelButtonText: 'Cerrar' });
         if (r.isConfirmed) CMG_descargar(json.url_zip || json.url_xml);
     };
+    // ─── Formulario 107 (PDF) ────────────────────────────────────────────────
+    // Imprime los valores GUARDADOS del anexo (los mismos del XML).
+    window.RDEP_f107 = function (idDetalle) {
+        CMG_pdfDocumento(`${URL}/formulario107Pdf?id_detalle=${idDetalle}`, { nombre: 'Formulario 107', archivo: 'Formulario107.pdf' });
+    };
+    window.RDEP_f107Todos = function () {
+        if (!detalle.length) {
+            Swal.fire({ icon: 'info', title: 'Sin trabajadores', text: 'Importe la nómina del ejercicio antes de imprimir el Formulario 107.' });
+            return;
+        }
+        CMG_pdfDocumento(`${URL}/formulario107Pdf?id=${id()}`, { nombre: 'Formulario 107', archivo: 'Formulario107_todos.pdf' });
+    };
+    window.RDEP_f107Actual = function () {
+        const idDet = $('rdep_t_id').value;
+        if (!idDet) return;
+        if (trabSucio) {
+            Swal.fire({ icon: 'info', title: 'Cambios sin guardar', text: 'Guarde el trabajador antes de imprimir: el Formulario 107 sale de los valores guardados.' });
+            return;
+        }
+        RDEP_f107(idDet);
+    };
+
+    // ─── Formulario 107 por correo ───────────────────────────────────────────
+    // Swal se dibuja DENTRO del modal abierto: si no, la trampa de foco de Bootstrap
+    // no deja escribir en el campo del correo.
+    const modalAbierto = () => document.querySelector('#modalRdepTrab.show') || document.querySelector('#modalRdep.show') || undefined;
+    let enviandoCorreo = false;
+
+    window.RDEP_enviar107 = async function (idDetalle) {
+        if (enviandoCorreo) return;
+        const d = detalle.find(x => String(x.id) === String(idDetalle)) || {};
+        if (arr(d.graves).length) {
+            Swal.fire({ icon: 'warning', title: 'Tiene observaciones graves', text: 'Corrija las observaciones graves de este trabajador antes de enviarle el Formulario 107.', target: modalAbierto() });
+            return;
+        }
+        const previo = d.f107_enviado_at ? `<div class="small text-success mb-2"><i class="bi bi-envelope-check me-1"></i>Ya se envió el ${esc(fecha(d.f107_enviado_at))} a ${esc(d.f107_enviado_a || '')}.</div>` : '';
+        const { value: correos, isConfirmed } = await Swal.fire({
+            title: 'Enviar Formulario 107',
+            html: `${previo}<div class="small text-muted">${esc((d.apellidos || '') + ' ' + (d.nombres || ''))}</div>`,
+            input: 'text',
+            inputLabel: 'Correo(s) del trabajador, separados por coma',
+            inputValue: d.email_empleado || '',
+            inputPlaceholder: 'trabajador@correo.com',
+            showCancelButton: true,
+            confirmButtonText: '<i class="bi bi-envelope me-1"></i> Enviar',
+            cancelButtonText: 'Cancelar',
+            target: modalAbierto(),
+            inputValidator: (v) => (!v || !v.trim()) ? 'Ingrese al menos un correo.' : undefined,
+        });
+        if (!isConfirmed) return;
+
+        enviandoCorreo = true;
+        Swal.fire({ title: 'Enviando correo...', allowOutsideClick: false, didOpen: () => Swal.showLoading(), target: modalAbierto() });
+        try {
+            const json = await post('enviarFormulario107Ajax', { id: idDetalle, correos: correos.trim() });
+            if (!json.ok) { Swal.fire({ icon: 'error', title: 'No se envió', text: json.error || 'No se pudo enviar el correo.', target: modalAbierto() }); return; }
+            Swal.fire({ icon: 'success', title: 'Enviado', text: json.msg, timer: 1800, showConfirmButton: false, target: modalAbierto() });
+            await cargar(id());
+            pintarEnvioTrabajador();
+        } catch (e) {
+            Swal.fire({ icon: 'error', title: 'Error de red', text: 'No se pudo conectar con el servidor.', target: modalAbierto() });
+        } finally {
+            enviandoCorreo = false;
+        }
+    };
+
+    window.RDEP_enviar107Actual = function () {
+        const idDet = $('rdep_t_id').value;
+        if (!idDet) return;
+        if (trabSucio) {
+            Swal.fire({ icon: 'info', title: 'Cambios sin guardar', text: 'Guarde el trabajador antes de enviar: el Formulario 107 sale de los valores guardados.', target: modalAbierto() });
+            return;
+        }
+        RDEP_enviar107(idDet);
+    };
+
+    window.RDEP_enviar107Todos = async function () {
+        if (enviandoCorreo) return;
+        if (!detalle.length) {
+            Swal.fire({ icon: 'info', title: 'Sin trabajadores', text: 'Importe la nómina del ejercicio antes de enviar el Formulario 107.', target: modalAbierto() });
+            return;
+        }
+        const conCorreo = detalle.filter(d => d.email_empleado && !arr(d.graves).length).length;
+        const sinCorreo = detalle.filter(d => !d.email_empleado).length;
+        const conGraves = detalle.filter(d => d.email_empleado && arr(d.graves).length).length;
+        if (!conCorreo) {
+            Swal.fire({ icon: 'info', title: 'Nadie a quien enviar', text: 'Ningún trabajador tiene correo en su ficha (o todos tienen observaciones graves).', target: modalAbierto() });
+            return;
+        }
+        const r = await Swal.fire({
+            title: '¿Enviar el Formulario 107 a todos?',
+            html: `Se enviará a <b>${conCorreo}</b> trabajador(es), al correo de su ficha de empleado.`
+                + (sinCorreo ? `<br><small class="text-muted">${sinCorreo} sin correo en su ficha: no se les envía.</small>` : '')
+                + (conGraves ? `<br><small class="text-danger">${conGraves} con observaciones graves: no se les envía.</small>` : ''),
+            icon: 'question', showCancelButton: true, confirmButtonText: '<i class="bi bi-envelope me-1"></i> Enviar', cancelButtonText: 'Cancelar', target: modalAbierto(),
+        });
+        if (!r.isConfirmed) return;
+
+        enviandoCorreo = true;
+        const btn = $('btnEnviar107Todos');
+        if (btn) btn.disabled = true;
+        Swal.fire({ title: 'Enviando correos...', text: 'Uno por trabajador; puede tardar.', allowOutsideClick: false, didOpen: () => Swal.showLoading(), target: modalAbierto() });
+        try {
+            const json = await post('enviarFormulario107TodosAjax', { id: id() });
+            if (!json.ok) { Swal.fire({ icon: 'error', title: 'No se envió', text: json.error || 'No se pudo enviar.', target: modalAbierto() }); return; }
+            const x = json.resultado;
+            const lista = (t, a, cls) => a.length ? `<div class="text-start small mt-2 ${cls}"><b>${t} (${a.length}):</b> ${a.map(esc).join(', ')}</div>` : '';
+            Swal.fire({
+                icon: x.fallidos.length ? 'warning' : 'success',
+                title: `Enviado a ${x.enviados} trabajador(es)`,
+                html: (x.detenido ? '<div class="text-danger small">El primer envío falló: revise la configuración de correo de la empresa. Se detuvo para no repetir el error con todos.</div>' : '')
+                    + lista('No se pudo enviar', x.fallidos, 'text-danger')
+                    + lista('Sin correo en la ficha', x.sin_correo, 'text-muted')
+                    + lista('Con observaciones graves', x.con_graves, 'text-warning-emphasis'),
+                target: modalAbierto(),
+            });
+            await cargar(id());
+        } catch (e) {
+            Swal.fire({ icon: 'error', title: 'Error de red', text: 'No se pudo conectar con el servidor.', target: modalAbierto() });
+        } finally {
+            enviandoCorreo = false;
+            if (btn) btn.disabled = false;
+        }
+    };
+
+    // Línea "ya enviado" en la barra del modal del trabajador.
+    function pintarEnvioTrabajador() {
+        const el = $('rdep_t_envio');
+        if (!el) return;
+        const d = detalle.find(x => String(x.id) === String($('rdep_t_id').value));
+        el.innerHTML = d && d.f107_enviado_at
+            ? `<i class="bi bi-envelope-check text-success me-1"></i>Enviado el ${esc(fecha(d.f107_enviado_at))} a ${esc(d.f107_enviado_a || '')}`
+            : (d && !d.email_empleado ? '<i class="bi bi-info-circle me-1"></i>Sin correo en la ficha del empleado' : '');
+    }
+
+    // Modal del trabajador encima del modal del anexo: la regla global deja todos los
+    // .modal en 5060; el hijo sube a 5080 y su fondo a 5075 (ver modales anidados).
+    $('modalRdepTrab')?.addEventListener('show.bs.modal', function () { this.style.setProperty('z-index', '5080', 'important'); });
+    $('modalRdepTrab')?.addEventListener('shown.bs.modal', function () {
+        const fondos = document.querySelectorAll('.modal-backdrop');
+        if (fondos.length) fondos[fondos.length - 1].style.setProperty('z-index', '5075', 'important');
+        pintarEnvioTrabajador();
+    });
+
     window.RDEP_descargar = function (nombre) {
         CMG_descargar(`${URL}/descargar?archivo=${encodeURIComponent(nombre)}`);
     };
@@ -344,7 +501,11 @@
             ? `<div class="border rounded-3 p-2 small">${g.map(m => `<div class="text-danger"><i class="bi bi-x-circle me-1"></i>${esc(m)}</div>`).join('')}${l.map(m => `<div class="text-warning-emphasis"><i class="bi bi-exclamation-circle me-1"></i>${esc(m)}</div>`).join('')}</div>`
             : '<div class="small text-success"><i class="bi bi-check-circle me-1"></i> Sin observaciones.</div>';
         try { new bootstrap.Tab($('rdept-tab-datos-btn')).show(); } catch (e) {}
+        trabSucio = false; // recién cargado o recién guardado
     }
+    // Cambios sin guardar en el modal del trabajador: el 107 imprime lo guardado.
+    let trabSucio = false;
+    ['input', 'change'].forEach(ev => $('formRdepTrab')?.addEventListener(ev, () => { trabSucio = true; }));
     function actualizarDiferencia() {
         const v = (id) => parseFloat($(id).value) || 0;
         const dif = v('rdep_t_val_ret') + v('rdep_t_val_imp_asu') + v('rdep_t_val_ret_otros') - v('rdep_t_imp_rebaja');

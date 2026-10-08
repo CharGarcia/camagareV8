@@ -26,6 +26,12 @@ $monto = fn(string $id, string $name, string $label, string $col = 'col-md-3', b
                 </div>
                 <div class="modal-body p-0">
                     <input type="hidden" name="id" id="rdep_t_id" value="">
+                    <!-- Barra de acciones del documento -->
+                    <div class="d-flex gap-1 align-items-center flex-wrap px-3 py-2 border-bottom bg-white">
+                        <button type="button" class="btn btn-sm btn-outline-danger" onclick="RDEP_f107Actual()" title="Formulario 107 de este trabajador (PDF)"><i class="bi bi-file-earmark-pdf"></i> Formulario 107</button>
+                        <button type="button" class="btn btn-sm btn-outline-info" onclick="RDEP_enviar107Actual()" title="Enviar el Formulario 107 por correo al trabajador"><i class="bi bi-envelope"></i> Enviar por correo</button>
+                        <span class="small text-muted ms-2" id="rdep_t_envio"></span>
+                    </div>
                     <div class="d-flex align-items-center bg-light px-3 pt-2">
                         <ul class="nav nav-tabs border-bottom-0 flex-grow-1 flex-nowrap tab-pestaña" id="tabsRdepTrab" role="tablist">
                             <li class="nav-item" role="presentation"><a class="nav-link active" id="rdept-tab-datos-btn" data-bs-toggle="tab" href="#rdept-tab-datos" role="tab"><i class="bi bi-person me-1"></i> Datos</a></li>

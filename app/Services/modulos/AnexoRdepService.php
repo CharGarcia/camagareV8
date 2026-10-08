@@ -514,6 +514,171 @@ class AnexoRdepService
         ];
     }
 
+    /**
+     * Formulario 107 en PDF: de un trabajador ($idDetalle) o de todos los del anexo
+     * ($idAnexo). Imprime los valores guardados en el anexo, los mismos del XML.
+     * @return array{contenido: string, archivo: string}
+     */
+    public function formulario107(int $idEmpresa, int $idUsuario, ?int $idAnexo, ?int $idDetalle, ?string $fechaEntrega = null): array
+    {
+        if (!$this->repo->instalado()) throw new Exception(self::MSG_NO_INSTALADO);
+        if ($idDetalle) {
+            $fila = $this->repo->findDetalle($idDetalle, $idEmpresa);
+            if (!$fila) throw new Exception('Trabajador no encontrado en el anexo.');
+            $idAnexo = (int) $fila['id_anexo'];
+            $filas = [$fila];
+        } else {
+            $filas = $idAnexo ? $this->repo->getDetalle($idAnexo, $idEmpresa) : [];
+        }
+        $cab = $idAnexo ? $this->repo->findById($idAnexo, $idEmpresa) : null;
+        if (!$cab) throw new Exception('Anexo no encontrado.');
+        if ($filas === []) throw new Exception('El anexo no tiene trabajadores: importe la nómina antes de imprimir el Formulario 107.');
+
+        $fecha = ($fechaEntrega && preg_match('/^\d{4}-\d{2}-\d{2}$/', $fechaEntrega)) ? $fechaEntrega : date('Y-m-d');
+        $pdf = new Formulario107PdfService();
+        $contenido = $pdf->generar($cab, $filas, $this->repo->getFirmas($idEmpresa), $fecha);
+
+        $this->log->registrar($idUsuario, $idEmpresa, 'FORMULARIO_107', 'anexo_rdep', (int) $cab['id'], null, [
+            'anio' => (int) $cab['anio'], 'trabajadores' => count($filas), 'id_detalle' => $idDetalle, 'fecha_entrega' => $fecha,
+        ]);
+        return ['contenido' => $contenido, 'archivo' => $pdf->nombreArchivo($cab, $filas)];
+    }
+
+    /**
+     * Envía por correo el Formulario 107 de un trabajador, como PDF adjunto, con el
+     * SMTP de la empresa. Destino: los correos indicados o, si no hay, el de la ficha
+     * del empleado. No se envía si el trabajador tiene observaciones graves (el PDF
+     * saldría como borrador).
+     * @return string correo(s) a los que se envió
+     */
+    public function enviarFormulario107(int $idEmpresa, int $idUsuario, int $idDetalle, string $correos = ''): string
+    {
+        if (!$this->repo->instalado()) throw new Exception(self::MSG_NO_INSTALADO);
+        $fila = $this->repo->findDetalle($idDetalle, $idEmpresa);
+        if (!$fila) throw new Exception('Trabajador no encontrado en el anexo.');
+        $cab = $this->repo->findById((int) $fila['id_anexo'], $idEmpresa);
+        if (!$cab) throw new Exception('Anexo no encontrado.');
+
+        $destinos = $this->destinosValidos($correos !== '' ? $correos : (string) ($fila['email_empleado'] ?? ''));
+        if ($destinos === []) {
+            throw new Exception($correos !== ''
+                ? 'Ingrese un correo válido.'
+                : 'El empleado no tiene correo en su ficha. Ingrese uno para enviar.');
+        }
+        if ($this->tieneGraves($fila)) {
+            throw new Exception('El trabajador tiene observaciones graves en el anexo: corríjalas antes de enviar el Formulario 107.');
+        }
+
+        $this->enviarUno($cab, $fila, $destinos, $idEmpresa, $idUsuario);
+        return implode(', ', $destinos);
+    }
+
+    /**
+     * Envía el Formulario 107 a todos los trabajadores del anexo que tienen correo en
+     * su ficha y no tienen observaciones graves. Si el primer envío falla por la
+     * configuración de correo, se detiene para no repetir el mismo error con todos.
+     * @return array{enviados:int, sin_correo:string[], con_graves:string[], fallidos:string[], detenido:bool}
+     */
+    public function enviarFormulario107Todos(int $idEmpresa, int $idUsuario, int $idAnexo): array
+    {
+        if (!$this->repo->instalado()) throw new Exception(self::MSG_NO_INSTALADO);
+        $cab = $this->repo->findById($idAnexo, $idEmpresa);
+        if (!$cab) throw new Exception('Anexo no encontrado.');
+        $filas = $this->repo->getDetalle($idAnexo, $idEmpresa);
+        if ($filas === []) throw new Exception('El anexo no tiene trabajadores: importe la nómina antes de enviar el Formulario 107.');
+
+        $res = ['enviados' => 0, 'sin_correo' => [], 'con_graves' => [], 'fallidos' => [], 'detenido' => false];
+        foreach ($filas as $f) {
+            $nombre = trim($f['apellidos'] . ' ' . $f['nombres']) ?: (string) $f['id_ret'];
+            $destinos = $this->destinosValidos((string) ($f['email_empleado'] ?? ''));
+            if ($destinos === []) { $res['sin_correo'][] = $nombre; continue; }
+            if ($this->tieneGraves($f)) { $res['con_graves'][] = $nombre; continue; }
+            try {
+                $this->enviarUno($cab, $f, $destinos, $idEmpresa, $idUsuario);
+                $res['enviados']++;
+            } catch (Exception $e) {
+                $res['fallidos'][] = $nombre;
+                if ($res['enviados'] === 0) {
+                    // Falla el primero: casi siempre es la configuración de correo de la empresa.
+                    $res['detenido'] = true;
+                    break;
+                }
+            }
+        }
+        $this->log->registrar($idUsuario, $idEmpresa, 'ENVIAR_107_TODOS', 'anexo_rdep', $idAnexo, null, [
+            'anio' => (int) $cab['anio'], 'enviados' => $res['enviados'], 'sin_correo' => count($res['sin_correo']),
+            'con_graves' => count($res['con_graves']), 'fallidos' => count($res['fallidos']),
+        ]);
+        return $res;
+    }
+
+    /** Genera el PDF de una fila y lo envía; lanza si el correo no sale. */
+    private function enviarUno(array $cab, array $fila, array $destinos, int $idEmpresa, int $idUsuario): void
+    {
+        $pdf = new Formulario107PdfService();
+        $contenido = $pdf->generar($cab, [$fila], $this->repo->getFirmas($idEmpresa), date('Y-m-d'));
+        $archivo = $pdf->nombreArchivo($cab, [$fila]);
+
+        $empresaNombre = (string) ($cab['razon_social'] ?? '');
+        $nombre = trim($fila['nombres'] . ' ' . $fila['apellidos']);
+        $anio = (int) $cab['anio'];
+        $asunto = 'Formulario 107 - Ejercicio ' . $anio . ($empresaNombre !== '' ? ' - ' . $empresaNombre : '');
+        $h = fn($v) => htmlspecialchars((string) $v, ENT_QUOTES, 'UTF-8');
+        $cuerpo = "<div style='font-family:Arial,Helvetica,sans-serif;font-size:14px;color:#333;line-height:1.5;max-width:640px'>"
+            . "<p>Estimado/a <strong>" . $h($nombre) . "</strong>,</p>"
+            . "<p>Adjunto encontrará su <strong>Formulario 107</strong> del ejercicio fiscal <strong>{$anio}</strong>: el comprobante de las "
+            . "retenciones en la fuente del impuesto a la renta por sus ingresos en relación de dependencia con "
+            . "<strong>" . $h($empresaNombre) . "</strong>.</p>"
+            . "<p>Si durante ese año trabajó solo con nosotros y no necesita reliquidar sus gastos personales, este formulario "
+            . "hace las veces de su declaración de impuesto a la renta. Si tuvo otros empleadores u otros ingresos, consérvelo "
+            . "para su declaración. Si cambia de empleador dentro del mismo año, entrégueselo a su nuevo empleador.</p>"
+            . "<p>Saludos cordiales,<br>" . $h($empresaNombre) . "</p>"
+            . "<hr style='border:none;border-top:1px solid #eee'><p style='font-size:12px;color:#888'>Mensaje generado automáticamente.</p>"
+            . "</div>";
+
+        $ok = $this->envioCorreo()->enviarPdfSimple(
+            $idEmpresa, implode(', ', $destinos), $nombre, $asunto, $cuerpo, $contenido,
+            preg_replace('/\.pdf$/', '', $archivo), $empresaNombre
+        );
+        if (!$ok) {
+            throw new Exception('No se pudo enviar el correo. Verifique la configuración de correo de la empresa o el destinatario.');
+        }
+
+        $this->repo->marcarEnvio107((int) $fila['id'], $idEmpresa, implode(', ', $destinos));
+        $this->log->registrar($idUsuario, $idEmpresa, 'ENVIAR_107', 'anexo_rdep_detalle', (int) $fila['id'], null, [
+            'anio' => $anio, 'id_empleado' => $fila['id_empleado'], 'correos' => implode(', ', $destinos),
+        ]);
+    }
+
+    private ?\App\Services\EnvioDocumentosSRIService $envioCorreo = null;
+
+    /** Servicio de correo (SMTP de la empresa). Inyectable para probar sin enviar correos reales. */
+    public function setEnvioCorreo(\App\Services\EnvioDocumentosSRIService $svc): void
+    {
+        $this->envioCorreo = $svc;
+    }
+
+    private function envioCorreo(): \App\Services\EnvioDocumentosSRIService
+    {
+        return $this->envioCorreo ??= new \App\Services\EnvioDocumentosSRIService();
+    }
+
+    /** Correos válidos de una lista separada por coma, punto y coma o espacios. */
+    private function destinosValidos(string $lista): array
+    {
+        $out = [];
+        foreach (preg_split('/[\s,;]+/', $lista) ?: [] as $c) {
+            $c = trim($c);
+            if ($c !== '' && filter_var($c, FILTER_VALIDATE_EMAIL)) $out[] = $c;
+        }
+        return array_values(array_unique($out));
+    }
+
+    private function tieneGraves(array $fila): bool
+    {
+        return (json_decode((string) ($fila['graves'] ?? '[]'), true) ?: []) !== [];
+    }
+
     public function rutaArchivo(int $idEmpresa, string $nombre): ?string
     {
         if (!preg_match('/^RDEP-\d{4}\.(xml|zip)$/', $nombre)) return null;

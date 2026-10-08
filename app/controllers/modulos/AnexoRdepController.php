@@ -247,6 +247,60 @@ class AnexoRdepController extends BaseModuloController
         });
     }
 
+    /**
+     * Formulario 107 en PDF: ?id_detalle= (un trabajador) o ?id= (todos los del anexo).
+     * Se pide con CMG_pdfDocumento; ante un error responde JSON {error}.
+     */
+    public function formulario107Pdf(): void
+    {
+        $this->requireLeer();
+        try {
+            $idDetalle = (int) ($_GET['id_detalle'] ?? 0) ?: null;
+            $idAnexo   = (int) ($_GET['id'] ?? 0) ?: null;
+            $r = $this->service->formulario107((int) $_SESSION['id_empresa'], (int) $_SESSION['id_usuario'], $idAnexo, $idDetalle, (string) ($_GET['fecha'] ?? ''));
+            header('Content-Type: application/pdf');
+            header('Content-Disposition: inline; filename="' . $r['archivo'] . '"');
+            header('Content-Length: ' . strlen($r['contenido']));
+            header('Cache-Control: no-store');
+            echo $r['contenido'];
+        } catch (\Throwable $e) {
+            ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
+            http_response_code(400);
+            header('Content-Type: application/json');
+            echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
+        }
+        exit;
+    }
+
+    /** Envía por correo el Formulario 107 de un trabajador (POST id = id del detalle, correos opcional). */
+    public function enviarFormulario107Ajax(): void
+    {
+        $this->requireLeer();
+        $idEmpresa = (int) $_SESSION['id_empresa'];
+        $idUsuario = (int) $_SESSION['id_usuario'];
+        // Soltar la sesión antes de hablar con el servidor de correo: si tarda, las
+        // demás peticiones del usuario no quedan en fila.
+        if (session_status() === PHP_SESSION_ACTIVE) session_write_close();
+        $this->responderAccion(function () use ($idEmpresa, $idUsuario) {
+            $destinos = $this->service->enviarFormulario107($idEmpresa, $idUsuario, (int) ($_POST['id'] ?? 0), trim((string) ($_POST['correos'] ?? '')));
+            return ['msg' => 'Formulario 107 enviado a ' . $destinos . '.'];
+        });
+    }
+
+    /** Envía el Formulario 107 a todos los trabajadores del anexo con correo en su ficha (POST id = anexo). */
+    public function enviarFormulario107TodosAjax(): void
+    {
+        $this->requireLeer();
+        $idEmpresa = (int) $_SESSION['id_empresa'];
+        $idUsuario = (int) $_SESSION['id_usuario'];
+        if (session_status() === PHP_SESSION_ACTIVE) session_write_close();
+        @set_time_limit(600); // un correo por trabajador
+        $this->responderAccion(function () use ($idEmpresa, $idUsuario) {
+            $r = $this->service->enviarFormulario107Todos($idEmpresa, $idUsuario, (int) ($_POST['id'] ?? 0));
+            return ['msg' => "Formulario 107 enviado a {$r['enviados']} trabajador(es).", 'resultado' => $r];
+        });
+    }
+
     public function descargar(): void
     {
         $this->requireLeer();

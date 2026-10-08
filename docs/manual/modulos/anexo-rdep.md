@@ -6,7 +6,7 @@ ruta_modulo: modulos/anexo-rdep
 tipo: modulo
 visibilidad: todos
 etiquetas: anexo rdep, rdep, relacion de dependencia, retenciones empleados, impuesto a la renta empleados, formulario 107, anexo anual SRI, RDEP-2025.zip, dimm, sri en linea, gastos personales, rebaja gastos personales, discapacidad, tercera edad, otros empleadores, nomina, roles de pago, decimos, utilidades, xml rdep
-version: 1.1
+version: 1.3
 orden: 32
 estado: activo
 ---
@@ -28,8 +28,8 @@ gastos, deducciones, exoneraciones y resumen impositivo) para los ejercicios
 2024 en adelante y produce `RDEP-aaaa.xml` y su `RDEP-aaaa.zip`, que se carga
 en **SRI en Línea → Anexos → Envío y consulta de anexos → Anexo RDEP**.
 
-La misma información es la del **formulario 107** que el empleador debe
-entregar a cada trabajador.
+La misma información es la del **Formulario 107** que el empleador debe
+entregar a cada trabajador, y el módulo lo imprime (ver *Formulario 107 en PDF*).
 
 ## Requisitos previos
 
@@ -111,10 +111,53 @@ Pestaña **Resumen impositivo**: base imponible, impuesto causado, rebaja,
 impuesto después de la rebaja (calculados) y lo retenido o asumido (editables),
 con la diferencia que el SRI va a comparar.
 
+## Formulario 107 en PDF
+
+El **Formulario 107** (formato 2023 del SRI) es el comprobante de retenciones
+que el empleador entrega a cada trabajador. El módulo lo imprime con los valores
+guardados en el anexo, los mismos que van en el XML, así que lo entregado coincide
+con lo declarado.
+
+- **De un trabajador**: botón **Formulario 107** de la barra superior del modal
+  del trabajador, o el ícono de PDF rojo en su fila de la pestaña Trabajadores.
+  Si el trabajador tiene cambios sin guardar, el sistema pide guardarlos antes.
+- **De todos**: botón **107 de todos** de la barra del anexo. Sale un solo PDF
+  con una página por trabajador, listo para imprimir y hacer firmar.
+
+Se elige **Imprimir**, **Descargar** o **Ver**. La fecha de entrega (casillero
+103) es la del día en que se genera. Lleva el RUC y la razón social del
+empleador, la identificación y el nombre del trabajador, todos los casilleros de
+la liquidación (301 a 407 y el 349) y los espacios de firma del representante
+legal, del trabajador y del contador con su RUC (casillero 199), tomados de los
+datos de la empresa.
+
+- El casillero **317** suma los otros ingresos no gravados y la compensación por
+  salario digno: el formato 2023 no tiene un casillero propio para esta última, y
+  el formulario lo aclara en una nota cuando existe.
+- Si el trabajador tiene **observaciones graves** en el anexo, la página sale con
+  un aviso de **BORRADOR** arriba: corrija antes de entregarlo.
+
+### Envío por correo al trabajador
+
+- **A un trabajador**: botón **Enviar por correo** de la barra del modal del
+  trabajador, o el ícono de sobre en su fila. Propone el correo de la ficha del
+  empleado; puede cambiarlo o escribir varios separados por coma.
+- **A todos**: botón **Enviar 107 a todos** de la barra del anexo. Envía a cada
+  trabajador al correo de su ficha y al final muestra un resumen: a cuántos se
+  envió, quiénes no tienen correo en la ficha y quiénes tienen observaciones
+  graves.
+
+El PDF va adjunto, con el mismo contenido que el impreso, y sale con la
+configuración de correo de la empresa (la misma de las facturas). No se envía a
+un trabajador con observaciones graves. Si el primer envío de *Enviar 107 a
+todos* falla, el proceso se detiene: casi siempre es la configuración de correo.
+Cada envío queda registrado: el sobre de la fila se pone verde y, al pasar el
+mouse, muestra la fecha y el correo del último envío.
+
 ## Permisos
 
 - **Ver**: abrir el listado y los anexos, descargar los archivos ya generados,
-  PDF y Excel del listado.
+  imprimir y enviar por correo el Formulario 107, PDF y Excel del listado.
 - **Crear**: abrir el anexo de un ejercicio.
 - **Modificar**: importar, editar la cabecera y los trabajadores, recalcular y
   generar el archivo.
@@ -178,6 +221,8 @@ con la diferencia que el SRI va a comparar.
   trabajador en el anexo.
 - **El impuesto causado sale en cero**: falta la tabla de tramos del ejercicio
   en Configuración → Impuesto a la renta.
+- **"No se pudo enviar el correo"** al enviar el 107: revise la configuración de
+  correo de la empresa (Empresa → Configurar correo) y el correo del empleado.
 - **"El archivo no cumple el esquema del SRI"**: algún valor no respeta el
   formato del esquema; el mensaje indica la línea. Reporte a soporte.
 - **Un trabajador no aparece**: no tiene rol mensual generado en el ejercicio;
@@ -185,6 +230,10 @@ con la diferencia que el SRI va a comparar.
 
 ## Historial de cambios
 
+- **1.3** — Envío del Formulario 107 por correo, a un trabajador o a todos, con
+  registro del último envío.
+- **1.2** — Formulario 107 en PDF, de un trabajador o de todos (una página por
+  trabajador), con los valores del anexo.
 - **1.1** — La discapacidad y su porcentaje se toman de la ficha del empleado.
 - **1.0** — Versión inicial: importación desde la nómina, edición por
   trabajador, cálculo del resumen impositivo según el catálogo 2024 del SRI,

@@ -171,19 +171,35 @@ class AnexoRdepRepository extends BaseRepository
     }
 
     // ─── Detalle ────────────────────────────────────────────────────────────
+    /** Detalle con el correo de la ficha del empleado (destino por defecto del Formulario 107). */
     public function getDetalle(int $idAnexo, int $idEmpresa): array
     {
-        $st = $this->db->prepare("SELECT * FROM anexo_rdep_detalle WHERE id_anexo = :a AND id_empresa = :e ORDER BY apellidos, nombres, id");
+        $st = $this->db->prepare("SELECT d.*, e.email AS email_empleado
+                                  FROM anexo_rdep_detalle d
+                                  LEFT JOIN empleados e ON e.id = d.id_empleado AND e.id_empresa = d.id_empresa
+                                  WHERE d.id_anexo = :a AND d.id_empresa = :e
+                                  ORDER BY d.apellidos, d.nombres, d.id");
         $st->execute([':a' => $idAnexo, ':e' => $idEmpresa]);
         return $st->fetchAll(PDO::FETCH_ASSOC);
     }
 
     public function findDetalle(int $id, int $idEmpresa): ?array
     {
-        $st = $this->db->prepare("SELECT * FROM anexo_rdep_detalle WHERE id = :id AND id_empresa = :e");
+        $st = $this->db->prepare("SELECT d.*, e.email AS email_empleado
+                                  FROM anexo_rdep_detalle d
+                                  LEFT JOIN empleados e ON e.id = d.id_empleado AND e.id_empresa = d.id_empresa
+                                  WHERE d.id = :id AND d.id_empresa = :e");
         $st->execute([':id' => $id, ':e' => $idEmpresa]);
         $r = $st->fetch(PDO::FETCH_ASSOC);
         return $r ?: null;
+    }
+
+    /** Anota el último envío del Formulario 107 (si la columna existe: SQL 20261008_anexo_rdep_envio_107). */
+    public function marcarEnvio107(int $idDetalle, int $idEmpresa, string $destinos): void
+    {
+        if (!$this->columnaExiste('anexo_rdep_detalle', 'f107_enviado_at')) return;
+        $st = $this->db->prepare("UPDATE anexo_rdep_detalle SET f107_enviado_at = CURRENT_TIMESTAMP, f107_enviado_a = :a WHERE id = :id AND id_empresa = :e");
+        $st->execute([':a' => mb_substr($destinos, 0, 300), ':id' => $idDetalle, ':e' => $idEmpresa]);
     }
 
     public function insertDetalle(int $idAnexo, int $idEmpresa, array $f, int $idUsuario): int
@@ -369,6 +385,14 @@ class AnexoRdepRepository extends BaseRepository
             // sin tabla de establecimientos: matriz 001
         }
         return ['num_ruc' => (string) $emp['ruc'], 'razon_social' => (string) $emp['nombre'], 'estab' => $estab];
+    }
+
+    /** Firmantes del Formulario 107: representante legal y contador de la empresa. */
+    public function getFirmas(int $idEmpresa): array
+    {
+        $st = $this->db->prepare("SELECT nom_rep_legal, ced_rep_legal, nombre_contador, ruc_contador FROM empresas WHERE id = :e");
+        $st->execute([':e' => $idEmpresa]);
+        return $st->fetch(PDO::FETCH_ASSOC) ?: [];
     }
 
     /** Códigos de establecimiento de la empresa (para el combo del trabajador). */

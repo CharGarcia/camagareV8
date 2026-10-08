@@ -39,6 +39,9 @@ $sel = function (array $opciones, string $id, string $name): string {
                         <div class="vr mx-1"></div>
                         <button type="button" class="btn btn-sm btn-success" onclick="RDEP_generar()" title="Generar el XML y el ZIP para SRI en Línea"><i class="bi bi-file-earmark-zip me-1"></i> Generar XML</button>
                     <?php endif; ?>
+                    <div class="vr mx-1"></div>
+                    <button type="button" class="btn btn-sm btn-outline-danger" onclick="RDEP_f107Todos()" title="Formulario 107 de todos los trabajadores (un PDF, una página por trabajador)"><i class="bi bi-file-earmark-pdf me-1"></i> 107 de todos</button>
+                    <button type="button" class="btn btn-sm btn-outline-info" id="btnEnviar107Todos" onclick="RDEP_enviar107Todos()" title="Enviar el Formulario 107 por correo a cada trabajador (al correo de su ficha)"><i class="bi bi-envelope me-1"></i> Enviar 107 a todos</button>
                     <span id="rdep_links" class="d-none ms-1">
                         <a href="#" id="rdep_link_zip" class="btn btn-sm btn-outline-success" title="Descargar ZIP"><i class="bi bi-file-earmark-zip"></i> ZIP</a>
                         <a href="#" id="rdep_link_xml" class="btn btn-sm btn-outline-secondary" title="Descargar XML"><i class="bi bi-filetype-xml"></i> XML</a>
@@ -163,7 +166,7 @@ $sel = function (array $opciones, string $id, string $name): string {
                                         <th class="text-end">Impuesto</th>
                                         <th class="text-end">Retenido</th>
                                         <th class="text-center">Obs.</th>
-                                        <th style="width:60px;"></th>
+                                        <th style="width:84px;"></th>
                                     </tr>
                                 </thead>
                                 <tbody id="rdep_tbody_trab"></tbody>
