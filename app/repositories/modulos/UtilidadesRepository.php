@@ -95,6 +95,15 @@ class UtilidadesRepository extends BaseRepository
         return ['rows' => $st->fetchAll(PDO::FETCH_ASSOC), 'total' => $total];
     }
 
+    /** Ejercicios con cálculo en la empresa (para el filtro del listado), del más reciente al más antiguo. */
+    public function getAniosDisponibles(int $idEmpresa): array
+    {
+        if (!$this->instalado()) return [];
+        $st = $this->db->prepare("SELECT DISTINCT anio FROM {$this->table} WHERE id_empresa = :e AND eliminado = false ORDER BY anio DESC");
+        $st->execute([':e' => $idEmpresa]);
+        return array_map('intval', $st->fetchAll(PDO::FETCH_COLUMN));
+    }
+
     public function findCabeceraPorAnio(int $idEmpresa, int $anio): ?array
     {
         $st = $this->db->prepare("SELECT * FROM {$this->table} WHERE id_empresa = :e AND anio = :a AND eliminado = false");

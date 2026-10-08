@@ -21,6 +21,7 @@ class UtilidadesController extends BaseModuloController
 {
     private UtilidadesService $service;
     private const RUTA_MODULO = 'modulos/utilidades';
+    private const ORDEN_DEFECTO = 'anio';
 
     public function __construct()
     {
@@ -33,39 +34,53 @@ class UtilidadesController extends BaseModuloController
         return self::RUTA_MODULO;
     }
 
+    /** Parámetros comunes del listado (index, searchAjax y exportaciones). */
+    private function parametrosListado(): array
+    {
+        $prefsVista = PreferenciasHelper::getPreferenciasVista(self::RUTA_MODULO);
+        $orden = OrdenListado::leer($prefsVista, self::ORDEN_DEFECTO, 'DESC');
+        $perm  = $this->getPermisos();
+        return [
+            'prefsVista' => $prefsVista,
+            'buscar'     => trim($_GET['b'] ?? $_POST['b'] ?? ''),
+            'page'       => max(1, (int) ($_GET['page'] ?? $_POST['page'] ?? 1)),
+            'orden'      => $orden,
+            'ordenCol'   => OrdenListado::primeraCol($orden, self::ORDEN_DEFECTO),
+            'ordenDir'   => OrdenListado::primeraDir($orden, 'DESC'),
+            'perm'       => $perm,
+            'idUsuarioFiltro' => empty($perm['todo']) ? (int) $_SESSION['id_usuario'] : null,
+        ];
+    }
+
     public function index(): void
     {
         $this->requireLeer();
-        $perm       = $this->getPermisos();
-        $idEmpresa  = (int) $_SESSION['id_empresa'];
-        $prefsVista = PreferenciasHelper::getPreferenciasVista(self::RUTA_MODULO);
+        $idEmpresa = (int) $_SESSION['id_empresa'];
+        $p = $this->parametrosListado();
+        $perPage = $this->porPagina();
 
-        $buscar   = trim($_GET['b'] ?? '');
-        $page     = max(1, (int) ($_GET['page'] ?? 1));
-        $orden    = OrdenListado::leer($prefsVista, 'anio', 'DESC');
-        $ordenCol = OrdenListado::primeraCol($orden, 'anio');
-        $ordenDir = OrdenListado::primeraDir($orden, 'DESC');
-        $perPage  = $this->porPagina();
-
-        $idUsuarioFiltro = empty($perm['todo']) ? (int) $_SESSION['id_usuario'] : null;
-        $result     = $this->service->getListado($idEmpresa, $buscar, $page, $perPage, $ordenCol, $ordenDir, $idUsuarioFiltro, $orden);
+        $result     = $this->service->getListado($idEmpresa, $p['buscar'], $p['page'], $perPage, $p['ordenCol'], $p['ordenDir'], $p['idUsuarioFiltro'], $p['orden']);
         $totalPages = $perPage > 0 ? (int) ceil($result['total'] / $perPage) : 1;
 
         $this->viewWithLayout('layouts.main', 'modulos.utilidades.index', [
             'titulo'      => 'Utilidades',
             'instalado'   => $this->service->instalado(),
-            'perm'        => $perm,
+            'perm'        => $p['perm'],
             'rutaModulo'  => self::RUTA_MODULO,
             'rows'        => $result['rows'],
             'total'       => $result['total'],
-            'page'        => $page,
+            'page'        => $p['page'],
             'totalPages'  => $totalPages,
             'perPage'     => $perPage,
-            'buscar'      => $buscar,
-            'ordenCol'    => $ordenCol,
-            'ordenDir'    => $ordenDir,
-            'vistaConfig' => $prefsVista,
+            'buscar'      => $p['buscar'],
+            'ordenCol'    => $p['ordenCol'],
+            'ordenDir'    => $p['ordenDir'],
+            'ordenJson'   => OrdenListado::aJson($p['orden']),
+            'ordenParam'  => OrdenListado::aCadena($p['orden']),
+            'vistaConfig' => $p['prefsVista'],
             'idEmpresa'   => $idEmpresa,
+            'fullWidth'   => true,
+            'aniosDisponibles' => $this->service->getAniosDisponibles($idEmpresa),
         ]);
     }
 
@@ -73,59 +88,63 @@ class UtilidadesController extends BaseModuloController
     {
         $this->requireLeer();
         header('Content-Type: application/json');
-        $idEmpresa  = (int) $_SESSION['id_empresa'];
-        $prefsVista = PreferenciasHelper::getPreferenciasVista(self::RUTA_MODULO);
-        $buscar     = trim($_GET['b'] ?? '');
-        $page       = max(1, (int) ($_GET['page'] ?? 1));
-        $orden      = OrdenListado::leer($prefsVista, 'anio', 'DESC');
-        $ordenCol   = OrdenListado::primeraCol($orden, 'anio');
-        $ordenDir   = OrdenListado::primeraDir($orden, 'DESC');
-        $perPage    = $this->porPagina();
-        $perm       = $this->getPermisos();
-        $idUsuarioFiltro = empty($perm['todo']) ? (int) $_SESSION['id_usuario'] : null;
+        $idEmpresa = (int) $_SESSION['id_empresa'];
+        $p = $this->parametrosListado();
+        $perPage = $this->porPagina();
 
-        $result     = $this->service->getListado($idEmpresa, $buscar, $page, $perPage, $ordenCol, $ordenDir, $idUsuarioFiltro, $orden);
-        $totalPages = $perPage > 0 ? (int) ceil($result['total'] / $perPage) : 1;
-        $from = $result['total'] > 0 ? (($page - 1) * $perPage) + 1 : 0;
-        $to   = $result['total'] > 0 ? min($page * $perPage, $result['total']) : 0;
+        $result     = $this->service->getListado($idEmpresa, $p['buscar'], $p['page'], $perPage, $p['ordenCol'], $p['ordenDir'], $p['idUsuarioFiltro'], $p['orden']);
+        $total      = $result['total'];
+        $page       = $p['page'];
+        $totalPages = $perPage > 0 ? (int) ceil($total / $perPage) : 1;
+        $from = $total > 0 ? (($page - 1) * $perPage) + 1 : 0;
+        $to   = $total > 0 ? min($page * $perPage, $total) : 0;
 
         ob_start();
         if (empty($result['rows'])) {
-            echo '<tr><td colspan="8" class="text-center py-5 text-muted">No hay utilidades calculadas.</td></tr>';
+            echo '<tr><td colspan="7" class="text-center py-5 text-muted"><i class="bi bi-pie-chart fs-3 d-block mb-2"></i>No se encontraron utilidades.</td></tr>';
         } else {
             foreach ($result['rows'] as $r) echo $this->renderFila($r);
         }
         $rowsHtml = ob_get_clean();
 
-        $prev = $page <= 1 ? 'disabled' : '';
-        $next = $page >= $totalPages ? 'disabled' : '';
-        $pag = '<div class="btn-group btn-group-sm">'
-            . '<button type="button" class="btn btn-outline-secondary" ' . $prev . ' onclick="cambiarPaginaAjax(' . ($page - 1) . ')"><i class="bi bi-chevron-left"></i></button>'
-            . '<button type="button" class="btn btn-outline-secondary" ' . $next . ' onclick="cambiarPaginaAjax(' . ($page + 1) . ')"><i class="bi bi-chevron-right"></i></button></div>';
+        $prevDisabled = ($page <= 1) ? 'disabled' : '';
+        $nextDisabled = ($page >= $totalPages) ? 'disabled' : '';
+        $paginationHtml = '<div class="btn-group btn-group-sm">'
+            . '<button type="button" class="btn btn-outline-secondary border-end-0 rounded-end-0" ' . $prevDisabled . ' onclick="cambiarPaginaAjax(' . ($page - 1) . ')"><i class="bi bi-chevron-left"></i></button>'
+            . '<button type="button" class="btn btn-outline-secondary rounded-start-0" ' . $nextDisabled . ' onclick="cambiarPaginaAjax(' . ($page + 1) . ')"><i class="bi bi-chevron-right"></i></button>'
+            . '</div>';
 
-        echo json_encode(['ok' => true, 'rows' => $rowsHtml, 'pagination' => $pag, 'info' => "$from-$to/" . $result['total'], 'total' => $result['total']]);
+        $ordenParam = urlencode(OrdenListado::aCadena($p['orden']));
+        echo json_encode([
+            'ok'         => true,
+            'rows'       => $rowsHtml,
+            'pagination' => $paginationHtml,
+            'info'       => "$from-$to/$total",
+            'total'      => $total,
+            'pdf_url'    => BASE_URL . '/' . self::RUTA_MODULO . '/export-pdf?b=' . urlencode($p['buscar']) . '&orden=' . $ordenParam,
+            'excel_url'  => BASE_URL . '/' . self::RUTA_MODULO . '/export-excel?b=' . urlencode($p['buscar']) . '&orden=' . $ordenParam,
+        ]);
         exit;
     }
 
     private function renderFila(array $r): string
     {
         $h = fn($v) => htmlspecialchars((string) ($v ?? ''), ENT_QUOTES, 'UTF-8');
-        $limite = $r['fecha_limite_pago'] ? date('d-m-Y', strtotime((string) $r['fecha_limite_pago'])) : '—';
+        $fmt = fn($v) => '$' . number_format((float) $v, 2);
+        $limite = $r['fecha_limite_pago'] ? date('d-m-Y', strtotime((string) $r['fecha_limite_pago'])) : '-';
         $colores = ['borrador' => 'secondary', 'calculado' => 'info', 'contabilizado' => 'success'];
         $c = $colores[$r['estado']] ?? 'secondary';
         $estado = '<span class="badge bg-' . $c . ' bg-opacity-10 text-' . $c . ' border border-' . $c . ' border-opacity-25">' . $h(ucfirst((string) $r['estado'])) . '</span>';
 
-        return '<tr class="ut-row" role="button" data-row=\'' . htmlspecialchars(json_encode($r), ENT_QUOTES, 'UTF-8') . '\' onclick="abrirModalVer(this)">'
+        return '<tr class="ut-row" role="button" tabindex="0" data-row=\'' . htmlspecialchars(json_encode($r), ENT_QUOTES, 'UTF-8') . '\' onclick="abrirModalVer(this)">'
             . '<td class="ps-3 fw-medium" data-col="anio">' . (int) $r['anio'] . '</td>'
             . '<td data-col="limite">' . $h($limite) . '</td>'
-            . '<td class="text-end" data-col="repartir">$' . number_format((float) $r['monto_repartir'], 2) . '</td>'
+            . '<td class="text-end" data-col="repartir">' . $fmt($r['monto_repartir']) . '</td>'
             . '<td class="text-center" data-col="empleados">' . (int) $r['total_empleados'] . '</td>'
-            . '<td class="text-end fw-bold" data-col="total">$' . number_format((float) $r['total_valor'], 2) . '</td>'
-            . '<td class="text-end text-muted" data-col="excedente">$' . number_format((float) $r['total_excedente'], 2) . '</td>'
-            . '<td class="text-center" data-col="estado">' . $estado . '</td>'
-            . '<td class="text-center pe-3" onclick="event.stopPropagation()">'
-            . '<button class="btn btn-outline-secondary btn-xs border-0 px-2" onclick="exportarCsv(' . (int) $r['id'] . ')" title="Exportar CSV"><i class="bi bi-file-earmark-spreadsheet"></i></button>'
-            . '</td></tr>';
+            . '<td class="text-end fw-bold" data-col="total">' . $fmt($r['total_valor']) . '</td>'
+            . '<td class="text-end text-muted" data-col="excedente">' . $fmt($r['total_excedente']) . '</td>'
+            . '<td class="text-center pe-3" data-col="estado">' . $estado . '</td>'
+            . '</tr>';
     }
 
     public function calcularAjax(): void
@@ -202,6 +221,7 @@ class UtilidadesController extends BaseModuloController
         exit;
     }
 
+    /** CSV con el informe para el Ministerio del Trabajo (una corrida). */
     public function exportarCsv(): void
     {
         $this->requireLeer();
@@ -238,5 +258,115 @@ class UtilidadesController extends BaseModuloController
             echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
         }
         exit;
+    }
+
+    // ─── Exportación del listado (PDF / Excel), mismo patrón que Proveedores ──
+    private function filasParaExportar(): array
+    {
+        $idEmpresa = (int) $_SESSION['id_empresa'];
+        $p = $this->parametrosListado();
+        $data = $this->service->getListado($idEmpresa, $p['buscar'], 1, 0, $p['ordenCol'], $p['ordenDir'], $p['idUsuarioFiltro'], $p['orden']);
+        $empresa = (new \App\models\Empresa())->getPorId($idEmpresa);
+        return [$data['rows'], (string) ($empresa['nombre'] ?? '')];
+    }
+
+    public function exportPdf(): void
+    {
+        $this->requireLeer();
+        try {
+            [$rows, $nombreEmpresa] = $this->filasParaExportar();
+            $autoload = MVC_ROOT . '/vendor/autoload.php';
+            if (file_exists($autoload)) {
+                require_once $autoload;
+            }
+            $fmt = fn($v) => number_format((float) $v, 2);
+            ob_start();
+?>
+            <style>
+                table { width: 100%; border-collapse: collapse; font-family: Arial, sans-serif; font-size: 8pt; table-layout: fixed; }
+                th { background: #f2f2f2; border: 1px solid #ccc; padding: 4px; text-align: left; }
+                td { border: 1px solid #ccc; padding: 4px; overflow: hidden; word-wrap: break-word; }
+                .num { text-align: right; }
+                .header { text-align: center; margin-bottom: 15px; width: 100%; }
+                h1 { margin: 0; font-size: 14pt; color: #333; }
+                h2 { margin: 3px 0 0 0; color: #666; font-size: 10pt; text-transform: uppercase; }
+            </style>
+            <page backtop="10mm" backbottom="10mm" backleft="10mm" backright="10mm">
+                <div class="header">
+                    <h1><?= htmlspecialchars($nombreEmpresa) ?></h1>
+                    <h2>Listado de Utilidades</h2>
+                </div>
+                <table>
+                    <thead>
+                        <tr>
+                            <th style="width: 10%">Ejercicio</th>
+                            <th style="width: 16%">Fecha límite</th>
+                            <th style="width: 18%" class="num">Monto a repartir</th>
+                            <th style="width: 12%" class="num">Trabajadores</th>
+                            <th style="width: 16%" class="num">A pagar</th>
+                            <th style="width: 14%" class="num">Excedente</th>
+                            <th style="width: 14%">Estado</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <?php foreach ($rows as $r): ?>
+                            <tr>
+                                <td style="width: 10%"><?= (int) $r['anio'] ?></td>
+                                <td style="width: 16%"><?= $r['fecha_limite_pago'] ? date('d-m-Y', strtotime((string) $r['fecha_limite_pago'])) : '-' ?></td>
+                                <td style="width: 18%" class="num"><?= $fmt($r['monto_repartir']) ?></td>
+                                <td style="width: 12%" class="num"><?= (int) $r['total_empleados'] ?></td>
+                                <td style="width: 16%" class="num"><?= $fmt($r['total_valor']) ?></td>
+                                <td style="width: 14%" class="num"><?= $fmt($r['total_excedente']) ?></td>
+                                <td style="width: 14%"><?= htmlspecialchars(ucfirst((string) $r['estado'])) ?></td>
+                            </tr>
+                        <?php endforeach; ?>
+                    </tbody>
+                </table>
+            </page>
+<?php
+            $content = ob_get_clean();
+            $html2pdf = new \Spipu\Html2Pdf\Html2Pdf('P', 'A4', 'es');
+            $html2pdf->writeHTML($content);
+            $html2pdf->output('Utilidades_' . date('Ymd_His') . '.pdf', 'D');
+            exit;
+        } catch (\Throwable $e) {
+            header('Content-Type: text/html');
+            echo "Error al generar PDF: " . $e->getMessage();
+            exit;
+        }
+    }
+
+    public function exportExcel(): void
+    {
+        $this->requireLeer();
+        try {
+            [$rows, $nombreEmpresa] = $this->filasParaExportar();
+            $autoload = MVC_ROOT . '/vendor/autoload.php';
+            if (file_exists($autoload)) {
+                require_once $autoload;
+            }
+            $headers = ['Ejercicio', 'Fecha límite de pago', 'Utilidad líquida', 'Monto a repartir', '10% por tiempo', '5% por cargas', 'Trabajadores', 'A pagar', 'Excedente (IESS)', 'Estado'];
+            $exportData = [];
+            foreach ($rows as $r) {
+                $exportData[] = [
+                    (string) (int) $r['anio'],
+                    $r['fecha_limite_pago'] ? date('d-m-Y', strtotime((string) $r['fecha_limite_pago'])) : '',
+                    (float) $r['utilidad_liquida'],
+                    (float) $r['monto_repartir'],
+                    (float) $r['monto_10'],
+                    (float) $r['monto_5'],
+                    (int) $r['total_empleados'],
+                    (float) $r['total_valor'],
+                    (float) $r['total_excedente'],
+                    ucfirst((string) $r['estado']),
+                ];
+            }
+            (new \App\Services\ReportService())->exportToExcel('Utilidades', $headers, $exportData, 'Utilidades', $nombreEmpresa);
+            exit;
+        } catch (\Throwable $e) {
+            header('Content-Type: text/html');
+            echo "Error al generar Excel: " . $e->getMessage();
+            exit;
+        }
     }
 }

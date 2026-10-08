@@ -6,7 +6,7 @@ ruta_modulo: modulos/utilidades
 tipo: modulo
 visibilidad: todos
 etiquetas: utilidades, participacion trabajadores, 15%, reparto de utilidades, 10% tiempo, 5% cargas familiares, cargas, ex trabajadores, tope 24 sbu, ministerio de trabajo, salarios en linea, informe empresarial, pago de utilidades, abril, asiento 31 de diciembre, participacion trabajadores por pagar
-version: 1.0
+version: 1.1
 orden: 61
 estado: activo
 ---
@@ -51,7 +51,7 @@ cuatro partes de ese proceso:
 
 ## Cómo se usa
 
-1. Pulse **Calcular**, indique el **ejercicio fiscal** (el año que generó la
+1. Pulse **Nuevo**, indique el **ejercicio fiscal** (el año que generó la
    utilidad) y la **utilidad líquida**. El sistema propone el 15% como **monto a
    repartir**; puede ajustarlo si la empresa reparte otro valor.
 2. Al guardar se abre el detalle. En la pestaña **Resumen** verá el monto del
@@ -61,7 +61,7 @@ cuatro partes de ese proceso:
    con los nombres primero; si algo está al revés, corríjalo en la ficha del
    empleado o aquí), las cargas, el tipo de pago, la discapacidad y la retención
    judicial. Los cambios se guardan solos al salir del campo.
-4. Pulse **Exportar CSV** para obtener el archivo del Ministerio.
+4. Pulse **CSV Ministerio** para obtener el archivo del Ministerio del Trabajo.
 5. Pulse **Contabilizar** para generar el asiento del 31 de diciembre.
 6. Pague desde **Egresos → Nómina**: cada trabajador aparece con su valor de
    utilidades pendiente, igual que un décimo cuarto.
@@ -92,12 +92,20 @@ En la grilla de trabajadores:
 | Discap. | Sí | Marca de discapacidad para el archivo del Ministerio. |
 | Ret. judicial | Sí | Retención judicial sobre este pago. Arranca en cero: el valor mensual de la ficha es del rol, no de este pago único. |
 
+## Buscar y filtrar el listado
+
+El buscador escribe directo sobre el ejercicio. El botón de filtros abre el modal con
+ejercicio, fecha límite de pago, estado, monto a repartir y total a pagar; los filtros
+activos quedan como chips junto al buscador. Las columnas se pueden ocultar o mostrar
+por usuario y el orden se encadena con Shift+clic en los encabezados. Los botones PDF
+y Excel descargan el listado tal como está filtrado y ordenado.
+
 ## Permisos
 
-- **Ver**: abrir el listado y el detalle, exportar el CSV.
+- **Ver**: abrir el listado y el detalle, exportar el CSV del Ministerio y el PDF o Excel del listado.
 - **Crear**: calcular y recalcular.
 - **Modificar**: editar la grilla y contabilizar.
-- **Eliminar**: anular un cálculo.
+- **Eliminar**: eliminar (anular) un cálculo con el botón Eliminar del modal.
 - **Acceso total**: ve los cálculos de toda la empresa; sin él, solo los que creó
   el propio usuario.
 
@@ -160,5 +168,8 @@ En la grilla de trabajadores:
 
 ## Historial de cambios
 
+- **1.1** — Listado con el diseño estándar (buscador con filtros, columnas por
+  usuario, orden múltiple, PDF y Excel); botón **Nuevo**; el módulo avisa si falta
+  ejecutar su SQL en la base.
 - **1.0** — Versión inicial: cálculo 10% / 5%, tope de 24 SBU, archivo CSV para
   el Ministerio, pago por Egresos → Nómina y asiento del 31 de diciembre.

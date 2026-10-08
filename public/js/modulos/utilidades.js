@@ -18,15 +18,16 @@
     const getModalCalcular = () => modalCalcularInst || (modalCalcularInst = new bootstrap.Modal($('modalCalcularUt')));
     const getModalDetalle = () => modalDetalleInst || (modalDetalleInst = new bootstrap.Modal($('modalDetalleUt')));
 
-    // ─── Calcular ────────────────────────────────────────────────────────────
-    window.abrirModalCalcular = function () {
+    // ─── Nuevo (cálculo de un ejercicio) ─────────────────────────────────────
+    window.UT_abrirModalNuevo = function () {
         const form = $('formCalcularUt');
         if (form) form.reset();
-        $('ut_calc_anio').value = (window.UT_ANIO_ACTUAL || new Date().getFullYear()) - 1;
+        $('ut_calc_anio').value = new Date().getFullYear() - 1;
         $('ut_calc_utilidad').value = '0.00';
         $('ut_calc_monto').value = '0.00';
         getModalCalcular().show();
     };
+    window.abrirModalCalcular = window.UT_abrirModalNuevo;
 
     // El 15% se propone solo al escribir la utilidad líquida; el usuario puede corregirlo.
     window.utProponerMonto = function () {
@@ -70,7 +71,7 @@
         const id = rowData.id;
         if (!id) return;
         $('ut_det_id').value = id;
-        $('ut_det_titulo').textContent = '';
+        $('ut_det_titulo').textContent = 'Utilidades';
         getModalDetalle().show();
         await cargarDetalle(id);
     };
@@ -91,7 +92,7 @@
     }
 
     function pintarResumen(c, filas, totalPagado, tienePagos) {
-        $('ut_det_titulo').textContent = `— Ejercicio ${c.anio}`;
+        $('ut_det_titulo').textContent = `Utilidades ${c.anio}`;
         $('ut_r_anio').textContent = c.anio;
         $('ut_r_limite').textContent = fecha(c.fecha_limite_pago);
         $('ut_r_utilidad').textContent = money(c.utilidad_liquida);

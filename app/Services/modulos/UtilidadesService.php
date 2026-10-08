@@ -56,6 +56,11 @@ class UtilidadesService
         return $this->repo->tienePagos($idCabecera);
     }
 
+    public function getAniosDisponibles(int $idEmpresa): array
+    {
+        return $this->repo->getAniosDisponibles($idEmpresa);
+    }
+
     /** False mientras no se haya ejecutado el SQL del módulo en la base. */
     public function instalado(): bool
     {
