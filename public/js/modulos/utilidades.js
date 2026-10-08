@@ -65,6 +65,31 @@
         });
     }
 
+    // ─── Pestaña «Asiento contable» (componente compartido asiento_contable_tab.js) ──
+    // Muestra el asiento del 31-dic registrado por Contabilizar (modulo_origen 'utilidades').
+    // soloRegistrado: sin asiento todavía, el componente muestra el aviso y no arma una vista
+    // previa (el asiento sale del botón Contabilizar, no de una previsualización).
+    let _utAsientoTab = null;
+    function getAsientoTab() {
+        if (!$('ut-asiento-tbody')) return null;
+        if (!_utAsientoTab && typeof window.crearAsientoTab === 'function') {
+            _utAsientoTab = window.crearAsientoTab({
+                prefijo: 'ut',
+                moduloOrigen: 'utilidades',
+                soloRegistrado: true,
+                cuentasUrl: `${BASE_URL}/modulos/plan-cuentas/searchAjaxCuentas`,
+                asientosUrl: `${BASE_URL}/modulos/asientos-contables`,
+            });
+        }
+        return _utAsientoTab;
+    }
+    function cargarAsientoTab() {
+        const tab = getAsientoTab();
+        const id = parseInt($('ut_det_id').value, 10) || 0;
+        if (tab) tab.cargar(id);
+    }
+    $('ut-tab-asiento-btn')?.addEventListener('shown.bs.tab', cargarAsientoTab);
+
     // ─── Ver / detalle ───────────────────────────────────────────────────────
     window.abrirModalVer = async function (tr) {
         const rowData = (tr instanceof HTMLElement) ? JSON.parse(tr.dataset.row) : tr;
@@ -72,6 +97,9 @@
         if (!id) return;
         $('ut_det_id').value = id;
         $('ut_det_titulo').textContent = 'Utilidades';
+        // Siempre se abre en Resumen; la pestaña de asiento se carga al mostrarla.
+        try { new bootstrap.Tab($('ut-tab-resumen-btn')).show(); } catch (e) {}
+        if (_utAsientoTab) _utAsientoTab.limpiar();
         getModalDetalle().show();
         await cargarDetalle(id);
     };
@@ -200,6 +228,11 @@
                 Swal.fire({ icon: 'success', title: 'Contabilizado', text: json.msg, timer: 1500, showConfirmButton: false });
                 await cargarDetalle(id);
                 window.dispatchEvent(new CustomEvent('utilidadesActualizado'));
+                // El asiento recién generado se muestra en su pestaña.
+                if ($('ut-tab-asiento-btn')) {
+                    try { new bootstrap.Tab($('ut-tab-asiento-btn')).show(); } catch (e) {}
+                    cargarAsientoTab();
+                }
             } else {
                 Swal.fire({ icon: 'error', title: 'No se pudo contabilizar', text: json.error });
             }

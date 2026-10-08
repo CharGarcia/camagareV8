@@ -189,6 +189,9 @@ $fmt = fn($v) => '$' . number_format((float) $v, 2);
 </script>
 <?php include __DIR__ . '/modal_calcular.php'; ?>
 <?php include __DIR__ . '/modal_detalle.php'; ?>
+<?php if (\App\Helpers\AsientoPestana::puedeVer()): // componente compartido de la pestaña «Asiento contable» ?>
+<script src="<?= rtrim($base, '/') ?>/js/modulos/asiento_contable_tab.js?v=<?= asset_ver('/js/modulos/asiento_contable_tab.js') ?>"></script>
+<?php endif; ?>
 <script src="<?= $base ?>/js/modulos/utilidades.js?v=<?= asset_ver('/js/modulos/utilidades.js') ?>"></script>
 
 <script>

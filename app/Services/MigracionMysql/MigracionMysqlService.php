@@ -7271,6 +7271,23 @@ class MigracionMysqlService
     {
         try {
             $pg = Database::getConnection();
+            // 0) Número legible (mes del rol) en las líneas ROL migradas YA enlazadas que aún guardan la
+            //    llave técnica del viejo ('ROL_PAGOS22882' / 'QUINCENA2722'): el detalle del egreso muestra
+            //    numero_documento y no decía de qué mes era el rol. Mismo texto que un egreso nativo
+            //    (EgresoRepository: 'Rol Mensual MM/AAAA', 'Quincena MM/AAAA'). Cubre migraciones anteriores.
+            $pg->prepare(
+                "UPDATE egresos_detalle d
+                    SET numero_documento = (CASE rc.tipo_rol WHEN 'MENSUAL' THEN 'Rol Mensual' WHEN 'QUINCENA' THEN 'Quincena' WHEN 'SEMANAL' THEN 'Semanal' ELSE 'Rol' END)
+                                           || ' ' || rc.periodo_mes || '/' || rc.periodo_anio
+                   FROM egresos_cabecera e, rol_detalle rd, rol_cabecera rc
+                  WHERE e.id = d.id_egreso AND e.id_empresa = :e
+                    AND d.tipo_documento = 'ROL' AND d.eliminado = false
+                    AND rd.id = d.id_referencia_documento AND rd.id_empresa = e.id_empresa
+                    AND rc.id = rd.id_rol
+                    AND d.numero_documento ~* '^(ROL[_ ]?PAGOS?|QUINCENA)[0-9]+$'
+                    AND EXISTS (SELECT 1 FROM migracion_mysql_map m WHERE m.id_empresa = e.id_empresa AND m.entidad = 'egresos' AND m.id_destino = e.id)"
+            )->execute([':e' => $idEmpresa]);
+
             // 1) Candidatas: líneas ROL migradas sin enlazar, con su llave natural (cv) en numero_documento.
             $sel = $pg->prepare(
                 "SELECT d.id AS id_det, d.numero_documento AS cv
@@ -7327,7 +7344,15 @@ class MigracionMysqlService
                   WHERE rd.id_empresa = :e AND rd.id_rol = :cab AND rd.id_empleado = :emp AND rc.eliminado = false
                   ORDER BY rd.id LIMIT 1"
             );
-            $upd = $pg->prepare("UPDATE egresos_detalle SET id_referencia_documento = :rd WHERE id = :d AND id_referencia_documento IS NULL");
+            // Al enlazar, el número pasa de la llave técnica al período del rol (como el egreso nativo).
+            $upd = $pg->prepare(
+                "UPDATE egresos_detalle d
+                    SET id_referencia_documento = :rd,
+                        numero_documento = (SELECT (CASE rc.tipo_rol WHEN 'MENSUAL' THEN 'Rol Mensual' WHEN 'QUINCENA' THEN 'Quincena' WHEN 'SEMANAL' THEN 'Semanal' ELSE 'Rol' END)
+                                                   || ' ' || rc.periodo_mes || '/' || rc.periodo_anio
+                                              FROM rol_detalle rd JOIN rol_cabecera rc ON rc.id = rd.id_rol WHERE rd.id = :rd2)
+                  WHERE d.id = :d AND d.id_referencia_documento IS NULL"
+            );
             $n = 0;
             foreach ($detInfo as $key => $info) {
                 $esQ    = ($key[0] === 'q');
@@ -7338,7 +7363,7 @@ class MigracionMysqlService
                 $rdId = (int) ($buscarRd->fetchColumn() ?: 0);
                 if ($rdId <= 0) { continue; }
                 foreach ($porDet[$key] ?? [] as $egDetId) {
-                    $upd->execute([':rd' => $rdId, ':d' => $egDetId]);
+                    $upd->execute([':rd' => $rdId, ':rd2' => $rdId, ':d' => $egDetId]);
                     $n += $upd->rowCount();
                 }
             }

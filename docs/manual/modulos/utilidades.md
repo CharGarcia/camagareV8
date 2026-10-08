@@ -6,7 +6,7 @@ ruta_modulo: modulos/utilidades
 tipo: modulo
 visibilidad: todos
 etiquetas: utilidades, participacion trabajadores, 15%, reparto de utilidades, 10% tiempo, 5% cargas familiares, cargas, ex trabajadores, tope 24 sbu, ministerio de trabajo, salarios en linea, informe empresarial, pago de utilidades, abril, asiento 31 de diciembre, participacion trabajadores por pagar
-version: 1.1
+version: 1.2
 orden: 61
 estado: activo
 ---
@@ -62,7 +62,10 @@ cuatro partes de ese proceso:
    empleado o aquí), las cargas, el tipo de pago, la discapacidad y la retención
    judicial. Los cambios se guardan solos al salir del campo.
 4. Pulse **CSV Ministerio** para obtener el archivo del Ministerio del Trabajo.
-5. Pulse **Contabilizar** para generar el asiento del 31 de diciembre.
+5. Pulse **Contabilizar** para generar el asiento del 31 de diciembre. Queda a la
+   vista en la pestaña **Asiento contable** del mismo modal (solo para quien tiene
+   acceso a Contabilidad → Asientos Contables), donde además se puede corregir y
+   guardar como en los demás documentos.
 6. Pague desde **Egresos → Nómina**: cada trabajador aparece con su valor de
    utilidades pendiente, igual que un décimo cuarto.
 
@@ -168,6 +171,8 @@ y Excel descargan el listado tal como está filtrado y ordenado.
 
 ## Historial de cambios
 
+- **1.2** — Pestaña **Asiento contable** en el modal, con el asiento del 31 de
+  diciembre generado por Contabilizar.
 - **1.1** — Listado con el diseño estándar (buscador con filtros, columnas por
   usuario, orden múltiple, PDF y Excel); botón **Nuevo**; el módulo avisa si falta
   ejecutar su SQL en la base.

@@ -3,6 +3,9 @@
 /** @var array $vistaConfig */
 $vistaConfigUt = \App\Helpers\PreferenciasHelper::getPreferenciasVista('utilidades');
 echo \App\Helpers\PreferenciasHelper::renderEstilosPestanasOcultas($vistaConfigUt, 'estiloVistaPestanasUt');
+// Pestaña «Asiento contable»: solo con acceso a Contabilidad → Asientos Contables (regla general
+// de todos los modales con asiento; ver app/helpers/AsientoPestana.php).
+$utVerAsiento = \App\Helpers\AsientoPestana::puedeVer();
 ?>
 <!-- Modal Utilidades (detalle de un ejercicio) -->
 <div class="modal fade" id="modalDetalleUt" tabindex="-1" aria-hidden="true" data-bs-backdrop="static" style="z-index: 1060;">
@@ -37,9 +40,18 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosPestanasOcultas($vistaConfigU
                         <li class="nav-item" role="presentation">
                             <a class="nav-link" id="ut-tab-trabajadores-btn" data-bs-toggle="tab" data-bs-target="#ut-tab-trabajadores" href="#ut-tab-trabajadores" role="tab" title="Trabajadores"><i class="bi bi-people me-1"></i> Trabajadores</a>
                         </li>
+                        <?php if ($utVerAsiento): // solo con acceso a Contabilidad → Asientos Contables ?>
+                        <li class="nav-item" role="presentation">
+                            <a class="nav-link" id="ut-tab-asiento-btn" data-bs-toggle="tab" data-bs-target="#ut-tab-asiento" href="#ut-tab-asiento" role="tab" title="Asiento contable del 31 de diciembre"><i class="bi bi-calculator me-1"></i> Asiento contable</a>
+                        </li>
+                        <?php endif; ?>
                     </ul>
                     <div class="pb-1 flex-shrink-0">
-                        <?= \App\Helpers\PreferenciasHelper::renderDropdownPestanas(['ut-tab-trabajadores' => 'Trabajadores'], $vistaConfigUt, 'utilidades', '__pestanas_ocultas__', 'estiloVistaPestanasUt') ?>
+                        <?php
+                        $pestanasUt = ['ut-tab-trabajadores' => 'Trabajadores'];
+                        if ($utVerAsiento) $pestanasUt['ut-tab-asiento'] = 'Asiento contable';
+                        echo \App\Helpers\PreferenciasHelper::renderDropdownPestanas($pestanasUt, $vistaConfigUt, 'utilidades', '__pestanas_ocultas__', 'estiloVistaPestanasUt');
+                        ?>
                     </div>
                 </div>
                 <div class="border-bottom bg-light mb-0"></div>
@@ -152,6 +164,17 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosPestanasOcultas($vistaConfigU
                             vuelve a repartir el 5% entre todos. Los ex trabajadores del año aparecen en gris.
                         </div>
                     </div>
+
+                    <!-- Pestaña Asiento contable (el del 31 de diciembre que genera Contabilizar) -->
+                    <?php if ($utVerAsiento): ?>
+                    <div class="tab-pane fade" id="ut-tab-asiento" role="tabpanel">
+                        <div class="alert alert-light border small d-flex align-items-center gap-2 mb-2 py-2">
+                            <i class="bi bi-info-circle text-primary"></i>
+                            <span>Asiento del <strong>31 de diciembre</strong> del ejercicio: <em>Gasto Participación Trabajadores</em> contra <em>Participación Trabajadores por Pagar</em>, por el monto repartido completo. Se genera con el botón <strong>Contabilizar</strong>.</span>
+                        </div>
+                        <?php $prefijo = 'ut'; require MVC_APP . '/views/partials/asiento_tab.php'; ?>
+                    </div>
+                    <?php endif; ?>
                 </div>
             </div>
             <div class="modal-footer justify-content-between bg-light border-top p-2">

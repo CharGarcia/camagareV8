@@ -1207,8 +1207,12 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
             const tipoBadge = esPrestamo
                 ? '<span class="badge bg-warning bg-opacity-10 text-warning border border-warning border-opacity-25" style="font-size:0.65rem">PRÉSTAMO</span>'
                 : (badgesDoc[d.tipo_bd] || `<span class="badge bg-secondary bg-opacity-10 text-secondary border border-secondary border-opacity-25" style="font-size:0.65rem">${d.tipo_bd}</span>`);
+            // Nómina migrada aún sin enlazar a su rol: el número es la llave técnica del sistema anterior
+            // (ROL_PAGOS22882 / QUINCENA2722); se muestra su texto ("Rol de pagos 11-2023 …"), que trae el mes.
+            const numeroVisible = (esNominaTipo && /^(ROL[_ ]?PAGOS?|QUINCENA)\d+$/i.test(String(d.numero || '')) && d.descripcion)
+                ? d.descripcion : d.numero;
             const numeroCell = esNominaTipo
-                ? `<span class="small fw-bold">${d.numero}</span>`
+                ? `<span class="small fw-bold">${String(numeroVisible).replace(/</g, '&lt;')}</span>`
                 : (d.id
                     ? `<code class="small text-primary fw-bold pointer text-decoration-underline" onclick="abrirPrevisualizadorDoc(${d.id}, '${d.tipo_bd}')">${d.numero}</code>`
                     : `<code class="small text-secondary fw-bold">${d.numero}</code>`);
@@ -2514,7 +2518,9 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
             const _egGrupos = {};
             (e.detalles || []).filter(d => (d.tipo_documento || 'MANUAL') !== 'MANUAL').forEach(d => {
                 const tipoBd = d.tipo_documento || comp;
-                const key = tipoBd + ':' + d.id_referencia_documento;
+                // Sin documento enlazado (p. ej. nómina migrada cuyo rol no se migró) cada línea va aparte:
+                // agrupar por id nulo juntaba en una sola fila los pagos de distintos empleados.
+                const key = tipoBd + ':' + (d.id_referencia_documento != null ? d.id_referencia_documento : ('linea' + d.id));
                 const prefItem = (d.numero_documento || '') + ' · ';
                 const esItem = (d.descripcion || '').startsWith(prefItem);
                 if (!_egGrupos[key]) {
@@ -2522,6 +2528,7 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                         id:          d.id_referencia_documento,
                         tipo_bd:     tipoBd,
                         numero:      d.numero_documento || '-',
+                        descripcion: d.descripcion || '',
                         fecha:       d.fecha_documento || null,
                         total:       0,
                         pendiente:   0,
