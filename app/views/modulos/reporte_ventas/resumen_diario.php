@@ -9,8 +9,10 @@
  * Cada bloque (un día, y el total del período si hay más de uno) trae las tres
  * secciones de la tirilla del Reporte Restaurante: Documentos, Detalle de impuestos
  * y Cobro por forma de pago. Ver ReporteVentasResumenDiarioService. El PDF es la
- * excepción: tras el detalle de documentos solo lleva el "Resumen de cobros" a todo
- * el ancho (forma de cobro, facturas, recibos, total y el total cobrado).
+ * excepción: tras el detalle de documentos solo lleva el "Detalle de pagos" (los
+ * Ingresos que los cobraron) y el "Resumen de cobros" a todo el ancho (forma de cobro,
+ * facturas, recibos, total y el total cobrado). Las tres salidas muestran el Detalle
+ * de pagos de cada día justo después de sus documentos.
  *
  * @var string $modo        pantalla | pdf | correo
  * @var array  $empresa     Ficha de la empresa (nombre, ruc)
@@ -148,6 +150,44 @@ $nombreEmpresa = (string) ($empresa['nombre_comercial'] ?? '') !== '' ? $empresa
                     </div>
                 </div>
             <?php endforeach; ?>
+            <?php // Detalle de pagos: Ingresos que cobraron los documentos del día. ?>
+            <?php if (!empty($b['pagos'])): ?>
+                <div class="px-2 pt-2">
+                    <div class="small fw-bold text-uppercase text-muted mb-1" style="font-size:.68rem;">
+                        Detalle de pagos (<?= count($b['pagos']['filas']) ?>)
+                    </div>
+                    <div class="table-responsive">
+                        <table class="table table-sm table-hover mb-0" style="font-size:.78rem;">
+                            <thead class="table-light">
+                                <tr>
+                                    <th class="py-1">Pagado a</th>
+                                    <th class="py-1">N.º ingreso</th>
+                                    <th class="py-1">Detalle</th>
+                                    <th class="py-1">Forma de pago</th>
+                                    <th class="py-1 text-end">Valor</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <?php foreach ($b['pagos']['filas'] as $p): ?>
+                                    <tr>
+                                        <td class="py-1"><?= $e($p['pagado_a']) ?></td>
+                                        <td class="py-1 text-nowrap"><?= $e($p['numero']) ?></td>
+                                        <td class="py-1"><?= $e($p['detalle']) ?></td>
+                                        <td class="py-1"><?= $e($p['forma_pago']) ?></td>
+                                        <td class="py-1 text-end text-nowrap"><?= $e($fmt($p['total'])) ?></td>
+                                    </tr>
+                                <?php endforeach; ?>
+                            </tbody>
+                            <tfoot>
+                                <tr class="fw-bold table-light">
+                                    <td class="py-1 text-end" colspan="4">Total pagos</td>
+                                    <td class="py-1 text-end text-nowrap"><?= $e($fmt($b['pagos']['total'])) ?></td>
+                                </tr>
+                            </tfoot>
+                        </table>
+                    </div>
+                </div>
+            <?php endif; ?>
             <?php if (!empty($b['detalle'])): ?>
                 <div class="px-2 pt-3 small fw-bold text-uppercase text-primary" style="font-size:.7rem;">Resumen del día</div>
             <?php endif; ?>
@@ -242,7 +282,48 @@ $nombreEmpresa = (string) ($empresa['nombre_comercial'] ?? '') !== '' ? $empresa
                 </table>
             <?php endforeach; ?>
 
-            <?php // 2) Resumen de cobros del día (o del período), a todo el ancho: una fila por
+            <?php // 2) Detalle de pagos: un Ingreso por fila (y por forma de pago) con quién pagó,
+                  //    el número de Ingreso, los documentos del día que cobró, la forma y el valor.
+                  //    Su total es el TOTAL COBRADO del resumen que sigue. Puede ocupar varias
+                  //    páginas: el <thead> se repite y el total va en tabla aparte. ?>
+            <?php if (!empty($b['pagos'])): ?>
+                <table style="width:100%;border-collapse:collapse;font-family:Arial,sans-serif;font-size:7.5pt;margin-top:6px;table-layout:fixed;">
+                    <thead>
+                        <tr>
+                            <th colspan="5" style="width:100%;text-align:left;background:#e3e9f0;border:1px solid #9aa7b4;padding:3px 5px;font-size:8.5pt;color:#1b2a3a;">
+                                DETALLE DE PAGOS (<?= count($b['pagos']['filas']) ?>)
+                            </th>
+                        </tr>
+                        <tr>
+                            <th style="width:26%;background:#f4f7fa;border:1px solid #c3ccd6;padding:2px 4px;">Pagado a</th>
+                            <th style="width:15%;background:#f4f7fa;border:1px solid #c3ccd6;padding:2px 4px;">N.º ingreso</th>
+                            <th style="width:29%;background:#f4f7fa;border:1px solid #c3ccd6;padding:2px 4px;">Detalle</th>
+                            <th style="width:16%;background:#f4f7fa;border:1px solid #c3ccd6;padding:2px 4px;">Forma de pago</th>
+                            <th style="width:14%;background:#f4f7fa;border:1px solid #c3ccd6;padding:2px 4px;text-align:right;">Valor</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <?php foreach ($b['pagos']['filas'] as $i => $p): ?>
+                            <?php $z = $i % 2 ? 'background:#f6f8fa;' : ''; ?>
+                            <tr>
+                                <td style="width:26%;border:1px solid #c3ccd6;padding:2px 4px;<?= $z ?>"><?= $e($p['pagado_a']) ?></td>
+                                <td style="width:15%;border:1px solid #c3ccd6;padding:2px 4px;<?= $z ?>"><?= $e($p['numero']) ?></td>
+                                <td style="width:29%;border:1px solid #c3ccd6;padding:2px 4px;<?= $z ?>"><?= $e($p['detalle']) ?></td>
+                                <td style="width:16%;border:1px solid #c3ccd6;padding:2px 4px;<?= $z ?>"><?= $e($p['forma_pago']) ?></td>
+                                <td style="width:14%;border:1px solid #c3ccd6;padding:2px 4px;text-align:right;<?= $z ?>"><?= $e($fmt($p['total'])) ?></td>
+                            </tr>
+                        <?php endforeach; ?>
+                    </tbody>
+                </table>
+                <table style="width:100%;border-collapse:collapse;font-family:Arial,sans-serif;font-size:7.5pt;table-layout:fixed;">
+                    <tr>
+                        <td style="width:86%;border:1px solid #9aa7b4;background:#e3e9f0;padding:2px 4px;text-align:right;font-weight:bold;">TOTAL PAGOS:</td>
+                        <td style="width:14%;border:1px solid #9aa7b4;background:#e3e9f0;padding:2px 4px;text-align:right;font-weight:bold;"><?= $e($fmt($b['pagos']['total'])) ?></td>
+                    </tr>
+                </table>
+            <?php endif; ?>
+
+            <?php // 3) Resumen de cobros del día (o del período), a todo el ancho: una fila por
                   //    forma de cobro con cuántas facturas y cuántos recibos cobró y el valor, y al
                   //    final el total cobrado. El PDF no lleva las secciones Documentos ni Detalle
                   //    de impuestos (sí la pantalla y el correo). nobreak: no se parte entre páginas. ?>
@@ -349,6 +430,35 @@ $nombreEmpresa = (string) ($empresa['nombre_comercial'] ?? '') !== '' ? $empresa
                     </tr>
                 </table>
             <?php endforeach; ?>
+            <?php if (!empty($b['pagos'])): ?>
+                <table style="width:100%;border-collapse:collapse;font-family:Arial,sans-serif;font-size:12px;margin-bottom:6px;">
+                    <tr>
+                        <td colspan="5" style="background:#e3e9f0;border:1px solid #9aa7b4;padding:4px 6px;font-weight:bold;color:#1b2a3a;">
+                            DETALLE DE PAGOS (<?= count($b['pagos']['filas']) ?>)
+                        </td>
+                    </tr>
+                    <tr>
+                        <td style="background:#f4f7fa;border:1px solid #c3ccd6;padding:3px 6px;font-weight:bold;">Pagado a</td>
+                        <td style="background:#f4f7fa;border:1px solid #c3ccd6;padding:3px 6px;font-weight:bold;">N.º ingreso</td>
+                        <td style="background:#f4f7fa;border:1px solid #c3ccd6;padding:3px 6px;font-weight:bold;">Detalle</td>
+                        <td style="background:#f4f7fa;border:1px solid #c3ccd6;padding:3px 6px;font-weight:bold;">Forma de pago</td>
+                        <td style="background:#f4f7fa;border:1px solid #c3ccd6;padding:3px 6px;font-weight:bold;text-align:right;">Valor</td>
+                    </tr>
+                    <?php foreach ($b['pagos']['filas'] as $p): ?>
+                        <tr>
+                            <td style="border:1px solid #c3ccd6;padding:3px 6px;"><?= $e($p['pagado_a']) ?></td>
+                            <td style="border:1px solid #c3ccd6;padding:3px 6px;white-space:nowrap;"><?= $e($p['numero']) ?></td>
+                            <td style="border:1px solid #c3ccd6;padding:3px 6px;"><?= $e($p['detalle']) ?></td>
+                            <td style="border:1px solid #c3ccd6;padding:3px 6px;"><?= $e($p['forma_pago']) ?></td>
+                            <td style="border:1px solid #c3ccd6;padding:3px 6px;text-align:right;white-space:nowrap;"><?= $e($fmt($p['total'])) ?></td>
+                        </tr>
+                    <?php endforeach; ?>
+                    <tr>
+                        <td colspan="4" style="background:#e3e9f0;border:1px solid #9aa7b4;padding:3px 6px;text-align:right;font-weight:bold;">Total pagos</td>
+                        <td style="background:#e3e9f0;border:1px solid #9aa7b4;padding:3px 6px;text-align:right;font-weight:bold;white-space:nowrap;"><?= $e($fmt($b['pagos']['total'])) ?></td>
+                    </tr>
+                </table>
+            <?php endif; ?>
             <?php if (!empty($b['detalle'])): ?>
                 <div style="margin:10px 0 4px 0;font-size:12px;font-weight:bold;color:#2c4a6b;">RESUMEN DEL DÍA <?= $e($b['titulo']) ?></div>
             <?php endif; ?>

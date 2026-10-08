@@ -1700,6 +1700,35 @@ class ReporteVentasRepository extends BaseRepository
     }
 
     /**
+     * Detalle de pagos del resumen (pantalla, PDF y correo): una fila por día, Ingreso y forma
+     * de pago con quién pagó (el "Recibo de" del Ingreso o, sin él, su cliente), el número de
+     * Ingreso, los documentos del día que ese Ingreso cobró y el valor. Sale del mismo CTE
+     * `cobros` que el "Resumen de cobros", así que su total es el TOTAL COBRADO: si un Ingreso
+     * cobró también documentos de otros días, aquí solo cuenta lo aplicado a los de este día.
+     */
+    public function getResumenDiarioPagos(int|array $idEmpresa, array $filtros): array
+    {
+        [$cte, $params] = $this->cteResumenDocs($idEmpresa, $filtros);
+        $st = $this->db->prepare($cte . $this->cteCobrosResumen() . "
+            SELECT c.fecha, c.id_ingreso,
+                   MAX(ic.numero_ingreso) AS numero_ingreso,
+                   MAX(COALESCE(NULLIF(TRIM(ic.recibo_de), ''), cl.nombre, '')) AS pagado_a,
+                   COALESCE(fp.id, 0) AS id_forma_pago,
+                   COALESCE(MAX(fp.nombre), 'Sin forma de pago registrada') AS forma_pago_nombre,
+                   STRING_AGG(DISTINCT CASE c.tipo WHEN 'FACTURA' THEN 'Factura ' ELSE 'Recibo ' END || c.numero, ', ') AS detalle,
+                   COALESCE(SUM(c.monto), 0) AS total
+              FROM cobros c
+              JOIN ingresos_cabecera ic ON ic.id = c.id_ingreso
+              LEFT JOIN clientes cl ON cl.id = COALESCE(ic.id_recibo_cliente, ic.id_cliente)
+              LEFT JOIN empresa_formas_pago fp ON fp.id = c.id_forma_cobro
+             GROUP BY c.fecha, c.id_ingreso, COALESCE(fp.id, 0)
+             ORDER BY c.fecha, numero_ingreso, c.id_ingreso, forma_pago_nombre
+        ");
+        $st->execute($params);
+        return $st->fetchAll(PDO::FETCH_ASSOC);
+    }
+
+    /**
      * CTE `cobros` del resumen (requiere `docs`): lo cobrado a cada factura y recibo por
      * forma de pago, desde el Ingreso que lo cobró. Ver getResumenDiarioCobros().
      */
@@ -1707,7 +1736,7 @@ class ReporteVentasRepository extends BaseRepository
     {
         return ",
             cobros AS (
-                SELECT d.tipo, d.id, d.fecha, ip.id_forma_cobro,
+                SELECT d.tipo, d.id, d.fecha, d.numero, ic.id AS id_ingreso, ip.id_forma_cobro,
                        CASE WHEN COALESCE(tp.total, 0) > 0
                             THEN idet.monto_cobrado * ip.monto / tp.total
                             ELSE idet.monto_cobrado END AS monto

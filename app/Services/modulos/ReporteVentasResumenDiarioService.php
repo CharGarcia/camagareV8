@@ -45,7 +45,8 @@ class ReporteVentasResumenDiarioService
      *                             por el controlador, igual que el resto del reporte.
      * @param array     $filtros   Los del reporte, con el alcance del usuario ya aplicado.
      * @param bool      $conDetalle Agrega a cada día la lista de sus documentos (número, cliente,
-     *                              total y saldo), agrupada por tipo. La usan la pantalla y el PDF;
+     *                              total y saldo), agrupada por tipo, y el detalle de pagos
+     *                              (Ingresos que los cobraron). La usan la pantalla y el PDF;
      *                              la tirilla no la necesita y se ahorra la consulta.
      * @return array{dias: list<array>, total: ?array}
      */
@@ -58,6 +59,7 @@ class ReporteVentasResumenDiarioService
         $impuestos = $this->repository->getResumenDiarioImpuestos($idEmpresa, $filtros);
         $cobros    = $this->repository->getResumenDiarioCobros($idEmpresa, $filtros);
         $detalle   = $conDetalle ? $this->repository->getResumenDiarioDetalle($idEmpresa, $filtros) : [];
+        $pagos     = $conDetalle ? $this->repository->getResumenDiarioPagos($idEmpresa, $filtros) : [];
 
         // Días con movimiento (documentos válidos o anulados), en orden.
         $fechas = array_unique(array_merge(array_column($docs, 'fecha'), array_column($anulados, 'fecha')));
@@ -76,7 +78,10 @@ class ReporteVentasResumenDiarioService
                 $porFecha($impuestos['impuestos'], $fecha),
                 $porFecha($cobros['formas'], $fecha),
                 $porFecha($cobros['saldos'], $fecha)
-            ) + ['detalle' => $this->agruparDetalle($porFecha($detalle, $fecha))];
+            ) + [
+                'detalle' => $this->agruparDetalle($porFecha($detalle, $fecha)),
+                'pagos'   => $this->armarPagos($porFecha($pagos, $fecha)),
+            ];
         }
 
         $total = count($dias) > 1
@@ -116,6 +121,31 @@ class ReporteVentasResumenDiarioService
             ];
         }
         return $grupos;
+    }
+
+    /**
+     * Detalle de pagos de un día: una fila por Ingreso y forma de pago (pagado a, número de
+     * Ingreso, documentos que cobró, forma y valor) y el total, que es el TOTAL COBRADO del
+     * Resumen de cobros. Sin cobros devuelve null (la sección no se pinta).
+     *
+     * @return array{filas: list<array>, total: float}|null
+     */
+    private function armarPagos(array $filas): ?array
+    {
+        if (!$filas) {
+            return null;
+        }
+        $lista = array_map(static fn (array $r): array => [
+            'pagado_a'   => (string) $r['pagado_a'],
+            'numero'     => (string) $r['numero_ingreso'],
+            'detalle'    => (string) $r['detalle'],
+            'forma_pago' => (string) $r['forma_pago_nombre'],
+            'total'      => round((float) $r['total'], 2),
+        ], $filas);
+        return [
+            'filas' => $lista,
+            'total' => round(array_sum(array_column($lista, 'total')), 2),
+        ];
     }
 
     /** Un bloque del resumen (un día o el total del período) a partir de las filas que le tocan. */
