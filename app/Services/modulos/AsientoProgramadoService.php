@@ -729,6 +729,15 @@ class AsientoProgramadoService
                 $sinUso[] = $tipo;
             }
         }
+
+        // «Ajustes de Inventario» también se usa en cuanto la empresa tiene productos
+        // inventariables, aunque todavía no haya movido inventario: así puede dejar las cuentas
+        // listas antes del primer ajuste.
+        if (in_array('ajuste_inventario', $sinUso, true)
+            && in_array('ajuste_inventario', $conCatalogo, true)
+            && $this->repo->tieneProductosInventariables($idEmpresa)) {
+            $sinUso = array_values(array_diff($sinUso, ['ajuste_inventario']));
+        }
         return $sinUso;
     }
 

@@ -2189,6 +2189,23 @@ class AsientoProgramadoRepository extends BaseRepository
         )->fetchAll(PDO::FETCH_COLUMN);
     }
 
+    /**
+     * ¿La empresa tiene algún producto inventariable vigente? Mismo criterio que el que mueve
+     * stock: marcado inventariable y que no sea servicio (tipo_produccion '02').
+     */
+    public function tieneProductosInventariables(int $idEmpresa): bool
+    {
+        $st = $this->db->prepare(
+            "SELECT EXISTS (
+                SELECT 1 FROM productos
+                WHERE id_empresa = :e AND eliminado = false AND inventariable = true
+                  AND COALESCE(tipo_produccion, '01') <> '02'
+             )"
+        );
+        $st->execute([':e' => $idEmpresa]);
+        return (bool) $st->fetchColumn();
+    }
+
     /** Razón social del proveedor si pertenece a la empresa y no está eliminado; null si no. */
     public function getNombreProveedorEmpresa(int $idEmpresa, int $idProveedor): ?string
     {
