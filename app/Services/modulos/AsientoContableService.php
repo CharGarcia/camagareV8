@@ -36,6 +36,15 @@ class AsientoContableService
     private AsientoContableDetalle $modelDetalle;
     private PeriodosContablesService $periodosService;
 
+    /**
+     * Lo activa SOLO CierreEjercicioService. Con él:
+     *  - se pueden crear y anular los asientos de cierre/apertura del ejercicio, que ninguna
+     *    otra pantalla puede tocar (ver validarOrigenCierreEjercicio());
+     *  - no se exige que la fecha esté en un período abierto: cerrar el año es justamente lo
+     *    que se hace cuando sus meses ya están cerrados, y el propio módulo bloquea el año.
+     */
+    public bool $desdeCierreEjercicio = false;
+
     public function __construct(
         private AsientoContableRepository $repository,
         private AsientoContableRules $rules,
@@ -363,7 +372,8 @@ class AsientoContableService
         // asiento— para que no se pueda sacar un asiento de un período cerrado cambiándole
         // la fecha, ni meterlo a uno cerrado.
         $idAsientoPrevio = (int) ($cabeceraData['id'] ?? 0);
-        if (!empty($cabeceraData['fecha_asiento'])) {
+        $this->validarOrigenCierreEjercicio((string) ($cabeceraData['modulo_origen'] ?? ''));
+        if (!empty($cabeceraData['fecha_asiento']) && !$this->desdeCierreEjercicio) {
             $this->periodosService->validarFechaPermitida(
                 (string) $cabeceraData['fecha_asiento'],
                 $idEmpresa,
@@ -373,7 +383,8 @@ class AsientoContableService
         }
         if ($idAsientoPrevio > 0) {
             $previo = $this->repository->getDetalleAsiento($idAsientoPrevio, $idEmpresa);
-            if (!empty($previo['fecha_asiento'])) {
+            $this->validarOrigenCierreEjercicio((string) ($previo['modulo_origen'] ?? ''));
+            if (!empty($previo['fecha_asiento']) && !$this->desdeCierreEjercicio) {
                 $this->periodosService->validarFechaPermitida(
                     (string) $previo['fecha_asiento'],
                     $idEmpresa,
@@ -656,6 +667,21 @@ class AsientoContableService
         }
     }
 
+    /**
+     * Los asientos de cierre y apertura del ejercicio solo los crea y revierte el módulo
+     * Cierre del Ejercicio: editarlos o anularlos desde Asientos dejaría el registro del cierre
+     * apuntando a otra cosa y el año siguiente arrancando con saldos que nadie generó.
+     */
+    private function validarOrigenCierreEjercicio(string $moduloOrigen): void
+    {
+        if ($this->desdeCierreEjercicio) {
+            return;
+        }
+        if (in_array($moduloOrigen, [\App\Helpers\CierreEjercicioSql::ORIGEN_CIERRE, \App\Helpers\CierreEjercicioSql::ORIGEN_APERTURA], true)) {
+            throw new \Exception('Este asiento lo generó el Cierre del Ejercicio. Para cambiarlo, revierta el cierre desde ese módulo y vuelva a generarlo.');
+        }
+    }
+
     public function anular(int $idAsiento, int $idEmpresa, int $idUsuario): void
     {
         $asiento = $this->repository->getDetalleAsiento($idAsiento, $idEmpresa);
@@ -665,7 +691,8 @@ class AsientoContableService
         if ($asiento['estado'] === 'anulado') {
             throw new \Exception('El asiento ya se encuentra anulado.');
         }
-        if (!empty($asiento['fecha_asiento'])) {
+        $this->validarOrigenCierreEjercicio((string) ($asiento['modulo_origen'] ?? ''));
+        if (!empty($asiento['fecha_asiento']) && !$this->desdeCierreEjercicio) {
             $this->periodosService->validarFechaPermitida(
                 (string) $asiento['fecha_asiento'],
                 $idEmpresa,

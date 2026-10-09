@@ -3,6 +3,7 @@ declare(strict_types=1);
 
 namespace App\repositories;
 
+use App\Helpers\CierreEjercicioSql;
 use PDO;
 
 /**
@@ -180,6 +181,7 @@ class ComprobacionContableRepository extends BaseRepository
                     WHERE ac.id_empresa = :e AND ac.estado = 'contabilizado'
                       AND ac.eliminado = FALSE AND ad.eliminado = FALSE
                       AND ac.tipo_ambiente = (SELECT t FROM amb)
+                      AND " . CierreEjercicioSql::acumulado('ac') . "
                       AND ad.id_cuenta_contable IN ({$cuentas})
                 ),
                 k AS (
@@ -331,6 +333,7 @@ class ComprobacionContableRepository extends BaseRepository
                        ON ac.id = ad.id_asiento AND ac.id_empresa = :e1 AND ac.estado = 'contabilizado'
                       AND ac.eliminado = FALSE
                       AND ac.tipo_ambiente = (SELECT CAST(tipo_ambiente AS VARCHAR(1)) FROM empresas WHERE id = :e2)
+                      AND " . CierreEjercicioSql::acumulado('ac') . "
                 WHERE pc.id_empresa = :e3 AND pc.id IN ({$cuentas})
                 GROUP BY pc.id, pc.codigo, pc.nombre
                 ORDER BY pc.codigo";

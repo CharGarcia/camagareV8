@@ -194,6 +194,30 @@ class SincronizadorAsientosService
         $db = Database::getConnection();
         $this->prepararEsquema($db);
 
+        return $this->contarPendientesSinEsquema($db, $idEmpresa);
+    }
+
+    /**
+     * contarPendientes() de varias empresas (los establecimientos de un RUC, vistos desde la
+     * matriz en Estados Financieros) preparando el esquema una sola vez.
+     *
+     * @param int[] $idsEmpresa
+     * @return array<int,int> id_empresa => documentos pendientes
+     */
+    public function contarPendientesEmpresas(array $idsEmpresa): array
+    {
+        $db = Database::getConnection();
+        $this->prepararEsquema($db);
+
+        $out = [];
+        foreach ($idsEmpresa as $id) {
+            $out[(int) $id] = $this->contarPendientesSinEsquema($db, (int) $id);
+        }
+        return $out;
+    }
+
+    private function contarPendientesSinEsquema(\PDO $db, int $idEmpresa): int
+    {
         $excMig = $this->construirExclusionMigracion($db);
         $trabajos = $this->construirTrabajos($idEmpresa, $excMig);
 

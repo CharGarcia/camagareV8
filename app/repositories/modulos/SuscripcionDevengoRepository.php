@@ -469,7 +469,8 @@ class SuscripcionDevengoRepository extends BaseRepository
              JOIN asientos_contables_cabecera a ON a.id = det.id_asiento
              WHERE a.id_empresa = :e AND a.eliminado = false AND a.estado <> 'anulado'
                AND det.eliminado = false AND det.id_cuenta_contable = :c AND a.fecha_asiento <= :f
-               AND a.tipo_ambiente = (SELECT CAST(tipo_ambiente AS VARCHAR(1)) FROM empresas WHERE id = :e2)"
+               AND a.tipo_ambiente = (SELECT CAST(tipo_ambiente AS VARCHAR(1)) FROM empresas WHERE id = :e2)
+               AND " . \App\Helpers\CierreEjercicioSql::acumulado('a')
         );
         $st->execute([':e' => $idEmpresa, ':c' => $idCuenta, ':f' => $fechaCorte, ':e2' => $idEmpresa]);
         return round((float) $st->fetchColumn(), 2);

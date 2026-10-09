@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\repositories\modulos;
 
 use App\core\Database;
+use App\Helpers\CierreEjercicioSql;
 use App\Traits\DocumentoOrigenAsientoTrait;
 use PDO;
 
@@ -61,7 +62,7 @@ class EstadosFinancierosRepository
             LEFT JOIN asientos_contables_detalle ad ON pc.id = ad.id_cuenta_contable AND ad.eliminado = false
                 $centroCostoFilter
                 $proyectoFilter
-            LEFT JOIN asientos_contables_cabecera ac ON ad.id_asiento = ac.id AND ac.eliminado = false AND ac.id_empresa = pc.id_empresa AND ac.tipo_ambiente = '2'
+            LEFT JOIN asientos_contables_cabecera ac ON ad.id_asiento = ac.id AND ac.eliminado = false AND ac.id_empresa = pc.id_empresa AND ac.tipo_ambiente = '2' AND " . CierreEjercicioSql::rango('ac', ':fecha_inicio') . "
             WHERE pc.id_empresa = :id_empresa 
               AND pc.eliminado = false
             GROUP BY pc.id, pc.codigo, pc.nombre, pc.nivel, pc.codigo_sri, pc.supercias_esf, pc.supercias_eri, pc.supercias_ecp_codigo, pc.supercias_ecp_subcodigo
@@ -122,7 +123,7 @@ class EstadosFinancierosRepository
                 AND ac.estado = 'contabilizado'
                 AND ac.id_empresa = pc.id_empresa
                 AND ac.fecha_asiento BETWEEN :fecha_inicio AND :fecha_fin
-                AND ac.tipo_ambiente = '2'
+                AND ac.tipo_ambiente = '2' AND " . CierreEjercicioSql::rango('ac', ':fecha_inicio') . "
             WHERE pc.id_empresa = :id_empresa
               AND pc.eliminado = false
               AND pc.codigo LIKE '3%'
@@ -171,7 +172,7 @@ class EstadosFinancierosRepository
                 AND ac.estado = 'contabilizado'
                 AND ac.id_empresa = pc.id_empresa
                 AND ac.fecha_asiento BETWEEN :fecha_inicio AND :fecha_fin
-                AND ac.tipo_ambiente = '2'
+                AND ac.tipo_ambiente = '2' AND " . CierreEjercicioSql::rango('ac', ':fecha_inicio') . "
             WHERE pc.id_empresa = :id_empresa
               AND pc.eliminado = false
             GROUP BY pc.id, pc.codigo, pc.nombre, pc.nivel, pc.supercias_esf, pc.supercias_eri
@@ -215,7 +216,7 @@ class EstadosFinancierosRepository
               AND ac.eliminado = false
               AND ac.estado = 'contabilizado'
               AND ac.fecha_asiento BETWEEN :fecha_inicio AND :fecha_fin
-              AND ac.tipo_ambiente = '2'
+              AND ac.tipo_ambiente = '2' AND " . CierreEjercicioSql::rango('ac', ':fecha_inicio') . "
               AND COALESCE(ac.tipo_comprobante, '') <> 'apertura'
               AND EXISTS (
                     SELECT 1
@@ -254,7 +255,7 @@ class EstadosFinancierosRepository
                 AND ac.estado = 'contabilizado'
                 AND ac.id_empresa = pc.id_empresa
                 AND ac.fecha_asiento BETWEEN :fecha_inicio AND :fecha_fin
-                AND ac.tipo_ambiente = '2'
+                AND ac.tipo_ambiente = '2' AND " . CierreEjercicioSql::rango('ac', ':fecha_inicio') . "
             WHERE pc.id_empresa = :id_empresa
               AND pc.eliminado = false
             GROUP BY pc.id, pc.codigo, pc.nombre, pc.nivel, pc.codigo_sri, pc.supercias_esf, pc.supercias_eri,
@@ -369,7 +370,7 @@ class EstadosFinancierosRepository
                 AND ac.estado = 'contabilizado'
                 AND ac.id_empresa = :id_empresa
                 AND ac.fecha_asiento BETWEEN :fecha_inicio AND :fecha_fin
-                AND ac.tipo_ambiente = '2'
+                AND ac.tipo_ambiente = '2' AND " . CierreEjercicioSql::rango('ac', ':fecha_inicio') . "
             WHERE ad.eliminado = false
               $centroCostoFilter
               $proyectoFilter
@@ -456,7 +457,8 @@ class EstadosFinancierosRepository
                      AND ac.fecha_asiento >= :f_inicio 
                      AND ac.fecha_asiento <= :f_fin 
                      AND pc.codigo LIKE :codigo_cuenta
-                     AND ac.tipo_ambiente = '2'";
+                     AND ac.tipo_ambiente = '2'
+                     AND " . CierreEjercicioSql::rango('ac', ':f_inicio') . "";
 
         $params = [
             ':id_empresa' => $idEmpresa,

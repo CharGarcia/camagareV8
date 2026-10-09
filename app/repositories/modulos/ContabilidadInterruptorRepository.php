@@ -133,7 +133,8 @@ class ContabilidadInterruptorRepository extends BaseRepository
                JOIN asientos_contables_cabecera c ON c.id = d.id_asiento
               WHERE c.id_empresa = :id_empresa AND c.eliminado = false AND c.estado <> 'anulado'
                 AND c.tipo_ambiente = (SELECT CAST(tipo_ambiente AS VARCHAR(1)) FROM empresas WHERE id = :id_empresa_amb)
-                AND d.eliminado = false AND d.id_cuenta_contable = :id_cuenta"
+                AND d.eliminado = false AND d.id_cuenta_contable = :id_cuenta
+                AND " . \App\Helpers\CierreEjercicioSql::acumulado('c')
         );
         $st->execute([':id_empresa' => $idEmpresa, ':id_empresa_amb' => $idEmpresa, ':id_cuenta' => $idCuenta]);
         return round((float) $st->fetchColumn(), 2);

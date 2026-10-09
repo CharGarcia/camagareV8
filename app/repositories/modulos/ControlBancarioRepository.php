@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\repositories\modulos;
 
 use App\repositories\BaseRepository;
+use App\Helpers\CierreEjercicioSql;
 use App\Helpers\FiltrosBusqueda;
 use PDO;
 
@@ -308,6 +309,7 @@ class ControlBancarioRepository extends BaseRepository
                     WHERE ac.id_empresa = :e AND ac.estado = 'contabilizado'
                       AND ac.eliminado = FALSE AND ad.eliminado = FALSE
                       AND ac.tipo_ambiente = (SELECT t FROM amb)
+                      AND " . CierreEjercicioSql::acumulado('ac') . "
                       AND ad.id_cuenta_contable IN ({$cuentasIn})
                     GROUP BY 1, 2
                 ),
@@ -945,7 +947,8 @@ class ControlBancarioRepository extends BaseRepository
                     WHERE UPPER(ac.tipo_comprobante) = 'EGRESOS'
                       AND ecx.id = ac.id_referencia_origen
                       AND (ecx.eliminado = TRUE OR COALESCE(ecx.estado, '') = 'anulado')
-              )";
+              )
+              AND " . CierreEjercicioSql::acumulado('ac');
     }
 
     /**

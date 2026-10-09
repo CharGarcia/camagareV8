@@ -359,11 +359,26 @@
             .then(json => {
                 if (!json || !json.ok) { terminar(); return; }
                 const n = parseInt(json.pendientes, 10) || 0;
-                if (n < 1) { terminar(); return; }
+                // `otros` (opcional): pendientes de los demás establecimientos del RUC, que el
+                // servidor manda solo cuando la empresa activa es la matriz (Estados Financieros).
+                // Solo se avisan: cada establecimiento genera los suyos entrando a él.
+                const otros = (Array.isArray(json.otros) ? json.otros : [])
+                    .filter(o => (parseInt(o.pendientes, 10) || 0) > 0);
+                if (n < 1 && !otros.length) { terminar(); return; }
+
+                const htmlOtros = otros.length
+                    ? `<div class="text-start small mt-3 pt-2 border-top">`
+                        + `<i class="bi bi-shop text-warning me-1"></i><strong>Otros establecimientos del RUC con asientos pendientes:</strong>`
+                        + `<ul class="mb-1 mt-1">${otros.map(o => `<li>${escapeHtml(o.etiqueta)}: <strong>${parseInt(o.pendientes, 10)}</strong> documento(s)</li>`).join('')}</ul>`
+                        + `<span class="text-muted">Para generarlos, cambie a ese establecimiento y abra este módulo.</span></div>`
+                    : '';
 
                 if (!window.Swal) {
                     // Sin SweetAlert: confirm nativo como respaldo.
-                    if (window.confirm(`Hay ${n} documento(s) sin asiento contable generado. ¿Desea generarlos ahora?`)) {
+                    if (n < 1) {
+                        window.alert('Otros establecimientos del RUC tienen asientos contables pendientes de generar.');
+                        terminar();
+                    } else if (window.confirm(`Hay ${n} documento(s) sin asiento contable generado. ¿Desea generarlos ahora?`)) {
                         generar(urlBase, onGenerado);
                     } else {
                         terminar();
@@ -371,10 +386,22 @@
                     return;
                 }
 
+                if (n < 1) {
+                    Swal.fire({
+                        icon: 'warning',
+                        title: 'Asientos pendientes en otros establecimientos',
+                        html: 'Este establecimiento no tiene asientos pendientes.' + htmlOtros,
+                        confirmButtonText: 'Continuar',
+                        allowOutsideClick: false,
+                    }).then(() => terminar());
+                    return;
+                }
+
                 Swal.fire({
                     icon: 'question',
                     title: 'Asientos pendientes',
-                    html: `Hay <strong>${n}</strong> documento(s) sin asiento contable generado.<br>¿Desea generarlos ahora?`,
+                    html: `Hay <strong>${n}</strong> documento(s) sin asiento contable generado${otros.length ? ' en este establecimiento' : ''}.<br>¿Desea generarlos ahora?` + htmlOtros,
+                    width: otros.length ? 600 : undefined,
                     showCancelButton: true,
                     confirmButtonText: '<i class="bi bi-gear-fill me-1"></i> Generar ahora',
                     cancelButtonText: 'Continuar sin generar',

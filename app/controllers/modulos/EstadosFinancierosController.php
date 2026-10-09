@@ -66,6 +66,9 @@ class EstadosFinancierosController extends BaseModuloController
             'rutaModulo' => $this->getRutaModulo(),
             'perm' => $perm,
             'hayGrupoRuc' => count($idsGrupoRuc) > 1,
+            // Selector "Establecimiento": los del mismo RUC a los que el usuario tiene acceso.
+            'establecimientosRuc' => count($idsGrupoRuc) > 1 ? $this->establecimientosAccesibles() : [],
+            'idEmpresaActual' => $idEmpresa,
             'fullWidth' => true
         ]);
     }
@@ -155,9 +158,32 @@ class EstadosFinancierosController extends BaseModuloController
             }
 
             $sincronizador = new \App\Services\modulos\SincronizadorAsientosService();
+
+            // Desde la matriz también se avisa lo que falta generar en los demás establecimientos
+            // del RUC (solo el aviso: cada uno los genera entrando a su propio establecimiento).
+            $empresaRepo = new \App\repositories\modulos\EmpresaRepository();
+            $idsOtros = array_values(array_diff(
+                $empresaRepo->getIdsConsolidadoDesdeMatriz($idEmpresa, (int) ($_SESSION['id_usuario'] ?? 0)),
+                [$idEmpresa]
+            ));
+
+            $conteos = $sincronizador->contarPendientesEmpresas(array_merge([$idEmpresa], $idsOtros));
+            $etiquetas = $idsOtros ? $empresaRepo->getEtiquetasEstablecimiento($idsOtros) : [];
+            $otros = [];
+            foreach ($idsOtros as $idOtro) {
+                if (($conteos[$idOtro] ?? 0) > 0) {
+                    $otros[] = [
+                        'etiqueta'   => $etiquetas[$idOtro] ?? ('Empresa ' . $idOtro),
+                        'pendientes' => $conteos[$idOtro],
+                    ];
+                }
+            }
+            usort($otros, fn ($a, $b) => strcmp($a['etiqueta'], $b['etiqueta']));
+
             echo json_encode([
                 'ok'         => true,
-                'pendientes' => $sincronizador->contarPendientes($idEmpresa),
+                'pendientes' => $conteos[$idEmpresa] ?? 0,
+                'otros'      => $otros,
             ]);
         } catch (\Throwable $th) {
             \App\Services\ErrorLogService::registrar($th, ['ruta' => static::class, 'accion' => __FUNCTION__]);
@@ -169,16 +195,7 @@ class EstadosFinancierosController extends BaseModuloController
     {
         try {
             $this->requireLeer();
-            $idEmpresa = (int) $_SESSION['id_empresa'];
-            $fechaInicio = $_GET['fecha_inicio'] ?? date('Y-01-01');
-            $fechaFin = $_GET['fecha_fin'] ?? date('Y-12-31');
-            
-            // TODO: Agregar filtros si existen
-            $idCentroCosto = !empty($_GET['centro_costo']) ? (int)$_GET['centro_costo'] : null;
-            $idProyecto = !empty($_GET['proyecto']) ? (int)$_GET['proyecto'] : null;
-            $nivel = !empty($_GET['nivel']) ? (int)$_GET['nivel'] : 5;
-
-            $datos = $this->service->getEstadoResultados($idEmpresa, $fechaInicio, $fechaFin, $idCentroCosto, $idProyecto, $nivel);
+            $datos = $this->reporteSegunEstablecimiento('resultados');
 
             $this->json(['success' => true, 'data' => $datos]);
         } catch (\Throwable $th) {
@@ -191,16 +208,7 @@ class EstadosFinancierosController extends BaseModuloController
     {
         try {
             $this->requireLeer();
-            $idEmpresa = (int) $_SESSION['id_empresa'];
-            $fechaInicio = $_GET['fecha_inicio'] ?? date('Y-01-01');
-            $fechaFin = $_GET['fecha_fin'] ?? date('Y-12-31');
-            
-            // TODO: Agregar filtros si existen
-            $idCentroCosto = !empty($_GET['centro_costo']) ? (int)$_GET['centro_costo'] : null;
-            $idProyecto = !empty($_GET['proyecto']) ? (int)$_GET['proyecto'] : null;
-            $nivel = !empty($_GET['nivel']) ? (int)$_GET['nivel'] : 5;
-
-            $datos = $this->service->getEstadoSituacionFinanciera($idEmpresa, $fechaInicio, $fechaFin, $idCentroCosto, $idProyecto, $nivel);
+            $datos = $this->reporteSegunEstablecimiento('situacion');
 
             $this->json(['success' => true, 'data' => $datos]);
         } catch (\Throwable $th) {
@@ -239,15 +247,7 @@ class EstadosFinancierosController extends BaseModuloController
     {
         try {
             $this->requireLeer();
-            $idEmpresa = (int) $_SESSION['id_empresa'];
-            $fechaInicio = $_GET['fecha_inicio'] ?? date('Y-01-01');
-            $fechaFin = $_GET['fecha_fin'] ?? date('Y-12-31');
-
-            $idCentroCosto = !empty($_GET['centro_costo']) ? (int)$_GET['centro_costo'] : null;
-            $idProyecto = !empty($_GET['proyecto']) ? (int)$_GET['proyecto'] : null;
-            $nivel = !empty($_GET['nivel']) ? (int)$_GET['nivel'] : 5;
-
-            $datos = $this->service->getEstadoResultadosPorPeriodos($idEmpresa, $fechaInicio, $fechaFin, $idCentroCosto, $idProyecto, $nivel);
+            $datos = $this->reporteSegunEstablecimiento('resultados_periodos');
 
             $this->json(['success' => true, 'data' => $datos]);
         } catch (\Throwable $th) {
@@ -260,15 +260,7 @@ class EstadosFinancierosController extends BaseModuloController
     {
         try {
             $this->requireLeer();
-            $idEmpresa = (int) $_SESSION['id_empresa'];
-            $fechaInicio = $_GET['fecha_inicio'] ?? date('Y-01-01');
-            $fechaFin = $_GET['fecha_fin'] ?? date('Y-12-31');
-
-            $idCentroCosto = !empty($_GET['centro_costo']) ? (int)$_GET['centro_costo'] : null;
-            $idProyecto = !empty($_GET['proyecto']) ? (int)$_GET['proyecto'] : null;
-            $nivel = !empty($_GET['nivel']) ? (int)$_GET['nivel'] : 5;
-
-            $datos = $this->service->getEstadoSituacionFinancieraPorPeriodos($idEmpresa, $fechaInicio, $fechaFin, $idCentroCosto, $idProyecto, $nivel);
+            $datos = $this->reporteSegunEstablecimiento('situacion_periodos');
 
             $this->json(['success' => true, 'data' => $datos]);
         } catch (\Throwable $th) {
@@ -280,15 +272,30 @@ class EstadosFinancierosController extends BaseModuloController
     public function exportar(): void
     {
         $this->requireLeer();
-        $idEmpresa = (int) $_SESSION['id_empresa'];
         $tipo = $_GET['tipo'] ?? 'resultados';
         $formato = $_GET['formato'] ?? 'excel';
-        $fechaInicio = $_GET['fecha_inicio'] ?? date('Y-01-01');
-        $fechaFin = $_GET['fecha_fin'] ?? date('Y-12-31');
-        
-        $idCentroCosto = !empty($_GET['centro_costo']) ? (int)$_GET['centro_costo'] : null;
-        $idProyecto = !empty($_GET['proyecto']) ? (int)$_GET['proyecto'] : null;
-        $nivel = !empty($_GET['nivel']) ? (int)$_GET['nivel'] : 5;
+        // Los archivos son de UN establecimiento (el elegido en pantalla, ya validado).
+        try {
+            $f = $this->filtrosReporte();
+            if ($f['todos']) {
+                $this->empresaReporte(); // lanza el mensaje de "elija un establecimiento"
+            }
+        } catch (\Throwable $th) {
+            http_response_code(400);
+            if (!empty($_SERVER['HTTP_X_REQUESTED_WITH'])) {
+                header('Content-Type: application/json; charset=utf-8');
+                echo json_encode(['error' => $th->getMessage()]);
+            } else {
+                echo htmlspecialchars($th->getMessage());
+            }
+            return;
+        }
+        $idEmpresa = $f['id_empresa'];
+        $fechaInicio = $f['fecha_inicio'];
+        $fechaFin = $f['fecha_fin'];
+        $idCentroCosto = $f['centro_costo'];
+        $idProyecto = $f['proyecto'];
+        $nivel = $f['nivel'];
 
         $empresaModel = new \App\models\Empresa();
         $empresa = $empresaModel->getPorId($idEmpresa);
@@ -345,11 +352,12 @@ class EstadosFinancierosController extends BaseModuloController
     {
         try {
             $this->requireLeer();
-            $idEmpresa = (int) $_SESSION['id_empresa'];
-            $fechaInicio = $_GET['fecha_inicio'] ?? date('Y-01-01');
-            $fechaFin = $_GET['fecha_fin'] ?? date('Y-12-31');
-            $idCentroCosto = !empty($_GET['centro_costo']) ? (int)$_GET['centro_costo'] : null;
-            $idProyecto = !empty($_GET['proyecto']) ? (int)$_GET['proyecto'] : null;
+            $f = $this->filtrosReporte();
+            if ($f['todos']) {
+                $this->empresaReporte(); // lanza el mensaje de "elija un establecimiento"
+            }
+            [$idEmpresa, $fechaInicio, $fechaFin, $idCentroCosto, $idProyecto] =
+                [$f['id_empresa'], $f['fecha_inicio'], $f['fecha_fin'], $f['centro_costo'], $f['proyecto']];
 
             $datos = $this->service->getEcpMatriz($idEmpresa, $fechaInicio, $fechaFin, $idCentroCosto, $idProyecto);
             $this->json(['success' => true, 'data' => $datos]);
@@ -367,11 +375,12 @@ class EstadosFinancierosController extends BaseModuloController
     {
         try {
             $this->requireLeer();
-            $idEmpresa = (int) $_SESSION['id_empresa'];
-            $fechaInicio = $_GET['fecha_inicio'] ?? date('Y-01-01');
-            $fechaFin = $_GET['fecha_fin'] ?? date('Y-12-31');
-            $idCentroCosto = !empty($_GET['centro_costo']) ? (int)$_GET['centro_costo'] : null;
-            $idProyecto = !empty($_GET['proyecto']) ? (int)$_GET['proyecto'] : null;
+            $f = $this->filtrosReporte();
+            if ($f['todos']) {
+                $this->empresaReporte(); // lanza el mensaje de "elija un establecimiento"
+            }
+            [$idEmpresa, $fechaInicio, $fechaFin, $idCentroCosto, $idProyecto] =
+                [$f['id_empresa'], $f['fecha_inicio'], $f['fecha_fin'], $f['centro_costo'], $f['proyecto']];
 
             $datos = $this->service->getEfeDetalle($idEmpresa, $fechaInicio, $fechaFin, $idCentroCosto, $idProyecto);
             $this->json(['success' => true, 'data' => $datos]);
@@ -389,15 +398,18 @@ class EstadosFinancierosController extends BaseModuloController
     {
         try {
             $this->requireLeer();
-            $idEmpresa = (int) $_SESSION['id_empresa'];
-            $fechaInicio = $_GET['fecha_inicio'] ?? date('Y-01-01');
-            $fechaFin = $_GET['fecha_fin'] ?? date('Y-12-31');
-            $idCentroCosto = !empty($_GET['centro_costo']) ? (int)$_GET['centro_costo'] : null;
-            $idProyecto = !empty($_GET['proyecto']) ? (int)$_GET['proyecto'] : null;
+            $f = $this->filtrosReporte();
+            if ($f['todos']) {
+                $this->empresaReporte(); // lanza el mensaje de "elija un establecimiento"
+            }
+            [$idEmpresa, $fechaInicio, $fechaFin, $idCentroCosto, $idProyecto] =
+                [$f['id_empresa'], $f['fecha_inicio'], $f['fecha_fin'], $f['centro_costo'], $f['proyecto']];
 
             $diag = new \App\Services\modulos\SuperciasDiagnosticoService(new EstadosFinancierosRepository(), $this->service);
             $datos = $diag->diagnosticar($idEmpresa, $fechaInicio, $fechaFin, $idCentroCosto, $idProyecto);
-            $datos['puede_corregir'] = \App\Helpers\Permisos::puedeActualizar('modulos/plan-cuentas');
+            // Corregir edita el plan de cuentas de la empresa ACTIVA: no aplica a otro establecimiento.
+            $datos['puede_corregir'] = $idEmpresa === (int) $_SESSION['id_empresa']
+                && \App\Helpers\Permisos::puedeActualizar('modulos/plan-cuentas');
             $this->json(['success' => true, 'data' => $datos]);
         } catch (\Throwable $th) {
             \App\Services\ErrorLogService::registrar($th, ['ruta' => static::class, 'accion' => __FUNCTION__]);
@@ -408,6 +420,89 @@ class EstadosFinancierosController extends BaseModuloController
     protected function getRutaModulo(): string
     {
         return 'modulos/estados-financieros';
+    }
+
+    /**
+     * Establecimientos del mismo RUC que el usuario puede consultar aquí (id_empresa =>
+     * "001 - Nombre"), ordenados por código de establecimiento. Misma regla de acceso que el
+     * Consolidado por RUC (EmpresaRepository::getIdsGrupoRucAccesible): todos para nivel 3, las
+     * empresas asignadas para el resto. Con un solo establecimiento devuelve solo la activa.
+     *
+     * @return array<int,string>
+     */
+    private function establecimientosAccesibles(): array
+    {
+        $idEmpresa = (int) $_SESSION['id_empresa'];
+        $repo = new \App\repositories\modulos\EmpresaRepository();
+        $ids = $repo->getIdsGrupoRucAccesible($idEmpresa, (int) $_SESSION['id_usuario']);
+        $etiquetas = $repo->getEtiquetasEstablecimiento($ids);
+        $out = [];
+        foreach ($ids as $id) {
+            $out[(int) $id] = $etiquetas[$id] ?? ('Empresa ' . $id);
+        }
+        asort($out, SORT_NATURAL);
+        return $out;
+    }
+
+    /** ¿Se pidió "Todos los establecimientos" (?id_establecimiento=todos)? */
+    private function pideTodos(): bool
+    {
+        return ($_GET['id_establecimiento'] ?? '') === 'todos';
+    }
+
+    /**
+     * Empresa (establecimiento) cuyo reporte se pide en ?id_establecimiento=. Vacío = la empresa
+     * activa. Cualquier otro id debe ser del mismo RUC y estar asignado al usuario; si no, se
+     * rechaza (nunca se cae en silencio a otra empresa).
+     */
+    private function empresaReporte(): int
+    {
+        $idActiva = (int) $_SESSION['id_empresa'];
+        if ($this->pideTodos()) {
+            throw new Exception('Esta opción no está disponible para «Todos los establecimientos». Elija un establecimiento.');
+        }
+        $pedido = (int) ($_GET['id_establecimiento'] ?? 0);
+        if ($pedido <= 0 || $pedido === $idActiva) {
+            return $idActiva;
+        }
+        if (!array_key_exists($pedido, $this->establecimientosAccesibles())) {
+            throw new Exception('No tiene acceso a ese establecimiento.');
+        }
+        return $pedido;
+    }
+
+    /**
+     * Filtros comunes del reporte. Centro de costo y proyecto son catálogos propios de cada
+     * empresa: los del selector son de la empresa activa, así que no se aplican al consultar otro
+     * establecimiento.
+     *
+     * @return array{todos:bool, id_empresa:int, fecha_inicio:string, fecha_fin:string, centro_costo:?int, proyecto:?int, nivel:int}
+     */
+    private function filtrosReporte(): array
+    {
+        $todos = $this->pideTodos();
+        $idEmpresa = $todos ? (int) $_SESSION['id_empresa'] : $this->empresaReporte();
+        $propia = !$todos && $idEmpresa === (int) $_SESSION['id_empresa'];
+
+        return [
+            'todos'        => $todos,
+            'id_empresa'   => $idEmpresa,
+            'fecha_inicio' => $_GET['fecha_inicio'] ?? date('Y-01-01'),
+            'fecha_fin'    => $_GET['fecha_fin'] ?? date('Y-12-31'),
+            'centro_costo' => $propia && !empty($_GET['centro_costo']) ? (int) $_GET['centro_costo'] : null,
+            'proyecto'     => $propia && !empty($_GET['proyecto']) ? (int) $_GET['proyecto'] : null,
+            'nivel'        => !empty($_GET['nivel']) ? (int) $_GET['nivel'] : 5,
+        ];
+    }
+
+    /** Datos del reporte $tipo para el establecimiento elegido, o de cada uno si se pidió "Todos". */
+    private function reporteSegunEstablecimiento(string $tipo): array
+    {
+        $f = $this->filtrosReporte();
+        if ($f['todos']) {
+            return $this->service->getReportePorEstablecimientos($tipo, $this->establecimientosAccesibles(), $f['fecha_inicio'], $f['fecha_fin'], $f['nivel']);
+        }
+        return $this->service->getReporte($tipo, $f['id_empresa'], $f['fecha_inicio'], $f['fecha_fin'], $f['centro_costo'], $f['proyecto'], $f['nivel']);
     }
 
     /**
@@ -436,13 +531,14 @@ class EstadosFinancierosController extends BaseModuloController
         header('Content-Type: application/json; charset=utf-8');
         try {
             $this->requireLeer();
-            $idEmpresa = (int) $_SESSION['id_empresa'];
+            // El mayor es de una cuenta de UN establecimiento: en "Todos", la vista manda el de la sección.
+            $f = $this->filtrosReporte();
+            $idEmpresa = $f['id_empresa'];
             $codigoCuenta = $_GET['codigo_cuenta'] ?? '';
-            $fechaInicio = $_GET['fecha_inicio'] ?? date('Y-01-01');
-            $fechaFin = $_GET['fecha_fin'] ?? date('Y-12-31');
-            
-            $idCentroCosto = !empty($_GET['centro_costo']) ? (int) $_GET['centro_costo'] : null;
-            $idProyecto = !empty($_GET['proyecto']) ? (int) $_GET['proyecto'] : null;
+            $fechaInicio = $f['fecha_inicio'];
+            $fechaFin = $f['fecha_fin'];
+            $idCentroCosto = $f['centro_costo'];
+            $idProyecto = $f['proyecto'];
 
             if (empty($codigoCuenta)) {
                 echo json_encode(['success' => false, 'error' => 'Código de cuenta requerido']);
@@ -479,7 +575,7 @@ class EstadosFinancierosController extends BaseModuloController
             $datos = $servicio->getDetalle(
                 trim($_GET['modulo'] ?? ''),
                 (int) ($_GET['id'] ?? 0),
-                (int) $_SESSION['id_empresa']
+                $this->empresaReporte() // el del mayor abierto (validado como del mismo RUC)
             );
             echo json_encode(['success' => true, 'data' => $datos]);
         } catch (\Throwable $e) {

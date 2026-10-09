@@ -6,7 +6,7 @@ ruta_modulo: modulos/balance-comprobacion
 tipo: modulo
 visibilidad: todos
 etiquetas: balance de comprobacion, balance de sumas y saldos, cuadre contable, debe haber, saldo deudor acreedor, comprobacion de saldos, sumas y saldos
-version: 1.2
+version: 1.3
 orden: 45
 estado: activo
 ---
@@ -60,8 +60,16 @@ que faltan sin que usted lo haya decidido.
   seleccionó un nivel agrupador (1-4) y la cuenta no tiene movimiento propio
   directo, solo se ve reflejada dentro del saldo de su cuenta padre.
 
+## Años cerrados
+
+El balance de comprobación ignora el asiento de cierre que genera el módulo **Cierre del
+Ejercicio**: muestra las cuentas de resultados del año con su saldo, como antes del cierre.
+El asiento de apertura del año siguiente cuenta solo si cae en el primer día del rango.
+
 ## Historial de cambios
 
+- **1.3** — Ignora el asiento de cierre del **Cierre del Ejercicio** y cuenta su apertura solo
+  al inicio del rango, igual que los Estados Financieros.
 - **1.2** — El reporte muestra solo documentos de **producción**, aunque la empresa esté configurada en pruebas (ver el artículo *Los reportes solo muestran documentos de producción*).
 - **1.1** — El aviso de asientos pendientes ya no muestra la sección **Otros
   avisos**; mientras el aviso no se resuelve, **Generar** y las exportaciones

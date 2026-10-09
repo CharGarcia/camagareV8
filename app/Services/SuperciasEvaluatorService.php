@@ -111,6 +111,7 @@ class SuperciasEvaluatorService
             FROM plan_cuentas p
             LEFT JOIN asientos_contables_detalle d ON p.id = d.id_cuenta_contable AND d.eliminado = false
             LEFT JOIN asientos_contables_cabecera c ON d.id_asiento = c.id AND c.eliminado = false AND c.id_empresa = :id_empresa
+                AND " . \App\Helpers\CierreEjercicioSql::sinCierre('c') . "
             WHERE p.id_empresa = :id_empresa AND p.eliminado = false
               AND EXTRACT(YEAR FROM c.fecha_asiento) = :anio
             GROUP BY p.codigo, p.supercias_esf, p.supercias_eri, p.supercias_ecp_codigo, p.supercias_ecp_subcodigo

@@ -6,7 +6,7 @@ ruta_modulo: modulos/periodos_contables
 tipo: modulo
 visibilidad: todos
 etiquetas: periodos contables, cerrar mes, periodo cerrado, abrir periodo, bloqueo de fechas, cierre mensual
-version: 1.1
+version: 1.2
 orden: 30
 estado: activo
 ---
@@ -43,6 +43,12 @@ mes ya declarado puede dejar la contabilidad distinta de lo presentado al SRI.
 Cuando la corrección no es imprescindible, la alternativa correcta es registrar
 el ajuste en el periodo abierto.
 
+## Cierre del ejercicio
+
+El módulo **Cierre del Ejercicio** cierra solo los períodos del año que cierra y, si
+ningún período cubre el año completo, crea uno llamado *Ejercicio AAAA (cierre)*. Al
+revertir ese cierre, los períodos vuelven a como estaban.
+
 ## Errores frecuentes
 
 - **"No se puede registrar porque el periodo contable está cerrado"**: la fecha
@@ -53,6 +59,8 @@ el ajuste en el periodo abierto.
 
 ## Historial de cambios
 
+- **1.2** — El **Cierre del Ejercicio** cierra los períodos del año (y los devuelve a
+  como estaban si se revierte).
 - **1.1** — El modal ya no tiene pestaña *Información* (historial de cambios); el historial
   del registro se consulta en el log del sistema.
 - **1.0** — Versión inicial.

@@ -3,6 +3,7 @@ declare(strict_types=1);
 
 namespace App\repositories\modulos;
 
+use App\Helpers\CierreEjercicioSql;
 use App\Helpers\FiltrosBusqueda;
 use App\Helpers\OrdenListado;
 use App\repositories\BaseRepository;
@@ -564,6 +565,7 @@ class PresupuestoRepository extends BaseRepository
                AND det.eliminado = false
                AND a.fecha_asiento BETWEEN :d AND :h
                AND a.tipo_ambiente = (SELECT CAST(tipo_ambiente AS VARCHAR(1)) FROM empresas WHERE id = :e2)
+               AND " . CierreEjercicioSql::sinCierre('a') . "
                AND (" . implode(' OR ', $condCuentas) . ")
                {$filtroRef}
              GROUP BY 1, 2"
@@ -601,6 +603,7 @@ class PresupuestoRepository extends BaseRepository
                AND (pc.codigo = :c OR pc.codigo LIKE :cl)
                AND to_char(a.fecha_asiento, 'YYYY-MM') = :p
                AND a.tipo_ambiente = (SELECT CAST(tipo_ambiente AS VARCHAR(1)) FROM empresas WHERE id = :e2)
+               AND " . CierreEjercicioSql::sinCierre('a') . "
                {$filtroRef}
              ORDER BY a.fecha_asiento, a.id
              LIMIT 500"
@@ -631,6 +634,7 @@ class PresupuestoRepository extends BaseRepository
                AND a.fecha_asiento BETWEEN :d AND :h
                AND (pc.codigo LIKE '4%' OR pc.codigo LIKE '5%' OR pc.codigo LIKE '6%')
                AND a.tipo_ambiente = (SELECT CAST(tipo_ambiente AS VARCHAR(1)) FROM empresas WHERE id = :e2)
+               AND " . CierreEjercicioSql::sinCierre('a') . "
                {$filtroRef}
              GROUP BY pc.id, pc.codigo, pc.nombre, 4
              ORDER BY pc.codigo, 4"

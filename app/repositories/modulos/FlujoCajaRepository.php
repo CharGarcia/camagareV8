@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\repositories\modulos;
 
 use App\repositories\BaseRepository;
+use App\Helpers\CierreEjercicioSql;
 use PDO;
 
 /**
@@ -73,6 +74,7 @@ class FlujoCajaRepository extends BaseRepository
                       AND ad.id_cuenta_contable IN ({$inCuentas})
                       AND ac.fecha_asiento <= :fecha
                       AND ac.tipo_ambiente = " . self::AMB . "
+                      AND " . CierreEjercicioSql::acumulado('ac') . "
                 ";
         $st2 = $this->db->prepare($sqlMov);
         $st2->execute([':id_empresa' => $idEmpresa, ':fecha' => $fecha]);
@@ -110,6 +112,7 @@ class FlujoCajaRepository extends BaseRepository
                   AND ad.id_cuenta_contable IN ({$inCuentas})
                   AND ac.fecha_asiento BETWEEN :desde AND :hasta
                   AND ac.tipo_ambiente = " . self::AMB . "
+                      AND " . CierreEjercicioSql::acumulado('ac') . "
                 GROUP BY periodo
                 ORDER BY periodo ASC";
         $st = $this->db->prepare($sql);

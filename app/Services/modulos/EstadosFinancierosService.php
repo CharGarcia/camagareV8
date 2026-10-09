@@ -207,6 +207,63 @@ class EstadosFinancierosService
         return ['aplica' => true, 'consolidado' => $consolidado, 'por_establecimiento' => $porEstablecimiento, 'total_general' => $totalGeneral];
     }
 
+    /**
+     * Uno de los cuatro reportes de pantalla (situacion, resultados, situacion_periodos,
+     * resultados_periodos) de UNA empresa/establecimiento.
+     */
+    public function getReporte(string $tipo, int $idEmpresa, string $fechaInicio, string $fechaFin, ?int $idCentroCosto = null, ?int $idProyecto = null, int $nivelReporte = 5): array
+    {
+        return match ($tipo) {
+            'resultados'          => $this->getEstadoResultados($idEmpresa, $fechaInicio, $fechaFin, $idCentroCosto, $idProyecto, $nivelReporte),
+            'resultados_periodos' => $this->getEstadoResultadosPorPeriodos($idEmpresa, $fechaInicio, $fechaFin, $idCentroCosto, $idProyecto, $nivelReporte),
+            'situacion_periodos'  => $this->getEstadoSituacionFinancieraPorPeriodos($idEmpresa, $fechaInicio, $fechaFin, $idCentroCosto, $idProyecto, $nivelReporte),
+            default               => $this->getEstadoSituacionFinanciera($idEmpresa, $fechaInicio, $fechaFin, $idCentroCosto, $idProyecto, $nivelReporte),
+        };
+    }
+
+    /**
+     * "Todos los establecimientos": el mismo reporte de cada establecimiento del RUC, completo y
+     * por separado (cada uno con su propio plan de cuentas), más la SUMA de sus totales para los
+     * indicadores. Es la suma simple, sin consolidar: lo que se repite entre establecimientos
+     * (capital, cuentas entre ellos) se cuenta en cada uno — el valor sin duplicados es el Total
+     * General de getConsolidadoRuc().
+     *
+     * Centro de costo y proyecto no se aplican: son propios de cada establecimiento.
+     *
+     * @param array<int,string> $establecimientos id_empresa => etiqueta, ya validados por el llamador.
+     */
+    public function getReportePorEstablecimientos(string $tipo, array $establecimientos, string $fechaInicio, string $fechaFin, int $nivelReporte = 5): array
+    {
+        $secciones = [];
+        $totales = [];
+        foreach ($establecimientos as $idEmp => $etiqueta) {
+            $data = $this->getReporte($tipo, (int) $idEmp, $fechaInicio, $fechaFin, null, null, $nivelReporte);
+            $secciones[] = ['id_empresa' => (int) $idEmp, 'etiqueta' => $etiqueta, 'data' => $data];
+            foreach ($data['totales'] ?? [] as $clave => $valor) {
+                $totales[$clave] = ($totales[$clave] ?? 0.0) + $this->valorFinalTotal($valor);
+            }
+        }
+
+        return ['por_establecimiento' => $secciones, 'totales' => $totales];
+    }
+
+    /**
+     * Valor de cierre de un total: el número tal cual en los reportes de un periodo; en los por
+     * periodos, la columna 'total' (Resultados) o el último mes visible (Situación, que es
+     * acumulada). Cada establecimiento oculta sus meses sin movimiento, así que los meses no
+     * coinciden entre ellos y no se pueden sumar columna a columna; el valor de cierre sí.
+     */
+    private function valorFinalTotal(mixed $valor): float
+    {
+        if (!is_array($valor)) {
+            return (float) $valor;
+        }
+        if (array_key_exists('total', $valor)) {
+            return (float) $valor['total'];
+        }
+        return $valor ? (float) end($valor) : 0.0;
+    }
+
     public function getAniosDisponibles(int $idEmpresa): array
     {
         return $this->repository->getAniosDisponibles($idEmpresa);

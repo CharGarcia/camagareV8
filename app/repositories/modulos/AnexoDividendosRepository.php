@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\repositories\modulos;
 
+use App\Helpers\CierreEjercicioSql;
 use App\Helpers\FiltrosBusqueda;
 use App\repositories\BaseRepository;
 use PDO;
@@ -885,6 +886,7 @@ class AnexoDividendosRepository extends BaseRepository
                     AND ac.estado = 'contabilizado'
                     AND ac.tipo_ambiente = :amb
                     AND ac.fecha_asiento <= CAST(:hasta AS DATE)
+                    AND " . CierreEjercicioSql::desdeUltimaApertura('ac', ':hasta') . "
              WHERE ad.id_empresa = :id_empresa
                AND ad.eliminado = false
                AND ad.id_cuenta_contable IN (" . implode(', ', $ph) . ")",
@@ -919,6 +921,7 @@ class AnexoDividendosRepository extends BaseRepository
                     AND ac.estado = 'contabilizado'
                     AND ac.tipo_ambiente = :amb
                     AND EXTRACT(YEAR FROM ac.fecha_asiento) = :anio
+                    AND " . CierreEjercicioSql::sinCierre('ac') . "
              INNER JOIN plan_cuentas pc
                      ON pc.id = ad.id_cuenta_contable
                     AND pc.eliminado = false

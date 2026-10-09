@@ -47,7 +47,9 @@ final class OrigenAsiento
         'suscripcion_devengo_apertura' => 'Suscripción: apertura de ingresos diferidos',
         'declaracion_iva'            => 'Declaración de IVA',
         'declaracion_retenciones'    => 'Declaración de retenciones',
-        'manual'                     => 'Asiento manual',
+        'cierre_ejercicio'           => 'Cierre del ejercicio',
+        'apertura_ejercicio'         => 'Apertura del ejercicio',
+        'manual'                   => 'Asiento manual',
         'migracion'                  => 'Migración (sistema anterior)',
     ];
 

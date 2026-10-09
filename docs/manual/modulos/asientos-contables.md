@@ -6,7 +6,7 @@ ruta_modulo: modulos/asientos_contables
 tipo: modulo
 visibilidad: todos
 etiquetas: asientos, asiento contable, diario, debe, haber, partida doble, cuadrado, comprobante, contabilidad, imprimir, pdf, excel, documento origen, cuadre con el documento, total de la factura, cuenta por cobrar, cartera, editar asiento desde el documento, pestaña asiento contable, editado a mano, restaurar asiento automático, permisos de contabilidad, documentos migrados, migración, sistema anterior, buscar asiento, buscador, filtros, filtrar asientos, buscar por cuenta, buscar por referencia, libro diario, chips, asiento descuadrado, búsqueda lenta, se queda buscando, filtrar por origen, origen del asiento, módulo de origen, vista previa, costo de ventas, asiento sin costo, duplicar asiento, copiar asiento, clonar asiento, repetir asiento
-version: 1.36
+version: 1.37
 orden: 20
 estado: activo
 ---
@@ -490,6 +490,12 @@ El botón no aparece en asientos manuales (tipo Diario) ni en los generados por
 nómina, activos fijos, declaraciones o traspasos, porque esos procesos no
 tienen un documento individual con tercero que mostrar.
 
+## Asientos de cierre y apertura del ejercicio
+
+Los asientos con origen *Cierre del ejercicio* (CI-) y *Apertura del ejercicio* (AP-) los
+genera el módulo **Cierre del Ejercicio**. No se pueden editar ni anular desde aquí: para
+cambiarlos se revierte el cierre en ese módulo y se genera de nuevo.
+
 ## Errores frecuentes
 
 - **"El asiento no está cuadrado"**: el mensaje muestra el total del Debe y del
@@ -516,6 +522,8 @@ tienen un documento individual con tercero que mostrar.
 
 ## Historial de cambios
 
+- **1.37** — Los asientos del **Cierre del Ejercicio** (cierre al 31-12 y apertura al 01-01)
+  no se pueden editar ni anular desde Asientos Contables; se revierten desde su módulo.
 - **1.36** — El asiento de **facturas de compra** ya contabiliza el **ICE** (al
   Debe, con la cuenta *ice factura compra* de Adquisiciones de Compras, que existía
   en Configuración Contable pero no se usaba); antes una factura con ICE

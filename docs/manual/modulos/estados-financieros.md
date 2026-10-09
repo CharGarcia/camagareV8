@@ -5,8 +5,8 @@ categoria: Contabilidad
 ruta_modulo: modulos/estados_financieros
 tipo: modulo
 visibilidad: todos
-etiquetas: estados financieros, cuadre con modulos, tarjetas por liquidar, cuenta puente de tarjetas, activos fijos vs contabilidad, depreciacion acumulada vs contabilidad, cuadre de caja, caja vs contabilidad, anticipos vs contabilidad, cuadre de anticipos, cuadrar contabilidad con modulos, contabilidad vs bancos, contabilidad vs cartera, contabilidad vs inventario, comprobar con contabilidad, no cuadra con el modulo, balance, estado de resultados, situacion financiera, perdidas y ganancias, activo pasivo patrimonio, reportes por periodos, comparativo mensual, horizontal por mes, editar cuenta desde el balance, codigo sri, supercias, entidades de control, pdf con logo, firma del contador, firma del representante legal, balances firmados, excel por niveles, columnas por nivel, exportar excel
-version: 1.13
+etiquetas: estados financieros, cuadre con modulos, tarjetas por liquidar, cuenta puente de tarjetas, activos fijos vs contabilidad, depreciacion acumulada vs contabilidad, cuadre de caja, caja vs contabilidad, anticipos vs contabilidad, cuadre de anticipos, cuadrar contabilidad con modulos, contabilidad vs bancos, contabilidad vs cartera, contabilidad vs inventario, comprobar con contabilidad, no cuadra con el modulo, balance, estado de resultados, situacion financiera, perdidas y ganancias, activo pasivo patrimonio, reportes por periodos, comparativo mensual, horizontal por mes, editar cuenta desde el balance, codigo sri, supercias, entidades de control, pdf con logo, firma del contador, firma del representante legal, balances firmados, excel por niveles, columnas por nivel, exportar excel, establecimiento, varios establecimientos, sucursal, sucursales, mismo ruc, todos los establecimientos, matriz, asientos pendientes de otro establecimiento
+version: 1.15
 orden: 50
 estado: activo
 ---
@@ -29,6 +29,14 @@ pendientes** cuando detecta documentos sin contabilizar.
 
 Si continúa sin generarlos, los informes saldrán sin esos movimientos. Es válido
 para una consulta rápida, pero no para presentar nada.
+
+Si la empresa activa es la **matriz** de un RUC con varios establecimientos, el
+mismo aviso lista además **los otros establecimientos que tienen asientos
+pendientes** y cuántos documentos le faltan a cada uno. Desde la matriz solo se
+avisan: **Generar ahora** genera los del establecimiento activo; los de cada
+uno de los demás se generan cambiando a ese establecimiento y abriendo este
+módulo. Si solo los otros tienen pendientes, el aviso lo dice y permite
+continuar.
 
 ## Cómo se generan
 
@@ -282,6 +290,32 @@ propio de ese mes, incluso en el Estado de Situación Financiera por Periodos
 (donde el saldo mostrado es acumulado): un mes sin movimiento repetiría el
 mismo saldo del mes anterior, así que no aporta una columna nueva.
 
+## Varios establecimientos del mismo RUC: elegir uno o ver todos
+
+Si el RUC tiene más de un establecimiento (empresa) al que el usuario tenga
+acceso, los filtros muestran el selector **Establecimiento**. Por defecto está
+el establecimiento activo.
+
+- **Otro establecimiento**: el reporte, el mayor auxiliar y los archivos (PDF,
+  Excel, Renta SRI, Supercias, ECP, EFE, Revisar Supercias) salen con la
+  contabilidad de ese establecimiento, sin tener que cambiar de empresa.
+- **Todos los establecimientos**: muestra el reporte elegido de **cada
+  establecimiento por separado**, uno debajo del otro, con su nombre como
+  título. Los totales de la tarjeta de arriba son la **suma simple** de todos.
+  Para un solo balance del RUC sin duplicar lo que se repite entre
+  establecimientos (capital, cuentas entre ellos) use **Consolidado por RUC**.
+  Con esta opción los archivos no se descargan: elija un establecimiento.
+
+Al consultar un establecimiento distinto del activo:
+
+- **Centro de costo** y **Proyecto** se desactivan (son catálogos de cada
+  establecimiento).
+- El código de la cuenta no abre la ficha para editarla, el número de asiento
+  del mayor no abre el asiento y **Cuadre con Módulos** queda desactivado: eso
+  se hace entrando a ese establecimiento. El documento de la columna
+  *Documento Ref.* del mayor sí se puede ver.
+- Solo se listan los establecimientos asignados al usuario (nivel 3 ve todos).
+
 ## Consolidado por RUC
 
 Si el RUC activo tiene más de un establecimiento (empresa) al que el usuario
@@ -312,6 +346,15 @@ en el detalle, tachados, solo como referencia.
 La **Utilidad/Pérdida del Ejercicio** del Total General sí se suma entre
 todos los establecimientos (a diferencia del capital, el resultado del
 período es propio de cada uno y legítimamente aditivo).
+
+## Años cerrados con el Cierre del Ejercicio
+
+Los reportes **ignoran el asiento de cierre** del módulo Cierre del Ejercicio: un año
+cerrado se ve igual que antes de cerrarlo (el Estado de Resultados no sale en cero y la
+utilidad del año sigue en el balance). El **asiento de apertura** del año siguiente
+cuenta solo cuando cae en el primer día del rango consultado. Así, el balance de un
+año nuevo arranca con los saldos al 31-12 del anterior, y un rango que cruza años no
+suma dos veces lo que la apertura repite.
 
 ## Si el balance no cuadra
 
@@ -389,6 +432,13 @@ los otros módulos.
 
 ## Historial de cambios
 
+- **1.15** — Los reportes ignoran el asiento de cierre del **Cierre del Ejercicio** y
+  cuentan su apertura solo si cae al inicio del rango consultado. Lo mismo aplica al
+  Balance de Comprobación, al Supercías y a la ejecución de Presupuestos.
+- **1.14** — Con varios establecimientos del mismo RUC, nuevo selector
+  **Establecimiento**: ver el reporte de otro establecimiento o de **todos**
+  (cada uno por separado, con la suma en los totales). Desde la **matriz**, el
+  aviso de asientos pendientes incluye los de los demás establecimientos.
 - **1.13** — El reporte muestra solo documentos de **producción**, aunque la empresa esté configurada en pruebas (ver el artículo *Los reportes solo muestran documentos de producción*).
 - **1.12** — Nuevo botón **Cuadre con Módulos**: compara las cuentas contables con
   el saldo de cada cuenta bancaria, cada caja, Cuentas por Cobrar, Cuentas por

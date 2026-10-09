@@ -91,7 +91,8 @@
         modalInstance.show();
 
         try {
-            const url = `${window.DOCORIGEN_URL}?modulo=${encodeURIComponent(modulo)}&id=${encodeURIComponent(idDocumento)}`;
+            const sep = String(window.DOCORIGEN_URL).includes('?') ? '&' : '?';
+            const url = `${window.DOCORIGEN_URL}${sep}modulo=${encodeURIComponent(modulo)}&id=${encodeURIComponent(idDocumento)}`;
             const resp = await fetch(url, { headers: { 'X-Requested-With': 'XMLHttpRequest' } });
             const contentType = resp.headers.get('content-type') || '';
             if (!contentType.includes('application/json')) {

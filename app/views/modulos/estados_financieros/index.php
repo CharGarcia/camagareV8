@@ -8,6 +8,10 @@
 /** @var array $proyectos */
 /** @var array $perm */
 /** @var bool $hayGrupoRuc */
+/** @var array<int,string> $establecimientosRuc id_empresa => "001 - Nombre" (vacío si el RUC tiene uno solo) */
+/** @var int $idEmpresaActual */
+$establecimientosRuc = $establecimientosRuc ?? [];
+$idEmpresaActual = (int) ($idEmpresaActual ?? 0);
 
 $base = BASE_URL;
 $urlBaseReporte = rtrim($base, '/') . '/' . ltrim($rutaModulo ?? '', '/');
@@ -45,6 +49,17 @@ $urlBaseActivosFijos = rtrim($base, '/') . '/modulos/activos-fijos';
                         <option value="resultados_periodos">Estado de Resultados por Periodos</option>
                     </select>
                 </div>
+                <?php if (count($establecimientosRuc) > 1): ?>
+                <div style="width:240px;">
+                    <label class="form-label small fw-bold mb-1 d-block text-muted text-uppercase" style="font-size:.65rem;" for="filtro_establecimiento">Establecimiento</label>
+                    <select class="form-select form-select-sm shadow-none border" id="filtro_establecimiento" onchange="EF_cambiarEstablecimiento()">
+                        <?php foreach ($establecimientosRuc as $idEst => $etiquetaEst): ?>
+                            <option value="<?= (int) $idEst ?>" <?= (int) $idEst === $idEmpresaActual ? 'selected' : '' ?>><?= htmlspecialchars($etiquetaEst) ?></option>
+                        <?php endforeach; ?>
+                        <option value="todos">Todos los establecimientos</option>
+                    </select>
+                </div>
+                <?php endif; ?>
                 <div style="width:130px;">
                     <label class="form-label small fw-bold mb-1 d-block text-muted text-uppercase" style="font-size:.65rem;">Nivel</label>
                     <select class="form-select form-select-sm shadow-none border" id="filtro_nivel">
@@ -138,7 +153,7 @@ $urlBaseActivosFijos = rtrim($base, '/') . '/modulos/activos-fijos';
     <div class="card cmg-table-card w-100 border-0 shadow-sm rounded-3">
         <div class="card-header bg-white py-2 px-3 border-bottom">
             <div class="d-flex justify-content-between align-items-center flex-wrap gap-2">
-                <div class="btn-group btn-group-sm flex-wrap">
+                <div class="btn-group btn-group-sm flex-wrap" id="ef-botones-archivos">
                     <button type="button" class="btn btn-outline-danger" title="Descargar PDF" onclick="exportar('pdf')">
                         <i class="bi bi-file-earmark-pdf"></i><span class="d-none d-md-inline"> PDF</span>
                     </button>
@@ -170,7 +185,7 @@ $urlBaseActivosFijos = rtrim($base, '/') . '/modulos/activos-fijos';
                         <i class="bi bi-diagram-3 me-1"></i>Consolidado por RUC
                     </button>
                     <?php endif; ?>
-                    <button type="button" class="btn btn-outline-primary btn-sm" onclick="EF_cuadreModulos()"
+                    <button type="button" class="btn btn-outline-primary btn-sm" id="btnCuadreModulos" onclick="EF_cuadreModulos()"
                             title="Cuadre con módulos: compara las cuentas contables con el saldo de Bancos, Caja, Cuentas por Cobrar, Cuentas por Pagar, Inventarios y Anticipos">
                         <i class="bi bi-journal-check me-1"></i>Cuadre con Módulos
                     </button>
@@ -468,6 +483,42 @@ $urlBaseActivosFijos = rtrim($base, '/') . '/modulos/activos-fijos';
 <script>
     let tipoReporteActivo = 'situacion';
     const urlBase = '<?= $urlBaseReporte ?>';
+
+    // ── Establecimiento del mismo RUC ───────────────────────────────────────────────
+    // Con varios establecimientos se puede ver el reporte de otro (validado en el servidor) o
+    // el de todos, uno debajo del otro. Centro de costo, proyecto, editar la cuenta y el Cuadre
+    // con Módulos son de la empresa activa; los archivos (PDF, Excel, Supercias…) son de un
+    // solo establecimiento.
+    const EF_EMPRESA_ACTUAL = <?= $idEmpresaActual ?>;
+    const EF_ESTABLECIMIENTOS = <?= json_encode((object) $establecimientosRuc, JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_HEX_AMP | JSON_UNESCAPED_UNICODE) ?>;
+    let EF_empRender = EF_EMPRESA_ACTUAL; // establecimiento de la sección que se está pintando
+
+    /** '' (empresa activa), id de otro establecimiento o 'todos'. */
+    function EF_establecimiento() {
+        const sel = document.getElementById('filtro_establecimiento');
+        if (!sel || sel.value === String(EF_EMPRESA_ACTUAL)) return '';
+        return sel.value;
+    }
+
+    function EF_cambiarEstablecimiento() {
+        const est = EF_establecimiento();
+        const propia = est === '';
+        ['filtro_centro_costo', 'filtro_proyecto'].forEach(id => {
+            const el = document.getElementById(id);
+            if (!el) return;
+            if (!propia) el.value = '';
+            el.disabled = !propia;
+            el.title = propia ? '' : 'Solo para el establecimiento activo';
+        });
+        document.querySelectorAll('#ef-botones-archivos .btn').forEach(btn => {
+            btn.disabled = est === 'todos';
+            btn.title = est === 'todos' ? 'Elija un establecimiento para descargar o revisar' : (btn.dataset.titulo || btn.title);
+        });
+        const cuadre = document.getElementById('btnCuadreModulos');
+        if (cuadre) cuadre.disabled = !propia;
+        document.getElementById('content-reporte').innerHTML = '<p class="text-muted text-center py-5 small"><i class="bi bi-info-circle me-1"></i> Presione Mostrar para actualizar el reporte.</p>';
+    }
+    document.querySelectorAll('#ef-botones-archivos .btn').forEach(btn => { btn.dataset.titulo = btn.title; });
     const urlBaseActivosFijos = '<?= $urlBaseActivosFijos ?>';
 
     // ── Aviso de asientos pendientes de generar ─────────────────────────────────────
@@ -557,6 +608,8 @@ $urlBaseActivosFijos = rtrim($base, '/') . '/modulos/activos-fijos';
         document.getElementById('fecha_inicio').value = fInicio;
         document.getElementById('fecha_fin').value = fFin;
     }
+
+    const EF_esc = (s) => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 
     const formatMoney = (amount) => {
         // Redondear a centavos antes de mirar el signo: un residuo de coma flotante
@@ -693,10 +746,31 @@ $urlBaseActivosFijos = rtrim($base, '/') . '/modulos/activos-fijos';
             };
             const ep = endpoints[tipoReporteActivo] || endpoints.situacion;
 
-            const resp = await fetch(`${urlBase}/${ep.url}?fecha_inicio=${fInicio}&fecha_fin=${fFin}&nivel=${nivel}&centro_costo=${centro}&proyecto=${proyecto}`);
+            const est = EF_establecimiento();
+            const resp = await fetch(`${urlBase}/${ep.url}?fecha_inicio=${fInicio}&fecha_fin=${fFin}&nivel=${nivel}&centro_costo=${centro}&proyecto=${proyecto}&id_establecimiento=${encodeURIComponent(est)}`);
             const json = await resp.json();
             if (json.success) {
-                ep.render(json.data, nivel);
+                let html;
+                if (est === 'todos') {
+                    // Un reporte completo por establecimiento; los indicadores suman los de todos.
+                    const secciones = json.data.por_establecimiento || [];
+                    html = `<div class="alert alert-info small py-2 mb-3"><i class="bi bi-info-circle me-1"></i>
+                        Se muestra el reporte de cada establecimiento por separado. Los indicadores de arriba son la
+                        <strong>suma simple</strong> de todos; para un solo balance sin duplicar lo que se repite entre
+                        establecimientos (capital, cuentas entre ellos) use <strong>Consolidado por RUC</strong>.</div>`;
+                    html += secciones.map(s => {
+                        EF_empRender = s.id_empresa;
+                        return `<div class="mb-4">
+                            <h6 class="fw-bold border-bottom pb-1 mb-2"><i class="bi bi-shop me-2 text-primary"></i>${EF_esc(s.etiqueta)}${s.id_empresa === EF_EMPRESA_ACTUAL ? ' <span class="badge bg-primary bg-opacity-10 text-primary border border-primary border-opacity-25 fw-normal">Actual</span>' : ''}</h6>
+                            ${ep.render(s.data, nivel)}
+                        </div>`;
+                    }).join('') || '<p class="text-muted text-center py-5 small">Sin establecimientos.</p>';
+                } else {
+                    EF_empRender = est === '' ? EF_EMPRESA_ACTUAL : parseInt(est, 10);
+                    html = ep.render(json.data, nivel);
+                }
+                EF_empRender = EF_EMPRESA_ACTUAL;
+                document.getElementById('content-reporte').innerHTML = html;
                 EF_actualizarStats(tipoReporteActivo, json.data.totales || {});
             } else {
                 Swal.fire({ icon: 'error', title: 'Error', text: json.error || 'Error al generar el reporte' });
@@ -761,7 +835,8 @@ $urlBaseActivosFijos = rtrim($base, '/') . '/modulos/activos-fijos';
     function celdaCodigo(item, esPadre, fwClass) {
         const nivelItem = parseInt(item.nivel);
         const idCuenta = parseInt(item.id_cuenta || 0);
-        if (nivelItem >= 2 && idCuenta > 0) {
+        // La ficha edita el plan de cuentas de la empresa activa: en otro establecimiento, solo texto.
+        if (nivelItem >= 2 && idCuenta > 0 && EF_empRender === EF_EMPRESA_ACTUAL) {
             const titulo = PC_PUEDE_ACTUALIZAR ? 'Ver / editar la cuenta contable' : 'Ver la cuenta contable';
             return `<td class="${fwClass}"><a href="javascript:void(0)" class="text-decoration-none fw-medium" onclick="abrirCuentaContable(${idCuenta})" title="${titulo}"><i class="bi bi-pencil-square small me-1 text-muted"></i>${item.codigo}</a></td>`;
         }
@@ -802,7 +877,7 @@ $urlBaseActivosFijos = rtrim($base, '/') . '/modulos/activos-fijos';
         let onclickAttr = '';
         if (nivelItem === 5 && !esPadre) {
             cursorClass = 'text-primary cursor-pointer fw-medium';
-            onclickAttr = `onclick="verMayorAuxiliar('${item.codigo}', '${item.nombre}')" style="cursor:pointer; text-decoration: underline;" title="Ver detalle del Mayor"`;
+            onclickAttr = `onclick="verMayorAuxiliar('${item.codigo}', '${item.nombre}', ${EF_empRender})" style="cursor:pointer; text-decoration: underline;" title="Ver detalle del Mayor"`;
         }
 
         let tdsNiveles = '';
@@ -879,7 +954,7 @@ $urlBaseActivosFijos = rtrim($base, '/') . '/modulos/activos-fijos';
         html += generarFilaTotal(lblNeta, data.totales.utilidad_neta, nivel, classNeta, true);
 
         html += '</tbody></table>';
-        document.getElementById('content-reporte').innerHTML = html;
+        return html;
     }
 
     function renderSituacion(data, nivel) {
@@ -925,7 +1000,7 @@ $urlBaseActivosFijos = rtrim($base, '/') . '/modulos/activos-fijos';
         html += generarFilaTotal('TOTAL PASIVO + PATRIMONIO', data.totales.pasivo_patrimonio, nivel, cuadra ? '' : 'text-danger', true);
 
         html += '</tbody></table>';
-        document.getElementById('content-reporte').innerHTML = html;
+        return html;
     }
 
     // ── Reportes horizontales "por periodos" (una columna por mes) ─────────────────────────
@@ -948,7 +1023,7 @@ $urlBaseActivosFijos = rtrim($base, '/') . '/modulos/activos-fijos';
         let onclickAttr = '';
         if (nivelItem === 5 && !esPadre) {
             cursorClass = 'text-primary cursor-pointer fw-medium';
-            onclickAttr = `onclick="verMayorAuxiliar('${item.codigo}', '${item.nombre}')" style="cursor:pointer; text-decoration: underline;" title="Ver detalle del Mayor"`;
+            onclickAttr = `onclick="verMayorAuxiliar('${item.codigo}', '${item.nombre}', ${EF_empRender})" style="cursor:pointer; text-decoration: underline;" title="Ver detalle del Mayor"`;
         }
 
         let tds = '';
@@ -1009,7 +1084,7 @@ $urlBaseActivosFijos = rtrim($base, '/') . '/modulos/activos-fijos';
         html += generarFilaTotalPeriodos(lblNeta, data.totales.utilidad_neta, claves, true, 'tr-total-general', classNeta);
 
         html += '</tbody></table>';
-        document.getElementById('content-reporte').innerHTML = html;
+        return html;
     }
 
     function renderSituacionPeriodos(data, nivel) {
@@ -1053,7 +1128,7 @@ $urlBaseActivosFijos = rtrim($base, '/') . '/modulos/activos-fijos';
         html += generarFilaTotalPeriodos('TOTAL PASIVO + PATRIMONIO', data.totales.pasivo_patrimonio, claves, false, 'tr-total-general', cuadra ? '' : 'text-danger');
 
         html += '</tbody></table>';
-        document.getElementById('content-reporte').innerHTML = html;
+        return html;
     }
 
     // Vista previa del ECP (Supercias): matriz fila × columna con los filtros de pantalla.
@@ -1073,7 +1148,7 @@ $urlBaseActivosFijos = rtrim($base, '/') . '/modulos/activos-fijos';
         modal.show();
 
         try {
-            const params = new URLSearchParams({ fecha_inicio: fInicio, fecha_fin: fFin, centro_costo: centro, proyecto: proyecto });
+            const params = new URLSearchParams({ fecha_inicio: fInicio, fecha_fin: fFin, centro_costo: centro, proyecto: proyecto, id_establecimiento: EF_establecimiento() });
             const res = await fetch(`${urlBase}/generarEcpAjax?${params.toString()}`).then(r => r.json());
             if (!res.success) { Swal.fire('Error', res.error || 'No se pudo calcular el ECP.', 'error'); modal.hide(); return; }
             renderEcp(res.data);
@@ -1159,7 +1234,7 @@ $urlBaseActivosFijos = rtrim($base, '/') . '/modulos/activos-fijos';
         modal.show();
 
         try {
-            const params = new URLSearchParams({ fecha_inicio: fInicio, fecha_fin: fFin, centro_costo: centro, proyecto: proyecto });
+            const params = new URLSearchParams({ fecha_inicio: fInicio, fecha_fin: fFin, centro_costo: centro, proyecto: proyecto, id_establecimiento: EF_establecimiento() });
             const res = await fetch(`${urlBase}/generarEfeAjax?${params.toString()}`).then(r => r.json());
             if (!res.success) { Swal.fire('Error', res.error || 'No se pudo calcular el EFE.', 'error'); modal.hide(); return; }
             renderEfe(res.data);
@@ -1243,7 +1318,7 @@ $urlBaseActivosFijos = rtrim($base, '/') . '/modulos/activos-fijos';
         document.getElementById('btn-diag-descargar').classList.add('d-none');
         if (!silenciosa) modal.show();
         try {
-            const params = new URLSearchParams({ fecha_inicio: fInicio, fecha_fin: fFin, centro_costo: centro, proyecto: proyecto });
+            const params = new URLSearchParams({ fecha_inicio: fInicio, fecha_fin: fFin, centro_costo: centro, proyecto: proyecto, id_establecimiento: EF_establecimiento() });
             const res = await fetch(`${urlBase}/diagnosticoSuperciasAjax?${params.toString()}`).then(r => r.json());
             if (!res.success) {
                 if (!silenciosa) { Swal.fire('Error', res.error || 'No se pudo hacer la revisión.', 'error'); modal.hide(); }
@@ -1378,7 +1453,7 @@ $urlBaseActivosFijos = rtrim($base, '/') . '/modulos/activos-fijos';
             diagFormatoPendiente = null;
         }
 
-        let url = `${urlBase}/exportar?tipo=${tipoReporteActivo}&formato=${formato}&fecha_inicio=${fInicio}&fecha_fin=${fFin}&nivel=${nivel}&centro_costo=${centro}&proyecto=${proyecto}`;
+        let url = `${urlBase}/exportar?tipo=${tipoReporteActivo}&formato=${formato}&fecha_inicio=${fInicio}&fecha_fin=${fFin}&nivel=${nivel}&centro_costo=${centro}&proyecto=${proyecto}&id_establecimiento=${encodeURIComponent(EF_establecimiento())}`;
         CMG_descargar(url);
     }
 
@@ -1391,9 +1466,15 @@ $urlBaseActivosFijos = rtrim($base, '/') . '/modulos/activos-fijos';
                    class="text-decoration-none" title="Ver el documento">${texto}</a>`;
     }
 
-    async function verMayorAuxiliar(codigoCuenta, nombreCuenta) {
+    // idEmpresa: establecimiento dueño de la cuenta (en "Todos", el de la sección clicada).
+    async function verMayorAuxiliar(codigoCuenta, nombreCuenta, idEmpresa = EF_EMPRESA_ACTUAL) {
+        const esPropia = idEmpresa === EF_EMPRESA_ACTUAL;
+        const idEst = esPropia ? '' : String(idEmpresa);
+        // El documento origen se lee del establecimiento del mayor (el servidor lo valida).
+        window.DOCORIGEN_URL = `${urlBase}/getDocumentoOrigenAjax` + (idEst ? `?id_establecimiento=${idEst}` : '');
         const modal = new bootstrap.Modal(document.getElementById('modalMayor'));
-        document.getElementById('tituloModalMayor').innerHTML = `<i class="bi bi-journal-text text-primary me-2"></i> Mayor: ${codigoCuenta} - ${nombreCuenta}`;
+        const etqEst = !esPropia && EF_ESTABLECIMIENTOS[idEmpresa] ? ` <span class="small text-muted fw-normal">(${EF_esc(EF_ESTABLECIMIENTOS[idEmpresa])})</span>` : '';
+        document.getElementById('tituloModalMayor').innerHTML = `<i class="bi bi-journal-text text-primary me-2"></i> Mayor: ${codigoCuenta} - ${nombreCuenta}${etqEst}`;
         const tbody = document.getElementById('tbodyMayor');
         const loader = document.getElementById('loader-mayor');
         
@@ -1407,7 +1488,7 @@ $urlBaseActivosFijos = rtrim($base, '/') . '/modulos/activos-fijos';
         const proyecto = document.getElementById('filtro_proyecto').value;
 
         try {
-            const resp = await fetch(`${urlBase}/generarMayorAuxiliar?codigo_cuenta=${codigoCuenta}&fecha_inicio=${fInicio}&fecha_fin=${fFin}&centro_costo=${centro}&proyecto=${proyecto}`);
+            const resp = await fetch(`${urlBase}/generarMayorAuxiliar?codigo_cuenta=${codigoCuenta}&fecha_inicio=${fInicio}&fecha_fin=${fFin}&centro_costo=${esPropia ? centro : ''}&proyecto=${esPropia ? proyecto : ''}&id_establecimiento=${idEst}`);
             const json = await resp.json();
             loader.classList.add('d-none');
             
@@ -1424,7 +1505,9 @@ $urlBaseActivosFijos = rtrim($base, '/') . '/modulos/activos-fijos';
 
                     html += `<tr>
                         <td class="text-center">${item.fecha_asiento}</td>
-                        <td class="text-center"><a href="#" onclick="event.preventDefault(); ASIENTO_abrirModal(${item.id_asiento});" class="text-decoration-none fw-bold" title="Ver asiento contable">${item.numero_comprobante || 'S/N'}</a></td>
+                        <td class="text-center">${esPropia
+                            ? `<a href="#" onclick="event.preventDefault(); ASIENTO_abrirModal(${item.id_asiento});" class="text-decoration-none fw-bold" title="Ver asiento contable">${item.numero_comprobante || 'S/N'}</a>`
+                            : `<span class="fw-bold" title="El asiento se abre desde su propio establecimiento">${item.numero_comprobante || 'S/N'}</span>`}</td>
                         <td>${docRefHtml(item)}</td>
                         <td><small>${item.referencia_detalle || item.concepto || ''}</small></td>
                         <td class="text-end ${de > 0 ? 'text-dark' : 'text-muted'}">${formatMoney(de)}</td>
