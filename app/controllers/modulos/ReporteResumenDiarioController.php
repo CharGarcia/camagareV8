@@ -5,6 +5,9 @@ declare(strict_types=1);
 namespace App\controllers\modulos;
 
 use App\Helpers\ReportePdf;
+use App\repositories\modulos\CajaMovimientoRepository;
+use App\repositories\modulos\ReporteResumenDiarioRepository;
+use App\Services\modulos\CajaMovimientoService;
 use App\Services\modulos\ReporteResumenDiarioService;
 use PhpOffice\PhpSpreadsheet\Cell\Coordinate;
 use PhpOffice\PhpSpreadsheet\Spreadsheet;
@@ -13,12 +16,15 @@ use PhpOffice\PhpSpreadsheet\Style\Border;
 use PhpOffice\PhpSpreadsheet\Style\Fill;
 
 /**
- * Resumen diario: ventas, compras, ingresos y egresos de UN día, en pantalla, PDF y Excel.
- * Lo arma ReporteResumenDiarioService; aquí solo se recibe la petición y se presenta.
+ * Resumen diario: ventas, compras, ingresos, egresos y traslados de UN día, con el saldo
+ * por forma de pago, en pantalla, PDF y Excel. También registra los traslados entre
+ * formas de pago y los saldos de apertura. La lógica vive en ReporteResumenDiarioService y
+ * CajaMovimientoService; aquí solo se recibe la petición y se presenta.
  */
 class ReporteResumenDiarioController extends BaseModuloController
 {
     private const XL_DINERO = '#,##0.00';
+    private const SIN_TABLAS = 'Falta aplicar en la base de datos el SQL database/20261008_caja_saldos_traslados.sql.';
 
     private ReporteResumenDiarioService $service;
 
@@ -40,6 +46,7 @@ class ReporteResumenDiarioController extends BaseModuloController
             'titulo'     => 'Resumen Diario',
             'perm'       => $this->getPermisos(),
             'rutaModulo' => $this->getRutaModulo(),
+            'formas'     => (new CajaMovimientoRepository())->getFormasPago((int) $_SESSION['id_empresa']),
             'fullWidth'  => true,
             'base'       => BASE_URL,
         ]);
@@ -54,14 +61,15 @@ class ReporteResumenDiarioController extends BaseModuloController
         ];
     }
 
-    /**
-     * Resumen ya armado para la empresa activa. Sin acceso total ('t') el usuario solo
-     * ve lo que él registró (§6).
-     */
+    /** Sin acceso total ('t') el usuario solo ve/gestiona lo que él registró (§6). */
+    private function idUsuarioFiltro(): ?int
+    {
+        return empty($this->getPermisos()['todo']) ? (int) $_SESSION['id_usuario'] : null;
+    }
+
     private function datos(array $f): array
     {
-        $idUsuarioFiltro = empty($this->getPermisos()['todo']) ? (int) $_SESSION['id_usuario'] : null;
-        return $this->service->generar((int) $_SESSION['id_empresa'], $f['fecha'], $f['borradores'], $idUsuarioFiltro);
+        return $this->service->generar((int) $_SESSION['id_empresa'], $f['fecha'], $f['borradores'], $this->idUsuarioFiltro());
     }
 
     /** Filtros en texto, para el PDF y el Excel. */
@@ -69,7 +77,7 @@ class ReporteResumenDiarioController extends BaseModuloController
     {
         $txt = ['Día' => date('d-m-Y', strtotime($f['fecha']))];
         $txt['Borradores'] = $f['borradores'] ? 'Incluidos' : 'No incluidos';
-        if (empty($this->getPermisos()['todo'])) {
+        if ($this->idUsuarioFiltro() !== null) {
             $txt['Alcance'] = 'Solo lo registrado por ' . (string) ($_SESSION['nombre'] ?? 'el usuario');
         }
         return $txt;
@@ -84,7 +92,7 @@ class ReporteResumenDiarioController extends BaseModuloController
         try {
             $datos = $this->datos($f);
             ob_start();
-            $this->view('modulos/reporte_resumen_diario/contenido', ['datos' => $datos]);
+            $this->view('modulos/reporte_resumen_diario/contenido', ['datos' => $datos, 'perm' => $this->getPermisos()]);
             $html = (string) ob_get_clean();
 
             $qs = http_build_query(['fecha' => $datos['fecha'], 'borradores' => $f['borradores'] ? 'INCLUIR' : '']);
@@ -105,6 +113,97 @@ class ReporteResumenDiarioController extends BaseModuloController
         exit;
     }
 
+    // ── Traslados y saldos de apertura ────────────────────────────────────────
+
+    private function tablasCaja(): bool
+    {
+        return (new ReporteResumenDiarioRepository())->tablasCajaDisponibles();
+    }
+
+    public function guardarTrasladoAjax(): void
+    {
+        $this->requireCrear();
+        header('Content-Type: application/json');
+        if (!$this->tablasCaja()) {
+            echo json_encode(['ok' => false, 'mensaje' => self::SIN_TABLAS]);
+            exit;
+        }
+        try {
+            $res = (new CajaMovimientoService())->crearTraslado(
+                $_POST, (string) ($_POST['token_guardado'] ?? ''),
+                (int) $_SESSION['id_empresa'], (int) $_SESSION['id_usuario']
+            );
+            echo json_encode(['ok' => true, 'id' => $res['id'], 'mensaje' => $res['ya_existia']
+                ? 'Ese traslado ya estaba registrado; no se creó otro.'
+                : 'Traslado registrado.']);
+        } catch (\InvalidArgumentException $e) {
+            echo json_encode(['ok' => false, 'mensaje' => $e->getMessage()]);
+        } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
+            echo json_encode(['ok' => false, 'mensaje' => 'No se pudo registrar el traslado.']);
+        }
+        exit;
+    }
+
+    public function eliminarTrasladoAjax(): void
+    {
+        $this->requireEliminar();
+        header('Content-Type: application/json');
+        try {
+            (new CajaMovimientoService())->eliminarTraslado(
+                (int) ($_POST['id'] ?? 0), (int) $_SESSION['id_empresa'], (int) $_SESSION['id_usuario'], $this->idUsuarioFiltro()
+            );
+            echo json_encode(['ok' => true, 'mensaje' => 'Traslado eliminado.']);
+        } catch (\InvalidArgumentException $e) {
+            echo json_encode(['ok' => false, 'mensaje' => $e->getMessage()]);
+        } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
+            echo json_encode(['ok' => false, 'mensaje' => 'No se pudo eliminar el traslado.']);
+        }
+        exit;
+    }
+
+    /** Formas de pago con su saldo de apertura (para el modal). */
+    public function aperturasAjax(): void
+    {
+        $this->requireLeer();
+        header('Content-Type: application/json');
+        if (!$this->tablasCaja()) {
+            echo json_encode(['ok' => false, 'mensaje' => self::SIN_TABLAS]);
+            exit;
+        }
+        echo json_encode(['ok' => true, 'formas' => (new CajaMovimientoService())->listarAperturas((int) $_SESSION['id_empresa'])]);
+        exit;
+    }
+
+    /** Los saldos de apertura son de toda la empresa: piden permiso de modificar y acceso total. */
+    public function guardarAperturasAjax(): void
+    {
+        $this->requireActualizar();
+        header('Content-Type: application/json');
+        if ($this->idUsuarioFiltro() !== null) {
+            echo json_encode(['ok' => false, 'mensaje' => 'Los saldos de apertura son de toda la empresa: hace falta acceso total en este módulo.']);
+            exit;
+        }
+        if (!$this->tablasCaja()) {
+            echo json_encode(['ok' => false, 'mensaje' => self::SIN_TABLAS]);
+            exit;
+        }
+        try {
+            $filas   = json_decode((string) ($_POST['aperturas'] ?? '[]'), true);
+            $cambios = (new CajaMovimientoService())->guardarAperturas(
+                is_array($filas) ? $filas : [], (int) $_SESSION['id_empresa'], (int) $_SESSION['id_usuario']
+            );
+            echo json_encode(['ok' => true, 'mensaje' => $cambios ? "Saldos de apertura guardados ({$cambios})." : 'No había cambios.']);
+        } catch (\InvalidArgumentException $e) {
+            echo json_encode(['ok' => false, 'mensaje' => $e->getMessage()]);
+        } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
+            echo json_encode(['ok' => false, 'mensaje' => 'No se pudieron guardar los saldos de apertura.']);
+        }
+        exit;
+    }
+
     // ── PDF ───────────────────────────────────────────────────────────────────
 
     public function exportPdf(): void
@@ -117,17 +216,22 @@ class ReporteResumenDiarioController extends BaseModuloController
             $idEmpresa = (int) $_SESSION['id_empresa'];
             $empresa   = (new \App\models\Empresa())->getPorId($idEmpresa) ?? [];
             $pt        = 7.5;
+            $k         = $datos['kpis'];
 
+            $kpis = [
+                ['Ventas netas', $this->dinero($k['ventas_netas'])],
+                ['Compras netas', $this->dinero($k['compras_netas'])],
+                ['Ingresos', $this->dinero($k['ingresos'])],
+                ['Egresos', $this->dinero($k['egresos'])],
+                ['Neto del día', $this->dinero($k['neto_caja']), $k['saldo_final'] === null],
+            ];
+            if ($k['saldo_final'] !== null) {
+                $kpis[] = ['Saldo final', $this->dinero($k['saldo_final']), true];
+            }
             $html = ReportePdf::encabezado($idEmpresa, (string) ($empresa['nombre'] ?? ''), 'Resumen diario',
                         'Día ' . date('d-m-Y', strtotime($datos['fecha'])))
                   . ReportePdf::filtros($this->filtrosTxt($f))
-                  . ReportePdf::indicadores([
-                        ['Ventas netas', $this->dinero($datos['kpis']['ventas_netas'])],
-                        ['Compras netas', $this->dinero($datos['kpis']['compras_netas'])],
-                        ['Ingresos (cobros)', $this->dinero($datos['kpis']['ingresos']), false, '#146c43'],
-                        ['Egresos (pagos)', $this->dinero($datos['kpis']['egresos']), false, '#b02a37'],
-                        ['Neto de caja', $this->dinero($datos['kpis']['neto_caja']), true],
-                    ]);
+                  . ReportePdf::indicadores($kpis);
 
             if (!$datos['grupos']) {
                 $html .= "<p style='text-align:center;font-size:9pt;'>No hay documentos ni movimientos en este día.</p>";
@@ -138,8 +242,8 @@ class ReporteResumenDiarioController extends BaseModuloController
                     $html .= $this->seccionPdf($s, $pt);
                 }
             }
-            if ($datos['grupos']) {
-                $html .= $this->resumenPdf($datos);
+            if ($datos['grupos'] || $datos['resumen']['caja']) {
+                $html .= $this->resumenPdf($datos, $pt);
             }
             $html .= $this->firmasPdf();
 
@@ -169,13 +273,13 @@ class ReporteResumenDiarioController extends BaseModuloController
              . "font-weight:bold;font-size:10pt;padding:2px 0;'>" . htmlspecialchars($titulo) . '</td></tr></table>';
     }
 
-    /** Título de la sección y su listado (solo llegan secciones con documentos). */
+    /** Título de la sección y su listado (solo llegan secciones con filas). */
     private function seccionPdf(array $s, float $pt): string
     {
         $n      = count($s['filas']);
         $titulo = mb_strtoupper($s['titulo']) . " ({$n})" . ($s['nota'] !== '' ? ' - ' . $s['nota'] : '');
-        $html = "<table class='fil-tit'><tr><td style='width:100%;'>" . htmlspecialchars($titulo) . '</td></tr></table>';
-        $cols = [];
+        $html   = "<table class='fil-tit'><tr><td style='width:100%;'>" . htmlspecialchars($titulo) . '</td></tr></table>';
+        $cols   = [];
         foreach ($s['columnas'] as $c) {
             $k = $c['k'];
             $w = (float) $c['w'];
@@ -189,15 +293,14 @@ class ReporteResumenDiarioController extends BaseModuloController
                     'val' => static fn (array $r): string => ReportePdf::texto((string) $r[$k], $ancho, $pt)];
             }
         }
-        return $html . ReportePdf::listado($cols, $s['filas'], 'TOTAL ' . mb_strtoupper($s['titulo']));
+        return $html . ReportePdf::listado($cols, $s['filas'], 'TOTAL');
     }
 
-    /** Resumen final: ventas, compras y caja por forma de pago. */
-    private function resumenPdf(array $datos): string
+    /** Resumen final: ventas, compras y caja por forma de pago (solo lo que existe). */
+    private function resumenPdf(array $datos, float $pt): string
     {
         $r    = $datos['resumen'];
         $html = $this->bandaPdf('RESUMEN DEL DÍA');
-
         foreach ([['VENTAS', $r['ventas']], ['COMPRAS', $r['compras']]] as [$titulo, $lineas]) {
             if (!$lineas) {
                 continue;
@@ -210,24 +313,9 @@ class ReporteResumenDiarioController extends BaseModuloController
             }
             $html .= '</table>';
         }
-
-        if (!$r['formas']) {
-            return $html;
+        if ($r['caja']) {
+            $html .= $this->seccionPdf($r['caja'], $pt);
         }
-        $html .= "<table class='fil-tit'><tr><td style='width:100%;'>CAJA POR FORMA DE PAGO</td></tr></table>"
-               . "<table><thead><tr><th style='width:40%;'>Forma de pago</th><th style='width:20%;'>Ingresos</th>"
-               . "<th style='width:20%;'>Egresos</th><th style='width:20%;'>Neto</th></tr></thead><tbody>";
-        foreach ($r['formas'] as $fp) {
-            $html .= "<tr><td style='width:40%;'>" . htmlspecialchars($fp['forma']) . '</td>'
-                   . "<td class='text-end' style='width:20%;'>" . $this->dinero($fp['ingresos']) . '</td>'
-                   . "<td class='text-end' style='width:20%;'>" . $this->dinero($fp['egresos']) . '</td>'
-                   . "<td class='text-end' style='width:20%;'>" . $this->dinero($fp['neto']) . '</td></tr>';
-        }
-        $c = $r['caja'];
-        $html .= "</tbody></table><table class='tot'><tr><td class='text-end' style='width:40%;'>TOTAL:</td>"
-               . "<td class='text-end' style='width:20%;'>" . $this->dinero($c['ingresos']) . '</td>'
-               . "<td class='text-end' style='width:20%;'>" . $this->dinero($c['egresos']) . '</td>'
-               . "<td class='text-end' style='width:20%;'>" . $this->dinero($c['neto']) . '</td></tr></table>';
         return $html;
     }
 
@@ -260,11 +348,10 @@ class ReporteResumenDiarioController extends BaseModuloController
             $datos   = $this->datos($f);
             $empresa = (new \App\models\Empresa())->getPorId((int) $_SESSION['id_empresa']) ?? [];
 
-            $libro = new Spreadsheet();
-            $hoja  = $libro->getActiveSheet();
+            $libro  = new Spreadsheet();
+            $hoja   = $libro->getActiveSheet();
             $hoja->setTitle('Resumen diario');
-            $maxCols = 6;
-            $ultima  = Coordinate::stringFromColumnIndex($maxCols);
+            $ultima = Coordinate::stringFromColumnIndex(6);
 
             $hoja->setCellValue('A1', mb_strtoupper((string) ($empresa['nombre'] ?? '')));
             $hoja->mergeCells("A1:{$ultima}1");
@@ -285,15 +372,14 @@ class ReporteResumenDiarioController extends BaseModuloController
                     $fila = $this->xlSeccion($hoja, $fila, $s);
                 }
             }
-
-            if ($datos['grupos']) {
+            if ($datos['grupos'] || $datos['resumen']['caja']) {
                 $fila = $this->xlResumen($hoja, $fila, $datos['resumen'], $ultima);
             } else {
                 $hoja->setCellValue("A{$fila}", 'No hay documentos ni movimientos en este día.');
             }
 
             // Anchos: las columnas de texto largas (cliente, detalle) a ancho fijo con ajuste.
-            foreach ([1 => 22, 2 => 38, 3 => 32, 4 => 18, 5 => 14, 6 => 14] as $col => $ancho) {
+            foreach ([1 => 24, 2 => 38, 3 => 32, 4 => 18, 5 => 14, 6 => 14] as $col => $ancho) {
                 $hoja->getColumnDimension(Coordinate::stringFromColumnIndex($col))->setWidth($ancho);
             }
             $hoja->getStyle("A1:{$ultima}{$fila}")->getAlignment()->setWrapText(true)->setVertical(Alignment::VERTICAL_TOP);
@@ -328,21 +414,7 @@ class ReporteResumenDiarioController extends BaseModuloController
             }
             $fila++;
         }
-        if (!$r['formas']) {
-            return $fila;
-        }
-        return $this->xlSeccion($hoja, $fila, [
-            'titulo'   => 'Caja por forma de pago',
-            'nota'     => '',
-            'columnas' => [
-                ['k' => 'forma', 'lbl' => 'Forma de pago'],
-                ['k' => 'ingresos', 'lbl' => 'Ingresos', 'num' => true],
-                ['k' => 'egresos', 'lbl' => 'Egresos', 'num' => true],
-                ['k' => 'neto', 'lbl' => 'Neto', 'num' => true],
-            ],
-            'filas'    => $r['formas'],
-            'totales'  => ['ingresos' => $r['caja']['ingresos'], 'egresos' => $r['caja']['egresos'], 'neto' => $r['caja']['neto']],
-        ]);
+        return $r['caja'] ? $this->xlSeccion($hoja, $fila, $r['caja']) : $fila;
     }
 
     /** Título de un bloque: negrita, subrayado, sin color de fondo. */
@@ -360,9 +432,7 @@ class ReporteResumenDiarioController extends BaseModuloController
     {
         $hoja->setCellValue("A{$fila}", $titulo);
         $hoja->mergeCells("A{$fila}:{$ultima}{$fila}");
-        $hoja->getStyle("A{$fila}")->applyFromArray([
-            'font' => ['bold' => true],
-        ]);
+        $hoja->getStyle("A{$fila}")->applyFromArray(['font' => ['bold' => true]]);
     }
 
     /** Escribe una sección (título, encabezados, filas y total) y devuelve la fila siguiente libre. */
@@ -372,6 +442,7 @@ class ReporteResumenDiarioController extends BaseModuloController
         $n      = count($s['filas']);
         $ultima = Coordinate::stringFromColumnIndex(max(count($cols), 6));
         $this->xlTituloSeccion($hoja, $fila++, $s['titulo'] . " ({$n})" . ($s['nota'] !== '' ? ' - ' . $s['nota'] : ''), $ultima);
+
         $finCols = Coordinate::stringFromColumnIndex(count($cols));
         foreach ($cols as $i => $c) {
             $hoja->setCellValue(Coordinate::stringFromColumnIndex($i + 1) . $fila, $c['lbl']);

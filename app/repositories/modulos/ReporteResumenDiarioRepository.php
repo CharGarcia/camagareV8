@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\repositories\modulos;
 
+use App\Helpers\AbonosVentaSql;
 use App\Helpers\AmbienteReporte;
 use App\repositories\BaseRepository;
 use PDO;
@@ -61,6 +62,11 @@ class ReporteResumenDiarioRepository extends BaseRepository
 
     // ── Ventas ────────────────────────────────────────────────────────────────
 
+    /**
+     * Facturas del día con su saldo pendiente HOY, con la regla de Cuentas por Cobrar
+     * (AbonosVentaSql): total + notas de débito − cobros − retenciones − notas de crédito,
+     * nunca negativo.
+     */
     public function getFacturas(int $idEmpresa, string $fecha, bool $conBorradores, ?int $idUsuarioFiltro): array
     {
         $p = [];
@@ -70,7 +76,12 @@ class ReporteResumenDiarioRepository extends BaseRepository
             SELECT v.id, CONCAT(v.establecimiento, '-', v.punto_emision, '-', v.secuencial) AS numero,
                    COALESCE(cl.nombre, '') AS tercero, COALESCE(cl.identificacion, '') AS identificacion,
                    '' AS referencia, v.estado,
-                   COALESCE(v.total_sin_impuestos, 0) AS subtotal, COALESCE(v.importe_total, 0) AS total
+                   COALESCE(v.total_sin_impuestos, 0) AS subtotal, COALESCE(v.importe_total, 0) AS total,
+                   GREATEST(COALESCE(v.importe_total, 0)
+                            + " . AbonosVentaSql::subNotasFactura('nota_debito_cabecera', 'v') . "
+                            - " . self::subCobrado('FACTURA', 'v') . "
+                            - " . AbonosVentaSql::subRetenidoFactura('v') . "
+                            - " . AbonosVentaSql::subNotasFactura('notas_credito_cabecera', 'v') . ", 0) AS saldo
               FROM ventas_cabecera v
               LEFT JOIN clientes cl ON cl.id = v.id_cliente
              WHERE {$w}
@@ -92,11 +103,22 @@ class ReporteResumenDiarioRepository extends BaseRepository
                                   CONCAT(r.establecimiento, '-', r.punto_emision, '-', r.secuencial)) AS numero,
                    COALESCE(cl.nombre, '') AS tercero, COALESCE(cl.identificacion, '') AS identificacion,
                    '' AS referencia, r.estado,
-                   COALESCE(r.total_sin_impuestos, 0) AS subtotal, COALESCE(r.importe_total, 0) AS total
+                   COALESCE(r.total_sin_impuestos, 0) AS subtotal, COALESCE(r.importe_total, 0) AS total,
+                   GREATEST(COALESCE(r.importe_total, 0) - " . self::subCobrado('RECIBO', 'r') . ", 0) AS saldo
               FROM recibos_venta_cabecera r
               LEFT JOIN clientes cl ON cl.id = r.id_cliente
              WHERE {$w}
              ORDER BY 2, r.id", $p);
+    }
+
+    /** Lo cobrado HASTA HOY a un documento por Ingresos no anulados (misma regla que el Reporte de Ventas). */
+    private static function subCobrado(string $tipo, string $alias): string
+    {
+        return "(SELECT COALESCE(SUM(idt.monto_cobrado), 0)
+                   FROM ingresos_detalle idt
+                   JOIN ingresos_cabecera icb ON icb.id = idt.id_ingreso
+                  WHERE idt.tipo_documento = '{$tipo}' AND idt.id_referencia_documento = {$alias}.id
+                    AND icb.estado <> 'anulado' AND icb.eliminado = false AND icb.id_empresa = {$alias}.id_empresa)";
     }
 
     /** Notas de crédito ($tabla = notas_credito_cabecera) o de débito (nota_debito_cabecera) de venta. */
@@ -212,10 +234,13 @@ class ReporteResumenDiarioRepository extends BaseRepository
     // ── Caja: ingresos y egresos ──────────────────────────────────────────────
 
     /**
-     * Ingresos (cobros) del día no anulados, una fila por forma de pago del Ingreso. Un
-     * Ingreso sin formas de pago sale una vez con su monto total y forma vacía. El
-     * detalle lista lo que cobró: documentos con su valor o, en otros conceptos, la
-     * descripción de la línea.
+     * Ingresos (cobros) del día no anulados, separados en dos grupos:
+     *  - 'DIA':   lo que cobró a facturas y recibos EMITIDOS ESE MISMO DÍA.
+     *  - 'OTROS': lo demás (documentos de días anteriores, saldos iniciales, otros conceptos).
+     * Una fila por Ingreso, grupo y forma de pago. Si un Ingreso cobró documentos de los dos
+     * grupos, cada forma de pago se reparte entre los grupos en proporción a lo cobrado en
+     * cada uno, así la suma sigue siendo exactamente lo que entró. Un Ingreso sin líneas va
+     * entero a 'OTROS'; uno sin formas de pago sale con forma vacía.
      */
     public function getIngresos(int $idEmpresa, string $fecha, ?int $idUsuarioFiltro): array
     {
@@ -223,23 +248,48 @@ class ReporteResumenDiarioRepository extends BaseRepository
         $w = $this->base('c', $idEmpresa, $fecha, $idUsuarioFiltro, 'COALESCE(c.created_by, c.id_usuario)', $p)
            . " AND LOWER(c.estado) <> 'anulado'";
         return $this->filas("
-            SELECT c.id, c.numero_ingreso AS numero,
-                   COALESCE(NULLIF(TRIM(c.recibo_de), ''), cl.nombre, '') AS tercero,
+            WITH cab AS (
+                SELECT c.id, c.numero_ingreso, c.monto_total, c.id_ingreso_concepto, c.observaciones,
+                       COALESCE(NULLIF(TRIM(c.recibo_de), ''), cl.nombre, '') AS tercero
+                  FROM ingresos_cabecera c
+                  LEFT JOIN clientes cl ON cl.id = COALESCE(c.id_recibo_cliente, c.id_cliente)
+                 WHERE {$w}
+            ),
+            lin AS (
+                SELECT d.id, d.id_ingreso, COALESCE(d.monto_cobrado, 0) AS monto,
+                       " . self::lineaDetalle('d', 'd.monto_cobrado') . " AS texto,
+                       CASE WHEN vf.fecha_emision = :fecha OR vr.fecha_emision = :fecha THEN 'DIA' ELSE 'OTROS' END AS grupo
+                  FROM ingresos_detalle d
+                  JOIN cab ON cab.id = d.id_ingreso
+                  LEFT JOIN ventas_cabecera vf ON d.tipo_documento = 'FACTURA' AND vf.id = d.id_referencia_documento
+                  LEFT JOIN recibos_venta_cabecera vr ON d.tipo_documento = 'RECIBO' AND vr.id = d.id_referencia_documento
+            ),
+            tot AS (SELECT id_ingreso, SUM(monto) AS total FROM lin GROUP BY id_ingreso),
+            grp AS (
+                SELECT l.id_ingreso, l.grupo, SUM(l.monto) AS monto,
+                       STRING_AGG(l.texto, ', ' ORDER BY l.id) AS detalle, t.total
+                  FROM lin l JOIN tot t ON t.id_ingreso = l.id_ingreso
+                 WHERE t.total > 0
+                 GROUP BY l.id_ingreso, l.grupo, t.total
+                UNION ALL
+                SELECT cab.id, 'OTROS', COALESCE(cab.monto_total, 0), NULL, 0
+                  FROM cab LEFT JOIN tot t ON t.id_ingreso = cab.id
+                 WHERE COALESCE(t.total, 0) <= 0
+            )
+            SELECT cab.id, cab.numero_ingreso AS numero, cab.tercero, g.grupo,
                    COALESCE(fp.id, 0) AS id_forma, fp.nombre AS forma,
-                   COALESCE(NULLIF(TRIM(p.numero_cheque), ''), NULLIF(TRIM(p.referencia), ''), '') AS referencia_pago,
-                   COALESCE(p.monto, c.monto_total, 0) AS valor,
-                   COALESCE(det.detalle, '') AS detalle, COALESCE(oc.nombre, '') AS concepto,
-                   COALESCE(c.observaciones, '') AS observaciones
-              FROM ingresos_cabecera c
-              LEFT JOIN clientes cl ON cl.id = COALESCE(c.id_recibo_cliente, c.id_cliente)
-              LEFT JOIN ingresos_pagos p ON p.id_ingreso = c.id
-              LEFT JOIN empresa_formas_pago fp ON fp.id = p.id_forma_cobro
-              LEFT JOIN empresa_opciones_ingreso_egreso oc ON oc.id = c.id_ingreso_concepto
-              LEFT JOIN LATERAL (
-                    SELECT STRING_AGG(" . self::lineaDetalle('d', 'd.monto_cobrado') . ", ', ' ORDER BY d.id) AS detalle
-                      FROM ingresos_detalle d WHERE d.id_ingreso = c.id) det ON true
-             WHERE {$w}
-             ORDER BY c.numero_ingreso, c.id, p.id", $p);
+                   COALESCE(NULLIF(TRIM(pg.numero_cheque), ''), NULLIF(TRIM(pg.referencia), ''), '') AS referencia_pago,
+                   CASE WHEN pg.id IS NULL THEN g.monto
+                        WHEN g.total > 0 THEN pg.monto * g.monto / g.total
+                        ELSE pg.monto END AS valor,
+                   COALESCE(g.detalle, '') AS detalle, COALESCE(oc.nombre, '') AS concepto,
+                   COALESCE(cab.observaciones, '') AS observaciones
+              FROM cab
+              JOIN grp g ON g.id_ingreso = cab.id
+              LEFT JOIN ingresos_pagos pg ON pg.id_ingreso = cab.id
+              LEFT JOIN empresa_formas_pago fp ON fp.id = pg.id_forma_cobro
+              LEFT JOIN empresa_opciones_ingreso_egreso oc ON oc.id = cab.id_ingreso_concepto
+             ORDER BY g.grupo, cab.numero_ingreso, cab.id, pg.id", $p);
     }
 
     /**
@@ -272,6 +322,101 @@ class ReporteResumenDiarioRepository extends BaseRepository
                       FROM egresos_detalle d WHERE d.id_egreso = c.id AND d.eliminado = false) det ON true
              WHERE {$w}
              ORDER BY c.numero_egreso, c.id, p.id", $p);
+    }
+
+    // ── Saldos por forma de pago y traslados ──────────────────────────────────
+
+    /** ¿Ya se aplicó database/20261008_caja_saldos_traslados.sql? Sin las tablas, se degrada. */
+    public function tablasCajaDisponibles(): bool
+    {
+        static $ok = null;
+        return $ok ??= (bool) $this->db->query(
+            "SELECT to_regclass('public.caja_traslados') IS NOT NULL AND to_regclass('public.caja_saldos_apertura') IS NOT NULL"
+        )->fetchColumn();
+    }
+
+    /**
+     * Saldo de cada forma de pago al INICIO del día: su saldo de apertura (si la apertura
+     * es de ese día o antes) más los Ingresos, menos los Egresos y +/- los traslados
+     * anteriores al día, contados desde la fecha de apertura. Sin apertura, desde el
+     * primer movimiento. Solo formas con saldo distinto de cero.
+     *
+     * @return array<int, array{nombre: string, saldo: float}> id_forma => datos
+     */
+    public function getSaldosIniciales(int $idEmpresa, string $fecha): array
+    {
+        $p = [':id_empresa' => $idEmpresa, ':fecha' => $fecha];
+        $amb = AmbienteReporte::literal();
+        $conCaja = $this->tablasCajaDisponibles();
+        $traslados = $conCaja ? "
+                UNION ALL
+                SELECT t.id_forma_destino, t.fecha, t.valor FROM caja_traslados t
+                 WHERE t.id_empresa = :id_empresa AND t.eliminado = false AND t.fecha < :fecha
+                UNION ALL
+                SELECT t.id_forma_origen, t.fecha, -t.valor FROM caja_traslados t
+                 WHERE t.id_empresa = :id_empresa AND t.eliminado = false AND t.fecha < :fecha" : '';
+        $apertura = $conCaja
+            ? "SELECT id_forma_pago, fecha, valor FROM caja_saldos_apertura
+                WHERE id_empresa = :id_empresa AND eliminado = false AND fecha <= :fecha"
+            : "SELECT NULL::int AS id_forma_pago, NULL::date AS fecha, 0::numeric AS valor WHERE false";
+
+        $rows = $this->filas("
+            WITH ap AS ({$apertura}),
+            mov AS (
+                SELECT pg.id_forma_cobro AS id_forma, c.fecha_emision AS fecha, pg.monto AS valor
+                  FROM ingresos_pagos pg
+                  JOIN ingresos_cabecera c ON c.id = pg.id_ingreso
+                 WHERE c.id_empresa = :id_empresa AND c.eliminado = false AND LOWER(c.estado) <> 'anulado'
+                   AND c.tipo_ambiente = {$amb} AND c.fecha_emision < :fecha
+                UNION ALL
+                SELECT pg.id_forma_pago, c.fecha_emision, -pg.monto
+                  FROM egresos_pagos pg
+                  JOIN egresos_cabecera c ON c.id = pg.id_egreso
+                 WHERE c.id_empresa = :id_empresa AND c.eliminado = false AND LOWER(c.estado) <> 'anulado'
+                   AND c.tipo_ambiente = {$amb} AND c.fecha_emision < :fecha
+                   AND pg.eliminado = false AND COALESCE(pg.estado_cheque, 'vigente') <> 'anulado'{$traslados}
+            ),
+            suma AS (
+                SELECT m.id_forma, SUM(m.valor) AS valor
+                  FROM mov m LEFT JOIN ap ON ap.id_forma_pago = m.id_forma
+                 WHERE ap.fecha IS NULL OR m.fecha >= ap.fecha
+                 GROUP BY m.id_forma
+            )
+            SELECT fp.id, fp.nombre, COALESCE(ap.valor, 0) + COALESCE(s.valor, 0) AS saldo
+              FROM empresa_formas_pago fp
+              LEFT JOIN ap ON ap.id_forma_pago = fp.id
+              LEFT JOIN suma s ON s.id_forma = fp.id
+             WHERE fp.id_empresa = :id_empresa
+               AND ROUND(COALESCE(ap.valor, 0) + COALESCE(s.valor, 0), 2) <> 0", $p);
+
+        $out = [];
+        foreach ($rows as $r) {
+            $out[(int) $r['id']] = ['nombre' => (string) $r['nombre'], 'saldo' => round((float) $r['saldo'], 2)];
+        }
+        return $out;
+    }
+
+    /** Traslados entre formas de pago del día (sin las tablas, ninguno). */
+    public function getTraslados(int $idEmpresa, string $fecha, ?int $idUsuarioFiltro): array
+    {
+        if (!$this->tablasCajaDisponibles()) {
+            return [];
+        }
+        $p = [':id_empresa' => $idEmpresa, ':fecha' => $fecha];
+        $w = 't.id_empresa = :id_empresa AND t.eliminado = false AND t.fecha = :fecha';
+        if ($idUsuarioFiltro !== null) {
+            $w .= ' AND t.created_by = :id_usuario_filtro';
+            $p[':id_usuario_filtro'] = $idUsuarioFiltro;
+        }
+        return $this->filas("
+            SELECT t.id, t.valor, COALESCE(t.observaciones, '') AS observaciones,
+                   t.id_forma_origen, fo.nombre AS forma_origen,
+                   t.id_forma_destino, fd.nombre AS forma_destino
+              FROM caja_traslados t
+              JOIN empresa_formas_pago fo ON fo.id = t.id_forma_origen
+              JOIN empresa_formas_pago fd ON fd.id = t.id_forma_destino
+             WHERE {$w}
+             ORDER BY t.id", $p);
     }
 
     /** Texto de una línea de ingreso/egreso: "Fact. 001-001-000000123 (11.50)". */

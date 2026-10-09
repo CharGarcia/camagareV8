@@ -1,4 +1,6 @@
-<?php /** @var string $rutaModulo @var string $base */ ?>
+<?php /** @var string $rutaModulo @var string $base @var array $perm @var array $formas */
+$puedeTraslado = !empty($perm['crear']);
+$puedeApertura = !empty($perm['actualizar']) && !empty($perm['todo']); ?>
 <script>document.body.classList.add('cmg-no-app-shell');</script>
 
 <style>
@@ -82,7 +84,14 @@
                     <i class="bi bi-wallet2 bg-primary bg-opacity-10 text-primary"></i>
                     <div>
                         <div class="cmg-control-card__stat-value text-primary" id="rrd-kpi-neto">$0.00</div>
-                        <div class="cmg-control-card__stat-label">Neto de caja</div>
+                        <div class="cmg-control-card__stat-label">Neto del día</div>
+                    </div>
+                </div>
+                <div class="cmg-control-card__stat d-none" id="rrd-stat-saldo">
+                    <i class="bi bi-safe bg-dark bg-opacity-10 text-dark"></i>
+                    <div>
+                        <div class="cmg-control-card__stat-value" id="rrd-kpi-saldo">$0.00</div>
+                        <div class="cmg-control-card__stat-label">Saldo final</div>
                     </div>
                 </div>
             </div>
@@ -97,7 +106,21 @@
                     <button type="button" class="btn btn-outline-danger" id="rrdBtnPdf" disabled><i class="bi bi-file-earmark-pdf"></i> PDF</button>
                     <button type="button" class="btn btn-outline-success" id="rrdBtnExcel" disabled><i class="bi bi-file-earmark-spreadsheet"></i> Excel</button>
                 </div>
-                <span class="text-muted small" id="rrd-titulo-dia"></span>
+                <div class="d-flex align-items-center gap-2">
+                    <span class="text-muted small" id="rrd-titulo-dia"></span>
+                    <?php if ($puedeTraslado): ?>
+                        <button type="button" class="btn btn-outline-primary btn-sm" id="rrdBtnTraslado"
+                                title="Dinero que pasa de una forma de pago a otra (p. ej. depositar el efectivo en el banco)">
+                            <i class="bi bi-arrow-left-right me-1"></i>Nuevo traslado
+                        </button>
+                    <?php endif; ?>
+                    <?php if ($puedeApertura): ?>
+                        <button type="button" class="btn btn-outline-secondary btn-sm" id="rrdBtnApertura"
+                                title="Saldo con que arranca cada forma de pago">
+                            <i class="bi bi-safe me-1"></i>Saldos de apertura
+                        </button>
+                    <?php endif; ?>
+                </div>
             </div>
         </div>
         <div class="card-body p-0 pb-2" id="rrd-contenido">
@@ -106,9 +129,96 @@
     </div>
 </div>
 
+<?php if ($puedeTraslado): ?>
+<!-- ── Nuevo traslado entre formas de pago ── -->
+<div class="modal fade" id="rrdModalTraslado" tabindex="-1">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content">
+      <div class="modal-header py-2">
+        <h6 class="modal-title fw-bold"><i class="bi bi-arrow-left-right me-1"></i>Nuevo traslado</h6>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <p class="small text-muted mb-3">Dinero que pasa de una forma de pago a otra sin ser ingreso ni egreso, por ejemplo depositar el efectivo en el banco. No genera asiento contable.</p>
+        <div class="row g-2">
+          <div class="col-6">
+            <label class="form-label small fw-bold mb-1 d-block" for="rrd-tr-fecha">Fecha</label>
+            <input type="date" class="form-control form-control-sm" id="rrd-tr-fecha">
+          </div>
+          <div class="col-6">
+            <label class="form-label small fw-bold mb-1 d-block" for="rrd-tr-valor">Valor</label>
+            <input type="number" class="form-control form-control-sm text-end" id="rrd-tr-valor" step="0.01" min="0.01" placeholder="0.00">
+          </div>
+          <div class="col-6">
+            <label class="form-label small fw-bold mb-1 d-block" for="rrd-tr-origen">Desde</label>
+            <select class="form-select form-select-sm" id="rrd-tr-origen">
+              <option value="">Elija…</option>
+              <?php foreach ($formas as $fp): ?>
+                <option value="<?= (int) $fp['id'] ?>"><?= htmlspecialchars($fp['nombre']) ?></option>
+              <?php endforeach; ?>
+            </select>
+          </div>
+          <div class="col-6">
+            <label class="form-label small fw-bold mb-1 d-block" for="rrd-tr-destino">Hacia</label>
+            <select class="form-select form-select-sm" id="rrd-tr-destino">
+              <option value="">Elija…</option>
+              <?php foreach ($formas as $fp): ?>
+                <option value="<?= (int) $fp['id'] ?>"><?= htmlspecialchars($fp['nombre']) ?></option>
+              <?php endforeach; ?>
+            </select>
+          </div>
+          <div class="col-12">
+            <label class="form-label small fw-bold mb-1 d-block" for="rrd-tr-obs">Observaciones</label>
+            <input type="text" class="form-control form-control-sm" id="rrd-tr-obs" maxlength="300" placeholder="Ej.: depósito papeleta 123456">
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer py-2">
+        <button type="button" class="btn btn-outline-secondary btn-sm" data-bs-dismiss="modal">Cancelar</button>
+        <button type="button" class="btn btn-primary btn-sm" id="rrdBtnGuardarTraslado"><i class="bi bi-check-lg me-1"></i>Guardar</button>
+      </div>
+    </div>
+  </div>
+</div>
+<?php endif; ?>
+
+<?php if ($puedeApertura): ?>
+<!-- ── Saldos de apertura por forma de pago ── -->
+<div class="modal fade" id="rrdModalApertura" tabindex="-1">
+  <div class="modal-dialog modal-lg modal-dialog-scrollable">
+    <div class="modal-content">
+      <div class="modal-header py-2">
+        <h6 class="modal-title fw-bold"><i class="bi bi-safe me-1"></i>Saldos de apertura</h6>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <p class="small text-muted mb-2">
+          El saldo con que arranca cada forma de pago al <strong>inicio</strong> de la fecha indicada. Desde esa fecha el saldo se
+          acumula día a día con los Ingresos, Egresos y traslados. Sin apertura, el saldo se acumula desde el primer movimiento.
+          Para quitar una apertura, borre su fecha.
+        </p>
+        <table class="table table-sm align-middle mb-0" style="font-size:.8rem;">
+          <thead class="table-light">
+            <tr><th>Forma de pago</th><th style="width:150px;">Fecha</th><th class="text-end" style="width:140px;">Saldo</th></tr>
+          </thead>
+          <tbody id="rrd-ap-tbody">
+            <tr><td colspan="3" class="text-center text-muted py-3">Cargando…</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="modal-footer py-2">
+        <button type="button" class="btn btn-outline-secondary btn-sm" data-bs-dismiss="modal">Cancelar</button>
+        <button type="button" class="btn btn-primary btn-sm" id="rrdBtnGuardarApertura" disabled><i class="bi bi-check-lg me-1"></i>Guardar</button>
+      </div>
+    </div>
+  </div>
+</div>
+<?php endif; ?>
+
 <script>
     window.RRD_RUTA = <?= json_encode($rutaModulo) ?>;
     window.RRD_BASE = <?= json_encode($base) ?>;
     window.RRD_HOY  = <?= json_encode(date('Y-m-d')) ?>;
+    window.RRD_PUEDE_ELIMINAR = <?= json_encode(!empty($perm['eliminar'])) ?>;
 </script>
 <script src="<?= $base ?>/js/modulos/reporte_resumen_diario.js?v=<?= asset_ver('/js/modulos/reporte_resumen_diario.js') ?>"></script>
