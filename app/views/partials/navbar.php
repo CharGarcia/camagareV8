@@ -1398,30 +1398,30 @@ $urlManual = $base . '/documentacion' . ($rutaActualAyuda !== '' ? '?ruta=' . ur
 
                 let filas = '';
                 if (v.empresa) {
-                    filas += '<tr><td class="text-muted">Empresa</td><td class="fw-semibold">' + esc(v.empresa)
+                    filas += '<tr><td class="text-muted text-nowrap pe-3" style="width:1%;">Empresa</td><td class="fw-semibold">' + esc(v.empresa)
                           + (v.ruc ? ' <span class="text-muted">(' + esc(v.ruc) + ')</span>' : '') + '</td></tr>';
                 }
                 if (v.fecha_periodo && v.fecha_periodo !== v.fecha) {
-                    filas += '<tr><td class="text-muted">' + (v.motivo === 'pendiente' ? 'Período facturado el' : 'Próximo cobro') + '</td><td>' + fecha(v.fecha_periodo) + '</td></tr>';
+                    filas += '<tr><td class="text-muted text-nowrap pe-3" style="width:1%;">' + (v.motivo === 'pendiente' ? 'Período facturado el' : 'Próximo cobro') + '</td><td>' + fecha(v.fecha_periodo) + '</td></tr>';
                 }
-                filas += '<tr><td class="text-muted">' + (vencida ? 'Venció el' : 'Fecha límite de pago') + '</td><td class="fw-semibold">' + fecha(v.fecha) + '</td></tr>';
+                filas += '<tr><td class="text-muted text-nowrap pe-3" style="width:1%;">' + (vencida ? 'Venció el' : 'Fecha límite de pago') + '</td><td class="fw-semibold">' + fecha(v.fecha) + '</td></tr>';
                 if (dias < 0) {
-                    filas += '<tr><td class="text-muted">Días de atraso</td><td class="fw-bold text-danger">' + Math.abs(dias) + '</td></tr>';
+                    filas += '<tr><td class="text-muted text-nowrap pe-3" style="width:1%;">Días de atraso</td><td class="fw-bold text-danger">' + Math.abs(dias) + '</td></tr>';
                 } else if (dias > 0) {
-                    filas += '<tr><td class="text-muted">Días restantes</td><td class="fw-bold text-' + color + '">' + dias + '</td></tr>';
+                    filas += '<tr><td class="text-muted text-nowrap pe-3" style="width:1%;">Días restantes</td><td class="fw-bold text-' + color + '">' + dias + '</td></tr>';
                 }
                 if (v.motivo === 'pendiente' && v.saldo !== null && v.saldo !== undefined) {
-                    filas += '<tr><td class="text-muted">Saldo pendiente</td><td class="fw-bold text-danger">' + dinero(v.saldo) + '</td></tr>';
+                    filas += '<tr><td class="text-muted text-nowrap pe-3" style="width:1%;">Saldo pendiente</td><td class="fw-bold text-danger">' + dinero(v.saldo) + '</td></tr>';
                     if (v.documento) {
                         const mas = (parseInt(v.documentos_pendientes, 10) || 1) - 1;
-                        filas += '<tr><td class="text-muted">Documento</td><td>' + esc(v.documento)
+                        filas += '<tr><td class="text-muted text-nowrap pe-3" style="width:1%;">Documento</td><td>' + esc(v.documento)
                               + (mas > 0 ? ' <span class="text-muted">y ' + mas + ' más</span>' : '') + '</td></tr>';
                     }
                 } else if (v.motivo === 'pendiente') {
-                    filas += '<tr><td class="text-muted">Pago</td><td class="fw-bold text-danger">Período pendiente de pago</td></tr>';
+                    filas += '<tr><td class="text-muted text-nowrap pe-3" style="width:1%;">Pago</td><td class="fw-bold text-danger">Período pendiente de pago</td></tr>';
                 }
                 if (v.periodicidad) {
-                    filas += '<tr><td class="text-muted">Periodicidad</td><td>' + esc(v.periodicidad) + '</td></tr>';
+                    filas += '<tr><td class="text-muted text-nowrap pe-3" style="width:1%;">Periodicidad</td><td>' + esc(v.periodicidad) + '</td></tr>';
                 }
 
                 const mensaje = vencida
