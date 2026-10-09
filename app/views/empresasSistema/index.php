@@ -209,7 +209,7 @@ function estadoPagoBadge($estado) {
                     <button type="button" id="btnSinSuscripcion" class="btn <?= $nSinSusc > 0 ? 'btn-outline-warning' : 'btn-outline-secondary' ?>"
                         title="<?= $nSinSusc ?> empresa(s) activa(s) sin suscripción del sistema — clic para verlas">
                         <i class="bi bi-shield-exclamation"></i><span class="d-none d-md-inline"> Sin suscripción</span>
-                        <span class="badge rounded-pill <?= $nSinSusc > 0 ? 'bg-danger' : 'bg-secondary' ?> ms-1"><?= $nSinSusc ?></span>
+                        <span class="badge rounded-pill <?= $nSinSusc > 0 ? 'bg-danger' : 'bg-secondary' ?> ms-1" style="font-size:.65rem; padding:.15em .45em; line-height:1.2; vertical-align:middle;"><?= $nSinSusc ?></span>
                     </button>
                 <?php endif; ?>
             </div>

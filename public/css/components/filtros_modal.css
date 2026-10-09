@@ -83,7 +83,11 @@
  * envuelto en <div class="dropdown">), así que Bootstrap no los une: se pegan a mano
  * con el mismo tamaño que .input-group-sm. */
 .fm-input-group > .fm-extra { display: flex; }
-.fm-input-group > .fm-extra > .dropdown { display: flex; }
+/* !important: el dropdown de columnas (PreferenciasHelper) trae .d-inline-block, que en
+ * Bootstrap es !important y anulaba este flex: su botón quedaba con el alto natural y se
+ * veía descuadrado cuando otro botón del grupo era más alto. */
+.fm-input-group > .fm-extra > .dropdown { display: flex !important; }
+.fm-input-group > .fm-extra > .dropdown > .btn { align-self: stretch; }
 .fm-input-group > .fm-extra > .btn,
 .fm-input-group > .fm-extra > .dropdown > .btn {
     font-size: .875rem;
