@@ -1,12 +1,12 @@
 ---
 titulo: Reporte de ventas
-resumen: Ventas del periodo con filtros por cliente, vendedor, cajero, producto y borradores, agrupables, ordenables y exportables, más un resumen diario tipo cierre de caja.
+resumen: Ventas del periodo con filtros por cliente, vendedor, cajero, producto y borradores, agrupables, ordenables y exportables.
 categoria: Reportes
 ruta_modulo: modulos/reporte_ventas
 tipo: modulo
 visibilidad: todos
-etiquetas: reporte de ventas, ventas, cuanto vendi, por cliente, por vendedor, por producto, estadisticas, exportar, pdf, excel, establecimientos, sucursales, matriz, mismo ruc, consolidado por ruc, borradores, borrador, facturas en borrador, incluir borradores, documentos sin autorizar, pendientes de enviar al sri, ordenar, ordenamiento, ordenar por columna, de mayor a menor, quien compro mas, saldo por cobrar, saldo x cobrar, cuanto me debe el cliente, nro facturas, numero de documentos, cartera en el reporte de ventas, acceso total, permiso de ver todos, registros propios, solo mis ventas, no veo las ventas de otro, cada usuario ve lo suyo, documentos migrados no aparecen, cartera del vendedor, mis clientes, clientes asignados, vendedor vinculado, usuario del sistema, el vendedor no ve nada, asesor solo ve sus clientes, nivel de usuario, administrador ve todo, el asesor ve las ventas de todos, imprimir el reporte, logo en el pdf, el pdf sale angosto, el pdf no ocupa la hoja, nombre del producto cortado, filtros aplicados en el pdf, encabezado del pdf, totales repetidos en el pdf, pdf horizontal, numero de pagina, boton buscar, no se actualiza, no cambia al elegir, hay que pulsar buscar, boton amarillo, filtros sin aplicar, unidades vendidas, unidades por mes, cantidades por mes, cuantas unidades vendi, ventas por producto y mes, producto por mes, rotacion mensual, tabla por meses, una columna por mes, marca, categoria, filtrar por marca, filtrar por categoria, ventas de una marca, ventas de una categoria, linea de productos, participacion por producto, porcentaje de ventas, porcentaje de unidades, % venta, % unidades, unidad de medida, total venta sin iva, producto mas vendido, cajero, por cajero, por usuario, ventas por usuario, ventas de un cajero, quien facturo, resumen diario, cierre de caja, cierre del dia, cuadre de caja, arqueo, ventas del dia, formas de pago, efectivo, tarjeta, transferencia, cuanto entro en efectivo, tirilla, ticket, enviar por correo, recibos de venta, recibos no aparecen, no salen los recibos, recibos en borrador, todos los documentos, facturas y recibos juntos, facturas recibos y notas de credito, ventas totales, firmas, realizado por, aprobado por, grafico, ocultar grafico, acordeon, detalle de facturas del dia, detalle de pagos, pagos del dia, numero de ingreso, quien pago, ingresos del dia, listado de recibos, saldo por factura, vendedores que puede ver, solo algunos vendedores, ocultar vendedores, coordinador de zona, ver las ventas de ciertos vendedores
-version: 1.16
+etiquetas: reporte de ventas, ventas, cuanto vendi, por cliente, por vendedor, por producto, estadisticas, exportar, pdf, excel, establecimientos, sucursales, matriz, mismo ruc, consolidado por ruc, borradores, borrador, facturas en borrador, incluir borradores, documentos sin autorizar, pendientes de enviar al sri, ordenar, ordenamiento, ordenar por columna, de mayor a menor, quien compro mas, saldo por cobrar, saldo x cobrar, cuanto me debe el cliente, nro facturas, numero de documentos, cartera en el reporte de ventas, acceso total, permiso de ver todos, registros propios, solo mis ventas, no veo las ventas de otro, cada usuario ve lo suyo, documentos migrados no aparecen, cartera del vendedor, mis clientes, clientes asignados, vendedor vinculado, usuario del sistema, el vendedor no ve nada, asesor solo ve sus clientes, nivel de usuario, administrador ve todo, el asesor ve las ventas de todos, imprimir el reporte, logo en el pdf, el pdf sale angosto, el pdf no ocupa la hoja, nombre del producto cortado, filtros aplicados en el pdf, encabezado del pdf, totales repetidos en el pdf, pdf horizontal, numero de pagina, boton buscar, no se actualiza, no cambia al elegir, hay que pulsar buscar, boton amarillo, filtros sin aplicar, unidades vendidas, unidades por mes, cantidades por mes, cuantas unidades vendi, ventas por producto y mes, producto por mes, rotacion mensual, tabla por meses, una columna por mes, marca, categoria, filtrar por marca, filtrar por categoria, ventas de una marca, ventas de una categoria, linea de productos, participacion por producto, porcentaje de ventas, porcentaje de unidades, % venta, % unidades, unidad de medida, total venta sin iva, producto mas vendido, cajero, por cajero, por usuario, ventas por usuario, ventas de un cajero, quien facturo, recibos de venta, recibos no aparecen, no salen los recibos, recibos en borrador, todos los documentos, facturas y recibos juntos, facturas recibos y notas de credito, ventas totales, grafico, ocultar grafico, acordeon, vendedores que puede ver, solo algunos vendedores, ocultar vendedores, coordinador de zona, ver las ventas de ciertos vendedores, donde esta el resumen diario
+version: 1.17
 orden: 10
 estado: activo
 ---
@@ -324,85 +324,11 @@ Para usuarios sin vendedor, una advertencia sobre documentos antiguos: los que
 se **migraron** desde el sistema anterior quedaron a nombre del usuario que
 corrió la migración, así que solo él (o alguien con acceso total) los verá.
 
-## Resumen diario (tipo cierre de caja)
+## Resumen diario: ahora es un módulo propio
 
-El botón **Resumen diario** (junto a PDF y Excel, sobre la tabla) arma, con los
-filtros del formulario, un resumen **día por día** con el mismo formato que la
-tirilla del Reporte Restaurante y el cierre de caja. Sirve para cuadrar la caja
-de un día o de un cajero (elija el **Cajero** en los filtros).
-
-Cómo se usa:
-
-1. Elija **Fecha desde** y **Fecha hasta** (hasta 31 días) y, si quiere, el
-   cajero, el vendedor u otros filtros.
-2. Pulse **Resumen diario**. Se abre una ventana con un bloque por cada día con
-   ventas y, si hay más de un día, el **Total del período** al final.
-3. Desde la barra de arriba de esa ventana: **Imprimir tirilla** (papel térmico
-   de 58 u 80 mm, el ancho configurado en *Configuración Restaurante*), **PDF** o
-   **Enviar por correo** (sale el correo de la empresa; se puede cambiar o
-   agregar otros separados por comas, y va con el PDF adjunto).
-
-El **PDF** lleva el mismo encabezado que el del reporte (logo del establecimiento,
-nombre de la empresa, RUC y fecha de generación) y la caja *Filtros aplicados*.
-
-La **ventana del resumen, el PDF y el correo** traen, en cada día, primero el **detalle de los
-documentos**: la lista de **facturas** y la
-de **recibos** (y la de notas de crédito, si el tipo de documento las incluye) con
-número, cliente, total y **saldo pendiente** (en rojo si el cliente aún debe), cada
-una con su total; luego el **Detalle de pagos** (ver abajo); y después el resumen
-del día. En la **ventana** y el **correo** ese
-resumen son las tres secciones de abajo. En el **PDF**, en cambio, el resumen del día
-es una sola tabla a todo el ancho, **Resumen de cobros**: una fila por forma de
-cobro (efectivo, tarjeta, transferencia, etc.) con cuántas **facturas** y cuántos
-**recibos** se cobraron con ella y el valor cobrado, y al final la fila **Total
-cobrado**. El PDF no lleva las secciones *Documentos* ni *Detalle de impuestos*. Al
-pie, el **PDF** trae dos firmas: **Realizado por** (con el nombre del
-usuario que generó el resumen) y **Aprobado por** (en blanco, para firmar a mano).
-
-### Detalle de pagos del resumen diario
-
-Antes del resumen de cobros, cada día lista los **pagos** que se registraron a sus
-facturas y recibos, uno por **Ingreso** (y por forma de pago, si el Ingreso usó
-varias):
-
-- **Pagado a**: el *Recibido de* del Ingreso o, si está vacío, su cliente.
-- **N.º ingreso**: el número del Ingreso.
-- **Detalle**: las facturas y recibos de ese día que el Ingreso cobró.
-- **Forma de pago** y **Valor**.
-
-La fila **Total pagos** es igual al **Total cobrado** del resumen de cobros. Si un
-mismo Ingreso cobró también documentos de otros días, aquí solo cuenta lo que se
-aplicó a los documentos de este día. La tirilla no lleva este detalle.
-
-Cada día trae tres secciones (ventana y correo):
-
-- **Documentos**: facturas, recibos y notas de crédito (estas restan), cuántos
-  anulados hubo (no suman), el **Total neto** y el total vendido sin impuestos.
-- **Detalle de impuestos**: subtotal por tarifa, subtotal sin impuestos, IVA,
-  servicio y el **Total con impuestos** (igual al total neto).
-- **Cobro por forma de pago**: cuánto de las facturas y recibos de ese día se
-  cobró en efectivo, tarjeta, transferencia, etc.; además las **retenciones**,
-  las **notas de crédito aplicadas** y lo **pendiente de cobro (crédito)**. La
-  suma da el total de facturas y recibos del día.
-
-A tener en cuenta:
-
-- El resumen respeta **todos los filtros**, incluido el **Tipo de documento**: con
-  *Facturas* resume solo facturas, con *Recibos* solo recibos, con *Facturas − NC*
-  facturas menos notas de crédito, y con *Todos* las tres (facturas y recibos suman,
-  notas de crédito restan). Solo ignora *Agrupar por*. También respeta el alcance
-  del usuario (quien solo ve lo suyo, solo resume lo suyo).
-- La sección *Cobro por forma de pago* explica las facturas y recibos del resumen;
-  con *Notas de crédito* sola queda vacía.
-- La forma de pago sale del **Ingreso** con que se cobró cada documento, no del
-  código SRI de la factura. Si un cobro se hizo con varias formas, se reparte
-  entre ellas. Un cobro registrado sin forma de pago aparece como *Sin forma de
-  pago registrada*.
-- Cuenta lo cobrado **hasta hoy**: si una factura a crédito del lunes se cobró
-  el miércoles, al sacar el resumen del lunes ya aparece cobrada (con la forma
-  de ese cobro). Si se cobró de más, sale aparte como *Cobrado de más*.
-- Solo aparecen los días con movimiento. No es un arqueo: no pide el efectivo
-  contado ni calcula diferencias (eso es el cierre de la *Caja POS*).
+El botón **Resumen diario** ya no está en este reporte. El resumen del día (ventas,
+compras, ingresos y egresos, con su PDF y Excel) se saca desde el módulo
+**Resumen Diario** (ver el artículo *Resumen diario*).
 
 ## Exportar
 
@@ -477,11 +403,6 @@ El PDF es la misma pantalla en hoja, pensado para imprimir o enviar por correo:
   contaba los recibos *emitidos*, y los recibos creados en el sistema quedan en
   *borrador*, así que no aparecían. Desde la 1.12 cuentan todos los recibos no
   anulados ni facturados.
-- **El resumen diario no abre**: necesita Fecha desde y Fecha hasta, y un período
-  de hasta 31 días.
-- **En el resumen diario una factura aparece como pendiente**: no tiene un
-  Ingreso registrado (o se cobró solo una parte). Regístrelo en *Ingresos* o desde
-  la factura y vuelva a sacar el resumen.
 - **Cambié un filtro y la tabla no cambia**: los filtros no consultan solos;
   pulse **Buscar** (el botón queda en ámbar mientras haya cambios sin aplicar).
 - **La columna Retenciones del detallado no cuadra con la retención**: desde la
@@ -492,6 +413,9 @@ El PDF es la misma pantalla en hoja, pensado para imprimir o enviar por correo:
 
 ## Historial de cambios
 
+- **1.17** — Se quita el botón **Resumen diario** (ventana, tirilla, PDF y correo). El resumen
+  del día pasa a su propio módulo, **Resumen Diario**, que junta ventas, compras, ingresos y
+  egresos de un día en pantalla, PDF y Excel.
 - **1.16** — El **resumen diario** (ventana, PDF y correo) agrega en cada día el
   **Detalle de pagos**, antes del resumen de cobros: pagado a, número de ingreso,
   documentos que cobró, forma de pago y valor, con su total (igual al total cobrado).

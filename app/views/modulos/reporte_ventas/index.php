@@ -339,10 +339,6 @@
                             <i class="bi bi-file-earmark-spreadsheet"></i> Excel
                         </button>
                     </div>
-                    <button type="button" class="btn btn-sm btn-outline-dark ms-1" onclick="window.RV_abrirResumenDiario()"
-                            title="Resumen por día (documentos, impuestos y formas de pago) con los filtros actuales: tirilla, PDF y correo">
-                        <i class="bi bi-receipt-cutoff"></i> Resumen diario
-                    </button>
                     <div class="btn-group btn-group-sm ms-1" role="group" aria-label="Vista de tabla">
                         <button type="button" id="rv-btn-detalle" class="btn btn-primary" onclick="window.RV_setVistaAgrupacion('NINGUNO')" title="Ver todas las ventas en lista">
                             <i class="bi bi-list-ul"></i> Detallado
@@ -374,63 +370,11 @@
     </div>
 </div>
 
-<!-- ── Resumen diario (tipo cierre de caja) ── -->
-<div class="modal fade" id="rvModalResumen" tabindex="-1">
-  <div class="modal-dialog modal-xl modal-dialog-scrollable">
-    <div class="modal-content">
-      <div class="modal-header py-2">
-        <h6 class="modal-title fw-bold"><i class="bi bi-receipt-cutoff me-1"></i>Resumen diario de ventas</h6>
-        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-      </div>
-      <div class="modal-body pt-2">
-        <!-- Barra de acciones superior (§9) -->
-        <div class="d-flex gap-1 align-items-center flex-wrap border-bottom pb-2 mb-2">
-          <button type="button" class="btn btn-sm btn-outline-dark" id="rvResBtnTirilla" title="Imprimir tirilla" disabled><i class="bi bi-printer"></i></button>
-          <button type="button" class="btn btn-sm btn-outline-danger" id="rvResBtnPdf" title="PDF" disabled><i class="bi bi-file-earmark-pdf"></i></button>
-          <div class="vr mx-1"></div>
-          <button type="button" class="btn btn-sm btn-outline-info" id="rvResBtnCorreo" title="Enviar por correo" disabled><i class="bi bi-envelope"></i></button>
-          <span class="ms-auto small text-muted">
-            Según el Tipo de documento elegido: facturas y recibos suman, notas de crédito restan. Un día por bloque (hasta <?= (int) ($maxDiasResumen ?? 31) ?> días).
-          </span>
-        </div>
-        <div id="rvResContenido"></div>
-      </div>
-    </div>
-  </div>
-</div>
-
-<!-- Enviar el resumen diario por correo -->
-<div class="modal fade" id="rvModalResumenCorreo" tabindex="-1">
-  <div class="modal-dialog modal-dialog-centered">
-    <div class="modal-content">
-      <div class="modal-header py-2">
-        <h6 class="modal-title"><i class="bi bi-envelope me-1"></i>Enviar resumen por correo</h6>
-        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-      </div>
-      <div class="modal-body">
-        <label class="form-label small fw-bold mb-1 d-block" for="rv-res-correos">Destinatarios</label>
-        <input type="text" class="form-control form-control-sm" id="rv-res-correos"
-               placeholder="correo@dominio.com, otro@dominio.com"
-               value="<?= htmlspecialchars($correoEmpresa ?? '') ?>">
-        <?php if (empty($correoEmpresa)): ?>
-          <div class="form-text">La empresa no tiene un correo configurado (Empresa → Datos generales). Escriba el destinatario.</div>
-        <?php endif; ?>
-        <div class="form-text">Separe varios correos con comas. Se envía el resumen en el cuerpo y el PDF adjunto.</div>
-      </div>
-      <div class="modal-footer py-2">
-        <button type="button" class="btn btn-outline-secondary btn-sm" data-bs-dismiss="modal">Cancelar</button>
-        <button type="button" class="btn btn-info btn-sm text-white" id="rvResBtnEnviarCorreo"><i class="bi bi-send me-1"></i>Enviar</button>
-      </div>
-    </div>
-  </div>
-</div>
-
 <?php // Panel lateral con el detalle del documento (clic sobre una fila del detallado)
 require_once MVC_APP . '/views/partials/offcanvas_doc_preview.php'; ?>
 
 <script>
     const RUTA_MODULO = "<?php echo $rutaModulo; ?>";
-    const RV_CORREO_EMPRESA = <?= json_encode($correoEmpresa ?? '', JSON_UNESCAPED_UNICODE) ?>;
 </script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 <script src="<?php echo BASE_URL; ?>/js/modulos/reporte_ventas.js?v=<?= asset_ver('/js/modulos/reporte_ventas.js') ?>"></script>

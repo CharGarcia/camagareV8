@@ -121,13 +121,36 @@ final class ReportePdf
     }
 
     /**
-     * Ruta en disco del logo del establecimiento principal ('' si no hay). Solo se devuelve
-     * si es una imagen legible: ante una imagen que no puede medir, Html2Pdf aborta el PDF
-     * entero, y un logo dañado no debe impedir sacar el reporte.
+     * Ruta en disco del logo de la empresa ('' si no hay): el del primer establecimiento que
+     * tenga uno (en el orden de siempre, el principal primero) y, si ningún establecimiento
+     * tiene, el del primer punto de emisión con logo (hay empresas que solo lo cargaron ahí).
+     * Solo se devuelve si es una imagen legible: ante una imagen que no puede medir, Html2Pdf
+     * aborta el PDF entero, y un logo dañado no debe impedir sacar el reporte.
      */
     public static function logo(int $idEmpresa): string
     {
-        $ruta = (string) ((new \App\models\Empresa())->getEstablecimientos($idEmpresa)[0]['logo_ruta'] ?? '');
+        $modelo = new \App\models\Empresa();
+        $establecimientos = $modelo->getEstablecimientos($idEmpresa);
+        foreach ($establecimientos as $est) {
+            $ruta = self::rutaLogo((string) ($est['logo_ruta'] ?? ''));
+            if ($ruta !== '') {
+                return $ruta;
+            }
+        }
+        foreach ($establecimientos as $est) {
+            foreach ($modelo->getPuntosEmision((int) $est['id']) as $pto) {
+                $ruta = self::rutaLogo((string) ($pto['logo_ruta'] ?? ''));
+                if ($ruta !== '') {
+                    return $ruta;
+                }
+            }
+        }
+        return '';
+    }
+
+    /** URL pública guardada en BD → ruta en disco de una imagen legible ('' si no lo es). */
+    private static function rutaLogo(string $ruta): string
+    {
         if ($ruta === '') {
             return '';
         }
