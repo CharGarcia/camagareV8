@@ -6,7 +6,7 @@ ruta_modulo: config/empresas-sistema
 tipo: modulo
 visibilidad: superadmin
 etiquetas: empresas del sistema, empresas sin suscripcion, sin suscripcion, no pagan, empresas que no pagan, regalia, sin cobro, cortesia, plan sin costo, exonerar suscripcion, empresa gratis, empresa administradora, administradora de suscripciones, empresa que controla las suscripciones, controladora, suscripcion por defecto, crear empresa, alta de empresa, establecimientos, sucursales, matriz, usuarios asignados, documentos legales, suscripcion, empresas del grupo, eliminar establecimiento, establecimiento activo, un solo establecimiento activo, buscar empresa, filtrar empresas, filtros de empresas, exportar empresas, pdf de empresas, excel de empresas, ordenar empresas, columnas del listado, telefono de la empresa, correo de la empresa
-version: 1.14
+version: 1.15
 orden: 1
 estado: activo
 ---
@@ -181,6 +181,8 @@ las empresas que ese usuario tiene asignadas.
 
 ## Historial de cambios
 
+- **1.15** — Los mensajes tras guardar, eliminar o asignar usuarios ya no aparecen como franja
+  sobre la lista: se muestran en una ventana SweetAlert (los de éxito se cierran solos).
 - **1.14** — Botón **Sin suscripción** junto a Excel (contador de empresas activas sin
   suscripción del sistema; al hacer clic filtra el listado) y filtro *Suscripción del sistema*
   en el modal de filtros.

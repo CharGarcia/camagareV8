@@ -61,10 +61,19 @@ function estadoPagoBadge($estado) {
 </div>
 
 <?php if ($msg): ?>
-<div class="alert alert-<?= htmlspecialchars($msg[0]) ?> alert-dismissible fade show" role="alert">
-    <?= htmlspecialchars($msg[1]) ?>
-    <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
-</div>
+<?php // Mensaje del servidor tras guardar/eliminar/asignar: ventana SweetAlert, no franja sobre la lista. ?>
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+    var tipo  = <?= json_encode((string) ($msg[0] ?? 'info'), JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT) ?>;
+    var texto = <?= json_encode((string) ($msg[1] ?? ''), JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT) ?>;
+    var icono  = { success: 'success', danger: 'error', warning: 'warning', info: 'info' }[tipo] || 'info';
+    var titulo = { success: 'Listo', danger: 'Error', warning: 'Atención', info: 'Aviso' }[tipo] || 'Aviso';
+    if (!window.Swal) { alert(texto); return; }
+    Swal.fire(icono === 'success'
+        ? { icon: icono, title: titulo, text: texto, timer: 2500, timerProgressBar: true, showConfirmButton: false }
+        : { icon: icono, title: titulo, text: texto });
+});
+</script>
 <?php endif; ?>
 
 <div class="card cmg-table-card w-100 border-0 shadow-sm rounded-3">
@@ -1486,9 +1495,10 @@ document.addEventListener('click', function (e) {
         if (el) el.classList.add('d-none');
     }
 
-    // Guarda un formulario por AJAX. Éxito: SweetAlert que se cierra solo y recarga el
-    // listado. Error: SweetAlert con el mensaje del servidor (antes el catch lo pisaba con
-    // "Error de conexión", porque el rechazo del propio else también caía en él).
+    // Guarda un formulario por AJAX. Éxito: recarga el listado y el aviso lo da el
+    // SweetAlert del mensaje de sesión (crear y editar lo dejan en empresas_msg); así no
+    // salen dos ventanas seguidas. Error: SweetAlert con el mensaje del servidor (antes el
+    // catch lo pisaba con "Error de conexión", porque el rechazo del else también caía en él).
     function enviarFormAjax(form, msgContainerId, url) {
         var yaAvisado = false;
         return fetch(url, {
@@ -1499,15 +1509,7 @@ document.addEventListener('click', function (e) {
         }).then(function(r) { return r.json(); })
         .then(function(res) {
             if (res.ok) {
-                var irListado = function() { window.location.href = base + '/config/empresas-sistema'; };
-                if (window.Swal) {
-                    Swal.fire({
-                        icon: 'success', title: 'Guardado', text: res.msg || 'Guardado correctamente.',
-                        timer: 1500, showConfirmButton: false
-                    }).then(irListado);
-                } else {
-                    setTimeout(irListado, 1500);
-                }
+                window.location.href = base + '/config/empresas-sistema';
             } else {
                 yaAvisado = true;
                 EMPSIS_alerta('error', 'No se pudo guardar', res.error || 'Error desconocido.');
