@@ -6,7 +6,7 @@ ruta_modulo: modulos/reporte_resumen_diario
 tipo: modulo
 visibilidad: todos
 etiquetas: resumen diario, cierre del dia, cierre de caja, cuadre de caja, cuadre diario, libro de caja, movimiento del dia, que paso hoy, ventas del dia, compras del dia, ingresos del dia, egresos del dia, cobros del dia, cobros de dias anteriores, cobros atrasados, pagos del dia, facturas del dia, saldo de la factura, saldo pendiente, recibos, notas de credito, notas de debito, retenciones recibidas, retenciones emitidas, liquidaciones de compra, efectivo, tarjeta, transferencia, cheque, forma de pago, saldo inicial, saldo final, saldo de caja, saldo de apertura, apertura de caja, traslado, deposito del efectivo, depositar en el banco, retiro del banco, pasar de efectivo a banco, cuanto entro, cuanto salio, cuanto hay en caja, numero de ingreso, numero de egreso, recibido de, pagado a, firmas, realizado por, aprobado por, pdf, excel, imprimir
-version: 1.2
+version: 1.3
 orden: 12
 estado: activo
 ---
@@ -71,8 +71,8 @@ lo cobrado de días anteriores), qué se pagó y con cuánto quedó cada forma d
 
 Cada sección trae su total. **Solo se muestra lo que existe**: una sección sin
 documentos ese día no aparece, y tampoco un bloque entero si no tiene nada. En el
-resumen del día pasa lo mismo con cada línea. Si el día no tiene ningún movimiento
-ni saldo, sale el aviso *No hay documentos ni movimientos en este día*.
+resumen del día pasa lo mismo con cada línea. Si el día no tiene ningún movimiento,
+sale el aviso *No hay documentos ni movimientos en este día*.
 
 **Resumen del día**
 
@@ -135,7 +135,9 @@ salen 50, hoy queda en 150.
 
 - Sin saldo de apertura, el saldo se acumula desde el primer Ingreso o Egreso
   registrado de esa forma de pago.
-- Salen las formas que tienen saldo o movimiento ese día.
+- Solo salen las formas de pago **usadas ese día** (con algún ingreso, egreso o
+  traslado). Una forma con saldo pero sin movimiento ese día no aparece, y su saldo
+  tampoco entra en el indicador **Saldo final**, que suma solo las formas mostradas.
 - Los Ingresos sin forma de pago salen como *Sin forma de pago registrada* y no
   tienen saldo.
 - El saldo solo lo ve quien tiene **acceso total** en el módulo: con registros
@@ -227,6 +229,7 @@ módulo: no generan asientos ni movimientos en Control Bancario.
 
 ## Historial de cambios
 
+- **1.3** — *Caja por forma de pago* muestra solo las formas de pago usadas ese día.
 - **1.2** — Saldo por forma de pago: saldo inicial (saldo de apertura + movimientos
   anteriores), ingresos, egresos, traslados y saldo final. Nuevos **traslados entre
   formas de pago** y **saldos de apertura**. Los cobros se separan en *Cobros de

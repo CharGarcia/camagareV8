@@ -318,9 +318,10 @@ class ReporteResumenDiarioService
 
     /**
      * Caja por forma de pago, con la misma forma que una sección (columnas, filas y
-     * totales). Con saldo: saldo inicial + ingresos − egresos ± traslados = saldo final, y
-     * entran también las formas que solo traen saldo de días anteriores. Sin saldo
-     * (registros propios): ingresos, egresos, traslados y neto. null si no hay nada.
+     * totales). Solo entran las formas de pago usadas ese día (con ingreso, egreso o
+     * traslado). Con saldo: saldo inicial + ingresos − egresos ± traslados = saldo final.
+     * Sin saldo (registros propios): ingresos, egresos, traslados y neto. null si ese día
+     * no se usó ninguna forma.
      */
     private static function cajaPorForma(array $ingresos, array $egresos, array $traslados, array $saldos, bool $conSaldo): ?array
     {
@@ -328,10 +329,6 @@ class ReporteResumenDiarioService
         $fila = static function (int $id, string $nombre) use (&$formas): void {
             $formas[$id] ??= ['forma' => $nombre, 'saldo_inicial' => 0.0, 'ingresos' => 0.0, 'egresos' => 0.0, 'traslados' => 0.0];
         };
-        foreach ($saldos as $id => $s) {
-            $fila($id, $s['nombre']);
-            $formas[$id]['saldo_inicial'] = $s['saldo'];
-        }
         foreach ([['ingresos', $ingresos], ['egresos', $egresos]] as [$lado, $filas]) {
             foreach ($filas as $f) {
                 $fila($f['id_forma'], $f['forma_nombre']);
@@ -347,7 +344,9 @@ class ReporteResumenDiarioService
         if (!$formas) {
             return null;
         }
-        foreach ($formas as &$f) {
+        // Solo las formas usadas ese día; a cada una se le suma el saldo que traía.
+        foreach ($formas as $id => &$f) {
+            $f['saldo_inicial'] = $saldos[$id]['saldo'] ?? 0.0;
             foreach (['saldo_inicial', 'ingresos', 'egresos', 'traslados'] as $k) {
                 $f[$k] = round($f[$k], 2);
             }
