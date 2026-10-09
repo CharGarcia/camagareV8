@@ -666,8 +666,8 @@ class Empresa extends BaseModel
      *   - modo: suscripción asignada (id_suscripcion) → reventa (id_cliente_facturado) →
      *     cliente con el RUC propio; solo suscripciones no eliminadas ni canceladas.
      * Valores: 'regalia' (regalía vigente), 'vendedora' (su RUC es el de una controladora:
-     * vende el sistema), 'con', 'sin'. Alimenta el filtro `suscripcion:` y el botón
-     * «Sin suscripción» de Empresas del sistema.
+     * vende el sistema), 'con', 'sin'. Alimenta el filtro `suscripcion:` (Suscripción del
+     * sistema) de Empresas del sistema.
      */
     public function exprSituacionSuscripcion(): string
     {
@@ -704,21 +704,6 @@ class Empresa extends BaseModel
             ) THEN 'con'
             ELSE 'sin'
         END)";
-    }
-
-    /** Empresas ACTIVAS sin suscripción del sistema (contador del botón del listado). */
-    public function contarSinSuscripcion(): int
-    {
-        try {
-            $r = $this->query(
-                "SELECT COUNT(*) AS n FROM empresas e
-                  WHERE e.eliminado = false AND e.estado = '1'
-                    AND " . $this->exprSituacionSuscripcion() . " = 'sin'"
-            );
-            return (int) ($r[0]['n'] ?? 0);
-        } catch (\Throwable $e) {
-            return 0;
-        }
     }
 
     /** Cache por request: ¿ya se aplicó la migración de regalía? */

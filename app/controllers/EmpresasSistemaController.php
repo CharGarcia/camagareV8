@@ -82,8 +82,6 @@ class EmpresasSistemaController extends Controller
             'opcionesFiltro' => $this->model->getOpcionesFiltroListado($idActual, $nivel),
             'empresasLista' => $empresasLista,
             'idControladoraSugerida' => $idControladoraSugerida,
-            // Botón «Sin suscripción» (junto a Excel): empresas activas sin suscripción del sistema.
-            'totalSinSuscripcion' => $nivel >= 3 ? $this->model->contarSinSuscripcion() : 0,
         ]);
     }
 

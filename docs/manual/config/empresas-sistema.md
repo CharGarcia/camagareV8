@@ -6,7 +6,7 @@ ruta_modulo: config/empresas-sistema
 tipo: modulo
 visibilidad: superadmin
 etiquetas: empresas del sistema, empresas sin suscripcion, sin suscripcion, no pagan, empresas que no pagan, regalia, sin cobro, cortesia, plan sin costo, exonerar suscripcion, empresa gratis, empresa administradora, administradora de suscripciones, empresa que controla las suscripciones, controladora, suscripcion por defecto, crear empresa, alta de empresa, establecimientos, sucursales, matriz, usuarios asignados, documentos legales, suscripcion, empresas del grupo, eliminar establecimiento, establecimiento activo, un solo establecimiento activo, buscar empresa, filtrar empresas, filtros de empresas, exportar empresas, pdf de empresas, excel de empresas, ordenar empresas, columnas del listado, telefono de la empresa, correo de la empresa
-version: 1.17
+version: 1.19
 orden: 1
 estado: activo
 ---
@@ -116,14 +116,13 @@ otra empresa, la **controladora**: la que vende y factura esa suscripción.
 Con esto se resuelve la suscripción que muestra el módulo **Empresa** y los
 avisos de vencimiento (ver el manual del módulo Empresa).
 
-### Botón «Sin suscripción»: empresas que no pagan
+### Ver las empresas que no tienen suscripción
 
-Junto al botón **Excel** del listado (solo superadministrador) está el botón
-**Sin suscripción**, con el número de **empresas activas** que no tienen una
-suscripción del sistema vigente. Al hacer clic, el listado se filtra para
-mostrar solo esas empresas (chips *Estado: Activa* y *Suscripción del sistema:
-Sin suscripción*); otro clic quita el filtro. Desde ahí se pueden exportar a
-PDF o Excel.
+En el modal de **Filtros** → **Cobro y vigencia** → **Suscripción del sistema**,
+elija **Sin suscripción** (y, si quiere solo las activas, **Estado: Activa**).
+El listado muestra las empresas que no tienen una suscripción del sistema
+vigente; desde ahí se pueden exportar a PDF o Excel. Las otras opciones del
+filtro son *Con suscripción*, *Regalía* y *Vende el sistema*.
 
 Se considera que una empresa **tiene** suscripción con la misma regla que usa
 su ficha de Empresa: la suscripción asignada a mano, la del cliente que paga
@@ -131,10 +130,6 @@ su ficha de Empresa: la suscripción asignada a mano, la del cliente que paga
 la empresa que controla las suscripciones, y que no esté cancelada. No cuentan
 como «sin suscripción» las empresas por **regalía** vigente ni las que **venden**
 el sistema.
-
-El mismo criterio está en el modal de filtros (**Cobro y vigencia → Suscripción
-del sistema**), con las opciones *Sin suscripción*, *Con suscripción*,
-*Regalía* y *Vende el sistema*.
 
 ### Empresas por regalía (sin cobro de suscripción)
 
@@ -182,6 +177,10 @@ las empresas que ese usuario tiene asignadas.
 
 ## Historial de cambios
 
+- **1.19** — Los avisos de éxito (guardar, eliminar, enviar) son un mensaje rápido en la
+  esquina superior derecha que se va solo; los errores y advertencias siguen en ventana.
+- **1.18** — Se quita el botón **Sin suscripción** junto a Excel: las empresas sin
+  suscripción se ven con el filtro *Suscripción del sistema → Sin suscripción*.
 - **1.17** — Nuevo filtro **Controladora asignada** (Cobro y vigencia): *Sin controladora*,
   *Asignada* o *Hereda de otro establecimiento* (el campo está vacío pero otra empresa con el
   mismo RUC la tiene).

@@ -2150,13 +2150,14 @@ $warnIcon = '<i class="bi bi-exclamation-circle-fill text-warning ms-1" title="C
     // ── Helpers de notificación (SweetAlert2) ─────────────────────────────────
     // Unifican todos los mensajes del módulo Empresa. Requieren Swal (cargado en
     // partials/scripts.php). Si por algún motivo Swal no está, hacen fallback.
-    // Éxito: ventana centrada que se cierra sola (antes era un toast en la esquina);
-    // mismo formato que Empresas del sistema.
+    // Éxito: mensaje rápido (toast) en la esquina superior derecha, se va solo; mismo
+    // formato que Empresas del sistema. Devuelve la promesa: las acciones que recargan
+    // la página lo hacen al cerrarse el aviso.
     function swalToastOk(mensaje) {
         if (typeof Swal === 'undefined') { return; }
         return Swal.fire({
-            icon: 'success', title: 'Listo',
-            text: mensaje || 'Cambios guardados correctamente',
+            toast: true, position: 'top-end', icon: 'success',
+            title: mensaje || 'Cambios guardados correctamente',
             showConfirmButton: false, timer: 2500, timerProgressBar: true
         });
     }

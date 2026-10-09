@@ -70,7 +70,7 @@ document.addEventListener('DOMContentLoaded', function () {
     var titulo = { success: 'Listo', danger: 'Error', warning: 'Atención', info: 'Aviso' }[tipo] || 'Aviso';
     if (!window.Swal) { alert(texto); return; }
     Swal.fire(icono === 'success'
-        ? { icon: icono, title: titulo, text: texto, timer: 2500, timerProgressBar: true, showConfirmButton: false }
+        ? { toast: true, position: 'top-end', icon: icono, title: titulo, text: texto, timer: 3000, timerProgressBar: true, showConfirmButton: false }
         : { icon: icono, title: titulo, text: texto });
 });
 </script>
@@ -166,8 +166,7 @@ document.addEventListener('DOMContentLoaded', function () {
             <script>
                 document.addEventListener('DOMContentLoaded', () => {
                     if (!window.FiltrosModal) return;
-                    // La instancia queda en window.EMPSIS_fm: la usa el botón «Sin suscripción».
-                    window.EMPSIS_fm = new FiltrosModal({
+                    new FiltrosModal({
                         containerId: 'fmBuscadorEMPSIS',
                         hiddenInputId: 'input-buscar-empresas',
                         placeholder: 'Buscar en todas las columnas...',
@@ -176,13 +175,8 @@ document.addEventListener('DOMContentLoaded', function () {
                         extraId: 'fmExtraEMPSIS',   // columnas + PDF + Excel, pegados al final del grupo
                         fields: <?= json_encode($filtrosEmpresas, JSON_UNESCAPED_UNICODE | JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS) ?>,
                         loadingTarget: '#tbodyEmpresas',   // se atenúa mientras se busca
-                        onApply: () => {
-                            if (window.EMPSIS_syncBtnSinSusc) window.EMPSIS_syncBtnSinSusc();
-                            return window.fetchSearch && window.fetchSearch(1);
-                        },
-                    });
-                    window.EMPSIS_fm.init();
-                    if (window.EMPSIS_syncBtnSinSusc) window.EMPSIS_syncBtnSinSusc();
+                        onApply: () => window.fetchSearch && window.fetchSearch(1),
+                    }).init();
                 });
             </script>
 
@@ -217,15 +211,6 @@ document.addEventListener('DOMContentLoaded', function () {
                     class="btn btn-outline-success" title="Descargar Excel">
                     <i class="bi bi-file-earmark-spreadsheet"></i><span class="d-none d-md-inline"> Excel</span>
                 </a>
-                <?php if (($nivel ?? 1) >= 3): ?>
-                    <?php $nSinSusc = (int) ($totalSinSuscripcion ?? 0); ?>
-                    <?php // Filtra las empresas ACTIVAS sin suscripción del sistema (suscripcion:sin estado:1); otro clic lo quita. ?>
-                    <button type="button" id="btnSinSuscripcion" class="btn <?= $nSinSusc > 0 ? 'btn-outline-warning' : 'btn-outline-secondary' ?>"
-                        title="<?= $nSinSusc ?> empresa(s) activa(s) sin suscripción del sistema — clic para verlas">
-                        <i class="bi bi-shield-exclamation"></i><span class="d-none d-md-inline"> Sin suscripción</span>
-                        <span class="badge rounded-pill <?= $nSinSusc > 0 ? 'bg-danger' : 'bg-secondary' ?> ms-1" style="font-size:.65rem; padding:.15em .45em; line-height:1.2; vertical-align:middle;"><?= $nSinSusc ?></span>
-                    </button>
-                <?php endif; ?>
             </div>
         </div>
 
@@ -769,6 +754,15 @@ document.addEventListener('DOMContentLoaded', function () {
 --------------------------------------------------------- */
 window.EMPSIS_alerta = function (icono, titulo, texto) {
     if (window.Swal) {
+        // Éxito: mensaje rápido (toast) en la esquina superior derecha, se va solo.
+        // Errores y advertencias: ventana, para que se lean.
+        if (icono === 'success') {
+            return Swal.fire({
+                toast: true, position: 'top-end', icon: 'success',
+                title: titulo, text: texto || '',
+                showConfirmButton: false, timer: 3000, timerProgressBar: true
+            });
+        }
         return Swal.fire({ icon: icono, title: titulo, text: texto || '' });
     }
     alert(texto ? titulo + '\n' + texto : titulo);
@@ -789,29 +783,6 @@ window.EMPSIS_confirmar = function (titulo, texto, boton, peligro) {
     }
     return Promise.resolve(confirm(texto ? titulo + '\n' + texto : titulo));
 };
-
-/* ---------------------------------------------------------
-   Botón «Sin suscripción» (junto a Excel, solo nivel 3): enciende/apaga los filtros
-   suscripcion:sin + estado:1 (activas) en el buscador estándar. El botón queda marcado
-   mientras el filtro esté puesto, también si se puso desde el modal de filtros.
---------------------------------------------------------- */
-window.EMPSIS_syncBtnSinSusc = function () {
-    var btn = document.getElementById('btnSinSuscripcion');
-    if (!btn || !window.EMPSIS_fm) return;
-    btn.classList.toggle('active', window.EMPSIS_fm.tieneFiltro('suscripcion', 'sin'));
-};
-document.addEventListener('click', function (e) {
-    var btn = e.target.closest ? e.target.closest('#btnSinSuscripcion') : null;
-    if (!btn || !window.EMPSIS_fm) return;
-    var fm = window.EMPSIS_fm;
-    if (fm.tieneFiltro('suscripcion', 'sin')) {
-        fm.quitarFiltro('estado', '1', false);
-        fm.quitarFiltro('suscripcion', 'sin', true);
-    } else {
-        fm.aplicarFiltro({ key: 'estado', op: '=', value: '1' }, false, false);
-        fm.aplicarFiltro({ key: 'suscripcion', op: '=', value: 'sin' }, false, true);
-    }
-});
 
 (function() {
     var base = '<?= $base ?>';
@@ -1532,10 +1503,7 @@ document.addEventListener('click', function (e) {
     // usuario administrador) queda abierta hasta que se lea.
     function avisoGuardado(res, titulo) {
         var advertencia = res && res.tipo === 'warning';
-        if (!window.Swal) { alert(res && res.msg ? res.msg : titulo); return Promise.resolve(); }
-        return Swal.fire(advertencia
-            ? { icon: 'warning', title: titulo, text: res.msg || '' }
-            : { icon: 'success', title: titulo, text: (res && res.msg) || '', timer: 2500, timerProgressBar: true, showConfirmButton: false });
+        return EMPSIS_alerta(advertencia ? 'warning' : 'success', titulo, (res && res.msg) || '');
     }
 
     function btnCargando(btn, on) {
