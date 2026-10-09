@@ -56,17 +56,20 @@ class EmpresaInicializadorService
     // ─────────────────────────────────────────────────────────────────
 
     /**
-     * Crea el cliente "CONSUMIDOR FINAL" si no existe en la empresa.
-     * Condiciones: tipo_id = '07', identificacion = '9999999999999'
+     * Crea el cliente "CONSUMIDOR FINAL" (tipo 07, '9999999999999') si no existe en la empresa.
+     *
+     * "Existe" = cualquier cliente con esa identificación, aunque esté ELIMINADO o tenga otro
+     * tipo_id (datos migrados): `clientes` tiene UNIQUE (id_empresa, identificacion) sin
+     * considerar `eliminado`, así que insertarlo de nuevo revienta con 23505 — y esto corre
+     * en cada guardado de Empresas del sistema. Si existe eliminado no se restaura: pudo
+     * borrarse a propósito.
      */
     private function crearClienteConsumidorFinal(int $idEmpresa, int $idUsuario): void
     {
         $existe = $this->db->prepare(
             "SELECT 1 FROM clientes
              WHERE id_empresa = :id_empresa
-               AND tipo_id = '07'
                AND identificacion = '9999999999999'
-               AND eliminado = false
              LIMIT 1"
         );
         $existe->execute([':id_empresa' => $idEmpresa]);
