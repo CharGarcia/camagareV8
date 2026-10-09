@@ -166,7 +166,8 @@ class VigenciaSuscripcionService
 
         $repo  = new SuscripcionesRepository();
         $idCtrl = (int) ($resuelto['controladora'] ?? 0);
-        $mejor = null;
+        $mejor   = null;
+        $porSusc = [];
 
         foreach ($info as $s) {
             $estadoSusc = strtolower((string) ($s['estado'] ?? ''));
@@ -209,11 +210,19 @@ class VigenciaSuscripcionService
                 $cand = $this->armar('proximo_cobro', (string) $s['proximo_cobro'], null, null, 0, $periodicidad, $meses, $sinValores);
             }
 
-            if ($cand !== null && ($mejor === null || $cand['dias'] < $mejor['dias'])) {
-                $mejor = $cand;
+            if ($cand !== null) {
+                $porSusc[(int) $s['id']] = $cand;
+                if ($mejor === null || $cand['dias'] < $mejor['dias']) {
+                    $mejor = $cand;
+                }
             }
         }
 
+        // Vencimiento de CADA suscripción: la tarjeta de la ficha pinta una barra por
+        // suscripción y debe usar esta misma regla (no solo el próximo cobro).
+        if ($mejor !== null) {
+            $mejor['por_suscripcion'] = $porSusc;
+        }
         return $mejor;
     }
 

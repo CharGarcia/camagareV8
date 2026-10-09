@@ -6,7 +6,7 @@ ruta_modulo: modulos/empresa
 tipo: modulo
 visibilidad: admin
 etiquetas: empresa, datos de la empresa, ruc, suscripcion, suscripcion vencida, vigencia, vencimiento, pago pendiente, aviso de pago, renovacion, mensualidad, cuota del sistema, establecimiento, punto de emision, logo, logo por punto de emision, logo de la caja, logo por sucursal, otra marca, quitar logo, ambiente, pruebas, produccion, configuracion, correo, email, smtp, envio de correos, cuerpo del correo, asunto, plantilla de correo, remitente, documentos legales, acuerdo de uso de datos, contrato de uso del sistema, aceptacion de documentos, documentos firmados, documentos cargados, archivos de la empresa, secuenciales, numeracion, tipos de documento, codDoc, eliminar secuencial, crear secuenciales, agregar todos los faltantes, facturas de reembolso, punto unico por empresa, punto inactivo, eliminar punto de emision con documentos, puntos duplicados, secuencial inicial, numero inicial, hueco, huecos, rellenar hueco, salto de numeracion, siguiente numero, retomar numeracion, presentacion de los items, agrupar items, agrupar por nombre, agrupar por lote, agrupar por nup, agrupar por serie, juntar lineas repetidas, sumar items iguales, mostrar lote en la factura, mostrar caducidad, mostrar unidad de medida, mostrar nup, descripcion del item, tirilla, ticket, impresion termica, modo de numeracion, numeracion por fecha, secuencial por fecha, reiniciar numeracion, reinicio anual, reinicio mensual, numeracion anual, numeracion mensual, correlativo por año, correlativo por mes, empezar de cero cada año, prefijo del año, numero con el año, volver a empezar la numeracion
-version: 1.35
+version: 1.36
 orden: 5
 estado: activo
 ---
@@ -458,6 +458,10 @@ de taxis.
 
 ## Historial de cambios
 
+- **1.36** — La barra de cada suscripción en la tarjeta Suscripción y Vigencia usa la misma regla
+  que el aviso: con una factura del período impaga se pinta en rojo («Vencida hace N días») o en
+  amarillo durante los días de gracia, y muestra el documento pendiente, la fecha límite y el
+  saldo. Antes se veía verde porque solo contaba los días hasta el próximo cobro.
 - **1.35** — La tarjeta Suscripción y Vigencia ya no le indica al cliente que configure
   *Empresas del sistema* (no tiene acceso): ve un texto neutro que lo remite a soporte. Las
   indicaciones de configuración quedan solo para el superadministrador.

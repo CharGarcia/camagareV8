@@ -337,6 +337,33 @@ $warnIcon = '<i class="bi bi-exclamation-circle-fill text-warning ms-1" title="C
                                                     if ($diasRestantes < 15) $colorBar = 'danger';
                                                     elseif ($diasRestantes < 30) $colorBar = 'warning';
                                                 }
+                                                $textoDias = max(0, $diasRestantes) . ' días';
+                                                $anchoBar  = 100 - $porcentaje;
+                                                $avisoPend = '';
+                                                // Misma regla que el aviso y el modal (VigenciaSuscripcionService):
+                                                // con un documento del período impago la barra NO puede verse vigente,
+                                                // aunque el próximo cobro esté lejos.
+                                                $vs = $vigS['por_suscripcion'][(int) ($s['id'] ?? 0)] ?? null;
+                                                if ($vs) {
+                                                    $dVs = (int) $vs['dias'];
+                                                    if ($vs['estado'] === 'vencida') {
+                                                        $colorBar  = 'danger';
+                                                        $anchoBar  = 100;
+                                                        $textoDias = 'Vencida hace ' . abs($dVs) . (abs($dVs) === 1 ? ' día' : ' días');
+                                                    } elseif ($vs['estado'] === 'vence_hoy') {
+                                                        $colorBar  = 'danger';
+                                                        $textoDias = 'Vence hoy';
+                                                    } elseif ($vs['motivo'] === 'pendiente') {
+                                                        $colorBar  = 'warning';
+                                                        $textoDias = $dVs . ($dVs === 1 ? ' día' : ' días') . ' para pagar';
+                                                    }
+                                                    if ($vs['motivo'] === 'pendiente') {
+                                                        $avisoPend = (!empty($vs['documento']) ? htmlspecialchars($vs['documento']) : 'Período')
+                                                            . ' pendiente de pago desde el ' . date('d-m-Y', strtotime($vs['fecha_periodo']))
+                                                            . ' (fecha límite ' . date('d-m-Y', strtotime($vs['fecha'])) . ')'
+                                                            . ($vs['saldo'] !== null ? ' · Saldo $ ' . number_format((float) $vs['saldo'], 2) : '');
+                                                    }
+                                                }
                                                 ?>
                                                 <?php if (!empty($suscripcion_sin_valores)): ?>
                                                     <!-- Modo reventa: solo estado, periodicidad y vigencia (sin montos ni detalles) -->
@@ -360,11 +387,12 @@ $warnIcon = '<i class="bi bi-exclamation-circle-fill text-warning ms-1" title="C
                                                         <div class="col-md-6 border-start ps-4">
                                                             <div class="d-flex justify-content-between align-items-center mb-1">
                                                                 <div class="text-muted" style="font-size: 0.65rem;">Vigencia: <span class="text-dark fw-bold"><?= $ini ? date('d-m-Y', strtotime($ini)) : '-' ?></span> — próximo cobro <span class="text-dark fw-bold"><?= $prox ? date('d-m-Y', strtotime($prox)) : '-' ?></span></div>
-                                                                <div class="fw-bold text-<?= $colorBar ?>" style="font-size: 0.65rem;"><?= max(0, $diasRestantes) ?> días</div>
+                                                                <div class="fw-bold text-<?= $colorBar ?> text-nowrap" style="font-size: 0.65rem;"><?= $textoDias ?></div>
                                                             </div>
                                                             <div class="progress" style="height: 6px; background: #e2e8f0;">
-                                                                <div class="progress-bar bg-<?= $colorBar ?> progress-bar-striped progress-bar-animated" role="progressbar" style="width: <?= 100 - $porcentaje ?>%"></div>
+                                                                <div class="progress-bar bg-<?= $colorBar ?> progress-bar-striped progress-bar-animated" role="progressbar" style="width: <?= $anchoBar ?>%"></div>
                                                             </div>
+                                                            <?php if ($avisoPend !== ''): ?><div class="text-danger mt-1" style="font-size: 0.6rem;"><i class="bi bi-exclamation-circle me-1"></i><?= $avisoPend ?></div><?php endif; ?>
                                                         </div>
                                                     </div>
                                                 <?php else: ?>
@@ -410,11 +438,12 @@ $warnIcon = '<i class="bi bi-exclamation-circle-fill text-warning ms-1" title="C
                                                     <div class="col-md-5 border-start ps-4">
                                                         <div class="d-flex justify-content-between align-items-center mb-1">
                                                             <div class="text-muted" style="font-size: 0.65rem;">Próximo cobro: <span class="text-dark fw-bold"><?= $prox ? date('d-m-Y', strtotime($prox)) : '-' ?></span></div>
-                                                            <div class="fw-bold text-<?= $colorBar ?>" style="font-size: 0.65rem;"><?= max(0, $diasRestantes) ?> días</div>
+                                                            <div class="fw-bold text-<?= $colorBar ?> text-nowrap" style="font-size: 0.65rem;"><?= $textoDias ?></div>
                                                         </div>
                                                         <div class="progress" style="height: 6px; background: #e2e8f0;">
-                                                            <div class="progress-bar bg-<?= $colorBar ?> progress-bar-striped progress-bar-animated" role="progressbar" style="width: <?= 100 - $porcentaje ?>%"></div>
+                                                            <div class="progress-bar bg-<?= $colorBar ?> progress-bar-striped progress-bar-animated" role="progressbar" style="width: <?= $anchoBar ?>%"></div>
                                                         </div>
+                                                        <?php if ($avisoPend !== ''): ?><div class="text-danger mt-1" style="font-size: 0.6rem;"><i class="bi bi-exclamation-circle me-1"></i><?= $avisoPend ?></div><?php endif; ?>
                                                         <div class="text-muted mt-1" style="font-size: 0.6rem;">Cliente: <?= htmlspecialchars($s['nombre_cliente'] ?? '') ?></div>
                                                     </div>
                                                 </div>
