@@ -6,7 +6,7 @@ ruta_modulo: modulos/empresa
 tipo: modulo
 visibilidad: admin
 etiquetas: empresa, datos de la empresa, ruc, suscripcion, suscripcion vencida, vigencia, vencimiento, pago pendiente, aviso de pago, renovacion, mensualidad, cuota del sistema, establecimiento, punto de emision, logo, logo por punto de emision, logo de la caja, logo por sucursal, otra marca, quitar logo, ambiente, pruebas, produccion, configuracion, correo, email, smtp, envio de correos, cuerpo del correo, asunto, plantilla de correo, remitente, documentos legales, acuerdo de uso de datos, contrato de uso del sistema, aceptacion de documentos, documentos firmados, documentos cargados, archivos de la empresa, secuenciales, numeracion, tipos de documento, codDoc, eliminar secuencial, crear secuenciales, agregar todos los faltantes, facturas de reembolso, punto unico por empresa, punto inactivo, eliminar punto de emision con documentos, puntos duplicados, secuencial inicial, numero inicial, hueco, huecos, rellenar hueco, salto de numeracion, siguiente numero, retomar numeracion, presentacion de los items, agrupar items, agrupar por nombre, agrupar por lote, agrupar por nup, agrupar por serie, juntar lineas repetidas, sumar items iguales, mostrar lote en la factura, mostrar caducidad, mostrar unidad de medida, mostrar nup, descripcion del item, tirilla, ticket, impresion termica, modo de numeracion, numeracion por fecha, secuencial por fecha, reiniciar numeracion, reinicio anual, reinicio mensual, numeracion anual, numeracion mensual, correlativo por año, correlativo por mes, empezar de cero cada año, prefijo del año, numero con el año, volver a empezar la numeracion
-version: 1.37
+version: 1.38
 orden: 5
 estado: activo
 ---
@@ -460,6 +460,9 @@ de taxis.
 
 ## Historial de cambios
 
+- **1.38** — Los avisos de éxito (guardar, eliminar, enviar) pasan de un aviso pequeño en la
+  esquina a una ventana SweetAlert centrada que se cierra sola, igual que en Empresas del
+  sistema. Cuando la acción recarga la página, lo hace al cerrarse el aviso.
 - **1.37** — Empresas por regalía: la tarjeta Suscripción y Vigencia muestra «Plan sin costo»
   (y la fecha hasta, si tiene) y no hay avisos ni ventana de vencimiento mientras esté vigente.
 - **1.36** — La barra de cada suscripción en la tarjeta Suscripción y Vigencia usa la misma regla

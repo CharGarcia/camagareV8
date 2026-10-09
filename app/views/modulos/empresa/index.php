@@ -2150,11 +2150,13 @@ $warnIcon = '<i class="bi bi-exclamation-circle-fill text-warning ms-1" title="C
     // ── Helpers de notificación (SweetAlert2) ─────────────────────────────────
     // Unifican todos los mensajes del módulo Empresa. Requieren Swal (cargado en
     // partials/scripts.php). Si por algún motivo Swal no está, hacen fallback.
+    // Éxito: ventana centrada que se cierra sola (antes era un toast en la esquina);
+    // mismo formato que Empresas del sistema.
     function swalToastOk(mensaje) {
         if (typeof Swal === 'undefined') { return; }
-        Swal.fire({
-            toast: true, position: 'top-end', icon: 'success',
-            title: mensaje || 'Cambios guardados correctamente',
+        return Swal.fire({
+            icon: 'success', title: 'Listo',
+            text: mensaje || 'Cambios guardados correctamente',
             showConfirmButton: false, timer: 2500, timerProgressBar: true
         });
     }
@@ -2199,8 +2201,7 @@ $warnIcon = '<i class="bi bi-exclamation-circle-fill text-warning ms-1" title="C
             const json = await res.json();
 
             if (json.ok) {
-                swalToastOk(json.msg || 'Documentos legales enviados');
-                setTimeout(() => location.reload(), 1000);
+                Promise.resolve(swalToastOk(json.msg || 'Documentos legales enviados')).then(() => location.reload());
             } else {
                 swalError(json.error || 'No se pudieron enviar los documentos legales');
                 btn.disabled = false;
@@ -2363,8 +2364,7 @@ $warnIcon = '<i class="bi bi-exclamation-circle-fill text-warning ms-1" title="C
             });
             const res = await response.json();
             if (res.ok) {
-                swalToastOk('Punto de emisión eliminado');
-                setTimeout(() => location.reload(), 900);
+                Promise.resolve(swalToastOk('Punto de emisión eliminado')).then(() => location.reload());
             } else {
                 swalError(res.error || 'No se pudo eliminar');
             }
@@ -2406,8 +2406,7 @@ $warnIcon = '<i class="bi bi-exclamation-circle-fill text-warning ms-1" title="C
             });
             const res = await response.json();
             if (res.ok) {
-                swalToastOk('Punto de emisión eliminado');
-                setTimeout(() => location.reload(), 900);
+                Promise.resolve(swalToastOk('Punto de emisión eliminado')).then(() => location.reload());
             } else {
                 swalError(res.error || 'No se pudo eliminar');
             }
@@ -2819,8 +2818,7 @@ $warnIcon = '<i class="bi bi-exclamation-circle-fill text-warning ms-1" title="C
             });
             const res = await response.json();
             if (res.ok) {
-                swalToastOk('Configuración de ICE eliminada');
-                setTimeout(() => location.reload(), 900);
+                Promise.resolve(swalToastOk('Configuración de ICE eliminada')).then(() => location.reload());
             } else {
                 swalError(res.error || 'No se pudo eliminar');
             }
@@ -2851,13 +2849,13 @@ $warnIcon = '<i class="bi bi-exclamation-circle-fill text-warning ms-1" title="C
                     });
                     const res = await response.json();
                     if (res.ok) {
-                        swalToastOk(res.msg || 'Cambios guardados correctamente');
+                        const avisoOk = swalToastOk(res.msg || 'Cambios guardados correctamente');
                         if (id === 'form-punto') {
                             // Tras recargar, dejar seleccionado el punto recién creado o editado.
                             const idPto = res.id || formData.get('id');
                             if (idPto) { try { sessionStorage.setItem('empresa_sec_punto', String(idPto)); } catch (e) {} }
                         }
-                        if (id === 'form-firma' || id === 'form-punto' || id === 'form-ice' || id === 'form-matriz' || id === 'form-establecimiento-directo') setTimeout(() => location.reload(), 1000);
+                        if (id === 'form-firma' || id === 'form-punto' || id === 'form-ice' || id === 'form-matriz' || id === 'form-establecimiento-directo') Promise.resolve(avisoOk).then(() => location.reload());
                     } else {
                         if (res.confirm) {
                             if (await swalConfirm(res.msg, { titulo: 'Confirmación requerida', icon: 'question', confirmText: 'Sí, continuar', confirmColor: '#0d6efd' })) {

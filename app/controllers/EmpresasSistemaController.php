@@ -518,11 +518,12 @@ class EmpresasSistemaController extends Controller
             $msgOk = 'Empresa creada correctamente. Los documentos legales quedan pendientes de envío.';
             $msgOk .= $msgUsuario;
 
-            $_SESSION['empresas_msg'] = [$usuarioOk ? 'success' : 'warning', $msgOk];
+            // Por AJAX el aviso lo da la vista (sin recargar); en sesión solo para el envío clásico.
             if ($esAjax) {
-                $this->json(['ok' => true, 'msg' => $msgOk]);
+                $this->json(['ok' => true, 'id' => (int) $id, 'tipo' => $usuarioOk ? 'success' : 'warning', 'msg' => $msgOk]);
                 return;
             }
+            $_SESSION['empresas_msg'] = [$usuarioOk ? 'success' : 'warning', $msgOk];
         } catch (\InvalidArgumentException $e) {
             if ($esAjax) {
                 $this->json(['ok' => false, 'error' => $e->getMessage()]);
@@ -699,11 +700,13 @@ class EmpresasSistemaController extends Controller
                 // y se limpia la marca (una sola vez).
                 $msgNotif = $this->enviarNotificacionesPendientes($id, $idUsuario);
 
-                $_SESSION['empresas_msg'] = ['success', 'Empresa actualizada correctamente.' . $msgNotif];
+                // Por AJAX el aviso lo da la vista (el modal queda abierto, sin recargar): el mensaje
+                // va solo en la respuesta. En sesión solo para el envío clásico, que sí recarga.
                 if ($esAjax) {
                     $this->json(['ok' => true, 'msg' => 'Empresa actualizada correctamente.' . $msgNotif]);
                     return;
                 }
+                $_SESSION['empresas_msg'] = ['success', 'Empresa actualizada correctamente.' . $msgNotif];
             } else {
                 if ($esAjax) {
                     $this->json(['ok' => false, 'error' => 'Error al actualizar.']);

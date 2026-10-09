@@ -396,8 +396,8 @@ document.addEventListener('DOMContentLoaded', function () {
                     </div>
                 </div>
                 <div class="modal-footer">
-                    <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancelar</button>
-                    <button type="submit" class="btn btn-success"><i class="bi bi-plus-lg"></i> Crear empresa</button>
+                    <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cerrar</button>
+                    <button type="submit" class="btn btn-success" id="btn-crear-empresa"><i class="bi bi-plus-lg"></i> Crear empresa</button>
                 </div>
             </form>
         </div>
@@ -510,9 +510,6 @@ document.addEventListener('DOMContentLoaded', function () {
                                     <label for="edit-telefono" class="form-label">Teléfono</label>
                                     <input type="text" id="edit-telefono" name="telefono" class="form-control form-control-sm" placeholder="Teléfono">
                                 </div>
-                                <div class="col-12">
-                                    <button type="submit" class="btn btn-primary btn-sm"><i class="bi bi-check-lg"></i> Guardar cambios</button>
-                                </div>
                             </div>
                         </form>
                     </div>
@@ -623,9 +620,6 @@ document.addEventListener('DOMContentLoaded', function () {
                                         (donde se suele anotar el nombre del cliente final), para distinguirlas.
                                     </div>
                                 </div>
-                                <div class="col-12">
-                                    <button type="submit" class="btn btn-primary btn-sm"><i class="bi bi-check-lg"></i> Guardar cambios</button>
-                                </div>
                             </div>
                         </form>
                     </div>
@@ -703,6 +697,11 @@ document.addEventListener('DOMContentLoaded', function () {
                         </div>
                     </div>
                 </div>
+            </div>
+            <?php // Guardar envía el formulario de la pestaña activa (General o Cobro y vigencia); en las demás se oculta. El modal NO se cierra al guardar. ?>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cerrar</button>
+                <button type="button" class="btn btn-primary" id="btn-guardar-empresa"><i class="bi bi-check-lg"></i> Guardar cambios</button>
             </div>
         </div>
     </div>
@@ -1495,11 +1494,11 @@ document.addEventListener('click', function (e) {
         if (el) el.classList.add('d-none');
     }
 
-    // Guarda un formulario por AJAX. Éxito: recarga el listado y el aviso lo da el
-    // SweetAlert del mensaje de sesión (crear y editar lo dejan en empresas_msg); así no
-    // salen dos ventanas seguidas. Error: SweetAlert con el mensaje del servidor (antes el
-    // catch lo pisaba con "Error de conexión", porque el rechazo del else también caía en él).
-    function enviarFormAjax(form, msgContainerId, url) {
+    // Guarda un formulario por AJAX SIN cerrar el modal ni recargar la página: refresca el
+    // listado detrás y devuelve la respuesta para que quien llama dé el aviso. Error:
+    // SweetAlert con el mensaje del servidor (antes el catch lo pisaba con "Error de
+    // conexión", porque el rechazo del propio else también caía en él).
+    function enviarFormAjax(form, url) {
         var yaAvisado = false;
         return fetch(url, {
             method: 'POST',
@@ -1509,12 +1508,12 @@ document.addEventListener('click', function (e) {
         }).then(function(r) { return r.json(); })
         .then(function(res) {
             if (res.ok) {
-                window.location.href = base + '/config/empresas-sistema';
-            } else {
-                yaAvisado = true;
-                EMPSIS_alerta('error', 'No se pudo guardar', res.error || 'Error desconocido.');
-                return Promise.reject();
+                if (typeof window.fetchSearch === 'function') window.fetchSearch(window.currentPage || 1);
+                return res;
             }
+            yaAvisado = true;
+            EMPSIS_alerta('error', 'No se pudo guardar', res.error || 'Error desconocido.');
+            return Promise.reject();
         })
         .catch(function(err) {
             if (!yaAvisado) {
@@ -1524,10 +1523,37 @@ document.addEventListener('click', function (e) {
         });
     }
 
+    // Aviso de guardado: éxito se cierra solo; advertencia (p. ej. no se pudo crear el
+    // usuario administrador) queda abierta hasta que se lea.
+    function avisoGuardado(res, titulo) {
+        var advertencia = res && res.tipo === 'warning';
+        if (!window.Swal) { alert(res && res.msg ? res.msg : titulo); return Promise.resolve(); }
+        return Swal.fire(advertencia
+            ? { icon: 'warning', title: titulo, text: res.msg || '' }
+            : { icon: 'success', title: titulo, text: (res && res.msg) || '', timer: 2500, timerProgressBar: true, showConfirmButton: false });
+    }
+
+    function btnCargando(btn, on) {
+        if (!btn) return;
+        if (on) {
+            btn.dataset.txtOrig = btn.innerHTML;
+            btn.disabled = true;
+            btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Guardando...';
+        } else {
+            btn.disabled = false;
+            if (btn.dataset.txtOrig) btn.innerHTML = btn.dataset.txtOrig;
+        }
+    }
+
+    // ── Crear: el modal queda abierto. Tras crear, "Crear empresa" se oculta hasta volver
+    //    a abrir el modal (un guardado = un registro: otro clic crearía otra empresa).
     var formCrear = document.getElementById('form-crear-empresa');
+    var btnCrear = document.getElementById('btn-crear-empresa');
+    var creando = false, empresaCreada = false;
     if (formCrear) {
         formCrear.addEventListener('submit', function(e) {
             e.preventDefault();
+            if (creando || empresaCreada) return;
             ocultarMsgForm('crear-empresa-msg');
             // Controladora obligatoria; el servidor valida lo mismo.
             var ctrlIdCrear = document.getElementById('crear-ctrl-id');
@@ -1538,50 +1564,84 @@ document.addEventListener('click', function (e) {
                 });
                 return;
             }
-            var btn = formCrear.querySelector('button[type="submit"]');
-            var txtOrig = btn ? btn.innerHTML : '';
-            if (btn) { btn.disabled = true; btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Guardando...'; }
-            enviarFormAjax(formCrear, 'crear-empresa-msg', base + '/config/empresas-sistema-store')
-                .catch(function() { if (btn) { btn.disabled = false; btn.innerHTML = txtOrig; } });
+            creando = true;
+            btnCargando(btnCrear, true);
+            enviarFormAjax(formCrear, base + '/config/empresas-sistema-store')
+                .then(function(res) {
+                    empresaCreada = true;
+                    if (btnCrear) btnCrear.classList.add('d-none');
+                    return avisoGuardado(res, 'Empresa creada');
+                })
+                .catch(function() {})
+                .finally(function() { creando = false; btnCargando(btnCrear, false); });
         });
     }
-
-    var formEditar = document.getElementById('form-editar-empresa');
-    if (formEditar) {
-        formEditar.addEventListener('submit', function(e) {
-            e.preventDefault();
-            ocultarMsgForm('editar-empresa-msg');
-            var btn = formEditar.querySelector('button[type="submit"]');
-            var txtOrig = btn ? btn.innerHTML : '';
-            if (btn) { btn.disabled = true; btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Guardando...'; }
-            enviarFormAjax(formEditar, 'editar-empresa-msg', base + '/config/empresas-sistema-update')
-                .catch(function() { if (btn) { btn.disabled = false; btn.innerHTML = txtOrig; } });
-        });
-    }
-
-    var formCobro = document.getElementById('form-editar-empresa-cobro');
-    if (formCobro) {
-        formCobro.addEventListener('submit', function(e) {
-            e.preventDefault();
-            ocultarMsgForm('editar-cobro-msg');
-            var btn = formCobro.querySelector('button[type="submit"]');
-            var txtOrig = btn ? btn.innerHTML : '';
-            if (btn) { btn.disabled = true; btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Guardando...'; }
-            enviarFormAjax(formCobro, 'editar-cobro-msg', base + '/config/empresas-sistema-update')
-                .catch(function() { if (btn) { btn.disabled = false; btn.innerHTML = txtOrig; } });
-        });
-    }
-
     var modalCrearForm = document.getElementById('modalCrearEmpresa');
     if (modalCrearForm) {
-        modalCrearForm.addEventListener('show.bs.modal', function() { ocultarMsgForm('crear-empresa-msg'); });
+        modalCrearForm.addEventListener('show.bs.modal', function() {
+            ocultarMsgForm('crear-empresa-msg');
+            // Abrir de nuevo tras crear una: formulario limpio (la controladora vuelve a la
+            // sugerida, que es su valor por defecto) y el botón Crear visible otra vez.
+            if (empresaCreada && formCrear) {
+                formCrear.reset();
+                empresaCreada = false;
+                if (btnCrear) btnCrear.classList.remove('d-none');
+            }
+        });
+    }
+
+    // ── Editar: el pie del modal tiene Cerrar + Guardar. Guardar envía el formulario de la
+    //    pestaña activa (General o Cobro y vigencia) y el modal queda abierto.
+    var btnGuardarEmp = document.getElementById('btn-guardar-empresa');
+    var guardandoEmp = false;
+    function formPestanaActiva() {
+        var pane = modal ? modal.querySelector('.tab-pane.active') : null;
+        return pane ? pane.querySelector('#form-editar-empresa, #form-editar-empresa-cobro') : null;
+    }
+    function syncBtnGuardarEmp() {
+        if (btnGuardarEmp) btnGuardarEmp.classList.toggle('d-none', !formPestanaActiva());
     }
     if (modal) {
+        modal.querySelectorAll('[data-bs-toggle="tab"]').forEach(function(t) {
+            t.addEventListener('shown.bs.tab', syncBtnGuardarEmp);
+        });
+        modal.addEventListener('shown.bs.modal', syncBtnGuardarEmp);
         modal.addEventListener('show.bs.modal', function() {
             ocultarMsgForm('editar-empresa-msg');
             ocultarMsgForm('editar-cobro-msg');
         });
     }
+    if (btnGuardarEmp) {
+        btnGuardarEmp.addEventListener('click', function() {
+            var f = formPestanaActiva();
+            if (!f) return;
+            // requestSubmit respeta los campos obligatorios del formulario (p. ej. motivo de regalía).
+            if (typeof f.requestSubmit === 'function') f.requestSubmit();
+            else f.dispatchEvent(new Event('submit', { cancelable: true }));
+        });
+    }
+    ['form-editar-empresa', 'form-editar-empresa-cobro'].forEach(function(idForm) {
+        var f = document.getElementById(idForm);
+        if (!f) return;
+        f.addEventListener('submit', function(e) {
+            e.preventDefault();
+            if (guardandoEmp) return;
+            guardandoEmp = true;
+            ocultarMsgForm(idForm === 'form-editar-empresa' ? 'editar-empresa-msg' : 'editar-cobro-msg');
+            btnCargando(btnGuardarEmp, true);
+            enviarFormAjax(f, base + '/config/empresas-sistema-update')
+                .then(function(res) {
+                    // El título del modal refleja la razón social recién guardada.
+                    if (idForm === 'form-editar-empresa') {
+                        var nom = f.querySelector('[name="nombre"]');
+                        if (nom && nom.value.trim()) document.getElementById('modal-empresa-nombre').textContent = nom.value.trim();
+                    }
+                    return avisoGuardado(res, 'Cambios guardados');
+                })
+                .catch(function() {})
+                .finally(function() { guardandoEmp = false; btnCargando(btnGuardarEmp, false); });
+        });
+    });
 
     // Búsqueda, orden y paginación en tiempo real: reemplazan solo la tabla vía
     // AJAX, sin recargar la página. Mismo patrón que Proveedores
