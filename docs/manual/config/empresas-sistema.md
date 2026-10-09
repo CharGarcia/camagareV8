@@ -6,7 +6,7 @@ ruta_modulo: config/empresas-sistema
 tipo: modulo
 visibilidad: superadmin
 etiquetas: empresas del sistema, regalia, sin cobro, cortesia, plan sin costo, exonerar suscripcion, empresa gratis, empresa administradora, administradora de suscripciones, empresa que controla las suscripciones, controladora, suscripcion por defecto, crear empresa, alta de empresa, establecimientos, sucursales, matriz, usuarios asignados, documentos legales, suscripcion, empresas del grupo, eliminar establecimiento, establecimiento activo, un solo establecimiento activo, buscar empresa, filtrar empresas, filtros de empresas, exportar empresas, pdf de empresas, excel de empresas, ordenar empresas, columnas del listado, telefono de la empresa, correo de la empresa
-version: 1.11
+version: 1.12
 orden: 1
 estado: activo
 ---
@@ -44,8 +44,8 @@ tabla.
   (identificación, contacto, provincia y ciudad, estado, documentos legales,
   obligado a contabilidad, cupo de usuarios, fecha de registro y operadora de
   transporte). El superadministrador ve además el grupo **Cobro y vigencia**
-  (estado de pago, vigencia desde/hasta, valor de cobro, empresa
-  administradora de suscripciones). Se aplican con **Aplicar** y quedan como
+  (estado de pago, vigencia desde/hasta, valor de cobro, regalía, empresa
+  que controla las suscripciones). Se aplican con **Aplicar** y quedan como
   chips junto a la caja; cada chip se quita con su «×».
 - **Columnas**: el botón de columnas permite ocultar o mostrar cualquier
   columna (incluidas las nuevas **Teléfono** y **Correo**) y el ancho que se
@@ -90,29 +90,21 @@ ficha de la empresa, pestaña Establecimiento, el superadministrador puede:
   la alternativa es marcarlo **Inactivo** desde la misma edición — deja de
   ofrecerse para emitir documentos nuevos, sin perder el historial.
 
-## Suscripción del sistema: empresa administradora y controladora
+## Suscripción del sistema: empresa que controla las suscripciones
 
 Cada empresa cliente paga el uso del sistema con una suscripción registrada en
 otra empresa, la **controladora**: la que vende y factura esa suscripción.
 
-- **Empresa administradora (por defecto)**: se marca en *Editar → Cobro y
-  vigencia* con el interruptor **Esta empresa vende las suscripciones (por defecto
-  para las demás)**. Se marca solo en la empresa propia, nunca en un cliente. Solo puede
-  haber una: al marcar otra, la anterior se desmarca. En el listado aparece con
-  la etiqueta **Administradora** junto al nombre.
 - **Empresas nuevas**: al crear una empresa, el campo **Empresa que controla
-  las suscripciones** es **obligatorio**. Viene con la administradora y se puede
-  elegir otra. Solo puede quedar vacío si la empresa nueva se marca como la que
-  vende las suscripciones.
+  las suscripciones** es **obligatorio** y viene lleno con la **misma
+  controladora de la última empresa creada**. Si es otra, se cambia con el
+  buscador.
 - **Cambiar la controladora** de una empresa: *Editar → Cobro y vigencia*,
   campo **Empresa que controla las suscripciones** (buscador por nombre o RUC).
   Si la empresa no tiene controladora, se usa la de otra empresa con el mismo
-  RUC (sucursal) y, si tampoco hay, la administradora.
-- Marcar una empresa como la que vende las suscripciones **no cambia** su propio
-  campo *Empresa que controla las suscripciones*: se conserva lo que se haya
-  asignado y se puede seguir editando.
-- Si la controladora guardada fue eliminada, el campo aparece vacío y el sistema
-  usa la administradora. Al guardar la empresa se limpia ese vínculo.
+  RUC (sucursal).
+- Si la controladora guardada fue eliminada, el campo aparece vacío. Al guardar
+  la empresa se limpia ese vínculo; conviene elegir la correcta.
 - **La controladora cuenta con todos sus establecimientos**: si la empresa que
   vende el sistema tiene varios establecimientos (varias filas con el mismo RUC,
   p. ej. 001 y 002), la suscripción del cliente se busca en **todos** ellos. Da
@@ -169,6 +161,9 @@ las empresas que ese usuario tiene asignadas.
 
 ## Historial de cambios
 
+- **1.12** — Se quita el interruptor «Esta empresa vende las suscripciones»: al crear una
+  empresa, *Empresa que controla las suscripciones* viene con la misma de la última empresa
+  creada. Se quita la etiqueta *Administradora* y su filtro del listado.
 - **1.11** — Empresas por **regalía** (sin cobro de suscripción): interruptor, motivo y
   fecha hasta en *Cobro y vigencia*, etiqueta y filtro en el listado, auditoría en
   `log_sistema`. Al crear una empresa, *Empresa que controla las suscripciones* pasa a ser

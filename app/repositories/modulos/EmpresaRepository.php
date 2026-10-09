@@ -173,14 +173,6 @@ class EmpresaRepository extends BaseModel
     }
 
     /**
-     * Resuelve la empresa que controla las suscripciones de la empresa actual,
-     * relacionando SIEMPRE por RUC (no por establecimiento):
-     *   1) el vínculo directo de la fila actual (id_empresa_suscripciones), si existe;
-     *   2) el vínculo de cualquier empresa hermana con el mismo RUC (otro establecimiento);
-     *   3) la empresa administradora por defecto (es_administradora_suscripciones = true).
-     * Devuelve el id de la controladora o null si no hay ninguna.
-     */
-    /**
      * Regalía de la empresa (no paga suscripción del sistema). null si no está marcada o
      * si aún no se aplicó database/20261009_empresas_regalia_suscripcion.sql.
      *
@@ -207,11 +199,20 @@ class EmpresaRepository extends BaseModel
         ];
     }
 
+    /**
+     * Resuelve la empresa que controla las suscripciones de la empresa actual,
+     * relacionando SIEMPRE por RUC (no por establecimiento):
+     *   1) el vínculo directo de la fila actual (id_empresa_suscripciones), si existe;
+     *   2) el vínculo de cualquier empresa hermana con el mismo RUC (otro establecimiento).
+     * Devuelve el id de la controladora o null si no hay ninguna. Ya no cae a la
+     * «administradora por defecto» (es_administradora_suscripciones): ese interruptor se
+     * quitó de la pantalla el 09-10-2026 y un respaldo invisible solo confundía.
+     */
     public function resolverEmpresaControladoraSuscripciones(string $ruc, ?int $idDirecto): ?int
     {
         // El vínculo solo vale si la controladora existe y no está eliminada: un vínculo
         // colgado (empresa borrada) dejaba a la empresa sin suscripción en vez de caer
-        // a la hermana o a la administradora por defecto.
+        // a la empresa hermana con el mismo RUC.
         if ($idDirecto !== null && $idDirecto > 0) {
             $ok = $this->query(
                 "SELECT 1 FROM empresas WHERE id = " . (int) $idDirecto . " AND eliminado = false"
@@ -237,12 +238,7 @@ class EmpresaRepository extends BaseModel
             }
         }
 
-        $g = $this->query(
-            "SELECT id FROM empresas
-             WHERE es_administradora_suscripciones = true AND eliminado = false
-             ORDER BY id LIMIT 1"
-        );
-        return isset($g[0]['id']) ? (int) $g[0]['id'] : null;
+        return null;
     }
 
     public function updateEmpresa(int $idEmpresa, array $data): bool

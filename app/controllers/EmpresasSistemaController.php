@@ -55,7 +55,8 @@ class EmpresasSistemaController extends Controller
         $totalPages = $perPage > 0 ? (int) ceil($total / $perPage) : 1;
 
         $empresasLista = $this->model->getListaParaSelect();
-        $idAdminSuscripciones = $this->model->getIdAdministradoraSuscripciones();
+        // Al crear, la controladora viene con la de la última empresa creada.
+        $idControladoraSugerida = $this->model->getIdControladoraUltimaEmpresa();
         $estadoDocs = (new \App\Services\DocumentosLegalesService())->getEstadoPorEmpresa();
 
         $this->viewWithLayout('layouts.main', 'empresasSistema.index', [
@@ -80,7 +81,7 @@ class EmpresasSistemaController extends Controller
             // Selects del modal de filtros: solo valores que usan las empresas visibles.
             'opcionesFiltro' => $this->model->getOpcionesFiltroListado($idActual, $nivel),
             'empresasLista' => $empresasLista,
-            'idAdminSuscripciones' => $idAdminSuscripciones,
+            'idControladoraSugerida' => $idControladoraSugerida,
         ]);
     }
 
@@ -351,7 +352,6 @@ class EmpresasSistemaController extends Controller
             // Vínculo a una controladora borrada/inexistente (ctrl_nombre vacío): se manda 0
             // para que el campo se vea vacío y, al guardar, el vínculo colgado se limpie.
             . ' data-id-empresa-suscripciones="' . (($r['ctrl_nombre'] ?? null) !== null ? (int) ($r['id_empresa_suscripciones'] ?? 0) : 0) . '"'
-            . ' data-es-administradora="' . (!empty($r['es_administradora_suscripciones']) ? '1' : '0') . '"'
             . ' data-sin-cobro="' . (!empty($r['sin_cobro_suscripcion']) ? '1' : '0') . '"'
             . ' data-sin-cobro-motivo="' . htmlspecialchars((string) ($r['sin_cobro_motivo'] ?? '')) . '"'
             . ' data-sin-cobro-hasta="' . htmlspecialchars((string) ($r['sin_cobro_hasta'] ?? '')) . '"'
@@ -364,9 +364,7 @@ class EmpresasSistemaController extends Controller
         // Cada celda lleva data-col: el usuario oculta columnas y fija anchos desde el
         // dropdown de columnas (PreferenciasHelper), igual que en Proveedores.
         $txt = static fn($v) => ($v === null || trim((string) $v) === '') ? '<span class="text-muted">-</span>' : htmlspecialchars((string) $v);
-        $badgeAdmin = !empty($r['es_administradora_suscripciones'])
-            ? ' <span class="badge bg-primary bg-opacity-10 text-primary border border-primary border-opacity-25" title="Empresa administradora de suscripciones: las empresas nuevas quedan controladas por ella">Administradora</span>'
-            : '';
+        $badgeAdmin = '';
         if (!empty($r['sin_cobro_suscripcion'])) {
             $hastaReg = !empty($r['sin_cobro_hasta']) ? date('d-m-Y', strtotime((string) $r['sin_cobro_hasta'])) : 'indefinida';
             $titReg   = 'Sin cobro de suscripción (regalía) hasta ' . $hastaReg
@@ -466,15 +464,14 @@ class EmpresasSistemaController extends Controller
             'estado_pago' => trim($_POST['estado_pago'] ?? 'pendiente'),
             'max_usuarios' => (int) ($_POST['max_usuarios'] ?? 3),
             'id_empresa_suscripciones' => $_POST['id_empresa_suscripciones'] ?? null,
-            'es_administradora_suscripciones' => !empty($_POST['es_administradora_suscripciones']) ? '1' : '0',
             'id_cliente_facturado' => $_POST['id_cliente_facturado'] ?? null,
         ];
 
         $esAjax = ($_SERVER['HTTP_X_REQUESTED_WITH'] ?? '') === 'XMLHttpRequest';
 
         // Toda empresa nueva debe quedar con su controladora de suscripciones (decisión del
-        // usuario, 09-10-2026). Excepción: la que se crea como la que VENDE las suscripciones.
-        if ((int) ($data['id_empresa_suscripciones'] ?? 0) <= 0 && $data['es_administradora_suscripciones'] !== '1') {
+        // usuario, 09-10-2026).
+        if ((int) ($data['id_empresa_suscripciones'] ?? 0) <= 0) {
             $msg = 'Seleccione la empresa que controla las suscripciones.';
             if ($esAjax) {
                 $this->json(['ok' => false, 'error' => $msg]);

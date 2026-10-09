@@ -293,12 +293,30 @@ class Empresa extends BaseModel
     public function getListaParaSelect(): array
     {
         return $this->query(
-            "SELECT id, nombre, nombre_comercial, ruc,
+            "SELECT id, nombre, nombre_comercial, ruc, establecimiento,
                     COALESCE(es_administradora_suscripciones, false) AS es_administradora_suscripciones
              FROM empresas
              WHERE eliminado = false
              ORDER BY nombre_comercial, nombre"
         );
+    }
+
+    /**
+     * Controladora de suscripciones de la ÚLTIMA empresa creada (la que tenga una
+     * controladora válida). Es el valor con que viene el campo al crear una empresa
+     * nueva: así se repite la última que se puso sin tener que buscarla otra vez.
+     */
+    public function getIdControladoraUltimaEmpresa(): ?int
+    {
+        $r = $this->query(
+            "SELECT e.id_empresa_suscripciones
+               FROM empresas e
+               JOIN empresas c ON c.id = e.id_empresa_suscripciones AND c.eliminado = false
+              WHERE e.eliminado = false
+              ORDER BY e.id DESC
+              LIMIT 1"
+        );
+        return isset($r[0]['id_empresa_suscripciones']) ? (int) $r[0]['id_empresa_suscripciones'] : null;
     }
 
     /**
@@ -438,12 +456,10 @@ class Empresa extends BaseModel
         $idEmpSusc = isset($data['id_empresa_suscripciones']) && $data['id_empresa_suscripciones'] !== '' && (int) $data['id_empresa_suscripciones'] > 0
             ? (int) $data['id_empresa_suscripciones'] : null;
         $esAdminSusc = $this->esValorVerdadero($data['es_administradora_suscripciones'] ?? null);
-        // Marcarla como la que vende las suscripciones NO borra la controladora elegida
-        // (decisión del usuario, 09-10-2026): se respeta lo que se puso en el formulario.
-        if (!$esAdminSusc && $idEmpSusc === null) {
-            // Sin controladora elegida: queda la administradora por defecto (la última
-            // empresa marcada), aunque el campo del formulario se haya dejado vacío.
-            $idEmpSusc = $this->getIdAdministradoraSuscripciones();
+        // Sin controladora elegida (el formulario la exige; esto cubre otros llamadores):
+        // la de la última empresa creada, igual que la sugerencia del modal.
+        if ($idEmpSusc === null) {
+            $idEmpSusc = $this->getIdControladoraUltimaEmpresa();
         }
         $idEmpSuscSql = $idEmpSusc !== null ? (string) $idEmpSusc : 'NULL';
 

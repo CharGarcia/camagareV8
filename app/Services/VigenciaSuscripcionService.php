@@ -83,7 +83,7 @@ class VigenciaSuscripcionService
                 // Sin montos solo si es reventa (se factura a un tercero).
                 $out['sin_valores'] = !empty($out['info']) && $idClienteFact > 0;
             } elseif ($idClienteFact > 0) {
-                $lista = $repo->getResumenPorControladoraYCliente($idCtrl, $idClienteFact);
+                $lista = $this->sinCanceladas($repo->getResumenPorControladoraYCliente($idCtrl, $idClienteFact));
                 if (count($lista) > 1) {
                     $out['varias'] = count($lista);
                 } else {
@@ -93,6 +93,10 @@ class VigenciaSuscripcionService
             } else {
                 $out['info'] = $repo->getResumenPorControladoraYRuc($idCtrl, $ruc);
             }
+
+            if ($idSuscripcion <= 0) {
+                $out['info'] = $this->sinCanceladas($out['info']);
+            }
         } catch (\Throwable $e) {
             // Módulo de suscripciones o migración no disponible: la ficha usa los datos manuales.
             $out['info']        = [];
@@ -101,6 +105,23 @@ class VigenciaSuscripcionService
         }
 
         return $out;
+    }
+
+    /**
+     * Quita las suscripciones canceladas si queda alguna que no lo esté. Antes la ficha
+     * pintaba un bloque por cada suscripción del RUC (incluidas las canceladas) y, en
+     * reventa, una cancelada hacía pedir «Falta asignar» con una sola vigente.
+     */
+    private function sinCanceladas(array $lista): array
+    {
+        if (count($lista) < 2) {
+            return $lista;
+        }
+        $vivas = array_values(array_filter(
+            $lista,
+            static fn ($s) => strtolower((string) ($s['estado'] ?? '')) !== 'cancelado'
+        ));
+        return $vivas ?: $lista;
     }
 
     /**

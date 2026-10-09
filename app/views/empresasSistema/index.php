@@ -129,9 +129,8 @@ function estadoPagoBadge($estado) {
                     ['tab' => $tE, 'key' => 'vigencia_desde', 'label' => 'Vigencia desde',  'icon' => 'bi-calendar-event', 'type' => 'date_range',   'grupo' => 'Cobro y vigencia', 'col' => 4, 'atajos' => true],
                     ['tab' => $tE, 'key' => 'vigencia_hasta', 'label' => 'Vigencia hasta',  'icon' => 'bi-calendar-x',     'type' => 'date_range',   'grupo' => 'Cobro y vigencia', 'col' => 4, 'atajos' => true],
                     ['tab' => $tE, 'key' => 'valor_cobro',    'label' => 'Valor de cobro',  'icon' => 'bi-currency-dollar','type' => 'number_range', 'grupo' => 'Cobro y vigencia', 'col' => 4],
-                    ['tab' => $tE, 'key' => 'administradora', 'label' => 'Administra suscripciones', 'icon' => 'bi-diagram-3', 'type' => 'select', 'grupo' => 'Cobro y vigencia', 'col' => 4, 'options' => $opcionesSiNo('Sí', 'No')],
                     ['tab' => $tE, 'key' => 'regalia', 'label' => 'Regalía (sin cobro)', 'icon' => 'bi-gift', 'type' => 'select', 'grupo' => 'Cobro y vigencia', 'col' => 4, 'options' => $opcionesSiNo('Sí, vigente', 'No')],
-                    ['tab' => $tE, 'key' => 'id_administradora', 'label' => 'Empresa administradora', 'icon' => 'bi-building-gear', 'type' => 'select', 'grupo' => 'Cobro y vigencia', 'col' => 4, 'options' => $opcionesAdmin],
+                    ['tab' => $tE, 'key' => 'id_administradora', 'label' => 'Empresa que controla las suscripciones', 'icon' => 'bi-building-gear', 'type' => 'select', 'grupo' => 'Cobro y vigencia', 'col' => 4, 'options' => $opcionesAdmin],
                 ]);
             }
             $filtrosEmpresas = array_merge($filtrosEmpresas, [
@@ -335,11 +334,12 @@ function estadoPagoBadge($estado) {
                             <input type="text" id="crear-telefono" name="telefono" class="form-control form-control-sm" placeholder="Teléfono">
                         </div>
                         <?php
-                        // Etiqueta preseleccionada de la administradora por defecto.
+                        // Controladora sugerida: la que se usó en la última empresa creada.
                         $adminLabel = '';
                         foreach (($empresasLista ?? []) as $emp) {
-                            if ((int) $emp['id'] === (int) ($idAdminSuscripciones ?? 0)) {
-                                $adminLabel = ($emp['nombre_comercial'] ?: $emp['nombre']) . ' — ' . ($emp['ruc'] ?? '');
+                            if ((int) $emp['id'] === (int) ($idControladoraSugerida ?? 0)) {
+                                $adminLabel = ($emp['nombre_comercial'] ?: $emp['nombre']) . ' — ' . ($emp['ruc'] ?? '')
+                                    . (!empty($emp['establecimiento']) ? ' (' . $emp['establecimiento'] . ')' : '');
                                 break;
                             }
                         }
@@ -347,22 +347,9 @@ function estadoPagoBadge($estado) {
                         <div class="col-md-8 position-relative">
                             <label for="crear-ctrl-texto" class="form-label">Empresa que controla las suscripciones <span class="text-danger">*</span></label>
                             <input type="text" id="crear-ctrl-texto" class="form-control form-control-sm" placeholder="Buscar empresa por nombre o RUC…" autocomplete="off" value="<?= htmlspecialchars($adminLabel) ?>">
-                            <input type="hidden" id="crear-ctrl-id" name="id_empresa_suscripciones" value="<?= (int) ($idAdminSuscripciones ?? 0) ?: '' ?>">
+                            <input type="hidden" id="crear-ctrl-id" name="id_empresa_suscripciones" value="<?= (int) ($idControladoraSugerida ?? 0) ?: '' ?>">
                             <div id="crear-ctrl-dropdown" class="list-group position-absolute w-100 shadow" style="display:none;z-index:2000;max-height:220px;overflow:auto;"></div>
-                            <?php if (!empty($idAdminSuscripciones)): ?>
-                                <div class="form-text">Obligatorio. Viene con la empresa que vende las suscripciones; puede elegir otra.</div>
-                            <?php else: ?>
-                                <div class="form-text text-warning"><i class="bi bi-exclamation-triangle"></i> No hay empresa administradora marcada. Márquela en <strong>Editar → Cobro y vigencia</strong> para que las nuevas empresas la tomen por defecto.</div>
-                            <?php endif; ?>
-                        </div>
-                        <div class="col-md-4">
-                            <label class="form-label d-block">Empresa que vende el sistema</label>
-                            <input type="hidden" name="es_administradora_suscripciones" value="0">
-                            <div class="form-check form-switch mt-1">
-                                <input class="form-check-input" type="checkbox" role="switch" id="crear-es-administradora" name="es_administradora_suscripciones" value="1">
-                                <label class="form-check-label small" for="crear-es-administradora">Esta empresa vende las suscripciones (por defecto para las demás)</label>
-                                <div class="form-text mt-0">Marcar solo en su propia empresa, no en los clientes.</div>
-                            </div>
+                            <div class="form-text">Obligatorio. Viene con la misma de la última empresa creada; puede elegir otra.</div>
                         </div>
                         <div class="col-md-8 position-relative">
                             <label for="crear-fact-texto" class="form-label">Empresa a la que facturamos (reventa)</label>
@@ -565,15 +552,6 @@ function estadoPagoBadge($estado) {
                                     <input type="hidden" id="edit-ctrl-id" name="id_empresa_suscripciones" value="">
                                     <div id="edit-ctrl-dropdown" class="list-group position-absolute w-100 shadow" style="display:none;z-index:2000;max-height:220px;overflow:auto;"></div>
                                     <div class="form-text">Se cruza por RUC contra los clientes de esa empresa para mostrar la suscripción real.</div>
-                                </div>
-                                <div class="col-md-4">
-                                    <label class="form-label d-block">Empresa que vende el sistema</label>
-                                    <input type="hidden" name="es_administradora_suscripciones" value="0">
-                                    <div class="form-check form-switch mt-1">
-                                        <input class="form-check-input" type="checkbox" role="switch" id="edit-es-administradora" name="es_administradora_suscripciones" value="1">
-                                        <label class="form-check-label small" for="edit-es-administradora">Esta empresa vende las suscripciones (por defecto para las demás)</label>
-                                        <div class="form-text mt-0">Marcar solo en su propia empresa, no en los clientes.</div>
-                                    </div>
                                 </div>
                                 <?php if (($nivel ?? 1) >= 3): ?>
                                 <!-- Regalía: la empresa no paga suscripción (sin avisos de vencimiento). Auditada en log_sistema. -->
@@ -848,8 +826,6 @@ function estadoPagoBadge($estado) {
             ctrlId.value  = hasCtrl ? el.dataset.idEmpresaSuscripciones : '';
             ctrlTxt.value = hasCtrl ? (el.dataset.ctrlLabel || '') : '';
         }
-        var chkAdmin = document.getElementById('edit-es-administradora');
-        if (chkAdmin) chkAdmin.checked = (el.dataset.esAdministradora === '1');
         // Regalía (sin cobro de suscripción)
         var chkSinCobro = document.getElementById('edit-sin-cobro');
         if (chkSinCobro) {
@@ -1457,11 +1433,9 @@ function estadoPagoBadge($estado) {
         formCrear.addEventListener('submit', function(e) {
             e.preventDefault();
             ocultarMsgForm('crear-empresa-msg');
-            // Controladora obligatoria (salvo que la nueva sea la que vende las suscripciones);
-            // el servidor valida lo mismo.
+            // Controladora obligatoria; el servidor valida lo mismo.
             var ctrlIdCrear = document.getElementById('crear-ctrl-id');
-            var chkVendeCrear = document.getElementById('crear-es-administradora');
-            if (ctrlIdCrear && !ctrlIdCrear.value && !(chkVendeCrear && chkVendeCrear.checked)) {
+            if (ctrlIdCrear && !ctrlIdCrear.value) {
                 mostrarMsgForm('crear-empresa-msg', 'error', 'Seleccione la empresa que controla las suscripciones.');
                 var txtCtrl = document.getElementById('crear-ctrl-texto');
                 if (txtCtrl) txtCtrl.focus();
