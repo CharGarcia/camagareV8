@@ -540,3 +540,11 @@ if (($rutaModulo ?? '') !== 'modulos/productos') {
 include __DIR__ . '/../categorias/modal_categoria.php';
 include __DIR__ . '/../marcas/modal_marca.php';
 ?>
+<?php
+// JS de los botones «+» de Categoría y Marca del producto (crear al vuelo, CLAUDE.md §9).
+// Va aquí, junto a sus modales, para que funcionen en toda página que abra el producto
+// (antes solo Productos, Facturas, Recibos y Compras los cargaban). Cargarlo dos veces es
+// inofensivo: cada script se salta su segunda carga.
+?>
+<script src="<?= BASE_URL ?>/js/modulos/categorias_modal.js?v=<?= asset_ver('/js/modulos/categorias_modal.js') ?>"></script>
+<script src="<?= BASE_URL ?>/js/modulos/marcas_modal.js?v=<?= asset_ver('/js/modulos/marcas_modal.js') ?>"></script>

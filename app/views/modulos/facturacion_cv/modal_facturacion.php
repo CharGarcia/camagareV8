@@ -1431,7 +1431,9 @@
         let ident = '';
         if (ev.detail && ev.detail.data && ev.detail.data.identificacion) ident = String(ev.detail.data.identificacion).trim();
         else { const f = $('cliente_identificacion'); ident = f ? f.value.trim() : ''; }
-        if (!ident) return;
+        if (!ident || ev.detail?.nuevo === false) return; // editar un cliente no cambia la factura
+        // Solo con la factura abierta y editable (CLAUDE.md §9, crear al vuelo).
+        if (!$('modalFacturacionCv')?.classList.contains('show') || $('faccv_cliente_busqueda')?.disabled) return;
         try {
             const res = await fetch(`${RUTA}/getClientesAjax?q=${encodeURIComponent(ident)}`); const data = await res.json();
             const lista = data.data || []; const match = lista.find(c => String(c.identificacion || '') === ident) || lista[0];

@@ -227,6 +227,16 @@
                         selClientes.value = json.id;
                     }
 
+                    // Crear al vuelo (CLAUDE.md §9): avisa a quien abrió el modal desde un
+                    // documento (p. ej. Consignaciones) para que agregue el vendedor a su
+                    // selector y lo deje seleccionado. El modal se cierra más abajo.
+                    document.dispatchEvent(new CustomEvent('vendedorGuardado', { detail: {
+                        ...json,
+                        id:     json.id || vid,
+                        nombre: (fd.get('nombre') || '').toString().trim(),
+                        nuevo:  !vid
+                    } }));
+
                     setTimeout(() => {
                         if (btn) {
                             btn.disabled = false;

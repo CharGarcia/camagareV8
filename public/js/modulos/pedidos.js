@@ -1727,19 +1727,31 @@ async function guardarResponsableTraslado() {
     }
 }
 
-document.addEventListener('clienteGuardado', function(e) {
+// Cliente creado desde «nuevo cliente» (CLAUDE.md §9, crear al vuelo): queda seleccionado
+// en el pedido con los mismos datos que el buscador (incluido el vendedor). Solo clientes
+// nuevos, con el pedido abierto y editable; antes también lo tomaba al editar cualquier
+// cliente y aunque el pedido estuviera cerrado.
+document.addEventListener('clienteGuardado', async function(e) {
     const res = e.detail;
-    if (res && res.ok && res.data) {
-        const cliente = res.data;
-        const inputBuscar = document.getElementById('buscar-cliente');
-        const inputId = document.getElementById('id_cliente');
-        if (inputBuscar && inputId) {
-            inputBuscar.value = cliente.nombre;
-            inputId.value = cliente.id;
-            pedMostrarVendedorCliente(cliente.nombre_vendedor);
-            document.getElementById('fecha_pedido').focus();
+    if (!res || !res.ok || !res.data || !res.data.id || res.nuevo === false) return;
+    if (!document.getElementById('modalPedido')?.classList.contains('show')) return;
+    const inputBuscar = document.getElementById('buscar-cliente');
+    const inputId = document.getElementById('id_cliente');
+    if (!inputBuscar || !inputId || inputBuscar.disabled || inputBuscar.readOnly) return;
+
+    let cliente = res.data;
+    const termino = String(res.data.identificacion || res.data.nombre || '').trim();
+    try {
+        if (termino) {
+            const resp = await fetch(`${window.CMG_urlBase}/buscarClientesAjax?term=${encodeURIComponent(termino)}`);
+            const items = await resp.json();
+            cliente = (Array.isArray(items) ? items : []).find(x => String(x.id) === String(res.data.id)) || cliente;
         }
-    }
+    } catch (err) { /* se usa lo que trajo el alta */ }
+    inputBuscar.value = cliente.nombre;
+    inputId.value = cliente.id;
+    pedMostrarVendedorCliente(cliente.nombre_vendedor);
+    document.getElementById('fecha_pedido')?.focus();
 });
 
 document.addEventListener('show.bs.modal', function (event) {

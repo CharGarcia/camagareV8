@@ -3448,15 +3448,11 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                 combo.dispatchEvent(new Event('change'));
             }
         }
-        Swal.fire({
-            icon: 'success',
-            title: '¡Creada!',
-            text: aplicaEgreso
+        Swal.fire({ toast: true, position: 'top-end', showConfirmButton: false, timer: aplicaEgreso ? 2500 : 3500,
+            icon: aplicaEgreso ? 'success' : 'info',
+            title: aplicaEgreso
                 ? `Forma de pago "${nombre}" creada y seleccionada.`
-                : `Forma de pago "${nombre}" creada, pero no aplica a Egresos.`,
-            timer: 2000,
-            showConfirmButton: false
-        });
+                : `Forma de pago "${nombre}" creada, pero no aplica a Egresos.` });
     };
 
     window.modalCrearOpcionEgreso = function () {
@@ -3465,8 +3461,17 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
         abrirModalOpcion();
     };
     // `cuenta` ({id, codigo, nombre} o null) es la cuenta con la que se creó el concepto.
-    window.onOpcionCreada = function (id, nombre, comportamiento, cuenta) {
+    // `aplica` ({ingreso, egreso}) dice a qué documentos aplica: si se creó solo para Ingresos,
+    // no se agrega aquí.
+    window.onOpcionCreada = function (id, nombre, comportamiento, cuenta, aplica) {
         comportamiento = comportamiento || 'GENERAL';
+        if (aplica && aplica.egreso === false) {
+            Swal.fire({ toast: true, position: 'top-end', icon: 'info', showConfirmButton: false, timer: 3500,
+                title: `"${nombre}" se creó como opción de ingreso: no aparece en Egresos.` });
+            return;
+        }
+        // Egreso en solo lectura (anulado/periodo cerrado): se agrega, pero no se selecciona.
+        const editable = !document.getElementById('eg-search-input')?.disabled;
         // Agregar al select oculto (fuente de verdad del concepto seleccionado)
         const sel = document.getElementById('eg-select-concepto');
         if (sel) {
@@ -3493,7 +3498,7 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                 optG.textContent = nombre;
                 selGen.appendChild(optG);
                 // Queda seleccionado para usarlo (salvo egreso en solo lectura)
-                if (!selGen.disabled && !document.getElementById('eg-search-input')?.disabled) {
+                if (editable && !selGen.disabled) {
                     selGen.value = id;
                     seleccionarConceptoGeneralEgreso(id);
                 }
@@ -3512,9 +3517,12 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                 // Insertar antes del selector general para conservar el orden
                 const selGen = document.getElementById('eg-select-concepto-general');
                 if (selGen) grp.insertBefore(btn, selGen); else grp.appendChild(btn);
+                // Queda elegido, igual que si se pulsara el botón (puede abrir los documentos pendientes).
+                if (editable) egOnClickConceptoBtn(btn);
             }
         }
-        Swal.fire({ icon: 'success', title: '¡Creada!', text: `Opción de egreso "${nombre}" creada correctamente.`, timer: 2000, showConfirmButton: false });
+        Swal.fire({ toast: true, position: 'top-end', icon: 'success', showConfirmButton: false, timer: 2500,
+            title: editable ? `Opción de egreso "${nombre}" creada y seleccionada.` : `Opción de egreso "${nombre}" creada.` });
     };
 
     window.modalCrearProveedor = function () {
@@ -3595,6 +3603,8 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
         const d = ev.detail || {};
         const id = d.id || (d.data && d.data.id);
         const nombre = (d.data && (d.data.razon_social || d.data.nombre)) || d.nombre || '';
+        // Editar otro proveedor no cambia el beneficiario; editar el mismo refresca su nombre.
+        if (d.nuevo === false && String(id) !== String(document.getElementById('eg-input-id-sujeto')?.value || '')) return;
         if (id && nombre) egUsarSujetoCreado({ id, razon_social: nombre }, 'PROVEEDOR');
     });
 
@@ -3602,6 +3612,8 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
     // el nombre se toman del propio formulario del modal, que ya quedó en modo edición.
     window.addEventListener('empleadoGuardado', (ev) => {
         const id = (ev.detail && ev.detail.id) || document.getElementById('emp_id')?.value;
+        // Editar otro empleado no cambia el beneficiario; editar el mismo refresca su nombre.
+        if (ev.detail?.nuevo === false && String(id) !== String(document.getElementById('eg-input-id-sujeto')?.value || '')) return;
         const nombre = (document.getElementById('emp_nombres_apellidos')?.value || '').trim();
         if (id && nombre) egUsarSujetoCreado({ id, nombres_apellidos: nombre }, 'EMPLEADO');
     });

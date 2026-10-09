@@ -409,6 +409,27 @@ $urlManual = $base . '/documentacion' . ($rutaActualAyuda !== '' ? '?ruta=' . ur
                     </ul>
                 </div>
 
+                <!-- Empresas del sistema sin controladora / sin suscripción (solo nivel 3, en la empresa
+                     que vende el sistema). Cada línea abre Empresas del sistema ya filtrado. -->
+                <div class="dropdown d-none cmg-empsusc-wrap">
+                    <a class="text-white text-decoration-none position-relative" href="#" role="button" data-bs-toggle="dropdown" aria-expanded="false" title="Empresas sin controladora o sin suscripción">
+                        <i class="bi bi-building-exclamation text-warning" style="font-size: 1.1rem;"></i>
+                        <span class="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-danger cmg-empsusc-total" style="font-size: 0.6rem; padding: 0.25em 0.5em;">0</span>
+                    </a>
+                    <ul class="dropdown-menu dropdown-menu-end shadow-sm" style="min-width: 280px; z-index: 5065;">
+                        <li><h6 class="dropdown-header text-danger"><i class="bi bi-building-exclamation me-1"></i>Empresas del sistema por revisar</h6></li>
+                        <li><hr class="dropdown-divider my-1"></li>
+                        <a data-aviso="sin_controladora" class="dropdown-item d-none d-flex justify-content-between align-items-center cmg-empsusc-item" data-empsusc="sin_controladora" href="<?= $base ?>/config/empresas-sistema">
+                            <span><i class="bi bi-diagram-2 me-2 text-muted"></i>Sin empresa controladora</span>
+                            <span class="badge bg-danger rounded-pill cmg-empsusc-badge-sin_controladora">0</span>
+                        </a>
+                        <a data-aviso="sin_suscripcion" class="dropdown-item d-none d-flex justify-content-between align-items-center cmg-empsusc-item" data-empsusc="sin_suscripcion" href="<?= $base ?>/config/empresas-sistema">
+                            <span><i class="bi bi-shield-exclamation me-2 text-muted"></i>Sin suscripción</span>
+                            <span class="badge bg-danger rounded-pill cmg-empsusc-badge-sin_suscripcion">0</span>
+                        </a>
+                    </ul>
+                </div>
+
                 <!-- Cheques posfechados por cobrar (recibidos / emitidos): fecha cumplida sin Fecha
                      Banco o por vencer. Cada línea abre el modal "Cheques Posfechados" de Control
                      Bancario en su pestaña. Lo llena CMG_refreshContadores (clave cheques_posfechados). -->
@@ -641,6 +662,16 @@ $urlManual = $base . '/documentacion' . ($rutaActualAyuda !== '' ? '?ruta=' . ur
                     <i class="bi bi-truck text-danger"></i>
                     <span class="position-absolute badge rounded-pill bg-danger cmg-nov-badge-guias_remision">0</span>
                     <small>Guía SRI</small>
+                </a>
+                <a data-aviso="sin_controladora" class="cmg-icon-update cmg-empsusc-item d-none" data-empsusc="sin_controladora" href="<?= $base ?>/config/empresas-sistema">
+                    <i class="bi bi-diagram-2 text-danger"></i>
+                    <span class="position-absolute badge rounded-pill bg-danger cmg-empsusc-badge-sin_controladora">0</span>
+                    <small>Sin ctrl.</small>
+                </a>
+                <a data-aviso="sin_suscripcion" class="cmg-icon-update cmg-empsusc-item d-none" data-empsusc="sin_suscripcion" href="<?= $base ?>/config/empresas-sistema">
+                    <i class="bi bi-shield-exclamation text-danger"></i>
+                    <span class="position-absolute badge rounded-pill bg-danger cmg-empsusc-badge-sin_suscripcion">0</span>
+                    <small>Sin susc.</small>
                 </a>
                 <a class="cmg-chq-tile d-none" data-chq-tile="recibidos" href="<?= $base ?>/modulos/control-bancario/posfechados-recibidos">
                     <i class="bi bi-box-arrow-in-down text-danger"></i>
@@ -1016,6 +1047,20 @@ $urlManual = $base . '/documentacion' . ($rutaActualAyuda !== '' ? '?ruta=' . ur
                     if (totalNov > 0) w.classList.remove('d-none'); else w.classList.add('d-none');
                 });
 
+                // Empresas del sistema sin controladora / sin suscripción (nivel 3, empresa que vende).
+                const empSusc = c.empresas_suscripcion || {};
+                let totalEmpSusc = 0;
+                ['sin_controladora', 'sin_suscripcion'].forEach(function(tipo) {
+                    const n = parseInt(empSusc[tipo] || 0, 10);
+                    totalEmpSusc += n;
+                    document.querySelectorAll('.cmg-empsusc-badge-' + tipo).forEach(function(b){ b.textContent = n > 99 ? '99+' : n; });
+                    document.querySelectorAll('.cmg-empsusc-item[data-empsusc="' + tipo + '"]').forEach(function(it){
+                        it.classList.toggle('d-none', n <= 0);
+                    });
+                });
+                document.querySelectorAll('.cmg-empsusc-total').forEach(function(b){ b.textContent = totalEmpSusc > 99 ? '99+' : totalEmpSusc; });
+                document.querySelectorAll('.cmg-empsusc-wrap').forEach(function(w){ w.classList.toggle('d-none', totalEmpSusc <= 0); });
+
                 // Cheques posfechados por cobrar: badge = total (rojo si alguno ya cumplió su
                 // fecha sin Fecha Banco; amarillo si solo hay por vencer) + desglose con montos.
                 const chq = c.cheques_posfechados || null;
@@ -1331,7 +1376,8 @@ $urlManual = $base . '/documentacion' . ($rutaActualAyuda !== '' ? '?ruta=' . ur
             .finally(function() { window.location.href = '<?= $base ?>/config/tareas-obligaciones'; });
         }
 
-        // Avisos que abren su módulo YA FILTRADO (data-aviso="borrador" | "novedad_sri"):
+        // Avisos que abren su módulo YA FILTRADO (data-aviso="borrador" | "novedad_sri" |
+        // "sin_controladora" | "sin_suscripcion"):
         // el filtro viaja en sesión (/contadores/filtroAvisoAjax) y se navega a la URL
         // limpia del módulo, que lo aplica en su buscador (estado:borrador / sri:novedad).
         // Si la petición falla, igual se abre el módulo, solo que sin filtro.

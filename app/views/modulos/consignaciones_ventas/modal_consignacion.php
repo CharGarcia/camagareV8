@@ -125,9 +125,11 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosPestanasOcultas($vistaConfigC
                                 <button type="button" class="btn btn-sm btn-outline-info px-2" onclick="llamarPedido()" title="Cargar desde Pedido">
                                     <i class="bi bi-cart"></i>
                                 </button>
+                                <?php if (AppHelpersPermisos::puedeCrear('modulos/vendedores')): ?>
                                 <button type="button" class="btn btn-sm btn-outline-secondary px-2" onclick="crearVendedorRapido()" title="Nuevo Vendedor">
                                     <i class="bi bi-person-plus"></i>
                                 </button>
+                                <?php endif; ?>
                                 <button type="button" class="btn btn-sm btn-outline-success px-2 py-1" onclick="abrirModalResponsableCrear()" title="Crear responsable de traslado rápido">
                                     <i class="bi bi-truck"></i>
                                 </button>
@@ -2789,7 +2791,27 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosPestanasOcultas($vistaConfigC
         }
     };
 
-    function crearVendedorRapido() { Swal.fire('Info', 'Abre modal de vendedor', 'info'); }
+    // Abre el modal compartido de vendedores (incluido en index.php). Antes era un aviso de
+    // relleno («Abre modal de vendedor») que no hacía nada.
+    function crearVendedorRapido() {
+        if (typeof window.abrirModalVendedorCrear === 'function') window.abrirModalVendedorCrear();
+        else Swal.fire('Información', 'El registro rápido de vendedores no está disponible.', 'info');
+    }
+
+    // Vendedor creado desde «Nuevo Vendedor»: se agrega al selector Asesor y queda elegido.
+    // Solo nuevos y con la consignación abierta y editable.
+    document.addEventListener('vendedorGuardado', (e) => {
+        const res = e.detail || {};
+        if (!res.ok || res.nuevo !== true || !res.id) return;
+        if (!document.getElementById('modalConsignacion')?.classList.contains('show')) return;
+        const sel = document.getElementById('cons_id_vendedor');
+        if (!sel || sel.disabled) return;
+        if (![...sel.options].some(o => o.value === String(res.id))) {
+            sel.add(new Option(res.nombre || ('Vendedor ' + res.id), res.id));
+        }
+        sel.value = String(res.id);
+        sel.dispatchEvent(new Event('change'));
+    });
 
     function pdfConsignacion() {
         const id = document.getElementById('cons_id').value;

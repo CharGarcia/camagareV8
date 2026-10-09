@@ -2712,7 +2712,7 @@
     document.addEventListener('clienteGuardado', (e) => {
         if (!_pfModalAbierto()) return;
         const res = e.detail;
-        if (res && res.ok && res.data) {
+        if (res && res.ok && res.data && res.nuevo !== false) {
             _seleccionarCliente(res.data);
         }
     });

@@ -289,8 +289,12 @@ $idEmpresaActOIE = (int)($_SESSION['id_empresa'] ?? 0);
                                 const cuenta = (idCta && !OIE_COMPORTAMIENTOS_CUENTA_BLOQUEADA.includes(comp))
                                     ? { id: idCta, codigo: inpCta.dataset.codigo || '', nombre: inpCta.dataset.nombre || '' }
                                     : null;
-                                window.onOpcionCreada(res.id, formData.get('nombre'), comp, cuenta);
+                                // Crear al vuelo (CLAUDE.md §9): se cierra antes de que el documento
+                                // la coloque. El 5.º argumento dice a qué documentos aplica, para que
+                                // Ingresos no agregue una opción creada solo para Egresos (y viceversa).
                                 if (modalInstanciaOIE) modalInstanciaOIE.hide();
+                                window.onOpcionCreada(res.id, formData.get('nombre'), comp, cuenta,
+                                    { ingreso: isIng, egreso: isEgr, nuevo: !(parseInt(formData.get('id') || '0') > 0) });
                             } else {
                                 Swal.fire({
                                     icon: 'success',

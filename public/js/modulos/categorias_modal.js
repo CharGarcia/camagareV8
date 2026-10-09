@@ -5,6 +5,11 @@
 (function (window, document) {
     'use strict';
 
+    // Se carga desde productos/modal.php y, en algunas páginas, también desde la vista:
+    // la segunda carga no hace nada (si no, el formulario guardaría dos veces).
+    if (window.__CMG_categoriasModal) return;
+    window.__CMG_categoriasModal = true;
+
     const urlBase = (typeof BASE_URL !== 'undefined') ? (BASE_URL + '/modulos/categorias') : (window.location.origin + '/sistema/public/modulos/categorias');
     const modalEl = document.getElementById('modalCategoria');
     let modalInst = null;

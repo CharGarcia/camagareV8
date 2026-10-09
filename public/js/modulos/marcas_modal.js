@@ -5,6 +5,11 @@
 (function (window, document) {
     'use strict';
 
+    // Se carga desde productos/modal.php y, en algunas páginas, también desde la vista:
+    // la segunda carga no hace nada (si no, el formulario guardaría dos veces).
+    if (window.__CMG_marcasModal) return;
+    window.__CMG_marcasModal = true;
+
     const urlBase = (typeof BASE_URL !== 'undefined') ? (BASE_URL + '/modulos/marcas') : (window.location.origin + '/sistema/public/modulos/marcas');
     const modalEl = document.getElementById('modalMarca');
     let modalInst = null;

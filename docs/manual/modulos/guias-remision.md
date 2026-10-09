@@ -6,7 +6,7 @@ ruta_modulo: modulos/guias_remision
 tipo: modulo
 visibilidad: todos
 etiquetas: guia de remision, guias, traslado, transporte, envio, placa, transportista, sri, mercaderia en transito, ride, pdf, imprimir guia, guia desde transferencia, traslado entre bodegas, traslado entre establecimientos, buscar guia, buscador, filtros, filtrar guias, buscar por producto, filtro de fechas, chips, aparecen documentos que no busque, resultados que no corresponden, la busqueda trae otros documentos, aviso, avisos, novedad sri, documentos con novedad, devuelto, no autorizado, pendientes de enviar, borrador, borradores
-version: 1.13
+version: 1.14
 orden: 55
 estado: activo
 ---
@@ -285,6 +285,7 @@ cargados. Solo queda completar el **destinatario**, el **transportista** y la
 
 ## Historial de cambios
 
+- **1.14** — Al crear un **transportista** desde la guía, su ficha se cierra sola y queda seleccionado en la guía. Editar un cliente o transportista existente ya no cambia el de la guía.
 - **1.13** — Al hacer clic en los avisos de la barra superior (*Documentos con novedad
   del SRI* y documentos en borrador pendientes de enviar) el listado se abre ya
   filtrado con esos documentos. Nuevo filtro **Novedad SRI** en la ventana de filtros.

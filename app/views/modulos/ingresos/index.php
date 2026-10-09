@@ -3235,15 +3235,11 @@ window.onFormaPagoCreada = function (id, nombre, info) {
             combo.dispatchEvent(new Event('change'));
         }
     }
-    Swal.fire({
-        icon: 'success',
-        title: 'Forma de pago creada',
-        text: aplicaIngreso
-            ? `"${nombre}" fue registrada y quedó seleccionada en la forma de cobro.`
-            : `"${nombre}" fue registrada, pero no aplica a Ingresos.`,
-        timer: 2500,
-        showConfirmButton: false
-    });
+    Swal.fire({ toast: true, position: 'top-end', showConfirmButton: false, timer: aplicaIngreso ? 2500 : 3500,
+        icon: aplicaIngreso ? 'success' : 'info',
+        title: aplicaIngreso
+            ? `Forma "${nombre}" creada y seleccionada en la forma de cobro.`
+            : `Forma "${nombre}" creada, pero no aplica a Ingresos.` });
 };
 
 // Botón: Crear Opción de Ingreso (preselecciona "Ingreso" antes de abrir)
@@ -3255,8 +3251,17 @@ window.modalCrearOpcionIngreso = function () {
 
 // Callback tras guardar opción: agrega el nuevo botón de concepto dinámicamente.
 // `cuenta` ({id, codigo, nombre} o null) es la cuenta con la que se creó el concepto.
-window.onOpcionCreada = function (id, nombre, comportamiento, cuenta) {
+// `aplica` ({ingreso, egreso}) dice a qué documentos aplica: si se creó solo para Egresos,
+// no se agrega aquí.
+window.onOpcionCreada = function (id, nombre, comportamiento, cuenta, aplica) {
     comportamiento = comportamiento || 'GENERAL';
+    if (aplica && aplica.ingreso === false) {
+        Swal.fire({ toast: true, position: 'top-end', icon: 'info', showConfirmButton: false, timer: 3500,
+            title: `"${nombre}" se creó como opción de egreso: no aparece en Ingresos.` });
+        return;
+    }
+    // Ingreso en solo lectura (anulado/periodo cerrado): se agrega, pero no se selecciona.
+    const editable = !document.getElementById('m-recibo-de-input')?.disabled;
     const grupo  = document.getElementById('concepto-btns-group');
     const sel    = document.getElementById('m-select-concepto');
     const selGen = document.getElementById('m-select-concepto-general');
@@ -3284,7 +3289,7 @@ window.onOpcionCreada = function (id, nombre, comportamiento, cuenta) {
             optG.value = id;
             optG.textContent = nombre;
             selGen.appendChild(optG);
-            if (!selGen.disabled) {
+            if (editable && !selGen.disabled) {
                 selGen.value = id;
                 seleccionarConceptoGeneralIngreso(id);
             }
@@ -3300,15 +3305,12 @@ window.onOpcionCreada = function (id, nombre, comportamiento, cuenta) {
         btn.addEventListener('click', function () { ingOnClickConceptoBtn(this); });
         // Insertar antes del selector general para conservar el orden
         if (selGen) grupo.insertBefore(btn, selGen); else grupo.appendChild(btn);
+        // Queda elegido, igual que si se pulsara el botón (puede abrir los documentos pendientes).
+        if (editable) ingOnClickConceptoBtn(btn);
     }
 
-    Swal.fire({
-        icon: 'success',
-        title: 'Opción creada',
-        text: `"${nombre}" fue registrada y ya aparece como opción de concepto.`,
-        timer: 2500,
-        showConfirmButton: false
-    });
+    Swal.fire({ toast: true, position: 'top-end', icon: 'success', showConfirmButton: false, timer: 2500,
+        title: editable ? `Opción "${nombre}" creada y seleccionada.` : `Opción "${nombre}" creada.` });
 };
 
 // window.abrirModalClienteCrear ya lo expone public/js/modulos/clientes_modal.js
@@ -3316,7 +3318,8 @@ window.onOpcionCreada = function (id, nombre, comportamiento, cuenta) {
 document.addEventListener('clienteGuardado', async (ev) => {
     let ident = '';
     if (ev.detail && ev.detail.data && ev.detail.data.identificacion) ident = String(ev.detail.data.identificacion).trim();
-    if (!ident) return;
+    if (!ident || ev.detail?.nuevo === false) return; // editar un cliente no lo cambia en el ingreso
+    if (!document.getElementById('modalNuevoIngreso')?.classList.contains('show')) return;
     // Un ingreso en solo lectura (anulado/periodo cerrado) no cambia de cliente.
     if (document.getElementById('m-recibo-de-input')?.disabled) return;
     try {

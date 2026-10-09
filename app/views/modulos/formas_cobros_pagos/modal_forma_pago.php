@@ -367,21 +367,22 @@ try {
                     .then(r => r.json())
                     .then(res => {
                         if (res.ok) {
-                            Swal.fire('¡Éxito!', res.mensaje, 'success').then(() => {
-                                // Si existe una funcion de callback global, dispararla para refrescar listados externos
-                                if (typeof window.onFormaPagoCreada === 'function') {
-                                    // Tercer argumento: lo que necesita quien la agrega a su combo
-                                    // (Ingresos/Egresos) para que quede lista para usar sin recargar.
-                                    window.onFormaPagoCreada(res.id, formData.get('nombre'), {
-                                        tipo:          formData.get('tipo') || '',
-                                        aplica_en:     formData.get('aplica_en') || 'AMBAS',
-                                        mostrar_saldo: formData.get('mostrar_saldo') === '1',
-                                    });
-                                    modalInstanciaFP.hide();
-                                } else {
-                                    location.reload();
-                                }
-                            });
+                            // Abierto desde un documento (Ingresos/Egresos definen el callback):
+                            // crear al vuelo (CLAUDE.md §9) — el modal se cierra sin un aviso que
+                            // haya que aceptar y el documento la agrega a su combo ya seleccionada
+                            // (el callback muestra su propio aviso). Tercer argumento: lo que
+                            // necesita para pintarla igual que las que vienen del servidor.
+                            if (typeof window.onFormaPagoCreada === 'function') {
+                                modalInstanciaFP.hide();
+                                window.onFormaPagoCreada(res.id, formData.get('nombre'), {
+                                    tipo:          formData.get('tipo') || '',
+                                    aplica_en:     formData.get('aplica_en') || 'AMBAS',
+                                    mostrar_saldo: formData.get('mostrar_saldo') === '1',
+                                    nuevo:         !(parseInt(formData.get('id') || '0') > 0),
+                                });
+                            } else {
+                                Swal.fire('¡Éxito!', res.mensaje, 'success').then(() => location.reload());
+                            }
                         } else {
                             Swal.fire('Error', res.mensaje, 'error');
                         }

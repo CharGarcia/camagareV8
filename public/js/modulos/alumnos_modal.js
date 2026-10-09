@@ -164,7 +164,7 @@
     document.addEventListener('clienteGuardado', (e) => {
         if (!modalEl || !modalEl.classList.contains('show')) return;
         const res = e.detail;
-        if (!res || !res.ok || !res.data) return;
+        if (!res || !res.ok || !res.data || res.nuevo === false) return;
         const input = document.getElementById('alu_cliente_texto');
         const hidden = document.getElementById('alu_id_cliente');
         if (!input || !hidden) return;

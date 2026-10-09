@@ -39,6 +39,13 @@ class EmpresasSistemaController extends Controller
         $idActual = (int) ($_SESSION['id_usuario'] ?? 0);
         $nivel = (int) ($_SESSION['nivel'] ?? 1);
         $buscar = trim($_GET['b'] ?? $_POST['b'] ?? $_GET['buscar'] ?? $_POST['buscar'] ?? '');
+        // Filtro que dejó el aviso del navbar (sin controladora / sin suscripción) vía
+        // /contadores/filtroAvisoAjax: se aplica UNA vez, al llegar con la URL limpia.
+        $filtroAviso = (string) ($_SESSION['aviso_filtro'][self::RUTA_MODULO] ?? '');
+        unset($_SESSION['aviso_filtro'][self::RUTA_MODULO]);
+        if ($buscar === '' && $filtroAviso !== '') {
+            $buscar = $filtroAviso;
+        }
         $page = max(1, (int) ($_GET['page'] ?? $_POST['page'] ?? 1));
         $perPage = \App\Helpers\PreferenciasHelper::porPaginaModulo('empresas_sistema');
 

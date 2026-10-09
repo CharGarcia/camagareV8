@@ -150,6 +150,13 @@ class ContadoresController extends Controller
         'modulos/notas_credito'       => ['novedad_sri' => 'sri:novedad', 'borrador' => 'estado:borrador'],
         'modulos/guias_remision'      => ['novedad_sri' => 'sri:novedad', 'borrador' => 'estado:borrador'],
         'modulos/car-wash'            => ['borrador' => 'estado:borrador'],
+        // Aviso de la empresa que vende el sistema (nivel 3): empresas activas sin
+        // controladora / sin suscripción. Mismos filtros del modal de Empresas del sistema.
+        'config/empresas-sistema'     => [
+            // Las que venden el sistema no necesitan controladora: se excluyen, igual que en el conteo.
+            'sin_controladora' => 'estado:1 controladora:sin -suscripcion:vendedora',
+            'sin_suscripcion'  => 'estado:1 suscripcion:sin',
+        ],
     ];
 
     /**

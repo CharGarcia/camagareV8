@@ -228,6 +228,17 @@
                     btn.innerHTML = '<i class="bi bi-check2-circle me-1"></i> Guardar';
                 }
                 if (d.ok) {
+                    // Creado al vuelo desde un documento (hay otro modal debajo, p. ej. la guía de
+                    // remisión): el documento lo toma por 'transportistaGuardado' y el modal se
+                    // cierra (CLAUDE.md §9). Desde el listado sigue el comportamiento de abajo.
+                    if (!id && d.id && typeof window.CMG_modalSobreOtro === 'function'
+                        && window.CMG_modalSobreOtro(document.getElementById('modalTransportista'))) {
+                        if (typeof window.TR_fetchSearch === 'function') window.TR_fetchSearch(1);
+                        document.dispatchEvent(new CustomEvent('transportistaGuardado', { detail: { ...d, nuevo: true } }));
+                        TR_cerrarModal(() => Swal.fire({ toast: true, position: 'top-end', icon: 'success',
+                            title: 'Transportista creado y seleccionado.', timer: 2500, showConfirmButton: false }));
+                        return;
+                    }
                     // El modal NO se cierra al guardar (igual que Clientes y Guías):
                     // el usuario lo cierra con Cancelar. Si era nuevo, queda en modo
                     // edición con el id recién creado y el botón Eliminar visible.
@@ -246,7 +257,7 @@
                     Swal.fire({ toast: true, position: 'top-end', icon: 'success', title: d.mensaje || 'Guardado', timer: 2500, showConfirmButton: false, timerProgressBar: true });
 
                     // Disparar evento por si otros módulos lo necesitan
-                    document.dispatchEvent(new CustomEvent('transportistaGuardado', { detail: d }));
+                    document.dispatchEvent(new CustomEvent('transportistaGuardado', { detail: { ...d, nuevo: !id } }));
                 } else {
                     Swal.fire({ icon: 'error', title: 'Error', text: d.mensaje });
                 }

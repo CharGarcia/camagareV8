@@ -953,7 +953,10 @@
 
     // Autoseleccionar la entidad recién creada (best-effort según el payload del evento).
     document.addEventListener('clienteGuardado', (e) => {
+        if (!document.getElementById('modalOrdenSE')?.classList.contains('show')) return;
+        if (document.getElementById('se_btn_guardar')?.classList.contains('d-none')) return; // solo lectura
         const j = e.detail || {}; const c = j.data || j;
+        if (j.nuevo === false) return; // editar un cliente no lo cambia en la orden
         if (c && c.id) seSeleccionarCliente({ id: c.id, nombre: c.nombre || j.nombre, identificacion: c.identificacion, direccion: c.direccion, correo: c.correo || c.email, telefono: c.telefono });
     });
     // Producto creado desde «nuevo producto»: se agrega al detalle (primera fila vacía o una

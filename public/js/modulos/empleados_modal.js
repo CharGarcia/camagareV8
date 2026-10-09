@@ -739,6 +739,19 @@
                 }
 
                 if (json.ok) {
+                    // Creado al vuelo desde un documento (hay otro modal debajo, p. ej. Egresos):
+                    // el documento lo toma por 'empleadoGuardado' (lee id y nombre del formulario,
+                    // que sigue lleno hasta que el modal termina de cerrarse) y el modal se cierra.
+                    if (!id && json.id && typeof window.CMG_modalSobreOtro === 'function'
+                        && window.CMG_modalSobreOtro(document.getElementById('modalEmpleado'))) {
+                        document.getElementById('emp_id').value = json.id;
+                        restaurarBtn();
+                        window.dispatchEvent(new CustomEvent('empleadoGuardado', { detail: { ...json, nuevo: true } }));
+                        getModalEmp()?.hide();
+                        Swal.fire({ toast: true, position: 'top-end', icon: 'success', showConfirmButton: false, timer: 2200,
+                            title: 'Empleado creado y seleccionado.' });
+                        return;
+                    }
                     Swal.fire({
                         icon: 'success',
                         title: id ? 'Actualizado' : 'Guardado',
@@ -758,7 +771,7 @@
                     await cargarDetalleEmp(id || json.id);
                     restaurarBtn();
                     if (typeof window.cambiarPaginaAjax === 'function') window.cambiarPaginaAjax(window.currentPage || 1);
-                    window.dispatchEvent(new CustomEvent('empleadoGuardado', { detail: json }));
+                    window.dispatchEvent(new CustomEvent('empleadoGuardado', { detail: { ...json, nuevo: !id } }));
                 } else {
                     Swal.fire({ icon: 'error', title: 'Atención', text: json.error || 'No se pudo guardar el empleado.' });
                     restaurarBtn();

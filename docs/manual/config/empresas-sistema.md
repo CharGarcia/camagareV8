@@ -5,8 +5,8 @@ categoria: Configuración global
 ruta_modulo: config/empresas-sistema
 tipo: modulo
 visibilidad: superadmin
-etiquetas: empresas del sistema, empresas sin suscripcion, sin suscripcion, no pagan, empresas que no pagan, regalia, sin cobro, cortesia, plan sin costo, exonerar suscripcion, empresa gratis, empresa administradora, administradora de suscripciones, empresa que controla las suscripciones, controladora, suscripcion por defecto, crear empresa, alta de empresa, establecimientos, sucursales, matriz, usuarios asignados, documentos legales, suscripcion, empresas del grupo, eliminar establecimiento, establecimiento activo, un solo establecimiento activo, buscar empresa, filtrar empresas, filtros de empresas, exportar empresas, pdf de empresas, excel de empresas, ordenar empresas, columnas del listado, telefono de la empresa, correo de la empresa
-version: 1.19
+etiquetas: empresas del sistema, aviso empresas sin suscripcion, aviso navbar, empresas por revisar, empresas sin suscripcion, sin suscripcion, no pagan, empresas que no pagan, regalia, sin cobro, cortesia, plan sin costo, exonerar suscripcion, empresa gratis, empresa administradora, administradora de suscripciones, empresa que controla las suscripciones, controladora, suscripcion por defecto, crear empresa, alta de empresa, establecimientos, sucursales, matriz, usuarios asignados, documentos legales, suscripcion, empresas del grupo, eliminar establecimiento, establecimiento activo, un solo establecimiento activo, buscar empresa, filtrar empresas, filtros de empresas, exportar empresas, pdf de empresas, excel de empresas, ordenar empresas, columnas del listado, telefono de la empresa, correo de la empresa
+version: 1.20
 orden: 1
 estado: activo
 ---
@@ -131,6 +131,23 @@ la empresa que controla las suscripciones, y que no esté cancelada. No cuentan
 como «sin suscripción» las empresas por **regalía** vigente ni las que **venden**
 el sistema.
 
+### Aviso en la barra superior: empresas por revisar
+
+Cuando un superadministrador trabaja dentro de la **empresa que vende el
+sistema** (la que es «Empresa que controla las suscripciones» de otras, o un
+establecimiento con su mismo RUC), en la barra superior aparece un ícono de
+edificio con un número: el total de **empresas activas** que hay que revisar.
+Al abrirlo muestra dos líneas:
+
+- **Sin empresa controladora**: empresas que no tienen asignada la empresa que
+  controla sus suscripciones (ni la heredan de otro establecimiento).
+- **Sin suscripción**: empresas sin una suscripción del sistema vigente.
+
+Cada línea abre **Empresas del sistema** ya filtrado con esas empresas, con
+los mismos filtros del modal (*Controladora asignada* y *Suscripción del
+sistema*). No cuentan las empresas que venden el sistema ni las de regalía
+vigente. El número se actualiza cada pocos minutos.
+
 ### Empresas por regalía (sin cobro de suscripción)
 
 Para una empresa a la que no se le cobra el sistema (socio, convenio, empresa
@@ -177,6 +194,9 @@ las empresas que ese usuario tiene asignadas.
 
 ## Historial de cambios
 
+- **1.20** — Aviso en la barra superior (superadministrador, dentro de la empresa que vende el
+  sistema) con las empresas activas sin controladora y sin suscripción; cada línea abre el
+  listado ya filtrado.
 - **1.19** — Los avisos de éxito (guardar, eliminar, enviar) son un mensaje rápido en la
   esquina superior derecha que se va solo; los errores y advertencias siguen en ventana.
 - **1.18** — Se quita el botón **Sin suscripción** junto a Excel: las empresas sin

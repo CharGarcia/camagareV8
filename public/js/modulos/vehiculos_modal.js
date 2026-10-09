@@ -371,7 +371,7 @@
                     setTimeout(() => { 
                         getModalVeh()?.hide(); 
                         if (typeof window.fetchSearch === 'function') window.fetchSearch(window.currentPage || 1);
-                        window.dispatchEvent(new CustomEvent('vehiculoGuardado', { detail: json }));
+                        window.dispatchEvent(new CustomEvent('vehiculoGuardado', { detail: { ...json, nuevo: !id } }));
                     }, 800);
                 } else {
                     Swal.fire({ icon: 'error', title: 'Error', text: json.error || 'Ocurrió un error al guardar.' });

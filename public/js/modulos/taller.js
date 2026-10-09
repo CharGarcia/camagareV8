@@ -1566,7 +1566,7 @@
     window.addEventListener('vehiculoGuardado', async (e) => {
         if (!tllOrdenAbierta()) return;
         const j = e.detail || {}; const id = parseInt((j.data || j).id || 0, 10);
-        if (!id) return;
+        if (!id || j.nuevo === false) return;
         // El guardado del vehículo responde solo {ok, id}: se vuelve a leer el vehículo por su
         // placa para tener la copia completa (marca, modelo, año, color, chasis, motor).
         const placa = (($('vehiculo_placa') || {}).value || '').trim();
@@ -1583,7 +1583,7 @@
     document.addEventListener('clienteGuardado', (e) => {
         if (!tllOrdenAbierta()) return;
         const j = e.detail || {}; const c = j.data || j;
-        if (!c || !c.id) return;
+        if (!c || !c.id || j.nuevo === false) return; // editar un cliente no lo cambia en la orden
         seleccionarCliente({ id: c.id, nombre: c.nombre || j.nombre || '', telefono: c.telefono || '', correo: c.correo || c.email || '' });
     });
 

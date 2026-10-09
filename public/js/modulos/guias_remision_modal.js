@@ -1319,7 +1319,7 @@
         // nuevo (msg "creado") o si es la ficha del cliente ya seleccionado (para
         // refrescar nombre/dirección); una edición de otro cliente no pisa la guía.
         const idSel   = document.getElementById('gr-id-cliente')?.value || '';
-        const esNuevo = /cread/i.test(res.msg || '');
+        const esNuevo = res.nuevo === true || /cread/i.test(res.msg || '');
         if (!esNuevo && String(idSel) !== String(res.data.id)) return;
         const c = res.data;
         window.GR_seleccionarCliente(c.id, c.nombre || '', c.identificacion || '', c.direccion || '', c.email || '');
@@ -1350,7 +1350,7 @@
     document.addEventListener('transportistaGuardado', function (e) {
         if (!grModalAbierto() || estadoActual !== 'borrador') return;
         const res = e.detail;
-        if (!res || !res.ok || !res.id) return; // al editar no viene id: no se toca la guía
+        if (!res || !res.ok || !res.id || res.nuevo === false) return; // editar no toca la guía
         fetch(urlBaseGR + '/get-transportista-ajax?id=' + encodeURIComponent(res.id))
             .then(r => r.json())
             .then(d => {

@@ -201,13 +201,7 @@ class Empresa extends BaseModel
                 // Controladora de suscripciones: propia (campo con empresa válida), hereda (campo
                 // vacío pero otra fila con el mismo RUC la tiene) o sin (ninguna). Misma regla que
                 // EmpresaRepository::resolverEmpresaControladoraSuscripciones().
-                'controladora'  => "(CASE
-                    WHEN EXISTS (SELECT 1 FROM empresas cp WHERE cp.id = e.id_empresa_suscripciones AND cp.eliminado = false) THEN 'propia'
-                    WHEN EXISTS (SELECT 1 FROM empresas h
-                                   JOIN empresas ch ON ch.id = h.id_empresa_suscripciones AND ch.eliminado = false
-                                  WHERE h.eliminado = false
-                                    AND regexp_replace(h.ruc, '[^0-9]', '', 'g') = regexp_replace(e.ruc, '[^0-9]', '', 'g')) THEN 'hereda'
-                    ELSE 'sin' END)",
+                'controladora'  => $this->exprSituacionControladora(),
                 'id_administradora' => 'e.id_empresa_suscripciones',
                 'operadora'     => "CASE WHEN COALESCE(e.factura_operadora_transporte, 'false') = 'true' THEN 'si' ELSE 'no' END",
                 'cupo_lleno'    => "CASE WHEN {$exprUsuarios} >= COALESCE(e.max_usuarios, 3) THEN 'si' ELSE 'no' END",
@@ -706,6 +700,66 @@ class Empresa extends BaseModel
         END)";
     }
 
+    /**
+     * Controladora de suscripciones de cada empresa (alias `e`): 'propia' (su campo apunta
+     * a una empresa válida), 'hereda' (campo vacío, pero otra fila con el mismo RUC la tiene)
+     * o 'sin'. Misma regla que EmpresaRepository::resolverEmpresaControladoraSuscripciones().
+     * Alimenta el filtro `controladora:` y el aviso del navbar.
+     */
+    public function exprSituacionControladora(): string
+    {
+        return "(CASE
+            WHEN EXISTS (SELECT 1 FROM empresas cp WHERE cp.id = e.id_empresa_suscripciones AND cp.eliminado = false) THEN 'propia'
+            WHEN EXISTS (SELECT 1 FROM empresas h
+                           JOIN empresas ch ON ch.id = h.id_empresa_suscripciones AND ch.eliminado = false
+                          WHERE h.eliminado = false
+                            AND regexp_replace(h.ruc, '[^0-9]', '', 'g') = regexp_replace(e.ruc, '[^0-9]', '', 'g')) THEN 'hereda'
+            ELSE 'sin' END)";
+    }
+
+    /**
+     * ¿La empresa VENDE el sistema? = su RUC es el de alguna controladora de suscripciones
+     * (cualquiera de sus establecimientos). Decide si se le muestra el aviso del navbar.
+     */
+    public function esVendedoraSuscripciones(int $idEmpresa): bool
+    {
+        $r = $this->query(
+            "SELECT 1
+               FROM empresas yo
+               JOIN empresas cv ON regexp_replace(cv.ruc, '[^0-9]', '', 'g') = regexp_replace(yo.ruc, '[^0-9]', '', 'g')
+                               AND cv.eliminado = false
+              WHERE yo.id = " . (int) $idEmpresa . "
+                AND regexp_replace(COALESCE(yo.ruc, ''), '[^0-9]', '', 'g') <> ''
+                AND EXISTS (SELECT 1 FROM empresas x WHERE x.id_empresa_suscripciones = cv.id AND x.eliminado = false)
+              LIMIT 1"
+        );
+        return !empty($r);
+    }
+
+    /**
+     * Aviso del navbar para la empresa que vende el sistema: empresas ACTIVAS sin
+     * controladora y sin suscripción (mismas reglas que los filtros `controladora:sin` y
+     * `suscripcion:sin` de Empresas del sistema, para que el número cuadre con el listado
+     * filtrado). No cuentan las que venden el sistema; tampoco las de regalía vigente en
+     * «sin suscripción».
+     *
+     * @return array{sin_controladora:int, sin_suscripcion:int}
+     */
+    public function getAvisoEmpresasSuscripcion(): array
+    {
+        $r = $this->query(
+            "SELECT COUNT(*) FILTER (WHERE x.ctrl = 'sin' AND x.susc <> 'vendedora') AS sin_controladora,
+                    COUNT(*) FILTER (WHERE x.susc = 'sin')                         AS sin_suscripcion
+               FROM (SELECT " . $this->exprSituacionControladora() . " AS ctrl,
+                            " . $this->exprSituacionSuscripcion() . " AS susc
+                       FROM empresas e
+                      WHERE e.eliminado = false AND e.estado = '1') x"
+        );
+        return [
+            'sin_controladora' => (int) ($r[0]['sin_controladora'] ?? 0),
+            'sin_suscripcion'  => (int) ($r[0]['sin_suscripcion'] ?? 0),
+        ];
+    }
     /** Cache por request: ¿ya se aplicó la migración de regalía? */
     private static ?bool $colsRegalia = null;
 

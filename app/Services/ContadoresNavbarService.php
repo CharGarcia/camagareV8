@@ -343,6 +343,41 @@ class ContadoresNavbarService
         return $perms;
     }
 
+    /** TTL del aviso «empresas sin controladora / sin suscripción» (consulta sobre todas las empresas). */
+    private const TTL_EMPRESAS_SUSCRIPCION = 300;
+
+    /**
+     * Aviso para la empresa que VENDE el sistema: empresas activas sin controladora y sin
+     * suscripción. null si la empresa activa no vende el sistema. Los conteos son globales
+     * (todas las empresas del sistema, como el listado de Empresas del sistema), con caché
+     * compartida de 5 min; si se corrige una empresa, el número baja en el siguiente refresco.
+     *
+     * @return array{sin_controladora:int, sin_suscripcion:int}|null
+     */
+    private function avisoEmpresasSuscripcion(int $idEmpresa): ?array
+    {
+        $claveVende = 'cmg_vende_susc_' . $idEmpresa;
+        $vende = Cache::get($claveVende);
+        try {
+            $modelo = new \App\models\Empresa();
+            if (!is_bool($vende)) {
+                $vende = $modelo->esVendedoraSuscripciones($idEmpresa);
+                Cache::set($claveVende, $vende, self::TTL_EMPRESAS_SUSCRIPCION);
+            }
+            if (!$vende) {
+                return null;
+            }
+            $conteo = Cache::get('cmg_aviso_empresas_susc');
+            if (!is_array($conteo)) {
+                $conteo = $modelo->getAvisoEmpresasSuscripcion();
+                Cache::set('cmg_aviso_empresas_susc', $conteo, self::TTL_EMPRESAS_SUSCRIPCION);
+            }
+            return $conteo;
+        } catch (\Throwable $e) {
+            return null;
+        }
+    }
+
     /**
      * Contadores que el usuario puede ver, listos para el navbar.
      *
@@ -421,6 +456,15 @@ class ContadoresNavbarService
                             'estado' => $dias < 0 ? 'caducada' : 'por_caducar',
                         ];
                     }
+                }
+            }
+
+            // Empresas del sistema sin controladora o sin suscripción: solo nivel 3 (es la
+            // pantalla Empresas del sistema) y solo si la empresa activa VENDE el sistema.
+            if ($nivel >= 3) {
+                $avEmp = $this->avisoEmpresasSuscripcion($idEmpresa);
+                if ($avEmp !== null && ($avEmp['sin_controladora'] + $avEmp['sin_suscripcion']) > 0) {
+                    $out['empresas_suscripcion'] = $avEmp;
                 }
             }
 

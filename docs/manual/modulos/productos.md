@@ -6,7 +6,7 @@ ruta_modulo: modulos/productos
 tipo: modulo
 visibilidad: todos
 etiquetas: productos, buscar producto, buscador, filtros, filtrar productos, productos bajo el minimo, reponer stock, buscar por variante, buscar por codigo de proveedor, kits, chips, ordenar por dos columnas, ordenar por categoria y descripcion, articulos, servicios, catalogo, precio, costo, iva, ice, stock, codigo de barras, inventariable, varios precios, lista de precios, mayorista, carga masiva, importar productos, precio editable, cambiar precio en la comanda, precio variable, envio a domicilio, delivery, servicio a domicilio, recargo por servicio, excluir propina, restaurante
-version: 1.12
+version: 1.13
 orden: 10
 estado: activo
 ---
@@ -240,6 +240,7 @@ aparecer al facturar.
 
 ## Historial de cambios
 
+- **1.13** — Los botones **+** de *Categoría* y *Marca* de la ficha funcionan en todas las pantallas que abren el producto (lavado, taller, servicio externo, proformas, suscripciones, importaciones, cotizaciones); antes solo en Productos, Facturas, Recibos y Compras.
 - **1.12** — El producto creado desde un documento se agrega solo a su detalle también en recibos, suscripciones, importaciones y órdenes de lavado, taller y servicio externo.
 - **1.11** — Al abrir la ficha de un producto **inactivo** migrado del sistema
   anterior, el selector **Estado** quedaba en blanco (el dato venía con un valor
