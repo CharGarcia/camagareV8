@@ -249,6 +249,9 @@ $warnIcon = '<i class="bi bi-exclamation-circle-fill text-warning ms-1" title="C
                                         // Reventa con varias suscripciones del mismo cliente y ninguna
                                         // asignada a esta empresa: no se puede saber cuál corresponde.
                                         $suscVarias = (int) ($suscripcion_varias ?? 0);
+                                        // Las indicaciones de configuración (Empresas del sistema) solo las ve el
+                                        // superadministrador: el cliente no tiene acceso a esa pantalla.
+                                        $esSuperadminSusc = (int) ($_SESSION['nivel'] ?? 1) >= 3;
                                         ?>
                                         <div class="d-flex align-items-center justify-content-between mb-3">
                                             <h6 class="fw-bold mb-0 small text-primary"><i class="bi bi-shield-check me-2"></i>Suscripción y Vigencia del Sistema</h6>
@@ -296,10 +299,15 @@ $warnIcon = '<i class="bi bi-exclamation-circle-fill text-warning ms-1" title="C
                                         <?php if (!$tieneSusc && $suscVarias > 1): ?>
                                             <div class="alert alert-warning py-2 px-3 mb-0" style="font-size: 0.75rem;">
                                                 <i class="bi bi-exclamation-triangle me-1"></i>
-                                                El cliente al que se factura tiene <strong><?= $suscVarias ?> suscripciones</strong>.
-                                                Para mostrar la que corresponde a esta empresa, asígnala en
-                                                <strong>Configuración → Empresas del sistema</strong>, editando esta empresa
-                                                en el campo <em>«Suscripción que cubre a esta empresa»</em>.
+                                                <?php if ($esSuperadminSusc): ?>
+                                                    El cliente al que se factura tiene <strong><?= $suscVarias ?> suscripciones</strong>.
+                                                    Para mostrar la que corresponde a esta empresa, asígnala en
+                                                    <strong>Configuración → Empresas del sistema</strong>, editando esta empresa
+                                                    en el campo <em>«Suscripción que cubre a esta empresa»</em>.
+                                                <?php else: ?>
+                                                    La información de la suscripción de esta empresa no está disponible por el momento.
+                                                    Si tiene dudas sobre su plan o sus pagos, comuníquese con soporte.
+                                                <?php endif; ?>
                                             </div>
                                         <?php elseif ($tieneSusc): ?>
                                             <?php
@@ -451,11 +459,16 @@ $warnIcon = '<i class="bi bi-exclamation-circle-fill text-warning ms-1" title="C
                                             <div class="alert alert-info d-flex align-items-center py-2 px-3 mb-3" style="font-size: 0.72rem;">
                                                 <i class="bi bi-info-circle me-2"></i>
                                                 <div>
-                                                    No hay ninguna <strong>suscripción asociada</strong> a la empresa actual (RUC <strong><?= htmlspecialchars($empresa['ruc'] ?? '') ?></strong>).
-                                                    <?php if (empty($suscripcion_controladora)): ?>
-                                                        <br><span class="text-muted">No se ha definido la empresa que controla las suscripciones. Configúrala en <em>Empresas del sistema</em>.</span>
+                                                    <?php if ($esSuperadminSusc): ?>
+                                                        No hay ninguna <strong>suscripción asociada</strong> a la empresa actual (RUC <strong><?= htmlspecialchars($empresa['ruc'] ?? '') ?></strong>).
+                                                        <?php if (empty($suscripcion_controladora)): ?>
+                                                            <br><span class="text-muted">No se ha definido la empresa que controla las suscripciones. Configúrala en <em>Empresas del sistema</em>.</span>
+                                                        <?php endif; ?>
+                                                        <br><span class="text-muted">Se muestran los datos manuales de vigencia.</span>
+                                                    <?php else: ?>
+                                                        Datos de vigencia del sistema para esta empresa.
+                                                        <br><span class="text-muted">Si tiene dudas sobre su plan o sus pagos, comuníquese con soporte.</span>
                                                     <?php endif; ?>
-                                                    <br><span class="text-muted">Se muestran los datos manuales de vigencia.</span>
                                                 </div>
                                             </div>
                                             <div class="row g-3 align-items-center">
@@ -549,11 +562,6 @@ $warnIcon = '<i class="bi bi-exclamation-circle-fill text-warning ms-1" title="C
                                                     </span>
                                                 <?php endif; ?>
                                             </div>
-                                            <?php if ($puedeEnviarDocsLegales): ?>
-                                                <button type="button" id="btn-enviar-documentos-legales" class="btn btn-sm btn-primary" onclick="enviarDocumentosLegalesEmpresa(this)">
-                                                    <i class="bi bi-envelope-fill me-1"></i><?= $ultimoEnvioDocs ? 'Reenviar documentos legales' : 'Enviar documentos legales' ?>
-                                                </button>
-                                            <?php endif; ?>
                                         </div>
 
                                         <?php if (!$ultimoEnvioDocs): ?>
@@ -587,6 +595,16 @@ $warnIcon = '<i class="bi bi-exclamation-circle-fill text-warning ms-1" title="C
                                                 </tbody>
                                             </table>
                                         </div>
+
+                                        <?php if ($puedeEnviarDocsLegales): ?>
+                                            <!-- Debajo de la tabla, pequeño y de contorno a propósito: no debe confundirse
+                                                 con el botón azul "Guardar Información General" de la misma pestaña. -->
+                                            <div class="text-end mb-2">
+                                                <button type="button" id="btn-enviar-documentos-legales" class="btn btn-outline-secondary" style="font-size: 0.68rem; padding: 0.1rem 0.5rem;" onclick="enviarDocumentosLegalesEmpresa(this)">
+                                                    <i class="bi bi-envelope me-1"></i><?= $ultimoEnvioDocs ? 'Reenviar documentos legales' : 'Enviar documentos legales' ?>
+                                                </button>
+                                            </div>
+                                        <?php endif; ?>
 
                                         <?php if (count($documentosLegales) > 1): ?>
                                             <details class="mb-3" style="font-size: 0.7rem;">

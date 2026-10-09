@@ -6,7 +6,7 @@ ruta_modulo: modulos/empresa
 tipo: modulo
 visibilidad: admin
 etiquetas: empresa, datos de la empresa, ruc, suscripcion, suscripcion vencida, vigencia, vencimiento, pago pendiente, aviso de pago, renovacion, mensualidad, cuota del sistema, establecimiento, punto de emision, logo, logo por punto de emision, logo de la caja, logo por sucursal, otra marca, quitar logo, ambiente, pruebas, produccion, configuracion, correo, email, smtp, envio de correos, cuerpo del correo, asunto, plantilla de correo, remitente, documentos legales, acuerdo de uso de datos, contrato de uso del sistema, aceptacion de documentos, documentos firmados, documentos cargados, archivos de la empresa, secuenciales, numeracion, tipos de documento, codDoc, eliminar secuencial, crear secuenciales, agregar todos los faltantes, facturas de reembolso, punto unico por empresa, punto inactivo, eliminar punto de emision con documentos, puntos duplicados, secuencial inicial, numero inicial, hueco, huecos, rellenar hueco, salto de numeracion, siguiente numero, retomar numeracion, presentacion de los items, agrupar items, agrupar por nombre, agrupar por lote, agrupar por nup, agrupar por serie, juntar lineas repetidas, sumar items iguales, mostrar lote en la factura, mostrar caducidad, mostrar unidad de medida, mostrar nup, descripcion del item, tirilla, ticket, impresion termica, modo de numeracion, numeracion por fecha, secuencial por fecha, reiniciar numeracion, reinicio anual, reinicio mensual, numeracion anual, numeracion mensual, correlativo por año, correlativo por mes, empezar de cero cada año, prefijo del año, numero con el año, volver a empezar la numeracion
-version: 1.34
+version: 1.35
 orden: 5
 estado: activo
 ---
@@ -304,7 +304,9 @@ Vigencia, hay una tarjeta con dos bloques:
   abre la versión vigente, para poder revisarlos **antes** de enviarlos. Si
   hubo más de un envío, un desplegable "Ver envíos anteriores" muestra el
   historial.
-  - **Botón "Enviar" / "Reenviar documentos legales"**: aparece mientras el
+  - **Botón "Enviar" / "Reenviar documentos legales"** (pequeño, debajo de la
+    tabla de los dos documentos, para no confundirlo con *Guardar Información
+    General*): aparece mientras el
     estado sea **Sin enviar** o **Pendiente de aceptación** (para poder
     insistir con un reenvío si el destinatario no llegó a aceptar). Cualquier
     usuario con permiso de actualizar sobre este módulo (no solo el
@@ -456,6 +458,9 @@ de taxis.
 
 ## Historial de cambios
 
+- **1.35** — La tarjeta Suscripción y Vigencia ya no le indica al cliente que configure
+  *Empresas del sistema* (no tiene acceso): ve un texto neutro que lo remite a soporte. Las
+  indicaciones de configuración quedan solo para el superadministrador.
 - **1.34** — Se quita el interruptor **Cancelar renovación** de la tarjeta Suscripción y
   Vigencia (datos manuales). Guardar la ficha ya no modifica ese dato.
 - **1.33** — Se agregan **3 días de gracia**: la suscripción se marca vencida recién 3 días
