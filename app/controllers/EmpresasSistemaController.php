@@ -352,6 +352,9 @@ class EmpresasSistemaController extends Controller
             // para que el campo se vea vacío y, al guardar, el vínculo colgado se limpie.
             . ' data-id-empresa-suscripciones="' . (($r['ctrl_nombre'] ?? null) !== null ? (int) ($r['id_empresa_suscripciones'] ?? 0) : 0) . '"'
             . ' data-es-administradora="' . (!empty($r['es_administradora_suscripciones']) ? '1' : '0') . '"'
+            . ' data-sin-cobro="' . (!empty($r['sin_cobro_suscripcion']) ? '1' : '0') . '"'
+            . ' data-sin-cobro-motivo="' . htmlspecialchars((string) ($r['sin_cobro_motivo'] ?? '')) . '"'
+            . ' data-sin-cobro-hasta="' . htmlspecialchars((string) ($r['sin_cobro_hasta'] ?? '')) . '"'
             . ' data-id-cliente-facturado="' . (int) ($r['id_cliente_facturado'] ?? 0) . '"'
             . ' data-id-suscripcion="' . (int) ($r['id_suscripcion'] ?? 0) . '"'
             . ' data-ctrl-label="' . htmlspecialchars(trim(($r['ctrl_nombre'] ?? '') . (!empty($r['ctrl_ruc']) ? ' — ' . $r['ctrl_ruc'] . ' (' . ($r['ctrl_estab'] ?? '') . ')' : ''))) . '"'
@@ -364,6 +367,14 @@ class EmpresasSistemaController extends Controller
         $badgeAdmin = !empty($r['es_administradora_suscripciones'])
             ? ' <span class="badge bg-primary bg-opacity-10 text-primary border border-primary border-opacity-25" title="Empresa administradora de suscripciones: las empresas nuevas quedan controladas por ella">Administradora</span>'
             : '';
+        if (!empty($r['sin_cobro_suscripcion'])) {
+            $hastaReg = !empty($r['sin_cobro_hasta']) ? date('d-m-Y', strtotime((string) $r['sin_cobro_hasta'])) : 'indefinida';
+            $titReg   = 'Sin cobro de suscripción (regalía) hasta ' . $hastaReg
+                . (!empty($r['sin_cobro_motivo']) ? ' — Motivo: ' . $r['sin_cobro_motivo'] : '');
+            $badgeAdmin .= ($r['regalia_vigente'] ?? 'no') === 'si'
+                ? ' <span class="badge bg-success bg-opacity-10 text-success border border-success border-opacity-25" title="' . htmlspecialchars($titReg) . '">Regalía</span>'
+                : ' <span class="badge bg-secondary bg-opacity-10 text-secondary border border-secondary border-opacity-25" title="' . htmlspecialchars($titReg) . ' (ya terminó)">Regalía vencida</span>';
+        }
         $html .= '<td class="ps-3 fw-medium text-truncate" style="max-width:300px" data-col="nombre">' . $txt($r['nombre'] ?? '') . $badgeAdmin . '</td>';
         $html .= '<td class="text-truncate" style="max-width:200px" data-col="nombre_comercial">' . $txt($r['nombre_comercial'] ?? '') . '</td>';
         $html .= '<td data-col="ruc"><code class="text-secondary">' . htmlspecialchars($r['ruc'] ?? '') . '</code></td>';
@@ -460,6 +471,19 @@ class EmpresasSistemaController extends Controller
         ];
 
         $esAjax = ($_SERVER['HTTP_X_REQUESTED_WITH'] ?? '') === 'XMLHttpRequest';
+
+        // Toda empresa nueva debe quedar con su controladora de suscripciones (decisión del
+        // usuario, 09-10-2026). Excepción: la que se crea como la que VENDE las suscripciones.
+        if ((int) ($data['id_empresa_suscripciones'] ?? 0) <= 0 && $data['es_administradora_suscripciones'] !== '1') {
+            $msg = 'Seleccione la empresa que controla las suscripciones.';
+            if ($esAjax) {
+                $this->json(['ok' => false, 'error' => $msg]);
+                return;
+            }
+            $_SESSION['empresas_msg'] = ['danger', $msg];
+            $this->redirect(BASE_URL . self::BASE_PATH);
+        }
+
         try {
             $id = $this->model->crear($data);
             $idUsuario = (int) ($_SESSION['id_usuario'] ?? 0);
@@ -641,9 +665,33 @@ class EmpresasSistemaController extends Controller
             }
         }
 
+        // Regalía (sin cobro de suscripción): solo nivel 3, motivo obligatorio y auditada.
+        $regaliaAntes = null;
+        if (array_key_exists('sin_cobro_suscripcion', $_POST) && (int) ($_SESSION['nivel'] ?? 1) >= 3) {
+            $sinCobro = !empty($_POST['sin_cobro_suscripcion']) && $_POST['sin_cobro_suscripcion'] !== '0';
+            $motivo   = trim((string) ($_POST['sin_cobro_motivo'] ?? ''));
+            if ($sinCobro && $motivo === '') {
+                $msg = 'Indique el motivo de la regalía (sin cobro de suscripción).';
+                if ($esAjax) {
+                    $this->json(['ok' => false, 'error' => $msg]);
+                    return;
+                }
+                $_SESSION['empresas_msg'] = ['danger', $msg];
+                $this->redirect(BASE_URL . self::BASE_PATH);
+            }
+            $data['sin_cobro_suscripcion'] = $sinCobro ? '1' : '0';
+            $data['sin_cobro_motivo']      = $sinCobro ? $motivo : '';
+            $data['sin_cobro_hasta']       = $sinCobro ? trim((string) ($_POST['sin_cobro_hasta'] ?? '')) : '';
+            $regaliaAntes = $this->model->getRegalia($id);
+        }
+
         try {
             if ($this->model->actualizar($id, $data)) {
                 $idUsuario = (int) ($_SESSION['id_usuario'] ?? 0);
+                if ($regaliaAntes !== null) {
+                    $this->auditarRegalia($id, $idUsuario, $regaliaAntes);
+                    \App\Services\VigenciaSuscripcionService::invalidar($id);
+                }
                 (new \App\Services\EmpresaInicializadorService())->inicializar($id, $idUsuario);
 
                 // Empresas registradas por la migración quedan con notificación
@@ -903,6 +951,30 @@ class EmpresasSistemaController extends Controller
         } catch (\Throwable $e) {
             http_response_code(404);
             echo htmlspecialchars($e->getMessage());
+        }
+    }
+
+    /**
+     * Auditoría de la regalía (sin cobro de suscripción): exonerar a una empresa de pagar
+     * no puede quedar sin rastro. Solo registra si cambió algo; un fallo aquí no revierte
+     * el guardado ya hecho.
+     */
+    private function auditarRegalia(int $idEmpresa, int $idUsuario, array $antes): void
+    {
+        try {
+            $despues = $this->model->getRegalia($idEmpresa);
+            if ($despues === [] || $despues == $antes) {
+                return;
+            }
+            $accion = !empty($despues['sin_cobro_suscripcion']) && empty($antes['sin_cobro_suscripcion'])
+                ? 'REGALIA_ACTIVAR'
+                : (empty($despues['sin_cobro_suscripcion']) && !empty($antes['sin_cobro_suscripcion'])
+                    ? 'REGALIA_QUITAR' : 'REGALIA_MODIFICAR');
+            (new \App\Services\LogSistemaService())->registrar(
+                $idUsuario, $idEmpresa, $accion, 'empresas', $idEmpresa, $antes, $despues
+            );
+        } catch (\Throwable $e) {
+            error_log('EmpresasSistemaController::auditarRegalia ' . $e->getMessage());
         }
     }
 

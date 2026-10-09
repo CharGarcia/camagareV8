@@ -140,6 +140,16 @@ class Empresa extends BaseModel
                 ) ua ON true";
         $exprDocEstado = "(CASE WHEN doc.estado = 'aceptado' THEN 'aceptado' WHEN doc.estado IS NULL THEN 'sin_enviar' ELSE 'pendiente' END)";
         $exprUsuarios  = 'COALESCE(ua.n, 0)';
+        // Regalía (sin cobro de suscripción): columnas opcionales hasta aplicar
+        // database/20261009_empresas_regalia_suscripcion.sql.
+        $conRegalia  = $this->tieneColumnasRegalia();
+        $exprRegalia = $conRegalia
+            ? "CASE WHEN COALESCE(e.sin_cobro_suscripcion, false)
+                     AND (e.sin_cobro_hasta IS NULL OR e.sin_cobro_hasta >= CURRENT_DATE) THEN 'si' ELSE 'no' END"
+            : "'no'";
+        $selRegalia = $conRegalia
+            ? "COALESCE(e.sin_cobro_suscripcion, false) AS sin_cobro_suscripcion, e.sin_cobro_motivo, e.sin_cobro_hasta, {$exprRegalia} AS regalia_vigente,"
+            : "false AS sin_cobro_suscripcion, NULL AS sin_cobro_motivo, NULL AS sin_cobro_hasta, 'no' AS regalia_vigente,";
         // Las claves de MAPA_ORDEN que apuntan a estos alias se resuelven aquí.
         $orderBy = strtr($orderBy, ['usuarios_asignados' => $exprUsuarios, 'doc_estado' => $exprDocEstado]);
 
@@ -186,6 +196,7 @@ class Empresa extends BaseModel
                 'cod_provincia' => 'e.cod_prov',
                 'cod_ciudad'    => 'e.cod_ciudad',
                 'administradora' => "CASE WHEN COALESCE(e.es_administradora_suscripciones, false) THEN 'si' ELSE 'no' END",
+                'regalia'       => $exprRegalia,                         // si / no (regalía vigente)
                 'id_administradora' => 'e.id_empresa_suscripciones',
                 'operadora'     => "CASE WHEN COALESCE(e.factura_operadora_transporte, 'false') = 'true' THEN 'si' ELSE 'no' END",
                 'cupo_lleno'    => "CASE WHEN {$exprUsuarios} >= COALESCE(e.max_usuarios, 3) THEN 'si' ELSE 'no' END",
@@ -212,6 +223,7 @@ class Empresa extends BaseModel
                 e.id_empresa_suscripciones, COALESCE(e.es_administradora_suscripciones, false) AS es_administradora_suscripciones,
                 e.id_cliente_facturado,
                 e.id_suscripcion,
+                {$selRegalia}
                 COALESCE(e.factura_operadora_transporte, 'false') AS factura_operadora_transporte,
                 COALESCE(NULLIF(ctrl.nombre_comercial,''), ctrl.nombre) AS ctrl_nombre, ctrl.ruc AS ctrl_ruc, ctrl.establecimiento AS ctrl_estab,
                 cli.nombre AS cli_nombre, cli.identificacion AS cli_identificacion,
@@ -564,13 +576,25 @@ class Empresa extends BaseModel
 
         // Si se marca como administradora por defecto, desmarcar a las demás.
         if (array_key_exists('es_administradora_suscripciones', $data) && $this->esValorVerdadero($data['es_administradora_suscripciones'])) {
-            $this->execute("UPDATE empresas SET es_administradora_suscripciones = false WHERE es_administradora_suscripciones = true AND id != {$id}");        }
+            $this->execute("UPDATE empresas SET es_administradora_suscripciones = false WHERE es_administradora_suscripciones = true AND id != {$id}");
+        }
 
         $sets = [];
         $campos = ['nombre', 'nombre_comercial', 'ruc', 'establecimiento', 'direccion', 'telefono', 'mail', 'nom_rep_legal', 'ced_rep_legal', 'cod_prov', 'cod_ciudad', 'nombre_contador', 'ruc_contador', 'estado', 'valor_cobro', 'periodo_vigencia_desde', 'periodo_vigencia_hasta', 'estado_pago', 'obligado_contabilidad', 'max_usuarios', 'id_empresa_suscripciones', 'es_administradora_suscripciones', 'id_cliente_facturado', 'id_suscripcion', 'factura_operadora_transporte'];
+        if ($this->tieneColumnasRegalia()) {
+            $campos = array_merge($campos, ['sin_cobro_suscripcion', 'sin_cobro_motivo', 'sin_cobro_hasta']);
+        }
         foreach ($campos as $c) {
             if (array_key_exists($c, $data)) {
-                if (in_array($c, ['valor_cobro'], true)) {
+                if ($c === 'sin_cobro_suscripcion') {
+                    $sets[] = "{$c} = " . ($this->esValorVerdadero($data[$c]) ? 'true' : 'false');
+                } elseif ($c === 'sin_cobro_motivo') {
+                    $v = mb_substr(trim((string) $data[$c]), 0, 200);
+                    $sets[] = "{$c} = " . ($v === '' ? 'NULL' : "'" . $this->escape($v) . "'");
+                } elseif ($c === 'sin_cobro_hasta') {
+                    $v = trim((string) $data[$c]);
+                    $sets[] = "{$c} = " . (preg_match('/^\d{4}-\d{2}-\d{2}$/', $v) ? "'" . $v . "'" : 'NULL');
+                } elseif (in_array($c, ['valor_cobro'], true)) {
                     $v = $data[$c];
                     $sets[] = "{$c} = " . ($v === '' || $v === null ? 'NULL' : (float) $v);
                 } elseif ($c === 'max_usuarios') {
@@ -604,6 +628,43 @@ class Empresa extends BaseModel
         }
 
         return $ok;
+    }
+
+    /** Cache por request: ¿ya se aplicó la migración de regalía? */
+    private static ?bool $colsRegalia = null;
+
+    /**
+     * ¿Existen las columnas de regalía (sin_cobro_*)? Mientras no se aplique
+     * database/20261009_empresas_regalia_suscripcion.sql, el listado y el guardado
+     * funcionan igual que antes, sin esos campos.
+     */
+    public function tieneColumnasRegalia(): bool
+    {
+        if (self::$colsRegalia === null) {
+            try {
+                $r = $this->query(
+                    "SELECT 1 FROM information_schema.columns
+                      WHERE table_name = 'empresas' AND column_name = 'sin_cobro_suscripcion' LIMIT 1"
+                );
+                self::$colsRegalia = !empty($r);
+            } catch (\Throwable $e) {
+                self::$colsRegalia = false;
+            }
+        }
+        return self::$colsRegalia;
+    }
+
+    /** Datos de regalía de una empresa (para auditar el cambio). Vacío si no hay columnas. */
+    public function getRegalia(int $id): array
+    {
+        if (!$this->tieneColumnasRegalia()) {
+            return [];
+        }
+        $r = $this->query(
+            "SELECT COALESCE(sin_cobro_suscripcion, false) AS sin_cobro_suscripcion, sin_cobro_motivo, sin_cobro_hasta
+               FROM empresas WHERE id = " . (int) $id
+        );
+        return $r[0] ?? [];
     }
 
     /**

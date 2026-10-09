@@ -180,6 +180,33 @@ class EmpresaRepository extends BaseModel
      *   3) la empresa administradora por defecto (es_administradora_suscripciones = true).
      * Devuelve el id de la controladora o null si no hay ninguna.
      */
+    /**
+     * Regalía de la empresa (no paga suscripción del sistema). null si no está marcada o
+     * si aún no se aplicó database/20261009_empresas_regalia_suscripcion.sql.
+     *
+     * @return array{vigente:bool, motivo:?string, hasta:?string}|null
+     */
+    public function getRegaliaSuscripcion(int $idEmpresa): ?array
+    {
+        if (!(new \App\models\Empresa())->tieneColumnasRegalia()) {
+            return null;
+        }
+        $r = $this->query(
+            "SELECT sin_cobro_motivo, sin_cobro_hasta,
+                    (sin_cobro_hasta IS NULL OR sin_cobro_hasta >= CURRENT_DATE) AS vigente
+               FROM empresas
+              WHERE id = " . (int) $idEmpresa . " AND COALESCE(sin_cobro_suscripcion, false) = true"
+        );
+        if (empty($r[0])) {
+            return null;
+        }
+        return [
+            'vigente' => !empty($r[0]['vigente']),
+            'motivo'  => $r[0]['sin_cobro_motivo'] ?? null,
+            'hasta'   => $r[0]['sin_cobro_hasta'] ?? null,
+        ];
+    }
+
     public function resolverEmpresaControladoraSuscripciones(string $ruc, ?int $idDirecto): ?int
     {
         // El vínculo solo vale si la controladora existe y no está eliminada: un vínculo

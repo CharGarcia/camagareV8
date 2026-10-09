@@ -252,10 +252,15 @@ $warnIcon = '<i class="bi bi-exclamation-circle-fill text-warning ms-1" title="C
                                         // Las indicaciones de configuración (Empresas del sistema) solo las ve el
                                         // superadministrador: el cliente no tiene acceso a esa pantalla.
                                         $esSuperadminSusc = (int) ($_SESSION['nivel'] ?? 1) >= 3;
+                                        // Regalía vigente: la empresa no paga suscripción. El cliente solo ve «Plan sin costo»;
+                                        // el motivo interno lo ve únicamente el superadministrador.
+                                        $regaliaS = (!empty($suscripcion_regalia) && !empty($suscripcion_regalia['vigente'])) ? $suscripcion_regalia : null;
                                         ?>
                                         <div class="d-flex align-items-center justify-content-between mb-3">
                                             <h6 class="fw-bold mb-0 small text-primary"><i class="bi bi-shield-check me-2"></i>Suscripción y Vigencia del Sistema</h6>
-                                            <?php if ($tieneSusc): ?>
+                                            <?php if ($regaliaS): ?>
+                                                <span class="badge bg-success bg-opacity-10 text-success" style="font-size: 0.62rem;"><i class="bi bi-gift"></i> Plan sin costo</span>
+                                            <?php elseif ($tieneSusc): ?>
                                                 <a href="<?= rtrim(BASE_URL, '/') ?>/modulos/suscripciones" class="badge bg-success bg-opacity-10 text-success text-decoration-none" style="font-size: 0.62rem;" title="Ver en el módulo de suscripciones">
                                                     <i class="bi bi-link-45deg"></i> Vinculada a suscripción
                                                 </a>
@@ -296,7 +301,17 @@ $warnIcon = '<i class="bi bi-exclamation-circle-fill text-warning ms-1" title="C
                                             </div>
                                         <?php endif; ?>
 
-                                        <?php if (!$tieneSusc && $suscVarias > 1): ?>
+                                        <?php if ($regaliaS): ?>
+                                            <div class="alert alert-success d-flex align-items-start py-2 px-3 mb-0" style="font-size: 0.75rem;">
+                                                <i class="bi bi-gift me-2 mt-1"></i>
+                                                <div>
+                                                    <strong>Plan sin costo</strong><?php if (!empty($regaliaS['hasta'])): ?> hasta el <?= date('d-m-Y', strtotime($regaliaS['hasta'])) ?><?php endif; ?>.
+                                                    <?php if ($esSuperadminSusc && !empty($regaliaS['motivo'])): ?>
+                                                        <br><span class="text-muted">Regalía — Motivo: <?= htmlspecialchars($regaliaS['motivo']) ?> (solo lo ve el superadministrador).</span>
+                                                    <?php endif; ?>
+                                                </div>
+                                            </div>
+                                        <?php elseif (!$tieneSusc && $suscVarias > 1): ?>
                                             <div class="alert alert-warning py-2 px-3 mb-0" style="font-size: 0.75rem;">
                                                 <i class="bi bi-exclamation-triangle me-1"></i>
                                                 <?php if ($esSuperadminSusc): ?>

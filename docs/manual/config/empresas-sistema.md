@@ -5,8 +5,8 @@ categoria: Configuración global
 ruta_modulo: config/empresas-sistema
 tipo: modulo
 visibilidad: superadmin
-etiquetas: empresas del sistema, empresa administradora, administradora de suscripciones, empresa que controla las suscripciones, controladora, suscripcion por defecto, crear empresa, alta de empresa, establecimientos, sucursales, matriz, usuarios asignados, documentos legales, suscripcion, empresas del grupo, eliminar establecimiento, establecimiento activo, un solo establecimiento activo, buscar empresa, filtrar empresas, filtros de empresas, exportar empresas, pdf de empresas, excel de empresas, ordenar empresas, columnas del listado, telefono de la empresa, correo de la empresa
-version: 1.10
+etiquetas: empresas del sistema, regalia, sin cobro, cortesia, plan sin costo, exonerar suscripcion, empresa gratis, empresa administradora, administradora de suscripciones, empresa que controla las suscripciones, controladora, suscripcion por defecto, crear empresa, alta de empresa, establecimientos, sucursales, matriz, usuarios asignados, documentos legales, suscripcion, empresas del grupo, eliminar establecimiento, establecimiento activo, un solo establecimiento activo, buscar empresa, filtrar empresas, filtros de empresas, exportar empresas, pdf de empresas, excel de empresas, ordenar empresas, columnas del listado, telefono de la empresa, correo de la empresa
+version: 1.11
 orden: 1
 estado: activo
 ---
@@ -101,8 +101,9 @@ otra empresa, la **controladora**: la que vende y factura esa suscripción.
   haber una: al marcar otra, la anterior se desmarca. En el listado aparece con
   la etiqueta **Administradora** junto al nombre.
 - **Empresas nuevas**: al crear una empresa, el campo **Empresa que controla
-  las suscripciones** ya viene con la administradora. Si se deja vacío, el
-  sistema igual le asigna la administradora al guardar.
+  las suscripciones** es **obligatorio**. Viene con la administradora y se puede
+  elegir otra. Solo puede quedar vacío si la empresa nueva se marca como la que
+  vende las suscripciones.
 - **Cambiar la controladora** de una empresa: *Editar → Cobro y vigencia*,
   campo **Empresa que controla las suscripciones** (buscador por nombre o RUC).
   Si la empresa no tiene controladora, se usa la de otra empresa con el mismo
@@ -121,6 +122,24 @@ otra empresa, la **controladora**: la que vende y factura esa suscripción.
 
 Con esto se resuelve la suscripción que muestra el módulo **Empresa** y los
 avisos de vencimiento (ver el manual del módulo Empresa).
+
+### Empresas por regalía (sin cobro de suscripción)
+
+Para una empresa a la que no se le cobra el sistema (socio, convenio, empresa
+del grupo, demo comercial…): *Editar → Cobro y vigencia* → interruptor
+**Sin cobro de suscripción**. Solo lo ve el superadministrador.
+
+- **Motivo** (obligatorio): queda como dato interno; el cliente no lo ve.
+- **Hasta** (opcional): vacío = indefinida. Al pasar la fecha, la empresa
+  vuelve a tratarse como normal y recibe los avisos de vencimiento.
+- Mientras la regalía está vigente, la empresa **no recibe avisos ni la ventana
+  de vencimiento**, y su ficha de Empresa muestra **«Plan sin costo»**.
+- En el listado aparece la etiqueta **Regalía** (o **Regalía vencida** si ya
+  terminó), y el filtro **Regalía (sin cobro)** permite verlas todas.
+- Marcarla, cambiarla o quitarla queda registrado en la bitácora del sistema
+  (`log_sistema`: REGALIA_ACTIVAR / REGALIA_MODIFICAR / REGALIA_QUITAR), con
+  quién lo hizo y los datos anteriores y nuevos.
+- Requiere el SQL `database/20261009_empresas_regalia_suscripcion.sql`.
 
 ## Permisos
 
@@ -150,6 +169,10 @@ las empresas que ese usuario tiene asignadas.
 
 ## Historial de cambios
 
+- **1.11** — Empresas por **regalía** (sin cobro de suscripción): interruptor, motivo y
+  fecha hasta en *Cobro y vigencia*, etiqueta y filtro en el listado, auditoría en
+  `log_sistema`. Al crear una empresa, *Empresa que controla las suscripciones* pasa a ser
+  obligatoria.
 - **1.10** — Al marcar «Esta empresa vende las suscripciones» ya no se borra ni se bloquea la
   empresa asignada en «Empresa que controla las suscripciones».
 - **1.9** — La suscripción se busca en todos los establecimientos de la controladora (mismo

@@ -121,7 +121,10 @@ class VigenciaSuscripcionService
         }
 
         try {
-            $empresa = (new EmpresaRepository())->getEmisorConfig($idEmpresa);
+            $repoEmp = new EmpresaRepository();
+            // Regalía vigente: la empresa no paga suscripción → nada que avisar.
+            $regalia = $repoEmp->getRegaliaSuscripcion($idEmpresa);
+            $empresa = ($regalia !== null && $regalia['vigente']) ? null : $repoEmp->getEmisorConfig($idEmpresa);
             $v = $empresa ? $this->evaluar($this->resolver($empresa), $empresa) : null;
             if ($v !== null) {
                 $v['empresa'] = (string) ($empresa['nombre'] ?? '');
@@ -224,6 +227,12 @@ class VigenciaSuscripcionService
             $mejor['por_suscripcion'] = $porSusc;
         }
         return $mejor;
+    }
+
+    /** Borra la caché del aviso de una empresa (p. ej. al marcar o quitar la regalía). */
+    public static function invalidar(int $idEmpresa): void
+    {
+        Cache::delete('cmg_vigencia_susc_' . $idEmpresa);
     }
 
     /** ¿Corresponde mostrar el modal al ingresar? (vencida o a ≤ DIAS_MODAL días). */

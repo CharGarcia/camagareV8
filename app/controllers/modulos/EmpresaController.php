@@ -80,6 +80,7 @@ class EmpresaController extends BaseModuloController
             'suscripcion_sin_valores' => $data['suscripcion_sin_valores'] ?? false,
             'suscripcion_varias' => $data['suscripcion_varias'] ?? 0,
             'suscripcion_vigencia' => $data['suscripcion_vigencia'] ?? null,
+            'suscripcion_regalia' => $data['suscripcion_regalia'] ?? null,
             'correo' => $data['correo'],
             'firmas' => $data['firmas'],
             'puntos' => $data['puntos'],

@@ -54,6 +54,11 @@ class EmpresaService
         } catch (\Throwable $e) {
             $vigencia = null;
         }
+        // Regalía (no paga suscripción): mientras esté vigente no hay vencimiento que mostrar.
+        $regalia = $this->repository->getRegaliaSuscripcion($idEmpresa);
+        if ($regalia !== null && $regalia['vigente']) {
+            $vigencia = null;
+        }
 
         // Puntos de emisión, marcando cuáles ya tienen documentos (para la UI:
         // bloquear código en esos) y cuáles se pueden eliminar (sin documentos,
@@ -78,6 +83,7 @@ class EmpresaService
             'suscripcion_sin_valores'  => $sinValores,
             'suscripcion_varias'       => $variasSuscripciones,
             'suscripcion_vigencia'     => $vigencia,
+            'suscripcion_regalia'      => $regalia,
             'correo'                => $this->repository->getCorreoConfig($idEmpresa),
             'firmas'                => $this->repository->getFirmas($idEmpresa),
             'establecimientos'      => $establecimientos,

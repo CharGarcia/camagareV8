@@ -130,6 +130,7 @@ function estadoPagoBadge($estado) {
                     ['tab' => $tE, 'key' => 'vigencia_hasta', 'label' => 'Vigencia hasta',  'icon' => 'bi-calendar-x',     'type' => 'date_range',   'grupo' => 'Cobro y vigencia', 'col' => 4, 'atajos' => true],
                     ['tab' => $tE, 'key' => 'valor_cobro',    'label' => 'Valor de cobro',  'icon' => 'bi-currency-dollar','type' => 'number_range', 'grupo' => 'Cobro y vigencia', 'col' => 4],
                     ['tab' => $tE, 'key' => 'administradora', 'label' => 'Administra suscripciones', 'icon' => 'bi-diagram-3', 'type' => 'select', 'grupo' => 'Cobro y vigencia', 'col' => 4, 'options' => $opcionesSiNo('Sí', 'No')],
+                    ['tab' => $tE, 'key' => 'regalia', 'label' => 'Regalía (sin cobro)', 'icon' => 'bi-gift', 'type' => 'select', 'grupo' => 'Cobro y vigencia', 'col' => 4, 'options' => $opcionesSiNo('Sí, vigente', 'No')],
                     ['tab' => $tE, 'key' => 'id_administradora', 'label' => 'Empresa administradora', 'icon' => 'bi-building-gear', 'type' => 'select', 'grupo' => 'Cobro y vigencia', 'col' => 4, 'options' => $opcionesAdmin],
                 ]);
             }
@@ -344,12 +345,12 @@ function estadoPagoBadge($estado) {
                         }
                         ?>
                         <div class="col-md-8 position-relative">
-                            <label for="crear-ctrl-texto" class="form-label">Empresa que controla las suscripciones</label>
+                            <label for="crear-ctrl-texto" class="form-label">Empresa que controla las suscripciones <span class="text-danger">*</span></label>
                             <input type="text" id="crear-ctrl-texto" class="form-control form-control-sm" placeholder="Buscar empresa por nombre o RUC…" autocomplete="off" value="<?= htmlspecialchars($adminLabel) ?>">
                             <input type="hidden" id="crear-ctrl-id" name="id_empresa_suscripciones" value="<?= (int) ($idAdminSuscripciones ?? 0) ?: '' ?>">
                             <div id="crear-ctrl-dropdown" class="list-group position-absolute w-100 shadow" style="display:none;z-index:2000;max-height:220px;overflow:auto;"></div>
                             <?php if (!empty($idAdminSuscripciones)): ?>
-                                <div class="form-text">Por defecto, la empresa administradora. Si lo deja vacío, se usa la administradora.</div>
+                                <div class="form-text">Obligatorio. Viene con la empresa que vende las suscripciones; puede elegir otra.</div>
                             <?php else: ?>
                                 <div class="form-text text-warning"><i class="bi bi-exclamation-triangle"></i> No hay empresa administradora marcada. Márquela en <strong>Editar → Cobro y vigencia</strong> para que las nuevas empresas la tomen por defecto.</div>
                             <?php endif; ?>
@@ -574,6 +575,27 @@ function estadoPagoBadge($estado) {
                                         <div class="form-text mt-0">Marcar solo en su propia empresa, no en los clientes.</div>
                                     </div>
                                 </div>
+                                <?php if (($nivel ?? 1) >= 3): ?>
+                                <!-- Regalía: la empresa no paga suscripción (sin avisos de vencimiento). Auditada en log_sistema. -->
+                                <div class="col-md-4">
+                                    <label class="form-label d-block">Regalía</label>
+                                    <input type="hidden" name="sin_cobro_suscripcion" value="0">
+                                    <div class="form-check form-switch mt-1">
+                                        <input class="form-check-input" type="checkbox" role="switch" id="edit-sin-cobro" name="sin_cobro_suscripcion" value="1">
+                                        <label class="form-check-label small" for="edit-sin-cobro">Sin cobro de suscripción</label>
+                                    </div>
+                                </div>
+                                <div class="col-md-5" id="edit-sin-cobro-motivo-wrap">
+                                    <label for="edit-sin-cobro-motivo" class="form-label">Motivo de la regalía <span class="text-danger">*</span></label>
+                                    <input type="text" id="edit-sin-cobro-motivo" name="sin_cobro_motivo" class="form-control form-control-sm" maxlength="200" placeholder="Ej.: socio, convenio, empresa del grupo">
+                                    <div class="form-text">Interno: el cliente solo ve «Plan sin costo».</div>
+                                </div>
+                                <div class="col-md-3" id="edit-sin-cobro-hasta-wrap">
+                                    <label for="edit-sin-cobro-hasta" class="form-label">Hasta</label>
+                                    <input type="date" id="edit-sin-cobro-hasta" name="sin_cobro_hasta" class="form-control form-control-sm">
+                                    <div class="form-text">Vacío = indefinida.</div>
+                                </div>
+                                <?php endif; ?>
                                 <div class="col-12 position-relative">
                                     <label for="edit-fact-texto" class="form-label">Empresa a la que facturamos (reventa)</label>
                                     <input type="text" id="edit-fact-texto" class="form-control form-control-sm" placeholder="Buscar cliente por nombre o identificación…" autocomplete="off">
@@ -828,6 +850,14 @@ function estadoPagoBadge($estado) {
         }
         var chkAdmin = document.getElementById('edit-es-administradora');
         if (chkAdmin) chkAdmin.checked = (el.dataset.esAdministradora === '1');
+        // Regalía (sin cobro de suscripción)
+        var chkSinCobro = document.getElementById('edit-sin-cobro');
+        if (chkSinCobro) {
+            chkSinCobro.checked = (el.dataset.sinCobro === '1');
+            document.getElementById('edit-sin-cobro-motivo').value = el.dataset.sinCobroMotivo || '';
+            document.getElementById('edit-sin-cobro-hasta').value = el.dataset.sinCobroHasta || '';
+            if (typeof window.EMPSIS_syncSinCobro === 'function') window.EMPSIS_syncSinCobro();
+        }
         // Buscador: cliente al que facturamos (reventa)
         var factId = document.getElementById('edit-fact-id');
         var factTxt = document.getElementById('edit-fact-texto');
@@ -1427,6 +1457,16 @@ function estadoPagoBadge($estado) {
         formCrear.addEventListener('submit', function(e) {
             e.preventDefault();
             ocultarMsgForm('crear-empresa-msg');
+            // Controladora obligatoria (salvo que la nueva sea la que vende las suscripciones);
+            // el servidor valida lo mismo.
+            var ctrlIdCrear = document.getElementById('crear-ctrl-id');
+            var chkVendeCrear = document.getElementById('crear-es-administradora');
+            if (ctrlIdCrear && !ctrlIdCrear.value && !(chkVendeCrear && chkVendeCrear.checked)) {
+                mostrarMsgForm('crear-empresa-msg', 'error', 'Seleccione la empresa que controla las suscripciones.');
+                var txtCtrl = document.getElementById('crear-ctrl-texto');
+                if (txtCtrl) txtCtrl.focus();
+                return;
+            }
             var btn = formCrear.querySelector('button[type="submit"]');
             var txtOrig = btn ? btn.innerHTML : '';
             if (btn) { btn.disabled = true; btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Guardando...'; }
@@ -1707,6 +1747,21 @@ function estadoPagoBadge($estado) {
         var fTx = document.getElementById(prefijo + '-fact-texto');
         if (fId) fId.value = '';
         if (fTx) fTx.value = '';
+    }
+
+    // Regalía: motivo (obligatorio) y "hasta" solo se muestran con el interruptor encendido.
+    window.EMPSIS_syncSinCobro = function () {
+        var chk = document.getElementById('edit-sin-cobro');
+        if (!chk) return;
+        var mot = document.getElementById('edit-sin-cobro-motivo');
+        document.getElementById('edit-sin-cobro-motivo-wrap').style.display = chk.checked ? '' : 'none';
+        document.getElementById('edit-sin-cobro-hasta-wrap').style.display = chk.checked ? '' : 'none';
+        if (mot) mot.required = chk.checked;
+    };
+    var chkSinCobroEl = document.getElementById('edit-sin-cobro');
+    if (chkSinCobroEl) {
+        chkSinCobroEl.addEventListener('change', window.EMPSIS_syncSinCobro);
+        window.EMPSIS_syncSinCobro();
     }
 
     ['crear', 'edit'].forEach(function (p) {
