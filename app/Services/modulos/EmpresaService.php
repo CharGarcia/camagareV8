@@ -147,15 +147,10 @@ class EmpresaService
         $fields = [
             'nombre', 'nombre_comercial', 'direccion', 'telefono', 'mail',
             'nom_rep_legal', 'ced_rep_legal', 'nombre_contador', 'ruc_contador',
-            'cod_prov', 'cod_ciudad', 'tipo', 'cancelar_renovacion', 'obligado_contabilidad'
+            'cod_prov', 'cod_ciudad', 'tipo', 'obligado_contabilidad'
         ];
-        
-        // Manejar checkbox cancelar_renovacion (si no viene es false)
-        if (!isset($data['cancelar_renovacion'])) {
-            $data['cancelar_renovacion'] = 'false';
-        } else {
-            $data['cancelar_renovacion'] = 'true';
-        }
+        // `cancelar_renovacion` ya no se edita desde la ficha (se quitó el interruptor el
+        // 09-10-2026): no se toca, para no sobrescribir con false el valor guardado.
 
         // Normalizar obligado_contabilidad a SI/NO
         $data['obligado_contabilidad'] = strtoupper(trim($data['obligado_contabilidad'] ?? 'NO')) === 'SI' ? 'SI' : 'NO';

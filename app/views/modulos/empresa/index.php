@@ -459,25 +459,18 @@ $warnIcon = '<i class="bi bi-exclamation-circle-fill text-warning ms-1" title="C
                                                 </div>
                                             </div>
                                             <div class="row g-3 align-items-center">
-                                                <div class="col-md-2">
+                                                <div class="col-md-3">
                                                     <div class="text-muted mb-1" style="font-size: 0.65rem;">Costo de Suscripción</div>
                                                     <div class="fw-bold text-dark" style="font-size: 0.8rem;">$ <?= number_format((float)($empresa['valor_cobro'] ?? 0), 2) ?></div>
                                                 </div>
                                                 <div class="col-md-3 border-start ps-3">
-                                                    <div class="form-check form-switch">
-                                                        <input class="form-check-input" type="checkbox" name="cancelar_renovacion" id="cancelar_renovacion" <?= ($empresa['cancelar_renovacion'] ?? false) ? 'checked' : '' ?>>
-                                                        <label class="form-check-label fw-bold text-danger" for="cancelar_renovacion" style="font-size: 0.7rem;">CANCELAR RENOVACIÓN</label>
-                                                    </div>
-                                                    <div class="text-muted mt-1" style="font-size: 0.6rem;">No renovar automáticamente</div>
-                                                </div>
-                                                <div class="col-md-2 border-start ps-3">
                                                     <div class="text-muted mb-1" style="font-size: 0.65rem;">Estado de Pago</div>
                                                     <?php $estP = strtolower($empresa['estado_pago'] ?? 'pendiente'); ?>
                                                     <span class="badge bg-<?= ($estP === 'pagado') ? 'success' : 'warning' ?> bg-opacity-10 text-<?= ($estP === 'pagado') ? 'success' : 'warning' ?> rounded-pill" style="font-size: 0.65rem;">
                                                         <i class="bi bi-circle-fill me-1" style="font-size: 0.4rem;"></i> <?= strtoupper($estP) ?>
                                                     </span>
                                                 </div>
-                                                <div class="col-md-5 border-start ps-4">
+                                                <div class="col-md-6 border-start ps-4">
                                                     <?php
                                                     $desde = $empresa['periodo_vigencia_desde'] ?? null;
                                                     $hasta = $empresa['periodo_vigencia_hasta'] ?? null;

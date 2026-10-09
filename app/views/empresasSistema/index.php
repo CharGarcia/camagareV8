@@ -355,11 +355,12 @@ function estadoPagoBadge($estado) {
                             <?php endif; ?>
                         </div>
                         <div class="col-md-4">
-                            <label class="form-label d-block">Administradora</label>
+                            <label class="form-label d-block">Empresa que vende el sistema</label>
                             <input type="hidden" name="es_administradora_suscripciones" value="0">
                             <div class="form-check form-switch mt-1">
                                 <input class="form-check-input" type="checkbox" role="switch" id="crear-es-administradora" name="es_administradora_suscripciones" value="1">
-                                <label class="form-check-label small" for="crear-es-administradora">Es la empresa administradora (por defecto)</label>
+                                <label class="form-check-label small" for="crear-es-administradora">Esta empresa vende las suscripciones (por defecto para las demás)</label>
+                                <div class="form-text mt-0">Marcar solo en su propia empresa, no en los clientes.</div>
                             </div>
                         </div>
                         <div class="col-md-8 position-relative">
@@ -565,11 +566,12 @@ function estadoPagoBadge($estado) {
                                     <div class="form-text">Se cruza por RUC contra los clientes de esa empresa para mostrar la suscripción real.</div>
                                 </div>
                                 <div class="col-md-4">
-                                    <label class="form-label d-block">Administradora</label>
+                                    <label class="form-label d-block">Empresa que vende el sistema</label>
                                     <input type="hidden" name="es_administradora_suscripciones" value="0">
                                     <div class="form-check form-switch mt-1">
                                         <input class="form-check-input" type="checkbox" role="switch" id="edit-es-administradora" name="es_administradora_suscripciones" value="1">
-                                        <label class="form-check-label small" for="edit-es-administradora">Es la empresa administradora (por defecto)</label>
+                                        <label class="form-check-label small" for="edit-es-administradora">Esta empresa vende las suscripciones (por defecto para las demás)</label>
+                                        <div class="form-text mt-0">Marcar solo en su propia empresa, no en los clientes.</div>
                                     </div>
                                 </div>
                                 <div class="col-12 position-relative">
@@ -1723,7 +1725,7 @@ function estadoPagoBadge($estado) {
         if (chk.checked) {
             hid.value = '';
             txt.value = '';
-            txt.placeholder = 'Es la administradora: no depende de otra empresa';
+            txt.placeholder = 'Esta empresa vende las suscripciones: no depende de otra';
             txt.disabled = true;
         } else {
             txt.disabled = false;

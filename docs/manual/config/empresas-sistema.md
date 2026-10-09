@@ -96,7 +96,8 @@ Cada empresa cliente paga el uso del sistema con una suscripción registrada en
 otra empresa, la **controladora**: la que vende y factura esa suscripción.
 
 - **Empresa administradora (por defecto)**: se marca en *Editar → Cobro y
-  vigencia* con el interruptor **Es la empresa administradora**. Solo puede
+  vigencia* con el interruptor **Esta empresa vende las suscripciones (por defecto
+  para las demás)**. Se marca solo en la empresa propia, nunca en un cliente. Solo puede
   haber una: al marcar otra, la anterior se desmarca. En el listado aparece con
   la etiqueta **Administradora** junto al nombre.
 - **Empresas nuevas**: al crear una empresa, el campo **Empresa que controla
