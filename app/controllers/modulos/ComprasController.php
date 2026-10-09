@@ -1181,6 +1181,8 @@ class ComprasController extends BaseModuloController
             ];
             if ($totalIce > 0) $totales['ICE'] = $totalIce;
             if ($propina > 0) $totales['Propina'] = $propina;
+            $otrosRubros = (float)($cabecera['otros_rubros_terceros'] ?? 0);
+            if ($otrosRubros > 0) $totales['Otros rubros de terceros'] = $otrosRubros;
             $totales['TOTAL'] = $total;
 
             foreach ($totales as $label => $valor) {

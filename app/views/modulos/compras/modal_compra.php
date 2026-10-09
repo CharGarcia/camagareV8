@@ -436,6 +436,21 @@
                     </div>
                   </div>
 
+                  <!-- Otros rubros de terceros (<otrosRubrosTerceros> del XML del SRI: tasa de
+                       pernoctación de un hotel, etc.). SÍ forman parte del importe total, por eso
+                       van ANTES del TOTAL (a diferencia de los valores de terceros de las planillas,
+                       que van debajo). Vienen del XML y no se editan; la fila solo se muestra cuando
+                       la factura los trae. El desglose (concepto y valor) va en el tooltip. -->
+                  <div id="mcRowOtrosRubros" class="d-flex justify-content-between align-items-center mb-1 d-none">
+                    <span class="text-muted">
+                      (+) Otros rubros de terceros
+                      <i class="bi bi-info-circle ms-1 text-info" style="cursor:help;" id="mcIconoOtrosRubros"
+                         title="Rubros que el emisor cobra por cuenta de terceros dentro del total de la factura (p. ej. tasa de pernoctación). Vienen del XML del SRI y se contabilizan en el mismo gasto de la compra."></i>
+                    </span>
+                    <span class="fw-bold text-dark" id="mcLabelOtrosRubros">0.00</span>
+                    <input type="hidden" id="mcInputOtrosRubros" value="0">
+                  </div>
+
                   <hr class="my-1 opacity-25">
 
                   <!-- Total Factura -->

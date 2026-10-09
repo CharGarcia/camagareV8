@@ -19,6 +19,7 @@ use App\Services\modulos\RetencionCompraService;
 use App\Services\modulos\RetencionVentaService;
 use App\Rules\modulos\RetencionCompraRules;
 use App\Services\LogSistemaService;
+use App\Helpers\OtrosRubrosTerceros;
 use App\Helpers\RubrosTerceros;
 use App\Helpers\SriIvaHelper;
 use App\core\Database;
@@ -638,6 +639,11 @@ class DocumentoAutomatedRegisterService
                 && !$this->omitirAprobacion
                 && $this->comprasService()->getConfigAprobacion($idEmpresa, (float) $total)['requiere'];
 
+            // Rubros de terceros DENTRO del importe total (solo factura, codDoc 01).
+            $otrosRubros = $codDoc === '01'
+                ? OtrosRubrosTerceros::leer($xml)
+                : ['items' => [], 'total' => 0.0];
+
             // 1. Cabecera
             $idCompra = $this->compraRepo->insertCabecera([
                 'id_empresa' => $idEmpresa,
@@ -659,6 +665,9 @@ class DocumentoAutomatedRegisterService
                 'total_descuento' => $descuento,
                 'importe_total' => $total,
                 'propina' => (float)($info->propina ?? 0),
+                // <otrosRubrosTerceros> (tasa de pernoctación, etc.): DENTRO del importe
+                // total. Sin esto el IVA del listado salía inflado y el asiento no cuadraba.
+                'otros_rubros_terceros' => $otrosRubros['total'],
                 'deducible' => $esGastoPersonal ? 'gasto_personal' : 'declaracion_iva',
                 'tipo_registro' => 'electronico',
                 'autorizacion_desde' => $secuencial,
@@ -697,6 +706,12 @@ class DocumentoAutomatedRegisterService
                 if ($terceros > 0) {
                     $this->compraRepo->updateTotalTerceros($idCompra, $terceros);
                 }
+            }
+
+            // 1.6b Desglose de <otrosRubrosTerceros> (concepto + valor), tal como vino en el
+            // XML. La suma ya quedó en la cabecera (otros_rubros_terceros).
+            foreach ($otrosRubros['items'] as $rubro) {
+                $this->compraRepo->insertOtroRubro($idCompra, $rubro['concepto'], $rubro['total']);
             }
 
             // 1.7 IVA de cabecera vs. detalle. Hay emisores (BANECUADOR, p. ej.) cuyo

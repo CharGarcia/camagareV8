@@ -24,6 +24,24 @@ class ComprasRepository extends BaseRepository
                 $this->db->exec("ALTER TABLE compras_cabecera ADD COLUMN IF NOT EXISTS total_terceros NUMERIC(12,2) NOT NULL DEFAULT 0;");
             }
         } catch (\Throwable $e) {}
+        // <otrosRubrosTerceros> del XML de factura (tasa de pernoctación, etc.): DENTRO del
+        // importe total, a diferencia de total_terceros. La fórmula del IVA del listado y el
+        // asiento leen esta columna, así que debe existir aunque todavía no se haya corrido
+        // database/migrations/20261009_compras_otros_rubros_terceros.sql (que además trae el
+        // desglose por rubro y el backfill).
+        try {
+            $existe = $this->db->query("SELECT 1 FROM information_schema.columns WHERE table_name = 'compras_cabecera' AND column_name = 'otros_rubros_terceros'")->fetchColumn();
+            if ($existe === false) {
+                $this->db->exec("ALTER TABLE compras_cabecera ADD COLUMN IF NOT EXISTS otros_rubros_terceros NUMERIC(12,2) NOT NULL DEFAULT 0;");
+                $this->db->exec("CREATE TABLE IF NOT EXISTS compras_otros_rubros (
+                    id SERIAL PRIMARY KEY,
+                    id_compra INTEGER NOT NULL REFERENCES compras_cabecera(id) ON DELETE CASCADE,
+                    concepto VARCHAR(300) NOT NULL,
+                    total NUMERIC(12,2) NOT NULL DEFAULT 0
+                );");
+                $this->db->exec("CREATE INDEX IF NOT EXISTS idx_compras_otros_rubros_compra ON compras_otros_rubros (id_compra);");
+            }
+        } catch (\Throwable $e) {}
     }
 
     public function query(string $sql, array $params = []): \PDOStatement
@@ -123,7 +141,7 @@ class ComprasRepository extends BaseRepository
         // Igual que la vista: saldo nunca negativo y las notas de crédito (04) no
         // tienen saldo por pagar.
         $saldo        = "(CASE WHEN c.tipo_comprobante = '04' THEN 0 ELSE GREATEST(0, c.importe_total - $sqlAbonos) END)";
-        $ivaCalc      = '(c.importe_total - c.total_sin_impuestos - COALESCE(c.propina, 0) - COALESCE(c.total_ice, 0))';
+        $ivaCalc      = '(c.importe_total - c.total_sin_impuestos - COALESCE(c.propina, 0) - COALESCE(c.total_ice, 0) - COALESCE(c.otros_rubros_terceros, 0))';
 
         // Texto libre: el número del comprobante, el proveedor, la fecha, los importes,
         // el saldo, las observaciones y el documento modificado.
@@ -350,8 +368,8 @@ class ComprasRepository extends BaseRepository
                        c.total_comprobantes_reembolso, c.total_base_imponible_reembolso,
                        c.total_impuesto_reembolso, c.id_orden_compra, c.estado,
                        c.token_aprobacion, c.aprobado_by, c.aprobado_at,
-                       c.motivo_rechazo, c.total_terceros,
-                       (c.importe_total - c.total_sin_impuestos - COALESCE(c.propina, 0) - COALESCE(c.total_ice, 0)) AS monto_iva,
+                       c.motivo_rechazo, c.total_terceros, c.otros_rubros_terceros,
+                       (c.importe_total - c.total_sin_impuestos - COALESCE(c.propina, 0) - COALESCE(c.total_ice, 0) - COALESCE(c.otros_rubros_terceros, 0)) AS monto_iva,
                        p.razon_social      AS proveedor_nombre,
                        p.identificacion    AS proveedor_ruc,
                        st.nombre           AS sustento_nombre,
@@ -632,7 +650,7 @@ class ComprasRepository extends BaseRepository
         }
 
         $sql = "SELECT c.*,
-                       (c.importe_total - c.total_sin_impuestos - COALESCE(c.propina, 0) - COALESCE(c.total_ice, 0)) AS monto_iva,
+                       (c.importe_total - c.total_sin_impuestos - COALESCE(c.propina, 0) - COALESCE(c.total_ice, 0) - COALESCE(c.otros_rubros_terceros, 0)) AS monto_iva,
                        p.razon_social          AS proveedor_nombre,
                        p.identificacion        AS proveedor_ruc,
                        p.direccion             AS proveedor_direccion,
@@ -948,6 +966,7 @@ class ComprasRepository extends BaseRepository
                     parte_relacionada, establecimiento_prov, punto_emision_prov,
                     secuencial_prov, numero_autorizacion, fecha_emision, fecha_registro,
                     total_sin_impuestos, total_descuento, importe_total, total_ice, propina,
+                    otros_rubros_terceros,
                     autorizacion_desde, autorizacion_hasta, fecha_caducidad,
                     tipo_registro, deducible, documento_modificado, motivo,
                     observaciones, estado, created_by, updated_by, id_usuario,
@@ -956,7 +975,7 @@ class ComprasRepository extends BaseRepository
                 ) VALUES (
                     ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
                     ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
-                    ?, ?, ?, ?, ?, ?, ?, ?, ?,
+                    ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
                     ?, ?, ?, ?, ?,
                     (SELECT CAST(tipo_ambiente AS VARCHAR(1)) FROM empresas WHERE id = ?)
                 ) RETURNING id";
@@ -980,6 +999,7 @@ class ComprasRepository extends BaseRepository
             (float) ($data['importe_total'] ?? 0),
             (float) ($data['total_ice'] ?? 0),
             (float) ($data['propina'] ?? 0),
+            (float) ($data['otros_rubros_terceros'] ?? 0),
             $data['autorizacion_desde'] ?? null,
             $data['autorizacion_hasta'] ?? null,
             !empty($data['fecha_caducidad']) ? $data['fecha_caducidad'] : null,
@@ -1026,6 +1046,7 @@ class ComprasRepository extends BaseRepository
                     importe_total           = ?,
                     total_ice               = ?,
                     propina                 = ?,
+                    otros_rubros_terceros   = ?,
                     autorizacion_desde      = ?,
                     autorizacion_hasta      = ?,
                     fecha_caducidad         = ?,
@@ -1060,6 +1081,7 @@ class ComprasRepository extends BaseRepository
             (float) ($data['importe_total'] ?? 0),
             (float) ($data['total_ice'] ?? 0),
             (float) ($data['propina'] ?? 0),
+            (float) ($data['otros_rubros_terceros'] ?? 0),
             $data['autorizacion_desde'] ?? null,
             $data['autorizacion_hasta'] ?? null,
             !empty($data['fecha_caducidad']) ? $data['fecha_caducidad'] : null,
@@ -1282,6 +1304,42 @@ class ComprasRepository extends BaseRepository
             "UPDATE compras_cabecera SET total_terceros = ? WHERE id = ?",
             [round($total, 2), $idCompra]
         );
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // OTROS RUBROS DE TERCEROS (<otrosRubrosTerceros> del XML de factura del SRI)
+    // Rubros que el emisor cobra por cuenta de terceros DENTRO del importe total
+    // (tasa de pernoctación de un hotel, etc.). La suma vive en
+    // compras_cabecera.otros_rubros_terceros; aquí el desglose tal como vino.
+    // No confundir con total_terceros (planillas de luz/agua, FUERA del total).
+    // ─────────────────────────────────────────────────────────────────────────
+
+    public function insertOtroRubro(int $idCompra, string $concepto, float $total): void
+    {
+        $this->query(
+            "INSERT INTO compras_otros_rubros (id_compra, concepto, total) VALUES (?, ?, ?)",
+            [$idCompra, mb_substr(trim($concepto), 0, 300), round($total, 2)]
+        );
+    }
+
+    public function deleteOtrosRubros(int $idCompra): void
+    {
+        $this->query("DELETE FROM compras_otros_rubros WHERE id_compra = ?", [$idCompra]);
+    }
+
+    /** @return array<int, array{id:int, concepto:string, total:float}> */
+    public function getOtrosRubros(int $idCompra): array
+    {
+        $rows = $this->query(
+            "SELECT id, concepto, total FROM compras_otros_rubros WHERE id_compra = ? ORDER BY id",
+            [$idCompra]
+        )->fetchAll(\PDO::FETCH_ASSOC);
+
+        return array_map(static fn(array $r) => [
+            'id'       => (int) $r['id'],
+            'concepto' => (string) $r['concepto'],
+            'total'    => (float) $r['total'],
+        ], $rows);
     }
 
     /**

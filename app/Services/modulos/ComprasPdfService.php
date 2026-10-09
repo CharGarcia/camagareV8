@@ -473,13 +473,16 @@ class ComprasPdfService
 
         $totalIva = array_sum($ivaMap);
         $propina  = (float)($cab['propina'] ?? 0);
+        // <otrosRubrosTerceros> del XML (tasa de pernoctación, etc.): dentro del importe total.
+        $otrosRubros      = (float)($cab['otros_rubros_terceros'] ?? 0);
+        $otrosRubrosItems = is_array($cab['otros_rubros'] ?? null) ? $cab['otros_rubros'] : [];
 
         $subtotalSinImp = isset($cab['total_sin_impuestos'])
             ? (float)$cab['total_sin_impuestos']
             : array_sum($subtotMap) + $noObjIva + $exentoIva;
         $total = isset($cab['importe_total'])
             ? (float)$cab['importe_total']
-            : $subtotalSinImp + $totalIva + $totalIce + $propina;
+            : $subtotalSinImp + $totalIva + $totalIce + $propina + $otrosRubros;
 
         // El salto de página del pie lo decide renderizar() midiendo su alto real
         // (PdfBloque::cabe). Antes había aquí un umbral fijo que mandaba el pie
@@ -522,6 +525,21 @@ class ComprasPdfService
 
         $this->filaTotales($pdf, $totX, $yTot, $lblW, $valW, $lh, 'PROPINA', $propina);
         $yTot += $lh;
+
+        // Otros rubros de terceros (<otrosRubrosTerceros>): una fila por rubro con su
+        // concepto, como en el RIDE del emisor. Solo cuando la factura los trae.
+        if ($otrosRubros > 0) {
+            $filas = $otrosRubrosItems !== []
+                ? $otrosRubrosItems
+                : [['concepto' => 'OTROS RUBROS DE TERCEROS', 'total' => $otrosRubros]];
+            foreach ($filas as $rubro) {
+                $concepto = strtoupper(trim((string) ($rubro['concepto'] ?? '')));
+                if ($concepto === '') $concepto = 'OTROS RUBROS DE TERCEROS';
+                if (mb_strlen($concepto) > 30) $concepto = mb_substr($concepto, 0, 29) . '…';
+                $this->filaTotales($pdf, $totX, $yTot, $lblW, $valW, $lh, $concepto, (float) ($rubro['total'] ?? 0));
+                $yTot += $lh;
+            }
+        }
 
         // VALOR TOTAL
         $pdf->SetFont('helvetica', 'B', 8);

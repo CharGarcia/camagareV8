@@ -305,6 +305,8 @@ function CMG_poblarModal(d) {
     if (document.getElementById('mcInputPropina')) {
         document.getElementById('mcInputPropina').value  = d.propina || 0;
     }
+    // Otros rubros de terceros (<otrosRubrosTerceros> del XML): dentro del total, no editables.
+    mcPintarOtrosRubros(d.otros_rubros_terceros, d.otros_rubros);
 
     // Cargar sustentos filtrados y seleccionar el actual
     CMG_cargarSustentos(d.tipo_comprobante, d.id_sustento_tributario);
@@ -880,7 +882,8 @@ function CMG_resetModal() {
     if (document.getElementById('mcInputPropina')) {
         document.getElementById('mcInputPropina').value = '0.00';
     }
-    
+    mcPintarOtrosRubros(0, []);
+
     if (document.getElementById('tbodyDetalle')) document.getElementById('tbodyDetalle').innerHTML = '';
     if (document.getElementById('mc-container-pagos-sri')) document.getElementById('mc-container-pagos-sri').innerHTML = '';
     if (document.getElementById('mc-tbody-info-adicional')) document.getElementById('mc-tbody-info-adicional').innerHTML = '';
@@ -1879,6 +1882,28 @@ function mcTotalesDeclarados() {
     try { return JSON.parse(m.dataset.cabTotales); } catch (e) { return null; }
 }
 
+// Otros rubros de terceros (<otrosRubrosTerceros> del XML del SRI: tasa de pernoctación,
+// etc.). Están DENTRO del importe total y vienen del XML: no se editan. Se guarda el total en
+// un input oculto (viaja al servidor para que el recálculo de totales no lo pierda) y el
+// desglose (concepto y valor) va en el tooltip del ícono. La fila solo se ve cuando hay valor.
+function mcPintarOtrosRubros(total, items) {
+    const input = document.getElementById('mcInputOtrosRubros');
+    const row   = document.getElementById('mcRowOtrosRubros');
+    if (!input || !row) return;
+    const t = _r2(parseFloat(total || 0) || 0);
+    input.value = t.toFixed(2);
+    document.getElementById('mcLabelOtrosRubros').textContent = t.toFixed(2);
+    row.classList.toggle('d-none', !(t > 0));
+    const icono = document.getElementById('mcIconoOtrosRubros');
+    if (icono) {
+        const base = 'Rubros que el emisor cobra por cuenta de terceros dentro del total de la factura. Vienen del XML del SRI y se contabilizan en el mismo gasto de la compra.';
+        const lista = Array.isArray(items) && items.length
+            ? ' ' + items.map(r => `${r.concepto || 'Rubro'}: ${(parseFloat(r.total || 0) || 0).toFixed(2)}`).join(' · ')
+            : '';
+        icono.title = base + lista;
+    }
+}
+
 function CMG_recalcularFila(input) {
     const tr    = input.closest('tr');
     const cant  = parseFloat(tr.querySelector('.input-cantidad').value || 0);
@@ -1988,10 +2013,13 @@ function CMG_recalcularTotales() {
 
     const inputPropina = document.getElementById('mcInputPropina');
     const propina      = r2(inputPropina ? parseFloat(inputPropina.value || 0) : 0);
+    // Otros rubros de terceros del XML (<otrosRubrosTerceros>): dentro del total, como la propina.
+    const inputRubros  = document.getElementById('mcInputOtrosRubros');
+    const otrosRubros  = r2(inputRubros ? parseFloat(inputRubros.value || 0) : 0);
 
-    // Total General = Subtotal (bruto) - Descuento + IVA + ICE + Propina, tal cual se ve en pantalla.
+    // Total General = Subtotal (bruto) - Descuento + IVA + ICE + Propina + Otros rubros, tal cual se ve en pantalla.
     let subtotalNeto = r2(subTotalBruto - totalDesc);
-    let totalFinal   = r2(subtotalNeto + totalIva + totalIce + propina);
+    let totalFinal   = r2(subtotalNeto + totalIva + totalIce + propina + otrosRubros);
 
     // Compra ya guardada con el detalle intacto: manda la cabecera (lo que declaró el XML del
     // SRI). La suma de líneas puede diferir por centavos de ese total por redondeos del emisor,
@@ -2343,6 +2371,8 @@ window.CMG_guardar = async function() {
         observaciones: document.getElementById('mcObservaciones').value,
         ...mcRecolectarPagoExterior(),
         propina: parseFloat(document.getElementById('mcInputPropina').value || 0),
+        // Del XML del SRI; el servidor lo conserva en las electrónicas aunque viaje distinto.
+        otros_rubros_terceros: parseFloat(document.getElementById('mcInputOtrosRubros')?.value || 0),
         detalles, pagos, retenciones: [],
         adicionales: mcRecolectarInfoAdicional()
     };
@@ -2505,6 +2535,8 @@ function mcCapturarEstado() {
     estado.pago_exterior = mcRecolectarPagoExterior();
     estado.observaciones = document.getElementById('mcObservaciones')?.value || '';
     estado.propina = document.getElementById('mcInputPropina')?.value || '0.00';
+    estado.otros_rubros_terceros = document.getElementById('mcInputOtrosRubros')?.value || '0.00';
+    estado.otros_rubros_tooltip  = document.getElementById('mcIconoOtrosRubros')?.title || '';
 
     // Detalles
     estado.detalles = [];
@@ -2622,7 +2654,11 @@ async function mcEjecutarRestauracion(estado) {
     mcCargarPagoExterior(estado.pago_exterior || {});
     document.getElementById('mcObservaciones').value = estado.observaciones || '';
     if (document.getElementById('mcInputPropina')) document.getElementById('mcInputPropina').value = estado.propina || '0.00';
-    
+    mcPintarOtrosRubros(estado.otros_rubros_terceros || 0, []);
+    if (estado.otros_rubros_tooltip && document.getElementById('mcIconoOtrosRubros')) {
+        document.getElementById('mcIconoOtrosRubros').title = estado.otros_rubros_tooltip;
+    }
+
     // Restaurar detalles
     document.getElementById('tbodyDetalle').innerHTML = '';
     if (estado.detalles && estado.detalles.length) {

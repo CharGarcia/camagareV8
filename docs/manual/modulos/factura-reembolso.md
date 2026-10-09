@@ -5,8 +5,8 @@ categoria: Ventas
 ruta_modulo: modulos/factura-reembolso
 tipo: modulo
 visibilidad: todos
-etiquetas: factura de reembolso, reembolso de gastos, ats 41, comprobante de venta emitido por reembolso, intermediario, terceros reembolsados, sri, comprobante electronico, buscar factura de reembolso, buscador, filtros, filtrar facturas de reembolso, buscar por proveedor, comprobante de terceros, filtro de fechas, chips, aparecen documentos que no busque, resultados que no corresponden, la busqueda trae otros documentos, informacion adicional, info adicional, limite de caracteres, maximo 300 caracteres, value too long, no se pudo guardar, imprimir, impresora, pdf en dos hojas, segunda hoja casi vacia, totales en otra pagina, el pdf corta la pagina, hoja de mas
-version: 1.9
+etiquetas: factura de reembolso, reembolso de gastos, ats 41, comprobante de venta emitido por reembolso, intermediario, terceros reembolsados, sri, comprobante electronico, buscar factura de reembolso, buscador, filtros, filtrar facturas de reembolso, buscar por proveedor, comprobante de terceros, filtro de fechas, chips, aparecen documentos que no busque, resultados que no corresponden, la busqueda trae otros documentos, informacion adicional, info adicional, limite de caracteres, maximo 300 caracteres, value too long, no se pudo guardar, imprimir, impresora, pdf en dos hojas, segunda hoja casi vacia, totales en otra pagina, el pdf corta la pagina, hoja de mas, asiento contable, no deja agregar lineas al asiento, registrar asiento a mano, asiento manual, factura autorizada sin asiento
+version: 2.0
 orden: 21
 estado: activo
 ---
@@ -178,6 +178,14 @@ bajo el submódulo "Factura de Reembolso" (colgado junto a Factura de Venta).
   alguna cuenta del concepto "Factura de Reembolso" en Configuración
   Contable (especialmente la cuenta puente "Reembolso a Terceros", que no
   tiene una cuenta de respaldo automática).
+- **Factura autorizada sin asiento / no deja agregar líneas**: abra la factura →
+  pestaña **Asiento contable**. Si el asiento no se pudo generar al autorizarla,
+  la pestaña muestra el motivo y las líneas que el sistema sí pudo armar:
+  complete las cuentas que falten, agregue o quite líneas y pulse **Guardar
+  asiento**. Queda enlazado a la factura y marcado como editado a mano. Requiere
+  permiso de actualizar en Factura de Reembolso y en Asientos Contables. En un
+  **borrador** la pestaña es solo una vista previa: el asiento se registra al
+  autorizar en el SRI.
 
 ## Períodos contables cerrados
 
@@ -192,6 +200,10 @@ Contables**; reabrir el período permite la operación de inmediato.
 
 ## Historial de cambios
 
+- **2.0** — Si una factura **autorizada** se quedó sin asiento contable (por
+  ejemplo, faltaba la cuenta puente «Reembolso a Terceros»), la pestaña
+  **Asiento contable** permite ahora armarlo a mano: agregar líneas, elegir
+  cuentas y guardarlo enlazado a la factura.
 - **1.9** — El PDF ya no manda los **totales y la información adicional** a una segunda hoja cuando
   caben en la primera. Antes saltaba de página siempre que el detalle pasara de cierta
   altura, aunque quedara espacio libre; ahora mide el alto real de ese bloque y solo lo pasa

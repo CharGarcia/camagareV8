@@ -1408,6 +1408,8 @@
                 prefijo: 'fr',
                 moduloOrigen: 'factura_reembolso',
                 previewUrl: `${BASE_URL}/modulos/factura-reembolso/getAsientoSugeridoAjax`,
+                // Autorizada sin asiento (la generación automática falló): se arma a mano.
+                manualUrl: `${BASE_URL}/modulos/factura-reembolso/registrarAsientoManualAjax`,
                 cuentasUrl: `${BASE_URL}/modulos/plan-cuentas/searchAjaxCuentas`,
                 asientosUrl: `${BASE_URL}/modulos/asientos-contables`
             });

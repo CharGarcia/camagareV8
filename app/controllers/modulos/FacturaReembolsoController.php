@@ -619,6 +619,25 @@ class FacturaReembolsoController extends BaseModuloController
                 exit;
             }
 
+            // Autorizada y sin asiento: la generación automática falló (cuenta sin configurar,
+            // descuadre…). El comprobante autorizado no se corrige, así que la pestaña deja armar
+            // el asiento a mano partiendo de lo que el sistema sí pudo calcular.
+            if (($cab['estado'] ?? '') === 'autorizado') {
+                $manual = $this->service->evaluarAsientoManual($cab, $idEmpresa);
+                if (!empty($manual['permitido'])) {
+                    echo json_encode([
+                        'ok'             => false,
+                        'error'          => $manual['motivo'],
+                        'permite_manual' => \App\Helpers\AsientoPestana::puedeEditar(),
+                        'detalles'       => $manual['detalles'] ?? [],
+                        'diferencia'     => $manual['diferencia'] ?? 0,
+                    ]);
+                    exit;
+                }
+                echo json_encode(['ok' => true, 'detalles' => [], 'es_guardado' => false, 'aviso' => $manual['motivo']]);
+                exit;
+            }
+
             // Vista previa del asiento (documento aún no autorizado, sin guardar todavía):
             // si no cuadra (p. ej. los terceros no coinciden con las líneas de "Gasto" del
             // detalle), no se muestra como error — el asiento real se genera recién al
@@ -635,6 +654,53 @@ class FacturaReembolsoController extends BaseModuloController
                     'mensaje' => 'El asiento se generará al autorizar el documento en el SRI.',
                 ]);
             }
+        } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
+            echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
+        }
+        exit;
+    }
+
+    /**
+     * Registra a mano el asiento de una factura de reembolso autorizada que no se pudo
+     * contabilizar. Las condiciones las decide FacturaReembolsoService::evaluarAsientoManual();
+     * acá solo permisos y entrada.
+     *
+     * Permisos: actualizar Factura de Reembolso y editar el asiento desde la pestaña (ver +
+     * actualizar Asientos Contables), los mismos que pinta el botón «Guardar asiento».
+     */
+    public function registrarAsientoManualAjax(): void
+    {
+        $this->requireActualizar();
+        header('Content-Type: application/json');
+
+        try {
+            if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
+                throw new \Exception('Método no permitido.');
+            }
+            if (!\App\Helpers\AsientoPestana::puedeEditar()) {
+                throw new \Exception('No tiene permiso para registrar asientos contables.');
+            }
+
+            $id       = (int) ($_POST['id'] ?? 0);
+            $detalles = json_decode((string) ($_POST['detalles_json'] ?? '[]'), true);
+            if ($id <= 0 || !is_array($detalles)) {
+                throw new \Exception('Datos del asiento inválidos.');
+            }
+
+            $res = $this->service->registrarAsientoManual(
+                $id,
+                (int) $_SESSION['id_empresa'],
+                (int) $_SESSION['id_usuario'],
+                $detalles,
+                !empty($_POST['confirmar_descuadre'])
+            );
+            if (!empty($res['ya_existia'])) {
+                $res['msg'] = 'El asiento de esta factura de reembolso ya estaba registrado; no se creó otro.';
+            } elseif (!empty($res['ok'])) {
+                $res['msg'] = 'Asiento registrado a mano y enlazado a la factura de reembolso.';
+            }
+            echo json_encode($res);
         } catch (\Throwable $e) {
             \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             echo json_encode(['ok' => false, 'error' => $e->getMessage()]);

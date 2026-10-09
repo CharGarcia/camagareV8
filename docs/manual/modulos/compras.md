@@ -5,8 +5,8 @@ categoria: Compras
 ruta_modulo: modulos/compras
 tipo: modulo
 visibilidad: todos
-etiquetas: compras, compra, factura de compra, buscar compra, buscador, aparecen compras que no busque, resultados que no corresponden, la busqueda trae otras compras, buscar por numero de autorizacion, filtros, filtrar compras, buscar por producto comprado, filtro de fechas, saldo pendiente, estado de pago, chips, ordenar por dos columnas, ordenar por proveedor y fecha, asiento contable, editar asiento, pestaña asiento, proveedor, xml, sri, entrada de mercaderia, vincular producto, retencion, orden de compra, vincular orden, pedido a proveedor, comparar pedido vs facturado, entrega parcial, recibido parcial, cerrar orden, sustento tributario, codigo de sustento, autorizacion, fecha de caducidad, ats, persona natural, obligada a llevar contabilidad, tipo de contribuyente, registro manual, compra fisica, pagar la compra, pestaña pagos, saldo pendiente, valores de terceros, otros conceptos, valores adicionales, bomberos, tasa de basura, recoleccion de basura, planilla de luz, planilla de agua, servicios basicos, informacion adicional, info adicional, nombre muy largo, limite de caracteres, value too long, no se pudo guardar la compra, imprimir, impresora, retencion antes de la factura, enlazar retencion, pdf en dos hojas, segunda hoja casi vacia, totales en otra pagina, el pdf corta la pagina, hoja de mas, asiento no cuadra, el asiento no se genera, asiento manual, registrar asiento a mano, importe total no es subtotal mas iva, supera el maximo de ajuste, xml inconsistente, iva de cabecera distinto al de las lineas, seguro campesino, generar contabilidad
-version: 2.31
+etiquetas: compras, compra, factura de compra, buscar compra, buscador, aparecen compras que no busque, resultados que no corresponden, la busqueda trae otras compras, buscar por numero de autorizacion, filtros, filtrar compras, buscar por producto comprado, filtro de fechas, saldo pendiente, estado de pago, chips, ordenar por dos columnas, ordenar por proveedor y fecha, asiento contable, editar asiento, pestaña asiento, proveedor, xml, sri, entrada de mercaderia, vincular producto, retencion, orden de compra, vincular orden, pedido a proveedor, comparar pedido vs facturado, entrega parcial, recibido parcial, cerrar orden, sustento tributario, codigo de sustento, autorizacion, fecha de caducidad, ats, persona natural, obligada a llevar contabilidad, tipo de contribuyente, registro manual, compra fisica, pagar la compra, pestaña pagos, saldo pendiente, valores de terceros, otros conceptos, valores adicionales, bomberos, tasa de basura, recoleccion de basura, planilla de luz, planilla de agua, servicios basicos, informacion adicional, info adicional, nombre muy largo, limite de caracteres, value too long, no se pudo guardar la compra, imprimir, impresora, retencion antes de la factura, enlazar retencion, pdf en dos hojas, segunda hoja casi vacia, totales en otra pagina, el pdf corta la pagina, hoja de mas, asiento no cuadra, el asiento no se genera, asiento manual, registrar asiento a mano, importe total no es subtotal mas iva, supera el maximo de ajuste, xml inconsistente, iva de cabecera distinto al de las lineas, seguro campesino, generar contabilidad, otros rubros de terceros, tasa de pernoctacion, tasa turistica, hotel, hospedaje, rubro dentro del total, iva inflado en el listado
+version: 2.32
 orden: 20
 estado: activo
 ---
@@ -401,6 +401,52 @@ campos cuyo nombre menciona *bomberos*, *basura*, *recolección* o *terceros* y
 cuyo valor es un número. En una compra registrada a mano se consigue lo mismo
 agregando el rubro en la pestaña Info Adicional con uno de esos nombres.
 
+## Hoteles y similares: otros rubros de terceros dentro del total
+
+Algunas facturas electrónicas traen, además de la propina, **otros rubros que el
+emisor cobra por cuenta de terceros y que sí están dentro del total**: el caso
+típico es la **tasa de pernoctación** (tasa turística) de un hotel. El SRI tiene
+un bloque propio para eso en el XML de la factura (`otrosRubrosTerceros`), y el
+total del comprobante lo incluye. Ejemplo real:
+
+| Línea | Valor |
+|---|---|
+| Subtotal sin impuestos | 138.06 |
+| IVA 15 % | 20.71 |
+| (+) Propina | 13.50 |
+| (+) Otros rubros de terceros — *Tasa de pernoctación* | 2.50 |
+| **TOTAL** | **174.77** |
+
+Al cargar la factura desde **Descargas SRI** el sistema lee ese bloque y lo
+muestra como una fila **(+) Otros rubros de terceros** justo antes del TOTAL,
+con el detalle de cada rubro (concepto y valor) al pasar el cursor por el ícono
+de información. La fila solo aparece cuando la factura lo trae y **no se edita**:
+viene del XML autorizado. También se imprime en el PDF de la compra, una fila por
+rubro con su concepto, y en el Excel del documento.
+
+Qué cambia con esto:
+
+- La columna **IVA del listado** y de las exportaciones ya no incluye ese valor
+  (antes salía inflada, porque el IVA se deducía como total menos subtotal menos
+  propina).
+- El **asiento contable cuadra solo**: el rubro se contabiliza en la **misma
+  cuenta de gasto de la compra** (la del concepto *Subtotal factura de compras*,
+  o la que corresponda por proveedor o por ítem). No hay que configurar ninguna
+  cuenta nueva ni registrar el asiento a mano.
+- Si se **edita el detalle** de una compra electrónica, el total recalculado
+  conserva el rubro; antes se perdía.
+- **Cuentas por Pagar**, el **ATS** y la **declaración de IVA** no cambian: el
+  saldo ya era el total completo y el rubro nunca fue base de impuestos.
+
+No confundir con los **valores de terceros de las planillas** de la sección
+anterior: aquellos quedan **fuera** del total de la factura y se muestran
+**debajo** del TOTAL; estos están **dentro** y van **antes** del TOTAL.
+
+Las compras cargadas **antes** de esta versión que traían el bloque quedaron sin
+el valor: la actualización de base de datos
+(`database/migrations/20261009_compras_otros_rubros_terceros.sql`) incluye un
+backfill comentado que lo recupera del XML guardado.
+
 ## Al abrir una compra
 
 La ventana de la compra se abre **siempre en la pestaña «Detalle de Compra»** (y,
@@ -697,6 +743,14 @@ aprobaciones pasa, así que no se paga dos veces.
 
 ## Historial de cambios
 
+- **2.32** — Las facturas con **otros rubros de terceros dentro del total** (bloque
+  `otrosRubrosTerceros` del XML del SRI; p. ej. la *tasa de pernoctación* de un
+  hotel) ya se registran completas: fila **(+) Otros rubros de terceros** antes del
+  TOTAL en la compra, en el PDF y en el Excel; la columna IVA del listado deja de
+  salir inflada; el asiento cuadra solo (el rubro va al mismo gasto de la compra) y
+  al editar el detalle el total conserva el rubro. Nueva sección *Hoteles y
+  similares: otros rubros de terceros dentro del total*. Exige el SQL
+  `database/migrations/20261009_compras_otros_rubros_terceros.sql`.
 - **2.31** — Un proveedor creado desde la retención abierta encima de la compra ya no cambia el proveedor de la compra; al crear uno desde la compra, la ficha se cierra sola.
 - **2.30** — Las compras **electrónicas cuyo importe total no es subtotal + IVA**
   (rubros del emisor dentro del total, como el *Seguro Campesino 0.5%*, o IVA de

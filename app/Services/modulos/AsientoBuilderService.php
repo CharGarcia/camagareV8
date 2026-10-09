@@ -2896,13 +2896,14 @@ class AsientoBuilderService
         $db = \App\core\Database::getConnection();
 
         // ── 1. Cabecera + tipo de comprobante (fuente de verdad: BD) ──
-        $importeTotal = 0.0; $subtotal = 0.0; $propina = 0.0; $tipoComprobante = '01';
+        $importeTotal = 0.0; $subtotal = 0.0; $propina = 0.0; $otrosRubros = 0.0; $tipoComprobante = '01';
         if ($idCompra > 0) {
             $stCab = $db->prepare(
                 "SELECT importe_total,
                         total_sin_impuestos,
                         COALESCE(propina, 0)          AS propina,
                         COALESCE(total_ice, 0)        AS total_ice,
+                        COALESCE(otros_rubros_terceros, 0) AS otros_rubros_terceros,
                         COALESCE(tipo_comprobante,'01') AS tipo_comprobante
                  FROM compras_cabecera WHERE id = ?"
             );
@@ -2911,6 +2912,7 @@ class AsientoBuilderService
             $importeTotal    = round((float)($cab['importe_total']      ?? 0), 2);
             $subtotal        = round((float)($cab['total_sin_impuestos'] ?? 0), 2);
             $propina         = round((float)($cab['propina']            ?? 0), 2);
+            $otrosRubros     = round((float)($cab['otros_rubros_terceros'] ?? 0), 2);
             $tipoComprobante = (string)($cab['tipo_comprobante']        ?? '01');
         }
 
@@ -2952,6 +2954,16 @@ class AsientoBuilderService
         $diferencia = round($subtotal - ($subInventario + $subGasto), 2);
         if (abs($diferencia) >= 0.01) {
             $subGasto = round($subGasto + $diferencia, 2);
+        }
+
+        // <otrosRubrosTerceros> del XML (tasa de pernoctación, etc.): está DENTRO del importe
+        // total pero fuera del subtotal y no es impuesto. Va al MISMO gasto de la compra
+        // (decisión del usuario, 2026-10-09), DESPUÉS de cuadrar las líneas contra el subtotal:
+        // así Por Pagar (importe total) = Gasto + Inventario + IVA + ICE + propina y el asiento
+        // cuadra solo. Con reparto por línea cae en el último bucket del gasto (la conciliación
+        // de repartirComprasPorItem suma ahí la diferencia).
+        if ($otrosRubros != 0.0) {
+            $subGasto = round($subGasto + $otrosRubros, 2);
         }
 
         // ── 2b. ICE (impuesto código 3). El importe total del comprobante lo incluye (y la base del

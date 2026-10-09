@@ -779,6 +779,7 @@ class PlantillasPdfRendererService
             '{ice}'                   => number_format($totales['ice'], 2),
             '{iva}'                   => number_format($totales['iva'], 2),
             '{propina}'               => number_format($totales['propina'], 2),
+            '{otros_rubros_terceros}' => number_format($totales['otros_rubros_terceros'] ?? 0, 2),
             '{valor_total}'           => number_format($totales['valor_total'], 2),
             '{total_items}'           => number_format($totales['total_items'] ?? 0, 2),
         ];
@@ -1035,6 +1036,8 @@ class PlantillasPdfRendererService
         }
 
         $propina    = (float)($cabecera['propina'] ?? 0);
+        // <otrosRubrosTerceros> de una factura de compra: dentro del importe total.
+        $otrosRubros = (float)($cabecera['otros_rubros_terceros'] ?? 0);
 
         // total_descuento y valor_total van al XML autorizado y al SRI desde la
         // cabecera: el RIDE los toma de ahí (no los recalcula) para mostrar las
@@ -1044,14 +1047,14 @@ class PlantillasPdfRendererService
         }
         $valorTotal = isset($cabecera['importe_total'])
             ? (float)$cabecera['importe_total']
-            : $subtotal0 + $subtotalIva + $totalIva + $totalIce + $propina;
+            : $subtotal0 + $subtotalIva + $totalIva + $totalIce + $propina + $otrosRubros;
 
         // Conciliar el IVA con el total del comprobante para que la plantilla cuadre EXACTO:
         // {valor_total} sale de importe_total (lo autorizado por el SRI), pero {iva} se sumó por
         // línea; si la empresa calcula el IVA sobre el subtotal difieren ±1 centavo. Se ajusta el
         // IVA para que subtotales + IVA = valor_total (misma lógica que el PDF/XML de factura).
         if (isset($cabecera['importe_total'])) {
-            $ivaObjetivo = round($valorTotal - $subtotal0 - $subtotalIva - $totalIce - $propina, 2);
+            $ivaObjetivo = round($valorTotal - $subtotal0 - $subtotalIva - $totalIce - $propina - $otrosRubros, 2);
             $desfase     = round($ivaObjetivo - $totalIva, 2);
             if (abs($desfase) >= 0.01 && abs($desfase) <= 0.05) {
                 $totalIva = round($totalIva + $desfase, 2);
@@ -1065,6 +1068,7 @@ class PlantillasPdfRendererService
             'ice'             => $totalIce,
             'iva'             => $totalIva,
             'propina'         => $propina,
+            'otros_rubros_terceros' => $otrosRubros,
             'valor_total'     => $valorTotal,
             'total_items'     => $totalItems, // suma de cantidades de las líneas
         ];

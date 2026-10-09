@@ -106,6 +106,12 @@ class ComprasService
             $this->sincronizarDetalles($idCompra, $data['detalles'] ?? []);
             $this->guardarPagos($idCompra, $data['pagos'] ?? []);
             $this->guardarAdicionales($idCompra, $data['adicionales'] ?? []);
+            // Desglose de <otrosRubrosTerceros> si el llamador lo trae (lista {concepto, total}).
+            foreach ((array) ($data['otros_rubros'] ?? []) as $rubro) {
+                if (is_array($rubro) && (float) ($rubro['total'] ?? 0) != 0.0) {
+                    $this->repository->insertOtroRubro($idCompra, (string) ($rubro['concepto'] ?? ''), (float) $rubro['total']);
+                }
+            }
 
             $this->logService->registrar(
                 $idUsuario, $idEmpresa,
@@ -460,6 +466,9 @@ class ComprasService
         }
 
         $compra['egresos_vinculados'] = $this->repository->getEgresosVinculados($id);
+
+        // Desglose de <otrosRubrosTerceros> del XML (tasa de pernoctación, etc.).
+        $compra['otros_rubros'] = $this->repository->getOtrosRubros($id);
 
         // Detalle de "Factura de Reembolso" recibida (bloque <reembolsos> del XML, solo si aplica).
         $terceros = $this->repository->getReembolsoTerceros($id);
@@ -849,6 +858,8 @@ class ComprasService
             throw new \RuntimeException('El XML no contiene la información del comprobante.');
         }
 
+        $otrosRubros = \App\Helpers\OtrosRubrosTerceros::leer($xml);
+
         // ── Cabecera (emisor = proveedor; número y autorización del documento) ──
         $cabecera = [
             'tipo_comprobante'         => $codDoc,
@@ -869,6 +880,9 @@ class ComprasService
             // débito: valorTotal. Sin este último, una ND siempre salía en 0 aquí.
             'importe_total'            => (float) ($info->importeTotal ?? $info->valorModificacion ?? $info->valorTotal ?? 0),
             'propina'                  => (float) ($info->propina ?? 0),
+            // <otrosRubrosTerceros> (tasa de pernoctación, etc.): dentro del importe total.
+            'otros_rubros_terceros'    => $otrosRubros['total'],
+            'otros_rubros'             => $otrosRubros['items'],
         ];
 
         // ── Adquirente (comprador / receptor) ─────────────────────────────────
@@ -1419,6 +1433,12 @@ class ComprasService
                 $guardadasPorId[(int) $g['id']] = $g;
             }
             $esElectronica = (string) ($cabecera['tipo_registro'] ?? 'fisica') === 'electronico';
+            // Los rubros de terceros del XML (<otrosRubrosTerceros>) no se editan: se
+            // conservan siempre, se haya tocado o no el detalle. Si no, al recalcular los
+            // totales el importe total perdía ese valor (174.77 → 172.27 en el caso real).
+            if ($esElectronica) {
+                $data['otros_rubros_terceros'] = (float) ($cabecera['otros_rubros_terceros'] ?? 0);
+            }
             if ($esElectronica && $guardadasPorId !== [] && $this->detalleCoincideConGuardado($guardadasPorId, $data['detalles'] ?? [])) {
                 $data = $this->aplicarDetalleGuardado($data, $cabecera, $guardadasPorId);
             } else {
@@ -1829,7 +1849,14 @@ class ComprasService
         $data['total_sin_impuestos'] = round($subtotal, 2);
         $data['total_descuento']     = round($descuento, 2);
         $data['total_ice']           = round($totalIce, 2);
-        $data['importe_total']       = round($data['total_sin_impuestos'] + $totalImpuestos + (float)($data['propina'] ?? 0), 2);
+        // + otros rubros de terceros del XML (<otrosRubrosTerceros>): están DENTRO del
+        // importe total, igual que la propina.
+        $data['importe_total']       = round(
+            $data['total_sin_impuestos'] + $totalImpuestos
+            + (float)($data['propina'] ?? 0)
+            + (float)($data['otros_rubros_terceros'] ?? 0),
+            2
+        );
 
         return $data;
     }
@@ -1890,6 +1917,7 @@ class ComprasService
         $data['total_descuento']     = (float) ($cabecera['total_descuento'] ?? 0);
         $data['total_ice']           = (float) ($cabecera['total_ice'] ?? 0);
         $data['propina']             = (float) ($cabecera['propina'] ?? 0);
+        $data['otros_rubros_terceros'] = (float) ($cabecera['otros_rubros_terceros'] ?? 0);
         $data['importe_total']       = (float) ($cabecera['importe_total'] ?? 0);
 
         return $data;

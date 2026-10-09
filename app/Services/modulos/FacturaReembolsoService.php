@@ -491,6 +491,219 @@ class FacturaReembolsoService
         $this->repository->updateAsientoContable($idFacturaReembolso, $idAsientoGenerado);
     }
 
+    // ─────────────────────────────────────────────────────────────────────────
+    // ASIENTO MANUAL DE UNA FACTURA AUTORIZADA QUE NO SE PUDO CONTABILIZAR
+    // ─────────────────────────────────────────────────────────────────────────
+
+    /**
+     * ¿Se puede registrar a mano el asiento de esta factura de reembolso? El asiento automático
+     * se genera al autorizar en el SRI; si falló (cuenta puente sin configurar, descuadre, etc.)
+     * el documento autorizado ya no se puede corregir, así que la pestaña deja armarlo a mano
+     * (mismo criterio que ComprasService::evaluarAsientoManual):
+     *  - está autorizada (un borrador todavía no lleva asiento; una anulada, ninguno);
+     *  - todavía no tiene asiento;
+     *  - el módulo contabiliza en la empresa (Configuración Contable → Módulos que contabilizan).
+     *
+     * Devuelve también las líneas que el sistema sí pudo armar (las que no resolvieron cuenta
+     * llegan con id_cuenta_contable = 0 para que el usuario la elija) y el motivo.
+     *
+     * @return array{permitido: bool, motivo: string, detalles?: array, diferencia?: float}
+     */
+    public function evaluarAsientoManual(array $fr, int $idEmpresa): array
+    {
+        $idFR = (int) ($fr['id'] ?? 0);
+        $no = fn(string $motivo) => ['permitido' => false, 'motivo' => $motivo];
+
+        if (($fr['estado'] ?? '') !== 'autorizado') {
+            return $no('El asiento contable se genera cuando el SRI autoriza la factura de reembolso.');
+        }
+        if ((int) ($fr['id_asiento_contable'] ?? 0) > 0) {
+            return $no('La factura de reembolso ya tiene asiento contable: corríjalo desde la pestaña Asiento contable.');
+        }
+        if (!ContabilidadInterruptorService::crear()->contabiliza($idEmpresa, 'factura_reembolso')) {
+            return $no('Las facturas de reembolso no se contabilizan en esta empresa (Configuración Contable → Módulos que contabilizan).');
+        }
+
+        $detalles = [];
+        $motivo = 'El asiento no se generó al autorizar la factura.';
+        try {
+            $detalles = (new AsientoBuilderService())->generarAsientoFacturaReembolso($idEmpresa, $idFR);
+        } catch (AsientoDescuadreDocumentoException $e) {
+            $detalles = $e->getDetalles();
+            $motivo = $e->getMessage();
+        } catch (\Throwable $e) {
+            $motivo = $e->getMessage();
+        }
+        // Una línea sin cuenta es la causa más común (la cuenta puente no tiene respaldo): se
+        // nombra primero, que es lo que el usuario tiene que completar.
+        $sinCuenta = array_filter($detalles, fn($d) => (int) ($d['id_cuenta_contable'] ?? 0) <= 0);
+        if ($sinCuenta) {
+            $faltan = implode(', ', array_unique(array_map(fn($d) => (string) ($d['referencia_detalle'] ?? ''), $sinCuenta)));
+            $motivo = "Falta la cuenta contable de: {$faltan}. Elíjala aquí o configúrela en Configuración contable, concepto «Factura de Reembolso».";
+        }
+
+        $diferencia = round(
+            array_sum(array_map(fn($d) => (float) ($d['debe'] ?? 0), $detalles))
+            - array_sum(array_map(fn($d) => (float) ($d['haber'] ?? 0), $detalles)),
+            2
+        );
+
+        return ['permitido' => true, 'motivo' => $motivo, 'detalles' => $detalles, 'diferencia' => $diferencia];
+    }
+
+    /**
+     * Registra a mano el asiento de una factura de reembolso autorizada que no se pudo
+     * contabilizar (ver evaluarAsientoManual). Queda con modulo_origen 'factura_reembolso',
+     * enlazado al documento (id_asiento_contable) y marcado como editado a mano (las
+     * regeneraciones automáticas lo respetan).
+     *
+     * Un guardado = un registro (§8): bajo el candado del documento se vuelve a mirar si ya tiene
+     * asiento; un doble clic o un reintento tras perderse la respuesta devuelve el existente.
+     *
+     * @param array $detalles líneas {id_cuenta_contable, debe, haber, referencia_detalle}
+     * @return array{ok: bool, id?: int, ya_existia?: bool, requiere_confirmacion?: bool, mensaje?: string}
+     */
+    public function registrarAsientoManual(int $idFR, int $idEmpresa, int $idUsuario, array $detalles, bool $confirmarDescuadre): array
+    {
+        $fr = $this->repository->getPorId($idFR);
+        if (!$fr || (int) ($fr['id_empresa'] ?? 0) !== $idEmpresa) {
+            throw new Exception('Factura de reembolso no encontrada.');
+        }
+
+        // Reintento de un guardado que sí llegó: devuelve el asiento que ya tiene, sin error.
+        $idAsientoActual = (int) ($fr['id_asiento_contable'] ?? 0);
+        if ($idAsientoActual > 0) {
+            return ['ok' => true, 'id' => $idAsientoActual, 'ya_existia' => true];
+        }
+
+        $evaluacion = $this->evaluarAsientoManual($fr, $idEmpresa);
+        if (!$evaluacion['permitido']) {
+            throw new Exception($evaluacion['motivo']);
+        }
+
+        $this->validarPeriodoContable(
+            $fr['fecha_emision'] ?? null,
+            $idEmpresa,
+            'No se puede registrar el asiento porque el período contable de la factura de reembolso está cerrado.'
+        );
+
+        $numero = ($fr['establecimiento'] ?? '') . '-' . ($fr['punto_emision'] ?? '') . '-' . ($fr['secuencial'] ?? '');
+        $lineas = $this->normalizarLineasAsientoManual($detalles, $numero, (int) ($fr['id_cliente'] ?? 0));
+
+        $cabeceraData = [
+            'id'                   => null,
+            'fecha_asiento'        => $fr['fecha_emision'] ?? date('Y-m-d'),
+            'tipo_comprobante'     => 'ventas',
+            'numero_comprobante'   => '',
+            'concepto'             => 'Factura de reembolso # ' . $numero . ' - Cliente: ' . ($fr['cliente_nombre'] ?? 'Cliente'),
+            'estado'               => 'contabilizado',
+            'modulo_origen'        => 'factura_reembolso',
+            'id_referencia_origen' => $idFR,
+            'observaciones'        => $fr['observaciones'] ?? null,
+        ];
+
+        $asientoRepo    = new \App\repositories\modulos\AsientoContableRepository();
+        $asientoService = new AsientoContableService($asientoRepo, new \App\Rules\modulos\AsientoContableRules(), $this->logService);
+
+        // La cuenta por cobrar del asiento debe reflejar el importe total de la factura. Sin línea
+        // de cartera no se guarda; con diferencia se avisa y se deja confirmar (queda en auditoría).
+        $cuadre = $asientoService->evaluarCuadreDocumento($cabeceraData, $lineas, $idEmpresa);
+        if ($cuadre !== null && !empty($cuadre['sin_linea_cartera'])) {
+            throw new Exception($cuadre['mensaje']);
+        }
+        $hayDescuadre = $cuadre !== null && empty($cuadre['cuadra']);
+        if ($hayDescuadre && !$confirmarDescuadre) {
+            return ['ok' => false, 'requiere_confirmacion' => true, 'mensaje' => $cuadre['mensaje']];
+        }
+
+        $db = Database::getConnection();
+        $propia = !$db->inTransaction();
+        if ($propia) {
+            $db->beginTransaction();
+        }
+        try {
+            $asientoRepo->lockAsientoOrigen($idEmpresa, 'factura_reembolso', $idFR);
+            $previo = $asientoService->getAsientoPorOrigen('factura_reembolso', $idFR, $idEmpresa);
+            if ($previo) {
+                if ($propia) {
+                    $db->rollBack();
+                }
+                return ['ok' => true, 'id' => (int) $previo['id'], 'ya_existia' => true];
+            }
+
+            $idAsiento = $asientoService->guardarAsiento($cabeceraData, $lineas, $idEmpresa, $idUsuario, true);
+            $this->repository->updateAsientoContable($idFR, $idAsiento);
+
+            $this->logService->registrar(
+                $idUsuario, $idEmpresa,
+                'Registrar Asiento Manual de Factura de Reembolso', 'factura_reembolso_cabecera', $idFR,
+                ['id_asiento_contable' => null],
+                [
+                    'id_asiento_contable' => $idAsiento,
+                    'motivo'              => $evaluacion['motivo'],
+                    'importe_total'       => (float) ($fr['importe_total'] ?? 0),
+                    'lineas'              => $lineas,
+                ]
+            );
+            if ($hayDescuadre) {
+                $asientoService->registrarDescuadreConfirmado($idAsiento, $cuadre, $idEmpresa, $idUsuario);
+            }
+
+            if ($propia) {
+                $db->commit();
+            }
+            return ['ok' => true, 'id' => $idAsiento, 'ya_existia' => false];
+        } catch (\Throwable $e) {
+            if ($propia && $db->inTransaction()) {
+                $db->rollBack();
+            }
+            throw $e;
+        }
+    }
+
+    /** Valida y normaliza las líneas que llegan de la pestaña: cuenta, un solo lado, Debe = Haber. */
+    private function normalizarLineasAsientoManual(array $detalles, string $numero, int $idCliente): array
+    {
+        $lineas = [];
+        $totalDebe = 0.0;
+        $totalHaber = 0.0;
+        foreach ($detalles as $i => $d) {
+            $idCuenta = (int) ($d['id_cuenta_contable'] ?? 0);
+            $debe  = round((float) ($d['debe'] ?? 0), 2);
+            $haber = round((float) ($d['haber'] ?? 0), 2);
+            if ($debe == 0.0 && $haber == 0.0) {
+                continue;
+            }
+            if ($idCuenta <= 0) {
+                throw new Exception('La línea ' . ($i + 1) . ' del asiento no tiene cuenta contable.');
+            }
+            if ($debe < 0 || $haber < 0 || ($debe > 0 && $haber > 0)) {
+                throw new Exception('La línea ' . ($i + 1) . ' del asiento debe tener valor solo en el Debe o solo en el Haber.');
+            }
+            $ref = trim((string) ($d['referencia_detalle'] ?? ''));
+            $lineas[] = [
+                'id_cuenta_contable'   => $idCuenta,
+                'debe'                 => $debe,
+                'haber'                => $haber,
+                'referencia_detalle'   => $ref !== '' ? $ref : "Factura de reembolso # $numero",
+                'documento_referencia' => "Factura de reembolso # $numero",
+                'id_entidad'           => $idCliente ?: null,
+                'tipo_entidad'         => 'cliente',
+            ];
+            $totalDebe  += $debe;
+            $totalHaber += $haber;
+        }
+
+        if (!$lineas) {
+            throw new Exception('Agregue al menos una línea con valor al asiento.');
+        }
+        if (abs(round($totalDebe - $totalHaber, 2)) >= 0.005) {
+            throw new Exception('El asiento no cuadra: Debe ' . number_format($totalDebe, 2) . ' y Haber ' . number_format($totalHaber, 2) . ' deben ser iguales.');
+        }
+
+        return $lineas;
+    }
+
     /**
      * Genera el XML (sin firmar) y lo persiste en detalle_xml. Se llama fuera
      * de la transacción principal; los errores se silencian para no revertir
