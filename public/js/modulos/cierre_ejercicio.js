@@ -1,5 +1,6 @@
 /**
  * Cierre del Ejercicio (modulos/cierre_ejercicio): listado, vista previa, generación y reversión.
+ * Un solo modal (#modalCierre) en dos modos: 'nuevo' (vista previa editable) y 'detalle'.
  */
 (function () {
     'use strict';
@@ -7,17 +8,16 @@
     const cfg = window.CE_CONFIG || {};
     const $ = (id) => document.getElementById(id);
 
-    let page = 1;
-    let totalPages = 1;
-    let ordenCol = cfg.ordenCol || 'anio';
-    let ordenDir = (cfg.ordenDir || 'DESC').toUpperCase();
-    let buscarTimer = null;
+    window.currentSorts = cfg.sorts || [];
+    window.currentPage = cfg.page || 1;
+    let sorter = null;
 
+    let modo = 'nuevo';
     let tokenGuardado = '';
     let guardando = false;
-    let previa = null;        // último cálculo válido
+    let previa = null;        // último cálculo válido (modo nuevo)
     let calcSeq = 0;          // descarta respuestas viejas si el usuario cambia rápido
-    let detalleActual = null;
+    let detalleActual = null; // cierre abierto (modo detalle)
 
     // ── Utilidades ─────────────────────────────────────────────────────────
     const esc = (s) => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -43,100 +43,61 @@
         return resp.json();
     }
 
-    function modal(id) {
-        return bootstrap.Modal.getOrCreateInstance($(id));
+    const modal = () => bootstrap.Modal.getOrCreateInstance($('modalCierre'));
+
+    function mostrarPestana(id) {
+        const btn = $(id);
+        if (btn) bootstrap.Tab.getOrCreateInstance(btn).show();
     }
 
     // ── Listado ────────────────────────────────────────────────────────────
-    async function cargar() {
-        if (!cfg.tabla) {
-            $('tbodyCierres').innerHTML = '<tr><td colspan="10" class="text-center py-5 text-muted">Módulo sin tabla en la base de datos.</td></tr>';
-            return;
-        }
-        const b = ($('buscarCierre')?.value || '').trim();
-        const qs = `page=${page}&b=${encodeURIComponent(b)}&orden=${encodeURIComponent(ordenCol + ':' + ordenDir)}`;
+    window.cambiarPaginaAjax = (n) => window.fetchSearch(n);
+
+    window.fetchSearch = async (page = 1) => {
+        const term = ($('buscarCierre')?.value || '').trim();
+        const orden = typeof window.CMG_ordenParam === 'function' ? window.CMG_ordenParam(window.currentSorts || []) : '';
+        const tbody = $('tbodyCierres');
+        if (tbody) tbody.classList.add('fm-cargando-target');
         try {
-            const json = await getJson(`${cfg.urlBase}/searchAjax?${qs}`);
-            if (!json.ok) { aviso(json.error || 'No se pudo cargar el listado', 'error'); return; }
-            pintarFilas(json.rows || []);
-            totalPages = json.total_pages || 1;
-            const per = json.per_page || 25;
-            const desde = json.total > 0 ? (page - 1) * per + 1 : 0;
-            const hasta = json.total > 0 ? Math.min(page * per, json.total) : 0;
-            $('paginationInfo').textContent = `${desde}-${hasta}/${json.total}`;
-            $('cePrev').disabled = page <= 1;
-            $('ceNext').disabled = page >= totalPages;
-            if (json.pdf_url) $('btnExportPdf').href = json.pdf_url;
-            if (json.excel_url) $('btnExportExcel').href = json.excel_url;
+            const data = await getJson(`${cfg.urlBase}/searchAjax?b=${encodeURIComponent(term)}&page=${page}&orden=${encodeURIComponent(orden)}`);
+            if (!data.ok) { aviso(data.error || 'No se pudo cargar el listado', 'error'); return; }
+            window.currentPage = page;
+            tbody.innerHTML = data.rows;
+            $('paginationContainer').innerHTML = data.pagination;
+            $('paginationInfo').textContent = data.info;
+            $('btnExportPdf').href = data.pdf_url;
+            $('btnExportExcel').href = data.excel_url;
+            if (sorter) sorter.refreshIcons();
         } catch (e) {
             console.error('Cierre del ejercicio: listado', e);
+        } finally {
+            if (tbody) tbody.classList.remove('fm-cargando-target');
         }
-    }
-
-    function badgeEstado(r) {
-        if (r.estado !== 'vigente') {
-            return '<span class="badge bg-secondary bg-opacity-10 text-secondary border border-secondary border-opacity-25">Revertido</span>';
-        }
-        const revisar = Number(r.cambios_posteriores || 0) > 0
-            ? ` <i class="bi bi-exclamation-triangle-fill text-warning" title="${r.cambios_posteriores} asiento(s) del año cambiaron después del cierre"></i>` : '';
-        return '<span class="badge bg-success bg-opacity-10 text-success border border-success border-opacity-25">Vigente</span>' + revisar;
-    }
-
-    function pintarFilas(rows) {
-        const tb = $('tbodyCierres');
-        if (!rows.length) {
-            tb.innerHTML = '<tr><td colspan="10" class="text-center py-5 text-muted"><i class="bi bi-journal-x fs-3 d-block mb-2"></i>Todavía no se ha cerrado ningún ejercicio.</td></tr>';
-            return;
-        }
-        tb.innerHTML = rows.map(r => `
-            <tr class="ce-row" data-id="${r.id}">
-                <td class="ps-3 fw-semibold" data-col="anio">${esc(r.anio)}</td>
-                <td data-col="fecha_cierre">${esc(r.fmt_fecha_cierre)}</td>
-                <td data-col="saldos_desde">${esc(r.fmt_saldos_desde)}</td>
-                <td data-col="asiento_cierre">${esc(r.numero_cierre || '—')}</td>
-                <td data-col="asiento_apertura">${esc(r.numero_apertura || '—')}</td>
-                <td class="text-end ${Number(r.resultado) < 0 ? 'text-danger' : ''}" data-col="resultado">${num(r.resultado)}</td>
-                <td class="text-end" data-col="activos">${num(r.total_activos)}</td>
-                <td class="text-end" data-col="patrimonio">${num(r.total_patrimonio)}</td>
-                <td class="text-center" data-col="estado">${badgeEstado(r)}</td>
-                <td class="pe-3 small text-muted" data-col="registrado">${esc(r.fmt_created_at)}<br>${esc(r.creado_por_nombre || '')}</td>
-            </tr>`).join('');
-    }
-
-    $('tbodyCierres')?.addEventListener('click', (ev) => {
-        const tr = ev.target.closest('tr.ce-row');
-        if (tr) CE_detalle(Number(tr.dataset.id));
-    });
-    $('cePrev')?.addEventListener('click', () => { if (page > 1) { page--; cargar(); } });
-    $('ceNext')?.addEventListener('click', () => { if (page < totalPages) { page++; cargar(); } });
-    $('buscarCierre')?.addEventListener('input', () => {
-        clearTimeout(buscarTimer);
-        buscarTimer = setTimeout(() => { page = 1; cargar(); }, 400);
-    });
+    };
 
     if (typeof window.CMG_initSort === 'function') {
-        window.CMG_initSort(cfg.modulo, (col, dir) => {
-            ordenCol = col; ordenDir = String(dir || 'ASC').toUpperCase();
-            page = 1; cargar();
-        }, { col: ordenCol, dir: ordenDir, reload: false });
+        sorter = window.CMG_initSort(cfg.modulo, (col, dir, sorts) => {
+            window.currentSorts = sorts;
+            window.fetchSearch(1);
+        }, { sorts: window.currentSorts, multi: true, container: '.cierre-ejercicio-scroll', reload: false });
     }
 
-    // ── Tablas de líneas y KPIs ────────────────────────────────────────────
+    // ── Piezas del modal ───────────────────────────────────────────────────
     function tablaLineas(lineas, vacio) {
         if (!lineas || !lineas.length) {
-            return `<div class="text-muted small p-3">${esc(vacio)}</div>`;
+            return `<div class="text-muted small p-3 text-center"><i class="bi bi-inbox d-block fs-4 mb-1"></i>${esc(vacio)}</div>`;
         }
         let d = 0, h = 0;
         const filas = lineas.map(l => {
             d += Number(l.debe || 0); h += Number(l.haber || 0);
-            return `<tr><td>${esc(l.codigo)}</td><td>${esc(l.nombre)}</td>
+            return `<tr><td><code class="text-secondary">${esc(l.codigo)}</code></td><td>${esc(l.nombre)}</td>
                     <td class="text-end">${Number(l.debe) ? num(l.debe) : ''}</td>
                     <td class="text-end">${Number(l.haber) ? num(l.haber) : ''}</td></tr>`;
         }).join('');
-        return `<table class="table table-sm table-bordered mb-0 ce-lineas">
-                    <thead><tr><th style="width:130px">Código</th><th>Cuenta</th><th class="text-end" style="width:130px">Debe</th><th class="text-end" style="width:130px">Haber</th></tr></thead>
+        return `<table class="table table-sm table-bordered table-hover mb-0 ce-lineas">
+                    <thead class="table-light"><tr><th style="width:140px">Código</th><th>Cuenta</th><th class="text-end" style="width:140px">Debe</th><th class="text-end" style="width:140px">Haber</th></tr></thead>
                     <tbody>${filas}</tbody>
-                    <tfoot><tr class="fw-semibold"><td colspan="2" class="text-end">Totales (${lineas.length} líneas)</td>
+                    <tfoot class="table-light"><tr class="fw-semibold"><td colspan="2" class="text-end">Totales (${lineas.length} líneas)</td>
                         <td class="text-end">${num(d)}</td><td class="text-end">${num(h)}</td></tr></tfoot>
                 </table>`;
     }
@@ -160,26 +121,53 @@
         return html;
     }
 
+    function setAlerta(id, html) {
+        const el = $(id);
+        if (html) { el.innerHTML = html; el.classList.remove('d-none'); } else { el.classList.add('d-none'); el.innerHTML = ''; }
+    }
+
+    function pintarLineas(cierre, apertura, vacioCierre) {
+        $('ceCntCierre').textContent = (cierre || []).length || '';
+        $('ceCntApertura').textContent = (apertura || []).length || '';
+        $('ceTablaCierre').innerHTML = tablaLineas(cierre, vacioCierre);
+        $('ceTablaApertura').innerHTML = tablaLineas(apertura, 'No hay saldos de balance que arrastrar.');
+    }
+
+    function limpiarModal() {
+        ['ceErrores', 'ceAvisos', 'ceRevertido'].forEach(id => setAlerta(id, ''));
+        $('ceResumen').classList.add('d-none');
+        $('cePie').classList.add('d-none');
+        $('ceEstadoBadge').innerHTML = '';
+        pintarLineas([], [], '');
+        mostrarPestana('ce-tab-general-btn');
+    }
+
+    function setEditable(editable) {
+        ['ceAnio', 'ceDesde', 'ceDesdeTodo', 'ceObs'].forEach(id => { $(id).disabled = !editable; });
+        $('ceBtnGenerar')?.classList.toggle('d-none', !editable);
+    }
+
     // ── Nuevo cierre ───────────────────────────────────────────────────────
     window.CE_nuevo = async function () {
+        modo = 'nuevo';
         tokenGuardado = typeof window.CMG_nuevoTokenGuardado === 'function' ? window.CMG_nuevoTokenGuardado() : '';
         previa = null;
+        detalleActual = null;
+        limpiarModal();
+        $('ceTitulo').textContent = 'Nuevo cierre del ejercicio';
+        $('ceBtnRevertir')?.classList.add('d-none');
+        setEditable(true);
         $('ceBtnGenerar').disabled = true;
         $('ceObs').value = '';
-        ['ceErrores', 'ceAvisos', 'cePrevia'].forEach(id => $(id).classList.add('d-none'));
+        $('ceDesde').value = '';
+        $('ceDesdeTodo').checked = false;
         try {
             const json = await getJson(`${cfg.urlBase}/contextoAjax`);
             if (!json.ok) { aviso(json.error, 'error'); return; }
             const ctx = json.data;
-            if (ctx.ambiente !== '2') {
-                aviso('La empresa está en ambiente de pruebas: el cierre se hace sobre la contabilidad de producción.', 'warning');
-            }
-            const sel = $('ceAnio');
             const anios = ctx.anios.length ? ctx.anios : [ctx.sugerido];
-            sel.innerHTML = anios.map(a => `<option value="${a}" ${a === ctx.sugerido ? 'selected' : ''}>${a}</option>`).join('');
-            $('ceDesde').value = '';
-            $('ceDesdeTodo').checked = false;
-            modal('modalCierreNuevo').show();
+            $('ceAnio').innerHTML = anios.map(a => `<option value="${a}" ${a === ctx.sugerido ? 'selected' : ''}>${a}</option>`).join('');
+            modal().show();
             calcular(true);
         } catch (e) {
             aviso('Error de conexión', 'error');
@@ -192,14 +180,15 @@
 
     /** @param {boolean} sugerido true = que el servidor elija "saldos desde". */
     async function calcular(sugerido) {
+        if (modo !== 'nuevo') return;
         const seq = ++calcSeq;
         previa = null;
         $('ceBtnGenerar').disabled = true;
         $('ceCargando').classList.remove('d-none');
-        ['ceErrores', 'ceAvisos', 'cePrevia'].forEach(id => $(id).classList.add('d-none'));
+        ['ceErrores', 'ceAvisos'].forEach(id => setAlerta(id, ''));
+        $('ceResumen').classList.add('d-none');
 
-        const anio = $('ceAnio').value;
-        let qs = `anio=${encodeURIComponent(anio)}`;
+        let qs = `anio=${encodeURIComponent($('ceAnio').value)}`;
         if (!sugerido) {
             qs += '&saldos_desde=' + ($('ceDesdeTodo').checked ? '' : encodeURIComponent($('ceDesde').value));
         }
@@ -208,16 +197,15 @@
             if (seq !== calcSeq) return;
             $('ceCargando').classList.add('d-none');
             if (!json.ok) {
-                $('ceErrores').textContent = json.error || 'No se pudo calcular el cierre.';
-                $('ceErrores').classList.remove('d-none');
+                setAlerta('ceErrores', esc(json.error || 'No se pudo calcular el cierre.'));
+                pintarLineas([], [], '');
                 return;
             }
             pintarPrevia(json.data);
         } catch (e) {
             if (seq !== calcSeq) return;
             $('ceCargando').classList.add('d-none');
-            $('ceErrores').textContent = 'Error de conexión al calcular el cierre.';
-            $('ceErrores').classList.remove('d-none');
+            setAlerta('ceErrores', 'Error de conexión al calcular el cierre.');
         }
     }
 
@@ -229,24 +217,15 @@
         $('ceDesdeTodo').disabled = !!d.saldos_desde_fijo || !!d.saldos_desde_min;
         if (d.saldos_desde_min) $('ceDesde').min = d.saldos_desde_min; else $('ceDesde').removeAttribute('min');
 
-        if (d.errores && d.errores.length) {
-            $('ceErrores').innerHTML = d.errores.map(esc).join('<br>');
-            $('ceErrores').classList.remove('d-none');
-        }
-        if (d.avisos && d.avisos.length) {
-            $('ceAvisos').innerHTML = d.avisos.map(esc).join('<br>');
-            $('ceAvisos').classList.remove('d-none');
-        }
+        setAlerta('ceErrores', (d.errores || []).map(esc).join('<br>'));
+        setAlerta('ceAvisos', (d.avisos || []).map(esc).join('<br>'));
         $('ceKpis').innerHTML = kpis(d);
         $('ceExplica').innerHTML = `Se registrará el <b>asiento de cierre al ${fecha(d.fecha_cierre)}</b>, que salda las cuentas de resultados del año, `
             + `y el <b>asiento de apertura al ${fecha(d.fecha_apertura)}</b>, con los saldos de balance `
             + (d.saldos_desde ? `acumulados desde el ${fecha(d.saldos_desde)}` : 'de todo el histórico')
             + `. Luego se bloquea el año ${esc(d.anio)} en Períodos Contables. Los reportes del año ${esc(d.anio)} se seguirán viendo igual.`;
-        $('ceCntCierre').textContent = (d.cierre.lineas || []).length;
-        $('ceCntApertura').textContent = (d.apertura.lineas || []).length;
-        $('ceTablaCierre').innerHTML = tablaLineas(d.cierre.lineas, 'Las cuentas de resultados del año ya están en cero: no hace falta asiento de cierre.');
-        $('ceTablaApertura').innerHTML = tablaLineas(d.apertura.lineas, 'No hay saldos de balance que arrastrar.');
-        $('cePrevia').classList.remove('d-none');
+        $('ceResumen').classList.remove('d-none');
+        pintarLineas(d.cierre.lineas, d.apertura.lineas, 'Las cuentas de resultados del año ya están en cero: no hace falta asiento de cierre.');
 
         previa = d;
         $('ceBtnGenerar').disabled = !!(d.errores && d.errores.length);
@@ -257,7 +236,7 @@
         guardando = true;
         const btn = $('ceBtnGenerar');
         btn.disabled = true;
-        let cerrado = false;
+        let creado = false;
         try {
             const ok = await confirmar(`¿Cerrar el ejercicio ${previa.anio}?`,
                 `Se registrarán los asientos de cierre y apertura y se <b>bloqueará el año ${esc(previa.anio)}</b>: `
@@ -265,7 +244,7 @@
                 'Sí, cerrar el ejercicio');
             if (!ok) return;
 
-            btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Generando…';
+            btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span> Generando…';
             const fd = new FormData();
             fd.append('anio', previa.anio);
             fd.append('saldos_desde', previa.saldos_desde || '');
@@ -276,19 +255,17 @@
                 aviso(json.error || 'No se pudo generar el cierre.', 'error');
                 return;
             }
-            cerrado = true;
-            modal('modalCierreNuevo').hide();
+            creado = true;
             aviso(json.msg, 'success');
-            page = 1;
-            await cargar();
-            CE_detalle(json.id);
+            window.fetchSearch(1);
+            // El modal pasa a mostrar el cierre recién creado: el botón Generar ya no vuelve.
+            await CE_detalle(json.id);
         } catch (e) {
             aviso('Error de conexión. Revise el listado antes de reintentar: el cierre pudo haberse registrado.', 'error');
         } finally {
             guardando = false;
-            btn.innerHTML = '<i class="bi bi-lock"></i> Generar cierre';
-            // Tras crear el cierre el botón no se reactiva: el modal ya se cerró.
-            btn.disabled = cerrado || !previa || !!(previa.errores && previa.errores.length);
+            btn.innerHTML = '<i class="bi bi-lock me-1"></i> Generar cierre';
+            btn.disabled = creado || !previa || !!(previa.errores && previa.errores.length);
         }
     };
 
@@ -298,35 +275,38 @@
             const json = await getJson(`${cfg.urlBase}/detalleAjax?id=${encodeURIComponent(id)}`);
             if (!json.ok) { aviso(json.error, 'error'); return; }
             const d = json.data;
+            modo = 'detalle';
+            calcSeq++;
             detalleActual = d;
-            $('ceDetTitulo').textContent = `Cierre del ejercicio ${d.anio}`;
-            $('ceDetKpis').innerHTML = kpis(d);
-            $('ceDetNumCierre').textContent = d.numero_cierre ? `(${d.numero_cierre})` : '';
-            $('ceDetNumApertura').textContent = d.numero_apertura ? `(${d.numero_apertura})` : '';
-            $('ceDetTablaCierre').innerHTML = tablaLineas(d.lineas_cierre, 'Sin asiento de cierre: las cuentas de resultados ya estaban en cero.');
-            $('ceDetTablaApertura').innerHTML = tablaLineas(d.lineas_apertura, 'Sin asiento de apertura.');
+            limpiarModal();
+            setEditable(false);
 
-            const avisoEl = $('ceDetAviso');
+            $('ceTitulo').textContent = `Cierre del ejercicio ${d.anio}`;
+            $('ceEstadoBadge').innerHTML = d.estado === 'vigente'
+                ? '<span class="badge bg-success bg-opacity-10 text-success border border-success border-opacity-25 fs-6 fw-normal">Vigente</span>'
+                : '<span class="badge bg-secondary bg-opacity-10 text-secondary border border-secondary border-opacity-25 fs-6 fw-normal">Revertido</span>';
+            $('ceAnio').innerHTML = `<option>${esc(d.anio)}</option>`;
+            $('ceDesde').value = d.saldos_desde ? String(d.saldos_desde).substring(0, 10) : '';
+            $('ceDesdeTodo').checked = !d.saldos_desde;
+            $('ceObs').value = d.observaciones || '';
+
             if (d.estado === 'vigente' && Number(d.cambios_posteriores) > 0) {
-                avisoEl.innerHTML = `<i class="bi bi-exclamation-triangle me-1"></i>${d.cambios_posteriores} asiento(s) con fecha hasta el ${esc(d.fmt_fecha_cierre)} `
-                    + 'se crearon o modificaron después de este cierre (se reabrió un período). La apertura ya no refleja esos saldos: revierta el cierre y vuelva a generarlo.';
-                avisoEl.classList.remove('d-none');
-            } else {
-                avisoEl.classList.add('d-none');
+                setAlerta('ceAvisos', `<i class="bi bi-exclamation-triangle me-1"></i>${d.cambios_posteriores} asiento(s) con fecha hasta el ${esc(d.fmt_fecha_cierre)} `
+                    + 'se crearon o modificaron después de este cierre (se reabrió un período). La apertura ya no refleja esos saldos: revierta el cierre y vuelva a generarlo.');
             }
-            const rev = $('ceDetRevertido');
             if (d.estado !== 'vigente') {
-                rev.innerHTML = `<i class="bi bi-arrow-counterclockwise me-1"></i>Revertido el ${esc(d.fmt_revertido_at)} por ${esc(d.revertido_por_nombre || '')}. Motivo: ${esc(d.motivo_reversion || '')}`;
-                rev.classList.remove('d-none');
-            } else {
-                rev.classList.add('d-none');
+                setAlerta('ceRevertido', `<i class="bi bi-arrow-counterclockwise me-1"></i>Revertido el ${esc(d.fmt_revertido_at)} por ${esc(d.revertido_por_nombre || '')}. Motivo: ${esc(d.motivo_reversion || '')}`);
             }
-            $('ceDetPie').textContent = `Saldos desde: ${d.fmt_saldos_desde}. Registrado el ${d.fmt_created_at} por ${d.creado_por_nombre || '—'}.`
-                + (d.observaciones ? ` Observaciones: ${d.observaciones}` : '');
+            $('ceKpis').innerHTML = kpis(d);
+            $('ceExplica').innerHTML = `Asiento de cierre <b>${esc(d.numero_cierre || '—')}</b> al ${esc(d.fmt_fecha_cierre)} `
+                + `y asiento de apertura <b>${esc(d.numero_apertura || '—')}</b> al ${esc(d.fmt_fecha_apertura)}.`;
+            $('ceResumen').classList.remove('d-none');
+            $('cePie').textContent = `Registrado el ${d.fmt_created_at} por ${d.creado_por_nombre || '—'}.`;
+            $('cePie').classList.remove('d-none');
+            pintarLineas(d.lineas_cierre, d.lineas_apertura, 'Sin asiento de cierre: las cuentas de resultados ya estaban en cero.');
 
-            const btnRev = $('ceBtnRevertir');
-            if (btnRev) btnRev.classList.toggle('d-none', !(d.estado === 'vigente' && d.es_ultimo));
-            modal('modalCierreDetalle').show();
+            $('ceBtnRevertir')?.classList.toggle('d-none', !(d.estado === 'vigente' && d.es_ultimo));
+            modal().show();
         } catch (e) {
             aviso('Error de conexión', 'error');
         }
@@ -356,13 +336,11 @@
         try {
             const json = await getJson(`${cfg.urlBase}/revertir`, { method: 'POST', body: fd });
             if (!json.ok) { aviso(json.error, 'error'); return; }
-            modal('modalCierreDetalle').hide();
             aviso(json.msg, 'success');
-            cargar();
+            window.fetchSearch(window.currentPage || 1);
+            await CE_detalle(d.id);
         } catch (e) {
             aviso('Error de conexión', 'error');
         }
     };
-
-    cargar();
 })();

@@ -6,7 +6,7 @@ ruta_modulo: modulos/inventario
 tipo: modulo
 visibilidad: todos
 etiquetas: inventario, stock, existencias, kardex, movimientos, ajuste, entradas, salidas, bodega, costo, buscar movimientos, buscador, filtros, filtrar movimientos, buscar por lote, buscar por serial, movimientos por bodega, chips, buscar por codigo de barras, buscar por bodega, buscar movimientos de una factura, buscar por mes, imprimir movimiento, pdf del movimiento, comprobante de movimiento, ficha del movimiento, imprimir registro, imprimir un movimiento, asiento del ajuste, contabilidad del ajuste, merma, faltante, sobrante, perdida de inventario, baja de inventario, asiento contable inventario
-version: 1.9
+version: 1.10
 orden: 20
 estado: activo
 ---
@@ -182,6 +182,7 @@ problema pero no aparece en el kardex ni tiene stock.
 
 ## Errores frecuentes
 
+- **"…su fecha corresponde a un período contable cerrado"**: el ajuste o el movimiento es de un mes cerrado en Periodos Contables. No se puede registrar, modificar, anular ni habilitar desde aquí; registre el ajuste en el período abierto o pida que reabran el mes.
 - **Compré y el stock no subió**: registrar la compra no mueve el stock. Hay que
   **procesar las entradas** y, antes, vincular cada línea con un producto del
   catálogo.
@@ -197,6 +198,7 @@ problema pero no aparece en el kardex ni tiene stock.
 
 ## Historial de cambios
 
+- **1.10** — Los ajustes y las ediciones, anulaciones y habilitaciones hechas desde Inventario respetan los períodos contables cerrados. Antes el movimiento se guardaba igual y su asiento simplemente no se generaba.
 - **1.9** — Los **ajustes** del módulo generan su **asiento contable** a costo
   (Inventario contra Sobrante o Faltante / merma), con las cuentas de
   Configuración Contable → Ajustes de Inventario. Una salida sin costo unitario se

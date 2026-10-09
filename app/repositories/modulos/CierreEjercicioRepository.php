@@ -20,10 +20,16 @@ class CierreEjercicioRepository extends BaseRepository
 {
     /** Whitelist y mapa del ORDER BY (§9). */
     public const MAPA_ORDEN = [
-        'anio'       => 'ce.anio',
-        'resultado'  => 'ce.resultado',
-        'estado'     => 'ce.estado',
-        'created_at' => 'ce.created_at',
+        'anio'             => 'ce.anio',
+        'fecha_cierre'     => 'ce.fecha_cierre',
+        'saldos_desde'     => 'ce.saldos_desde',
+        'asiento_cierre'   => 'ac.numero_comprobante',
+        'asiento_apertura' => 'aa.numero_comprobante',
+        'resultado'        => 'ce.resultado',
+        'activos'          => 'ce.total_activos',
+        'patrimonio'       => 'ce.total_patrimonio',
+        'estado'           => 'ce.estado',
+        'registrado'       => 'ce.created_at',
     ];
 
     /** Códigos de asientos_tipo (tipo 'cierre_ejercicio') → clave interna. */
@@ -62,9 +68,9 @@ class CierreEjercicioRepository extends BaseRepository
             $params[':b'] = '%' . $parsed['texto_libre'] . '%';
         }
         FiltrosBusqueda::aplicarFiltros($where, $params, $parsed['filtros'], [
-            'exacto'   => ['estado' => 'ce.estado'],
+            'exacto'   => ['estado' => 'ce.estado', 'usuario' => 'ce.created_by'],
             'numerico' => ['anio' => 'ce.anio', 'resultado' => 'ce.resultado'],
-            'fecha'    => ['fecha' => 'ce.created_at'],
+            'fecha'    => ['registro' => 'ce.created_at', 'cierre' => 'ce.fecha_cierre'],
         ]);
 
         $from = "FROM cierre_ejercicio ce
@@ -97,6 +103,19 @@ class CierreEjercicioRepository extends BaseRepository
         $st->execute();
 
         return ['rows' => $st->fetchAll(PDO::FETCH_ASSOC), 'total' => $total];
+    }
+
+    /** Usuarios que registraron cierres (opciones del filtro "Usuario"). */
+    public function getUsuariosConCierres(int $idEmpresa): array
+    {
+        $st = $this->db->prepare(
+            "SELECT DISTINCT u.id, u.nombre
+               FROM cierre_ejercicio ce JOIN usuarios u ON u.id = ce.created_by
+              WHERE ce.id_empresa = :e AND ce.eliminado = false
+              ORDER BY u.nombre"
+        );
+        $st->execute([':e' => $idEmpresa]);
+        return $st->fetchAll(PDO::FETCH_ASSOC);
     }
 
     public function getDetalle(int $id, int $idEmpresa): ?array
@@ -471,17 +490,17 @@ class CierreEjercicioRepository extends BaseRepository
         return $st->fetchAll(PDO::FETCH_ASSOC);
     }
 
-    /** ¿Hay un período cerrado que cubre el año completo? */
-    public function existePeriodoCerradoQueCubre(int $idEmpresa, string $desde, string $hasta): bool
+    /** Períodos vivos que tocan el rango (completos o en parte), ordenados por fecha. */
+    public function getPeriodosQueTocan(int $idEmpresa, string $desde, string $hasta): array
     {
         $st = $this->db->prepare(
-            "SELECT 1 FROM periodos_contables
-              WHERE id_empresa = :e AND eliminado = false AND status = 0
-                AND fecha_inicial <= CAST(:d AS DATE) AND fecha_final >= CAST(:h AS DATE)
-              LIMIT 1"
+            "SELECT id, nombre, fecha_inicial, fecha_final, status FROM periodos_contables
+              WHERE id_empresa = :e AND eliminado = false
+                AND fecha_inicial <= CAST(:h AS DATE) AND fecha_final >= CAST(:d AS DATE)
+              ORDER BY fecha_inicial, id"
         );
         $st->execute([':e' => $idEmpresa, ':d' => $desde, ':h' => $hasta]);
-        return (bool) $st->fetchColumn();
+        return $st->fetchAll(PDO::FETCH_ASSOC);
     }
 
     public function setStatusPeriodo(int $idPeriodo, int $idEmpresa, int $status, int $idUsuario): void

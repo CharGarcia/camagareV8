@@ -322,6 +322,9 @@ class PeriodosContablesController extends BaseModuloController
         $data = $this->recogerDatosFormulario();
         $data['id_empresa'] = $idEmpresa;
         $data['id_usuario'] = (int) $_SESSION['id_usuario'];
+        // Reabrir un período cerrado exige acceso total (la regla vive en el Service).
+        $data['puede_reabrir']     = !empty($this->getPermisos()['todo']);
+        $data['motivo_reapertura'] = trim((string) ($_POST['motivo_reapertura'] ?? ''));
 
         try {
             if ($id <= 0) throw new \Exception('ID de periodo no válido.');

@@ -9,7 +9,7 @@ namespace App\Rules;
 
 class AsignacionSubmodulosRules
 {
-    private const MODOS_VALIDOS = ['usuarios', 'nivel', 'empresa'];
+    private const MODOS_VALIDOS = ['usuarios', 'nivel', 'empresa', 'submodulo_origen'];
     private const NIVELES_VALIDOS = ['1', '2', 'todos'];
 
     /**
@@ -49,6 +49,14 @@ class AsignacionSubmodulosRules
             case 'empresa':
                 if ((int) ($params['id_empresa'] ?? 0) <= 0) {
                     $errores[] = 'Debe seleccionar la empresa.';
+                }
+                break;
+            case 'submodulo_origen':
+                $idOrigen = (int) ($params['id_submodulo_origen'] ?? 0);
+                if ($idOrigen <= 0) {
+                    $errores[] = 'Debe seleccionar el submódulo que ya deben tener los usuarios.';
+                } elseif ($idOrigen === $idSubmodulo) {
+                    $errores[] = 'El submódulo de referencia debe ser distinto al submódulo a asignar.';
                 }
                 break;
         }

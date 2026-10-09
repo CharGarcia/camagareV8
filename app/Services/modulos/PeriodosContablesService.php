@@ -34,6 +34,9 @@ class PeriodosContablesService
     {
         $this->rules->validar($data);
         $idEmpresa = (int) $data['id_empresa'];
+        $this->rules->validarSinCruce($this->repository->getPeriodoQueSeCruza(
+            $idEmpresa, trim($data['fecha_inicial']), trim($data['fecha_final'])
+        ));
 
         $this->repository->beginTransaction();
         try {
@@ -74,6 +77,23 @@ class PeriodosContablesService
         $antes = $this->repository->findById($id, $idEmpresa);
         if (!$antes) throw new Exception('El periodo contable no existe.');
 
+        $estabaCerrado = (int) $antes['status'] === 0;
+        $quedaAbierto  = isset($data['status']) ? (bool) $data['status'] : true;
+        $reapertura    = $estabaCerrado && $quedaAbierto;
+        $motivo        = trim((string) ($data['motivo_reapertura'] ?? ''));
+        if ($reapertura) {
+            $this->rules->validarReapertura(
+                !empty($data['puede_reabrir']),
+                $motivo,
+                $this->repository->getAnioCerradoQueToca($idEmpresa, (string) $antes['fecha_inicial'], (string) $antes['fecha_final'])
+            );
+        } elseif ($estabaCerrado) {
+            $this->rules->validarFechasCerrado($antes, $data);
+        }
+        $this->rules->validarSinCruce($this->repository->getPeriodoQueSeCruza(
+            $idEmpresa, trim($data['fecha_inicial']), trim($data['fecha_final']), $id
+        ));
+
         $this->repository->beginTransaction();
         try {
             $updateData = [
@@ -85,15 +105,15 @@ class PeriodosContablesService
             ];
 
             $this->repository->update($id, $idEmpresa, $updateData);
-            
+
             $this->logService->registrar(
                 (int)$data['id_usuario'],
                 $idEmpresa,
-                'actualizar',
+                $reapertura ? 'reabrir' : 'actualizar',
                 'periodos_contables',
                 $id,
                 $antes,
-                $updateData
+                $reapertura ? $updateData + ['motivo_reapertura' => $motivo] : $updateData
             );
 
             $this->repository->commit();
@@ -107,6 +127,7 @@ class PeriodosContablesService
     {
         $antes = $this->repository->findById($id, $idEmpresa);
         if (!$antes) throw new Exception('El periodo contable no existe.');
+        $this->rules->validarEliminar($antes);
 
         $this->repository->beginTransaction();
         try {

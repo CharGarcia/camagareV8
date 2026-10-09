@@ -77,6 +77,38 @@ trait PeriodoContableTrait
         );
     }
 
+    /**
+     * Antes de anular, en pasos separados, el egreso y el asiento de un documento (p. ej. al
+     * reabrir una declaración): comprueba de entrada que NINGUNO esté en un período cerrado.
+     * Cada anulación lleva su propia transacción; si la segunda fallaba por el período, la
+     * primera ya había quedado hecha y el documento a medio reabrir.
+     */
+    protected function validarPeriodoEgresoYAsiento(?int $idEgreso, ?int $idAsiento, int $idEmpresa, string $documento): void
+    {
+        if ($idEgreso) {
+            $egreso = (new \App\repositories\modulos\EgresoRepository())->getPorId($idEgreso, $idEmpresa);
+            if ($egreso && ($egreso['estado'] ?? '') !== 'anulado') {
+                $this->validarPeriodoContable(
+                    (string) ($egreso['fecha_emision'] ?? ''),
+                    $idEmpresa,
+                    "No se puede reabrir {$documento}: su egreso de pago " . trim((string) ($egreso['numero_egreso'] ?? ''))
+                        . ' es de un período contable cerrado.'
+                );
+            }
+        }
+        if ($idAsiento) {
+            $asiento = (new \App\repositories\modulos\AsientoContableRepository())->getDetalleAsiento($idAsiento, $idEmpresa);
+            if ($asiento && ($asiento['estado'] ?? '') !== 'anulado') {
+                $this->validarPeriodoContable(
+                    (string) ($asiento['fecha_asiento'] ?? ''),
+                    $idEmpresa,
+                    "No se puede reabrir {$documento}: su asiento " . trim((string) ($asiento['numero_comprobante'] ?? ''))
+                        . ' es de un período contable cerrado.'
+                );
+            }
+        }
+    }
+
     private function periodoContableService(): PeriodosContablesService
     {
         return $this->periodoContableService ??= new PeriodosContablesService(

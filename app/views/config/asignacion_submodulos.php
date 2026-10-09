@@ -88,6 +88,27 @@ unset($_SESSION['config_msg']);
                         <label class="form-check-label" for="modo-todos">Todos (administradores + usuarios)</label>
                     </div>
 
+                    <div class="form-check">
+                        <input class="form-check-input" type="radio" name="asigsub-modo" id="modo-submodulo-origen" value="submodulo_origen">
+                        <label class="form-check-label" for="modo-submodulo-origen">Usuarios que ya tienen otro submódulo</label>
+                    </div>
+                    <div id="bloque-submodulo-origen" class="ms-4 mb-2 d-none" style="max-width:520px">
+                        <select id="asigsub-submodulo-origen" class="form-select">
+                            <option value="">Seleccione el submódulo que ya tienen...</option>
+                            <?php foreach ($catalogo as $mod): ?>
+                                <optgroup label="<?= htmlspecialchars($mod['nombre_modulo']) ?>">
+                                    <?php foreach ($mod['submodulos'] as $sub): ?>
+                                        <?php $busqueda = $mod['nombre_modulo'] . ' ' . $sub['nombre_submodulo']; ?>
+                                        <option value="<?= (int) $sub['id_submodulo'] ?>" data-data="<?= htmlspecialchars(json_encode(['search' => $busqueda]), ENT_QUOTES) ?>">
+                                            <?= htmlspecialchars($sub['nombre_submodulo']) ?>
+                                        </option>
+                                    <?php endforeach; ?>
+                                </optgroup>
+                            <?php endforeach; ?>
+                        </select>
+                        <div class="form-text">Se asigna en cada empresa donde el usuario tiene ese submódulo (no en todas sus empresas).</div>
+                    </div>
+
                     <div id="bloque-empresa-filtro" class="ms-4 mb-2" style="max-width:420px">
                         <label class="form-label small text-muted mb-1">Limitar a una empresa (opcional)</label>
                         <select id="asigsub-empresa-filtro" class="form-select form-select-sm">

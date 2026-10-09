@@ -10,6 +10,15 @@ use App\core\Database;
 
 class InventarioService
 {
+    /**
+     * Período contable: los ajustes y las ediciones/anulaciones que hace el usuario desde el
+     * módulo Inventario no pueden tocar una fecha de un período cerrado. El asiento del ajuste
+     * se genera DESPUÉS del commit y en silencio (procesarSeguro), así que sin esta validación el
+     * kardex cambiaba en el mes cerrado y el asiento simplemente no se generaba. Los documentos
+     * que mueven inventario (facturas, compras, notas de crédito…) validan su propio período.
+     */
+    use \App\Traits\PeriodoContableTrait;
+
     private InventarioRepository $repo;
     private LogSistemaService $log;
     private ?BodegaService $bodegaService = null;
@@ -388,6 +397,14 @@ class InventarioService
                      && ($data['referencia_tipo'] ?? 'ajuste_manual') === 'ajuste_manual';
         $idsKardex    = [];
 
+        if ($contabiliza) {
+            $this->validarPeriodoContable(
+                (string) ($data['fecha_movimiento'] ?? date('Y-m-d')),
+                $idEmpresa,
+                'No se puede registrar el ajuste de inventario: su fecha corresponde a un período contable cerrado.'
+            );
+        }
+
         $db = \App\core\Database::getConnection();
         $managedTransaction = !$db->inTransaction();
         if ($managedTransaction) $db->beginTransaction();
@@ -516,6 +533,16 @@ class InventarioService
         // Restricción: No eliminar movimientos vinculados a documentos (Facturas, etc.)
         $this->validarRestriccionMovimiento($mov, $ignorarRestriccion, $idUsuarioNivel, $permitirAnularCompra);
 
+        // Anulación pedida por el usuario en Inventario. Los documentos que revierten su propio
+        // kardex ($ignorarRestriccion) ya validaron el período del documento.
+        if (!$ignorarRestriccion) {
+            $this->validarPeriodoContable(
+                (string) ($mov['fecha_movimiento'] ?? ''),
+                $idEmpresa,
+                'No se puede anular el movimiento: su fecha corresponde a un período contable cerrado.'
+            );
+        }
+
         $db = \App\core\Database::getConnection();
         $managedTransaction = !$db->inTransaction();
         if ($managedTransaction) $db->beginTransaction();
@@ -580,6 +607,11 @@ class InventarioService
         if (empty($mov['eliminado'])) throw new \Exception("Este movimiento no está anulado.");
 
         $this->validarRestriccionMovimiento($mov, false, null, $permitirAnularCompra);
+        $this->validarPeriodoContable(
+            (string) ($mov['fecha_movimiento'] ?? ''),
+            $idEmpresa,
+            'No se puede habilitar el movimiento: su fecha corresponde a un período contable cerrado.'
+        );
 
         $db = \App\core\Database::getConnection();
         $managedTransaction = !$db->inTransaction();
@@ -846,6 +878,12 @@ class InventarioService
 
         // Restricción: No editar movimientos vinculados a documentos (Facturas, etc.), excepto Superadmin
         $this->validarRestriccionMovimiento($movOld, false, $idUsuarioNivel);
+        // La edición no cambia la fecha del movimiento: basta con validar la que tiene.
+        $this->validarPeriodoContable(
+            (string) ($movOld['fecha_movimiento'] ?? ''),
+            $idEmpresa,
+            'No se puede modificar el movimiento: su fecha corresponde a un período contable cerrado.'
+        );
 
         $db = \App\core\Database::getConnection();
         $managedTransaction = !$db->inTransaction();

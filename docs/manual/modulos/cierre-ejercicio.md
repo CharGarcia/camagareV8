@@ -6,7 +6,7 @@ ruta_modulo: modulos/cierre_ejercicio
 tipo: modulo
 visibilidad: todos
 etiquetas: cierre del ejercicio, apertura duplicada, ya existe apertura, cierre manual, apertura manual, saldos iniciales duplicados, cierre anual, cierre contable, cerrar el año, cierre de año, apertura, asiento de apertura, asiento de cierre, saldos iniciales del año, pasar de un año a otro, arrastrar saldos, resultados acumulados, utilidad acumulada, perdida acumulada, utilidad del ejercicio, perdida del ejercicio, resumen de resultados, cuentas de resultados en cero, cerrar periodo, bloquear año, revertir cierre, reabrir año, nuevo año contable
-version: 1.1
+version: 1.3
 orden: 35
 estado: activo
 ---
@@ -36,8 +36,9 @@ Al cerrar el año **AAAA** se registran dos asientos:
    del Ejercicio pasa a **Utilidades Acumuladas** o **Pérdidas Acumuladas**, así
    el año nuevo arranca con esas dos cuentas en cero.
 
-Después cierra los períodos contables de ese año. Si ningún período cubre el año
-completo, crea uno llamado *Ejercicio AAAA (cierre)*.
+Después cierra los períodos contables abiertos de ese año. Los días que ningún período
+cubre se cierran con períodos nuevos, *Ejercicio AAAA (cierre)*, uno por tramo, sin
+superponerse a los que ya existen.
 
 ## Cómo se ven los reportes después de cerrar
 
@@ -70,20 +71,22 @@ completo, crea uno llamado *Ejercicio AAAA (cierre)*.
 
 ## Cómo se usa
 
-1. Pulse **Cerrar un ejercicio**.
+1. Pulse **Nuevo**.
 2. Elija el **año a cerrar**. Se sugiere el siguiente al último cerrado o, si
    nunca se cerró ninguno, el último año terminado.
 3. Revise **Saldos de balance desde** (ver *Campos*). Casi siempre basta con el
    valor sugerido.
 4. El sistema calcula la **vista previa**: utilidad o pérdida del año, resultados
    anteriores que se trasladan, totales de activo, pasivo y patrimonio, y las
-   líneas de los dos asientos, cada uno en su pestaña.
+   líneas de los dos asientos en las pestañas *Asiento de cierre* y *Asiento de
+   apertura* (cada usuario puede ocultarlas con el engranaje).
 5. Si hay errores (cuentas sin configurar, cuentas eliminadas con saldo,
    asientos descuadrados) se muestran en rojo y el botón queda desactivado.
    Corríjalos y vuelva a elegir el año.
 6. Pulse **Generar cierre** y confirme.
 
-Para ver un cierre, haga clic en su fila: muestra los dos asientos, quién lo
+Para ver un cierre, haga clic en su fila: se abre la misma ventana, en modo consulta,
+con los dos asientos, quién lo
 registró y cuándo.
 
 ## Campos del formulario
@@ -148,12 +151,13 @@ traídos de la migración:
 - **Los asientos no se tocan desde Asientos Contables.** Los asientos de cierre y
   apertura no se pueden editar ni anular desde el Libro Diario. Para cambiarlos,
   se revierte el cierre y se genera de nuevo.
-- **Cambios posteriores.** Si alguien reabre un período del año cerrado y registra
-  o modifica asientos, el cierre se marca con ⚠ en el listado y el detalle lo
+- **Cambios posteriores.** Si pese al bloqueo cambian asientos del año (por ejemplo,
+  una migración o una importación de comprobantes ya emitidos, que no revisan los
+  períodos), el cierre se marca con ⚠ en el listado y el detalle lo
   explica. La apertura ya no refleja esos saldos: revierta y vuelva a generar.
 - **Doble clic y reintentos.** Un mismo formulario nunca crea dos cierres.
 - **Revertir** anula los dos asientos, reabre los períodos que el cierre había
-  cerrado, elimina el período que había creado y deja el registro como
+  cerrado, elimina los períodos que había creado y deja el registro como
   *Revertido*, con el motivo, en el historial.
 
 ## Integraciones con otros módulos
@@ -182,6 +186,8 @@ traídos de la migración:
 - **"Ya existe un asiento de apertura del año…"**: hay una apertura del año
   siguiente registrada a mano o migrada. Anúlela en Asientos Contables: la genera
   el cierre.
+- **"El período … está abierto y cruza el inicio o el fin de…"**: ajuste sus fechas
+  en Periodos Contables para que quede dentro de un solo año.
 - **"Ya existe el cierre del ejercicio…"**: hay un cierre posterior. Revierta
   primero los cierres más recientes.
 - **"Este asiento lo generó el Cierre del Ejercicio"** (en Asientos Contables):
@@ -189,6 +195,13 @@ traídos de la migración:
 
 ## Historial de cambios
 
+- **1.3** — Los períodos que crea el cierre cubren solo los días sin período (uno por
+  tramo), sin superponerse a los existentes. Si un período abierto cruza el inicio o el fin
+  del año, el cierre pide ajustarlo. Los períodos de un año cerrado no se reabren desde
+  Periodos Contables: se revierte el cierre.
+- **1.2** — Pantalla con el mismo diseño que los demás listados: buscador con filtros
+  (año, estado, resultado, fechas, usuario), orden por varias columnas (Shift+clic) y una sola
+  ventana con pestañas para crear y consultar un cierre.
 - **1.1** — Bloquea el cierre si ya hay una apertura manual del año siguiente (duplicaría los
   saldos iniciales). Detecta los cierres manuales del año y muestra el resultado real. El
   punto de partida es la primera apertura del último grupo, incluida una a mitad de año.

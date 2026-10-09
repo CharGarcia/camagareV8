@@ -40,6 +40,7 @@ class AsignacionSubmodulosService
             'usuarios' => $this->resolverPorUsuarios($params['ids_usuario'] ?? [], $idEmpresaFiltro),
             'nivel'    => $this->resolverPorNivel((string) ($params['nivel'] ?? ''), $idEmpresaFiltro),
             'empresa'  => $this->resolverPorEmpresa((int) ($params['id_empresa'] ?? 0)),
+            'submodulo_origen' => $this->resolverPorSubmoduloOrigen((int) ($params['id_submodulo_origen'] ?? 0), $idEmpresaFiltro),
             default    => [],
         };
 
@@ -104,6 +105,26 @@ class AsignacionSubmodulosService
         return $destinos;
     }
 
+    /**
+     * Usuarios que ya tienen asignado otro submódulo: el destino es cada empresa donde
+     * lo tienen (no todas sus empresas), así el nuevo submódulo acompaña al de origen.
+     */
+    private function resolverPorSubmoduloOrigen(int $idSubmoduloOrigen, int $idEmpresaFiltro): array
+    {
+        if ($idSubmoduloOrigen <= 0) return [];
+        $destinos = [];
+        foreach ($this->modelPermiso->getDestinosConSubmodulo($idSubmoduloOrigen, $idEmpresaFiltro) as $r) {
+            $idEmpresa = (int) $r['id_empresa'];
+            $destinos[] = [
+                'id_usuario'     => (int) $r['id_usuario'],
+                'nombre_usuario' => (string) ($r['nombre_usuario'] ?? ''),
+                'id_empresa'     => $idEmpresa,
+                'nombre_empresa' => (string) ($r['nombre_empresa'] ?? ('Empresa #' . $idEmpresa)),
+            ];
+        }
+        return $destinos;
+    }
+
     /** Expande un usuario (array con id_usuario|id, nombre) a una fila por cada empresa asignada. */
     private function expandirUsuarioAEmpresas(array $usuario, int $idEmpresaFiltro): array
     {
@@ -161,7 +182,9 @@ class AsignacionSubmodulosService
         string $nombreSubmodulo,
         array $destinos,
         array $permisos,
-        bool $sobrescribir
+        bool $sobrescribir,
+        string $modo = '',
+        array $params = []
     ): array {
         $resultado = $this->modelPermiso->asignarSubmoduloEnLote($idModulo, $idSubmodulo, $destinos, $permisos, $sobrescribir);
         $resultado['total'] = count($destinos);
@@ -178,6 +201,8 @@ class AsignacionSubmodulosService
                 'nombre_submodulo' => $nombreSubmodulo,
                 'permisos'         => $permisos,
                 'sobrescribir'     => $sobrescribir,
+                'modo'             => $modo,
+                'id_submodulo_origen' => $modo === 'submodulo_origen' ? (int) ($params['id_submodulo_origen'] ?? 0) : null,
                 'resultado'        => $resultado,
                 'destinos'         => array_map(
                     static fn (array $d) => ['id_usuario' => $d['id_usuario'], 'id_empresa' => $d['id_empresa']],

@@ -33,10 +33,16 @@ class CierreEjercicioController extends BaseModuloController
     public function index(): void
     {
         $this->requireLeer();
-        $perm = $this->getPermisos();
+        $idEmpresa  = (int) $_SESSION['id_empresa'];
+        $perm       = $this->getPermisos();
         $prefsVista = PreferenciasHelper::getPreferenciasVista(self::RUTA_MODULO);
-        $orden = OrdenListado::leer($prefsVista, 'anio', 'DESC');
-        $this->porPagina();
+        $orden      = OrdenListado::leer($prefsVista, 'anio', 'DESC');
+        $buscar     = trim((string) ($_GET['b'] ?? ''));
+        $page       = max(1, (int) ($_GET['page'] ?? 1));
+        $perPage    = $this->porPagina();
+        $tabla      = $this->service->tablaDisponible();
+
+        $listado = $this->listado($idEmpresa, $buscar, $page, $perPage, $orden);
 
         $this->viewWithLayout('layouts.main', 'modulos.cierre_ejercicio.index', [
             'titulo'          => 'Cierre del Ejercicio',
@@ -44,45 +50,74 @@ class CierreEjercicioController extends BaseModuloController
             'perm'            => $perm,
             'rutaModulo'      => self::RUTA_MODULO,
             'vistaConfig'     => $prefsVista,
-            'ordenCol'        => OrdenListado::primeraCol($orden, 'anio'),
-            'ordenDir'        => OrdenListado::primeraDir($orden, 'DESC'),
-            'tablaDisponible' => $this->service->tablaDisponible(),
+            'rows'            => $listado['rows'],
+            'total'           => $listado['total'],
+            'page'            => $page,
+            'totalPages'      => $listado['total_pages'],
+            'perPage'         => $perPage,
+            'buscar'          => $buscar,
+            'ordenJson'       => OrdenListado::aJson($orden),
+            'ordenParam'      => OrdenListado::aCadena($orden),
+            'usuariosFiltro'  => $tabla ? $this->service->getUsuariosConCierres($idEmpresa) : [],
+            'tablaDisponible' => $tabla,
         ]);
     }
 
-    /** GET: filas del listado (JSON); la vista las pinta. */
+    /** GET: filas (HTML), paginación y contador del listado. */
     public function searchAjax(): void
     {
         $this->requireLeer();
         $idEmpresa = (int) $_SESSION['id_empresa'];
         try {
-            if (!$this->service->tablaDisponible()) {
-                $this->json(['ok' => true, 'rows' => [], 'total' => 0, 'page' => 1, 'total_pages' => 1]);
-            }
             $prefsVista = PreferenciasHelper::getPreferenciasVista(self::RUTA_MODULO);
             $orden   = OrdenListado::leer($prefsVista, 'anio', 'DESC');
             $buscar  = trim((string) ($_GET['b'] ?? ''));
             $page    = max(1, (int) ($_GET['page'] ?? 1));
             $perPage = $this->porPagina();
 
-            $res = $this->service->getListado($idEmpresa, $buscar, $page, $perPage, $orden, $this->filtroPropios());
-            $rows = array_map(fn(array $r) => $this->formatearFila($r), $res['rows']);
-            $qs = '?b=' . urlencode($buscar) . '&orden=' . urlencode(OrdenListado::aCadena($orden));
+            $listado = $this->listado($idEmpresa, $buscar, $page, $perPage, $orden);
+            $total   = $listado['total'];
+            $from    = $total > 0 ? (($page - 1) * $perPage) + 1 : 0;
+            $to      = $total > 0 ? min($page * $perPage, $total) : 0;
 
+            $rows = $listado['rows'];
+            ob_start();
+            require MVC_APP . '/views/modulos/cierre_ejercicio/_filas.php';
+            $rowsHtml = ob_get_clean();
+
+            $prev = $page <= 1 ? 'disabled' : '';
+            $next = $page >= $listado['total_pages'] ? 'disabled' : '';
+            $paginationHtml = '<button type="button" class="btn btn-outline-secondary" ' . $prev . ' onclick="cambiarPaginaAjax(' . ($page - 1) . ')"><i class="bi bi-chevron-left"></i></button>'
+                . '<button type="button" class="btn btn-outline-secondary" ' . $next . ' onclick="cambiarPaginaAjax(' . ($page + 1) . ')"><i class="bi bi-chevron-right"></i></button>';
+
+            $qs = '?b=' . urlencode($buscar) . '&orden=' . urlencode(OrdenListado::aCadena($orden));
             $this->json([
-                'ok'          => true,
-                'rows'        => $rows,
-                'total'       => $res['total'],
-                'page'        => $page,
-                'per_page'    => $perPage,
-                'total_pages' => $perPage > 0 ? max(1, (int) ceil($res['total'] / $perPage)) : 1,
-                'pdf_url'     => BASE_URL . '/' . self::RUTA_MODULO . '/exportPdf' . $qs,
-                'excel_url'   => BASE_URL . '/' . self::RUTA_MODULO . '/exportExcel' . $qs,
+                'ok'         => true,
+                'rows'       => $rowsHtml,
+                'pagination' => $paginationHtml,
+                'info'       => "{$from}-{$to}/{$total}",
+                'total'      => $total,
+                'pdf_url'    => BASE_URL . '/' . self::RUTA_MODULO . '/export-pdf' . $qs,
+                'excel_url'  => BASE_URL . '/' . self::RUTA_MODULO . '/export-excel' . $qs,
             ]);
         } catch (\Throwable $e) {
             ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             $this->json(['ok' => false, 'error' => $e->getMessage()]);
         }
+    }
+
+    /** Filas formateadas + total + páginas (sin la tabla del módulo, listado vacío). */
+    private function listado(int $idEmpresa, string $buscar, int $page, int $perPage, array $orden): array
+    {
+        if (!$this->service->tablaDisponible()) {
+            return ['rows' => [], 'total' => 0, 'total_pages' => 1];
+        }
+        $res = $this->service->getListado($idEmpresa, $buscar, $page, $perPage, $orden, $this->filtroPropios());
+        return [
+            'rows'        => array_map(fn(array $r) => $this->formatearFila($r), $res['rows']),
+            'total'       => $res['total'],
+            'total_pages' => $perPage > 0 ? max(1, (int) ceil($res['total'] / $perPage)) : 1,
+        ];
     }
 
     /** GET: años disponibles, año sugerido y configuración, para el modal de cierre nuevo. */

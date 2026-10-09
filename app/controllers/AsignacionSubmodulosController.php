@@ -108,7 +108,7 @@ class AsignacionSubmodulosController extends Controller
 
         $idActual = (int) ($_SESSION['id_usuario'] ?? 0);
         try {
-            $resultado = $this->service->aplicar($idActual, $idModulo, $idSubmodulo, $nombreSubmodulo, $destinos, $permisos, $sobrescribir);
+            $resultado = $this->service->aplicar($idActual, $idModulo, $idSubmodulo, $nombreSubmodulo, $destinos, $permisos, $sobrescribir, $modo, $params);
         } catch (\Throwable $e) {
             $this->json(['ok' => false, 'error' => 'Error al aplicar la asignación.']);
         }
@@ -140,6 +140,7 @@ class AsignacionSubmodulosController extends Controller
             'nivel'              => trim((string) ($_POST['nivel'] ?? '')),
             'id_empresa'         => (int) ($_POST['id_empresa'] ?? 0),
             'id_empresa_filtro'  => (int) ($_POST['id_empresa_filtro'] ?? 0),
+            'id_submodulo_origen' => (int) ($_POST['id_submodulo_origen'] ?? 0),
         ];
         $sobrescribir = !empty($_POST['sobrescribir']);
 

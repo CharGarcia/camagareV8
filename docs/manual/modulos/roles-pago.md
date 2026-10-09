@@ -6,7 +6,7 @@ ruta_modulo: modulos/roles-pago
 tipo: modulo
 visibilidad: todos
 etiquetas: rol de pago, roles, nomina, sueldo, quincena, semanal, mensual, pago de empleados, descuentos, liquido a recibir, neteo, ingresos de quincena, bono en quincena, horas extra en quincena, observacion, observaciones, detalle de novedad, motivo del descuento, asiento contable, contabilizacion, cuentas de nomina, prestamo quirografario, prestamo hipotecario, prestamo empresa, prestamos iess, aporte iess, base del iess, con iess, sin iess, bonos, comisiones, horas extra, dias no laborados, faltas, dias laborados, sueldo ganado, fondos de reserva, decimo tercero, decimo cuarto, buscar rol de pago, buscador, filtros, filtrar roles, buscar empleado en el rol, buscar rubro, chips, ordenar, ordenamiento, ordenar por periodo, ordenar columnas, orden del listado, periodo mas reciente, imprimir, impresora, eliminar rol, anular rol, rol eliminado, nomina duplicada, nomina contabilizada dos veces, gasto de nomina inflado, asiento sigue contabilizado, asiento de rol eliminado, pagado, pago pendiente, pago parcial, estado de pago, referencia del pago, egreso del rol, ver egreso, pdf del egreso, comprobante de egreso, con que se pago, como se pago, transferencia, cheque, pestaña pago
-version: 1.15
+version: 1.16
 orden: 30
 estado: activo
 ---
@@ -291,6 +291,7 @@ módulo. Para regresar al orden de fábrica, ordene por *Período* de mayor a me
 
 ## Errores frecuentes
 
+- **"No se puede regenerar el rol: ya está contabilizado y su asiento … es de un período contable cerrado"**: el rol ya tiene asiento en un mes cerrado. Para recalcularlo, reabra ese período en Periodos Contables. Un rol sin asiento sí se puede regenerar.
 - **"No se pudo anular el asiento contable del rol de pagos: …"**: al anular o
   eliminar el rol, uno de sus asientos no se pudo anular y no se cambió nada; el
   texto que sigue dice por qué (lo más común, un período contable cerrado).
@@ -310,6 +311,7 @@ módulo. Para regresar al orden de fábrica, ordene por *Período* de mayor a me
 
 ## Historial de cambios
 
+- **1.16** — Un rol ya contabilizado no se puede regenerar si su asiento está en un período contable cerrado. Antes se recalculaba igual y la nómina quedaba distinta de su asiento. Marcarlo como pagado sigue permitido.
 - **1.15** — Nueva columna **Pago** en la lista de empleados del rol (ventana
   más ancha) y pestaña **Pago** en la ficha del empleado: clic en el estado
   *Pagado / Parcial / Pendiente* abre la ficha en esa pestaña, donde se ven los

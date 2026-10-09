@@ -5,8 +5,8 @@ categoria: Contabilidad
 ruta_modulo: modulos/periodos_contables
 tipo: modulo
 visibilidad: todos
-etiquetas: periodos contables, cerrar mes, periodo cerrado, abrir periodo, bloqueo de fechas, cierre mensual
-version: 1.2
+etiquetas: periodos contables, reabrir periodo, motivo de reapertura, periodos superpuestos, periodos cruzados, no deja eliminar periodo, cerrar mes, periodo cerrado, abrir periodo, bloqueo de fechas, cierre mensual
+version: 1.3
 orden: 30
 estado: activo
 ---
@@ -32,7 +32,9 @@ movimiento de un mes cerrado cambiándole la fecha.
 3. Indique la **fecha inicial** y la **fecha final**.
 4. Guarde.
 
-La fecha inicial no puede ser posterior a la final.
+La fecha inicial no puede ser posterior a la final, y **un período no puede cruzarse
+con otro**: si dos períodos se superponen, uno abierto y otro cerrado, no se sabría si
+esas fechas están bloqueadas. El sistema indica con qué período choca.
 
 ## Reabrir
 
@@ -40,14 +42,29 @@ Si hay que corregir algo de un periodo ya cerrado, se reabre, se corrige y se
 vuelve a cerrar. Es una decisión del contador, no de quien captura: reabrir un
 mes ya declarado puede dejar la contabilidad distinta de lo presentado al SRI.
 
+Por eso, para reabrir:
+
+- El usuario necesita **acceso total** en Periodos Contables (el nivel 3 siempre lo
+  tiene).
+- Al cambiar el estado a *Abierto* aparece el campo **Motivo de la reapertura**, que es
+  obligatorio. Queda en el log del sistema junto con quién y cuándo reabrió.
+- Un período de un año cerrado con el **Cierre del Ejercicio** no se reabre desde aquí:
+  se revierte ese cierre.
+
+Mientras el período está cerrado **no se pueden cambiar sus fechas ni eliminarlo**
+(acortarlo o borrarlo desbloquearía días sin dejar rastro). Para hacerlo, primero se
+reabre con el motivo.
+
 Cuando la corrección no es imprescindible, la alternativa correcta es registrar
 el ajuste en el periodo abierto.
 
 ## Cierre del ejercicio
 
-El módulo **Cierre del Ejercicio** cierra solo los períodos del año que cierra y, si
-ningún período cubre el año completo, crea uno llamado *Ejercicio AAAA (cierre)*. Al
-revertir ese cierre, los períodos vuelven a como estaban.
+El módulo **Cierre del Ejercicio** cierra los períodos abiertos del año y, para los días
+que ningún período cubre, crea períodos cerrados llamados *Ejercicio AAAA (cierre)*, uno
+por cada tramo sin período, sin superponerse a los existentes. Si un período abierto
+cruza el inicio o el fin del año, el cierre pide ajustar sus fechas primero. Al revertir
+el cierre, los períodos vuelven a como estaban.
 
 ## Errores frecuentes
 
@@ -56,9 +73,20 @@ revertir ese cierre, los períodos vuelven a como estaban.
   pida al contador que lo reabra.
 - **"La fecha inicial no puede ser mayor a la fecha final"**: revise las fechas
   del periodo.
+- **"Las fechas se cruzan con el período…"**: ajuste las fechas para que no se
+  superpongan con ese período.
+- **"Solo un usuario con acceso total… puede reabrir"**: pida a un administrador que
+  lo reabra, o que le asigne acceso total en Periodos Contables.
+- **"No se pueden cambiar las fechas de un período cerrado"** o **"No se puede
+  eliminar un período cerrado"**: reábralo primero indicando el motivo.
+- **"El período pertenece al ejercicio…, cerrado con el Cierre del Ejercicio"**:
+  revierta ese cierre en su módulo.
 
 ## Historial de cambios
 
+- **1.3** — Los períodos no pueden cruzarse. Reabrir un período cerrado exige acceso total
+  y un motivo (queda en el log), y no se permite en un año cerrado con el Cierre del
+  Ejercicio. Un período cerrado no se puede eliminar ni cambiar de fechas.
 - **1.2** — El **Cierre del Ejercicio** cierra los períodos del año (y los devuelve a
   como estaban si se revierte).
 - **1.1** — El modal ya no tiene pestaña *Información* (historial de cambios); el historial

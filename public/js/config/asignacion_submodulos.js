@@ -8,6 +8,8 @@ window.addEventListener('load', function () {
     const bloqueUsuarios = document.getElementById('bloque-usuarios');
     const bloqueEmpresaFiltro = document.getElementById('bloque-empresa-filtro');
     const bloqueEmpresa = document.getElementById('bloque-empresa');
+    const bloqueSubOrigen = document.getElementById('bloque-submodulo-origen');
+    const selSubOrigen = document.getElementById('asigsub-submodulo-origen');
     const selEmpresaFiltro = document.getElementById('asigsub-empresa-filtro');
     const selEmpresa = document.getElementById('asigsub-empresa');
     const errorEl = document.getElementById('asigsub-error');
@@ -25,22 +27,27 @@ window.addEventListener('load', function () {
     let tsUsuarios = null;
     let tsEmpresaFiltro = null;
     let tsEmpresa = null;
+    let tsSubOrigen = null;
 
     if (typeof TomSelect !== 'undefined') {
-        tsSubmodulo = new TomSelect(selSubmodulo, {
-            create: false,
-            placeholder: 'Buscar submódulo...',
-            searchField: ['text', 'search'],
-            render: {
-                option: function (data, escape) {
-                    var grupo = data.optgroup ? this.optgroups[data.optgroup] : null;
-                    var modulo = grupo ? escape(grupo.label) : '';
-                    return '<div class="py-1">' + escape(data.text)
-                        + (modulo ? ' <small class="text-muted">(' + modulo + ')</small>' : '')
-                        + '</div>';
+        const opcionesSubmodulo = function (placeholder) {
+            return {
+                create: false,
+                placeholder: placeholder,
+                searchField: ['text', 'search'],
+                render: {
+                    option: function (data, escape) {
+                        var grupo = data.optgroup ? this.optgroups[data.optgroup] : null;
+                        var modulo = grupo ? escape(grupo.label) : '';
+                        return '<div class="py-1">' + escape(data.text)
+                            + (modulo ? ' <small class="text-muted">(' + modulo + ')</small>' : '')
+                            + '</div>';
+                    },
                 },
-            },
-        });
+            };
+        };
+        tsSubmodulo = new TomSelect(selSubmodulo, opcionesSubmodulo('Buscar submódulo...'));
+        if (selSubOrigen) tsSubOrigen = new TomSelect(selSubOrigen, opcionesSubmodulo('Buscar el submódulo que ya tienen...'));
         tsUsuarios = new TomSelect('#asigsub-usuarios', {
             create: false,
             placeholder: 'Buscar usuarios...',
@@ -68,6 +75,7 @@ window.addEventListener('load', function () {
         bloqueUsuarios.classList.toggle('d-none', modo !== 'usuarios');
         bloqueEmpresaFiltro.classList.toggle('d-none', modo === 'empresa');
         bloqueEmpresa.classList.toggle('d-none', modo !== 'empresa');
+        if (bloqueSubOrigen) bloqueSubOrigen.classList.toggle('d-none', modo !== 'submodulo_origen');
     }
 
     document.querySelectorAll('input[name="asigsub-modo"]').forEach(function (r) {
@@ -94,7 +102,7 @@ window.addEventListener('load', function () {
     }
 
     // Cualquier cambio en los criterios invalida la previsualización vigente.
-    ['asigsub-submodulo', 'perm-ver', 'perm-crear', 'perm-actualizar', 'perm-eliminar', 'perm-t', 'asigsub-sobrescribir', 'asigsub-empresa-filtro', 'asigsub-empresa'].forEach(function (id) {
+    ['asigsub-submodulo', 'perm-ver', 'perm-crear', 'perm-actualizar', 'perm-eliminar', 'perm-t', 'asigsub-sobrescribir', 'asigsub-empresa-filtro', 'asigsub-empresa', 'asigsub-submodulo-origen'].forEach(function (id) {
         const el = document.getElementById(id);
         if (el) el.addEventListener('change', invalidarPreview);
     });
@@ -131,6 +139,10 @@ window.addEventListener('load', function () {
         } else if (modo === 'empresa') {
             fd.append('modo', 'empresa');
             fd.append('id_empresa', (tsEmpresa ? tsEmpresa.getValue() : selEmpresa.value) || '');
+        } else if (modo === 'submodulo_origen') {
+            fd.append('modo', 'submodulo_origen');
+            fd.append('id_submodulo_origen', (tsSubOrigen ? tsSubOrigen.getValue() : selSubOrigen.value) || '');
+            fd.append('id_empresa_filtro', (tsEmpresaFiltro ? tsEmpresaFiltro.getValue() : selEmpresaFiltro.value) || '');
         } else {
             // admin | usuario | todos
             const nivelMap = { admin: '2', usuario: '1', todos: 'todos' };

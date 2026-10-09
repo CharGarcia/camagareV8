@@ -13,6 +13,8 @@ use Exception;
 
 class RolPagoService
 {
+    use \App\Traits\PeriodoContableTrait;
+
     private RolPagoRepository $repo;
     private RolPagoRules $rules;
     private LogSistemaService $log;
@@ -278,6 +280,7 @@ class RolPagoService
         if ($cab['estado'] === 'anulado') {
             throw new Exception('No se puede regenerar una corrida anulada.');
         }
+        $this->validarPeriodoAsientosRol($id, $idEmpresa);
         // 'pagado' y 'contabilizado' YA NO bloquean la regeneración: el rol mensual se
         // contabiliza en base devengado (al calcularse, no al pagarse), y debe poder
         // seguir corrigiéndose después — el asiento se vuelve a sincronizar solo (ver
@@ -667,6 +670,26 @@ class RolPagoService
         // Pagar/despagar una semana o quincena cambia el neteo del rol mensual del mismo período.
         if (in_array($cab['tipo_rol'], ['SEMANAL', 'QUINCENA'], true)) {
             $this->regenerarAfectados($idEmpresa, 'rol', (int) $cab['periodo_anio'], (int) $cab['periodo_mes'], $idUsuario);
+        }
+    }
+
+    /**
+     * Un rol ya contabilizado no se recalcula si alguno de sus asientos está en un período
+     * cerrado: generar cambia los totales y lo devuelve a 'generado', pero el asiento no se puede
+     * actualizar (el período lo impide) y la nómina quedaba distinta de la contabilidad sin aviso.
+     * Un rol sin asiento sí se puede recalcular: todavía no tocó la contabilidad.
+     */
+    private function validarPeriodoAsientosRol(int $idRol, int $idEmpresa): void
+    {
+        $asientoRepo = new \App\repositories\modulos\AsientoContableRepository();
+        foreach ($asientoRepo->getIdsAsientosPorOrigen('nomina', $idRol, $idEmpresa) as $idAsiento) {
+            $asiento = $asientoRepo->getDetalleAsiento($idAsiento, $idEmpresa);
+            $this->validarPeriodoContable(
+                (string) ($asiento['fecha_asiento'] ?? ''),
+                $idEmpresa,
+                'No se puede regenerar el rol: ya está contabilizado y su asiento ' . ($asiento['numero_comprobante'] ?? '')
+                    . ' es de un período contable cerrado. Reabra el período para recalcularlo.'
+            );
         }
     }
 

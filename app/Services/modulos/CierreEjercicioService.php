@@ -66,6 +66,11 @@ class CierreEjercicioService
         return $res;
     }
 
+    public function getUsuariosConCierres(int $idEmpresa): array
+    {
+        return $this->repo->tablaDisponible() ? $this->repo->getUsuariosConCierres($idEmpresa) : [];
+    }
+
     public function getDetalle(int $id, int $idEmpresa): array
     {
         $c = $this->repo->getDetalle($id, $idEmpresa);
@@ -171,6 +176,14 @@ class CierreEjercicioService
                 . date('d-m-Y', strtotime((string) $a['fecha_asiento'])) . ($a['estado'] === 'borrador' ? ' (borrador)' : '')), $ajenas);
             $errores[] = 'Ya existe un asiento de apertura del año ' . ($anio + 1) . ': ' . implode(', ', $lista)
                 . '. El cierre genera su propia apertura y los saldos iniciales quedarían duplicados. Anúlelo en Asientos Contables y vuelva a calcular.';
+        }
+
+        // Un período abierto que empieza antes del año o termina después no se puede cerrar solo
+        // en la parte de este año: hay que ajustar sus fechas en Periodos Contables.
+        foreach ($this->periodosAbiertosQueCruzanElAnio($idEmpresa, $fi, $fc) as $p) {
+            $errores[] = 'El período "' . $p['nombre'] . '" (' . date('d-m-Y', strtotime((string) $p['fecha_inicial'])) . ' a '
+                . date('d-m-Y', strtotime((string) $p['fecha_final'])) . ") está abierto y cruza el inicio o el fin de {$anio}. "
+                . 'Ajuste sus fechas en Periodos Contables para que quede dentro de un solo año.';
         }
 
         // El año se cierra desde el punto de partida si cae dentro de él (la empresa empezó a
@@ -436,8 +449,12 @@ class CierreEjercicioService
                     $this->repo->setStatusPeriodo((int) $idPeriodo, $idEmpresa, 1, $idUsuario);
                 }
             }
-            if (!empty($periodos['creado'])) {
-                $this->repo->eliminarPeriodo((int) $periodos['creado'], $idEmpresa, $idUsuario);
+            $creados = $periodos['creados'] ?? [];
+            if (!empty($periodos['creado'])) { // registros anteriores a los huecos: un solo período
+                $creados[] = $periodos['creado'];
+            }
+            foreach ($creados as $idPeriodo) {
+                $this->repo->eliminarPeriodo((int) $idPeriodo, $idEmpresa, $idUsuario);
             }
 
             $this->repo->marcarRevertido($id, $idEmpresa, $idUsuario, trim($motivo));
@@ -462,17 +479,57 @@ class CierreEjercicioService
     {
         $fi = "{$anio}-01-01";
         $fc = "{$anio}-12-31";
-        $hecho = ['cerrados' => [], 'creado' => null];
+        $hecho = ['cerrados' => [], 'creados' => []];
         foreach ($this->repo->getPeriodosDentro($idEmpresa, $fi, $fc) as $p) {
             if ((int) $p['status'] === 1) {
                 $this->repo->setStatusPeriodo((int) $p['id'], $idEmpresa, 0, $idUsuario);
                 $hecho['cerrados'][] = (int) $p['id'];
             }
         }
-        if (!$this->repo->existePeriodoCerradoQueCubre($idEmpresa, $fi, $fc)) {
-            $hecho['creado'] = $this->repo->crearPeriodoCerrado($idEmpresa, "Ejercicio {$anio} (cierre)", $fi, $fc, $idUsuario);
+        // Los días del año que ningún período cubre se cierran con períodos nuevos, uno por
+        // hueco, para no superponerse con los que ya existen (Periodos Contables no lo admite).
+        foreach ($this->huecosSinPeriodo($this->repo->getPeriodosQueTocan($idEmpresa, $fi, $fc), $fi, $fc) as [$d, $h]) {
+            $nombre = ($d === $fi && $h === $fc)
+                ? "Ejercicio {$anio} (cierre)"
+                : "Ejercicio {$anio} (cierre) " . date('d-m', strtotime($d)) . ' a ' . date('d-m', strtotime($h));
+            $hecho['creados'][] = $this->repo->crearPeriodoCerrado($idEmpresa, $nombre, $d, $h, $idUsuario);
         }
         return $hecho;
+    }
+
+    /**
+     * Tramos [desde, hasta] del rango que no cubre ningún período.
+     * @return array<int, array{0:string,1:string}>
+     */
+    private function huecosSinPeriodo(array $periodos, string $desde, string $hasta): array
+    {
+        $huecos = [];
+        $cursor = $desde;
+        foreach ($periodos as $p) { // vienen ordenados por fecha inicial
+            $pi = substr((string) $p['fecha_inicial'], 0, 10);
+            $pf = substr((string) $p['fecha_final'], 0, 10);
+            if ($pi > $cursor) {
+                $huecos[] = [$cursor, min($hasta, date('Y-m-d', strtotime($pi . ' -1 day')))];
+            }
+            if ($pf >= $cursor) {
+                $cursor = date('Y-m-d', strtotime($pf . ' +1 day'));
+            }
+            if ($cursor > $hasta) {
+                return $huecos;
+            }
+        }
+        $huecos[] = [$cursor, $hasta];
+        return $huecos;
+    }
+
+    /** Períodos ABIERTOS que cruzan el inicio o el fin del año: no se pueden cerrar solo en parte. */
+    private function periodosAbiertosQueCruzanElAnio(int $idEmpresa, string $fi, string $fc): array
+    {
+        return array_values(array_filter(
+            $this->repo->getPeriodosQueTocan($idEmpresa, $fi, $fc),
+            static fn($p) => (int) $p['status'] === 1
+                && (substr((string) $p['fecha_inicial'], 0, 10) < $fi || substr((string) $p['fecha_final'], 0, 10) > $fc)
+        ));
     }
 
     private function asientoService(): AsientoContableService

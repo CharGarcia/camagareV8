@@ -30,6 +30,8 @@ use App\Services\LogSistemaService;
  */
 class DeclaracionRetencionesService
 {
+    use \App\Traits\PeriodoContableTrait;
+
     private DeclaracionRetencionesRepository $repository;
     private RetencionCompraRepository $retCompraRepo;
     private DeclaracionRetencionesRules $rules;
@@ -330,6 +332,12 @@ class DeclaracionRetencionesService
         if (($decl['estado'] ?? '') !== 'pagado') {
             throw new \Exception('Esta declaración no está cerrada; no hace falta reabrirla.');
         }
+        $this->validarPeriodoEgresoYAsiento(
+            !empty($decl['id_egreso']) ? (int) $decl['id_egreso'] : null,
+            !empty($decl['id_asiento']) ? (int) $decl['id_asiento'] : null,
+            $idEmpresa,
+            'la declaración de retenciones'
+        );
 
         if (!empty($decl['id_egreso'])) {
             $egresoService = new EgresoService(

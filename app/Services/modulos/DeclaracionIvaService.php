@@ -22,6 +22,8 @@ use App\Services\LogSistemaService;
  */
 class DeclaracionIvaService
 {
+    use \App\Traits\PeriodoContableTrait;
+
     private $repository;
     private $fvRepository;
     private $rules;
@@ -1199,6 +1201,12 @@ class DeclaracionIvaService
         if (($decl['estado'] ?? '') !== 'pagado') {
             throw new \Exception('Esta declaración no está cerrada; no hace falta reabrirla.');
         }
+        $this->validarPeriodoEgresoYAsiento(
+            !empty($decl['id_egreso']) ? (int) $decl['id_egreso'] : null,
+            !empty($decl['id_asiento']) ? (int) $decl['id_asiento'] : null,
+            $idEmpresa,
+            'la declaración de IVA'
+        );
 
         if (!empty($decl['id_egreso'])) {
             $egresoService = new EgresoService(

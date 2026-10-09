@@ -184,6 +184,46 @@ class PeriodosContablesRepository
     }
 
     /**
+     * Primer período vivo que se cruza con el rango (otro que no sea $idExcluir). Dos períodos
+     * superpuestos, uno abierto y otro cerrado, dejan sin saber si una fecha está bloqueada.
+     */
+    public function getPeriodoQueSeCruza(int $idEmpresa, string $desde, string $hasta, int $idExcluir = 0): ?array
+    {
+        $stmt = $this->db->prepare(
+            "SELECT id, nombre, fecha_inicial, fecha_final, status
+               FROM periodos_contables
+              WHERE id_empresa = :id_empresa AND eliminado = false AND id <> :excluir
+                AND fecha_inicial <= CAST(:hasta AS DATE) AND fecha_final >= CAST(:desde AS DATE)
+              ORDER BY fecha_inicial
+              LIMIT 1"
+        );
+        $stmt->execute([':id_empresa' => $idEmpresa, ':excluir' => $idExcluir, ':desde' => $desde, ':hasta' => $hasta]);
+        $res = $stmt->fetch();
+        return $res ?: null;
+    }
+
+    /**
+     * Año con Cierre del Ejercicio vigente que toca el rango (null si no hay, o si el módulo aún
+     * no tiene su tabla en esta base). Esos años se reabren revirtiendo el cierre.
+     */
+    public function getAnioCerradoQueToca(int $idEmpresa, string $desde, string $hasta): ?int
+    {
+        $existe = $this->db->query("SELECT to_regclass('public.cierre_ejercicio') IS NOT NULL")->fetchColumn();
+        if (!$existe) {
+            return null;
+        }
+        $stmt = $this->db->prepare(
+            "SELECT MIN(anio) FROM cierre_ejercicio
+              WHERE id_empresa = :id_empresa AND eliminado = false AND estado = 'vigente'
+                AND fecha_cierre >= CAST(:desde AS DATE)
+                AND make_date(anio, 1, 1) <= CAST(:hasta AS DATE)"
+        );
+        $stmt->execute([':id_empresa' => $idEmpresa, ':desde' => $desde, ':hasta' => $hasta]);
+        $v = $stmt->fetchColumn();
+        return $v !== null && $v !== false ? (int) $v : null;
+    }
+
+    /**
      * Valida si una fecha específica cae dentro de un periodo cerrado.
      */
     public function isFechaEnPeriodoCerrado(string $fecha, int $idEmpresa): bool

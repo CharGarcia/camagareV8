@@ -6,7 +6,7 @@ ruta_modulo: modulos/declaracion_retenciones
 tipo: modulo
 visibilidad: todos
 etiquetas: retenciones, declaracion de retenciones, formulario 103, renta, impuesto a la renta, empleados, pagar retenciones
-version: 1.1
+version: 1.2
 orden: 20
 estado: activo
 ---
@@ -41,6 +41,7 @@ el periodo no arroja saldo, no hay nada que pagar.
 
 ## Errores frecuentes
 
+- **"No se puede reabrir la declaración de retenciones: su egreso de pago (o su asiento) … es de un período contable cerrado"**: reabra ese período en Periodos Contables antes de reabrir la declaración.
 - **"Esta declaración ya tiene un egreso generado"**: anule el egreso primero.
 - **"Esta declaración no tiene valor a pagar; no se puede generar un egreso"**: el
   periodo cerró sin saldo a pagar.
@@ -49,6 +50,7 @@ el periodo no arroja saldo, no hay nada que pagar.
 
 ## Historial de cambios
 
+- **1.2** — Reabrir revisa primero que ni el egreso de pago ni el asiento estén en un período cerrado. Antes podía anular el egreso y fallar en el asiento, dejando la declaración a medio reabrir.
 - **1.1** — Si una línea de retención no está enlazada al catálogo SRI, su casillero se
   busca primero por el **código ATS** y, si no se encuentra, por el otro código del
   catálogo. Antes solo se buscaba por este último, y una retención con código ATS

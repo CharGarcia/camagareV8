@@ -201,6 +201,14 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                                         <option value="0">Cerrado</option>
                                     </select>
                                 </div>
+                                <div class="col-md-12 d-none" id="grupoMotivoReapertura">
+                                    <label for="periodo_motivo_reapertura" class="form-label small fw-bold">Motivo de la reapertura *</label>
+                                    <input type="text" name="motivo_reapertura" id="periodo_motivo_reapertura" class="form-control form-control-sm" maxlength="500" autocomplete="off" placeholder="Por qué se reabre este período">
+                                    <div class="form-text small">Reabrir un período ya cerrado permite volver a modificar documentos de esas fechas. Queda registrado en el log del sistema con este motivo. Solo puede hacerlo un usuario con acceso total.</div>
+                                </div>
+                                <div class="col-md-12 d-none" id="notaPeriodoCerrado">
+                                    <div class="small text-muted"><i class="bi bi-lock me-1"></i>Período cerrado: sus fechas no se pueden cambiar ni se puede eliminar. Para hacerlo, primero reábralo.</div>
+                                </div>
                             </div>
                         </div>
 
@@ -244,6 +252,23 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
             if (!modalInst) modalInst = new bootstrap.Modal(document.getElementById('modalPeriodo'));
             return modalInst;
         }
+
+        // Estado con que se abrió el período: un período cerrado no mueve sus fechas ni se
+        // elimina, y para reabrirlo hay que dar el motivo (el servidor valida lo mismo).
+        let estabaCerrado = false;
+        const selStatus = document.getElementById('periodo_status');
+
+        function actualizarControlesCierre() {
+            const reabriendo = estabaCerrado && selStatus.value === '1';
+            const sigueCerrado = estabaCerrado && selStatus.value === '0';
+            document.getElementById('grupoMotivoReapertura').classList.toggle('d-none', !reabriendo);
+            document.getElementById('periodo_motivo_reapertura').required = reabriendo;
+            document.getElementById('notaPeriodoCerrado').classList.toggle('d-none', !sigueCerrado);
+            document.getElementById('periodo_fecha_inicial').readOnly = sigueCerrado;
+            document.getElementById('periodo_fecha_final').readOnly = sigueCerrado;
+            document.getElementById('btnEliminar')?.classList.toggle('d-none', !document.getElementById('periodo_id').value || estabaCerrado);
+        }
+        selStatus.addEventListener('change', actualizarControlesCierre);
 
         window.cambiarPaginaAjax = function(p) {
             if (p < 1 || p > totalPages) return;
@@ -331,7 +356,8 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
             form.reset();
             document.getElementById('periodo_id').value = '';
             document.getElementById('tituloModal').textContent = 'Nuevo Periodo Contable';
-            document.getElementById('btnEliminar')?.classList.add('d-none');
+            estabaCerrado = false;
+            actualizarControlesCierre();
 
             if (typeof bootstrap !== 'undefined') {
                 bootstrap.Tab.getInstance(document.getElementById('tab-general-btn'))?.show() || new bootstrap.Tab(document.getElementById('tab-general-btn')).show();
@@ -361,7 +387,8 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
             document.getElementById('periodo_status').value = isInactive ? '0' : '1';
 
             document.getElementById('tituloModal').textContent = 'Editar Periodo Contable';
-            document.getElementById('btnEliminar')?.classList.remove('d-none');
+            estabaCerrado = isInactive;
+            actualizarControlesCierre();
 
             if (typeof bootstrap !== 'undefined') {
                 bootstrap.Tab.getInstance(document.getElementById('tab-general-btn'))?.show() || new bootstrap.Tab(document.getElementById('tab-general-btn')).show();

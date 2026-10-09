@@ -413,6 +413,28 @@ class PermisoSubmodulo extends BaseModel
     }
 
     /**
+     * Pares usuario+empresa que hoy tienen asignado el submódulo $idSubmoduloOrigen (con al
+     * menos un permiso). Solo usuarios activos de nivel < 3, empresas activas y empresas que
+     * el usuario sigue teniendo asignadas. Usado por la asignación masiva ("quienes tienen X").
+     */
+    public function getDestinosConSubmodulo(int $idSubmoduloOrigen, int $idEmpresaFiltro = 0): array
+    {
+        $idS = (int) $idSubmoduloOrigen;
+        if ($idS <= 0) return [];
+        $filtroEmpresa = $idEmpresaFiltro > 0 ? ' AND ma.id_empresa = ' . (int) $idEmpresaFiltro : '';
+
+        return $this->query("SELECT DISTINCT ma.id_usuario, u.nombre AS nombre_usuario,
+                ma.id_empresa, COALESCE(NULLIF(e.nombre_comercial, ''), e.ruc) AS nombre_empresa
+            FROM modulos_asignados ma
+            INNER JOIN usuarios u ON u.id = ma.id_usuario AND u.estado = 1 AND u.nivel < 3
+            INNER JOIN empresas e ON e.id = ma.id_empresa AND e.estado = '1' AND e.eliminado = false
+            INNER JOIN empresa_asignada ea ON ea.id_usuario = ma.id_usuario AND ea.id_empresa = ma.id_empresa
+            WHERE ma.id_submodulo = {$idS}{$filtroEmpresa}
+              AND (COALESCE(ma.r,0) + COALESCE(ma.w,0) + COALESCE(ma.u,0) + COALESCE(ma.d,0) + COALESCE(ma.t,0)) > 0
+            ORDER BY u.nombre, nombre_empresa");
+    }
+
+    /**
      * Asigna un submódulo en lote a una lista de destinos [ ['id_usuario'=>, 'id_empresa'=>], ... ].
      * Si el destino ya tiene ese submódulo asignado: se omite, salvo que $sobrescribir sea true
      * (en cuyo caso se actualizan sus permisos). Transaccional.

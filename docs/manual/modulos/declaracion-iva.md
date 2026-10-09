@@ -6,7 +6,7 @@ ruta_modulo: modulos/declaracion_iva
 tipo: modulo
 visibilidad: todos
 etiquetas: iva, valor a pagar, iva a pagar sale en cero, casillero 902, casillero 499, casillero 484, casillero 564, factor de proporcionalidad, casillero 563, casillero 419, saldo credito tributario proximo mes, casillero 615, casillero 617, credito del mes anterior, casillero 605, casillero 606, declaracion de iva, notas de credito, aviso nota de credito, tarifa distinta, no objeto de iva, casillero 441, casillero 413, casillero negativo, nota de credito no resta, devoluciones en ventas, casillero 411, casillero 421, valor neto, formulario 104, selector de año, no aparece el año, año anterior, impuesto, credito tributario, saldo a favor, pagar iva, casilleros, detalle de casilleros, excel, exportar, filtrar, sumas, cuadrar, casillero 609, retenciones de iva, retenciones que me hicieron, retenciones emitidas, retenciones en compras, agente de retencion, casilleros 721 a 731, codigo de retencion, formula, suma de casilleros, casillero en blanco, no calcula, no genera la declaracion, error al generar, value too long, invalid byte sequence, nombre de producto largo, tildes, acentos, caracteres raros
-version: 1.12
+version: 1.13
 orden: 10
 estado: activo
 ---
@@ -321,6 +321,7 @@ Es la misma lógica de los décimos: no se cambia lo que ya se pagó.
 
 ## Errores frecuentes
 
+- **"No se puede reabrir la declaración de IVA: su egreso de pago (o su asiento) … es de un período contable cerrado"**: reabra ese período en Periodos Contables antes de reabrir la declaración.
 - **"Esta declaración ya tiene un egreso generado"**: anule el egreso para poder
   modificarla.
 - **"El tipo de período debe ser mensual o semestral"**: revise el tipo elegido.
@@ -345,6 +346,7 @@ Es la misma lógica de los décimos: no se cambia lo que ya se pagó.
 
 ## Historial de cambios
 
+- **1.13** — Reabrir revisa primero que ni el egreso de pago ni el asiento estén en un período cerrado. Antes podía anular el egreso y fallar en el asiento, dejando la declaración a medio reabrir.
 - **1.12** — **Corrección del valor a pagar.** El casillero 484 queda igual al
   482 cuando la empresa no usa liquidación diferida (antes quedaba en cero, y con
   él el 499, el 601 y el 902: el IVA en ventas no llegaba al total a pagar). Los
