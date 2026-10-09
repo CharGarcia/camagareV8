@@ -52,12 +52,13 @@ class ReporteResumenDiarioController extends BaseModuloController
         ]);
     }
 
-    /** Filtros de la petición: el día y si cuentan los borradores. */
+    /** Filtros de la petición: el día, si cuentan los borradores y si la caja va con saldos iniciales. */
     private function filtros(): array
     {
         return [
             'fecha'      => trim((string) ($_GET['fecha'] ?? date('Y-m-d'))),
             'borradores' => ($_GET['borradores'] ?? '') === 'INCLUIR',
+            'saldos'     => ($_GET['saldos'] ?? '') === 'SI',
         ];
     }
 
@@ -69,7 +70,7 @@ class ReporteResumenDiarioController extends BaseModuloController
 
     private function datos(array $f): array
     {
-        return $this->service->generar((int) $_SESSION['id_empresa'], $f['fecha'], $f['borradores'], $this->idUsuarioFiltro());
+        return $this->service->generar((int) $_SESSION['id_empresa'], $f['fecha'], $f['borradores'], $f['saldos'], $this->idUsuarioFiltro());
     }
 
     /** Filtros en texto, para el PDF y el Excel. */
@@ -77,6 +78,7 @@ class ReporteResumenDiarioController extends BaseModuloController
     {
         $txt = ['Día' => date('d-m-Y', strtotime($f['fecha']))];
         $txt['Borradores'] = $f['borradores'] ? 'Incluidos' : 'No incluidos';
+        $txt['Caja'] = $f['saldos'] && $this->idUsuarioFiltro() === null ? 'Con saldos iniciales' : 'Neto del día';
         if ($this->idUsuarioFiltro() !== null) {
             $txt['Alcance'] = 'Solo lo registrado por ' . (string) ($_SESSION['nombre'] ?? 'el usuario');
         }
@@ -95,7 +97,7 @@ class ReporteResumenDiarioController extends BaseModuloController
             $this->view('modulos/reporte_resumen_diario/contenido', ['datos' => $datos, 'perm' => $this->getPermisos()]);
             $html = (string) ob_get_clean();
 
-            $qs = http_build_query(['fecha' => $datos['fecha'], 'borradores' => $f['borradores'] ? 'INCLUIR' : '']);
+            $qs = http_build_query(['fecha' => $datos['fecha'], 'borradores' => $f['borradores'] ? 'INCLUIR' : '', 'saldos' => $f['saldos'] ? 'SI' : '']);
             $urlBase = BASE_URL . '/' . $this->getRutaModulo();
             echo json_encode([
                 'ok'        => true,

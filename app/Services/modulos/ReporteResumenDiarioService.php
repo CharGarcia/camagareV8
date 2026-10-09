@@ -41,9 +41,10 @@ class ReporteResumenDiarioService
      * @param int      $idEmpresa       Empresa activa.
      * @param string   $fecha           Día del resumen (Y-m-d).
      * @param bool     $conBorradores   Cuenta también los comprobantes electrónicos en borrador.
+     * @param bool     $conSaldos       Caja con saldos iniciales (y saldo final); si no, neto del día.
      * @param int|null $idUsuarioFiltro Sin acceso total: solo lo que registró ese usuario (§6).
      */
-    public function generar(int $idEmpresa, string $fecha, bool $conBorradores, ?int $idUsuarioFiltro): array
+    public function generar(int $idEmpresa, string $fecha, bool $conBorradores, bool $conSaldos, ?int $idUsuarioFiltro): array
     {
         $fecha = $this->rules->validarFecha($fecha);
         $r     = $this->repository;
@@ -139,8 +140,8 @@ class ReporteResumenDiarioService
         $totIngresos  = $sum($ingresos, 'valor');
         $totEgresos   = $sum($egresos, 'valor');
 
-        // Saldo por forma de pago: solo para quien ve toda la empresa.
-        $conSaldo = $idUsuarioFiltro === null;
+        // Saldo por forma de pago: solo si se pidió y para quien ve toda la empresa.
+        $conSaldo = $conSaldos && $idUsuarioFiltro === null;
         $saldos   = $conSaldo ? $r->getSaldosIniciales($idEmpresa, $fecha) : [];
         $caja     = self::cajaPorForma($ingresos, $egresos, $traslados, $saldos, $conSaldo);
 
@@ -158,6 +159,8 @@ class ReporteResumenDiarioService
             'fecha'     => $fecha,
             'grupos'    => $grupos,
             'con_saldo' => $conSaldo,
+            // Pidió saldos pero solo ve lo suyo: la pantalla explica por qué no salen.
+            'saldo_restringido' => $conSaldos && $idUsuarioFiltro !== null,
             'resumen'   => [
                 'ventas'  => $ventas,
                 'compras' => self::bloqueResumen(

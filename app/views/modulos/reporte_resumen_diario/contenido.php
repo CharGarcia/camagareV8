@@ -104,7 +104,7 @@ $tabla = static function (array $s) use ($e, $fmt, $perm): void {
         <div class="col-xl-6">
             <div class="small fw-bold text-uppercase text-muted mb-1" style="font-size:.7rem;">
                 Caja por forma de pago
-                <?php if (!$datos['con_saldo']): ?>
+                <?php if (!empty($datos['saldo_restringido'])): ?>
                     <span class="fw-normal text-lowercase fst-italic">(sin saldos: solo ve lo que usted registró)</span>
                 <?php endif; ?>
             </div>

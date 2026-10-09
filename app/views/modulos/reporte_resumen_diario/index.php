@@ -42,6 +42,14 @@ $puedeApertura = !empty($perm['actualizar']) && !empty($perm['todo']); ?>
                     </select>
                 </div>
                 <div>
+                    <label class="form-label small fw-bold mb-1 d-block text-muted text-uppercase" style="font-size:.65rem;" for="rrd-saldos">Caja</label>
+                    <select id="rrd-saldos" class="form-select form-select-sm shadow-none border" style="width:170px;"
+                            title="Neto del día: solo lo que entró y salió ese día. Con saldos iniciales: además, el saldo que traía cada forma de pago y el saldo final">
+                        <option value="">Neto del día</option>
+                        <option value="SI">Con saldos iniciales</option>
+                    </select>
+                </div>
+                <div>
                     <label class="form-label small fw-bold mb-1 d-block" style="font-size:.65rem;">&nbsp;</label>
                     <div class="d-flex gap-2">
                         <button type="button" class="btn btn-outline-secondary btn-sm" id="rrdBtnLimpiar" title="Volver a hoy"><i class="bi bi-eraser me-1"></i>Limpiar</button>

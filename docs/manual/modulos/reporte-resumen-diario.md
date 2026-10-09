@@ -6,7 +6,7 @@ ruta_modulo: modulos/reporte_resumen_diario
 tipo: modulo
 visibilidad: todos
 etiquetas: resumen diario, cierre del dia, cierre de caja, cuadre de caja, cuadre diario, libro de caja, movimiento del dia, que paso hoy, ventas del dia, compras del dia, ingresos del dia, egresos del dia, cobros del dia, cobros de dias anteriores, cobros atrasados, pagos del dia, facturas del dia, saldo de la factura, saldo pendiente, recibos, notas de credito, notas de debito, retenciones recibidas, retenciones emitidas, liquidaciones de compra, efectivo, tarjeta, transferencia, cheque, forma de pago, saldo inicial, saldo final, saldo de caja, saldo de apertura, apertura de caja, traslado, deposito del efectivo, depositar en el banco, retiro del banco, pasar de efectivo a banco, cuanto entro, cuanto salio, cuanto hay en caja, numero de ingreso, numero de egreso, recibido de, pagado a, firmas, realizado por, aprobado por, pdf, excel, imprimir
-version: 1.3
+version: 1.4
 orden: 12
 estado: activo
 ---
@@ -37,10 +37,16 @@ lo cobrado de días anteriores), qué se pagó y con cuánto quedó cada forma d
 1. Elija el **Día** (con las flechas ‹ › pasa al día anterior o al siguiente).
 2. Si quiere contar también los comprobantes electrónicos que aún no se
    autorizan, elija **Con borradores**.
-3. Pulse **Mostrar**. Arriba se actualizan los indicadores: **Ventas netas**,
-   **Compras netas**, **Ingresos**, **Egresos**, **Neto del día** y **Saldo final**.
-4. Con **PDF** o **Excel** descarga el mismo resumen.
-5. Con **Nuevo traslado** registra dinero que pasó de una forma de pago a otra; con
+3. En **Caja** elija cómo ver la caja por forma de pago:
+   - **Neto del día** (por defecto): solo lo que entró y salió ese día (ingresos,
+     egresos, traslados y neto).
+   - **Con saldos iniciales**: además, el saldo que traía cada forma de pago y el
+     saldo final (ver *Saldo por forma de pago*).
+4. Pulse **Mostrar**. Arriba se actualizan los indicadores: **Ventas netas**,
+   **Compras netas**, **Ingresos**, **Egresos**, **Neto del día** y, con saldos
+   iniciales, **Saldo final**.
+5. Con **PDF** o **Excel** descarga el mismo resumen.
+6. Con **Nuevo traslado** registra dinero que pasó de una forma de pago a otra; con
    **Saldos de apertura** fija el saldo con que arranca cada forma.
 
 ## Qué trae el resumen
@@ -81,8 +87,9 @@ sale el aviso *No hay documentos ni movimientos en este día*.
   día** y el **saldo pendiente de las ventas del día**.
 - **Compras**: compras + liquidaciones − notas de crédito de proveedores =
   **Compras netas**, y aparte el total de retenciones emitidas.
-- **Caja por forma de pago**: por cada forma, **saldo inicial + ingresos − egresos ±
-  traslados = saldo final**, con el total.
+- **Caja por forma de pago**: por cada forma usada ese día, **ingresos − egresos ±
+  traslados = neto del día**; con *Caja: Con saldos iniciales*, **saldo inicial +
+  ingresos − egresos ± traslados = saldo final**. Con el total.
 
 Los títulos van en negro, sin colores. El **PDF** lleva el logo y el nombre de la
 empresa (el logo del establecimiento o, si ningún establecimiento tiene, el del
@@ -126,6 +133,9 @@ efectivo y la mitad con transferencia, son dos filas).
   referencia de la transferencia.
 
 ## Saldo por forma de pago
+
+Se ve al elegir **Caja: Con saldos iniciales**; con *Neto del día* la caja muestra
+solo los movimientos del día, sin saldos.
 
 El **saldo inicial** de cada forma de pago es lo que quedó al cierre del día anterior:
 su **saldo de apertura** más todos los Ingresos, menos todos los Egresos y +/− los
@@ -229,6 +239,7 @@ módulo: no generan asientos ni movimientos en Control Bancario.
 
 ## Historial de cambios
 
+- **1.4** — Selector **Caja**: *Neto del día* (por defecto) o *Con saldos iniciales*.
 - **1.3** — *Caja por forma de pago* muestra solo las formas de pago usadas ese día.
 - **1.2** — Saldo por forma de pago: saldo inicial (saldo de apertura + movimientos
   anteriores), ingresos, egresos, traslados y saldo final. Nuevos **traslados entre

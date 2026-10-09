@@ -38,7 +38,7 @@
         $('rrdBtnExcel').disabled = true;
 
         try {
-            const params = new URLSearchParams({ fecha, borradores: $('rrd-borradores').value });
+            const params = new URLSearchParams({ fecha, borradores: $('rrd-borradores').value, saldos: $('rrd-saldos').value });
             const res = await fetch(`${URL_MOD}/generarAjax?${params.toString()}`, { headers: { 'X-Requested-With': 'XMLHttpRequest' } });
             const json = await res.json();
             if (id !== consulta) return;
@@ -89,6 +89,7 @@
     $('rrdBtnLimpiar').addEventListener('click', () => {
         $('rrd-fecha').value = window.RRD_HOY;
         $('rrd-borradores').value = '';
+        $('rrd-saldos').value = '';
         mostrar();
     });
 
