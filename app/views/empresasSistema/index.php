@@ -827,10 +827,7 @@ function estadoPagoBadge($estado) {
             ctrlTxt.value = hasCtrl ? (el.dataset.ctrlLabel || '') : '';
         }
         var chkAdmin = document.getElementById('edit-es-administradora');
-        if (chkAdmin) {
-            chkAdmin.checked = (el.dataset.esAdministradora === '1');
-            if (typeof window.EMPSIS_syncAdministradora === 'function') window.EMPSIS_syncAdministradora('edit');
-        }
+        if (chkAdmin) chkAdmin.checked = (el.dataset.esAdministradora === '1');
         // Buscador: cliente al que facturamos (reventa)
         var factId = document.getElementById('edit-fact-id');
         var factTxt = document.getElementById('edit-fact-texto');
@@ -1712,35 +1709,7 @@ function estadoPagoBadge($estado) {
         if (fTx) fTx.value = '';
     }
 
-    // "Es la empresa administradora": la administradora no depende de otra, así que su
-    // campo de controladora se vacía y se bloquea mientras el interruptor está encendido
-    // (el servidor hace lo mismo al guardar). Al apagarlo en el alta, se vuelve a
-    // proponer la administradora actual.
-    var ADMIN_ACTUAL = { id: '<?= (int) ($idAdminSuscripciones ?? 0) ?: '' ?>', label: <?= json_encode($adminLabel ?? '', JSON_UNESCAPED_UNICODE) ?> };
-    window.EMPSIS_syncAdministradora = function (p) {
-        var chk = document.getElementById(p + '-es-administradora');
-        var txt = document.getElementById(p + '-ctrl-texto');
-        var hid = document.getElementById(p + '-ctrl-id');
-        if (!chk || !txt || !hid) return;
-        if (chk.checked) {
-            hid.value = '';
-            txt.value = '';
-            txt.placeholder = 'Esta empresa vende las suscripciones: no depende de otra';
-            txt.disabled = true;
-        } else {
-            txt.disabled = false;
-            txt.placeholder = 'Buscar empresa por nombre o RUC…';
-            if (p === 'crear' && hid.value === '' && ADMIN_ACTUAL.id) {
-                hid.value = ADMIN_ACTUAL.id;
-                txt.value = ADMIN_ACTUAL.label;
-            }
-        }
-    };
-
     ['crear', 'edit'].forEach(function (p) {
-        var chkAdm = document.getElementById(p + '-es-administradora');
-        if (chkAdm) chkAdm.addEventListener('change', function () { window.EMPSIS_syncAdministradora(p); });
-
         // Controladora → empresas
         setupTypeahead(
             document.getElementById(p + '-ctrl-texto'),

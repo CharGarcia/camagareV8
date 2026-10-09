@@ -426,10 +426,9 @@ class Empresa extends BaseModel
         $idEmpSusc = isset($data['id_empresa_suscripciones']) && $data['id_empresa_suscripciones'] !== '' && (int) $data['id_empresa_suscripciones'] > 0
             ? (int) $data['id_empresa_suscripciones'] : null;
         $esAdminSusc = $this->esValorVerdadero($data['es_administradora_suscripciones'] ?? null);
-        if ($esAdminSusc) {
-            // La administradora no depende de otra: es la que controla a las demás.
-            $idEmpSusc = null;
-        } elseif ($idEmpSusc === null) {
+        // Marcarla como la que vende las suscripciones NO borra la controladora elegida
+        // (decisión del usuario, 09-10-2026): se respeta lo que se puso en el formulario.
+        if (!$esAdminSusc && $idEmpSusc === null) {
             // Sin controladora elegida: queda la administradora por defecto (la última
             // empresa marcada), aunque el campo del formulario se haya dejado vacío.
             $idEmpSusc = $this->getIdAdministradoraSuscripciones();
@@ -565,10 +564,7 @@ class Empresa extends BaseModel
 
         // Si se marca como administradora por defecto, desmarcar a las demás.
         if (array_key_exists('es_administradora_suscripciones', $data) && $this->esValorVerdadero($data['es_administradora_suscripciones'])) {
-            $this->execute("UPDATE empresas SET es_administradora_suscripciones = false WHERE es_administradora_suscripciones = true AND id != {$id}");
-            // La administradora no depende de otra empresa para su suscripción.
-            $data['id_empresa_suscripciones'] = null;
-        }
+            $this->execute("UPDATE empresas SET es_administradora_suscripciones = false WHERE es_administradora_suscripciones = true AND id != {$id}");        }
 
         $sets = [];
         $campos = ['nombre', 'nombre_comercial', 'ruc', 'establecimiento', 'direccion', 'telefono', 'mail', 'nom_rep_legal', 'ced_rep_legal', 'cod_prov', 'cod_ciudad', 'nombre_contador', 'ruc_contador', 'estado', 'valor_cobro', 'periodo_vigencia_desde', 'periodo_vigencia_hasta', 'estado_pago', 'obligado_contabilidad', 'max_usuarios', 'id_empresa_suscripciones', 'es_administradora_suscripciones', 'id_cliente_facturado', 'id_suscripcion', 'factura_operadora_transporte'];

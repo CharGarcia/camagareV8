@@ -6,7 +6,7 @@ ruta_modulo: config/empresas-sistema
 tipo: modulo
 visibilidad: superadmin
 etiquetas: empresas del sistema, empresa administradora, administradora de suscripciones, empresa que controla las suscripciones, controladora, suscripcion por defecto, crear empresa, alta de empresa, establecimientos, sucursales, matriz, usuarios asignados, documentos legales, suscripcion, empresas del grupo, eliminar establecimiento, establecimiento activo, un solo establecimiento activo, buscar empresa, filtrar empresas, filtros de empresas, exportar empresas, pdf de empresas, excel de empresas, ordenar empresas, columnas del listado, telefono de la empresa, correo de la empresa
-version: 1.9
+version: 1.10
 orden: 1
 estado: activo
 ---
@@ -107,8 +107,9 @@ otra empresa, la **controladora**: la que vende y factura esa suscripción.
   campo **Empresa que controla las suscripciones** (buscador por nombre o RUC).
   Si la empresa no tiene controladora, se usa la de otra empresa con el mismo
   RUC (sucursal) y, si tampoco hay, la administradora.
-- Al marcar una empresa como administradora, su propio campo de controladora se
-  vacía y se bloquea: la administradora no depende de otra empresa.
+- Marcar una empresa como la que vende las suscripciones **no cambia** su propio
+  campo *Empresa que controla las suscripciones*: se conserva lo que se haya
+  asignado y se puede seguir editando.
 - Si la controladora guardada fue eliminada, el campo aparece vacío y el sistema
   usa la administradora. Al guardar la empresa se limpia ese vínculo.
 - **La controladora cuenta con todos sus establecimientos**: si la empresa que
@@ -149,6 +150,8 @@ las empresas que ese usuario tiene asignadas.
 
 ## Historial de cambios
 
+- **1.10** — Al marcar «Esta empresa vende las suscripciones» ya no se borra ni se bloquea la
+  empresa asignada en «Empresa que controla las suscripciones».
 - **1.9** — La suscripción se busca en todos los establecimientos de la controladora (mismo
   RUC), no solo en el elegido: antes, una suscripción registrada en el establecimiento 002 no
   se encontraba si la controladora configurada era el 001.
