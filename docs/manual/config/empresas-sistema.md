@@ -6,7 +6,7 @@ ruta_modulo: config/empresas-sistema
 tipo: modulo
 visibilidad: superadmin
 etiquetas: empresas del sistema, empresas sin suscripcion, sin suscripcion, no pagan, empresas que no pagan, regalia, sin cobro, cortesia, plan sin costo, exonerar suscripcion, empresa gratis, empresa administradora, administradora de suscripciones, empresa que controla las suscripciones, controladora, suscripcion por defecto, crear empresa, alta de empresa, establecimientos, sucursales, matriz, usuarios asignados, documentos legales, suscripcion, empresas del grupo, eliminar establecimiento, establecimiento activo, un solo establecimiento activo, buscar empresa, filtrar empresas, filtros de empresas, exportar empresas, pdf de empresas, excel de empresas, ordenar empresas, columnas del listado, telefono de la empresa, correo de la empresa
-version: 1.16
+version: 1.17
 orden: 1
 estado: activo
 ---
@@ -102,7 +102,8 @@ otra empresa, la **controladora**: la que vende y factura esa suscripción.
 - **Cambiar la controladora** de una empresa: *Editar → Cobro y vigencia*,
   campo **Empresa que controla las suscripciones** (buscador por nombre o RUC).
   Si la empresa no tiene controladora, se usa la de otra empresa con el mismo
-  RUC (sucursal).
+  RUC (sucursal). Para encontrar las que no tienen ninguna, use el filtro
+  **Controladora asignada → Sin controladora**.
 - Si la controladora guardada fue eliminada, el campo aparece vacío. Al guardar
   la empresa se limpia ese vínculo; conviene elegir la correcta.
 - **La controladora cuenta con todos sus establecimientos**: si la empresa que
@@ -181,6 +182,9 @@ las empresas que ese usuario tiene asignadas.
 
 ## Historial de cambios
 
+- **1.17** — Nuevo filtro **Controladora asignada** (Cobro y vigencia): *Sin controladora*,
+  *Asignada* o *Hereda de otro establecimiento* (el campo está vacío pero otra empresa con el
+  mismo RUC la tiene).
 - **1.16** — Al guardar, los modales de crear y editar ya no se cierran ni recargan la página:
   avisan con SweetAlert y el listado se actualiza detrás. El modal de edición tiene en el pie
   los botones **Cerrar** y **Guardar cambios** (a la derecha); Guardar aplica a la pestaña

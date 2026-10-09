@@ -146,6 +146,11 @@ document.addEventListener('DOMContentLoaded', function () {
                         ['v' => 'vendedora', 'l' => 'Vende el sistema'],
                     ]],
                     ['tab' => $tE, 'key' => 'id_administradora', 'label' => 'Empresa que controla las suscripciones', 'icon' => 'bi-building-gear', 'type' => 'select', 'grupo' => 'Cobro y vigencia', 'col' => 4, 'options' => $opcionesAdmin],
+                    ['tab' => $tE, 'key' => 'controladora', 'label' => 'Controladora asignada', 'icon' => 'bi-diagram-2', 'type' => 'select', 'grupo' => 'Cobro y vigencia', 'col' => 4, 'options' => [
+                        ['v' => 'sin', 'l' => 'Sin controladora'],
+                        ['v' => 'propia', 'l' => 'Asignada'],
+                        ['v' => 'hereda', 'l' => 'Hereda de otro establecimiento'],
+                    ]],
                 ]);
             }
             $filtrosEmpresas = array_merge($filtrosEmpresas, [

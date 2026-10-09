@@ -198,6 +198,16 @@ class Empresa extends BaseModel
                 'administradora' => "CASE WHEN COALESCE(e.es_administradora_suscripciones, false) THEN 'si' ELSE 'no' END",
                 'regalia'       => $exprRegalia,                         // si / no (regalía vigente)
                 'suscripcion'   => $this->exprSituacionSuscripcion(),    // con / sin / regalia / vendedora
+                // Controladora de suscripciones: propia (campo con empresa válida), hereda (campo
+                // vacío pero otra fila con el mismo RUC la tiene) o sin (ninguna). Misma regla que
+                // EmpresaRepository::resolverEmpresaControladoraSuscripciones().
+                'controladora'  => "(CASE
+                    WHEN EXISTS (SELECT 1 FROM empresas cp WHERE cp.id = e.id_empresa_suscripciones AND cp.eliminado = false) THEN 'propia'
+                    WHEN EXISTS (SELECT 1 FROM empresas h
+                                   JOIN empresas ch ON ch.id = h.id_empresa_suscripciones AND ch.eliminado = false
+                                  WHERE h.eliminado = false
+                                    AND regexp_replace(h.ruc, '[^0-9]', '', 'g') = regexp_replace(e.ruc, '[^0-9]', '', 'g')) THEN 'hereda'
+                    ELSE 'sin' END)",
                 'id_administradora' => 'e.id_empresa_suscripciones',
                 'operadora'     => "CASE WHEN COALESCE(e.factura_operadora_transporte, 'false') = 'true' THEN 'si' ELSE 'no' END",
                 'cupo_lleno'    => "CASE WHEN {$exprUsuarios} >= COALESCE(e.max_usuarios, 3) THEN 'si' ELSE 'no' END",
