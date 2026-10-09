@@ -130,6 +130,12 @@ function estadoPagoBadge($estado) {
                     ['tab' => $tE, 'key' => 'vigencia_hasta', 'label' => 'Vigencia hasta',  'icon' => 'bi-calendar-x',     'type' => 'date_range',   'grupo' => 'Cobro y vigencia', 'col' => 4, 'atajos' => true],
                     ['tab' => $tE, 'key' => 'valor_cobro',    'label' => 'Valor de cobro',  'icon' => 'bi-currency-dollar','type' => 'number_range', 'grupo' => 'Cobro y vigencia', 'col' => 4],
                     ['tab' => $tE, 'key' => 'regalia', 'label' => 'Regalía (sin cobro)', 'icon' => 'bi-gift', 'type' => 'select', 'grupo' => 'Cobro y vigencia', 'col' => 4, 'options' => $opcionesSiNo('Sí, vigente', 'No')],
+                    ['tab' => $tE, 'key' => 'suscripcion', 'label' => 'Suscripción del sistema', 'icon' => 'bi-shield-check', 'type' => 'select', 'grupo' => 'Cobro y vigencia', 'col' => 4, 'options' => [
+                        ['v' => 'sin', 'l' => 'Sin suscripción'],
+                        ['v' => 'con', 'l' => 'Con suscripción'],
+                        ['v' => 'regalia', 'l' => 'Regalía (sin cobro)'],
+                        ['v' => 'vendedora', 'l' => 'Vende el sistema'],
+                    ]],
                     ['tab' => $tE, 'key' => 'id_administradora', 'label' => 'Empresa que controla las suscripciones', 'icon' => 'bi-building-gear', 'type' => 'select', 'grupo' => 'Cobro y vigencia', 'col' => 4, 'options' => $opcionesAdmin],
                 ]);
             }
@@ -146,7 +152,8 @@ function estadoPagoBadge($estado) {
             <script>
                 document.addEventListener('DOMContentLoaded', () => {
                     if (!window.FiltrosModal) return;
-                    new FiltrosModal({
+                    // La instancia queda en window.EMPSIS_fm: la usa el botón «Sin suscripción».
+                    window.EMPSIS_fm = new FiltrosModal({
                         containerId: 'fmBuscadorEMPSIS',
                         hiddenInputId: 'input-buscar-empresas',
                         placeholder: 'Buscar en todas las columnas...',
@@ -155,8 +162,13 @@ function estadoPagoBadge($estado) {
                         extraId: 'fmExtraEMPSIS',   // columnas + PDF + Excel, pegados al final del grupo
                         fields: <?= json_encode($filtrosEmpresas, JSON_UNESCAPED_UNICODE | JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS) ?>,
                         loadingTarget: '#tbodyEmpresas',   // se atenúa mientras se busca
-                        onApply: () => window.fetchSearch && window.fetchSearch(1),
-                    }).init();
+                        onApply: () => {
+                            if (window.EMPSIS_syncBtnSinSusc) window.EMPSIS_syncBtnSinSusc();
+                            return window.fetchSearch && window.fetchSearch(1);
+                        },
+                    });
+                    window.EMPSIS_fm.init();
+                    if (window.EMPSIS_syncBtnSinSusc) window.EMPSIS_syncBtnSinSusc();
                 });
             </script>
 
@@ -191,6 +203,15 @@ function estadoPagoBadge($estado) {
                     class="btn btn-outline-success" title="Descargar Excel">
                     <i class="bi bi-file-earmark-spreadsheet"></i><span class="d-none d-md-inline"> Excel</span>
                 </a>
+                <?php if (($nivel ?? 1) >= 3): ?>
+                    <?php $nSinSusc = (int) ($totalSinSuscripcion ?? 0); ?>
+                    <?php // Filtra las empresas ACTIVAS sin suscripción del sistema (suscripcion:sin estado:1); otro clic lo quita. ?>
+                    <button type="button" id="btnSinSuscripcion" class="btn <?= $nSinSusc > 0 ? 'btn-outline-warning' : 'btn-outline-secondary' ?>"
+                        title="<?= $nSinSusc ?> empresa(s) activa(s) sin suscripción del sistema — clic para verlas">
+                        <i class="bi bi-shield-exclamation"></i><span class="d-none d-md-inline"> Sin suscripción</span>
+                        <span class="badge rounded-pill <?= $nSinSusc > 0 ? 'bg-danger' : 'bg-secondary' ?> ms-1"><?= $nSinSusc ?></span>
+                    </button>
+                <?php endif; ?>
             </div>
         </div>
 
@@ -727,6 +748,58 @@ function estadoPagoBadge($estado) {
 </div>
 
 <script>
+/* ---------------------------------------------------------
+   Alertas del módulo con SweetAlert (cargado global en partials/scripts.php).
+   Si por algo no estuviera, caen a alert()/confirm() del navegador.
+   - EMPSIS_alerta(icono, titulo, texto)            → Promise
+   - EMPSIS_confirmar(titulo, texto, boton, peligro) → Promise<bool>
+--------------------------------------------------------- */
+window.EMPSIS_alerta = function (icono, titulo, texto) {
+    if (window.Swal) {
+        return Swal.fire({ icon: icono, title: titulo, text: texto || '' });
+    }
+    alert(texto ? titulo + '\n' + texto : titulo);
+    return Promise.resolve();
+};
+window.EMPSIS_confirmar = function (titulo, texto, boton, peligro) {
+    if (window.Swal) {
+        return Swal.fire({
+            icon: peligro ? 'warning' : 'question',
+            title: titulo,
+            text: texto || '',
+            showCancelButton: true,
+            confirmButtonText: boton || 'Aceptar',
+            cancelButtonText: 'Cancelar',
+            confirmButtonColor: peligro ? '#dc3545' : '#0d6efd',
+            reverseButtons: true
+        }).then(function (r) { return r.isConfirmed; });
+    }
+    return Promise.resolve(confirm(texto ? titulo + '\n' + texto : titulo));
+};
+
+/* ---------------------------------------------------------
+   Botón «Sin suscripción» (junto a Excel, solo nivel 3): enciende/apaga los filtros
+   suscripcion:sin + estado:1 (activas) en el buscador estándar. El botón queda marcado
+   mientras el filtro esté puesto, también si se puso desde el modal de filtros.
+--------------------------------------------------------- */
+window.EMPSIS_syncBtnSinSusc = function () {
+    var btn = document.getElementById('btnSinSuscripcion');
+    if (!btn || !window.EMPSIS_fm) return;
+    btn.classList.toggle('active', window.EMPSIS_fm.tieneFiltro('suscripcion', 'sin'));
+};
+document.addEventListener('click', function (e) {
+    var btn = e.target.closest ? e.target.closest('#btnSinSuscripcion') : null;
+    if (!btn || !window.EMPSIS_fm) return;
+    var fm = window.EMPSIS_fm;
+    if (fm.tieneFiltro('suscripcion', 'sin')) {
+        fm.quitarFiltro('estado', '1', false);
+        fm.quitarFiltro('suscripcion', 'sin', true);
+    } else {
+        fm.aplicarFiltro({ key: 'estado', op: '=', value: '1' }, false, false);
+        fm.aplicarFiltro({ key: 'suscripcion', op: '=', value: 'sin' }, false, true);
+    }
+});
+
 (function() {
     var base = '<?= $base ?>';
 
@@ -1082,8 +1155,9 @@ function estadoPagoBadge($estado) {
                     tbody.innerHTML = data.html;
                     tbody.querySelectorAll('.btn-eliminar-doc').forEach(function(b) {
                         b.addEventListener('click', function() {
-                            if (confirm('¿Eliminar este documento?')) {
-                                var id = this.dataset.id;
+                            var id = this.dataset.id;
+                            EMPSIS_confirmar('¿Eliminar este documento?', 'El documento se quitará de la empresa.', 'Sí, eliminar', true).then(function(ok) {
+                                if (!ok) return;
                                 var formData = new FormData();
                                 formData.append('action', 'deleteDocumento');
                                 formData.append('id', id);
@@ -1095,11 +1169,15 @@ function estadoPagoBadge($estado) {
                                 })
                                 .then(function(r) { return r.json(); })
                                 .then(function(res) {
-                                    if (res.ok) cargarDocumentos();
-                                    else alert(res.msg || 'Error');
+                                    if (res.ok) {
+                                        cargarDocumentos();
+                                        EMPSIS_alerta('success', 'Documento eliminado');
+                                    } else {
+                                        EMPSIS_alerta('error', 'No se pudo eliminar', res.msg || res.error || 'Error desconocido.');
+                                    }
                                 })
-                                .catch(function() { alert('Error al eliminar'); });
-                            }
+                                .catch(function() { EMPSIS_alerta('error', 'Error de conexión', 'No se pudo eliminar el documento. Intente de nuevo.'); });
+                            });
                         });
                     });
                 } else {
@@ -1135,8 +1213,13 @@ function estadoPagoBadge($estado) {
                     });
                     tbody.querySelectorAll('.btn-eliminar-est').forEach(function(b) {
                         b.addEventListener('click', function() {
-                            if (confirm('¿Eliminar este establecimiento? Solo se puede si no es el matriz, si queda al menos otro establecimiento disponible, y si no tiene documentos emitidos.')) {
-                                var id = this.dataset.id;
+                            var id = this.dataset.id;
+                            EMPSIS_confirmar(
+                                '¿Eliminar este establecimiento?',
+                                'Solo se puede si no es el matriz, si queda al menos otro establecimiento disponible y si no tiene documentos emitidos.',
+                                'Sí, eliminar', true
+                            ).then(function(ok) {
+                                if (!ok) return;
                                 var formData = new FormData();
                                 formData.append('action', 'deleteEstablecimiento');
                                 formData.append('id', id);
@@ -1148,11 +1231,15 @@ function estadoPagoBadge($estado) {
                                 })
                                 .then(function(r) { return r.json(); })
                                 .then(function(res) {
-                                    if (res.ok) cargarEstablecimientos();
-                                    else alert(res.error || res.msg || 'Error');
+                                    if (res.ok) {
+                                        cargarEstablecimientos();
+                                        EMPSIS_alerta('success', 'Establecimiento eliminado');
+                                    } else {
+                                        EMPSIS_alerta('error', 'No se pudo eliminar', res.error || res.msg || 'Error desconocido.');
+                                    }
                                 })
-                                .catch(function() { alert('Error al eliminar'); });
-                            }
+                                .catch(function() { EMPSIS_alerta('error', 'Error de conexión', 'No se pudo eliminar el establecimiento. Intente de nuevo.'); });
+                            });
                         });
                     });
                 } else {
@@ -1206,15 +1293,14 @@ function estadoPagoBadge($estado) {
                             }
                         }
                     }
-                    if (window.Swal) Swal.fire('Éxito', res.msg, 'success');
-                    else alert(res.msg);
+                    EMPSIS_alerta('success', 'Establecimiento actualizado', res.msg);
                 } else {
-                    alert(res.error || 'Error al actualizar');
+                    EMPSIS_alerta('error', 'No se pudo actualizar', res.error || 'Error desconocido.');
                 }
             }).catch(function() {
                 btn.disabled = false;
                 btn.innerHTML = txtOrig;
-                alert('Error de conexión');
+                EMPSIS_alerta('error', 'Error de conexión', 'No se pudo guardar el establecimiento. Intente de nuevo.');
             });
         });
     }
@@ -1257,8 +1343,9 @@ function estadoPagoBadge($estado) {
                     tbody.innerHTML = data.html;
                     tbody.querySelectorAll('.btn-quitar-usuario-empresa').forEach(function(b) {
                         b.addEventListener('click', function() {
-                            if (confirm('¿Quitar este usuario de la empresa?')) {
-                                var id = this.dataset.id;
+                            var id = this.dataset.id;
+                            EMPSIS_confirmar('¿Quitar este usuario de la empresa?', 'Dejará de tener acceso a esta empresa.', 'Sí, quitar', true).then(function(ok) {
+                                if (!ok) return;
                                 var f = document.createElement('form');
                                 f.method = 'POST';
                                 f.action = base + '/config/asignar-empresas';
@@ -1271,7 +1358,7 @@ function estadoPagoBadge($estado) {
                                 f.appendChild(i); f.appendChild(i2); f.appendChild(i3);
                                 document.body.appendChild(f);
                                 f.submit();
-                            }
+                            });
                         });
                     });
                 } else {
@@ -1284,7 +1371,7 @@ function estadoPagoBadge($estado) {
 
     document.getElementById('btn-agregar-usuario-empresa').addEventListener('click', function() {
         var idUsuario = document.getElementById('select-usuario-empresa').value;
-        if (!idUsuario) { alert('Busque y seleccione un usuario de la lista.'); return; }
+        if (!idUsuario) { EMPSIS_alerta('warning', 'Seleccione un usuario', 'Busque y seleccione un usuario de la lista.'); return; }
         var f = document.createElement('form');
         f.method = 'POST';
         f.action = base + '/config/asignar-empresas';
@@ -1370,7 +1457,7 @@ function estadoPagoBadge($estado) {
                         cargarCiudades(codProv, 'crear-ciudad', codCiud);
                     }
                 } else {
-                    alert(res.error || 'No se pudo consultar el RUC.');
+                    EMPSIS_alerta('warning', 'Consulta del RUC', res.error || 'No se pudo consultar el RUC.');
                 }
             })
             .catch(function(err) {
@@ -1378,7 +1465,7 @@ function estadoPagoBadge($estado) {
                 btn.innerHTML = '<i class="bi bi-search"></i>';
                 var msg = (err && err.message) ? err.message
                     : 'Error de conexión al consultar el RUC. Revise sri_identification_url en config/app.php y que el servidor salga a internet (probar con curl desde el VPS).';
-                alert(msg);
+                EMPSIS_alerta('error', 'No se pudo consultar el RUC', msg);
             });
     }
 
@@ -1394,19 +1481,16 @@ function estadoPagoBadge($estado) {
         btnConsultar.addEventListener('click', consultarRucSri);
     }
 
-    function mostrarMsgForm(containerId, tipo, texto) {
-        var el = document.getElementById(containerId);
-        if (!el) return;
-        el.className = 'alert alert-' + (tipo === 'error' ? 'danger' : 'success') + ' alert-dismissible fade show mb-3';
-        el.innerHTML = texto + ' <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Cerrar"></button>';
-        el.classList.remove('d-none');
-    }
     function ocultarMsgForm(containerId) {
         var el = document.getElementById(containerId);
         if (el) el.classList.add('d-none');
     }
 
+    // Guarda un formulario por AJAX. Éxito: SweetAlert que se cierra solo y recarga el
+    // listado. Error: SweetAlert con el mensaje del servidor (antes el catch lo pisaba con
+    // "Error de conexión", porque el rechazo del propio else también caía en él).
     function enviarFormAjax(form, msgContainerId, url) {
+        var yaAvisado = false;
         return fetch(url, {
             method: 'POST',
             body: new FormData(form),
@@ -1415,15 +1499,25 @@ function estadoPagoBadge($estado) {
         }).then(function(r) { return r.json(); })
         .then(function(res) {
             if (res.ok) {
-                mostrarMsgForm(msgContainerId, 'success', res.msg || 'Guardado correctamente.');
-                setTimeout(function() { window.location.href = base + '/config/empresas-sistema'; }, 1500);
+                var irListado = function() { window.location.href = base + '/config/empresas-sistema'; };
+                if (window.Swal) {
+                    Swal.fire({
+                        icon: 'success', title: 'Guardado', text: res.msg || 'Guardado correctamente.',
+                        timer: 1500, showConfirmButton: false
+                    }).then(irListado);
+                } else {
+                    setTimeout(irListado, 1500);
+                }
             } else {
-                mostrarMsgForm(msgContainerId, 'error', res.error || 'Error desconocido.');
+                yaAvisado = true;
+                EMPSIS_alerta('error', 'No se pudo guardar', res.error || 'Error desconocido.');
                 return Promise.reject();
             }
         })
         .catch(function(err) {
-            mostrarMsgForm(msgContainerId, 'error', err.message || 'Error de conexión. Intente de nuevo.');
+            if (!yaAvisado) {
+                EMPSIS_alerta('error', 'Error de conexión', (err && err.message) || 'No se pudo guardar. Intente de nuevo.');
+            }
             return Promise.reject();
         });
     }
@@ -1436,9 +1530,10 @@ function estadoPagoBadge($estado) {
             // Controladora obligatoria; el servidor valida lo mismo.
             var ctrlIdCrear = document.getElementById('crear-ctrl-id');
             if (ctrlIdCrear && !ctrlIdCrear.value) {
-                mostrarMsgForm('crear-empresa-msg', 'error', 'Seleccione la empresa que controla las suscripciones.');
-                var txtCtrl = document.getElementById('crear-ctrl-texto');
-                if (txtCtrl) txtCtrl.focus();
+                EMPSIS_alerta('warning', 'Falta un dato', 'Seleccione la empresa que controla las suscripciones.').then(function() {
+                    var txtCtrl = document.getElementById('crear-ctrl-texto');
+                    if (txtCtrl) txtCtrl.focus();
+                });
                 return;
             }
             var btn = formCrear.querySelector('button[type="submit"]');
@@ -1545,26 +1640,32 @@ function estadoPagoBadge($estado) {
     })();
 
     window.eliminarEmpresa = function(id) {
-        if (!confirm('¿Está seguro de eliminar esta empresa? Esta acción no se puede deshacer y solo se permite si la empresa no tiene registros vinculados.')) return;
+        EMPSIS_confirmar(
+            '¿Eliminar esta empresa?',
+            'Esta acción no se puede deshacer y solo se permite si la empresa no tiene registros vinculados.',
+            'Sí, eliminar', true
+        ).then(function(ok) {
+            if (!ok) return;
 
-        var formData = new FormData();
-        formData.append('id', id);
+            var formData = new FormData();
+            formData.append('id', id);
 
-        fetch(base + '/config/empresas-sistema-delete', {
-            method: 'POST',
-            body: formData,
-            headers: { 'X-Requested-With': 'XMLHttpRequest' }
-        }).then(function(r) { return r.json(); })
-        .then(function(res) {
-            if (res.ok) {
-                alert(res.msg || 'Empresa eliminada correctamente.');
-                window.location.reload();
-            } else {
-                alert(res.error || 'No se pudo eliminar la empresa.');
-            }
-        })
-        .catch(function(err) {
-            alert('Error de conexión. Intente de nuevo.');
+            fetch(base + '/config/empresas-sistema-delete', {
+                method: 'POST',
+                body: formData,
+                headers: { 'X-Requested-With': 'XMLHttpRequest' }
+            }).then(function(r) { return r.json(); })
+            .then(function(res) {
+                if (res.ok) {
+                    EMPSIS_alerta('success', 'Empresa eliminada', res.msg || 'Empresa eliminada correctamente.')
+                        .then(function() { window.location.reload(); });
+                } else {
+                    EMPSIS_alerta('error', 'No se pudo eliminar', res.error || 'No se pudo eliminar la empresa.');
+                }
+            })
+            .catch(function() {
+                EMPSIS_alerta('error', 'Error de conexión', 'No se pudo eliminar la empresa. Intente de nuevo.');
+            });
         });
     };
 
@@ -1575,21 +1676,11 @@ function estadoPagoBadge($estado) {
     window.enviarDocumentosLegales = function(id, btn, onDone) {
         if (!id) return;
 
-        var pregunta = '¿Enviar el acuerdo de uso de datos y el contrato de uso al correo de esta empresa?';
-        var seguir = (typeof Swal !== 'undefined')
-            ? Swal.fire({
-                title: 'Enviar documentos legales',
-                text: pregunta,
-                icon: 'question',
-                showCancelButton: true,
-                confirmButtonText: 'Sí, enviar',
-                cancelButtonText: 'Cancelar',
-                confirmButtonColor: '#0d6efd',
-                reverseButtons: true
-              }).then(function(r) { return r.isConfirmed; })
-            : Promise.resolve(confirm(pregunta));
-
-        seguir.then(function(ok) {
+        EMPSIS_confirmar(
+            'Enviar documentos legales',
+            '¿Enviar el acuerdo de uso de datos y el contrato de uso al correo de esta empresa?',
+            'Sí, enviar'
+        ).then(function(ok) {
             if (!ok) return;
 
             var original = btn ? btn.innerHTML : '';
@@ -1613,26 +1704,14 @@ function estadoPagoBadge($estado) {
                         if (typeof onDone === 'function') { onDone(); }
                         else { window.location.reload(); }
                     };
-                    if (typeof Swal !== 'undefined') {
-                        Swal.fire({ icon: 'success', title: 'Enviado', text: res.msg }).then(despues);
-                    } else {
-                        alert(res.msg); despues();
-                    }
+                    EMPSIS_alerta('success', 'Enviado', res.msg).then(despues);
                 } else {
-                    if (typeof Swal !== 'undefined') {
-                        Swal.fire('No se pudo enviar', res.error || 'Error desconocido.', 'error');
-                    } else {
-                        alert(res.error || 'No se pudo enviar.');
-                    }
+                    EMPSIS_alerta('error', 'No se pudo enviar', res.error || 'Error desconocido.');
                 }
             })
             .catch(function() {
                 if (btn) { btn.disabled = false; btn.innerHTML = original; }
-                if (typeof Swal !== 'undefined') {
-                    Swal.fire('Error', 'Error de conexión. Intente de nuevo.', 'error');
-                } else {
-                    alert('Error de conexión.');
-                }
+                EMPSIS_alerta('error', 'Error de conexión', 'No se pudieron enviar los documentos. Intente de nuevo.');
             });
         });
     };

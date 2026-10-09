@@ -197,6 +197,7 @@ class Empresa extends BaseModel
                 'cod_ciudad'    => 'e.cod_ciudad',
                 'administradora' => "CASE WHEN COALESCE(e.es_administradora_suscripciones, false) THEN 'si' ELSE 'no' END",
                 'regalia'       => $exprRegalia,                         // si / no (regalía vigente)
+                'suscripcion'   => $this->exprSituacionSuscripcion(),    // con / sin / regalia / vendedora
                 'id_administradora' => 'e.id_empresa_suscripciones',
                 'operadora'     => "CASE WHEN COALESCE(e.factura_operadora_transporte, 'false') = 'true' THEN 'si' ELSE 'no' END",
                 'cupo_lleno'    => "CASE WHEN {$exprUsuarios} >= COALESCE(e.max_usuarios, 3) THEN 'si' ELSE 'no' END",
@@ -644,6 +645,70 @@ class Empresa extends BaseModel
         }
 
         return $ok;
+    }
+
+    /**
+     * Situación de la suscripción del sistema de cada empresa, como expresión SQL sobre el
+     * alias `e` de `empresas`. Misma regla que VigenciaSuscripcionService::resolver():
+     *   - controladora = la de la propia fila si existe y no está eliminada; si no, la de
+     *     una hermana con el mismo RUC;
+     *   - la suscripción se busca en TODOS los establecimientos de la controladora (mismo RUC);
+     *   - modo: suscripción asignada (id_suscripcion) → reventa (id_cliente_facturado) →
+     *     cliente con el RUC propio; solo suscripciones no eliminadas ni canceladas.
+     * Valores: 'regalia' (regalía vigente), 'vendedora' (su RUC es el de una controladora:
+     * vende el sistema), 'con', 'sin'. Alimenta el filtro `suscripcion:` y el botón
+     * «Sin suscripción» de Empresas del sistema.
+     */
+    public function exprSituacionSuscripcion(): string
+    {
+        $ruc = "regexp_replace(e.ruc, '[^0-9]', '', 'g')";
+        $regalia = $this->tieneColumnasRegalia()
+            ? "COALESCE(e.sin_cobro_suscripcion, false) AND (e.sin_cobro_hasta IS NULL OR e.sin_cobro_hasta >= CURRENT_DATE)"
+            : 'false';
+        $rucCtrl = "(SELECT regexp_replace(cx.ruc, '[^0-9]', '', 'g')
+                       FROM empresas h
+                       JOIN empresas cx ON cx.id = h.id_empresa_suscripciones AND cx.eliminado = false
+                      WHERE h.eliminado = false
+                        AND (h.id = e.id OR regexp_replace(h.ruc, '[^0-9]', '', 'g') = {$ruc})
+                      ORDER BY (h.id = e.id) DESC, h.id
+                      LIMIT 1)";
+
+        return "(CASE
+            WHEN {$regalia} THEN 'regalia'
+            WHEN EXISTS (SELECT 1 FROM empresas x
+                           JOIN empresas cv ON cv.id = x.id_empresa_suscripciones AND cv.eliminado = false
+                          WHERE x.eliminado = false
+                            AND regexp_replace(cv.ruc, '[^0-9]', '', 'g') = {$ruc}) THEN 'vendedora'
+            WHEN EXISTS (
+                SELECT 1
+                  FROM suscripciones s
+                  JOIN clientes c  ON c.id = s.id_cliente AND c.eliminado = false
+                  JOIN empresas se ON se.id = s.id_empresa AND se.eliminado = false
+                 WHERE s.eliminado = false AND s.estado <> 'cancelado'
+                   AND regexp_replace(se.ruc, '[^0-9]', '', 'g') = {$rucCtrl}
+                   AND CASE
+                         WHEN e.id_suscripcion IS NOT NULL       THEN s.id = e.id_suscripcion
+                         WHEN e.id_cliente_facturado IS NOT NULL THEN s.id_cliente = e.id_cliente_facturado
+                         ELSE regexp_replace(c.identificacion, '[^0-9]', '', 'g') = {$ruc}
+                       END
+            ) THEN 'con'
+            ELSE 'sin'
+        END)";
+    }
+
+    /** Empresas ACTIVAS sin suscripción del sistema (contador del botón del listado). */
+    public function contarSinSuscripcion(): int
+    {
+        try {
+            $r = $this->query(
+                "SELECT COUNT(*) AS n FROM empresas e
+                  WHERE e.eliminado = false AND e.estado = '1'
+                    AND " . $this->exprSituacionSuscripcion() . " = 'sin'"
+            );
+            return (int) ($r[0]['n'] ?? 0);
+        } catch (\Throwable $e) {
+            return 0;
+        }
     }
 
     /** Cache por request: ¿ya se aplicó la migración de regalía? */

@@ -5,8 +5,8 @@ categoria: Configuración global
 ruta_modulo: config/empresas-sistema
 tipo: modulo
 visibilidad: superadmin
-etiquetas: empresas del sistema, regalia, sin cobro, cortesia, plan sin costo, exonerar suscripcion, empresa gratis, empresa administradora, administradora de suscripciones, empresa que controla las suscripciones, controladora, suscripcion por defecto, crear empresa, alta de empresa, establecimientos, sucursales, matriz, usuarios asignados, documentos legales, suscripcion, empresas del grupo, eliminar establecimiento, establecimiento activo, un solo establecimiento activo, buscar empresa, filtrar empresas, filtros de empresas, exportar empresas, pdf de empresas, excel de empresas, ordenar empresas, columnas del listado, telefono de la empresa, correo de la empresa
-version: 1.12
+etiquetas: empresas del sistema, empresas sin suscripcion, sin suscripcion, no pagan, empresas que no pagan, regalia, sin cobro, cortesia, plan sin costo, exonerar suscripcion, empresa gratis, empresa administradora, administradora de suscripciones, empresa que controla las suscripciones, controladora, suscripcion por defecto, crear empresa, alta de empresa, establecimientos, sucursales, matriz, usuarios asignados, documentos legales, suscripcion, empresas del grupo, eliminar establecimiento, establecimiento activo, un solo establecimiento activo, buscar empresa, filtrar empresas, filtros de empresas, exportar empresas, pdf de empresas, excel de empresas, ordenar empresas, columnas del listado, telefono de la empresa, correo de la empresa
+version: 1.14
 orden: 1
 estado: activo
 ---
@@ -115,6 +115,26 @@ otra empresa, la **controladora**: la que vende y factura esa suscripción.
 Con esto se resuelve la suscripción que muestra el módulo **Empresa** y los
 avisos de vencimiento (ver el manual del módulo Empresa).
 
+### Botón «Sin suscripción»: empresas que no pagan
+
+Junto al botón **Excel** del listado (solo superadministrador) está el botón
+**Sin suscripción**, con el número de **empresas activas** que no tienen una
+suscripción del sistema vigente. Al hacer clic, el listado se filtra para
+mostrar solo esas empresas (chips *Estado: Activa* y *Suscripción del sistema:
+Sin suscripción*); otro clic quita el filtro. Desde ahí se pueden exportar a
+PDF o Excel.
+
+Se considera que una empresa **tiene** suscripción con la misma regla que usa
+su ficha de Empresa: la suscripción asignada a mano, la del cliente que paga
+(reventa) o la de un cliente con su mismo RUC, en cualquier establecimiento de
+la empresa que controla las suscripciones, y que no esté cancelada. No cuentan
+como «sin suscripción» las empresas por **regalía** vigente ni las que **venden**
+el sistema.
+
+El mismo criterio está en el modal de filtros (**Cobro y vigencia → Suscripción
+del sistema**), con las opciones *Sin suscripción*, *Con suscripción*,
+*Regalía* y *Vende el sistema*.
+
 ### Empresas por regalía (sin cobro de suscripción)
 
 Para una empresa a la que no se le cobra el sistema (socio, convenio, empresa
@@ -161,6 +181,13 @@ las empresas que ese usuario tiene asignadas.
 
 ## Historial de cambios
 
+- **1.14** — Botón **Sin suscripción** junto a Excel (contador de empresas activas sin
+  suscripción del sistema; al hacer clic filtra el listado) y filtro *Suscripción del sistema*
+  en el modal de filtros.
+- **1.13** — Confirmaciones y mensajes con ventanas SweetAlert (eliminar empresa, establecimiento,
+  documento o usuario; guardar; consultar RUC; enviar documentos legales) en lugar de las
+  alertas del navegador y los avisos dentro del formulario. Un error de validación al guardar ya
+  no se muestra como «Error de conexión».
 - **1.12** — Se quita el interruptor «Esta empresa vende las suscripciones»: al crear una
   empresa, *Empresa que controla las suscripciones* viene con la misma de la última empresa
   creada. Se quita la etiqueta *Administradora* y su filtro del listado.
