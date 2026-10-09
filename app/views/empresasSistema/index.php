@@ -1543,7 +1543,7 @@ window.EMPSIS_confirmar = function (titulo, texto, boton, peligro) {
                 .then(function(res) {
                     empresaCreada = true;
                     if (btnCrear) btnCrear.classList.add('d-none');
-                    return avisoGuardado(res, 'Empresa creada');
+                    avisoGuardado(res, 'Empresa creada');   // sin esperar a que se cierre
                 })
                 .catch(function() {})
                 .finally(function() { creando = false; btnCargando(btnCrear, false); });
@@ -1609,7 +1609,9 @@ window.EMPSIS_confirmar = function (titulo, texto, boton, peligro) {
                         var nom = f.querySelector('[name="nombre"]');
                         if (nom && nom.value.trim()) document.getElementById('modal-empresa-nombre').textContent = nom.value.trim();
                     }
-                    return avisoGuardado(res, 'Cambios guardados');
+                    // Sin return: el botón se libera en cuanto responde el servidor, sin esperar
+                    // a que se cierre el aviso (antes quedaba 3 s más en «Guardando...»).
+                    avisoGuardado(res, 'Cambios guardados');
                 })
                 .catch(function() {})
                 .finally(function() { guardandoEmp = false; btnCargando(btnGuardarEmp, false); });
