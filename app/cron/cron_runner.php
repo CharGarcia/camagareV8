@@ -204,6 +204,22 @@ try {
     echo "[" . date('Y-m-d H:i:s') . "] Error en reajustes de condominios: " . $e->getMessage() . "\n";
 }
 
+// ── Condominios: emisiones en bloque que quedaron abiertas ───────────────────
+//    Si al crear la emisión no se pudo lanzar su worker (o se cortó), se relanza aquí, como
+//    máximo cada 10 minutos. El worker tiene candado por emisión: si ya hay uno trabajando, el
+//    relanzado sale sin hacer nada; los documentos a medias quedan «para revisar», nunca se repiten.
+try {
+    $marcaEmi = sys_get_temp_dir() . '/sistema_condominios_emisiones.txt';
+    if (time() - (int) @file_get_contents($marcaEmi) >= 600) {
+        file_put_contents($marcaEmi, (string) time());
+        foreach (\App\Services\modulos\CondominioCobroService::crear()->retomarAbiertas() as $idEmi) {
+            echo "[" . date('Y-m-d H:i:s') . "] Emisión de condominio #{$idEmi}: worker relanzado\n";
+        }
+    }
+} catch (\Throwable $e) {
+    echo "[" . date('Y-m-d H:i:s') . "] Error al retomar emisiones de condominios: " . $e->getMessage() . "\n";
+}
+
 // ── Ejecutar ──────────────────────────────────────────────────────────────────
 try {
     $repository = new AutomatizacionesRepository();

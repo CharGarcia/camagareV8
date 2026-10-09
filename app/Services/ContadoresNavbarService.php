@@ -205,8 +205,9 @@ class ContadoresNavbarService
             $datos['__novedad_sri'] = [];
         }
         // Vigencia de la suscripción del sistema (null si no aplica / columnas sin migrar).
+        // Misma regla que la ficha de empresa y el modal de ingreso; con su propia caché.
         try {
-            $datos['__vigencia'] = $this->repo->getDiasVigenciaSuscripcion($idEmpresa);
+            $datos['__vigencia'] = (new VigenciaSuscripcionService())->estado($idEmpresa);
         } catch (\Throwable $e) {
             $datos['__vigencia'] = null;
         }
@@ -390,21 +391,24 @@ class ContadoresNavbarService
                 $out['novedad_sri'] = $novedad;
             }
 
-            // Suscripción del sistema: avisar si está por vencer (≤ umbral escalado por
-            // periodicidad) o vencida. Así una suscripción mensual no queda siempre encendida.
-            if (!empty($permRuta[self::RUTA_EMPRESA])) {
-                $vig = $empresa['__vigencia'] ?? null;
-                if (is_array($vig) && isset($vig['dias'])) {
-                    $dias   = (int) $vig['dias'];
-                    $umbral = $this->umbralVigencia($vig['meses'] ?? null);
-                    if ($dias <= $umbral) {
-                        $out['suscripcion'] = [
-                            'dias'   => $dias,
-                            'estado' => $dias < 0 ? 'vencida' : 'por_vencer',
-                        ];
-                    }
+            // Suscripción del sistema: avisar si está vencida (incluye documento del período
+            // con saldo) o por vencer (≤ umbral escalado por periodicidad, para que una mensual
+            // no quede siempre encendida). Va a TODOS los usuarios de la empresa, no solo a
+            // quien ve el módulo Empresa (decisión del usuario, 09-10-2026): el clic abre el
+            // mismo modal del ingreso, que no exige ese permiso.
+            $vig = $empresa['__vigencia'] ?? null;
+            if (is_array($vig) && isset($vig['dias'])) {
+                $dias = (int) $vig['dias'];
+                if ($vig['estado'] !== 'por_vencer' || $dias <= $this->umbralVigencia($vig['meses'] ?? null)) {
+                    $out['suscripcion'] = [
+                        'dias'   => $dias,
+                        'estado' => $vig['estado'],
+                        'motivo' => $vig['motivo'],
+                    ];
                 }
+            }
 
+            if (!empty($permRuta[self::RUTA_EMPRESA])) {
                 // Firma electrónica: avisar si no hay firma vigente, o si está por caducar/caducada.
                 $firma = $empresa['__firma'] ?? null;
                 if (is_array($firma)) {

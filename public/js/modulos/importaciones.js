@@ -521,15 +521,41 @@ function IMP_poblarModal(d) {
 document.addEventListener('DOMContentLoaded', function () {
     const inpProv = document.getElementById('impBuscarProveedor');
     const listProv = document.getElementById('impListaProveedores');
+    const pickProveedor = (p) => {
+        document.getElementById('impIdProveedor').value = p.id;
+        inpProv.value = p.nombre;
+        inpProv.dataset.selectedId = p.id;
+    };
     if (inpProv && listProv) {
         IMP_wireBuscadorInline(inpProv, listProv, IMP_buscarProveedoresExterior, {
             label: (p) => `<strong>${IMP_esc(p.identificacion)}</strong> — ${IMP_esc(p.nombre)}`,
-            pick: (p) => {
-                document.getElementById('impIdProveedor').value = p.id;
-                inpProv.value = p.nombre;
-                inpProv.dataset.selectedId = p.id;
-            },
+            pick: pickProveedor,
             clear: () => { document.getElementById('impIdProveedor').value = ''; },
+        });
+
+        // El proveedor creado desde «nuevo proveedor» queda seleccionado en la importación.
+        // Se busca con el mismo buscador de proveedores del exterior: si el nuevo no es del
+        // exterior no aparece y se avisa, igual que si se buscara a mano.
+        document.addEventListener('proveedorGuardado', async (e) => {
+            const res = e.detail;
+            if (!res || !res.ok || res.nuevo !== true || !res.data) return;
+            const idNuevo = res.id || res.data.id;
+            if (!idNuevo || !document.getElementById('modalImportacion')?.classList.contains('show')) return;
+            if (inpProv.disabled || inpProv.readOnly) return;
+            const termino = String(res.data.identificacion || res.data.razon_social || '').trim();
+            if (!termino) return;
+            try {
+                const lista = await IMP_buscarProveedoresExterior(termino);
+                const p = lista.find(x => String(x.id) === String(idNuevo));
+                if (p) {
+                    pickProveedor(p);
+                } else {
+                    Swal.fire({ toast: true, position: 'top-end', icon: 'info', showConfirmButton: false, timer: 3500,
+                        title: 'Proveedor creado, pero no es del exterior: no se puede usar en la importación.' });
+                }
+            } catch (err) {
+                console.error('Error al recuperar el proveedor recién creado:', err);
+            }
         });
     }
 
@@ -691,18 +717,51 @@ function IMP_agregarFilaProducto(det) {
     if (descInput && listaProd) {
         IMP_wireBuscadorInline(descInput, listaProd, IMP_buscarProductosCatalogo, {
             label: (p) => `<div class="d-flex justify-content-between"><span>${IMP_esc(p.nombre)}</span><small class="text-muted">${IMP_esc(p.codigo_principal || p.codigo || '')}</small></div>`,
-            pick: (p) => {
-                tr.querySelector('.input-imp-id-producto').value = p.id;
-                tr.querySelector('.input-imp-codigo-raw').value = p.codigo_principal || p.codigo || '';
-                tr.querySelector('.input-imp-id-medida').value = p.id_medida || '';
-                descInput.value = p.nombre;
-                descInput.dataset.selectedId = p.id;
-                descInput.classList.remove('border-danger');
-            },
+            pick: (p) => IMP_vincularProductoFila(tr, p),
             clear: () => { tr.querySelector('.input-imp-id-producto').value = ''; },
         });
     }
 }
+
+// Vincula un producto del catálogo a una fila del tab Productos (FOB).
+function IMP_vincularProductoFila(tr, p) {
+    const descInput = tr.querySelector('.input-imp-descripcion');
+    tr.querySelector('.input-imp-id-producto').value = p.id;
+    tr.querySelector('.input-imp-codigo-raw').value = p.codigo_principal || p.codigo || '';
+    tr.querySelector('.input-imp-id-medida').value = p.id_medida || '';
+    descInput.value = p.nombre;
+    descInput.dataset.selectedId = p.id;
+    descInput.classList.remove('border-danger');
+}
+
+// El producto creado desde «nuevo producto» se agrega al tab Productos (FOB): en la
+// primera fila vacía o en una nueva. Solo productos nuevos y con la importación abierta.
+document.addEventListener('productoGuardado', async (e) => {
+    const res = e.detail || {};
+    if (!res.ok || !res.id || res.nuevo === false) return;
+    if (!document.getElementById('modalImportacion')?.classList.contains('show')) return;
+    // Importación nacionalizada/cerrada/anulada: IMP_bloquearEdicion deshabilita la cabecera.
+    if (document.getElementById('impBuscarProveedor')?.disabled) return;
+    const tbody = document.getElementById('tbodyProductosFob');
+    if (!tbody) return;
+    const termino = String(res.codigo || res.nombre || '').trim();
+    if (!termino) return;
+    try {
+        const lista = await IMP_buscarProductosCatalogo(termino);
+        const p = lista.find(x => String(x.id) === String(res.id));
+        if (!p) return;
+        let tr = [...tbody.querySelectorAll('tr.row-detalle')].find(f =>
+            !f.querySelector('.input-imp-id-producto')?.value &&
+            !(f.querySelector('.input-imp-descripcion')?.value || '').trim());
+        if (!tr) {
+            IMP_agregarLineaProductoVacia();
+            tr = tbody.querySelector('tr.row-detalle:last-child');
+        }
+        if (tr) IMP_vincularProductoFila(tr, p);
+    } catch (err) {
+        console.error('Error al recuperar el producto recién creado:', err);
+    }
+});
 
 function IMP_recalcularFilaProducto(input) {
     const tr = input.closest('tr');

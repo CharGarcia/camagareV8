@@ -1410,16 +1410,24 @@
                         if (typeof window.fetchSearch === 'function') window.fetchSearch(window.currentPage || 1);
                         document.dispatchEvent(new CustomEvent('clienteGuardado', { detail: { ...json, nombre: json.data?.nombre || '', nuevo: eraNuevo } }));
 
-                        // El modal no se cierra: se refresca en sitio para seguir
-                        // completando la ficha. Los módulos que crean el cliente al
-                        // vuelo ya lo recibieron por el evento 'clienteGuardado'.
-                        await cliRefrescarModalTrasGuardar(json, eraNuevo);
+                        // Creado al vuelo desde un documento (hay otro modal debajo): el
+                        // documento ya lo tomó por 'clienteGuardado', así que se cierra para
+                        // seguir con el documento. Desde el listado de Clientes el modal no
+                        // se cierra: se refresca en sitio para seguir completando la ficha.
+                        const modalCliEl = document.getElementById('modalCliente');
+                        const alVuelo = eraNuevo && typeof window.CMG_modalSobreOtro === 'function'
+                            && window.CMG_modalSobreOtro(modalCliEl);
+                        if (alVuelo) {
+                            getModalCliente().hide();
+                        } else {
+                            await cliRefrescarModalTrasGuardar(json, eraNuevo);
+                        }
 
                         Swal.fire({
                             toast: true,
                             position: 'top-end',
                             icon: 'success',
-                            title: json.msg || 'Guardado correctamente.',
+                            title: alVuelo ? 'Cliente creado y seleccionado.' : (json.msg || 'Guardado correctamente.'),
                             timer: 2200,
                             showConfirmButton: false
                         });

@@ -309,6 +309,28 @@ eliminado (boolean), deleted_at, deleted_by
   `log_sistema`; ocupar una pestaña con eso solo estorba. Si algún dato de registro
   (quién y cuándo) aporta al usuario, va como una línea discreta al pie del contenido
   del modal, no como pestaña.
+- **Crear al vuelo (modal sobre modal) — obligatorio**: todo botón de un documento que abre el
+  modal de otro catálogo para registrar algo nuevo (cliente, proveedor, producto, vehículo,
+  transportista, etc.) debe dejar lo creado **puesto en el documento** al guardar, sin pasos extra.
+  - **El modal de catálogo** emite al guardar `document.dispatchEvent(new CustomEvent('{catalogo}Guardado', { detail: { ...json, nuevo: !id, … } }))`
+    con `nuevo` (alta vs. edición) y lo que el documento necesita para buscarlo (`codigo`/`nombre`/`identificacion`).
+    Si se abrió **encima de otro modal** (`CMG_modalSobreOtro(modalEl)`, `public/js/app.js`) y es un alta,
+    **se cierra solo** y avisa *«… creado y seleccionado»*; desde su propio listado no se cierra.
+    Ref.: `clientes_modal.js`, `proveedores_modal.js`, `productos_modal.js`.
+  - **El documento** escucha ese evento y lo coloca: solo si `detail.nuevo === true`, si **su** modal
+    está abierto (`.show`) y si el documento es **editable** (borrador / buscador no `disabled`).
+    Lo vuelve a pedir por **su propio** endpoint de búsqueda (`getClientesAjax`, `getProductosAjax`…)
+    filtrando por el `id` creado y llama a **la misma función** que usa el buscador manual
+    (`seleccionarCliente`, `…SeleccionarProductoEnFila`), nunca un llenado aparte. Producto: primera
+    fila vacía del detalle o una nueva. Si no aparece en su buscador, avisar y no colocar.
+  - **Página con varios modales de documento** (p. ej. NC/ND o retención embebidas en Factura/Compras):
+    el listener del documento de abajo se abstiene si el de arriba está abierto, para no tomar lo
+    que se creó para el otro.
+  - **Incluir el partial del modal de catálogo fuera del modal del documento** (hermano, en la vista
+    `index.php`, con `include_once`) y su JS; sin el partial el botón no hace nada. Ver z-index de
+    modales anidados.
+  - Ref. completa: `factura_venta/index.php` (listeners `clienteGuardado` / `productoGuardado`).
+    Manual: `docs/manual/guias/crear-registros-desde-documentos.md` (agregar ahí el documento nuevo).
 - Tablas dentro de modales con **filas compactas**: `<td class="p-0">` e inputs con
   `style="padding:0 4px;height:20px;font-size:0.78rem;"`.
 - **Barra de acciones de documento (regla general)**: los botones de **PDF, Correo y WhatsApp** (y otras acciones de documento como XML, ticket, duplicar, enviar al SRI) van en una **barra de acciones superior** al **inicio del cuerpo del modal**, **antes de las pestañas/contenido** — NO sueltos dentro de una pestaña. Es una fila horizontal `d-flex gap-1 align-items-center flex-wrap` con borde inferior; los botones son `btn btn-sm btn-outline-*` solo con ícono (`bi-file-earmark-pdf` rojo, `bi-envelope` info, `bi-whatsapp` verde) y `title`. Agrupar sets con un separador `<div class="vr mx-1"></div>`. Referencia canónica: el modal de **Facturas de Venta** (`app/views/modulos/factura_venta/index.php`, "Barra de Acciones Superior"). Cada acción valida primero que el documento esté guardado.
@@ -357,7 +379,7 @@ Todo módulo nuevo debe contemplar desde el diseño: **multiempresa, permisos, a
 4. **Service** en `app/Services/modulos/{Nombre}Service.php`: lógica de negocio, **transacciones** y **auditoría** (`LogSistemaService`). Si crea documentos: **guardado único** con `GuardadoUnicoService` (`previo()` al inicio de la transacción, `registrar()` antes del commit) y, en la vista, botón con bandera "en curso" + `token_guardado = CMG_nuevoTokenGuardado()` al abrir un documento nuevo (§8, *Un guardado = un registro*).
 5. **Model** en `app/models/` solo si se necesita acceso a datos adicional (extiende `BaseModel`).
 6. **Controller** en `app/controllers/modulos/{Nombre}Controller.php`: extiende `BaseModuloController`, implementa `getRutaModulo()` (p. ej. `'modulos/productos'`) y llama `requireLeer/requireCrear/requireActualizar/requireEliminar` en cada acción. Para el listado, calcular `$idUsuarioFiltro = empty($this->getPermisos()['todo']) ? (int)$_SESSION['id_usuario'] : null` y pasarlo al repository (registros propios). Sin lógica de negocio.
-7. **Vista** en `app/views/modulos/{nombre}/`: tabla estándar (§9) y modales estándar (§9). El botón PDF del modal usa `CMG_pdfDocumento(url)` (§9, *PDF de un documento desde un modal*). Para columnas visibles/anchos, pestañas y favoritos usar `PreferenciasHelper` (ver §9, *Preferencias de usuario*).
+7. **Vista** en `app/views/modulos/{nombre}/`: tabla estándar (§9) y modales estándar (§9). El botón PDF del modal usa `CMG_pdfDocumento(url)` (§9, *PDF de un documento desde un modal*). Si el modal tiene botones para crear cliente/proveedor/producto u otro catálogo, lo creado debe quedar puesto en el documento (§9, *Crear al vuelo*); si el módulo **es** un catálogo con modal reutilizable, su guardado emite `{catalogo}Guardado` con `nuevo` y se cierra solo cuando está sobre otro modal. Para columnas visibles/anchos, pestañas y favoritos usar `PreferenciasHelper` (ver §9, *Preferencias de usuario*).
 8. **JS** en `public/js/modulos/{nombre}.js`. Al referenciarlo desde la vista, la versión del
    asset se pone con el helper `asset_ver()`, **nunca con `time()`**:
    `<script src="<?= $base ?>/js/modulos/{nombre}.js?v=<?= asset_ver('/js/modulos/{nombre}.js') ?>"></script>`.

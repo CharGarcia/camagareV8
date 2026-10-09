@@ -161,6 +161,10 @@ class AuthController extends Controller
 
         session_regenerate_id(true);
 
+        // Revisar la vigencia de la suscripción del sistema en la primera pantalla
+        // (modal si está vencida o por vencer; ver VigenciaSuscripcionService).
+        $_SESSION[\App\Services\VigenciaSuscripcionService::CLAVE_SESION] = true;
+
         // Registrar nueva sesión activa (cierra la anterior si existe)
         $token = $sesionSvc->iniciarSesion((int) $user['id']);
         $_SESSION['session_token'] = $token;

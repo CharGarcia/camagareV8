@@ -1786,10 +1786,13 @@ $totalPages = $totalPagesOriginal;
     // mismos campos que usa seleccionarCliente() (tipo de id, vendedor, plazo, forma SRI).
     document.addEventListener('clienteGuardado', async (e) => {
         if (!fvFacturaEditableAbierta()) return;
+        // Si encima de la factura está abierta una NC/ND (embebidas en esta página), el
+        // cliente se creó para la nota: lo toma su propio listener, no la factura.
+        if (['modalNC', 'modalND'].some(id => document.getElementById(id)?.classList.contains('show'))) return;
         const res = e.detail;
         if (!res || !res.ok || !res.data || !res.data.id) return;
         const idSel   = document.getElementById('m-id-cliente')?.value || '';
-        const esNuevo = /cread/i.test(res.msg || '');
+        const esNuevo = res.nuevo === true || /cread/i.test(res.msg || '');
         if (!esNuevo && String(idSel) !== String(res.data.id)) return;
 
         const termino = String(res.data.identificacion || res.data.nombre || '').trim();
@@ -1810,10 +1813,11 @@ $totalPages = $totalPagesOriginal;
     document.addEventListener('productoGuardado', async (e) => {
         if (!fvFacturaEditableAbierta()) return;
         const res = e.detail;
-        if (!res || !res.ok || !res.id) return;
+        if (!res || !res.ok || !res.id || res.nuevo === false) return;
+        if (['modalNC', 'modalND'].some(id => document.getElementById(id)?.classList.contains('show'))) return;
 
-        const codigo  = document.getElementById('prod_codigo')?.value?.trim() || '';
-        const nombre  = document.getElementById('prod_nombre')?.value?.trim() || '';
+        const codigo  = res.codigo || document.getElementById('prod_codigo')?.value?.trim() || '';
+        const nombre  = res.nombre || document.getElementById('prod_nombre')?.value?.trim() || '';
         const termino = codigo || nombre;
         if (!termino || typeof window.fvSeleccionarProductoEnFila !== 'function') return;
 

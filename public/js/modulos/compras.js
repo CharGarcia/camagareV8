@@ -1336,6 +1336,9 @@ document.addEventListener('proveedorGuardado', (e) => {
     // El modal de compras solo debe reaccionar si está abierto
     const modalEl = document.getElementById('modalCompra');
     if (!modalEl || !modalEl.classList.contains('show')) return;
+    // Proveedor creado desde el modal de retención (embebido en esta página): es para la
+    // retención, que lo toma con su propio listener; no cambia el de la compra.
+    if (document.getElementById('modalRetencion')?.classList.contains('show')) return;
 
     CMG_seleccionarProveedor({
         id:             res.id || res.data.id,

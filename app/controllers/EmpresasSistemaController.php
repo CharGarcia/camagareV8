@@ -348,7 +348,9 @@ class EmpresasSistemaController extends Controller
             . ' data-obligado-contabilidad="' . htmlspecialchars($r['obligado_contabilidad'] ?? 'NO') . '"'
             . ' data-operadora-transporte="' . ((($r['factura_operadora_transporte'] ?? 'false') === 'true' || ($r['factura_operadora_transporte'] ?? false) === true) ? 'true' : 'false') . '"'
             . ' data-max-usuarios="' . (int) ($r['max_usuarios'] ?? 3) . '"'
-            . ' data-id-empresa-suscripciones="' . (int) ($r['id_empresa_suscripciones'] ?? 0) . '"'
+            // Vínculo a una controladora borrada/inexistente (ctrl_nombre vacío): se manda 0
+            // para que el campo se vea vacío y, al guardar, el vínculo colgado se limpie.
+            . ' data-id-empresa-suscripciones="' . (($r['ctrl_nombre'] ?? null) !== null ? (int) ($r['id_empresa_suscripciones'] ?? 0) : 0) . '"'
             . ' data-es-administradora="' . (!empty($r['es_administradora_suscripciones']) ? '1' : '0') . '"'
             . ' data-id-cliente-facturado="' . (int) ($r['id_cliente_facturado'] ?? 0) . '"'
             . ' data-id-suscripcion="' . (int) ($r['id_suscripcion'] ?? 0) . '"'
@@ -359,7 +361,10 @@ class EmpresasSistemaController extends Controller
         // Cada celda lleva data-col: el usuario oculta columnas y fija anchos desde el
         // dropdown de columnas (PreferenciasHelper), igual que en Proveedores.
         $txt = static fn($v) => ($v === null || trim((string) $v) === '') ? '<span class="text-muted">-</span>' : htmlspecialchars((string) $v);
-        $html .= '<td class="ps-3 fw-medium text-truncate" style="max-width:300px" data-col="nombre">' . $txt($r['nombre'] ?? '') . '</td>';
+        $badgeAdmin = !empty($r['es_administradora_suscripciones'])
+            ? ' <span class="badge bg-primary bg-opacity-10 text-primary border border-primary border-opacity-25" title="Empresa administradora de suscripciones: las empresas nuevas quedan controladas por ella">Administradora</span>'
+            : '';
+        $html .= '<td class="ps-3 fw-medium text-truncate" style="max-width:300px" data-col="nombre">' . $txt($r['nombre'] ?? '') . $badgeAdmin . '</td>';
         $html .= '<td class="text-truncate" style="max-width:200px" data-col="nombre_comercial">' . $txt($r['nombre_comercial'] ?? '') . '</td>';
         $html .= '<td data-col="ruc"><code class="text-secondary">' . htmlspecialchars($r['ruc'] ?? '') . '</code></td>';
         $html .= '<td class="text-center" data-col="establecimiento"><code class="text-secondary">' . htmlspecialchars($r['establecimiento'] ?? '001') . '</code></td>';

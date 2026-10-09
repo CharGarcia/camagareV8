@@ -1,9 +1,35 @@
 <?php
 /** @var string $titulo @var array $perm @var string $rutaModulo @var array $vistaConfig @var bool $instalado
- *  @var ?array $config @var array $pendientes @var array $puntosEmision @var array $multas @var array $metodos @var string $base */
+ *  @var ?array $config @var array $pendientes @var array $multas @var array $metodos @var string $base
+ *  @var string $ordenJson @var string $ordenParam @var array $tiposUnidad @var array $opcionesFiltro */
 $urlBase  = rtrim($base, '/') . '/' . $rutaModulo;
+// Pestaña Condóminos: columnas personalizables y filtros del buscador (FiltrosModal).
+$columnasCondominos = [
+    'nombre'         => 'Cliente',
+    'identificacion' => 'Identificación',
+    'contacto'       => 'Contacto',
+    'inmuebles'      => 'Inmuebles',
+    'alicuota_pct'   => 'Alícuota %',
+    'restringida'    => 'Restricción',
+];
+$tC = 'Condómino';
+$opcSiNo = fn(string $si, string $no) => [['v' => 'si', 'l' => $si], ['v' => 'no', 'l' => $no]];
+$filtrosCondominos = [
+    ['tab' => $tC, 'key' => 'nombre',         'label' => 'Cliente',        'icon' => 'bi-person',       'type' => 'text',   'grupo' => 'Cliente', 'col' => 6],
+    ['tab' => $tC, 'key' => 'identificacion', 'label' => 'Identificación', 'icon' => 'bi-person-vcard', 'type' => 'text',   'grupo' => 'Cliente', 'col' => 3],
+    ['tab' => $tC, 'key' => 'activo',         'label' => 'Cliente activo', 'icon' => 'bi-toggle-on',    'type' => 'select', 'grupo' => 'Cliente', 'col' => 3, 'options' => $opcSiNo('Activos', 'Inactivos')],
+    ['tab' => $tC, 'key' => 'con_inmueble',   'label' => 'Inmueble',       'icon' => 'bi-door-open',    'type' => 'select', 'grupo' => 'Inmueble', 'col' => 3, 'options' => $opcSiNo('Con inmueble', 'Sin inmueble')],
+    ['tab' => $tC, 'key' => 'rol',            'label' => 'Rol',            'icon' => 'bi-people',       'type' => 'select', 'grupo' => 'Inmueble', 'col' => 3,
+        'options' => [['v' => 'propietario', 'l' => 'Propietario'], ['v' => 'arrendatario', 'l' => 'Arrendatario'], ['v' => 'ambos', 'l' => 'Propietario y arrendatario'], ['v' => 'ninguno', 'l' => 'Ninguno']]],
+    ['tab' => $tC, 'key' => 'inmueble',       'label' => 'Código o nombre del inmueble', 'icon' => 'bi-hash', 'type' => 'text', 'grupo' => 'Inmueble', 'col' => 6],
+    ['tab' => $tC, 'key' => 'torre',          'label' => 'Torre / Bloque', 'icon' => 'bi-buildings',    'type' => 'select', 'grupo' => 'Inmueble', 'col' => 4,
+        'options' => array_map(fn($t) => ['v' => (string) $t['nombre'], 'l' => (string) $t['nombre']], $opcionesFiltro['torres'] ?? [])],
+    ['tab' => $tC, 'key' => 'inmuebles',      'label' => 'N.º de inmuebles', 'icon' => 'bi-123',        'type' => 'number_range', 'grupo' => 'Inmueble', 'col' => 4],
+    ['tab' => $tC, 'key' => 'restringida',    'label' => 'Áreas comunes',  'icon' => 'bi-slash-circle', 'type' => 'select', 'grupo' => 'Inmueble', 'col' => 4, 'options' => $opcSiNo('Restringido', 'Sin restricción')],
+];
 $pestanasCfg = [
     'pane-cfg-general'    => 'Condominio',
+    'pane-cfg-condominos' => 'Condóminos',
     'pane-cfg-alicuota'   => 'Alícuota y fondo',
     'pane-cfg-mora'       => 'Mora y multas',
     'pane-cfg-reajuste'   => 'Reajuste de cuotas',
@@ -28,7 +54,16 @@ $prodChip = function (string $id, string $label, string $campo, string $ayuda) u
     .condcfg .nav-tabs .nav-link { font-size: .875rem; }
     .condcfg .form-text { font-size: .7rem; }
     .condcfg-dropdown { z-index: 1090; max-height: 240px; overflow-y: auto; }
+    .condominos-scroll { max-height: 62vh; overflow: auto; }
+    .condominos-scroll thead th { position: sticky; top: 0; z-index: 2; }
+    .cond-row { cursor: pointer; }
+    .cond-inm { cursor: pointer; font-weight: 500; }
+    .cond-inm:hover { filter: brightness(.92); }
+    .cond-dropdown { z-index: 1090; max-height: 240px; overflow-y: auto; }
 </style>
+<?= \App\Helpers\PreferenciasHelper::renderEstilosColumnasOcultas($vistaConfig ?? []) ?>
+<link rel="stylesheet" href="<?= rtrim($base, '/') ?>/css/components/filtros_modal.css?v=<?= asset_ver('/css/components/filtros_modal.css') ?>">
+<script src="<?= rtrim($base, '/') ?>/js/components/filtros_modal.js?v=<?= asset_ver('/js/components/filtros_modal.js') ?>"></script>
 
 <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-3">
     <h5 class="mb-0 fw-bold"><i class="bi bi-gear text-primary me-2"></i><?= htmlspecialchars($titulo) ?>
@@ -42,7 +77,7 @@ $prodChip = function (string $id, string $label, string $campo, string $ayuda) u
     </div>
 <?php elseif (!$config): ?>
     <div class="alert alert-info py-2 small"><i class="bi bi-info-circle me-1"></i>
-        Este condominio aún no está configurado. Indique el administrador y el producto para la alícuota (créelo antes en <b>Productos</b> como servicio) y pulse <b>Guardar</b>: con eso el módulo queda activo para esta empresa.
+        Este condominio aún no está configurado. Revise los datos del condominio y el administrador y pulse <b>Guardar</b>: con eso el módulo queda activo para esta empresa y puede asignar inmuebles en la pestaña <b>Condóminos</b>.
     </div>
 <?php elseif ($pendientes): ?>
     <div class="alert alert-warning py-2 small" id="cfg-aviso-pendientes"><i class="bi bi-exclamation-triangle me-1"></i>
@@ -55,6 +90,7 @@ $prodChip = function (string $id, string $label, string $campo, string $ayuda) u
     <div class="card-header bg-light py-2 px-3 d-flex align-items-center">
         <ul class="nav nav-tabs border-bottom-0 flex-grow-1 flex-nowrap" role="tablist">
             <li class="nav-item"><a class="nav-link active py-2 small" id="cfg-tab-general-btn" data-bs-toggle="tab" href="#pane-cfg-general" role="tab"><i class="bi bi-buildings me-1"></i>Condominio</a></li>
+            <li class="nav-item"><a class="nav-link py-2 small" id="cfg-tab-condominos-btn" data-bs-toggle="tab" href="#pane-cfg-condominos" role="tab"><i class="bi bi-people me-1"></i>Condóminos</a></li>
             <li class="nav-item"><a class="nav-link py-2 small" data-bs-toggle="tab" href="#pane-cfg-alicuota" role="tab"><i class="bi bi-calculator me-1"></i>Alícuota y fondo</a></li>
             <li class="nav-item"><a class="nav-link py-2 small" data-bs-toggle="tab" href="#pane-cfg-mora" role="tab"><i class="bi bi-hourglass-split me-1"></i>Mora y multas</a></li>
             <li class="nav-item"><a class="nav-link py-2 small" data-bs-toggle="tab" href="#pane-cfg-reajuste" role="tab"><i class="bi bi-arrow-repeat me-1"></i>Reajuste de cuotas</a></li>
@@ -118,6 +154,74 @@ $prodChip = function (string $id, string $label, string $campo, string $ayuda) u
                     <textarea class="form-control form-control-sm" id="cfg_observaciones" name="observaciones" rows="2"></textarea>
                 </div>
             </div>
+        </div>
+
+        <!-- ══ Condóminos: todos los clientes; a cada uno se le asignan sus inmuebles ══ -->
+        <div class="tab-pane fade" id="pane-cfg-condominos" role="tabpanel">
+            <?php if (!$config): ?>
+                <div class="small text-muted"><i class="bi bi-info-circle me-1"></i>Guarde primero la configuración del condominio (pestaña <b>Condominio</b>) para asignar inmuebles a los clientes.</div>
+            <?php else: ?>
+            <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-2">
+                <div class="d-flex align-items-center gap-2 flex-wrap">
+                    <div id="fmBuscadorCOND"></div>
+                    <input type="hidden" id="cond-buscar" value="">
+                    <?php // FiltrosModal (extraId) mueve estos botones dentro del input-group del buscador. ?>
+                    <div id="fmExtraCOND" class="btn-group btn-group-sm">
+                        <?= \App\Helpers\PreferenciasHelper::renderDropdownColumnas($columnasCondominos, $vistaConfig ?? [], $rutaModulo) ?>
+                        <a id="cond-btn-pdf" href="<?= $urlBase ?>/exportPdf?orden=<?= urlencode($ordenParam) ?>" class="btn btn-outline-danger" title="PDF del listado">
+                            <i class="bi bi-file-earmark-pdf"></i><span class="d-none d-md-inline"> PDF</span>
+                        </a>
+                        <a id="cond-btn-excel" href="<?= $urlBase ?>/exportExcel?orden=<?= urlencode($ordenParam) ?>" class="btn btn-outline-success" title="Excel del listado">
+                            <i class="bi bi-file-earmark-spreadsheet"></i><span class="d-none d-md-inline"> Excel</span>
+                        </a>
+                        <a href="<?= $urlBase ?>/pdfRestringidas" class="btn btn-outline-secondary" title="Inmuebles con restricción de áreas comunes (PDF)" data-pdf-documento>
+                            <i class="bi bi-slash-circle"></i><span class="d-none d-md-inline"> Restringidas</span>
+                        </a>
+                        <?php if (!empty($perm['crear'])): ?>
+                            <button type="button" class="btn btn-outline-primary" onclick="COND.abrirExcel()" title="Cargar inmuebles desde Excel">
+                                <i class="bi bi-file-earmark-arrow-up"></i><span class="d-none d-md-inline"> Cargar Excel</span>
+                            </button>
+                        <?php endif; ?>
+                        <button type="button" class="btn btn-outline-secondary" onclick="COND.emisiones()" title="Emisiones en bloque: avance, documentos y errores">
+                            <i class="bi bi-clock-history"></i><span class="d-none d-md-inline"> Emisiones</span>
+                        </button>
+                    </div>
+                    <?php if (!empty($perm['crear'])): ?>
+                        <button type="button" class="btn btn-primary btn-sm px-3" onclick="COND.cobro()" title="Emitir recibos o facturas en bloque, o agregar un cobro recurrente a las suscripciones">
+                            <i class="bi bi-receipt me-1"></i>Generar cobro <span class="badge bg-light text-primary ms-1 d-none" id="cond-marcados"></span>
+                        </button>
+                    <?php endif; ?>
+                </div>
+                <div class="d-flex align-items-center gap-3">
+                    <span class="text-muted small" id="cond-resumen" title="Clientes con inmueble · inmuebles activos · suma de alícuotas · suma de m²"></span>
+                    <span id="cond-pag-info" class="text-muted small fw-medium">0-0/0</span>
+                    <div id="cond-paginacion" class="btn-group btn-group-sm">
+                        <button type="button" class="btn btn-outline-secondary" data-pag="-1" disabled><i class="bi bi-chevron-left"></i></button>
+                        <button type="button" class="btn btn-outline-secondary" data-pag="1" disabled><i class="bi bi-chevron-right"></i></button>
+                    </div>
+                </div>
+            </div>
+            <div class="condominos-scroll border rounded-3 bg-white">
+                <table class="table table-hover table-sm mb-0 align-middle" id="tabla-cond">
+                    <thead class="table-light">
+                        <tr>
+                            <th class="ps-3" style="width:32px"><input type="checkbox" class="form-check-input" id="cond-chk-todos" title="Marcar los de esta página"></th>
+                            <th class="sortable-header" role="button" data-sort="nombre" data-col="nombre">Cliente <i class="bi bi-arrow-down-up small text-muted ms-1"></i></th>
+                            <th class="sortable-header" role="button" data-sort="identificacion" data-col="identificacion">Identificación <i class="bi bi-arrow-down-up small text-muted ms-1"></i></th>
+                            <th class="sortable-header" role="button" data-sort="email" data-col="contacto">Contacto <i class="bi bi-arrow-down-up small text-muted ms-1"></i></th>
+                            <th class="sortable-header" role="button" data-sort="codigo" data-col="inmuebles">Inmuebles <i class="bi bi-arrow-down-up small text-muted ms-1"></i></th>
+                            <th class="text-end sortable-header" role="button" data-sort="alicuota_pct" data-col="alicuota_pct" title="Suma de las alícuotas de los inmuebles de los que es propietario">Alícuota % <i class="bi bi-arrow-down-up small text-muted ms-1"></i></th>
+                            <th class="text-center sortable-header" role="button" data-sort="restringida" data-col="restringida">Restricción <i class="bi bi-arrow-down-up small text-muted ms-1"></i></th>
+                            <th class="text-end pe-3" style="width:60px"></th>
+                        </tr>
+                    </thead>
+                    <tbody id="cond-tbody">
+                        <tr><td colspan="8" class="text-center py-5 text-muted">Cargando…</td></tr>
+                    </tbody>
+                </table>
+            </div>
+            <div class="small text-muted mt-2"><i class="bi bi-info-circle me-1"></i>Se listan todos los clientes de la empresa. Pulse un cliente sin inmueble para asignárselo, o un inmueble para editarlo. Con <i class="bi bi-plus-lg"></i> se agrega otro inmueble al mismo cliente.</div>
+            <?php endif; ?>
         </div>
 
         <!-- ══ Alícuota y fondo ══ -->
@@ -473,3 +577,23 @@ $prodChip = function (string $id, string $label, string $campo, string $ayuda) u
     };
 </script>
 <script src="<?= rtrim($base, '/') ?>/js/modulos/condominios_config.js?v=<?= asset_ver('/js/modulos/condominios_config.js') ?>"></script>
+
+<?php if ($config): ?>
+    <?php // Pestaña Condóminos: modal del inmueble y carga Excel (fuera del formulario de configuración). ?>
+    <?php include __DIR__ . '/modal_unidad.php'; ?>
+    <?php include __DIR__ . '/modal_excel.php'; ?>
+    <?php include __DIR__ . '/modal_cobro.php'; ?>
+    <script>
+        window.COND_CFG = {
+            url: <?= json_encode($urlBase) ?>,
+            modulo: <?= json_encode(basename($rutaModulo)) ?>,
+            perm: <?= json_encode(['crear' => !empty($perm['crear']), 'actualizar' => !empty($perm['actualizar']), 'eliminar' => !empty($perm['eliminar'])]) ?>,
+            sorts: <?= $ordenJson ?>,
+            config: <?= json_encode($config, JSON_UNESCAPED_UNICODE) ?>,
+            tipos: <?= json_encode($tiposUnidad, JSON_UNESCAPED_UNICODE) ?>,
+            metodos: <?= json_encode($metodos, JSON_UNESCAPED_UNICODE) ?>,
+            filtros: <?= json_encode($filtrosCondominos, JSON_UNESCAPED_UNICODE | JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS) ?>,
+        };
+    </script>
+    <script src="<?= rtrim($base, '/') ?>/js/modulos/condominios.js?v=<?= asset_ver('/js/modulos/condominios.js') ?>"></script>
+<?php endif; ?>

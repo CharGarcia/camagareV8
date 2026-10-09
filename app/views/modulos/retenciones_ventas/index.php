@@ -269,6 +269,13 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
 
 <?php include 'modal_retencion.php'; ?>
 
+<?php
+// Modal compartido de clientes: el botón «nuevo cliente» lo abre y el cliente creado
+// queda seleccionado en la retención (evento 'clienteGuardado'). Faltaba el partial:
+// clientes_modal.js ya se cargaba, pero sin el modal el botón no hacía nada.
+include_once dirname(__DIR__) . '/clientes/modal_cliente.php';
+?>
+
 <script>
     window.RETV_rutaBase = '<?= $urlBase ?>';
     window.RETV_perm = <?= json_encode($perm) ?>;

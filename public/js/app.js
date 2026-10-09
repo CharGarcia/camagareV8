@@ -10,6 +10,15 @@ window.CMG_fechaLocal = function(d) {
     return new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().split('T')[0];
 };
 
+// ¿El modal de catálogo (cliente, proveedor, producto…) se abrió ENCIMA de otro modal?
+// Es el caso "crear al vuelo" desde un documento (factura, compra, proforma…): al crear
+// el registro el modal de catálogo se cierra y el documento lo recibe ya seleccionado por
+// el evento '{catalogo}Guardado'. Abierto desde su propio listado no hay otro modal
+// debajo y el modal sigue abierto para completar la ficha.
+window.CMG_modalSobreOtro = function (modalEl) {
+    return [...document.querySelectorAll('.modal.show')].some(m => m !== modalEl);
+};
+
 // Dígito verificador de cédula y RUC ecuatorianos. Espejo de
 // App\Helpers\DigitoVerificador (si cambia el algoritmo, cambiarlo en los dos).
 // Es SOLO un aviso: hay números reales que no superan el algoritmo, así que nunca

@@ -263,6 +263,36 @@ $warnIcon = '<i class="bi bi-exclamation-circle-fill text-warning ms-1" title="C
                                             <?php endif; ?>
                                         </div>
 
+                                        <?php
+                                        // Vencimiento real (VigenciaSuscripcionService): un documento con saldo
+                                        // manda sobre el próximo cobro. Mismo dato del aviso del navbar y del modal.
+                                        $vigS = $suscripcion_vigencia ?? null;
+                                        ?>
+                                        <?php if ($vigS && ($vigS['estado'] !== 'por_vencer' || $vigS['dias'] <= 15)): ?>
+                                            <?php $vencidaS = $vigS['estado'] === 'vencida'; ?>
+                                            <div class="alert alert-<?= $vencidaS ? 'danger' : 'warning' ?> d-flex align-items-start py-2 px-3 mb-3" style="font-size: 0.75rem;">
+                                                <i class="bi bi-<?= $vencidaS ? 'exclamation-octagon-fill' : 'hourglass-split' ?> me-2 mt-1"></i>
+                                                <div>
+                                                    <?php if ($vencidaS): ?>
+                                                        <strong>Suscripción vencida</strong> desde el <?= date('d-m-Y', strtotime($vigS['fecha'])) ?>
+                                                        <?php if ($vigS['dias'] < 0): ?>(hace <?= abs((int) $vigS['dias']) ?> <?= abs((int) $vigS['dias']) === 1 ? 'día' : 'días' ?>)<?php endif; ?>.
+                                                    <?php elseif ($vigS['estado'] === 'vence_hoy'): ?>
+                                                        <strong>La suscripción vence hoy</strong> (<?= date('d-m-Y', strtotime($vigS['fecha'])) ?>).
+                                                    <?php else: ?>
+                                                        <strong>La suscripción vence en <?= (int) $vigS['dias'] ?> <?= (int) $vigS['dias'] === 1 ? 'día' : 'días' ?></strong> (<?= date('d-m-Y', strtotime($vigS['fecha'])) ?>).
+                                                    <?php endif; ?>
+                                                    <?php if ($vigS['motivo'] === 'pendiente' && $vigS['saldo'] !== null): ?>
+                                                        <br>Saldo pendiente: <strong>$ <?= number_format((float) $vigS['saldo'], 2) ?></strong>
+                                                        <?php if (!empty($vigS['documento'])): ?>
+                                                            — <?= htmlspecialchars($vigS['documento']) ?><?= $vigS['documentos_pendientes'] > 1 ? ' y ' . ($vigS['documentos_pendientes'] - 1) . ' más' : '' ?>
+                                                        <?php endif; ?>
+                                                    <?php elseif ($vigS['motivo'] === 'pendiente'): ?>
+                                                        <br>Hay un período pendiente de pago.
+                                                    <?php endif; ?>
+                                                </div>
+                                            </div>
+                                        <?php endif; ?>
+
                                         <?php if (!$tieneSusc && $suscVarias > 1): ?>
                                             <div class="alert alert-warning py-2 px-3 mb-0" style="font-size: 0.75rem;">
                                                 <i class="bi bi-exclamation-triangle me-1"></i>

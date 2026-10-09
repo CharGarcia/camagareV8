@@ -197,6 +197,16 @@
     }
     window._cpSelCliente = c => _seleccionarCliente(c);
 
+    // El cliente creado desde «nuevo cliente» queda seleccionado en la cotización.
+    // La respuesta del alta ya trae id, nombre e identificación.
+    document.addEventListener('clienteGuardado', e => {
+        const res = e.detail;
+        if (!res || !res.ok || res.nuevo !== true || !res.data || !res.data.id) return;
+        if (!$id('modalCotizacionPublicidad')?.classList.contains('show')) return;
+        if ($id('cp_clienteBuscar')?.disabled) return;
+        _seleccionarCliente(res.data);
+    });
+
     /* ── Filas de detalle ────────────────────────────────────── */
     function _categoriaOpts(idSeleccionada) {
         const opts = categorias().map(c => {

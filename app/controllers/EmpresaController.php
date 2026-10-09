@@ -39,7 +39,9 @@ class EmpresaController extends Controller
             // Establecer en sesión
             $_SESSION['id_empresa'] = $idEmpresa;
             $_SESSION['ruc_empresa'] = $ruc;
-            
+            // Cada empresa tiene su suscripción: revisar su vigencia al entrar (modal).
+            $_SESSION[\App\Services\VigenciaSuscripcionService::CLAVE_SESION] = true;
+
             // Redirigir a la misma página donde estaba o al home
             $redir = $_SERVER['HTTP_REFERER'] ?? (BASE_URL . '/home/index');
             $this->redirect($redir);

@@ -115,24 +115,38 @@ class CondominioService
 
     // ── Inmuebles ─────────────────────────────────────────────────────────────
 
-    public function getListado(int $idEmpresa, string $buscar, int $page, int $perPage, array $orden, ?int $idUsuarioFiltro): array
+    /**
+     * Pestaña Condóminos de Configuración de condominios: todos los clientes de la empresa con
+     * los inmuebles que tienen como propietario o arrendatario.
+     */
+    public function getCondominos(int $idEmpresa, string $buscar, int $page, int $perPage, array $orden): array
     {
         if (!$this->repo->instalado()) {
             return ['total' => 0, 'rows' => []];
         }
-        $res = $this->repo->getListado($idEmpresa, $buscar, $page, $perPage, $orden, $idUsuarioFiltro);
-        $cfg = $this->repo->getConfig($idEmpresa);
-        // La cuota del listado se calcula con el valor que rige HOY y el reparto del resto (si
-        // aplica), igual que lo hará la emisión: una sola corrida sobre todos los inmuebles.
-        $cuotas = $cfg ? $this->cuotasConValorVigente($idEmpresa, $cfg) : [];
+        $res = $this->repo->getCondominos($idEmpresa, $buscar, $page, $perPage, $orden);
         foreach ($res['rows'] as &$r) {
-            $r['tipo_label']   = CondominioRules::TIPOS_LABEL[$r['tipo']] ?? $r['tipo'];
-            $r['metodo_label'] = CondominioRules::METODOS_LABEL[$r['metodo_efectivo'] ?? ''] ?? '—';
-            $r['restringida']  = $this->esTrue($r['restringida'] ?? false);
-            $r['cuota_estimada'] = $cuotas[(int) $r['id']] ?? ($cfg ? $this->cuotaOrdinaria($r, $cfg, null) : null);
+            $lista = json_decode((string) $r['lista'], true) ?: [];
+            foreach ($lista as &$u) {
+                $u['tipo_label']  = CondominioRules::TIPOS_LABEL[$u['tipo']] ?? $u['tipo'];
+                $u['restringida'] = $this->esTrue($u['restringida'] ?? false);
+                $u['paga']        = $this->esTrue($u['paga'] ?? false);
+            }
+            unset($u);
+            $r['lista']       = $lista;
+            $r['inmuebles']   = (int) $r['inmuebles'];
+            $r['restringida'] = $this->esTrue($r['restringida']);
+            $r['activo']      = (int) ($r['status'] ?? 1) === 1;
         }
         unset($r);
         return $res;
+    }
+
+    /** Cuota ordinaria por inmueble [id => cuota|null] con el valor que rige hoy (cobros en bloque). */
+    public function cuotasVigentes(int $idEmpresa): array
+    {
+        $cfg = $this->repo->getConfig($idEmpresa);
+        return $cfg ? $this->cuotasConValorVigente($idEmpresa, $cfg) : [];
     }
 
     /** Cuota ordinaria por inmueble [id => cuota|null] con el valor vigente a hoy. */

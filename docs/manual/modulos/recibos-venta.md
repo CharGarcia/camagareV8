@@ -6,7 +6,7 @@ ruta_modulo: modulos/recibo-venta
 tipo: modulo
 visibilidad: todos
 etiquetas: recibo de venta, recibos, buscar recibos, buscador, filtros, filtrar recibos, buscar por cliente, buscar por producto, estado de pago, saldo pendiente, nota de venta, venta sin factura, documento interno, sin impuestos, numeracion por fecha, numero con el año, reiniciar numeracion, reinicio anual, reinicio mensual, correlativo por año, correlativo por mes, modo de numeracion, lote, vencimiento, caducidad, fecha de vencimiento, lote y vencimiento, ancho de columna, agrandar columna, ensanchar, codigo cortado, descripcion cortada, no se ve la descripcion completa, redimensionar, precio con impuestos, precio con iva, sale en cero, tipo de identificacion, tipo de documento del cliente, ruc o cedula, es ruc o cedula, cedula o pasaporte, consumidor final, no se cual identificacion tiene el cliente, buscador de clientes, buscar cliente, elegir cliente, datos del cliente, imprimir, impresora, estado del recibo, borrador, emitido, recibo pagado sigue en borrador, no cambia a emitido, recibo sin asiento, asiento del recibo, cuando se emite, no puedo modificar el recibo, no aparece actualizar, editar recibo emitido, corregir recibo, iva del listado, iva diferente, iva no coincide, iva con descuento, columna iva, pdf en dos hojas, segunda hoja casi vacia, totales en otra pagina, el pdf corta la pagina, hoja de mas
-version: 1.27
+version: 1.28
 orden: 35
 estado: activo
 ---
@@ -241,6 +241,7 @@ la operación de inmediato.
 
 ## Historial de cambios
 
+- **1.28** — Al crear un **cliente nuevo** desde el recibo, la ficha se cierra sola y el cliente queda seleccionado en el recibo. Lo mismo con un **producto nuevo**: se agrega solo al detalle del recibo.
 - **1.27** — El PDF ya no manda los **totales y la información adicional** a una segunda hoja cuando
   caben en la primera. Antes saltaba de página siempre que el detalle pasara de cierta
   altura, aunque quedara espacio libre; ahora mide el alto real de ese bloque y solo lo pasa

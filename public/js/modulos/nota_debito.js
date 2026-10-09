@@ -1411,13 +1411,35 @@
         }
     };
 
+    // Abre el modal compartido de clientes (clientes_modal.js). Antes llamaba a un
+    // window.ClienteService que no existe y siempre respondía «no está disponible».
     window.ND_abrirModalClienteCrear = () => {
-        if (window.ClienteService && typeof window.ClienteService.abrirModalNuevo === 'function') {
-            window.ClienteService.abrirModalNuevo();
+        if (typeof window.abrirModalClienteCrear === 'function') {
+            window.abrirModalClienteCrear();
         } else {
             Swal.fire('Información', 'El módulo de creación rápida de clientes no está disponible.', 'info');
         }
     };
+
+    // El cliente creado desde el botón «nuevo cliente» queda seleccionado en la nota.
+    // Se vuelve a pedir por getClientesAjax para traer los mismos campos que usa la búsqueda.
+    document.addEventListener('clienteGuardado', async (e) => {
+        const res = e.detail;
+        if (!res || !res.ok || res.nuevo !== true || !res.data || !res.data.id) return;
+        if (!document.getElementById('modalND')?.classList.contains('show')) return;
+        if (document.getElementById('nd_cliente_search')?.disabled) return;
+
+        const termino = String(res.data.identificacion || res.data.nombre || '').trim();
+        if (!termino) return;
+        try {
+            const resp = await fetch(`${BASE_URL}/modulos/factura_venta/getClientesAjax?q=${encodeURIComponent(termino)}`);
+            const json = await resp.json();
+            const c = (json.data || []).find(x => String(x.id) === String(res.data.id));
+            if (c) window.ND_seleccionarCliente(c);
+        } catch (err) {
+            console.error('Error al recuperar el cliente recién creado:', err);
+        }
+    });
 
     window.ND_eliminar = async () => {
         const id = document.getElementById('nd_id').value;

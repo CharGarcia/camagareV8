@@ -5,8 +5,8 @@ categoria: Configuración de empresa
 ruta_modulo: modulos/empresa
 tipo: modulo
 visibilidad: admin
-etiquetas: empresa, datos de la empresa, ruc, establecimiento, punto de emision, logo, logo por punto de emision, logo de la caja, logo por sucursal, otra marca, quitar logo, ambiente, pruebas, produccion, configuracion, correo, email, smtp, envio de correos, cuerpo del correo, asunto, plantilla de correo, remitente, documentos legales, acuerdo de uso de datos, contrato de uso del sistema, aceptacion de documentos, documentos firmados, documentos cargados, archivos de la empresa, secuenciales, numeracion, tipos de documento, codDoc, eliminar secuencial, crear secuenciales, agregar todos los faltantes, facturas de reembolso, punto unico por empresa, punto inactivo, eliminar punto de emision con documentos, puntos duplicados, secuencial inicial, numero inicial, hueco, huecos, rellenar hueco, salto de numeracion, siguiente numero, retomar numeracion, presentacion de los items, agrupar items, agrupar por nombre, agrupar por lote, agrupar por nup, agrupar por serie, juntar lineas repetidas, sumar items iguales, mostrar lote en la factura, mostrar caducidad, mostrar unidad de medida, mostrar nup, descripcion del item, tirilla, ticket, impresion termica, modo de numeracion, numeracion por fecha, secuencial por fecha, reiniciar numeracion, reinicio anual, reinicio mensual, numeracion anual, numeracion mensual, correlativo por año, correlativo por mes, empezar de cero cada año, prefijo del año, numero con el año, volver a empezar la numeracion
-version: 1.31
+etiquetas: empresa, datos de la empresa, ruc, suscripcion, suscripcion vencida, vigencia, vencimiento, pago pendiente, aviso de pago, renovacion, mensualidad, cuota del sistema, establecimiento, punto de emision, logo, logo por punto de emision, logo de la caja, logo por sucursal, otra marca, quitar logo, ambiente, pruebas, produccion, configuracion, correo, email, smtp, envio de correos, cuerpo del correo, asunto, plantilla de correo, remitente, documentos legales, acuerdo de uso de datos, contrato de uso del sistema, aceptacion de documentos, documentos firmados, documentos cargados, archivos de la empresa, secuenciales, numeracion, tipos de documento, codDoc, eliminar secuencial, crear secuenciales, agregar todos los faltantes, facturas de reembolso, punto unico por empresa, punto inactivo, eliminar punto de emision con documentos, puntos duplicados, secuencial inicial, numero inicial, hueco, huecos, rellenar hueco, salto de numeracion, siguiente numero, retomar numeracion, presentacion de los items, agrupar items, agrupar por nombre, agrupar por lote, agrupar por nup, agrupar por serie, juntar lineas repetidas, sumar items iguales, mostrar lote en la factura, mostrar caducidad, mostrar unidad de medida, mostrar nup, descripcion del item, tirilla, ticket, impresion termica, modo de numeracion, numeracion por fecha, secuencial por fecha, reiniciar numeracion, reinicio anual, reinicio mensual, numeracion anual, numeracion mensual, correlativo por año, correlativo por mes, empezar de cero cada año, prefijo del año, numero con el año, volver a empezar la numeracion
+version: 1.33
 orden: 5
 estado: activo
 ---
@@ -241,6 +241,55 @@ comprobante electrónico y la representación impresa siempre dicen lo mismo.
 - **Las imágenes que inserté en el cuerpo no se ven**: el editor guarda las
   imágenes dentro del texto y la mayoría de los correos (Gmail, Outlook) las
   bloquea. Use el logo del establecimiento, que sí se envía correctamente.
+## Suscripción y vigencia del sistema: avisos de vencimiento
+
+La tarjeta **Suscripción y Vigencia del Sistema** (pestaña Información General)
+muestra la suscripción con la que la empresa paga el uso del sistema. Se busca
+así, en este orden:
+
+1. La suscripción **asignada** a la empresa en *Configuración → Empresas del
+   sistema* («Suscripción que cubre a esta empresa»).
+2. Si se factura a un tercero (reventa), las suscripciones de ese cliente, sin
+   mostrar montos. Si tiene varias y ninguna está asignada, la tarjeta pide
+   asignarla.
+3. Si no, la suscripción cuyo cliente tiene el **mismo RUC** que la empresa.
+4. Si no hay ninguna, la fecha de vigencia escrita a mano en la empresa.
+
+### Cuándo se considera vencida
+
+- Si algún período ya facturado de la suscripción tiene **saldo pendiente**, se
+  toma la fecha de ese documento (el más antiguo con saldo). Se muestra el saldo
+  y el número del documento.
+- Si todo está pagado, se toma la fecha del **próximo cobro**.
+- A esa fecha se le suman **3 días de gracia**: esa es la **fecha límite de
+  pago**. Recién al pasarla la suscripción se marca **vencida**; durante la
+  gracia figura como «por vencer».
+- Las suscripciones canceladas no generan aviso.
+
+El próximo cobro avanza solo apenas se genera el documento del período, aunque
+no se haya pagado. Por eso el sistema mira también el saldo: si no lo hiciera,
+una suscripción impaga nunca aparecería como vencida.
+
+### Aviso en la barra superior
+
+Un ícono de escudo aparece para **todos los usuarios** de la empresa cuando la
+suscripción está vencida (muestra **!**) o cerca de vencer (muestra los días):
+en los últimos 5 días si es mensual, 10 si es trimestral y 15 si es semestral,
+anual o manual. Al hacer clic se abre la ventana con el detalle.
+
+### Ventana al ingresar al sistema
+
+Cada vez que un usuario **inicia sesión** o **cambia de empresa**, si la
+suscripción de esa empresa está vencida o le faltan **2 días o menos** para la
+fecha límite de pago, aparece una ventana con la empresa, la fecha del período,
+la fecha límite de pago, los días de atraso o los
+que faltan, el saldo pendiente y la periodicidad. Se cierra con **Entendido** y
+vuelve a salir en el siguiente ingreso mientras no se pague. Quien tiene acceso
+al módulo Empresa ve además el botón **Ver detalle**.
+
+Al registrar el cobro del documento pendiente, el aviso desaparece en pocos
+minutos y la ventana deja de salir en el siguiente ingreso.
+
 ## Documentos Legales y Archivos de la Empresa
 
 En la pestaña **Información General**, debajo de la tarjeta de Suscripción y
@@ -407,6 +456,17 @@ de taxis.
 
 ## Historial de cambios
 
+- **1.33** — Se agregan **3 días de gracia**: la suscripción se marca vencida recién 3 días
+  después de la fecha del documento con saldo (o del próximo cobro); la ventana muestra la
+  fecha límite de pago.
+- **1.32** — Avisos de vencimiento de la suscripción del sistema: la suscripción se
+  considera vencida si un período facturado tiene saldo pendiente (antes solo se miraba el
+  próximo cobro, que avanza aunque no se pague). El ícono de la barra superior lo ven todos los
+  usuarios de la empresa y abre el detalle; además, al iniciar sesión o cambiar de empresa sale
+  una ventana si la suscripción está vencida o vence en 2 días o menos. El aviso usa ahora la
+  misma búsqueda de suscripción que la tarjeta (antes no veía la reventa ni las sucursales con
+  el mismo RUC). La tarjeta vuelve a mostrar el aviso «Falta asignar» cuando el cliente
+  facturado tiene varias suscripciones.
 - **1.31** — **Probar Envío** (Configuración Correo) ya no deja el sistema colgado cuando el
   host, el puerto o la clave están mal: la prueba se corta a los pocos segundos, el resto de la
   sesión sigue respondiendo mientras tanto y el error explica qué revisar.

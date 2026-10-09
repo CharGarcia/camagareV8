@@ -1,5 +1,6 @@
 <?php
-/** @var array $perm @var array $vistaConfig @var string $rutaModulo @var array $puntosEmision @var array $tiposUnidad @var array $metodos */
+/** Modal del inmueble (pestaña Condóminos de Configuración de condominios).
+ *  @var array $perm @var array $vistaConfig @var string $rutaModulo @var array $tiposUnidad @var array $metodos */
 $pestanasUni = [
     'pane-uni-general'     => 'General',
     'pane-uni-historial'   => 'Propietarios',
@@ -213,7 +214,7 @@ $pestanasUni = [
 
                         <!-- ══ Expensa (suscripción) ══ -->
                         <div class="tab-pane fade" id="pane-uni-suscripcion" role="tabpanel">
-                            <p class="small text-muted mb-2"><i class="bi bi-info-circle me-1"></i>La expensa mensual del inmueble se emite por una <b>suscripción</b> que administra este módulo. Si el pagador ya tiene una suscripción (por ejemplo, un programado migrado del sistema anterior), puede enlazarla aquí; si no, el módulo la creará al emitir por primera vez.</p>
+                            <p class="small text-muted mb-2"><i class="bi bi-info-circle me-1"></i>La cuota del inmueble se emite desde <b>Suscripciones</b>. Al crear la suscripción del pagador elija este inmueble, o enlace aquí una suscripción que ya tenga (por ejemplo, un programado migrado del sistema anterior). Sus recibos o facturas llevarán el detalle del inmueble en la información adicional.</p>
                             <div id="uni-susc-actual" class="border rounded-3 p-3 bg-light small mb-3">Guardel inmueble para ver su expensa.</div>
                             <div id="uni-susc-enlazables"></div>
                         </div>

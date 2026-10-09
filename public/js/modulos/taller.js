@@ -1587,6 +1587,29 @@
         seleccionarCliente({ id: c.id, nombre: c.nombre || j.nombre || '', telefono: c.telefono || '', correo: c.correo || c.email || '' });
     });
 
+    // Producto creado desde «nuevo producto»: queda precargado en el formulario de línea
+    // (descripción, precio y tipo), igual que si se eligiera en el buscador; el usuario
+    // completa cantidad/técnico y pulsa Agregar. Solo productos nuevos y con la orden abierta.
+    document.addEventListener('productoGuardado', async (e) => {
+        if (!tllOrdenAbierta()) return;
+        const res = e.detail || {};
+        if (!res.ok || !res.id || res.nuevo === false || !$('tll_l_descripcion')) return;
+        const termino = String(res.codigo || res.nombre || '').trim();
+        if (!termino) return;
+        try {
+            const params = new URLSearchParams({ q: termino, id_bodega: val('tll_id_bodega') || 0, id_orden: val('tll_id') || 0 });
+            const data = await (await fetch(`${RUTA}/getProductosAjax?${params}`)).json();
+            const p = (data.data || []).find(x => String(x.id) === String(res.id));
+            if (!p) return;
+            const precio = (p.precios_lista && p.precios_lista.length) ? p.precios_lista[0].precio : (p.precio_venta || 0);
+            const esServicio = !(p.inventariable === true || p.inventariable === 't'
+                || p.inventariable === '1' || p.inventariable === 1);
+            seleccionarProducto({ id: p.id, nombre: p.nombre, precio: precio, codigo: p.codigo, servicio: esServicio });
+        } catch (err) {
+            console.error('Error al recuperar el producto recién creado:', err);
+        }
+    });
+
     // ─── Alta rápida de departamento ─────────────────────────────────────────
 
     window.tllCrearDepartamento = function () {

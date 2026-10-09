@@ -218,7 +218,7 @@ class Empresa extends BaseModel
                 p.nombre AS nombre_provincia, c.nombre AS nombre_ciudad,
                 {$exprDocEstado} AS doc_estado
             FROM empresas e {$joins}
-                LEFT JOIN empresas ctrl ON ctrl.id = e.id_empresa_suscripciones
+                LEFT JOIN empresas ctrl ON ctrl.id = e.id_empresa_suscripciones AND ctrl.eliminado = false
                 LEFT JOIN clientes cli  ON cli.id = e.id_cliente_facturado
             {$where}
             {$orderBy}";
@@ -425,8 +425,16 @@ class Empresa extends BaseModel
         // Empresa que controla la suscripción (FK lógica a empresas.id) y flag de administradora.
         $idEmpSusc = isset($data['id_empresa_suscripciones']) && $data['id_empresa_suscripciones'] !== '' && (int) $data['id_empresa_suscripciones'] > 0
             ? (int) $data['id_empresa_suscripciones'] : null;
-        $idEmpSuscSql = $idEmpSusc !== null ? (string) $idEmpSusc : 'NULL';
         $esAdminSusc = $this->esValorVerdadero($data['es_administradora_suscripciones'] ?? null);
+        if ($esAdminSusc) {
+            // La administradora no depende de otra: es la que controla a las demás.
+            $idEmpSusc = null;
+        } elseif ($idEmpSusc === null) {
+            // Sin controladora elegida: queda la administradora por defecto (la última
+            // empresa marcada), aunque el campo del formulario se haya dejado vacío.
+            $idEmpSusc = $this->getIdAdministradoraSuscripciones();
+        }
+        $idEmpSuscSql = $idEmpSusc !== null ? (string) $idEmpSusc : 'NULL';
 
         // Solo una empresa puede ser administradora por defecto.
         if ($esAdminSusc) {
@@ -558,6 +566,8 @@ class Empresa extends BaseModel
         // Si se marca como administradora por defecto, desmarcar a las demás.
         if (array_key_exists('es_administradora_suscripciones', $data) && $this->esValorVerdadero($data['es_administradora_suscripciones'])) {
             $this->execute("UPDATE empresas SET es_administradora_suscripciones = false WHERE es_administradora_suscripciones = true AND id != {$id}");
+            // La administradora no depende de otra empresa para su suscripción.
+            $data['id_empresa_suscripciones'] = null;
         }
 
         $sets = [];

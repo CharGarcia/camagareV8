@@ -446,7 +446,7 @@ $urlManual = $base . '/documentacion' . ($rutaActualAyuda !== '' ? '?ruta=' . ur
                 </a>
 
                 <!-- Suscripción del sistema por vencer / vencida (empresa activa) -->
-                <a href="<?= $base ?>/modulos/empresa" class="text-white text-decoration-none position-relative d-none cmg-suscripcion-wrap" title="Suscripción del sistema">
+                <a href="<?= $base ?>/modulos/empresa" class="text-white text-decoration-none position-relative d-none cmg-suscripcion-wrap" data-aviso-suscripcion title="Suscripción del sistema">
                     <i class="bi bi-shield-exclamation" style="font-size: 1.1rem;"></i>
                     <span class="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-warning text-dark cmg-suscripcion-badge" style="font-size: 0.6rem; padding: 0.25em 0.5em;">0</span>
                 </a>
@@ -657,7 +657,7 @@ $urlManual = $base . '/documentacion' . ($rutaActualAyuda !== '' ? '?ruta=' . ur
                     <span class="position-absolute badge rounded-pill bg-warning text-dark cmg-firma-badge">0</span>
                     <small>Firma</small>
                 </a>
-                <a class="cmg-suscripcion-wrap d-none" href="<?= $base ?>/modulos/empresa">
+                <a class="cmg-suscripcion-wrap d-none" href="<?= $base ?>/modulos/empresa" data-aviso-suscripcion>
                     <i class="bi bi-shield-exclamation text-danger"></i>
                     <span class="position-absolute badge rounded-pill bg-warning text-dark cmg-suscripcion-badge">0</span>
                     <small>Mi susc.</small>
@@ -1073,8 +1073,12 @@ $urlManual = $base . '/documentacion' . ($rutaActualAyuda !== '' ? '?ruta=' . ur
                         else { b.classList.add('bg-warning', 'text-dark'); }
                     });
                     const titulo = vencida
-                        ? 'La suscripción DE ESTA EMPRESA está VENCIDA — clic para ver el detalle'
-                        : ('La suscripción DE ESTA EMPRESA vence en ' + dias + (dias === 1 ? ' día' : ' días') + ' — clic para ver el detalle');
+                        ? (susc.motivo === 'pendiente'
+                            ? 'La suscripción DE ESTA EMPRESA está VENCIDA: hay un pago pendiente — clic para ver el detalle'
+                            : 'La suscripción DE ESTA EMPRESA está VENCIDA — clic para ver el detalle')
+                        : (dias === 0
+                            ? 'La suscripción DE ESTA EMPRESA vence HOY — clic para ver el detalle'
+                            : ('La suscripción DE ESTA EMPRESA vence en ' + dias + (dias === 1 ? ' día' : ' días') + ' — clic para ver el detalle'));
                     suscWraps.forEach(function(w) { w.classList.remove('d-none'); w.setAttribute('title', titulo); });
                 } else {
                     suscWraps.forEach(function(w) { w.classList.add('d-none'); });
@@ -1364,6 +1368,122 @@ $urlManual = $base . '/documentacion' . ($rutaActualAyuda !== '' ? '?ruta=' . ur
 
         // Carga inicial
         window.CMG_refreshContadores();
+
+        // ── Modal de vigencia de la suscripción del sistema ─────────────────
+        // Sale una vez por ingreso / cambio de empresa si está vencida (incluye un
+        // período con saldo pendiente) o a ≤ 2 días; el clic en el aviso del navbar
+        // lo abre siempre. Datos: ContadoresController::avisoSuscripcionAjax.
+        (function() {
+            const base = '<?= $base ?>';
+            const esc = function(t) {
+                const d = document.createElement('div');
+                d.textContent = t == null ? '' : String(t);
+                return d.innerHTML;
+            };
+            const fecha = function(f) {
+                const p = String(f || '').split('-');
+                return p.length === 3 ? p[2] + '-' + p[1] + '-' + p[0] : esc(f);
+            };
+            const dinero = function(v) {
+                return '$ ' + Number(v || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+            };
+
+            function pintar(v, puedeVerDetalle) {
+                const dias = parseInt(v.dias, 10) || 0;
+                const vencida = v.estado === 'vencida';
+                const color = vencida || dias <= 0 ? 'danger' : 'warning';
+                const titulo = vencida ? 'Suscripción vencida'
+                    : (dias === 0 ? 'Tu suscripción vence hoy'
+                    : 'Tu suscripción vence en ' + dias + (dias === 1 ? ' día' : ' días'));
+
+                let filas = '';
+                if (v.empresa) {
+                    filas += '<tr><td class="text-muted">Empresa</td><td class="fw-semibold">' + esc(v.empresa)
+                          + (v.ruc ? ' <span class="text-muted">(' + esc(v.ruc) + ')</span>' : '') + '</td></tr>';
+                }
+                if (v.fecha_periodo && v.fecha_periodo !== v.fecha) {
+                    filas += '<tr><td class="text-muted">' + (v.motivo === 'pendiente' ? 'Período facturado el' : 'Próximo cobro') + '</td><td>' + fecha(v.fecha_periodo) + '</td></tr>';
+                }
+                filas += '<tr><td class="text-muted">' + (vencida ? 'Venció el' : 'Fecha límite de pago') + '</td><td class="fw-semibold">' + fecha(v.fecha) + '</td></tr>';
+                if (dias < 0) {
+                    filas += '<tr><td class="text-muted">Días de atraso</td><td class="fw-bold text-danger">' + Math.abs(dias) + '</td></tr>';
+                } else if (dias > 0) {
+                    filas += '<tr><td class="text-muted">Días restantes</td><td class="fw-bold text-' + color + '">' + dias + '</td></tr>';
+                }
+                if (v.motivo === 'pendiente' && v.saldo !== null && v.saldo !== undefined) {
+                    filas += '<tr><td class="text-muted">Saldo pendiente</td><td class="fw-bold text-danger">' + dinero(v.saldo) + '</td></tr>';
+                    if (v.documento) {
+                        const mas = (parseInt(v.documentos_pendientes, 10) || 1) - 1;
+                        filas += '<tr><td class="text-muted">Documento</td><td>' + esc(v.documento)
+                              + (mas > 0 ? ' <span class="text-muted">y ' + mas + ' más</span>' : '') + '</td></tr>';
+                    }
+                } else if (v.motivo === 'pendiente') {
+                    filas += '<tr><td class="text-muted">Pago</td><td class="fw-bold text-danger">Período pendiente de pago</td></tr>';
+                }
+                if (v.periodicidad) {
+                    filas += '<tr><td class="text-muted">Periodicidad</td><td>' + esc(v.periodicidad) + '</td></tr>';
+                }
+
+                const mensaje = vencida
+                    ? 'Tu suscripción al sistema está vencida. Realiza el pago lo antes posible para mantener tu servicio activo. Si ya pagaste, comunícate con nosotros para registrarlo.'
+                    : 'Realiza el pago antes de la fecha de vencimiento para mantener tu servicio activo sin interrupciones.';
+
+                let modal = document.getElementById('cmgModalVigenciaSuscripcion');
+                if (modal) { modal.remove(); }
+                modal = document.createElement('div');
+                modal.id = 'cmgModalVigenciaSuscripcion';
+                modal.className = 'modal fade';
+                modal.tabIndex = -1;
+                modal.setAttribute('aria-hidden', 'true');
+                modal.innerHTML =
+                    '<div class="modal-dialog modal-dialog-centered">'
+                  +   '<div class="modal-content border-0 shadow">'
+                  +     '<div class="modal-header bg-' + color + (color === 'danger' ? ' text-white' : ' text-dark') + ' py-2">'
+                  +       '<h5 class="modal-title fs-6 fw-bold"><i class="bi bi-shield-exclamation me-2"></i>' + esc(titulo) + '</h5>'
+                  +     '</div>'
+                  +     '<div class="modal-body">'
+                  +       '<p class="mb-3" style="font-size:.85rem;">' + esc(mensaje) + '</p>'
+                  +       '<table class="table table-sm mb-0" style="font-size:.82rem;"><tbody>' + filas + '</tbody></table>'
+                  +     '</div>'
+                  +     '<div class="modal-footer py-2">'
+                  +       (puedeVerDetalle ? '<a href="' + base + '/modulos/empresa" class="btn btn-sm btn-outline-secondary me-auto"><i class="bi bi-building me-1"></i>Ver detalle</a>' : '')
+                  +       '<button type="button" class="btn btn-sm btn-primary" data-bs-dismiss="modal">Entendido</button>'
+                  +     '</div>'
+                  +   '</div>'
+                  + '</div>';
+                document.body.appendChild(modal);
+                if (window.bootstrap && bootstrap.Modal) {
+                    bootstrap.Modal.getOrCreateInstance(modal).show();
+                }
+            }
+
+            window.CMG_avisoSuscripcion = function(forzar) {
+                return fetch(base + '/contadores/avisoSuscripcionAjax' + (forzar ? '?forzar=1' : ''), { headers: { 'Accept': 'application/json' } })
+                    .then(function(r) { return r.ok ? r.json() : null; })
+                    .then(function(d) {
+                        if (d && d.mostrar && d.vigencia) { pintar(d.vigencia, !!d.puede_ver_detalle); }
+                        else if (forzar) { window.location.href = base + '/modulos/empresa'; }
+                    })
+                    .catch(function() {});
+            };
+
+            // Clic en el aviso del navbar (escritorio y menú móvil): abre el modal.
+            document.addEventListener('click', function(e) {
+                const a = e.target.closest ? e.target.closest('[data-aviso-suscripcion]') : null;
+                if (!a) return;
+                e.preventDefault();
+                const oc = a.closest('.offcanvas');
+                if (oc && window.bootstrap && bootstrap.Offcanvas) {
+                    const inst = bootstrap.Offcanvas.getInstance(oc);
+                    if (inst) inst.hide();
+                }
+                window.CMG_avisoSuscripcion(true);
+            });
+
+            <?php if (!empty($_SESSION[\App\Services\VigenciaSuscripcionService::CLAVE_SESION])): ?>
+            window.CMG_avisoSuscripcion(false);
+            <?php endif; ?>
+        })();
         // Un solo ciclo de sondeo, SOLO con la pestaña visible (ahorra peticiones en
         // pestañas de fondo).
         //

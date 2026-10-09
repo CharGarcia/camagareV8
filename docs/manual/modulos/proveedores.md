@@ -6,7 +6,7 @@ ruta_modulo: modulos/proveedores
 tipo: modulo
 visibilidad: todos
 etiquetas: proveedores, contable, cuenta contable, cuentas contables, asiento contable, configuracion contable, cuenta por pagar del proveedor, cuenta de gasto del proveedor, buscar proveedor, buscador, filtros, filtrar proveedores, proveedores sin correo, proveedores por banco, proveedores por ciudad, chips, ordenar por dos columnas, ordenar por ciudad y razon social, proveedor, acreedor, ruc, retencion, cuenta bancaria, plazo, credito, parte relacionada, pago automatico, cheque, egreso automatico, pagos pendientes, resumen comercial, por pagar, buscar, buscador, filtrar, copiar a otra empresa, replicar, duplicar, multiempresa, valores de terceros, otros conceptos, valores adicionales, bomberos, tasa de basura, planilla de luz, transacciones, productos comprados, servicios comprados, historial de compras, que le compre, ultimo precio, precio de compra, estado de cuenta, kardex, saldo del proveedor, historial de pagos, pagos realizados, egresos, ver egreso, cedula y ruc, cliente duplicado, proveedor duplicado, identificacion repetida, ruc es la cedula mas 001, mismo tercero dos fichas, estado de cuenta partido, cedula falsa, cedula invalida, cedula incorrecta, ruc invalido, digito verificador, validar cedula, comprobar cedula, imprimir, impresora
-version: 2.11
+version: 2.12
 orden: 10
 estado: activo
 ---
@@ -27,10 +27,14 @@ concepto ya propuestos.
    pero es lo que ahorra tiempo después.
 5. Guarde.
 
-Al guardar, la ficha **no se cierra**: se queda abierta y se refresca con lo que
-quedó realmente grabado, para que siga completando pestañas sin volver a
-buscar el proveedor. Si lo creó desde una compra, liquidación u orden, el
-documento de fondo ya lo tiene seleccionado; cierre la ficha cuando termine.
+Al guardar desde el listado de Proveedores, la ficha **no se cierra**: se queda
+abierta y se refresca con lo que quedó realmente grabado, para que siga
+completando pestañas sin volver a buscar el proveedor.
+
+Si crea un proveedor **nuevo** desde un documento (compra, egreso, orden de
+compra, liquidación, retención de compra o importación), al guardar la ficha
+se cierra sola y el proveedor queda seleccionado en el documento. Ver la guía
+*Crear un cliente, proveedor o producto sin salir del documento*.
 
 ## Campos
 
@@ -489,6 +493,7 @@ lo referencian se conservan intactas. Si solo quiere dejar de usarlo, cámbielo 
 
 ## Historial de cambios
 
+- **2.12** — Creado desde un documento (compra, egreso, retención, importación…), el proveedor nuevo **se cierra solo y queda seleccionado** en el documento. Desde el listado la ficha sigue sin cerrarse al guardar.
 - **2.11** — Anticipos: solo cuentan los egresos del ambiente de la empresa
   (pruebas o producción), igual que en el resto de saldos. Antes un anticipo
   registrado en pruebas seguía sumando en producción.

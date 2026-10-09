@@ -625,6 +625,15 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosPestanasOcultas($vistaConfigS
         infoCli.classList.remove('d-none');
     }
 
+    // El cliente creado desde «nuevo cliente» queda seleccionado en la suscripción.
+    // La respuesta del alta ya trae id, nombre, identificación y correo.
+    document.addEventListener('clienteGuardado', (e) => {
+        const res = e.detail;
+        if (!res || !res.ok || res.nuevo !== true || !res.data || !res.data.id) return;
+        if (!document.getElementById('modalSusc')?.classList.contains('show') || inpCli.disabled) return;
+        window.suscSelCliente(encodeURIComponent(JSON.stringify(res.data)));
+    });
+
     /* ── Condominios: inmuebles que paga el cliente (selector del modal) ───────── */
     const selInm = document.getElementById('susc_id_unidad');
     async function suscCargarInmuebles(idCliente, idUnidadActual) {
@@ -722,6 +731,44 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosPestanasOcultas($vistaConfigS
         suscRecalcFila(tr.querySelector('.det-qty'));
         ddProd.classList.add('d-none');
     };
+
+    // El producto creado desde «nuevo producto» se agrega al detalle: en la primera fila
+    // vacía o en una nueva, con el mismo llenado que el buscador (precio y tarifa de IVA).
+    document.addEventListener('productoGuardado', async (e) => {
+        const res = e.detail;
+        if (!res || !res.ok || !res.id || res.nuevo === false) return;
+        if (!document.getElementById('modalSusc')?.classList.contains('show')) return;
+        const termino = String(res.codigo || res.nombre || '').trim();
+        if (!termino) return;
+        try {
+            const r = await fetch(urlBase + '/getProductosAjax?q=' + encodeURIComponent(termino));
+            const d = await r.json();
+            const p = (d.rows ?? []).find(x => String(x.id) === String(res.id));
+            if (!p) {
+                Swal.fire({ toast: true, position: 'top-end', icon: 'info', showConfirmButton: false, timer: 2500,
+                    title: 'Producto creado. Búscalo en el detalle para agregarlo.' });
+                return;
+            }
+            let tr = [...document.querySelectorAll('#susc_tbody_detalle .row-susc-det')].find(f =>
+                !f.querySelector('.det-id-prod')?.value && !(f.querySelector('.det-desc')?.value || '').trim());
+            if (!tr) {
+                suscAgregarFilaVacia();
+                const filas = document.querySelectorAll('#susc_tbody_detalle .row-susc-det');
+                tr = filas[filas.length - 1];
+            }
+            if (!tr) return;
+            inputFilaActiva = tr.querySelector('.det-desc');
+            window.suscAsignarProductoFila(encodeURIComponent(JSON.stringify({
+                id: p.id,
+                n: p.nombre ?? '',
+                p: parseFloat(p.precio_base ?? p.precio_unitario ?? 0),
+                i: parseFloat(p.porcentaje_iva_final ?? p.porcentaje_iva ?? p.iva ?? 0).toFixed(2),
+                tid: p.tarifa_iva ?? null
+            })));
+        } catch (err) {
+            console.error('Error al recuperar el producto recién creado:', err);
+        }
+    });
 
     window.suscAgregarFilaVacia = function() {
         suscAgregarFila({ id_producto: '', descripcion: '', cantidad: 1, precio_unitario: 0, porcentaje_iva: 0 });

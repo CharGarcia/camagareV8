@@ -27,7 +27,7 @@
 
         // Buscar proveedor
         const provUrl = (typeof BASE_URL !== 'undefined' ? BASE_URL : '') + '/modulos/proveedores/getProveedoresAjax';
-        busquedaPredictiva('ret_proveedor_search', 'ret_proveedor_dropdown', provUrl, (item) => {
+        const seleccionarProveedor = (item) => {
             // El documento vinculado tiene que ser del proveedor retenido: si se
             // cambia de proveedor, el vínculo anterior ya no vale.
             if (docVinculado && String(docVinculado.id_proveedor) !== String(item.id)) {
@@ -40,6 +40,29 @@
             // Pasar el foco al número de documento retenido
             const numDoc = document.getElementById('ret_num_doc_sustento');
             if (numDoc) numDoc.focus();
+        };
+        busquedaPredictiva('ret_proveedor_search', 'ret_proveedor_dropdown', provUrl, seleccionarProveedor);
+
+        // El proveedor creado desde «nuevo proveedor» queda seleccionado en la retención.
+        // Se vuelve a pedir por getProveedoresAjax para traer los mismos campos que la búsqueda.
+        document.addEventListener('proveedorGuardado', async (e) => {
+            const res = e.detail;
+            if (!res || !res.ok || res.nuevo !== true || !res.data) return;
+            const idNuevo = res.id || res.data.id;
+            if (!idNuevo) return;
+            if (!document.getElementById('modalRetencion')?.classList.contains('show')) return;
+            if (document.getElementById('ret_proveedor_search')?.disabled) return;
+
+            const termino = String(res.data.identificacion || res.data.razon_social || '').trim();
+            if (!termino) return;
+            try {
+                const resp = await fetch(`${provUrl}?q=${encodeURIComponent(termino)}`);
+                const json = await resp.json();
+                const p = (json.data || []).find(x => String(x.id) === String(idNuevo));
+                if (p) seleccionarProveedor(p);
+            } catch (err) {
+                console.error('Error al recuperar el proveedor recién creado:', err);
+            }
         });
 
         // Aplicar máscara al número de documento

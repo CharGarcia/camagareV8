@@ -677,22 +677,29 @@
                         document.dispatchEvent(new CustomEvent('proveedorGuardado', {
                             detail: {
                                 ...json,
-                                nombre: json.data ? (json.data.razon_social || json.data.nombre) : ''
+                                nombre: json.data ? (json.data.razon_social || json.data.nombre) : '',
+                                nuevo: !id
                             }
                         }));
 
-                        // El modal nunca se cierra al guardar: se refresca en sitio,
-                        // también cuando se abre embebido desde otro módulo (compras,
-                        // liquidaciones, órdenes…). El documento de fondo ya recibió
-                        // el proveedor mediante el evento 'proveedorGuardado'.
-                        await refrescarModalTrasGuardar(json, !id);
+                        // Creado al vuelo desde un documento (hay otro modal debajo: compra,
+                        // egreso, retención…): el documento ya lo tomó por 'proveedorGuardado',
+                        // así que se cierra para seguir con el documento. Desde el listado de
+                        // Proveedores (o al editar) el modal no se cierra: se refresca en sitio.
+                        const alVuelo = !id && typeof window.CMG_modalSobreOtro === 'function'
+                            && window.CMG_modalSobreOtro(document.getElementById('modalProveedor'));
+                        if (alVuelo) {
+                            getModalProv()?.hide();
+                        } else {
+                            await refrescarModalTrasGuardar(json, !id);
+                        }
 
                         if (typeof Swal !== 'undefined') {
                             Swal.fire({
                                 toast: true,
                                 position: 'top-end',
                                 icon: 'success',
-                                title: json.msg || 'Guardado correctamente',
+                                title: alVuelo ? 'Proveedor creado y seleccionado.' : (json.msg || 'Guardado correctamente'),
                                 timer: 2200,
                                 showConfirmButton: false
                             });

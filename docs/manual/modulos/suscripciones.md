@@ -6,7 +6,7 @@ ruta_modulo: modulos/suscripciones
 tipo: modulo
 visibilidad: todos
 etiquetas: suscripciones, suscripcion, cobro recurrente, facturacion recurrente, factura recurrente, mensualidad, pension, plan mensual, membresia, renovacion, periodicidad, proximo cobro, generar documentos, generar facturas, facturacion automatica, facturas del cliente, facturas emitidas, historial de facturas, detalle de facturas, recibos del cliente, que le facture, saldo del cliente, facturas pendientes, facturas pagadas, facturas abonadas, cobro con tarjeta, debito automatico, nuvei, kushki, aviso de vencimiento, imprimir, impresora, excel, exportar, resumen de valores, total por periodicidad, proyeccion anual, ingresos recurrentes, iva por tarifa, resumen por concepto, detalle por cliente, que se le factura a cada cliente, items por cliente, informacion adicional en excel, resumen en pdf, detalle por cliente en pdf, pdf de la suscripcion, imprimir suscripcion, contrato, ficha de la suscripcion, detalle de la suscripcion en pdf, devengado, devengo, ingreso diferido, ingresos diferidos, ingreso anticipado, cobro por adelantado, mes caido, mes vencido, facturacion vencida, niif 15, seccion 23, reconocimiento de ingresos, provision de ingresos, ingresos por facturar
-version: 1.24
+version: 1.25
 orden: 0
 estado: activo
 ---
@@ -415,6 +415,7 @@ registrados*.
 
 ## Historial de cambios
 
+- **1.25** — Al crear un **cliente nuevo** desde la suscripción, la ficha se cierra sola y el cliente queda seleccionado. Un **producto nuevo** se agrega solo al detalle de la suscripción.
 - **1.24** — Condominios: campo **Inmueble** en la suscripción (solo empresas con el módulo activo), con
   asociación automática cuando el cliente paga un solo inmueble; columna y filtro `inmueble:` en el
   listado; al generar el documento, Inmueble, Propietario y Período van en la Información adicional.

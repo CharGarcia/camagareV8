@@ -6,7 +6,7 @@ ruta_modulo: modulos/taller
 tipo: modulo
 visibilidad: todos
 etiquetas: taller, mecanica, precuenta, whatsapp, mecánica, orden de trabajo, OT, orden de reparacion, enderezada, pintura, latoneria, repuestos, mano de obra, tecnico, diagnostico, informe tecnico, garantia, siniestro, aseguradora, vehiculo, auto, carro, presupuesto, aprobacion, numeracion por fecha, numero con el año, reiniciar numeracion, reinicio anual, reinicio mensual, correlativo por año, correlativo por mes, modo de numeracion, buscar orden, buscar placa, buscador, filtros, filtrar ordenes de trabajo, filtro de fechas, buscar por repuesto, chips, imprimir, impresora
-version: 1.14
+version: 1.15
 orden: 0
 estado: activo
 ---
@@ -330,6 +330,7 @@ documentos admite cada periodo) está en el manual de **Empresa**, sección
 
 ## Historial de cambios
 
+- **1.15** — El producto creado desde **Registrar nuevo producto** queda precargado en el formulario de línea, listo para agregar.
 - **1.14** — Los botones **Vehículo**, **Cliente** y **Producto** de la orden abren
   el formulario correspondiente ya **limpio** (antes podía mostrar los datos del
   último registro tecleado). Al guardar el vehículo o el cliente nuevo, la orden

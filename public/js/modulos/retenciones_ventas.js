@@ -22,12 +22,13 @@
 
         // Búsqueda predictiva de clientes
         const clienteUrl = BASE + '/getClientesAjax';
-        busquedaPredictiva('retv_cliente_search', 'retv_cliente_dropdown', clienteUrl, (item) => {
+        const seleccionarCliente = (item) => {
             document.getElementById('retv_id_cliente').value       = item.id;
             document.getElementById('retv_cliente_search').value   = item.nombre || item.razon_social;
             mostrarInfoCliente(item);
             document.getElementById('retv_cliente_dropdown').classList.add('d-none');
-        });
+        };
+        busquedaPredictiva('retv_cliente_search', 'retv_cliente_dropdown', clienteUrl, seleccionarCliente);
 
         // (Ya se está cargando arriba)
 
@@ -37,6 +38,25 @@
                 abrirModalClienteCrear();
             }
         };
+
+        // El cliente creado desde «nuevo cliente» queda seleccionado en la retención.
+        document.addEventListener('clienteGuardado', async (e) => {
+            const res = e.detail;
+            if (!res || !res.ok || res.nuevo !== true || !res.data || !res.data.id) return;
+            if (!document.getElementById('modalRetencionVenta')?.classList.contains('show')) return;
+            if (document.getElementById('retv_cliente_search')?.disabled) return;
+
+            const termino = String(res.data.identificacion || res.data.nombre || '').trim();
+            if (!termino) return;
+            try {
+                const resp = await fetch(`${clienteUrl}?q=${encodeURIComponent(termino)}`);
+                const json = await resp.json();
+                const c = (json.data || []).find(x => String(x.id) === String(res.data.id));
+                if (c) seleccionarCliente(c);
+            } catch (err) {
+                console.error('Error al recuperar el cliente recién creado:', err);
+            }
+        });
 
         // Búsqueda en listado
         const buscarEl = document.getElementById('buscarRetV');

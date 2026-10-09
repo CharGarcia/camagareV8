@@ -8,6 +8,7 @@ use App\core\Controller;
 use App\models\PermisoSubmodulo;
 use App\Services\ContadoresNavbarService;
 use App\Services\SesionActivaService;
+use App\Services\VigenciaSuscripcionService;
 use App\Traits\PermisoModuloTrait;
 
 /**
@@ -89,6 +90,52 @@ class ContadoresController extends Controller
             // motivo para sacar al usuario del sistema.
             $this->json(['ok' => false, 'sesion_activa' => true, 'contadores' => (object) []]);
         }
+    }
+
+    /**
+     * GET /contadores/avisoSuscripcionAjax[?forzar=1] → { ok, mostrar, vigencia, puede_ver_detalle }
+     *
+     * Modal de vigencia de la suscripción del sistema. Sin `forzar`, solo responde
+     * mostrar=true una vez por ingreso o cambio de empresa (marca en sesión que ponen
+     * AuthController y EmpresaController) y solo si está vencida o a ≤ 2 días. Con
+     * `forzar` (clic en el aviso del navbar) devuelve el detalle siempre que haya vigencia.
+     * Lo ven todos los usuarios de la empresa activa (decisión del usuario, 09-10-2026).
+     */
+    public function avisoSuscripcionAjax(): void
+    {
+        $this->requireAuth();
+
+        $idEmpresa = (int) ($_SESSION['id_empresa'] ?? 0);
+        $forzar    = !empty($_GET['forzar']);
+        $pendiente = !empty($_SESSION[VigenciaSuscripcionService::CLAVE_SESION]);
+
+        // Se consume ANTES de cerrar la escritura de la sesión: una revisión por ingreso.
+        if ($pendiente) {
+            unset($_SESSION[VigenciaSuscripcionService::CLAVE_SESION]);
+        }
+        if (session_status() === PHP_SESSION_ACTIVE) {
+            session_write_close();
+        }
+
+        if ($idEmpresa <= 0 || (!$pendiente && !$forzar)) {
+            $this->json(['ok' => true, 'mostrar' => false]);
+        }
+
+        try {
+            // En vivo (sin caché): un pago recién registrado debe verse ya.
+            $vig = (new VigenciaSuscripcionService())->estado($idEmpresa, false);
+        } catch (\Throwable $e) {
+            error_log('ContadoresController::avisoSuscripcionAjax ' . $e->getMessage());
+            $this->json(['ok' => false, 'mostrar' => false]);
+        }
+
+        $mostrar = $forzar ? $vig !== null : VigenciaSuscripcionService::requiereModal($vig);
+        $this->json([
+            'ok'                => true,
+            'mostrar'           => $mostrar,
+            'vigencia'          => $mostrar ? $vig : null,
+            'puede_ver_detalle' => $mostrar && $this->permisosModuloPorRuta(ContadoresNavbarService::RUTA_EMPRESA)['ver'] === true,
+        ]);
     }
 
     /**

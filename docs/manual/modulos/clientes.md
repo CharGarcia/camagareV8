@@ -6,7 +6,7 @@ ruta_modulo: modulos/clientes
 tipo: modulo
 visibilidad: todos
 etiquetas: clientes, contable, cuenta contable, cuentas contables, asiento contable, configuracion contable, cuenta por cobrar del cliente, cuenta de ventas del cliente, cliente, cartera, buscar cliente, buscador, filtros, filtrar clientes, clientes sin correo, clientes por ciudad, clientes por vendedor, chips, ordenar por dos columnas, ordenar por ciudad y nombre, ruc, cedula, consumidor final, deudores, cobro automatico, cobros pendientes, forma de cobro, ingreso automatico, cheque, dias de credito, visitas, dias de visita, ruta de visita, rutero, frecuencia de visita, vendedor, preventa, visita del vendedor, horario de atencion, orden de visita, importar clientes, carga masiva, asignar vendedor, transacciones, productos vendidos, servicios vendidos, historial de ventas, que le vendi, ultimo precio, precio de venta, estado de cuenta, kardex, saldo del cliente, historial de cobros, cobros realizados, ingresos, ver ingreso, cedula y ruc, cliente duplicado, proveedor duplicado, identificacion repetida, ruc es la cedula mas 001, mismo tercero dos fichas, estado de cuenta partido, cedula falsa, cedula invalida, cedula incorrecta, ruc invalido, digito verificador, validar cedula, comprobar cedula, imprimir, impresora
-version: 2.9
+version: 3.0
 orden: 10
 estado: activo
 ---
@@ -39,10 +39,26 @@ y pulse la estrella: cada vez que abra **Nuevo**, ese campo ya vendrá cargado.
 Para quitarlo, pulse la estrella otra vez con el mismo valor puesto. El favorito
 es por usuario y por empresa.
 
-Al guardar, la ficha **no se cierra**: se queda abierta y se refresca con lo que
-quedó realmente grabado, para que siga completando pestañas sin volver a buscar
-el cliente. Si lo creó desde una factura, pedido u orden de lavado, el documento
-de fondo ya lo tiene seleccionado; cierre la ficha cuando termine.
+Al guardar desde el listado de Clientes, la ficha **no se cierra**: se queda
+abierta y se refresca con lo que quedó realmente grabado, para que siga
+completando pestañas sin volver a buscar el cliente.
+
+## Crear un cliente desde un documento (factura, nota, pedido…)
+
+Los documentos que tienen el botón **Registrar nuevo cliente** junto al
+buscador (factura de venta, recibo, notas de crédito y débito, retención de
+venta, proforma, pedido, guía de remisión, ingreso, suscripción, orden de
+lavado o de taller, entre otros) abren esta misma ficha. Al pulsar **Guardar**
+con un cliente **nuevo**:
+
+- la ficha **se cierra sola** y vuelve al documento;
+- el cliente **ya queda seleccionado** en el documento, con sus datos (correo,
+  dirección, vendedor, plazo, etc., según el documento);
+- aparece el aviso *«Cliente creado y seleccionado»*.
+
+Solo ocurre si el documento está abierto y todavía se puede editar (por
+ejemplo, una factura en borrador). Si después quiere completar más pestañas del
+cliente, ábralo desde el listado de Clientes.
 
 ## Aviso de cédula o RUC mal digitados (dígito verificador)
 
@@ -461,6 +477,7 @@ usuario y la fecha.
 
 ## Historial de cambios
 
+- **3.0** — Creado desde un documento (factura, nota, retención, pedido…), el cliente nuevo se **cierra solo y queda seleccionado** en el documento. Desde el listado de Clientes la ficha sigue sin cerrarse al guardar.
 - **2.9** — Anticipos: solo cuentan los ingresos del ambiente de la empresa
   (pruebas o producción), igual que en el resto de saldos. Antes un anticipo
   registrado en pruebas seguía sumando en producción.

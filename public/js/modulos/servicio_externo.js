@@ -956,7 +956,31 @@
         const j = e.detail || {}; const c = j.data || j;
         if (c && c.id) seSeleccionarCliente({ id: c.id, nombre: c.nombre || j.nombre, identificacion: c.identificacion, direccion: c.direccion, correo: c.correo || c.email, telefono: c.telefono });
     });
-    document.addEventListener('productoGuardado', () => {
-        // El nuevo producto queda disponible en el buscador de líneas; nada que autoseleccionar aquí.
+    // Producto creado desde «nuevo producto»: se agrega al detalle (primera fila vacía o una
+    // nueva) con el mismo llenado que el buscador. Solo nuevos y con la orden abierta y editable.
+    document.addEventListener('productoGuardado', async (e) => {
+        if (!document.getElementById('modalOrdenSE')?.classList.contains('show')) return;
+        if (document.getElementById('se_btn_guardar')?.classList.contains('d-none')) return;
+        const res = e.detail || {};
+        if (!res.ok || !res.id || res.nuevo === false) return;
+        const termino = String(res.codigo || res.nombre || '').trim();
+        if (!termino) return;
+        try {
+            const idBod = document.getElementById('se_id_bodega').value || 0;
+            const idOrd = document.getElementById('se_id').value || 0;
+            const json = await (await fetch(`${RUTA}/getProductosAjax?q=${encodeURIComponent(termino)}&id_bodega=${idBod}&id_orden=${idOrd}`)).json();
+            const prod = (json.data || []).find(x => String(x.id) === String(res.id));
+            if (!prod) {
+                Swal.fire({ toast: true, position: 'top-end', icon: 'info', showConfirmButton: false, timer: 2500,
+                    title: 'Producto creado. Búscalo en el detalle para agregarlo.' });
+                return;
+            }
+            const fila = [...document.querySelectorAll('#se_tbodyDetalle .row-detalle')].find(tr =>
+                !tr.querySelector('.input-id-producto')?.value &&
+                !(tr.querySelector('.input-descripcion')?.value || '').trim()) || window.seAgregarLinea();
+            if (fila) window.seSeleccionarProductoEnFila(prod, fila);
+        } catch (err) {
+            console.error('Error al recuperar el producto recién creado:', err);
+        }
     });
 })();

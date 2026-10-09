@@ -3,8 +3,8 @@
 namespace App\services\modulos;
 
 use App\repositories\modulos\EmpresaRepository;
-use App\repositories\modulos\SuscripcionesRepository;
 use App\repositories\SecuencialRepository;
+use App\Services\VigenciaSuscripcionService;
 
 class EmpresaService
 {
@@ -40,65 +40,19 @@ class EmpresaService
             $empresa = array_merge($empresa ?? [], $this->repository->getConfigServicioRestaurante($idEstPrincipal));
         }
 
-        // Suscripción del sistema — regla de resolución:
-        //   a) Si la empresa tiene una SUSCRIPCIÓN específica vinculada (id_suscripcion),
-        //      esa manda: se muestra solo esa. Resuelve el caso de reventa en que el
-        //      cliente facturado tiene varias suscripciones (una por cada empresa suya).
-        //   b) Si hay CLIENTE de reventa seleccionado (id_cliente_facturado), se buscan
-        //      las suscripciones de ese cliente y la tarjeta muestra solo estado/
-        //      periodicidad/vigencia (sin montos, para no exponer precio). Si hay MÁS DE
-        //      UNA y ninguna está vinculada, no se muestra detalle: se avisa que debe
-        //      asignarse cuál corresponde a esta empresa.
-        //   c) Si no hay selección, se aplica la regla por RUC propio contra la controladora
-        //      (con montos y detalle).
-        //   d) Si no encuentra nada, la vista cae al fallback manual (datos de `empresas`).
-        // La controladora se resuelve por RUC (vínculo directo, empresa hermana con el mismo
-        // RUC, o administradora por defecto).
-        $suscripcionInfo = [];
-        $rucEmpresa = trim((string) ($empresa['ruc'] ?? ''));
-        $idControladora = 0;
-        $sinValores = false;
-        $variasSuscripciones = 0; // >0 => hay que elegir cuál corresponde a esta empresa
-        if ($rucEmpresa !== '') {
-            try {
-                $idDirecto = isset($empresa['id_empresa_suscripciones']) && (int) $empresa['id_empresa_suscripciones'] > 0
-                    ? (int) $empresa['id_empresa_suscripciones'] : null;
-                $idControladora = (int) ($this->repository->resolverEmpresaControladoraSuscripciones($rucEmpresa, $idDirecto) ?? 0);
-
-                if ($idControladora > 0) {
-                    $suscRepo = new SuscripcionesRepository();
-                    $idClienteFact = isset($empresa['id_cliente_facturado']) && (int) $empresa['id_cliente_facturado'] > 0
-                        ? (int) $empresa['id_cliente_facturado'] : 0;
-                    $idSuscripcion = isset($empresa['id_suscripcion']) && (int) $empresa['id_suscripcion'] > 0
-                        ? (int) $empresa['id_suscripcion'] : 0;
-
-                    if ($idSuscripcion > 0) {
-                        // 1) Suscripción específica vinculada a esta empresa: solo esa.
-                        $suscripcionInfo = $suscRepo->getResumenPorSuscripcion($idControladora, $idSuscripcion);
-                        // Sin montos solo si es reventa (se factura a un tercero).
-                        $sinValores = !empty($suscripcionInfo) && $idClienteFact > 0;
-                    } elseif ($idClienteFact > 0) {
-                        // 2) Reventa sin suscripción vinculada.
-                        $lista = $suscRepo->getResumenPorControladoraYCliente($idControladora, $idClienteFact);
-                        if (count($lista) > 1) {
-                            // Varias: no se puede saber cuál es la de esta empresa.
-                            $variasSuscripciones = count($lista);
-                            $suscripcionInfo = [];
-                        } else {
-                            $suscripcionInfo = $lista;
-                            $sinValores = !empty($lista);
-                        }
-                    } else {
-                        // 3) Sin selección: regla por RUC propio contra la controladora.
-                        $suscripcionInfo = $suscRepo->getResumenPorControladoraYRuc($idControladora, $rucEmpresa);
-                    }
-                }
-            } catch (\Throwable $e) {
-                // Módulo de suscripciones o migración no disponible: se usa el fallback manual.
-                $suscripcionInfo = [];
-                $sinValores = false;
-                $variasSuscripciones = 0;
-            }
+        // Suscripción del sistema: la resolución (vínculo directo, empresa hermana, reventa,
+        // RUC propio o datos manuales) y el vencimiento viven en VigenciaSuscripcionService,
+        // la misma fuente del aviso del navbar y del modal que sale al ingresar.
+        $vigSvc              = new VigenciaSuscripcionService();
+        $resuelto            = $vigSvc->resolver($empresa ?? []);
+        $suscripcionInfo     = $resuelto['info'];
+        $idControladora      = $resuelto['controladora'];
+        $sinValores          = $resuelto['sin_valores'];
+        $variasSuscripciones = $resuelto['varias']; // >0 => hay que elegir cuál corresponde a esta empresa
+        try {
+            $vigencia = $vigSvc->evaluar($resuelto, $empresa ?? []);
+        } catch (\Throwable $e) {
+            $vigencia = null;
         }
 
         // Puntos de emisión, marcando cuáles ya tienen documentos (para la UI:
@@ -123,6 +77,7 @@ class EmpresaService
             'suscripcion_controladora' => $idControladora,
             'suscripcion_sin_valores'  => $sinValores,
             'suscripcion_varias'       => $variasSuscripciones,
+            'suscripcion_vigencia'     => $vigencia,
             'correo'                => $this->repository->getCorreoConfig($idEmpresa),
             'firmas'                => $this->repository->getFirmas($idEmpresa),
             'establecimientos'      => $establecimientos,

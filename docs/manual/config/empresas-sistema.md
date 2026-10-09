@@ -5,8 +5,8 @@ categoria: Configuración global
 ruta_modulo: config/empresas-sistema
 tipo: modulo
 visibilidad: superadmin
-etiquetas: empresas del sistema, crear empresa, alta de empresa, establecimientos, sucursales, matriz, usuarios asignados, documentos legales, suscripcion, empresas del grupo, eliminar establecimiento, establecimiento activo, un solo establecimiento activo, buscar empresa, filtrar empresas, filtros de empresas, exportar empresas, pdf de empresas, excel de empresas, ordenar empresas, columnas del listado, telefono de la empresa, correo de la empresa
-version: 1.7
+etiquetas: empresas del sistema, empresa administradora, administradora de suscripciones, empresa que controla las suscripciones, controladora, suscripcion por defecto, crear empresa, alta de empresa, establecimientos, sucursales, matriz, usuarios asignados, documentos legales, suscripcion, empresas del grupo, eliminar establecimiento, establecimiento activo, un solo establecimiento activo, buscar empresa, filtrar empresas, filtros de empresas, exportar empresas, pdf de empresas, excel de empresas, ordenar empresas, columnas del listado, telefono de la empresa, correo de la empresa
+version: 1.8
 orden: 1
 estado: activo
 ---
@@ -90,6 +90,30 @@ ficha de la empresa, pestaña Establecimiento, el superadministrador puede:
   la alternativa es marcarlo **Inactivo** desde la misma edición — deja de
   ofrecerse para emitir documentos nuevos, sin perder el historial.
 
+## Suscripción del sistema: empresa administradora y controladora
+
+Cada empresa cliente paga el uso del sistema con una suscripción registrada en
+otra empresa, la **controladora**: la que vende y factura esa suscripción.
+
+- **Empresa administradora (por defecto)**: se marca en *Editar → Cobro y
+  vigencia* con el interruptor **Es la empresa administradora**. Solo puede
+  haber una: al marcar otra, la anterior se desmarca. En el listado aparece con
+  la etiqueta **Administradora** junto al nombre.
+- **Empresas nuevas**: al crear una empresa, el campo **Empresa que controla
+  las suscripciones** ya viene con la administradora. Si se deja vacío, el
+  sistema igual le asigna la administradora al guardar.
+- **Cambiar la controladora** de una empresa: *Editar → Cobro y vigencia*,
+  campo **Empresa que controla las suscripciones** (buscador por nombre o RUC).
+  Si la empresa no tiene controladora, se usa la de otra empresa con el mismo
+  RUC (sucursal) y, si tampoco hay, la administradora.
+- Al marcar una empresa como administradora, su propio campo de controladora se
+  vacía y se bloquea: la administradora no depende de otra empresa.
+- Si la controladora guardada fue eliminada, el campo aparece vacío y el sistema
+  usa la administradora. Al guardar la empresa se limpia ese vínculo.
+
+Con esto se resuelve la suscripción que muestra el módulo **Empresa** y los
+avisos de vencimiento (ver el manual del módulo Empresa).
+
 ## Permisos
 
 Exclusivo de nivel 3 (superadministrador) para crear empresas y eliminar
@@ -118,6 +142,11 @@ las empresas que ese usuario tiene asignadas.
 
 ## Historial de cambios
 
+- **1.8** — Empresa administradora de suscripciones: etiqueta **Administradora** en el
+  listado; las empresas nuevas quedan controladas por la administradora aunque el campo se
+  deje vacío; al marcar la administradora se vacía y bloquea su propia controladora; un
+  vínculo a una controladora eliminada ya no deja a la empresa sin suscripción (se usa la
+  administradora y se limpia al guardar). Aviso en el alta cuando no hay administradora marcada.
 - **1.7** — El listado adopta el diseño estándar de los listados de módulo
   (como Proveedores): buscador de texto libre en todas las columnas, modal de
   **filtros** con chips, selector de **columnas** por usuario, orden de hasta

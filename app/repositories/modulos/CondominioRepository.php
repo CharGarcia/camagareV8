@@ -18,22 +18,6 @@ use PDO;
  */
 class CondominioRepository extends BaseRepository
 {
-    /** Columnas ordenables del listado de unidades (whitelist + mapa de OrdenListado). */
-    public const MAPA_ORDEN = [
-        'codigo'       => 'u.codigo',
-        'nombre'       => 'u.nombre',
-        'tipo'         => 'u.tipo',
-        'torre_bloque' => 'u.torre_bloque',
-        'piso'         => 'u.piso',
-        'area_m2'      => 'u.area_m2',
-        'alicuota_pct' => 'u.alicuota_pct',
-        'propietario'  => 'cp.nombre',
-        'pagador'      => "CASE WHEN u.pagador = 'arrendatario' THEN ca.nombre ELSE cp.nombre END",
-        'metodo'       => 'COALESCE(u.metodo_alicuota, cfg.metodo_alicuota)',
-        'restringida'  => 'u.restringida',
-        'estado'       => 'u.estado',
-    ];
-
     public function __construct()
     {
         parent::__construct('condominios_unidades');
@@ -126,63 +110,107 @@ class CondominioRepository extends BaseRepository
         LEFT JOIN clientes ca ON ca.id = u.id_arrendatario
         LEFT JOIN condominios_config cfg ON cfg.id_empresa = u.id_empresa AND cfg.eliminado = false";
 
-    public function getListado(int $idEmpresa, string $buscar, int $page, int $perPage, array $ordenMulti, ?int $idUsuarioFiltro = null): array
+    // ── Condóminos: todos los clientes con sus inmuebles ────────────────────
+
+    /** Columnas ordenables del listado de condóminos (pestaña de Configuración de condominios). */
+    public const MAPA_ORDEN_CONDOMINOS = [
+        'nombre'         => 'c.nombre',
+        'identificacion' => 'c.identificacion',
+        'email'          => 'c.email',
+        'telefono'       => 'c.telefono',
+        'inmuebles'      => 'COALESCE(inm.n, 0)',
+        'codigo'         => 'inm.primer_codigo',
+        'alicuota_pct'   => 'COALESCE(inm.suma_pct, 0)',
+        'restringida'    => 'COALESCE(inm.restringida, false)',
+    ];
+
+    /**
+     * Inmuebles del cliente como propietario o arrendatario (LATERAL): lista JSON para pintar,
+     * texto para el buscador y agregados para ordenar/filtrar. Igual en COUNT y SELECT.
+     */
+    private const JOIN_CONDOMINO = "
+        LEFT JOIN LATERAL (
+            SELECT COUNT(*) AS n,
+                   MIN(u.codigo) AS primer_codigo,
+                   SUM(u.alicuota_pct) FILTER (WHERE u.id_propietario = c.id) AS suma_pct,
+                   BOOL_OR(u.restringida) AS restringida,
+                   BOOL_OR(u.id_propietario = c.id) AS es_propietario,
+                   BOOL_OR(u.id_arrendatario = c.id) AS es_arrendatario,
+                   STRING_AGG(u.codigo || ' ' || u.nombre || ' ' || COALESCE(u.torre_bloque, ''), ' ') AS texto,
+                   STRING_AGG(DISTINCT u.tipo, ',') AS tipos,
+                   STRING_AGG(DISTINCT COALESCE(u.torre_bloque, ''), ',') AS torres,
+                   JSON_AGG(JSON_BUILD_OBJECT(
+                       'id', u.id, 'codigo', u.codigo, 'nombre', u.nombre, 'tipo', u.tipo,
+                       'torre_bloque', u.torre_bloque, 'piso', u.piso, 'area_m2', u.area_m2, 'alicuota_pct', u.alicuota_pct,
+                       'rol', CASE WHEN u.id_propietario = c.id THEN 'propietario' ELSE 'arrendatario' END,
+                       'paga', (u.pagador = 'arrendatario' AND u.id_arrendatario = c.id) OR (u.pagador = 'propietario' AND u.id_propietario = c.id),
+                       'restringida', u.restringida, 'estado', u.estado, 'id_suscripcion', u.id_suscripcion
+                   ) ORDER BY u.codigo) AS lista
+              FROM condominios_unidades u
+             WHERE u.id_empresa = c.id_empresa AND u.eliminado = false
+               AND (u.id_propietario = c.id OR u.id_arrendatario = c.id)
+        ) inm ON true";
+
+    /**
+     * Listado de condóminos: TODOS los clientes de la empresa (tengan o no inmueble), cada uno con
+     * los inmuebles que tiene como propietario o arrendatario. Así se asigna el inmueble al cliente
+     * sin salir de Configuración de condominios.
+     */
+    public function getCondominos(int $idEmpresa, string $buscar, int $page, int $perPage, array $ordenMulti): array
     {
-        $orderBy  = OrdenListado::clausula(OrdenListado::normalizar($ordenMulti), self::MAPA_ORDEN, 'u.codigo', 'u.id DESC');
-        $whereSql = $this->getBaseWhere($idEmpresa, 'u', $idUsuarioFiltro);
+        $orderBy  = OrdenListado::clausula(OrdenListado::normalizar($ordenMulti), self::MAPA_ORDEN_CONDOMINOS, 'c.nombre', 'c.id DESC');
+        $whereSql = $this->getBaseWhere($idEmpresa, 'c');
         $params   = [':id_empresa' => $idEmpresa];
-        if ($idUsuarioFiltro !== null) {
-            $params[':id_usuario_filtro'] = $idUsuarioFiltro;
-        }
 
         $parsed = FiltrosBusqueda::parsear($buscar);
         if ($parsed['texto_libre'] !== '') {
-            // Texto libre por palabras y sin tildes sobre lo visible. Tipo, método, estado y
-            // restricción quedan fuera: se filtran desde el modal (tipo:, estado:, …).
-            $cond = FiltrosBusqueda::condicionTexto([
-                'u.codigo', 'u.nombre', 'u.torre_bloque', 'u.piso',
-                'cp.nombre', 'cp.identificacion', 'ca.nombre', 'ca.identificacion',
-            ], $parsed['texto_libre'], $params, 'cu_b');
+            $cond = FiltrosBusqueda::condicionTexto(['c.nombre', 'c.identificacion', 'c.email', 'c.telefono', 'inm.texto'], $parsed['texto_libre'], $params, 'cn_b');
             if ($cond !== '') {
                 $whereSql .= ' AND ' . $cond;
             }
         }
         FiltrosBusqueda::aplicarFiltros($whereSql, $params, $parsed['filtros'], [
-            'texto'    => [
-                'codigo' => 'u.codigo', 'nombre' => 'u.nombre', 'torre' => 'u.torre_bloque', 'piso' => 'u.piso',
-                'propietario' => 'cp.nombre', 'arrendatario' => 'ca.nombre',
-            ],
+            'texto'    => ['nombre' => 'c.nombre', 'identificacion' => 'c.identificacion', 'inmueble' => 'inm.texto', 'torre' => 'inm.torres'],
             'exacto'   => [
-                'tipo'          => 'u.tipo',
-                'estado'        => 'u.estado',
-                'pagador'       => 'u.pagador',
-                'metodo'        => 'COALESCE(u.metodo_alicuota, cfg.metodo_alicuota)',
-                'restringida'   => "CASE WHEN u.restringida THEN 'si' ELSE 'no' END",
-                'con_arrendatario' => "CASE WHEN u.id_arrendatario IS NULL THEN 'no' ELSE 'si' END",
-                'id_propietario' => 'u.id_propietario',
-                'usuario'       => 'u.created_by',
+                'con_inmueble' => "CASE WHEN COALESCE(inm.n, 0) > 0 THEN 'si' ELSE 'no' END",
+                'rol'          => "CASE WHEN COALESCE(inm.es_propietario, false) AND COALESCE(inm.es_arrendatario, false) THEN 'ambos'
+                                        WHEN COALESCE(inm.es_propietario, false) THEN 'propietario'
+                                        WHEN COALESCE(inm.es_arrendatario, false) THEN 'arrendatario' ELSE 'ninguno' END",
+                'restringida'  => "CASE WHEN COALESCE(inm.restringida, false) THEN 'si' ELSE 'no' END",
+                'activo'       => "CASE WHEN c.status = 1 THEN 'si' ELSE 'no' END",
             ],
-            'numerico' => ['area' => 'u.area_m2', 'alicuota' => 'u.alicuota_pct'],
-            'fecha'    => ['registro' => 'u.created_at'],
+            'numerico' => ['inmuebles' => 'COALESCE(inm.n, 0)'],
         ]);
 
-        $st = $this->db->prepare("SELECT COUNT(*) FROM {$this->table} u " . self::JOINS_UNIDADES . " {$whereSql}");
+        $from = "FROM clientes c " . self::JOIN_CONDOMINO;
+        $st = $this->db->prepare("SELECT COUNT(*) {$from} {$whereSql}");
         $st->execute($params);
         $total = (int) $st->fetchColumn();
 
-        $sql = "SELECT u.*,
-                       cp.nombre AS propietario_nombre, cp.identificacion AS propietario_identificacion,
-                       ca.nombre AS arrendatario_nombre, ca.identificacion AS arrendatario_identificacion,
-                       CASE WHEN u.pagador = 'arrendatario' THEN ca.nombre ELSE cp.nombre END AS pagador_nombre,
-                       COALESCE(u.metodo_alicuota, cfg.metodo_alicuota) AS metodo_efectivo
-                  FROM {$this->table} u " . self::JOINS_UNIDADES . "
-                 {$whereSql} {$orderBy}";
+        $sql = "SELECT c.id, c.nombre, c.identificacion, c.email, c.telefono, c.status,
+                       COALESCE(inm.n, 0) AS inmuebles, COALESCE(inm.suma_pct, 0) AS suma_pct,
+                       COALESCE(inm.restringida, false) AS restringida, COALESCE(inm.lista, '[]'::json) AS lista
+                  {$from} {$whereSql} {$orderBy}";
         if ($perPage > 0) {
             $sql .= ' LIMIT ' . (int) $perPage . ' OFFSET ' . (int) (($page - 1) * $perPage);
         }
         $st = $this->db->prepare($sql);
         $st->execute($params);
         return ['total' => $total, 'rows' => $st->fetchAll(PDO::FETCH_ASSOC)];
+    }
+
+    /** Pie del listado de condóminos: clientes, con inmueble y sin inmueble. */
+    public function getResumenCondominos(int $idEmpresa): array
+    {
+        $st = $this->db->prepare(
+            "SELECT COUNT(*) AS clientes,
+                    COUNT(*) FILTER (WHERE EXISTS (SELECT 1 FROM condominios_unidades u WHERE u.id_empresa = c.id_empresa AND u.eliminado = false
+                                                     AND (u.id_propietario = c.id OR u.id_arrendatario = c.id))) AS con_inmueble
+               FROM clientes c WHERE c.id_empresa = :e AND c.eliminado = false"
+        );
+        $st->execute([':e' => $idEmpresa]);
+        $r = $st->fetch(PDO::FETCH_ASSOC) ?: ['clientes' => 0, 'con_inmueble' => 0];
+        return $r + $this->getResumen($idEmpresa);
     }
 
     /** Opciones de los selects del modal de filtros: solo valores que la empresa usa. */

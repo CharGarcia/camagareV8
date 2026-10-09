@@ -182,20 +182,28 @@ class EmpresaRepository extends BaseModel
      */
     public function resolverEmpresaControladoraSuscripciones(string $ruc, ?int $idDirecto): ?int
     {
+        // El vínculo solo vale si la controladora existe y no está eliminada: un vínculo
+        // colgado (empresa borrada) dejaba a la empresa sin suscripción en vez de caer
+        // a la hermana o a la administradora por defecto.
         if ($idDirecto !== null && $idDirecto > 0) {
-            return $idDirecto;
+            $ok = $this->query(
+                "SELECT 1 FROM empresas WHERE id = " . (int) $idDirecto . " AND eliminado = false"
+            );
+            if (!empty($ok)) {
+                return $idDirecto;
+            }
         }
 
         $rucNorm = preg_replace('/\D/', '', $ruc);
         if ($rucNorm !== '') {
             $rucEsc = $this->escape($rucNorm);
             $r = $this->query(
-                "SELECT id_empresa_suscripciones
-                 FROM empresas
-                 WHERE regexp_replace(ruc, '[^0-9]', '', 'g') = '{$rucEsc}'
-                   AND id_empresa_suscripciones IS NOT NULL
-                   AND eliminado = false
-                 ORDER BY id LIMIT 1"
+                "SELECT e.id_empresa_suscripciones
+                 FROM empresas e
+                 JOIN empresas ctrl ON ctrl.id = e.id_empresa_suscripciones AND ctrl.eliminado = false
+                 WHERE regexp_replace(e.ruc, '[^0-9]', '', 'g') = '{$rucEsc}'
+                   AND e.eliminado = false
+                 ORDER BY e.id LIMIT 1"
             );
             if (!empty($r[0]['id_empresa_suscripciones'])) {
                 return (int) $r[0]['id_empresa_suscripciones'];

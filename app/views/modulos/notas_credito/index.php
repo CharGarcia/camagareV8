@@ -350,6 +350,13 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
 
 <?php include 'modal_nc.php'; ?>
 
+<?php
+// Modal compartido de clientes: el botón «nuevo cliente» del modal lo abre y el
+// cliente creado queda seleccionado en la nota (evento 'clienteGuardado').
+// Va fuera del modal de la nota para que no quede atrapado en su z-index.
+include_once dirname(__DIR__) . '/clientes/modal_cliente.php';
+?>
+
 <script>
     window.nc_dec_p = <?= (int)($empresa['decimales_precio'] ?? 2) ?>;
     window.nc_dec_c = <?= (int)($empresa['decimales_cantidad'] ?? 2) ?>;
@@ -364,4 +371,5 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
     window.currentDir   = window.NC_ORDEN_DIR;
 </script>
 <script src="<?= rtrim($base, '/') ?>/js/modulos/asiento_contable_tab.js?v=<?= asset_ver('/js/modulos/asiento_contable_tab.js') ?>" defer></script>
+<script src="<?= rtrim($base, '/') ?>/js/modulos/clientes_modal.js?v=<?= asset_ver('/js/modulos/clientes_modal.js') ?>" defer></script>
 <script src="<?= rtrim($base, '/') ?>/js/modulos/notas_credito.js?v=<?= asset_ver('/js/modulos/notas_credito.js') ?>" defer></script>

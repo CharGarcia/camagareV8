@@ -1330,6 +1330,68 @@ $totalPages = $totalPagesOriginal;
         }
     };
 
+    // clientes_modal.js emite 'clienteGuardado' al crear y al editar. Se toma el registro
+    // si es nuevo, o si es el cliente ya seleccionado (refresca sus datos); la edición de
+    // otro cliente no pisa el recibo. Se vuelve a pedir por getClientesAjax para traer los
+    // mismos campos que usa seleccionarCliente(). Solo con el recibo abierto y editable.
+    document.addEventListener('clienteGuardado', async (e) => {
+        const modal = document.getElementById('modalNuevaFactura');
+        if (!modal || !modal.classList.contains('show')) return;
+        if (document.getElementById('m-search-cliente')?.disabled) return;
+        const res = e.detail;
+        if (!res || !res.ok || !res.data || !res.data.id) return;
+        const idSel = document.getElementById('m-id-cliente')?.value || '';
+        if (res.nuevo !== true && String(idSel) !== String(res.data.id)) return;
+
+        const termino = String(res.data.identificacion || res.data.nombre || '').trim();
+        if (!termino) return;
+        try {
+            const resp = await fetch(`${B_URL}/${RUTA_MODULO}/getClientesAjax?q=${encodeURIComponent(termino)}`);
+            const json = await resp.json();
+            const c = (json.data || []).find(x => String(x.id) === String(res.data.id));
+            if (c) seleccionarCliente(c);
+        } catch (err) {
+            console.error('Error al recuperar el cliente recién creado:', err);
+        }
+    });
+
+    // productos_modal.js emite 'productoGuardado' (con nuevo/codigo/nombre). Un producto
+    // nuevo se agrega en la primera fila vacía del detalle (o en una nueva) con el mismo
+    // llenado que la búsqueda manual. Solo con el recibo abierto y editable.
+    document.addEventListener('productoGuardado', async (e) => {
+        const modal = document.getElementById('modalNuevaFactura');
+        if (!modal || !modal.classList.contains('show')) return;
+        if (document.getElementById('m-search-cliente')?.disabled) return;
+        const res = e.detail;
+        if (!res || !res.ok || !res.id || res.nuevo === false) return;
+
+        const termino = String(res.codigo || res.nombre || '').trim();
+        if (!termino || typeof window.rvSeleccionarProductoEnFila !== 'function') return;
+        try {
+            const resp = await fetch(`${B_URL}/${RUTA_MODULO}/getProductosAjax?q=${encodeURIComponent(termino)}`);
+            const json = await resp.json();
+            const prod = (json.data || []).find(p => String(p.id) === String(res.id));
+            if (!prod) {
+                Swal.fire({ toast: true, position: 'top-end', icon: 'info', showConfirmButton: false, timer: 2500,
+                    title: 'Producto creado. Búscalo en el detalle para agregarlo.' });
+                return;
+            }
+            let fila = [...document.querySelectorAll('#m-tbodyDetalle .row-detalle')].find(tr =>
+                !tr.querySelector('.input-id-producto')?.value &&
+                !(tr.querySelector('.input-descripcion')?.value || '').trim());
+            if (!fila) {
+                agregarFila();
+                const filas = document.querySelectorAll('#m-tbodyDetalle .row-detalle');
+                fila = filas[filas.length - 1];
+            }
+            if (!fila) return;
+            window.rvSeleccionarProductoEnFila(prod, fila);
+            if (typeof calcTotales === 'function') calcTotales();
+        } catch (err) {
+            console.error('Error al recuperar el producto recién creado:', err);
+        }
+    });
+
     // fetchSearch está definido más abajo para el listado de facturas (AJAX).
 
     async function cargarPuntosEmision(idEst) {
@@ -3732,6 +3794,9 @@ $totalPages = $totalPagesOriginal;
             inCant.focus();
             inCant.select();
         };
+        // Expuesta para agregar al detalle el producto creado desde «nuevo producto»
+        // (listener 'productoGuardado'), con el mismo llenado que la búsqueda manual.
+        window.rvSeleccionarProductoEnFila = seleccionarProductoEnFila;
 
         const buscarProducto = async (q, sourceInput) => {
             // ... (keep search logic similar but adjust for no inputCod)

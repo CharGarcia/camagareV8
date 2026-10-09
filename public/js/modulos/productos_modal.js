@@ -928,7 +928,14 @@
                     getModal().hide();
                     swalToast('success', json.msg || 'Guardado correctamente.');
                     if (typeof window.fetchSearch === 'function') window.fetchSearch(window.currentPage || 1);
-                    document.dispatchEvent(new CustomEvent('productoGuardado', { detail: json }));
+                    // nuevo/codigo/nombre: los documentos que crean el producto al vuelo lo
+                    // buscan con su propio buscador para agregarlo al detalle.
+                    document.dispatchEvent(new CustomEvent('productoGuardado', { detail: {
+                        ...json,
+                        nuevo:  !id,
+                        codigo: (fd.get('codigo') || document.getElementById('prod_codigo')?.value || '').toString().trim(),
+                        nombre: (fd.get('nombre') || document.getElementById('prod_nombre')?.value || '').toString().trim()
+                    } }));
 
                     const htmlReplicado = resumenReplicado(json.replicado);
                     if (htmlReplicado) {
