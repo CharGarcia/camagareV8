@@ -6,7 +6,7 @@ ruta_modulo: config/empresas-sistema
 tipo: modulo
 visibilidad: superadmin
 etiquetas: empresas del sistema, empresa administradora, administradora de suscripciones, empresa que controla las suscripciones, controladora, suscripcion por defecto, crear empresa, alta de empresa, establecimientos, sucursales, matriz, usuarios asignados, documentos legales, suscripcion, empresas del grupo, eliminar establecimiento, establecimiento activo, un solo establecimiento activo, buscar empresa, filtrar empresas, filtros de empresas, exportar empresas, pdf de empresas, excel de empresas, ordenar empresas, columnas del listado, telefono de la empresa, correo de la empresa
-version: 1.8
+version: 1.9
 orden: 1
 estado: activo
 ---
@@ -111,6 +111,12 @@ otra empresa, la **controladora**: la que vende y factura esa suscripción.
   vacía y se bloquea: la administradora no depende de otra empresa.
 - Si la controladora guardada fue eliminada, el campo aparece vacío y el sistema
   usa la administradora. Al guardar la empresa se limpia ese vínculo.
+- **La controladora cuenta con todos sus establecimientos**: si la empresa que
+  vende el sistema tiene varios establecimientos (varias filas con el mismo RUC,
+  p. ej. 001 y 002), la suscripción del cliente se busca en **todos** ellos. Da
+  igual cuál de los establecimientos se elija como controladora. El buscador
+  *Empresa a la que facturamos* muestra clientes de todos los establecimientos e
+  indica en cuál está cada uno.
 
 Con esto se resuelve la suscripción que muestra el módulo **Empresa** y los
 avisos de vencimiento (ver el manual del módulo Empresa).
@@ -143,6 +149,9 @@ las empresas que ese usuario tiene asignadas.
 
 ## Historial de cambios
 
+- **1.9** — La suscripción se busca en todos los establecimientos de la controladora (mismo
+  RUC), no solo en el elegido: antes, una suscripción registrada en el establecimiento 002 no
+  se encontraba si la controladora configurada era el 001.
 - **1.8** — Empresa administradora de suscripciones: etiqueta **Administradora** en el
   listado; las empresas nuevas quedan controladas por la administradora aunque el campo se
   deje vacío; al marcar la administradora se vacía y bloquea su propia controladora; un

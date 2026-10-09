@@ -295,11 +295,77 @@ class SuscripcionesRepository extends BaseRepository
     }
 
     /**
-     * Resumen de suscripciones de una empresa controladora cuyo cliente coincide
-     * por RUC/identificación. Alimenta la tarjeta "Suscripción y Vigencia" de la
-     * ficha de empresa. Devuelve monto, periodicidad, próximo cobro, estado y el
-     * último pago registrado (suscripciones_pagos).
+     * Establecimientos de la empresa controladora: todas las filas activas de `empresas`
+     * con su mismo RUC. La empresa que vende el sistema puede tener varios establecimientos
+     * (cada uno con sus propios clientes y suscripciones), así que la suscripción de un
+     * cliente puede estar en cualquiera de ellos — p. ej. CMG 001 (id 8) y CAMAGARE ERP 002
+     * (id 46). Sin RUC, solo la propia controladora.
+     *
+     * @return int[]
      */
+    public function idsEmpresasControladora(int $idControladora): array
+    {
+        if ($idControladora <= 0) {
+            return [];
+        }
+        $st = $this->db->prepare(
+            "SELECT e.id
+               FROM empresas e
+               JOIN empresas c ON c.id = :ctrl
+              WHERE e.eliminado = false
+                AND regexp_replace(COALESCE(c.ruc, ''), '[^0-9]', '', 'g') <> ''
+                AND regexp_replace(e.ruc, '[^0-9]', '', 'g') = regexp_replace(c.ruc, '[^0-9]', '', 'g')
+              ORDER BY e.id"
+        );
+        $st->execute([':ctrl' => $idControladora]);
+        $ids = array_map('intval', $st->fetchAll(PDO::FETCH_COLUMN));
+        if (!in_array($idControladora, $ids, true)) {
+            $ids[] = $idControladora;
+        }
+        return $ids;
+    }
+
+    /**
+     * Buscador "Empresa a la que facturamos (reventa)" de Empresas del sistema: clientes de
+     * cualquier establecimiento de la controladora (todas las palabras, sin tildes).
+     *
+     * @return array<int, array{id:int,label:string}>
+     */
+    public function buscarClientesControladora(int $idControladora, string $q): array
+    {
+        $in        = $this->listaIn($this->idsEmpresasControladora($idControladora));
+        $params    = [];
+        $condicion = FiltrosBusqueda::condicionTexto(['c.nombre', 'c.identificacion'], $q, $params, 'ac');
+        $filtro    = $condicion !== '' ? "AND {$condicion}" : '';
+
+        $st = $this->db->prepare(
+            "SELECT c.id, c.nombre, c.identificacion,
+                    COALESCE(NULLIF(e.nombre_comercial, ''), e.nombre) AS empresa, e.establecimiento
+               FROM clientes c
+               JOIN empresas e ON e.id = c.id_empresa
+              WHERE c.id_empresa IN ({$in}) AND c.eliminado = false
+                {$filtro}
+              ORDER BY c.nombre, c.id
+              LIMIT 20"
+        );
+        $st->execute($params);
+        $varios = substr_count($in, ',') > 0;
+
+        return array_map(static fn ($r) => [
+            'id'    => (int) $r['id'],
+            // Con varios establecimientos se indica en cuál está el cliente.
+            'label' => $r['nombre'] . ' — ' . $r['identificacion']
+                . ($varios ? ' (' . $r['empresa'] . ' ' . $r['establecimiento'] . ')' : ''),
+        ], $st->fetchAll(PDO::FETCH_ASSOC));
+    }
+
+    /** Lista de ids enteros para un `IN (...)` (ya validados como int: interpolación segura). */
+    private function listaIn(array $ids): string
+    {
+        $ids = array_values(array_filter(array_map('intval', $ids), static fn ($i) => $i > 0));
+        return $ids ? implode(',', $ids) : '0';
+    }
+
     /**
      * Igual que getResumenPorControladoraYRuc pero apuntando a un CLIENTE concreto
      * de la controladora (selección explícita de "empresa a la que facturamos").
@@ -333,6 +399,7 @@ class SuscripcionesRepository extends BaseRepository
         // Se incluyen `info_adicional` (pares concepto/detalle, donde se suele
         // anotar el nombre del cliente final) y las descripciones del detalle,
         // para poder distinguir una suscripción de otra en el selector.
+        $in  = $this->listaIn($this->idsEmpresasControladora($idControladora));
         $sql = "SELECT s.id, s.estado, s.fecha_inicio, s.fecha_fin, s.proximo_cobro,
                        s.observaciones, s.info_adicional,
                        per.nombre AS periodicidad,
@@ -344,12 +411,12 @@ class SuscripcionesRepository extends BaseRepository
                          WHERE d.id_suscripcion = s.id AND d.eliminado = false) AS items
                   FROM suscripciones s
                   LEFT JOIN suscripcion_periodicidades per ON per.id = s.id_periodicidad
-                 WHERE s.id_empresa = :ctrl
+                 WHERE s.id_empresa IN ({$in})
                    AND s.id_cliente = :cli
                    AND s.eliminado = false
                  ORDER BY (s.estado = 'activo') DESC, s.proximo_cobro ASC, s.id ASC";
         $st = $this->db->prepare($sql);
-        $st->execute([':ctrl' => $idControladora, ':cli' => $idCliente]);
+        $st->execute([':cli' => $idCliente]);
         $rows = $st->fetchAll(PDO::FETCH_ASSOC);
 
         // Aplana info_adicional a texto legible: "concepto: detalle · concepto: detalle"
@@ -407,12 +474,16 @@ class SuscripcionesRepository extends BaseRepository
     }
 
     /**
-     * Núcleo del resumen: aplica el filtro de cliente indicado (por id o por RUC)
-     * y adjunta ítems y estado real de pago.
+     * Núcleo del resumen: aplica el filtro de cliente indicado (por id o por RUC) sobre
+     * TODOS los establecimientos de la controladora (idsEmpresasControladora) y adjunta
+     * ítems y estado real de pago. Cada fila trae `id_empresa`: la empresa dueña de la
+     * suscripción, que es donde están sus facturas, cobros, retenciones y NC.
      */
     private function getResumenPorControladora(int $idControladora, string $filtroCliente, array $paramsFiltro): array
     {
+        $in  = $this->listaIn($this->idsEmpresasControladora($idControladora));
         $sql = "SELECT s.id,
+                       s.id_empresa,
                        s.estado,
                        s.fecha_inicio,
                        s.fecha_fin,
@@ -438,13 +509,13 @@ class SuscripcionesRepository extends BaseRepository
                 FROM suscripciones s
                 JOIN clientes c ON c.id = s.id_cliente
                 LEFT JOIN suscripcion_periodicidades per ON per.id = s.id_periodicidad
-                WHERE s.id_empresa = :ctrl
+                WHERE s.id_empresa IN ({$in})
                   AND s.eliminado = false
                   AND c.eliminado = false
                   AND {$filtroCliente}
-                ORDER BY (s.estado = 'activo') DESC, s.proximo_cobro ASC";
+                ORDER BY (s.estado = 'activo') DESC, s.proximo_cobro ASC, s.id ASC";
         $st = $this->db->prepare($sql);
-        $st->execute(array_merge([':ctrl' => $idControladora], $paramsFiltro));
+        $st->execute($paramsFiltro);
         $suscripciones = $st->fetchAll(PDO::FETCH_ASSOC);
 
         if (empty($suscripciones)) {
@@ -479,11 +550,19 @@ class SuscripcionesRepository extends BaseRepository
 
         // Estado REAL de pago de la factura del último período (aislado por id_factura,
         // no por cliente, para no confundir con otras facturas de la misma empresa).
-        $idsFactura = array_values(array_unique(array_filter(array_map(
-            static fn($s) => (int) ($s['ultimo_pago_id_factura'] ?? 0),
-            $suscripciones
-        ))));
-        $estadoFacturas = $this->getEstadoFacturas($idsFactura, $idControladora);
+        // Se agrupa por la empresa dueña de cada suscripción: sus retenciones y NC se
+        // filtran por esa empresa (getEstadoFacturas recibe una sola).
+        $facturasPorEmpresa = [];
+        foreach ($suscripciones as $s) {
+            $idf = (int) ($s['ultimo_pago_id_factura'] ?? 0);
+            if ($idf > 0) {
+                $facturasPorEmpresa[(int) $s['id_empresa']][$idf] = $idf;
+            }
+        }
+        $estadoFacturas = [];
+        foreach ($facturasPorEmpresa as $idEmp => $idsFactura) {
+            $estadoFacturas += $this->getEstadoFacturas(array_values($idsFactura), $idEmp);
+        }
         foreach ($suscripciones as &$s) {
             $idf = (int) ($s['ultimo_pago_id_factura'] ?? 0);
             $s['pago_real'] = ($idf > 0 && isset($estadoFacturas[$idf])) ? $estadoFacturas[$idf] : null;

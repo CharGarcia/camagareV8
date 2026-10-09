@@ -918,28 +918,8 @@ class EmpresasSistemaController extends Controller
             return;
         }
 
-        // Todas las palabras escritas, en cualquier orden y sin distinguir tildes.
-        $params    = [':e' => $idEmpresa];
-        $condicion = \App\Helpers\FiltrosBusqueda::condicionTexto(
-            ['nombre', 'identificacion'], $q, $params, 'ac'
-        );
-        $filtro = $condicion !== '' ? "AND {$condicion}" : '';
-
-        $db = Database::getConnection();
-        $st = $db->prepare(
-            "SELECT id, nombre, identificacion
-             FROM clientes
-             WHERE id_empresa = :e AND eliminado = false
-               {$filtro}
-             ORDER BY nombre
-             LIMIT 20"
-        );
-        $st->execute($params);
-
-        $data = array_map(static fn($r) => [
-            'id'    => (int) $r['id'],
-            'label' => $r['nombre'] . ' — ' . $r['identificacion'],
-        ], $st->fetchAll(PDO::FETCH_ASSOC));
+        // Clientes de todos los establecimientos de la controladora (mismo RUC).
+        $data = (new \App\repositories\modulos\SuscripcionesRepository())->buscarClientesControladora($idEmpresa, $q);
 
         $this->json(['ok' => true, 'data' => $data]);
     }

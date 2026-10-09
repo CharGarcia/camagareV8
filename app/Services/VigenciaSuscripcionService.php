@@ -179,10 +179,13 @@ class VigenciaSuscripcionService
 
             // 1) Documentos de la suscripción con saldo: vence en la fecha del más antiguo.
             //    Misma consulta (y regla de saldo) que la pestaña Facturas del módulo.
+            // En la empresa DUEÑA de la suscripción (puede ser otro establecimiento de la
+            // controladora, con el mismo RUC): ahí están sus documentos y cobros.
             $cand = null;
-            if ($idCtrl > 0) {
+            $idDuena = (int) ($s['id_empresa'] ?? $idCtrl);
+            if ($idDuena > 0) {
                 $pend = $repo->getFacturasCliente(
-                    $idCtrl, [], (int) $s['id'], true,
+                    $idDuena, [], (int) $s['id'], true,
                     ['FACTURA' => null, 'RECIBO' => null],
                     'saldo:>0', 1, 1, 'fecha', 'ASC'
                 );
