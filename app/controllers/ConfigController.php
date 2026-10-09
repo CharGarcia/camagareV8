@@ -1555,6 +1555,8 @@ class ConfigController extends Controller
             'clientes-search-ajax'     => 'clientesSearchAjax',
             'cliente-combo-ajax'       => 'clienteComboAjax',
             'tareas-copiar-combo'      => 'tareasCopiarComboAjax',
+            'cambiar-responsable-cliente' => 'cambiarResponsableClienteAjax',
+            'guardar-tab'              => 'guardarTabAjax',
             default                    => 'index',
         };
         if (method_exists($c, $method)) {

@@ -45,6 +45,10 @@ class TareasObligacionesController extends Controller
     /** Tarea que la campana del navbar pidió abrir (de un solo uso, ver tareasEntrarAjax()). */
     private const SESION_ABRIR_TAREA = 'tareas_abrir_tarea';
 
+    /** Pestaña activa: vive en sesión para que la URL quede limpia (ver guardarTabAjax()). */
+    private const SESION_TAB = 'tareas_obligaciones_tab';
+    private const TABS       = ['tareas', 'obligaciones', 'clientes'];
+
     public function __construct()
     {
         $logService              = new LogSistemaService();
@@ -62,7 +66,14 @@ class TareasObligacionesController extends Controller
         // Registra la preferencia "filas por página" para que favoritos.js pinte el selector junto al paginador.
         \App\Helpers\PreferenciasHelper::porPaginaModulo('tareas_obligaciones');
 
-        $tab      = $_GET['tab'] ?? 'tareas';
+        // Enlaces antiguos con ?tab=…: se recuerda la pestaña y se redirige a la URL limpia.
+        if (isset($_GET['tab'])) {
+            if (in_array($_GET['tab'], self::TABS, true)) {
+                $_SESSION[self::SESION_TAB] = $_GET['tab'];
+            }
+            $this->redirect(BASE_URL . '/config/tareas-obligaciones');
+        }
+        $tab       = $_SESSION[self::SESION_TAB] ?? 'tareas';
         $idUsuario = (int) ($_SESSION['id_usuario'] ?? 0);
         $nivel     = (int) ($_SESSION['nivel'] ?? 1);
 
@@ -97,6 +108,10 @@ class TareasObligacionesController extends Controller
         // URL quede limpia. Es de un solo uso, así al recargar no se reabre.
         $abrirTarea = (int) ($_SESSION[self::SESION_ABRIR_TAREA] ?? 0);
         unset($_SESSION[self::SESION_ABRIR_TAREA]);
+        if ($abrirTarea > 0) {
+            $tab = 'tareas';
+            $_SESSION[self::SESION_TAB] = $tab;
+        }
 
         $this->viewWithLayout('layouts.main', 'tareasObligaciones.index', [
             'titulo'              => 'Tareas y Obligaciones',
@@ -470,6 +485,19 @@ class TareasObligacionesController extends Controller
         $this->json(['ok' => true]);
     }
 
+    /** Recuerda en sesión la pestaña elegida, para no llevarla en la URL. */
+    public function guardarTabAjax(): void
+    {
+        $this->requireAuth();
+
+        $tab = (string) ($_POST['tab'] ?? '');
+        if (!in_array($tab, self::TABS, true)) {
+            $this->json(['ok' => false, 'error' => 'Pestaña no válida.']);
+        }
+        $_SESSION[self::SESION_TAB] = $tab;
+        $this->json(['ok' => true]);
+    }
+
     // ════════════════════════════════════════════════════════
     //  AJAX — ADJUNTOS
     // ════════════════════════════════════════════════════════
@@ -830,6 +858,28 @@ class TareasObligacionesController extends Controller
             echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
         }
         exit;
+    }
+
+    /**
+     * Reemplaza un responsable por otro en todas las tareas pendientes de un cliente.
+     */
+    public function cambiarResponsableClienteAjax(): void
+    {
+        $this->requireAuth();
+
+        $idUsuario = (int) ($_SESSION['id_usuario'] ?? 0);
+        $nivel     = (int) ($_SESSION['nivel'] ?? 1);
+        $idCliente = (int) ($_POST['id_cliente'] ?? 0);
+        $actual    = json_decode((string) ($_POST['actual'] ?? ''), true);
+        $nuevo     = json_decode((string) ($_POST['nuevo'] ?? ''), true);
+
+        try {
+            if (!is_array($actual) || !is_array($nuevo)) throw new \Exception('Datos de responsables no válidos.');
+            $n = $this->tareaService->cambiarResponsableCliente($idCliente, $actual, $nuevo, $idUsuario, $nivel);
+            $this->json(['ok' => true, 'actualizadas' => $n, 'msg' => 'Responsable cambiado en ' . $n . ' tarea(s).']);
+        } catch (\Throwable $e) {
+            $this->json(['ok' => false, 'error' => $e->getMessage()]);
+        }
     }
 
     // ════════════════════════════════════════════════════════

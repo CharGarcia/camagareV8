@@ -336,38 +336,7 @@ class TareaService
         $vistos = []; // Evitar duplicados por ID o Correo en el mismo request
 
         foreach ($responsables as $resp) {
-            $rData = [
-                'id_usuario'    => null,
-                'id_resp_tarea' => null,
-                'nombre'        => '',
-                'correo'        => ''
-            ];
-
-            if (is_numeric($resp)) {
-                $rData['id_usuario'] = (int) $resp;
-            } elseif (is_array($resp)) {
-                $rData['id_usuario']    = !empty($resp['id_usuario']) ? (int) $resp['id_usuario'] : (!empty($resp['id']) && ($resp['tipo']??'') === 'usuario' ? (int)$resp['id'] : null);
-                $rData['id_resp_tarea'] = !empty($resp['id_resp_tarea']) ? (int) $resp['id_resp_tarea'] : (!empty($resp['id']) && ($resp['tipo']??'') === 'propio' ? (int)$resp['id'] : null);
-                $rData['nombre']        = trim($resp['nombre'] ?? '');
-                $rData['correo']        = trim($resp['correo'] ?? $resp['mail'] ?? '');
-
-                // Si es un externo sin ID, intentar catalogarlo o encontrarlo
-                if (!$rData['id_usuario'] && !$rData['id_resp_tarea'] && $rData['nombre'] !== '') {
-                    $existente = $this->repository->findResponsableTareaByNameEmail($rData['nombre'], $rData['correo']);
-                    if ($existente) {
-                        $rData['id_resp_tarea'] = (int) $existente['id'];
-                        $rData['nombre']        = $existente['nombre'];
-                        $rData['correo']        = $existente['correo'];
-                    } else {
-                        // Crear nuevo en catálogo de responsables
-                        $rData['id_resp_tarea'] = $this->repository->createResponsableTarea([
-                            'nombre'     => $rData['nombre'],
-                            'correo'     => $rData['correo'],
-                            'created_by' => $idUsuario
-                        ]);
-                    }
-                }
-            }
+            $rData = $this->normalizarResponsable($resp, $idUsuario);
 
             // Clave única para evitar duplicados en la misma inserción
             $key = $rData['id_usuario'] ? "u_{$rData['id_usuario']}" : ($rData['id_resp_tarea'] ? "r_{$rData['id_resp_tarea']}" : "n_{$rData['nombre']}");
@@ -377,6 +346,122 @@ class TareaService
             if ($rData['id_usuario'] || $rData['id_resp_tarea'] || $rData['nombre'] !== '') {
                 $this->repository->vincularResponsable($idTarea, $rData);
             }
+        }
+    }
+
+    /**
+     * Convierte un responsable recibido del formulario (id numérico de usuario, o
+     * arreglo con id+tipo / id_usuario / id_resp_tarea / nombre+correo) a la forma
+     * de tareas_responsables. Un externo sin id se busca en el catálogo
+     * responsables_tareas y, si no existe, se crea.
+     */
+    private function normalizarResponsable(mixed $resp, int $idUsuario): array
+    {
+        $rData = [
+            'id_usuario'    => null,
+            'id_resp_tarea' => null,
+            'nombre'        => '',
+            'correo'        => ''
+        ];
+
+        if (is_numeric($resp)) {
+            $rData['id_usuario'] = (int) $resp;
+        } elseif (is_array($resp)) {
+            $rData['id_usuario']    = !empty($resp['id_usuario']) ? (int) $resp['id_usuario'] : (!empty($resp['id']) && ($resp['tipo']??'') === 'usuario' ? (int)$resp['id'] : null);
+            $rData['id_resp_tarea'] = !empty($resp['id_resp_tarea']) ? (int) $resp['id_resp_tarea'] : (!empty($resp['id']) && ($resp['tipo']??'') === 'propio' ? (int)$resp['id'] : null);
+            $rData['nombre']        = trim($resp['nombre'] ?? '');
+            $rData['correo']        = trim($resp['correo'] ?? $resp['mail'] ?? '');
+
+            // Si es un externo sin ID, intentar catalogarlo o encontrarlo
+            if (!$rData['id_usuario'] && !$rData['id_resp_tarea'] && $rData['nombre'] !== '') {
+                $existente = $this->repository->findResponsableTareaByNameEmail($rData['nombre'], $rData['correo']);
+                if ($existente) {
+                    $rData['id_resp_tarea'] = (int) $existente['id'];
+                    $rData['nombre']        = $existente['nombre'];
+                    $rData['correo']        = $existente['correo'];
+                } else {
+                    // Crear nuevo en catálogo de responsables
+                    $rData['id_resp_tarea'] = $this->repository->createResponsableTarea([
+                        'nombre'     => $rData['nombre'],
+                        'correo'     => $rData['correo'],
+                        'created_by' => $idUsuario
+                    ]);
+                }
+            }
+        }
+
+        return $rData;
+    }
+
+    // ─── Cambiar responsable en todas las tareas de un cliente ────
+
+    /**
+     * Reemplaza a un responsable por otro en todas las tareas por realizar, vencidas
+     * y realizadas (no archivadas) de un cliente que el usuario puede ver.
+     * Las canceladas y archivadas conservan su responsable.
+     * Atómico: si una falla, no cambia ninguna.
+     *
+     * @param array $actual ['id_usuario'?, 'id_resp_tarea'?, 'nombre', 'correo'] tal como está vinculado hoy
+     * @param array $nuevo  ['id', 'tipo' ('usuario'|'propio'), 'nombre', 'mail'] o externo sin id
+     * @return int Número de tareas actualizadas.
+     */
+    public function cambiarResponsableCliente(int $idCliente, array $actual, array $nuevo, int $idUsuario, int $nivel): int
+    {
+        if ($idCliente <= 0) {
+            throw new Exception('Cliente no válido.');
+        }
+        $actual = [
+            'id_usuario'    => !empty($actual['id_usuario']) ? (int) $actual['id_usuario'] : null,
+            'id_resp_tarea' => !empty($actual['id_resp_tarea']) ? (int) $actual['id_resp_tarea'] : null,
+            'nombre'        => trim((string) ($actual['nombre'] ?? '')),
+            'correo'        => trim((string) ($actual['correo'] ?? '')),
+        ];
+        if (!$actual['id_usuario'] && !$actual['id_resp_tarea'] && $actual['nombre'] === '') {
+            throw new Exception('Seleccione el responsable que desea reemplazar.');
+        }
+        if (empty($nuevo['id']) && trim((string) ($nuevo['nombre'] ?? '')) === '') {
+            throw new Exception('Seleccione el nuevo responsable.');
+        }
+
+        $this->repository->beginTransaction();
+        try {
+            $nuevoData = $this->normalizarResponsable($nuevo, $idUsuario);
+
+            $mismo = ($actual['id_usuario'] && $actual['id_usuario'] === $nuevoData['id_usuario'])
+                || ($actual['id_resp_tarea'] && $actual['id_resp_tarea'] === $nuevoData['id_resp_tarea']);
+            if ($mismo) {
+                throw new Exception('El nuevo responsable es el mismo que el actual.');
+            }
+
+            $ids = $this->repository->getTareasClienteConResponsable($idCliente, $actual, $idUsuario, $nivel);
+            if (empty($ids)) {
+                throw new Exception('Ese responsable no tiene tareas por realizar, vencidas ni realizadas en este cliente.');
+            }
+
+            foreach ($ids as $idTarea) {
+                $antes = $this->repository->getResponsables($idTarea);
+                $this->repository->quitarResponsable($idTarea, $actual);
+                if (!$this->repository->tieneResponsable($idTarea, $nuevoData)) {
+                    $this->repository->vincularResponsable($idTarea, $nuevoData);
+                }
+                $despues = $this->repository->getResponsables($idTarea);
+
+                $this->logService->registrar(
+                    $idUsuario,
+                    null,
+                    'cambiar_responsable',
+                    'tareas',
+                    $idTarea,
+                    ['responsables' => $antes],
+                    ['responsables' => $despues, 'reemplazado' => $actual, 'nuevo' => $nuevoData]
+                );
+            }
+
+            $this->repository->commit();
+            return count($ids);
+        } catch (Exception $e) {
+            $this->repository->rollBack();
+            throw $e;
         }
     }
 

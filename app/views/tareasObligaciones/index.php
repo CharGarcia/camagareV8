@@ -326,13 +326,13 @@ $tabActiva = in_array($tab, ['tareas', 'obligaciones', 'clientes'], true) ? $tab
     </li>
     <li class="nav-item">
         <a class="nav-link<?= $tabActiva === 'obligaciones' ? ' active' : '' ?>"
-            href="<?= $base ?>/config/tareas-obligaciones?tab=obligaciones"
+            href="<?= $base ?>/config/tareas-obligaciones"
             onclick="cambiarTab('obligaciones',event)"
             id="tab-oblig-link"><i class="bi bi-journal-text me-1"></i>Lista de Obligaciones</a>
     </li>
     <li class="nav-item">
         <a class="nav-link<?= $tabActiva === 'clientes' ? ' active' : '' ?>"
-            href="<?= $base ?>/config/tareas-obligaciones?tab=clientes"
+            href="<?= $base ?>/config/tareas-obligaciones"
             onclick="cambiarTab('clientes',event)"
             id="tab-clientes-link"><i class="bi bi-people me-1"></i>Detalle por cliente</a>
     </li>
@@ -819,6 +819,33 @@ $tabActiva = in_array($tab, ['tareas', 'obligaciones', 'clientes'], true) ? $tab
                     </thead>
                     <tbody id="tbody-combo-cliente"></tbody>
                 </table>
+
+                <!-- Cambiar un responsable en todas las tareas del cliente -->
+                <div id="combo-cambiar-resp" class="border rounded-3 p-2 bg-light d-none">
+                    <div class="fw-bold small mb-2"><i class="bi bi-arrow-left-right me-1 text-primary"></i>Cambiar responsable en todas sus tareas</div>
+                    <div class="d-flex flex-wrap align-items-start gap-2">
+                        <div style="width:240px">
+                            <label class="form-label-sm d-block mb-1">Responsable actual</label>
+                            <select id="cambio-resp-actual" class="form-select form-select-sm"></select>
+                        </div>
+                        <div style="width:280px">
+                            <label class="form-label-sm d-block mb-1">Nuevo responsable</label>
+                            <div class="autocomplete-wrap">
+                                <input type="text" id="cambio-resp-nuevo" class="form-control form-control-sm"
+                                    placeholder="Buscar usuario o responsable…" autocomplete="off"
+                                    oninput="buscarCambioRespAC(this.value)" onkeydown="teclaCambioResp(event)">
+                                <div id="cambio-resp-ac" class="autocomplete-list"></div>
+                            </div>
+                        </div>
+                        <div>
+                            <label class="form-label-sm d-block mb-1">&nbsp;</label>
+                            <button type="button" class="btn btn-primary btn-sm" id="btn-cambiar-resp" onclick="guardarCambioResponsable()">
+                                <i class="bi bi-check-lg me-1"></i>Cambiar
+                            </button>
+                        </div>
+                    </div>
+                    <div class="text-muted extra-small mt-1">Se aplica a las tareas por realizar, vencidas y realizadas del cliente. Las canceladas y archivadas conservan su responsable.</div>
+                </div>
             </div>
             <div class="modal-footer">
                 <button type="button" class="btn btn-outline-secondary btn-sm" data-bs-dismiss="modal">Cerrar</button>
@@ -1022,6 +1049,7 @@ $tabActiva = in_array($tab, ['tareas', 'obligaciones', 'clientes'], true) ? $tab
                     cerrarAC('tarea-obligacion-ac');
                     cerrarAC('resp-ac');
                     cerrarAC('duplicar-cliente-ac');
+                    cerrarAC('cambio-resp-ac');
                     cerrarPanelRespFila();
                 });
             });
@@ -1064,7 +1092,10 @@ $tabActiva = in_array($tab, ['tareas', 'obligaciones', 'clientes'], true) ? $tab
         } else {
             buscarOblig(1);
         }
-        history.replaceState(null, '', BASE + '/config/tareas-obligaciones' + (tab !== 'tareas' ? '?tab=' + tab : ''));
+        // La pestaña se recuerda en sesión (no en la URL): al recargar se vuelve a ella.
+        var fdTab = new FormData();
+        fdTab.append('tab', tab);
+        fetch(BASE + '/config/tareas-obligaciones?action=guardar-tab', { method: 'POST', body: fdTab, headers: { 'X-Permitir-Repetido': '1' } }).catch(function() {});
     };
 
     // ══════════════════════════════════════════════════════════════════
@@ -1370,9 +1401,14 @@ $tabActiva = in_array($tab, ['tareas', 'obligaciones', 'clientes'], true) ? $tab
         document.getElementById('combo-cliente-vacio').classList.add('d-none');
         document.getElementById('tabla-combo-cliente').classList.add('d-none');
         document.getElementById('btn-duplicar-combo').disabled = true;
+        document.getElementById('combo-cambiar-resp').classList.add('d-none');
         modalComboBS.show();
+        cargarComboCliente();
+    };
 
-        fetch(BASE + '/config/tareas-obligaciones?action=cliente-combo-ajax&id_cliente=' + r.id)
+    function cargarComboCliente() {
+        if (!comboOrigen) return;
+        fetch(BASE + '/config/tareas-obligaciones?action=cliente-combo-ajax&id_cliente=' + comboOrigen.idCliente)
             .then(function(res) { return res.json(); })
             .then(function(d) {
                 document.getElementById('combo-cliente-loading').classList.add('d-none');
@@ -1393,7 +1429,144 @@ $tabActiva = in_array($tab, ['tareas', 'obligaciones', 'clientes'], true) ? $tab
                 document.getElementById('tbody-combo-cliente').innerHTML = html;
                 document.getElementById('tabla-combo-cliente').classList.remove('d-none');
                 document.getElementById('btn-duplicar-combo').disabled = false;
+                prepararCambioResponsable(d.data);
             });
+    }
+
+    // ── Cambiar un responsable en todas las tareas del cliente ─────────
+    var cambioRespOpciones = []; // responsables distintos del combo
+    var cambioRespNuevo = null;  // {id, tipo, nombre, mail}
+    var cambiandoResp = false;
+
+    function claveResp(r) {
+        if (r.id_usuario) return 'u_' + r.id_usuario;
+        if (r.id_resp_tarea) return 'r_' + r.id_resp_tarea;
+        return 'n_' + (r.nombre_cache || '').trim().toLowerCase() + '|' + (r.correo_cache || '').trim().toLowerCase();
+    }
+
+    function prepararCambioResponsable(items) {
+        var vistos = {};
+        cambioRespOpciones = [];
+        items.forEach(function(it) {
+            (it.responsables || []).forEach(function(r) {
+                var k = claveResp(r);
+                if (vistos[k]) return;
+                vistos[k] = true;
+                cambioRespOpciones.push(r);
+            });
+        });
+
+        var sel = document.getElementById('cambio-resp-actual');
+        sel.innerHTML = cambioRespOpciones.map(function(r, i) {
+            return '<option value="' + i + '">' + escH(r.nombre) + (r.mail ? ' — ' + escH(r.mail) : '') + '</option>';
+        }).join('');
+        limpiarCambioRespNuevo();
+        document.getElementById('combo-cambiar-resp').classList.toggle('d-none', cambioRespOpciones.length === 0);
+    }
+
+    function limpiarCambioRespNuevo() {
+        cambioRespNuevo = null;
+        document.getElementById('cambio-resp-nuevo').value = '';
+        cerrarAC('cambio-resp-ac');
+    }
+
+    // Con un responsable ya elegido, Backspace/Supr limpia la selección completa.
+    window.teclaCambioResp = function(e) {
+        if (cambioRespNuevo && (e.key === 'Backspace' || e.key === 'Delete')) {
+            e.preventDefault();
+            limpiarCambioRespNuevo();
+        }
+    };
+
+    var debounceCambioResp;
+    window.buscarCambioRespAC = function(q) {
+        clearTimeout(debounceCambioResp);
+        cambioRespNuevo = null;
+        if (q.length < 2) { cerrarAC('cambio-resp-ac'); return; }
+        debounceCambioResp = setTimeout(function() {
+            fetch(BASE + '/config/tareas-obligaciones?action=buscar-usuarios&q=' + encodeURIComponent(q))
+                .then(function(r) { return r.json(); })
+                .then(function(d) {
+                    var list = document.getElementById('cambio-resp-ac');
+                    if (!d.ok) { list.style.display = 'none'; return; }
+
+                    var html = '';
+                    (d.sistema || []).forEach(function(u) {
+                        html += '<div class="ac-item" data-json=\'' + encEscJson({ id: u.id, nombre: u.nombre, mail: u.mail || '', tipo: 'usuario' }) + '\'>' +
+                            '<i class="bi bi-person-fill text-primary me-1 small"></i><span class="fw-medium">' + escH(u.nombre) + '</span>' +
+                            (u.mail ? '<br><small class="text-muted">' + escH(u.mail) + '</small>' : '') + '</div>';
+                    });
+                    (d.propios || []).forEach(function(u) {
+                        html += '<div class="ac-item" data-json=\'' + encEscJson({ id: u.id, nombre: u.nombre, mail: u.mail || '', tipo: 'propio' }) + '\'>' +
+                            '<i class="bi bi-person-badge text-warning me-1 small"></i><span class="fw-medium">' + escH(u.nombre) + '</span>' +
+                            (u.mail ? '<br><small class="text-muted">' + escH(u.mail) + '</small>' : '') + '</div>';
+                    });
+                    if (!html) { list.style.display = 'none'; list.innerHTML = ''; return; }
+
+                    list.innerHTML = html;
+                    flotarAC(document.getElementById('cambio-resp-nuevo'), list);
+                    list.style.display = 'block';
+                    list.querySelectorAll('.ac-item[data-json]').forEach(function(el) {
+                        el.addEventListener('click', function() {
+                            cambioRespNuevo = JSON.parse(decodeURIComponent(el.getAttribute('data-json')));
+                            document.getElementById('cambio-resp-nuevo').value = cambioRespNuevo.nombre + (cambioRespNuevo.mail ? ' — ' + cambioRespNuevo.mail : '');
+                            cerrarAC('cambio-resp-ac');
+                        });
+                    });
+                });
+        }, 280);
+    };
+
+    window.guardarCambioResponsable = async function() {
+        if (cambiandoResp || !comboOrigen) return;
+        var actual = cambioRespOpciones[parseInt(document.getElementById('cambio-resp-actual').value, 10)];
+        if (!actual) { mostrarToast('Seleccione el responsable actual.', 'warning'); return; }
+        if (!cambioRespNuevo) { mostrarToast('Busque y seleccione el nuevo responsable.', 'warning'); return; }
+        if (claveResp(actual) === (cambioRespNuevo.tipo === 'usuario' ? 'u_' : 'r_') + cambioRespNuevo.id) {
+            mostrarToast('El nuevo responsable es el mismo que el actual.', 'warning');
+            return;
+        }
+
+        cambiandoResp = true;
+        var btn = document.getElementById('btn-cambiar-resp');
+        btn.disabled = true;
+        try {
+            var conf = await Swal.fire({
+                icon: 'question',
+                title: 'Cambiar responsable',
+                html: 'Se reemplazará a <b>' + escH(actual.nombre) + '</b> por <b>' + escH(cambioRespNuevo.nombre) +
+                    '</b> en todas las tareas (por realizar, vencidas y realizadas) de <b>' + escH(comboOrigen.nombre) + '</b>.',
+                showCancelButton: true,
+                confirmButtonText: 'Cambiar',
+                cancelButtonText: 'Cancelar'
+            });
+            if (!conf.isConfirmed) return;
+
+            var fd = new FormData();
+            fd.append('id_cliente', comboOrigen.idCliente);
+            fd.append('actual', JSON.stringify({
+                id_usuario: actual.id_usuario || null,
+                id_resp_tarea: actual.id_resp_tarea || null,
+                nombre: actual.nombre_cache || actual.nombre || '',
+                correo: actual.correo_cache || actual.mail || ''
+            }));
+            fd.append('nuevo', JSON.stringify(cambioRespNuevo));
+
+            var res = await fetch(BASE + '/config/tareas-obligaciones?action=cambiar-responsable-cliente', { method: 'POST', body: fd });
+            var d = await res.json();
+            if (d.ok) {
+                mostrarToast(d.msg || 'Responsable cambiado.', 'success');
+                cargarComboCliente();
+                if (typeof buscarTareas === 'function') buscarTareas(1);
+            } else {
+                mostrarToast(d.error || 'No se pudo cambiar el responsable.', 'danger');
+            }
+        } catch (e) {
+            mostrarToast('Error de conexión al cambiar el responsable.', 'danger');
+        } finally {
+            cambiandoResp = false;
+            btn.disabled = false;
+        }
     };
 
     // ── Duplicar combo hacia otro cliente ──────────────────────────────

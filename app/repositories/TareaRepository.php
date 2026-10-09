@@ -1030,6 +1030,97 @@ class TareaRepository extends BaseRepository
     }
 
     /**
+     * Tareas por realizar, vencidas o realizadas (no canceladas ni archivadas) de un cliente en las
+     * que figura un responsable dado. Mismo criterio de visibilidad que el combo:
+     * nivel 3 todas; el resto, las que creó o en las que es responsable.
+     *
+     * El responsable se identifica por id_usuario, si no por id_resp_tarea y, si no
+     * tiene ninguno, por nombre + correo guardados en la vinculación.
+     *
+     * @param array $resp ['id_usuario'?, 'id_resp_tarea'?, 'nombre'?, 'correo'?]
+     * @return int[]
+     */
+    public function getTareasClienteConResponsable(int $idCliente, array $resp, int $idUsuario, int $nivel): array
+    {
+        $params = [':id_cliente' => $idCliente];
+        $condResp = $this->condicionResponsable($resp, $params);
+
+        $visSql = '';
+        if ($nivel < 3) {
+            $selMail = $this->db->prepare("SELECT mail FROM usuarios WHERE id = :id_u");
+            $selMail->execute([':id_u' => $idUsuario]);
+            $uMail = strtolower(trim((string) $selMail->fetchColumn()));
+
+            $visSql = " AND (
+                t.created_by = :id_usuario
+                OR t.id IN (
+                    SELECT id_tarea FROM tareas_responsables
+                    WHERE id_usuario = :id_usuario_aux
+                       OR (:u_mail <> '' AND LOWER(correo_cache) = :u_mail_aux)
+                )
+            )";
+            $params[':id_usuario']     = $idUsuario;
+            $params[':id_usuario_aux'] = $idUsuario;
+            $params[':u_mail']         = $uMail;
+            $params[':u_mail_aux']     = $uMail;
+        }
+
+        $sql = "SELECT t.id
+                FROM tareas t
+                WHERE t.id_cliente = :id_cliente
+                  AND t.eliminado = false
+                  AND t.archivada = false
+                  AND t.estado IN ('por_realizar', 'vencida', 'realizada_continua', 'realizada_finalizada')
+                  AND EXISTS (SELECT 1 FROM tareas_responsables tr WHERE tr.id_tarea = t.id AND {$condResp})
+                  {$visSql}
+                ORDER BY t.id";
+        $st = $this->db->prepare($sql);
+        $st->execute($params);
+        return array_map('intval', $st->fetchAll(PDO::FETCH_COLUMN));
+    }
+
+    /**
+     * Quita de la tarea las vinculaciones de un responsable (ver condicionResponsable).
+     */
+    public function quitarResponsable(int $idTarea, array $resp): void
+    {
+        $params = [':id_tarea' => $idTarea];
+        $condResp = $this->condicionResponsable($resp, $params);
+        $st = $this->db->prepare("DELETE FROM tareas_responsables tr WHERE tr.id_tarea = :id_tarea AND {$condResp}");
+        $st->execute($params);
+    }
+
+    /**
+     * true si el responsable ya está vinculado a la tarea.
+     */
+    public function tieneResponsable(int $idTarea, array $resp): bool
+    {
+        $params = [':id_tarea' => $idTarea];
+        $condResp = $this->condicionResponsable($resp, $params);
+        $st = $this->db->prepare("SELECT 1 FROM tareas_responsables tr WHERE tr.id_tarea = :id_tarea AND {$condResp} LIMIT 1");
+        $st->execute($params);
+        return (bool) $st->fetchColumn();
+    }
+
+    /** Condición SQL (alias tr) que identifica a un responsable dentro de tareas_responsables. */
+    private function condicionResponsable(array $resp, array &$params): string
+    {
+        if (!empty($resp['id_usuario'])) {
+            $params[':resp_id_usuario'] = (int) $resp['id_usuario'];
+            return 'tr.id_usuario = :resp_id_usuario';
+        }
+        if (!empty($resp['id_resp_tarea'])) {
+            $params[':resp_id_resp'] = (int) $resp['id_resp_tarea'];
+            return 'tr.id_resp_tarea = :resp_id_resp';
+        }
+        $params[':resp_nombre'] = mb_strtolower(trim((string) ($resp['nombre'] ?? '')), 'UTF-8');
+        $params[':resp_correo'] = mb_strtolower(trim((string) ($resp['correo'] ?? '')), 'UTF-8');
+        return "tr.id_usuario IS NULL AND tr.id_resp_tarea IS NULL
+                AND LOWER(TRIM(COALESCE(tr.nombre_cache, ''))) = :resp_nombre
+                AND LOWER(TRIM(COALESCE(tr.correo_cache, ''))) = :resp_correo";
+    }
+
+    /**
      * true si el cliente ya tiene una tarea activa (no archivada) para esa obligación.
      */
     public function existeObligacionActivaParaCliente(int $idCliente, int $idObligacion): bool

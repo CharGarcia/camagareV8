@@ -117,11 +117,6 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
 <div class="egr-header d-flex justify-content-between align-items-center flex-wrap gap-2 mb-3">
     <h5 class="mb-0 fw-bold"><i class="bi bi-cash-stack me-1 text-primary"></i> <?= htmlspecialchars($titulo) ?></h5>
     <div class="d-flex gap-2">
-        <?php if (!empty($perm['ver'])): ?>
-            <button type="button" class="btn btn-outline-secondary btn-sm px-3 shadow-sm" onclick="abrirModalChequesImprimir()" title="Imprimir cheques emitidos">
-                <i class="bi bi-printer me-1"></i> Imprimir cheques
-            </button>
-        <?php endif; ?>
         <?php if ($perm['crear']): ?>
             <button type="button" class="btn btn-primary btn-sm px-3 shadow-sm" onclick="abrirModalEgreso()">
                 <i class="bi bi-plus-lg me-1"></i> Nuevo
@@ -253,6 +248,11 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                 <a id="btnExportExcel" href="<?= $urlBase ?>/export-excel?b=<?= urlencode($buscar) ?>&orden=<?= urlencode($ordenParam ?? '') ?>" class="btn btn-outline-success" title="Descargar Excel">
                     <i class="bi bi-file-earmark-spreadsheet"></i><span class="d-none d-md-inline"> Excel</span>
                 </a>
+                <?php if (!empty($perm['ver'])): ?>
+                    <button type="button" class="btn btn-outline-secondary" onclick="abrirModalChequesImprimir()" title="Imprimir cheques emitidos">
+                        <i class="bi bi-printer"></i><span class="d-none d-md-inline"> Imprimir cheques</span>
+                    </button>
+                <?php endif; ?>
             </div>
         </div>
 
