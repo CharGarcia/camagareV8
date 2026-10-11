@@ -6,6 +6,14 @@ $base = $base ?? BASE_URL;
 $menuModulos = array_values(array_filter($menuModulos, fn($m) => !empty($m['submodulos'] ?? [])));
 ?>
 <nav class="cmg-menu-modulos d-none d-lg-flex" aria-label="Módulos del sistema">
+    <?php if (!empty($menuModulos)): ?>
+    <button type="button" id="cmg-menu-reordenar-btn" class="cmg-menu-scroll-btn cmg-menu-reordenar-btn" title="Reordenar módulos" aria-pressed="false">
+        <i class="bi bi-arrows-move"></i>
+    </button>
+    <button type="button" id="cmg-menu-restablecer-btn" class="cmg-menu-scroll-btn cmg-menu-restablecer-btn d-none" title="Restablecer orden original">
+        <i class="bi bi-arrow-counterclockwise"></i>
+    </button>
+    <?php endif; ?>
     <button type="button" class="cmg-menu-scroll-btn cmg-menu-scroll-left" aria-label="Desplazar izquierda">
         <i class="bi bi-chevron-left"></i>
     </button>
@@ -50,11 +58,8 @@ $menuModulos = array_values(array_filter($menuModulos, fn($m) => !empty($m['subm
         <i class="bi bi-chevron-right"></i>
     </button>
     <?php if (!empty($menuModulos)): ?>
-    <button type="button" id="cmg-menu-reordenar-btn" class="cmg-menu-scroll-btn cmg-menu-reordenar-btn" title="Reordenar módulos" aria-pressed="false">
-        <i class="bi bi-arrows-move"></i>
-    </button>
-    <button type="button" id="cmg-menu-restablecer-btn" class="cmg-menu-scroll-btn cmg-menu-restablecer-btn d-none" title="Restablecer orden original">
-        <i class="bi bi-arrow-counterclockwise"></i>
+    <button type="button" class="cmg-menu-scroll-btn" data-cmg-tipo-menu="vertical" title="Cambiar a menú lateral (vertical)">
+        <i class="bi bi-layout-sidebar"></i>
     </button>
     <?php endif; ?>
 </nav>
@@ -136,6 +141,17 @@ $menuModulos = array_values(array_filter($menuModulos, fn($m) => !empty($m['subm
     });
 })();
 
+/* Guarda la personalización del menú del USUARIO (igual en todas sus empresas):
+   {tipo, orden, colapsado}. La usa también partials/menu-sidebar.php. */
+window.CMG_guardarMenuUsuario = window.CMG_guardarMenuUsuario || function(cambios) {
+    var fd = new FormData();
+    fd.append('menu', JSON.stringify(cambios));
+    return fetch('<?= rtrim($base, '/') ?>/Preferencias/guardarMenuAjax', {
+        method: 'POST', body: fd, credentials: 'same-origin',
+        headers: { 'X-Requested-With': 'XMLHttpRequest' }
+    });
+};
+
 (function() {
     var btnReordenar = document.getElementById('cmg-menu-reordenar-btn');
     var btnRestablecer = document.getElementById('cmg-menu-restablecer-btn');
@@ -143,7 +159,6 @@ $menuModulos = array_values(array_filter($menuModulos, fn($m) => !empty($m['subm
     var lista = document.getElementById('cmg-menu-list');
     if (!btnReordenar || !nav || !lista) return;
 
-    var urlGuardarVista = '<?= rtrim($base, '/') ?>/Preferencias/guardarVistaAjax';
     var dragEl = null;
 
     function itemsArray() {
@@ -163,13 +178,7 @@ $menuModulos = array_values(array_filter($menuModulos, fn($m) => !empty($m['subm
 
     function guardarOrden() {
         var orden = itemsArray().map(function(li) { return li.dataset.idModulo; });
-        var fd = new FormData();
-        fd.append('modulo', 'navbar');
-        fd.append('vistaPayload', JSON.stringify({ __orden_menu__: orden }));
-        fetch(urlGuardarVista, {
-            method: 'POST', body: fd, credentials: 'same-origin',
-            headers: { 'X-Requested-With': 'XMLHttpRequest' }
-        }).catch(function() {});
+        window.CMG_guardarMenuUsuario({ orden: orden }).catch(function() {});
     }
 
     btnReordenar.addEventListener('click', function() {
@@ -178,13 +187,7 @@ $menuModulos = array_values(array_filter($menuModulos, fn($m) => !empty($m['subm
 
     if (btnRestablecer) {
         btnRestablecer.addEventListener('click', function() {
-            var fd = new FormData();
-            fd.append('modulo', 'navbar');
-            fd.append('vistaPayload', JSON.stringify({ __orden_menu__: [] }));
-            fetch(urlGuardarVista, {
-                method: 'POST', body: fd, credentials: 'same-origin',
-                headers: { 'X-Requested-With': 'XMLHttpRequest' }
-            }).finally(function() { window.location.reload(); });
+            window.CMG_guardarMenuUsuario({ orden: [] }).finally(function() { window.location.reload(); });
         });
     }
 
@@ -215,4 +218,13 @@ $menuModulos = array_values(array_filter($menuModulos, fn($m) => !empty($m['subm
         guardarOrden();
     });
 })();
+
+/* Pasar al menú lateral: guarda la preferencia del usuario y recarga. */
+document.querySelectorAll('.cmg-menu-modulos [data-cmg-tipo-menu]').forEach(function(btn) {
+    btn.addEventListener('click', function() {
+        btn.disabled = true;
+        window.CMG_guardarMenuUsuario({ tipo: btn.getAttribute('data-cmg-tipo-menu') })
+            .finally(function() { window.location.reload(); });
+    });
+});
 </script>

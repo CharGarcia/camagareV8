@@ -121,6 +121,35 @@ class PreferenciasController extends Controller
         exit;
     }
     /**
+     * Personalización del menú de módulos del usuario (tipo de menú, orden de los
+     * módulos y sidebar contraído). Es del usuario, igual en todas sus empresas.
+     * POST menu = JSON {tipo?, orden?, colapsado?}
+     */
+    public function guardarMenuAjax(): void
+    {
+        header('Content-Type: application/json');
+        if (session_status() === PHP_SESSION_NONE) {
+            session_start();
+        }
+        if (empty($_SESSION['id_usuario'])) {
+            echo json_encode(['ok' => false, 'error' => 'No autorizado']);
+            exit;
+        }
+
+        try {
+            $cambios = json_decode((string) ($_POST['menu'] ?? '{}'), true);
+            if (!is_array($cambios) || $cambios === []) {
+                throw new \Exception('Datos incompletos.');
+            }
+            $this->service->guardarMenuUsuario((int) $_SESSION['id_usuario'], $cambios);
+            echo json_encode(['ok' => true]);
+        } catch (\Throwable $e) {
+            echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
+        }
+        exit;
+    }
+
+    /**
      * Endpoint asíncrono para guardar la empresa favorita (global) del usuario
      */
     public function guardarEmpresaFavoritaAjax(): void

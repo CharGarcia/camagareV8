@@ -492,6 +492,173 @@ body.cmg-has-table .cmg-main-content > .container-fluid > div:has(> h5) {
   color: var(--cmg-primary, #0d6efd);
 }
 
+/* ============================================================
+   MENÚ LATERAL (sidebar) — partials/menu-sidebar.php
+   Alternativa a la barra horizontal, elegida por cada usuario
+   (preferencia __tipo_menu__). Todo cuelga de body.cmg-menu-vertical:
+   sin esa clase nada de esto aplica. Solo escritorio (≥992px); en
+   móvil el sidebar no se pinta y sigue el panel lateral del navbar.
+   El header fijo ya no lleva la barra de módulos, así que
+   --cmg-sticky-h (medida por JS) baja sola y el sidebar arranca
+   justo debajo del navbar.
+   ============================================================ */
+body.cmg-menu-vertical { --cmg-sidebar-w: 240px; }
+body.cmg-menu-vertical.cmg-sidebar-colapsado { --cmg-sidebar-w: 56px; }
+
+.cmg-sidebar {
+  position: fixed;
+  top: var(--cmg-sticky-h);
+  left: 0;
+  bottom: 0;
+  width: var(--cmg-sidebar-w);
+  flex-direction: column;
+  background: #fff;
+  border-right: 1px solid #dee2e6;
+  box-shadow: 1px 0 3px rgba(0,0,0,0.04);
+  z-index: 4990; /* debajo del navbar (5000) y de los modales */
+  transition: width 0.15s ease;
+}
+@media (min-width: 992px) {
+  body.cmg-menu-vertical .cmg-main-content {
+    margin-left: var(--cmg-sidebar-w);
+    transition: margin-left 0.15s ease;
+  }
+}
+
+.cmg-sidebar__tools {
+  display: flex;
+  align-items: center;
+  gap: 0.15rem;
+  padding: 0.3rem 0.4rem;
+  border-bottom: 1px solid #eef0f2;
+  flex-shrink: 0;
+}
+.cmg-sidebar__tool {
+  width: 30px;
+  height: 30px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: #6c757d;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.95rem;
+  flex-shrink: 0;
+}
+.cmg-sidebar__tool:hover { background: #f0f4f8; color: var(--cmg-primary, #0d6efd); }
+.cmg-sidebar__tool.active { background: rgba(13, 110, 253, 0.15); color: var(--cmg-primary, #0d6efd); }
+
+.cmg-sidebar__lista {
+  list-style: none;
+  margin: 0;
+  padding: 0.35rem 0.4rem 1rem;
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  scrollbar-width: thin;
+}
+.cmg-sidebar__vacio { padding: 0.5rem 0.75rem; }
+
+.cmg-sidebar__modulo {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  width: 100%;
+  padding: 0.42rem 0.6rem;
+  font-size: 0.85rem;
+  color: #495057;
+  background: transparent;
+  border: 0;
+  border-radius: 6px;
+  text-align: left;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+.cmg-sidebar__modulo:hover { background: #f0f4f8; color: var(--cmg-primary, #0d6efd); }
+.cmg-sidebar__modulo.activo { color: var(--cmg-primary, #0d6efd); font-weight: 600; }
+.cmg-sidebar__icono { width: 1.1rem; text-align: center; flex-shrink: 0; }
+.cmg-sidebar__texto { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.cmg-sidebar__chevron { font-size: 0.7rem; opacity: 0.7; transition: transform 0.15s; flex-shrink: 0; }
+.cmg-sidebar__item.abierto > .cmg-sidebar__modulo .cmg-sidebar__chevron { transform: rotate(180deg); }
+
+.cmg-sidebar__sub {
+  display: none;
+  list-style: none;
+  margin: 0;
+  padding: 0.1rem 0 0.35rem;
+}
+.cmg-sidebar__item.abierto > .cmg-sidebar__sub { display: block; }
+.cmg-sidebar__sub-titulo { display: none; }
+.cmg-sidebar__link {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.3rem 0.6rem 0.3rem 2.2rem;
+  font-size: 0.8rem;
+  color: #6c757d;
+  text-decoration: none;
+  border-radius: 6px;
+  white-space: nowrap;
+}
+.cmg-sidebar__link span { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.cmg-sidebar__link:hover { background: #f0f4f8; color: var(--cmg-primary, #0d6efd); }
+.cmg-sidebar__link.activo {
+  background: rgba(13, 110, 253, 0.1);
+  color: var(--cmg-primary, #0d6efd);
+  font-weight: 600;
+}
+
+/* Reordenar: asa visible y cursor de arrastre */
+.cmg-sidebar__grip { display: none; cursor: grab; opacity: 0.6; font-size: 0.85rem; }
+.cmg-sidebar--reordenando .cmg-sidebar__grip { display: inline-flex; }
+.cmg-sidebar--reordenando .cmg-sidebar__item { cursor: grab; }
+.cmg-sidebar__item--arrastrando { opacity: 0.4; }
+
+/* Contraído: solo íconos; los submódulos salen flotando a la derecha */
+.cmg-sidebar-colapsado .cmg-sidebar__tools { flex-direction: column; }
+.cmg-sidebar-colapsado .cmg-sidebar__tools .ms-auto { margin-left: 0 !important; }
+.cmg-sidebar-colapsado .cmg-sidebar__solo-expandido { display: none !important; }
+.cmg-sidebar-colapsado .cmg-sidebar__icono-colapsar { transform: rotate(180deg); }
+.cmg-sidebar-colapsado .cmg-sidebar__texto,
+.cmg-sidebar-colapsado .cmg-sidebar__chevron,
+.cmg-sidebar-colapsado .cmg-sidebar__grip { display: none; }
+.cmg-sidebar-colapsado .cmg-sidebar__modulo { justify-content: center; padding: 0.5rem 0; }
+.cmg-sidebar-colapsado .cmg-sidebar__icono { font-size: 1.05rem; }
+.cmg-sidebar-colapsado .cmg-sidebar__item.abierto > .cmg-sidebar__sub,
+.cmg-sidebar-colapsado .cmg-sidebar__sub { display: none; }
+body.cmg-sidebar-colapsado .cmg-sidebar__item > .cmg-sidebar__sub.cmg-flyout-visible {
+  display: block;
+  position: fixed;
+  min-width: 230px;
+  max-width: 320px;
+  max-height: 70vh;
+  overflow-y: auto;
+  background: #fff;
+  border: 1px solid #dee2e6;
+  border-radius: 6px;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+  padding: 0.25rem;
+  z-index: 5065;
+}
+.cmg-sidebar-colapsado .cmg-flyout-visible .cmg-sidebar__sub-titulo {
+  display: block;
+  padding: 0.35rem 0.6rem 0.3rem;
+  font-size: 0.72rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  color: #6c757d;
+  border-bottom: 1px solid #eef0f2;
+  margin-bottom: 0.2rem;
+}
+.cmg-sidebar-colapsado .cmg-flyout-visible .cmg-sidebar__link { padding-left: 0.6rem; }
+@media print {
+  .cmg-sidebar { display: none !important; }
+  body.cmg-menu-vertical .cmg-main-content { margin-left: 0 !important; }
+}
+
 /* ---------------------------------------------------------------
    Prevenir zoom automático en iOS/Android al enfocar inputs.
    El navegador hace zoom cuando font-size < 16px. Forzamos 16px

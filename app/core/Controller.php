@@ -34,6 +34,8 @@ abstract class Controller
         $empresas = [];
         $menuModulos = [];
         $idEmpresaFavorita = null;
+        $tipoMenu = 'horizontal';
+        $sidebarColapsado = false;
         if (isset($_SESSION['id_usuario'])) {
             $idUsuario = (int) $_SESSION['id_usuario'];
             $nivelUsuario = (int) ($_SESSION['nivel'] ?? 1);
@@ -91,7 +93,19 @@ abstract class Controller
                         $idEmpresa,
                         $nivel
                     );
-                    $menuModulos = $this->aplicarOrdenPersonalizadoMenu($menuModulos, (int) $_SESSION['id_usuario'], $idEmpresa);
+                    // Personalización del menú: es del USUARIO, igual en todas sus empresas
+                    // (UsuarioPreferenciaService::obtenerMenuUsuario).
+                    $menuUsuario = $this->leerMenuUsuario((int) $_SESSION['id_usuario']);
+                    // Orden: si aún no lo guardó con el esquema por usuario, se respeta
+                    // el que tenía antes en esta empresa (__orden_menu__ de 'navbar').
+                    $orden = array_key_exists('orden', $menuUsuario)
+                        ? $menuUsuario['orden']
+                        : $this->leerOrdenMenuEmpresa((int) $_SESSION['id_usuario'], $idEmpresa);
+                    $menuModulos = $this->aplicarOrdenPersonalizadoMenu($menuModulos, $orden);
+                    if (($menuUsuario['tipo'] ?? '') === 'vertical') {
+                        $tipoMenu = 'vertical';
+                    }
+                    $sidebarColapsado = !empty($menuUsuario['colapsado']);
                 } catch (\Throwable $e) {
                     $menuModulos = [];
                 }
@@ -103,7 +117,38 @@ abstract class Controller
             'app_name' => $this->config['name'] ?? 'CaMaGaRe',
             'menuModulos' => $menuModulos,
             'idEmpresaFavorita' => $idEmpresaFavorita,
+            'tipoMenu' => $tipoMenu,
+            'sidebarColapsado' => $sidebarColapsado,
         ];
+    }
+
+    /** Personalización del menú del usuario (tipo, orden, sidebar contraído). */
+    private function leerMenuUsuario(int $idUsuario): array
+    {
+        try {
+            $service = new \App\Services\UsuarioPreferenciaService(new \App\repositories\UsuarioPreferenciaRepository());
+            return $service->obtenerMenuUsuario($idUsuario);
+        } catch (\Throwable $e) {
+            return [];
+        }
+    }
+
+    /**
+     * Orden del menú guardado antes por empresa (`__vista__.__orden_menu__` del
+     * módulo 'navbar'). Solo se usa mientras el usuario no tenga su orden propio.
+     */
+    private function leerOrdenMenuEmpresa(int $idUsuario, int $idEmpresa): array
+    {
+        if ($idUsuario <= 0 || $idEmpresa <= 0) {
+            return [];
+        }
+        try {
+            $repo = new \App\repositories\UsuarioPreferenciaRepository();
+            $orden = $repo->obtenerPreferencias($idUsuario, $idEmpresa, 'navbar')['__vista__']['__orden_menu__'] ?? [];
+            return is_array($orden) ? $orden : [];
+        } catch (\Throwable $e) {
+            return [];
+        }
     }
 
     /**
@@ -112,21 +157,9 @@ abstract class Controller
      * Los módulos que aún no estén en la preferencia (nuevos, recién
      * asignados) se agregan al final en su orden original.
      */
-    private function aplicarOrdenPersonalizadoMenu(array $menuModulos, int $idUsuario, int $idEmpresa): array
+    private function aplicarOrdenPersonalizadoMenu(array $menuModulos, $orden): array
     {
-        if (empty($menuModulos) || $idUsuario <= 0 || $idEmpresa <= 0) {
-            return $menuModulos;
-        }
-
-        try {
-            $repo = new \App\repositories\UsuarioPreferenciaRepository();
-            $prefs = $repo->obtenerPreferencias($idUsuario, $idEmpresa, 'navbar');
-            $orden = $prefs['__vista__']['__orden_menu__'] ?? [];
-        } catch (\Throwable $e) {
-            return $menuModulos;
-        }
-
-        if (!is_array($orden) || empty($orden)) {
+        if (empty($menuModulos) || !is_array($orden) || empty($orden)) {
             return $menuModulos;
         }
 
