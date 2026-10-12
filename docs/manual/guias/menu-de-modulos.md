@@ -5,7 +5,7 @@ categoria: Primeros pasos
 tipo: guia
 visibilidad: todos
 etiquetas: menu, menú lateral, menu vertical, sidebar, barra lateral, menu horizontal, barra de modulos, cambiar menu, menu a la izquierda, contraer menu, ocultar menu, solo iconos, reordenar modulos, ordenar menu, arrastrar modulos, restablecer orden
-version: 1.0
+version: 1.1
 orden: 37
 estado: activo
 ---
@@ -21,7 +21,10 @@ prefiere; la elección no afecta a nadie más.
   azul. Al pasar el mouse sobre un módulo se despliegan sus submódulos.
 - **Lateral**: los módulos van en una columna a la izquierda. Al hacer clic en un
   módulo se abren sus submódulos debajo de él (uno a la vez), y el submódulo de
-  la pantalla en la que está queda resaltado.
+  la pantalla en la que está queda resaltado. Si los módulos no caben en el
+  alto de la pantalla, se desplazan con la rueda del mouse o el touchpad; no se
+  muestra barra de desplazamiento, y una sombra suave arriba o abajo indica que
+  hay más módulos en esa dirección.
 
 En los dos casos se ven exactamente los mismos módulos y submódulos: los que el
 usuario tiene asignados en la empresa activa. La barra azul (empresa, buscador,
@@ -77,3 +80,5 @@ en el menú que se abre con el botón **☰** de la barra azul, como siempre.
   orden personalizado que la barra horizontal. El botón **Reordenar** de la
   barra horizontal pasa al extremo izquierdo. Tipo de menú, orden y menú
   contraído se guardan por usuario (iguales en todas sus empresas).
+- **1.1** — Menú lateral sin barra de desplazamiento visible; una sombra
+  arriba/abajo avisa cuando hay más módulos fuera de la vista.

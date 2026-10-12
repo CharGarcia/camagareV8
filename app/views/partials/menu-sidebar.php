@@ -60,6 +60,8 @@ foreach ($menuModulos as $mod) {
         </button>
     </div>
 
+    <?php // El cuerpo no hace scroll: dibuja el degradado de «hay más» arriba/abajo sobre la lista. ?>
+    <div class="cmg-sidebar__cuerpo" id="cmg-sidebar-cuerpo">
     <ul class="cmg-sidebar__lista" id="cmg-sidebar-lista">
         <?php if (empty($menuModulos)): ?>
         <li class="cmg-sidebar__vacio text-muted small">Sin módulos asignados</li>
@@ -97,6 +99,7 @@ foreach ($menuModulos as $mod) {
         </li>
         <?php endforeach; ?>
     </ul>
+    </div>
 </aside>
 
 <script>
@@ -178,6 +181,34 @@ foreach ($menuModulos as $mod) {
         });
     });
     lista.addEventListener('scroll', ocultarFlyouts);
+
+    /* ── Degradado de «hay más» (la lista no muestra barra de scroll) ──
+       Arriba si ya se bajó algo; abajo si quedan módulos fuera de la vista.
+       Se recalcula al hacer scroll, al cambiar el tamaño (ventana, contraer)
+       y al abrir/cerrar o reordenar módulos, sin engancharse a cada botón. */
+    var cuerpo = document.getElementById('cmg-sidebar-cuerpo');
+    function actualizarSombras() {
+        if (!cuerpo) return;
+        var arriba = lista.scrollTop > 2;
+        var abajo = lista.scrollTop + lista.clientHeight < lista.scrollHeight - 2;
+        cuerpo.classList.toggle('cmg-sidebar__cuerpo--mas-arriba', arriba);
+        cuerpo.classList.toggle('cmg-sidebar__cuerpo--mas-abajo', abajo);
+    }
+    var sombraPendiente = false;
+    function programarSombras() {
+        if (sombraPendiente) return;
+        sombraPendiente = true;
+        requestAnimationFrame(function() { sombraPendiente = false; actualizarSombras(); });
+    }
+    lista.addEventListener('scroll', programarSombras, { passive: true });
+    if (window.ResizeObserver) new ResizeObserver(programarSombras).observe(lista);
+    if (window.MutationObserver) {
+        new MutationObserver(programarSombras).observe(lista, {
+            subtree: true, childList: true, attributes: true, attributeFilter: ['class']
+        });
+    }
+    window.addEventListener('resize', programarSombras);
+    actualizarSombras();
 
     /* ── Reordenar (mismo orden del usuario que la barra horizontal) ── */
     var btnReordenar = document.getElementById('cmg-sidebar-reordenar');

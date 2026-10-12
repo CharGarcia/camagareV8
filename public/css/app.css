@@ -549,6 +549,40 @@ body.cmg-menu-vertical.cmg-sidebar-colapsado { --cmg-sidebar-w: 56px; }
 .cmg-sidebar__tool:hover { background: #f0f4f8; color: var(--cmg-primary, #0d6efd); }
 .cmg-sidebar__tool.active { background: rgba(13, 110, 253, 0.15); color: var(--cmg-primary, #0d6efd); }
 
+/* Cuerpo fijo: la lista hace scroll dentro, y el degradado (::before arriba,
+   ::after abajo) aparece solo cuando hay módulos fuera de la vista
+   (clases --mas-arriba / --mas-abajo, ver menu-sidebar.php). */
+.cmg-sidebar__cuerpo {
+  position: relative;
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+.cmg-sidebar__cuerpo::before,
+.cmg-sidebar__cuerpo::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 28px;
+  pointer-events: none; /* no tapa los clics de los módulos */
+  opacity: 0;
+  transition: opacity 0.15s ease;
+  z-index: 1;
+}
+.cmg-sidebar__cuerpo::before {
+  top: 0;
+  background: linear-gradient(to bottom, #fff 15%, rgba(255, 255, 255, 0));
+}
+.cmg-sidebar__cuerpo::after {
+  bottom: 0;
+  background: linear-gradient(to top, #fff 15%, rgba(255, 255, 255, 0));
+}
+.cmg-sidebar__cuerpo--mas-arriba::before,
+.cmg-sidebar__cuerpo--mas-abajo::after { opacity: 1; }
+
+/* Scroll con rueda/touchpad, sin barra visible (igual que la barra horizontal). */
 .cmg-sidebar__lista {
   list-style: none;
   margin: 0;
@@ -557,8 +591,11 @@ body.cmg-menu-vertical.cmg-sidebar-colapsado { --cmg-sidebar-w: 56px; }
   min-height: 0;
   overflow-y: auto;
   overflow-x: hidden;
-  scrollbar-width: thin;
+  scrollbar-width: none;      /* Firefox */
+  -ms-overflow-style: none;   /* Edge antiguo */
+  overscroll-behavior: contain; /* al llegar al final no desplaza la página */
 }
+.cmg-sidebar__lista::-webkit-scrollbar { display: none; } /* Chrome, Edge, Safari */
 .cmg-sidebar__vacio { padding: 0.5rem 0.75rem; }
 
 .cmg-sidebar__modulo {
