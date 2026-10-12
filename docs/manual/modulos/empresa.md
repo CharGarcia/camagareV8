@@ -6,7 +6,7 @@ ruta_modulo: modulos/empresa
 tipo: modulo
 visibilidad: admin
 etiquetas: empresa, datos de la empresa, ruc, suscripcion, suscripcion vencida, vigencia, vencimiento, pago pendiente, aviso de pago, renovacion, mensualidad, cuota del sistema, establecimiento, punto de emision, logo, logo por punto de emision, logo de la caja, logo por sucursal, otra marca, quitar logo, ambiente, pruebas, produccion, configuracion, correo, email, smtp, envio de correos, cuerpo del correo, asunto, plantilla de correo, remitente, documentos legales, acuerdo de uso de datos, contrato de uso del sistema, aceptacion de documentos, documentos firmados, documentos cargados, archivos de la empresa, secuenciales, numeracion, tipos de documento, codDoc, eliminar secuencial, crear secuenciales, agregar todos los faltantes, facturas de reembolso, punto unico por empresa, punto inactivo, eliminar punto de emision con documentos, puntos duplicados, secuencial inicial, numero inicial, hueco, huecos, rellenar hueco, salto de numeracion, siguiente numero, retomar numeracion, presentacion de los items, agrupar items, agrupar por nombre, agrupar por lote, agrupar por nup, agrupar por serie, juntar lineas repetidas, sumar items iguales, mostrar lote en la factura, mostrar caducidad, mostrar unidad de medida, mostrar nup, descripcion del item, tirilla, ticket, impresion termica, modo de numeracion, numeracion por fecha, secuencial por fecha, reiniciar numeracion, reinicio anual, reinicio mensual, numeracion anual, numeracion mensual, correlativo por año, correlativo por mes, empezar de cero cada año, prefijo del año, numero con el año, volver a empezar la numeracion
-version: 1.39
+version: 1.40
 orden: 5
 estado: activo
 ---
@@ -15,6 +15,11 @@ El módulo de **Empresa** guarda los datos de la compañía y la configuración 
 condiciona el comportamiento del resto del sistema. Es lo primero que se
 configura y lo que hay que revisar cuando algo se comporta distinto de lo
 esperado en varios módulos a la vez.
+
+La configuración está repartida en pestañas. Si no caben todas a lo ancho (pantalla
+angosta o menú lateral abierto), aparecen flechas **‹ ›** a los lados de la barra de
+pestañas: pulse una flecha o gire la rueda del mouse sobre las pestañas para ver las
+demás. La pestaña en la que está siempre queda a la vista.
 
 ## Datos generales
 
@@ -460,6 +465,9 @@ de taxis.
 
 ## Historial de cambios
 
+- **1.40** — Si las pestañas no caben a lo ancho, se muestran flechas ‹ › y se pueden
+  deslizar con la rueda del mouse (antes las últimas quedaban ocultas sin aviso, sobre todo
+  con el menú lateral).
 - **1.39** — Los avisos de éxito vuelven a ser el mensaje rápido de la esquina superior derecha
   (igual que Empresas del sistema); cuando la acción recarga la página, lo hace al irse el aviso.
 - **1.38** — Los avisos de éxito (guardar, eliminar, enviar) pasan de un aviso pequeño en la

@@ -81,6 +81,8 @@
 <!-- Tiempo máximo de espera de un envío al SRI: la cuenta regresiva de CMG_sriEsperando() (app.js) usa el mismo valor que el servidor. -->
 <script>window.CMG_SRI_TIEMPO_MAX = <?= (int) \App\Services\Sri\SriEnvioService::TIEMPO_MAXIMO_SEGUNDOS ?>;</script>
 <script src="<?= rtrim(BASE_URL ?? '', '/') ?>/js/app.js?v=<?= asset_ver('/js/app.js') ?>"></script>
+<!-- Pestañas que no caben a lo ancho: flechas ‹ › y rueda del mouse (solo las marcadas con data-cmg-tabs-deslizables). -->
+<script src="<?= rtrim(BASE_URL ?? '', '/') ?>/js/tabs-deslizables.js?v=<?= asset_ver('/js/tabs-deslizables.js') ?>"></script>
 <!-- Anterior / Siguiente en los modales abiertos desde una fila de listado (automático). -->
 <script src="<?= rtrim(BASE_URL ?? '', '/') ?>/js/modal-nav.js?v=<?= asset_ver('/js/modal-nav.js') ?>"></script>
 <!-- favoritos.js ahora se carga en <head> (ver head.php) para que CMG_initSort esté

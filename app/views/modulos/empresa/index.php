@@ -25,7 +25,7 @@ $warnIcon = '<i class="bi bi-exclamation-circle-fill text-warning ms-1" title="C
 
     <div class="card shadow-sm border-0 rounded-3">
         <div class="d-flex align-items-center bg-light px-3 pt-2 rounded-top border-bottom">
-            <ul class="nav nav-tabs border-bottom-0 flex-nowrap overflow-x-auto tab-pestaña pb-1" style="scrollbar-width: none;" id="empresaTabs" role="tablist">
+            <ul class="nav nav-tabs border-bottom-0 flex-nowrap tab-pestaña pb-1" id="empresaTabs" role="tablist" data-cmg-tabs-deslizables>
                 <li class="nav-item" role="presentation">
                     <button class="nav-link active px-2 py-1 small text-nowrap" style="font-size: 0.75rem;" id="general-tab" data-bs-toggle="tab" data-bs-target="#general" type="button" role="tab">
                         Información General <?= $warnGeneral ? $warnIcon : '' ?>
