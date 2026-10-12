@@ -354,7 +354,7 @@ $urlManual = $base . '/documentacion' . ($rutaActualAyuda !== '' ? '?ruta=' . ur
         </style>
         <div class="d-flex align-items-center order-3 order-lg-2 cmg-mobile-row-2">
             <div class="cmg-nav-search-wrap d-flex align-items-center flex-grow-1 flex-lg-grow-0 position-relative" id="cmg-nav-search-wrap">
-                <input type="text" id="cmg-nav-search" class="form-control cmg-nav-search-input shadow-none w-100" placeholder='Presione "/" para buscar' autocomplete="off">
+                <input type="text" id="cmg-nav-search" class="form-control cmg-nav-search-input shadow-none w-100" placeholder='Presione "/" para buscar un módulo' title="Buscar un módulo del menú (atajo: tecla /)" aria-label="Buscar un módulo" autocomplete="off">
                 <i class="bi bi-search cmg-nav-search-icon d-none d-lg-block position-absolute" style="right: 10px;"></i>
                 <div id="cmg-nav-search-results" class="cmg-nav-search-results" style="top: 100%; right: 0; left: 0;"></div>
             </div>
@@ -1612,7 +1612,7 @@ $urlManual = $base . '/documentacion' . ($rutaActualAyuda !== '' ? '?ruta=' . ur
         const searchInput = document.getElementById('cmg-nav-search');
         const searchResults = document.getElementById('cmg-nav-search-results');
         const portal = document.getElementById('cmg-dropdown-portal');
-        const modulos = <?= json_encode($flatModulos) ?>;
+        const modulos = <?= json_encode($flatModulos, JSON_UNESCAPED_UNICODE | JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT) ?>;
 
         if (searchInput && searchResults && portal) {
             const updatePosition = () => {
@@ -1636,6 +1636,10 @@ $urlManual = $base . '/documentacion' . ($rutaActualAyuda !== '' ? '?ruta=' . ur
             const normalize = (str) => {
                 return str.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
             };
+            // Los nombres vienen de la BD: se escapan antes de armar el HTML de los resultados.
+            const escHtml = (s) => String(s ?? '').replace(/[&<>"']/g, c => (
+                { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]
+            ));
 
             searchInput.addEventListener('input', function() {
                 const queryStr = this.value.trim();
@@ -1660,13 +1664,13 @@ $urlManual = $base . '/documentacion' . ($rutaActualAyuda !== '' ? '?ruta=' . ur
                     searchResults.innerHTML = '<div class="p-3 text-center text-muted small bg-white" style="background:#fff !important; opacity:1 !important;">No se encontraron resultados</div>';
                 } else {
                     searchResults.innerHTML = filtered.map(m => `
-                    <a href="${m.url}" class="cmg-search-result-item bg-white" style="background:#fff !important; opacity:1 !important;">
+                    <a href="${escHtml(m.url)}" class="cmg-search-result-item bg-white" style="background:#fff !important; opacity:1 !important;">
                         <div class="cmg-search-result-icon">
-                            <i class="${m.icon}"></i>
+                            <i class="${escHtml(m.icon)}"></i>
                         </div>
                         <div class="cmg-search-result-content">
-                            <span class="cmg-search-result-title">${m.title}</span>
-                            <span class="cmg-search-result-path">${m.path}</span>
+                            <span class="cmg-search-result-title">${escHtml(m.title)}</span>
+                            <span class="cmg-search-result-path">${escHtml(m.path)}</span>
                         </div>
                     </a>
                 `).join('');

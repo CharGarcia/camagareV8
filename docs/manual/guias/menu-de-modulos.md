@@ -4,8 +4,8 @@ resumen: Cómo elegir entre la barra de módulos de arriba y el menú lateral (s
 categoria: Primeros pasos
 tipo: guia
 visibilidad: todos
-etiquetas: menu, menú lateral, menu vertical, sidebar, barra lateral, menu horizontal, barra de modulos, cambiar menu, menu a la izquierda, contraer menu, ocultar menu, solo iconos, reordenar modulos, ordenar menu, arrastrar modulos, restablecer orden
-version: 1.1
+etiquetas: menu, menú lateral, menu vertical, sidebar, barra lateral, menu horizontal, barra de modulos, cambiar menu, menu a la izquierda, contraer menu, ocultar menu, solo iconos, reordenar modulos, ordenar menu, arrastrar modulos, restablecer orden, buscar modulo, buscador de modulos, encontrar modulo, tecla barra, atajo
+version: 1.2
 orden: 37
 estado: activo
 ---
@@ -69,6 +69,21 @@ Funciona igual en los dos menús, y el orden es el mismo para ambos:
    circular), que aparece mientras reordena.
 4. Haga clic otra vez en **Reordenar** para terminar.
 
+## Buscar un módulo por su nombre
+
+En la barra azul hay un campo que dice **Presione "/" para buscar un módulo**.
+Sirve con cualquiera de los dos menús:
+
+1. Haga clic en el campo, o presione la tecla **/** desde cualquier pantalla
+   (no funciona mientras escribe en otro campo o con una ventana abierta).
+2. Escriba parte del nombre: no importan mayúsculas ni tildes, y puede escribir
+   varias palabras en cualquier orden (por ejemplo, «venta fact» encuentra
+   *Facturas de Venta*). Cada resultado muestra debajo el módulo al que pertenece.
+3. Elija con el mouse, o con las flechas **↑ ↓** y **Enter**. Si presiona Enter
+   sin haber elegido uno, se abre el primero de la lista. **Esc** cierra la lista.
+
+Solo aparecen los submódulos que usted tiene asignados en la empresa activa.
+
 ## En el celular
 
 En pantallas pequeñas no se muestra ninguna de las dos barras: los módulos están
@@ -82,3 +97,5 @@ en el menú que se abre con el botón **☰** de la barra azul, como siempre.
   contraído se guardan por usuario (iguales en todas sus empresas).
 - **1.1** — Menú lateral sin barra de desplazamiento visible; una sombra
   arriba/abajo avisa cuando hay más módulos fuera de la vista.
+- **1.2** — Se documenta el buscador de módulos de la barra azul, cuyo texto pasa
+  a decir «Presione "/" para buscar un módulo».
