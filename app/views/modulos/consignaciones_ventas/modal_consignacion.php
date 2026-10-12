@@ -125,7 +125,7 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosPestanasOcultas($vistaConfigC
                                 <button type="button" class="btn btn-sm btn-outline-info px-2" onclick="llamarPedido()" title="Cargar desde Pedido">
                                     <i class="bi bi-cart"></i>
                                 </button>
-                                <?php if (AppHelpersPermisos::puedeCrear('modulos/vendedores')): ?>
+                                <?php if (\App\Helpers\Permisos::puedeCrear('modulos/vendedores')): ?>
                                 <button type="button" class="btn btn-sm btn-outline-secondary px-2" onclick="crearVendedorRapido()" title="Nuevo Vendedor">
                                     <i class="bi bi-person-plus"></i>
                                 </button>

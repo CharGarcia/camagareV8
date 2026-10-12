@@ -245,7 +245,7 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
 <?php
 // Modal compartido de vendedores para el botón «Nuevo Vendedor» de la consignación
 // (crear al vuelo, CLAUDE.md §9). Va fuera del modal de la consignación; trae su JS.
-if (AppHelpersPermisos::puedeCrear('modulos/vendedores')) {
+if (\App\Helpers\Permisos::puedeCrear('modulos/vendedores')) {
     include_once dirname(__DIR__) . '/vendedores/modal_vendedor.php';
 }
 ?>
