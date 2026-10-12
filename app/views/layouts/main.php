@@ -16,6 +16,22 @@
         </div>
         <?php endif; ?>
     </header>
+    <script>
+        // Alto real del header, medido apenas se dibuja y ANTES de pintar el resto: así el
+        // sidebar y el contenido aparecen desde el inicio en su lugar, sin el salto de
+        // esperar al final de la carga (el 80px de app.css es solo el respaldo). Se vuelve
+        // a medir si el header cambia de alto (letra web que termina de cargar, navbar en
+        // dos filas, etc.); scripts.php sigue midiendo también al cargar y al redimensionar.
+        (function () {
+            var h = document.querySelector('.cmg-sticky-header');
+            if (!h) return;
+            var medir = function () {
+                document.documentElement.style.setProperty('--cmg-sticky-h', h.offsetHeight + 'px');
+            };
+            medir();
+            if (window.ResizeObserver) new ResizeObserver(medir).observe(h);
+        })();
+    </script>
     <?php if ($menuVertical): ?>
         <?php require MVC_APP . '/views/partials/menu-sidebar.php'; ?>
     <?php endif; ?>
