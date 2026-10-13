@@ -65,6 +65,10 @@ class CargasInventarioController extends BaseModuloController
         $ordenDir = \App\Helpers\OrdenListado::primeraDir($orden);
         $perPage  = self::PER_PAGE;
 
+        // Cargas que quedaron trabadas (pendientes sin enlace ni aviso): se les genera el enlace
+        // y se avisa a los aprobadores una sola vez.
+        $this->service->rescatarPendientesSinEnlace($idEmpresa);
+
         $res = $this->service->getListado($idEmpresa, $buscar, $page, $perPage, $ordenCol, $ordenDir, $this->idUsuarioFiltro(), $orden);
         $total = $res['total'];
 
@@ -89,6 +93,7 @@ class CargasInventarioController extends BaseModuloController
             'esSuperAdmin' => $nivel >= 3,
             'idUsuarioActual' => $idUsuario,
             'aprobadoresNombres' => $this->service->getAprobadoresNombres($idEmpresa),
+            'sinAprobadores' => $this->service->sinAprobadores($idEmpresa),
             'rutaModulo'  => self::RUTA_MODULO,
             'fullWidth'   => true,
             // Selects del modal de filtros: solo usuarios y bodegas que aparecen en las cargas.
@@ -399,6 +404,28 @@ class CargasInventarioController extends BaseModuloController
             $id = (int) ($_POST['id'] ?? 0);
             $res = $this->service->aprobar($id, $idEmpresa, $idUsuario, false, $nivel);
             echo json_encode(['ok' => true, 'data' => $res, 'mensaje' => 'Carga aprobada y aplicada al inventario.']);
+        } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
+            echo json_encode(['ok' => false, 'mensaje' => $e->getMessage()]);
+        }
+    }
+
+    /** Guarda la observación general de la carga (desde el modal de la carga). */
+    public function guardarObservacionAjax(): void
+    {
+        $this->requireActualizar();
+        header('Content-Type: application/json');
+
+        $idEmpresa = (int) ($_SESSION['id_empresa'] ?? 0);
+        $idUsuario = (int) ($_SESSION['id_usuario'] ?? 0);
+        $id = (int) ($_POST['id'] ?? 0);
+
+        // Sin acceso total solo se modifican las cargas propias, igual que en el listado.
+        $this->requireRegistroPropio($this->service->getCabecera($id, $idEmpresa));
+
+        try {
+            $res = $this->service->actualizarObservacion($id, $idEmpresa, $idUsuario, (string) ($_POST['observacion'] ?? ''));
+            echo json_encode(['ok' => true, 'data' => $res, 'mensaje' => 'Observación guardada.']);
         } catch (\Throwable $e) {
             \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             echo json_encode(['ok' => false, 'mensaje' => $e->getMessage()]);

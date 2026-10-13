@@ -350,7 +350,8 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosColumnasOcultas($vistaConfig)
                     <?php endif; ?>
                 </div>
                 <div class="d-flex gap-2">
-                    <?php if (!empty($esAprobador)): ?>
+                    <?php // Aprobar/rechazar: aprobador (o cualquiera sin aprobadores configurados) con permiso de actualizar. ?>
+                    <?php if (!empty($esAprobador) && !empty($perm['actualizar'])): ?>
                         <button type="button" id="ci-btn-rechazar" class="btn btn-outline-danger btn-sm d-none" onclick="CI_rechazar()"><i class="bi bi-x-circle me-1"></i>Rechazar</button>
                         <button type="button" id="ci-btn-aprobar" class="btn btn-success btn-sm d-none" onclick="CI_aprobar()"><i class="bi bi-check-circle me-1"></i>Aprobar</button>
                     <?php endif; ?>
@@ -363,9 +364,12 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosColumnasOcultas($vistaConfig)
 
 <script>
 const CI_URL = '<?= $urlBase ?>';
-const CI_ES_APROBADOR  = <?= !empty($esAprobador) ? 'true' : 'false' ?>;
+const CI_ES_APROBADOR  = <?= !empty($esAprobador) && !empty($perm['actualizar']) ? 'true' : 'false' ?>;
+// Sin aprobadores configurados en el módulo Aprobaciones, quien subió la carga también la aprueba.
+const CI_SIN_APROBADORES = <?= !empty($sinAprobadores) ? 'true' : 'false' ?>;
 const CI_ES_SUPERADMIN = <?= !empty($esSuperAdmin) ? 'true' : 'false' ?>;
 const CI_PUEDE_CREAR   = <?= !empty($perm['crear']) ? 'true' : 'false' ?>;
+const CI_PUEDE_ACTUALIZAR = <?= !empty($perm['actualizar']) ? 'true' : 'false' ?>;
 const CI_ID_USUARIO    = <?= (int) ($idUsuarioActual ?? 0) ?>;
 const CI_APROBADORES   = <?= json_encode(array_values($aprobadoresNombres ?? []), JSON_UNESCAPED_UNICODE) ?>;
 const CI_PER_PAGE      = <?= $perPage ?>;
@@ -533,6 +537,21 @@ function CI_resultadoImportacion(d) {
         return { ...botones, icon: 'success', title: `Carga #${d.numero} aplicada al inventario`, text: `${registradas} y el stock ya se actualizó.` };
     }
     const quien = CI_APROBADORES.length ? ` por ${CI_APROBADORES.join(', ')}` : '';
+    // Debía aplicarse sola pero no se pudo (p. ej. una salida sin stock suficiente): queda pendiente.
+    if (d.error_aplicacion) {
+        return {
+            ...botones,
+            icon: 'warning',
+            title: `Carga #${d.numero} registrada, pero no se aplicó al inventario`,
+            width: 640,
+            html: `<div class="text-start small">
+                <p class="mb-2">${registradas}, pero el stock no se actualizó:</p>
+                <p class="mb-2 text-danger">${CI_esc(d.error_aplicacion)}</p>
+                <p class="mb-0 text-muted">La carga quedó <b>pendiente</b>. Corrija la causa y apruébela${quien ? ` (o pídaselo a ${CI_esc(CI_APROBADORES.join(', '))})` : ''},
+                    o elimínela e impórtela de nuevo.</p>
+            </div>`,
+        };
+    }
     return {
         ...botones,
         icon: 'success',
@@ -575,9 +594,10 @@ async function CI_verDetalle(id) {
     const validada = CI_bool(c.validada);
     const detalle  = c.detalle || [];
     const conError = detalle.filter(d => !CI_bool(d.linea_valida)).length;
-    // Segregación de funciones: quien registró la carga no la aprueba (salvo super admin).
+    // Segregación de funciones: quien registró la carga no la aprueba (salvo super admin o
+    // que la empresa no tenga aprobadores configurados).
     const esCreador    = String(c.created_by) === String(CI_ID_USUARIO);
-    const puedeAprobar = c.estado === 'pendiente' && CI_ES_APROBADOR && (CI_ES_SUPERADMIN || !esCreador);
+    const puedeAprobar = c.estado === 'pendiente' && CI_ES_APROBADOR && (CI_ES_SUPERADMIN || CI_SIN_APROBADORES || !esCreador);
 
     // Ajuste (conteo físico): la cantidad es lo contado. Aprobado, se muestran el saldo que
     // tenía el sistema y la diferencia registrada; pendiente, una estimación con el saldo de
@@ -623,7 +643,9 @@ async function CI_verDetalle(id) {
         `<div class="${col}"><div class="text-muted" style="font-size:.65rem;">${etiqueta}</div><div class="${claseValor}">${valor}</div></div>`;
     const estadoTxt = { pendiente: 'Pendiente', aprobada: 'Aprobada', rechazada: 'Rechazada', anulada: 'Anulada' }[c.estado] || CI_esc(c.estado);
     const anuladaPor = [c.anulado_por_nombre, CI_fechaHora(c.anulada_at)].filter(Boolean).join(' · ');
-    const aprobadores = CI_APROBADORES.length ? CI_esc(CI_APROBADORES.join(', ')) : 'un usuario autorizado (configúrelos en el módulo Aprobaciones)';
+    const aprobadores = CI_APROBADORES.length ? CI_esc(CI_APROBADORES.join(', ')) : 'cualquier usuario con permiso de modificar cargas de inventario';
+    // La observación general se edita en cualquier estado salvo anulada; no toca líneas ni stock.
+    const obsEditable = CI_PUEDE_ACTUALIZAR && c.estado !== 'anulada';
 
     cuerpo.innerHTML = `
         <div class="row g-2 small mb-3 flex-shrink-0">
@@ -631,7 +653,15 @@ async function CI_verDetalle(id) {
             ${campo('Tipo', CI_esc(c.tipo_movimiento), undefined, 'fw-bold text-capitalize')}
             ${campo('Estado', estadoTxt)}
             ${campo('Comprobada', validada ? 'Sí' : 'No', undefined, `fw-bold ${validada ? 'text-success' : 'text-danger'}`)}
-            ${c.observacion ? campo('Observación', CI_esc(c.observacion), 'col-12', '') : ''}
+            ${obsEditable ? `<div class="col-12">
+                <div class="text-muted" style="font-size:.65rem;">Observación</div>
+                <div class="d-flex gap-1 align-items-start">
+                    <textarea id="ci-det-observacion" class="form-control form-control-sm" rows="2" maxlength="1000"
+                        placeholder="Sin observación" oninput="CI_obsCambio()">${CI_esc(c.observacion || '')}</textarea>
+                    <button type="button" id="ci-btn-guardar-obs" class="btn btn-sm btn-primary text-nowrap" onclick="CI_guardarObservacion()" disabled
+                        title="Guardar la observación"><i class="bi bi-floppy me-1"></i>Guardar</button>
+                </div>
+            </div>` : (c.observacion ? campo('Observación', CI_esc(c.observacion), 'col-12', '') : '')}
             ${c.motivo_rechazo ? campo('Motivo rechazo', CI_esc(c.motivo_rechazo), 'col-12', 'text-danger') : ''}
             ${c.estado === 'anulada' ? campo('Anulada por', CI_esc(anuladaPor || '-'), 'col-12', '') : ''}
             ${c.motivo_anulacion ? campo('Motivo de anulación', CI_esc(c.motivo_anulacion), 'col-12', 'text-danger') : ''}
@@ -674,7 +704,7 @@ async function CI_verDetalle(id) {
     // Pendientes y rechazadas no movieron el stock: se eliminan. Una aprobada se anula
     // (lo hace otro aprobador, no quien la registró); una anulada queda como constancia.
     if (c.estado === 'pendiente' || c.estado === 'rechazada') document.getElementById('ci-btn-eliminar')?.classList.remove('d-none');
-    if (c.estado === 'aprobada' && (CI_ES_SUPERADMIN || !esCreador)) document.getElementById('ci-btn-anular')?.classList.remove('d-none');
+    if (c.estado === 'aprobada' && (CI_ES_SUPERADMIN || CI_SIN_APROBADORES || !esCreador)) document.getElementById('ci-btn-anular')?.classList.remove('d-none');
 }
 
 /** Botones PDF / Excel del modal: descargan las líneas de la carga abierta. */
@@ -715,6 +745,45 @@ async function CI_accion(url, body, textoProceso, alTerminar = null) {
         return;
     }
     CI_aviso({ icon: 'success', titleText: json.mensaje || 'Listo' });
+}
+
+/** Habilita Guardar solo si la observación cambió respecto de la guardada. */
+function CI_obsCambio() {
+    const txt = document.getElementById('ci-det-observacion');
+    const btn = document.getElementById('ci-btn-guardar-obs');
+    if (!txt || !btn || !CI_cargaActual) return;
+    btn.disabled = txt.value.trim() === String(CI_cargaActual.observacion || '').trim();
+}
+
+/** Guarda la observación general sin cerrar el modal; el listado se refresca. */
+let CI_guardandoObs = false;
+async function CI_guardarObservacion() {
+    if (CI_guardandoObs || !CI_cargaActual) return;
+    const txt = document.getElementById('ci-det-observacion');
+    const btn = document.getElementById('ci-btn-guardar-obs');
+    if (!txt) return;
+    CI_guardandoObs = true;
+    btn.disabled = true;
+    let json;
+    try {
+        const body = new URLSearchParams({ id: CI_cargaActual.id, observacion: txt.value });
+        const res = await fetch(`${CI_URL}/guardarObservacionAjax`, { method: 'POST', body });
+        json = await res.json();
+    } catch (err) {
+        json = { ok: false, mensaje: 'No se pudo comunicar con el servidor. Intente de nuevo.' };
+    } finally {
+        CI_guardandoObs = false;
+    }
+    if (!json.ok) {
+        CI_obsCambio();
+        CI_aviso({ icon: 'error', title: 'No se pudo guardar', text: json.mensaje || json.error || 'Error al guardar la observación.' }, 'ci-modal-detalle');
+        return;
+    }
+    CI_cargaActual.observacion = json.data?.observacion || '';
+    txt.value = CI_cargaActual.observacion;
+    CI_obsCambio();
+    CI_buscar(CI_currentPage);
+    CI_aviso({ icon: 'success', titleText: json.mensaje || 'Observación guardada.', timer: 1500, showConfirmButton: false }, 'ci-modal-detalle');
 }
 
 async function CI_aprobar() {

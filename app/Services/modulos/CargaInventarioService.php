@@ -182,9 +182,23 @@ class CargaInventarioService
         );
     }
 
-    /** ¿El usuario puede aprobar cargas? (aprobador configurado o super admin). */
+    /** ¿La empresa no tiene aprobadores configurados para las cargas de inventario? */
+    public function sinAprobadores(int $idEmpresa): bool
+    {
+        return empty($this->getConfigAprobacion($idEmpresa)['aprobadores']);
+    }
+
+    /**
+     * ¿El usuario puede aprobar cargas? Aprobador configurado o super admin. Si la empresa no
+     * configuró aprobadores, cualquier usuario del módulo (con permiso de actualizar, que lo
+     * exige el controlador): de lo contrario una carga que no se aplicó sola —p. ej. una
+     * salida sin stock en ese momento— solo la podría aprobar el super admin.
+     */
     public function esAprobador(int $idUsuario, int $idEmpresa, int $nivel = 1): bool
     {
+        if ($this->sinAprobadores($idEmpresa)) {
+            return true;
+        }
         return $this->aprobacionesService()->esAprobador(
             AprobacionesService::CARGA_INVENTARIO,
             $idEmpresa,
@@ -285,13 +299,9 @@ class CargaInventarioService
         }
         $todasOk = $errores === [];
 
-        // La config se resuelve con el costo total de la carga: si el checkpoint
-        // tiene monto mínimo, las cargas por debajo no piden aprobación.
-        $costoTotal = array_sum(array_map(
-            static fn(array $ln): float => (float) $ln['cantidad'] * (float) $ln['costo_unitario'],
-            $lineas
-        ));
-        $cfg = $this->getConfigAprobacion($idEmpresa, $costoTotal);
+        // La config se resuelve con el valor de la carga: si el checkpoint tiene
+        // monto mínimo, las cargas por debajo no piden aprobación.
+        $cfg = $this->getConfigAprobacion($idEmpresa, $this->montoParaAprobacion($tipoMovimiento, $lineas, $idEmpresa));
 
         $db = Database::getConnection();
         $db->beginTransaction();
@@ -329,14 +339,25 @@ class CargaInventarioService
 
         // Auto-aprobación si no se exige aprobación y la carga está validada.
         $estadoFinal = 'pendiente';
+        $errorAuto   = null;
         if (!$cfg['requiere'] && $todasOk) {
-            $this->aprobar($idCarga, $idEmpresa, $idUsuario, true);
-            $estadoFinal = 'aprobada';
-        } else {
+            try {
+                $this->aprobar($idCarga, $idEmpresa, $idUsuario, true);
+                $estadoFinal = 'aprobada';
+            } catch (\Throwable $e) {
+                // La carga ya quedó guardada: si no se pudo aplicar (p. ej. una salida sin
+                // stock suficiente), sigue pendiente con su enlace y el aviso a los aprobadores,
+                // en vez de quedar trabada sin que nadie se entere. aprobar() ya revirtió lo suyo.
+                \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => 'aprobar_auto', 'id_carga' => $idCarga]);
+                $errorAuto = $e->getMessage();
+            }
+        }
+
+        if ($estadoFinal === 'pendiente') {
             // Queda pendiente: token para aprobar/rechazar desde el enlace del correo.
             $token = bin2hex(random_bytes(24));
             $this->repo->setToken($idCarga, $token);
-            if ($cfg['requiere'] && $cfg['notificar']) {
+            if (($cfg['requiere'] || $errorAuto !== null) && $cfg['notificar']) {
                 try { $this->notificarAprobadores($idEmpresa, $idCarga, $cfg['aprobadores'], $token, $idUsuario); } catch (\Throwable $e) {}
             }
         }
@@ -349,7 +370,77 @@ class CargaInventarioService
             'lineas'   => count($lineas),
             'errores'  => $errores,
             'requiere_aprobacion' => $cfg['requiere'],
+            // Motivo por el que no se aplicó sola, aunque la empresa no exige aprobación.
+            'error_aplicacion'    => $errorAuto,
         ];
+    }
+
+    /**
+     * Valor de la carga con el que se compara el monto mínimo del módulo Aprobaciones.
+     *
+     * Entrada: cantidad × costo del archivo. Salida: al costo promedio de la bodega, que es
+     * como sale (el archivo casi nunca trae costo; contarla en 0 la dejaba siempre bajo el
+     * mínimo y se aprobaba sola). Ajuste: la diferencia estimada con el saldo de hoy, al costo
+     * del archivo o al promedio. Las líneas con error no suman: la carga no se aplica igual.
+     */
+    private function montoParaAprobacion(string $tipoMovimiento, array $lineas, int $idEmpresa): float
+    {
+        $invRepo = $this->inventarioService()->getRepository();
+        $total = 0.0;
+        foreach ($lineas as $ln) {
+            if (!$ln['linea_valida']) continue;
+            $idProducto = (int) $ln['id_producto'];
+            $idBodega   = (int) $ln['id_bodega'];
+            $costo      = (float) $ln['costo_unitario'];
+            $cantidad   = (float) $ln['cantidad'];
+
+            if ($tipoMovimiento === 'ajuste') {
+                $saldo = $ln['numero_lote'] === null
+                    ? $invRepo->getStockActual($idProducto, $idBodega, $idEmpresa)
+                    : $invRepo->getStockLote($idProducto, $idBodega, $idEmpresa, $ln['numero_lote']);
+                $cantidad = abs($cantidad - (float) $saldo);
+            }
+            if ($tipoMovimiento === 'salida' || $costo <= 0) {
+                $costo = $invRepo->getCostoPromedio($idProducto, $idBodega, $idEmpresa);
+            }
+            $total += $cantidad * $costo;
+        }
+        return round($total, 2);
+    }
+
+    /**
+     * Rescata las cargas trabadas: pendientes y comprobadas sin enlace de aprobación, que
+     * quedaron así cuando la aprobación automática falló al importar (p. ej. una salida sin
+     * stock) antes de que ese caso dejara la carga lista para aprobar. A cada una le pone su
+     * enlace y avisa a los aprobadores, igual que hoy al importar. El UPDATE condicionado hace
+     * que se avise una sola vez aunque dos usuarios abran el módulo a la vez.
+     * Best-effort: nunca impide abrir el listado. Devuelve cuántas rescató.
+     */
+    public function rescatarPendientesSinEnlace(int $idEmpresa): int
+    {
+        try {
+            $trabadas = $this->repo->getPendientesSinEnlace($idEmpresa);
+            if ($trabadas === []) return 0;
+
+            $aprobadores = $this->getConfigAprobacion($idEmpresa)['aprobadores'];
+            $rescatadas = 0;
+            foreach ($trabadas as $c) {
+                $idCarga = (int) $c['id'];
+                $token   = bin2hex(random_bytes(24));
+                if (!$this->repo->setTokenSiFalta($idCarga, $idEmpresa, $token)) continue;
+                $rescatadas++;
+
+                $this->log->registrar(0, $idEmpresa, 'rescatar_pendiente', 'inventario_cargas', $idCarga,
+                    ['token_aprobacion' => null], ['token_aprobacion' => 'generado', 'aviso' => $aprobadores !== []]);
+                if ($aprobadores !== []) {
+                    try { $this->notificarAprobadores($idEmpresa, $idCarga, $aprobadores, $token, (int) $c['created_by']); } catch (\Throwable $e) {}
+                }
+            }
+            return $rescatadas;
+        } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
+            return 0;
+        }
     }
 
     // ─── Aprobación / rechazo ───────────────────────────────────────────────────
@@ -381,7 +472,8 @@ class CargaInventarioService
                 throw new \InvalidArgumentException('Solo se pueden aprobar cargas en estado pendiente.');
             }
             // Segregación de funciones: quien crea la carga no puede aprobarla (salvo super admin).
-            if (!$auto && $nivel < 3 && (int) ($carga['created_by'] ?? 0) === $idUsuario) {
+            // Sin aprobadores configurados no hay a quién más pedírselo: la aprueba quien la subió.
+            if (!$auto && $nivel < 3 && (int) ($carga['created_by'] ?? 0) === $idUsuario && !$this->sinAprobadores($idEmpresa)) {
                 throw new \InvalidArgumentException('No puede aprobar una carga que usted mismo registró. Debe aprobarla otro usuario autorizado.');
             }
             $validada = !empty($carga['validada']) && $carga['validada'] !== 'f';
@@ -580,12 +672,37 @@ class CargaInventarioService
         if ($carga['estado'] !== 'pendiente') {
             throw new \InvalidArgumentException('Solo se pueden rechazar cargas pendientes.');
         }
-        if ($nivel < 3 && (int) ($carga['created_by'] ?? 0) === $idUsuario) {
+        if ($nivel < 3 && (int) ($carga['created_by'] ?? 0) === $idUsuario && !$this->sinAprobadores($idEmpresa)) {
             throw new \InvalidArgumentException('No puede rechazar una carga que usted mismo registró. Si desea, puede eliminarla.');
         }
         $this->repo->actualizarEstado($idCarga, $idEmpresa, 'rechazada', null, $motivo);
         $this->log->registrar($idUsuario, $idEmpresa, 'rechazar', 'inventario_cargas', $idCarga, ['estado' => 'pendiente'], ['estado' => 'rechazada', 'motivo' => $motivo]);
         return ['ok' => true, 'estado' => 'rechazada'];
+    }
+
+    /** Cambia la observación general de la carga (vacía = sin observación). */
+    public function actualizarObservacion(int $idCarga, int $idEmpresa, int $idUsuario, string $observacion): array
+    {
+        $observacion = trim($observacion);
+        $db = Database::getConnection();
+        $db->beginTransaction();
+        try {
+            $carga = $this->repo->getByIdParaActualizar($idCarga, $idEmpresa);
+            $this->rules->validarObservacionEditable($carga, $observacion);
+
+            $antes = $carga['observacion'] ?? null;
+            $nueva = $observacion !== '' ? $observacion : null;
+            if ($antes !== $nueva) {
+                $this->repo->actualizarObservacion($idCarga, $idEmpresa, $nueva, $idUsuario);
+                $this->log->registrar($idUsuario, $idEmpresa, 'actualizar_observacion', 'inventario_cargas', $idCarga,
+                    ['observacion' => $antes], ['observacion' => $nueva]);
+            }
+            $db->commit();
+            return ['ok' => true, 'observacion' => $nueva];
+        } catch (\Throwable $e) {
+            if ($db->inTransaction()) $db->rollBack();
+            throw $e;
+        }
     }
 
     // ─── Aprobación desde el enlace del correo (por token, sin sesión) ──────────
@@ -788,7 +905,7 @@ class CargaInventarioService
      */
     private function validarAnulable(?array $carga, int $idEmpresa, int $idUsuario, int $nivel): array
     {
-        $this->rules->validarAnulable($carga, $idUsuario, $nivel);
+        $this->rules->validarAnulable($carga, $idUsuario, $nivel, $this->sinAprobadores($idEmpresa));
 
         if (!$this->esAprobador($idUsuario, $idEmpresa, $nivel)) {
             throw new \InvalidArgumentException('Solo los aprobadores de cargas de inventario pueden anular una carga aprobada.');

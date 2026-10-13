@@ -418,6 +418,18 @@ class CargaInventarioRepository extends BaseRepository
         ]);
     }
 
+    /** Cambia solo la observación general de la carga (no toca líneas ni stock). */
+    public function actualizarObservacion(int $id, int $idEmpresa, ?string $observacion, int $idUsuario): bool
+    {
+        $st = $this->db->prepare(
+            "UPDATE inventario_cargas
+             SET observacion = :obs, updated_at = CURRENT_TIMESTAMP, updated_by = :u
+             WHERE id = :id AND id_empresa = :e AND eliminado = false"
+        );
+        $st->execute([':obs' => $observacion, ':u' => $idUsuario, ':id' => $id, ':e' => $idEmpresa]);
+        return $st->rowCount() === 1;
+    }
+
     // ─── VALIDACIÓN (existencia) ──────────────────────────────────────────────
 
     public function productoExiste(int $idProducto, int $idEmpresa): bool
@@ -484,6 +496,34 @@ class CargaInventarioRepository extends BaseRepository
         $st = $this->db->prepare("SELECT id, nombre, mail FROM usuarios WHERE id IN ($ph)");
         $st->execute($ids);
         return $st->fetchAll(PDO::FETCH_ASSOC);
+    }
+
+    /**
+     * Cargas pendientes y comprobadas sin enlace de aprobación: las que quedaron trabadas
+     * cuando la aprobación automática falló al importar (antes no se les generaba enlace).
+     */
+    public function getPendientesSinEnlace(int $idEmpresa): array
+    {
+        $st = $this->db->prepare(
+            "SELECT id, created_by FROM inventario_cargas
+             WHERE id_empresa = :e AND eliminado = false AND estado = 'pendiente'
+               AND validada = true AND token_aprobacion IS NULL
+             ORDER BY id"
+        );
+        $st->execute([':e' => $idEmpresa]);
+        return $st->fetchAll(PDO::FETCH_ASSOC);
+    }
+
+    /** Pone el enlace solo si la carga sigue pendiente y sin él: true si esta llamada lo puso. */
+    public function setTokenSiFalta(int $id, int $idEmpresa, string $token): bool
+    {
+        $st = $this->db->prepare(
+            "UPDATE inventario_cargas SET token_aprobacion = :t
+             WHERE id = :id AND id_empresa = :e AND eliminado = false
+               AND estado = 'pendiente' AND token_aprobacion IS NULL"
+        );
+        $st->execute([':t' => $token, ':id' => $id, ':e' => $idEmpresa]);
+        return $st->rowCount() === 1;
     }
 
     public function setToken(int $id, string $token): void

@@ -46,10 +46,11 @@ class CargaInventarioRules
     /**
      * Solo se anula una carga aprobada: las pendientes y rechazadas no movieron el stock y
      * se eliminan. Igual que al aprobar, quien registró la carga no la anula (salvo el
-     * superadministrador). Lo que depende de la base (aprobadores, movimientos, período,
+     * superadministrador o que la empresa no tenga aprobadores configurados: no hay a quién
+     * más pedírselo). Lo que depende de la base (aprobadores, movimientos, período,
      * bodegas y uso posterior) lo comprueba CargaInventarioService.
      */
-    public function validarAnulable(?array $carga, int $idUsuario, int $nivel): void
+    public function validarAnulable(?array $carga, int $idUsuario, int $nivel, bool $sinAprobadores = false): void
     {
         if (!$carga) {
             throw new \InvalidArgumentException('Carga no encontrada.');
@@ -61,8 +62,28 @@ class CargaInventarioRules
         if ($estado !== 'aprobada') {
             throw new \InvalidArgumentException('Solo se anulan cargas aprobadas. Una carga pendiente o rechazada no movió el stock: se elimina.');
         }
-        if ($nivel < 3 && (int) ($carga['created_by'] ?? 0) === $idUsuario) {
+        if ($nivel < 3 && !$sinAprobadores && (int) ($carga['created_by'] ?? 0) === $idUsuario) {
             throw new \InvalidArgumentException('No puede anular una carga que usted mismo registró. Debe anularla otro aprobador.');
+        }
+    }
+
+    /** Largo máximo de la observación general de una carga. */
+    public const MAX_OBSERVACION = 1000;
+
+    /**
+     * La observación general se edita en cualquier estado salvo anulada (queda como
+     * constancia). Es solo texto: no cambia las líneas ni el stock.
+     */
+    public function validarObservacionEditable(?array $carga, string $observacion): void
+    {
+        if (!$carga) {
+            throw new \InvalidArgumentException('Carga no encontrada.');
+        }
+        if (($carga['estado'] ?? '') === 'anulada') {
+            throw new \InvalidArgumentException('Una carga anulada no se modifica.');
+        }
+        if (mb_strlen($observacion) > self::MAX_OBSERVACION) {
+            throw new \InvalidArgumentException('La observación admite hasta ' . self::MAX_OBSERVACION . ' caracteres.');
         }
     }
 

@@ -5,8 +5,8 @@ categoria: Inventario
 ruta_modulo: modulos/cargas-inventario
 tipo: modulo
 visibilidad: todos
-etiquetas: carga de inventario, errores de carga, no se puede aprobar, lineas con error, comprobada, corregir carga, ajuste masivo, entrada masiva, salida masiva, conteo fisico, inventario fisico, toma fisica, cuadrar stock, saldo contado, diferencia de inventario, faltantes, sobrantes, importar stock, aprobacion, buscar, filtrar, ordenar, columnas, observacion, observaciones, observacion de la linea, creado por, aprobado por, exportar, buscador, filtros, filtrar cargas, buscar por producto, cargas pendientes, chips, detalle de la carga, lineas de la carga, ver lineas, motivo, fila del excel, descargar pdf, descargar excel, exportar lineas, cargando archivo, importar excel, rechazar carga, eliminar carga, anular carga, anular carga aprobada, reversar carga, revertir carga, deshacer carga, modificar carga aprobada, editar carga aprobada, corregir carga aprobada, carga anulada, productos ya usados, no se puede anular, nup, serie, series, serial, numero de serie, varias series, lote, ajuste por lote, imprimir, impresora
-version: 1.9
+etiquetas: carga de inventario, errores de carga, no se puede aprobar, lineas con error, comprobada, corregir carga, ajuste masivo, entrada masiva, salida masiva, conteo fisico, inventario fisico, toma fisica, cuadrar stock, saldo contado, diferencia de inventario, faltantes, sobrantes, importar stock, aprobacion, buscar, filtrar, ordenar, columnas, observacion, observaciones, observacion de la linea, creado por, aprobado por, exportar, buscador, filtros, filtrar cargas, buscar por producto, cargas pendientes, chips, detalle de la carga, lineas de la carga, ver lineas, motivo, fila del excel, descargar pdf, descargar excel, exportar lineas, cargando archivo, importar excel, rechazar carga, eliminar carga, anular carga, anular carga aprobada, reversar carga, revertir carga, deshacer carga, modificar carga aprobada, editar carga aprobada, corregir carga aprobada, carga anulada, productos ya usados, no se puede anular, nup, serie, series, serial, numero de serie, varias series, lote, ajuste por lote, imprimir, impresora, quien aprueba, aprobar salida, salida no se aprueba, sin aprobadores, aprobacion automatica, editar observacion, cambiar observacion, corregir observacion
+version: 2.1
 orden: 25
 estado: activo
 ---
@@ -33,6 +33,7 @@ Cada carga es de un tipo, y solo se admiten tres:
 4. Al terminar, un aviso resume el resultado:
    - **Carga aplicada al inventario**: todas las líneas estaban bien y la empresa no exige aprobación; el stock ya se actualizó.
    - **Carga registrada**: queda pendiente de aprobación.
+   - **Carga registrada, pero no se aplicó al inventario**: debía aplicarse sola pero falló (p. ej. una salida sin stock suficiente); muestra el motivo y la carga queda pendiente (ver *Aprobación*).
    - **Carga registrada con errores**: lista cada línea que falló con su número de fila del Excel; la carga no se podrá aprobar hasta corregirlas (ver *Errores frecuentes*).
 
 El botón **Ver líneas** del aviso abre la carga recién importada. El listado se
@@ -104,6 +105,23 @@ Un clic en una fila del listado abre la carga. Arriba muestra la fecha, el tipo,
 el estado, si está **comprobada** (todas sus líneas sin error), la observación
 general de la carga, el motivo del rechazo, quién la anuló y por qué (si está
 anulada) y, si está pendiente y usted no puede aprobarla, quién debe hacerlo.
+
+### Editar la observación general
+
+La **observación general** de la carga (la que se escribe al importar) se puede
+corregir desde esta misma ventana: escriba en el cuadro *Observación* y pulse
+**Guardar** (se activa solo si el texto cambió). Para quitarla, deje el cuadro
+vacío y guarde. Admite hasta 1000 caracteres.
+
+- Se puede en cualquier estado (pendiente, aprobada o rechazada), salvo en una
+  carga **anulada**, que queda como constancia.
+- Necesita permiso de **modificar** en el módulo; sin acceso total, solo en sus
+  propias cargas. Sin ese permiso la observación se ve pero no se edita.
+- Es solo texto: no cambia las líneas, el stock ni la aprobación. El cambio queda
+  en el historial del sistema con el texto anterior y el nuevo.
+- En las cargas **migradas** del sistema anterior la observación trae la línea
+  técnica completa; si borra la parte *Ref: …*, el listado deja de mostrar esa
+  referencia.
 
 Debajo está la lista de líneas, en el mismo orden del archivo:
 
@@ -236,6 +254,37 @@ se activa el proceso *Cargas de inventario*, se eligen los aprobadores y, si se
 quiere, un **monto mínimo** por debajo del cual la carga se aplica directamente.
 Antes esta configuración estaba en *Empresa → Inventario*.
 
+### Cuándo se aplica sola
+
+Al importar, la carga se aplica al stock en el acto (sin que nadie la apruebe) si
+**todas sus líneas están bien** y además la aprobación está desactivada, no tiene
+aprobadores elegidos o la carga no llega al monto mínimo. El valor que se compara
+con el monto mínimo es:
+
+| Tipo | Valor de la carga |
+|------|-------------------|
+| Entrada | Cantidad × costo del archivo (si una línea no trae costo, al costo promedio) |
+| Salida | Cantidad × **costo promedio** de la bodega, que es como sale (el costo del archivo no cuenta) |
+| Ajuste | Diferencia estimada con el saldo de hoy × costo del archivo o costo promedio |
+
+Si debía aplicarse sola pero no se pudo —lo común es una **salida sin stock
+suficiente** en ese momento—, el aviso lo dice con el motivo y la carga queda
+**pendiente**: se avisa por correo a los aprobadores (si los hay) y se aprueba
+luego como cualquier otra, una vez corregida la causa. Las cargas que quedaron
+así antes de esta corrección (pendientes sin enlace ni aviso) se rescatan solas la
+primera vez que alguien abre el módulo: reciben su enlace y se avisa a los
+aprobadores una sola vez.
+
+### Quién aprueba
+
+| Caso | Quién puede aprobar o rechazar |
+|------|--------------------------------|
+| Hay aprobadores elegidos | Solo ellos y el superadministrador, con permiso de **modificar** en este módulo. Quien registró la carga no la aprueba ni la rechaza (salvo el superadministrador): debe hacerlo otro aprobador |
+| No hay aprobadores elegidos | **Cualquier usuario** con permiso de **modificar** en este módulo, incluso quien registró la carga, sea entrada, salida o ajuste |
+
+Sin **acceso total**, el usuario solo ve sus propias cargas; con aprobadores
+elegidos, un aprobador necesita acceso total para ver las cargas de los demás.
+
 ## Anular o corregir una carga aprobada
 
 Una carga aprobada ya movió el stock, así que **no se edita ni se elimina**: se
@@ -251,7 +300,9 @@ corregido**, que abre la importación con la observación *Corrige la carga #N*.
 **Quién puede anular.** Los aprobadores de cargas de inventario (módulo
 Aprobaciones) y el superadministrador, que además tengan permiso de **eliminar** en
 este módulo. Igual que al aprobar, quien registró la carga no la anula: debe
-hacerlo otro aprobador (salvo el superadministrador).
+hacerlo otro aprobador (salvo el superadministrador). Si la empresa **no tiene
+aprobadores elegidos**, anula cualquier usuario con permiso de **eliminar**,
+incluso quien registró la carga.
 
 **Cómo se hace.** Abra la carga y pulse **Anular**. Antes de pedir el motivo, el
 sistema comprueba si se puede; si se puede, indica cuántos movimientos se van a
@@ -342,6 +393,19 @@ para corregir el archivo. Los motivos posibles son:
 
 ## Historial de cambios
 
+- **2.1** — La **observación general** de la carga se puede editar desde la ventana
+  de la carga (botón **Guardar**), en cualquier estado salvo anulada y con permiso
+  de modificar. No cambia líneas ni stock.
+- **2.0** — **Aprobación de salidas**: el monto mínimo se compara con el valor de la
+  salida al costo promedio (antes, sin costo en el archivo, una salida valía 0 y se
+  aplicaba sola aunque la empresa exigiera aprobación). Si una carga que debía
+  aplicarse sola falla (p. ej. sin stock), queda pendiente con aviso a los aprobadores
+  y el motivo real (antes decía *No se pudo leer el archivo* y la carga quedaba
+  trabada). Las cargas que ya habían quedado trabadas así se rescatan solas al abrir
+  el módulo: reciben su enlace y se avisa una vez a los aprobadores. **Sin aprobadores elegidos**, cualquier usuario con permiso de modificar
+  aprueba o rechaza, incluso sus propias cargas, y cualquiera con permiso de eliminar
+  anula una carga aprobada, incluso la suya. Los botones Aprobar y Rechazar
+  solo aparecen con permiso de modificar.
 - **1.9** — En la ventana de filtros, la pestaña *Detalles* se llama ahora
   **Búsqueda por detalle**, y la ventana ya no tiene barra de desplazamiento
   vertical propia: se muestra completa.
