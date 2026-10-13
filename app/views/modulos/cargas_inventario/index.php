@@ -350,6 +350,11 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosColumnasOcultas($vistaConfig)
                     <?php endif; ?>
                 </div>
                 <div class="d-flex gap-2">
+                    <?php // Actualizar: guarda la observación general (cualquier estado salvo anulada). ?>
+                    <?php if (!empty($perm['actualizar'])): ?>
+                        <button type="button" id="ci-btn-guardar-obs" class="btn btn-primary btn-sm d-none" onclick="CI_guardarObservacion()" disabled
+                            title="Guardar la observación de la carga"><i class="bi bi-check2 me-1"></i>Actualizar</button>
+                    <?php endif; ?>
                     <?php // Aprobar/rechazar: aprobador (o cualquiera sin aprobadores configurados) con permiso de actualizar. ?>
                     <?php if (!empty($esAprobador) && !empty($perm['actualizar'])): ?>
                         <button type="button" id="ci-btn-rechazar" class="btn btn-outline-danger btn-sm d-none" onclick="CI_rechazar()"><i class="bi bi-x-circle me-1"></i>Rechazar</button>
@@ -566,7 +571,7 @@ async function CI_verDetalle(id) {
     cuerpo.innerHTML = '';
     document.getElementById('ci-det-numero').textContent = '';
     document.getElementById('ci-det-resumen').innerHTML = '';
-    ['ci-btn-aprobar', 'ci-btn-rechazar', 'ci-btn-eliminar', 'ci-btn-anular'].forEach(b => document.getElementById(b)?.classList.add('d-none'));
+    ['ci-btn-aprobar', 'ci-btn-rechazar', 'ci-btn-eliminar', 'ci-btn-anular', 'ci-btn-guardar-obs'].forEach(b => document.getElementById(b)?.classList.add('d-none'));
     const modalEl = document.getElementById('ci-modal-detalle');
     bootstrap.Modal.getOrCreateInstance(modalEl).show();
     const loader = document.getElementById('ci-modal-loader');
@@ -655,12 +660,8 @@ async function CI_verDetalle(id) {
             ${campo('Comprobada', validada ? 'Sí' : 'No', undefined, `fw-bold ${validada ? 'text-success' : 'text-danger'}`)}
             ${obsEditable ? `<div class="col-12">
                 <div class="text-muted" style="font-size:.65rem;">Observación</div>
-                <div class="d-flex gap-1 align-items-start">
-                    <textarea id="ci-det-observacion" class="form-control form-control-sm" rows="2" maxlength="1000"
-                        placeholder="Sin observación" oninput="CI_obsCambio()">${CI_esc(c.observacion || '')}</textarea>
-                    <button type="button" id="ci-btn-guardar-obs" class="btn btn-sm btn-primary text-nowrap" onclick="CI_guardarObservacion()" disabled
-                        title="Guardar la observación"><i class="bi bi-floppy me-1"></i>Guardar</button>
-                </div>
+                <textarea id="ci-det-observacion" class="form-control form-control-sm" rows="2" maxlength="1000"
+                    placeholder="Sin observación" oninput="CI_obsCambio()">${CI_esc(c.observacion || '')}</textarea>
             </div>` : (c.observacion ? campo('Observación', CI_esc(c.observacion), 'col-12', '') : '')}
             ${c.motivo_rechazo ? campo('Motivo rechazo', CI_esc(c.motivo_rechazo), 'col-12', 'text-danger') : ''}
             ${c.estado === 'anulada' ? campo('Anulada por', CI_esc(anuladaPor || '-'), 'col-12', '') : ''}
@@ -694,6 +695,12 @@ async function CI_verDetalle(id) {
             </table>
         </div>`;
 
+    // Actualizar (footer): visible si la observación es editable; se activa al cambiarla.
+    const btnObs = document.getElementById('ci-btn-guardar-obs');
+    if (btnObs && obsEditable) {
+        btnObs.classList.remove('d-none');
+        btnObs.disabled = true;
+    }
     const btnAp = document.getElementById('ci-btn-aprobar');
     if (btnAp && puedeAprobar) {
         btnAp.classList.remove('d-none');
@@ -747,7 +754,7 @@ async function CI_accion(url, body, textoProceso, alTerminar = null) {
     CI_aviso({ icon: 'success', titleText: json.mensaje || 'Listo' });
 }
 
-/** Habilita Guardar solo si la observación cambió respecto de la guardada. */
+/** Habilita Actualizar solo si la observación cambió respecto de la guardada. */
 function CI_obsCambio() {
     const txt = document.getElementById('ci-det-observacion');
     const btn = document.getElementById('ci-btn-guardar-obs');

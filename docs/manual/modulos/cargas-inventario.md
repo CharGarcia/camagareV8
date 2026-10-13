@@ -110,7 +110,7 @@ anulada) y, si está pendiente y usted no puede aprobarla, quién debe hacerlo.
 
 La **observación general** de la carga (la que se escribe al importar) se puede
 corregir desde esta misma ventana: escriba en el cuadro *Observación* y pulse
-**Guardar** (se activa solo si el texto cambió). Para quitarla, deje el cuadro
+**Actualizar**, abajo junto a Cerrar (se activa solo si el texto cambió). Para quitarla, deje el cuadro
 vacío y guarde. Admite hasta 1000 caracteres.
 
 - Se puede en cualquier estado (pendiente, aprobada o rechazada), salvo en una
@@ -394,7 +394,7 @@ para corregir el archivo. Los motivos posibles son:
 ## Historial de cambios
 
 - **2.1** — La **observación general** de la carga se puede editar desde la ventana
-  de la carga (botón **Guardar**), en cualquier estado salvo anulada y con permiso
+  de la carga (botón **Actualizar**, al pie de la ventana), en cualquier estado salvo anulada y con permiso
   de modificar. No cambia líneas ni stock.
 - **2.0** — **Aprobación de salidas**: el monto mínimo se compara con el valor de la
   salida al costo promedio (antes, sin costo en el archivo, una salida valía 0 y se
