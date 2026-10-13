@@ -154,11 +154,10 @@ class InventarioController extends BaseModuloController
                         <td class="small" data-col="numero_lote">' . htmlspecialchars($row['numero_lote'] ?? '-') . '</td>
                         <td class="small" data-col="fecha_caducidad">' . $cad . '</td>
                         <td class="small" data-col="nup">' . htmlspecialchars($row['nup'] ?? '-') . '</td>
-                        <td class="small" data-col="usuario_nombre">' . htmlspecialchars($row['usuario_nombre'] ?? '-') . '</td>
-                        <td class="small text-truncate" style="max-width: 150px;" data-col="observaciones" title="' . htmlspecialchars($row['observaciones'] ?? '') . '">
-                            ' . htmlspecialchars($row['observaciones'] ?? '-') . '
-                        </td>
-                      </tr>';
+                        <td class="small" data-col="usuario_nombre">' . htmlspecialchars($row['usuario_nombre'] ?? '-') . '</td>';
+                // Misma celda Obs. que index.php (movimiento + observación de la carga).
+                include MVC_APP . '/views/modulos/inventario/_celda_obs.php';
+                echo '</tr>';
             }
         }
         $rowsHtml = ob_get_clean();

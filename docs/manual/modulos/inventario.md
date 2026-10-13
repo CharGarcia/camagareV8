@@ -5,8 +5,8 @@ categoria: Inventario
 ruta_modulo: modulos/inventario
 tipo: modulo
 visibilidad: todos
-etiquetas: inventario, stock, existencias, kardex, movimientos, ajuste, entradas, salidas, bodega, costo, buscar movimientos, buscador, filtros, filtrar movimientos, buscar por lote, buscar por serial, movimientos por bodega, chips, buscar por codigo de barras, buscar por bodega, buscar movimientos de una factura, buscar por mes, imprimir movimiento, pdf del movimiento, comprobante de movimiento, ficha del movimiento, imprimir registro, imprimir un movimiento, asiento del ajuste, contabilidad del ajuste, merma, faltante, sobrante, perdida de inventario, baja de inventario, asiento contable inventario
-version: 1.10
+etiquetas: inventario, stock, existencias, kardex, movimientos, ajuste, entradas, salidas, bodega, costo, buscar movimientos, buscador, filtros, filtrar movimientos, buscar por lote, buscar por serial, movimientos por bodega, chips, buscar por codigo de barras, buscar por bodega, buscar movimientos de una factura, buscar por mes, imprimir movimiento, pdf del movimiento, comprobante de movimiento, ficha del movimiento, imprimir registro, imprimir un movimiento, asiento del ajuste, contabilidad del ajuste, merma, faltante, sobrante, perdida de inventario, baja de inventario, asiento contable inventario, buscar por observacion, observacion de la carga, buscar carga de inventario, columna observaciones
+version: 1.11
 orden: 20
 estado: activo
 ---
@@ -40,6 +40,21 @@ final del cuadro y la tabla se ve atenuada.
 Las observaciones llevan el número del documento que originó el movimiento
 (*Salida por Factura # 001-101-000000127*, *Ingreso por Compra #015-915-000066550*),
 así que escribir ese número trae todos los movimientos de ese documento.
+
+En los movimientos que vienen de una **carga de inventario**, la búsqueda también
+encuentra la **observación general de la carga** (la que se escribe al importarla
+o se corrige luego en *Cargas de inventario*): escribir *conteo bodega norte* trae
+todos los movimientos de esa carga. De las cargas migradas del sistema anterior
+cuenta solo su referencia. Lo mismo vale para el filtro **Observaciones** de la
+ventana de filtros y para `obs:` en el cuadro (por ejemplo `obs:"bodega norte"`, o
+`-obs:norte` para excluirlos).
+
+**Columna Obs.** Muestra el texto en varios renglones en vez de cortarlo en una
+sola línea: arriba la observación del movimiento y, si viene de una carga de
+inventario, debajo en gris (con el ícono de caja) la observación general de la
+carga. Cada una ocupa hasta dos renglones; el texto completo aparece al dejar el
+cursor sobre la celda. En el PDF y el Excel van las dos juntas, separadas por
+« · ».
 
 **Lo que NO entra en la búsqueda libre, y dónde buscarlo:**
 
@@ -198,6 +213,11 @@ problema pero no aparece en el kardex ni tiene stock.
 
 ## Historial de cambios
 
+- **1.11** — El buscador encuentra también la **observación general de la carga de
+  inventario** en los movimientos de esa carga (también con el filtro Observaciones
+  y con `obs:`), y la columna **Obs.** la muestra
+  debajo de la del movimiento. La columna Obs. es más ancha y muestra el texto en
+  varios renglones (antes se cortaba en una línea de 150 px).
 - **1.10** — Los ajustes y las ediciones, anulaciones y habilitaciones hechas desde Inventario respetan los períodos contables cerrados. Antes el movimiento se guardaba igual y su asiento simplemente no se generaba.
 - **1.9** — Los **ajustes** del módulo generan su **asiento contable** a costo
   (Inventario contra Sobrante o Faltante / merma), con las cuentas de

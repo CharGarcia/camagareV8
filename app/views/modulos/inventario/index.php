@@ -55,6 +55,16 @@ $optOrigen   = array_map(fn($t) => ['v' => $t, 'l' => ucwords(str_replace('_', '
     .badge-entrada { background: rgba(25,135,84,.1);  color:#198754; border:1px solid rgba(25,135,84,.2); }
     .badge-salida  { background: rgba(220,53,69,.1);  color:#dc3545; border:1px solid rgba(220,53,69,.2); }
     .badge-ajuste  { background: rgba(13,110,253,.1); color:#0d6efd; border:1px solid rgba(13,110,253,.2); }
+
+    /* Obs.: ancho suficiente para leer "Salida por Factura # 001-101-000000127" entero; el
+       texto se parte en renglones (hasta 2 por observación) en vez de cortarse en una sola
+       línea. El completo queda en el title. Si el usuario ajustó el ancho, manda el suyo. */
+    .inv-scroll td.inv-obs { min-width: 240px; max-width: 420px; white-space: normal; line-height: 1.25; }
+    .inv-obs-texto {
+        display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;
+        overflow: hidden; overflow-wrap: anywhere;
+    }
+    .inv-obs-texto + .inv-obs-texto { margin-top: 2px; font-size: .95em; }
 </style>
 
 <?= \App\Helpers\PreferenciasHelper::renderEstilosColumnasOcultas($vistaConfig ?? []) ?>
@@ -243,9 +253,7 @@ $optOrigen   = array_map(fn($t) => ['v' => $t, 'l' => ucwords(str_replace('_', '
                                 <td class="small" data-col="fecha_caducidad"><?= $row['fecha_caducidad'] ? date('d-m-Y', strtotime($row['fecha_caducidad'])) : '-' ?></td>
                                 <td class="small" data-col="nup"><?= htmlspecialchars($row['nup'] ?? '-') ?></td>
                                 <td class="small" data-col="usuario_nombre"><?= htmlspecialchars($row['usuario_nombre'] ?? '-') ?></td>
-                                <td class="small text-truncate" style="max-width: 150px;" data-col="observaciones" title="<?= htmlspecialchars($row['observaciones'] ?? '') ?>">
-                                    <?= htmlspecialchars($row['observaciones'] ?? '-') ?>
-                                </td>
+                                <?php include __DIR__ . '/_celda_obs.php'; ?>
                             </tr>
                         <?php endforeach; ?>
                     <?php endif; ?>

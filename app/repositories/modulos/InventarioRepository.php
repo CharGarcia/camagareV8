@@ -8,6 +8,15 @@ use PDO;
 
 class InventarioRepository extends BaseRepository
 {
+    /**
+     * Observación general de una carga de inventario (alias `ic`) tal como se muestra: de las
+     * migradas solo la referencia. Misma regla que App\Helpers\ObservacionCargaInventario.
+     */
+    private const OBS_CARGA_SQL =
+        "CASE WHEN ic.observacion ~ 'Ref\\s*:'
+              THEN NULLIF(NULLIF(TRIM(substring(ic.observacion from 'Ref\\s*:\\s*([^·]*)')), ''), '—')
+              ELSE ic.observacion END";
+
     public function __construct()
     {
         parent::__construct('inventario_kardex');
@@ -678,6 +687,12 @@ class InventarioRepository extends BaseRepository
                     'k.numero_lote',                                        // Lote
                     'k.nup',                                                // NUP/Serial
                     'k.observaciones',                                      // Obs.
+                    // Obs. de los movimientos de una carga de inventario: también la
+                    // observación general de la carga (se edita en Cargas de Inventario y no se
+                    // copia al movimiento; la columna Obs. la muestra al lado). Conjunto por
+                    // palabra, sin depender de la fila de afuera (ver condicionTexto()).
+                    ['col' => self::OBS_CARGA_SQL,
+                     'sql' => "k.referencia_tipo = 'carga_inventario' AND k.referencia_id IN (SELECT ic.id FROM inventario_cargas ic WHERE ic.id_empresa = :e AND ic.eliminado = false AND {cond})"],
                     // Producto: nombre y código (los dos se ven en la celda).
                     ['col' => "CONCAT_WS(' ', px.codigo, px.nombre)",
                      'sql' => "k.id_producto IN (SELECT px.id FROM productos px WHERE px.id_empresa = :e AND {cond})"],
@@ -702,7 +717,12 @@ class InventarioRepository extends BaseRepository
                 'codigo'   => 'p.codigo',
                 'lote'     => 'k.numero_lote',
                 'nup'      => 'k.nup',
-                'obs'      => 'k.observaciones',
+                // Como la columna Obs.: la del movimiento y, si viene de una carga de
+                // inventario, también la observación general de la carga. El CASE hace que
+                // la subconsulta (por PK) solo corra en los movimientos de cargas.
+                'obs'      => "CONCAT_WS(' ', k.observaciones, CASE WHEN k.referencia_tipo = 'carga_inventario' THEN "
+                            . "(SELECT " . str_replace('ic.', 'icf.', self::OBS_CARGA_SQL) . " FROM inventario_cargas icf "
+                            . "WHERE icf.id = k.referencia_id AND icf.id_empresa = k.id_empresa AND icf.eliminado = false) END)",
                 'bodega'   => 'b.nombre',
                 // Salieron del texto libre el 18-09-2026: estos filtros son ahora la forma de
                 // buscarlos a propósito (los JOIN um y u ya están en el conteo y en las filas).
@@ -812,19 +832,45 @@ class InventarioRepository extends BaseRepository
         $offset = ($page - 1) * $perPage;
         $sql = "SELECT k.*, p.nombre AS producto_nombre, p.codigo AS producto_codigo,
                        b.nombre AS bodega_nombre, u.nombre AS usuario_nombre,
-                       um.nombre AS nombre_medida, um.abreviatura AS abreviatura_medida
+                       um.nombre AS nombre_medida, um.abreviatura AS abreviatura_medida,
+                       ic.observacion AS carga_observacion
                 FROM inventario_kardex k
                 INNER JOIN productos p ON p.id = k.id_producto
                 INNER JOIN bodegas   b ON b.id = k.id_bodega
                 LEFT JOIN unidades_medida um ON um.id = k.id_medida
                 LEFT JOIN usuarios   u ON u.id = k.created_by
+                LEFT JOIN inventario_cargas ic ON k.referencia_tipo = 'carga_inventario'
+                     AND ic.id = k.referencia_id AND ic.id_empresa = k.id_empresa AND ic.eliminado = false
                 $where
                 ORDER BY $sort $dir, k.id DESC" . ($perPage > 0 ? " LIMIT $perPage OFFSET $offset" : "");
         $st = $this->db->prepare($sql);
         $st->execute($params);
+        $rows = $st->fetchAll(PDO::FETCH_ASSOC);
+
+        // Obs. de un movimiento de carga = la de su línea (o "Carga de inventario #N") más la
+        // observación general de la carga, que es la que el usuario escribe y corrige. Así lo
+        // que encuentra el buscador se ve en la columna, en pantalla y en PDF/Excel. De las
+        // cargas migradas solo la referencia (igual que el listado de Cargas de Inventario).
+        // `obs_movimiento` y `obs_carga` van por separado para que la celda los pinte en dos
+        // renglones; `observaciones` queda con los dos juntos para PDF/Excel.
+        foreach ($rows as &$r) {
+            $obsCarga = \App\Helpers\ObservacionCargaInventario::paraMostrar($r['carga_observacion'] ?? null);
+            $obsMov   = trim((string) ($r['observaciones'] ?? ''));
+            if ($obsCarga !== '' && $obsMov !== '' && mb_stripos($obsMov, $obsCarga) !== false) {
+                $obsCarga = ''; // la línea ya la repite
+            }
+            $r['obs_movimiento'] = $obsMov;
+            $r['obs_carga']      = $obsCarga;
+            if ($obsCarga !== '') {
+                $r['observaciones'] = $obsMov !== '' ? $obsMov . ' · ' . $obsCarga : $obsCarga;
+            }
+            unset($r['carga_observacion']);
+        }
+        unset($r);
+
         return [
-            'total' => $total, 
-            'rows' => $st->fetchAll(PDO::FETCH_ASSOC),
+            'total' => $total,
+            'rows' => $rows,
             'saldo' => $saldo
         ];
     }
