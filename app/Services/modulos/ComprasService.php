@@ -64,6 +64,7 @@ class ComprasService
     public function crear(array $data): int
     {
         $this->rules->validar($data);
+        $this->rules->validarDeducible($data['deducible'] ?? '', (int) ($data['id_empresa'] ?? 0), null, $data['detalle_xml'] ?? null);
         $this->verificarSecuencialDuplicado($data);
         $this->validarPeriodo($data, 'No se puede registrar la compra porque el periodo contable está cerrado.');
 
@@ -466,6 +467,12 @@ class ComprasService
         }
 
         $compra['egresos_vinculados'] = $this->repository->getEgresosVinculados($id);
+
+        // Comprobante emitido a la cédula del dueño: el modal fija Deducible = Gasto personal.
+        $compra['emitida_a_cedula'] = \App\Rules\modulos\ComprasRules::emitidaACedula(
+            $compra['detalle_xml'] ?? null,
+            (new \App\models\Empresa())->getPorId($idEmpresa)['ruc'] ?? ''
+        );
 
         // Desglose de <otrosRubrosTerceros> del XML (tasa de pernoctación, etc.).
         $compra['otros_rubros'] = $this->repository->getOtrosRubros($id);
@@ -1406,6 +1413,11 @@ class ComprasService
         }
 
         $this->rules->validar($data);
+        $this->rules->validarDeducible(
+            $data['deducible'] ?? '', $idEmpresa,
+            \App\repositories\modulos\ComprasRepository::normalizarDeducible($cabecera['deducible'] ?? ''),
+            $cabecera['detalle_xml'] ?? null
+        );
         $this->verificarSecuencialDuplicado($data, $id);
         
         // Validar tanto la fecha original como la nueva
@@ -1518,6 +1530,11 @@ class ComprasService
             throw new \Exception('Valor de Deducible no válido.');
         }
         $deducibleAntes = (string) ($cabecera['deducible'] ?? '');
+        $this->rules->validarDeducible(
+            $deducible, $idEmpresa,
+            \App\repositories\modulos\ComprasRepository::normalizarDeducible($deducibleAntes),
+            $cabecera['detalle_xml'] ?? null
+        );
         $cambiaDeducible = $deducibleAntes !== $deducible;
         if ($cambiaDeducible) {
             $this->periodosService->validarFechaPermitida(

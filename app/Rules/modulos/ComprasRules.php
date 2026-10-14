@@ -35,6 +35,63 @@ class ComprasRules
     }
 
     /**
+     * «Gasto personal» solo existe para personas naturales: tipo_empresa 1 (no obligada a
+     * llevar contabilidad) y 2 (obligada). Una sociedad, contribuyente especial o sector
+     * público no tiene gastos personales. Debe coincidir con la vista
+     * (modulos/compras/modal_compra.php, opción del selector Deducible).
+     */
+    public static function empresaPermiteGastoPersonal($tipoEmpresa): bool
+    {
+        $tipo = ltrim(trim((string) ($tipoEmpresa ?? '1')), '0');
+        return in_array($tipo === '' ? '1' : $tipo, ['1', '2'], true);
+    }
+
+    /**
+     * ¿El comprobante electrónico se emitió a la CÉDULA del dueño (tipo de identificación
+     * del comprador 05 = los 10 primeros dígitos del RUC de la empresa) y no a su RUC?
+     * Un comprobante así no sustenta crédito tributario de IVA: es gasto personal. Es la
+     * misma regla con la que DocumentoAutomatedRegisterService registra los XML del SRI.
+     * `$detalleXml` puede ser el comprobante o el sobre de autorización (escapado o CDATA).
+     */
+    public static function emitidaACedula(?string $detalleXml, ?string $rucEmpresa): bool
+    {
+        $ruc = preg_replace('/\D/', '', (string) $rucEmpresa);
+        if ($detalleXml === null || $detalleXml === '' || strlen($ruc) < 10) {
+            return false;
+        }
+        $xml = html_entity_decode($detalleXml, ENT_QUOTES | ENT_XML1, 'UTF-8');
+        if (!preg_match('/<tipoIdentificacionComprador>\s*(\d+)\s*</', $xml, $tipo)
+            || !preg_match('/<identificacionComprador>\s*([^<]*?)\s*</', $xml, $ident)) {
+            return false;
+        }
+        $cedula = preg_replace('/\D/', '', $ident[1]);
+        return $tipo[1] === '05' && strlen($cedula) === 10 && $cedula === substr($ruc, 0, 10);
+    }
+
+    /**
+     * Reglas de «Deducible» al guardar:
+     *  - Gasto personal solo en empresas de persona natural (tipos 1 y 2).
+     *  - Un comprobante emitido a la cédula del dueño (ver emitidaACedula) no puede pasar a
+     *    Declaración de IVA.
+     * Si la compra ya tenía guardado ese valor ($deducibleAntes) se deja pasar: no se obliga
+     * a reclasificar un dato histórico solo por abrir y guardar la compra.
+     */
+    public function validarDeducible($deducible, int $idEmpresa, ?string $deducibleAntes = null, ?string $detalleXml = null): void
+    {
+        $ded = \App\repositories\modulos\ComprasRepository::normalizarDeducible($deducible);
+        if ($ded === $deducibleAntes) {
+            return;
+        }
+        $empData = (new \App\models\Empresa())->getPorId($idEmpresa);
+        if ($ded === 'gasto_personal' && !self::empresaPermiteGastoPersonal($empData['tipo'] ?? '1')) {
+            throw new \Exception('«Gasto personal» solo se permite en empresas de persona natural (obligada o no a llevar contabilidad).');
+        }
+        if ($ded !== 'gasto_personal' && self::emitidaACedula($detalleXml, $empData['ruc'] ?? '')) {
+            throw new \Exception('Este comprobante fue emitido a la cédula y no al RUC de la empresa: es gasto personal y no da crédito tributario de IVA.');
+        }
+    }
+
+    /**
      * Valida los datos de una compra antes de guardar.
      */
     public function validar(array $data): void

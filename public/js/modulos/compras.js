@@ -25,6 +25,50 @@ const CMG_TIPOS_MASCARA = ['01', '03', '04', '05', '06', '09', '11', '12', '15',
 // app/Rules/modulos/ComprasRules.php (si divergen, el campo queda oculto pero igual se exige).
 const _esPersonaNatural = (window.CMG_empresa?.tipo == '1' || window.CMG_empresa?.tipo == '01');
 
+/**
+ * Fija «Deducible». La opción «Gasto personal» solo la dibuja la vista para personas
+ * naturales (tipos 1 y 2, ver ComprasRules::empresaPermiteGastoPersonal); si no existe,
+ * el valor cae en «Declaración de IVA». Con `historico` (una compra que YA se guardó como
+ * gasto personal) se agrega la opción solo para esa compra, para no reclasificarla en
+ * silencio al guardar; se retira al fijar cualquier otro valor.
+ */
+function mcFijarDeducible(valor, historico = false) {
+    const sel = document.getElementById('mcDeducible');
+    if (!sel) return;
+    sel.querySelector('option[data-historico]')?.remove();
+    let v = (valor === 'gasto_personal' || valor === '05') ? 'gasto_personal' : 'declaracion_iva';
+    if (v === 'gasto_personal' && !sel.querySelector('option[value="gasto_personal"]')) {
+        if (historico) {
+            const opt = new Option('Gasto Personal', 'gasto_personal');
+            opt.dataset.historico = '1';
+            sel.appendChild(opt);
+        } else {
+            v = 'declaracion_iva';
+        }
+    }
+    sel.value = v;
+}
+
+/**
+ * Comprobante emitido a la CÉDULA del dueño y no a su RUC (flag `emitida_a_cedula` de
+ * getCompraAjax, ver ComprasRules::emitidaACedula): no da crédito tributario de IVA, así
+ * que Deducible queda fijo en «Gasto personal». El servidor rechaza pasarlo a IVA.
+ */
+function mcFijarDeducibleCedula(activo) {
+    const sel = document.getElementById('mcDeducible');
+    if (!sel) return;
+    if (activo) {
+        mcFijarDeducible('gasto_personal', true);
+        sel.dataset.fijoCedula = '1';
+        sel.disabled = true;
+        sel.title = 'Comprobante emitido a la cédula y no al RUC: es gasto personal.';
+    } else if (sel.dataset.fijoCedula === '1') {
+        delete sel.dataset.fijoCedula;
+        sel.disabled = false;
+        sel.removeAttribute('title');
+    }
+}
+
 // Precio sugerido al elegir un producto del catálogo (no viene de un XML, es una entrada manual):
 // se usa el decimales_precio configurado por la empresa como cantidad de decimales por defecto.
 const DEC_PRECIO = parseInt(window.CMG_empresa?.decimales_precio ?? 2, 10) || 2;
@@ -140,7 +184,12 @@ window.abrirModalCompraCrear = function () {
         if (typeof window.aplicarFavoritosModal === 'function') {
             window.aplicarFavoritosModal('#modalCompra');
         }
-        
+        // Un favorito «Gasto personal» guardado en otra empresa no existe en esta:
+        // el selector no debe quedar en blanco.
+        mcFijarDeducibleCedula(false);
+        mcFijarDeducible(document.getElementById('mcDeducible')?.value || 'declaracion_iva');
+        mcToggleRubroGasto();
+
         // Aplicar los límites de autorización según el favorito seleccionado
         if (typeof aplicarLimiteAutorizacion === 'function') aplicarLimiteAutorizacion();
         
@@ -292,7 +341,11 @@ function CMG_poblarModal(d) {
     // Códigos crudos del sistema anterior ('04' deducible IVA / '05' gasto personal):
     // se muestran traducidos para que el selector nunca quede en blanco.
     const dedRaw = String(d.deducible || '');
-    document.getElementById('mcDeducible').value = (dedRaw === 'gasto_personal' || dedRaw === '05') ? 'gasto_personal' : 'declaracion_iva';
+    mcFijarDeducible(dedRaw, true);
+    // Emitido a la cédula: Gasto personal fijo, salvo con el período cerrado (ahí no se
+    // puede cambiar Deducible y se muestra lo guardado).
+    const perCerrado = [true, 't', 1, '1'].includes(d.periodo_cerrado);
+    mcFijarDeducibleCedula(d.emitida_a_cedula === true && !perCerrado);
     if (document.getElementById('mcRubroGasto')) document.getElementById('mcRubroGasto').value = d.rubro_gasto_personal || '';
     mcToggleRubroGasto();
     document.getElementById('mcDocumentoModificado').value = d.documento_modificado || '';
@@ -566,41 +619,6 @@ async function mcRechazarCompra() {
 }
 
 /**
- * Guarda SOLO el Sustento Tributario de una compra migrada (ver mcAplicarSoloLectura,
- * bloque `permiteSustentoMigrado`). No recarga toda la compra: la migrada sigue de
- * solo lectura en lo demás, solo se sincroniza el aviso/estado del propio selector.
- */
-async function mcGuardarSustentoMigrado() {
-    const id         = document.getElementById('mcId')?.value;
-    const idSustento = document.getElementById('mcSustento')?.value;
-    if (!id) return;
-    if (!idSustento) {
-        Swal.fire('Atención', 'Seleccione un Sustento Tributario.', 'warning');
-        return;
-    }
-
-    const btn = document.getElementById('mcBtnGuardarSustentoMigrado');
-    if (btn) btn.disabled = true;
-
-    const fd = new FormData();
-    fd.append('id_compra', id);
-    fd.append('id_sustento_tributario', idSustento);
-    try {
-        const res  = await fetch(`${BASE_URL}/modulos/compras/actualizarSustentoTributarioAjax`, { method: 'POST', body: fd });
-        const json = await res.json();
-        if (!json.ok) {
-            Swal.fire('No se pudo guardar', json.error || 'Error desconocido.', 'error');
-            return;
-        }
-        Swal.fire({ toast: true, position: 'top-end', icon: 'success', title: 'Sustento Tributario guardado.', timer: 1800, showConfirmButton: false });
-    } catch (e) {
-        Swal.fire('Error de conexión', 'No se pudo contactar al servidor.', 'error');
-    } finally {
-        if (btn) btn.disabled = false;
-    }
-}
-
-/**
  * Revierte el bloqueo de solo-lectura: re-habilita SOLO lo que ese bloqueo
  * deshabilitó (marcado con `.mc-lock-off`) y oculta el banner. Es idempotente y
  * no toca campos deshabilitados por otra lógica (electrónica, naturales).
@@ -613,43 +631,74 @@ function mcLimpiarBloqueoSoloLectura() {
         el.classList.remove('mc-lock-off');
     });
     document.getElementById('mcBloqueoAviso')?.classList.add('d-none');
-    document.getElementById('mcBtnGuardarSustentoMigrado')?.classList.add('d-none');
-    document.getElementById('mcSustentoMigradoHelp')?.classList.add('d-none');
-    document.getElementById('mcBtnGuardarClasificacion')?.classList.add('d-none');
-    const help = document.getElementById('mcClasificacionHelp');
-    if (help) { help.classList.add('d-none'); help.innerHTML = ''; }
+    delete modal.dataset.soloLectura;
+    delete modal.dataset.permiteSustento;
+    delete modal.dataset.permiteClasif;
+    const btnGuardar = document.getElementById('btnGuardarCompra');
+    if (btnGuardar) btnGuardar.innerHTML = '<i class="bi bi-check2-circle me-1"></i> Guardar';
 }
 
 /**
- * Guarda SOLO «Deducible» y el rubro de gasto personal de una compra de solo lectura
- * (migrada o período cerrado). El servidor exige período abierto para cambiar
- * Deducible (afecta la Declaración de IVA del mes); el rubro se guarda siempre.
+ * Guardado de una compra de solo lectura (migrada o período cerrado) desde el botón
+ * «Actualizar» del pie: envía únicamente lo que quedó editable — Sustento Tributario
+ * (migrada electrónica con período abierto) y Deducible/Rubro — por sus endpoints
+ * propios (actualizarSustentoTributarioAjax / actualizarClasificacionGastoAjax).
+ * Qué se permite lo decide mcAplicarSoloLectura() y lo deja en modal.dataset.
  */
-async function mcGuardarClasificacion() {
-    const id        = document.getElementById('mcId')?.value;
-    const deducible = document.getElementById('mcDeducible')?.value || '';
-    const rubro     = deducible === 'gasto_personal' ? (document.getElementById('mcRubroGasto')?.value || '') : '';
+let mcActualizandoSoloLectura = false;
+async function mcGuardarSoloLectura() {
+    if (mcActualizandoSoloLectura) return;
+    const modal = document.getElementById('modalCompra');
+    const id    = document.getElementById('mcId')?.value || modal?.dataset.id || '';
     if (!id) return;
 
-    const btn = document.getElementById('mcBtnGuardarClasificacion');
-    if (btn) btn.disabled = true;
+    const enviaSustento = modal.dataset.permiteSustento === '1';
+    const enviaClasif   = modal.dataset.permiteClasif === '1';
+    const idSustento    = document.getElementById('mcSustento')?.value || '';
+    if (enviaSustento && !idSustento) {
+        Swal.fire('Atención', 'Seleccione un Sustento Tributario.', 'warning');
+        return;
+    }
 
-    const fd = new FormData();
-    fd.append('id_compra', id);
-    fd.append('deducible', deducible);
-    fd.append('rubro_gasto_personal', rubro);
-    try {
-        const res  = await fetch(`${BASE_URL}/modulos/compras/actualizarClasificacionGastoAjax`, { method: 'POST', body: fd });
+    mcActualizandoSoloLectura = true;
+    const btn = document.getElementById('btnGuardarCompra');
+    if (btn) {
+        btn.disabled = true;
+        btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Actualizando...';
+    }
+
+    const enviar = async (accion, campos) => {
+        const fd = new FormData();
+        fd.append('id_compra', id);
+        Object.entries(campos).forEach(([k, v]) => fd.append(k, v));
+        const res  = await fetch(`${BASE_URL}/modulos/compras/${accion}`, { method: 'POST', body: fd });
         const json = await res.json();
-        if (!json.ok) {
-            Swal.fire('No se pudo guardar', json.error || 'Error desconocido.', 'error');
-            return;
+        if (!json.ok) throw new Error(json.error || 'Error desconocido.');
+    };
+
+    try {
+        if (enviaSustento) {
+            await enviar('actualizarSustentoTributarioAjax', { id_sustento_tributario: idSustento });
         }
-        Swal.fire({ toast: true, position: 'top-end', icon: 'success', title: json.mensaje || 'Clasificación guardada.', timer: 1800, showConfirmButton: false });
+        if (enviaClasif) {
+            const deducible = document.getElementById('mcDeducible')?.value || '';
+            const rubro     = deducible === 'gasto_personal' ? (document.getElementById('mcRubroGasto')?.value || '') : '';
+            await enviar('actualizarClasificacionGastoAjax', { deducible, rubro_gasto_personal: rubro });
+        }
+        Swal.fire({ icon: 'success', title: 'Compra actualizada', timer: 1500, showConfirmButton: false });
+
+        const compRes  = await fetch(`${window.CMG_urlBase}/getCompraAjax?id=${id}`);
+        const compData = await compRes.json();
+        if (compData.ok) CMG_poblarModal(compData.data);
+        CMG_fetchSearch(window.CMG_currentPage);
     } catch (e) {
-        Swal.fire('Error de conexión', 'No se pudo contactar al servidor.', 'error');
+        Swal.fire('No se pudo actualizar', e.message || 'No se pudo contactar al servidor.', 'error');
     } finally {
-        if (btn) btn.disabled = false;
+        mcActualizandoSoloLectura = false;
+        if (btn) {
+            btn.disabled = false;
+            btn.innerHTML = '<i class="bi bi-check2-circle me-1"></i> Actualizar';
+        }
     }
 }
 
@@ -696,15 +745,15 @@ function mcAplicarSoloLectura(d) {
     const pagoForm = document.getElementById('pagoFormNuevo');
 
     // Sustento Tributario en compra MIGRADA electrónica (no en período cerrado): se
-    // deja editable y con guardado propio (ver mcGuardarSustentoMigrado/
+    // deja editable y se guarda con el botón «Actualizar» (mcGuardarSoloLectura /
     // actualizarSustentoTributarioAjax) porque las migradas llegan sin esta
     // clasificación bien resuelta y el ATS/Declaración de IVA la necesitan correcta,
     // sin abrir el resto del documento. Una migrada FÍSICA no entra aquí: ya quedó
     // completamente editable arriba (bloqueadoPorMigracion=false).
     const permiteSustentoMigrado = bloqueadoPorMigracion && !periodoCerrado;
 
-    // Clasificación de la compra (Deducible + rubro de gasto personal), con guardado
-    // propio (mcGuardarClasificacion / actualizarClasificacionGastoAjax):
+    // Clasificación de la compra (Deducible + rubro de gasto personal), guardada con el
+    // botón «Actualizar» (mcGuardarSoloLectura / actualizarClasificacionGastoAjax):
     //  - Migrada con período ABIERTO: Deducible y rubro editables (Deducible decide si
     //    entra a la Declaración de IVA del mes, y ese mes aún se puede declarar).
     //  - Período CERRADO: Deducible bloqueado (la declaración de ese mes ya se cerró);
@@ -733,31 +782,27 @@ function mcAplicarSoloLectura(d) {
     modal.querySelectorAll('.modal-body button').forEach(btn => {
         if (btn.id === 'mcBtnPdf' || btn.id === 'mcBtnExcel' || btn.id === 'mcBtnDescargarXml') return;
         if (btn.hasAttribute('data-bs-toggle')) return; // pestañas
-        if (permiteSustentoMigrado && btn.id === 'mcBtnGuardarSustentoMigrado') return;
-        if (permiteClasif && btn.id === 'mcBtnGuardarClasificacion') return;
         bloquear(btn);
     });
 
-    document.getElementById('mcBtnGuardarClasificacion')?.classList.toggle('d-none', !permiteClasif);
-    const helpClasif = document.getElementById('mcClasificacionHelp');
-    if (helpClasif) {
-        helpClasif.innerHTML = permiteDeducible
-            ? '<i class="bi bi-pencil-fill"></i> Deducible y Rubro se pueden corregir aunque el resto sea de solo lectura. Guarde con ✓.'
-            : '<i class="bi bi-pencil-fill"></i> Período cerrado: Deducible no se puede cambiar; el Rubro sí. Guarde con ✓.';
-        helpClasif.classList.toggle('d-none', !permiteClasif);
-    }
     mcToggleRubroGasto();
 
-    // Botón de guardado dedicado del Sustento Tributario: solo tiene sentido si el
-    // selector quedó editable (arriba) Y no está fijo por Reembolso (código 08).
+    // El Sustento Tributario solo se envía si el selector quedó editable (arriba) y
+    // no está fijo por Reembolso (código 08).
     const sustentoSel   = document.getElementById('mcSustento');
     const fijoReembolso = !!(sustentoSel && sustentoSel.classList.contains('mc-lock-reembolso'));
-    const muestraSustentoMigrado = permiteSustentoMigrado && !fijoReembolso;
-    document.getElementById('mcBtnGuardarSustentoMigrado')?.classList.toggle('d-none', !muestraSustentoMigrado);
-    document.getElementById('mcSustentoMigradoHelp')?.classList.toggle('d-none', !muestraSustentoMigrado);
+    const enviaSustento = permiteSustentoMigrado && !fijoReembolso && !!sustentoSel && !sustentoSel.disabled;
 
-    // Sin edición: ocultar Guardar siempre que esté bloqueada (migrada o período cerrado).
-    document.getElementById('btnGuardarCompra')?.classList.add('d-none');
+    // El botón del pie pasa a «Actualizar» y guarda solo lo editable
+    // (mcGuardarSoloLectura). Si no queda nada editable, se oculta.
+    modal.dataset.soloLectura     = '1';
+    modal.dataset.permiteSustento = enviaSustento ? '1' : '0';
+    modal.dataset.permiteClasif   = permiteClasif ? '1' : '0';
+    const btnGuardar = document.getElementById('btnGuardarCompra');
+    if (btnGuardar) {
+        btnGuardar.innerHTML = '<i class="bi bi-check2-circle me-1"></i> Actualizar';
+        btnGuardar.classList.toggle('d-none', !(enviaSustento || permiteClasif));
+    }
 
     // Eliminar SÍ se permite para compras migradas (a diferencia de editar) — solo se
     // oculta cuando el bloqueo es por período contable cerrado (esa restricción aplica
@@ -798,8 +843,10 @@ function mcActualizarBloqueoCampos() {
     const propinaEl = document.getElementById('mcInputPropina');
     if (propinaEl) propinaEl.disabled = isElectronico;
 
-    // Especial para Deducible y Parte Relacionada (Permitidos)
-    document.getElementById('mcDeducible').disabled = false;
+    // Especial para Deducible y Parte Relacionada (Permitidos). Deducible queda fijo si el
+    // comprobante se emitió a la cédula del dueño (ver mcFijarDeducibleCedula).
+    const dedSel = document.getElementById('mcDeducible');
+    dedSel.disabled = dedSel.dataset.fijoCedula === '1';
     if (document.getElementById('mcRubroGasto')) document.getElementById('mcRubroGasto').disabled = false;
     document.getElementById('mcMotivo').disabled = false;
     document.getElementById('mcObservaciones').disabled = false;
@@ -871,7 +918,8 @@ function CMG_resetModal() {
         document.getElementById('mcSustento').innerHTML = '<option value="">-- Seleccione Comprobante primero --</option>';
     }
     if (document.getElementById('mcTipoRegistro')) document.getElementById('mcTipoRegistro').value = 'fisica';
-    if (document.getElementById('mcDeducible')) document.getElementById('mcDeducible').value = 'declaracion_iva';
+    mcFijarDeducibleCedula(false);
+    mcFijarDeducible('declaracion_iva');
     if (document.getElementById('mcRubroGasto')) document.getElementById('mcRubroGasto').value = '';
     mcToggleRubroGasto();
     const d_now = new Date();
@@ -1233,7 +1281,7 @@ document.getElementById('mcBuscarProveedor').addEventListener('keydown', functio
         this.value = ''; // Limpiar el texto visible
         document.getElementById('mcIdProveedor').value = ''; // Limpiar ID oculto
         // Restablecer deducible por defecto
-        document.getElementById('mcDeducible').value = 'declaracion_iva';
+        mcFijarDeducible('declaracion_iva');
         // Ocultar lista si estaba abierta
         document.getElementById('mcListaProveedores').classList.add('d-none');
     }
@@ -1242,7 +1290,7 @@ document.getElementById('mcBuscarProveedor').addEventListener('keydown', functio
 document.getElementById('mcBuscarProveedor').addEventListener('blur', function() {
     if (this.value.trim() === '') {
         document.getElementById('mcIdProveedor').value = '';
-        document.getElementById('mcDeducible').value = 'declaracion_iva';
+        mcFijarDeducible('declaracion_iva');
     }
 });
 
@@ -1289,17 +1337,14 @@ window.CMG_seleccionarProveedor = function(p) {
     document.getElementById('mcListaProveedores').classList.add('d-none');
     
     // Si el proveedor tiene Cédula (SRI: 05), sugerir Gasto Personal
-    if (p.tipo_id === '05') {
-        document.getElementById('mcDeducible').value = 'gasto_personal';
-    } else {
-        document.getElementById('mcDeducible').value = 'declaracion_iva';
-    }
+    // (solo si la empresa es persona natural: mcFijarDeducible lo resuelve).
+    mcFijarDeducible(p.tipo_id === '05' ? 'gasto_personal' : 'declaracion_iva');
     // Rubro: el de la última compra de gasto personal de ese proveedor (si existe).
     // Si ya tiene rubro, se asume que la compra es gasto personal aunque el proveedor tenga RUC.
     const rubroSel = document.getElementById('mcRubroGasto');
     if (rubroSel) {
         rubroSel.value = p.ultimo_rubro || '';
-        if (p.ultimo_rubro) document.getElementById('mcDeducible').value = 'gasto_personal';
+        if (p.ultimo_rubro) mcFijarDeducible('gasto_personal');
     }
     mcToggleRubroGasto();
 
@@ -2095,6 +2140,8 @@ function CMG_recalcularTotales() {
 // ─────────────────────────────────────────────────────────────────────────────
 window.CMG_guardar = async function() {
     const modal = document.getElementById('modalCompra');
+    // Compra de solo lectura (migrada / período cerrado): solo Sustento, Deducible y Rubro.
+    if (modal.dataset.soloLectura === '1') return mcGuardarSoloLectura();
     const id    = document.getElementById('mcId').value || modal.dataset.id || '';
     const tipo  = document.getElementById('mcTipoComprobante').value;
     const usaMascara = CMG_TIPOS_MASCARA.includes(tipo);
@@ -2643,7 +2690,7 @@ async function mcEjecutarRestauracion(estado) {
     document.getElementById('mcAutorizacionHasta').value = estado.aut_hasta || '';
     if (estado.caducidad) document.getElementById('mcFechaCaducidad').value = estado.caducidad;
     if (estado.tipo_registro) document.getElementById('mcTipoRegistro').value = estado.tipo_registro;
-    if (estado.deducible) document.getElementById('mcDeducible').value = estado.deducible;
+    if (estado.deducible) mcFijarDeducible(estado.deducible);
     if (document.getElementById('mcRubroGasto')) document.getElementById('mcRubroGasto').value = estado.rubro_gasto_personal || '';
     mcToggleRubroGasto();
     document.getElementById('mcDocumentoModificado').value = estado.documento_modificado || '';

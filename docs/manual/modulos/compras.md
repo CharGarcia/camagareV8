@@ -6,7 +6,7 @@ ruta_modulo: modulos/compras
 tipo: modulo
 visibilidad: todos
 etiquetas: compras, compra, factura de compra, buscar compra, buscador, aparecen compras que no busque, resultados que no corresponden, la busqueda trae otras compras, buscar por numero de autorizacion, filtros, filtrar compras, buscar por producto comprado, filtro de fechas, saldo pendiente, estado de pago, chips, ordenar por dos columnas, ordenar por proveedor y fecha, asiento contable, editar asiento, pestaña asiento, proveedor, xml, sri, entrada de mercaderia, vincular producto, retencion, orden de compra, vincular orden, pedido a proveedor, comparar pedido vs facturado, entrega parcial, recibido parcial, cerrar orden, sustento tributario, codigo de sustento, autorizacion, fecha de caducidad, ats, persona natural, obligada a llevar contabilidad, tipo de contribuyente, registro manual, compra fisica, pagar la compra, pestaña pagos, saldo pendiente, valores de terceros, otros conceptos, valores adicionales, bomberos, tasa de basura, recoleccion de basura, planilla de luz, planilla de agua, servicios basicos, informacion adicional, info adicional, nombre muy largo, limite de caracteres, value too long, no se pudo guardar la compra, imprimir, impresora, retencion antes de la factura, enlazar retencion, pdf en dos hojas, segunda hoja casi vacia, totales en otra pagina, el pdf corta la pagina, hoja de mas, asiento no cuadra, el asiento no se genera, asiento manual, registrar asiento a mano, importe total no es subtotal mas iva, supera el maximo de ajuste, xml inconsistente, iva de cabecera distinto al de las lineas, seguro campesino, generar contabilidad, otros rubros de terceros, tasa de pernoctacion, tasa turistica, hotel, hospedaje, rubro dentro del total, iva inflado en el listado
-version: 2.32
+version: 2.34
 orden: 20
 estado: activo
 ---
@@ -67,6 +67,23 @@ Cada compra lleva el campo **Deducible**, que decide a qué declaración va:
   crédito tributario de IVA; sirven para la **rebaja por gastos personales** del
   impuesto a la renta y para el Anexo de Gastos Personales.
 
+La opción **Gasto personal** solo aparece si la empresa es **Persona Natural**
+(obligada o no a llevar contabilidad), según el *Tipo de Contribuyente* de
+Configuración → Empresa. En una sociedad, contribuyente especial o sector
+público el selector solo ofrece *Deducible para declaración IVA*, y el sistema
+rechaza guardar una compra como gasto personal. Si una compra antigua de esas
+empresas ya estaba guardada como gasto personal, se sigue mostrando así y se
+puede pasar a *Declaración de IVA*.
+
+**Comprobantes emitidos a la cédula.** Si el comprobante electrónico se emitió a
+la **cédula** del dueño (los 10 primeros dígitos del RUC) y no a su RUC, la
+compra es **gasto personal**: un comprobante así no da crédito tributario de
+IVA. Al registrarla desde el XML del SRI ya entra como *Gasto personal*, y al
+abrirla el campo *Deducible* queda fijo en esa opción (no se puede pasar a
+*Declaración de IVA*). Si una compra antigua quedó mal clasificada, basta con
+abrirla y guardarla para que se corrija. La excepción es el período contable
+cerrado: ahí *Deducible* no se puede cambiar y se muestra lo guardado.
+
 Cuando se elige *Gasto personal* aparece el campo **Rubro gasto personal**, con
 los rubros del formulario del SRI: **Vivienda, Salud, Educación (arte y
 cultura), Alimentación, Vestimenta y Turismo nacional**. Al escoger un proveedor,
@@ -81,8 +98,10 @@ para encontrar las que faltan por clasificar).
 
 **Compras de solo lectura** (migradas electrónicas o de un período contable
 cerrado): el resto del documento no se puede editar, pero su clasificación sí.
-Junto a *Deducible* aparece un botón de guardado propio (✓) que guarda
-*Deducible* y *Rubro* sin tocar nada más; el cambio queda en el historial.
+Se corrigen en el modal y se guardan con el botón **Actualizar** del pie, que
+guarda *Deducible*, *Rubro* (y el *Sustento Tributario* en las migradas
+electrónicas) sin tocar nada más; el cambio queda en el historial. Si en la
+compra no queda nada editable, el botón no aparece.
 
 | Caso | Deducible | Rubro |
 |------|-----------|-------|
@@ -126,8 +145,8 @@ pagado para solicitar Reembolso de Gasto (intermediario)* y no se puede cambiar.
 **Corregir el sustento en una compra migrada ELECTRÓNICA.** Una compra
 migrada **electrónica** (respaldada por un XML del SRI) es de solo lectura
 (no se puede editar nada más, ver más abajo), pero el selector de **Sustento
-Tributario** queda habilitado con su propio botón de guardado (✓) junto al
-campo, porque las compras migradas llegan sin esta clasificación bien resuelta
+Tributario** queda habilitado y se guarda con el botón **Actualizar** del pie
+del modal, porque las compras migradas llegan sin esta clasificación bien resuelta
 y el ATS/Declaración de IVA la necesitan correcta. Guardarlo no abre el resto
 del documento a edición, y sigue respetando las mismas reglas: no se puede
 tocar si el período contable de la compra está cerrado, y en una factura de
@@ -743,6 +762,14 @@ aprobaciones pasa, así que no se paga dos veces.
 
 ## Historial de cambios
 
+- **2.34** — La opción **Gasto personal** de *Deducible* solo aparece en empresas
+  de Persona Natural (obligada o no a llevar contabilidad); en las demás el
+  servidor también la rechaza. Una compra cuyo comprobante se emitió a la
+  **cédula** del dueño (no al RUC) queda fija como *Gasto personal*.
+- **2.33** — En las compras de solo lectura (migradas electrónicas o de período
+  cerrado) desaparecen los botones ✓ junto a *Sustento Tributario* y *Deducible*
+  y los mensajes debajo de esos campos: *Sustento*, *Deducible* y *Rubro* se
+  guardan juntos con el botón **Actualizar** del pie del modal.
 - **2.32** — Las facturas con **otros rubros de terceros dentro del total** (bloque
   `otrosRubrosTerceros` del XML del SRI; p. ej. la *tasa de pernoctación* de un
   hotel) ya se registran completas: fila **(+) Otros rubros de terceros** antes del

@@ -154,6 +154,9 @@
               // y los datos de autorización. Los tipos 2 a 5 los ven y son obligatorios.
               // Debe coincidir con _esPersonaNatural en public/js/modulos/compras.js.
               $esPersonaNatural = in_array($tipoEmp, ['1', '01'], true);
+              // «Gasto personal» solo para personas naturales (tipos 1 y 2). Misma regla en
+              // ComprasRules::empresaPermiteGastoPersonal() y en compras.js.
+              $permiteGastoPersonal = \App\Rules\modulos\ComprasRules::empresaPermiteGastoPersonal($tipoEmp);
               $dNonePN = $esPersonaNatural ? 'd-none' : '';
               ?>
               <!-- Sustento Tributario -->
@@ -161,20 +164,11 @@
                 <label class="form-label form-label-sm mb-1 fw-semibold">
                   Sustento Tributario <?= \App\Helpers\PreferenciasHelper::renderEstrellaFavorito('compras', 'mcSustento', 'id_sustento_tributario') ?> <?php if (!$esPersonaNatural): ?><span class="text-danger">*</span><?php endif; ?>
                 </label>
-                <div class="d-flex gap-1 align-items-start">
-                  <select id="mcSustento" class="form-select form-select-sm">
-                    <option value="">-- Seleccione Tipo de Comprobante --</option>
-                  </select>
-                  <button type="button" id="mcBtnGuardarSustentoMigrado" class="btn btn-sm btn-outline-primary d-none flex-shrink-0"
-                          title="Guardar Sustento Tributario" onclick="mcGuardarSustentoMigrado()">
-                    <i class="bi bi-check-lg"></i>
-                  </button>
-                </div>
+                <select id="mcSustento" class="form-select form-select-sm">
+                  <option value="">-- Seleccione Tipo de Comprobante --</option>
+                </select>
                 <div id="mcSustentoReembolsoHelp" class="form-text small text-muted d-none">
                   <i class="bi bi-lock-fill"></i> Bloqueado: código 08 obligatorio por ser Factura de Reembolso recibida.
-                </div>
-                <div id="mcSustentoMigradoHelp" class="form-text small text-muted d-none">
-                  <i class="bi bi-pencil-fill"></i> Compra migrada: el Sustento Tributario se puede corregir aunque el resto del documento sea de solo lectura.
                 </div>
               </div>
 
@@ -219,19 +213,12 @@
                 <label class="form-label form-label-sm mb-1 fw-semibold">
                   Deducible <?= \App\Helpers\PreferenciasHelper::renderEstrellaFavorito('compras', 'mcDeducible', 'deducible') ?>
                 </label>
-                <div class="d-flex gap-1 align-items-start">
-                  <select id="mcDeducible" class="form-select form-select-sm" onchange="mcToggleRubroGasto()">
-                    <option value="declaracion_iva">Deducible para declaración IVA</option>
-                    <option value="gasto_personal">Gasto Personal</option>
-                  </select>
-                  <!-- Guardado propio de Deducible + Rubro en compras de solo lectura
-                       (migrada / período cerrado). Ver mcGuardarClasificacion(). -->
-                  <button type="button" id="mcBtnGuardarClasificacion" class="btn btn-sm btn-outline-primary d-none flex-shrink-0"
-                          title="Guardar Deducible y Rubro" onclick="mcGuardarClasificacion()">
-                    <i class="bi bi-check-lg"></i>
-                  </button>
-                </div>
-                <div id="mcClasificacionHelp" class="form-text small text-muted d-none"></div>
+                <select id="mcDeducible" class="form-select form-select-sm" onchange="mcToggleRubroGasto()">
+                  <option value="declaracion_iva">Deducible para declaración IVA</option>
+                  <?php if ($permiteGastoPersonal): ?>
+                  <option value="gasto_personal">Gasto Personal</option>
+                  <?php endif; ?>
+                </select>
               </div>
 
               <!-- Rubro del gasto personal (solo cuando Deducible = Gasto personal) -->
