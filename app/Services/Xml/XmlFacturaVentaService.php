@@ -133,6 +133,14 @@ class XmlFacturaVentaService
         $this->txt($dom, $el, 'razonSocialComprador',        $cab['cliente_nombre'] ?? '');
         $this->txt($dom, $el, 'identificacionComprador',     $cab['cliente_ruc'] ?? '');
 
+        // direccionComprador (opcional en el XSD, máx. 300): va justo después de
+        // identificacionComprador. Misma dirección del cliente que muestra el RIDE;
+        // se omite si el cliente no la tiene para no enviar un nodo vacío.
+        $dirComprador = trim((string) preg_replace('/\s+/u', ' ', (string)($cab['cliente_direccion'] ?? '')));
+        if ($dirComprador !== '') {
+            $this->txt($dom, $el, 'direccionComprador', mb_substr($dirComprador, 0, 300));
+        }
+
         $this->txt($dom, $el, 'totalSinImpuestos', $this->dec2($cab['total_sin_impuestos'] ?? 0));
         $this->txt($dom, $el, 'totalDescuento',    $this->dec2($cab['total_descuento']    ?? 0));
 
