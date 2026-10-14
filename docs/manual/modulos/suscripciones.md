@@ -5,8 +5,8 @@ categoria: Ventas
 ruta_modulo: modulos/suscripciones
 tipo: modulo
 visibilidad: todos
-etiquetas: suscripciones, suscripcion, cobro recurrente, facturacion recurrente, factura recurrente, mensualidad, pension, plan mensual, membresia, renovacion, periodicidad, proximo cobro, generar documentos, generar facturas, facturacion automatica, facturas del cliente, facturas emitidas, historial de facturas, detalle de facturas, recibos del cliente, que le facture, saldo del cliente, facturas pendientes, facturas pagadas, facturas abonadas, cobro con tarjeta, debito automatico, nuvei, kushki, aviso de vencimiento, imprimir, impresora, excel, exportar, resumen de valores, total por periodicidad, proyeccion anual, ingresos recurrentes, iva por tarifa, resumen por concepto, detalle por cliente, que se le factura a cada cliente, items por cliente, informacion adicional en excel, resumen en pdf, detalle por cliente en pdf, pdf de la suscripcion, imprimir suscripcion, contrato, ficha de la suscripcion, detalle de la suscripcion en pdf, devengado, devengo, ingreso diferido, ingresos diferidos, ingreso anticipado, cobro por adelantado, mes caido, mes vencido, facturacion vencida, niif 15, seccion 23, reconocimiento de ingresos, provision de ingresos, ingresos por facturar
-version: 1.25
+etiquetas: suscripciones, suscripcion, cobro recurrente, facturacion recurrente, factura recurrente, mensualidad, pension, plan mensual, membresia, renovacion, periodicidad, proximo cobro, generar documentos, generar facturas, facturacion automatica, facturas del cliente, facturas emitidas, historial de facturas, detalle de facturas, recibos del cliente, que le facture, saldo del cliente, facturas pendientes, facturas pagadas, facturas abonadas, cobro con tarjeta, debito automatico, nuvei, kushki, aviso de vencimiento, pagos reportados, comprobante de pago, reporte de pago, revisar pago, rechazar pago, ya pague, transferencia del cliente, imprimir, impresora, excel, exportar, resumen de valores, total por periodicidad, proyeccion anual, ingresos recurrentes, iva por tarifa, resumen por concepto, detalle por cliente, que se le factura a cada cliente, items por cliente, informacion adicional en excel, resumen en pdf, detalle por cliente en pdf, pdf de la suscripcion, imprimir suscripcion, contrato, ficha de la suscripcion, detalle de la suscripcion en pdf, devengado, devengo, ingreso diferido, ingresos diferidos, ingreso anticipado, cobro por adelantado, mes caido, mes vencido, facturacion vencida, niif 15, seccion 23, reconocimiento de ingresos, provision de ingresos, ingresos por facturar
+version: 1.26
 orden: 0
 estado: activo
 ---
@@ -303,6 +303,41 @@ suscripción, y en orden:
 El PDF muestra lo que está **guardado**: los cambios sin guardar del formulario no
 aparecen.
 
+## Pagos reportados por los clientes
+
+Cuando la suscripción del sistema de un cliente está vencida o por vencer, el cliente ve
+un aviso desde el cual puede **enviar un mensaje y el comprobante de pago** (PDF o imagen).
+Cada envío:
+
+- Llega por **correo** al correo registrado de la empresa dueña de la suscripción (campo
+  correo de la empresa; si tiene varios separados por coma, a todos), con el comprobante
+  adjunto y un botón para abrir este módulo.
+- Aparece en el botón **Pagos reportados** de la parte superior del listado. El número rojo
+  indica cuántos siguen **en revisión**. El aviso de suscripciones de la barra superior
+  también los cuenta y, al hacer clic, abre directamente esta ventana.
+
+La ventana lista los reportes de los últimos 60 días: cuándo se reportó, empresa, usuario,
+fecha límite de pago, documento y saldo pendientes, el mensaje, el comprobante (clic para
+abrirlo) y el estado:
+
+| Estado | Qué significa |
+|---|---|
+| **En revisión** | Recién reportado. El cliente no ve el aviso de vencimiento. |
+| **Sin respuesta** | Pasaron 3 días sin revisarlo: el cliente vuelve a ver el aviso. |
+| **Rechazado** | Se rechazó con un motivo (se muestra quién y cuándo). |
+
+Qué hacer con cada reporte:
+
+- **El pago es correcto**: registra el cobro como siempre (en Ingresos). La suscripción del
+  cliente queda al día y su aviso desaparece solo. No hace falta marcar nada aquí.
+- **El pago no es correcto**: pulsa **Rechazar**, escribe el motivo y confirma. Al cliente
+  le vuelve a salir el aviso con ese motivo y le llega por correo (al usuario que lo reportó
+  y al correo de su empresa). Necesita permiso de **modificar**.
+
+Si al lado del estado aparece **Sin correo**, el correo de aviso no se pudo enviar
+(normalmente porque la empresa no tiene correo registrado). El reporte igual queda en esta
+ventana.
+
 ## Buscar y filtrar el listado
 
 El cuadro de búsqueda busca en las columnas del listado, en los productos de cada
@@ -369,6 +404,8 @@ registrados*.
   acceso total en uno de esos módulos, de ese tipo solo ve los documentos que él
   registró (igual que en el listado del módulo); la nota al pie de la pestaña lo
   indica.
+- **Pagos reportados**: con permiso de ver se consultan y se abren los comprobantes;
+  para **Rechazar** hace falta permiso de modificar.
 
 ## Reglas de negocio
 
@@ -415,6 +452,9 @@ registrados*.
 
 ## Historial de cambios
 
+- **1.26** — Nuevo botón **Pagos reportados**: los pagos que los clientes informan desde su
+  aviso de suscripción vencida (mensaje + comprobante), con la opción de **Rechazar** indicando
+  el motivo. Cada reporte llega también por correo a la empresa.
 - **1.25** — Al crear un **cliente nuevo** desde la suscripción, la ficha se cierra sola y el cliente queda seleccionado. Un **producto nuevo** se agrega solo al detalle de la suscripción.
 - **1.24** — Condominios: campo **Inmueble** en la suscripción (solo empresas con el módulo activo), con
   asociación automática cuando el cliente paga un solo inmueble; columna y filtro `inmueble:` en el

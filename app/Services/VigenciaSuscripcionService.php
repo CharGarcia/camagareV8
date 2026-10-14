@@ -150,6 +150,10 @@ class VigenciaSuscripcionService
             if ($v !== null) {
                 $v['empresa'] = (string) ($empresa['nombre'] ?? '');
                 $v['ruc']     = (string) ($empresa['ruc'] ?? '');
+                // Pago reportado por el cliente para ESTA fecha límite. Si la controladora
+                // registra el cobro, la fecha cambia y el reporte deja de aplicar solo.
+                $v['reporte']     = (new SuscripcionReportePagoService())->estadoReporte($idEmpresa, (string) $v['fecha']);
+                $v['en_revision'] = ($v['reporte']['estado'] ?? '') === 'en_revision';
             }
         } catch (\Throwable $e) {
             error_log('VigenciaSuscripcionService::estado ' . $e->getMessage());
@@ -185,7 +189,10 @@ class VigenciaSuscripcionService
             if (empty($hasta)) {
                 return null;
             }
-            return $this->armar('manual', (string) $hasta, null, null, 0, null, null, $sinValores);
+            $m = $this->armar('manual', (string) $hasta, null, null, 0, null, null, $sinValores);
+            $m['id_empresa_controladora'] = (int) ($resuelto['controladora'] ?? 0);
+            $m['id_suscripcion']          = 0;
+            return $m;
         }
 
         $repo  = new SuscripcionesRepository();
@@ -235,6 +242,9 @@ class VigenciaSuscripcionService
             }
 
             if ($cand !== null) {
+                // A quién se le reporta el pago (Suscripciones → Pagos reportados).
+                $cand['id_suscripcion']          = (int) $s['id'];
+                $cand['id_empresa_controladora'] = $idDuena;
                 $porSusc[(int) $s['id']] = $cand;
                 if ($mejor === null || $cand['dias'] < $mejor['dias']) {
                     $mejor = $cand;
@@ -256,10 +266,14 @@ class VigenciaSuscripcionService
         Cache::delete('cmg_vigencia_susc_' . $idEmpresa);
     }
 
-    /** ¿Corresponde mostrar el modal al ingresar? (vencida o a ≤ DIAS_MODAL días). */
+    /**
+     * ¿Corresponde mostrar el modal al ingresar? (vencida o a ≤ DIAS_MODAL días).
+     * No, mientras el cliente tenga un pago reportado en revisión (SuscripcionReportePagoService).
+     */
     public static function requiereModal(?array $vig): bool
     {
-        return $vig !== null && ($vig['estado'] === 'vencida' || $vig['dias'] <= self::DIAS_MODAL);
+        return $vig !== null && empty($vig['en_revision'])
+            && ($vig['estado'] === 'vencida' || $vig['dias'] <= self::DIAS_MODAL);
     }
 
     private function armar(

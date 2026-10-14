@@ -1110,14 +1110,23 @@ $urlManual = $base . '/documentacion' . ($rutaActualAyuda !== '' ? '?ruta=' . ur
                 if (susc) {
                     const dias = parseInt(susc.dias, 10);
                     const vencida = susc.estado === 'vencida' || dias < 0;
+                    const enRevision = !!susc.en_revision;
                     const esUrgente = vencida || dias < 15; // rojo si <15 días o vencida
                     document.querySelectorAll('.cmg-suscripcion-badge').forEach(function(b) {
+                        b.classList.remove('bg-warning', 'text-dark', 'bg-danger', 'text-white', 'bg-info');
+                        if (enRevision) {
+                            // Pago reportado por el cliente: sin alarma mientras se revisa.
+                            b.innerHTML = '<i class="bi bi-hourglass-split"></i>';
+                            b.classList.add('bg-info', 'text-dark');
+                            return;
+                        }
                         b.textContent = vencida ? '!' : String(dias);
-                        b.classList.remove('bg-warning', 'text-dark', 'bg-danger', 'text-white');
                         if (esUrgente) { b.classList.add('bg-danger', 'text-white'); }
                         else { b.classList.add('bg-warning', 'text-dark'); }
                     });
-                    const titulo = vencida
+                    const titulo = enRevision
+                        ? 'Pago de la suscripción reportado: EN REVISIÓN — clic para ver el detalle'
+                        : vencida
                         ? (susc.motivo === 'pendiente'
                             ? 'La suscripción DE ESTA EMPRESA está VENCIDA: hay un pago pendiente — clic para ver el detalle'
                             : 'La suscripción DE ESTA EMPRESA está VENCIDA — clic para ver el detalle')
@@ -1135,15 +1144,20 @@ $urlManual = $base . '/documentacion' . ($rutaActualAyuda !== '' ? '?ruta=' . ur
                 if (sg) {
                     const sgV = parseInt(sg.vencidas || 0, 10);
                     const sgP = parseInt(sg.por_vencer || 0, 10);
-                    const sgT = parseInt(sg.total || (sgV + sgP), 10);
+                    const sgR = parseInt(sg.reportados || 0, 10);
+                    const sgT = parseInt(sg.total || (sgV + sgP), 10) + sgR;
                     document.querySelectorAll('.cmg-suscgest-badge').forEach(function(b) {
                         b.textContent = sgT > 99 ? '99+' : sgT;
                         b.classList.remove('bg-warning', 'text-dark', 'bg-danger', 'text-white');
-                        if (sgV > 0) { b.classList.add('bg-danger', 'text-white'); }
+                        if (sgV > 0 || sgR > 0) { b.classList.add('bg-danger', 'text-white'); }
                         else { b.classList.add('bg-warning', 'text-dark'); }
                     });
-                    const sgTit = 'Suscripciones DE CLIENTES: ' + sgV + ' vencida' + (sgV === 1 ? '' : 's') + ' · ' + sgP + ' por vencer — clic para gestionarlas';
-                    sgWraps.forEach(function(w) { w.classList.remove('d-none'); w.setAttribute('title', sgTit); });
+                    let sgTit = 'Suscripciones DE CLIENTES: ' + sgV + ' vencida' + (sgV === 1 ? '' : 's') + ' · ' + sgP + ' por vencer';
+                    if (sgR > 0) { sgTit += ' · ' + sgR + ' pago' + (sgR === 1 ? '' : 's') + ' reportado' + (sgR === 1 ? '' : 's') + ' por revisar'; }
+                    sgTit += ' — clic para gestionarlas';
+                    // Con pagos por revisar, el clic abre directamente «Pagos reportados».
+                    const sgHref = '<?= $base ?>/modulos/suscripciones' + (sgR > 0 ? '?reportados=1' : '');
+                    sgWraps.forEach(function(w) { w.classList.remove('d-none'); w.setAttribute('title', sgTit); w.setAttribute('href', sgHref); });
                 } else {
                     sgWraps.forEach(function(w) { w.classList.add('d-none'); });
                 }
@@ -1434,11 +1448,113 @@ $urlManual = $base . '/documentacion' . ($rutaActualAyuda !== '' ? '?ruta=' . ur
                 return '$ ' + Number(v || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
             };
 
-            function pintar(v, puedeVerDetalle) {
+            const fechaHora = function(f) {
+                const s = String(f || '');
+                return fecha(s.substring(0, 10)) + (s.length > 10 ? ' ' + esc(s.substring(11, 19)) : '');
+            };
+
+            // Bloque «Reportar pago»: estado del último reporte + formulario (mensaje y
+            // comprobante). Datos: SuscripcionReportePagoService vía avisoSuscripcionAjax.
+            function htmlReporte(v, d) {
+                const rep = v.reporte || null;
+                const est = rep ? rep.estado : '';
+                let html = '';
+                if (est === 'en_revision') {
+                    html += '<div class="alert alert-info py-2 px-3 mb-2" style="font-size:.82rem;"><i class="bi bi-hourglass-split me-1"></i>'
+                         +  'Reportaste el pago el <strong>' + fechaHora(rep.fecha) + '</strong>' + (rep.usuario ? ' (' + esc(rep.usuario) + ')' : '')
+                         +  '. Lo estamos revisando; mientras tanto no verás este aviso al ingresar.</div>';
+                } else if (est === 'rechazado') {
+                    html += '<div class="alert alert-danger py-2 px-3 mb-2" style="font-size:.82rem;"><i class="bi bi-x-circle me-1"></i>'
+                         +  'El pago que reportaste el <strong>' + fechaHora(rep.fecha) + '</strong> fue rechazado.'
+                         +  (rep.motivo ? '<div class="mt-1"><strong>Motivo:</strong> ' + esc(rep.motivo).replace(/\n/g, '<br>') + '</div>' : '')
+                         +  '</div>';
+                } else if (est === 'sin_respuesta') {
+                    html += '<div class="alert alert-warning py-2 px-3 mb-2" style="font-size:.82rem;"><i class="bi bi-clock-history me-1"></i>'
+                         +  'Reportaste el pago el <strong>' + fechaHora(rep.fecha) + '</strong> y aún no lo hemos confirmado. Puedes volver a enviarlo.</div>';
+                }
+                if (!d.puede_reportar) {
+                    return html;
+                }
+                const oculto = est === 'en_revision';
+                if (oculto) {
+                    html += '<a href="#" class="small" data-susc-rep-abrir><i class="bi bi-chat-left-text me-1"></i>Enviar otro mensaje o comprobante</a>';
+                }
+                html += '<div class="border rounded-3 p-2 bg-light' + (oculto ? ' d-none' : '') + '" data-susc-rep-form>'
+                     +    '<div class="fw-semibold mb-1" style="font-size:.82rem;"><i class="bi bi-send me-1 text-success"></i>¿Ya pagaste? Envíanos el comprobante</div>'
+                     +    '<textarea class="form-control form-control-sm mb-2" rows="3" maxlength="2000" data-susc-rep-mensaje placeholder="Escribe un mensaje (opcional si adjuntas el comprobante)" style="font-size:.8rem;"></textarea>'
+                     +    '<input type="file" class="form-control form-control-sm mb-1" data-susc-rep-archivo accept=".pdf,.jpg,.jpeg,.png,.webp,application/pdf,image/jpeg,image/png,image/webp" style="font-size:.8rem;">'
+                     +    '<div class="text-muted mb-2" style="font-size:.72rem;">PDF o imagen (JPG, PNG, WEBP), máximo ' + (parseInt(d.max_mb, 10) || 5) + ' MB. '
+                     +      'Mientras revisamos tu pago no verás este aviso (máximo ' + (parseInt(d.dias_revision, 10) || 3) + ' días).</div>'
+                     +    '<div class="alert alert-danger py-1 px-2 mb-2 d-none" data-susc-rep-error style="font-size:.78rem;"></div>'
+                     +    '<div class="text-end"><button type="button" class="btn btn-sm btn-success" data-susc-rep-enviar data-max-bytes="' + ((parseInt(d.max_mb, 10) || 5) * 1048576) + '"><i class="bi bi-send me-1"></i>Enviar</button></div>'
+                     +  '</div>';
+                return html;
+            }
+
+            // Envío del reporte: bandera «en curso» antes del primer await y clave de guardado
+            // única por apertura del modal (§8: un guardado = un registro).
+            function prepararReporte(modal) {
+                const form = modal.querySelector('[data-susc-rep-form]');
+                if (!form) return;
+                const token = typeof window.CMG_nuevoTokenGuardado === 'function'
+                    ? window.CMG_nuevoTokenGuardado()
+                    : String(Date.now()) + Math.random().toString(36).slice(2, 10);
+                const abrir = modal.querySelector('[data-susc-rep-abrir]');
+                if (abrir) {
+                    abrir.addEventListener('click', function(e) {
+                        e.preventDefault();
+                        form.classList.remove('d-none');
+                        abrir.classList.add('d-none');
+                    });
+                }
+                const btn = form.querySelector('[data-susc-rep-enviar]');
+                const err = form.querySelector('[data-susc-rep-error]');
+                let enviando = false;
+                btn.addEventListener('click', function() {
+                    if (enviando) return;
+                    const mensaje = form.querySelector('[data-susc-rep-mensaje]').value.trim();
+                    const archivo = form.querySelector('[data-susc-rep-archivo]').files[0] || null;
+                    const fallo = function(t) {
+                        err.textContent = t;
+                        err.classList.remove('d-none');
+                    };
+                    err.classList.add('d-none');
+                    if (!mensaje && !archivo) { fallo('Escribe un mensaje o adjunta el comprobante de pago.'); return; }
+                    if (archivo && archivo.size > (parseInt(btn.dataset.maxBytes, 10) || 5 * 1048576)) { fallo('El archivo pesa demasiado.'); return; }
+
+                    enviando = true;
+                    btn.disabled = true;
+                    btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Enviando…';
+                    const fd = new FormData();
+                    fd.append('mensaje', mensaje);
+                    if (archivo) fd.append('comprobante', archivo);
+                    fd.append('token_guardado', token);
+                    fetch(base + '/contadores/reportarPagoSuscripcionAjax', { method: 'POST', body: fd, headers: { 'Accept': 'application/json' } })
+                        .then(function(r) { return r.json(); })
+                        .then(function(res) {
+                            if (!res || !res.ok) { throw new Error((res && res.mensaje) || 'No se pudo enviar el reporte.'); }
+                            // Registrado: no se reactiva el botón; el formulario se reemplaza por la confirmación.
+                            form.outerHTML = '<div class="alert alert-success py-2 px-3 mb-0" style="font-size:.82rem;"><i class="bi bi-check-circle me-1"></i>' + esc(res.mensaje) + '</div>';
+                            modal.querySelectorAll('[data-susc-rep-abrir], .alert-info, .alert-danger:not([data-susc-rep-error]), .alert-warning').forEach(function(x) { x.remove(); });
+                            if (typeof window.CMG_refreshContadores === 'function') { window.CMG_refreshContadores(true); }
+                        })
+                        .catch(function(e) {
+                            fallo(e && e.message ? e.message : 'Error de conexión. Inténtalo de nuevo.');
+                            enviando = false;
+                            btn.disabled = false;
+                            btn.innerHTML = '<i class="bi bi-send me-1"></i>Enviar';
+                        });
+                });
+            }
+
+            function pintar(v, d) {
+                const puedeVerDetalle = !!d.puede_ver_detalle;
                 const dias = parseInt(v.dias, 10) || 0;
                 const vencida = v.estado === 'vencida';
-                const color = vencida || dias <= 0 ? 'danger' : 'warning';
-                const titulo = vencida ? 'Suscripción vencida'
+                const enRevision = !!v.en_revision;
+                const color = enRevision ? 'info' : (vencida || dias <= 0 ? 'danger' : 'warning');
+                const titulo = enRevision ? 'Pago de la suscripción en revisión'
+                    : vencida ? 'Suscripción vencida'
                     : (dias === 0 ? 'Tu suscripción vence hoy'
                     : 'Tu suscripción vence en ' + dias + (dias === 1 ? ' día' : ' días'));
 
@@ -1470,8 +1586,10 @@ $urlManual = $base . '/documentacion' . ($rutaActualAyuda !== '' ? '?ruta=' . ur
                     filas += '<tr><td class="text-muted text-nowrap pe-3" style="width:1%;">Periodicidad</td><td>' + esc(v.periodicidad) + '</td></tr>';
                 }
 
-                const mensaje = vencida
-                    ? 'Tu suscripción al sistema está vencida. Realiza el pago lo antes posible para mantener tu servicio activo. Si ya pagaste, comunícate con nosotros para registrarlo.'
+                const mensaje = enRevision
+                    ? 'Recibimos tu reporte de pago y lo estamos revisando. Si lo confirmamos, este aviso desaparecerá.'
+                    : vencida
+                    ? 'Tu suscripción al sistema está vencida. Realiza el pago lo antes posible para mantener tu servicio activo. Si ya pagaste, envíanos el comprobante desde aquí.'
                     : 'Realiza el pago antes de la fecha de vencimiento para mantener tu servicio activo sin interrupciones.';
 
                 let modal = document.getElementById('cmgModalVigenciaSuscripcion');
@@ -1490,6 +1608,7 @@ $urlManual = $base . '/documentacion' . ($rutaActualAyuda !== '' ? '?ruta=' . ur
                   +     '<div class="modal-body">'
                   +       '<p class="mb-3" style="font-size:.85rem;">' + esc(mensaje) + '</p>'
                   +       '<table class="table table-sm mb-0" style="font-size:.82rem;"><tbody>' + filas + '</tbody></table>'
+                  +       '<div class="mt-3">' + htmlReporte(v, d) + '</div>'
                   +     '</div>'
                   +     '<div class="modal-footer py-2">'
                   +       (puedeVerDetalle ? '<a href="' + base + '/modulos/empresa" class="btn btn-sm btn-outline-secondary me-auto"><i class="bi bi-building me-1"></i>Ver detalle</a>' : '')
@@ -1498,6 +1617,7 @@ $urlManual = $base . '/documentacion' . ($rutaActualAyuda !== '' ? '?ruta=' . ur
                   +   '</div>'
                   + '</div>';
                 document.body.appendChild(modal);
+                prepararReporte(modal);
                 if (window.bootstrap && bootstrap.Modal) {
                     bootstrap.Modal.getOrCreateInstance(modal).show();
                 }
@@ -1507,7 +1627,7 @@ $urlManual = $base . '/documentacion' . ($rutaActualAyuda !== '' ? '?ruta=' . ur
                 return fetch(base + '/contadores/avisoSuscripcionAjax' + (forzar ? '?forzar=1' : ''), { headers: { 'Accept': 'application/json' } })
                     .then(function(r) { return r.ok ? r.json() : null; })
                     .then(function(d) {
-                        if (d && d.mostrar && d.vigencia) { pintar(d.vigencia, !!d.puede_ver_detalle); }
+                        if (d && d.mostrar && d.vigencia) { pintar(d.vigencia, d); }
                         else if (forzar) { window.location.href = base + '/modulos/empresa'; }
                     })
                     .catch(function() {});

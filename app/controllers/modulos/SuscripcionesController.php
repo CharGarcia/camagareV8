@@ -6,6 +6,7 @@ namespace App\controllers\modulos;
 use App\repositories\modulos\SuscripcionesRepository;
 use App\Rules\modulos\SuscripcionesRules;
 use App\Services\LogSistemaService;
+use App\Services\SuscripcionReportePagoService;
 use App\Services\modulos\SuscripcionesService;
 use App\Services\modulos\KushkiService;
 
@@ -103,6 +104,8 @@ class SuscripcionesController extends BaseModuloController
             }
         }
 
+        $reportes = new SuscripcionReportePagoService();
+
         $this->viewWithLayout('layouts.main', 'modulos.suscripciones.index', [
             'titulo'         => 'Suscripciones',
             'perm'           => $perm,
@@ -127,7 +130,76 @@ class SuscripcionesController extends BaseModuloController
             'decimalesPrecio'   => $decimalesPrecio,
             'decimalesCantidad' => $decimalesCantidad,
             'calculoIva'        => $calculoIva,
+            // Botón «Pagos reportados» (pagos que los clientes informaron desde su aviso).
+            'reportesDisponible' => $reportes->disponible(),
+            'reportesEnRevision' => $reportes->contarEnRevision($idEmpresa),
             'fullWidth'      => true,
+        ]);
+    }
+
+    /**
+     * Modal «Pagos reportados»: lo que los clientes informaron desde el aviso de suscripción
+     * vencida (mensaje + comprobante) en los últimos días. JSON { ok, rows }.
+     */
+    public function pagosReportadosAjax(): void
+    {
+        $this->requireLeer();
+        try {
+            $rows = (new SuscripcionReportePagoService())->listarParaControladora((int) $_SESSION['id_empresa']);
+            foreach ($rows as &$r) {
+                $r['created_at_fmt']   = date('d-m-Y H:i:s', strtotime((string) $r['created_at']));
+                $r['revisado_at_fmt']  = !empty($r['revisado_at']) ? date('d-m-Y H:i:s', strtotime((string) $r['revisado_at'])) : '';
+                $r['fecha_limite_fmt'] = !empty($r['fecha_limite']) ? date('d-m-Y', strtotime((string) $r['fecha_limite'])) : '';
+            }
+            unset($r);
+            $this->json(['ok' => true, 'rows' => $rows]);
+        } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
+            $this->json(['ok' => false, 'mensaje' => 'No se pudieron cargar los pagos reportados.']);
+        }
+    }
+
+    /** Descarga / vista del comprobante de un pago reportado a esta empresa. */
+    public function comprobanteReporte(): void
+    {
+        $this->requireLeer();
+        $arch = (new SuscripcionReportePagoService())->archivoParaControladora((int) ($_GET['id'] ?? 0), (int) $_SESSION['id_empresa']);
+        if ($arch === null) {
+            http_response_code(404);
+            echo 'Comprobante no encontrado.';
+            exit;
+        }
+        $nombre = str_replace(['"', "\r", "\n"], '', $arch['nombre']);
+        header('Content-Type: ' . ($arch['mime'] !== '' ? $arch['mime'] : 'application/octet-stream'));
+        header('Content-Length: ' . (string) filesize($arch['ruta']));
+        header('Content-Disposition: inline; filename="' . $nombre . '"; filename*=UTF-8\'\'' . rawurlencode($arch['nombre']));
+        header('X-Content-Type-Options: nosniff');
+        readfile($arch['ruta']);
+        exit;
+    }
+
+    /** Rechaza un pago reportado (motivo obligatorio): el aviso vuelve al cliente y se le envía el motivo. */
+    public function rechazarReporteAjax(): void
+    {
+        $this->requireActualizar();
+        try {
+            $res = (new SuscripcionReportePagoService())->rechazar(
+                (int) ($_POST['id'] ?? 0),
+                (int) $_SESSION['id_empresa'],
+                (string) ($_POST['motivo'] ?? ''),
+                (int) $_SESSION['id_usuario']
+            );
+        } catch (\InvalidArgumentException | \RuntimeException $e) {
+            $this->json(['ok' => false, 'mensaje' => $e->getMessage()]);
+        } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
+            $this->json(['ok' => false, 'mensaje' => 'No se pudo rechazar el reporte.']);
+        }
+        $this->json([
+            'ok'      => true,
+            'mensaje' => $res['correo_enviado']
+                ? 'Reporte rechazado. Se le envió el motivo al cliente por correo.'
+                : 'Reporte rechazado. No se pudo enviar el correo al cliente (no tiene correo registrado o falló el envío).',
         ]);
     }
 

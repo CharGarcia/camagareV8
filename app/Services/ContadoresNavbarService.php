@@ -113,6 +113,7 @@ class ContadoresNavbarService
 
     /** Tablas que, al cambiar, invalidan la caché de contadores de una empresa. */
     private const TABLAS_INVALIDAN = [
+        'suscripciones_reportes_pago',
         'ventas_cabecera',
         'liquidaciones_cabecera',
         'retencion_compra_cabecera',
@@ -216,6 +217,12 @@ class ContadoresNavbarService
             $datos['__suscripciones'] = $this->repo->getAlertaSuscripciones($idEmpresa, self::DIAS_SUSCRIPCIONES_POR_VENCER);
         } catch (\Throwable $e) {
             $datos['__suscripciones'] = null;
+        }
+        // Pagos de suscripción reportados por clientes, en revisión (tabla puede no existir).
+        try {
+            $datos['__pagos_reportados'] = (new SuscripcionReportePagoService())->contarEnRevision($idEmpresa);
+        } catch (\Throwable $e) {
+            $datos['__pagos_reportados'] = 0;
         }
         // Estado de la firma electrónica (['sin_firma'=>true] | ['dias'=>int] | null).
         try {
@@ -436,9 +443,12 @@ class ContadoresNavbarService
                 $dias = (int) $vig['dias'];
                 if ($vig['estado'] !== 'por_vencer' || $dias <= $this->umbralVigencia($vig['meses'] ?? null)) {
                     $out['suscripcion'] = [
-                        'dias'   => $dias,
-                        'estado' => $vig['estado'],
-                        'motivo' => $vig['motivo'],
+                        'dias'        => $dias,
+                        'estado'      => $vig['estado'],
+                        'motivo'      => $vig['motivo'],
+                        // Pago reportado por el cliente y aún en revisión: el ícono sigue
+                        // (para ver el estado) pero sin la alarma roja.
+                        'en_revision' => !empty($vig['en_revision']),
                     ];
                 }
             }
@@ -477,10 +487,13 @@ class ContadoresNavbarService
                 if (is_array($sus)) {
                     $sVenc = (int) ($sus['vencidas'] ?? 0);
                     $sProx = (int) ($sus['por_vencer'] ?? 0);
-                    if ($sVenc > 0 || $sProx > 0) {
+                    $sRep  = (int) ($empresa['__pagos_reportados'] ?? 0);
+                    if ($sVenc > 0 || $sProx > 0 || $sRep > 0) {
                         $out['suscripciones_gestion'] = [
                             'vencidas'   => $sVenc,
                             'por_vencer' => $sProx,
+                            // Pagos que los clientes reportaron y siguen en revisión.
+                            'reportados' => $sRep,
                             'total'      => $sVenc + $sProx,
                         ];
                     }

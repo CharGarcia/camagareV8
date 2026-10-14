@@ -8,6 +8,7 @@ use App\core\Controller;
 use App\models\PermisoSubmodulo;
 use App\Services\ContadoresNavbarService;
 use App\Services\SesionActivaService;
+use App\Services\SuscripcionReportePagoService;
 use App\Services\VigenciaSuscripcionService;
 use App\Traits\PermisoModuloTrait;
 
@@ -135,7 +136,61 @@ class ContadoresController extends Controller
             'mostrar'           => $mostrar,
             'vigencia'          => $mostrar ? $vig : null,
             'puede_ver_detalle' => $mostrar && $this->permisosModuloPorRuta(ContadoresNavbarService::RUTA_EMPRESA)['ver'] === true,
+            // Formulario «Ya pagué / enviar mensaje» del modal (falso sin el SQL aplicado).
+            'puede_reportar'    => $mostrar && (new SuscripcionReportePagoService())->disponible(),
+            'max_mb'            => (int) (SuscripcionReportePagoService::MAX_BYTES / 1048576),
+            'dias_revision'     => SuscripcionReportePagoService::DIAS_REVISION,
         ]);
+    }
+
+    /**
+     * POST /contadores/reportarPagoSuscripcionAjax (multipart: mensaje, comprobante, token_guardado)
+     * → { ok, mensaje, ya_existia, correo_enviado }
+     *
+     * El usuario de la empresa activa reporta el pago de la suscripción desde el modal de
+     * vigencia: se avisa por correo a la controladora y el aviso deja de salir mientras se
+     * revisa. Lo puede enviar cualquier usuario de la empresa, igual que ve el modal.
+     */
+    public function reportarPagoSuscripcionAjax(): void
+    {
+        $this->requireAuth();
+        if (($_SERVER['REQUEST_METHOD'] ?? '') !== 'POST') {
+            $this->json(['ok' => false, 'mensaje' => 'Método no permitido.'], 405);
+        }
+
+        $idEmpresa = (int) ($_SESSION['id_empresa'] ?? 0);
+        $idUsuario = (int) ($_SESSION['id_usuario'] ?? 0);
+        if (session_status() === PHP_SESSION_ACTIVE) {
+            session_write_close();
+        }
+        if ($idEmpresa <= 0) {
+            $this->json(['ok' => false, 'mensaje' => 'Selecciona una empresa.']);
+        }
+
+        try {
+            $res = (new SuscripcionReportePagoService())->reportar(
+                $idEmpresa,
+                $idUsuario,
+                (string) ($_POST['mensaje'] ?? ''),
+                $_FILES['comprobante'] ?? null,
+                $_POST['token_guardado'] ?? null
+            );
+        } catch (\InvalidArgumentException | \RuntimeException $e) {
+            $this->json(['ok' => false, 'mensaje' => $e->getMessage()]);
+        } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
+            $this->json(['ok' => false, 'mensaje' => 'No se pudo enviar el reporte. Inténtalo de nuevo.']);
+        }
+
+        $dias = SuscripcionReportePagoService::DIAS_REVISION;
+        if ($res['ya_existia']) {
+            $msg = 'Tu reporte ya estaba registrado; no se envió otro.';
+        } elseif ($res['correo_enviado']) {
+            $msg = 'Recibimos tu reporte y lo revisaremos. Mientras tanto no verás este aviso (máximo ' . $dias . ' días).';
+        } else {
+            $msg = 'Tu reporte quedó registrado y lo revisaremos, aunque no se pudo enviar el correo de aviso. Mientras tanto no verás este aviso (máximo ' . $dias . ' días).';
+        }
+        $this->json(['ok' => true, 'mensaje' => $msg] + $res);
     }
 
     /**
