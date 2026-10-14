@@ -5,8 +5,8 @@ categoria: Configuración global
 ruta_modulo: config/empresas-sistema
 tipo: modulo
 visibilidad: superadmin
-etiquetas: empresas del sistema, aviso empresas sin suscripcion, aviso navbar, empresas por revisar, empresas sin suscripcion, sin suscripcion, no pagan, empresas que no pagan, regalia, sin cobro, cortesia, plan sin costo, exonerar suscripcion, empresa gratis, empresa administradora, administradora de suscripciones, empresa que controla las suscripciones, controladora, suscripcion por defecto, crear empresa, alta de empresa, establecimientos, sucursales, matriz, usuarios asignados, documentos legales, suscripcion, empresas del grupo, eliminar establecimiento, establecimiento activo, un solo establecimiento activo, buscar empresa, filtrar empresas, filtros de empresas, exportar empresas, pdf de empresas, excel de empresas, ordenar empresas, columnas del listado, telefono de la empresa, correo de la empresa
-version: 1.20
+etiquetas: empresas del sistema, aviso empresas sin suscripcion, aviso navbar, empresas por revisar, empresas sin suscripcion, sin suscripcion, no pagan, empresas que no pagan, regalia, sin cobro, cortesia, plan sin costo, exonerar suscripcion, empresa gratis, empresa administradora, administradora de suscripciones, empresa que controla las suscripciones, controladora, suscripcion por defecto, crear empresa, alta de empresa, establecimientos, sucursales, matriz, usuarios asignados, documentos legales, suscripcion, empresas del grupo, eliminar establecimiento, establecimiento activo, un solo establecimiento activo, buscar empresa, filtrar empresas, filtros de empresas, exportar empresas, pdf de empresas, excel de empresas, ordenar empresas, columnas del listado, telefono de la empresa, correo de la empresa, empresa como cliente, registrar cliente automaticamente, cliente de la controladora, facturar a la empresa
+version: 1.21
 orden: 1
 estado: activo
 ---
@@ -113,6 +113,22 @@ otra empresa, la **controladora**: la que vende y factura esa suscripción.
   *Empresa a la que facturamos* muestra clientes de todos los establecimientos e
   indica en cuál está cada uno.
 
+### La empresa nueva queda registrada como cliente
+
+Al crear una empresa, el sistema la registra automáticamente en **Clientes** de
+la **empresa controladora**, para poder facturarle la suscripción sin digitarla
+de nuevo. Toma de la empresa: razón social (nombre), RUC (tipo RUC; cédula si
+tiene 10 dígitos), correo, teléfono, dirección, provincia y ciudad. Queda activa
+y con plazo 0; vendedor y formas de cobro se configuran después en Clientes.
+
+- Si en la controladora **ya existe** un cliente con ese RUC (por ejemplo, otro
+  establecimiento de la misma compañía), **no se crea otro**: se usa el existente
+  sin cambiar sus datos. Si estaba eliminado, se reactiva tal como estaba.
+- Si no se puede registrar (por ejemplo, la empresa no tiene correo o el RUC no es
+  válido), **la empresa se crea igual** y el aviso final lo indica; el cliente se
+  puede crear a mano desde Clientes.
+- Solo ocurre al **crear** la empresa; editarla después no modifica el cliente.
+
 Con esto se resuelve la suscripción que muestra el módulo **Empresa** y los
 avisos de vencimiento (ver el manual del módulo Empresa).
 
@@ -194,6 +210,8 @@ las empresas que ese usuario tiene asignadas.
 
 ## Historial de cambios
 
+- **1.21** — Al crear una empresa, queda registrada automáticamente como cliente de su
+  empresa controladora de suscripciones (sin duplicar si ya existe con ese RUC).
 - **1.20** — Aviso en la barra superior (superadministrador, dentro de la empresa que vende el
   sistema) con las empresas activas sin controladora y sin suscripción; cada línea abre el
   listado ya filtrado.

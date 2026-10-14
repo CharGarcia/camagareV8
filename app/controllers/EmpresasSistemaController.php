@@ -520,8 +520,17 @@ class EmpresasSistemaController extends Controller
             // hay fila en empresas_documentos_envios) hasta que se envíen
             // manualmente con el botón de sobre, igual que a cualquier empresa
             // existente que aún no los tiene enviados.
+            // Registrarla como cliente de la empresa que controla sus suscripciones
+            // (para poder facturarle). No interrumpe la creación.
+            $resCliente = $this->registrarComoClienteDeControladora(
+                $empCreada ?? [],
+                (int) $data['id_empresa_suscripciones'],
+                $idUsuario
+            );
+            $usuarioOk = $usuarioOk && $resCliente['ok'];
+
             $msgOk = 'Empresa creada correctamente. Los documentos legales quedan pendientes de envío.';
-            $msgOk .= $msgUsuario;
+            $msgOk .= $msgUsuario . ' ' . $resCliente['msg'];
 
             // Por AJAX el aviso lo da la vista (sin recargar); en sesión solo para el envío clásico.
             if ($esAjax) {
@@ -544,6 +553,37 @@ class EmpresasSistemaController extends Controller
         }
 
         $this->redirect(BASE_URL . self::BASE_PATH);
+    }
+
+    /**
+     * Registra la empresa recién creada en Clientes de su empresa controladora de
+     * suscripciones. Es NO fatal: un fallo (sin correo, RUC inválido…) se avisa pero
+     * no revierte la creación de la empresa.
+     *
+     * @return array{ok:bool, msg:string}
+     */
+    private function registrarComoClienteDeControladora(array $empresa, int $idControladora, int $idUsuario): array
+    {
+        if ($idControladora <= 0 || empty($empresa)) {
+            return ['ok' => true, 'msg' => ''];
+        }
+        try {
+            $service = new \App\Services\modulos\ClienteService(
+                new \App\repositories\modulos\ClienteRepository(),
+                new \App\Rules\modulos\ClienteRules(),
+                new \App\Services\LogSistemaService()
+            );
+            $res = $service->registrarEmpresaComoCliente($empresa, $idControladora, $idUsuario);
+            $msg = match ($res['estado']) {
+                'creado'     => 'Se registró como cliente de la empresa controladora.',
+                'reactivado' => 'Se reactivó su registro en clientes de la empresa controladora.',
+                default      => 'Ya estaba registrada como cliente de la empresa controladora.',
+            };
+            return ['ok' => true, 'msg' => $msg];
+        } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
+            return ['ok' => false, 'msg' => 'No se pudo registrar como cliente: ' . $e->getMessage()];
+        }
     }
 
     /**

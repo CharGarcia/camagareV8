@@ -290,6 +290,42 @@ class ClienteService
     }
 
     /**
+     * Registra una empresa del sistema (recién creada en config/empresas-sistema) como
+     * cliente de la empresa que controla sus suscripciones, para poder facturarle.
+     * Reutiliza replicarClienteEnEmpresa(): si ya existe un cliente con esa
+     * identificación (p. ej. otro establecimiento del mismo RUC) no se duplica, y si
+     * estaba eliminado se reactiva.
+     *
+     * @return array{estado:string,id:int}  estado: creado | reactivado | omitido
+     */
+    public function registrarEmpresaComoCliente(array $empresa, int $idEmpresaDestino, int $idUsuario): array
+    {
+        $ruc = preg_replace('/[^0-9]/', '', (string) ($empresa['ruc'] ?? ''));
+        $tipoId = match (strlen($ruc)) {
+            13      => '04', // RUC
+            10      => '05', // Cédula
+            default => throw new Exception('La empresa no tiene un RUC válido para registrarla como cliente.'),
+        };
+
+        $datos = [
+            'id_empresa'     => $empresa['id'] ?? null,
+            'nombre'         => trim((string) ($empresa['nombre'] ?? '')),
+            'tipo_id'        => $tipoId,
+            'identificacion' => $ruc,
+            'telefono'       => trim((string) ($empresa['telefono'] ?? '')) ?: null,
+            'email'          => trim((string) ($empresa['mail'] ?? '')),
+            'direccion'      => trim((string) ($empresa['direccion'] ?? '')) ?: null,
+            'plazo'          => 0,
+            // Mismos códigos de catálogo (provincia.codigo / ciudad.codigo) en ambas tablas.
+            'provincia'      => trim((string) ($empresa['cod_prov'] ?? '')) ?: null,
+            'ciudad'         => trim((string) ($empresa['cod_ciudad'] ?? '')) ?: null,
+            'status'         => 1,
+        ];
+
+        return $this->replicarClienteEnEmpresa($datos, $idEmpresaDestino, $idUsuario);
+    }
+
+    /**
      * Proxy para el repositorio para listados.
      */
     /**
