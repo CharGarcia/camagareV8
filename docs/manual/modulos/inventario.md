@@ -5,8 +5,8 @@ categoria: Inventario
 ruta_modulo: modulos/inventario
 tipo: modulo
 visibilidad: todos
-etiquetas: inventario, stock, existencias, kardex, movimientos, ajuste, entradas, salidas, bodega, costo, buscar movimientos, buscador, filtros, filtrar movimientos, buscar por lote, buscar por serial, movimientos por bodega, chips, buscar por codigo de barras, buscar por bodega, buscar movimientos de una factura, buscar por mes, imprimir movimiento, pdf del movimiento, comprobante de movimiento, ficha del movimiento, imprimir registro, imprimir un movimiento, asiento del ajuste, contabilidad del ajuste, merma, faltante, sobrante, perdida de inventario, baja de inventario, asiento contable inventario, buscar por observacion, observacion de la carga, buscar carga de inventario, columna observaciones
-version: 1.11
+etiquetas: inventario, stock, existencias, kardex, movimientos, ajuste, entradas, salidas, bodega, costo, buscar movimientos, buscador, filtros, filtrar movimientos, buscar por lote, buscar por serial, movimientos por bodega, chips, buscar por codigo de barras, buscar por bodega, buscar movimientos de una factura, buscar por mes, imprimir movimiento, pdf del movimiento, comprobante de movimiento, ficha del movimiento, imprimir registro, imprimir un movimiento, asiento del ajuste, contabilidad del ajuste, merma, faltante, sobrante, perdida de inventario, baja de inventario, asiento contable inventario, buscar por observacion, observacion de la carga, buscar carga de inventario, columna observaciones, editar movimiento, no se puede editar, candado, solo lectura, modificar movimiento, anular movimiento, movimiento bloqueado
+version: 1.12
 orden: 20
 estado: activo
 ---
@@ -102,6 +102,37 @@ Casi ningún movimiento se registra a mano: los generan otros módulos.
 
 Por eso, si el stock de un producto está mal, lo primero es mirar qué documento
 generó el movimiento equivocado, no corregir el número a mano.
+
+## Qué movimientos se pueden editar o anular
+
+En el listado, un **candado** gris junto a la fecha marca los movimientos que no
+se pueden editar desde aquí; al dejar el cursor encima se ve el motivo. Al
+abrirlos, la ventana queda en **solo lectura**, sin el botón *Guardar Cambios*, con
+el motivo en un aviso amarillo.
+
+Un movimiento **se puede editar** cuando se cumple todo esto:
+
+| Condición | Si no se cumple |
+|-----------|-----------------|
+| Es un **ajuste manual** de este módulo | Si lo generó un documento (factura, nota de crédito, compra, carga de inventario, transferencia, consignación, orden de taller…), se corrige desde ese documento |
+| La fecha está en un **período contable abierto** | Hay que reabrir el período en Periodos Contables |
+| Usted tiene acceso a la **bodega** del movimiento | Pida acceso a esa bodega |
+| No está **anulado** | Primero hay que habilitarlo |
+| Tiene permiso de **modificar** en Inventario | La ventana se abre en solo lectura |
+
+Excepciones:
+
+- Si el **documento de origen ya fue eliminado** (factura, nota de crédito o de
+  débito, recibo, compra o nota de crédito de compra), su movimiento queda libre
+  para corregirlo o anularlo aquí.
+- Los movimientos de una **compra** no se editan, pero sí se pueden **anular**
+  desde aquí.
+- Los que vienen de la **migración** o de un **saldo inicial** no se editan ni se
+  anulan: si la cantidad está mal, se corrige con un ajuste nuevo.
+
+El botón **Anular** aparece solo cuando el movimiento se puede anular (y con
+permiso de eliminar). Al guardar, el sistema revisa además que el stock no quede
+negativo.
 
 ## Ajuste manual
 
@@ -213,6 +244,11 @@ problema pero no aparece en el kardex ni tiene stock.
 
 ## Historial de cambios
 
+- **1.12** — Se ve de antemano qué movimientos se pueden editar: **candado** en el
+  listado con el motivo al pasar el cursor, y la ventana se abre en **solo lectura**
+  con el motivo cuando no se puede editar (antes había que intentar guardar para
+  enterarse). **Anular** aparece solo si el movimiento se puede anular, y *Guardar
+  Cambios* solo con permiso de modificar.
 - **1.11** — El buscador encuentra también la **observación general de la carga de
   inventario** en los movimientos de esa carga (también con el filtro Observaciones
   y con `obs:`), y la columna **Obs.** la muestra

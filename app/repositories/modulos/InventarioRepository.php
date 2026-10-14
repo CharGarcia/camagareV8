@@ -528,6 +528,29 @@ class InventarioRepository extends BaseRepository
         return $st->fetch(PDO::FETCH_ASSOC) ?: null;
     }
 
+    /**
+     * De los ids dados, los documentos de origen que ya están eliminados (`eliminado = true`).
+     * `$tabla` sale SIEMPRE de la lista fija de InventarioService::TABLA_ORIGEN, nunca del
+     * usuario (es lo único que se interpola). Si la tabla no existe en esta base, ninguno.
+     *
+     * @param int[] $ids
+     * @return int[]
+     */
+    public function getIdsOrigenEliminados(string $tabla, int $idEmpresa, array $ids): array
+    {
+        $ids = array_values(array_unique(array_filter(array_map('intval', $ids))));
+        if ($ids === [] || !preg_match('/^[a-z_]+$/', $tabla)) return [];
+
+        $st = $this->db->prepare('SELECT to_regclass(:t) IS NOT NULL');
+        $st->execute([':t' => 'public.' . $tabla]);
+        if (!$st->fetchColumn()) return [];
+
+        $ph = implode(',', array_fill(0, count($ids), '?'));
+        $st = $this->db->prepare("SELECT id FROM {$tabla} WHERE id_empresa = ? AND eliminado = true AND id IN ({$ph})");
+        $st->execute(array_merge([$idEmpresa], $ids));
+        return array_map('intval', $st->fetchAll(PDO::FETCH_COLUMN));
+    }
+
     /** Igual que find(), pero incluye movimientos anulados (eliminado=true) — para verlos/habilitarlos. */
     public function findIncluyendoEliminados(int $id, int $idEmpresa): ?array
     {

@@ -51,7 +51,7 @@ class InventarioController extends BaseModuloController
 
         // Obtener datos del Kardex
         $kardexData = $this->service->getKardex($idEmpresa, $filtros, $page, $perPage);
-        $rows       = $kardexData['rows'];
+        $rows       = $this->marcarEdicion($kardexData['rows'], $idEmpresa); // candado por fila
         $total      = $kardexData['total'];
         $saldo      = $kardexData['saldo'] ?? 0;
         $totalPages = (int) ceil($total / $perPage);
@@ -111,7 +111,7 @@ class InventarioController extends BaseModuloController
         $filtros = $this->getFiltrosDesdeRequest($buscar, $ordenCol, $ordenDir);
 
         $result = $this->service->getKardex($idEmpresa, $filtros, $page, $perPage);
-        $rows   = $result['rows'];
+        $rows   = $this->marcarEdicion($result['rows'], $idEmpresa); // candado por fila
         $total  = $result['total'];
         $saldo  = $result['saldo'] ?? 0;
         $totalPages = (int) ceil($total / $perPage);
@@ -134,7 +134,9 @@ class InventarioController extends BaseModuloController
                 $anulado = !empty($row['eliminado']);
 
                 echo '<tr class="inventario-row' . ($anulado ? ' opacity-50' : '') . '" onclick="editarMovimiento(' . $row['id'] . ')">
-                        <td class="ps-3 small text-nowrap" data-col="fecha_movimiento">' . $fecha . '</td>
+                        <td class="ps-3 small text-nowrap" data-col="fecha_movimiento">' . $fecha;
+                include MVC_APP . '/views/modulos/inventario/_candado.php'; // mismo candado que index.php
+                echo '</td>
                         <td data-col="producto_nombre">
                             <div class="fw-bold text-dark mb-0">' . htmlspecialchars($row['producto_nombre']) . '</div>
                             <small class="text-muted">' . htmlspecialchars($row['producto_codigo']) . '</small>
@@ -483,6 +485,10 @@ class InventarioController extends BaseModuloController
             exit;
         }
 
+        // editable / motivo_bloqueo / anulable / motivo_no_anulable: el modal se abre en solo
+        // lectura con el motivo, en vez de dejar intentar guardar y fallar.
+        $mov = $this->marcarEdicion([$mov], $idEmpresa)[0];
+
         echo json_encode(['ok' => true, 'data' => $mov]);
         exit;
     }
@@ -624,6 +630,19 @@ class InventarioController extends BaseModuloController
     // ────────────────────────────────────────────────────────────────
     // HELPERS
     // ────────────────────────────────────────────────────────────────
+
+    /** Si cada movimiento se puede editar/anular y por qué no (InventarioService::marcarEdicion). */
+    private function marcarEdicion(array $rows, int $idEmpresa): array
+    {
+        try {
+            return $this->service->marcarEdicion($rows, $idEmpresa, (int) $_SESSION['id_usuario'], (int) ($_SESSION['nivel'] ?? 1));
+        } catch (\Throwable $e) {
+            // Es solo un aviso: si falla, el listado y el modal se ven como antes y el
+            // servidor sigue validando al guardar o anular.
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
+            return $rows;
+        }
+    }
     private function getProductosInventariables(int $idEmpresa): array
     {
         try {

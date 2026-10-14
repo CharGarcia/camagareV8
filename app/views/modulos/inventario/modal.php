@@ -235,6 +235,8 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosPestanasOcultas($vistaConfigI
     };
 
     (function() {
+        // Editar un movimiento existente exige permiso de modificar (el servidor también lo valida).
+        const INV_PUEDE_ACTUALIZAR = <?= !empty($perm['actualizar']) ? 'true' : 'false' ?>;
         const form = document.getElementById('formAjuste');
         const inputBusqueda = document.getElementById('ajuste_busqueda_prod');
         const inputIdProd = document.getElementById('ajuste_id_producto');
@@ -385,8 +387,23 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosPestanasOcultas($vistaConfigI
                                 resMsg.innerHTML = '<i class="bi bi-slash-circle me-1"></i> Este movimiento está <strong>ANULADO</strong> y no afecta el stock actual.';
                                 resMsg.classList.remove('d-none');
                             } else {
-                                if (btnEliminar) btnEliminar.classList.remove('d-none');
+                                // editable/anulable los calcula el servidor (InventarioService::marcarEdicion)
+                                // con las mismas reglas que valida al guardar o anular. Si no vienen (falló
+                                // el cálculo), se comporta como antes y decide el servidor al guardar.
+                                const puedeEditar = d.editable !== false && INV_PUEDE_ACTUALIZAR;
+                                if (btnEliminar) btnEliminar.classList.toggle('d-none', d.anulable === false);
                                 if (btnHabilitar) btnHabilitar.classList.add('d-none');
+                                if (!puedeEditar) {
+                                    btnGuardar.classList.add('d-none');
+                                    form.querySelectorAll('input, select, textarea').forEach(el => el.disabled = true);
+                                    const motivo = d.editable === false
+                                        ? d.motivo_bloqueo
+                                        : 'No tiene permiso para modificar movimientos de inventario.';
+                                    resMsg.className = 'alert mx-3 mb-3 py-2 small alert-warning border-0 shadow-sm';
+                                    resMsg.innerHTML = '<i class="bi bi-lock-fill me-1"></i><strong>Solo lectura.</strong> ';
+                                    resMsg.append(document.createTextNode(motivo || 'Este movimiento no se puede editar desde Inventario.'));
+                                    resMsg.classList.remove('d-none');
+                                }
                             }
                         }
                     } catch (e) {

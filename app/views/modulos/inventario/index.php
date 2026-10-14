@@ -225,7 +225,7 @@ $optOrigen   = array_map(fn($t) => ['v' => $t, 'l' => ucwords(str_replace('_', '
                     <?php else: ?>
                         <?php foreach ($rows as $row): ?>
                             <tr class="inventario-row" onclick="editarMovimiento(<?= $row['id'] ?>)">
-                                <td class="ps-3 small text-nowrap" data-col="fecha_movimiento"><?= date('d-m-Y H:i:s', strtotime($row['fecha_movimiento'])) ?></td>
+                                <td class="ps-3 small text-nowrap" data-col="fecha_movimiento"><?= date('d-m-Y H:i:s', strtotime($row['fecha_movimiento'])) ?><?php include __DIR__ . '/_candado.php'; ?></td>
                                 <td data-col="producto_nombre">
                                     <div class="fw-bold text-dark mb-0"><?= htmlspecialchars($row['producto_nombre']) ?></div>
                                     <small class="text-muted"><?= htmlspecialchars($row['producto_codigo']) ?></small>

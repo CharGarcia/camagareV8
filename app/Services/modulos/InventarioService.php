@@ -19,6 +19,50 @@ class InventarioService
      */
     use \App\Traits\PeriodoContableTrait;
 
+    /**
+     * Documento de origen → su tabla. Un movimiento generado por un documento no se edita
+     * desde Inventario, salvo que ese documento ya esté eliminado (limpieza manual). Solo
+     * estos orígenes tienen esa excepción; los demás (cargas, transferencias, consignaciones…)
+     * se gestionan siempre desde su módulo. Lo usan validarRestriccionMovimiento() y
+     * marcarEdicion(), para que el candado del listado diga lo mismo que el guardado.
+     */
+    public const TABLA_ORIGEN = [
+        'factura_venta'       => 'ventas_cabecera',
+        'nota_debito'         => 'ventas_cabecera',
+        'recibo_venta'        => 'recibos_venta_cabecera',
+        'compra'              => 'compras_cabecera',
+        'nota_credito_compra' => 'compras_cabecera',
+        'nota_credito'        => 'ventas_notas_credito',
+        'ajuste_inventario'   => 'inventario_ajustes',
+    ];
+
+    /** Orígenes cuyos movimientos sí se pueden ANULAR (no editar) desde Inventario. */
+    private const ORIGEN_ANULABLE_AQUI = ['compra', 'nota_credito_compra'];
+
+    /** Nombre del documento de origen en el aviso de "no se puede editar". */
+    private const ETIQUETA_ORIGEN = [
+        'factura_venta'       => 'una factura de venta',
+        'nota_debito'         => 'una nota de débito',
+        'nota_credito'        => 'una nota de crédito',
+        'recibo_venta'        => 'un recibo de venta',
+        'compra'              => 'una compra',
+        'nota_credito_compra' => 'una nota de crédito de compra',
+        'carga_inventario'    => 'una carga de inventario',
+        'ajuste_inventario'   => 'un ajuste de inventario',
+        'importacion'         => 'una importación',
+        'transferencia_inventario'   => 'una transferencia de inventario',
+        'consignacion_venta'         => 'una consignación de venta',
+        'edicion_consignacion_venta' => 'la edición de una consignación de venta',
+        'facturacion_cv'             => 'una facturación de consignaciones',
+        'retorno_cv'                 => 'un retorno de consignación',
+        'cambio_estado_retorno_cv'   => 'un retorno de consignación',
+        'cambio_producto_cv'         => 'un cambio de producto de consignación',
+        'taller_orden'               => 'una orden de taller',
+        'carwash_orden'              => 'una orden de car-wash',
+        'saldo_inicial'              => 'un saldo inicial',
+        'migracion'                  => 'la migración del sistema anterior',
+    ];
+
     private InventarioRepository $repo;
     private LogSistemaService $log;
     private ?BodegaService $bodegaService = null;
@@ -523,6 +567,98 @@ class InventarioService
     public function getById(int $id, int $idEmpresa): ?array
     {
         return $this->repo->findIncluyendoEliminados($id, $idEmpresa);
+    }
+
+    /**
+     * Marca en cada movimiento si se puede editar o anular desde Inventario y por qué no,
+     * con las mismas reglas que actualizarMovimiento() / eliminarMovimiento():
+     *   - documento de origen (salvo que ese documento ya esté eliminado; las compras sí se
+     *     anulan desde aquí, pero no se editan),
+     *   - período contable cerrado en la fecha del movimiento,
+     *   - acceso del usuario a la bodega del movimiento (solo editar; nivel 1 y 2).
+     * No mira permisos del módulo (eso lo resuelven el controlador y la vista) ni el stock
+     * resultante (depende de lo que se escriba al editar).
+     *
+     * Agrega: `editable`, `motivo_bloqueo` (?string), `anulable`, `motivo_no_anulable` (?string).
+     * Por lote: una consulta de períodos y una por tabla de origen, no una por fila.
+     */
+    public function marcarEdicion(array $rows, int $idEmpresa, int $idUsuario, int $nivel): array
+    {
+        if ($rows === []) return $rows;
+
+        // Documentos de origen ya eliminados, por tabla.
+        $idsPorTabla = [];
+        foreach ($rows as $r) {
+            $tabla = self::TABLA_ORIGEN[$r['referencia_tipo'] ?? ''] ?? null;
+            if ($tabla !== null && (int) ($r['referencia_id'] ?? 0) > 0) {
+                $idsPorTabla[$tabla][] = (int) $r['referencia_id'];
+            }
+        }
+        $eliminados = [];
+        foreach ($idsPorTabla as $tabla => $ids) {
+            try {
+                $eliminados[$tabla] = array_flip($this->repo->getIdsOrigenEliminados($tabla, $idEmpresa, $ids));
+            } catch (\Throwable $e) {
+                $eliminados[$tabla] = []; // igual que al guardar: ante la duda, bloqueado
+            }
+        }
+
+        $rangosCerrados = $this->omitirValidacionPeriodo
+            ? [] : (new \App\repositories\modulos\PeriodosContablesRepository())->getRangosCerrados($idEmpresa);
+        $accesoBodega = [];
+
+        foreach ($rows as &$r) {
+            $anulado = Booleano::es($r['eliminado'] ?? false);
+            $tipo    = (string) ($r['referencia_tipo'] ?? '');
+            $tabla   = self::TABLA_ORIGEN[$tipo] ?? null;
+            $deDocumento = $tipo !== '' && $tipo !== 'ajuste_manual'
+                && !($tabla !== null && isset($eliminados[$tabla][(int) ($r['referencia_id'] ?? 0)]));
+
+            $fecha = substr((string) ($r['fecha_movimiento'] ?? ''), 0, 10);
+            $periodoCerrado = false;
+            foreach ($rangosCerrados as $p) {
+                if ($fecha !== '' && $fecha >= $p['desde'] && $fecha <= $p['hasta']) { $periodoCerrado = true; break; }
+            }
+
+            $idBodega = (int) ($r['id_bodega'] ?? 0);
+            if ($nivel < 3 && !isset($accesoBodega[$idBodega])) {
+                $accesoBodega[$idBodega] = $this->getBodegaService()->validarAccesoUsuario($idUsuario, $idBodega, $idEmpresa, $nivel);
+            }
+            $sinBodega = $nivel < 3 && !$accesoBodega[$idBodega];
+
+            // Algunos módulos guardan el origen en MAYÚSCULAS (CONSIGNACION_VENTA, RETORNO_CV…).
+            $etiqueta    = self::ETIQUETA_ORIGEN[strtolower($tipo)]
+                ?? ('un documento (' . ucfirst(str_replace('_', ' ', strtolower($tipo))) . ')');
+            $anulableAqui = in_array($tipo, self::ORIGEN_ANULABLE_AQUI, true);
+            $msgPeriodo  = 'Su fecha está en un período contable cerrado: no se puede modificar ni anular. Para corregirlo hay que reabrir el período.';
+
+            // Migración y saldos iniciales no tienen un módulo donde corregirlos.
+            $sinModulo   = in_array(strtolower($tipo), ['migracion', 'saldo_inicial'], true);
+
+            $motivo = match (true) {
+                $anulado        => 'Movimiento anulado: no afecta el stock. Solo se puede habilitar de nuevo.',
+                $deDocumento && $sinModulo => "Viene de {$etiqueta}: no se edita. Si la cantidad está mal, corríjala con un ajuste nuevo.",
+                $deDocumento    => "Lo generó {$etiqueta} (ver la observación). Se corrige desde ese módulo"
+                                   . ($anulableAqui ? '; desde aquí solo se puede anular.' : ', no desde Inventario.'),
+                $periodoCerrado => $msgPeriodo,
+                $sinBodega      => 'No tiene acceso a la bodega ' . ($r['bodega_nombre'] ?? '') . ' de este movimiento.',
+                default         => null,
+            };
+            $motivoAnular = match (true) {
+                $anulado                       => 'El movimiento ya está anulado.',
+                $deDocumento && $sinModulo     => "Viene de {$etiqueta}: no se anula desde aquí.",
+                $deDocumento && !$anulableAqui => "Lo generó {$etiqueta}: se anula desde ese módulo.",
+                $periodoCerrado                => $msgPeriodo,
+                default                        => null,
+            };
+
+            $r['editable']           = $motivo === null;
+            $r['motivo_bloqueo']     = $motivo;
+            $r['anulable']           = $motivoAnular === null;
+            $r['motivo_no_anulable'] = $motivoAnular;
+        }
+        unset($r);
+        return $rows;
     }
 
     public function eliminarMovimiento(int $id, int $idEmpresa, int $idUsuario, bool $ignorarRestriccion = false, ?int $idUsuarioNivel = null, bool $permitirNegativo = false, bool $permitirAnularCompra = false): void
@@ -1041,14 +1177,7 @@ class InventarioService
 
         if (!empty($tipo) && $tipo !== 'ajuste_manual') {
             // Caso especial: Si el documento de origen ya está eliminado, permitimos la limpieza manual del inventario
-            $tablaRef = match ($tipo) {
-                'factura_venta', 'nota_debito' => 'ventas_cabecera',
-                'recibo_venta' => 'recibos_venta_cabecera',
-                'compra', 'nota_credito_compra' => 'compras_cabecera',
-                'nota_credito' => 'ventas_notas_credito',
-                'ajuste_inventario' => 'inventario_ajustes',
-                default => null
-            };
+            $tablaRef = self::TABLA_ORIGEN[$tipo] ?? null;
 
             if ($tablaRef && $idRef > 0) {
                 try {

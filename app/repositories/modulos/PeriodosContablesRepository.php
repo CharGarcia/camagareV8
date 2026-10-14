@@ -224,6 +224,21 @@ class PeriodosContablesRepository
     }
 
     /**
+     * Rangos [fecha_inicial, fecha_final] (Y-m-d) de los períodos cerrados de la empresa.
+     * Para marcar muchas filas de un listado con una sola consulta, en vez de una por fila.
+     */
+    public function getRangosCerrados(int $idEmpresa): array
+    {
+        $stmt = $this->db->prepare(
+            "SELECT CAST(fecha_inicial AS DATE) AS desde, CAST(fecha_final AS DATE) AS hasta
+             FROM periodos_contables
+             WHERE id_empresa = :id_empresa AND eliminado = false AND status = 0"
+        );
+        $stmt->execute([':id_empresa' => $idEmpresa]);
+        return $stmt->fetchAll(\PDO::FETCH_ASSOC);
+    }
+
+    /**
      * Valida si una fecha específica cae dentro de un periodo cerrado.
      */
     public function isFechaEnPeriodoCerrado(string $fecha, int $idEmpresa): bool
