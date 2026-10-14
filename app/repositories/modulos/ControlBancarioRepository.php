@@ -241,11 +241,14 @@ class ControlBancarioRepository extends BaseRepository
                       AND (tc.id_forma_destino IN ({$marcasCobro}) OR tc.id_forma_origen IN ({$marcasPago}))
                     UNION ALL
                     -- Liquidaciones de tarjetas cerradas: el neto depositado entra en el banco
-                    -- destino (su asiento lo debita con la cuenta de cobro del destino).
-                    SELECT 'conciliacion_tarjetas', ct.id, ct.numero, ct.fecha_conciliacion, ct.neto_depositado
+                    -- destino (su asiento lo debita con la cuenta de cobro del destino, una línea
+                    -- por cobro; aquí se compara el total de la conciliación).
+                    -- total_neto + diferencia = lo depositado (también cuando el usuario no lo
+                    -- digitó y neto_depositado quedó en 0).
+                    SELECT 'conciliacion_tarjetas', ct.id, ct.numero, ct.fecha_conciliacion, ct.total_neto + ct.diferencia
                     FROM conciliacion_tarjetas_cabecera ct
                     WHERE ct.id_empresa = :e AND ct.eliminado = FALSE AND ct.estado = 'cerrada'
-                      AND ct.neto_depositado <> 0
+                      AND ct.total_neto + ct.diferencia <> 0
                       AND ct.tipo_ambiente = (SELECT t FROM amb)
                       AND ct.id_forma_cobro_destino IN ({$marcasCobro})
                     UNION ALL
@@ -734,43 +737,88 @@ class ControlBancarioRepository extends BaseRepository
             UNION ALL
 
             -- Liquidación de tarjetas (Conciliación de Tarjetas cerrada): la procesadora deposita
-            -- el neto en el banco destino. No genera un ingreso, pero su asiento debita la cuenta
-            -- del banco, así que también es movimiento del banco. Ancla: 'liq_tarj' + id.
+            -- en el banco destino. No genera un ingreso, pero su asiento debita la cuenta del
+            -- banco, así que también es movimiento del banco. UNA FILA POR COBRO (línea cruzada
+            -- del estado de cuenta), igual que el estado de cuenta de la tarjeta.
+            -- Ancla: 'liq_tarj_l' + id de la línea. Las anotaciones hechas antes sobre la
+            -- liquidación entera ('liq_tarj' + id de la conciliación) se heredan como respaldo.
             SELECT
                 NULL::INTEGER AS id_asiento_detalle,
                 NULL::INTEGER AS id_asiento,
-                'liq_tarj'::VARCHAR AS origen_tipo,
-                ct.id AS origen_id,
-                ct.fecha_conciliacion AS fecha_asiento,
-                ct.numero AS numero_comprobante,
+                'liq_tarj_l'::VARCHAR AS origen_tipo,
+                lt.id_linea AS origen_id,
+                lt.fecha_conciliacion AS fecha_asiento,
+                lt.numero AS numero_comprobante,
                 'Liquidación de ' || COALESCE(fpt.nombre, 'tarjetas') AS concepto,
-                COALESCE(NULLIF(ct.observaciones, ''), 'Liquidación de ' || COALESCE(fpt.nombre, 'tarjetas')) AS referencia_detalle,
-                NULL::VARCHAR AS documento_referencia,
-                ct.neto_depositado AS debe,
-                0::NUMERIC AS haber,
-                NULL::VARCHAR AS tipo_entidad,
-                NULL::INTEGER AS id_entidad,
-                COALESCE(fpt.nombre, 'tarjetas') AS nombre_entidad,
-                COALESCE(fpt.nombre, 'tarjetas') AS beneficiario_cheque,
-                COALESCE(cbm.tipo_transaccion, 'DEPOSITO') AS tipo_transaccion,
-                COALESCE(cbm.cheque_direccion, 'RECIBIDO') AS cheque_direccion,
+                'Cobro ' || COALESCE(fpt.nombre, 'tarjeta')
+                    || COALESCE(' aut. ' || NULLIF(lt.autorizacion, ''), ' ref. ' || NULLIF(lt.referencia, ''), '')
+                    || COALESCE(' (' || lt.ingresos || ')', '') AS referencia_detalle,
+                COALESCE(NULLIF(lt.autorizacion, ''), NULLIF(lt.referencia, '')) AS documento_referencia,
+                GREATEST(lt.neto, 0) AS debe,
+                GREATEST(-lt.neto, 0) AS haber,
+                CASE WHEN lt.id_cliente IS NOT NULL THEN 'cliente' END::VARCHAR AS tipo_entidad,
+                lt.id_cliente AS id_entidad,
+                COALESCE(lt.cliente_nombre, fpt.nombre, 'tarjetas') AS nombre_entidad,
+                COALESCE(lt.cliente_nombre, fpt.nombre, 'tarjetas') AS beneficiario_cheque,
+                COALESCE(cbm.tipo_transaccion, cbmc.tipo_transaccion, 'DEPOSITO') AS tipo_transaccion,
+                COALESCE(cbm.cheque_direccion, cbmc.cheque_direccion, 'RECIBIDO') AS cheque_direccion,
                 cbm.numero_cheque AS numero_cheque,
                 cbm.fecha_cheque AS fecha_cheque,
-                COALESCE(cbm.fecha_banco, ct.fecha_conciliacion) AS fecha_banco,
-                cbm.fecha_banco AS fecha_banco_manual,
+                COALESCE(cbm.fecha_banco, cbmc.fecha_banco, lt.fecha_conciliacion) AS fecha_banco,
+                COALESCE(cbm.fecha_banco, cbmc.fecha_banco) AS fecha_banco_manual,
                 cbm.id AS id_clasificacion,
-                cbm.observacion AS observacion,
+                COALESCE(cbm.observacion, cbmc.observacion) AS observacion,
                 TRUE AS tiene_documento
-            FROM conciliacion_tarjetas_cabecera ct
-            LEFT JOIN empresa_formas_pago fpt ON fpt.id = ct.id_forma_cobro
+            FROM ({$this->sqlDepositosTarjetaPorCobro()}) lt
+            LEFT JOIN empresa_formas_pago fpt ON fpt.id = lt.id_forma_cobro
             LEFT JOIN control_bancario_movimientos cbm
-                   ON cbm.origen_tipo = 'liq_tarj' AND cbm.origen_id = ct.id AND cbm.eliminado = FALSE
-            WHERE ct.id_empresa = :id_empresa_lt
-              AND ct.id_forma_cobro_destino = :id_forma_lt
-              AND ct.eliminado = FALSE
-              AND ct.estado = 'cerrada'
-              AND ct.neto_depositado <> 0
-              AND ct.tipo_ambiente = (SELECT CAST(tipo_ambiente AS VARCHAR(1)) FROM empresas WHERE id = :amb_lt)";
+                   ON cbm.origen_tipo = 'liq_tarj_l' AND cbm.origen_id = lt.id_linea AND cbm.eliminado = FALSE
+            LEFT JOIN control_bancario_movimientos cbmc
+                   ON cbmc.origen_tipo = 'liq_tarj' AND cbmc.origen_id = lt.id_cabecera AND cbmc.eliminado = FALSE
+            WHERE lt.neto <> 0";
+    }
+
+    /**
+     * Depósitos de las conciliaciones de tarjetas CERRADAS en la cuenta :id_forma_lt, cobro
+     * por cobro: una fila por línea cruzada del estado de cuenta con su neto (cobros cruzados
+     * − comisión − IVA − retenciones − otros). La diferencia aceptada al cerrar
+     * (ct.diferencia = depositado − neto calculado) va a la línea de mayor neto, así que las
+     * filas de una conciliación suman exactamente lo depositado.
+     *
+     * Es el mismo reparto que ConciliacionTarjetasService::depositosPorCobro() usa para las
+     * líneas del banco en el asiento. Si cambia uno, cambiar el otro.
+     * Placeholders: :id_empresa_lt, :id_forma_lt, :amb_lt (una vez cada uno).
+     */
+    private function sqlDepositosTarjetaPorCobro(): string
+    {
+        return "SELECT ct.id AS id_cabecera, ct.numero, ct.fecha_conciliacion, ct.id_forma_cobro,
+                       l.id AS id_linea, l.autorizacion, l.referencia,
+                       cr.id_cliente, cr.cliente_nombre, cr.ingresos,
+                       ROUND(b.neto_linea
+                             + CASE WHEN ROW_NUMBER() OVER (PARTITION BY ct.id ORDER BY b.neto_linea DESC, l.id ASC) = 1
+                                    THEN COALESCE(ct.diferencia, 0) ELSE 0 END, 2) AS neto
+                  FROM conciliacion_tarjetas_cabecera ct
+                  JOIN conciliacion_tarjetas_lineas l ON l.id_cabecera = ct.id AND l.eliminado = FALSE
+                  JOIN LATERAL (
+                        SELECT COUNT(*) AS n,
+                               ROUND(SUM(c.monto_cruzado), 2) AS cruzado,
+                               CASE WHEN COUNT(DISTINCT ic.id_cliente) = 1 THEN MIN(ic.id_cliente) END AS id_cliente,
+                               CASE WHEN COUNT(DISTINCT ic.id_cliente) = 1 THEN MIN(cli.nombre) END AS cliente_nombre,
+                               STRING_AGG(DISTINCT ic.numero_ingreso, ', ') AS ingresos
+                          FROM conciliacion_tarjetas_cruces c
+                          JOIN ingresos_cabecera ic ON ic.id = c.id_ingreso
+                          LEFT JOIN clientes cli ON cli.id = ic.id_cliente
+                         WHERE c.id_linea = l.id AND c.eliminado = FALSE
+                  ) cr ON cr.n > 0
+                  CROSS JOIN LATERAL (
+                        SELECT ROUND(cr.cruzado - l.comision - l.iva_comision - l.retencion_ir
+                                     - l.retencion_iva - l.otros_descuentos, 2) AS neto_linea
+                  ) b
+                 WHERE ct.id_empresa = :id_empresa_lt
+                   AND ct.id_forma_cobro_destino = :id_forma_lt
+                   AND ct.eliminado = FALSE
+                   AND ct.estado = 'cerrada'
+                   AND ct.tipo_ambiente = (SELECT CAST(tipo_ambiente AS VARCHAR(1)) FROM empresas WHERE id = :amb_lt)";
     }
 
     /** Parámetros que espera baseTesoreria(). */
@@ -1501,6 +1549,14 @@ class ControlBancarioRepository extends BaseRepository
             $sql = "SELECT ct.fecha_conciliacion
                     FROM conciliacion_tarjetas_cabecera ct
                     WHERE ct.id = :id AND ct.id_empresa = :id_empresa
+                      AND ct.id_forma_cobro_destino = :id_forma_pago AND ct.eliminado = FALSE
+                      AND ct.estado = 'cerrada'";
+        } elseif ($origenTipo === 'liq_tarj_l') {
+            // Un cobro (línea cruzada) de una liquidación de tarjetas cerrada en esta cuenta.
+            $sql = "SELECT ct.fecha_conciliacion
+                    FROM conciliacion_tarjetas_lineas l
+                    INNER JOIN conciliacion_tarjetas_cabecera ct ON ct.id = l.id_cabecera
+                    WHERE l.id = :id AND l.eliminado = FALSE AND ct.id_empresa = :id_empresa
                       AND ct.id_forma_cobro_destino = :id_forma_pago AND ct.eliminado = FALSE
                       AND ct.estado = 'cerrada'";
         } elseif ($origenTipo === 'trasp_in' || $origenTipo === 'trasp_out') {

@@ -7,6 +7,8 @@
  *   Derecha    = cobros con tarjeta registrados en el sistema.
  *   El usuario empareja (o acepta las sugerencias automáticas) y al cerrar elige
  *   a qué forma de cobro (banco) entró el dinero.
+ * Pestaña «Depósitos al banco»: lo que entra al banco destino cobro por cobro (una
+ *   fila por línea cruzada, por su neto), tal como queda en Control Bancario.
  * Pestaña «Asiento contable» (solo con acceso a Contabilidad → Asientos Contables):
  *   el asiento del depósito, con el componente compartido asiento_tab.php.
  * Pestaña «Configuración» (permiso de actualizar): cuentas y valores por defecto de
@@ -19,6 +21,7 @@ $ctarVerAsiento = \App\Helpers\AsientoPestana::puedeVer();
 // La configuración contable de la procesadora se edita con permiso de actualizar.
 $ctarVerConfig  = !empty($perm['actualizar']);
 $ctarPestanasOcultables = array_filter([
+    'ctar-pane-depositos' => 'Depósitos al banco',
     'ctar-pane-asiento' => $ctarVerAsiento ? 'Asiento contable' : null,
     'ctar-pane-config'  => $ctarVerConfig ? 'Configuración' : null,
 ]);
@@ -112,6 +115,12 @@ $ctarPestanasOcultables = array_filter([
                             <button type="button" class="nav-link active py-2 small" id="ctar-tab-cruce-btn"
                                     data-bs-toggle="tab" data-bs-target="#ctar-pane-cruce" role="tab">
                                 <i class="bi bi-arrow-left-right me-1"></i>Conciliación
+                            </button>
+                        </li>
+                        <li class="nav-item" role="presentation">
+                            <button type="button" class="nav-link py-2 small" id="ctar-tab-depositos-btn"
+                                    data-bs-toggle="tab" data-bs-target="#ctar-pane-depositos" role="tab">
+                                <i class="bi bi-bank me-1"></i>Depósitos al banco
                             </button>
                         </li>
                         <?php if ($ctarVerAsiento): // solo con acceso a Contabilidad → Asientos Contables ?>
@@ -327,12 +336,52 @@ $ctarPestanasOcultables = array_filter([
                 </div><!-- /paso 2 -->
                 </div><!-- /ctar-pane-cruce -->
 
+                <!-- ═══ Pestaña: Depósitos al banco ═══
+                     Desglose cobro por cobro de lo que entra al banco destino: es exactamente lo
+                     que se registra al cerrar (líneas del banco en el asiento y filas de Control
+                     Bancario). Lo pinta CTAR_pintarDepositos(). -->
+                <div class="tab-pane fade p-3" id="ctar-pane-depositos" role="tabpanel">
+                    <div class="alert alert-light border small d-flex align-items-center gap-2 mb-2 py-2">
+                        <i class="bi bi-info-circle text-primary"></i>
+                        <span id="ctar-dep-nota">Cada cobro cruzado se registra por separado en el banco destino, por su neto,
+                            igual que en el estado de cuenta de la tarjeta.</span>
+                    </div>
+                    <div class="ctar-m-lista border rounded-3">
+                        <table class="table table-sm table-hover mb-0 align-middle" style="min-width:820px;font-size:.8rem;">
+                            <thead class="table-light">
+                                <tr>
+                                    <th class="ps-3 text-center" style="width:40px;">#</th>
+                                    <th>Fecha</th>
+                                    <th>Autorización / Ref.</th>
+                                    <th>Cliente</th>
+                                    <th>Ingreso</th>
+                                    <th class="text-end">Bruto</th>
+                                    <th class="text-end">Descuentos</th>
+                                    <th class="text-end pe-3">Neto al banco</th>
+                                </tr>
+                            </thead>
+                            <tbody id="ctar-dep-tbody">
+                                <tr><td colspan="8" class="text-center py-4 text-muted small">Aún no hay cobros cruzados.</td></tr>
+                            </tbody>
+                            <tfoot class="table-light fw-bold">
+                                <tr>
+                                    <td colspan="5" class="ps-3">Total depositado en <span id="ctar-dep-banco">—</span>
+                                        (<span id="ctar-dep-cantidad">0</span> cobros)</td>
+                                    <td class="text-end">$<span id="ctar-dep-bruto">0.00</span></td>
+                                    <td class="text-end">$<span id="ctar-dep-descuentos">0.00</span></td>
+                                    <td class="text-end pe-3 text-primary">$<span id="ctar-dep-neto">0.00</span></td>
+                                </tr>
+                            </tfoot>
+                        </table>
+                    </div>
+                </div><!-- /ctar-pane-depositos -->
+
                 <?php if ($ctarVerAsiento): ?>
                 <!-- ═══ Pestaña: Asiento contable ═══ -->
                 <div class="tab-pane fade p-3" id="ctar-pane-asiento" role="tabpanel">
                     <div class="alert alert-light border small d-flex align-items-center gap-2 mb-2 py-2">
                         <i class="bi bi-info-circle text-primary"></i>
-                        <span>Asiento del depósito: <em>Banco</em> (neto) + comisión, IVA y retenciones en el Debe, contra la
+                        <span>Asiento del depósito: <em>Banco</em> (neto de cada cobro, una línea por cobro) + comisión, IVA y retenciones en el Debe, contra la
                             <em>cuenta puente</em> de la forma de cobro (bruto) en el Haber. Se genera al conciliar y cerrar.</span>
                     </div>
                     <?php $prefijo = 'ctar'; require MVC_APP . '/views/partials/asiento_tab.php'; ?>

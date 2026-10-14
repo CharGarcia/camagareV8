@@ -5,8 +5,8 @@ categoria: Tesorería
 ruta_modulo: modulos/control-bancario
 tipo: modulo
 visibilidad: todos
-etiquetas: control bancario, traspaso, traspasos en el banco, deposito de caja al banco, traspaso no aparece en el banco, conciliacion bancaria, estado de cuenta, banco, cheques, movimientos, cuadrar banco, buscar movimiento, buscador, filtros, filtrar movimientos bancarios, buscar cheque, chips, cheques posfechados, cheque por cobrar, cheque por depositar, aviso de cheques, alerta, notificacion, vencimiento de cheques, comprobar con contabilidad, cuadrar con contabilidad, saldo contable vs banco, diferencia contable, asiento faltante, sin asiento
-version: 1.20
+etiquetas: control bancario, liquidacion de tarjetas, cobros con tarjeta en el banco, traspaso, traspasos en el banco, deposito de caja al banco, traspaso no aparece en el banco, conciliacion bancaria, estado de cuenta, banco, cheques, movimientos, cuadrar banco, buscar movimiento, buscador, filtros, filtrar movimientos bancarios, buscar cheque, chips, cheques posfechados, cheque por cobrar, cheque por depositar, aviso de cheques, alerta, notificacion, vencimiento de cheques, comprobar con contabilidad, cuadrar con contabilidad, saldo contable vs banco, diferencia contable, asiento faltante, sin asiento
+version: 1.21
 orden: 60
 estado: activo
 ---
@@ -394,8 +394,11 @@ contables:
   concilia (Fecha Banco) igual que cualquier movimiento; un traspaso entre dos
   bancos se concilia por separado en cada uno.
 - Cada **liquidación de tarjetas** ([Conciliación de tarjetas](conciliacion-tarjetas.md))
-  **cerrada** es un depósito por el **neto** en la cuenta bancaria destino. El
-  comprobante es el número de la conciliación (CT-…) y se concilia igual.
+  **cerrada** entra en la cuenta bancaria destino **cobro por cobro**: un depósito
+  por cada línea del estado de cuenta de la tarjeta, por su neto, a nombre del
+  cliente y con la autorización como documento de referencia. El comprobante es
+  el número de la conciliación (CT-…) y cada cobro se concilia (Fecha Banco) por
+  separado, igual que en el estado de cuenta del banco.
 - La **fecha** de cada fila es la fecha de emisión del ingreso/egreso y el
   **comprobante** es su número, no los del asiento.
 - Se excluyen los documentos y traspasos eliminados o anulados y los cheques
@@ -442,6 +445,11 @@ los dos casos.
 
 ## Historial de cambios
 
+- **1.21** — Las **liquidaciones de tarjetas** se muestran cobro por cobro (un
+  depósito por cada línea del estado de cuenta de la tarjeta, por su neto) en vez
+  de un solo depósito por el total, para que coincidan con el estado de cuenta que
+  emite el banco. Una Fecha Banco que ya se había puesto a la liquidación entera
+  se conserva en cada uno de sus cobros.
 - **1.20** — En *Clasificar Movimiento*, botón junto a **Fecha Banco** que copia la
   fecha de emisión del cheque (solo en cheques).
 - **1.19** — El módulo se nombra **Conciliación Bancaria** en pantallas, mensajes, exportaciones

@@ -181,6 +181,10 @@ class ConciliacionTarjetasService
             'cobros'        => $cobros,
             'totales'       => $totales,
             'contabilidad'  => $this->evaluarContabilidad($cabecera, $idEmpresa, $totales),
+            // Desglose de lo que entra al banco, cobro por cobro, SIN la diferencia: la
+            // pantalla la aplica en vivo con el neto depositado que se está digitando
+            // (mismo criterio que depositosPorCobro: a la línea de mayor neto).
+            'depositos'     => $this->depositosPorCobro($lineas, $cruces, 0.0),
             // Margen con el que se acepta que los cobros de una línea pasen de su bruto
             // (lo valida cruzar(); la pantalla lo usa para atenuar los que no caben).
             'tolerancia'    => (float) ($this->repository->getConfig($idEmpresa, (int) $cabecera['id_forma_cobro'])['tolerancia_diferencia'] ?? 0.05),
@@ -561,7 +565,8 @@ class ConciliacionTarjetasService
                 // Se vuelve al punto previo y el cierre sigue sin asiento.
                 $db->exec('SAVEPOINT ct_asiento');
                 try {
-                    $idAsiento = $this->generarAsiento($cabecera, $totales, $diagnostico['cuentas'], $idEmpresa, $idUsuario);
+                    $depositos = $this->depositosPorCobro($lineas, $cruces, (float) $totales['diferencia']);
+                    $idAsiento = $this->generarAsiento($cabecera, $totales, $depositos, $diagnostico['cuentas'], $idEmpresa, $idUsuario);
                     $db->exec('RELEASE SAVEPOINT ct_asiento');
                 } catch (\Throwable $e) {
                     $db->exec('ROLLBACK TO SAVEPOINT ct_asiento');
@@ -635,7 +640,8 @@ class ConciliacionTarjetasService
         $db = Database::getConnection();
         $txPropia = $this->abrirTx($db);
         try {
-            $idAsiento = $this->generarAsiento($cabecera, $totales, $diagnostico['cuentas'], $idEmpresa, $idUsuario);
+            $depositos = $this->depositosPorCobro($lineas, $cruces, (float) $totales['diferencia']);
+            $idAsiento = $this->generarAsiento($cabecera, $totales, $depositos, $diagnostico['cuentas'], $idEmpresa, $idUsuario);
             $this->repository->enlazarAsiento($id, $idEmpresa, $idUsuario, $idAsiento);
             $this->commitTx($db, $txPropia);
         } catch (\Throwable $e) {
@@ -756,6 +762,92 @@ class ConciliacionTarjetasService
         ];
     }
 
+    /**
+     * Lo que entra al banco, COBRO POR COBRO (una entrada por línea cruzada del estado
+     * de cuenta), para que el banco destino y Control Bancario muestren los mismos
+     * movimientos individuales que el estado de cuenta de la tarjeta y no un solo
+     * depósito consolidado.
+     *
+     * Neto de cada línea = cobros cruzados − comisión − IVA comisión − retenciones −
+     * otros descuentos. La diferencia aceptada al cerrar (neto depositado − neto
+     * calculado, dentro de la tolerancia) se suma a la línea de mayor neto, para que
+     * la suma de los movimientos sea exactamente lo depositado.
+     *
+     * OJO: ControlBancarioRepository::sqlDepositosTarjetaPorCobro() replica este mismo
+     * reparto en SQL (para las cuentas sin contabilidad). Si cambia uno, cambiar el otro.
+     *
+     * @return list<array{id_linea:int, neto:float, bruto:float, descuentos:float, fecha:?string,
+     *                    autorizacion:string, referencia:string, id_cliente:?int, cliente:string, ingresos:string}>
+     */
+    public function depositosPorCobro(array $lineas, array $cruces, float $diferencia): array
+    {
+        $porLinea = [];
+        foreach ($cruces as $c) {
+            $porLinea[(int) $c['id_linea']][] = $c;
+        }
+
+        $depositos = [];
+        foreach ($lineas as $l) {
+            $crucesLinea = $porLinea[(int) $l['id']] ?? [];
+            if ($crucesLinea === []) {
+                continue;
+            }
+            $cruzado  = 0.0;
+            $clientes = [];
+            $nombres  = [];
+            $ingresos = [];
+            foreach ($crucesLinea as $c) {
+                $cruzado += (float) $c['monto_cruzado'];
+                if (!empty($c['id_cliente'])) {
+                    $clientes[(int) $c['id_cliente']] = true;
+                }
+                if (($v = trim((string) ($c['cliente_nombre'] ?? ''))) !== '') {
+                    $nombres[$v] = true;
+                }
+                if (($v = trim((string) ($c['numero_ingreso'] ?? ''))) !== '') {
+                    $ingresos[$v] = true;
+                }
+            }
+            $bruto = round($cruzado, 2);
+            $descuentos = round(
+                (float) $l['comision'] + (float) $l['iva_comision']
+                + (float) $l['retencion_ir'] + (float) $l['retencion_iva']
+                + (float) $l['otros_descuentos'],
+                2
+            );
+            $neto = round($bruto - $descuentos, 2);
+            $depositos[] = [
+                'id_linea'     => (int) $l['id'],
+                'neto'         => $neto,
+                'bruto'        => $bruto,
+                'descuentos'   => $descuentos,
+                'fecha'        => $l['fecha_movimiento'] ?? null,
+                'autorizacion' => trim((string) ($l['autorizacion'] ?? '')),
+                'referencia'   => trim((string) ($l['referencia'] ?? '')),
+                // Un solo cliente detrás de la línea: el movimiento del banco queda a su nombre.
+                'id_cliente'   => count($clientes) === 1 ? (int) array_key_first($clientes) : null,
+                'cliente'      => implode(', ', array_keys($nombres)),
+                'ingresos'     => implode(', ', array_keys($ingresos)),
+            ];
+        }
+
+        // La diferencia aceptada va a la línea de mayor neto (desempate: la de menor id),
+        // mismo criterio que el ROW_NUMBER() del SQL de Control Bancario.
+        $diferencia = round($diferencia, 2);
+        if ($depositos !== [] && abs($diferencia) >= 0.005) {
+            $kMax = 0;
+            foreach ($depositos as $k => $d) {
+                $max = $depositos[$kMax];
+                if ($d['neto'] > $max['neto'] || ($d['neto'] === $max['neto'] && $d['id_linea'] < $max['id_linea'])) {
+                    $kMax = $k;
+                }
+            }
+            $depositos[$kMax]['neto'] = round($depositos[$kMax]['neto'] + $diferencia, 2);
+        }
+
+        return $depositos;
+    }
+
     // ─── Contabilidad (opcional) ─────────────────────────────────────────────
 
     /**
@@ -846,13 +938,13 @@ class ConciliacionTarjetasService
 
     /**
      * Asiento del depósito:
-     *   Debe  Banco ................ neto depositado
+     *   Debe  Banco ................ neto de CADA cobro (una línea por cobro del estado de cuenta)
      *   Debe  Comisión + otros ..... gasto de la procesadora
      *   Debe  IVA de la comisión ... crédito tributario
      *   Debe  Retención IR / IVA ... lo que retuvo la procesadora
      *      Haber  Cuenta puente .... bruto conciliado
      */
-    private function generarAsiento(array $cabecera, array $totales, array $cuentas, int $idEmpresa, int $idUsuario): int
+    private function generarAsiento(array $cabecera, array $totales, array $depositos, array $cuentas, int $idEmpresa, int $idUsuario): int
     {
         $mapaCuentas = $this->repository->getDatosCuentas(array_values($cuentas));
         $datosCuenta = static function (int $id) use ($mapaCuentas): array {
@@ -860,7 +952,7 @@ class ConciliacionTarjetasService
         };
 
         $detalles = [];
-        $agregar = static function (int $idCuenta, float $debe, float $haber, string $referencia) use (&$detalles, $datosCuenta): void {
+        $agregar = static function (int $idCuenta, float $debe, float $haber, string $referencia, array $extra = []) use (&$detalles, $datosCuenta): void {
             if (round($debe, 2) <= 0 && round($haber, 2) <= 0) {
                 return;
             }
@@ -872,13 +964,29 @@ class ConciliacionTarjetasService
                 'debe'               => round($debe, 2),
                 'haber'              => round($haber, 2),
                 'referencia_detalle' => $referencia,
-            ];
+            ] + $extra;
         };
 
         $numero = $cabecera['numero'];
         $proc   = $cabecera['procesadora_nombre'] ?? 'tarjeta';
 
-        $agregar((int) $cuentas['banco'], (float) $totales['neto_depositado'], 0.0, 'Depósito ' . $proc . ' — ' . $numero);
+        // Banco: una línea por cobro, igual que el estado de cuenta de la tarjeta. Así el
+        // mayor del banco y Control Bancario muestran cada cobro por separado.
+        foreach ($depositos as $dep) {
+            $neto = (float) $dep['neto'];
+            $clave = $dep['autorizacion'] !== '' ? $dep['autorizacion'] : $dep['referencia'];
+            $referencia = 'Cobro ' . $proc
+                . ($dep['autorizacion'] !== '' ? ' aut. ' . $dep['autorizacion'] : ($dep['referencia'] !== '' ? ' ref. ' . $dep['referencia'] : ''))
+                . ($dep['cliente'] !== '' ? ' — ' . $dep['cliente'] : '')
+                . ($dep['ingresos'] !== '' ? ' (' . $dep['ingresos'] . ')' : '');
+            $extra = ['documento_referencia' => mb_substr($clave !== '' ? $clave : 'Conciliación ' . $numero, 0, 100)];
+            if (!empty($dep['id_cliente'])) {
+                $extra['tipo_entidad'] = 'cliente';
+                $extra['id_entidad']   = (int) $dep['id_cliente'];
+            }
+            // Un neto negativo (p. ej. una línea de reverso) sale del banco.
+            $agregar((int) $cuentas['banco'], max($neto, 0.0), max(-$neto, 0.0), $referencia, $extra);
+        }
 
         $comisionTotal = round((float) $totales['total_comision'] + (float) $totales['total_otros'], 2);
         if ($comisionTotal > 0) {
@@ -911,7 +1019,9 @@ class ConciliacionTarjetasService
         ];
 
         foreach ($detalles as &$d) {
-            $d['documento_referencia'] = 'Conciliación ' . $numero;
+            if (trim((string) ($d['documento_referencia'] ?? '')) === '') {
+                $d['documento_referencia'] = 'Conciliación ' . $numero;
+            }
         }
         unset($d);
 

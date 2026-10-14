@@ -5,8 +5,8 @@ categoria: Tesorería
 ruta_modulo: modulos/conciliacion-tarjetas
 tipo: modulo
 visibilidad: todos
-etiquetas: conciliar tarjetas, recaps diners, interdin, visa, mastercard, discover, asiento no generado, asiento pendiente, contabilizar conciliacion, payphone, nuvei, datafono, tarjeta de credito, liquidacion, comision de tarjeta, deposito de tarjeta, retenciones tarjeta, cuadrar tarjetas, cobros por depositar, asiento del deposito, imprimir, impresora
-version: 2.5
+etiquetas: conciliar tarjetas, cobros individuales en el banco, cobro por cobro, voucher por voucher, recaps diners, interdin, visa, mastercard, discover, asiento no generado, asiento pendiente, contabilizar conciliacion, payphone, nuvei, datafono, tarjeta de credito, liquidacion, comision de tarjeta, deposito de tarjeta, retenciones tarjeta, cuadrar tarjetas, cobros por depositar, asiento del deposito, imprimir, impresora
+version: 2.6
 orden: 66
 estado: activo
 ---
@@ -106,7 +106,10 @@ ocultarla con el engranaje de las pestañas.
 5. Las líneas que no correspondan a ningún cobro márquelas con el triángulo de
    aviso: quedan reportadas como *sin documento*.
 6. Indique **Depositado en** (el banco) y el **Neto depositado**, revise que la
-   diferencia sea cero y pulse **Conciliar y cerrar**.
+   diferencia sea cero y pulse **Conciliar y cerrar**. Cada cobro cruzado queda
+   registrado **por separado** en ese banco (uno por línea del estado de cuenta,
+   por su neto), así que en Conciliación Bancaria se ven los mismos movimientos
+   que en el estado de cuenta de la tarjeta.
 7. Si la conciliación generó asiento, puede revisarlo en la pestaña **Asiento
    contable** del mismo modal. Una conciliación cerrada se anula con el botón
    **Anular** de la barra de acciones superior.
@@ -131,6 +134,20 @@ ocultarla con el engranaje de las pestañas.
   derecha. El contador indica qué filas está viendo y el total.
 - **PDF / Excel**: exportan lo que cumple la búsqueda y los filtros, en el mismo
   orden de la pantalla.
+
+## Pestaña Depósitos al banco
+
+Muestra, **cobro por cobro**, lo que entra al banco elegido en *Depositado en*: una
+fila por cada línea cruzada del estado de cuenta, con su fecha, autorización,
+cliente, ingreso, bruto, descuentos (comisión, IVA, retenciones y otros) y el
+**neto al banco**. Es exactamente lo que se registra al cerrar y lo que luego se ve
+en Conciliación Bancaria, así que sirve para compararlo con el estado de cuenta de
+la tarjeta antes de cerrar.
+
+Mientras la conciliación está en borrador se actualiza al cruzar cobros y al
+digitar el **Neto depositado**: si este difiere del neto calculado, la diferencia
+se suma al cobro de mayor valor (lo marca un ícono de aviso) y el total del pie
+queda igual a lo depositado. Se puede ocultar con el engranaje de las pestañas.
 
 ## Pestaña Asiento contable
 
@@ -209,11 +226,16 @@ Módulos que contabilizan*, no se genera ninguno.
   importar si nació de un link de pago, del POS o de un cobro digitado.
 - **Payphone y Nuvei**: aportan el código de autorización de cada transacción,
   que es la llave más confiable para cruzar.
-- **Contabilidad**: al cerrar genera un asiento — Banco por el neto, más
-  comisión, IVA y retenciones, contra la cuenta puente por el bruto.
+- **Contabilidad**: al cerrar genera un asiento — Banco **una línea por cobro**
+  (el neto de cada línea del estado de cuenta, con el cliente y la autorización),
+  más comisión, IVA y retenciones, contra la cuenta puente por el bruto.
 - **Conciliación Bancaria**: una conciliación **cerrada** aparece en la cuenta bancaria
-  destino como un depósito por el **neto**, y ahí se concilia con su Fecha Banco.
-  Las conciliaciones en borrador o anuladas no aparecen.
+  destino **cobro por cobro**: un depósito por cada línea cruzada del estado de
+  cuenta, por su neto (bruto − comisión − IVA − retenciones − otros), a nombre del
+  cliente y con la autorización como documento. Cada uno se concilia con su
+  Fecha Banco. Si el neto depositado difirió del calculado (dentro de la
+  tolerancia), esa diferencia se suma al cobro de mayor valor, para que el total
+  sea exactamente lo depositado. Las conciliaciones en borrador o anuladas no aparecen.
 - **Estados financieros** (*Cuadre con Módulos*): la fila *Tarjetas por liquidar*
   compara lo cobrado con cada tarjeta menos lo liquidado en conciliaciones
   cerradas contra la cuenta puente.
@@ -258,6 +280,15 @@ Contables**; reabrir el período permite la operación de inmediato.
 
 ## Historial de cambios
 
+- **2.6** — Al cerrar, los cobros se registran **de forma individual** en el banco
+  elegido en *Depositado en* (uno por línea cruzada del estado de cuenta, por su
+  neto), en lugar de un solo depósito por el total: así Conciliación Bancaria y el
+  mayor del banco coinciden con el estado de cuenta de la tarjeta. El asiento lleva
+  una línea de banco por cobro, con el cliente y la autorización. Las
+  conciliaciones ya cerradas se ven cobro por cobro en las cuentas sin
+  contabilidad; en las que tienen contabilidad, su asiento anterior sigue
+  consolidado hasta que se anule y se vuelva a cerrar. Nueva pestaña **Depósitos
+  al banco** en el modal con ese desglose, antes y después de cerrar.
 - **2.5** — La liquidación de una conciliación cerrada aparece en **Conciliación
   Bancaria** como depósito del neto en la cuenta destino, y el saldo por
   liquidar de cada tarjeta se compara con su cuenta puente en el *Cuadre con

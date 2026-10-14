@@ -883,7 +883,7 @@ class ConciliacionTarjetasRepository extends BaseRepository
     public function getCruces(int $idCabecera, int $idEmpresa): array
     {
         $sql = "SELECT cr.*,
-                       ic.numero_ingreso, ic.fecha_emision,
+                       ic.numero_ingreso, ic.fecha_emision, ic.id_cliente,
                        cl.nombre AS cliente_nombre,
                        (SELECT string_agg(idet.numero_documento, ', ' ORDER BY idet.id)
                           FROM ingresos_detalle idet WHERE idet.id_ingreso = ic.id) AS documentos

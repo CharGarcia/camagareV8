@@ -217,6 +217,7 @@ function CTAR_nueva() {
         '<tr><td colspan="8" class="text-center py-4 text-muted small">Llene el encabezado, elija el perfil y el archivo del estado de cuenta, y pulse Cargar.</td></tr>';
     document.getElementById('ctar-m-tbody-cobros').innerHTML =
         '<tr><td colspan="5" class="text-center py-4 text-muted small">—</td></tr>';
+    CTAR_pintarDepositos();
 
     CTAR_habilitarAcciones(false, true);
     CTAR_mostrarModal();
@@ -894,6 +895,77 @@ function CTAR_recalcularDiferencia() {
     document.getElementById('ctar-m-t-diferencia').textContent = CTAR_num(diferencia);
     document.getElementById('ctar-m-t-diferencia-wrap').className =
         Math.abs(diferencia) < 0.005 ? 'fw-bold text-success' : 'fw-bold text-danger';
+
+    CTAR_pintarDepositos();
+}
+
+// ─── Pestaña «Depósitos al banco» ───────────────────────────────────────────
+
+const CTAR_r2 = (v) => (window.CMG_r2 ? window.CMG_r2(v) : parseFloat((parseFloat(v) || 0).toFixed(2)));
+
+/**
+ * Lo que entra al banco destino, cobro por cobro (detalle.depositos, del servidor, sin
+ * diferencia). La diferencia aceptada se suma a la línea de mayor neto (desempate: menor
+ * id), igual que ConciliacionTarjetasService::depositosPorCobro() al cerrar: en borrador
+ * con el neto depositado que se está digitando; cerrada, con la diferencia guardada.
+ * Siempre sobre TODA la conciliación (los filtros de fecha de las listas no aplican).
+ */
+function CTAR_pintarDepositos() {
+    const tbody = document.getElementById('ctar-dep-tbody');
+    if (!tbody) return;
+
+    const cab = CTAR_detalle?.cabecera;
+    const deps = (CTAR_detalle?.depositos || []).map((d) => ({ ...d }));
+
+    let diferencia = 0;
+    if (cab?.estado === 'cerrada') {
+        diferencia = parseFloat(cab.diferencia) || 0;
+    } else if (cab) {
+        const declarado = parseFloat(document.getElementById('ctar-m-neto').value);
+        diferencia = (isNaN(declarado) || declarado === 0)
+            ? 0 : CTAR_r2(declarado - (parseFloat(CTAR_detalle.totales?.total_neto) || 0));
+    }
+    let iAjuste = -1;
+    if (deps.length && Math.abs(diferencia) >= 0.005) {
+        iAjuste = 0;
+        deps.forEach((d, i) => {
+            const m = deps[iAjuste];
+            if (d.neto > m.neto || (d.neto === m.neto && d.id_linea < m.id_linea)) iAjuste = i;
+        });
+        deps[iAjuste].neto = CTAR_r2(deps[iAjuste].neto + diferencia);
+    }
+
+    const selDest = document.getElementById('ctar-m-destino');
+    const banco = selDest?.value ? selDest.options[selDest.selectedIndex].text : '';
+    document.getElementById('ctar-dep-banco').textContent = banco || '(elija «Depositado en»)';
+
+    if (!deps.length) {
+        tbody.innerHTML = `<tr><td colspan="8" class="text-center py-4 text-muted small">${
+            cab?.estado === 'anulada' ? 'La conciliación está anulada: no registra depósitos.' : 'Aún no hay cobros cruzados.'}</td></tr>`;
+    } else {
+        tbody.innerHTML = deps.map((d, i) => {
+            const clave = d.autorizacion || d.referencia || '—';
+            const ajuste = i === iAjuste
+                ? ` <i class="bi bi-info-circle text-warning" title="Incluye la diferencia de ${CTAR_num(diferencia)} entre el neto depositado y el calculado"></i>`
+                : '';
+            return `<tr>
+                <td class="ps-3 text-center text-muted">${i + 1}</td>
+                <td>${CTAR_esc(CTAR_fecha(d.fecha))}</td>
+                <td>${CTAR_esc(clave)}</td>
+                <td class="text-truncate" style="max-width:260px;" title="${CTAR_esc(d.cliente)}">${CTAR_esc(d.cliente || '—')}</td>
+                <td class="text-truncate" style="max-width:160px;" title="${CTAR_esc(d.ingresos)}">${CTAR_esc(d.ingresos || '—')}</td>
+                <td class="text-end">${CTAR_num(d.bruto)}</td>
+                <td class="text-end text-secondary">${CTAR_num(d.descuentos)}</td>
+                <td class="text-end pe-3 fw-semibold${d.neto < 0 ? ' text-danger' : ''}">${CTAR_num(d.neto)}${ajuste}</td>
+            </tr>`;
+        }).join('');
+    }
+
+    const suma = (campo) => CTAR_r2(deps.reduce((t, d) => t + (parseFloat(d[campo]) || 0), 0));
+    document.getElementById('ctar-dep-cantidad').textContent  = deps.length;
+    document.getElementById('ctar-dep-bruto').textContent      = CTAR_num(suma('bruto'));
+    document.getElementById('ctar-dep-descuentos').textContent = CTAR_num(suma('descuentos'));
+    document.getElementById('ctar-dep-neto').textContent       = CTAR_num(suma('neto'));
 }
 
 // ─── Guardar / cerrar / anular / eliminar ───────────────────────────────────
@@ -987,7 +1059,7 @@ async function CTAR_cerrarConciliacion() {
     if (!id) return;
 
     if (!await CTAR_confirmar('¿Cerrar la conciliación?',
-        'Los cobros cruzados quedarán conciliados y, si hay cuentas configuradas, se generará el asiento contable.',
+        'Los cobros cruzados quedarán conciliados y se registrarán uno por uno en el banco elegido (como en el estado de cuenta de la tarjeta); si hay cuentas configuradas, se generará el asiento contable.',
         'Sí, conciliar')) return;
 
     try {
@@ -1392,5 +1464,7 @@ document.addEventListener('DOMContentLoaded', () => {
         CTAR_cargarPerfilesModal();   // los perfiles dependen del tipo y banco de la procesadora
     });
     document.getElementById('ctar-m-archivo').addEventListener('change', CTAR_pintarInfoArchivo);
+    // El pie de «Depósitos al banco» nombra el banco elegido.
+    document.getElementById('ctar-m-destino').addEventListener('change', CTAR_pintarDepositos);
     CTAR_cargar();
 });
