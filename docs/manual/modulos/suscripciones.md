@@ -6,7 +6,7 @@ ruta_modulo: modulos/suscripciones
 tipo: modulo
 visibilidad: todos
 etiquetas: suscripciones, suscripcion, cobro recurrente, facturacion recurrente, factura recurrente, mensualidad, pension, plan mensual, membresia, renovacion, periodicidad, proximo cobro, generar documentos, generar facturas, facturacion automatica, facturas del cliente, facturas emitidas, historial de facturas, detalle de facturas, recibos del cliente, que le facture, saldo del cliente, facturas pendientes, facturas pagadas, facturas abonadas, cobro con tarjeta, debito automatico, nuvei, kushki, aviso de vencimiento, pagos reportados, comprobante de pago, reporte de pago, revisar pago, rechazar pago, ya pague, transferencia del cliente, imprimir, impresora, excel, exportar, resumen de valores, total por periodicidad, proyeccion anual, ingresos recurrentes, iva por tarifa, resumen por concepto, detalle por cliente, que se le factura a cada cliente, items por cliente, informacion adicional en excel, resumen en pdf, detalle por cliente en pdf, pdf de la suscripcion, imprimir suscripcion, contrato, ficha de la suscripcion, detalle de la suscripcion en pdf, devengado, devengo, ingreso diferido, ingresos diferidos, ingreso anticipado, cobro por adelantado, mes caido, mes vencido, facturacion vencida, niif 15, seccion 23, reconocimiento de ingresos, provision de ingresos, ingresos por facturar
-version: 1.26
+version: 1.27
 orden: 0
 estado: activo
 ---
@@ -312,7 +312,9 @@ Cada envío:
 - Llega por **correo** al correo registrado de la empresa dueña de la suscripción (campo
   correo de la empresa; si tiene varios separados por coma, a todos), con el comprobante
   adjunto y un botón para abrir este módulo.
-- Aparece en el botón **Pagos reportados** de la parte superior del listado. El número rojo
+- Aparece en el botón **Pagos reportados**, junto a **Generar Documentos** en la barra del
+  listado. El botón solo se muestra en la **empresa controladora de suscripciones** (la que
+  otras empresas tienen como controladora en Empresas del sistema). El número rojo
   indica cuántos siguen **en revisión**. El aviso de suscripciones de la barra superior
   también los cuenta y, al hacer clic, abre directamente esta ventana.
 
@@ -452,6 +454,8 @@ registrados*.
 
 ## Historial de cambios
 
+- **1.27** — El botón **Pagos reportados** pasa junto a **Generar Documentos** y solo
+  aparece en la empresa controladora de suscripciones.
 - **1.26** — Nuevo botón **Pagos reportados**: los pagos que los clientes informan desde su
   aviso de suscripción vencida (mensaje + comprobante), con la opción de **Rechazar** indicando
   el motivo. Cada reporte llega también por correo a la empresa.

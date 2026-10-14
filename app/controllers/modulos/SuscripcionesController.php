@@ -105,6 +105,10 @@ class SuscripcionesController extends BaseModuloController
         }
 
         $reportes = new SuscripcionReportePagoService();
+        // «Pagos reportados» solo en la empresa controladora de suscripciones (la que recibe
+        // esos reportes); en las demás no hay nada que revisar.
+        $verReportes = $reportes->disponible()
+            && (new \App\models\Empresa())->esControladoraSuscripciones($idEmpresa);
 
         $this->viewWithLayout('layouts.main', 'modulos.suscripciones.index', [
             'titulo'         => 'Suscripciones',
@@ -131,8 +135,8 @@ class SuscripcionesController extends BaseModuloController
             'decimalesCantidad' => $decimalesCantidad,
             'calculoIva'        => $calculoIva,
             // Botón «Pagos reportados» (pagos que los clientes informaron desde su aviso).
-            'reportesDisponible' => $reportes->disponible(),
-            'reportesEnRevision' => $reportes->contarEnRevision($idEmpresa),
+            'reportesDisponible' => $verReportes,
+            'reportesEnRevision' => $verReportes ? $reportes->contarEnRevision($idEmpresa) : 0,
             'fullWidth'      => true,
         ]);
     }

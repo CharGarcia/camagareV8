@@ -718,6 +718,23 @@ class Empresa extends BaseModel
     }
 
     /**
+     * ¿Esta empresa (este id exacto) es la controladora de suscripciones de alguna empresa
+     * vigente? Es el mismo id con el que se guardan los pagos reportados
+     * (suscripciones_reportes_pago.id_empresa_controladora), así que decide si la pantalla
+     * Suscripciones muestra el botón «Pagos reportados».
+     */
+    public function esControladoraSuscripciones(int $idEmpresa): bool
+    {
+        $st = $this->db->prepare(
+            "SELECT 1 FROM empresas x
+              WHERE x.id_empresa_suscripciones = :id AND x.eliminado = false
+              LIMIT 1"
+        );
+        $st->execute([':id' => $idEmpresa]);
+        return (bool) $st->fetchColumn();
+    }
+
+    /**
      * ¿La empresa VENDE el sistema? = su RUC es el de alguna controladora de suscripciones
      * (cualquiera de sus establecimientos). Decide si se le muestra el aviso del navbar.
      */

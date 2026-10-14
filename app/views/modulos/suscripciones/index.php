@@ -47,14 +47,6 @@ $estadoClases = [
 <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-3">
     <h5 class="mb-0 fw-bold"><i class="bi bi-arrow-repeat text-primary me-2"></i><?= htmlspecialchars($titulo) ?></h5>
     <div class="d-flex gap-2">
-        <?php if (!empty($reportesDisponible)): ?>
-            <button type="button" class="btn btn-outline-secondary btn-sm px-3 position-relative" onclick="SUSC_abrirPagosReportados()" title="Pagos que los clientes informaron desde su aviso de suscripción">
-                <i class="bi bi-inbox"></i> Pagos reportados
-                <?php if (!empty($reportesEnRevision)): ?>
-                    <span class="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-danger" id="susc-reportes-badge"><?= (int) $reportesEnRevision ?></span>
-                <?php endif; ?>
-            </button>
-        <?php endif; ?>
         <?php if ($perm['crear']): ?>
             <button type="button" class="btn btn-primary btn-sm px-3" onclick="abrirModalSuscCrear()">
                 <i class="bi bi-plus-lg"></i> Nueva
@@ -210,6 +202,14 @@ $estadoClases = [
                 <?php if ($perm['crear']): ?>
                 <button type="button" class="btn btn-outline-secondary" onclick="abrirModalGenerarDocumentos()" title="Generar los documentos del período">
                     <i class="bi bi-file-earmark-text"></i><span class="d-none d-md-inline"> Generar Documentos</span>
+                </button>
+                <?php endif; ?>
+                <?php if (!empty($reportesDisponible)): // solo en la empresa controladora de suscripciones ?>
+                <button type="button" class="btn btn-outline-secondary position-relative" onclick="SUSC_abrirPagosReportados()" title="Pagos que los clientes informaron desde su aviso de suscripción">
+                    <i class="bi bi-inbox"></i><span class="d-none d-md-inline"> Pagos reportados</span>
+                    <?php if (!empty($reportesEnRevision)): ?>
+                        <span class="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-danger" id="susc-reportes-badge"><?= (int) $reportesEnRevision ?></span>
+                    <?php endif; ?>
                 </button>
                 <?php endif; ?>
             </div>
