@@ -87,7 +87,7 @@ tachado, que tiene restringidas las áreas comunes.
 | Alícuota y cuotas extraord. | Configuración **común a todos los inmuebles**: método de alícuota del condominio, cuotas extraordinarias y **Valores que rigen**. Tiene su propio botón **Guardar para el condominio**; el Guardar del pie no aparece en esta pestaña. |
 | Propietarios | Historial de propietario, arrendatario y pagador con desde / hasta. |
 | Áreas comunes | Marcar o levantar la restricción (fecha de notificación y motivo obligatorios) y su bitácora. |
-| Expensa | La suscripción que emite la cuota del inmueble. Se asocia desde Suscripciones (campo **Inmueble**) o se enlaza aquí una suscripción del pagador que aún no tenga inmueble. Al emitir, el inmueble y su propietario salen en la Información adicional del documento. |
+| Expensa | La suscripción que emite la cuota del inmueble. Se enlaza aquí una suscripción del pagador que aún no tenga inmueble. El inmueble que deba salir en el documento se escribe a mano en la **Información adicional** de la suscripción. |
 
 | Campo | Obligatorio | Qué significa |
 |---|---|---|
@@ -235,8 +235,9 @@ permiso ven todos los condóminos.
 
 - **Clientes**: los condóminos son los clientes de la empresa.
 - **Productos**: fuente de los conceptos.
-- **Suscripciones**: emite la cuota de cada inmueble; el campo **Inmueble** de la suscripción la
-  asocia y el reajuste de cuotas escribe el precio de su línea.
+- **Suscripciones**: emite la cuota de cada inmueble; se enlaza desde la pestaña Expensa del
+  inmueble y el reajuste de cuotas escribe el precio de su línea. El inmueble se escribe a mano en
+  la Información adicional de la suscripción.
 - **Presupuestos**: un presupuesto aprobado puede ser la base del monto a repartir.
 - **Ingresos / Cuentas por Cobrar / Reporte de Cartera**: cobro y cartera, como siempre.
 - **Recibos de Venta / Facturas de Venta / SRI**: los cobros en bloque crean documentos normales
@@ -273,7 +274,8 @@ permiso ven todos los condóminos.
   pantalla ocupa todo el ancho. En Condóminos: el botón + pasa a la celda de inmuebles, **Generar
   cobro** va a la derecha junto al paginador y se retiran el resumen y los botones Restringidas y
   Emisiones. La pestaña **Alícuota y cuotas extraordinarias** pasa a la ventana del inmueble y se
-  retira la pestaña **Descuentos** (los valores ya guardados se conservan).
+  retira la pestaña **Descuentos** (los valores ya guardados se conservan). Suscripciones ya no tiene
+  selector de inmueble ni agrega solo el inmueble a la Información adicional: se escribe a mano.
 
 - **1.5** — **Generar cobro** en Condóminos: emisión en bloque de recibos o facturas sin pasar
   por Suscripciones, en segundo plano, con envío al SRI y por correo; **Agregar a suscripciones**

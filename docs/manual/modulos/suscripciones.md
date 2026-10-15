@@ -6,7 +6,7 @@ ruta_modulo: modulos/suscripciones
 tipo: modulo
 visibilidad: todos
 etiquetas: suscripciones, suscripcion, cobro recurrente, facturacion recurrente, factura recurrente, mensualidad, pension, plan mensual, membresia, renovacion, periodicidad, proximo cobro, generar documentos, generar facturas, facturacion automatica, facturas del cliente, facturas emitidas, historial de facturas, detalle de facturas, recibos del cliente, que le facture, saldo del cliente, facturas pendientes, facturas pagadas, facturas abonadas, cobro con tarjeta, debito automatico, nuvei, kushki, aviso de vencimiento, pagos reportados, comprobante de pago, reporte de pago, revisar pago, rechazar pago, ya pague, transferencia del cliente, imprimir, impresora, excel, exportar, resumen de valores, total por periodicidad, proyeccion anual, ingresos recurrentes, iva por tarifa, resumen por concepto, detalle por cliente, que se le factura a cada cliente, items por cliente, informacion adicional en excel, resumen en pdf, detalle por cliente en pdf, pdf de la suscripcion, imprimir suscripcion, contrato, ficha de la suscripcion, detalle de la suscripcion en pdf, devengado, devengo, ingreso diferido, ingresos diferidos, ingreso anticipado, cobro por adelantado, mes caido, mes vencido, facturacion vencida, niif 15, seccion 23, reconocimiento de ingresos, provision de ingresos, ingresos por facturar
-version: 1.27
+version: 1.28
 orden: 0
 estado: activo
 ---
@@ -64,7 +64,6 @@ Periodicidad guarda ese valor como favorito: cada suscripción nueva lo trae ya 
 | Campo | Obligatorio | Qué significa |
 |-------|-------------|---------------|
 | Cliente | Sí | A quién se le factura la suscripción. |
-| Inmueble | No (solo condominios) | Inmueble del condominio cuya expensa cobra esta suscripción. Aparece solo si la empresa tiene activo el módulo Condominios. Lista los inmuebles que **paga** el cliente; si paga uno solo, se asocia solo al guardar. Al generar el recibo o la factura, el inmueble, su propietario y el período salen en la **Información adicional** del documento (RIDE, XML y correo). |
 | Estado | Sí | Activo, Pausado, Suspendido o Cancelado. Solo las **activas** generan documentos. |
 | Comprobante | Sí | Factura de Venta o Recibo de Venta. |
 | Fecha inicio | Sí | Desde cuándo rige la suscripción. |
@@ -454,6 +453,10 @@ registrados*.
 
 ## Historial de cambios
 
+- **1.28** — Condominios: se quita el selector **Inmueble** del formulario. El inmueble que deba
+  salir en el recibo o la factura se escribe a mano en la **Información adicional** (p. ej.
+  Concepto «Inmueble», Detalle «Departamento 104»); ya no se agrega solo al generar. Las
+  suscripciones ya enlazadas desde Condominios conservan su enlace.
 - **1.27** — El botón **Pagos reportados** pasa junto a **Generar Documentos** y solo
   aparece en la empresa controladora de suscripciones.
 - **1.26** — Nuevo botón **Pagos reportados**: los pagos que los clientes informan desde su

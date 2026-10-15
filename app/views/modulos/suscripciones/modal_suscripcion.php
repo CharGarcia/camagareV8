@@ -162,17 +162,6 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosPestanasOcultas($vistaConfigS
                                             <span class="fw-bold text-dark border-end pe-2 me-1" id="susc_lbl_cli_ruc"></span>
                                             <i class="bi bi-envelope me-1"></i><span id="susc_lbl_cli_email"></span>
                                         </div>
-                                        <?php if (!empty($esCondominio)): ?>
-                                        <!-- Condominios: inmueble cuya expensa cobra esta suscripción. Con un solo inmueble del
-                                             cliente se asocia solo al guardar; sale en la Información adicional del recibo/factura. -->
-                                        <div class="d-flex align-items-center gap-2 mt-2" id="susc_inmueble_wrap">
-                                            <label for="susc_id_unidad" class="mb-0 text-nowrap"><i class="bi bi-door-open me-1 text-primary"></i>Inmueble</label>
-                                            <select class="form-select form-select-sm" name="id_unidad" id="susc_id_unidad" style="max-width:420px">
-                                                <option value="">— Elija primero el cliente —</option>
-                                            </select>
-                                            <small class="text-muted text-nowrap d-none d-lg-inline">Sale en la información adicional del documento.</small>
-                                        </div>
-                                        <?php endif; ?>
                                     </div>
 
                                     <!-- Comprobante (junto al buscador de cliente) -->
@@ -614,7 +603,6 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosPestanasOcultas($vistaConfigS
         document.getElementById('susc_lbl_cli_email').textContent  = c.correo ?? c.email ?? '';
         infoCli.classList.remove('d-none');
         ddCli.classList.add('d-none');
-        suscCargarInmuebles(c.id, null);
     };
 
     function suscSetCliente(c) {
@@ -633,24 +621,6 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosPestanasOcultas($vistaConfigS
         if (!document.getElementById('modalSusc')?.classList.contains('show') || inpCli.disabled) return;
         window.suscSelCliente(encodeURIComponent(JSON.stringify(res.data)));
     });
-
-    /* ── Condominios: inmuebles que paga el cliente (selector del modal) ───────── */
-    const selInm = document.getElementById('susc_id_unidad');
-    async function suscCargarInmuebles(idCliente, idUnidadActual) {
-        if (!selInm) return;
-        selInm.innerHTML = '<option value="">— Elija primero el cliente —</option>';
-        if (!idCliente) return;
-        try {
-            const r = await fetch(urlBase + '/getInmueblesClienteAjax?id_cliente=' + encodeURIComponent(idCliente));
-            const d = await r.json();
-            const lista = d.rows ?? [];
-            if (!lista.length) { selInm.innerHTML = '<option value="">Sin inmuebles a nombre de este cliente</option>'; return; }
-            // Con un solo inmueble se preselecciona (igual que lo hará el servidor al guardar).
-            selInm.innerHTML = (lista.length === 1 ? '' : '<option value="">— Sin inmueble —</option>')
-                + lista.map(u => `<option value="${u.id}">${(u.etiqueta ?? '').replace(/</g, '&lt;')}</option>`).join('');
-            selInm.value = idUnidadActual ? String(idUnidadActual) : (lista.length === 1 ? String(lista[0].id) : '');
-        } catch (e) { console.error(e); }
-    }
 
     /* ── Buscador de productos ────────────────────────────────────────────────── */
     const ddProd  = document.getElementById('susc_dropdown_productos');
@@ -1201,7 +1171,6 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosPestanasOcultas($vistaConfigS
     window.abrirModalSuscCrear = async function () {
         document.getElementById('susc_id').value                = '';
         hidCli.value                                             = '';
-        suscCargarInmuebles(null, null);
         inpCli.value                                             = '';
         infoCli.classList.add('d-none');
         document.getElementById('susc_fecha_inicio').value      = CMG_fechaLocal();
@@ -1264,12 +1233,9 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosPestanasOcultas($vistaConfigS
         suscCargarInfoAdicional(s.info_adicional ?? null);
 
 
-        // Poblar cliente (y su inmueble, en condominios)
+        // Poblar cliente
         if (s.id_cliente) {
             suscSetCliente({ id: s.id_cliente, nombre: s.nombre_cliente ?? '', identificacion: s.identificacion_cliente ?? '' });
-            suscCargarInmuebles(s.id_cliente, s.id_unidad ?? null);
-        } else {
-            suscCargarInmuebles(null, null);
         }
 
         // Tarjeta (Kushki)

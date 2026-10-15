@@ -135,10 +135,16 @@ class SuscripcionesService
      * lo pague; si no eligió y el cliente paga un solo inmueble, se asocia solo. Fuera de un
      * condominio (o sin el SQL de Condominios) devuelve null y nada cambia.
      */
-    private function resolverInmueble(array $data): ?int
+    private function resolverInmueble(array $data, ?array $antes = null): ?int
     {
         if (!$this->repository->tieneInmueble()) {
             return null;
+        }
+        // El formulario ya no tiene selector de inmueble (se escribe a mano en Información
+        // adicional): sin id_unidad explícito no se asocia solo, y al editar se conserva el
+        // enlace hecho desde Condominios (pestaña Expensa del inmueble).
+        if (!array_key_exists('id_unidad', $data)) {
+            return $antes ? ((int) ($antes['id_unidad'] ?? 0) ?: null) : null;
         }
         return \App\Services\modulos\CondominioService::crear()->resolverInmuebleSuscripcion(
             (int) ($data['id_cliente'] ?? 0),
@@ -194,7 +200,7 @@ class SuscripcionesService
         }
 
         $idUsuario = (int) $data['id_usuario'];
-        $data['id_unidad'] = $this->resolverInmueble($data);
+        $data['id_unidad'] = $this->resolverInmueble($data, $antes);
 
         $this->repository->beginTransaction();
         try {

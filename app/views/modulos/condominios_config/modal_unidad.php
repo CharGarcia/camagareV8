@@ -277,7 +277,7 @@ $pestanasUni = [
 
                         <!-- ══ Expensa (suscripción) ══ -->
                         <div class="tab-pane fade" id="pane-uni-suscripcion" role="tabpanel">
-                            <p class="small text-muted mb-2"><i class="bi bi-info-circle me-1"></i>La cuota del inmueble se emite desde <b>Suscripciones</b>. Al crear la suscripción del pagador elija este inmueble, o enlace aquí una suscripción que ya tenga (por ejemplo, un programado migrado del sistema anterior). Sus recibos o facturas llevarán el detalle del inmueble en la información adicional.</p>
+                            <p class="small text-muted mb-2"><i class="bi bi-info-circle me-1"></i>La cuota del inmueble se emite desde <b>Suscripciones</b>. Enlace aquí la suscripción del pagador (por ejemplo, un programado migrado del sistema anterior). El detalle del inmueble que deba salir en el recibo o la factura se escribe a mano en la <b>Información adicional</b> de la suscripción.</p>
                             <div id="uni-susc-actual" class="border rounded-3 p-3 bg-light small mb-3">Guardel inmueble para ver su expensa.</div>
                             <div id="uni-susc-enlazables"></div>
                         </div>

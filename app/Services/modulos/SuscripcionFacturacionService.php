@@ -190,19 +190,8 @@ class SuscripcionFacturacionService
             $infoAdicional[] = ['nombre' => $infoConcepto, 'valor' => $infoDetalle];
         }
 
-        // Condominios: la suscripción pertenece a un inmueble → Inmueble, Propietario y Período
-        // salen en el RIDE, el XML y el correo (el detalle del inmueble, p. ej. «Departamento 104»).
-        if (!empty($susc['id_unidad'])) {
-            try {
-                $periodoTexto = $reemplazos['{mes_anio}'] ?? '';
-                foreach (\App\Services\modulos\CondominioService::crear()->infoAdicionalInmueble((int) $susc['id_unidad'], $idEmpresa, $periodoTexto) as $fila) {
-                    $infoAdicional[] = $fila;
-                }
-            } catch (\Throwable $e) {
-                // Sin el inmueble el documento igual sale; se registra para revisar.
-                \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => 'infoAdicionalInmueble']);
-            }
-        }
+        // Condominios: el inmueble ya no se agrega solo; el usuario lo escribe en la Información
+        // adicional de la suscripción (filas de arriba).
 
         // Correo del cliente: campo fijo, usa el nombre 'correo del cliente' que la vista
         // reconoce como fila no eliminable (data-tipo="correo-cliente", sin botón borrar).
