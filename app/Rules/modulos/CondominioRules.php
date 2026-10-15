@@ -69,15 +69,15 @@ class CondominioRules
 
         $c['fondo_reserva_tipo'] = (string) ($d['fondo_reserva_tipo'] ?? 'no');
         if (!in_array($c['fondo_reserva_tipo'], ['no', 'porcentaje', 'fijo'], true)) {
-            throw new \InvalidArgumentException('El tipo de fondo de reserva no es válido.|#cfg_fondo_reserva_tipo');
+            throw new \InvalidArgumentException('El tipo de cuota extraordinaria no es válido.|#cfg_fondo_reserva_tipo');
         }
         $c['fondo_reserva_valor'] = round(self::num($d['fondo_reserva_valor'] ?? 0), 2);
         if ($c['fondo_reserva_tipo'] !== 'no') {
             if ($c['fondo_reserva_valor'] <= 0) {
-                throw new \InvalidArgumentException('Indique el ' . ($c['fondo_reserva_tipo'] === 'porcentaje' ? '% sobre la alícuota' : 'monto fijo') . ' del fondo de reserva.|#cfg_fondo_reserva_valor');
+                throw new \InvalidArgumentException('Indique el ' . ($c['fondo_reserva_tipo'] === 'porcentaje' ? '% sobre la alícuota' : 'monto fijo') . ' de la cuota extraordinaria.|#cfg_fondo_reserva_valor');
             }
             if ($c['fondo_reserva_tipo'] === 'porcentaje' && $c['fondo_reserva_valor'] > 100) {
-                throw new \InvalidArgumentException('El % del fondo de reserva no puede pasar de 100.|#cfg_fondo_reserva_valor');
+                throw new \InvalidArgumentException('El % de la cuota extraordinaria no puede pasar de 100.|#cfg_fondo_reserva_valor');
             }
         }
 
@@ -189,7 +189,7 @@ class CondominioRules
         $fp = $d['fondo_reserva_valor_propio'] ?? null;
         $u['fondo_reserva_valor_propio'] = ($fp === null || trim((string) $fp) === '') ? null : round(self::num($fp), 2);
         if ($u['fondo_reserva_valor_propio'] !== null && $u['fondo_reserva_valor_propio'] < 0) {
-            throw new \InvalidArgumentException('El fondo de reserva propio no puede ser negativo.|#uni_fondo_reserva_valor_propio');
+            throw new \InvalidArgumentException('La cuota extraordinaria propia no puede ser negativa.|#uni_fondo_reserva_valor_propio');
         }
 
         $u['estado'] = ($d['estado'] ?? 'activo') === 'inactivo' ? 'inactivo' : 'activo';

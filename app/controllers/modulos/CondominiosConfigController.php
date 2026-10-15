@@ -9,7 +9,7 @@ use App\Services\modulos\CondominioService;
 
 /**
  * Configuración de condominios (modulos/condominios-config): único submódulo de Condominios.
- * Pestañas: condominio, condóminos (todos los clientes y sus inmuebles), alícuota y fondo, mora
+ * Pestañas: condominio, condóminos (todos los clientes y sus inmuebles), alícuota y cuotas extraordinarias, mora
  * y multas, reajuste de cuotas, descuentos. Permisos: ver = consultar; crear = asignar inmuebles
  * y carga Excel; actualizar = guardar la configuración, editar, restringir y enlazar; eliminar =
  * inmuebles, multas y valores. Guardar la configuración ACTIVA el módulo para la empresa.
@@ -74,6 +74,7 @@ class CondominiosConfigController extends BaseModuloController
             'tiposUnidad'   => CondominioRules::TIPOS_LABEL,
             'opcionesFiltro' => $instalado && $cfg ? $this->service->repo()->getOpcionesFiltroListado($idEmpresa) : [],
             'titulo'        => 'Configuración de condominios',
+            'fullWidth'     => true,
             'perm'          => $this->getPermisos(),
             'rutaModulo'    => self::RUTA_MODULO,
             'vistaConfig'   => \App\Helpers\PreferenciasHelper::getPreferenciasVista(self::RUTA_MODULO),

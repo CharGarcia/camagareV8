@@ -74,7 +74,7 @@ class CondominioService
         $this->exigirInstalado();
         $c = $this->rules->validarConfig($data);
         if ($c['id_producto_fondo']) {
-            $this->validarProducto($c['id_producto_fondo'], $idEmpresa, 'el fondo de reserva', '#cfg_prod_fondo_txt');
+            $this->validarProducto($c['id_producto_fondo'], $idEmpresa, 'las cuotas extraordinarias', '#cfg_prod_fondo_txt');
         }
         if ($c['id_producto_interes']) {
             $this->validarProducto($c['id_producto_interes'], $idEmpresa, 'los intereses de mora', '#cfg_prod_interes_txt');
@@ -959,7 +959,7 @@ class CondominioService
             ['- PROPIETARIO_IDENTIFICACION es obligatoria: se cruza con Clientes por cédula/RUC. Si el cliente no existe se crea con PROPIETARIO_NOMBRE (obligatorio en ese caso), EMAIL y TELEFONO.'],
             ['- ARRENDATARIO_* es opcional; igual cruce con Clientes. PAGADOR: propietario | arrendatario (vacío = propietario).'],
             ['- METODO: porcentaje | m2 | manual | vacío (= el del condominio). MONTO_MANUAL solo si METODO = manual. El comprobante (recibo/factura) se define en la suscripción del inmueble.'],
-            ['- FONDO_RESERVA_PROPIO: valor propio del inmueble (vacío = regla del condominio).'],
+            ['- FONDO_RESERVA_PROPIO: cuota extraordinaria propia del inmueble (vacío = regla del condominio).'],
             ['- Las filas de ejemplo se pueden borrar. No cambie los encabezados.'],
             ['- Si un inmueble ya existe (mismo CODIGO), se ACTUALIZA con los datos del archivo.'],
         ], null, 'A1');

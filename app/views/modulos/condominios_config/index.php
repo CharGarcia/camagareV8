@@ -30,7 +30,7 @@ $filtrosCondominos = [
 $pestanasCfg = [
     'pane-cfg-general'    => 'Condominio',
     'pane-cfg-condominos' => 'Condóminos',
-    'pane-cfg-alicuota'   => 'Alícuota y fondo',
+    'pane-cfg-alicuota'   => 'Alícuota y cuotas extraordinarias',
     'pane-cfg-mora'       => 'Mora y multas',
     'pane-cfg-reajuste'   => 'Reajuste de cuotas',
     'pane-cfg-descuentos' => 'Descuentos',
@@ -91,7 +91,7 @@ $prodChip = function (string $id, string $label, string $campo, string $ayuda) u
         <ul class="nav nav-tabs border-bottom-0 flex-grow-1 flex-nowrap" role="tablist">
             <li class="nav-item"><a class="nav-link active py-2 small" id="cfg-tab-general-btn" data-bs-toggle="tab" href="#pane-cfg-general" role="tab"><i class="bi bi-buildings me-1"></i>Condominio</a></li>
             <li class="nav-item"><a class="nav-link py-2 small" id="cfg-tab-condominos-btn" data-bs-toggle="tab" href="#pane-cfg-condominos" role="tab"><i class="bi bi-people me-1"></i>Condóminos</a></li>
-            <li class="nav-item"><a class="nav-link py-2 small" data-bs-toggle="tab" href="#pane-cfg-alicuota" role="tab"><i class="bi bi-calculator me-1"></i>Alícuota y fondo</a></li>
+            <li class="nav-item"><a class="nav-link py-2 small" data-bs-toggle="tab" href="#pane-cfg-alicuota" role="tab"><i class="bi bi-calculator me-1"></i>Alícuota y cuotas extraordinarias</a></li>
             <li class="nav-item"><a class="nav-link py-2 small" data-bs-toggle="tab" href="#pane-cfg-mora" role="tab"><i class="bi bi-hourglass-split me-1"></i>Mora y multas</a></li>
             <li class="nav-item"><a class="nav-link py-2 small" data-bs-toggle="tab" href="#pane-cfg-reajuste" role="tab"><i class="bi bi-arrow-repeat me-1"></i>Reajuste de cuotas</a></li>
             <li class="nav-item"><a class="nav-link py-2 small" data-bs-toggle="tab" href="#pane-cfg-descuentos" role="tab"><i class="bi bi-percent me-1"></i>Descuentos</a></li>
@@ -211,20 +211,18 @@ $prodChip = function (string $id, string $label, string $campo, string $ayuda) u
                             <th class="sortable-header" role="button" data-sort="email" data-col="contacto">Contacto <i class="bi bi-arrow-down-up small text-muted ms-1"></i></th>
                             <th class="sortable-header" role="button" data-sort="codigo" data-col="inmuebles">Inmuebles <i class="bi bi-arrow-down-up small text-muted ms-1"></i></th>
                             <th class="text-end sortable-header" role="button" data-sort="alicuota_pct" data-col="alicuota_pct" title="Suma de las alícuotas de los inmuebles de los que es propietario">Alícuota % <i class="bi bi-arrow-down-up small text-muted ms-1"></i></th>
-                            <th class="text-center sortable-header" role="button" data-sort="restringida" data-col="restringida">Restricción <i class="bi bi-arrow-down-up small text-muted ms-1"></i></th>
-                            <th class="text-end pe-3" style="width:60px"></th>
-                        </tr>
+                            <th class="text-center sortable-header" role="button" data-sort="restringida" data-col="restringida">Restricción <i class="bi bi-arrow-down-up small text-muted ms-1"></i></th>                        </tr>
                     </thead>
                     <tbody id="cond-tbody">
-                        <tr><td colspan="8" class="text-center py-5 text-muted">Cargando…</td></tr>
+                        <tr><td colspan="7" class="text-center py-5 text-muted">Cargando…</td></tr>
                     </tbody>
                 </table>
             </div>
-            <div class="small text-muted mt-2"><i class="bi bi-info-circle me-1"></i>Se listan todos los clientes de la empresa. Pulse un cliente sin inmueble para asignárselo, o un inmueble para editarlo. Con <i class="bi bi-plus-lg"></i> se agrega otro inmueble al mismo cliente.</div>
+            <div class="small text-muted mt-2"><i class="bi bi-info-circle me-1"></i>Se listan todos los clientes de la empresa. Pulse un cliente sin inmueble para asignárselo, o un inmueble para editarlo. Con <i class="bi bi-plus-lg"></i>, junto a sus inmuebles, se le agrega otro.</div>
             <?php endif; ?>
         </div>
 
-        <!-- ══ Alícuota y fondo ══ -->
+        <!-- ══ Alícuota y cuotas extraordinarias ══ -->
         <div class="tab-pane fade" id="pane-cfg-alicuota" role="tabpanel">
             <div class="row g-2">
                 <div class="col-md-6">
@@ -246,7 +244,7 @@ $prodChip = function (string $id, string $label, string $campo, string $ayuda) u
             <hr class="my-3">
             <div class="row g-2">
                 <div class="col-md-3">
-                    <label for="cfg_fondo_reserva_tipo">Fondo de reserva</label>
+                    <label for="cfg_fondo_reserva_tipo">Cuotas extraordinarias</label>
                     <select class="form-select form-select-sm" id="cfg_fondo_reserva_tipo" name="fondo_reserva_tipo" onchange="CONDCFG.onFondo()">
                         <option value="no">No se cobra</option>
                         <option value="porcentaje">% sobre la alícuota ordinaria</option>
@@ -258,7 +256,7 @@ $prodChip = function (string $id, string $label, string $campo, string $ayuda) u
                     <input type="number" class="form-control form-control-sm text-end" id="cfg_fondo_reserva_valor" name="fondo_reserva_valor" step="0.01" min="0" value="0">
                 </div>
                 <div class="col-md-6 position-relative" id="cfg-wrap-prod-fondo">
-                    <?= $prodChip('cfg_prod_fondo', 'Producto para el fondo de reserva', 'id_producto_fondo', 'Línea separada en el recibo; su cuenta contable la define el producto (normalmente un pasivo/patrimonio del condominio).') ?>
+                    <?= $prodChip('cfg_prod_fondo', 'Producto para las cuotas extraordinarias', 'id_producto_fondo', 'Línea separada en el recibo; su cuenta contable la define el producto (según el destino de la cuota extraordinaria).') ?>
                 </div>
             </div>
 
@@ -551,7 +549,7 @@ $prodChip = function (string $id, string $label, string $campo, string $ayuda) u
                     <div class="row g-2 mb-2" id="val-kpis"></div>
                     <div class="border rounded-3 bg-white" style="max-height: 45vh; overflow: auto;">
                         <table class="table table-sm table-hover mb-0 small">
-                            <thead class="table-light"><tr><th class="ps-2">Inmueble</th><th>Propietario</th><th>Método</th><th class="text-end">m²</th><th class="text-end">%</th><th class="text-end">Cuota</th><th class="text-end">Fondo</th><th class="text-end pe-2">Total</th></tr></thead>
+                            <thead class="table-light"><tr><th class="ps-2">Inmueble</th><th>Propietario</th><th>Método</th><th class="text-end">m²</th><th class="text-end">%</th><th class="text-end">Cuota</th><th class="text-end">C. extraord.</th><th class="text-end pe-2">Total</th></tr></thead>
                             <tbody id="val-body"></tbody>
                         </table>
                     </div>

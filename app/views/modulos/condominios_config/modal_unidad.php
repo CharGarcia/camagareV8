@@ -143,10 +143,10 @@ $pestanasUni = [
                                 </div>
                             </div>
 
-                            <!-- Fila 4: fondo propio, estado, cuota estimada (2+2+8) -->
+                            <!-- Fila 4: cuota extraordinaria propia, estado, cuota estimada (2+2+8) -->
                             <div class="row g-2 mt-0">
                                 <div class="col-md-2">
-                                    <label for="uni_fondo_reserva_valor_propio">Fondo reserva propio</label>
+                                    <label for="uni_fondo_reserva_valor_propio">Cuota extraord. propia</label>
                                     <input type="number" class="form-control form-control-sm text-end" id="uni_fondo_reserva_valor_propio" name="fondo_reserva_valor_propio" step="0.01" min="0" placeholder="Regla del condominio">
                                 </div>
                                 <div class="col-md-2">

@@ -1,7 +1,7 @@
 /**
  * condominios_config.js — Configuración de condominios (modulos/condominios-config).
  *
- * Formulario por pestañas (Condominio / Emisión / Alícuota y fondo / Mora y multas / Descuentos)
+ * Formulario por pestañas (Condominio / Emisión / Alícuota y cuotas extraordinarias / Mora y multas / Descuentos)
  * que se guarda completo con AJAX, más el catálogo de multas (se guarda por fila). Los productos
  * de cada concepto se eligen con buscadores tipo chip sobre los servicios de Productos.
  * Configuración en window.CONDCFG_CFG.
@@ -195,7 +195,7 @@ window.CONDCFG = (function () {
         const kpi = (lbl, val, sub) => `<div class="col-6 col-md-3"><div class="border rounded-3 p-2 bg-light"><div class="text-muted" style="font-size:.7rem">${lbl}</div><div class="fw-bold">${val}</div>${sub ? `<div class="text-muted" style="font-size:.7rem">${sub}</div>` : ''}</div></div>`;
         $('val-kpis').innerHTML = kpi('Inmuebles', `${t.inmuebles}${t.sin_cuota ? ` <span class="text-danger">(${t.sin_cuota} sin cuota)</span>` : ''}`)
             + kpi('Σ cuotas ordinarias', money(t.cuotas), ant ? `antes ${money(ant.cuotas)}` : '')
-            + kpi('Σ fondo de reserva', money(t.fondo), ant ? `antes ${money(ant.fondo)}` : '')
+            + kpi('Σ cuotas extraordinarias', money(t.fondo), ant ? `antes ${money(ant.fondo)}` : '')
             + kpi(t.monto_a_repartir ? 'Frente al monto a repartir' : 'Σ total a cobrar', t.monto_a_repartir ? (t.diferencia === 0 ? '<span class="text-success">Cuadra</span>' : `<span class="${t.diferencia > 0 ? 'text-success' : 'text-danger'}">${t.diferencia > 0 ? '+' : ''}${money(t.diferencia)}</span>`) : money(t.total),
                   t.repartir_resto ? `Resto repartido: ${money(t.monto_efectivo)} (manuales ${money(t.manuales)})` : (t.monto_a_repartir ? `Σ cuotas ${money(t.cuotas)} vs ${money(t.monto_a_repartir)}` : ''));
         $('val-body').innerHTML = res.filas.map(f => `<tr class="${f.cuota === null ? 'table-warning' : ''}">

@@ -99,10 +99,10 @@ window.COND = (function () {
         const q = new URLSearchParams({ b: $('cond-buscar').value, page: L.page, orden: (window.CMG_ordenParam ? window.CMG_ordenParam(L.sorts) : '') });
         try {
             const res = await pedir(`${CFG.url}/condominosAjax?${q}`);
-            if (!res.ok) { tbody.innerHTML = `<tr><td colspan="8" class="text-center text-danger py-4">${esc(res.mensaje)}</td></tr>`; return; }
+            if (!res.ok) { tbody.innerHTML = `<tr><td colspan="7" class="text-center text-danger py-4">${esc(res.mensaje)}</td></tr>`; return; }
             pintarListado(res);
         } catch (e) {
-            tbody.innerHTML = '<tr><td colspan="8" class="text-center text-danger py-4">Error de comunicación con el servidor.</td></tr>';
+            tbody.innerHTML = '<tr><td colspan="7" class="text-center text-danger py-4">Error de comunicación con el servidor.</td></tr>';
         } finally { tbody.classList.remove('fm-cargando-target'); }
     }
 
@@ -118,7 +118,7 @@ window.COND = (function () {
         const tbody = $('cond-tbody');
         L.rows = {};
         if (!res.rows.length) {
-            tbody.innerHTML = '<tr><td colspan="8" class="text-center py-5 text-muted"><i class="bi bi-people fs-3 d-block mb-2"></i>No se encontraron clientes. Regístrelos en Clientes o cárguelos con el Excel de inmuebles.</td></tr>';
+            tbody.innerHTML = '<tr><td colspan="7" class="text-center py-5 text-muted"><i class="bi bi-people fs-3 d-block mb-2"></i>No se encontraron clientes. Regístrelos en Clientes o cárguelos con el Excel de inmuebles.</td></tr>';
         } else {
             tbody.innerHTML = res.rows.map(r => {
                 L.rows[r.id] = r;
@@ -128,11 +128,9 @@ window.COND = (function () {
                     <td class="fw-medium text-truncate" style="max-width:260px" data-col="nombre" title="${esc(r.nombre)}">${esc(r.nombre)}${r.activo ? '' : ' <span class="badge bg-secondary bg-opacity-10 text-secondary border border-secondary border-opacity-25">inactivo</span>'}</td>
                     <td data-col="identificacion">${esc(r.identificacion || '—')}</td>
                     <td class="text-truncate small" style="max-width:220px" data-col="contacto" title="${esc([r.email, r.telefono].filter(Boolean).join(' · '))}">${esc([r.email, r.telefono].filter(Boolean).join(' · ') || '—')}</td>
-                    <td data-col="inmuebles">${inm.length ? inm.map(etiquetaInmueble).join('') : '<span class="text-muted small">Sin inmueble</span>'}</td>
+                    <td data-col="inmuebles">${inm.length ? inm.map(etiquetaInmueble).join('') + (CFG.perm.crear ? `<button type="button" class="btn btn-link btn-sm p-0 ms-1 align-baseline" title="Asignar otro inmueble a este cliente" onclick="event.stopPropagation(); COND.nueva(${r.id})"><i class="bi bi-plus-lg"></i></button>` : '') : '<span class="text-muted small">Sin inmueble</span>'}</td>
                     <td class="text-end" data-col="alicuota_pct">${+r.suma_pct ? num(r.suma_pct, 4) : '<span class="text-muted">—</span>'}</td>
-                    <td class="text-center" data-col="restringida">${r.restringida ? '<span class="badge bg-danger bg-opacity-10 text-danger border border-danger border-opacity-25" title="Tiene inmuebles con áreas comunes restringidas"><i class="bi bi-slash-circle"></i></span>' : '<span class="text-muted">—</span>'}</td>
-                    <td class="text-end pe-3">${CFG.perm.crear ? `<button type="button" class="btn btn-link btn-sm p-0" title="Asignar otro inmueble a este cliente" onclick="event.stopPropagation(); COND.nueva(${r.id})"><i class="bi bi-plus-lg"></i></button>` : ''}</td>
-                </tr>`;
+                    <td class="text-center" data-col="restringida">${r.restringida ? '<span class="badge bg-danger bg-opacity-10 text-danger border border-danger border-opacity-25" title="Tiene inmuebles con áreas comunes restringidas"><i class="bi bi-slash-circle"></i></span>' : '<span class="text-muted">—</span>'}</td>                </tr>`;
             }).join('');
         }
         const from = res.total ? (res.page - 1) * res.per_page + 1 : 0;
