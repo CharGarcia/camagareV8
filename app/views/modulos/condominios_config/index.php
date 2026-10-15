@@ -30,10 +30,8 @@ $filtrosCondominos = [
 $pestanasCfg = [
     'pane-cfg-general'    => 'Condominio',
     'pane-cfg-condominos' => 'Condóminos',
-    'pane-cfg-alicuota'   => 'Alícuota y cuotas extraordinarias',
     'pane-cfg-mora'       => 'Mora y multas',
     'pane-cfg-reajuste'   => 'Reajuste de cuotas',
-    'pane-cfg-descuentos' => 'Descuentos',
 ];
 $puedeGuardar = !empty($perm['actualizar']);
 $prodChip = function (string $id, string $label, string $campo, string $ayuda) use ($rutaModulo, $base): string {
@@ -91,10 +89,8 @@ $prodChip = function (string $id, string $label, string $campo, string $ayuda) u
         <ul class="nav nav-tabs border-bottom-0 flex-grow-1 flex-nowrap" role="tablist">
             <li class="nav-item"><a class="nav-link active py-2 small" id="cfg-tab-general-btn" data-bs-toggle="tab" href="#pane-cfg-general" role="tab"><i class="bi bi-buildings me-1"></i>Condominio</a></li>
             <li class="nav-item"><a class="nav-link py-2 small" id="cfg-tab-condominos-btn" data-bs-toggle="tab" href="#pane-cfg-condominos" role="tab"><i class="bi bi-people me-1"></i>Condóminos</a></li>
-            <li class="nav-item"><a class="nav-link py-2 small" data-bs-toggle="tab" href="#pane-cfg-alicuota" role="tab"><i class="bi bi-calculator me-1"></i>Alícuota y cuotas extraordinarias</a></li>
             <li class="nav-item"><a class="nav-link py-2 small" data-bs-toggle="tab" href="#pane-cfg-mora" role="tab"><i class="bi bi-hourglass-split me-1"></i>Mora y multas</a></li>
             <li class="nav-item"><a class="nav-link py-2 small" data-bs-toggle="tab" href="#pane-cfg-reajuste" role="tab"><i class="bi bi-arrow-repeat me-1"></i>Reajuste de cuotas</a></li>
-            <li class="nav-item"><a class="nav-link py-2 small" data-bs-toggle="tab" href="#pane-cfg-descuentos" role="tab"><i class="bi bi-percent me-1"></i>Descuentos</a></li>
         </ul>
         <div class="flex-shrink-0">
             <?= \App\Helpers\PreferenciasHelper::renderDropdownPestanas($pestanasCfg, $vistaConfig ?? [], basename($rutaModulo)) ?>
@@ -161,8 +157,8 @@ $prodChip = function (string $id, string $label, string $campo, string $ayuda) u
             <?php if (!$config): ?>
                 <div class="small text-muted"><i class="bi bi-info-circle me-1"></i>Guarde primero la configuración del condominio (pestaña <b>Condominio</b>) para asignar inmuebles a los clientes.</div>
             <?php else: ?>
-            <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-2">
-                <div class="d-flex align-items-center gap-2 flex-wrap">
+            <div class="d-flex justify-content-between align-items-center flex-wrap flex-xl-nowrap gap-2 mb-2">
+                <div class="d-flex align-items-center gap-2 flex-wrap flex-grow-1" style="min-width:0">
                     <div id="fmBuscadorCOND"></div>
                     <input type="hidden" id="cond-buscar" value="">
                     <?php // FiltrosModal (extraId) mueve estos botones dentro del input-group del buscador. ?>
@@ -174,26 +170,19 @@ $prodChip = function (string $id, string $label, string $campo, string $ayuda) u
                         <a id="cond-btn-excel" href="<?= $urlBase ?>/exportExcel?orden=<?= urlencode($ordenParam) ?>" class="btn btn-outline-success" title="Excel del listado">
                             <i class="bi bi-file-earmark-spreadsheet"></i><span class="d-none d-md-inline"> Excel</span>
                         </a>
-                        <a href="<?= $urlBase ?>/pdfRestringidas" class="btn btn-outline-secondary" title="Inmuebles con restricción de áreas comunes (PDF)" data-pdf-documento>
-                            <i class="bi bi-slash-circle"></i><span class="d-none d-md-inline"> Restringidas</span>
-                        </a>
                         <?php if (!empty($perm['crear'])): ?>
                             <button type="button" class="btn btn-outline-primary" onclick="COND.abrirExcel()" title="Cargar inmuebles desde Excel">
                                 <i class="bi bi-file-earmark-arrow-up"></i><span class="d-none d-md-inline"> Cargar Excel</span>
                             </button>
                         <?php endif; ?>
-                        <button type="button" class="btn btn-outline-secondary" onclick="COND.emisiones()" title="Emisiones en bloque: avance, documentos y errores">
-                            <i class="bi bi-clock-history"></i><span class="d-none d-md-inline"> Emisiones</span>
-                        </button>
                     </div>
+                </div>
+                <div class="d-flex align-items-center gap-3 ms-auto flex-shrink-0">
                     <?php if (!empty($perm['crear'])): ?>
                         <button type="button" class="btn btn-primary btn-sm px-3" onclick="COND.cobro()" title="Emitir recibos o facturas en bloque, o agregar un cobro recurrente a las suscripciones">
                             <i class="bi bi-receipt me-1"></i>Generar cobro <span class="badge bg-light text-primary ms-1 d-none" id="cond-marcados"></span>
                         </button>
                     <?php endif; ?>
-                </div>
-                <div class="d-flex align-items-center gap-3">
-                    <span class="text-muted small" id="cond-resumen" title="Clientes con inmueble · inmuebles activos · suma de alícuotas · suma de m²"></span>
                     <span id="cond-pag-info" class="text-muted small fw-medium">0-0/0</span>
                     <div id="cond-paginacion" class="btn-group btn-group-sm">
                         <button type="button" class="btn btn-outline-secondary" data-pag="-1" disabled><i class="bi bi-chevron-left"></i></button>
@@ -220,61 +209,6 @@ $prodChip = function (string $id, string $label, string $campo, string $ayuda) u
             </div>
             <div class="small text-muted mt-2"><i class="bi bi-info-circle me-1"></i>Se listan todos los clientes de la empresa. Pulse un cliente sin inmueble para asignárselo, o un inmueble para editarlo. Con <i class="bi bi-plus-lg"></i>, junto a sus inmuebles, se le agrega otro.</div>
             <?php endif; ?>
-        </div>
-
-        <!-- ══ Alícuota y cuotas extraordinarias ══ -->
-        <div class="tab-pane fade" id="pane-cfg-alicuota" role="tabpanel">
-            <div class="row g-2">
-                <div class="col-md-6">
-                    <label for="cfg_metodo_alicuota">Método de alícuota *</label>
-                    <select class="form-select form-select-sm" id="cfg_metodo_alicuota" name="metodo_alicuota">
-                        <?php foreach ($metodos as $k => $v): ?><option value="<?= $k ?>"><?= htmlspecialchars($v) ?></option><?php endforeach; ?>
-                    </select>
-                    <div class="form-text">Cada inmueble puede tener el suyo.</div>
-                </div>
-                <div class="col-md-6">
-                    <label for="cfg_reparto_manuales">Manuales con presupuesto</label>
-                    <select class="form-select form-select-sm" id="cfg_reparto_manuales" name="reparto_manuales">
-                        <option value="repartir_resto">Repartir el resto entre las demás</option>
-                        <option value="aparte">Los manuales van aparte</option>
-                    </select>
-                    <div class="form-text">Solo cuando la base del % es un presupuesto aprobado.</div>
-                </div>
-            </div>
-            <hr class="my-3">
-            <div class="row g-2">
-                <div class="col-md-3">
-                    <label for="cfg_fondo_reserva_tipo">Cuotas extraordinarias</label>
-                    <select class="form-select form-select-sm" id="cfg_fondo_reserva_tipo" name="fondo_reserva_tipo" onchange="CONDCFG.onFondo()">
-                        <option value="no">No se cobra</option>
-                        <option value="porcentaje">% sobre la alícuota ordinaria</option>
-                        <option value="fijo">Monto fijo por inmueble</option>
-                    </select>
-                </div>
-                <div class="col-md-3">
-                    <label for="cfg_fondo_reserva_valor" id="cfg_fondo_reserva_valor_lbl">Valor</label>
-                    <input type="number" class="form-control form-control-sm text-end" id="cfg_fondo_reserva_valor" name="fondo_reserva_valor" step="0.01" min="0" value="0">
-                </div>
-                <div class="col-md-6 position-relative" id="cfg-wrap-prod-fondo">
-                    <?= $prodChip('cfg_prod_fondo', 'Producto para las cuotas extraordinarias', 'id_producto_fondo', 'Línea separada en el recibo; su cuenta contable la define el producto (según el destino de la cuota extraordinaria).') ?>
-                </div>
-            </div>
-
-            <!-- Valores que rigen: tarifa por m² (método m²) y monto a repartir (método %), con fecha desde la que rigen -->
-            <hr class="my-3">
-            <div class="d-flex align-items-center flex-wrap gap-2 mb-2">
-                <h6 class="fw-bold small mb-0"><i class="bi bi-calendar-check me-1 text-primary"></i>Valores que rigen</h6>
-                <span class="small text-muted">Tarifa por m² (método por m²) y monto mensual a repartir (método por %). Se agregan con fecha desde la que rigen; nunca se editan los anteriores.</span>
-                <?php if ($config && $puedeGuardar): ?>
-                    <button type="button" class="btn btn-outline-primary btn-sm ms-auto" onclick="CONDCFG.nuevoValor()"><i class="bi bi-plus-lg me-1"></i>Nuevo valor desde…</button>
-                <?php endif; ?>
-            </div>
-            <div class="border rounded-3 bg-white">
-                <table class="table table-sm table-hover mb-0 small">
-                    <thead class="table-light"><tr><th class="ps-2">Rige desde</th><th class="text-end">Tarifa m²</th><th class="text-end">Monto a repartir</th><th>Base</th><th>Acta</th><th>Observación</th><th>Registró</th><th class="pe-2"></th></tr></thead>
-                    <tbody id="valores-body"><tr><td colspan="8" class="text-center text-muted py-3">—</td></tr></tbody>
-                </table>
-            </div>
         </div>
 
         <!-- ══ Mora y multas ══ -->
@@ -451,44 +385,13 @@ $prodChip = function (string $id, string $label, string $campo, string $ayuda) u
             </div>
         </div>
 
-        <!-- ══ Descuentos ══ -->
-        <div class="tab-pane fade" id="pane-cfg-descuentos" role="tabpanel">
-            <div class="row g-2">
-                <div class="col-md-4 pt-4">
-                    <div class="form-check form-switch">
-                        <input class="form-check-input" type="checkbox" id="cfg_pronto_pago_activo" name="pronto_pago_activo" value="1">
-                        <label class="form-check-label" for="cfg_pronto_pago_activo">Descuento por pronto pago</label>
-                    </div>
-                </div>
-                <div class="col-md-2">
-                    <label for="cfg_pronto_pago_pct">% descuento</label>
-                    <input type="number" class="form-control form-control-sm text-end" id="cfg_pronto_pago_pct" name="pronto_pago_pct" step="0.01" min="0" max="100" value="0">
-                </div>
-                <div class="col-md-2">
-                    <label for="cfg_pronto_pago_dia">Hasta el día</label>
-                    <input type="number" class="form-control form-control-sm text-end" id="cfg_pronto_pago_dia" name="pronto_pago_dia" min="1" max="28" value="5">
-                </div>
-                <div class="col-md-4 small text-muted pt-4">Se propone al cobrar en Ingresos si la fecha de pago está dentro del plazo. No aplica a intereses ni multas.</div>
-            </div>
-            <hr class="my-3">
-            <div class="row g-2">
-                <div class="col-md-4 pt-4">
-                    <div class="form-check form-switch">
-                        <input class="form-check-input" type="checkbox" id="cfg_anticipado_activo" name="anticipado_activo" value="1">
-                        <label class="form-check-label" for="cfg_anticipado_activo">Descuento por pagar varios meses</label>
-                    </div>
-                </div>
-                <div class="col-md-2">
-                    <label for="cfg_anticipado_pct">% descuento</label>
-                    <input type="number" class="form-control form-control-sm text-end" id="cfg_anticipado_pct" name="anticipado_pct" step="0.01" min="0" max="100" value="0">
-                </div>
-                <div class="col-md-2">
-                    <label for="cfg_anticipado_meses_min">Desde (meses)</label>
-                    <input type="number" class="form-control form-control-sm text-end" id="cfg_anticipado_meses_min" name="anticipado_meses_min" min="2" max="60" value="12">
-                </div>
-                <div class="col-md-4 small text-muted pt-4">Un solo recibo con una línea por mes; esos meses quedan facturados y el ingreso se devenga mes a mes.</div>
-            </div>
-        </div>
+        <?php // Descuentos: sin pestaña; se conservan los valores guardados para no apagarlos al guardar. ?>
+        <input type="hidden" id="cfg_pronto_pago_activo" name="pronto_pago_activo" value="">
+        <input type="hidden" id="cfg_pronto_pago_pct" name="pronto_pago_pct" value="">
+        <input type="hidden" id="cfg_pronto_pago_dia" name="pronto_pago_dia" value="">
+        <input type="hidden" id="cfg_anticipado_activo" name="anticipado_activo" value="">
+        <input type="hidden" id="cfg_anticipado_pct" name="anticipado_pct" value="">
+        <input type="hidden" id="cfg_anticipado_meses_min" name="anticipado_meses_min" value="">
     </div>
 
     <div class="card-footer bg-light border-top p-2 d-flex justify-content-between align-items-center">

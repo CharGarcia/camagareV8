@@ -67,7 +67,8 @@ window.CONDCFG = (function () {
     let guardando = false;
     function cargar(c) {
         const f = $('formCondConfig');
-        f.querySelectorAll('input[name], select[name], textarea[name]').forEach(el => {
+        // f.elements incluye los campos ligados con form="formCondConfig" (pestaña Alícuota de la ventana del inmueble).
+        Array.from(f.elements).filter(el => el.name).forEach(el => {
             if (el.type === 'hidden' && el.id.startsWith('cfg_prod_')) return;
             if (el.type === 'checkbox') { el.checked = esTrue(c[el.name] ?? false); return; }
             // Nombre y dirección vienen precargados desde el servidor (empresa / establecimiento)
@@ -79,6 +80,7 @@ window.CONDCFG = (function () {
         onFondo(); onIntereses();
     }
     function onFondo() {
+        if (!$('cfg_fondo_reserva_tipo')) return; // la pestaña vive en la ventana del inmueble (solo con condominio configurado)
         const t = $('cfg_fondo_reserva_tipo').value;
         $('cfg_fondo_reserva_valor').disabled = t === 'no';
         $('cfg_fondo_reserva_valor_lbl').textContent = t === 'porcentaje' ? '% sobre la alícuota' : (t === 'fijo' ? 'Monto fijo' : 'Valor');
@@ -93,11 +95,11 @@ window.CONDCFG = (function () {
     async function guardar(e) {
         e?.preventDefault();
         if (guardando || !CFG.perm.actualizar) return;
-        guardando = true; const btn = $('cfg-btn-guardar'); if (btn) btn.disabled = true;
+        guardando = true; const btns = ['cfg-btn-guardar', 'uni-btn-guardar-alicuota'].map($).filter(Boolean); btns.forEach(b => { b.disabled = true; });
         try {
             const fd = new FormData($('formCondConfig'));
             // Los disabled no viajan: se completan desde los controles.
-            ['fondo_reserva_valor', 'interes_tipo', 'interes_tasa_mensual', 'interes_destino'].forEach(k => fd.set(k, $('cfg_' + k).value));
+            ['fondo_reserva_valor', 'interes_tipo', 'interes_tasa_mensual', 'interes_destino'].forEach(k => { if ($('cfg_' + k)) fd.set(k, $('cfg_' + k).value); });
             const res = await post('guardarAjax', fd);
             if (!res.ok) return errorForm(res.mensaje);
             const eraNueva = !CFG.config;
@@ -105,7 +107,7 @@ window.CONDCFG = (function () {
             await Swal.fire({ icon: 'success', title: 'Listo', text: res.mensaje + (res.pendientes && res.pendientes.length ? ' Pendiente: ' + res.pendientes.join(' ') : ''), timer: 2600, showConfirmButton: false });
             if (eraNueva || (res.pendientes || []).length !== (CFG.pendientesIni || 0)) location.reload(); // los avisos y el catálogo de multas dependen de la configuración
         } catch (err) { aviso('error', 'No se pudo guardar', 'Error de comunicación con el servidor.'); }
-        finally { guardando = false; if (btn) btn.disabled = false; }
+        finally { guardando = false; btns.forEach(b => { b.disabled = false; }); }
     }
 
     // ── Multas ──
@@ -317,6 +319,11 @@ window.CONDCFG = (function () {
         ['reaj_id_producto', 'reaj_parametro', 'reaj_fecha_aplicar', 'reaj_incluir_sin_inmueble'].forEach(id => $(id)?.addEventListener('change', ocultarReajPreview));
         if (CFG.config) cargarValores();
         $('val_vigente_desde')?.addEventListener('change', valorPresupuesto);
+        // «Nuevo valor» se abre sobre la ventana del inmueble: la regla global .modal (5060 !important) lo dejaría detrás.
+        $('modalCondValor')?.addEventListener('shown.bs.modal', () => {
+            $('modalCondValor').style.setProperty('z-index', '5080', 'important');
+            const bd = document.querySelectorAll('.modal-backdrop'); bd[bd.length - 1]?.style.setProperty('z-index', '5075', 'important');
+        });
         $('formCondConfig').addEventListener('submit', guardar);
         chip('cfg_prod_fondo_txt', 'cfg_prod_fondo', 'cfg_prod_fondo_dd', buscarServicios, lblServicio);
         chip('cfg_prod_interes_txt', 'cfg_prod_interes', 'cfg_prod_interes_dd', buscarServicios, lblServicio);
@@ -327,7 +334,7 @@ window.CONDCFG = (function () {
         if (typeof window.aplicarFavoritosModal === 'function' && !CFG.config) window.aplicarFavoritosModal('#formCondConfig');
     });
 
-    return { onFondo, onIntereses, multaLimpiar, multaEditar, multaGuardar, multaEliminar,
+    return { guardar, onFondo, onIntereses, multaLimpiar, multaEditar, multaGuardar, multaEliminar,
              nuevoValor, valorPresupuesto, valorPreview, valorGuardar, valorEliminar,
              reajusteForma, reajustePreview, reajusteToggle, reajusteTodas, reajusteAplicar, reajusteCancelar };
 })();

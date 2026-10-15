@@ -1,6 +1,6 @@
 ---
 titulo: Configuración de condominios
-resumen: Todo el módulo Condominios en una pantalla: datos del condominio, condóminos (clientes y sus inmuebles), alícuota y cuotas extraordinarias, mora y multas, reajuste de cuotas y descuentos. Guardarla activa el módulo.
+resumen: Todo el módulo Condominios en una pantalla: datos del condominio, condóminos (clientes y sus inmuebles), alícuota y cuotas extraordinarias, mora y multas, reajuste de cuotas. Guardarla activa el módulo.
 categoria: Ventas
 ruta_modulo: modulos/condominios-config
 tipo: modulo
@@ -12,21 +12,22 @@ estado: activo
 ---
 
 **Configuración de condominios** es la pantalla única del módulo Condominios. La empresa es el
-condominio: aquí se guardan sus reglas (administrador, alícuota, cuotas extraordinarias, mora, multas,
-descuentos), a cada **cliente** se le asignan sus **inmuebles** y se reajustan las cuotas en
+condominio: aquí se guardan sus reglas (administrador, alícuota, cuotas extraordinarias, mora y multas),
+a cada **cliente** se le asignan sus **inmuebles** y se reajustan las cuotas en
 bloque. **Guardarla activa el módulo** para la empresa. La emisión mensual la hace
 **Suscripciones**, el cobro **Ingresos** y la cartera **Cuentas por Cobrar**, como siempre.
 
 ## Qué es y para qué sirve
 
-- Una sola pantalla en pestañas: **Condominio**, **Condóminos**, **Alícuota y cuotas extraordinarias**, **Mora y
-  multas**, **Reajuste de cuotas** y **Descuentos**.
+- Una sola pantalla en pestañas: **Condominio**, **Condóminos**, **Mora y multas** y **Reajuste de
+  cuotas**. La alícuota y las cuotas extraordinarias del condominio se configuran en la ventana
+  de cualquier inmueble (pestaña **Alícuota y cuotas extraord.**).
 - **Condóminos** lista **todos los clientes** de la empresa y, a cada uno, sus inmuebles
   (departamento, local, parqueadero, bodega…) como propietario o arrendatario, con quién paga,
   área, % de alícuota, historial de propietarios y restricción de áreas comunes.
 - Lo que es de la emisión (recibo o factura, serie, periodicidad, día de cobro, valor de la
   cuota) **no está aquí**: lo define cada suscripción en el módulo Suscripciones.
-- Todo lo opcional nace **apagado**: intereses, multas, descuentos y restricción automática.
+- Todo lo opcional nace **apagado**: intereses, multas y restricción automática.
 - Los conceptos que se cobran **no se crean aquí**: son servicios del módulo **Productos**. El
   nombre, el IVA y la cuenta contable salen del producto.
 
@@ -43,8 +44,9 @@ bloque. **Guardarla activa el módulo** para la empresa. La emisión mensual la 
    cobro judicial, art. 13 LPH), presidente de la asamblea (opcional), desde cuántas expensas
    vencidas se habilita la liquidación. **Guardar** activa el módulo.
 2. **Condóminos**: asigne a cada cliente su inmueble (ver la sección propia más abajo).
-3. **Alícuota y cuotas extraordinarias**: método de alícuota del condominio (por %, por m² o manual; cada
-   inmueble puede tener el suyo). Cuotas extraordinarias: no / % sobre la alícuota / monto fijo, con su
+3. **Alícuota y cuotas extraordinarias** (en la ventana de cualquier inmueble de **Condóminos**;
+   aplica a **todo el condominio** y se graba con **Guardar para el condominio**): método de
+   alícuota del condominio (por %, por m² o manual; cada inmueble puede tener el suyo). Cuotas extraordinarias: no / % sobre la alícuota / monto fijo, con su
    producto. Debajo, **Valores que rigen**: la tarifa por m² y el monto mensual a repartir, cada
    uno con el **mes desde el que rige**. Se agregan con **Nuevo valor desde…**, que muestra una
    **vista previa** de la cuota de cada inmueble antes de guardar; el monto a repartir puede
@@ -57,8 +59,6 @@ bloque. **Guardarla activa el módulo** para la empresa. La emisión mensual la 
    (monto fijo, aumento % o según el inmueble). **Vista previa** muestra cada suscripción con su
    valor actual y el nuevo (se pueden destildar); **Aplicar** cambia la línea del concepto en
    cada suscripción. Con una **fecha futura** queda **programado** y se aplica solo ese día.
-6. **Descuentos**: pronto pago (% hasta el día N) y pago anticipado de varios meses (% desde N
-   meses). Ambos apagados por defecto.
 
 El botón **Guardar** del pie graba la configuración. En la pestaña Condóminos no aparece: cada
 inmueble se guarda en su propia ventana.
@@ -84,6 +84,7 @@ tachado, que tiene restringidas las áreas comunes.
 | Pestaña | Qué tiene |
 |---|---|
 | General | Código, nombre, tipo, torre, piso, propietario / arrendatario / quién paga, área, alícuota, método, monto manual, cuota extraordinaria propia, estado y la cuota ordinaria estimada con el valor que rige hoy. Al cambiar las personas aparece **Rige desde**. |
+| Alícuota y cuotas extraord. | Configuración **común a todos los inmuebles**: método de alícuota del condominio, cuotas extraordinarias y **Valores que rigen**. Tiene su propio botón **Guardar para el condominio**; el Guardar del pie no aparece en esta pestaña. |
 | Propietarios | Historial de propietario, arrendatario y pagador con desde / hasta. |
 | Áreas comunes | Marcar o levantar la restricción (fecha de notificación y motivo obligatorios) y su bitácora. |
 | Expensa | La suscripción que emite la cuota del inmueble. Se asocia desde Suscripciones (campo **Inmueble**) o se enlaza aquí una suscripción del pagador que aún no tenga inmueble. Al emitir, el inmueble y su propietario salen en la Información adicional del documento. |
@@ -113,8 +114,7 @@ y torre de sus inmuebles, por palabras sueltas y sin distinguir tildes.
 Sintaxis directa: `con_inmueble:no`, `rol:arrendatario`, `torre:"Torre B"`, `inmuebles:>=2`,
 `restringida:si`. Clic en un título ordena por esa columna; con **Shift+clic** se encadenan hasta
 tres. **PDF** y **Excel** exportan con la misma búsqueda, filtros y orden: una fila por cliente
-con sus inmuebles en una celda. **Restringidas** entrega el PDF de inmuebles con áreas comunes
-restringidas, para administración y guardianía.
+con sus inmuebles en una celda. Para ver solo los restringidos, filtre con `restringida:si`.
 
 ### Generar cobro a condóminos
 
@@ -154,10 +154,7 @@ suscripciones de los condóminos **sin duplicar**:
 La emisión mensual sigue siendo de **Suscripciones**. Para un cambio de valor masivo con fecha
 futura, use la pestaña **Reajuste de cuotas**.
 
-**Emisiones** (botón junto al buscador) muestra cada emisión en bloque con su avance, los
-documentos generados, los errores y los correos enviados. Al abrir una se ve el detalle por
-condómino, con el número de documento y el motivo de cada error. Una emisión en curso se puede
-**cancelar**: lo ya generado se conserva y lo que falta no se emite.
+Los documentos emitidos se consultan en **Recibos de Venta** o **Facturas de Venta**.
 
 ### Cargar inmuebles desde Excel
 
@@ -192,8 +189,6 @@ ejemplo (bórrelas). Columnas: `CODIGO`, `NOMBRE`, `TIPO`, `TORRE_BLOQUE`, `PISO
 | Dónde se cobra el interés | — | Línea en el siguiente recibo o recibo aparte. |
 | Cobra multas | — | Apagado por defecto. Habilita cargar multas del catálogo a un inmueble. |
 | Restricción automática | — | Marca la restricción de áreas comunes al superar N meses de mora; se quita al quedar al día. |
-| Pronto pago | — | % de descuento si paga hasta el día N del mes. No aplica a intereses ni multas. |
-| Pago anticipado | — | % de descuento al pagar N meses o más de una vez. |
 
 ## Permisos
 
@@ -201,7 +196,7 @@ ejemplo (bórrelas). Columnas: `CODIGO`, `NOMBRE`, `TIPO`, `TORRE_BLOQUE`, `PISO
 |---|---|
 | Ver | Consultar la configuración, los condóminos, sus inmuebles, PDF y Excel. |
 | Crear | Asignar inmuebles, cargar Excel, crear multas y **emitir cobros en bloque**. |
-| Actualizar | **Guardar la configuración**, editar inmuebles, marcar o levantar restricciones, enlazar suscripciones, editar multas, registrar valores que rigen, aplicar o programar reajustes y cancelar emisiones en curso. |
+| Actualizar | **Guardar la configuración**, editar inmuebles, marcar o levantar restricciones, enlazar suscripciones, editar multas, registrar valores que rigen y aplicar o programar reajustes. |
 | Crear + Actualizar | **Agregar a suscripciones** (crea suscripciones y cambia valores). |
 | Eliminar | Eliminar inmuebles sin expensas emitidas, multas y valores que rigen. |
 
@@ -275,7 +270,10 @@ permiso ven todos los condóminos.
 
 - **1.6** — «Fondo de reserva» pasa a llamarse **Cuotas extraordinarias** (pestaña **Alícuota y
   cuotas extraordinarias** y ventana del inmueble). Funciona igual: se suma a cada cuota. La
-  pantalla ocupa todo el ancho y en Condóminos el botón + pasa a la celda de inmuebles.
+  pantalla ocupa todo el ancho. En Condóminos: el botón + pasa a la celda de inmuebles, **Generar
+  cobro** va a la derecha junto al paginador y se retiran el resumen y los botones Restringidas y
+  Emisiones. La pestaña **Alícuota y cuotas extraordinarias** pasa a la ventana del inmueble y se
+  retira la pestaña **Descuentos** (los valores ya guardados se conservan).
 
 - **1.5** — **Generar cobro** en Condóminos: emisión en bloque de recibos o facturas sin pasar
   por Suscripciones, en segundo plano, con envío al SRI y por correo; **Agregar a suscripciones**

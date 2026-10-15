@@ -1,8 +1,9 @@
 <?php
 /** Modal del inmueble (pestaña Condóminos de Configuración de condominios).
- *  @var array $perm @var array $vistaConfig @var string $rutaModulo @var array $tiposUnidad @var array $metodos */
+ *  @var callable $prodChip (de index.php) @var array $perm @var array $vistaConfig @var string $rutaModulo @var array $tiposUnidad @var array $metodos */
 $pestanasUni = [
     'pane-uni-general'     => 'General',
+    'pane-uni-alicuota'    => 'Alícuota y cuotas extraordinarias',
     'pane-uni-historial'   => 'Propietarios',
     'pane-uni-restriccion' => 'Áreas comunes',
     'pane-uni-suscripcion' => 'Expensa',
@@ -35,6 +36,7 @@ $pestanasUni = [
                     <div class="d-flex align-items-center bg-light px-3 pt-2">
                         <ul class="nav nav-tabs border-bottom-0 flex-grow-1 flex-nowrap" role="tablist">
                             <li class="nav-item"><a class="nav-link active py-2 small" id="uni-tab-general-btn" data-bs-toggle="tab" href="#pane-uni-general" role="tab"><i class="bi bi-card-text me-1"></i>General</a></li>
+                            <li class="nav-item"><a class="nav-link py-2 small" id="uni-tab-alicuota-btn" data-bs-toggle="tab" href="#pane-uni-alicuota" role="tab"><i class="bi bi-calculator me-1"></i>Alícuota y cuotas extraord.</a></li>
                             <li class="nav-item"><a class="nav-link py-2 small" id="uni-tab-historial-btn" data-bs-toggle="tab" href="#pane-uni-historial" role="tab"><i class="bi bi-people me-1"></i>Propietarios</a></li>
                             <li class="nav-item"><a class="nav-link py-2 small" id="uni-tab-restriccion-btn" data-bs-toggle="tab" href="#pane-uni-restriccion" role="tab"><i class="bi bi-slash-circle me-1"></i>Áreas comunes</a></li>
                             <li class="nav-item"><a class="nav-link py-2 small" id="uni-tab-suscripcion-btn" data-bs-toggle="tab" href="#pane-uni-suscripcion" role="tab"><i class="bi bi-arrow-repeat me-1"></i>Expensa</a></li>
@@ -169,6 +171,67 @@ $pestanasUni = [
                                 </div>
                                 <div class="col-12 small text-muted" id="uni-registro"></div>
                             </div>
+                        </div>
+
+                        <!-- ══ Alícuota del condominio (configuración común a todos los inmuebles) ══ -->
+                        <div class="tab-pane fade condcfg" id="pane-uni-alicuota" role="tabpanel">
+                            <div class="alert alert-info py-2 small mb-3"><i class="bi bi-info-circle me-1"></i>Estos valores son del <b>condominio</b> y aplican a <b>todos los inmuebles</b>. Lo propio de este inmueble (método, % de alícuota, cuota extraordinaria propia) está en <b>General</b>.</div>
+                            <div class="row g-2">
+                                <div class="col-md-6">
+                                    <label for="cfg_metodo_alicuota">Método de alícuota *</label>
+                                    <select class="form-select form-select-sm" id="cfg_metodo_alicuota" form="formCondConfig" name="metodo_alicuota">
+                                        <?php foreach ($metodos as $k => $v): ?><option value="<?= $k ?>"><?= htmlspecialchars($v) ?></option><?php endforeach; ?>
+                                    </select>
+                                    <div class="form-text">Cada inmueble puede tener el suyo.</div>
+                                </div>
+                                <div class="col-md-6">
+                                    <label for="cfg_reparto_manuales">Manuales con presupuesto</label>
+                                    <select class="form-select form-select-sm" id="cfg_reparto_manuales" form="formCondConfig" name="reparto_manuales">
+                                        <option value="repartir_resto">Repartir el resto entre las demás</option>
+                                        <option value="aparte">Los manuales van aparte</option>
+                                    </select>
+                                    <div class="form-text">Solo cuando la base del % es un presupuesto aprobado.</div>
+                                </div>
+                            </div>
+                            <hr class="my-3">
+                            <div class="row g-2">
+                                <div class="col-md-3">
+                                    <label for="cfg_fondo_reserva_tipo">Cuotas extraordinarias</label>
+                                    <select class="form-select form-select-sm" id="cfg_fondo_reserva_tipo" form="formCondConfig" name="fondo_reserva_tipo" onchange="CONDCFG.onFondo()">
+                                        <option value="no">No se cobra</option>
+                                        <option value="porcentaje">% sobre la alícuota ordinaria</option>
+                                        <option value="fijo">Monto fijo por inmueble</option>
+                                    </select>
+                                </div>
+                                <div class="col-md-3">
+                                    <label for="cfg_fondo_reserva_valor" id="cfg_fondo_reserva_valor_lbl">Valor</label>
+                                    <input type="number" class="form-control form-control-sm text-end" id="cfg_fondo_reserva_valor" form="formCondConfig" name="fondo_reserva_valor" step="0.01" min="0" value="0">
+                                </div>
+                                <div class="col-md-6 position-relative" id="cfg-wrap-prod-fondo">
+                                    <?= str_replace(' name="', ' form="formCondConfig" name="', $prodChip('cfg_prod_fondo', 'Producto para las cuotas extraordinarias', 'id_producto_fondo', 'Línea separada en el recibo; su cuenta contable la define el producto (según el destino de la cuota extraordinaria).')) ?>
+                                </div>
+                            </div>
+                
+                            <!-- Valores que rigen: tarifa por m² (método m²) y monto a repartir (método %), con fecha desde la que rigen -->
+                            <hr class="my-3">
+                            <div class="d-flex align-items-center flex-wrap gap-2 mb-2">
+                                <h6 class="fw-bold small mb-0"><i class="bi bi-calendar-check me-1 text-primary"></i>Valores que rigen</h6>
+                                <span class="small text-muted">Tarifa por m² (método por m²) y monto mensual a repartir (método por %). Se agregan con fecha desde la que rigen; nunca se editan los anteriores.</span>
+                                <?php if ($config && $puedeGuardar): ?>
+                                    <button type="button" class="btn btn-outline-primary btn-sm ms-auto" onclick="CONDCFG.nuevoValor()"><i class="bi bi-plus-lg me-1"></i>Nuevo valor desde…</button>
+                                <?php endif; ?>
+                            </div>
+                            <div class="border rounded-3 bg-white">
+                                <table class="table table-sm table-hover mb-0 small">
+                                    <thead class="table-light"><tr><th class="ps-2">Rige desde</th><th class="text-end">Tarifa m²</th><th class="text-end">Monto a repartir</th><th>Base</th><th>Acta</th><th>Observación</th><th>Registró</th><th class="pe-2"></th></tr></thead>
+                                    <tbody id="valores-body"><tr><td colspan="8" class="text-center text-muted py-3">—</td></tr></tbody>
+                                </table>
+                            </div>
+                            <?php if (!empty($perm['actualizar'])): ?>
+                                <div class="d-flex justify-content-end mt-3">
+                                    <button type="button" class="btn btn-primary btn-sm px-4" id="uni-btn-guardar-alicuota" onclick="CONDCFG.guardar()"><i class="bi bi-check2-circle me-1"></i>Guardar para el condominio</button>
+                                </div>
+                            <?php endif; ?>
                         </div>
 
                         <!-- ══ Propietarios (historial) ══ -->

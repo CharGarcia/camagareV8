@@ -139,10 +139,6 @@ window.COND = (function () {
         const [prev, next] = $('cond-paginacion').querySelectorAll('[data-pag]');
         prev.disabled = res.page <= 1; next.disabled = res.page >= res.total_pages;
         $('cond-btn-pdf').href = res.pdf_url; $('cond-btn-excel').href = res.excel_url;
-        if (res.resumen) {
-            const s = res.resumen;
-            $('cond-resumen').textContent = `${s.con_inmueble} de ${s.clientes} clientes con inmueble · ${s.activas} inmuebles activos · Σ ${num(s.suma_pct, 4)} % · ${num(s.suma_m2, 2)} m²` + (+s.restringidas > 0 ? ` · ${s.restringidas} restringido(s)` : '');
-        }
         L.total = res.total;
         pintarMarcados();
         if (L.sorter) L.sorter.refreshIcons();
@@ -612,6 +608,11 @@ window.COND = (function () {
             L.sorter = window.CMG_initSort(CFG.modulo, (col, dir, sorts) => { L.sorts = sorts; cargarListado(1); }, { sorts: L.sorts, multi: true, container: '.condominos-scroll', reload: false });
         }
         $('formUnidad')?.addEventListener('submit', guardar);
+        // Pestaña Alícuota (configuración del condominio): tiene su propio botón; el Guardar del
+        // pie es del inmueble y ahí no aplica.
+        document.querySelectorAll('#modalUnidad a[data-bs-toggle="tab"]').forEach(a => a.addEventListener('shown.bs.tab', () => {
+            $('uni-btn-guardar')?.classList.toggle('d-none', a.id === 'uni-tab-alicuota-btn');
+        }));
         chip('uni_propietario_txt', 'uni_id_propietario', 'uni_propietario_dd', buscarClientes, lblCliente, onPersonas);
         chip('uni_arrendatario_txt', 'uni_id_arrendatario', 'uni_arrendatario_dd', buscarClientes, lblCliente, onPersonas);
         $('uni_pagador')?.addEventListener('change', onPersonas);
