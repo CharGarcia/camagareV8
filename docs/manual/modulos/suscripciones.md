@@ -63,7 +63,7 @@ Periodicidad guarda ese valor como favorito: cada suscripción nueva lo trae ya 
 
 | Campo | Obligatorio | Qué significa |
 |-------|-------------|---------------|
-| Cliente | Sí | A quién se le factura la suscripción. |
+| Cliente | Sí | A quién se le factura la suscripción. Debajo se ven sus datos: identificación, tipo, dirección, teléfono y correo (como en Facturas de Venta). |
 | Estado | Sí | Activo, Pausado, Suspendido o Cancelado. Solo las **activas** generan documentos. |
 | Comprobante | Sí | Factura de Venta o Recibo de Venta. |
 | Fecha inicio | Sí | Desde cuándo rige la suscripción. |
@@ -456,7 +456,8 @@ registrados*.
 - **1.28** — Condominios: se quita el selector **Inmueble** del formulario. El inmueble que deba
   salir en el recibo o la factura se escribe a mano en la **Información adicional** (p. ej.
   Concepto «Inmueble», Detalle «Departamento 104»); ya no se agrega solo al generar. Las
-  suscripciones ya enlazadas desde Condominios conservan su enlace.
+  suscripciones ya enlazadas desde Condominios conservan su enlace. Debajo del cliente se muestran
+  sus datos (identificación, tipo, dirección, teléfono y correo), como en Facturas de Venta.
 - **1.27** — El botón **Pagos reportados** pasa junto a **Generar Documentos** y solo
   aparece en la empresa controladora de suscripciones.
 - **1.26** — Nuevo botón **Pagos reportados**: los pagos que los clientes informan desde su

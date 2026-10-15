@@ -158,9 +158,21 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosPestanasOcultas($vistaConfigS
                                                  class="list-group shadow dropdown-predictivo position-absolute d-none"
                                                  style="z-index:1090; width:100%; max-height:250px; overflow-y:auto; top:100%; left:0;"></div>
                                         </div>
-                                        <div class="d-none px-2 mt-1" id="susc_info_cliente" style="font-size:.72rem; color:#6c757d;">
-                                            <span class="fw-bold text-dark border-end pe-2 me-1" id="susc_lbl_cli_ruc"></span>
-                                            <i class="bi bi-envelope me-1"></i><span id="susc_lbl_cli_email"></span>
+                                        <!-- Datos del cliente (mismo formato que Facturas de Venta) -->
+                                        <div class="d-none px-2 mt-1" id="susc_info_cliente">
+                                            <div class="d-flex flex-wrap align-items-center gap-x-3 gap-y-1" style="font-size:0.72rem; text-transform:lowercase; color:#6c757d;">
+                                                <span class="border-end pe-2 me-1 fw-bold text-dark" id="susc_lbl_cli_ruc"></span>
+                                                <span class="border-end pe-2 me-1 d-none" id="susc_lbl_cli_tipo_id" title="Tipo de identificación"></span>
+                                                <div class="d-flex align-items-center gap-1">
+                                                    <i class="bi bi-geo-alt"></i><span id="susc_lbl_cli_direccion"></span>
+                                                </div>
+                                                <div class="d-flex align-items-center gap-1 border-start ps-2">
+                                                    <i class="bi bi-telephone"></i><span id="susc_lbl_cli_telefono"></span>
+                                                </div>
+                                                <div class="d-flex align-items-center gap-1 border-start ps-2">
+                                                    <i class="bi bi-envelope"></i><span id="susc_lbl_cli_email"></span>
+                                                </div>
+                                            </div>
                                         </div>
                                     </div>
 
@@ -599,27 +611,44 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosPestanasOcultas($vistaConfigS
         const c = JSON.parse(decodeURIComponent(enc));
         hidCli.value                                           = c.id;
         inpCli.value                                           = (c.nombre ?? '') + (c.identificacion ? ' (' + c.identificacion + ')' : '');
-        document.getElementById('susc_lbl_cli_ruc').textContent   = c.identificacion ?? '';
-        document.getElementById('susc_lbl_cli_email').textContent  = c.correo ?? c.email ?? '';
-        infoCli.classList.remove('d-none');
+        suscPintarInfoCliente(c);
         ddCli.classList.add('d-none');
     };
+
+    // Barra de datos del cliente bajo el buscador (identificación, tipo, dirección, teléfono, correo).
+    function suscPintarInfoCliente(c) {
+        const txt = (id, v) => { document.getElementById(id).textContent = v; };
+        txt('susc_lbl_cli_ruc', c.identificacion ?? '');
+        const tipo = (c.nombre_tipo_id ?? '').trim();
+        txt('susc_lbl_cli_tipo_id', tipo);
+        document.getElementById('susc_lbl_cli_tipo_id').classList.toggle('d-none', tipo === '');
+        txt('susc_lbl_cli_direccion', c.direccion || 'No especificada');
+        txt('susc_lbl_cli_telefono', c.telefono || 'Sin teléfono registrado');
+        txt('susc_lbl_cli_email', c.correo || c.email || 'Sin correo registrado');
+        infoCli.classList.remove('d-none');
+    }
 
     function suscSetCliente(c) {
         hidCli.value = c.id;
         inpCli.value = (c.nombre ?? '') + (c.identificacion ? ' (' + c.identificacion + ')' : '');
-        document.getElementById('susc_lbl_cli_ruc').textContent  = c.identificacion ?? '';
-        document.getElementById('susc_lbl_cli_email').textContent = c.correo ?? c.email ?? '';
-        infoCli.classList.remove('d-none');
+        suscPintarInfoCliente(c);
     }
 
     // El cliente creado desde «nuevo cliente» queda seleccionado en la suscripción.
-    // La respuesta del alta ya trae id, nombre, identificación y correo.
-    document.addEventListener('clienteGuardado', (e) => {
+    // Se vuelve a pedir por el buscador del módulo para tener los mismos datos que una
+    // selección manual (tipo de identificación, dirección, teléfono); si no aparece, se usa
+    // lo que trae la respuesta del alta.
+    document.addEventListener('clienteGuardado', async (e) => {
         const res = e.detail;
         if (!res || !res.ok || res.nuevo !== true || !res.data || !res.data.id) return;
         if (!document.getElementById('modalSusc')?.classList.contains('show') || inpCli.disabled) return;
-        window.suscSelCliente(encodeURIComponent(JSON.stringify(res.data)));
+        let c = res.data;
+        try {
+            const q = res.data.identificacion || res.data.nombre || '';
+            const d = await (await fetch(urlBase + '/getClientesAjax?q=' + encodeURIComponent(q))).json();
+            c = (d.rows ?? []).find(r => +r.id === +res.data.id) || c;
+        } catch (err) { console.error(err); }
+        window.suscSelCliente(encodeURIComponent(JSON.stringify(c)));
     });
 
     /* ── Buscador de productos ────────────────────────────────────────────────── */
@@ -1235,7 +1264,9 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosPestanasOcultas($vistaConfigS
 
         // Poblar cliente
         if (s.id_cliente) {
-            suscSetCliente({ id: s.id_cliente, nombre: s.nombre_cliente ?? '', identificacion: s.identificacion_cliente ?? '' });
+            suscSetCliente({ id: s.id_cliente, nombre: s.nombre_cliente ?? '', identificacion: s.identificacion_cliente ?? '',
+                             nombre_tipo_id: s.nombre_tipo_id_cliente ?? '', direccion: s.direccion_cliente ?? '',
+                             telefono: s.telefono_cliente ?? '', email: s.email_cliente ?? '' });
         }
 
         // Tarjeta (Kushki)
