@@ -5,8 +5,8 @@ categoria: Nómina
 ruta_modulo: modulos/roles-pago
 tipo: modulo
 visibilidad: todos
-etiquetas: rol de pago, roles, nomina, sueldo, quincena, semanal, mensual, pago de empleados, descuentos, liquido a recibir, neteo, ingresos de quincena, bono en quincena, horas extra en quincena, observacion, observaciones, detalle de novedad, motivo del descuento, asiento contable, contabilizacion, cuentas de nomina, prestamo quirografario, prestamo hipotecario, prestamo empresa, prestamos iess, aporte iess, base del iess, con iess, sin iess, bonos, comisiones, horas extra, dias no laborados, faltas, dias laborados, sueldo ganado, fondos de reserva, decimo tercero, decimo cuarto, buscar rol de pago, buscador, filtros, filtrar roles, buscar empleado en el rol, buscar rubro, chips, ordenar, ordenamiento, ordenar por periodo, ordenar columnas, orden del listado, periodo mas reciente, imprimir, impresora, eliminar rol, anular rol, rol eliminado, nomina duplicada, nomina contabilizada dos veces, gasto de nomina inflado, asiento sigue contabilizado, asiento de rol eliminado, pagado, pago pendiente, pago parcial, estado de pago, referencia del pago, egreso del rol, ver egreso, pdf del egreso, comprobante de egreso, con que se pago, como se pago, transferencia, cheque, pestaña pago
-version: 1.16
+etiquetas: rol de pago, roles, nomina, sueldo, quincena, semanal, mensual, pago de empleados, descuentos, liquido a recibir, neteo, ingresos de quincena, bono en quincena, horas extra en quincena, observacion, observaciones, detalle de novedad, motivo del descuento, asiento contable, contabilizacion, cuentas de nomina, prestamo quirografario, prestamo hipotecario, prestamo empresa, prestamos iess, aporte iess, base del iess, con iess, sin iess, bonos, comisiones, horas extra, dias no laborados, faltas, dias laborados, sueldo ganado, fondos de reserva, decimo tercero, decimo cuarto, buscar rol de pago, buscador, filtros, filtrar roles, buscar empleado en el rol, buscar rubro, chips, ordenar, ordenamiento, ordenar por periodo, ordenar columnas, orden del listado, periodo mas reciente, imprimir, impresora, eliminar rol, anular rol, rol eliminado, nomina duplicada, nomina contabilizada dos veces, asiento duplicado, asiento general e individual, rol migrado, asiento migrado, cuadre del asiento, asiento no cuadra con el rol, gasto de nomina inflado, asiento sigue contabilizado, asiento de rol eliminado, pagado, pago pendiente, pago parcial, estado de pago, referencia del pago, egreso del rol, ver egreso, pdf del egreso, comprobante de egreso, con que se pago, como se pago, transferencia, cheque, pestaña pago
+version: 1.17
 orden: 30
 estado: activo
 ---
@@ -209,6 +209,27 @@ dentro de *Descuentos aplicados en quincenas/semanas del mes*).
 Cambiar la configuración no modifica los asientos ya generados: las cuentas
 nuevas se usan en los roles que se contabilicen desde ese momento.
 
+### El asiento tiene que cuadrar con el rol
+
+Antes de guardar, el sistema comprueba que el asiento refleje el rol, no solo que
+el Debe sea igual al Haber. Para cada empleado:
+
+- El **Debe** debe ser igual a sus ingresos más el aporte patronal y las provisiones del mes.
+- **Sueldos por Pagar** debe ser igual a su líquido a recibir.
+- La suma de los líquidos de todos los empleados debe ser igual al total neto del rol.
+
+Si algo no coincide, el rol **no se contabiliza** y el mensaje dice qué empleado y
+qué valor no cuadra. Al terminar, el sistema también verifica que el rol quede con
+un solo juego de asientos; si quedaría con otro asiento vivo además de los
+generados, no guarda nada y lo indica.
+
+### Roles migrados del sistema anterior
+
+Los roles traídos por la migración ya tienen su contabilidad: el asiento de
+nómina del sistema anterior, que se migra aparte. Por eso no se les genera un
+asiento propio. Tampoco se genera el primer asiento de un rol cuyo mes ya tiene
+un asiento de nómina migrado: la nómina de ese mes ya está contabilizada.
+
 ### Al anular o eliminar un rol
 
 Anular o eliminar un rol **anula todos sus asientos** en la misma operación (un
@@ -299,6 +320,10 @@ módulo. Para regresar al orden de fábrica, ordene por *Período* de mayor a me
   1.13, eliminar un rol que se había regenerado dejaba su asiento vivo. Anule en
   *Contabilidad → Asientos Contables* los asientos de nómina (*NO-…*) de los roles
   eliminados; el del rol vigente se queda.
+- **"El asiento no cuadra con el rol de pagos, no se contabilizó: …"**: lo más común es un empleado con líquido negativo, un grupo de rubros que suma en negativo, o un rol cuyos totales no coinciden con sus rubros. Revise al empleado que nombra el mensaje y vuelva a generar el rol.
+- **"Este rol se migró del sistema anterior …"** / **"La nómina de … ya está contabilizada con asiento(s) migrado(s) …"**: ese mes ya tiene su asiento de nómina del sistema anterior; no hace falta contabilizarlo otra vez.
+- **"El rol quedaría con asientos duplicados …"**: el rol ya tiene otro asiento de nómina vivo. Anule el sobrante en *Contabilidad → Asientos Contables* y vuelva a contabilizar.
+- **Un mes migrado tiene la nómina dos veces (un asiento general y uno por empleado)**: hasta la versión 1.16 el sistema generaba asiento también a los roles migrados. El soporte técnico lo corrige con un script que conserva el asiento migrado y anula los generados.
 - **"La quincena debe ser 1 o 2"** / **"La semana debe estar entre 1 y 5"**:
   revise el periodo elegido.
 - **Falta una hora extra en el rol**: la novedad está imputada a otro mes o año.
@@ -310,6 +335,8 @@ módulo. Para regresar al orden de fábrica, ordene por *Período* de mayor a me
   quincena o semana en lugar del rol mensual.
 
 ## Historial de cambios
+
+- **1.17** — El asiento del rol mensual se comprueba contra el rol antes de guardarse (Debe = ingresos + aporte patronal + provisiones, Sueldos por Pagar = líquido, total neto de la cabecera) y no queda más de un juego de asientos por rol. Los roles migrados ya no reciben asiento propio (duplicaba el asiento de nómina migrado), ni el primer asiento de un mes que ya tiene asiento de nómina migrado.
 
 - **1.16** — Un rol ya contabilizado no se puede regenerar si su asiento está en un período contable cerrado. Antes se recalculaba igual y la nómina quedaba distinta de su asiento. Marcarlo como pagado sigue permitido.
 - **1.15** — Nueva columna **Pago** en la lista de empleados del rol (ventana

@@ -353,6 +353,46 @@ class RolPagoRepository extends BaseRepository
         return $st->execute([':e' => $estado, ':u' => $idUsuario, ':id' => $id, ':emp' => $idEmpresa]);
     }
 
+    /**
+     * ¿El rol lo INSERTÓ la migración desde el sistema anterior? (migracion_mysql_map, entidad
+     * 'roles_pago', vinculado IS NOT TRUE). Un rol nativo que la migración solo enlazó por período
+     * (vinculado = true) no cuenta como migrado. Sin la tabla del mapa (empresa sin migración)
+     * devuelve false.
+     */
+    public function esRolMigrado(int $idRol, int $idEmpresa): bool
+    {
+        if (!$this->db->query("SELECT to_regclass('public.migracion_mysql_map')")->fetchColumn()) {
+            return false;
+        }
+        $st = $this->db->prepare("SELECT 1 FROM migracion_mysql_map
+                                   WHERE entidad = 'roles_pago' AND id_destino = :id AND id_empresa = :emp
+                                     AND vinculado IS NOT TRUE LIMIT 1");
+        $st->execute([':id' => $idRol, ':emp' => $idEmpresa]);
+        return $st->fetchColumn() !== false;
+    }
+
+    /**
+     * Candado de la contabilización de un rol (§8). La nómina es un origen multi-asiento, así que
+     * AsientoContableService::guardarAsiento() no toma su candado por origen: sin este, dos
+     * contabilizaciones simultáneas (dos pestañas del sincronizador, o el sincronizador mientras
+     * alguien pulsa Contabilizar) leían ambas "sin asientos" y creaban dos juegos. Se libera solo
+     * al COMMIT/ROLLBACK.
+     */
+    /** Abre una transacción solo si no hay una en curso; true si la abrió este llamado (y debe cerrarla). */
+    public function beginTransactionPropia(): bool
+    {
+        if ($this->db->inTransaction()) {
+            return false;
+        }
+        return $this->db->beginTransaction();
+    }
+
+    public function lockContabilizacion(int $idRol, int $idEmpresa): void
+    {
+        $st = $this->db->prepare("SELECT pg_advisory_xact_lock(hashtext('rol_asiento:' || :e || ':' || :r))");
+        $st->execute([':e' => $idEmpresa, ':r' => $idRol]);
+    }
+
     public function findCabecera(int $id, int $idEmpresa): ?array
     {
         $st = $this->db->prepare("SELECT * FROM {$this->table} WHERE id = :id AND id_empresa = :emp AND eliminado = false");

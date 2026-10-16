@@ -116,6 +116,12 @@ class AsientoContableService
         return $this->repository->getIdsAsientosPorOrigen($modulo, $idRef, $idEmpresa);
     }
 
+    /** Asientos de nómina migrados del sistema anterior vivos en un mes (ver el repositorio). */
+    public function getAsientosMigradosNominaPeriodo(int $idEmpresa, int $anio, int $mes): array
+    {
+        return $this->repository->getAsientosMigradosNominaPeriodo($idEmpresa, $anio, $mes);
+    }
+
     /** @return int[] id_entidad distintos que cubre un asiento ya guardado. */
     public function getEntidadesDeAsiento(int $idAsiento, string $tipoEntidad): array
     {

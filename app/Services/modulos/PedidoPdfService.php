@@ -186,33 +186,50 @@ class PedidoPdfService
         foreach ($cols as $i => &$c) { if ($c['w'] === 0) { $c['w'] = $flex; $descIdx = $i; } }
         unset($c);
 
-        // Encabezado
-        $pdf->SetXY($mL, $y);
-        $pdf->SetFont('helvetica', 'B', 7.5);
-        $pdf->SetFillColor(60, 70, 90);
-        $pdf->SetTextColor(255, 255, 255);
-        $pdf->SetDrawColor(60, 70, 90);
-        $pdf->SetLineWidth(0.2);
-        foreach ($cols as $c) {
-            $pdf->Cell($c['w'], 6, $c['t'], 1, 0, 'C', true);
-        }
-        $pdf->Ln();
+        // El salto de página se controla a mano, fila por fila: si TCPDF lo hace solo
+        // dentro de una celda, las demás celdas de la fila vuelven (SetXY) a la página
+        // anterior y la fila queda partida entre dos hojas.
+        $limiteY = $pdf->getPageHeight() - $pdf->getBreakMargin();
+        $pdf->SetAutoPageBreak(false);
 
-        // Filas
-        $pdf->SetFont('helvetica', '', 7.5);
-        $pdf->SetTextColor(0, 0, 0);
+        $encabezado = function () use ($pdf, $mL, $cols) {
+            $pdf->SetX($mL);
+            $pdf->SetFont('helvetica', 'B', 7.5);
+            $pdf->SetFillColor(60, 70, 90);
+            $pdf->SetTextColor(255, 255, 255);
+            $pdf->SetDrawColor(60, 70, 90);
+            $pdf->SetLineWidth(0.2);
+            foreach ($cols as $c) {
+                $pdf->Cell($c['w'], 6, $c['t'], 1, 0, 'C', true);
+            }
+            $pdf->Ln();
+            $pdf->SetFont('helvetica', '', 7.5);
+            $pdf->SetTextColor(0, 0, 0);
+        };
+        // Si no entra lo que sigue, nueva hoja y se repite el encabezado de la tabla.
+        $asegurarEspacio = function (float $alto, bool $conEncabezado = true) use ($pdf, $limiteY, $encabezado) {
+            if ($pdf->GetY() + $alto <= $limiteY) {
+                return;
+            }
+            $pdf->AddPage();
+            if ($conEncabezado) {
+                $encabezado();
+            }
+        };
+
+        $pdf->SetY($y);
+        $asegurarEspacio(6 + 6, false);
+        $encabezado();
+
         if (empty($detalles)) {
             $pdf->SetX($mL);
             $pdf->Cell($this->contentW, 6, 'Sin productos.', 1, 1, 'C');
+            $pdf->SetAutoPageBreak(true, 15);
             return $pdf->GetY();
         }
 
         $alt = false;
         foreach ($detalles as $d) {
-            $bg = $alt ? [245, 247, 250] : [255, 255, 255];
-            $alt = !$alt;
-            $pdf->SetFillColor(...$bg);
-
             $vals = [];
             foreach ($cols as $c) {
                 $k   = $c['k'];
@@ -220,19 +237,25 @@ class PedidoPdfService
                 $vals[] = ($k === 'cantidad') ? number_format((float) $raw, 2) : (string) $raw;
             }
 
-            $descW = $cols[$descIdx]['w'];
-            $nLin  = max(1, (int) ceil(max(1, $pdf->GetStringWidth((string) $vals[$descIdx])) / max(1, $descW - 2)));
-            $h     = max(5.5, $nLin * 4.2);
+            // Alto real de la fila: el mayor número de líneas entre las columnas de texto
+            // (código y descripción se envuelven; nunca se salen de su celda).
+            $nLin = 1;
+            foreach ($cols as $i => $c) {
+                if ($c['k'] !== 'cantidad') {
+                    $nLin = max($nLin, $pdf->getNumLines($vals[$i], $c['w']));
+                }
+            }
+            $h = max(5.5, $nLin * 3.6 + 1.6);
 
-            $x = $mL;
+            $asegurarEspacio($h);
+
+            $pdf->SetFillColor(...($alt ? [245, 247, 250] : [255, 255, 255]));
+            $alt = !$alt;
+
+            $x    = $mL;
             $yRow = $pdf->GetY();
             foreach ($cols as $i => $c) {
-                $pdf->SetXY($x, $yRow);
-                if ($i === $descIdx) {
-                    $pdf->MultiCell($c['w'], $h, $vals[$i], 1, $c['a'], true, 0, '', '', true, 0, false, true, $h, 'M');
-                } else {
-                    $pdf->Cell($c['w'], $h, $vals[$i], 1, 0, $c['a'], true);
-                }
+                $pdf->MultiCell($c['w'], $h, $vals[$i], 1, $c['a'], true, 0, $x, $yRow, true, 0, false, true, $h, 'M');
                 $x += $c['w'];
             }
             $pdf->SetXY($mL, $yRow + $h);
@@ -247,12 +270,14 @@ class PedidoPdfService
         foreach ($cols as $c) {
             if ($c['k'] === 'cantidad') { $cantW = $c['w']; break; }
         }
+        $asegurarEspacio(6);
         $pdf->SetX($mL);
         $pdf->SetFont('helvetica', 'B', 7.5);
         $pdf->SetFillColor(230, 233, 238);
         $pdf->Cell($this->contentW - $cantW, 6, 'TOTAL PEDIDO', 1, 0, 'R', true);
         $pdf->Cell($cantW, 6, number_format($totalCantidad, 2), 1, 1, 'R', true);
 
+        $pdf->SetAutoPageBreak(true, 15);
         return $pdf->GetY();
     }
 

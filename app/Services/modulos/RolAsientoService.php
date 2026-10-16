@@ -185,6 +185,13 @@ class RolAsientoService
         if (ContabilidadInterruptorService::crear()->omitirGeneracion($idEmpresa, 'roles_pago', 'nomina', $idRol)) {
             throw new Exception('Esta empresa no contabiliza Roles de Pago. Se activa en Configuración Contable → Módulos que contabilizan.');
         }
+        // Rol traído del sistema anterior: su contabilidad es el asiento del diario viejo
+        // (ROL_PAGOS, migrado con modulo_origen = 'migracion'). Generarle uno propio duplicaba la
+        // nómina del mes (asiento general migrado + asientos por empleado nuevos). Mismo criterio
+        // que el resto de documentos migrados (ver SincronizadorAsientosService).
+        if ($this->repo->esRolMigrado($idRol, $idEmpresa)) {
+            throw new Exception('Este rol se migró del sistema anterior: su contabilidad es el asiento migrado de ese período y no se genera otro.');
+        }
 
         $detalle = $this->repo->getDetalleCompleto($idRol, $idEmpresa);
         if (empty($detalle)) throw new Exception('El rol no tiene empleados.');
@@ -254,6 +261,9 @@ class RolAsientoService
         };
 
         $nombresPorEmpleado = [];
+        // Lo que el asiento DEBE reflejar de cada empleado según el propio rol (rol_detalle), para
+        // comprobar después que lo generado cuadra con el rol y no solo Debe = Haber.
+        $esperadoPorEmpleado = [];
         foreach ($detalle as $lin) {
             $idEmp  = (int) $lin['id_empleado'];
             $nombre = (string) $lin['nombres_apellidos'];
@@ -261,6 +271,19 @@ class RolAsientoService
             $empOv  = $overridesPorEmpleado[$idEmp];
             $provis = $prov->calcularProvisiones($lin, $salario);
             $grp    = $this->devolverPrestamosSinCuenta($this->clasificarRubros($lin['rubros'] ?? []), $ctas, $empOv);
+
+            $provIncluidas = 0.0;
+            foreach ($provis as $p) {
+                if (!empty($p['incluir']) && $p['valor'] > 0) {
+                    $provIncluidas += round((float) $p['valor'], 2);
+                }
+            }
+            $esperadoPorEmpleado[$idEmp] = [
+                // Debe = todo lo ganado + aporte patronal + provisiones del mes.
+                'debe' => round(round((float) $lin['total_ingresos'], 2) + round((float) $lin['aporte_patronal'], 2) + $provIncluidas, 2),
+                // Sueldos por Pagar = líquido a recibir del rol.
+                'neto' => round((float) $lin['neto'], 2),
+            ];
 
             $push('GASTOSUELDOSNOMINA', 'debe', $grp['sueldo_base'], 'Gasto Sueldos y Salarios', $empOv, $idEmp, $nombre);
             $push('GASTOHORASEXTRASNOMINA', 'debe', $grp['horas_extra'], 'Gasto Horas Extras', $empOv, $idEmp, $nombre);
@@ -297,12 +320,97 @@ class RolAsientoService
         }
         if (empty($lineasPorEmpleado)) throw new Exception('No hay valores para contabilizar.');
 
+        // ── Cuadre contra el rol ─────────────────────────────────────────────
+        $this->validarCuadreConRol($cab, $lineasPorEmpleado, $esperadoPorEmpleado, $nombresPorEmpleado);
+
         // ── Persistir ────────────────────────────────────────────────────────
+        // Todo en una transacción (§8) y bajo el candado del rol: anular los asientos sobrantes,
+        // guardar los nuevos y marcar el rol van juntos o no va nada.
         $asientoRepo    = new AsientoContableRepository();
         $asientoService = new AsientoContableService($asientoRepo, new AsientoContableRules(), $this->log);
+        $propia = $this->repo->beginTransactionPropia();
+        try {
+            $this->repo->lockContabilizacion($idRol, $idEmpresa);
+            $resultado = $this->persistir($cab, $idRol, $idEmpresa, $idUsuario, $ref, $modoPorEmpleado, $lineasPorEmpleado, $nombresPorEmpleado, $asientoService);
+            if ($propia) $this->repo->commit();
+            return $resultado;
+        } catch (\Throwable $e) {
+            if ($propia) $this->repo->rollBack();
+            throw $e;
+        }
+    }
+
+    /**
+     * El asiento no solo debe cuadrar Debe = Haber: debe reflejar el rol. Por cada empleado:
+     *   - Debe del asiento  = total de ingresos + aporte patronal + provisiones incluidas del rol.
+     *   - Sueldos por Pagar = líquido a recibir (neto) del rol.
+     *   - Debe = Haber.
+     * Y en total, la suma de los netos de las líneas = total_neto de la cabecera del rol.
+     *
+     * Si no cuadra no se guarda nada: los motivos típicos son un grupo de rubros en negativo (se
+     * descarta porque una línea de asiento no admite valores negativos), un neto negativo, o un
+     * rol cuyos totales no coinciden con sus rubros (roles migrados o editados a mano).
+     */
+    private function validarCuadreConRol(array $cab, array $lineasPorEmpleado, array $esperadoPorEmpleado, array $nombres): void
+    {
+        $tol = 0.005;
+        $problemas = [];
+        $sumaNeto = 0.0;
+        foreach ($esperadoPorEmpleado as $idEmp => $esp) {
+            $sumaNeto += $esp['neto'];
+            $lineas = $lineasPorEmpleado[$idEmp] ?? [];
+            $debe = 0.0; $haber = 0.0; $porPagar = 0.0;
+            foreach ($lineas as $l) {
+                $debe  += (float) $l['debe'];
+                $haber += (float) $l['haber'];
+                if (($l['concepto'] ?? '') === 'Sueldos por Pagar') {
+                    $porPagar += (float) $l['haber'];
+                }
+            }
+            $debe = round($debe, 2); $haber = round($haber, 2); $porPagar = round($porPagar, 2);
+            $nombre = $nombres[$idEmp] ?? ('empleado #' . $idEmp);
+            if (abs($debe - $esp['debe']) > $tol) {
+                $problemas[] = sprintf('%s: el Debe del asiento (%s) no coincide con ingresos + aporte patronal + provisiones del rol (%s)',
+                    $nombre, number_format($debe, 2, ',', '.'), number_format($esp['debe'], 2, ',', '.'));
+            } elseif (abs($porPagar - $esp['neto']) > $tol) {
+                $problemas[] = sprintf('%s: Sueldos por Pagar (%s) no coincide con el líquido a recibir del rol (%s)',
+                    $nombre, number_format($porPagar, 2, ',', '.'), number_format($esp['neto'], 2, ',', '.'));
+            } elseif (abs($debe - $haber) > $tol) {
+                $problemas[] = sprintf('%s: el asiento no cuadra (Debe %s / Haber %s); revise que los ingresos menos los egresos del rol den el líquido a recibir',
+                    $nombre, number_format($debe, 2, ',', '.'), number_format($haber, 2, ',', '.'));
+            }
+        }
+        $totalNetoCab = round((float) ($cab['total_neto'] ?? 0), 2);
+        if (empty($problemas) && abs(round($sumaNeto, 2) - $totalNetoCab) > $tol) {
+            $problemas[] = sprintf('la suma de los líquidos de los empleados (%s) no coincide con el total neto del rol (%s); recalcule el rol',
+                number_format($sumaNeto, 2, ',', '.'), number_format($totalNetoCab, 2, ',', '.'));
+        }
+        if (!empty($problemas)) {
+            $extra = count($problemas) > 5 ? ' (y ' . (count($problemas) - 5) . ' más)' : '';
+            throw new Exception('El asiento no cuadra con el rol de pagos, no se contabilizó: '
+                . implode('; ', array_slice($problemas, 0, 5)) . $extra . '.');
+        }
+    }
+
+    /** Guarda el/los asiento(s) del rol. Corre dentro de la transacción y el candado de contabilizar(). */
+    private function persistir(array $cab, int $idRol, int $idEmpresa, int $idUsuario, string $ref, bool $modoPorEmpleado, array $lineasPorEmpleado, array $nombresPorEmpleado, AsientoContableService $asientoService): array
+    {
         $fecha          = $cab['fecha_pago'] ?: date('Y-m-t', mktime(0, 0, 0, (int) $cab['periodo_mes'], 1, (int) $cab['periodo_anio']));
         $tituloBase     = CatalogoRol::nombreTipo((string) $cab['tipo_rol']) . ' - ' . $ref;
         $idsExistentes  = $asientoService->getIdsAsientosPorOrigen('nomina', $idRol, $idEmpresa);
+
+        // Nómina del mes ya contabilizada por la migración: el diario viejo trae un asiento
+        // ROL_PAGOS (modulo_origen = 'migracion') que no queda enlazado a ningún rol. Si este rol
+        // todavía no tiene asiento propio, generarle uno duplicaría la nómina del período. Un rol
+        // que ya tiene el suyo se sigue regenerando (no se agrava nada; el duplicado ya existe y se
+        // revisa a mano).
+        if (empty($idsExistentes)) {
+            $migrados = $asientoService->getAsientosMigradosNominaPeriodo($idEmpresa, (int) $cab['periodo_anio'], (int) $cab['periodo_mes']);
+            if (!empty($migrados)) {
+                $nums = implode(', ', array_map(static fn (array $a): string => ($a['numero_comprobante'] !== '' ? $a['numero_comprobante'] : '#' . $a['id']), array_slice($migrados, 0, 5)));
+                throw new Exception('La nómina de ' . $ref . ' ya está contabilizada con asiento(s) migrado(s) del sistema anterior (' . $nums . '); no se genera otro para no duplicarla.');
+            }
+        }
 
         if (!$modoPorEmpleado) {
             // Un solo asiento combinado, SUMANDO los rubros de todos los empleados y agrupando
@@ -330,6 +438,7 @@ class RolAsientoService
                 'observaciones'        => null,
             ];
             $idAsiento = $asientoService->guardarAsiento($cabeceraData, $lineas, $idEmpresa, $idUsuario);
+            $this->verificarUnSoloJuego($idRol, $idEmpresa, [$idAsiento], $asientoService);
 
             $this->repo->setIdAsiento($idRol, $idAsiento);
             $this->repo->setEstado($idRol, $idEmpresa, 'contabilizado', $idUsuario);
@@ -377,6 +486,7 @@ class RolAsientoService
         foreach ($mapaEmpleadoAsientoPrevio as $idSobrante) {
             $asientoService->anular($idSobrante, $idEmpresa, $idUsuario);
         }
+        $this->verificarUnSoloJuego($idRol, $idEmpresa, $idsGenerados, $asientoService);
 
         // rol_cabecera.id_asiento guarda uno cualquiera de los generados: solo se usa como
         // marcador booleano de "¿este rol ya tiene asiento(s)?" (ver anularAsiento() y
@@ -393,6 +503,22 @@ class RolAsientoService
             'lineas'      => array_sum(array_map('count', $lineasPorEmpleado)),
             'modo'        => 'por_empleado',
         ];
+    }
+
+    /**
+     * Última comprobación antes del COMMIT: los asientos vivos del rol tienen que ser EXACTAMENTE
+     * los que se acaban de guardar. Cualquier otro (un juego general que quedó junto a uno por
+     * empleado, o uno que entró por otra vía) significaría la nómina contabilizada dos veces;
+     * en ese caso se revierte todo y se avisa en vez de dejar el duplicado.
+     */
+    private function verificarUnSoloJuego(int $idRol, int $idEmpresa, array $idsGuardados, AsientoContableService $asientoService): void
+    {
+        $vivos = $asientoService->getIdsAsientosPorOrigen('nomina', $idRol, $idEmpresa);
+        $sobran = array_diff($vivos, array_map('intval', $idsGuardados));
+        if (!empty($sobran)) {
+            throw new Exception('El rol quedaría con asientos duplicados (asiento(s) #' . implode(', #', $sobran)
+                . ' además de los generados); no se contabilizó. Anule los sobrantes desde Asientos Contables y vuelva a intentarlo.');
+        }
     }
 
     /**

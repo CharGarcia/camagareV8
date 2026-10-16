@@ -326,6 +326,7 @@ esas líneas primero. El detalle está en el manual de **Proformas**, sección
 
 ## Historial de cambios
 
+- **1.16** — El PDF del pedido con muchos productos ya no se desordena al pasar de página: cada fila queda completa en una sola hoja, el encabezado de la tabla (Código / Descripción / Cantidad) se repite en cada página y los códigos o descripciones largos se ajustan dentro de su celda.
 - **1.15** — El cliente creado desde el pedido queda seleccionado con su vendedor, solo si el pedido está abierto y editable. Antes, editar cualquier cliente con la página abierta lo ponía en el pedido.
 - **1.14** — En la ventana de filtros, la pestaña *Detalles* se llama ahora
   **Búsqueda por detalle**, y la ventana ya no tiene barra de desplazamiento

@@ -578,6 +578,38 @@ class AsientoContableRepository
     }
 
     /**
+     * Asientos de nómina MIGRADOS del sistema anterior (diario 'ROL_PAGOS' → modulo_origen =
+     * 'migracion', tipo_comprobante = 'nomina') vivos en un mes. El migrador no los enlaza con
+     * ningún rol (no hay columna de enlace que sirva: el diario viejo no trae el id del rol), así
+     * que la única forma de saber que la nómina de ese mes ya está contabilizada es por período.
+     * Lo usa RolAsientoService para no generar encima un segundo juego de asientos del mismo rol.
+     *
+     * @return array<int, array{id:int, numero_comprobante:string, fecha_asiento:string, total_debe:float}>
+     */
+    public function getAsientosMigradosNominaPeriodo(int $idEmpresa, int $anio, int $mes): array
+    {
+        $sql = "SELECT id, numero_comprobante, fecha_asiento, total_debe
+                  FROM asientos_contables_cabecera
+                 WHERE id_empresa = :id_empresa AND eliminado = false AND estado <> 'anulado'
+                   AND modulo_origen = 'migracion' AND tipo_comprobante = 'nomina'
+                   AND fecha_asiento >= make_date(:anio, :mes, 1)
+                   AND fecha_asiento <  make_date(:anio2, :mes2, 1) + INTERVAL '1 month'
+                   AND tipo_ambiente = (SELECT CAST(tipo_ambiente AS VARCHAR(1)) FROM empresas WHERE id = :id_empresa2)
+                 ORDER BY id";
+        $stmt = \App\core\Database::getConnection()->prepare($sql);
+        $stmt->execute([
+            ':id_empresa' => $idEmpresa, ':id_empresa2' => $idEmpresa,
+            ':anio' => $anio, ':mes' => $mes, ':anio2' => $anio, ':mes2' => $mes,
+        ]);
+        return array_map(static fn (array $r): array => [
+            'id'                 => (int) $r['id'],
+            'numero_comprobante' => (string) $r['numero_comprobante'],
+            'fecha_asiento'      => (string) $r['fecha_asiento'],
+            'total_debe'         => (float) $r['total_debe'],
+        ], $stmt->fetchAll(\PDO::FETCH_ASSOC));
+    }
+
+    /**
      * id_entidad distintos (de un tipo_entidad dado) que cubren las líneas de un asiento ya
      * guardado — para emparejar, en una regeneración, cada asiento existente con "su" entidad
      * (p. ej. qué empleado le corresponde a cada asiento de nómina por empleado).

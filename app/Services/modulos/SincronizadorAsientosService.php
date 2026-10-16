@@ -860,12 +860,35 @@ class SincronizadorAsientosService
         //    se REGENERA (edita el mismo asiento, no lo duplica) cada vez que el rol
         //    se recalcula después de contabilizado y queda más nuevo que su asiento
         //    (rol_cabecera.updated_at > asiento.updated_at). 'anulado' queda fuera.
+        //    Los roles que INSERTÓ la migración quedan fuera: su contabilidad es el asiento
+        //    ROL_PAGOS del diario viejo (modulo_origen = 'migracion'); generarles uno propio
+        //    duplicaba la nómina del mes (asiento general migrado + uno por empleado nuevo).
+        //    No se usa $excMig: su segunda condición lee "alias.id_asiento_contable" y en
+        //    rol_cabecera la columna es id_asiento. RolAsientoService repite la validación.
+        $excMigRol = '';
+        try {
+            if (Database::getConnection()->query("SELECT to_regclass('public.migracion_mysql_map')")->fetchColumn()) {
+                $excMigRol = " AND NOT EXISTS (SELECT 1 FROM migracion_mysql_map mm WHERE mm.entidad = 'roles_pago' AND mm.id_destino = rc2.id AND mm.vinculado IS NOT TRUE) ";
+            }
+        } catch (\Throwable $e) {
+            $excMigRol = '';
+        }
+        //    Tampoco se genera el PRIMER asiento de un rol cuyo mes ya tiene asiento de nómina
+        //    migrado (el diario viejo no lo enlaza a ningún rol: se reconoce por período). Mismo
+        //    criterio que RolAsientoService::persistir(); aquí evita que salga como aviso en cada
+        //    sincronización.
+        $excMigRol .= " AND NOT (rc2.id_asiento IS NULL AND EXISTS (
+                            SELECT 1 FROM asientos_contables_cabecera am
+                             WHERE am.id_empresa = rc2.id_empresa AND am.eliminado = false AND am.estado <> 'anulado'
+                               AND am.modulo_origen = 'migracion' AND am.tipo_comprobante = 'nomina'
+                               AND am.fecha_asiento >= make_date(rc2.periodo_anio, rc2.periodo_mes, 1)
+                               AND am.fecha_asiento <  make_date(rc2.periodo_anio, rc2.periodo_mes, 1) + INTERVAL '1 month')) ";
         $trabajos[] = [
             'sql'    => "SELECT rc2.id FROM rol_cabecera rc2
                          LEFT JOIN asientos_contables_cabecera ac2 ON ac2.id = rc2.id_asiento
                          WHERE rc2.id_empresa = ? AND rc2.eliminado = false
                            AND rc2.tipo_rol = 'MENSUAL' AND rc2.estado IN ('generado', 'pagado', 'contabilizado')
-                           AND (rc2.id_asiento IS NULL OR ac2.updated_at < rc2.updated_at)",
+                           AND (rc2.id_asiento IS NULL OR ac2.updated_at < rc2.updated_at)" . $excMigRol,
             'params' => [$idEmpresa],
             'factory' => function() {
                 return new \App\Services\modulos\RolAsientoService(

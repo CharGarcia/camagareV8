@@ -244,7 +244,7 @@ class AuditoriaContableRepository extends BaseRepository
             'chequear_monto' => 'informativo', // el asiento incluye aportes/provisiones: no cuadra con total_neto
             'regenerable'    => false, // RolAsientoService::contabilizar() tiene otra firma
             'tiene_id_asiento' => false, // rol_cabecera no tiene id_asiento_contable
-            'entidad_mig'    => null,
+            'entidad_mig'    => 'roles_pago', // el rol migrado se contabiliza con el asiento del diario viejo
         ],
     ];
 
