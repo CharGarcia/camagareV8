@@ -2100,6 +2100,14 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosPestanasOcultas($vistaConfigC
         const selLote = tr.querySelector('.item-lote');
         const selVenc = tr.querySelector('.item-caducidad');
         if (!selLote || !selVenc) return;
+        // Lote que la fila ya tenía (elegido por el usuario o guardado antes de redibujar la
+        // tabla): se vuelve a seleccionar si existe en la lista nueva. Sin esto, una respuesta
+        // de lotes que llegaba tarde, o el redibujo al marcar "Desagr.", dejaba la fila en
+        // "Lote..." y al agregar se omitía en silencio por "falta lote".
+        const lotePrevio = (tr._bpLoteRestaurar !== undefined)
+            ? tr._bpLoteRestaurar
+            : (selLote.selectedIndex > 0 ? selLote.value : null);
+        delete tr._bpLoteRestaurar;
         tr._bpLotes = lotes || [];
         if (tr._bpLotes.length > 0) {
             let lo = '<option value="">Lote...</option>';
@@ -2113,6 +2121,15 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosPestanasOcultas($vistaConfigC
             selLote.innerHTML = lo;
             selVenc.innerHTML = vo;
             tr._bpVencOptions = vo;
+            if (lotePrevio !== null) {
+                const idx = tr._bpLotes.findIndex(l => (l.numero_lote === 'sin_lote' ? '' : l.numero_lote) === lotePrevio);
+                if (idx >= 0) {
+                    selLote.selectedIndex = idx + 1;
+                    const c = tr._bpLotes[idx].fecha_caducidad || '';
+                    selVenc.innerHTML = `<option value="${c}">${consFechaCadTexto(c)}</option>`;
+                    selVenc.selectedIndex = 0;
+                }
+            }
         } else {
             selLote.innerHTML = '<option value="">Sin Lote</option>';
             selVenc.innerHTML = '<option value="">Sin Fecha</option>';
@@ -2316,6 +2333,24 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosPestanasOcultas($vistaConfigC
                 window._BP_BODEGA_PREFS = bodegaPrefs;
 
                 function renderTablaPedido() {
+                    // Lo ya digitado en cada fila (cantidad, precio, lote, NUP) se guarda antes de
+                    // redibujar. Marcar/desmarcar "Desagr." en UN producto redibuja toda la tabla, y
+                    // antes eso borraba lo escrito en todos los demás: en pedidos largos esas filas
+                    // quedaban sin lote/NUP y al agregar se omitían (los ítems "se borraban").
+                    const previo = {};
+                    tbody.querySelectorAll('tr').forEach(trPrev => {
+                        const k = trPrev.dataset.itemId;
+                        if (!k) return;
+                        const selL = trPrev.querySelector('.item-lote');
+                        (previo[k] = previo[k] || []).push({
+                            cantidad: trPrev.querySelector('.item-cantidad')?.value,
+                            listaIdx: trPrev.querySelector('.item-lista-precios')?.selectedIndex ?? 0,
+                            precio:   trPrev.querySelector('.item-precio')?.value,
+                            lote:     (selL && selL.selectedIndex > 0) ? selL.value : null,
+                            nup:      trPrev.querySelector('.item-nup')?.value || '',
+                            tocada:   trPrev.dataset.tocada === '1'
+                        });
+                    });
                     tbody.innerHTML = '';
                     const bodegaDefecto = document.getElementById('buscar_pedido_bodega').value || '';
                     itemsPreparados.forEach(datos => {
@@ -2323,6 +2358,11 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosPestanasOcultas($vistaConfigC
                         const desagregarEstaFila = manejaNup && desagregarPrefs[item.id];
                         const unidades = desagregarEstaFila ? Math.max(1, Math.floor(cantPendiente)) : 1;
                         const bodegaFila = bodegaPrefs[item.id] || bodegaDefecto;
+                        // Mismo número de filas que antes = el producto no cambió: se restaura fila
+                        // por fila. Si es el producto que se desagregó/agrupó, solo se conservan
+                        // precio y lote (cantidad y NUP dependen de la nueva forma de las filas).
+                        const snaps = previo[item.id] || [];
+                        const mismaForma = snaps.length === unidades;
 
                         // El badge de stock y las listas de lote/vencimiento los llena
                         // bpAplicarBodegaFila() según la bodega de CADA fila.
@@ -2391,6 +2431,20 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosPestanasOcultas($vistaConfigC
                                 <td class="align-middle">${nupHtml}</td>
                             `;
                             tbody.appendChild(tr);
+
+                            const snap = mismaForma ? snaps[u] : (snaps[0] ? { listaIdx: snaps[0].listaIdx, precio: snaps[0].precio, lote: snaps[0].lote } : null);
+                            if (snap) {
+                                const inpC = tr.querySelector('.item-cantidad');
+                                const selP = tr.querySelector('.item-lista-precios');
+                                const inpP = tr.querySelector('.item-precio');
+                                const inpN = tr.querySelector('.item-nup');
+                                if (inpC && snap.cantidad !== undefined) inpC.value = snap.cantidad;
+                                if (selP && snap.listaIdx >= 0 && snap.listaIdx < selP.options.length) selP.selectedIndex = snap.listaIdx;
+                                if (inpP && snap.precio !== undefined) inpP.value = snap.precio;
+                                if (inpN && snap.nup !== undefined) inpN.value = snap.nup;
+                                if (snap.lote !== null && snap.lote !== undefined) tr._bpLoteRestaurar = snap.lote;
+                                if (snap.tocada) tr.dataset.tocada = '1';
+                            }
 
                             // Bodega de la fila: arranca en la bodega por defecto (o en la última
                             // elegida para este producto) y se puede cambiar fila por fila. Al
@@ -2490,11 +2544,29 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosPestanasOcultas($vistaConfigC
         }
     });
 
+    // Un solo "Agregar" a la vez. Con pedidos largos el agregado tardaba (una consulta de lotes
+    // por ítem, en serie) sin ninguna señal en pantalla: un segundo clic, o cerrar y guardar a
+    // mitad de camino, dejaba la consignación con parte de los ítems.
+    window._CONS_AGREGANDO_PEDIDO = false;
     window.agregarItemsSeleccionadosPaso2 = async function() {
+        if (window._CONS_AGREGANDO_PEDIDO) return;
+        const btnAgregar = document.getElementById('btn_agregar_items_seleccionados');
+        window._CONS_AGREGANDO_PEDIDO = true;
+        if (btnAgregar) btnAgregar.disabled = true;
+        try {
+            await consAgregarItemsPedido();
+        } finally {
+            window._CONS_AGREGANDO_PEDIDO = false;
+            window.CONS_CARGANDO_DETALLES = false;
+            if (btnAgregar) btnAgregar.disabled = false;
+        }
+    };
+
+    async function consAgregarItemsPedido() {
         const id = window.ACTUAL_PEDIDO_ID;
         const loaded = window.PEDIDO_DETALLES_LOADED ? window.PEDIDO_DETALLES_LOADED[id] : null;
         if (!loaded) return;
-        
+
         const c = loaded.cabecera;
         const tbodyItems = document.getElementById('bp_items_tbody');
         const checkedRows = tbodyItems.querySelectorAll('tr');
@@ -2657,11 +2729,17 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosPestanasOcultas($vistaConfigC
             if (!idProd && !nombre.trim()) tr.remove();
         });
 
+        // Carga en bloque (como al abrir una consignación): sin enfocar cada fila nueva ni
+        // recalcular totales por cada una; consCalcTotales() se llama una vez al final.
+        window.CONS_CARGANDO_DETALLES = true;
+        let agregados = 0;
         for (const item of selectedItems) {
-            const tr = agregarFilaConsignacion();
+            let tr = null;
+            try {
+            tr = agregarFilaConsignacion();
             // Cada línea sale de la bodega elegida en SU fila del pedido (no de la cabecera).
             consSetBodegaFila(tr, item.id_bodega || selectedBodegaId);
-            
+
             const inputDesc = tr.querySelector('.input-descripcion');
             const inputCant = tr.querySelector('.input-cantidad');
             const inputPrecio = tr.querySelector('.input-precio');
@@ -2724,13 +2802,15 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosPestanasOcultas($vistaConfigC
 
                 const bodegaId = item.id_bodega || selectedBodegaId || 0;
                 try {
-                    const resLote = await fetch(`${RUTA_MODULO_CONSIGNACION}/getLotesDisponiblesAjax?id_producto=${item.id_producto}&id_bodega=${bodegaId}`);
-                    const dataLote = await resLote.json();
-                    
-                    if (dataLote.ok && dataLote.data.length > 0) {
+                    // Los mismos lotes que ya se consultaron para la tabla del pedido (caché por
+                    // producto/bodega): antes se volvía a pedir uno por uno, en serie.
+                    const infoLotes = await bpLotesBodega(item.id_producto, bodegaId);
+                    const lotesItem = (infoLotes && infoLotes.lotes) || [];
+
+                    if (lotesItem.length > 0) {
                         if (fLote) {
                             fLote.innerHTML = '<option value="">Lote...</option>';
-                            dataLote.data.forEach(l => {
+                            lotesItem.forEach(l => {
                                 const lv = l.numero_lote === 'sin_lote' ? '' : l.numero_lote;
                                 fLote.innerHTML += `<option value="${lv}">${lv || 'Sin Lote'}</option>`;
                             });
@@ -2741,7 +2821,7 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosPestanasOcultas($vistaConfigC
                         }
                         if (fCad) {
                             fCad.innerHTML = '<option value="">Vencimiento...</option>';
-                            dataLote.data.forEach(l => {
+                            lotesItem.forEach(l => {
                                 const c = l.fecha_caducidad || '';
                                 fCad.innerHTML += `<option value="${c}">${c || 'Sin Fecha'}</option>`;
                             });
@@ -2766,19 +2846,28 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosPestanasOcultas($vistaConfigC
             }
 
             consCalcFila(inputPrecio);
+            agregados++;
+            } catch (errItem) {
+                // Un ítem que falla no corta el resto (antes el error abortaba el ciclo y los
+                // ítems siguientes no se agregaban): se quita su fila a medias y se avisa.
+                console.error('Error al agregar ítem del pedido:', errItem);
+                if (tr) tr.remove();
+                omitidos.push(`${item.original?.producto_nombre || 'Producto ' + item.id_producto} (no se pudo agregar)`);
+            }
         }
+        window.CONS_CARGANDO_DETALLES = false;
 
         consCalcTotales();
 
         if (consBuscarPedidoModal) {
             consBuscarPedidoModal.hide();
         }
-        
+
         if (omitidos.length) {
             Swal.fire({
                 icon: 'warning',
                 title: 'Ítems agregados (con omisiones)',
-                html: `Se agregaron ${selectedItems.length} ítem(s). No se agregaron por tener la fila incompleta:<ul class="text-start small mb-0 mt-2">${omitidos.map(o => `<li>${o}</li>`).join('')}</ul>`,
+                html: `Se agregaron ${agregados} ítem(s). No se agregaron:<ul class="text-start small mb-0 mt-2">${omitidos.map(o => `<li>${o}</li>`).join('')}</ul>`,
             });
         } else {
             Swal.fire({
@@ -2789,7 +2878,7 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosPestanasOcultas($vistaConfigC
                 showConfirmButton: false
             });
         }
-    };
+    }
 
     // Abre el modal compartido de vendedores (incluido en index.php). Antes era un aviso de
     // relleno («Abre modal de vendedor») que no hacía nada.

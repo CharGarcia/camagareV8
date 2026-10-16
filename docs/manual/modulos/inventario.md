@@ -5,8 +5,8 @@ categoria: Inventario
 ruta_modulo: modulos/inventario
 tipo: modulo
 visibilidad: todos
-etiquetas: inventario, stock, existencias, kardex, movimientos, ajuste, entradas, salidas, bodega, costo, buscar movimientos, buscador, filtros, filtrar movimientos, buscar por lote, buscar por serial, movimientos por bodega, chips, buscar por codigo de barras, buscar por bodega, buscar movimientos de una factura, buscar por mes, imprimir movimiento, pdf del movimiento, comprobante de movimiento, ficha del movimiento, imprimir registro, imprimir un movimiento, asiento del ajuste, contabilidad del ajuste, merma, faltante, sobrante, perdida de inventario, baja de inventario, asiento contable inventario, buscar por observacion, observacion de la carga, buscar carga de inventario, columna observaciones, editar movimiento, no se puede editar, candado, solo lectura, modificar movimiento, anular movimiento, movimiento bloqueado
-version: 1.12
+etiquetas: inventario, stock, existencias, kardex, movimientos, ajuste, entradas, salidas, bodega, costo, buscar movimientos, buscador, filtros, filtrar movimientos, buscar por lote, buscar por serial, movimientos por bodega, chips, buscar por codigo de barras, buscar por bodega, buscar movimientos de una factura, buscar por mes, imprimir movimiento, pdf del movimiento, comprobante de movimiento, ficha del movimiento, imprimir registro, imprimir un movimiento, asiento del ajuste, contabilidad del ajuste, merma, faltante, sobrante, perdida de inventario, baja de inventario, asiento contable inventario, buscar por observacion, observacion de la carga, buscar carga de inventario, columna observaciones, editar movimiento, no se puede editar, candado, solo lectura, modificar movimiento, anular movimiento, movimiento bloqueado, costo del producto, costo de la ficha, costo unitario del ajuste, entrada con costo, costo en cero
+version: 1.13
 orden: 20
 estado: activo
 ---
@@ -152,6 +152,17 @@ Para cuadrar muchos productos tras un conteo físico, use una **carga de
 inventario de tipo Ajuste**: se escribe lo contado y el sistema registra solo la
 diferencia.
 
+### Costo unitario del ajuste
+
+- En una **entrada**, al elegir el producto el campo **Costo Unitario** se llena
+  con el **costo de la ficha del producto** (el que se ve y se edita en
+  Productos). Si actualizó ese costo, la siguiente entrada ya lo propone. Se puede
+  cambiar antes de guardar; el kardex graba el valor que quede en el campo.
+- Si el producto no tiene costo en su ficha, el campo queda vacío.
+- En una **salida** el campo queda vacío: el sistema la valora al **costo
+  promedio** del producto en esa bodega. Al pasar de Entrada a Salida, el costo
+  propuesto se borra solo; uno escrito a mano se respeta.
+
 ## Asiento contable del ajuste
 
 Cada ajuste registrado en este módulo (desde la ventana, la importación CSV o la
@@ -244,6 +255,9 @@ problema pero no aparece en el kardex ni tiene stock.
 
 ## Historial de cambios
 
+- **1.13** — En un ajuste de **entrada**, el **Costo Unitario** se llena solo con el
+  costo de la ficha del producto al elegirlo (antes salía vacío y, si no se escribía,
+  la entrada quedaba con costo 0). Las salidas siguen valorándose al costo promedio.
 - **1.12** — Se ve de antemano qué movimientos se pueden editar: **candado** en el
   listado con el motivo al pasar el cursor, y la ventana se abre en **solo lectura**
   con el motivo cuando no se puede editar (antes había que intentar guardar para

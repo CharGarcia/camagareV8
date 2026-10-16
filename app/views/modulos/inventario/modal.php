@@ -250,6 +250,7 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosPestanasOcultas($vistaConfigI
         const selectMedida = document.getElementById('ajuste_id_medida');
         const inputLote = document.getElementById('ajuste_lote_input');
         const inputCaducidad = document.querySelector('input[name="fecha_caducidad"]');
+        const inputCosto = document.getElementById('ajuste_costo');
         const loteContainer = document.getElementById('ajuste_lote_container');
 
         const btnGuardar = document.getElementById('ajuste_btn_guardar');
@@ -321,6 +322,8 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosPestanasOcultas($vistaConfigI
                 btnGuardar.disabled = false;
                 btnGuardar.classList.remove('d-none');
                 stockActualGlobal = 0;
+                costoFicha = null;
+                costoPrecargado = false;
                 restablecerCampoLote();
                 if (btnEliminar) btnEliminar.classList.add('d-none');
                 if (btnHabilitar) btnHabilitar.classList.add('d-none');
@@ -614,6 +617,7 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosPestanasOcultas($vistaConfigI
         inputCant.addEventListener('input', validarCantidad);
 
         selectTipoMov.addEventListener('change', () => {
+            precargarCostoFicha();
             verificarCargaDatos().then(validarCantidad);
         });
         selectBodega.addEventListener('change', () => {
@@ -665,7 +669,7 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosPestanasOcultas($vistaConfigI
                 // mousedown: se dispara antes que cualquier cierre por clic/blur.
                 div.addEventListener('mousedown', (ev) => {
                     ev.preventDefault();
-                    window.seleccionarProducto(item.id, cod, nom);
+                    window.seleccionarProducto(item.id, cod, nom, item.costo_producto);
                 });
                 resDiv.appendChild(div);
             });
@@ -673,14 +677,33 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosPestanasOcultas($vistaConfigI
             resDiv.classList.add('show');
         }
 
-        window.seleccionarProducto = (id, cod, nom) => {
+        window.seleccionarProducto = (id, cod, nom, costo = null) => {
             inputIdProd.value = id;
             inputBusqueda.value = `[${cod}] ${nom}`;
             resDiv.classList.add('d-none');
             resDiv.classList.remove('show');
+            costoFicha = parseFloat(costo) > 0 ? parseFloat(costo) : null;
+            precargarCostoFicha();
             cargarMedidasProducto(id);
             verificarCargaDatos();
         };
+
+        // Costo de la ficha del producto: se propone en las ENTRADAS (el usuario puede cambiarlo).
+        // En las SALIDAS se deja vacío para que el servidor las valore al costo promedio.
+        // Nunca pisa un costo escrito a mano: solo toca el campo si está vacío o si lo llenó esta precarga.
+        let costoFicha = null;
+        let costoPrecargado = false;
+        function precargarCostoFicha() {
+            if (inputCosto.value !== '' && !costoPrecargado) return;
+            if (selectTipoMov.value === 'entrada' && costoFicha !== null) {
+                inputCosto.value = costoFicha;
+                costoPrecargado = true;
+            } else {
+                inputCosto.value = '';
+                costoPrecargado = false;
+            }
+        }
+        inputCosto.addEventListener('input', () => { costoPrecargado = false; });
 
         // Guardar Ajuste
         form.addEventListener('submit', async (e) => {

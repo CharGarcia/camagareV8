@@ -1562,7 +1562,8 @@ class ProductoRepository extends BaseRepository
 
         $params[] = $limit;
 
-        $st = $db->prepare("SELECT p.id, p.codigo, p.nombre, p.id_medida, p.id_tipo_medida, um.nombre AS nombre_medida
+        $st = $db->prepare("SELECT p.id, p.codigo, p.nombre, p.id_medida, p.id_tipo_medida, um.nombre AS nombre_medida,
+                                   p.costo_producto
                             FROM productos p
                             LEFT JOIN unidades_medida um ON um.id = p.id_medida
                             WHERE p.id_empresa = ? AND (p.codigo ILIKE ? OR p.nombre ILIKE ?) AND p.eliminado = false 
