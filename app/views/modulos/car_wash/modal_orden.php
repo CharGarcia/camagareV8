@@ -108,7 +108,7 @@
                             </div>
                             <div class="col-12 col-md-6 position-relative">
                                 <label class="x-small fw-bold text-muted mb-1">Cliente <span class="text-danger">*</span>
-                                    <a href="#" id="cw_lnk_editar_cliente" class="ms-2 fw-normal text-decoration-none d-none" onclick="event.preventDefault(); cwEditarCliente();" title="Editar la ficha del cliente"><i class="bi bi-pencil-square"></i> Editar</a></label>
+                                    <a href="#" id="cw_lnk_editar_cliente" class="ms-2 fw-normal link-primary text-decoration-underline d-none" style="font-size:.68rem;" onclick="event.preventDefault(); cwEditarCliente();" title="Editar la ficha del cliente">editar</a></label>
                                 <input type="text" id="cw_cliente_busqueda" class="form-control form-control-sm border-primary border-opacity-10" placeholder="Seleccionar cliente..." oninput="cwBuscarClientes(this.value)">
                                 <div id="cw_cli_dropdown" class="list-group position-absolute w-100 shadow-sm d-none" style="z-index:1085; max-height:240px; overflow:auto;"></div>
                             </div>
@@ -117,7 +117,7 @@
                         <div class="row g-2 align-items-end mt-1">
                             <div class="col-12 col-md-4 position-relative">
                                 <label class="x-small fw-bold text-muted mb-1">Vehículo <span class="text-danger">*</span>
-                                    <a href="#" id="cw_lnk_editar_vehiculo" class="ms-2 fw-normal text-decoration-none d-none" onclick="event.preventDefault(); cwEditarVehiculo();" title="Editar la ficha del vehículo"><i class="bi bi-pencil-square"></i> Editar</a></label>
+                                    <a href="#" id="cw_lnk_editar_vehiculo" class="ms-2 fw-normal link-primary text-decoration-underline d-none" style="font-size:.68rem;" onclick="event.preventDefault(); cwEditarVehiculo();" title="Editar la ficha del vehículo">editar</a></label>
                                 <input type="text" id="cw_vehiculo_busqueda" class="form-control form-control-sm border-primary border-opacity-10" placeholder="Placa, marca o propietario..." oninput="cwBuscarVehiculos(this.value)">
                                 <div id="cw_veh_dropdown" class="list-group position-absolute w-100 shadow-sm d-none" style="z-index:1085; max-height:240px; overflow:auto;"></div>
                             </div>
