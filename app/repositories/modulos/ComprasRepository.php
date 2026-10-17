@@ -1222,10 +1222,12 @@ class ComprasRepository extends BaseRepository
     /** [id_compra_detalle => cantidad ya enviada a inventario (viva)] para una compra. */
     public function getCantidadProcesadaPorDetalle(int $idCompra): array
     {
-        $sql = "SELECT k.referencia_id AS id_detalle, COALESCE(SUM(k.cantidad), 0) AS cantidad
+        // 'nota_credito_compra' = salida por NC de compra (cantidad en negativo): se cuenta en
+        // valor absoluto, porque aquí interesa cuánto de la línea ya se movió en inventario.
+        $sql = "SELECT k.referencia_id AS id_detalle, COALESCE(SUM(ABS(k.cantidad)), 0) AS cantidad
                 FROM inventario_kardex k
                 JOIN compras_detalle d ON d.id = k.referencia_id
-                WHERE k.referencia_tipo = 'compra' AND k.eliminado = false AND d.id_compra = ?
+                WHERE k.referencia_tipo IN ('compra', 'nota_credito_compra') AND k.eliminado = false AND d.id_compra = ?
                 GROUP BY k.referencia_id";
         $rows = $this->query($sql, [$idCompra])->fetchAll(\PDO::FETCH_ASSOC);
 

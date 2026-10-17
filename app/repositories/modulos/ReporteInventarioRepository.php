@@ -22,7 +22,8 @@ class ReporteInventarioRepository extends BaseRepository
         'ajuste_manual'                  => 'Ajuste manual',
         'carga_inventario'               => 'Carga de inventario',
         'compra'                         => 'Compra',
-        'factura_venta'                  => 'Factura de venta',
+        'nota_credito_compra'            => 'Nota de crédito de compra',
+        'factura_venta'                => 'Factura de venta',
         'nota_credito'                   => 'Nota de crédito',
         'recibo_venta'                   => 'Recibo de venta',
         'SALDO_INICIAL'                  => 'Saldo inicial',
@@ -2250,7 +2251,7 @@ class ReporteInventarioRepository extends BaseRepository
                           * ABS(COALESCE(k.costo_total, ABS(k.cantidad) * k.costo_unitario, 0)) AS monto
                  FROM inventario_kardex k
                  LEFT JOIN compras_detalle cd
-                        ON k.referencia_tipo IN ('compra', 'compra_item') AND cd.id = k.referencia_id
+                        ON k.referencia_tipo IN ('compra', 'compra_item', 'nota_credito_compra') AND cd.id = k.referencia_id
                  LEFT JOIN importaciones_detalle idt
                         ON k.referencia_tipo = 'importacion' AND idt.id = k.referencia_id
                  WHERE k.id_empresa = :e AND k.eliminado = FALSE

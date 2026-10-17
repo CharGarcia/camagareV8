@@ -5,8 +5,8 @@ categoria: Compras
 ruta_modulo: modulos/compras
 tipo: modulo
 visibilidad: todos
-etiquetas: compras, compra, factura de compra, buscar compra, buscador, aparecen compras que no busque, resultados que no corresponden, la busqueda trae otras compras, buscar por numero de autorizacion, filtros, filtrar compras, buscar por producto comprado, filtro de fechas, saldo pendiente, estado de pago, chips, ordenar por dos columnas, ordenar por proveedor y fecha, asiento contable, editar asiento, pestaña asiento, proveedor, xml, sri, entrada de mercaderia, vincular producto, retencion, orden de compra, vincular orden, pedido a proveedor, comparar pedido vs facturado, entrega parcial, recibido parcial, cerrar orden, sustento tributario, codigo de sustento, autorizacion, fecha de caducidad, ats, persona natural, obligada a llevar contabilidad, tipo de contribuyente, registro manual, compra fisica, pagar la compra, pestaña pagos, saldo pendiente, valores de terceros, otros conceptos, valores adicionales, bomberos, tasa de basura, recoleccion de basura, planilla de luz, planilla de agua, servicios basicos, informacion adicional, info adicional, nombre muy largo, limite de caracteres, value too long, no se pudo guardar la compra, imprimir, impresora, retencion antes de la factura, enlazar retencion, pdf en dos hojas, segunda hoja casi vacia, totales en otra pagina, el pdf corta la pagina, hoja de mas, asiento no cuadra, el asiento no se genera, asiento manual, registrar asiento a mano, importe total no es subtotal mas iva, supera el maximo de ajuste, xml inconsistente, iva de cabecera distinto al de las lineas, seguro campesino, generar contabilidad, otros rubros de terceros, tasa de pernoctacion, tasa turistica, hotel, hospedaje, rubro dentro del total, iva inflado en el listado
-version: 2.34
+etiquetas: compras, compra, factura de compra, buscar compra, buscador, aparecen compras que no busque, resultados que no corresponden, la busqueda trae otras compras, buscar por numero de autorizacion, filtros, filtrar compras, buscar por producto comprado, filtro de fechas, saldo pendiente, estado de pago, chips, ordenar por dos columnas, ordenar por proveedor y fecha, asiento contable, editar asiento, pestaña asiento, proveedor, xml, sri, entrada de mercaderia, vincular producto, retencion, orden de compra, vincular orden, pedido a proveedor, comparar pedido vs facturado, entrega parcial, recibido parcial, cerrar orden, sustento tributario, codigo de sustento, autorizacion, fecha de caducidad, ats, persona natural, obligada a llevar contabilidad, tipo de contribuyente, registro manual, compra fisica, pagar la compra, pestaña pagos, saldo pendiente, valores de terceros, otros conceptos, valores adicionales, bomberos, tasa de basura, recoleccion de basura, planilla de luz, planilla de agua, servicios basicos, informacion adicional, info adicional, nombre muy largo, limite de caracteres, value too long, no se pudo guardar la compra, imprimir, impresora, retencion antes de la factura, enlazar retencion, pdf en dos hojas, segunda hoja casi vacia, totales en otra pagina, el pdf corta la pagina, hoja de mas, asiento no cuadra, el asiento no se genera, asiento manual, registrar asiento a mano, importe total no es subtotal mas iva, supera el maximo de ajuste, xml inconsistente, iva de cabecera distinto al de las lineas, seguro campesino, generar contabilidad, otros rubros de terceros, tasa de pernoctacion, tasa turistica, hotel, hospedaje, rubro dentro del total, iva inflado en el listado, nota de credito de compra, devolucion al proveedor, restar inventario, salida de inventario por nota de credito, procesar salidas
+version: 2.35
 orden: 20
 estado: activo
 ---
@@ -379,6 +379,35 @@ impuesto de IVA y el valor del IVA cuadra con ese total) y lo deja escrito en la
 **Observaciones** de la compra, empezando por *"XML del SRI inconsistente"*. Si
 hay varios impuestos o el IVA no cuadra, se guarda tal como vino y la observación
 pide revisarlo a mano.
+
+### Restar del inventario los productos de una nota de crédito
+
+Cuando la nota de crédito es por **mercadería devuelta al proveedor**, sus
+productos se pueden sacar del inventario desde la misma nota:
+
+1. Abra la nota de crédito y vaya a la pestaña **Inventario**. Un aviso rojo
+   indica que los productos **se restarán** del inventario.
+2. Vincule cada línea con su producto del catálogo (igual que en una factura) y
+   elija la **bodega** de donde sale, la medida y la cantidad.
+3. Marque las líneas y pulse **Procesar Salidas**.
+
+Cada línea genera una **salida** en el kardex de esa bodega, con origen *Nota de
+crédito de compra* y el costo de la línea. Como en la entrada, si la medida es
+distinta a la del producto (p. ej. cajas) la cantidad se convierte a la unidad
+del producto.
+
+- Si la bodega **no tiene stock suficiente**, la salida no se registra y se
+  avisa cuánto hay disponible: no se puede devolver lo que no está en bodega.
+- Una nota de crédito que solo es un **descuento o ajuste de precio** (no hubo
+  devolución física) no debe procesarse: deje la pestaña Inventario sin tocar.
+- Para deshacer una salida, use la papelera en *Movimientos procesados en
+  inventario*: el stock vuelve a sumarse. Eliminar la nota de crédito también
+  revierte sus salidas.
+
+Antes de este cambio, la pestaña registraba **entradas** también en las notas
+de crédito (el stock subía en vez de bajar). Si alguna quedó así, elimine ese
+movimiento con la papelera y vuelva a procesar la nota: ahora se registra como
+salida.
 
 ## Planillas de luz y agua: valores de terceros
 
@@ -762,6 +791,10 @@ aprobaciones pasa, así que no se paga dos veces.
 
 ## Historial de cambios
 
+- **2.35** — **Notas de crédito de compra**: la pestaña Inventario ahora **resta**
+  del inventario los productos de la nota (botón *Procesar Salidas*, salida en el
+  kardex con origen *Nota de crédito de compra*), validando el stock de la bodega.
+  Antes registraba entradas por error.
 - **2.34** — La opción **Gasto personal** de *Deducible* solo aparece en empresas
   de Persona Natural (obligada o no a llevar contabilidad); en las demás el
   servidor también la rechaza. Una compra cuyo comprobante se emitió a la

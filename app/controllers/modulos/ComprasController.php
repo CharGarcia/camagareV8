@@ -1467,8 +1467,10 @@ class ComprasController extends BaseModuloController
             $invSrv  = new \App\Services\modulos\InventarioService($invRepo, new \App\Services\LogSistemaService());
 
             foreach ($detalles as $det) {
-                // Revertir movimientos asociados a cada ítem (mismo referencia_tipo usado al insertar en procesarInventarioAjax)
+                // Revertir movimientos asociados a cada ítem (mismos referencia_tipo usados al insertar
+                // en procesarInventarioAjax: 'compra' = entrada, 'nota_credito_compra' = salida por NC)
                 $invSrv->revertirMovimientosPorReferencia('compra', (int)$det['id'], $idEmpresa, $idUsuario);
+                $invSrv->revertirMovimientosPorReferencia('nota_credito_compra', (int)$det['id'], $idEmpresa, $idUsuario);
             }
 
             // 2. Eliminar la compra (lógico)
@@ -1704,16 +1706,26 @@ class ComprasController extends BaseModuloController
 
             // Obtener datos de cabecera para las observaciones
             $db = \App\core\Database::getConnection();
-            $sqlCab = "SELECT c.establecimiento_prov, c.punto_emision_prov, c.secuencial_prov, p.razon_social AS proveedor_nombre 
-                       FROM compras_cabecera c 
-                       JOIN proveedores p ON c.id_proveedor = p.id 
-                       WHERE c.id = ? AND c.id_empresa = ?";
+            $sqlCab = "SELECT c.establecimiento_prov, c.punto_emision_prov, c.secuencial_prov, c.tipo_comprobante,
+                              p.razon_social AS proveedor_nombre
+                       FROM compras_cabecera c
+                       JOIN proveedores p ON c.id_proveedor = p.id
+                       WHERE c.id = ? AND c.id_empresa = ? AND c.eliminado = false";
             $stCab = $db->prepare($sqlCab);
             $stCab->execute([$idCompra, $idEmpresa]);
             $cab = $stCab->fetch();
+            if (!$cab) {
+                throw new \Exception('Compra no encontrada.');
+            }
+
+            // Nota de crédito de compra (tipo 04): los productos se devuelven al proveedor, así
+            // que SALEN del inventario (en vez de entrar) con referencia_tipo 'nota_credito_compra'.
+            $esNotaCredito = (string)($cab['tipo_comprobante'] ?? '') === '04';
+            $refTipo       = $esNotaCredito ? 'nota_credito_compra' : 'compra';
 
             $numeroDoc = ($cab['establecimiento_prov'] ?? '000') . '-' . ($cab['punto_emision_prov'] ?? '000') . '-' . ($cab['secuencial_prov'] ?? $idCompra);
-            $obsBase = "Ingreso por Compra #" . $numeroDoc . " - " . ($cab['proveedor_nombre'] ?? '');
+            $obsBase = ($esNotaCredito ? "Salida por Nota de Crédito de Compra #" : "Ingreso por Compra #")
+                . $numeroDoc . " - " . ($cab['proveedor_nombre'] ?? '');
 
             $invRepo = new \App\repositories\modulos\InventarioRepository();
             $invSrv  = new \App\Services\modulos\InventarioService($invRepo, new \App\Services\LogSistemaService());
@@ -1800,7 +1812,13 @@ class ComprasController extends BaseModuloController
                 $idBodegaItem = (int)$item['id_bodega'];
                 $invRepo->lockStock($idProducto, $idBodegaItem, $idEmpresa);
                 $stockAnt = $invRepo->getStockActual($idProducto, $idBodegaItem, $idEmpresa);
-                $stockPost = $stockAnt + $cantEnviar;
+                $stockPost = $esNotaCredito ? $stockAnt - $cantEnviar : $stockAnt + $cantEnviar;
+
+                // No se puede devolver al proveedor lo que no hay en la bodega (el saldo ya
+                // se leyó con el candado tomado, así que es el real en este momento).
+                if ($esNotaCredito && $stockPost < -0.0001) {
+                    throw new \Exception("Stock insuficiente de '{$nombreAMostrar}' en la bodega elegida para registrar la salida. Disponible: {$stockAnt}, requerido: {$cantEnviar}.");
+                }
 
                 // 5. Registrar movimiento en Kardex vía el Repository (no SQL directo):
                 // tipo_ambiente se toma del ambiente actual de la empresa; el listado
@@ -1814,10 +1832,11 @@ class ComprasController extends BaseModuloController
                     'id_empresa'      => $idEmpresa,
                     'id_producto'     => $idProducto,
                     'id_bodega'       => $idBodegaItem,
-                    'tipo_movimiento' => 'entrada',
-                    'referencia_tipo' => 'compra',
+                    'tipo_movimiento' => $esNotaCredito ? 'salida' : 'entrada',
+                    'referencia_tipo' => $refTipo,
                     'referencia_id'   => $idDetalle,
-                    'cantidad'        => $cantEnviar,
+                    // Las salidas se guardan en negativo (mismo criterio que la venta).
+                    'cantidad'        => $esNotaCredito ? -$cantEnviar : $cantEnviar,
                     'costo_unitario'  => $costoUnit,
                     'costo_total'     => $costoTotal,
                     'stock_anterior'  => $stockAnt,
@@ -1847,10 +1866,10 @@ class ComprasController extends BaseModuloController
                     'id_producto' => $idProducto,
                     'cantidad'    => $cantEnviar,
                     'bodega'      => (int)$item['id_bodega'],
-                    'referencia'  => "Compra #{$idCompra} - Item {$idDetalle}"
+                    'referencia'  => ($esNotaCredito ? "Nota de crédito de compra #" : "Compra #") . "{$idCompra} - Item {$idDetalle}"
                 ]);
                 $ipUser = $_SERVER['REMOTE_ADDR'] ?? '127.0.0.1';
-                $stLog->execute([$idUsuario, $idEmpresa, 'INGRESO_INVENTARIO_COMPRA', $idKardex, $datosLog, $ipUser]);
+                $stLog->execute([$idUsuario, $idEmpresa, $esNotaCredito ? 'SALIDA_INVENTARIO_NC_COMPRA' : 'INGRESO_INVENTARIO_COMPRA', $idKardex, $datosLog, $ipUser]);
 
                 // Homologación automática
                 if (!empty($det['codigo_principal']) && $idProducto > 0) {
@@ -1877,7 +1896,9 @@ class ComprasController extends BaseModuloController
 
             echo json_encode([
                 'ok' => true,
-                'mensaje' => "Inventario procesado con éxito. Se han registrado {$processedCount} movimientos."
+                'mensaje' => $esNotaCredito
+                    ? "Inventario procesado con éxito. Se registraron {$processedCount} salidas por la nota de crédito."
+                    : "Inventario procesado con éxito. Se han registrado {$processedCount} movimientos."
             ]);
         } catch (\Throwable $e) {
             \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
@@ -1930,7 +1951,7 @@ class ComprasController extends BaseModuloController
                     LEFT JOIN productos p ON k.id_producto = p.id
                     LEFT JOIN bodegas b ON k.id_bodega = b.id
                     LEFT JOIN unidades_medida um ON k.id_medida = um.id
-                    JOIN compras_detalle d ON k.referencia_id = d.id AND k.referencia_tipo = 'compra'
+                    JOIN compras_detalle d ON k.referencia_id = d.id AND k.referencia_tipo IN ('compra', 'nota_credito_compra')
                     WHERE d.id_compra = ? AND k.id_empresa = ? AND k.eliminado = false
                     ORDER BY k.id ASC";
             $db = \App\core\Database::getConnection();

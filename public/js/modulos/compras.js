@@ -2834,6 +2834,17 @@ async function mcConsultarHomologacion(idProv, codigoProv, tr) {
  */
 window.mcInventarioProcesadoMap = {}; // id_detalle => total_enviado
 
+/** Nota de crédito de compra (tipo 04): al procesar, el inventario SALE en vez de entrar. */
+function mcInvEsNotaCredito() {
+    return (document.getElementById('mcTipoComprobante')?.value || '') === '04';
+}
+
+function mcInvHtmlBotonProcesar() {
+    return mcInvEsNotaCredito()
+        ? '<i class="bi bi-box-arrow-up me-1"></i> Procesar Salidas'
+        : '<i class="bi bi-box-arrow-in-right me-1"></i> Procesar Entradas';
+}
+
 window.mcCargarStatusInventario = async function() {
     const id = document.getElementById('mcId').value;
     const btnProcesar = document.getElementById('btnProcesarInventario');
@@ -2846,7 +2857,7 @@ window.mcCargarStatusInventario = async function() {
         if (container) container.classList.add('d-none');
         if (btnProcesar) {
             btnProcesar.disabled = false;
-            btnProcesar.innerHTML = '<i class="bi bi-box-arrow-in-right me-1"></i> Procesar Entradas';
+            btnProcesar.innerHTML = mcInvHtmlBotonProcesar();
         }
         return;
     }
@@ -2864,7 +2875,10 @@ window.mcCargarStatusInventario = async function() {
                 // Acumular totales por detalle de compra
                 const idDet = m.referencia_id;
                 if (!window.mcInventarioProcesadoMap[idDet]) window.mcInventarioProcesadoMap[idDet] = 0;
-                window.mcInventarioProcesadoMap[idDet] += parseFloat(m.cantidad);
+                // Las salidas por nota de crédito se guardan en negativo: cuenta lo movido.
+                const cantMov = Math.abs(parseFloat(m.cantidad) || 0);
+                window.mcInventarioProcesadoMap[idDet] += cantMov;
+                const esSalida = m.tipo_movimiento === 'salida';
 
                 if (tbodyStatus) {
                     const tr = document.createElement('tr');
@@ -2875,8 +2889,8 @@ window.mcCargarStatusInventario = async function() {
                             <small class="text-muted d-block" style="font-size:0.65rem;">${_esc(m.producto_codigo)}</small>
                         </td>
                         <td class="py-1">${_esc(m.bodega_nombre)}</td>
-                        <td class="py-1 text-center fw-bold text-primary">
-                            ${m.cantidad} 
+                        <td class="py-1 text-center fw-bold ${esSalida ? 'text-danger' : 'text-primary'}" title="${esSalida ? 'Salida' : 'Entrada'}">
+                            ${esSalida ? '−' : ''}${cantMov}
                             <small class="text-muted fw-normal">${_esc(m.medida_abreviatura || '')}</small>
                         </td>
                         <td class="py-1 text-center small text-muted">${(() => {
@@ -2888,7 +2902,7 @@ window.mcCargarStatusInventario = async function() {
                         })()}</td>
                         <td class="py-1 small text-truncate" style="max-width:200px;" title="${_esc(m.observaciones||'')}">${_esc(m.observaciones || '-')}</td>
                         <td class="py-1 text-center pe-3">
-                            <button type="button" class="btn btn-link text-danger p-0" onclick="mcEliminarMovimientoInventario(${m.id})" title="Eliminar este ingreso de inventario">
+                            <button type="button" class="btn btn-link text-danger p-0" onclick="mcEliminarMovimientoInventario(${m.id})" title="${esSalida ? 'Eliminar esta salida de inventario' : 'Eliminar este ingreso de inventario'}">
                                 <i class="bi bi-trash"></i>
                             </button>
                         </td>
@@ -2913,7 +2927,7 @@ window.mcCargarStatusInventario = async function() {
 
 window.mcEliminarMovimientoInventario = async function(idMov) {
     const result = await Swal.fire({
-        title: '¿Eliminar este ingreso?',
+        title: mcInvEsNotaCredito() ? '¿Eliminar esta salida?' : '¿Eliminar este ingreso?',
         text: "El stock regresará a su estado anterior. Esta acción quedará registrada en auditoría.",
         icon: 'warning',
         showCancelButton: true,
@@ -3000,6 +3014,9 @@ window.mcActualizarUIInventario = function() {
         }
     });
 
+    // Aviso de nota de crédito (el inventario sale en vez de entrar)
+    document.getElementById('mc-inventario-aviso-nc')?.classList.toggle('d-none', !mcInvEsNotaCredito());
+
     // Aviso de líneas sin vincular
     const aviso = document.getElementById('mc-inventario-aviso-vinculacion');
     if (aviso) {
@@ -3029,7 +3046,7 @@ window.mcActualizarUIInventario = function() {
             btnProcesar.title = 'Las líneas seleccionadas deben estar vinculadas a un producto del catálogo.';
         } else {
             btnProcesar.disabled = !hayParaProcesar;
-            btnProcesar.innerHTML = '<i class="bi bi-box-arrow-in-right me-1"></i> Procesar Entradas';
+            btnProcesar.innerHTML = mcInvHtmlBotonProcesar();
             btnProcesar.classList.replace('btn-outline-success', 'btn-primary');
             btnProcesar.title = '';
         }
@@ -3359,9 +3376,12 @@ window.mcProcesarInventario = async function() {
         return;
     }
 
+    const esNC = mcInvEsNotaCredito();
     const confirm = await Swal.fire({
         title: '¿Procesar Inventario?',
-        text: `Se registrarán ${items.length} entradas en el inventario vinculadas a esta compra.`,
+        text: esNC
+            ? `Se registrarán ${items.length} salidas del inventario por esta nota de crédito (devolución al proveedor).`
+            : `Se registrarán ${items.length} entradas en el inventario vinculadas a esta compra.`,
         icon: 'question',
         showCancelButton: true,
         confirmButtonText: 'Sí, procesar',

@@ -721,6 +721,19 @@
                 </div>
               </div>
 
+              <!-- Aviso: nota de crédito de compra (tipo 04). Al procesar, los productos
+                   SALEN del inventario (devolución al proveedor). Lo muestra mcActualizarUIInventario(). -->
+              <div id="mc-inventario-aviso-nc" class="alert alert-danger bg-danger bg-opacity-10 d-flex align-items-start gap-2 py-2 px-3 mb-3 d-none">
+                <i class="bi bi-box-arrow-up mt-1"></i>
+                <div class="small">
+                  <strong>Nota de crédito: los productos se restarán del inventario.</strong>
+                  <div class="text-muted mt-1">
+                    Al procesar se registra una salida en la bodega elegida por cada línea marcada (devolución al proveedor).
+                    Si la bodega no tiene stock suficiente, la salida no se registra.
+                  </div>
+                </div>
+              </div>
+
               <!-- Aviso: líneas sin vincular a un producto del catálogo.
                    Sin vinculación el inventario NO se puede registrar. -->
               <div id="mc-inventario-aviso-vinculacion" class="alert alert-warning d-flex align-items-start gap-2 py-2 px-3 mb-3 d-none">

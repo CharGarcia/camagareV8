@@ -226,6 +226,8 @@ class ReasignarEstablecimientoService
                         // Mismo criterio que ComprasController::eliminarAjax(): referencia_tipo='compra',
                         // referencia_id=id de la línea (compras_detalle), no de la cabecera.
                         $this->inventarioService()->revertirMovimientosPorReferencia('compra', $idDetalle, $idEmpresa, $idUsuario, true);
+                        // Salida por nota de crédito de compra (tipo 04), mismo id de línea.
+                        $this->inventarioService()->revertirMovimientosPorReferencia('nota_credito_compra', $idDetalle, $idEmpresa, $idUsuario, true);
                         $anulados['inventario']++;
                     }
                     if ($vinc['id_asiento'] !== null) {

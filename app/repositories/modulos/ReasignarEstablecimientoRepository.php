@@ -269,7 +269,7 @@ class ReasignarEstablecimientoRepository extends BaseRepository
         $st = $this->db->prepare(
             "SELECT DISTINCT d.id
                FROM compras_detalle d
-               JOIN inventario_kardex k ON k.referencia_tipo = 'compra' AND k.referencia_id = d.id
+               JOIN inventario_kardex k ON k.referencia_tipo IN ('compra', 'nota_credito_compra') AND k.referencia_id = d.id
               WHERE d.id_compra = :ic AND k.id_empresa = :ie AND k.eliminado = false"
         );
         $st->execute([':ic' => $idCompra, ':ie' => $idEmpresa]);
