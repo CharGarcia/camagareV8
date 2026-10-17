@@ -421,9 +421,14 @@ if (($rutaModulo ?? '') !== 'modulos/productos') {
                             <!-- Productos equivalentes: se muestra solo si el SQL está aplicado (equivalencias_disponibles) -->
                             <div id="prod_equiv_wrap" class="d-none mt-3 pt-3 border-top">
                                 <div class="small fw-bold text-muted mb-1"><i class="bi bi-arrow-left-right me-1"></i>Productos equivalentes</div>
-                                <p class="small text-muted mb-2">Productos que sirven para lo mismo (otra marca, otra presentación). Cuando este no tenga saldo, al vender se ofrecerán primero estos.</p>
-                                <div class="position-relative mb-2" style="max-width: 440px;">
-                                    <input type="text" id="equiv_search" class="form-control form-control-sm shadow-none" placeholder="Buscar producto para agregar como equivalente..." autocomplete="off">
+                                <p class="small text-muted mb-1">Productos que sirven para lo mismo (otra marca, otra presentación). Cuando este no tenga saldo, al vender se ofrecerán primero estos.</p>
+                                <p class="small text-muted mb-2"><i class="bi bi-info-circle me-1"></i>Debe estar activada la opción «Mostrar equivalencias» en la configuración de facturación.</p>
+                                <label class="form-label small fw-bold text-primary mb-1" for="equiv_search"><i class="bi bi-plus-circle me-1"></i>Agregar producto equivalente</label>
+                                <div class="position-relative mb-2" style="max-width: 520px;">
+                                    <div class="input-group input-group-sm">
+                                        <span class="input-group-text bg-primary bg-opacity-10 border-primary text-primary"><i class="bi bi-search"></i></span>
+                                        <input type="text" id="equiv_search" class="form-control shadow-none border-primary" placeholder="Escriba el código o el nombre del producto..." autocomplete="off">
+                                    </div>
                                     <div id="equiv_results" class="list-group position-absolute w-100 shadow-lg d-none" style="z-index: 1070; max-height: 200px; overflow-y: auto;"></div>
                                 </div>
                                 <div class="table-responsive" style="max-height: 180px;">
