@@ -266,6 +266,8 @@ class EgresoService
                 ['monto' => $data['monto_total'], 'tipo' => $data['tipo_egreso']]
             );
 
+            $this->sincronizarSaldosInicialesCxp($this->idsSaldoInicialCxp($data['detalles'] ?? []), (int) $data['id_empresa']);
+
             if (!$inTrans) $db->commit();
 
         } catch (\Throwable $e) {
@@ -319,6 +321,9 @@ class EgresoService
             // El asiento se anula en la MISMA transacción: si no se puede, el egreso tampoco
             // queda anulado (antes quedaba anulado con su asiento vivo y el error solo en el log).
             $this->anularAsientoContable($egreso, $idEmpresa, $idUsuario);
+
+            // El pago anulado deja de descontar del saldo inicial CxP que pagaba.
+            $this->sincronizarSaldosInicialesCxp($this->idsSaldoInicialCxp($this->repository->getDetalles($id)), $idEmpresa);
 
             if (!$inTrans) $db->commit();
         } catch (\Throwable $e) {
@@ -557,6 +562,12 @@ class EgresoService
                 $datosNuevos['id_empleado']   = $payload['id_empleado'];
                 $datosNuevos['observaciones'] = $payload['observaciones'];
                 $datosNuevos['monto_total']   = $montoTotal;
+
+                // Saldos iniciales CxP que el egreso pagaba antes o paga ahora.
+                $this->sincronizarSaldosInicialesCxp(array_merge(
+                    $this->idsSaldoInicialCxp($datosAnteriores['detalles']),
+                    $this->idsSaldoInicialCxp($detallesNuevos)
+                ), $idEmpresa);
             }
 
             // 4. Si la fecha cambió, actualizarla en la cabecera
@@ -767,6 +778,34 @@ class EgresoService
     }
 
     /** Misma regla que IngresoService: la fecha del egreso no puede ser anterior a la del documento que paga. */
+    /** IDs de saldos iniciales CxP (tipo_documento 'SALDO_INICIAL') presentes en unos detalles de egreso. */
+    private function idsSaldoInicialCxp(array $detalles): array
+    {
+        $ids = [];
+        foreach ($detalles as $d) {
+            if (($d['tipo_documento'] ?? '') === 'SALDO_INICIAL' && !empty($d['id_referencia_documento'])) {
+                $ids[] = (int) $d['id_referencia_documento'];
+            }
+        }
+        return array_values(array_unique($ids));
+    }
+
+    /**
+     * Recalcula monto_pagado / saldo_pendiente / estado guardados de cada saldo inicial CxP
+     * afectado, desde los egresos vigentes. Cuentas por Pagar y Saldos Iniciales leen esas
+     * columnas; va dentro de la transacción del egreso para que nunca queden desfasadas.
+     */
+    private function sincronizarSaldosInicialesCxp(array $idsSaldo, int $idEmpresa): void
+    {
+        if (empty($idsSaldo)) {
+            return;
+        }
+        $repo = new \App\repositories\modulos\SaldosInicialesRepository();
+        foreach (array_unique($idsSaldo) as $idSaldo) {
+            $repo->actualizarMontoPagadoCxp((int) $idSaldo, $idEmpresa);
+        }
+    }
+
     private function validarFechaVsDocumentos(array $data): void
     {
         $fechaEmision = $data['fecha_emision'] ?? null;

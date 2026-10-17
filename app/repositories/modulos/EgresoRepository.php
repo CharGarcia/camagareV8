@@ -394,11 +394,12 @@ class EgresoRepository extends BaseRepository
 
     public function getDetalles(int $idEgreso): array
     {
-        $sql = "SELECT ed.*, COALESCE(c.fecha_emision, l.fecha_emision) AS fecha_documento,
+        $sql = "SELECT ed.*, COALESCE(c.fecha_emision, l.fecha_emision, si.fecha_emision) AS fecha_documento,
                        pc.codigo AS cuenta_codigo, pc.nombre AS cuenta_nombre
                 FROM egresos_detalle ed
                 LEFT JOIN compras_cabecera c ON ed.tipo_documento = 'COMPRA' AND ed.id_referencia_documento = c.id
                 LEFT JOIN liquidaciones_cabecera l ON ed.tipo_documento = 'LIQUIDACION' AND ed.id_referencia_documento = l.id
+                LEFT JOIN saldos_iniciales_cxp si ON ed.tipo_documento = 'SALDO_INICIAL' AND ed.id_referencia_documento = si.id
                 LEFT JOIN plan_cuentas pc ON pc.id = ed.id_cuenta_contable
                 WHERE ed.id_egreso = ? AND ed.eliminado = FALSE
                 ORDER BY ed.id ASC";
@@ -969,7 +970,61 @@ class EgresoRepository extends BaseRepository
                 $params[':q'] = '%' . $q . '%';
             }
 
-            $sql = "WITH pagado AS (
+            // Saldos iniciales CxP (cuentas por pagar de apertura): se listan junto con las
+            // compras, igual que Ingresos lista los saldos iniciales CXC junto a las facturas.
+            // El pago se guarda como egresos_detalle tipo 'SALDO_INICIAL' (mismo enlace que usa
+            // Saldos Iniciales / Cuentas por Pagar) y el saldo se calcula aquí desde los egresos
+            // vigentes, no desde la columna cacheada. Las notas de crédito no se pagan.
+            // Al recalcular UN documento ($soloId) no aplica: getSaldoPendienteDocumento()
+            // resuelve SALDO_INICIAL por su propio camino.
+            $unionSaldosIniciales = '';
+            if ($soloId === null) {
+                $filtroBusqSi = '';
+                if ($q !== '') {
+                    $filtroBusqSi = " AND (
+                        s.nro_documento ILIKE :q
+                        OR COALESCE(prov_si.razon_social, s.nombre_proveedor) ILIKE :q
+                        OR COALESCE(prov_si.identificacion, s.ruc_proveedor) ILIKE :q
+                    )";
+                }
+                $unionSaldosIniciales = "
+                    UNION ALL
+                    SELECT 'SALDO_INICIAL' AS tipo_doc_bd,
+                           s.id,
+                           s.nro_documento AS numero_documento,
+                           s.fecha_emision,
+                           GREATEST(COALESCE(s.fecha_vencimiento - s.fecha_emision, 0), 0) AS dias_credito,
+                           s.saldo_inicial AS monto_total,
+                           COALESCE(psi.total_pagado, 0) AS monto_cobrado,
+                           0 AS monto_retenido,
+                           (s.saldo_inicial - COALESCE(psi.total_pagado, 0)) AS saldo_pendiente,
+                           s.id_proveedor AS proveedor_id,
+                           COALESCE(prov_si.razon_social, s.nombre_proveedor) AS proveedor_nombre,
+                           COALESCE(prov_si.identificacion, s.ruc_proveedor)  AS proveedor_ruc
+                    FROM saldos_iniciales_cxp s
+                    LEFT JOIN proveedores prov_si ON prov_si.id = s.id_proveedor
+                    LEFT JOIN pagado_si psi ON psi.id_referencia_documento = s.id
+                    WHERE s.id_empresa = :id_empresa
+                      AND s.eliminado = FALSE
+                      AND s.tipo_documento <> 'NOTA_CREDITO'
+                      AND ROUND(s.saldo_inicial - COALESCE(psi.total_pagado, 0), 2) > 0
+                      $filtroBusqSi
+                      {$filtroFecha('s.fecha_emision')}";
+            }
+
+            $sql = "WITH pagado_si AS (
+                        SELECT d.id_referencia_documento, SUM(d.monto_pagado) AS total_pagado
+                        FROM egresos_detalle d
+                        INNER JOIN egresos_cabecera e ON d.id_egreso = e.id
+                        WHERE d.tipo_documento = 'SALDO_INICIAL'
+                          AND e.id_empresa = :id_empresa
+                          AND e.estado != 'anulado'
+                          AND e.eliminado = FALSE
+                          AND d.eliminado = FALSE
+                          $excluirSql
+                        GROUP BY d.id_referencia_documento
+                    ),
+                    pagado AS (
                         SELECT d.id_referencia_documento, SUM(d.monto_pagado) AS total_pagado
                         FROM egresos_detalle d
                         INNER JOIN egresos_cabecera e ON d.id_egreso = e.id
@@ -1020,6 +1075,7 @@ class EgresoRepository extends BaseRepository
                         ) tmp
                         GROUP BY tmp.id_compra
                     )
+                    SELECT * FROM (
                     SELECT 'COMPRA' AS tipo_doc_bd,
                            cb.id,
                            CONCAT(cb.establecimiento_prov,'-',cb.punto_emision_prov,'-',cb.secuencial_prov) AS numero_documento,
@@ -1048,7 +1104,9 @@ class EgresoRepository extends BaseRepository
                       $filtroBusq
                       {$filtroFecha('cb.fecha_emision')}
                       {$filtroSoloId('cb.id')}
-                    ORDER BY prov.razon_social ASC, cb.fecha_emision ASC
+                    $unionSaldosIniciales
+                    ) u
+                    ORDER BY u.proveedor_nombre ASC, u.fecha_emision ASC
                     LIMIT 301";
         } elseif ($tipo === 'ROL') {
             // NÓMINA: líneas de rol pendientes + anticipos/préstamos (novedades) pendientes,

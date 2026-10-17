@@ -747,7 +747,8 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
     // todo ("Rol Mensual 9/2026", "Décimo Tercero 2026", "Préstamo Empresa (desembolso)").
     const EG_OBS_TIPOS = {
         COMPRA:      ['factura de compra', 'facturas de compra'],
-        LIQUIDACION: ['liquidación de compra', 'liquidaciones de compra']
+        LIQUIDACION: ['liquidación de compra', 'liquidaciones de compra'],
+        SALDO_INICIAL: ['saldo inicial', 'saldos iniciales']
     };
 
     // Facturas y liquidaciones de compra: solo el secuencial, sin establecimiento/punto ni ceros
@@ -1200,7 +1201,8 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                 COMPRA:      '<span class="badge bg-primary bg-opacity-10 text-primary border border-primary border-opacity-25" style="font-size:0.65rem">COMPRA</span>',
                 LIQUIDACION: '<span class="badge bg-warning bg-opacity-10 text-warning border border-warning border-opacity-25" style="font-size:0.65rem">LIQUID.</span>',
                 ROL:         '<span class="badge bg-success bg-opacity-10 text-success border border-success border-opacity-25" style="font-size:0.65rem">NÓMINA</span>',
-                ANTICIPO:    '<span class="badge bg-info bg-opacity-10 text-info border border-info border-opacity-25" style="font-size:0.65rem">ANTICIPO</span>'
+                ANTICIPO:    '<span class="badge bg-info bg-opacity-10 text-info border border-info border-opacity-25" style="font-size:0.65rem">ANTICIPO</span>',
+                SALDO_INICIAL: '<span class="badge bg-secondary bg-opacity-10 text-secondary border border-secondary border-opacity-25" style="font-size:0.65rem" title="Cuenta por pagar de apertura (Saldos Iniciales)">SALDO INI.</span>'
             };
             const esPrestamo = String(d.tipo_bd || '').startsWith('PRESTAMO');
             const esNominaTipo = d.tipo_bd === 'ROL' || d.tipo_bd === 'ANTICIPO' || esPrestamo;
@@ -1213,7 +1215,7 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                 ? d.descripcion : d.numero;
             const numeroCell = esNominaTipo
                 ? `<span class="small fw-bold">${String(numeroVisible).replace(/</g, '&lt;')}</span>`
-                : (d.id
+                : (d.id && ['COMPRA', 'LIQUIDACION'].includes(d.tipo_bd)
                     ? `<code class="small text-primary fw-bold pointer text-decoration-underline" onclick="abrirPrevisualizadorDoc(${d.id}, '${d.tipo_bd}')">${d.numero}</code>`
                     : `<code class="small text-secondary fw-bold">${d.numero}</code>`);
             const tieneItems = Array.isArray(d.items) && d.items.length > 0;
@@ -3212,6 +3214,13 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
         await Promise.all((_egDocsModal || []).map(async doc => {
             const uid   = doc.tipo_doc_bd + '_' + doc.id;
             const saldo = parseFloat(doc.saldo_pendiente);
+            // Saldo inicial CxP: no tiene ítems; es un solo ítem por todo su saldo (igual que en Ingresos).
+            if (doc.tipo_doc_bd === 'SALDO_INICIAL') {
+                _egItemsModal.push({ iuid: uid + '#0', docUid: uid, docId: doc.id, tipo_bd: doc.tipo_doc_bd,
+                    numero_documento: doc.numero_documento, proveedor_nombre: doc.proveedor_nombre, proveedor_id: doc.proveedor_id,
+                    fecha: doc.fecha_emision, saldo_doc: saldo, desc: 'Saldo inicial', cant: 1, total_item: saldo });
+                return;
+            }
             const ep    = (doc.tipo_doc_bd === 'LIQUIDACION') ? 'liquidacion-compra/getLiquidacionAjax' : 'compras/getCompraAjax';
             try {
                 const res  = await (await fetch(`<?= BASE_URL ?>/modulos/${ep}?id=${doc.id}`)).json();
