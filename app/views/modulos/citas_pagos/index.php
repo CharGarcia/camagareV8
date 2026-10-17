@@ -74,11 +74,15 @@ $filtrosPagos = [
 
 <?= \App\Helpers\PreferenciasHelper::renderEstilosColumnasOcultas($vistaConfig) ?>
 
+<?php // Título + buscador + KPIs en la tarjeta de control fija: sin app-shell, la página hace scroll normal (§9). ?>
+<script>document.body.classList.add('cmg-no-app-shell');</script>
+
 <style>
-    .pagos-table-wrap { max-height: calc(100dvh - 310px); overflow-y: auto; }
-    .pagos-table-wrap thead th {
-        position: sticky; top: 0; z-index: 1;
-        background: #f8f9fa; box-shadow: 0 1px 0 #dee2e6;
+    /* Con tarjeta de control fija la tabla no lleva scroll vertical interno: scrollea la página. */
+    .pagos-scroll { overflow-x: auto; }
+    .pagos-scroll thead th { background: #f8f9fa; box-shadow: 0 1px 0 #dee2e6; }
+    @media (max-width: 767.98px) {
+        #modulo-citas-pagos .pagos-scroll { max-height: none !important; height: auto !important; overflow-y: visible !important; }
     }
     .pago-row { cursor: pointer; }
     .pago-row:hover { background-color: rgba(0,0,0,.03); }
@@ -88,89 +92,93 @@ $filtrosPagos = [
     }
     .cmg-resizer:hover, .cmg-resizer.resizing { background: #0d6efd44; }
     thead th { position: relative; }
-    .stat-card { border-radius: .5rem; padding: .75rem 1.25rem; }
 </style>
 
 <script>
 const URL_PAGOS = '<?= $urlBase ?>';
 </script>
 
-<!-- ─── ENCABEZADO ──────────────────────────────────────────────────────────── -->
-<div class="d-flex align-items-center justify-content-between flex-wrap gap-2 mb-3">
-    <div>
-        <h4 class="mb-0 fw-bold"><i class="bi bi-cash-coin text-primary me-2"></i>Pagos de Citas</h4>
-        <small class="text-muted">Registro y seguimiento de pagos vinculados a citas</small>
-    </div>
-    <div class="d-flex align-items-center gap-2">
-        <?php if ($perm['crear']): ?>
-            <button class="btn btn-success btn-sm" onclick="abrirModalPago()">
-                <i class="bi bi-plus-circle me-1"></i>Nuevo pago
-            </button>
-        <?php endif; ?>
-        <a href="<?= BASE_URL ?>/modulos/citas-agenda" class="btn btn-outline-secondary btn-sm">
-            <i class="bi bi-calendar3 me-1"></i>Agenda
-        </a>
-    </div>
-</div>
+<div class="container-fluid pt-3 pb-3 px-3" id="modulo-citas-pagos">
 
-<!-- ─── TARJETAS RESUMEN ─────────────────────────────────────────────────────── -->
-<div class="row g-3 mb-3">
-    <div class="col-6 col-md-3">
-        <div class="stat-card bg-success bg-opacity-10 border border-success border-opacity-25">
-            <div class="small text-muted mb-1"><i class="bi bi-check-circle me-1 text-success"></i>Total cobrado</div>
-            <div class="fs-5 fw-bold text-success">$<?= number_format((float)($resumen['total_cobrado'] ?? 0), 2) ?></div>
-            <div class="small text-muted"><?= (int)($resumen['completados'] ?? 0) ?> pagos</div>
-        </div>
+<!-- ─── TARJETA DE CONTROL FIJA (título + buscador + resumen) ────────────────── -->
+<div class="card cmg-control-card border-0 shadow-sm rounded-3 mb-3">
+    <div class="card-header bg-white border-bottom py-2 px-3">
+        <h5 class="mb-0 fw-bold"><i class="bi bi-cash-coin me-2 text-primary"></i>Pagos de Citas</h5>
     </div>
-    <div class="col-6 col-md-3">
-        <div class="stat-card bg-warning bg-opacity-10 border border-warning border-opacity-25">
-            <div class="small text-muted mb-1"><i class="bi bi-hourglass-split me-1 text-warning"></i>Pendiente</div>
-            <div class="fs-5 fw-bold text-warning">$<?= number_format((float)($resumen['total_pendiente'] ?? 0), 2) ?></div>
-            <div class="small text-muted"><?= (int)($resumen['pendientes'] ?? 0) ?> pagos</div>
-        </div>
-    </div>
-    <div class="col-6 col-md-3">
-        <div class="stat-card bg-danger bg-opacity-10 border border-danger border-opacity-25">
-            <div class="small text-muted mb-1"><i class="bi bi-arrow-counterclockwise me-1 text-danger"></i>Reembolsado</div>
-            <div class="fs-5 fw-bold text-danger">$<?= number_format((float)($resumen['total_reembolsado'] ?? 0), 2) ?></div>
-        </div>
-    </div>
-    <div class="col-6 col-md-3">
-        <div class="stat-card bg-secondary bg-opacity-10 border border-secondary border-opacity-25">
-            <div class="small text-muted mb-1"><i class="bi bi-x-octagon me-1 text-secondary"></i>Fallidos</div>
-            <div class="fs-5 fw-bold text-secondary"><?= (int)($resumen['fallidos'] ?? 0) ?></div>
-            <div class="small text-muted">registros</div>
-        </div>
-    </div>
-</div>
 
-<!-- ─── BARRA DE HERRAMIENTAS ────────────────────────────────────────────────── -->
-<div class="card border-0 shadow-sm mb-2">
-    <div class="card-body py-2 px-3">
-        <div class="d-flex align-items-center gap-2 flex-wrap">
+    <div class="card-body p-3">
+        <div class="d-flex align-items-center justify-content-between flex-wrap gap-2">
 
-            <!-- Buscador (FiltrosModal) -->
-            <div id="fmBuscadorPAGOS"></div>
-            <input type="hidden" id="buscarPagosHidden" value="">
+            <div class="d-flex align-items-center gap-2 flex-wrap">
+                <!-- Buscador (FiltrosModal) -->
+                <div id="fmBuscadorPAGOS"></div>
+                <input type="hidden" id="buscarPagosHidden" value="">
 
-            <?php // FiltrosModal (extraId) mueve estos botones dentro del input-group del buscador; si el JS no corre, quedan aquí. ?>
-            <div id="fmExtraPAGOS" class="btn-group btn-group-sm">
-                <?= \App\Helpers\PreferenciasHelper::renderDropdownColumnas($cols, $vistaConfig, $rutaModulo) ?>
-                <a id="btnExportPdf" href="#" target="_blank" class="btn btn-outline-danger" title="Exportar PDF">
-                    <i class="bi bi-file-earmark-pdf"></i><span class="d-none d-md-inline"> PDF</span>
-                </a>
-                <a id="btnExportExcel" href="#" target="_blank" class="btn btn-outline-success" title="Exportar Excel">
-                    <i class="bi bi-file-earmark-spreadsheet"></i><span class="d-none d-md-inline"> Excel</span>
-                </a>
+                <?php // FiltrosModal (extraId) mueve estos botones dentro del input-group del buscador; si el JS no corre, quedan aquí. ?>
+                <div id="fmExtraPAGOS" class="btn-group btn-group-sm">
+                    <?= \App\Helpers\PreferenciasHelper::renderDropdownColumnas($cols, $vistaConfig, $rutaModulo) ?>
+                    <a id="btnExportPdf" href="#" target="_blank" class="btn btn-outline-danger" title="Exportar PDF">
+                        <i class="bi bi-file-earmark-pdf"></i><span class="d-none d-md-inline"> PDF</span>
+                    </a>
+                    <a id="btnExportExcel" href="#" target="_blank" class="btn btn-outline-success" title="Exportar Excel">
+                        <i class="bi bi-file-earmark-spreadsheet"></i><span class="d-none d-md-inline"> Excel</span>
+                    </a>
+                </div>
+
+                <?php if ($perm['crear']): ?>
+                    <button class="btn btn-success btn-sm" onclick="abrirModalPago()">
+                        <i class="bi bi-plus-circle me-1"></i>Nuevo pago
+                    </button>
+                <?php endif; ?>
             </div>
 
-            <!-- Paginación por página -->
-            <select id="perPageSel" class="form-select form-select-sm ms-auto" style="width:auto;" onchange="cargarPagos(1)">
-                <option value="15">15</option>
-                <option value="25" selected>25</option>
-                <option value="50">50</option>
-                <option value="100">100</option>
-            </select>
+            <!-- Paginación (el selector de filas por página se agrega solo junto a las flechas) -->
+            <div class="d-flex align-items-center gap-3">
+                <span id="infoPagos" class="text-muted small fw-medium"></span>
+                <div class="btn-group btn-group-sm">
+                    <button type="button" class="btn btn-outline-secondary" id="btnPrevPagos" disabled
+                            onclick="cargarPagos(_pagPage - 1)">
+                        <i class="bi bi-chevron-left"></i>
+                    </button>
+                    <button type="button" class="btn btn-outline-secondary" id="btnNextPagos" disabled
+                            onclick="cargarPagos(_pagPage + 1)">
+                        <i class="bi bi-chevron-right"></i>
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="card-footer bg-white border-top py-2 px-3">
+        <div class="cmg-control-card__stats">
+            <div class="cmg-control-card__stat">
+                <i class="bi bi-check-circle bg-success bg-opacity-10 text-success"></i>
+                <div>
+                    <div class="cmg-control-card__stat-value text-success">$<?= number_format((float)($resumen['total_cobrado'] ?? 0), 2) ?></div>
+                    <div class="cmg-control-card__stat-label">Cobrado · <?= (int)($resumen['completados'] ?? 0) ?> pagos</div>
+                </div>
+            </div>
+            <div class="cmg-control-card__stat">
+                <i class="bi bi-hourglass-split bg-warning bg-opacity-10 text-warning"></i>
+                <div>
+                    <div class="cmg-control-card__stat-value text-warning">$<?= number_format((float)($resumen['total_pendiente'] ?? 0), 2) ?></div>
+                    <div class="cmg-control-card__stat-label">Pendiente · <?= (int)($resumen['pendientes'] ?? 0) ?> pagos</div>
+                </div>
+            </div>
+            <div class="cmg-control-card__stat">
+                <i class="bi bi-arrow-counterclockwise bg-danger bg-opacity-10 text-danger"></i>
+                <div>
+                    <div class="cmg-control-card__stat-value text-danger">$<?= number_format((float)($resumen['total_reembolsado'] ?? 0), 2) ?></div>
+                    <div class="cmg-control-card__stat-label">Reembolsado</div>
+                </div>
+            </div>
+            <div class="cmg-control-card__stat">
+                <i class="bi bi-x-octagon bg-secondary bg-opacity-10 text-secondary"></i>
+                <div>
+                    <div class="cmg-control-card__stat-value text-secondary"><?= (int)($resumen['fallidos'] ?? 0) ?></div>
+                    <div class="cmg-control-card__stat-label">Fallidos</div>
+                </div>
+            </div>
         </div>
     </div>
 </div>
@@ -178,7 +186,7 @@ const URL_PAGOS = '<?= $urlBase ?>';
 <!-- ─── TABLA ────────────────────────────────────────────────────────────────── -->
 <div class="card border-0 shadow-sm">
     <div class="card-body p-0">
-        <div class="pagos-table-wrap">
+        <div class="pagos-scroll">
             <table class="table table-hover table-sm mb-0" id="tablaPagos"
                    style="table-layout:fixed;min-width:900px;">
                 <thead class="table-light">
@@ -238,25 +246,24 @@ const URL_PAGOS = '<?= $urlBase ?>';
                 </tbody>
             </table>
         </div>
-
-        <!-- Paginación -->
-        <div class="d-flex align-items-center justify-content-between px-3 py-2 border-top flex-wrap gap-2">
-            <small class="text-muted" id="infoPagos">—</small>
-            <nav id="navPagos"></nav>
-        </div>
     </div>
 </div>
+
+</div><!-- /#modulo-citas-pagos -->
 
 <script>
 // ─── Estado de la tabla ────────────────────────────────────────────────────────
 let _pagSort = { col: 'created_at', dir: 'DESC' };
 let _pagPage = 1;
+let _pagTotalPags = 1;
+const PAG_POR_PAGINA = <?= (int) ($perPage ?? 25) ?>;   // preferencia del usuario (BaseModuloController::porPagina)
 
 // ─── Cargar datos ─────────────────────────────────────────────────────────────
 // Devuelve la promesa: FiltrosModal apaga su indicador de carga cuando termina.
 function cargarPagos(page) {
+    if (page !== undefined && (page < 1 || page > _pagTotalPags)) return;
     _pagPage = page ?? _pagPage;
-    const perPage = parseInt(document.getElementById('perPageSel').value) || 25;
+    const perPage = PAG_POR_PAGINA;
     const q       = document.getElementById('buscarPagosHidden')?.value || '';
 
     const params = new URLSearchParams({
@@ -277,8 +284,8 @@ function cargarPagos(page) {
         .then(res => {
             if (!res.ok) { console.error(res); return; }
             renderPagos(res.data);
-            document.getElementById('infoPagos').textContent = `${res.info} registros`;
-            renderPaginacion(res.total, perPage, _pagPage);
+            document.getElementById('infoPagos').textContent = res.info ?? '';
+            renderPaginacion(res.total, res.per_page ?? perPage, _pagPage);
             if (res.pdf_url)   document.getElementById('btnExportPdf').href   = res.pdf_url;
             if (res.excel_url) document.getElementById('btnExportExcel').href = res.excel_url;
         })
@@ -353,28 +360,9 @@ function abrirDesdeRow(data) {
 
 // ─── Paginación ──────────────────────────────────────────────────────────────
 function renderPaginacion(total, perPage, page) {
-    const totalPages = Math.ceil(total / perPage) || 1;
-    const nav = document.getElementById('navPagos');
-    if (totalPages <= 1) { nav.innerHTML = ''; return; }
-
-    let html = '<ul class="pagination pagination-sm mb-0">';
-    html += `<li class="page-item ${page <= 1 ? 'disabled' : ''}">
-        <a class="page-link" href="#" onclick="cargarPagos(${page - 1});return false;">&laquo;</a></li>`;
-
-    const delta = 2;
-    for (let i = 1; i <= totalPages; i++) {
-        if (i === 1 || i === totalPages || (i >= page - delta && i <= page + delta)) {
-            html += `<li class="page-item ${i === page ? 'active' : ''}">
-                <a class="page-link" href="#" onclick="cargarPagos(${i});return false;">${i}</a></li>`;
-        } else if (i === page - delta - 1 || i === page + delta + 1) {
-            html += '<li class="page-item disabled"><span class="page-link">…</span></li>';
-        }
-    }
-
-    html += `<li class="page-item ${page >= totalPages ? 'disabled' : ''}">
-        <a class="page-link" href="#" onclick="cargarPagos(${page + 1});return false;">&raquo;</a></li>`;
-    html += '</ul>';
-    nav.innerHTML = html;
+    _pagTotalPags = Math.max(1, Math.ceil((total || 0) / perPage));
+    document.getElementById('btnPrevPagos').disabled = page <= 1;
+    document.getElementById('btnNextPagos').disabled = page >= _pagTotalPags;
 }
 
 // ─── Ordenamiento ─────────────────────────────────────────────────────────────

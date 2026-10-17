@@ -39,6 +39,7 @@ class CitasPagosController extends BaseModuloController
         $idEmpresa  = (int) $_SESSION['id_empresa'];
         $prefsVista = PreferenciasHelper::getPreferenciasVista(self::RUTA_MODULO);
         $resumen    = $this->service->getResumen($idEmpresa);
+        $perPage    = $this->porPagina();   // filas por página del usuario (selector automático)
 
         $this->viewWithLayout('layouts.main', 'modulos/citas_pagos/index', [
             'titulo'      => 'Pagos de Citas',
@@ -46,6 +47,7 @@ class CitasPagosController extends BaseModuloController
             'rutaModulo'  => self::RUTA_MODULO,
             'vistaConfig' => $prefsVista,
             'resumen'     => $resumen,
+            'perPage'     => $perPage,
             // Selects del modal de filtros (solo lo que la empresa ya usó en pagos)
             'opcionesFiltro' => $this->service->getOpcionesFiltroListado($idEmpresa),
             'fullWidth'   => true,
@@ -61,7 +63,7 @@ class CitasPagosController extends BaseModuloController
 
         $idEmpresa = (int) $_SESSION['id_empresa'];
         $page      = max(1, (int) ($_GET['page']     ?? 1));
-        $perPage   = max(5, min(100, (int) ($_GET['per_page'] ?? 20)));
+        $perPage   = $this->porPagina();
         $ordenCol  = trim($_GET['sort'] ?? 'created_at');
         $ordenDir  = trim($_GET['dir']  ?? 'DESC');
         $rawQ      = trim($_GET['q']    ?? '');
