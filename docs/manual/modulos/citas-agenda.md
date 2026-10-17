@@ -6,7 +6,7 @@ ruta_modulo: modulos/citas-agenda
 tipo: modulo
 visibilidad: todos
 etiquetas: citas, agenda, calendario, reservas, turnos, cliente, horario de atencion, recordatorio, buscar cita, buscador, filtros, filtrar citas, lista de citas, chips, exportar citas
-version: 1.1
+version: 1.2
 orden: 20
 estado: activo
 ---
@@ -16,8 +16,8 @@ para qué servicio y con qué profesional.
 
 ## Antes de usarla
 
-Hay que configurar primero la disponibilidad en el módulo de configuración de
-citas: horarios de atención, duración de cada servicio y quién los presta. La
+Hay que configurar primero la disponibilidad en el módulo **Configuración de
+citas** (opción propia del menú): horarios de atención, duración de cada servicio y quién los presta. La
 agenda respeta esa configuración al ofrecer los espacios libres.
 
 ## Cómo se agenda
@@ -86,6 +86,9 @@ muestra con los filtros aplicados.
 
 ## Historial de cambios
 
+- **1.2** — Se quita el botón *Configuración* de la agenda: la configuración de
+  citas se abre desde su propia opción del menú. La pantalla deja un margen a
+  los lados para que el título y los botones no queden pegados al borde.
 - **1.1** — Nuevo buscador de la vista Lista: el cuadro ya no despliega
   sugerencias; lo que se escribe se busca en las columnas de la cita (salvo
   Tipo, Estado y Origen) y además en notas, datos del cliente del portal,

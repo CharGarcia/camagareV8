@@ -6,10 +6,11 @@
 /** @var string $rutaModulo */
 
 $urlBase     = BASE_URL . '/modulos/citas-agenda';
-$urlCfg      = BASE_URL . '/modulos/citas-configuracion';
 $vistaConfig = $vistaConfig ?? [];
 $rutaModulo  = $rutaModulo  ?? 'modulos/citas-agenda';
 ?>
+<?php // Calendario + filtros sobre la tabla: sin app-shell (borde a borde), la página hace scroll normal (§9). ?>
+<script>document.body.classList.add('cmg-no-app-shell');</script>
 <!-- FullCalendar (solo en esta vista) -->
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.14/index.global.min.css">
 <!-- FiltrosModal (buscador del listado) -->
@@ -39,6 +40,8 @@ $rutaModulo  = $rutaModulo  ?? 'modulos/citas-agenda';
 const URL_AGENDA = '<?= $urlBase ?>';
 </script>
 
+<div class="container-fluid pt-3 pb-3 px-3" id="modulo-citas-agenda">
+
 <!-- ─── ENCABEZADO ──────────────────────────────────────────────────────────── -->
 <div class="d-flex align-items-center justify-content-between flex-wrap gap-2 mb-3">
     <div>
@@ -59,9 +62,6 @@ const URL_AGENDA = '<?= $urlBase ?>';
             <i class="bi bi-plus-circle me-1"></i>Nueva Cita
         </button>
         <?php endif; ?>
-        <a href="<?= $urlCfg ?>" class="btn btn-outline-secondary btn-sm">
-            <i class="bi bi-gear me-1"></i>Configuración
-        </a>
     </div>
 </div>
 
@@ -285,6 +285,8 @@ const URL_AGENDA = '<?= $urlBase ?>';
     <span class="badge rounded-pill" style="background:#6c757d;">Cancelada</span>
     <span class="badge rounded-pill" style="background:#dc3545;">No asistió</span>
 </div>
+
+</div><!-- /#modulo-citas-agenda -->
 
 <!-- ─── FULLCALENDAR JS ───────────────────────────────────────────────────────── -->
 <script src="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.14/index.global.min.js"></script>
