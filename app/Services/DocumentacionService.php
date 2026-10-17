@@ -210,6 +210,143 @@ class DocumentacionService
         ], $rows);
     }
 
+    /**
+     * Secciones del manual que responden a una consulta escrita en la burbuja
+     * del chat de soporte, listas para mostrarse: cada una con el HTML de esa
+     * sección (recortado del artículo ya saneado, el mismo que pinta el visor) y
+     * el enlace para abrirla en el manual.
+     *
+     * Aplica la visibilidad del usuario de la sesión —que en la burbuja es quien
+     * pregunta—, así que nunca se le muestra la documentación de un módulo que
+     * no puede ver ni la de configuración.
+     *
+     * La consulta se registra en documentacion_busquedas como cualquier
+     * búsqueda del visor: las que no encuentran nada son lo que falta documentar.
+     *
+     * @return array<int,array{slug:string,titulo:string,seccion:string,ancla:string,html:string,recortada:bool,url:string}>
+     */
+    public function seccionesParaSoporte(string $consulta, string $rutaModulo = '', int $limite = 4): array
+    {
+        $consulta = trim($consulta);
+        if ($consulta === '') {
+            return [];
+        }
+
+        // Las rutas de la pantalla llegan con '_' o '-' según el módulo; el
+        // manual las guarda con guion (igual que submodulos_menu normalizado).
+        $rutaModulo = str_replace('_', '-', trim($rutaModulo));
+
+        try {
+            $rows = $this->model->buscarSeccionesSoporte($consulta, $this->contexto(), $rutaModulo, $limite);
+            $html = $this->model->getHtmlPorIds(array_column($rows, 'id_documentacion'));
+        } catch (\Throwable $e) {
+            // Sin manual desplegado o con un fallo de búsqueda, la burbuja sigue
+            // funcionando: la consulta se envía al equipo como siempre.
+            return [];
+        }
+
+        $base = rtrim((string) (defined('BASE_URL') ? BASE_URL : ''), '/');
+        $salida = [];
+        foreach ($rows as $r) {
+            [$fragmento, $recortada] = $this->fragmentoSeccion(
+                $html[(int) $r['id_documentacion']] ?? '',
+                (string) $r['ancla']
+            );
+            if ($fragmento === '') {
+                continue;
+            }
+            $salida[] = [
+                'slug'      => (string) $r['slug'],
+                'titulo'    => (string) $r['titulo'],
+                'seccion'   => (string) ($r['seccion_titulo'] ?? ''),
+                'ancla'     => (string) $r['ancla'],
+                'html'      => $fragmento,
+                'recortada' => $recortada,
+                'url'       => $base . '/documentacion?slug=' . rawurlencode((string) $r['slug'])
+                             . '&ancla=' . rawurlencode((string) $r['ancla']),
+            ];
+        }
+
+        try {
+            $this->model->registrarBusqueda(
+                $consulta,
+                count($salida),
+                isset($_SESSION['id_usuario']) ? (int) $_SESSION['id_usuario'] : null,
+                !empty($_SESSION['id_empresa']) ? (int) $_SESSION['id_empresa'] : null
+            );
+        } catch (\Throwable $e) {
+            // La analítica nunca debe romper una búsqueda.
+        }
+
+        return $salida;
+    }
+
+    /** Bloques del cuerpo que se muestran de una sección antes de recortarla. */
+    private const MAX_BLOQUES_SECCION = 8;
+
+    /**
+     * Recorta del HTML del artículo lo que pertenece a una sección: lo que va
+     * después de su encabezado hasta el siguiente encabezado (h2 o h3). Así es
+     * como el índice parte el artículo: las subsecciones (h3 dentro de un h2)
+     * tienen su propia fila y salen por separado si son relevantes.
+     *
+     * El HTML de origen ya pasó por HTMLPurifier al guardarse el artículo, así
+     * que lo que se devuelve es seguro para insertarse tal cual en la página.
+     *
+     * @return array{0:string,1:bool} [html, se recortó]
+     */
+    private function fragmentoSeccion(string $html, string $ancla): array
+    {
+        if (trim($html) === '' || $ancla === '' || !class_exists(\DOMDocument::class)) {
+            return ['', false];
+        }
+
+        $doc = new \DOMDocument('1.0', 'UTF-8');
+        $previo = libxml_use_internal_errors(true);
+        $ok = $doc->loadHTML(
+            '<?xml encoding="UTF-8">' . '<div>' . $html . '</div>',
+            LIBXML_HTML_NOIMPLIED | LIBXML_HTML_NODEFDTD
+        );
+        libxml_clear_errors();
+        libxml_use_internal_errors($previo);
+
+        if (!$ok || $doc->documentElement === null) {
+            return ['', false];
+        }
+
+        $dentro = false;
+        $bloques = 0;
+        $recortada = false;
+        $salida = '';
+
+        foreach ($doc->documentElement->childNodes as $nodo) {
+            $nombre = $nodo instanceof \DOMElement ? strtolower($nodo->nodeName) : '';
+
+            if (!$dentro) {
+                if (in_array($nombre, ['h2', 'h3'], true) && $nodo->getAttribute('id') === $ancla) {
+                    $dentro = true;
+                }
+                continue;
+            }
+
+            if (in_array($nombre, ['h2', 'h3'], true)) {
+                break;
+            }
+            if ($nodo instanceof \DOMText && trim($nodo->textContent) === '') {
+                continue;
+            }
+            if ($bloques >= self::MAX_BLOQUES_SECCION) {
+                $recortada = true;
+                break;
+            }
+
+            $salida .= $doc->saveHTML($nodo);
+            $bloques++;
+        }
+
+        return [trim($salida), $recortada];
+    }
+
     /** Ayuda contextual: slug del artículo que documenta una ruta de módulo. */
     public function slugPorRutaModulo(string $rutaModulo): ?string
     {

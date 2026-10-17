@@ -9,8 +9,9 @@ use App\repositories\modulos\ProductoRepository;
 /**
  * Productos similares con saldo: cuando el usuario elige un producto que no tiene saldo
  * en la bodega del documento (y la facturación afecta al inventario), se le ofrecen
- * otros productos que sí tienen saldo, priorizando la misma categoría, luego la misma
- * marca y por último un nombre parecido.
+ * otros productos que sí tienen saldo: primero sus EQUIVALENTES (definidos en la ficha,
+ * ver ProductoEquivalenciaService; vienen con `equivalente = true`), luego la misma
+ * categoría, la misma marca y por último un nombre parecido.
  *
  * Compartido por Facturas de Venta y Car-Wash (y cualquier módulo que agregue
  * productos a un documento). La única diferencia por módulo es el tipo de referencia
@@ -60,6 +61,10 @@ class ProductosSimilaresService
                 if ((int) $r['id'] !== $idProducto && !isset($cand[(int) $r['id']])) $cand[(int) $r['id']] = $r;
             }
         };
+        // Primero los equivalentes que el usuario definió en la ficha (pestaña Referencias):
+        // son sustitutos confirmados, no parecidos; van arriba de todo.
+        $equivIds = array_flip((new ProductoEquivalenciaService())->getIdsEquivalentes($idProducto, $idEmpresa));
+        if ($equivIds) $agregar($buscar('id:' . implode(',', array_keys($equivIds))));
         if (!empty($base['id_categoria'])) $agregar($buscar('id_categoria:' . (int) $base['id_categoria']));
         if (!empty($base['id_marca']))     $agregar($buscar('id_marca:' . (int) $base['id_marca']));
         foreach (array_slice($palabras, 0, 2) as $w) $agregar($buscar($w));
@@ -79,6 +84,8 @@ class ProductosSimilaresService
 
             $motivos = [];
             $puntaje = 0;
+            $esEquivalente = isset($equivIds[(int) $p['id']]);
+            if ($esEquivalente) { $puntaje += 100; $motivos[] = 'equivalente'; }
             if (!empty($base['id_categoria']) && (int) ($p['id_categoria'] ?? 0) === (int) $base['id_categoria']) { $puntaje += 3; $motivos[] = 'categoría'; }
             if (!empty($base['id_marca']) && (int) ($p['id_marca'] ?? 0) === (int) $base['id_marca'])             { $puntaje += 2; $motivos[] = 'marca'; }
             $nombreP = $norm((string) $p['nombre']);
@@ -89,6 +96,7 @@ class ProductosSimilaresService
             $p['stock_bodega']   = $stock; // nombre que usa el buscador de Facturas de Venta
             $p['controla_stock'] = true;
             $p['coincide']       = implode(', ', $motivos);
+            $p['equivalente']    = $esEquivalente;
             $p['_puntaje']       = $puntaje;
             $out[] = $p;
         }

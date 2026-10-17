@@ -17,7 +17,8 @@
     var S = {
         bienvenida: '',          // mensaje configurado, lo renderiza el partial
         abierto: false,
-        vista: 'lista',          // lista | chat | nueva
+        vista: 'lista',          // lista | chat | nueva | manual
+        enviandoNueva: false,    // búsqueda en el manual o alta de consulta en curso
         idConversacion: 0,
         ultimoId: 0,             // id del último mensaje pintado
         version: 0,              // último número de versión conocido
@@ -161,8 +162,10 @@
         $('sopVistaLista').classList.toggle('d-none', vista !== 'lista');
         $('sopVistaChat').classList.toggle('d-none', vista !== 'chat');
         $('sopVistaNueva').classList.toggle('d-none', vista !== 'nueva');
+        $('sopVistaManual').classList.toggle('d-none', vista !== 'manual');
 
         $('sopFootLista').classList.toggle('d-none', vista !== 'lista');
+        $('sopFootManual').classList.toggle('d-none', vista !== 'manual');
         $('sopFootChat').classList.toggle('d-none', vista !== 'chat');
         $('sopBtnVolver').classList.toggle('d-none', vista === 'lista');
 
@@ -172,6 +175,9 @@
         } else if (vista === 'nueva') {
             $('sopTitulo').textContent = 'Nueva consulta';
             $('sopSubtitulo').textContent = 'Cuéntanos qué necesitas';
+        } else if (vista === 'manual') {
+            $('sopTitulo').textContent = 'Esto puede ayudarte';
+            $('sopSubtitulo').textContent = 'Del Manual del Sistema';
         }
 
         marcarActividad();
@@ -406,13 +412,62 @@
 
     // ── Nueva consulta ──────────────────────────────────────────────────────
 
+    /**
+     * «Enviar consulta»: antes de abrir la conversación se busca en el Manual
+     * del Sistema. Si hay secciones que la responden se muestran y el usuario
+     * decide; si no hay nada (o la búsqueda falla) se envía directo al equipo,
+     * igual que antes de existir este paso.
+     */
     function enviarNueva() {
+        if (S.enviandoNueva) return;
+
         var mensaje = $('sopNuevoMensaje').value.trim();
         if (!mensaje) { aviso('Escribe tu consulta.'); return; }
-
         var asunto = $('sopNuevoAsunto').value.trim();
+
+        S.enviandoNueva = true;
         var btn = $('sopBtnEnviarNueva');
+        var htmlBtn = btn.innerHTML;
         btn.disabled = true;
+        btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span> Buscando en el manual…';
+
+        post('/modulos/soporte-chat/sugerenciasManualAjax', {
+            asunto: asunto,
+            mensaje: mensaje,
+            origen_modulo: window.SOP_MODULO || ''
+        })
+        .then(function (r) { return r && r.ok && Array.isArray(r.data) ? r.data : []; })
+        .catch(function () { return []; })
+        .then(function (secciones) {
+            btn.disabled = false;
+            btn.innerHTML = htmlBtn;
+            S.enviandoNueva = false;
+
+            if (secciones.length) {
+                pintarManual(secciones);
+                mostrarVista('manual');
+                $('sopVistaManual').scrollTop = 0;
+            } else {
+                abrirConsulta();
+            }
+        });
+    }
+
+    /** Envía al equipo la consulta escrita en el formulario de nueva consulta. */
+    function abrirConsulta() {
+        if (S.enviandoNueva) return;
+
+        var mensaje = $('sopNuevoMensaje').value.trim();
+        if (!mensaje) { mostrarVista('nueva'); aviso('Escribe tu consulta.'); return; }
+        var asunto = $('sopNuevoAsunto').value.trim();
+
+        S.enviandoNueva = true;
+        var botones = [$('sopBtnEnviarNueva'), $('sopBtnManualEnviar'), $('sopBtnManualResuelto')];
+        botones.forEach(function (b) { b.disabled = true; });
+        function liberar() {
+            S.enviandoNueva = false;
+            botones.forEach(function (b) { b.disabled = false; });
+        }
 
         post('/modulos/soporte-chat/abrirAjax', {
             mensaje: mensaje,
@@ -421,16 +476,78 @@
             origen_modulo: window.SOP_MODULO || ''
         })
         .then(function (r) {
-            btn.disabled = false;
+            liberar();
             if (!r || !r.ok) { aviso(r && r.error ? r.error : 'No se pudo enviar la consulta.'); return; }
             $('sopNuevoMensaje').value = '';
             $('sopNuevoAsunto').value = '';
             abrirConversacion(r.id, asunto || mensaje.substring(0, 60));
         })
         .catch(function () {
-            btn.disabled = false;
+            liberar();
             aviso('No se pudo enviar la consulta.');
         });
+    }
+
+    // ── Sugerencias del Manual del Sistema ──────────────────────────────────
+
+    /**
+     * Pinta las secciones encontradas. El HTML de cada sección viene del
+     * servidor ya saneado (es el mismo que muestra /documentacion), por eso se
+     * inserta tal cual; títulos y enlaces sí se escapan aquí.
+     */
+    function pintarManual(secciones) {
+        var cont = $('sopManualLista');
+        cont.innerHTML = secciones.map(function (s, i) {
+            var titulo = s.seccion ? s.seccion : s.titulo;
+            var ruta = s.seccion ? s.titulo : 'Manual del Sistema';
+            return '<div class="sop-manual-item" data-i="' + i + '">' +
+                     '<div class="sop-manual-ruta"><i class="bi bi-journal-text me-1"></i>' + esc(ruta) + '</div>' +
+                     '<div class="sop-manual-seccion">' + esc(titulo) + '</div>' +
+                     '<div class="sop-manual-html">' + (s.html || '') + '</div>' +
+                     '<div class="sop-manual-acciones">' +
+                       '<button type="button" class="btn btn-link btn-sm p-0 sop-manual-mas d-none">Leer todo</button>' +
+                       '<a href="' + esc(s.url) + '" target="_blank" rel="noopener" class="ms-auto">' +
+                         'Ver en el manual <i class="bi bi-box-arrow-up-right"></i></a>' +
+                     '</div>' +
+                   '</div>';
+        }).join('');
+
+        // Los enlaces del cuerpo de la sección se abren aparte: navegar dentro
+        // de la burbuja haría perder la pantalla en la que se está trabajando.
+        Array.prototype.forEach.call(cont.querySelectorAll('.sop-manual-html a[href]'), function (a) {
+            a.setAttribute('target', '_blank');
+            a.setAttribute('rel', 'noopener');
+        });
+
+        // «Leer todo» solo donde el contenido no cabe en el alto acotado. Se mide
+        // con la vista ya visible: oculta, scrollHeight vale 0.
+        setTimeout(function () {
+            Array.prototype.forEach.call(cont.querySelectorAll('.sop-manual-item'), function (item) {
+                var cuerpo = item.querySelector('.sop-manual-html');
+                var btn = item.querySelector('.sop-manual-mas');
+                if (cuerpo.scrollHeight > cuerpo.clientHeight + 4) {
+                    cuerpo.classList.add('sop-manual-html--largo');
+                    btn.classList.remove('d-none');
+                    btn.addEventListener('click', function () {
+                        var abierto = item.classList.toggle('sop-manual-abierto');
+                        btn.textContent = abierto ? 'Leer menos' : 'Leer todo';
+                    });
+                }
+            });
+        }, 0);
+    }
+
+    /** El manual resolvió la duda: no se crea ninguna conversación. */
+    function manualResuelto() {
+        if (S.enviandoNueva) return;
+        $('sopNuevoMensaje').value = '';
+        $('sopNuevoAsunto').value = '';
+        $('sopManualLista').innerHTML = '';
+        mostrarVista('lista');
+        cargarLista();
+        if (window.Toast) {
+            window.Toast.fire({ icon: 'success', title: '¡Qué bueno! Si necesitas algo más, aquí estamos.' });
+        }
     }
 
     // ── Apertura / cierre del panel ─────────────────────────────────────────
@@ -614,6 +731,13 @@
         $('sopBtnCerrar').addEventListener('click', cerrarPanel);
 
         $('sopBtnVolver').addEventListener('click', function () {
+            // Desde las sugerencias del manual se vuelve al formulario, con lo
+            // escrito intacto, por si quiere precisar la consulta.
+            if (S.vista === 'manual') {
+                mostrarVista('nueva');
+                $('sopNuevoMensaje').focus();
+                return;
+            }
             S.idConversacion = 0;
             mostrarVista('lista');
             cargarLista();
@@ -630,6 +754,8 @@
         });
 
         $('sopBtnEnviarNueva').addEventListener('click', enviarNueva);
+        $('sopBtnManualEnviar').addEventListener('click', abrirConsulta);
+        $('sopBtnManualResuelto').addEventListener('click', manualResuelto);
 
         $('sopFootChat').addEventListener('submit', function (e) {
             e.preventDefault();

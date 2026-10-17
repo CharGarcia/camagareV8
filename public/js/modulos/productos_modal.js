@@ -351,6 +351,124 @@
         } catch (e) { console.error(e); }
     };
 
+    // ── Productos equivalentes (pestaña Referencias) ─────────────────────────
+    // La lista viaja con Guardar (`equivalentes` + `equivalentes_vistos`) solo si se
+    // llegó a cargar: si el usuario guarda antes de que responda getDetalleAjax, no se
+    // manda y el servidor no toca las equivalencias (ver ProductoService).
+    let equivalentesObj = [];      // filas {id, codigo, nombre, nombre_marca, stock, status}
+    let equivVistos     = new Set(); // ids que estuvieron en la lista (el servidor solo quita a estos)
+    let equivCargado    = false;
+    let equivIdProducto = null;    // producto cuya lista está cargada
+    let equivDisponible = null;    // ¿SQL aplicado? (cache por página)
+    let equivTimer      = null;
+
+    function mostrarSeccionEquivalentes(disponible) {
+        equivDisponible = !!disponible;
+        document.getElementById('prod_equiv_wrap')?.classList.toggle('d-none', !equivDisponible);
+    }
+
+    function renderEquivalentes() {
+        const tb = document.getElementById('tb-equivalentes');
+        if (!tb) return;
+        if (!equivalentesObj.length) {
+            tb.innerHTML = '<tr><td colspan="5" class="text-center py-3 text-muted">Sin productos equivalentes</td></tr>';
+            return;
+        }
+        tb.innerHTML = equivalentesObj.map((e, i) => `
+            <tr>
+                <td class="ps-3"><code>${escapeHtml(e.codigo || '')}</code></td>
+                <td>${escapeHtml(e.nombre || '')}${Number(e.status ?? 1) === 1 ? '' : ' <span class="badge bg-secondary bg-opacity-10 text-secondary">Inactivo</span>'}</td>
+                <td>${escapeHtml(e.nombre_marca || '—')}</td>
+                <td class="text-end fw-bold">${parseFloat(e.stock || 0).toFixed(2)}</td>
+                <td class="text-center">
+                    <button type="button" class="btn btn-sm text-danger p-0" onclick="quitarEquivalente(${i})" title="Quitar de los equivalentes">
+                        <i class="bi bi-x-circle-fill"></i>
+                    </button>
+                </td>
+            </tr>`).join('');
+    }
+
+    function cargarEquivalentes(lista, idProducto) {
+        equivalentesObj = Array.isArray(lista) ? lista.slice() : [];
+        equivVistos     = new Set(equivalentesObj.map(e => Number(e.id)));
+        equivIdProducto = idProducto;
+        equivCargado    = true;
+        renderEquivalentes();
+    }
+
+    function reiniciarEquivalentes() {
+        equivalentesObj = []; equivVistos = new Set(); equivCargado = false; equivIdProducto = null;
+        const s = document.getElementById('equiv_search'); if (s) s.value = '';
+        document.getElementById('equiv_results')?.classList.add('d-none');
+        renderEquivalentes();
+    }
+
+    async function prepararEquivalentesNuevo() {
+        reiniciarEquivalentes();
+        if (equivDisponible === null) {
+            try {
+                const json = await (await fetch(`${urlBaseProd}/equivalenteParaAgregarAjax`)).json();
+                mostrarSeccionEquivalentes(json.ok && json.disponible);
+            } catch (e) { mostrarSeccionEquivalentes(false); }
+        } else {
+            mostrarSeccionEquivalentes(equivDisponible);
+        }
+        if (equivDisponible) cargarEquivalentes([], null);
+    }
+
+    async function buscarEquivalente() {
+        const input  = document.getElementById('equiv_search');
+        const resDiv = document.getElementById('equiv_results');
+        if (!input || !resDiv) return;
+        const q = input.value.trim();
+        const selfId = Number(document.getElementById('prod_id').value || 0);
+        if (q.length < 2) { resDiv.classList.add('d-none'); return; }
+        try {
+            const json = await (await fetch(`${urlBaseProd}/searchAjaxSimple?q=${encodeURIComponent(q)}&tipo=01&exclude=${selfId}`)).json();
+            const ya = new Set(equivalentesObj.map(e => Number(e.id)));
+            const filas = (json.ok ? json.data : []).filter(i => !ya.has(Number(i.id)));
+            resDiv.innerHTML = filas.length
+                ? filas.map(i => `<button type="button" class="list-group-item list-group-item-action py-1 small" data-id="${Number(i.id)}"><b>${escapeHtml(i.codigo)}</b> - ${escapeHtml(i.nombre)}</button>`).join('')
+                : '<div class="list-group-item small text-muted">No hay resultados</div>';
+            resDiv.classList.remove('d-none');
+        } catch (e) { console.error(e); }
+    }
+
+    async function agregarEquivalente(id) {
+        const resDiv = document.getElementById('equiv_results');
+        resDiv?.classList.add('d-none');
+        const input = document.getElementById('equiv_search');
+        if (input) input.value = '';
+        const selfId = Number(document.getElementById('prod_id').value || 0);
+        try {
+            const json = await (await fetch(`${urlBaseProd}/equivalenteParaAgregarAjax?id=${id}`)).json();
+            if (!json.ok) { swalError(json.error || 'No se pudo agregar el producto.'); return; }
+            const ya = new Set(equivalentesObj.map(e => Number(e.id)));
+            const nuevos = (json.data || []).filter(e => Number(e.id) !== selfId && !ya.has(Number(e.id)));
+            nuevos.forEach(e => { equivalentesObj.push(e); equivVistos.add(Number(e.id)); });
+            renderEquivalentes();
+            if (nuevos.length > 1) {
+                swalToast('info', `Se agregaron también ${nuevos.length - 1} equivalente(s) que ya tenía ese producto`);
+            }
+        } catch (e) { swalError('Error de conexión al agregar el equivalente.'); }
+    }
+
+    window.quitarEquivalente = function(i) {
+        equivalentesObj.splice(i, 1);
+        renderEquivalentes();
+    };
+
+    document.addEventListener('input', ev => {
+        if (ev.target?.id !== 'equiv_search') return;
+        clearTimeout(equivTimer);
+        equivTimer = setTimeout(buscarEquivalente, 250);
+    });
+    document.addEventListener('click', ev => {
+        const btn = ev.target.closest?.('#equiv_results [data-id]');
+        if (btn) { agregarEquivalente(Number(btn.dataset.id)); return; }
+        if (!ev.target.closest?.('#equiv_search')) document.getElementById('equiv_results')?.classList.add('d-none');
+    });
+
     // ── Precios: filas editables inline (estilo Factura de Venta) ────────────
 
     function filaPrecioHTML(p = {}) {
@@ -513,6 +631,7 @@
         codigoAutogenerado = '';
         renderListas();
         renderPrecios([]); // producto nuevo: sin precios adicionales
+        await prepararEquivalentesNuevo();
         window.removerImagen();
         quitarRestriccionesEnUso();
         activarTabGeneral();
@@ -606,6 +725,7 @@
         const cId = document.getElementById('comp_id');
         if (cId) cId.value = '';
 
+        reiniciarEquivalentes(); // hasta que responda getDetalleAjax no se manda la lista
         fetchDetalleExtra(data.id);
         await inicializarReplicarUI();
         getModal()?.show();
@@ -866,6 +986,12 @@
                 variantesObj = d.variantes || [];
                 renderListas(d);
                 renderPrecios(preciosObj); // filas editables con los precios guardados
+                // Al recargar la ficha del mismo producto (p. ej. tras quitar una homologación)
+                // se conservan los cambios aún no guardados de la lista de equivalentes.
+                mostrarSeccionEquivalentes(d.equivalencias_disponibles);
+                if (d.equivalencias_disponibles && !(equivCargado && String(equivIdProducto) === String(id))) {
+                    cargarEquivalentes(d.equivalentes || [], id);
+                }
                 if (d.imagen) mostrarImagen(d.imagen);
                 if (d.stock_actual_general !== undefined) {
                     document.getElementById('prod_stock_actual').value = parseFloat(d.stock_actual_general).toFixed(2);
@@ -916,6 +1042,10 @@
             fd.append('precios',     JSON.stringify(recogerPrecios())); // se leen las filas editables
             fd.append('componentes', JSON.stringify(componentesObj));
             fd.append('variantes',   JSON.stringify(variantesObj));
+            if (equivCargado && equivDisponible) {
+                fd.append('equivalentes',        JSON.stringify(equivalentesObj.map(e => Number(e.id))));
+                fd.append('equivalentes_vistos', JSON.stringify([...equivVistos]));
+            }
 
             const id        = document.getElementById('prod_id').value;
             const urlAction = id ? '/update' : '/store';

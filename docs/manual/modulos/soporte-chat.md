@@ -5,8 +5,8 @@ categoria: Herramientas
 ruta_modulo: modulos/soporte-chat
 tipo: modulo
 visibilidad: todos
-etiquetas: soporte, chat, ayuda, aviso whatsapp, alerta soporte, consulta, mesa de ayuda, asistencia, contactar soporte, hablar con alguien, burbuja, no me funciona, reportar problema, ticket
-version: 1.3
+etiquetas: soporte, chat, ayuda, aviso whatsapp, alerta soporte, consulta, mesa de ayuda, asistencia, contactar soporte, hablar con alguien, burbuja, no me funciona, reportar problema, ticket, manual, respuesta automatica, como hago, como se hace, preguntas frecuentes, ayuda del manual
+version: 1.4
 orden: 30
 estado: activo
 ---
@@ -27,6 +27,9 @@ hace falta ningún permiso: cualquier persona con sesión abierta puede usarla.
 2. Escriba el asunto (opcional) y cuente el problema con el mayor detalle que
    pueda.
 3. Pulse **Enviar consulta**.
+4. Si el **Manual del Sistema** tiene algo sobre lo que preguntó, la burbuja se
+   lo muestra antes de enviar la consulta (vea *Respuestas del Manual del
+   Sistema* más abajo). Si no hay nada, la consulta se envía directo al equipo.
 
 Junto con su mensaje viaja **la pantalla desde la que escribió**. Por eso conviene
 abrir la burbuja sin salir de donde ocurrió el problema: el equipo ve de entrada
@@ -59,6 +62,28 @@ vuelva a entrar**; entonces regresa sola a su esquina.
 
 Quitarla no afecta a sus consultas: las conversaciones y las respuestas del
 equipo siguen ahí y las verá al volver a tener la burbuja.
+
+## Respuestas del Manual del Sistema
+
+Al pulsar **Enviar consulta**, la burbuja busca primero en el **Manual del
+Sistema** las secciones que responden a lo que escribió (por ejemplo, a
+*«¿cómo hago una factura?»* le muestra **Facturas de Venta › Crear una
+factura**). No es una inteligencia artificial: son las secciones del manual tal
+como están escritas, las mismas que encontraría en el buscador del manual.
+
+- Cada sección se ve completa dentro de la burbuja; si es larga, pulse
+  **Leer todo**. Con **Ver en el manual** se abre el artículo en otra pestaña,
+  justo en esa sección, sin perder la pantalla en la que está trabajando.
+- Si la duda quedó resuelta, pulse **Esto resolvió mi duda**: no se envía nada
+  al equipo.
+- Si no le sirvió, pulse **No me sirvió, enviar al equipo de soporte**: la
+  consulta se envía tal como la escribió y sigue el camino de siempre.
+- Con la flecha de volver regresa a su consulta, con lo escrito intacto, por si
+  quiere precisarla.
+
+La búsqueda tiene en cuenta la pantalla desde la que escribe, y solo le muestra
+la documentación de los módulos que usted puede ver. Las consultas que el manual
+no logra responder quedan registradas para que el equipo las documente.
 
 ## Qué pasa después de enviar la consulta
 
@@ -271,9 +296,16 @@ trabajo diario, y se sigue consultando marcando **Archivadas** en los filtros.
   negocio en las últimas 24 horas.
 - **El adjunto no se envía**: revise que no supere los 10 MB y que sea de un tipo
   permitido.
+- **La burbuja no me mostró nada del manual**: el manual no tiene una sección
+  sobre lo que preguntó, o es de un módulo que usted no tiene asignado. La
+  consulta se envió directo al equipo, como siempre.
 
 ## Historial de cambios
 
+- **1.4** — Antes de enviar una consulta, la burbuja muestra las secciones del
+  **Manual del Sistema** que la responden, con los botones *Esto resolvió mi
+  duda* y *No me sirvió, enviar al equipo de soporte*. Nueva sección
+  *Respuestas del Manual del Sistema*.
 - **1.3** — La burbuja de soporte se puede **arrastrar** a cualquier punto de la
   pantalla; la posición dura mientras la sesión esté abierta (al volver a entrar
   regresa a su esquina), nunca se mete bajo el navbar y el panel se abre hacia

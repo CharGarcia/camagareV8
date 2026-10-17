@@ -4733,13 +4733,13 @@ $totalPages = $totalPagesOriginal;
             }
             const filas = similares.map((s, i) => `
                 <tr>
-                    <td class="text-start"><div class="fw-semibold">${esc(s.nombre)}</div><div class="text-muted" style="font-size:.72rem">${esc(s.codigo || '')}${s.coincide ? ' · coincide en ' + esc(s.coincide) : ''}</div></td>
+                    <td class="text-start"><div class="fw-semibold">${esc(s.nombre)}${s.equivalente ? ' <span class="badge bg-primary bg-opacity-10 text-primary border border-primary border-opacity-25">Equivalente</span>' : ''}</div><div class="text-muted" style="font-size:.72rem">${esc(s.codigo || '')}${s.coincide && !s.equivalente ? ' · coincide en ' + esc(s.coincide) : ''}</div></td>
                     <td class="text-end"><span class="badge bg-success bg-opacity-10 text-success border border-success border-opacity-25">${fmt(s.stock_actual, DEC_CANT)}</span></td>
                     <td class="text-end">$${fmt(s.precio_base, 2)}</td>
                     <td class="text-center"><button type="button" class="btn btn-outline-primary btn-sm py-0 px-2 fv-usar-similar" data-i="${i}">Usar este</button></td>
                 </tr>`).join('');
             await Swal.fire({
-                icon: 'info', title: 'Sin saldo — productos similares', width: 720, target: modalEl,
+                icon: 'info', title: similares.some(s => s.equivalente) ? 'Sin saldo — productos equivalentes' : 'Sin saldo — productos similares', width: 720, target: modalEl,
                 showConfirmButton: false, showCancelButton: true, cancelButtonText: 'Mantener el producto',
                 html: `<div class="text-start small mb-2"><b>${esc(p.nombre)}</b> no tiene saldo en la bodega <b>${esc(nomBodega)}</b>. Estos productos similares sí tienen:</div>
                        <div style="max-height:320px;overflow:auto"><table class="table table-sm table-hover align-middle mb-0" style="font-size:.8rem">

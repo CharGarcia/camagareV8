@@ -8,6 +8,7 @@ use App\repositories\modulos\ProductoRepository;
 use App\Rules\modulos\ProductoRules;
 use App\Services\LogSistemaService;
 use App\Services\modulos\ProductoService;
+use App\Services\modulos\ProductoEquivalenciaService;
 use App\repositories\modulos\InventarioRepository;
 use App\Services\modulos\InventarioService;
 use App\repositories\modulos\EmpresaRepository;
@@ -286,6 +287,7 @@ class ProductosController extends BaseModuloController
             $fmt = fn($d) => !empty($d) ? date('d-m-Y H:i:s', strtotime($d)) : '—';
 
             $enUso = $repo->estaUsadoEnDocumentos($id, $idEmpresa);
+            $equivService = new ProductoEquivalenciaService();
 
             echo json_encode([
                 'ok' => true,
@@ -306,8 +308,34 @@ class ProductosController extends BaseModuloController
 
                     'en_uso' => $enUso,
                     'homologaciones' => $producto['homologaciones'] ?? [],
+                    'equivalencias_disponibles' => $equivService->disponible(),
+                    'equivalentes' => $equivService->getEquivalentes($id, $idEmpresa),
                 ]
             ]);
+        } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
+            echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
+        }
+        exit;
+    }
+
+    /**
+     * Pestaña Referencias: lo que se agrega a la lista de equivalentes al elegir un
+     * producto en el buscador (él y, si ya tiene, sus propios equivalentes).
+     * Sin id = solo informa si la función está disponible (ficha de un producto nuevo).
+     */
+    public function equivalenteParaAgregarAjax(): void
+    {
+        $this->requireLeer();
+        header('Content-Type: application/json');
+
+        $id = (int) ($_GET['id'] ?? 0);
+        $idEmpresa = (int) $_SESSION['id_empresa'];
+
+        try {
+            $equivService = new ProductoEquivalenciaService();
+            $data = $id > 0 ? $equivService->getParaAgregar($id, $idEmpresa) : [];
+            echo json_encode(['ok' => true, 'disponible' => $equivService->disponible(), 'data' => $data]);
         } catch (\Throwable $e) {
             \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
@@ -954,7 +982,12 @@ class ProductosController extends BaseModuloController
             'precios'               => !empty($_POST['precios']) ? json_decode($_POST['precios'], true) : [],
             'componentes'           => !empty($_POST['componentes']) ? json_decode($_POST['componentes'], true) : [],
             'variantes'             => !empty($_POST['variantes']) ? json_decode($_POST['variantes'], true) : [],
-            'opciones'              => json_encode([
+            // Pestaña Referencias. Igual que 'inventarios': si no viene (la ficha no cargó la
+            // lista, otra pantalla que reutiliza el modal), queda null y no se toca nada;
+            // '[]' sí significa "sin equivalentes".
+            'equivalentes'          => isset($_POST['equivalentes']) ? (json_decode((string) $_POST['equivalentes'], true) ?: []) : null,
+            'equivalentes_vistos'   => isset($_POST['equivalentes_vistos']) ? (json_decode((string) $_POST['equivalentes_vistos'], true) ?: []) : [],
+            'opciones'           => json_encode([
                 'compra' => isset($_POST['opc_compra']) && $_POST['opc_compra'] === '1',
                 'venta'  => isset($_POST['opc_venta'])  && $_POST['opc_venta']  === '1',
             ]),

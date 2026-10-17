@@ -1052,6 +1052,38 @@ class ConsignacionVentaRepository extends BaseRepository
     }
 
     /**
+     * Líneas vigentes (id, pedido, producto) de los pedidos indicados, de la empresa. Sirve para
+     * vincular a su pedido una línea agregada a mano en la consignación (ver
+     * ConsignacionVentaService::vincularLineasManualesAPedidos).
+     *
+     * @param int[] $idsPedido
+     * @return array<int, array{id:int, id_pedido:int, id_producto:int}>
+     */
+    public function getLineasDePedidos(array $idsPedido, int $idEmpresa): array
+    {
+        $ids = array_values(array_unique(array_filter(array_map('intval', $idsPedido), static fn(int $v) => $v > 0)));
+        if (empty($ids)) {
+            return [];
+        }
+
+        $in  = implode(',', array_fill(0, count($ids), '?'));
+        $sql = "SELECT pd.id, pd.id_pedido, pd.id_producto
+                  FROM pedidos_detalle pd
+                  JOIN pedidos_cabecera p ON p.id = pd.id_pedido
+                 WHERE pd.id_pedido IN ($in)
+                   AND pd.eliminado = false
+                   AND p.id_empresa = ? AND p.eliminado = false
+                 ORDER BY pd.id_pedido, pd.id";
+        $st = $this->db->prepare($sql);
+        $st->execute([...$ids, $idEmpresa]);
+        return array_map(static fn(array $f): array => [
+            'id'          => (int) $f['id'],
+            'id_pedido'   => (int) $f['id_pedido'],
+            'id_producto' => (int) $f['id_producto'],
+        ], $st->fetchAll(PDO::FETCH_ASSOC));
+    }
+
+    /**
      * Candado transaccional por pedido (CLAUDE.md §8) antes de recalcular su estado: sin él, dos
      * consignaciones que consumen el mismo pedido y se guardan a la vez calculan cada una sin ver
      * las líneas de la otra, y el pedido queda "Pendiente" aunque ya esté cubierto. Se toman en

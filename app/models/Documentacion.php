@@ -228,6 +228,106 @@ class Documentacion extends BaseModel
     }
 
     /**
+     * Secciones del manual que responden a una consulta escrita en la burbuja
+     * del chat de soporte, con el HTML del artículo para mostrar la sección tal
+     * como se ve en el visor.
+     *
+     * A diferencia de buscarSeccionesParaIa(), la relevancia combina la sección
+     * con el artículo: una pregunta corta («¿cómo hago una factura?») casi
+     * siempre nombra el MÓDULO, y eso vive en el título y las etiquetas del
+     * artículo (peso A), no en el texto de la sección. Además se premia el
+     * artículo de la pantalla desde la que se escribe y se toman como máximo
+     * dos secciones por artículo, para no llenar la burbuja con un solo tema.
+     *
+     * @param array{nivel:int,rutas_permitidas:?array<int,string>} $ctx
+     * @return array<int,array<string,mixed>>
+     */
+    public function buscarSeccionesSoporte(string $pregunta, array $ctx, string $rutaModulo, int $limite = 4): array
+    {
+        $pregunta = trim($pregunta);
+        if ($pregunta === '') {
+            return [];
+        }
+
+        $params = [':q' => $pregunta, ':ruta' => $rutaModulo];
+        $vis = $this->condicionVisibilidad($ctx, 'd', $params);
+
+        $sql = "WITH consulta AS (
+                    SELECT NULLIF(replace(plainto_tsquery('spanish', :q)::text, ' & ', ' | '), '')::tsquery AS q
+                ),
+                candidatas AS (
+                    SELECT d.id AS id_documentacion, d.slug, d.titulo,
+                           s.titulo AS seccion_titulo, s.ancla, s.orden,
+                           ts_rank(s.busqueda_tsv, c.q)
+                             + 0.5 * ts_rank(d.busqueda_tsv, c.q)
+                             + CASE WHEN d.ruta_modulo = :ruta THEN 0.2 ELSE 0 END AS relevancia
+                    FROM documentacion_secciones s
+                    INNER JOIN documentacion d ON d.id = s.id_documentacion
+                    CROSS JOIN consulta c
+                    WHERE d.eliminado = FALSE
+                      AND d.estado = 'activo'
+                      AND c.q IS NOT NULL
+                      AND s.busqueda_tsv @@ c.q
+                      AND COALESCE(s.contenido, '') <> ''
+                      {$vis}
+                ),
+                por_articulo AS (
+                    SELECT x.*,
+                           ROW_NUMBER() OVER (PARTITION BY x.id_documentacion
+                                              ORDER BY x.relevancia DESC, x.orden ASC) AS puesto
+                    FROM candidatas x
+                )
+                SELECT id_documentacion, slug, titulo, seccion_titulo, ancla, relevancia
+                FROM por_articulo
+                WHERE puesto <= 2
+                ORDER BY relevancia DESC, titulo ASC, orden ASC
+                LIMIT :limite";
+
+        $st = $this->db->prepare($sql);
+        foreach ($params as $k => $v) {
+            $st->bindValue($k, $v, \PDO::PARAM_STR);
+        }
+        $st->bindValue(':limite', $limite, \PDO::PARAM_INT);
+        $st->execute();
+        return $st->fetchAll(\PDO::FETCH_ASSOC);
+    }
+
+    /**
+     * HTML ya saneado (con anclas) de varios artículos, indexado por id.
+     *
+     * @param array<int,int> $ids
+     * @return array<int,string>
+     */
+    public function getHtmlPorIds(array $ids): array
+    {
+        $ids = array_values(array_unique(array_map('intval', $ids)));
+        if ($ids === []) {
+            return [];
+        }
+
+        $ph = [];
+        $params = [];
+        foreach ($ids as $i => $id) {
+            $ph[] = ':id' . $i;
+            $params[':id' . $i] = $id;
+        }
+
+        $st = $this->db->prepare(
+            "SELECT id, contenido_html FROM documentacion WHERE id IN (" . implode(', ', $ph) . ")"
+        );
+        foreach ($params as $k => $v) {
+            $st->bindValue($k, $v, \PDO::PARAM_INT);
+        }
+        $st->execute();
+
+        $html = [];
+        foreach ($st->fetchAll(\PDO::FETCH_ASSOC) as $r) {
+            $html[(int) $r['id']] = (string) ($r['contenido_html'] ?? '');
+        }
+        return $html;
+    }
+
+    /**
      * Respaldo del buscador: coincidencia literal por ILIKE. Devuelve la misma
      * forma de fila que buscar() para que el visor no tenga que distinguir.
      *

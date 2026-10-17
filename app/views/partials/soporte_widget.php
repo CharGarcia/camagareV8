@@ -93,11 +93,31 @@ $sopEnHorario = !empty($sopConfig['en_horario']);
             </div>
         </div>
 
+        <!-- Vista: lo que dice el Manual del Sistema sobre la consulta, antes de
+             enviarla al equipo. Sin IA: son las secciones tal como están en el
+             manual, encontradas con el mismo buscador de /documentacion. -->
+        <div id="sopVistaManual" class="sop-body d-none">
+            <div class="sop-manual-intro">
+                <i class="bi bi-journal-bookmark-fill me-1"></i>
+                Encontramos esto en el <strong>Manual del Sistema</strong>. Revisa si responde tu consulta;
+                si no, envíala al equipo de soporte.
+            </div>
+            <div id="sopManualLista" class="sop-manual-lista"></div>
+        </div>
+
         <!-- Pie: acciones de lista / caja de escritura -->
         <div class="sop-panel-foot">
             <div id="sopFootLista">
                 <button type="button" class="btn btn-primary btn-sm w-100" id="sopBtnNueva">
                     <i class="bi bi-plus-lg me-1"></i> Nueva consulta
+                </button>
+            </div>
+            <div id="sopFootManual" class="d-none d-flex flex-column gap-2">
+                <button type="button" class="btn btn-outline-success btn-sm w-100" id="sopBtnManualResuelto">
+                    <i class="bi bi-check2-circle me-1"></i> Esto resolvió mi duda
+                </button>
+                <button type="button" class="btn btn-primary btn-sm w-100" id="sopBtnManualEnviar">
+                    <i class="bi bi-send me-1"></i> No me sirvió, enviar al equipo de soporte
                 </button>
             </div>
             <form id="sopFootChat" class="d-none d-flex align-items-end gap-2">
@@ -265,6 +285,35 @@ $sopEnHorario = !empty($sopConfig['en_horario']);
     color: #6c757d; font-size: .75rem; font-style: italic; box-shadow: none;
 }
 .sop-hora { font-size: .68rem; color: rgba(0,0,0,.45); margin-top: 3px; text-align: right; }
+
+/* Sugerencias del Manual del Sistema */
+.sop-manual-intro {
+    background: #e7f1ff; color: #084298; border-bottom: 1px solid #cfe2ff;
+    padding: 8px 12px; font-size: .78rem;
+}
+.sop-manual-lista { padding: 10px; display: flex; flex-direction: column; gap: 8px; background: #f7f8fa; min-height: 100%; }
+.sop-manual-item { background: #fff; border: 1px solid #e9ecef; border-radius: 10px; padding: 8px 10px; }
+.sop-manual-ruta { font-size: .72rem; color: #6c757d; margin-bottom: 2px; }
+.sop-manual-seccion { font-size: .86rem; font-weight: 600; margin-bottom: 4px; }
+/* El cuerpo de la sección se muestra acotado; «Leer todo» lo despliega. */
+.sop-manual-html {
+    font-size: .8rem; line-height: 1.4; max-height: 170px; overflow: hidden; position: relative;
+    overflow-wrap: anywhere;
+}
+.sop-manual-html.sop-manual-html--largo::after {
+    content: ''; position: absolute; left: 0; right: 0; bottom: 0; height: 36px;
+    background: linear-gradient(rgba(255,255,255,0), #fff);
+}
+.sop-manual-item.sop-manual-abierto .sop-manual-html { max-height: none; }
+.sop-manual-item.sop-manual-abierto .sop-manual-html::after { display: none; }
+.sop-manual-html p, .sop-manual-html ul, .sop-manual-html ol,
+.sop-manual-html blockquote, .sop-manual-html pre { margin-bottom: .4rem; }
+.sop-manual-html ul, .sop-manual-html ol { padding-left: 1.1rem; }
+.sop-manual-html img { max-width: 100%; height: auto; }
+.sop-manual-html table { font-size: .74rem; display: block; overflow-x: auto; max-width: 100%; }
+.sop-manual-html th, .sop-manual-html td { border: 1px solid #dee2e6; padding: 2px 4px; }
+.sop-manual-html h4 { font-size: .82rem; font-weight: 600; margin: .4rem 0 .2rem; }
+.sop-manual-acciones { display: flex; justify-content: space-between; align-items: center; margin-top: 4px; font-size: .75rem; }
 
 @media (max-width: 575.98px) {
     .sop-widget { right: 12px; bottom: 12px; }

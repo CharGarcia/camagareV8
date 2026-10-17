@@ -157,7 +157,8 @@ class ProductoService
             if (isset($data['variantes']) && is_array($data['variantes'])) {
                 $this->repository->syncVariantes($id, $idEmpresa, $data['variantes'], (int)$data['id_usuario']);
             }
-            
+            $this->sincronizarEquivalentes($id, $idEmpresa, $data, $tipoProduccion, $insertData['nombre']);
+
             $this->logService->registrar(
                 (int)$data['id_usuario'],
                 $idEmpresa,
@@ -443,7 +444,8 @@ class ProductoService
             if (isset($data['variantes']) && is_array($data['variantes'])) {
                 $this->repository->syncVariantes($id, $idEmpresa, $data['variantes'], (int)$data['id_usuario']);
             }
-            
+            $this->sincronizarEquivalentes($id, $idEmpresa, $data, $tipoProduccion, $updateData['nombre']);
+
             $this->logService->registrar(
                 (int)$data['id_usuario'],
                 $idEmpresa,
@@ -460,6 +462,26 @@ class ProductoService
             $this->repository->rollBack();
             throw $e;
         }
+    }
+
+    /**
+     * Lista de productos equivalentes de la pestaña Referencias. Solo si el formulario la
+     * mandó: el modal de producto se abre también desde facturas, compras, etc., y una
+     * ficha que no alcanzó a cargar la lista (o un guardado por API o Excel) no debe
+     * vaciarla. Va dentro de la transacción del producto (ProductoEquivalenciaService::sincronizar()).
+     */
+    private function sincronizarEquivalentes(int $id, int $idEmpresa, array $data, string $tipoProduccion, string $nombre): void
+    {
+        if (!isset($data['equivalentes']) || !is_array($data['equivalentes'])) return;
+        (new ProductoEquivalenciaService())->sincronizar(
+            $id,
+            $idEmpresa,
+            $data['equivalentes'],
+            is_array($data['equivalentes_vistos'] ?? null) ? $data['equivalentes_vistos'] : [],
+            $tipoProduccion,
+            $nombre,
+            (int) $data['id_usuario']
+        );
     }
 
     public function eliminar(int $id, int $idEmpresa, int $idUsuario): void

@@ -113,6 +113,86 @@ class ConsignacionVentaService
     }
 
     /**
+     * Una línea agregada A MANO (sin id_pedido_detalle) cuyo producto está pendiente en un pedido
+     * que ya alimenta esta misma consignación queda vinculada a esa línea del pedido, si le
+     * alcanza el saldo. Sin esto el pedido no la contaba: consignación 001-101-53320 con 5
+     * unidades de OSGD 05 y el pedido 001-101-38223 en "Parcial 4/5", porque la quinta se
+     * agregó a mano tras omitirse al cargar el pedido (16-10-2026).
+     *
+     * Solo mira pedidos ya usados en la consignación (no busca en otros pedidos del cliente) y no
+     * reparte: si la cantidad de la línea no cabe entera en el saldo de una línea del pedido, se
+     * deja sin vincular, como hoy. Va DENTRO de la transacción y antes de validarSaldoPedidos(),
+     * con el candado por línea tomado aquí, para que dos guardados no asignen el mismo saldo.
+     *
+     * @return array Los detalles, con id_pedido_detalle completado donde corresponde.
+     */
+    private function vincularLineasManualesAPedidos(array $detalles, int $idEmpresa, int $idConsignacion = 0): array
+    {
+        $usadas = [];
+        $hayManual = false;
+        foreach ($detalles as $det) {
+            $idPd = (int) ($det['id_pedido_detalle'] ?? 0);
+            if ($idPd > 0) {
+                $usadas[] = $idPd;
+            } elseif (!empty($det['id_producto']) && (float) ($det['cantidad'] ?? 0) > 0) {
+                $hayManual = true;
+            }
+        }
+        if (!$hayManual || empty($usadas)) {
+            return $detalles;
+        }
+
+        $idsPedido = $this->repository->getPedidosDeLineas($usadas, $idEmpresa);
+        $candidatas = [];
+        foreach ($this->repository->getLineasDePedidos($idsPedido, $idEmpresa) as $l) {
+            $candidatas[$l['id_producto']][] = $l['id'];
+        }
+        $productosManuales = [];
+        foreach ($detalles as $det) {
+            if ((int) ($det['id_pedido_detalle'] ?? 0) <= 0 && !empty($det['id_producto'])) {
+                $productosManuales[(int) $det['id_producto']] = true;
+            }
+        }
+        $candidatas = array_intersect_key($candidatas, $productosManuales);
+        if (empty($candidatas)) {
+            return $detalles;
+        }
+
+        $idsCandidatas = array_merge(...array_values($candidatas));
+        // Mismo candado que validarSaldoPedidos(), tomado en un solo orden para todo el conjunto.
+        $this->repository->lockPedidoDetalles(array_merge($usadas, $idsCandidatas));
+        $saldos = $this->repository->getSaldoPedidoDetalles($idsCandidatas, $idEmpresa, $idConsignacion);
+
+        // Lo que esta misma consignación ya toma de cada línea del pedido.
+        $asignado = [];
+        foreach ($detalles as $det) {
+            $idPd = (int) ($det['id_pedido_detalle'] ?? 0);
+            if ($idPd > 0) {
+                $asignado[$idPd] = ($asignado[$idPd] ?? 0.0) + (float) ($det['cantidad'] ?? 0);
+            }
+        }
+
+        foreach ($detalles as $i => $det) {
+            $idProd = (int) ($det['id_producto'] ?? 0);
+            $cant   = (float) ($det['cantidad'] ?? 0);
+            if ((int) ($det['id_pedido_detalle'] ?? 0) > 0 || $cant <= 0 || empty($candidatas[$idProd])) {
+                continue;
+            }
+            foreach ($candidatas[$idProd] as $idPd) {
+                $s = $saldos[$idPd] ?? null;
+                if ($s === null) continue;
+                $pendiente = $s['cantidad_pedido'] - $s['consignado'] - ($asignado[$idPd] ?? 0.0);
+                if ($cant <= $pendiente + 0.000001) {
+                    $detalles[$i]['id_pedido_detalle'] = $idPd;
+                    $asignado[$idPd] = ($asignado[$idPd] ?? 0.0) + $cant;
+                    break;
+                }
+            }
+        }
+        return $detalles;
+    }
+
+    /**
      * Revalida EN EL SERVIDOR que ninguna línea de pedido se consigne por encima de su saldo.
      * El modal solo filtra lo pendiente al cargar el pedido: con dos modales abiertos sobre el
      * mismo pedido, ambos veían todo pendiente y el servidor aceptaba los dos guardados (caso
@@ -321,8 +401,11 @@ class ConsignacionVentaService
                 }
             }
 
+            // Líneas agregadas a mano de un producto pendiente en el pedido usado: se vinculan.
+            $data['detalles'] = $this->vincularLineasManualesAPedidos($data['detalles'] ?? [], (int) $idEmpresa);
+
             // Saldo de los pedidos, bajo candado y antes del secuencial y del stock.
-            $this->validarSaldoPedidos($data['detalles'] ?? [], (int) $idEmpresa);
+            $this->validarSaldoPedidos($data['detalles'], (int) $idEmpresa);
 
             // Número del documento: lo decide el SERVIDOR, dentro de esta transacción.
             // Lo que manda el navegador es solo la vista previa que se cargó al abrir el modal.
@@ -526,7 +609,8 @@ class ConsignacionVentaService
                     $cantidadesPrevias[$idPd] = ($cantidadesPrevias[$idPd] ?? 0.0) + (float) $da['cantidad'];
                 }
             }
-            $this->validarSaldoPedidos($data['detalles'] ?? [], $idEmpresa, $id, $cantidadesPrevias);
+            $data['detalles'] = $this->vincularLineasManualesAPedidos($data['detalles'] ?? [], $idEmpresa, $id);
+            $this->validarSaldoPedidos($data['detalles'], $idEmpresa, $id, $cantidadesPrevias);
 
             $this->revertirInventarioConsignacion($id, $idEmpresa, $idUsuario);
 

@@ -5,8 +5,8 @@ categoria: Inventario
 ruta_modulo: modulos/productos
 tipo: modulo
 visibilidad: todos
-etiquetas: productos, buscar producto, buscador, filtros, filtrar productos, productos bajo el minimo, reponer stock, buscar por variante, buscar por codigo de proveedor, kits, chips, ordenar por dos columnas, ordenar por categoria y descripcion, articulos, servicios, catalogo, precio, costo, iva, ice, stock, codigo de barras, inventariable, varios precios, lista de precios, mayorista, carga masiva, importar productos, precio editable, cambiar precio en la comanda, precio variable, envio a domicilio, delivery, servicio a domicilio, recargo por servicio, excluir propina, restaurante
-version: 1.13
+etiquetas: productos, productos equivalentes, equivalencias, equivalente, sustituto, reemplazo, otra marca, generico, compatible, referencias, codigos de proveedores, homologacion, buscar producto, buscador, filtros, filtrar productos, productos bajo el minimo, reponer stock, buscar por variante, buscar por codigo de proveedor, kits, chips, ordenar por dos columnas, ordenar por categoria y descripcion, articulos, servicios, catalogo, precio, costo, iva, ice, stock, codigo de barras, inventariable, varios precios, lista de precios, mayorista, carga masiva, importar productos, precio editable, cambiar precio en la comanda, precio variable, envio a domicilio, delivery, servicio a domicilio, recargo por servicio, excluir propina, restaurante
+version: 1.15
 orden: 10
 estado: activo
 ---
@@ -105,9 +105,46 @@ quieren cargar variantes, componentes o stock por bodega. En ambos, si un
 producto aparece en la hoja de precios, esa es su lista completa; si no
 aparece, conserva la que tenía.
 
+## Productos equivalentes (pestaña Referencias)
+
+Un producto equivalente es otro producto que **sirve para lo mismo**: el filtro de
+otra marca que le cabe al mismo carro, el genérico de un medicamento, el tóner
+compatible de una impresora. Se registran en la ficha del producto, pestaña
+**Referencias**, sección **Productos equivalentes**. Solo aplica a productos; los
+servicios no tienen esta pestaña.
+
+Cómo se agregan:
+
+1. Abra la ficha del producto y vaya a la pestaña **Referencias**.
+2. En el buscador escriba el código o el nombre del otro producto y elíjalo. Se
+   agrega a la tabla con su código, nombre, marca y saldo total.
+3. Repita con los demás equivalentes y pulse **Guardar**.
+
+Reglas:
+
+- **La relación es de todos con todos**: si en la ficha del filtro Bosch agrega el
+  Mann y el Fram, al abrir el Mann ya verá al Bosch y al Fram, sin hacer nada más.
+- Si el producto que agrega **ya tenía sus propios equivalentes**, se agregan también
+  (aparece un aviso) y todos quedan como un solo grupo. Antes de guardar puede quitar
+  los que no correspondan.
+- **Quitar** (✕) saca a ese producto de los equivalentes. Si un producto se queda sin
+  ningún equivalente, deja de pertenecer al grupo.
+- Los cambios se aplican **al pulsar Guardar** en la ficha. Si cierra sin guardar,
+  no cambia nada.
+- Un producto puede tener hasta 50 equivalentes.
+
+Para qué sirve: en **Facturas de Venta** y en las órdenes de **Car-Wash**, cuando el
+producto elegido no tiene saldo en la bodega, la ventana de sugerencias muestra
+**primero sus equivalentes con saldo**, marcados como *Equivalente*, para reemplazarlo
+con un clic. Cada producto mantiene su propio stock, kardex y precio: la equivalencia
+solo sirve para sugerir.
+
+La misma pestaña conserva, arriba, los **códigos de proveedores** (los códigos con que
+cada proveedor identifica el producto en sus facturas electrónicas).
+
 ## Marcas para el restaurante
 
-Al pie de la pestaña donde se carga la imagen hay dos marcas que solo tienen
+Al pie de la pestaña **Adicionales** (donde se carga la imagen) hay dos marcas que solo tienen
 efecto en el salón y en el punto de venta:
 
 - **No aplicar el recargo por servicio (propina) a este producto**: el producto
@@ -240,6 +277,8 @@ aparecer al facturar.
 
 ## Historial de cambios
 
+- **1.15** — Nueva sección **Productos equivalentes** en la pestaña *Referencias* de la ficha: se agregan los productos que sirven para lo mismo y, cuando uno no tiene saldo, Facturas de Venta y Car-Wash ofrecen primero sus equivalentes.
+- **1.14** — En la ficha del producto, la pestaña *Detalles* se llama ahora **Adicionales** y la pestaña *Homologaciones* se llama **Referencias** (los códigos con que los proveedores identifican el producto). Si las tenía ocultas, siguen ocultas.
 - **1.13** — Los botones **+** de *Categoría* y *Marca* de la ficha funcionan en todas las pantallas que abren el producto (lavado, taller, servicio externo, proformas, suscripciones, importaciones, cotizaciones); antes solo en Productos, Facturas, Recibos y Compras.
 - **1.12** — El producto creado desde un documento se agrega solo a su detalle también en recibos, suscripciones, importaciones y órdenes de lavado, taller y servicio externo.
 - **1.11** — Al abrir la ficha de un producto **inactivo** migrado del sistema

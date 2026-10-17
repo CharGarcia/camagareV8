@@ -5,8 +5,8 @@ categoria: Servicios
 ruta_modulo: modulos/car-wash
 tipo: modulo
 visibilidad: todos
-etiquetas: car wash, lavado, lavadora de autos, lubricadora, cambio de aceite, mecanica, taller, orden de servicio, orden mecanica, orden de trabajo, vehiculo, placa, historial del vehiculo, historial del cliente, visitas, ultima visita, facturar orden, recibo de venta, refacturar, factura anulada, proxima cita, proximo chequeo, editar cliente, editar vehiculo, corregir placa, cambiar datos del cliente, actualizar correo, migracion, sistema anterior, numeracion por fecha, numero con el año, reiniciar numeracion, reinicio anual, reinicio mensual, correlativo por año, correlativo por mes, modo de numeracion, buscar orden, buscar placa, buscador, filtros, filtrar ordenes, filtro de fechas, buscar por servicio, chips, imprimir, impresora, aviso, avisos, ordenes en borrador, ordenes sin facturar, pendientes de facturar, barra superior, sin saldo, sin stock, productos similares, sugerir otro producto, misma categoria, usar este, pdf en dos hojas, segunda hoja casi vacia, totales en otra pagina, el pdf corta la pagina, hoja de mas
-version: 1.19
+etiquetas: car wash, lavado, lavadora de autos, lubricadora, cambio de aceite, mecanica, taller, orden de servicio, orden mecanica, orden de trabajo, vehiculo, placa, historial del vehiculo, historial del cliente, visitas, ultima visita, facturar orden, recibo de venta, refacturar, factura anulada, proxima cita, proximo chequeo, editar cliente, editar vehiculo, corregir placa, cambiar datos del cliente, actualizar correo, migracion, sistema anterior, numeracion por fecha, numero con el año, reiniciar numeracion, reinicio anual, reinicio mensual, correlativo por año, correlativo por mes, modo de numeracion, buscar orden, buscar placa, buscador, filtros, filtrar ordenes, filtro de fechas, buscar por servicio, chips, imprimir, impresora, aviso, avisos, ordenes en borrador, ordenes sin facturar, pendientes de facturar, barra superior, sin saldo, sin stock, productos similares, productos equivalentes, equivalencias, reemplazo, otra marca, sugerir otro producto, misma categoria, usar este, pdf en dos hojas, segunda hoja casi vacia, totales en otra pagina, el pdf corta la pagina, hoja de mas
+version: 1.20
 orden: 10
 estado: activo
 ---
@@ -159,11 +159,13 @@ rechazarían:
 
 Lote, caducidad, NUP y unidad pasan tal cual a la factura o al recibo.
 
-## Producto sin saldo: productos similares
+## Producto sin saldo: productos equivalentes y similares
 
 Si elige un producto que **no tiene saldo** en la bodega de la orden, se abre una
-ventana con **productos similares que sí tienen saldo**: primero los de la misma
-categoría, después los de la misma marca o con un nombre parecido, ordenados por
+ventana con **productos que sí tienen saldo**: primero sus **equivalentes** (los que
+se agregaron en la ficha del producto, pestaña **Referencias**, con la etiqueta
+*Equivalente*), luego los de la misma categoría, después los de la misma marca o con
+un nombre parecido, ordenados por
 parecido y saldo (hasta ocho). Cada uno muestra su saldo y precio; **Usar este**
 reemplaza el producto en la línea. **Mantener el producto** deja el que eligió.
 
@@ -391,6 +393,7 @@ documentos admite cada periodo) está en el manual de **Empresa**, sección
 
 ## Historial de cambios
 
+- **1.20** — Si un producto no tiene saldo, la ventana de sugerencias muestra primero sus **productos equivalentes** (ficha del producto, pestaña Referencias).
 - **1.19** — Enlace **Editar** junto a Cliente y Vehículo en la orden: abre la ficha
   encima de la orden y, al guardar, la orden muestra los datos nuevos (solo si está
   en borrador). Requiere permiso de modificar en Clientes o Vehículos.

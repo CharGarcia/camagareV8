@@ -158,6 +158,33 @@ class SoporteChatService
     }
 
     /**
+     * Antes de abrir una consulta, la burbuja muestra las secciones del Manual
+     * del Sistema que la responden. No crea nada ni llama a ninguna IA: es la
+     * misma búsqueda del visor /documentacion, con la visibilidad del usuario
+     * que pregunta. Si no hay nada (o el manual no está desplegado) devuelve
+     * vacío y la consulta sigue al equipo como siempre.
+     *
+     * @return array<int,array<string,mixed>>
+     */
+    public function sugerenciasManual(string $asunto, string $mensaje, string $origenModulo): array
+    {
+        // El asunto suele ser lo más preciso («Anular factura»); va delante. Se
+        // acota el largo: la búsqueda es por palabras y un texto de 4000
+        // caracteres solo diluye la relevancia.
+        $consulta = mb_substr(trim($asunto . ' ' . $mensaje), 0, 400);
+        if (mb_strlen($consulta) < 3) {
+            return [];
+        }
+
+        try {
+            return (new \App\Services\DocumentacionService())
+                ->seccionesParaSoporte($consulta, mb_substr(trim($origenModulo), 0, 100));
+        } catch (\Throwable $e) {
+            return [];
+        }
+    }
+
+    /**
      * Abre una conversación con su primer mensaje. Todo o nada (§8).
      *
      * @param array{asunto?:string,mensaje:string,origen_url?:string,origen_modulo?:string} $data

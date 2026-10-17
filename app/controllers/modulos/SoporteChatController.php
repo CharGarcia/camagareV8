@@ -98,6 +98,24 @@ class SoporteChatController extends BaseModuloController
         }
     }
 
+    /**
+     * Secciones del manual que responden a la consulta, para mostrarlas antes
+     * de enviarla al equipo. Va por POST para que el texto de la consulta no
+     * quede en la URL ni en los registros de acceso del servidor.
+     */
+    public function sugerenciasManualAjax(): void
+    {
+        $this->requireEmpresaSesion();
+        $input = $this->inputJson();
+
+        $secciones = $this->service->sugerenciasManual(
+            (string) ($input['asunto'] ?? ''),
+            (string) ($input['mensaje'] ?? ''),
+            (string) ($input['origen_modulo'] ?? '')
+        );
+        $this->json(['ok' => true, 'data' => $secciones]);
+    }
+
     public function abrirAjax(): void
     {
         $this->requireEmpresaSesion();

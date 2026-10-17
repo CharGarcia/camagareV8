@@ -1016,6 +1016,11 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosPestanasOcultas($vistaConfigC
             const dropdownGlobal = document.getElementById('cons_res_prod_global') || crearDropdownConsignacion();
 
             const seleccionarProducto = (p) => {
+                // Otro producto en una fila que vino de un pedido: el vínculo con esa línea del
+                // pedido ya no aplica (si no, el pedido contaría como consignado un producto
+                // distinto). Al guardar, el servidor la vuelve a vincular si corresponde.
+                const inpPedDet = tr.querySelector('.input-id-pedido-detalle');
+                if (inpPedDet && String(tr.dataset.idProducto || '') !== String(p.id)) inpPedDet.value = '';
                 tr.querySelector('.input-id-producto').value = p.id;
                 tr.querySelector('.input-codigo').value = p.codigo || '';
                 inputDesc.value = p.nombre;
@@ -1068,8 +1073,10 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosPestanasOcultas($vistaConfigC
                     if (idProd) {
                         e.preventDefault();
                         
-                        // Limpiar campos de producto
+                        // Limpiar campos de producto (y el vínculo con la línea del pedido)
                         tr.querySelector('.input-id-producto').value = '';
+                        const inpPedDet = tr.querySelector('.input-id-pedido-detalle');
+                        if (inpPedDet) inpPedDet.value = '';
                         tr.querySelector('.input-codigo').value = '';
                         inputDesc.value = '';
                         inputDesc.readOnly = false;

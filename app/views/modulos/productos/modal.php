@@ -96,12 +96,12 @@ if (($rutaModulo ?? '') !== 'modulos/productos') {
                             </li>
                             <li class="nav-item">
                                 <a class="nav-link py-2 small" id="tab-homologaciones-btn" data-bs-toggle="tab" href="#pane-homologaciones" role="tab">
-                                    <i class="bi bi-arrow-repeat me-1"></i> Homologaciones
+                                    <i class="bi bi-arrow-repeat me-1"></i> Referencias
                                 </a>
                             </li>
                             <li class="nav-item">
                                 <a class="nav-link py-2 small" id="tab-info-btn" data-bs-toggle="tab" href="#pane-info" role="tab">
-                                    <i class="bi bi-card-list me-1"></i> Detalles
+                                    <i class="bi bi-card-list me-1"></i> Adicionales
                                 </a>
                             </li>
                         </ul>
@@ -112,8 +112,8 @@ if (($rutaModulo ?? '') !== 'modulos/productos') {
                                 'tab-precios-btn' => 'Precios',
                                 'tab-componentes-btn' => 'Componentes',
                                 'tab-variantes-btn' => 'Variantes',
-                                'tab-homologaciones-btn' => 'Homologaciones',
-                                'tab-info-btn' => 'Detalles'
+                                'tab-homologaciones-btn' => 'Referencias',
+                                'tab-info-btn' => 'Adicionales'
                             ];
                             echo \App\Helpers\PreferenciasHelper::renderDropdownPestanas($pestanasConfig, $vistaConfigProd ?? [], 'productos');
                             ?>
@@ -396,11 +396,11 @@ if (($rutaModulo ?? '') !== 'modulos/productos') {
                         </div>
 
                         <!-- TAB HOMOLOGACIONES -->
+                        <!-- TAB REFERENCIAS: códigos de proveedores + productos equivalentes -->
                         <div class="tab-pane fade" id="pane-homologaciones" role="tabpanel">
-                            <div class="bg-light p-2 rounded border mb-3">
-                                <p class="small text-muted mb-0"><i class="bi bi-info-circle me-1"></i> Estos son los códigos con los que tus proveedores identifican este producto en sus documentos electrónicos.</p>
-                            </div>
-                            <div class="table-responsive" style="max-height: 300px;">
+                            <div class="small fw-bold text-muted mb-1"><i class="bi bi-upc-scan me-1"></i>Códigos de proveedores</div>
+                            <p class="small text-muted mb-2">Códigos con los que tus proveedores identifican este producto en sus documentos electrónicos.</p>
+                            <div class="table-responsive" style="max-height: 180px;">
                                 <table class="table table-sm table-hover border mb-0 small">
                                     <thead class="table-light text-muted">
                                         <tr>
@@ -416,6 +416,32 @@ if (($rutaModulo ?? '') !== 'modulos/productos') {
                                         </tr>
                                     </tbody>
                                 </table>
+                            </div>
+
+                            <!-- Productos equivalentes: se muestra solo si el SQL está aplicado (equivalencias_disponibles) -->
+                            <div id="prod_equiv_wrap" class="d-none mt-3 pt-3 border-top">
+                                <div class="small fw-bold text-muted mb-1"><i class="bi bi-arrow-left-right me-1"></i>Productos equivalentes</div>
+                                <p class="small text-muted mb-2">Productos que sirven para lo mismo (otra marca, otra presentación). Cuando este no tenga saldo, al vender se ofrecerán primero estos.</p>
+                                <div class="position-relative mb-2" style="max-width: 440px;">
+                                    <input type="text" id="equiv_search" class="form-control form-control-sm shadow-none" placeholder="Buscar producto para agregar como equivalente..." autocomplete="off">
+                                    <div id="equiv_results" class="list-group position-absolute w-100 shadow-lg d-none" style="z-index: 1070; max-height: 200px; overflow-y: auto;"></div>
+                                </div>
+                                <div class="table-responsive" style="max-height: 180px;">
+                                    <table class="table table-sm table-hover border mb-0 small">
+                                        <thead class="table-light text-muted">
+                                            <tr>
+                                                <th class="ps-3">Código</th>
+                                                <th>Producto</th>
+                                                <th>Marca</th>
+                                                <th class="text-end">Saldo</th>
+                                                <th class="text-center" style="width: 80px;">Acción</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody id="tb-equivalentes">
+                                            <tr><td colspan="5" class="text-center py-3 text-muted">Sin productos equivalentes</td></tr>
+                                        </tbody>
+                                    </table>
+                                </div>
                             </div>
                         </div>
 
