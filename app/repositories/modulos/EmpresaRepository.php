@@ -573,6 +573,10 @@ class EmpresaRepository extends BaseModel
         // getConfigServicioRestaurante). Si falta, la vista asume su valor por defecto.
         $colAdicional = $this->tieneColumnaEstablecimiento('mostrar_columna_adicional_factura')
             ? ', mostrar_columna_adicional_factura' : '';
+        // Sugerencias al elegir un producto sin saldo (SQL 2026-10-16_facturacion_sugerencias_productos).
+        foreach (['sugerir_productos_similares', 'sugerir_equivalencias'] as $colSug) {
+            if ($this->tieneColumnaEstablecimiento($colSug)) $colAdicional .= ", {$colSug}";
+        }
         $sql = "SELECT id, decimales_cantidad, decimales_precio, calculo_iva_facturacion,
                        facturacion_inventario, metodo_costeo, facturacion_libre,
                        id_tarifa_iva_defecto_libre,
@@ -699,6 +703,7 @@ class EmpresaRepository extends BaseModel
             'id_forma_pago_sri_def',
             'editar_precio_factura', 'editar_iva_factura', 'editar_descuento_factura',
             'mostrar_propina_factura', 'mostrar_columna_adicional_factura',
+            'sugerir_productos_similares', 'sugerir_equivalencias',
             'servicio_restaurante', 'servicio_restaurante_porcentaje', 'id_producto_propina',
             'factura_agrupar_items', 'factura_item_mostrar_unidad',
             'factura_item_mostrar_lote', 'factura_item_mostrar_caducidad',
@@ -711,7 +716,7 @@ class EmpresaRepository extends BaseModel
         $numericNullable = ['valor_limite_consumidor_final', 'id_forma_pago_sri_def', 'id_tarifa_iva_defecto_libre', 'id_producto_propina'];
 
         // Columnas que pueden no existir todavía (SQL pendiente): se omiten en vez de tumbar el guardado.
-        $opcionales = ['mostrar_columna_adicional_factura'];
+        $opcionales = ['mostrar_columna_adicional_factura', 'sugerir_productos_similares', 'sugerir_equivalencias'];
 
         $sets = [];
         foreach ($data as $k => $v) {

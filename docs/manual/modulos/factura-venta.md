@@ -123,12 +123,15 @@ negativo), el producto se coloca en la línea y enseguida se abre una ventana co
   que eligió; la factura se puede seguir armando y, al guardar, se aplican las reglas
   de stock de siempre (si la empresa trabaja con stock positivo, el guardado se
   rechaza con *Stock insuficiente*).
-- Solo ocurre si la empresa tiene activados **"La facturación afecta al inventario"** y
-  **"¿Trabajar con stock positivo?"** (Empresa → Facturación) y hay bodega en la
-  cabecera. Si la empresa permite stock negativo, el producto se agrega sin más, porque
-  igual se puede facturar. Los servicios y los productos no inventariables nunca
-  disparan la ventana. Si ningún producto similar tiene saldo, se avisa *Sin saldo*
-  y no se sugiere nada.
+- Se configura en **Empresa → Facturación** con dos interruptores, que vienen apagados:
+  **Mostrar equivalencias** (ofrece los equivalentes) y **Mostrar sugerencias de
+  productos similares** (ofrece los parecidos). La ventana solo sale si al menos uno
+  está encendido, la empresa tiene **"La facturación afecta al inventario"** y hay
+  bodega en la cabecera; muestra solo lo que esté encendido.
+- Si no hay nada que sugerir: con **"¿Trabajar con stock positivo?"** activado se avisa
+  *Sin saldo*; si se permite stock negativo, el producto se agrega sin aviso, porque
+  igual se puede facturar.
+- Los servicios y los productos no inventariables nunca disparan la ventana.
 - También se dispara cuando el producto se eligió **por código exacto** (lectura de
   código de barras o código escrito completo), no solo al hacer clic en la lista.
 
@@ -576,7 +579,7 @@ la operación de inmediato.
 
 ## Historial de cambios
 
-- **2.44** — Cuando un producto no tiene saldo, la ventana de sugerencias muestra primero sus **productos equivalentes** (definidos en la ficha del producto, pestaña Referencias) con la etiqueta *Equivalente*.
+- **2.44** — Cuando un producto no tiene saldo, la ventana de sugerencias muestra primero sus **productos equivalentes** (definidos en la ficha del producto, pestaña Referencias) con la etiqueta *Equivalente*. La ventana ahora se enciende en Empresa → Facturación con «Mostrar equivalencias» y «Mostrar sugerencias de productos similares» (vienen apagados); antes salía sola con stock positivo.
 - **2.43** — El XML que se envía al SRI ahora incluye la **dirección del cliente** (la misma que ya salía en el PDF). Si el cliente no tiene dirección registrada, el XML se envía sin ella, como antes.
 - **2.42** — Al crear un **cliente nuevo** desde la factura, la ficha del cliente se cierra sola y el cliente queda seleccionado; ya no hay que cerrarla a mano.
 - **2.41** — El PDF ya no manda los **totales, la información adicional y la forma de

@@ -137,7 +137,9 @@ Para qué sirve: en **Facturas de Venta** y en las órdenes de **Car-Wash**, cua
 producto elegido no tiene saldo en la bodega, la ventana de sugerencias muestra
 **primero sus equivalentes con saldo**, marcados como *Equivalente*, para reemplazarlo
 con un clic. Cada producto mantiene su propio stock, kardex y precio: la equivalencia
-solo sirve para sugerir.
+solo sirve para sugerir. Para que la ventana salga, en **Empresa → Facturación** deben
+estar encendidos *La facturación afecta al inventario* y **Mostrar equivalencias** (viene
+apagado).
 
 La misma pestaña conserva, arriba, los **códigos de proveedores** (los códigos con que
 cada proveedor identifica el producto en sus facturas electrónicas).

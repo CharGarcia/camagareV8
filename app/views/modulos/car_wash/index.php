@@ -243,6 +243,9 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
         facturacion_libre: <?= $bt('facturacion_libre', false) ?>,
         facturacion_inventario: <?= $bt('facturacion_inventario', true) ?>,
         factura_solo_stock_positivo: <?= $bt('factura_solo_stock_positivo', false) ?>,
+        // Ventana de sugerencias al elegir un producto sin saldo (Empresa → Facturación).
+        sugerir_productos_similares: <?= $bt('sugerir_productos_similares', false) ?>,
+        sugerir_equivalencias: <?= $bt('sugerir_equivalencias', false) ?>,
         obligatorio_lotes: <?= $bt('obligatorio_lotes', false) ?>,
         obligatorio_caducidad: <?= $bt('obligatorio_caducidad', false) ?>,
         obligatorio_nup: <?= $bt('obligatorio_nup', false) ?>,

@@ -669,7 +669,13 @@ class CarWashController extends BaseModuloController
             }
             // Trae precios de lista y variantes en lote, para que "Usar este" deje la
             // línea exactamente como si se hubiera buscado el producto.
-            $rows = $this->service->productosSimilares($idProducto, $idEmpresa, $idBodega, $idOrden ?: null);
+            // equivalentes / similares: Empresa → Facturación → "Mostrar equivalencias" y
+            // "Mostrar sugerencias de productos similares" (la vista manda lo configurado).
+            $rows = $this->service->productosSimilares(
+                $idProducto, $idEmpresa, $idBodega, $idOrden ?: null, 8,
+                ($_GET['equivalentes'] ?? '0') === '1',
+                ($_GET['similares'] ?? '0') === '1'
+            );
             echo json_encode(['ok' => true, 'data' => $rows]);
         } catch (\Throwable $e) {
             \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);

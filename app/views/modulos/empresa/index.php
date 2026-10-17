@@ -1620,6 +1620,16 @@ $warnIcon = '<i class="bi bi-exclamation-circle-fill text-warning ms-1" title="C
                                             <label class="form-check-label small fw-bold" for="sw_medida">Mostrar unidad de medida en facturación</label>
                                             <div class="form-text mt-0 sub-text" style="font-size:0.65rem;">Habilita la columna y selección de unidades en el detalle de la factura.</div>
                                         </div>
+                                        <div class="form-check form-switch mb-3">
+                                            <input class="form-check-input" type="checkbox" role="switch" name="sugerir_productos_similares" id="sw_sug_similares" <?= (($empresa['sugerir_productos_similares'] ?? false) === 'true' || ($empresa['sugerir_productos_similares'] ?? false) === true) ? 'checked' : '' ?>>
+                                            <label class="form-check-label small fw-bold" for="sw_sug_similares">Mostrar sugerencias de productos similares</label>
+                                            <div class="form-text mt-0 sub-text" style="font-size:0.65rem;">Al elegir un producto sin saldo en la bodega, ofrece productos parecidos (misma categoría, marca o nombre) que sí tienen saldo.</div>
+                                        </div>
+                                        <div class="form-check form-switch mb-3">
+                                            <input class="form-check-input" type="checkbox" role="switch" name="sugerir_equivalencias" id="sw_sug_equiv" <?= (($empresa['sugerir_equivalencias'] ?? false) === 'true' || ($empresa['sugerir_equivalencias'] ?? false) === true) ? 'checked' : '' ?>>
+                                            <label class="form-check-label small fw-bold" for="sw_sug_equiv">Mostrar equivalencias</label>
+                                            <div class="form-text mt-0 sub-text" style="font-size:0.65rem;">Al elegir un producto sin saldo en la bodega, ofrece sus productos equivalentes (ficha del producto, pestaña Referencias) que sí tienen saldo.</div>
+                                        </div>
                                     </div>
                                     <div class="col-md-6 ps-4">
 
@@ -2953,10 +2963,11 @@ $warnIcon = '<i class="bi bi-exclamation-circle-fill text-warning ms-1" title="C
             if (divIvaLibre) divIvaLibre.style.display = libreChecked ? '' : 'none';
 
             // Dependencias totales de Facturación Libre
-            const allDeps = ['sw_inv', 'sw_lotes', 'sw_cad', 'sw_nup', 'sw_solo_pos', 'sw_medida'];
+            const allDeps = ['sw_inv', 'sw_lotes', 'sw_cad', 'sw_nup', 'sw_solo_pos', 'sw_medida', 'sw_sug_similares', 'sw_sug_equiv'];
 
-            // Reglas que dependen de que el Inventario esté activo
-            const invDeps = ['sw_lotes', 'sw_cad', 'sw_nup', 'sw_solo_pos'];
+            // Reglas que dependen de que el Inventario esté activo (las sugerencias
+            // se basan en el saldo de la bodega: sin inventario no hay a qué sugerir).
+            const invDeps = ['sw_lotes', 'sw_cad', 'sw_nup', 'sw_solo_pos', 'sw_sug_similares', 'sw_sug_equiv'];
 
             if (libreChecked) {
                 // Si es libre, desactivamos y bloqueamos TODO

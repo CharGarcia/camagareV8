@@ -1551,8 +1551,11 @@ $totalPages = $totalPagesOriginal;
     const EMPRESA_CONFIG = {
         facturacion_libre: <?= (($empresa['facturacion_libre'] ?? false) === 'true' || ($empresa['facturacion_libre'] ?? false) === true) ? 'true' : 'false' ?>,
         facturacion_inventario: <?= (($empresa['facturacion_inventario'] ?? true) === 'true'  || ($empresa['facturacion_inventario'] ?? true)  === true)  ? 'true' : 'false' ?>,
-        // "¿Trabajar con stock positivo?" (Empresa → Facturación): condiciona la ventana de productos similares.
+        // "¿Trabajar con stock positivo?" (Empresa → Facturación): si no hay nada que sugerir, avisa "Sin saldo".
         factura_solo_stock_positivo: <?= (($empresa['factura_solo_stock_positivo'] ?? false) === 'true' || ($empresa['factura_solo_stock_positivo'] ?? false) === true) ? 'true' : 'false' ?>,
+        // Ventana de sugerencias al elegir un producto sin saldo (Empresa → Facturación). Sin la columna de BD: apagadas.
+        sugerir_productos_similares: <?= (($empresa['sugerir_productos_similares'] ?? false) === 'true' || ($empresa['sugerir_productos_similares'] ?? false) === true) ? 'true' : 'false' ?>,
+        sugerir_equivalencias: <?= (($empresa['sugerir_equivalencias'] ?? false) === 'true' || ($empresa['sugerir_equivalencias'] ?? false) === true) ? 'true' : 'false' ?>,
         obligatorio_lotes: <?= (($empresa['obligatorio_lotes'] ?? false) === 'true'    || ($empresa['obligatorio_lotes'] ?? false)    === true)    ? 'true' : 'false' ?>,
         obligatorio_caducidad: <?= (($empresa['obligatorio_caducidad'] ?? false) === 'true' || ($empresa['obligatorio_caducidad'] ?? false) === true) ? 'true' : 'false' ?>,
         obligatorio_nup: <?= (($empresa['obligatorio_nup'] ?? false) === 'true'       || ($empresa['obligatorio_nup'] ?? false)       === true)       ? 'true' : 'false' ?>,
@@ -4698,12 +4701,12 @@ $totalPages = $totalPagesOriginal;
         window.fvSeleccionarProductoEnFila = seleccionarProductoEnFila;
 
         // ¿El producto elegido no tiene saldo en la bodega de la cabecera? Solo aplica
-        // cuando la facturación afecta al inventario Y la empresa trabaja con stock
-        // positivo (si se permite stock negativo, el producto se factura igual y la
-        // ventana de similares solo estorba). El buscador ya pidió stock_bodega (null
+        // cuando la facturación afecta al inventario y la empresa activó al menos una de
+        // las sugerencias (Empresa → Facturación: "Mostrar sugerencias de productos
+        // similares" / "Mostrar equivalencias"). El buscador ya pidió stock_bodega (null
         // en servicios y productos no inventariables).
         const fvProductoSinSaldo = (p) => EMPRESA_CONFIG.facturacion_inventario
-            && EMPRESA_CONFIG.factura_solo_stock_positivo
+            && (EMPRESA_CONFIG.sugerir_productos_similares || EMPRESA_CONFIG.sugerir_equivalencias)
             && getIdBodegaCabecera()
             && p.stock_bodega !== undefined && p.stock_bodega !== null
             && (parseFloat(p.stock_bodega) || 0) <= 0;
@@ -4721,14 +4724,17 @@ $totalPages = $totalPagesOriginal;
             try {
                 let url = `${B_URL}/${RUTA_MODULO}/productosSimilaresAjax?id_producto=${encodeURIComponent(p.id)}&id_bodega=${encodeURIComponent(idBod)}`;
                 if (FV_ID_ACTIVO) url += `&id_venta=${FV_ID_ACTIVO}`;
+                url += `&equivalentes=${EMPRESA_CONFIG.sugerir_equivalencias ? 1 : 0}&similares=${EMPRESA_CONFIG.sugerir_productos_similares ? 1 : 0}`;
                 const res = await fetch(url);
                 const data = await res.json();
                 similares = data.ok ? (data.data || []) : [];
             } catch (e) { similares = []; }
 
             if (!similares.length) {
+                // Nada que sugerir: con stock negativo permitido se factura igual, no se interrumpe.
+                if (!EMPRESA_CONFIG.factura_solo_stock_positivo) return;
                 Swal.fire({ icon: 'warning', title: 'Sin saldo', target: modalEl,
-                    html: `<b>${esc(p.nombre)}</b> no tiene saldo en la bodega <b>${esc(nomBodega)}</b> y no hay productos similares con saldo.` });
+                    html: `<b>${esc(p.nombre)}</b> no tiene saldo en la bodega <b>${esc(nomBodega)}</b> y no hay otros productos con saldo para sugerir.` });
                 return;
             }
             const filas = similares.map((s, i) => `
@@ -4741,7 +4747,7 @@ $totalPages = $totalPagesOriginal;
             await Swal.fire({
                 icon: 'info', title: similares.some(s => s.equivalente) ? 'Sin saldo — productos equivalentes' : 'Sin saldo — productos similares', width: 720, target: modalEl,
                 showConfirmButton: false, showCancelButton: true, cancelButtonText: 'Mantener el producto',
-                html: `<div class="text-start small mb-2"><b>${esc(p.nombre)}</b> no tiene saldo en la bodega <b>${esc(nomBodega)}</b>. Estos productos similares sí tienen:</div>
+                html: `<div class="text-start small mb-2"><b>${esc(p.nombre)}</b> no tiene saldo en la bodega <b>${esc(nomBodega)}</b>. Estos productos sí tienen:</div>
                        <div style="max-height:320px;overflow:auto"><table class="table table-sm table-hover align-middle mb-0" style="font-size:.8rem">
                        <thead class="table-light"><tr><th class="text-start">Producto</th><th class="text-end">Saldo</th><th class="text-end">Precio</th><th></th></tr></thead>
                        <tbody>${filas}</tbody></table></div>`,

@@ -267,9 +267,9 @@ class OrdenCarWashService
      * comparten Facturas de Venta y Car-Wash); aquí solo se indica que el consumo de la
      * propia orden (si se está editando) no cuenta para el saldo.
      */
-    public function productosSimilares(int $idProducto, int $idEmpresa, int $idBodega, ?int $idOrden, int $limite = 8): array
+    public function productosSimilares(int $idProducto, int $idEmpresa, int $idBodega, ?int $idOrden, int $limite = 8, bool $conEquivalentes = true, bool $conSimilares = true): array
     {
-        return (new ProductosSimilaresService())->buscar($idProducto, $idEmpresa, $idBodega, $idOrden ?: null, self::REF_TIPO, $limite);
+        return (new ProductosSimilaresService())->buscar($idProducto, $idEmpresa, $idBodega, $idOrden ?: null, self::REF_TIPO, $limite, $conEquivalentes, $conSimilares);
     }
 
     /**

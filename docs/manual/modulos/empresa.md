@@ -5,8 +5,8 @@ categoria: Configuración de empresa
 ruta_modulo: modulos/empresa
 tipo: modulo
 visibilidad: admin
-etiquetas: empresa, datos de la empresa, ruc, suscripcion, suscripcion vencida, vigencia, vencimiento, pago pendiente, aviso de pago, ya pague, enviar comprobante, comprobante de pago, reportar pago, adjuntar pago, transferencia, pago en revision, renovacion, mensualidad, cuota del sistema, establecimiento, punto de emision, logo, logo por punto de emision, logo de la caja, logo por sucursal, otra marca, quitar logo, ambiente, pruebas, produccion, configuracion, correo, email, smtp, envio de correos, cuerpo del correo, asunto, plantilla de correo, remitente, documentos legales, acuerdo de uso de datos, contrato de uso del sistema, aceptacion de documentos, documentos firmados, documentos cargados, archivos de la empresa, secuenciales, numeracion, tipos de documento, codDoc, eliminar secuencial, crear secuenciales, agregar todos los faltantes, facturas de reembolso, punto unico por empresa, punto inactivo, eliminar punto de emision con documentos, puntos duplicados, secuencial inicial, numero inicial, hueco, huecos, rellenar hueco, salto de numeracion, siguiente numero, retomar numeracion, presentacion de los items, agrupar items, agrupar por nombre, agrupar por lote, agrupar por nup, agrupar por serie, juntar lineas repetidas, sumar items iguales, mostrar lote en la factura, mostrar caducidad, mostrar unidad de medida, mostrar nup, descripcion del item, tirilla, ticket, impresion termica, modo de numeracion, numeracion por fecha, secuencial por fecha, reiniciar numeracion, reinicio anual, reinicio mensual, numeracion anual, numeracion mensual, correlativo por año, correlativo por mes, empezar de cero cada año, prefijo del año, numero con el año, volver a empezar la numeracion
-version: 1.41
+etiquetas: empresa, sugerencias, productos similares, equivalencias, productos equivalentes, sin saldo, sin stock, ventana de sugerencias, datos de la empresa, ruc, suscripcion, suscripcion vencida, vigencia, vencimiento, pago pendiente, aviso de pago, ya pague, enviar comprobante, comprobante de pago, reportar pago, adjuntar pago, transferencia, pago en revision, renovacion, mensualidad, cuota del sistema, establecimiento, punto de emision, logo, logo por punto de emision, logo de la caja, logo por sucursal, otra marca, quitar logo, ambiente, pruebas, produccion, configuracion, correo, email, smtp, envio de correos, cuerpo del correo, asunto, plantilla de correo, remitente, documentos legales, acuerdo de uso de datos, contrato de uso del sistema, aceptacion de documentos, documentos firmados, documentos cargados, archivos de la empresa, secuenciales, numeracion, tipos de documento, codDoc, eliminar secuencial, crear secuenciales, agregar todos los faltantes, facturas de reembolso, punto unico por empresa, punto inactivo, eliminar punto de emision con documentos, puntos duplicados, secuencial inicial, numero inicial, hueco, huecos, rellenar hueco, salto de numeracion, siguiente numero, retomar numeracion, presentacion de los items, agrupar items, agrupar por nombre, agrupar por lote, agrupar por nup, agrupar por serie, juntar lineas repetidas, sumar items iguales, mostrar lote en la factura, mostrar caducidad, mostrar unidad de medida, mostrar nup, descripcion del item, tirilla, ticket, impresion termica, modo de numeracion, numeracion por fecha, secuencial por fecha, reiniciar numeracion, reinicio anual, reinicio mensual, numeracion anual, numeracion mensual, correlativo por año, correlativo por mes, empezar de cero cada año, prefijo del año, numero con el año, volver a empezar la numeracion
+version: 1.42
 orden: 5
 estado: activo
 ---
@@ -194,6 +194,26 @@ la factura?** decide si la tabla de productos del modal de Factura de Venta mues
 **encendido**; apáguelo si su empresa no usa ese
 dato y quiere más espacio para las demás columnas. Solo cambia la pantalla: lo que ya está
 guardado en cada línea se conserva y sigue saliendo en el PDF y el XML cuando tiene contenido.
+
+## Sugerencias cuando un producto no tiene saldo
+
+En la pestaña **Facturación**, debajo de *Mostrar unidad de medida en facturación*, hay dos
+interruptores que deciden si, al elegir un producto **sin saldo** en la bodega, se abre una
+ventana para reemplazarlo por otro que sí tiene:
+
+- **Mostrar sugerencias de productos similares**: ofrece productos parecidos (misma
+  categoría, misma marca o nombre parecido).
+- **Mostrar equivalencias**: ofrece los **productos equivalentes** que se agregaron en la
+  ficha del producto (Productos → pestaña *Referencias*). Salen primero, con la etiqueta
+  *Equivalente*.
+
+Funcionan en **Facturas de Venta** y en las órdenes de **Car-Wash**, se configuran por
+establecimiento y vienen **apagados**. Solo se pueden activar si **La facturación afecta al
+inventario** está encendido. Con los dos apagados, el producto se agrega sin ninguna ventana.
+
+Si no hay nada que sugerir: con **¿Trabajar con stock positivo?** encendido se avisa *Sin
+saldo* (la factura no podrá guardarse con ese producto); si se permite stock negativo, el
+producto se agrega sin aviso.
 
 ## Presentación de los ítems en el comprobante
 
@@ -491,6 +511,7 @@ de taxis.
 
 ## Historial de cambios
 
+- **1.42** — Nuevos interruptores en la pestaña *Facturación*: **Mostrar sugerencias de productos similares** y **Mostrar equivalencias** (vienen apagados). Deciden si Facturas de Venta y Car-Wash ofrecen reemplazos cuando un producto no tiene saldo.
 - **1.41** — La ventana de suscripción vencida permite **enviar un mensaje y el comprobante
   de pago** (PDF o imagen). Le llega por correo a la empresa que administra la suscripción y,
   mientras revisa (máximo 3 días), el aviso deja de salir. Si rechaza el pago, el aviso vuelve

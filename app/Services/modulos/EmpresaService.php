@@ -362,6 +362,7 @@ class EmpresaService
             'obligatorio_lotes', 'obligatorio_caducidad', 'obligatorio_nup',
             'mostrar_cajero_factura', 'mostrar_vendedor_factura',
             'mostrar_unidad_medida',
+            'sugerir_productos_similares', 'sugerir_equivalencias',
             'editar_precio_factura', 'editar_iva_factura', 'editar_descuento_factura',
             'mostrar_propina_factura', 'mostrar_columna_adicional_factura',
             'factura_item_mostrar_unidad', 'factura_item_mostrar_lote',

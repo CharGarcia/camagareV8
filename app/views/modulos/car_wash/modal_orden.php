@@ -1022,9 +1022,10 @@
                                 <div class="text-nowrap">${stockBadge}<span class="badge bg-primary bg-opacity-10 text-primary border border-primary border-opacity-10">$${parseFloat(p.precio_base || 0).toFixed(2)}</span></div></div>`;
                         b.onmousedown = (evt) => {
                             evt.preventDefault();
-                            // Solo cuando la facturación afecta al inventario, la empresa trabaja con
-                            // stock positivo y hay bodega en la cabecera.
-                            const sinStock = EMPRESA_CONFIG.facturacion_inventario && EMPRESA_CONFIG.factura_solo_stock_positivo
+                            // Solo cuando la facturación afecta al inventario, la empresa activó
+                            // alguna sugerencia (Empresa → Facturación) y hay bodega en la cabecera.
+                            const sinStock = EMPRESA_CONFIG.facturacion_inventario
+                                          && (EMPRESA_CONFIG.sugerir_productos_similares || EMPRESA_CONFIG.sugerir_equivalencias)
                                           && parseInt(idBod, 10) > 0 && p.controla_stock && parseFloat(p.stock_actual || 0) <= 0;
                             cwSeleccionarProductoEnFila(p, tr);
                             dropdownGlobal.classList.add('d-none');
@@ -1188,9 +1189,11 @@
         const modalEl = document.getElementById('modalOrdenCW');
         const idBod = document.getElementById('cw_id_bodega').value || 0;
         const idOrd = document.getElementById('cw_id').value || 0;
+        // Qué se sugiere: Empresa → Facturación ("Mostrar equivalencias" / "...productos similares").
+        const qSug = `&equivalentes=${EMPRESA_CONFIG.sugerir_equivalencias ? 1 : 0}&similares=${EMPRESA_CONFIG.sugerir_productos_similares ? 1 : 0}`;
         let similares = [];
         try {
-            const res = await fetch(`${RUTA}/productosSimilaresAjax?id_producto=${p.id}&id_bodega=${idBod}&id_orden=${idOrd}`);
+            const res = await fetch(`${RUTA}/productosSimilaresAjax?id_producto=${p.id}&id_bodega=${idBod}&id_orden=${idOrd}${qSug}`);
             const data = await res.json();
             similares = data.ok ? (data.data || []) : [];
         } catch (e) { similares = []; }
@@ -1198,8 +1201,10 @@
         const bodega = document.getElementById('cw_id_bodega');
         const nomBodega = bodega && bodega.selectedIndex >= 0 ? bodega.options[bodega.selectedIndex].text : '';
         if (!similares.length) {
+            // Nada que sugerir: con stock negativo permitido se factura igual, no se interrumpe.
+            if (!EMPRESA_CONFIG.factura_solo_stock_positivo) return;
             Swal.fire({ icon: 'warning', title: 'Sin saldo', target: modalEl,
-                html: `<b>${esc(p.nombre)}</b> no tiene saldo en la bodega <b>${esc(nomBodega)}</b> y no hay productos similares con saldo.` });
+                html: `<b>${esc(p.nombre)}</b> no tiene saldo en la bodega <b>${esc(nomBodega)}</b> y no hay otros productos con saldo para sugerir.` });
             return;
         }
         const filas = similares.map((s, i) => `
@@ -1212,7 +1217,7 @@
         await Swal.fire({
             icon: 'info', title: similares.some(s => s.equivalente) ? 'Sin saldo — productos equivalentes' : 'Sin saldo — productos similares', width: 720, target: modalEl,
             showConfirmButton: false, showCancelButton: true, cancelButtonText: 'Mantener el producto',
-            html: `<div class="text-start small mb-2"><b>${esc(p.nombre)}</b> no tiene saldo en la bodega <b>${esc(nomBodega)}</b>. Estos productos similares sí tienen:</div>
+            html: `<div class="text-start small mb-2"><b>${esc(p.nombre)}</b> no tiene saldo en la bodega <b>${esc(nomBodega)}</b>. Estos productos sí tienen:</div>
                    <div style="max-height:320px;overflow:auto"><table class="table table-sm table-hover align-middle mb-0" style="font-size:.8rem">
                    <thead class="table-light"><tr><th class="text-start">Producto</th><th class="text-end">Saldo</th><th class="text-end">Precio</th><th></th></tr></thead>
                    <tbody>${filas}</tbody></table></div>`,

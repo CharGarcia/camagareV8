@@ -36,13 +36,18 @@ class ProductosSimilaresService
      * @param int|null    $excludeRefId   Id del documento que se edita (su propio consumo no cuenta).
      * @param string|null $excludeRefTipo Tipo de referencia del kardex de ese documento.
      * @param int         $limite         Máximo de sugerencias.
+     * @param bool        $conEquivalentes Incluir los equivalentes de la ficha (Empresa → Facturación →
+     *                    "Mostrar equivalencias", sugerir_equivalencias).
+     * @param bool        $conSimilares    Incluir los parecidos por categoría, marca y nombre
+     *                    ("Mostrar sugerencias de productos similares", sugerir_productos_similares).
      *
      * @return array filas con el mismo formato del buscador de productos + stock_actual,
      *               controla_stock y `coincide` (por qué se sugiere), con precios_lista y
      *               variantes en lote para que "Usar este" deje la línea como si se hubiera buscado.
      */
-    public function buscar(int $idProducto, int $idEmpresa, int $idBodega, ?int $excludeRefId = null, ?string $excludeRefTipo = null, int $limite = 8): array
+    public function buscar(int $idProducto, int $idEmpresa, int $idBodega, ?int $excludeRefId = null, ?string $excludeRefTipo = null, int $limite = 8, bool $conEquivalentes = true, bool $conSimilares = true): array
     {
+        if (!$conEquivalentes && !$conSimilares) return [];
         $base = $this->prodRepo->getProductoBasico($idProducto, $idEmpresa);
         if (!$base || $idBodega <= 0) return [];
 
@@ -63,11 +68,15 @@ class ProductosSimilaresService
         };
         // Primero los equivalentes que el usuario definió en la ficha (pestaña Referencias):
         // son sustitutos confirmados, no parecidos; van arriba de todo.
-        $equivIds = array_flip((new ProductoEquivalenciaService())->getIdsEquivalentes($idProducto, $idEmpresa));
+        $equivIds = $conEquivalentes
+            ? array_flip((new ProductoEquivalenciaService())->getIdsEquivalentes($idProducto, $idEmpresa))
+            : [];
         if ($equivIds) $agregar($buscar('id:' . implode(',', array_keys($equivIds))));
-        if (!empty($base['id_categoria'])) $agregar($buscar('id_categoria:' . (int) $base['id_categoria']));
-        if (!empty($base['id_marca']))     $agregar($buscar('id_marca:' . (int) $base['id_marca']));
-        foreach (array_slice($palabras, 0, 2) as $w) $agregar($buscar($w));
+        if ($conSimilares) {
+            if (!empty($base['id_categoria'])) $agregar($buscar('id_categoria:' . (int) $base['id_categoria']));
+            if (!empty($base['id_marca']))     $agregar($buscar('id_marca:' . (int) $base['id_marca']));
+            foreach (array_slice($palabras, 0, 2) as $w) $agregar($buscar($w));
+        }
 
         // Solo los que controlan inventario; su saldo en UNA consulta.
         $cand = array_filter($cand, fn($p) => self::esInventariable($p));

@@ -169,10 +169,12 @@ un nombre parecido, ordenados por
 parecido y saldo (hasta ocho). Cada uno muestra su saldo y precio; **Usar este**
 reemplaza el producto en la línea. **Mantener el producto** deja el que eligió.
 
-Solo ocurre si la empresa tiene activados **"La facturación afecta al inventario"** y
-**"¿Trabajar con stock positivo?"** (módulo Empresa → pestaña Facturación) y la orden
-tiene bodega. Si la facturación no afecta al inventario o se permite stock negativo,
-el producto se agrega sin más. Es la misma ventana que usa
+Se configura en **Empresa → Facturación** con dos interruptores, que vienen apagados:
+**Mostrar equivalencias** y **Mostrar sugerencias de productos similares**. La ventana
+solo sale si al menos uno está encendido, la empresa tiene **"La facturación afecta al
+inventario"** y la orden tiene bodega; muestra solo lo que esté encendido. Si no hay nada
+que sugerir, con **"¿Trabajar con stock positivo?"** se avisa *Sin saldo*; con stock
+negativo permitido el producto se agrega sin aviso. Es la misma ventana que usa
 **Facturas de Venta**.
 
 ## Historial por vehículo o por cliente
@@ -393,7 +395,7 @@ documentos admite cada periodo) está en el manual de **Empresa**, sección
 
 ## Historial de cambios
 
-- **1.20** — Si un producto no tiene saldo, la ventana de sugerencias muestra primero sus **productos equivalentes** (ficha del producto, pestaña Referencias).
+- **1.20** — Si un producto no tiene saldo, la ventana de sugerencias muestra primero sus **productos equivalentes** (ficha del producto, pestaña Referencias). La ventana ahora se enciende en Empresa → Facturación con «Mostrar equivalencias» y «Mostrar sugerencias de productos similares» (vienen apagados); antes salía sola con stock positivo.
 - **1.19** — Enlace **Editar** junto a Cliente y Vehículo en la orden: abre la ficha
   encima de la orden y, al guardar, la orden muestra los datos nuevos (solo si está
   en borrador). Requiere permiso de modificar en Clientes o Vehículos.

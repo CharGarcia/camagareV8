@@ -1820,8 +1820,12 @@ class FacturaVentaController extends BaseModuloController
                 echo json_encode(['ok' => true, 'data' => []]);
                 exit;
             }
+            // equivalentes / similares: Empresa → Facturación → "Mostrar equivalencias" y
+            // "Mostrar sugerencias de productos similares" (la vista manda lo configurado).
             $rows = (new \App\Services\modulos\ProductosSimilaresService())
-                ->buscar($idProducto, $idEmpresa, $idBodega, $idVenta ?: null, 'factura_venta');
+                ->buscar($idProducto, $idEmpresa, $idBodega, $idVenta ?: null, 'factura_venta', 8,
+                    ($_GET['equivalentes'] ?? '0') === '1',
+                    ($_GET['similares'] ?? '0') === '1');
             echo json_encode(['ok' => true, 'data' => $rows]);
         } catch (\Throwable $e) {
             \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
