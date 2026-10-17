@@ -180,6 +180,26 @@ class VehiculosController extends BaseModuloController
         exit;
     }
 
+    /** Ficha completa del vehículo, para abrir su modal de edición desde otro módulo (Car-Wash). */
+    public function getAjax(): void
+    {
+        $this->requireLeer();
+        header('Content-Type: application/json');
+        try {
+            $id = (int) ($_GET['id'] ?? 0);
+            if ($id <= 0) throw new \Exception('ID no válido');
+
+            $vehiculo = $this->service->findById($id, (int) $_SESSION['id_empresa']);
+            if (!$vehiculo) throw new \Exception('Vehículo no encontrado');
+
+            echo json_encode(['ok' => true, 'data' => $vehiculo]);
+        } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
+            echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
+        }
+        exit;
+    }
+
     /** Pestaña Transacciones: órdenes de Car-Wash del vehículo con sus servicios/productos. */
     public function transaccionesAjax(): void
     {

@@ -233,7 +233,10 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
     window.CW_PERM = {
         crear:      <?= (!empty($perm['crear']) || !empty($perm['todo'])) ? 'true' : 'false' ?>,
         actualizar: <?= (!empty($perm['actualizar']) || !empty($perm['todo'])) ? 'true' : 'false' ?>,
-        eliminar:   <?= (!empty($perm['eliminar']) || !empty($perm['todo'])) ? 'true' : 'false' ?>
+        eliminar:   <?= (!empty($perm['eliminar']) || !empty($perm['todo'])) ? 'true' : 'false' ?>,
+        // Permiso de modificar en Clientes / Vehículos (enlaces «Editar» de la orden).
+        editarCliente:  <?= !empty($puedeEditarCliente) ? 'true' : 'false' ?>,
+        editarVehiculo: <?= !empty($puedeEditarVehiculo) ? 'true' : 'false' ?>
     };
     <?php $bt = fn($k, $def) => ((($empresa[$k] ?? $def) === 'true' || ($empresa[$k] ?? $def) === true) ? 'true' : 'false'); ?>
     window.EMPRESA_CONFIG = {

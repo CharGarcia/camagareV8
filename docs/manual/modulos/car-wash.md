@@ -5,8 +5,8 @@ categoria: Servicios
 ruta_modulo: modulos/car-wash
 tipo: modulo
 visibilidad: todos
-etiquetas: car wash, lavado, lavadora de autos, lubricadora, cambio de aceite, mecanica, taller, orden de servicio, orden mecanica, orden de trabajo, vehiculo, placa, historial del vehiculo, historial del cliente, visitas, ultima visita, facturar orden, recibo de venta, refacturar, factura anulada, proxima cita, proximo chequeo, migracion, sistema anterior, numeracion por fecha, numero con el año, reiniciar numeracion, reinicio anual, reinicio mensual, correlativo por año, correlativo por mes, modo de numeracion, buscar orden, buscar placa, buscador, filtros, filtrar ordenes, filtro de fechas, buscar por servicio, chips, imprimir, impresora, aviso, avisos, ordenes en borrador, ordenes sin facturar, pendientes de facturar, barra superior, sin saldo, sin stock, productos similares, sugerir otro producto, misma categoria, usar este, pdf en dos hojas, segunda hoja casi vacia, totales en otra pagina, el pdf corta la pagina, hoja de mas
-version: 1.18
+etiquetas: car wash, lavado, lavadora de autos, lubricadora, cambio de aceite, mecanica, taller, orden de servicio, orden mecanica, orden de trabajo, vehiculo, placa, historial del vehiculo, historial del cliente, visitas, ultima visita, facturar orden, recibo de venta, refacturar, factura anulada, proxima cita, proximo chequeo, editar cliente, editar vehiculo, corregir placa, cambiar datos del cliente, actualizar correo, migracion, sistema anterior, numeracion por fecha, numero con el año, reiniciar numeracion, reinicio anual, reinicio mensual, correlativo por año, correlativo por mes, modo de numeracion, buscar orden, buscar placa, buscador, filtros, filtrar ordenes, filtro de fechas, buscar por servicio, chips, imprimir, impresora, aviso, avisos, ordenes en borrador, ordenes sin facturar, pendientes de facturar, barra superior, sin saldo, sin stock, productos similares, sugerir otro producto, misma categoria, usar este, pdf en dos hojas, segunda hoja casi vacia, totales en otra pagina, el pdf corta la pagina, hoja de mas
+version: 1.19
 orden: 10
 estado: activo
 ---
@@ -50,6 +50,10 @@ se le entrega al cliente.
    **bodega** y, si quiere, kilometraje, combustible y **próxima cita**. El botón
    **Cliente** funciona igual: el cliente recién creado se asigna solo si la orden
    aún no tiene cliente.
+
+   Con un cliente o vehículo ya elegido aparece el enlace **Editar** junto a su
+   rótulo: abre su ficha encima de la orden para corregir, por ejemplo, la placa,
+   el correo o el teléfono. Al guardar se vuelve a la orden con los datos nuevos.
 3. Agregue los **servicios y productos** en la grilla (igual que en una factura).
 4. Anote las novedades en **Info. Adicional** y pulse **Guardar**.
 5. Para cobrar, abra la orden y pulse **Factura** o **Recibo** en la barra superior y
@@ -226,6 +230,11 @@ rastro completo.
 Los botones **PDF**, **Correo** y **WhatsApp** del documento generado usan los
 módulos de Facturas y Recibos de venta, así que requieren permiso de lectura en ellos.
 
+Los enlaces **Editar** de Cliente y Vehículo solo aparecen a quien tiene permiso de
+**ver** y **modificar** en los módulos Clientes y Vehículos. En una orden facturada o
+anulada también aparecen: se corrige la ficha, pero la orden conserva los datos con
+que se guardó.
+
 ## Reglas de negocio
 
 - **Inventario:** la orden descuenta al guardarse (si el establecimiento trabaja con
@@ -382,6 +391,9 @@ documentos admite cada periodo) está en el manual de **Empresa**, sección
 
 ## Historial de cambios
 
+- **1.19** — Enlace **Editar** junto a Cliente y Vehículo en la orden: abre la ficha
+  encima de la orden y, al guardar, la orden muestra los datos nuevos (solo si está
+  en borrador). Requiere permiso de modificar en Clientes o Vehículos.
 - **1.18** — El producto creado desde **Registrar nuevo producto** se agrega solo al detalle de la orden.
 - **1.17** — El PDF ya no manda los **totales y la información adicional** de la orden a una segunda hoja cuando
   caben en la primera. Antes saltaba de página siempre que el detalle pasara de cierta

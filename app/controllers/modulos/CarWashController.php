@@ -98,9 +98,18 @@ class CarWashController extends BaseModuloController
         $tarifasIva = $this->repository->getTarifasIva();
         $unidades   = $this->repository->getUnidadesMedida($idEmpresa);
 
+        // Enlaces «Editar» de cliente/vehículo en la orden: abren el modal de esos módulos,
+        // así que solo se muestran a quien puede leer y modificar en ellos.
+        $puedeEditar = function (string $ruta): bool {
+            $p = $this->permisosModuloPorRuta($ruta);
+            return !empty($p['ver']) && (!empty($p['actualizar']) || !empty($p['todo']));
+        };
+
         $this->viewWithLayout('layouts.main', 'modulos.car_wash.index', [
             'titulo'      => 'Servicio Car-Wash',
             'perm'        => $perm,
+            'puedeEditarCliente'  => $puedeEditar('modulos/clientes'),
+            'puedeEditarVehiculo' => $puedeEditar('modulos/vehiculos'),
             'rutaModulo'  => self::RUTA_MODULO,
             'empresa'     => $empresaData,
             'puntos'      => $puntos,

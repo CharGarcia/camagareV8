@@ -107,7 +107,8 @@
                                 <input type="text" id="cw_secuencial" class="form-control form-control-sm border-primary border-opacity-25 text-center text-dark py-0 bg-light" style="height:31px;" readonly placeholder="000000001" maxlength="9">
                             </div>
                             <div class="col-12 col-md-6 position-relative">
-                                <label class="x-small fw-bold text-muted mb-1">Cliente <span class="text-danger">*</span></label>
+                                <label class="x-small fw-bold text-muted mb-1">Cliente <span class="text-danger">*</span>
+                                    <a href="#" id="cw_lnk_editar_cliente" class="ms-2 fw-normal text-decoration-none d-none" onclick="event.preventDefault(); cwEditarCliente();" title="Editar la ficha del cliente"><i class="bi bi-pencil-square"></i> Editar</a></label>
                                 <input type="text" id="cw_cliente_busqueda" class="form-control form-control-sm border-primary border-opacity-10" placeholder="Seleccionar cliente..." oninput="cwBuscarClientes(this.value)">
                                 <div id="cw_cli_dropdown" class="list-group position-absolute w-100 shadow-sm d-none" style="z-index:1085; max-height:240px; overflow:auto;"></div>
                             </div>
@@ -115,7 +116,8 @@
                         <!-- Fila 2: vehículo, kilometraje, combustible, próxima cita, bodega -->
                         <div class="row g-2 align-items-end mt-1">
                             <div class="col-12 col-md-4 position-relative">
-                                <label class="x-small fw-bold text-muted mb-1">Vehículo <span class="text-danger">*</span></label>
+                                <label class="x-small fw-bold text-muted mb-1">Vehículo <span class="text-danger">*</span>
+                                    <a href="#" id="cw_lnk_editar_vehiculo" class="ms-2 fw-normal text-decoration-none d-none" onclick="event.preventDefault(); cwEditarVehiculo();" title="Editar la ficha del vehículo"><i class="bi bi-pencil-square"></i> Editar</a></label>
                                 <input type="text" id="cw_vehiculo_busqueda" class="form-control form-control-sm border-primary border-opacity-10" placeholder="Placa, marca o propietario..." oninput="cwBuscarVehiculos(this.value)">
                                 <div id="cw_veh_dropdown" class="list-group position-absolute w-100 shadow-sm d-none" style="z-index:1085; max-height:240px; overflow:auto;"></div>
                             </div>
@@ -483,6 +485,7 @@
         const veh = document.getElementById('cw_vehiculo_busqueda');
         veh.value = b.vehiculo_texto || ''; veh.dataset.placa = b.placa || ''; veh.dataset.marca = b.marca || ''; veh.dataset.modelo = b.modelo || '';
         set('cw_id_cliente', b.id_cliente); set('cw_cliente_busqueda', b.cliente_texto);
+        cwEnlacesEditar();
         set('cw_kilometraje', b.kilometraje); set('cw_nivel_combustible', b.combustible);
         set('cw_proxima_cita', b.proxima_cita); set('cw_id_bodega', b.id_bodega);
         document.getElementById('cw_tbodyDetalle').innerHTML = '';
@@ -546,6 +549,7 @@
         // form.reset() no toca los data-* del buscador de vehículo: si quedaban los del último
         // vehículo elegido/creado, el Guardar los mandaba como placa/marca/modelo de OTRA orden.
         cwSetVehiculoDatos('', '', '');
+        cwEnlacesEditar();
         document.getElementById('cw_secuencial').value = '';
         document.getElementById('cw_secuencial').dataset.sec = '';
         const selSerie = document.getElementById('cw_select_serie');
@@ -657,6 +661,7 @@
             document.getElementById('cw_id_cliente').value = o.id_cliente || '';
             document.getElementById('cw_cliente_busqueda').value = o.id_cliente ? ((o.cliente_identificacion || '') + ' — ' + (o.cliente_nombre || '')) : '';
             cwPintarInfoCliente(o);
+            cwEnlacesEditar();
             document.getElementById('cw_kilometraje').value = o.kilometraje || '';
             document.getElementById('cw_nivel_combustible').value = o.nivel_combustible || '';
             document.getElementById('cw_id_bodega').value = o.id_bodega || '';
@@ -801,7 +806,38 @@
         document.getElementById('cw_vehiculo_busqueda').value = (v.placa || '') + (v.marca ? ' — ' + v.marca : '');
         document.getElementById('cw_veh_dropdown').classList.add('d-none');
         cwSetVehiculoDatos(v.placa, v.marca, v.modelo);
+        cwEnlacesEditar();
     }
+
+    // Enlaces «Editar» junto a Cliente / Vehículo: solo con uno elegido y con permiso de
+    // modificar en ese módulo. También en órdenes facturadas/anuladas: se edita la ficha,
+    // no la orden (que conserva los datos con que se guardó).
+    function cwEnlacesEditar() {
+        const ver = (lnk, idInput, permiso) => document.getElementById(lnk)
+            ?.classList.toggle('d-none', !(permiso && document.getElementById(idInput).value));
+        ver('cw_lnk_editar_vehiculo', 'cw_id_vehiculo', !!window.CW_PERM.editarVehiculo);
+        ver('cw_lnk_editar_cliente', 'cw_id_cliente', !!window.CW_PERM.editarCliente);
+    }
+
+    // Abre la ficha completa en el modal del módulo (encima de la orden).
+    async function cwAbrirEdicion(url, abrir, nombre) {
+        if (typeof abrir !== 'function') { Swal.fire('Atención', `No se pudo abrir el formulario de ${nombre}.`, 'warning'); return; }
+        try {
+            const json = await (await fetch(url)).json();
+            if (!json.ok || !json.data) throw new Error(json.error || `No se encontró el ${nombre}.`);
+            await abrir(json.data);
+        } catch (e) {
+            Swal.fire('Atención', e.message || `No se pudo cargar el ${nombre}.`, 'warning');
+        }
+    }
+    window.cwEditarVehiculo = function () {
+        const id = document.getElementById('cw_id_vehiculo').value;
+        if (id) cwAbrirEdicion(`<?= rtrim(BASE_URL, '/') ?>/modulos/vehiculos/getAjax?id=${encodeURIComponent(id)}`, window.abrirModalVehiculoEditar, 'vehículo');
+    };
+    window.cwEditarCliente = function () {
+        const id = document.getElementById('cw_id_cliente').value;
+        if (id) cwAbrirEdicion(`<?= rtrim(BASE_URL, '/') ?>/modulos/clientes/getAjax?id=${encodeURIComponent(id)}`, window.abrirModalClienteEditar, 'cliente');
+    };
 
     // ─── Cliente ──────────────────────────────────────────────────────────────
     window.cwBuscarClientes = function (q) {
@@ -832,6 +868,7 @@
         cwPintarInfoCliente({ cliente_direccion: c.direccion, cliente_email: c.correo, cliente_telefono: c.telefono });
         // Agrega/actualiza el correo del cliente en Info. Adicional (igual que factura).
         cwActualizarInfoCorreoCliente(c.correo || '');
+        cwEnlacesEditar();
     }
 
     // Fila fija con el correo del cliente en Info. Adicional (se actualiza al cambiar de cliente).
@@ -1944,13 +1981,23 @@
     // cliente_id con valor) no se asigna nada.
     const cwOrdenAbierta = () => document.getElementById('modalOrdenCW').classList.contains('show');
     const campo = id => ((document.getElementById(id) || {}).value || '').trim();
+    // Orden en borrador y con permiso: los buscadores se deshabilitan en la orden bloqueada.
+    const cwOrdenEditable = () => !document.getElementById('cw_cliente_busqueda').disabled;
     window.addEventListener('vehiculoGuardado', (e) => {
         // Solo si la orden está abierta: el vehículo creado desde el listado no debe quedar
         // "pegado" en el formulario oculto y colarse en la siguiente orden que se abra.
         if (!cwOrdenAbierta()) return;
-        if (campo('vehiculo_id')) return;            // fue una edición, no un vehículo nuevo
-        if (campo('cw_id_vehiculo')) return;         // la orden ya tiene vehículo: no se reemplaza
         const j = e.detail || {}; const v = j.data || j;
+        if (campo('vehiculo_id')) {
+            // Edición (enlace «Editar» de la orden): si es el vehículo de esta orden y la orden
+            // es editable, se repintan placa/marca. En una orden facturada/anulada se queda lo
+            // que se guardó con ella.
+            if (campo('vehiculo_id') === campo('cw_id_vehiculo') && cwOrdenEditable()) {
+                cwSeleccionarVehiculo({ id: campo('vehiculo_id'), placa: campo('vehiculo_placa').toUpperCase(), marca: campo('vehiculo_marca'), modelo: document.getElementById('cw_vehiculo_busqueda').dataset.modelo || '' });
+            }
+            return;
+        }
+        if (campo('cw_id_vehiculo')) return;         // la orden ya tiene vehículo: no se reemplaza
         if (!v || !v.id) return;
         // El guardado del vehículo responde solo {ok, id}: la placa y la marca se toman del
         // formulario del vehículo para mostrarlas en el buscador (el servidor las vuelve a
@@ -1959,13 +2006,20 @@
     });
     document.addEventListener('clienteGuardado', (e) => {
         if (!cwOrdenAbierta()) return;
-        if (campo('cw_id_cliente')) return;          // la orden ya tiene cliente: no se reemplaza
         const j = e.detail || {}; const c = j.data || j;
         if (!c || !c.id) return;
         // 'nuevo' lo manda clientes_modal.js; si no viene, se mira el id del formulario
         // (vacío al crear; el modal de cliente no se cierra y lo rellena después del evento).
         const esNuevo = (typeof j.nuevo === 'boolean') ? j.nuevo : !campo('cliente_id');
-        if (!esNuevo) return;
+        if (!esNuevo) {
+            // Edición (enlace «Editar» de la orden): se repintan los datos del cliente de esta
+            // orden, solo si es editable (la facturada/anulada conserva lo guardado).
+            if (String(c.id) === campo('cw_id_cliente') && cwOrdenEditable()) {
+                cwSeleccionarCliente({ id: c.id, nombre: c.nombre || j.nombre, identificacion: c.identificacion, direccion: c.direccion, correo: c.correo || c.email, telefono: c.telefono });
+            }
+            return;
+        }
+        if (campo('cw_id_cliente')) return;          // la orden ya tiene cliente: no se reemplaza
         cwSeleccionarCliente({ id: c.id, nombre: c.nombre || j.nombre, identificacion: c.identificacion, direccion: c.direccion, correo: c.correo || c.email, telefono: c.telefono });
     });
     // Producto creado desde «nuevo producto»: se agrega al detalle (primera fila vacía o una
