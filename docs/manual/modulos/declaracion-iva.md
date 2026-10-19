@@ -5,8 +5,8 @@ categoria: Impuestos
 ruta_modulo: modulos/declaracion_iva
 tipo: modulo
 visibilidad: todos
-etiquetas: iva, valor a pagar, iva a pagar sale en cero, casillero 902, casillero 499, casillero 484, casillero 564, factor de proporcionalidad, casillero 563, casillero 419, saldo credito tributario proximo mes, casillero 615, casillero 617, credito del mes anterior, casillero 605, casillero 606, declaracion de iva, notas de credito, aviso nota de credito, tarifa distinta, no objeto de iva, casillero 441, casillero 413, casillero negativo, nota de credito no resta, devoluciones en ventas, casillero 411, casillero 421, valor neto, formulario 104, selector de año, no aparece el año, año anterior, impuesto, credito tributario, saldo a favor, pagar iva, casilleros, detalle de casilleros, excel, exportar, filtrar, sumas, cuadrar, casillero 609, retenciones de iva, retenciones que me hicieron, retenciones emitidas, retenciones en compras, agente de retencion, casilleros 721 a 731, codigo de retencion, formula, suma de casilleros, casillero en blanco, no calcula, no genera la declaracion, error al generar, value too long, invalid byte sequence, nombre de producto largo, tildes, acentos, caracteres raros
-version: 1.13
+etiquetas: iva, valor a pagar, iva a pagar sale en cero, casillero 902, casillero 499, casillero 484, casillero 564, factor de proporcionalidad, casillero 563, casillero 419, saldo credito tributario proximo mes, casillero 615, casillero 617, credito del mes anterior, casillero 605, casillero 606, declaracion de iva, notas de credito, aviso nota de credito, tarifa distinta, no objeto de iva, casillero 441, casillero 413, casillero negativo, nota de credito no resta, devoluciones en ventas, casillero 411, casillero 421, valor neto, formulario 104, selector de año, no aparece el año, año anterior, impuesto, credito tributario, saldo a favor, pagar iva, casilleros, detalle de casilleros, excel, exportar, filtrar, sumas, cuadrar, casillero 609, retenciones de iva, retenciones que me hicieron, retenciones emitidas, retenciones en compras, agente de retencion, casilleros 721 a 731, codigo de retencion, formula, suma de casilleros, casillero en blanco, no calcula, no genera la declaracion, error al generar, value too long, invalid byte sequence, nombre de producto largo, tildes, acentos, caracteres raros, notas de venta, nota de venta, rise, rimpe, negocio popular, casillero 508, casillero 518, casillero 509, total adquisiciones
+version: 1.14
 orden: 10
 estado: activo
 ---
@@ -87,6 +87,27 @@ La solución es corregir la nota de crédito: debe llevar la **misma tarifa de I
 que la línea de la factura** que devuelve. No se omiten ni se mueven valores del
 formulario automáticamente, porque el formulario debe coincidir con los
 comprobantes autorizados por el SRI.
+
+## Notas de venta recibidas (RISE / negocios populares)
+
+Las **notas de venta** que le entregan sus proveedores RISE o RIMPE negocio
+popular se registran en **Compras** con el tipo de comprobante **02 - Nota de
+venta** y la opción *Declaración de IVA*. En el formulario se declaran
+**completas en los casilleros 508 (valor bruto) y 518 (valor neto)**, sin
+importar la tarifa con que se haya registrado cada línea (0 %, 15 %, exento o sin
+impuesto). Así no se pierde ninguna por haber elegido otra tarifa al registrarla.
+
+- La nota de venta **no da crédito tributario**: solo se declara su base, nunca
+  un IVA.
+- Los casilleros salen de *Empresa → Form 104 IVA → Notas de Venta (Compra)*. Se
+  usa la fila **Exento de IVA** (la que llena la *Carga Rápida* con 508/518); si
+  esa fila está vacía, la primera tarifa que tenga casilleros. Si ninguna tiene,
+  la nota de venta no se declara.
+- El **total de adquisiciones (509/519)** suma también los casilleros 507/517
+  (compras al 0 %) y 508/518.
+- Las notas de venta registradas **antes** de este cambio se corrigen solas al
+  pulsar **GENERAR** en el período, que vuelve a armar los casilleros de cada
+  documento.
 
 ## Cómo se ve el formulario
 
@@ -346,6 +367,7 @@ Es la misma lógica de los décimos: no se cambia lo que ya se pagó.
 
 ## Historial de cambios
 
+- **1.14** — Las **notas de venta** recibidas (compras tipo 02) se declaran completas en los casilleros 508/518, con cualquier tarifa en sus líneas. Antes solo entraban las líneas registradas como *Exento*: las de 0 %, 15 % o sin impuesto no llegaban a ningún casillero. El total 509/519 suma ahora también el 507/517 y el 508/518.
 - **1.13** — Reabrir revisa primero que ni el egreso de pago ni el asiento estén en un período cerrado. Antes podía anular el egreso y fallar en el asiento, dejando la declaración a medio reabrir.
 - **1.12** — **Corrección del valor a pagar.** El casillero 484 queda igual al
   482 cuando la empresa no usa liquidación diferida (antes quedaba en cero, y con

@@ -2057,6 +2057,11 @@ class ComprasService
         $tarifaMap = $decIvaRepo->getMapaTarifasIva();
         $detalles = $data['detalles'] ?? [];
 
+        if ($tipoComprobante === '02') {
+            $this->sincronizarCasillerosNotaVenta($decIvaRepo, $idEmpresa, $idCompra, $fechaEmision, $detalles, $confCompras, $tarifaMap);
+            return;
+        }
+
         foreach ($detalles as $det) {
             $desc = !empty($det['producto_nombre']) ? $det['producto_nombre'] : (!empty($det['descripcion']) ? $det['descripcion'] : 'Sin concepto');
             // 240 y no 255: al concepto se le concatena " (Base)" / " (IVA)" justo abajo,
@@ -2099,6 +2104,66 @@ class ComprasService
                         'fecha' => $fechaEmision, 'casillero' => $impC, 'valor' => $signo * $valorImp, 'concepto' => $concepto . ' (IVA)'
                     ]);
                 }
+            }
+        }
+    }
+
+    /**
+     * Nota de venta recibida (tipo 02, RISE / RIMPE negocio popular): el F104 la declara
+     * entera en un solo renglón (508/518) sin importar la tarifa con que se registró cada
+     * línea. Antes se buscaba el casillero por la tarifa de la línea y la configuración
+     * estándar solo tiene "Exento": las líneas al 0 %, 15 % o sin impuesto no llegaban a
+     * ningún casillero y la nota de venta desaparecía de la declaración.
+     *
+     * Casillero: la fila "Exento" de "Notas de Venta (Compra)" si está configurada; si no,
+     * la primera tarifa con casillero. Base: la del impuesto IVA de la línea o, si la línea
+     * no tiene impuesto IVA, su subtotal. La nota de venta no genera crédito tributario, así
+     * que el casillero de impuesto se ignora.
+     */
+    private function sincronizarCasillerosNotaVenta(
+        \App\repositories\modulos\DeclaracionIvaRepository $decIvaRepo,
+        int $idEmpresa, int $idCompra, string $fechaEmision,
+        array $detalles, array $confNotaVenta, array $tarifaMap
+    ): void {
+        $conf = null;
+        $idExento = $tarifaMap['7'] ?? '';
+        $candidatas = $idExento !== '' && isset($confNotaVenta[$idExento])
+            ? [$confNotaVenta[$idExento]] + $confNotaVenta
+            : $confNotaVenta;
+        foreach ($candidatas as $c) {
+            if (($c['bruto'] ?? '') !== '' || ($c['neto'] ?? '') !== '') {
+                $conf = $c;
+                break;
+            }
+        }
+        if ($conf === null) return;
+
+        $bruto = (string) ($conf['bruto'] ?? '');
+        $neto  = (string) ($conf['neto'] ?? '');
+
+        foreach ($detalles as $det) {
+            $desc = !empty($det['producto_nombre']) ? $det['producto_nombre'] : (!empty($det['descripcion']) ? $det['descripcion'] : 'Sin concepto');
+            $concepto = mb_substr(trim($desc), 0, 240);
+
+            $base = 0.0;
+            $tieneIva = false;
+            foreach ($det['impuestos'] ?? [] as $imp) {
+                if ((int) ($imp['codigo_impuesto'] ?? 0) !== 2) continue;
+                $tieneIva = true;
+                $base += (float) ($imp['base_imponible'] ?? 0);
+            }
+            if (!$tieneIva) {
+                $base = (float) ($det['precio_total_sin_impuesto'] ?? 0);
+            }
+            $base = round($base, 2);
+            if ($base <= 0) continue;
+
+            foreach ([$bruto, $neto] as $casillero) {
+                if ($casillero === '') continue;
+                $decIvaRepo->insertarCasilleroDeclaracion([
+                    'id_empresa' => $idEmpresa, 'origen' => 'compras', 'id_origen' => $idCompra,
+                    'fecha' => $fechaEmision, 'casillero' => $casillero, 'valor' => $base, 'concepto' => $concepto . ' (Base)'
+                ]);
             }
         }
     }
