@@ -829,19 +829,36 @@ class InventarioService
             $cantidad = $conv['cantidad'];
         }
 
+        $numDoc = trim((string) ($data['num_doc_modificado'] ?? ''));
+        $codDoc = (string) ($data['cod_doc_modificado'] ?? '01');
+        // Lo disponible por lote de la factura se lee y se consume bajo candado (§8): dos notas
+        // simultáneas sobre la misma factura no deben devolver dos veces el mismo lote.
+        if ($numDoc !== '') {
+            $this->repo->lockDevolucionDocumento($idEmpresa, $numDoc, $idProducto);
+        }
         $this->repo->lockStock($idProducto, $idBodega, $idEmpresa);
         $stockActual  = $this->repo->getStockActual($idProducto, $idBodega, $idEmpresa);
         $costoUnit    = $this->repo->getCostoPromedio($idProducto, $idBodega, $idEmpresa);
 
-        // La devolución regresa al mismo lote / NUP / caducidad que salió en la factura.
-        $tramos = $this->repartirDevolucionPorOrigen(
-            $idEmpresa,
-            $idProducto,
-            (string) ($data['num_doc_modificado'] ?? ''),
-            (string) ($data['cod_doc_modificado'] ?? '01'),
-            $cantidad,
-            $data['linea_origen'] ?? null
-        );
+        $loteElegido = trim((string) ($data['lote_elegido'] ?? ''));
+        $nupElegido  = trim((string) ($data['nup_elegido'] ?? ''));
+        if ($loteElegido !== '' || $nupElegido !== '') {
+            // El usuario eligió en la nota a qué lote / NUP regresa la mercadería.
+            $tramos = $this->tramosLoteElegido(
+                $idEmpresa, $idProducto, $numDoc, $codDoc, $cantidad, $loteElegido, $nupElegido,
+                (string) ($data['nombre_producto'] ?? "producto #{$idProducto}")
+            );
+        } else {
+            // Sin elección: regresa al mismo lote / NUP / caducidad que salió en la factura.
+            $tramos = $this->repartirDevolucionPorOrigen(
+                $idEmpresa,
+                $idProducto,
+                $numDoc,
+                $codDoc,
+                $cantidad,
+                $data['linea_origen'] ?? null
+            );
+        }
 
         foreach ($tramos as $t) {
             $stockPost = $stockActual + $t['cantidad'];
@@ -930,37 +947,8 @@ class InventarioService
     {
         $sinOrigen = [['lote' => null, 'caducidad' => null, 'nup' => null, 'cantidad' => $cantidad]];
 
-        $numDoc = trim($numDoc);
-        if ($numDoc === '' || $codDoc !== '01') return $sinOrigen;
-
-        $idVenta = $this->idVentaPorNumero($idEmpresa, $numDoc);
-        if (!$idVenta) return $sinOrigen;
-
-        $origen = $this->repo->getSalidasVentaProducto($idEmpresa, $idProducto, $idVenta);
-        if (!$origen) {
-            $origen = $this->repo->getLotesDetalleVenta($idProducto, $idVenta);
-        }
-
-        // Agrupar por lote+NUP: el disponible para devolver de cada uno.
-        $disponibles = [];
-        foreach ($origen as $o) {
-            $lote = trim((string) ($o['numero_lote'] ?? ''));
-            $nup  = trim((string) ($o['nup'] ?? ''));
-            $cad  = trim((string) ($o['fecha_caducidad'] ?? ''));
-            if ($lote === '' && $nup === '' && $cad === '') continue;
-            $k = $lote . '|' . $nup;
-            if (!isset($disponibles[$k])) {
-                $disponibles[$k] = ['lote' => $lote, 'nup' => $nup, 'caducidad' => $cad, 'cantidad' => 0.0];
-            }
-            $disponibles[$k]['cantidad'] += abs((float) $o['cantidad']);
-            if ($disponibles[$k]['caducidad'] === '' && $cad !== '') $disponibles[$k]['caducidad'] = $cad;
-        }
+        $disponibles = $this->disponiblesDevolucion($idEmpresa, trim($numDoc), $codDoc, $idProducto)[$idProducto] ?? [];
         if (!$disponibles) return $sinOrigen;
-
-        foreach ($this->repo->getDevueltoPorNcDeDocumento($idEmpresa, $idProducto, $numDoc) as $d) {
-            $k = $d['lote'] . '|' . $d['nup'];
-            if (isset($disponibles[$k])) $disponibles[$k]['cantidad'] -= (float) $d['cantidad'];
-        }
 
         // Ítem enlazado a su línea de factura: su lote / NUP va primero en el reparto.
         $loteLinea = $lineaOrigen['lote'] ?? null;
@@ -988,6 +976,125 @@ class InventarioService
         }
         if ($restante > 0) {
             $tramos[] = ['lote' => null, 'caducidad' => null, 'nup' => null, 'cantidad' => $restante];
+        }
+        return $tramos;
+    }
+
+    /**
+     * Lo que aún se puede devolver de cada lote / NUP que salió con una factura: lo que la factura
+     * sacó (kardex; si no, lo escrito en sus líneas) menos lo que otras NC vigentes del mismo
+     * documento ya devolvieron. Cantidades en la unidad del producto (la del kardex).
+     * Con $idProducto = null, todos los productos de la factura en tres consultas en total.
+     *
+     * @return array<int,array<string,array{lote:string,nup:string,caducidad:string,cantidad:float}>>
+     *         id_producto => [ 'lote|nup' => disponible ]
+     */
+    private function disponiblesDevolucion(int $idEmpresa, string $numDoc, string $codDoc, ?int $idProducto = null, ?int $excluirIdNc = null): array
+    {
+        if ($numDoc === '' || $codDoc !== '01') return [];
+        $idVenta = $this->idVentaPorNumero($idEmpresa, $numDoc);
+        if (!$idVenta) return [];
+
+        // Por producto: el kardex de la salida manda; las líneas de la factura solo cubren a los
+        // productos cuya salida no quedó registrada (mismo respaldo de siempre).
+        $porProducto = [];
+        foreach ($this->repo->getSalidasVentaProducto($idEmpresa, $idProducto, $idVenta) as $o) {
+            $porProducto[(int) $o['id_producto']][] = $o;
+        }
+        $respaldo = [];
+        foreach ($this->repo->getLotesDetalleVenta($idProducto, $idVenta) as $o) {
+            $respaldo[(int) $o['id_producto']][] = $o;
+        }
+        $porProducto += $respaldo;
+
+        $disponibles = [];
+        foreach ($porProducto as $idProd => $origen) {
+            foreach ($origen as $o) {
+                $lote = trim((string) ($o['numero_lote'] ?? ''));
+                // 'sin_lote': centinela de la factura cuando el lote no era obligatorio.
+                if ($lote === 'sin_lote') $lote = '';
+                $nup  = trim((string) ($o['nup'] ?? ''));
+                $cad  = trim((string) ($o['fecha_caducidad'] ?? ''));
+                if ($lote === '' && $nup === '' && $cad === '') continue;
+                $k = $lote . '|' . $nup;
+                if (!isset($disponibles[$idProd][$k])) {
+                    $disponibles[$idProd][$k] = ['lote' => $lote, 'nup' => $nup, 'caducidad' => $cad, 'cantidad' => 0.0];
+                }
+                $disponibles[$idProd][$k]['cantidad'] += abs((float) $o['cantidad']);
+                if ($disponibles[$idProd][$k]['caducidad'] === '' && $cad !== '') $disponibles[$idProd][$k]['caducidad'] = $cad;
+            }
+        }
+        if (!$disponibles) return [];
+
+        foreach ($this->repo->getDevueltoPorNcDeDocumento($idEmpresa, $idProducto, $numDoc, $excluirIdNc) as $d) {
+            $k = $d['lote'] . '|' . $d['nup'];
+            $idProd = (int) $d['id_producto'];
+            if (isset($disponibles[$idProd][$k])) $disponibles[$idProd][$k]['cantidad'] -= (float) $d['cantidad'];
+        }
+        return $disponibles;
+    }
+
+    /**
+     * Selector de Lote / NUP de la nota de crédito: por producto, los lotes y NUP que salieron con
+     * la factura y lo que aún se puede devolver de cada uno. Solo lectura.
+     * $excluirIdNc: la nota que se está editando (lo que ella devolvió vuelve a estar disponible).
+     *
+     * @return array<int,array<int,array{lote:string,nup:string,caducidad:string,disponible:float}>>
+     */
+    public function lotesDevolviblesFactura(int $idEmpresa, string $numDoc, string $codDoc = '01', ?int $excluirIdNc = null): array
+    {
+        $res = [];
+        foreach ($this->disponiblesDevolucion($idEmpresa, trim($numDoc), $codDoc, null, $excluirIdNc) as $idProd => $lista) {
+            foreach ($lista as $d) {
+                $res[$idProd][] = [
+                    'lote'       => $d['lote'],
+                    'nup'        => $d['nup'],
+                    'caducidad'  => $d['caducidad'],
+                    'disponible' => max(0.0, round($d['cantidad'], 6)),
+                ];
+            }
+        }
+        return $res;
+    }
+
+    /**
+     * Devolución al lote / NUP que eligió el usuario en la nota. Solo se acepta uno que haya salido
+     * con la factura, y nunca más de lo que aún queda por devolver de él: si no, la nota no se guarda.
+     *
+     * @return array<int,array{lote:?string,caducidad:?string,nup:?string,cantidad:float}>
+     */
+    private function tramosLoteElegido(int $idEmpresa, int $idProducto, string $numDoc, string $codDoc, float $cantidad, string $lote, string $nup, string $nombreProducto): array
+    {
+        $disponibles = $this->disponiblesDevolucion($idEmpresa, trim($numDoc), $codDoc, $idProducto)[$idProducto] ?? [];
+        $elegidos = array_filter($disponibles, fn($d) =>
+            ($lote === '' || $d['lote'] === $lote) && ($nup === '' || $d['nup'] === $nup));
+
+        $etiqueta = trim(($lote !== '' ? "lote {$lote}" : '') . ($nup !== '' ? ($lote !== '' ? ' / ' : '') . "NUP {$nup}" : ''));
+        if (!$elegidos) {
+            throw new \Exception("El {$etiqueta} de «{$nombreProducto}» no salió con la factura {$numDoc}. Elija uno de los lotes de esa factura.");
+        }
+
+        $disp = round(array_sum(array_column($elegidos, 'cantidad')), 6);
+        if (round($cantidad, 6) > $disp + 0.000001) {
+            throw new \Exception(
+                "Del {$etiqueta} de «{$nombreProducto}» solo quedan {$this->fmtCantidad(max(0, $disp))} por devolver "
+                . "en la factura {$numDoc} (la nota devuelve {$this->fmtCantidad($cantidad)}). Ajuste la cantidad o elija otro lote."
+            );
+        }
+
+        $tramos = [];
+        $restante = round($cantidad, 6);
+        foreach ($elegidos as $d) {
+            if ($restante <= 0) break;
+            $toma = min($restante, round($d['cantidad'], 6));
+            if ($toma <= 0) continue;
+            $tramos[] = [
+                'lote'      => $d['lote'] !== '' ? $d['lote'] : null,
+                'caducidad' => $d['caducidad'] !== '' ? $d['caducidad'] : null,
+                'nup'       => $d['nup'] !== '' ? $d['nup'] : null,
+                'cantidad'  => $toma,
+            ];
+            $restante = round($restante - $toma, 6);
         }
         return $tramos;
     }

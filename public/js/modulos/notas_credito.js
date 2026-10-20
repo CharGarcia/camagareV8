@@ -255,7 +255,7 @@
             document.getElementById('modalNCTitulo').innerHTML = '<i class="bi bi-file-earmark-minus text-primary me-2"></i>Nueva Nota de Crédito';
             
             // Limpiar tabla
-            if (tableBody) tableBody.innerHTML = '<tr><td colspan="8" class="text-center py-4 text-muted">Seleccione una factura para cargar los detalles.</td></tr>';
+            if (tableBody) tableBody.innerHTML = '<tr><td colspan="10" class="text-center py-4 text-muted">Seleccione una factura para cargar los detalles.</td></tr>';
             
             // Limpiar datos de cliente/factura
             setEl('nc_info_factura_modificada', 'innerHTML', '');
@@ -454,6 +454,8 @@
                     // Modo solo lectura para NC guardadas (ver NC_setModoLectura).
                     const soloLectura = (data && data._soloLectura === true) || (estadoEfectivo !== 'borrador');
                     NC_setModoLectura(!!soloLectura);
+                    // Columnas Lote / NUP con la serie y la factura ya repobladas.
+                    NC_cargarLotesFactura();
                 }
             } catch (e) {
                 console.error('Error al cargar datos NC:', e);
@@ -636,6 +638,8 @@
         if (!idPt) return;
         // Otra serie puede ser de otro establecimiento, con otro modo de cálculo del IVA.
         window.NC_calcFila();
+        // ...y con otra configuración de lotes / NUP (columnas del detalle).
+        NC_cargarLotesFactura();
 
         const url = `${BASE_URL}/modulos/notas_credito/getSecuencialAjax?id_punto=${idPt}`;
         fetch(url)
@@ -923,6 +927,7 @@
             const result = await resp.json();
             if (result.ok) {
                 renderDetallesFromFactura(result.detalles);
+                NC_cargarLotesFactura();
                 calcTotales();
             }
         } catch (e) {
@@ -1009,6 +1014,111 @@
         calcTotales();
     }
 
+    // ─── LOTE / NUP DE LA DEVOLUCIÓN ───────────────────────────────────────
+    // Si el establecimiento de la serie exige lote y/o NUP (Empresa → Facturación), el detalle
+    // muestra las columnas Lote / NUP con los que salieron en la factura modificada y lo que aún
+    // se puede devolver de cada uno; el usuario elige a cuál regresa la mercadería. El servidor
+    // vuelve a validar al guardar (InventarioService::tramosLoteElegido). Sin elección, la
+    // devolución se reparte sola como siempre.
+    let NC_LOTES = { lotes: false, nup: false, productos: {} };
+    let NC_lotesToken = 0;
+
+    const NC_escAttr = (s) => String(s ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+    const NC_fmtCant = (n) => String(Math.round((parseFloat(n) || 0) * 1e6) / 1e6);
+    // 'sin_lote' es el centinela que graba la factura cuando el lote no era obligatorio.
+    const NC_loteReal = (v) => { const s = String(v ?? '').trim(); return s === 'sin_lote' ? '' : s; };
+
+    async function NC_cargarLotesFactura() {
+        const tabla = document.getElementById('nc_tabla_detalle');
+        if (!tabla) return;
+        const token = ++NC_lotesToken;
+        const params = new URLSearchParams({
+            num_doc: (document.getElementById('nc_factura_search')?.value || '').trim(),
+            id_punto_emision: document.getElementById('nc_id_punto_emision')?.value || '',
+            id_nc: document.getElementById('nc_id')?.value || ''
+        });
+        let res = null;
+        try {
+            res = await (await fetch(`${BASE_URL}/modulos/notas_credito/getLotesDevolucionAjax?${params}`, { cache: 'no-store' })).json();
+        } catch (e) {
+            console.error('Error al cargar lotes de la factura:', e);
+        }
+        if (token !== NC_lotesToken) return;   // llegó la respuesta de una petición anterior
+        NC_LOTES = (res && res.ok)
+            ? { lotes: !!res.lotes, nup: !!res.nup, productos: res.productos || {} }
+            : { lotes: false, nup: false, productos: {} };
+        tabla.classList.toggle('nc-con-lote', NC_LOTES.lotes);
+        tabla.classList.toggle('nc-con-nup', NC_LOTES.nup);
+        tableBody.querySelectorAll('tr.row-det').forEach(NC_pintarLotesFila);
+    }
+
+    // Llena los selectores Lote / NUP de una fila con los de su producto en la factura,
+    // conservando lo ya elegido (o lo que traía la línea de la factura / la nota guardada).
+    function NC_pintarLotesFila(tr) {
+        const selLote = tr.querySelector('select[name="det_lote[]"]');
+        const selNup  = tr.querySelector('select[name="det_nup[]"]');
+        if (!selLote || !selNup) return;
+        const idProd = tr.querySelector('input[name="det_id_producto[]"]')?.value || '';
+        const lista  = (idProd && NC_LOTES.productos[idProd]) || [];
+
+        const preLote = selLote.value || selLote.dataset.pre || '';
+        const lotes = [];
+        lista.forEach(l => {
+            if (!l.lote) return;
+            let g = lotes.find(x => x.lote === l.lote);
+            if (!g) lotes.push(g = { lote: l.lote, caducidad: l.caducidad, disponible: 0 });
+            g.disponible += parseFloat(l.disponible) || 0;
+            if (!g.caducidad && l.caducidad) g.caducidad = l.caducidad;
+        });
+        let opts = lotes.length ? '<option value="">Seleccione…</option>' : '<option value="">—</option>';
+        opts += lotes.map(g => `<option value="${NC_escAttr(g.lote)}">${NC_escAttr(g.lote)}`
+            + `${g.caducidad ? ' · vence ' + NC_escAttr(g.caducidad) : ''} · disp. ${NC_fmtCant(g.disponible)}</option>`).join('');
+        // Lote guardado que ya no está en la lista (nota emitida, factura sin salida registrada).
+        if (preLote && !lotes.some(g => g.lote === preLote)) {
+            opts += `<option value="${NC_escAttr(preLote)}">${NC_escAttr(preLote)}</option>`;
+        }
+        selLote.innerHTML = opts;
+        selLote.value = preLote;
+        selLote.dataset.pre = '';
+
+        const preNup = selNup.value || selNup.dataset.pre || '';
+        const loteSel = selLote.value;
+        const nups = lista.filter(l => l.nup && (!loteSel || l.lote === loteSel));
+        let optsN = nups.length ? '<option value="">Seleccione…</option>' : '<option value="">—</option>';
+        optsN += nups.map(l => `<option value="${NC_escAttr(l.nup)}" data-lote="${NC_escAttr(l.lote)}">${NC_escAttr(l.nup)}`
+            + ` · disp. ${NC_fmtCant(l.disponible)}</option>`).join('');
+        if (preNup && !nups.some(l => l.nup === preNup)) {
+            optsN += `<option value="${NC_escAttr(preNup)}">${NC_escAttr(preNup)}</option>`;
+        }
+        selNup.innerHTML = optsN;
+        selNup.value = preNup;
+        selNup.dataset.pre = '';
+    }
+
+    window.NC_cambioLoteFila = (sel) => {
+        const tr = sel.closest('tr');
+        if (!tr) return;
+        if (sel.name === 'det_lote[]') {
+            // Otro lote: el NUP elegido puede no ser de ese lote.
+            const selNup = tr.querySelector('select[name="det_nup[]"]');
+            if (selNup) selNup.value = '';
+            NC_pintarLotesFila(tr);
+        } else if (sel.value) {
+            // Elegir un NUP fija su lote.
+            const lote = sel.selectedOptions[0]?.dataset.lote || '';
+            const selLote = tr.querySelector('select[name="det_lote[]"]');
+            if (selLote && lote && NC_LOTES.lotes) selLote.value = lote;
+        }
+    };
+
+    // Lote / NUP elegidos en una fila (vacíos si la columna no está activa).
+    function NC_loteFila(tr) {
+        return {
+            lote: NC_LOTES.lotes ? (tr.querySelector('select[name="det_lote[]"]')?.value || '') : '',
+            nup:  NC_LOTES.nup   ? (tr.querySelector('select[name="det_nup[]"]')?.value || '')  : ''
+        };
+    }
+
     // Acepta datos opcionales: el botón "Agregar línea manual" la llama sin argumentos
     // (fila en blanco) y la restauración del borrador la llama con la línea guardada.
     window.NC_agregarFila = (data) => {
@@ -1027,6 +1137,9 @@
         const precioUnitario = data.precio_unitario || 0;
         const descuento = data.descuento || 0;
         const idTarifaIva = data.id_tarifa_iva || 1;
+        // Lote / NUP: el elegido (borrador local), el de la nota guardada o el de la línea de la factura.
+        const loteIni = NC_loteReal(data.lote_elegido ?? data.numero_lote);
+        const nupIni  = String(data.nup_elegido ?? data.nup ?? '').trim();
         // Cantidad, precio y descuento no admiten negativos: el signo "-" (y la "e" de
         // notación científica) dejaban el subtotal de la línea en negativo al escribir.
         const sinNegativos = `min="0" onkeydown="if(event.key==='-'||event.key==='e'||event.key==='E')event.preventDefault()"`;
@@ -1039,6 +1152,12 @@
             </td>
             <td class="py-1 position-relative">
                 <input type="text" name="det_descripcion[]" class="input-detalle" value="${descripcion}" placeholder="Buscar producto/servicio o escribir..." autocomplete="off">
+            </td>
+            <td class="py-1 nc-col-lote">
+                <select name="det_lote[]" class="input-detalle" data-pre="${NC_escAttr(loteIni)}" onchange="window.NC_cambioLoteFila(this)"></select>
+            </td>
+            <td class="py-1 nc-col-nup">
+                <select name="det_nup[]" class="input-detalle" data-pre="${NC_escAttr(nupIni)}" onchange="window.NC_cambioLoteFila(this)"></select>
             </td>
             <td class="py-1">
                 <input type="number" name="det_cantidad[]" class="input-detalle text-center" value="${cantidad}" step="0.000001" ${sinNegativos} oninput="window.NC_calcFila(this)">
@@ -1063,6 +1182,7 @@
         `;
         
         tableBody.appendChild(tr);
+        NC_pintarLotesFila(tr);
         NC_attachProductoAutocomplete(tr);
         window.NC_calcFila(tr.querySelector('input[name="det_cantidad[]"]'));
     }
@@ -1118,6 +1238,12 @@
             // la descripción se conserva (puede ser un ítem libre con código propio).
             if (inpId) inpId.value = '';
             if (inpVd) inpVd.value = '';
+            // Sin producto no hay lote que elegir.
+            const conLote = tr.querySelector('select[name="det_lote[]"]');
+            if (conLote && (conLote.value || conLote.options.length > 1)) {
+                tr.querySelectorAll('select[name="det_lote[]"], select[name="det_nup[]"]').forEach(s => { s.value = ''; s.dataset.pre = ''; });
+                NC_pintarLotesFila(tr);
+            }
             if (inp === inpDesc && inpCod) inpCod.value = '';
             const q = inp.value.trim();
             if (q.length < (inp === inpCod ? 1 : 2)) { if (dd) dd.classList.add('d-none'); return; }
@@ -1198,6 +1324,9 @@
         }
 
         dd.classList.add('d-none');
+        // Otro producto: sus lotes son otros.
+        tr.querySelectorAll('select[name="det_lote[]"], select[name="det_nup[]"]').forEach(s => { s.value = ''; s.dataset.pre = ''; });
+        NC_pintarLotesFila(tr);
         window.NC_calcFila(inpCant || inpPrec);
         if (inpCant) inpCant.focus();
     };
@@ -1207,7 +1336,7 @@
         if (tr && tr._ncDdProd) tr._ncDdProd.remove();   // limpiar dropdown colgado del body
         tr.remove();
         if (tableBody.children.length === 0) {
-            tableBody.innerHTML = '<tr><td colspan="8" class="text-center py-4 text-muted">No hay items.</td></tr>';
+            tableBody.innerHTML = '<tr><td colspan="10" class="text-center py-4 text-muted">No hay items.</td></tr>';
         }
         calcTotales();
     };
@@ -1504,6 +1633,18 @@
             const cant = tr.querySelector('input[name="det_cantidad[]"]');
             if (!desc.value.trim()) { NC_focusYError(desc, 'La descripción del ítem es obligatoria.'); return false; }
             if (!(parseFloat(cant.value) > 0)) { NC_focusYError(cant, 'La cantidad del ítem debe ser mayor a cero.'); return false; }
+            // Lote / NUP: obligatorios si el establecimiento los exige y la factura sacó alguno
+            // de ese producto (la lista trae más que la opción vacía).
+            if (tr.querySelector('input[name="det_id_producto[]"]').value) {
+                const selL = tr.querySelector('select[name="det_lote[]"]');
+                const selN = tr.querySelector('select[name="det_nup[]"]');
+                if (NC_LOTES.lotes && selL && selL.options.length > 1 && !selL.value) {
+                    NC_focusYError(selL, `Seleccione el lote al que regresa «${desc.value.trim()}».`); return false;
+                }
+                if (NC_LOTES.nup && selN && selN.options.length > 1 && !selN.value) {
+                    NC_focusYError(selN, `Seleccione el NUP / serial que regresa de «${desc.value.trim()}».`); return false;
+                }
+            }
             const prec  = tr.querySelector('input[name="det_precio_unitario[]"]');
             const dscto = tr.querySelector('input[name="det_descuento[]"]');
             if ((parseFloat(prec.value) || 0) < 0) { NC_focusYError(prec, 'El precio unitario no puede ser negativo.'); return false; }
@@ -1568,11 +1709,14 @@
             const porcIva = parseFloat(optIva.dataset.porcentaje) || 0;
             const valorIva = r2(base * (porcIva / 100));
 
+            const loteFila = NC_loteFila(tr);
             detalles.push({
                 id_producto: tr.querySelector('input[name="det_id_producto[]"]').value,
                 id_venta_detalle: (tr.querySelector('input[name="det_id_venta_detalle[]"]')?.value || null),
                 codigo_principal: (tr.querySelector('input[name="det_codigo_principal[]"]')?.value || ''),
                 descripcion: tr.querySelector('input[name="det_descripcion[]"]').value,
+                lote_elegido: loteFila.lote,
+                nup_elegido: loteFila.nup,
                 cantidad: cant,
                 precio_unitario: prec,
                 descuento: desc,
@@ -1622,6 +1766,11 @@
                 // Capturar antes de recargar (el reload resetea NC_ID_ACTIVO).
                 const idPrevio   = parseInt(window.NC_ID_ACTIVO) || 0;
                 const idGuardado = parseInt(data.id) || idPrevio;
+                // "Registrar nueva" solo al crear, y solo desde el propio módulo: embebida en
+                // Factura de Venta / Recibos la NC nace de una factura, no tiene sentido una en blanco.
+                const eraNueva = !idPrevio && !payload.id;
+                const embebida = typeof window.fvRefrescarDatosModal === 'function'
+                              || typeof window.refrescarDesdeModuloHijo === 'function';
                 window.NC_eliminarRespaldo();
 
                 // NO se cierra el modal: el usuario lo cierra a mano (para corregir
@@ -1630,7 +1779,9 @@
                 if (idGuardado > 0 && typeof window.NC_abrirModalNC === 'function') {
                     // Recargar en modo solo lectura: la NC ya está guardada; el usuario
                     // usa los botones (SRI, PDF, XML, correo) sin editar los campos.
-                    window.NC_abrirModalNC({ dataset: { row: JSON.stringify({ id: idGuardado, _soloLectura: true }) } });
+                    // Se ESPERA la recarga: hasta que nc_id tiene el id creado, otro clic en
+                    // Guardar crearía una segunda NC (el botón sigue deshabilitado mientras tanto).
+                    await window.NC_abrirModalNC({ dataset: { row: JSON.stringify({ id: idGuardado, _soloLectura: true }) } });
                 }
                 // Notificar al módulo padre si existe una función de refresco.
                 if (typeof window.fvRefrescarDatosModal === 'function') {
@@ -1638,7 +1789,11 @@
                 } else if (typeof window.refrescarDesdeModuloHijo === 'function') {
                     window.refrescarDesdeModuloHijo();
                 }
-                Swal.fire({ toast: true, position: 'top-end', icon: 'success', title: data.mensaje || 'Guardado', showConfirmButton: false, timer: 2500, timerProgressBar: true });
+                if (eraNueva && !embebida && idGuardado > 0) {
+                    NC_preguntarRegistrarOtra(data.mensaje);
+                } else {
+                    Swal.fire({ toast: true, position: 'top-end', icon: 'success', title: data.mensaje || 'Guardado', showConfirmButton: false, timer: 2500, timerProgressBar: true });
+                }
             } else {
                 Swal.fire('Error', data.mensaje, 'error');
             }
@@ -1654,6 +1809,23 @@
         }
     };
 
+    // Tras crear una NC (mismo modelo que Ingresos): "Registrar nueva" limpia el modal para
+    // empezar otra en el acto; "Seguir en esta" deja abierta la recién guardada (SRI, PDF, correo).
+    function NC_preguntarRegistrarOtra(mensaje) {
+        Swal.fire({
+            icon: 'success',
+            title: mensaje || 'Nota de crédito guardada',
+            text: '¿Desea registrar una nueva nota de crédito o seguir en esta?',
+            showCancelButton: true,
+            confirmButtonText: '<i class="bi bi-plus-circle me-1"></i> Registrar nueva',
+            cancelButtonText: 'Seguir en esta',
+            reverseButtons: true,
+            allowOutsideClick: false
+        }).then(r => {
+            if (r.isConfirmed) window.NC_abrirModalNuevo();
+        });
+    }
+
     function NC_capturarEstado() {
         const detalles = [];
         const rows = tableBody.querySelectorAll('tr.row-det');
@@ -1663,6 +1835,8 @@
                 id_venta_detalle: (tr.querySelector('input[name="det_id_venta_detalle[]"]')?.value || ''),
                 codigo_principal: (tr.querySelector('input[name="det_codigo_principal[]"]')?.value || ''),
                 descripcion: tr.querySelector('input[name="det_descripcion[]"]').value,
+                lote_elegido: tr.querySelector('select[name="det_lote[]"]')?.value || '',
+                nup_elegido: tr.querySelector('select[name="det_nup[]"]')?.value || '',
                 cantidad: tr.querySelector('input[name="det_cantidad[]"]').value,
                 precio_unitario: tr.querySelector('input[name="det_precio_unitario[]"]').value,
                 descuento: tr.querySelector('input[name="det_descuento[]"]').value,
@@ -1774,6 +1948,7 @@
         NC_renderInfoAdicional(data.info_adicional);
 
         calcTotales();
+        NC_cargarLotesFactura();
         if (typeof mostrarToast === 'function') mostrarToast('Borrador de NC restaurado.', 'info');
     };
 

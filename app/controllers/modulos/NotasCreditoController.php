@@ -590,6 +590,56 @@ class NotasCreditoController extends BaseModuloController
         exit;
     }
 
+    /**
+     * Columnas Lote / NUP del detalle: si el establecimiento de la serie elegida exige lote y/o NUP
+     * (Empresa → Facturación) y, por producto, los lotes / NUP que salieron con la factura que
+     * modifica la nota y lo que aún se puede devolver de cada uno. Solo lee.
+     * id_nc: la nota en edición (lo que ella misma devolvió vuelve a contar como disponible).
+     */
+    public function getLotesDevolucionAjax(): void
+    {
+        $this->requireLeer();
+        header('Content-Type: application/json');
+
+        try {
+            $idEmpresa = (int) $_SESSION['id_empresa'];
+            $numDoc    = trim((string) ($_GET['num_doc'] ?? ''));
+            $idPunto   = (int) ($_GET['id_punto_emision'] ?? 0);
+            $idNc      = (int) ($_GET['id_nc'] ?? 0);
+
+            $lotes = false;
+            $nup   = false;
+            if ($idPunto > 0) {
+                // Punto validado contra la empresa activa (un id de otra empresa no devuelve nada).
+                $punto = (new \App\repositories\SecuencialRepository())->getPuntoEmisionSerie($idPunto, $idEmpresa);
+                if ($punto && !empty($punto['id_establecimiento'])) {
+                    $cfg   = (new \App\repositories\modulos\EmpresaRepository())->getEstablecimientoConfig((int) $punto['id_establecimiento']) ?? [];
+                    $lotes = \App\Helpers\Booleano::es($cfg['obligatorio_lotes'] ?? false);
+                    $nup   = \App\Helpers\Booleano::es($cfg['obligatorio_nup'] ?? false);
+                }
+            }
+
+            $productos = [];
+            if (($lotes || $nup) && $numDoc !== '') {
+                if ($idNc > 0) {
+                    $nc = $this->repository->getPorId($idNc);
+                    if (!$nc || (int) ($nc['id_empresa'] ?? 0) !== $idEmpresa) $idNc = 0;
+                }
+                $inv = new \App\Services\modulos\InventarioService(
+                    new \App\repositories\modulos\InventarioRepository(),
+                    new \App\Services\LogSistemaService()
+                );
+                $productos = $inv->lotesDevolviblesFactura($idEmpresa, $numDoc, '01', $idNc ?: null);
+            }
+
+            echo json_encode(['ok' => true, 'lotes' => $lotes, 'nup' => $nup, 'productos' => (object) $productos]);
+        } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
+            echo json_encode(['ok' => false, 'mensaje' => 'No se pudieron cargar los lotes de la factura.']);
+        }
+        exit;
+    }
+
     public function guardarAjax(): void
     {
         header('Content-Type: application/json');

@@ -233,6 +233,9 @@ class NotaCreditoService
                         'num_doc_modificado' => $data['num_doc_modificado'] ?? '',
                         'cod_doc_modificado' => $data['cod_doc_modificado'] ?? '01',
                         'linea_origen'    => $det['linea_origen'],
+                        'lote_elegido'    => $det['lote_elegido'] ?? '',
+                        'nup_elegido'     => $det['nup_elegido'] ?? '',
+                        'nombre_producto' => $det['descripcion'] ?? '',
                         'descripcion'     => "Devolución NC {$data['establecimiento']}-{$data['punto_emision']}-{$data['secuencial']}",
                         'id_usuario'      => $data['id_usuario']
                     ]);
@@ -466,6 +469,9 @@ class NotaCreditoService
                         'num_doc_modificado' => $data['num_doc_modificado'] ?? '',
                         'cod_doc_modificado' => $data['cod_doc_modificado'] ?? '01',
                         'linea_origen'    => $det['linea_origen'],
+                        'lote_elegido'    => $det['lote_elegido'] ?? '',
+                        'nup_elegido'     => $det['nup_elegido'] ?? '',
+                        'nombre_producto' => $det['descripcion'] ?? '',
                         'descripcion'     => "Devolución NC Actualizada {$data['secuencial']}",
                         'id_usuario'      => $data['id_usuario']
                     ]);
@@ -522,6 +528,11 @@ class NotaCreditoService
             }
             $det['id_venta_detalle'] = $linea ? $idLinea : null;
             $det['linea_origen']     = $linea;
+            // Lote / NUP elegidos en la nota: solo tienen sentido en un ítem con producto.
+            if (empty($det['id_producto'])) {
+                $det['lote_elegido'] = '';
+                $det['nup_elegido']  = '';
+            }
         }
         unset($det);
 

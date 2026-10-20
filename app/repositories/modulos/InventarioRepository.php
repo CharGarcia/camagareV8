@@ -176,31 +176,40 @@ class InventarioRepository extends BaseRepository
         return $id ? (int) $id : null;
     }
 
-    /** Lo que la factura sacó de inventario para un producto, con su lote/caducidad/NUP. */
-    public function getSalidasVentaProducto(int $idEmpresa, int $idProducto, int $idVenta): array
+    /**
+     * Lo que la factura sacó de inventario, con su lote/caducidad/NUP. Con $idProducto = null
+     * trae todos los productos de la factura en una sola consulta (selector de lotes de la NC).
+     */
+    public function getSalidasVentaProducto(int $idEmpresa, ?int $idProducto, int $idVenta): array
     {
+        $filtroProd = $idProducto !== null ? 'AND id_producto = :p' : '';
         $st = $this->db->prepare(
-            "SELECT numero_lote, fecha_caducidad, nup, ABS(cantidad) AS cantidad
+            "SELECT id_producto, numero_lote, fecha_caducidad, nup, ABS(cantidad) AS cantidad
              FROM inventario_kardex
-             WHERE id_empresa = :e AND id_producto = :p AND referencia_id = :v
+             WHERE id_empresa = :e AND referencia_id = :v {$filtroProd}
                AND referencia_tipo = 'factura_venta' AND tipo_movimiento = 'salida'
                AND eliminado = false
              ORDER BY id"
         );
-        $st->execute([':e' => $idEmpresa, ':p' => $idProducto, ':v' => $idVenta]);
+        $params = [':e' => $idEmpresa, ':v' => $idVenta];
+        if ($idProducto !== null) $params[':p'] = $idProducto;
+        $st->execute($params);
         return $st->fetchAll(\PDO::FETCH_ASSOC);
     }
 
-    /** Lote/caducidad/NUP escritos en la línea de la factura (respaldo cuando el kardex no lo trae). */
-    public function getLotesDetalleVenta(int $idProducto, int $idVenta): array
+    /** Lote/caducidad/NUP escritos en las líneas de la factura (respaldo cuando el kardex no lo trae). */
+    public function getLotesDetalleVenta(?int $idProducto, int $idVenta): array
     {
+        $filtroProd = $idProducto !== null ? 'AND id_producto = :p' : '';
         $st = $this->db->prepare(
-            "SELECT numero_lote, fecha_caducidad, nup, cantidad
+            "SELECT id_producto, numero_lote, fecha_caducidad, nup, cantidad
              FROM ventas_detalle
-             WHERE id_venta = :v AND id_producto = :p
+             WHERE id_venta = :v AND id_producto IS NOT NULL {$filtroProd}
              ORDER BY id"
         );
-        $st->execute([':v' => $idVenta, ':p' => $idProducto]);
+        $params = [':v' => $idVenta];
+        if ($idProducto !== null) $params[':p'] = $idProducto;
+        $st->execute($params);
         return $st->fetchAll(\PDO::FETCH_ASSOC);
     }
 
@@ -226,22 +235,41 @@ class InventarioRepository extends BaseRepository
         return $lineas;
     }
 
-    /** Lo ya devuelto por notas de crédito vigentes del mismo documento, por lote y NUP. */
-    public function getDevueltoPorNcDeDocumento(int $idEmpresa, int $idProducto, string $numDoc): array
+    /**
+     * Lo ya devuelto por notas de crédito vigentes del mismo documento, por producto, lote y NUP.
+     * $excluirIdNc deja fuera una nota (la que se está editando: su devolución se rehace).
+     */
+    public function getDevueltoPorNcDeDocumento(int $idEmpresa, ?int $idProducto, string $numDoc, ?int $excluirIdNc = null): array
     {
+        $filtroProd = $idProducto !== null ? 'AND id_producto = :p' : '';
+        $filtroNc   = $excluirIdNc ? 'AND referencia_id <> :x' : '';
         $st = $this->db->prepare(
-            "SELECT COALESCE(numero_lote, '') AS lote, COALESCE(nup, '') AS nup, SUM(cantidad) AS cantidad
+            "SELECT id_producto, COALESCE(numero_lote, '') AS lote, COALESCE(nup, '') AS nup, SUM(cantidad) AS cantidad
              FROM inventario_kardex
-             WHERE id_empresa = :e AND id_producto = :p
+             WHERE id_empresa = :e {$filtroProd} {$filtroNc}
                AND referencia_tipo = 'nota_credito' AND eliminado = false
                AND referencia_id IN (
                    SELECT id FROM notas_credito_cabecera
                    WHERE id_empresa = :e2 AND num_doc_modificado = :n AND eliminado = false
                )
-             GROUP BY 1, 2"
+             GROUP BY 1, 2, 3"
         );
-        $st->execute([':e' => $idEmpresa, ':p' => $idProducto, ':e2' => $idEmpresa, ':n' => $numDoc]);
+        $params = [':e' => $idEmpresa, ':e2' => $idEmpresa, ':n' => $numDoc];
+        if ($idProducto !== null) $params[':p'] = $idProducto;
+        if ($excluirIdNc) $params[':x'] = $excluirIdNc;
+        $st->execute($params);
         return $st->fetchAll(\PDO::FETCH_ASSOC);
+    }
+
+    /**
+     * Bloqueo transaccional de lo que se puede devolver de un producto de una factura: dos notas
+     * de crédito simultáneas sobre la misma factura no deben leer el mismo disponible por lote
+     * (cada una podría devolver el lote completo). Se libera solo al COMMIT/ROLLBACK.
+     */
+    public function lockDevolucionDocumento(int $idEmpresa, string $numDoc, int $idProducto): void
+    {
+        $st = $this->db->prepare("SELECT pg_advisory_xact_lock(hashtext('nc_devolucion:' || :e || ':' || :n || ':' || :p))");
+        $st->execute([':e' => $idEmpresa, ':n' => $numDoc, ':p' => $idProducto]);
     }
 
     /**

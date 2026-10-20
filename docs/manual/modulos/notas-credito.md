@@ -5,8 +5,8 @@ categoria: Ventas
 ruta_modulo: modulos/notas_credito
 tipo: modulo
 visibilidad: todos
-etiquetas: nota de credito, notas de credito, devolucion, descuento, anular factura, corregir factura, sri, buscar nota de credito, buscador, filtros, filtrar notas de credito, buscar por producto, filtro de fechas, documento modificado, chips, aparecen notas que no busque, resultados que no corresponden, buscar por clave de acceso, lote, lotes, nup, serial, numero de serie, caducidad, vencimiento, fecha de vencimiento, devolver al inventario, reingreso de stock, devolucion de mercaderia, lote equivocado, bodega de reintegro, sin bodegas asignadas, no tiene bodegas, no se refleja en inventario, no aparece en inventario, no devolvio stock, informacion adicional, info adicional, limite de caracteres, maximo 300 caracteres, value too long, no se pudo guardar la nota, codigo, codigo del producto, columna codigo, buscar por codigo, iva, tarifa iva, iva 12, 12%, iva anterior, iva historico, factura año anterior, exento, no objeto de impuesto, tarifa 0, descuento por pronto pago, pronto pago, descuento posterior, descuento comercial, rebaja de precio, bonificacion, no afecta inventario, sin afectar inventario, sin devolver mercaderia, nota de credito sin productos, linea libre, linea manual, subtotal negativo, valor negativo, descuento mayor, sin bodega, invalid input syntax for type integer, vendedor, asesor, vendedor de la nota de credito, cambiar vendedor, comision, motivo, cambiar vendedor nota autorizada, corregir vendedor, vendedor de la factura, vendedor equivocado, vendedor del cliente, imprimir, impresora, aviso, avisos, novedad sri, documentos con novedad, devuelto, no autorizado, pendientes de enviar, borrador, borradores, pdf en dos hojas, segunda hoja casi vacia, totales en otra pagina, el pdf corta la pagina, hoja de mas
-version: 1.34
+etiquetas: nota de credito, notas de credito, devolucion, descuento, anular factura, corregir factura, sri, buscar nota de credito, buscador, filtros, filtrar notas de credito, buscar por producto, filtro de fechas, documento modificado, chips, aparecen notas que no busque, resultados que no corresponden, buscar por clave de acceso, lote, lotes, nup, serial, numero de serie, caducidad, vencimiento, fecha de vencimiento, devolver al inventario, reingreso de stock, devolucion de mercaderia, lote equivocado, bodega de reintegro, sin bodegas asignadas, no tiene bodegas, no se refleja en inventario, no aparece en inventario, no devolvio stock, informacion adicional, info adicional, limite de caracteres, maximo 300 caracteres, value too long, no se pudo guardar la nota, codigo, codigo del producto, columna codigo, buscar por codigo, iva, tarifa iva, iva 12, 12%, iva anterior, iva historico, factura año anterior, exento, no objeto de impuesto, tarifa 0, descuento por pronto pago, pronto pago, descuento posterior, descuento comercial, rebaja de precio, bonificacion, no afecta inventario, sin afectar inventario, sin devolver mercaderia, nota de credito sin productos, linea libre, linea manual, subtotal negativo, valor negativo, descuento mayor, sin bodega, invalid input syntax for type integer, vendedor, asesor, vendedor de la nota de credito, cambiar vendedor, comision, motivo, cambiar vendedor nota autorizada, corregir vendedor, vendedor de la factura, vendedor equivocado, vendedor del cliente, imprimir, impresora, aviso, avisos, novedad sri, documentos con novedad, devuelto, no autorizado, pendientes de enviar, borrador, borradores, pdf en dos hojas, segunda hoja casi vacia, totales en otra pagina, el pdf corta la pagina, hoja de mas, registrar otra nota, nueva nota despues de guardar, seguir en esta, crear otra, elegir lote, escoger lote, que lote devolver, columna lote, columna nup, devolver a otro lote, lote no salio con la factura, solo quedan por devolver
+version: 1.36
 orden: 30
 estado: activo
 ---
@@ -120,6 +120,20 @@ Los **Subtotal 15%**, **Subtotal 0%**, etc. del pie son bases imponibles netas:
 ya tienen el descuento aplicado, de modo que el IVA que se muestra debajo es
 exactamente el porcentaje de esa base.
 
+## Registrar otra nota de crédito después de guardar
+
+Al guardar una nota de crédito **nueva** desde el módulo, la ventana no se cierra: queda
+abierta en solo lectura con la nota ya numerada y aparece la pregunta *"¿Desea registrar
+una nueva nota de crédito o seguir en esta?"*:
+
+- **Registrar nueva**: limpia la ventana para empezar otra nota en el acto, sin cerrar ni
+  volver a pulsar **Nueva**.
+- **Seguir en esta**: deja abierta la nota recién guardada para enviarla al SRI, sacar el
+  PDF o mandarla por correo.
+
+La pregunta no aparece al actualizar una nota ya guardada, ni cuando la nota se crea desde
+una factura de venta o un recibo (ahí la nota nace de ese documento).
+
 ## Si se cierra el modal sin guardar
 
 Mientras se captura una nota de crédito nueva, el sistema va guardando un
@@ -208,6 +222,33 @@ otras notas de crédito de la misma factura ya devolvieron:
 Si un ítem devuelve más de lo que salió de su lote, el excedente sigue ese mismo reparto.
 Lo que no se pueda atribuir a ningún lote (nota sobre un saldo inicial, factura sin lote,
 o unidades de más sobre lo vendido) entra al inventario sin lote.
+
+### Elegir el lote y el NUP que se devuelven
+
+Si el establecimiento de la **serie** de la nota trabaja con lotes y/o NUP (Empresa →
+Facturación: **lote obligatorio** / **NUP obligatorio**), el detalle muestra las columnas
+**Lote** y **NUP**. En ellas el usuario decide a qué lote o serial regresa la mercadería:
+
+- Cada lista trae **solo los lotes / NUP que salieron con la factura modificada**, con su
+  fecha de vencimiento y lo que **aún se puede devolver** de cada uno (*disp.*), ya
+  descontado lo que devolvieron otras notas de crédito de la misma factura.
+- Al cargar la factura, cada ítem llega con el lote y el NUP de su línea ya elegidos; se
+  pueden cambiar.
+- Al elegir un NUP se fija también su lote; al cambiar de lote, la lista de NUP muestra
+  solo los de ese lote.
+- Si la factura sacó lotes de ese producto, elegirlo es **obligatorio**. Si no sacó
+  ninguno (factura sin lote, saldo inicial, producto que no estaba en la factura), la
+  columna muestra *—* y el ítem sigue el reparto automático de la sección anterior.
+
+Al guardar, el sistema vuelve a comprobar la elección y **no deja guardar** si:
+
+- el lote o NUP no salió con esa factura: *"El lote X de «producto» no salió con la
+  factura..."*;
+- se devuelve más de lo que queda de ese lote: *"Del lote X de «producto» solo quedan N
+  por devolver en la factura..."*. Hay que bajar la cantidad o elegir otro lote.
+
+Las columnas se ocultan si el establecimiento no exige lote ni NUP. Si la nota no lleva
+lote elegido, la devolución se reparte sola, como antes.
 
 ## Nota de crédito por descuento, sin afectar el inventario
 
@@ -379,6 +420,8 @@ la operación de inmediato.
 
 ## Historial de cambios
 
+- **1.36** — Si el establecimiento trabaja con lotes y/o NUP, el detalle muestra las columnas **Lote** y **NUP** para elegir a cuál regresa la mercadería, entre los que salieron con la factura y con lo que aún se puede devolver de cada uno. No deja guardar un lote ajeno a la factura ni más de lo que queda de él. Requiere el SQL `database/20261020_nc_detalle_lote_nup.sql` para volver a mostrar la elección al reabrir la nota.
+- **1.35** — Al guardar una nota de crédito nueva, el sistema pregunta si se desea **registrar una nueva** o **seguir en esta** (mismo modelo que Ingresos). Además, el botón Guardar queda bloqueado hasta que la nota guardada termina de recargarse, para que un segundo clic no cree otra.
 - **1.34** — El botón **Registrar nuevo cliente** no funcionaba (decía «no está disponible»): ahora abre la ficha del cliente y, al guardarlo, queda seleccionado en la nota.
 - **1.33** — El PDF ya no manda los **totales y la información adicional** a una segunda hoja cuando
   caben en la primera. Antes saltaba de página siempre que el detalle pasara de cierta

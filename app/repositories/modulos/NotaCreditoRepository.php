@@ -615,6 +615,16 @@ class NotaCreditoRepository extends BaseRepository
             $params[] = !empty($data['id_venta_detalle']) ? (int) $data['id_venta_detalle'] : null;
         }
 
+        // Lote / NUP elegidos por el usuario (database/20261020_nc_detalle_lote_nup.sql).
+        // Sin el SQL, la devolución usa igual la elección; solo no queda guardada para reabrir.
+        foreach (['numero_lote' => 'lote_elegido', 'nup' => 'nup_elegido'] as $col => $clave) {
+            if ($this->columnaExiste('notas_credito_detalle', $col)) {
+                $cols    .= ", {$col}";
+                $valor    = trim((string) ($data[$clave] ?? ''));
+                $params[] = $valor !== '' ? mb_substr($valor, 0, 100) : null;
+            }
+        }
+
         $marcas = implode(', ', array_fill(0, count($params), '?'));
         $st = $this->db->prepare("INSERT INTO notas_credito_detalle ({$cols}) VALUES ({$marcas}) RETURNING id");
         $st->execute($params);
