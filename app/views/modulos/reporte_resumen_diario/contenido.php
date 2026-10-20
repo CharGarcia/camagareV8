@@ -6,6 +6,7 @@
  *
  * @var array $datos Salida de ReporteResumenDiarioService::generar()
  * @var array $perm  Permisos del módulo (ver, crear, actualizar, eliminar, todo)
+ * @var bool  $usuarioElegido Con acceso total, se eligió un usuario en el selector «Usuario»
  */
 $e   = static fn ($v): string => htmlspecialchars((string) $v, ENT_QUOTES, 'UTF-8');
 $fmt = static fn ($v): string => ((float) $v < 0 ? '-$' : '$') . number_format(abs((float) $v), 2);
@@ -62,6 +63,28 @@ $tabla = static function (array $s) use ($e, $fmt, $perm): void {
     <?php
 };
 ?>
+<?php
+// Modo «Cierre de caja»: avisos de la caja del día.
+$cierre = $datos['cierre'] ?? null;
+if ($cierre !== null): ?>
+    <?php if (empty($cierre['disponible'])): ?>
+        <div class="alert alert-warning small m-3 mb-0">Falta aplicar en la base de datos el SQL <code>database/20261020_caja_cierres_diarios.sql</code>: por ahora la caja se ve como el neto del día y no se puede abrir ni cerrar.</div>
+    <?php elseif ($cierre['esperado_actual'] !== null): ?>
+        <div class="alert alert-warning small m-3 mb-0">
+            <i class="bi bi-exclamation-triangle me-1"></i>Después del cierre cambiaron los movimientos de este día: hoy el saldo esperado es
+            <strong><?= $e($fmt($cierre['esperado_actual'])) ?></strong> y al cerrar era <strong><?= $e($fmt($datos['kpis']['saldo_final'] ?? 0)) ?></strong>.
+            La tabla de caja muestra lo que quedó al cerrar; para volver a cuadrarla, reabra la caja.
+        </div>
+    <?php elseif ($cierre['estado'] === 'sin_abrir'): ?>
+        <div class="alert alert-light border small m-3 mb-0"><i class="bi bi-info-circle me-1"></i>La caja de este día todavía no se abre. El saldo inicial que se ve es el propuesto; se fija al pulsar <strong>Abrir caja</strong>.</div>
+    <?php endif; ?>
+    <?php if (($cierre['obs_apertura'] ?? '') !== '' || ($cierre['obs_cierre'] ?? '') !== ''): ?>
+        <div class="small text-muted px-3 pt-2">
+            <?php if ($cierre['obs_apertura'] !== ''): ?><div><strong>Al abrir:</strong> <?= $e($cierre['obs_apertura']) ?></div><?php endif; ?>
+            <?php if ($cierre['obs_cierre'] !== ''): ?><div><strong>Al cerrar:</strong> <?= $e($cierre['obs_cierre']) ?></div><?php endif; ?>
+        </div>
+    <?php endif; ?>
+<?php endif; ?>
 <?php if (!$datos['grupos'] && !$r['caja']): ?>
     <div class="text-center py-5 text-muted"><i class="bi bi-calendar-x fs-3 d-block mb-2"></i>No hay documentos ni movimientos en este día.</div>
     <?php return; ?>
@@ -101,11 +124,13 @@ $tabla = static function (array $s) use ($e, $fmt, $perm): void {
         </div>
     <?php endforeach; ?>
     <?php if ($r['caja']): ?>
-        <div class="col-xl-6">
+        <div class="<?= $cierre !== null ? 'col-12' : 'col-xl-6' ?>">
             <div class="small fw-bold text-uppercase text-muted mb-1" style="font-size:.7rem;">
                 Caja por forma de pago
                 <?php if (!empty($datos['saldo_restringido'])): ?>
-                    <span class="fw-normal text-lowercase fst-italic">(sin saldos: solo ve lo que usted registró)</span>
+                    <span class="fw-normal text-lowercase fst-italic"><?= !empty($usuarioElegido)
+                        ? '(sin saldos: el saldo es de toda la empresa; para la caja de un usuario use «Cierre de caja»)'
+                        : '(sin saldos: solo ve lo que usted registró)' ?></span>
                 <?php endif; ?>
             </div>
             <?php $tabla($r['caja']); ?>

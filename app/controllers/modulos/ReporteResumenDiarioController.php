@@ -7,6 +7,7 @@ namespace App\controllers\modulos;
 use App\Helpers\ReportePdf;
 use App\repositories\modulos\CajaMovimientoRepository;
 use App\repositories\modulos\ReporteResumenDiarioRepository;
+use App\Services\modulos\CajaCierreService;
 use App\Services\modulos\CajaMovimientoService;
 use App\Services\modulos\ReporteResumenDiarioService;
 use PhpOffice\PhpSpreadsheet\Cell\Coordinate;
@@ -42,23 +43,32 @@ class ReporteResumenDiarioController extends BaseModuloController
     public function index(): void
     {
         $this->requireLeer();
+        $cierre = new CajaCierreService();
         $this->viewWithLayout('layouts.main', 'modulos/reporte_resumen_diario/index', [
             'titulo'     => 'Resumen Diario',
             'perm'       => $this->getPermisos(),
             'rutaModulo' => $this->getRutaModulo(),
             'formas'     => (new CajaMovimientoRepository())->getFormasPago((int) $_SESSION['id_empresa']),
+            // Selector «Usuario»: solo para quien ve toda la empresa (acceso total).
+            'usuarios'   => $this->idUsuarioFiltro() === null && $cierre->disponible()
+                ? $cierre->usuarios((int) $_SESSION['id_empresa'], (int) $_SESSION['id_usuario']) : [],
             'fullWidth'  => true,
             'base'       => BASE_URL,
         ]);
     }
 
-    /** Filtros de la petición: el día, si cuentan los borradores y si la caja va con saldos iniciales. */
+    /**
+     * Filtros de la petición: el día, si cuentan los borradores y el modo de la caja
+     * ('' neto del día, 'SI' con saldos iniciales, 'CIERRE' cierre de caja).
+     */
     private function filtros(): array
     {
+        $caja = (string) ($_GET['saldos'] ?? '');
         return [
             'fecha'      => trim((string) ($_GET['fecha'] ?? date('Y-m-d'))),
             'borradores' => ($_GET['borradores'] ?? '') === 'INCLUIR',
-            'saldos'     => ($_GET['saldos'] ?? '') === 'SI',
+            'saldos'     => $caja === 'SI',
+            'cierre'     => $caja === 'CIERRE',
         ];
     }
 
@@ -68,21 +78,71 @@ class ReporteResumenDiarioController extends BaseModuloController
         return empty($this->getPermisos()['todo']) ? (int) $_SESSION['id_usuario'] : null;
     }
 
+    /**
+     * De quién es lo que se ve y la caja que se abre/cierra: sin acceso total, siempre el
+     * propio usuario (§6); con acceso total, el elegido en el selector «Usuario» (validado
+     * contra la empresa) o null = toda la empresa.
+     */
+    private function alcanceUsuario(): ?int
+    {
+        if (($propio = $this->idUsuarioFiltro()) !== null) {
+            return $propio;
+        }
+        $elegido = (int) ($_REQUEST['usuario'] ?? 0);
+        if ($elegido <= 0) {
+            return null;
+        }
+        if (!(new CajaCierreService())->usuarioEsDeEmpresa((int) $_SESSION['id_empresa'], $elegido, (int) $_SESSION['id_usuario'])) {
+            throw new \InvalidArgumentException('El usuario elegido no pertenece a la empresa.');
+        }
+        return $elegido;
+    }
+
+    /** Nombre del usuario elegido en el selector (para el PDF y el Excel). */
+    private function nombreUsuario(int $id): string
+    {
+        foreach ((new CajaCierreService())->usuarios((int) $_SESSION['id_empresa'], (int) $_SESSION['id_usuario']) as $u) {
+            if ((int) $u['id'] === $id) {
+                return (string) $u['nombre'];
+            }
+        }
+        return "#{$id}";
+    }
+
     private function datos(array $f): array
     {
-        return $this->service->generar((int) $_SESSION['id_empresa'], $f['fecha'], $f['borradores'], $f['saldos'], $this->idUsuarioFiltro());
+        return $this->service->generar((int) $_SESSION['id_empresa'], $f['fecha'], $f['borradores'], $f['saldos'], $this->alcanceUsuario(), $f['cierre']);
     }
 
     /** Filtros en texto, para el PDF y el Excel. */
-    private function filtrosTxt(array $f): array
+    private function filtrosTxt(array $f, array $datos): array
     {
+        $alcance = $this->alcanceUsuario();
         $txt = ['Día' => date('d-m-Y', strtotime($f['fecha']))];
         $txt['Borradores'] = $f['borradores'] ? 'Incluidos' : 'No incluidos';
-        $txt['Caja'] = $f['saldos'] && $this->idUsuarioFiltro() === null ? 'Con saldos iniciales' : 'Neto del día';
+        if ($f['cierre']) {
+            $txt['Caja'] = 'Cierre de caja: ' . $this->estadoCajaTxt($datos['cierre'] ?? null);
+        } else {
+            $txt['Caja'] = $f['saldos'] && $alcance === null ? 'Con saldos iniciales' : 'Neto del día';
+        }
         if ($this->idUsuarioFiltro() !== null) {
             $txt['Alcance'] = 'Solo lo registrado por ' . (string) ($_SESSION['nombre'] ?? 'el usuario');
+        } elseif ($alcance !== null) {
+            $txt['Usuario'] = 'Solo lo registrado por ' . $this->nombreUsuario($alcance);
         }
         return $txt;
+    }
+
+    /** Estado de la caja del día en una línea (PDF/Excel). */
+    private function estadoCajaTxt(?array $c): string
+    {
+        $fh = static fn (string $f): string => $f !== '' ? date('d-m-Y H:i:s', strtotime($f)) : '';
+        return match (true) {
+            $c === null || empty($c['disponible']) => 'no disponible',
+            $c['estado'] === 'cerrada' => "cerrada por {$c['cerrada_por']} el " . $fh($c['fecha_cierre']),
+            $c['estado'] === 'abierta' => "abierta por {$c['abierta_por']} el " . $fh($c['fecha_apertura']),
+            default => 'sin abrir',
+        };
     }
 
     public function generarAjax(): void
@@ -94,15 +154,24 @@ class ReporteResumenDiarioController extends BaseModuloController
         try {
             $datos = $this->datos($f);
             ob_start();
-            $this->view('modulos/reporte_resumen_diario/contenido', ['datos' => $datos, 'perm' => $this->getPermisos()]);
+            $this->view('modulos/reporte_resumen_diario/contenido', [
+                'datos' => $datos, 'perm' => $this->getPermisos(),
+                'usuarioElegido' => $this->idUsuarioFiltro() === null && $this->alcanceUsuario() !== null,
+            ]);
             $html = (string) ob_get_clean();
 
-            $qs = http_build_query(['fecha' => $datos['fecha'], 'borradores' => $f['borradores'] ? 'INCLUIR' : '', 'saldos' => $f['saldos'] ? 'SI' : '']);
+            $qs = http_build_query([
+                'fecha'      => $datos['fecha'],
+                'borradores' => $f['borradores'] ? 'INCLUIR' : '',
+                'saldos'     => $f['cierre'] ? 'CIERRE' : ($f['saldos'] ? 'SI' : ''),
+                'usuario'    => $this->idUsuarioFiltro() === null ? (string) ($this->alcanceUsuario() ?? '') : '',
+            ]);
             $urlBase = BASE_URL . '/' . $this->getRutaModulo();
             echo json_encode([
                 'ok'        => true,
                 'html'      => $html,
                 'kpis'      => $datos['kpis'],
+                'cierre'    => $datos['cierre'],
                 'pdf_url'   => "{$urlBase}/exportPdf?{$qs}",
                 'excel_url' => "{$urlBase}/exportExcel?{$qs}",
             ]);
@@ -206,6 +275,87 @@ class ReporteResumenDiarioController extends BaseModuloController
         exit;
     }
 
+    // ── Apertura y cierre de caja (Caja: «Cierre de caja») ────────────────────
+    // La caja es del día y del alcance: el usuario elegido (o el propio, sin acceso total)
+    // o toda la empresa. La lógica vive en CajaCierreService.
+
+    private const SIN_TABLAS_CIERRE = 'Falta aplicar en la base de datos el SQL database/20261020_caja_cierres_diarios.sql.';
+
+    /** Responde JSON con lo que devuelva $accion; errores de negocio con su mensaje. */
+    private function jsonCierre(string $accion, string $error, callable $fn): void
+    {
+        header('Content-Type: application/json');
+        try {
+            if (!(new CajaCierreService())->disponible()) {
+                throw new \InvalidArgumentException(self::SIN_TABLAS_CIERRE);
+            }
+            echo json_encode(['ok' => true] + $fn());
+        } catch (\InvalidArgumentException $e) {
+            echo json_encode(['ok' => false, 'mensaje' => $e->getMessage()]);
+        } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => $accion]);
+            echo json_encode(['ok' => false, 'mensaje' => $error]);
+        }
+        exit;
+    }
+
+    /** Formas de pago para el modal: ?tipo=abrir (saldo propuesto) o ?tipo=cerrar (esperado). */
+    public function cajaFormasAjax(): void
+    {
+        $this->requireLeer();
+        $this->jsonCierre(__FUNCTION__, 'No se pudieron cargar las formas de pago.', function (): array {
+            $svc   = new CajaCierreService();
+            $fecha = (string) ($_GET['fecha'] ?? '');
+            $args  = [(int) $_SESSION['id_empresa'], $fecha, $this->alcanceUsuario()];
+            return ['formas' => ($_GET['tipo'] ?? '') === 'cerrar' ? $svc->formasParaCerrar(...$args) : $svc->formasParaAbrir(...$args)];
+        });
+    }
+
+    public function abrirCajaAjax(): void
+    {
+        $this->requireCrear();
+        $this->jsonCierre(__FUNCTION__, 'No se pudo abrir la caja.', function (): array {
+            $filas = json_decode((string) ($_POST['saldos'] ?? '[]'), true);
+            $res = (new CajaCierreService())->abrir(
+                (int) $_SESSION['id_empresa'], (string) ($_POST['fecha'] ?? ''), $this->alcanceUsuario(),
+                is_array($filas) ? $filas : [], (string) ($_POST['observaciones'] ?? ''),
+                (string) ($_POST['token_guardado'] ?? ''), (int) $_SESSION['id_usuario']
+            );
+            return ['mensaje' => $res['ya_existia'] ? 'La caja ya estaba abierta; no se abrió otra.' : 'Caja abierta.'];
+        });
+    }
+
+    public function cerrarCajaAjax(): void
+    {
+        $this->requireCrear();
+        $this->jsonCierre(__FUNCTION__, 'No se pudo cerrar la caja.', function (): array {
+            $filas = json_decode((string) ($_POST['contados'] ?? '[]'), true);
+            $tot = (new CajaCierreService())->cerrar(
+                (int) $_SESSION['id_empresa'], (string) ($_POST['fecha'] ?? ''), $this->alcanceUsuario(),
+                is_array($filas) ? $filas : [], (string) ($_POST['observaciones'] ?? ''), (int) $_SESSION['id_usuario']
+            );
+            return ['mensaje' => 'Caja cerrada.', 'totales' => $tot];
+        });
+    }
+
+    /** Reabrir borra el arqueo: pide modificar y acceso total. */
+    public function reabrirCajaAjax(): void
+    {
+        $this->requireActualizar();
+        if ($this->idUsuarioFiltro() !== null) {
+            header('Content-Type: application/json');
+            echo json_encode(['ok' => false, 'mensaje' => 'Para reabrir una caja cerrada hace falta acceso total en este módulo.']);
+            exit;
+        }
+        $this->jsonCierre(__FUNCTION__, 'No se pudo reabrir la caja.', function (): array {
+            (new CajaCierreService())->reabrir(
+                (int) $_SESSION['id_empresa'], (string) ($_POST['fecha'] ?? ''), $this->alcanceUsuario(),
+                (string) ($_POST['motivo'] ?? ''), (int) $_SESSION['id_usuario']
+            );
+            return ['mensaje' => 'Caja reabierta.'];
+        });
+    }
+
     // ── PDF ───────────────────────────────────────────────────────────────────
 
     public function exportPdf(): void
@@ -228,11 +378,15 @@ class ReporteResumenDiarioController extends BaseModuloController
                 ['Neto del día', $this->dinero($k['neto_caja']), $k['saldo_final'] === null],
             ];
             if ($k['saldo_final'] !== null) {
-                $kpis[] = ['Saldo final', $this->dinero($k['saldo_final']), true];
+                $kpis[] = [$f['cierre'] ? 'Saldo esperado' : 'Saldo final', $this->dinero($k['saldo_final']), true];
+            }
+            if (($datos['cierre']['estado'] ?? '') === 'cerrada') {
+                $kpis[] = ['Contado', $this->dinero($datos['cierre']['contado'])];
+                $kpis[] = ['Diferencia', $this->dinero($datos['cierre']['diferencia']), true];
             }
             $html = ReportePdf::encabezado($idEmpresa, (string) ($empresa['nombre'] ?? ''), 'Resumen diario',
                         'Día ' . date('d-m-Y', strtotime($datos['fecha'])))
-                  . ReportePdf::filtros($this->filtrosTxt($f))
+                  . ReportePdf::filtros($this->filtrosTxt($f, $datos))
                   . ReportePdf::indicadores($kpis);
 
             if (!$datos['grupos']) {
@@ -360,7 +514,7 @@ class ReporteResumenDiarioController extends BaseModuloController
             $hoja->getStyle('A1')->getFont()->setBold(true)->setSize(14);
             $hoja->getStyle('A1')->getAlignment()->setHorizontal(Alignment::HORIZONTAL_CENTER);
             $fila = 2;
-            foreach ($this->filtrosTxt($f) + ['Generado' => date('d-m-Y H:i:s')] as $lbl => $val) {
+            foreach ($this->filtrosTxt($f, $datos) + ['Generado' => date('d-m-Y H:i:s')] as $lbl => $val) {
                 $hoja->setCellValue("A{$fila}", $lbl . ':');
                 $hoja->getStyle("A{$fila}")->getFont()->setBold(true);
                 $hoja->setCellValueExplicit("B{$fila}", (string) $val, \PhpOffice\PhpSpreadsheet\Cell\DataType::TYPE_STRING);

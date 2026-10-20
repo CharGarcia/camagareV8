@@ -42,9 +42,13 @@ class ReporteResumenDiarioService
      * @param string   $fecha           Día del resumen (Y-m-d).
      * @param bool     $conBorradores   Cuenta también los comprobantes electrónicos en borrador.
      * @param bool     $conSaldos       Caja con saldos iniciales (y saldo final); si no, neto del día.
-     * @param int|null $idUsuarioFiltro Sin acceso total: solo lo que registró ese usuario (§6).
+     * @param int|null $idUsuarioFiltro Solo lo que registró ese usuario: el propio sin acceso total (§6)
+     *                                  o el elegido en el selector «Usuario».
+     * @param bool     $modoCierre      Caja «Cierre de caja»: la caja por forma de pago sale con el saldo
+     *                                  inicial de la apertura, el esperado y, cerrada, lo contado
+     *                                  (CajaCierreService). No cambia nada del resto del resumen.
      */
-    public function generar(int $idEmpresa, string $fecha, bool $conBorradores, bool $conSaldos, ?int $idUsuarioFiltro): array
+    public function generar(int $idEmpresa, string $fecha, bool $conBorradores, bool $conSaldos, ?int $idUsuarioFiltro, bool $modoCierre = false): array
     {
         $fecha = $this->rules->validarFecha($fecha);
         $r     = $this->repository;
@@ -55,7 +59,8 @@ class ReporteResumenDiarioService
         $ndVenta   = $this->docs($r->getNotasVenta('nota_debito_cabecera', $idEmpresa, $fecha, $conBorradores, $u));
         $ncVenta   = $this->docs($r->getNotasVenta('notas_credito_cabecera', $idEmpresa, $fecha, $conBorradores, $u));
         $retVenta  = $this->rets($r->getRetencionesVenta($idEmpresa, $fecha, $u));
-        $ingresos  = $this->caja($r->getIngresos($idEmpresa, $fecha, $u));
+        $ingRaw    = $r->getIngresos($idEmpresa, $fecha, $u);
+        $ingresos  = $this->caja($ingRaw);
         $cobrosDia = array_values(array_filter($ingresos, static fn (array $f): bool => $f['grupo'] === 'DIA'));
         $cobrosOtr = array_values(array_filter($ingresos, static fn (array $f): bool => $f['grupo'] !== 'DIA'));
 
@@ -63,8 +68,10 @@ class ReporteResumenDiarioService
         $ncCompra  = $this->docs($r->getCompras('NC', $idEmpresa, $fecha, $u));
         $liqs      = $this->docs($r->getLiquidaciones($idEmpresa, $fecha, $conBorradores, $u));
         $retCompra = $this->rets($r->getRetencionesCompra($idEmpresa, $fecha, $conBorradores, $u));
-        $egresos   = $this->caja($r->getEgresos($idEmpresa, $fecha, $u));
-        $traslados = $this->traslados($r->getTraslados($idEmpresa, $fecha, $u));
+        $egrRaw    = $r->getEgresos($idEmpresa, $fecha, $u);
+        $egresos   = $this->caja($egrRaw);
+        $trRaw     = $r->getTraslados($idEmpresa, $fecha, $u);
+        $traslados = $this->traslados($trRaw);
 
         // Documentos de venta: solo total y saldo (pendiente hoy). Notas: solo total.
         $colsVenta = static fn (?string $ref = null): array => array_values(array_filter([
@@ -141,9 +148,13 @@ class ReporteResumenDiarioService
         $totEgresos   = $sum($egresos, 'valor');
 
         // Saldo por forma de pago: solo si se pidió y para quien ve toda la empresa.
-        $conSaldo = $conSaldos && $idUsuarioFiltro === null;
+        $conSaldo = !$modoCierre && $conSaldos && $idUsuarioFiltro === null;
         $saldos   = $conSaldo ? $r->getSaldosIniciales($idEmpresa, $fecha) : [];
         $caja     = self::cajaPorForma($ingresos, $egresos, $traslados, $saldos, $conSaldo);
+        $cierre   = null;
+        if ($modoCierre) {
+            [$caja, $cierre] = $this->cajaCierre($idEmpresa, $fecha, $idUsuarioFiltro, $ingRaw, $egrRaw, $trRaw, $caja);
+        }
 
         $ventas = self::bloqueResumen(
             [['Facturas', $facturas, 1], ['Recibos', $recibos, 1], ['Notas de débito', $ndVenta, 1], ['(-) Notas de crédito', $ncVenta, -1]],
@@ -160,7 +171,9 @@ class ReporteResumenDiarioService
             'grupos'    => $grupos,
             'con_saldo' => $conSaldo,
             // Pidió saldos pero solo ve lo suyo: la pantalla explica por qué no salen.
-            'saldo_restringido' => $conSaldos && $idUsuarioFiltro !== null,
+            'saldo_restringido' => !$modoCierre && $conSaldos && $idUsuarioFiltro !== null,
+            // Solo en «Cierre de caja»: estado de la caja del día (ver cajaCierre()).
+            'cierre'    => $cierre,
             'resumen'   => [
                 'ventas'  => $ventas,
                 'compras' => self::bloqueResumen(
@@ -176,9 +189,69 @@ class ReporteResumenDiarioService
                 'ingresos'      => $totIngresos,
                 'egresos'       => $totEgresos,
                 'neto_caja'     => round($totIngresos - $totEgresos, 2),
-                'saldo_final'   => $caja !== null && $conSaldo ? $caja['totales']['saldo_final'] : null,
+                'saldo_final'   => $caja !== null && $conSaldo ? $caja['totales']['saldo_final']
+                                 : ($caja !== null && !empty($cierre['disponible']) ? $caja['totales']['esperado'] : null),
             ],
         ];
+    }
+
+    /**
+     * Caja por forma de pago del modo «Cierre de caja» y el estado de la caja del día:
+     * sin abrir (saldo inicial propuesto), abierta (saldo inicial guardado) o cerrada (foto
+     * del arqueo, con contado y diferencia). Si después de cerrar cambiaron los
+     * movimientos del día, 'esperado_actual' trae el esperado de hoy para avisarlo.
+     * Sin el SQL de cierres, la caja queda como el neto del día y se avisa.
+     *
+     * @return array{0: ?array, 1: array}
+     */
+    private function cajaCierre(int $idEmpresa, string $fecha, ?int $idUsuario, array $ingRaw, array $egrRaw, array $trRaw, ?array $cajaNeto): array
+    {
+        $svc = new CajaCierreService();
+        if (!$svc->disponible()) {
+            return [$cajaNeto, ['disponible' => false]];
+        }
+        $estado  = $svc->estado($idEmpresa, $fecha, $idUsuario);
+        $movs    = CajaCierreService::movimientosPorForma($ingRaw, $egrRaw, $trRaw);
+        $filas   = CajaCierreService::filas($movs, $estado);
+        $c       = $estado['cierre'];
+        $cerrada = ($c['estado'] ?? '') === 'cerrada';
+
+        // Cerrada: ¿los movimientos de ese día cambiaron después del cierre?
+        $esperadoActual = null;
+        if ($cerrada) {
+            $vivo  = CajaCierreService::filas($movs, ['cierre' => ['estado' => 'abierta']] + $estado);
+            $total = round(array_sum(array_column($vivo, 'esperado')), 2);
+            if ($total !== round((float) $c['total_esperado'], 2)) {
+                $esperadoActual = $total;
+            }
+        }
+
+        $w    = $cerrada ? 11 : 14;
+        $cols = array_values(array_filter([
+            ['k' => 'forma',         'lbl' => 'Forma de pago',  'w' => $cerrada ? 23 : 30, 'flex' => true],
+            ['k' => 'saldo_inicial', 'lbl' => $c ? 'Saldo inicial' : 'Saldo inicial (propuesto)', 'w' => $w, 'num' => true],
+            ['k' => 'ingresos',      'lbl' => 'Ingresos',       'w' => $w, 'num' => true],
+            ['k' => 'egresos',       'lbl' => 'Egresos',        'w' => $w, 'num' => true],
+            ['k' => 'traslados',     'lbl' => 'Traslados',      'w' => $w, 'num' => true],
+            ['k' => 'esperado',      'lbl' => 'Saldo esperado', 'w' => $w, 'num' => true],
+            $cerrada ? ['k' => 'contado',    'lbl' => 'Contado',    'w' => $w, 'num' => true] : null,
+            $cerrada ? ['k' => 'diferencia', 'lbl' => 'Diferencia', 'w' => $w, 'num' => true] : null,
+        ]));
+        $caja = $filas ? self::seccion('caja', 'Caja por forma de pago', $cols, $filas) : null;
+
+        return [$caja, [
+            'disponible'      => true,
+            'estado'          => $c ? (string) $c['estado'] : 'sin_abrir',
+            'abierta_por'     => $c ? (string) $c['abierta_por_nombre'] : '',
+            'fecha_apertura'  => $c ? (string) $c['fecha_apertura'] : '',
+            'cerrada_por'     => $c ? (string) $c['cerrada_por_nombre'] : '',
+            'fecha_cierre'    => $c ? (string) ($c['fecha_cierre'] ?? '') : '',
+            'obs_apertura'    => $c ? (string) ($c['observaciones_apertura'] ?? '') : '',
+            'obs_cierre'      => $c ? (string) ($c['observaciones_cierre'] ?? '') : '',
+            'contado'         => $cerrada ? round((float) $c['total_contado'], 2) : null,
+            'diferencia'      => $cerrada ? round((float) $c['total_diferencia'], 2) : null,
+            'esperado_actual' => $esperadoActual,
+        ]];
     }
 
     private static function seccion(string $clave, string $titulo, array $cols, array $filas, string $nota = ''): array

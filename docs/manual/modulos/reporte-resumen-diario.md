@@ -5,8 +5,8 @@ categoria: Reportes
 ruta_modulo: modulos/reporte_resumen_diario
 tipo: modulo
 visibilidad: todos
-etiquetas: resumen diario, cierre del dia, cierre de caja, cuadre de caja, cuadre diario, libro de caja, movimiento del dia, que paso hoy, ventas del dia, compras del dia, ingresos del dia, egresos del dia, cobros del dia, cobros de dias anteriores, cobros atrasados, pagos del dia, facturas del dia, saldo de la factura, saldo pendiente, recibos, notas de credito, notas de debito, retenciones recibidas, retenciones emitidas, liquidaciones de compra, efectivo, tarjeta, transferencia, cheque, forma de pago, saldo inicial, saldo final, saldo de caja, saldo de apertura, apertura de caja, traslado, deposito del efectivo, depositar en el banco, retiro del banco, pasar de efectivo a banco, cuanto entro, cuanto salio, cuanto hay en caja, numero de ingreso, numero de egreso, recibido de, pagado a, firmas, realizado por, aprobado por, pdf, excel, imprimir
-version: 1.4
+etiquetas: resumen diario, cierre del dia, cierre de caja, abrir caja, cerrar caja, reabrir caja, arqueo, arqueo de caja, contar la caja, fondo de caja, faltante, sobrante, diferencia de caja, caja por usuario, caja por cajero, filtro por usuario, cuadre de caja, cuadre diario, libro de caja, movimiento del dia, que paso hoy, ventas del dia, compras del dia, ingresos del dia, egresos del dia, cobros del dia, cobros de dias anteriores, cobros atrasados, pagos del dia, facturas del dia, saldo de la factura, saldo pendiente, recibos, notas de credito, notas de debito, retenciones recibidas, retenciones emitidas, liquidaciones de compra, efectivo, tarjeta, transferencia, cheque, forma de pago, saldo inicial, saldo final, saldo de caja, saldo de apertura, apertura de caja, traslado, deposito del efectivo, depositar en el banco, retiro del banco, pasar de efectivo a banco, cuanto entro, cuanto salio, cuanto hay en caja, numero de ingreso, numero de egreso, recibido de, pagado a, firmas, realizado por, aprobado por, pdf, excel, imprimir
+version: 1.5
 orden: 12
 estado: activo
 ---
@@ -31,6 +31,9 @@ lo cobrado de días anteriores), qué se pagó y con cuánto quedó cada forma d
   pueden registrar traslados ni saldos de apertura.
 - Para que los saldos arranquen de un valor real, cargue el **saldo de apertura** de
   cada forma de pago (ver *Saldos de apertura*).
+- Para abrir y cerrar caja, el SQL `database/20261020_caja_cierres_diarios.sql`
+  (tablas de cierres de caja). Sin él, la opción *Cierre de caja* lo avisa y el resto
+  del resumen funciona igual.
 
 ## Cómo se usa
 
@@ -42,11 +45,16 @@ lo cobrado de días anteriores), qué se pagó y con cuánto quedó cada forma d
      egresos, traslados y neto).
    - **Con saldos iniciales**: además, el saldo que traía cada forma de pago y el
      saldo final (ver *Saldo por forma de pago*).
-4. Pulse **Mostrar**. Arriba se actualizan los indicadores: **Ventas netas**,
+   - **Cierre de caja**: abrir la caja del día con su saldo inicial y cerrarla con
+     lo contado (ver *Abrir y cerrar caja*).
+4. Con **acceso total** aparece el selector **Usuario**: *Todos* (por defecto, toda
+   la empresa) o un usuario, para ver solo lo que registró ese usuario y su caja.
+5. Pulse **Mostrar**. Arriba se actualizan los indicadores: **Ventas netas**,
    **Compras netas**, **Ingresos**, **Egresos**, **Neto del día** y, con saldos
-   iniciales, **Saldo final**.
-5. Con **PDF** o **Excel** descarga el mismo resumen.
-6. Con **Nuevo traslado** registra dinero que pasó de una forma de pago a otra; con
+   iniciales, **Saldo final** (en *Cierre de caja*, **Saldo esperado** y, con la caja
+   cerrada, **Contado** y **Diferencia**).
+6. Con **PDF** o **Excel** descarga el mismo resumen.
+7. Con **Nuevo traslado** registra dinero que pasó de una forma de pago a otra; con
    **Saldos de apertura** fija el saldo con que arranca cada forma.
 
 ## Qué trae el resumen
@@ -153,6 +161,58 @@ salen 50, hoy queda en 150.
 - El saldo solo lo ve quien tiene **acceso total** en el módulo: con registros
   propios se ven los ingresos, egresos y traslados del usuario, sin saldos.
 
+## Abrir y cerrar caja
+
+Con **Caja: Cierre de caja** el resumen sirve para cuadrar la caja del día. Las
+opciones *Neto del día* y *Con saldos iniciales* siguen igual que siempre.
+
+**De quién es la caja.** Hay una caja por día y por alcance:
+
+- **Todos**: la caja de toda la empresa.
+- **Un usuario** (selector *Usuario*, con acceso total): cuenta solo los ingresos,
+  egresos y traslados que registró ese usuario. Sirve para cuadrar a cada cajero.
+- Sin acceso total no hay selector: cada usuario abre y cierra **su propia** caja.
+
+Junto al título del día aparece el estado: *Caja sin abrir*, *Caja abierta* o *Caja
+cerrada* (al pasar el mouse dice quién y cuándo).
+
+**Abrir caja.** Botón **Abrir caja** (pide permiso de crear). Muestra las formas de
+pago con el **saldo inicial propuesto**, que puede corregir (en efectivo, el fondo):
+
+- Si esa caja ya se cerró antes, lo **contado en el último cierre** más lo que se
+  movió en los días que quedaron sin cerrar.
+- Si nunca se cerró: para *Todos*, el saldo inicial del resumen (saldo de apertura +
+  movimientos); para un usuario, cero.
+
+Mientras la caja no se abre, la tabla muestra el saldo inicial como *propuesto*.
+
+**Cerrar caja.** Botón **Cerrar caja** (pide permiso de crear). Por cada forma de pago
+muestra el **esperado** = saldo inicial + ingresos − egresos ± traslados del día, y se
+escribe lo **contado** (el efectivo del cajón, el saldo del banco…); la diferencia se
+calcula sola (en rojo si falta, en verde si sobra). **Copiar esperado** pone el
+esperado en todas las formas para corregir solo las que no cuadran. Todas las formas
+deben tener un valor. Al guardar, el sistema vuelve a calcular el esperado.
+
+Con la caja cerrada, *Caja por forma de pago* trae además **Contado** y
+**Diferencia**, igual en el PDF y el Excel, y en *Filtros aplicados* sale quién la
+cerró y cuándo.
+
+**Reabrir caja.** Botón **Reabrir caja** (pide permiso de modificar y acceso total) y
+un motivo. Borra el arqueo (contado y diferencia) y conserva el saldo inicial; luego
+se vuelve a cerrar.
+
+**Reglas**
+
+- Cerrar la caja **no bloquea** nada: se pueden seguir registrando o anulando
+  Ingresos y Egresos de ese día. Si después del cierre cambian, el resumen avisa con
+  el esperado de hoy y el que había al cerrar; reabra la caja para volver a cuadrar.
+- No toca los *Saldos de apertura* ni los traslados, no genera asientos ni
+  movimientos en *Control Bancario*.
+- Es independiente del cierre de turno de la *Caja POS* (Restaurante): lo cobrado en
+  el POS también es un Ingreso y aparece en la caja del cajero que lo cobró.
+- Abrir, cerrar y reabrir quedan en el historial (*log_sistema*). Un doble clic o un
+  reintento tras un error de conexión no abre dos cajas.
+
 ## Saldos de apertura
 
 Botón **Saldos de apertura** (pide permiso de modificar y acceso total). Muestra
@@ -184,11 +244,13 @@ eliminar). Un doble clic o un reintento tras un error de conexión no lo duplica
 ## Permisos
 
 - **Ver**: abrir el resumen, PDF y Excel.
-- **Crear**: registrar traslados. **Eliminar**: eliminar traslados.
-- **Modificar** + **Acceso total**: saldos de apertura (son de toda la empresa).
-- Con **Acceso total** se ve todo lo de la empresa, con saldos. Sin él, solo lo que
-  registró el propio usuario y sin saldos; el PDF y el Excel lo indican en
-  *Filtros aplicados*.
+- **Crear**: registrar traslados; abrir y cerrar caja. **Eliminar**: eliminar traslados.
+- **Modificar** + **Acceso total**: saldos de apertura (son de toda la empresa) y
+  reabrir una caja cerrada.
+- Con **Acceso total** se ve todo lo de la empresa, con saldos, y se puede elegir un
+  **Usuario** para ver solo lo suyo y abrir o cerrar su caja. Sin él, solo lo que
+  registró el propio usuario y sin saldos (en *Cierre de caja*, su propia caja); el
+  PDF y el Excel lo indican en *Filtros aplicados*.
 
 ## Reglas de negocio
 
@@ -209,8 +271,8 @@ eliminar). Un doble clic o un reintento tras un error de conexión no lo duplica
 - En compras, **Impuestos** = total − subtotal (IVA, ICE y servicio).
 - Traslados y saldos de apertura quedan en el historial (*log_sistema*); al eliminar
   un traslado no se borra, se marca como eliminado.
-- No pide el efectivo contado ni calcula diferencias de arqueo (para eso está el
-  cierre de la *Caja POS*).
+- Solo con *Caja: Cierre de caja* pide el efectivo contado y calcula la diferencia
+  (ver *Abrir y cerrar caja*); los otros modos no lo hacen.
 
 ## Integraciones con otros módulos
 
@@ -237,7 +299,21 @@ módulo: no generan asientos ni movimientos en Control Bancario.
 - **Un Ingreso sale como "Sin forma de pago registrada"**: se guardó sin formas de
   pago. Edítelo en *Ingresos* y agregue la forma.
 
+- **No aparece el botón Abrir caja / Cerrar caja**: elija *Caja: Cierre de caja* y
+  pulse *Mostrar*; hace falta permiso de crear. Si la caja está cerrada, solo sale
+  *Reabrir caja* (con acceso total).
+- **"La caja de este día ya fue abierta"**: otro usuario la abrió mientras tanto;
+  pulse *Mostrar* para verla.
+- **El esperado de una caja cerrada no coincide con el de hoy**: después del cierre
+  se registró, editó o anuló un Ingreso, Egreso o traslado de ese día. Reabra la caja
+  y vuelva a cerrarla.
+
 ## Historial de cambios
+
+- **1.5** — Nueva opción **Caja: Cierre de caja**: abrir la caja del día con su saldo
+  inicial por forma de pago y cerrarla con lo contado (arqueo) y la diferencia; reabrir
+  con motivo. Nuevo selector **Usuario** (acceso total) para ver lo de un usuario y
+  manejar su caja. *Neto del día* y *Con saldos iniciales* no cambian.
 
 - **1.4** — Selector **Caja**: *Neto del día* (por defecto) o *Con saldos iniciales*.
 - **1.3** — *Caja por forma de pago* muestra solo las formas de pago usadas ese día.

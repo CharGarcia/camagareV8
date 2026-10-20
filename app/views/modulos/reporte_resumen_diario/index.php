@@ -1,6 +1,8 @@
-<?php /** @var string $rutaModulo @var string $base @var array $perm @var array $formas */
+<?php /** @var string $rutaModulo @var string $base @var array $perm @var array $formas @var array $usuarios */
 $puedeTraslado = !empty($perm['crear']);
-$puedeApertura = !empty($perm['actualizar']) && !empty($perm['todo']); ?>
+$puedeApertura = !empty($perm['actualizar']) && !empty($perm['todo']);
+$puedeCaja     = !empty($perm['crear']);                                   // abrir y cerrar caja
+$puedeReabrir  = !empty($perm['actualizar']) && !empty($perm['todo']); ?>
 <script>document.body.classList.add('cmg-no-app-shell');</script>
 
 <style>
@@ -44,11 +46,24 @@ $puedeApertura = !empty($perm['actualizar']) && !empty($perm['todo']); ?>
                 <div>
                     <label class="form-label small fw-bold mb-1 d-block text-muted text-uppercase" style="font-size:.65rem;" for="rrd-saldos">Caja</label>
                     <select id="rrd-saldos" class="form-select form-select-sm shadow-none border" style="width:170px;"
-                            title="Neto del día: solo lo que entró y salió ese día. Con saldos iniciales: además, el saldo que traía cada forma de pago y el saldo final">
+                            title="Neto del día: solo lo que entró y salió ese día. Con saldos iniciales: además, el saldo que traía cada forma de pago y el saldo final. Cierre de caja: abrir la caja con su saldo inicial y cerrarla con lo contado">
                         <option value="">Neto del día</option>
                         <option value="SI">Con saldos iniciales</option>
+                        <option value="CIERRE">Cierre de caja</option>
                     </select>
                 </div>
+                <?php if ($usuarios): ?>
+                <div>
+                    <label class="form-label small fw-bold mb-1 d-block text-muted text-uppercase" style="font-size:.65rem;" for="rrd-usuario">Usuario</label>
+                    <select id="rrd-usuario" class="form-select form-select-sm shadow-none border" style="width:180px;"
+                            title="Todos: lo de toda la empresa. Un usuario: solo lo que registró ese usuario (y su caja)">
+                        <option value="">Todos</option>
+                        <?php foreach ($usuarios as $u): ?>
+                            <option value="<?= (int) $u['id'] ?>"><?= htmlspecialchars((string) $u['nombre']) ?></option>
+                        <?php endforeach; ?>
+                    </select>
+                </div>
+                <?php endif; ?>
                 <div>
                     <label class="form-label small fw-bold mb-1 d-block" style="font-size:.65rem;">&nbsp;</label>
                     <div class="d-flex gap-2">
@@ -99,7 +114,21 @@ $puedeApertura = !empty($perm['actualizar']) && !empty($perm['todo']); ?>
                     <i class="bi bi-safe bg-dark bg-opacity-10 text-dark"></i>
                     <div>
                         <div class="cmg-control-card__stat-value" id="rrd-kpi-saldo">$0.00</div>
-                        <div class="cmg-control-card__stat-label">Saldo final</div>
+                        <div class="cmg-control-card__stat-label" id="rrd-kpi-saldo-lbl">Saldo final</div>
+                    </div>
+                </div>
+                <div class="cmg-control-card__stat d-none" id="rrd-stat-contado">
+                    <i class="bi bi-cash-stack bg-info bg-opacity-10 text-info"></i>
+                    <div>
+                        <div class="cmg-control-card__stat-value" id="rrd-kpi-contado">$0.00</div>
+                        <div class="cmg-control-card__stat-label">Contado</div>
+                    </div>
+                </div>
+                <div class="cmg-control-card__stat d-none" id="rrd-stat-diferencia">
+                    <i class="bi bi-plus-slash-minus bg-warning bg-opacity-10 text-warning"></i>
+                    <div>
+                        <div class="cmg-control-card__stat-value" id="rrd-kpi-diferencia">$0.00</div>
+                        <div class="cmg-control-card__stat-label">Diferencia</div>
                     </div>
                 </div>
             </div>
@@ -116,6 +145,20 @@ $puedeApertura = !empty($perm['actualizar']) && !empty($perm['todo']); ?>
                 </div>
                 <div class="d-flex align-items-center gap-2">
                     <span class="text-muted small" id="rrd-titulo-dia"></span>
+                    <span class="badge d-none" id="rrd-caja-estado"></span>
+                    <?php if ($puedeCaja): ?>
+                        <button type="button" class="btn btn-success btn-sm d-none" id="rrdBtnAbrirCaja" title="Fijar el saldo inicial de cada forma de pago">
+                            <i class="bi bi-unlock me-1"></i>Abrir caja
+                        </button>
+                        <button type="button" class="btn btn-danger btn-sm d-none" id="rrdBtnCerrarCaja" title="Arqueo: escribir lo contado en cada forma de pago">
+                            <i class="bi bi-lock me-1"></i>Cerrar caja
+                        </button>
+                    <?php endif; ?>
+                    <?php if ($puedeReabrir): ?>
+                        <button type="button" class="btn btn-outline-warning btn-sm d-none" id="rrdBtnReabrirCaja" title="Volver a abrir la caja para corregir (borra el arqueo)">
+                            <i class="bi bi-arrow-counterclockwise me-1"></i>Reabrir caja
+                        </button>
+                    <?php endif; ?>
                     <?php if ($puedeTraslado): ?>
                         <button type="button" class="btn btn-outline-primary btn-sm" id="rrdBtnTraslado"
                                 title="Dinero que pasa de una forma de pago a otra (p. ej. depositar el efectivo en el banco)">
@@ -217,6 +260,82 @@ $puedeApertura = !empty($perm['actualizar']) && !empty($perm['todo']); ?>
       <div class="modal-footer py-2">
         <button type="button" class="btn btn-outline-secondary btn-sm" data-bs-dismiss="modal">Cancelar</button>
         <button type="button" class="btn btn-primary btn-sm" id="rrdBtnGuardarApertura" disabled><i class="bi bi-check-lg me-1"></i>Guardar</button>
+      </div>
+    </div>
+  </div>
+</div>
+<?php endif; ?>
+
+<?php if ($puedeCaja): ?>
+<!-- ── Abrir caja: saldo inicial por forma de pago ── -->
+<div class="modal fade" id="rrdModalAbrirCaja" tabindex="-1">
+  <div class="modal-dialog modal-lg modal-dialog-scrollable">
+    <div class="modal-content">
+      <div class="modal-header py-2">
+        <h6 class="modal-title fw-bold"><i class="bi bi-unlock me-1"></i>Abrir caja <span class="fw-normal text-muted" id="rrd-ac-titulo"></span></h6>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <p class="small text-muted mb-2">
+          El saldo con que arranca la caja en cada forma de pago (en efectivo, el fondo). Se propone lo contado en el
+          último cierre más lo que se movió en los días sin cerrar; puede corregirlo. Deje en cero las formas que no usa.
+        </p>
+        <table class="table table-sm align-middle mb-2" style="font-size:.8rem;">
+          <thead class="table-light">
+            <tr><th>Forma de pago</th><th class="text-end" style="width:160px;">Saldo inicial</th></tr>
+          </thead>
+          <tbody id="rrd-ac-tbody">
+            <tr><td colspan="2" class="text-center text-muted py-3">Cargando…</td></tr>
+          </tbody>
+        </table>
+        <label class="form-label small fw-bold mb-1 d-block" for="rrd-ac-obs">Observaciones</label>
+        <input type="text" class="form-control form-control-sm" id="rrd-ac-obs" maxlength="300">
+      </div>
+      <div class="modal-footer py-2">
+        <button type="button" class="btn btn-outline-secondary btn-sm" data-bs-dismiss="modal">Cancelar</button>
+        <button type="button" class="btn btn-success btn-sm" id="rrdBtnGuardarAbrirCaja" disabled><i class="bi bi-check-lg me-1"></i>Abrir caja</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ── Cerrar caja: arqueo por forma de pago ── -->
+<div class="modal fade" id="rrdModalCerrarCaja" tabindex="-1">
+  <div class="modal-dialog modal-lg modal-dialog-scrollable">
+    <div class="modal-content">
+      <div class="modal-header py-2">
+        <h6 class="modal-title fw-bold"><i class="bi bi-lock me-1"></i>Cerrar caja <span class="fw-normal text-muted" id="rrd-cc-titulo"></span></h6>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <div class="d-flex justify-content-between align-items-start gap-2 mb-2">
+          <p class="small text-muted mb-0">
+            Escriba lo que hay realmente en cada forma de pago (el efectivo contado, el saldo del banco…). El esperado es
+            saldo inicial + ingresos − egresos ± traslados del día; el sistema lo vuelve a calcular al guardar.
+          </p>
+          <button type="button" class="btn btn-outline-secondary btn-sm text-nowrap" id="rrdBtnCopiarEsperado" title="Poner el esperado como contado en todas las formas">
+            <i class="bi bi-clipboard-check me-1"></i>Copiar esperado
+          </button>
+        </div>
+        <table class="table table-sm align-middle mb-2" style="font-size:.8rem;">
+          <thead class="table-light">
+            <tr><th>Forma de pago</th><th class="text-end">Esperado</th><th class="text-end" style="width:150px;">Contado</th><th class="text-end">Diferencia</th></tr>
+          </thead>
+          <tbody id="rrd-cc-tbody">
+            <tr><td colspan="4" class="text-center text-muted py-3">Cargando…</td></tr>
+          </tbody>
+          <tfoot>
+            <tr class="fw-bold table-light">
+              <td>Total</td><td class="text-end" id="rrd-cc-tot-esp"></td><td class="text-end" id="rrd-cc-tot-cont"></td><td class="text-end" id="rrd-cc-tot-dif"></td>
+            </tr>
+          </tfoot>
+        </table>
+        <label class="form-label small fw-bold mb-1 d-block" for="rrd-cc-obs">Observaciones</label>
+        <input type="text" class="form-control form-control-sm" id="rrd-cc-obs" maxlength="500" placeholder="Ej.: faltante de $2 por cambio">
+      </div>
+      <div class="modal-footer py-2">
+        <button type="button" class="btn btn-outline-secondary btn-sm" data-bs-dismiss="modal">Cancelar</button>
+        <button type="button" class="btn btn-danger btn-sm" id="rrdBtnGuardarCerrarCaja" disabled><i class="bi bi-lock me-1"></i>Cerrar caja</button>
       </div>
     </div>
   </div>
