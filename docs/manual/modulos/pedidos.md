@@ -6,7 +6,7 @@ ruta_modulo: modulos/pedidos
 tipo: modulo
 visibilidad: todos
 etiquetas: pedidos, pedido desde proforma, proforma a pedido, enviar a pedidos, generar pedido desde cotizacion, pedido de cliente, vendedor del cliente, asesor, quien atiende al cliente, solicitado por, quien hizo el pedido, usuario que registro el pedido, buscar pedidos, buscador, filtros, filtrar pedidos, buscar por producto, buscar por cliente, ordenar por estado y fecha de entrega, ordenar por dos columnas, encargo, orden de pedido, reserva, entregas, despacho, agenda de entrega, hora de entrega, responsable de entrega, rango horario, pedidos pendientes, aparecen pedidos que no busque, resultados que no corresponden, buscar por producto en el listado, imprimir, impresora
-version: 1.15
+version: 1.17
 orden: 0
 estado: activo
 ---
@@ -217,9 +217,9 @@ búsqueda**. La **×** quita solo ese filtro, y con el cuadro vacío la tecla
 | Secuencial | Sí | Número del pedido. Lo asigna el sistema y no se escribe a mano. |
 | Estado | Sí | Pendiente, Procesado o Anulado. Nace en Pendiente. |
 | Cliente | Sí | A quién se le entrega. Se busca por nombre o identificación. A la derecha del título del campo se muestra el **vendedor (asesor)** asignado a ese cliente, solo como referencia. |
-| Fecha Pedido | Sí | Cuándo se tomó el encargo. |
+| Fecha Pedido | Sí | Cuándo se tomó el encargo (fecha de emisión). En un pedido nuevo no puede ser anterior a hoy; al editar un pedido ya guardado se conserva su fecha. |
 | Fecha de Entrega | Sí | Cuándo se entrega. No puede ser anterior a hoy ni al día del pedido. |
-| Hora Inicial / Hora Máxima | Sí | Ventana horaria de la entrega, en formato 00:00. La inicial no puede ser mayor que la máxima; pueden ser la misma hora si la entrega es a una hora exacta. |
+| Hora Inicial / Hora Máxima | Sí | Ventana horaria de la entrega, en formato 00:00. La inicial no puede ser mayor que la máxima; pueden ser la misma hora si la entrega es a una hora exacta. Si la entrega es hoy, la hora máxima no puede ser anterior a la hora actual (la inicial sí puede haber pasado). |
 | Responsable de Entrega | Sí | Quién lleva el pedido. Se puede crear uno nuevo sin salir del formulario. |
 | Observaciones Generales | No | Notas que acompañan al pedido (salen en el PDF). |
 | Observaciones Internas | No | Notas para el equipo. |
@@ -238,9 +238,13 @@ Se administran en **Configuración → Permisos por módulo**, sobre la ruta
 
 ## Reglas de negocio
 
-- **Fechas y horas**: la entrega no puede quedar antes de hoy ni antes de la fecha
-  del pedido; las horas deben tener formato `00:00` y la inicial no puede ser
-  mayor que la máxima (sí pueden ser iguales, para una entrega a hora exacta).
+- **Fechas y horas**: un pedido **nuevo** no puede tener fecha de emisión anterior
+  a hoy (al editar uno ya guardado se respeta su fecha original). La entrega no
+  puede quedar antes de hoy ni antes de la fecha del pedido; las horas deben tener
+  formato `00:00` y la inicial no puede ser mayor que la máxima (sí pueden ser
+  iguales, para una entrega a hora exacta). Si la entrega es **hoy**, la hora
+  máxima no puede ser anterior a la hora actual: una ventana de 14:00 a 18:00
+  siendo las 15:00 se acepta; una de 08:00 a 12:00 a esa hora, no.
 - **Al menos un producto**, y toda cantidad debe ser mayor a cero.
 - **El secuencial no se repite**: al guardar, el sistema toma el siguiente número
   bajo un bloqueo, de modo que dos personas guardando a la vez no obtienen el mismo.
@@ -318,6 +322,12 @@ esas líneas primero. El detalle está en el manual de **Proformas**, sección
   que la consumió.
 - **"La fecha de entrega no puede ser menor a la fecha actual"**: la entrega quedó
   en el pasado; corrija la fecha.
+- **"La fecha de emisión no puede ser anterior a la fecha actual"**: se está
+  creando un pedido con fecha de un día ya pasado; ponga la fecha de hoy o una
+  posterior.
+- **"La hora máxima de entrega no puede ser anterior a la hora actual"**: la
+  entrega es hoy y su ventana horaria ya terminó; amplíe la hora máxima o cambie
+  la fecha de entrega.
 - **La descarga pide acotar la búsqueda**: el listado supera las 500 filas. Use el
   buscador (por ejemplo, un rango de fechas) y vuelva a exportar.
 - **En el celular no aparece la lista de productos al buscar**: si su navegador
@@ -326,6 +336,7 @@ esas líneas primero. El detalle está en el manual de **Proformas**, sección
 
 ## Historial de cambios
 
+- **1.17** — Un pedido **nuevo** ya no acepta una fecha de emisión anterior a hoy (al editar uno guardado se respeta su fecha). Y si la entrega es hoy, la **hora máxima** no puede ser anterior a la hora actual. Se valida en el formulario y al guardar (también desde la app móvil). Además, al abrir un pedido nuevo la fecha de emisión vuelve a ser la de hoy aunque antes se haya abierto un pedido de otro día.
 - **1.16** — El PDF del pedido con muchos productos ya no se desordena al pasar de página: cada fila queda completa en una sola hoja, el encabezado de la tabla (Código / Descripción / Cantidad) se repite en cada página y los códigos o descripciones largos se ajustan dentro de su celda.
 - **1.15** — El cliente creado desde el pedido queda seleccionado con su vendedor, solo si el pedido está abierto y editable. Antes, editar cualquier cliente con la página abierta lo ponía en el pedido.
 - **1.14** — En la ventana de filtros, la pestaña *Detalles* se llama ahora

@@ -169,6 +169,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const inputHoraIni = document.getElementById('hora_inicial_entrega');
     const inputHoraMax = document.getElementById('hora_maxima_entrega');
 
+    document.getElementById('fecha_pedido')?.addEventListener('change', validarFechasYHoras);
     if (inputFecha) inputFecha.addEventListener('change', validarFechasYHoras);
     if (inputHoraIni) inputHoraIni.addEventListener('change', validarFechasYHoras);
     if (inputHoraMax) inputHoraMax.addEventListener('change', validarFechasYHoras);
@@ -469,7 +470,10 @@ function nuevoPedido() {
     window._PED_CLIENTE_EMAIL = '';
     pedMostrarVendedorCliente('');
     
-    // Configurar fecha de entrega con la fecha actual por defecto
+    // Fechas de emisión y de entrega con la fecha actual por defecto. La de emisión
+    // también se repone: si antes se abrió un pedido de otro día, quedaba esa fecha
+    // y el pedido nuevo no se dejaba guardar (no puede ser anterior a hoy).
+    document.getElementById('fecha_pedido').value = CMG_fechaLocal();
     document.getElementById('fecha_entrega').value = CMG_fechaLocal();
     // Las horas de entrega arrancan VACÍAS: no se sugiere la hora actual ni se
     // limita la hora máxima con `min`, para que se puedan escribir libremente.
@@ -993,18 +997,28 @@ function validarFechasYHoras() {
         el.parentNode.appendChild(feedback);
     };
 
+    const inputFechaPedido = document.getElementById('fecha_pedido');
+
     clearError(inputFecha);
     clearError(inputHoraIni);
     clearError(inputHoraMax);
+    if (inputFechaPedido) clearError(inputFechaPedido);
+
+    // Hoy y la hora actual, en hora local (YYYY-MM-DD y HH:MM, comparables como texto).
+    const ahora = new Date();
+    const todayStr = `${ahora.getFullYear()}-${String(ahora.getMonth() + 1).padStart(2, '0')}-${String(ahora.getDate()).padStart(2, '0')}`;
+    const horaActual = `${String(ahora.getHours()).padStart(2, '0')}:${String(ahora.getMinutes()).padStart(2, '0')}`;
+
+    // 0. Fecha de emisión no anterior a hoy, solo en un pedido nuevo: al editar se
+    //    respeta la fecha original (igual que en PedidoRules).
+    const esNuevo = !document.getElementById('pedido_id')?.value;
+    if (esNuevo && inputFechaPedido && inputFechaPedido.value && inputFechaPedido.value < todayStr) {
+        showError(inputFechaPedido, 'La fecha de emisión no puede ser anterior a la fecha actual.');
+        isOk = false;
+    }
 
     // 1. Fecha de entrega no puede ser menor a la fecha actual (hoy local)
     if (inputFecha.value) {
-        const localDate = new Date();
-        const year = localDate.getFullYear();
-        const month = String(localDate.getMonth() + 1).padStart(2, '0');
-        const day = String(localDate.getDate()).padStart(2, '0');
-        const todayStr = `${year}-${month}-${day}`;
-
         if (inputFecha.value < todayStr) {
             showError(inputFecha, 'La fecha de entrega no puede ser menor a la fecha actual.');
             isOk = false;
@@ -1030,6 +1044,13 @@ function validarFechasYHoras() {
     if (hIni && hMax && PED_RE_HORA.test(hIni) && PED_RE_HORA.test(hMax) && hIni > hMax) {
         showError(inputHoraIni, 'La hora inicial no puede ser mayor a la hora máxima.');
         showError(inputHoraMax, 'La hora máxima no puede ser menor a la hora inicial.');
+        isOk = false;
+    }
+
+    // 3. Entrega hoy: la ventana no puede haber terminado ya. Se mira la hora máxima;
+    //    la inicial sí puede haber pasado (entre 14:00 y 18:00 siendo las 15:00).
+    if (inputFecha.value === todayStr && hMax && PED_RE_HORA.test(hMax) && hMax < horaActual) {
+        showError(inputHoraMax, 'La hora máxima no puede ser anterior a la hora actual.');
         isOk = false;
     }
 
@@ -1085,7 +1106,7 @@ async function guardarPedido() {
     }
 
     if (!validarFechasYHoras()) {
-        Swal.fire({ icon: 'warning', title: 'Validación de Entrega', text: 'Por favor, corrija los errores en la fecha u horas de entrega antes de continuar.' });
+        Swal.fire({ icon: 'warning', title: 'Validación de Entrega', text: 'Por favor, corrija los errores en la fecha de emisión o en la fecha u horas de entrega antes de continuar.' });
         return;
     }
 

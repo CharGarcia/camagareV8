@@ -158,6 +158,13 @@ class ConsignacionVentaPdfService
             return $v !== '' ? substr($v, 0, 5) : '';
         };
 
+        // fecha_emision es DATE: la hora sale de created_at, solo si es del mismo día
+        // (en migradas o con fecha retroactiva created_at no es la hora de emisión).
+        $emision = $fmtFecha($c['fecha_emision'] ?? '');
+        $tsCreado = !empty($c['created_at']) ? strtotime((string)$c['created_at']) : false;
+        if ($emision !== '' && $tsCreado && date('Y-m-d', $tsCreado) === date('Y-m-d', strtotime((string)$c['fecha_emision']))) {
+            $emision .= ' ' . date('H:i', $tsCreado);
+        }
         $entrega = trim($fmtFecha($c['fecha_entrega'] ?? '') . ' '
             . $fmtHora($c['hora_entrega_desde'] ?? '')
             . (($c['hora_entrega_hasta'] ?? '') ? ' - ' . $fmtHora($c['hora_entrega_hasta'] ?? '') : ''));
@@ -171,7 +178,7 @@ class ConsignacionVentaPdfService
         // Las observaciones NO van aquí: tienen su propio bloque bajo la tabla de productos,
         // donde hay ancho completo para leerlas.
         $filas = [
-            ['Cliente:', (string)($c['cliente_nombre'] ?? '—'), 'Fecha emisión:', $fmtFecha($c['fecha_emision'] ?? '')],
+            ['Cliente:', (string)($c['cliente_nombre'] ?? '—'), 'Fecha emisión:', $emision],
             ['Identificación:', (string)($c['cliente_identificacion'] ?? ''), 'Asesor:', (string)($c['vendedor_nombre'] ?? '—')],
             ['Dirección:', (string)($c['cliente_direccion'] ?? ''), 'Resp. traslado:', (string)($c['responsable_traslado_nombre'] ?? '—')],
             ['Teléfono:', trim((string)($c['cliente_telefono'] ?? '')) !== '' ? trim((string)$c['cliente_telefono']) : '—', 'Entrega:', $entrega !== '' ? $entrega : '—'],

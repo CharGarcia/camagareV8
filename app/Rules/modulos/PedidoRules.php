@@ -29,7 +29,7 @@ class PedidoRules {
     }
 
     /**
-     * Fecha y horas de entrega. Antes vivía inline en PedidosController::guardarAjax().
+     * Fecha de emisión y fecha/horas de entrega. Antes vivía inline en PedidosController::guardarAjax().
      */
     public static function validarFechaHoraEntrega($datos): void
     {
@@ -38,14 +38,20 @@ class PedidoRules {
         $horaInicial = $datos['hora_inicial_entrega'] ?? '';
         $horaMaxima = $datos['hora_maxima_entrega'] ?? '';
 
-        if (!empty($fechaEntrega)) {
-            $today = date('Y-m-d');
-            if ($fechaEntrega < $today) {
-                throw new Exception('La fecha de entrega no puede ser menor a la fecha actual.');
-            }
+        $today = date('Y-m-d');
+
+        // Fecha de emisión: solo al crear. Al editar se respeta la original, para que un
+        // pedido de días anteriores se pueda seguir guardando. Se compara solo el día:
+        // los pedidos generados desde una proforma traen también la hora.
+        if (empty($datos['id']) && !empty($fechaPedido) && substr((string) $fechaPedido, 0, 10) < $today) {
+            throw new Exception('La fecha de emisión no puede ser anterior a la fecha actual.');
         }
 
-        if (!empty($fechaPedido) && !empty($fechaEntrega) && $fechaEntrega < $fechaPedido) {
+        if (!empty($fechaEntrega) && $fechaEntrega < $today) {
+            throw new Exception('La fecha de entrega no puede ser menor a la fecha actual.');
+        }
+
+        if (!empty($fechaPedido) && !empty($fechaEntrega) && $fechaEntrega < substr((string) $fechaPedido, 0, 10)) {
             throw new Exception('La fecha de entrega no puede ser menor a la fecha del pedido.');
         }
 
@@ -63,6 +69,12 @@ class PedidoRules {
         // rechaza que la inicial quede después de la máxima.
         if (!empty($horaInicial) && !empty($horaMaxima) && $horaInicial > $horaMaxima) {
             throw new Exception('La hora inicial no puede ser mayor a la hora máxima de entrega.');
+        }
+
+        // Entrega hoy: la ventana no puede haber terminado ya. Se mira la hora máxima;
+        // la inicial sí puede haber pasado (entre 14:00 y 18:00 siendo las 15:00).
+        if ($fechaEntrega === $today && !empty($horaMaxima) && substr((string) $horaMaxima, 0, 5) < date('H:i')) {
+            throw new Exception('La hora máxima de entrega no puede ser anterior a la hora actual.');
         }
     }
 }
