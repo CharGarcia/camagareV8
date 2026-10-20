@@ -912,9 +912,10 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                                             <!-- Subtotales agrupados por tarifa IVA -->
                                             <div id="m-lbl-subtotales-iva" class="mb-1"></div>
 
-                                            <!-- Total Descuento (informativo: ya está restado dentro del Subtotal de arriba) -->
+                                            <!-- Total Descuento (informativo: ya está restado dentro del Subtotal de arriba).
+                                                 En borrador, el enlace abre el descuento de toda la factura, que se reparte línea por línea. -->
                                             <div class="d-flex justify-content-between align-items-center mb-1">
-                                                <span class="text-muted">(-) Descuento</span>
+                                                <span class="text-muted">(-) <a href="#" id="m-link-descuento-global" class="text-decoration-none" onclick="abrirModalDescuentoGlobal(); return false;" title="Aplicar un descuento a toda la factura (se reparte en cada línea)">Descuento <i class="bi bi-pencil-square small"></i></a><span id="m-txt-descuento-global" class="d-none">Descuento</span></span>
                                                 <span class="fw-bold text-dark"><small id="m-lbl-descuento-pct" class="text-muted fw-normal me-1 cmg-pct-desc" title="Porcentaje sobre el subtotal antes del descuento"></small><span id="m-lbl-descuento">0.00</span></span>
                                             </div>
 
@@ -1992,6 +1993,16 @@ $totalPages = $totalPagesOriginal;
                 hayError = true;
                 return;
             }
+            const _bruto = r2((parseFloat(tr.querySelector('.input-cantidad')?.value) || 0) * _prec);
+            if (r2(_dcto) - _bruto > 0.001) {
+                Swal.fire({
+                    icon: 'warning',
+                    title: 'Atención',
+                    text: `"${desc || 'Ítem'}": el descuento (${r2(_dcto).toFixed(2)}) no puede ser mayor que el subtotal de la línea (${_bruto.toFixed(2)}).`
+                });
+                hayError = true;
+                return;
+            }
 
             // Campos obligatorios por configuración (solo para productos inventariables, NO servicios Tipo 02)
             if (!esLibre && idProd) {
@@ -2889,6 +2900,10 @@ $totalPages = $totalPagesOriginal;
         btnsDescuento.forEach(btn => {
             btn.classList.toggle('d-none', !esBorrador || !EMPRESA_CONFIG.editar_descuento_factura);
         });
+        // Enlace "(-) Descuento" de los totales (descuento de toda la factura): mismo criterio.
+        const descGlobalEditable = esBorrador && !!EMPRESA_CONFIG.editar_descuento_factura;
+        document.getElementById('m-link-descuento-global')?.classList.toggle('d-none', !descGlobalEditable);
+        document.getElementById('m-txt-descuento-global')?.classList.toggle('d-none', descGlobalEditable);
 
         // Mostrar/ocultar botones de eliminación de filas (basureros)
         const trashBtns = tabDetalle.querySelectorAll('button.text-danger, button.btn-outline-danger');
@@ -5364,6 +5379,14 @@ $totalPages = $totalPagesOriginal;
         const subtotalNeto = r2(subtotalBruto - desc);
         CMG_pctDescuentoLinea(tr, desc, subtotalBruto); // % de la línea, solo en pantalla
 
+        // Descuento mayor que el subtotal de la línea: se marca aquí y el guardado lo
+        // rechaza (también lo valida FacturaVentaRules). Se revisa al cambiar cantidad o
+        // precio, no solo el descuento.
+        const inputDesc = tr.querySelector('.input-desc');
+        const descExcede = r2(desc) - subtotalBruto > 0.001;
+        inputDesc.classList.toggle('is-invalid', descExcede);
+        inputDesc.title = descExcede ? `El descuento no puede ser mayor que el subtotal de la línea (${subtotalBruto.toFixed(2)})` : '';
+
         // ICE: tarifa < 1 †’ específico ($ por unidad); tarifa >= 1 †’ ad-valorem (% sobre neto)
         const iceTarifa = parseFloat(tr.querySelector('.input-ice-pct').value) || 0;
         let iceVal = 0;
@@ -7019,7 +7042,7 @@ $totalPages = $totalPagesOriginal;
     <div class="modal-dialog modal-sm modal-dialog-centered" style="max-width: 320px;">
         <div class="modal-content border-0 shadow-lg">
             <div class="modal-header bg-light py-1 px-3 border-bottom-0">
-                <h6 class="modal-title small text-primary" style="font-size: 0.85rem;"><i class="bi bi-percent me-1"></i> Aplicar Descuento</h6>
+                <h6 class="modal-title small text-primary" style="font-size: 0.85rem;"><i class="bi bi-percent me-1"></i> <span id="tituloDescModal">Aplicar Descuento</span></h6>
                 <button type="button" class="btn-close" data-bs-dismiss="modal" style="font-size: 0.5rem; padding: 0.8rem;"></button>
             </div>
             <div class="modal-body py-2 px-3">
@@ -7044,8 +7067,12 @@ $totalPages = $totalPagesOriginal;
                     </div>
                 </div>
 
-                <div class="form-check form-switch mb-1" style="min-height: auto;">
-                    <input class="form-check-input" type="checkbox" id="checkAplicarTodo" style="height: 1rem; width: 1.8rem; margin-top: 0.2rem;">
+                <div id="ayudaDescGlobal" class="text-muted mb-1 d-none" style="font-size: 0.7rem;">
+                    Reemplaza el descuento de todas las líneas. En Valor ($) se reparte en proporción al subtotal de cada línea.
+                </div>
+
+                <div class="form-check form-switch mb-1" id="wrapAplicarTodo" style="min-height: auto;">
+                    <input class="form-check-input" type="checkbox" id="checkAplicarTodo" onchange="validarCalculoModal()" style="height: 1rem; width: 1.8rem; margin-top: 0.2rem;">
                     <label class="form-check-label text-muted ms-1" for="checkAplicarTodo" style="font-size: 0.7rem; vertical-align: middle;">Aplicar a todos los ítems</label>
                 </div>
             </div>
@@ -7059,24 +7086,62 @@ $totalPages = $totalPagesOriginal;
 <script>
     let trDescuentoTarget = null;
     let modalDescInst = null;
+    // true cuando el modal se abrió desde "(-) Descuento" de los totales (toda la factura).
+    let descModoGlobal = false;
 
-    function abrirModalDescuento(btn) {
-        trDescuentoTarget = btn.closest('tr');
+    // Subtotal bruto de la línea (cantidad × precio), con el mismo redondeo de calcFila().
+    function fvBrutoFila(tr) {
+        const c = parseFloat(tr.querySelector('.input-cantidad').value) || 0;
+        const p = parseFloat(tr.querySelector('.input-precio').value) || 0;
+        return r2(c * p);
+    }
+
+    /**
+     * Descuento de cada fila, siempre a 2 decimales (lo mismo que se guarda y va al XML).
+     *   P → el mismo % sobre el bruto de cada línea.
+     *   V → el valor se reparte en proporción al bruto de cada línea; los centavos de
+     *       redondeo los absorbe la línea de mayor bruto, así la suma da exactamente V.
+     * Devuelve null si el valor supera lo que se puede descontar.
+     */
+    function fvRepartirDescuento(filas, tipo, valor) {
+        const brutos = filas.map(fvBrutoFila);
+        const totalBruto = r2(brutos.reduce((a, b) => a + b, 0));
+
+        if (tipo === 'P') {
+            if (valor > 100) return null;
+            return brutos.map(b => b > 0 ? r2(b * valor / 100) : 0);
+        }
+
+        if (valor > totalBruto) return null;
+        if (!(totalBruto > 0)) return brutos.map(() => 0);
+
+        const descs = brutos.map(b => b > 0 ? r2(valor * b / totalBruto) : 0);
+        const diferencia = r2(valor - descs.reduce((a, b) => a + b, 0));
+        if (diferencia !== 0) {
+            const iMayor = brutos.indexOf(Math.max(...brutos));
+            descs[iMayor] = Math.min(brutos[iMayor], Math.max(0, r2(descs[iMayor] + diferencia)));
+        }
+        return descs;
+    }
+
+    function fvFilasDescuento() {
+        const aplicarTodo = descModoGlobal || document.getElementById('checkAplicarTodo').checked;
+        return aplicarTodo ?
+            Array.from(document.querySelectorAll('#m-tbodyDetalle tr.row-detalle')) :
+            (trDescuentoTarget ? [trDescuentoTarget] : []);
+    }
+
+    function fvMostrarModalDescuento(valorInicial) {
         if (!modalDescInst) {
             modalDescInst = new bootstrap.Modal(document.getElementById('modalDescuentoRapido'));
         }
+        document.getElementById('tituloDescModal').textContent = descModoGlobal ? 'Descuento de la factura' : 'Aplicar Descuento';
+        document.getElementById('ayudaDescGlobal').classList.toggle('d-none', !descModoGlobal);
+        document.getElementById('wrapAplicarTodo').classList.toggle('d-none', descModoGlobal);
 
-        const currentVal = parseFloat(trDescuentoTarget.querySelector('.input-desc').value) || 0;
         const inputModal = document.getElementById('inputValDescModal');
-        inputModal.value = currentVal;
-
-        if (currentVal > 0) {
-            document.getElementById('descVal').checked = true;
-            document.getElementById('descPorc').checked = false;
-        } else {
-            document.getElementById('descPorc').checked = true;
-            document.getElementById('descVal').checked = false;
-        }
+        inputModal.value = valorInicial;
+        document.getElementById(valorInicial > 0 ? 'descVal' : 'descPorc').checked = true;
 
         document.getElementById('checkAplicarTodo').checked = false;
         validarCalculoModal();
@@ -7088,62 +7153,78 @@ $totalPages = $totalPagesOriginal;
         }, 400);
     }
 
+    function abrirModalDescuento(btn) {
+        descModoGlobal = false;
+        trDescuentoTarget = btn.closest('tr');
+        fvMostrarModalDescuento(parseFloat(trDescuentoTarget.querySelector('.input-desc').value) || 0);
+    }
+
+    // "(-) Descuento" de los totales: descuento de toda la factura, repartido por línea.
+    function abrirModalDescuentoGlobal() {
+        if (!FV_ES_BORRADOR || !EMPRESA_CONFIG.editar_descuento_factura) return;
+        if (!document.querySelector('#m-tbodyDetalle tr.row-detalle')) {
+            return Swal.fire({ icon: 'info', title: 'Sin ítems', text: 'Agregue productos antes de aplicar un descuento.' });
+        }
+        descModoGlobal = true;
+        trDescuentoTarget = null;
+        fvMostrarModalDescuento(parseFloat(document.getElementById('m-lbl-descuento')?.textContent) || 0);
+    }
+
     function validarCalculoModal() {
-        if (!trDescuentoTarget) return;
+        const filas = fvFilasDescuento();
+        const inputCalculado = document.getElementById('inputCalcDescModal');
+        if (!filas.length) { inputCalculado.value = '0.00'; return; }
 
         const tipo = document.querySelector('input[name="tipoDesc"]:checked').value;
         const valorIngresado = parseFloat(document.getElementById('inputValDescModal').value) || 0;
-        const inputCalculado = document.getElementById('inputCalcDescModal');
+        const descs = fvRepartirDescuento(filas, tipo, Math.max(0, valorIngresado));
 
-        const inputCant = trDescuentoTarget.querySelector('.input-cantidad');
-        const inputPrecio = trDescuentoTarget.querySelector('.input-precio');
-        const cant = parseFloat(inputCant.value) || 1;
-        const precio = parseFloat(inputPrecio.value) || 0;
-        const subtotal = precio * cant;
-
-        let res = 0;
-        if (tipo === 'P') {
-            res = subtotal * (valorIngresado / 100);
-        } else {
-            res = valorIngresado;
-        }
-
-        inputCalculado.value = res.toFixed(4);
+        inputCalculado.value = descs ? r2(descs.reduce((a, b) => a + b, 0)).toFixed(2) : '';
     }
 
     function confirmarDescuento() {
         const tipo = document.querySelector('input[name="tipoDesc"]:checked').value;
         const valorIngresado = parseFloat(document.getElementById('inputValDescModal').value) || 0;
-        const aplicarTodo = document.getElementById('checkAplicarTodo').checked;
 
         if (valorIngresado < 0) {
             return Swal.fire({
                 icon: 'warning',
                 title: 'Valor inválido',
                 text: 'El valor no puede ser negativo.',
-                confirmButtonColor: '#ffc107'
+                confirmButtonColor: '#ffc107',
+                target: document.getElementById('modalDescuentoRapido')
             });
         }
 
-        const filas = aplicarTodo ?
-            document.querySelectorAll('#m-tbodyDetalle tr.row-detalle') : [trDescuentoTarget];
+        const filas = fvFilasDescuento();
+        const descs = fvRepartirDescuento(filas, tipo, valorIngresado);
+        if (!descs) {
+            return Swal.fire({
+                icon: 'warning',
+                title: 'Valor inválido',
+                text: tipo === 'P' ? 'El porcentaje no puede ser mayor a 100.' : 'El descuento no puede ser mayor que el subtotal de los ítems.',
+                confirmButtonColor: '#ffc107',
+                target: document.getElementById('modalDescuentoRapido')
+            });
+        }
 
-        filas.forEach(tr => {
-            const inputDesc = tr.querySelector('.input-desc');
-            let finalRowDesc = 0;
-            if (tipo === 'P') {
-                const p = parseFloat(tr.querySelector('.input-precio').value) || 0;
-                const c = parseFloat(tr.querySelector('.input-cantidad').value) || 1;
-                finalRowDesc = (p * c) * (valorIngresado / 100);
-            } else {
-                finalRowDesc = valorIngresado;
-            }
+        // calcFila() recalcula los totales por cada fila; con la bandera de carga lo omite
+        // y se recalculan una sola vez al final (mismo criterio que al abrir la factura).
+        FV_CARGANDO_DETALLES = true;
+        try {
+            filas.forEach((tr, i) => {
+                const inputDesc = tr.querySelector('.input-desc');
+                inputDesc.value = descs[i].toFixed(2);
+                inputDesc.dispatchEvent(new Event('input', {
+                    bubbles: true
+                }));
+            });
+        } finally {
+            FV_CARGANDO_DETALLES = false;
+        }
+        calcTotales();
 
-            inputDesc.value = finalRowDesc.toFixed(4);
-            inputDesc.dispatchEvent(new Event('input', {
-                bubbles: true
-            }));
-        });
+        modalDescInst?.hide();
     }
 
 

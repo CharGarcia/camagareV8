@@ -136,8 +136,35 @@ class FacturaVentaRules
                 throw new \Exception("Línea #{$num}: El nombre o descripción del producto/servicio es obligatorio.");
             }
 
+            $this->validarDescuentoLinea($d, $num);
+
             // 3. Reglas de Inventario (Lotes, Caducidad, NUP)
             $this->validarItemInventario($d, $num, $estConfig);
+        }
+    }
+
+    /**
+     * El descuento de una línea va de 0 a su subtotal (cantidad × precio). Uno mayor
+     * deja la línea en negativo: el total de la factura puede seguir positivo si otras
+     * líneas lo compensan, pero el SRI rechaza el comprobante.
+     */
+    private function validarDescuentoLinea(array $d, int $num): void
+    {
+        $descuento = round((float) ($d['descuento'] ?? 0), 2);
+        $nombreItem = $d['nombre'] ?? ($d['descripcion'] ?? "Línea #{$num}");
+
+        if ($descuento < 0) {
+            throw new \Exception("{$nombreItem}: el descuento no puede ser negativo.");
+        }
+
+        $bruto = round((float) ($d['cantidad'] ?? 0) * (float) ($d['precio_unitario'] ?? 0), 2);
+        if ($descuento - $bruto > 0.001) {
+            throw new \Exception(sprintf(
+                '%s: el descuento ($%s) no puede ser mayor que el subtotal de la línea ($%s).',
+                $nombreItem,
+                number_format($descuento, 2),
+                number_format($bruto, 2)
+            ));
         }
     }
 

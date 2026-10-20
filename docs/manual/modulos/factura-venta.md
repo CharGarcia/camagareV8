@@ -5,8 +5,8 @@ categoria: Ventas
 ruta_modulo: modulos/factura-venta
 tipo: modulo
 visibilidad: todos
-etiquetas: factura, facturar, venta, buscar factura, buscador, aparecen facturas que no busque, resultados que no corresponden, la busqueda trae otras facturas, buscar por clave de acceso, filtros, filtrar facturas, buscar por producto vendido, buscar por forma de pago, filtro de fechas, saldo pendiente, chips, ordenar por dos columnas, ordenar por estado de pago, ordenar por cliente y fecha, sri, comprobante electronico, xml, excel, anular, nota de credito, whatsapp, link de pago, payphone, nuvei, serie vacia, sin puntos de emision, secuencial repetido, secuencial ya existe, punto de emision, ambiente, pruebas, produccion, cambio de ambiente, clave de acceso en procesamiento, error 70, comprobante devuelto, reintento automatico, saldo, stock, existencias, cuanto queda, disponible, buscador de productos, lote, vencimiento, caducidad, fecha de vencimiento, lote y vencimiento, pdf, ride, columnas del pdf, subsidio, irbpnr, servicio, propina, codigo cortado, detalle adicional, forma de pago, plazo, dias credito, unidad de tiempo, meses, anios, informacion adicional, vendedor, cajero, no sale el vendedor, falta informacion en el pdf, se cierra el modal, autorizar, bloquear factura, no puedo editar, letra pequena, tamano de letra, fuente del pdf, letra del pdf, no se lee el pdf, ancho de columna, agrandar columna, ensanchar, codigo cortado en el modal, descripcion cortada, no se ve la descripcion completa, redimensionar, precio con impuestos, precio con iva, sale en cero, columna descuento, tipo de identificacion, tipo de documento del cliente, ruc o cedula, es ruc o cedula, cedula o pasaporte, consumidor final, no se cual identificacion tiene el cliente, buscador de clientes, buscar cliente, elegir cliente, datos del cliente, informacion adicional larga, limite de caracteres, maximo 300 caracteres, value too long, no se pudo guardar la factura, imprimir, impresora, iva al subtotal, iva sobre el subtotal, iva linea por linea, calculo del iva, iva no cuadra, iva mal calculado, centavos de diferencia, factura grande, muchas lineas, muchos items, factura lenta, tarda en abrir, tarda en cargar, peso del xml, tamano del xml, 320 kb, crear cliente desde la factura, nuevo cliente, crear producto desde la factura, nuevo producto, no aparece el boton de crear cliente, falta el boton nuevo producto, aviso, avisos, novedad sri, documentos con novedad, devuelto, no autorizado, pendientes de enviar, borrador, borradores, iva del listado, iva diferente, iva no coincide, iva distinto al documento, iva con descuento, columna iva, filas por pagina, registros por pagina, cuantas filas, mostrar mas filas, paginador, 25 50 75 100, sin saldo, sin stock, producto sin existencias, productos similares, productos equivalentes, equivalencias, otra marca, sugerir otro producto, misma categoria, reemplazar producto, usar este, mantener el producto, pdf en dos hojas, segunda hoja casi vacia, totales en otra pagina, el pdf corta la pagina, hoja de mas, direccion del cliente en el xml, xml sin direccion, direccion del comprador, direccionComprador
-version: 2.44
+etiquetas: factura, facturar, venta, buscar factura, buscador, aparecen facturas que no busque, resultados que no corresponden, la busqueda trae otras facturas, buscar por clave de acceso, filtros, filtrar facturas, buscar por producto vendido, buscar por forma de pago, filtro de fechas, saldo pendiente, chips, ordenar por dos columnas, ordenar por estado de pago, ordenar por cliente y fecha, sri, comprobante electronico, xml, excel, anular, nota de credito, whatsapp, link de pago, payphone, nuvei, serie vacia, sin puntos de emision, secuencial repetido, secuencial ya existe, punto de emision, ambiente, pruebas, produccion, cambio de ambiente, clave de acceso en procesamiento, error 70, comprobante devuelto, reintento automatico, saldo, stock, existencias, cuanto queda, disponible, buscador de productos, lote, vencimiento, caducidad, fecha de vencimiento, lote y vencimiento, pdf, ride, columnas del pdf, subsidio, irbpnr, servicio, propina, codigo cortado, detalle adicional, forma de pago, plazo, dias credito, unidad de tiempo, meses, anios, informacion adicional, vendedor, cajero, no sale el vendedor, falta informacion en el pdf, se cierra el modal, autorizar, bloquear factura, no puedo editar, letra pequena, tamano de letra, fuente del pdf, letra del pdf, no se lee el pdf, ancho de columna, agrandar columna, ensanchar, codigo cortado en el modal, descripcion cortada, no se ve la descripcion completa, redimensionar, precio con impuestos, precio con iva, sale en cero, columna descuento, tipo de identificacion, tipo de documento del cliente, ruc o cedula, es ruc o cedula, cedula o pasaporte, consumidor final, no se cual identificacion tiene el cliente, buscador de clientes, buscar cliente, elegir cliente, datos del cliente, informacion adicional larga, limite de caracteres, maximo 300 caracteres, value too long, no se pudo guardar la factura, imprimir, impresora, iva al subtotal, iva sobre el subtotal, iva linea por linea, calculo del iva, iva no cuadra, iva mal calculado, centavos de diferencia, factura grande, muchas lineas, muchos items, factura lenta, tarda en abrir, tarda en cargar, peso del xml, tamano del xml, 320 kb, crear cliente desde la factura, nuevo cliente, crear producto desde la factura, nuevo producto, no aparece el boton de crear cliente, falta el boton nuevo producto, aviso, avisos, novedad sri, documentos con novedad, devuelto, no autorizado, pendientes de enviar, borrador, borradores, iva del listado, iva diferente, iva no coincide, iva distinto al documento, iva con descuento, columna iva, filas por pagina, registros por pagina, cuantas filas, mostrar mas filas, paginador, 25 50 75 100, sin saldo, sin stock, producto sin existencias, productos similares, productos equivalentes, equivalencias, otra marca, sugerir otro producto, misma categoria, reemplazar producto, usar este, mantener el producto, pdf en dos hojas, segunda hoja casi vacia, totales en otra pagina, el pdf corta la pagina, hoja de mas, direccion del cliente en el xml, xml sin direccion, direccion del comprador, direccionComprador, descuento global, descuento a toda la factura, descuento general, repartir descuento, prorratear descuento, aplicar a todos los items
+version: 2.45
 orden: 20
 estado: activo
 ---
@@ -33,6 +33,31 @@ Para emitir facturas electrónicas la empresa necesita tener configurado:
 5. Guarde la factura.
 
 Una factura guardada queda en borrador hasta que se envía al SRI.
+
+### Descuento de toda la factura
+
+El descuento siempre se registra **línea por línea** (así lo pide el SRI en el XML),
+pero no hace falta escribirlo en cada ítem:
+
+- **Desde los totales**: en un borrador, pulse **(-) Descuento** en el recuadro de
+  totales. Elija **Porcentaje (%)** o **Valor ($)** y pulse **Confirmar**.
+  - **Porcentaje**: se aplica el mismo % a cada línea.
+  - **Valor**: el monto se reparte entre las líneas en proporción al subtotal de cada
+    una; si sobran centavos de redondeo, se los lleva la línea de mayor valor, así la
+    suma da exactamente lo ingresado.
+  - Reemplaza el descuento que ya tuvieran las líneas. Cada línea queda con su propio
+    descuento, que puede ajustar después a mano.
+- **Desde una línea**: el botón **+** junto al descuento del ítem abre la misma ventana.
+  Con **Aplicar a todos los ítems** encendido funciona igual que el descuento de toda
+  la factura: el valor en dólares se reparte, no se repite en cada línea.
+
+El descuento no puede pasar del 100 % ni ser mayor que el subtotal de los ítems.
+Tampoco el de cada línea: si el descuento escrito en un ítem supera su subtotal
+(cantidad × precio), la casilla se marca en rojo y la factura no se guarda hasta
+corregirlo; el mensaje indica el ítem y su subtotal. El
+enlace y el botón **+** solo aparecen en borradores y si la empresa permite editar el
+enlace y el botón **+** solo aparecen en borradores y si la empresa permite editar el
+descuento en la factura.
 
 ### Cálculo del IVA: línea por línea o al subtotal
 
@@ -579,6 +604,7 @@ la operación de inmediato.
 
 ## Historial de cambios
 
+- **2.45** — Nuevo **descuento de toda la factura**: el texto **(-) Descuento** de los totales es un enlace (solo en borrador) que reparte un porcentaje o un valor entre las líneas. Corregido: en el descuento rápido con **Aplicar a todos los ítems** en modo Valor ($), el monto se repetía en cada línea (10 $ con 5 líneas daban 50 $); ahora se reparte. El descuento se escribe ya redondeado a 2 decimales, para que el subtotal de la línea coincida siempre con lo que se guarda, y la ventana se cierra al confirmar. Además, el descuento de cada línea ya no puede ser mayor que su subtotal: antes una línea podía quedar en negativo si otras la compensaban, y el SRI rechazaba el comprobante. Se controla en pantalla y al guardar, también en las facturas que se crean desde otros módulos (consignaciones, alumnos, suscripciones, app móvil).
 - **2.44** — Cuando un producto no tiene saldo, la ventana de sugerencias muestra primero sus **productos equivalentes** (definidos en la ficha del producto, pestaña Referencias) con la etiqueta *Equivalente*. La ventana ahora se enciende en Empresa → Facturación con «Mostrar equivalencias» y «Mostrar sugerencias de productos similares» (vienen apagados); antes salía sola con stock positivo.
 - **2.43** — El XML que se envía al SRI ahora incluye la **dirección del cliente** (la misma que ya salía en el PDF). Si el cliente no tiene dirección registrada, el XML se envía sin ella, como antes.
 - **2.42** — Al crear un **cliente nuevo** desde la factura, la ficha del cliente se cierra sola y el cliente queda seleccionado; ya no hay que cerrarla a mano.
