@@ -5,8 +5,8 @@ categoria: Reportes
 ruta_modulo: modulos/mejor_cliente
 tipo: modulo
 visibilidad: todos
-etiquetas: mejor cliente, top clientes, ranking de clientes, cliente top, cuanto compra cada cliente, mejores clientes, cliente estrella, cliente frecuente, cliente que mas compra, recibos en borrador, no salen los recibos, recibos no aparecen
-version: 1.1
+etiquetas: mejor cliente, pdf mejor cliente, imprimir ranking, top clientes, ranking de clientes, cliente top, cuanto compra cada cliente, mejores clientes, cliente estrella, cliente frecuente, cliente que mas compra, recibos en borrador, no salen los recibos, recibos no aparecen
+version: 1.2
 orden: 15
 estado: activo
 ---
@@ -38,6 +38,26 @@ generarse.
 4. Elija el criterio de **Ordenar Por**: Monto Neto o Cantidad de Documentos.
 5. Elija cuántos clientes mostrar en **Top** (10, 20, 50, 100 o Todos).
 6. Descargue el resultado en **PDF** o **Excel**, o envíelo por **Correo**.
+
+## El PDF del reporte
+
+El PDF (el que se descarga y el que se adjunta al correo) tiene el mismo formato
+que los demás reportes del sistema y ocupa todo el ancho de la hoja:
+
+- **Encabezado** con el logo de la empresa, su nombre, el título, el periodo y el
+  vendedor consultado.
+- **Filtros aplicados**: fechas desde/hasta, vendedor (o "Todos"), documentos
+  incluidos (Facturas / Recibos), criterio de orden y cuántos clientes se muestran.
+- **Indicadores**: clientes con ventas, documentos, monto neto total, venta
+  promedio y el monto del mejor cliente. Se calculan sobre **todos** los clientes
+  del periodo, no solo los del Top.
+- **Listado** con el puesto, cliente, RUC/Cédula, documentos, monto neto, venta
+  promedio y **% del total** (participación del cliente en el monto neto del
+  periodo). La fila final suma solo los clientes listados; con un Top, su
+  porcentaje indica cuánto de la venta concentran esos mejores clientes.
+
+El logo es el del establecimiento (o, si no tiene, el del punto de emisión)
+cargado en la configuración de la empresa; sin logo, el encabezado sale centrado.
 
 ## Campos del formulario
 
@@ -96,6 +116,9 @@ Facturas/Recibos.
 
 ## Historial de cambios
 
+- **1.2** — **Nuevo diseño del PDF**: logo de la empresa, caja de filtros aplicados
+  (incluido el vendedor), indicadores del periodo, columna **% del total** y tabla a
+  todo el ancho de la hoja.
 - **1.1** — **Corrección: los Recibos de Venta no aparecían** en el ranking (ni sus
   años en el selector), porque se descartaban los recibos en *borrador*, que es el
   estado normal de un recibo creado en el sistema. Ahora cuenta todo recibo no

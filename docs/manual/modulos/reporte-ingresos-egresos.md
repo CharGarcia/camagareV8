@@ -5,8 +5,8 @@ categoria: Reportes
 ruta_modulo: modulos/reporte_ingresos_egresos
 tipo: modulo
 visibilidad: todos
-etiquetas: reporte de ingresos y egresos, movimiento de dinero, cobros y pagos, por tercero, forma de pago, concepto, vendedor, asesor, cobros por vendedor, comisiones, asesor del cliente, otros conceptos, saldo inicial, saldos iniciales, exportar, excel detallado, pdf, imprimir, logo en el pdf, totales en el pdf, reporte de ingresos por vendedor, reporte de egresos, pdf por vendedor
-version: 1.7
+etiquetas: reporte de ingresos y egresos, anulados, ingresos anulados, egresos anulados, vigentes, movimiento de dinero, cobros y pagos, por tercero, forma de pago, concepto, vendedor, asesor, cobros por vendedor, comisiones, asesor del cliente, otros conceptos, saldo inicial, saldos iniciales, exportar, excel detallado, pdf, imprimir, logo en el pdf, totales en el pdf, reporte de ingresos por vendedor, reporte de egresos, pdf por vendedor
+version: 1.8
 orden: 30
 estado: activo
 ---
@@ -25,12 +25,23 @@ salió, de quién y por qué concepto.
 | Forma de pago | Efectivo, banco, tarjeta… |
 | Operación bancaria | Transferencia, cheque, depósito |
 | Concepto | El motivo del ingreso o egreso |
+| Estado | *Vigentes* (por defecto) o *Anulados* |
 | Tipo de documento | Qué documento originó el movimiento |
 | Monto | Rango de valores |
 | Texto libre | Búsqueda sobre la descripción |
 
 Todos se combinan entre sí. La consulta típica —*todo lo que le pagué a este
 proveedor por transferencia este trimestre*— sale con tres filtros.
+
+## Ingresos y egresos anulados
+
+El reporte muestra por defecto solo los comprobantes **vigentes**: un ingreso o
+egreso anulado **no aparece ni suma** en los totales, las vistas resumidas, el
+Excel ni el PDF. Así los valores cuadran con los módulos de Ingresos y Egresos.
+
+Para revisar los anulados, elija **Anulados** en el filtro *Estado*: el reporte
+muestra entonces solo esos. Nunca se mezclan vigentes y anulados en un mismo
+resultado.
 
 ## Filtro por vendedor: cuánto cobró cada vendedor
 
@@ -117,8 +128,9 @@ Reporte de Ventas:
   neto (con un solo flujo, solo los de ese flujo).
 - **Las columnas que un filtro deja con un único valor no se repiten en cada
   fila**: al filtrar por vendedor desaparece la columna *Asesor*; al elegir un
-  tercero, la de *Cliente / Proveedor / Empleado*; al elegir un concepto, un
-  estado o un tipo de documento, esa columna. Ese dato ya está en el encabezado.
+  tercero, la de *Cliente / Proveedor / Empleado*; al elegir un concepto o un
+  tipo de documento, esa columna. El estado no va como columna: todo el PDF es de
+  vigentes o todo de anulados, según el filtro. Ese dato ya está en el encabezado.
 - Con ingresos y egresos juntos, los valores van en **dos columnas, Ingreso y
   Egreso**, para poder sumar cada una; con *Solo ingresos* o *Solo egresos* va
   una sola. En *Por día* / *Por mes* se muestran solo las columnas del flujo
@@ -139,7 +151,8 @@ cobró cada vendedor, qué movimientos hubo por encima de cierto monto.
 ## Errores frecuentes
 
 - **Falta un movimiento**: revise las fechas; el reporte usa la fecha del ingreso
-  o egreso, no la del documento cobrado o pagado.
+  o egreso, no la del documento cobrado o pagado. Si el comprobante está anulado,
+  solo aparece con el filtro *Estado* en *Anulados*.
 - **Los totales no cuadran con el flujo de caja**: compruebe si tiene filtros
   activos que estén acotando el resultado.
 - **Al elegir un vendedor no aparecen egresos**: es lo esperado; los egresos no
@@ -152,6 +165,9 @@ cobró cada vendedor, qué movimientos hubo por encima de cierto monto.
 
 ## Historial de cambios
 
+- **1.8** — Los ingresos y egresos **anulados ya no aparecen ni suman** en el
+  reporte. El filtro *Estado* ofrece *Vigentes* (por defecto) o *Anulados*; se
+  quitó la opción *Todos*, que los mezclaba en los totales.
 - **1.7** — El reporte muestra solo documentos de **producción**, aunque la empresa esté configurada en pruebas (ver el artículo *Los reportes solo muestran documentos de producción*).
 - **1.6** — **PDF rediseñado** con el formato del Reporte de Ventas: logo del
   establecimiento, título según el flujo y la vista (con el vendedor o tercero

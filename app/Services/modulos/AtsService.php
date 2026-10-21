@@ -88,6 +88,14 @@ class AtsService
      */
     private array $ndCompletadas = [];
 
+    /**
+     * Compras/liquidaciones desde el umbral de formas de pago sin ninguna registrada
+     * (ni en la factura que modifican, si son ND): se reportaron con 20.
+     *
+     * @var array<string, array<string, string>>  tipoComp => serie => serie
+     */
+    private array $sinFormaPago = [];
+
     public function __construct(
         private AtsRepository $repo,
         private XmlAtsService $xml,
@@ -201,6 +209,7 @@ class AtsService
         $this->sinSustento   = [];
         $this->sinBases      = [];
         $this->ndCompletadas = [];
+        $this->sinFormaPago  = [];
 
         // El ATS se presenta por RUC completo, no por establecimiento: se consolidan todas las
         // filas de `empresas` con el mismo RUC a las que el usuario tenga acceso. Los queries de
@@ -258,6 +267,7 @@ class AtsService
             $retComprasIdx = $this->indexarRetenciones($retCompras);
             $retLiqIdx     = $this->indexarRetenciones($retLiq);
             $pagoComprasIdx = $this->indexarPagos($this->repo->getFormasPago('compras_pagos', 'id_compra', $idsCompra));
+            $pagoComprasIdx = $this->pagosDesdeModificado($compras, $pagoComprasIdx);
             $pagoLiqIdx     = $this->indexarPagos($this->repo->getFormasPago('liquidaciones_pagos', 'id_cabecera', $idsLiq));
 
             // Facturas de Reembolso RECIBIDAS (codDoc=01, codDocReembolso=41): el bloque
@@ -582,6 +592,22 @@ class AtsService
             $muestra = array_slice($series, 0, 5);
             $out[] = sprintf($texto, count($series), implode(', ', $muestra), count($series) > count($muestra) ? ', …' : '');
         }
+
+        ksort($this->sinFormaPago);
+        foreach ($this->sinFormaPago as $tipoComp => $series) {
+            $series  = array_values($series);
+            sort($series);
+            $muestra = array_slice($series, 0, 5);
+            $out[] = sprintf(
+                'Compras: %d comprobante(s) tipo %s desde el monto que exige forma de pago (USD 500; USD 1000 '
+                . 'antes de 2024) sin ninguna registrada; se reportaron con 20 (otros con utilización del '
+                . 'sistema financiero). Complete la forma de pago real en el módulo Compras. Ejemplo(s): %s%s',
+                count($series),
+                $tipoComp,
+                implode(', ', $muestra),
+                count($series) > count($muestra) ? ', …' : ''
+            );
+        }
         return $out;
     }
 
@@ -664,6 +690,33 @@ class AtsService
         }
         unset($c);
         return $compras;
+    }
+
+    /**
+     * Notas de débito (05) sin formas de pago registradas: el XML de muchas no trae
+     * <pagos>, así que se reportan las de la factura que modifican (mod_id_compra,
+     * resuelta en AtsRepository::getCompras(), puede estar en otro establecimiento
+     * del mismo RUC). Una ND que ya tiene las suyas no se toca.
+     */
+    private function pagosDesdeModificado(array $compras, array $pagoIdx): array
+    {
+        $porNd = [];
+        foreach ($compras as $c) {
+            $idMod = (int) ($c['mod_id_compra'] ?? 0);
+            if ((string) $c['tipo_comprobante'] === '05' && $idMod > 0 && empty($pagoIdx[(int) $c['id']])) {
+                $porNd[(int) $c['id']] = $idMod;
+            }
+        }
+        if ($porNd === []) {
+            return $pagoIdx;
+        }
+        $pagosMod = $this->indexarPagos($this->repo->getFormasPago('compras_pagos', 'id_compra', array_values($porNd)));
+        foreach ($porNd as $idNd => $idMod) {
+            if (!empty($pagosMod[$idMod])) {
+                $pagoIdx[$idNd] = $pagosMod[$idMod];
+            }
+        }
+        return $pagoIdx;
     }
 
     /**
@@ -882,7 +935,7 @@ class AtsService
             'valorRetServicios'=> $this->money($iva['70']),
             'valRetServ100'    => $this->money($iva['100']),
             'pagoExterior'     => $this->pagoExterior($doc),
-            'formasDePago'     => $this->formasDePago($doc, $pagos, $tipoComp),
+            'formasDePago'     => $this->formasDePago($doc, $pagos, $tipoComp, "{$estab}-{$pto}-{$sec}"),
             'air'              => $air,
             'retencionDoc'     => $retDoc,
             'docModificado'    => $this->docModificado($doc, $tipoComp),
@@ -1054,18 +1107,27 @@ class AtsService
     }
 
     /**
-     * Formas de pago: se reportan cuando el importe supera el umbral del período
-     * (USD 500 desde 2024; USD 1000 antes) y no es nota de crédito (04).
+     * Formas de pago: obligatorias desde el umbral del período (USD 500 desde 2024;
+     * USD 1000 antes), salvo en notas de crédito (04). Antes, una compra sin formas de
+     * pago registradas salía sin el bloque aunque superara el umbral y el SRI la
+     * rechazaba (caso típico: notas de débito, cuyo XML muchas veces no trae <pagos>;
+     * para ellas pagosDesdeModificado() ya tomó las de la factura que modifican). Si
+     * aun así no hay ninguna, se reporta 20 (otros con utilización del sistema
+     * financiero) y se advierte para completarla en Compras.
      */
-    private function formasDePago(array $doc, array $pagos, string $tipoComp): array
+    private function formasDePago(array $doc, array $pagos, string $tipoComp, string $serie): array
     {
-        if ($tipoComp === '04' || $pagos === []) {
+        if ($tipoComp === '04') {
             return [];
         }
         $anio = (int) date('Y', strtotime((string) $doc['fecha_emision']));
         $umbral = $anio >= 2024 ? 500.0 : 1000.0;
-        if ((float) $doc['importe_total'] <= $umbral) {
+        if ((float) $doc['importe_total'] < $umbral) {
             return [];
+        }
+        if ($pagos === []) {
+            $this->sinFormaPago[$tipoComp][$serie] = $serie;
+            return ['20'];
         }
         $codigos = [];
         foreach ($pagos as $p) {

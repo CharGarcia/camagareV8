@@ -103,9 +103,11 @@ class ReporteIngresosEgresosRepository extends BaseRepository
         $w = "c.id_empresa = :id_empresa AND c.eliminado = false AND c.tipo_ambiente = " . self::AMB;
         if (!empty($f['fecha_desde'])) { $w .= " AND c.fecha_emision >= :fdesde"; $params[':fdesde'] = $f['fecha_desde']; }
         if (!empty($f['fecha_hasta'])) { $w .= " AND c.fecha_emision <= :fhasta"; $params[':fhasta'] = $f['fecha_hasta']; }
-        if (!empty($f['estado']) && strtoupper($f['estado']) !== 'TODOS') {
-            $w .= " AND c.estado = :estado"; $params[':estado'] = strtolower($f['estado']);
-        }
+        // Por defecto solo vigentes: un comprobante anulado no suma en el reporte.
+        // Los anulados se ven únicamente pidiéndolos (estado = ANULADO).
+        $w .= strtoupper($f['estado'] ?? '') === 'ANULADO'
+            ? " AND LOWER(c.estado) = 'anulado'"
+            : " AND LOWER(COALESCE(c.estado, '')) <> 'anulado'";
         if ($f['monto_min'] !== '' && $f['monto_min'] !== null) { $w .= " AND c.monto_total >= :montomin"; $params[':montomin'] = (float)$f['monto_min']; }
         if ($f['monto_max'] !== '' && $f['monto_max'] !== null) { $w .= " AND c.monto_total <= :montomax"; $params[':montomax'] = (float)$f['monto_max']; }
         if (!empty($f['id_concepto'])) {

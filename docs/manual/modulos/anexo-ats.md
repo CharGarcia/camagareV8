@@ -5,7 +5,7 @@ categoria: Impuestos
 ruta_modulo: modulos/anexo-ats
 tipo: modulo
 visibilidad: todos
-etiquetas: ats, anexo transaccional, xml, dimm, declaracion, compras, ventas, anulados, sri, sin ventas, solo compras, nota de debito, valores en cero
+etiquetas: ats, anexo transaccional, xml, dimm, declaracion, compras, ventas, anulados, sri, sin ventas, solo compras, nota de debito, valores en cero, forma de pago, 500
 version: 1.9
 orden: 30
 estado: activo
@@ -116,6 +116,19 @@ solo:
 
 Una nota de débito que ya tiene sus líneas con IVA se reporta tal como está.
 
+## Formas de pago desde USD 500
+
+Toda compra o liquidación de **USD 500 o más** (USD 1000 antes de 2024) debe
+llevar su forma de pago en el anexo; las notas de crédito no la llevan. El
+anexo usa las formas de pago registradas en el documento en **Compras**:
+
+- Si una **nota de débito** no tiene ninguna (su XML muchas veces no las trae),
+  se reportan las de la **factura que modifica**, si está registrada.
+- Si aun así no hay ninguna, se reporta **20** (otros con utilización del
+  sistema financiero) para que el SRI no rechace el archivo, y el aviso
+  *sin ninguna registrada; se reportaron con 20* lista los documentos. Complete
+  la forma de pago real en **Compras** y vuelva a generar el anexo.
+
 ## Cómo se usa
 
 1. Elija el **periodo**.
@@ -187,7 +200,10 @@ Una nota de débito que ya tiene sus líneas con IVA se reporta tal como está.
 - **1.9** — Las notas de débito de compra sin desglose de IVA ya no salen con
   los valores en 0,00: se toman del XML autorizado o, sin XML, se estiman con
   los totales de la cabecera, con un aviso en cada caso (ver *Valores de las
-  notas de débito sin desglose*).
+  notas de débito sin desglose*). Las compras de USD 500 o más sin forma de
+  pago registrada ya no salen sin ella: las notas de débito toman la de la
+  factura que modifican y, si no hay ninguna, se reporta 20 con un aviso (ver
+  *Formas de pago desde USD 500*).
 - **1.8** — El reporte muestra solo documentos de **producción**, aunque la empresa esté configurada en pruebas (ver el artículo *Los reportes solo muestran documentos de producción*).
 - **1.7** — Nuevo aviso *Compras: N comprobante(s) sin ninguna base de IVA en su
   detalle*, con la lista de documentos y qué hacer, para explicar el error del

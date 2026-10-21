@@ -60,7 +60,7 @@ class ReporteIngresosEgresosController extends BaseModuloController
             'id_forma'          => (int) ($_REQUEST['id_forma'] ?? 0),
             'operacion_bancaria'=> strtoupper(trim($_REQUEST['operacion_bancaria'] ?? '')),
             'id_concepto'       => (int) ($_REQUEST['id_concepto'] ?? 0),
-            'estado'            => strtoupper(trim($_REQUEST['estado'] ?? 'TODOS')),
+            'estado'            => strtoupper(trim($_REQUEST['estado'] ?? '')) === 'ANULADO' ? 'ANULADO' : 'VIGENTES',
             'tipo_documento'    => strtoupper(trim($_REQUEST['tipo_documento'] ?? '')),
             'monto_min'         => trim($_REQUEST['monto_min'] ?? ''),
             'monto_max'         => trim($_REQUEST['monto_max'] ?? ''),
@@ -472,9 +472,7 @@ class ReporteIngresosEgresosController extends BaseModuloController
         if ($f['id_concepto'] > 0) {
             $info['Concepto'] = self::nombreEnCatalogo($this->repository->getConceptos($idEmpresa), $f['id_concepto']);
         }
-        if ($f['estado'] !== '' && $f['estado'] !== 'TODOS') {
-            $info['Estado'] = ucfirst(strtolower($f['estado']));
-        }
+        $info['Estado'] = $f['estado'] === 'ANULADO' ? 'Anulados' : 'Vigentes';
         if ($f['tipo_documento'] !== '') {
             $info['Tipo de documento'] = $f['tipo_documento'];
         }
@@ -759,10 +757,6 @@ class ReporteIngresosEgresosController extends BaseModuloController
         $cols[] = ['lbl' => 'Descripción', 'w' => 16, 'cls' => '', 'flex' => true, 'val' => $txt('descripcion', 16)];
         if ($f['id_concepto'] <= 0) {
             $cols[] = ['lbl' => 'Concepto', 'w' => 8, 'cls' => '', 'val' => $txt('concepto', 8)];
-        }
-        if ($f['estado'] === '' || $f['estado'] === 'TODOS') {
-            $cols[] = ['lbl' => 'Estado', 'w' => 6, 'cls' => 'text-center',
-                       'val' => static fn (array $r): string => htmlspecialchars(ucfirst(strtolower((string) ($r['estado'] ?? ''))))];
         }
         return array_merge($cols, $montos('monto', 6));
     }

@@ -174,56 +174,90 @@ class MejorClienteController extends BaseModuloController
         }
     }
 
-    /** Arma el HTML completo del reporte (tabla + totales) para PDF, reutilizado por descarga y envío por correo. */
+    /**
+     * Arma el documento completo del PDF, reutilizado por descarga y envío por correo. Mismo
+     * formato que los demás reportes (App\Helpers\ReportePdf): encabezado con logo, filtros
+     * aplicados, indicadores del período y listado a todo el ancho de la hoja.
+     */
     private function construirHtmlReporte(array $rows, array $stats, string $nombreEmpresa, array $filtros): string
     {
-        ob_start();
-        ?>
-        <style>
-            table { width: 100%; border-collapse: collapse; font-family: Arial, sans-serif; font-size: 9pt; margin: 0 auto 20px auto; }
-            th { background: #f2f2f2; border: 1px solid #ccc; padding: 6px; text-align: center; }
-            td { border: 1px solid #ccc; padding: 6px; }
-            .text-end { text-align: right; }
-            .text-center { text-align: center; }
-            .header { text-align: center; margin-bottom: 20px; }
-            .totales-table th { background: #e0e0e0; }
-        </style>
-        <div class="header">
-            <h2><?= htmlspecialchars($nombreEmpresa) ?></h2>
-            <h3>Reporte de Mejor Cliente</h3>
-            <p>
-                Período: <?= htmlspecialchars($filtros['fecha_desde']) ?> al <?= htmlspecialchars($filtros['fecha_hasta']) ?>
-                &nbsp;|&nbsp; Orden: <?= $filtros['orden_por'] === 'cantidad' ? 'Cantidad de documentos' : 'Monto neto' ?>
-            </p>
-            <p>Fecha de reporte: <?= date('d-m-Y H:i:s') ?></p>
-        </div>
-        <table>
-            <thead>
-                <tr><th>#</th><th>Cliente</th><th>RUC/Cédula</th><th>Nro Documentos</th><th>Monto Neto</th><th>Venta Promedio</th></tr>
-            </thead>
-            <tbody>
-                <?php $rank = 0; foreach ($rows as $r): $rank++; ?>
-                    <tr>
-                        <td class="text-center"><?= $rank ?></td>
-                        <td><?= htmlspecialchars($r['cliente_nombre']) ?></td>
-                        <td><?= htmlspecialchars($r['cliente_ruc']) ?></td>
-                        <td class="text-center"><?= (int)$r['cantidad_documentos'] ?></td>
-                        <td class="text-end"><strong><?= number_format((float)$r['monto_neto'], 2) ?></strong></td>
-                        <td class="text-end"><?= number_format((float)$r['venta_promedio'], 2) ?></td>
-                    </tr>
-                <?php endforeach; ?>
-            </tbody>
-            <tfoot>
-                <tr style="background-color: #e9ecef;">
-                    <th colspan="3" class="text-center" style="font-size: 10pt;">TOTALES GENERALES:</th>
-                    <th class="text-center" style="font-size: 10pt;"><?= (int)$stats['total_documentos'] ?></th>
-                    <th class="text-end" style="font-size: 11pt; font-weight: bold; color: #198754;">$<?= number_format((float)$stats['monto_neto_total'], 2) ?></th>
-                    <th class="text-end" style="font-size: 10pt;">$<?= number_format((float)$stats['venta_promedio'], 2) ?></th>
-                </tr>
-            </tfoot>
-        </table>
-        <?php
-        return ob_get_clean();
+        $pdf = \App\Helpers\ReportePdf::class;
+        $pt  = 8.0;
+        $fecha = static fn (string $f): string => ($t = strtotime($f)) ? date('d-m-Y', $t) : $f;
+
+        $fuentes = array_filter([
+            $filtros['incluir_facturas'] ? 'Facturas' : '',
+            $filtros['incluir_recibos'] ? 'Recibos de venta' : '',
+        ]);
+        // Por id y no por la lista de activos: un vendedor ya inactivo también puede filtrarse.
+        $vendedor = 'Todos';
+        if ((int) $filtros['id_vendedor'] > 0) {
+            $v = (new \App\repositories\modulos\VendedorRepository())->findById((int) $filtros['id_vendedor'], $filtros['id_empresa']);
+            $vendedor = trim((string) ($v['nombre'] ?? '')) ?: 'Vendedor #' . (int) $filtros['id_vendedor'];
+        }
+        $filtrosTxt = [
+            'Desde'        => $fecha($filtros['fecha_desde']),
+            'Hasta'        => $fecha($filtros['fecha_hasta']),
+            'Vendedor'     => $vendedor,
+            'Documentos'   => implode(' y ', $fuentes),
+            'Ordenado por' => $filtros['orden_por'] === 'cantidad' ? 'Cantidad de documentos' : 'Monto neto',
+            'Mostrar'      => $filtros['top_x'] > 0 ? 'Top ' . $filtros['top_x'] : 'Todos los clientes',
+        ];
+
+        $montoTotal = (float) $stats['monto_neto_total'];
+        $dinero = static fn (float $v): string => ($v < 0 ? '-$' : '$') . number_format(abs($v), 2);
+        $kpis = [
+            ['Clientes con ventas', number_format((int) $stats['total_clientes'])],
+            ['Documentos', number_format((int) $stats['total_documentos'])],
+            ['Monto neto total', $dinero($montoTotal), true],
+            ['Venta promedio', $dinero((float) $stats['venta_promedio'])],
+        ];
+        if ($rows) {
+            $kpis[] = ['Mejor cliente', $dinero((float) $rows[0]['monto_neto'])];
+        }
+
+        // El puesto viaja en cada fila para que la columna # no dependa de un contador externo.
+        $filas = [];
+        foreach (array_values($rows) as $i => $r) {
+            $filas[] = $r + ['__rank' => $i + 1];
+        }
+        $wCliente = 38.0;
+        $anchoCli = $pdf::anchoPt($wCliente, false);
+        $suma = static fn (string $k): \Closure => static fn (array $fs): float => array_sum(array_map(static fn ($r) => (float) $r[$k], $fs));
+        $cols = [
+            ['lbl' => '#', 'w' => 6.0, 'cls' => 'text-center',
+             'val' => static fn (array $r): string => '<b>' . $r['__rank'] . '</b>'],
+            ['lbl' => 'Cliente', 'w' => $wCliente,
+             'val' => static fn (array $r): string => $pdf::texto((string) ($r['cliente_nombre'] ?? ''), $anchoCli, $pt)],
+            ['lbl' => 'RUC / Cédula', 'w' => 15.0, 'cls' => 'text-center',
+             'val' => static fn (array $r): string => htmlspecialchars((string) ($r['cliente_ruc'] ?? ''))],
+            ['lbl' => 'Documentos', 'w' => 10.0, 'cls' => 'text-center',
+             'val' => static fn (array $r): string => (string) (int) $r['cantidad_documentos'],
+             'tot' => $suma('cantidad_documentos'), 'fmt' => static fn (float $v): string => number_format($v)],
+            ['lbl' => 'Monto neto', 'w' => 12.0, 'cls' => 'text-end',
+             'val' => static fn (array $r): string => '<b>' . number_format((float) $r['monto_neto'], 2) . '</b>',
+             'tot' => $suma('monto_neto')],
+            ['lbl' => 'Venta promedio', 'w' => 11.0, 'cls' => 'text-end',
+             'val' => static fn (array $r): string => number_format((float) $r['venta_promedio'], 2)],
+            ['lbl' => '% del total', 'w' => 8.0, 'cls' => 'text-end',
+             'val' => static fn (array $r): string => $montoTotal != 0.0 ? number_format((float) $r['monto_neto'] * 100 / $montoTotal, 2) . '%' : '-',
+             'tot' => static fn (array $fs): float => $montoTotal != 0.0 ? array_sum(array_map(static fn ($r) => (float) $r['monto_neto'], $fs)) * 100 / $montoTotal : 0.0,
+             'fmt' => static fn (float $v): string => number_format($v, 2) . '%'],
+        ];
+
+        $n = count($filas);
+        $etiquetaTotal = 'TOTAL ' . ($filtros['top_x'] > 0 && $n < (int) $stats['total_clientes']
+            ? "DE LOS {$n} MEJORES CLIENTES"
+            : "({$n} " . ($n === 1 ? 'cliente' : 'clientes') . ')');
+
+        return $pdf::pagina($pt,
+            $pdf::encabezado($filtros['id_empresa'], $nombreEmpresa, 'Reporte de Mejor Cliente',
+                'Período del ' . $fecha($filtros['fecha_desde']) . ' al ' . $fecha($filtros['fecha_hasta'])
+                . ' · Vendedor: ' . $vendedor)
+            . $pdf::filtros($filtrosTxt)
+            . $pdf::indicadores($kpis)
+            . $pdf::listado($cols, $filas, $etiquetaTotal, 'No se encontraron ventas para los filtros aplicados.')
+        );
     }
 
     public function exportPdf(): void

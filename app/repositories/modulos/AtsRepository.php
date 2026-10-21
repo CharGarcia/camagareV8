@@ -110,7 +110,8 @@ class AtsRepository extends BaseRepository
                        imp.base_imponible_exe, imp.monto_iva, imp.monto_ice,
                        xm.cod_doc_modificado_xml,
                        modif.numero_autorizacion AS mod_numero_autorizacion,
-                       modif.tipo_comprobante    AS mod_tipo_comprobante
+                       modif.tipo_comprobante    AS mod_tipo_comprobante,
+                       modif.id                  AS mod_id_compra
                 FROM compras_cabecera c
                 INNER JOIN proveedores p ON p.id = c.id_proveedor
                 LEFT  JOIN sustento_tributario st ON st.id = c.id_sustento_tributario
@@ -132,7 +133,7 @@ class AtsRepository extends BaseRepository
                      WHERE c.tipo_comprobante IN ('04', '05')
                 ) xm ON true
                 LEFT  JOIN LATERAL (
-                    SELECT f.numero_autorizacion, f.tipo_comprobante
+                    SELECT f.id, f.numero_autorizacion, f.tipo_comprobante
                       FROM proveedores pf
                       INNER JOIN compras_cabecera f ON f.id_proveedor = pf.id
                                                    AND f.id_empresa   = pf.id_empresa

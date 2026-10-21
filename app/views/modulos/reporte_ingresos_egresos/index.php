@@ -46,9 +46,8 @@
                     <div>
                         <label class="form-label small fw-bold mb-1 d-block text-muted text-uppercase" style="font-size:.65rem;">Estado</label>
                         <select id="rie-estado" class="form-select form-select-sm shadow-none border" style="width:110px;">
-                            <option value="TODOS">Todos</option>
-                            <option value="registrado">Registrado</option>
-                            <option value="anulado">Anulado</option>
+                            <option value="VIGENTES" selected>Vigentes</option>
+                            <option value="ANULADO">Anulados</option>
                         </select>
                     </div>
                     <div>
@@ -322,7 +321,7 @@
         $('rie-fecha-desde').value = '<?= date('Y-m-01') ?>';
         $('rie-fecha-hasta').value = '<?= date('Y-m-d') ?>';
         $('rie-tipo-flujo').value = 'AMBOS'; $('rie-ver-por').value = 'DETALLE'; $('rie-tercero-tipo').value = '';
-        $('rie-forma').value = '0'; $('rie-opbanc').value = ''; $('rie-concepto').value = '0'; $('rie-tipo-doc').value = ''; $('rie-estado').value = 'TODOS';
+        $('rie-forma').value = '0'; $('rie-opbanc').value = ''; $('rie-concepto').value = '0'; $('rie-tipo-doc').value = ''; $('rie-estado').value = 'VIGENTES';
         $('rie-vendedor').value = '0';
         generar();
     });
