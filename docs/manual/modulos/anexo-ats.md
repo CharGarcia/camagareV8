@@ -5,8 +5,8 @@ categoria: Impuestos
 ruta_modulo: modulos/anexo-ats
 tipo: modulo
 visibilidad: todos
-etiquetas: ats, anexo transaccional, xml, dimm, declaracion, compras, ventas, anulados, sri, sin ventas, solo compras
-version: 1.8
+etiquetas: ats, anexo transaccional, xml, dimm, declaracion, compras, ventas, anulados, sri, sin ventas, solo compras, nota de debito, valores en cero
+version: 1.9
 orden: 30
 estado: activo
 ---
@@ -98,6 +98,24 @@ como autorización, para que el archivo se pueda cargar, y la validación lo
 avisa. Ese valor no es real: registre el comprobante y vuelva a generar el
 anexo antes de presentarlo.
 
+### Valores de las notas de débito sin desglose
+
+Las bases e IVA de cada compra salen de las líneas registradas en **Compras**.
+Hay notas de débito que no tienen ese desglose: las que llegaron del SRI antes
+del 11-09-2026, las migradas sin líneas o las cargadas a mano sin tarifa. Antes
+salían en el anexo con todos los valores en 0,00. Ahora el anexo las completa
+solo:
+
+1. Con los impuestos del **XML autorizado** de la nota, si está guardado. El
+   aviso *nota(s) de débito sin desglose de IVA registrado en Compras; las bases
+   e IVA se tomaron del XML* las lista.
+2. Si no hay XML, las **estima** con la cabecera: la base es el total sin
+   impuestos y la diferencia con el importe total es el IVA (sin diferencia, va
+   como base 0%). El aviso *las bases se ESTIMARON* las lista: revise cada una y
+   registre sus líneas en **Compras** antes de presentar.
+
+Una nota de débito que ya tiene sus líneas con IVA se reporta tal como está.
+
 ## Cómo se usa
 
 1. Elija el **periodo**.
@@ -166,6 +184,10 @@ anexo antes de presentarlo.
 
 ## Historial de cambios
 
+- **1.9** — Las notas de débito de compra sin desglose de IVA ya no salen con
+  los valores en 0,00: se toman del XML autorizado o, sin XML, se estiman con
+  los totales de la cabecera, con un aviso en cada caso (ver *Valores de las
+  notas de débito sin desglose*).
 - **1.8** — El reporte muestra solo documentos de **producción**, aunque la empresa esté configurada en pruebas (ver el artículo *Los reportes solo muestran documentos de producción*).
 - **1.7** — Nuevo aviso *Compras: N comprobante(s) sin ninguna base de IVA en su
   detalle*, con la lista de documentos y qué hacer, para explicar el error del

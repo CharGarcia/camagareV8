@@ -92,6 +92,9 @@ class AtsRepository extends BaseRepository
                        c.fecha_emision,
                        c.fecha_emision AS fecha_registro,
                        c.importe_total,
+                       c.total_sin_impuestos,
+                       -- Solo ND: respaldo de bases cuando la nota no tiene desglose (AtsService::completarBasesNotaDebito).
+                       CASE WHEN c.tipo_comprobante = '05' THEN c.detalle_xml END AS nd_detalle_xml,
                        c.parte_relacionada,
                        c.documento_modificado,
                        c.cod_doc_reembolso,

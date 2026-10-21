@@ -80,6 +80,14 @@ class AtsService
      */
     private array $sinBases = [];
 
+    /**
+     * Notas de débito (05) sin desglose de IVA en Compras cuyas bases se tomaron del
+     * XML guardado ('xml') o se estimaron con los totales de la cabecera ('cabecera').
+     *
+     * @var array<string, array<string, string>>  fuente => serie => serie
+     */
+    private array $ndCompletadas = [];
+
     public function __construct(
         private AtsRepository $repo,
         private XmlAtsService $xml,
@@ -192,6 +200,7 @@ class AtsService
         $this->sustentoTipos = $this->repo->getSustentosPermitidos();
         $this->sinSustento   = [];
         $this->sinBases      = [];
+        $this->ndCompletadas = [];
 
         // El ATS se presenta por RUC completo, no por establecimiento: se consolidan todas las
         // filas de `empresas` con el mismo RUC a las que el usuario tenga acceso. Los queries de
@@ -237,6 +246,7 @@ class AtsService
 
             // $idsGrupo: el comprobante que modifica una NC/ND se busca en todo el RUC accesible.
             $compras       = $this->filtrarDuplicados($this->repo->getCompras($idEmp, $desde, $hasta, $idsGrupo), 'numero_autorizacion', $clavesVistas, $omitidosPorDuplicado);
+            $compras       = $this->completarBasesNotaDebito($compras);
             $liquidaciones = $this->filtrarDuplicados($this->repo->getLiquidaciones($idEmp, $desde, $hasta), 'numero_autorizacion', $clavesVistas, $omitidosPorDuplicado);
 
             // Retenciones y formas de pago en bloque (evita N+1)
@@ -549,15 +559,136 @@ class AtsService
                 count($series),
                 $tipoComp,
                 $tipoComp === '05'
-                    ? ' Si la nota de débito llegó del SRI (XML) antes del 11-09-2026, se registró sin '
-                      . 'detalle: pida al administrador del sistema ejecutar la reparación de notas de '
-                      . 'débito, que reconstruye el detalle desde el XML autorizado.'
+                    ? ' La nota de débito tampoco tiene valores en su XML ni total en la cabecera.'
                     : '',
                 implode(', ', $muestra),
                 count($series) > count($muestra) ? ', …' : ''
             );
         }
+
+        $textosNd = [
+            'xml'      => 'Compras: %d nota(s) de débito sin desglose de IVA registrado en Compras; las bases e IVA '
+                        . 'se tomaron del XML autorizado de cada nota. Ejemplo(s): %s%s',
+            'cabecera' => 'Compras: %d nota(s) de débito sin desglose de IVA ni XML del SRI; las bases se ESTIMARON '
+                        . 'con el total sin impuestos y el importe total de la cabecera (diferencia = IVA). Revise '
+                        . 'cada una en el módulo Compras y registre sus líneas con la tarifa correcta. Ejemplo(s): %s%s',
+        ];
+        foreach ($textosNd as $fuente => $texto) {
+            if (empty($this->ndCompletadas[$fuente])) {
+                continue;
+            }
+            $series = array_values($this->ndCompletadas[$fuente]);
+            sort($series);
+            $muestra = array_slice($series, 0, 5);
+            $out[] = sprintf($texto, count($series), implode(', ', $muestra), count($series) > count($muestra) ? ', …' : '');
+        }
         return $out;
+    }
+
+    /**
+     * Notas de débito de compra (05) sin desglose de IVA en compras_detalle_impuestos:
+     * salían con las cuatro bases y el IVA en 0,00 aunque la cabecera tuviera su total
+     * (ND llegadas del SRI antes del 11-09-2026, migradas sin cuerpo o cargadas a mano
+     * sin tarifa). Se completan, en este orden:
+     *  1. con los impuestos de <infoNotaDebito><impuestos> del XML guardado en
+     *     detalle_xml (NotaDebitoXmlHelper, el mismo criterio del registro automático);
+     *  2. si no hay XML del SRI: base = total sin impuestos (o el importe total si viene
+     *     en 0) e IVA = importe total − base; con IVA va a la base gravada, sin IVA a la
+     *     base 0%. Es una estimación y se advierte para que se corrija en Compras.
+     * Una ND que ya tiene alguna base o IVA en su detalle no se toca.
+     */
+    private function completarBasesNotaDebito(array $compras): array
+    {
+        foreach ($compras as &$c) {
+            $xmlNd = $c['nd_detalle_xml'] ?? null;
+            unset($c['nd_detalle_xml']);
+            if ((string) $c['tipo_comprobante'] !== '05') {
+                continue;
+            }
+            $tieneDesglose = (float) $c['base_no_gra_iva'] > 0 || (float) $c['base_imponible_0'] > 0
+                || (float) $c['base_imponible_grav'] > 0 || (float) $c['base_imponible_exe'] > 0
+                || (float) $c['monto_iva'] > 0;
+            if ($tieneDesglose) {
+                continue;
+            }
+
+            $serie = str_pad(substr((string) $c['establecimiento_prov'], 0, 3), 3, '0', STR_PAD_LEFT)
+                . '-' . str_pad(substr((string) $c['punto_emision_prov'], 0, 3), 3, '0', STR_PAD_LEFT)
+                . '-' . str_pad((string) (int) $c['secuencial_prov'], 9, '0', STR_PAD_LEFT);
+
+            $impuestos = $this->impuestosNotaDebitoXml((string) $xmlNd);
+            if ($impuestos !== null) {
+                $b = ['base_no_gra_iva' => 0.0, 'base_imponible_0' => 0.0, 'base_imponible_grav' => 0.0,
+                      'base_imponible_exe' => 0.0, 'monto_iva' => 0.0, 'monto_ice' => 0.0];
+                foreach ($impuestos as $imp) {
+                    if ($imp['codigo_impuesto'] === '3') {
+                        $b['monto_ice'] += $imp['valor'];
+                        continue;
+                    }
+                    if ($imp['codigo_impuesto'] !== '2') {
+                        continue;
+                    }
+                    // Mismo reparto que el LATERAL de AtsRepository::getCompras().
+                    switch ($imp['codigo_porcentaje']) {
+                        case '6': $b['base_no_gra_iva']    += $imp['base_imponible']; break;
+                        case '0': $b['base_imponible_0']   += $imp['base_imponible']; break;
+                        case '7': $b['base_imponible_exe'] += $imp['base_imponible']; break;
+                        default:
+                            $b['base_imponible_grav'] += $imp['base_imponible'];
+                            $b['monto_iva']           += $imp['valor'];
+                    }
+                }
+                if ($b['base_no_gra_iva'] + $b['base_imponible_0'] + $b['base_imponible_grav'] + $b['base_imponible_exe'] > 0) {
+                    $c = array_merge($c, array_map(fn ($v) => round($v, 2), $b));
+                    $this->ndCompletadas['xml'][$serie] = $serie;
+                    continue;
+                }
+            }
+
+            $total = round((float) $c['importe_total'], 2);
+            $base  = round((float) ($c['total_sin_impuestos'] ?? 0), 2);
+            if ($base <= 0 || $base > $total) {
+                $base = $total;
+            }
+            if ($base <= 0) {
+                continue; // sin valores: queda en sinBases (mapearDocumento)
+            }
+            $iva = round($total - $base, 2);
+            if ($iva > 0) {
+                $c['base_imponible_grav'] = $base;
+                $c['monto_iva']           = $iva;
+            } else {
+                $c['base_imponible_0'] = $base;
+            }
+            $this->ndCompletadas['cabecera'][$serie] = $serie;
+        }
+        unset($c);
+        return $compras;
+    }
+
+    /**
+     * Impuestos de cabecera de una nota de débito a partir de su detalle_xml (sobre de
+     * autorización del SRI o comprobante suelto). null si no es el XML de una ND con
+     * impuestos (p. ej. el XML reconstruido de una compra migrada, que no los trae).
+     */
+    private function impuestosNotaDebitoXml(string $xmlString): ?array
+    {
+        if (strpos($xmlString, '<notaDebito') === false && strpos($xmlString, '&lt;notaDebito') === false) {
+            return null;
+        }
+        if (preg_match('/<comprobante>\s*<!\[CDATA\[(.*?)\]\]>\s*<\/comprobante>/s', $xmlString, $m)) {
+            $xmlString = trim($m[1]);
+        } elseif (preg_match('/<comprobante>(.*?)<\/comprobante>/s', $xmlString, $m)) {
+            $xmlString = trim(htmlspecialchars_decode($m[1]));
+        }
+        $prev = libxml_use_internal_errors(true);
+        $xml  = simplexml_load_string($xmlString);
+        libxml_clear_errors();
+        libxml_use_internal_errors($prev);
+        if ($xml === false || !isset($xml->infoNotaDebito->impuestos->impuesto)) {
+            return null;
+        }
+        return \App\Helpers\NotaDebitoXmlHelper::impuestosCabecera($xml->infoNotaDebito)['impuestos'];
     }
 
     /**
