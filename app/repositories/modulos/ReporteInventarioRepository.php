@@ -303,7 +303,9 @@ class ReporteInventarioRepository extends BaseRepository
                        -- puede desincronizarse si algo toca productos_bodegas sin pasar por el
                        -- kardex — mismo motivo que el Saldo de Movimientos.
                        COALESCE(u.stock_actual, 0) AS stock_actual,
-                       COALESCE(u.costo_unitario, 0) AS costo_unitario,
+                       -- Costo del kardex; si no lo hay (sin movimientos o último costo 0),
+                       -- el costo de la ficha del producto.
+                       COALESCE(NULLIF(u.costo_unitario, 0), p.costo_producto, 0) AS costo_unitario,
                        COALESCE(ca.consignado, 0) AS consignado
                 FROM (
                     SELECT CAST(:id_empresa AS integer) AS id_empresa,
@@ -616,7 +618,8 @@ class ReporteInventarioRepository extends BaseRepository
                            COALESCE(mar.nombre, 'Sin marca') AS marca_nombre,
                            b.nombre AS bodega_nombre,
                            SUM(k.cantidad) AS stock_actual,
-                           (ARRAY_AGG(k.costo_unitario ORDER BY k.fecha_movimiento DESC, k.id DESC))[1] AS costo_unitario,
+                           COALESCE(NULLIF((ARRAY_AGG(k.costo_unitario ORDER BY k.fecha_movimiento DESC, k.id DESC))[1], 0),
+                                    p.costo_producto, 0) AS costo_unitario,
                            COALESCE(MAX(ca.consignado), 0) AS consignado
                     FROM inventario_kardex k
                     INNER JOIN productos p ON p.id = k.id_producto AND p.id_empresa = k.id_empresa
@@ -627,7 +630,7 @@ class ReporteInventarioRepository extends BaseRepository
                         AND ca.id_producto = k.id_producto AND ca.id_bodega = k.id_bodega{$joinCv}
                     WHERE {$where}
                     GROUP BY k.id_empresa, k.id_producto, k.id_bodega{$groupExtra},
-                             p.codigo, p.nombre, cat.nombre, mar.nombre, b.nombre
+                             p.codigo, p.nombre, p.costo_producto, cat.nombre, mar.nombre, b.nombre
                 ) t
                 WHERE (t.stock_actual + t.consignado) <> 0" . self::condConsignadoDesglose($filtros) . "
                 ORDER BY {$orden}";
