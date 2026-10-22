@@ -265,6 +265,7 @@ $estadoClases = [
                                 onclick="abrirModalSuscEditar(this)">
                                 <td class="ps-3 fw-medium" data-col="nombre_cliente"><?= htmlspecialchars($r['nombre_cliente'] ?? '') ?></td>
                                 <td data-col="identificacion_cliente"><small class="text-muted"><?= htmlspecialchars($r['identificacion_cliente'] ?? '') ?></small></td>
+                                <td data-col="inmueble"><small><?= htmlspecialchars($r['inmueble'] ?? '—') ?></small></td>
                                 <td data-col="nombre_periodicidad"><?= htmlspecialchars($r['nombre_periodicidad'] ?? '-') ?></td>
                                 <td class="text-center" data-col="tipo_comprobante"><small class="text-muted"><?= htmlspecialchars(ucwords(str_replace('_', ' ', $r['tipo_comprobante'] ?? 'Factura'))) ?></small></td>
                                 <td class="text-center" data-col="forma_cobro"><?= $iconCobro ?> <?= ucfirst($r['forma_cobro'] ?? '') ?></td>
