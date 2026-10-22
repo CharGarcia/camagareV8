@@ -665,9 +665,7 @@ class LiquidacionCompraController extends BaseModuloController
 
         // Servir desde detalle_xml si existe
         if (!empty($cab['detalle_xml'])) {
-            header('Content-Type: application/xml; charset=UTF-8');
-            header('Content-Disposition: attachment; filename="' . $filename . '"');
-            echo $cab['detalle_xml'];
+            \App\Helpers\XmlAutorizadoSri::descargar($cab['detalle_xml'], $cab['clave_acceso'] ?? null, $filename);
             exit;
         }
 
@@ -703,9 +701,7 @@ class LiquidacionCompraController extends BaseModuloController
 
             $this->repository->updateDetalleXml($id, $xml);
 
-            header('Content-Type: application/xml; charset=UTF-8');
-            header('Content-Disposition: attachment; filename="' . $filename . '"');
-            echo $xml;
+            \App\Helpers\XmlAutorizadoSri::descargar($xml, $cab['clave_acceso'] ?? null, $filename);
         } catch (\Throwable $e) {
             http_response_code(500); echo 'Error generando XML: ' . $e->getMessage();
         }

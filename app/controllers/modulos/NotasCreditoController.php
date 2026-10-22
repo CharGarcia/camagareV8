@@ -1026,9 +1026,7 @@ class NotasCreditoController extends BaseModuloController
 
             // Servir el XML ya persistido (autorizado por el SRI cuando aplica).
             if (!empty($nc['detalle_xml'])) {
-                header('Content-Type: application/xml; charset=UTF-8');
-                header('Content-Disposition: attachment; filename="nc_' . $numero . '.xml"');
-                echo $nc['detalle_xml'];
+                \App\Helpers\XmlAutorizadoSri::descargar($nc['detalle_xml'], $nc['clave_acceso'] ?? null, 'nc_' . $numero . '.xml');
                 exit;
             }
 
@@ -1051,9 +1049,7 @@ class NotasCreditoController extends BaseModuloController
 
             try { $this->repository->updateDetalleXml($id, $xmlString); } catch (\Throwable $e) {}
 
-            header('Content-Type: application/xml; charset=UTF-8');
-            header('Content-Disposition: attachment; filename="nc_' . $numero . '.xml"');
-            echo $xmlString;
+            \App\Helpers\XmlAutorizadoSri::descargar($xmlString, $nc['clave_acceso'] ?? null, 'nc_' . $numero . '.xml');
         } catch (\Throwable $e) {
             die('Error al generar XML: ' . $e->getMessage());
         }
@@ -1191,9 +1187,7 @@ class NotasCreditoController extends BaseModuloController
 
         // Servir desde detalle_xml si existe
         if (!empty($nc['detalle_xml'])) {
-            header('Content-Type: application/xml; charset=UTF-8');
-            header('Content-Disposition: attachment; filename="' . $filename . '"');
-            echo $nc['detalle_xml'];
+            \App\Helpers\XmlAutorizadoSri::descargar($nc['detalle_xml'], $nc['clave_acceso'] ?? null, $filename);
             exit;
         }
 
@@ -1227,9 +1221,7 @@ class NotasCreditoController extends BaseModuloController
 
             $this->repository->updateDetalleXml($id, $xml);
 
-            header('Content-Type: application/xml; charset=UTF-8');
-            header('Content-Disposition: attachment; filename="' . $filename . '"');
-            echo $xml;
+            \App\Helpers\XmlAutorizadoSri::descargar($xml, $nc['clave_acceso'] ?? null, $filename);
         } catch (\Throwable $e) {
             http_response_code(500); echo 'Error generando XML: ' . $e->getMessage();
         }

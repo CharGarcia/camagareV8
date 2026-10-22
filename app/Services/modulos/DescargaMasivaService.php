@@ -202,7 +202,9 @@ class DescargaMasivaService
                 if ($formato === 'xml' || $formato === 'ambos') {
                     $xml = $this->obtenerXml($tipo, $idEmpresa, $id);
                     if ($xml !== null && $xml !== '') {
-                        $zip->agregarDesdeString($nombreBase . '.xml', $xml);
+                        // Formato de descarga del portal del SRI; el nombre sigue siendo el número para
+                        // que en el ZIP cada XML quede junto a su PDF.
+                        $zip->agregarDesdeString($nombreBase . '.xml', \App\Helpers\XmlAutorizadoSri::formatoSri($xml));
                     }
                 }
             } catch (\Throwable $e) {

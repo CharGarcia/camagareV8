@@ -160,8 +160,12 @@ class EnvioDocumentosSRIService
 
         // Nombre base para los archivos adjuntos (ej: Factura_001-001-000000001)
         $baseName = str_replace(' ', '_', $nombreDocArchivo) . '_' . $numComprobante;
+        // El XML viaja en el formato en que lo descarga el portal del SRI (<autorizacion>) y con la
+        // clave de acceso como nombre: hay receptores que solo aceptan ese formato.
+        $xmlString = \App\Helpers\XmlAutorizadoSri::formatoSri($xmlString);
+        $nombreXml = \App\Helpers\XmlAutorizadoSri::nombreArchivo((string) $claveAcceso, $baseName . '.xml');
         // 5. Enviar usando PHPMailer
-        $enviado = $this->enviarPhpMailer($smtpData, $listaDestinos, $nombreDestino, $asunto, $htmlCuerpo, $baseName, $xmlString, $pdfString, [], $logoPath, $logoCid);
+        $enviado = $this->enviarPhpMailer($smtpData, $listaDestinos, $nombreDestino, $asunto, $htmlCuerpo, $baseName, $xmlString, $pdfString, [], $logoPath, $logoCid, $nombreXml);
         if (!$enviado) {
             \App\Services\ErrorLogService::registrarManual(
                 "Correo NO enviado ($tipoDocumento) a " . implode(', ', $listaDestinos) . ": el servidor SMTP rechazó o falló el envío. Revise host/usuario/contraseña de 'envio_documentos_sri' o del correo propio de la empresa.",
@@ -913,7 +917,7 @@ class EnvioDocumentosSRIService
         require $plantilla;
         return (string) ob_get_clean();
     }
-    private function enviarPhpMailer(array $smtpData, array $toEmails, string $toName, string $subject, string $bodyHtml, string $baseName, string $xmlString, string $pdfString, array $adjuntosExtra = [], string $logoPath = '', string $logoCid = ''): bool
+    private function enviarPhpMailer(array $smtpData, array $toEmails, string $toName, string $subject, string $bodyHtml, string $baseName, string $xmlString, string $pdfString, array $adjuntosExtra = [], string $logoPath = '', string $logoCid = '', ?string $nombreXml = null): bool
     {
         $docMailDir = MVC_APP . '/lib/mail';
         if (!file_exists($docMailDir . '/phpmailer.php')) {
@@ -961,7 +965,7 @@ class EnvioDocumentosSRIService
 
             // Adjuntos
             if (!empty($xmlString)) {
-                $mail->addStringAttachment($xmlString, $baseName . '.xml', 'base64', 'application/xml');
+                $mail->addStringAttachment($xmlString, $nombreXml ?? ($baseName . '.xml'), 'base64', 'application/xml');
             }
             if (!empty($pdfString)) {
                 $mail->addStringAttachment($pdfString, $baseName . '.pdf', 'base64', 'application/pdf');

@@ -619,9 +619,7 @@ class RetencionesComprasController extends BaseModuloController
 
             // Servir el XML autorizado ya persistido si existe (igual que factura de venta).
             if (!empty($cabecera['detalle_xml'])) {
-                header('Content-Type: application/xml; charset=UTF-8');
-                header('Content-Disposition: attachment; filename="ret_' . $numero . '.xml"');
-                echo $cabecera['detalle_xml'];
+                \App\Helpers\XmlAutorizadoSri::descargar($cabecera['detalle_xml'], $cabecera['clave_acceso'] ?? null, 'ret_' . $numero . '.xml');
                 exit;
             }
 
@@ -635,9 +633,7 @@ class RetencionesComprasController extends BaseModuloController
             $xmlService = new \App\Services\Xml\XmlRetencionCompraService();
             $xmlString  = $xmlService->generar($cabecera, $lineas, $empresa, $dirEstablecimiento, $docSustento);
 
-            header('Content-Type: application/xml; charset=UTF-8');
-            header('Content-Disposition: attachment; filename="ret_' . $numero . '.xml"');
-            echo $xmlString;
+            \App\Helpers\XmlAutorizadoSri::descargar($xmlString, $cabecera['clave_acceso'] ?? null, 'ret_' . $numero . '.xml');
         } catch (\Throwable $e) {
             die('Error al generar XML: ' . $e->getMessage());
         }
@@ -987,9 +983,7 @@ class RetencionesComprasController extends BaseModuloController
 
         // Servir desde detalle_xml si existe
         if (!empty($retencion['detalle_xml'])) {
-            header('Content-Type: application/xml; charset=UTF-8');
-            header('Content-Disposition: attachment; filename="' . $filename . '"');
-            echo $retencion['detalle_xml'];
+            \App\Helpers\XmlAutorizadoSri::descargar($retencion['detalle_xml'], $retencion['clave_acceso'] ?? null, $filename);
             exit;
         }
 
@@ -1018,9 +1012,7 @@ class RetencionesComprasController extends BaseModuloController
 
             $this->repository->updateDetalleXml($id, $xml);
 
-            header('Content-Type: application/xml; charset=UTF-8');
-            header('Content-Disposition: attachment; filename="' . $filename . '"');
-            echo $xml;
+            \App\Helpers\XmlAutorizadoSri::descargar($xml, $retencion['clave_acceso'] ?? null, $filename);
         } catch (\Throwable $e) {
             http_response_code(500);
             echo 'Error generando XML: ' . $e->getMessage();

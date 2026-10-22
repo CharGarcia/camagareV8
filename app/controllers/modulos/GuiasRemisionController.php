@@ -614,9 +614,7 @@ class GuiasRemisionController extends BaseModuloController
 
             // Servir desde detalle_xml si existe
             if (!empty($cabecera['detalle_xml'])) {
-                header('Content-Type: application/xml; charset=UTF-8');
-                header('Content-Disposition: attachment; filename="' . $filename . '"');
-                echo $cabecera['detalle_xml'];
+                \App\Helpers\XmlAutorizadoSri::descargar($cabecera['detalle_xml'], $cabecera['clave_acceso'] ?? null, $filename);
                 exit;
             }
 
@@ -631,9 +629,7 @@ class GuiasRemisionController extends BaseModuloController
 
             $this->repo->updateDetalleXml($id, $xmlString);
 
-            header('Content-Type: application/xml; charset=UTF-8');
-            header('Content-Disposition: attachment; filename="' . $filename . '"');
-            echo $xmlString;
+            \App\Helpers\XmlAutorizadoSri::descargar($xmlString, $cabecera['clave_acceso'] ?? null, $filename);
         } catch (\Throwable $e) {
             http_response_code(500); echo 'Error al generar XML: ' . $e->getMessage();
         }
@@ -833,9 +829,7 @@ class GuiasRemisionController extends BaseModuloController
                   . str_pad((string)($cab['secuencial'] ?? ''), 9, '0', STR_PAD_LEFT);
         $filename = 'guia_remision_' . $numero . '.xml';
 
-        header('Content-Type: application/xml; charset=UTF-8');
-        header('Content-Disposition: attachment; filename="' . $filename . '"');
-        echo $xmlContent;
+        \App\Helpers\XmlAutorizadoSri::descargar($xmlContent, $cab['clave_acceso'] ?? null, $filename);
         exit;
     }
 
