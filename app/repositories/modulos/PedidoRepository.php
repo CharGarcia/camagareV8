@@ -460,11 +460,15 @@ class PedidoRepository {
     }
 
     public function obtenerDetalles($id_pedido, $id_empresa) {
+        // ORDER BY d.id = orden en que se capturaron las líneas. Sin él PostgreSQL las devolvía en
+        // orden físico, que cambia tras editar el pedido (cada UPDATE mueve la fila), y el pedido
+        // se veía en un orden distinto al que usa la Consignación de Venta al cargarlo (d.id).
         $sql = "SELECT d.*, p.nombre as producto_nombre, p.codigo as producto_codigo
                 FROM pedidos_detalle d
                 JOIN productos p ON d.id_producto = p.id
-                WHERE d.id_pedido = :id_pedido 
-                AND d.eliminado = false";
+                WHERE d.id_pedido = :id_pedido
+                AND d.eliminado = false
+                ORDER BY d.id ASC";
         $stmt = $this->db->prepare($sql);
         $stmt->execute(['id_pedido' => $id_pedido]);
         return $stmt->fetchAll(PDO::FETCH_ASSOC);

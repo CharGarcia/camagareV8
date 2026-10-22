@@ -239,6 +239,30 @@ class AsignarEmpresasController extends Controller
             $this->redirect($targetUrl);
         }
 
+        // Propietario: sus empresas (y las de otros superadministradores) solo las quita el Propietario.
+        $idUsuarioDestino = $this->model->getIdUsuarioDeAsignacion($idRegistro);
+        if ($idUsuarioDestino > 0) {
+            $motivo = (new \App\Rules\UsuarioPropietarioRules(new \App\models\Usuario()))
+                ->motivoNoGestionable($idActual, $idUsuarioDestino);
+            if ($motivo !== null) {
+                try {
+                    (new \App\Services\LogSistemaService())->registrar(
+                        $idActual,
+                        null,
+                        'BLOQUEO_PROPIETARIO',
+                        'usuarios',
+                        $idUsuarioDestino,
+                        null,
+                        ['accion' => 'quitar_empresa', 'id_empresa_asignada' => $idRegistro, 'motivo' => $motivo]
+                    );
+                } catch (\Throwable $e) {
+                    // La auditoría no debe impedir el rechazo.
+                }
+                $_SESSION[$msgKey] = ['danger', $motivo];
+                $this->redirect($targetUrl);
+            }
+        }
+
         try {
             if ($this->model->quitar($idRegistro, $idActual, $nivel)) {
                 $_SESSION[$msgKey] = ['success', 'Empresa quitada correctamente.'];

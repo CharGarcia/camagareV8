@@ -561,6 +561,56 @@ class Usuario extends BaseModel
         return (int) ($r[0]['n'] ?? 0);
     }
 
+    /** Caché por petición de la existencia de la columna `es_propietario`. */
+    private static ?bool $columnaPropietario = null;
+
+    /**
+     * True si la columna `usuarios.es_propietario` ya existe. Mientras el SQL
+     * (database/2026-10-22_usuarios_es_propietario.sql) no se aplique, las
+     * reglas del Propietario no actúan y todo se comporta como antes.
+     */
+    public function columnaPropietarioExiste(): bool
+    {
+        if (self::$columnaPropietario === null) {
+            $r = $this->query("SELECT 1 AS x FROM information_schema.columns
+                WHERE table_schema = current_schema() AND table_name = 'usuarios' AND column_name = 'es_propietario'
+                LIMIT 1");
+            self::$columnaPropietario = !empty($r);
+        }
+        return self::$columnaPropietario;
+    }
+
+    /** Expresión SQL de la marca Propietario (false si la columna aún no existe). */
+    public function sqlEsPropietario(string $alias = 'u'): string
+    {
+        return $this->columnaPropietarioExiste() ? "COALESCE({$alias}.es_propietario, false)" : 'false';
+    }
+
+    /** True si hay al menos un Propietario vigente: sin él, las reglas no aplican. */
+    public function hayPropietario(): bool
+    {
+        if (!$this->columnaPropietarioExiste()) {
+            return false;
+        }
+        $r = $this->query("SELECT 1 AS x FROM usuarios WHERE es_propietario = true AND eliminado = false LIMIT 1");
+        return !empty($r);
+    }
+
+    /**
+     * Nivel, estado y marca Propietario de un usuario no eliminado, o null si no
+     * existe. Lo usan las reglas de gestión (App\Rules\UsuarioPropietarioRules).
+     */
+    public function getDatosGestion(int $id): ?array
+    {
+        $id = (int) $id;
+        if ($id <= 0) return null;
+        $r = $this->query("SELECT u.id, u.nombre, u.nivel, u.estado, " . $this->sqlEsPropietario('u') . " AS es_propietario
+            FROM usuarios u WHERE u.id = {$id} AND u.eliminado = false LIMIT 1");
+        if (empty($r)) return null;
+        $r[0]['es_propietario'] = self::pgBool($r[0]['es_propietario'] ?? false);
+        return $r[0];
+    }
+
     /**
      * Actualiza correo, nivel, estado y (opcionalmente) nombre e identificación
      * de un usuario. Valida que ni el correo ni la cédula estén registrados por
@@ -851,6 +901,7 @@ class Usuario extends BaseModel
         // Estado de registro: ver self::sqlRegistrado().
         $sql = "SELECT u.id, u.nombre, u.cedula, u.nivel, u.estado, u.mail, u.telefono, u.puede_app_movil, u.created_at,
                 {$exprRegistrado} AS registrado,
+                " . $this->sqlEsPropietario('u') . " AS es_propietario,
                 {$exprEmpresas} AS empresas_asignadas
             FROM usuarios u {$joins}
             {$where}

@@ -5,8 +5,8 @@ categoria: Configuración global
 ruta_modulo: config/usuarios-sistema
 tipo: modulo
 visibilidad: admin
-etiquetas: usuarios del sistema, crear usuario, asignar empresa, empresa a asignar, invitar usuario, limite de usuarios, usuario existente, que usuarios veo, no aparece el usuario, lista de usuarios, usuarios de mi empresa, cambiar cedula, editar cedula, identificacion del usuario, cedula repetida, usuario bloqueado, demasiados intentos, reiniciar intentos, desbloquear usuario, no puede iniciar sesion, reenviar invitacion, no le llego el correo, no recibio la invitacion, invitacion pendiente, reenviar correo de bienvenida, clave provisional, contrasena provisional, asignar contrasena, poner clave al usuario, cambiar nombre del usuario, editar nombre, nombre mal escrito, desaparecio el boton de invitacion, se perdio la invitacion al guardar, no me deja reenviar la invitacion, boton de invitacion en gris, telefono del usuario, celular, numero de telefono, editar telefono, cambiar telefono, columna telefono, app movil, puede usar la app, buscar usuario, filtrar usuarios, filtros de usuarios, exportar usuarios, pdf de usuarios, excel de usuarios, ordenar usuarios, columnas del listado
-version: 1.6
+etiquetas: usuarios del sistema, propietario, dueño del sistema, varios superadministradores, otro superadmin, proteger mi usuario, no pueden eliminarme, quien puede dar nivel 3, superadministrador delegado, crear usuario, asignar empresa, empresa a asignar, invitar usuario, limite de usuarios, usuario existente, que usuarios veo, no aparece el usuario, lista de usuarios, usuarios de mi empresa, cambiar cedula, editar cedula, identificacion del usuario, cedula repetida, usuario bloqueado, demasiados intentos, reiniciar intentos, desbloquear usuario, no puede iniciar sesion, reenviar invitacion, no le llego el correo, no recibio la invitacion, invitacion pendiente, reenviar correo de bienvenida, clave provisional, contrasena provisional, asignar contrasena, poner clave al usuario, cambiar nombre del usuario, editar nombre, nombre mal escrito, desaparecio el boton de invitacion, se perdio la invitacion al guardar, no me deja reenviar la invitacion, boton de invitacion en gris, telefono del usuario, celular, numero de telefono, editar telefono, cambiar telefono, columna telefono, app movil, puede usar la app, buscar usuario, filtrar usuarios, filtros de usuarios, exportar usuarios, pdf de usuarios, excel de usuarios, ordenar usuarios, columnas del listado
+version: 1.7
 orden: 3
 estado: activo
 ---
@@ -270,8 +270,47 @@ cuando el usuario no tiene intentos fallidos pendientes.
 - **"Falta aplicar la migración … 20260825_login_intentos_anulado.sql"**:
   el servidor todavía no tiene el cambio de base de datos que sostiene el
   reinicio de intentos. Aplíquelo y vuelva a intentar.
+- **"Ese usuario es el Propietario del sistema…"** o **"Solo el Propietario
+  del sistema puede…"**: la acción está reservada al Propietario (ver
+  «Propietario del sistema y varios superadministradores»). El intento queda
+  registrado en el log del sistema.
+
+## Propietario del sistema y varios superadministradores
+
+Para que otras personas hagan el trabajo del superadministrador sin poder
+tocar la cuenta del dueño, un usuario de nivel 3 puede estar marcado como
+**Propietario**. En el listado se ve con el distintivo **Propietario** junto
+a su nivel.
+
+Cuando existe un Propietario:
+
+- **Al Propietario solo lo modifica otro Propietario**: nadie más puede
+  editar su ficha, cambiarle el nivel o el estado, eliminarlo, asignarle una
+  clave provisional, reenviarle la invitación ni quitarle empresas.
+- **Solo el Propietario otorga el nivel de superadministrador**. En la ficha,
+  para los demás la opción *Super administrador* aparece deshabilitada.
+- **Solo el Propietario gestiona a otros superadministradores**. Un
+  superadministrador que no es Propietario los ve en el listado, pero no
+  puede modificarlos; sí puede editar su propia ficha.
+- **El Propietario siempre es superadministrador activo**: no se le puede
+  bajar el nivel ni desactivar, ni siquiera él mismo, para que el sistema no
+  quede sin dueño por error.
+
+Todo lo demás que hace un superadministrador (empresas, módulos, permisos,
+configuración) sigue igual para todos los de nivel 3.
+
+La marca **no se pone ni se quita desde la pantalla**: se aplica con el
+script `database/2026-10-22_usuarios_es_propietario.sql`. Mientras ningún
+usuario esté marcado, el sistema funciona como antes, sin estas
+restricciones. Cada intento rechazado queda en el log del sistema con la
+acción `BLOQUEO_PROPIETARIO`.
 
 ## Historial de cambios
+
+- **1.7** — Nuevo rol **Propietario**: protege la cuenta del dueño frente a
+  otros superadministradores y reserva para él otorgar el nivel 3 y
+  gestionar a los demás superadministradores. Nueva sección «Propietario del
+  sistema y varios superadministradores».
 
 - **1.6** — El listado adopta el diseño estándar de los listados de módulo
   (como Proveedores): buscador de texto libre, modal de **filtros** con chips,

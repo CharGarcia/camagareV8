@@ -421,6 +421,14 @@ class EmpresaAsignada extends BaseModel
      * Super admin: puede quitar cualquiera.
      * Admin: puede quitar si asignó la empresa (usu_asignador) o si tiene acceso a esa empresa.
      */
+    /** Usuario dueño de una fila de empresa_asignada (0 si no existe). */
+    public function getIdUsuarioDeAsignacion(int $idRegistro): int
+    {
+        $id = (int) $idRegistro;
+        $r = $this->query("SELECT id_usuario FROM empresa_asignada WHERE id = {$id}");
+        return (int) ($r[0]['id_usuario'] ?? 0);
+    }
+
     public function quitar(int $idRegistro, int $idActual, int $nivel = 1): bool
     {
         $id = (int) $idRegistro;

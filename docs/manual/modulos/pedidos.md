@@ -6,7 +6,7 @@ ruta_modulo: modulos/pedidos
 tipo: modulo
 visibilidad: todos
 etiquetas: pedidos, pedido desde proforma, proforma a pedido, enviar a pedidos, generar pedido desde cotizacion, pedido de cliente, vendedor del cliente, asesor, quien atiende al cliente, solicitado por, quien hizo el pedido, usuario que registro el pedido, buscar pedidos, buscador, filtros, filtrar pedidos, buscar por producto, buscar por cliente, ordenar por estado y fecha de entrega, ordenar por dos columnas, encargo, orden de pedido, reserva, entregas, despacho, agenda de entrega, hora de entrega, responsable de entrega, rango horario, pedidos pendientes, aparecen pedidos que no busque, resultados que no corresponden, buscar por producto en el listado, imprimir, impresora
-version: 1.17
+version: 1.18
 orden: 0
 estado: activo
 ---
@@ -336,6 +336,7 @@ esas líneas primero. El detalle está en el manual de **Proformas**, sección
 
 ## Historial de cambios
 
+- **1.18** — Los productos del pedido se muestran siempre en el **orden en que se capturaron** (pantalla, PDF, Excel y app móvil). Antes, después de editar un pedido, las líneas podían aparecer en otro orden.
 - **1.17** — Un pedido **nuevo** ya no acepta una fecha de emisión anterior a hoy (al editar uno guardado se respeta su fecha). Y si la entrega es hoy, la **hora máxima** no puede ser anterior a la hora actual. Se valida en el formulario y al guardar (también desde la app móvil). Además, al abrir un pedido nuevo la fecha de emisión vuelve a ser la de hoy aunque antes se haya abierto un pedido de otro día.
 - **1.16** — El PDF del pedido con muchos productos ya no se desordena al pasar de página: cada fila queda completa en una sola hoja, el encabezado de la tabla (Código / Descripción / Cantidad) se repite en cada página y los códigos o descripciones largos se ajustan dentro de su celda.
 - **1.15** — El cliente creado desde el pedido queda seleccionado con su vendedor, solo si el pedido está abierto y editable. Antes, editar cualquier cliente con la página abierta lo ponía en el pedido.

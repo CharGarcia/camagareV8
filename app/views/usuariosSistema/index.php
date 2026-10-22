@@ -661,6 +661,11 @@ $rowsHtml = $rowsHtml ?? '';
             document.getElementById('edit-mail').value = mailOriginal;
             document.getElementById('edit-telefono').value = el.dataset.telefono || '';
             document.getElementById('edit-nivel').value = el.dataset.nivel || '1';
+            // Solo el Propietario otorga el nivel 3 (el servidor también lo valida).
+            var optSuper = document.querySelector('#edit-nivel option[value="3"]');
+            if (optSuper) {
+                optSuper.disabled = <?= !empty($puedeOtorgarNivel3) ? 'false' : 'true' ?> && el.dataset.nivel !== '3';
+            }
             document.getElementById('edit-estado').value = el.dataset.estado === '1' ? '1' : '0';
 
             var chkAppMovil = document.getElementById('edit-puede-app-movil');

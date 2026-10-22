@@ -75,6 +75,7 @@ class UsuariosSistemaController extends Controller
             'perPage' => $perPage,
             'buscar' => $buscar,
             'nivel' => $nivel,
+            'puedeOtorgarNivel3' => $nivel >= 3 && !(new \App\Rules\UsuarioPropietarioRules($this->model))->actorRestringido($idActual),
             'ordenCol' => $ordenCol,
             'ordenDir' => $ordenDir,
             'ordenJson' => \App\Helpers\OrdenListado::aJson($orden),
@@ -355,7 +356,11 @@ class UsuariosSistemaController extends Controller
         $html .= '<td class="ps-3 fw-medium text-truncate" style="max-width:300px" data-col="nombre">' . $txt($r['nombre'] ?? '') . '</td>';
         $html .= '<td data-col="cedula"><code class="text-secondary">' . htmlspecialchars($r['cedula'] ?? '') . '</code></td>';
         $html .= '<td class="text-truncate" style="max-width:260px" data-col="mail">' . $txt($r['mail'] ?? '') . '</td>';
-        $html .= '<td data-col="nivel"><span class="badge bg-' . $nivelClase . ' bg-opacity-10 text-' . $nivelClase . ' border border-' . $nivelClase . ' border-opacity-25">' . $nivelTexto . '</span></td>';
+        $pv = $r['es_propietario'] ?? false;
+        $badgePropietario = ($pv === true || $pv === 't' || $pv === '1' || $pv === 1 || $pv === 'true')
+            ? ' <span class="badge bg-warning bg-opacity-10 text-warning border border-warning border-opacity-25" title="Dueño del sistema: solo el Propietario puede modificarlo"><i class="bi bi-star-fill me-1"></i>Propietario</span>'
+            : '';
+        $html .= '<td class="text-nowrap" data-col="nivel"><span class="badge bg-' . $nivelClase . ' bg-opacity-10 text-' . $nivelClase . ' border border-' . $nivelClase . ' border-opacity-25">' . $nivelTexto . '</span>' . $badgePropietario . '</td>';
         $html .= '<td data-col="telefono">' . $txt($r['telefono'] ?? '') . '</td>';
         $html .= '<td class="text-nowrap" data-col="estado">';
         if (!$registrado) {
@@ -417,6 +422,14 @@ class UsuariosSistemaController extends Controller
         }
 
         $this->requireGestionable($id);
+
+        // Solo el Propietario otorga el nivel 3, y el Propietario nunca queda degradado ni inactivo.
+        $motivo = (new \App\Rules\UsuarioPropietarioRules($this->model))
+            ->motivoCambioNivelEstado((int) ($_SESSION['id_usuario'] ?? 0), $id, $nivel, $estado ? 1 : 0);
+        if ($motivo !== null) {
+            $this->registrarIntentoBloqueado($id, $motivo);
+            $this->json(['ok' => false, 'msg' => $motivo]);
+        }
 
         // El checkbox "Puede usar app móvil" solo se renderiza en el modal cuando
         // quien edita es nivel 3, así que un POST de un admin nivel < 3 nunca lo trae
@@ -743,19 +756,47 @@ class UsuariosSistemaController extends Controller
     /**
      * Un administrador (nivel 2) solo puede actuar sobre los usuarios que ve en
      * su listado: los que comparten empresa con él, los que gestiona en
-     * `usuario_asignado` y él mismo. El superadministrador no tiene restricción.
+     * `usuario_asignado` y él mismo. El superadministrador gestiona a todos,
+     * salvo lo que reservan las reglas del Propietario (UsuarioPropietarioRules).
      * Corta la petición con JSON de error si el id no le corresponde.
      */
     private function requireGestionable(int $idUsuario): void
     {
         $nivel = (int) ($_SESSION['nivel'] ?? 0);
-        if ($nivel >= 3) {
-            return;
-        }
         $idActual = (int) ($_SESSION['id_usuario'] ?? 0);
-        if (!$this->model->esGestionablePorAdmin($idUsuario, $idActual)) {
+        if ($nivel < 3 && !$this->model->esGestionablePorAdmin($idUsuario, $idActual)) {
             $this->json(['ok' => false, 'msg' => 'No tiene permiso para gestionar ese usuario.']);
         }
+        // Propietario: ni otro superadministrador puede tocarlo (App\Rules\UsuarioPropietarioRules).
+        $motivo = (new \App\Rules\UsuarioPropietarioRules($this->model))->motivoNoGestionable($idActual, $idUsuario);
+        if ($motivo !== null) {
+            $this->registrarIntentoBloqueado($idUsuario, $motivo);
+            $this->json(['ok' => false, 'msg' => $motivo]);
+        }
+    }
+
+    /** Deja en log_sistema el intento rechazado por las reglas del Propietario. */
+    private function registrarIntentoBloqueado(int $idUsuario, string $motivo): void
+    {
+        try {
+            (new \App\Services\LogSistemaService())->registrar(
+                (int) ($_SESSION['id_usuario'] ?? 0),
+                null,                       // usuarios es una tabla global
+                'BLOQUEO_PROPIETARIO',
+                'usuarios',
+                $idUsuario,
+                null,
+                ['accion' => $this->accionActual(), 'motivo' => $motivo]
+            );
+        } catch (\Throwable $e) {
+            // La auditoría no debe impedir el rechazo.
+        }
+    }
+
+    private function accionActual(): string
+    {
+        $uri = (string) parse_url((string) ($_SERVER['REQUEST_URI'] ?? ''), PHP_URL_PATH);
+        return substr(basename($uri), 0, 60);
     }
 
     private function requireNivel(int $min): void
