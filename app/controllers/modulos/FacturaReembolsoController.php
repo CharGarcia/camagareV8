@@ -1058,7 +1058,7 @@ class FacturaReembolsoController extends BaseModuloController
             $numero = ($fr['establecimiento'] ?? '001') . '-' . ($fr['punto_emision'] ?? '001') . '-' . str_pad((string) $fr['secuencial'], 9, '0', STR_PAD_LEFT);
 
             if (!empty($fr['detalle_xml'])) {
-                \App\Helpers\XmlAutorizadoSri::descargar($fr['detalle_xml'], $fr['clave_acceso'] ?? null, 'factura_reembolso_' . $numero . '.xml');
+                \App\Helpers\XmlAutorizadoSri::descargar($fr['detalle_xml'], 'factura_reembolso_' . $numero . '.xml');
                 exit;
             }
 
@@ -1070,7 +1070,7 @@ class FacturaReembolsoController extends BaseModuloController
 
             try { $this->repository->updateDetalleXml($id, $xmlString); } catch (\Throwable $e) {}
 
-            \App\Helpers\XmlAutorizadoSri::descargar($xmlString, $fr['clave_acceso'] ?? null, 'factura_reembolso_' . $numero . '.xml');
+            \App\Helpers\XmlAutorizadoSri::descargar($xmlString, 'factura_reembolso_' . $numero . '.xml');
         } catch (\Throwable $e) {
             die('Error al generar XML: ' . $e->getMessage());
         }
@@ -1169,7 +1169,7 @@ class FacturaReembolsoController extends BaseModuloController
         $filename = 'factura_reembolso_' . $numero . '.xml';
 
         if (!empty($fr['detalle_xml'])) {
-            \App\Helpers\XmlAutorizadoSri::descargar($fr['detalle_xml'], $fr['clave_acceso'] ?? null, $filename);
+            \App\Helpers\XmlAutorizadoSri::descargar($fr['detalle_xml'], $filename);
         } else {
             http_response_code(404);
             echo 'Esta factura de reembolso todavía no tiene un XML generado.';

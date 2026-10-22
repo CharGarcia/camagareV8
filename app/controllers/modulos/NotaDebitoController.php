@@ -958,7 +958,7 @@ class NotaDebitoController extends BaseModuloController
             $numero = ($nd['establecimiento'] ?? '001') . '-' . ($nd['punto_emision'] ?? '001') . '-' . str_pad((string)$nd['secuencial'], 9, '0', STR_PAD_LEFT);
 
             if (!empty($nd['detalle_xml'])) {
-                \App\Helpers\XmlAutorizadoSri::descargar($nd['detalle_xml'], $nd['clave_acceso'] ?? null, 'nd_' . $numero . '.xml');
+                \App\Helpers\XmlAutorizadoSri::descargar($nd['detalle_xml'], 'nd_' . $numero . '.xml');
                 exit;
             }
 
@@ -973,7 +973,7 @@ class NotaDebitoController extends BaseModuloController
 
             try { $this->repository->updateDetalleXml($id, $xmlString); } catch (\Throwable $e) {}
 
-            \App\Helpers\XmlAutorizadoSri::descargar($xmlString, $nd['clave_acceso'] ?? null, 'nd_' . $numero . '.xml');
+            \App\Helpers\XmlAutorizadoSri::descargar($xmlString, 'nd_' . $numero . '.xml');
         } catch (\Throwable $e) {
             die('Error al generar XML: ' . $e->getMessage());
         }
@@ -1101,7 +1101,7 @@ class NotaDebitoController extends BaseModuloController
         $filename = 'nd_' . $numero . '.xml';
 
         if (!empty($nd['detalle_xml'])) {
-            \App\Helpers\XmlAutorizadoSri::descargar($nd['detalle_xml'], $nd['clave_acceso'] ?? null, $filename);
+            \App\Helpers\XmlAutorizadoSri::descargar($nd['detalle_xml'], $filename);
             exit;
         }
 
@@ -1127,7 +1127,7 @@ class NotaDebitoController extends BaseModuloController
 
             $this->repository->updateDetalleXml($id, $xml);
 
-            \App\Helpers\XmlAutorizadoSri::descargar($xml, $nd['clave_acceso'] ?? null, $filename);
+            \App\Helpers\XmlAutorizadoSri::descargar($xml, $filename);
         } catch (\Throwable $e) {
             http_response_code(500); echo 'Error generando XML: ' . $e->getMessage();
         }

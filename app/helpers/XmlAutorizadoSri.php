@@ -22,7 +22,7 @@ namespace App\Helpers;
  *   <mensajes/>
  *   </autorizacion>
  *
- * y el archivo nombrado con la clave de acceso (`{clave}.xml`).
+ * El nombre del archivo NO cambia: cada módulo conserva el suyo (`factura_001-001-…xml`).
  *
  * La conversión se hace SOLO al entregar (descarga, correo, descarga masiva); lo guardado
  * en BD no cambia, porque otros módulos leen ese sobre. El comprobante firmado viaja
@@ -95,25 +95,11 @@ final class XmlAutorizadoSri
     }
 
     /**
-     * Nombre del archivo XML: la clave de acceso (49 dígitos).
-     * Sin clave válida se usa el nombre de respaldo.
+     * Envía el XML como descarga en formato SRI, con el nombre de siempre del módulo
+     * (p. ej. `factura_001-001-000000009.xml`). No hace exit: lo decide quien llama.
      */
-    public static function nombreArchivo(?string $claveAcceso, string $respaldo): string
+    public static function descargar(string $xml, string $nombre): void
     {
-        $clave = preg_replace('/\D/', '', (string) $claveAcceso);
-        if (strlen((string) $clave) === 49) {
-            return $clave . '.xml';
-        }
-        return str_ends_with(strtolower($respaldo), '.xml') ? $respaldo : $respaldo . '.xml';
-    }
-
-    /**
-     * Envía el XML como descarga en formato SRI y nombre = clave de acceso.
-     * No hace exit: lo decide quien llama.
-     */
-    public static function descargar(string $xml, ?string $claveAcceso, string $respaldo): void
-    {
-        $nombre = self::nombreArchivo($claveAcceso, $respaldo);
         header('Content-Type: application/xml; charset=UTF-8');
         header('Content-Disposition: attachment; filename="' . $nombre . '"');
         echo self::formatoSri($xml);

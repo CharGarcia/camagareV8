@@ -4,7 +4,7 @@ resumen: Qué pasa al pulsar Excel, PDF, XML o una plantilla en cualquier módul
 categoria: Primeros pasos
 tipo: guia
 visibilidad: todos
-etiquetas: descargar, imprimir, impresora, imprimir pdf, imprimir documento, ver pdf, descarga, exportar, excel, pdf, xml, csv, zip, plantilla, generando, no descarga, no se descarga, pestaña en blanco, pagina en blanco, xml autorizado, xml sri, clave de acceso, nombre del archivo xml, cliente no acepta el xml, se queda cargando, demasiados datos, archivo muy grande, error al descargar, reporte muy grande
+etiquetas: descargar, imprimir, impresora, imprimir pdf, imprimir documento, ver pdf, descarga, exportar, excel, pdf, xml, csv, zip, plantilla, generando, no descarga, no se descarga, pestaña en blanco, pagina en blanco, xml autorizado, xml sri, cliente no acepta el xml, se queda cargando, demasiados datos, archivo muy grande, error al descargar, reporte muy grande
 version: 1.2
 orden: 30
 estado: activo
@@ -60,8 +60,8 @@ nota de crédito, nota de débito, guía de remisión, liquidación de compra y
 retención) y el XML que se adjunta al **correo** al cliente salen igual que el XML que se
 descarga del portal del SRI en línea:
 
-- El archivo se llama con la **clave de acceso** (49 dígitos), por ejemplo
-  `1910202601179313144100120010010000011698648915310.xml`.
+- El archivo conserva su nombre de siempre, por ejemplo
+  `factura_001-001-000000009.xml`.
 - Por dentro trae la autorización del SRI: estado, número y fecha de
   autorización, ambiente (**PRODUCCIÓN** o **PRUEBAS**) y el comprobante firmado.
 
@@ -70,8 +70,8 @@ forma de entregarlo. Así lo aceptan también los sistemas de recepción de
 facturas de los clientes que no aceptaban el formato anterior.
 
 Un documento que todavía no está autorizado descarga el comprobante sin la
-parte de autorización. En la **Descarga masiva** los XML del ZIP mantienen
-como nombre el número del documento, para que cada uno quede junto a su PDF.
+parte de autorización. En la **Descarga masiva** los XML del ZIP salen en el mismo formato y con el
+número del documento como nombre, junto a su PDF.
 
 ## Documentos que se abren para ver
 
@@ -87,8 +87,7 @@ ratón) sigue abriendo el archivo en otra pestaña, como antes.
 ## Historial de cambios
 
 - **1.2** — El XML autorizado (botón XML y adjunto del correo) se entrega igual
-  que el que descarga el portal del SRI y con la clave de acceso como nombre
-  del archivo.
+  que el que descarga el portal del SRI. El nombre del archivo no cambia.
 
 - **1.1** — El botón PDF de los documentos pregunta si se quiere **Imprimir**
   (abre el cuadro de impresión con el documento cargado), **Descargar** o

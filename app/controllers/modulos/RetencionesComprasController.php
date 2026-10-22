@@ -619,7 +619,7 @@ class RetencionesComprasController extends BaseModuloController
 
             // Servir el XML autorizado ya persistido si existe (igual que factura de venta).
             if (!empty($cabecera['detalle_xml'])) {
-                \App\Helpers\XmlAutorizadoSri::descargar($cabecera['detalle_xml'], $cabecera['clave_acceso'] ?? null, 'ret_' . $numero . '.xml');
+                \App\Helpers\XmlAutorizadoSri::descargar($cabecera['detalle_xml'], 'ret_' . $numero . '.xml');
                 exit;
             }
 
@@ -633,7 +633,7 @@ class RetencionesComprasController extends BaseModuloController
             $xmlService = new \App\Services\Xml\XmlRetencionCompraService();
             $xmlString  = $xmlService->generar($cabecera, $lineas, $empresa, $dirEstablecimiento, $docSustento);
 
-            \App\Helpers\XmlAutorizadoSri::descargar($xmlString, $cabecera['clave_acceso'] ?? null, 'ret_' . $numero . '.xml');
+            \App\Helpers\XmlAutorizadoSri::descargar($xmlString, 'ret_' . $numero . '.xml');
         } catch (\Throwable $e) {
             die('Error al generar XML: ' . $e->getMessage());
         }
@@ -983,7 +983,7 @@ class RetencionesComprasController extends BaseModuloController
 
         // Servir desde detalle_xml si existe
         if (!empty($retencion['detalle_xml'])) {
-            \App\Helpers\XmlAutorizadoSri::descargar($retencion['detalle_xml'], $retencion['clave_acceso'] ?? null, $filename);
+            \App\Helpers\XmlAutorizadoSri::descargar($retencion['detalle_xml'], $filename);
             exit;
         }
 
@@ -1012,7 +1012,7 @@ class RetencionesComprasController extends BaseModuloController
 
             $this->repository->updateDetalleXml($id, $xml);
 
-            \App\Helpers\XmlAutorizadoSri::descargar($xml, $retencion['clave_acceso'] ?? null, $filename);
+            \App\Helpers\XmlAutorizadoSri::descargar($xml, $filename);
         } catch (\Throwable $e) {
             http_response_code(500);
             echo 'Error generando XML: ' . $e->getMessage();

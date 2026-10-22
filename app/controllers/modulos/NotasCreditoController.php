@@ -1026,7 +1026,7 @@ class NotasCreditoController extends BaseModuloController
 
             // Servir el XML ya persistido (autorizado por el SRI cuando aplica).
             if (!empty($nc['detalle_xml'])) {
-                \App\Helpers\XmlAutorizadoSri::descargar($nc['detalle_xml'], $nc['clave_acceso'] ?? null, 'nc_' . $numero . '.xml');
+                \App\Helpers\XmlAutorizadoSri::descargar($nc['detalle_xml'], 'nc_' . $numero . '.xml');
                 exit;
             }
 
@@ -1049,7 +1049,7 @@ class NotasCreditoController extends BaseModuloController
 
             try { $this->repository->updateDetalleXml($id, $xmlString); } catch (\Throwable $e) {}
 
-            \App\Helpers\XmlAutorizadoSri::descargar($xmlString, $nc['clave_acceso'] ?? null, 'nc_' . $numero . '.xml');
+            \App\Helpers\XmlAutorizadoSri::descargar($xmlString, 'nc_' . $numero . '.xml');
         } catch (\Throwable $e) {
             die('Error al generar XML: ' . $e->getMessage());
         }
@@ -1187,7 +1187,7 @@ class NotasCreditoController extends BaseModuloController
 
         // Servir desde detalle_xml si existe
         if (!empty($nc['detalle_xml'])) {
-            \App\Helpers\XmlAutorizadoSri::descargar($nc['detalle_xml'], $nc['clave_acceso'] ?? null, $filename);
+            \App\Helpers\XmlAutorizadoSri::descargar($nc['detalle_xml'], $filename);
             exit;
         }
 
@@ -1221,7 +1221,7 @@ class NotasCreditoController extends BaseModuloController
 
             $this->repository->updateDetalleXml($id, $xml);
 
-            \App\Helpers\XmlAutorizadoSri::descargar($xml, $nc['clave_acceso'] ?? null, $filename);
+            \App\Helpers\XmlAutorizadoSri::descargar($xml, $filename);
         } catch (\Throwable $e) {
             http_response_code(500); echo 'Error generando XML: ' . $e->getMessage();
         }

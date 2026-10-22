@@ -2079,7 +2079,7 @@ class FacturaVentaController extends BaseModuloController
 
             // Servir desde detalle_xml si ya está persistido
             if (!empty($factura['detalle_xml'])) {
-                \App\Helpers\XmlAutorizadoSri::descargar($factura['detalle_xml'], $factura['clave_acceso'] ?? null, $filename);
+                \App\Helpers\XmlAutorizadoSri::descargar($factura['detalle_xml'], $filename);
                 exit;
             }
 
@@ -2126,7 +2126,7 @@ class FacturaVentaController extends BaseModuloController
                 error_log('[FacturaVenta] No se pudo persistir detalle_xml en fallback: ' . $e->getMessage());
             }
 
-            \App\Helpers\XmlAutorizadoSri::descargar($xmlString, $factura['clave_acceso'] ?? null, $filename);
+            \App\Helpers\XmlAutorizadoSri::descargar($xmlString, $filename);
         } catch (\Throwable $e) {
             http_response_code(500); echo 'Error al generar XML: ' . $e->getMessage();
         }
@@ -2374,7 +2374,7 @@ class FacturaVentaController extends BaseModuloController
                   . str_pad((string)($factura['secuencial'] ?? ''), 9, '0', STR_PAD_LEFT);
         $filename = 'factura_' . $numero . '.xml';
 
-        \App\Helpers\XmlAutorizadoSri::descargar($xmlContent, $factura['clave_acceso'] ?? null, $filename);
+        \App\Helpers\XmlAutorizadoSri::descargar($xmlContent, $filename);
         exit;
     }
 
