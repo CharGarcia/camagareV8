@@ -124,9 +124,10 @@ class SuscripcionesController extends BaseModuloController
             'ordenDir'       => $ordenDir,
             'vistaConfig'    => $prefsVista,
             'periodicidades' => $periodicidades,
-            // Condominios activo en esta empresa: el modal muestra el selector de inmueble y el
-            // listado la columna Inmueble.
+            // Condominios activo en esta empresa: el modal muestra el selector de inmueble.
             'esCondominio'   => \App\Services\modulos\CondominioService::activo($idEmpresa),
+            // Columna Inmueble del listado: solo para quien tiene asignado Condominios.
+            'verInmueble'    => $this->verInmueble(),
             // Selects del modal de filtros (solo valores usados por la empresa).
             'opcionesFiltro' => $this->service->getOpcionesFiltro($idEmpresa),
             'tarifasIva'     => $tarifasIva,
@@ -236,6 +237,8 @@ class SuscripcionesController extends BaseModuloController
             'cancelado'  => 'secondary',
         ];
 
+        $verInmueble = $this->verInmueble();
+
         ob_start();
         foreach ($result['rows'] as $r) {
             $cls        = $estadoClases[$r['estado'] ?? 'activo'] ?? 'secondary';
@@ -250,7 +253,9 @@ class SuscripcionesController extends BaseModuloController
             echo '<tr class="susc-row" role="button" data-susc=\'' . htmlspecialchars(json_encode($r), ENT_QUOTES) . '\' onclick="abrirModalSuscEditar(this)">';
             echo '<td class="ps-3 fw-medium" data-col="nombre_cliente">' . htmlspecialchars($r['nombre_cliente'] ?? '') . '</td>';
             echo '<td data-col="identificacion_cliente"><small class="text-muted">' . htmlspecialchars($r['identificacion_cliente'] ?? '') . '</small></td>';
-            echo '<td data-col="inmueble"><small>' . htmlspecialchars($r['inmueble'] ?? '—') . '</small></td>';
+            if ($verInmueble) {
+                echo '<td data-col="inmueble"><small>' . htmlspecialchars($r['inmueble'] ?? '—') . '</small></td>';
+            }
             echo '<td data-col="nombre_periodicidad">' . htmlspecialchars($r['nombre_periodicidad'] ?? '—') . '</td>';
             echo '<td class="text-center" data-col="tipo_comprobante"><small class="text-muted">' . htmlspecialchars(ucwords(str_replace('_', ' ', $r['tipo_comprobante'] ?? 'Factura'))) . '</small></td>';
             echo '<td class="text-center" data-col="forma_cobro">' . $iconoCobro . ' ' . ucfirst($r['forma_cobro'] ?? '') . '</td>';
@@ -1050,6 +1055,29 @@ class SuscripcionesController extends BaseModuloController
         return $data['rows'] ?? [];
     }
 
+    /**
+     * Columna Inmueble (listado y exportaciones): oculta mientras el módulo de Condominios no
+     * esté definido. Al habilitarla, mostrarla solo a quien tenga asignado
+     * modulos/condominios-config:
+     *   return !empty($this->permisosModuloPorRuta('modulos/condominios-config')['ver']);
+     */
+    private function verInmueble(): bool
+    {
+        return false;
+    }
+
+    /** Posición de Inmueble en CABECERAS_EXPORT / filaExport(). */
+    private const POS_INMUEBLE_EXPORT = 2;
+
+    /** Quita la columna Inmueble de una cabecera/fila de exportación si el usuario no la ve. */
+    private function sinInmuebleSiNoAplica(array $celdas): array
+    {
+        if (!$this->verInmueble()) {
+            array_splice($celdas, self::POS_INMUEBLE_EXPORT, 1);
+        }
+        return $celdas;
+    }
+
     private const CABECERAS_EXPORT = [
         'Cliente', 'Identificación', 'Inmueble', 'Periodicidad', 'Comprobante', 'Forma de cobro',
         'Modalidad', 'Reconocimiento',
@@ -1060,7 +1088,7 @@ class SuscripcionesController extends BaseModuloController
     private function filaExport(array $r): array
     {
         $fecha = static fn($v) => !empty($v) ? date('d-m-Y', strtotime((string) $v)) : '-';
-        return [
+        return $this->sinInmuebleSiNoAplica([
             (string) ($r['nombre_cliente'] ?? ''),
             (string) ($r['identificacion_cliente'] ?? ''),
             (string) ($r['inmueble'] ?? '-'),
@@ -1075,7 +1103,7 @@ class SuscripcionesController extends BaseModuloController
             (string) ((int) ($r['total_items'] ?? 0)),
             number_format((float) ($r['monto_total'] ?? 0), 2, '.', ''),
             ucfirst((string) ($r['estado'] ?? 'activo')),
-        ];
+        ]);
     }
 
     public function exportPdf(): void
@@ -1093,7 +1121,10 @@ class SuscripcionesController extends BaseModuloController
                 require_once $autoload;
             }
 
-            $anchos = ['16%', '10%', '8%', '7%', '7%', '8%', '9%', '7%', '7%', '7%', '4%', '5%', '5%'];
+            // Un ancho por columna exportada; sin Inmueble, su 8% pasa a Cliente e Identificación.
+            $anchos = $this->verInmueble()
+                ? ['14%', '9%', '8%', '7%', '7%', '6%', '7%', '7%', '7%', '7%', '7%', '4%', '5%', '5%']
+                : ['19%', '12%', '7%', '7%', '6%', '7%', '7%', '7%', '7%', '7%', '4%', '5%', '5%'];
 
             // Resumen de valores (mismas suscripciones del listado = filtro de búsqueda).
             $filtro      = trim($_GET['b'] ?? $_POST['b'] ?? '');
@@ -1158,7 +1189,7 @@ class SuscripcionesController extends BaseModuloController
                 <table>
                     <thead>
                         <tr>
-                            <?php foreach (self::CABECERAS_EXPORT as $i => $h): ?>
+                            <?php foreach ($this->sinInmuebleSiNoAplica(self::CABECERAS_EXPORT) as $i => $h): ?>
                                 <th style="width: <?= $anchos[$i] ?? 'auto' ?>"><?= htmlspecialchars($h) ?></th>
                             <?php endforeach; ?>
                         </tr>
@@ -1316,7 +1347,7 @@ class SuscripcionesController extends BaseModuloController
 
             $reportService = new \App\Services\ReportService();
             $libro = $reportService->construirSpreadsheet(
-                self::CABECERAS_EXPORT,
+                $this->sinInmuebleSiNoAplica(self::CABECERAS_EXPORT),
                 $exportData,
                 'Listado de Suscripciones',
                 $nombreEmpresa,
