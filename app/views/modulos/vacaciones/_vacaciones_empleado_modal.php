@@ -36,7 +36,8 @@ $mesActualVE  = (int) date('n');
             <div class="modal-body">
                 <div class="alert alert-light border small py-2 mb-3 d-flex flex-wrap gap-3" data-rol="resumen">
                     <span><i class="bi bi-person me-1 text-muted"></i><b data-rol="res-empleado">—</b></span>
-                    <span class="text-muted">Saldo: <b data-rol="res-saldo">—</b></span>
+                    <span class="text-muted" title="Saldo a la fecha desde de esta vacación">Disponible al <span data-rol="res-fecha">—</span>: <b data-rol="res-saldo" class="text-primary">—</b></span>
+                    <span class="text-muted">Queda después: <b data-rol="res-despues">—</b></span>
                     <span class="text-muted">Sueldo: <b data-rol="res-sueldo">—</b></span>
                 </div>
 

@@ -163,6 +163,31 @@ class VacacionesController extends BaseModuloController
     }
 
     /**
+     * Saldo del empleado a la fecha desde de una vacación (disponible antes de ella).
+     * GET: id_empleado, fecha (Y-m-d), exclude (vacación en edición).
+     */
+    public function getSaldoFechaAjax(): void
+    {
+        $this->requireLeer();
+        header('Content-Type: application/json');
+        $idEmp = (int) ($_GET['id_empleado'] ?? 0);
+        $excl  = (int) ($_GET['exclude'] ?? 0) ?: null;
+        $fecha = (string) ($_GET['fecha'] ?? '');
+        $f = \DateTime::createFromFormat('!Y-m-d', $fecha);
+        if (!$f || $f->format('Y-m-d') !== $fecha) {
+            $fecha = date('Y-m-d');
+        }
+        try {
+            $info = $this->service->getSaldoAFecha($idEmp, (int) $_SESSION['id_empresa'], $fecha, $excl);
+            echo json_encode(['ok' => true, 'data' => $info]);
+        } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
+            echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
+        }
+        exit;
+    }
+
+    /**
      * Marca como tomados o pagados antes del sistema los períodos elegidos del empleado.
      * POST: id_empleado, estado (tomado|pagado), periodos[número] = días, observacion.
      */

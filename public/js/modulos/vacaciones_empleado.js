@@ -190,8 +190,41 @@
 
         pintarResumen() {
             this.m('res-empleado').textContent = this.empleado.nombre || '—';
-            this.m('res-saldo').textContent = this.empleado.saldo != null ? `${dias(this.empleado.saldo)} día(s)` : '—';
             this.m('res-sueldo').textContent = this.empleado.sueldo != null ? money(this.empleado.sueldo) : '—';
+            this.disponible = null;
+            this.m('res-fecha').textContent = fecha(this.m('f-desde').value);
+            this.m('res-saldo').textContent = '—';
+            this.pintarDespues();
+            this.cargarSaldo();
+        }
+
+        /**
+         * Saldo a la fecha desde de la vacación (no a hoy): lo disponible antes de ella,
+         * sin contar la que se está editando.
+         */
+        async cargarSaldo() {
+            if (!this.idEmpleado) return;
+            const seq = this.saldoSeq = (this.saldoSeq || 0) + 1;
+            const desde = this.m('f-desde').value || '';
+            const qs = new URLSearchParams({ id_empleado: this.idEmpleado, fecha: desde, exclude: this.m('f-id').value || 0 });
+            try {
+                const resp = await fetch(`${this.url}/getSaldoFechaAjax?${qs}`);
+                const json = await resp.json();
+                if (seq !== this.saldoSeq || !json.ok) return;
+                this.disponible = parseFloat(json.data.disponible) || 0;
+                this.m('res-fecha').textContent = fecha(json.data.fecha);
+                this.m('res-saldo').textContent = `${dias(this.disponible)} día(s)`;
+                this.m('res-saldo').classList.toggle('text-danger', this.disponible < 0);
+                this.pintarDespues();
+            } catch (e) { }
+        }
+
+        pintarDespues() {
+            const n = this.m('res-despues');
+            if (this.disponible == null) { n.textContent = '—'; return; }
+            const despues = Math.round((this.disponible - (parseFloat(this.m('f-dias').value) || 0)) * 100) / 100;
+            n.textContent = `${dias(despues)} día(s)`;
+            n.classList.toggle('text-danger', despues < 0);
         }
 
         mostrarModal() {
@@ -203,6 +236,7 @@
             const d = parseFloat(this.m('f-dias').value) || 0;
             const sueldo = parseFloat(this.empleado.sueldo) || 0;
             this.m('f-valor').value = money((sueldo / 30) * d);
+            this.pintarDespues();
         }
 
         async guardar() {
@@ -317,6 +351,8 @@
                     this.m('f-anio').value = d.substring(0, 4);
                 }
             }));
+            // El saldo es a la fecha desde: si cambia, se vuelve a calcular.
+            this.m('f-desde').addEventListener('change', () => this.cargarSaldo());
 
             this.m('btn-guardar').addEventListener('click', () => this.guardar());
             this.m('btn-eliminar')?.addEventListener('click', () => this.eliminar());

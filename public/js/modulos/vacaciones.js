@@ -1,9 +1,9 @@
 /**
  * Modal de Vacaciones (Nómina): empleado con buscador, saldo y valor.
  *
- * El saldo sale del cuadro de períodos (CuadroPeriodosVacaciones, en
- * vacaciones_periodos.js), que aquí queda siempre oculto: el detalle por período se
- * revisa en la pestaña Vacaciones de la ficha del empleado.
+ * El saldo se calcula a la FECHA DESDE de la vacación (getSaldoFechaAjax), no a hoy:
+ * lo disponible antes de ella, esta vacación y lo que queda después. Así cada
+ * registro conserva su saldo aunque luego se registren otras vacaciones.
  */
 (function (window, document) {
     'use strict';
@@ -31,30 +31,54 @@
         return modalInst;
     }
 
-    // ─── Panel de saldo (datos del cuadro de períodos oculto) ────────────────
-    const cuadro = new window.CuadroPeriodosVacaciones($('vac_cuadro_periodos'), { onCambio: pintarPanel });
+    // ─── Panel de saldo a la fecha desde ─────────────────────────────────────
+    let disponible = null;   // días disponibles antes de esta vacación
+    let saldoSeq = 0;        // descarta respuestas viejas si se cambia la fecha rápido
 
     function pintarPanel(d) {
-        const saldo = parseFloat(d.saldo) || 0;
+        disponible = parseFloat(d.disponible) || 0;
         sueldoEmp = parseFloat(d.sueldo_base) || 0;
         $('vac_info_antig').textContent = d.antiguedad || '—';
         $('vac_info_derecho').textContent = d.fecha_ingreso ? `Derecho del año: ${dias(d.derecho_anio_actual)}` : '';
         $('vac_info_acumulado').textContent = dias(d.total_derecho);
         $('vac_info_marcados').textContent = dias(d.dias_marcados);
-        $('vac_info_gozados').textContent = dias(d.dias_gozados_total);
-        $('vac_info_saldo').textContent = dias(saldo);
-        $('vac_info_saldo').classList.toggle('text-danger', saldo < 0);
-        $('vac_info_saldo').classList.toggle('text-primary', saldo >= 0);
+        $('vac_info_gozados').textContent = dias(d.dias_gozados_antes);
+        $('vac_info_fecha').textContent = fmtFecha(d.fecha);
+        $('vac_info_saldo').textContent = dias(disponible);
+        $('vac_info_saldo').classList.toggle('text-danger', disponible < 0);
+        $('vac_info_saldo').classList.toggle('text-primary', disponible >= 0);
         $('vac_info_sueldo').textContent = money(d.sueldo_base);
         $('vac_info_ingreso').textContent = d.fecha_ingreso ? fmtFecha(d.fecha_ingreso) : 'sin registrar';
         $('vac_info').classList.remove('d-none');
         recalcularValor();
     }
 
-    async function cargarInfoEmpleado(idEmpleado) {
-        // Al editar, la vacación abierta no cuenta en el saldo (se está reemplazando).
-        const d = await cuadro.cargar(idEmpleado, { exclude: $('vac_id').value || 0 });
-        if (d) pintarPanel(d);
+    /** Esta vacación y lo que queda después (se repinta al cambiar los días). */
+    function pintarDespues() {
+        const esta = parseFloat($('vac_dias').value) || 0;
+        $('vac_info_esta').textContent = dias(esta);
+        if (disponible === null) { $('vac_info_despues').textContent = '—'; return; }
+        const despues = Math.round((disponible - esta) * 100) / 100;
+        $('vac_info_despues').textContent = dias(despues);
+        $('vac_info_despues').classList.toggle('text-danger', despues < 0);
+    }
+
+    async function cargarSaldo() {
+        const idEmpleado = empHidden ? empHidden.value : '';
+        if (!idEmpleado) return;
+        const seq = ++saldoSeq;
+        // Al editar, la vacación abierta no cuenta (se está reemplazando).
+        const qs = new URLSearchParams({
+            id_empleado: idEmpleado,
+            fecha: $('vac_fecha_desde').value || '',
+            exclude: $('vac_id').value || 0,
+        });
+        try {
+            const resp = await fetch(`${urlModulo}/getSaldoFechaAjax?${qs}`);
+            const json = await resp.json();
+            if (seq !== saldoSeq) return;
+            if (json.ok) pintarPanel(json.data);
+        } catch (e) { }
     }
 
     // ─── Buscador de empleado ────────────────────────────────────────────────
@@ -67,9 +91,10 @@
         if (empBuscar) empBuscar.value = texto || '';
         ocultarResultados();
         if (id) {
-            cargarInfoEmpleado(id);
+            cargarSaldo();
         } else {
-            cuadro.limpiar();
+            saldoSeq++;
+            disponible = null;
             $('vac_info').classList.add('d-none');
             sueldoEmp = 0;
             recalcularValor();
@@ -126,6 +151,7 @@
     function recalcularValor() {
         const d = parseFloat($('vac_dias').value) || 0;
         $('vac_valor_preview').value = money((sueldoEmp / 30) * d);
+        pintarDespues();
     }
 
     function diasEntreFechas() {
@@ -148,6 +174,8 @@
             $('vac_periodo_anio').value = fd.substring(0, 4);
         }
     }));
+    // El saldo es a la fecha desde: si cambia, se vuelve a calcular.
+    $('vac_fecha_desde').addEventListener('change', cargarSaldo);
 
     // ─── Abrir / guardar ─────────────────────────────────────────────────────
     window.abrirModalCrear = function () {
@@ -179,6 +207,7 @@
         $('tituloModalVac').textContent = 'Editar Vacación';
         $('btnEliminarVac')?.classList.remove('d-none');
         $('vac_estado').disabled = false;
+        setEmpleado('', '');
         getModal()?.show();
         document.getElementById('vac-modal-loader')?.classList.remove('d-none');
 
@@ -187,11 +216,12 @@
             const res = await resp.json();
             if (!res.ok) return;
             const d = res.data;
-            setEmpleado(d.id_empleado || '', d.empleado_nombre ? `${d.empleado_nombre} (${d.empleado_identificacion || ''})` : '');
             $('vac_estado').value = d.estado || 'registrado';
             $('vac_fecha_desde').value = d.fecha_desde || '';
             $('vac_fecha_hasta').value = d.fecha_hasta || '';
             $('vac_dias').value = d.dias_gozados != null ? parseFloat(d.dias_gozados) : 0;
+            // Después de las fechas: el saldo se calcula a la fecha desde.
+            setEmpleado(d.id_empleado || '', d.empleado_nombre ? `${d.empleado_nombre} (${d.empleado_identificacion || ''})` : '');
             $('vac_periodo_mes').value = String(parseInt(d.periodo_mes, 10) || '');
             $('vac_periodo_anio').value = d.periodo_anio || '';
             $('vac_afecta_rol').checked = (d.afecta_rol === true || d.afecta_rol === 't' || d.afecta_rol === '1' || d.afecta_rol === 1);

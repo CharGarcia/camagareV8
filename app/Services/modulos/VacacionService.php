@@ -102,6 +102,49 @@ class VacacionService
     }
 
     /**
+     * Saldo del empleado a una fecha (la fecha desde de una vacación): lo que tenía
+     * disponible justo antes de esa vacación. No cambia aunque después se registren
+     * otras vacaciones posteriores.
+     *
+     * Disponible = derecho acumulado hasta la fecha − períodos marcados como
+     * tomados/pagados antes del sistema que ya existían a esa fecha − vacaciones que
+     * empiezan antes (sin contar $excludeVacacion, la que se está editando).
+     */
+    public function getSaldoAFecha(int $idEmpleado, int $idEmpresa, string $fecha, ?int $excludeVacacion = null): array
+    {
+        $emp = $this->repo->getEmpleado($idEmpleado, $idEmpresa);
+        if (!$emp) throw new Exception('Empleado no encontrado.');
+
+        $fechaIngreso = $this->repo->getFechaIngreso($idEmpleado, $idEmpresa);
+        $gozados = $this->repo->getDiasGozadosAntesDe($idEmpleado, $idEmpresa, $fecha, $excludeVacacion);
+
+        $ant = $fechaIngreso
+            ? $this->calc->antiguedad($fechaIngreso, $fecha)
+            : ['anios_completos' => 0, 'anios_texto' => 'Sin fecha de ingreso', 'derecho_anio_actual' => 15, 'total_derecho' => 0.0];
+
+        // Mismo cuadro que la ficha, pero cortado a la fecha: una marca de un período
+        // que a esa fecha aún no empezaba no descuenta.
+        $cuadro = $this->armarPeriodos(
+            $fechaIngreso ? $this->calc->periodos($fechaIngreso, $fecha) : [],
+            $this->periodosRepo->getMarcados($idEmpleado, $idEmpresa),
+            $gozados
+        );
+
+        return [
+            'id_empleado'         => $idEmpleado,
+            'fecha'               => $fecha,
+            'sueldo_base'         => (float) $emp['sueldo_base'],
+            'fecha_ingreso'       => $fechaIngreso,
+            'antiguedad'          => $ant['anios_texto'],
+            'derecho_anio_actual' => $ant['derecho_anio_actual'],
+            'total_derecho'       => $ant['total_derecho'],
+            'dias_marcados'       => $cuadro['dias_marcados'],
+            'dias_gozados_antes'  => round($gozados, 2),
+            'disponible'          => $this->calc->saldo($ant['total_derecho'], $gozados + $cuadro['dias_marcados']),
+        ];
+    }
+
+    /**
      * Cuadro de períodos de servicio. A cada año se le resta lo marcado como tomado o
      * pagado antes del sistema y, después, los días gozados registrados en el sistema se
      * reparten del período más antiguo al más nuevo (así se consumen las vacaciones).

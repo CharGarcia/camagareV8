@@ -42,31 +42,25 @@ $mesActual  = (int) date('n');
                             </select>
                         </div>
 
-                        <!-- Panel de saldo del empleado -->
+                        <!-- Saldo del empleado a la fecha desde de esta vacación (no a hoy):
+                             cada registro muestra lo que tenía disponible antes de él. -->
                         <div class="col-12">
                             <div id="vac_info" class="d-none border rounded-3 bg-light p-2">
-                                <div class="row row-cols-2 row-cols-md-6 text-center small g-2">
-                                    <div class="col"><span class="text-muted d-block">Antigüedad</span><b id="vac_info_antig">—</b><span class="d-block text-muted" id="vac_info_derecho"></span></div>
+                                <div class="row row-cols-2 row-cols-md-4 text-center small g-2">
+                                    <div class="col"><span class="text-muted d-block">Antigüedad a esa fecha</span><b id="vac_info_antig">—</b><span class="d-block text-muted" id="vac_info_derecho"></span></div>
                                     <div class="col"><span class="text-muted d-block">Derecho acumulado</span><b id="vac_info_acumulado">—</b></div>
-                                    <div class="col"><span class="text-muted d-block" title="Días de los períodos marcados como tomados o pagados antes de usar el sistema">Tomados/pagados antes</span><b id="vac_info_marcados">—</b></div>
-                                    <div class="col"><span class="text-muted d-block">Gozados en el sistema</span><b id="vac_info_gozados">—</b></div>
-                                    <div class="col"><span class="text-muted d-block">Saldo pendiente</span><b id="vac_info_saldo" class="text-primary">—</b></div>
+                                    <div class="col"><span class="text-muted d-block" title="Días de los períodos marcados como tomados o pagados antes de usar el sistema">Tomados/pagados antes del sistema</span><b id="vac_info_marcados">—</b></div>
+                                    <div class="col"><span class="text-muted d-block" title="Vacaciones registradas que empiezan antes de esta">Vacaciones anteriores</span><b id="vac_info_gozados">—</b></div>
+                                    <div class="col"><span class="text-muted d-block">Disponible al <span id="vac_info_fecha">—</span></span><b id="vac_info_saldo" class="text-primary">—</b></div>
+                                    <div class="col"><span class="text-muted d-block">Esta vacación</span><b id="vac_info_esta">—</b></div>
+                                    <div class="col"><span class="text-muted d-block">Queda después</span><b id="vac_info_despues">—</b></div>
                                     <div class="col"><span class="text-muted d-block">Sueldo</span><b id="vac_info_sueldo">—</b></div>
                                 </div>
                                 <div class="d-flex align-items-center flex-wrap gap-2 border-top mt-2 pt-2 small">
                                     <span class="text-muted">Ingreso: <b id="vac_info_ingreso">—</b></span>
+                                    <span class="text-muted ms-auto"><i class="bi bi-info-circle me-1"></i>Calculado a la fecha desde de esta vacación.</span>
                                 </div>
                             </div>
-                        </div>
-
-                        <!-- Cuadro de períodos: siempre oculto aquí (el detalle confundía al usuario);
-                             solo se usa para traer el saldo del empleado. Los períodos se revisan y
-                             marcan en la pestaña Vacaciones de la ficha del empleado. -->
-                        <div class="d-none" id="vac_periodos">
-                            <?php
-                            $cuadroPeriodos = ['id' => 'vac_cuadro_periodos', 'puede_marcar' => false, 'con_resumen' => false];
-                            include __DIR__ . '/_cuadro_periodos.php';
-                            ?>
                         </div>
 
                         <!-- Datos de la vacación -->

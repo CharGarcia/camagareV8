@@ -169,7 +169,6 @@ $colores = ['registrado' => 'info', 'pagado' => 'success', 'anulado' => 'danger'
 
 <script>window.BASE_URL = '<?= $base ?>';</script>
 <?php include 'modal_vacacion.php'; ?>
-<script src="<?= $base ?>/js/modulos/vacaciones_periodos.js?v=<?= asset_ver('/js/modulos/vacaciones_periodos.js') ?>"></script>
 <script src="<?= $base ?>/js/modulos/vacaciones.js?v=<?= asset_ver('/js/modulos/vacaciones.js') ?>"></script>
 
 <script>

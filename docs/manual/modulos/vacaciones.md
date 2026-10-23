@@ -6,7 +6,7 @@ ruta_modulo: modulos/vacaciones
 tipo: modulo
 visibilidad: todos
 etiquetas: vacaciones, dias de vacaciones, descanso, saldo de vacaciones, antiguedad, gozadas, periodo vacacional, buscar vacaciones, buscador, filtros, filtrar vacaciones, vacaciones por empleado, chips, periodos, periodos de vacaciones, periodos tomados, periodos pagados, vacaciones tomadas, vacaciones pagadas, vacaciones no gozadas, vacaciones acumuladas, saldo inicial de vacaciones, ajustar saldo, empleados de otro sistema, migracion de empleados, vacaciones al dia, solicitud de vacaciones, solicitar vacaciones, pedir vacaciones, permiso de vacaciones, formulario de vacaciones, enlace por correo, aprobar vacaciones, rechazar vacaciones, autorizar vacaciones, solicitudes pendientes, pdf de vacaciones, imprimir vacaciones, detalle de vacaciones
-version: 1.8
+version: 1.9
 orden: 40
 estado: activo
 ---
@@ -23,15 +23,30 @@ el sexto año, 17 el séptimo…), con un **tope de 30 días**.
 El sistema calcula el derecho a partir de la fecha de ingreso del empleado, así
 que esa fecha tiene que estar bien en su ficha.
 
-Al elegir un empleado, el panel de saldo muestra:
+### Saldo de cada vacación (a su fecha desde)
+
+Al registrar o abrir una vacación, el panel de saldo se calcula **a la fecha
+desde de esa vacación**, no a la fecha de hoy. Así cada registro muestra lo que
+el empleado tenía disponible justo antes de él, y ese número no cambia aunque
+después se registren otras vacaciones. Si cambia la fecha desde, el saldo se
+vuelve a calcular.
 
 | Dato | Qué es |
 |------|--------|
-| Antigüedad | Tiempo desde la fecha de ingreso, y los días de derecho del año en curso |
-| Derecho acumulado | Todos los días ganados desde el ingreso, con la parte proporcional del año en curso |
-| Tomados/pagados antes | Días de los períodos marcados como ya tomados o pagados antes de usar el sistema |
-| Gozados en el sistema | Días de las vacaciones registradas en este módulo (sin las anuladas) |
-| Saldo pendiente | Derecho acumulado − tomados/pagados antes − gozados en el sistema |
+| Antigüedad a esa fecha | Tiempo desde la fecha de ingreso hasta la fecha desde, y los días de derecho de ese año |
+| Derecho acumulado | Días ganados desde el ingreso hasta la fecha desde, con la parte proporcional del año en curso |
+| Tomados/pagados antes del sistema | Días de los períodos marcados como ya tomados o pagados antes de usar el sistema |
+| Vacaciones anteriores | Días de las vacaciones registradas que empiezan antes de esta (sin las anuladas ni la que está abierta) |
+| Disponible al (fecha) | Derecho acumulado − tomados/pagados antes − vacaciones anteriores |
+| Esta vacación | Días gozados de la vacación que está registrando o editando |
+| Queda después | Disponible − esta vacación. En rojo si queda en negativo |
+
+> Ejemplo: un empleado tiene vacaciones en marzo y en agosto. Al abrir la de
+> marzo se ve lo que tenía en marzo (sin restar la de agosto); al abrir la de
+> agosto, lo que tenía en agosto (ya restada la de marzo).
+
+En la ficha del empleado (módulo **Empleados**, pestaña *Vacaciones*) el saldo
+general del empleado sigue siendo a la fecha de hoy.
 
 ## Períodos ya tomados o pagados antes del sistema
 
@@ -280,6 +295,11 @@ búsqueda**. La **×** quita solo ese filtro, y con el cuadro vacío la tecla
   administrador; el resto del módulo sigue funcionando igual.
 
 ## Historial de cambios
+
+- **1.9** — El saldo del formulario de cada vacación se calcula ahora **a su
+  fecha desde** (antes era a la fecha de hoy y cambiaba con cada registro nuevo).
+  Muestra *Disponible al (fecha)*, *Esta vacación* y *Queda después*. Igual en el
+  formulario que se abre desde la ficha del empleado.
 
 - **1.8** — Se quitaron los botones **Períodos** y **Solicitudes** del listado, y
   el formulario de cada vacación ya no muestra el detalle de períodos (solo el

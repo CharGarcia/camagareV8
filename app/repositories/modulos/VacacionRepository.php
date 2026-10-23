@@ -224,6 +224,25 @@ class VacacionRepository extends BaseRepository
     }
 
     /**
+     * Días gozados (no anulados) de las vacaciones del empleado que empiezan antes de
+     * una fecha. Las del mismo día cuentan como anteriores si son más antiguas que la
+     * vacación $excludeId (o todas, si es una vacación nueva); esa nunca cuenta.
+     */
+    public function getDiasGozadosAntesDe(int $idEmpleado, int $idEmpresa, string $fecha, ?int $excludeId = null): float
+    {
+        $sql = "SELECT COALESCE(SUM(dias_gozados), 0) FROM {$this->table}
+                WHERE id_empleado = :e AND id_empresa = :emp AND eliminado = false AND estado != 'anulado'
+                  AND tipo_ambiente = (SELECT CAST(tipo_ambiente AS VARCHAR(1)) FROM empresas WHERE id = :emp2)
+                  AND (fecha_desde < :f1 OR (fecha_desde = :f2 AND (:id1 = 0 OR id < :id2)))";
+        $id = (int) ($excludeId ?? 0);
+        $p = [':e' => $idEmpleado, ':emp' => $idEmpresa, ':emp2' => $idEmpresa, ':f1' => $fecha, ':f2' => $fecha, ':id1' => $id, ':id2' => $id];
+        if ($id > 0) { $sql .= " AND id != :id3"; $p[':id3'] = $id; }
+        $st = $this->db->prepare($sql);
+        $st->execute($p);
+        return (float) $st->fetchColumn();
+    }
+
+    /**
      * Vacaciones registradas del empleado, de la más reciente a la más antigua
      * (PDF del detalle de vacaciones). Incluye las anuladas: el PDF las muestra
      * como tales y no las suma en los totales.
