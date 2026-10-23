@@ -1320,6 +1320,41 @@ class CuentasPorCobrarRepository extends BaseRepository
         return $st->fetchAll(PDO::FETCH_ASSOC);
     }
 
+    /**
+     * Descripciones de los ítems de varias facturas y recibos, para el concepto de los
+     * mensajes de cobro por WhatsApp (ConceptosCobro). Los ids ya llegan validados contra
+     * la empresa y el alcance del usuario por quien llama (getFacturaParaCobro /
+     * getReciboParaCobro), igual que en getLineasFactura().
+     *
+     * @return array<string,string[]> 'FACTURA:id' | 'RECIBO:id' => descripciones en el orden del documento
+     */
+    public function getDescripcionesDocumentos(array $idsFacturas, array $idsRecibos): array
+    {
+        $out = [];
+        $fuentes = [
+            ['FACTURA', 'ventas_detalle',        'id_venta',  $idsFacturas, 'df'],
+            ['RECIBO',  'recibos_venta_detalle', 'id_recibo', $idsRecibos,  'dr'],
+        ];
+        foreach ($fuentes as [$origen, $tabla, $fk, $ids, $pref]) {
+            $ids = array_values(array_unique(array_filter(array_map('intval', $ids))));
+            if (!$ids) {
+                continue;
+            }
+            $params = [];
+            $in  = $this->phIn($ids, $pref, $params);
+            $sql = "SELECT d.{$fk} AS id_doc, d.descripcion
+                    FROM {$tabla} d
+                    WHERE d.{$fk} IN ({$in})
+                    ORDER BY d.{$fk}, d.id";
+            $st = $this->db->prepare($sql);
+            $st->execute($params);
+            foreach ($st->fetchAll(PDO::FETCH_ASSOC) as $l) {
+                $out[$origen . ':' . (int) $l['id_doc']][] = (string) ($l['descripcion'] ?? '');
+            }
+        }
+        return $out;
+    }
+
     // ─────────────────────────────────────────────────────────────────────
     // SALDOS INICIALES CXC
     // ─────────────────────────────────────────────────────────────────────

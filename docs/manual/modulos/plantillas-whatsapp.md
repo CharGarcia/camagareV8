@@ -5,8 +5,8 @@ categoria: Herramientas
 ruta_modulo: modulos/plantillas-whatsapp
 tipo: modulo
 visibilidad: todos
-etiquetas: whatsapp, plantillas, meta, mensajes aprobados, link de pago, enlace de pago, payphone, nuvei, enviar factura por whatsapp, enviar proforma por whatsapp, variables, aprobacion, estado de cuenta, estado_cuenta_cliente, resumen de deuda, facturas pendientes
-version: 1.1
+etiquetas: whatsapp, plantillas, meta, mensajes aprobados, link de pago, enlace de pago, payphone, nuvei, enviar factura por whatsapp, enviar proforma por whatsapp, variables, aprobacion, estado de cuenta, estado_cuenta_cliente, resumen de deuda, facturas pendientes, detalle de lo que se cobra, por concepto de, factura_por_cobrar, cuenta_por_cobrar, texto sugerido, editar plantilla, no guarda la plantilla editada
+version: 1.2
 orden: 21
 estado: activo
 ---
@@ -61,12 +61,12 @@ con la opción de borrarla también en Meta.
 | Plantilla | Adjunta PDF | Variables (en orden) | Quién la usa |
 |-----------|-------------|----------------------|--------------|
 | `factura_venta` | Sí | Cliente, Número, Total | Facturas de Venta, POS |
-| `factura_por_cobrar` | Sí | Cliente, Valor pendiente, Número | Facturas de Venta |
+| `factura_por_cobrar` | Sí | Cliente, Valor pendiente, Número, Detalle de lo que se cobra | Facturas de Venta, Cuentas por Cobrar |
 | `proforma` | Sí | Cliente, Número de proforma, Total | Proformas |
 | `link_pago_payphone` | No | Cliente, Monto, Referencia, Enlace | Facturas de Venta, POS |
 | `link_pago_nuvei` | No | Cliente, Monto, Referencia, Enlace | Facturas de Venta |
-| `cuenta_por_cobrar` | No | Cliente, Total por cobrar | Cuentas por Cobrar |
-| `estado_cuenta_cliente` | No | Cliente, N° de facturas pendientes, Valor pendiente, Empresa que emite | Cuentas por Cobrar (vista Por cliente) |
+| `cuenta_por_cobrar` | No | Cliente, Total por cobrar, Detalle de lo que se cobra | Cuentas por Cobrar |
+| `estado_cuenta_cliente` | No | Cliente, N° de facturas pendientes, Valor pendiente, Detalle de lo que se cobra, Empresa que emite | Cuentas por Cobrar (vista Por cliente) |
 | `renovacion_suscripcion` | No | Cliente, Fecha de renovación | Suscripciones |
 | `renovacion_firma_electronica` | No | Cliente, Fecha de vencimiento | Firmas Electrónicas |
 | `retencion_compra` | Sí | Proveedor, Número, Valor retenido | Retenciones en Compras |
@@ -80,6 +80,30 @@ con la opción de borrarla también en Meta.
 Cada plantilla rápida se ofrece **solo en su módulo**: las de link de pago no
 aparecen al enviar una proforma ni una orden de taller, y la de proforma no
 aparece en el modal de facturas.
+
+### Plantillas de cobro con detalle de lo que se cobra
+
+`factura_por_cobrar`, `cuenta_por_cobrar` y `estado_cuenta_cliente` llevan una
+variable con el **detalle de lo que se cobra** (*por concepto de: …*): los
+productos o servicios de los documentos, sin repetir, que el usuario puede
+cambiar antes de enviar. El texto sugerido de cada una:
+
+- `factura_por_cobrar`: *Estimado(a) {{1}}, le recordamos que tiene un valor
+  pendiente de pago de {{2}} correspondiente a la factura {{3}} por concepto de:
+  {{4}}. Agradecemos su puntual pago.*
+- `cuenta_por_cobrar`: *Estimado(a) {{1}}, le informamos que tiene un saldo
+  pendiente de pago de {{2}} por concepto de: {{3}}. Si tiene dudas,
+  contáctenos.*
+- `estado_cuenta_cliente`: *Estimado(a) {{1}}, le recordamos que estamos
+  pendientes del pago de {{2}} factura(s) por un valor de {{3}}, por concepto
+  de: {{4}}. Atentamente, {{5}}. Agradecemos su puntual pago.*
+
+Si su plantilla se aprobó **antes** con el texto sin detalle, sigue funcionando
+igual (sin el detalle). Para agregarlo, edítela: el modal **Editar** avisa que
+aún no incluye el detalle y ofrece **Usar el texto sugerido**. Al guardar,
+Meta la vuelve a revisar y, mientras esté en revisión, no se puede enviar.
+Detalle de cómo se arma el concepto: *Cuentas por Cobrar → Detalle de lo que se
+cobra en los mensajes de WhatsApp*.
 
 ### Enlaces de pago (Payphone y Nuvei)
 
@@ -159,6 +183,11 @@ Sin **acceso total**, el usuario ve solo las plantillas que él mismo registró.
 
 ## Historial de cambios
 
+- **1.2** — Las plantillas de cobro (`factura_por_cobrar`, `cuenta_por_cobrar`,
+  `estado_cuenta_cliente`) suman la variable **Detalle de lo que se cobra**; el
+  modal Editar ofrece cargar el texto sugerido nuevo. Corregido: guardar una
+  plantilla editada fallaba en la validación de la pantalla y no se enviaba.
+  Nueva sección *Plantillas de cobro con detalle de lo que se cobra*.
 - **1.1** — Nueva plantilla rápida `estado_cuenta_cliente` (*Estado de Cuenta
   del Cliente*): la usa Cuentas por Cobrar, vista *Por cliente*, para enviar el
   resumen vencido o total de la deuda. El cuerpo sugerido cierra con texto

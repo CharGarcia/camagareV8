@@ -605,9 +605,26 @@
                             <span>Plantilla <span class="text-danger">*</span></span>
                             <?= \App\Helpers\PreferenciasHelper::renderEstrellaFavorito('cuentas_por_cobrar', 'wa-plantilla', 'wa_plantilla_default') ?>
                         </label>
-                        <select id="wa-plantilla" class="form-select form-select-sm shadow-none">
+                        <select id="wa-plantilla" class="form-select form-select-sm shadow-none" onchange="CXC_waCambioPlantilla()">
                             <option value="">Seleccione una plantilla aprobada…</option>
                         </select>
+                    </div>
+                    <div class="col-12 d-none" id="wa-bloque-detalle">
+                        <label class="form-label small fw-bold mb-1 d-block" for="wa-detalle">Detalle de lo que se cobra</label>
+                        <textarea id="wa-detalle" class="form-control form-control-sm shadow-none" rows="2" maxlength="250"
+                                  placeholder="Ej.: Mantenimiento mensual de octubre, Hosting anual"
+                                  oninput="this.dataset.editado = '1'; CXC_previewWA()"></textarea>
+                        <div class="form-text" id="wa-detalle-nota">Se arma con los productos o servicios de la factura, sin repetir. Puede cambiarlo antes de enviar.</div>
+                    </div>
+                    <div class="col-12 d-none" id="wa-aviso-detalle">
+                        <div class="alert alert-warning py-2 px-3 small mb-0">
+                            <i class="bi bi-exclamation-triangle me-1"></i>Esta plantilla aún no incluye el <strong>detalle de lo que se cobra</strong>.
+                            Edítela en <em>Plantillas de WhatsApp</em> con el texto sugerido y espere la aprobación de Meta.
+                        </div>
+                    </div>
+                    <div class="col-12 d-none" id="wa-bloque-preview">
+                        <label class="form-label small fw-bold mb-1 d-block">Mensaje</label>
+                        <div id="wa-preview" class="p-2 rounded border small" style="background:#e7f8ee;white-space:pre-wrap;"></div>
                     </div>
                 </div>
             </div>
@@ -643,11 +660,11 @@
                         <label class="form-label small fw-bold mb-1 d-block">Resumen a enviar <span class="text-danger">*</span></label>
                         <div class="d-flex flex-column gap-1">
                             <div class="form-check">
-                                <input class="form-check-input" type="radio" name="wae-tipo" id="wae-tipo-vencido" value="vencido" onchange="CXC_previewWAEstado()">
+                                <input class="form-check-input" type="radio" name="wae-tipo" id="wae-tipo-vencido" value="vencido" onchange="CXC_waeCambioTipo()">
                                 <label class="form-check-label small" for="wae-tipo-vencido">Resumen vencido: <span id="wae-lbl-vencido"></span></label>
                             </div>
                             <div class="form-check">
-                                <input class="form-check-input" type="radio" name="wae-tipo" id="wae-tipo-total" value="total" onchange="CXC_previewWAEstado()">
+                                <input class="form-check-input" type="radio" name="wae-tipo" id="wae-tipo-total" value="total" onchange="CXC_waeCambioTipo()">
                                 <label class="form-check-label small" for="wae-tipo-total">Resumen total de la deuda: <span id="wae-lbl-total"></span></label>
                             </div>
                         </div>
@@ -660,6 +677,19 @@
                                    placeholder="593987654321 (sin + ni espacios)">
                         </div>
                         <div class="form-text">Incluya el código de país. Ej: 593 para Ecuador.</div>
+                    </div>
+                    <div class="col-12 d-none" id="wae-bloque-detalle">
+                        <label class="form-label small fw-bold mb-1 d-block" for="wae-detalle">Detalle de lo que se cobra</label>
+                        <textarea id="wae-detalle" class="form-control form-control-sm shadow-none" rows="2" maxlength="250"
+                                  placeholder="Ej.: Mantenimiento mensual, Hosting anual"
+                                  oninput="this.dataset.editado = '1'; CXC_previewWAEstado()"></textarea>
+                        <div class="form-text">Se arma con los productos o servicios de los documentos del resumen, sin repetir. Puede cambiarlo antes de enviar.</div>
+                    </div>
+                    <div class="col-12 d-none" id="wae-aviso-detalle">
+                        <div class="alert alert-warning py-2 px-3 small mb-0">
+                            <i class="bi bi-exclamation-triangle me-1"></i>La plantilla <strong>estado_cuenta_cliente</strong> aún no incluye el detalle de lo que se cobra.
+                            Edítela en <em>Plantillas de WhatsApp</em> con el texto sugerido y espere la aprobación de Meta.
+                        </div>
                     </div>
                     <div class="col-12">
                         <label class="form-label small fw-bold mb-1">Mensaje</label>

@@ -115,7 +115,7 @@ class CuentasPorCobrarHandler extends BaseHandler
             if ($telefono === '') { $sinTel++; continue; }
 
             // Valores que rellenan las variables del cuerpo, en orden fijo
-            $ctx = $this->contextoVariables($cli, $empresaNombre);
+            $ctx = $this->contextoVariables($cli, $empresaNombre, $plantilla, $numVars);
 
             $components     = [];
             $valoresUsados  = [];
@@ -218,8 +218,23 @@ class CuentasPorCobrarHandler extends BaseHandler
      * EN ORDEN: {{1}}=cliente, {{2}}=total vencido, {{3}}=total general,
      * {{4}}=n.º facturas, {{5}}=empresa.
      */
-    private function contextoVariables(array $cli, string $empresaNombre): array
+    private function contextoVariables(array $cli, string $empresaNombre, string $plantilla = '', int $numVars = 0): array
     {
+        // Plantillas rápidas de cobro con orden propio (el mismo que usa el módulo Cuentas por
+        // Cobrar). Su versión con detalle lleva el concepto, que en el orden genérico recibiría
+        // un monto: "por concepto de: $120,00".
+        if ($plantilla === 'cuenta_por_cobrar') {
+            // {{1}} cliente, {{2}} saldo de las facturas incluidas, {{3}} concepto
+            return [$cli['nombre'], '$' . $this->money($cli['total_general']), $this->conceptoCliente($cli)];
+        }
+        if ($plantilla === 'estado_cuenta_cliente') {
+            // {{1}} cliente, {{2}} n.º facturas, {{3}} valor y, con 5 variables, {{4}} concepto
+            // y {{5}} empresa; la versión de 4 firma con la empresa en {{4}}.
+            $base = [$cli['nombre'], (string) count($cli['facturas']), '$' . $this->money($cli['total_general'])];
+            return $numVars >= 5
+                ? array_merge($base, [$this->conceptoCliente($cli), $empresaNombre])
+                : array_merge($base, [$empresaNombre]);
+        }
         return [
             $cli['nombre'],
             '$' . $this->money($cli['total_vencido']),
@@ -227,6 +242,18 @@ class CuentasPorCobrarHandler extends BaseHandler
             (string)count($cli['facturas']),
             $empresaNombre,
         ];
+    }
+
+    /** Conceptos de las facturas del cliente, sin repetir (descripciones de sus ítems). */
+    private function conceptoCliente(array $cli): string
+    {
+        $ids    = array_map(fn ($f) => (int) $f['id'], $cli['facturas']);
+        $porDoc = (new CuentasPorCobrarRepository())->getDescripcionesDocumentos($ids, []);
+        $desc   = [];
+        foreach ($ids as $id) {
+            foreach ($porDoc['FACTURA:' . $id] ?? [] as $d) $desc[] = $d;
+        }
+        return \App\Helpers\ConceptosCobro::armar($desc);
     }
 
     // ── Agrupación ────────────────────────────────────────────────────────────

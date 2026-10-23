@@ -1353,11 +1353,75 @@ async function CXC_confirmarEnvioMasivo() {
 /* ════════════════════════════════════════════════════
    MODAL WHATSAPP
 ════════════════════════════════════════════════════ */
+/* Detalle de lo que se cobra («por concepto de: …»). Meta solo acepta el texto aprobado, así
+   que el detalle viaja como una variable más de la plantilla. Cada plantilla de cobro tiene
+   una versión anterior sin esa variable: con menos variables que las de aquí, el detalle no
+   se envía (el servidor aplica la misma regla en CuentasPorCobrarController). */
+const CXC_WA_VARS_CON_DETALLE = { factura_por_cobrar: 4, cuenta_por_cobrar: 3, estado_cuenta_cliente: 5 };
+
+function CXC_waCuerpo(p) {
+    try {
+        const body = JSON.parse(p?.componentes || '[]').find(c => c.type === 'BODY');
+        return body?.text || '';
+    } catch { return ''; }
+}
+function CXC_waNumVars(texto) {
+    const nums = [...String(texto || '').matchAll(/{{(\d+)}}/g)].map(m => parseInt(m[1]));
+    return nums.length ? Math.max(...nums) : 0;
+}
+function CXC_waConDetalle(p) {
+    const min = p ? CXC_WA_VARS_CON_DETALLE[p.nombre] : 0;
+    return !!min && CXC_waNumVars(CXC_waCuerpo(p)) >= min;
+}
+
+/* Concepto sugerido para unos documentos (descripciones de sus ítems sin repetir). El
+   servidor los valida como en el envío. '' si no se pudo armar: al enviar vacío, el
+   servidor lo arma solo. */
+let CXC_waSeq = 0;
+async function CXC_waPedirConcepto(docs, tipo = 'total') {
+    const fd = new FormData();
+    fd.append('documentos', JSON.stringify(docs));
+    fd.append('tipo', tipo);
+    try {
+        const r = await fetch(`${BASE_URL}/${RUTA_MODULO_CXC}/getConceptoWAAjax`, {
+            method: 'POST',
+            headers: { 'X-Requested-With': 'XMLHttpRequest' },
+            body: fd
+        });
+        const data = await r.json();
+        return data.ok ? (data.concepto || '') : '';
+    } catch { return ''; }
+}
+
+/* Contexto del modal por documento: la factura de la fila y, para cuenta_por_cobrar (que
+   habla del saldo pendiente hasta el momento), TODOS los documentos con saldo del mismo
+   cliente que hay en el listado, agrupados por identificación base como en la vista por
+   cliente. El servidor recalcula los saldos desde BD. */
+let CXC_waCtx = null;
+
 function CXC_abrirWA(idVenta, nroFactura, telefono, clienteNombre) {
     if (!CXC_TIENE_WA) {
         CXC_toast('WhatsApp no está configurado para esta empresa. Active el módulo de WhatsApp para usar esta función.', 'warning');
         return;
     }
+
+    const fila = CXC_datos.find(x => (x.origen || 'FACTURA') === 'FACTURA' && parseInt(x.id) === parseInt(idVenta) && !x.es_hermana);
+    const ctx  = { idVenta, nro: nroFactura, nombre: clienteNombre, saldo: fila ? (parseFloat(fila.saldo) || 0) : 0,
+                   docs: [], saldoCliente: 0, conceptos: {} };
+    if (fila) {
+        const clave = IdentificacionTercero.claveGrupo(fila.cliente_ruc, fila.cliente_nombre || 'Sin cliente');
+        for (const x of CXC_datos) {
+            if (IdentificacionTercero.claveGrupo(x.cliente_ruc, x.cliente_nombre || 'Sin cliente') !== clave) continue;
+            const s = parseFloat(x.saldo) || 0;
+            if (s <= 0.001) continue;
+            ctx.docs.push({ origen: x.origen || 'FACTURA', id: parseInt(x.id), id_empresa: parseInt(x.id_empresa) || 0 });
+            ctx.saldoCliente += s;
+        }
+    }
+    CXC_waCtx = ctx;
+    const det = document.getElementById('wa-detalle');
+    det.value = '';
+    det.dataset.editado = '';
 
     document.getElementById('wa-id-venta').value         = idVenta;
     document.getElementById('wa-subtitulo').textContent  = `Factura: ${nroFactura} — ${clienteNombre}`;
@@ -1384,8 +1448,60 @@ function CXC_abrirWA(idVenta, nroFactura, telefono, clienteNombre) {
     if (typeof APP_FAVORITOS !== 'undefined' && APP_FAVORITOS['wa_plantilla_default']) {
         sel.value = APP_FAVORITOS['wa_plantilla_default'];
     }
+    CXC_waCambioPlantilla();
 
     new bootstrap.Modal(document.getElementById('modalWA')).show();
+}
+
+/* Al elegir plantilla: muestra el campo Detalle solo si la plantilla aprobada lo lleva (y
+   avisa si es una plantilla de cobro en su versión anterior) y, si el usuario no lo tocó,
+   lo llena con los conceptos de la factura o, en cuenta_por_cobrar, de todo el cliente. */
+async function CXC_waCambioPlantilla() {
+    const ctx = CXC_waCtx;
+    if (!ctx) return;
+    const p   = CXC_plantillasWA.find(x => x.nombre === document.getElementById('wa-plantilla').value) || null;
+    const con = CXC_waConDetalle(p);
+    document.getElementById('wa-bloque-detalle').classList.toggle('d-none', !con);
+    document.getElementById('wa-aviso-detalle').classList.toggle('d-none', !(p && CXC_WA_VARS_CON_DETALLE[p.nombre] && !con));
+    document.getElementById('wa-bloque-preview').classList.toggle('d-none', !p);
+
+    const det = document.getElementById('wa-detalle');
+    if (con && det.dataset.editado !== '1') {
+        const modo = (p.nombre === 'cuenta_por_cobrar' && ctx.docs.length) ? 'cliente' : 'factura';
+        document.getElementById('wa-detalle-nota').textContent = modo === 'cliente'
+            ? `Se arma con los productos o servicios de los ${ctx.docs.length} documento(s) pendientes del cliente, sin repetir. Puede cambiarlo antes de enviar.`
+            : 'Se arma con los productos o servicios de la factura, sin repetir. Puede cambiarlo antes de enviar.';
+        if (ctx.conceptos[modo] === undefined) {
+            const seq = ++CXC_waSeq;
+            det.value = '';
+            det.placeholder = 'Cargando detalle…';
+            CXC_previewWA();
+            const docs = modo === 'cliente' ? ctx.docs : [{ origen: 'FACTURA', id: parseInt(ctx.idVenta) }];
+            const concepto = await CXC_waPedirConcepto(docs);
+            det.placeholder = 'Ej.: Mantenimiento mensual de octubre, Hosting anual';
+            if (seq !== CXC_waSeq || CXC_waCtx !== ctx) return;   // cambió la plantilla o el documento
+            ctx.conceptos[modo] = concepto;
+        }
+        if (det.dataset.editado !== '1') det.value = ctx.conceptos[modo];
+    }
+    CXC_previewWA();
+}
+
+/* Vista previa con los valores que enviará el servidor (los montos son referenciales: el
+   servidor los recalcula desde BD). */
+function CXC_previewWA() {
+    const ctx = CXC_waCtx;
+    const p   = CXC_plantillasWA.find(x => x.nombre === document.getElementById('wa-plantilla').value) || null;
+    if (!ctx || !p) return;
+    const det  = document.getElementById('wa-detalle').value.trim() || '…';
+    let vals = {};
+    if (p.nombre === 'factura_por_cobrar') {
+        vals = { 1: ctx.nombre, 2: '$' + CXC_fmt(ctx.saldo), 3: ctx.nro, 4: det };
+    } else if (p.nombre === 'cuenta_por_cobrar') {
+        vals = { 1: ctx.nombre, 2: '$' + CXC_fmt(ctx.docs.length ? ctx.saldoCliente : ctx.saldo), 3: det };
+    }
+    document.getElementById('wa-preview').textContent =
+        CXC_waCuerpo(p).replace(/{{(\d+)}}/g, (m, n) => vals[n] ?? ' ');
 }
 
 async function CXC_enviarWA() {
@@ -1400,6 +1516,14 @@ async function CXC_enviarWA() {
     fd.append('id_venta',       idVenta);
     fd.append('telefono',       telefono);
     fd.append('template_name',  templateName);
+    // Detalle escrito o revisado en el modal (vacío = el servidor lo arma con los ítems)
+    if (!document.getElementById('wa-bloque-detalle').classList.contains('d-none')) {
+        fd.append('detalle', document.getElementById('wa-detalle').value.trim());
+    }
+    // cuenta_por_cobrar: saldo y conceptos de todo el cliente
+    if (templateName === 'cuenta_por_cobrar' && CXC_waCtx && CXC_waCtx.docs.length) {
+        fd.append('documentos', JSON.stringify(CXC_waCtx.docs));
+    }
 
     // Aviso "Enviando…" mientras la API de WhatsApp responde (puede tardar unos
     // segundos); el usuario ve que el envío está en curso.
@@ -1491,8 +1615,45 @@ function CXC_abrirWAEstado(gkey) {
         ? `Incluye ${res.otrosEstab} documento(s) de otros establecimientos del mismo RUC.`
         : '';
 
-    CXC_previewWAEstado();
+    // Detalle de lo que se cobra: solo si la plantilla aprobada ya es la versión que lo lleva
+    const con = CXC_waConDetalle(CXC_plantillaEstado);
+    document.getElementById('wae-bloque-detalle').classList.toggle('d-none', !con);
+    document.getElementById('wae-aviso-detalle').classList.toggle('d-none', !CXC_plantillaEstado || con);
+    const det = document.getElementById('wae-detalle');
+    det.value = '';
+    det.dataset.editado = '';
+    CXC_waeConceptos = {};
+
+    CXC_waeCambioTipo();
     new bootstrap.Modal(document.getElementById('modalWAEstado')).show();
+}
+
+/* Conceptos ya pedidos para el cliente abierto, por tipo de resumen (vencido / total). */
+let CXC_waeConceptos = {};
+
+/* Al abrir o cambiar el resumen: si el usuario no editó el detalle, se llena con los conceptos
+   de los documentos de ESE resumen (el vencido puede tener menos que el total). */
+async function CXC_waeCambioTipo() {
+    const gkey = document.getElementById('wae-gkey').value;
+    const g    = CXC_gruposCliente.get(gkey);
+    if (!g) return;
+    const det  = document.getElementById('wae-detalle');
+    const tipo = document.getElementById('wae-tipo-vencido').checked ? 'vencido' : 'total';
+    if (CXC_waConDetalle(CXC_plantillaEstado) && det.dataset.editado !== '1') {
+        if (CXC_waeConceptos[tipo] === undefined) {
+            const docs = CXC_resumenWAEstado(g)[tipo].docs;
+            const seq  = ++CXC_waSeq;
+            det.value = '';
+            det.placeholder = 'Cargando detalle…';
+            CXC_previewWAEstado();
+            const concepto = docs.length ? await CXC_waPedirConcepto(docs, tipo) : '';
+            det.placeholder = 'Ej.: Mantenimiento mensual, Hosting anual';
+            if (seq !== CXC_waSeq || document.getElementById('wae-gkey').value !== gkey) return;
+            CXC_waeConceptos[tipo] = concepto;
+        }
+        if (det.dataset.editado !== '1') det.value = CXC_waeConceptos[tipo];
+    }
+    CXC_previewWAEstado();
 }
 
 function CXC_previewWAEstado() {
@@ -1500,15 +1661,20 @@ function CXC_previewWAEstado() {
     if (!g) return;
     const res  = CXC_resumenWAEstado(g);
     const tipo = document.getElementById('wae-tipo-vencido').checked ? 'vencido' : 'total';
-    const vals = { 1: g.nombre, 2: String(res[tipo].n), 3: '$' + CXC_fmt(res[tipo].valor), 4: CXC_EMPRESA_NOMBRE || 'la empresa' };
+    const empresa = CXC_EMPRESA_NOMBRE || 'la empresa';
 
-    let texto = 'Estimado(a) {{1}}, le recordamos que estamos pendientes del pago de {{2}} factura(s) por un valor de {{3}}. Atentamente, {{4}}. Agradecemos su puntual pago.';
+    // Sin plantilla aprobada se muestra el texto sugerido con detalle (Plantillas de WhatsApp)
+    let texto = 'Estimado(a) {{1}}, le recordamos que estamos pendientes del pago de {{2}} factura(s) por un valor de {{3}}, por concepto de: {{4}}. Atentamente, {{5}}. Agradecemos su puntual pago.';
     if (CXC_plantillaEstado) {
-        try {
-            const comps = JSON.parse(CXC_plantillaEstado.componentes || '[]');
-            const body  = comps.find(c => c.type === 'BODY');
-            if (body && body.text) texto = body.text;
-        } catch {}
+        texto = CXC_waCuerpo(CXC_plantillaEstado) || texto;
+    }
+    // Versión con detalle (5 variables): {{4}} concepto y {{5}} empresa; la anterior firma en {{4}}.
+    const vals = { 1: g.nombre, 2: String(res[tipo].n), 3: '$' + CXC_fmt(res[tipo].valor) };
+    if (CXC_waNumVars(texto) >= 5) {
+        vals[4] = document.getElementById('wae-detalle').value.trim() || '…';
+        vals[5] = empresa;
+    } else {
+        vals[4] = empresa;
     }
     document.getElementById('wae-preview').textContent = texto.replace(/{{(\d+)}}/g, (m, n) => vals[n] ?? m);
 }
@@ -1527,6 +1693,9 @@ async function CXC_enviarWAEstado() {
     fd.append('telefono',   telefono);
     fd.append('tipo',       tipo);
     fd.append('documentos', JSON.stringify(docs));
+    if (!document.getElementById('wae-bloque-detalle').classList.contains('d-none')) {
+        fd.append('detalle', document.getElementById('wae-detalle').value.trim());
+    }
 
     Swal.fire({
         title: 'Enviando mensaje…',

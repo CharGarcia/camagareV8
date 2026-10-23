@@ -998,10 +998,12 @@ class FacturaVentaController extends BaseModuloController
                             
                             // Mapeo dependiendo de la plantilla rápida elegida
                             if ($plantillaMeta['nombre'] === 'factura_por_cobrar') {
-                                // 1: Cliente, 2: Valor, 3: Número Factura
+                                // 1: Cliente, 2: Valor, 3: Número Factura, 4: Concepto (versión con
+                                // detalle: los ítems de la factura sin repetir, como en Cuentas por Cobrar)
                                 if ($i == 1) $val = $nombreCliente;
                                 elseif ($i == 2) $val = '$' . $total;
                                 elseif ($i == 3) $val = $numeroFactura;
+                                elseif ($i == 4) $val = \App\Helpers\ConceptosCobro::armar(array_column($detalles, 'descripcion'));
                             } elseif ($plantillaMeta['nombre'] === 'factura_venta') {
                                 // 1: Cliente, 2: Número Factura, 3: Valor
                                 if ($i == 1) $val = $nombreCliente;

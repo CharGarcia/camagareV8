@@ -517,13 +517,13 @@ class PlantillasWhatsappController extends BaseModuloController
         // VALIDACIÓN DE PLANTILLAS RAPIDAS Y LIBRES
         $plantillasRapidasConfig = [
             'aviso_mensajes_pendientes' => ['{{1}}', '{{2}}'],
-            'factura_por_cobrar' => ['{{1}}', '{{2}}', '{{3}}'],
+            'factura_por_cobrar' => ['{{1}}', '{{2}}', '{{3}}', '{{4}}'],
             'factura_venta' => ['{{1}}', '{{2}}', '{{3}}'],
             'proforma' => ['{{1}}', '{{2}}', '{{3}}'],
             'link_pago_payphone' => ['{{1}}', '{{2}}', '{{3}}', '{{4}}'],
             'link_pago_nuvei' => ['{{1}}', '{{2}}', '{{3}}', '{{4}}'],
-            'cuenta_por_cobrar' => ['{{1}}', '{{2}}'],
-            'estado_cuenta_cliente' => ['{{1}}', '{{2}}', '{{3}}', '{{4}}'],
+            'cuenta_por_cobrar' => ['{{1}}', '{{2}}', '{{3}}'],
+            'estado_cuenta_cliente' => ['{{1}}', '{{2}}', '{{3}}', '{{4}}', '{{5}}'],
             'renovacion_suscripcion' => ['{{1}}', '{{2}}'],
             'renovacion_firma_electronica' => ['{{1}}', '{{2}}'],
             'retencion_compra' => ['{{1}}', '{{2}}', '{{3}}'],
@@ -746,13 +746,13 @@ class PlantillasWhatsappController extends BaseModuloController
         // 2. Si es rápida, validar permitidas
         $plantillasRapidasConfig = [
             'aviso_mensajes_pendientes' => ['{{1}}', '{{2}}'],
-            'factura_por_cobrar' => ['{{1}}', '{{2}}', '{{3}}'],
+            'factura_por_cobrar' => ['{{1}}', '{{2}}', '{{3}}', '{{4}}'],
             'factura_venta' => ['{{1}}', '{{2}}', '{{3}}'],
             'proforma' => ['{{1}}', '{{2}}', '{{3}}'],
             'link_pago_payphone' => ['{{1}}', '{{2}}', '{{3}}', '{{4}}'],
             'link_pago_nuvei' => ['{{1}}', '{{2}}', '{{3}}', '{{4}}'],
-            'cuenta_por_cobrar' => ['{{1}}', '{{2}}'],
-            'estado_cuenta_cliente' => ['{{1}}', '{{2}}', '{{3}}', '{{4}}'],
+            'cuenta_por_cobrar' => ['{{1}}', '{{2}}', '{{3}}'],
+            'estado_cuenta_cliente' => ['{{1}}', '{{2}}', '{{3}}', '{{4}}', '{{5}}'],
             'renovacion_suscripcion' => ['{{1}}', '{{2}}'],
             'renovacion_firma_electronica' => ['{{1}}', '{{2}}'],
             'retencion_compra' => ['{{1}}', '{{2}}', '{{3}}'],

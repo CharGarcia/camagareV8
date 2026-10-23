@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\controllers\modulos;
 
+use App\Helpers\ConceptosCobro;
 use App\Helpers\IdentificacionTercero;
 use App\repositories\modulos\CuentasPorCobrarRepository;
 use App\repositories\modulos\EmpresaRepository;
@@ -1780,6 +1781,32 @@ $plantillasFiltradas = [];
         // mismas CTEs de cobrado/retenido/NC que usa el resto del módulo)
         $saldoReal = max(0, (float) ($factura['saldo'] ?? 0));
 
+        // Concepto («por concepto de: …») y, para cuenta_por_cobrar, el saldo de TODO el
+        // cliente: su texto habla del saldo pendiente hasta el momento, no del de esta factura.
+        // La vista manda los documentos del cliente que tiene en pantalla; se validan igual que
+        // en el estado de cuenta y deben ser del mismo cliente que la factura de la fila.
+        $numVars       = $this->numVariablesCuerpo(json_decode($plantillaMeta['componentes'], true) ?? []);
+        $clavesDocs    = ['FACTURA:' . $idVenta];
+        $nombreCliente = $factura['cliente_nombre'] ?? 'Cliente';
+        if ($nombrePlant === 'cuenta_por_cobrar') {
+            $docsRaw = json_decode($_POST['documentos'] ?? '[]', true);
+            if (is_array($docsRaw) && $docsRaw) {
+                if (count($docsRaw) > 300) {
+                    $this->jsonError('Máximo 300 documentos por envío.');
+                }
+                $cli = $this->documentosClienteWA($docsRaw, 'total', $idEmpresa);
+                $claveFactura = IdentificacionTercero::claveGrupo($factura['cliente_ruc'] ?? null, 'id:' . (int) ($factura['id_cliente'] ?? 0));
+                if ($cli['clave_cliente'] !== $claveFactura) {
+                    $this->jsonError('Los documentos enviados no pertenecen al cliente de la factura.');
+                }
+                $saldoReal  = $cli['valor'];
+                $clavesDocs = $cli['claves'];
+            }
+        }
+        $esDetalle = ($nombrePlant === 'factura_por_cobrar' && $numVars >= 4)
+                  || ($nombrePlant === 'cuenta_por_cobrar' && $numVars >= 3);
+        $concepto  = $esDetalle ? $this->conceptoWA($_POST['detalle'] ?? '', $clavesDocs) : null;
+
         // 3. GENERAR PDF SI ES NECESARIO
         $waService = new WhatsappService();
         $mediaId = null;
@@ -1862,7 +1889,6 @@ $plantillasFiltradas = [];
         $apiComponents = [];
 
         $numeroFactura = ($factura['establecimiento'] ?? '') . '-' . ($factura['punto_emision'] ?? '') . '-' . ($factura['secuencial'] ?? '');
-        $nombreCliente = $factura['cliente_nombre'] ?? 'Cliente';
         $saldoFormateado = number_format($saldoReal, 2);
 
         foreach ($componentesDB as $comp) {
@@ -1890,14 +1916,16 @@ $plantillasFiltradas = [];
                         $val = '';
                         
                         if ($nombrePlant === 'factura_por_cobrar') {
-                            // 1: Cliente, 2: Saldo, 3: Número
+                            // 1: Cliente, 2: Saldo, 3: Número, 4: Concepto (versión con detalle)
                             if ($i == 1) $val = $nombreCliente;
                             elseif ($i == 2) $val = '$' . $saldoFormateado;
                             elseif ($i == 3) $val = $numeroFactura;
+                            elseif ($i == 4) $val = $concepto ?? ' ';
                         } elseif ($nombrePlant === 'cuenta_por_cobrar') {
-                            // 1: Cliente, 2: Saldo
+                            // 1: Cliente, 2: Saldo del cliente, 3: Concepto (versión con detalle)
                             if ($i == 1) $val = $nombreCliente;
                             elseif ($i == 2) $val = '$' . $saldoFormateado;
+                            elseif ($i == 3) $val = $concepto ?? ' ';
                         } else {
                             $val = ' ';
                         }
@@ -1977,7 +2005,7 @@ $plantillasFiltradas = [];
             'ventas_cabecera',
             $idVenta,
             null,
-            ['telefono' => $telefono, 'template' => $nombrePlant]
+            ['telefono' => $telefono, 'template' => $nombrePlant, 'valor' => round($saldoReal, 2), 'concepto' => $concepto]
         );
 
         $this->jsonSuccess(['mensaje' => 'WhatsApp enviado correctamente.']);
@@ -2019,95 +2047,32 @@ $plantillasFiltradas = [];
             $this->jsonError('Falta la plantilla "estado_cuenta_cliente" aprobada por Meta. Créela en Plantillas de WhatsApp (plantilla rápida "Estado de Cuenta del Cliente").');
         }
 
-        // 1) Documentos desde BD: saldo real, vencimiento y alcance del usuario (§6).
-        // Consolidado por RUC: cada documento trae su `id_empresa`; se acepta una hermana solo
-        // si pertenece al grupo consolidable desde la matriz activa (misma regla que el listado
-        // y empresaLectura()). El mensaje sale siempre con la configuración de WhatsApp y las
-        // plantillas de la empresa activa.
-        $grupo     = (new EmpresaRepository())->getIdsConsolidadoDesdeMatriz($idEmpresa, (int) $_SESSION['id_usuario']);
-        $siRepo    = new \App\repositories\modulos\SaldosInicialesRepository();
-        $restringe = [];   // id_empresa => ¿usuario restringido a su vendedor en esa empresa?
-        $hoy       = strtotime(date('Y-m-d'));
-        $claveCli  = null;
-        $nombreCli = '';
-        $idCliente = 0;
-        $numDocs   = 0;
-        $valor     = 0.0;
-        $numeros   = [];
-        $vistos    = [];
+        // 1) Documentos desde BD (saldo real, vencimiento, alcance del usuario y mismo cliente)
+        $cli       = $this->documentosClienteWA($docsRaw, $tipo, $idEmpresa);
+        $nombreCli = $cli['nombre'];
+        $idCliente = $cli['id_cliente'];
+        $numDocs   = $cli['num_docs'];
+        $valor     = $cli['valor'];
+        $numeros   = $cli['numeros'];
 
-        foreach ($docsRaw as $d) {
-            $origen = strtoupper(trim((string) ($d['origen'] ?? 'FACTURA')));
-            $id     = (int) ($d['id'] ?? 0);
-            $idEmpDoc = (int) ($d['id_empresa'] ?? 0) ?: $idEmpresa;
-            if ($id <= 0 || !in_array($origen, ['FACTURA', 'RECIBO', 'SALDO_INICIAL'], true)) continue;
-            if ($idEmpDoc !== $idEmpresa && !in_array($idEmpDoc, $grupo, true)) continue;
-            if (isset($vistos[$idEmpDoc . ':' . $origen . ':' . $id])) continue;
-            $vistos[$idEmpDoc . ':' . $origen . ':' . $id] = true;
-
-            if ($origen === 'SALDO_INICIAL') {
-                $si = $siRepo->getCxcPorId($id, $idEmpDoc);
-                if (!$si) continue;
-                $restringe[$idEmpDoc] ??= (bool) \App\Helpers\AlcanceRegistros::idsVendedor($this->alcanceUsuario([$idEmpDoc]));
-                $vCli = $restringe[$idEmpDoc] ? $this->repo->getIdVendedorDeCliente((int) ($si['id_cliente'] ?? 0), $idEmpDoc) : null;
-                if (!$this->dentroAlcance($si, 'created_by', $idEmpDoc, $vCli)) continue;
-                $doc = [
-                    'id_cliente'        => (int) ($si['id_cliente'] ?? 0),
-                    'cliente_nombre'    => $si['nombre_cliente'] ?? '',
-                    'cliente_ruc'       => $si['ruc_cliente'] ?? null,
-                    'numero_factura'    => $si['nro_documento'] ?? '',
-                    'fecha_vencimiento' => $si['fecha_vencimiento'] ?: ($si['fecha_emision'] ?? null),
-                    'saldo'             => $si['saldo_pendiente'] ?? 0,
-                ];
-            } else {
-                $doc = $origen === 'RECIBO'
-                    ? $this->repo->getReciboParaCobro($id, $idEmpDoc)
-                    : $this->repo->getFacturaParaCobro($id, $idEmpDoc);
-                if (!$doc || !$this->dentroAlcance($doc, 'id_usuario', $idEmpDoc)) continue;
-            }
-
-            // Mismo cliente = misma identificación base (entre establecimientos el id de la
-            // ficha cambia, el RUC no).
-            $clave = IdentificacionTercero::claveGrupo($doc['cliente_ruc'] ?? null, 'id:' . (int) ($doc['id_cliente'] ?? 0));
-            if ($claveCli === null) {
-                $claveCli  = $clave;
-                $nombreCli = (string) ($doc['cliente_nombre'] ?? '');
-            } elseif ($clave !== $claveCli) {
-                $this->jsonError('Los documentos enviados no pertenecen a un mismo cliente.');
-            }
-            // La auditoría se registra en la empresa activa: se usa la ficha de ESTA empresa.
-            if (!$idCliente && $idEmpDoc === $idEmpresa) $idCliente = (int) ($doc['id_cliente'] ?? 0);
-
-            $saldo = (float) ($doc['saldo'] ?? 0);
-            if ($saldo <= 0.001) continue;
-
-            if ($tipo === 'vencido') {
-                $fVenc = !empty($doc['fecha_vencimiento'])
-                    ? $doc['fecha_vencimiento']
-                    : date('Y-m-d', strtotime(($doc['fecha_emision'] ?? 'now') . ' +' . (int) ($doc['dias_credito'] ?? 0) . ' days'));
-                if (strtotime(date('Y-m-d', strtotime($fVenc))) >= $hoy) continue; // aún no vence
-            }
-
-            $numDocs++;
-            $valor    += $saldo;
-            $numeros[] = ($idEmpDoc !== $idEmpresa ? "[{$idEmpDoc}] " : '') . ($doc['numero_factura'] ?? '');
-        }
-
-        if ($numDocs === 0) {
-            $this->jsonError($tipo === 'vencido'
-                ? 'El cliente no tiene documentos vencidos con saldo pendiente.'
-                : 'El cliente no tiene documentos con saldo pendiente.');
-        }
-
-        // 2) Variables de la plantilla
+        // 2) Variables de la plantilla. Con 5 variables (versión con detalle) el concepto es
+        // {{4}} y la empresa {{5}}; la versión anterior, de 4, firma con la empresa en {{4}}.
+        $componentesDB = json_decode($plantilla['componentes'] ?? '[]', true) ?? [];
+        $numVars       = $this->numVariablesCuerpo($componentesDB);
         $valores = [
             1 => $nombreCli !== '' ? $nombreCli : 'Cliente',
             2 => (string) $numDocs,
             3 => '$' . number_format($valor, 2),
-            4 => $this->nombreEmpresaMensaje($idEmpresa),
         ];
+        $concepto = null;
+        if ($numVars >= 5) {
+            $concepto   = $this->conceptoWA($_POST['detalle'] ?? '', $cli['claves']);
+            $valores[4] = $concepto;
+            $valores[5] = $this->nombreEmpresaMensaje($idEmpresa);
+        } else {
+            $valores[4] = $this->nombreEmpresaMensaje($idEmpresa);
+        }
 
-        $componentesDB = json_decode($plantilla['componentes'] ?? '[]', true) ?? [];
         $apiComponents = [];
         $textoFinal    = '';
         foreach ($componentesDB as $comp) {
@@ -2160,12 +2125,181 @@ $plantillasFiltradas = [];
                 'tipo'       => $tipo,
                 'documentos' => $numeros,
                 'valor'      => round($valor, 2),
+                'concepto'   => $concepto,
             ]
         );
 
         $this->jsonSuccess([
             'mensaje' => "Estado de cuenta enviado por WhatsApp ({$numDocs} documento(s), $" . number_format($valor, 2) . ').',
         ]);
+    }
+
+    /**
+     * Concepto sugerido para el mensaje de cobro por WhatsApp (campo «Detalle de lo que se
+     * cobra» de los modales): las descripciones de los ítems de los documentos, sin repetir.
+     * Recibe los mismos `documentos` y `tipo` que el envío y los valida igual (empresa,
+     * alcance del usuario y mismo cliente), así que la vista previa no expone nada que el
+     * envío no expondría.
+     */
+    public function getConceptoWAAjax(): void
+    {
+        $this->requireLeer();
+        session_write_close();
+        $idEmpresa = (int) $_SESSION['id_empresa'];
+
+        $tipo    = ($_POST['tipo'] ?? '') === 'vencido' ? 'vencido' : 'total';
+        $docsRaw = json_decode($_POST['documentos'] ?? '[]', true);
+        if (!is_array($docsRaw) || empty($docsRaw)) {
+            $this->jsonError('Datos incompletos.');
+        }
+        if (count($docsRaw) > 300) {
+            $this->jsonError('Máximo 300 documentos por envío.');
+        }
+
+        $cli = $this->documentosClienteWA($docsRaw, $tipo, $idEmpresa);
+        $this->jsonSuccess(['concepto' => $this->conceptoWA('', $cli['claves'])]);
+    }
+
+    /**
+     * Documentos de UN cliente para un mensaje de cobro por WhatsApp, leídos desde BD: saldo
+     * real, vencimiento y alcance del usuario (§6). Consolidado por RUC: cada documento trae su
+     * `id_empresa`; se acepta una hermana solo si pertenece al grupo consolidable desde la
+     * matriz activa (misma regla que el listado y empresaLectura()). El mensaje sale siempre
+     * con la configuración de WhatsApp y las plantillas de la empresa activa.
+     * `tipo` = 'vencido' deja solo los documentos con días de mora.
+     *
+     * @return array{nombre:string,clave_cliente:?string,id_cliente:int,num_docs:int,valor:float,numeros:string[],claves:string[]}
+     *         `claves` = 'FACTURA:id' | 'RECIBO:id' | 'SALDO_INICIAL:id', del más antiguo al más reciente.
+     */
+    private function documentosClienteWA(array $docsRaw, string $tipo, int $idEmpresa): array
+    {
+        $grupo     = (new EmpresaRepository())->getIdsConsolidadoDesdeMatriz($idEmpresa, (int) $_SESSION['id_usuario']);
+        $siRepo    = new \App\repositories\modulos\SaldosInicialesRepository();
+        $restringe = [];   // id_empresa => ¿usuario restringido a su vendedor en esa empresa?
+        $hoy       = strtotime(date('Y-m-d'));
+        $claveCli  = null;
+        $nombreCli = '';
+        $idCliente = 0;
+        $numDocs   = 0;
+        $valor     = 0.0;
+        $numeros   = [];
+        $claves    = [];   // 'ORIGEN:id' => [fecha_emision, número] (para ordenar)
+        $vistos    = [];
+
+        foreach ($docsRaw as $d) {
+            $origen = strtoupper(trim((string) ($d['origen'] ?? 'FACTURA')));
+            $id     = (int) ($d['id'] ?? 0);
+            $idEmpDoc = (int) ($d['id_empresa'] ?? 0) ?: $idEmpresa;
+            if ($id <= 0 || !in_array($origen, ['FACTURA', 'RECIBO', 'SALDO_INICIAL'], true)) continue;
+            if ($idEmpDoc !== $idEmpresa && !in_array($idEmpDoc, $grupo, true)) continue;
+            if (isset($vistos[$idEmpDoc . ':' . $origen . ':' . $id])) continue;
+            $vistos[$idEmpDoc . ':' . $origen . ':' . $id] = true;
+
+            if ($origen === 'SALDO_INICIAL') {
+                $si = $siRepo->getCxcPorId($id, $idEmpDoc);
+                if (!$si) continue;
+                $restringe[$idEmpDoc] ??= (bool) \App\Helpers\AlcanceRegistros::idsVendedor($this->alcanceUsuario([$idEmpDoc]));
+                $vCli = $restringe[$idEmpDoc] ? $this->repo->getIdVendedorDeCliente((int) ($si['id_cliente'] ?? 0), $idEmpDoc) : null;
+                if (!$this->dentroAlcance($si, 'created_by', $idEmpDoc, $vCli)) continue;
+                $doc = [
+                    'id_cliente'        => (int) ($si['id_cliente'] ?? 0),
+                    'cliente_nombre'    => $si['nombre_cliente'] ?? '',
+                    'cliente_ruc'       => $si['ruc_cliente'] ?? null,
+                    'numero_factura'    => $si['nro_documento'] ?? '',
+                    'fecha_emision'     => $si['fecha_emision'] ?? null,
+                    'fecha_vencimiento' => $si['fecha_vencimiento'] ?: ($si['fecha_emision'] ?? null),
+                    'saldo'             => $si['saldo_pendiente'] ?? 0,
+                ];
+            } else {
+                $doc = $origen === 'RECIBO'
+                    ? $this->repo->getReciboParaCobro($id, $idEmpDoc)
+                    : $this->repo->getFacturaParaCobro($id, $idEmpDoc);
+                if (!$doc || !$this->dentroAlcance($doc, 'id_usuario', $idEmpDoc)) continue;
+            }
+
+            // Mismo cliente = misma identificación base (entre establecimientos el id de la
+            // ficha cambia, el RUC no).
+            $clave = IdentificacionTercero::claveGrupo($doc['cliente_ruc'] ?? null, 'id:' . (int) ($doc['id_cliente'] ?? 0));
+            if ($claveCli === null) {
+                $claveCli  = $clave;
+                $nombreCli = (string) ($doc['cliente_nombre'] ?? '');
+            } elseif ($clave !== $claveCli) {
+                $this->jsonError('Los documentos enviados no pertenecen a un mismo cliente.');
+            }
+            // La auditoría se registra en la empresa activa: se usa la ficha de ESTA empresa.
+            if (!$idCliente && $idEmpDoc === $idEmpresa) $idCliente = (int) ($doc['id_cliente'] ?? 0);
+
+            $saldo = (float) ($doc['saldo'] ?? 0);
+            if ($saldo <= 0.001) continue;
+
+            if ($tipo === 'vencido') {
+                $fVenc = !empty($doc['fecha_vencimiento'])
+                    ? $doc['fecha_vencimiento']
+                    : date('Y-m-d', strtotime(($doc['fecha_emision'] ?? 'now') . ' +' . (int) ($doc['dias_credito'] ?? 0) . ' days'));
+                if (strtotime(date('Y-m-d', strtotime($fVenc))) >= $hoy) continue; // aún no vence
+            }
+
+            $numDocs++;
+            $valor    += $saldo;
+            $numeros[] = ($idEmpDoc !== $idEmpresa ? "[{$idEmpDoc}] " : '') . ($doc['numero_factura'] ?? '');
+            $claves[$origen . ':' . $id] = [(string) ($doc['fecha_emision'] ?? ''), (string) ($doc['numero_factura'] ?? '')];
+        }
+
+        if ($numDocs === 0) {
+            $this->jsonError($tipo === 'vencido'
+                ? 'El cliente no tiene documentos vencidos con saldo pendiente.'
+                : 'El cliente no tiene documentos con saldo pendiente.');
+        }
+
+        // Del más antiguo al más reciente: así se leen también los conceptos del mensaje.
+        uasort($claves, fn ($a, $b) => strcmp($a[0], $b[0]) ?: strcmp($a[1], $b[1]));
+
+        return [
+            'nombre'        => $nombreCli,
+            'clave_cliente' => $claveCli,
+            'id_cliente'    => $idCliente,
+            'num_docs'      => $numDocs,
+            'valor'         => $valor,
+            'numeros'       => $numeros,
+            'claves'        => array_keys($claves),
+        ];
+    }
+
+    /**
+     * Concepto del mensaje de cobro: lo que el usuario escribió en «Detalle de lo que se cobra»
+     * o, si lo dejó vacío, las descripciones de los ítems de los documentos sin repetir.
+     *
+     * @param string[] $claves 'FACTURA:id' | 'RECIBO:id' | 'SALDO_INICIAL:id', en el orden del mensaje
+     */
+    private function conceptoWA(string $detalleUsuario, array $claves): string
+    {
+        $detalle = ConceptosCobro::limpiar($detalleUsuario);
+        if ($detalle !== '') {
+            return $detalle;
+        }
+        $ids = ['FACTURA' => [], 'RECIBO' => []];
+        foreach ($claves as $k) {
+            [$origen, $id] = explode(':', $k) + [1 => 0];
+            if (isset($ids[$origen])) $ids[$origen][] = (int) $id;
+        }
+        // Los saldos iniciales no tienen ítems: no aportan concepto.
+        $porDoc = $this->repo->getDescripcionesDocumentos($ids['FACTURA'], $ids['RECIBO']);
+        $descripciones = [];
+        foreach ($claves as $k) {
+            foreach ($porDoc[$k] ?? [] as $d) $descripciones[] = $d;
+        }
+        return ConceptosCobro::armar($descripciones);
+    }
+
+    /** Número de variables {{n}} del cuerpo de una plantilla (componentes guardados de Meta). */
+    private function numVariablesCuerpo(array $componentes): int
+    {
+        foreach ($componentes as $comp) {
+            if (($comp['type'] ?? '') === 'BODY' && preg_match_all('/{{(\d+)}}/', (string) ($comp['text'] ?? ''), $m)) {
+                return (int) max($m[1]);
+            }
+        }
+        return 0;
     }
 
     /** Nombre con el que firma la empresa los mensajes al cliente: comercial o, si no hay, razón social. */

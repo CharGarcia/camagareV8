@@ -5,8 +5,8 @@ categoria: Tesorería
 ruta_modulo: modulos/cuentas_por_cobrar
 tipo: modulo
 visibilidad: todos
-etiquetas: cuentas por cobrar, comprobar con contabilidad, cuadrar con contabilidad, cartera vs contabilidad, no cuadra con contabilidad, cuenta por cobrar contable, mayor de cuentas por cobrar, borrador, factura en borrador, sin autorizar, facturas migradas, no coincide con ingresos, distinto a ingresos, cxc, cartera, deudas de clientes, saldo pendiente, vencido, morosidad, cobrar, recibos de venta, tipo de documento, envio masivo, estado de cuenta, recordatorio de pago, fecha de corte, saldo a una fecha, fecha hasta, vendedor, cartera por vendedor, filtrar por vendedor, producto, cartera por producto, filtrar por producto, que deben por un producto, consolidado, establecimientos, sucursales, matriz, mismo ruc, cartera consolidada, todas las sucursales, serie, punto de emision, serie inactiva, registrar cobro, cedula y ruc, cliente duplicado, proveedor duplicado, mismo cliente dos veces, mismo proveedor dos veces, identificacion repetida, ruc es la cedula mas 001, unificar fichas, cartera partida en dos, tildes, acentos, eñe, buscar sin tildes, no encuentra al cliente, no aparece el cliente, buscar por apellido, buscar por varias palabras, mayor, mayor del cliente, cartera como mayor, agrupado por cliente, subtotal por cliente, total general, seccion por cliente, no carga al entrar, boton aplicar, aplicar filtros, listado vacio al entrar, detalle por cliente, columnas del detalle, nc, abonos, retenciones, dias vencidos, dias transcurridos, antiguedad del documento, columna dias, dias desde la emision, cuadricula del pdf, lineas de la tabla del pdf, ruc delante del nombre, asesor, vendedor del documento, fecha un dia antes, ordenar, ordenamiento, orden alfabetico, a-z, z-a, ordenar por cliente, ordenar por saldo, ordenar por vencimiento, clic en la columna, ordenar la tabla, ordenar el excel, ordenar el pdf, flecha de la columna, saldo junto al nombre, saldo del cliente, pdf vertical, pdf horizontal, orientacion del pdf, hoja vertical, pdf apaisado, acceso total, permiso de ver todos, registros propios, solo mis facturas, no veo las facturas de otro, cada usuario ve lo suyo, documentos migrados no aparecen, cartera del vendedor, mis clientes, clientes asignados, vendedor vinculado, usuario del sistema, el vendedor no ve nada, asesor solo ve sus clientes, logo, logo en el pdf, logo de la empresa, encabezado del pdf, filtros del pdf, filtros aplicados, resumen de filtros, filtros en el pdf, mostrar filtros del pdf, columna asesor, columna vendedor, ocultar columna asesor, quitar columna vendedor, se repite el asesor, nivel de usuario, administrador ve todo, el vendedor ve la cartera de todos, pdf de la factura, descargar pdf, descargar factura, imprimir factura, ride, pdf del recibo, acciones de la fila, botones de la fila, detalle del documento, panel de detalle, ver detalle, error http, http 403, no carga el detalle, no aparece el boton de cobro, no aparece el historial, no aparece whatsapp, whatsapp no configurado, permiso de ingresos, reporte de cartera, celular, movil, telefono, botones pequeños, menu del celular, menu bloqueado, menu no responde, lineas montadas, lineas encimadas, lineas pisadas, texto montado en el pdf, filas cortadas, fila partida entre paginas, paginas en blanco, hojas en blanco en el pdf, pdf descuadrado, encabezado de columnas en cada pagina, encabezado por cada cliente, encabezado por cliente, no se ve a que columna corresponde, rotulo de columnas, estado de cuenta por whatsapp, whatsapp por cliente, resumen vencido, resumen total, deuda total por whatsapp, cuantas facturas debe, cobranza por whatsapp, correo por cliente, estado de cuenta por correo, enviar correo al cliente, numero de documento montado, documento se pasa a la otra columna, numero cortado en el pdf, cobrar dos veces, doble cobro, cobro duplicado, supera el saldo pendiente, vendedores que puede ver, solo algunos vendedores, ocultar vendedores, coordinador de zona, cartera de ciertos vendedores
-version: 2.34
+etiquetas: cuentas por cobrar, comprobar con contabilidad, cuadrar con contabilidad, cartera vs contabilidad, no cuadra con contabilidad, cuenta por cobrar contable, mayor de cuentas por cobrar, borrador, factura en borrador, sin autorizar, facturas migradas, no coincide con ingresos, distinto a ingresos, cxc, cartera, deudas de clientes, saldo pendiente, vencido, morosidad, cobrar, recibos de venta, tipo de documento, envio masivo, estado de cuenta, recordatorio de pago, fecha de corte, saldo a una fecha, fecha hasta, vendedor, cartera por vendedor, filtrar por vendedor, producto, cartera por producto, filtrar por producto, que deben por un producto, consolidado, establecimientos, sucursales, matriz, mismo ruc, cartera consolidada, todas las sucursales, serie, punto de emision, serie inactiva, registrar cobro, cedula y ruc, cliente duplicado, proveedor duplicado, mismo cliente dos veces, mismo proveedor dos veces, identificacion repetida, ruc es la cedula mas 001, unificar fichas, cartera partida en dos, tildes, acentos, eñe, buscar sin tildes, no encuentra al cliente, no aparece el cliente, buscar por apellido, buscar por varias palabras, mayor, mayor del cliente, cartera como mayor, agrupado por cliente, subtotal por cliente, total general, seccion por cliente, no carga al entrar, boton aplicar, aplicar filtros, listado vacio al entrar, detalle por cliente, columnas del detalle, nc, abonos, retenciones, dias vencidos, dias transcurridos, antiguedad del documento, columna dias, dias desde la emision, cuadricula del pdf, lineas de la tabla del pdf, ruc delante del nombre, asesor, vendedor del documento, fecha un dia antes, ordenar, ordenamiento, orden alfabetico, a-z, z-a, ordenar por cliente, ordenar por saldo, ordenar por vencimiento, clic en la columna, ordenar la tabla, ordenar el excel, ordenar el pdf, flecha de la columna, saldo junto al nombre, saldo del cliente, pdf vertical, pdf horizontal, orientacion del pdf, hoja vertical, pdf apaisado, acceso total, permiso de ver todos, registros propios, solo mis facturas, no veo las facturas de otro, cada usuario ve lo suyo, documentos migrados no aparecen, cartera del vendedor, mis clientes, clientes asignados, vendedor vinculado, usuario del sistema, el vendedor no ve nada, asesor solo ve sus clientes, logo, logo en el pdf, logo de la empresa, encabezado del pdf, filtros del pdf, filtros aplicados, resumen de filtros, filtros en el pdf, mostrar filtros del pdf, columna asesor, columna vendedor, ocultar columna asesor, quitar columna vendedor, se repite el asesor, nivel de usuario, administrador ve todo, el vendedor ve la cartera de todos, pdf de la factura, descargar pdf, descargar factura, imprimir factura, ride, pdf del recibo, acciones de la fila, botones de la fila, detalle del documento, panel de detalle, ver detalle, error http, http 403, no carga el detalle, no aparece el boton de cobro, no aparece el historial, no aparece whatsapp, whatsapp no configurado, permiso de ingresos, reporte de cartera, celular, movil, telefono, botones pequeños, menu del celular, menu bloqueado, menu no responde, lineas montadas, lineas encimadas, lineas pisadas, texto montado en el pdf, filas cortadas, fila partida entre paginas, paginas en blanco, hojas en blanco en el pdf, pdf descuadrado, encabezado de columnas en cada pagina, encabezado por cada cliente, encabezado por cliente, no se ve a que columna corresponde, rotulo de columnas, estado de cuenta por whatsapp, whatsapp por cliente, resumen vencido, resumen total, deuda total por whatsapp, cuantas facturas debe, cobranza por whatsapp, correo por cliente, estado de cuenta por correo, enviar correo al cliente, numero de documento montado, documento se pasa a la otra columna, numero cortado en el pdf, cobrar dos veces, doble cobro, cobro duplicado, supera el saldo pendiente, vendedores que puede ver, solo algunos vendedores, ocultar vendedores, coordinador de zona, cartera de ciertos vendedores, detalle de lo que se cobra, concepto del cobro, por concepto de, que servicio se cobra, mensaje generico de whatsapp, whatsapp sin detalle, descripcion del servicio en whatsapp, conceptos repetidos, plantilla de cobro, factura_por_cobrar, cuenta_por_cobrar, estado_cuenta_cliente, saldo total del cliente por whatsapp
+version: 2.35
 orden: 40
 estado: activo
 ---
@@ -339,9 +339,15 @@ Cada opción muestra cuántos documentos y qué valor abarca; el vencido se
 desactiva si el cliente no tiene nada vencido. El teléfono sale de la ficha del
 cliente (se puede corregir) y abajo se ve el mensaje tal como llegará, por
 ejemplo: *Estimado(a) CLIENTE, le recordamos que estamos pendientes del pago de
-3 factura(s) por un valor de $1,250.00. Atentamente, MI EMPRESA. Agradecemos su
-puntual pago.* La firma es el nombre comercial de la empresa activa (o su razón
-social si no tiene).
+3 factura(s) por un valor de $1,250.00, por concepto de: Mantenimiento mensual,
+Hosting anual. Atentamente, MI EMPRESA. Agradecemos su puntual pago.* La firma
+es el nombre comercial de la empresa activa (o su razón social si no tiene).
+
+El campo **Detalle de lo que se cobra** se llena con los productos o servicios
+de los documentos del resumen elegido (el vencido puede tener menos que el
+total), sin repetir, y se puede cambiar antes de enviar. Aparece solo cuando la
+plantilla aprobada ya es la versión con detalle; ver *Detalle de lo que se
+cobra en los mensajes de WhatsApp*.
 
 - Entran facturas, recibos y saldos iniciales del cliente que estén en el
   listado filtrado. El número y el valor se **recalculan al enviar** con el
@@ -609,6 +615,57 @@ El recordatorio por **correo** funciona para facturas y recibos; el envío por
 **WhatsApp** está disponible solo para facturas y solo si la empresa tiene
 WhatsApp configurado (si no, el botón no aparece).
 
+En el WhatsApp de una fila se elige la plantilla y abajo se ve el mensaje tal
+como llegará:
+
+- **Factura por Cobrar** (`factura_por_cobrar`): el saldo de **esa factura**,
+  con su PDF adjunto.
+- **Cuenta por Cobrar** (`cuenta_por_cobrar`): el saldo pendiente de **todo el
+  cliente**, sumando todos sus documentos con saldo del listado (facturas,
+  recibos y saldos iniciales, también los de las otras fichas del mismo
+  contribuyente con cédula o RUC). Antes enviaba solo el saldo de la factura de
+  la fila aunque el texto hablaba del saldo del cliente.
+- Una **plantilla libre** sale con el texto que se aprobó; sus variables se
+  envían en blanco.
+
+## Detalle de lo que se cobra en los mensajes de WhatsApp
+
+Para que el cliente sepa **qué servicio o producto** se le está cobrando, las
+plantillas de cobro llevan la frase *por concepto de: …*:
+
+| Plantilla | Dónde se usa | Qué detalle lleva |
+| --- | --- | --- |
+| Factura por Cobrar | WhatsApp de una fila, Facturas de Venta | Los productos o servicios de esa factura |
+| Cuenta por Cobrar | WhatsApp de una fila | Los de todos los documentos pendientes del cliente |
+| Estado de Cuenta del Cliente | Vista *Por cliente* | Los de los documentos del resumen elegido (vencido o total) |
+
+**Cómo se arma.** Se toman las descripciones de los ítems de los documentos,
+del más antiguo al más reciente, y se juntan separadas por comas **sin
+repetir**: *Mantenimiento mensual*, *mantenimiento  mensual* y *MANTENIMIENTO
+MENSUAL.* cuentan como un solo concepto (no importan mayúsculas, tildes ni
+espacios de más). El detalle tiene un largo máximo de 250 caracteres: si no
+caben todos los conceptos, se corta y termina en *y N concepto(s) más*. Los
+saldos iniciales no tienen ítems y no aportan concepto; si ningún documento
+tiene ítems, el mensaje dice *documentos pendientes de pago*.
+
+**Se puede cambiar.** El campo **Detalle de lo que se cobra** de la ventana de
+WhatsApp viene lleno y se puede editar (por ejemplo, *Mensualidad de octubre
+del plan Premium*). Los saltos de línea se convierten en espacios, porque
+WhatsApp no los admite dentro de una variable. Si se deja vacío, se envía el
+detalle automático.
+
+**Requiere la versión nueva de la plantilla.** WhatsApp solo deja enviar el
+texto exacto que Meta aprobó, así que el detalle necesita una variable más en
+la plantilla. Las plantillas que ya estaban aprobadas **siguen funcionando
+igual, sin el detalle**; la ventana avisa *Esta plantilla aún no incluye el
+detalle de lo que se cobra*. Para activarlo:
+
+1. Entre a **Plantillas de WhatsApp** y edite la plantilla.
+2. Pulse **Usar el texto sugerido** (el cuerpo queda con la variable del
+   detalle) y guarde.
+3. Espere la aprobación de Meta. Mientras está en revisión, esa plantilla no se
+   puede enviar.
+
 ## Historial de la factura
 
 El botón del reloj de cada fila abre el **Historial de Cobros**, que lista
@@ -780,6 +837,15 @@ un doble clic no genera dos ingresos.
   (y en las demás que tienen el panel de detalle). Ya está corregido.
 
 ## Historial de cambios
+- **2.35** — Los mensajes de WhatsApp dicen **qué se cobra**: campo **Detalle
+  de lo que se cobra** (editable) que se llena con los productos o servicios de
+  los documentos, sin repetir conceptos. La ventana de WhatsApp de una fila
+  muestra el mensaje tal como llegará. **Cuenta por Cobrar** envía ahora el
+  saldo de todo el cliente y no solo el de la factura de la fila. Requiere
+  editar las plantillas `factura_por_cobrar`, `cuenta_por_cobrar` y
+  `estado_cuenta_cliente` con el texto sugerido y que Meta las apruebe; sin eso
+  siguen saliendo como antes. Nueva sección *Detalle de lo que se cobra en los
+  mensajes de WhatsApp*.
 - **2.34** — El reporte muestra solo documentos de **producción**, aunque la empresa esté configurada en pruebas (ver el artículo *Los reportes solo muestran documentos de producción*).
 - **2.33** — **Vendedores que puede ver**: el administrador puede desmarcar, por
   usuario, los vendedores cuya cartera no debe ver en este módulo (*Permisos

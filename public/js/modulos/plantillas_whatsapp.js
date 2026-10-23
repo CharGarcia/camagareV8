@@ -3,6 +3,27 @@
  */
 const WA_URL = window.WA_URL_BASE || '';
 
+/* Texto sugerido de las plantillas de cobro con la variable "detalle de lo que se cobra".
+   Una plantilla ya aprobada con el texto anterior sigue funcionando (sin el detalle) hasta
+   que se edita con este texto; mientras Meta la revisa no se puede enviar, y al aprobarla ya
+   sale con el detalle. El modal Editar ofrece cargar este texto.
+   El detalle va en medio del texto: Meta rechaza un cuerpo que termina con una variable. */
+const WA_TEXTOS_CON_DETALLE = {
+    factura_por_cobrar:    'Estimado(a) {{1}}, le recordamos que tiene un valor pendiente de pago de {{2}} correspondiente a la factura {{3}} por concepto de: {{4}}. Agradecemos su puntual pago.',
+    cuenta_por_cobrar:     'Estimado(a) {{1}}, le informamos que tiene un saldo pendiente de pago de {{2}} por concepto de: {{3}}. Si tiene dudas, contáctenos.',
+    estado_cuenta_cliente: 'Estimado(a) {{1}}, le recordamos que estamos pendientes del pago de {{2}} factura(s) por un valor de {{3}}, por concepto de: {{4}}. Atentamente, {{5}}. Agradecemos su puntual pago.',
+};
+/* Variable que solo tiene la versión con detalle (si el cuerpo no la tiene, es la anterior). */
+const WA_VAR_DETALLE = { factura_por_cobrar: '{{4}}', cuenta_por_cobrar: '{{3}}', estado_cuenta_cliente: '{{5}}' };
+
+/* Modal Editar: reemplaza el cuerpo por el texto sugerido con el detalle de lo que se cobra. */
+function WA_usarTextoConDetalle() {
+    const nombre = document.getElementById('editarNombre').value;
+    if (!WA_TEXTOS_CON_DETALLE[nombre]) return;
+    document.getElementById('editarCuerpo').value = WA_TEXTOS_CON_DETALLE[nombre];
+    document.getElementById('editarAvisoDetalle')?.classList.add('d-none');
+}
+
 // Sobrescribimos el fetchSearch que pusimos en la vista
 window.fetchSearch = async (page = 1) => {
     const term = document.getElementById('buscarPlantilla') ? document.getElementById('buscarPlantilla').value.trim() : '';
@@ -213,12 +234,13 @@ document.addEventListener('DOMContentLoaded', () => {
             nombre: 'factura_por_cobrar',
             categoria: 'UTILITY',
             cabecera: 'DOCUMENT',
-            descripcion: 'Sirve para enviar el saldo pendiente de pago de una factura de venta, adjuntando obligatoriamente el documento (PDF).',
-            texto: 'Estimado(a) {{1}}, le recordamos que tiene un valor pendiente de pago de {{2}} correspondiente a la factura {{3}}. Agradecemos su puntual pago.',
+            descripcion: 'Sirve para enviar el saldo pendiente de pago de una factura de venta, adjuntando obligatoriamente el documento (PDF). {{4}} es el detalle de lo que se cobra: los productos o servicios de la factura, sin repetir, editables antes de enviar.',
+            texto: WA_TEXTOS_CON_DETALLE.factura_por_cobrar,
             variables: [
                 { id: '{{1}}', label: 'Nombre del Cliente' },
                 { id: '{{2}}', label: 'Valor Pendiente de Pago' },
-                { id: '{{3}}', label: 'Número de Factura' }
+                { id: '{{3}}', label: 'Número de Factura' },
+                { id: '{{4}}', label: 'Detalle de lo que se Cobra' }
             ]
         },
         'factura_venta': {
@@ -275,24 +297,26 @@ document.addEventListener('DOMContentLoaded', () => {
             nombre: 'cuenta_por_cobrar',
             categoria: 'UTILITY',
             cabecera: 'NONE',
-            descripcion: 'Sirve para enviar a los clientes su saldo pendiente de pago consolidado hasta el momento.',
-            texto: 'Estimado(a) {{1}}, le informamos que su saldo pendiente de pago hasta el momento es de {{2}}. Si tiene dudas, contáctenos.',
+            descripcion: 'Sirve para enviar a los clientes su saldo pendiente de pago consolidado hasta el momento (todas sus facturas pendientes). {{3}} es el detalle de lo que se cobra: los productos o servicios de esas facturas, sin repetir, editables antes de enviar.',
+            texto: WA_TEXTOS_CON_DETALLE.cuenta_por_cobrar,
             variables: [
                 { id: '{{1}}', label: 'Nombre del Cliente' },
-                { id: '{{2}}', label: 'Total por Cobrar' }
+                { id: '{{2}}', label: 'Total por Cobrar' },
+                { id: '{{3}}', label: 'Detalle de lo que se Cobra' }
             ]
         },
         'estado_cuenta_cliente': {
             nombre: 'estado_cuenta_cliente',
             categoria: 'UTILITY',
             cabecera: 'NONE',
-            descripcion: 'Sirve para enviar a un cliente el resumen de su deuda (vencida o total) desde Cuentas por Cobrar, en la vista agrupada por cliente: número de facturas pendientes, valor adeudado y la empresa que emite el mensaje.',
-            texto: 'Estimado(a) {{1}}, le recordamos que estamos pendientes del pago de {{2}} factura(s) por un valor de {{3}}. Atentamente, {{4}}. Agradecemos su puntual pago.',
+            descripcion: 'Sirve para enviar a un cliente el resumen de su deuda (vencida o total) desde Cuentas por Cobrar, en la vista agrupada por cliente: número de facturas pendientes, valor adeudado, detalle de lo que se cobra (productos o servicios sin repetir, editables antes de enviar) y la empresa que emite el mensaje.',
+            texto: WA_TEXTOS_CON_DETALLE.estado_cuenta_cliente,
             variables: [
                 { id: '{{1}}', label: 'Nombre del Cliente' },
                 { id: '{{2}}', label: 'Número de Facturas Pendientes' },
                 { id: '{{3}}', label: 'Valor Pendiente' },
-                { id: '{{4}}', label: 'Empresa que Emite' }
+                { id: '{{4}}', label: 'Detalle de lo que se Cobra' },
+                { id: '{{5}}', label: 'Empresa que Emite' }
             ]
         },
         'renovacion_suscripcion': {
@@ -424,6 +448,9 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         });
     });
+
+    // El submit del modal Editar (otro DOMContentLoaded) valida contra este catálogo.
+    window.WA_PLANTILLAS_RAPIDAS = PLANTILLAS_RAPIDAS;
 
     if (selectRapida) {
         selectRapida.addEventListener('change', (e) => {
@@ -601,9 +628,11 @@ document.addEventListener('DOMContentLoaded', () => {
                 }
             }
 
-            // 2. Si es rápida, validar permitidas
-            if (PLANTILLAS_RAPIDAS[nombre]) {
-                const permitidas = (PLANTILLAS_RAPIDAS[nombre].variables || []).map(v => v.id);
+            // 2. Si es rápida, validar permitidas. El catálogo se declara dentro de otro
+            // DOMContentLoaded: aquí se lee por window (antes daba ReferenceError al guardar).
+            const rapidas = window.WA_PLANTILLAS_RAPIDAS || {};
+            if (rapidas[nombre]) {
+                const permitidas = (rapidas[nombre].variables || []).map(v => v.id);
                 for (let v of encontradas) {
                     if (!permitidas.includes(v)) {
                         Swal.fire('Error', `La variable ${v} no está permitida en esta plantilla rápida. Solo puedes usar: ${permitidas.length ? permitidas.join(', ') : 'Ninguna'}`, 'error');
@@ -737,7 +766,15 @@ window.WA_abrirModalEditar = function(id) {
             document.getElementById('editarCategoria').value = p.categoria;
             document.getElementById('editarIdioma').value = p.idioma;
             document.getElementById('editarCuerpo').value = p.cuerpo;
-            
+
+            // Plantilla de cobro con el texto anterior (sin el detalle de lo que se cobra):
+            // se ofrece cargar el texto sugerido nuevo. Al guardar, Meta la vuelve a revisar.
+            const avisoDet = document.getElementById('editarAvisoDetalle');
+            if (avisoDet) {
+                const varDet = WA_VAR_DETALLE[p.nombre];
+                avisoDet.classList.toggle('d-none', !varDet || String(p.cuerpo || '').includes(varDet));
+            }
+
             const selectCab = document.getElementById('editarTipoCabecera');
             selectCab.value = p.tipo_cabecera;
             selectCab.dispatchEvent(new Event('change'));

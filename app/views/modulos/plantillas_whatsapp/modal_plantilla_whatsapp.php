@@ -182,6 +182,11 @@
 
                     <div class="mb-3">
                         <label class="form-label fw-medium small text-muted">Cuerpo del Mensaje (Body)</label>
+                        <div id="editarAvisoDetalle" class="alert alert-info py-2 px-3 small d-none">
+                            <i class="fas fa-info-circle me-1"></i>Esta plantilla aún no incluye el <strong>detalle de lo que se cobra</strong>.
+                            <a href="#" class="alert-link" onclick="WA_usarTextoConDetalle(); return false;">Usar el texto sugerido</a>
+                            y guardar. Meta vuelve a revisar la plantilla y, mientras esté en revisión, no se puede enviar.
+                        </div>
                         <textarea class="form-control" name="cuerpo" id="editarCuerpo" rows="5" required></textarea>
                         <div class="form-text" style="font-size: 0.75rem;">Puedes usar variables usando llaves dobles: {{1}}, {{2}}, etc.</div>
                     </div>
