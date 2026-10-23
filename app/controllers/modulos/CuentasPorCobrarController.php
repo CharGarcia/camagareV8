@@ -1449,7 +1449,7 @@ class CuentasPorCobrarController extends BaseModuloController
 
         $todasLasRapidas = [
             'aviso_mensajes_pendientes', 'factura_por_cobrar', 'factura_venta',
-            'cuenta_por_cobrar', 'renovacion_suscripcion', 'renovacion_firma_electronica',
+            'cuenta_por_cobrar', 'renovacion_suscripcion', 'renovacion_firma_electronica', 'solicitud_firma',
             'retencion_compra', 'nota_credito', 'nota_debito', 'guia_remision',
             'rol_pagos', 'descuento_empleado', 'estado_cuenta_cliente'
         ];

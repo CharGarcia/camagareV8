@@ -230,6 +230,8 @@ class FirmaElectronicaRepository extends BaseRepository
                     tipo_persona, con_ruc, ruc_empresa, nombre_empresa, cargo,
                     tipo_identificacion, numero_identificacion, codigo_dactilar,
                     nombres, apellidos, fecha_nacimiento,
+                    apellido_paterno, apellido_materno, telefono2, correo2, departamento, motivo,
+                    rep_tipo_identificacion, rep_identificacion, rep_nombres, rep_apellidos,
                     telefono, correo, nacionalidad, sexo, direccion,
                     cod_prov, cod_ciudad,
                     tipo_pago, estado_pago, estado, fecha_caducidad, observaciones,
@@ -242,6 +244,8 @@ class FirmaElectronicaRepository extends BaseRepository
                     :tipo_persona, :con_ruc, :ruc_empresa, :nombre_empresa, :cargo,
                     :tipo_identificacion, :numero_identificacion, :codigo_dactilar,
                     :nombres, :apellidos, :fecha_nacimiento,
+                    :apellido_paterno, :apellido_materno, :telefono2, :correo2, :departamento, :motivo,
+                    :rep_tipo_identificacion, :rep_identificacion, :rep_nombres, :rep_apellidos,
                     :telefono, :correo, :nacionalidad, :sexo, :direccion,
                     :cod_prov, :cod_ciudad,
                     :tipo_pago, :estado_pago, :estado, :fecha_caducidad, :observaciones,
@@ -264,6 +268,10 @@ class FirmaElectronicaRepository extends BaseRepository
                     numero_identificacion = :numero_identificacion,
                     codigo_dactilar = :codigo_dactilar,
                     nombres = :nombres, apellidos = :apellidos,
+                    apellido_paterno = :apellido_paterno, apellido_materno = :apellido_materno,
+                    telefono2 = :telefono2, correo2 = :correo2, departamento = :departamento, motivo = :motivo,
+                    rep_tipo_identificacion = :rep_tipo_identificacion, rep_identificacion = :rep_identificacion,
+                    rep_nombres = :rep_nombres, rep_apellidos = :rep_apellidos,
                     fecha_nacimiento = :fecha_nacimiento,
                     telefono = :telefono, correo = :correo,
                     nacionalidad = :nacionalidad, sexo = :sexo, direccion = :direccion,
@@ -349,6 +357,443 @@ class FirmaElectronicaRepository extends BaseRepository
         return $st->execute([':id' => $id, ':id_empresa' => $idEmpresa, ':u' => $idUsuario]);
     }
 
+    // ── Trámite (portal del cliente, pago, Uanataca) ──────────
+
+    /** Candado del trámite de una firma: serializa pago, facturación y cambios de estado (CLAUDE.md §8). */
+    public function lockFirma(int $idFirma): void
+    {
+        $st = $this->db->prepare("SELECT pg_advisory_xact_lock(hashtext('firma_tramite:' || :id))");
+        $st->execute([':id' => $idFirma]);
+    }
+
+    public function getPorSolicitud(int $idSolicitud, int $idEmpresa): ?array
+    {
+        $st = $this->db->prepare(
+            "SELECT f.*, v.estado AS factura_estado, v.eliminado AS factura_eliminada,
+                    v.establecimiento AS factura_establecimiento, v.punto_emision AS factura_punto_emision,
+                    v.secuencial AS factura_secuencial, v.importe_total AS factura_importe_total
+             FROM {$this->table} f
+             LEFT JOIN ventas_cabecera v ON v.id = f.id_factura
+             WHERE f.id_solicitud = :s AND f.id_empresa = :ie AND f.eliminado = false
+             LIMIT 1"
+        );
+        $st->execute([':s' => $idSolicitud, ':ie' => $idEmpresa]);
+        $row = $st->fetch(PDO::FETCH_ASSOC);
+        return $row ?: null;
+    }
+
+    /** Campos del trámite que el Service puede escribir sin pasar por el formulario completo. */
+    private const CAMPOS_TRAMITE = [
+        'estado', 'estado_pago', 'tipo_pago', 'id_factura', 'id_ingreso', 'fecha_caducidad',
+        'pago_motivo_rechazo', 'pago_revisado_by', 'pago_revisado_at',
+        'correo_confirmacion_token', 'correo_confirmacion_enviado_at', 'correo_confirmado_at',
+        'uanataca_referencia', 'uanataca_registrada_at', 'emitida_at', 'observacion_cliente',
+        'uanataca_uuid', 'uanataca_estado', 'uanataca_estado_at', 'uanataca_comentarios', 'uanataca_enviada_at', 'uanataca_error',
+    ];
+
+    public function actualizarTramite(int $id, int $idEmpresa, array $campos, ?int $idUsuario): void
+    {
+        $sets   = [];
+        $params = [':id' => $id, ':ie' => $idEmpresa, ':ub' => $idUsuario ?: null];
+        foreach ($campos as $campo => $valor) {
+            if (!in_array($campo, self::CAMPOS_TRAMITE, true)) {
+                throw new \InvalidArgumentException("Campo de trámite no permitido: {$campo}");
+            }
+            $sets[] = "{$campo} = :{$campo}";
+            $params[":{$campo}"] = $valor;
+        }
+        if (!$sets) {
+            return;
+        }
+        $sql = "UPDATE {$this->table} SET " . implode(', ', $sets) . ",
+                       updated_by = COALESCE(:ub, updated_by), updated_at = CURRENT_TIMESTAMP
+                WHERE id = :id AND id_empresa = :ie AND eliminado = false";
+        $this->db->prepare($sql)->execute($params);
+    }
+
+    /** Datos del titular desde el portal (sin tocar pago, estado ni facturación). */
+    public function actualizarDatosPortal(int $id, int $idEmpresa, array $data): void
+    {
+        $sql = "UPDATE {$this->table} SET
+                    id_producto = :id_producto, nombre_producto = :nombre_producto,
+                    tipo_persona = :tipo_persona, con_ruc = :con_ruc,
+                    ruc_empresa = :ruc_empresa, nombre_empresa = :nombre_empresa, cargo = :cargo,
+                    tipo_identificacion = :tipo_identificacion, numero_identificacion = :numero_identificacion,
+                    codigo_dactilar = :codigo_dactilar, nombres = :nombres, apellidos = :apellidos,
+                    apellido_paterno = :apellido_paterno, apellido_materno = :apellido_materno,
+                    telefono2 = :telefono2, correo2 = :correo2, departamento = :departamento, motivo = :motivo,
+                    rep_tipo_identificacion = :rep_tipo_identificacion, rep_identificacion = :rep_identificacion,
+                    rep_nombres = :rep_nombres, rep_apellidos = :rep_apellidos,
+                    fecha_nacimiento = :fecha_nacimiento, telefono = :telefono, correo = :correo,
+                    nacionalidad = :nacionalidad, sexo = :sexo, direccion = :direccion,
+                    cod_prov = :cod_prov, cod_ciudad = :cod_ciudad, observaciones = :observaciones,
+                    facturacion_mismos_datos = :facturacion_mismos_datos,
+                    facturacion_tipo_id = :facturacion_tipo_id, facturacion_num_id = :facturacion_num_id,
+                    facturacion_nombres = :facturacion_nombres, facturacion_direccion = :facturacion_direccion,
+                    facturacion_correo = :facturacion_correo, facturacion_telefono = :facturacion_telefono,
+                    updated_at = CURRENT_TIMESTAMP
+                WHERE id = :id AND id_empresa = :id_empresa AND eliminado = false";
+        $params = $this->mapParams($data);
+        unset($params[':id_usuario'], $params[':created_by'], $params[':tipo_pago'], $params[':estado_pago'],
+              $params[':estado'], $params[':fecha_caducidad']);
+        $params[':id']         = $id;
+        $params[':id_empresa'] = $idEmpresa;
+        $this->db->prepare($sql)->execute($params);
+    }
+
+    /** Firma creada desde el portal: guarda además el origen y la solicitud que la generó. */
+    public function createDesdePortal(array $data, int $idSolicitud): int
+    {
+        $id = $this->create($data);
+        $this->db->prepare("UPDATE {$this->table} SET origen = 'portal', id_solicitud = :s WHERE id = :id")
+                 ->execute([':s' => $idSolicitud, ':id' => $id]);
+        return $id;
+    }
+
+    /** Firma (de empresa activa) dueña de un token de confirmación de correo. */
+    public function getPorTokenConfirmacion(string $token): ?array
+    {
+        $st = $this->db->prepare(
+            "SELECT f.*, e.nombre AS empresa_nombre, s.token AS token_portal
+             FROM {$this->table} f
+             JOIN empresas e ON e.id = f.id_empresa AND e.estado = '1' AND e.eliminado = false
+             LEFT JOIN firma_solicitudes s ON s.id = f.id_solicitud
+             WHERE f.correo_confirmacion_token = :t AND f.eliminado = false
+             LIMIT 1"
+        );
+        $st->execute([':t' => $token]);
+        $row = $st->fetch(PDO::FETCH_ASSOC);
+        return $row ?: null;
+    }
+
+    /**
+     * Firmas pagadas cuya factura ya está autorizada y todavía no recibieron el correo
+     * de confirmación (lo envía el cron cuando el SRI autorizó después del pago).
+     */
+    public function getPendientesCorreoConfirmacion(int $limite = 30): array
+    {
+        $st = $this->db->prepare(
+            "SELECT f.id, f.id_empresa
+             FROM {$this->table} f
+             JOIN ventas_cabecera v ON v.id = f.id_factura AND v.eliminado = false AND v.estado = 'autorizado'
+             JOIN empresas e ON e.id = f.id_empresa AND e.estado = '1' AND e.eliminado = false
+             WHERE f.eliminado = false
+               AND f.estado_pago = 'confirmado'
+               AND f.correo_confirmacion_enviado_at IS NULL
+               AND f.correo_confirmado_at IS NULL
+               AND f.estado NOT IN ('cancelada')
+             ORDER BY f.id
+             LIMIT " . max(1, $limite)
+        );
+        $st->execute();
+        return $st->fetchAll(PDO::FETCH_ASSOC);
+    }
+
+    /**
+     * Firmas pagadas cuya factura quedó en borrador (el SRI no respondió a tiempo al
+     * pagar). Solo las de los últimos 3 días, para no reintentar sin fin un error de
+     * configuración (p. ej. firma de la empresa vencida): esas las ve el operador.
+     */
+    public function getPendientesEmitir(int $limite = 20): array
+    {
+        $st = $this->db->prepare(
+            "SELECT f.id, f.id_empresa
+             FROM {$this->table} f
+             JOIN ventas_cabecera v ON v.id = f.id_factura AND v.eliminado = false AND v.estado = 'borrador'
+             JOIN empresas e ON e.id = f.id_empresa AND e.estado = '1' AND e.eliminado = false
+             WHERE f.eliminado = false AND f.estado_pago = 'confirmado' AND f.id_ingreso IS NOT NULL
+               AND f.pago_revisado_at > CURRENT_TIMESTAMP - INTERVAL '3 days'
+               AND f.pago_revisado_at < CURRENT_TIMESTAMP - INTERVAL '5 minutes'
+             ORDER BY f.id
+             LIMIT " . max(1, $limite)
+        );
+        $st->execute();
+        return $st->fetchAll(PDO::FETCH_ASSOC);
+    }
+
+    public function getEstadoFactura(int $idFactura, int $idEmpresa): ?array
+    {
+        $st = $this->db->prepare(
+            "SELECT id, estado, eliminado FROM ventas_cabecera WHERE id = :id AND id_empresa = :ie"
+        );
+        $st->execute([':id' => $idFactura, ':ie' => $idEmpresa]);
+        $row = $st->fetch(PDO::FETCH_ASSOC);
+        return $row ?: null;
+    }
+
+    /** Productos de firma (categoría cuyo nombre contiene "FIRMA") con su PVP. */
+    public function getTiposFirma(int $idEmpresa): array
+    {
+        $st = $this->db->prepare(
+            "SELECT p.id, p.nombre,
+                    ROUND((p.precio_base + COALESCE(p.valor_ice, 0))
+                        * (1 + COALESCE(ti.porcentaje_iva, 0)::numeric / 100), 2) AS pvp
+             FROM productos p
+             INNER JOIN categorias c ON c.id = p.id_categoria
+             LEFT  JOIN tarifa_iva ti ON ti.id = p.tarifa_iva
+             WHERE p.id_empresa = :ie AND p.eliminado = false AND p.status = 1
+               AND UPPER(c.nombre) LIKE '%FIRMA%'
+             ORDER BY p.nombre ASC"
+        );
+        $st->execute([':ie' => $idEmpresa]);
+        return $st->fetchAll(PDO::FETCH_ASSOC);
+    }
+
+    /** Producto de la firma con lo necesario para facturarlo. */
+    public function getProductoFacturable(int $idProducto, int $idEmpresa): ?array
+    {
+        $st = $this->db->prepare(
+            "SELECT p.id, p.nombre, p.precio_base, p.codigo, p.codigo_auxiliar, p.id_medida,
+                    ti.id AS id_tarifa_iva, ti.porcentaje_iva, ti.codigo AS codigo_porcentaje_iva
+             FROM productos p
+             LEFT JOIN tarifa_iva ti ON ti.id = p.tarifa_iva
+             WHERE p.id = :id AND p.id_empresa = :ie AND p.eliminado = false"
+        );
+        $st->execute([':id' => $idProducto, ':ie' => $idEmpresa]);
+        $row = $st->fetch(PDO::FETCH_ASSOC);
+        return $row ?: null;
+    }
+
+    /** Serie activa (establecimiento + punto) de la empresa; sin id, la primera. */
+    public function getSerieFacturacion(int $idEmpresa, ?int $idPunto): ?array
+    {
+        $filtro = $idPunto ? 'AND p.id = :ip' : '';
+        $st = $this->db->prepare(
+            "SELECT p.id, p.codigo_punto, e.id AS id_establecimiento, e.codigo AS cod_establecimiento
+             FROM empresa_punto_emision p
+             JOIN empresa_establecimiento e ON e.id = p.id_establecimiento
+             WHERE p.id_empresa = :ie AND p.eliminado = false AND e.eliminado = false
+               AND p.estado = 'activo' AND e.estado = 'activo' {$filtro}
+             ORDER BY e.codigo ASC, p.codigo_punto ASC
+             LIMIT 1"
+        );
+        $params = [':ie' => $idEmpresa];
+        if ($idPunto) {
+            $params[':ip'] = $idPunto;
+        }
+        $st->execute($params);
+        $row = $st->fetch(PDO::FETCH_ASSOC);
+        return $row ?: null;
+    }
+
+    /** Series activas de la empresa (selector de la configuración del módulo). */
+    public function getSeriesFacturacion(int $idEmpresa): array
+    {
+        $st = $this->db->prepare(
+            "SELECT p.id, e.codigo || '-' || p.codigo_punto AS serie, COALESCE(e.nombre, '') AS establecimiento
+             FROM empresa_punto_emision p
+             JOIN empresa_establecimiento e ON e.id = p.id_establecimiento
+             WHERE p.id_empresa = :ie AND p.eliminado = false AND e.eliminado = false
+               AND p.estado = 'activo' AND e.estado = 'activo'
+             ORDER BY e.codigo, p.codigo_punto"
+        );
+        $st->execute([':ie' => $idEmpresa]);
+        return $st->fetchAll(PDO::FETCH_ASSOC);
+    }
+
+    /** Formas de cobro de la empresa válidas para un ingreso (aprobación del comprobante). */
+    public function getFormasCobro(int $idEmpresa): array
+    {
+        $st = $this->db->prepare(
+            "SELECT id, nombre, UPPER(tipo) AS tipo
+             FROM empresa_formas_pago
+             WHERE id_empresa = :ie AND eliminado = false AND activo = true
+               AND aplica_en IN ('AMBAS', 'INGRESO')
+             ORDER BY CASE WHEN UPPER(tipo) = 'BANCO' THEN 0 ELSE 1 END, nombre"
+        );
+        $st->execute([':ie' => $idEmpresa]);
+        return $st->fetchAll(PDO::FETCH_ASSOC);
+    }
+
+    public function getFormaCobro(int $idFormaCobro, int $idEmpresa): ?array
+    {
+        $st = $this->db->prepare(
+            "SELECT id, nombre, UPPER(tipo) AS tipo, modalidad_tarjeta
+             FROM empresa_formas_pago
+             WHERE id = :id AND id_empresa = :ie AND eliminado = false AND activo = true
+               AND aplica_en IN ('AMBAS', 'INGRESO')"
+        );
+        $st->execute([':id' => $idFormaCobro, ':ie' => $idEmpresa]);
+        $row = $st->fetch(PDO::FETCH_ASSOC);
+        return $row ?: null;
+    }
+
+    // ── Historial del trámite ─────────────────────────────────
+
+    public function crearEvento(int $idEmpresa, int $idFirma, string $tipo, string $titulo, ?string $detalle, bool $visibleCliente, ?int $idUsuario): void
+    {
+        $st = $this->db->prepare(
+            "INSERT INTO firmas_electronicas_eventos (id_empresa, id_firma, tipo, titulo, detalle, visible_cliente, created_by)
+             VALUES (:ie, :f, :t, :ti, :d, :v, :u)"
+        );
+        $st->execute([
+            ':ie' => $idEmpresa, ':f' => $idFirma, ':t' => $tipo, ':ti' => mb_substr($titulo, 0, 200),
+            ':d' => $detalle, ':v' => $visibleCliente ? 'true' : 'false', ':u' => $idUsuario ?: null,
+        ]);
+    }
+
+    public function getEventos(int $idFirma, int $idEmpresa, bool $soloCliente = false): array
+    {
+        $filtro = $soloCliente ? 'AND ev.visible_cliente = true' : '';
+        $st = $this->db->prepare(
+            "SELECT ev.id, ev.tipo, ev.titulo, ev.detalle, ev.visible_cliente, ev.created_at,
+                    u.nombre AS usuario
+             FROM firmas_electronicas_eventos ev
+             LEFT JOIN usuarios u ON u.id = ev.created_by
+             WHERE ev.id_firma = :f AND ev.id_empresa = :ie AND ev.eliminado = false {$filtro}
+             ORDER BY ev.created_at ASC, ev.id ASC"
+        );
+        $st->execute([':f' => $idFirma, ':ie' => $idEmpresa]);
+        return $st->fetchAll(PDO::FETCH_ASSOC);
+    }
+
+    // ── Configuración del módulo por empresa ──────────────────
+
+    public function getConfig(int $idEmpresa): ?array
+    {
+        $st = $this->db->prepare("SELECT * FROM firmas_electronicas_config WHERE id_empresa = :ie AND eliminado = false LIMIT 1");
+        $st->execute([':ie' => $idEmpresa]);
+        $row = $st->fetch(PDO::FETCH_ASSOC);
+        return $row ?: null;
+    }
+
+    /** Config por el código del enlace fijo, solo si está activo y la empresa también. */
+    public function getConfigPorEnlace(string $codigo): ?array
+    {
+        $st = $this->db->prepare(
+            "SELECT c.*, e.nombre AS empresa_nombre, e.ruc AS empresa_ruc
+             FROM firmas_electronicas_config c
+             JOIN empresas e ON e.id = c.id_empresa AND e.estado = '1' AND e.eliminado = false
+             WHERE c.enlace_fijo_codigo = :c AND c.enlace_fijo_activo = true AND c.eliminado = false
+             LIMIT 1"
+        );
+        $st->execute([':c' => $codigo]);
+        $row = $st->fetch(PDO::FETCH_ASSOC);
+        return $row ?: null;
+    }
+
+    public function guardarConfig(int $idEmpresa, array $d, int $idUsuario): void
+    {
+        $params = [
+            ':ie'  => $idEmpresa,
+            ':pe'  => $d['id_punto_emision'] ?: null,
+            ':ur'  => $d['id_usuario_responsable'] ?: null,
+            ':pp'  => $d['payphone_activo'] ? 'true' : 'false',
+            ':tr'  => $d['transferencia_activa'] ? 'true' : 'false',
+            ':dt'  => $d['datos_transferencia'] !== '' ? $d['datos_transferencia'] : null,
+            ':ef'  => $d['enlace_fijo_activo'] ? 'true' : 'false',
+            ':cod' => $d['enlace_fijo_codigo'],
+            ':ua'     => !empty($d['uanataca_activo']) ? 'true' : 'false',
+            ':uamb'   => ($d['uanataca_ambiente'] ?? '') === 'produccion' ? 'produccion' : 'pruebas',
+            ':uusr'   => ($d['uanataca_usuario'] ?? '') !== '' ? $d['uanataca_usuario'] : null,
+            // Clave vacía = conservar la guardada; se guarda cifrada.
+            ':uclave' => ($d['uanataca_clave'] ?? '') !== '' ? \App\Helpers\CryptoHelper::encriptar($d['uanataca_clave']) : null,
+            ':uauto'  => !empty($d['uanataca_envio_automatico']) ? 'true' : 'false',
+            ':ucorreo'=> !empty($d['uanataca_exigir_correo']) ? 'true' : 'false',
+            ':u'   => $idUsuario,
+        ];
+        if ($this->getConfig($idEmpresa)) {
+            $sql = "UPDATE firmas_electronicas_config SET
+                        id_punto_emision = :pe, id_usuario_responsable = :ur, payphone_activo = :pp,
+                        transferencia_activa = :tr, datos_transferencia = :dt, enlace_fijo_activo = :ef,
+                        enlace_fijo_codigo = :cod, uanataca_activo = :ua, uanataca_ambiente = :uamb,
+                        uanataca_usuario = :uusr, uanataca_clave_cifrada = COALESCE(:uclave, uanataca_clave_cifrada),
+                        uanataca_envio_automatico = :uauto, uanataca_exigir_correo = :ucorreo,
+                        updated_by = :u, updated_at = CURRENT_TIMESTAMP
+                    WHERE id_empresa = :ie AND eliminado = false";
+        } else {
+            $sql = "INSERT INTO firmas_electronicas_config
+                        (id_empresa, id_punto_emision, id_usuario_responsable, payphone_activo, transferencia_activa,
+                         datos_transferencia, enlace_fijo_activo, enlace_fijo_codigo, uanataca_activo, uanataca_ambiente,
+                         uanataca_usuario, uanataca_clave_cifrada, uanataca_envio_automatico, uanataca_exigir_correo, created_by)
+                    VALUES (:ie, :pe, :ur, :pp, :tr, :dt, :ef, :cod, :ua, :uamb, :uusr, :uclave, :uauto, :ucorreo, :u)";
+        }
+        $this->db->prepare($sql)->execute($params);
+    }
+
+    // ── Uanataca: mapeo de productos y colas del cron ─────────
+
+    /** ¿Alguna firma (de cualquier empresa) ya quedó enlazada a esta solicitud de Uanataca? */
+    public function existeUanatacaUuid(string $uuid): bool
+    {
+        $st = $this->db->prepare("SELECT 1 FROM {$this->table} WHERE uanataca_uuid = :u LIMIT 1");
+        $st->execute([':u' => $uuid]);
+        return (bool) $st->fetchColumn();
+    }
+
+    public function getMapeoProductos(int $idEmpresa): array
+    {
+        $st = $this->db->prepare(
+            "SELECT id_producto, uanataca_product_uuid, uanataca_code, uanataca_nombre
+             FROM firmas_productos_uanataca WHERE id_empresa = :ie AND eliminado = false"
+        );
+        $st->execute([':ie' => $idEmpresa]);
+        $out = [];
+        foreach ($st->fetchAll(PDO::FETCH_ASSOC) as $r) {
+            $out[(int) $r['id_producto']] = $r;
+        }
+        return $out;
+    }
+
+    /** Reemplaza el producto de Uanataca de un producto del sistema ('' = quitar el enlace). */
+    public function guardarMapeoProducto(int $idEmpresa, int $idProducto, string $uuid, string $code, string $nombre, int $idUsuario): void
+    {
+        $this->db->prepare(
+            "UPDATE firmas_productos_uanataca SET eliminado = true, deleted_at = CURRENT_TIMESTAMP, deleted_by = :u
+             WHERE id_empresa = :ie AND id_producto = :p AND eliminado = false"
+        )->execute([':u' => $idUsuario, ':ie' => $idEmpresa, ':p' => $idProducto]);
+        if ($uuid === '') {
+            return;
+        }
+        $this->db->prepare(
+            "INSERT INTO firmas_productos_uanataca (id_empresa, id_producto, uanataca_product_uuid, uanataca_code, uanataca_nombre, created_by)
+             VALUES (:ie, :p, :uuid, :code, :nom, :u)"
+        )->execute([':ie' => $idEmpresa, ':p' => $idProducto, ':uuid' => $uuid, ':code' => $code ?: null, ':nom' => $nombre ?: null, ':u' => $idUsuario]);
+    }
+
+    /**
+     * Firmas listas para el envío automático: pagadas, sin solicitud en Uanataca, de
+     * empresas con la API y el envío automático activos (y correo confirmado si la
+     * empresa lo exige). Un intento fallido espera 1 hora antes del siguiente.
+     */
+    public function getPendientesEnvioUanataca(int $limite = 10): array
+    {
+        $st = $this->db->prepare(
+            "SELECT f.id, f.id_empresa
+             FROM {$this->table} f
+             JOIN firmas_electronicas_config c ON c.id_empresa = f.id_empresa AND c.eliminado = false
+                  AND c.uanataca_activo = true AND c.uanataca_envio_automatico = true
+             JOIN empresas e ON e.id = f.id_empresa AND e.estado = '1' AND e.eliminado = false
+             WHERE f.eliminado = false AND f.estado = 'por_registrar' AND f.estado_pago = 'confirmado'
+               AND f.uanataca_uuid IS NULL
+               AND (c.uanataca_exigir_correo = false OR f.correo_confirmado_at IS NOT NULL)
+               AND (f.uanataca_estado_at IS NULL OR f.uanataca_estado_at < CURRENT_TIMESTAMP - INTERVAL '1 hour')
+             ORDER BY f.id
+             LIMIT " . max(1, $limite)
+        );
+        $st->execute();
+        return $st->fetchAll(PDO::FETCH_ASSOC);
+    }
+
+    /** Solicitudes enviadas a Uanataca aún sin estado final, no consultadas en los últimos 10 min. */
+    public function getPendientesSincronizarUanataca(int $limite = 30): array
+    {
+        $st = $this->db->prepare(
+            "SELECT f.id, f.id_empresa
+             FROM {$this->table} f
+             JOIN firmas_electronicas_config c ON c.id_empresa = f.id_empresa AND c.eliminado = false AND c.uanataca_activo = true
+             JOIN empresas e ON e.id = f.id_empresa AND e.estado = '1' AND e.eliminado = false
+             WHERE f.eliminado = false AND f.uanataca_uuid IS NOT NULL
+               AND COALESCE(f.uanataca_estado, '') NOT IN ('ISSUED', 'CANCELED')
+               AND f.estado NOT IN ('emitida', 'cancelada')
+               AND (f.uanataca_estado_at IS NULL OR f.uanataca_estado_at < CURRENT_TIMESTAMP - INTERVAL '10 minutes')
+             ORDER BY f.uanataca_estado_at NULLS FIRST, f.id
+             LIMIT " . max(1, $limite)
+        );
+        $st->execute();
+        return $st->fetchAll(PDO::FETCH_ASSOC);
+    }
+
     // ── Privado ───────────────────────────────────────────────
 
     private function mapParams(array $data): array
@@ -369,7 +814,22 @@ class FirmaElectronicaRepository extends BaseRepository
             ':numero_identificacion'=> $data['numero_identificacion'],
             ':codigo_dactilar'      => $fn($data['codigo_dactilar'] ?? null),
             ':nombres'              => mb_strtoupper(trim($data['nombres']), 'UTF-8'),
-            ':apellidos'            => mb_strtoupper(trim($data['apellidos']), 'UTF-8'),
+            // Con paterno/materno separados, "apellidos" (listados, facturas) es su unión.
+            ':apellidos'            => mb_strtoupper(trim(
+                trim((string) ($data['apellido_paterno'] ?? '')) !== ''
+                    ? trim(($data['apellido_paterno'] ?? '') . ' ' . ($data['apellido_materno'] ?? ''))
+                    : (string) $data['apellidos']
+            ), 'UTF-8'),
+            ':apellido_paterno'     => $fn(mb_strtoupper(trim((string) ($data['apellido_paterno'] ?? '')), 'UTF-8')),
+            ':apellido_materno'     => $fn(mb_strtoupper(trim((string) ($data['apellido_materno'] ?? '')), 'UTF-8')),
+            ':telefono2'            => $fn(trim((string) ($data['telefono2'] ?? ''))),
+            ':correo2'              => $fn(trim((string) ($data['correo2'] ?? ''))),
+            ':departamento'         => $fn(mb_strtoupper(trim((string) ($data['departamento'] ?? '')), 'UTF-8')),
+            ':motivo'               => $fn(trim((string) ($data['motivo'] ?? ''))),
+            ':rep_tipo_identificacion' => $fn($data['rep_tipo_identificacion'] ?? null),
+            ':rep_identificacion'   => $fn(trim((string) ($data['rep_identificacion'] ?? ''))),
+            ':rep_nombres'          => $fn(mb_strtoupper(trim((string) ($data['rep_nombres'] ?? '')), 'UTF-8')),
+            ':rep_apellidos'        => $fn(mb_strtoupper(trim((string) ($data['rep_apellidos'] ?? '')), 'UTF-8')),
             ':fecha_nacimiento'     => $fn($data['fecha_nacimiento'] ?? null),
             ':telefono'             => $fn($data['telefono'] ?? null),
             ':correo'               => $fn($data['correo'] ?? null),

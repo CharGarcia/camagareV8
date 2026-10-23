@@ -48,9 +48,17 @@ $to      = $total > 0 ? min($page * $perPage, $total) : 0;
 <div class="firmas-header d-flex justify-content-between align-items-center flex-wrap gap-2 mb-3">
     <h5 class="mb-0 fw-bold"><i class="bi bi-pen-fill me-2 text-primary"></i>Firmas Electrónicas</h5>
     <div class="d-flex gap-2">
+        <?php if ($perm['actualizar']): ?>
+            <button type="button" class="btn btn-outline-secondary btn-sm px-2" title="Configuración del módulo" onclick="abrirConfigFirmas()">
+                <i class="bi bi-gear"></i>
+            </button>
+        <?php endif; ?>
         <?php if ($perm['crear']): ?>
             <button type="button" class="btn btn-outline-secondary btn-sm px-3" id="btnToggleSolicitudes" onclick="togglePanelSolicitudes()">
-                <i class="bi bi-envelope-arrow-up me-1"></i> Formularios enviados
+                <i class="bi bi-link-45deg me-1"></i> Enlaces enviados
+            </button>
+            <button type="button" class="btn btn-success btn-sm px-3 shadow-sm" onclick="abrirModalEnviarFormulario()">
+                <i class="bi bi-send me-1"></i> Enviar enlace
             </button>
             <button type="button" class="btn btn-primary btn-sm px-3 shadow-sm" onclick="abrirModalFirmaCrear()">
                 <i class="bi bi-plus-lg me-1"></i> Nueva
@@ -62,10 +70,10 @@ $to      = $total > 0 ? min($page * $perPage, $total) : 0;
 <!-- ── Panel Solicitudes ───────────────────────────────────── -->
 <div id="panelSolicitudes" class="card border-0 shadow-sm rounded-3 mb-3">
     <div class="card-header bg-white border-bottom py-2 px-3 d-flex justify-content-between align-items-center">
-        <span class="fw-semibold small"><i class="bi bi-envelope-arrow-up me-2 text-secondary"></i>Formularios Enviados por Email</span>
+        <span class="fw-semibold small"><i class="bi bi-link-45deg me-2 text-secondary"></i>Enlaces enviados a clientes</span>
         <div class="d-flex gap-2 align-items-center">
             <button type="button" class="btn btn-primary btn-sm px-3" onclick="abrirModalEnviarFormulario()">
-                <i class="bi bi-send me-1"></i> Enviar formulario
+                <i class="bi bi-send me-1"></i> Enviar enlace
             </button>
             <button type="button" class="btn btn-sm btn-outline-secondary" onclick="togglePanelSolicitudes()">
                 <i class="bi bi-x-lg"></i>
@@ -77,7 +85,7 @@ $to      = $total > 0 ? min($page * $perPage, $total) : 0;
             <table class="table table-sm table-hover mb-0 align-middle small">
                 <thead class="table-light">
                     <tr>
-                        <th class="ps-3">Correo</th>
+                        <th class="ps-3">Destino</th>
                         <th>Nombre</th>
                         <th class="text-center">Estado</th>
                         <th>Enviado</th>
@@ -119,14 +127,18 @@ $to      = $total > 0 ? min($page * $perPage, $total) : 0;
             $filtrosFirmas = [
                 ['key' => 'fecha',               'label' => 'Fecha de registro',      'icon' => 'bi-calendar-event',      'type' => 'date_range', 'grupo' => 'Firma',   'col' => 6, 'atajos' => true],
                 ['key' => 'estado',              'label' => 'Estado del trámite',     'icon' => 'bi-flag',                'type' => 'select',     'grupo' => 'Firma',   'col' => 3, 'options' => [
-                    ['v' => 'pendiente',  'l' => 'Pendiente'],
-                    ['v' => 'en_proceso', 'l' => 'En proceso'],
-                    ['v' => 'emitida',    'l' => 'Emitida'],
-                    ['v' => 'cancelada',  'l' => 'Cancelada'],
+                    ['v' => 'borrador',      'l' => 'Borrador (cliente completando)'],
+                    ['v' => 'pendiente',     'l' => 'Pendiente de pago'],
+                    ['v' => 'por_registrar', 'l' => 'Por registrar en Uanataca'],
+                    ['v' => 'en_proceso',    'l' => 'En trámite'],
+                    ['v' => 'observada',     'l' => 'Observada'],
+                    ['v' => 'emitida',       'l' => 'Emitida'],
+                    ['v' => 'cancelada',     'l' => 'Cancelada'],
                 ]],
                 ['key' => 'estado_pago',         'label' => 'Estado del pago',        'icon' => 'bi-credit-card-2-front', 'type' => 'select',     'grupo' => 'Firma',   'col' => 3, 'options' => [
-                    ['v' => 'pendiente',  'l' => 'Pendiente'],
-                    ['v' => 'confirmado', 'l' => 'Confirmado'],
+                    ['v' => 'pendiente',   'l' => 'Pendiente'],
+                    ['v' => 'en_revision', 'l' => 'Comprobante en revisión'],
+                    ['v' => 'confirmado',  'l' => 'Confirmado'],
                     ['v' => 'rechazado',  'l' => 'Rechazado'],
                 ]],
                 ['key' => 'factura',             'label' => 'Factura',                'icon' => 'bi-receipt',             'type' => 'select',     'grupo' => 'Firma',   'col' => 4, 'options' => [
@@ -150,6 +162,7 @@ $to      = $total > 0 ? min($page * $perPage, $total) : 0;
                 ['key' => 'identificacion',      'label' => 'Identificación',         'icon' => 'bi-card-text',           'type' => 'text',       'grupo' => 'Titular', 'col' => 4],
                 ['key' => 'tipo_identificacion', 'label' => 'Tipo de identificación', 'icon' => 'bi-credit-card',         'type' => 'select',     'grupo' => 'Titular', 'col' => 4, 'options' => [
                     ['v' => 'cedula',    'l' => 'Cédula'],
+                    ['v' => 'ruc',       'l' => 'RUC'],
                     ['v' => 'pasaporte', 'l' => 'Pasaporte'],
                 ]],
                 ['key' => 'tipo_persona',        'label' => 'Tipo de persona',        'icon' => 'bi-people',              'type' => 'select',     'grupo' => 'Titular', 'col' => 4, 'options' => [
@@ -248,18 +261,21 @@ $to      = $total > 0 ? min($page * $perPage, $total) : 0;
                             </td>
                         </tr>
                     <?php else: ?>
-                        <?php foreach ($rows as $row):
-                            $badgeEstado = match($row['estado'] ?? 'pendiente') {
-                                'en_proceso' => '<span class="badge bg-info bg-opacity-10 text-info border border-info border-opacity-25">En Proceso</span>',
-                                'emitida'    => '<span class="badge bg-success bg-opacity-10 text-success border border-success border-opacity-25">Emitida</span>',
-                                'cancelada'  => '<span class="badge bg-danger bg-opacity-10 text-danger border border-danger border-opacity-25">Cancelada</span>',
-                                default      => '<span class="badge bg-warning bg-opacity-10 text-warning border border-warning border-opacity-25">Pendiente</span>',
-                            };
-                            $badgePago = match($row['estado_pago'] ?? 'pendiente') {
-                                'confirmado' => '<span class="badge bg-success bg-opacity-10 text-success border border-success border-opacity-25">Confirmado</span>',
-                                'rechazado'  => '<span class="badge bg-danger bg-opacity-10 text-danger border border-danger border-opacity-25">Rechazado</span>',
-                                default      => '<span class="badge bg-warning bg-opacity-10 text-warning border border-warning border-opacity-25">Pendiente</span>',
-                            };
+                        <?php
+                        $estadosFirma = [
+                            'borrador' => ['secondary', 'Borrador'], 'pendiente' => ['warning', 'Pendiente de pago'],
+                            'por_registrar' => ['info', 'Por registrar'], 'en_proceso' => ['primary', 'En trámite'],
+                            'observada' => ['danger', 'Observada'], 'emitida' => ['success', 'Emitida'], 'cancelada' => ['dark', 'Cancelada'],
+                        ];
+                        $estadosPago = [
+                            'pendiente' => ['warning', 'Pendiente'], 'en_revision' => ['info', 'En revisión'],
+                            'confirmado' => ['success', 'Confirmado'], 'rechazado' => ['danger', 'Rechazado'],
+                        ];
+                        foreach ($rows as $row):
+                            [$colE, $lblE] = $estadosFirma[$row['estado'] ?? 'pendiente'] ?? ['secondary', ucfirst((string) ($row['estado'] ?? ''))];
+                            $badgeEstado = "<span class=\"badge bg-{$colE} bg-opacity-10 text-{$colE} border border-{$colE} border-opacity-25\">{$lblE}</span>";
+                            [$colP, $lblP] = $estadosPago[$row['estado_pago'] ?? 'pendiente'] ?? ['secondary', ucfirst((string) ($row['estado_pago'] ?? ''))];
+                            $badgePago = "<span class=\"badge bg-{$colP} bg-opacity-10 text-{$colP} border border-{$colP} border-opacity-25\">{$lblP}</span>";
                             $factElim  = ($row['factura_eliminada'] ?? false) === true;
                             $factId    = $row['id_factura'] ? (int)$row['id_factura'] : null;
                             $factEst   = $row['factura_estado'] ?? null;
@@ -267,8 +283,8 @@ $to      = $total > 0 ? min($page * $perPage, $total) : 0;
                                 ? '<span class="badge bg-secondary bg-opacity-10 text-secondary border border-secondary border-opacity-25" style="font-size:.7rem;">Por Facturar</span>'
                                 : match($factEst) {
                                     'borrador'   => '<span class="badge bg-info bg-opacity-10 text-info border border-info border-opacity-25" style="font-size:.7rem;">Borrador</span>',
-                                    'autorizada' => '<span class="badge bg-success bg-opacity-10 text-success border border-success border-opacity-25" style="font-size:.7rem;"><i class="bi bi-check-circle me-1"></i>Facturado</span>',
-                                    'anulada'    => '<span class="badge bg-danger bg-opacity-10 text-danger border border-danger border-opacity-25" style="font-size:.7rem;">Anulada</span>',
+                                    'autorizado' => '<span class="badge bg-success bg-opacity-10 text-success border border-success border-opacity-25" style="font-size:.7rem;"><i class="bi bi-check-circle me-1"></i>Facturado</span>',
+                                    'anulado'    => '<span class="badge bg-danger bg-opacity-10 text-danger border border-danger border-opacity-25" style="font-size:.7rem;">Anulada</span>',
                                     default      => '<span class="badge bg-secondary bg-opacity-10 text-secondary border border-secondary border-opacity-25" style="font-size:.7rem;">' . htmlspecialchars(ucfirst($factEst ?? '?')) . '</span>',
                                 };
                             $fCad = $row['fecha_caducidad'] ?? null;
@@ -312,18 +328,35 @@ $to      = $total > 0 ? min($page * $perPage, $total) : 0;
     <div class="modal-dialog modal-dialog-centered" style="max-width:420px;">
         <div class="modal-content rounded-3">
             <div class="modal-header py-2 px-3">
-                <h6 class="modal-title fw-semibold"><i class="bi bi-envelope-arrow-up me-2 text-primary"></i>Enviar Formulario al Cliente</h6>
+                <h6 class="modal-title fw-semibold"><i class="bi bi-send me-2 text-success"></i>Enviar enlace al cliente</h6>
                 <button type="button" class="btn-close btn-sm" data-bs-dismiss="modal"></button>
             </div>
             <div class="modal-body px-3 py-3">
+                <p class="small text-muted mb-2">El cliente llena sus datos, sube sus documentos y paga desde el enlace. Con el mismo enlace sigue el estado de su firma.</p>
                 <div id="alertEnviarFormulario" class="alert d-none mb-3 py-2 small"></div>
+                <input type="hidden" id="solIdFirma" value="">
                 <div class="mb-2">
                     <label class="form-label form-label-sm fw-medium">Nombre del cliente <span class="text-muted fw-normal">(opcional)</span></label>
                     <input type="text" class="form-control form-control-sm" id="solNombreDestino" placeholder="Ej: Juan Pérez">
                 </div>
-                <div class="mb-0">
-                    <label class="form-label form-label-sm fw-medium">Correo electrónico <span class="text-danger">*</span></label>
+                <div class="mb-2">
+                    <div class="form-check form-switch mb-1">
+                        <input class="form-check-input" type="checkbox" id="solPorCorreo" checked>
+                        <label class="form-check-label small fw-medium" for="solPorCorreo"><i class="bi bi-envelope me-1"></i>Enviar por correo</label>
+                    </div>
                     <input type="email" class="form-control form-control-sm" id="solCorreoDestino" placeholder="cliente@ejemplo.com">
+                </div>
+                <div class="mb-0">
+                    <div class="form-check form-switch mb-1">
+                        <input class="form-check-input" type="checkbox" id="solPorWhatsapp">
+                        <label class="form-check-label small fw-medium" for="solPorWhatsapp"><i class="bi bi-whatsapp me-1 text-success"></i>Enviar por WhatsApp</label>
+                    </div>
+                    <input type="tel" class="form-control form-control-sm" id="solTelefonoDestino" placeholder="09XXXXXXXX">
+                    <div class="form-text small">Con la plantilla <code>solicitud_firma</code> aprobada en Meta se envía sola; si no, se abre WhatsApp con el mensaje listo.</div>
+                </div>
+                <div id="solEnlaceGenerado" class="input-group input-group-sm mt-3 d-none">
+                    <input type="text" class="form-control" id="solEnlaceTexto" readonly>
+                    <button type="button" class="btn btn-outline-secondary" onclick="copiarTextoFirma(document.getElementById('solEnlaceTexto').value)" title="Copiar enlace"><i class="bi bi-clipboard"></i></button>
                 </div>
             </div>
             <div class="modal-footer py-2 px-3">
@@ -336,7 +369,146 @@ $to      = $total > 0 ? min($page * $perPage, $total) : 0;
     </div>
 </div>
 
-<script>window.BASE_URL = '<?= $base ?>';</script>
+<?php if ($perm['actualizar']): $cfgM = $configModulo ?? []; ?>
+<!-- ── Modal: Configuración del módulo ─────────────────────── -->
+<div class="modal fade" id="modalConfigFirmas" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered" style="max-width:560px;">
+        <div class="modal-content rounded-3">
+            <div class="modal-header py-2 px-3">
+                <h6 class="modal-title fw-semibold"><i class="bi bi-gear me-2 text-secondary"></i>Configuración de firmas electrónicas</h6>
+                <button type="button" class="btn-close btn-sm" data-bs-dismiss="modal"></button>
+            </div>
+            <form id="formConfigFirmas" onsubmit="return false;">
+            <div class="modal-body px-3 py-3">
+                <div id="alertConfigFirmas" class="alert d-none mb-3 py-2 small"></div>
+                <div class="row g-2">
+                    <div class="col-sm-6">
+                        <label class="form-label small fw-bold text-muted mb-1">Serie de facturación</label>
+                        <select class="form-select form-select-sm" name="id_punto_emision">
+                            <option value="0">La primera serie activa</option>
+                            <?php foreach ($seriesFact ?? [] as $se): ?>
+                                <option value="<?= (int) $se['id'] ?>" <?= (int) ($cfgM['id_punto_emision'] ?? 0) === (int) $se['id'] ? 'selected' : '' ?>>
+                                    <?= htmlspecialchars($se['serie'] . ($se['establecimiento'] !== '' ? ' — ' . $se['establecimiento'] : '')) ?>
+                                </option>
+                            <?php endforeach; ?>
+                        </select>
+                    </div>
+                    <div class="col-sm-6">
+                        <label class="form-label small fw-bold text-muted mb-1">Usuario responsable</label>
+                        <select class="form-select form-select-sm" name="id_usuario_responsable">
+                            <option value="0">Yo (quien guarda)</option>
+                            <?php foreach ($usuariosEmp ?? [] as $u): ?>
+                                <option value="<?= (int) $u['id'] ?>" <?= (int) ($cfgM['id_usuario_responsable'] ?? 0) === (int) $u['id'] ? 'selected' : '' ?>><?= htmlspecialchars($u['nombre']) ?></option>
+                            <?php endforeach; ?>
+                        </select>
+                        <div class="form-text small">Dueño de las solicitudes del enlace fijo y de sus facturas.</div>
+                    </div>
+                    <div class="col-12 mt-2">
+                        <div class="form-check form-switch">
+                            <input class="form-check-input" type="checkbox" name="payphone_activo" id="cfgPayphone" value="1" <?= !empty($cfgM['payphone_activo']) ? 'checked' : '' ?>>
+                            <label class="form-check-label small" for="cfgPayphone">El cliente puede pagar con tarjeta (Payphone)</label>
+                        </div>
+                        <div class="form-check form-switch">
+                            <input class="form-check-input" type="checkbox" name="transferencia_activa" id="cfgTransfer" value="1" <?= !empty($cfgM['transferencia_activa']) ? 'checked' : '' ?>>
+                            <label class="form-check-label small" for="cfgTransfer">El cliente puede pagar por transferencia y subir el comprobante</label>
+                        </div>
+                    </div>
+                    <div class="col-12">
+                        <label class="form-label small fw-bold text-muted mb-1">Datos para la transferencia (los ve el cliente)</label>
+                        <textarea class="form-control form-control-sm" name="datos_transferencia" rows="3" placeholder="Banco Pichincha · Cta. corriente 2200000000 · A nombre de … · RUC …"><?= htmlspecialchars($cfgM['datos_transferencia'] ?? '') ?></textarea>
+                    </div>
+                    <div class="col-12 mt-2">
+                        <div class="form-check form-switch">
+                            <input class="form-check-input" type="checkbox" name="enlace_fijo_activo" id="cfgEnlaceFijo" value="1" <?= !empty($cfgM['enlace_fijo_activo']) ? 'checked' : '' ?>>
+                            <label class="form-check-label small" for="cfgEnlaceFijo">Enlace público fijo (para la web, redes o un QR)</label>
+                        </div>
+                        <div class="input-group input-group-sm mt-1">
+                            <input type="text" class="form-control" id="cfgUrlEnlaceFijo" readonly value="<?= htmlspecialchars($urlEnlaceFijo ?? '') ?>" placeholder="Se genera al guardar">
+                            <button type="button" class="btn btn-outline-secondary" title="Copiar" onclick="copiarTextoFirma(document.getElementById('cfgUrlEnlaceFijo').value)"><i class="bi bi-clipboard"></i></button>
+                            <button type="button" class="btn btn-outline-danger" title="Generar un enlace nuevo (el anterior deja de funcionar)" onclick="guardarConfigFirmas(true)"><i class="bi bi-arrow-repeat"></i></button>
+                        </div>
+                        <div class="form-text small">Cualquier persona con este enlace puede iniciar una solicitud (máximo 5 por hora desde la misma conexión).</div>
+                    </div>
+
+                    <!-- API de Uanataca (Precompra) -->
+                    <div class="col-12 mt-3 pt-2 border-top">
+                        <div class="form-check form-switch">
+                            <input class="form-check-input" type="checkbox" name="uanataca_activo" id="cfgUanActivo" value="1" <?= !empty($cfgM['uanataca_activo']) ? 'checked' : '' ?>>
+                            <label class="form-check-label small fw-bold" for="cfgUanActivo">Enviar las solicitudes a Uanataca por API</label>
+                        </div>
+                        <div class="form-text small mb-2">Credenciales de distribuidor (Precompra) que entrega Uanataca. Cada solicitud consume Uanacréditos.</div>
+                    </div>
+                    <div class="col-sm-4">
+                        <label class="form-label small fw-bold text-muted mb-1">Ambiente</label>
+                        <select class="form-select form-select-sm" name="uanataca_ambiente">
+                            <option value="pruebas" <?= ($cfgM['uanataca_ambiente'] ?? 'pruebas') === 'pruebas' ? 'selected' : '' ?>>Pruebas</option>
+                            <option value="produccion" <?= ($cfgM['uanataca_ambiente'] ?? '') === 'produccion' ? 'selected' : '' ?>>Producción</option>
+                        </select>
+                    </div>
+                    <div class="col-sm-4">
+                        <label class="form-label small fw-bold text-muted mb-1">Usuario</label>
+                        <input type="text" class="form-control form-control-sm" name="uanataca_usuario" autocomplete="off" value="<?= htmlspecialchars($cfgM['uanataca_usuario'] ?? '') ?>">
+                    </div>
+                    <div class="col-sm-4">
+                        <label class="form-label small fw-bold text-muted mb-1">Clave</label>
+                        <input type="password" class="form-control form-control-sm" name="uanataca_clave" autocomplete="new-password"
+                               placeholder="<?= !empty($cfgM['uanataca_tiene_clave']) ? 'Guardada (vacío = no cambiar)' : '' ?>">
+                    </div>
+                    <div class="col-12">
+                        <div class="form-check form-switch">
+                            <input class="form-check-input" type="checkbox" name="uanataca_envio_automatico" id="cfgUanAuto" value="1" <?= !empty($cfgM['uanataca_envio_automatico']) ? 'checked' : '' ?>>
+                            <label class="form-check-label small" for="cfgUanAuto">Enviar automáticamente al confirmarse el pago</label>
+                        </div>
+                        <div class="form-check form-switch">
+                            <input class="form-check-input" type="checkbox" name="uanataca_exigir_correo" id="cfgUanCorreo" value="1" <?= !isset($cfgM['uanataca_exigir_correo']) || !empty($cfgM['uanataca_exigir_correo']) ? 'checked' : '' ?>>
+                            <label class="form-check-label small" for="cfgUanCorreo">Esperar a que el cliente confirme su correo antes del envío automático</label>
+                        </div>
+                    </div>
+                    <div class="col-12 d-flex flex-wrap gap-2 align-items-center">
+                        <button type="button" class="btn btn-sm btn-outline-primary" onclick="probarUanataca()"><i class="bi bi-plug me-1"></i>Probar conexión</button>
+                        <button type="button" class="btn btn-sm btn-outline-secondary" onclick="abrirMapeoUanataca()"><i class="bi bi-diagram-2 me-1"></i>Productos de Uanataca</button>
+                        <span class="small text-muted" id="cfgUanResultado"></span>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer py-2 px-3">
+                <button type="button" class="btn btn-sm btn-outline-secondary" data-bs-dismiss="modal">Cancelar</button>
+                <button type="button" class="btn btn-sm btn-primary" id="btnGuardarConfigFirmas" onclick="guardarConfigFirmas(false)"><i class="bi bi-check-lg me-1"></i>Guardar</button>
+            </div>
+            </form>
+        </div>
+    </div>
+</div>
+<!-- ── Modal: Productos de Uanataca ────────────────────────── -->
+<div class="modal fade" id="modalMapeoUanataca" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered" style="max-width:640px;">
+        <div class="modal-content rounded-3">
+            <div class="modal-header py-2 px-3">
+                <h6 class="modal-title fw-semibold"><i class="bi bi-diagram-2 me-2 text-secondary"></i>Productos de Uanataca</h6>
+                <button type="button" class="btn-close btn-sm" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body px-3 py-3">
+                <p class="small text-muted mb-2">Elija a qué producto de Uanataca corresponde cada firma que vende. Sin enlace, esa firma no se puede enviar por API.</p>
+                <div id="alertMapeoUanataca" class="alert d-none mb-2 py-2 small"></div>
+                <table class="table table-sm align-middle small mb-0">
+                    <thead class="table-light"><tr><th>Firma en el sistema</th><th>Producto de Uanataca</th></tr></thead>
+                    <tbody id="tbodyMapeoUanataca"><tr><td colspan="2" class="text-muted text-center py-3">Cargando…</td></tr></tbody>
+                </table>
+            </div>
+            <div class="modal-footer py-2 px-3">
+                <button type="button" class="btn btn-sm btn-outline-secondary" data-bs-dismiss="modal">Cerrar</button>
+                <button type="button" class="btn btn-sm btn-primary" id="btnGuardarMapeoUanataca" onclick="guardarMapeoUanataca()"><i class="bi bi-check-lg me-1"></i>Guardar</button>
+            </div>
+        </div>
+    </div>
+</div>
+<?php endif; ?>
+
+<script>
+    window.BASE_URL = '<?= $base ?>';
+    window.FIRMAS_FORMAS_COBRO = <?= json_encode(array_values($formasCobro ?? []), JSON_HEX_TAG | JSON_HEX_APOS) ?>;
+    window.FIRMAS_PERM = <?= json_encode(['actualizar' => !empty($perm['actualizar']), 'crear' => !empty($perm['crear'])]) ?>;
+</script>
 <?php include 'modal_firma.php'; ?>
 
 <script>
@@ -358,6 +530,18 @@ $to      = $total > 0 ? min($page * $perPage, $total) : 0;
     }
 
     window.cambiarPaginaFirmas = (n) => window.fetchSearch(n);
+    // El modal de la ficha refresca el listado con este nombre.
+    window.fetchSearchFirmas = () => window.fetchSearch(window.currentPage || 1);
+
+    // "Enviar enlace" se abre también desde la ficha (modal sobre modal): la regla global
+    // .modal { z-index:5060 !important } lo dejaría detrás, así que se sube inline.
+    // Igual "Productos de Uanataca", que se abre sobre la configuración.
+    ['modalEnviarFormulario', 'modalMapeoUanataca'].forEach(id => document.getElementById(id)?.addEventListener('shown.bs.modal', function () {
+        if (!window.CMG_modalSobreOtro || !CMG_modalSobreOtro(this)) return;
+        this.style.setProperty('z-index', '5080', 'important');
+        const fondos = document.querySelectorAll('.modal-backdrop');
+        fondos[fondos.length - 1]?.style.setProperty('z-index', '5075', 'important');
+    }));
 
     window.fetchSearch = async (page = 1) => {
         const term = inputBuscar ? inputBuscar.value.trim() : '';
@@ -418,52 +602,171 @@ $to      = $total > 0 ? min($page * $perPage, $total) : 0;
         if (panelVisible) cargarSolicitudes(1);
     };
 
-    window.abrirModalEnviarFormulario = function () {
-        document.getElementById('solNombreDestino').value = '';
-        document.getElementById('solCorreoDestino').value = '';
+    window.copiarTextoFirma = async function (texto) {
+        if (!texto) return;
+        try { await navigator.clipboard.writeText(texto); }
+        catch {
+            const ta = document.createElement('textarea');
+            ta.value = texto; document.body.appendChild(ta); ta.select(); document.execCommand('copy'); ta.remove();
+        }
+        if (window.Swal) Swal.fire({ toast: true, position: 'top-end', icon: 'success', title: 'Copiado', showConfirmButton: false, timer: 1200 });
+    };
+
+    /** Abre el envío del enlace. Con datos de una firma, el enlace es el de esa firma. */
+    window.abrirModalEnviarFormulario = function (firma = null) {
+        document.getElementById('solIdFirma').value         = firma?.id || '';
+        document.getElementById('solNombreDestino').value   = firma ? `${firma.nombres || ''} ${firma.apellidos || ''}`.trim() : '';
+        document.getElementById('solCorreoDestino').value   = firma?.correo || '';
+        document.getElementById('solTelefonoDestino').value = firma?.telefono || '';
+        document.getElementById('solPorCorreo').checked     = true;
+        document.getElementById('solPorWhatsapp').checked   = !!firma?.telefono;
+        document.getElementById('solEnlaceGenerado').classList.add('d-none');
         const alerta = document.getElementById('alertEnviarFormulario');
         alerta.className = 'alert d-none mb-3 py-2 small';
         alerta.textContent = '';
+        enviandoEnlace = false;
+        const btn = document.getElementById('btnConfirmarEnviarFormulario');
+        btn.disabled = false;
         bootstrap.Modal.getOrCreateInstance(document.getElementById('modalEnviarFormulario')).show();
     };
 
+    let enviandoEnlace = false;
     window.confirmarEnviarFormulario = async function () {
-        const correo = document.getElementById('solCorreoDestino').value.trim();
-        const nombre = document.getElementById('solNombreDestino').value.trim();
+        if (enviandoEnlace) return;
         const alerta = document.getElementById('alertEnviarFormulario');
         const btn    = document.getElementById('btnConfirmarEnviarFormulario');
-
-        if (!correo) {
+        const porCorreo   = document.getElementById('solPorCorreo').checked;
+        const porWhatsapp = document.getElementById('solPorWhatsapp').checked;
+        if (!porCorreo && !porWhatsapp) {
             alerta.className = 'alert alert-warning mb-3 py-2 small';
-            alerta.textContent = 'Ingrese el correo electrónico.';
+            alerta.textContent = 'Elija correo, WhatsApp o ambos.';
             return;
         }
+        // La ventana de WhatsApp se abre ya (en el clic): después del await el navegador la bloquearía.
+        const ventanaWa = porWhatsapp ? window.open('about:blank', '_blank') : null;
 
+        enviandoEnlace = true;
         btn.disabled = true;
         btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Enviando…';
 
         try {
             const fd = new FormData();
-            fd.append('correo_destino', correo);
-            fd.append('nombre_destino', nombre);
+            fd.append('nombre_destino', document.getElementById('solNombreDestino').value.trim());
+            fd.append('correo_destino', document.getElementById('solCorreoDestino').value.trim());
+            fd.append('telefono_destino', document.getElementById('solTelefonoDestino').value.trim());
+            fd.append('id_firma', document.getElementById('solIdFirma').value);
+            if (porCorreo) fd.append('por_correo', '1');
+            if (porWhatsapp) fd.append('por_whatsapp', '1');
             const resp = await fetch(`${urlBase}/enviarSolicitud`, { method: 'POST', body: fd });
             const data = await resp.json();
 
-            alerta.className = `alert alert-${data.ok ? 'success' : 'danger'} mb-3 py-2 small`;
-            alerta.textContent = data.msg;
+            alerta.className = `alert alert-${data.ok ? (data.correo === false ? 'warning' : 'success') : 'danger'} mb-3 py-2 small`;
+            alerta.textContent = data.ok ? data.msg : data.error;
 
             if (data.ok) {
-                setTimeout(() => {
-                    bootstrap.Modal.getOrCreateInstance(document.getElementById('modalEnviarFormulario')).hide();
-                    if (panelVisible) cargarSolicitudes(1);
-                }, 1500);
+                document.getElementById('solEnlaceTexto').value = data.url;
+                document.getElementById('solEnlaceGenerado').classList.remove('d-none');
+                if (ventanaWa) {
+                    if (data.wa_me) ventanaWa.location.href = data.wa_me; else ventanaWa.close();
+                }
+                if (panelVisible) cargarSolicitudes(1);
+                if (window.FIRMA_recargarTramite) window.FIRMA_recargarTramite();
+                // El enlace ya se creó: no se reactiva Enviar para no crear otro con un segundo clic.
+                btn.innerHTML = '<i class="bi bi-check-lg me-1"></i> Enviado';
+                return;
             }
+            if (ventanaWa) ventanaWa.close();
+        } catch {
+            if (ventanaWa) ventanaWa.close();
+            alerta.className = 'alert alert-danger mb-3 py-2 small';
+            alerta.textContent = 'Error de conexión.';
+        }
+        enviandoEnlace = false;
+        btn.disabled = false;
+        btn.innerHTML = '<i class="bi bi-send me-1"></i> Enviar';
+    };
+
+    // ── API de Uanataca ───────────────────────────────────────
+    async function postFirmas(endpoint, fd) {
+        return (await fetch(`${urlBase}/${endpoint}`, { method: 'POST', body: fd || new FormData() })).json();
+    }
+
+    window.probarUanataca = async function () {
+        const res = document.getElementById('cfgUanResultado');
+        res.className = 'small text-muted';
+        res.textContent = 'Guardando y probando…';
+        // Se prueba con lo guardado: primero se guarda la configuración del formulario.
+        const g = await postFirmas('guardarConfigAjax', new FormData(document.getElementById('formConfigFirmas')));
+        if (!g.ok) { res.className = 'small text-danger'; res.textContent = g.error; return; }
+        try {
+            const d = await postFirmas('probarUanatacaAjax');
+            res.className = `small ${d.ok ? 'text-success' : 'text-danger'}`;
+            res.textContent = d.ok ? d.msg : d.error;
+        } catch { res.className = 'small text-danger'; res.textContent = 'Error de conexión.'; }
+    };
+
+    let catalogoUan = [];
+    window.abrirMapeoUanataca = async function () {
+        const tbody = document.getElementById('tbodyMapeoUanataca');
+        const alerta = document.getElementById('alertMapeoUanataca');
+        alerta.className = 'alert d-none mb-2 py-2 small';
+        tbody.innerHTML = '<tr><td colspan="2" class="text-muted text-center py-3">Cargando catálogo de Uanataca…</td></tr>';
+        bootstrap.Modal.getOrCreateInstance(document.getElementById('modalMapeoUanataca')).show();
+        const esc = v => String(v ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
+        try {
+            const d = await (await fetch(`${urlBase}/catalogoUanatacaAjax`)).json();
+            if (!d.ok) throw new Error(d.error);
+            catalogoUan = d.catalogo;
+            const opciones = sel => '<option value="">— Sin enlace —</option>' + d.catalogo.map(c =>
+                `<option value="${esc(c.uuid)}" ${c.uuid === sel ? 'selected' : ''}>${esc(c.code)} · ${esc(c.name)} ($${Number(c.price).toFixed(2)})</option>`).join('');
+            tbody.innerHTML = d.productos.length
+                ? d.productos.map(p => `<tr><td>${esc(p.nombre)}</td><td><select class="form-select form-select-sm" data-producto="${p.id}">${opciones(p.uanataca_uuid)}</select></td></tr>`).join('')
+                : '<tr><td colspan="2" class="text-muted text-center py-3">No hay productos en una categoría «FIRMA».</td></tr>';
+        } catch (e) {
+            tbody.innerHTML = '';
+            alerta.className = 'alert alert-danger mb-2 py-2 small';
+            alerta.textContent = e.message || 'No se pudo cargar el catálogo.';
+        }
+    };
+
+    window.guardarMapeoUanataca = async function () {
+        const btn = document.getElementById('btnGuardarMapeoUanataca');
+        const alerta = document.getElementById('alertMapeoUanataca');
+        const mapeo = {};
+        document.querySelectorAll('#tbodyMapeoUanataca select[data-producto]').forEach(s => { mapeo[s.dataset.producto] = s.value; });
+        const fd = new FormData();
+        fd.append('mapeo', JSON.stringify(mapeo));
+        btn.disabled = true;
+        try {
+            const d = await postFirmas('guardarMapeoUanatacaAjax', fd);
+            alerta.className = `alert alert-${d.ok ? 'success' : 'danger'} mb-2 py-2 small`;
+            alerta.textContent = d.ok ? d.msg : d.error;
+        } catch { alerta.className = 'alert alert-danger mb-2 py-2 small'; alerta.textContent = 'Error de conexión.'; }
+        finally { btn.disabled = false; }
+    };
+
+    window.abrirConfigFirmas = function () {
+        document.getElementById('alertConfigFirmas').className = 'alert d-none mb-3 py-2 small';
+        bootstrap.Modal.getOrCreateInstance(document.getElementById('modalConfigFirmas')).show();
+    };
+
+    window.guardarConfigFirmas = async function (regenerar) {
+        if (regenerar && !confirm('Se generará un enlace fijo nuevo y el anterior dejará de funcionar. ¿Continuar?')) return;
+        const btn = document.getElementById('btnGuardarConfigFirmas');
+        const alerta = document.getElementById('alertConfigFirmas');
+        btn.disabled = true;
+        try {
+            const fd = new FormData(document.getElementById('formConfigFirmas'));
+            if (regenerar) fd.append('regenerar_enlace', '1');
+            const data = await (await fetch(`${urlBase}/guardarConfigAjax`, { method: 'POST', body: fd })).json();
+            alerta.className = `alert alert-${data.ok ? 'success' : 'danger'} mb-3 py-2 small`;
+            alerta.textContent = data.ok ? data.msg : data.error;
+            if (data.ok) document.getElementById('cfgUrlEnlaceFijo').value = data.url_enlace_fijo;
         } catch {
             alerta.className = 'alert alert-danger mb-3 py-2 small';
             alerta.textContent = 'Error de conexión.';
         } finally {
             btn.disabled = false;
-            btn.innerHTML = '<i class="bi bi-send me-1"></i> Enviar';
         }
     };
 
@@ -483,14 +786,15 @@ $to      = $total > 0 ? min($page * $perPage, $total) : 0;
                 expirado:   '<span class="badge sol-badge-expirado">Expirado</span>',
                 cancelado:  '<span class="badge sol-badge-cancelado">Cancelado</span>',
             };
+            const esc = v => String(v ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
             tbody.innerHTML = data.rows.map(r => `
                 <tr>
-                    <td class="ps-3">${r.correo_destino}</td>
-                    <td>${r.nombre_destino || '<span class="text-muted">-</span>'}</td>
+                    <td class="ps-3">${esc(r.correo_destino || '')}${r.telefono_destino ? `<div class="text-muted"><i class="bi bi-whatsapp me-1"></i>${esc(r.telefono_destino)}</div>` : ''}${r.origen === 'enlace_fijo' ? '<div><span class="badge bg-light text-secondary border">Enlace fijo</span></div>' : ''}</td>
+                    <td>${r.nombre_destino ? esc(r.nombre_destino) : '<span class="text-muted">-</span>'}</td>
                     <td class="text-center">${badges[r.estado] || r.estado}</td>
                     <td class="text-muted">${r.created_at}</td>
                     <td class="text-muted">${r.expira_at}</td>
-                    <td>${r.firma_nombre ? `<a href="#" onclick="event.preventDefault();abrirFirmaPorNombre('${r.id_firma_generada}')" class="small text-primary">${r.firma_nombre}</a>` : '<span class="text-muted small">-</span>'}</td>
+                    <td>${r.firma_nombre ? `<a href="#" onclick="event.preventDefault();abrirFirmaPorNombre('${r.id_firma_generada}')" class="small text-primary">${esc(r.firma_nombre)}</a>` : '<span class="text-muted small">-</span>'}</td>
                     <td class="text-end pe-3">
                         ${r.estado === 'pendiente'
                             ? `<button class="btn btn-sm btn-outline-danger py-0 px-2" style="font-size:.75rem;" onclick="cancelarSolicitud(${r.id})"><i class="bi bi-x-circle"></i></button>`

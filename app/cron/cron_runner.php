@@ -166,6 +166,34 @@ try {
     echo "[" . date('Y-m-d H:i:s') . "] Error en aviso de caducidad de firma electrónica: " . $e->getMessage() . "\n";
 }
 
+// ── Firmas vendidas a clientes: correo con la factura y la confirmación ──────
+//    Cuando el SRI autoriza la factura después del pago (reintentos de arriba), el
+//    cliente recibe aquí su factura con el botón "Confirmo que recibí mi factura".
+//    Idempotente: solo toma firmas pagadas sin ese correo enviado.
+try {
+    $resFirmasCli = \App\Services\modulos\FirmaElectronicaService::instancia()->procesarCorreosPendientes();
+    if ($resFirmasCli['enviados'] > 0 || $resFirmasCli['fallidos'] > 0) {
+        echo "[" . date('Y-m-d H:i:s') . "] Firmas (clientes): {$resFirmasCli['enviados']} correo(s) de confirmación, "
+            . "{$resFirmasCli['fallidos']} fallido(s).\n";
+    }
+} catch (\Throwable $e) {
+    echo "[" . date('Y-m-d H:i:s') . "] Error en correos de confirmación de firmas: " . $e->getMessage() . "\n";
+}
+
+// ── Firmas vendidas a clientes: API de Uanataca ──────────────────────────────
+//    Envía las solicitudes pagadas (empresas con envío automático) y consulta el
+//    estado de las ya enviadas (Uanataca no tiene webhooks). Cada firma se consulta
+//    como máximo cada 10 min y un envío fallido se reintenta a la hora.
+try {
+    $resUan = \App\Services\modulos\FirmaElectronicaService::instancia()->procesarUanataca();
+    if ($resUan['enviadas'] + $resUan['sincronizadas'] + $resUan['errores'] > 0) {
+        echo "[" . date('Y-m-d H:i:s') . "] Uanataca: {$resUan['enviadas']} enviada(s), "
+            . "{$resUan['sincronizadas']} consultada(s), {$resUan['errores']} error(es).\n";
+    }
+} catch (\Throwable $e) {
+    echo "[" . date('Y-m-d H:i:s') . "] Error en la integración con Uanataca: " . $e->getMessage() . "\n";
+}
+
 // ── Devengo de ingresos de suscripciones, NIIF 15 (FIJO, 1 vez al día) ───────
 //    Pasa al ingreso lo diferido de los meses ya cumplidos y provisiona el mes caído,
 //    en TODAS las empresas que tienen algo pendiente, sin que nadie lo configure.

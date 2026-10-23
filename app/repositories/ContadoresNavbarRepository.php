@@ -81,6 +81,24 @@ class ContadoresNavbarRepository
      * puede no existir en un servidor sin la migración del módulo: si falla, el servicio
      * lo atrapa y el resto de avisos sigue funcionando.
      */
+    /**
+     * Firmas electrónicas por atender: comprobantes de pago en revisión + firmas pagadas,
+     * con el correo confirmado por el cliente, que faltan registrar en Uanataca.
+     * Consulta aparte: firmas_electronicas puede no tener las columnas sin la migración
+     * database/20261023_firmas_electronicas_autoservicio.sql.
+     */
+    public function getFirmasPorAtender(int $idEmpresa): int
+    {
+        $st = $this->db->prepare(
+            "SELECT COUNT(*) FROM firmas_electronicas f
+              WHERE f.id_empresa = :e AND f.eliminado = false
+                AND (f.estado_pago = 'en_revision'
+                     OR (f.estado = 'por_registrar' AND f.correo_confirmado_at IS NOT NULL))"
+        );
+        $st->execute([':e' => $idEmpresa]);
+        return (int) $st->fetchColumn();
+    }
+
     public function getCarwashBorrador(int $idEmpresa): int
     {
         $st = $this->db->prepare(

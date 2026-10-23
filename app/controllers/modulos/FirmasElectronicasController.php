@@ -12,9 +12,6 @@ use App\Services\modulos\FirmaElectronicaService;
 class FirmasElectronicasController extends BaseModuloController
 {
     private const RUTA_MODULO   = 'modulos/firmas_electronicas';
-    private const STORAGE_DIR   = 'firmas_electronicas';
-    private const EXTS_PERMITIDAS = ['jpg', 'jpeg', 'png', 'pdf', 'webp'];
-    private const MAX_BYTES      = 5 * 1024 * 1024; // 5 MB
 
     private FirmaElectronicaService $service;
     private FirmaElectronicaRepository $repo;
@@ -71,9 +68,16 @@ class FirmasElectronicasController extends BaseModuloController
         $provincias = (new \App\models\Provincia())->getTodas();
 
         // Cargar productos con categoría "firmas" para el selector
-        $tiposFirma = $this->getTiposFirma($idEmpresa);
+        $tiposFirma = $this->service->getTiposFirma($idEmpresa);
+        $configModulo = $this->service->getConfigModulo($idEmpresa);
 
         $this->viewWithLayout('layouts.main', 'modulos.firmas_electronicas.index', [
+            'configModulo'  => $configModulo,
+            'urlEnlaceFijo' => $configModulo['enlace_fijo_codigo'] !== ''
+                ? FirmaElectronicaService::urlEnlaceFijo($configModulo['enlace_fijo_codigo']) : '',
+            'seriesFact'    => $this->service->getSeriesFacturacion($idEmpresa),
+            'formasCobro'   => $this->service->getFormasCobro($idEmpresa),
+            'usuariosEmp'   => $this->service->getUsuariosEmpresa($idEmpresa),
             'titulo'      => 'Firmas Electrónicas',
             'perm'        => $perm,
             'rutaModulo'  => self::RUTA_MODULO,
@@ -107,7 +111,7 @@ class FirmasElectronicasController extends BaseModuloController
         $page       = max(1, (int) ($_GET['page'] ?? 1));
         $ordenCol   = trim($_GET['sort'] ?? $prefsVista['__ordenCol__'] ?? 'created_at');
         $ordenDir   = strtoupper(trim($_GET['dir']  ?? $prefsVista['__ordenDir__'] ?? 'desc'));
-        $perPage    = max(1, (int) ($_GET['perPage'] ?? 20));
+        $perPage    = $this->porPagina();
 
         $perm = $this->getPermisos();
         $idUsuarioFiltro = empty($perm['todo']) ? (int)$_SESSION['id_usuario'] : null;
@@ -351,67 +355,17 @@ class FirmasElectronicasController extends BaseModuloController
         $idUsuario = (int) $_SESSION['id_usuario'];
         $tipo      = trim($_POST['tipo'] ?? 'otro');
 
-        $tiposPermitidos = [
-            'cedula_frontal', 'cedula_posterior', 'selfie',
-            'comprobante_transferencia',
-            'ruc_empresa', 'constitucion_compania', 'nombramiento', 'aceptacion_nombramiento',
-            'otro',
-        ];
-        if (!in_array($tipo, $tiposPermitidos, true)) $tipo = 'otro';
-
         try {
             if ($idFirma <= 0) throw new \Exception('ID de firma no válido.');
-
-            $firma = $this->repo->findById($idFirma, $idEmpresa);
-            if (!$firma) throw new \Exception('Firma no encontrada o no pertenece a esta empresa.');
-
-            if (empty($_FILES['archivo']) || $_FILES['archivo']['error'] !== UPLOAD_ERR_OK) {
-                throw new \Exception('No se recibió ningún archivo o hubo un error al subirlo.');
-            }
-
-            $archivo = $_FILES['archivo'];
-            if ($archivo['size'] > self::MAX_BYTES) {
-                throw new \Exception('El archivo supera el tamaño máximo permitido (5 MB).');
-            }
-
-            $ext = strtolower(pathinfo($archivo['name'], PATHINFO_EXTENSION));
-            if (!in_array($ext, self::EXTS_PERMITIDAS, true)) {
-                throw new \Exception('Tipo de archivo no permitido. Use: ' . implode(', ', self::EXTS_PERMITIDAS));
-            }
-
-            $dir = MVC_ROOT . '/storage/' . self::STORAGE_DIR . '/' . $idEmpresa;
-            if (!is_dir($dir)) {
-                mkdir($dir, 0755, true);
-            }
-
-            $nombreArchivo = $idFirma . '_' . $tipo . '_' . uniqid() . '.' . $ext;
-            $rutaCompleta  = $dir . '/' . $nombreArchivo;
-
-            if (!move_uploaded_file($archivo['tmp_name'], $rutaCompleta)) {
-                throw new \Exception('Error al guardar el archivo en el servidor.');
-            }
-
-            $this->repo->beginTransaction();
-            $adjId = $this->repo->createAdjunto([
-                'id_firma'        => $idFirma,
-                'id_empresa'      => $idEmpresa,
-                'tipo'            => $tipo,
-                'nombre_original' => $archivo['name'],
-                'nombre_archivo'  => $nombreArchivo,
-                'ruta_relativa'   => self::STORAGE_DIR . '/' . $idEmpresa . '/' . $nombreArchivo,
-                'mime_type'       => $archivo['type'],
-                'tamano_bytes'    => $archivo['size'],
-                'created_by'      => $idUsuario,
-            ]);
-            $this->repo->commit();
+            $adj = $this->service->subirAdjuntoInterno($idFirma, $idEmpresa, $idUsuario, $tipo, $_FILES['archivo'] ?? []);
 
             echo json_encode([
                 'ok'             => true,
                 'msg'            => 'Archivo cargado correctamente.',
-                'id'             => $adjId,
-                'nombre_original'=> $archivo['name'],
-                'tipo'           => $tipo,
-                'url_ver'        => BASE_URL . '/modulos/firmas_electronicas/verAdjunto?id=' . $adjId,
+                'id'             => $adj['id'],
+                'nombre_original'=> $adj['nombre_original'],
+                'tipo'           => $adj['tipo'],
+                'url_ver'        => BASE_URL . '/modulos/firmas_electronicas/verAdjunto?id=' . $adj['id'],
             ]);
         } catch (\Throwable $e) {
             \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
@@ -610,194 +564,208 @@ class FirmasElectronicasController extends BaseModuloController
 
         try {
             if ($idFirma <= 0) throw new \Exception('ID de firma no válido.');
-
-            $firma = $this->repo->getDetalleCompleto($idFirma, $idEmpresa);
-            if (!$firma) throw new \Exception('Firma no encontrada.');
-
-            if (empty($firma['fecha_caducidad'])) {
-                throw new \Exception('La firma no tiene fecha de caducidad registrada. Guarda la firma con fecha de caducidad antes de generar la factura.');
-            }
-
-            $idProducto = (int)($firma['id_producto'] ?? 0);
-            if ($idProducto <= 0) throw new \Exception('La firma no tiene una Validez de Firma seleccionada. Guarda la firma antes de generar la factura.');
-
-            // Verificar que no exista factura activa
-            if (!empty($firma['id_factura'])) {
-                $db = \App\core\Database::getConnection();
-                $stChk = $db->prepare("SELECT estado, eliminado FROM ventas_cabecera WHERE id = :id");
-                $stChk->execute([':id' => $firma['id_factura']]);
-                $factExist = $stChk->fetch(\PDO::FETCH_ASSOC);
-                if ($factExist && $factExist['eliminado'] !== 't' && $factExist['estado'] !== 'anulada') {
-                    throw new \Exception('Ya existe una factura activa para esta firma (estado: ' . ucfirst($factExist['estado'] ?? '') . '). No se puede generar otra.');
-                }
-            }
-
-            // Determinar datos de facturación
-            $mismosDatos = ($firma['facturacion_mismos_datos'] === 't' || $firma['facturacion_mismos_datos'] === true);
-
-            if ($mismosDatos) {
-                $tipoIdStr = $firma['tipo_identificacion'] ?? 'cedula';
-                $numId     = $firma['numero_identificacion'] ?? '';
-                $nombres   = trim(($firma['apellidos'] ?? '') . ' ' . ($firma['nombres'] ?? ''));
-                $correo    = $firma['correo'] ?? '';
-                $telefono  = $firma['telefono'] ?? '';
-                $direccion = $firma['direccion'] ?? '';
-            } else {
-                $tipoIdStr = $firma['facturacion_tipo_id'] ?? 'cedula';
-                $numId     = $firma['facturacion_num_id'] ?? '';
-                $nombres   = $firma['facturacion_nombres'] ?? '';
-                $correo    = $firma['facturacion_correo'] ?? '';
-                $telefono  = $firma['facturacion_telefono'] ?? '';
-                $direccion = $firma['facturacion_direccion'] ?? '';
-            }
-
-            if (trim($numId) === '') throw new \Exception('No hay número de identificación para la facturación.');
-            if (trim($nombres) === '') throw new \Exception('No hay nombres para la facturación.');
-
-            $tipoIdCodigo = match($tipoIdStr) {
-                'ruc'       => '04',
-                'pasaporte' => '06',
-                default     => '05',
-            };
-
-            $db = \App\core\Database::getConnection();
-
-            // Buscar o crear cliente
-            $stBuscar = $db->prepare("SELECT id FROM clientes WHERE id_empresa = :ie AND identificacion = :id AND eliminado = false LIMIT 1");
-            $stBuscar->execute([':ie' => $idEmpresa, ':id' => $numId]);
-            $idCliente = $stBuscar->fetchColumn();
-
-            if (!$idCliente) {
-                $stCrear = $db->prepare(
-                    "INSERT INTO clientes (id_empresa, id_usuario, nombre, tipo_id, identificacion, telefono, email, direccion, plazo, status, created_by, created_at, eliminado)
-                     VALUES (:ie, :iu, :nom, :tid, :idd, :tel, :email, :dir, 0, 1, :iu, CURRENT_TIMESTAMP, false) RETURNING id"
-                );
-                $stCrear->execute([
-                    ':ie'   => $idEmpresa,
-                    ':iu'   => $idUsuario,
-                    ':nom'  => mb_strtoupper(trim($nombres), 'UTF-8'),
-                    ':tid'  => $tipoIdCodigo,
-                    ':idd'  => $numId,
-                    ':tel'  => $telefono ?: '',
-                    ':email'=> $correo ?: '',
-                    ':dir'  => $direccion ?: '',
-                ]);
-                $idCliente = $stCrear->fetchColumn();
-            }
-
-            if (!$idCliente) throw new \Exception('No se pudo encontrar o crear el cliente.');
-
-            // Obtener primer punto de emisión activo
-            $stPunto = $db->prepare(
-                "SELECT p.id, p.codigo_punto, e.id AS id_establecimiento, e.codigo AS cod_establecimiento
-                 FROM empresa_punto_emision p
-                 LEFT JOIN empresa_establecimiento e ON e.id = p.id_establecimiento
-                 WHERE p.id_empresa = :ie AND p.eliminado = false AND e.eliminado = false
-                 ORDER BY e.codigo ASC, p.codigo_punto ASC
-                 LIMIT 1"
-            );
-            $stPunto->execute([':ie' => $idEmpresa]);
-            $punto = $stPunto->fetch(\PDO::FETCH_ASSOC);
-            if (!$punto) throw new \Exception('No hay puntos de emisión configurados para esta empresa.');
-
-            // Secuencial. Se abre la transacción ANTES de calcularlo y se mantiene hasta el
-            // INSERT final (FacturaVentaService::crear()): el lock de obtenerSiguienteSecuencial()
-            // se libera solo al COMMIT/ROLLBACK (CLAUDE.md §8).
-            $db->beginTransaction();
-            $secInfo = (new \App\Services\SecuencialService())->obtenerSiguienteSecuencial((int)$punto['id'], 'Facturas de venta');
-
-            // Producto con IVA
-            $stProd = $db->prepare(
-                "SELECT p.id, p.nombre, p.precio_base, p.codigo,
-                        ti.id AS id_tarifa_iva, ti.porcentaje_iva, ti.codigo AS codigo_porcentaje_iva
-                 FROM productos p
-                 LEFT JOIN tarifa_iva ti ON ti.id = p.tarifa_iva
-                 WHERE p.id = :id AND p.id_empresa = :ie AND p.eliminado = false"
-            );
-            $stProd->execute([':id' => $idProducto, ':ie' => $idEmpresa]);
-            $prod = $stProd->fetch(\PDO::FETCH_ASSOC);
-            if (!$prod) throw new \Exception('Producto/Validez de Firma no encontrado.');
-
-            $precioBase    = round((float)($prod['precio_base'] ?? 0), 2);
-            $porcentajeIva = (float)($prod['porcentaje_iva'] ?? 0);
-            $valorIva      = round($precioBase * $porcentajeIva / 100, 2);
-            $precioTotal   = round($precioBase + $valorIva, 2);
-
-            $empresaData = (new \App\models\Empresa())->getPorId($idEmpresa) ?? [];
-
-            $dataFact = [
-                'id_empresa'           => $idEmpresa,
-                'id_usuario'           => $idUsuario,
-                'empresa_config'       => $empresaData,
-                'id_cliente'           => (int)$idCliente,
-                'id_establecimiento'   => (int)$punto['id_establecimiento'],
-                'id_punto_emision'     => (int)$punto['id'],
-                'establecimiento'      => $punto['cod_establecimiento'],
-                'punto_emision'        => $punto['codigo_punto'],
-                'secuencial'           => $secInfo['formateado'],
-                'fecha_emision'        => date('Y-m-d'),
-                'estado'               => 'borrador',
-                'total_sin_impuestos'  => $precioBase,
-                'total_descuento'      => 0,
-                'importe_total'        => $precioTotal,
-                'detalles' => [
-                    [
-                        'id_producto'               => $idProducto,
-                        'descripcion'               => $prod['nombre'],
-                        'cantidad'                  => 1,
-                        'precio_unitario'           => $precioBase,
-                        'descuento'                 => 0,
-                        'precio_total_sin_impuesto' => $precioBase,
-                        'codigo_principal'          => $prod['codigo'] ?: $prod['nombre'],
-                        'id_tarifa_iva'             => (int)($prod['id_tarifa_iva'] ?? 0),
-                        'impuestos' => [
-                            [
-                                'codigo_impuesto'   => '2',
-                                'codigo_porcentaje' => $prod['codigo_porcentaje_iva'] ?? '0',
-                                'tarifa'            => $porcentajeIva,
-                                'base_imponible'    => $precioBase,
-                                'valor'             => $valorIva,
-                            ]
-                        ],
-                    ]
-                ],
-                'pagos' => [
-                    ['forma_pago' => '01', 'total' => $precioTotal, 'plazo' => 0, 'unidad_tiempo' => 'dias']
-                ],
-            ];
-
-            $factService = new \App\Services\modulos\FacturaVentaService(
-                new \App\repositories\modulos\FacturaVentaRepository(),
-                new \App\Rules\modulos\FacturaVentaRules(),
-                new \App\Services\LogSistemaService()
-            );
-            $idFactura = $factService->crear($dataFact);
-
-            // Asociar factura a la firma
-            $db->prepare("UPDATE firmas_electronicas SET id_factura = :if, updated_at = CURRENT_TIMESTAMP WHERE id = :id AND id_empresa = :ie")
-               ->execute([':if' => $idFactura, ':id' => $idFirma, ':ie' => $idEmpresa]);
-
-            $db->commit();
-
-            echo json_encode([
-                'ok'                      => true,
-                'msg'                     => 'Factura generada correctamente.',
-                'id_factura'              => $idFactura,
-                'factura_estado'          => 'borrador',
-                'factura_establecimiento' => $punto['cod_establecimiento'],
-                'factura_punto_emision'   => $punto['codigo_punto'],
-                'factura_secuencial'      => $secInfo['formateado'],
-                'factura_importe_total'   => $precioTotal,
-                'url'                     => BASE_URL . '/modulos/factura-venta',
-            ]);
+            $res = $this->service->generarFacturaBorrador($idFirma, $idEmpresa, $idUsuario);
+            echo json_encode(['ok' => true, 'msg' => 'Factura generada correctamente.', 'url' => BASE_URL . '/modulos/factura-venta'] + $res);
         } catch (\Throwable $e) {
-            if (isset($db) && $db->inTransaction()) $db->rollBack();
             \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
         }
         exit;
     }
 
+    // ── Trámite (pago, Uanataca, historial) ───────────────────
+
+    public function getTramiteAjax(): void
+    {
+        $this->requireLeer();
+        $this->responderJson(function () {
+            $d = $this->service->getDatosTramite((int) ($_GET['id'] ?? 0), (int) $_SESSION['id_empresa']);
+            $f = $d['firma'];
+            $fmt = fn($v) => !empty($v) ? date('d-m-Y H:i:s', strtotime($v)) : null;
+            return [
+                'estado'              => $f['estado'],
+                'estado_label'        => FirmaElectronicaService::etiquetaEstado((string) $f['estado']),
+                'estado_pago'         => $f['estado_pago'],
+                'tipo_pago'           => $f['tipo_pago'],
+                'origen'              => $f['origen'] ?? 'interno',
+                'total'               => $d['total'],
+                'pago_motivo_rechazo' => $f['pago_motivo_rechazo'],
+                'id_factura'          => $f['id_factura'],
+                'factura_estado'      => $f['factura_estado'],
+                'factura_numero'      => !empty($f['factura_secuencial']) ? $f['factura_establecimiento'] . '-' . $f['factura_punto_emision'] . '-' . $f['factura_secuencial'] : null,
+                'id_ingreso'          => $f['id_ingreso'],
+                'correo'              => $f['correo'],
+                'correo_enviado_at'   => $fmt($f['correo_confirmacion_enviado_at']),
+                'correo_confirmado_at'=> $fmt($f['correo_confirmado_at']),
+                'uanataca_referencia' => $f['uanataca_referencia'],
+                'uanataca_registrada_at' => $fmt($f['uanataca_registrada_at']),
+                'observacion_cliente' => $f['observacion_cliente'],
+                'url_portal'          => $d['url_portal'],
+                'uanataca_api'        => $this->service->getConfigModulo((int) $_SESSION['id_empresa'])['uanataca_activo'],
+                'uanataca_uuid'       => $f['uanataca_uuid'],
+                'uanataca_estado'     => $f['uanataca_estado'],
+                'uanataca_estado_label' => \App\Services\UanatacaApiService::ESTADOS[$f['uanataca_estado'] ?? ''] ?? $f['uanataca_estado'],
+                'uanataca_estado_at'  => $fmt($f['uanataca_estado_at']),
+                'uanataca_comentarios'=> $f['uanataca_comentarios'],
+                'uanataca_error'      => $f['uanataca_error'],
+                'uanataca_faltantes'  => $f['estado'] === 'por_registrar' && empty($f['uanataca_uuid'])
+                    ? $this->service->faltantesUanataca((int) $f['id'], (int) $_SESSION['id_empresa']) : [],
+                'eventos'             => array_map(fn($ev) => [
+                    'titulo'  => $ev['titulo'], 'detalle' => $ev['detalle'], 'usuario' => $ev['usuario'],
+                    'visible_cliente' => in_array($ev['visible_cliente'], [true, 't', 1, '1'], true),
+                    'fecha'   => $fmt($ev['created_at']),
+                ], array_reverse($d['eventos'])),
+                // Datos para el registro manual en Uanataca (botones de copiar)
+                'uanataca' => $this->datosUanataca($f),
+                'adjuntos' => array_map(fn($a) => [
+                    'id' => $a['id'], 'tipo' => $a['tipo'], 'nombre' => $a['nombre_original'],
+                    'etiqueta' => \App\Rules\modulos\FirmaElectronicaRules::ETIQUETAS_ADJUNTO[$a['tipo']] ?? $a['tipo'],
+                    'url' => BASE_URL . '/modulos/firmas_electronicas/verAdjunto?id=' . $a['id'],
+                ], $d['adjuntos']),
+            ];
+        });
+    }
+
+    public function accionTramiteAjax(): void
+    {
+        $this->requireActualizar();
+        $this->responderJson(function () {
+            $this->service->accionTramite(
+                (int) ($_POST['id'] ?? 0), (int) $_SESSION['id_empresa'], (int) $_SESSION['id_usuario'],
+                trim($_POST['accion'] ?? ''),
+                [
+                    'referencia'      => $_POST['referencia'] ?? '',
+                    'fecha_caducidad' => $_POST['fecha_caducidad'] ?? '',
+                    'nota'            => $_POST['nota'] ?? '',
+                    'visible_cliente' => !empty($_POST['visible_cliente']),
+                ]
+            );
+            return ['msg' => 'Trámite actualizado.'];
+        });
+    }
+
+    public function aprobarPagoAjax(): void
+    {
+        $this->requireActualizar();
+        $this->responderJson(function () {
+            $res = $this->service->aprobarPago(
+                (int) ($_POST['id'] ?? 0), (int) $_SESSION['id_empresa'], (int) $_SESSION['id_usuario'],
+                (int) ($_POST['id_forma_cobro'] ?? 0), trim($_POST['referencia'] ?? '')
+            );
+            return ['msg' => $res['ya_existia'] ? 'El pago ya estaba registrado; no se creó otro.' : 'Pago aprobado: se generó la factura y su cobro.'];
+        });
+    }
+
+    public function rechazarPagoAjax(): void
+    {
+        $this->requireActualizar();
+        $this->responderJson(function () {
+            $this->service->rechazarPago((int) ($_POST['id'] ?? 0), (int) $_SESSION['id_empresa'], (int) $_SESSION['id_usuario'], (string) ($_POST['motivo'] ?? ''));
+            return ['msg' => 'Comprobante rechazado. Se avisó al cliente.'];
+        });
+    }
+
+    public function reenviarConfirmacionAjax(): void
+    {
+        $this->requireActualizar();
+        $this->responderJson(function () {
+            $idFirma   = (int) ($_POST['id'] ?? 0);
+            $idEmpresa = (int) $_SESSION['id_empresa'];
+            // Si la factura sigue en borrador, primero se intenta autorizar.
+            $this->service->emitirFacturaYConfirmar($idFirma, $idEmpresa);
+            $ok = $this->service->enviarCorreoConfirmacion($idFirma, $idEmpresa, (int) $_SESSION['id_usuario']);
+            if (!$ok) throw new \Exception('No se pudo enviar el correo. Revise la configuración de correo de la empresa.');
+            return ['msg' => 'Correo con la factura enviado.'];
+        });
+    }
+
+    public function marcarCorreoConfirmadoAjax(): void
+    {
+        $this->requireActualizar();
+        $this->responderJson(function () {
+            $this->service->marcarCorreoConfirmado((int) ($_POST['id'] ?? 0), (int) $_SESSION['id_empresa'], (int) $_SESSION['id_usuario']);
+            return ['msg' => 'Correo marcado como confirmado.'];
+        });
+    }
+
+    public function urlPortalAjax(): void
+    {
+        $this->requireActualizar();
+        $this->responderJson(fn() => ['url' => $this->service->getUrlPortalFirma((int) ($_POST['id'] ?? 0), (int) $_SESSION['id_empresa'], (int) $_SESSION['id_usuario'])]);
+    }
+
+    // ── API de Uanataca ───────────────────────────────────────
+
+    public function probarUanatacaAjax(): void
+    {
+        $this->requireActualizar();
+        $this->responderJson(function () {
+            $r = $this->service->probarConexionUanataca((int) $_SESSION['id_empresa']);
+            return ['msg' => 'Conexión correcta. Saldo de Uanacréditos: $' . number_format($r['saldo'], 2) . ' · ' . $r['productos'] . ' productos.'] + $r;
+        });
+    }
+
+    public function saldoUanatacaAjax(): void
+    {
+        $this->requireLeer();
+        $this->responderJson(fn() => ['saldo' => $this->service->getSaldoUanataca((int) $_SESSION['id_empresa'])]);
+    }
+
+    public function catalogoUanatacaAjax(): void
+    {
+        $this->requireActualizar();
+        $this->responderJson(fn() => $this->service->getCatalogoUanataca((int) $_SESSION['id_empresa']));
+    }
+
+    public function guardarMapeoUanatacaAjax(): void
+    {
+        $this->requireActualizar();
+        $this->responderJson(function () {
+            $mapeo = json_decode((string) ($_POST['mapeo'] ?? '{}'), true);
+            $this->service->guardarMapeoUanataca((int) $_SESSION['id_empresa'], (int) $_SESSION['id_usuario'], is_array($mapeo) ? $mapeo : []);
+            return ['msg' => 'Productos de Uanataca guardados.'];
+        });
+    }
+
+    public function enviarUanatacaAjax(): void
+    {
+        $this->requireActualizar();
+        $this->responderJson(function () {
+            $uuid = $this->service->enviarAUanataca((int) ($_POST['id'] ?? 0), (int) $_SESSION['id_empresa'], (int) $_SESSION['id_usuario']);
+            return ['msg' => 'Solicitud creada en Uanataca (' . $uuid . '). El cliente recibirá el correo de Uanataca para validar su identidad.'];
+        });
+    }
+
+    public function sincronizarUanatacaAjax(): void
+    {
+        $this->requireActualizar();
+        $this->responderJson(function () {
+            $r = $this->service->sincronizarUanataca((int) ($_POST['id'] ?? 0), (int) $_SESSION['id_empresa'], (int) $_SESSION['id_usuario']);
+            return ['msg' => 'Estado en Uanataca: ' . $r['etiqueta'] . ($r['cambio'] ? ' (actualizado).' : ' (sin cambios).')];
+        });
+    }
+
+    public function guardarConfigAjax(): void
+    {
+        $this->requireActualizar();
+        $this->responderJson(function () {
+            $cfg = $this->service->guardarConfigModulo((int) $_SESSION['id_empresa'], (int) $_SESSION['id_usuario'], [
+                'id_punto_emision'       => (int) ($_POST['id_punto_emision'] ?? 0),
+                'id_usuario_responsable' => (int) ($_POST['id_usuario_responsable'] ?? 0),
+                'payphone_activo'        => !empty($_POST['payphone_activo']),
+                'transferencia_activa'   => !empty($_POST['transferencia_activa']),
+                'datos_transferencia'    => (string) ($_POST['datos_transferencia'] ?? ''),
+                'enlace_fijo_activo'     => !empty($_POST['enlace_fijo_activo']),
+                'uanataca_activo'           => !empty($_POST['uanataca_activo']),
+                'uanataca_ambiente'         => (string) ($_POST['uanataca_ambiente'] ?? 'pruebas'),
+                'uanataca_usuario'          => (string) ($_POST['uanataca_usuario'] ?? ''),
+                'uanataca_clave'            => (string) ($_POST['uanataca_clave'] ?? ''),
+                'uanataca_envio_automatico' => !empty($_POST['uanataca_envio_automatico']),
+                'uanataca_exigir_correo'    => !empty($_POST['uanataca_exigir_correo']),
+            ], !empty($_POST['regenerar_enlace']));
+            return ['msg' => 'Configuración guardada.', 'url_enlace_fijo' => FirmaElectronicaService::urlEnlaceFijo($cfg['enlace_fijo_codigo'])];
+        });
+    }
     // ── Helpers ───────────────────────────────────────────────
 
     private function recogerFormulario(): array
@@ -815,7 +783,7 @@ class FirmasElectronicasController extends BaseModuloController
         return [
             'id_producto'           => (int) ($_POST['id_producto'] ?? 0) ?: null,
             'nombre_producto'       => trim($_POST['nombre_producto'] ?? ''),
-            'tipo_persona'          => in_array(trim($_POST['tipo_persona'] ?? ''), ['natural', 'juridica'], true)
+            'tipo_persona'          => in_array(trim($_POST['tipo_persona'] ?? ''), ['natural', 'juridica', 'miembro'], true)
                                          ? trim($_POST['tipo_persona']) : 'natural',
             'con_ruc'               => !empty($_POST['con_ruc']),
             'ruc_empresa'           => trim($_POST['ruc_empresa'] ?? ''),
@@ -825,7 +793,17 @@ class FirmasElectronicasController extends BaseModuloController
             'numero_identificacion' => trim($_POST['numero_identificacion'] ?? ''),
             'codigo_dactilar'       => trim($_POST['codigo_dactilar'] ?? ''),
             'nombres'               => trim($_POST['nombres'] ?? ''),
-            'apellidos'             => trim($_POST['apellidos'] ?? ''),
+            'apellidos'             => trim(trim($_POST['apellido_paterno'] ?? '') . ' ' . trim($_POST['apellido_materno'] ?? '')) ?: trim($_POST['apellidos'] ?? ''),
+            'apellido_paterno'      => trim($_POST['apellido_paterno'] ?? ''),
+            'apellido_materno'      => trim($_POST['apellido_materno'] ?? ''),
+            'telefono2'             => trim($_POST['telefono2'] ?? ''),
+            'correo2'               => trim($_POST['correo2'] ?? ''),
+            'departamento'          => trim($_POST['departamento'] ?? ''),
+            'motivo'                => trim($_POST['motivo'] ?? ''),
+            'rep_tipo_identificacion' => in_array($_POST['rep_tipo_identificacion'] ?? '', ['cedula', 'pasaporte'], true) ? $_POST['rep_tipo_identificacion'] : 'cedula',
+            'rep_identificacion'    => trim($_POST['rep_identificacion'] ?? ''),
+            'rep_nombres'           => trim($_POST['rep_nombres'] ?? ''),
+            'rep_apellidos'         => trim($_POST['rep_apellidos'] ?? ''),
             'fecha_nacimiento'      => $convFecha(trim($_POST['fecha_nacimiento'] ?? '')),
             'telefono'              => trim($_POST['telefono'] ?? ''),
             'correo'                => trim($_POST['correo'] ?? ''),
@@ -852,10 +830,13 @@ class FirmasElectronicasController extends BaseModuloController
     private function badgeEstado(string $estado): string
     {
         $map = [
-            'pendiente'   => ['warning',  'Pendiente'],
-            'en_proceso'  => ['info',     'En Proceso'],
-            'emitida'     => ['success',  'Emitida'],
-            'cancelada'   => ['danger',   'Cancelada'],
+            'borrador'      => ['secondary', 'Borrador'],
+            'pendiente'     => ['warning',   'Pendiente de pago'],
+            'por_registrar' => ['info',      'Por registrar'],
+            'en_proceso'    => ['primary',   'En trámite'],
+            'observada'     => ['danger',    'Observada'],
+            'emitida'       => ['success',   'Emitida'],
+            'cancelada'     => ['dark',      'Cancelada'],
         ];
         [$color, $label] = $map[$estado] ?? ['secondary', ucfirst($estado)];
         return "<span class=\"badge bg-{$color} bg-opacity-10 text-{$color} border border-{$color} border-opacity-25\">{$label}</span>";
@@ -888,6 +869,7 @@ class FirmasElectronicasController extends BaseModuloController
     {
         $map = [
             'pendiente'   => ['warning', 'Pendiente'],
+            'en_revision' => ['info',    'En revisión'],
             'confirmado'  => ['success', 'Confirmado'],
             'rechazado'   => ['danger',  'Rechazado'],
         ];
@@ -897,26 +879,68 @@ class FirmasElectronicasController extends BaseModuloController
 
     private function verificarFacturaActiva(int $idFirma, int $idEmpresa): ?string
     {
-        try {
-            $db = \App\core\Database::getConnection();
-            $st = $db->prepare(
-                "SELECT v.estado
-                 FROM firmas_electronicas f
-                 JOIN ventas_cabecera v ON v.id = f.id_factura
-                 WHERE f.id = :id AND f.id_empresa = :ie
-                   AND f.eliminado = false AND f.id_factura IS NOT NULL
-                   AND v.eliminado = false
-                   AND v.estado IN ('borrador', 'autorizada')"
-            );
-            $st->execute([':id' => $idFirma, ':ie' => $idEmpresa]);
-            $row = $st->fetch(\PDO::FETCH_ASSOC);
-            if ($row) {
-                return 'Esta firma tiene una factura activa (estado: ' . ucfirst($row['estado']) . '). Primero debe eliminar o anular la factura desde el módulo de Facturas de Venta.';
-            }
-        } catch (\Throwable) {}
-        return null;
+        return $this->service->errorFacturaActiva($idFirma, $idEmpresa);
     }
 
+    /** Ejecuta una acción AJAX y responde {ok, ...} o {ok:false, error}. */
+    private function responderJson(callable $fn): void
+    {
+        header('Content-Type: application/json; charset=utf-8');
+        try {
+            echo json_encode(['ok' => true] + $fn());
+        } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => debug_backtrace(DEBUG_BACKTRACE_IGNORE_ARGS, 2)[1]['function'] ?? '']);
+            echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
+        }
+        exit;
+    }
+
+    /** Campos tal como se escriben en el portal de Uanataca (para copiarlos). */
+    private function datosUanataca(array $f): array
+    {
+        $tipoId = ['cedula' => 'Cédula', 'ruc' => 'RUC', 'pasaporte' => 'Pasaporte'][$f['tipo_identificacion'] ?? ''] ?? ($f['tipo_identificacion'] ?? '');
+        $campos = [
+            ['Tipo de firma',          $f['nombre_producto'] ?? ''],
+            ['Tipo de persona',        ($f['tipo_persona'] ?? '') === 'juridica' ? 'Representante legal' : 'Persona natural'],
+            ['Tipo de identificación', $tipoId],
+            ['Identificación',         $f['numero_identificacion'] ?? ''],
+            ['Código dactilar',        $f['codigo_dactilar'] ?? ''],
+            ['Nombres',                $f['nombres'] ?? ''],
+            ['Primer apellido',        $f['apellido_paterno'] ?: ($f['apellidos'] ?? '')],
+            ['Segundo apellido',       $f['apellido_materno'] ?? ''],
+            ['Fecha de nacimiento',    !empty($f['fecha_nacimiento']) ? date('d/m/Y', strtotime($f['fecha_nacimiento'])) : ''],
+            ['Sexo',                   ['hombre' => 'Masculino', 'mujer' => 'Femenino'][$f['sexo'] ?? ''] ?? ''],
+            ['Nacionalidad',           $f['nacionalidad'] ?? ''],
+            ['Celular',                $f['telefono'] ?? ''],
+            ['Correo',                 $f['correo'] ?? ''],
+            ['Provincia',              $f['provincia_nombre'] ?? ''],
+            ['Ciudad',                 $f['ciudad_nombre'] ?? ''],
+            ['Dirección',              $f['direccion'] ?? ''],
+        ];
+        if (in_array($f['con_ruc'] ?? false, [true, 't', 1, '1'], true)) {
+            $campos[] = ['Con RUC', 'Sí'];
+        }
+        if (!empty($f['telefono2'])) {
+            $campos[] = ['Otro teléfono', $f['telefono2']];
+        }
+        if (!empty($f['correo2'])) {
+            $campos[] = ['Correo alterno', $f['correo2']];
+        }
+        if (in_array($f['tipo_persona'] ?? '', ['juridica', 'miembro'], true)) {
+            $campos[1] = ['Tipo de persona', $f['tipo_persona'] === 'miembro' ? 'Miembro de empresa' : 'Representante legal'];
+            $campos[] = ['RUC de la empresa', $f['ruc_empresa'] ?? ''];
+            $campos[] = ['Razón social',      $f['nombre_empresa'] ?? ''];
+            $campos[] = ['Cargo',             $f['cargo'] ?? ''];
+            $campos[] = ['Motivo',            $f['motivo'] ?? ''];
+        }
+        if (($f['tipo_persona'] ?? '') === 'miembro') {
+            $campos[] = ['Departamento',                     $f['departamento'] ?? ''];
+            $campos[] = ['Identificación del representante', $f['rep_identificacion'] ?? ''];
+            $campos[] = ['Nombres del representante',        $f['rep_nombres'] ?? ''];
+            $campos[] = ['Apellidos del representante',      $f['rep_apellidos'] ?? ''];
+        }
+        return array_map(fn($c) => ['campo' => $c[0], 'valor' => (string) $c[1]], $campos);
+    }
     private function badgeEstadoFactura(?int $idFactura, ?string $estado, bool $eliminada): string
     {
         if (!$idFactura || $eliminada) {
@@ -924,36 +948,10 @@ class FirmasElectronicasController extends BaseModuloController
         }
         return match($estado) {
             'borrador'   => '<span class="badge bg-info bg-opacity-10 text-info border border-info border-opacity-25" style="font-size:.7rem;">Borrador</span>',
-            'autorizada' => '<span class="badge bg-success bg-opacity-10 text-success border border-success border-opacity-25" style="font-size:.7rem;"><i class="bi bi-check-circle me-1"></i>Facturado</span>',
-            'anulada'    => '<span class="badge bg-danger bg-opacity-10 text-danger border border-danger border-opacity-25" style="font-size:.7rem;">Anulada</span>',
+            'autorizado' => '<span class="badge bg-success bg-opacity-10 text-success border border-success border-opacity-25" style="font-size:.7rem;"><i class="bi bi-check-circle me-1"></i>Facturado</span>',
+            'anulado'    => '<span class="badge bg-danger bg-opacity-10 text-danger border border-danger border-opacity-25" style="font-size:.7rem;">Anulada</span>',
             default      => '<span class="badge bg-secondary bg-opacity-10 text-secondary border border-secondary border-opacity-25" style="font-size:.7rem;">' . htmlspecialchars(ucfirst($estado ?? '?')) . '</span>',
         };
-    }
-
-    private function getTiposFirma(int $idEmpresa): array
-    {
-        try {
-            $db = \App\core\Database::getConnection();
-            $st = $db->prepare(
-                "SELECT p.id, p.nombre,
-                        ROUND(
-                            (p.precio_base + COALESCE(p.valor_ice, 0))
-                            * (1 + COALESCE(ti.porcentaje_iva, 0)::numeric / 100),
-                        2) AS pvp
-                 FROM productos p
-                 INNER JOIN categorias c ON c.id = p.id_categoria
-                 LEFT  JOIN tarifa_iva ti ON ti.id = p.tarifa_iva
-                 WHERE p.id_empresa = :ie
-                   AND p.eliminado = false
-                   AND p.status = 1
-                   AND UPPER(c.nombre) LIKE '%FIRMA%'
-                 ORDER BY p.nombre ASC"
-            );
-            $st->execute([':ie' => $idEmpresa]);
-            return $st->fetchAll(\PDO::FETCH_ASSOC);
-        } catch (\Throwable $e) {
-            return [];
-        }
     }
 
     // ── Solicitudes (formulario público por email) ────────────
@@ -961,60 +959,23 @@ class FirmasElectronicasController extends BaseModuloController
     public function enviarSolicitud(): void
     {
         $this->requireCrear();
-        header('Content-Type: application/json');
-
-        $idEmpresa = (int) $_SESSION['id_empresa'];
-        $idUsuario = (int) $_SESSION['id_usuario'];
-        $correo    = trim($_POST['correo_destino'] ?? '');
-        $nombre    = trim($_POST['nombre_destino'] ?? '');
-
-        if (!filter_var($correo, FILTER_VALIDATE_EMAIL)) {
-            echo json_encode(['ok' => false, 'msg' => 'Correo electrónico no válido.']);
-            return;
-        }
-
-        // Generar token único de 64 chars hex
-        $token = bin2hex(random_bytes(32));
-
-        // Obtener nombre de la empresa
-        $empresaRow = (new \App\models\Empresa())->getPorId($idEmpresa);
-        $empresaNombre = $empresaRow['nombre'] ?? 'Firma Electrónica';
-
-        $expiraAt = date('Y-m-d H:i:s', strtotime('+7 days'));
-        $scheme   = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? 'https' : 'http';
-        $host     = $_SERVER['HTTP_HOST'] ?? 'localhost';
-        $urlForm  = $scheme . '://' . $host . rtrim(BASE_URL, '/') . '/solicitud-firma/' . $token;
-
-        try {
-            $idSol = $this->solRepo->crear([
-                'id_empresa'     => $idEmpresa,
-                'token'          => $token,
-                'correo_destino' => $correo,
-                'nombre_destino' => $nombre ?: null,
-                'expira_at'      => $expiraAt,
-                'created_by'     => $idUsuario,
+        $this->responderJson(function () {
+            $res = $this->service->enviarEnlace((int) $_SESSION['id_empresa'], (int) $_SESSION['id_usuario'], [
+                'correo'       => $_POST['correo_destino'] ?? '',
+                'nombre'       => $_POST['nombre_destino'] ?? '',
+                'telefono'     => $_POST['telefono_destino'] ?? '',
+                'por_correo'   => !empty($_POST['por_correo']),
+                'por_whatsapp' => !empty($_POST['por_whatsapp']),
+                'id_firma'     => (int) ($_POST['id_firma'] ?? 0),
             ]);
-
-            $enviado = enviar_correo_solicitud_firma($correo, [
-                'nombre_destino' => $nombre,
-                'empresa_nombre' => $empresaNombre,
-                'url_formulario' => $urlForm,
-                'expira'         => date('d-m-Y H:i', strtotime($expiraAt)),
-            ]);
-
-            if (!$enviado) {
-                $err = $GLOBALS['LAST_EMAIL_ERROR'] ?? 'Error desconocido al enviar el correo.';
-                echo json_encode(['ok' => false, 'msg' => 'Solicitud creada pero no se pudo enviar el correo: ' . $err]);
-                return;
-            }
-
-            echo json_encode(['ok' => true, 'msg' => 'Formulario enviado a ' . $correo, 'id' => $idSol]);
-        } catch (\Throwable $e) {
-            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
-            echo json_encode(['ok' => false, 'msg' => 'Error: ' . $e->getMessage()]);
-        }
+            $partes = [];
+            if ($res['correo'] === true)  $partes[] = 'Correo enviado.';
+            if ($res['correo'] === false) $partes[] = 'El correo no se pudo enviar: ' . $res['correo_error'];
+            if ($res['whatsapp'] === 'api')   $partes[] = 'WhatsApp enviado.';
+            if ($res['whatsapp'] === 'wa_me') $partes[] = 'Se abrirá WhatsApp con el mensaje listo para enviar.';
+            return $res + ['msg' => implode(' ', $partes)];
+        });
     }
-
     public function getSolicitudes(): void
     {
         $this->requireLeer();

@@ -47,6 +47,18 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosPestanasOcultas($vistaConfigF
                                 </button>
                             </li>
                             <li class="nav-item">
+                                <button class="nav-link fw-medium py-2 disabled" id="tab-firma-tramite-btn"
+                                    data-bs-toggle="tab" data-bs-target="#tab-firma-tramite" type="button">
+                                    <i class="bi bi-list-check me-1"></i> Trámite
+                                </button>
+                            </li>
+                            <li class="nav-item">
+                                <button class="nav-link fw-medium py-2 disabled" id="tab-firma-uanataca-btn"
+                                    data-bs-toggle="tab" data-bs-target="#tab-firma-uanataca" type="button">
+                                    <i class="bi bi-clipboard-check me-1"></i> Uanataca
+                                </button>
+                            </li>
+                            <li class="nav-item">
                                 <button class="nav-link fw-medium py-2" id="tab-firma-pago-btn"
                                     data-bs-toggle="tab" data-bs-target="#tab-firma-pago" type="button">
                                     <i class="bi bi-credit-card me-1"></i> Pago
@@ -67,6 +79,8 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosPestanasOcultas($vistaConfigF
                         </ul>
                         <?php
                         $pestanasConfig = [
+                            'tab-firma-tramite-btn'  => 'Trámite',
+                            'tab-firma-uanataca-btn' => 'Uanataca',
                             'tab-firma-pago-btn' => 'Pago',
                             'tab-firma-docs-btn' => 'Documentos',
                             'tab-firma-fact-btn' => 'Facturación',
@@ -87,7 +101,8 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosPestanasOcultas($vistaConfigF
                                     <label class="form-label small fw-bold text-muted mb-1">Tipo de Persona *</label>
                                     <select class="form-select form-select-sm shadow-none" name="tipo_persona" id="firma_tipo_persona">
                                         <option value="natural">Persona Natural</option>
-                                        <option value="juridica">Persona Jurídica</option>
+                                        <option value="juridica">Representante legal</option>
+                                        <option value="miembro">Miembro de empresa</option>
                                     </select>
                                 </div>
 
@@ -169,7 +184,7 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosPestanasOcultas($vistaConfigF
                                 <!-- Bloque Persona Jurídica -->
                                 <div id="bloqueJuridica" class="col-12" style="display:none;">
                                     <div class="border border-primary border-opacity-25 rounded-3 p-3 bg-primary bg-opacity-5">
-                                        <div class="small fw-bold text-primary mb-2"><i class="bi bi-building me-1"></i>Datos Persona Jurídica</div>
+                                        <div class="small fw-bold text-primary mb-2"><i class="bi bi-building me-1"></i>Datos de la empresa</div>
                                         <div class="row g-2">
                                             <div class="col-md-3">
                                                 <label class="form-label small fw-bold text-muted mb-1">RUC Empresa</label>
@@ -185,6 +200,37 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosPestanasOcultas($vistaConfigF
                                                 <label class="form-label small fw-bold text-muted mb-1">Cargo / Representación</label>
                                                 <input type="text" class="form-control form-control-sm shadow-none" name="cargo"
                                                     id="firma_cargo" maxlength="100" placeholder="Ej. Gerente General">
+                                            </div>
+                                            <div class="col-md-3 solo-miembro">
+                                                <label class="form-label small fw-bold text-muted mb-1">Departamento</label>
+                                                <input type="text" class="form-control form-control-sm shadow-none" name="departamento"
+                                                    id="firma_departamento" maxlength="150" placeholder="Ej. Contabilidad">
+                                            </div>
+                                            <div class="col-md-9">
+                                                <label class="form-label small fw-bold text-muted mb-1">Motivo (uso de la firma)</label>
+                                                <input type="text" class="form-control form-control-sm shadow-none" name="motivo"
+                                                    id="firma_motivo" maxlength="255" placeholder="Ej. Facturación electrónica y firma de documentos">
+                                            </div>
+                                        </div>
+                                        <div class="row g-2 mt-1 solo-miembro">
+                                            <div class="col-12 small fw-bold text-muted">Representante legal de la empresa</div>
+                                            <div class="col-md-2">
+                                                <select class="form-select form-select-sm shadow-none" name="rep_tipo_identificacion" id="firma_rep_tipo_id">
+                                                    <option value="cedula">Cédula</option>
+                                                    <option value="pasaporte">Pasaporte</option>
+                                                </select>
+                                            </div>
+                                            <div class="col-md-3">
+                                                <input type="text" class="form-control form-control-sm shadow-none" name="rep_identificacion"
+                                                    id="firma_rep_identificacion" maxlength="20" placeholder="Identificación">
+                                            </div>
+                                            <div class="col-md-3">
+                                                <input type="text" class="form-control form-control-sm shadow-none" name="rep_nombres"
+                                                    id="firma_rep_nombres" maxlength="150" placeholder="Nombres">
+                                            </div>
+                                            <div class="col-md-4">
+                                                <input type="text" class="form-control form-control-sm shadow-none" name="rep_apellidos"
+                                                    id="firma_rep_apellidos" maxlength="150" placeholder="Apellidos">
                                             </div>
                                         </div>
                                     </div>
@@ -204,11 +250,16 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosPestanasOcultas($vistaConfigF
                                         id="firma_nombres" required maxlength="100" placeholder="Ej. Juan Carlos">
                                 </div>
 
-                                <!-- Apellidos -->
-                                <div class="col-md-4">
-                                    <label class="form-label small fw-bold text-muted mb-1">Apellidos *</label>
-                                    <input type="text" class="form-control form-control-sm shadow-none" name="apellidos"
-                                        id="firma_apellidos" required maxlength="100" placeholder="Ej. Pérez García">
+                                <!-- Apellidos (Uanataca los pide por separado) -->
+                                <div class="col-md-2">
+                                    <label class="form-label small fw-bold text-muted mb-1">Primer apellido *</label>
+                                    <input type="text" class="form-control form-control-sm shadow-none" name="apellido_paterno"
+                                        id="firma_apellido_paterno" required maxlength="100" placeholder="Ej. Pérez">
+                                </div>
+                                <div class="col-md-2">
+                                    <label class="form-label small fw-bold text-muted mb-1">Segundo apellido</label>
+                                    <input type="text" class="form-control form-control-sm shadow-none" name="apellido_materno"
+                                        id="firma_apellido_materno" maxlength="100" placeholder="Ej. García">
                                 </div>
 
                                 <!-- Sexo -->
@@ -263,6 +314,18 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosPestanasOcultas($vistaConfigF
                                         id="firma_correo" maxlength="150" placeholder="Ej. cliente@correo.com">
                                 </div>
 
+                                <!-- Contacto alterno -->
+                                <div class="col-md-2">
+                                    <label class="form-label small fw-bold text-muted mb-1">Otro teléfono</label>
+                                    <input type="text" class="form-control form-control-sm shadow-none" name="telefono2"
+                                        id="firma_telefono2" maxlength="20" inputmode="tel">
+                                </div>
+                                <div class="col-md-4">
+                                    <label class="form-label small fw-bold text-muted mb-1">Correo alterno</label>
+                                    <input type="email" class="form-control form-control-sm shadow-none" name="correo2"
+                                        id="firma_correo2" maxlength="150">
+                                </div>
+
                                 <!-- Provincia -->
                                 <div class="col-md-2">
                                     <label class="form-label small fw-bold text-muted mb-1">Provincia</label>
@@ -295,8 +358,11 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosPestanasOcultas($vistaConfigF
                                 <div class="col-md-2">
                                     <label class="form-label small fw-bold text-muted mb-1">Estado Trámite</label>
                                     <select class="form-select form-select-sm shadow-none" name="estado" id="firma_estado">
-                                        <option value="pendiente">Pendiente</option>
-                                        <option value="en_proceso">En Proceso</option>
+                                        <option value="borrador">Borrador</option>
+                                        <option value="pendiente">Pendiente de pago</option>
+                                        <option value="por_registrar">Por registrar</option>
+                                        <option value="en_proceso">En trámite</option>
+                                        <option value="observada">Observada</option>
                                         <option value="emitida">Emitida</option>
                                         <option value="cancelada">Cancelada</option>
                                     </select>
@@ -305,6 +371,7 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosPestanasOcultas($vistaConfigF
                                     <label class="form-label small fw-bold text-muted mb-1">Estado Pago</label>
                                     <select class="form-select form-select-sm shadow-none" name="estado_pago" id="firma_estado_pago">
                                         <option value="pendiente">Pendiente</option>
+                                        <option value="en_revision">En revisión</option>
                                         <option value="confirmado">Confirmado</option>
                                         <option value="rechazado">Rechazado</option>
                                     </select>
@@ -322,6 +389,16 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosPestanasOcultas($vistaConfigF
                             </div>
                         </div><!-- /tab-firma-general -->
 
+                        <!-- ── Pestaña Trámite: pago, correo, Uanataca e historial ── -->
+                        <div class="tab-pane fade" id="tab-firma-tramite" role="tabpanel">
+                            <div id="tramiteContenido" class="small text-muted py-3">Cargando…</div>
+                        </div>
+
+                        <!-- ── Pestaña Uanataca: datos para copiar al portal de la entidad ── -->
+                        <div class="tab-pane fade" id="tab-firma-uanataca" role="tabpanel">
+                            <div id="uanatacaContenido" class="small text-muted py-3">Cargando…</div>
+                        </div>
+
                         <!-- ── Pestaña Pago ── -->
                         <div class="tab-pane fade" id="tab-firma-pago" role="tabpanel">
                             <div class="row g-2">
@@ -330,15 +407,16 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosPestanasOcultas($vistaConfigF
                                     <select class="form-select form-select-sm shadow-none" name="tipo_pago" id="firma_tipo_pago">
                                         <option value="">- Seleccionar -</option>
                                         <option value="transferencia">Transferencia Bancaria</option>
-                                        <option value="tarjeta">Tarjeta de Crédito/Débito</option>
+                                        <option value="payphone">Tarjeta (Payphone)</option>
+                                        <option value="tarjeta">Tarjeta (datáfono)</option>
                                     </select>
                                 </div>
 
                                 <!-- Bloque transferencia -->
                                 <div class="col-12" id="bloquePagoTransferencia" style="display:none;">
                                     <div class="alert alert-info py-2 small mb-2">
-                                        <strong><i class="bi bi-bank me-1"></i>Cuentas para Transferencia:</strong><br>
-                                        <span class="text-muted">Configure las cuentas bancarias en los ajustes de la empresa.</span>
+                                        <i class="bi bi-info-circle me-1"></i>Para aprobar un comprobante y generar la factura con su cobro use la pestaña <b>Trámite</b>.
+                                        Los datos bancarios que ve el cliente se configuran con el engranaje del listado.
                                     </div>
                                     <label class="form-label small fw-bold text-muted mb-1">Comprobante de Transferencia</label>
                                     <div id="contenedorComprobante">
@@ -363,9 +441,9 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosPestanasOcultas($vistaConfigF
 
                                 <!-- Bloque tarjeta -->
                                 <div class="col-12" id="bloquePagoTarjeta" style="display:none;">
-                                    <div class="alert alert-warning py-2 small">
+                                    <div class="alert alert-info py-2 small">
                                         <i class="bi bi-credit-card me-1"></i>
-                                        <strong>Pago con tarjeta:</strong> La integración con pasarela de pagos estará disponible próximamente.
+                                        El cliente paga con tarjeta desde su enlace (Payphone): al aprobarse, la factura y su cobro se generan solos.
                                     </div>
                                 </div>
                             </div>
@@ -433,7 +511,7 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosPestanasOcultas($vistaConfigF
                                 <!-- Documentos Persona Jurídica -->
                                 <div id="bloqueDocsJuridica" class="col-12" style="display:none;">
                                     <div class="border-top pt-3 mt-1">
-                                        <h6 class="small fw-bold text-primary mb-3"><i class="bi bi-building me-1"></i>Documentos Persona Jurídica</h6>
+                                        <h6 class="small fw-bold text-primary mb-3"><i class="bi bi-building me-1"></i>Documentos de la empresa</h6>
                                         <div class="row g-3">
 
                                             <!-- RUC empresa -->
@@ -452,7 +530,7 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosPestanasOcultas($vistaConfigF
                                             </div>
 
                                             <!-- Constitución compañía -->
-                                            <div class="col-md-6">
+                                            <div class="col-md-6 solo-juridica">
                                                 <div class="border rounded-3 p-3">
                                                     <h6 class="small fw-bold text-muted mb-2"><i class="bi bi-file-earmark-text me-1 text-secondary"></i>Constitución de Compañía</h6>
                                                     <div id="previewConstitucion" class="mb-2"></div>
@@ -482,7 +560,7 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosPestanasOcultas($vistaConfigF
                                             </div>
 
                                             <!-- Aceptación de nombramiento -->
-                                            <div class="col-md-6">
+                                            <div class="col-md-6 solo-juridica">
                                                 <div class="border rounded-3 p-3">
                                                     <h6 class="small fw-bold text-muted mb-2"><i class="bi bi-file-earmark-check me-1 text-success"></i>Aceptación de Nombramiento</h6>
                                                     <div id="previewAceptacion" class="mb-2"></div>
@@ -496,6 +574,33 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosPestanasOcultas($vistaConfigF
                                                 </div>
                                             </div>
 
+                                            <!-- Miembro de empresa -->
+                                            <div class="col-md-6 solo-miembro">
+                                                <div class="border rounded-3 p-3">
+                                                    <h6 class="small fw-bold text-muted mb-2"><i class="bi bi-person-vcard me-1 text-primary"></i>Cédula del representante legal</h6>
+                                                    <div id="previewCedulaRepresentante" class="mb-2"></div>
+                                                    <div class="input-group input-group-sm">
+                                                        <input type="file" class="form-control form-control-sm" id="archivoCedulaRepresentante" accept=".jpg,.jpeg,.png,.webp,.pdf">
+                                                        <button type="button" class="btn btn-outline-primary btn-sm" id="btnSubirCedulaRepresentante">
+                                                            <i class="bi bi-upload me-1"></i>Subir
+                                                        </button>
+                                                    </div>
+                                                    <div class="form-text">Foto o PDF. Máx. 5 MB.</div>
+                                                </div>
+                                            </div>
+                                            <div class="col-md-6 solo-miembro">
+                                                <div class="border rounded-3 p-3">
+                                                    <h6 class="small fw-bold text-muted mb-2"><i class="bi bi-file-earmark-medical me-1 text-primary"></i>Autorización del representante legal</h6>
+                                                    <div id="previewAutorizacion" class="mb-2"></div>
+                                                    <div class="input-group input-group-sm">
+                                                        <input type="file" class="form-control form-control-sm" id="archivoAutorizacion" accept=".pdf">
+                                                        <button type="button" class="btn btn-outline-primary btn-sm" id="btnSubirAutorizacion">
+                                                            <i class="bi bi-upload me-1"></i>Subir
+                                                        </button>
+                                                    </div>
+                                                    <div class="form-text">Formato: PDF. Máx. 5 MB.</div>
+                                                </div>
+                                            </div>
                                         </div>
                                     </div>
                                 </div>

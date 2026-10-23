@@ -105,12 +105,25 @@ class Router
             if (($parts[0] ?? '') === 'solicitud-firma') {
                 $controller = 'SolicitudFirma';
                 $part1      = $parts[1] ?? '';
+                // Acciones del portal del cliente: /solicitud-firma/{token}/{accion}
+                $accionesPortal = [
+                    'enviar' => 'guardar', 'guardar' => 'guardar', 'adjunto' => 'adjunto',
+                    'quitar-adjunto' => 'quitarAdjunto', 'documentos' => 'documentos',
+                    'pagar' => 'pagar', 'comprobante' => 'comprobante',
+                ];
                 // Sub-rutas AJAX: /solicitud-firma/ciudades y /solicitud-firma/sri
                 if (in_array($part1, ['ciudades', 'sri'], true)) {
                     $action = $part1;
-                } elseif (!empty($part1) && ($parts[2] ?? '') === 'enviar') {
-                    // /solicitud-firma/{token}/enviar → POST del formulario
-                    $action          = 'enviar';
+                } elseif ($part1 === 'e') {
+                    // /solicitud-firma/e/{codigo} → enlace fijo de la empresa
+                    $action         = 'enlace';
+                    $_GET['codigo'] = $parts[2] ?? '';
+                } elseif ($part1 === 'confirmar-correo') {
+                    // /solicitud-firma/confirmar-correo/{token} → botón del correo con la factura
+                    $action        = 'confirmarCorreo';
+                    $_GET['token'] = $parts[2] ?? '';
+                } elseif (!empty($part1) && isset($accionesPortal[$parts[2] ?? ''])) {
+                    $action          = $accionesPortal[$parts[2]];
                     $_GET['token']   = $part1;
                 } elseif (!empty($part1)) {
                     // /solicitud-firma/{token} → mostrar formulario

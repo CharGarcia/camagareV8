@@ -4,202 +4,142 @@ declare(strict_types=1);
 namespace App\controllers;
 
 use App\core\Controller;
-use App\repositories\modulos\FirmaSolicitudRepository;
-use App\repositories\modulos\FirmaElectronicaRepository;
+use App\Services\modulos\FirmaElectronicaService;
 
 /**
- * Controlador PÚBLICO — sin autenticación.
- * Muestra y procesa el formulario de firma electrónica enviado por email.
+ * Controlador PÚBLICO — sin autenticación (está en $publicControllers).
+ * Portal del cliente para solicitar su firma electrónica:
+ *   GET  /solicitud-firma/{token}                 portal (datos → documentos → pago → seguimiento)
+ *   POST /solicitud-firma/{token}/guardar         datos del titular
+ *   POST /solicitud-firma/{token}/adjunto         sube un documento
+ *   POST /solicitud-firma/{token}/quitar-adjunto  quita un documento
+ *   POST /solicitud-firma/{token}/documentos      envía los documentos (pasa a pago)
+ *   POST /solicitud-firma/{token}/pagar           inicia el pago con Payphone
+ *   POST /solicitud-firma/{token}/comprobante     sube el comprobante de transferencia
+ *   GET|POST /solicitud-firma/e/{codigo}          enlace fijo de la empresa
+ *   GET  /solicitud-firma/confirmar-correo/{t}    confirma el correo (botón del correo con la factura)
+ * La empresa se resuelve siempre por el token/código con la empresa activa (CLAUDE.md §6).
+ * Toda la lógica vive en FirmaElectronicaService.
  */
 class SolicitudFirmaController extends Controller
 {
-    private FirmaSolicitudRepository $solRepo;
-    private FirmaElectronicaRepository $firmaRepo;
+    private FirmaElectronicaService $service;
 
-    private const EXTS_IMG = ['jpg', 'jpeg', 'png', 'webp'];
-    private const EXTS_PDF = ['pdf'];
-    private const MAX_BYTES = 5 * 1024 * 1024;
+    /** Consultas al SRI permitidas por sesión y hora (el endpoint es público). */
+    private const MAX_SRI_HORA = 20;
 
     public function __construct()
     {
         parent::__construct();
-        $this->solRepo   = new FirmaSolicitudRepository();
-        $this->firmaRepo = new FirmaElectronicaRepository();
+        $this->service = FirmaElectronicaService::instancia();
     }
 
-    // ── GET: mostrar formulario ───────────────────────────────
+    // ── Páginas ───────────────────────────────────────────────
 
     public function index(): void
     {
-        $token     = trim($_GET['token'] ?? '');
-        $solicitud = $this->validarToken($token);
-        if (!$solicitud) return;
-
-        $idEmpresa = (int) $solicitud['id_empresa'];
-
-        $this->solRepo->expirarVencidos();
-
-        // Recargar para reflejar posible expiración
-        $solicitud = $this->solRepo->getByToken($token);
-        if (!$solicitud || $solicitud['estado'] !== 'pendiente') {
-            $this->renderError('Este enlace ya no está disponible. Puede que haya expirado o ya fue utilizado.');
+        $portal = $this->service->resolverPortal(trim($_GET['token'] ?? ''));
+        if (!$portal) {
+            $this->renderError('El enlace no existe o ya no está disponible.');
             return;
         }
-
-        $provincias  = (new \App\models\Provincia())->getTodas();
-        $tiposFirma  = $this->getTiposFirmaPublico($idEmpresa);
-
-        $this->renderForm($solicitud, $provincias, $tiposFirma, [], null);
+        if (in_array($portal['solicitud']['estado'], ['expirado', 'cancelado'], true) && !$portal['firma']) {
+            $this->renderError('Este enlace ya no está disponible. Solicite uno nuevo a la empresa.');
+            return;
+        }
+        $this->renderPortal($portal);
     }
 
-    // ── POST: procesar envío ──────────────────────────────────
-
-    public function enviar(): void
+    /** Enlace fijo: GET muestra el formulario vacío; POST crea la solicitud y devuelve su enlace. */
+    public function enlace(): void
     {
-        if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
-            header('Location: ' . BASE_URL . '/');
-            exit;
-        }
-
-        $token     = trim($_POST['token'] ?? '');
-        $solicitud = $this->validarToken($token);
-        if (!$solicitud) return;
-
-        if ($solicitud['estado'] !== 'pendiente') {
-            $this->renderError('Este enlace ya no está disponible o ya fue utilizado.');
+        $codigo = trim($_GET['codigo'] ?? '');
+        if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+            $this->responder(function () use ($codigo) {
+                $token = $this->service->crearDesdeEnlaceFijo($codigo, $this->recogerPost(), (string) ($_SERVER['REMOTE_ADDR'] ?? ''));
+                return ['url' => FirmaElectronicaService::urlPortal($token)];
+            });
             return;
         }
-
-        $idEmpresa = (int) $solicitud['id_empresa'];
-        $provincias = (new \App\models\Provincia())->getTodas();
-        $tiposFirma = $this->getTiposFirmaPublico($idEmpresa);
-
-        // ── Validar campos ────────────────────────────────────
-        $errores = [];
-        $data    = $this->recogerPost();
-
-        if (empty($data['id_producto']))           $errores[] = 'Seleccione la validez de la firma.';
-        if (empty($data['tipo_identificacion']))   $errores[] = 'Seleccione el tipo de identificación.';
-        if (empty($data['numero_identificacion'])) $errores[] = 'Ingrese el número de identificación.';
-        if (empty($data['nombres']))               $errores[] = 'Ingrese los nombres.';
-        if (empty($data['apellidos']))             $errores[] = 'Ingrese los apellidos.';
-        if (empty($data['telefono']))              $errores[] = 'Ingrese el teléfono.';
-        if (empty($data['correo']))                $errores[] = 'Ingrese el correo electrónico.';
-        if (!filter_var($data['correo'], FILTER_VALIDATE_EMAIL)) $errores[] = 'El correo electrónico no es válido.';
-        if (empty($data['cod_prov']))              $errores[] = 'Seleccione la provincia.';
-        if (empty($data['cod_ciudad']))            $errores[] = 'Seleccione la ciudad.';
-        if (empty($data['direccion']))             $errores[] = 'Ingrese la dirección.';
-
-        // Validar adjuntos obligatorios
-        $adjuntosRequeridos = ['cedula_frontal', 'cedula_posterior', 'selfie_cedula'];
-        if ($data['tipo_persona'] === 'juridica') {
-            $adjuntosRequeridos = array_merge($adjuntosRequeridos, ['ruc_empresa', 'constitucion', 'nombramiento', 'aceptacion_nombramiento']);
-        }
-
-        foreach ($adjuntosRequeridos as $campo) {
-            if (empty($_FILES[$campo]['tmp_name']) || $_FILES[$campo]['error'] !== UPLOAD_ERR_OK) {
-                $labels = [
-                    'cedula_frontal'         => 'Foto cédula (frente)',
-                    'cedula_posterior'       => 'Foto cédula (posterior)',
-                    'selfie_cedula'          => 'Selfie con cédula',
-                    'ruc_empresa'            => 'RUC de la empresa',
-                    'constitucion'           => 'Constitución de la compañía',
-                    'nombramiento'           => 'Nombramiento',
-                    'aceptacion_nombramiento'=> 'Aceptación del nombramiento',
-                ];
-                $errores[] = 'El documento "' . ($labels[$campo] ?? $campo) . '" es obligatorio.';
-            }
-        }
-
-        if (!empty($errores)) {
-            $this->renderForm($solicitud, $provincias, $tiposFirma, $errores, $data);
+        $portal = $this->service->resolverEnlaceFijo($codigo);
+        if (!$portal) {
+            $this->renderError('Este enlace ya no está disponible.');
             return;
         }
-
-        // ── Buscar nombre del producto ────────────────────────
-        $nombreProducto = '';
-        foreach ($tiposFirma as $t) {
-            if ((int)$t['id'] === (int)$data['id_producto']) {
-                $nombreProducto = $t['nombre'];
-                break;
-            }
-        }
-
-        // ── Insertar firma ────────────────────────────────────
-        $firmaData = array_merge($data, [
-            'id_empresa'             => $idEmpresa,
-            'id_usuario'             => null,
-            'nombre_producto'        => $nombreProducto,
-            'estado'                 => 'pendiente',
-            'estado_pago'            => 'pendiente',
-            'facturacion_mismos_datos' => true,
-        ]);
-
-        try {
-            $db = \App\core\Database::getConnection();
-            $db->beginTransaction();
-
-            $idFirma = $this->firmaRepo->create($firmaData);
-
-            // ── Guardar adjuntos ──────────────────────────────
-            $storageBase = MVC_ROOT . '/storage/firmas/' . $idEmpresa;
-            if (!is_dir($storageBase)) {
-                mkdir($storageBase, 0755, true);
-            }
-
-            // Clave = nombre del campo en $_FILES, valor = [tipo guardado en BD, extensiones permitidas]
-            // Los tipos deben coincidir exactamente con los que espera el modal interno
-            $tiposAdj = [
-                'cedula_frontal'          => ['cedula_frontal',          self::EXTS_IMG],
-                'cedula_posterior'        => ['cedula_posterior',        self::EXTS_IMG],
-                'selfie_cedula'           => ['selfie',                  self::EXTS_IMG],
-                'ruc_empresa'             => ['ruc_empresa',             self::EXTS_PDF],
-                'constitucion'            => ['constitucion',            self::EXTS_PDF],
-                'nombramiento'            => ['nombramiento',            self::EXTS_PDF],
-                'aceptacion_nombramiento' => ['aceptacion_nombramiento', self::EXTS_PDF],
-            ];
-
-            foreach ($tiposAdj as $campo => [$tipo, $extsPermitidas]) {
-                if (empty($_FILES[$campo]['tmp_name']) || $_FILES[$campo]['error'] !== UPLOAD_ERR_OK) continue;
-
-                $file      = $_FILES[$campo];
-                $ext       = strtolower(pathinfo($file['name'], PATHINFO_EXTENSION));
-                if (!in_array($ext, $extsPermitidas, true)) continue;
-                if ($file['size'] > self::MAX_BYTES) continue;
-
-                $nombreArchivo = $idFirma . '_' . $tipo . '_' . time() . '.' . $ext;
-                $destino       = $storageBase . '/' . $nombreArchivo;
-
-                if (move_uploaded_file($file['tmp_name'], $destino)) {
-                    $this->firmaRepo->createAdjunto([
-                        'id_firma'       => $idFirma,
-                        'id_empresa'     => $idEmpresa,
-                        'tipo'           => $tipo,
-                        'nombre_original'=> $file['name'],
-                        'nombre_archivo' => $nombreArchivo,
-                        'ruta_relativa'  => 'firmas/' . $idEmpresa . '/' . $nombreArchivo,
-                        'mime_type'      => $file['type'],
-                        'tamano_bytes'   => $file['size'],
-                        'created_by'     => null,
-                    ]);
-                }
-            }
-
-            $this->solRepo->marcarCompletado((int)$solicitud['id'], $idFirma);
-
-            $db->commit();
-
-            $this->renderExito($solicitud);
-
-        } catch (\Throwable $e) {
-            if (isset($db) && $db->inTransaction()) $db->rollBack();
-            error_log('SolicitudFirma::enviar error: ' . $e->getMessage());
-            $errores[] = 'Ocurrió un error al guardar los datos. Por favor intente nuevamente.';
-            $this->renderForm($solicitud, $provincias, $tiposFirma, $errores, $data);
-        }
+        $this->renderPortal($portal);
     }
 
-    // ── AJAX: ciudades por provincia ──────────────────────────
+    public function confirmarCorreo(): void
+    {
+        try {
+            $firma = $this->service->confirmarCorreo(trim($_GET['token'] ?? ''));
+        } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
+            $firma = null;
+        }
+        if (!$firma) {
+            $this->renderError('El enlace de confirmación no es válido o ya no está disponible.');
+            return;
+        }
+        $this->view('publica.solicitud_firma_exito', [
+            'titulo'    => '¡Correo confirmado!',
+            'mensaje'   => 'Gracias. Confirmaste que ' . $firma['correo'] . ' es tu correo: ahí te llegará la activación de tu firma electrónica.',
+            'urlPortal' => !empty($firma['token_portal']) ? FirmaElectronicaService::urlPortal((string) $firma['token_portal']) : null,
+            'empresa'   => $firma['empresa_nombre'] ?? '',
+        ]);
+    }
+
+    // ── Acciones del portal (AJAX, JSON) ──────────────────────
+
+    public function guardar(): void
+    {
+        $this->responder(function () {
+            $this->service->guardarDatosPortal($this->token(), $this->recogerPost());
+            return ['msg' => 'Datos guardados.'];
+        });
+    }
+
+    public function adjunto(): void
+    {
+        $this->responder(function () {
+            $tipo = trim($_POST['tipo'] ?? '');
+            $res  = $this->service->subirAdjuntoPortal($this->token(), $tipo, $_FILES['archivo'] ?? []);
+            return ['adjunto' => $res];
+        });
+    }
+
+    public function quitarAdjunto(): void
+    {
+        $this->responder(function () {
+            $this->service->quitarAdjuntoPortal($this->token(), (int) ($_POST['id'] ?? 0));
+            return ['msg' => 'Documento quitado.'];
+        });
+    }
+
+    public function documentos(): void
+    {
+        $this->responder(function () {
+            $this->service->finalizarDocumentosPortal($this->token());
+            return ['msg' => 'Documentos enviados.'];
+        });
+    }
+
+    public function pagar(): void
+    {
+        $this->responder(function () {
+            return ['url' => $this->service->iniciarPagoPayphone($this->token())];
+        });
+    }
+
+    public function comprobante(): void
+    {
+        $this->responder(function () {
+            $this->service->subirComprobantePortal($this->token(), $_FILES['archivo'] ?? []);
+            return ['msg' => 'Comprobante recibido. Te avisaremos cuando lo revisemos.'];
+        });
+    }
+
+    // ── AJAX auxiliares ───────────────────────────────────────
 
     public function ciudades(): void
     {
@@ -211,13 +151,33 @@ class SolicitudFirmaController extends Controller
         echo json_encode(array_map(fn($c) => ['codigo' => $c['codigo'], 'nombre' => $c['nombre']], $rows));
     }
 
-    // ── AJAX: consultar SRI ───────────────────────────────────
-
+    /**
+     * Autocompleta nombres desde el SRI. Público, así que exige un enlace válido
+     * (token o código del enlace fijo) y un tope por sesión.
+     */
     public function sri(): void
     {
         header('Content-Type: application/json');
-        $id  = trim($_GET['id'] ?? '');
-        if ($id === '') { echo json_encode(['ok' => false, 'error' => 'Identificación vacía']); return; }
+        $id     = trim($_GET['id'] ?? '');
+        $token  = trim($_GET['token'] ?? '');
+        $codigo = trim($_GET['codigo'] ?? '');
+        $valido = ($token !== '' && $this->service->resolverPortal($token))
+               || ($codigo !== '' && $this->service->resolverEnlaceFijo($codigo));
+        if (!$valido || !preg_match('/^\d{10}(\d{3})?$/', $id)) {
+            echo json_encode(['ok' => false, 'error' => 'Consulta no permitida.']);
+            return;
+        }
+        $hora = date('YmdH');
+        $cont = $_SESSION['firma_sri_consultas'] ?? ['hora' => $hora, 'n' => 0];
+        if ($cont['hora'] !== $hora) {
+            $cont = ['hora' => $hora, 'n' => 0];
+        }
+        if (++$cont['n'] > self::MAX_SRI_HORA) {
+            echo json_encode(['ok' => false, 'error' => 'Demasiadas consultas. Escriba sus datos a mano.']);
+            return;
+        }
+        $_SESSION['firma_sri_consultas'] = $cont;
+        session_write_close();
 
         $svc = new \App\Services\SriIdentificationService();
         echo json_encode($svc->consultar($id));
@@ -225,103 +185,89 @@ class SolicitudFirmaController extends Controller
 
     // ── Helpers privados ──────────────────────────────────────
 
-    private function validarToken(string $token): ?array
+    private function token(): string
     {
-        if (strlen($token) !== 64 || !preg_match('/^[a-f0-9]+$/i', $token)) {
-            $this->renderError('Enlace inválido.');
-            return null;
+        return trim($_GET['token'] ?? '');
+    }
+
+    /** Ejecuta la acción y responde JSON; los errores de negocio se muestran al cliente tal cual. */
+    private function responder(callable $fn): void
+    {
+        header('Content-Type: application/json; charset=utf-8');
+        if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
+            http_response_code(405);
+            echo json_encode(['ok' => false, 'error' => 'Método no permitido.']);
+            return;
         }
-        $solicitud = $this->solRepo->getByToken($token);
-        if (!$solicitud) {
-            $this->renderError('El enlace no existe o ha expirado.');
-            return null;
+        try {
+            echo json_encode(['ok' => true] + $fn());
+        } catch (\PDOException $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => 'portal']);
+            echo json_encode(['ok' => false, 'error' => 'Ocurrió un error al guardar. Intente nuevamente.']);
+        } catch (\Throwable $e) {
+            echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
         }
-        return $solicitud;
     }
 
     private function recogerPost(): array
     {
-        $str = fn($k) => trim($_POST[$k] ?? '');
+        $str = fn($k) => trim((string) ($_POST[$k] ?? ''));
         $fn  = fn($v) => $v === '' ? null : $v;
 
         $fechaNac = $str('fecha_nacimiento');
-        if ($fechaNac !== '' && preg_match('/^\d{2}-\d{2}-\d{4}$/', $fechaNac)) {
-            $fechaNac = \DateTime::createFromFormat('d-m-Y', $fechaNac)->format('Y-m-d');
-        } elseif ($fechaNac !== '' && preg_match('/^\d{4}-\d{2}-\d{2}$/', $fechaNac)) {
-            // ya en formato Y-m-d
-        } else {
+        if (preg_match('/^(\d{2})-(\d{2})-(\d{4})$/', $fechaNac, $m)) {
+            $fechaNac = "{$m[3]}-{$m[2]}-{$m[1]}";
+        } elseif (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $fechaNac)) {
             $fechaNac = null;
         }
+        $mismos = !isset($_POST['facturacion_mismos_datos']) || !empty($_POST['facturacion_mismos_datos']);
 
         return [
-            'tipo_persona'          => in_array($str('tipo_persona'), ['natural', 'juridica'], true) ? $str('tipo_persona') : 'natural',
+            'tipo_persona'          => in_array($str('tipo_persona'), ['natural', 'juridica', 'miembro'], true) ? $str('tipo_persona') : 'natural',
             'con_ruc'               => !empty($_POST['con_ruc']),
             'ruc_empresa'           => $fn($str('ruc_empresa')),
             'nombre_empresa'        => $fn($str('nombre_empresa')),
             'cargo'                 => $fn($str('cargo')),
-            'tipo_identificacion'   => $fn($str('tipo_identificacion')),
-            'numero_identificacion' => $fn($str('numero_identificacion')),
-            'codigo_dactilar'       => $fn($str('codigo_dactilar')),
-            'nombres'               => $fn($str('nombres')),
-            'apellidos'             => $fn($str('apellidos')),
+            'tipo_identificacion'   => $str('tipo_identificacion'),
+            'numero_identificacion' => $str('numero_identificacion'),
+            'codigo_dactilar'       => $fn(mb_strtoupper($str('codigo_dactilar'), 'UTF-8')),
+            'nombres'               => $str('nombres'),
+            'apellidos'             => trim($str('apellido_paterno') . ' ' . $str('apellido_materno')),
+            'apellido_paterno'      => $str('apellido_paterno'),
+            'apellido_materno'      => $str('apellido_materno'),
+            'telefono2'             => $str('telefono2'),
+            'correo2'               => mb_strtolower($str('correo2'), 'UTF-8'),
+            'departamento'          => $str('departamento'),
+            'motivo'                => $str('motivo'),
+            'rep_tipo_identificacion' => in_array($str('rep_tipo_identificacion'), ['cedula', 'pasaporte'], true) ? $str('rep_tipo_identificacion') : 'cedula',
+            'rep_identificacion'    => $str('rep_identificacion'),
+            'rep_nombres'           => $str('rep_nombres'),
+            'rep_apellidos'         => $str('rep_apellidos'),
             'sexo'                  => $fn($str('sexo')),
             'fecha_nacimiento'      => $fechaNac,
             'nacionalidad'          => $fn($str('nacionalidad')) ?: 'Ecuatoriana',
-            'telefono'              => $fn($str('telefono')),
-            'correo'                => $fn($str('correo')),
+            'telefono'              => $str('telefono'),
+            'correo'                => mb_strtolower($str('correo'), 'UTF-8'),
             'cod_prov'              => $fn($str('cod_prov')),
             'cod_ciudad'            => $fn($str('cod_ciudad')),
-            'direccion'             => $fn($str('direccion')),
-            'id_producto'           => $fn($str('id_producto')),
-            'tipo_pago'             => null,
-            'fecha_caducidad'       => null,
+            'direccion'             => $str('direccion'),
+            'id_producto'           => (int) $str('id_producto') ?: null,
             'observaciones'         => $fn($str('observaciones')),
-            'facturacion_mismos_datos' => true,
-            'facturacion_tipo_id'   => null,
-            'facturacion_num_id'    => null,
-            'facturacion_nombres'   => null,
-            'facturacion_direccion' => null,
-            'facturacion_correo'    => null,
-            'facturacion_telefono'  => null,
+            'facturacion_mismos_datos' => $mismos,
+            'facturacion_tipo_id'   => $mismos ? null : $fn($str('facturacion_tipo_id')),
+            'facturacion_num_id'    => $mismos ? null : $fn($str('facturacion_num_id')),
+            'facturacion_nombres'   => $mismos ? null : $fn($str('facturacion_nombres')),
+            'facturacion_direccion' => $mismos ? null : $fn($str('facturacion_direccion')),
+            'facturacion_correo'    => $mismos ? null : $fn($str('facturacion_correo')),
+            'facturacion_telefono'  => $mismos ? null : $fn($str('facturacion_telefono')),
         ];
     }
 
-    private function getTiposFirmaPublico(int $idEmpresa): array
-    {
-        try {
-            $st = $this->db->prepare(
-                "SELECT p.id, p.nombre,
-                        ROUND((p.precio_base + COALESCE(p.valor_ice, 0))
-                            * (1 + COALESCE(ti.porcentaje_iva, 0)::numeric / 100), 2) AS pvp
-                 FROM productos p
-                 INNER JOIN categorias c ON c.id = p.id_categoria
-                 LEFT  JOIN tarifa_iva ti ON ti.id = p.tarifa_iva
-                 WHERE p.id_empresa = :ie AND p.eliminado = false AND p.status = 1
-                   AND UPPER(c.nombre) LIKE '%FIRMA%'
-                 ORDER BY p.nombre ASC"
-            );
-            $st->execute([':ie' => $idEmpresa]);
-            return $st->fetchAll(\PDO::FETCH_ASSOC);
-        } catch (\Throwable) {
-            return [];
-        }
-    }
-
-    private function renderForm(array $solicitud, array $provincias, array $tiposFirma, array $errores, ?array $post): void
+    private function renderPortal(array $portal): void
     {
         $this->view('publica.solicitud_firma', [
-            'solicitud'  => $solicitud,
-            'provincias' => $provincias,
-            'tiposFirma' => $tiposFirma,
-            'errores'    => $errores,
-            'post'       => $post ?? [],
-        ]);
-    }
-
-    private function renderExito(array $solicitud): void
-    {
-        $this->view('publica.solicitud_firma_exito', [
-            'solicitud' => $solicitud,
+            'portal'     => $portal,
+            'provincias' => (new \App\models\Provincia())->getTodas(),
         ]);
     }
 

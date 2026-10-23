@@ -293,6 +293,18 @@ document.addEventListener('DOMContentLoaded', () => {
                 { id: '{{4}}', label: 'Enlace de Pago (Nuvei)' }
             ]
         },
+        'solicitud_firma': {
+            nombre: 'solicitud_firma',
+            categoria: 'UTILITY',
+            cabecera: 'NONE',
+            descripcion: 'Sirve para enviar al cliente el enlace donde solicita su firma electrónica: llena sus datos, sube sus documentos, paga y sigue el estado del trámite. Se usa desde el módulo Firmas Electrónicas (botón Enviar enlace). Sin esta plantilla aprobada, el sistema abre WhatsApp del usuario con el mensaje listo.',
+            texto: 'Hola {{1}}, {{2}} te envía el formulario para solicitar tu firma electrónica. Completa tus datos, sube tus documentos y realiza el pago en este enlace: {{3}} Con el mismo enlace puedes ver el estado de tu solicitud.',
+            variables: [
+                { id: '{{1}}', label: 'Nombre del Cliente' },
+                { id: '{{2}}', label: 'Nombre de la Empresa' },
+                { id: '{{3}}', label: 'Enlace del formulario' }
+            ]
+        },
         'cuenta_por_cobrar': {
             nombre: 'cuenta_por_cobrar',
             categoria: 'UTILITY',

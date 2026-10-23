@@ -503,6 +503,10 @@ $urlManual = $base . '/documentacion' . ($rutaActualAyuda !== '' ? '?ruta=' . ur
                     <i class="bi bi-qr-code" style="font-size: 1.1rem;"></i>
                     <span class="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-warning text-dark factura-express-pendientes-badge" style="font-size: 0.6rem; padding: 0.25em 0.5em;">0</span>
                 </a>
+                <a href="<?= $base ?>/modulos/firmas_electronicas" class="text-white text-decoration-none position-relative d-none cmg-icon-update firmas-por-atender-icon" title="Firmas electrónicas por atender (pagos por revisar o por registrar en Uanataca)">
+                    <i class="bi bi-pen" style="font-size: 1.1rem;"></i>
+                    <span class="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-warning text-dark firmas-por-atender-badge" style="font-size: 0.6rem; padding: 0.25em 0.5em;">0</span>
+                </a>
                 <a data-aviso="borrador" href="<?= $base ?>/modulos/factura-venta" class="text-white text-decoration-none position-relative d-none cmg-icon-update facturas-borrador-icon" title="Facturas en borrador">
                     <i class="bi bi-receipt" style="font-size: 1.1rem;"></i>
                     <span class="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-warning text-dark facturas-borrador-badge" style="font-size: 0.6rem; padding: 0.25em 0.5em;">0</span>
@@ -712,6 +716,11 @@ $urlManual = $base . '/documentacion' . ($rutaActualAyuda !== '' ? '?ruta=' . ur
                     <i class="bi bi-qr-code"></i>
                     <span class="position-absolute badge rounded-pill bg-warning text-dark factura-express-pendientes-badge">0</span>
                     <small>Express</small>
+                </a>
+                <a class="cmg-icon-update firmas-por-atender-icon d-none" href="<?= $base ?>/modulos/firmas_electronicas">
+                    <i class="bi bi-pen"></i>
+                    <span class="position-absolute badge rounded-pill bg-warning text-dark firmas-por-atender-badge">0</span>
+                    <small>Firmas</small>
                 </a>
                 <a data-aviso="borrador" class="cmg-icon-update facturas-borrador-icon d-none" href="<?= $base ?>/modulos/factura-venta">
                     <i class="bi bi-receipt"></i>
@@ -945,6 +954,7 @@ $urlManual = $base . '/documentacion' . ($rutaActualAyuda !== '' ? '?ruta=' . ur
             notas_credito_borrador:       { icon: '.notas-credito-borrador-icon',       badge: '.notas-credito-borrador-badge' },
             guias_remision_borrador:      { icon: '.guias-remision-borrador-icon',      badge: '.guias-remision-borrador-badge' },
             factura_express_pendientes:   { icon: '.factura-express-pendientes-icon',   badge: '.factura-express-pendientes-badge' },
+            firmas_por_atender:           { icon: '.firmas-por-atender-icon',           badge: '.firmas-por-atender-badge' },
             ordenes_compra_borrador:      { icon: '.ordenes-compra-borrador-icon',      badge: '.ordenes-compra-borrador-badge' },
             carwash_borrador:             { icon: '.carwash-borrador-icon',             badge: '.carwash-borrador-badge' },
             whatsapp_unread:              { icon: '.whatsapp-unread-icon',              badge: '.whatsapp-unread-badge' },

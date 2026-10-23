@@ -42,6 +42,7 @@ class ContadoresNavbarService
         'pedidos_pendientes'           => 'modulos/pedidos',
         'factura_express_pendientes'   => 'modulos/factura-express-solicitudes',
         'carwash_borrador'             => 'modulos/car-wash',
+        'firmas_por_atender'           => 'modulos/firmas_electronicas',
         'whatsapp_unread'              => self::RUTA_WHATSAPP,
     ];
 
@@ -122,6 +123,7 @@ class ContadoresNavbarService
         'ordenes_compra',
         'pedidos_cabecera',
         'factura_express_solicitudes',
+        'firmas_electronicas',
         'whatsapp_chats',
         'carwash_ordenes',
         'sri_envio_log', // cualquier acción SRI (devuelta/autorizado/…) cambia las novedades
@@ -198,6 +200,12 @@ class ContadoresNavbarService
             $datos['carwash_borrador'] = $this->repo->getCarwashBorrador($idEmpresa);
         } catch (\Throwable $e) {
             $datos['carwash_borrador'] = 0;
+        }
+        // Firmas electrónicas por atender: consulta aparte, columnas nuevas pueden faltar sin la migración.
+        try {
+            $datos['firmas_por_atender'] = $this->repo->getFirmasPorAtender($idEmpresa);
+        } catch (\Throwable $e) {
+            $datos['firmas_por_atender'] = 0;
         }
         // Novedades SRI: si la tabla/columna no existe en algún ambiente, no debe romper el resto.
         try {

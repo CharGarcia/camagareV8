@@ -18,15 +18,20 @@ class FirmaSolicitudRepository extends BaseRepository
     public function crear(array $data): int
     {
         $sql = "INSERT INTO {$this->table}
-                    (id_empresa, token, correo_destino, nombre_destino, estado, expira_at, observaciones, created_by)
+                    (id_empresa, token, correo_destino, nombre_destino, telefono_destino, origen, ip_origen,
+                     estado, expira_at, observaciones, created_by)
                 VALUES
-                    (:id_empresa, :token, :correo_destino, :nombre_destino, 'pendiente', :expira_at, :observaciones, :created_by)";
+                    (:id_empresa, :token, :correo_destino, :nombre_destino, :telefono_destino, :origen, :ip_origen,
+                     'pendiente', :expira_at, :observaciones, :created_by)";
         $st = $this->db->prepare($sql);
         $st->execute([
             ':id_empresa'     => $data['id_empresa'],
             ':token'          => $data['token'],
-            ':correo_destino' => $data['correo_destino'],
+            ':correo_destino' => ($data['correo_destino'] ?? '') !== '' ? $data['correo_destino'] : null,
             ':nombre_destino' => $data['nombre_destino'] ?? null,
+            ':telefono_destino' => ($data['telefono_destino'] ?? '') !== '' ? $data['telefono_destino'] : null,
+            ':origen'         => $data['origen'] ?? 'operador',
+            ':ip_origen'      => $data['ip_origen'] ?? null,
             ':expira_at'      => $data['expira_at'],
             ':observaciones'  => $data['observaciones'] ?? null,
             ':created_by'     => $data['created_by'],
@@ -56,7 +61,7 @@ class FirmaSolicitudRepository extends BaseRepository
         $stCount->execute([':ie' => $idEmpresa]);
         $total = (int) $stCount->fetchColumn();
 
-        $sql = "SELECT s.id, s.token, s.correo_destino, s.nombre_destino, s.estado,
+        $sql = "SELECT s.id, s.token, s.correo_destino, s.nombre_destino, s.telefono_destino, s.origen, s.estado,
                        s.expira_at, s.completado_at, s.created_at, s.id_firma_generada,
                        f.nombres AS firma_nombres, f.apellidos AS firma_apellidos
                 FROM {$this->table} s
@@ -72,6 +77,24 @@ class FirmaSolicitudRepository extends BaseRepository
         $rows = $st->fetchAll(PDO::FETCH_ASSOC);
 
         return ['total' => $total, 'rows' => $rows];
+    }
+
+    /** Deja constancia del canal por el que se envió el enlace ('correo' | 'whatsapp'). */
+    public function marcarEnvio(int $id, int $idEmpresa, string $canal): void
+    {
+        $col = $canal === 'whatsapp' ? 'whatsapp_enviado_at' : 'correo_enviado_at';
+        $this->db->prepare("UPDATE {$this->table} SET {$col} = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP
+                            WHERE id = :id AND id_empresa = :ie")
+                 ->execute([':id' => $id, ':ie' => $idEmpresa]);
+    }
+
+    /** Solicitudes creadas desde una IP en la última hora (límite del enlace fijo). */
+    public function contarRecientesPorIp(string $ip): int
+    {
+        $st = $this->db->prepare("SELECT COUNT(*) FROM {$this->table}
+                                  WHERE ip_origen = :ip AND created_at > CURRENT_TIMESTAMP - INTERVAL '1 hour'");
+        $st->execute([':ip' => $ip]);
+        return (int) $st->fetchColumn();
     }
 
     public function marcarCompletado(int $id, int $idFirma): bool

@@ -49,6 +49,7 @@
                                 <option value="estado_cuenta_cliente">Estado de Cuenta del Cliente</option>
                                 <option value="renovacion_suscripcion">Renovación de Suscripción</option>
                                 <option value="renovacion_firma_electronica">Renovación Firma Electrónica</option>
+                                <option value="solicitud_firma">Solicitud de Firma Electrónica (enlace)</option>
                                 <option value="retencion_compra">Retención en Compras</option>
                                 <option value="nota_credito">Nota de Crédito</option>
                                 <option value="nota_debito">Nota de Débito</option>

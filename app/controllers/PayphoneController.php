@@ -108,6 +108,10 @@ class PayphoneController extends Controller
                     new \App\Services\modulos\PosVentaService($cajaService, $logService)
                 );
                 $comandaService->cobrarGrupoDesdePayphone($trans);
+            } elseif (($trans['modulo'] ?? '') === \App\Services\modulos\FirmaElectronicaService::MODULO_PAGO) {
+                // Firma electrónica pagada desde el portal del cliente: factura + cobro +
+                // envío al SRI + correo de confirmación.
+                \App\Services\modulos\FirmaElectronicaService::instancia()->procesarPagoPayphone($trans);
             }
         } catch (\Throwable $e) {
             // No bloquear la pantalla de éxito del cliente si falla el registro

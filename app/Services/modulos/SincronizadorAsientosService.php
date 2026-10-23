@@ -673,8 +673,17 @@ class SincronizadorAsientosService
 
         // 5b. Retenciones en Compras: mismo criterio que facturas/NC/liquidaciones, solo se
         //     contabiliza el documento vigente ya autorizado por el SRI, nunca el borrador.
+        //     Igual que en Ventas, una retención con valor retenido CERO no tiene nada que
+        //     contabilizar (quedaba como "sin asiento" para siempre). La cabecera de compras no
+        //     guarda totales, así que el valor se toma solo de las líneas del detalle.
         $trabajos[] = [
-            'sql'    => "SELECT id FROM retencion_compra_cabecera WHERE id_empresa = ? AND eliminado = false AND id_asiento_contable IS NULL AND estado = 'autorizada'" . $excMig('retenciones_compra', 'retencion_compra_cabecera.id'),
+            'sql'    => "SELECT id FROM retencion_compra_cabecera
+                         WHERE id_empresa = ? AND eliminado = false AND id_asiento_contable IS NULL AND estado = 'autorizada'
+                           AND EXISTS (
+                                 SELECT 1 FROM retencion_compra_detalle rcd
+                                 WHERE rcd.id_retencion = retencion_compra_cabecera.id
+                                   AND ABS(COALESCE(rcd.valor_retenido, 0)) >= 0.01
+                           )" . $excMig('retenciones_compra', 'retencion_compra_cabecera.id'),
             'params' => [$idEmpresa],
             'factory' => function() {
                 return new \App\Services\modulos\RetencionCompraService(
