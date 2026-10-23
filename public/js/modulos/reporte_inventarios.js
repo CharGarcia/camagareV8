@@ -795,11 +795,13 @@ window.RI_Movimientos = {
         }
     },
 
-    dibujarCabecera(modo) {
+    /** conSaldo = false con filtros de Tipo/Origen/Usuario/Observaciones: ahí el saldo
+     *  corrido no es stock y el servidor manda las filas sin esa columna. */
+    dibujarCabecera(modo, conSaldo = true) {
         let th = '<tr class="text-secondary">';
         if (modo === 'NINGUNO') {
             th += `<th class="ps-3">Código</th><th>Fecha</th><th>Producto</th><th>Bodega</th><th class="text-center">Tipo</th>
-                   <th>Origen</th><th class="text-end">Entradas</th><th class="text-end">Salidas</th><th class="text-end">Saldo</th>
+                   <th>Origen</th><th class="text-end">Entradas</th><th class="text-end">Salidas</th>${conSaldo ? '<th class="text-end">Saldo</th>' : ''}
                    <th class="text-end">Costo Unit.</th>
                    <th>Lote</th><th>Caducidad</th><th class="pe-3">Observaciones</th>`;
         } else {
@@ -825,6 +827,7 @@ window.RI_Movimientos = {
         const resumen = document.getElementById('ri-mv-resumen');
         const colSpan = modo === 'NINGUNO' ? 13 : (modo === 'PRODUCTO' ? 7 : 6);
         RI_fetchGenerar('movimientos', params, (res) => {
+            if (modo === 'NINGUNO' && res.con_saldo === false) this.dibujarCabecera(modo, false);
             tbody.innerHTML = res.rows;
             // Resumen de cuadre del producto, o el aviso de que el Saldo no es stock.
             if (resumen) resumen.innerHTML = res.resumen || '';

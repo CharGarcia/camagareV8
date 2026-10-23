@@ -522,13 +522,17 @@ class ReporteInventariosController extends BaseModuloController
         // a repetir la consulta completa en cada Mostrar (medido: una segunda pasada completa sobre el kardex). El único
         // indicador que sí se usa, el de Auditoría, se cuenta en PHP sobre las filas ya traídas.
 
+        // Con filtros de Tipo/Origen/Usuario/Observaciones el saldo corrido no es stock: el
+        // detalle va sin la columna Saldo.
+        $conSaldo = ReporteInventarioRepository::saldoCorridoEsStock($filtros);
         // +1 columna (Código) en detalle y en el agrupado por producto; el resto de agrupados no la lleva.
-        $colSpan = $modo === 'NINGUNO' ? 13 : ($modo === 'PRODUCTO' ? 7 : 6);
+        $colSpan = $modo === 'NINGUNO' ? ($conSaldo ? 13 : 12) : ($modo === 'PRODUCTO' ? 7 : 6);
 
         return [
-            'rows'       => $this->renderRows($rows, fn($r) => $this->filaMovimientos($r, $modo), $colSpan)
+            'rows'       => $this->renderRows($rows, fn($r) => $this->filaMovimientos($r, $modo, $conSaldo), $colSpan)
                             . ($hayMas ? self::filaTopeAlcanzado($limite, $colSpan) : ''),
             'agrupacion' => $modo,
+            'con_saldo'  => $conSaldo,
             'tope'       => $hayMas ? $limite : null,
             'resumen'    => $this->htmlResumenCuadre($idEmpresa, $filtros),
         ];
@@ -539,19 +543,15 @@ class ReporteInventariosController extends BaseModuloController
      *  - con un producto elegido, el resumen de cuadre por bodega (saldo inicial + entradas
      *    − salidas ± correcciones = saldo final, contra lo que dice Existencias);
      *  - con filtros de tipo/origen/usuario/observaciones, el aviso de que la columna Saldo
-     *    ya no es stock sino el acumulado de lo filtrado;
+     *    se ocultó (sería el acumulado de lo filtrado, no el stock);
      *  - sin producto, una línea que dice cómo obtener el resumen.
      */
     private function htmlResumenCuadre(int $idEmpresa, array $filtros): string
     {
-        $claseFiltrada = !empty($filtros['tipo_movimiento']) || !empty($filtros['referencia_tipo'])
-            || !empty($filtros['id_usuario']) || !empty($filtros['observaciones']);
-        if ($claseFiltrada) {
-            return '<div class="alert alert-warning border-0 shadow-sm rounded-3 small py-2 px-3 mb-3">'
-                . '<i class="bi bi-exclamation-triangle me-1"></i><strong>La columna Saldo no es el stock.</strong> '
-                . 'Con un filtro de Tipo, Origen, Usuario u Observaciones solo se suman los movimientos filtrados, '
-                . 'así que el Saldo es el acumulado de esos movimientos. Para ver el stock y el resumen de cuadre, '
-                . 'quite esos filtros y elija un producto.</div>';
+        if (!ReporteInventarioRepository::saldoCorridoEsStock($filtros)) {
+            return '<div class="small text-muted mb-2 px-1"><i class="bi bi-info-circle me-1"></i>'
+                . 'Con un filtro de Tipo, Origen, Usuario u Observaciones no se muestra la columna Saldo ni el resumen de cuadre. '
+                . 'Para verlos, quite esos filtros y elija un producto.</div>';
         }
         if (!ReporteInventarioRepository::resumenCuadreAplica($filtros)) {
             return '<div class="small text-muted mb-2 px-1"><i class="bi bi-info-circle me-1"></i>'
@@ -933,7 +933,7 @@ class ReporteInventariosController extends BaseModuloController
             . '</tr>';
     }
 
-    private function filaMovimientos(array $r, string $modo): string
+    private function filaMovimientos(array $r, string $modo, bool $conSaldo = true): string
     {
         if ($modo === 'NINGUNO' && !empty($r['es_saldo_inicial'])) {
             // Saldo con el que arranca el periodo (kardex anterior a la fecha "Desde").
@@ -972,7 +972,7 @@ class ReporteInventariosController extends BaseModuloController
                 . '</td>'
                 . '<td class="text-end text-success">' . $entrada . '</td>'
                 . '<td class="text-end text-danger">' . $salida . '</td>'
-                . '<td class="text-end fw-bold">' . number_format($saldo, 2) . '</td>'
+                . ($conSaldo ? '<td class="text-end fw-bold">' . number_format($saldo, 2) . '</td>' : '')
                 . '<td class="text-end small">' . number_format((float) ($r['costo_unitario'] ?? 0), 4) . '</td>'
                 . '<td class="small">' . htmlspecialchars($r['numero_lote'] ?? '-') . '</td>'
                 . '<td class="small">' . $cad . '</td>'
@@ -2162,6 +2162,16 @@ class ReporteInventariosController extends BaseModuloController
                             (float) $r['costo_unitario'], $r['numero_lote'] ?? '', $r['observaciones'] ?? '',
                         ];
                     }, $rows);
+                    // Con filtros de Tipo/Origen/Usuario/Observaciones el saldo corrido no es
+                    // stock: el archivo sale sin esa columna, igual que la pantalla.
+                    if (!ReporteInventarioRepository::saldoCorridoEsStock($filtros)) {
+                        $sinSaldo = static function (array $fila): array {
+                            array_splice($fila, 8, 1);
+                            return $fila;
+                        };
+                        $headers = $sinSaldo($headers);
+                        $data = array_map($sinSaldo, $data);
+                    }
                 } elseif ($modo === 'PRODUCTO') {
                     $headers = ['Código', 'Producto', 'Movimientos', 'Entradas', 'Salidas', 'Saldo neto', 'Costo total'];
                     $data = array_map(fn($r) => [

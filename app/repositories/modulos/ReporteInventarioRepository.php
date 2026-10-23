@@ -1055,18 +1055,25 @@ class ReporteInventarioRepository extends BaseRepository
      */
     private const FILTROS_SIN_SALDO_INICIAL = ['tipo_movimiento', 'referencia_tipo', 'id_usuario', 'observaciones'];
 
-    /** El saldo inicial solo aplica con fecha "Desde" y sin filtros de clase de movimiento. */
-    public static function llevaSaldoInicial(array $filtros): bool
+    /**
+     * El saldo corrido del detalle es el stock solo sin filtros de clase de movimiento.
+     * Con uno activo la columna Saldo se oculta (pantalla, PDF y Excel): sería el
+     * acumulado de lo filtrado y se confundía con el stock.
+     */
+    public static function saldoCorridoEsStock(array $filtros): bool
     {
-        if (empty($filtros['fecha_desde'])) {
-            return false;
-        }
         foreach (self::FILTROS_SIN_SALDO_INICIAL as $clave) {
             if (!empty($filtros[$clave])) {
                 return false;
             }
         }
         return true;
+    }
+
+    /** El saldo inicial solo aplica con fecha "Desde" y sin filtros de clase de movimiento. */
+    public static function llevaSaldoInicial(array $filtros): bool
+    {
+        return !empty($filtros['fecha_desde']) && self::saldoCorridoEsStock($filtros);
     }
 
     /**
