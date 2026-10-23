@@ -325,7 +325,14 @@ $to      = $total > 0 ? min($page * $perPage, $total) : 0;
 <!-- ── Modal: Enviar Formulario ───────────────────────────── -->
 <div class="modal fade" id="modalEnviarFormulario" tabindex="-1" aria-hidden="true">
     <div class="modal-dialog modal-dialog-centered" style="max-width:420px;">
-        <div class="modal-content rounded-3">
+        <div class="modal-content rounded-3 position-relative">
+            <!-- Loader mientras se envía (cubre el modal para que no se toque nada a medio envío) -->
+            <div id="solLoaderEnvio" class="position-absolute top-0 start-0 w-100 h-100 rounded-3 d-none flex-column align-items-center justify-content-center text-center px-4"
+                 style="z-index:10;background:rgba(255,255,255,.92);">
+                <div class="spinner-border text-success mb-3" style="width:2.6rem;height:2.6rem;" role="status"></div>
+                <div class="fw-semibold" id="solLoaderTitulo">Enviando enlace…</div>
+                <div class="small text-muted mt-1" id="solLoaderDetalle"></div>
+            </div>
             <div class="modal-header py-2 px-3">
                 <h6 class="modal-title fw-semibold"><i class="bi bi-send me-2 text-success"></i>Enviar enlace al cliente</h6>
                 <button type="button" class="btn-close btn-sm" data-bs-dismiss="modal"></button>
@@ -716,10 +723,22 @@ $to      = $total > 0 ? min($page * $perPage, $total) : 0;
         const btn = document.getElementById('btnConfirmarEnviarFormulario');
         btn.disabled = false;
         btn.innerHTML = '<i class="bi bi-send me-1"></i> Enviar';
+        mostrarLoaderEnvio(null);
         bootstrap.Modal.getOrCreateInstance(document.getElementById('modalEnviarFormulario')).show();
     };
 
     let enviandoEnlace = false;
+    // A medio envío no se cierra el modal (Esc o clic afuera): el usuario no vería el resultado.
+    document.getElementById('modalEnviarFormulario')?.addEventListener('hide.bs.modal', e => { if (enviandoEnlace) e.preventDefault(); });
+    // Loader que cubre el modal "Enviar enlace" mientras se envía; null lo oculta.
+    function mostrarLoaderEnvio(titulo, detalle = '') {
+        const el = document.getElementById('solLoaderEnvio');
+        el.classList.toggle('d-none', !titulo);
+        el.classList.toggle('d-flex', !!titulo);
+        if (!titulo) return;
+        document.getElementById('solLoaderTitulo').textContent = titulo;
+        document.getElementById('solLoaderDetalle').textContent = detalle;
+    }
     window.confirmarEnviarFormulario = async function () {
         if (enviandoEnlace) return;
         const alerta = document.getElementById('alertEnviarFormulario');
@@ -733,10 +752,14 @@ $to      = $total > 0 ? min($page * $perPage, $total) : 0;
         }
         // La ventana de WhatsApp se abre ya (en el clic): después del await el navegador la bloquearía.
         const ventanaWa = porWhatsapp ? window.open('about:blank', '_blank') : null;
+        try { ventanaWa?.document.write('<p style="font-family:sans-serif;padding:2rem;color:#555">Preparando el mensaje de WhatsApp…</p>'); } catch {}
 
         enviandoEnlace = true;
         btn.disabled = true;
         btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Enviando…';
+        const canales = [porCorreo ? 'correo' : '', porWhatsapp ? 'WhatsApp' : ''].filter(Boolean).join(' y ');
+        mostrarLoaderEnvio(`Enviando enlace por ${canales}…`,
+            porCorreo ? 'El envío del correo puede tardar unos segundos. No cierre esta ventana.' : 'No cierre esta ventana.');
 
         try {
             const fd = new FormData();
@@ -761,8 +784,9 @@ $to      = $total > 0 ? min($page * $perPage, $total) : 0;
                 }
                 if (enlacesAbierto()) cargarSolicitudes(paginaSolicitudes);
                 if (window.FIRMA_recargarTramite) window.FIRMA_recargarTramite();
-                // El enlace ya se creó: no se reactiva Enviar para no crear otro con un segundo clic.
+                // El enlace ya se creó: no se reactiva Enviar (sigue disabled) para no crear otro con un segundo clic.
                 btn.innerHTML = '<i class="bi bi-check-lg me-1"></i> Enviado';
+                enviandoEnlace = false;
                 return;
             }
             if (ventanaWa) ventanaWa.close();
@@ -772,6 +796,8 @@ $to      = $total > 0 ? min($page * $perPage, $total) : 0;
             alerta.textContent = e?.name === 'TimeoutError'
                 ? 'El servidor no respondió a tiempo. Revise en «Enlaces enviados» si el enlace se creó antes de volver a enviarlo.'
                 : 'Error de conexión.';
+        } finally {
+            mostrarLoaderEnvio(null);
         }
         enviandoEnlace = false;
         btn.disabled = false;
