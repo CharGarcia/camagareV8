@@ -2399,19 +2399,24 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
     }
 
     // Tras crear un egreso: "Registrar nuevo" limpia el modal (abrirModalEgreso) para empezar
-    // uno nuevo en el acto; "Seguir en este" deja abierto el recién guardado (PDF, cheques, asiento).
+    // uno nuevo en el acto; "Seguir en este" deja abierto el recién guardado (PDF, cheques, asiento);
+    // "Cerrar" cierra el modal del egreso y vuelve al listado.
     function egPreguntarRegistrarOtro(mensaje) {
         Swal.fire({
             icon: 'success',
             title: mensaje || 'Egreso guardado',
             text: '¿Desea registrar un nuevo egreso o seguir en este?',
             showCancelButton: true,
+            showDenyButton: true,
             confirmButtonText: '<i class="bi bi-plus-circle me-1"></i> Registrar nuevo',
             cancelButtonText: 'Seguir en este',
+            denyButtonText: '<i class="bi bi-x-lg me-1"></i> Cerrar',
+            denyButtonColor: '#6c757d',
             reverseButtons: true,
             allowOutsideClick: false
         }).then(r => {
             if (r.isConfirmed) abrirModalEgreso();
+            else if (r.isDenied) bootstrap.Modal.getInstance(document.getElementById('modalNuevoEgreso'))?.hide();
         });
     }
 

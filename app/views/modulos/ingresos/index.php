@@ -2342,19 +2342,24 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
     }
 
     // Tras crear un ingreso: "Registrar nuevo" limpia el modal (abrirModalIngreso) para empezar
-    // uno nuevo en el acto; "Seguir en este" deja abierto el recién guardado (PDF, correo, asiento).
+    // uno nuevo en el acto; "Seguir en este" deja abierto el recién guardado (PDF, correo, asiento);
+    // "Cerrar" cierra el modal del ingreso y vuelve al listado.
     function ingPreguntarRegistrarOtro(mensaje) {
         Swal.fire({
             icon: 'success',
             title: mensaje || 'Ingreso guardado',
             text: '¿Desea registrar un nuevo ingreso o seguir en este?',
             showCancelButton: true,
+            showDenyButton: true,
             confirmButtonText: '<i class="bi bi-plus-circle me-1"></i> Registrar nuevo',
             cancelButtonText: 'Seguir en este',
+            denyButtonText: '<i class="bi bi-x-lg me-1"></i> Cerrar',
+            denyButtonColor: '#6c757d',
             reverseButtons: true,
             allowOutsideClick: false
         }).then(r => {
             if (r.isConfirmed) abrirModalIngreso();
+            else if (r.isDenied) bootstrap.Modal.getInstance(document.getElementById('modalNuevoIngreso'))?.hide();
         });
     }
 
