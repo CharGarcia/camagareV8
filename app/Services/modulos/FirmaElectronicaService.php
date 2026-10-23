@@ -1352,7 +1352,7 @@ class FirmaElectronicaService
                         $cad = (string) $this->caducidadEstimada((int) $firma['id_producto'], $idEmpresa);
                     }
                     if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $cad) || strtotime($cad) <= time()) {
-                        throw new Exception('Indique la fecha de caducidad de la firma emitida (futura).');
+                        throw new Exception('Indique la fecha de vencimiento de la firma emitida (futura).');
                     }
                     $this->repository->actualizarTramite($idFirma, $idEmpresa, [
                         'estado' => 'emitida', 'fecha_caducidad' => $cad, 'emitida_at' => date('Y-m-d H:i:s'),
@@ -1524,7 +1524,7 @@ class FirmaElectronicaService
     {
         $firma = $this->repository->findById($idFirma, $idEmpresa);
         if (!$firma || $firma['estado'] !== 'emitida' || empty($firma['fecha_caducidad'])) {
-            throw new Exception('Solo se avisa el vencimiento de una firma emitida con fecha de caducidad.');
+            throw new Exception('Solo se avisa el vencimiento de una firma emitida con fecha de vencimiento.');
         }
         $restantes = (int) floor((strtotime((string) $firma['fecha_caducidad']) - strtotime('today')) / 86400);
         $r = $this->enviarAvisoVencimiento($firma, ['correo' => $restantes, 'whatsapp' => $restantes], true, $idUsuario);
@@ -2081,7 +2081,7 @@ class FirmaElectronicaService
                     $this->repository->crearEvento($idEmpresa, $idFirma, 'emitida', 'Firma electrónica emitida',
                         $cad ? 'Vigente hasta el ' . date('d-m-Y', strtotime($cad)) . '.' : null, true, null);
                     if (!$cad) {
-                        $this->repository->crearEvento($idEmpresa, $idFirma, 'nota', 'Registre la fecha de caducidad', 'Uanataca no informó la vigencia.', false, null);
+                        $this->repository->crearEvento($idEmpresa, $idFirma, 'nota', 'Registre la fecha de vencimiento', 'Uanataca no informó la vigencia.', false, null);
                     }
                     $aviso = ['Tu firma electrónica fue emitida', '<p>¡Listo! Tu firma electrónica fue emitida' . ($cad ? ' y está vigente hasta el <b>' . date('d-m-Y', strtotime($cad)) . '</b>' : '') . '.</p>'];
                 } elseif (in_array($nuevo, ['IN_VALIDATION', 'UPDATED', 'APPROVED'], true) && in_array($firma['estado'], ['observada', 'por_registrar'], true)) {

@@ -65,7 +65,7 @@ class FirmaElectronicaRules
         }
         // La caducidad la da el certificado emitido: antes de eso no existe.
         if ($estado === 'emitida' && empty(trim((string) ($data['fecha_caducidad'] ?? '')))) {
-            $errores[] = 'Para marcar la firma como emitida se necesita su fecha de caducidad.';
+            $errores[] = 'Para marcar la firma como emitida se necesita su fecha de vencimiento.';
         }
 
         $tipoPago = trim($data['tipo_pago'] ?? '');

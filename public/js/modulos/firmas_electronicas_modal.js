@@ -830,7 +830,7 @@
 
         const fechaCadVal = document.getElementById('firma_fecha_cad')?.value.trim();
         if (document.getElementById('firma_estado')?.value === 'emitida' && !/^\d{2}-\d{2}-\d{4}$/.test(fechaCadVal || '')) {
-            mostrarAlerta('Para marcar la firma como emitida indique su fecha de caducidad.', 'warning');
+            mostrarAlerta('Para marcar la firma como emitida indique su fecha de vencimiento.', 'warning');
             document.getElementById('firma_fecha_cad')?.focus();
             return;
         }
@@ -1217,7 +1217,7 @@
                     ${t.estado === 'por_registrar' ? `<div><label class="form-label small mb-0">N.º de solicitud en Uanataca</label>
                         <input type="text" class="form-control form-control-sm" id="trRefUanataca" style="width:180px;"></div>
                         <button type="button" class="btn ${t.uanataca_api ? 'btn-outline-secondary' : 'btn-primary'} btn-sm" data-tr="registrar_uanataca"><i class="bi bi-box-arrow-up-right me-1"></i>Ya la registré en Uanataca${t.uanataca_api ? ' (manual)' : ''}</button>` : ''}
-                    <div><label class="form-label small mb-0">Caducidad de la firma</label>
+                    <div><label class="form-label small mb-0">Vencimiento de la firma</label>
                         <input type="date" class="form-control form-control-sm" id="trCaducidad" style="width:150px;" value="${esc(t.caducidad_sugerida || '')}"></div>
                     <button type="button" class="btn btn-success btn-sm" data-tr="emitida"><i class="bi bi-patch-check me-1"></i>Marcar emitida</button>
                 </div>
@@ -1351,7 +1351,7 @@
                 await postTramite('accionTramiteAjax', { accion: 'registrar_uanataca', referencia: document.getElementById('trRefUanataca')?.value || '' });
             } else if (accion === 'emitida') {
                 const fecha = document.getElementById('trCaducidad')?.value;
-                if (!fecha) { mostrarAlerta('Indique la fecha de caducidad de la firma emitida.', 'warning'); return; }
+                if (!fecha) { mostrarAlerta('Indique la fecha de vencimiento de la firma emitida.', 'warning'); return; }
                 await postTramite('accionTramiteAjax', { accion: 'emitida', fecha_caducidad: fecha });
             } else if (accion === 'observar') {
                 const nota = await pedirTexto('Pedir corrección', '¿Qué debe corregir el cliente? (se le envía por correo)');

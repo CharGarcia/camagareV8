@@ -160,10 +160,10 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosPestanasOcultas($vistaConfigF
                                     <div id="firma_num_id_hint" class="form-text">10 dígitos numéricos</div>
                                 </div>
 
-                                <!-- Fecha de Caducidad -->
+                                <!-- Fecha de vencimiento -->
                                 <div class="col-md-2">
                                     <label class="form-label small fw-bold text-muted mb-1 d-flex align-items-center gap-2">
-                                        Caducidad firma
+                                        Vencimiento
                                         <span id="firma_cad_badge" class="d-none" style="font-size:.7rem;"></span>
                                     </label>
                                     <input type="text" class="form-control form-control-sm shadow-none" name="fecha_caducidad"

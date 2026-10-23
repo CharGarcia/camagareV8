@@ -6,7 +6,7 @@ ruta_modulo: modulos/firmas_electronicas
 tipo: modulo
 visibilidad: admin
 etiquetas: firma electronica, vender firmas, aviso de vencimiento al cliente, recordatorio de renovacion, renovar firma del cliente, firma por vencer, enlace de renovacion, api uanataca, uanacreditos, creditos uanataca, precompra, distribuidor uanataca, miembro de empresa, representante legal, solicitud de firma, tramite de firma, uanataca, enlace para el cliente, formulario de firma, link de firma, whatsapp, pagar firma, payphone, transferencia, comprobante de pago, confirmar correo, factura de la firma, registrar en uanataca, firma emitida, observada, corregir solicitud, enlace fijo, qr de firma, certificado, p12, caducada, por caducar, renovar firma, firma invalida, xades, anf, security data, buscar firma, filtros, firmas por facturar
-version: 2.3
+version: 2.4
 orden: 20
 estado: activo
 ---
@@ -28,7 +28,7 @@ por estos estados:
 | Por registrar | Pagada y facturada; falta ingresarla en Uanataca | Empresa |
 | En trámite | Ya se ingresó en Uanataca; el cliente valida su identidad con ellos | Uanataca / cliente |
 | Observada | Usted pidió una corrección; el cliente debe corregir y reenviar | Cliente |
-| Emitida | La firma fue emitida (se registra su caducidad) | — |
+| Emitida | La firma fue emitida (se registra su vencimiento) | — |
 | Cancelada | Se canceló con un motivo | — |
 
 El **pago** tiene su propio estado: Pendiente, En revisión (el cliente subió un
@@ -94,7 +94,7 @@ cédula, el **código dactilar**.
    copiarlo y están los documentos para descargar. Ingrese la solicitud en el
    portal de Uanataca y pulse **Ya la registré en Uanataca** (puede anotar el
    número de solicitud).
-7. Cuando Uanataca emite la firma, indique la **fecha de caducidad** y pulse
+7. Cuando Uanataca emite la firma, indique la **fecha de vencimiento** y pulse
    **Marcar emitida**. El cliente recibe un correo en cada paso y, con su
    mismo enlace, ve el historial de su solicitud.
 
@@ -116,9 +116,9 @@ Botón del **engranaje**, junto a los botones de PDF y Excel (requiere permiso d
 | Datos para la transferencia | Banco, cuenta y titular que el cliente ve para transferir. |
 | Enlace público fijo | Un enlace permanente (para su web, redes o un QR) donde cualquiera inicia su solicitud. Se puede regenerar; el anterior deja de funcionar. Máximo 5 solicitudes por hora desde una misma conexión. |
 
-## Fecha de caducidad automática
+## Fecha de vencimiento automática
 
-- Al elegir la **validez de la firma** en la ficha, la fecha de caducidad se
+- Al elegir la **validez de la firma** en la ficha, la fecha de vencimiento se
   llena sola: **hoy + la vigencia** de esa firma. Si usted la escribe a mano ya
   no se cambia, y una firma que ya tenía fecha la conserva.
 - Al confirmarse el pago, si la firma aún no tiene fecha, se pone la estimada.
@@ -139,7 +139,7 @@ firma va a vencer, para que la renueve a tiempo con usted.
 - **Cuándo**: por defecto, por correo 30, 15 y 5 días antes y el mismo día; por
   WhatsApp 30 y 5 días antes y el mismo día. Se revisa una vez al día desde las
   08:00.
-- **A quién**: solo firmas **emitidas**, con fecha de caducidad. Si el titular
+- **A quién**: solo firmas **emitidas**, con fecha de vencimiento. Si el titular
   ya renovó (registró otra firma con la misma identificación y la pagó), no se
   le avisa más.
 - **Una sola vez**: cada aviso (etapa y canal) sale una sola vez, aunque el
@@ -187,7 +187,7 @@ también con **Consultar estado ahora** en la pestaña Trámite):
 | Nueva / En validación / Aprobada | Trámite *En trámite* |
 | Corrección solicitada o Rechazada | Pasa a *Observada*; el cliente recibe por correo el comentario de Uanataca |
 | Corregida | Vuelve a *En trámite* |
-| Emitida | Pasa a *Emitida* con la fecha de caducidad que informa Uanataca |
+| Emitida | Pasa a *Emitida* con la fecha de vencimiento que informa Uanataca |
 | Cancelada | Queda en el historial interno para que usted decida |
 
 Una solicitud ya creada en Uanataca **no se vuelve a enviar**: si el cliente
@@ -265,7 +265,7 @@ búsqueda y los botones de columnas, PDF y Excel.
 
 **Búsqueda libre.** Escriba cualquier cosa en el cuadro y el listado se filtra
 solo, sin menús ni sugerencias. Busca en las columnas de la firma: nombres y
-apellidos, identificación, teléfono, correo, caducidad y fecha de registro
+apellidos, identificación, teléfono, correo, vencimiento y fecha de registro
 (como *29-04-2028*). Además busca en el RUC y nombre de la empresa del titular,
 los datos de facturación (nombre e identificación), el número de la factura,
 las observaciones y el usuario que registró la firma. Las columnas **Tipo
@@ -283,7 +283,7 @@ La ventana solo se cierra con la X, Cancelar, Aplicar o Limpiar filtros.
 
 | Bloque | Filtros |
 |--------|---------|
-| Firma | Fecha de registro (con atajos *Hoy*, *Esta semana*, *Este mes*, *Mes pasado*, *Este año*), estado del trámite, estado del pago, factura (por facturar, borrador, facturado, anulado), tipo de firma, usuario que registró, fecha de caducidad, vigencia (vigente, por vencer en 30 días, vencida, sin fecha) |
+| Firma | Fecha de registro (con atajos *Hoy*, *Esta semana*, *Este mes*, *Mes pasado*, *Este año*), estado del trámite, estado del pago, factura (por facturar, borrador, facturado, anulado), tipo de firma, usuario que registró, fecha de vencimiento, vigencia (vigente, por vencer en 30 días, vencida, sin fecha) |
 | Titular | Nombres, apellidos, identificación, tipo de identificación, tipo de persona, con o sin RUC, teléfono, correo, empresa (RUC o nombre) |
 
 Los selectores *Tipo de firma* y *Usuario que registró* listan solo lo que ya
@@ -372,6 +372,7 @@ archivo, y volver a cargar la firma no lo soluciona.
 
 ## Historial de cambios
 
+- **2.4** — En la ficha, el listado y los filtros, «Caducidad» pasa a llamarse **Vencimiento**.
 - **2.3** — Avisos de vencimiento al cliente por correo y WhatsApp (días
   configurables, una sola vez por etapa) con enlace personal de renovación con
   los datos ya llenos; aviso manual desde la pestaña Trámite.

@@ -142,12 +142,12 @@ $to      = $total > 0 ? min($page * $perPage, $total) : 0;
                 ]],
                 ['key' => 'id_producto',         'label' => 'Tipo de firma',          'icon' => 'bi-pen',                 'type' => 'select',     'grupo' => 'Firma',   'col' => 4, 'options' => $opcionesProducto],
                 ['key' => 'usuario',             'label' => 'Usuario que registró',   'icon' => 'bi-person-badge',        'type' => 'select',     'grupo' => 'Firma',   'col' => 4, 'options' => $opcionesUsuario],
-                ['key' => 'caducidad',           'label' => 'Fecha de caducidad',     'icon' => 'bi-calendar-x',          'type' => 'date_range', 'grupo' => 'Firma',   'col' => 6],
+                ['key' => 'caducidad',           'label' => 'Fecha de vencimiento',   'icon' => 'bi-calendar-x',          'type' => 'date_range', 'grupo' => 'Firma',   'col' => 6],
                 ['key' => 'vigencia',            'label' => 'Vigencia',               'icon' => 'bi-hourglass-split',     'type' => 'select',     'grupo' => 'Firma',   'col' => 6, 'options' => [
                     ['v' => 'vigente',    'l' => 'Vigente (más de 30 días)'],
                     ['v' => 'por_vencer', 'l' => 'Por vencer (30 días o menos)'],
                     ['v' => 'vencida',    'l' => 'Vencida'],
-                    ['v' => 'sin_fecha',  'l' => 'Sin fecha de caducidad'],
+                    ['v' => 'sin_fecha',  'l' => 'Sin fecha de vencimiento'],
                 ]],
                 ['key' => 'nombres',             'label' => 'Nombres',                'icon' => 'bi-person',              'type' => 'text',       'grupo' => 'Titular', 'col' => 4],
                 ['key' => 'apellidos',           'label' => 'Apellidos',              'icon' => 'bi-person',              'type' => 'text',       'grupo' => 'Titular', 'col' => 4],
@@ -205,7 +205,7 @@ $to      = $total > 0 ? min($page * $perPage, $total) : 0;
                     'estado_pago'           => 'Pago',
                     'factura_estado'        => 'Factura',
                     'estado'                => 'Estado',
-                    'fecha_caducidad'       => 'Caducidad',
+                    'fecha_caducidad'       => 'Vencimiento',
                     'created_at'            => 'Fecha',
                 ];
                 echo \App\Helpers\PreferenciasHelper::renderDropdownColumnas($columnasTabla, $vistaConfig ?? [], $rutaModulo);
@@ -248,7 +248,7 @@ $to      = $total > 0 ? min($page * $perPage, $total) : 0;
                         <th class="text-center sortable-header-f" data-sort="estado_pago" data-col="estado_pago" role="button">Pago <i class="bi bi-arrow-down-up small text-muted ms-1"></i></th>
                         <th class="text-center sortable-header-f" data-sort="factura_estado" data-col="factura_estado" role="button">Factura <i class="bi bi-arrow-down-up small text-muted ms-1"></i></th>
                         <th class="text-center sortable-header-f" data-sort="estado" data-col="estado" role="button">Estado <i class="bi bi-arrow-down-up small text-muted ms-1"></i></th>
-                        <th class="text-center sortable-header-f" data-sort="fecha_caducidad" data-col="fecha_caducidad" role="button">Caducidad <i class="bi bi-arrow-down-up small text-muted ms-1"></i></th>
+                        <th class="text-center sortable-header-f" data-sort="fecha_caducidad" data-col="fecha_caducidad" role="button">Vencimiento <i class="bi bi-arrow-down-up small text-muted ms-1"></i></th>
                         <th class="text-end pe-3 sortable-header-f" data-sort="created_at" data-col="created_at" role="button">Fecha <i class="bi bi-arrow-down-up small text-muted ms-1"></i></th>
                     </tr>
                 </thead>
@@ -450,7 +450,7 @@ $to      = $total > 0 ? min($page * $perPage, $total) : 0;
                     <!-- Vigencia de cada tipo de firma (para la fecha de caducidad) -->
                     <div class="col-12 mt-3 pt-2 border-top">
                         <div class="small fw-bold mb-1">Vigencia de cada firma</div>
-                        <div class="form-text small mb-2">Con ella se calcula la fecha de caducidad al elegir la firma y al emitirla. Vacío = la que dice el nombre del producto.</div>
+                        <div class="form-text small mb-2">Con ella se calcula la fecha de vencimiento al elegir la firma y al emitirla. Vacío = la que dice el nombre del producto.</div>
                         <?php $unidadesVig = \App\Rules\modulos\FirmaElectronicaRules::UNIDADES_VIGENCIA; ?>
                         <table class="table table-sm align-middle small mb-0">
                             <tbody>
