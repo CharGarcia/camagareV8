@@ -297,12 +297,12 @@ document.addEventListener('DOMContentLoaded', () => {
             nombre: 'solicitud_firma',
             categoria: 'UTILITY',
             cabecera: 'NONE',
-            descripcion: 'Sirve para enviar al cliente el enlace donde solicita su firma electrónica: llena sus datos, sube sus documentos, paga y sigue el estado del trámite. Se usa desde el módulo Firmas Electrónicas (botón Enviar enlace). Sin esta plantilla aprobada, el sistema abre WhatsApp del usuario con el mensaje listo.',
-            texto: 'Hola {{1}}, {{2}} te envía el formulario para solicitar tu firma electrónica. Completa tus datos, sube tus documentos y realiza el pago en este enlace: {{3}} Con el mismo enlace puedes ver el estado de tu solicitud.',
+            descripcion: 'Sirve para enviar al cliente el enlace donde solicita su firma electrónica: llena sus datos, sube sus documentos, paga y sigue el estado del trámite. Se usa desde el módulo Firmas Electrónicas (botón Enviar link). La plantilla se crea con un botón «Completar solicitud» que abre el enlace personal del cliente, por eso el texto ya no necesita la URL. Si ya tenía una aprobada sin botón, edítela y guárdela: se le agrega el botón (Meta la vuelve a revisar). Debe hacerse desde el sistema publicado (https).',
+            texto: 'Hola {{1}}, {{2}} te envía el formulario para solicitar tu firma electrónica. Pulsa el botón Completar solicitud para llenar tus datos, subir tus documentos y realizar el pago. Con el mismo enlace puedes ver el estado de tu solicitud.',
             variables: [
                 { id: '{{1}}', label: 'Nombre del Cliente' },
                 { id: '{{2}}', label: 'Nombre de la Empresa' },
-                { id: '{{3}}', label: 'Enlace del formulario' }
+                { id: '{{3}}', label: 'Enlace del formulario (opcional: ya va en el botón)' }
             ]
         },
         'cuenta_por_cobrar': {

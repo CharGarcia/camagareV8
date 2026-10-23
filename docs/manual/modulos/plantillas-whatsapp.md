@@ -6,7 +6,7 @@ ruta_modulo: modulos/plantillas-whatsapp
 tipo: modulo
 visibilidad: todos
 etiquetas: whatsapp, plantillas, meta, mensajes aprobados, link de pago, enlace de pago, payphone, nuvei, enviar factura por whatsapp, enviar proforma por whatsapp, variables, aprobacion, estado de cuenta, estado_cuenta_cliente, resumen de deuda, facturas pendientes, detalle de lo que se cobra, por concepto de, factura_por_cobrar, cuenta_por_cobrar, texto sugerido, editar plantilla, no guarda la plantilla editada
-version: 1.2
+version: 1.3
 orden: 21
 estado: activo
 ---
@@ -69,6 +69,7 @@ con la opción de borrarla también en Meta.
 | `estado_cuenta_cliente` | No | Cliente, N° de facturas pendientes, Valor pendiente, Detalle de lo que se cobra, Empresa que emite | Cuentas por Cobrar (vista Por cliente) |
 | `renovacion_suscripcion` | No | Cliente, Fecha de renovación | Suscripciones |
 | `renovacion_firma_electronica` | No | Cliente, Fecha de vencimiento | Firmas Electrónicas |
+| `solicitud_firma` | No (lleva botón **Completar solicitud**) | Cliente, Empresa | Firmas Electrónicas (Enviar link) |
 | `retencion_compra` | Sí | Proveedor, Número, Valor retenido | Retenciones en Compras |
 | `nota_credito` | Sí | Cliente, Número, Total | Notas de Crédito |
 | `nota_debito` | Sí | Cliente, Número, Total | Notas de Débito |
@@ -104,6 +105,23 @@ aún no incluye el detalle y ofrece **Usar el texto sugerido**. Al guardar,
 Meta la vuelve a revisar y, mientras esté en revisión, no se puede enviar.
 Detalle de cómo se arma el concepto: *Cuentas por Cobrar → Detalle de lo que se
 cobra en los mensajes de WhatsApp*.
+
+### Solicitud de firma con botón
+
+`solicitud_firma` se crea con un botón **Completar solicitud** debajo del
+mensaje: al tocarlo, el cliente abre su enlace personal para solicitar la firma
+electrónica. El botón apunta a la dirección del sistema más el código de cada
+enlace, que el módulo Firmas Electrónicas pone al enviar; por eso el texto
+sugerido ya no lleva la URL (solo Cliente y Empresa).
+
+- **Hágalo desde el sistema publicado** (dirección `https://…`): Meta no acepta
+  un botón que apunte a una dirección local o sin https, y el sistema lo avisa.
+- **Si ya tenía `solicitud_firma` aprobada sin botón**, no la elimine (Meta no
+  deja reutilizar el nombre por varias semanas): ábrala con **Editar**, cambie el
+  texto si quiere quitar el enlace y guarde. Se le agrega el botón y Meta la
+  vuelve a revisar; mientras tanto el envío por WhatsApp no sale solo.
+- Una plantilla antigua que sigue con el enlace en `{{3}}` funciona igual; si
+  además tiene el botón, el cliente ve ambos.
 
 ### Enlaces de pago (Payphone y Nuvei)
 
@@ -183,6 +201,9 @@ Sin **acceso total**, el usuario ve solo las plantillas que él mismo registró.
 
 ## Historial de cambios
 
+- **1.3** — `solicitud_firma` se crea con un botón de URL **Completar
+  solicitud**; al editar una ya aprobada sin botón, se le agrega. Nueva sección
+  *Solicitud de firma con botón*.
 - **1.2** — Las plantillas de cobro (`factura_por_cobrar`, `cuenta_por_cobrar`,
   `estado_cuenta_cliente`) suman la variable **Detalle de lo que se cobra**; el
   modal Editar ofrece cargar el texto sugerido nuevo. Corregido: guardar una

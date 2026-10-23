@@ -63,7 +63,7 @@ $to      = $total > 0 ? min($page * $perPage, $total) : 0;
                 <h6 class="modal-title fw-semibold"><i class="bi bi-link-45deg me-2 text-secondary"></i>Enlaces enviados a clientes</h6>
                 <div class="d-flex gap-2 align-items-center ms-auto">
                     <button type="button" class="btn btn-success btn-sm px-3" onclick="abrirModalEnviarFormulario()">
-                        <i class="bi bi-whatsapp me-1"></i> Enviar enlace
+                        <i class="bi bi-send me-1"></i> Enviar link
                     </button>
                     <button type="button" class="btn-close btn-sm" data-bs-dismiss="modal"></button>
                 </div>
@@ -216,7 +216,7 @@ $to      = $total > 0 ? min($page * $perPage, $total) : 0;
                    class="btn btn-outline-success" title="Excel"><i class="bi bi-file-earmark-spreadsheet"></i><span class="d-none d-md-inline"> Excel</span></a>
                 <?php if ($perm['crear']): ?>
                     <button type="button" class="btn btn-outline-secondary" title="Enlaces enviados a clientes" onclick="abrirEnlacesEnviados()"><i class="bi bi-link-45deg"></i></button>
-                    <button type="button" class="btn btn-outline-success" title="Enviar enlace al cliente (WhatsApp / correo)" onclick="abrirModalEnviarFormulario()"><i class="bi bi-whatsapp"></i></button>
+                    <button type="button" class="btn btn-outline-success" title="Enviar enlace al cliente (WhatsApp / correo)" onclick="abrirModalEnviarFormulario()"><i class="bi bi-send"></i><span class="d-none d-md-inline"> Enviar link</span></button>
                 <?php endif; ?>
                 <?php if ($perm['actualizar']): ?>
                     <button type="button" class="btn btn-outline-secondary" title="Configuración del módulo" onclick="abrirConfigFirmas()"><i class="bi bi-gear"></i></button>
@@ -339,7 +339,6 @@ $to      = $total > 0 ? min($page * $perPage, $total) : 0;
             </div>
             <div class="modal-body px-3 py-3">
                 <p class="small text-muted mb-2">El cliente llena sus datos, sube sus documentos y paga desde el enlace. Con el mismo enlace sigue el estado de su firma.</p>
-                <div id="alertEnviarFormulario" class="alert d-none mb-3 py-2 small"></div>
                 <input type="hidden" id="solIdFirma" value="">
                 <div class="mb-2">
                     <label class="form-label form-label-sm fw-medium">Nombre del cliente <span class="text-muted fw-normal">(opcional)</span></label>
@@ -358,11 +357,7 @@ $to      = $total > 0 ? min($page * $perPage, $total) : 0;
                         <label class="form-check-label small fw-medium" for="solPorWhatsapp"><i class="bi bi-whatsapp me-1 text-success"></i>Enviar por WhatsApp</label>
                     </div>
                     <input type="tel" class="form-control form-control-sm" id="solTelefonoDestino" placeholder="09XXXXXXXX">
-                    <div class="form-text small">Con la plantilla <code>solicitud_firma</code> aprobada en Meta se envía sola; si no, se abre WhatsApp con el mensaje listo.</div>
-                </div>
-                <div id="solEnlaceGenerado" class="input-group input-group-sm mt-3 d-none">
-                    <input type="text" class="form-control" id="solEnlaceTexto" readonly>
-                    <button type="button" class="btn btn-outline-secondary" onclick="copiarTextoFirma(document.getElementById('solEnlaceTexto').value)" title="Copiar enlace"><i class="bi bi-clipboard"></i></button>
+                    <div class="form-text small">Con la plantilla <code>solicitud_firma</code> aprobada en Meta se envía sola; si no, podrá abrir WhatsApp con el mensaje listo.</div>
                 </div>
             </div>
             <div class="modal-footer py-2 px-3">
@@ -715,10 +710,6 @@ $to      = $total > 0 ? min($page * $perPage, $total) : 0;
         document.getElementById('solTelefonoDestino').value = firma?.telefono || '';
         document.getElementById('solPorCorreo').checked     = true;
         document.getElementById('solPorWhatsapp').checked   = !!firma?.telefono;
-        document.getElementById('solEnlaceGenerado').classList.add('d-none');
-        const alerta = document.getElementById('alertEnviarFormulario');
-        alerta.className = 'alert d-none mb-3 py-2 small';
-        alerta.textContent = '';
         enviandoEnlace = false;
         const btn = document.getElementById('btnConfirmarEnviarFormulario');
         btn.disabled = false;
@@ -739,20 +730,49 @@ $to      = $total > 0 ? min($page * $perPage, $total) : 0;
         document.getElementById('solLoaderTitulo').textContent = titulo;
         document.getElementById('solLoaderDetalle').textContent = detalle;
     }
+    // Resultado del envío (como en Facturas de Venta: SweetAlert). WhatsApp nunca abre otra
+    // página por su cuenta: sin la plantilla aprobada en Meta, el usuario decide abrirlo.
+    function mostrarResultadoEnvio(data) {
+        const esc = v => String(v ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
+        const lineas = [];
+        if (data.correo === true)  lineas.push('<i class="bi bi-envelope-check text-success me-1"></i>Correo enviado.');
+        if (data.correo === false) lineas.push(`<i class="bi bi-envelope-x text-danger me-1"></i>El correo no se pudo enviar: ${esc(data.correo_error)}`);
+        if (data.whatsapp === 'api')   lineas.push('<i class="bi bi-whatsapp text-success me-1"></i>WhatsApp enviado.');
+        if (data.whatsapp === 'wa_me') lineas.push('<i class="bi bi-whatsapp text-warning me-1"></i>WhatsApp no se envió solo (falta la plantilla <code>solicitud_firma</code> aprobada en Meta). Puede abrirlo con el mensaje listo.');
+        const incompleto = data.correo === false || data.whatsapp === 'wa_me';
+        Swal.fire({
+            icon: incompleto ? 'warning' : 'success',
+            title: incompleto ? 'Enlace creado' : '¡Enviado!',
+            html: `<div class="text-start small">${lineas.map(l => `<div class="mb-1">${l}</div>`).join('')}</div>
+                   <div class="input-group input-group-sm mt-3">
+                       <input type="text" class="form-control" id="swalEnlaceFirma" readonly value="${esc(data.url)}">
+                       <button type="button" class="btn btn-outline-secondary" id="swalCopiarEnlace" title="Copiar enlace"><i class="bi bi-clipboard"></i></button>
+                   </div>`,
+            showConfirmButton: data.whatsapp === 'wa_me',
+            confirmButtonText: '<i class="bi bi-whatsapp me-1"></i>Abrir WhatsApp',
+            confirmButtonColor: '#198754',
+            showCancelButton: true,
+            cancelButtonText: 'Cerrar',
+            didOpen: () => {
+                // Copia aquí mismo: copiarTextoFirma() muestra un toast que cerraría este aviso.
+                document.getElementById('swalCopiarEnlace').addEventListener('click', async function () {
+                    const input = document.getElementById('swalEnlaceFirma');
+                    try { await navigator.clipboard.writeText(input.value); } catch { input.select(); document.execCommand('copy'); }
+                    this.innerHTML = '<i class="bi bi-check-lg text-success"></i>';
+                });
+            },
+        }).then(r => { if (r.isConfirmed && data.wa_me) window.open(data.wa_me, '_blank'); });
+    }
+
     window.confirmarEnviarFormulario = async function () {
         if (enviandoEnlace) return;
-        const alerta = document.getElementById('alertEnviarFormulario');
         const btn    = document.getElementById('btnConfirmarEnviarFormulario');
         const porCorreo   = document.getElementById('solPorCorreo').checked;
         const porWhatsapp = document.getElementById('solPorWhatsapp').checked;
         if (!porCorreo && !porWhatsapp) {
-            alerta.className = 'alert alert-warning mb-3 py-2 small';
-            alerta.textContent = 'Elija correo, WhatsApp o ambos.';
+            Swal.fire('Atención', 'Elija correo, WhatsApp o ambos.', 'warning');
             return;
         }
-        // La ventana de WhatsApp se abre ya (en el clic): después del await el navegador la bloquearía.
-        const ventanaWa = porWhatsapp ? window.open('about:blank', '_blank') : null;
-        try { ventanaWa?.document.write('<p style="font-family:sans-serif;padding:2rem;color:#555">Preparando el mensaje de WhatsApp…</p>'); } catch {}
 
         enviandoEnlace = true;
         btn.disabled = true;
@@ -773,29 +793,22 @@ $to      = $total > 0 ? min($page * $perPage, $total) : 0;
             const resp = await fetch(`${urlBase}/enviarSolicitud`, { method: 'POST', body: fd, signal: AbortSignal.timeout(90000) });
             const data = await resp.json();
 
-            alerta.className = `alert alert-${data.ok ? (data.correo === false ? 'warning' : 'success') : 'danger'} mb-3 py-2 small`;
-            alerta.textContent = data.ok ? data.msg : data.error;
-
             if (data.ok) {
-                document.getElementById('solEnlaceTexto').value = data.url;
-                document.getElementById('solEnlaceGenerado').classList.remove('d-none');
-                if (ventanaWa) {
-                    if (data.wa_me) ventanaWa.location.href = data.wa_me; else ventanaWa.close();
-                }
                 if (enlacesAbierto()) cargarSolicitudes(paginaSolicitudes);
                 if (window.FIRMA_recargarTramite) window.FIRMA_recargarTramite();
                 // El enlace ya se creó: no se reactiva Enviar (sigue disabled) para no crear otro con un segundo clic.
                 btn.innerHTML = '<i class="bi bi-check-lg me-1"></i> Enviado';
                 enviandoEnlace = false;
+                mostrarLoaderEnvio(null);
+                bootstrap.Modal.getInstance(document.getElementById('modalEnviarFormulario'))?.hide();
+                mostrarResultadoEnvio(data);
                 return;
             }
-            if (ventanaWa) ventanaWa.close();
+            Swal.fire('Error', data.error || 'No se pudo enviar el enlace.', 'error');
         } catch (e) {
-            if (ventanaWa) ventanaWa.close();
-            alerta.className = 'alert alert-danger mb-3 py-2 small';
-            alerta.textContent = e?.name === 'TimeoutError'
+            Swal.fire('Error', e?.name === 'TimeoutError'
                 ? 'El servidor no respondió a tiempo. Revise en «Enlaces enviados» si el enlace se creó antes de volver a enviarlo.'
-                : 'Error de conexión.';
+                : 'Error de red al enviar el enlace.', 'error');
         } finally {
             mostrarLoaderEnvio(null);
         }

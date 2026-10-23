@@ -15,6 +15,34 @@ class PlantillasWhatsappController extends BaseModuloController
     private WhatsappConfig $configModel;
     private WhatsappService $whatsappService;
 
+    /**
+     * Plantillas rápidas que se crean con un botón de URL dinámica: la URL es la ruta
+     * pública del sistema + {{1}} (el sufijo que manda el módulo al enviar).
+     * Ref.: FirmaElectronicaService::enviarWhatsappPlantilla() (sufijo = token del enlace).
+     */
+    private const BOTONES_URL_RAPIDAS = [
+        'solicitud_firma' => ['texto' => 'Completar solicitud', 'ruta' => 'solicitud-firma/', 'ejemplo' => '3f9a1c7e5b2d4a6f'],
+    ];
+
+    /** Componente BUTTONS de una plantilla rápida con botón de URL, o ['error' => …]. */
+    private function componenteBotonUrl(string $plantillaRapida): array
+    {
+        $boton   = self::BOTONES_URL_RAPIDAS[$plantillaRapida];
+        $urlBase = url_absoluta($boton['ruta']);
+        if (!str_starts_with($urlBase, 'https://') || preg_match('#^https://(localhost|127\.0\.0\.1)[:/]#', $urlBase)) {
+            return ['error' => 'Esta plantilla lleva un botón con la dirección del sistema y Meta solo acepta una dirección pública https (actual: ' . $urlBase . '). Hágalo desde el sistema publicado.'];
+        }
+        return [
+            'type'    => 'BUTTONS',
+            'buttons' => [[
+                'type'    => 'URL',
+                'text'    => $boton['texto'],
+                'url'     => $urlBase . '{{1}}',
+                'example' => [$urlBase . $boton['ejemplo']],
+            ]],
+        ];
+    }
+
     public function __construct()
     {
         parent::__construct();
@@ -626,6 +654,16 @@ class PlantillasWhatsappController extends BaseModuloController
 
         $components[] = $bodyComponent;
 
+        // BOTÓN DE URL (plantillas rápidas que llevan al cliente a una página del sistema)
+        if ($tipoCreacion === 'rapida' && isset(self::BOTONES_URL_RAPIDAS[$plantillaRapida])) {
+            $boton = $this->componenteBotonUrl($plantillaRapida);
+            if (isset($boton['error'])) {
+                echo json_encode(['ok' => false, 'error' => $boton['error']]);
+                return;
+            }
+            $components[] = $boton;
+        }
+
         $data = [
             'name' => $nombre,
             'category' => $categoria,
@@ -878,6 +916,18 @@ class PlantillasWhatsappController extends BaseModuloController
         }
         if (!$tieneBody) {
             $updatedComponents[] = ['type' => 'BODY', 'text' => $nuevoCuerpo];
+        }
+
+        // Plantilla rápida aprobada antes de llevar botón: al editarla se le agrega
+        // (Meta no deja reusar el nombre de una plantilla borrada por varias semanas).
+        if (isset(self::BOTONES_URL_RAPIDAS[$nombrePlantilla])
+            && !in_array('BUTTONS', array_map(fn($c) => strtoupper($c['type'] ?? ''), $updatedComponents), true)) {
+            $boton = $this->componenteBotonUrl($nombrePlantilla);
+            if (isset($boton['error'])) {
+                echo json_encode(['ok' => false, 'error' => $boton['error']]);
+                return;
+            }
+            $updatedComponents[] = $boton;
         }
 
         $data = ['components' => $updatedComponents];

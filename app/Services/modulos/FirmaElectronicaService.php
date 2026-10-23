@@ -495,7 +495,7 @@ class FirmaElectronicaService
 
         if ($porWhatsapp) {
             $vars = [$nombre !== '' ? $nombre : 'cliente', $empresaNombre, $url];
-            if ($this->enviarWhatsappPlantilla($idEmpresa, $telefono, $vars)) {
+            if ($this->enviarWhatsappPlantilla($idEmpresa, $telefono, $vars, (string) $sol['token'])) {
                 $res['whatsapp'] = 'api';
             } else {
                 $texto = "Hola {$vars[0]}, {$empresaNombre} te envía el formulario para solicitar tu firma electrónica. "
@@ -557,22 +557,29 @@ class FirmaElectronicaService
         return $this->solRepo->getById($idSol, $idEmpresa);
     }
 
-    private function enviarWhatsappPlantilla(int $idEmpresa, string $telefono, array $vars): bool
+    /**
+     * Envía el enlace con la plantilla solicitud_firma. Dos versiones aprobadas conviven:
+     * la antigua lleva el enlace como {{3}} en el texto; la nueva, como botón «Completar
+     * solicitud» cuya URL termina en {{1}} = token (y el texto solo {{1}} y {{2}}).
+     */
+    private function enviarWhatsappPlantilla(int $idEmpresa, string $telefono, array $vars, string $token): bool
     {
         try {
-            $plantilla = null;
-            foreach ((new \App\models\WhatsappPlantilla())->getPlantillasAprobadas($idEmpresa) as $p) {
-                if (($p['nombre'] ?? '') === self::PLANTILLA_WA) {
-                    $plantilla = $p;
-                    break;
-                }
-            }
+            $plantilla = $this->plantillaAprobada($idEmpresa, self::PLANTILLA_WA);
             if (!$plantilla) {
                 return false;
             }
-            $params = array_map(static fn($v) => ['type' => 'text', 'text' => (string) $v], $vars);
+            // Meta rechaza el mensaje si se mandan más variables de las que tiene el cuerpo.
+            $params = array_map(static fn($v) => ['type' => 'text', 'text' => (string) $v], array_slice($vars, 0, $plantilla['variables']));
+            $componentes = $params ? [['type' => 'body', 'parameters' => $params]] : [];
+            if ($plantilla['boton_url'] !== null) {
+                $componentes[] = [
+                    'type' => 'button', 'sub_type' => 'url', 'index' => (string) $plantilla['boton_url'],
+                    'parameters' => [['type' => 'text', 'text' => $token]],
+                ];
+            }
             $resp = (new \App\services\WhatsappService())->sendTemplateMessage(
-                $idEmpresa, $telefono, $plantilla['nombre'], $plantilla['idioma'], [['type' => 'body', 'parameters' => $params]]
+                $idEmpresa, $telefono, $plantilla['nombre'], $plantilla['idioma'], $componentes
             );
             return !empty($resp['success']);
         } catch (\Throwable $e) {
@@ -1624,12 +1631,23 @@ class FirmaElectronicaService
                     continue;
                 }
                 $vars = 0;
+                $botonUrl = null;
                 foreach (json_decode((string) ($p['componentes'] ?? '[]'), true) ?: [] as $c) {
-                    if (strtoupper((string) ($c['type'] ?? '')) === 'BODY' && preg_match_all('/{{(\d+)}}/', (string) ($c['text'] ?? ''), $m)) {
+                    $tipo = strtoupper((string) ($c['type'] ?? ''));
+                    if ($tipo === 'BODY' && preg_match_all('/{{(\d+)}}/', (string) ($c['text'] ?? ''), $m)) {
                         $vars = count(array_unique($m[1]));
                     }
+                    // Botón de URL dinámica (…/solicitud-firma/{{1}}): Meta pide el sufijo al enviar.
+                    if ($tipo === 'BUTTONS') {
+                        foreach (array_values($c['buttons'] ?? []) as $i => $b) {
+                            if (strtoupper((string) ($b['type'] ?? '')) === 'URL' && str_contains((string) ($b['url'] ?? ''), '{{1}}')) {
+                                $botonUrl = $i;
+                                break;
+                            }
+                        }
+                    }
                 }
-                return ['nombre' => $p['nombre'], 'idioma' => $p['idioma'], 'variables' => $vars];
+                return ['nombre' => $p['nombre'], 'idioma' => $p['idioma'], 'variables' => $vars, 'boton_url' => $botonUrl];
             }
         } catch (\Throwable $e) {
             error_log('[Firmas] Plantillas WhatsApp: ' . $e->getMessage());

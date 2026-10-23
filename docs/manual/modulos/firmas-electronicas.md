@@ -6,7 +6,7 @@ ruta_modulo: modulos/firmas_electronicas
 tipo: modulo
 visibilidad: admin
 etiquetas: firma electronica, vender firmas, aviso de vencimiento al cliente, recordatorio de renovacion, renovar firma del cliente, firma por vencer, enlace de renovacion, api uanataca, uanacreditos, creditos uanataca, precompra, distribuidor uanataca, miembro de empresa, representante legal, solicitud de firma, tramite de firma, uanataca, enlace para el cliente, formulario de firma, link de firma, whatsapp, pagar firma, payphone, transferencia, comprobante de pago, confirmar correo, factura de la firma, registrar en uanataca, firma emitida, observada, corregir solicitud, enlace fijo, qr de firma, certificado, p12, caducada, por caducar, renovar firma, firma invalida, xades, anf, security data, buscar firma, filtros, firmas por facturar
-version: 2.6
+version: 2.7
 orden: 20
 estado: activo
 ---
@@ -63,9 +63,13 @@ cédula, el **código dactilar**.
 
 ## Cómo se usa
 
-1. Pulse el botón de **WhatsApp** (junto a los botones de PDF y Excel), escriba el nombre del cliente y elija **correo**,
-   **WhatsApp** o ambos. El cliente recibe un enlace propio (también puede
-   copiarlo y enviarlo usted). Desde la ficha de una firma, en la pestaña
+1. Pulse **Enviar link** (ícono de avión de papel, junto a los botones de PDF y Excel), escriba el nombre del cliente y elija **correo**,
+   **WhatsApp** o ambos. Mientras se envía, el cuadro muestra un indicador de
+   carga; al terminar, un aviso le dice qué se envió y le muestra el enlace
+   para copiarlo. Si WhatsApp no tiene aprobada la plantilla
+   `solicitud_firma` en Meta, el mensaje no sale solo: el aviso ofrece
+   **Abrir WhatsApp** con el texto listo (no se abre ninguna página sin que
+   usted lo pida). Desde la ficha de una firma, en la pestaña
    **Trámite**, puede enviar el enlace de esa misma solicitud.
    Con el botón de **enlaces enviados** (ícono de cadena, junto a Excel) ve todos
    los enlaces con su estado y la firma que generaron, y puede copiarlos o
@@ -377,9 +381,14 @@ archivo, y volver a cargar la firma no lo soluciona.
 
 ## Historial de cambios
 
+- **2.7** — El WhatsApp del enlace llega con un botón **Completar solicitud**
+  cuando la plantilla `solicitud_firma` lo tiene (ver el manual de Plantillas de
+  WhatsApp); las plantillas aprobadas sin botón siguen funcionando.
 - **2.6** — Enviar enlace al cliente por correo ya no se queda «Enviando…»: el
   correo tiene un tiempo máximo de espera y, si el servidor no responde, se
-  muestra un aviso.
+  muestra un aviso. El botón pasa a llamarse **Enviar link**, el envío muestra
+  un indicador de carga y el resultado sale en un aviso; WhatsApp ya no abre
+  otra página por su cuenta.
 - **2.5** — La configuración de la API de Uanataca pasa de la pestaña General a
   su propia pestaña **Uanataca** en el engranaje, que muestra además la tabla
   de **Productos de Uanataca** (antes en un modal aparte).
