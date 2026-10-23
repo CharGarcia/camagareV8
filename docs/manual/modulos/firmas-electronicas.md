@@ -6,7 +6,7 @@ ruta_modulo: modulos/firmas_electronicas
 tipo: modulo
 visibilidad: admin
 etiquetas: firma electronica, vender firmas, aviso de vencimiento al cliente, recordatorio de renovacion, renovar firma del cliente, firma por vencer, enlace de renovacion, api uanataca, uanacreditos, creditos uanataca, precompra, distribuidor uanataca, miembro de empresa, representante legal, solicitud de firma, tramite de firma, uanataca, enlace para el cliente, formulario de firma, link de firma, whatsapp, pagar firma, payphone, transferencia, comprobante de pago, confirmar correo, factura de la firma, registrar en uanataca, firma emitida, observada, corregir solicitud, enlace fijo, qr de firma, certificado, p12, caducada, por caducar, renovar firma, firma invalida, xades, anf, security data, buscar firma, filtros, firmas por facturar
-version: 2.4
+version: 2.5
 orden: 20
 estado: activo
 ---
@@ -104,7 +104,7 @@ motivo por correo, corrige desde su enlace y la reenvía.
 
 ## Configuración
 
-Botón del **engranaje**, junto a los botones de PDF y Excel (requiere permiso de modificar). Tiene tres pestañas: **General**, **Avisos** (avisos de vencimiento al cliente) y **Vigencia**; un solo **Guardar** guarda las tres:
+Botón del **engranaje**, junto a los botones de PDF y Excel (requiere permiso de modificar). Tiene cuatro pestañas: **General**, **Uanataca** (la conexión con ese proveedor de firmas; ver *Envío automático a Uanataca*), **Avisos** (avisos de vencimiento al cliente) y **Vigencia**; un solo **Guardar** guarda todas:
 
 | Campo | Qué significa |
 |-------|---------------|
@@ -165,16 +165,18 @@ directamente en Uanataca con los datos y documentos del cliente, sin copiar
 nada a mano. Cada solicitud consume **Uanacréditos** (saldo prepago que se
 compra en el portal de distribuidores de Uanataca).
 
-**Puesta en marcha** (engranaje del listado, sección *API de Uanataca*):
+**Puesta en marcha** (engranaje del listado, pestaña **Uanataca**):
 
 1. Active **Enviar las solicitudes a Uanataca por API**, elija el ambiente
    (**Pruebas** mientras valida con Uanataca, luego **Producción**) y escriba el
    usuario y la clave de distribuidor que le entregó Uanataca. La clave se
    guarda cifrada; si deja el campo vacío se conserva la anterior.
 2. Pulse **Probar conexión**: muestra el saldo de Uanacréditos.
-3. Pulse **Productos de Uanataca** y enlace cada firma que vende con su
-   producto de Uanataca (por ejemplo *Firma 1 año* → *Persona Natural Archivo
-   1 año*). Una firma sin enlace no se puede enviar.
+3. En la sección **Productos de Uanataca**, al pie de la misma pestaña,
+   enlace cada firma que vende con su producto de Uanataca (por ejemplo
+   *Firma 1 año* → *Persona Natural Archivo 1 año*) y pulse **Guardar
+   productos**. El catálogo se consulta al abrir la pestaña (botón ↻ para
+   volver a pedirlo). Una firma sin enlace no se puede enviar.
 4. Decida si el envío es **automático** (al confirmarse el pago) y si debe
    **esperar a que el cliente confirme su correo** (recomendado: ahí le llega
    la activación de Uanataca).
@@ -372,6 +374,9 @@ archivo, y volver a cargar la firma no lo soluciona.
 
 ## Historial de cambios
 
+- **2.5** — La configuración de la API de Uanataca pasa de la pestaña General a
+  su propia pestaña **Uanataca** en el engranaje, que muestra además la tabla
+  de **Productos de Uanataca** (antes en un modal aparte).
 - **2.4** — En la ficha, el listado y los filtros, «Caducidad» pasa a llamarse **Vencimiento**.
 - **2.3** — Avisos de vencimiento al cliente por correo y WhatsApp (días
   configurables, una sola vez por etapa) con enlace personal de renovación con

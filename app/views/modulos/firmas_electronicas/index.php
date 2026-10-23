@@ -388,6 +388,11 @@ $to      = $total > 0 ? min($page * $perPage, $total) : 0;
                             </button>
                         </li>
                         <li class="nav-item">
+                            <button class="nav-link fw-medium py-1" id="tab-cfg-uanataca-btn" data-bs-toggle="tab" data-bs-target="#tab-cfg-uanataca" type="button">
+                                <i class="bi bi-patch-check me-1"></i>Uanataca
+                            </button>
+                        </li>
+                        <li class="nav-item">
                             <button class="nav-link fw-medium py-1" id="tab-cfg-avisos-btn" data-bs-toggle="tab" data-bs-target="#tab-cfg-avisos" type="button">
                                 <i class="bi bi-bell me-1"></i>Avisos
                             </button>
@@ -398,7 +403,7 @@ $to      = $total > 0 ? min($page * $perPage, $total) : 0;
                             </button>
                         </li>
                     </ul>
-                    <?= \App\Helpers\PreferenciasHelper::renderDropdownPestanas(['tab-cfg-avisos-btn' => 'Avisos', 'tab-cfg-vigencia-btn' => 'Vigencia'], \App\Helpers\PreferenciasHelper::getPreferenciasVista('firmas_electronicas'), 'firmas_electronicas') ?>
+                    <?= \App\Helpers\PreferenciasHelper::renderDropdownPestanas(['tab-cfg-uanataca-btn' => 'Uanataca', 'tab-cfg-avisos-btn' => 'Avisos', 'tab-cfg-vigencia-btn' => 'Vigencia'], \App\Helpers\PreferenciasHelper::getPreferenciasVista('firmas_electronicas'), 'firmas_electronicas') ?>
                 </div>
                 <div class="tab-content">
                 <div class="tab-pane fade show active" id="tab-cfg-general" role="tabpanel">
@@ -450,9 +455,13 @@ $to      = $total > 0 ? min($page * $perPage, $total) : 0;
                         </div>
                         <div class="form-text small">Cualquier persona con este enlace puede iniciar una solicitud (máximo 5 por hora desde la misma conexión).</div>
                     </div>
+                </div>
+                </div><!-- /tab-cfg-general -->
 
-                    <!-- API de Uanataca (Precompra) -->
-                    <div class="col-12 mt-3 pt-2 border-top">
+                <!-- Proveedor de firmas: Uanataca (API Precompra). Otro proveedor con convenio = otra pestaña igual. -->
+                <div class="tab-pane fade" id="tab-cfg-uanataca" role="tabpanel">
+                <div class="row g-2">
+                    <div class="col-12">
                         <div class="form-check form-switch">
                             <input class="form-check-input" type="checkbox" name="uanataca_activo" id="cfgUanActivo" value="1" <?= !empty($cfgM['uanataca_activo']) ? 'checked' : '' ?>>
                             <label class="form-check-label small fw-bold" for="cfgUanActivo">Enviar las solicitudes a Uanataca por API</label>
@@ -487,11 +496,29 @@ $to      = $total > 0 ? min($page * $perPage, $total) : 0;
                     </div>
                     <div class="col-12 d-flex flex-wrap gap-2 align-items-center">
                         <button type="button" class="btn btn-sm btn-outline-primary" onclick="probarUanataca()"><i class="bi bi-plug me-1"></i>Probar conexión</button>
-                        <button type="button" class="btn btn-sm btn-outline-secondary" onclick="abrirMapeoUanataca()"><i class="bi bi-diagram-2 me-1"></i>Productos de Uanataca</button>
                         <span class="small text-muted" id="cfgUanResultado"></span>
                     </div>
+
+                    <!-- Productos de Uanataca: enlace de cada firma con su producto en Uanataca -->
+                    <div class="col-12 mt-3 pt-2 border-top">
+                        <div class="d-flex align-items-center gap-2 mb-1">
+                            <span class="small fw-bold"><i class="bi bi-diagram-2 me-1 text-secondary"></i>Productos de Uanataca</span>
+                            <button type="button" class="btn btn-sm btn-outline-secondary ms-auto py-0" title="Volver a consultar el catálogo de Uanataca" onclick="cargarProductosUanataca()"><i class="bi bi-arrow-clockwise"></i></button>
+                        </div>
+                        <div class="form-text small mb-2">Elija a qué producto de Uanataca corresponde cada firma que vende. Sin enlace, esa firma no se puede enviar por API.</div>
+                        <div id="alertMapeoUanataca" class="alert d-none mb-2 py-2 small"></div>
+                        <div style="max-height:240px;overflow:auto;">
+                            <table class="table table-sm align-middle small mb-0">
+                                <thead class="table-light"><tr><th>Firma en el sistema</th><th>Producto de Uanataca</th></tr></thead>
+                                <tbody id="tbodyMapeoUanataca"><tr><td colspan="2" class="text-muted text-center py-3">Se carga al abrir esta pestaña.</td></tr></tbody>
+                            </table>
+                        </div>
+                        <div class="text-end mt-2">
+                            <button type="button" class="btn btn-sm btn-outline-primary" id="btnGuardarMapeoUanataca" onclick="guardarMapeoUanataca()" disabled><i class="bi bi-check-lg me-1"></i>Guardar productos</button>
+                        </div>
+                    </div>
                 </div>
-                </div><!-- /tab-cfg-general -->
+                </div><!-- /tab-cfg-uanataca -->
 
                 <!-- Avisos de vencimiento al cliente -->
                 <div class="tab-pane fade" id="tab-cfg-avisos" role="tabpanel">
@@ -564,29 +591,6 @@ $to      = $total > 0 ? min($page * $perPage, $total) : 0;
         </div>
     </div>
 </div>
-<!-- ── Modal: Productos de Uanataca ────────────────────────── -->
-<div class="modal fade" id="modalMapeoUanataca" tabindex="-1" aria-hidden="true">
-    <div class="modal-dialog modal-dialog-centered" style="max-width:640px;">
-        <div class="modal-content rounded-3">
-            <div class="modal-header py-2 px-3">
-                <h6 class="modal-title fw-semibold"><i class="bi bi-diagram-2 me-2 text-secondary"></i>Productos de Uanataca</h6>
-                <button type="button" class="btn-close btn-sm" data-bs-dismiss="modal"></button>
-            </div>
-            <div class="modal-body px-3 py-3">
-                <p class="small text-muted mb-2">Elija a qué producto de Uanataca corresponde cada firma que vende. Sin enlace, esa firma no se puede enviar por API.</p>
-                <div id="alertMapeoUanataca" class="alert d-none mb-2 py-2 small"></div>
-                <table class="table table-sm align-middle small mb-0">
-                    <thead class="table-light"><tr><th>Firma en el sistema</th><th>Producto de Uanataca</th></tr></thead>
-                    <tbody id="tbodyMapeoUanataca"><tr><td colspan="2" class="text-muted text-center py-3">Cargando…</td></tr></tbody>
-                </table>
-            </div>
-            <div class="modal-footer py-2 px-3">
-                <button type="button" class="btn btn-sm btn-outline-secondary" data-bs-dismiss="modal">Cerrar</button>
-                <button type="button" class="btn btn-sm btn-primary" id="btnGuardarMapeoUanataca" onclick="guardarMapeoUanataca()"><i class="bi bi-check-lg me-1"></i>Guardar</button>
-            </div>
-        </div>
-    </div>
-</div>
 <?php endif; ?>
 
 <script>
@@ -620,8 +624,7 @@ $to      = $total > 0 ? min($page * $perPage, $total) : 0;
 
     // "Enviar enlace" se abre también desde la ficha (modal sobre modal): la regla global
     // .modal { z-index:5060 !important } lo dejaría detrás, así que se sube inline.
-    // Igual "Productos de Uanataca", que se abre sobre la configuración.
-    ['modalEnviarFormulario', 'modalMapeoUanataca'].forEach(id => document.getElementById(id)?.addEventListener('shown.bs.modal', function () {
+    ['modalEnviarFormulario'].forEach(id => document.getElementById(id)?.addEventListener('shown.bs.modal', function () {
         if (!window.CMG_modalSobreOtro || !CMG_modalSobreOtro(this)) return;
         this.style.setProperty('z-index', '5080', 'important');
         const fondos = document.querySelectorAll('.modal-backdrop');
@@ -787,32 +790,41 @@ $to      = $total > 0 ? min($page * $perPage, $total) : 0;
             const d = await postFirmas('probarUanatacaAjax');
             res.className = `small ${d.ok ? 'text-success' : 'text-danger'}`;
             res.textContent = d.ok ? d.msg : d.error;
+            // Con la conexión ya probada, el catálogo de productos puede cargarse.
+            if (d.ok) window.cargarProductosUanataca();
         } catch { res.className = 'small text-danger'; res.textContent = 'Error de conexión.'; }
     };
 
-    let catalogoUan = [];
-    window.abrirMapeoUanataca = async function () {
+    // Productos de Uanataca (sección de la pestaña Uanataca): se consulta el catálogo
+    // la primera vez que se abre la pestaña; el botón ↻ lo vuelve a pedir.
+    let productosUanCargados = false;
+    window.cargarProductosUanataca = async function () {
         const tbody = document.getElementById('tbodyMapeoUanataca');
         const alerta = document.getElementById('alertMapeoUanataca');
+        const btnGuardar = document.getElementById('btnGuardarMapeoUanataca');
+        productosUanCargados = true;
+        btnGuardar.disabled = true;
         alerta.className = 'alert d-none mb-2 py-2 small';
         tbody.innerHTML = '<tr><td colspan="2" class="text-muted text-center py-3">Cargando catálogo de Uanataca…</td></tr>';
-        bootstrap.Modal.getOrCreateInstance(document.getElementById('modalMapeoUanataca')).show();
         const esc = v => String(v ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
         try {
             const d = await (await fetch(`${urlBase}/catalogoUanatacaAjax`)).json();
             if (!d.ok) throw new Error(d.error);
-            catalogoUan = d.catalogo;
             const opciones = sel => '<option value="">— Sin enlace —</option>' + d.catalogo.map(c =>
                 `<option value="${esc(c.uuid)}" ${c.uuid === sel ? 'selected' : ''}>${esc(c.code)} · ${esc(c.name)} ($${Number(c.price).toFixed(2)})</option>`).join('');
             tbody.innerHTML = d.productos.length
                 ? d.productos.map(p => `<tr><td>${esc(p.nombre)}</td><td><select class="form-select form-select-sm" data-producto="${p.id}">${opciones(p.uanataca_uuid)}</select></td></tr>`).join('')
                 : '<tr><td colspan="2" class="text-muted text-center py-3">No hay productos en una categoría «FIRMA».</td></tr>';
+            btnGuardar.disabled = !d.productos.length;
         } catch (e) {
-            tbody.innerHTML = '';
-            alerta.className = 'alert alert-danger mb-2 py-2 small';
+            tbody.innerHTML = '<tr><td colspan="2" class="text-muted text-center py-3">Sin catálogo.</td></tr>';
+            alerta.className = 'alert alert-warning mb-2 py-2 small';
             alerta.textContent = e.message || 'No se pudo cargar el catálogo.';
         }
     };
+    document.getElementById('tab-cfg-uanataca-btn')?.addEventListener('shown.bs.tab', () => {
+        if (!productosUanCargados) window.cargarProductosUanataca();
+    });
 
     window.guardarMapeoUanataca = async function () {
         const btn = document.getElementById('btnGuardarMapeoUanataca');
