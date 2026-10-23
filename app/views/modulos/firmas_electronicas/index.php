@@ -388,12 +388,17 @@ $to      = $total > 0 ? min($page * $perPage, $total) : 0;
                             </button>
                         </li>
                         <li class="nav-item">
+                            <button class="nav-link fw-medium py-1" id="tab-cfg-avisos-btn" data-bs-toggle="tab" data-bs-target="#tab-cfg-avisos" type="button">
+                                <i class="bi bi-bell me-1"></i>Avisos
+                            </button>
+                        </li>
+                        <li class="nav-item">
                             <button class="nav-link fw-medium py-1" id="tab-cfg-vigencia-btn" data-bs-toggle="tab" data-bs-target="#tab-cfg-vigencia" type="button">
                                 <i class="bi bi-calendar-check me-1"></i>Vigencia
                             </button>
                         </li>
                     </ul>
-                    <?= \App\Helpers\PreferenciasHelper::renderDropdownPestanas(['tab-cfg-vigencia-btn' => 'Vigencia'], \App\Helpers\PreferenciasHelper::getPreferenciasVista('firmas_electronicas'), 'firmas_electronicas') ?>
+                    <?= \App\Helpers\PreferenciasHelper::renderDropdownPestanas(['tab-cfg-avisos-btn' => 'Avisos', 'tab-cfg-vigencia-btn' => 'Vigencia'], \App\Helpers\PreferenciasHelper::getPreferenciasVista('firmas_electronicas'), 'firmas_electronicas') ?>
                 </div>
                 <div class="tab-content">
                 <div class="tab-pane fade show active" id="tab-cfg-general" role="tabpanel">
@@ -446,24 +451,6 @@ $to      = $total > 0 ? min($page * $perPage, $total) : 0;
                         <div class="form-text small">Cualquier persona con este enlace puede iniciar una solicitud (máximo 5 por hora desde la misma conexión).</div>
                     </div>
 
-                    <!-- Avisos de vencimiento al cliente -->
-                    <div class="col-12 mt-3 pt-2 border-top">
-                        <div class="form-check form-switch">
-                            <input class="form-check-input" type="checkbox" name="avisos_vencimiento_activo" id="cfgAvisos" value="1" <?= !empty($cfgM['avisos_vencimiento_activo']) ? 'checked' : '' ?>>
-                            <label class="form-check-label small fw-bold" for="cfgAvisos">Avisar al cliente que su firma va a vencer</label>
-                        </div>
-                        <div class="form-text small mb-2">Días antes del vencimiento, separados por coma (0 = el mismo día). Cada aviso lleva un enlace para renovar con sus datos ya llenos.</div>
-                    </div>
-                    <div class="col-sm-6">
-                        <label class="form-label small fw-bold text-muted mb-1"><i class="bi bi-envelope me-1"></i>Por correo</label>
-                        <input type="text" class="form-control form-control-sm" name="avisos_dias_correo" value="<?= htmlspecialchars($cfgM['avisos_dias_correo'] ?? '30,15,5,0') ?>" placeholder="30,15,5,0">
-                    </div>
-                    <div class="col-sm-6">
-                        <label class="form-label small fw-bold text-muted mb-1"><i class="bi bi-whatsapp me-1"></i>Por WhatsApp</label>
-                        <input type="text" class="form-control form-control-sm" name="avisos_dias_whatsapp" value="<?= htmlspecialchars($cfgM['avisos_dias_whatsapp'] ?? '30,5,0') ?>" placeholder="30,5,0">
-                        <div class="form-text small">Requiere la plantilla <code>renovacion_firma_electronica</code> aprobada en Meta.</div>
-                    </div>
-
                     <!-- API de Uanataca (Precompra) -->
                     <div class="col-12 mt-3 pt-2 border-top">
                         <div class="form-check form-switch">
@@ -505,6 +492,29 @@ $to      = $total > 0 ? min($page * $perPage, $total) : 0;
                     </div>
                 </div>
                 </div><!-- /tab-cfg-general -->
+
+                <!-- Avisos de vencimiento al cliente -->
+                <div class="tab-pane fade" id="tab-cfg-avisos" role="tabpanel">
+                <div class="row g-2">
+                    <div class="col-12">
+                        <div class="form-check form-switch">
+                            <input class="form-check-input" type="checkbox" name="avisos_vencimiento_activo" id="cfgAvisos" value="1" <?= !empty($cfgM['avisos_vencimiento_activo']) ? 'checked' : '' ?>>
+                            <label class="form-check-label small fw-bold" for="cfgAvisos">Avisar al cliente que su firma va a vencer</label>
+                        </div>
+                        <div class="form-text small mb-2">Días antes del vencimiento, separados por coma (0 = el mismo día). Cada aviso lleva un enlace para renovar con sus datos ya llenos.</div>
+                    </div>
+                    <div class="col-sm-6">
+                        <label class="form-label small fw-bold text-muted mb-1"><i class="bi bi-envelope me-1"></i>Por correo</label>
+                        <input type="text" class="form-control form-control-sm" name="avisos_dias_correo" value="<?= htmlspecialchars($cfgM['avisos_dias_correo'] ?? '30,15,5,0') ?>" placeholder="30,15,5,0">
+                    </div>
+                    <div class="col-sm-6">
+                        <label class="form-label small fw-bold text-muted mb-1"><i class="bi bi-whatsapp me-1"></i>Por WhatsApp</label>
+                        <input type="text" class="form-control form-control-sm" name="avisos_dias_whatsapp" value="<?= htmlspecialchars($cfgM['avisos_dias_whatsapp'] ?? '30,5,0') ?>" placeholder="30,5,0">
+                        <div class="form-text small">Requiere la plantilla <code>renovacion_firma_electronica</code> aprobada en Meta.</div>
+                    </div>
+
+                </div>
+                </div><!-- /tab-cfg-avisos -->
 
                 <!-- Vigencia de cada tipo de firma (para la fecha de vencimiento) -->
                 <div class="tab-pane fade" id="tab-cfg-vigencia" role="tabpanel">

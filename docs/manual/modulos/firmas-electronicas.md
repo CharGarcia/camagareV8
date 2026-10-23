@@ -104,12 +104,12 @@ motivo por correo, corrige desde su enlace y la reenvía.
 
 ## Configuración
 
-Botón del **engranaje**, junto a los botones de PDF y Excel (requiere permiso de modificar). La pestaña **General** reúne todo salvo la vigencia, que está en la pestaña **Vigencia**; un solo **Guardar** guarda ambas:
+Botón del **engranaje**, junto a los botones de PDF y Excel (requiere permiso de modificar). Tiene tres pestañas: **General**, **Avisos** (avisos de vencimiento al cliente) y **Vigencia**; un solo **Guardar** guarda las tres:
 
 | Campo | Qué significa |
 |-------|---------------|
 | Vigencia de cada firma (pestaña **Vigencia**) | Cuánto dura cada tipo de firma. Vacío = se toma del nombre del producto ("1 año", "2 años", "30 días", "6 meses"); úselo cuando el nombre no la diga o sea distinta. |
-| Avisos de vencimiento | Encendidos o apagados (apagados de inicio) y los días antes del vencimiento en que se avisa por correo (30,15,5,0) y por WhatsApp (30,5,0). 0 = el mismo día. |
+| Avisos de vencimiento (pestaña **Avisos**) | Encendidos o apagados (apagados de inicio) y los días antes del vencimiento en que se avisa por correo (30,15,5,0) y por WhatsApp (30,5,0). 0 = el mismo día. |
 | Serie de facturación | Establecimiento y punto con que se facturan las firmas. Sin elegir, la primera serie activa. El IVA sigue la configuración de facturación de esa serie. |
 | Usuario responsable | Dueño de las solicitudes que llegan por el enlace fijo y de sus facturas. |
 | Pago con tarjeta / por transferencia | Qué formas de pago ve el cliente. Al menos una. |
@@ -133,7 +133,7 @@ Esta fecha es la que usan los avisos de vencimiento.
 
 ## Avisos de vencimiento al cliente
 
-Con los avisos encendidos (engranaje), el sistema recuerda al titular que su
+Con los avisos encendidos (engranaje, pestaña **Avisos**), el sistema recuerda al titular que su
 firma va a vencer, para que la renueve a tiempo con usted.
 
 - **Cuándo**: por defecto, por correo 30, 15 y 5 días antes y el mismo día; por
