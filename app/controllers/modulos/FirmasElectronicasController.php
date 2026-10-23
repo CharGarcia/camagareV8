@@ -601,6 +601,15 @@ class FirmasElectronicasController extends BaseModuloController
                 'uanataca_registrada_at' => $fmt($f['uanataca_registrada_at']),
                 'observacion_cliente' => $f['observacion_cliente'],
                 'url_portal'          => $d['url_portal'],
+                'fecha_caducidad'     => !empty($f['fecha_caducidad']) ? date('d-m-Y', strtotime($f['fecha_caducidad'])) : null,
+                'id_firma_renovacion' => $f['id_firma_renovacion'] ?? null,
+                'avisos'              => array_map(fn($a) => [
+                    'canal' => $a['canal'], 'manual' => in_array($a['manual'], [true, 't', 1, '1'], true),
+                    'enviado' => in_array($a['enviado'], [true, 't', 1, '1'], true), 'dias' => (int) $a['dias'],
+                    'destino' => $a['destino'], 'error' => $a['error'], 'fecha' => $fmt($a['created_at']),
+                ], $this->service->getAvisosVencimiento((int) $f['id'], (int) $_SESSION['id_empresa'])),
+                // Caducidad si se emitiera hoy (vigencia del tipo de firma): valor inicial de "Marcar emitida".
+                'caducidad_sugerida'  => $this->service->caducidadEstimada((int) ($f['id_producto'] ?? 0), (int) $_SESSION['id_empresa']),
                 'uanataca_api'        => $this->service->getConfigModulo((int) $_SESSION['id_empresa'])['uanataca_activo'],
                 'uanataca_uuid'       => $f['uanataca_uuid'],
                 'uanataca_estado'     => $f['uanataca_estado'],
@@ -745,6 +754,14 @@ class FirmasElectronicasController extends BaseModuloController
         });
     }
 
+    public function avisoVencimientoAjax(): void
+    {
+        $this->requireActualizar();
+        $this->responderJson(fn() => ['msg' => $this->service->avisoVencimientoManual(
+            (int) ($_POST['id'] ?? 0), (int) $_SESSION['id_empresa'], (int) $_SESSION['id_usuario']
+        )]);
+    }
+
     public function guardarConfigAjax(): void
     {
         $this->requireActualizar();
@@ -762,7 +779,13 @@ class FirmasElectronicasController extends BaseModuloController
                 'uanataca_clave'            => (string) ($_POST['uanataca_clave'] ?? ''),
                 'uanataca_envio_automatico' => !empty($_POST['uanataca_envio_automatico']),
                 'uanataca_exigir_correo'    => !empty($_POST['uanataca_exigir_correo']),
+                'avisos_vencimiento_activo' => !empty($_POST['avisos_vencimiento_activo']),
+                'avisos_dias_correo'        => (string) ($_POST['avisos_dias_correo'] ?? ''),
+                'avisos_dias_whatsapp'      => (string) ($_POST['avisos_dias_whatsapp'] ?? ''),
             ], !empty($_POST['regenerar_enlace']));
+            if (isset($_POST['vig']) && is_array($_POST['vig'])) {
+                $this->service->guardarVigencias((int) $_SESSION['id_empresa'], (int) $_SESSION['id_usuario'], $_POST['vig']);
+            }
             return ['msg' => 'Configuración guardada.', 'url_enlace_fijo' => FirmaElectronicaService::urlEnlaceFijo($cfg['enlace_fijo_codigo'])];
         });
     }

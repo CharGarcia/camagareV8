@@ -1878,10 +1878,6 @@ class ReporteInventarioRepository extends BaseRepository
     public function getConsignacionDetalleLineas(int $idEmpresa, int $idConsignacion, array $filtrosLinea = []): array
     {
         $filtros = array_intersect_key($filtrosLinea, array_flip(self::FILTROS_LINEA_CONSIGNACION));
-        // Las bodegas denegadas no son un filtro del formulario, así que no están en
-        // FILTROS_LINEA_CONSIGNACION y hay que pasarlas aparte: el modal no puede mostrar
-        // líneas de una bodega que el listado ya le oculta, ni con "Ver todas las líneas".
-        $filtros['bodegas_denegadas'] = $filtrosLinea['bodegas_denegadas'] ?? [];
         list($where, $params) = $this->buildWhereConsignaciones($idEmpresa, $filtros);
         $where .= " AND cv.id = :id_consignacion";
         $params[':id_consignacion'] = $idConsignacion;
@@ -2049,34 +2045,6 @@ class ReporteInventarioRepository extends BaseRepository
             'clientes_con_saldo'     => (int) ($row['clientes_con_saldo'] ?? 0),
             'consignaciones_activas' => (int) ($row['consignaciones_activas'] ?? 0),
         ];
-    }
-
-    /**
-     * ¿Queda alguna línea de esta consignación en una bodega que el usuario sí puede ver?
-     * Es el guard de lo que se sirve por id (el PDF de estado y los documentos de una
-     * línea): sin esto, escribiendo el id en la URL se llegaba al documento completo que
-     * el listado y el modal ya no muestran.
-     */
-    public function consignacionVisible(int $idEmpresa, int $idConsignacion, array $bodegasDenegadas): bool
-    {
-        return $this->existeLineaVisible($idEmpresa, 'cvd.id_consignacion = :id', $idConsignacion, $bodegasDenegadas);
-    }
-
-    /** Igual que consignacionVisible(), pero para UNA línea concreta del documento. */
-    public function lineaConsignacionVisible(int $idEmpresa, int $idDetalle, array $bodegasDenegadas): bool
-    {
-        return $this->existeLineaVisible($idEmpresa, 'cvd.id = :id', $idDetalle, $bodegasDenegadas);
-    }
-
-    private function existeLineaVisible(int $idEmpresa, string $condicion, int $id, array $bodegasDenegadas): bool
-    {
-        $where = "cvd.id_empresa = :id_empresa AND cvd.eliminado = false AND {$condicion}"
-               . $this->excluirBodegasDenegadas(['bodegas_denegadas' => $bodegasDenegadas], 'cvd.id_bodega');
-
-        $st = $this->db->prepare("SELECT EXISTS (SELECT 1 FROM consignaciones_ventas_detalles cvd WHERE {$where})");
-        $st->execute([':id_empresa' => $idEmpresa, ':id' => $id]);
-
-        return (bool) $st->fetchColumn();
     }
 
     // ════════════════════════════════════════════════════════════════════

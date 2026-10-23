@@ -535,7 +535,7 @@ $riSubtitulo = count($riNombres) > 1
                                 <label class="form-label small fw-bold mb-1 d-block text-muted text-uppercase" style="font-size:.65rem;">Bodega</label>
                                 <select id="ri-cv-bodega" class="form-select form-select-sm shadow-none border" style="width:140px;">
                                     <option value="">Todas</option>
-                                    <?php foreach (($bodegas ?? []) as $b): ?><option value="<?= (int) $b['id'] ?>"><?= htmlspecialchars($b['nombre']) ?></option><?php endforeach; ?>
+                                    <?php foreach (($bodegasConsignaciones ?? $bodegas ?? []) as $b): ?><option value="<?= (int) $b['id'] ?>"><?= htmlspecialchars($b['nombre']) ?></option><?php endforeach; ?>
                                 </select>
                             </div>
                             <div>

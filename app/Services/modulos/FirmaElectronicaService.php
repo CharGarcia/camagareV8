@@ -253,6 +253,7 @@ class FirmaElectronicaService
     public function getTiposFirma(int $idEmpresa): array
     {
         $cfg   = $this->getConfigModulo($idEmpresa);
+        $ajustes = $this->repository->getVigencias($idEmpresa);
         $tipos = [];
         foreach ($this->repository->getTiposFirma($idEmpresa) as $t) {
             try {
@@ -261,9 +262,66 @@ class FirmaElectronicaService
             } catch (\Throwable) {
                 // Producto sin datos completos: se muestra con el PVP del catálogo.
             }
+            $deducida = FirmaElectronicaRules::vigenciaDesdeNombre((string) $t['nombre']);
+            $vig = $ajustes[(int) $t['id']] ?? $deducida;
+            $t['vigencia_cantidad'] = $vig['cantidad'] ?? null;
+            $t['vigencia_unidad']   = $vig['unidad'] ?? null;
+            $t['vigencia_origen']   = isset($ajustes[(int) $t['id']]) ? 'ajuste' : ($deducida ? 'nombre' : null);
+            $t['vigencia_deducida'] = $deducida;
             $tipos[] = $t;
         }
         return $tipos;
+    }
+
+    /** Vigencia del producto: el ajuste guardado o, si no hay, la que dice su nombre. */
+    public function vigenciaProducto(int $idProducto, int $idEmpresa): ?array
+    {
+        $ajuste = $this->repository->getVigencias($idEmpresa)[$idProducto] ?? null;
+        if ($ajuste) {
+            return $ajuste;
+        }
+        $prod = $this->repository->getProductoFacturable($idProducto, $idEmpresa);
+        return $prod ? FirmaElectronicaRules::vigenciaDesdeNombre((string) $prod['nombre']) : null;
+    }
+
+    /** Fecha de caducidad (Y-m-d) contando la vigencia desde $desde; null si no se conoce la vigencia. */
+    public function caducidadEstimada(int $idProducto, int $idEmpresa, string $desde = 'today'): ?string
+    {
+        $vig = $idProducto > 0 ? $this->vigenciaProducto($idProducto, $idEmpresa) : null;
+        return $vig ? FirmaElectronicaRules::sumarVigencia($desde, $vig['cantidad'], $vig['unidad']) : null;
+    }
+
+    /**
+     * Ajuste de vigencia por producto desde la configuración.
+     * @param array<int, array{cantidad?:mixed, unidad?:string}> $vigencias  cantidad vacía = usar la del nombre
+     */
+    public function guardarVigencias(int $idEmpresa, int $idUsuario, array $vigencias): void
+    {
+        $propios = array_map(static fn($t) => (int) $t['id'], $this->repository->getTiposFirma($idEmpresa));
+        $antes   = $this->repository->getVigencias($idEmpresa);
+        $this->repository->beginTransaction();
+        try {
+            foreach ($vigencias as $idProducto => $v) {
+                $idProducto = (int) $idProducto;
+                if (!in_array($idProducto, $propios, true)) {
+                    continue;
+                }
+                $cant   = trim((string) ($v['cantidad'] ?? ''));
+                $unidad = (string) ($v['unidad'] ?? 'anios');
+                if ($cant !== '' && (!ctype_digit($cant) || (int) $cant < 1 || (int) $cant > 3650)) {
+                    throw new Exception('La vigencia debe ser un número entero mayor a cero.');
+                }
+                if (!isset(FirmaElectronicaRules::UNIDADES_VIGENCIA[$unidad])) {
+                    throw new Exception('Unidad de vigencia no válida.');
+                }
+                $this->repository->guardarVigencia($idEmpresa, $idProducto, $cant === '' ? null : (int) $cant, $unidad, $idUsuario);
+            }
+            $this->logService->registrar($idUsuario, $idEmpresa, 'vigencias_firma', 'firmas_productos_vigencia', null, $antes, $vigencias);
+            $this->repository->commit();
+        } catch (\Throwable $e) {
+            $this->repository->rollBack();
+            throw $e;
+        }
     }
 
     // ═════════════════════════════════════════════════════════════════════
@@ -289,6 +347,9 @@ class FirmaElectronicaService
             'uanataca_tiene_clave'      => !empty($cfg['uanataca_clave_cifrada']),
             'uanataca_envio_automatico' => $bool($cfg['uanataca_envio_automatico'] ?? null, false),
             'uanataca_exigir_correo'    => $bool($cfg['uanataca_exigir_correo'] ?? null, true),
+            'avisos_vencimiento_activo' => $bool($cfg['avisos_vencimiento_activo'] ?? null, false),
+            'avisos_dias_correo'        => (string) ($cfg['avisos_dias_correo'] ?? '30,15,5,0'),
+            'avisos_dias_whatsapp'      => (string) ($cfg['avisos_dias_whatsapp'] ?? '30,5,0'),
         ];
     }
 
@@ -324,7 +385,13 @@ class FirmaElectronicaService
             'uanataca_usuario'          => trim((string) ($d['uanataca_usuario'] ?? '')),
             'uanataca_envio_automatico' => !empty($d['uanataca_envio_automatico']),
             'uanataca_exigir_correo'    => !empty($d['uanataca_exigir_correo']),
+            'avisos_vencimiento_activo' => array_key_exists('avisos_vencimiento_activo', $d) ? !empty($d['avisos_vencimiento_activo']) : $antes['avisos_vencimiento_activo'],
+            'avisos_dias_correo'        => array_key_exists('avisos_dias_correo', $d) ? self::normalizarDiasAviso((string) $d['avisos_dias_correo']) : $antes['avisos_dias_correo'],
+            'avisos_dias_whatsapp'      => array_key_exists('avisos_dias_whatsapp', $d) ? self::normalizarDiasAviso((string) $d['avisos_dias_whatsapp'], true) : $antes['avisos_dias_whatsapp'],
         ];
+        if ($nuevo['avisos_vencimiento_activo'] && $nuevo['avisos_dias_correo'] === '' && $nuevo['avisos_dias_whatsapp'] === '') {
+            throw new Exception('Indique en qué días antes del vencimiento se avisa al cliente (ej. 30,15,5,0).');
+        }
         if ($nuevo['uanataca_activo'] && ($nuevo['uanataca_usuario'] === ''
             || (($d['uanataca_clave'] ?? '') === '' && !$antes['uanataca_tiene_clave']))) {
             throw new Exception('Para activar la API de Uanataca ingrese el usuario y la clave que le entregó Uanataca.');
@@ -992,7 +1059,10 @@ class FirmaElectronicaService
             $nuevoEstado = in_array((string) $firma['estado'], ['borrador', 'pendiente'], true)
                 ? ($firma['estado'] === 'pendiente' ? 'por_registrar' : 'borrador')
                 : (string) $firma['estado'];
-            $this->repository->actualizarTramite($idFirma, $idEmpresa, [
+            $estimada = empty($firma['fecha_caducidad'])
+                ? $this->caducidadEstimada((int) $firma['id_producto'], $idEmpresa)
+                : null;
+            $this->repository->actualizarTramite($idFirma, $idEmpresa, ($estimada ? ['fecha_caducidad' => $estimada] : []) + [
                 'estado_pago' => 'confirmado', 'tipo_pago' => $tipoPago, 'estado' => $nuevoEstado,
                 'id_factura' => $idFactura, 'id_ingreso' => $idIngreso, 'pago_motivo_rechazo' => null,
                 'pago_revisado_by' => $tipoPago === 'payphone' ? null : $idUsuario, 'pago_revisado_at' => date('Y-m-d H:i:s'),
@@ -1277,6 +1347,10 @@ class FirmaElectronicaService
                     if (preg_match('/^(\d{2})-(\d{2})-(\d{4})$/', $cad, $m)) {
                         $cad = "{$m[3]}-{$m[2]}-{$m[1]}";
                     }
+                    if ($cad === '') {
+                        // La vigencia corre desde la emisión (hoy).
+                        $cad = (string) $this->caducidadEstimada((int) $firma['id_producto'], $idEmpresa);
+                    }
                     if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $cad) || strtotime($cad) <= time()) {
                         throw new Exception('Indique la fecha de caducidad de la firma emitida (futura).');
                     }
@@ -1365,6 +1439,282 @@ class FirmaElectronicaService
         }
     }
 
+    // ═════════════════════════════════════════════════════════════════════
+    // AVISOS DE VENCIMIENTO AL CLIENTE
+    // ═════════════════════════════════════════════════════════════════════
+
+    private const PLANTILLA_VENCIMIENTO = 'renovacion_firma_electronica';
+
+    /** "30, 15,5,0,x" → "30,15,5,0" (enteros 0-365, sin repetir, de mayor a menor). */
+    public static function normalizarDiasAviso(string $lista, bool $permitirVacio = false): string
+    {
+        $dias = [];
+        foreach (preg_split('/[\s,;]+/', trim($lista)) as $d) {
+            if ($d === '') {
+                continue;
+            }
+            if (!ctype_digit($d) || (int) $d > 365) {
+                throw new Exception('Los días de aviso deben ser números de 0 a 365 separados por coma (ej. 30,15,5,0).');
+            }
+            $dias[(int) $d] = (int) $d;
+        }
+        if (!$dias && !$permitirVacio) {
+            return '';
+        }
+        rsort($dias);
+        return implode(',', $dias);
+    }
+
+    /**
+     * Etapa de aviso que corresponde a los días que faltan: el menor umbral que todavía
+     * los cubre. Con 30,15,5,0 y 12 días restantes → 15. Así un día sin cron no manda
+     * avisos atrasados: solo el de la etapa actual.
+     */
+    public static function etapaAviso(int $restantes, string $lista): ?int
+    {
+        $dias = array_map('intval', array_filter(explode(',', $lista), 'strlen'));
+        sort($dias);
+        foreach ($dias as $t) {
+            if ($restantes <= $t) {
+                return $t;
+            }
+        }
+        return null;
+    }
+
+    /** Cron (una vez al día): avisos de las firmas por vencer de todas las empresas con avisos activos. */
+    public function procesarAvisosVencimiento(): array
+    {
+        $res = ['correos' => 0, 'whatsapp' => 0, 'fallidos' => 0];
+        foreach ($this->repository->getEmpresasConAvisos() as $cfg) {
+            $idEmpresa = (int) $cfg['id_empresa'];
+            $listaCorreo = (string) $cfg['avisos_dias_correo'];
+            $listaWa     = (string) $cfg['avisos_dias_whatsapp'];
+            $max = max(array_map('intval', array_filter(explode(',', $listaCorreo . ',' . $listaWa), 'strlen')) ?: [0]);
+            foreach ($this->repository->getFirmasPorVencer($idEmpresa, $max) as $firma) {
+                if (in_array($firma['renovada'], [true, 't', 1, '1'], true)) {
+                    continue;
+                }
+                $restantes = (int) $firma['dias_restantes'];
+                $canales = [];
+                if (($e = self::etapaAviso($restantes, $listaCorreo)) !== null) {
+                    $canales['correo'] = $e;
+                }
+                if (($e = self::etapaAviso($restantes, $listaWa)) !== null) {
+                    $canales['whatsapp'] = $e;
+                }
+                if (!$canales) {
+                    continue;
+                }
+                try {
+                    foreach ($this->enviarAvisoVencimiento($firma, $canales, false, null) as $canal => $ok) {
+                        $ok === true ? $res[$canal === 'correo' ? 'correos' : 'whatsapp']++ : ($ok === false ? $res['fallidos']++ : null);
+                    }
+                } catch (\Throwable $e) {
+                    $res['fallidos']++;
+                    error_log('[Firmas] Aviso de vencimiento firma #' . $firma['id'] . ': ' . $e->getMessage());
+                }
+            }
+        }
+        return $res;
+    }
+
+    /** "Enviar aviso ahora" desde la ficha: correo y WhatsApp, sin importar la etapa. */
+    public function avisoVencimientoManual(int $idFirma, int $idEmpresa, int $idUsuario): string
+    {
+        $firma = $this->repository->findById($idFirma, $idEmpresa);
+        if (!$firma || $firma['estado'] !== 'emitida' || empty($firma['fecha_caducidad'])) {
+            throw new Exception('Solo se avisa el vencimiento de una firma emitida con fecha de caducidad.');
+        }
+        $restantes = (int) floor((strtotime((string) $firma['fecha_caducidad']) - strtotime('today')) / 86400);
+        $r = $this->enviarAvisoVencimiento($firma, ['correo' => $restantes, 'whatsapp' => $restantes], true, $idUsuario);
+        $partes = [];
+        $partes[] = $r['correo'] === true ? 'Correo enviado.' : ($r['correo'] === false ? 'El correo no se pudo enviar.' : 'Sin correo válido.');
+        $partes[] = $r['whatsapp'] === true ? 'WhatsApp enviado.' : ($r['whatsapp'] === false ? 'El WhatsApp no se pudo enviar.' : 'WhatsApp no disponible (plantilla no aprobada o sin celular).');
+        if ($r['correo'] !== true && $r['whatsapp'] !== true) {
+            throw new Exception(implode(' ', $partes));
+        }
+        return implode(' ', $partes);
+    }
+
+    /**
+     * Envía el aviso por los canales indicados (canal => etapa en días).
+     * @return array<string, ?bool> canal => true enviado | false falló | null no aplica / ya enviado
+     */
+    private function enviarAvisoVencimiento(array $firma, array $canales, bool $manual, ?int $idUsuario): array
+    {
+        $idEmpresa = (int) $firma['id_empresa'];
+        $idFirma   = (int) $firma['id'];
+        $caducidad = date('Y-m-d', strtotime((string) $firma['fecha_caducidad']));
+        $restantes = (int) floor((strtotime($caducidad) - strtotime('today')) / 86400);
+        $fechaTxt  = date('d-m-Y', strtotime($caducidad));
+        $nombre    = trim(($firma['nombres'] ?? '') . ' ' . ($firma['apellidos'] ?? ''));
+        $empresa   = (new \App\models\Empresa())->getPorId($idEmpresa) ?? [];
+        $nomEmp    = (string) (($empresa['nombre_comercial'] ?? '') ?: ($empresa['nombre'] ?? ''));
+        $out = ['correo' => null, 'whatsapp' => null];
+        $url = null;
+        $urlRenovacion = function () use (&$url, $firma, $idUsuario): string {
+            return $url ??= $this->enlaceRenovacion($firma, $idUsuario);
+        };
+
+        // Correo
+        $correo = trim((string) ($firma['correo'] ?? ''));
+        if (isset($canales['correo']) && filter_var($correo, FILTER_VALIDATE_EMAIL)
+            && ($idAviso = $this->repository->reservarAviso($idEmpresa, $idFirma, $caducidad, (int) $canales['correo'], 'correo', $manual, $correo, $idUsuario))) {
+            try {
+                $cuando = $restantes <= 0 ? '<b>vence hoy</b>' : '<b>vence el ' . $fechaTxt . '</b>, en <b>' . $restantes . ' día' . ($restantes === 1 ? '' : 's') . '</b>';
+                $cuerpo = '<p>Hola ' . self::h($nombre) . ':</p>'
+                    . '<p>Te recordamos que tu <b>firma electrónica</b>' . (!empty($firma['nombre_producto']) ? ' (' . self::h((string) $firma['nombre_producto']) . ')' : '') . ' ' . $cuando . '.</p>'
+                    . '<p>Cuando vence, ya no podrás firmar documentos ni emitir facturas electrónicas. La renovación toma unos días, por eso te recomendamos hacerla con anticipación.</p>'
+                    . '<p style="text-align:center;margin:24px 0;"><a href="' . self::h($urlRenovacion()) . '" '
+                    . 'style="background:#16a34a;color:#fff;padding:12px 22px;border-radius:8px;text-decoration:none;font-weight:600;">Renovar mi firma</a></p>'
+                    . '<p>Saludos cordiales,<br>' . self::h($nomEmp) . '</p>';
+                $asunto = 'Tu firma electrónica vence ' . ($restantes <= 0 ? 'hoy' : 'el ' . $fechaTxt) . ' - ' . $nomEmp;
+                $ok = (new \App\Services\EnvioDocumentosSRIService())->enviarAvisoSimple($idEmpresa, $correo, $nombre, $asunto, $cuerpo, $nomEmp);
+                $this->repository->resultadoAviso($idAviso, $ok, $ok ? null : 'No se pudo enviar el correo.');
+                $out['correo'] = $ok;
+            } catch (\Throwable $e) {
+                $this->repository->resultadoAviso($idAviso, false, $e->getMessage());
+                $out['correo'] = false;
+            }
+        }
+
+        // WhatsApp (solo con la plantilla aprobada: Meta no permite mensajes libres automáticos)
+        $telefono = self::normalizarTelefono((string) ($firma['telefono'] ?? ''));
+        $plantilla = isset($canales['whatsapp']) && $telefono !== '' ? $this->plantillaAprobada($idEmpresa, self::PLANTILLA_VENCIMIENTO) : null;
+        if ($plantilla
+            && ($idAviso = $this->repository->reservarAviso($idEmpresa, $idFirma, $caducidad, (int) $canales['whatsapp'], 'whatsapp', $manual, $telefono, $idUsuario))) {
+            try {
+                // La versión de la plantilla se reconoce por cuántas variables tiene: con 3 va el enlace de renovación.
+                $vars = [$nombre !== '' ? $nombre : 'cliente', $restantes <= 0 ? 'hoy (' . $fechaTxt . ')' : $fechaTxt];
+                if ($plantilla['variables'] >= 3) {
+                    $vars[] = $urlRenovacion();
+                }
+                $params = array_map(static fn($v) => ['type' => 'text', 'text' => (string) $v], $vars);
+                $resp = (new \App\services\WhatsappService())->sendTemplateMessage(
+                    $idEmpresa, $telefono, $plantilla['nombre'], $plantilla['idioma'], [['type' => 'body', 'parameters' => $params]]
+                );
+                $ok = !empty($resp['success']);
+                $this->repository->resultadoAviso($idAviso, $ok, $ok ? null : (string) ($resp['message'] ?? 'Error de WhatsApp.'));
+                $out['whatsapp'] = $ok;
+            } catch (\Throwable $e) {
+                $this->repository->resultadoAviso($idAviso, false, $e->getMessage());
+                $out['whatsapp'] = false;
+            }
+        }
+
+        $enviados = array_keys(array_filter($out, static fn($v) => $v === true));
+        if ($enviados) {
+            $this->repository->crearEvento($idEmpresa, $idFirma, 'aviso_vencimiento',
+                'Aviso de vencimiento enviado' . ($manual ? ' (manual)' : ''),
+                'Por ' . implode(' y ', array_map(static fn($c) => $c === 'correo' ? 'correo' : 'WhatsApp', $enviados))
+                . ($restantes <= 0 ? '; vence hoy.' : "; faltan {$restantes} días."), false, $idUsuario);
+            $this->logService->registrar((int) $idUsuario, $idEmpresa, 'aviso_vencimiento', 'firmas_electronicas', $idFirma, null,
+                ['canales' => $enviados, 'dias' => $restantes, 'manual' => $manual]);
+        }
+        return $out;
+    }
+
+    /** Plantilla aprobada por nombre, con el número de variables de su cuerpo. */
+    private function plantillaAprobada(int $idEmpresa, string $nombre): ?array
+    {
+        try {
+            foreach ((new \App\models\WhatsappPlantilla())->getPlantillasAprobadas($idEmpresa) as $p) {
+                if (($p['nombre'] ?? '') !== $nombre) {
+                    continue;
+                }
+                $vars = 0;
+                foreach (json_decode((string) ($p['componentes'] ?? '[]'), true) ?: [] as $c) {
+                    if (strtoupper((string) ($c['type'] ?? '')) === 'BODY' && preg_match_all('/{{(\d+)}}/', (string) ($c['text'] ?? ''), $m)) {
+                        $vars = count(array_unique($m[1]));
+                    }
+                }
+                return ['nombre' => $p['nombre'], 'idioma' => $p['idioma'], 'variables' => $vars];
+            }
+        } catch (\Throwable $e) {
+            error_log('[Firmas] Plantillas WhatsApp: ' . $e->getMessage());
+        }
+        return null;
+    }
+
+    /**
+     * Enlace personal de renovación: una solicitud nueva con los datos del titular ya
+     * llenos (el cliente vuelve a subir sus documentos y paga). Se crea una vez y se
+     * reutiliza en los avisos siguientes mientras siga en curso.
+     */
+    public function enlaceRenovacion(array $firma, ?int $idUsuario = null): string
+    {
+        $idEmpresa = (int) $firma['id_empresa'];
+        $idFirma   = (int) $firma['id'];
+        $db = Database::getConnection();
+        $managed = !$db->inTransaction();
+        if ($managed) {
+            $db->beginTransaction();
+        }
+        try {
+            $this->repository->lockFirma($idFirma);
+            $firma = $this->repository->findById($idFirma, $idEmpresa) ?? $firma;
+            if (!empty($firma['id_firma_renovacion'])) {
+                $ren = $this->repository->findById((int) $firma['id_firma_renovacion'], $idEmpresa);
+                if ($ren && $ren['estado'] !== 'cancelada' && !empty($ren['id_solicitud'])
+                    && ($sol = $this->solRepo->getById((int) $ren['id_solicitud'], $idEmpresa))) {
+                    if ($managed) {
+                        $db->commit();
+                    }
+                    return self::urlPortal((string) $sol['token']);
+                }
+            }
+
+            $owner = (int) ($firma['created_by'] ?? 0) ?: $this->getConfigModulo($idEmpresa)['id_usuario_responsable'];
+            $token = bin2hex(random_bytes(32));
+            $idSol = $this->solRepo->crear([
+                'id_empresa'       => $idEmpresa,
+                'token'            => $token,
+                'correo_destino'   => $firma['correo'] ?? '',
+                'nombre_destino'   => trim(($firma['nombres'] ?? '') . ' ' . ($firma['apellidos'] ?? '')),
+                'telefono_destino' => self::normalizarTelefono((string) ($firma['telefono'] ?? '')),
+                'origen'           => 'renovacion',
+                'expira_at'        => date('Y-m-d H:i:s', strtotime('+60 days')),
+                'created_by'       => $owner ?: null,
+            ]);
+            // Copia de los datos del titular; documentos, pago, factura y trámite empiezan de cero.
+            $copia = array_intersect_key($firma, array_flip([
+                'id_producto', 'nombre_producto', 'tipo_persona', 'con_ruc', 'ruc_empresa', 'nombre_empresa', 'cargo',
+                'tipo_identificacion', 'numero_identificacion', 'codigo_dactilar', 'nombres', 'apellidos', 'fecha_nacimiento',
+                'telefono', 'correo', 'nacionalidad', 'sexo', 'direccion', 'cod_prov', 'cod_ciudad',
+                'apellido_paterno', 'apellido_materno', 'telefono2', 'correo2', 'departamento', 'motivo',
+                'rep_tipo_identificacion', 'rep_identificacion', 'rep_nombres', 'rep_apellidos',
+                'facturacion_mismos_datos', 'facturacion_tipo_id', 'facturacion_num_id', 'facturacion_nombres',
+                'facturacion_direccion', 'facturacion_correo', 'facturacion_telefono',
+            ]));
+            $copia['con_ruc'] = in_array($copia['con_ruc'] ?? false, [true, 't', 1, '1'], true);
+            $copia['facturacion_mismos_datos'] = !in_array($copia['facturacion_mismos_datos'] ?? true, [false, 'f', 0, '0'], true);
+            $idNueva = $this->repository->create($copia + [
+                'id_empresa' => $idEmpresa, 'id_usuario' => $owner ?: null,
+                'estado' => 'borrador', 'estado_pago' => 'pendiente', 'tipo_pago' => null, 'fecha_caducidad' => null, 'observaciones' => null,
+            ]);
+            $this->repository->marcarRenovacion($idNueva, $idFirma, $idSol);
+            $this->solRepo->marcarCompletado($idSol, $idNueva);
+            $this->repository->actualizarTramite($idFirma, $idEmpresa, ['id_firma_renovacion' => $idNueva], $idUsuario);
+            $this->repository->crearEvento($idEmpresa, $idNueva, 'renovacion', 'Renovación de tu firma electrónica',
+                'Revisa tus datos y sube nuevamente tus documentos.', true, $idUsuario);
+            $this->logService->registrar((int) $idUsuario, $idEmpresa, 'crear_renovacion', 'firmas_electronicas', $idNueva, null, ['id_firma_anterior' => $idFirma]);
+            if ($managed) {
+                $db->commit();
+            }
+            return self::urlPortal($token);
+        } catch (\Throwable $e) {
+            if ($managed && $db->inTransaction()) {
+                $db->rollBack();
+            }
+            throw $e;
+        }
+    }
+
+    public function getAvisosVencimiento(int $idFirma, int $idEmpresa): array
+    {
+        return $this->repository->getAvisos($idFirma, $idEmpresa);
+    }
     // ═════════════════════════════════════════════════════════════════════
     // API DE UANATACA (Precompra)
     // ═════════════════════════════════════════════════════════════════════
@@ -1725,7 +2075,8 @@ class FirmaElectronicaService
                     $aviso = ['Tu solicitud de firma necesita una corrección',
                         '<p>La entidad certificadora revisó tu solicitud y pide lo siguiente:</p><p><b>' . nl2br(self::h($nota)) . '</b></p><p>Ingresa a tu enlace para corregir.</p>'];
                 } elseif ($nuevo === 'ISSUED' && $firma['estado'] !== 'emitida') {
-                    $cad = self::fechaApi($r['validTo'] ?? null);
+                    $cad = self::fechaApi($r['validTo'] ?? null)
+                        ?? $this->caducidadEstimada((int) $firma['id_producto'], $idEmpresa, self::fechaApi($r['approvedDate'] ?? null) ?? 'today');
                     $campos += ['estado' => 'emitida', 'emitida_at' => date('Y-m-d H:i:s')] + ($cad ? ['fecha_caducidad' => $cad] : []);
                     $this->repository->crearEvento($idEmpresa, $idFirma, 'emitida', 'Firma electrónica emitida',
                         $cad ? 'Vigente hasta el ' . date('d-m-Y', strtotime($cad)) . '.' : null, true, null);

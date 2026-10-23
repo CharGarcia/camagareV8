@@ -5,8 +5,8 @@ categoria: Ventas
 ruta_modulo: modulos/firmas_electronicas
 tipo: modulo
 visibilidad: admin
-etiquetas: firma electronica, vender firmas, api uanataca, uanacreditos, creditos uanataca, precompra, distribuidor uanataca, miembro de empresa, representante legal, solicitud de firma, tramite de firma, uanataca, enlace para el cliente, formulario de firma, link de firma, whatsapp, pagar firma, payphone, transferencia, comprobante de pago, confirmar correo, factura de la firma, registrar en uanataca, firma emitida, observada, corregir solicitud, enlace fijo, qr de firma, certificado, p12, caducada, por caducar, renovar firma, firma invalida, xades, anf, security data, buscar firma, filtros, firmas por facturar
-version: 2.1
+etiquetas: firma electronica, vender firmas, aviso de vencimiento al cliente, recordatorio de renovacion, renovar firma del cliente, firma por vencer, enlace de renovacion, api uanataca, uanacreditos, creditos uanataca, precompra, distribuidor uanataca, miembro de empresa, representante legal, solicitud de firma, tramite de firma, uanataca, enlace para el cliente, formulario de firma, link de firma, whatsapp, pagar firma, payphone, transferencia, comprobante de pago, confirmar correo, factura de la firma, registrar en uanataca, firma emitida, observada, corregir solicitud, enlace fijo, qr de firma, certificado, p12, caducada, por caducar, renovar firma, firma invalida, xades, anf, security data, buscar firma, filtros, firmas por facturar
+version: 2.3
 orden: 20
 estado: activo
 ---
@@ -108,11 +108,55 @@ Botón del **engranaje**, junto a los botones de PDF y Excel (requiere permiso d
 
 | Campo | Qué significa |
 |-------|---------------|
+| Vigencia de cada firma | Cuánto dura cada tipo de firma. Vacío = se toma del nombre del producto ("1 año", "2 años", "30 días", "6 meses"); úselo cuando el nombre no la diga o sea distinta. |
+| Avisos de vencimiento | Encendidos o apagados (apagados de inicio) y los días antes del vencimiento en que se avisa por correo (30,15,5,0) y por WhatsApp (30,5,0). 0 = el mismo día. |
 | Serie de facturación | Establecimiento y punto con que se facturan las firmas. Sin elegir, la primera serie activa. El IVA sigue la configuración de facturación de esa serie. |
 | Usuario responsable | Dueño de las solicitudes que llegan por el enlace fijo y de sus facturas. |
 | Pago con tarjeta / por transferencia | Qué formas de pago ve el cliente. Al menos una. |
 | Datos para la transferencia | Banco, cuenta y titular que el cliente ve para transferir. |
 | Enlace público fijo | Un enlace permanente (para su web, redes o un QR) donde cualquiera inicia su solicitud. Se puede regenerar; el anterior deja de funcionar. Máximo 5 solicitudes por hora desde una misma conexión. |
+
+## Fecha de caducidad automática
+
+- Al elegir la **validez de la firma** en la ficha, la fecha de caducidad se
+  llena sola: **hoy + la vigencia** de esa firma. Si usted la escribe a mano ya
+  no se cambia, y una firma que ya tenía fecha la conserva.
+- Al confirmarse el pago, si la firma aún no tiene fecha, se pone la estimada.
+- Al **marcar la firma emitida**, la fecha se vuelve a contar **desde ese día**
+  (puede corregirla antes de confirmar). Con la API de Uanataca se usa la
+  vigencia que informa Uanataca; si no la informa, se cuenta desde la fecha de
+  aprobación.
+- Meses y años caen el mismo día del mes o, si ese día no existe, el último
+  (31-01 + 1 mes = 28-02).
+
+Esta fecha es la que usan los avisos de vencimiento.
+
+## Avisos de vencimiento al cliente
+
+Con los avisos encendidos (engranaje), el sistema recuerda al titular que su
+firma va a vencer, para que la renueve a tiempo con usted.
+
+- **Cuándo**: por defecto, por correo 30, 15 y 5 días antes y el mismo día; por
+  WhatsApp 30 y 5 días antes y el mismo día. Se revisa una vez al día desde las
+  08:00.
+- **A quién**: solo firmas **emitidas**, con fecha de caducidad. Si el titular
+  ya renovó (registró otra firma con la misma identificación y la pagó), no se
+  le avisa más.
+- **Una sola vez**: cada aviso (etapa y canal) sale una sola vez, aunque el
+  proceso corra varias veces. Si un día el servidor no lo ejecutó, al siguiente
+  sale el aviso de la etapa que corresponde ese día, no uno atrasado.
+- **Enlace de renovación**: cada aviso lleva un enlace personal que abre el
+  formulario con los datos del cliente ya llenos y el mismo tipo de firma; el
+  cliente vuelve a subir sus documentos y paga. Esa solicitud aparece en el
+  listado como una firma nueva en *Borrador*.
+- **WhatsApp**: necesita la plantilla rápida **Renovación Firma Electrónica**
+  (`renovacion_firma_electronica`) aprobada en Meta. Con la versión de 3
+  variables lleva el enlace; una plantilla aprobada de 2 variables sigue
+  funcionando, sin el enlace. Sin plantilla aprobada, solo sale el correo.
+- **En la ficha**, pestaña **Trámite**: los avisos enviados (o el motivo si no
+  salieron) y el botón **Enviar aviso ahora** para mandarlo a mano.
+- Para ver las firmas por vencer use el filtro **Vigencia → Por vencer** del
+  listado.
 
 ## Envío automático a Uanataca (API Precompra)
 
@@ -328,6 +372,12 @@ archivo, y volver a cargar la firma no lo soluciona.
 
 ## Historial de cambios
 
+- **2.3** — Avisos de vencimiento al cliente por correo y WhatsApp (días
+  configurables, una sola vez por etapa) con enlace personal de renovación con
+  los datos ya llenos; aviso manual desde la pestaña Trámite.
+- **2.2** — La fecha de caducidad se autocompleta con la vigencia de cada firma
+  (deducida del nombre del producto o ajustada en la configuración) y se
+  recalcula al emitir.
 - **2.1** — Integración con la API Precompra de Uanataca: credenciales por
   empresa, enlace de productos, envío de la solicitud con sus documentos
   (automático o con botón), consulta periódica del estado y saldo de

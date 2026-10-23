@@ -164,7 +164,11 @@ class ReporteInventariosController extends BaseModuloController
 
         $prefsVista = \App\Helpers\PreferenciasHelper::getPreferenciasVista(self::RUTA_MODULO);
 
-        $bodegas    = (new BodegaRepository())->getBodegasPermitidas($idUsuario, $idEmpresa, $nivel);
+        $bodegaRepo = new BodegaRepository();
+        $bodegas    = $bodegaRepo->getBodegasPermitidas($idUsuario, $idEmpresa, $nivel);
+        // Consignaciones no se limita por bodega (ver getFiltrosConsignaciones()): su filtro
+        // ofrece todas. Sin bodegas denegadas (lo normal) es la misma lista.
+        $bodegasConsignaciones = $this->bodegasDenegadas() ? $bodegaRepo->getBodegasEmpresa($idEmpresa) : $bodegas;
         $categorias = (new CategoriaRepository())->getCombo($idEmpresa);
         $marcas     = (new MarcaRepository())->getCombo($idEmpresa);
         $vendedores    = (new VendedorRepository())->getVendedoresActivos($idEmpresa);
@@ -187,6 +191,7 @@ class ReporteInventariosController extends BaseModuloController
             'vistaConfig'=> $prefsVista,
             'rutaModulo' => self::RUTA_MODULO,
             'bodegas'    => $bodegas,
+            'bodegasConsignaciones' => $bodegasConsignaciones,
             'categorias' => $categorias,
             'marcas'     => $marcas,
             'vendedores' => $vendedores,
@@ -365,7 +370,9 @@ class ReporteInventariosController extends BaseModuloController
             'fecha_caducidad_desde' => $_REQUEST['fecha_caducidad_desde'] ?? '',
             'fecha_caducidad_hasta' => $_REQUEST['fecha_caducidad_hasta'] ?? '',
             'secuencial'         => trim($_REQUEST['secuencial'] ?? ''),
-            'bodegas_denegadas' => $this->bodegasDenegadas(),
+            // Sin 'bodegas_denegadas' a propósito: la consignación es un documento de venta y
+            // quien tiene esta pestaña la consulta entera (listado, detalle, PDF y Excel),
+            // aunque la emitiera otro usuario desde una bodega a la que él no tiene acceso.
         ];
     }
 
@@ -1186,6 +1193,15 @@ class ReporteInventariosController extends BaseModuloController
                 throw new \InvalidArgumentException('El producto no existe.');
             }
 
+            // La categoría llega por id: debe ser de esta empresa y no estar eliminada.
+            $categoria = null;
+            if ($idCategoria !== null) {
+                $categoria = (new CategoriaRepository())->getDetalleCompleto($idCategoria, $idEmpresa);
+                if (!$categoria) {
+                    throw new \InvalidArgumentException('La categoría no existe.');
+                }
+            }
+
             $productoRepo->actualizarCategoria($idProducto, $idEmpresa, $idCategoria, $idUsuario);
 
             (new \App\Services\LogSistemaService())->registrar(
@@ -1194,11 +1210,7 @@ class ReporteInventariosController extends BaseModuloController
                 ['id_categoria' => $idCategoria]
             );
 
-            $categoriaNombre = 'Sin categoría';
-            if ($idCategoria !== null) {
-                $cat = (new CategoriaRepository())->getDetalleCompleto($idCategoria, $idEmpresa);
-                $categoriaNombre = $cat['nombre'] ?? 'Sin categoría';
-            }
+            $categoriaNombre = $categoria['nombre'] ?? 'Sin categoría';
 
             echo json_encode(['ok' => true, 'categoria_nombre' => $categoriaNombre]);
         } catch (\Throwable $e) {
@@ -1352,9 +1364,6 @@ class ReporteInventariosController extends BaseModuloController
                 )
                 : [];
             $hayFiltros = !empty(array_filter($filtrosLinea, fn($v) => $v !== '' && $v !== null));
-            // Aparte de $hayFiltros: no es un filtro de la búsqueda sino lo que este usuario
-            // puede ver, así que también se aplica con "Ver todas las líneas".
-            $filtrosLinea['bodegas_denegadas'] = $this->bodegasDenegadas();
 
             $lineas = $this->repository->getConsignacionDetalleLineas($idEmpresa, $idConsignacion, $filtrosLinea);
             if (empty($lineas)) {
@@ -1469,13 +1478,6 @@ class ReporteInventariosController extends BaseModuloController
             if ($idDetalle <= 0 || !in_array($tipo, ['retorno', 'factura'], true)) {
                 throw new \InvalidArgumentException('Parámetros no válidos.');
             }
-            // La línea llega por id: si está en una bodega que el usuario no ve, el sub-modal
-            // responde igual que con un id inválido (no se filtra el motivo).
-            $denegadas = $this->bodegasDenegadas();
-            if ($denegadas && !$this->repository->lineaConsignacionVisible($idEmpresa, $idDetalle, $denegadas)) {
-                throw new \InvalidArgumentException('Parámetros no válidos.');
-            }
-
             $rows = $tipo === 'retorno'
                 ? $this->repository->getRetornosDeLineaConsignacion($idEmpresa, $idDetalle)
                 : $this->repository->getFacturasDeLineaConsignacion($idEmpresa, $idDetalle);
@@ -1548,8 +1550,7 @@ class ReporteInventariosController extends BaseModuloController
 
     /**
      * Excel del estado de UNA consignación (botón del modal de detalle): el documento entero,
-     * como el PDF (no reaplica los filtros del listado), sin las líneas de bodegas que el
-     * usuario no ve.
+     * como el PDF (no reaplica los filtros del listado).
      */
     public function consignacionExcel(): void
     {
@@ -1560,9 +1561,7 @@ class ReporteInventariosController extends BaseModuloController
         $idEmpresa      = (int) $_SESSION['id_empresa'];
         $idConsignacion = (int) ($_REQUEST['id'] ?? 0);
         $lineas = $idConsignacion > 0
-            ? $this->repository->getConsignacionDetalleLineas($idEmpresa, $idConsignacion, [
-                'bodegas_denegadas' => $this->bodegasDenegadas(),
-            ])
+            ? $this->repository->getConsignacionDetalleLineas($idEmpresa, $idConsignacion)
             : [];
         if (empty($lineas)) {
             $this->json(['ok' => false, 'error' => 'No se encontró la consignación o no pertenece a esta empresa.'], 404);
@@ -1634,10 +1633,7 @@ class ReporteInventariosController extends BaseModuloController
                 new LogSistemaService()
             );
             $cons = $service->getDetalleCompleto($idConsignacion, $idEmpresa);
-            // Mismo 404 que un documento inexistente: si ninguna de sus líneas está en una
-            // bodega visible para este usuario, el documento no existe para él.
-            $denegadas = $this->bodegasDenegadas();
-            if (!$cons || ($denegadas && !$this->repository->consignacionVisible($idEmpresa, $idConsignacion, $denegadas))) {
+            if (!$cons) {
                 $this->errorDescarga('No se encontró la consignación o no pertenece a esta empresa.', 404);
             }
 
@@ -1682,6 +1678,7 @@ class ReporteInventariosController extends BaseModuloController
      */
     public function comprobacionContableAjax(): void
     {
+        $this->requireLeer();
         $this->requirePestana('auditoria');
         $this->liberarSesion();
         $this->responderComprobacionContable($this->repository->definicionComprobacionContable());

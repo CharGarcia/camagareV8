@@ -389,6 +389,7 @@ class FirmaElectronicaRepository extends BaseRepository
         'correo_confirmacion_token', 'correo_confirmacion_enviado_at', 'correo_confirmado_at',
         'uanataca_referencia', 'uanataca_registrada_at', 'emitida_at', 'observacion_cliente',
         'uanataca_uuid', 'uanataca_estado', 'uanataca_estado_at', 'uanataca_comentarios', 'uanataca_enviada_at', 'uanataca_error',
+        'id_firma_renovacion',
     ];
 
     public function actualizarTramite(int $id, int $idEmpresa, array $campos, ?int $idUsuario): void
@@ -690,6 +691,9 @@ class FirmaElectronicaRepository extends BaseRepository
             ':uclave' => ($d['uanataca_clave'] ?? '') !== '' ? \App\Helpers\CryptoHelper::encriptar($d['uanataca_clave']) : null,
             ':uauto'  => !empty($d['uanataca_envio_automatico']) ? 'true' : 'false',
             ':ucorreo'=> !empty($d['uanataca_exigir_correo']) ? 'true' : 'false',
+            ':avact'  => !empty($d['avisos_vencimiento_activo']) ? 'true' : 'false',
+            ':avcor'  => (string) ($d['avisos_dias_correo'] ?? '30,15,5,0'),
+            ':avwa'   => (string) ($d['avisos_dias_whatsapp'] ?? '30,5,0'),
             ':u'   => $idUsuario,
         ];
         if ($this->getConfig($idEmpresa)) {
@@ -699,19 +703,131 @@ class FirmaElectronicaRepository extends BaseRepository
                         enlace_fijo_codigo = :cod, uanataca_activo = :ua, uanataca_ambiente = :uamb,
                         uanataca_usuario = :uusr, uanataca_clave_cifrada = COALESCE(:uclave, uanataca_clave_cifrada),
                         uanataca_envio_automatico = :uauto, uanataca_exigir_correo = :ucorreo,
+                        avisos_vencimiento_activo = :avact, avisos_dias_correo = :avcor, avisos_dias_whatsapp = :avwa,
                         updated_by = :u, updated_at = CURRENT_TIMESTAMP
                     WHERE id_empresa = :ie AND eliminado = false";
         } else {
             $sql = "INSERT INTO firmas_electronicas_config
                         (id_empresa, id_punto_emision, id_usuario_responsable, payphone_activo, transferencia_activa,
                          datos_transferencia, enlace_fijo_activo, enlace_fijo_codigo, uanataca_activo, uanataca_ambiente,
-                         uanataca_usuario, uanataca_clave_cifrada, uanataca_envio_automatico, uanataca_exigir_correo, created_by)
-                    VALUES (:ie, :pe, :ur, :pp, :tr, :dt, :ef, :cod, :ua, :uamb, :uusr, :uclave, :uauto, :ucorreo, :u)";
+                         uanataca_usuario, uanataca_clave_cifrada, uanataca_envio_automatico, uanataca_exigir_correo,
+                         avisos_vencimiento_activo, avisos_dias_correo, avisos_dias_whatsapp, created_by)
+                    VALUES (:ie, :pe, :ur, :pp, :tr, :dt, :ef, :cod, :ua, :uamb, :uusr, :uclave, :uauto, :ucorreo, :avact, :avcor, :avwa, :u)";
         }
         $this->db->prepare($sql)->execute($params);
     }
 
+    // ── Avisos de vencimiento ─────────────────────────────────
+
+    /** Empresas activas con los avisos de vencimiento encendidos. */
+    public function getEmpresasConAvisos(): array
+    {
+        return $this->db->query(
+            "SELECT c.id_empresa, c.avisos_dias_correo, c.avisos_dias_whatsapp
+             FROM firmas_electronicas_config c
+             JOIN empresas e ON e.id = c.id_empresa AND e.estado = '1' AND e.eliminado = false
+             WHERE c.eliminado = false AND c.avisos_vencimiento_activo = true"
+        )->fetchAll(PDO::FETCH_ASSOC);
+    }
+
+    /**
+     * Firmas emitidas que vencen entre hoy y hoy + $maxDias, con los días que faltan y
+     * si el titular ya renovó (otra firma suya, posterior y pagada).
+     */
+    public function getFirmasPorVencer(int $idEmpresa, int $maxDias): array
+    {
+        $st = $this->db->prepare(
+            "SELECT f.*, (f.fecha_caducidad - CURRENT_DATE) AS dias_restantes,
+                    EXISTS (
+                        SELECT 1 FROM {$this->table} r
+                        WHERE r.id_empresa = f.id_empresa AND r.eliminado = false AND r.id <> f.id
+                          AND r.numero_identificacion = f.numero_identificacion
+                          AND r.estado_pago = 'confirmado' AND r.created_at > f.created_at
+                    ) AS renovada
+             FROM {$this->table} f
+             WHERE f.id_empresa = :ie AND f.eliminado = false AND f.estado = 'emitida'
+               AND f.fecha_caducidad BETWEEN CURRENT_DATE AND CURRENT_DATE + CAST(:dias AS INTEGER)
+             ORDER BY f.fecha_caducidad, f.id"
+        );
+        $st->execute([':ie' => $idEmpresa, ':dias' => $maxDias]);
+        return $st->fetchAll(PDO::FETCH_ASSOC);
+    }
+
+    /**
+     * Reserva un aviso antes de enviarlo. Automático: si ya existe para esa firma,
+     * vencimiento, etapa y canal, devuelve null (otro proceso o un día anterior lo envió).
+     */
+    public function reservarAviso(int $idEmpresa, int $idFirma, string $caducidad, int $dias, string $canal, bool $manual, string $destino, ?int $idUsuario): ?int
+    {
+        $st = $this->db->prepare(
+            "INSERT INTO firmas_avisos_vencimiento (id_empresa, id_firma, fecha_caducidad, dias, canal, manual, destino, created_by)
+             VALUES (:ie, :f, :fc, :d, :c, :m, :dest, :u)
+             ON CONFLICT (id_firma, fecha_caducidad, dias, canal) WHERE manual = false AND eliminado = false DO NOTHING
+             RETURNING id"
+        );
+        $st->execute([':ie' => $idEmpresa, ':f' => $idFirma, ':fc' => $caducidad, ':d' => $dias, ':c' => $canal,
+                      ':m' => $manual ? 'true' : 'false', ':dest' => mb_substr($destino, 0, 150), ':u' => $idUsuario ?: null]);
+        $id = $st->fetchColumn();
+        return $id ? (int) $id : null;
+    }
+
+    public function resultadoAviso(int $id, bool $enviado, ?string $error): void
+    {
+        $this->db->prepare(
+            "UPDATE firmas_avisos_vencimiento SET enviado = :e, error = :err, updated_at = CURRENT_TIMESTAMP WHERE id = :id"
+        )->execute([':e' => $enviado ? 'true' : 'false', ':err' => $error !== null ? mb_substr($error, 0, 1000) : null, ':id' => $id]);
+    }
+
+    public function getAvisos(int $idFirma, int $idEmpresa): array
+    {
+        $st = $this->db->prepare(
+            "SELECT dias, canal, manual, enviado, destino, error, created_at
+             FROM firmas_avisos_vencimiento
+             WHERE id_firma = :f AND id_empresa = :ie AND eliminado = false
+             ORDER BY created_at DESC, id DESC"
+        );
+        $st->execute([':f' => $idFirma, ':ie' => $idEmpresa]);
+        return $st->fetchAll(PDO::FETCH_ASSOC);
+    }
+
+    /** Solicitud de renovación creada a partir de otra firma. */
+    public function marcarRenovacion(int $idNueva, int $idAnterior, int $idSolicitud): void
+    {
+        $this->db->prepare(
+            "UPDATE {$this->table} SET origen = 'renovacion', id_firma_anterior = :a, id_solicitud = :s WHERE id = :id"
+        )->execute([':a' => $idAnterior, ':s' => $idSolicitud, ':id' => $idNueva]);
+    }
+
     // ── Uanataca: mapeo de productos y colas del cron ─────────
+    /** Vigencias ajustadas a mano: id_producto => {cantidad, unidad}. */
+    public function getVigencias(int $idEmpresa): array
+    {
+        $st = $this->db->prepare(
+            "SELECT id_producto, cantidad, unidad FROM firmas_productos_vigencia WHERE id_empresa = :ie AND eliminado = false"
+        );
+        $st->execute([':ie' => $idEmpresa]);
+        $out = [];
+        foreach ($st->fetchAll(PDO::FETCH_ASSOC) as $r) {
+            $out[(int) $r['id_producto']] = ['cantidad' => (int) $r['cantidad'], 'unidad' => $r['unidad']];
+        }
+        return $out;
+    }
+
+    /** Reemplaza el ajuste de vigencia de un producto (cantidad null = quitar el ajuste). */
+    public function guardarVigencia(int $idEmpresa, int $idProducto, ?int $cantidad, string $unidad, int $idUsuario): void
+    {
+        $this->db->prepare(
+            "UPDATE firmas_productos_vigencia SET eliminado = true, deleted_at = CURRENT_TIMESTAMP, deleted_by = :u
+             WHERE id_empresa = :ie AND id_producto = :p AND eliminado = false"
+        )->execute([':u' => $idUsuario, ':ie' => $idEmpresa, ':p' => $idProducto]);
+        if ($cantidad === null) {
+            return;
+        }
+        $this->db->prepare(
+            "INSERT INTO firmas_productos_vigencia (id_empresa, id_producto, cantidad, unidad, created_by)
+             VALUES (:ie, :p, :c, :un, :u)"
+        )->execute([':ie' => $idEmpresa, ':p' => $idProducto, ':c' => $cantidad, ':un' => $unidad, ':u' => $idUsuario]);
+    }
 
     /** ¿Alguna firma (de cualquier empresa) ya quedó enlazada a esta solicitud de Uanataca? */
     public function existeUanatacaUuid(string $uuid): bool

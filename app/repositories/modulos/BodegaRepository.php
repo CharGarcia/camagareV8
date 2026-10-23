@@ -325,6 +325,17 @@ class BodegaRepository extends BaseRepository
     /**
      * Retorna las bodegas permitidas para un usuario según su nivel y empresa.
      */
+    /** Todas las bodegas activas de la empresa, sin mirar los accesos del usuario. */
+    public function getBodegasEmpresa(int $idEmpresa): array
+    {
+        $st = $this->db->prepare("SELECT b.id, b.nombre
+                                    FROM bodegas b
+                                   WHERE b.id_empresa = :id_e AND b.status = true AND b.eliminado = false
+                                   ORDER BY b.nombre ASC");
+        $st->execute([':id_e' => $idEmpresa]);
+        return $st->fetchAll(PDO::FETCH_ASSOC);
+    }
+
     public function getBodegasPermitidas(int $idUsuario, int $idEmpresa, int $nivel): array
     {
         if ($nivel >= 2) {

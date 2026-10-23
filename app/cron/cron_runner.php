@@ -180,6 +180,25 @@ try {
     echo "[" . date('Y-m-d H:i:s') . "] Error en correos de confirmación de firmas: " . $e->getMessage() . "\n";
 }
 
+// ── Firmas vendidas a clientes: avisos de vencimiento (1 vez al día) ─────────
+//    Desde las 08:00, correo y WhatsApp a los titulares cuya firma vence pronto, en
+//    los días configurados por empresa. La bitácora (firmas_avisos_vencimiento)
+//    impide repetir un aviso aunque la marca diaria se pierda.
+try {
+    $marcaAvisosFirma = sys_get_temp_dir() . '/sistema_firmas_avisos_vencimiento.txt';
+    $hoyAvisos = date('Y-m-d');
+    if ((int) date('H') >= 8 && @file_get_contents($marcaAvisosFirma) !== $hoyAvisos) {
+        @file_put_contents($marcaAvisosFirma, $hoyAvisos);
+        $resAv = \App\Services\modulos\FirmaElectronicaService::instancia()->procesarAvisosVencimiento();
+        if ($resAv['correos'] + $resAv['whatsapp'] + $resAv['fallidos'] > 0) {
+            echo "[" . date('Y-m-d H:i:s') . "] Avisos de vencimiento de firmas: {$resAv['correos']} correo(s), "
+                . "{$resAv['whatsapp']} WhatsApp, {$resAv['fallidos']} fallido(s).\n";
+        }
+    }
+} catch (\Throwable $e) {
+    echo "[" . date('Y-m-d H:i:s') . "] Error en avisos de vencimiento de firmas: " . $e->getMessage() . "\n";
+}
+
 // ── Firmas vendidas a clientes: API de Uanataca ──────────────────────────────
 //    Envía las solicitudes pagadas (empresas con envío automático) y consulta el
 //    estado de las ya enviadas (Uanataca no tiene webhooks). Cada firma se consulta

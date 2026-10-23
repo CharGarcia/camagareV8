@@ -5,8 +5,8 @@ categoria: Reportes
 ruta_modulo: modulos/reporte_inventarios
 tipo: modulo
 visibilidad: todos
-etiquetas: reporte de inventario, comprobar con contabilidad, cuadrar con contabilidad, inventario vs contabilidad, kardex vs contabilidad, valor del inventario contable, cuenta de inventario, no cuadra con contabilidad, no descarga el excel, excel no descarga, excel en blanco, demasiados datos, excel muy grande, filtrar por año, no descarga el pdf, pdf en blanco, pdf muy grande, excel de la consignacion, numero de factura en el excel, numero de retorno en el excel, totales en el excel, existencias, stock por bodega, valorizacion, kardex, faltantes, exportar, auditoria, stock cacheado, corregir stock, consignaciones, stock por lote, por caducidad, que se vence, vencimientos, limpiar filtros, lento, tarda, se cuelga, tarda en abrir, tarda en entrar, busqueda lenta, se recarga la pagina, ordenar por columna, pierde el resultado, no puedo abrir otro modulo mientras carga, primeras 5000 filas, listado recortado, lote, nup, asesor, detalle de consignacion, totales del detalle, pdf del documento relacionado, permisos, pestañas, no veo la pestaña, no aparece consignaciones, no aparece existencias, pestañas que puede ver, pestañas por usuario, ocultar pestañas, me quitaron una pestaña, pdf de la consignacion, estado de la consignacion, imprimir consignacion con saldo, consignacion completa, saldo en poder del cliente, no veo una bodega, bodegas asignadas, acceso a bodegas, solo mi bodega, falta una bodega, no aparece la bodega, codigo de producto en consignacion, codigo del producto en el detalle, codigo como primera columna, columna codigo, codigo de producto en el reporte, ordenar por codigo, lote mas consignacion, que lote tiene cada cliente, lote por cliente, consignacion por lote, con quien salio el lote, entregas por lote, se genera solo, se consulta solo, no muestra datos, boton mostrar, hay que pulsar mostrar, al elegir el producto se pone a cargar, al cambiar el anio se pone a cargar, no quiero que cargue solo, carga sola, consulta automatica, lotes en cero, lote agotado, no muestra lotes vacios, stock cero, lotes sin stock, filas en cero, por que no aparece el lote, lote desaparecio del reporte, boton mostrar bloqueado, no puedo pulsar mostrar, doble clic en mostrar, barra de progreso, porcentaje de avance, cuanto falta, se queda cargando, indicador de carga, stock negativo, por que esta en negativo, saldo negativo, negativo en existencias, seguimiento, trazabilidad del lote, de donde sale el negativo, lote sin entrada, lote duplicado, lote mal escrito, movimientos de otro ambiente, kardex de un lote, filtros no funcionan, no filtra, no coge los filtros, filtro de estado, filtro consignado, saldo a fecha, fecha de corte, saldo inicial, saldo anterior, saldo de arranque, saldo al inicio del mes, kardex empieza en cero, saldo empieza en cero, resumen de cuadre, cuadre de inventario, no cuadra, movimientos y existencias no coinciden, saldo distinto, reverso por cambio a borrador, retorno en borrador, reactivacion, entrada por reactivacion, correcciones, ocultar correcciones, movimientos que se anulan, el saldo no es el stock, filtro de lote en existencias, stock del lote, costo en cero, no muestra el costo, costo del producto, costo de la ficha, actualice el costo, cambie el costo y no se ve, de donde sale el costo
-version: 1.40
+etiquetas: reporte de inventario, comprobar con contabilidad, cuadrar con contabilidad, inventario vs contabilidad, kardex vs contabilidad, valor del inventario contable, cuenta de inventario, no cuadra con contabilidad, no descarga el excel, excel no descarga, excel en blanco, demasiados datos, excel muy grande, filtrar por año, no descarga el pdf, pdf en blanco, pdf muy grande, excel de la consignacion, numero de factura en el excel, numero de retorno en el excel, totales en el excel, existencias, stock por bodega, valorizacion, kardex, faltantes, exportar, auditoria, stock cacheado, corregir stock, consignaciones, stock por lote, por caducidad, que se vence, vencimientos, limpiar filtros, lento, tarda, se cuelga, tarda en abrir, tarda en entrar, busqueda lenta, se recarga la pagina, ordenar por columna, pierde el resultado, no puedo abrir otro modulo mientras carga, primeras 5000 filas, listado recortado, lote, nup, asesor, detalle de consignacion, totales del detalle, pdf del documento relacionado, permisos, pestañas, no veo la pestaña, no aparece consignaciones, no aparece existencias, pestañas que puede ver, pestañas por usuario, ocultar pestañas, me quitaron una pestaña, pdf de la consignacion, estado de la consignacion, imprimir consignacion con saldo, consignacion completa, saldo en poder del cliente, no veo una bodega, bodegas asignadas, acceso a bodegas, solo mi bodega, falta una bodega, no aparece la bodega, codigo de producto en consignacion, codigo del producto en el detalle, codigo como primera columna, columna codigo, codigo de producto en el reporte, ordenar por codigo, lote mas consignacion, que lote tiene cada cliente, lote por cliente, consignacion por lote, con quien salio el lote, entregas por lote, se genera solo, se consulta solo, no muestra datos, boton mostrar, hay que pulsar mostrar, al elegir el producto se pone a cargar, al cambiar el anio se pone a cargar, no quiero que cargue solo, carga sola, consulta automatica, lotes en cero, lote agotado, no muestra lotes vacios, stock cero, lotes sin stock, filas en cero, por que no aparece el lote, lote desaparecio del reporte, boton mostrar bloqueado, no puedo pulsar mostrar, doble clic en mostrar, barra de progreso, porcentaje de avance, cuanto falta, se queda cargando, indicador de carga, stock negativo, por que esta en negativo, saldo negativo, negativo en existencias, seguimiento, trazabilidad del lote, de donde sale el negativo, lote sin entrada, lote duplicado, lote mal escrito, movimientos de otro ambiente, kardex de un lote, filtros no funcionan, no filtra, no coge los filtros, filtro de estado, filtro consignado, saldo a fecha, fecha de corte, saldo inicial, saldo anterior, saldo de arranque, saldo al inicio del mes, kardex empieza en cero, saldo empieza en cero, resumen de cuadre, cuadre de inventario, no cuadra, movimientos y existencias no coinciden, saldo distinto, reverso por cambio a borrador, retorno en borrador, reactivacion, entrada por reactivacion, correcciones, ocultar correcciones, movimientos que se anulan, el saldo no es el stock, filtro de lote en existencias, stock del lote, costo en cero, no muestra el costo, costo del producto, costo de la ficha, actualice el costo, cambie el costo y no se ve, de donde sale el costo, consignacion de otra bodega, consignacion de otro usuario, no veo una consignacion
+version: 1.41
 orden: 40
 estado: activo
 ---
@@ -650,13 +650,19 @@ según *Bodegas → pestaña Accesos*. Por defecto todos ven todas las bodegas d
 empresa: solo se ocultan aquellas cuyo acceso se le haya quitado expresamente
 ahí.
 
-- El filtro **Bodega** de cada pestaña ofrece solo las bodegas permitidas.
+- El filtro **Bodega** de cada pestaña ofrece solo las bodegas permitidas
+  (salvo Consignaciones, ver abajo).
 - **También se aplica con el filtro en *Todas***: el listado, los indicadores, el
-  PDF y el Excel de las cinco pestañas cuentan únicamente esas bodegas. Escribir
-  a mano el número de una bodega ajena en la dirección no devuelve nada.
-- Lo mismo vale para el detalle de una consignación y su PDF de estado: si todas
-  sus líneas están en bodegas que el usuario no puede ver, responde como si el
-  documento no existiera.
+  PDF y el Excel de Existencias, Movimientos, Valorización y Auditoría cuentan
+  únicamente esas bodegas. Escribir a mano el número de una bodega ajena en la
+  dirección no devuelve nada.
+- **Excepción: la pestaña Consignaciones no se limita por bodega.** Quien tiene
+  esa pestaña ve todas las consignaciones de la empresa —listado, búsqueda por
+  número, detalle, documentos de cada línea, PDF y Excel—, aunque las haya
+  emitido otro usuario desde una bodega a la que él no tiene acceso. Su filtro
+  **Bodega** ofrece todas las bodegas de la empresa. El
+  desglose *Lote + consignación* de Existencias sí respeta las bodegas
+  permitidas, porque es stock.
 - Ajustar inventario, editar mínimo/máximo y corregir la auditoría rechazan una
   bodega sin acceso con *No tiene acceso a esa bodega*.
 - **Administrador (nivel 2) y superadministrador (nivel 3)** ven todas las
@@ -690,7 +696,8 @@ ahí.
 - **Un producto no aparece**: no es inventariable.
 - **Falta una bodega, o su stock no suma en los totales**: a ese usuario se le
   quitó el acceso a esa bodega en *Bodegas → Accesos*. Es una restricción de
-  acceso, no un filtro: poner *Todas* en el selector no la trae de vuelta.
+  acceso, no un filtro: poner *Todas* en el selector no la trae de vuelta. No
+  aplica a la pestaña Consignaciones, que muestra las de todas las bodegas.
 - **El stock está en otra bodega**: revise el filtro de bodega.
 - **Movimientos y Existencias dan números distintos**: elija el producto en
   Movimientos y mire el *Resumen de cuadre*, que compara los dos y dice la
@@ -717,6 +724,7 @@ ahí.
 
 ## Historial de cambios
 
+- **1.41** — **Consignaciones sin restricción de bodega**: la pestaña Consignaciones (listado, búsqueda por número, detalle, PDF y Excel) muestra las consignaciones de todas las bodegas de la empresa, aunque el usuario no tenga acceso a la bodega que la emitió, y su filtro **Bodega** lista todas las bodegas. Las demás pestañas siguen limitadas a las bodegas permitidas.
 - **1.40** — **Existencias y Valorización**: si el kardex no tiene costo (producto sin movimientos o último costo 0), se usa el costo de la ficha del producto en vez de mostrar 0. Ver *De dónde sale el costo en Existencias y Valorización*.
 - **1.39** — **Comprobar con Contabilidad** reconoce los ajustes de inventario que ahora generan asiento (*Ajuste de inventario*); el ajuste de la ventana de la pestaña **Existencias** también genera su asiento (ver el manual de Inventario).
 - **1.38** — El reporte muestra solo documentos de **producción**, aunque la empresa esté configurada en pruebas (ver el artículo *Los reportes solo muestran documentos de producción*).

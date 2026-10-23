@@ -213,6 +213,51 @@ class FirmaElectronicaRules
         return $f;
     }
 
+    public const UNIDADES_VIGENCIA = ['dias' => 'días', 'meses' => 'meses', 'anios' => 'años'];
+
+    /**
+     * Vigencia escrita en el nombre del producto: "Firma 1 año", "2 AÑOS", "30 días",
+     * "6 meses", "una semana". null si el nombre no la dice.
+     * @return array{cantidad:int, unidad:string}|null
+     */
+    public static function vigenciaDesdeNombre(string $nombre): ?array
+    {
+        $n = mb_strtolower($nombre, 'UTF-8');
+        $palabras = ['un' => 1, 'una' => 1, 'uno' => 1, 'dos' => 2, 'tres' => 3, 'cuatro' => 4, 'cinco' => 5, 'seis' => 6];
+        if (!preg_match('/\b(\d{1,4}|un|una|uno|dos|tres|cuatro|cinco|seis)\s*(años?|anios?|anos?|mes(?:es)?|d[ií]as?|semanas?)\b/u', $n, $m)) {
+            return null;
+        }
+        $cant = ctype_digit($m[1]) ? (int) $m[1] : $palabras[$m[1]];
+        $u = $m[2];
+        if (str_starts_with($u, 'mes')) {
+            return ['cantidad' => $cant, 'unidad' => 'meses'];
+        }
+        if (str_starts_with($u, 'semana')) {
+            return ['cantidad' => $cant * 7, 'unidad' => 'dias'];
+        }
+        if (str_starts_with($u, 'd')) {
+            return ['cantidad' => $cant, 'unidad' => 'dias'];
+        }
+        return ['cantidad' => $cant, 'unidad' => 'anios'];
+    }
+
+    /** Fecha (Y-m-d) en que vence una vigencia contada desde $desde. */
+    public static function sumarVigencia(string $desde, int $cantidad, string $unidad): string
+    {
+        $d = new \DateTimeImmutable($desde);
+        if ($unidad === 'dias') {
+            return $d->modify("+{$cantidad} days")->format('Y-m-d');
+        }
+        // Meses/años: mismo día del mes destino o su último día (31-01 + 1 mes = 28/29-02,
+        // 29-02 + 1 año = 28-02), sin desbordar al mes siguiente.
+        $meses = $unidad === 'meses' ? $cantidad : $cantidad * 12;
+        $total = (int) $d->format('Y') * 12 + (int) $d->format('n') - 1 + $meses;
+        $anio  = intdiv($total, 12);
+        $mes   = $total % 12 + 1;
+        $dia   = min((int) $d->format('j'), (int) date('t', mktime(0, 0, 0, $mes, 1, $anio)));
+        return sprintf('%04d-%02d-%02d', $anio, $mes, $dia);
+    }
+
     /** Documentos obligatorios según el tipo de persona. */
     public function adjuntosRequeridos(string $tipoPersona): array
     {

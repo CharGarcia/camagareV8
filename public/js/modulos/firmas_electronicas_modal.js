@@ -179,7 +179,48 @@
 
     if (selectProducto) {
         selectProducto.addEventListener('change', actualizarPvpBadge);
+        selectProducto.addEventListener('change', autocompletarCaducidad);
     }
+
+    // ── Caducidad = hoy + vigencia del tipo de firma ───────────
+    // Se autocompleta al elegir la firma mientras el usuario no la haya escrito a mano
+    // (o la firma ya traiga una). Al emitirla, el servidor la vuelve a contar desde ese día.
+    let _cadManual = false;
+    const UNIDAD_TXT = { dias: ['día', 'días'], meses: ['mes', 'meses'], anios: ['año', 'años'] };
+
+    function sumarVigencia(cant, unidad) {
+        // Igual que FirmaElectronicaRules::sumarVigencia(): meses/años sin desbordar el mes.
+        let d = new Date();
+        if (unidad === 'dias') {
+            d.setDate(d.getDate() + cant);
+        } else {
+            const total = d.getFullYear() * 12 + d.getMonth() + (unidad === 'meses' ? cant : cant * 12);
+            const anio = Math.floor(total / 12), mes = total % 12;
+            const ultimo = new Date(anio, mes + 1, 0).getDate();
+            d = new Date(anio, mes, Math.min(d.getDate(), ultimo));
+        }
+        return [String(d.getDate()).padStart(2, '0'), String(d.getMonth() + 1).padStart(2, '0'), d.getFullYear()].join('-');
+    }
+
+    function autocompletarCaducidad() {
+        const opt  = selectProducto?.options[selectProducto.selectedIndex];
+        const cant = parseInt(opt?.dataset.vigCant || '0', 10);
+        const unidad = opt?.dataset.vigUnidad || '';
+        const ayuda = document.getElementById('firma_cad_ayuda');
+        if (_cadManual || !cant || !unidad) {
+            if (ayuda) ayuda.textContent = (!cant && opt?.value && !_cadManual) ? 'Vigencia desconocida: configúrela en el engranaje.' : '';
+            return;
+        }
+        setVal('firma_fecha_cad', sumarVigencia(cant, unidad));
+        if (ayuda) ayuda.textContent = `Hoy + ${cant} ${UNIDAD_TXT[unidad][cant === 1 ? 0 : 1]} (se recalcula al emitir)`;
+        actualizarCadBadge();
+    }
+
+    document.getElementById('firma_fecha_cad')?.addEventListener('input', () => {
+        _cadManual = true;
+        const ayuda = document.getElementById('firma_cad_ayuda');
+        if (ayuda) ayuda.textContent = '';
+    });
 
     // ── Pestaña Facturación ────────────────────────────────────
     const chkMismosDatos = document.getElementById('fact_mismos_datos');
@@ -597,6 +638,9 @@
     // ── Abrir modal crear ──────────────────────────────────────
     window.abrirModalFirmaCrear = function () {
         _idFirmaActual = null;
+        _cadManual = false;
+        const ayudaCad = document.getElementById('firma_cad_ayuda');
+        if (ayudaCad) ayudaCad.textContent = '';
         const form = document.getElementById('formFirmaModal');
         if (!form) return;
         form.reset();
@@ -717,6 +761,9 @@
         }
         setVal('firma_fecha_nac', bdADisplay(data.fecha_nacimiento));
         setVal('firma_fecha_cad', bdADisplay(data.fecha_caducidad));
+        _cadManual = !!data.fecha_caducidad;
+        const ayudaCadE = document.getElementById('firma_cad_ayuda');
+        if (ayudaCadE) ayudaCadE.textContent = '';
 
         ajustarTipoId(data.tipo_identificacion || 'cedula');
         actualizarCadBadge();
@@ -1171,9 +1218,18 @@
                         <input type="text" class="form-control form-control-sm" id="trRefUanataca" style="width:180px;"></div>
                         <button type="button" class="btn ${t.uanataca_api ? 'btn-outline-secondary' : 'btn-primary'} btn-sm" data-tr="registrar_uanataca"><i class="bi bi-box-arrow-up-right me-1"></i>Ya la registré en Uanataca${t.uanataca_api ? ' (manual)' : ''}</button>` : ''}
                     <div><label class="form-label small mb-0">Caducidad de la firma</label>
-                        <input type="date" class="form-control form-control-sm" id="trCaducidad" style="width:150px;"></div>
+                        <input type="date" class="form-control form-control-sm" id="trCaducidad" style="width:150px;" value="${esc(t.caducidad_sugerida || '')}"></div>
                     <button type="button" class="btn btn-success btn-sm" data-tr="emitida"><i class="bi bi-patch-check me-1"></i>Marcar emitida</button>
                 </div>
+            </div>`;
+        }
+        if (t.estado === 'emitida') {
+            const avisos = (t.avisos || []).map(a =>
+                `<div class="${a.enviado ? '' : 'text-danger'}"><i class="bi ${a.canal === 'correo' ? 'bi-envelope' : 'bi-whatsapp'} me-1"></i>${esc(a.fecha)} · ${a.manual ? 'manual' : (a.dias === 0 ? 'el día del vencimiento' : a.dias + ' días antes')} · ${esc(a.destino || '')}${a.enviado ? '' : ' · no enviado' + (a.error ? ': ' + esc(a.error) : '')}</div>`).join('');
+            acciones += `<div class="border rounded-3 p-2 mb-2">
+                <div class="fw-semibold mb-1"><i class="bi bi-bell me-1"></i>Vencimiento: ${esc(t.fecha_caducidad || 'sin fecha')}</div>
+                ${avisos ? `<div class="small text-muted mb-2">${avisos}</div>` : '<div class="small text-muted mb-2">Aún no se han enviado avisos de vencimiento.</div>'}
+                ${puede && t.fecha_caducidad ? '<button type="button" class="btn btn-outline-primary btn-sm" data-tr="aviso_vencimiento"><i class="bi bi-send me-1"></i>Enviar aviso ahora</button>' : ''}
             </div>`;
         }
         if (puede && !['emitida', 'cancelada'].includes(t.estado)) {
@@ -1284,6 +1340,10 @@
                 if (confirm('Se creará la solicitud en Uanataca con los datos y documentos del cliente (consume Uanacréditos). ¿Continuar?')) {
                     btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Enviando…';
                     await postTramite('enviarUanatacaAjax');
+                }
+            } else if (accion === 'aviso_vencimiento') {
+                if (confirm('Se enviará al cliente el aviso de vencimiento con el enlace para renovar (correo y, si hay plantilla aprobada, WhatsApp). ¿Continuar?')) {
+                    await postTramite('avisoVencimientoAjax');
                 }
             } else if (accion === 'sincronizar_uanataca') {
                 await postTramite('sincronizarUanatacaAjax');

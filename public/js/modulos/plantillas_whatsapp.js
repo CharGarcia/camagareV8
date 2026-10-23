@@ -346,11 +346,12 @@ document.addEventListener('DOMContentLoaded', () => {
             nombre: 'renovacion_firma_electronica',
             categoria: 'UTILITY',
             cabecera: 'NONE',
-            descripcion: 'Sirve para avisar a los clientes que han sacado firmas electrónicas sobre la próxima caducidad de su firma.',
-            texto: 'Estimado(a) {{1}}, le recordamos que su firma electrónica caduca el {{2}}. Comuníquese con nosotros para renovarla.',
+            descripcion: 'Avisos automáticos de vencimiento del módulo Firmas Electrónicas (30, 15, 5 días antes y el mismo día, configurable). {{3}} es el enlace personal para renovar con los datos ya llenos; una plantilla aprobada con solo {{1}} y {{2}} sigue funcionando, sin el enlace.',
+            texto: 'Hola {{1}}, tu firma electrónica vence el {{2}}. Renuévala a tiempo desde este enlace: {{3}} Si ya la renovaste, ignora este mensaje.',
             variables: [
                 { id: '{{1}}', label: 'Nombre del Cliente' },
-                { id: '{{2}}', label: 'Fecha de Vencimiento' }
+                { id: '{{2}}', label: 'Fecha de Vencimiento' },
+                { id: '{{3}}', label: 'Enlace de renovación' }
             ]
         },
         'retencion_compra': {

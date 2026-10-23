@@ -117,7 +117,9 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosPestanasOcultas($vistaConfigF
                                         <?php foreach ($tiposFirma as $tf): ?>
                                             <option value="<?= $tf['id'] ?>"
                                                 data-nombre="<?= htmlspecialchars($tf['nombre']) ?>"
-                                                data-pvp="<?= number_format((float)($tf['pvp'] ?? 0), 2, '.', '') ?>">
+                                                data-pvp="<?= number_format((float)($tf['pvp'] ?? 0), 2, '.', '') ?>"
+                                                data-vig-cant="<?= (int) ($tf['vigencia_cantidad'] ?? 0) ?>"
+                                                data-vig-unidad="<?= htmlspecialchars((string) ($tf['vigencia_unidad'] ?? '')) ?>">
                                                 <?= htmlspecialchars($tf['nombre']) ?>
                                                 <?php if (($tf['pvp'] ?? 0) > 0): ?>
                                                     - $<?= number_format((float)$tf['pvp'], 2) ?>
@@ -168,6 +170,7 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosPestanasOcultas($vistaConfigF
                                         id="firma_fecha_cad" maxlength="10" placeholder="dd-mm-yyyy"
                                         pattern="\d{2}-\d{2}-\d{4}"
                                         title="Formato: dd-mm-yyyy">
+                                    <div class="form-text small" id="firma_cad_ayuda" style="font-size:.7rem;"></div>
 
                                 </div>
                                 <!-- ¿Con RUC? (solo Persona Natural) -->
