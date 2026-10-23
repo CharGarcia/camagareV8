@@ -380,6 +380,23 @@ $to      = $total > 0 ? min($page * $perPage, $total) : 0;
             <form id="formConfigFirmas" onsubmit="return false;">
             <div class="modal-body px-3 py-3">
                 <div id="alertConfigFirmas" class="alert d-none mb-3 py-2 small"></div>
+                <div class="d-flex align-items-center mb-3">
+                    <ul class="nav nav-tabs flex-grow-1" role="tablist">
+                        <li class="nav-item">
+                            <button class="nav-link active fw-medium py-1" id="tab-cfg-general-btn" data-bs-toggle="tab" data-bs-target="#tab-cfg-general" type="button">
+                                <i class="bi bi-sliders me-1"></i>General
+                            </button>
+                        </li>
+                        <li class="nav-item">
+                            <button class="nav-link fw-medium py-1" id="tab-cfg-vigencia-btn" data-bs-toggle="tab" data-bs-target="#tab-cfg-vigencia" type="button">
+                                <i class="bi bi-calendar-check me-1"></i>Vigencia
+                            </button>
+                        </li>
+                    </ul>
+                    <?= \App\Helpers\PreferenciasHelper::renderDropdownPestanas(['tab-cfg-vigencia-btn' => 'Vigencia'], \App\Helpers\PreferenciasHelper::getPreferenciasVista('firmas_electronicas'), 'firmas_electronicas') ?>
+                </div>
+                <div class="tab-content">
+                <div class="tab-pane fade show active" id="tab-cfg-general" role="tabpanel">
                 <div class="row g-2">
                     <div class="col-sm-6">
                         <label class="form-label small fw-bold text-muted mb-1">Serie de facturación</label>
@@ -447,43 +464,6 @@ $to      = $total > 0 ? min($page * $perPage, $total) : 0;
                         <div class="form-text small">Requiere la plantilla <code>renovacion_firma_electronica</code> aprobada en Meta.</div>
                     </div>
 
-                    <!-- Vigencia de cada tipo de firma (para la fecha de caducidad) -->
-                    <div class="col-12 mt-3 pt-2 border-top">
-                        <div class="small fw-bold mb-1">Vigencia de cada firma</div>
-                        <div class="form-text small mb-2">Con ella se calcula la fecha de vencimiento al elegir la firma y al emitirla. Vacío = la que dice el nombre del producto.</div>
-                        <?php $unidadesVig = \App\Rules\modulos\FirmaElectronicaRules::UNIDADES_VIGENCIA; ?>
-                        <table class="table table-sm align-middle small mb-0">
-                            <tbody>
-                            <?php foreach ($tiposFirma ?? [] as $tf):
-                                $ded = $tf['vigencia_deducida'] ?? null;
-                                $esAjuste = ($tf['vigencia_origen'] ?? '') === 'ajuste'; ?>
-                                <tr>
-                                    <td><?= htmlspecialchars($tf['nombre']) ?></td>
-                                    <td style="width:90px;">
-                                        <input type="number" min="1" max="3650" class="form-control form-control-sm" name="vig[<?= (int) $tf['id'] ?>][cantidad]"
-                                               value="<?= $esAjuste ? (int) $tf['vigencia_cantidad'] : '' ?>" placeholder="<?= $ded ? (int) $ded['cantidad'] : '?' ?>">
-                                    </td>
-                                    <td style="width:110px;">
-                                        <select class="form-select form-select-sm" name="vig[<?= (int) $tf['id'] ?>][unidad]">
-                                            <?php $uSel = $esAjuste ? $tf['vigencia_unidad'] : ($ded['unidad'] ?? 'anios');
-                                            foreach ($unidadesVig as $k => $lbl): ?>
-                                                <option value="<?= $k ?>" <?= $uSel === $k ? 'selected' : '' ?>><?= $lbl ?></option>
-                                            <?php endforeach; ?>
-                                        </select>
-                                    </td>
-                                    <td class="text-muted" style="width:150px;">
-                                        <?php $singular = ['dias' => 'día', 'meses' => 'mes', 'anios' => 'año']; ?>
-                                        <?= $ded ? 'Nombre: ' . (int) $ded['cantidad'] . ' ' . ((int) $ded['cantidad'] === 1 ? $singular[$ded['unidad']] : $unidadesVig[$ded['unidad']]) : '<span class="text-warning">El nombre no la indica</span>' ?>
-                                    </td>
-                                </tr>
-                            <?php endforeach; ?>
-                            <?php if (empty($tiposFirma)): ?>
-                                <tr><td class="text-muted">No hay productos en una categoría «FIRMA».</td></tr>
-                            <?php endif; ?>
-                            </tbody>
-                        </table>
-                    </div>
-
                     <!-- API de Uanataca (Precompra) -->
                     <div class="col-12 mt-3 pt-2 border-top">
                         <div class="form-check form-switch">
@@ -524,6 +504,47 @@ $to      = $total > 0 ? min($page * $perPage, $total) : 0;
                         <span class="small text-muted" id="cfgUanResultado"></span>
                     </div>
                 </div>
+                </div><!-- /tab-cfg-general -->
+
+                <!-- Vigencia de cada tipo de firma (para la fecha de vencimiento) -->
+                <div class="tab-pane fade" id="tab-cfg-vigencia" role="tabpanel">
+                    <div>
+                        <div class="form-text small mb-2">Con ella se calcula la fecha de vencimiento al elegir la firma y al emitirla. Vacío = la que dice el nombre del producto.</div>
+                        <?php $unidadesVig = \App\Rules\modulos\FirmaElectronicaRules::UNIDADES_VIGENCIA; ?>
+                        <table class="table table-sm align-middle small mb-0">
+                            <tbody>
+                            <?php foreach ($tiposFirma ?? [] as $tf):
+                                $ded = $tf['vigencia_deducida'] ?? null;
+                                $esAjuste = ($tf['vigencia_origen'] ?? '') === 'ajuste'; ?>
+                                <tr>
+                                    <td><?= htmlspecialchars($tf['nombre']) ?></td>
+                                    <td style="width:90px;">
+                                        <input type="number" min="1" max="3650" class="form-control form-control-sm" name="vig[<?= (int) $tf['id'] ?>][cantidad]"
+                                               value="<?= $esAjuste ? (int) $tf['vigencia_cantidad'] : '' ?>" placeholder="<?= $ded ? (int) $ded['cantidad'] : '?' ?>">
+                                    </td>
+                                    <td style="width:110px;">
+                                        <select class="form-select form-select-sm" name="vig[<?= (int) $tf['id'] ?>][unidad]">
+                                            <?php $uSel = $esAjuste ? $tf['vigencia_unidad'] : ($ded['unidad'] ?? 'anios');
+                                            foreach ($unidadesVig as $k => $lbl): ?>
+                                                <option value="<?= $k ?>" <?= $uSel === $k ? 'selected' : '' ?>><?= $lbl ?></option>
+                                            <?php endforeach; ?>
+                                        </select>
+                                    </td>
+                                    <td class="text-muted" style="width:150px;">
+                                        <?php $singular = ['dias' => 'día', 'meses' => 'mes', 'anios' => 'año']; ?>
+                                        <?= $ded ? 'Nombre: ' . (int) $ded['cantidad'] . ' ' . ((int) $ded['cantidad'] === 1 ? $singular[$ded['unidad']] : $unidadesVig[$ded['unidad']]) : '<span class="text-warning">El nombre no la indica</span>' ?>
+                                    </td>
+                                </tr>
+                            <?php endforeach; ?>
+                            <?php if (empty($tiposFirma)): ?>
+                                <tr><td class="text-muted">No hay productos en una categoría «FIRMA».</td></tr>
+                            <?php endif; ?>
+                            </tbody>
+                        </table>
+                    </div>
+
+                </div><!-- /tab-cfg-vigencia -->
+                </div><!-- /tab-content -->
             </div>
             <div class="modal-footer py-2 px-3">
                 <button type="button" class="btn btn-sm btn-outline-secondary" data-bs-dismiss="modal">Cancelar</button>

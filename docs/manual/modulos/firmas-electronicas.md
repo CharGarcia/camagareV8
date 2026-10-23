@@ -104,11 +104,11 @@ motivo por correo, corrige desde su enlace y la reenvía.
 
 ## Configuración
 
-Botón del **engranaje**, junto a los botones de PDF y Excel (requiere permiso de modificar):
+Botón del **engranaje**, junto a los botones de PDF y Excel (requiere permiso de modificar). La pestaña **General** reúne todo salvo la vigencia, que está en la pestaña **Vigencia**; un solo **Guardar** guarda ambas:
 
 | Campo | Qué significa |
 |-------|---------------|
-| Vigencia de cada firma | Cuánto dura cada tipo de firma. Vacío = se toma del nombre del producto ("1 año", "2 años", "30 días", "6 meses"); úselo cuando el nombre no la diga o sea distinta. |
+| Vigencia de cada firma (pestaña **Vigencia**) | Cuánto dura cada tipo de firma. Vacío = se toma del nombre del producto ("1 año", "2 años", "30 días", "6 meses"); úselo cuando el nombre no la diga o sea distinta. |
 | Avisos de vencimiento | Encendidos o apagados (apagados de inicio) y los días antes del vencimiento en que se avisa por correo (30,15,5,0) y por WhatsApp (30,5,0). 0 = el mismo día. |
 | Serie de facturación | Establecimiento y punto con que se facturan las firmas. Sin elegir, la primera serie activa. El IVA sigue la configuración de facturación de esa serie. |
 | Usuario responsable | Dueño de las solicitudes que llegan por el enlace fijo y de sus facturas. |
