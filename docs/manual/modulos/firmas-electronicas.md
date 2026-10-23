@@ -63,10 +63,13 @@ cédula, el **código dactilar**.
 
 ## Cómo se usa
 
-1. Pulse **Enviar enlace**, escriba el nombre del cliente y elija **correo**,
+1. Pulse el botón de **WhatsApp** (junto a los botones de PDF y Excel), escriba el nombre del cliente y elija **correo**,
    **WhatsApp** o ambos. El cliente recibe un enlace propio (también puede
    copiarlo y enviarlo usted). Desde la ficha de una firma, en la pestaña
    **Trámite**, puede enviar el enlace de esa misma solicitud.
+   Con el botón de **enlaces enviados** (ícono de cadena, junto a Excel) ve todos
+   los enlaces con su estado y la firma que generaron, y puede copiarlos o
+   cancelar los que aún no se usan.
 2. El cliente, desde su enlace:
    - llena sus datos y elige la validez de la firma;
    - sube su cédula (frente y posterior) y una selfie con la cédula; si es
@@ -101,7 +104,7 @@ motivo por correo, corrige desde su enlace y la reenvía.
 
 ## Configuración
 
-Botón del **engranaje** en el listado (requiere permiso de modificar):
+Botón del **engranaje**, junto a los botones de PDF y Excel (requiere permiso de modificar):
 
 | Campo | Qué significa |
 |-------|---------------|

@@ -37,7 +37,6 @@ $to      = $total > 0 ? min($page * $perPage, $total) : 0;
     .firma-row:hover { background-color: rgba(0, 0, 0, .04); }
 
     /* Panel solicitudes */
-    #panelSolicitudes { display: none; }
     .sol-badge-pendiente  { background: #fef3c7; color: #92400e; border: 1px solid #fde68a; }
     .sol-badge-completado { background: #d1fae5; color: #065f46; border: 1px solid #6ee7b7; }
     .sol-badge-expirado   { background: #f1f5f9; color: #64748b; border: 1px solid #cbd5e1; }
@@ -48,18 +47,7 @@ $to      = $total > 0 ? min($page * $perPage, $total) : 0;
 <div class="firmas-header d-flex justify-content-between align-items-center flex-wrap gap-2 mb-3">
     <h5 class="mb-0 fw-bold"><i class="bi bi-pen-fill me-2 text-primary"></i>Firmas Electrónicas</h5>
     <div class="d-flex gap-2">
-        <?php if ($perm['actualizar']): ?>
-            <button type="button" class="btn btn-outline-secondary btn-sm px-2" title="Configuración del módulo" onclick="abrirConfigFirmas()">
-                <i class="bi bi-gear"></i>
-            </button>
-        <?php endif; ?>
         <?php if ($perm['crear']): ?>
-            <button type="button" class="btn btn-outline-secondary btn-sm px-3" id="btnToggleSolicitudes" onclick="togglePanelSolicitudes()">
-                <i class="bi bi-link-45deg me-1"></i> Enlaces enviados
-            </button>
-            <button type="button" class="btn btn-success btn-sm px-3 shadow-sm" onclick="abrirModalEnviarFormulario()">
-                <i class="bi bi-send me-1"></i> Enviar enlace
-            </button>
             <button type="button" class="btn btn-primary btn-sm px-3 shadow-sm" onclick="abrirModalFirmaCrear()">
                 <i class="bi bi-plus-lg me-1"></i> Nueva
             </button>
@@ -67,21 +55,20 @@ $to      = $total > 0 ? min($page * $perPage, $total) : 0;
     </div>
 </div>
 
-<!-- ── Panel Solicitudes ───────────────────────────────────── -->
-<div id="panelSolicitudes" class="card border-0 shadow-sm rounded-3 mb-3">
-    <div class="card-header bg-white border-bottom py-2 px-3 d-flex justify-content-between align-items-center">
-        <span class="fw-semibold small"><i class="bi bi-link-45deg me-2 text-secondary"></i>Enlaces enviados a clientes</span>
-        <div class="d-flex gap-2 align-items-center">
-            <button type="button" class="btn btn-primary btn-sm px-3" onclick="abrirModalEnviarFormulario()">
-                <i class="bi bi-send me-1"></i> Enviar enlace
-            </button>
-            <button type="button" class="btn btn-sm btn-outline-secondary" onclick="togglePanelSolicitudes()">
-                <i class="bi bi-x-lg"></i>
-            </button>
-        </div>
-    </div>
-    <div class="card-body p-0">
-        <div style="max-height:260px;overflow-y:auto;">
+<!-- ── Modal: Enlaces enviados ─────────────────────────────── -->
+<div class="modal fade" id="modalEnlacesEnviados" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-xl modal-dialog-centered modal-dialog-scrollable">
+        <div class="modal-content rounded-3">
+            <div class="modal-header py-2 px-3">
+                <h6 class="modal-title fw-semibold"><i class="bi bi-link-45deg me-2 text-secondary"></i>Enlaces enviados a clientes</h6>
+                <div class="d-flex gap-2 align-items-center ms-auto">
+                    <button type="button" class="btn btn-success btn-sm px-3" onclick="abrirModalEnviarFormulario()">
+                        <i class="bi bi-whatsapp me-1"></i> Enviar enlace
+                    </button>
+                    <button type="button" class="btn-close btn-sm" data-bs-dismiss="modal"></button>
+                </div>
+            </div>
+            <div class="modal-body p-0">
             <table class="table table-sm table-hover mb-0 align-middle small">
                 <thead class="table-light">
                     <tr>
@@ -91,13 +78,18 @@ $to      = $total > 0 ? min($page * $perPage, $total) : 0;
                         <th>Enviado</th>
                         <th>Expira</th>
                         <th>Firma generada</th>
-                        <th class="text-end pe-3">Acción</th>
+                        <th class="text-end pe-3">Acciones</th>
                     </tr>
                 </thead>
                 <tbody id="tbodySolicitudes">
                     <tr><td colspan="7" class="text-center py-3 text-muted">Cargando…</td></tr>
                 </tbody>
             </table>
+            </div>
+            <div class="modal-footer py-2 px-3 justify-content-between">
+                <span class="small text-muted" id="infoSolicitudes"></span>
+                <div class="btn-group btn-group-sm" id="pagSolicitudes"></div>
+            </div>
         </div>
     </div>
 </div>
@@ -222,6 +214,13 @@ $to      = $total > 0 ? min($page * $perPage, $total) : 0;
                    class="btn btn-outline-danger" title="PDF"><i class="bi bi-file-earmark-pdf"></i><span class="d-none d-md-inline"> PDF</span></a>
                 <a id="btnFirmaExcel" href="<?= $urlBase ?>/export-excel?b=<?= urlencode($buscar) ?>&sort=<?= urlencode($ordenCol) ?>&dir=<?= urlencode($ordenDir) ?>"
                    class="btn btn-outline-success" title="Excel"><i class="bi bi-file-earmark-spreadsheet"></i><span class="d-none d-md-inline"> Excel</span></a>
+                <?php if ($perm['crear']): ?>
+                    <button type="button" class="btn btn-outline-secondary" title="Enlaces enviados a clientes" onclick="abrirEnlacesEnviados()"><i class="bi bi-link-45deg"></i></button>
+                    <button type="button" class="btn btn-outline-success" title="Enviar enlace al cliente (WhatsApp / correo)" onclick="abrirModalEnviarFormulario()"><i class="bi bi-whatsapp"></i></button>
+                <?php endif; ?>
+                <?php if ($perm['actualizar']): ?>
+                    <button type="button" class="btn btn-outline-secondary" title="Configuración del módulo" onclick="abrirConfigFirmas()"><i class="bi bi-gear"></i></button>
+                <?php endif; ?>
             </div>
         </div>
 
@@ -592,14 +591,14 @@ $to      = $total > 0 ? min($page * $perPage, $total) : 0;
 
     if (inputBuscar) inputBuscar.addEventListener('input', debounce(() => window.fetchSearch(1), 400));
 
-    // ── Panel solicitudes ──────────────────────────────────────
-    let panelVisible = false;
+    // ── Enlaces enviados (modal) ───────────────────────────────
+    const modalEnlaces = () => document.getElementById('modalEnlacesEnviados');
+    const enlacesAbierto = () => modalEnlaces()?.classList.contains('show');
+    let paginaSolicitudes = 1;
 
-    window.togglePanelSolicitudes = function () {
-        panelVisible = !panelVisible;
-        const panel = document.getElementById('panelSolicitudes');
-        panel.style.display = panelVisible ? 'block' : 'none';
-        if (panelVisible) cargarSolicitudes(1);
+    window.abrirEnlacesEnviados = function () {
+        bootstrap.Modal.getOrCreateInstance(modalEnlaces()).show();
+        cargarSolicitudes(1);
     };
 
     window.copiarTextoFirma = async function (texto) {
@@ -669,7 +668,7 @@ $to      = $total > 0 ? min($page * $perPage, $total) : 0;
                 if (ventanaWa) {
                     if (data.wa_me) ventanaWa.location.href = data.wa_me; else ventanaWa.close();
                 }
-                if (panelVisible) cargarSolicitudes(1);
+                if (enlacesAbierto()) cargarSolicitudes(paginaSolicitudes);
                 if (window.FIRMA_recargarTramite) window.FIRMA_recargarTramite();
                 // El enlace ya se creó: no se reactiva Enviar para no crear otro con un segundo clic.
                 btn.innerHTML = '<i class="bi bi-check-lg me-1"></i> Enviado';
@@ -772,12 +771,23 @@ $to      = $total > 0 ? min($page * $perPage, $total) : 0;
 
     async function cargarSolicitudes(page = 1) {
         const tbody = document.getElementById('tbodySolicitudes');
+        const info  = document.getElementById('infoSolicitudes');
+        const pag   = document.getElementById('pagSolicitudes');
+        paginaSolicitudes = page;
         tbody.innerHTML = '<tr><td colspan="7" class="text-center py-3 text-muted">Cargando…</td></tr>';
         try {
             const resp = await fetch(`${urlBase}/getSolicitudes?page=${page}`);
             const data = await resp.json();
+            const porPagina = 15;
+            const total = data.ok ? Number(data.total || 0) : 0;
+            const paginas = Math.max(1, Math.ceil(total / porPagina));
+            info.textContent = total ? `${(page - 1) * porPagina + 1}-${Math.min(page * porPagina, total)}/${total}` : '';
+            pag.innerHTML = total > porPagina
+                ? `<button type="button" class="btn btn-outline-secondary" ${page <= 1 ? 'disabled' : ''} onclick="cargarSolicitudesPagina(${page - 1})"><i class="bi bi-chevron-left"></i></button>
+                   <button type="button" class="btn btn-outline-secondary" ${page >= paginas ? 'disabled' : ''} onclick="cargarSolicitudesPagina(${page + 1})"><i class="bi bi-chevron-right"></i></button>`
+                : '';
             if (!data.ok || !data.rows.length) {
-                tbody.innerHTML = '<tr><td colspan="7" class="text-center py-3 text-muted">No hay formularios enviados.</td></tr>';
+                tbody.innerHTML = '<tr><td colspan="7" class="text-center py-3 text-muted">No hay enlaces enviados.</td></tr>';
                 return;
             }
             const badges = {
@@ -794,10 +804,13 @@ $to      = $total > 0 ? min($page * $perPage, $total) : 0;
                     <td class="text-center">${badges[r.estado] || r.estado}</td>
                     <td class="text-muted">${r.created_at}</td>
                     <td class="text-muted">${r.expira_at}</td>
-                    <td>${r.firma_nombre ? `<a href="#" onclick="event.preventDefault();abrirFirmaPorNombre('${r.id_firma_generada}')" class="small text-primary">${esc(r.firma_nombre)}</a>` : '<span class="text-muted small">-</span>'}</td>
-                    <td class="text-end pe-3">
+                    <td>${r.firma_nombre ? `<a href="#" onclick="event.preventDefault();abrirFirmaDesdeEnlaces('${Number(r.id_firma_generada)}')" class="small text-primary">${esc(r.firma_nombre)}</a>` : '<span class="text-muted small">-</span>'}</td>
+                    <td class="text-end pe-3 text-nowrap">
+                        ${r.estado !== 'cancelado' && r.estado !== 'expirado'
+                            ? `<button class="btn btn-sm btn-outline-secondary py-0 px-2" style="font-size:.75rem;" title="Copiar enlace" onclick="copiarTextoFirma(this.dataset.v)" data-v="${esc(urlEnlace(r.token))}"><i class="bi bi-clipboard"></i></button>`
+                            : ''}
                         ${r.estado === 'pendiente'
-                            ? `<button class="btn btn-sm btn-outline-danger py-0 px-2" style="font-size:.75rem;" onclick="cancelarSolicitud(${r.id})"><i class="bi bi-x-circle"></i></button>`
+                            ? `<button class="btn btn-sm btn-outline-danger py-0 px-2" style="font-size:.75rem;" title="Cancelar enlace" onclick="cancelarSolicitud(${r.id})"><i class="bi bi-x-circle"></i></button>`
                             : ''}
                     </td>
                 </tr>`).join('');
@@ -806,6 +819,16 @@ $to      = $total > 0 ? min($page * $perPage, $total) : 0;
         }
     }
 
+    window.cargarSolicitudesPagina = (n) => cargarSolicitudes(n);
+    const urlEnlace = token => `${window.location.origin}${window.BASE_URL || ''}/solicitud-firma/${token}`;
+
+    // La ficha se abre al cerrar el modal de enlaces (no se apilan dos modales grandes).
+    window.abrirFirmaDesdeEnlaces = function (idFirma) {
+        const m = modalEnlaces();
+        m.addEventListener('hidden.bs.modal', () => window.abrirFirmaPorNombre(idFirma), { once: true });
+        bootstrap.Modal.getOrCreateInstance(m).hide();
+    };
+
     window.cancelarSolicitud = async function (id) {
         if (!confirm('¿Cancelar esta solicitud?')) return;
         const fd = new FormData();
@@ -813,7 +836,7 @@ $to      = $total > 0 ? min($page * $perPage, $total) : 0;
         try {
             const resp = await fetch(`${urlBase}/cancelarSolicitud`, { method: 'POST', body: fd });
             const data = await resp.json();
-            if (data.ok) cargarSolicitudes(1);
+            if (data.ok) cargarSolicitudes(paginaSolicitudes);
             else alert(data.msg);
         } catch { alert('Error de conexión.'); }
     };
