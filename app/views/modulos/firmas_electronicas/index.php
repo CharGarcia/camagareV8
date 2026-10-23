@@ -715,6 +715,7 @@ $to      = $total > 0 ? min($page * $perPage, $total) : 0;
         enviandoEnlace = false;
         const btn = document.getElementById('btnConfirmarEnviarFormulario');
         btn.disabled = false;
+        btn.innerHTML = '<i class="bi bi-send me-1"></i> Enviar';
         bootstrap.Modal.getOrCreateInstance(document.getElementById('modalEnviarFormulario')).show();
     };
 
@@ -745,7 +746,8 @@ $to      = $total > 0 ? min($page * $perPage, $total) : 0;
             fd.append('id_firma', document.getElementById('solIdFirma').value);
             if (porCorreo) fd.append('por_correo', '1');
             if (porWhatsapp) fd.append('por_whatsapp', '1');
-            const resp = await fetch(`${urlBase}/enviarSolicitud`, { method: 'POST', body: fd });
+            // Tope en el navegador por si el servidor no responde (el SMTP tiene 20 s por intento).
+            const resp = await fetch(`${urlBase}/enviarSolicitud`, { method: 'POST', body: fd, signal: AbortSignal.timeout(90000) });
             const data = await resp.json();
 
             alerta.className = `alert alert-${data.ok ? (data.correo === false ? 'warning' : 'success') : 'danger'} mb-3 py-2 small`;
@@ -764,10 +766,12 @@ $to      = $total > 0 ? min($page * $perPage, $total) : 0;
                 return;
             }
             if (ventanaWa) ventanaWa.close();
-        } catch {
+        } catch (e) {
             if (ventanaWa) ventanaWa.close();
             alerta.className = 'alert alert-danger mb-3 py-2 small';
-            alerta.textContent = 'Error de conexión.';
+            alerta.textContent = e?.name === 'TimeoutError'
+                ? 'El servidor no respondió a tiempo. Revise en «Enlaces enviados» si el enlace se creó antes de volver a enviarlo.'
+                : 'Error de conexión.';
         }
         enviandoEnlace = false;
         btn.disabled = false;

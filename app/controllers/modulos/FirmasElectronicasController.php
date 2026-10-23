@@ -982,6 +982,9 @@ class FirmasElectronicasController extends BaseModuloController
     public function enviarSolicitud(): void
     {
         $this->requireCrear();
+        // Soltar el candado de la sesión antes de esperar al SMTP/WhatsApp: si no, las demás
+        // peticiones del usuario hacen fila hasta que respondan ($_SESSION se sigue leyendo).
+        session_write_close();
         $this->responderJson(function () {
             $res = $this->service->enviarEnlace((int) $_SESSION['id_empresa'], (int) $_SESSION['id_usuario'], [
                 'correo'       => $_POST['correo_destino'] ?? '',

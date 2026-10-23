@@ -826,13 +826,16 @@ if (!function_exists('enviar_correo_solicitud_firma')) {
 
         try {
             $mail->isSMTP();
-            $mail->Host       = $base['host'];
+            $mail->Host       = _mail_resolve_ipv4_host($base['host']);
             $mail->SMTPAuth   = true;
             $mail->Username   = $base['emisor'];
             $mail->Password   = $base['pass'];
             $mail->SMTPSecure = $base['smtp_secure'] ?? 'tls';
             $mail->Port       = $base['port'];
             $mail->CharSet    = 'UTF-8';
+            // Se envía mientras el usuario espera en pantalla: sin esto PHPMailer aguarda hasta 300 s.
+            $mail->Timeout = 20;
+            $mail->getSMTPInstance()->Timelimit = 20;
 
             $config = require MVC_CONFIG . '/app.php';
             if (!empty($config['mail_smtp_options'])) {
@@ -891,7 +894,7 @@ if (!function_exists('enviar_correo_suscripcion')) {
 
         try {
             $mail->isSMTP();
-            $mail->Host       = $base['host'];
+            $mail->Host       = _mail_resolve_ipv4_host($base['host']);
             $mail->SMTPAuth   = true;
             $mail->Username   = $base['emisor'];
             $mail->Password   = $base['pass'];

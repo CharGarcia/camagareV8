@@ -6,7 +6,7 @@ ruta_modulo: modulos/firmas_electronicas
 tipo: modulo
 visibilidad: admin
 etiquetas: firma electronica, vender firmas, aviso de vencimiento al cliente, recordatorio de renovacion, renovar firma del cliente, firma por vencer, enlace de renovacion, api uanataca, uanacreditos, creditos uanataca, precompra, distribuidor uanataca, miembro de empresa, representante legal, solicitud de firma, tramite de firma, uanataca, enlace para el cliente, formulario de firma, link de firma, whatsapp, pagar firma, payphone, transferencia, comprobante de pago, confirmar correo, factura de la firma, registrar en uanataca, firma emitida, observada, corregir solicitud, enlace fijo, qr de firma, certificado, p12, caducada, por caducar, renovar firma, firma invalida, xades, anf, security data, buscar firma, filtros, firmas por facturar
-version: 2.5
+version: 2.6
 orden: 20
 estado: activo
 ---
@@ -246,6 +246,9 @@ crear otra. Las fotos de más de 1 MB se reducen antes de enviarlas.
   esté autorizada y el correo de la empresa configurado; en la pestaña Trámite
   use **Reenviar factura y confirmación** o, si el cliente lo confirmó por
   teléfono, **Marcar correo confirmado**.
+- **«El servidor no respondió a tiempo» al enviar el enlace**: el servidor de
+  correo tardó demasiado. Abra **Enlaces enviados**: si el enlace aparece, ya se
+  creó (cópielo desde ahí o reenvíelo); si no, vuelva a intentar.
 - **«Este enlace ya no está disponible»**: el enlace venció sin usarse (15
   días) o la empresa está inactiva. Envíe uno nuevo.
 - **«Uanataca rechazó el usuario o la clave de la API»**: revise las
@@ -374,6 +377,9 @@ archivo, y volver a cargar la firma no lo soluciona.
 
 ## Historial de cambios
 
+- **2.6** — Enviar enlace al cliente por correo ya no se queda «Enviando…»: el
+  correo tiene un tiempo máximo de espera y, si el servidor no responde, se
+  muestra un aviso.
 - **2.5** — La configuración de la API de Uanataca pasa de la pestaña General a
   su propia pestaña **Uanataca** en el engranaje, que muestra además la tabla
   de **Productos de Uanataca** (antes en un modal aparte).
