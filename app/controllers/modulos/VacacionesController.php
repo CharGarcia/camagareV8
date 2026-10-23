@@ -66,8 +66,6 @@ class VacacionesController extends BaseModuloController
             'usuariosFiltro' => $this->service->getUsuariosConVacaciones($idEmpresa),
             'vistaConfig' => $prefsVista,
             'idEmpresa'  => $idEmpresa,
-            // Bandeja de solicitudes: badge con las que esperan aprobación (0 si su SQL no está aplicado).
-            'solicitudesPendientes' => $this->solicitudes()->contarPendientes($idEmpresa, $idUsuarioFiltro),
         ]);
     }
 

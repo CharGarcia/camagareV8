@@ -6,7 +6,7 @@ ruta_modulo: modulos/vacaciones
 tipo: modulo
 visibilidad: todos
 etiquetas: vacaciones, dias de vacaciones, descanso, saldo de vacaciones, antiguedad, gozadas, periodo vacacional, buscar vacaciones, buscador, filtros, filtrar vacaciones, vacaciones por empleado, chips, periodos, periodos de vacaciones, periodos tomados, periodos pagados, vacaciones tomadas, vacaciones pagadas, vacaciones no gozadas, vacaciones acumuladas, saldo inicial de vacaciones, ajustar saldo, empleados de otro sistema, migracion de empleados, vacaciones al dia, solicitud de vacaciones, solicitar vacaciones, pedir vacaciones, permiso de vacaciones, formulario de vacaciones, enlace por correo, aprobar vacaciones, rechazar vacaciones, autorizar vacaciones, solicitudes pendientes, pdf de vacaciones, imprimir vacaciones, detalle de vacaciones
-version: 1.7
+version: 1.8
 orden: 40
 estado: activo
 ---
@@ -43,18 +43,17 @@ contar en el saldo.
 
 ### Cómo marcarlos
 
-1. Pulse **Períodos** (arriba del listado). El mismo cuadro aparece en
-   **Nueva** al elegir el empleado, y en el módulo **Empleados**, en la pestaña
-   **Vacaciones** de la ficha del empleado.
-2. Elija el **empleado**. Se muestra un cuadro con todos sus períodos, del más
-   antiguo al más nuevo.
-3. Marque la casilla de cada período ya tomado o pagado. Puede marcar varios a
+1. Abra la ficha del empleado en el módulo **Empleados** y vaya a la pestaña
+   **Vacaciones**. Ahí se muestra un cuadro con todos sus períodos, del más
+   antiguo al más nuevo. (Al registrar una vacación en este módulo solo se ve el
+   saldo del empleado, no el detalle de períodos.)
+2. Marque la casilla de cada período ya tomado o pagado. Puede marcar varios a
    la vez, o todos con la casilla del encabezado.
-4. En **Antes del sistema** aparecen los días del período completo. Si solo tomó
+3. En **Antes del sistema** aparecen los días del período completo. Si solo tomó
    una parte (por ejemplo 10 de 15), cambie el número.
-5. Si quiere, escriba una **observación** (por ejemplo *Tomadas en el sistema
+4. Si quiere, escriba una **observación** (por ejemplo *Tomadas en el sistema
    anterior*).
-6. Pulse **Marcar como tomados** o **Marcar como pagados** y confirme.
+5. Pulse **Marcar como tomados** o **Marcar como pagados** y confirme.
 
 Marcar un período no genera ningún valor ni toca el rol de pagos: solo ajusta el
 saldo de días.
@@ -147,8 +146,7 @@ queda **esperando aprobación**.
 
 ### 3. Aprobar o rechazar
 
-En la pestaña **Vacaciones** de la ficha del empleado, o en la bandeja del
-listado (botón **Solicitudes**, que muestra cuántas esperan aprobación):
+En la pestaña **Vacaciones** de la ficha del empleado (módulo **Empleados**):
 
 - **Aprobar** (✔) registra la vacación del empleado con esas fechas y días: el
   valor se calcula con su sueldo, el mes del rol sale de la fecha *desde* y el
@@ -282,6 +280,11 @@ búsqueda**. La **×** quita solo ese filtro, y con el cuadro vacío la tecla
   administrador; el resto del módulo sigue funcionando igual.
 
 ## Historial de cambios
+
+- **1.8** — Se quitaron los botones **Períodos** y **Solicitudes** del listado, y
+  el formulario de cada vacación ya no muestra el detalle de períodos (solo el
+  panel de saldo). Los períodos y las solicitudes se manejan desde la pestaña
+  **Vacaciones** de la ficha del empleado (módulo **Empleados**).
 
 - **1.7** — El botón **PDF** del documento pregunta ahora si se quiere
   **Imprimir** (abre el cuadro de impresión con el documento ya cargado),

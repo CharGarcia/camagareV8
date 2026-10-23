@@ -55,27 +55,21 @@ $mesActual  = (int) date('n');
                                 </div>
                                 <div class="d-flex align-items-center flex-wrap gap-2 border-top mt-2 pt-2 small">
                                     <span class="text-muted">Ingreso: <b id="vac_info_ingreso">—</b></span>
-                                    <button type="button" class="btn btn-link btn-sm p-0 ms-auto text-decoration-none" id="vac_btn_periodos">
-                                        <i class="bi bi-calendar-check me-1"></i><span id="vac_btn_periodos_txt">Ver períodos</span>
-                                        <i class="bi bi-chevron-down ms-1" id="vac_btn_periodos_chev"></i>
-                                    </button>
                                 </div>
                             </div>
                         </div>
 
-                        <!-- Períodos de servicio: marcar los ya tomados o pagados antes del sistema
-                             (mismo cuadro que la pestaña Vacaciones del modal de Empleados) -->
-                        <div class="col-12 d-none" id="vac_periodos">
-                            <div class="border rounded-3 p-2">
-                                <div class="small fw-bold text-muted mb-1"><i class="bi bi-calendar-check me-1 text-primary"></i>Períodos de vacaciones</div>
-                                <?php
-                                $cuadroPeriodos = ['id' => 'vac_cuadro_periodos', 'puede_marcar' => !empty($perm['crear']), 'con_resumen' => false];
-                                include __DIR__ . '/_cuadro_periodos.php';
-                                ?>
-                            </div>
+                        <!-- Cuadro de períodos: siempre oculto aquí (el detalle confundía al usuario);
+                             solo se usa para traer el saldo del empleado. Los períodos se revisan y
+                             marcan en la pestaña Vacaciones de la ficha del empleado. -->
+                        <div class="d-none" id="vac_periodos">
+                            <?php
+                            $cuadroPeriodos = ['id' => 'vac_cuadro_periodos', 'puede_marcar' => false, 'con_resumen' => false];
+                            include __DIR__ . '/_cuadro_periodos.php';
+                            ?>
                         </div>
 
-                        <!-- Datos de la vacación (se ocultan al abrir solo los períodos) -->
+                        <!-- Datos de la vacación -->
                         <div class="col-12" id="vac_campos">
                             <div class="row g-3">
                                 <div class="col-md-3">

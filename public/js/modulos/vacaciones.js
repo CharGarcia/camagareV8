@@ -1,11 +1,9 @@
 /**
- * Modal de Vacaciones (Nómina): empleado con buscador, saldo, valor y el cuadro de
- * períodos de servicio (CuadroPeriodosVacaciones, en vacaciones_periodos.js), donde se
- * marcan los ya tomados o pagados antes del sistema.
+ * Modal de Vacaciones (Nómina): empleado con buscador, saldo y valor.
  *
- * Dos modos sobre el mismo modal:
- *   - 'vacacion': registrar/editar una vacación (el cuadro de períodos se puede plegar).
- *   - 'periodos': solo el empleado y su cuadro (botón "Períodos" del listado).
+ * El saldo sale del cuadro de períodos (CuadroPeriodosVacaciones, en
+ * vacaciones_periodos.js), que aquí queda siempre oculto: el detalle por período se
+ * revisa en la pestaña Vacaciones de la ficha del empleado.
  */
 (function (window, document) {
     'use strict';
@@ -14,8 +12,6 @@
     let modalInst = null;
     const form = document.getElementById('formVacacion');
     let sueldoEmp = 0;
-    let modo = 'vacacion';
-    let periodosAbiertos = leerPreferencia();
 
     const $ = (id) => document.getElementById(id);
     const money = (v) => '$' + (parseFloat(v) || 0).toLocaleString('es-EC', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -35,31 +31,7 @@
         return modalInst;
     }
 
-    // Preferencia del usuario: cuadro de períodos abierto o plegado al registrar vacaciones.
-    function leerPreferencia() {
-        try { return localStorage.getItem('cmg_vac_periodos') !== '0'; } catch (e) { return true; }
-    }
-    function guardarPreferencia(v) {
-        try { localStorage.setItem('cmg_vac_periodos', v ? '1' : '0'); } catch (e) { }
-    }
-
-    function aplicarModo(nuevo, titulo) {
-        modo = nuevo;
-        const soloPeriodos = nuevo === 'periodos';
-        $('tituloModalVac').textContent = titulo;
-        $('iconoModalVac').className = `bi ${soloPeriodos ? 'bi-calendar-check' : 'bi-umbrella'} me-2 text-primary`;
-        $('vac_campos').classList.toggle('d-none', soloPeriodos);
-        $('vac_container_estado').classList.toggle('d-none', soloPeriodos);
-        $('vac_container_empleado').classList.toggle('col-md-8', !soloPeriodos);
-        $('vac_container_empleado').classList.toggle('col-12', soloPeriodos);
-        $('btnGuardarVac').classList.toggle('d-none', soloPeriodos);
-        $('btnCancelarVacTxt').textContent = soloPeriodos ? 'Cerrar' : 'Cancelar';
-        // En modo períodos el cuadro siempre está abierto: el botón de plegar sobra.
-        $('vac_btn_periodos').classList.toggle('d-none', soloPeriodos);
-    }
-
-    // ─── Cuadro de períodos + panel de saldo ─────────────────────────────────
-    // Tras marcar o quitar una marca, el cuadro se recarga solo; aquí se repinta el panel.
+    // ─── Panel de saldo (datos del cuadro de períodos oculto) ────────────────
     const cuadro = new window.CuadroPeriodosVacaciones($('vac_cuadro_periodos'), { onCambio: pintarPanel });
 
     function pintarPanel(d) {
@@ -76,8 +48,6 @@
         $('vac_info_sueldo').textContent = money(d.sueldo_base);
         $('vac_info_ingreso').textContent = d.fecha_ingreso ? fmtFecha(d.fecha_ingreso) : 'sin registrar';
         $('vac_info').classList.remove('d-none');
-        actualizarSeccionPeriodos();
-        cuadro.scrollAlPrimerPendiente();
         recalcularValor();
     }
 
@@ -86,23 +56,6 @@
         const d = await cuadro.cargar(idEmpleado, { exclude: $('vac_id').value || 0 });
         if (d) pintarPanel(d);
     }
-
-    function actualizarSeccionPeriodos() {
-        const hayEmpleado = !!(empHidden && empHidden.value) && !$('vac_info').classList.contains('d-none');
-        const abierto = modo === 'periodos' || periodosAbiertos;
-        $('vac_periodos').classList.toggle('d-none', !(hayEmpleado && abierto));
-        const txt = abierto ? 'Ocultar períodos' : 'Ver períodos';
-        const n = cuadro.pendientes;
-        $('vac_btn_periodos_txt').textContent = n > 0 ? `${txt} (${n} pendiente${n === 1 ? '' : 's'})` : txt;
-        $('vac_btn_periodos_chev').className = `bi ${abierto ? 'bi-chevron-up' : 'bi-chevron-down'} ms-1`;
-    }
-
-    $('vac_btn_periodos').addEventListener('click', () => {
-        periodosAbiertos = !periodosAbiertos;
-        guardarPreferencia(periodosAbiertos);
-        actualizarSeccionPeriodos();
-        cuadro.scrollAlPrimerPendiente();
-    });
 
     // ─── Buscador de empleado ────────────────────────────────────────────────
     let empTimer = null;
@@ -118,7 +71,6 @@
         } else {
             cuadro.limpiar();
             $('vac_info').classList.add('d-none');
-            $('vac_periodos').classList.add('d-none');
             sueldoEmp = 0;
             recalcularValor();
         }
@@ -202,7 +154,7 @@
         if (!form) return;
         form.reset();
         $('vac_id').value = '';
-        aplicarModo('vacacion', 'Nueva Vacación');
+        $('tituloModalVac').textContent = 'Nueva Vacación';
         $('btnEliminarVac')?.classList.add('d-none');
         setEmpleado('', '');
         $('vac_afecta_rol').checked = true;
@@ -212,22 +164,10 @@
         getModal()?.show();
     };
 
-    // Solo los períodos del empleado (botón "Períodos" del listado).
-    window.abrirModalPeriodos = function () {
-        if (!form) return;
-        form.reset();
-        $('vac_id').value = '';
-        aplicarModo('periodos', 'Períodos de vacaciones');
-        $('btnEliminarVac')?.classList.add('d-none');
-        setEmpleado('', '');
-        getModal()?.show();
-    };
-
     $('modalVacacion').addEventListener('shown.bs.modal', () => {
-        // Al crear o abrir períodos, directo al buscador. Al editar no: con el empleado
-        // ya elegido, un Retroceso ahí limpiaría la selección.
+        // Al crear, directo al buscador. Al editar no: con el empleado ya elegido, un
+        // Retroceso ahí limpiaría la selección.
         if (!$('vac_id').value && !empHidden.value) empBuscar?.focus();
-        cuadro.scrollAlPrimerPendiente();
     });
 
     window.abrirModalEditar = async function (tr) {
@@ -236,7 +176,7 @@
         if (!form || !id) return;
         form.reset();
         $('vac_id').value = id;
-        aplicarModo('vacacion', 'Editar Vacación');
+        $('tituloModalVac').textContent = 'Editar Vacación';
         $('btnEliminarVac')?.classList.remove('d-none');
         $('vac_estado').disabled = false;
         getModal()?.show();
@@ -265,7 +205,6 @@
 
     if (form) {
         form.addEventListener('submit', async () => {
-            if (modo === 'periodos') return; // en ese modo no hay vacación que guardar
             if (!empHidden.value) { Swal.fire({ icon: 'info', title: 'Seleccione un empleado' }); return; }
             const id = $('vac_id').value;
             const btn = $('btnGuardarVac');
