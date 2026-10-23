@@ -186,7 +186,6 @@
     // Se autocompleta al elegir la firma mientras el usuario no la haya escrito a mano
     // (o la firma ya traiga una). Al emitirla, el servidor la vuelve a contar desde ese día.
     let _cadManual = false;
-    const UNIDAD_TXT = { dias: ['día', 'días'], meses: ['mes', 'meses'], anios: ['año', 'años'] };
 
     function sumarVigencia(cant, unidad) {
         // Igual que FirmaElectronicaRules::sumarVigencia(): meses/años sin desbordar el mes.
@@ -206,21 +205,12 @@
         const opt  = selectProducto?.options[selectProducto.selectedIndex];
         const cant = parseInt(opt?.dataset.vigCant || '0', 10);
         const unidad = opt?.dataset.vigUnidad || '';
-        const ayuda = document.getElementById('firma_cad_ayuda');
-        if (_cadManual || !cant || !unidad) {
-            if (ayuda) ayuda.textContent = (!cant && opt?.value && !_cadManual) ? 'Vigencia desconocida: configúrela en el engranaje.' : '';
-            return;
-        }
+        if (_cadManual || !cant || !unidad) return;
         setVal('firma_fecha_cad', sumarVigencia(cant, unidad));
-        if (ayuda) ayuda.textContent = `Hoy + ${cant} ${UNIDAD_TXT[unidad][cant === 1 ? 0 : 1]} (se recalcula al emitir)`;
         actualizarCadBadge();
     }
 
-    document.getElementById('firma_fecha_cad')?.addEventListener('input', () => {
-        _cadManual = true;
-        const ayuda = document.getElementById('firma_cad_ayuda');
-        if (ayuda) ayuda.textContent = '';
-    });
+    document.getElementById('firma_fecha_cad')?.addEventListener('input', () => { _cadManual = true; });
 
     // ── Pestaña Facturación ────────────────────────────────────
     const chkMismosDatos = document.getElementById('fact_mismos_datos');
@@ -639,8 +629,6 @@
     window.abrirModalFirmaCrear = function () {
         _idFirmaActual = null;
         _cadManual = false;
-        const ayudaCad = document.getElementById('firma_cad_ayuda');
-        if (ayudaCad) ayudaCad.textContent = '';
         const form = document.getElementById('formFirmaModal');
         if (!form) return;
         form.reset();
@@ -762,8 +750,6 @@
         setVal('firma_fecha_nac', bdADisplay(data.fecha_nacimiento));
         setVal('firma_fecha_cad', bdADisplay(data.fecha_caducidad));
         _cadManual = !!data.fecha_caducidad;
-        const ayudaCadE = document.getElementById('firma_cad_ayuda');
-        if (ayudaCadE) ayudaCadE.textContent = '';
 
         ajustarTipoId(data.tipo_identificacion || 'cedula');
         actualizarCadBadge();

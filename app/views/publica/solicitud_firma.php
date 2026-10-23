@@ -633,26 +633,72 @@ $nacionalidades = ['Ecuatoriana', 'Colombiana', 'Peruana', 'Venezolana', 'Cubana
         prov.addEventListener('change', () => cargarCiudades(prov.value, ''));
         if (prov.value) cargarCiudades(prov.value, codCiudadIni);
 
-        document.getElementById('btnBuscarSri')?.addEventListener('click', async () => {
-            const id = document.getElementById('numero_identificacion').value.trim();
-            if (!/^\d{10}(\d{3})?$/.test(id)) { aviso('Escriba una cédula (10 dígitos) o RUC (13 dígitos).'); return; }
+        // ── Consulta al SRI ───────────────────────────────────
+        // El servicio devuelve el nombre completo en "nombre" ("PEREZ ANDRADE JUAN CARLOS"):
+        // los dos primeros términos son los apellidos y el resto los nombres, igual que en la
+        // ficha interna (splitNombreApellido de firmas_electronicas_modal.js).
+        async function consultarSri(id) {
+            const q = new URLSearchParams({ id, token, codigo });
+            return (await fetch(`${base}/solicitud-firma/sri?${q}`)).json();
+        }
+        const valor = idCampo => document.getElementById(idCampo)?.value.trim() || '';
+        const poner = (idCampo, v, pisar) => {
+            const el = document.getElementById(idCampo);
+            if (el && v && (pisar || !el.value.trim())) el.value = v;
+        };
+
+        let ultimaSri = '';
+        async function buscarTitularSri(manual) {
+            const id = valor('numero_identificacion').replace(/\D/g, '');
+            if (!/^\d{10}(\d{3})?$/.test(id)) {
+                if (manual) aviso('Escriba una cédula (10 dígitos) o RUC (13 dígitos).');
+                return;
+            }
+            if (!manual && id === ultimaSri) return;
+            ultimaSri = id;
             const icon = document.getElementById('sriIcono'), loader = document.getElementById('sriLoader');
             icon.classList.add('d-none'); loader.classList.remove('d-none');
             try {
-                const q = new URLSearchParams({ id, token, codigo });
-                const data = await (await fetch(`${base}/solicitud-firma/sri?${q}`)).json();
-                if (data.ok && data.data) {
-                    if (data.data.nombres)   document.getElementById('nombres').value   = data.data.nombres;
-                    if (data.data.apellidos) {
-                        const partes = data.data.apellidos.trim().split(/\s+/);
-                        document.getElementById('apellido_paterno').value = partes.shift() || '';
-                        document.getElementById('apellido_materno').value = partes.join(' ');
+                const data = await consultarSri(id);
+                const d = data.data || {};
+                if (data.ok && d.nombre) {
+                    const partes = d.nombre.trim().split(/\s+/).filter(Boolean);
+                    const ape = partes.length >= 3 ? partes.slice(0, 2) : partes.slice(0, 1);
+                    const nom = partes.slice(ape.length);
+                    // Con el botón se reemplaza lo escrito; al teclear solo se llenan los campos vacíos.
+                    poner('apellido_paterno', ape[0] || '', manual);
+                    poner('apellido_materno', ape[1] || '', manual);
+                    poner('nombres', nom.join(' '), manual);
+                    if (d.direccion) poner('direccion', d.direccion, false);
+                    if (d.cod_prov && !valor('cod_prov')) {
+                        document.getElementById('cod_prov').value = d.cod_prov;
+                        cargarCiudades(d.cod_prov, d.cod_ciudad || '');
                     }
-                } else {
-                    aviso(data.error || 'No se encontraron datos. Escríbalos a mano.', 'warning');
+                    if (id.length === 10) document.getElementById('tipo_identificacion').value = 'cedula';
+                    else if (id.length === 13) document.getElementById('tipo_identificacion').value = 'ruc';
+                    aviso('Encontramos tus datos en el SRI. Revísalos antes de continuar.', 'success');
+                } else if (manual || data.advertencia) {
+                    aviso(data.advertencia || data.error || 'No se encontraron datos. Escríbalos a mano.', 'warning');
                 }
-            } catch { aviso('No se pudo consultar. Escriba sus datos a mano.', 'warning'); }
+            } catch { if (manual) aviso('No se pudo consultar. Escriba sus datos a mano.', 'warning'); }
             finally { icon.classList.remove('d-none'); loader.classList.add('d-none'); }
+        }
+        document.getElementById('btnBuscarSri')?.addEventListener('click', () => buscarTitularSri(true));
+        document.getElementById('numero_identificacion')?.addEventListener('input', function () {
+            const n = this.value.replace(/\D/g, '');
+            if (n.length === 10 || n.length === 13) buscarTitularSri(false);
+        });
+
+        // RUC de la empresa (representante legal / miembro): completa la razón social.
+        let ultimoRucEmp = '';
+        document.getElementById('ruc_empresa')?.addEventListener('input', async function () {
+            const ruc = this.value.replace(/\D/g, '');
+            if (ruc.length !== 13 || ruc === ultimoRucEmp) return;
+            ultimoRucEmp = ruc;
+            try {
+                const data = await consultarSri(ruc);
+                if (data.ok && data.data?.nombre) poner('nombre_empresa', data.data.nombre, false);
+            } catch { /* se escribe a mano */ }
         });
 
         let guardando = false;

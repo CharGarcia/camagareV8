@@ -170,7 +170,6 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosPestanasOcultas($vistaConfigF
                                         id="firma_fecha_cad" maxlength="10" placeholder="dd-mm-yyyy"
                                         pattern="\d{2}-\d{2}-\d{4}"
                                         title="Formato: dd-mm-yyyy">
-                                    <div class="form-text small" id="firma_cad_ayuda" style="font-size:.7rem;"></div>
 
                                 </div>
                                 <!-- ¿Con RUC? (solo Persona Natural) -->
