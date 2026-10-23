@@ -396,7 +396,7 @@ $nacionalidades = ['Ecuatoriana', 'Colombiana', 'Peruana', 'Venezolana', 'Cubana
             <div id="bloqueFacturacion" class="row g-2 mt-1 <?= $mismos ? 'd-none' : '' ?>">
                 <div class="col-12 col-sm-4">
                     <label class="form-label">Tipo</label>
-                    <select class="form-select form-select-sm" name="facturacion_tipo_id">
+                    <select class="form-select form-select-sm" name="facturacion_tipo_id" id="facturacion_tipo_id">
                         <?php foreach (['cedula' => 'Cédula', 'ruc' => 'RUC', 'pasaporte' => 'Pasaporte'] as $k => $lbl): ?>
                             <option value="<?= $k ?>" <?= ($f['facturacion_tipo_id'] ?? '') === $k ? 'selected' : '' ?>><?= $lbl ?></option>
                         <?php endforeach; ?>
@@ -404,11 +404,16 @@ $nacionalidades = ['Ecuatoriana', 'Colombiana', 'Peruana', 'Venezolana', 'Cubana
                 </div>
                 <div class="col-12 col-sm-8">
                     <label class="form-label">Identificación</label>
-                    <input type="text" class="form-control form-control-sm" name="facturacion_num_id" maxlength="13" value="<?= $v('facturacion_num_id') ?>">
+                    <div class="input-group input-group-sm">
+                        <input type="text" class="form-control" name="facturacion_num_id" id="facturacion_num_id" maxlength="13" inputmode="numeric" value="<?= $v('facturacion_num_id') ?>">
+                        <button type="button" class="btn btn-outline-primary px-2" id="btnBuscarSriFact" title="Buscar en el SRI">
+                            <i class="bi bi-search" id="sriFactIcono"></i><span id="sriFactLoader" class="spinner-border spinner-border-sm d-none"></span>
+                        </button>
+                    </div>
                 </div>
                 <div class="col-12">
                     <label class="form-label">Nombre o razón social</label>
-                    <input type="text" class="form-control form-control-sm" name="facturacion_nombres" value="<?= $v('facturacion_nombres') ?>">
+                    <input type="text" class="form-control form-control-sm" name="facturacion_nombres" id="facturacion_nombres" value="<?= $v('facturacion_nombres') ?>">
                 </div>
                 <div class="col-12 col-sm-6">
                     <label class="form-label">Correo</label>
@@ -420,7 +425,7 @@ $nacionalidades = ['Ecuatoriana', 'Colombiana', 'Peruana', 'Venezolana', 'Cubana
                 </div>
                 <div class="col-12">
                     <label class="form-label">Dirección</label>
-                    <input type="text" class="form-control form-control-sm" name="facturacion_direccion" value="<?= $v('facturacion_direccion') ?>">
+                    <input type="text" class="form-control form-control-sm" name="facturacion_direccion" id="facturacion_direccion" value="<?= $v('facturacion_direccion') ?>">
                 </div>
             </div>
         </div>
@@ -687,6 +692,38 @@ $nacionalidades = ['Ecuatoriana', 'Colombiana', 'Peruana', 'Venezolana', 'Cubana
         document.getElementById('numero_identificacion')?.addEventListener('input', function () {
             const n = this.value.replace(/\D/g, '');
             if (n.length === 10 || n.length === 13) buscarTitularSri(false);
+        });
+
+        // Factura a otro nombre: nombre completo / razón social y dirección.
+        let ultimaSriFact = '';
+        async function buscarFacturacionSri(manual) {
+            const id = valor('facturacion_num_id').replace(/\D/g, '');
+            if (!/^\d{10}(\d{3})?$/.test(id)) {
+                if (manual) aviso('Escriba una cédula (10 dígitos) o RUC (13 dígitos).');
+                return;
+            }
+            if (!manual && id === ultimaSriFact) return;
+            ultimaSriFact = id;
+            const icon = document.getElementById('sriFactIcono'), loader = document.getElementById('sriFactLoader');
+            icon.classList.add('d-none'); loader.classList.remove('d-none');
+            try {
+                const data = await consultarSri(id);
+                const d = data.data || {};
+                if (data.ok && d.nombre) {
+                    poner('facturacion_nombres', d.nombre, manual);
+                    if (d.direccion) poner('facturacion_direccion', d.direccion, manual);
+                    document.getElementById('facturacion_tipo_id').value = id.length === 13 ? 'ruc' : 'cedula';
+                    aviso('Encontramos los datos para la factura en el SRI.', 'success');
+                } else if (manual || data.advertencia) {
+                    aviso(data.advertencia || data.error || 'No se encontraron datos. Escríbalos a mano.', 'warning');
+                }
+            } catch { if (manual) aviso('No se pudo consultar. Escriba los datos a mano.', 'warning'); }
+            finally { icon.classList.remove('d-none'); loader.classList.add('d-none'); }
+        }
+        document.getElementById('btnBuscarSriFact')?.addEventListener('click', () => buscarFacturacionSri(true));
+        document.getElementById('facturacion_num_id')?.addEventListener('input', function () {
+            const n = this.value.replace(/\D/g, '');
+            if (n.length === 10 || n.length === 13) buscarFacturacionSri(false);
         });
 
         // RUC de la empresa (representante legal / miembro): completa la razón social.
