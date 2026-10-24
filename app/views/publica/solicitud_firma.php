@@ -289,16 +289,16 @@ $nacionalidades = ['Ecuatoriana', 'Colombiana', 'Peruana', 'Venezolana', 'Cubana
                         </button>
                     </div>
                 </div>
-                <div class="col-12 col-sm-3 d-flex align-items-end pb-1" id="bloqueConRuc">
+                <div class="col-12 col-sm-4">
+                    <label class="form-label" for="codigo_dactilar">Código dactilar <span class="req" id="reqDactilar">*</span></label>
+                    <input type="text" class="form-control form-control-sm" id="codigo_dactilar" name="codigo_dactilar" maxlength="20" value="<?= $v('codigo_dactilar') ?>" placeholder="Ej. V4443V4442">
+                </div>
+                <div class="col-12 col-sm-4 d-flex align-items-end pb-1" id="bloqueConRuc">
                     <?php // Solo persona natural: el representante legal ya registra el RUC de la empresa. ?>
                     <div class="form-check form-switch">
                         <input class="form-check-input" type="checkbox" id="con_ruc" name="con_ruc" value="1" <?= in_array($f['con_ruc'] ?? false, [true, 't', 1, '1'], true) ? 'checked' : '' ?>>
                         <label class="form-check-label small fw-medium" for="con_ruc">Firma electrónica con RUC</label>
                     </div>
-                </div>
-                <div class="col-12 col-sm-4">
-                    <label class="form-label" for="codigo_dactilar">Código dactilar <span class="req" id="reqDactilar">*</span></label>
-                    <input type="text" class="form-control form-control-sm" id="codigo_dactilar" name="codigo_dactilar" maxlength="20" value="<?= $v('codigo_dactilar') ?>" placeholder="Ej. V4443V4442">
                 </div>
             </div>
         </div>
