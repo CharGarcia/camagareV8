@@ -1740,7 +1740,7 @@ class SincronizadorAsientosService
             )));
             if ($nombres) {
                 $resto = count($nombres) - min(count($nombres), 4);
-                $linea .= ' · ' . ($tipoRef === 'proveedor' ? 'proveedor' : 'cliente') . (count($nombres) > 1 ? 'es' : '')
+                $linea .= ' · ' . ($tipoRef === 'proveedor' ? 'proveedor' : 'cliente') . (count($nombres) > 1 ? ($tipoRef === 'proveedor' ? 'es' : 's') : '')
                         . ': ' . implode(', ', array_slice($nombres, 0, 4)) . ($resto > 0 ? " y {$resto} más" : '');
             }
         }
@@ -1749,7 +1749,50 @@ class SincronizadorAsientosService
         if ($faltan) {
             $linea .= ' — falta: ' . implode(', ', array_map(fn($c) => '«' . $c . '»', $faltan));
         }
+        $noUsables = self::cuentasNoUtilizables($motivo);
+        if ($noUsables) {
+            $linea .= ' — cuentas configuradas que no se pueden usar: ' . implode(', ', $noUsables);
+        }
+        // El motivo no nombra ninguna cuenta («La fila 3 no tiene una cuenta contable asignada»,
+        // «No se ha configurado ninguna cuenta…», «El asiento no está cuadrado…»): la acción solo
+        // diría "Configure las cuentas de …" y el usuario no sabría qué buscar. Se muestra el motivo
+        // tal cual; si es técnico (error de BD), queda en el log del servidor. Solo los motivos de
+        // cuentas/cuadre: los demás ya van completos en el texto de la acción (registrarAccionInterna).
+        if (!$faltan && !$noUsables && preg_match('/cuenta|configur|cuadr/iu', $motivo) && !self::esMotivoTecnico($motivo)) {
+            $linea .= ' — motivo: ' . rtrim(trim($motivo), '. ');
+        }
         return $linea;
+    }
+
+    /** Error técnico (BD, clases PHP) que no se le muestra al usuario: va al log para soporte. */
+    private static function esMotivoTecnico(string $motivo): bool
+    {
+        return (bool) preg_match('/sqlstate|pdoexception|exception|error de sintaxis|undefined|stack trace|\.php/i', $motivo)
+            || mb_strlen($motivo) > 400;
+    }
+
+    /**
+     * Cuentas que AsientoContableService::validarCuentasUtilizables() rechazó al grabar el asiento
+     * («la cuenta 1.1.02 - Clientes está eliminada del plan de cuentas»): están configuradas, pero
+     * apuntan a una cuenta eliminada, de otra empresa o inexistente.
+     *
+     * @return string[] "«1.1.02 - Clientes» (eliminada)"
+     */
+    private static function cuentasNoUtilizables(string $motivo): array
+    {
+        if (!preg_match_all('/la cuenta (.+?) (está eliminada del plan de cuentas|pertenece a otra empresa|no existe en el plan de cuentas)/u', $motivo, $mm, PREG_SET_ORDER)) {
+            return [];
+        }
+        $out = [];
+        foreach ($mm as $x) {
+            $estado = match (true) {
+                str_contains($x[2], 'eliminada') => 'eliminada',
+                str_contains($x[2], 'otra')      => 'de otra empresa',
+                default                          => 'no existe',
+            };
+            $out[] = '«' . trim($x[1]) . "» ({$estado})";
+        }
+        return array_values(array_unique($out));
     }
 
     /**
@@ -1826,6 +1869,20 @@ class SincronizadorAsientosService
         if (trim($m) === '') {
             $this->agregarAccion('', '', "Algunos {$nombreModulo} quedaron sin asiento porque les falta un dato que el asiento necesita "
                 . '(revise que tengan valores y formas de cobro/pago); si todo está completo, comuníquese con soporte');
+            return;
+        }
+
+        // La cuenta SÍ está configurada, pero apunta a una cuenta eliminada del plan de cuentas, de
+        // otra empresa o inexistente (AsientoContableService::validarCuentasUtilizables()).
+        // Configuración Contable la sigue mostrando como asignada, así que decir "Configure las
+        // cuentas" mandaba al usuario a revisar una pantalla que se ve completa.
+        if (str_contains($m, 'no se puede registrar el asiento') && self::cuentasNoUtilizables($motivo)) {
+            $donde = $area['nombre'] ?? $nombreModulo;
+            $this->agregarAccion(
+                $area['tipo'] ?? '', $area['seccion'] ?? 'general',
+                "Algunas cuentas configuradas en {$donde} ya no se pueden usar (eliminadas del plan de cuentas o de otra empresa): "
+                . 'reactívelas en el Plan de Cuentas o cámbielas en Configuración Contable (regla General o del cliente/proveedor)'
+            );
             return;
         }
 

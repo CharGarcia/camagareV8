@@ -2369,6 +2369,11 @@ class AsientoBuilderService
                     ". Configúrela en Contabilidad → Configuración contable, concepto «ventas»."
                 );
             }
+            // Factura en cero: no es configuración (el aviso de sincronización la reconoce por
+            // este texto y no manda a Configuración Contable).
+            if ($importeTotal <= 0 && $subtotal <= 0) {
+                throw new \Exception("No se generó ninguna línea del asiento: el documento no tiene líneas con valor (el detalle está vacío o en cero).");
+            }
             throw new \Exception("No se ha configurado ninguna cuenta para este asiento o los montos son cero.");
         }
 

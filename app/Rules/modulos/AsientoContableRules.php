@@ -143,7 +143,12 @@ class AsientoContableRules
         foreach ($detalles as $i => $det) {
             $fila = $i + 1;
             if (empty($det['id_cuenta_contable'])) {
-                throw new \Exception("La fila {$fila} no tiene una cuenta contable asignada.");
+                // En los asientos automáticos la referencia es el concepto de Configuración
+                // Contable: se nombra para que el aviso de pendientes diga qué cuenta falta.
+                $ref = trim((string) ($det['referencia_detalle'] ?? ''));
+                throw new \Exception($ref !== ''
+                    ? "Falta la cuenta contable de «{$ref}» (fila {$fila} del asiento)."
+                    : "La fila {$fila} no tiene una cuenta contable asignada.");
             }
 
             $debe = round((float)($det['debe'] ?? 0), 2);

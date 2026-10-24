@@ -5,8 +5,8 @@ categoria: Contabilidad
 ruta_modulo: modulos/asientos_contables
 tipo: modulo
 visibilidad: todos
-etiquetas: asientos, asiento contable, diario, debe, haber, partida doble, cuadrado, comprobante, contabilidad, imprimir, pdf, excel, documento origen, cuadre con el documento, total de la factura, cuenta por cobrar, cartera, editar asiento desde el documento, pestaña asiento contable, editado a mano, restaurar asiento automático, permisos de contabilidad, documentos migrados, migración, sistema anterior, buscar asiento, buscador, filtros, filtrar asientos, buscar por cuenta, buscar por referencia, libro diario, chips, asiento descuadrado, búsqueda lenta, se queda buscando, filtrar por origen, origen del asiento, módulo de origen, vista previa, costo de ventas, asiento sin costo, duplicar asiento, copiar asiento, clonar asiento, repetir asiento
-version: 1.37
+etiquetas: asientos, cuenta eliminada, cuenta configurada no funciona, asiento contable, diario, debe, haber, partida doble, cuadrado, comprobante, contabilidad, imprimir, pdf, excel, documento origen, cuadre con el documento, total de la factura, cuenta por cobrar, cartera, editar asiento desde el documento, pestaña asiento contable, editado a mano, restaurar asiento automático, permisos de contabilidad, documentos migrados, migración, sistema anterior, buscar asiento, buscador, filtros, filtrar asientos, buscar por cuenta, buscar por referencia, libro diario, chips, asiento descuadrado, búsqueda lenta, se queda buscando, filtrar por origen, origen del asiento, módulo de origen, vista previa, costo de ventas, asiento sin costo, duplicar asiento, copiar asiento, clonar asiento, repetir asiento
+version: 1.38
 orden: 20
 estado: activo
 ---
@@ -268,8 +268,11 @@ esa parte va a la Cuenta por Pagar de las compras.
 
 Si el detalle nombra **proveedores o clientes**, esos tienen cuentas propias: la
 cuenta que falta se asigna en su fila de *Reglas por Proveedores* o *Reglas por
-Clientes* (o en la General, que la complementa). Cuando el motivo no permite saber
-qué cuenta exacta falta, el detalle muestra solo los documentos y de quién son.
+Clientes* (o en la General, que la complementa). Cuando el motivo no nombra una
+cuenta, el detalle muestra el **motivo exacto** después de «— motivo:», por ejemplo
+*— motivo: No se ha configurado ninguna cuenta para este asiento o los montos son
+cero*. Solo los errores técnicos (de base de datos) no se muestran: quedan en el
+registro del servidor para soporte.
 
 Hay dos casos que **no son de configuración** y el aviso los distingue, sin
 enlace *Configurar*:
@@ -281,6 +284,15 @@ enlace *Configurar*:
   mensaje exacto con el Debe, el Haber y la diferencia.
 - **«… no tienen líneas con valor»**: el documento no tiene detalle o lo tiene en
   cero, así que no hay nada que contabilizar.
+
+Y un caso en que la cuenta **sí está configurada pero no sirve**:
+
+- **«Algunas cuentas configuradas en … ya no se pueden usar»**: la regla (General o
+  del cliente/proveedor) apunta a una cuenta que se **eliminó** del Plan de Cuentas,
+  que es de otra empresa o que ya no existe. En Configuración Contable se sigue viendo
+  asignada, por eso parece que todo está bien. El detalle nombra la cuenta, por
+  ejemplo *«1.1.02.01 - Clientes» (eliminada)*: reactívela en el Plan de Cuentas o
+  elija otra cuenta en esa regla.
 
 Otros ejemplos de líneas:
 
@@ -522,6 +534,12 @@ cambiarlos se revierte el cierre en ese módulo y se genera de nuevo.
 
 ## Historial de cambios
 
+- **1.38** — El aviso de asientos sin generar distingue la cuenta **configurada pero
+  eliminada** del Plan de Cuentas (o de otra empresa) y la nombra; antes decía
+  «Configure las cuentas contables de …» aunque la regla se viera completa. Una factura
+  en cero se informa como «sin líneas con valor». Si el motivo no nombra una cuenta, el
+  detalle muestra el motivo exacto, y una línea del asiento sin cuenta dice de qué
+  concepto es.
 - **1.37** — Los asientos del **Cierre del Ejercicio** (cierre al 31-12 y apertura al 01-01)
   no se pueden editar ni anular desde Asientos Contables; se revierten desde su módulo.
 - **1.36** — El asiento de **facturas de compra** ya contabiliza el **ICE** (al
