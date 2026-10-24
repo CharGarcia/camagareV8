@@ -735,6 +735,41 @@ class FirmasElectronicasController extends BaseModuloController
         });
     }
 
+    /**
+     * PDF de la factura de venta de la firma (pestaña Facturación): el mismo que descarga
+     * Facturas de Venta, con el permiso de ver de este módulo (DocumentoVentaPdfService).
+     * Lo pide CMG_pdfDocumento(): ante un error responde JSON {error}.
+     */
+    public function pdfFacturaAjax(): void
+    {
+        $this->requireLeer();
+        $idEmpresa = (int) $_SESSION['id_empresa'];
+        $idFact = $this->service->idFacturaParaPdf((int) ($_GET['id'] ?? 0), $idEmpresa);
+        if (!$idFact) {
+            http_response_code(404);
+            header('Content-Type: application/json; charset=utf-8');
+            echo json_encode(['error' => 'Esta firma no tiene una factura de venta.']);
+            exit;
+        }
+        // El PDF tarda: sin el candado de la sesión, las demás peticiones del usuario no esperan.
+        session_write_close();
+        try {
+            if (!(new \App\Services\modulos\DocumentoVentaPdfService())->descargar('FACTURA', $idFact, $idEmpresa)) {
+                http_response_code(404);
+                header('Content-Type: application/json; charset=utf-8');
+                echo json_encode(['error' => 'Factura no encontrada.']);
+            }
+        } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
+            if (!headers_sent()) {
+                http_response_code(500);
+                header('Content-Type: application/json; charset=utf-8');
+            }
+            echo json_encode(['error' => 'Error al generar el PDF: ' . $e->getMessage()]);
+        }
+        exit;
+    }
+
     public function enviarUanatacaAjax(): void
     {
         $this->requireActualizar();

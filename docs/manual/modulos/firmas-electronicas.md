@@ -6,7 +6,7 @@ ruta_modulo: modulos/firmas_electronicas
 tipo: modulo
 visibilidad: admin
 etiquetas: firma electronica, vender firmas, aviso de vencimiento al cliente, recordatorio de renovacion, renovar firma del cliente, firma por vencer, enlace de renovacion, api uanataca, uanacreditos, creditos uanataca, precompra, distribuidor uanataca, miembro de empresa, representante legal, solicitud de firma, tramite de firma, uanataca, enlace para el cliente, formulario de firma, link de firma, whatsapp, pagar firma, payphone, transferencia, comprobante de pago, confirmar correo, factura de la firma, registrar en uanataca, firma emitida, observada, corregir solicitud, enlace fijo, qr de firma, certificado, p12, caducada, por caducar, renovar firma, firma invalida, xades, anf, security data, buscar firma, filtros, firmas por facturar
-version: 2.8
+version: 2.9
 orden: 20
 estado: activo
 ---
@@ -53,11 +53,11 @@ comprobante), Confirmado o Rechazado.
 |------|-----------|--------------------------------------|
 | Persona natural | Uso personal o con RUC de persona natural | — |
 | Representante legal | Quien consta en el nombramiento de la empresa | RUC, constitución, nombramiento y su aceptación (PDF) |
-| Miembro de empresa | Empleado autorizado por el representante legal | RUC, nombramiento del representante, cédula del representante y autorización firmada |
 
-Para representante legal y miembro de empresa se piden además el RUC, la razón
-social, el cargo y el motivo (uso de la firma); para miembro de empresa, el
-departamento y los datos del representante legal. Uanataca exige también la
+Para representante legal se piden además el RUC, la razón social, el cargo y el
+motivo (uso de la firma). El tipo **Miembro de empresa** ya no se ofrece en las
+solicitudes nuevas; las firmas que ya lo tenían lo conservan (con sus datos de
+departamento y del representante legal). Uanataca exige también la
 **fecha de nacimiento**, el **sexo**, los **dos apellidos por separado** y, con
 cédula, el **código dactilar**.
 
@@ -204,7 +204,9 @@ crear otra. Las fotos de más de 1 MB se reducen antes de enviarlas.
 
 ## Permisos
 
-- **Ver**: listado, fichas y documentos.
+- **Ver**: listado, fichas y documentos, incluido el **PDF de la factura** de
+  la firma (botón en la pestaña Facturación: ver, imprimir o descargar), sin
+  necesitar permiso en Facturas de Venta.
 - **Crear**: registrar firmas a mano, enviar enlaces y generar la factura en
   borrador desde la pestaña Facturación.
 - **Modificar**: aprobar o rechazar pagos, avanzar el trámite, reenviar el
@@ -396,6 +398,10 @@ archivo, y volver a cargar la firma no lo soluciona.
 
 ## Historial de cambios
 
+- **2.9** — Pestaña Facturación: el botón «Ver en Facturas de Venta» se
+  reemplaza por **PDF de la factura**. Tipo de persona: solo Persona natural y
+  Representante legal (Miembro de empresa queda en las firmas que ya lo tenían).
+  Se quita el botón «Abrir Uanataca». Mensajes con SweetAlert.
 - **2.8** — Una firma con factura activa se puede editar mientras no esté
   emitida (datos del titular, tipo de firma, estado, observaciones); el pago y
   la facturación se conservan y la factura no se modifica. Se quitan «Otro

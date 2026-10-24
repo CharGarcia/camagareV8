@@ -381,7 +381,6 @@ $to      = $total > 0 ? min($page * $perPage, $total) : 0;
             </div>
             <form id="formConfigFirmas" onsubmit="return false;">
             <div class="modal-body px-3 py-3">
-                <div id="alertConfigFirmas" class="alert d-none mb-3 py-2 small"></div>
                 <div class="d-flex align-items-center mb-3">
                     <ul class="nav nav-tabs flex-grow-1" role="tablist">
                         <li class="nav-item">
@@ -828,14 +827,15 @@ $to      = $total > 0 ? min($page * $perPage, $total) : 0;
         res.textContent = 'Guardando y probando…';
         // Se prueba con lo guardado: primero se guarda la configuración del formulario.
         const g = await postFirmas('guardarConfigAjax', new FormData(document.getElementById('formConfigFirmas')));
-        if (!g.ok) { res.className = 'small text-danger'; res.textContent = g.error; return; }
+        if (!g.ok) { res.textContent = ''; Swal.fire('Error', g.error, 'error'); return; }
         try {
             const d = await postFirmas('probarUanatacaAjax');
             res.className = `small ${d.ok ? 'text-success' : 'text-danger'}`;
-            res.textContent = d.ok ? d.msg : d.error;
+            res.textContent = d.ok ? 'Conexión correcta' : 'Sin conexión';
+            Swal.fire(d.ok ? 'Conexión correcta' : 'Error', d.ok ? d.msg : d.error, d.ok ? 'success' : 'error');
             // Con la conexión ya probada, el catálogo de productos puede cargarse.
             if (d.ok) window.cargarProductosUanataca();
-        } catch { res.className = 'small text-danger'; res.textContent = 'Error de conexión.'; }
+        } catch { res.className = 'small text-danger'; res.textContent = 'Sin conexión'; Swal.fire('Error', 'Error de conexión.', 'error'); }
     };
 
     // Productos de Uanataca (sección de la pestaña Uanataca): se consulta el catálogo
@@ -871,7 +871,6 @@ $to      = $total > 0 ? min($page * $perPage, $total) : 0;
 
     window.guardarMapeoUanataca = async function () {
         const btn = document.getElementById('btnGuardarMapeoUanataca');
-        const alerta = document.getElementById('alertMapeoUanataca');
         const mapeo = {};
         document.querySelectorAll('#tbodyMapeoUanataca select[data-producto]').forEach(s => { mapeo[s.dataset.producto] = s.value; });
         const fd = new FormData();
@@ -879,32 +878,33 @@ $to      = $total > 0 ? min($page * $perPage, $total) : 0;
         btn.disabled = true;
         try {
             const d = await postFirmas('guardarMapeoUanatacaAjax', fd);
-            alerta.className = `alert alert-${d.ok ? 'success' : 'danger'} mb-2 py-2 small`;
-            alerta.textContent = d.ok ? d.msg : d.error;
-        } catch { alerta.className = 'alert alert-danger mb-2 py-2 small'; alerta.textContent = 'Error de conexión.'; }
+            Swal.fire(d.ok ? '¡Guardado!' : 'Error', d.ok ? d.msg : d.error, d.ok ? 'success' : 'error');
+        } catch { Swal.fire('Error', 'Error de conexión.', 'error'); }
         finally { btn.disabled = false; }
     };
 
     window.abrirConfigFirmas = function () {
-        document.getElementById('alertConfigFirmas').className = 'alert d-none mb-3 py-2 small';
         bootstrap.Modal.getOrCreateInstance(document.getElementById('modalConfigFirmas')).show();
     };
 
     window.guardarConfigFirmas = async function (regenerar) {
-        if (regenerar && !confirm('Se generará un enlace fijo nuevo y el anterior dejará de funcionar. ¿Continuar?')) return;
+        if (regenerar) {
+            const r = await Swal.fire({
+                icon: 'warning', title: '¿Generar un enlace nuevo?', text: 'Se generará un enlace fijo nuevo y el anterior dejará de funcionar.',
+                showCancelButton: true, confirmButtonText: 'Sí, generar', cancelButtonText: 'Cancelar', reverseButtons: true,
+            });
+            if (!r.isConfirmed) return;
+        }
         const btn = document.getElementById('btnGuardarConfigFirmas');
-        const alerta = document.getElementById('alertConfigFirmas');
         btn.disabled = true;
         try {
             const fd = new FormData(document.getElementById('formConfigFirmas'));
             if (regenerar) fd.append('regenerar_enlace', '1');
             const data = await (await fetch(`${urlBase}/guardarConfigAjax`, { method: 'POST', body: fd })).json();
-            alerta.className = `alert alert-${data.ok ? 'success' : 'danger'} mb-3 py-2 small`;
-            alerta.textContent = data.ok ? data.msg : data.error;
+            Swal.fire(data.ok ? '¡Guardado!' : 'Error', data.ok ? data.msg : data.error, data.ok ? 'success' : 'error');
             if (data.ok) document.getElementById('cfgUrlEnlaceFijo').value = data.url_enlace_fijo;
         } catch {
-            alerta.className = 'alert alert-danger mb-3 py-2 small';
-            alerta.textContent = 'Error de conexión.';
+            Swal.fire('Error', 'Error de conexión.', 'error');
         } finally {
             btn.disabled = false;
         }
@@ -971,15 +971,19 @@ $to      = $total > 0 ? min($page * $perPage, $total) : 0;
     };
 
     window.cancelarSolicitud = async function (id) {
-        if (!confirm('¿Cancelar esta solicitud?')) return;
+        const r = await Swal.fire({
+            icon: 'warning', title: '¿Cancelar este enlace?', text: 'El cliente ya no podrá usarlo.',
+            showCancelButton: true, confirmButtonText: 'Sí, cancelar enlace', cancelButtonText: 'No', reverseButtons: true,
+        });
+        if (!r.isConfirmed) return;
         const fd = new FormData();
         fd.append('id', id);
         try {
             const resp = await fetch(`${urlBase}/cancelarSolicitud`, { method: 'POST', body: fd });
             const data = await resp.json();
             if (data.ok) cargarSolicitudes(paginaSolicitudes);
-            else alert(data.msg);
-        } catch { alert('Error de conexión.'); }
+            else Swal.fire('Error', data.msg || 'No se pudo cancelar el enlace.', 'error');
+        } catch { Swal.fire('Error', 'Error de conexión.', 'error'); }
     };
 
     window.abrirFirmaPorNombre = function (idFirma) {

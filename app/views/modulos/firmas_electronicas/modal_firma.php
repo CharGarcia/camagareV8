@@ -101,7 +101,8 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosPestanasOcultas($vistaConfigF
                                     <select class="form-select form-select-sm shadow-none" name="tipo_persona" id="firma_tipo_persona">
                                         <option value="natural">Persona Natural</option>
                                         <option value="juridica">Representante legal</option>
-                                        <option value="miembro">Miembro de empresa</option>
+                                        <?php // Ya no se ofrece; solo aparece en firmas antiguas que lo tienen (el JS lo muestra). ?>
+                                        <option value="miembro" hidden disabled>Miembro de empresa</option>
                                     </select>
                                 </div>
 
@@ -728,9 +729,9 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosPestanasOcultas($vistaConfigF
 
                                         <!-- Footer con enlace (solo con factura generada) -->
                                         <div class="px-3 py-2 border-top d-none" id="factLinkWrap">
-                                            <a href="#" id="facturaLink" target="_blank" class="btn btn-outline-secondary btn-sm">
-                                                <i class="bi bi-eye me-1"></i>Ver en Facturas de Venta
-                                            </a>
+                                            <button type="button" id="btnPdfFacturaFirma" class="btn btn-outline-danger btn-sm" title="Ver, imprimir o descargar el PDF de la factura">
+                                                <i class="bi bi-file-earmark-pdf me-1"></i>PDF de la factura
+                                            </button>
                                         </div>
 
                                     </div>

@@ -181,10 +181,13 @@ $nacionalidades = ['Ecuatoriana', 'Colombiana', 'Peruana', 'Venezolana', 'Cubana
                     <input class="form-check-input" type="radio" name="tipo_persona" id="tp_juridica" value="juridica" <?= $tipoPersona === 'juridica' ? 'checked' : '' ?>>
                     <label class="form-check-label" for="tp_juridica">Representante legal</label>
                 </div>
+                <?php // «Miembro de empresa» ya no se ofrece; solo se ve en una solicitud que ya lo tenía. ?>
+                <?php if ($tipoPersona === 'miembro'): ?>
                 <div class="form-check">
-                    <input class="form-check-input" type="radio" name="tipo_persona" id="tp_miembro" value="miembro" <?= $tipoPersona === 'miembro' ? 'checked' : '' ?>>
+                    <input class="form-check-input" type="radio" name="tipo_persona" id="tp_miembro" value="miembro" checked>
                     <label class="form-check-label" for="tp_miembro">Miembro de empresa</label>
                 </div>
+                <?php endif; ?>
             </div>
             <div class="form-text small" id="ayudaTipoPersona"></div>
         </div>

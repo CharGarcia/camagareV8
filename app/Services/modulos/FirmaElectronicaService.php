@@ -2403,6 +2403,20 @@ class FirmaElectronicaService
     }
 
     /** id de la factura de la firma si sigue activa (no eliminada ni anulada). */
+    /** Factura de la firma para su PDF (también si está anulada); null si no tiene o se eliminó. */
+    public function idFacturaParaPdf(int $idFirma, int $idEmpresa): ?int
+    {
+        $firma = $this->repository->findById($idFirma, $idEmpresa);
+        if (!$firma || empty($firma['id_factura'])) {
+            return null;
+        }
+        $f = $this->repository->getEstadoFactura((int) $firma['id_factura'], $idEmpresa);
+        if (!$f || $f['eliminado'] === true || $f['eliminado'] === 't') {
+            return null;
+        }
+        return (int) $f['id'];
+    }
+
     private function facturaActiva(array $firma): ?int
     {
         if (empty($firma['id_factura'])) {

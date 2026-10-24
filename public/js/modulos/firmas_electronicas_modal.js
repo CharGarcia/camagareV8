@@ -127,6 +127,13 @@
     // ── Tipo de Persona (Natural / Jurídica) ───────────────────
     const selectTipoPersona = document.getElementById('firma_tipo_persona');
 
+    // «Miembro de empresa» ya no se ofrece: solo se muestra en una firma que ya lo tiene,
+    // para que al guardarla no cambie sola a Persona Natural.
+    function mostrarOpcionMiembro(mostrar) {
+        const opt = selectTipoPersona?.querySelector('option[value="miembro"]');
+        if (opt) { opt.hidden = !mostrar; opt.disabled = !mostrar; }
+    }
+
     function mostrarCamposJuridica(tipo) {
         // Representante legal y miembro de empresa comparten los datos de la empresa.
         const esJuridica    = tipo === 'juridica' || tipo === 'miembro';
@@ -335,13 +342,19 @@
         }
     }
 
+    // PDF de la factura de la firma: Ver / Imprimir / Descargar con el diálogo estándar (CLAUDE.md §9).
+    document.getElementById('btnPdfFacturaFirma')?.addEventListener('click', () => {
+        const id = _idFirmaActual || document.getElementById('firma_id_modal')?.value;
+        if (!id) return;
+        CMG_pdfDocumento(`${urlBase}/pdfFacturaAjax?id=${encodeURIComponent(id)}`);
+    });
+
     function mostrarInfoFactura(factData) {
         const headerRow = document.getElementById('factHeaderRow');
         const badge     = document.getElementById('facturaEstadoBadge');
         const numEl     = document.getElementById('factNumero');
         const fechaEl   = document.getElementById('factFecha');
         const linkWrap  = document.getElementById('factLinkWrap');
-        const link      = document.getElementById('facturaLink');
 
         const tieneFactura = !!(factData && factData.factura_estado && factData.factura_eliminada !== true);
 
@@ -407,8 +420,6 @@
             ? parseFloat(opt.dataset.pvp)
             : (factData.factura_importe_total != null ? parseFloat(factData.factura_importe_total) : 0);
         actualizarFactItem(nomP, pvpVal);
-
-        if (link) link.href = (typeof BASE_URL !== 'undefined' ? BASE_URL : '') + '/modulos/factura-venta';
     }
 
     function mostrarBloqueFacturacion(mismosDatos) {
@@ -688,6 +699,7 @@
         // Facturación: resetear tab
         _facturaEstado = null;
         _firmaEstado   = null;
+        mostrarOpcionMiembro(false);
         _facturaElim   = false;
         if (chkMismosDatos) chkMismosDatos.checked = true;
         mostrarBloqueFacturacion(true);
@@ -732,6 +744,7 @@
         document.getElementById('firma_nombre_producto_modal').value = data.nombre_producto || '';
         document.getElementById('tituloModalFirma').textContent       = 'Editar Firma Electrónica';
 
+        mostrarOpcionMiembro(data.tipo_persona === 'miembro');
         setVal('firma_tipo_persona',   data.tipo_persona || 'natural');
         setVal('firma_id_producto',    data.id_producto || '');
         setVal('firma_tipo_id',        data.tipo_identificacion || 'cedula');
@@ -910,7 +923,7 @@
             mostrarAlerta('No se puede eliminar. Primero elimine o anule la factura activa desde Facturas de Venta.', 'warning');
             return;
         }
-        if (!confirm('¿Seguro que desea eliminar esta firma electrónica?')) return;
+        if (!(await confirmar('Se eliminará esta firma electrónica.', 'Sí, eliminar'))) return;
         const btn = document.getElementById('btnEliminarFirmaModal');
         if (btn) btn.disabled = true;
         try {
@@ -1104,7 +1117,7 @@
     }
 
     window.eliminarAdjunto = async function (id) {
-        if (!confirm('¿Eliminar este archivo adjunto?')) return;
+        if (!(await confirmar('Se eliminará este archivo adjunto.', 'Sí, eliminar'))) return;
         try {
             const fd = new FormData();
             fd.append('id', id);
@@ -1148,12 +1161,34 @@
         }
     }
 
+    // Mensajes con SweetAlert (como en Facturas de Venta). Se dibujan dentro del modal
+    // mientras está abierto, para que el foco del modal de Bootstrap no los bloquee.
+    function destinoSwal() {
+        return modalEl?.classList.contains('show') ? modalEl : 'body';
+    }
+
+    const SWAL_TIPOS = {
+        success: ['success', '¡Listo!'],
+        danger:  ['error',   'Error'],
+        warning: ['warning', 'Atención'],
+        info:    ['info',    'Información'],
+    };
+
     function mostrarAlerta(msg, tipo) {
-        const el = document.getElementById('modalAlertFirma');
-        if (!el) return;
-        el.textContent = msg;
-        el.className   = `alert mb-3 py-2 small shadow-sm border-0 alert-${tipo}`;
-        el.classList.remove('d-none');
+        if (!msg) return;
+        const [icon, title] = SWAL_TIPOS[tipo] || SWAL_TIPOS.info;
+        if (!window.Swal) { alert(msg); return; }
+        Swal.fire({ icon, title, text: msg, target: destinoSwal(), confirmButtonText: 'Aceptar' });
+    }
+
+    /** Confirmación con SweetAlert; devuelve true si el usuario acepta. */
+    async function confirmar(msg, textoBoton = 'Sí, continuar') {
+        if (!window.Swal) return confirm(msg);
+        const r = await Swal.fire({
+            icon: 'question', title: '¿Continuar?', text: msg, target: destinoSwal(),
+            showCancelButton: true, confirmButtonText: textoBoton, cancelButtonText: 'Cancelar', reverseButtons: true,
+        });
+        return r.isConfirmed;
     }
 
     function ocultarAlerta() {
@@ -1310,9 +1345,8 @@
             ? '<div class="alert alert-warning py-1 px-2 mb-2"><i class="bi bi-envelope-exclamation me-1"></i>El cliente aún no confirma su correo: Uanataca le enviará ahí la activación.</div>' : '';
         document.getElementById('uanatacaContenido').innerHTML = `
             ${aviso}
-            <div class="d-flex justify-content-between align-items-center mb-2">
+            <div class="mb-2">
                 <span class="text-muted">Copie cada dato en el portal de Uanataca:</span>
-                <a href="https://store.v2.uanataca.ec/solicitud/productos" target="_blank" rel="noopener" class="btn btn-sm btn-outline-primary"><i class="bi bi-box-arrow-up-right me-1"></i>Abrir Uanataca</a>
             </div>
             <table class="table table-sm table-hover align-middle mb-3" style="font-size:.82rem;"><tbody>${filas}</tbody></table>
             <div class="text-muted fw-semibold mb-1">Documentos</div>
@@ -1357,7 +1391,7 @@
             if (accion === 'aprobar') {
                 const forma = document.getElementById('trFormaCobro')?.value;
                 if (!forma) { mostrarAlerta('Elija la cuenta o forma de cobro donde llegó el pago.', 'warning'); return; }
-                if (!confirm('Se generará la factura, se enviará al SRI y se registrará el cobro. ¿Continuar?')) return;
+                if (!(await confirmar('Se generará la factura, se enviará al SRI y se registrará el cobro.'))) return;
                 await postTramite('aprobarPagoAjax', { id_forma_cobro: forma, referencia: document.getElementById('trReferencia')?.value || '' });
             } else if (accion === 'rechazar') {
                 const motivo = await pedirTexto('Rechazar comprobante', 'Motivo (lo verá el cliente)');
@@ -1365,14 +1399,14 @@
             } else if (accion === 'reenviar') {
                 await postTramite('reenviarConfirmacionAjax');
             } else if (accion === 'confirmar_manual') {
-                if (confirm('¿El cliente confirmó por otro medio que el correo ' + (_tramite?.correo || '') + ' es suyo?')) await postTramite('marcarCorreoConfirmadoAjax');
+                if (await confirmar('¿El cliente confirmó por otro medio que el correo ' + (_tramite?.correo || '') + ' es suyo?', 'Sí, confirmado')) await postTramite('marcarCorreoConfirmadoAjax');
             } else if (accion === 'enviar_uanataca') {
-                if (confirm('Se creará la solicitud en Uanataca con los datos y documentos del cliente (consume Uanacréditos). ¿Continuar?')) {
+                if (await confirmar('Se creará la solicitud en Uanataca con los datos y documentos del cliente (consume Uanacréditos).', 'Sí, enviar')) {
                     btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Enviando…';
                     await postTramite('enviarUanatacaAjax');
                 }
             } else if (accion === 'aviso_vencimiento') {
-                if (confirm('Se enviará al cliente el aviso de vencimiento con el enlace para renovar (correo y, si hay plantilla aprobada, WhatsApp). ¿Continuar?')) {
+                if (await confirmar('Se enviará al cliente el aviso de vencimiento con el enlace para renovar (correo y, si hay plantilla aprobada, WhatsApp).', 'Sí, enviar')) {
                     await postTramite('avisoVencimientoAjax');
                 }
             } else if (accion === 'sincronizar_uanataca') {
