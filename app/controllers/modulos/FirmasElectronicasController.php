@@ -738,6 +738,9 @@ class FirmasElectronicasController extends BaseModuloController
     public function enviarUanatacaAjax(): void
     {
         $this->requireActualizar();
+        // Uanataca puede tardar (documentos en base64): sin soltar la sesión, las demás
+        // peticiones del usuario hacen fila hasta que responda.
+        session_write_close();
         $this->responderJson(function () {
             $uuid = $this->service->enviarAUanataca((int) ($_POST['id'] ?? 0), (int) $_SESSION['id_empresa'], (int) $_SESSION['id_usuario']);
             return ['msg' => 'Solicitud creada en Uanataca (' . $uuid . '). El cliente recibirá el correo de Uanataca para validar su identidad.'];
@@ -818,8 +821,6 @@ class FirmasElectronicasController extends BaseModuloController
             'apellidos'             => trim(trim($_POST['apellido_paterno'] ?? '') . ' ' . trim($_POST['apellido_materno'] ?? '')) ?: trim($_POST['apellidos'] ?? ''),
             'apellido_paterno'      => trim($_POST['apellido_paterno'] ?? ''),
             'apellido_materno'      => trim($_POST['apellido_materno'] ?? ''),
-            'telefono2'             => trim($_POST['telefono2'] ?? ''),
-            'correo2'               => trim($_POST['correo2'] ?? ''),
             'departamento'          => trim($_POST['departamento'] ?? ''),
             'motivo'                => trim($_POST['motivo'] ?? ''),
             'rep_tipo_identificacion' => in_array($_POST['rep_tipo_identificacion'] ?? '', ['cedula', 'pasaporte'], true) ? $_POST['rep_tipo_identificacion'] : 'cedula',

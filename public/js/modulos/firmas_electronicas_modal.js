@@ -90,7 +90,6 @@
     // ── Tipo de identificación ─────────────────────────────────
     const selectTipoId = document.getElementById('firma_tipo_id');
     const inputNumId   = document.getElementById('firma_num_id');
-    const hintNumId    = document.getElementById('firma_num_id_hint');
 
     function ajustarTipoId(tipo) {
         if (!inputNumId) return;
@@ -98,12 +97,10 @@
             inputNumId.pattern     = '\\d{10}';
             inputNumId.maxLength   = 10;
             inputNumId.inputMode   = 'numeric';
-            if (hintNumId) hintNumId.textContent = '10 dígitos numéricos';
         } else {
             inputNumId.pattern     = '[a-zA-Z0-9]{1,20}';
             inputNumId.maxLength   = 20;
             inputNumId.inputMode   = 'text';
-            if (hintNumId) hintNumId.textContent = 'Letras y números (máx. 20)';
         }
     }
 
@@ -300,7 +297,9 @@
         // Alerta visible: el texto cambia según lo que queda bloqueado
         const alerta = document.getElementById('alertaBloqueoFirma');
         if (alerta) {
-            alerta.classList.toggle('d-none', !conFactura);
+            // Con la factura ya autorizada no se muestra el aviso de "puede corregir"
+            // (solo el de solo lectura, si además ya está emitida).
+            alerta.classList.toggle('d-none', !soloLectura && !(conFactura && _facturaEstado === 'borrador'));
             const txt = alerta.querySelector('.js-texto-bloqueo');
             if (txt) txt.innerHTML = soloLectura
                 ? 'Esta firma ya fue <strong>emitida</strong> y tiene una <strong>factura activa</strong>. Para modificarla o eliminarla, primero debe <strong>eliminar o anular la factura</strong> desde el módulo de Facturas de Venta.'
@@ -743,8 +742,6 @@
         const partesApe = (data.apellidos || '').trim().split(/\s+/);
         setVal('firma_apellido_paterno', data.apellido_paterno || partesApe.shift() || '');
         setVal('firma_apellido_materno', data.apellido_paterno ? (data.apellido_materno || '') : partesApe.join(' '));
-        setVal('firma_telefono2',      data.telefono2 || '');
-        setVal('firma_correo2',        data.correo2 || '');
         setVal('firma_departamento',   data.departamento || '');
         setVal('firma_motivo',         data.motivo || '');
         setVal('firma_rep_tipo_id',    data.rep_tipo_identificacion || 'cedula');
@@ -844,6 +841,14 @@
 
         if (id && esFirmaSoloLectura()) {
             mostrarAlerta('No se puede modificar una firma emitida con factura activa. Primero elimine o anule la factura.', 'warning');
+            return;
+        }
+
+        const inpDireccion = document.getElementById('firma_direccion');
+        if (inpDireccion && inpDireccion.value.trim().length < 10) {
+            mostrarAlerta('La dirección debe tener al menos 10 caracteres (calle, número, sector).', 'warning');
+            activarTab('tab-firma-general-btn');
+            inpDireccion.focus();
             return;
         }
 
@@ -1343,6 +1348,9 @@
         const btn = ev.target.closest('[data-tr]');
         if (!btn || _tramiteEnCurso) return;
         const accion = btn.dataset.tr;
+        // Texto original: si la acción falla, el botón vuelve a como estaba (si sale bien,
+        // cargarTramite() repinta la pestaña y lo reemplaza).
+        const htmlOriginal = btn.innerHTML;
         _tramiteEnCurso = true;
         btn.disabled = true;
         try {
@@ -1395,10 +1403,11 @@
                 if (window.abrirModalEnviarFormulario) window.abrirModalEnviarFormulario(d);
             }
         } catch (e) {
-            mostrarAlerta('Error de conexión.', 'danger');
+            mostrarAlerta('Error de conexión o respuesta inválida del servidor. Intente de nuevo.', 'danger');
         } finally {
             _tramiteEnCurso = false;
             btn.disabled = false;
+            btn.innerHTML = htmlOriginal;
         }
     });
 

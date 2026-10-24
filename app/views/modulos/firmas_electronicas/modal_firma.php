@@ -156,7 +156,6 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosPestanasOcultas($vistaConfigF
                                             </div>
                                         </span>
                                     </div>
-                                    <div id="firma_num_id_hint" class="form-text">10 dígitos numéricos</div>
                                 </div>
 
                                 <!-- Fecha de vencimiento -->
@@ -315,18 +314,6 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosPestanasOcultas($vistaConfigF
                                         id="firma_correo" maxlength="150" placeholder="Ej. cliente@correo.com">
                                 </div>
 
-                                <!-- Contacto alterno -->
-                                <div class="col-md-2">
-                                    <label class="form-label small fw-bold text-muted mb-1">Otro teléfono</label>
-                                    <input type="text" class="form-control form-control-sm shadow-none" name="telefono2"
-                                        id="firma_telefono2" maxlength="20" inputmode="tel">
-                                </div>
-                                <div class="col-md-4">
-                                    <label class="form-label small fw-bold text-muted mb-1">Correo alterno</label>
-                                    <input type="email" class="form-control form-control-sm shadow-none" name="correo2"
-                                        id="firma_correo2" maxlength="150">
-                                </div>
-
                                 <!-- Provincia -->
                                 <div class="col-md-2">
                                     <label class="form-label small fw-bold text-muted mb-1">Provincia</label>
@@ -350,9 +337,9 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosPestanasOcultas($vistaConfigF
 
                                 <!-- Dirección -->
                                 <div class="col-8">
-                                    <label class="form-label small fw-bold text-muted mb-1">Dirección</label>
+                                    <label class="form-label small fw-bold text-muted mb-1">Dirección <span class="text-danger">*</span></label>
                                     <input type="text" class="form-control form-control-sm shadow-none" name="direccion"
-                                        id="firma_direccion" maxlength="255" placeholder="Calle, número, sector…">
+                                        id="firma_direccion" minlength="10" maxlength="255" placeholder="Calle, número, sector… (mín. 10 caracteres)">
                                 </div>
 
                                 <!-- Estado trámite, estado pago y caducidad -->

@@ -347,14 +347,6 @@ $nacionalidades = ['Ecuatoriana', 'Colombiana', 'Peruana', 'Venezolana', 'Cubana
                     <input type="email" class="form-control form-control-sm" name="correo" value="<?= $e($f['correo'] ?? ($sol['correo_destino'] ?? '')) ?>">
                     <div class="form-text small">Aquí te llegará la factura y la activación de tu firma.</div>
                 </div>
-                <div class="col-12 col-sm-6">
-                    <label class="form-label">Otro teléfono</label>
-                    <input type="tel" class="form-control form-control-sm" name="telefono2" value="<?= $v('telefono2') ?>">
-                </div>
-                <div class="col-12 col-sm-6">
-                    <label class="form-label">Correo alterno</label>
-                    <input type="email" class="form-control form-control-sm" name="correo2" value="<?= $v('correo2') ?>">
-                </div>
             </div>
         </div>
     </div>
@@ -380,7 +372,7 @@ $nacionalidades = ['Ecuatoriana', 'Colombiana', 'Peruana', 'Venezolana', 'Cubana
                 </div>
                 <div class="col-12 col-sm-4">
                     <label class="form-label">Dirección <span class="req">*</span></label>
-                    <input type="text" class="form-control form-control-sm" name="direccion" value="<?= $v('direccion') ?>">
+                    <input type="text" class="form-control form-control-sm" name="direccion" minlength="10" maxlength="255" placeholder="Calle, número, sector (mín. 10 caracteres)" value="<?= $v('direccion') ?>">
                 </div>
             </div>
         </div>

@@ -235,8 +235,6 @@ class SolicitudFirmaController extends Controller
             'apellidos'             => trim($str('apellido_paterno') . ' ' . $str('apellido_materno')),
             'apellido_paterno'      => $str('apellido_paterno'),
             'apellido_materno'      => $str('apellido_materno'),
-            'telefono2'             => $str('telefono2'),
-            'correo2'               => mb_strtolower($str('correo2'), 'UTF-8'),
             'departamento'          => $str('departamento'),
             'motivo'                => $str('motivo'),
             'rep_tipo_identificacion' => in_array($str('rep_tipo_identificacion'), ['cedula', 'pasaporte'], true) ? $str('rep_tipo_identificacion') : 'cedula',

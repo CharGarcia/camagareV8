@@ -221,6 +221,9 @@ crear otra. Las fotos de más de 1 MB se reducen antes de enviarlas.
   cambiar la validez elegida.
 - El precio cobrado por Payphone es el total de la factura (IVA según la serie
   configurada).
+- La **dirección** del titular es obligatoria y debe tener al menos 10
+  caracteres (calle, número, sector), tanto en el formulario del cliente como
+  en la ficha.
 - Una firma con factura activa (borrador o autorizada) **no se elimina**. Mientras
   **no esté emitida**, sí se pueden corregir los datos del titular, el **tipo de
   firma**, el estado y las observaciones. La factura no cambia: queda con el
@@ -395,7 +398,9 @@ archivo, y volver a cargar la firma no lo soluciona.
 
 - **2.8** — Una firma con factura activa se puede editar mientras no esté
   emitida (datos del titular, tipo de firma, estado, observaciones); el pago y
-  la facturación se conservan y la factura no se modifica. Mensaje claro al crear en Uanataca con HTTP 403.
+  la facturación se conservan y la factura no se modifica. Se quitan «Otro
+  teléfono» y «Correo alterno» del formulario; la dirección pide mínimo 10
+  caracteres. Mensaje claro al crear en Uanataca con HTTP 403.
 - **2.7** — El WhatsApp del enlace llega con un botón **Completar solicitud**
   cuando la plantilla `solicitud_firma` lo tiene (ver el manual de Plantillas de
   WhatsApp); las plantillas aprobadas sin botón siguen funcionando.

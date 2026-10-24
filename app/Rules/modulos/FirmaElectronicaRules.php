@@ -42,6 +42,8 @@ class FirmaElectronicaRules
     private const MIME_IMAGEN = ['image/jpeg', 'image/png', 'image/webp'];
     private const MIME_PDF    = ['application/pdf'];
     public const MAX_BYTES    = 5 * 1024 * 1024;
+    /** Mínimo de caracteres de la dirección del titular (pantalla y servidor). */
+    public const MIN_DIRECCION = 10;
 
     public function validar(array $data): void
     {
@@ -91,7 +93,6 @@ class FirmaElectronicaRules
             'correo'    => 'Ingrese el correo electrónico.',
             'cod_prov'  => 'Seleccione la provincia.',
             'cod_ciudad'=> 'Seleccione la ciudad.',
-            'direccion' => 'Ingrese la dirección.',
         ] as $campo => $msg) {
             if (trim((string) ($data[$campo] ?? '')) === '') {
                 $errores[] = $msg;
@@ -110,10 +111,6 @@ class FirmaElectronicaRules
         if (($data['tipo_identificacion'] ?? '') === 'cedula'
             && !preg_match('/^[A-Z]\d{4}[A-Z]\d{4}$/i', (string) ($data['codigo_dactilar'] ?? ''))) {
             $errores[] = 'Ingrese el código dactilar (está al reverso de la cédula, ej. V4443V4442).';
-        }
-        $correo2 = trim((string) ($data['correo2'] ?? ''));
-        if ($correo2 !== '' && !filter_var($correo2, FILTER_VALIDATE_EMAIL)) {
-            $errores[] = 'El correo alterno no es válido.';
         }
         $tel = preg_replace('/\D/', '', (string) ($data['telefono'] ?? ''));
         if ($tel !== '' && (strlen($tel) < 9 || strlen($tel) > 12)) {
@@ -326,6 +323,11 @@ class FirmaElectronicaRules
         $correo = trim($data['correo'] ?? '');
         if ($correo !== '' && !filter_var($correo, FILTER_VALIDATE_EMAIL)) {
             $errores[] = 'El correo electrónico no tiene un formato válido.';
+        }
+
+        // Uanataca necesita una dirección real (calle, número, sector), no solo la ciudad.
+        if (mb_strlen(trim((string) ($data['direccion'] ?? '')), 'UTF-8') < self::MIN_DIRECCION) {
+            $errores[] = 'La dirección debe tener al menos ' . self::MIN_DIRECCION . ' caracteres (calle, número, sector).';
         }
 
         $sexo = trim($data['sexo'] ?? '');
