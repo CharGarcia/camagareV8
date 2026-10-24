@@ -6,7 +6,7 @@ ruta_modulo: modulos/firmas_electronicas
 tipo: modulo
 visibilidad: admin
 etiquetas: firma electronica, firma para persona natural, firma para representante legal, tipo de persona de la firma, vender firmas, aviso de vencimiento al cliente, recordatorio de renovacion, renovar firma del cliente, firma por vencer, enlace de renovacion, api uanataca, uanacreditos, creditos uanataca, precompra, distribuidor uanataca, miembro de empresa, representante legal, solicitud de firma, tramite de firma, uanataca, enlace para el cliente, formulario de firma, link de firma, whatsapp, pagar firma, payphone, transferencia, comprobante de pago, confirmar correo, factura de la firma, registrar en uanataca, firma emitida, observada, corregir solicitud, enlace fijo, qr de firma, certificado, p12, caducada, por caducar, renovar firma, firma invalida, xades, anf, security data, buscar firma, filtros, firmas por facturar
-version: 3.4
+version: 3.5
 orden: 20
 estado: activo
 ---
@@ -55,7 +55,10 @@ comprobante), Confirmado o Rechazado.
 | Persona natural | Uso personal o con RUC de persona natural | — |
 | Representante legal | Quien consta en el nombramiento de la empresa | RUC, constitución, nombramiento y su aceptación (PDF) |
 
-Para representante legal se piden además el RUC, la razón social y el cargo. El
+Para representante legal se piden además el RUC, la razón social y el cargo. Al
+escribir los 13 dígitos del RUC de la empresa (en el formulario del cliente y en
+la ficha) el sistema consulta al SRI y llena la **razón social**; el cargo viene
+lleno con **Representante legal** (se puede cambiar). El
 motivo de uso que exige Uanataca ya no se escribe (ni el cliente ni en la ficha): se envía
 «Facturación electrónica y firma de documentos» (las firmas antiguas conservan el que tenían
 registrado). El formulario del cliente no pide observaciones; para persona natural
@@ -414,6 +417,9 @@ archivo, y volver a cargar la firma no lo soluciona.
 
 ## Historial de cambios
 
+- **3.5** — RUC de la empresa (representante legal): consulta al SRI y llena la
+  razón social, en el formulario del cliente (con botón de búsqueda) y en la
+  ficha. Cargo por defecto: «Representante legal».
 - **3.4** — Ficha de la firma: se quita el campo «Motivo (uso de la firma)» de
   representante legal; se usa el motivo por defecto (o el que ya tenía).
 - **3.3** — Aviso de vencimiento de la firma de la empresa: primer correo 15

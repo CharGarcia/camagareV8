@@ -189,7 +189,11 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosPestanasOcultas($vistaConfigF
                                         <div class="small fw-bold text-primary mb-2"><i class="bi bi-building me-1"></i>Datos de la empresa</div>
                                         <div class="row g-2">
                                             <div class="col-md-3">
-                                                <label class="form-label small fw-bold text-muted mb-1">RUC Empresa</label>
+                                                <label class="form-label small fw-bold text-muted mb-1 d-flex align-items-center gap-1">
+                                                    RUC Empresa
+                                                    <span id="firma_ruc_emp_spinner" class="spinner-border spinner-border-sm text-secondary d-none" style="width:.8rem;height:.8rem;" role="status"></span>
+                                                    <span id="firma_ruc_emp_badge" class="badge d-none" style="font-size:.65rem;"></span>
+                                                </label>
                                                 <input type="text" class="form-control form-control-sm shadow-none" name="ruc_empresa"
                                                     id="firma_ruc_empresa" maxlength="13" placeholder="Ej. 1790000000001" inputmode="numeric">
                                             </div>

@@ -226,7 +226,12 @@ $nacionalidades = ['Ecuatoriana', 'Colombiana', 'Peruana', 'Venezolana', 'Cubana
             <div class="row g-2">
                 <div class="col-12 col-sm-5">
                     <label class="form-label" for="ruc_empresa">RUC de la empresa <span class="req">*</span></label>
-                    <input type="text" class="form-control form-control-sm" id="ruc_empresa" name="ruc_empresa" maxlength="13" inputmode="numeric" value="<?= $v('ruc_empresa') ?>">
+                    <div class="input-group input-group-sm">
+                        <input type="text" class="form-control" id="ruc_empresa" name="ruc_empresa" maxlength="13" inputmode="numeric" value="<?= $v('ruc_empresa') ?>">
+                        <button type="button" class="btn btn-outline-primary px-2" id="btnBuscarSriEmp" title="Buscar la empresa en el SRI">
+                            <i class="bi bi-search" id="sriEmpIcono"></i><span id="sriEmpLoader" class="spinner-border spinner-border-sm d-none"></span>
+                        </button>
+                    </div>
                 </div>
                 <div class="col-12 col-sm-7">
                     <label class="form-label" for="nombre_empresa">Razón social <span class="req">*</span></label>
@@ -234,7 +239,7 @@ $nacionalidades = ['Ecuatoriana', 'Colombiana', 'Peruana', 'Venezolana', 'Cubana
                 </div>
                 <div class="col-12 col-sm-6">
                     <label class="form-label" for="cargo">Su cargo en la empresa <span class="req">*</span></label>
-                    <input type="text" class="form-control form-control-sm" id="cargo" name="cargo" value="<?= $v('cargo') ?>" placeholder="Ej. Gerente general">
+                    <input type="text" class="form-control form-control-sm" id="cargo" name="cargo" value="<?= $v('cargo', $tipoPersona === 'juridica' ? 'Representante legal' : '') ?>" placeholder="Ej. Gerente general">
                 </div>
                 <div class="col-12 col-sm-6 solo-miembro">
                     <label class="form-label" for="departamento">Departamento / área <span class="req">*</span></label>
@@ -602,6 +607,9 @@ $nacionalidades = ['Ecuatoriana', 'Colombiana', 'Peruana', 'Venezolana', 'Cubana
             const conRuc = document.getElementById('con_ruc');
             document.getElementById('bloqueConRuc')?.classList.toggle('d-none', tipo !== 'natural');
             if (conRuc && tipo !== 'natural') conRuc.checked = false;
+            // Cargo por defecto del representante legal (editable).
+            const cargo = document.getElementById('cargo');
+            if (cargo && tipo === 'juridica' && !cargo.value.trim()) cargo.value = 'Representante legal';
             document.querySelectorAll('.solo-miembro').forEach(el => el.classList.toggle('d-none', tipo !== 'miembro'));
             document.getElementById('ayudaTipoPersona').textContent = ayudas[tipo] || '';
             // Solo las firmas para este tipo de persona (data-para vacío = sirve para ambos).
@@ -729,16 +737,35 @@ $nacionalidades = ['Ecuatoriana', 'Colombiana', 'Peruana', 'Venezolana', 'Cubana
             if (n.length === 10 || n.length === 13) buscarFacturacionSri(false);
         });
 
-        // RUC de la empresa (representante legal / miembro): completa la razón social.
-        let ultimoRucEmp = '';
-        document.getElementById('ruc_empresa')?.addEventListener('input', async function () {
-            const ruc = this.value.replace(/\D/g, '');
-            if (ruc.length !== 13 || ruc === ultimoRucEmp) return;
+        // RUC de la empresa (representante legal / miembro): razón social desde el SRI.
+        // Un RUC nuevo es otra empresa, así que se reemplaza la razón social escrita.
+        let ultimoRucEmp = valor('ruc_empresa').replace(/\D/g, '');
+        async function buscarEmpresaSri(manual) {
+            const ruc = valor('ruc_empresa').replace(/\D/g, '');
+            if (!/^\d{13}$/.test(ruc)) {
+                if (manual) aviso('Escriba el RUC de la empresa (13 dígitos).');
+                return;
+            }
+            if (!manual && ruc === ultimoRucEmp) return;
             ultimoRucEmp = ruc;
+            const icon = document.getElementById('sriEmpIcono'), loader = document.getElementById('sriEmpLoader');
+            icon.classList.add('d-none'); loader.classList.remove('d-none');
             try {
                 const data = await consultarSri(ruc);
-                if (data.ok && data.data?.nombre) poner('nombre_empresa', data.data.nombre, false);
-            } catch { /* se escribe a mano */ }
+                if (data.ok && data.data?.nombre) {
+                    poner('nombre_empresa', data.data.nombre, true);
+                    aviso('Encontramos la empresa en el SRI. Revise la razón social.', 'success');
+                } else if (manual || data.advertencia) {
+                    aviso(data.advertencia || data.error || 'No encontramos la empresa. Escriba la razón social.', 'warning');
+                }
+            } catch { if (manual) aviso('No se pudo consultar. Escriba la razón social.', 'warning'); }
+            finally { icon.classList.remove('d-none'); loader.classList.add('d-none'); }
+        }
+        document.getElementById('btnBuscarSriEmp')?.addEventListener('click', () => buscarEmpresaSri(true));
+        document.getElementById('ruc_empresa')?.addEventListener('input', function () {
+            const limpio = this.value.replace(/\D/g, '').slice(0, 13);
+            if (limpio !== this.value) this.value = limpio;
+            if (limpio.length === 13) buscarEmpresaSri(false);
         });
 
         let guardando = false;

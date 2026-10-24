@@ -87,6 +87,48 @@
         }
     }
 
+    // ── RUC de la empresa (representante legal): razón social desde el SRI ──
+    const inputRucEmp = document.getElementById('firma_ruc_empresa');
+    let _rucEmpDebounce = null, _ultimoRucEmp = '';
+
+    function estadoRucEmp(spinner, texto = '', cls = '') {
+        document.getElementById('firma_ruc_emp_spinner')?.classList.toggle('d-none', !spinner);
+        const b = document.getElementById('firma_ruc_emp_badge');
+        if (!b) return;
+        b.textContent = texto;
+        b.className = 'badge ' + (texto ? cls : 'd-none');
+    }
+
+    async function consultarRucEmpresaSri(ruc) {
+        _ultimoRucEmp = ruc;
+        estadoRucEmp(true);
+        try {
+            const fd = new FormData();
+            fd.append('identificacion', ruc);
+            const json = await (await fetch(`${urlBase}/consultarSri`, { method: 'POST', body: fd })).json();
+            if (ruc !== _ultimoRucEmp) return; // ya se escribió otro RUC
+            if (json.ok && json.data?.nombre) {
+                // RUC nuevo = empresa nueva: se reemplaza la razón social.
+                setVal('firma_nombre_empresa', json.data.nombre);
+                estadoRucEmp(false, '✓ SRI', 'bg-success bg-opacity-75 text-white');
+            } else {
+                estadoRucEmp(false, json.error || 'No encontrado', 'bg-warning text-dark');
+            }
+        } catch {
+            estadoRucEmp(false, 'Error de consulta', 'bg-danger text-white');
+        }
+    }
+
+    inputRucEmp?.addEventListener('input', function () {
+        const limpio = this.value.replace(/\D/g, '').slice(0, 13);
+        if (limpio !== this.value) this.value = limpio;
+        clearTimeout(_rucEmpDebounce);
+        estadoRucEmp(false);
+        if (limpio.length === 13 && limpio !== _ultimoRucEmp) {
+            _rucEmpDebounce = setTimeout(() => consultarRucEmpresaSri(limpio), 600);
+        }
+    });
+
     // ── Tipo de identificación ─────────────────────────────────
     const selectTipoId = document.getElementById('firma_tipo_id');
     const inputNumId   = document.getElementById('firma_num_id');
@@ -149,7 +191,12 @@
             // Al cambiar a Jurídica limpiar y desmarcar Con RUC
             const conRucEl = document.getElementById('firma_con_ruc');
             if (conRucEl) conRucEl.checked = false;
+            // Cargo por defecto del representante legal (editable).
+            const cargoEl = document.getElementById('firma_cargo');
+            if (tipo === 'juridica' && cargoEl && !cargoEl.value.trim()) cargoEl.value = 'Representante legal';
         } else {
+            estadoRucEmp(false);
+            _ultimoRucEmp = '';
             setVal('firma_ruc_empresa',   '');
             setVal('firma_nombre_empresa','');
             setVal('firma_cargo',         '');
@@ -806,6 +853,8 @@
 
         // Campos Jurídica
         setVal('firma_ruc_empresa',    data.ruc_empresa || '');
+        _ultimoRucEmp = data.ruc_empresa || '';
+        estadoRucEmp(false);
         setVal('firma_nombre_empresa', data.nombre_empresa || '');
         setVal('firma_cargo',          data.cargo || '');
 
