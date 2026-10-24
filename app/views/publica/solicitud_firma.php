@@ -240,10 +240,6 @@ $nacionalidades = ['Ecuatoriana', 'Colombiana', 'Peruana', 'Venezolana', 'Cubana
                     <label class="form-label" for="departamento">Departamento / área <span class="req">*</span></label>
                     <input type="text" class="form-control form-control-sm" id="departamento" name="departamento" value="<?= $v('departamento') ?>" placeholder="Ej. Contabilidad">
                 </div>
-                <div class="col-12">
-                    <label class="form-label" for="motivo">¿Para qué usará la firma? <span class="req">*</span></label>
-                    <input type="text" class="form-control form-control-sm" id="motivo" name="motivo" value="<?= $v('motivo', 'Facturación electrónica y firma de documentos') ?>">
-                </div>
             </div>
             <div class="solo-miembro mt-3">
                 <p class="section-title mb-1"><i class="bi bi-person-vcard me-1"></i>Representante legal de la empresa</p>
@@ -293,10 +289,11 @@ $nacionalidades = ['Ecuatoriana', 'Colombiana', 'Peruana', 'Venezolana', 'Cubana
                         </button>
                     </div>
                 </div>
-                <div class="col-12 col-sm-3 d-flex align-items-end pb-1">
+                <div class="col-12 col-sm-3 d-flex align-items-end pb-1" id="bloqueConRuc">
+                    <?php // Solo persona natural: el representante legal ya registra el RUC de la empresa. ?>
                     <div class="form-check form-switch">
                         <input class="form-check-input" type="checkbox" id="con_ruc" name="con_ruc" value="1" <?= in_array($f['con_ruc'] ?? false, [true, 't', 1, '1'], true) ? 'checked' : '' ?>>
-                        <label class="form-check-label small fw-medium" for="con_ruc">¿Tienes RUC?</label>
+                        <label class="form-check-label small fw-medium" for="con_ruc">Firma electrónica con RUC</label>
                     </div>
                 </div>
                 <div class="col-12 col-sm-4">
@@ -425,13 +422,6 @@ $nacionalidades = ['Ecuatoriana', 'Colombiana', 'Peruana', 'Venezolana', 'Cubana
                     <input type="text" class="form-control form-control-sm" name="facturacion_direccion" id="facturacion_direccion" value="<?= $v('facturacion_direccion') ?>">
                 </div>
             </div>
-        </div>
-    </div>
-
-    <div class="card border-0 shadow-sm rounded-3 mb-3">
-        <div class="card-body p-3">
-            <label class="form-label section-title" for="observaciones"><i class="bi bi-chat-text me-1"></i>Observaciones</label>
-            <textarea class="form-control form-control-sm" name="observaciones" id="observaciones" rows="2"><?= $v('observaciones') ?></textarea>
         </div>
     </div>
 
@@ -608,6 +598,10 @@ $nacionalidades = ['Ecuatoriana', 'Colombiana', 'Peruana', 'Venezolana', 'Cubana
         const toggleJuridica = () => {
             const tipo = form.querySelector('[name="tipo_persona"]:checked')?.value || 'natural';
             document.getElementById('bloqueJuridica').classList.toggle('d-none', tipo === 'natural');
+            // «Firma electrónica con RUC» es solo para persona natural.
+            const conRuc = document.getElementById('con_ruc');
+            document.getElementById('bloqueConRuc')?.classList.toggle('d-none', tipo !== 'natural');
+            if (conRuc && tipo !== 'natural') conRuc.checked = false;
             document.querySelectorAll('.solo-miembro').forEach(el => el.classList.toggle('d-none', tipo !== 'miembro'));
             document.getElementById('ayudaTipoPersona').textContent = ayudas[tipo] || '';
             // Solo las firmas para este tipo de persona (data-para vacío = sirve para ambos).

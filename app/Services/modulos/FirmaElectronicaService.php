@@ -501,7 +501,15 @@ class FirmaElectronicaService
     public function enviarEnlace(int $idEmpresa, int $idUsuario, array $d): array
     {
         $correo   = trim((string) ($d['correo'] ?? ''));
-        $telefono = self::normalizarTelefono((string) ($d['telefono'] ?? ''));
+        $celular  = preg_replace('/\s+/', '', (string) ($d['telefono'] ?? ''));
+        // Celular de Ecuador tal como lo escribe el usuario: 10 dígitos (ej. 0958924835).
+        if ($celular !== '' && !preg_match('/^09\d{8}$/', $celular)) {
+            throw new Exception('El celular debe tener 10 dígitos numéricos y empezar con 09 (ej. 0958924835).');
+        }
+        if ($correo !== '' && !filter_var($correo, FILTER_VALIDATE_EMAIL)) {
+            throw new Exception('El correo electrónico no es válido.');
+        }
+        $telefono = self::normalizarTelefono($celular);
         $nombre   = trim((string) ($d['nombre'] ?? ''));
         $porCorreo   = !empty($d['por_correo']);
         $porWhatsapp = !empty($d['por_whatsapp']);
@@ -511,10 +519,10 @@ class FirmaElectronicaService
             throw new Exception('Elija al menos un canal: correo o WhatsApp.');
         }
         if ($porCorreo && !filter_var($correo, FILTER_VALIDATE_EMAIL)) {
-            throw new Exception('El correo electrónico no es válido.');
+            throw new Exception('Ingrese un correo electrónico válido para enviar por correo.');
         }
         if ($porWhatsapp && $telefono === '') {
-            throw new Exception('El número de WhatsApp no es válido (use 09XXXXXXXX o 5939XXXXXXXX).');
+            throw new Exception('Ingrese el celular para enviar por WhatsApp: 10 dígitos numéricos (ej. 0958924835).');
         }
 
         $this->repository->beginTransaction();
@@ -763,6 +771,9 @@ class FirmaElectronicaService
                     throw new Exception('Ya registró el pago de esta firma: no puede cambiar la validez elegida.');
                 }
                 $data['id_empresa'] = $idEmpresa;
+                // El portal no pide observaciones ni motivo: se conserva lo que tenía la ficha.
+                $data['observaciones'] = $firma['observaciones'] ?? null;
+                $data['motivo']        = self::motivoParaTipo((string) $data['tipo_persona'], $firma['motivo'] ?? null);
                 $this->repository->actualizarDatosPortal((int) $firma['id'], $idEmpresa, $data);
                 $this->logService->registrar(0, $idEmpresa, 'actualizar_portal', 'firmas_electronicas', (int) $firma['id'], $firma, $data);
             } else {
@@ -831,6 +842,7 @@ class FirmaElectronicaService
         $owner = (int) ($sol['created_by'] ?? 0) ?: $this->getConfigModulo($idEmpresa)['id_usuario_responsable'];
 
         $firmaData = array_merge($data, [
+            'motivo'                   => self::motivoParaTipo((string) ($data['tipo_persona'] ?? 'natural'), null),
             'id_empresa'               => $idEmpresa,
             'id_usuario'               => $owner ?: null,
             'estado'                   => 'borrador',
@@ -2081,7 +2093,7 @@ class FirmaElectronicaService
             $p['ruc']      = trim((string) $f['ruc_empresa']);
             $p['company']  = $up($f['nombre_empresa']);
             $p['position'] = $up($f['cargo']);
-            $p['reason']   = $up($f['motivo']);
+            $p['reason']   = $up((string) self::motivoParaTipo((string) $f['tipo_persona'], $f['motivo'] ?? null));
         }
         if ($f['tipo_persona'] === 'miembro') {
             $p['department']                = $up($f['departamento']);
@@ -2684,6 +2696,18 @@ class FirmaElectronicaService
     }
 
     /** 09XXXXXXXX / +593 9XXXXXXXX → 5939XXXXXXXX (formato de WhatsApp). '' si no es válido. */
+    /**
+     * Motivo de uso que Uanataca exige al representante legal ("reason"). El cliente ya no
+     * lo escribe: se conserva el que hubiera y, si no hay, va el texto por defecto.
+     */
+    public static function motivoParaTipo(string $tipoPersona, ?string $actual): ?string
+    {
+        if (!in_array($tipoPersona, ['juridica', 'miembro'], true)) {
+            return $actual !== null && trim($actual) !== '' ? $actual : null;
+        }
+        return $actual !== null && trim($actual) !== '' ? $actual : FirmaElectronicaRules::MOTIVO_POR_DEFECTO;
+    }
+
     public static function normalizarTelefono(string $tel): string
     {
         $d = preg_replace('/\D/', '', $tel);

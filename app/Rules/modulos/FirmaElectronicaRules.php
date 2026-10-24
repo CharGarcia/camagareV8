@@ -44,6 +44,8 @@ class FirmaElectronicaRules
     private const MIME_IMAGEN = ['image/jpeg', 'image/png', 'image/webp'];
     private const MIME_PDF    = ['application/pdf'];
     public const MAX_BYTES    = 5 * 1024 * 1024;
+    /** Motivo de uso que se envía a Uanataca para representante legal si no se indicó otro. */
+    public const MOTIVO_POR_DEFECTO = 'Facturación electrónica y firma de documentos';
     /** Mínimo de caracteres de la dirección del titular (pantalla y servidor). */
     public const MIN_DIRECCION = 10;
 
@@ -129,9 +131,6 @@ class FirmaElectronicaRules
             if (trim((string) ($data['cargo'] ?? '')) === '') {
                 $errores[] = 'Ingrese su cargo en la empresa.';
             }
-            if (trim((string) ($data['motivo'] ?? '')) === '') {
-                $errores[] = 'Indique para qué usará la firma (motivo).';
-            }
         }
         if ($tipoPersona === 'miembro') {
             if (trim((string) ($data['departamento'] ?? '')) === '') {
@@ -198,7 +197,6 @@ class FirmaElectronicaRules
             $req('ruc_empresa', 'RUC de la empresa');
             $req('nombre_empresa', 'razón social');
             $req('cargo', 'cargo');
-            $req('motivo', 'motivo');
         }
         if ($tipo === 'miembro') {
             $req('departamento', 'departamento');

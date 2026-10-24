@@ -350,14 +350,14 @@ $to      = $total > 0 ? min($page * $perPage, $total) : 0;
                         <input class="form-check-input" type="checkbox" id="solPorCorreo" checked>
                         <label class="form-check-label small fw-medium" for="solPorCorreo"><i class="bi bi-envelope me-1"></i>Enviar por correo</label>
                     </div>
-                    <input type="email" class="form-control form-control-sm" id="solCorreoDestino" placeholder="cliente@ejemplo.com">
+                    <input type="email" class="form-control form-control-sm" id="solCorreoDestino" placeholder="cliente@ejemplo.com" maxlength="150">
                 </div>
                 <div class="mb-0">
                     <div class="form-check form-switch mb-1">
                         <input class="form-check-input" type="checkbox" id="solPorWhatsapp">
                         <label class="form-check-label small fw-medium" for="solPorWhatsapp"><i class="bi bi-whatsapp me-1 text-success"></i>Enviar por WhatsApp</label>
                     </div>
-                    <input type="tel" class="form-control form-control-sm" id="solTelefonoDestino" placeholder="09XXXXXXXX">
+                    <input type="tel" class="form-control form-control-sm" id="solTelefonoDestino" placeholder="Ej. 0958924835" maxlength="10" inputmode="numeric" pattern="09[0-9]{8}">
                     <div class="form-text small">Con la plantilla <code>solicitud_firma</code> aprobada en Meta se envía sola; si no, podrá abrir WhatsApp con el mensaje listo.</div>
                 </div>
             </div>
@@ -731,12 +731,30 @@ $to      = $total > 0 ? min($page * $perPage, $total) : 0;
         if (window.Swal) Swal.fire({ toast: true, position: 'top-end', icon: 'success', title: 'Copiado', showConfirmButton: false, timer: 1200 });
     };
 
+    // Celular como lo escribe el usuario en Ecuador: 10 dígitos que empiezan con 09.
+    const RE_CELULAR = /^09\d{8}$/;
+    const RE_CORREO  = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
+
+    /** 593958924835 / +593 95 892 4835 / 0958924835 → 0958924835 (lo que no se reconoce queda igual). */
+    function celularLocal(tel) {
+        const d = String(tel || '').replace(/\D/g, '');
+        if (/^5939\d{8}$/.test(d)) return '0' + d.slice(3);
+        if (/^9\d{8}$/.test(d)) return '0' + d;
+        return d || '';
+    }
+
+    // Solo dígitos en el celular, máximo 10.
+    document.getElementById('solTelefonoDestino')?.addEventListener('input', function () {
+        const limpio = this.value.replace(/\D/g, '').slice(0, 10);
+        if (limpio !== this.value) this.value = limpio;
+    });
+
     /** Abre el envío del enlace. Con datos de una firma, el enlace es el de esa firma. */
     window.abrirModalEnviarFormulario = function (firma = null) {
         document.getElementById('solIdFirma').value         = firma?.id || '';
         document.getElementById('solNombreDestino').value   = firma ? `${firma.nombres || ''} ${firma.apellidos || ''}`.trim() : '';
         document.getElementById('solCorreoDestino').value   = firma?.correo || '';
-        document.getElementById('solTelefonoDestino').value = firma?.telefono || '';
+        document.getElementById('solTelefonoDestino').value = celularLocal(firma?.telefono || '');
         document.getElementById('solPorCorreo').checked     = true;
         document.getElementById('solPorWhatsapp').checked   = !!firma?.telefono;
         enviandoEnlace = false;
@@ -800,6 +818,21 @@ $to      = $total > 0 ? min($page * $perPage, $total) : 0;
         const porWhatsapp = document.getElementById('solPorWhatsapp').checked;
         if (!porCorreo && !porWhatsapp) {
             Swal.fire('Atención', 'Elija correo, WhatsApp o ambos.', 'warning');
+            return;
+        }
+        const inpCorreo  = document.getElementById('solCorreoDestino');
+        const inpCelular = document.getElementById('solTelefonoDestino');
+        const correo  = inpCorreo.value.trim();
+        const celular = inpCelular.value.trim();
+        // Si se escribió, debe ser válido aunque ese canal no esté marcado (queda guardado en el enlace).
+        if ((porCorreo || correo !== '') && !RE_CORREO.test(correo)) {
+            Swal.fire('Atención', correo === '' ? 'Ingrese el correo del cliente.' : 'El correo electrónico no es válido (ej. cliente@ejemplo.com).', 'warning')
+                .then(() => inpCorreo.focus());
+            return;
+        }
+        if ((porWhatsapp || celular !== '') && !RE_CELULAR.test(celular)) {
+            Swal.fire('Atención', 'El celular debe tener 10 dígitos numéricos y empezar con 09 (ej. 0958924835).', 'warning')
+                .then(() => inpCelular.focus());
             return;
         }
 

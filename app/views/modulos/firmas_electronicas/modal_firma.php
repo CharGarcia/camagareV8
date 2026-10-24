@@ -172,12 +172,12 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosPestanasOcultas($vistaConfigF
                                         title="Formato: dd-mm-yyyy">
 
                                 </div>
-                                <!-- ¿Con RUC? (solo Persona Natural) -->
+                                <!-- Firma electrónica con RUC (solo Persona Natural) -->
                                 <div class="col-12" id="bloqueConRuc">
                                     <div class="form-check">
                                         <input class="form-check-input" type="checkbox" name="con_ruc" id="firma_con_ruc" value="1">
                                         <label class="form-check-label small" for="firma_con_ruc">
-                                            <strong>¿Con RUC?</strong>
+                                            <strong>Firma electrónica con RUC</strong>
                                             <span class="text-muted">Válido para facturación electrónica</span>
                                         </label>
                                     </div>

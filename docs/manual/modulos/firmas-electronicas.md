@@ -6,7 +6,7 @@ ruta_modulo: modulos/firmas_electronicas
 tipo: modulo
 visibilidad: admin
 etiquetas: firma electronica, firma para persona natural, firma para representante legal, tipo de persona de la firma, vender firmas, aviso de vencimiento al cliente, recordatorio de renovacion, renovar firma del cliente, firma por vencer, enlace de renovacion, api uanataca, uanacreditos, creditos uanataca, precompra, distribuidor uanataca, miembro de empresa, representante legal, solicitud de firma, tramite de firma, uanataca, enlace para el cliente, formulario de firma, link de firma, whatsapp, pagar firma, payphone, transferencia, comprobante de pago, confirmar correo, factura de la firma, registrar en uanataca, firma emitida, observada, corregir solicitud, enlace fijo, qr de firma, certificado, p12, caducada, por caducar, renovar firma, firma invalida, xades, anf, security data, buscar firma, filtros, firmas por facturar
-version: 3.1
+version: 3.2
 orden: 20
 estado: activo
 ---
@@ -55,8 +55,11 @@ comprobante), Confirmado o Rechazado.
 | Persona natural | Uso personal o con RUC de persona natural | — |
 | Representante legal | Quien consta en el nombramiento de la empresa | RUC, constitución, nombramiento y su aceptación (PDF) |
 
-Para representante legal se piden además el RUC, la razón social, el cargo y el
-motivo (uso de la firma). El tipo **Miembro de empresa** ya no se ofrece en las
+Para representante legal se piden además el RUC, la razón social y el cargo. El
+motivo de uso que exige Uanataca ya no lo escribe el cliente: se envía
+«Facturación electrónica y firma de documentos» (o el que se haya registrado en
+la ficha). El formulario del cliente no pide observaciones; para persona natural
+ofrece el interruptor **Firma electrónica con RUC**. El tipo **Miembro de empresa** ya no se ofrece en las
 solicitudes nuevas; las firmas que ya lo tenían lo conservan (con sus datos de
 departamento y del representante legal). Uanataca exige también la
 **fecha de nacimiento**, el **sexo**, los **dos apellidos por separado** y, con
@@ -403,6 +406,10 @@ archivo, y volver a cargar la firma no lo soluciona.
 
 ## Historial de cambios
 
+- **3.2** — Formulario del cliente: se quitan «¿Para qué usará la firma?» y
+  Observaciones; «¿Tienes RUC?» pasa a **Firma electrónica con RUC** (solo persona natural, también en la ficha). El motivo va por defecto a Uanataca y las
+  observaciones internas de la ficha ya no se borran cuando el cliente guarda.
+  Enviar link: celular de 10 dígitos (09…) y correo válido.
 - **3.1** — Configuración, pestaña **Tipo de persona**: cada firma se marca para
   persona natural, representante legal o ambos; el cliente y la ficha solo
   muestran las firmas que corresponden y el servidor valida la combinación.

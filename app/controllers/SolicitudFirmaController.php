@@ -224,7 +224,8 @@ class SolicitudFirmaController extends Controller
 
         return [
             'tipo_persona'          => in_array($str('tipo_persona'), ['natural', 'juridica', 'miembro'], true) ? $str('tipo_persona') : 'natural',
-            'con_ruc'               => !empty($_POST['con_ruc']),
+            // «Firma electrónica con RUC»: solo aplica a persona natural.
+            'con_ruc'               => !empty($_POST['con_ruc']) && $str('tipo_persona') === 'natural',
             'ruc_empresa'           => $fn($str('ruc_empresa')),
             'nombre_empresa'        => $fn($str('nombre_empresa')),
             'cargo'                 => $fn($str('cargo')),
@@ -236,7 +237,6 @@ class SolicitudFirmaController extends Controller
             'apellido_paterno'      => $str('apellido_paterno'),
             'apellido_materno'      => $str('apellido_materno'),
             'departamento'          => $str('departamento'),
-            'motivo'                => $str('motivo'),
             'rep_tipo_identificacion' => in_array($str('rep_tipo_identificacion'), ['cedula', 'pasaporte'], true) ? $str('rep_tipo_identificacion') : 'cedula',
             'rep_identificacion'    => $str('rep_identificacion'),
             'rep_nombres'           => $str('rep_nombres'),
@@ -250,7 +250,6 @@ class SolicitudFirmaController extends Controller
             'cod_ciudad'            => $fn($str('cod_ciudad')),
             'direccion'             => $str('direccion'),
             'id_producto'           => (int) $str('id_producto') ?: null,
-            'observaciones'         => $fn($str('observaciones')),
             'facturacion_mismos_datos' => $mismos,
             'facturacion_tipo_id'   => $mismos ? null : $fn($str('facturacion_tipo_id')),
             'facturacion_num_id'    => $mismos ? null : $fn($str('facturacion_num_id')),
