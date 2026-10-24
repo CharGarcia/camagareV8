@@ -51,7 +51,7 @@ $documentos = [
 ];
 $tipoPersona = $f['tipo_persona'] ?? 'natural';
 $colorEstado = [
-    'borrador' => 'secondary', 'pendiente' => 'warning', 'por_registrar' => 'info', 'en_proceso' => 'primary',
+    'borrador' => 'secondary', 'pendiente' => 'warning', 'por_registrar' => 'info', 'en_proceso' => 'primary', 'aprobada' => 'success',
     'observada' => 'danger', 'emitida' => 'success', 'cancelada' => 'dark',
 ];
 $etiquetaCliente = [
@@ -59,6 +59,7 @@ $etiquetaCliente = [
     'pendiente'     => $estadoPago === 'en_revision' ? 'Pago en revisión' : 'Pendiente de pago',
     'por_registrar' => 'Pagada — en preparación',
     'en_proceso'    => 'En trámite con la entidad certificadora',
+    'aprobada'      => 'Aprobada: falta solo la emisión de tu firma',
     'observada'     => 'Requiere corrección',
     'emitida'       => 'Firma emitida',
     'cancelada'     => 'Cancelada',
@@ -518,7 +519,7 @@ $nacionalidades = ['Ecuatoriana', 'Colombiana', 'Peruana', 'Venezolana', 'Cubana
 </div>
 <?php endif; ?>
 
-<?php if ($firma && in_array($estado, ['por_registrar', 'en_proceso', 'emitida'], true)): ?>
+<?php if ($firma && in_array($estado, ['por_registrar', 'en_proceso', 'aprobada', 'emitida'], true)): ?>
 <!-- ═══ PASO 4: TRÁMITE ═══ -->
 <div class="card border-0 shadow-sm rounded-3 mb-3">
     <div class="card-body p-3 small">

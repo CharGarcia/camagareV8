@@ -6,7 +6,7 @@ ruta_modulo: modulos/firmas_electronicas
 tipo: modulo
 visibilidad: admin
 etiquetas: firma electronica, vender firmas, aviso de vencimiento al cliente, recordatorio de renovacion, renovar firma del cliente, firma por vencer, enlace de renovacion, api uanataca, uanacreditos, creditos uanataca, precompra, distribuidor uanataca, miembro de empresa, representante legal, solicitud de firma, tramite de firma, uanataca, enlace para el cliente, formulario de firma, link de firma, whatsapp, pagar firma, payphone, transferencia, comprobante de pago, confirmar correo, factura de la firma, registrar en uanataca, firma emitida, observada, corregir solicitud, enlace fijo, qr de firma, certificado, p12, caducada, por caducar, renovar firma, firma invalida, xades, anf, security data, buscar firma, filtros, firmas por facturar
-version: 2.9
+version: 3.0
 orden: 20
 estado: activo
 ---
@@ -27,6 +27,7 @@ por estos estados:
 | Pendiente de pago | Datos y documentos completos; falta el pago | Cliente |
 | Por registrar | Pagada y facturada; falta ingresarla en Uanataca | Empresa |
 | En trámite | Ya se ingresó en Uanataca; el cliente valida su identidad con ellos | Uanataca / cliente |
+| Aprobada | Uanataca aprobó la solicitud; falta solo la emisión. Ya no se edita | Uanataca |
 | Observada | Usted pidió una corrección; el cliente debe corregir y reenviar | Cliente |
 | Emitida | La firma fue emitida (se registra su vencimiento) | — |
 | Cancelada | Se canceló con un motivo | — |
@@ -190,7 +191,8 @@ también con **Consultar estado ahora** en la pestaña Trámite):
 
 | Estado en Uanataca | Qué pasa en el sistema |
 |--------------------|------------------------|
-| Nueva / En validación / Aprobada | Trámite *En trámite* |
+| Nueva / En validación | Trámite *En trámite* |
+| Aprobada | Pasa a *Aprobada*: la solicitud ya no se puede editar ni eliminar, solo falta la emisión |
 | Corrección solicitada o Rechazada | Pasa a *Observada*; el cliente recibe por correo el comentario de Uanataca |
 | Corregida | Vuelve a *En trámite* |
 | Emitida | Pasa a *Emitida* con la fecha de vencimiento que informa Uanataca |
@@ -226,14 +228,16 @@ crear otra. Las fotos de más de 1 MB se reducen antes de enviarlas.
 - La **dirección** del titular es obligatoria y debe tener al menos 10
   caracteres (calle, número, sector), tanto en el formulario del cliente como
   en la ficha.
+- Una vez **aprobada por Uanataca** o **emitida**, la solicitud **no se edita
+  ni se elimina** (tampoco el cliente desde su enlace, ni se le puede pedir
+  corrección). La ficha queda de solo lectura y el avance (marcar emitida,
+  notas, avisos) se lleva desde la pestaña **Trámite**.
 - Una firma con factura activa (borrador o autorizada) **no se elimina**. Mientras
-  **no esté emitida**, sí se pueden corregir los datos del titular, el **tipo de
-  firma**, el estado y las observaciones. La factura no cambia: queda con el
-  tipo y el valor con que se hizo (si el precio del nuevo tipo es distinto,
-  ajústelo con una nota de crédito o anulando la factura). El estado del pago y
-  las pestañas Pago y Facturación quedan como se facturaron. Una vez
-  **emitida**, la ficha queda de solo lectura hasta que se elimine o anule la
-  factura.
+  no esté aprobada ni emitida, sí se pueden corregir los datos del titular, el
+  **tipo de firma**, el estado y las observaciones. La factura no cambia: queda
+  con el tipo y el valor con que se hizo (si el precio del nuevo tipo es
+  distinto, ajústelo con una nota de crédito o anulando la factura). El estado
+  del pago y las pestañas Pago y Facturación quedan como se facturaron.
 - Los documentos se validan por su contenido real: cédula y selfie deben ser
   fotos (JPG, PNG, WEBP); los de la empresa, PDF; máximo 5 MB.
 - Si el SRI no responde al momento del pago, la factura queda en borrador y el
@@ -398,6 +402,9 @@ archivo, y volver a cargar la firma no lo soluciona.
 
 ## Historial de cambios
 
+- **3.0** — Nuevo estado **Aprobada**: cuando Uanataca aprueba la solicitud se
+  marca igual en el sistema (consulta automática o *Consultar estado ahora*) y
+  la solicitud deja de editarse; lo mismo al quedar emitida.
 - **2.9** — Pestaña Facturación: el botón «Ver en Facturas de Venta» se
   reemplaza por **PDF de la factura**. Tipo de persona: solo Persona natural y
   Representante legal (Miembro de empresa queda en las firmas que ya lo tenían).

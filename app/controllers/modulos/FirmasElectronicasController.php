@@ -892,6 +892,7 @@ class FirmasElectronicasController extends BaseModuloController
             'pendiente'     => ['warning',   'Pendiente de pago'],
             'por_registrar' => ['info',      'Por registrar'],
             'en_proceso'    => ['primary',   'En trámite'],
+            'aprobada'      => ['success',   'Aprobada'],
             'observada'     => ['danger',    'Observada'],
             'emitida'       => ['success',   'Emitida'],
             'cancelada'     => ['dark',      'Cancelada'],

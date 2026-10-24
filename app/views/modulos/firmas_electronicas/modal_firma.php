@@ -351,6 +351,7 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosPestanasOcultas($vistaConfigF
                                         <option value="pendiente">Pendiente de pago</option>
                                         <option value="por_registrar">Por registrar</option>
                                         <option value="en_proceso">En trámite</option>
+                                        <option value="aprobada">Aprobada</option>
                                         <option value="observada">Observada</option>
                                         <option value="emitida">Emitida</option>
                                         <option value="cancelada">Cancelada</option>

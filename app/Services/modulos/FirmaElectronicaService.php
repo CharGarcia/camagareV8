@@ -126,13 +126,14 @@ class FirmaElectronicaService
         if (!$antes) {
             throw new Exception('La firma electrónica no existe o ha sido eliminada.');
         }
+        // Aprobada por Uanataca o emitida: la solicitud ya no se edita (el avance va por la pestaña Trámite).
+        if (in_array($antes['estado'] ?? '', FirmaElectronicaRules::ESTADOS_CERRADOS, true)) {
+            throw new Exception('Esta solicitud ya está ' . mb_strtolower(self::etiquetaEstado((string) $antes['estado']), 'UTF-8')
+                . ' y no se puede editar. El avance del trámite se lleva desde la pestaña Trámite.');
+        }
         // Con factura activa se pueden corregir los datos del titular, el tipo de firma y el
-        // trámite hasta que se emita; el pago y los datos de facturación se conservan tal
-        // cual. Emitida y con factura activa, no se modifica.
-        if ($errorFactura = $this->errorFacturaActiva($id, $idEmpresa)) {
-            if (($antes['estado'] ?? '') === 'emitida') {
-                throw new Exception($errorFactura);
-            }
+        // trámite; el pago y los datos de facturación se conservan tal cual.
+        if ($this->errorFacturaActiva($id, $idEmpresa)) {
             foreach (self::CAMPOS_FACTURADOS as $campo) {
                 $data[$campo] = $antes[$campo] ?? null;
             }
@@ -1368,7 +1369,7 @@ class FirmaElectronicaService
                     break;
 
                 case 'emitida':
-                    if (!in_array($estado, ['en_proceso', 'por_registrar'], true)) {
+                    if (!in_array($estado, ['en_proceso', 'aprobada', 'por_registrar'], true)) {
                         throw new Exception('Solo se marca como emitida una firma en trámite.');
                     }
                     $cad = trim((string) ($d['fecha_caducidad'] ?? ''));
@@ -1391,7 +1392,8 @@ class FirmaElectronicaService
                     break;
 
                 case 'observar':
-                    if (in_array($estado, ['emitida', 'cancelada', 'borrador'], true)) {
+                    // Aprobada: la solicitud ya no se edita, el cliente no puede corregirla.
+                    if (in_array($estado, ['aprobada', 'emitida', 'cancelada', 'borrador'], true)) {
                         throw new Exception('Esta firma no se puede observar en su estado actual.');
                     }
                     if ($nota === '') {
@@ -2123,7 +2125,12 @@ class FirmaElectronicaService
                         $this->repository->crearEvento($idEmpresa, $idFirma, 'nota', 'Registre la fecha de vencimiento', 'Uanataca no informó la vigencia.', false, null);
                     }
                     $aviso = ['Tu firma electrónica fue emitida', '<p>¡Listo! Tu firma electrónica fue emitida' . ($cad ? ' y está vigente hasta el <b>' . date('d-m-Y', strtotime($cad)) . '</b>' : '') . '.</p>'];
-                } elseif (in_array($nuevo, ['IN_VALIDATION', 'UPDATED', 'APPROVED'], true) && in_array($firma['estado'], ['observada', 'por_registrar'], true)) {
+                } elseif ($nuevo === 'APPROVED' && in_array($firma['estado'], ['por_registrar', 'en_proceso', 'observada'], true)) {
+                    // Aprobada en Uanataca: se marca igual aquí y la solicitud deja de editarse.
+                    $campos += ['estado' => 'aprobada', 'observacion_cliente' => null];
+                    $this->repository->crearEvento($idEmpresa, $idFirma, 'aprobada', 'Solicitud aprobada por la entidad certificadora',
+                        $ultimo !== '' ? $ultimo : 'Falta solo la emisión de la firma.', true, null);
+                } elseif (in_array($nuevo, ['IN_VALIDATION', 'UPDATED'], true) && in_array($firma['estado'], ['observada', 'por_registrar'], true)) {
                     $campos += ['estado' => 'en_proceso', 'observacion_cliente' => null];
                     $this->repository->crearEvento($idEmpresa, $idFirma, 'uanataca', 'En validación en la entidad certificadora', null, true, null);
                 } else {
@@ -2640,6 +2647,7 @@ class FirmaElectronicaService
             'pendiente'     => 'Pendiente de pago',
             'por_registrar' => 'Por registrar en Uanataca',
             'en_proceso'    => 'En trámite (Uanataca)',
+            'aprobada'      => 'Aprobada por Uanataca',
             'observada'     => 'Observada',
             'emitida'       => 'Emitida',
             'cancelada'     => 'Cancelada',

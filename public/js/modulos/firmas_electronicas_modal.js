@@ -289,9 +289,10 @@
         return !_facturaElim && (_facturaEstado === 'borrador' || _facturaEstado === 'autorizado');
     }
 
-    /** Con factura activa y ya emitida: la ficha entera queda de solo lectura. */
+    /** Aprobada por Uanataca o emitida: la solicitud ya no se edita (el servidor también lo impide). */
+    const ESTADOS_CERRADOS = ['aprobada', 'emitida'];
     function esFirmaSoloLectura() {
-        return esFirmaBloqueada() && _firmaEstado === 'emitida';
+        return ESTADOS_CERRADOS.includes(_firmaEstado);
     }
 
     // El pago ya facturado no cambia mientras la factura siga activa (el servidor lo conserva igual). El tipo de firma sí, hasta que se emita.
@@ -309,18 +310,18 @@
             alerta.classList.toggle('d-none', !soloLectura && !(conFactura && _facturaEstado === 'borrador'));
             const txt = alerta.querySelector('.js-texto-bloqueo');
             if (txt) txt.innerHTML = soloLectura
-                ? 'Esta firma ya fue <strong>emitida</strong> y tiene una <strong>factura activa</strong>. Para modificarla o eliminarla, primero debe <strong>eliminar o anular la factura</strong> desde el módulo de Facturas de Venta.'
+                ? `Esta solicitud ya está <strong>${_firmaEstado === 'aprobada' ? 'aprobada por Uanataca' : 'emitida'}</strong> y no se puede editar. El avance del trámite se lleva desde la pestaña <strong>Trámite</strong>.`
                 : 'Esta firma tiene una <strong>factura activa</strong>: hasta que se emita puede corregir los datos del titular, el tipo de firma y el trámite (la factura queda con el tipo y el valor con que se hizo). El pago y los datos de facturación quedan como se facturaron.';
         }
 
-        // Datos del titular: solo se bloquean cuando ya está emitida
+        // Datos del titular: se bloquean al quedar aprobada o emitida
         document.querySelector('#tab-firma-general')?.querySelectorAll('input, select, textarea').forEach(el => {
             el.disabled = soloLectura || (conFactura && CAMPOS_FACTURADOS.some(s => el.matches(s)));
         });
-        // Pago y Facturación: fijos mientras exista la factura activa
+        // Pago y Facturación: fijos mientras exista la factura activa o la solicitud esté cerrada
         ['#tab-firma-pago', '#tab-firma-fact'].forEach(sel => {
             document.querySelector(sel)?.querySelectorAll('input, select, textarea').forEach(el => {
-                el.disabled = conFactura;
+                el.disabled = conFactura || soloLectura;
             });
         });
 
@@ -328,16 +329,16 @@
         const btnG = document.getElementById('btnGuardarFirmaModal');
         if (btnG) {
             btnG.disabled = soloLectura;
-            btnG.title    = soloLectura ? 'Firma emitida con factura activa. Elimine o anule la factura primero.' : '';
+            btnG.title    = soloLectura ? 'La solicitud ya está aprobada o emitida: no se puede editar.' : '';
         }
 
-        const bloqueada = conFactura;
-
-        // Botón eliminar
+        // Botón eliminar: no con factura activa ni con la solicitud aprobada/emitida
+        const bloqueada = conFactura || soloLectura;
         const btnE = document.getElementById('btnEliminarFirmaModal');
         if (btnE) {
             btnE.disabled = bloqueada;
-            btnE.title    = bloqueada ? 'No se puede eliminar: existe una factura activa.' : '';
+            btnE.title    = soloLectura ? 'No se puede eliminar: la solicitud ya está aprobada o emitida.'
+                          : (conFactura ? 'No se puede eliminar: existe una factura activa.' : '');
             btnE.classList.toggle('disabled', bloqueada);
         }
     }
@@ -853,7 +854,7 @@
         const id    = document.getElementById('firma_id_modal')?.value;
 
         if (id && esFirmaSoloLectura()) {
-            mostrarAlerta('No se puede modificar una firma emitida con factura activa. Primero elimine o anule la factura.', 'warning');
+            mostrarAlerta('Esta solicitud ya está aprobada o emitida y no se puede editar. El avance del trámite se lleva desde la pestaña Trámite.', 'warning');
             return;
         }
 
@@ -919,6 +920,10 @@
     window.eliminarFirmaModal = async function () {
         const id = document.getElementById('firma_id_modal')?.value;
         if (!id) return;
+        if (esFirmaSoloLectura()) {
+            mostrarAlerta('No se puede eliminar: la solicitud ya está aprobada o emitida.', 'warning');
+            return;
+        }
         if (esFirmaBloqueada()) {
             mostrarAlerta('No se puede eliminar. Primero elimine o anule la factura activa desde Facturas de Venta.', 'warning');
             return;
@@ -1211,6 +1216,13 @@
             _tramite = json;
             renderTramite(json);
             renderUanataca(json);
+            // Si el trámite cambió de estado (consulta a Uanataca, marcar emitida…), la ficha
+            // lo refleja y, al quedar aprobada o emitida, pasa a solo lectura.
+            if (json.estado && json.estado !== _firmaEstado) {
+                _firmaEstado = json.estado;
+                setVal('firma_estado', json.estado);
+                aplicarBloqueoFirma();
+            }
         } catch (e) {
             cont.innerHTML = uana.innerHTML = `<div class="text-danger py-3">${esc(e.message || 'No se pudo cargar el trámite.')}</div>`;
         }
@@ -1226,7 +1238,7 @@
         const puede = !!(window.FIRMAS_PERM && window.FIRMAS_PERM.actualizar);
         const pagoOk = t.estado_pago === 'confirmado';
         const correoOk = !!t.correo_confirmado_at;
-        const registrada = ['en_proceso', 'emitida'].includes(t.estado);
+        const registrada = ['en_proceso', 'aprobada', 'emitida'].includes(t.estado);
         const formas = (window.FIRMAS_FORMAS_COBRO || []).map(f => `<option value="${f.id}">${esc(f.nombre)}${f.tipo ? ' (' + esc(f.tipo) + ')' : ''}</option>`).join('');
         const comprobante = (t.adjuntos || []).filter(a => a.tipo === 'comprobante_transferencia').pop();
         let acciones = '';
@@ -1273,7 +1285,7 @@
                 <span class="small text-muted ms-1">Consume Uanacréditos.</span>
             </div>`;
         }
-        if (puede && ['por_registrar', 'en_proceso'].includes(t.estado)) {
+        if (puede && ['por_registrar', 'en_proceso', 'aprobada'].includes(t.estado)) {
             acciones += `<div class="border rounded-3 p-2 mb-2">
                 <div class="d-flex flex-wrap gap-2 align-items-end">
                     ${t.estado === 'por_registrar' ? `<div><label class="form-label small mb-0">N.º de solicitud en Uanataca</label>
@@ -1296,7 +1308,7 @@
         }
         if (puede && !['emitida', 'cancelada'].includes(t.estado)) {
             acciones += `<div class="d-flex flex-wrap gap-2 mb-2">
-                ${t.estado !== 'borrador' ? '<button type="button" class="btn btn-outline-warning btn-sm" data-tr="observar"><i class="bi bi-exclamation-triangle me-1"></i>Pedir corrección al cliente</button>' : ''}
+                ${!['borrador', 'aprobada'].includes(t.estado) ? '<button type="button" class="btn btn-outline-warning btn-sm" data-tr="observar"><i class="bi bi-exclamation-triangle me-1"></i>Pedir corrección al cliente</button>' : ''}
                 <button type="button" class="btn btn-outline-secondary btn-sm" data-tr="nota"><i class="bi bi-chat-left-text me-1"></i>Agregar nota</button>
                 <button type="button" class="btn btn-outline-danger btn-sm" data-tr="cancelar"><i class="bi bi-slash-circle me-1"></i>Cancelar solicitud</button>
             </div>`;
@@ -1323,7 +1335,8 @@
                 ${paso(pagoOk, !pagoOk && t.estado === 'pendiente', 'Pago', pagoOk ? `${esc(t.tipo_pago || '')}${t.factura_numero ? ' · Factura ' + esc(t.factura_numero) + ' (' + esc(t.factura_estado || '') + ')' : ''}` : (t.estado_pago === 'en_revision' ? 'Comprobante en revisión' : (t.estado_pago === 'rechazado' ? 'Rechazado: ' + esc(t.pago_motivo_rechazo || '') : 'Pendiente')))}
                 ${paso(correoOk, pagoOk && !correoOk, 'Correo confirmado', correoOk ? `${esc(t.correo)} · ${esc(t.correo_confirmado_at)}` : (t.correo_enviado_at ? `Factura enviada a ${esc(t.correo)} el ${esc(t.correo_enviado_at)}; esperando confirmación.` : esc(t.correo || '')))}
                 ${paso(registrada, t.estado === 'por_registrar', 'Registrada en Uanataca', registrada ? `${t.uanataca_referencia ? 'Ref. ' + esc(t.uanataca_referencia) + ' · ' : ''}${esc(t.uanataca_registrada_at || '')}` : 'Use la pestaña Uanataca para copiar los datos.')}
-                ${paso(t.estado === 'emitida', t.estado === 'en_proceso', 'Firma emitida', '')}
+                ${paso(['aprobada', 'emitida'].includes(t.estado), t.estado === 'en_proceso', 'Aprobada por Uanataca', '')}
+                ${paso(t.estado === 'emitida', t.estado === 'aprobada', 'Firma emitida', '')}
                 ${t.estado === 'observada' ? `<div class="alert alert-warning py-1 px-2 mb-2">Corrección pedida: ${esc(t.observacion_cliente || '')}</div>` : ''}
                 <div class="mt-3"><div class="text-muted mb-1">Enlace del cliente</div>${enlace}</div>
             </div>

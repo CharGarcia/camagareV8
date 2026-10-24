@@ -123,6 +123,7 @@ $to      = $total > 0 ? min($page * $perPage, $total) : 0;
                     ['v' => 'pendiente',     'l' => 'Pendiente de pago'],
                     ['v' => 'por_registrar', 'l' => 'Por registrar en Uanataca'],
                     ['v' => 'en_proceso',    'l' => 'En trámite'],
+                    ['v' => 'aprobada',      'l' => 'Aprobada'],
                     ['v' => 'observada',     'l' => 'Observada'],
                     ['v' => 'emitida',       'l' => 'Emitida'],
                     ['v' => 'cancelada',     'l' => 'Cancelada'],
@@ -263,7 +264,7 @@ $to      = $total > 0 ? min($page * $perPage, $total) : 0;
                         <?php
                         $estadosFirma = [
                             'borrador' => ['secondary', 'Borrador'], 'pendiente' => ['warning', 'Pendiente de pago'],
-                            'por_registrar' => ['info', 'Por registrar'], 'en_proceso' => ['primary', 'En trámite'],
+                            'por_registrar' => ['info', 'Por registrar'], 'en_proceso' => ['primary', 'En trámite'], 'aprobada' => ['success', 'Aprobada'],
                             'observada' => ['danger', 'Observada'], 'emitida' => ['success', 'Emitida'], 'cancelada' => ['dark', 'Cancelada'],
                         ];
                         $estadosPago = [

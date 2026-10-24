@@ -8,7 +8,9 @@ use Exception;
 class FirmaElectronicaRules
 {
     /** Estados del trámite, en el orden en que avanza. */
-    public const ESTADOS = ['borrador', 'pendiente', 'por_registrar', 'en_proceso', 'observada', 'emitida', 'cancelada'];
+    public const ESTADOS = ['borrador', 'pendiente', 'por_registrar', 'en_proceso', 'aprobada', 'observada', 'emitida', 'cancelada'];
+    /** Desde aquí la solicitud ya no se edita: Uanataca la aprobó o ya emitió la firma. */
+    public const ESTADOS_CERRADOS = ['aprobada', 'emitida'];
 
     public const ESTADOS_PAGO = ['pendiente', 'en_revision', 'confirmado', 'rechazado'];
 
