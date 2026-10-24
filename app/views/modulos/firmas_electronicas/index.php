@@ -1003,7 +1003,7 @@ $to      = $total > 0 ? min($page * $perPage, $total) : 0;
             const esc = v => String(v ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
             tbody.innerHTML = data.rows.map(r => `
                 <tr>
-                    <td class="ps-3">${esc(r.correo_destino || '')}${r.telefono_destino ? `<div class="text-muted"><i class="bi bi-whatsapp me-1"></i>${esc(r.telefono_destino)}</div>` : ''}${r.origen === 'enlace_fijo' ? '<div><span class="badge bg-light text-secondary border">Enlace fijo</span></div>' : ''}</td>
+                    <td class="ps-3">${esc(r.correo_destino || '')}${r.telefono_destino ? `<div class="text-muted"><i class="bi bi-whatsapp me-1"></i>${esc(r.telefono_destino)}</div>` : ''}${r.origen === 'enlace_fijo' ? '<div><span class="badge bg-light text-secondary border">Enlace fijo</span></div>' : ''}${r.origen === 'aviso_vencimiento' ? '<div><span class="badge bg-warning bg-opacity-10 text-warning border border-warning border-opacity-25">Aviso de vencimiento</span></div>' : ''}</td>
                     <td>${r.nombre_destino ? esc(r.nombre_destino) : '<span class="text-muted">-</span>'}</td>
                     <td class="text-center">${badges[r.estado] || r.estado}</td>
                     <td class="text-muted">${r.created_at}</td>

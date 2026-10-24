@@ -151,9 +151,10 @@ try {
 
 // ── Firma electrónica: aviso por correo de caducidad (FIJO, 1 vez al día) ─────
 //    Complementa al ícono del navbar: avisa al correo registrado en la ficha de
-//    la empresa (empresas.mail) cuando la firma activa caduca mañana (o acaba de
-//    caducar y aún no se avisó). Se autolimita a UNA revisión diaria desde las
-//    06:00 y a UN correo por firma (la marca vive en log_sistema).
+//    la empresa (empresas.mail) 15 días antes si es sociedad o 5 si es persona
+//    natural, y otra vez a 2 días (o ya caducada) con el enlace para solicitar la
+//    firma nueva. Se autolimita a UNA revisión diaria desde las 06:00 y a UN
+//    correo por etapa y firma (la marca vive en log_sistema).
 try {
     $svcFirma = new \App\Services\FirmaCaducidadAvisoService();
     $resFirma = $svcFirma->ejecutarSiCorresponde();

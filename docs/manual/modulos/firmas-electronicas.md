@@ -6,7 +6,7 @@ ruta_modulo: modulos/firmas_electronicas
 tipo: modulo
 visibilidad: admin
 etiquetas: firma electronica, firma para persona natural, firma para representante legal, tipo de persona de la firma, vender firmas, aviso de vencimiento al cliente, recordatorio de renovacion, renovar firma del cliente, firma por vencer, enlace de renovacion, api uanataca, uanacreditos, creditos uanataca, precompra, distribuidor uanataca, miembro de empresa, representante legal, solicitud de firma, tramite de firma, uanataca, enlace para el cliente, formulario de firma, link de firma, whatsapp, pagar firma, payphone, transferencia, comprobante de pago, confirmar correo, factura de la firma, registrar en uanataca, firma emitida, observada, corregir solicitud, enlace fijo, qr de firma, certificado, p12, caducada, por caducar, renovar firma, firma invalida, xades, anf, security data, buscar firma, filtros, firmas por facturar
-version: 3.2
+version: 3.4
 orden: 20
 estado: activo
 ---
@@ -56,9 +56,9 @@ comprobante), Confirmado o Rechazado.
 | Representante legal | Quien consta en el nombramiento de la empresa | RUC, constitución, nombramiento y su aceptación (PDF) |
 
 Para representante legal se piden además el RUC, la razón social y el cargo. El
-motivo de uso que exige Uanataca ya no lo escribe el cliente: se envía
-«Facturación electrónica y firma de documentos» (o el que se haya registrado en
-la ficha). El formulario del cliente no pide observaciones; para persona natural
+motivo de uso que exige Uanataca ya no se escribe (ni el cliente ni en la ficha): se envía
+«Facturación electrónica y firma de documentos» (las firmas antiguas conservan el que tenían
+registrado). El formulario del cliente no pide observaciones; para persona natural
 ofrece el interruptor **Firma electrónica con RUC**. El tipo **Miembro de empresa** ya no se ofrece en las
 solicitudes nuevas; las firmas que ya lo tenían lo conservan (con sus datos de
 departamento y del representante legal). Uanataca exige también la
@@ -349,20 +349,23 @@ El sistema avisa de dos formas que la firma activa está por vencer:
   firma activa caduca en **5 días o menos**, cuando ya caducó, o cuando la
   empresa no tiene ninguna firma activa cargada. Al hacer clic lleva a la ficha
   de la empresa. Solo lo ve quien entra al sistema.
-- **Correo automático a la empresa**: se envía **un día antes** de la fecha de
-  caducidad al correo registrado en la ficha de la empresa (pestaña *Datos
-  generales*, campo **Correo**). Llega aunque nadie haya iniciado sesión.
+- **Correo automático a la empresa**: un primer aviso **15 días antes** si la
+  empresa es **sociedad** o **5 días antes** si es **persona natural**, y un
+  segundo aviso **2 días antes** con el enlace para **solicitar la firma nueva**.
+  Llega al correo registrado en la ficha de la empresa (pestaña *Datos
+  generales*, campo **Correo**), aunque nadie haya iniciado sesión.
 
 Cómo funciona el correo:
 
 | Regla | Detalle |
 |-------|---------|
-| Cuándo | Cuando a la firma activa le queda **1 día o menos** (incluye el día de caducidad). |
+| Primer aviso | **Sociedad** (RUC con tercer dígito 9 o 6): **15 días** antes. **Persona natural** (tercer dígito 0 a 5): **5 días** antes. Si el RUC no se puede leer, se usa el *Tipo de contribuyente* de la ficha. |
+| Segundo aviso | **2 días** antes (o el día que se revise si ya faltan menos), con el botón **Solicitar mi firma electrónica**: abre la solicitud de firma de la empresa que le vende las firmas (su controladora de suscripciones o, si no tiene, la administradora). La solicitud aparece en *Enlaces enviados* de esa empresa con la etiqueta **Aviso de vencimiento**. Si esa empresa no tiene configurado el módulo, el correo sale igual, sin el botón. |
 | A quién | Al correo de la ficha de la empresa. Si está vacío o no es válido, no se envía y queda una traza en el log del servidor. |
-| Cuántas veces | **Una sola vez por firma.** El envío queda en la bitácora del sistema (tabla *Firma electrónica de la empresa*, acción *Aviso caducidad correo*) y esa marca evita repetirlo. |
-| Si ya caducó | Si la firma venció hace **hasta 7 días** y nunca se avisó (por ejemplo, el correo del servidor estaba caído), se envía igual indicando desde cuándo está caducada. Firmas vencidas hace más tiempo no generan correo. |
+| Cuántas veces | **Una vez por aviso y por firma.** Cada envío queda en la bitácora del sistema (tabla *Firma electrónica de la empresa*, acciones *Aviso caducidad correo* y *Aviso caducidad enlace*) y esa marca evita repetirlo. |
+| Si ya caducó | Si la firma venció hace **hasta 7 días** y no se envió el segundo aviso (por ejemplo, el correo del servidor estaba caído), se envía igual. Firmas vencidas hace más tiempo no generan correo. |
 | Hora | La revisión corre una vez al día, a partir de las **06:00**, sobre el cron del servidor. |
-| Firma nueva | Al cargar y activar la firma renovada, el aviso se reinicia: la nueva firma recibirá su propio correo cuando le toque. |
+| Firma nueva | Al cargar y activar la firma renovada, los avisos se reinician: la nueva firma recibirá los suyos cuando le toque. |
 
 El correo indica la empresa, el RUC, la fecha de caducidad y qué hacer
 (renovar con la entidad certificadora y cargar el nuevo `.p12` como firma
@@ -401,11 +404,22 @@ archivo, y volver a cargar la firma no lo soluciona.
 
 - **No llegó el correo de aviso de caducidad**: revise que la ficha de la
   empresa tenga un correo válido en *Datos generales* y que el correo de
-  *notificaciones* del sistema esté configurado. El aviso se envía una sola vez
-  por firma; si ya se envió, no se repite aunque la firma siga caducada.
+  *notificaciones* del sistema esté configurado. Cada aviso (el de 15 o 5 días y
+  el de 2 días) se envía una sola vez por firma; si ya se envió, no se repite
+  aunque la firma siga caducada.
+- **El correo de 2 días llegó sin el botón para solicitar la firma**: la empresa
+  que vende las firmas no tiene configurado el módulo Firmas electrónicas (o
+  está inactiva), o el servidor no tiene definida su dirección pública
+  (`APP_URL`), necesaria para armar el enlace desde el cron.
 
 ## Historial de cambios
 
+- **3.4** — Ficha de la firma: se quita el campo «Motivo (uso de la firma)» de
+  representante legal; se usa el motivo por defecto (o el que ya tenía).
+- **3.3** — Aviso de vencimiento de la firma de la empresa: primer correo 15
+  días antes (sociedad) o 5 días antes (persona natural) y un segundo correo a 2
+  días con el enlace para solicitar la firma nueva (antes: un solo correo un día
+  antes).
 - **3.2** — Formulario del cliente: se quitan «¿Para qué usará la firma?» y
   Observaciones; «¿Tienes RUC?» pasa a **Firma electrónica con RUC** (solo persona natural, también en la ficha). El motivo va por defecto a Uanataca y las
   observaciones internas de la ficha ya no se borran cuando el cliente guarda.

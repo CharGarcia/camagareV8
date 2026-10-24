@@ -153,7 +153,7 @@
             setVal('firma_ruc_empresa',   '');
             setVal('firma_nombre_empresa','');
             setVal('firma_cargo',         '');
-            ['firma_departamento', 'firma_motivo', 'firma_rep_identificacion', 'firma_rep_nombres', 'firma_rep_apellidos'].forEach(id => setVal(id, ''));
+            ['firma_departamento', 'firma_rep_identificacion', 'firma_rep_nombres', 'firma_rep_apellidos'].forEach(id => setVal(id, ''));
         }
     }
 
@@ -785,7 +785,6 @@
         setVal('firma_apellido_paterno', data.apellido_paterno || partesApe.shift() || '');
         setVal('firma_apellido_materno', data.apellido_paterno ? (data.apellido_materno || '') : partesApe.join(' '));
         setVal('firma_departamento',   data.departamento || '');
-        setVal('firma_motivo',         data.motivo || '');
         setVal('firma_rep_tipo_id',    data.rep_tipo_identificacion || 'cedula');
         setVal('firma_rep_identificacion', data.rep_identificacion || '');
         setVal('firma_rep_nombres',    data.rep_nombres || '');

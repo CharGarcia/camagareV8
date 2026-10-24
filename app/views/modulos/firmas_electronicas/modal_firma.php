@@ -208,11 +208,6 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosPestanasOcultas($vistaConfigF
                                                 <input type="text" class="form-control form-control-sm shadow-none" name="departamento"
                                                     id="firma_departamento" maxlength="150" placeholder="Ej. Contabilidad">
                                             </div>
-                                            <div class="col-md-9">
-                                                <label class="form-label small fw-bold text-muted mb-1">Motivo (uso de la firma)</label>
-                                                <input type="text" class="form-control form-control-sm shadow-none" name="motivo"
-                                                    id="firma_motivo" maxlength="255" placeholder="Ej. Facturación electrónica y firma de documentos">
-                                            </div>
                                         </div>
                                         <div class="row g-2 mt-1 solo-miembro">
                                             <div class="col-12 small fw-bold text-muted">Representante legal de la empresa</div>

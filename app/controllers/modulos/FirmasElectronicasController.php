@@ -860,7 +860,6 @@ class FirmasElectronicasController extends BaseModuloController
             'apellido_paterno'      => trim($_POST['apellido_paterno'] ?? ''),
             'apellido_materno'      => trim($_POST['apellido_materno'] ?? ''),
             'departamento'          => trim($_POST['departamento'] ?? ''),
-            'motivo'                => trim($_POST['motivo'] ?? ''),
             'rep_tipo_identificacion' => in_array($_POST['rep_tipo_identificacion'] ?? '', ['cedula', 'pasaporte'], true) ? $_POST['rep_tipo_identificacion'] : 'cedula',
             'rep_identificacion'    => trim($_POST['rep_identificacion'] ?? ''),
             'rep_nombres'           => trim($_POST['rep_nombres'] ?? ''),

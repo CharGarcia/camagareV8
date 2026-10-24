@@ -95,6 +95,8 @@ class FirmaElectronicaService
     {
         $this->rules->validar($data);
         $this->validarTipoPersonaFirma((int) $data['id_empresa'], (int) ($data['id_producto'] ?? 0) ?: null, (string) ($data['tipo_persona'] ?? 'natural'));
+        // El motivo ya no se escribe en la ficha: el de por defecto para representante legal.
+        $data['motivo'] = self::motivoParaTipo((string) ($data['tipo_persona'] ?? 'natural'), null);
 
         $this->repository->beginTransaction();
         try {
@@ -141,6 +143,8 @@ class FirmaElectronicaService
             $data['facturacion_mismos_datos'] = !empty($antes['facturacion_mismos_datos']) && $antes['facturacion_mismos_datos'] !== 'f';
         }
         $this->validarTipoPersonaFirma($idEmpresa, (int) ($data['id_producto'] ?? 0) ?: null, (string) ($data['tipo_persona'] ?? 'natural'));
+        // El motivo ya no se escribe en la ficha: se conserva el que tenía o va el de por defecto.
+        $data['motivo'] = self::motivoParaTipo((string) ($data['tipo_persona'] ?? 'natural'), $antes['motivo'] ?? null);
         // El pago confirmado lo deja el flujo de pago (factura + cobro): el formulario no
         // puede deshacerlo ni marcarlo a mano.
         if (($antes['estado_pago'] ?? '') === 'confirmado' && ($data['estado_pago'] ?? '') !== 'confirmado' && !empty($antes['id_ingreso'])) {
@@ -612,6 +616,48 @@ class FirmaElectronicaService
             throw $e;
         }
         return self::urlPortal((string) $sol['token']);
+    }
+
+    /**
+     * Enlace personal para que una empresa del sistema, cuya firma está por vencer, solicite
+     * la nueva firma a la empresa que se las vende (aviso del cron, FirmaCaducidadAvisoService).
+     * La solicitud queda en "Enlaces enviados" de la vendedora, a nombre de su usuario
+     * responsable. null si la vendedora no tiene configurado el módulo de firmas o está inactiva.
+     */
+    public function crearEnlaceAvisoVencimiento(int $idVendedora, string $correo, string $nombre, string $telefono, int $idEmpresaCliente): ?string
+    {
+        $vendedora = (new \App\models\Empresa())->getPorId($idVendedora);
+        $eliminada = in_array($vendedora['eliminado'] ?? false, [true, 't', 1, '1'], true);
+        if (!$vendedora || $eliminada || (string) ($vendedora['estado'] ?? '') !== '1') {
+            return null;
+        }
+        $cfg = $this->getConfigModulo($idVendedora);
+        if (empty($cfg['existe'])) {
+            return null;
+        }
+        $owner = (int) ($cfg['id_usuario_responsable'] ?? 0) ?: null;
+        $token = bin2hex(random_bytes(32));
+        $this->repository->beginTransaction();
+        try {
+            $idSol = $this->solRepo->crear([
+                'id_empresa'       => $idVendedora,
+                'token'            => $token,
+                'correo_destino'   => filter_var($correo, FILTER_VALIDATE_EMAIL) ? $correo : '',
+                'nombre_destino'   => mb_substr(trim($nombre), 0, 150) ?: null,
+                'telefono_destino' => self::normalizarTelefono($telefono),
+                'origen'           => 'aviso_vencimiento',
+                'expira_at'        => date('Y-m-d H:i:s', strtotime('+' . self::DIAS_ENLACE . ' days')),
+                'observaciones'    => 'Aviso automático: la firma de la empresa #' . $idEmpresaCliente . ' está por vencer.',
+                'created_by'       => $owner,
+            ]);
+            $this->logService->registrar((int) $owner, $idVendedora, 'enlace_aviso_vencimiento', 'firma_solicitudes', $idSol, null,
+                ['id_empresa_cliente' => $idEmpresaCliente, 'correo' => $correo]);
+            $this->repository->commit();
+        } catch (\Throwable $e) {
+            $this->repository->rollBack();
+            throw $e;
+        }
+        return self::urlPortal($token);
     }
 
     private function asegurarSolicitudDeFirma(array $firma, int $idUsuario, string $correo, string $telefono, string $nombre): array

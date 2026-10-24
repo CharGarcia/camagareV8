@@ -31,6 +31,8 @@ if ($dias > 1) {
              . $atras . ' día' . ($atras === 1 ? '' : 's') . '</strong>.';
 }
 $url = (string) ($data['url'] ?? '');
+// Segundo aviso: enlace para solicitar la firma nueva en el módulo Firmas Electrónicas.
+$urlSolicitud = (string) ($data['url_solicitud'] ?? '');
 ?>
 <div style="font-family: Arial, Helvetica, sans-serif; color:#2d3748; max-width:640px; margin:0 auto;">
     <h2 style="color:<?= $color ?>; margin-bottom:4px;"><?= htmlspecialchars($titulo) ?></h2>
@@ -54,6 +56,23 @@ $url = (string) ($data['url'] ?? '');
             <td style="padding:8px; border-bottom:1px solid #edf2f7;"><strong><?= htmlspecialchars($fechaTexto) ?></strong></td>
         </tr>
     </table>
+
+    <?php if ($urlSolicitud !== ''): ?>
+    <div style="border:1px solid #c6f6d5; background:#f0fff4; border-radius:6px; padding:14px 16px; margin:0 0 16px;">
+        <p style="margin:0 0 10px;">
+            <strong>Solicite su nueva firma electrónica aquí mismo:</strong> llene sus datos,
+            suba sus documentos y realice el pago desde este enlace. Con el mismo enlace
+            puede ver el estado de su solicitud.
+        </p>
+        <a href="<?= htmlspecialchars($urlSolicitud) ?>"
+           style="display:inline-block; background:#198754; color:#fff; text-decoration:none; padding:11px 22px; border-radius:4px; font-size:14px; font-weight:bold;">
+            Solicitar mi firma electrónica
+        </a>
+        <p style="margin:10px 0 0; font-size:12px; color:#718096; word-break:break-all;">
+            Si el botón no funciona, copie este enlace: <?= htmlspecialchars($urlSolicitud) ?>
+        </p>
+    </div>
+    <?php endif; ?>
 
     <p style="margin:0 0 8px;">
         <strong>Qué hacer:</strong> solicite la renovación del certificado a su entidad
