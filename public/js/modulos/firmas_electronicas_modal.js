@@ -157,12 +157,39 @@
         }
     }
 
-    if (selectTipoPersona) {
-        selectTipoPersona.addEventListener('change', () => mostrarCamposJuridica(selectTipoPersona.value));
-    }
-
     // ── Validez de Firma (producto) ────────────────────────────
     const selectProducto = document.getElementById('firma_id_producto');
+
+    /**
+     * Solo deja elegir las firmas del tipo de persona elegido (configuración → pestaña
+     * Tipo de persona; data-para vacío = sirve para ambos). Si la firma elegida no
+     * corresponde, se quita la selección; al abrir una ficha se conserva la que ya tenía
+     * (el servidor avisa al guardar si no cuadra).
+     */
+    function filtrarFirmasPorTipoPersona(tipo, conservarSeleccion = false) {
+        if (!selectProducto) return;
+        const esEmpresa = tipo === 'juridica' || tipo === 'miembro';
+        let quitarSeleccion = false;
+        selectProducto.querySelectorAll('option[data-para]').forEach(opt => {
+            const para = opt.dataset.para || '';
+            const sirve = para === '' || (para === 'juridica') === esEmpresa;
+            const visible = sirve || (conservarSeleccion && opt.selected);
+            opt.hidden = !visible;
+            opt.disabled = !visible;
+            if (!sirve && opt.selected && !conservarSeleccion) quitarSeleccion = true;
+        });
+        if (quitarSeleccion) {
+            selectProducto.value = '';
+            selectProducto.dispatchEvent(new Event('change'));
+        }
+    }
+
+    if (selectTipoPersona) {
+        selectTipoPersona.addEventListener('change', () => {
+            mostrarCamposJuridica(selectTipoPersona.value);
+            filtrarFirmasPorTipoPersona(selectTipoPersona.value);
+        });
+    }
     const pvpBadge       = document.getElementById('firma_pvp_badge');
 
     function actualizarPvpBadge() {
@@ -691,6 +718,7 @@
         if (conRucEl) conRucEl.checked = false;
 
         mostrarCamposJuridica('natural');
+        filtrarFirmasPorTipoPersona('natural');
         desactivarSubidaArchivos();
         mostrarBloquePago('');
         ajustarTipoId('cedula');
@@ -784,6 +812,7 @@
 
         // Mostrar / ocultar bloque Jurídica
         mostrarCamposJuridica(data.tipo_persona || 'natural');
+        filtrarFirmasPorTipoPersona(data.tipo_persona || 'natural', true);
 
         // Fechas: la BD guarda yyyy-mm-dd, mostrar dd-mm-yyyy
         function bdADisplay(val) {

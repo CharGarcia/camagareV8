@@ -202,7 +202,7 @@ $nacionalidades = ['Ecuatoriana', 'Colombiana', 'Peruana', 'Venezolana', 'Cubana
             <?php else: ?>
                 <div class="row g-2">
                     <?php foreach ($portal['tiposFirma'] as $tf): ?>
-                        <div class="col-12 col-sm-6">
+                        <div class="col-12 col-sm-6 js-tipo-firma" data-para="<?= $e((string) ($tf['tipo_persona'] ?? '')) ?>">
                             <div class="form-check border rounded-2 p-2 ps-4">
                                 <input class="form-check-input" type="radio" name="id_producto" id="tf_<?= (int) $tf['id'] ?>" value="<?= (int) $tf['id'] ?>"
                                        <?= (int) ($f['id_producto'] ?? 0) === (int) $tf['id'] ? 'checked' : '' ?>>
@@ -214,6 +214,7 @@ $nacionalidades = ['Ecuatoriana', 'Colombiana', 'Peruana', 'Venezolana', 'Cubana
                         </div>
                     <?php endforeach; ?>
                 </div>
+                <p class="text-muted small mb-0 d-none" id="sinFirmasTipoPersona">No hay firmas disponibles para este tipo de persona. Si eres representante legal o persona natural, revisa la opción elegida arriba.</p>
                 <div class="small text-muted mt-2">Precios con IVA incluido.</div>
             <?php endif; ?>
         </div>
@@ -609,6 +610,18 @@ $nacionalidades = ['Ecuatoriana', 'Colombiana', 'Peruana', 'Venezolana', 'Cubana
             document.getElementById('bloqueJuridica').classList.toggle('d-none', tipo === 'natural');
             document.querySelectorAll('.solo-miembro').forEach(el => el.classList.toggle('d-none', tipo !== 'miembro'));
             document.getElementById('ayudaTipoPersona').textContent = ayudas[tipo] || '';
+            // Solo las firmas para este tipo de persona (data-para vacío = sirve para ambos).
+            const esEmpresa = tipo === 'juridica' || tipo === 'miembro';
+            let visibles = 0;
+            document.querySelectorAll('.js-tipo-firma').forEach(col => {
+                const para = col.dataset.para || '';
+                const sirve = para === '' || (para === 'juridica') === esEmpresa;
+                col.classList.toggle('d-none', !sirve);
+                if (sirve) visibles++;
+                const radio = col.querySelector('input[name="id_producto"]');
+                if (radio) { radio.disabled = !sirve; if (!sirve) radio.checked = false; }
+            });
+            document.getElementById('sinFirmasTipoPersona')?.classList.toggle('d-none', visibles > 0);
         };
         form.querySelectorAll('[name="tipo_persona"]').forEach(r => r.addEventListener('change', toggleJuridica));
         toggleJuridica();

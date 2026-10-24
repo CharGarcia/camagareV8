@@ -829,6 +829,46 @@ class FirmaElectronicaRepository extends BaseRepository
         )->execute([':ie' => $idEmpresa, ':p' => $idProducto, ':c' => $cantidad, ':un' => $unidad, ':u' => $idUsuario]);
     }
 
+    /**
+     * Tipo de persona de cada firma configurada: [id_producto => 'natural'|'juridica'].
+     * Sin la tabla (migración 20261024 sin correr) devuelve [] y todas sirven para ambos.
+     */
+    public function getTiposPersonaProductos(int $idEmpresa): array
+    {
+        try {
+            $st = $this->db->prepare(
+                "SELECT id_producto, tipo_persona FROM firmas_productos_tipo_persona WHERE id_empresa = :ie AND eliminado = false"
+            );
+            $st->execute([':ie' => $idEmpresa]);
+        } catch (\PDOException $e) {
+            if (str_contains($e->getMessage(), 'firmas_productos_tipo_persona')) {
+                return [];
+            }
+            throw $e;
+        }
+        $out = [];
+        foreach ($st->fetchAll(PDO::FETCH_ASSOC) as $r) {
+            $out[(int) $r['id_producto']] = (string) $r['tipo_persona'];
+        }
+        return $out;
+    }
+
+    /** Reemplaza el tipo de persona de un producto (null = sirve para ambos). */
+    public function guardarTipoPersonaProducto(int $idEmpresa, int $idProducto, ?string $tipo, int $idUsuario): void
+    {
+        $this->db->prepare(
+            "UPDATE firmas_productos_tipo_persona SET eliminado = true, deleted_at = CURRENT_TIMESTAMP, deleted_by = :u
+             WHERE id_empresa = :ie AND id_producto = :p AND eliminado = false"
+        )->execute([':u' => $idUsuario, ':ie' => $idEmpresa, ':p' => $idProducto]);
+        if ($tipo === null) {
+            return;
+        }
+        $this->db->prepare(
+            "INSERT INTO firmas_productos_tipo_persona (id_empresa, id_producto, tipo_persona, created_by)
+             VALUES (:ie, :p, :t, :u)"
+        )->execute([':ie' => $idEmpresa, ':p' => $idProducto, ':t' => $tipo, ':u' => $idUsuario]);
+    }
+
     /** ¿Alguna firma (de cualquier empresa) ya quedó enlazada a esta solicitud de Uanataca? */
     public function existeUanatacaUuid(string $uuid): bool
     {

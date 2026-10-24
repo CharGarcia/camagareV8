@@ -823,6 +823,9 @@ class FirmasElectronicasController extends BaseModuloController
             if (isset($_POST['vig']) && is_array($_POST['vig'])) {
                 $this->service->guardarVigencias((int) $_SESSION['id_empresa'], (int) $_SESSION['id_usuario'], $_POST['vig']);
             }
+            if (isset($_POST['tpf']) && is_array($_POST['tpf'])) {
+                $this->service->guardarTiposPersona((int) $_SESSION['id_empresa'], (int) $_SESSION['id_usuario'], $_POST['tpf']);
+            }
             return ['msg' => 'Configuración guardada.', 'url_enlace_fijo' => FirmaElectronicaService::urlEnlaceFijo($cfg['enlace_fijo_codigo'])];
         });
     }

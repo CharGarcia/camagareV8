@@ -404,8 +404,13 @@ $to      = $total > 0 ? min($page * $perPage, $total) : 0;
                                 <i class="bi bi-calendar-check me-1"></i>Vigencia
                             </button>
                         </li>
+                        <li class="nav-item">
+                            <button class="nav-link fw-medium py-1" id="tab-cfg-tipopersona-btn" data-bs-toggle="tab" data-bs-target="#tab-cfg-tipopersona" type="button">
+                                <i class="bi bi-people me-1"></i>Tipo de persona
+                            </button>
+                        </li>
                     </ul>
-                    <?= \App\Helpers\PreferenciasHelper::renderDropdownPestanas(['tab-cfg-uanataca-btn' => 'Uanataca', 'tab-cfg-avisos-btn' => 'Avisos', 'tab-cfg-vigencia-btn' => 'Vigencia'], \App\Helpers\PreferenciasHelper::getPreferenciasVista('firmas_electronicas'), 'firmas_electronicas') ?>
+                    <?= \App\Helpers\PreferenciasHelper::renderDropdownPestanas(['tab-cfg-uanataca-btn' => 'Uanataca', 'tab-cfg-avisos-btn' => 'Avisos', 'tab-cfg-vigencia-btn' => 'Vigencia', 'tab-cfg-tipopersona-btn' => 'Tipo de persona'], \App\Helpers\PreferenciasHelper::getPreferenciasVista('firmas_electronicas'), 'firmas_electronicas') ?>
                 </div>
                 <div class="tab-content">
                 <div class="tab-pane fade show active" id="tab-cfg-general" role="tabpanel">
@@ -583,6 +588,30 @@ $to      = $total > 0 ? min($page * $perPage, $total) : 0;
                     </div>
 
                 </div><!-- /tab-cfg-vigencia -->
+
+                <!-- Para qué tipo de persona es cada firma: el cliente no puede mezclarlos -->
+                <div class="tab-pane fade" id="tab-cfg-tipopersona" role="tabpanel">
+                    <div class="form-text small mb-2">Indique para quién es cada firma. Al elegir el tipo de persona, el cliente (y la ficha) solo ven las firmas que le corresponden. «Ambos» = la firma sirve para los dos.</div>
+                    <table class="table table-sm align-middle small mb-0">
+                        <tbody>
+                        <?php foreach ($tiposFirma ?? [] as $tf): $tpSel = (string) ($tf['tipo_persona'] ?? ''); ?>
+                            <tr>
+                                <td><?= htmlspecialchars($tf['nombre']) ?></td>
+                                <td style="width:200px;">
+                                    <select class="form-select form-select-sm" name="tpf[<?= (int) $tf['id'] ?>]">
+                                        <option value="" <?= $tpSel === '' ? 'selected' : '' ?>>Ambos</option>
+                                        <option value="natural" <?= $tpSel === 'natural' ? 'selected' : '' ?>>Persona natural</option>
+                                        <option value="juridica" <?= $tpSel === 'juridica' ? 'selected' : '' ?>>Representante legal</option>
+                                    </select>
+                                </td>
+                            </tr>
+                        <?php endforeach; ?>
+                        <?php if (empty($tiposFirma)): ?>
+                            <tr><td class="text-muted">No hay productos en una categoría «FIRMA».</td></tr>
+                        <?php endif; ?>
+                        </tbody>
+                    </table>
+                </div><!-- /tab-cfg-tipopersona -->
                 </div><!-- /tab-content -->
             </div>
             <div class="modal-footer py-2 px-3">

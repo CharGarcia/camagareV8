@@ -5,8 +5,8 @@ categoria: Ventas
 ruta_modulo: modulos/firmas_electronicas
 tipo: modulo
 visibilidad: admin
-etiquetas: firma electronica, vender firmas, aviso de vencimiento al cliente, recordatorio de renovacion, renovar firma del cliente, firma por vencer, enlace de renovacion, api uanataca, uanacreditos, creditos uanataca, precompra, distribuidor uanataca, miembro de empresa, representante legal, solicitud de firma, tramite de firma, uanataca, enlace para el cliente, formulario de firma, link de firma, whatsapp, pagar firma, payphone, transferencia, comprobante de pago, confirmar correo, factura de la firma, registrar en uanataca, firma emitida, observada, corregir solicitud, enlace fijo, qr de firma, certificado, p12, caducada, por caducar, renovar firma, firma invalida, xades, anf, security data, buscar firma, filtros, firmas por facturar
-version: 3.0
+etiquetas: firma electronica, firma para persona natural, firma para representante legal, tipo de persona de la firma, vender firmas, aviso de vencimiento al cliente, recordatorio de renovacion, renovar firma del cliente, firma por vencer, enlace de renovacion, api uanataca, uanacreditos, creditos uanataca, precompra, distribuidor uanataca, miembro de empresa, representante legal, solicitud de firma, tramite de firma, uanataca, enlace para el cliente, formulario de firma, link de firma, whatsapp, pagar firma, payphone, transferencia, comprobante de pago, confirmar correo, factura de la firma, registrar en uanataca, firma emitida, observada, corregir solicitud, enlace fijo, qr de firma, certificado, p12, caducada, por caducar, renovar firma, firma invalida, xades, anf, security data, buscar firma, filtros, firmas por facturar
+version: 3.1
 orden: 20
 estado: activo
 ---
@@ -109,11 +109,12 @@ motivo por correo, corrige desde su enlace y la reenvía.
 
 ## Configuración
 
-Botón del **engranaje**, junto a los botones de PDF y Excel (requiere permiso de modificar). Tiene cuatro pestañas: **General**, **Uanataca** (la conexión con ese proveedor de firmas; ver *Envío automático a Uanataca*), **Avisos** (avisos de vencimiento al cliente) y **Vigencia**; un solo **Guardar** guarda todas:
+Botón del **engranaje**, junto a los botones de PDF y Excel (requiere permiso de modificar). Tiene cinco pestañas: **General**, **Uanataca** (la conexión con ese proveedor de firmas; ver *Envío automático a Uanataca*), **Avisos** (avisos de vencimiento al cliente), **Vigencia** y **Tipo de persona**; un solo **Guardar** guarda todas:
 
 | Campo | Qué significa |
 |-------|---------------|
 | Vigencia de cada firma (pestaña **Vigencia**) | Cuánto dura cada tipo de firma. Vacío = se toma del nombre del producto ("1 año", "2 años", "30 días", "6 meses"); úselo cuando el nombre no la diga o sea distinta. |
+| Para quién es cada firma (pestaña **Tipo de persona**) | *Persona natural*, *Representante legal* o *Ambos* (por defecto). El cliente y la ficha solo muestran las firmas del tipo de persona elegido, y el sistema no deja guardar una combinación que no cuadre. |
 | Avisos de vencimiento (pestaña **Avisos**) | Encendidos o apagados (apagados de inicio) y los días antes del vencimiento en que se avisa por correo (30,15,5,0) y por WhatsApp (30,5,0). 0 = el mismo día. |
 | Serie de facturación | Establecimiento y punto con que se facturan las firmas. Sin elegir, la primera serie activa. El IVA sigue la configuración de facturación de esa serie. |
 | Usuario responsable | Dueño de las solicitudes que llegan por el enlace fijo y de sus facturas. |
@@ -402,6 +403,10 @@ archivo, y volver a cargar la firma no lo soluciona.
 
 ## Historial de cambios
 
+- **3.1** — Configuración, pestaña **Tipo de persona**: cada firma se marca para
+  persona natural, representante legal o ambos; el cliente y la ficha solo
+  muestran las firmas que corresponden y el servidor valida la combinación.
+  Requiere `database/20261024_firmas_productos_tipo_persona.sql`.
 - **3.0** — Nuevo estado **Aprobada**: cuando Uanataca aprueba la solicitud se
   marca igual en el sistema (consulta automática o *Consultar estado ahora*) y
   la solicitud deja de editarse; lo mismo al quedar emitida.

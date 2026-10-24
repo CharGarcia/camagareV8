@@ -94,6 +94,7 @@ class FirmaElectronicaService
     public function crear(array $data): int
     {
         $this->rules->validar($data);
+        $this->validarTipoPersonaFirma((int) $data['id_empresa'], (int) ($data['id_producto'] ?? 0) ?: null, (string) ($data['tipo_persona'] ?? 'natural'));
 
         $this->repository->beginTransaction();
         try {
@@ -139,6 +140,7 @@ class FirmaElectronicaService
             }
             $data['facturacion_mismos_datos'] = !empty($antes['facturacion_mismos_datos']) && $antes['facturacion_mismos_datos'] !== 'f';
         }
+        $this->validarTipoPersonaFirma($idEmpresa, (int) ($data['id_producto'] ?? 0) ?: null, (string) ($data['tipo_persona'] ?? 'natural'));
         // El pago confirmado lo deja el flujo de pago (factura + cobro): el formulario no
         // puede deshacerlo ni marcarlo a mano.
         if (($antes['estado_pago'] ?? '') === 'confirmado' && ($data['estado_pago'] ?? '') !== 'confirmado' && !empty($antes['id_ingreso'])) {
@@ -276,8 +278,11 @@ class FirmaElectronicaService
     {
         $cfg   = $this->getConfigModulo($idEmpresa);
         $ajustes = $this->repository->getVigencias($idEmpresa);
+        $paraPersona = $this->repository->getTiposPersonaProductos($idEmpresa);
         $tipos = [];
         foreach ($this->repository->getTiposFirma($idEmpresa) as $t) {
+            // null = sirve para persona natural y para representante legal.
+            $t['tipo_persona'] = $paraPersona[(int) $t['id']] ?? null;
             try {
                 $tot = $this->totalesProducto((int) $t['id'], $idEmpresa, $cfg['id_punto_emision'] ?: null);
                 $t['pvp'] = $tot['total'];
@@ -343,6 +348,54 @@ class FirmaElectronicaService
         } catch (\Throwable $e) {
             $this->repository->rollBack();
             throw $e;
+        }
+    }
+
+    /** Para qué tipo de persona es cada firma: [id_producto => 'natural'|'juridica'|''] ('' = ambos). */
+    public function guardarTiposPersona(int $idEmpresa, int $idUsuario, array $tipos): void
+    {
+        $propios = array_map(static fn($t) => (int) $t['id'], $this->repository->getTiposFirma($idEmpresa));
+        $antes   = $this->repository->getTiposPersonaProductos($idEmpresa);
+        $this->repository->beginTransaction();
+        try {
+            foreach ($tipos as $idProducto => $tipo) {
+                $idProducto = (int) $idProducto;
+                if (!in_array($idProducto, $propios, true)) {
+                    continue;
+                }
+                $tipo = (string) $tipo;
+                if ($tipo !== '' && !in_array($tipo, ['natural', 'juridica'], true)) {
+                    throw new Exception('Tipo de persona no válido para la firma.');
+                }
+                $this->repository->guardarTipoPersonaProducto($idEmpresa, $idProducto, $tipo === '' ? null : $tipo, $idUsuario);
+            }
+            $this->logService->registrar($idUsuario, $idEmpresa, 'tipos_persona_firma', 'firmas_productos_tipo_persona', null, $antes, $tipos);
+            $this->repository->commit();
+        } catch (\Throwable $e) {
+            $this->repository->rollBack();
+            throw $e;
+        }
+    }
+
+    /**
+     * La firma elegida debe servir para el tipo de persona elegido (pestaña Tipo de persona
+     * de la configuración). Representante legal y miembro de empresa cuentan como empresa.
+     */
+    public function validarTipoPersonaFirma(int $idEmpresa, ?int $idProducto, string $tipoPersona): void
+    {
+        if (!$idProducto) {
+            return;
+        }
+        $para = $this->repository->getTiposPersonaProductos($idEmpresa)[$idProducto] ?? null;
+        if ($para === null) {
+            return;
+        }
+        $esEmpresa = in_array($tipoPersona, ['juridica', 'miembro'], true);
+        if ($para === 'juridica' && !$esEmpresa) {
+            throw new Exception('La firma elegida es para representante legal. Cambie el tipo de persona a «Representante legal» o elija una firma para persona natural.');
+        }
+        if ($para === 'natural' && $esEmpresa) {
+            throw new Exception('La firma elegida es para persona natural. Cambie el tipo de persona a «Persona natural» o elija una firma para representante legal.');
         }
     }
 
@@ -691,6 +744,7 @@ class FirmaElectronicaService
 
         $tipos = $this->repository->getTiposFirma($idEmpresa);
         $this->rules->validarPortal($data, array_map(static fn($t) => (int) $t['id'], $tipos));
+        $this->validarTipoPersonaFirma($idEmpresa, (int) ($data['id_producto'] ?? 0) ?: null, (string) ($data['tipo_persona'] ?? 'natural'));
         $data['nombre_producto'] = $this->nombreProducto($tipos, (int) $data['id_producto']);
 
         $db = Database::getConnection();
@@ -737,6 +791,7 @@ class FirmaElectronicaService
 
         $tipos = $this->repository->getTiposFirma($idEmpresa);
         $this->rules->validarPortal($data, array_map(static fn($t) => (int) $t['id'], $tipos));
+        $this->validarTipoPersonaFirma($idEmpresa, (int) ($data['id_producto'] ?? 0) ?: null, (string) ($data['tipo_persona'] ?? 'natural'));
         $data['nombre_producto'] = $this->nombreProducto($tipos, (int) $data['id_producto']);
 
         $cfg   = $this->getConfigModulo($idEmpresa);

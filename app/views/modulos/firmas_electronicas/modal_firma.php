@@ -119,7 +119,8 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosPestanasOcultas($vistaConfigF
                                                 data-nombre="<?= htmlspecialchars($tf['nombre']) ?>"
                                                 data-pvp="<?= number_format((float)($tf['pvp'] ?? 0), 2, '.', '') ?>"
                                                 data-vig-cant="<?= (int) ($tf['vigencia_cantidad'] ?? 0) ?>"
-                                                data-vig-unidad="<?= htmlspecialchars((string) ($tf['vigencia_unidad'] ?? '')) ?>">
+                                                data-vig-unidad="<?= htmlspecialchars((string) ($tf['vigencia_unidad'] ?? '')) ?>"
+                                                data-para="<?= htmlspecialchars((string) ($tf['tipo_persona'] ?? '')) ?>">
                                                 <?= htmlspecialchars($tf['nombre']) ?>
                                                 <?php if (($tf['pvp'] ?? 0) > 0): ?>
                                                     - $<?= number_format((float)$tf['pvp'], 2) ?>
