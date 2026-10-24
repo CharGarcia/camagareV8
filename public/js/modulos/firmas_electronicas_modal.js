@@ -10,6 +10,7 @@
     let _idFirmaActual  = null;
     let _facturaEstado  = null;
     let _facturaElim    = false;
+    let _firmaEstado    = null;   // estado del trámite tal como está guardado
 
     function getModal() {
         if (!modalInst && typeof bootstrap !== 'undefined' && modalEl) {
@@ -273,28 +274,52 @@
 
     function ucFirst(str) { return str ? str.charAt(0).toUpperCase() + str.slice(1) : ''; }
 
+    /** Tiene factura activa (borrador o autorizada): no se elimina. */
     function esFirmaBloqueada() {
         return !_facturaElim && (_facturaEstado === 'borrador' || _facturaEstado === 'autorizado');
     }
 
-    function aplicarBloqueoFirma(bloqueada) {
-        // Alerta visible
-        const alerta = document.getElementById('alertaBloqueoFirma');
-        if (alerta) alerta.classList.toggle('d-none', !bloqueada);
+    /** Con factura activa y ya emitida: la ficha entera queda de solo lectura. */
+    function esFirmaSoloLectura() {
+        return esFirmaBloqueada() && _firmaEstado === 'emitida';
+    }
 
-        // Deshabilitar campos de Datos y Facturación
-        ['#tab-firma-general', '#tab-firma-pago', '#tab-firma-fact'].forEach(sel => {
+    // Lo que ya se facturó no cambia mientras la factura siga activa (el servidor lo conserva igual).
+    const CAMPOS_FACTURADOS = ['#firma_id_producto', '#firma_estado_pago'];
+
+    function aplicarBloqueoFirma() {
+        const conFactura = esFirmaBloqueada();
+        const soloLectura = esFirmaSoloLectura();
+
+        // Alerta visible: el texto cambia según lo que queda bloqueado
+        const alerta = document.getElementById('alertaBloqueoFirma');
+        if (alerta) {
+            alerta.classList.toggle('d-none', !conFactura);
+            const txt = alerta.querySelector('.js-texto-bloqueo');
+            if (txt) txt.innerHTML = soloLectura
+                ? 'Esta firma ya fue <strong>emitida</strong> y tiene una <strong>factura activa</strong>. Para modificarla o eliminarla, primero debe <strong>eliminar o anular la factura</strong> desde el módulo de Facturas de Venta.'
+                : 'Esta firma tiene una <strong>factura activa</strong>: puede corregir los datos del titular y el trámite hasta que se emita, pero el tipo de firma, el pago y los datos de facturación quedan como se facturaron.';
+        }
+
+        // Datos del titular: solo se bloquean cuando ya está emitida
+        document.querySelector('#tab-firma-general')?.querySelectorAll('input, select, textarea').forEach(el => {
+            el.disabled = soloLectura || (conFactura && CAMPOS_FACTURADOS.some(s => el.matches(s)));
+        });
+        // Pago y Facturación: fijos mientras exista la factura activa
+        ['#tab-firma-pago', '#tab-firma-fact'].forEach(sel => {
             document.querySelector(sel)?.querySelectorAll('input, select, textarea').forEach(el => {
-                el.disabled = bloqueada;
+                el.disabled = conFactura;
             });
         });
 
         // Botón guardar
         const btnG = document.getElementById('btnGuardarFirmaModal');
         if (btnG) {
-            btnG.disabled = bloqueada;
-            btnG.title    = bloqueada ? 'Existe una factura activa. Elimínela o anúlela primero.' : '';
+            btnG.disabled = soloLectura;
+            btnG.title    = soloLectura ? 'Firma emitida con factura activa. Elimine o anule la factura primero.' : '';
         }
+
+        const bloqueada = conFactura;
 
         // Botón eliminar
         const btnE = document.getElementById('btnEliminarFirmaModal');
@@ -521,8 +546,8 @@
                 _facturaElim   = false;
                 mostrarInfoFactura(json);
                 actualizarBtnGenerarFactura();
-                aplicarBloqueoFirma(true);
-                mostrarAlerta('Factura generada correctamente. La ficha queda bloqueada hasta que la factura sea eliminada o anulada.', 'success');
+                aplicarBloqueoFirma();
+                mostrarAlerta('Factura generada correctamente. El tipo de firma, el pago y los datos de facturación quedan fijos; los datos del titular se pueden corregir hasta que se emita.', 'success');
                 setTimeout(() => { if (window.fetchSearchFirmas) window.fetchSearchFirmas(); }, 1500);
             } else {
                 mostrarAlerta(json.error || 'Error al generar la factura.', 'danger');
@@ -657,6 +682,7 @@
 
         // Facturación: resetear tab
         _facturaEstado = null;
+        _firmaEstado   = null;
         _facturaElim   = false;
         if (chkMismosDatos) chkMismosDatos.checked = true;
         mostrarBloqueFacturacion(true);
@@ -674,7 +700,7 @@
         document.getElementById('tab-firma-uanataca-btn')?.classList.add('disabled');
         setVal('firma_estado', 'pendiente');
 
-        aplicarBloqueoFirma(false);
+        aplicarBloqueoFirma();
         activarTab('tab-firma-general-btn');
         getModal()?.show();
         setTimeout(() => document.getElementById('firma_nombres')?.focus(), 500);
@@ -725,6 +751,7 @@
         setVal('firma_correo',         data.correo || '');
         setVal('firma_direccion',      data.direccion || '');
         setVal('firma_estado',         data.estado || 'pendiente');
+        _firmaEstado = data.estado || 'pendiente';
         setVal('firma_estado_pago',    data.estado_pago || 'pendiente');
         setVal('firma_tipo_pago',      data.tipo_pago || '');
         setVal('firma_observaciones',  data.observaciones || '');
@@ -793,7 +820,7 @@
         document.getElementById('tab-firma-tramite-btn')?.classList.remove('disabled');
         document.getElementById('tab-firma-uanataca-btn')?.classList.remove('disabled');
 
-        aplicarBloqueoFirma(esFirmaBloqueada());
+        aplicarBloqueoFirma();
         cargarTramite(data.id);
 
         activarSubidaArchivos(data.id);
@@ -809,8 +836,8 @@
         const form  = document.getElementById('formFirmaModal');
         const id    = document.getElementById('firma_id_modal')?.value;
 
-        if (id && esFirmaBloqueada()) {
-            mostrarAlerta('No se puede modificar. Primero elimine o anule la factura activa.', 'warning');
+        if (id && esFirmaSoloLectura()) {
+            mostrarAlerta('No se puede modificar una firma emitida con factura activa. Primero elimine o anule la factura.', 'warning');
             return;
         }
 
@@ -852,12 +879,15 @@
                 setTimeout(() => {
                     if (window.fetchSearchFirmas) window.fetchSearchFirmas();
                 }, 1200);
+                _firmaEstado = document.getElementById('firma_estado')?.value || _firmaEstado;
             }
         } catch (e) {
             mostrarAlerta('Error de conexión.', 'danger');
         } finally {
             btn.disabled = false;
             btn.innerHTML = '<i class="bi bi-check-lg"></i> Guardar';
+            // Si se acaba de marcar como emitida con factura activa, la ficha pasa a solo lectura.
+            aplicarBloqueoFirma();
         }
     };
 

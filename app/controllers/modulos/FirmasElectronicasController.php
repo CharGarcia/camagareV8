@@ -310,8 +310,7 @@ class FirmasElectronicasController extends BaseModuloController
 
         try {
             if ($id <= 0) throw new \Exception('ID no válido.');
-            $errorFactura = $this->verificarFacturaActiva($id, $idEmpresa);
-            if ($errorFactura) { echo json_encode(['ok' => false, 'error' => $errorFactura]); exit; }
+            // Con factura activa: el Service decide qué se puede cambiar (todo bloqueado solo si ya está emitida).
             $this->service->actualizar($id, $idEmpresa, $data);
             echo json_encode(['ok' => true, 'msg' => 'Firma electrónica actualizada correctamente.']);
         } catch (\Throwable $e) {

@@ -6,7 +6,7 @@ ruta_modulo: modulos/firmas_electronicas
 tipo: modulo
 visibilidad: admin
 etiquetas: firma electronica, vender firmas, aviso de vencimiento al cliente, recordatorio de renovacion, renovar firma del cliente, firma por vencer, enlace de renovacion, api uanataca, uanacreditos, creditos uanataca, precompra, distribuidor uanataca, miembro de empresa, representante legal, solicitud de firma, tramite de firma, uanataca, enlace para el cliente, formulario de firma, link de firma, whatsapp, pagar firma, payphone, transferencia, comprobante de pago, confirmar correo, factura de la firma, registrar en uanataca, firma emitida, observada, corregir solicitud, enlace fijo, qr de firma, certificado, p12, caducada, por caducar, renovar firma, firma invalida, xades, anf, security data, buscar firma, filtros, firmas por facturar
-version: 2.7
+version: 2.8
 orden: 20
 estado: activo
 ---
@@ -221,8 +221,11 @@ crear otra. Las fotos de más de 1 MB se reducen antes de enviarlas.
   cambiar la validez elegida.
 - El precio cobrado por Payphone es el total de la factura (IVA según la serie
   configurada).
-- Una firma con factura activa (borrador o autorizada) no se edita ni elimina
-  desde la pestaña Datos: el trámite se lleva desde la pestaña **Trámite**.
+- Una firma con factura activa (borrador o autorizada) **no se elimina**. Mientras
+  **no esté emitida**, sí se pueden corregir los datos del titular, el estado y
+  las observaciones; el tipo de firma, el estado del pago y las pestañas Pago y
+  Facturación quedan como se facturaron. Una vez **emitida**, la ficha queda de
+  solo lectura hasta que se elimine o anule la factura.
 - Los documentos se validan por su contenido real: cédula y selfie deben ser
   fotos (JPG, PNG, WEBP); los de la empresa, PDF; máximo 5 MB.
 - Si el SRI no responde al momento del pago, la factura queda en borrador y el
@@ -257,6 +260,12 @@ crear otra. Las fotos de más de 1 MB se reducen antes de enviarlas.
   días) o la empresa está inactiva. Envíe uno nuevo.
 - **«Uanataca rechazó el usuario o la clave de la API»**: revise las
   credenciales y el ambiente (las de pruebas no sirven en producción).
+- **«Uanataca no permite a este usuario de API crear solicitudes (HTTP 403)»**:
+  el usuario y la clave son correctos (inicia sesión y ve el catálogo), pero su
+  cuenta de distribuidor no tiene habilitada la creación de solicitudes en ese
+  ambiente. Pida a Uanataca que la habilite, o revise en la pestaña
+  **Uanataca** del engranaje que el ambiente (Pruebas/Producción) corresponda a
+  esas credenciales.
 - **«Falta para enviar a Uanataca: …»**: complete en la ficha los datos o
   documentos indicados, o enlace el producto en *Productos de Uanataca*.
 - **El envío falla por saldo o por un dato que Uanataca no acepta**: el
@@ -381,6 +390,9 @@ archivo, y volver a cargar la firma no lo soluciona.
 
 ## Historial de cambios
 
+- **2.8** — Una firma con factura activa se puede editar mientras no esté
+  emitida (datos del titular, estado, observaciones); el tipo de firma, el pago
+  y la facturación se conservan. Mensaje claro al crear en Uanataca con HTTP 403.
 - **2.7** — El WhatsApp del enlace llega con un botón **Completar solicitud**
   cuando la plantilla `solicitud_firma` lo tiene (ver el manual de Plantillas de
   WhatsApp); las plantillas aprobadas sin botón siguen funcionando.

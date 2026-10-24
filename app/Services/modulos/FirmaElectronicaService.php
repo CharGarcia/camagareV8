@@ -36,6 +36,12 @@ class FirmaElectronicaService
     private const MAX_POR_IP_HORA = 5;
     public  const MODULO_PAGO   = 'firma_electronica';
     public  const PLANTILLA_WA  = 'solicitud_firma';
+    /** Lo que ya quedó en la factura: no se cambia mientras la factura siga activa. */
+    private const CAMPOS_FACTURADOS = [
+        'id_producto', 'nombre_producto', 'tipo_pago', 'estado_pago',
+        'facturacion_tipo_id', 'facturacion_num_id', 'facturacion_nombres',
+        'facturacion_direccion', 'facturacion_correo', 'facturacion_telefono',
+    ];
 
     private FirmaElectronicaRepository $repository;
     private FirmaElectronicaRules      $rules;
@@ -116,6 +122,18 @@ class FirmaElectronicaService
         $antes = $this->repository->findById($id, $idEmpresa);
         if (!$antes) {
             throw new Exception('La firma electrónica no existe o ha sido eliminada.');
+        }
+        // Con factura activa se pueden corregir los datos del titular y el trámite hasta que
+        // se emita; lo que ya se facturó (tipo de firma, pago, datos de facturación) se
+        // conserva tal cual. Emitida y con factura activa, no se modifica.
+        if ($errorFactura = $this->errorFacturaActiva($id, $idEmpresa)) {
+            if (($antes['estado'] ?? '') === 'emitida') {
+                throw new Exception($errorFactura);
+            }
+            foreach (self::CAMPOS_FACTURADOS as $campo) {
+                $data[$campo] = $antes[$campo] ?? null;
+            }
+            $data['facturacion_mismos_datos'] = !empty($antes['facturacion_mismos_datos']) && $antes['facturacion_mismos_datos'] !== 'f';
         }
         // El pago confirmado lo deja el flujo de pago (factura + cobro): el formulario no
         // puede deshacerlo ni marcarlo a mano.

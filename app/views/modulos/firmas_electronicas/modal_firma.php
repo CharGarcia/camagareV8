@@ -31,8 +31,7 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosPestanasOcultas($vistaConfigF
                     <div id="modalAlertFirma" class="alert d-none mb-2 py-2 small shadow-sm border-0 mx-3"></div>
                     <div id="alertaBloqueoFirma" class="alert alert-warning d-none mb-3 py-2 small shadow-sm border-0 mx-3">
                         <i class="bi bi-lock-fill me-2"></i>
-                        Esta firma tiene una <strong>factura activa</strong>. Para modificarla o eliminarla, primero debe
-                        <strong>eliminar o anular la factura</strong> desde el módulo de Facturas de Venta.
+                        <span class="js-texto-bloqueo">Esta firma tiene una <strong>factura activa</strong>.</span>
                     </div>
                     <input type="hidden" name="id" id="firma_id_modal" value="">
                     <input type="hidden" name="nombre_producto" id="firma_nombre_producto_modal" value="">

@@ -83,8 +83,21 @@ class UanatacaApiService
     {
         $ruta = self::AMBIENTES[$this->ambiente]['crear'];
         [$st, $headers, $body] = $this->peticion('POST', $ruta, $payload);
+        // La documentación pone /api solo en el POST de producción, mientras login, productos
+        // y consultas van sin /api. Si esa ruta se niega (403) o no existe (404), se prueba la
+        // misma ruta que usa el resto de la API: un 403/404 no crea nada, así que no duplica.
+        if (in_array($st, [403, 404], true) && str_starts_with($ruta, '/api/')) {
+            $ruta = substr($ruta, 4);
+            [$st, $headers, $body] = $this->peticion('POST', $ruta, $payload);
+        }
         if ($st === 400 && preg_match('/deserializ|START_ARRAY|START_OBJECT|JSON parse/i', $body)) {
             [$st, $headers, $body] = $this->peticion('POST', $ruta, [$payload]);
+        }
+        if ($st === 403) {
+            throw new RuntimeException('Uanataca no permite a este usuario de API crear solicitudes (HTTP 403) en el ambiente '
+                . ($this->ambiente === 'produccion' ? 'Producción' : 'Pruebas') . '. El usuario sí inicia sesión, así que la clave es correcta: '
+                . 'pida a Uanataca que habilite la creación de solicitudes (Precompra) para ese usuario en ese ambiente, '
+                . 'o revise que no esté usando un usuario de pruebas en Producción (o al revés).');
         }
         $this->exigirOk($st, $body, 'crear la solicitud');
 
