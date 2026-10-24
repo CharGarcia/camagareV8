@@ -36,9 +36,12 @@ class FirmaElectronicaService
     private const MAX_POR_IP_HORA = 5;
     public  const MODULO_PAGO   = 'firma_electronica';
     public  const PLANTILLA_WA  = 'solicitud_firma';
-    /** Lo que ya quedó en la factura: no se cambia mientras la factura siga activa. */
+    /**
+     * Pago y datos de facturación: no se cambian mientras la factura siga activa.
+     * El tipo de firma (producto) sí, hasta que se emita: la factura queda con el anterior.
+     */
     private const CAMPOS_FACTURADOS = [
-        'id_producto', 'nombre_producto', 'tipo_pago', 'estado_pago',
+        'tipo_pago', 'estado_pago',
         'facturacion_tipo_id', 'facturacion_num_id', 'facturacion_nombres',
         'facturacion_direccion', 'facturacion_correo', 'facturacion_telefono',
     ];
@@ -123,9 +126,9 @@ class FirmaElectronicaService
         if (!$antes) {
             throw new Exception('La firma electrónica no existe o ha sido eliminada.');
         }
-        // Con factura activa se pueden corregir los datos del titular y el trámite hasta que
-        // se emita; lo que ya se facturó (tipo de firma, pago, datos de facturación) se
-        // conserva tal cual. Emitida y con factura activa, no se modifica.
+        // Con factura activa se pueden corregir los datos del titular, el tipo de firma y el
+        // trámite hasta que se emita; el pago y los datos de facturación se conservan tal
+        // cual. Emitida y con factura activa, no se modifica.
         if ($errorFactura = $this->errorFacturaActiva($id, $idEmpresa)) {
             if (($antes['estado'] ?? '') === 'emitida') {
                 throw new Exception($errorFactura);

@@ -174,13 +174,19 @@
         } else {
             pvpBadge.classList.add('d-none');
         }
-        actualizarFactItem(nombre, pvp);
+        // Con factura activa, la pestaña Facturación sigue mostrando lo facturado.
+        if (!esFirmaBloqueada()) actualizarFactItem(nombre, pvp);
         actualizarBtnGenerarFactura();
     }
 
     if (selectProducto) {
         selectProducto.addEventListener('change', actualizarPvpBadge);
         selectProducto.addEventListener('change', autocompletarCaducidad);
+        selectProducto.addEventListener('change', () => {
+            if (esFirmaBloqueada()) {
+                mostrarAlerta('La factura activa se mantiene con el tipo de firma y el valor anteriores; solo cambia la ficha.', 'warning');
+            }
+        });
     }
 
     // ── Caducidad = hoy + vigencia del tipo de firma ───────────
@@ -284,8 +290,8 @@
         return esFirmaBloqueada() && _firmaEstado === 'emitida';
     }
 
-    // Lo que ya se facturó no cambia mientras la factura siga activa (el servidor lo conserva igual).
-    const CAMPOS_FACTURADOS = ['#firma_id_producto', '#firma_estado_pago'];
+    // El pago ya facturado no cambia mientras la factura siga activa (el servidor lo conserva igual). El tipo de firma sí, hasta que se emita.
+    const CAMPOS_FACTURADOS = ['#firma_estado_pago'];
 
     function aplicarBloqueoFirma() {
         const conFactura = esFirmaBloqueada();
@@ -298,7 +304,7 @@
             const txt = alerta.querySelector('.js-texto-bloqueo');
             if (txt) txt.innerHTML = soloLectura
                 ? 'Esta firma ya fue <strong>emitida</strong> y tiene una <strong>factura activa</strong>. Para modificarla o eliminarla, primero debe <strong>eliminar o anular la factura</strong> desde el módulo de Facturas de Venta.'
-                : 'Esta firma tiene una <strong>factura activa</strong>: puede corregir los datos del titular y el trámite hasta que se emita, pero el tipo de firma, el pago y los datos de facturación quedan como se facturaron.';
+                : 'Esta firma tiene una <strong>factura activa</strong>: hasta que se emita puede corregir los datos del titular, el tipo de firma y el trámite (la factura queda con el tipo y el valor con que se hizo). El pago y los datos de facturación quedan como se facturaron.';
         }
 
         // Datos del titular: solo se bloquean cuando ya está emitida
@@ -547,7 +553,7 @@
                 mostrarInfoFactura(json);
                 actualizarBtnGenerarFactura();
                 aplicarBloqueoFirma();
-                mostrarAlerta('Factura generada correctamente. El tipo de firma, el pago y los datos de facturación quedan fijos; los datos del titular se pueden corregir hasta que se emita.', 'success');
+                mostrarAlerta('Factura generada correctamente. El pago y los datos de facturación quedan fijos; los datos del titular y el tipo de firma se pueden corregir hasta que se emita.', 'success');
                 setTimeout(() => { if (window.fetchSearchFirmas) window.fetchSearchFirmas(); }, 1500);
             } else {
                 mostrarAlerta(json.error || 'Error al generar la factura.', 'danger');

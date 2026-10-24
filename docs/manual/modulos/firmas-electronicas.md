@@ -222,10 +222,13 @@ crear otra. Las fotos de más de 1 MB se reducen antes de enviarlas.
 - El precio cobrado por Payphone es el total de la factura (IVA según la serie
   configurada).
 - Una firma con factura activa (borrador o autorizada) **no se elimina**. Mientras
-  **no esté emitida**, sí se pueden corregir los datos del titular, el estado y
-  las observaciones; el tipo de firma, el estado del pago y las pestañas Pago y
-  Facturación quedan como se facturaron. Una vez **emitida**, la ficha queda de
-  solo lectura hasta que se elimine o anule la factura.
+  **no esté emitida**, sí se pueden corregir los datos del titular, el **tipo de
+  firma**, el estado y las observaciones. La factura no cambia: queda con el
+  tipo y el valor con que se hizo (si el precio del nuevo tipo es distinto,
+  ajústelo con una nota de crédito o anulando la factura). El estado del pago y
+  las pestañas Pago y Facturación quedan como se facturaron. Una vez
+  **emitida**, la ficha queda de solo lectura hasta que se elimine o anule la
+  factura.
 - Los documentos se validan por su contenido real: cédula y selfie deben ser
   fotos (JPG, PNG, WEBP); los de la empresa, PDF; máximo 5 MB.
 - Si el SRI no responde al momento del pago, la factura queda en borrador y el
@@ -391,8 +394,8 @@ archivo, y volver a cargar la firma no lo soluciona.
 ## Historial de cambios
 
 - **2.8** — Una firma con factura activa se puede editar mientras no esté
-  emitida (datos del titular, estado, observaciones); el tipo de firma, el pago
-  y la facturación se conservan. Mensaje claro al crear en Uanataca con HTTP 403.
+  emitida (datos del titular, tipo de firma, estado, observaciones); el pago y
+  la facturación se conservan y la factura no se modifica. Mensaje claro al crear en Uanataca con HTTP 403.
 - **2.7** — El WhatsApp del enlace llega con un botón **Completar solicitud**
   cuando la plantilla `solicitud_firma` lo tiene (ver el manual de Plantillas de
   WhatsApp); las plantillas aprobadas sin botón siguen funcionando.
