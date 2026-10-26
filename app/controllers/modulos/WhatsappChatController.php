@@ -5,6 +5,7 @@ namespace App\controllers\modulos;
 use App\repositories\modulos\WhatsappMensajeRepository;
 use App\services\WhatsappService;
 use App\models\WhatsappConfig;
+use App\Services\modulos\WhatsappChatService;
 
 class WhatsappChatController extends BaseModuloController
 {
@@ -37,7 +38,8 @@ class WhatsappChatController extends BaseModuloController
 
         $this->viewWithLayout('layouts.main', 'modulos/whatsapp_chat/index', [
             'titulo' => 'Bandeja de Entrada WhatsApp',
-            'configurado' => $configurado
+            'configurado' => $configurado,
+            'permisos'    => $this->getPermisos(),
         ]);
     }
 
@@ -91,7 +93,48 @@ class WhatsappChatController extends BaseModuloController
         // Enriquecer mensajes de tipo "template" sin template_text
         $mensajes = $this->enriquecerMensajesPlantilla($mensajes, $idEmpresa);
 
-        echo json_encode(['ok' => true, 'mensajes' => $mensajes]);
+        echo json_encode([
+            'ok'       => true,
+            'mensajes' => $mensajes,
+            'ventana'  => (new WhatsappChatService())->estadoVentana((int) $idEmpresa, $idChat),
+        ]);
+    }
+
+    /** Clientes con teléfono para el modal «Nuevo chat». GET ?q= */
+    public function buscarClientesAjax(): void
+    {
+        $this->requireLeer();
+        $clientes = (new WhatsappChatService())->buscarClientes((int) $_SESSION['id_empresa'], (string) ($_GET['q'] ?? ''));
+        echo json_encode(['ok' => true, 'clientes' => $clientes]);
+    }
+
+    /** Plantillas aprobadas por Meta, con sus variables, para iniciar o reabrir un chat. */
+    public function getPlantillasAjax(): void
+    {
+        $this->requireLeer();
+        $plantillas = (new WhatsappChatService())->plantillasDisponibles((int) $_SESSION['id_empresa']);
+        echo json_encode(['ok' => true, 'plantillas' => $plantillas]);
+    }
+
+    /**
+     * Envía una plantilla (único mensaje que Meta acepta para iniciar una conversación o
+     * escribir cuando pasaron 24 h desde el último mensaje del cliente).
+     * Body JSON: { telefono, nombre, plantilla, vars_header[], vars_body[], var_boton }
+     */
+    public function enviarPlantillaAjax(): void
+    {
+        $this->requireCrear();
+        $input = json_decode(file_get_contents('php://input'), true) ?: [];
+        // Soltar el candado de la sesión antes de llamar a Meta (las demás pestañas no esperan).
+        $idEmpresa = (int) $_SESSION['id_empresa'];
+        $idUsuario = (int) $_SESSION['id_usuario'];
+        session_write_close();
+        try {
+            $res = (new WhatsappChatService())->enviarPlantilla($idEmpresa, $idUsuario, $input);
+            echo json_encode(['ok' => true] + $res);
+        } catch (\Throwable $e) {
+            echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
+        }
     }
 
     /**
@@ -303,7 +346,12 @@ class WhatsappChatController extends BaseModuloController
             ]);
         } else {
             $errorMsg = $response['error']['message'] ?? 'Error desconocido en Meta';
-            echo json_encode(['ok' => false, 'error' => $errorMsg]);
+            // 131047: pasaron más de 24 h desde el último mensaje del cliente.
+            $ventanaCerrada = (int) ($response['error']['code'] ?? 0) === 131047;
+            if ($ventanaCerrada) {
+                $errorMsg = 'Pasaron más de 24 horas desde el último mensaje del cliente: WhatsApp solo permite enviarle una plantilla aprobada.';
+            }
+            echo json_encode(['ok' => false, 'error' => $errorMsg, 'ventana_cerrada' => $ventanaCerrada]);
         }
     }
 

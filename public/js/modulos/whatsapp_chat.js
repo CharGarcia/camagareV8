@@ -1,5 +1,6 @@
 let WC_currentChatId = 0;
 let WC_currentPhone = '';
+let WC_currentNombre = '';
 let WC_pollingInterval = null;
 let WC_lastMsgSignature = '';
 
@@ -92,18 +93,21 @@ function WC_renderChats(chats) {
         let dateObj = new Date(c.updated_at);
         let timeStr = dateObj.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
 
+        // Datos en data-* (escapados): un nombre con comilla rompía el onclick armado a mano.
         html += `
-        <div class="wa-chat-item p-3 border-bottom d-flex align-items-center ${isActive}" onclick="WC_seleccionarChat(${c.id}, '${c.telefono_cliente}', '${c.nombre_cliente}')">
+        <div class="wa-chat-item p-3 border-bottom d-flex align-items-center ${isActive}"
+             data-id="${c.id}" data-tel="${WC_escHtml(c.telefono_cliente)}" data-nombre="${WC_escHtml(c.nombre_cliente || '')}"
+             onclick="WC_seleccionarChat(+this.dataset.id, this.dataset.tel, this.dataset.nombre)">
             <div class="bg-secondary bg-opacity-25 text-secondary rounded-circle d-flex align-items-center justify-content-center me-3" style="width: 45px; height: 45px; min-width: 45px;">
                 <i class="bi bi-person-fill fs-4"></i>
             </div>
             <div class="flex-grow-1 overflow-hidden">
                 <div class="d-flex justify-content-between align-items-center mb-1">
-                    <h6 class="m-0 text-truncate fw-bold">${c.nombre_cliente || c.telefono_cliente}</h6>
+                    <h6 class="m-0 text-truncate fw-bold">${WC_escHtml(c.nombre_cliente || c.telefono_cliente)}</h6>
                     <small class="text-muted" style="font-size: 11px;">${timeStr}</small>
                 </div>
                 <div class="d-flex align-items-center">
-                    <small class="text-muted text-truncate flex-grow-1" style="max-width: 80%;">${c.ultimo_mensaje || ''}</small>
+                    <small class="text-muted text-truncate flex-grow-1" style="max-width: 80%;">${WC_escHtml(c.ultimo_mensaje || '')}</small>
                     ${unread}
                 </div>
             </div>
@@ -122,7 +126,10 @@ function WC_seleccionarChat(id, telefono, nombre) {
     document.getElementById('waChatEmptyState').classList.add('d-none');
     document.getElementById('waChatHeader').classList.remove('d-none');
     document.getElementById('waChatMessages').classList.remove('d-none');
-    document.getElementById('waChatInputArea').classList.remove('d-none');
+    // El área de escritura o el aviso de 24 h se decide al llegar los mensajes (WC_aplicarVentana).
+    document.getElementById('waChatInputArea').classList.add('d-none');
+    document.getElementById('waChatVentanaCerrada').classList.add('d-none');
+    WC_currentNombre = nombre || '';
 
     document.getElementById('waChatName').innerText = nombre || telefono;
     document.getElementById('waChatPhone').innerText = telefono;
@@ -151,11 +158,24 @@ function WC_cargarMensajes(idChat, telefono, silencioso = false) {
     })
     .then(res => res.json())
     .then(data => {
-        if (data.ok) {
+        // Una respuesta de un chat que ya no está abierto no debe pintarse encima del actual.
+        if (data.ok && idChat === WC_currentChatId) {
             WC_renderMensajes(data.mensajes, !silencioso);
+            WC_aplicarVentana(data.ventana);
         }
     })
     .catch(err => console.error(err));
+}
+
+/**
+ * Ventana de 24 h de Meta: abierta → se escribe libremente; cerrada → solo plantilla.
+ * Sin dato (respuesta antigua) se deja escribir, como antes.
+ */
+function WC_aplicarVentana(ventana) {
+    const abierta = !ventana || !!ventana.abierta;
+    document.getElementById('waChatInputArea').classList.toggle('d-none', !abierta);
+    document.getElementById('waChatVentanaCerrada').classList.toggle('d-none', abierta);
+    if (!abierta) WC_toggleRespuestasPanel(false);
 }
 
 function WC_renderMensajes(mensajes, esInicial = false) {
@@ -422,9 +442,15 @@ function WC_enviarMensaje() {
             WC_cargarMensajes(WC_currentChatId, WC_currentPhone, true);
             WC_cargarChats(true);
         } else {
-            Swal.fire('Error', data.error, 'error');
             const temp = document.getElementById('msg-temp');
             if (temp) temp.remove();
+            if (data.ventana_cerrada) {
+                input.value = texto;
+                WC_aplicarVentana({ abierta: false });
+                Swal.fire('Ventana de 24 horas cerrada', data.error, 'warning');
+            } else {
+                Swal.fire('Error', data.error, 'error');
+            }
         }
     })
     .catch(err => {
@@ -757,3 +783,248 @@ function WC_eliminarRespuesta(id) {
         });
     });
 }
+
+// ═══════════════════════════════════════════════════════════════════════════
+//  NUEVO CHAT / ENVIAR PLANTILLA
+//  Meta solo acepta una plantilla aprobada para iniciar una conversación o para
+//  escribir cuando pasaron 24 h desde el último mensaje del cliente.
+// ═══════════════════════════════════════════════════════════════════════════
+
+let WC_plPlantillas = null;   // caché de plantillas aprobadas
+let WC_plChatFijo   = false;  // true = se envía al chat abierto (ventana cerrada)
+let WC_plEnviando   = false;
+let WC_plTimerBusca = null;
+
+/** Abre el modal. chatActual = true → al chat abierto; si no, a un número nuevo. */
+async function WC_abrirPlantilla(chatActual = false) {
+    WC_plChatFijo = !!chatActual && WC_currentChatId > 0;
+    const $ = id => document.getElementById(id);
+
+    $('waPlTitulo').innerHTML = WC_plChatFijo
+        ? '<i class="bi bi-send text-success me-2"></i>Enviar plantilla'
+        : '<i class="bi bi-whatsapp text-success me-2"></i>Nuevo chat';
+    $('waPlDestinoNuevo').classList.toggle('d-none', WC_plChatFijo);
+    $('waPlDestinoFijo').classList.toggle('d-none', !WC_plChatFijo);
+    $('waPlDestinoTexto').textContent = WC_plChatFijo
+        ? `${WC_currentNombre || 'Sin nombre'} (${WC_currentPhone})` : '';
+    $('waPlBuscarCliente').value = '';
+    $('waPlCelular').value = '';
+    $('waPlNombre').value = '';
+    $('waPlClientesLista').classList.add('d-none');
+
+    bootstrap.Modal.getOrCreateInstance($('waModalPlantilla')).show();
+    await WC_plCargarPlantillas();
+}
+
+async function WC_plCargarPlantillas() {
+    const sel = document.getElementById('waPlPlantilla');
+    if (!WC_plPlantillas) {
+        sel.innerHTML = '<option value="">Cargando…</option>';
+        try {
+            const r = await fetch(`${B_URL}/modulos/whatsapp-chat/getPlantillasAjax`, { headers: { 'X-Requested-With': 'XMLHttpRequest' } });
+            const data = await r.json();
+            if (!data.ok) throw new Error(data.error || 'No se pudieron cargar las plantillas.');
+            WC_plPlantillas = data.plantillas || [];
+        } catch (e) {
+            sel.innerHTML = '<option value="">No se pudieron cargar</option>';
+            Swal.fire('Error', e.message || 'No se pudieron cargar las plantillas.', 'error');
+            return;
+        }
+    }
+    const previa = sel.value;
+    const ayuda = document.getElementById('waPlPlantillaAyuda');
+    if (!WC_plPlantillas.length) {
+        sel.innerHTML = '<option value="">No hay plantillas aprobadas por Meta</option>';
+        ayuda.textContent = 'Créelas en Plantillas de WhatsApp y espere la aprobación de Meta.';
+    } else {
+        sel.innerHTML = '<option value="">— Elija una plantilla —</option>' + WC_plPlantillas.map(p =>
+            `<option value="${WC_escHtml(p.nombre)}" ${p.soportada ? '' : 'disabled'} title="${WC_escHtml(p.motivo)}">`
+            + `${WC_escHtml(p.nombre)}${p.soportada ? '' : ' (no disponible aquí)'}</option>`
+        ).join('');
+        ayuda.textContent = WC_plPlantillas.some(p => !p.soportada)
+            ? 'Las marcadas «no disponible aquí» llevan un archivo en el encabezado o variables con nombre.' : '';
+        if (previa && WC_plPlantillas.some(p => p.nombre === previa && p.soportada)) sel.value = previa;
+    }
+    WC_plRenderVariables();
+}
+
+function WC_plSeleccionada() {
+    const nombre = document.getElementById('waPlPlantilla').value;
+    return (WC_plPlantillas || []).find(p => p.nombre === nombre) || null;
+}
+
+/** Inputs de las variables de la plantilla elegida (encabezado, cuerpo y botón). */
+function WC_plRenderVariables() {
+    const cont = document.getElementById('waPlVariables');
+    const p = WC_plSeleccionada();
+    if (!p) { cont.innerHTML = ''; WC_plPreview(); return; }
+
+    const campo = (grupo, i, ejemplo, etiqueta) => `
+        <div class="mb-2">
+            <label class="form-label small mb-1">${etiqueta}</label>
+            <input type="text" class="form-control form-control-sm wa-pl-var" data-grupo="${grupo}" data-i="${i}"
+                   maxlength="1000" placeholder="${ejemplo ? 'Ej.: ' + WC_escHtml(ejemplo) : ''}">
+        </div>`;
+    let html = '';
+    for (let i = 0; i < p.vars_header; i++) html += campo('header', i, p.ejemplos_header[i], `Encabezado {{${i + 1}}} <span class="text-danger">*</span>`);
+    for (let i = 0; i < p.vars_body; i++)   html += campo('body', i, p.ejemplos_body[i], `Variable {{${i + 1}}} <span class="text-danger">*</span>`);
+    if (p.boton_url) {
+        html += `
+        <div class="mb-2">
+            <label class="form-label small mb-1">Enlace del botón «${WC_escHtml(p.boton_url.texto)}» <span class="text-danger">*</span></label>
+            <div class="input-group input-group-sm">
+                <span class="input-group-text text-truncate" style="max-width:55%;" title="${WC_escHtml(p.boton_url.base)}">${WC_escHtml(p.boton_url.base)}</span>
+                <input type="text" class="form-control wa-pl-var" data-grupo="boton" data-i="0"
+                       placeholder="${p.boton_url.ejemplo ? 'Ej.: ' + WC_escHtml(p.boton_url.ejemplo) : ''}">
+            </div>
+        </div>`;
+    }
+    cont.innerHTML = html || '<div class="small text-muted">Esta plantilla no tiene variables.</div>';
+
+    // Si el cuerpo saluda («Hola {{1}}», «Estimado {{1}}»), {{1}} se precarga con el nombre del contacto.
+    const nombre = WC_plChatFijo ? WC_currentNombre : document.getElementById('waPlNombre').value.trim();
+    const primera = cont.querySelector('.wa-pl-var[data-grupo="body"][data-i="0"]');
+    if (primera && nombre && /(hola|estimad[oa]s?|querid[oa]s?)[\s,¡!]*\{\{1\}\}/i.test(p.cuerpo)) primera.value = nombre;
+    WC_plPreview();
+}
+
+function WC_plValores(grupo) {
+    return [...document.querySelectorAll(`#waPlVariables .wa-pl-var[data-grupo="${grupo}"]`)]
+        .sort((a, b) => a.dataset.i - b.dataset.i).map(i => i.value.trim());
+}
+
+/** Texto con las variables puestas; las vacías se resaltan para que se vea qué falta. */
+function WC_plRellenar(texto, valores) {
+    return WC_escHtml(texto || '').replace(/\{\{(\d+)\}\}/g, (m, n) => {
+        const v = valores[n - 1];
+        return v ? WC_escHtml(v) : `<span class="badge bg-warning text-dark">{{${n}}}</span>`;
+    }).replace(/\n/g, '<br>');
+}
+
+function WC_plPreview() {
+    const prev = document.getElementById('waPlPreview');
+    const p = WC_plSeleccionada();
+    if (!p) { prev.innerHTML = '<span class="text-muted">Elija una plantilla.</span>'; return; }
+    let html = '';
+    if (p.encabezado) html += `<div class="fw-bold mb-1">${WC_plRellenar(p.encabezado, WC_plValores('header'))}</div>`;
+    html += `<div>${WC_plRellenar(p.cuerpo, WC_plValores('body'))}</div>`;
+    if (p.pie) html += `<div class="text-muted mt-1" style="font-size:.78rem;">${WC_escHtml(p.pie)}</div>`;
+    if (p.botones.length) {
+        html += '<div class="mt-2 d-flex flex-wrap gap-1 border-top pt-1">' + p.botones.map(b =>
+            `<span class="badge bg-white text-primary border" style="font-size:.75rem;">${WC_escHtml(b)}</span>`).join('') + '</div>';
+    }
+    prev.innerHTML = html;
+}
+
+// ── Buscador de clientes ────────────────────────────────────────────────────
+function WC_plBuscarClientes() {
+    const q = document.getElementById('waPlBuscarCliente').value.trim();
+    const lista = document.getElementById('waPlClientesLista');
+    clearTimeout(WC_plTimerBusca);
+    if (q.length < 2) { lista.classList.add('d-none'); return; }
+    WC_plTimerBusca = setTimeout(async () => {
+        try {
+            const r = await fetch(`${B_URL}/modulos/whatsapp-chat/buscarClientesAjax?q=${encodeURIComponent(q)}`,
+                { headers: { 'X-Requested-With': 'XMLHttpRequest' } });
+            const data = await r.json();
+            const clientes = data.clientes || [];
+            lista.innerHTML = clientes.length ? clientes.map(c => `
+                <button type="button" class="list-group-item list-group-item-action py-1 small"
+                        data-cel="${WC_escHtml(c.celular)}" data-nombre="${WC_escHtml(c.nombre)}" data-tel="${WC_escHtml(c.telefono)}">
+                    <div class="fw-semibold text-truncate">${WC_escHtml(c.nombre)}</div>
+                    <div class="text-muted">${WC_escHtml(c.identificacion || '')} · ${WC_escHtml(c.telefono)}
+                        ${c.celular ? '' : '<span class="text-danger ms-1">(sin celular 09…)</span>'}</div>
+                </button>`).join('')
+                : '<div class="list-group-item small text-muted">Sin clientes con teléfono que coincidan.</div>';
+            lista.classList.remove('d-none');
+        } catch (e) {
+            console.error(e);
+        }
+    }, 300);
+}
+
+function WC_plElegirCliente(btn) {
+    document.getElementById('waPlCelular').value = btn.dataset.cel || '';
+    document.getElementById('waPlNombre').value = btn.dataset.nombre || '';
+    document.getElementById('waPlBuscarCliente').value = btn.dataset.nombre || '';
+    document.getElementById('waPlClientesLista').classList.add('d-none');
+    if (!btn.dataset.cel) {
+        Swal.fire('Sin celular', `El teléfono registrado del cliente (${btn.dataset.tel}) no es un celular 09…. Escriba el celular a mano.`, 'info');
+        document.getElementById('waPlCelular').focus();
+    }
+    WC_plRenderVariables();
+}
+
+// ── Envío ───────────────────────────────────────────────────────────────────
+async function WC_enviarPlantilla() {
+    if (WC_plEnviando) return;
+    WC_plEnviando = true;
+    const btn = document.getElementById('waPlBtnEnviar');
+    const htmlBtn = btn.innerHTML;
+    try {
+        const p = WC_plSeleccionada();
+        const telefono = WC_plChatFijo ? WC_currentPhone : document.getElementById('waPlCelular').value.trim();
+        const nombre   = WC_plChatFijo ? WC_currentNombre : document.getElementById('waPlNombre').value.trim();
+
+        if (!WC_plChatFijo && !/^09\d{8}$/.test(telefono)) {
+            Swal.fire('Celular no válido', 'Escriba los 10 dígitos del celular, por ejemplo 0958924835.', 'warning');
+            return;
+        }
+        if (!p) {
+            Swal.fire('Falta la plantilla', 'Elija la plantilla aprobada que desea enviar.', 'warning');
+            return;
+        }
+        const vacia = [...document.querySelectorAll('#waPlVariables .wa-pl-var')].find(i => !i.value.trim());
+        if (vacia) {
+            vacia.focus();
+            Swal.fire('Faltan datos', 'Complete todas las variables de la plantilla.', 'warning');
+            return;
+        }
+
+        btn.disabled = true;
+        btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Enviando…';
+        const r = await fetch(`${B_URL}/modulos/whatsapp-chat/enviarPlantillaAjax`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
+            body: JSON.stringify({
+                telefono, nombre, plantilla: p.nombre,
+                vars_header: WC_plValores('header'), vars_body: WC_plValores('body'),
+                var_boton: WC_plValores('boton')[0] || '',
+            }),
+        });
+        const data = await r.json();
+        if (!data.ok) throw new Error(data.error || 'No se pudo enviar.');
+
+        bootstrap.Modal.getOrCreateInstance(document.getElementById('waModalPlantilla')).hide();
+        WC_cargarChats(true);
+        WC_seleccionarChat(data.id_chat, data.telefono, data.nombre || nombre);
+        Swal.fire({ icon: 'success', title: 'Plantilla enviada', text: 'Cuando el cliente responda podrá escribirle libremente.', timer: 2500, showConfirmButton: false });
+    } catch (e) {
+        Swal.fire('Error', e.message || 'Problema de red al enviar.', 'error');
+    } finally {
+        WC_plEnviando = false;
+        btn.disabled = false;
+        btn.innerHTML = htmlBtn;
+    }
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+    const modal = document.getElementById('waModalPlantilla');
+    if (!modal) return;
+    document.getElementById('waPlPlantilla').addEventListener('change', WC_plRenderVariables);
+    document.getElementById('waPlVariables').addEventListener('input', WC_plPreview);
+    document.getElementById('waPlBuscarCliente').addEventListener('input', WC_plBuscarClientes);
+    document.getElementById('waPlClientesLista').addEventListener('click', e => {
+        const btn = e.target.closest('[data-cel]');
+        if (btn) WC_plElegirCliente(btn);
+    });
+    document.getElementById('waPlCelular').addEventListener('input', e => {
+        e.target.value = e.target.value.replace(/\D/g, '').slice(0, 10);
+    });
+    // Cerrar la lista de clientes al hacer clic fuera de ella.
+    modal.addEventListener('click', e => {
+        if (!e.target.closest('#waPlClientesLista') && e.target.id !== 'waPlBuscarCliente') {
+            document.getElementById('waPlClientesLista').classList.add('d-none');
+        }
+    });
+});

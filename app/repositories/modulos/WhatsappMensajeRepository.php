@@ -142,4 +142,39 @@ class WhatsappMensajeRepository
         $stmt->execute([$idEmpresa, $idChat]);
         return $stmt->fetchAll(\PDO::FETCH_ASSOC);
     }
+
+    /**
+     * Ventana de atención de 24 h de Meta: se abre con cada mensaje que escribe el cliente.
+     * Devuelve si sigue abierta y cuántos segundos le quedan (calculado en la BD, con su reloj).
+     */
+    public function getVentanaChat(int $idEmpresa, int $idChat): array
+    {
+        $stmt = $this->db->prepare("
+            SELECT MAX(fecha_hora) > NOW() - INTERVAL '24 hours' AS abierta,
+                   EXTRACT(EPOCH FROM (MAX(fecha_hora) + INTERVAL '24 hours' - NOW())) AS segundos
+            FROM whatsapp_mensajes
+            WHERE id_empresa = ? AND id_chat = ? AND direccion = 'IN' AND eliminado = FALSE
+        ");
+        $stmt->execute([$idEmpresa, $idChat]);
+        $row = $stmt->fetch(\PDO::FETCH_ASSOC) ?: [];
+        $abierta = in_array($row['abierta'] ?? false, [true, 't', 1, '1'], true);
+        return ['abierta' => $abierta, 'segundos' => $abierta ? (int) $row['segundos'] : 0];
+    }
+
+    /** Clientes activos con teléfono, para iniciar un chat (buscador del modal «Nuevo chat»). */
+    public function buscarClientesConTelefono(int $idEmpresa, string $texto, int $limite = 20): array
+    {
+        $stmt = $this->db->prepare("
+            SELECT id, nombre, identificacion, telefono
+            FROM clientes
+            WHERE id_empresa = :id_empresa AND eliminado = FALSE AND status = 1
+              AND COALESCE(TRIM(telefono), '') <> ''
+              AND (nombre ILIKE :t_nombre OR identificacion ILIKE :t_ident OR telefono ILIKE :t_tel)
+            ORDER BY nombre ASC
+            LIMIT " . max(1, min(50, $limite))
+        );
+        $like = '%' . $texto . '%';
+        $stmt->execute([':id_empresa' => $idEmpresa, ':t_nombre' => $like, ':t_ident' => $like, ':t_tel' => $like]);
+        return $stmt->fetchAll(\PDO::FETCH_ASSOC);
+    }
 }

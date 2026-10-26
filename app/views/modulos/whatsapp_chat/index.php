@@ -4,8 +4,9 @@
  */
 $ruta_assets = '/sistema/public';
 ?>
+<script>document.body.classList.add('wa-chat-pantalla');</script>
 
-<div class="container h-100 p-0 py-lg-3">
+<div class="wa-chat-shell">
     <?php if (!$configurado): ?>
     <div class="row h-100 m-0 align-items-center justify-content-center bg-light rounded shadow-sm border">
         <div class="col-md-6 text-center">
@@ -23,12 +24,19 @@ $ruta_assets = '/sistema/public';
     </div>
     <?php else: ?>
     
-    <div class="row m-0 border rounded shadow-sm overflow-hidden" style="height: calc(100dvh - 160px);">
+    <div class="row m-0 border-top overflow-hidden h-100">
         <!-- Sidebar Izquierdo: Lista de Chats -->
         <div class="col-12 col-md-4 col-lg-3 border-end bg-white p-0 d-flex flex-column" id="chatListContainer" style="height: 100%;">
             <div class="p-3 border-bottom bg-light d-flex align-items-center justify-content-between">
                 <h5 class="m-0 fw-bold"><i class="bi bi-chat-left-text text-success me-2"></i> Chats</h5>
-                <button class="btn btn-sm btn-outline-secondary" onclick="WC_cargarChats()"><i class="bi bi-arrow-clockwise"></i></button>
+                <div class="d-flex gap-1">
+                    <?php if (!empty($permisos['crear'])): ?>
+                    <button class="btn btn-sm btn-success" onclick="WC_abrirPlantilla()" title="Iniciar un chat con una plantilla aprobada">
+                        <i class="bi bi-plus-lg me-1"></i>Nuevo chat
+                    </button>
+                    <?php endif; ?>
+                    <button class="btn btn-sm btn-outline-secondary" onclick="WC_cargarChats()" title="Actualizar"><i class="bi bi-arrow-clockwise"></i></button>
+                </div>
             </div>
             <!-- Buscador -->
             <div class="p-2 border-bottom bg-light">
@@ -69,6 +77,22 @@ $ruta_assets = '/sistema/public';
             <!-- Cuerpo de Mensajes -->
             <div class="flex-grow-1 overflow-auto p-4 d-none" id="waChatMessages"
                  style="background-image:url('<?= $ruta_assets ?>/img/wa-bg.png');background-color:#efeae2;">
+            </div>
+
+            <!-- Ventana de 24 h cerrada: solo se puede enviar una plantilla -->
+            <div class="p-3 bg-white border-top d-none" id="waChatVentanaCerrada">
+                <div class="d-flex align-items-center flex-wrap gap-2">
+                    <i class="bi bi-clock-history text-warning fs-4"></i>
+                    <div class="flex-grow-1 small">
+                        <strong>Pasaron más de 24 horas desde el último mensaje del cliente</strong> (o aún no ha escrito).
+                        WhatsApp solo permite enviarle una plantilla aprobada; cuando responda, podrá escribirle libremente.
+                    </div>
+                    <?php if (!empty($permisos['crear'])): ?>
+                    <button type="button" class="btn btn-success btn-sm" onclick="WC_abrirPlantilla(true)">
+                        <i class="bi bi-send me-1"></i>Enviar plantilla
+                    </button>
+                    <?php endif; ?>
+                </div>
             </div>
 
             <!-- Input Area -->
@@ -161,6 +185,75 @@ $ruta_assets = '/sistema/public';
         </div>
     </div>
 
+    <!-- Modal: Nuevo chat / Enviar plantilla -->
+    <div class="modal fade" id="waModalPlantilla" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog modal-lg modal-dialog-scrollable">
+            <div class="modal-content">
+                <div class="modal-header py-2">
+                    <h5 class="modal-title" id="waPlTitulo"><i class="bi bi-whatsapp text-success me-2"></i>Nuevo chat</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="row g-3">
+                        <div class="col-lg-6">
+                            <!-- Destinatario nuevo -->
+                            <div id="waPlDestinoNuevo">
+                                <label class="form-label small fw-semibold mb-1">Buscar cliente</label>
+                                <div class="position-relative mb-2">
+                                    <div class="input-group input-group-sm">
+                                        <span class="input-group-text"><i class="bi bi-search"></i></span>
+                                        <input type="text" class="form-control" id="waPlBuscarCliente" autocomplete="off"
+                                               placeholder="Nombre, cédula/RUC o teléfono">
+                                    </div>
+                                    <div id="waPlClientesLista" class="list-group position-absolute w-100 shadow-sm d-none"
+                                         style="z-index:1060;max-height:240px;overflow-y:auto;"></div>
+                                </div>
+                                <div class="row g-2">
+                                    <div class="col-5">
+                                        <label class="form-label small fw-semibold mb-1">Celular <span class="text-danger">*</span></label>
+                                        <input type="text" class="form-control form-control-sm" id="waPlCelular"
+                                               maxlength="10" inputmode="numeric" placeholder="0958924835">
+                                    </div>
+                                    <div class="col-7">
+                                        <label class="form-label small fw-semibold mb-1">Nombre del contacto</label>
+                                        <input type="text" class="form-control form-control-sm" id="waPlNombre" maxlength="150">
+                                    </div>
+                                </div>
+                            </div>
+                            <!-- Destinatario del chat abierto -->
+                            <div id="waPlDestinoFijo" class="d-none">
+                                <label class="form-label small fw-semibold mb-1">Para</label>
+                                <div class="form-control form-control-sm bg-light" id="waPlDestinoTexto"></div>
+                            </div>
+
+                            <label class="form-label small fw-semibold mb-1 mt-3">Plantilla aprobada <span class="text-danger">*</span></label>
+                            <select class="form-select form-select-sm" id="waPlPlantilla">
+                                <option value="">Cargando…</option>
+                            </select>
+                            <div class="form-text" id="waPlPlantillaAyuda"></div>
+
+                            <div id="waPlVariables" class="mt-2"></div>
+                        </div>
+                        <div class="col-lg-6">
+                            <label class="form-label small fw-semibold mb-1">Vista previa</label>
+                            <div class="rounded p-3 d-flex flex-column" style="background-color:#efeae2;min-height:200px;">
+                                <div id="waPlPreview" class="wa-bubble wa-bubble-out" style="max-width:100%;">
+                                    <span class="text-muted">Elija una plantilla.</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer py-2">
+                    <button type="button" class="btn btn-sm btn-light border" data-bs-dismiss="modal">Cancelar</button>
+                    <button type="button" class="btn btn-sm btn-success" id="waPlBtnEnviar" onclick="WC_enviarPlantilla()">
+                        <i class="bi bi-send me-1"></i>Enviar
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <!-- Cargar JS Específico -->
     <script>
         const B_URL = '<?= rtrim(BASE_URL, '/') ?>';
@@ -170,6 +263,41 @@ $ruta_assets = '/sistema/public';
 </div>
 
 <style>
+/* Pantalla completa: el chat llena todo el espacio bajo el header y la página no hace
+   scroll; solo se desplazan la lista de chats y los mensajes. */
+body.wa-chat-pantalla {
+    overflow: hidden !important;
+    height: 100dvh !important;
+}
+body.wa-chat-pantalla .cmg-main-content {
+    height: calc(100dvh - var(--cmg-sticky-h));
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+}
+body.wa-chat-pantalla .cmg-main-content > .container,
+body.wa-chat-pantalla .cmg-main-content > .container-fluid {
+    flex: 1 1 auto;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    max-width: 100% !important;
+    width: 100% !important;
+    padding: 0 !important;
+}
+.wa-chat-shell {
+    flex: 1 1 auto;
+    min-height: 0;
+}
+/* Con el header fijo (≥992px) el contenido arranca debajo con margen, no con padding,
+   para no restarle esa altura al chat (mismo criterio que el app-shell de app.css). */
+@media (min-width: 992px) {
+    body.wa-chat-pantalla .cmg-main-content {
+        padding-top: 0 !important;
+        margin-top: var(--cmg-sticky-h) !important;
+    }
+}
+
 /* Estilos extra para las burbujas de WhatsApp */
 .wa-bubble {
     max-width: 75%;
