@@ -1305,33 +1305,42 @@
     const esc = v => String(v ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
     let _tramite = null;
 
-    // Hitos del trámite que forman el historial del estado (sin notas internas ni técnicos).
-    const HITOS_ESTADO = ['datos', 'documentos', 'comprobante', 'pago_confirmado', 'pago_rechazado', 'factura',
-        'factura_autorizada', 'uanataca', 'aprobada', 'observada', 'correccion', 'emitida', 'cancelada', 'estado', 'renovacion'];
+    // Historial del estado: pasos fijos del trámite, en rojo mientras faltan y en verde cuando
+    // se cumplen (se calcula con el estado real; la fecha sale del evento si lo hay).
     const COLOR_ESTADO = {
         borrador: 'secondary', pendiente: 'warning', por_registrar: 'info', en_proceso: 'primary',
         aprobada: 'success', observada: 'danger', emitida: 'success', cancelada: 'dark',
     };
+    const PASOS_ESTADO = [
+        { titulo: 'Datos registrados',  evento: 'datos',              hecho: () => true },
+        { titulo: 'Documentos',         evento: 'documentos',         hecho: t => t.estado !== 'borrador' },
+        { titulo: 'Pago',               evento: 'pago_confirmado',    hecho: t => t.estado_pago === 'confirmado' },
+        { titulo: 'Facturado',          evento: 'factura',            hecho: t => !t.factura_eliminada && ['borrador', 'autorizado'].includes(t.factura_estado) },
+        { titulo: 'Enviado a Uanataca', evento: 'uanataca',           hecho: t => !!t.uanataca_uuid || ['en_proceso', 'aprobada', 'emitida'].includes(t.estado) },
+        { titulo: 'Factura autorizada', evento: 'factura_autorizada', hecho: t => !t.factura_eliminada && t.factura_estado === 'autorizado' },
+        { titulo: 'Firma emitida',      evento: 'emitida',            hecho: t => t.estado === 'emitida' },
+    ];
 
-    /** Historial del estado arriba de la ficha: estado actual + hitos con su fecha (más antiguo primero). */
     function renderHistorialEstado(t) {
         const caja = document.getElementById('historialEstadoFirma');
         if (!caja) return;
-        // t.eventos llega del más reciente al más antiguo: aquí se lee de izquierda a derecha.
-        const hitos = (t.eventos || []).filter(ev => HITOS_ESTADO.includes(ev.tipo)).reverse();
         const color = COLOR_ESTADO[t.estado] || 'secondary';
         const badge = document.getElementById('historialEstadoActual');
         if (badge) {
             badge.className = `badge bg-${color} bg-opacity-10 text-${color} border border-${color} border-opacity-25`;
             badge.textContent = t.estado_label || t.estado || '';
         }
-        const pasos = hitos.map((ev, i) => `
-            ${i ? '<i class="bi bi-chevron-right text-muted align-self-center" style="font-size:.7rem;"></i>' : ''}
-            <div class="px-2 py-1 rounded-2 bg-white border" title="${esc(ev.detalle || '')}">
-                <div class="fw-semibold text-dark" style="font-size:.75rem;">${esc(ev.titulo)}</div>
-                <div class="text-muted" style="font-size:.68rem;">${esc(ev.fecha)}</div>
-            </div>`).join('');
-        document.getElementById('historialEstadoPasos').innerHTML = pasos || '<span class="text-muted">Sin movimientos todavía.</span>';
+        // Fecha del primer evento de cada tipo (t.eventos llega del más reciente al más antiguo).
+        const fechas = {};
+        (t.eventos || []).forEach(ev => { fechas[ev.tipo] = ev.fecha; });
+        const items = PASOS_ESTADO.map(p => {
+            const ok = p.hecho(t);
+            const fecha = ok && fechas[p.evento] ? ` <span class="fw-normal text-muted" style="font-size:.68rem;">${esc(fechas[p.evento])}</span>` : '';
+            return `<li class="breadcrumb-item fw-semibold ${ok ? 'text-success' : 'text-danger'}">
+                <i class="bi ${ok ? 'bi-check-circle-fill' : 'bi-circle'} me-1"></i>${esc(p.titulo)}${fecha}</li>`;
+        }).join('');
+        document.getElementById('historialEstadoPasos').innerHTML =
+            `<nav aria-label="Historial del estado"><ol class="breadcrumb mb-0 small" style="--bs-breadcrumb-divider: '»';">${items}</ol></nav>`;
         caja.classList.remove('d-none');
     }
 

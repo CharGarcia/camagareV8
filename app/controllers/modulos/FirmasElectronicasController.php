@@ -591,6 +591,7 @@ class FirmasElectronicasController extends BaseModuloController
                 'pago_motivo_rechazo' => $f['pago_motivo_rechazo'],
                 'id_factura'          => $f['id_factura'],
                 'factura_estado'      => $f['factura_estado'],
+                'factura_eliminada'   => in_array($f['factura_eliminada'] ?? false, [true, 't', 1, '1'], true),
                 'factura_numero'      => !empty($f['factura_secuencial']) ? $f['factura_establecimiento'] . '-' . $f['factura_punto_emision'] . '-' . $f['factura_secuencial'] : null,
                 'id_ingreso'          => $f['id_ingreso'],
                 'correo'              => $f['correo'],

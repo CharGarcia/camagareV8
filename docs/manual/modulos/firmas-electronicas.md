@@ -418,8 +418,10 @@ archivo, y volver a cargar la firma no lo soluciona.
 ## Historial de cambios
 
 - **3.8** — Ficha de la firma: arriba se muestra el **historial del estado** (estado
-  actual y los hitos del trámite con su fecha) en lugar del aviso «ya está aprobada…
-  no se puede editar»; la ficha sigue siendo de solo lectura en ese caso.
+  actual y los pasos Datos registrados » Documentos » Pago » Facturado » Enviado a
+  Uanataca » Factura autorizada » Firma emitida, en rojo mientras faltan y en verde
+  cuando se cumplen) en lugar del aviso «ya está aprobada… no se puede editar»; la
+  ficha sigue siendo de solo lectura en ese caso.
 - **3.7** — Con «Esperar a que el cliente confirme su correo» desmarcado (pestaña
   Uanataca), la ficha ya no avisa que el cliente no confirmó su correo y el aviso
   de la barra superior cuenta esas firmas como listas para registrar.

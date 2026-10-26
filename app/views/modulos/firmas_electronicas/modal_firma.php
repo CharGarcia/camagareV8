@@ -39,7 +39,7 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosPestanasOcultas($vistaConfigF
                             <span class="fw-semibold text-dark"><i class="bi bi-clock-history me-1 text-secondary"></i>Historial del estado</span>
                             <span id="historialEstadoActual" class="badge"></span>
                         </div>
-                        <div id="historialEstadoPasos" class="d-flex flex-wrap align-items-start gap-1"></div>
+                        <div id="historialEstadoPasos"></div>
                     </div>
                     <input type="hidden" name="id" id="firma_id_modal" value="">
                     <input type="hidden" name="nombre_producto" id="firma_nombre_producto_modal" value="">
