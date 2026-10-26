@@ -1314,8 +1314,9 @@
         { titulo: 'Facturado',          hecho: t => !t.factura_eliminada && ['borrador', 'autorizado'].includes(t.factura_estado) },
         { titulo: 'Factura autorizada', hecho: t => !t.factura_eliminada && t.factura_estado === 'autorizado' },
         { titulo: 'Enviado a Uanataca', hecho: t => !!t.uanataca_uuid || ['en_proceso', 'aprobada', 'emitida'].includes(t.estado) },
-        // Último paso: aprobada por Uanataca (una firma ya emitida también pasó por aquí).
+        // Aprobada por Uanataca (una firma ya emitida también pasó por aquí) y, al final, emitida.
         { titulo: 'Firma aprobada',     hecho: t => ['aprobada', 'emitida'].includes(t.estado) },
+        { titulo: 'Firma emitida',      hecho: t => t.estado === 'emitida' },
     ];
 
     function renderHistorialEstado(t) {
