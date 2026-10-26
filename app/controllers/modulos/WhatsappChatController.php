@@ -345,7 +345,7 @@ class WhatsappChatController extends BaseModuloController
                 'fecha_hora' => date('Y-m-d H:i:s')
             ]);
         } else {
-            $errorMsg = $response['error']['message'] ?? 'Error desconocido en Meta';
+            $errorMsg = WhatsappService::mensajeErrorMeta($response['error'] ?? ['message' => 'Error desconocido en Meta']);
             // 131047: pasaron más de 24 h desde el último mensaje del cliente.
             $ventanaCerrada = (int) ($response['error']['code'] ?? 0) === 131047;
             if ($ventanaCerrada) {

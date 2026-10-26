@@ -159,10 +159,24 @@ class WhatsappService
         file_put_contents($logPath, json_encode($logData, JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT) . "\n---\n", FILE_APPEND);
 
         if (isset($response['error'])) {
-            return ['success' => false, 'message' => 'Error al crear plantilla en Meta: ' . ($response['error']['message'] ?? 'Desconocido'), 'data' => $response];
+            return ['success' => false, 'message' => 'Error al crear plantilla en Meta: ' . self::mensajeErrorMeta($response['error']), 'data' => $response];
         }
 
         return ['success' => true, 'data' => $response];
+    }
+
+    /**
+     * Meta responde casi siempre «Invalid parameter» en `message`; el motivo útil (y en el
+     * idioma de la cuenta) viene en error_user_title / error_user_msg.
+     */
+    public static function mensajeErrorMeta(array $error): string
+    {
+        $titulo  = trim((string) ($error['error_user_title'] ?? ''));
+        $detalle = trim((string) ($error['error_user_msg'] ?? ''));
+        if ($titulo !== '' || $detalle !== '') {
+            return trim($titulo . ($titulo !== '' && $detalle !== '' ? ': ' : '') . $detalle);
+        }
+        return (string) ($error['message'] ?? 'Desconocido');
     }
 
     /**
@@ -194,7 +208,7 @@ class WhatsappService
 
         if (isset($response['error'])) {
             $err  = $response['error'];
-            $msg  = $err['message'] ?? 'Desconocido';
+            $msg  = self::mensajeErrorMeta($err);
             $sub  = isset($err['error_subcode']) ? ' (subcode: ' . $err['error_subcode'] . ')' : '';
             $data = isset($err['error_data']) ? ' — ' . $err['error_data'] : '';
             return ['success' => false, 'message' => 'Error al actualizar en Meta: ' . $msg . $sub . $data, 'raw' => $response];
@@ -284,7 +298,7 @@ class WhatsappService
         $response = $this->makeRequest('POST', $url, $config['access_token'], $payload);
 
         if (isset($response['error'])) {
-            return ['success' => false, 'message' => 'Error enviando mensaje: ' . ($response['error']['message'] ?? 'Desconocido'), 'data' => $response];
+            return ['success' => false, 'message' => 'Error enviando mensaje: ' . self::mensajeErrorMeta($response['error']), 'data' => $response];
         }
 
         return ['success' => true, 'data' => $response];
@@ -410,7 +424,7 @@ class WhatsappService
         $response = $this->makeRequest('POST', $url, $config['access_token'], $payload);
 
         if (isset($response['error'])) {
-            return ['success' => false, 'message' => $response['error']['message'] ?? 'Error desconocido'];
+            return ['success' => false, 'message' => self::mensajeErrorMeta($response['error'])];
         }
 
         return ['success' => true, 'data' => $response];
@@ -435,7 +449,7 @@ class WhatsappService
         $response = $this->makeRequest('DELETE', $url, $config['access_token']);
 
         if (isset($response['error'])) {
-            return ['success' => false, 'message' => 'Error al eliminar en Meta: ' . ($response['error']['message'] ?? 'Desconocido')];
+            return ['success' => false, 'message' => 'Error al eliminar en Meta: ' . self::mensajeErrorMeta($response['error'])];
         }
 
         return ['success' => true, 'data' => $response];

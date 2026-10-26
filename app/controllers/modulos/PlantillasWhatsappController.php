@@ -523,6 +523,17 @@ class PlantillasWhatsappController extends BaseModuloController
             echo json_encode(['ok' => false, 'error' => 'El tipo de creación, nombre y el cuerpo del mensaje son obligatorios.']);
             return;
         }
+        // Meta solo acepta minúsculas, números y guion bajo («iniciar_conversacion»); con
+        // espacios, tildes o ñ responde un «Invalid parameter» que no dice cuál es el problema.
+        if (!preg_match('/^[a-z0-9_]{1,512}$/', $nombre)) {
+            echo json_encode(['ok' => false, 'error' => 'El nombre solo puede tener letras minúsculas sin tildes ni ñ, números y guion bajo, sin espacios. Ejemplo: iniciar_conversacion']);
+            return;
+        }
+        // Meta tampoco acepta una variable al inicio o al final del texto.
+        if (preg_match('/^\{\{\d+\}\}|\{\{\d+\}\}[\s.!?¡¿,;:]*$/u', $cuerpo)) {
+            echo json_encode(['ok' => false, 'error' => 'El mensaje no puede empezar ni terminar con una variable ({{1}}, {{2}}…). Agregue un texto fijo antes o después, por ejemplo «Gracias por su preferencia.».']);
+            return;
+        }
 
         preg_match_all('/\{\{(\d+)\}\}/', $cuerpo, $matchesVars);
         $numsEncontrados = $matchesVars[1] ?? [];

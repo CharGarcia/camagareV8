@@ -6,7 +6,7 @@ ruta_modulo: modulos/plantillas-whatsapp
 tipo: modulo
 visibilidad: todos
 etiquetas: whatsapp, plantillas, meta, mensajes aprobados, link de pago, enlace de pago, payphone, nuvei, enviar factura por whatsapp, enviar proforma por whatsapp, variables, aprobacion, estado de cuenta, estado_cuenta_cliente, resumen de deuda, facturas pendientes, detalle de lo que se cobra, por concepto de, factura_por_cobrar, cuenta_por_cobrar, texto sugerido, editar plantilla, no guarda la plantilla editada
-version: 1.3
+version: 1.4
 orden: 21
 estado: activo
 ---
@@ -198,8 +198,22 @@ Sin **acceso total**, el usuario ve solo las plantillas que él mismo registró.
   la forma de cobro antes de enviar enlaces de pago.
 - **La plantilla no aparece en el módulo**: revise que esté **APPROVED** y que sea
   la plantilla que ese módulo espera (cada uno ofrece solo las suyas).
+- **Meta rechaza al crear o editar**: el aviso muestra el motivo que da Meta (antes
+  solo decía «Invalid parameter»). Los más comunes:
+  - **El nombre** solo admite minúsculas sin tildes ni ñ, números y guion bajo. Al
+    escribirlo, el sistema lo convierte solo («Iniciar Conversación» →
+    `iniciar_conversacion`).
+  - **Una variable al inicio o al final** del mensaje no se permite; el sistema lo
+    avisa antes de enviarlo a Meta.
+  - **Un nombre ya usado** (incluso de una plantilla eliminada hace poco) o un
+    texto igual a otra plantilla del mismo idioma: use otro nombre.
 
 ## Historial de cambios
+
+- **1.4** — Al crear, editar o eliminar una plantilla, el error muestra el motivo
+  que da Meta en lugar de «Invalid parameter». El nombre se convierte al formato de
+  Meta mientras se escribe, y se avisa antes de enviar si el mensaje empieza o
+  termina con una variable.
 
 - **1.3** — `solicitud_firma` se crea con un botón de URL **Completar
   solicitud**; al editar una ya aprobada sin botón, se le agrega. Nueva sección

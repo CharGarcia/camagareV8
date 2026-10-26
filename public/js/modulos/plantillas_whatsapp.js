@@ -807,3 +807,13 @@ window.WA_abrirModalEditar = function(id) {
     });
 };
 
+
+// Nombre de plantilla en el formato que exige Meta, mientras se escribe:
+// «Iniciar Conversación» → «iniciar_conversacion».
+document.addEventListener('input', (e) => {
+    const el = e.target;
+    if (!el.matches('#formCrearPlantilla [name="nombre"]') || el.readOnly) return;
+    const limpio = el.value.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '')
+        .replace(/\s+/g, '_').replace(/[^a-z0-9_]/g, '');
+    if (limpio !== el.value) el.value = limpio;
+});
