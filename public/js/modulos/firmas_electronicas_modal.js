@@ -1311,8 +1311,9 @@
         { titulo: 'Datos registrados',  hecho: () => true },
         { titulo: 'Documentos',         hecho: t => t.estado !== 'borrador' },
         { titulo: 'Pago',               hecho: t => t.estado_pago === 'confirmado' },
-        { titulo: 'Facturado',          hecho: t => !t.factura_eliminada && ['borrador', 'autorizado'].includes(t.factura_estado) },
-        { titulo: 'Factura autorizada', hecho: t => !t.factura_eliminada && t.factura_estado === 'autorizado' },
+        // Un solo paso para la factura: el texto dice si el SRI ya la autorizó.
+        { titulo: t => !t.factura_eliminada && t.factura_estado === 'autorizado' ? 'Facturado y autorizado' : 'Facturado',
+          hecho: t => !t.factura_eliminada && ['borrador', 'autorizado'].includes(t.factura_estado) },
         { titulo: 'Enviado a Uanataca', hecho: t => !!t.uanataca_uuid || ['en_proceso', 'aprobada', 'emitida'].includes(t.estado) },
         // Aprobada por Uanataca (una firma ya emitida también pasó por aquí) y, al final, emitida.
         { titulo: 'Firma aprobada',     hecho: t => ['aprobada', 'emitida'].includes(t.estado) },
@@ -1326,8 +1327,9 @@
         // verde = cumplido, rojo = falta. El title repite el nombre por si el ancho lo recorta.
         const items = PASOS_ESTADO.map(p => {
             const ok = p.hecho(t);
-            return `<li class="firma-paso ${ok ? 'ok' : 'falta'}" title="${esc(p.titulo)}: ${ok ? 'cumplido' : 'pendiente'}">
-                <i class="bi ${ok ? 'bi-check-circle-fill' : 'bi-x-circle'}"></i><span>${esc(p.titulo)}</span></li>`;
+            const titulo = typeof p.titulo === 'function' ? p.titulo(t) : p.titulo;
+            return `<li class="firma-paso ${ok ? 'ok' : 'falta'}" title="${esc(titulo)}: ${ok ? 'cumplido' : 'pendiente'}">
+                <i class="bi ${ok ? 'bi-check-circle-fill' : 'bi-x-circle'}"></i><span>${esc(titulo)}</span></li>`;
         }).join('');
         document.getElementById('historialEstadoPasos').innerHTML =
             `<nav aria-label="Historial del estado"><ol class="firma-pasos">${items}</ol></nav>`;
