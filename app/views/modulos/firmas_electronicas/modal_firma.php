@@ -33,6 +33,14 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosPestanasOcultas($vistaConfigF
                         <i class="bi bi-lock-fill me-2"></i>
                         <span class="js-texto-bloqueo">Esta firma tiene una <strong>factura activa</strong>.</span>
                     </div>
+                    <!-- Historial del estado de la firma (hitos del trámite; el detalle completo está en la pestaña Trámite) -->
+                    <div id="historialEstadoFirma" class="d-none mx-3 mb-2 px-3 py-2 border rounded-3 bg-light small">
+                        <div class="d-flex align-items-center gap-2 mb-1">
+                            <span class="fw-semibold text-dark"><i class="bi bi-clock-history me-1 text-secondary"></i>Historial del estado</span>
+                            <span id="historialEstadoActual" class="badge"></span>
+                        </div>
+                        <div id="historialEstadoPasos" class="d-flex flex-wrap align-items-start gap-1"></div>
+                    </div>
                     <input type="hidden" name="id" id="firma_id_modal" value="">
                     <input type="hidden" name="nombre_producto" id="firma_nombre_producto_modal" value="">
 
@@ -241,7 +249,7 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosPestanasOcultas($vistaConfigF
                                 <div class="col-md-2">
                                     <label class="form-label small fw-bold text-muted mb-1">Código Dactilar</label>
                                     <input type="text" class="form-control form-control-sm shadow-none" name="codigo_dactilar"
-                                        id="firma_cod_dactilar" maxlength="30" placeholder="Alfanumérico">
+                                        id="firma_cod_dactilar" maxlength="10" placeholder="Ej. V4443V4442" style="text-transform:uppercase;" autocomplete="off">
                                 </div>
 
                                 <!-- Nombres -->
@@ -312,7 +320,7 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosPestanasOcultas($vistaConfigF
                                 <div class="col-md-6">
                                     <label class="form-label small fw-bold text-muted mb-1">Correo Electrónico</label>
                                     <input type="email" class="form-control form-control-sm shadow-none" name="correo"
-                                        id="firma_correo" maxlength="150" placeholder="Ej. cliente@correo.com">
+                                        id="firma_correo" maxlength="150" placeholder="Ej. cliente@correo.com" data-caso="minus">
                                 </div>
 
                                 <!-- Provincia -->
@@ -340,7 +348,7 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosPestanasOcultas($vistaConfigF
                                 <div class="col-8">
                                     <label class="form-label small fw-bold text-muted mb-1">Dirección <span class="text-danger">*</span></label>
                                     <input type="text" class="form-control form-control-sm shadow-none" name="direccion"
-                                        id="firma_direccion" minlength="10" maxlength="255" placeholder="Calle, número, sector… (mín. 10 caracteres)">
+                                        id="firma_direccion" minlength="10" maxlength="255" placeholder="Calle, número, sector… (mín. 10 caracteres)" data-caso="mayus">
                                 </div>
 
                                 <!-- Estado trámite, estado pago y caducidad -->
@@ -657,12 +665,12 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosPestanasOcultas($vistaConfigF
                                             <div class="col-md-5">
                                                 <label class="form-label small fw-bold text-muted mb-1">Correo</label>
                                                 <input type="email" class="form-control form-control-sm shadow-none"
-                                                    name="facturacion_correo" id="fact_correo" maxlength="150">
+                                                    name="facturacion_correo" id="fact_correo" maxlength="150" data-caso="minus">
                                             </div>
                                             <div class="col-md-7">
                                                 <label class="form-label small fw-bold text-muted mb-1">Dirección</label>
                                                 <input type="text" class="form-control form-control-sm shadow-none"
-                                                    name="facturacion_direccion" id="fact_direccion" maxlength="255">
+                                                    name="facturacion_direccion" id="fact_direccion" maxlength="255" data-caso="mayus">
                                             </div>
                                         </div>
                                     </div>

@@ -87,6 +87,25 @@
         }
     }
 
+    // Direcciones en MAYÚSCULAS y correos en minúsculas mientras se escribe (data-caso).
+    // Se conserva la posición del cursor; el servidor aplica lo mismo al guardar.
+    modalEl?.addEventListener('input', (ev) => {
+        const el = ev.target.closest?.('[data-caso]');
+        if (!el) return;
+        const nuevo = el.dataset.caso === 'mayus' ? el.value.toUpperCase() : el.value.toLowerCase();
+        if (nuevo === el.value) return;
+        let ini = null, fin = null;
+        try { ini = el.selectionStart; fin = el.selectionEnd; } catch { /* type=email no expone el cursor */ }
+        el.value = nuevo;
+        if (ini !== null) try { el.setSelectionRange(ini, fin); } catch { }
+    });
+
+    // Código dactilar: solo letras y números, en mayúsculas (ej. V4443V4442).
+    document.getElementById('firma_cod_dactilar')?.addEventListener('input', function () {
+        const limpio = this.value.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 10);
+        if (limpio !== this.value) this.value = limpio;
+    });
+
     // ── RUC de la empresa (representante legal): razón social desde el SRI ──
     const inputRucEmp = document.getElementById('firma_ruc_empresa');
     let _rucEmpDebounce = null, _ultimoRucEmp = '';
@@ -381,11 +400,11 @@
         if (alerta) {
             // Con la factura ya autorizada no se muestra el aviso de "puede corregir"
             // (solo el de solo lectura, si además ya está emitida).
-            alerta.classList.toggle('d-none', !soloLectura && !(conFactura && _facturaEstado === 'borrador'));
+            // Aprobada o emitida: en este lugar se ve el historial del estado (renderHistorialEstado),
+            // no un aviso; la ficha queda de solo lectura igual.
+            alerta.classList.toggle('d-none', soloLectura || !(conFactura && _facturaEstado === 'borrador'));
             const txt = alerta.querySelector('.js-texto-bloqueo');
-            if (txt) txt.innerHTML = soloLectura
-                ? `Esta solicitud ya está <strong>${_firmaEstado === 'aprobada' ? 'aprobada por Uanataca' : 'emitida'}</strong> y no se puede editar. El avance del trámite se lleva desde la pestaña <strong>Trámite</strong>.`
-                : 'Esta firma tiene una <strong>factura activa</strong>: hasta que se emita puede corregir los datos del titular, el tipo de firma y el trámite (la factura queda con el tipo y el valor con que se hizo). El pago y los datos de facturación quedan como se facturaron.';
+            if (txt) txt.innerHTML = 'Esta firma tiene una <strong>factura activa</strong>: hasta que se emita puede corregir los datos del titular, el tipo de firma y el trámite (la factura queda con el tipo y el valor con que se hizo). El pago y los datos de facturación quedan como se facturaron.';
         }
 
         // Datos del titular: se bloquean al quedar aprobada o emitida
@@ -625,12 +644,14 @@
         const spinner = document.getElementById('factSpinner');
         if (btn)     { btn.disabled = true; }
         if (spinner) spinner.classList.remove('d-none');
+        mostrarCargando('Generando la factura…', 'Esto puede tardar unos segundos; no cierre la ventana.');
 
         try {
             const fd = new FormData();
             fd.append('id_firma', idFirma);
             const resp = await fetch(`${urlBase}/generarFacturaDesdeFirma`, { method: 'POST', body: fd });
             const json = await resp.json();
+            cerrarCargando();
 
             if (json.ok) {
                 _facturaEstado = json.factura_estado || 'borrador';
@@ -649,6 +670,7 @@
             if (btn) btn.disabled = false;
         } finally {
             if (spinner) spinner.classList.add('d-none');
+            cerrarCargando(); // por si la respuesta no trajo mensaje
         }
     };
 
@@ -775,6 +797,7 @@
         // Facturación: resetear tab
         _facturaEstado = null;
         _firmaEstado   = null;
+        document.getElementById('historialEstadoFirma')?.classList.add('d-none');
         mostrarOpcionMiembro(false);
         _facturaElim   = false;
         if (chkMismosDatos) chkMismosDatos.checked = true;
@@ -1282,6 +1305,36 @@
     const esc = v => String(v ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
     let _tramite = null;
 
+    // Hitos del trámite que forman el historial del estado (sin notas internas ni técnicos).
+    const HITOS_ESTADO = ['datos', 'documentos', 'comprobante', 'pago_confirmado', 'pago_rechazado', 'factura',
+        'factura_autorizada', 'uanataca', 'aprobada', 'observada', 'correccion', 'emitida', 'cancelada', 'estado', 'renovacion'];
+    const COLOR_ESTADO = {
+        borrador: 'secondary', pendiente: 'warning', por_registrar: 'info', en_proceso: 'primary',
+        aprobada: 'success', observada: 'danger', emitida: 'success', cancelada: 'dark',
+    };
+
+    /** Historial del estado arriba de la ficha: estado actual + hitos con su fecha (más antiguo primero). */
+    function renderHistorialEstado(t) {
+        const caja = document.getElementById('historialEstadoFirma');
+        if (!caja) return;
+        // t.eventos llega del más reciente al más antiguo: aquí se lee de izquierda a derecha.
+        const hitos = (t.eventos || []).filter(ev => HITOS_ESTADO.includes(ev.tipo)).reverse();
+        const color = COLOR_ESTADO[t.estado] || 'secondary';
+        const badge = document.getElementById('historialEstadoActual');
+        if (badge) {
+            badge.className = `badge bg-${color} bg-opacity-10 text-${color} border border-${color} border-opacity-25`;
+            badge.textContent = t.estado_label || t.estado || '';
+        }
+        const pasos = hitos.map((ev, i) => `
+            ${i ? '<i class="bi bi-chevron-right text-muted align-self-center" style="font-size:.7rem;"></i>' : ''}
+            <div class="px-2 py-1 rounded-2 bg-white border" title="${esc(ev.detalle || '')}">
+                <div class="fw-semibold text-dark" style="font-size:.75rem;">${esc(ev.titulo)}</div>
+                <div class="text-muted" style="font-size:.68rem;">${esc(ev.fecha)}</div>
+            </div>`).join('');
+        document.getElementById('historialEstadoPasos').innerHTML = pasos || '<span class="text-muted">Sin movimientos todavía.</span>';
+        caja.classList.remove('d-none');
+    }
+
     async function cargarTramite(id) {
         const cont = document.getElementById('tramiteContenido');
         const uana = document.getElementById('uanatacaContenido');
@@ -1293,6 +1346,7 @@
             _tramite = json;
             renderTramite(json);
             renderUanataca(json);
+            renderHistorialEstado(json);
             // Si el trámite cambió de estado (consulta a Uanataca, marcar emitida…), la ficha
             // lo refleja y, al quedar aprobada o emitida, pasa a solo lectura.
             if (json.estado && json.estado !== _firmaEstado) {
@@ -1315,6 +1369,8 @@
         const puede = !!(window.FIRMAS_PERM && window.FIRMAS_PERM.actualizar);
         const pagoOk = t.estado_pago === 'confirmado';
         const correoOk = !!t.correo_confirmado_at;
+        // Configuración "Esperar a que el cliente confirme su correo": sin ella, no se avisa que falta.
+        const correoRequerido = t.exigir_correo !== false;
         const registrada = ['en_proceso', 'aprobada', 'emitida'].includes(t.estado);
         const formas = (window.FIRMAS_FORMAS_COBRO || []).map(f => `<option value="${f.id}">${esc(f.nombre)}${f.tipo ? ' (' + esc(f.tipo) + ')' : ''}</option>`).join('');
         const comprobante = (t.adjuntos || []).filter(a => a.tipo === 'comprobante_transferencia').pop();
@@ -1338,8 +1394,8 @@
         }
         if (puede && pagoOk && !correoOk) {
             acciones += `<div class="d-flex flex-wrap gap-2 mb-2">
-                <button type="button" class="btn btn-outline-primary btn-sm" data-tr="reenviar"><i class="bi bi-envelope-arrow-up me-1"></i>${t.correo_enviado_at ? 'Reenviar' : 'Enviar'} factura y confirmación</button>
-                <button type="button" class="btn btn-outline-secondary btn-sm" data-tr="confirmar_manual"><i class="bi bi-envelope-check me-1"></i>Marcar correo confirmado</button>
+                <button type="button" class="btn btn-outline-primary btn-sm" data-tr="reenviar"><i class="bi bi-envelope-arrow-up me-1"></i>${t.correo_enviado_at ? 'Reenviar' : 'Enviar'} factura${correoRequerido ? ' y confirmación' : ''}</button>
+                ${correoRequerido ? '<button type="button" class="btn btn-outline-secondary btn-sm" data-tr="confirmar_manual"><i class="bi bi-envelope-check me-1"></i>Marcar correo confirmado</button>' : ''}
             </div>`;
         }
         // API de Uanataca: envío y estado de la solicitud.
@@ -1356,7 +1412,7 @@
             acciones += `<div class="border rounded-3 p-2 mb-2">
                 <div class="fw-semibold mb-1"><i class="bi bi-cloud-upload me-1"></i>Enviar a Uanataca por API</div>
                 ${faltan.length ? `<div class="alert alert-warning py-1 px-2 mb-2">Falta: ${faltan.map(esc).join(', ')}.</div>` : ''}
-                ${!t.correo_confirmado_at ? '<div class="small text-muted mb-1">El cliente aún no confirma su correo.</div>' : ''}
+                ${correoRequerido && !t.correo_confirmado_at ? '<div class="small text-muted mb-1">El cliente aún no confirma su correo.</div>' : ''}
                 ${t.uanataca_error ? `<div class="small text-danger mb-1">Último intento: ${esc(t.uanataca_error)}</div>` : ''}
                 <button type="button" class="btn btn-primary btn-sm" data-tr="enviar_uanataca" ${faltan.length ? 'disabled' : ''}><i class="bi bi-send me-1"></i>Enviar a Uanataca</button>
                 <span class="small text-muted ms-1">Consume Uanacréditos.</span>
@@ -1410,7 +1466,7 @@
                 <div class="mb-2"><span class="text-muted">Estado:</span> <b>${esc(t.estado_label)}</b>${t.total !== null ? ` · <span class="text-muted">Total:</span> <b>$${Number(t.total).toFixed(2)}</b>` : ''}</div>
                 ${paso(t.estado !== 'borrador', t.estado === 'borrador', 'Datos y documentos del cliente', t.estado === 'borrador' ? 'El cliente aún no envía sus documentos.' : '')}
                 ${paso(pagoOk, !pagoOk && t.estado === 'pendiente', 'Pago', pagoOk ? `${esc(t.tipo_pago || '')}${t.factura_numero ? ' · Factura ' + esc(t.factura_numero) + ' (' + esc(t.factura_estado || '') + ')' : ''}` : (t.estado_pago === 'en_revision' ? 'Comprobante en revisión' : (t.estado_pago === 'rechazado' ? 'Rechazado: ' + esc(t.pago_motivo_rechazo || '') : 'Pendiente')))}
-                ${paso(correoOk, pagoOk && !correoOk, 'Correo confirmado', correoOk ? `${esc(t.correo)} · ${esc(t.correo_confirmado_at)}` : (t.correo_enviado_at ? `Factura enviada a ${esc(t.correo)} el ${esc(t.correo_enviado_at)}; esperando confirmación.` : esc(t.correo || '')))}
+                ${!correoRequerido && !correoOk ? paso(pagoOk, false, 'Correo confirmado', 'No se exige (configuración del módulo).') : paso(correoOk, pagoOk && !correoOk, 'Correo confirmado', correoOk ? `${esc(t.correo)} · ${esc(t.correo_confirmado_at)}` : (t.correo_enviado_at ? `Factura enviada a ${esc(t.correo)} el ${esc(t.correo_enviado_at)}; esperando confirmación.` : esc(t.correo || '')))}
                 ${paso(registrada, t.estado === 'por_registrar', 'Registrada en Uanataca', registrada ? `${t.uanataca_referencia ? 'Ref. ' + esc(t.uanataca_referencia) + ' · ' : ''}${esc(t.uanataca_registrada_at || '')}` : 'Use la pestaña Uanataca para copiar los datos.')}
                 ${paso(['aprobada', 'emitida'].includes(t.estado), t.estado === 'en_proceso', 'Aprobada por Uanataca', '')}
                 ${paso(t.estado === 'emitida', t.estado === 'aprobada', 'Firma emitida', '')}
@@ -1431,7 +1487,7 @@
                 <td class="fw-semibold text-dark">${esc(c.valor) || '<span class="text-muted fw-normal">—</span>'}</td>
                 <td class="text-end" style="width:40px;">${c.valor ? `<button type="button" class="btn btn-sm btn-link p-0" title="Copiar" onclick="copiarTextoFirma(this.dataset.v)" data-v="${esc(c.valor)}"><i class="bi bi-clipboard"></i></button>` : ''}</td></tr>`).join('');
         const docs = (t.adjuntos || []).map(a => `<a class="btn btn-sm btn-outline-secondary me-1 mb-1" href="${a.url}" target="_blank"><i class="bi bi-file-earmark me-1"></i>${esc(a.etiqueta)}</a>`).join('') || '<span class="text-muted">Sin documentos.</span>';
-        const aviso = !t.correo_confirmado_at && t.estado_pago === 'confirmado'
+        const aviso = t.exigir_correo !== false && !t.correo_confirmado_at && t.estado_pago === 'confirmado'
             ? '<div class="alert alert-warning py-1 px-2 mb-2"><i class="bi bi-envelope-exclamation me-1"></i>El cliente aún no confirma su correo: Uanataca le enviará ahí la activación.</div>' : '';
         document.getElementById('uanatacaContenido').innerHTML = `
             ${aviso}
@@ -1443,11 +1499,36 @@
             <div>${docs}</div>`;
     }
 
-    async function postTramite(endpoint, datos) {
+    /**
+     * Aviso "en curso" (SweetAlert con spinner) para acciones que tardan: facturar y enviar
+     * al SRI, enviar a Uanataca, correos. No se puede cerrar a mano; lo reemplaza el
+     * mensaje del resultado (mostrarAlerta) o cerrarCargando().
+     */
+    function mostrarCargando(titulo, texto = '') {
+        if (!window.Swal) return;
+        Swal.fire({
+            title: titulo, text: texto, target: destinoSwal(),
+            allowOutsideClick: false, allowEscapeKey: false, showConfirmButton: false,
+            didOpen: () => Swal.showLoading(),
+        });
+    }
+
+    function cerrarCargando() {
+        if (window.Swal && Swal.isVisible() && Swal.isLoading()) Swal.close();
+    }
+
+    async function postTramite(endpoint, datos, cargando = null) {
         const fd = new FormData();
         fd.append('id', _idFirmaActual);
         Object.entries(datos || {}).forEach(([k, v]) => fd.append(k, v));
-        const json = await (await fetch(`${urlBase}/${endpoint}`, { method: 'POST', body: fd })).json();
+        if (cargando) mostrarCargando(cargando[0], cargando[1] || '');
+        let json;
+        try {
+            json = await (await fetch(`${urlBase}/${endpoint}`, { method: 'POST', body: fd })).json();
+        } finally {
+            // Sin mensaje de resultado, el aviso de carga no debe quedarse abierto.
+            cerrarCargando();
+        }
         mostrarAlerta(json.ok ? json.msg : json.error, json.ok ? 'success' : 'danger');
         if (json.ok) {
             cargarTramite(_idFirmaActual);
@@ -1482,31 +1563,32 @@
                 const forma = document.getElementById('trFormaCobro')?.value;
                 if (!forma) { mostrarAlerta('Elija la cuenta o forma de cobro donde llegó el pago.', 'warning'); return; }
                 if (!(await confirmar('Se generará la factura, se enviará al SRI y se registrará el cobro.'))) return;
-                await postTramite('aprobarPagoAjax', { id_forma_cobro: forma, referencia: document.getElementById('trReferencia')?.value || '' });
+                await postTramite('aprobarPagoAjax', { id_forma_cobro: forma, referencia: document.getElementById('trReferencia')?.value || '' },
+                    ['Registrando el pago…', 'Conciliando el cobro, generando la factura y enviándola al SRI. Esto puede tardar unos segundos; no cierre la ventana.']);
             } else if (accion === 'rechazar') {
                 const motivo = await pedirTexto('Rechazar comprobante', 'Motivo (lo verá el cliente)');
-                if (motivo) await postTramite('rechazarPagoAjax', { motivo });
+                if (motivo) await postTramite('rechazarPagoAjax', { motivo }, ['Rechazando el comprobante…', 'Se avisa al cliente por correo.']);
             } else if (accion === 'reenviar') {
-                await postTramite('reenviarConfirmacionAjax');
+                await postTramite('reenviarConfirmacionAjax', null, ['Enviando el correo…', 'Factura y confirmación al cliente.']);
             } else if (accion === 'confirmar_manual') {
                 if (await confirmar('¿El cliente confirmó por otro medio que el correo ' + (_tramite?.correo || '') + ' es suyo?', 'Sí, confirmado')) await postTramite('marcarCorreoConfirmadoAjax');
             } else if (accion === 'enviar_uanataca') {
                 if (await confirmar('Se creará la solicitud en Uanataca con los datos y documentos del cliente (consume Uanacréditos).', 'Sí, enviar')) {
                     btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Enviando…';
-                    await postTramite('enviarUanatacaAjax');
+                    await postTramite('enviarUanatacaAjax', null, ['Enviando a Uanataca…', 'Se envían los datos y documentos del cliente. Esto puede tardar unos segundos.']);
                 }
             } else if (accion === 'aviso_vencimiento') {
                 if (await confirmar('Se enviará al cliente el aviso de vencimiento con el enlace para renovar (correo y, si hay plantilla aprobada, WhatsApp).', 'Sí, enviar')) {
-                    await postTramite('avisoVencimientoAjax');
+                    await postTramite('avisoVencimientoAjax', null, ['Enviando el aviso…', 'Correo y, si hay plantilla aprobada, WhatsApp.']);
                 }
             } else if (accion === 'sincronizar_uanataca') {
-                await postTramite('sincronizarUanatacaAjax');
+                await postTramite('sincronizarUanatacaAjax', null, ['Consultando a Uanataca…', '']);
             } else if (accion === 'registrar_uanataca') {
                 await postTramite('accionTramiteAjax', { accion: 'registrar_uanataca', referencia: document.getElementById('trRefUanataca')?.value || '' });
             } else if (accion === 'emitida') {
                 const fecha = document.getElementById('trCaducidad')?.value;
                 if (!fecha) { mostrarAlerta('Indique la fecha de vencimiento de la firma emitida.', 'warning'); return; }
-                await postTramite('accionTramiteAjax', { accion: 'emitida', fecha_caducidad: fecha });
+                await postTramite('accionTramiteAjax', { accion: 'emitida', fecha_caducidad: fecha }, ['Marcando la firma como emitida…', 'Se avisa al cliente por correo.']);
             } else if (accion === 'observar') {
                 const nota = await pedirTexto('Pedir corrección', '¿Qué debe corregir el cliente? (se le envía por correo)');
                 if (nota) await postTramite('accionTramiteAjax', { accion: 'observar', nota });

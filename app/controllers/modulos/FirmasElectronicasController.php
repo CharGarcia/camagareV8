@@ -609,7 +609,9 @@ class FirmasElectronicasController extends BaseModuloController
                 ], $this->service->getAvisosVencimiento((int) $f['id'], (int) $_SESSION['id_empresa'])),
                 // Caducidad si se emitiera hoy (vigencia del tipo de firma): valor inicial de "Marcar emitida".
                 'caducidad_sugerida'  => $this->service->caducidadEstimada((int) ($f['id_producto'] ?? 0), (int) $_SESSION['id_empresa']),
-                'uanataca_api'        => $this->service->getConfigModulo((int) $_SESSION['id_empresa'])['uanataca_activo'],
+                'uanataca_api'        => ($cfgMod = $this->service->getConfigModulo((int) $_SESSION['id_empresa']))['uanataca_activo'],
+                // Configuración: ¿hay que esperar a que el cliente confirme su correo?
+                'exigir_correo'       => (bool) $cfgMod['uanataca_exigir_correo'],
                 'uanataca_uuid'       => $f['uanataca_uuid'],
                 'uanataca_estado'     => $f['uanataca_estado'],
                 'uanataca_estado_label' => \App\Services\UanatacaApiService::ESTADOS[$f['uanataca_estado'] ?? ''] ?? $f['uanataca_estado'],
@@ -619,6 +621,7 @@ class FirmasElectronicasController extends BaseModuloController
                 'uanataca_faltantes'  => $f['estado'] === 'por_registrar' && empty($f['uanataca_uuid'])
                     ? $this->service->faltantesUanataca((int) $f['id'], (int) $_SESSION['id_empresa']) : [],
                 'eventos'             => array_map(fn($ev) => [
+                    'tipo'    => $ev['tipo'],
                     'titulo'  => $ev['titulo'], 'detalle' => $ev['detalle'], 'usuario' => $ev['usuario'],
                     'visible_cliente' => in_array($ev['visible_cliente'], [true, 't', 1, '1'], true),
                     'fecha'   => $fmt($ev['created_at']),
@@ -854,7 +857,7 @@ class FirmasElectronicasController extends BaseModuloController
             'cargo'                 => trim($_POST['cargo'] ?? ''),
             'tipo_identificacion'   => trim($_POST['tipo_identificacion'] ?? 'cedula'),
             'numero_identificacion' => trim($_POST['numero_identificacion'] ?? ''),
-            'codigo_dactilar'       => trim($_POST['codigo_dactilar'] ?? ''),
+            'codigo_dactilar'       => mb_strtoupper(preg_replace('/\s+/', '', (string) ($_POST['codigo_dactilar'] ?? '')), 'UTF-8'),
             'nombres'               => trim($_POST['nombres'] ?? ''),
             'apellidos'             => trim(trim($_POST['apellido_paterno'] ?? '') . ' ' . trim($_POST['apellido_materno'] ?? '')) ?: trim($_POST['apellidos'] ?? ''),
             'apellido_paterno'      => trim($_POST['apellido_paterno'] ?? ''),
@@ -866,12 +869,12 @@ class FirmasElectronicasController extends BaseModuloController
             'rep_apellidos'         => trim($_POST['rep_apellidos'] ?? ''),
             'fecha_nacimiento'      => $convFecha(trim($_POST['fecha_nacimiento'] ?? '')),
             'telefono'              => trim($_POST['telefono'] ?? ''),
-            'correo'                => trim($_POST['correo'] ?? ''),
+            'correo'                => mb_strtolower(trim($_POST['correo'] ?? ''), 'UTF-8'),
             'cod_prov'              => trim($_POST['cod_prov'] ?? ''),
             'cod_ciudad'            => trim($_POST['cod_ciudad'] ?? ''),
             'nacionalidad'          => trim($_POST['nacionalidad'] ?? ''),
             'sexo'                  => trim($_POST['sexo'] ?? ''),
-            'direccion'             => trim($_POST['direccion'] ?? ''),
+            'direccion'             => mb_strtoupper(trim($_POST['direccion'] ?? ''), 'UTF-8'),
             'tipo_pago'                 => trim($_POST['tipo_pago'] ?? ''),
             'estado_pago'               => trim($_POST['estado_pago'] ?? 'pendiente'),
             'estado'                    => trim($_POST['estado'] ?? 'pendiente'),
@@ -881,8 +884,8 @@ class FirmasElectronicasController extends BaseModuloController
             'facturacion_tipo_id'       => trim($_POST['facturacion_tipo_id'] ?? ''),
             'facturacion_num_id'        => trim($_POST['facturacion_num_id'] ?? ''),
             'facturacion_nombres'       => trim($_POST['facturacion_nombres'] ?? ''),
-            'facturacion_direccion'     => trim($_POST['facturacion_direccion'] ?? ''),
-            'facturacion_correo'        => trim($_POST['facturacion_correo'] ?? ''),
+            'facturacion_direccion'     => mb_strtoupper(trim($_POST['facturacion_direccion'] ?? ''), 'UTF-8'),
+            'facturacion_correo'        => mb_strtolower(trim($_POST['facturacion_correo'] ?? ''), 'UTF-8'),
             'facturacion_telefono'      => trim($_POST['facturacion_telefono'] ?? ''),
         ];
     }

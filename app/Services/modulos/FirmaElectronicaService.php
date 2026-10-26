@@ -2754,6 +2754,23 @@ class FirmaElectronicaService
         return $actual !== null && trim($actual) !== '' ? $actual : FirmaElectronicaRules::MOTIVO_POR_DEFECTO;
     }
 
+    /**
+     * Celular como lo escribe el cliente en Ecuador (10 dígitos, 09…). Los enlaces guardan el
+     * número en formato internacional para WhatsApp (593…): 593958924835 → 0958924835.
+     * Lo que no se reconoce queda solo con sus dígitos.
+     */
+    public static function celularLocal(?string $tel): string
+    {
+        $d = preg_replace('/\D/', '', (string) $tel);
+        if (preg_match('/^5939\d{8}$/', $d)) {
+            return '0' . substr($d, 3);
+        }
+        if (preg_match('/^9\d{8}$/', $d)) {
+            return '0' . $d;
+        }
+        return $d;
+    }
+
     public static function normalizarTelefono(string $tel): string
     {
         $d = preg_replace('/\D/', '', $tel);

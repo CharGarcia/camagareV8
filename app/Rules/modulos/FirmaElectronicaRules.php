@@ -44,6 +44,8 @@ class FirmaElectronicaRules
     private const MIME_IMAGEN = ['image/jpeg', 'image/png', 'image/webp'];
     private const MIME_PDF    = ['application/pdf'];
     public const MAX_BYTES    = 5 * 1024 * 1024;
+    /** Código dactilar (reverso de la cédula): letras mayúsculas y números, de 6 a 10 (ej. V4443V4442). */
+    public const RE_CODIGO_DACTILAR = '/^[A-Z0-9]{6,10}$/';
     /** Motivo de uso que se envía a Uanataca para representante legal si no se indicó otro. */
     public const MOTIVO_POR_DEFECTO = 'Facturación electrónica y firma de documentos';
     /** Mínimo de caracteres de la dirección del titular (pantalla y servidor). */
@@ -113,12 +115,13 @@ class FirmaElectronicaRules
             $errores[] = 'Seleccione el sexo.';
         }
         if (($data['tipo_identificacion'] ?? '') === 'cedula'
-            && !preg_match('/^[A-Z]\d{4}[A-Z]\d{4}$/i', (string) ($data['codigo_dactilar'] ?? ''))) {
-            $errores[] = 'Ingrese el código dactilar (está al reverso de la cédula, ej. V4443V4442).';
+            && !preg_match(self::RE_CODIGO_DACTILAR, (string) ($data['codigo_dactilar'] ?? ''))) {
+            $errores[] = 'Ingrese el código dactilar (está al reverso de la cédula; solo letras mayúsculas y números, ej. V4443V4442).';
         }
+        // Celular de Ecuador como lo escribe el cliente: 10 dígitos que empiezan con 09.
         $tel = preg_replace('/\D/', '', (string) ($data['telefono'] ?? ''));
-        if ($tel !== '' && (strlen($tel) < 9 || strlen($tel) > 12)) {
-            $errores[] = 'El teléfono debe tener entre 9 y 12 dígitos.';
+        if ($tel !== '' && !preg_match('/^09\d{8}$/', $tel)) {
+            $errores[] = 'El celular debe tener 10 dígitos numéricos y empezar con 09 (ej. 0958924835).';
         }
         $tipoPersona = $data['tipo_persona'] ?? 'natural';
         if (in_array($tipoPersona, ['juridica', 'miembro'], true)) {
@@ -323,6 +326,12 @@ class FirmaElectronicaRules
         $correo = trim($data['correo'] ?? '');
         if ($correo !== '' && !filter_var($correo, FILTER_VALIDATE_EMAIL)) {
             $errores[] = 'El correo electrónico no tiene un formato válido.';
+        }
+
+        // Ficha interna: el código dactilar es opcional aquí, pero si se escribe va en su formato.
+        $dactilar = (string) ($data['codigo_dactilar'] ?? '');
+        if ($dactilar !== '' && !preg_match(self::RE_CODIGO_DACTILAR, $dactilar)) {
+            $errores[] = 'El código dactilar solo lleva letras mayúsculas y números (de 6 a 10, ej. V4443V4442).';
         }
 
         // Uanataca necesita una dirección real (calle, número, sector), no solo la ciudad.

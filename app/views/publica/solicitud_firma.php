@@ -296,7 +296,7 @@ $nacionalidades = ['Ecuatoriana', 'Colombiana', 'Peruana', 'Venezolana', 'Cubana
                 </div>
                 <div class="col-12 col-sm-4">
                     <label class="form-label" for="codigo_dactilar">Código dactilar <span class="req" id="reqDactilar">*</span></label>
-                    <input type="text" class="form-control form-control-sm" id="codigo_dactilar" name="codigo_dactilar" maxlength="20" value="<?= $v('codigo_dactilar') ?>" placeholder="Ej. V4443V4442">
+                    <input type="text" class="form-control form-control-sm" id="codigo_dactilar" name="codigo_dactilar" maxlength="10" style="text-transform:uppercase;" autocomplete="off" value="<?= $v('codigo_dactilar') ?>" placeholder="Ej. V4443V4442">
                 </div>
                 <div class="col-12 col-sm-4 d-flex align-items-end pb-1" id="bloqueConRuc">
                     <?php // Solo persona natural: el representante legal ya registra el RUC de la empresa. ?>
@@ -347,11 +347,11 @@ $nacionalidades = ['Ecuatoriana', 'Colombiana', 'Peruana', 'Venezolana', 'Cubana
                 </div>
                 <div class="col-12 col-sm-6">
                     <label class="form-label">Celular <span class="req">*</span></label>
-                    <input type="tel" class="form-control form-control-sm" name="telefono" value="<?= $e($f['telefono'] ?? ($sol['telefono_destino'] ?? '')) ?>" placeholder="09XXXXXXXX">
+                    <input type="tel" class="form-control form-control-sm" name="telefono" id="telefono" maxlength="10" inputmode="numeric" value="<?= $e(\App\Services\modulos\FirmaElectronicaService::celularLocal($f['telefono'] ?? ($sol['telefono_destino'] ?? ''))) ?>" placeholder="Ej. 0958924835">
                 </div>
                 <div class="col-12 col-sm-6">
                     <label class="form-label">Correo electrónico <span class="req">*</span></label>
-                    <input type="email" class="form-control form-control-sm" name="correo" value="<?= $e($f['correo'] ?? ($sol['correo_destino'] ?? '')) ?>">
+                    <input type="email" class="form-control form-control-sm" name="correo" data-caso="minus" value="<?= $e($f['correo'] ?? ($sol['correo_destino'] ?? '')) ?>">
                     <div class="form-text small">Aquí te llegará la factura y la activación de tu firma.</div>
                 </div>
             </div>
@@ -379,7 +379,7 @@ $nacionalidades = ['Ecuatoriana', 'Colombiana', 'Peruana', 'Venezolana', 'Cubana
                 </div>
                 <div class="col-12 col-sm-4">
                     <label class="form-label">Dirección <span class="req">*</span></label>
-                    <input type="text" class="form-control form-control-sm" name="direccion" minlength="10" maxlength="255" placeholder="Calle, número, sector (mín. 10 caracteres)" value="<?= $v('direccion') ?>">
+                    <input type="text" class="form-control form-control-sm" name="direccion" data-caso="mayus" minlength="10" maxlength="255" placeholder="Calle, número, sector (mín. 10 caracteres)" value="<?= $v('direccion') ?>">
                 </div>
             </div>
         </div>
@@ -416,7 +416,7 @@ $nacionalidades = ['Ecuatoriana', 'Colombiana', 'Peruana', 'Venezolana', 'Cubana
                 </div>
                 <div class="col-12 col-sm-6">
                     <label class="form-label">Correo</label>
-                    <input type="email" class="form-control form-control-sm" name="facturacion_correo" value="<?= $v('facturacion_correo') ?>">
+                    <input type="email" class="form-control form-control-sm" name="facturacion_correo" data-caso="minus" value="<?= $v('facturacion_correo') ?>">
                 </div>
                 <div class="col-12 col-sm-6">
                     <label class="form-label">Teléfono</label>
@@ -424,7 +424,7 @@ $nacionalidades = ['Ecuatoriana', 'Colombiana', 'Peruana', 'Venezolana', 'Cubana
                 </div>
                 <div class="col-12">
                     <label class="form-label">Dirección</label>
-                    <input type="text" class="form-control form-control-sm" name="facturacion_direccion" id="facturacion_direccion" value="<?= $v('facturacion_direccion') ?>">
+                    <input type="text" class="form-control form-control-sm" name="facturacion_direccion" id="facturacion_direccion" data-caso="mayus" value="<?= $v('facturacion_direccion') ?>">
                 </div>
             </div>
         </div>
@@ -762,6 +762,31 @@ $nacionalidades = ['Ecuatoriana', 'Colombiana', 'Peruana', 'Venezolana', 'Cubana
             finally { icon.classList.remove('d-none'); loader.classList.add('d-none'); }
         }
         document.getElementById('btnBuscarSriEmp')?.addEventListener('click', () => buscarEmpresaSri(true));
+        // Direcciones en MAYÚSCULAS y correos en minúsculas mientras se escribe (data-caso).
+        // Se conserva la posición del cursor; el servidor aplica lo mismo al guardar.
+        form.addEventListener('input', (ev) => {
+            const el = ev.target.closest?.('[data-caso]');
+            if (!el) return;
+            const nuevo = el.dataset.caso === 'mayus' ? el.value.toUpperCase() : el.value.toLowerCase();
+            if (nuevo === el.value) return;
+            let ini = null, fin = null;
+            try { ini = el.selectionStart; fin = el.selectionEnd; } catch { /* type=email no expone el cursor */ }
+            el.value = nuevo;
+            if (ini !== null) try { el.setSelectionRange(ini, fin); } catch { }
+        });
+
+        // Código dactilar: solo letras y números, en mayúsculas (ej. V4443V4442).
+        document.getElementById('codigo_dactilar')?.addEventListener('input', function () {
+            const limpio = this.value.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 10);
+            if (limpio !== this.value) this.value = limpio;
+        });
+
+        // Celular: solo dígitos, máximo 10 (ej. 0958924835).
+        document.getElementById('telefono')?.addEventListener('input', function () {
+            const limpio = this.value.replace(/\D/g, '').slice(0, 10);
+            if (limpio !== this.value) this.value = limpio;
+        });
+
         document.getElementById('ruc_empresa')?.addEventListener('input', function () {
             const limpio = this.value.replace(/\D/g, '').slice(0, 13);
             if (limpio !== this.value) this.value = limpio;

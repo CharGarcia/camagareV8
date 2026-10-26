@@ -6,7 +6,7 @@ ruta_modulo: modulos/firmas_electronicas
 tipo: modulo
 visibilidad: admin
 etiquetas: firma electronica, firma para persona natural, firma para representante legal, tipo de persona de la firma, vender firmas, aviso de vencimiento al cliente, recordatorio de renovacion, renovar firma del cliente, firma por vencer, enlace de renovacion, api uanataca, uanacreditos, creditos uanataca, precompra, distribuidor uanataca, miembro de empresa, representante legal, solicitud de firma, tramite de firma, uanataca, enlace para el cliente, formulario de firma, link de firma, whatsapp, pagar firma, payphone, transferencia, comprobante de pago, confirmar correo, factura de la firma, registrar en uanataca, firma emitida, observada, corregir solicitud, enlace fijo, qr de firma, certificado, p12, caducada, por caducar, renovar firma, firma invalida, xades, anf, security data, buscar firma, filtros, firmas por facturar
-version: 3.5
+version: 3.8
 orden: 20
 estado: activo
 ---
@@ -417,6 +417,16 @@ archivo, y volver a cargar la firma no lo soluciona.
 
 ## Historial de cambios
 
+- **3.8** — Ficha de la firma: arriba se muestra el **historial del estado** (estado
+  actual y los hitos del trámite con su fecha) en lugar del aviso «ya está aprobada…
+  no se puede editar»; la ficha sigue siendo de solo lectura en ese caso.
+- **3.7** — Con «Esperar a que el cliente confirme su correo» desmarcado (pestaña
+  Uanataca), la ficha ya no avisa que el cliente no confirmó su correo y el aviso
+  de la barra superior cuenta esas firmas como listas para registrar.
+- **3.6** — Formulario del cliente: el celular se muestra y se pide con 10 dígitos
+  (0958924835, sin el código de país). Código dactilar en mayúsculas, solo letras
+  y números (6 a 10), en el formulario del cliente y en la ficha. Direcciones en
+  mayúsculas y correos en minúsculas (titular y facturación).
 - **3.5** — RUC de la empresa (representante legal): consulta al SRI y llena la
   razón social, en el formulario del cliente (con botón de búsqueda) y en la
   ficha. Cargo por defecto: «Representante legal».

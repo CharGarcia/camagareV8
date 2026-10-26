@@ -82,8 +82,9 @@ class ContadoresNavbarRepository
      * lo atrapa y el resto de avisos sigue funcionando.
      */
     /**
-     * Firmas electrónicas por atender: comprobantes de pago en revisión + firmas pagadas,
-     * con el correo confirmado por el cliente, que faltan registrar en Uanataca.
+     * Firmas electrónicas por atender: comprobantes de pago en revisión + firmas pagadas
+     * que faltan registrar en Uanataca (con el correo confirmado por el cliente, salvo que
+     * la configuración del módulo no lo exija: "Esperar a que el cliente confirme su correo").
      * Consulta aparte: firmas_electronicas puede no tener las columnas sin la migración
      * database/20261023_firmas_electronicas_autoservicio.sql.
      */
@@ -91,9 +92,11 @@ class ContadoresNavbarRepository
     {
         $st = $this->db->prepare(
             "SELECT COUNT(*) FROM firmas_electronicas f
+              LEFT JOIN firmas_electronicas_config c ON c.id_empresa = f.id_empresa AND c.eliminado = false
               WHERE f.id_empresa = :e AND f.eliminado = false
                 AND (f.estado_pago = 'en_revision'
-                     OR (f.estado = 'por_registrar' AND f.correo_confirmado_at IS NOT NULL))"
+                     OR (f.estado = 'por_registrar'
+                         AND (f.correo_confirmado_at IS NOT NULL OR c.uanataca_exigir_correo = false)))"
         );
         $st->execute([':e' => $idEmpresa]);
         return (int) $st->fetchColumn();
