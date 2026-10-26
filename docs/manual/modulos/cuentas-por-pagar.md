@@ -5,8 +5,8 @@ categoria: Tesorería
 ruta_modulo: modulos/cuentas_por_pagar
 tipo: modulo
 visibilidad: todos
-etiquetas: cuentas por pagar, comprobar con contabilidad, cuadrar con contabilidad, cartera vs contabilidad, no cuadra con contabilidad, cuenta por pagar contable, mayor de proveedores, cxp, deudas, proveedores, saldo pendiente, vencimiento, pagar, obligaciones, fecha de corte, saldo a una fecha, fecha hasta, consolidado, establecimientos, sucursales, matriz, mismo ruc, deudas consolidadas, todas las sucursales, valores de terceros, otros conceptos, valores adicionales, bomberos, tasa de basura, planilla de luz, supera el saldo pendiente, filtrar por proveedor, error de conexion, serie, punto de emision, serie inactiva, registrar pago, cedula y ruc, cliente duplicado, proveedor duplicado, mismo cliente dos veces, mismo proveedor dos veces, identificacion repetida, ruc es la cedula mas 001, unificar fichas, cartera partida en dos, tildes, acentos, eñe, buscar sin tildes, no encuentra al proveedor, no aparece el proveedor, buscar por apellido, buscar por varias palabras, mayor, mayor del proveedor, deuda como mayor, agrupado por proveedor, subtotal por proveedor, total general, seccion por proveedor, no carga al entrar, boton aplicar, aplicar filtros, listado vacio al entrar, detalle por proveedor, columnas del detalle, nc, abonos, retenciones, dias vencidos, ordenar, ordenamiento, orden alfabetico, a-z, z-a, ordenar por proveedor, ordenar por saldo, ordenar por vencimiento, clic en la columna, ordenar la tabla, ordenar el excel, ordenar el pdf, flecha de la columna, saldo junto al nombre, saldo del proveedor, pdf vertical, pdf horizontal, orientacion del pdf, hoja vertical, pdf apaisado, acceso total, permiso de ver todos, registros propios, solo mis compras, no veo las compras de otro, cada usuario ve lo suyo, documentos migrados no aparecen, filtros del pdf, filtros aplicados, quitar filtros del pdf, encabezado del pdf, menu del celular, menu bloqueado, menu no responde, lineas montadas, lineas encimadas, lineas pisadas, texto montado en el pdf, filas cortadas, fila partida entre paginas, paginas en blanco, hojas en blanco en el pdf, pdf descuadrado, encabezado de columnas en cada pagina, nota de debito, notas de debito, nd del proveedor, no cuadra el pdf, total menos pagado no da el saldo, totales repetidos, totales en cada hoja, letra del pdf, pdf se lee chiquito, cuadricula del pdf, columna documento cortada, numero de documento montado, documento se pasa a la otra columna, numero cortado en el pdf, pagar dos veces, doble pago, pago duplicado, importacion no se puede pagar, supera el saldo pendiente
-version: 1.31
+etiquetas: cuentas por pagar, comprobar con contabilidad, cuadrar con contabilidad, cartera vs contabilidad, no cuadra con contabilidad, cuenta por pagar contable, mayor de proveedores, cxp, deudas, proveedores, saldo pendiente, vencimiento, pagar, obligaciones, fecha de corte, saldo a una fecha, fecha hasta, consolidado, establecimientos, sucursales, matriz, mismo ruc, deudas consolidadas, todas las sucursales, valores de terceros, otros conceptos, valores adicionales, bomberos, tasa de basura, planilla de luz, supera el saldo pendiente, filtrar por proveedor, error de conexion, serie, punto de emision, serie inactiva, registrar pago, cedula y ruc, cliente duplicado, proveedor duplicado, mismo cliente dos veces, mismo proveedor dos veces, identificacion repetida, ruc es la cedula mas 001, unificar fichas, cartera partida en dos, tildes, acentos, eñe, buscar sin tildes, no encuentra al proveedor, no aparece el proveedor, buscar por apellido, buscar por varias palabras, mayor, mayor del proveedor, deuda como mayor, agrupado por proveedor, subtotal por proveedor, total general, seccion por proveedor, no carga al entrar, boton aplicar, aplicar filtros, listado vacio al entrar, detalle por proveedor, columnas del detalle, nc, abonos, retenciones, dias vencidos, ordenar, ordenamiento, orden alfabetico, a-z, z-a, ordenar por proveedor, ordenar por saldo, ordenar por vencimiento, clic en la columna, ordenar la tabla, ordenar el excel, ordenar el pdf, flecha de la columna, saldo junto al nombre, saldo del proveedor, pdf vertical, pdf horizontal, orientacion del pdf, hoja vertical, pdf apaisado, acceso total, permiso de ver todos, registros propios, solo mis compras, no veo las compras de otro, cada usuario ve lo suyo, documentos migrados no aparecen, filtros del pdf, filtros aplicados, quitar filtros del pdf, encabezado del pdf, menu del celular, menu bloqueado, menu no responde, lineas montadas, lineas encimadas, lineas pisadas, texto montado en el pdf, filas cortadas, fila partida entre paginas, paginas en blanco, hojas en blanco en el pdf, pdf descuadrado, encabezado de columnas en cada pagina, nota de debito, notas de debito, nd del proveedor, no cuadra el pdf, total menos pagado no da el saldo, totales repetidos, totales en cada hoja, letra del pdf, pdf se lee chiquito, cuadricula del pdf, columna documento cortada, numero de documento montado, documento se pasa a la otra columna, numero cortado en el pdf, pagar dos veces, doble pago, pago duplicado, importacion no se puede pagar, supera el saldo pendiente, vencimiento segun, plazo del proveedor, plazo del documento, vencer desde la emision, sin credito, antiguedad de cartera, aging, por antiguedad, tramos de dias, 15 30 60 90 dias, vencidos por dias, favoritos, filtro favorito, estrella, datos viejos, limpiar pantalla, pdf lento, pdf de un solo proveedor, sin columna proveedor
+version: 1.32
 orden: 50
 estado: activo
 ---
@@ -31,6 +31,49 @@ va a buscar la deuda.
   filtro vuelve a consultar de inmediato.
 - El botón **Limpiar** deja los filtros en sus valores por defecto; si todavía
   no se aplicó nada, tampoco consulta.
+
+## Al aplicar un filtro la pantalla se limpia
+
+Cada vez que se aplica un filtro, la pantalla **se limpia primero** —tabla,
+tarjetas y contador— y luego aparece lo nuevo; nunca quedan cifras de la
+consulta anterior. Las listas (Estado, Tipo, Vencimiento según,
+Establecimientos) y el proveedor vuelven a consultar solos; las **fechas** y el
+botón **Limpiar filtros** dejan la tabla en blanco hasta presionar **Mostrar**.
+
+## Filtros favoritos
+
+Junto a **Estado**, **Tipo**, **Vencimiento según** y **Establecimientos** —y
+junto al selector de tramos de la vista *Por antigüedad*— hay una **estrella**.
+Elija el valor que usa siempre y haga clic en la estrella: ese valor se pondrá
+solo al entrar al módulo y al presionar **Limpiar filtros**. Para quitarlo, con
+ese mismo valor elegido, vuelva a hacer clic en la estrella. Los favoritos son de
+cada usuario y de cada empresa.
+
+## Vencimiento según: plazo del documento, del proveedor o emisión
+
+El selector **Vencimiento según** decide desde qué fecha un documento cuenta como
+vencido. Con eso cambian los días vencidos, los estados *Vencidas* y *Al día*,
+las tarjetas *Vencido* y *Al Día* y la vista *Por antigüedad*:
+
+| Opción | Fecha de vencimiento |
+|---|---|
+| **Plazo del documento** (por defecto) | Emisión + el plazo de las formas de pago de la compra o liquidación (en la importación, el plazo de la factura del exterior). El saldo inicial usa su propia fecha de vencimiento. |
+| **Plazo del proveedor** | Emisión + el **plazo (días)** que tiene **hoy** la ficha del proveedor. |
+| **Fecha de emisión** | Sin crédito: el documento vence el mismo día que se emite. |
+
+## Vista "Por antigüedad": deuda vencida por rangos de días
+
+El botón **Por antigüedad** muestra una línea por proveedor con su **saldo
+pendiente repartido en columnas** según los días que lleva vencido: *Por
+vencer*, un rango por cada tramo y *Más de N días*, con el total del proveedor y
+el **TOTAL** al pie. Lo vencido sale en rojo.
+
+Junto a los botones de vista aparece el selector de **tramos** (30·60·90,
+15·30·60·90, 30·60·90·120, 15·30·45·60·90 o 30·60·90·180·360 días); cambiarlo
+no vuelve a consultar. Solo cuenta lo que tiene saldo. Al hacer clic en un
+proveedor se despliegan sus documentos, cada uno en su columna. El **PDF** y el
+**Excel** salen con la misma estructura; con más de 5 columnas de días el PDF
+sale en hoja horizontal.
 
 ## Vista "Por proveedor": la deuda como el mayor de una cuenta
 
@@ -117,6 +160,12 @@ proveedor. Si un documento vence antes de lo que esperaba, ese es el campo a
 revisar.
 
 ## El PDF y el Excel de la vista Detallado
+
+Los PDF se arman **por bloques**: con miles de documentos tardan segundos en vez
+de minutos, ninguna fila se parte entre hojas y la cabecera de columnas se repite
+en cada hoja. Si el filtro **Proveedor** deja un solo proveedor (su cédula y su
+RUC cuentan como uno), el PDF no muestra la columna **Proveedor**: el nombre va
+en el encabezado.
 
 Con la vista **Detallado** activa (una fila por documento), los botones **PDF** y
 **Excel** exportan lo mismo que se ve en pantalla.
@@ -399,6 +448,12 @@ la factura que modifican. Mismo criterio que
 el Reporte de Cartera y que el asiento contable de la compra.
 
 ## Historial de cambios
+- **1.32** — Selector **Vencimiento según** (plazo del documento, del proveedor o
+  emisión), vista **Por antigüedad** con tramos elegibles (también en PDF y
+  Excel), **favoritos** en los filtros y pantalla que se limpia al filtrar. PDF
+  por bloques (rápidos con miles de documentos) y sin columna Proveedor cuando se
+  filtra uno solo. Las tarjetas ya no repiten la consulta. Corregido: un usuario
+  sin *Acceso total* veía en el listado los saldos iniciales de todos.
 
 - **1.31** — El reporte muestra solo documentos de **producción**, aunque la empresa esté configurada en pruebas (ver el artículo *Los reportes solo muestran documentos de producción*).
 - **1.30** — Nuevo botón **Comprobar con Contabilidad**: compara el saldo por pagar

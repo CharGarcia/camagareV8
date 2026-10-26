@@ -13,6 +13,7 @@ let CXP_filtradoLocal = [];   // filas tras filtro local de texto
 let CXP_catalogos     = { puntos: [], conceptos: [], formas: [] };
 let CXP_catalogosCargados = false;
 let CXP_agrupado      = false;          // vista agrupada por proveedor
+let CXP_vista         = 'detalle';      // 'detalle' | 'agrupado' (por proveedor) | 'antiguedad'
 // Consolidado por RUC (fase 1, solo lectura): lo confirma el servidor en cada carga.
 // Las filas de OTRO establecimiento (r.es_hermana) no se pagan desde aquí.
 let CXP_consolidado   = false;
@@ -102,10 +103,21 @@ document.addEventListener('DOMContentLoaded', () => {
     // Al entrar NO se consulta nada: el listado se carga solo cuando el usuario
     // presiona "Mostrar" (ver CXP_cargado / CXP_recargar).
     CXP_initOrden();
+    CXP_aplicarFavoritos();
     CXP_estadoInicial();
     CXP_cargarCatalogos();
     CXP_initBuscadorProveedores();
 });
+
+/* Valores favoritos (estrella junto a cada filtro, PreferenciasHelper::renderEstrellaFavorito):
+   Estado, Tipo, Vencimiento según, Establecimientos y los tramos de la vista Por antigüedad.
+   Se ponen al entrar y al presionar "Limpiar". Solo en los filtros de este módulo: el
+   modal de pago tiene sus propios favoritos. */
+function CXP_aplicarFavoritos() {
+    if (typeof aplicarFavoritosModal !== 'function') return;
+    aplicarFavoritosModal('#form-filtros-cxp');
+    aplicarFavoritosModal('#cxp-tramos-wrap');
+}
 
 /* Cabeceras clicables: alternan la dirección, guardan la preferencia del usuario
    (sin recargar la página, que perdería los filtros) y repintan la tabla. */
@@ -131,7 +143,7 @@ function CXP_initOrden() {
 function CXP_estadoInicial() {
     const tbody = document.getElementById('cxp-tbody');
     if (tbody) {
-        tbody.innerHTML = `<tr><td colspan="11" class="text-center py-5 text-muted">
+        tbody.innerHTML = `<tr><td colspan="${CXP_nCols()}" class="text-center py-5 text-muted">
             <i class="bi bi-funnel fs-3 d-block mb-2 text-primary opacity-50"></i>
             Elija los filtros y presione <span class="fw-semibold text-primary">Mostrar</span> para ver las cuentas por pagar.
         </td></tr>`;
@@ -146,10 +158,47 @@ function CXP_recargar() {
     if (CXP_cargado) CXP_cargar();
 }
 
+/* Columnas de la tabla según la vista (para el colspan de los mensajes). */
+function CXP_nCols() {
+    // Por antigüedad: [chevron] Proveedor | Docs | Por vencer | tramos… | Más de N | Total
+    return CXP_vista === 'antiguedad' ? 5 + CXP_tramos().length : 11;
+}
+
+/* Borra de la pantalla los datos de la consulta anterior: tabla, tarjetas, contador y
+   filtro local. Así nunca se ven cifras que no corresponden a los filtros puestos
+   (mientras carga la consulta nueva, si falla, o al cambiar un filtro que espera a
+   "Mostrar", como las fechas). Gemelo de CXC_limpiarPantalla. */
+function CXP_limpiarPantalla() {
+    CXP_datos         = [];
+    CXP_filtradoLocal = [];
+    CXP_actualizarStats({});
+    const estabWrap = document.getElementById('cxp-stat-estab-wrap');
+    if (estabWrap) estabWrap.hidden = true;
+    const buscador = document.getElementById('cxp-buscador');
+    if (buscador) buscador.value = '';
+    const label = document.getElementById('cxp-count-label');
+    if (label) label.textContent = '';
+}
+
+/* Filtro que no consulta solo (fechas): limpia la pantalla y deja el aviso de presionar
+   Mostrar, en vez de seguir mostrando la consulta anterior. */
+function CXP_filtroCambiado() {
+    if (!CXP_cargado) return;
+    CXP_cargado = false;
+    CXP_limpiarPantalla();
+    CXP_renderTabla([]);
+}
+
+/* Número de la última consulta: una respuesta que llega después de otra consulta más
+   nueva (el usuario cambió otro filtro) se descarta y no pisa a la nueva. */
+let CXP_consultaActual = 0;
+
 async function CXP_cargar() {
     CXP_cargado = true;
+    const miConsulta = ++CXP_consultaActual;
+    CXP_limpiarPantalla();
     const tbody = document.getElementById('cxp-tbody');
-    tbody.innerHTML = `<tr><td colspan="11" class="text-center py-4"><div class="spinner-border spinner-border-sm text-primary me-2"></div>Cargando…</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="${CXP_nCols()}" class="text-center py-4"><div class="spinner-border spinner-border-sm text-primary me-2"></div>Cargando…</td></tr>`;
 
     const params = new URLSearchParams({
         accion:      'generarAjax',
@@ -157,6 +206,7 @@ async function CXP_cargar() {
         tipo_fuente: document.getElementById('cxp-tipo')?.value         || '',
         fecha_desde: document.getElementById('cxp-fecha-desde')?.value  || '',
         fecha_hasta: document.getElementById('cxp-fecha-hasta')?.value  || '',
+        vencimiento: document.getElementById('cxp-vencimiento')?.value  || 'DOCUMENTO',
         id_proveedor:CXP_getProveedoresSeleccionados(),
         alcance:     CXP_getAlcance(),
         // El servidor devuelve las filas ya ordenadas (mismas reglas que aquí)
@@ -169,9 +219,11 @@ async function CXP_cargar() {
             headers: { 'X-Requested-With': 'XMLHttpRequest' }
         });
         const data = await r.json();
+        // Llegó tarde: ya se pidió otra consulta con otros filtros (o se limpió la pantalla).
+        if (miConsulta !== CXP_consultaActual || !CXP_cargado) return;
 
         if (!data.ok) {
-            tbody.innerHTML = `<tr><td colspan="11" class="text-center py-4 text-danger"><i class="bi bi-exclamation-triangle me-2"></i>${cxpEsc(data.error || 'Error al cargar')}</td></tr>`;
+            tbody.innerHTML = `<tr><td colspan="${CXP_nCols()}" class="text-center py-4 text-danger"><i class="bi bi-exclamation-triangle me-2"></i>${cxpEsc(data.error || 'Error al cargar')}</td></tr>`;
             return;
         }
 
@@ -190,7 +242,8 @@ async function CXP_cargar() {
         CXP_renderTabla(CXP_filtradoLocal);
 
     } catch (e) {
-        tbody.innerHTML = `<tr><td colspan="11" class="text-center py-4 text-danger"><i class="bi bi-exclamation-triangle me-2"></i>Error de conexión</td></tr>`;
+        if (miConsulta !== CXP_consultaActual || !CXP_cargado) return;
+        tbody.innerHTML = `<tr><td colspan="${CXP_nCols()}" class="text-center py-4 text-danger"><i class="bi bi-exclamation-triangle me-2"></i>Error de conexión</td></tr>`;
         console.error('[CXP]', e);
     }
 }
@@ -221,13 +274,14 @@ function CXP_renderTabla(filas) {
 
     if (!filas.length) {
         label.textContent = '0 registros';
-        tbody.innerHTML = `<tr><td colspan="11" class="text-center py-5 text-muted">
+        tbody.innerHTML = `<tr><td colspan="${CXP_nCols()}" class="text-center py-5 text-muted">
             <i class="bi bi-credit-card fs-3 d-block mb-2 text-primary opacity-40"></i>
             No se encontraron cuentas por pagar con los filtros aplicados.
         </td></tr>`;
         return;
     }
 
+    if (CXP_vista === 'antiguedad') { CXP_renderAntiguedad(filas); return; }
     if (CXP_agrupado) { CXP_renderAgrupado(filas); return; }
 
     label.textContent = filas.length + ' registros';
@@ -427,6 +481,11 @@ function CXP_renderCabecera() {
     const cg = document.getElementById('cxp-colgroup');
     const th = document.getElementById('cxp-thead');
     if (!cg || !th) return;
+    if (CXP_vista === 'antiguedad') {
+        cg.innerHTML = CXP_colsAntiguedad();
+        th.innerHTML = CXP_thAntiguedad();
+        return;
+    }
     cg.innerHTML = CXP_agrupado ? CXP_COLS_MAYOR : CXP_COLS_ESTANDAR;
     th.innerHTML = CXP_agrupado ? CXP_TH_MAYOR   : CXP_TH_ESTANDAR;
     // Los <th> recién creados no tienen el clic de ordenar: se vuelven a enganchar
@@ -612,16 +671,128 @@ function CXP_toggleProveedor(el) {
 
 /* Cambia entre vista detallada y agrupada (llamado desde los botones de la vista). */
 function CXP_setVista(modo) {
-    CXP_agrupado = (modo === 'agrupado');
-    const bDet = document.getElementById('cxp-btn-detalle');
-    const bGrp = document.getElementById('cxp-btn-agrupado');
-    if (bDet && bGrp) {
-        bDet.classList.toggle('btn-primary',         !CXP_agrupado);
-        bDet.classList.toggle('btn-outline-primary',  CXP_agrupado);
-        bGrp.classList.toggle('btn-primary',          CXP_agrupado);
-        bGrp.classList.toggle('btn-outline-primary', !CXP_agrupado);
+    CXP_vista    = ['detalle', 'agrupado', 'antiguedad'].includes(modo) ? modo : 'detalle';
+    CXP_agrupado = (CXP_vista === 'agrupado');
+    const botones = { detalle: 'cxp-btn-detalle', agrupado: 'cxp-btn-agrupado', antiguedad: 'cxp-btn-antiguedad' };
+    for (const [m, id] of Object.entries(botones)) {
+        const b = document.getElementById(id);
+        if (!b) continue;
+        b.classList.toggle('btn-primary',         m === CXP_vista);
+        b.classList.toggle('btn-outline-primary', m !== CXP_vista);
     }
+    const selTramos = document.getElementById('cxp-tramos-wrap');
+    if (selTramos) selTramos.hidden = (CXP_vista !== 'antiguedad');
     CXP_renderTabla(CXP_filtradoLocal);
+}
+
+/* Valor del parámetro `vista` de las exportaciones: salen con la estructura de la vista activa. */
+function CXP_vistaExport() {
+    return { agrupado: 'PROVEEDOR', antiguedad: 'ANTIGUEDAD' }[CXP_vista] || '';
+}
+
+/* ════════════════════════════════════════════════════
+   VISTA POR ANTIGÜEDAD
+   Una línea por proveedor con su saldo pendiente repartido en
+   columnas según los días vencidos (dias_vencido, que sigue el
+   selector "Vencimiento según"). Al desplegar un proveedor, cada
+   documento aparece en la columna que le toca. Gemelo del
+   servidor: App\Helpers\AntiguedadCartera (y CXC_renderAntiguedad).
+════════════════════════════════════════════════════ */
+const CXP_antiguedadAbiertos = new Set();
+function CXP_tramos() {
+    const v = document.getElementById('cxp-tramos')?.value || '30,60,90';
+    const t = [...new Set(v.split(',').map(n => parseInt(n, 10)).filter(n => n >= 1))].sort((a, b) => a - b);
+    return t.length ? t : [30, 60, 90];
+}
+function CXP_columnasAntiguedad(tramos) {
+    const cols = ['Por vencer'];
+    let desde = 1;
+    for (const t of tramos) { cols.push(`${desde} - ${t} días`); desde = t + 1; }
+    cols.push(`Más de ${tramos[tramos.length - 1]} días`);
+    return cols;
+}
+function CXP_columnaAntiguedad(dias, tramos) {
+    if (dias <= 0) return 0;
+    const i = tramos.findIndex(t => dias <= t);
+    return i === -1 ? tramos.length + 1 : i + 1;
+}
+function CXP_colsAntiguedad() {
+    const n = CXP_tramos().length + 2;
+    return `<col style="width:36px;"><col><col style="width:70px;">${'<col style="width:120px;">'.repeat(n)}<col style="width:130px;">`;
+}
+function CXP_thAntiguedad() {
+    const cols = CXP_columnasAntiguedad(CXP_tramos());
+    return `<tr>
+        <th class="text-center p-1"></th>
+        <th class="ps-2">Proveedor</th>
+        <th class="text-center">Docs.</th>
+        ${cols.map((c, i) => `<th class="text-end" title="${i === 0 ? 'Saldo que aún no vence' : 'Saldo con ' + cxpEsc(c) + ' de vencido'}">${cxpEsc(c)}</th>`).join('')}
+        <th class="text-end pe-2">Total</th>
+    </tr>`;
+}
+function CXP_toggleAntiguedad(el) {
+    const k = el.getAttribute('data-gkey');
+    if (CXP_antiguedadAbiertos.has(k)) CXP_antiguedadAbiertos.delete(k);
+    else CXP_antiguedadAbiertos.add(k);
+    CXP_renderTabla(CXP_filtradoLocal);
+}
+function CXP_renderAntiguedad(filas) {
+    const tbody  = document.getElementById('cxp-tbody');
+    const label  = document.getElementById('cxp-count-label');
+    const tramos = CXP_tramos();
+    const nCol   = tramos.length + 2;
+    // Solo lo que tiene saldo: lo pagado no envejece.
+    const pendientes = filas.filter(r => (parseFloat(r.saldo) || 0) > 0);
+    const grupos = CXP_agruparPorProveedor(pendientes);
+    label.textContent = `${pendientes.length} docs · ${grupos.length} proveedor${grupos.length !== 1 ? 'es' : ''}`;
+    if (!grupos.length) {
+        tbody.innerHTML = `<tr><td colspan="${CXP_nCols()}" class="text-center py-5 text-muted">
+            <i class="bi bi-hourglass-split fs-3 d-block mb-2 text-primary opacity-40"></i>
+            No hay saldos pendientes con los filtros aplicados.
+        </td></tr>`;
+        return;
+    }
+    const celdas = (vals, total, negrita) => vals.map((v, i) => `
+        <td class="text-end${negrita ? ' fw-semibold' : ''}" style="font-size:.8rem;${i > 0 && v > 0.004 ? 'color:#dc3545;' : ''}">
+            ${v > 0.004 ? '$' + CXP_fmt(v) : '<span class="text-muted">—</span>'}</td>`).join('')
+        + `<td class="text-end fw-bold pe-2" style="font-size:.82rem;">$${CXP_fmt(total)}</td>`;
+    const tot = new Array(nCol).fill(0);
+    let html = '';
+    for (const g of grupos) {
+        const vals = new Array(nCol).fill(0);
+        for (const r of g.items) vals[CXP_columnaAntiguedad(parseInt(r.dias_vencido) || 0, tramos)] += parseFloat(r.saldo) || 0;
+        vals.forEach((v, i) => { tot[i] += v; });
+        const abierto = CXP_antiguedadAbiertos.has(g.key);
+        html += `
+        <tr data-gkey="${cxpEsc(g.key)}" onclick="CXP_toggleAntiguedad(this)" style="cursor:pointer;background:#f3f7fd;" title="Clic para ver los documentos del proveedor">
+            <td class="text-center p-1"><i class="bi ${abierto ? 'bi-chevron-down' : 'bi-chevron-right'} text-primary"></i></td>
+            <td class="fw-bold ps-2 text-truncate" style="font-size:.82rem;" title="${cxpEsc(g.nombre)}${g.ruc ? ' · ' + cxpEsc(g.ruc) : ''}">${cxpEsc(g.nombre)}
+                ${g.ruc ? `<div class="text-muted fw-normal text-truncate" style="font-size:.68rem;line-height:1.1;">${cxpEsc(g.ruc)}</div>` : ''}</td>
+            <td class="text-center"><span class="badge bg-primary bg-opacity-10 text-primary border border-primary border-opacity-25 fw-normal">${g.items.length}</span></td>
+            ${celdas(vals, g.saldo, true)}
+        </tr>`;
+        if (abierto) {
+            for (const r of g.items) {
+                const v = new Array(nCol).fill(0);
+                v[CXP_columnaAntiguedad(parseInt(r.dias_vencido) || 0, tramos)] = parseFloat(r.saldo) || 0;
+                const dias = parseInt(r.dias_vencido) || 0;
+                html += `
+                <tr>
+                    <td></td>
+                    <td class="ps-4" style="font-size:.78rem;">${cxpEsc(r.numero_documento)}
+                        <span class="text-muted ms-1" style="font-size:.7rem;">emisión ${CXP_fmtFecha(r.fecha_emision)} · vence ${CXP_fmtFecha(r.fecha_vencimiento)}${dias > 0 ? ` · <span style="color:#dc3545;">${dias} días vencido</span>` : ''}</span></td>
+                    <td></td>
+                    ${celdas(v, parseFloat(r.saldo) || 0, false)}
+                </tr>`;
+            }
+        }
+    }
+    html += `
+        <tr style="background:#e9ecef;font-weight:bold;">
+            <td colspan="3" class="text-end" style="font-size:.8rem;">TOTAL (${grupos.length} proveedor${grupos.length !== 1 ? 'es' : ''})</td>
+            ${celdas(tot, tot.reduce((a, b) => a + b, 0), true)}
+        </tr>`;
+    tbody.innerHTML = html;
 }
 
 /* ════════════════════════════════════════════════════
@@ -1139,7 +1310,13 @@ function CXP_limpiarFiltros() {
     const buscador = document.getElementById('cxp-buscador');
     if (buscador) buscador.value = '';
 
-    CXP_recargar();
+    // Los filtros marcados como favoritos vuelven a su valor favorito, no al de fábrica.
+    const selVenc = document.getElementById('cxp-vencimiento');
+    if (selVenc) selVenc.value = 'DOCUMENTO';
+    CXP_aplicarFavoritos();
+
+    // Pantalla en blanco con el aviso de "Mostrar": no se consulta con los filtros por defecto.
+    CXP_filtroCambiado();
 }
 
 /* ════════════════════════════════════════════════════
@@ -1158,7 +1335,9 @@ function CXP_exportarExcel() {
         orden_dir:    CXP_getOrden()[1],
         // La exportación sale con la misma estructura que la vista activa: por proveedor
         // en formato mayor (sección por proveedor, subtotal y total general).
-        vista:        CXP_agrupado ? 'PROVEEDOR' : '',
+        vista:        CXP_vistaExport(),
+        vencimiento:  document.getElementById('cxp-vencimiento')?.value || 'DOCUMENTO',
+        tramos:       CXP_tramos().join(','),
     });
     CMG_descargar(`${BASE_URL}/${RUTA_MODULO_CXP}/exportExcel?${params}`);
 }
@@ -1176,7 +1355,9 @@ function CXP_exportarPDF() {
         orden_dir:    CXP_getOrden()[1],
         // La exportación sale con la misma estructura que la vista activa: por proveedor
         // en formato mayor (sección por proveedor, subtotal y total general).
-        vista:        CXP_agrupado ? 'PROVEEDOR' : '',
+        vista:        CXP_vistaExport(),
+        vencimiento:  document.getElementById('cxp-vencimiento')?.value || 'DOCUMENTO',
+        tramos:       CXP_tramos().join(','),
     });
     CMG_descargar(`${BASE_URL}/${RUTA_MODULO_CXP}/exportPdf?${params}`);
 }

@@ -202,49 +202,6 @@ class CuentasPorCobrarController extends BaseModuloController
         return $r;
     }
 
-    /**
-     * Escribe un listado largo en el PDF por bloques. Html2Pdf tarda de forma cuadrática con
-     * el tamaño de cada writeHTML (medido: 500 filas 9 s, 2.000 filas 102 s); escribiendo
-     * fila a fila es lineal (2.000 filas ≈ 10 s). El salto de página lo decide este método
-     * antes de cada fila, para repetir la cabecera de columnas arriba de cada hoja como
-     * hacía el <thead>. Los estilos del primer writeHTML siguen vigentes en los siguientes.
-     *
-     * @param string   $inicio   HTML del primer bloque: <style>, <page …> con el encabezado,
-     *                           filtros y tarjetas, y su </page> (la página sigue abierta).
-     * @param string   $thead    <tr> de la cabecera de columnas.
-     * @param array    $filas    Un <tr> por fila, o ['html' => <tr> o lista de <tr>, 'alto' => mm] cuando la
-     *                           fila puede ocupar más que el alto por defecto (o varias <tr>
-     *                           que deben ir juntas, p. ej. la cabecera de un grupo y su
-     *                           primera fila). Con 'html_salto' se da la variante que se usa
-     *                           cuando la fila abre hoja nueva (p. ej. sin repetir la cabecera
-     *                           de columnas, que ya se dibujó arriba).
-     * @param string   $final    HTML posterior (totales); puede ir vacío.
-     */
-    private function escribirPdfPorBloques(\Spipu\Html2Pdf\Html2Pdf $html2pdf, string $inicio, string $thead, array $filas, string $final = ''): void
-    {
-        $html2pdf->writeHTML($inicio . "<table class='fila'>{$thead}</table>");
-        $pdf = $html2pdf->pdf;
-        foreach ($filas as $fila) {
-            // Alto estimado por defecto (mm): 3 líneas de 8 pt + relleno. Si no cabe, hoja
-            // nueva con la cabecera; así Html2Pdf nunca parte una fila ni deja una hoja sin cabecera.
-            [$tr, $alto] = is_array($fila) ? [$fila['html'], (float)($fila['alto'] ?? 13)] : [$fila, 13.0];
-            if ($pdf->GetY() + $alto > $pdf->getPageHeight() - $pdf->getBreakMargin()) {
-                $html2pdf->writeHTML("<page pageset='old'><table class='fila'>{$thead}</table></page>");
-                $tr = is_array($fila) ? ($fila['html_salto'] ?? $tr) : $tr;
-            }
-            // Cada <tr> en su propia tabla: si una fila de una sola celda (cabecera de grupo)
-            // abre la tabla, Html2Pdf toma sus anchos y las filas siguientes se salen de la hoja.
-            $html = '';
-            foreach ((array)$tr as $t) {
-                $html .= "<table class='fila'>{$t}</table>";
-            }
-            $html2pdf->writeHTML($html);
-        }
-        if ($final !== '') {
-            $html2pdf->writeHTML($final);
-        }
-    }
-
     /** Líneas de producto de las facturas y recibos del listado (ver repo->getLineasProductoPorDocumentos). */
     private function lineasProductoDe(array $filas, array $filtros): array
     {
@@ -424,7 +381,7 @@ class CuentasPorCobrarController extends BaseModuloController
                       <p style='font-size:7pt;color:#555;'>Total Docs., Cobrado y Saldo corresponden a los documentos que contienen cada producto; un documento con varios productos cuenta en cada uno, por lo que estas columnas no se suman entre productos.</p>";
             // Vertical (A4 retrato): es la orientación por defecto de los listados del módulo.
             $html2pdf = new \Spipu\Html2Pdf\Html2Pdf('P', 'A4', 'es');
-            $this->escribirPdfPorBloques($html2pdf, $inicio, $thead, $cuerpo, $final);
+            \App\Helpers\PdfPorBloques::escribir($html2pdf, $inicio, $thead, $cuerpo, $final);
             $html2pdf->output('CuentasPorCobrar_Producto_' . date('Ymd_His') . '.pdf', 'D');
             exit;
         } catch (\Throwable $e) {
@@ -434,92 +391,18 @@ class CuentasPorCobrarController extends BaseModuloController
 
     // ─────────────────────────────────────────────────────────────────────
     // VISTA "POR ANTIGÜEDAD": saldo pendiente de cada cliente repartido en columnas
-    // según los días de mora (dias_vencido, que sigue el selector "Vencimiento según").
-    // Gemelo en el navegador: CXC_renderAntiguedad (cuentas_por_cobrar.js).
+    // según los días vencidos (App\Helpers\AntiguedadCartera, compartido con Cuentas
+    // por Pagar). Gemelo en el navegador: CXC_renderAntiguedad.
     // ─────────────────────────────────────────────────────────────────────
-
-    /** Etiquetas de las columnas: Por vencer, 1-30, 31-60, …, Más de N. */
-    private static function columnasAntiguedad(array $tramos): array
-    {
-        $cols = ['Por vencer'];
-        $desde = 1;
-        foreach ($tramos as $t) {
-            $cols[] = "{$desde} - {$t} días";
-            $desde  = $t + 1;
-        }
-        $cols[] = 'Más de ' . end($tramos) . ' días';
-        return $cols;
-    }
-
-    /** Columna (índice de columnasAntiguedad) que le toca a un documento con esta mora. */
-    private static function columnaAntiguedad(int $diasVencido, array $tramos): int
-    {
-        if ($diasVencido <= 0) {
-            return 0;
-        }
-        foreach ($tramos as $i => $t) {
-            if ($diasVencido <= $t) {
-                return $i + 1;
-            }
-        }
-        return count($tramos) + 1;
-    }
-
-    /**
-     * Una fila por cliente (misma clave que agruparPorCliente: cédula y RUC juntos) con su
-     * saldo pendiente por columna de antigüedad. Solo cuenta lo que tiene saldo > 0: lo
-     * pagado no envejece. Clientes en orden alfabético, como las demás vistas.
-     */
-    private function agruparPorAntiguedad(array $filas, array $tramos): array
-    {
-        $nCols  = count($tramos) + 2;
-        $grupos = [];
-        foreach ($filas as $r) {
-            $saldo = (float)($r['saldo'] ?? 0);
-            if ($saldo <= 0) {
-                continue;
-            }
-            $k = IdentificacionTercero::claveGrupo((string)($r['cliente_ruc'] ?? ''), (string)($r['cliente_nombre'] ?? 'Sin cliente'));
-            $grupos[$k] ??= ['nombre' => (string)($r['cliente_nombre'] ?? 'Sin cliente'), 'ruc' => (string)($r['cliente_ruc'] ?? ''),
-                             'docs' => 0, 'cols' => array_fill(0, $nCols, 0.0), 'total' => 0.0];
-            $grupos[$k]['docs']++;
-            $grupos[$k]['cols'][self::columnaAntiguedad((int)($r['dias_vencido'] ?? 0), $tramos)] += $saldo;
-            $grupos[$k]['total'] += $saldo;
-        }
-        usort($grupos, static fn ($a, $b) => strcmp(
-            \App\Helpers\OrdenFilas::normalizar($a['nombre']),
-            \App\Helpers\OrdenFilas::normalizar($b['nombre'])
-        ));
-        return $grupos;
-    }
 
     /** Excel de la vista "Por antigüedad": una fila por cliente y la fila TOTAL al final. */
     private function exportExcelPorAntiguedad(int $idEmpresa, array $idsEmpresa, array $filtros, array $filas): void
     {
-        $tramos = $filtros['tramos'];
-        $grupos = $this->agruparPorAntiguedad($filas, $tramos);
         try {
-            $empresa       = (new \App\models\Empresa())->getPorId($idEmpresa) ?? [];
-            $nombreEmpresa = $empresa['nombre'] ?? 'Cuentas por Cobrar';
-            $filtrosTxt    = ['Vista' => 'Por antigüedad (' . implode(', ', $tramos) . ' días)'] + $this->describirFiltros($idsEmpresa, $filtros);
-
-            $cols    = self::columnasAntiguedad($tramos);
-            $headers = array_merge(['Cliente', 'RUC/Cédula', 'Docs.'], $cols, ['Total']);
-            $data    = [];
-            $tot     = array_fill(0, count($cols), 0.0);
-            $totDocs = 0;
-            foreach ($grupos as $g) {
-                $data[] = array_merge([$g['nombre'], $g['ruc'], $g['docs']], array_map(static fn ($v) => round($v, 2), $g['cols']), [round($g['total'], 2)]);
-                foreach ($g['cols'] as $i => $v) {
-                    $tot[$i] += $v;
-                }
-                $totDocs += $g['docs'];
-            }
-            $data[] = array_merge(['TOTAL (' . count($grupos) . ' clientes)', '', $totDocs], array_map(static fn ($v) => round($v, 2), $tot), [round(array_sum($tot), 2)]);
-            $formatos = array_fill_keys(range(4, 4 + count($cols)), '#,##0.00');
-
-            (new \App\Services\ReportService())->exportToExcel('cuentas_por_cobrar_antiguedad', $headers, $data, 'Antigüedad de Cartera', $nombreEmpresa, $filtrosTxt, $formatos);
-            exit;
+            $empresa = (new \App\models\Empresa())->getPorId($idEmpresa) ?? [];
+            $grupos  = \App\Helpers\AntiguedadCartera::agrupar($filas, $filtros['tramos'], 'cliente_nombre', 'cliente_ruc');
+            \App\Helpers\AntiguedadCartera::exportarExcel('cuentas_por_cobrar_antiguedad', 'Cliente', $grupos, $filtros['tramos'],
+                $empresa['nombre'] ?? 'Cuentas por Cobrar', $this->describirFiltros($idsEmpresa, $filtros));
         } catch (\Throwable $e) {
             if (!headers_sent()) {
                 $_SESSION['cuentas_por_cobrar_msg'] = ['danger', 'Error al generar Excel: ' . $e->getMessage()];
@@ -529,68 +412,18 @@ class CuentasPorCobrarController extends BaseModuloController
         }
     }
 
-    /** PDF de la vista "Por antigüedad" (horizontal si hay más de 5 columnas de días). */
+    /**
+     * PDF de la vista "Por antigüedad" (horizontal si hay más de 5 columnas de días). Con un
+     * solo cliente (unSoloCliente()) sin columna Cliente ni fila TOTAL.
+     */
     private function exportPdfPorAntiguedad(int $idEmpresa, array $idsEmpresa, array $filtros, array $filas): void
     {
-        $tramos = $filtros['tramos'];
-        $grupos = $this->agruparPorAntiguedad($filas, $tramos);
         try {
             $empresa       = (new \App\models\Empresa())->getPorId($idEmpresa) ?? [];
             $nombreEmpresa = $empresa['nombre'] ?? 'Cuentas por Cobrar';
-            $filtrosTxt    = $this->describirFiltros($idsEmpresa, $filtros);
-            $e = static fn ($v): string => htmlspecialchars((string)$v);
-
-            $cols   = self::columnasAntiguedad($tramos);
-            $nCols  = count($cols);
-            // Anchos (%): cliente + docs fijos; el resto se reparte entre las columnas de días y el total.
-            // Un solo cliente (unSoloCliente()): sin columna Cliente —el nombre va en los filtros—
-            // y sin fila TOTAL, que repetiría la misma fila.
-            $sinCliente = $this->unSoloCliente($filtros, $filas);
-            $wCli   = $sinCliente ? 0 : ($nCols > 5 ? 22 : 28);
-            $wDocs  = $sinCliente ? 8 : 5;
-            $wNum   = round((100 - $wCli - $wDocs) / ($nCols + 1), 2);
-            if ($sinCliente) {
-                $wDocs = round(100 - $wNum * ($nCols + 1), 2);
-            } else {
-                $wCli = round(100 - $wDocs - $wNum * ($nCols + 1), 2);
-            }
-            $money  = static fn (float $v): string => $v > 0.004 ? '$' . number_format($v, 2) : '-';
-            $tdCli  = static fn (string $html): string => $sinCliente ? '' : $html;
-
-            $thead = "<tr>" . $tdCli("<th style='width:{$wCli}%;'>Cliente</th>") . "<th style='width:{$wDocs}%;'>Docs.</th>";
-            foreach ($cols as $c) {
-                $thead .= "<th style='width:{$wNum}%;'>" . $e($c) . "</th>";
-            }
-            $thead .= "<th style='width:{$wNum}%;'>Total</th></tr>";
-
-            $filasHtml = [];
-            $tot = array_fill(0, $nCols, 0.0);
-            $totDocs = 0;
-            foreach ($grupos as $g) {
-                $tr = "<tr>" . $tdCli("<td style='width:{$wCli}%;'>" . $e($g['nombre']) . "</td>") . "<td class='text-center' style='width:{$wDocs}%;'>{$g['docs']}</td>";
-                foreach ($g['cols'] as $i => $v) {
-                    $tot[$i] += $v;
-                    // Las columnas vencidas en rojo; "Por vencer" en negro.
-                    $estilo = $i > 0 && $v > 0.004 ? 'color:#dc3545;' : '';
-                    $tr .= "<td class='text-end' style='width:{$wNum}%;{$estilo}'>" . $money($v) . "</td>";
-                }
-                $tr .= "<td class='text-end' style='width:{$wNum}%;font-weight:bold;'>" . $money($g['total']) . "</td></tr>";
-                $filasHtml[] = $tr;
-                $totDocs += $g['docs'];
-            }
-            if (!$filasHtml) {
-                $filasHtml[] = "<tr><td class='text-center' style='width:100%;'>No hay saldos pendientes con los filtros aplicados.</td></tr>";
-            }
-            $final = "<table class='fila'><tr style='background:#f8f9fa;font-weight:bold;'>
-                        <td class='text-end' style='width:{$wCli}%;'>TOTAL (" . count($grupos) . " clientes)</td>
-                        <td class='text-center' style='width:{$wDocs}%;'>{$totDocs}</td>";
-            foreach ($tot as $v) {
-                $final .= "<td class='text-end' style='width:{$wNum}%;'>" . $money($v) . "</td>";
-            }
-            $final .= "<td class='text-end' style='width:{$wNum}%;'>" . $money(array_sum($tot)) . "</td></tr></table>";
-            if ($sinCliente) {
-                $final = '';
-            }
+            $grupos        = \App\Helpers\AntiguedadCartera::agrupar($filas, $filtros['tramos'], 'cliente_nombre', 'cliente_ruc');
+            [$thead, $filasHtml, $final, $horizontal] = \App\Helpers\AntiguedadCartera::partesPdf(
+                $grupos, $filtros['tramos'], 'Cliente', $this->unSoloCliente($filtros, $filas));
 
             ob_start();
             ?>
@@ -607,12 +440,12 @@ class CuentasPorCobrarController extends BaseModuloController
             </style>
             <page backtop="8mm" backbottom="12mm" backleft="8mm" backright="8mm" footer="page">
             <?= $this->encabezadoPdf($idEmpresa, $nombreEmpresa, 'Antigüedad de Cuentas por Cobrar') ?>
-            <?= $this->bloqueFiltrosPdf($filtrosTxt) ?>
+            <?= $this->bloqueFiltrosPdf($this->describirFiltros($idsEmpresa, $filtros)) ?>
             </page>
             <?php
             $inicio   = ob_get_clean();
-            $html2pdf = new \Spipu\Html2Pdf\Html2Pdf($nCols > 5 ? 'L' : 'P', 'A4', 'es');
-            $this->escribirPdfPorBloques($html2pdf, $inicio, $thead, $filasHtml, $final);
+            $html2pdf = new \Spipu\Html2Pdf\Html2Pdf($horizontal ? 'L' : 'P', 'A4', 'es');
+            \App\Helpers\PdfPorBloques::escribir($html2pdf, $inicio, $thead, $filasHtml, $final);
             $html2pdf->output('CuentasPorCobrar_Antiguedad_' . date('Ymd_His') . '.pdf', 'D');
             exit;
         } catch (\Throwable $ex) {
@@ -814,7 +647,7 @@ class CuentasPorCobrarController extends BaseModuloController
             $totSaldo  = 0.0;
             $cuerpo    = [];
 
-            // Las filas se escriben por bloques (escribirPdfPorBloques): ese método decide el
+            // Las filas se escriben por bloques (App\Helpers\PdfPorBloques): ese helper decide el
             // salto de página antes de cada bloque, así que ninguna fila se parte entre hojas
             // (el problema de las "líneas montadas" que antes obligó a usar una sola tabla)
             // y la cabecera de columnas se repite arriba de cada hoja. La cabecera de cada
@@ -962,7 +795,7 @@ class CuentasPorCobrarController extends BaseModuloController
                 </tr></table>";
             // Vertical (A4 retrato): es la orientación por defecto de los listados del módulo.
             $html2pdf = new \Spipu\Html2Pdf\Html2Pdf('P', 'A4', 'es');
-            $this->escribirPdfPorBloques($html2pdf, $inicio, "<tr>{$thCols}</tr>", $cuerpo, $final);
+            \App\Helpers\PdfPorBloques::escribir($html2pdf, $inicio, "<tr>{$thCols}</tr>", $cuerpo, $final);
             $html2pdf->output('CuentasPorCobrar_Cliente_' . date('Ymd_His') . '.pdf', 'D');
             exit;
         } catch (\Throwable $ex) {
@@ -2860,7 +2693,7 @@ $plantillasFiltradas = [];
                       </tr></table>";
             // Vertical (A4 retrato): es la orientación por defecto de los listados del módulo.
             $html2pdf = new \Spipu\Html2Pdf\Html2Pdf('P', 'A4', 'es');
-            $this->escribirPdfPorBloques($html2pdf, $inicio, $thead, $filasHtml, $final);
+            \App\Helpers\PdfPorBloques::escribir($html2pdf, $inicio, $thead, $filasHtml, $final);
             $html2pdf->output('CuentasPorCobrar_' . date('Ymd_His') . '.pdf', 'D');
             exit;
         } catch (\Throwable $e) {
@@ -2886,8 +2719,8 @@ $plantillasFiltradas = [];
             // Desde cuándo cuenta como vencido: DOCUMENTO (días de crédito guardados en el
             // documento), CLIENTE (plazo de la ficha del cliente) o EMISION (sin crédito).
             'vencimiento' => CuentasPorCobrarRepository::modoVencimiento($_REQUEST),
-            // Tramos de la vista "Por antigüedad" (días, ascendentes); ver tramosAntiguedad().
-            'tramos'      => self::tramosAntiguedad((string)($_REQUEST['tramos'] ?? '')),
+            // Tramos de la vista "Por antigüedad" (días, ascendentes); ver AntiguedadCartera::tramos().
+            'tramos'      => \App\Helpers\AntiguedadCartera::tramos((string)($_REQUEST['tramos'] ?? '')),
             'id_cliente'  => $_REQUEST['id_cliente']  ?? '',
             'id_vendedor' => (int)($_REQUEST['id_vendedor'] ?? 0) ?: '',
             // Texto del producto (nombre o código de las líneas del documento). Con este
@@ -3121,24 +2954,6 @@ $plantillasFiltradas = [];
         'CLIENTE'   => 'Plazo del cliente',
         'EMISION'   => 'Fecha de emisión (sin crédito)',
     ];
-
-    /** Tramos por defecto de la vista "Por antigüedad" (días de mora). */
-    private const TRAMOS_DEFECTO = [30, 60, 90];
-
-    /**
-     * Tramos de la vista "Por antigüedad": lista "15,30,60,90" → [15, 30, 60, 90]. Días
-     * enteros entre 1 y 3650, sin repetidos y ascendentes; entre 1 y 6 tramos (más columnas
-     * no caben en el PDF). Cualquier otra cosa → los tramos por defecto.
-     */
-    private static function tramosAntiguedad(string $raw): array
-    {
-        $t = array_values(array_unique(array_filter(
-            array_map('intval', explode(',', $raw)),
-            static fn (int $d): bool => $d >= 1 && $d <= 3650
-        )));
-        sort($t);
-        return ($t && count($t) <= 6) ? $t : self::TRAMOS_DEFECTO;
-    }
 
     private function describirFiltros(int|array $idsEmpresa, array $filtros): array
     {

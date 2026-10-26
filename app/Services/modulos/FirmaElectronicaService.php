@@ -710,7 +710,11 @@ class FirmaElectronicaService
             $resp = (new \App\services\WhatsappService())->sendTemplateMessage(
                 $idEmpresa, $telefono, $plantilla['nombre'], $plantilla['idioma'], $componentes
             );
-            return !empty($resp['success']);
+            if (empty($resp['success'])) {
+                return false;
+            }
+            $this->guardarEnChatWhatsapp($idEmpresa, $telefono, (string) ($vars[0] ?? ''), $plantilla, $vars, $resp, 'Solicitud de firma electrónica');
+            return true;
         } catch (\Throwable $e) {
             error_log('[Firmas] WhatsApp no enviado: ' . $e->getMessage());
             return false;
@@ -1739,6 +1743,9 @@ class FirmaElectronicaService
                 );
                 $ok = !empty($resp['success']);
                 $this->repository->resultadoAviso($idAviso, $ok, $ok ? null : (string) ($resp['message'] ?? 'Error de WhatsApp.'));
+                if ($ok) {
+                    $this->guardarEnChatWhatsapp($idEmpresa, $telefono, $nombre, $plantilla, $vars, $resp, 'Aviso de vencimiento de firma electrónica');
+                }
                 $out['whatsapp'] = $ok;
             } catch (\Throwable $e) {
                 $this->repository->resultadoAviso($idAviso, false, $e->getMessage());
@@ -1768,10 +1775,14 @@ class FirmaElectronicaService
                 }
                 $vars = 0;
                 $botonUrl = null;
+                $texto = '';
                 foreach (json_decode((string) ($p['componentes'] ?? '[]'), true) ?: [] as $c) {
                     $tipo = strtoupper((string) ($c['type'] ?? ''));
-                    if ($tipo === 'BODY' && preg_match_all('/{{(\d+)}}/', (string) ($c['text'] ?? ''), $m)) {
-                        $vars = count(array_unique($m[1]));
+                    if ($tipo === 'BODY') {
+                        $texto = (string) ($c['text'] ?? '');
+                        if (preg_match_all('/{{(\d+)}}/', $texto, $m)) {
+                            $vars = count(array_unique($m[1]));
+                        }
                     }
                     // Botón de URL dinámica (…/solicitud-firma/{{1}}): Meta pide el sufijo al enviar.
                     if ($tipo === 'BUTTONS') {
@@ -1783,12 +1794,36 @@ class FirmaElectronicaService
                         }
                     }
                 }
-                return ['nombre' => $p['nombre'], 'idioma' => $p['idioma'], 'variables' => $vars, 'boton_url' => $botonUrl];
+                return ['nombre' => $p['nombre'], 'idioma' => $p['idioma'], 'variables' => $vars, 'boton_url' => $botonUrl, 'texto' => $texto];
             }
         } catch (\Throwable $e) {
             error_log('[Firmas] Plantillas WhatsApp: ' . $e->getMessage());
         }
         return null;
+    }
+
+    /**
+     * Deja el mensaje enviado en el chat de WhatsApp de la empresa (bandeja + webhook de
+     * estados), igual que Cuentas por Cobrar. Un fallo aquí no anula el envío ya hecho.
+     */
+    private function guardarEnChatWhatsapp(int $idEmpresa, string $telefono, string $nombre, array $plantilla, array $vars, array $resp, string $resumen): void
+    {
+        try {
+            $vars  = array_map('strval', array_slice($vars, 0, $plantilla['variables']));
+            $texto = (string) ($plantilla['texto'] ?? '');
+            foreach ($vars as $i => $v) {
+                $texto = str_replace('{{' . ($i + 1) . '}}', $v, $texto);
+            }
+            $repo   = new \App\repositories\modulos\WhatsappMensajeRepository();
+            $idChat = $repo->getOrCreateChat($idEmpresa, $telefono, $nombre !== '' ? $nombre : 'Cliente', $resumen, false);
+            $repo->saveMessage($idEmpresa, $idChat, 'OUT', $telefono, 'template', [
+                'template'      => $plantilla['nombre'],
+                'variables'     => $vars,
+                'template_text' => $texto,
+            ], $resp['data']['messages'][0]['id'] ?? null, 'sent');
+        } catch (\Throwable $e) {
+            error_log('[Firmas] Mensaje no guardado en el chat de WhatsApp: ' . $e->getMessage());
+        }
     }
 
     /**

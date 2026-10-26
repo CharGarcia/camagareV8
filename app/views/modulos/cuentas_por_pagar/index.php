@@ -63,7 +63,7 @@
 
                 <!-- Estado -->
                 <div>
-                    <label class="form-label small fw-bold mb-1 d-block text-muted text-uppercase" style="font-size:.65rem;">Estado</label>
+                    <label class="form-label small fw-bold mb-1 d-block text-muted text-uppercase" style="font-size:.65rem;">Estado <?= \App\Helpers\PreferenciasHelper::renderEstrellaFavorito($rutaModulo, 'cxp-estado', 'estado') ?></label>
                     <select id="cxp-estado" name="estado" class="form-select form-select-sm shadow-none border" style="width:130px;"
                             onchange="CXP_recargar()">
                         <option value="PENDIENTES" selected>Saldo Pendiente</option>
@@ -76,7 +76,7 @@
 
                 <!-- Tipo de documento -->
                 <div>
-                    <label class="form-label small fw-bold mb-1 d-block text-muted text-uppercase" style="font-size:.65rem;">Tipo</label>
+                    <label class="form-label small fw-bold mb-1 d-block text-muted text-uppercase" style="font-size:.65rem;">Tipo <?= \App\Helpers\PreferenciasHelper::renderEstrellaFavorito($rutaModulo, 'cxp-tipo', 'tipo_fuente') ?></label>
                     <select id="cxp-tipo" name="tipo_fuente" class="form-select form-select-sm shadow-none border" style="width:130px;"
                             onchange="CXP_recargar()">
                         <option value="">Todos</option>
@@ -86,10 +86,22 @@
                     </select>
                 </div>
 
+                <!-- Desde cuándo cuenta como vencido: decide la mora, Vencidas / Al día y la vista Por antigüedad -->
+                <div>
+                    <label class="form-label small fw-bold mb-1 d-block text-muted text-uppercase" style="font-size:.65rem;"
+                           title="Fecha desde la que un documento cuenta como vencido">Vencimiento según <?= \App\Helpers\PreferenciasHelper::renderEstrellaFavorito($rutaModulo, 'cxp-vencimiento', 'vencimiento') ?></label>
+                    <select id="cxp-vencimiento" name="vencimiento" class="form-select form-select-sm shadow-none border" style="width:150px;"
+                            onchange="CXP_recargar()">
+                        <option value="DOCUMENTO" selected title="Plazo de las formas de pago registradas en cada documento">Plazo del documento</option>
+                        <option value="PROVEEDOR" title="Plazo configurado en la ficha del proveedor, contado desde la emisión">Plazo del proveedor</option>
+                        <option value="EMISION" title="Sin crédito: vence el mismo día de emisión">Fecha de emisión</option>
+                    </select>
+                </div>
+
                 <?php if (!empty($puedeConsolidar)): ?>
                 <!-- Alcance: solo la MATRIZ del grupo RUC puede consolidar (fase 1: solo lectura de las hermanas) -->
                 <div>
-                    <label class="form-label small fw-bold mb-1 d-block text-muted text-uppercase" style="font-size:.65rem;">Establecimientos</label>
+                    <label class="form-label small fw-bold mb-1 d-block text-muted text-uppercase" style="font-size:.65rem;">Establecimientos <?= \App\Helpers\PreferenciasHelper::renderEstrellaFavorito($rutaModulo, 'cxp-alcance', 'alcance') ?></label>
                     <select id="cxp-alcance" name="alcance" class="form-select form-select-sm shadow-none border" style="width:180px;"
                             onchange="CXP_recargar()"
                             title="Consolidado por RUC: <?php echo htmlspecialchars(implode(' · ', $establecimientos ?? [])); ?>">
@@ -102,14 +114,14 @@
                 <!-- Fecha Desde -->
                 <div>
                     <label class="form-label small fw-bold mb-1 d-block text-muted text-uppercase" style="font-size:.65rem;">Fecha Desde</label>
-                    <input type="date" id="cxp-fecha-desde" name="fecha_desde"
+                    <input type="date" id="cxp-fecha-desde" name="fecha_desde" onchange="CXP_filtroCambiado()"
                            class="form-control form-control-sm shadow-none border" style="width:115px;">
                 </div>
 
                 <!-- Fecha Hasta -->
                 <div>
                     <label class="form-label small fw-bold mb-1 d-block text-muted text-uppercase" style="font-size:.65rem;">Fecha Hasta</label>
-                    <input type="date" id="cxp-fecha-hasta" name="fecha_hasta"
+                    <input type="date" id="cxp-fecha-hasta" name="fecha_hasta" onchange="CXP_filtroCambiado()"
                            class="form-control form-control-sm shadow-none border" style="width:115px;"
                            value="<?php echo date('Y-m-d'); ?>">
                 </div>
@@ -220,7 +232,22 @@
                         <button type="button" id="cxp-btn-agrupado" class="btn btn-outline-primary" onclick="CXP_setVista('agrupado')" title="Agrupar documentos por proveedor">
                             <i class="bi bi-people"></i> Por proveedor
                         </button>
+                        <button type="button" id="cxp-btn-antiguedad" class="btn btn-outline-primary" onclick="CXP_setVista('antiguedad')" title="Saldo de cada proveedor repartido en columnas según los días vencidos">
+                            <i class="bi bi-hourglass-split"></i> Por antigüedad
+                        </button>
                     </div>
+                    <!-- Columnas de la vista Por antigüedad (días vencidos); solo visible en esa vista -->
+                    <span id="cxp-tramos-wrap" class="d-inline-flex align-items-center" hidden>
+                    <select id="cxp-tramos" class="form-select form-select-sm shadow-none border ms-1" style="width:170px;"
+                            title="Columnas de días vencidos" onchange="CXP_renderTabla(CXP_filtradoLocal)">
+                        <option value="30,60,90" selected>30 · 60 · 90 días</option>
+                        <option value="15,30,60,90">15 · 30 · 60 · 90 días</option>
+                        <option value="30,60,90,120">30 · 60 · 90 · 120 días</option>
+                        <option value="15,30,45,60,90">15 · 30 · 45 · 60 · 90 días</option>
+                        <option value="30,60,90,180,360">30 · 60 · 90 · 180 · 360 días</option>
+                    </select>
+                    <?= \App\Helpers\PreferenciasHelper::renderEstrellaFavorito($rutaModulo, 'cxp-tramos', 'tramos') ?>
+                    </span>
                 </div>
 
                 <!-- Derecha: contador + buscador -->

@@ -210,12 +210,54 @@ class CuentasPorPagarRepository extends BaseRepository
         return $fechaHasta ?: null;
     }
 
+    // ─────────────────────────────────────────────────────────────────────
+    // VENCIMIENTO (selector "Vencimiento según" de la pantalla)
+    //   - DOCUMENTO (por defecto): el plazo de las formas de pago del documento
+    //     (compras_pagos / liquidaciones_pagos; importación: plazo_dias); el saldo
+    //     inicial, su fecha de vencimiento.
+    //   - PROVEEDOR: el plazo configurado HOY en la ficha del proveedor
+    //     (`proveedores.plazo`, en días), contado desde la emisión.
+    //   - EMISION: sin crédito; vence el mismo día de emisión.
+    // Decide la mora, Vencidas / Al día, las tarjetas y la vista Por antigüedad.
+    // ─────────────────────────────────────────────────────────────────────
+
+    /** Modo de vencimiento normalizado (lista blanca: se interpola en el SQL). */
+    public static function modoVencimiento(array $filtros): string
+    {
+        $m = strtoupper(trim((string) ($filtros['vencimiento'] ?? '')));
+        return in_array($m, ['PROVEEDOR', 'EMISION'], true) ? $m : 'DOCUMENTO';
+    }
+
+    /**
+     * Fecha de vencimiento para los modos PROVEEDOR y EMISION (null en DOCUMENTO, que
+     * sigue con la expresión propia de cada tipo de documento). Mismo tipo que las
+     * expresiones de siempre (fecha + intervalo = timestamp).
+     */
+    private function vencimientoAlterno(array $filtros, string $exprEmision, string $exprIdProveedor): ?string
+    {
+        return match (self::modoVencimiento($filtros)) {
+            'PROVEEDOR' => "(({$exprEmision}) + INTERVAL '1 day' * COALESCE((SELECT pv_dc.plazo FROM proveedores pv_dc WHERE pv_dc.id = {$exprIdProveedor}), 0))",
+            'EMISION'   => "(({$exprEmision}) + INTERVAL '0 day')",
+            default     => null,
+        };
+    }
+
+    /** Fecha de vencimiento (date) de un saldo inicial `s` según el modo. */
+    private function vencimientoSaldoInicial(array $filtros): string
+    {
+        $alt = $this->vencimientoAlterno($filtros, 's.fecha_emision', 's.id_proveedor');
+        return $alt === null ? 's.fecha_vencimiento' : "({$alt})::date";
+    }
+
     /**
      * Expresión SQL para calcular la fecha de vencimiento de una compra.
      * Toma el mayor plazo registrado en compras_pagos.
      */
-    private function exprFechaVencCompra(string $aliasC = 'c'): string
+    private function exprFechaVencCompra(string $aliasC = 'c', array $filtros = []): string
     {
+        if ($alt = $this->vencimientoAlterno($filtros, "{$aliasC}.fecha_emision", "{$aliasC}.id_proveedor")) {
+            return $alt;
+        }
         return "(
             SELECT {$aliasC}.fecha_emision + INTERVAL '1 day' *
                 COALESCE(
@@ -235,8 +277,11 @@ class CuentasPorPagarRepository extends BaseRepository
     /**
      * Expresión SQL para calcular la fecha de vencimiento de una liquidación.
      */
-    private function exprFechaVencLiquid(string $aliasL = 'l'): string
+    private function exprFechaVencLiquid(string $aliasL = 'l', array $filtros = []): string
     {
+        if ($alt = $this->vencimientoAlterno($filtros, "{$aliasL}.fecha_emision", "{$aliasL}.id_proveedor")) {
+            return $alt;
+        }
         return "(
             SELECT {$aliasL}.fecha_emision + INTERVAL '1 day' *
                 COALESCE(
@@ -259,8 +304,12 @@ class CuentasPorPagarRepository extends BaseRepository
      * está en días, a diferencia de compras_pagos/liquidaciones_pagos que
      * distinguen días/meses/años).
      */
-    private function exprFechaVencImportacion(string $aliasF = 'fe', string $aliasIc = 'ic'): string
+    private function exprFechaVencImportacion(string $aliasF = 'fe', string $aliasIc = 'ic', array $filtros = []): string
     {
+        $emision = "COALESCE({$aliasF}.fecha_factura, {$aliasIc}.fecha_nacionalizacion, {$aliasIc}.created_at::date)";
+        if ($alt = $this->vencimientoAlterno($filtros, $emision, "{$aliasF}.id_proveedor")) {
+            return $alt;
+        }
         return "(
             COALESCE({$aliasF}.fecha_factura, {$aliasIc}.fecha_nacionalizacion, {$aliasIc}.created_at::date)
             + INTERVAL '1 day' * COALESCE({$aliasF}.plazo_dias, 0)
@@ -365,9 +414,9 @@ class CuentasPorPagarRepository extends BaseRepository
         [$whereExtra, $params, $in] = $this->buildWhereExtra($ids, $filtros);
         $fh = $this->aplicarFechaCorteCtEs($filtros, $params);
 
-        $fvcExpr = $this->exprFechaVencCompra('c');
-        $fvlExpr = $this->exprFechaVencLiquid('l');
-        $fviExpr = $this->exprFechaVencImportacion('fe', 'ic');
+        $fvcExpr = $this->exprFechaVencCompra('c', $filtros);
+        $fvlExpr = $this->exprFechaVencLiquid('l', $filtros);
+        $fviExpr = $this->exprFechaVencImportacion('fe', 'ic', $filtros);
 
         // Todo comprobante que genera deuda (factura, nota de venta, doc. financiero, planilla…), no solo '01'.
         $esCargo = \App\Helpers\TiposComprobanteCompra::sqlEsCargo('c.tipo_comprobante');
@@ -531,9 +580,9 @@ class CuentasPorPagarRepository extends BaseRepository
         [$whereExtra, $params, $in] = $this->buildWhereExtra($ids, $filtrosSinEstado);
         $fh = $this->aplicarFechaCorteCtEs($filtros, $params);
 
-        $fvcExpr = $this->exprFechaVencCompra('c');
-        $fvlExpr = $this->exprFechaVencLiquid('l');
-        $fviExpr = $this->exprFechaVencImportacion('fe', 'ic');
+        $fvcExpr = $this->exprFechaVencCompra('c', $filtros);
+        $fvlExpr = $this->exprFechaVencLiquid('l', $filtros);
+        $fviExpr = $this->exprFechaVencImportacion('fe', 'ic', $filtros);
 
         // Todo comprobante que genera deuda (factura, nota de venta, doc. financiero, planilla…), no solo '01'.
         $esCargo = \App\Helpers\TiposComprobanteCompra::sqlEsCargo('c.tipo_comprobante');
@@ -689,7 +738,7 @@ class CuentasPorPagarRepository extends BaseRepository
                 COALESCE(SUM(CASE WHEN sub.pend > 0 AND (sub.fecha_vencimiento IS NULL OR sub.fecha_vencimiento >= CURRENT_DATE) THEN sub.pend ELSE 0 END), 0) AS total_al_dia,
                 COUNT(*) FILTER (WHERE sub.pend > 0 AND sub.fecha_vencimiento IS NOT NULL AND sub.fecha_vencimiento < CURRENT_DATE) AS vencidas
             FROM (
-                SELECT s.fecha_vencimiento,
+                SELECT {$this->vencimientoSaldoInicial($filtros)} AS fecha_vencimiento,
                        ROUND(s.saldo_inicial - pag.pagado, 2) AS pend
                 FROM saldos_iniciales_cxp s"
                 . $lateralPag . "
@@ -720,9 +769,9 @@ class CuentasPorPagarRepository extends BaseRepository
         [$whereExtra, $params, $in] = $this->buildWhereExtra($ids, $filtrosSinEstado);
         $fh = $this->aplicarFechaCorteCtEs($filtros, $params);
 
-        $fvcExpr = $this->exprFechaVencCompra('c');
-        $fvlExpr = $this->exprFechaVencLiquid('l');
-        $fviExpr = $this->exprFechaVencImportacion('fe', 'ic');
+        $fvcExpr = $this->exprFechaVencCompra('c', $filtros);
+        $fvlExpr = $this->exprFechaVencLiquid('l', $filtros);
+        $fviExpr = $this->exprFechaVencImportacion('fe', 'ic', $filtros);
 
         // Todo comprobante que genera deuda (factura, nota de venta, doc. financiero, planilla…), no solo '01'.
         $esCargo = \App\Helpers\TiposComprobanteCompra::sqlEsCargo('c.tipo_comprobante');
@@ -846,8 +895,8 @@ class CuentasPorPagarRepository extends BaseRepository
                 COALESCE(SUM(CASE WHEN dv > 90            THEN pend ELSE 0 END), 0) AS tramo_mas_90
             FROM (
                 SELECT ROUND(s.saldo_inicial - pag.pagado, 2) AS pend,
-                       CASE WHEN s.fecha_vencimiento IS NULL THEN 0
-                            ELSE (CURRENT_DATE - s.fecha_vencimiento)::int END AS dv
+                       CASE WHEN {$this->vencimientoSaldoInicial($filtros)} IS NULL THEN 0
+                            ELSE (CURRENT_DATE - {$this->vencimientoSaldoInicial($filtros)})::int END AS dv
                 FROM saldos_iniciales_cxp s"
                 . $lateralPag . "
                 WHERE {$where}
@@ -1263,7 +1312,7 @@ class CuentasPorPagarRepository extends BaseRepository
         $lateralPag = $this->lateralPagadoSaldoInicialCxp($filtros, $params);
 
         $sql = "SELECT
-                    s.id, s.tipo_documento, s.nro_documento, s.fecha_emision, s.fecha_vencimiento,
+                    s.id, s.tipo_documento, s.nro_documento, s.fecha_emision, {$this->vencimientoSaldoInicial($filtros)} AS fecha_vencimiento,
                     s.ruc_proveedor, s.nombre_proveedor, s.id_proveedor,
                     {$this->colsEstablecimiento('s')},
                     CAST(s.saldo_inicial AS NUMERIC(16,2)) AS saldo_inicial,
@@ -1275,8 +1324,8 @@ class CuentasPorPagarRepository extends BaseRepository
                         ELSE 'PENDIENTE'
                     END AS estado,
                     s.observaciones,
-                    CASE WHEN s.fecha_vencimiento < CURRENT_DATE AND {$pend} > 0
-                         THEN CURRENT_DATE - s.fecha_vencimiento ELSE 0 END AS dias_vencido
+                    CASE WHEN {$this->vencimientoSaldoInicial($filtros)} < CURRENT_DATE AND {$pend} > 0
+                         THEN CURRENT_DATE - {$this->vencimientoSaldoInicial($filtros)} ELSE 0 END AS dias_vencido
                 FROM saldos_iniciales_cxp s
                 LEFT JOIN empresas emp ON emp.id = s.id_empresa"
                 . $lateralPag . "

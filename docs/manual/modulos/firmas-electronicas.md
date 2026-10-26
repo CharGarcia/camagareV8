@@ -6,7 +6,7 @@ ruta_modulo: modulos/firmas_electronicas
 tipo: modulo
 visibilidad: admin
 etiquetas: firma electronica, firma para persona natural, firma para representante legal, tipo de persona de la firma, vender firmas, aviso de vencimiento al cliente, recordatorio de renovacion, renovar firma del cliente, firma por vencer, enlace de renovacion, api uanataca, uanacreditos, creditos uanataca, precompra, distribuidor uanataca, miembro de empresa, representante legal, solicitud de firma, tramite de firma, uanataca, enlace para el cliente, formulario de firma, link de firma, whatsapp, pagar firma, payphone, transferencia, comprobante de pago, confirmar correo, factura de la firma, registrar en uanataca, firma emitida, observada, corregir solicitud, enlace fijo, qr de firma, certificado, p12, caducada, por caducar, renovar firma, firma invalida, xades, anf, security data, buscar firma, filtros, firmas por facturar
-version: 3.8
+version: 3.9
 orden: 20
 estado: activo
 ---
@@ -417,6 +417,9 @@ archivo, y volver a cargar la firma no lo soluciona.
 
 ## Historial de cambios
 
+- **3.9** — Los WhatsApp enviados por la plantilla (enlace de solicitud y aviso de
+  vencimiento) quedan registrados en el **chat de WhatsApp** de la empresa, igual que los
+  recordatorios de Cuentas por Cobrar.
 - **3.8** — Ficha de la firma: arriba se muestra el **historial del estado** en una sola fila de
   flechas (Datos registrados » Documentos » Pago » Facturado (o «Facturado y autorizado»
   cuando el SRI la autoriza) » Enviado a Uanataca » Firma aprobada » Firma emitida, en rojo mientras faltan y en verde

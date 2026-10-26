@@ -89,9 +89,10 @@ class CuentasPorPagarController extends BaseModuloController
         $filtros   = $this->getFiltros();
         [$idsEmpresa, $consolidado] = $this->resolverAlcance($idEmpresa, $filtros);
 
-        $filas      = $this->getFilasUnificadas($idsEmpresa, $filtros);
-        $stats      = $this->repo->getEstadisticas($idsEmpresa, $filtros);
-        $antiguedad = $this->repo->getAntiguedad($idsEmpresa, $filtros);
+        $filas = $this->getFilasUnificadas($idsEmpresa, $filtros);
+        // Tarjetas: con los filtros por defecto salen de las mismas filas (repetir la
+        // consulta costaba otro tanto). La antigüedad ya no se calcula: la pantalla no la usa.
+        $stats = $this->estadisticas($idsEmpresa, $filtros, $filas);
 
         foreach ($filas as &$f) {
             $f['total']          = number_format((float)$f['total'],          2, '.', '');
@@ -125,7 +126,6 @@ class CuentasPorPagarController extends BaseModuloController
         $this->jsonSuccess([
             'filas'            => $filas,
             'stats'            => $stats,
-            'antiguedad'       => $antiguedad,
             'consolidado'      => $consolidado,
             'establecimientos' => count($idsEmpresa),
         ]);
@@ -206,6 +206,129 @@ class CuentasPorPagarController extends BaseModuloController
      * `tipo_fuente` ('COMPRA' | 'LIQUIDACION' | 'IMPORTACION' | 'SALDO_INICIAL')
      * para distinguirla y enrutar.
      */
+    /**
+     * Tarjetas superiores. Con estado "Pendientes" y sin filtro de tipo, las filas del
+     * listado son exactamente lo que suman (saldo > 0, saldos iniciales incluidos), así que
+     * se calculan de ellas sin volver a consultar; en otro caso, repo->getEstadisticas()
+     * (que siempre suma lo pendiente, sea cual sea el estado elegido).
+     * Vencido = días vencido > 0, el mismo criterio de la consulta.
+     */
+    private function estadisticas(array $idsEmpresa, array $filtros, array $filas): array
+    {
+        if (($filtros['estado'] ?? 'PENDIENTES') !== 'PENDIENTES' || !empty($filtros['tipo_fuente'])) {
+            return $this->repo->getEstadisticas($idsEmpresa, $filtros);
+        }
+        $r = ['total_docs' => 0, 'total_saldo' => 0.0, 'total_vencido' => 0.0, 'total_al_dia' => 0.0, 'docs_vencidos' => 0];
+        foreach ($filas as $f) {
+            $saldo = (float)$f['saldo'];
+            $r['total_docs']++;
+            $r['total_saldo'] += $saldo;
+            if ((int)($f['dias_vencido'] ?? 0) > 0) {
+                $r['total_vencido'] += $saldo;
+                $r['docs_vencidos']++;
+            } else {
+                $r['total_al_dia'] += $saldo;
+            }
+        }
+        foreach (['total_saldo', 'total_vencido', 'total_al_dia'] as $k) {
+            $r[$k] = round($r[$k], 2);
+        }
+        return $r;
+    }
+
+    // ─────────────────────────────────────────────────────────────────────
+    // VISTA "POR ANTIGÜEDAD": saldo pendiente de cada proveedor repartido en columnas
+    // según los días vencidos (App\Helpers\AntiguedadCartera, compartido con Cuentas
+    // por Cobrar). Gemelo en el navegador: CXP_renderAntiguedad.
+    // ─────────────────────────────────────────────────────────────────────
+
+    /** Excel de la vista "Por antigüedad": una fila por proveedor y la fila TOTAL al final. */
+    private function exportExcelPorAntiguedad(int $idEmpresa, array $idsEmpresa, array $filtros, array $filas): void
+    {
+        try {
+            $empresa = (new \App\models\Empresa())->getPorId($idEmpresa) ?? [];
+            $grupos  = \App\Helpers\AntiguedadCartera::agrupar($filas, $filtros['tramos'], 'proveedor_nombre', 'proveedor_ruc');
+            \App\Helpers\AntiguedadCartera::exportarExcel('cuentas_por_pagar_antiguedad', 'Proveedor', $grupos, $filtros['tramos'],
+                $empresa['nombre'] ?? 'Cuentas por Pagar', $this->describirFiltros($idsEmpresa, $filtros));
+        } catch (\Throwable $e) {
+            if (!headers_sent()) {
+                $_SESSION['cuentas_por_pagar_msg'] = ['danger', 'Error al generar Excel: ' . $e->getMessage()];
+                $this->redirect(BASE_URL . '/' . $this->getRutaModulo());
+            }
+            exit;
+        }
+    }
+
+    /**
+     * PDF de la vista "Por antigüedad" (horizontal si hay más de 5 columnas de días). Con un
+     * solo proveedor (unSoloProveedor()) sin columna Proveedor ni fila TOTAL.
+     */
+    private function exportPdfPorAntiguedad(int $idEmpresa, array $idsEmpresa, array $filtros, array $filas): void
+    {
+        try {
+            $empresa       = (new \App\models\Empresa())->getPorId($idEmpresa) ?? [];
+            $nombreEmpresa = $empresa['nombre'] ?? 'Cuentas por Pagar';
+            $sinProv       = $this->unSoloProveedor($filtros, $filas);
+            $grupos        = \App\Helpers\AntiguedadCartera::agrupar($filas, $filtros['tramos'], 'proveedor_nombre', 'proveedor_ruc');
+            [$thead, $filasHtml, $final, $horizontal] = \App\Helpers\AntiguedadCartera::partesPdf(
+                $grupos, $filtros['tramos'], 'Proveedor', $sinProv);
+            $e = static fn ($v): string => htmlspecialchars((string)$v);
+            $filtrosTxt = $this->describirFiltros($idsEmpresa, $filtros);
+
+            ob_start();
+            ?>
+            <style>
+                body { font-family: Arial, sans-serif; font-size: 8pt; }
+                table { width: 100%; border-collapse: collapse; margin-bottom: 10px; table-layout: fixed; }
+                table.fila { margin-bottom: 0; }
+                th { background: #e9ecef; border: 1px solid #999; padding: 3px 3px; text-align: center; font-size: 8pt; }
+                td { border: 1px solid #999; padding: 2px 3px; font-size: 8pt; overflow: hidden; word-wrap: break-word; }
+                .text-end { text-align: right; } .text-center { text-align: center; }
+                .header { text-align: center; margin-bottom: 10px; }
+                .header h2 { margin: 0 0 2px 0; font-size: 13pt; }
+                .header h3 { margin: 0 0 2px 0; font-size: 10pt; color: #555; }
+                .header p  { margin: 0; font-size: 7.5pt; color: #777; }
+            </style>
+            <page backtop="8mm" backbottom="12mm" backleft="8mm" backright="8mm" footer="page">
+            <div class="header">
+                <h2><?= $e($nombreEmpresa) ?></h2>
+                <h3>Antigüedad de Cuentas por Pagar</h3>
+                <?php if ($sinProv): ?><h3><?= $e(trim(($filas[0]['proveedor_nombre'] ?? '') . ' (' . ($filas[0]['proveedor_ruc'] ?? '') . ')')) ?></h3><?php endif; ?>
+                <p><?= $e($filtrosTxt['Vencimiento según'] ?? '') ?> · <?= $e($filtrosTxt['Período'] ?? '') ?> · Generado: <?= date('d-m-Y H:i:s') ?></p>
+            </div>
+            </page>
+            <?php
+            $inicio   = ob_get_clean();
+            $html2pdf = new \Spipu\Html2Pdf\Html2Pdf($horizontal ? 'L' : 'P', 'A4', 'es');
+            \App\Helpers\PdfPorBloques::escribir($html2pdf, $inicio, $thead, $filasHtml, $final);
+            $html2pdf->output('CuentasPorPagar_Antiguedad_' . date('Ymd_His') . '.pdf', 'D');
+            exit;
+        } catch (\Throwable $ex) {
+            echo 'Error al generar PDF: ' . $ex->getMessage();
+        }
+    }
+
+    /**
+     * ¿El PDF es de UN solo proveedor? Hay filtro de proveedor y todas las filas son de él
+     * (misma clave que la vista Por proveedor: su cédula y su RUC cuentan como uno). Entonces
+     * la columna Proveedor repetiría el mismo nombre en cada fila y se omite; el nombre va en
+     * el encabezado. Con varios proveedores elegidos la columna se mantiene.
+     */
+    private function unSoloProveedor(array $filtros, array $filas): bool
+    {
+        if (empty($filtros['id_proveedor']) || !$filas) {
+            return false;
+        }
+        $claves = [];
+        foreach ($filas as $r) {
+            $claves[\App\Helpers\IdentificacionTercero::claveGrupo((string)($r['proveedor_ruc'] ?? ''), (string)($r['proveedor_nombre'] ?? ''))] = true;
+            if (count($claves) > 1) {
+                return false;
+            }
+        }
+        return true;
+    }
+
     private function getFilasUnificadas(int|array $idEmpresa, array $filtros): array
     {
         // Compras + liquidaciones + importaciones
@@ -224,6 +347,11 @@ class CuentasPorPagarController extends BaseModuloController
             'id_proveedor' => $filtros['id_proveedor'] ?? '',
             'fecha_desde'  => $filtros['fecha_desde'] ?? '',
             'fecha_hasta'  => $filtros['fecha_hasta'] ?? '',
+            'vencimiento'  => $filtros['vencimiento'] ?? '',
+            // Registros propios (§6): el mismo alcance que compras, liquidaciones e
+            // importaciones. Sin esto, quien no tiene acceso total veía en el listado los
+            // saldos iniciales de todos (las tarjetas sí los filtraban).
+            'id_usuario_filtro' => $filtros['id_usuario_filtro'] ?? null,
         ]);
 
         $estado = $filtros['estado'] ?? 'PENDIENTES';
@@ -463,6 +591,10 @@ class CuentasPorPagarController extends BaseModuloController
 
         // El archivo sale con la misma estructura que la vista activa en pantalla:
         // "Por proveedor" es una sección por proveedor con SUBTOTAL y TOTAL GENERAL (formato mayor)
+        if (strtoupper(trim((string)($_REQUEST['vista'] ?? ''))) === 'ANTIGUEDAD') {
+            $this->exportExcelPorAntiguedad($idEmpresa, $idsEmpresa, $filtros, $filas);
+            return;
+        }
         if (strtoupper(trim((string)($_REQUEST['vista'] ?? ''))) === 'PROVEEDOR') {
             $this->exportExcelPorProveedor($idEmpresa, $idsEmpresa, $consolidado, $filtros, $filas);
             return;
@@ -546,12 +678,16 @@ class CuentasPorPagarController extends BaseModuloController
 
         // El archivo sale con la misma estructura que la vista activa en pantalla:
         // "Por proveedor" es una cabecera por proveedor con SUBTOTAL y TOTAL GENERAL (formato mayor)
+        if (strtoupper(trim((string)($_REQUEST['vista'] ?? ''))) === 'ANTIGUEDAD') {
+            $this->exportPdfPorAntiguedad($idEmpresa, $idsEmpresa, $filtros, $filas);
+            return;
+        }
         if (strtoupper(trim((string)($_REQUEST['vista'] ?? ''))) === 'PROVEEDOR') {
             $this->exportPdfPorProveedor($idEmpresa, $idsEmpresa, $consolidado, $filtros, $filas);
             return;
         }
 
-        $stats = $this->repo->getEstadisticas($idsEmpresa, $filtros);
+        $stats = $this->estadisticas($idsEmpresa, $filtros, $filas);
 
         try {
             $empresa       = (new \App\models\Empresa())->getPorId($idEmpresa) ?? [];
@@ -565,6 +701,15 @@ class CuentasPorPagarController extends BaseModuloController
             $wEst  = $consolidado ? 6 : 0;
             $wDoc  = 17;
             $wProv = 25 - $wEst;
+            $wVen  = 16;
+            // Un solo proveedor (unSoloProveedor()): sin columna Proveedor —el nombre va en
+            // el encabezado—; su ancho se reparte entre Documento y F. Vencimiento.
+            $sinProv = $this->unSoloProveedor($filtros, $filas);
+            if ($sinProv) {
+                $wDoc += intdiv($wProv, 2);
+                $wVen += $wProv - intdiv($wProv, 2);
+                $wProv = 0;
+            }
             $tdEst = fn (array $r): string => $consolidado
                 ? "<td class='text-center' style='width:{$wEst}%;'>" . htmlspecialchars((string)($r['establecimiento'] ?? '')) . "</td>"
                 : '';
@@ -572,7 +717,7 @@ class CuentasPorPagarController extends BaseModuloController
             $totalSaldo   = 0;
             $totalPagRet  = 0;   // pagado + retenido + NC (lo que muestra la columna)
             $totalTotal   = 0;
-            $filaHtml     = '';
+            $filasHtml    = [];
 
             foreach ($filas as $r) {
                 $dias  = (int)($r['dias_vencido'] ?? 0);
@@ -604,11 +749,11 @@ class CuentasPorPagarController extends BaseModuloController
                     default         => 'Fac.',
                 };
 
-                $filaHtml .= "<tr style='{$color}'>{$tdEst($r)}
+                $filasHtml[] = "<tr style='{$color}'>{$tdEst($r)}
                     <td style='width:{$wDoc}%;'><small style='color:#6c757d;'>{$tipo}</small><br>" . self::docPdf((string) ($r['numero_documento'] ?? ''), $wDoc) . "</td>
-                    <td style='width:{$wProv}%;'>" . htmlspecialchars($r['proveedor_nombre'] ?? '') . "</td>
+                    " . ($sinProv ? '' : "<td style='width:{$wProv}%;'>" . htmlspecialchars($r['proveedor_nombre'] ?? '') . "</td>") . "
                     <td class='text-center' style='width:12%;'>{$fEmis}</td>
-                    <td class='text-center' style='width:16%;'>{$fVenc}<br>{$badge}</td>
+                    <td class='text-center' style='width:{$wVen}%;'>{$fVenc}<br>{$badge}</td>
                     <td class='text-end' style='width:10%;'>\$" . number_format($ts, 2) . "</td>
                     <td class='text-end' style='width:10%;color:#198754;'>\$" . number_format($tp + $tret, 2) . "</td>
                     <td class='text-end' style='width:10%;{$color}font-weight:bold;'>\$" . number_format($tsal, 2) . "</td>
@@ -629,6 +774,7 @@ class CuentasPorPagarController extends BaseModuloController
                 .header h3 { margin: 0 0 2px 0; font-size: 10pt; color: #555; }
                 .header p  { margin: 0; font-size: 7.5pt; color: #777; }
                 table.tot td { background: #f8f9fa; font-weight: bold; }
+                table.fila { margin-bottom: 0; }
                 .stats-box { text-align: center; padding: 5px; }
                 .stat-val  { font-size: 11pt; font-weight: bold; }
             </style>
@@ -636,6 +782,7 @@ class CuentasPorPagarController extends BaseModuloController
             <div class="header">
                 <h2><?= htmlspecialchars($nombreEmpresa) ?></h2>
                 <h3>Cuentas por Pagar</h3>
+                <?php if ($sinProv): ?><h3><?= htmlspecialchars(trim(($filas[0]['proveedor_nombre'] ?? '') . ' (' . ($filas[0]['proveedor_ruc'] ?? '') . ')')) ?></h3><?php endif; ?>
                 <p>Generado: <?= date('d-m-Y H:i:s') ?></p>
             </div>
             <table class="stats">
@@ -658,45 +805,35 @@ class CuentasPorPagarController extends BaseModuloController
                     </td>
                 </tr>
             </table>
-            <table>
-                <thead>
-                    <tr>
-                        <?php if ($consolidado): ?><th style="width:<?= $wEst ?>%;">Estab.</th><?php endif; ?>
-                        <th style="width:<?= $wDoc ?>%;">Documento</th>
-                        <th style="width:<?= $wProv ?>%;">Proveedor</th>
-                        <th style="width:12%;">F. Emisión</th>
-                        <th style="width:16%;">F. Vencimiento</th>
-                        <th style="width:10%;">Total</th>
-                        <th style="width:10%;">Pagado/Ret/NC</th>
-                        <th style="width:10%;">Saldo</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    <?php // Sin resultados: una fila con el aviso, igual que la vista "Por
-                          // proveedor". Además hace que Html2Pdf dibuje el encabezado de la
-                          // tabla, que con el <tbody> vacío no llegaba a pintarse. ?>
-                    <?= $filaHtml ?: "<tr><td colspan='" . ($consolidado ? 8 : 7) . "' class='text-center' style='width:100%;'>No se encontraron cuentas por pagar con los filtros aplicados.</td></tr>" ?>
-                </tbody>
-            </table>
-            <!-- La fila de totales va en su propia tabla, NO en un <tfoot>: Html2Pdf dibuja
-                 el tfoot al pie de CADA página, así que el total del reporte salía repetido
-                 en todas las hojas (y con la cifra global, como si fuera el total de esa
-                 hoja). El 70% de la etiqueta equivale a Documento + Proveedor + las dos
-                 fechas (y al Estab. cuando va), con o sin consolidado. -->
-            <table class="tot">
-                <tr>
-                    <td class="text-end" style="width:70%;">TOTALES:</td>
-                    <td class="text-end" style="width:10%;">$<?= number_format($totalTotal, 2) ?></td>
-                    <td class="text-end" style="width:10%;color:#198754;">$<?= number_format($totalPagRet, 2) ?></td>
-                    <td class="text-end" style="width:10%;color:#dc3545;">$<?= number_format($totalSaldo, 2) ?></td>
-                </tr>
-            </table>
             </page>
             <?php
-            $html     = ob_get_clean();
+            $inicio = ob_get_clean();
+            $thead  = '<tr>'
+                . ($consolidado ? "<th style='width:{$wEst}%;'>Estab.</th>" : '')
+                . "<th style='width:{$wDoc}%;'>Documento</th>"
+                . ($sinProv ? '' : "<th style='width:{$wProv}%;'>Proveedor</th>")
+                . "<th style='width:12%;'>F. Emisión</th>
+                   <th style='width:{$wVen}%;'>F. Vencimiento</th>
+                   <th style='width:10%;'>Total</th>
+                   <th style='width:10%;'>Pagado/Ret/NC</th>
+                   <th style='width:10%;'>Saldo</th></tr>";
+            // Sin resultados: una fila con el aviso, igual que la vista "Por proveedor".
+            if (!$filasHtml) {
+                $filasHtml[] = "<tr><td class='text-center' style='width:100%;'>No se encontraron cuentas por pagar con los filtros aplicados.</td></tr>";
+            }
+            // Los totales van en su propia tabla, NO en un <tfoot>: Html2Pdf dibuja el tfoot al
+            // pie de CADA página. El 70% de la etiqueta equivale a Documento + Proveedor + las
+            // dos fechas (y al Estab. cuando va), con o sin consolidado.
+            $final = "<table class='tot'><tr>
+                        <td class='text-end' style='width:70%;'>TOTALES:</td>
+                        <td class='text-end' style='width:10%;'>\$" . number_format($totalTotal, 2) . "</td>
+                        <td class='text-end' style='width:10%;color:#198754;'>\$" . number_format($totalPagRet, 2) . "</td>
+                        <td class='text-end' style='width:10%;color:#dc3545;'>\$" . number_format($totalSaldo, 2) . "</td>
+                      </tr></table>";
             // Vertical (A4 retrato): es la orientación por defecto de los listados del módulo.
+            // Por bloques (App\Helpers\PdfPorBloques): lineal con miles de documentos.
             $html2pdf = new \Spipu\Html2Pdf\Html2Pdf('P', 'A4', 'es');
-            $html2pdf->writeHTML($html);
+            \App\Helpers\PdfPorBloques::escribir($html2pdf, $inicio, $thead, $filasHtml, $final);
             $html2pdf->output('CuentasPorPagar_' . date('Ymd_His') . '.pdf', 'D');
             exit;
         } catch (\Throwable $e) {
@@ -891,7 +1028,7 @@ class CuentasPorPagarController extends BaseModuloController
     private function exportPdfPorProveedor(int $idEmpresa, array $idsEmpresa, bool $consolidado, array $filtros, array $filas): void
     {
         $grupos = $this->agruparPorProveedor($filas);
-        $stats  = $this->repo->getEstadisticas($idsEmpresa, $filtros);
+        $stats  = $this->estadisticas($idsEmpresa, $filtros, $filas);
         try {
             $empresa       = (new \App\models\Empresa())->getPorId($idEmpresa) ?? [];
             $nombreEmpresa = $empresa['nombre'] ?? 'Cuentas por Pagar';
@@ -908,20 +1045,12 @@ class CuentasPorPagarController extends BaseModuloController
             $totAbonos = 0.0;
             $totRet    = 0.0;
             $totSaldo  = 0.0;
-            $cuerpo    = '';
+            $cuerpo    = [];
 
-            // Todo el listado va en UNA sola tabla y cada proveedor es una fila de cabecera
-            // (colspan) dentro de ella. No es cosmético: con una tabla por proveedor, cuando
-            // una de ellas se abría en el último centímetro de la hoja, Html2Pdf dibujaba su
-            // <thead> al pie SIN contarlo al decidir si la primera fila cabía (la condición
-            // de Html2Pdf::_tag_open_TR suma el tfoot, no el thead), así que esa fila se
-            // partía y sus celdas se repartían entre dos o tres páginas, dejando renglones
-            // sueltos al pie y hojas casi en blanco. Con una sola tabla, el <thead> solo se
-            // dibuja arriba de cada página (donde siempre hay sitio), se repite en TODAS las
-            // páginas y ninguna fila se parte. El colspan de la cabecera de proveedor no
-            // descuadra los anchos porque la primera fila sigue siendo el <thead> con el
-            // ancho de cada columna. Mismo arreglo que en Cuentas por Cobrar.
-            $nCols  = 8 + ($consolidado ? 1 : 0);
+            // Las filas se escriben por bloques (App\Helpers\PdfPorBloques): el helper decide
+            // el salto de página antes de cada bloque, así ninguna fila se parte entre hojas
+            // y la cabecera de columnas se repite arriba de cada hoja. La cabecera de cada
+            // proveedor va en el mismo bloque que su primer documento para no quedar sola al pie.
             $thCols = ($consolidado ? "<th style='width:{$wEst}%;'>Estab.</th>" : '')
                 . "<th style='width:10%;'>Fecha</th>"
                 . "<th style='width:{$wDoc}%;'>N. Documento</th>"
@@ -939,21 +1068,18 @@ class CuentasPorPagarController extends BaseModuloController
                 $totRet    += $g['retenciones'];
                 $totSaldo  += $g['saldo'];
 
-                if ($cuerpo === '') {
-                    $cuerpo .= "<table><thead><tr>{$thCols}</tr></thead><tbody>";
-                } else {
-                    // Hueco entre un proveedor y el siguiente (antes era el margin-bottom de
-                    // la tabla de cada uno): fila vacía sin bordes, del mismo alto.
-                    $cuerpo .= "<tr class='sep'><td colspan='{$nCols}'>&nbsp;</td></tr>";
-                }
+                $primerProv = !$cuerpo;
+                // Hueco entre un proveedor y el siguiente: fila vacía sin bordes.
+                $sep = "<tr class='sep'><td style='width:100%;'>&nbsp;</td></tr>";
 
                 // Cabecera de la sección: "RUC - NOMBRE · saldo: 1,234.56". Lo que interesa
                 // del proveedor es cuánto se le debe, no cuántos documentos tiene.
                 $titulo = trim(($g['ruc'] !== '' ? $g['ruc'] . ' - ' : '') . $g['nombre']);
-                $cuerpo .= "<tr class='grp'><td colspan='{$nCols}'>"
+                $grp = "<tr class='grp'><td style='width:100%;'>"
                     . $e($titulo) . " &nbsp;&middot;&nbsp; saldo: " . number_format($g['saldo'] > 0 ? $g['saldo'] : 0, 2)
                     . "</td></tr>";
 
+                $primeraFila = true;
                 foreach ($g['items'] as $r) {
                     $dias   = (int)($r['dias_vencido'] ?? 0);
                     $ts     = (float)($r['total'] ?? 0);
@@ -969,7 +1095,7 @@ class CuentasPorPagarController extends BaseModuloController
                     $ndTxt  = $nd > 0 ? " <small>+" . number_format($nd, 2) . "</small>" : '';
                     $tipo   = ($r['tipo_fuente'] ?? '') === 'FACTURA' || ($r['tipo_fuente'] ?? '') === ''
                         ? '' : "<small style='color:#6c757d;'>" . $this->getTipoLabel((string)$r['tipo_fuente'], true) . "</small><br>";
-                    $cuerpo .= "<tr>"
+                    $tr = "<tr>"
                         . ($consolidado ? "<td class='text-center' style='width:{$wEst}%;'>" . $e($r['establecimiento'] ?? '') . "</td>" : '')
                         . "<td class='text-center' style='width:10%;'>{$fEmis}</td>"
                         . "<td style='width:{$wDoc}%;'>{$tipo}" . self::docPdf((string) ($r['numero_documento'] ?? ''), $wDoc) . "</td>"
@@ -980,13 +1106,19 @@ class CuentasPorPagarController extends BaseModuloController
                         . "<td class='text-end' style='width:12%;{$color}font-weight:bold;'>$" . number_format($tsal, 2) . "</td>"
                         . "<td class='text-center' style='width:7%;{$color}'>" . ($dias > 0 ? $dias : '—') . "</td>"
                         . "</tr>";
+                    if (!$primeraFila) {
+                        $cuerpo[] = $tr;
+                        continue;
+                    }
+                    // Bloque inicial del proveedor: separación + cabecera + 1.er documento.
+                    $primeraFila = false;
+                    $cuerpo[] = $primerProv
+                        ? ['alto' => 21, 'html' => [$grp, $tr]]
+                        : ['alto' => 24, 'html' => [$sep, $grp, $tr], 'html_salto' => [$grp, $tr]];
                 }
 
                 // Sin fila de SUBTOTAL por proveedor: el saldo ya va en la cabecera de la
                 // sección y el resumen de toda la deuda queda en el TOTAL GENERAL.
-            }
-            if ($cuerpo !== '') {
-                $cuerpo .= '</tbody></table>';
             }
 
             ob_start();
@@ -1002,7 +1134,8 @@ class CuentasPorPagarController extends BaseModuloController
                 .header h2 { margin: 0 0 2px 0; font-size: 13pt; }
                 .header h3 { margin: 0 0 2px 0; font-size: 10pt; color: #555; }
                 .header p  { margin: 0; font-size: 7.5pt; color: #777; }
-                /* Cabecera de cada proveedor: fila de la misma tabla, con todo el ancho. */
+                table.fila { margin-bottom: 0; }
+                /* Cabecera de cada proveedor: fila de todo el ancho. */
                 tr.grp td { background: #eaf1fb; border: 1px solid #ccc; font-weight: bold; font-size: 8.5pt; padding: 4px 5px; }
                 /* Separación entre un proveedor y el siguiente: fila vacía sin bordes, del
                    mismo alto que el hueco que dejaban antes las tablas sueltas (6px). */
@@ -1037,24 +1170,24 @@ class CuentasPorPagarController extends BaseModuloController
                     </td>
                 </tr>
             </table>
-            <?= $cuerpo ?: "<table><tr><td class='text-center' style='width:100%;'>No se encontraron cuentas por pagar con los filtros aplicados.</td></tr></table>" ?>
-            <table class="tot">
-                <tr>
-                    <td class="text-end" style="width:<?= $wEtq ?>%;">TOTAL GENERAL (<?= count($grupos) ?> proveedor<?= count($grupos) !== 1 ? 'es' : '' ?>)</td>
-                    <td class="text-end" style="width:12%;">$<?= number_format($totTotal, 2) ?></td>
-                    <td class="text-end" style="width:10%;">$<?= number_format($totNc, 2) ?></td>
-                    <td class="text-end" style="width:12%;">$<?= number_format($totAbonos, 2) ?></td>
-                    <td class="text-end" style="width:12%;">$<?= number_format($totRet, 2) ?></td>
-                    <td class="text-end" style="width:12%;">$<?= number_format($totSaldo, 2) ?></td>
-                    <td style="width:7%;"></td>
-                </tr>
-            </table>
             </page>
             <?php
-            $html     = ob_get_clean();
+            $inicio = ob_get_clean();
+            if (!$cuerpo) {
+                $cuerpo[] = "<tr><td class='text-center' style='width:100%;'>No se encontraron cuentas por pagar con los filtros aplicados.</td></tr>";
+            }
+            $final = "<table class='tot' style='margin-top:6px;'><tr>
+                    <td class='text-end' style='width:{$wEtq}%;'>TOTAL GENERAL (" . count($grupos) . ' proveedor' . (count($grupos) !== 1 ? 'es' : '') . ")</td>
+                    <td class='text-end' style='width:12%;'>\$" . number_format($totTotal, 2) . "</td>
+                    <td class='text-end' style='width:10%;'>\$" . number_format($totNc, 2) . "</td>
+                    <td class='text-end' style='width:12%;'>\$" . number_format($totAbonos, 2) . "</td>
+                    <td class='text-end' style='width:12%;'>\$" . number_format($totRet, 2) . "</td>
+                    <td class='text-end' style='width:12%;'>\$" . number_format($totSaldo, 2) . "</td>
+                    <td style='width:7%;'></td>
+                </tr></table>";
             // Vertical (A4 retrato): es la orientación por defecto de los listados del módulo.
             $html2pdf = new \Spipu\Html2Pdf\Html2Pdf('P', 'A4', 'es');
-            $html2pdf->writeHTML($html);
+            \App\Helpers\PdfPorBloques::escribir($html2pdf, $inicio, "<tr>{$thCols}</tr>", $cuerpo, $final);
             $html2pdf->output('CuentasPorPagar_Proveedor_' . date('Ymd_His') . '.pdf', 'D');
             exit;
         } catch (\Throwable $ex) {
@@ -1074,6 +1207,11 @@ class CuentasPorPagarController extends BaseModuloController
             'fecha_hasta'  => $_REQUEST['fecha_hasta']  ?? '',
             'id_proveedor' => $_REQUEST['id_proveedor'] ?? '',
             'tipo_fuente'  => $_REQUEST['tipo_fuente']  ?? '',
+            // Desde cuándo cuenta como vencido: DOCUMENTO (plazo de las formas de pago del
+            // documento), PROVEEDOR (plazo de la ficha del proveedor) o EMISION (sin crédito).
+            'vencimiento'  => CuentasPorPagarRepository::modoVencimiento($_REQUEST),
+            // Tramos de la vista "Por antigüedad" (días, ascendentes); ver AntiguedadCartera.
+            'tramos'       => \App\Helpers\AntiguedadCartera::tramos((string)($_REQUEST['tramos'] ?? '')),
             // ESTABLECIMIENTO (solo la empresa activa) | CONSOLIDADO (todo el grupo RUC;
             // solo se honra desde la matriz — ver resolverAlcance()).
             'alcance'      => strtoupper(trim((string)($_REQUEST['alcance'] ?? ''))),
@@ -1139,6 +1277,13 @@ class CuentasPorPagarController extends BaseModuloController
      * los filtros, solo el encabezado y las tarjetas de totales).
      * Devuelve etiqueta => valor, con los ids de proveedor resueltos a nombre.
      */
+    /** Etiquetas del selector "Vencimiento según" (mismas que la vista). */
+    private const VENCIMIENTO_LBL = [
+        'DOCUMENTO' => 'Plazo del documento',
+        'PROVEEDOR' => 'Plazo del proveedor',
+        'EMISION'   => 'Fecha de emisión (sin crédito)',
+    ];
+
     private function describirFiltros(int|array $idsEmpresa, array $filtros): array
     {
         $idsEmpresa = (array) $idsEmpresa;
@@ -1203,6 +1348,7 @@ class CuentasPorPagarController extends BaseModuloController
             'Alcance'           => $alcanceTxt,
             'Tipo de documento' => $tipoLbl[$tipo] ?? $tipo,
             'Estado'            => $estadoLbl[$estado] ?? $estado,
+            'Vencimiento según' => self::VENCIMIENTO_LBL[CuentasPorPagarRepository::modoVencimiento($filtros)],
             'Período'           => $periodo,
             'Proveedor'         => $proveedorTxt,
         ];
