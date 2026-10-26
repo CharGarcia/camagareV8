@@ -108,6 +108,7 @@ document.addEventListener('DOMContentLoaded', () => {
     // Al entrar NO se consulta nada: el listado se carga solo cuando el usuario
     // presiona "Mostrar" (ver CXC_cargado / CXC_recargar).
     CXC_initOrden();
+    CXC_aplicarFavoritos();
     CXC_estadoInicial();
     // Series, conceptos y formas de cobro solo hacen falta si puede cobrar en esta empresa
     // (los de una hermana del consolidado se piden al abrir su cobro).
@@ -116,6 +117,16 @@ document.addEventListener('DOMContentLoaded', () => {
     CXC_initBuscadorClientes();
     CXC_initBuscadorProductos();
 });
+
+/* Valores favoritos (estrella junto a cada filtro, PreferenciasHelper::renderEstrellaFavorito):
+   Documento, Estado, Vencimiento según, Vendedor, Establecimientos y los tramos de la vista
+   Por antigüedad. Se ponen al entrar y al presionar "Limpiar". Solo en los filtros de este
+   módulo: los modales de la página (cobro, correo…) tienen sus propios favoritos. */
+function CXC_aplicarFavoritos() {
+    if (typeof aplicarFavoritosModal !== 'function') return;
+    aplicarFavoritosModal('#form-filtros-cxc');
+    aplicarFavoritosModal('#cxc-tramos-wrap');
+}
 
 /* Cabeceras clicables: alternan la dirección, guardan la preferencia del usuario
    (sin recargar la página, que perdería los filtros) y repintan la tabla. */
@@ -737,7 +748,7 @@ function CXC_toggleGrupo(el) {
 function CXC_setVista(modo) {
     CXC_vista    = ['detalle', 'agrupado', 'producto', 'antiguedad'].includes(modo) ? modo : 'detalle';
     CXC_agrupado = (CXC_vista === 'agrupado');
-    const selTramos = document.getElementById('cxc-tramos');
+    const selTramos = document.getElementById('cxc-tramos-wrap');
     if (selTramos) selTramos.hidden = (CXC_vista !== 'antiguedad');
     const botones = { detalle: 'cxc-btn-detalle', agrupado: 'cxc-btn-agrupado', producto: 'cxc-btn-producto', antiguedad: 'cxc-btn-antiguedad' };
     for (const [m, id] of Object.entries(botones)) {
@@ -2101,6 +2112,11 @@ function CXC_limpiarFiltros() {
 
     const buscador = document.getElementById('cxc-buscador');
     if (buscador) buscador.value = '';
+
+    // Los filtros que el usuario marcó como favoritos vuelven a su valor favorito, no al de fábrica.
+    const selVenc = document.getElementById('cxc-vencimiento');
+    if (selVenc) selVenc.value = 'DOCUMENTO';
+    CXC_aplicarFavoritos();
 
     // Pantalla en blanco con el aviso de "Mostrar": no se consulta con los filtros por defecto.
     CXC_filtroCambiado();

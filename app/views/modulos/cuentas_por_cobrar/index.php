@@ -48,7 +48,7 @@
 
                 <!-- Tipo de documento -->
                 <div>
-                    <label class="form-label small fw-bold mb-1 d-block text-muted text-uppercase" style="font-size:.65rem;">Documento</label>
+                    <label class="form-label small fw-bold mb-1 d-block text-muted text-uppercase" style="font-size:.65rem;">Documento <?= \App\Helpers\PreferenciasHelper::renderEstrellaFavorito($rutaModulo, 'cxc-tipo-doc', 'tipo_doc') ?></label>
                     <select id="cxc-tipo-doc" name="tipo_doc" class="form-select form-select-sm shadow-none border" style="width:128px;"
                             onchange="CXC_recargar()">
                         <option value="TODOS" selected>Todos</option>
@@ -60,7 +60,7 @@
 
                 <!-- Estado CxC -->
                 <div>
-                    <label class="form-label small fw-bold mb-1 d-block text-muted text-uppercase" style="font-size:.65rem;">Estado</label>
+                    <label class="form-label small fw-bold mb-1 d-block text-muted text-uppercase" style="font-size:.65rem;">Estado <?= \App\Helpers\PreferenciasHelper::renderEstrellaFavorito($rutaModulo, 'cxc-estado', 'estado') ?></label>
                     <select id="cxc-estado" name="estado" class="form-select form-select-sm shadow-none border" style="width:120px;"
                             onchange="CXC_recargar()">
                         <option value="PENDIENTES" selected>Saldo Pendiente</option>
@@ -74,7 +74,7 @@
                 <!-- Desde cuándo cuenta como vencido: decide la mora, Vencidas / Al día y la vista Por antigüedad -->
                 <div>
                     <label class="form-label small fw-bold mb-1 d-block text-muted text-uppercase" style="font-size:.65rem;"
-                           title="Fecha desde la que un documento cuenta como vencido">Vencimiento según</label>
+                           title="Fecha desde la que un documento cuenta como vencido">Vencimiento según <?= \App\Helpers\PreferenciasHelper::renderEstrellaFavorito($rutaModulo, 'cxc-vencimiento', 'vencimiento') ?></label>
                     <select id="cxc-vencimiento" name="vencimiento" class="form-select form-select-sm shadow-none border" style="width:150px;"
                             onchange="CXC_recargar()">
                         <option value="DOCUMENTO" selected title="Días de crédito guardados en cada factura o recibo">Crédito del documento</option>
@@ -85,7 +85,7 @@
 
                 <!-- Vendedor (asignado en la factura / recibo; los saldos iniciales no tienen vendedor) -->
                 <div>
-                    <label class="form-label small fw-bold mb-1 d-block text-muted text-uppercase" style="font-size:.65rem;">Vendedor</label>
+                    <label class="form-label small fw-bold mb-1 d-block text-muted text-uppercase" style="font-size:.65rem;">Vendedor <?php if (empty($vendedorFijo)): ?><?= \App\Helpers\PreferenciasHelper::renderEstrellaFavorito($rutaModulo, 'cxc-vendedor', 'id_vendedor') ?><?php endif; ?></label>
                     <?php if (!empty($vendedorFijo)): ?>
                         <?php // Usuario restringido (§6): solo su propio vendedor; el servidor ignora el filtro. ?>
                         <input type="text" class="form-control form-control-sm shadow-none border bg-light" style="width:135px;" disabled
@@ -105,7 +105,7 @@
                 <?php if (!empty($puedeConsolidar)): ?>
                 <!-- Alcance: solo la MATRIZ del grupo RUC puede consolidar (fase 1: solo lectura de las hermanas) -->
                 <div>
-                    <label class="form-label small fw-bold mb-1 d-block text-muted text-uppercase" style="font-size:.65rem;">Establecimientos</label>
+                    <label class="form-label small fw-bold mb-1 d-block text-muted text-uppercase" style="font-size:.65rem;">Establecimientos <?= \App\Helpers\PreferenciasHelper::renderEstrellaFavorito($rutaModulo, 'cxc-alcance', 'alcance') ?></label>
                     <select id="cxc-alcance" name="alcance" class="form-select form-select-sm shadow-none border" style="width:150px;"
                             onchange="CXC_recargar()"
                             title="Consolidado por RUC: <?php echo htmlspecialchars(implode(' · ', $establecimientos ?? [])); ?>">
@@ -266,7 +266,8 @@
                         </button>
                     </div>
                     <!-- Columnas de la vista Por antigüedad (días vencidos); solo visible en esa vista -->
-                    <select id="cxc-tramos" class="form-select form-select-sm shadow-none border ms-1" style="width:170px;" hidden
+                    <span id="cxc-tramos-wrap" class="d-inline-flex align-items-center" hidden>
+                    <select id="cxc-tramos" class="form-select form-select-sm shadow-none border ms-1" style="width:170px;"
                             title="Columnas de días vencidos" onchange="CXC_renderTabla(CXC_filtradoLocal)">
                         <option value="30,60,90" selected>30 · 60 · 90 días</option>
                         <option value="15,30,60,90">15 · 30 · 60 · 90 días</option>
@@ -274,6 +275,8 @@
                         <option value="15,30,45,60,90">15 · 30 · 45 · 60 · 90 días</option>
                         <option value="30,60,90,180,360">30 · 60 · 90 · 180 · 360 días</option>
                     </select>
+                    <?= \App\Helpers\PreferenciasHelper::renderEstrellaFavorito($rutaModulo, 'cxc-tramos', 'tramos') ?>
+                    </span>
                 </div>
                 <div class="d-flex align-items-center gap-2">
                     <small class="text-muted fw-medium" id="cxc-count-label"></small>
