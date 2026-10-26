@@ -35,22 +35,20 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosPestanasOcultas($vistaConfigF
                     </div>
                     <style>
                         /* Historial del estado: breadcrumb de flechas (verde = cumplido, rojo = falta). */
-                        .firma-pasos { display:flex; flex-wrap:wrap; gap:4px 0; list-style:none; margin:0; padding:0; }
-                        .firma-paso { position:relative; display:flex; align-items:center; gap:4px; min-height:30px;
-                            padding:4px 14px 4px 20px; font-size:.74rem; font-weight:600; color:#fff; white-space:nowrap;
-                            clip-path: polygon(0 0, calc(100% - 10px) 0, 100% 50%, calc(100% - 10px) 100%, 0 100%, 10px 50%);
-                            margin-right:-4px; }
-                        .firma-paso:first-child { padding-left:12px; clip-path: polygon(0 0, calc(100% - 10px) 0, 100% 50%, calc(100% - 10px) 100%, 0 100%); }
+                        /* Una sola fila: los pasos se reparten el ancho y, si no alcanza, el texto se recorta (title muestra el nombre). */
+                        .firma-pasos { display:flex; flex-wrap:nowrap; list-style:none; margin:0; padding:0; }
+                        .firma-paso { position:relative; flex:1 1 0; min-width:0; display:flex; align-items:center; justify-content:center;
+                            gap:4px; min-height:28px; padding:3px 12px 3px 16px; font-size:.72rem; font-weight:600; color:#fff;
+                            white-space:nowrap; overflow:hidden;
+                            clip-path: polygon(0 0, calc(100% - 9px) 0, 100% 50%, calc(100% - 9px) 100%, 0 100%, 9px 50%);
+                            margin-right:-3px; }
+                        .firma-paso > span { overflow:hidden; text-overflow:ellipsis; }
+                        .firma-paso:first-child { padding-left:10px; clip-path: polygon(0 0, calc(100% - 9px) 0, 100% 50%, calc(100% - 9px) 100%, 0 100%); }
                         .firma-paso.ok    { background:#198754; }
                         .firma-paso.falta { background:#dc3545; }
-                        .firma-paso-fecha { font-weight:400; font-size:.64rem; opacity:.85; margin-left:2px; }
                     </style>
                     <!-- Historial del estado de la firma (pasos del trámite; el detalle completo está en la pestaña Trámite) -->
-                    <div id="historialEstadoFirma" class="d-none mx-3 mb-2 px-3 py-2 border rounded-3 bg-light small">
-                        <div class="d-flex align-items-center gap-2 mb-1">
-                            <span class="fw-semibold text-dark"><i class="bi bi-clock-history me-1 text-secondary"></i>Historial del estado</span>
-                            <span id="historialEstadoActual" class="badge"></span>
-                        </div>
+                    <div id="historialEstadoFirma" class="d-none mx-3 mb-2">
                         <div id="historialEstadoPasos"></div>
                     </div>
                     <input type="hidden" name="id" id="firma_id_modal" value="">

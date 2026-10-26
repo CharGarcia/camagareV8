@@ -1306,41 +1306,27 @@
     let _tramite = null;
 
     // Historial del estado: pasos fijos del trámite, en rojo mientras faltan y en verde cuando
-    // se cumplen (se calcula con el estado real; la fecha sale del evento si lo hay).
-    const COLOR_ESTADO = {
-        borrador: 'secondary', pendiente: 'warning', por_registrar: 'info', en_proceso: 'primary',
-        aprobada: 'success', observada: 'danger', emitida: 'success', cancelada: 'dark',
-    };
+    // se cumplen (se calcula con el estado real de la firma).
     const PASOS_ESTADO = [
-        { titulo: 'Datos registrados',  evento: 'datos',              hecho: () => true },
-        { titulo: 'Documentos',         evento: 'documentos',         hecho: t => t.estado !== 'borrador' },
-        { titulo: 'Pago',               evento: 'pago_confirmado',    hecho: t => t.estado_pago === 'confirmado' },
-        { titulo: 'Facturado',          evento: 'factura',            hecho: t => !t.factura_eliminada && ['borrador', 'autorizado'].includes(t.factura_estado) },
-        { titulo: 'Enviado a Uanataca', evento: 'uanataca',           hecho: t => !!t.uanataca_uuid || ['en_proceso', 'aprobada', 'emitida'].includes(t.estado) },
-        { titulo: 'Factura autorizada', evento: 'factura_autorizada', hecho: t => !t.factura_eliminada && t.factura_estado === 'autorizado' },
+        { titulo: 'Datos registrados',  hecho: () => true },
+        { titulo: 'Documentos',         hecho: t => t.estado !== 'borrador' },
+        { titulo: 'Pago',               hecho: t => t.estado_pago === 'confirmado' },
+        { titulo: 'Facturado',          hecho: t => !t.factura_eliminada && ['borrador', 'autorizado'].includes(t.factura_estado) },
+        { titulo: 'Factura autorizada', hecho: t => !t.factura_eliminada && t.factura_estado === 'autorizado' },
+        { titulo: 'Enviado a Uanataca', hecho: t => !!t.uanataca_uuid || ['en_proceso', 'aprobada', 'emitida'].includes(t.estado) },
         // Último paso: aprobada por Uanataca (una firma ya emitida también pasó por aquí).
-        { titulo: 'Firma aprobada',     evento: 'aprobada', alterno: 'emitida', hecho: t => ['aprobada', 'emitida'].includes(t.estado) },
+        { titulo: 'Firma aprobada',     hecho: t => ['aprobada', 'emitida'].includes(t.estado) },
     ];
 
     function renderHistorialEstado(t) {
         const caja = document.getElementById('historialEstadoFirma');
         if (!caja) return;
-        const color = COLOR_ESTADO[t.estado] || 'secondary';
-        const badge = document.getElementById('historialEstadoActual');
-        if (badge) {
-            badge.className = `badge bg-${color} bg-opacity-10 text-${color} border border-${color} border-opacity-25`;
-            badge.textContent = t.estado_label || t.estado || '';
-        }
-        // Fecha del primer evento de cada tipo (t.eventos llega del más reciente al más antiguo).
-        const fechas = {};
-        (t.eventos || []).forEach(ev => { fechas[ev.tipo] = ev.fecha; });
-        // Breadcrumb de flechas (estilos .firma-pasos en modal_firma.php): verde = cumplido, rojo = falta.
+        // Breadcrumb de flechas en una sola fila (estilos .firma-pasos en modal_firma.php):
+        // verde = cumplido, rojo = falta. El title repite el nombre por si el ancho lo recorta.
         const items = PASOS_ESTADO.map(p => {
             const ok = p.hecho(t);
-            const cuando = fechas[p.evento] || (p.alterno ? fechas[p.alterno] : '');
-            const fecha = ok && cuando ? `<span class="firma-paso-fecha">${esc(cuando)}</span>` : '';
-            return `<li class="firma-paso ${ok ? 'ok' : 'falta'}" title="${ok ? 'Cumplido' : 'Pendiente'}">
-                <i class="bi ${ok ? 'bi-check-circle-fill' : 'bi-x-circle'} me-1"></i><span>${esc(p.titulo)}</span>${fecha}</li>`;
+            return `<li class="firma-paso ${ok ? 'ok' : 'falta'}" title="${esc(p.titulo)}: ${ok ? 'cumplido' : 'pendiente'}">
+                <i class="bi ${ok ? 'bi-check-circle-fill' : 'bi-x-circle'}"></i><span>${esc(p.titulo)}</span></li>`;
         }).join('');
         document.getElementById('historialEstadoPasos').innerHTML =
             `<nav aria-label="Historial del estado"><ol class="firma-pasos">${items}</ol></nav>`;
