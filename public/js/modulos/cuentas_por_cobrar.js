@@ -168,11 +168,45 @@ function CXC_recargar() {
     if (CXC_cargado) CXC_cargar();
 }
 
+/* Borra de la pantalla los datos de la consulta anterior: tabla, tarjetas, contador,
+   selección y filtro local. Así nunca se ven cifras que no corresponden a los filtros
+   puestos (mientras carga la consulta nueva, si falla, o al cambiar un filtro que espera
+   a "Mostrar", como las fechas). */
+function CXC_limpiarPantalla() {
+    CXC_datos         = [];
+    CXC_filtradoLocal = [];
+    CXC_lineas        = null;
+    CXC_seleccionados.clear();
+    CXC_actualizarStats({});
+    const estabWrap = document.getElementById('cxc-stat-estab-wrap');
+    if (estabWrap) estabWrap.hidden = true;
+    const buscador = document.getElementById('cxc-buscador');
+    if (buscador) buscador.value = '';
+    const chkAll = document.getElementById('cxc-chk-all');
+    if (chkAll) chkAll.checked = false;
+    const label = document.getElementById('cxc-count-label');
+    if (label) label.textContent = '';
+}
+
+/* Filtro que no consulta solo (fechas, texto del producto): limpia la pantalla y deja el
+   aviso de presionar Mostrar, en vez de seguir mostrando la consulta anterior. */
+function CXC_filtroCambiado() {
+    if (!CXC_cargado) return;
+    CXC_cargado = false;
+    CXC_limpiarPantalla();
+    CXC_renderTabla([]);
+}
+
+/* Número de la última consulta: si el usuario cambia otro filtro antes de que llegue la
+   respuesta anterior, esa respuesta vieja se descarta y no pisa a la nueva. */
+let CXC_consultaActual = 0;
+
 async function CXC_cargar() {
     CXC_cargado = true;
+    const miConsulta = ++CXC_consultaActual;
+    CXC_limpiarPantalla();
     const tbody = document.getElementById('cxc-tbody');
     tbody.innerHTML = `<tr><td colspan="${CXC_nCols()}" class="text-center py-4"><div class="spinner-border spinner-border-sm text-success me-2"></div>Cargando…</td></tr>`;
-    CXC_seleccionados.clear();
 
     const params = new URLSearchParams({
         accion:      'generarAjax',
@@ -198,6 +232,8 @@ async function CXC_cargar() {
             headers: { 'X-Requested-With': 'XMLHttpRequest' }
         });
         const data = await r.json();
+        // Llegó tarde: ya se pidió otra consulta con otros filtros (o se limpió la pantalla).
+        if (miConsulta !== CXC_consultaActual || !CXC_cargado) return;
 
         if (!data.ok) {
             tbody.innerHTML = `<tr><td colspan="${CXC_nCols()}" class="text-center py-4 text-danger"><i class="bi bi-exclamation-triangle me-2"></i>${data.error || 'Error al cargar'}</td></tr>`;
@@ -222,6 +258,7 @@ async function CXC_cargar() {
         CXC_renderTabla(CXC_filtradoLocal);
 
     } catch (e) {
+        if (miConsulta !== CXC_consultaActual || !CXC_cargado) return;
         tbody.innerHTML = `<tr><td colspan="${CXC_nCols()}" class="text-center py-4 text-danger"><i class="bi bi-exclamation-triangle me-2"></i>Error de conexión</td></tr>`;
         console.error('[CXC]', e);
     }
@@ -2065,7 +2102,8 @@ function CXC_limpiarFiltros() {
     const buscador = document.getElementById('cxc-buscador');
     if (buscador) buscador.value = '';
 
-    CXC_recargar();
+    // Pantalla en blanco con el aviso de "Mostrar": no se consulta con los filtros por defecto.
+    CXC_filtroCambiado();
 }
 
 /* ════════════════════════════════════════════════════

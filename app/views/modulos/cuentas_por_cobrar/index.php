@@ -118,14 +118,14 @@
                 <!-- Fecha Desde -->
                 <div>
                     <label class="form-label small fw-bold mb-1 d-block text-muted text-uppercase" style="font-size:.65rem;">Fecha Desde</label>
-                    <input type="date" id="cxc-fecha-desde" name="fecha_desde"
+                    <input type="date" id="cxc-fecha-desde" name="fecha_desde" onchange="CXC_filtroCambiado()"
                            class="form-control form-control-sm shadow-none border" style="width:110px;">
                 </div>
 
                 <!-- Fecha Hasta -->
                 <div>
                     <label class="form-label small fw-bold mb-1 d-block text-muted text-uppercase" style="font-size:.65rem;">Fecha Hasta</label>
-                    <input type="date" id="cxc-fecha-hasta" name="fecha_hasta"
+                    <input type="date" id="cxc-fecha-hasta" name="fecha_hasta" onchange="CXC_filtroCambiado()"
                            class="form-control form-control-sm shadow-none border" style="width:110px;"
                            value="<?php echo date('Y-m-d'); ?>">
                 </div>
