@@ -144,6 +144,8 @@ function CXC_initOrden() {
    colspan mayor que las columnas reales el navegador agrega una columna fantasma y la fila
    del mensaje se sale del ancho del <thead>. */
 function CXC_nCols() {
+    // Por antigüedad: [chevron] Cliente | Docs | Por vencer | tramos… | Más de N | Total
+    if (CXC_vista === 'antiguedad') return 5 + CXC_tramos().length;
     return (CXC_vista === 'agrupado' && CXC_sinAsesor()) ? 10 : 11;
 }
 
@@ -178,6 +180,7 @@ async function CXC_cargar() {
         tipo_doc:    document.getElementById('cxc-tipo-doc')?.value     || 'TODOS',
         fecha_desde: document.getElementById('cxc-fecha-desde')?.value  || '',
         fecha_hasta: document.getElementById('cxc-fecha-hasta')?.value  || '',
+        vencimiento: document.getElementById('cxc-vencimiento')?.value  || 'DOCUMENTO',
         id_cliente:  CXC_getClientesSeleccionados(),
         id_vendedor: document.getElementById('cxc-vendedor')?.value    || '',
         id_producto: CXC_getProductosSeleccionados(),
@@ -258,6 +261,7 @@ function CXC_renderTabla(filas) {
     }
 
     if (CXC_vista === 'producto') { CXC_renderAgrupadoProducto(filas); return; }
+    if (CXC_vista === 'antiguedad') { CXC_renderAntiguedad(filas); return; }
     if (CXC_agrupado) { CXC_renderAgrupado(filas); return; }
 
     label.textContent = filas.length + ' registros';
@@ -457,6 +461,11 @@ function CXC_renderCabecera() {
     const th = document.getElementById('cxc-thead');
     if (!cg || !th) return;
     const mayor = (CXC_vista === 'agrupado');
+    if (CXC_vista === 'antiguedad') {
+        cg.innerHTML = CXC_colsAntiguedad();
+        th.innerHTML = CXC_thAntiguedad();
+        return;
+    }
     cg.innerHTML = mayor ? CXC_colsMayor() : CXC_COLS_ESTANDAR;
     th.innerHTML = mayor ? CXC_thMayor()   : CXC_TH_ESTANDAR;
     // Los <th> recién creados no tienen el clic de ordenar: se vuelven a enganchar
@@ -689,9 +698,11 @@ function CXC_toggleGrupo(el) {
 
 /* Cambia entre vista detallada y agrupada (llamado desde los botones de la vista). */
 function CXC_setVista(modo) {
-    CXC_vista    = ['detalle', 'agrupado', 'producto'].includes(modo) ? modo : 'detalle';
+    CXC_vista    = ['detalle', 'agrupado', 'producto', 'antiguedad'].includes(modo) ? modo : 'detalle';
     CXC_agrupado = (CXC_vista === 'agrupado');
-    const botones = { detalle: 'cxc-btn-detalle', agrupado: 'cxc-btn-agrupado', producto: 'cxc-btn-producto' };
+    const selTramos = document.getElementById('cxc-tramos');
+    if (selTramos) selTramos.hidden = (CXC_vista !== 'antiguedad');
+    const botones = { detalle: 'cxc-btn-detalle', agrupado: 'cxc-btn-agrupado', producto: 'cxc-btn-producto', antiguedad: 'cxc-btn-antiguedad' };
     for (const [m, id] of Object.entries(botones)) {
         const b = document.getElementById(id);
         if (!b) continue;
@@ -705,6 +716,115 @@ function CXC_setVista(modo) {
         return;
     }
     CXC_renderTabla(CXC_filtradoLocal);
+}
+
+/* Valor del parámetro `vista` de las exportaciones: salen con la estructura de la vista activa. */
+function CXC_vistaExport() {
+    return { producto: 'PRODUCTO', agrupado: 'CLIENTE', antiguedad: 'ANTIGUEDAD' }[CXC_vista] || '';
+}
+
+/* ════════════════════════════════════════════════════
+   VISTA POR ANTIGÜEDAD
+   Una línea por cliente con su saldo pendiente repartido en
+   columnas según los días vencidos (dias_vencido, que sigue el
+   selector "Vencimiento según"): Por vencer, 1-30, 31-60, …,
+   Más de N. Al desplegar un cliente, cada documento aparece en
+   la columna que le toca. Gemelo del servidor:
+   CuentasPorCobrarController::agruparPorAntiguedad.
+════════════════════════════════════════════════════ */
+function CXC_tramos() {
+    const v = document.getElementById('cxc-tramos')?.value || '30,60,90';
+    const t = [...new Set(v.split(',').map(n => parseInt(n, 10)).filter(n => n >= 1))].sort((a, b) => a - b);
+    return t.length ? t : [30, 60, 90];
+}
+function CXC_columnasAntiguedad(tramos) {
+    const cols = ['Por vencer'];
+    let desde = 1;
+    for (const t of tramos) { cols.push(`${desde} - ${t} días`); desde = t + 1; }
+    cols.push(`Más de ${tramos[tramos.length - 1]} días`);
+    return cols;
+}
+function CXC_columnaAntiguedad(dias, tramos) {
+    if (dias <= 0) return 0;
+    const i = tramos.findIndex(t => dias <= t);
+    return i === -1 ? tramos.length + 1 : i + 1;
+}
+function CXC_colsAntiguedad() {
+    const n = CXC_tramos().length + 2;
+    return `<col style="width:36px;"><col><col style="width:70px;">${'<col style="width:120px;">'.repeat(n)}<col style="width:130px;">`;
+}
+function CXC_thAntiguedad() {
+    const cols = CXC_columnasAntiguedad(CXC_tramos());
+    return `<tr>
+        <th class="text-center p-1"></th>
+        <th class="ps-2">Cliente</th>
+        <th class="text-center">Docs.</th>
+        ${cols.map((c, i) => `<th class="text-end" title="${i === 0 ? 'Saldo que aún no vence' : 'Saldo con ' + esc(c) + ' de vencido'}">${esc(c)}</th>`).join('')}
+        <th class="text-end pe-2">Total</th>
+    </tr>`;
+}
+
+function CXC_renderAntiguedad(filas) {
+    const tbody  = document.getElementById('cxc-tbody');
+    const label  = document.getElementById('cxc-count-label');
+    const tramos = CXC_tramos();
+    const nCol   = tramos.length + 2;
+    // Solo lo que tiene saldo: lo pagado no envejece.
+    const pendientes = filas.filter(r => (parseFloat(r.saldo) || 0) > 0);
+    const grupos = CXC_agruparPorCliente(pendientes);
+    label.textContent = `${pendientes.length} docs · ${grupos.length} cliente${grupos.length !== 1 ? 's' : ''}`;
+
+    if (!grupos.length) {
+        tbody.innerHTML = `<tr><td colspan="${CXC_nCols()}" class="text-center py-5 text-muted">
+            <i class="bi bi-hourglass-split fs-3 d-block mb-2 text-success opacity-40"></i>
+            No hay saldos pendientes con los filtros aplicados.
+        </td></tr>`;
+        return;
+    }
+
+    const celdas = (vals, total, negrita) => vals.map((v, i) => `
+        <td class="text-end${negrita ? ' fw-semibold' : ''}" style="font-size:.8rem;${i > 0 && v > 0.004 ? 'color:#dc3545;' : ''}">
+            ${v > 0.004 ? '$' + CXC_fmt(v) : '<span class="text-muted">—</span>'}</td>`).join('')
+        + `<td class="text-end fw-bold pe-2" style="font-size:.82rem;">$${CXC_fmt(total)}</td>`;
+
+    const tot = new Array(nCol).fill(0);
+    let html = '';
+    for (const g of grupos) {
+        const vals = new Array(nCol).fill(0);
+        for (const r of g.items) vals[CXC_columnaAntiguedad(parseInt(r.dias_vencido) || 0, tramos)] += parseFloat(r.saldo) || 0;
+        vals.forEach((v, i) => { tot[i] += v; });
+        const abierto = CXC_gruposAbiertos.has('ant:' + g.key);
+        html += `
+        <tr class="cxc-mayor-grp" data-gkey="ant:${esc(g.key)}" onclick="CXC_toggleGrupo(this)" style="cursor:pointer;" title="Clic para ver los documentos del cliente">
+            <td class="text-center p-1"><i class="bi ${abierto ? 'bi-chevron-down' : 'bi-chevron-right'} text-success"></i></td>
+            <td class="fw-bold ps-2 text-truncate" style="font-size:.82rem;" title="${esc(g.nombre)}${g.ruc ? ' · ' + esc(g.ruc) : ''}">${esc(g.nombre)}
+                ${g.ruc ? `<div class="text-muted fw-normal text-truncate" style="font-size:.68rem;line-height:1.1;">${esc(g.ruc)}</div>` : ''}</td>
+            <td class="text-center"><span class="badge bg-success bg-opacity-10 text-success border border-success border-opacity-25 fw-normal">${g.items.length}</span></td>
+            ${celdas(vals, g.saldo, true)}
+        </tr>`;
+        if (abierto) {
+            for (const r of g.items) {
+                const col = CXC_columnaAntiguedad(parseInt(r.dias_vencido) || 0, tramos);
+                const v = new Array(nCol).fill(0);
+                v[col] = parseFloat(r.saldo) || 0;
+                const dias = parseInt(r.dias_vencido) || 0;
+                html += `
+                <tr style="cursor:pointer;" title="Clic para ver el detalle" data-id="${r.id}" data-origen="${r.origen}" data-hermana="${r.es_hermana ? 1 : 0}" data-cliente="${esc(r.cliente_nombre)}" data-factura="${esc(r.numero_factura)}">
+                    <td></td>
+                    <td class="ps-4" style="font-size:.78rem;">${esc(r.numero_factura)}
+                        <span class="text-muted ms-1" style="font-size:.7rem;">emisión ${CXC_fmtFecha(r.fecha_emision)} · vence ${CXC_fmtFecha(r.fecha_vencimiento)}${dias > 0 ? ` · <span style="color:#dc3545;">${dias} días vencido</span>` : ''}</span></td>
+                    <td></td>
+                    ${celdas(v, parseFloat(r.saldo) || 0, false)}
+                </tr>`;
+            }
+        }
+    }
+    html += `
+        <tr class="cxc-mayor-total">
+            <td colspan="3" class="text-end" style="font-size:.8rem;">TOTAL (${grupos.length} cliente${grupos.length !== 1 ? 's' : ''})</td>
+            ${celdas(tot, tot.reduce((a, b) => a + b, 0), true)}
+        </tr>`;
+    tbody.innerHTML = html;
 }
 
 /* ════════════════════════════════════════════════════
@@ -1967,7 +2087,9 @@ function CXC_exportarExcel() {
         orden_dir:   CXC_getOrden()[1],
         // La exportación sale con la misma estructura que la vista activa: por producto, o por
         // cliente en formato mayor (sección por cliente, subtotal y total general).
-        vista:       CXC_vista === 'producto' ? 'PRODUCTO' : (CXC_vista === 'agrupado' ? 'CLIENTE' : ''),
+        vista:       CXC_vistaExport(),
+        vencimiento: document.getElementById('cxc-vencimiento')?.value || 'DOCUMENTO',
+        tramos:      CXC_tramos().join(','),
     });
     CMG_descargar(`${BASE_URL}/${RUTA_MODULO_CXC}/exportExcel?${params}`);
 }
@@ -1988,7 +2110,9 @@ function CXC_exportarPDF() {
         orden_dir:   CXC_getOrden()[1],
         // La exportación sale con la misma estructura que la vista activa: por producto, o por
         // cliente en formato mayor (sección por cliente, subtotal y total general).
-        vista:       CXC_vista === 'producto' ? 'PRODUCTO' : (CXC_vista === 'agrupado' ? 'CLIENTE' : ''),
+        vista:       CXC_vistaExport(),
+        vencimiento: document.getElementById('cxc-vencimiento')?.value || 'DOCUMENTO',
+        tramos:      CXC_tramos().join(','),
     });
     CMG_descargar(`${BASE_URL}/${RUTA_MODULO_CXC}/exportPdf?${params}`);
 }

@@ -432,6 +432,183 @@ class CuentasPorCobrarController extends BaseModuloController
         }
     }
 
+    // ─────────────────────────────────────────────────────────────────────
+    // VISTA "POR ANTIGÜEDAD": saldo pendiente de cada cliente repartido en columnas
+    // según los días de mora (dias_vencido, que sigue el selector "Vencimiento según").
+    // Gemelo en el navegador: CXC_renderAntiguedad (cuentas_por_cobrar.js).
+    // ─────────────────────────────────────────────────────────────────────
+
+    /** Etiquetas de las columnas: Por vencer, 1-30, 31-60, …, Más de N. */
+    private static function columnasAntiguedad(array $tramos): array
+    {
+        $cols = ['Por vencer'];
+        $desde = 1;
+        foreach ($tramos as $t) {
+            $cols[] = "{$desde} - {$t} días";
+            $desde  = $t + 1;
+        }
+        $cols[] = 'Más de ' . end($tramos) . ' días';
+        return $cols;
+    }
+
+    /** Columna (índice de columnasAntiguedad) que le toca a un documento con esta mora. */
+    private static function columnaAntiguedad(int $diasVencido, array $tramos): int
+    {
+        if ($diasVencido <= 0) {
+            return 0;
+        }
+        foreach ($tramos as $i => $t) {
+            if ($diasVencido <= $t) {
+                return $i + 1;
+            }
+        }
+        return count($tramos) + 1;
+    }
+
+    /**
+     * Una fila por cliente (misma clave que agruparPorCliente: cédula y RUC juntos) con su
+     * saldo pendiente por columna de antigüedad. Solo cuenta lo que tiene saldo > 0: lo
+     * pagado no envejece. Clientes en orden alfabético, como las demás vistas.
+     */
+    private function agruparPorAntiguedad(array $filas, array $tramos): array
+    {
+        $nCols  = count($tramos) + 2;
+        $grupos = [];
+        foreach ($filas as $r) {
+            $saldo = (float)($r['saldo'] ?? 0);
+            if ($saldo <= 0) {
+                continue;
+            }
+            $k = IdentificacionTercero::claveGrupo((string)($r['cliente_ruc'] ?? ''), (string)($r['cliente_nombre'] ?? 'Sin cliente'));
+            $grupos[$k] ??= ['nombre' => (string)($r['cliente_nombre'] ?? 'Sin cliente'), 'ruc' => (string)($r['cliente_ruc'] ?? ''),
+                             'docs' => 0, 'cols' => array_fill(0, $nCols, 0.0), 'total' => 0.0];
+            $grupos[$k]['docs']++;
+            $grupos[$k]['cols'][self::columnaAntiguedad((int)($r['dias_vencido'] ?? 0), $tramos)] += $saldo;
+            $grupos[$k]['total'] += $saldo;
+        }
+        usort($grupos, static fn ($a, $b) => strcmp(
+            \App\Helpers\OrdenFilas::normalizar($a['nombre']),
+            \App\Helpers\OrdenFilas::normalizar($b['nombre'])
+        ));
+        return $grupos;
+    }
+
+    /** Excel de la vista "Por antigüedad": una fila por cliente y la fila TOTAL al final. */
+    private function exportExcelPorAntiguedad(int $idEmpresa, array $idsEmpresa, array $filtros, array $filas): void
+    {
+        $tramos = $filtros['tramos'];
+        $grupos = $this->agruparPorAntiguedad($filas, $tramos);
+        try {
+            $empresa       = (new \App\models\Empresa())->getPorId($idEmpresa) ?? [];
+            $nombreEmpresa = $empresa['nombre'] ?? 'Cuentas por Cobrar';
+            $filtrosTxt    = ['Vista' => 'Por antigüedad (' . implode(', ', $tramos) . ' días)'] + $this->describirFiltros($idsEmpresa, $filtros);
+
+            $cols    = self::columnasAntiguedad($tramos);
+            $headers = array_merge(['Cliente', 'RUC/Cédula', 'Docs.'], $cols, ['Total']);
+            $data    = [];
+            $tot     = array_fill(0, count($cols), 0.0);
+            $totDocs = 0;
+            foreach ($grupos as $g) {
+                $data[] = array_merge([$g['nombre'], $g['ruc'], $g['docs']], array_map(static fn ($v) => round($v, 2), $g['cols']), [round($g['total'], 2)]);
+                foreach ($g['cols'] as $i => $v) {
+                    $tot[$i] += $v;
+                }
+                $totDocs += $g['docs'];
+            }
+            $data[] = array_merge(['TOTAL (' . count($grupos) . ' clientes)', '', $totDocs], array_map(static fn ($v) => round($v, 2), $tot), [round(array_sum($tot), 2)]);
+            $formatos = array_fill_keys(range(4, 4 + count($cols)), '#,##0.00');
+
+            (new \App\Services\ReportService())->exportToExcel('cuentas_por_cobrar_antiguedad', $headers, $data, 'Antigüedad de Cartera', $nombreEmpresa, $filtrosTxt, $formatos);
+            exit;
+        } catch (\Throwable $e) {
+            if (!headers_sent()) {
+                $_SESSION['cuentas_por_cobrar_msg'] = ['danger', 'Error al generar Excel: ' . $e->getMessage()];
+                $this->redirect(BASE_URL . '/' . $this->getRutaModulo());
+            }
+            exit;
+        }
+    }
+
+    /** PDF de la vista "Por antigüedad" (horizontal si hay más de 5 columnas de días). */
+    private function exportPdfPorAntiguedad(int $idEmpresa, array $idsEmpresa, array $filtros, array $filas): void
+    {
+        $tramos = $filtros['tramos'];
+        $grupos = $this->agruparPorAntiguedad($filas, $tramos);
+        try {
+            $empresa       = (new \App\models\Empresa())->getPorId($idEmpresa) ?? [];
+            $nombreEmpresa = $empresa['nombre'] ?? 'Cuentas por Cobrar';
+            $filtrosTxt    = $this->describirFiltros($idsEmpresa, $filtros);
+            $e = static fn ($v): string => htmlspecialchars((string)$v);
+
+            $cols   = self::columnasAntiguedad($tramos);
+            $nCols  = count($cols);
+            // Anchos (%): cliente + docs fijos; el resto se reparte entre las columnas de días y el total.
+            $wCli   = $nCols > 5 ? 22 : 28;
+            $wDocs  = 5;
+            $wNum   = round((100 - $wCli - $wDocs) / ($nCols + 1), 2);
+            $wCli   = round(100 - $wDocs - $wNum * ($nCols + 1), 2);
+            $money  = static fn (float $v): string => $v > 0.004 ? '$' . number_format($v, 2) : '-';
+
+            $thead = "<tr><th style='width:{$wCli}%;'>Cliente</th><th style='width:{$wDocs}%;'>Docs.</th>";
+            foreach ($cols as $c) {
+                $thead .= "<th style='width:{$wNum}%;'>" . $e($c) . "</th>";
+            }
+            $thead .= "<th style='width:{$wNum}%;'>Total</th></tr>";
+
+            $filasHtml = [];
+            $tot = array_fill(0, $nCols, 0.0);
+            $totDocs = 0;
+            foreach ($grupos as $g) {
+                $tr = "<tr><td style='width:{$wCli}%;'>" . $e($g['nombre']) . "</td><td class='text-center' style='width:{$wDocs}%;'>{$g['docs']}</td>";
+                foreach ($g['cols'] as $i => $v) {
+                    $tot[$i] += $v;
+                    // Las columnas vencidas en rojo; "Por vencer" en negro.
+                    $estilo = $i > 0 && $v > 0.004 ? 'color:#dc3545;' : '';
+                    $tr .= "<td class='text-end' style='width:{$wNum}%;{$estilo}'>" . $money($v) . "</td>";
+                }
+                $tr .= "<td class='text-end' style='width:{$wNum}%;font-weight:bold;'>" . $money($g['total']) . "</td></tr>";
+                $filasHtml[] = $tr;
+                $totDocs += $g['docs'];
+            }
+            if (!$filasHtml) {
+                $filasHtml[] = "<tr><td class='text-center' style='width:100%;'>No hay saldos pendientes con los filtros aplicados.</td></tr>";
+            }
+            $final = "<table class='fila'><tr style='background:#f8f9fa;font-weight:bold;'>
+                        <td class='text-end' style='width:{$wCli}%;'>TOTAL (" . count($grupos) . " clientes)</td>
+                        <td class='text-center' style='width:{$wDocs}%;'>{$totDocs}</td>";
+            foreach ($tot as $v) {
+                $final .= "<td class='text-end' style='width:{$wNum}%;'>" . $money($v) . "</td>";
+            }
+            $final .= "<td class='text-end' style='width:{$wNum}%;'>" . $money(array_sum($tot)) . "</td></tr></table>";
+
+            ob_start();
+            ?>
+            <style>
+                body { font-family: Arial, sans-serif; font-size: 8pt; color: #000; }
+                table { width: 100%; border-collapse: collapse; margin-bottom: 10px; table-layout: fixed; }
+                table.fila { margin-bottom: 0; }
+                th { background: #e9ecef; border: 1px solid #999; padding: 3px 3px; text-align: center; font-size: 8pt; }
+                td { border: 1px solid #999; padding: 2px 3px; font-size: 8pt; overflow: hidden; word-wrap: break-word; }
+                .text-end { text-align: right; } .text-center { text-align: center; }
+                .header { text-align: center; margin-bottom: 10px; }
+                .header h2 { margin: 0 0 2px 0; font-size: 13pt; } .header h3 { margin: 0 0 2px 0; font-size: 10pt; } .header p { margin: 0; font-size: 7.5pt; }
+                <?= self::CSS_FILTROS_PDF ?>
+            </style>
+            <page backtop="8mm" backbottom="12mm" backleft="8mm" backright="8mm" footer="page">
+            <?= $this->encabezadoPdf($idEmpresa, $nombreEmpresa, 'Antigüedad de Cuentas por Cobrar') ?>
+            <?= $this->bloqueFiltrosPdf($filtrosTxt) ?>
+            </page>
+            <?php
+            $inicio   = ob_get_clean();
+            $html2pdf = new \Spipu\Html2Pdf\Html2Pdf($nCols > 5 ? 'L' : 'P', 'A4', 'es');
+            $this->escribirPdfPorBloques($html2pdf, $inicio, $thead, $filasHtml, $final);
+            $html2pdf->output('CuentasPorCobrar_Antiguedad_' . date('Ymd_His') . '.pdf', 'D');
+            exit;
+        } catch (\Throwable $ex) {
+            echo 'Error al generar PDF: ' . $ex->getMessage();
+        }
+    }
+
     /**
      * Agrupa el listado por cliente para las exportaciones de la vista "Por cliente"
      * (formato mayor). La clave es la identificación BASE, no el texto del RUC: el
@@ -927,6 +1104,7 @@ class CuentasPorCobrarController extends BaseModuloController
                 'id_vendedor' => $filtros['id_vendedor'] ?? '',
                 'fecha_desde' => $filtros['fecha_desde'] ?? '',
                 'fecha_hasta' => $filtros['fecha_hasta'] ?? '',
+                'vencimiento' => $filtros['vencimiento'] ?? '',
                 // Alcance del usuario (§6): el mismo que aplican facturas y recibos
                 'id_vendedor_filtro' => $filtros['id_vendedor_filtro'] ?? [],
                 'id_usuario_filtro'  => $filtros['id_usuario_filtro'] ?? null,
@@ -2430,6 +2608,11 @@ $plantillasFiltradas = [];
         // El archivo sale con la misma estructura que la vista activa en pantalla
         $vista = strtoupper(trim((string)($_REQUEST['vista'] ?? '')));
         // "Por producto": mismo listado, agrupado por producto (una fila por producto y documento)
+        // "Por antigüedad": saldo de cada cliente repartido por días de mora
+        if ($vista === 'ANTIGUEDAD') {
+            $this->exportExcelPorAntiguedad($idEmpresa, $idsEmpresa, $filtros, $filas);
+            return;
+        }
         if ($vista === 'PRODUCTO') {
             $this->exportExcelPorProducto($idEmpresa, $idsEmpresa, $consolidado, $filtros, $filas);
             return;
@@ -2521,6 +2704,11 @@ $plantillasFiltradas = [];
         // El archivo sale con la misma estructura que la vista activa en pantalla
         $vista = strtoupper(trim((string)($_REQUEST['vista'] ?? '')));
         // "Por producto": cabecera por producto y debajo sus documentos
+        // "Por antigüedad": saldo de cada cliente repartido por días de mora
+        if ($vista === 'ANTIGUEDAD') {
+            $this->exportPdfPorAntiguedad($idEmpresa, $idsEmpresa, $filtros, $filas);
+            return;
+        }
         if ($vista === 'PRODUCTO') {
             $this->exportPdfPorProducto($idEmpresa, $idsEmpresa, $consolidado, $filtros, $filas);
             return;
@@ -2675,6 +2863,11 @@ $plantillasFiltradas = [];
             'tipo_doc'    => $tipoDoc,
             'fecha_desde' => $_REQUEST['fecha_desde'] ?? '',
             'fecha_hasta' => $_REQUEST['fecha_hasta'] ?? '',
+            // Desde cuándo cuenta como vencido: DOCUMENTO (días de crédito guardados en el
+            // documento), CLIENTE (plazo de la ficha del cliente) o EMISION (sin crédito).
+            'vencimiento' => CuentasPorCobrarRepository::modoVencimiento($_REQUEST),
+            // Tramos de la vista "Por antigüedad" (días, ascendentes); ver tramosAntiguedad().
+            'tramos'      => self::tramosAntiguedad((string)($_REQUEST['tramos'] ?? '')),
             'id_cliente'  => $_REQUEST['id_cliente']  ?? '',
             'id_vendedor' => (int)($_REQUEST['id_vendedor'] ?? 0) ?: '',
             // Texto del producto (nombre o código de las líneas del documento). Con este
@@ -2881,6 +3074,31 @@ $plantillasFiltradas = [];
      * aplicados" de los PDF, vía bloqueFiltrosPdf()).
      * Devuelve etiqueta => valor, con los ids de cliente/vendedor resueltos a nombre.
      */
+    /** Etiquetas del selector "Vencimiento según" (mismas que la vista). */
+    private const VENCIMIENTO_LBL = [
+        'DOCUMENTO' => 'Días de crédito del documento',
+        'CLIENTE'   => 'Plazo del cliente',
+        'EMISION'   => 'Fecha de emisión (sin crédito)',
+    ];
+
+    /** Tramos por defecto de la vista "Por antigüedad" (días de mora). */
+    private const TRAMOS_DEFECTO = [30, 60, 90];
+
+    /**
+     * Tramos de la vista "Por antigüedad": lista "15,30,60,90" → [15, 30, 60, 90]. Días
+     * enteros entre 1 y 3650, sin repetidos y ascendentes; entre 1 y 6 tramos (más columnas
+     * no caben en el PDF). Cualquier otra cosa → los tramos por defecto.
+     */
+    private static function tramosAntiguedad(string $raw): array
+    {
+        $t = array_values(array_unique(array_filter(
+            array_map('intval', explode(',', $raw)),
+            static fn (int $d): bool => $d >= 1 && $d <= 3650
+        )));
+        sort($t);
+        return ($t && count($t) <= 6) ? $t : self::TRAMOS_DEFECTO;
+    }
+
     private function describirFiltros(int|array $idsEmpresa, array $filtros): array
     {
         $idEmpresa  = (int) $_SESSION['id_empresa'];
@@ -2957,6 +3175,7 @@ $plantillasFiltradas = [];
             'Alcance'           => $alcanceTxt,
             'Tipo de documento' => $tipoDocLbl[$filtros['tipo_doc'] ?? 'TODOS'] ?? 'Todos',
             'Estado'            => $estadoLbl[$filtros['estado'] ?? 'PENDIENTES'] ?? (string)($filtros['estado'] ?? ''),
+            'Vencimiento según' => self::VENCIMIENTO_LBL[CuentasPorCobrarRepository::modoVencimiento($filtros)],
             'Vendedor'          => $vendedorTxt,
             'Producto'          => $this->describirProductos($filtros, $idsEmpresa),
             'Período'           => $periodo,

@@ -265,6 +265,50 @@ class CuentasPorCobrarRepository extends BaseRepository
     }
 
     // ─────────────────────────────────────────────────────────────────────
+    // VENCIMIENTO (selector "Vencimiento según" de la pantalla)
+    //
+    // Decide desde cuándo un documento cuenta como vencido, y con eso la mora
+    // (`dias_vencido`), el estado Vencidas / Al día, las tarjetas y los tramos:
+    //   - DOCUMENTO (por defecto): los días de crédito guardados en la factura o
+    //     recibo; el saldo inicial, su fecha de vencimiento.
+    //   - CLIENTE: el plazo configurado HOY en la ficha del cliente
+    //     (`clientes.plazo`), contado desde la emisión.
+    //   - EMISION: sin crédito; vence el mismo día de emisión.
+    // ─────────────────────────────────────────────────────────────────────
+
+    /** Modo de vencimiento normalizado (lista blanca: se interpola en el SQL). */
+    public static function modoVencimiento(array $filtros): string
+    {
+        $m = strtoupper(trim((string) ($filtros['vencimiento'] ?? '')));
+        return in_array($m, ['CLIENTE', 'EMISION'], true) ? $m : 'DOCUMENTO';
+    }
+
+    /** Días de crédito de un documento con columnas `fecha_emision`, `dias_credito` e `id_cliente`. */
+    private function sqlDiasCredito(array $filtros, string $alias = 'v'): string
+    {
+        return match (self::modoVencimiento($filtros)) {
+            'CLIENTE' => "COALESCE((SELECT cl_dc.plazo FROM clientes cl_dc WHERE cl_dc.id = {$alias}.id_cliente), 0)",
+            'EMISION' => '0',
+            default   => "COALESCE({$alias}.dias_credito, 0)",
+        };
+    }
+
+    /** Fecha de vencimiento (date) de una factura o recibo según el modo. */
+    private function sqlVencimiento(array $filtros, string $alias = 'v'): string
+    {
+        return "({$alias}.fecha_emision + INTERVAL '1 day' * {$this->sqlDiasCredito($filtros, $alias)})::date";
+    }
+
+    /** Fecha de vencimiento de un saldo inicial `s` según el modo (puede ser NULL en DOCUMENTO). */
+    private function sqlVencimientoSaldoInicial(array $filtros): string
+    {
+        return match (self::modoVencimiento($filtros)) {
+            'DOCUMENTO' => 's.fecha_vencimiento',
+            default     => $this->sqlVencimiento($filtros, 's'),
+        };
+    }
+
+    // ─────────────────────────────────────────────────────────────────────
     // ALCANCE DEL USUARIO (§6, ver App\Helpers\AlcanceRegistros)
     //
     // Si el usuario es de nivel 1 y NO tiene acceso total ('t') en el módulo, la
@@ -416,7 +460,7 @@ class CuentasPorCobrarRepository extends BaseRepository
         $fh = $this->aplicarFechaCorteCtEs($filtros, $params);
 
         $estado    = $filtros['estado'] ?? 'PENDIENTES';
-        $venc      = "(v.fecha_emision + INTERVAL '1 day' * v.dias_credito)::date";
+        $venc      = $this->sqlVencimiento($filtros);
         $saldo     = "(v.importe_total + COALESCE(nd.total_nd, 0) - COALESCE(cb.total_cobrado, 0) - COALESCE(rt.total_retenido, 0) - COALESCE(nc.total_nc, 0))";
         $prefiltro = '';
         $condSaldo = 'true'; // TODOS → sin filtro extra
@@ -461,8 +505,8 @@ class CuentasPorCobrarRepository extends BaseRepository
                 COALESCE(nc.total_nc, 0)                                                                                    AS total_nc,
                 COALESCE(nd.total_nd, 0)                                                                                    AS total_nd,
                 {$saldo} AS saldo,
-                v.fecha_emision + INTERVAL '1 day' * v.dias_credito AS fecha_vencimiento,
-                v.dias_credito,
+                {$venc}::timestamp AS fecha_vencimiento, -- mismo tipo que antes (fecha + intervalo)
+                {$this->sqlDiasCredito($filtros)} AS dias_credito,
                 (CURRENT_DATE - {$venc}) AS dias_vencido,
                 " . $this->sqlDiasTranscurridos($filtros, 'v.fecha_emision', ':dias_corte_fac', $params) . " AS dias_transcurridos
             FROM cand
@@ -580,7 +624,7 @@ class CuentasPorCobrarRepository extends BaseRepository
                 COALESCE(SUM(CASE WHEN sub.pend > 0 AND (sub.fecha_vencimiento IS NULL OR sub.fecha_vencimiento >= CURRENT_DATE) THEN sub.pend ELSE 0 END), 0) AS total_al_dia,
                 COUNT(*) FILTER (WHERE sub.pend > 0 AND sub.fecha_vencimiento IS NOT NULL AND sub.fecha_vencimiento < CURRENT_DATE) AS vencidas
             FROM (
-                SELECT s.fecha_vencimiento,
+                SELECT {$this->sqlVencimientoSaldoInicial($filtros)} AS fecha_vencimiento,
                        (s.saldo_inicial - cob.cobrado - COALESCE(ret.retenido, 0) - COALESCE(ncsi.nc_total, 0)) AS pend
                 FROM saldos_iniciales_cxc s"
                 . $this->lateralCobradoSaldoInicial($fCob)
@@ -662,6 +706,7 @@ class CuentasPorCobrarRepository extends BaseRepository
         $params = [];
         $where  = "s.id_empresa IN ({$this->phIn($idsEmpresa, 'si_emp', $params)}) AND s.eliminado = false";
         $where .= $this->condAlcanceUsuario($filtros, 's', 'created_by', 'prop_si_ant', $params, false);
+        $vencSi = $this->sqlVencimientoSaldoInicial($filtros);
         $where .= $this->condVendedorSaldoInicial($filtros, 'ven_si_ant', $params);
 
         if (!empty($filtros['id_cliente'])) {
@@ -686,8 +731,8 @@ class CuentasPorCobrarRepository extends BaseRepository
                 COALESCE(SUM(CASE WHEN dv > 90            THEN pend ELSE 0 END), 0) AS tramo_mas_90
             FROM (
                 SELECT (s.saldo_inicial - cob.cobrado - COALESCE(ret.retenido, 0) - COALESCE(ncsi.nc_total, 0)) AS pend,
-                       CASE WHEN s.fecha_vencimiento IS NULL THEN 0
-                            ELSE (CURRENT_DATE - s.fecha_vencimiento)::int END AS dv
+                       CASE WHEN {$vencSi} IS NULL THEN 0
+                            ELSE (CURRENT_DATE - {$vencSi})::int END AS dv
                 FROM saldos_iniciales_cxc s"
                 . $this->lateralCobradoSaldoInicial($fCob)
                 . $this->lateralRetSaldoInicial($fRet)
@@ -736,10 +781,10 @@ class CuentasPorCobrarRepository extends BaseRepository
             $where .= " AND {$saldoExpr} > 0";
         } elseif ($estado === 'VENCIDAS') {
             $where .= " AND {$saldoExpr} > 0
-                        AND (v.fecha_emision + INTERVAL '1 day' * v.dias_credito)::date < CURRENT_DATE";
+                        AND {$this->sqlVencimiento($filtros)} < CURRENT_DATE";
         } elseif ($estado === 'AL_DIA') {
             $where .= " AND {$saldoExpr} > 0
-                        AND (v.fecha_emision + INTERVAL '1 day' * v.dias_credito)::date >= CURRENT_DATE";
+                        AND {$this->sqlVencimiento($filtros)} >= CURRENT_DATE";
         } elseif ($estado === 'PAGADAS') {
             $where .= " AND {$saldoExpr} <= 0";
         }
@@ -803,9 +848,9 @@ class CuentasPorCobrarRepository extends BaseRepository
                 0                                                   AS total_retenido,
                 0                                                   AS total_nc,
                 v.importe_total - COALESCE(cb.total_cobrado, 0)     AS saldo,
-                v.fecha_emision + INTERVAL '1 day' * v.dias_credito AS fecha_vencimiento,
-                v.dias_credito,
-                (CURRENT_DATE - (v.fecha_emision + INTERVAL '1 day' * v.dias_credito)::date) AS dias_vencido,
+                {$this->sqlVencimiento($filtros)}::timestamp AS fecha_vencimiento,
+                {$this->sqlDiasCredito($filtros)} AS dias_credito,
+                (CURRENT_DATE - {$this->sqlVencimiento($filtros)}) AS dias_vencido,
                 " . $this->sqlDiasTranscurridos($filtros, 'v.fecha_emision', ':dias_corte_rec', $params) . " AS dias_transcurridos
             FROM recibos_venta_cabecera v
             LEFT JOIN empresas emp ON emp.id = v.id_empresa
@@ -839,13 +884,13 @@ class CuentasPorCobrarRepository extends BaseRepository
                 COUNT(v.id) AS cnt,
                 COALESCE(SUM(v.importe_total - COALESCE(cb.total_cobrado, 0)), 0) AS total_saldo,
                 COALESCE(SUM(CASE
-                    WHEN (v.fecha_emision + INTERVAL '1 day' * v.dias_credito)::date < CURRENT_DATE
+                    WHEN {$this->sqlVencimiento($filtros)} < CURRENT_DATE
                     THEN v.importe_total - COALESCE(cb.total_cobrado, 0) ELSE 0 END), 0) AS total_vencido,
                 COALESCE(SUM(CASE
-                    WHEN (v.fecha_emision + INTERVAL '1 day' * v.dias_credito)::date >= CURRENT_DATE
+                    WHEN {$this->sqlVencimiento($filtros)} >= CURRENT_DATE
                     THEN v.importe_total - COALESCE(cb.total_cobrado, 0) ELSE 0 END), 0) AS total_al_dia,
                 COUNT(CASE
-                    WHEN (v.fecha_emision + INTERVAL '1 day' * v.dias_credito)::date < CURRENT_DATE THEN 1 END) AS vencidas
+                    WHEN {$this->sqlVencimiento($filtros)} < CURRENT_DATE THEN 1 END) AS vencidas
             FROM recibos_venta_cabecera v
             JOIN clientes c ON c.id = v.id_cliente
             LEFT JOIN cobrado cb ON cb.id_venta = v.id
@@ -886,7 +931,7 @@ class CuentasPorCobrarRepository extends BaseRepository
             FROM (
                 SELECT
                     v.importe_total - COALESCE(cb.total_cobrado, 0) AS saldo,
-                    (CURRENT_DATE - (v.fecha_emision + INTERVAL '1 day' * v.dias_credito)::date) AS dias_vencido
+                    (CURRENT_DATE - {$this->sqlVencimiento($filtros)}) AS dias_vencido
                 FROM recibos_venta_cabecera v
                 JOIN clientes c ON c.id = v.id_cliente
                 LEFT JOIN cobrado cb ON cb.id_venta = v.id
@@ -1538,6 +1583,7 @@ class CuentasPorCobrarRepository extends BaseRepository
         // cortan a esa fecha (ver corteSaldoInicialCxc).
         $pend     = '(s.saldo_inicial - cob.cobrado - COALESCE(ret.retenido, 0) - COALESCE(ncsi.nc_total, 0))';
         $aplicado = '(cob.cobrado + COALESCE(ret.retenido, 0) + COALESCE(ncsi.nc_total, 0))';
+        $vencSi   = $this->sqlVencimientoSaldoInicial($filtros);
 
         $params = [];
         $where  = "s.id_empresa IN ({$this->phIn($this->idsEmpresa($idsEmpresa), 'si_emp', $params)}) AND s.eliminado = false";
@@ -1571,7 +1617,7 @@ class CuentasPorCobrarRepository extends BaseRepository
         if (!empty($filtros['fecha_hasta'])) { $where .= " AND s.fecha_emision <= :sfh"; $params[':sfh'] = $filtros['fecha_hasta']; }
 
         $sql = "SELECT
-                    s.id, s.id_cliente, s.nro_documento, s.fecha_emision, s.fecha_vencimiento,
+                    s.id, s.id_cliente, s.nro_documento, s.fecha_emision, {$vencSi} AS fecha_vencimiento,
                     s.ruc_cliente, s.nombre_cliente,
                     COALESCE(ven.nombre,'') AS vendedor_nombre, -- el vendedor asignado al cliente
                     {$this->colsEstablecimiento('s')},
@@ -1586,8 +1632,8 @@ class CuentasPorCobrarRepository extends BaseRepository
                         ELSE 'PENDIENTE'
                     END AS estado,
                     s.observaciones,
-                    CASE WHEN s.fecha_vencimiento < CURRENT_DATE AND {$pend} > 0
-                         THEN CURRENT_DATE - s.fecha_vencimiento ELSE 0 END AS dias_vencido,
+                    CASE WHEN {$vencSi} < CURRENT_DATE AND {$pend} > 0
+                         THEN CURRENT_DATE - {$vencSi} ELSE 0 END AS dias_vencido,
                     " . $this->sqlDiasTranscurridos($filtros, 's.fecha_emision', ':dias_corte_si', $params) . " AS dias_transcurridos
                 FROM saldos_iniciales_cxc s
                 LEFT JOIN empresas emp ON emp.id = s.id_empresa

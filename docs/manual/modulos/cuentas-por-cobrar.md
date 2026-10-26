@@ -5,8 +5,8 @@ categoria: Tesorería
 ruta_modulo: modulos/cuentas_por_cobrar
 tipo: modulo
 visibilidad: todos
-etiquetas: cuentas por cobrar, comprobar con contabilidad, cuadrar con contabilidad, cartera vs contabilidad, no cuadra con contabilidad, cuenta por cobrar contable, mayor de cuentas por cobrar, borrador, factura en borrador, sin autorizar, facturas migradas, no coincide con ingresos, distinto a ingresos, cxc, cartera, deudas de clientes, saldo pendiente, vencido, morosidad, cobrar, recibos de venta, tipo de documento, envio masivo, estado de cuenta, recordatorio de pago, fecha de corte, saldo a una fecha, fecha hasta, vendedor, cartera por vendedor, filtrar por vendedor, producto, cartera por producto, filtrar por producto, que deben por un producto, consolidado, establecimientos, sucursales, matriz, mismo ruc, cartera consolidada, todas las sucursales, serie, punto de emision, serie inactiva, registrar cobro, cedula y ruc, cliente duplicado, proveedor duplicado, mismo cliente dos veces, mismo proveedor dos veces, identificacion repetida, ruc es la cedula mas 001, unificar fichas, cartera partida en dos, tildes, acentos, eñe, buscar sin tildes, no encuentra al cliente, no aparece el cliente, buscar por apellido, buscar por varias palabras, mayor, mayor del cliente, cartera como mayor, agrupado por cliente, subtotal por cliente, total general, seccion por cliente, no carga al entrar, boton aplicar, aplicar filtros, listado vacio al entrar, detalle por cliente, columnas del detalle, nc, abonos, retenciones, dias vencidos, dias transcurridos, antiguedad del documento, columna dias, dias desde la emision, cuadricula del pdf, lineas de la tabla del pdf, ruc delante del nombre, asesor, vendedor del documento, fecha un dia antes, ordenar, ordenamiento, orden alfabetico, a-z, z-a, ordenar por cliente, ordenar por saldo, ordenar por vencimiento, clic en la columna, ordenar la tabla, ordenar el excel, ordenar el pdf, flecha de la columna, saldo junto al nombre, saldo del cliente, pdf vertical, pdf horizontal, orientacion del pdf, hoja vertical, pdf apaisado, acceso total, permiso de ver todos, registros propios, solo mis facturas, no veo las facturas de otro, cada usuario ve lo suyo, documentos migrados no aparecen, cartera del vendedor, mis clientes, clientes asignados, vendedor vinculado, usuario del sistema, el vendedor no ve nada, asesor solo ve sus clientes, logo, logo en el pdf, logo de la empresa, encabezado del pdf, filtros del pdf, filtros aplicados, resumen de filtros, filtros en el pdf, mostrar filtros del pdf, columna asesor, columna vendedor, ocultar columna asesor, quitar columna vendedor, se repite el asesor, nivel de usuario, administrador ve todo, el vendedor ve la cartera de todos, pdf de la factura, descargar pdf, descargar factura, imprimir factura, ride, pdf del recibo, acciones de la fila, botones de la fila, detalle del documento, panel de detalle, ver detalle, error http, http 403, no carga el detalle, no aparece el boton de cobro, no aparece el historial, no aparece whatsapp, whatsapp no configurado, permiso de ingresos, reporte de cartera, celular, movil, telefono, botones pequeños, menu del celular, menu bloqueado, menu no responde, lineas montadas, lineas encimadas, lineas pisadas, texto montado en el pdf, filas cortadas, fila partida entre paginas, paginas en blanco, hojas en blanco en el pdf, pdf descuadrado, encabezado de columnas en cada pagina, encabezado por cada cliente, encabezado por cliente, no se ve a que columna corresponde, rotulo de columnas, estado de cuenta por whatsapp, whatsapp por cliente, resumen vencido, resumen total, deuda total por whatsapp, cuantas facturas debe, cobranza por whatsapp, correo por cliente, estado de cuenta por correo, enviar correo al cliente, numero de documento montado, documento se pasa a la otra columna, numero cortado en el pdf, cobrar dos veces, doble cobro, cobro duplicado, supera el saldo pendiente, vendedores que puede ver, solo algunos vendedores, ocultar vendedores, coordinador de zona, cartera de ciertos vendedores, detalle de lo que se cobra, concepto del cobro, por concepto de, que servicio se cobra, mensaje generico de whatsapp, whatsapp sin detalle, descripcion del servicio en whatsapp, conceptos repetidos, plantilla de cobro, factura_por_cobrar, cuenta_por_cobrar, estado_cuenta_cliente, saldo total del cliente por whatsapp
-version: 2.36
+etiquetas: cuentas por cobrar, comprobar con contabilidad, cuadrar con contabilidad, cartera vs contabilidad, no cuadra con contabilidad, cuenta por cobrar contable, mayor de cuentas por cobrar, borrador, factura en borrador, sin autorizar, facturas migradas, no coincide con ingresos, distinto a ingresos, cxc, cartera, deudas de clientes, saldo pendiente, vencido, morosidad, cobrar, recibos de venta, tipo de documento, envio masivo, estado de cuenta, recordatorio de pago, fecha de corte, saldo a una fecha, fecha hasta, vendedor, cartera por vendedor, filtrar por vendedor, producto, cartera por producto, filtrar por producto, que deben por un producto, consolidado, establecimientos, sucursales, matriz, mismo ruc, cartera consolidada, todas las sucursales, serie, punto de emision, serie inactiva, registrar cobro, cedula y ruc, cliente duplicado, proveedor duplicado, mismo cliente dos veces, mismo proveedor dos veces, identificacion repetida, ruc es la cedula mas 001, unificar fichas, cartera partida en dos, tildes, acentos, eñe, buscar sin tildes, no encuentra al cliente, no aparece el cliente, buscar por apellido, buscar por varias palabras, mayor, mayor del cliente, cartera como mayor, agrupado por cliente, subtotal por cliente, total general, seccion por cliente, no carga al entrar, boton aplicar, aplicar filtros, listado vacio al entrar, detalle por cliente, columnas del detalle, nc, abonos, retenciones, dias vencidos, dias transcurridos, antiguedad del documento, columna dias, dias desde la emision, cuadricula del pdf, lineas de la tabla del pdf, ruc delante del nombre, asesor, vendedor del documento, fecha un dia antes, ordenar, ordenamiento, orden alfabetico, a-z, z-a, ordenar por cliente, ordenar por saldo, ordenar por vencimiento, clic en la columna, ordenar la tabla, ordenar el excel, ordenar el pdf, flecha de la columna, saldo junto al nombre, saldo del cliente, pdf vertical, pdf horizontal, orientacion del pdf, hoja vertical, pdf apaisado, acceso total, permiso de ver todos, registros propios, solo mis facturas, no veo las facturas de otro, cada usuario ve lo suyo, documentos migrados no aparecen, cartera del vendedor, mis clientes, clientes asignados, vendedor vinculado, usuario del sistema, el vendedor no ve nada, asesor solo ve sus clientes, logo, logo en el pdf, logo de la empresa, encabezado del pdf, filtros del pdf, filtros aplicados, resumen de filtros, filtros en el pdf, mostrar filtros del pdf, columna asesor, columna vendedor, ocultar columna asesor, quitar columna vendedor, se repite el asesor, nivel de usuario, administrador ve todo, el vendedor ve la cartera de todos, pdf de la factura, descargar pdf, descargar factura, imprimir factura, ride, pdf del recibo, acciones de la fila, botones de la fila, detalle del documento, panel de detalle, ver detalle, error http, http 403, no carga el detalle, no aparece el boton de cobro, no aparece el historial, no aparece whatsapp, whatsapp no configurado, permiso de ingresos, reporte de cartera, celular, movil, telefono, botones pequeños, menu del celular, menu bloqueado, menu no responde, lineas montadas, lineas encimadas, lineas pisadas, texto montado en el pdf, filas cortadas, fila partida entre paginas, paginas en blanco, hojas en blanco en el pdf, pdf descuadrado, encabezado de columnas en cada pagina, encabezado por cada cliente, encabezado por cliente, no se ve a que columna corresponde, rotulo de columnas, estado de cuenta por whatsapp, whatsapp por cliente, resumen vencido, resumen total, deuda total por whatsapp, cuantas facturas debe, cobranza por whatsapp, correo por cliente, estado de cuenta por correo, enviar correo al cliente, numero de documento montado, documento se pasa a la otra columna, numero cortado en el pdf, cobrar dos veces, doble cobro, cobro duplicado, supera el saldo pendiente, vendedores que puede ver, solo algunos vendedores, ocultar vendedores, coordinador de zona, cartera de ciertos vendedores, detalle de lo que se cobra, concepto del cobro, por concepto de, que servicio se cobra, mensaje generico de whatsapp, whatsapp sin detalle, descripcion del servicio en whatsapp, conceptos repetidos, plantilla de cobro, factura_por_cobrar, cuenta_por_cobrar, estado_cuenta_cliente, saldo total del cliente por whatsapp, vencimiento segun, plazo del cliente, dias de credito del cliente, dias de credito del documento, vencer desde la emision, sin credito, antiguedad de cartera, aging, por antiguedad, tramos de dias, 15 30 60 90 dias, vencidos por dias, cartera por edades, columnas de vencimiento
+version: 2.37
 orden: 40
 estado: activo
 ---
@@ -518,6 +518,40 @@ tarjetas, el gráfico de antigüedad y las exportaciones respetan el corte. Sin
 Fecha Hasta, el saldo es el actual. La fecha que manda para un cobro es la
 **fecha del ingreso**.
 
+## Vencimiento según: crédito del documento, plazo del cliente o emisión
+
+El selector **Vencimiento según** de los filtros decide desde qué fecha un
+documento cuenta como vencido. Con eso cambian la mora (días vencidos), los
+estados *Vencidas* y *Al día*, las tarjetas *Vencido* y *Al Día*, el color de las
+filas y la vista *Por antigüedad*:
+
+| Opción | Fecha de vencimiento |
+|---|---|
+| **Crédito del documento** (por defecto) | Emisión + los días de crédito guardados en la factura o recibo. El saldo inicial usa su propia fecha de vencimiento. |
+| **Plazo del cliente** | Emisión + el **Plazo de crédito (días)** que tiene **hoy** la ficha del cliente. Sirve cuando las facturas se emitieron sin días de crédito. |
+| **Fecha de emisión** | Sin crédito: el documento vence el mismo día que se emite. |
+
+El selector sale en el resumen de filtros del PDF y del Excel. Los recordatorios
+automáticos y el registro del cobro siguen usando el crédito del documento.
+
+## Vista "Por antigüedad": saldo vencido por rangos de días
+
+El botón **Por antigüedad** muestra una línea por cliente con su **saldo
+pendiente repartido en columnas** según los días que lleva vencido: *Por
+vencer*, luego un rango por cada tramo y al final *Más de N días*, con el total
+del cliente y el **TOTAL** de todos al pie. Lo vencido sale en rojo.
+
+Junto a los botones de vista aparece el selector de **tramos**: 30·60·90,
+15·30·60·90, 30·60·90·120, 15·30·45·60·90 o 30·60·90·180·360 días. Cambiarlo no
+vuelve a consultar: solo reparte de nuevo las columnas.
+
+- Solo cuenta lo que tiene saldo: lo pagado no aparece.
+- Los días vencidos siguen el selector **Vencimiento según** (sección anterior).
+- Al hacer clic en un cliente se despliegan sus documentos, cada uno en la
+  columna que le toca, con su emisión, vencimiento y días vencidos.
+- El **PDF** y el **Excel** salen con esta misma estructura y los mismos tramos.
+  Con más de 5 columnas de días, el PDF sale en hoja horizontal.
+
 ## La columna Días y el estado de vencimiento
 
 Son dos cosas distintas y conviene no confundirlas.
@@ -531,9 +565,9 @@ iniciales.
 
 **El estado de vencimiento** (la etiqueta *VENCIDA / VIGENTE / PAGADA*, el número
 en rojo, el color de la fila y los tramos del gráfico de antigüedad) se calcula
-aparte, desde la **fecha de vencimiento** —que en facturas y recibos es la
-emisión más los **días de crédito** del documento— y **siempre contra el día de
-hoy**, no contra la fecha de corte. Por eso en la vista *Por cliente* el número
+aparte, desde la **fecha de vencimiento** —según el selector **Vencimiento
+según**: por defecto, la emisión más los **días de crédito** del documento— y
+**siempre contra el día de hoy**, no contra la fecha de corte. Por eso en la vista *Por cliente* el número
 de la columna *Días* sale **en rojo cuando el documento está vencido**: la cifra
 es la antigüedad, el color avisa de la mora.
 
@@ -837,6 +871,10 @@ un doble clic no genera dos ingresos.
   (y en las demás que tienen el panel de detalle). Ya está corregido.
 
 ## Historial de cambios
+- **2.37** — Selector **Vencimiento según** (crédito del documento, plazo del
+  cliente o fecha de emisión) y vista **Por antigüedad**: saldo de cada cliente
+  repartido en columnas de días vencidos con tramos elegibles, también en PDF y
+  Excel.
 - **2.36** — Más rápido con mucha información: el listado y las tarjetas se
   calculan en una sola consulta que revisa retenciones y notas de crédito solo
   de los documentos que aún tienen saldo (antes recorría todo el histórico, tres

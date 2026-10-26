@@ -71,6 +71,18 @@
                     </select>
                 </div>
 
+                <!-- Desde cuándo cuenta como vencido: decide la mora, Vencidas / Al día y la vista Por antigüedad -->
+                <div>
+                    <label class="form-label small fw-bold mb-1 d-block text-muted text-uppercase" style="font-size:.65rem;"
+                           title="Fecha desde la que un documento cuenta como vencido">Vencimiento según</label>
+                    <select id="cxc-vencimiento" name="vencimiento" class="form-select form-select-sm shadow-none border" style="width:150px;"
+                            onchange="CXC_recargar()">
+                        <option value="DOCUMENTO" selected title="Días de crédito guardados en cada factura o recibo">Crédito del documento</option>
+                        <option value="CLIENTE" title="Plazo configurado en la ficha del cliente, contado desde la emisión">Plazo del cliente</option>
+                        <option value="EMISION" title="Sin crédito: vence el mismo día de emisión">Fecha de emisión</option>
+                    </select>
+                </div>
+
                 <!-- Vendedor (asignado en la factura / recibo; los saldos iniciales no tienen vendedor) -->
                 <div>
                     <label class="form-label small fw-bold mb-1 d-block text-muted text-uppercase" style="font-size:.65rem;">Vendedor</label>
@@ -249,7 +261,19 @@
                         <button type="button" id="cxc-btn-producto" class="btn btn-outline-success" onclick="CXC_setVista('producto')" title="Agrupar la cartera por producto: qué documentos pendientes contienen cada producto">
                             <i class="bi bi-box-seam"></i> Por producto
                         </button>
+                        <button type="button" id="cxc-btn-antiguedad" class="btn btn-outline-success" onclick="CXC_setVista('antiguedad')" title="Saldo de cada cliente repartido en columnas según los días vencidos">
+                            <i class="bi bi-hourglass-split"></i> Por antigüedad
+                        </button>
                     </div>
+                    <!-- Columnas de la vista Por antigüedad (días vencidos); solo visible en esa vista -->
+                    <select id="cxc-tramos" class="form-select form-select-sm shadow-none border ms-1" style="width:170px;" hidden
+                            title="Columnas de días vencidos" onchange="CXC_renderTabla(CXC_filtradoLocal)">
+                        <option value="30,60,90" selected>30 · 60 · 90 días</option>
+                        <option value="15,30,60,90">15 · 30 · 60 · 90 días</option>
+                        <option value="30,60,90,120">30 · 60 · 90 · 120 días</option>
+                        <option value="15,30,45,60,90">15 · 30 · 45 · 60 · 90 días</option>
+                        <option value="30,60,90,180,360">30 · 60 · 90 · 180 · 360 días</option>
+                    </select>
                 </div>
                 <div class="d-flex align-items-center gap-2">
                     <small class="text-muted fw-medium" id="cxc-count-label"></small>
