@@ -1318,7 +1318,8 @@
         { titulo: 'Facturado',          evento: 'factura',            hecho: t => !t.factura_eliminada && ['borrador', 'autorizado'].includes(t.factura_estado) },
         { titulo: 'Enviado a Uanataca', evento: 'uanataca',           hecho: t => !!t.uanataca_uuid || ['en_proceso', 'aprobada', 'emitida'].includes(t.estado) },
         { titulo: 'Factura autorizada', evento: 'factura_autorizada', hecho: t => !t.factura_eliminada && t.factura_estado === 'autorizado' },
-        { titulo: 'Firma emitida',      evento: 'emitida',            hecho: t => t.estado === 'emitida' },
+        // Último paso: aprobada por Uanataca (una firma ya emitida también pasó por aquí).
+        { titulo: 'Firma aprobada',     evento: 'aprobada', alterno: 'emitida', hecho: t => ['aprobada', 'emitida'].includes(t.estado) },
     ];
 
     function renderHistorialEstado(t) {
@@ -1333,14 +1334,16 @@
         // Fecha del primer evento de cada tipo (t.eventos llega del más reciente al más antiguo).
         const fechas = {};
         (t.eventos || []).forEach(ev => { fechas[ev.tipo] = ev.fecha; });
+        // Breadcrumb de flechas (estilos .firma-pasos en modal_firma.php): verde = cumplido, rojo = falta.
         const items = PASOS_ESTADO.map(p => {
             const ok = p.hecho(t);
-            const fecha = ok && fechas[p.evento] ? ` <span class="fw-normal text-muted" style="font-size:.68rem;">${esc(fechas[p.evento])}</span>` : '';
-            return `<li class="breadcrumb-item fw-semibold ${ok ? 'text-success' : 'text-danger'}">
-                <i class="bi ${ok ? 'bi-check-circle-fill' : 'bi-circle'} me-1"></i>${esc(p.titulo)}${fecha}</li>`;
+            const cuando = fechas[p.evento] || (p.alterno ? fechas[p.alterno] : '');
+            const fecha = ok && cuando ? `<span class="firma-paso-fecha">${esc(cuando)}</span>` : '';
+            return `<li class="firma-paso ${ok ? 'ok' : 'falta'}" title="${ok ? 'Cumplido' : 'Pendiente'}">
+                <i class="bi ${ok ? 'bi-check-circle-fill' : 'bi-x-circle'} me-1"></i><span>${esc(p.titulo)}</span>${fecha}</li>`;
         }).join('');
         document.getElementById('historialEstadoPasos').innerHTML =
-            `<nav aria-label="Historial del estado"><ol class="breadcrumb mb-0 small" style="--bs-breadcrumb-divider: '»';">${items}</ol></nav>`;
+            `<nav aria-label="Historial del estado"><ol class="firma-pasos">${items}</ol></nav>`;
         caja.classList.remove('d-none');
     }
 

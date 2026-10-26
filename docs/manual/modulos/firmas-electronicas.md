@@ -419,7 +419,7 @@ archivo, y volver a cargar la firma no lo soluciona.
 
 - **3.8** — Ficha de la firma: arriba se muestra el **historial del estado** (estado
   actual y los pasos Datos registrados » Documentos » Pago » Facturado » Enviado a
-  Uanataca » Factura autorizada » Firma emitida, en rojo mientras faltan y en verde
+  Uanataca » Factura autorizada » Firma aprobada, en rojo mientras faltan y en verde
   cuando se cumplen) en lugar del aviso «ya está aprobada… no se puede editar»; la
   ficha sigue siendo de solo lectura en ese caso.
 - **3.7** — Con «Esperar a que el cliente confirme su correo» desmarcado (pestaña
