@@ -173,6 +173,121 @@ final class AbonosVentaSql
     }
 
     /**
+     * Igual que cteRetenidoPorFactura(), pero solo para las facturas de un conjunto ya
+     * filtrado `$docs` (un CTE con columnas `id`, `id_empresa` y `num_norm` = numFactura()).
+     * Columnas: `id_venta` y `total_retenido`.
+     *
+     * cteRetenidoPorFactura() normaliza el número de TODAS las facturas de la empresa para
+     * cruzarlas con las retenciones; en un reporte de cartera, donde casi todo el histórico
+     * ya está cobrado, ese trabajo crece con los años aunque lo pendiente sea poco. Aquí el
+     * número sale del conjunto (se calcula una vez por factura candidata).
+     *
+     * @param string $docs         Nombre del CTE con las facturas candidatas.
+     * @param string $empresaExpr  Entero validado o expresión `ANY(ARRAY[...])` de la empresa.
+     * @param string $extraWhereR  Condiciones extra sobre la cabecera `r` (p. ej. corte por fecha).
+     * @param bool   $porIndice    true si existe `idx_ret_vta_det_sustento_norm` (índice sobre el
+     *                             sustento normalizado, database/migrations/20260903_…): busca las
+     *                             líneas de cada factura por ese índice. Sin él, normaliza todas
+     *                             las líneas de retención una vez y las cruza por hash (una
+     *                             búsqueda por factura sin índice leería la tabla entera cada vez).
+     */
+    public static function cteRetenidoDeDocumentos(string $docs, string $empresaExpr, string $extraWhereR = '', bool $porIndice = false): string
+    {
+        $numVc  = self::numFactura('vc');
+        $numSus = self::normalizar('rd.num_doc_sustento');
+
+        // (a) Líneas del detalle enlazadas a la factura por número de sustento.
+        $lineas = $porIndice
+            ? "SELECT d.id AS id_venta, ln.monto
+                FROM {$docs} d
+                CROSS JOIN LATERAL (
+                    SELECT SUM(rd.valor_retenido) AS monto
+                    FROM retencion_venta_detalle rd
+                    JOIN retencion_venta_cabecera r
+                         ON r.id = rd.id_retencion
+                        AND r.id_empresa = d.id_empresa
+                        AND r.eliminado  = false
+                    WHERE {$numSus} = d.num_norm
+                      AND COALESCE(rd.num_doc_sustento, '') <> ''
+                      {$extraWhereR}
+                ) ln
+                WHERE ln.monto IS NOT NULL"
+            : "SELECT d.id AS id_venta, SUM(rd.valor_retenido) AS monto
+                FROM {$docs} d
+                JOIN retencion_venta_cabecera r
+                     ON r.id_empresa = d.id_empresa
+                    AND r.eliminado  = false
+                JOIN retencion_venta_detalle rd
+                     ON rd.id_retencion = r.id
+                    AND {$numSus} = d.num_norm
+                WHERE COALESCE(rd.num_doc_sustento, '') <> ''
+                  {$extraWhereR}
+                GROUP BY d.id";
+
+        return "
+            SELECT x.id_venta, SUM(x.monto) AS total_retenido
+            FROM (
+                {$lineas}
+
+                UNION ALL
+
+                -- (b) Retenciones registradas desde la factura (id_venta) cuyo detalle
+                --     no enlaza ninguna factura por número: total de la cabecera.
+                --     OFFSET 0 obliga a cruzar primero con las candidatas: sin esa barrera el
+                --     planificador evaluaba el NOT EXISTS en TODAS las retenciones con id_venta.
+                SELECT r.id_venta, (r.total_renta + r.total_iva + r.total_isd) AS monto
+                FROM (
+                    SELECT r.*
+                    FROM {$docs} d
+                    JOIN retencion_venta_cabecera r ON r.id_venta = d.id
+                    WHERE r.eliminado  = false
+                      AND r.id_empresa = {$empresaExpr}
+                      {$extraWhereR}
+                    OFFSET 0
+                ) r
+                WHERE NOT EXISTS (
+                      SELECT 1
+                      FROM retencion_venta_detalle rd
+                      JOIN ventas_cabecera vc
+                           ON vc.id_empresa = r.id_empresa
+                          AND vc.eliminado  = false
+                          AND {$numVc} = {$numSus}
+                      WHERE rd.id_retencion = r.id
+                        AND COALESCE(rd.num_doc_sustento, '') <> ''
+                  )
+            ) x
+            GROUP BY x.id_venta
+        ";
+    }
+
+    /**
+     * Igual que cteNotasPorFactura(..., porEmpresa: true), pero solo para las facturas del
+     * conjunto `$docs` (ver cteRetenidoDeDocumentos()). Columnas: `id_venta` y `$totalAlias`.
+     * Dos facturas del conjunto con la misma empresa y número reciben ambas la nota, igual
+     * que con el enlace por (empresa, número) de cteNotasPorFactura().
+     *
+     * @param string $extraWhere Condiciones extra sobre el alias `n`.
+     */
+    public static function cteNotasDeDocumentos(string $tabla, string $totalAlias, string $docs, string $extraWhere = ''): string
+    {
+        $tabla      = $tabla === 'nota_debito_cabecera' ? 'nota_debito_cabecera' : 'notas_credito_cabecera';
+        $totalAlias = preg_replace('/[^a-z_]/', '', $totalAlias) ?: 'total';
+        $numNorm    = self::normalizar('n.num_doc_modificado');
+
+        return "
+            SELECT d.id AS id_venta, SUM(n.importe_total) AS {$totalAlias}
+            FROM {$docs} d
+            JOIN {$tabla} n
+                 ON n.id_empresa = d.id_empresa
+                AND {$numNorm}   = d.num_norm
+            WHERE n.estado    != 'anulado'
+              AND n.eliminado  = false
+              {$extraWhere}
+            GROUP BY d.id
+        ";
+    }
+
+    /**
      * Subconsulta escalar (correlacionada con la factura `$alias`) con lo
      * retenido de esa factura. Misma regla que cteRetenidoPorFactura(); para
      * listados que calculan el saldo fila a fila (Facturas de Venta).

@@ -124,7 +124,9 @@ class NovedadRepository extends BaseRepository
      */
     private static function exprEstadoPago(string $a): string
     {
-        return "CASE WHEN COALESCE({$a}.desembolsado_migrado, false) OR COALESCE({$a}.conciliada_migrada, false)
+        // La marca de desembolso solo cuenta como pagada en lo migrado (id_carga NULL): en
+        // lo cargado por Excel solo dice que el anticipo/préstamo ya se entregó (ver esDesembolsoMigrado).
+        return "CASE WHEN (COALESCE({$a}.desembolsado_migrado, false) AND {$a}.id_carga IS NULL) OR COALESCE({$a}.conciliada_migrada, false)
                        OR EXISTS (
                             SELECT 1
                             FROM rol_detalle_rubro rr
@@ -193,7 +195,9 @@ class NovedadRepository extends BaseRepository
             // Anticipo/Préstamo migrados marcados como desembolsados (Camino 1): se muestran como
             // "Pagada" (ya estaban saldados en el sistema anterior) aunque aún no exista el rol.
             // OJO: en pgsql el booleano llega como 't'/'f' y 'f' es truthy en PHP → comparar explícito.
-            $desembMig = in_array($r['desembolsado_migrado'] ?? null, ['t', true, 1, '1', 'true'], true);
+            // Lo marcado como desembolsado por la carga Excel NO cuenta aquí: se edita, elimina y
+            // revierte como cualquier otra novedad (no hay egreso que quede sin respaldo).
+            $desembMig = self::esDesembolsoMigrado($r);
             // Conciliada por rol migrado (Pieza B): novedad de un período con rol/quincena migrado → "Pagada".
             $concMig = in_array($r['conciliada_migrada'] ?? null, ['t', true, 1, '1', 'true'], true);
             $r['pagada'] = isset($pagadas[(int) $r['id']]) || $desembMig || $concMig;
@@ -205,6 +209,22 @@ class NovedadRepository extends BaseRepository
         unset($r);
 
         return $rows;
+    }
+
+    /** ¿Marca de desembolso puesta? (Anticipo/Préstamo Empresa ya entregado, sin egreso). */
+    public static function tieneMarcaDesembolso(array $n): bool
+    {
+        return in_array($n['desembolsado_migrado'] ?? null, ['t', true, 1, '1', 'true'], true);
+    }
+
+    /**
+     * ¿Desembolsado en el sistema anterior (migración)? La misma marca la pone la carga
+     * Excel, que asume ya entregados los anticipos y préstamos empresa; esas novedades
+     * llevan id_carga y no se bloquean ni se ven como pagadas por ella.
+     */
+    public static function esDesembolsoMigrado(array $n): bool
+    {
+        return self::tieneMarcaDesembolso($n) && empty($n['id_carga']);
     }
 
     /** Clave [id_empleado|tipo_rol|anio|mes] para cruzar una novedad con su corrida de rol. */
@@ -372,6 +392,11 @@ class NovedadRepository extends BaseRepository
         $idCarga    = isset($d['id_carga']) && (int) $d['id_carga'] > 0 ? (int) $d['id_carga'] : null;
         $colCarga   = $idCarga !== null ? ', id_carga' : '';
         $valCarga   = $idCarga !== null ? ', :id_carga' : '';
+        // Anticipo/Préstamo Empresa ya entregados fuera del sistema (la carga Excel lo asume):
+        // el rol los descuenta sin pedir el egreso de desembolso.
+        $desemb     = !empty($d['desembolsado_migrado']);
+        $colDesemb  = $desemb ? ', desembolsado_migrado' : '';
+        $valDesemb  = $desemb ? ', true' : '';
         // Igual con la marca de IESS: solo si ya existe la columna.
         $conIess    = $this->tieneMarcaIess();
         $colIess    = $conIess ? ', aporta_iess' : '';
@@ -380,12 +405,12 @@ class NovedadRepository extends BaseRepository
         $sql = "INSERT INTO {$this->table} (
                     id_empresa, id_empleado, tipo_codigo, tipo_nombre, fecha,
                     periodo_mes, periodo_anio, valor, aplica_en, motivo_codigo, motivo_nombre,
-                    observacion, estado, tipo_ambiente, created_by, updated_by, created_at, updated_at, eliminado{$colCarga}{$colIess}
+                    observacion, estado, tipo_ambiente, created_by, updated_by, created_at, updated_at, eliminado{$colCarga}{$colIess}{$colDesemb}
                 ) VALUES (
                     :id_empresa, :id_empleado, :tipo_codigo, :tipo_nombre, :fecha,
                     :periodo_mes, :periodo_anio, :valor, :aplica_en, :motivo_codigo, :motivo_nombre,
                     :observacion, :estado, (SELECT CAST(tipo_ambiente AS VARCHAR(1)) FROM empresas WHERE id = :id_empresa),
-                    :id_u, :id_u, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, false{$valCarga}{$valIess}
+                    :id_u, :id_u, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, false{$valCarga}{$valIess}{$valDesemb}
                 )";
         $params = [
             ':id_empresa'    => $d['id_empresa'],

@@ -383,9 +383,16 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                     <!-- Paso 2: se importa lo que diga el archivo, nada más -->
                     <h6 class="fw-bold mb-1"><span class="badge bg-secondary me-1">2</span> Subir la plantilla completada</h6>
                     <p class="small text-muted mb-2">
-                        Escriba el valor en la columna de cada novedad que le corresponda al empleado (monto, horas,
-                        días o, en <i>Aviso de salida</i>, el motivo). Las celdas vacías o en 0 no crean nada.
+                        Escriba el valor en la columna de cada novedad que le corresponda al empleado (monto, horas
+                        o días). Las celdas vacías o en 0 no crean nada. El <i>Aviso de salida</i> se registra a mano.
                     </p>
+                    <div class="alert alert-info py-2 px-3 small mb-2">
+                        <i class="bi bi-info-circle me-1"></i>
+                        Los <b>Anticipos</b> y las cuotas de <b>Préstamo Empresa</b> que se importan se dan por
+                        <b>ya entregados</b> al empleado: el rol los descuenta directo, sin pedir el egreso en
+                        <i>Egresos → Nómina</i>. Como no hay egreso, ese pago no queda en contabilidad: regístrelo
+                        con un asiento si aún no está.
+                    </div>
                     <input type="file" id="nov_import_file" class="form-control form-control-sm" accept=".xlsx,.xls">
                     <div id="nov_import_result" class="mt-3"></div>
                 </div>
@@ -394,8 +401,8 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                     <div class="d-flex justify-content-between align-items-start gap-2 mb-2">
                         <div class="small text-muted">
                             Últimas <b>10</b> cargas. Una carga se puede eliminar completa mientras <b>ninguna</b>
-                            de sus novedades se haya usado (rol del período pagado, o anticipo/préstamo ya
-                            desembolsado por egreso).
+                            de sus novedades se haya usado (rol del período pagado, o en cargas anteriores,
+                            anticipo/préstamo ya desembolsado por egreso).
                         </div>
                         <button type="button" class="btn btn-sm btn-outline-secondary border-0 px-2" onclick="window.cargarCargasNov()" title="Actualizar">
                             <i class="bi bi-arrow-clockwise"></i>

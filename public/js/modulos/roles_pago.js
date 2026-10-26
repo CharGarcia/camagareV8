@@ -204,31 +204,44 @@
         $('rolver_conteo').textContent = det.length + ' empleados';
     }
 
-    // Banners: (1) empleados activos NO incluidos por falta de período, (2) anticipos/
-    // préstamos pendientes de desembolso (no se descuentan hasta pagarlos).
+    // Avisos en acordeón (cerrados): (1) empleados activos NO incluidos por falta de período,
+    // (2) anticipos/préstamos pendientes de desembolso (no se descuentan hasta pagarlos).
+    // Cerrados y con scroll propio para que, con muchos avisos, no tapen la tabla ni el footer.
     function renderAvisos(avisos, sinPeriodo) {
         const box = $('rolver_avisos');
         if (!box) return;
+        const item = (id, color, icono, titulo, cuerpo) => `
+            <div class="accordion-item border-${color} border-opacity-50">
+                <h2 class="accordion-header">
+                    <button class="accordion-button collapsed py-2 px-3 small bg-${color} bg-opacity-10 text-${color === 'warning' ? 'dark' : color} shadow-none" type="button"
+                            data-bs-toggle="collapse" data-bs-target="#${id}" aria-expanded="false" aria-controls="${id}">
+                        <i class="bi ${icono} me-2"></i>${titulo}
+                    </button>
+                </h2>
+                <div id="${id}" class="accordion-collapse collapse">
+                    <div class="accordion-body py-2 px-3 small" style="max-height:28vh; overflow-y:auto;">${cuerpo}</div>
+                </div>
+            </div>`;
         let html = '';
         if (sinPeriodo && sinPeriodo.length) {
             const liSp = sinPeriodo.map(e =>
                 `<li>${esc(e.nombres_apellidos)} <span class="text-muted">${esc(e.identificacion || '')}</span></li>`
             ).join('');
-            html += `<div class="alert alert-danger py-2 px-3 mb-2 small">
-                <i class="bi bi-person-fill-exclamation me-1"></i>
-                <b>${sinPeriodo.length} empleado(s) activo(s) NO incluido(s) en este rol.</b> No tienen un período registrado que cubra este mes — regístrelo en su ficha (pestaña <b>Periodos</b>) y vuelva a abrir este rol:
-                <ul class="mb-0 mt-1">${liSp}</ul></div>`;
+            html += item('rolver_av_sinperiodo', 'danger', 'bi-person-fill-exclamation',
+                `<b>${sinPeriodo.length} empleado(s) activo(s) NO incluido(s) en este rol</b>`,
+                `No tienen un período registrado que cubra este mes — regístrelo en su ficha (pestaña <b>Periodos</b>) y vuelva a abrir este rol:
+                <ul class="mb-0 mt-1">${liSp}</ul>`);
         }
         if (avisos && avisos.length) {
             const li = avisos.map(a =>
                 `<li>${esc(a.empleado)} — <b>${esc(a.concepto)}</b>: ${money(a.monto)} <span class="text-muted">(${a.tipo === 'anticipo' ? 'anticipo sin pagar' : 'préstamo sin desembolsar'})</span></li>`
             ).join('');
-            html += `<div class="alert alert-warning py-2 px-3 mb-2 small">
-                <i class="bi bi-exclamation-triangle-fill me-1"></i>
-                <b>Pendientes de desembolso.</b> Estas novedades NO se descuentan en el rol hasta pagarlas en <b>Egresos → Nómina</b>:
-                <ul class="mb-0 mt-1">${li}</ul></div>`;
+            html += item('rolver_av_desembolso', 'warning', 'bi-exclamation-triangle-fill',
+                `<b>${avisos.length} novedad(es) pendiente(s) de desembolso</b>`,
+                `Estas novedades NO se descuentan en el rol hasta pagarlas en <b>Egresos → Nómina</b>:
+                <ul class="mb-0 mt-1">${li}</ul>`);
         }
-        box.innerHTML = html;
+        box.innerHTML = html ? `<div class="accordion py-2" id="rolver_avisos_acc">${html}</div>` : '';
     }
 
     // Aviso emergente al generar, si hay empleados sin período o novedades sin desembolsar.
@@ -249,7 +262,7 @@
         Swal.fire({
             icon: 'warning',
             title: 'Revise antes de continuar',
-            html: `<div class="small text-start">${html}</div>`,
+            html: `<div class="small text-start" style="max-height:50vh; overflow-y:auto;">${html}</div>`,
             confirmButtonText: 'Entendido'
         });
     }
@@ -507,9 +520,10 @@
                 document.body.appendChild(a); a.click(); a.remove();
             };
             const btnMail = $('rolemp_email');
-            btnMail.disabled = !d.email;
-            btnMail.title = d.email ? 'Enviar por correo' : 'Sin correo en la ficha';
-            btnMail.onclick = () => window.rolEmailEmpleado(detActual);
+            // Habilitado aunque la ficha no tenga correo: el destinatario se puede escribir al enviar.
+            btnMail.disabled = false;
+            btnMail.title = 'Enviar por correo';
+            btnMail.onclick = () => window.rolEmailEmpleado(detActual, d.email || '');
             renderGeneral(d);
             renderProvisiones(d);
             renderAsiento(d);
@@ -784,12 +798,29 @@
             <p class="small text-muted mt-2 mb-0"><i class="bi bi-info-circle me-1"></i>Asistencia del mes del rol. Los atrasos se trasladan al rol según el tratamiento de la ficha del empleado.</p>`;
     }
 
-    window.rolEmailEmpleado = async function (det) {
-        const c = await Swal.fire({ title: 'Enviar por correo', text: 'Se enviará el rol al correo del empleado.', icon: 'question', showCancelButton: true, confirmButtonText: 'Enviar', cancelButtonText: 'Cancelar' });
-        if (!c.isConfirmed) return;
-        Swal.fire({ title: 'Enviando…', allowOutsideClick: false, didOpen: () => Swal.showLoading() });
+    // Igual que Factura de Venta: se ve y edita el destinatario (precargado con el correo de
+    // la ficha); admite varios separados por coma o espacio.
+    window.rolEmailEmpleado = async function (det, correoFicha) {
+        const { value: correos, isConfirmed } = await Swal.fire({
+            title: 'Enviar por correo',
+            input: 'text',
+            inputLabel: 'Correos electrónicos (separados por coma o espacio)',
+            inputValue: correoFicha || '',
+            target: document.getElementById('modalRolEmp'),
+            showCancelButton: true,
+            confirmButtonText: '<i class="bi bi-send me-1"></i> Enviar',
+            cancelButtonText: 'Cancelar',
+            inputValidator: (value) => {
+                const lista = value.split(/[\s,;]+/).filter(Boolean);
+                if (!lista.length) return 'Debes ingresar al menos un correo válido!';
+                const malos = lista.filter(c => !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(c));
+                if (malos.length) return 'Correo no válido: ' + malos.join(', ');
+            }
+        });
+        if (!isConfirmed) return;
+        Swal.fire({ title: 'Enviando…', target: document.getElementById('modalRolEmp'), allowOutsideClick: false, didOpen: () => Swal.showLoading() });
         try {
-            const fd = new FormData(); fd.append('det', det);
+            const fd = new FormData(); fd.append('det', det); fd.append('correos', correos);
             const resp = await fetch(`${urlModulo}/enviarCorreoEmpleado`, { method: 'POST', body: fd });
             const json = await resp.json();
             if (json.ok) Swal.fire({ icon: 'success', title: 'Enviado', text: json.msg, timer: 1800, showConfirmButton: false });

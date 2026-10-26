@@ -20,7 +20,7 @@
                         <input type="text" id="rolver_buscar" class="form-control border-start-0 ps-0 shadow-none" placeholder="Buscar empleado por nombre o cédula..." autocomplete="off" oninput="window.rolVerFiltrar()">
                     </div>
                 </div>
-                <div id="rolver_avisos" class="px-3"></div>
+                <div id="rolver_avisos" class="px-3 flex-shrink-0" style="max-height:40%; overflow-y:auto;"></div>
                 <div class="flex-grow-1" style="overflow-y:auto; min-height:0;">
                     <table class="table table-hover table-sm mb-0 align-middle">
                         <thead class="table-light" style="position:sticky; top:0; z-index:5;">

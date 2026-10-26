@@ -60,7 +60,7 @@ class NovedadPlantillaService
     public static function columnasNovedad(): array
     {
         $cols = [];
-        foreach (CatalogoNovedades::TIPOS as $t) {
+        foreach (self::tiposPlantilla() as $t) {
             $codigo = (string) $t['codigo'];
             if (CatalogoNovedades::admiteOpcionIess($codigo)) {
                 $cols[] = ['codigo' => $codigo, 'iess' => true];
@@ -70,6 +70,18 @@ class NovedadPlantillaService
             }
         }
         return $cols;
+    }
+
+    /**
+     * Tipos que van en la plantilla: todos menos el Aviso de salida, que se
+     * registra a mano en el módulo (el importador lo rechaza, ver NovedadImportService).
+     */
+    public static function tiposPlantilla(): array
+    {
+        return array_values(array_filter(
+            CatalogoNovedades::TIPOS,
+            fn($t) => !CatalogoNovedades::esAvisoSalida((string) $t['codigo'])
+        ));
     }
 
     /**
@@ -124,8 +136,6 @@ class NovedadPlantillaService
         foreach (self::COLS_FILA as $i => $campo) {
             $colFila[$campo] = $letra($nEmpleado + $nNov + 1 + $i);
         }
-        $idxAviso = (int) array_search(CatalogoNovedades::COD_AVISO_SALIDA, array_column($colsNov, 'codigo'), true);
-        $colAviso = $letra($nEmpleado + 1 + $idxAviso);
         $ultCol   = $letra(count($encabezados));
 
         $ss = new Spreadsheet();
@@ -171,11 +181,10 @@ class NovedadPlantillaService
             }
         }
 
-        $rangoMotivos = $this->agregarReferencia($ss);
+        $this->agregarReferencia($ss);
 
-        // Listas desplegables de ayuda. No bloquean lo escrito a mano (el
-        // importador valida igual y acepta también códigos y nombres).
-        $this->listaDesplegable($hoja, "{$colAviso}2:{$colAviso}{$ultFilaListas}", $rangoMotivos);
+        // Lista desplegable de ayuda. No bloquea lo escrito a mano (el importador
+        // valida igual).
         $this->listaDesplegable(
             $hoja,
             $colFila['AFECTA_A'] . "2:" . $colFila['AFECTA_A'] . $ultFilaListas,
@@ -215,12 +224,8 @@ class NovedadPlantillaService
         $hoja->setDataValidation($rango, $dv);
     }
 
-    /**
-     * Hoja de apoyo: cómo se llena la plantilla y los valores válidos. Devuelve el
-     * rango con las opciones de motivo de salida, que alimenta la lista
-     * desplegable de la columna AVISO DE SALIDA.
-     */
-    private function agregarReferencia(Spreadsheet $ss): string
+    /** Hoja de apoyo: cómo se llena la plantilla y los valores válidos. */
+    private function agregarReferencia(Spreadsheet $ss): void
     {
         $ref = $ss->createSheet();
         $ref->setTitle('Referencia');
@@ -236,9 +241,10 @@ class NovedadPlantillaService
         foreach ([
             '• Hay una fila por empleado y una columna por cada tipo de novedad. Escriba el valor solo en las novedades que le correspondan: las celdas vacías o en 0 no crean nada.',
             '• MES, ANIO, AFECTA_A y FECHA valen para todas las novedades de la fila. Si una novedad va a otro período u otro pago, póngala en una copia de la fila del empleado con esos datos.',
-            '• En la quincena y la semana solo hay ingresos y descuentos: los DÍAS NO LABORADOS y el AVISO DE SALIDA van siempre al rol mensual, aunque AFECTA_A diga quincena o semanal.',
+            '• En la quincena y la semana solo hay ingresos y descuentos: los DÍAS NO LABORADOS van siempre al rol mensual, aunque AFECTA_A diga quincena o semanal.',
             '• OBSERVACION es opcional: si queda vacía, cada novedad se guarda con "Tipo - Mes Año".',
-            '• En la columna AVISO DE SALIDA no va un valor: se elige (o se escribe) el motivo de salida.',
+            '• El AVISO DE SALIDA no se carga por Excel: regístrelo a mano en el módulo Novedades (botón Nuevo).',
+            '• ANTICIPO y PRÉSTAMO EMPRESA se dan por YA ENTREGADOS al empleado: el rol los descuenta directo, sin pedir el egreso en Egresos → Nómina. Como no hay egreso, ese pago no queda en contabilidad: regístrelo con un asiento si aún no está.',
             '• Otros Ingresos y las horas tienen dos columnas, CON IESS y SIN IESS: escriba el valor en la que corresponda. Si el empleado no aporta al IESS, se registra sin IESS aunque esté en la columna CON IESS.',
         ] as $linea) {
             $ref->setCellValue('A' . $fila++, $linea);
@@ -249,10 +255,8 @@ class NovedadPlantillaService
         $ref->fromArray(['CÓDIGO', 'NOVEDAD', 'QUÉ SE ESCRIBE EN SU COLUMNA', 'APORTA AL IESS'], null, 'A' . $fila);
         $ref->getStyle("A{$fila}:D{$fila}")->getFont()->setBold(true);
         $fila++;
-        foreach (CatalogoNovedades::TIPOS as $t) {
-            $que = CatalogoNovedades::esAvisoSalida($t['codigo'])
-                ? 'Motivo de salida (ver abajo)'
-                : CatalogoNovedades::labelValor($t['codigo']);
+        foreach (self::tiposPlantilla() as $t) {
+            $que = CatalogoNovedades::labelValor($t['codigo']);
             $iess = CatalogoNovedades::admiteOpcionIess($t['codigo'])
                 ? 'Según la columna: CON IESS o SIN IESS'
                 : 'No aplica';
@@ -264,21 +268,10 @@ class NovedadPlantillaService
         foreach (CatalogoNovedades::APLICA_EN as $k => $v) {
             $ref->fromArray([$k, $v], null, 'A' . $fila++);
         }
-        $fila++;
-
-        // Una sola columna "T - Terminación del contrato": es lo que muestra la
-        // lista desplegable de la hoja Novedades (el importador toma el código).
-        $titulo('MOTIVOS DE SALIDA (columna AVISO DE SALIDA)');
-        $primMotivo = $fila;
-        foreach (CatalogoNovedades::MOTIVOS_SALIDA as $m) {
-            $ref->setCellValueExplicit('A' . $fila++, $m['codigo'] . ' - ' . $m['nombre'], DataType::TYPE_STRING);
-        }
 
         $ref->getColumnDimension('A')->setWidth(12);
         foreach (['B', 'C', 'D'] as $col) {
             $ref->getColumnDimension($col)->setAutoSize(true);
         }
-
-        return 'Referencia!$A$' . $primMotivo . ':$A$' . ($fila - 1);
     }
 }

@@ -129,9 +129,13 @@ class CuentasPorCobrarController extends BaseModuloController
         $filtros = $this->getFiltros();
         [$idsEmpresa, $consolidado] = $this->resolverAlcance($idEmpresa, $filtros);
 
-        $filas      = $this->getFilasUnificadas($idsEmpresa, $filtros);
-        $stats      = $this->repo->getEstadisticas($idsEmpresa, $filtros);
-        $antiguedad = $this->repo->getAntiguedad($idsEmpresa, $filtros);
+        $filas = $this->getFilasUnificadas($idsEmpresa, $filtros);
+        // Con el estado por defecto (Pendientes) las tarjetas salen de las mismas filas del
+        // listado: repetir la consulta costaba otro tanto. Con otro estado se consultan aparte.
+        // (La antigüedad ya no se calcula aquí: la pantalla no la usa.)
+        $stats = ($filtros['estado'] ?? 'PENDIENTES') === 'PENDIENTES'
+            ? $this->estadisticasDeFilas($filas)
+            : $this->repo->getEstadisticas($idsEmpresa, $filtros);
 
         // Formateamos filas
         $puedeCobrarEn = [];
@@ -167,11 +171,78 @@ class CuentasPorCobrarController extends BaseModuloController
         $this->jsonSuccess([
             'filas'            => $filas,
             'stats'            => $stats,
-            'antiguedad'       => $antiguedad,
             'consolidado'      => $consolidado,
             'establecimientos' => count($idsEmpresa),
             'lineas'           => $lineas,
         ]);
+    }
+
+    /**
+     * Tarjetas superiores calculadas sobre las filas del listado con estado "Pendientes":
+     * mismo resultado que repo->getEstadisticas() (vencido = días vencido > 0) sin volver
+     * a consultar. Las filas ya traen solo documentos con saldo > 0.
+     */
+    private function estadisticasDeFilas(array $filas): array
+    {
+        $r = ['total_facturas' => 0, 'total_saldo' => 0.0, 'total_vencido' => 0.0, 'total_al_dia' => 0.0, 'facturas_vencidas' => 0];
+        foreach ($filas as $f) {
+            $saldo = (float)$f['saldo'];
+            $r['total_facturas']++;
+            $r['total_saldo'] += $saldo;
+            if ((int)($f['dias_vencido'] ?? 0) > 0) {
+                $r['total_vencido'] += $saldo;
+                $r['facturas_vencidas']++;
+            } else {
+                $r['total_al_dia'] += $saldo;
+            }
+        }
+        foreach (['total_saldo', 'total_vencido', 'total_al_dia'] as $k) {
+            $r[$k] = round($r[$k], 2);
+        }
+        return $r;
+    }
+
+    /**
+     * Escribe un listado largo en el PDF por bloques. Html2Pdf tarda de forma cuadrática con
+     * el tamaño de cada writeHTML (medido: 500 filas 9 s, 2.000 filas 102 s); escribiendo
+     * fila a fila es lineal (2.000 filas ≈ 10 s). El salto de página lo decide este método
+     * antes de cada fila, para repetir la cabecera de columnas arriba de cada hoja como
+     * hacía el <thead>. Los estilos del primer writeHTML siguen vigentes en los siguientes.
+     *
+     * @param string   $inicio   HTML del primer bloque: <style>, <page …> con el encabezado,
+     *                           filtros y tarjetas, y su </page> (la página sigue abierta).
+     * @param string   $thead    <tr> de la cabecera de columnas.
+     * @param array    $filas    Un <tr> por fila, o ['html' => <tr> o lista de <tr>, 'alto' => mm] cuando la
+     *                           fila puede ocupar más que el alto por defecto (o varias <tr>
+     *                           que deben ir juntas, p. ej. la cabecera de un grupo y su
+     *                           primera fila). Con 'html_salto' se da la variante que se usa
+     *                           cuando la fila abre hoja nueva (p. ej. sin repetir la cabecera
+     *                           de columnas, que ya se dibujó arriba).
+     * @param string   $final    HTML posterior (totales); puede ir vacío.
+     */
+    private function escribirPdfPorBloques(\Spipu\Html2Pdf\Html2Pdf $html2pdf, string $inicio, string $thead, array $filas, string $final = ''): void
+    {
+        $html2pdf->writeHTML($inicio . "<table class='fila'>{$thead}</table>");
+        $pdf = $html2pdf->pdf;
+        foreach ($filas as $fila) {
+            // Alto estimado por defecto (mm): 3 líneas de 8 pt + relleno. Si no cabe, hoja
+            // nueva con la cabecera; así Html2Pdf nunca parte una fila ni deja una hoja sin cabecera.
+            [$tr, $alto] = is_array($fila) ? [$fila['html'], (float)($fila['alto'] ?? 13)] : [$fila, 13.0];
+            if ($pdf->GetY() + $alto > $pdf->getPageHeight() - $pdf->getBreakMargin()) {
+                $html2pdf->writeHTML("<page pageset='old'><table class='fila'>{$thead}</table></page>");
+                $tr = is_array($fila) ? ($fila['html_salto'] ?? $tr) : $tr;
+            }
+            // Cada <tr> en su propia tabla: si una fila de una sola celda (cabecera de grupo)
+            // abre la tabla, Html2Pdf toma sus anchos y las filas siguientes se salen de la hoja.
+            $html = '';
+            foreach ((array)$tr as $t) {
+                $html .= "<table class='fila'>{$t}</table>";
+            }
+            $html2pdf->writeHTML($html);
+        }
+        if ($final !== '') {
+            $html2pdf->writeHTML($final);
+        }
     }
 
     /** Líneas de producto de las facturas y recibos del listado (ver repo->getLineasProductoPorDocumentos). */
@@ -283,7 +354,7 @@ class CuentasPorCobrarController extends BaseModuloController
             $e = static fn ($v): string => htmlspecialchars((string)$v);
 
             $totalValor = 0.0; $totalSaldo = 0.0; $totalCobrado = 0.0; $totalDocs = 0.0; $totalCant = 0.0;
-            $cuerpo = '';
+            $cuerpo = [];
             foreach ($grupos as $g) {
                 $totalValor   += $g['valor'];
                 $totalSaldo   += $g['saldo'];
@@ -296,7 +367,8 @@ class CuentasPorCobrarController extends BaseModuloController
                 // celda haga multilínea en vez de desbordar la hoja por la derecha.
                 $nombrePdf = wordwrap($g['nombre'], 34, "\n", true);
                 $codigoPdf = wordwrap($g['codigo'], 14, "\n", true);
-                $cuerpo .= "<tr>
+                $lineas    = max(substr_count($nombrePdf, "\n"), substr_count($codigoPdf, "\n")) + 1;
+                $cuerpo[]  = ['alto' => max(13, $lineas * 4 + 3), 'html' => "<tr>
                     <td style='width:11%;'>" . nl2br($e($codigoPdf)) . "</td>
                     <td style='width:33%;'>" . nl2br($e($nombrePdf)) . "</td>
                     <td class='text-center' style='width:7%;'>" . count($g['docs']) . "</td>
@@ -305,7 +377,7 @@ class CuentasPorCobrarController extends BaseModuloController
                     <td class='text-end' style='width:10%;'>\$" . number_format($g['total'], 2) . "</td>
                     <td class='text-end' style='width:10%;'>\$" . number_format($g['cobrado'], 2) . "</td>
                     <td class='text-end' style='width:10%;font-weight:bold;'>\$" . number_format($g['saldo'], 2) . "</td>
-                </tr>";
+                </tr>"];
             }
 
             ob_start();
@@ -313,6 +385,7 @@ class CuentasPorCobrarController extends BaseModuloController
             <style>
                 body { font-family: Arial, sans-serif; font-size: 8pt; color: #000; }
                 table { width: 100%; border-collapse: collapse; margin-bottom: 10px; table-layout: fixed; }
+                table.fila { margin-bottom: 0; }
                 th { background: #e9ecef; border: 1px solid #999; padding: 3px 3px; text-align: center; font-size: 8.5pt; }
                 td { border: 1px solid #999; padding: 2px 3px; font-size: 8pt; overflow: hidden; word-wrap: break-word; }
                 .text-end { text-align: right; } .text-center { text-align: center; }
@@ -323,38 +396,35 @@ class CuentasPorCobrarController extends BaseModuloController
             <page backtop="8mm" backbottom="12mm" backleft="8mm" backright="8mm" footer="page">
             <?= $this->encabezadoPdf($idEmpresa, $nombreEmpresa, 'Cuentas por Cobrar por Producto') ?>
             <?= $this->bloqueFiltrosPdf($filtrosTxt) ?>
-            <table>
-                <thead>
-                    <tr>
-                        <th style="width:11%;">Código</th>
-                        <th style="width:33%;">Producto</th>
-                        <th style="width:7%;">Docs.</th>
-                        <th style="width:9%;">Cantidad</th>
-                        <th style="width:10%;">Valor Prod.</th>
-                        <th style="width:10%;">Total Docs.</th>
-                        <th style="width:10%;">Cobrado</th>
-                        <th style="width:10%;">Saldo</th>
-                    </tr>
-                </thead>
-                <tbody><?= $cuerpo ?: "<tr><td colspan='8' class='text-center' style='width:100%;'>Sin documentos con líneas de producto para los filtros aplicados.</td></tr>" ?></tbody>
-                <tfoot>
-                    <tr style="background:#f8f9fa;font-weight:bold;">
-                        <td colspan="3" class="text-end" style="width:51%;">TOTALES (<?= count($grupos) ?> productos):</td>
-                        <td class="text-end" style="width:9%;"><?= number_format($totalCant, 2) ?></td>
-                        <td class="text-end" style="width:10%;">$<?= number_format($totalValor, 2) ?></td>
-                        <td class="text-end" style="width:10%;">$<?= number_format($totalDocs, 2) ?></td>
-                        <td class="text-end" style="width:10%;">$<?= number_format($totalCobrado, 2) ?></td>
-                        <td class="text-end" style="width:10%;">$<?= number_format($totalSaldo, 2) ?></td>
-                    </tr>
-                </tfoot>
-            </table>
-            <p style="font-size:7pt;color:#555;">Total Docs., Cobrado y Saldo corresponden a los documentos que contienen cada producto; un documento con varios productos cuenta en cada uno, por lo que estas columnas no se suman entre productos.</p>
             </page>
             <?php
-            $html     = ob_get_clean();
+            $inicio = ob_get_clean();
+            $thead  = "<tr>
+                        <th style='width:11%;'>Código</th>
+                        <th style='width:33%;'>Producto</th>
+                        <th style='width:7%;'>Docs.</th>
+                        <th style='width:9%;'>Cantidad</th>
+                        <th style='width:10%;'>Valor Prod.</th>
+                        <th style='width:10%;'>Total Docs.</th>
+                        <th style='width:10%;'>Cobrado</th>
+                        <th style='width:10%;'>Saldo</th>
+                    </tr>";
+            if (!$cuerpo) {
+                $cuerpo[] = "<tr><td class='text-center' style='width:100%;'>Sin documentos con líneas de producto para los filtros aplicados.</td></tr>";
+            }
+            // Total único al final (un <tfoot> se repetiría en cada hoja con la cifra global).
+            $final = "<table class='fila'><tr style='background:#f8f9fa;font-weight:bold;'>
+                        <td class='text-end' style='width:51%;'>TOTALES (" . count($grupos) . " productos):</td>
+                        <td class='text-end' style='width:9%;'>" . number_format($totalCant, 2) . "</td>
+                        <td class='text-end' style='width:10%;'>\$" . number_format($totalValor, 2) . "</td>
+                        <td class='text-end' style='width:10%;'>\$" . number_format($totalDocs, 2) . "</td>
+                        <td class='text-end' style='width:10%;'>\$" . number_format($totalCobrado, 2) . "</td>
+                        <td class='text-end' style='width:10%;'>\$" . number_format($totalSaldo, 2) . "</td>
+                      </tr></table>
+                      <p style='font-size:7pt;color:#555;'>Total Docs., Cobrado y Saldo corresponden a los documentos que contienen cada producto; un documento con varios productos cuenta en cada uno, por lo que estas columnas no se suman entre productos.</p>";
             // Vertical (A4 retrato): es la orientación por defecto de los listados del módulo.
             $html2pdf = new \Spipu\Html2Pdf\Html2Pdf('P', 'A4', 'es');
-            $html2pdf->writeHTML($html);
+            $this->escribirPdfPorBloques($html2pdf, $inicio, $thead, $cuerpo, $final);
             $html2pdf->output('CuentasPorCobrar_Producto_' . date('Ymd_His') . '.pdf', 'D');
             exit;
         } catch (\Throwable $e) {
@@ -528,7 +598,9 @@ class CuentasPorCobrarController extends BaseModuloController
     private function exportPdfPorCliente(int $idEmpresa, array $idsEmpresa, bool $consolidado, array $filtros, array $filas): void
     {
         $grupos = $this->agruparPorCliente($filas);
-        $stats  = $this->repo->getEstadisticas($idsEmpresa, $filtros);
+        $stats  = ($filtros['estado'] ?? 'PENDIENTES') === 'PENDIENTES'
+            ? $this->estadisticasDeFilas($filas)
+            : $this->repo->getEstadisticas($idsEmpresa, $filtros);
         try {
             $empresa       = (new \App\models\Empresa())->getPorId($idEmpresa) ?? [];
             $nombreEmpresa = $empresa['nombre'] ?? 'Cuentas por Cobrar';
@@ -552,20 +624,13 @@ class CuentasPorCobrarController extends BaseModuloController
             $totAbonos = 0.0;
             $totRet    = 0.0;
             $totSaldo  = 0.0;
-            $cuerpo    = '';
+            $cuerpo    = [];
 
-            // Todo el listado va en UNA sola tabla y cada cliente es una fila de cabecera
-            // (colspan) dentro de ella. No es cosmético: con una tabla por cliente, cuando
-            // una de ellas se abría en el último centímetro de la hoja, Html2Pdf dibujaba su
-            // <thead> al pie SIN contarlo al decidir si la primera fila cabía (la condición
-            // de Html2Pdf::_tag_open_TR suma el tfoot, no el thead), así que esa fila se
-            // partía y sus celdas se repartían entre dos o tres páginas, dejando renglones
-            // sueltos al pie y hojas casi en blanco — las "líneas montadas" del reporte.
-            // Con una sola tabla, el <thead> solo se dibuja arriba de cada página (donde
-            // siempre hay sitio), se repite en TODAS las páginas y ninguna fila se parte.
-            // El colspan de la cabecera de cliente no descuadra los anchos porque la primera
-            // fila de la tabla sigue siendo el <thead> con el ancho de cada columna.
-            $nCols  = 8 + ($consolidado ? 1 : 0) + ($sinAsesor ? 0 : 1);
+            // Las filas se escriben por bloques (escribirPdfPorBloques): ese método decide el
+            // salto de página antes de cada bloque, así que ninguna fila se parte entre hojas
+            // (el problema de las "líneas montadas" que antes obligó a usar una sola tabla)
+            // y la cabecera de columnas se repite arriba de cada hoja. La cabecera de cada
+            // cliente va en el mismo bloque que su primer documento para no quedar sola al pie.
             $thCols = ($consolidado ? "<th style='width:{$wEst}%;'>Estab.</th>" : '')
                 . "<th style='width:9%;'>Fecha</th>"
                 . "<th style='width:{$wDoc}%;'>N. Documento</th>"
@@ -584,35 +649,23 @@ class CuentasPorCobrarController extends BaseModuloController
                 $totRet    += $g['retenciones'];
                 $totSaldo  += $g['saldo'];
 
-                $primerCliente = ($cuerpo === '');
-                if ($primerCliente) {
-                    $cuerpo .= "<table class='cli'><thead><tr>{$thCols}</tr></thead><tbody>";
-                } else {
-                    // Hueco entre un cliente y el siguiente (antes era el margin-bottom de la
-                    // tabla de cada cliente): fila vacía sin bordes, de la misma altura.
-                    $cuerpo .= "<tr class='sep'><td colspan='{$nCols}'>&nbsp;</td></tr>";
-                }
+                $primerCliente = !$cuerpo;
 
                 // Cabecera de la sección: "NOMBRE · saldo: 1,234.56". Sin el RUC delante:
                 // quien lee el reporte identifica al cliente por el nombre, y el número
                 // solo le robaba ancho a la línea. Lo que interesa es cuánto debe, no
                 // cuántos documentos tiene.
                 $titulo = trim((string) $g['nombre']);
-                $cuerpo .= "<tr class='grp'><td colspan='{$nCols}'>"
+                $grp = "<tr class='grp'><td style='width:100%;'>"
                     . $e($titulo) . " &nbsp;&middot;&nbsp; saldo: " . number_format($g['saldo'], 2)
                     . "</td></tr>";
+                // Hueco entre un cliente y el siguiente: fila vacía sin bordes.
+                $sep = "<tr class='sep'><td style='width:100%;'>&nbsp;</td></tr>";
+                // Encabezado de columnas bajo CADA cliente que empieza a media hoja; el primero
+                // y el que abre hoja nueva no lo llevan (la cabecera de la hoja está justo encima).
+                $cab = "<tr class='cab'>{$thCols}</tr>";
 
-                // Encabezado de columnas bajo CADA cliente. Con una sola tabla, el <thead>
-                // solo se dibuja al principio de cada página, así que el cliente que empieza
-                // a media hoja quedaba con sus documentos sin rótulo de columnas. Va como
-                // fila normal del <tbody> con celdas <th> (hereda el mismo estilo): NO como
-                // un segundo <thead>, porque volver a abrir <thead> a media tabla reactiva
-                // el corte de filas entre páginas que se arregló al unificar la tabla.
-                // El primero no lo lleva: el <thead> de la tabla está justo encima.
-                if (!$primerCliente) {
-                    $cuerpo .= "<tr class='cab'>{$thCols}</tr>";
-                }
-
+                $primeraFila = true;
                 foreach ($g['items'] as $r) {
                     $dias   = (int)($r['dias_vencido'] ?? 0);
                     $ts     = (float)($r['total'] ?? 0);
@@ -627,7 +680,7 @@ class CuentasPorCobrarController extends BaseModuloController
                     // total − NC − abonos − retenciones siga cuadrando con el saldo.
                     $ndTxt  = $nd > 0 ? " <small>+" . number_format($nd, 2) . "</small>" : '';
                     $tipo   = ($r['origen'] ?? 'FACTURA') === 'FACTURA' ? '' : "<small style='color:#6c757d;'>" . $this->getOrigenLabel($r['origen'] ?? '') . "</small><br>";
-                    $cuerpo .= "<tr>"
+                    $tr = "<tr>"
                         . ($consolidado ? "<td class='text-center' style='width:{$wEst}%;'>" . $e($r['establecimiento'] ?? '') . "</td>" : '')
                         . "<td class='text-center' style='width:9%;'>{$fEmis}</td>"
                         . "<td style='width:{$wDoc}%;'>{$tipo}" . self::docPdf((string) ($r['numero_factura'] ?? ''), $wDoc) . "</td>"
@@ -641,13 +694,19 @@ class CuentasPorCobrarController extends BaseModuloController
                         . "<td class='text-center' style='width:5%;{$color}'>" . max(0, (int)($r['dias_transcurridos'] ?? 0)) . "</td>"
                         . ($sinAsesor ? '' : "<td style='width:{$wAse}%;'>" . $e($r['vendedor_nombre'] ?? '') . "</td>")
                         . "</tr>";
+                    if (!$primeraFila) {
+                        $cuerpo[] = $tr;
+                        continue;
+                    }
+                    // Bloque inicial del cliente: separación + cabecera + rótulos + 1.er documento.
+                    $primeraFila = false;
+                    $cuerpo[] = $primerCliente
+                        ? ['alto' => 21, 'html' => [$grp, $tr]]
+                        : ['alto' => 32, 'html' => [$sep, $grp, $cab, $tr], 'html_salto' => [$grp, $tr]];
                 }
 
                 // Sin fila de SUBTOTAL por cliente: el saldo ya va en la cabecera de la
                 // sección y el resumen de toda la cartera queda en el TOTAL GENERAL.
-            }
-            if ($cuerpo !== '') {
-                $cuerpo .= '</tbody></table>';
             }
 
             ob_start();
@@ -663,8 +722,8 @@ class CuentasPorCobrarController extends BaseModuloController
                 .header h2 { margin: 0 0 2px 0; font-size: 13pt; }
                 .header h3 { margin: 0 0 2px 0; font-size: 10pt; }
                 .header p  { margin: 0; font-size: 7.5pt; }
-                table.cli { margin-bottom: 12px; }
-                /* Cabecera de cada cliente: fila de la misma tabla, con todo el ancho. */
+                table.fila { margin-bottom: 0; }
+                /* Cabecera de cada cliente: fila de todo el ancho. */
                 tr.grp td { background: #eafaf1; border: 1px solid #ccc; font-weight: bold; font-size: 8.5pt; padding: 4px 5px; }
                 /* Separación entre un cliente y el siguiente: fila vacía sin bordes, del
                    mismo alto que el hueco que dejaban antes las tablas sueltas (~25 pt). */
@@ -698,24 +757,24 @@ class CuentasPorCobrarController extends BaseModuloController
                     </td>
                 </tr>
             </table>
-            <?= $cuerpo ?: "<table><tr><td class='text-center' style='width:100%;'>No se encontraron cuentas por cobrar con los filtros aplicados.</td></tr></table>" ?>
-            <table class="tot">
-                <tr>
-                    <td class="text-end" style="width:<?= $wEtq ?>%;">TOTAL GENERAL (<?= count($grupos) ?> cliente<?= count($grupos) !== 1 ? 's' : '' ?>)</td>
-                    <td class="text-end" style="width:10%;">$<?= number_format($totTotal, 2) ?></td>
-                    <td class="text-end" style="width:9%;">$<?= number_format($totNc, 2) ?></td>
-                    <td class="text-end" style="width:10%;">$<?= number_format($totAbonos, 2) ?></td>
-                    <td class="text-end" style="width:10%;">$<?= number_format($totRet, 2) ?></td>
-                    <td class="text-end" style="width:10%;">$<?= number_format($totSaldo, 2) ?></td>
-                    <td style="width:<?= 5 + $wAse ?>%;"></td>
-                </tr>
-            </table>
             </page>
             <?php
-            $html     = ob_get_clean();
+            $inicio = ob_get_clean();
+            if (!$cuerpo) {
+                $cuerpo[] = "<tr><td class='text-center' style='width:100%;'>No se encontraron cuentas por cobrar con los filtros aplicados.</td></tr>";
+            }
+            $final = "<table class='tot' style='margin-top:6px;'><tr>
+                    <td class='text-end' style='width:{$wEtq}%;'>TOTAL GENERAL (" . count($grupos) . ' cliente' . (count($grupos) !== 1 ? 's' : '') . ")</td>
+                    <td class='text-end' style='width:10%;'>\$" . number_format($totTotal, 2) . "</td>
+                    <td class='text-end' style='width:9%;'>\$" . number_format($totNc, 2) . "</td>
+                    <td class='text-end' style='width:10%;'>\$" . number_format($totAbonos, 2) . "</td>
+                    <td class='text-end' style='width:10%;'>\$" . number_format($totRet, 2) . "</td>
+                    <td class='text-end' style='width:10%;'>\$" . number_format($totSaldo, 2) . "</td>
+                    <td style='width:" . (5 + $wAse) . "%;'></td>
+                </tr></table>";
             // Vertical (A4 retrato): es la orientación por defecto de los listados del módulo.
             $html2pdf = new \Spipu\Html2Pdf\Html2Pdf('P', 'A4', 'es');
-            $html2pdf->writeHTML($html);
+            $this->escribirPdfPorBloques($html2pdf, $inicio, "<tr>{$thCols}</tr>", $cuerpo, $final);
             $html2pdf->output('CuentasPorCobrar_Cliente_' . date('Ymd_His') . '.pdf', 'D');
             exit;
         } catch (\Throwable $ex) {
@@ -2360,6 +2419,8 @@ $plantillasFiltradas = [];
     public function exportExcel(): void
     {
         $this->requireLeer();
+        // Listados grandes: el tiempo por defecto de PHP no alcanza para armar el Excel.
+        @set_time_limit(300);
         $idEmpresa = (int) $_SESSION['id_empresa'];
         $filtros   = $this->getFiltros();
         [$idsEmpresa, $consolidado] = $this->resolverAlcance($idEmpresa, $filtros);
@@ -2449,6 +2510,8 @@ $plantillasFiltradas = [];
     public function exportPdf(): void
     {
         $this->requireLeer();
+        // Listados grandes: el tiempo por defecto de PHP no alcanza para armar el PDF.
+        @set_time_limit(300);
         $idEmpresa = (int) $_SESSION['id_empresa'];
         $filtros   = $this->getFiltros();
         [$idsEmpresa, $consolidado] = $this->resolverAlcance($idEmpresa, $filtros);
@@ -2468,7 +2531,9 @@ $plantillasFiltradas = [];
             return;
         }
 
-        $stats = $this->repo->getEstadisticas($idsEmpresa, $filtros);
+        $stats = ($filtros['estado'] ?? 'PENDIENTES') === 'PENDIENTES'
+            ? $this->estadisticasDeFilas($filas)
+            : $this->repo->getEstadisticas($idsEmpresa, $filtros);
 
         try {
             $empresa       = (new \App\models\Empresa())->getPorId($idEmpresa) ?? [];
@@ -2493,7 +2558,7 @@ $plantillasFiltradas = [];
             $totalSaldo   = 0;
             $totalCobrado = 0;
             $totalTotal   = 0;
-            $filaHtml = '';
+            $filasHtml = [];
             foreach ($filas as $r) {
                 $dias = (int)($r['dias_vencido'] ?? 0);
                 $ts   = (float)$r['total'];
@@ -2507,7 +2572,7 @@ $plantillasFiltradas = [];
                 $fVenc = !empty($r['fecha_vencimiento']) ? date('d-m-Y', strtotime($r['fecha_vencimiento'])) : '—';
                 $fEmis = !empty($r['fecha_emision']) ? date('d-m-Y', strtotime($r['fecha_emision'])) : '—';
                 $origenTxt = $this->getOrigenLabel($r['origen'] ?? 'FACTURA');
-                $filaHtml .= "<tr>{$tdEst($r)}
+                $filasHtml[] = "<tr>{$tdEst($r)}
                     <td style='width:{$wDoc}%;'>" . $docPdf($r) . "</td>
                     <td class='text-center' style='width:9%;'>{$origenTxt}</td>
                     <td style='width:{$wCli}%;'>" . htmlspecialchars($r['cliente_nombre'] ?? '') . "</td>
@@ -2535,6 +2600,7 @@ $plantillasFiltradas = [];
                 table.stats td.stats-box { text-align: center; vertical-align: middle; padding: 6px 4px; border: 1px solid #ccc; }
                 .stat-lbl  { font-size: 7.5pt; }
                 .stat-val  { font-size: 11pt; font-weight: bold; }
+                table.fila { margin-bottom: 0; }
                 <?= self::CSS_FILTROS_PDF ?>
             </style>
             <page backtop="8mm" backbottom="12mm" backleft="8mm" backright="8mm" footer="page">
@@ -2560,41 +2626,33 @@ $plantillasFiltradas = [];
                     </td>
                 </tr>
             </table>
-            <table>
-                <thead>
-                    <tr>
-                        <?php if ($consolidado): ?><th style="width:<?= $wEst ?>%;">Estab.</th><?php endif; ?>
-                        <th style="width:<?= $wDoc ?>%;">Documento</th>
-                        <th style="width:9%;">Origen</th>
-                        <th style="width:<?= $wCli ?>%;">Cliente</th>
-                        <th style="width:11%;">F. Emisión</th>
-                        <th style="width:14%;">F. Vencimiento</th>
-                        <th style="width:9%;">Total</th>
-                        <th style="width:9%;">Cobrado</th>
-                        <th style="width:9%;">Saldo</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    <?php // Sin resultados: una fila con el aviso, igual que las vistas "Por
-                          // cliente" y "Por producto". Además hace que Html2Pdf dibuje el
-                          // encabezado de la tabla, que con el <tbody> vacío no se pintaba. ?>
-                    <?= $filaHtml ?: "<tr><td colspan='" . ($consolidado ? 9 : 8) . "' class='text-center' style='width:100%;'>No se encontraron cuentas por cobrar con los filtros aplicados.</td></tr>" ?>
-                </tbody>
-                <tfoot>
-                    <tr style="background:#f8f9fa;font-weight:bold;">
-                        <td colspan="<?= $consolidado ? 6 : 5 ?>" class="text-end" style="width:73%;">TOTALES:</td>
-                        <td class="text-end" style="width:9%;">$<?= number_format($totalTotal, 2) ?></td>
-                        <td class="text-end" style="width:9%;">$<?= number_format($totalCobrado, 2) ?></td>
-                        <td class="text-end" style="width:9%;">$<?= number_format($totalSaldo, 2) ?></td>
-                    </tr>
-                </tfoot>
-            </table>
             </page>
             <?php
-            $html     = ob_get_clean();
+            $inicio = ob_get_clean();
+            $thead  = "<tr>"
+                . ($consolidado ? "<th style='width:{$wEst}%;'>Estab.</th>" : '')
+                . "<th style='width:{$wDoc}%;'>Documento</th>
+                   <th style='width:9%;'>Origen</th>
+                   <th style='width:{$wCli}%;'>Cliente</th>
+                   <th style='width:11%;'>F. Emisión</th>
+                   <th style='width:14%;'>F. Vencimiento</th>
+                   <th style='width:9%;'>Total</th>
+                   <th style='width:9%;'>Cobrado</th>
+                   <th style='width:9%;'>Saldo</th></tr>";
+            // Sin resultados: una fila con el aviso, igual que las vistas "Por cliente" y "Por producto".
+            if (!$filasHtml) {
+                $filasHtml[] = "<tr><td class='text-center' style='width:100%;'>No se encontraron cuentas por cobrar con los filtros aplicados.</td></tr>";
+            }
+            // Total único al final (un <tfoot> se repetiría en cada hoja con la cifra global).
+            $final = "<table class='fila'><tr style='background:#f8f9fa;font-weight:bold;'>
+                        <td class='text-end' style='width:73%;'>TOTALES:</td>
+                        <td class='text-end' style='width:9%;'>\$" . number_format($totalTotal, 2) . "</td>
+                        <td class='text-end' style='width:9%;'>\$" . number_format($totalCobrado, 2) . "</td>
+                        <td class='text-end' style='width:9%;'>\$" . number_format($totalSaldo, 2) . "</td>
+                      </tr></table>";
             // Vertical (A4 retrato): es la orientación por defecto de los listados del módulo.
             $html2pdf = new \Spipu\Html2Pdf\Html2Pdf('P', 'A4', 'es');
-            $html2pdf->writeHTML($html);
+            $this->escribirPdfPorBloques($html2pdf, $inicio, $thead, $filasHtml, $final);
             $html2pdf->output('CuentasPorCobrar_' . date('Ymd_His') . '.pdf', 'D');
             exit;
         } catch (\Throwable $e) {

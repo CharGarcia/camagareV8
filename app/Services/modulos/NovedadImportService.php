@@ -23,14 +23,19 @@ use Exception;
  *  - Plantilla actual (NovedadPlantillaService): una fila por empleado y una
  *    columna por tipo de novedad. Columnas IDENTIFICACION, NOMBRE, una por tipo,
  *    MES, ANIO, AFECTA_A, FECHA y OBSERVACION. Cada celda de novedad con valor es
- *    una novedad; en la de Aviso de salida va el motivo en lugar del valor.
+ *    una novedad. El Aviso de salida NO se carga por Excel (se registra a mano
+ *    en el módulo): si una plantilla vieja trae esa columna con datos, se rechaza.
  *    Otros Ingresos y las horas tienen una columna CON IESS y otra SIN IESS: la
  *    columna es la marca "aporta al IESS" de la novedad. Una columna con solo el
  *    nombre del tipo (plantillas anteriores) deja la novedad sin marca.
  *  - Formato anterior: una fila por novedad, con IDENTIFICACION, NOMBRE, TIPO,
- *    VALOR, MES, ANIO, AFECTA_A, FECHA, OBSERVACION y MOTIVO, y opcionalmente
+ *    VALOR, MES, ANIO, AFECTA_A, FECHA y OBSERVACION, y opcionalmente
  *    APORTA_IESS (SI/NO). Se sigue aceptando para las plantillas que ya se
  *    descargaron así.
+ *
+ * Los Anticipos (3) y las cuotas de Préstamo Empresa (9) del archivo se asumen YA
+ * ENTREGADOS al empleado: se guardan con la marca de desembolso (desembolsado_migrado),
+ * así el rol los descuenta sin pedir el egreso de Egresos → Nómina (ver yaEntregado()).
  *
  * Cada importación queda registrada como una CARGA (novedades_cargas) y todas sus
  * novedades guardan el id_carga, para poder revertirla completa desde el módulo
@@ -49,9 +54,11 @@ class NovedadImportService
         'aplica_en'      => ['AFECTAA', 'AFECTA', 'APLICAEN', 'APLICA'],
         'fecha'          => ['FECHA', 'FECHAREGISTRO'],
         'observacion'    => ['OBSERVACION', 'OBSERVACIONES', 'DETALLE', 'CONCEPTO'],
-        'motivo'         => ['MOTIVO', 'MOTIVOSALIDA'],
         'aporta_iess'    => ['APORTAIESS', 'APORTAALIESS', 'IESS', 'CONIESS'],
     ];
+
+    /** El Aviso de salida se registra a mano en el módulo, no por Excel. */
+    private const MSG_AVISO_SALIDA = 'El Aviso de salida ya no se carga por Excel: regístrelo a mano en Novedades (botón Nuevo) y deje esa columna vacía.';
 
     private NovedadService $svc;
     private NovedadRepository $repo;
@@ -164,7 +171,7 @@ class NovedadImportService
                 throw new Exception('El archivo no tiene ninguna fila con datos.');
             }
             throw new Exception($porEmpleado
-                ? 'Ningún empleado tiene novedades: escriba el valor en la columna de la novedad que le corresponda (monto, horas, días o, en Aviso de salida, el motivo).'
+                ? 'Ningún empleado tiene novedades: escriba el valor en la columna de la novedad que le corresponda (monto, horas o días).'
                 : 'Ninguna fila tiene VALOR: complete la columna VALOR de los empleados a los que aplica la novedad.');
         }
 
@@ -204,8 +211,8 @@ class NovedadImportService
     /**
      * Plantilla actual: la fila es un empleado y hay una columna por tipo de
      * novedad. Cada celda de novedad con valor es una novedad; las vacías o en 0
-     * no (a ese empleado no le aplica ese tipo). En la columna de Aviso de salida
-     * va el motivo de salida en lugar del valor, y en Otros Ingresos y horas la
+     * no (a ese empleado no le aplica ese tipo). Una columna de Aviso de salida con
+     * datos (plantillas viejas) es error: ese tipo se registra a mano. En Otros Ingresos y horas la
      * columna (CON IESS / SIN IESS) da la marca de IESS. MES, ANIO, AFECTA_A,
      * FECHA y OBSERVACION valen para todas las novedades de la fila.
      *
@@ -267,11 +274,13 @@ class NovedadImportService
 
         $novedades = [];
         foreach ($celdas as $c) {
-            $codigo  = $c['codigo'];
-            $esAviso = CatalogoNovedades::esAvisoSalida($codigo);
+            $codigo = $c['codigo'];
+            if (CatalogoNovedades::esAvisoSalida($codigo)) {
+                $errores[] = [$this->etiquetaTipo($codigo, $c['iess']), self::MSG_AVISO_SALIDA];
+                continue;
+            }
             try {
-                $valor  = $esAviso ? 0.0 : $this->numero($c['txt']);
-                $motivo = $esAviso ? $this->resolverMotivo($c['txt']) : '';
+                $valor = $this->numero($c['txt']);
             } catch (\Throwable $e) {
                 $errores[] = [$this->etiquetaTipo($codigo, $c['iess']), $e->getMessage()];
                 continue;
@@ -282,8 +291,9 @@ class NovedadImportService
             $novedades[] = $base + [
                 'tipo_codigo'   => $codigo,
                 'valor'         => $valor,
-                'motivo_codigo' => $motivo,
+                'motivo_codigo' => '',
                 'aporta_iess'   => $c['iess'], // null: columna sin CON/SIN IESS → la del tipo
+                'desembolsado_migrado' => $this->yaEntregado($codigo),
                 'observacion'   => $obs !== '' ? $obs : $this->observacionPorDefecto($codigo, $mes, $anio),
             ];
         }
@@ -480,21 +490,20 @@ class NovedadImportService
         $anio     = (int) $this->celda($f, $campos, 'anio', 0);
         $afecta   = trim((string) $this->celda($f, $campos, 'aplica_en', 'rol'));
         $obs      = trim((string) $this->celda($f, $campos, 'observacion'));
-        $motivo   = trim((string) $this->celda($f, $campos, 'motivo'));
         $iessTxt  = trim((string) $this->celda($f, $campos, 'aporta_iess')); // opcional; vacío = la del tipo
 
         if ($ident === '') {
             throw new Exception('Falta la IDENTIFICACION del empleado.');
         }
 
-        $tipo  = $this->resolverTipo($tipoRaw);
-        $valor = 0.0;
-        if (!CatalogoNovedades::esAvisoSalida($tipo)) {
-            if ($valorTxt === '') {
-                return null; // a este empleado no le aplica la novedad
-            }
-            $valor = $this->numero($valorTxt);
+        $tipo = $this->resolverTipo($tipoRaw);
+        if (CatalogoNovedades::esAvisoSalida($tipo)) {
+            throw new Exception(self::MSG_AVISO_SALIDA);
         }
+        if ($valorTxt === '') {
+            return null; // a este empleado no le aplica la novedad
+        }
+        $valor = $this->numero($valorTxt);
         $idEmp = $this->resolverEmpleado($idEmpresa, $ident);
         if (!$idEmp) {
             throw new Exception("No existe un empleado con identificación '{$ident}'"
@@ -512,12 +521,23 @@ class NovedadImportService
             'aplica_en'        => $this->resolverAplicaEn($afecta),
             'fecha'            => $this->normalizarFecha($this->celda($f, $campos, 'fecha', '')),
             'observacion'      => $obs !== '' ? $obs : $this->observacionPorDefecto($tipo, $mes, $anio),
-            'motivo_codigo'    => $motivo !== '' ? $this->resolverMotivo($motivo) : '',
+            'motivo_codigo'    => '',
+            'desembolsado_migrado' => $this->yaEntregado($tipo),
             'aporta_iess'      => $iessTxt !== '' && CatalogoNovedades::admiteOpcionIess($tipo) ? $this->resolverSiNo($iessTxt) : null,
             'estado'           => 'activo',
             // Solo para los mensajes de error; se quita antes de guardar.
             '_nombre_empleado' => $nombre !== '' ? $nombre : $ident,
         ];
+    }
+
+    /**
+     * Anticipo y Préstamo Empresa normalmente se pagan primero con un egreso y solo
+     * entonces el rol los descuenta. En la carga por Excel se asume que ya se
+     * entregaron (fuera del sistema): el rol los descuenta directo.
+     */
+    private function yaEntregado(string $codigo): bool
+    {
+        return CatalogoNovedades::esPagoPorEgreso($codigo) || CatalogoNovedades::esPrestamo($codigo);
     }
 
     /** ¿La celda es un 0? En la plantilla por empleado, un 0 equivale a dejarla vacía. */
@@ -595,26 +615,6 @@ class NovedadImportService
         throw new Exception("APORTA_IESS no reconocido: '{$raw}' (use SI o NO).");
     }
 
-    /**
-     * Motivo de salida por código ("T", también en minúscula), por nombre, o como
-     * lo pone la lista desplegable de la plantilla: "T - Terminación del contrato".
-     */
-    private function resolverMotivo(string $raw): string
-    {
-        $raw    = trim($raw);
-        $codigo = mb_strtoupper($raw, 'UTF-8');
-        if (CatalogoNovedades::esMotivoValido($codigo)) return $codigo;
-        if (preg_match('/^([A-Za-z])\s*-\s*\S/', $raw, $m) && CatalogoNovedades::esMotivoValido(strtoupper($m[1]))) {
-            return strtoupper($m[1]);
-        }
-        foreach (CatalogoNovedades::MOTIVOS_SALIDA as $mot) {
-            if (mb_strtolower($mot['nombre']) === mb_strtolower($raw)) return $mot['codigo'];
-        }
-        $codigos = array_column(CatalogoNovedades::MOTIVOS_SALIDA, 'codigo');
-        $ultimo  = array_pop($codigos);
-        throw new Exception("Motivo de salida no reconocido: «{$raw}». Elíjalo de la lista o escriba su código ("
-            . implode(', ', $codigos) . " o {$ultimo}).");
-    }
 
     private function normalizarFecha($valor): string
     {

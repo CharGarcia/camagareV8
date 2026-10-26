@@ -15,7 +15,7 @@ class CuentasPorCobrarRepository extends BaseRepository
 {
     use AmbienteEmpresaTrait;
     use ExpansionTerceroTrait;
-    /** Número de la factura `v` normalizado a 15 dígitos: clave de enlace con nc_aplic / nd_aplic. */
+    /** Número de la factura `v` normalizado a 15 dígitos (`cand.num_norm`): clave de enlace con retenciones y notas. */
     private string $numV;
 
     public function __construct()
@@ -132,52 +132,95 @@ class CuentasPorCobrarRepository extends BaseRepository
     }
 
     /**
-     * CTE que calcula lo retenido por factura hasta una fecha de corte opcional.
-     * La regla de enlace (id_venta o num_doc_sustento normalizado a 15 dígitos, con lo retenido
-     * por línea cuando una retención sustenta varias facturas) vive en
-     * AbonosVentaSql y es la misma que usan Ingresos y Facturas de Venta.
-     * $idEmpresa: mismo motivo que getCteCobrado — sin filtrar, sumaba retenciones
-     * de todas las empresas.
+     * CTE con lo retenido por cada factura candidata (`cand`, ver sqlFacturas()) hasta una
+     * fecha de corte opcional. La regla de enlace (id_venta o num_doc_sustento normalizado
+     * a 15 dígitos, con lo retenido por línea cuando una retención sustenta varias facturas)
+     * vive en AbonosVentaSql y es la misma que usan Ingresos y Facturas de Venta.
+     *
+     * @param bool $pocas true cuando `cand` trae pocas facturas (solo las pendientes, o una
+     *                    sola): entonces conviene buscar las líneas de cada una por índice.
+     *                    Con todo el histórico ("Todos", "Pagadas") es más rápido el hash.
      */
-    private function getCteRetenido(array $idsEmpresa, ?string $fechaHasta = null): string
+    private function getCteRetenido(array $idsEmpresa, ?string $fechaHasta = null, bool $pocas = true): string
     {
         $filtroFecha = $fechaHasta ? "AND r.fecha_emision <= :retenido_hasta" : '';
-        // El helper compara `r.id_empresa = {expr}`; con ANY(ARRAY[...]) cubre uno o varios
-        // establecimientos. El enlace a la factura ya exige vc.id_empresa = r.id_empresa.
-        return AbonosVentaSql::cteRetenidoPorFactura($this->sqlAny($idsEmpresa), $filtroFecha);
+        return AbonosVentaSql::cteRetenidoDeDocumentos('cand', $this->sqlAny($idsEmpresa), $filtroFecha,
+            $pocas && $this->indiceExiste('idx_ret_vta_det_sustento_norm'));
     }
 
     /**
-     * CTE que calcula el total de notas de crédito aplicadas hasta una fecha de corte opcional.
-     * Columnas: num_norm (documento modificado, normalizado a 15 dígitos) y total_nc.
+     * Condición sobre las notas `n` (crédito o débito) que cuentan para el saldo: ambiente
+     * de producción (tolerando notas legacy sin tipo_ambiente, NULL, para no perderlas del
+     * cálculo) y, con corte, emitidas hasta esa fecha.
+     */
+    private function condNotas(array $idsEmpresa, string $phFecha): string
+    {
+        return "AND (n.tipo_ambiente IS NULL OR {$this->condAmbiente('n', $idsEmpresa)})"
+            . ($phFecha !== '' ? " AND n.fecha_emision <= {$phFecha}" : '');
+    }
+
+    /**
+     * CTE con las notas de crédito aplicadas a cada factura candidata hasta una fecha de
+     * corte opcional. Columnas: id_venta y total_nc. El enlace es por (empresa, número
+     * normalizado): la NC de un establecimiento no descuenta la factura de otro con el
+     * mismo número.
      */
     private function getCteNC(array $idsEmpresa, ?string $fechaHasta = null): string
     {
-        $filtroFecha = $fechaHasta ? "AND n.fecha_emision <= :nc_hasta" : '';
-        // Ids enteros validados → interpolación segura. Se filtra por empresa (multiempresa,
-        // §4) y por el ambiente actual de la empresa DUEÑA de la nota (correlacionado por
-        // fila, ver condAmbiente), tolerando NC legacy sin tipo_ambiente (NULL) para no
-        // perderlas del cálculo. porEmpresa=true: el CTE sale con id_empresa para enlazar
-        // por (empresa, número) y que la NC de un establecimiento no descuente la factura
-        // de otro con el mismo número.
-        $extra = "AND (n.tipo_ambiente IS NULL OR {$this->condAmbiente('n', $idsEmpresa)})
-              {$filtroFecha}";
-        return AbonosVentaSql::cteNotasPorFactura('notas_credito_cabecera', 'total_nc', $this->sqlAny($idsEmpresa), $extra, true);
+        return AbonosVentaSql::cteNotasDeDocumentos('notas_credito_cabecera', 'total_nc', 'cand',
+            $this->condNotas($idsEmpresa, $fechaHasta ? ':nc_hasta' : ''));
     }
 
     /**
-     * CTE que calcula el total de notas de débito aplicadas hasta una fecha de corte opcional.
-     * A diferencia de la NC (que resta), la ND SUMA al saldo pendiente de la factura:
-     * es un cargo adicional al cliente, no una devolución.
-     * Columnas: num_norm (documento modificado, normalizado a 15 dígitos) y total_nd.
+     * CTE con las notas de débito aplicadas a cada factura candidata hasta una fecha de
+     * corte opcional. A diferencia de la NC (que resta), la ND SUMA al saldo pendiente de
+     * la factura: es un cargo adicional al cliente, no una devolución.
+     * Columnas: id_venta y total_nd.
      */
     private function getCteND(array $idsEmpresa, ?string $fechaHasta = null): string
     {
-        $filtroFecha = $fechaHasta ? "AND n.fecha_emision <= :nd_hasta" : '';
-        $extra = "AND (n.tipo_ambiente IS NULL OR {$this->condAmbiente('n', $idsEmpresa)})
-              {$filtroFecha}";
-        return AbonosVentaSql::cteNotasPorFactura('nota_debito_cabecera', 'total_nd', $this->sqlAny($idsEmpresa), $extra, true);
+        return AbonosVentaSql::cteNotasDeDocumentos('nota_debito_cabecera', 'total_nd', 'cand',
+            $this->condNotas($idsEmpresa, $fechaHasta ? ':nd_hasta' : ''));
     }
+
+    /**
+     * Condición " OR v.id IN (…)" con las facturas que tienen alguna nota de débito, para
+     * el prefiltro de candidatas (ver sqlFacturas()): la ND suma al saldo, así que una
+     * factura "pagada" según sus cobros puede volver a deber. Cadena vacía si en estas
+     * empresas no hay ninguna ND, que es lo normal: así ni siquiera se busca.
+     * La búsqueda va de la nota a la factura (pocas notas), no al revés.
+     */
+    private function condFacturasConNotaDebito(array $idsEmpresa, ?string $fechaHasta, array &$params): string
+    {
+        $clave = implode(',', $idsEmpresa);
+        $this->hayNotasDebito[$clave] ??= (bool) $this->db->query(
+            "SELECT EXISTS (SELECT 1 FROM nota_debito_cabecera
+                            WHERE id_empresa IN ({$this->sqlIn($idsEmpresa)}) AND eliminado = false AND estado != 'anulado')"
+        )->fetchColumn();
+        if (!$this->hayNotasDebito[$clave]) {
+            return '';
+        }
+        if ($fechaHasta) {
+            $params[':nd_pre_hasta'] = $fechaHasta;
+        }
+        $numVc   = AbonosVentaSql::numFactura('vc');
+        $numNota = AbonosVentaSql::normalizar('n.num_doc_modificado');
+        return " OR v.id IN (
+                    SELECT vc.id
+                    FROM nota_debito_cabecera n
+                    JOIN ventas_cabecera vc
+                         ON vc.id_empresa = n.id_empresa
+                        AND vc.eliminado  = false
+                        AND {$numVc} = {$numNota}
+                    WHERE n.id_empresa IN ({$this->sqlIn($idsEmpresa)})
+                      AND n.estado    != 'anulado'
+                      AND n.eliminado  = false
+                      " . $this->condNotas($idsEmpresa, $fechaHasta ? ':nd_pre_hasta' : '') . "
+                )";
+    }
+
+    /** Caché por petición de condFacturasConNotaDebito(): empresas => ¿hay alguna ND? */
+    private array $hayNotasDebito = [];
 
     /**
      * Extrae fecha_hasta del array de filtros y agrega los parámetros de corte
@@ -344,13 +387,61 @@ class CuentasPorCobrarRepository extends BaseRepository
      */
     public function getListado(int|array $idsEmpresa, array $filtros): array
     {
-        $ids = $this->idsEmpresa($idsEmpresa);
+        $params = [];
+        $sql = $this->sqlFacturas($this->idsEmpresa($idsEmpresa), $filtros, $params) . "
+            -- v.id desempata: sin él, las filas con la misma fecha salen en orden
+            -- arbitrario y cambian de posición entre cargas (el orden depende del plan).
+            ORDER BY fecha_vencimiento ASC, fecha_emision DESC, id DESC";
+
+        $st = $this->db->prepare($sql);
+        $st->execute($params);
+        return $st->fetchAll(PDO::FETCH_ASSOC);
+    }
+
+    /**
+     * SELECT de las facturas del listado con su saldo (sin ORDER BY). Lo comparten el
+     * listado, las tarjetas y la antigüedad, que lo envuelven para sumar.
+     *
+     * Rendimiento: calcular retenciones y notas exige normalizar el número de cada factura
+     * (varias expresiones regulares por fila). Antes se hacía sobre TODO el histórico de la
+     * empresa en cada consulta, aunque casi todo esté cobrado. Ahora va en dos pasos:
+     *  1. `cand`: las facturas que pasan los filtros y, cuando el estado pide saldo
+     *     pendiente, cuyo total menos lo cobrado aún es positivo (o que tienen nota de
+     *     débito). Es una cota segura: retenciones y NC solo bajan el saldo, la ND lo sube.
+     *  2. Retenciones, NC y ND se cruzan solo con esas candidatas, y el saldo exacto decide.
+     */
+    private function sqlFacturas(array $ids, array $filtros, array &$params): string
+    {
         [$where, $params] = $this->buildWhere($ids, $filtros);
         $fh = $this->aplicarFechaCorteCtEs($filtros, $params);
 
-        $sql = "
+        $estado    = $filtros['estado'] ?? 'PENDIENTES';
+        $venc      = "(v.fecha_emision + INTERVAL '1 day' * v.dias_credito)::date";
+        $saldo     = "(v.importe_total + COALESCE(nd.total_nd, 0) - COALESCE(cb.total_cobrado, 0) - COALESCE(rt.total_retenido, 0) - COALESCE(nc.total_nc, 0))";
+        $prefiltro = '';
+        $condSaldo = 'true'; // TODOS → sin filtro extra
+        if (in_array($estado, ['PENDIENTES', 'VENCIDAS', 'AL_DIA'], true)) {
+            $prefiltro = " AND (v.importe_total - COALESCE(cb.total_cobrado, 0) > 0"
+                       . $this->condFacturasConNotaDebito($ids, $fh, $params) . ")";
+            if ($estado === 'VENCIDAS') {
+                $prefiltro .= " AND {$venc} < CURRENT_DATE";
+            } elseif ($estado === 'AL_DIA') {
+                $prefiltro .= " AND {$venc} >= CURRENT_DATE";
+            }
+            $condSaldo = "{$saldo} > 0";
+        } elseif ($estado === 'PAGADAS') {
+            $condSaldo = "{$saldo} <= 0";
+        }
+
+        return "
             WITH cobrado  AS (" . $this->getCteCobrado($ids, $fh) . "),
-                 retenido AS (" . $this->getCteRetenido($ids, $fh) . "),
+                 cand     AS MATERIALIZED (
+                     SELECT v.id, v.id_empresa, {$this->numV} AS num_norm
+                     FROM ventas_cabecera v
+                     LEFT JOIN cobrado cb ON cb.id_venta = v.id
+                     WHERE {$where}{$prefiltro}
+                 ),
+                 retenido AS (" . $this->getCteRetenido($ids, $fh, $prefiltro !== '') . "),
                  nc_aplic AS (" . $this->getCteNC($ids, $fh) . "),
                  nd_aplic AS (" . $this->getCteND($ids, $fh) . ")
             SELECT
@@ -369,28 +460,22 @@ class CuentasPorCobrarRepository extends BaseRepository
                 COALESCE(rt.total_retenido, 0)                                                                              AS total_retenido,
                 COALESCE(nc.total_nc, 0)                                                                                    AS total_nc,
                 COALESCE(nd.total_nd, 0)                                                                                    AS total_nd,
-                v.importe_total + COALESCE(nd.total_nd, 0) - COALESCE(cb.total_cobrado, 0) - COALESCE(rt.total_retenido, 0) - COALESCE(nc.total_nc, 0) AS saldo,
+                {$saldo} AS saldo,
                 v.fecha_emision + INTERVAL '1 day' * v.dias_credito AS fecha_vencimiento,
                 v.dias_credito,
-                (CURRENT_DATE - (v.fecha_emision + INTERVAL '1 day' * v.dias_credito)::date) AS dias_vencido,
+                (CURRENT_DATE - {$venc}) AS dias_vencido,
                 " . $this->sqlDiasTranscurridos($filtros, 'v.fecha_emision', ':dias_corte_fac', $params) . " AS dias_transcurridos
-            FROM ventas_cabecera v
+            FROM cand
+            JOIN ventas_cabecera v ON v.id = cand.id
             LEFT JOIN empresas emp ON emp.id = v.id_empresa
             JOIN clientes c ON c.id = v.id_cliente
             LEFT JOIN vendedores ven ON ven.id = v.id_vendedor
             LEFT JOIN cobrado  cb ON cb.id_venta = v.id
             LEFT JOIN retenido rt ON rt.id_venta = v.id
-            LEFT JOIN nc_aplic nc ON nc.id_empresa = v.id_empresa AND nc.num_norm = {$this->numV}
-            LEFT JOIN nd_aplic nd ON nd.id_empresa = v.id_empresa AND nd.num_norm = {$this->numV}
-            WHERE {$where}
-            -- v.id desempata: sin él, las filas con la misma fecha salen en orden
-            -- arbitrario y cambian de posición entre cargas (el orden depende del plan).
-            ORDER BY fecha_vencimiento ASC, v.fecha_emision DESC, v.id DESC
+            LEFT JOIN nc_aplic nc ON nc.id_venta = v.id
+            LEFT JOIN nd_aplic nd ON nd.id_venta = v.id
+            WHERE {$condSaldo}
         ";
-
-        $st = $this->db->prepare($sql);
-        $st->execute($params);
-        return $st->fetchAll(PDO::FETCH_ASSOC);
     }
 
     /**
@@ -427,38 +512,15 @@ class CuentasPorCobrarRepository extends BaseRepository
 
         if (in_array($tipoDoc, ['TODOS', 'FACTURA'], true)) {
             // Para estadísticas, no aplicar filtro de estado pues queremos todos los saldos
-            $filtrosSinEstado = array_merge($filtros, ['estado' => 'PENDIENTES']);
-            [$where, $params] = $this->buildWhere($ids, $filtrosSinEstado);
-            $fh = $this->aplicarFechaCorteCtEs($filtros, $params);
-
+            $params = [];
             $sql = "
-                WITH cobrado  AS (" . $this->getCteCobrado($ids, $fh) . "),
-                     retenido AS (" . $this->getCteRetenido($ids, $fh) . "),
-                     nc_aplic AS (" . $this->getCteNC($ids, $fh) . "),
-                     nd_aplic AS (" . $this->getCteND($ids, $fh) . ")
                 SELECT
-                    COUNT(v.id) AS total_facturas,
-                    SUM(v.importe_total + COALESCE(nd.total_nd, 0) - COALESCE(cb.total_cobrado, 0) - COALESCE(rt.total_retenido, 0) - COALESCE(nc.total_nc, 0)) AS total_saldo,
-                    SUM(CASE
-                        WHEN (v.fecha_emision + INTERVAL '1 day' * v.dias_credito)::date < CURRENT_DATE
-                        THEN v.importe_total + COALESCE(nd.total_nd, 0) - COALESCE(cb.total_cobrado, 0) - COALESCE(rt.total_retenido, 0) - COALESCE(nc.total_nc, 0)
-                        ELSE 0
-                    END) AS total_vencido,
-                    SUM(CASE
-                        WHEN (v.fecha_emision + INTERVAL '1 day' * v.dias_credito)::date >= CURRENT_DATE
-                        THEN v.importe_total + COALESCE(nd.total_nd, 0) - COALESCE(cb.total_cobrado, 0) - COALESCE(rt.total_retenido, 0) - COALESCE(nc.total_nc, 0)
-                        ELSE 0
-                    END) AS total_al_dia,
-                    COUNT(CASE
-                        WHEN (v.fecha_emision + INTERVAL '1 day' * v.dias_credito)::date < CURRENT_DATE THEN 1
-                    END) AS facturas_vencidas
-                FROM ventas_cabecera v
-                JOIN clientes c ON c.id = v.id_cliente
-                LEFT JOIN cobrado  cb ON cb.id_venta = v.id
-                LEFT JOIN retenido rt ON rt.id_venta = v.id
-                LEFT JOIN nc_aplic nc ON nc.id_empresa = v.id_empresa AND nc.num_norm = {$this->numV}
-                LEFT JOIN nd_aplic nd ON nd.id_empresa = v.id_empresa AND nd.num_norm = {$this->numV}
-                WHERE {$where}
+                    COUNT(*) AS total_facturas,
+                    SUM(f.saldo) AS total_saldo,
+                    SUM(CASE WHEN f.dias_vencido > 0  THEN f.saldo ELSE 0 END) AS total_vencido,
+                    SUM(CASE WHEN f.dias_vencido <= 0 THEN f.saldo ELSE 0 END) AS total_al_dia,
+                    COUNT(*) FILTER (WHERE f.dias_vencido > 0) AS facturas_vencidas
+                FROM (" . $this->sqlFacturas($ids, array_merge($filtros, ['estado' => 'PENDIENTES']), $params) . ") f
             ";
 
             $st = $this->db->prepare($sql);
@@ -551,15 +613,8 @@ class CuentasPorCobrarRepository extends BaseRepository
         $r = ['tramo_vigente' => 0, 'tramo_1_30' => 0, 'tramo_31_60' => 0, 'tramo_61_90' => 0, 'tramo_mas_90' => 0];
 
         if (in_array($tipoDoc, ['TODOS', 'FACTURA'], true)) {
-            $filtrosSinEstado = array_merge($filtros, ['estado' => 'PENDIENTES']);
-            [$where, $params] = $this->buildWhere($ids, $filtrosSinEstado);
-            $fh = $this->aplicarFechaCorteCtEs($filtros, $params);
-
+            $params = [];
             $sql = "
-                WITH cobrado  AS (" . $this->getCteCobrado($ids, $fh) . "),
-                     retenido AS (" . $this->getCteRetenido($ids, $fh) . "),
-                     nc_aplic AS (" . $this->getCteNC($ids, $fh) . "),
-                     nd_aplic AS (" . $this->getCteND($ids, $fh) . ")
                 SELECT
                     SUM(CASE WHEN dias_vencido BETWEEN 1 AND 30
                         THEN saldo ELSE 0 END) AS tramo_1_30,
@@ -571,18 +626,7 @@ class CuentasPorCobrarRepository extends BaseRepository
                         THEN saldo ELSE 0 END) AS tramo_mas_90,
                     SUM(CASE WHEN dias_vencido <= 0
                         THEN saldo ELSE 0 END) AS tramo_vigente
-                FROM (
-                    SELECT
-                        v.importe_total + COALESCE(nd.total_nd, 0) - COALESCE(cb.total_cobrado, 0) - COALESCE(rt.total_retenido, 0) - COALESCE(nc.total_nc, 0) AS saldo,
-                        (CURRENT_DATE - (v.fecha_emision + INTERVAL '1 day' * v.dias_credito)::date) AS dias_vencido
-                    FROM ventas_cabecera v
-                    JOIN clientes c ON c.id = v.id_cliente
-                    LEFT JOIN cobrado  cb ON cb.id_venta = v.id
-                    LEFT JOIN retenido rt ON rt.id_venta = v.id
-                    LEFT JOIN nc_aplic nc ON nc.id_empresa = v.id_empresa AND nc.num_norm = {$this->numV}
-                    LEFT JOIN nd_aplic nd ON nd.id_empresa = v.id_empresa AND nd.num_norm = {$this->numV}
-                    WHERE {$where}
-                ) sub
+                FROM (" . $this->sqlFacturas($ids, array_merge($filtros, ['estado' => 'PENDIENTES']), $params) . ") sub
             ";
 
             $st = $this->db->prepare($sql);
@@ -1104,8 +1148,18 @@ class CuentasPorCobrarRepository extends BaseRepository
      */
     public function getFacturaParaCobro(int $idVenta, int $idEmpresa): ?array
     {
+        // `cand` = solo esta factura: retenciones y notas se cruzan con ella y no con todo
+        // el histórico de la empresa (ver sqlFacturas()).
         $sql = "
             WITH cobrado  AS (" . $this->getCteCobrado([$idEmpresa]) . "),
+                 cand     AS MATERIALIZED (
+                     SELECT v.id, v.id_empresa, {$this->numV} AS num_norm
+                     FROM ventas_cabecera v
+                     WHERE v.id         = :id
+                       AND v.id_empresa = :id_empresa
+                       AND v.eliminado  = false
+                       AND v.estado NOT IN ('anulado','anulada') -- incluye 'borrador' (mismo criterio que Ingresos)
+                 ),
                  retenido AS (" . $this->getCteRetenido([$idEmpresa]) . "),
                  nc_aplic AS (" . $this->getCteNC([$idEmpresa]) . "),
                  nd_aplic AS (" . $this->getCteND([$idEmpresa]) . ")
@@ -1122,16 +1176,13 @@ class CuentasPorCobrarRepository extends BaseRepository
                 COALESCE(nd.total_nd, 0)                                                                                     AS total_nd,
                 v.importe_total + COALESCE(nd.total_nd, 0) - COALESCE(cb.total_cobrado, 0) - COALESCE(rt.total_retenido, 0) - COALESCE(nc.total_nc, 0) AS saldo,
                 CONCAT(v.establecimiento,'-',v.punto_emision,'-',v.secuencial) AS numero_factura
-            FROM ventas_cabecera v
+            FROM cand
+            JOIN ventas_cabecera v ON v.id = cand.id
             JOIN clientes c ON c.id = v.id_cliente
             LEFT JOIN cobrado  cb ON cb.id_venta = v.id
             LEFT JOIN retenido rt ON rt.id_venta = v.id
-            LEFT JOIN nc_aplic nc ON nc.id_empresa = v.id_empresa AND nc.num_norm = {$this->numV}
-            LEFT JOIN nd_aplic nd ON nd.id_empresa = v.id_empresa AND nd.num_norm = {$this->numV}
-            WHERE v.id         = :id
-              AND v.id_empresa = :id_empresa
-              AND v.eliminado  = false
-              AND v.estado NOT IN ('anulado','anulada') -- incluye 'borrador' (mismo criterio que Ingresos)
+            LEFT JOIN nc_aplic nc ON nc.id_venta = v.id
+            LEFT JOIN nd_aplic nd ON nd.id_venta = v.id
         ";
 
         $st = $this->db->prepare($sql);
@@ -1258,8 +1309,21 @@ class CuentasPorCobrarRepository extends BaseRepository
      */
     public function getFacturasPendientesParaEnvio(int $idEmpresa, bool $soloVencidas, int $diasMin): array
     {
+        $params = [':id_empresa' => $idEmpresa];
+        // Candidatas con la misma cota que sqlFacturas(): total menos cobros > 0, o con ND.
         $sql = "
             WITH cobrado  AS (" . $this->getCteCobrado([$idEmpresa]) . "),
+                 cand     AS MATERIALIZED (
+                     SELECT v.id, v.id_empresa, {$this->numV} AS num_norm
+                     FROM ventas_cabecera v
+                     LEFT JOIN cobrado cb ON cb.id_venta = v.id
+                     WHERE v.id_empresa = :id_empresa
+                       AND v.eliminado  = false
+                       AND v.estado    IN ('autorizado','autorizada')
+                       AND v.tipo_ambiente = '2'
+                       AND (v.importe_total - COALESCE(cb.total_cobrado, 0) > 0"
+                       . $this->condFacturasConNotaDebito([$idEmpresa], null, $params) . ")
+                 ),
                  retenido AS (" . $this->getCteRetenido([$idEmpresa]) . "),
                  nc_aplic AS (" . $this->getCteNC([$idEmpresa]) . "),
                  nd_aplic AS (" . $this->getCteND([$idEmpresa]) . ")
@@ -1279,20 +1343,15 @@ class CuentasPorCobrarRepository extends BaseRepository
                 COALESCE(rt.total_retenido, 0)                                              AS total_retenido,
                 COALESCE(nc.total_nc, 0)                                                    AS total_nc,
                 (v.importe_total + COALESCE(nd.total_nd, 0) - COALESCE(cb.total_cobrado, 0) - COALESCE(rt.total_retenido, 0) - COALESCE(nc.total_nc, 0)) AS saldo
-            FROM ventas_cabecera v
+            FROM cand
+            JOIN ventas_cabecera v ON v.id = cand.id
             JOIN clientes c ON c.id = v.id_cliente
             LEFT JOIN cobrado  cb ON cb.id_venta = v.id
             LEFT JOIN retenido rt ON rt.id_venta = v.id
-            LEFT JOIN nc_aplic nc ON nc.id_empresa = v.id_empresa AND nc.num_norm = {$this->numV}
-            LEFT JOIN nd_aplic nd ON nd.id_empresa = v.id_empresa AND nd.num_norm = {$this->numV}
-            WHERE v.id_empresa = :id_empresa
-              AND v.eliminado  = false
-              AND v.estado    IN ('autorizado','autorizada')
-              AND v.tipo_ambiente = '2'
-              AND (v.importe_total + COALESCE(nd.total_nd, 0) - COALESCE(cb.total_cobrado, 0) - COALESCE(rt.total_retenido, 0) - COALESCE(nc.total_nc, 0)) > 0
+            LEFT JOIN nc_aplic nc ON nc.id_venta = v.id
+            LEFT JOIN nd_aplic nd ON nd.id_venta = v.id
+            WHERE (v.importe_total + COALESCE(nd.total_nd, 0) - COALESCE(cb.total_cobrado, 0) - COALESCE(rt.total_retenido, 0) - COALESCE(nc.total_nc, 0)) > 0
         ";
-
-        $params = [':id_empresa' => $idEmpresa];
 
         if ($soloVencidas || $diasMin > 0) {
             $sql .= " AND (CURRENT_DATE - (v.fecha_emision + INTERVAL '1 day' * v.dias_credito)::date) >= :dmin";
@@ -1556,21 +1615,8 @@ class CuentasPorCobrarRepository extends BaseRepository
               AND v.estado NOT IN ('anulado','anulada')
               AND {$this->condAmbiente('v', $idsEmpresa)}"
               . $this->condAlcanceUsuario($filtros, 'v', 'id_usuario', 'prop_fac', $params);
-
-        // Filtro de estado CxC
-        $estado = $filtros['estado'] ?? 'PENDIENTES';
-        if ($estado === 'PENDIENTES') {
-            $where .= " AND (v.importe_total + COALESCE(nd.total_nd, 0) - COALESCE(cb.total_cobrado, 0) - COALESCE(rt.total_retenido, 0) - COALESCE(nc.total_nc, 0)) > 0";
-        } elseif ($estado === 'VENCIDAS') {
-            $where .= " AND (v.importe_total + COALESCE(nd.total_nd, 0) - COALESCE(cb.total_cobrado, 0) - COALESCE(rt.total_retenido, 0) - COALESCE(nc.total_nc, 0)) > 0
-                        AND (v.fecha_emision + INTERVAL '1 day' * v.dias_credito)::date < CURRENT_DATE";
-        } elseif ($estado === 'AL_DIA') {
-            $where .= " AND (v.importe_total + COALESCE(nd.total_nd, 0) - COALESCE(cb.total_cobrado, 0) - COALESCE(rt.total_retenido, 0) - COALESCE(nc.total_nc, 0)) > 0
-                        AND (v.fecha_emision + INTERVAL '1 day' * v.dias_credito)::date >= CURRENT_DATE";
-        } elseif ($estado === 'PAGADAS') {
-            $where .= " AND (v.importe_total + COALESCE(nd.total_nd, 0) - COALESCE(cb.total_cobrado, 0) - COALESCE(rt.total_retenido, 0) - COALESCE(nc.total_nc, 0)) <= 0";
-        }
-        // TODOS → sin filtro extra
+        // El filtro de estado CxC (saldo y vencimiento) lo aplica sqlFacturas(): depende de
+        // los abonos, que se calculan después de este WHERE.
 
         if (!empty($filtros['fecha_desde'])) {
             $where .= " AND v.fecha_emision >= :fecha_desde";

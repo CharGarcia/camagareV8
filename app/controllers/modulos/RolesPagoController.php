@@ -698,8 +698,16 @@ class RolesPagoController extends BaseModuloController
             $lin = $this->service->getLineaEmpleado($idDetalle, $idEmpresa, (int) $_SESSION['id_usuario']);
             if (!$lin) throw new \Exception('Línea no encontrada.');
 
-            $email = trim((string) ($lin['email'] ?? ''));
-            if ($email === '') throw new \Exception('El empleado no tiene correo registrado en su ficha.');
+            // Destinatarios editados en pantalla (como en Factura de Venta); sin ellos, el de la ficha.
+            $correos = trim((string) ($_POST['correos'] ?? ''));
+            if ($correos === '') $correos = trim((string) ($lin['email'] ?? ''));
+            $validos = [];
+            foreach (preg_split('/[\s,;]+/', $correos, -1, PREG_SPLIT_NO_EMPTY) as $c) {
+                if (!filter_var($c, FILTER_VALIDATE_EMAIL)) throw new \Exception('Correo no válido: ' . $c);
+                $validos[] = $c;
+            }
+            if (!$validos) throw new \Exception('Ingrese al menos un correo para enviar el rol.');
+            $email = implode(', ', array_unique($validos));
 
             $empresa = $this->cargarEmpresaParaPdf($idEmpresa);
             $pdfString = (new RolPagoPdfService())->generarEmpleado($lin, $empresa, 'S');

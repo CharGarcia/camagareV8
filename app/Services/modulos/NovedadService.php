@@ -284,7 +284,7 @@ class NovedadService
         if (!$this->yaDesembolsada($idEmpresa, $novedad)) return;
 
         $cod = (string) ($novedad['tipo_codigo'] ?? '');
-        if (in_array($novedad['desembolsado_migrado'] ?? null, ['t', true, 1, '1', 'true'], true)) {
+        if (NovedadRepository::esDesembolsoMigrado($novedad)) {
             throw new Exception('No se puede editar ni eliminar esta novedad: viene migrada del sistema anterior, donde ya fue pagada/desembolsada. Registre una novedad nueva de ajuste si necesita corregirla.');
         }
         $msg = $cod === '3'
@@ -308,10 +308,11 @@ class NovedadService
         $idEmpleado = (int) ($novedad['id_empleado'] ?? 0);
         if ($idEmpleado <= 0 || $idNovedad <= 0) return false;
 
-        // Cuota de Préstamo Empresa migrada ya saldada en el sistema anterior: se bloquea por su
-        // propio flag (mismo criterio que el listado), no por las demás cuotas migradas del empleado.
-        if ($cod === '9' && in_array($novedad['desembolsado_migrado'] ?? null, ['t', true, 1, '1', 'true'], true)) {
-            return true;
+        // Con la marca de desembolso decide la marca, no los egresos (mismo criterio que el listado):
+        // migrada del sistema anterior → bloqueada; cargada por Excel (que asume ya entregados los
+        // anticipos y préstamos) → libre, como cualquier novedad: no tiene egreso que respalde.
+        if (NovedadRepository::tieneMarcaDesembolso($novedad)) {
+            return NovedadRepository::esDesembolsoMigrado($novedad);
         }
 
         try {

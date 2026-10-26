@@ -5,8 +5,8 @@ categoria: Nómina
 ruta_modulo: modulos/novedades
 tipo: modulo
 visibilidad: todos
-etiquetas: novedades, novedad, horas extra, faltas, atrasos, prestamo, anticipo, descuento, aviso de salida, motivo de salida, multa, bonos, comisiones, otros ingresos, iess, aporta iess, con iess, sin iess, aporte personal, base del iess, carga masiva, importar, importacion, excel, plantilla, plantilla por empleado, columnas por novedad, subir novedades, eliminar carga, revertir carga, deshacer carga, borrar importacion, historial de cargas, duplicados, repetida, todo o nada, buscar novedades, buscador, filtros, filtrar novedades, buscar por empleado, novedades pagadas, novedades pendientes, chips
-version: 1.9
+etiquetas: novedades, novedad, anticipo ya pagado, prestamo ya desembolsado, desembolso, pendiente de desembolso, aviso de desembolso, anticipo cargado por excel, horas extra, faltas, atrasos, prestamo, anticipo, descuento, aviso de salida, motivo de salida, multa, bonos, comisiones, otros ingresos, iess, aporta iess, con iess, sin iess, aporte personal, base del iess, carga masiva, importar, importacion, excel, plantilla, plantilla por empleado, columnas por novedad, subir novedades, eliminar carga, revertir carga, deshacer carga, borrar importacion, historial de cargas, duplicados, repetida, todo o nada, buscar novedades, buscador, filtros, filtrar novedades, buscar por empleado, novedades pagadas, novedades pendientes, chips
+version: 1.12
 orden: 20
 estado: activo
 ---
@@ -81,6 +81,9 @@ El aviso de salida es un tipo especial: exige indicar el **motivo de salida** de
 catálogo y **no lleva valor**. Sirve para dejar constancia de la desvinculación y
 su causa, que es lo que después determina la liquidación.
 
+Se registra **solo a mano**, con el botón **Nuevo**: no se carga desde la
+plantilla Excel.
+
 ## Periodo, no solo fecha
 
 Una novedad tiene fecha (cuándo ocurrió) y periodo (a qué mes se imputa). No
@@ -93,8 +96,9 @@ El campo **Afecta a** indica en qué rol se paga o se descuenta la novedad: el
 **rol de pagos** mensual, la **quincena** o el **pago semanal**. En la quincena y
 en la semana solo hay **ingresos** (con o sin IESS) y **descuentos**; por eso,
 al elegir **Días no laborados** o **Aviso de salida**, *Afecta a* queda fijo en
-**Rol de Pagos** y no se puede cambiar. Lo mismo se aplica al importar la
-plantilla y al generar novedades desde Control de Asistencia.
+**Rol de Pagos** y no se puede cambiar. Lo mismo se aplica a los días no
+laborados al importar la plantilla y al generar novedades desde Control de
+Asistencia.
 
 Un ingreso registrado para la quincena se paga en ella y el rol mensual lo toma
 en cuenta al cerrar el mes: no lo descuenta y, si aporta al IESS, lo suma a la
@@ -119,12 +123,15 @@ periodo. No hace falta elegir el tipo de novedad.
 |----------|---------------|
 | IDENTIFICACION, NOMBRE | El empleado (ya vienen escritos) |
 | Dos por cada ingreso que aporta o no al IESS: OTROS INGRESOS (bonos, comisiones), HORAS NOCTURNAS, HORAS SUPLEMENTARIAS y HORAS EXTRAORDINARIAS, cada una **CON IESS** y **SIN IESS** | Vacías: aquí se escribe |
-| Una por tipo: DESCUENTO, ANTICIPO, los tres PRÉSTAMOS, DÍAS NO LABORADOS y AVISO DE SALIDA | Vacías: aquí se escribe |
+| Una por tipo: DESCUENTO, ANTICIPO, los tres PRÉSTAMOS y DÍAS NO LABORADOS | Vacías: aquí se escribe |
 | MES, ANIO, AFECTA_A, FECHA | Ya escritos con lo que eligió en pantalla y la fecha de hoy |
 | OBSERVACION | Opcional |
 
 En cada columna de novedad, entre paréntesis, dice qué va: **$** (monto),
-**HORAS**, **DÍAS** o **MOTIVO**.
+**HORAS** o **DÍAS**.
+
+> El **Aviso de salida** no está en la plantilla: se registra a mano con
+> **Nuevo**.
 
 > Mes, año y *afecta a* son solo **sugerencias para crear la plantilla con datos**:
 > el archivo baja con esos valores ya escritos en cada fila para no tener que
@@ -144,15 +151,11 @@ Cómo se llenan los casos especiales:
   escriba el valor es la marca de *Aporta IESS*. Puede usar las dos en la misma
   fila (por ejemplo un bono con IESS y otro sin IESS). Si el empleado no aporta
   al IESS, se registra sin IESS aunque esté en la columna CON IESS.
-- **Aviso de salida**: en su columna no va un número sino el **motivo de
-  salida**. La celda tiene una lista desplegable con los motivos (*T -
-  Terminación del contrato*, *V - Renuncia voluntaria*...); también puede
-  escribir solo la letra del código.
 - **Mes, año, afecta a y fecha** valen para **todas** las novedades de esa fila.
   Si a un empleado le toca una novedad de otro periodo o de otro pago (por
   ejemplo un anticipo que va a la quincena), copie su fila debajo, cambie esos
-  datos y deje en ella solo esa novedad. Los días no laborados y el aviso de
-  salida van siempre al rol mensual, aunque la fila diga quincena o semanal.
+  datos y deje en ella solo esa novedad. Los días no laborados van siempre al
+  rol mensual, aunque la fila diga quincena o semanal.
 - **Observación**: si la deja vacía, cada novedad se guarda con el texto
   *"Tipo - Mes Año"* (por ejemplo *Descuento - Septiembre 2026*), el mismo que
   propone el formulario de **Nuevo**. Si la escribe, se usa para todas las
@@ -160,7 +163,7 @@ Cómo se llenan los casos especiales:
 
 La plantilla tiene dos hojas: **Novedades** (la que se llena, y la que se abre al
 abrir el archivo) y **Referencia** (instrucciones, qué se escribe en cada
-columna, los valores de *afecta a* y los motivos de salida). La identificación y
+columna y los valores de *afecta a*). La identificación y
 el nombre quedan fijos a la izquierda al desplazarse por las columnas, y están
 guardados como texto para que una cédula que empieza en cero no pierda ese cero.
 
@@ -169,6 +172,28 @@ guardados como texto para que una cédula que empieza en cero no pierda ese cero
 > APORTA_IESS con SI o NO. Las que tienen una sola columna por tipo, sin CON IESS
 > ni SIN IESS, registran esas novedades con el cálculo de siempre: las horas con
 > IESS y Otros Ingresos sin IESS.
+
+### Anticipos y préstamos empresa cargados por Excel
+
+Normalmente un **Anticipo** o una cuota de **Préstamo Empresa** se descuenta en el
+rol solo después de pagarse con un egreso en **Egresos → Nómina**; mientras
+tanto, el rol muestra el aviso *Pendientes de desembolso*.
+
+Los que se cargan **desde la plantilla Excel** se dan por **ya entregados** al
+empleado: el rol los descuenta directo, no aparecen en *Egresos → Nómina* ni en
+el aviso del rol. Los demás tipos no cambian (Descuento y los préstamos
+quirografario e hipotecario siempre se descuentan directo).
+
+Estas novedades se pueden editar, eliminar o revertir con su carga como
+cualquier otra, mientras el rol del periodo no esté pagado.
+
+> **Contabilidad:** como no hay egreso, ese pago **no queda registrado en
+> contabilidad**. El asiento del rol acredita la cuenta de *Anticipos* o de
+> *Préstamos Empresa por Cobrar*, pero nada la debita. Si la entrega del dinero
+> todavía no está contabilizada, regístrela con un asiento manual.
+>
+> Si un anticipo o préstamo **todavía no se ha entregado**, no lo cargue por
+> Excel: regístrelo con **Nuevo** y páguelo desde *Egresos → Nómina*.
 
 ### La importación es todo o nada
 
@@ -212,7 +237,8 @@ considera usada cuando:
 - el **rol** de ese empleado y periodo (mensual, quincena o semanal, según el
   campo *Afecta a*) ya está **pagado** o contabilizado, o
 - se trata de un **anticipo** o una cuota de **préstamo empresa** que ya tiene un
-  **desembolso registrado por egreso** (un egreso anulado no cuenta), o
+  **desembolso registrado por egreso** (un egreso anulado no cuenta; solo pasa en
+  cargas anteriores a la versión 1.12, porque ahora se dan por entregados), o
 - es un anticipo o una cuota de préstamo empresa **migrada** del sistema
   anterior que ya venía pagada (sale como *Pagada*). Las demás cuotas
   pendientes del mismo empleado sí se pueden editar o eliminar.
@@ -282,9 +308,9 @@ filtrado.
   mismo monto, regístrela a mano desde **Nuevo**.
 - **"El valor «...» no es un número"**: en las columnas de monto, horas o días
   solo van números (se acepta coma o punto decimal).
-- **"Motivo de salida no reconocido"**: en la columna *AVISO DE SALIDA* va el
-  motivo, no un valor ni una "X". Elíjalo de la lista desplegable o escriba su
-  código (T, V, B, R, S, D, I, F o A).
+- **"El Aviso de salida ya no se carga por Excel"**: el archivo es una plantilla
+  descargada antes y trae algo en la columna *AVISO DE SALIDA*. Borre esa celda
+  (o descargue la plantilla nueva) y registre el aviso a mano con **Nuevo**.
 - **"Ningún empleado tiene novedades"**: descargó la plantilla y la subió sin
   escribir ningún valor en las columnas de novedad.
 - **"Falta la columna MES"** (o IDENTIFICACION, ANIO) / **"No se reconocen las
@@ -299,6 +325,14 @@ filtrado.
 
 ## Historial de cambios
 
+- **1.12** — **Los anticipos y préstamos empresa cargados por Excel se dan por
+  entregados.** El rol los descuenta directo, sin pedir el egreso de desembolso
+  ni mostrar el aviso *Pendientes de desembolso*. Ese pago no se contabiliza:
+  si hace falta, regístrelo con un asiento manual.
+- **1.11** — **El Aviso de salida sale de la plantilla Excel.** Ya no tiene
+  columna ni lista de motivos: se registra a mano con **Nuevo**. Si una
+  plantilla descargada antes trae esa columna con datos, la importación se
+  rechaza indicando la fila.
 - **1.10** — **Las cuotas de préstamo empresa pendientes se pueden eliminar
   aunque el empleado tenga cuotas migradas.** Antes, si el empleado tenía cuotas
   migradas ya pagadas en el sistema anterior, ninguna otra cuota suya se podía

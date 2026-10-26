@@ -5,8 +5,8 @@ categoria: Nómina
 ruta_modulo: modulos/roles-pago
 tipo: modulo
 visibilidad: todos
-etiquetas: rol de pago, roles, nomina, sueldo, quincena, semanal, mensual, pago de empleados, descuentos, liquido a recibir, neteo, ingresos de quincena, bono en quincena, horas extra en quincena, observacion, observaciones, detalle de novedad, motivo del descuento, asiento contable, contabilizacion, cuentas de nomina, prestamo quirografario, prestamo hipotecario, prestamo empresa, prestamos iess, aporte iess, base del iess, con iess, sin iess, bonos, comisiones, horas extra, dias no laborados, faltas, dias laborados, sueldo ganado, fondos de reserva, decimo tercero, decimo cuarto, buscar rol de pago, buscador, filtros, filtrar roles, buscar empleado en el rol, buscar rubro, chips, ordenar, ordenamiento, ordenar por periodo, ordenar columnas, orden del listado, periodo mas reciente, imprimir, impresora, eliminar rol, anular rol, rol eliminado, nomina duplicada, nomina contabilizada dos veces, asiento duplicado, asiento general e individual, rol migrado, asiento migrado, cuadre del asiento, asiento no cuadra con el rol, gasto de nomina inflado, asiento sigue contabilizado, asiento de rol eliminado, pagado, pago pendiente, pago parcial, estado de pago, referencia del pago, egreso del rol, ver egreso, pdf del egreso, comprobante de egreso, con que se pago, como se pago, transferencia, cheque, pestaña pago
-version: 1.17
+etiquetas: rol de pago, roles, enviar rol por correo, correo del empleado, editar correo, varios correos, destinatario, avisos del rol, avisos tapan el modal, no se puede cerrar el rol, empleados sin periodo, pendientes de desembolso, nomina, sueldo, quincena, semanal, mensual, pago de empleados, descuentos, liquido a recibir, neteo, ingresos de quincena, bono en quincena, horas extra en quincena, observacion, observaciones, detalle de novedad, motivo del descuento, asiento contable, contabilizacion, cuentas de nomina, prestamo quirografario, prestamo hipotecario, prestamo empresa, prestamos iess, aporte iess, base del iess, con iess, sin iess, bonos, comisiones, horas extra, dias no laborados, faltas, dias laborados, sueldo ganado, fondos de reserva, decimo tercero, decimo cuarto, buscar rol de pago, buscador, filtros, filtrar roles, buscar empleado en el rol, buscar rubro, chips, ordenar, ordenamiento, ordenar por periodo, ordenar columnas, orden del listado, periodo mas reciente, imprimir, impresora, eliminar rol, anular rol, rol eliminado, nomina duplicada, nomina contabilizada dos veces, asiento duplicado, asiento general e individual, rol migrado, asiento migrado, cuadre del asiento, asiento no cuadra con el rol, gasto de nomina inflado, asiento sigue contabilizado, asiento de rol eliminado, pagado, pago pendiente, pago parcial, estado de pago, referencia del pago, egreso del rol, ver egreso, pdf del egreso, comprobante de egreso, con que se pago, como se pago, transferencia, cheque, pestaña pago
+version: 1.19
 orden: 30
 estado: activo
 ---
@@ -139,6 +139,15 @@ Al abrir el detalle de un empleado en una corrida ya generada, el encabezado del
 modal tiene un botón rojo para el **PDF** del rol individual y, junto a él, uno
 verde para el **Excel**: una tabla Concepto/Ingreso/Egreso con los mismos
 rubros del PDF, más el neto a recibir.
+
+### Enviar el rol por correo
+
+El botón del sobre (**Enviar por correo**) abre un cuadro con el correo del
+empleado ya escrito (el de su ficha), igual que en *Facturas de Venta*. Antes de
+enviar se puede **corregir, borrar o agregar destinatarios**, separados por coma
+o espacio (por ejemplo, el correo personal y el de la empresa). Si la ficha no
+tiene correo, el cuadro aparece vacío y basta con escribirlo. Lo que se escribe
+ahí solo vale para ese envío: no cambia el correo guardado en la ficha.
 
 En el desglose de ingresos y egresos, cuando el rubro proviene de una novedad
 (hora extra, anticipo, cuota de préstamo, falta, etc.) se muestra debajo del
@@ -335,6 +344,10 @@ módulo. Para regresar al orden de fábrica, ordene por *Período* de mayor a me
   quincena o semana en lugar del rol mensual.
 
 ## Historial de cambios
+
+- **1.19** — El botón **Enviar por correo** de la ficha del empleado muestra el destinatario antes de enviar y deja editarlo o agregar más correos, como en Facturas de Venta. Ya no se desactiva cuando la ficha no tiene correo.
+
+- **1.18** — Al ver un rol, los avisos (empleados activos sin período y anticipos/préstamos pendientes de desembolso) se muestran como **acordeones cerrados** con el número de casos en el título; al abrirlos, la lista tiene su propio scroll. Antes, con muchos avisos, tapaban la ventana y no se podía ni cerrarla.
 
 - **1.17** — El asiento del rol mensual se comprueba contra el rol antes de guardarse (Debe = ingresos + aporte patronal + provisiones, Sueldos por Pagar = líquido, total neto de la cabecera) y no queda más de un juego de asientos por rol. Los roles migrados ya no reciben asiento propio (duplicaba el asiento de nómina migrado), ni el primer asiento de un mes que ya tiene asiento de nómina migrado.
 
