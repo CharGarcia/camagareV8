@@ -571,7 +571,8 @@ class PlantillasWhatsappController extends BaseModuloController
             'nota_debito' => ['{{1}}', '{{2}}', '{{3}}'],
             'guia_remision' => ['{{1}}', '{{2}}', '{{3}}'],
             'rol_pagos' => ['{{1}}', '{{2}}', '{{3}}'],
-            'descuento_empleado' => ['{{1}}', '{{2}}', '{{3}}']
+            'descuento_empleado' => ['{{1}}', '{{2}}', '{{3}}'],
+            'iniciar_conversacion' => ['{{1}}', '{{2}}']
         ];
 
         if ($tipoCreacion === 'libre') {
@@ -811,7 +812,8 @@ class PlantillasWhatsappController extends BaseModuloController
             'nota_debito' => ['{{1}}', '{{2}}', '{{3}}'],
             'guia_remision' => ['{{1}}', '{{2}}', '{{3}}'],
             'rol_pagos' => ['{{1}}', '{{2}}', '{{3}}'],
-            'descuento_empleado' => ['{{1}}', '{{2}}', '{{3}}']
+            'descuento_empleado' => ['{{1}}', '{{2}}', '{{3}}'],
+            'iniciar_conversacion' => ['{{1}}', '{{2}}']
         ];
 
         $nombrePlantilla = $plantilla['nombre'];

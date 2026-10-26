@@ -425,6 +425,17 @@ document.addEventListener('DOMContentLoaded', () => {
                 { id: '{{2}}', label: 'Concepto del Descuento' },
                 { id: '{{3}}', label: 'Valor a Descontar' }
             ]
+        },
+        'iniciar_conversacion': {
+            nombre: 'iniciar_conversacion',
+            categoria: 'UTILITY',
+            cabecera: 'NONE',
+            descripcion: 'Solo texto. Sirve para iniciar una conversación desde el Chat de WhatsApp (botón «Nuevo chat») o retomarla cuando pasaron más de 24 horas desde el último mensaje del cliente.',
+            texto: 'Hola {{1}}, te saludamos de {{2}}. Nos comunicamos contigo para brindarte atención personalizada. Responde este mensaje para continuar la conversación.',
+            variables: [
+                { id: '{{1}}', label: 'Nombre del Contacto' },
+                { id: '{{2}}', label: 'Nombre de la Empresa' }
+            ]
         }
     };
 

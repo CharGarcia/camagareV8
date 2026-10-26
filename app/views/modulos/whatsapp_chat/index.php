@@ -257,6 +257,7 @@ $ruta_assets = '/sistema/public';
     <!-- Cargar JS Específico -->
     <script>
         const B_URL = '<?= rtrim(BASE_URL, '/') ?>';
+        const WC_NOMBRE_EMPRESA = <?= json_encode((string) ($nombreEmpresa ?? ''), JSON_UNESCAPED_UNICODE | JSON_HEX_TAG) ?>;
     </script>
     <script src="<?= rtrim(BASE_URL, '/') ?>/js/modulos/whatsapp_chat.js?v=<?= asset_ver('/js/modulos/whatsapp_chat.js') ?>"></script>
     <?php endif; ?>

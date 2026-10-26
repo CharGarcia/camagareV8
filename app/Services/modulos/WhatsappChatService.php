@@ -29,6 +29,13 @@ class WhatsappChatService
         $this->logService = new LogSistemaService();
     }
 
+    /** Nombre con el que la empresa se presenta en las plantillas (comercial o, si no, razón social). */
+    public function nombreEmpresa(int $idEmpresa): string
+    {
+        $empresa = (new \App\models\Empresa())->getPorId($idEmpresa) ?? [];
+        return (string) (($empresa['nombre_comercial'] ?? '') ?: ($empresa['nombre'] ?? ''));
+    }
+
     public function estadoVentana(int $idEmpresa, int $idChat): array
     {
         return $this->repository->getVentanaChat($idEmpresa, $idChat);

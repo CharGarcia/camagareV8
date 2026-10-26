@@ -39,6 +39,7 @@
                             <label class="form-label fw-bold text-dark"><i class="fas fa-list me-1"></i>Seleccione la Plantilla del Sistema <span class="text-danger">*</span></label>
                             <select class="form-select border-primary" id="selectPlantillaRapida" name="plantilla_rapida">
                                 <option value="">-- Seleccione --</option>
+                                <option value="iniciar_conversacion">Iniciar Conversación (solo texto)</option>
                                 <option value="aviso_mensajes_pendientes">Aviso de Mensajes Pendientes</option>
                                 <option value="factura_por_cobrar">Factura por Cobrar</option>
                                 <option value="factura_venta">Factura de Venta</option>

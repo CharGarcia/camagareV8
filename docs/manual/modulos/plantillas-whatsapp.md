@@ -6,7 +6,7 @@ ruta_modulo: modulos/plantillas-whatsapp
 tipo: modulo
 visibilidad: todos
 etiquetas: whatsapp, plantillas, meta, mensajes aprobados, link de pago, enlace de pago, payphone, nuvei, enviar factura por whatsapp, enviar proforma por whatsapp, variables, aprobacion, estado de cuenta, estado_cuenta_cliente, resumen de deuda, facturas pendientes, detalle de lo que se cobra, por concepto de, factura_por_cobrar, cuenta_por_cobrar, texto sugerido, editar plantilla, no guarda la plantilla editada
-version: 1.4
+version: 1.5
 orden: 21
 estado: activo
 ---
@@ -77,6 +77,7 @@ con la opción de borrarla también en Meta.
 | `rol_pagos` | Sí | Empleado, Periodo, Valor a recibir | Roles de Pago |
 | `descuento_empleado` | Sí | Empleado, Concepto, Valor | Novedades / Roles de Pago |
 | `aviso_mensajes_pendientes` | No | Cantidad, Minutos | Chat de WhatsApp |
+| `iniciar_conversacion` | No (solo texto) | Contacto, Empresa | Chat de WhatsApp (Nuevo chat / Enviar plantilla) |
 
 Cada plantilla rápida se ofrece **solo en su módulo**: las de link de pago no
 aparecen al enviar una proforma ni una orden de taller, y la de proforma no
@@ -210,6 +211,10 @@ Sin **acceso total**, el usuario ve solo las plantillas que él mismo registró.
 
 ## Historial de cambios
 
+- **1.5** — Nueva plantilla rápida **`iniciar_conversacion`** (solo texto): *Hola
+  {{1}}, te saludamos de {{2}}. Nos comunicamos contigo para brindarte atención
+  personalizada. Responde este mensaje para continuar la conversación.* Se usa en el
+  Chat de WhatsApp para iniciar o retomar conversaciones.
 - **1.4** — Al crear, editar o eliminar una plantilla, el error muestra el motivo
   que da Meta en lugar de «Invalid parameter». El nombre se convierte al formato de
   Meta mientras se escribe, y se avisa antes de enviar si el mensaje empieza o

@@ -40,6 +40,7 @@ class WhatsappChatController extends BaseModuloController
             'titulo' => 'Bandeja de Entrada WhatsApp',
             'configurado' => $configurado,
             'permisos'    => $this->getPermisos(),
+            'nombreEmpresa' => $configurado ? (new WhatsappChatService())->nombreEmpresa((int) $idEmpresa) : '',
         ]);
     }
 

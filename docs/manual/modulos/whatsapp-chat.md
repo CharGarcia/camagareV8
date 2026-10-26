@@ -6,7 +6,7 @@ ruta_modulo: modulos/whatsapp-chat
 tipo: modulo
 visibilidad: todos
 etiquetas: whatsapp, chat, mensajes, clientes, enviar factura, plantillas, atencion al cliente, nuevo chat, iniciar conversacion, 24 horas
-version: 1.4
+version: 1.5
 orden: 20
 estado: activo
 ---
@@ -102,6 +102,9 @@ aparece únicamente cuando hay mensajes sin leer.
 
 ## Historial de cambios
 
+- **1.5** — Con la plantilla del sistema `iniciar_conversacion` (créela en Plantillas
+  de WhatsApp → Plantillas del sistema), {{1}} se llena con el nombre del contacto
+  y {{2}} con el nombre de la empresa.
 - **1.4** — Botón **Nuevo chat**: iniciar una conversación buscando un cliente o
   escribiendo el celular, con una plantilla aprobada, sus variables y vista previa.
   Si pasaron 24 h desde el último mensaje del cliente, el cuadro de texto se cambia

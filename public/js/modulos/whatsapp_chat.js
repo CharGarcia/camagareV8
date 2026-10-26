@@ -885,6 +885,9 @@ function WC_plRenderVariables() {
     const nombre = WC_plChatFijo ? WC_currentNombre : document.getElementById('waPlNombre').value.trim();
     const primera = cont.querySelector('.wa-pl-var[data-grupo="body"][data-i="0"]');
     if (primera && nombre && /(hola|estimad[oa]s?|querid[oa]s?)[\s,¡!]*\{\{1\}\}/i.test(p.cuerpo)) primera.value = nombre;
+    // En la plantilla del sistema para iniciar conversación, {{2}} es el nombre de la empresa.
+    const segunda = cont.querySelector('.wa-pl-var[data-grupo="body"][data-i="1"]');
+    if (segunda && p.nombre === 'iniciar_conversacion' && typeof WC_NOMBRE_EMPRESA === 'string') segunda.value = WC_NOMBRE_EMPRESA;
     WC_plPreview();
 }
 

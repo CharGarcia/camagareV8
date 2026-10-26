@@ -1532,7 +1532,7 @@ class CuentasPorCobrarController extends BaseModuloController
             'aviso_mensajes_pendientes', 'factura_por_cobrar', 'factura_venta',
             'cuenta_por_cobrar', 'renovacion_suscripcion', 'renovacion_firma_electronica', 'solicitud_firma',
             'retencion_compra', 'nota_credito', 'nota_debito', 'guia_remision',
-            'rol_pagos', 'descuento_empleado', 'estado_cuenta_cliente'
+            'rol_pagos', 'descuento_empleado', 'estado_cuenta_cliente', 'iniciar_conversacion'
         ];
         // estado_cuenta_cliente no va en el selector por documento: la usa solo el envío del
         // estado de cuenta desde la vista por cliente (enviarWhatsappEstadoCuentaAjax).
