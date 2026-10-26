@@ -543,13 +543,21 @@ class CuentasPorCobrarController extends BaseModuloController
             $cols   = self::columnasAntiguedad($tramos);
             $nCols  = count($cols);
             // Anchos (%): cliente + docs fijos; el resto se reparte entre las columnas de días y el total.
-            $wCli   = $nCols > 5 ? 22 : 28;
-            $wDocs  = 5;
+            // Un solo cliente (unSoloCliente()): sin columna Cliente —el nombre va en los filtros—
+            // y sin fila TOTAL, que repetiría la misma fila.
+            $sinCliente = $this->unSoloCliente($filtros, $filas);
+            $wCli   = $sinCliente ? 0 : ($nCols > 5 ? 22 : 28);
+            $wDocs  = $sinCliente ? 8 : 5;
             $wNum   = round((100 - $wCli - $wDocs) / ($nCols + 1), 2);
-            $wCli   = round(100 - $wDocs - $wNum * ($nCols + 1), 2);
+            if ($sinCliente) {
+                $wDocs = round(100 - $wNum * ($nCols + 1), 2);
+            } else {
+                $wCli = round(100 - $wDocs - $wNum * ($nCols + 1), 2);
+            }
             $money  = static fn (float $v): string => $v > 0.004 ? '$' . number_format($v, 2) : '-';
+            $tdCli  = static fn (string $html): string => $sinCliente ? '' : $html;
 
-            $thead = "<tr><th style='width:{$wCli}%;'>Cliente</th><th style='width:{$wDocs}%;'>Docs.</th>";
+            $thead = "<tr>" . $tdCli("<th style='width:{$wCli}%;'>Cliente</th>") . "<th style='width:{$wDocs}%;'>Docs.</th>";
             foreach ($cols as $c) {
                 $thead .= "<th style='width:{$wNum}%;'>" . $e($c) . "</th>";
             }
@@ -559,7 +567,7 @@ class CuentasPorCobrarController extends BaseModuloController
             $tot = array_fill(0, $nCols, 0.0);
             $totDocs = 0;
             foreach ($grupos as $g) {
-                $tr = "<tr><td style='width:{$wCli}%;'>" . $e($g['nombre']) . "</td><td class='text-center' style='width:{$wDocs}%;'>{$g['docs']}</td>";
+                $tr = "<tr>" . $tdCli("<td style='width:{$wCli}%;'>" . $e($g['nombre']) . "</td>") . "<td class='text-center' style='width:{$wDocs}%;'>{$g['docs']}</td>";
                 foreach ($g['cols'] as $i => $v) {
                     $tot[$i] += $v;
                     // Las columnas vencidas en rojo; "Por vencer" en negro.
@@ -580,6 +588,9 @@ class CuentasPorCobrarController extends BaseModuloController
                 $final .= "<td class='text-end' style='width:{$wNum}%;'>" . $money($v) . "</td>";
             }
             $final .= "<td class='text-end' style='width:{$wNum}%;'>" . $money(array_sum($tot)) . "</td></tr></table>";
+            if ($sinCliente) {
+                $final = '';
+            }
 
             ob_start();
             ?>
@@ -2738,6 +2749,15 @@ $plantillasFiltradas = [];
             $wEst = $consolidado ? 6 : 0;
             $wCli = 22 - $wEst;
             $wDoc = 17;
+            $wVen = 14;
+            // Un solo cliente: sin columna Cliente (ver unSoloCliente()); su ancho se reparte
+            // entre Documento y F. Vencimiento, las que más texto llevan.
+            $sinCliente = $this->unSoloCliente($filtros, $filas);
+            if ($sinCliente) {
+                $wDoc += intdiv($wCli, 2);
+                $wVen += $wCli - intdiv($wCli, 2);
+                $wCli  = 0;
+            }
             $docPdf = static fn (array $r): string => self::docPdf((string) ($r['numero_factura'] ?? ''), $wDoc);
             $tdEst = fn (array $r): string => $consolidado
                 ? "<td class='text-center' style='width:{$wEst}%;'>" . htmlspecialchars((string)($r['establecimiento'] ?? '')) . "</td>"
@@ -2763,9 +2783,9 @@ $plantillasFiltradas = [];
                 $filasHtml[] = "<tr>{$tdEst($r)}
                     <td style='width:{$wDoc}%;'>" . $docPdf($r) . "</td>
                     <td class='text-center' style='width:9%;'>{$origenTxt}</td>
-                    <td style='width:{$wCli}%;'>" . htmlspecialchars($r['cliente_nombre'] ?? '') . "</td>
+                    " . ($sinCliente ? '' : "<td style='width:{$wCli}%;'>" . htmlspecialchars($r['cliente_nombre'] ?? '') . "</td>") . "
                     <td class='text-center' style='width:11%;'>{$fEmis}</td>
-                    <td class='text-center' style='width:14%;'>{$fVenc} {$badge}</td>
+                    <td class='text-center' style='width:{$wVen}%;'>{$fVenc} {$badge}</td>
                     <td class='text-end' style='width:9%;'>\$" . number_format($ts, 2) . "</td>
                     <td class='text-end' style='width:9%;'>\$" . number_format($tc, 2) . "</td>
                     <td class='text-end' style='width:9%;font-weight:bold;'>\$" . number_format($tsal, 2) . "</td>
@@ -2820,10 +2840,10 @@ $plantillasFiltradas = [];
             $thead  = "<tr>"
                 . ($consolidado ? "<th style='width:{$wEst}%;'>Estab.</th>" : '')
                 . "<th style='width:{$wDoc}%;'>Documento</th>
-                   <th style='width:9%;'>Origen</th>
-                   <th style='width:{$wCli}%;'>Cliente</th>
-                   <th style='width:11%;'>F. Emisión</th>
-                   <th style='width:14%;'>F. Vencimiento</th>
+                   <th style='width:9%;'>Origen</th>"
+                . ($sinCliente ? '' : "<th style='width:{$wCli}%;'>Cliente</th>")
+                . "<th style='width:11%;'>F. Emisión</th>
+                   <th style='width:{$wVen}%;'>F. Vencimiento</th>
                    <th style='width:9%;'>Total</th>
                    <th style='width:9%;'>Cobrado</th>
                    <th style='width:9%;'>Saldo</th></tr>";
@@ -3015,6 +3035,27 @@ $plantillasFiltradas = [];
      * pantalla, en el PDF y en el Excel. El usuario restringido SIN vendedor vinculado (ve sus
      * propios registros) no entra aquí: sus documentos pueden ser de varios asesores.
      */
+    /**
+     * ¿El PDF es de UN solo cliente? Hay filtro de cliente y todas las filas son de él
+     * (misma clave que la vista Por cliente: su cédula y su RUC cuentan como uno). Entonces
+     * la columna Cliente repetiría el mismo nombre en cada fila —ya va en el resumen de
+     * filtros— y se omite. Con varios clientes elegidos la columna se mantiene.
+     */
+    private function unSoloCliente(array $filtros, array $filas): bool
+    {
+        if (empty($filtros['id_cliente']) || !$filas) {
+            return false;
+        }
+        $claves = [];
+        foreach ($filas as $r) {
+            $claves[IdentificacionTercero::claveGrupo((string)($r['cliente_ruc'] ?? ''), (string)($r['cliente_nombre'] ?? ''))] = true;
+            if (count($claves) > 1) {
+                return false;
+            }
+        }
+        return true;
+    }
+
     private function filtraPorVendedor(array $filtros): bool
     {
         // Con varios vendedores visibles ("Vendedores que puede ver") y ninguno elegido,
