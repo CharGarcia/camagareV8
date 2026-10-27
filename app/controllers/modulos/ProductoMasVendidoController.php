@@ -127,7 +127,13 @@ class ProductoMasVendidoController extends BaseModuloController
         $cantidad = number_format((float) ($r['cantidad_vendida'] ?? 0), 2);
         $total    = number_format((float) ($r['total_vendido'] ?? 0), 2);
 
-        $html = '<tr class="align-middle">';
+        // Clic en la fila: abre el modal con los clientes que compraron ese producto. Un ítem libre
+        // (sin producto del catálogo) se identifica por su descripción, como en el ranking.
+        $html = '<tr class="align-middle pmv-fila-producto" role="button" title="Ver clientes que lo compraron"'
+            . ' data-id-producto="' . ($r['id_producto'] !== null ? (int) $r['id_producto'] : '') . '"'
+            . ' data-nombre="' . htmlspecialchars($r['producto_nombre'] ?? '') . '"'
+            . ' data-codigo="' . htmlspecialchars($r['producto_codigo'] ?? '') . '"'
+            . ' onclick="window.PMV_verDetalle(this)">';
         $html .= "<td class='text-center'><span class='badge border {$badgeColor}'>#{$ranking}</span></td>";
         $html .= "<td><span class='fw-bold'>" . htmlspecialchars($r['producto_nombre'] ?? '') . "</span><br><small class='text-muted'>" . htmlspecialchars($r['producto_codigo'] ?? '') . "</small></td>";
         $html .= "<td class='text-center fw-bold'>{$cantidad}</td>";
@@ -136,6 +142,188 @@ class ProductoMasVendidoController extends BaseModuloController
         $html .= '</tr>';
 
         return $html;
+    }
+
+    /** Producto del modal de detalle: id del catálogo o, para un ítem libre, su descripción. */
+    private function productoDetalleDesdeRequest(): array
+    {
+        $id = trim((string) ($_REQUEST['det_id_producto'] ?? ''));
+        $nombre = trim((string) ($_REQUEST['det_nombre'] ?? ''));
+        if ($id === '' && $nombre === '') {
+            throw new \RuntimeException('Producto no válido.');
+        }
+        return [$id !== '' ? (int) $id : null, $nombre];
+    }
+
+    /** Clientes que compraron un producto con los filtros actuales del reporte (modal de detalle). */
+    public function detalleClientesAjax(): void
+    {
+        $this->requireLeer();
+        header('Content-Type: application/json');
+
+        try {
+            [$idProducto, $nombre] = $this->productoDetalleDesdeRequest();
+            echo json_encode([
+                'ok'   => true,
+                'rows' => $this->repository->getClientesProducto((int) $_SESSION['id_empresa'], $this->getFiltrosDesdeRequest(), $idProducto, $nombre),
+            ]);
+        } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
+            echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
+        }
+        exit;
+    }
+
+    private function fechaTxt(string $f): string
+    {
+        return ($t = strtotime($f)) ? date('d-m-Y', $t) : $f;
+    }
+
+    private function periodoTxt(array $filtros): string
+    {
+        if ($filtros['fecha_desde'] === '' && $filtros['fecha_hasta'] === '') {
+            return 'Todo el período';
+        }
+        return 'Período del ' . $this->fechaTxt($filtros['fecha_desde']) . ' al ' . $this->fechaTxt($filtros['fecha_hasta']);
+    }
+
+    private function tipoDocumentoTxt(array $filtros): string
+    {
+        return match ($filtros['tipo_documento']) {
+            'RECIBO' => 'Recibos de venta',
+            'AMBOS'  => 'Facturas y Recibos de venta',
+            default  => 'Facturas de venta',
+        };
+    }
+
+    /**
+     * Datos de las exportaciones del detalle de un producto: los mismos clientes del modal y,
+     * si el usuario escribió algo en su buscador, solo los que coinciden (todas las palabras,
+     * sin distinguir mayúsculas), para descargar lo que está viendo.
+     */
+    private function datosDetalleExport(): array
+    {
+        [$idProducto, $nombre] = $this->productoDetalleDesdeRequest();
+        $filtros = $this->getFiltrosDesdeRequest();
+        $rows = $this->repository->getClientesProducto((int) $_SESSION['id_empresa'], $filtros, $idProducto, $nombre);
+
+        $buscar = trim((string) ($_REQUEST['buscar'] ?? ''));
+        if ($buscar !== '') {
+            $palabras = preg_split('/\s+/u', mb_strtolower($buscar));
+            $rows = array_values(array_filter($rows, static function (array $r) use ($palabras): bool {
+                $texto = mb_strtolower($r['cliente_ruc'] . ' ' . $r['cliente_nombre']);
+                foreach ($palabras as $p) {
+                    if (!str_contains($texto, $p)) {
+                        return false;
+                    }
+                }
+                return true;
+            }));
+        }
+
+        $producto = [
+            'nombre' => $nombre,
+            'codigo' => trim((string) ($_REQUEST['det_codigo'] ?? '')),
+        ];
+
+        return [$filtros, $producto, $rows, $buscar];
+    }
+
+    public function exportDetalleExcel(): void
+    {
+        $this->requireLeer();
+
+        try {
+            [$filtros, $producto, $rows, $buscar] = $this->datosDetalleExport();
+            $empresa = (new \App\models\Empresa())->getPorId((int) $_SESSION['id_empresa']) ?? [];
+
+            $headers = ['RUC/Cédula', 'Cliente', 'Cant. Vendida', 'N° Documentos', 'Total Vendido', '% del Producto'];
+            $data = [];
+            foreach ($rows as $r) {
+                $data[] = [$r['cliente_ruc'], $r['cliente_nombre'], $r['cantidad_vendida'], $r['num_documentos'],
+                           $r['total_vendido'], $r['pct']];
+            }
+            $data[] = ['', 'TOTAL', array_sum(array_column($rows, 'cantidad_vendida')), '',
+                       array_sum(array_column($rows, 'total_vendido')), ''];
+
+            $info = [
+                'Producto'   => ($producto['codigo'] !== '' ? $producto['codigo'] . ' - ' : '') . $producto['nombre'],
+                'Período'    => $this->periodoTxt($filtros),
+                'Documentos' => $this->tipoDocumentoTxt($filtros),
+            ];
+            if ($buscar !== '') {
+                $info['Filtro'] = $buscar;
+            }
+
+            (new \App\Services\ReportService())->exportToExcel('ProductoMasVendido_Clientes', $headers, $data,
+                'Clientes', ($empresa['nombre'] ?? '') . ' - Clientes que compraron el producto', $info);
+            exit;
+        } catch (\Throwable $e) {
+            echo 'Error al generar Excel: ' . $e->getMessage();
+        }
+    }
+
+    public function exportDetallePdf(): void
+    {
+        $this->requireLeer();
+
+        try {
+            [$filtros, $producto, $rows, $buscar] = $this->datosDetalleExport();
+            $idEmpresa = (int) $_SESSION['id_empresa'];
+            $empresa = (new \App\models\Empresa())->getPorId($idEmpresa) ?? [];
+
+            $pdf = \App\Helpers\ReportePdf::class;
+            $pt  = 8.0;
+            $wCliente = 41.0;
+            $anchoCli = $pdf::anchoPt($wCliente, false);
+
+            $filtrosTxt = [
+                'Producto'   => $producto['nombre'],
+                'Código'     => $producto['codigo'] !== '' ? $producto['codigo'] : '—',
+                'Desde'      => $this->fechaTxt($filtros['fecha_desde']),
+                'Hasta'      => $this->fechaTxt($filtros['fecha_hasta']),
+                'Documentos' => $this->tipoDocumentoTxt($filtros),
+            ];
+            if ($buscar !== '') {
+                $filtrosTxt['Filtro'] = $buscar;
+            }
+
+            $suma = static fn (string $k): \Closure => static fn (array $fs): float => array_sum(array_column($fs, $k));
+            $cols = [
+                ['lbl' => 'RUC / Cédula', 'w' => 15.0,
+                 'val' => static fn (array $r): string => htmlspecialchars((string) $r['cliente_ruc'])],
+                ['lbl' => 'Cliente', 'w' => $wCliente,
+                 'val' => static fn (array $r): string => $pdf::texto((string) $r['cliente_nombre'], $anchoCli, $pt)],
+                ['lbl' => 'Cant. vendida', 'w' => 12.0, 'cls' => 'text-end',
+                 'val' => static fn (array $r): string => number_format((float) $r['cantidad_vendida'], 2),
+                 'tot' => $suma('cantidad_vendida')],
+                ['lbl' => 'Docs.', 'w' => 8.0, 'cls' => 'text-center',
+                 'val' => static fn (array $r): string => (string) (int) $r['num_documentos']],
+                ['lbl' => 'Total vendido', 'w' => 13.0, 'cls' => 'text-end',
+                 'val' => static fn (array $r): string => '<b>' . number_format((float) $r['total_vendido'], 2) . '</b>',
+                 'tot' => $suma('total_vendido')],
+                ['lbl' => '% producto', 'w' => 11.0, 'cls' => 'text-end',
+                 'val' => static fn (array $r): string => number_format((float) $r['pct'], 2) . '%'],
+            ];
+
+            $n = count($rows);
+            $html = $pdf::encabezado($idEmpresa, $empresa['nombre'] ?? '', 'Clientes que compraron el producto',
+                    $producto['nombre'] . ' · ' . $this->periodoTxt($filtros))
+                . $pdf::filtros($filtrosTxt)
+                . $pdf::listado($cols, $rows, 'TOTAL (' . $n . ' ' . ($n === 1 ? 'cliente' : 'clientes') . ')',
+                    'No se encontraron clientes para este producto.');
+
+            $autoload = MVC_ROOT . '/vendor/autoload.php';
+            if (file_exists($autoload)) {
+                require_once $autoload;
+            }
+            $html2pdf = new \Spipu\Html2Pdf\Html2Pdf('P', 'A4', 'es');
+            $html2pdf->writeHTML($pdf::pagina($pt, $html));
+            $html2pdf->output('ProductoMasVendido_Clientes_' . date('Ymd_His') . '.pdf', 'D');
+            exit;
+        } catch (\Throwable $e) {
+            echo 'Error al generar PDF: ' . $e->getMessage();
+        }
     }
 
     public function getClientesAjax(): void

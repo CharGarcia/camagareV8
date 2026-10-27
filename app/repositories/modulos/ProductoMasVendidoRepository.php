@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\repositories\modulos;
 
+use App\Helpers\AmbienteReporte;
 use App\repositories\BaseRepository;
 use PDO;
 
@@ -70,7 +71,7 @@ class ProductoMasVendidoRepository extends BaseRepository
     {
         $where = "{$aliasVenta}.id_empresa = :id_empresa
                   AND {$aliasVenta}.eliminado = false
-                  AND {$aliasVenta}.tipo_ambiente = (SELECT CAST(tipo_ambiente AS VARCHAR(1)) FROM empresas WHERE id = :id_empresa)
+                  AND " . AmbienteReporte::condicion($aliasVenta) . "
                   AND " . str_replace('{alias}', $aliasVenta, $f['estado_ok']);
 
         $params = [':id_empresa' => $idEmpresa];
@@ -157,6 +158,79 @@ class ProductoMasVendidoRepository extends BaseRepository
             }
         }
         return array_values($idx);
+    }
+
+    /**
+     * Clientes que compraron un producto, para una única fuente. El producto se identifica
+     * como en el ranking: por id_producto o, si es un ítem libre, por su descripción.
+     */
+    private function getClientesProductoPorFuente(int $idEmpresa, array $filtros, string $tipo, ?int $idProducto, string $nombre): array
+    {
+        $f = $this->fuente($tipo);
+        // El producto del modal reemplaza al filtro de productos del reporte.
+        $filtros['id_producto'] = '';
+        [$where, $params] = $this->buildWhereYParams($idEmpresa, $filtros, 'v', 'd', $f);
+
+        if ($idProducto !== null) {
+            $where .= ' AND d.id_producto = :id_prod_detalle';
+            $params[':id_prod_detalle'] = $idProducto;
+        } else {
+            $where .= ' AND d.id_producto IS NULL AND d.descripcion = :desc_prod_detalle';
+            $params[':desc_prod_detalle'] = $nombre;
+        }
+
+        $sql = "
+            SELECT
+                v.id_cliente,
+                COALESCE(c.identificacion, '') AS cliente_ruc,
+                COALESCE(c.nombre, '') AS cliente_nombre,
+                SUM(d.cantidad) AS cantidad_vendida,
+                COUNT(DISTINCT d.{$f['fk_det']}) AS num_documentos,
+                SUM(d.precio_total_sin_impuesto) AS total_vendido
+            FROM {$f['det']} d
+            JOIN {$f['cab']} v ON v.id = d.{$f['fk_det']}
+            LEFT JOIN clientes c ON c.id = v.id_cliente
+            WHERE {$where}
+            GROUP BY v.id_cliente, c.identificacion, c.nombre
+        ";
+
+        $st = $this->db->prepare($sql);
+        $st->execute($params);
+        return $st->fetchAll(PDO::FETCH_ASSOC);
+    }
+
+    /**
+     * Clientes que compraron un producto con los mismos filtros del ranking (tipo de documento,
+     * fechas y clientes elegidos), ordenados por cantidad. Su suma cuadra con la fila del producto.
+     */
+    public function getClientesProducto(int $idEmpresa, array $filtros, ?int $idProducto, string $nombre): array
+    {
+        $tipo = $filtros['tipo_documento'] ?? 'FACTURA';
+        $tipos = $tipo === 'AMBOS' ? ['FACTURA', 'RECIBO'] : [$tipo];
+
+        $idx = [];
+        foreach ($tipos as $t) {
+            foreach ($this->getClientesProductoPorFuente($idEmpresa, $filtros, $t, $idProducto, $nombre) as $r) {
+                $k = (int) $r['id_cliente'];
+                if (!isset($idx[$k])) {
+                    $idx[$k] = ['cantidad_vendida' => 0.0, 'num_documentos' => 0, 'total_vendido' => 0.0] + $r;
+                }
+                $idx[$k]['cantidad_vendida'] += (float) $r['cantidad_vendida'];
+                $idx[$k]['num_documentos'] += (int) $r['num_documentos'];
+                $idx[$k]['total_vendido'] += (float) $r['total_vendido'];
+            }
+        }
+
+        $rows = array_values($idx);
+        usort($rows, fn ($a, $b) => [$b['cantidad_vendida'], $b['total_vendido']] <=> [$a['cantidad_vendida'], $a['total_vendido']]);
+
+        $totalCant = array_sum(array_column($rows, 'cantidad_vendida'));
+        foreach ($rows as &$r) {
+            $r['pct'] = abs($totalCant) > 0.000001 ? round($r['cantidad_vendida'] * 100 / $totalCant, 2) : 0.0;
+        }
+        unset($r);
+
+        return $rows;
     }
 
     /**

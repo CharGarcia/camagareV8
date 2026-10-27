@@ -5,8 +5,8 @@ categoria: Reportes
 ruta_modulo: modulos/producto_mas_vendido
 tipo: modulo
 visibilidad: todos
-etiquetas: producto mas vendido, ranking de ventas, top productos, mejores productos, productos top, reporte de ventas por producto, best sellers, recibos en borrador, no salen los recibos, recibos no aparecen
-version: 1.1
+etiquetas: producto mas vendido, ranking de ventas, top productos, mejores productos, productos top, reporte de ventas por producto, best sellers, quien compra este producto, clientes por producto, a quien le vendi, grafico de productos, tipo de grafico, documentos de pruebas, recibos en borrador, no salen los recibos, recibos no aparecen
+version: 1.2
 orden: 0
 estado: activo
 ---
@@ -38,9 +38,40 @@ siendo facturado, se cuenta una sola vez como Factura, para no duplicar la venta
    **Fecha Desde/Hasta** directamente.
 4. Opcional: filtrar por uno o varios **Clientes** o **Productos** puntuales
    (buscador con chips, se pueden combinar varios).
-5. El ranking se genera automáticamente al cambiar cualquier filtro.
-6. Exportar a **PDF** o **Excel**, o usar el botón **Correo** para enviarlo
+5. El ranking se genera automáticamente al cambiar el tipo, el Top, el mes/año o los
+   chips; tras cambiar las fechas a mano, presionar **Mostrar**.
+6. Hacer clic sobre un producto para ver **a qué clientes se vendió** (ver más abajo).
+7. Exportar a **PDF** o **Excel**, o usar el botón **Correo** para enviarlo
    como adjunto a uno o varios destinatarios.
+
+## El gráfico de productos
+
+Sobre la tabla aparece el gráfico de los 15 productos más vendidos (por cantidad).
+Igual que en Reporte de Ventas, viene **cerrado**: se abre o cierra con su título o
+con la flecha de la derecha.
+
+El selector junto al título cambia el **tipo de gráfico**: *Automático* (barras
+horizontales, para que los nombres se lean completos), *Barras*, *Líneas*,
+*Pastel* o *Dona*. Con la estrella puede dejar fijo su tipo preferido.
+
+## Clientes que compraron un producto
+
+Al hacer clic sobre la fila de un producto se abre una ventana con los clientes a
+los que se les vendió, con **los mismos filtros del ranking** (tipo de documento,
+periodo y clientes elegidos):
+
+- **RUC/Cédula y Cliente**.
+- **Cantidad vendida** y **N° de documentos** en los que el cliente lo compró.
+- **Total vendido**, sin impuestos.
+- **% del producto**: qué parte de las unidades vendidas del producto se llevó ese cliente.
+
+La suma de los clientes coincide con la fila del producto en el ranking. El campo
+de búsqueda de la ventana filtra por RUC o nombre del cliente.
+
+Los botones **PDF** y **Excel** de la parte superior de la ventana descargan ese
+mismo detalle, con el producto, el periodo y el tipo de documento en el
+encabezado. Si escribió algo en el buscador, se descargan solo los clientes
+filtrados (y el filtro aparece en el encabezado).
 
 ## Campos del formulario
 
@@ -62,6 +93,9 @@ registros individuales con dueño.
 
 ## Reglas de negocio
 
+- Solo se cuentan documentos del ambiente de **producción** del SRI, como en todos
+  los reportes: lo emitido en pruebas no aparece aunque la empresa esté
+  configurada en pruebas.
 - Se excluyen documentos **eliminados**, **anulados** y **borradores**.
 - Un recibo que ya fue facturado no se cuenta como recibo (evita duplicar la
   venta al combinar Facturas + Recibos).
@@ -92,6 +126,12 @@ escribe en ninguna tabla: es de solo lectura.
   solo se contabiliza una vez, como Factura.
 
 ## Historial de cambios
+
+- **1.2** — **Clientes por producto**: clic sobre un producto abre una ventana con
+  los clientes que lo compraron (cantidad, documentos, total y %), descargable en PDF y
+  Excel. El **gráfico** toma el diseño de los demás reportes (acordeón y selector de
+  tipo: Automático, Barras, Líneas, Pastel o Dona). El reporte muestra **solo
+  documentos de producción**. El botón de filtros pasa a llamarse **Mostrar**.
 
 - **1.1** — **Corrección: los Recibos de Venta no aparecían** (ni sus años en el
   selector), porque se descartaban los recibos en *borrador*, que es el estado normal

@@ -11,6 +11,10 @@
     #form-filtros-reporte .btn { height:28px; font-size:.75rem; }
     /* Evita que el contenedor de chips (vacío hasta elegir) desalinee la fila de filtros */
     #pmv-chips-cliente:empty, #pmv-chips-producto:empty { margin-top:0; }
+    .pmv-fila-producto { cursor: pointer; }
+    .pmv-detalle-scroll { max-height: 60vh; overflow: auto; }
+    .pmv-detalle-scroll thead th { position: sticky; top: 0; background: #f8f9fa; box-shadow: 0 1px 0 #dee2e6; white-space: nowrap; z-index: 1; }
+    .pmv-detalle-scroll td { font-size: .8rem; }
     /* La tabla se extiende libremente hacia abajo; hace scroll la página, no un contenedor interno */
     @media (max-width: 767.98px) {
         #modulo-producto_mas_vendido .pmv-scroll { max-height:none !important; height:auto !important; overflow-y:visible !important; }
@@ -111,7 +115,7 @@
                     <div>
                         <label class="form-label small fw-bold mb-1 d-block" style="font-size:.65rem;">&nbsp;</label>
                         <button type="submit" class="btn btn-primary btn-sm shadow-sm" style="width:90px;" id="btn-generar-reporte">
-                            <i class="bi bi-search me-1"></i> Buscar
+                            <i class="bi bi-search me-1"></i> Mostrar
                         </button>
                     </div>
                 </div>
@@ -151,13 +155,34 @@
         </div>
     </div>
 
-    <!-- ── Gráfico ── -->
-    <div class="card border-0 shadow-sm mb-4" id="chart-container" style="display: none;">
-        <div class="card-header bg-white border-bottom-0 pt-4 pb-0">
-            <h6 class="mb-0 fw-bold text-dark" style="font-family: 'Outfit', sans-serif;"><i class="bi bi-bar-chart-line text-primary me-2"></i>Cantidad Vendida por Producto</h6>
+    <!-- ── Gráfico: acordeón, cerrado por defecto (el título lo abre/cierra), como en Reporte de Ventas ── -->
+    <div class="card border-0 shadow-sm mb-3" id="chart-container" style="display: none;">
+        <div class="card-header bg-white border-bottom-0 py-2 d-flex justify-content-between align-items-center flex-wrap gap-2">
+            <button type="button" class="btn btn-link p-0 text-decoration-none text-dark fw-bold d-flex align-items-center collapsed"
+                    data-bs-toggle="collapse" data-bs-target="#pmv-grafico-body" aria-expanded="false" aria-controls="pmv-grafico-body"
+                    style="font-family: 'Outfit', sans-serif;font-size:.95rem;">
+                <i class="bi bi-bar-chart-line text-primary me-2"></i>Cantidad Vendida por Producto
+            </button>
+            <div class="d-flex align-items-center gap-2">
+                <?= \App\Helpers\PreferenciasHelper::renderEstrellaFavorito($rutaModulo, 'pmv-tipo-grafico', 'tipo_grafico') ?>
+                <select id="pmv-tipo-grafico" class="form-select form-select-sm shadow-none border" style="width: 140px;" onchange="window.PMV_cambiarTipoGrafico()">
+                    <option value="auto">Automático</option>
+                    <option value="bar">Barras</option>
+                    <option value="line">Líneas</option>
+                    <option value="pie">Pastel</option>
+                    <option value="doughnut">Dona</option>
+                </select>
+                <?php // Flecha del acordeón, al extremo derecho: abajo = cerrado, arriba = abierto. ?>
+                <button type="button" class="btn btn-sm btn-light border collapsed" title="Mostrar / ocultar el gráfico"
+                        data-bs-toggle="collapse" data-bs-target="#pmv-grafico-body" aria-expanded="false" aria-controls="pmv-grafico-body">
+                    <i class="bi bi-chevron-down" id="pmv-grafico-chevron"></i>
+                </button>
+            </div>
         </div>
-        <div class="card-body">
-            <canvas id="reporteChart" style="max-height: 300px;"></canvas>
+        <div class="collapse" id="pmv-grafico-body">
+            <div class="card-body pt-0">
+                <canvas id="reporteChart" style="max-height: 300px;"></canvas>
+            </div>
         </div>
     </div>
 
@@ -200,6 +225,56 @@
                         <tr><td colspan="5" class="text-center py-5 text-muted"><i class="bi bi-filter-circle fs-3 d-block mb-2"></i>Aplica los filtros y haz clic en Generar para ver los resultados.</td></tr>
                     </tbody>
                 </table>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- ── Modal: Clientes que compraron el producto ── -->
+<div class="modal fade" id="modalDetalleProducto" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-xl modal-dialog-scrollable">
+        <div class="modal-content">
+            <div class="modal-header py-2">
+                <div>
+                    <h6 class="modal-title fw-bold mb-0"><i class="bi bi-people me-2 text-primary"></i><span id="pmv-det-producto"></span></h6>
+                    <small class="text-muted" id="pmv-det-subtitulo"></small>
+                </div>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body p-0">
+                <div class="d-flex gap-1 align-items-center flex-wrap px-3 py-2 border-bottom">
+                    <button type="button" class="btn btn-sm btn-outline-danger" onclick="window.PMV_exportarDetalle('exportDetallePdf')" title="Descargar PDF">
+                        <i class="bi bi-file-earmark-pdf"></i>
+                    </button>
+                    <button type="button" class="btn btn-sm btn-outline-success" onclick="window.PMV_exportarDetalle('exportDetalleExcel')" title="Descargar Excel">
+                        <i class="bi bi-file-earmark-spreadsheet"></i>
+                    </button>
+                    <div class="vr mx-1"></div>
+                    <div class="input-group input-group-sm" style="width:320px;">
+                        <span class="input-group-text"><i class="bi bi-search"></i></span>
+                        <input type="text" class="form-control shadow-none" id="pmv-det-buscar" placeholder="Filtrar por RUC o cliente" oninput="window.PMV_filtrarDetalle()">
+                    </div>
+                    <span class="ms-auto small text-muted" id="pmv-det-resumen"></span>
+                </div>
+                <div class="pmv-detalle-scroll">
+                    <table class="table table-hover table-sm mb-0 align-middle">
+                        <thead>
+                            <tr class="text-secondary">
+                                <th class="ps-3">RUC / Cédula</th>
+                                <th>Cliente</th>
+                                <th class="text-end">Cantidad Vendida</th>
+                                <th class="text-center">N° Documentos</th>
+                                <th class="text-end">Total Vendido</th>
+                                <th class="text-end pe-3">% del Producto</th>
+                            </tr>
+                        </thead>
+                        <tbody id="pmv-det-tbody"></tbody>
+                        <tfoot id="pmv-det-tfoot" class="table-light fw-bold"></tfoot>
+                    </table>
+                </div>
+            </div>
+            <div class="modal-footer py-2">
+                <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Cerrar</button>
             </div>
         </div>
     </div>
