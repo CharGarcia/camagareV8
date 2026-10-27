@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\repositories\modulos;
 
+use App\Helpers\AmbienteReporte;
 use App\repositories\BaseRepository;
 use PDO;
 
@@ -26,12 +27,12 @@ class MejorClienteRepository extends BaseRepository
         parent::__construct('ventas_cabecera');
     }
 
-    /** WHERE común (empresa, no eliminado, ambiente, fecha, vendedor) para una tabla tipo *_cabecera con id_vendedor. */
+    /** WHERE común (empresa, no eliminado, ambiente de producción, fecha, vendedor) para una tabla tipo *_cabecera con id_vendedor. */
     private function condicionesDocumento(string $alias, string $estadoOkTpl, bool $tieneVendedor, array $filtros, string $sufijo, array &$params): string
     {
         $where = "{$alias}.id_empresa = :id_empresa{$sufijo}
                   AND {$alias}.eliminado = false
-                  AND {$alias}.tipo_ambiente = (SELECT CAST(tipo_ambiente AS VARCHAR(1)) FROM empresas WHERE id = :id_empresa{$sufijo})
+                  AND " . AmbienteReporte::condicion($alias) . "
                   AND " . str_replace('{alias}', $alias, $estadoOkTpl);
         $params[":id_empresa{$sufijo}"] = $filtros['id_empresa'];
 
@@ -149,6 +150,84 @@ class MejorClienteRepository extends BaseRepository
             $r['venta_promedio'] = $r['cantidad_documentos'] > 0
                 ? $r['monto_neto'] / $r['cantidad_documentos']
                 : 0.0;
+        }
+        unset($r);
+
+        return $rows;
+    }
+
+    /**
+     * Productos vendidos a un cliente con los mismos filtros del ranking (fechas, vendedor,
+     * fuentes y estados), para que la suma de los productos cuadre con su monto neto: líneas
+     * de Facturas y/o Recibos menos las líneas de sus Notas de Crédito, sin impuestos.
+     * Agrupa por producto; las líneas sin producto (conceptos libres) se agrupan por código y
+     * descripción. La unidad es la del producto, como en Reporte de Ventas.
+     */
+    public function getDetalleProductos(array $filtros, int $idCliente): array
+    {
+        $params = [];
+        $partes = [];
+
+        if (!empty($filtros['incluir_facturas'])) {
+            $where = $this->condicionesDocumento('v', "{alias}.estado IN ('autorizado', 'autorizada')", true, $filtros, '_fac', $params);
+            $partes[] = "SELECT d.id_producto, d.codigo_principal, d.descripcion, d.cantidad,
+                                d.precio_total_sin_impuesto AS monto, 'F' || v.id AS doc
+                         FROM ventas_detalle d
+                         JOIN ventas_cabecera v ON v.id = d.id_venta
+                         WHERE {$where} AND v.id_cliente = :id_cliente_fac";
+            $params[':id_cliente_fac'] = $idCliente;
+        }
+
+        if (!empty($filtros['incluir_recibos'])) {
+            $where = $this->condicionesDocumento('r', "{alias}.estado NOT IN ('anulado', 'facturado')", true, $filtros, '_rec', $params);
+            $partes[] = "SELECT d.id_producto, d.codigo_principal, d.descripcion, d.cantidad,
+                                d.precio_total_sin_impuesto AS monto, 'R' || r.id AS doc
+                         FROM recibos_venta_detalle d
+                         JOIN recibos_venta_cabecera r ON r.id = d.id_recibo
+                         WHERE {$where} AND r.id_cliente = :id_cliente_rec";
+            $params[':id_cliente_rec'] = $idCliente;
+        }
+
+        if ($partes === []) {
+            return [];
+        }
+
+        // Las NC restan cantidad y monto; no cuentan como documento de venta (doc = NULL).
+        $whereNc = $this->condicionesDocumento('nc', "{alias}.estado IN ('autorizado', 'autorizada')", false, $filtros, '_nc', $params);
+        $partes[] = "SELECT d.id_producto, d.codigo_principal, d.descripcion, -d.cantidad,
+                            -d.precio_total_sin_impuesto, NULL
+                     FROM notas_credito_detalle d
+                     JOIN notas_credito_cabecera nc ON nc.id = d.id_nota_credito
+                     WHERE {$whereNc} AND nc.id_cliente = :id_cliente_nc";
+        $params[':id_cliente_nc'] = $idCliente;
+
+        $sql = "
+            WITH lineas AS (" . implode(' UNION ALL ', $partes) . ")
+            SELECT
+                l.id_producto,
+                COALESCE(NULLIF(TRIM(p.codigo), ''), MAX(l.codigo_principal), '') AS producto_codigo,
+                COALESCE(p.nombre, MAX(l.descripcion)) AS producto_nombre,
+                COALESCE(um.nombre, '') AS unidad_medida,
+                SUM(l.cantidad) AS cantidad,
+                SUM(l.monto) AS monto_neto,
+                COUNT(DISTINCT l.doc) AS cantidad_documentos
+            FROM lineas l
+            LEFT JOIN productos p ON p.id = l.id_producto
+            LEFT JOIN unidades_medida um ON um.id = p.id_medida
+            GROUP BY l.id_producto, p.codigo, p.nombre, um.nombre,
+                     CASE WHEN l.id_producto IS NULL THEN COALESCE(l.codigo_principal, '') || '|' || l.descripcion END
+            ORDER BY monto_neto DESC, producto_nombre";
+
+        $st = $this->db->prepare($sql);
+        $st->execute($params);
+        $rows = $st->fetchAll(PDO::FETCH_ASSOC);
+
+        $total = array_sum(array_map(static fn ($r) => (float) $r['monto_neto'], $rows));
+        foreach ($rows as &$r) {
+            $r['cantidad'] = (float) $r['cantidad'];
+            $r['monto_neto'] = (float) $r['monto_neto'];
+            $r['cantidad_documentos'] = (int) $r['cantidad_documentos'];
+            $r['pct'] = abs($total) > 0.000001 ? round($r['monto_neto'] * 100 / $total, 2) : 0.0;
         }
         unset($r);
 

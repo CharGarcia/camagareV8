@@ -118,6 +118,31 @@ class MejorClienteController extends BaseModuloController
         exit;
     }
 
+    /** Productos vendidos a un cliente con los filtros actuales del reporte (modal de detalle). */
+    public function detalleProductosAjax(): void
+    {
+        $this->requireLeer();
+        header('Content-Type: application/json');
+
+        try {
+            $idCliente = (int) ($_REQUEST['id_cliente'] ?? 0);
+            if ($idCliente <= 0) {
+                echo json_encode(['ok' => false, 'error' => 'Cliente no válido.']);
+                exit;
+            }
+
+            $filtros = $this->getFiltrosDesdeRequest((int) $_SESSION['id_empresa']);
+            echo json_encode([
+                'ok'   => true,
+                'rows' => $this->repository->getDetalleProductos($filtros, $idCliente),
+            ]);
+        } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
+            echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
+        }
+        exit;
+    }
+
     private function renderFilaHtml(array $r, int $rank): string
     {
         $medalClass = match (true) {
@@ -130,7 +155,13 @@ class MejorClienteController extends BaseModuloController
         $monto = number_format((float)$r['monto_neto'], 2);
         $ventaPromedio = number_format((float)$r['venta_promedio'], 2);
 
-        $html = '<tr class="align-middle">';
+        // Clic en la fila: abre el modal con los productos vendidos a ese cliente.
+        $html = '<tr class="align-middle mc-fila-cliente" role="button" title="Ver productos vendidos"'
+            . ' data-id-cliente="' . (int) $r['id_cliente'] . '"'
+            . ' data-nombre="' . htmlspecialchars($r['cliente_nombre'] ?? '') . '"'
+            . ' data-ruc="' . htmlspecialchars($r['cliente_ruc'] ?? '') . '"'
+            . ' data-monto="' . (float) $r['monto_neto'] . '"'
+            . ' onclick="window.MC_verDetalle(this)">';
         $html .= "<td class='text-center'><span class='badge border {$medalClass}' style='font-size:.8rem;'>#{$rank}</span></td>";
         $html .= "<td><span class='fw-bold'>" . htmlspecialchars($r['cliente_nombre'] ?? '') . "</span><br><small class='text-muted'>" . htmlspecialchars($r['cliente_ruc'] ?? '') . "</small></td>";
         $html .= "<td class='text-center'>" . (int)($r['cantidad_documentos'] ?? 0) . "</td>";

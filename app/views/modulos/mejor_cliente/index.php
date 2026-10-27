@@ -8,6 +8,10 @@
     #form-filtros-reporte .form-select,
     #form-filtros-reporte .form-control,
     #form-filtros-reporte .btn { height:28px; font-size:.75rem; }
+    .mc-fila-cliente { cursor: pointer; }
+    .mc-detalle-scroll { max-height: 60vh; overflow: auto; }
+    .mc-detalle-scroll thead th { position: sticky; top: 0; background: #f8f9fa; box-shadow: 0 1px 0 #dee2e6; white-space: nowrap; z-index: 1; }
+    .mc-detalle-scroll td { font-size: .8rem; }
     /* La tabla se extiende libremente hacia abajo; hace scroll la página, no un contenedor interno */
     @media (max-width: 767.98px) {
         #modulo-mejor_cliente .mc-scroll { max-height:none !important; height:auto !important; overflow-y:visible !important; }
@@ -126,7 +130,7 @@
                     <div>
                         <label class="form-label small fw-bold mb-1 d-block" style="font-size:.65rem;">&nbsp;</label>
                         <button type="submit" class="btn btn-primary btn-sm shadow-sm" style="width:170px;" id="btn-generar-reporte">
-                            <i class="bi bi-search me-1"></i> Buscar
+                            <i class="bi bi-search me-1"></i> Mostrar
                         </button>
                     </div>
                 </div>
@@ -215,6 +219,50 @@
                         <tr><td colspan="5" class="text-center py-5 text-muted"><i class="bi bi-filter-circle fs-3 d-block mb-2"></i>Aplica los filtros y haz clic en Generar para ver los resultados.</td></tr>
                     </tbody>
                 </table>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- ── Modal: Productos vendidos al cliente ── -->
+<div class="modal fade" id="modalDetalleCliente" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-xl modal-dialog-scrollable">
+        <div class="modal-content">
+            <div class="modal-header py-2">
+                <div>
+                    <h6 class="modal-title fw-bold mb-0"><i class="bi bi-box-seam me-2 text-primary"></i><span id="mc-det-cliente"></span></h6>
+                    <small class="text-muted" id="mc-det-subtitulo"></small>
+                </div>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body p-0">
+                <div class="d-flex gap-2 align-items-center px-3 py-2 border-bottom">
+                    <div class="input-group input-group-sm" style="width:320px;">
+                        <span class="input-group-text"><i class="bi bi-search"></i></span>
+                        <input type="text" class="form-control shadow-none" id="mc-det-buscar" placeholder="Filtrar por código o producto" oninput="window.MC_filtrarDetalle()">
+                    </div>
+                    <span class="ms-auto small text-muted" id="mc-det-resumen"></span>
+                </div>
+                <div class="mc-detalle-scroll">
+                    <table class="table table-hover table-sm mb-0 align-middle">
+                        <thead>
+                            <tr class="text-secondary">
+                                <th class="ps-3">Código</th>
+                                <th>Producto</th>
+                                <th>Unidad</th>
+                                <th class="text-end">Cantidad</th>
+                                <th class="text-center">Documentos</th>
+                                <th class="text-end">Monto Neto</th>
+                                <th class="text-end pe-3">% del Cliente</th>
+                            </tr>
+                        </thead>
+                        <tbody id="mc-det-tbody"></tbody>
+                        <tfoot id="mc-det-tfoot" class="table-light fw-bold"></tfoot>
+                    </table>
+                </div>
+            </div>
+            <div class="modal-footer py-2">
+                <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Cerrar</button>
             </div>
         </div>
     </div>

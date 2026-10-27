@@ -5,8 +5,8 @@ categoria: Reportes
 ruta_modulo: modulos/mejor_cliente
 tipo: modulo
 visibilidad: todos
-etiquetas: mejor cliente, pdf mejor cliente, imprimir ranking, top clientes, ranking de clientes, cliente top, cuanto compra cada cliente, mejores clientes, cliente estrella, cliente frecuente, cliente que mas compra, recibos en borrador, no salen los recibos, recibos no aparecen
-version: 1.2
+etiquetas: mejor cliente, pdf mejor cliente, imprimir ranking, top clientes, ranking de clientes, cliente top, cuanto compra cada cliente, mejores clientes, cliente estrella, cliente frecuente, cliente que mas compra, recibos en borrador, no salen los recibos, recibos no aparecen, que productos compra el cliente, productos por cliente, detalle de productos, que le vendi al cliente, documentos de pruebas
+version: 1.3
 orden: 15
 estado: activo
 ---
@@ -37,7 +37,29 @@ generarse.
 3. Elija el periodo con **Mes/Año** o con **Fecha Desde/Hasta**.
 4. Elija el criterio de **Ordenar Por**: Monto Neto o Cantidad de Documentos.
 5. Elija cuántos clientes mostrar en **Top** (10, 20, 50, 100 o Todos).
-6. Descargue el resultado en **PDF** o **Excel**, o envíelo por **Correo**.
+6. Presione **Mostrar** (el reporte también se actualiza solo al cambiar un filtro).
+7. Haga clic sobre un cliente para ver **qué productos le vendió** (ver la sección siguiente).
+8. Descargue el resultado en **PDF** o **Excel**, o envíelo por **Correo**.
+
+## Productos vendidos a un cliente
+
+Al hacer clic sobre la fila de un cliente se abre una ventana con los productos
+que se le vendieron, con **los mismos filtros del ranking** (periodo, vendedor y
+fuentes Facturas/Recibos):
+
+- **Código, Producto y Unidad** (la unidad de medida del producto).
+- **Cantidad**: unidades vendidas menos las devueltas en Notas de Crédito.
+- **Documentos**: en cuántas facturas/recibos aparece el producto.
+- **Monto neto**: valor sin impuestos de las líneas, menos las Notas de Crédito.
+- **% del cliente**: cuánto representa el producto en lo que compró el cliente.
+
+El campo de búsqueda de la ventana filtra por código o nombre del producto. Las
+líneas sin producto del catálogo (conceptos libres) aparecen agrupadas por su
+código y descripción.
+
+La suma de los productos coincide con el monto neto del cliente en el ranking. Si
+no coincide (por ejemplo, documentos migrados que no trajeron su detalle), la
+ventana muestra una línea **Diferencia** con el valor que falta.
 
 ## El PDF del reporte
 
@@ -82,6 +104,9 @@ Facturas/Recibos.
 - El **monto neto** es la suma de Facturas y/o Recibos (campo `total_sin_impuestos`,
   es decir sin IVA) menos las Notas de Crédito de venta del mismo cliente y
   periodo.
+- Solo se cuentan documentos del ambiente de **producción** del SRI, como en todos
+  los reportes: lo emitido en pruebas no aparece aunque la empresa esté
+  configurada en pruebas.
 - Solo se cuentan documentos **autorizados** (Facturas y Notas de Crédito) y
   los Recibos **no anulados ni facturados**. El recibo no pasa por el SRI ni tiene
   aprobación: se guarda en estado *borrador* y solo pasa a *emitido* cuando queda
@@ -98,7 +123,9 @@ Facturas/Recibos.
 
 - Lee de **Facturas de Venta** y **Recibos de Venta** (`ventas_cabecera`,
   `recibos_venta_cabecera`) y de **Notas de Crédito en Ventas**
-  (`notas_credito_cabecera`).
+  (`notas_credito_cabecera`); el detalle por producto, de sus líneas
+  (`ventas_detalle`, `recibos_venta_detalle`, `notas_credito_detalle`) y del
+  catálogo de **Productos**.
 - El filtro de Asesor/Vendedor usa el catálogo de **Vendedores**.
 
 ## Errores frecuentes
@@ -115,6 +142,11 @@ Facturas/Recibos.
   Notas de Crédito grandes en el periodo.
 
 ## Historial de cambios
+
+- **1.3** — **Productos vendidos por cliente**: clic sobre un cliente abre una ventana
+  con sus productos (cantidad, documentos, monto neto y % del cliente), con los mismos
+  filtros del ranking. El reporte ahora muestra **solo documentos de producción**, como
+  los demás reportes. El botón de filtros pasa a llamarse **Mostrar**.
 
 - **1.2** — **Nuevo diseño del PDF**: logo de la empresa, caja de filtros aplicados
   (incluido el vendedor), indicadores del periodo, columna **% del total** y tabla a
