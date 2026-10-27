@@ -151,6 +151,8 @@ class CargaProductosAplicacionService
             null,
             null,
             [
+                'modo'         => $informe['modo'] ?? 'completa',
+                'parcial'      => $informe['parcial'] ?? null,
                 'creados'      => $resultado['creados'],
                 'actualizados' => $resultado['actualizados'],
                 'omitidos'     => $resultado['omitidos'],
@@ -238,6 +240,13 @@ class CargaProductosAplicacionService
                 'venta'  => (bool) $p['aplica_venta'],
             ]),
         ];
+
+        // Campos que la plantilla no trae pero ProductoService::actualizar()
+        // sobrescribe (imagen, ubicación, opciones de restaurante): se reenvía
+        // el valor actual para no borrarlos.
+        foreach ($p['conservar'] ?? [] as $campo => $valor) {
+            $datos[$campo] = $valor;
+        }
 
         if ($this->tieneSeccion($p, CargaProductosEsquema::HOJA_PRECIOS)) {
             $datos['precios'] = array_map(static fn($x) => [

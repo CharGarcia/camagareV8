@@ -127,35 +127,7 @@ class CargaProductosPlantillaService
 
         $fila = 2;
         foreach ($productos as $p) {
-            $opciones   = $this->decodificarOpciones($p['opciones'] ?? null);
-            $esServicio = ($p['tipo_produccion'] === CargaProductosEsquema::TIPO_SERVICIO);
-
-            // Un servicio nunca maneja inventario ni unidad de medida. Hay
-            // registros heredados que sí los tienen; se exportan normalizados
-            // porque ProductoService los fuerza igual al guardar.
-            $inventariable = $esServicio ? false : $p['inventariable'];
-            $codigoMedida  = $esServicio ? '' : ($p['codigo_medida'] ?? '');
-
-            $valores = [
-                $p['codigo'],
-                $p['nombre'],
-                $esServicio ? 'Servicio' : 'Producto',
-                $p['codigo_auxiliar'] ?? '',
-                $p['codigo_barras'] ?? '',
-                $this->numero($p['precio_base']),
-                $this->numero($p['costo_producto']),
-                $p['codigo_iva'] ?? '',
-                $codigoMedida,
-                $p['categoria'] ?? '',
-                $p['marca'] ?? '',
-                $this->siNo($inventariable),
-                $this->numero($p['stock_minimo']),
-                $this->numero($p['stock_maximo']),
-                $this->siNo($opciones['compra']),
-                $this->siNo($opciones['venta']),
-                $p['codigo_ice'] ?? '',
-                ((int) $p['status'] === 1) ? 'Activo' : 'Inactivo',
-            ];
+            $valores = $this->valoresFilaProducto($p);
 
             // Columnas que deben viajar como texto para no perder ceros a la
             // izquierda ni convertirse en número/fecha: códigos.
@@ -467,6 +439,47 @@ class CargaProductosPlantillaService
         // (que inflarían el archivo y correrían la última fila con datos).
         $letra = $h->getCell([$columna, 1])->getColumn();
         $h->setDataValidation($letra . $filaInicio . ':' . $letra . $filaFin, $dv);
+    }
+
+    /**
+     * Celdas de la hoja Productos para un producto existente (una fila de
+     * getProductosParaPlantilla()), en el orden de CargaProductosEsquema.
+     *
+     * Público porque el validador lo usa en el modo de actualización parcial
+     * para rellenar las columnas no elegidas con el valor actual: así lo que se
+     * conserva es exactamente lo que la plantilla habría exportado.
+     */
+    public function valoresFilaProducto(array $p): array
+    {
+        $opciones   = $this->decodificarOpciones($p['opciones'] ?? null);
+        $esServicio = ($p['tipo_produccion'] === CargaProductosEsquema::TIPO_SERVICIO);
+
+        // Un servicio nunca maneja inventario ni unidad de medida. Hay
+        // registros heredados que sí los tienen; se exportan normalizados
+        // porque ProductoService los fuerza igual al guardar.
+        $inventariable = $esServicio ? false : $p['inventariable'];
+        $codigoMedida  = $esServicio ? '' : ($p['codigo_medida'] ?? '');
+
+        return [
+            $p['codigo'],
+            $p['nombre'],
+            $esServicio ? 'Servicio' : 'Producto',
+            $p['codigo_auxiliar'] ?? '',
+            $p['codigo_barras'] ?? '',
+            $this->numero($p['precio_base']),
+            $this->numero($p['costo_producto']),
+            $p['codigo_iva'] ?? '',
+            $codigoMedida,
+            $p['categoria'] ?? '',
+            $p['marca'] ?? '',
+            $this->siNo($inventariable),
+            $this->numero($p['stock_minimo']),
+            $this->numero($p['stock_maximo']),
+            $this->siNo($opciones['compra']),
+            $this->siNo($opciones['venta']),
+            $p['codigo_ice'] ?? '',
+            ((int) $p['status'] === 1) ? 'Activo' : 'Inactivo',
+        ];
     }
 
     /** jsonb `opciones` => ['compra'=>bool,'venta'=>bool]. */

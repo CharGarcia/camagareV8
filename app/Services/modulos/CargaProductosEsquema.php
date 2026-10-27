@@ -100,6 +100,46 @@ class CargaProductosEsquema
         ];
     }
 
+    /**
+     * Columnas de la hoja Productos que se pueden elegir en el modo
+     * "Actualizar solo algunas columnas", con su rótulo para la pantalla.
+     * CODIGO no figura: es la llave y nunca se modifica.
+     */
+    public static function columnasElegibles(): array
+    {
+        return [
+            'NOMBRE'          => 'Nombre',
+            'TIPO'            => 'Tipo (Producto/Servicio)',
+            'CODIGO_AUXILIAR' => 'Código auxiliar',
+            'CODIGO_BARRAS'   => 'Código de barras',
+            'PRECIO_BASE'     => 'Precio base',
+            'COSTO'           => 'Costo',
+            'CODIGO_IVA'      => 'Tarifa de IVA',
+            'CODIGO_MEDIDA'   => 'Unidad de medida',
+            'CATEGORIA'       => 'Categoría',
+            'MARCA'           => 'Marca',
+            'INVENTARIABLE'   => 'Inventariable',
+            'STOCK_MINIMO'    => 'Stock mínimo',
+            'STOCK_MAXIMO'    => 'Stock máximo',
+            'APLICA_COMPRA'   => 'Aplica a compras',
+            'APLICA_VENTA'    => 'Aplica a ventas',
+            'CODIGO_ICE'      => 'ICE',
+            'ESTADO'          => 'Estado (Activo/Inactivo)',
+        ];
+    }
+
+    /** Hojas adicionales que se pueden elegir en el modo de actualización parcial. */
+    public static function hojasElegibles(): array
+    {
+        $hojas = [];
+        foreach (self::hojasDatos() as $nombre => $def) {
+            if ($nombre !== self::HOJA_PRODUCTOS) {
+                $hojas[$nombre] = $def['titulo'];
+            }
+        }
+        return $hojas;
+    }
+
     /** Hojas de referencia con sus encabezados. */
     public static function hojasReferencia(): array
     {
@@ -148,6 +188,10 @@ class CargaProductosEsquema
             'CÓMO FUNCIONA',
             '- La columna CODIGO identifica al producto. Si el código ya existe, se ACTUALIZA.',
             '- Si el código no existe, se CREA un producto nuevo.',
+            '- Al subir el archivo puede elegir "Actualizar solo algunas columnas": entonces',
+            '  solo cambian las columnas y hojas marcadas, el resto se conserva, y no se',
+            '  crean productos nuevos.',
+            '- En la carga completa, una celda vacía BORRA ese dato del producto.',
             '- Desde este archivo NO se puede eliminar. Para dejar de ver un producto,',
             '  ponga ESTADO = Inactivo y se inactivará al subir el archivo.',
             '',

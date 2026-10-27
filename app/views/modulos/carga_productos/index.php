@@ -2,6 +2,8 @@
 
 /** @var array $perm */
 /** @var string $rutaModulo */
+/** @var array $columnasElegibles */
+/** @var array $hojasElegibles */
 
 $base    = BASE_URL;
 $urlBase = rtrim($base, '/') . '/' . ltrim($rutaModulo, '/');
@@ -76,6 +78,12 @@ $urlBase = rtrim($base, '/') . '/' . ltrim($rutaModulo, '/');
     .cp-msg {
         font-size: .8rem;
     }
+
+    .cp-checks {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(170px, 1fr));
+        column-gap: .75rem;
+    }
 </style>
 
 <div class="container-fluid py-3">
@@ -89,7 +97,9 @@ $urlBase = rtrim($base, '/') . '/' . ltrim($rutaModulo, '/');
             Descargue la plantilla —viene con todo su catálogo actual—, edite lo que necesite
             y súbala: los códigos que ya existen se <strong>actualizan</strong> y los nuevos se
             <strong>crean</strong>. Incluye precios, variantes, componentes, stock mínimo/máximo
-            por bodega y homologaciones con proveedores. Desde el Excel no se elimina nada;
+            por bodega y homologaciones con proveedores. Si solo quiere cambiar algunos datos
+            (por ejemplo la categoría), elija <strong>Actualizar solo algunas columnas</strong>.
+            Desde el Excel no se elimina nada;
             para retirar un producto de circulación márquelo como <strong>Inactivo</strong>.
         </p>
     </div>
@@ -140,6 +150,53 @@ $urlBase = rtrim($base, '/') . '/' . ltrim($rutaModulo, '/');
                     </div>
 
                     <?php if (!empty($perm['crear'])): ?>
+                        <div class="mb-3">
+                            <div class="form-check">
+                                <input class="form-check-input" type="radio" name="cpModo" id="cpModoCompleta" value="completa" checked>
+                                <label class="form-check-label small" for="cpModoCompleta">
+                                    <strong>Carga completa</strong> — crea los códigos nuevos y actualiza
+                                    todas las columnas de los existentes (una celda vacía borra ese dato).
+                                </label>
+                            </div>
+                            <div class="form-check">
+                                <input class="form-check-input" type="radio" name="cpModo" id="cpModoParcial" value="parcial">
+                                <label class="form-check-label small" for="cpModoParcial">
+                                    <strong>Actualizar solo algunas columnas</strong> — cambia únicamente lo
+                                    que marque; el resto se conserva y no se crean productos nuevos.
+                                </label>
+                            </div>
+                        </div>
+
+                        <div class="border rounded p-2 mb-3 d-none" id="cpPanelColumnas">
+                            <div class="d-flex align-items-center mb-1">
+                                <span class="small fw-semibold flex-grow-1">Columnas de la hoja Productos</span>
+                                <button type="button" class="btn btn-link btn-sm p-0 me-2 cp-msg" data-cp-marcar="1">Todas</button>
+                                <button type="button" class="btn btn-link btn-sm p-0 cp-msg" data-cp-marcar="0">Ninguna</button>
+                            </div>
+                            <div class="cp-checks">
+                                <?php foreach ($columnasElegibles as $col => $rotulo): ?>
+                                    <div class="form-check">
+                                        <input class="form-check-input cp-col" type="checkbox" value="<?= htmlspecialchars($col) ?>" id="cpCol_<?= htmlspecialchars($col) ?>">
+                                        <label class="form-check-label small" for="cpCol_<?= htmlspecialchars($col) ?>"><?= htmlspecialchars($rotulo) ?></label>
+                                    </div>
+                                <?php endforeach; ?>
+                            </div>
+
+                            <div class="small fw-semibold mt-2 mb-1">Hojas adicionales</div>
+                            <div class="cp-checks">
+                                <?php foreach ($hojasElegibles as $hoja => $rotulo): ?>
+                                    <div class="form-check">
+                                        <input class="form-check-input cp-hoja" type="checkbox" value="<?= htmlspecialchars($hoja) ?>" id="cpHoja_<?= htmlspecialchars($hoja) ?>">
+                                        <label class="form-check-label small" for="cpHoja_<?= htmlspecialchars($hoja) ?>"><?= htmlspecialchars($rotulo) ?></label>
+                                    </div>
+                                <?php endforeach; ?>
+                            </div>
+                            <div class="text-muted mt-2 cp-msg">
+                                Una hoja adicional marcada reemplaza esa sección en los productos que
+                                aparecen en ella; si no la marca, se ignora por completo.
+                            </div>
+                        </div>
+
                         <div class="cp-dropzone" id="cpDropzone">
                             <i class="bi bi-cloud-arrow-up fs-3 text-secondary d-block mb-1"></i>
                             <div class="small fw-semibold" id="cpNombreArchivo">

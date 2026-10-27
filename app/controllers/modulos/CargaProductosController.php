@@ -11,6 +11,7 @@ use App\Rules\modulos\CargaProductosRules;
 use App\Rules\modulos\ProductoRules;
 use App\Services\LogSistemaService;
 use App\Services\modulos\CargaProductosAplicacionService;
+use App\Services\modulos\CargaProductosEsquema;
 use App\Services\modulos\CargaProductosPlantillaService;
 use App\Services\modulos\CargaProductosValidacionService;
 use App\Services\modulos\InventarioService;
@@ -60,6 +61,8 @@ class CargaProductosController extends BaseModuloController
             'titulo'     => 'Carga de Productos',
             'perm'       => $this->getPermisos(),
             'rutaModulo' => self::RUTA_MODULO,
+            'columnasElegibles' => CargaProductosEsquema::columnasElegibles(),
+            'hojasElegibles'    => CargaProductosEsquema::hojasElegibles(),
         ]);
     }
 
@@ -105,10 +108,12 @@ class CargaProductosController extends BaseModuloController
                 throw new \RuntimeException('No hay una empresa activa.');
             }
 
+            $parcial = $this->leerModoParcial();
+
             $rutaTemporal = $this->recibirArchivo($idEmpresa);
 
             $servicio = new CargaProductosValidacionService($this->repository, new CargaProductosRules());
-            $informe  = $servicio->validar($rutaTemporal, $idEmpresa);
+            $informe  = $servicio->validar($rutaTemporal, $idEmpresa, $parcial);
 
             if ($informe['errores_globales']) {
                 // El archivo no sirve: no tiene sentido conservarlo.
@@ -125,6 +130,9 @@ class CargaProductosController extends BaseModuloController
                 'ruta'       => $rutaTemporal,
                 'id_empresa' => $idEmpresa,
                 'creado'     => time(),
+                // La elección se fija al revisar: al aplicar se usa esta, no
+                // la que pudiera mandar el navegador.
+                'parcial'    => $parcial,
             ];
 
             echo json_encode([
@@ -166,7 +174,7 @@ class CargaProductosController extends BaseModuloController
             // Se revalida siempre: el informe no viaja por el navegador, así que
             // el cliente no puede alterar lo que se va a escribir.
             $validacion = new CargaProductosValidacionService($this->repository, new CargaProductosRules());
-            $informe    = $validacion->validar($pendiente['ruta'], $idEmpresa);
+            $informe    = $validacion->validar($pendiente['ruta'], $idEmpresa, $pendiente['parcial'] ?? null);
 
             if ($informe['errores_globales']) {
                 throw new \RuntimeException(implode(' ', $informe['errores_globales']));
@@ -216,6 +224,32 @@ class CargaProductosController extends BaseModuloController
             $productoService,
             $logService
         );
+    }
+
+    /**
+     * Modo "Actualizar solo algunas columnas" elegido en pantalla.
+     * @return array|null null = carga completa.
+     */
+    private function leerModoParcial(): ?array
+    {
+        if (($_POST['modo'] ?? 'completa') !== 'parcial') {
+            return null;
+        }
+
+        $parcial = CargaProductosValidacionService::normalizarParcial([
+            'columnas' => (array) ($_POST['columnas'] ?? []),
+            'hojas'    => (array) ($_POST['hojas'] ?? []),
+        ]);
+        if (!$parcial['columnas'] && !$parcial['hojas']) {
+            throw new \RuntimeException('Marque al menos una columna u hoja para actualizar.');
+        }
+
+        // Se guardan los nombres (no los índices) para la auditoría.
+        $nombres = CargaProductosEsquema::columnas(CargaProductosEsquema::HOJA_PRODUCTOS);
+        return [
+            'columnas' => array_values(array_map(static fn($i) => $nombres[$i], array_keys($parcial['columnas']))),
+            'hojas'    => array_keys($parcial['hojas']),
+        ];
     }
 
     /**
@@ -302,6 +336,7 @@ class CargaProductosController extends BaseModuloController
         }
 
         return [
+            'modo'             => $informe['modo'] ?? 'completa',
             'ok'               => $informe['ok'] ?? false,
             'errores_globales' => $informe['errores_globales'] ?? [],
             'resumen'          => $informe['resumen'] ?? [],

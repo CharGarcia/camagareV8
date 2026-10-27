@@ -77,6 +77,41 @@
         ocultarPaneles();
     }
 
+    // ── Modo: carga completa o solo algunas columnas ────────────────────────
+    const panelColumnas = $('cpPanelColumnas');
+
+    function modoActual() {
+        const r = document.querySelector('input[name="cpModo"]:checked');
+        return r ? r.value : 'completa';
+    }
+
+    function marcados(selector) {
+        return Array.from(document.querySelectorAll(selector + ':checked')).map((c) => c.value);
+    }
+
+    // Cambiar la elección invalida una revisión ya hecha: se revisó con otra.
+    function eleccionCambiada() {
+        if (tokenCarga || !panelResultado.classList.contains('d-none')) {
+            ocultarPaneles();
+            descartarToken();
+        }
+    }
+
+    document.querySelectorAll('input[name="cpModo"]').forEach((r) => {
+        r.addEventListener('change', () => {
+            panelColumnas.classList.toggle('d-none', modoActual() !== 'parcial');
+            eleccionCambiada();
+        });
+    });
+    document.querySelectorAll('.cp-col, .cp-hoja').forEach((c) => c.addEventListener('change', eleccionCambiada));
+    document.querySelectorAll('[data-cp-marcar]').forEach((b) => {
+        b.addEventListener('click', () => {
+            const valor = b.dataset.cpMarcar === '1';
+            document.querySelectorAll('.cp-col').forEach((c) => { c.checked = valor; });
+            eleccionCambiada();
+        });
+    });
+
     btnLimpiar.addEventListener('click', limpiar);
 
     function limpiar() {
@@ -105,6 +140,14 @@
     btnValidar.addEventListener('click', async () => {
         if (!archivoSeleccionado) return;
 
+        const modo = modoActual();
+        const columnas = marcados('.cp-col');
+        const hojas = marcados('.cp-hoja');
+        if (modo === 'parcial' && !columnas.length && !hojas.length) {
+            aviso('Marque al menos una columna u hoja para actualizar.', 'warning');
+            return;
+        }
+
         descartarToken();
         ocultarPaneles();
         cargando(btnValidar, true, 'Revisando...');
@@ -112,6 +155,11 @@
         try {
             const fd = new FormData();
             fd.append('archivo', archivoSeleccionado);
+            fd.append('modo', modo);
+            if (modo === 'parcial') {
+                columnas.forEach((c) => fd.append('columnas[]', c));
+                hojas.forEach((h) => fd.append('hojas[]', h));
+            }
 
             const resp = await fetch(`${URL_BASE}/validarAjax`, { method: 'POST', body: fd });
             const json = await resp.json();
@@ -168,6 +216,9 @@
         } else {
             subtitulo = `Todo correcto: se aplicarán ${aplicables} producto(s).`;
         }
+        if (!globales.length && informe.modo === 'parcial') {
+            subtitulo += ' Solo se cambiarán las columnas y hojas marcadas.';
+        }
         $('cpSubtituloResultado').textContent = subtitulo;
 
         // Solo se puede aplicar si hay token y algo que aplicar.
@@ -207,7 +258,9 @@
         const confirmar = typeof Swal !== 'undefined'
             ? (await Swal.fire({
                 title: '¿Aplicar los cambios?',
-                text: 'Se crearán y actualizarán productos en la empresa activa.',
+                text: modoActual() === 'parcial'
+                    ? 'Se actualizarán solo las columnas y hojas marcadas en la empresa activa.'
+                    : 'Se crearán y actualizarán productos en la empresa activa.',
                 icon: 'question',
                 showCancelButton: true,
                 confirmButtonText: 'Sí, aplicar',

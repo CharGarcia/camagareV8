@@ -34,6 +34,15 @@ class CargaProductosValidacionService
     private array $idsUsados         = [];
     private array $mapaCodigosBarras = [];
 
+    /**
+     * Modo "Actualizar solo algunas columnas" (null = carga completa).
+     * ['columnas' => [índice => true], 'hojas' => [nombre => true]]
+     */
+    private ?array $parcial = null;
+
+    /** Modo parcial: celdas actuales de cada producto, por código en minúsculas. */
+    private array $filasExistentes = [];
+
     public function __construct(
         CargaProductosRepository $repository,
         CargaProductosRules $rules
@@ -47,11 +56,18 @@ class CargaProductosValidacionService
      *
      * @param string $rutaArchivo Ruta al .xlsx subido.
      * @param int    $idEmpresa   Empresa activa (destino de la carga).
+     * @param array|null $parcial  Modo "Actualizar solo algunas columnas":
+     *                             ['columnas' => string[], 'hojas' => string[]]
+     *                             con nombres de CargaProductosEsquema. null = carga completa.
      * @return array Informe de validación.
      */
-    public function validar(string $rutaArchivo, int $idEmpresa): array
+    public function validar(string $rutaArchivo, int $idEmpresa, ?array $parcial = null): array
     {
+        $this->parcial = $parcial !== null ? self::normalizarParcial($parcial) : null;
+
         $informe = [
+            'modo'             => $this->parcial !== null ? 'parcial' : 'completa',
+            'parcial'          => $parcial,
             'ok'               => false,
             'errores_globales' => [],
             'resumen'          => [
@@ -111,11 +127,22 @@ class CargaProductosValidacionService
         }
 
         // 5. Hojas hijas (solo tocan los productos que aparecen en ellas).
-        $this->procesarHojaPrecios($libro, $productos, $informe);
-        $this->procesarHojaVariantes($libro, $productos, $informe);
-        $this->procesarHojaComponentes($libro, $productos, $informe);
-        $this->procesarHojaStockBodegas($libro, $productos, $informe);
-        $this->procesarHojaHomologaciones($libro, $productos, $informe);
+        //    En modo parcial, solo las hojas elegidas; las demás ni se leen.
+        if ($this->procesaHoja(CargaProductosEsquema::HOJA_PRECIOS)) {
+            $this->procesarHojaPrecios($libro, $productos, $informe);
+        }
+        if ($this->procesaHoja(CargaProductosEsquema::HOJA_VARIANTES)) {
+            $this->procesarHojaVariantes($libro, $productos, $informe);
+        }
+        if ($this->procesaHoja(CargaProductosEsquema::HOJA_COMPONENTES)) {
+            $this->procesarHojaComponentes($libro, $productos, $informe);
+        }
+        if ($this->procesaHoja(CargaProductosEsquema::HOJA_STOCK_BODEGAS)) {
+            $this->procesarHojaStockBodegas($libro, $productos, $informe);
+        }
+        if ($this->procesaHoja(CargaProductosEsquema::HOJA_HOMOLOGACIONES)) {
+            $this->procesarHojaHomologaciones($libro, $productos, $informe);
+        }
 
         // 6. Resumen.
         //    - crear/actualizar/bloqueados se cuentan sobre los PRODUCTOS, cuyo
@@ -240,6 +267,60 @@ class CargaProductosValidacionService
         $this->mapaProveedores   = $this->repository->getMapaProveedores($idEmpresa);
         $this->idsUsados         = $this->repository->getIdsUsadosEnDocumentos($idEmpresa);
         $this->mapaCodigosBarras = $this->repository->getMapaCodigosBarras($idEmpresa);
+
+        $this->filasExistentes = [];
+        if ($this->parcial !== null) {
+            $plantilla = new CargaProductosPlantillaService($this->repository);
+            foreach ($this->repository->getProductosParaPlantilla($idEmpresa) as $p) {
+                $this->filasExistentes[mb_strtolower(trim((string) $p['codigo']))]
+                    = $plantilla->valoresFilaProducto($p);
+            }
+        }
+    }
+
+    /**
+     * Convierte la elección del usuario (nombres) en índices de columna y
+     * descarta lo que no esté en la lista blanca del esquema.
+     */
+    public static function normalizarParcial(array $parcial): array
+    {
+        $indices   = array_flip(CargaProductosEsquema::columnas(CargaProductosEsquema::HOJA_PRODUCTOS));
+        $elegibles = CargaProductosEsquema::columnasElegibles();
+
+        $columnas = [];
+        foreach ((array) ($parcial['columnas'] ?? []) as $col) {
+            $col = strtoupper(trim((string) $col));
+            if (isset($elegibles[$col], $indices[$col])) {
+                $columnas[$indices[$col]] = true;
+            }
+        }
+
+        $hojasElegibles = CargaProductosEsquema::hojasElegibles();
+        $hojas = [];
+        foreach ((array) ($parcial['hojas'] ?? []) as $hoja) {
+            $hoja = (string) $hoja;
+            if (isset($hojasElegibles[$hoja])) {
+                $hojas[$hoja] = true;
+            }
+        }
+
+        return ['columnas' => $columnas, 'hojas' => $hojas];
+    }
+
+    /** ¿Se procesa esa hoja hija? En carga completa, siempre. */
+    private function procesaHoja(string $hoja): bool
+    {
+        return $this->parcial === null || isset($this->parcial['hojas'][$hoja]);
+    }
+
+    /** ¿Esa columna de Productos se escribe? En carga completa, todas. */
+    private function columnaElegida(string $columna): bool
+    {
+        if ($this->parcial === null) {
+            return true;
+        }
+        $i = array_search($columna, CargaProductosEsquema::columnas(CargaProductosEsquema::HOJA_PRODUCTOS), true);
+        return $i !== false && isset($this->parcial['columnas'][$i]);
     }
 
     // ─────────────────────────────────────────────────────────────────────────
@@ -253,6 +334,23 @@ class CargaProductosValidacionService
         $vistosEnArchivo = [];
 
         foreach ($filas as $nFila => $celdas) {
+            // Modo parcial: las columnas NO elegidas toman el valor actual del
+            // producto, de modo que lo que traiga el archivo en ellas (aunque
+            // esté vacío o desactualizado) no se escribe.
+            $noExiste = false;
+            if ($this->parcial !== null) {
+                $actual = $this->filasExistentes[mb_strtolower($this->texto($celdas[0] ?? ''))] ?? null;
+                if ($actual === null) {
+                    $noExiste = true;
+                } else {
+                    foreach ($actual as $i => $valor) {
+                        if ($i > 0 && !isset($this->parcial['columnas'][$i])) {
+                            $celdas[$i] = $valor;
+                        }
+                    }
+                }
+            }
+
             $f = [
                 'codigo'          => $this->texto($celdas[0] ?? ''),
                 'nombre'          => $this->texto($celdas[1] ?? ''),
@@ -284,6 +382,11 @@ class CargaProductosValidacionService
             $errores = $this->rules->validarProducto($f);
             $avisos  = [];
 
+            if ($noExiste && $f['codigo'] !== '') {
+                $errores[] = 'El código no existe. En "Actualizar solo algunas columnas" no se crean'
+                    . ' productos nuevos; use la carga completa para darlo de alta.';
+            }
+
             $clave = mb_strtolower($f['codigo']);
 
             // Duplicado dentro del propio archivo.
@@ -309,7 +412,8 @@ class CargaProductosValidacionService
                 $f['tarifa_iva'] = $this->mapaIva[$f['codigo_iva']]['id'];
                 // Las tarifas derogadas (12%, 14%) siguen siendo válidas para
                 // productos históricos, pero se avisa por si conviene actualizarlas.
-                if (!$this->mapaIva[$f['codigo_iva']]['activa']) {
+                // En modo parcial, solo si el usuario eligió cambiar el IVA.
+                if (!$this->mapaIva[$f['codigo_iva']]['activa'] && $this->columnaElegida('CODIGO_IVA')) {
                     $avisos[] = 'La tarifa de IVA "' . $f['codigo_iva'] . '" ('
                         . $this->mapaIva[$f['codigo_iva']]['tarifa'] . ') está derogada; se conservará.';
                 }
@@ -382,6 +486,7 @@ class CargaProductosValidacionService
             $existente = $this->mapaProductos[$clave] ?? null;
             $f['accion']      = $existente ? 'actualizar' : 'crear';
             $f['id_producto'] = $existente['id'] ?? null;
+            $f['conservar']   = $existente['conservar'] ?? [];
 
             // El producto ya usado en documentos conserva su TIPO (código no cambia
             // porque es la llave). El nombre sí se puede corregir. Se avisa solo si

@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\repositories\modulos;
 
+use App\Helpers\Booleano;
 use App\repositories\BaseRepository;
 use PDO;
 
@@ -30,7 +31,8 @@ class CargaProductosRepository extends BaseRepository
      */
     public function getMapaProductos(int $idEmpresa): array
     {
-        $sql = "SELECT id, codigo, nombre, tipo_produccion, status, inventariable
+        $sql = "SELECT id, codigo, nombre, tipo_produccion, status, inventariable,
+                       imagen, ubicacion, excluir_recargo_servicio, precio_editable_comanda
                 FROM productos
                 WHERE id_empresa = :id_empresa AND eliminado = false";
         $st = $this->db->prepare($sql);
@@ -45,6 +47,14 @@ class CargaProductosRepository extends BaseRepository
                 'tipo_produccion' => $row['tipo_produccion'],
                 'status'          => (int) $row['status'],
                 'inventariable'   => (bool) $row['inventariable'],
+                // Campos que la plantilla no trae y ProductoService::actualizar()
+                // sobrescribe: se devuelven tal cual para no borrarlos.
+                'conservar'       => [
+                    'imagen'                   => $row['imagen'],
+                    'ubicacion'                => $row['ubicacion'],
+                    'excluir_recargo_servicio' => Booleano::es($row['excluir_recargo_servicio']),
+                    'precio_editable_comanda'  => Booleano::es($row['precio_editable_comanda']),
+                ],
             ];
         }
         return $mapa;
