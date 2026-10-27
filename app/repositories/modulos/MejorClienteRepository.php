@@ -48,6 +48,11 @@ class MejorClienteRepository extends BaseRepository
             $where .= " AND {$alias}.id_vendedor = :id_vendedor{$sufijo}";
             $params[":id_vendedor{$sufijo}"] = (int)$filtros['id_vendedor'];
         }
+        // Un solo cliente: detalle de productos y su fila del ranking (cabecera de las exportaciones).
+        if (!empty($filtros['id_cliente'])) {
+            $where .= " AND {$alias}.id_cliente = :id_cliente{$sufijo}";
+            $params[":id_cliente{$sufijo}"] = (int)$filtros['id_cliente'];
+        }
 
         return $where;
     }
@@ -167,6 +172,7 @@ class MejorClienteRepository extends BaseRepository
     {
         $params = [];
         $partes = [];
+        $filtros['id_cliente'] = $idCliente;
 
         if (!empty($filtros['incluir_facturas'])) {
             $where = $this->condicionesDocumento('v', "{alias}.estado IN ('autorizado', 'autorizada')", true, $filtros, '_fac', $params);
@@ -174,8 +180,7 @@ class MejorClienteRepository extends BaseRepository
                                 d.precio_total_sin_impuesto AS monto, 'F' || v.id AS doc
                          FROM ventas_detalle d
                          JOIN ventas_cabecera v ON v.id = d.id_venta
-                         WHERE {$where} AND v.id_cliente = :id_cliente_fac";
-            $params[':id_cliente_fac'] = $idCliente;
+                         WHERE {$where}";
         }
 
         if (!empty($filtros['incluir_recibos'])) {
@@ -184,8 +189,7 @@ class MejorClienteRepository extends BaseRepository
                                 d.precio_total_sin_impuesto AS monto, 'R' || r.id AS doc
                          FROM recibos_venta_detalle d
                          JOIN recibos_venta_cabecera r ON r.id = d.id_recibo
-                         WHERE {$where} AND r.id_cliente = :id_cliente_rec";
-            $params[':id_cliente_rec'] = $idCliente;
+                         WHERE {$where}";
         }
 
         if ($partes === []) {
@@ -198,8 +202,7 @@ class MejorClienteRepository extends BaseRepository
                             -d.precio_total_sin_impuesto, NULL
                      FROM notas_credito_detalle d
                      JOIN notas_credito_cabecera nc ON nc.id = d.id_nota_credito
-                     WHERE {$whereNc} AND nc.id_cliente = :id_cliente_nc";
-        $params[':id_cliente_nc'] = $idCliente;
+                     WHERE {$whereNc}";
 
         $sql = "
             WITH lineas AS (" . implode(' UNION ALL ', $partes) . ")
@@ -232,6 +235,15 @@ class MejorClienteRepository extends BaseRepository
         unset($r);
 
         return $rows;
+    }
+
+    /** Nombre e identificación de un cliente de la empresa (encabezado de las exportaciones del detalle). */
+    public function getCliente(int $idCliente, int $idEmpresa): ?array
+    {
+        $st = $this->db->prepare("SELECT id, identificacion, nombre FROM clientes
+                                  WHERE id = :id AND id_empresa = :e AND eliminado = false");
+        $st->execute([':id' => $idCliente, ':e' => $idEmpresa]);
+        return $st->fetch(PDO::FETCH_ASSOC) ?: null;
     }
 
     /** Estadísticas globales (para las tarjetas KPI), sin Top X ni orden. */

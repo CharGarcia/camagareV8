@@ -104,8 +104,11 @@ const MC_dinero = v => (v < 0 ? '-$' : '$') + Math.abs(v).toLocaleString('en-US'
 const MC_cantidad = v => v.toLocaleString('en-US', { maximumFractionDigits: 4 });
 
 /** Abre el modal con los productos vendidos al cliente de la fila (mismos filtros del ranking). */
+let MC_detalleCliente = null;
+
 window.MC_verDetalle = function (fila) {
     const idCliente = fila.dataset.idCliente;
+    MC_detalleCliente = idCliente;
     const montoFila = parseFloat(fila.dataset.monto) || 0;
     const desde = document.getElementById('mc-fecha-desde').value;
     const hasta = document.getElementById('mc-fecha-hasta').value;
@@ -180,6 +183,15 @@ function MC_pintarDetalle(rows, montoFila) {
     MC_filtrarDetalle();
 }
 
+/** PDF/Excel del detalle abierto: mismos filtros del ranking y, si hay texto en el buscador, solo lo filtrado. */
+window.MC_exportarDetalle = function (accion) {
+    if (!MC_detalleCliente) return;
+    const params = new URLSearchParams(MC_paramsRanking);
+    params.set('id_cliente', MC_detalleCliente);
+    params.set('buscar', document.getElementById('mc-det-buscar').value.trim());
+    CMG_descargar(BASE_URL + '/' + RUTA_MODULO + '/' + accion + '?' + params.toString());
+};
+
 window.MC_filtrarDetalle = function () {
     const q = document.getElementById('mc-det-buscar').value.trim().toLowerCase();
     const filas = document.querySelectorAll('#mc-det-tbody tr[data-buscar]');
@@ -194,8 +206,49 @@ window.MC_filtrarDetalle = function () {
         : '';
 };
 
+window.mc_last_raw_data = null;
+window.mc_last_orden_por = null;
 let chartInstance = null;
+
+// Acordeón del gráfico (cerrado por defecto). Chart.js no puede medir un canvas oculto:
+// el gráfico se dibuja igual al generar el reporte y se reajusta al ancho real al abrirse.
+document.addEventListener('DOMContentLoaded', function () {
+    const cuerpo  = document.getElementById('mc-grafico-body');
+    const chevron = document.getElementById('mc-grafico-chevron');
+    if (!cuerpo) return;
+    cuerpo.addEventListener('shown.bs.collapse', function () {
+        if (chevron) chevron.className = 'bi bi-chevron-up';
+        if (chartInstance) chartInstance.resize();
+    });
+    cuerpo.addEventListener('hidden.bs.collapse', function () {
+        if (chevron) chevron.className = 'bi bi-chevron-down';
+    });
+});
+
+window.MC_cambiarTipoGrafico = function () {
+    if (window.mc_last_raw_data) {
+        MC_dibujarGrafico(window.mc_last_raw_data, window.mc_last_orden_por);
+    }
+};
+
+function MC_generarColores(cantidad) {
+    const paleta = [
+        'rgba(54, 162, 235, 0.7)', 'rgba(255, 99, 132, 0.7)', 'rgba(75, 192, 192, 0.7)',
+        'rgba(255, 206, 86, 0.7)', 'rgba(153, 102, 255, 0.7)', 'rgba(255, 159, 64, 0.7)',
+        'rgba(201, 203, 207, 0.7)', 'rgba(100, 200, 100, 0.7)', 'rgba(200, 100, 200, 0.7)',
+        'rgba(100, 100, 200, 0.7)', 'rgba(200, 200, 100, 0.7)', 'rgba(100, 200, 200, 0.7)'
+    ];
+    let colores = [];
+    for (let i = 0; i < cantidad; i++) {
+        colores.push(paleta[i % paleta.length]);
+    }
+    return colores;
+}
+
 function MC_dibujarGrafico(rawData, ordenPor) {
+    window.mc_last_raw_data = rawData;
+    window.mc_last_orden_por = ordenPor;
+
     const ctx = document.getElementById('reporteChart').getContext('2d');
     if (chartInstance) chartInstance.destroy();
 
@@ -208,24 +261,45 @@ function MC_dibujarGrafico(rawData, ordenPor) {
         ? 'Top Clientes por Cantidad de Documentos'
         : 'Top Clientes por Monto Neto';
 
+    // Automático = barras horizontales: los nombres de clientes son largos y se leen mejor en el eje vertical.
+    const selectEl = document.getElementById('mc-tipo-grafico');
+    const elegido = selectEl ? selectEl.value : 'auto';
+    const horizontal = elegido === 'auto';
+    const type = horizontal ? 'bar' : elegido;
+    const circular = type === 'pie' || type === 'doughnut';
+
+    let backgroundColor = 'rgba(54, 162, 235, 0.5)';
+    let borderColor = 'rgba(54, 162, 235, 1)';
+    if (circular) {
+        backgroundColor = MC_generarColores(labels.length);
+        borderColor = backgroundColor.map(c => c.replace('0.7', '1'));
+    }
+
+    const formatoEje = value => esCantidad ? value : '$' + value;
+    const ejeValor = { beginAtZero: true, ticks: { callback: formatoEje } };
+
     chartInstance = new Chart(ctx, {
-        type: 'bar',
+        type: type,
         data: {
             labels: labels,
             datasets: [{
                 label: esCantidad ? 'Cantidad de Documentos' : 'Monto Neto ($)',
                 data: data,
-                backgroundColor: 'rgba(54, 162, 235, 0.6)',
-                borderColor: 'rgba(54, 162, 235, 1)',
-                borderWidth: 1
+                backgroundColor: backgroundColor,
+                borderColor: borderColor,
+                borderWidth: circular ? 1 : 2,
+                tension: 0.3,
+                fill: type === 'line'
             }]
         },
         options: {
-            indexAxis: 'y',
+            indexAxis: horizontal ? 'y' : 'x',
             responsive: true,
             maintainAspectRatio: false,
-            plugins: { legend: { display: false } },
-            scales: { x: { beginAtZero: true } }
+            plugins: {
+                legend: { display: circular || type === 'line' }
+            },
+            scales: circular ? {} : (horizontal ? { x: ejeValor } : { y: ejeValor })
         }
     });
 }

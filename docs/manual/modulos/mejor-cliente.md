@@ -5,8 +5,8 @@ categoria: Reportes
 ruta_modulo: modulos/mejor_cliente
 tipo: modulo
 visibilidad: todos
-etiquetas: mejor cliente, pdf mejor cliente, imprimir ranking, top clientes, ranking de clientes, cliente top, cuanto compra cada cliente, mejores clientes, cliente estrella, cliente frecuente, cliente que mas compra, recibos en borrador, no salen los recibos, recibos no aparecen, que productos compra el cliente, productos por cliente, detalle de productos, que le vendi al cliente, documentos de pruebas
-version: 1.3
+etiquetas: mejor cliente, pdf mejor cliente, grafico mejores clientes, tipo de grafico, grafico de pastel, cambiar grafico, excel productos por cliente, descargar productos del cliente, imprimir ranking, top clientes, ranking de clientes, cliente top, cuanto compra cada cliente, mejores clientes, cliente estrella, cliente frecuente, cliente que mas compra, recibos en borrador, no salen los recibos, recibos no aparecen, que productos compra el cliente, productos por cliente, detalle de productos, que le vendi al cliente, documentos de pruebas
+version: 1.5
 orden: 15
 estado: activo
 ---
@@ -41,6 +41,17 @@ generarse.
 7. Haga clic sobre un cliente para ver **qué productos le vendió** (ver la sección siguiente).
 8. Descargue el resultado en **PDF** o **Excel**, o envíelo por **Correo**.
 
+## El gráfico de mejores clientes
+
+Sobre la tabla aparece el gráfico de los 15 primeros clientes del ranking, por
+monto neto o por cantidad de documentos según el criterio de **Ordenar Por**. Igual
+que en Reporte de Ventas, viene **cerrado**: se abre o cierra con su título o con
+la flecha de la derecha.
+
+El selector junto al título cambia el **tipo de gráfico**: *Automático* (barras
+horizontales, para que los nombres se lean completos), *Barras*, *Líneas*,
+*Pastel* o *Dona*. Con la estrella puede dejar fijo su tipo preferido.
+
 ## Productos vendidos a un cliente
 
 Al hacer clic sobre la fila de un cliente se abre una ventana con los productos
@@ -56,6 +67,11 @@ fuentes Facturas/Recibos):
 El campo de búsqueda de la ventana filtra por código o nombre del producto. Las
 líneas sin producto del catálogo (conceptos libres) aparecen agrupadas por su
 código y descripción.
+
+Los botones **PDF** y **Excel** de la parte superior de la ventana descargan ese
+mismo detalle, con el cliente, el periodo, el vendedor y los documentos incluidos
+en el encabezado. Si escribió algo en el buscador, se descargan solo los productos
+filtrados (y el filtro aparece en el encabezado).
 
 La suma de los productos coincide con el monto neto del cliente en el ranking. Si
 no coincide (por ejemplo, documentos migrados que no trajeron su detalle), la
@@ -142,6 +158,13 @@ Facturas/Recibos.
   Notas de Crédito grandes en el periodo.
 
 ## Historial de cambios
+
+- **1.5** — El **gráfico** toma el diseño de los demás reportes: se abre y cierra
+  como acordeón y permite elegir el **tipo de gráfico** (Automático, Barras, Líneas,
+  Pastel o Dona), con estrella para guardar el preferido.
+
+- **1.4** — Los **productos vendidos a un cliente** se pueden descargar en **PDF** y
+  **Excel** desde su ventana (respetan el filtro del buscador).
 
 - **1.3** — **Productos vendidos por cliente**: clic sobre un cliente abre una ventana
   con sus productos (cantidad, documentos, monto neto y % del cliente), con los mismos

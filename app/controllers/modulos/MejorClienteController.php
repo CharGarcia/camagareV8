@@ -205,6 +205,185 @@ class MejorClienteController extends BaseModuloController
         }
     }
 
+    private function fechaTxt(string $f): string
+    {
+        return ($t = strtotime($f)) ? date('d-m-Y', $t) : $f;
+    }
+
+    private function periodoTxt(array $filtros): string
+    {
+        if ($filtros['fecha_desde'] === '' && $filtros['fecha_hasta'] === '') {
+            return 'Todo el período';
+        }
+        return 'Período del ' . $this->fechaTxt($filtros['fecha_desde']) . ' al ' . $this->fechaTxt($filtros['fecha_hasta']);
+    }
+
+    private function fuentesTxt(array $filtros): string
+    {
+        return implode(' y ', array_filter([
+            $filtros['incluir_facturas'] ? 'Facturas' : '',
+            $filtros['incluir_recibos'] ? 'Recibos de venta' : '',
+        ]));
+    }
+
+    private function nombreVendedor(array $filtros): string
+    {
+        // Por id y no por la lista de activos: un vendedor ya inactivo también puede filtrarse.
+        if ((int) $filtros['id_vendedor'] <= 0) {
+            return 'Todos';
+        }
+        $v = (new \App\repositories\modulos\VendedorRepository())->findById((int) $filtros['id_vendedor'], $filtros['id_empresa']);
+        return trim((string) ($v['nombre'] ?? '')) ?: 'Vendedor #' . (int) $filtros['id_vendedor'];
+    }
+
+    /**
+     * Datos de las exportaciones del detalle de un cliente: los mismos productos del modal y,
+     * si el usuario escribió algo en su buscador, solo los que coinciden (todas las palabras,
+     * sin distinguir mayúsculas), para descargar lo que está viendo.
+     */
+    private function datosDetalleExport(): array
+    {
+        $idEmpresa = (int) $_SESSION['id_empresa'];
+        $idCliente = (int) ($_REQUEST['id_cliente'] ?? 0);
+        $cliente = $idCliente > 0 ? $this->repository->getCliente($idCliente, $idEmpresa) : null;
+        if (!$cliente) {
+            throw new \RuntimeException('Cliente no válido.');
+        }
+
+        $filtros = $this->getFiltrosDesdeRequest($idEmpresa);
+        $rows = $this->repository->getDetalleProductos($filtros, $idCliente);
+
+        $buscar = trim((string) ($_REQUEST['buscar'] ?? ''));
+        if ($buscar !== '') {
+            $palabras = preg_split('/\s+/u', mb_strtolower($buscar));
+            $rows = array_values(array_filter($rows, static function (array $r) use ($palabras): bool {
+                $texto = mb_strtolower($r['producto_codigo'] . ' ' . $r['producto_nombre']);
+                foreach ($palabras as $p) {
+                    if (!str_contains($texto, $p)) {
+                        return false;
+                    }
+                }
+                return true;
+            }));
+        }
+
+        // Monto del cliente en el ranking (sale de las cabeceras) para mostrar la diferencia con
+        // la suma de los productos, igual que el modal. Con un filtro de texto no aplica.
+        $diferencia = 0.0;
+        if ($buscar === '') {
+            $fila = $this->repository->getRanking(['id_cliente' => $idCliente, 'top_x' => 0] + $filtros)[0] ?? null;
+            $suma = array_sum(array_column($rows, 'monto_neto'));
+            $diferencia = round((float) ($fila['monto_neto'] ?? $suma) - $suma, 2);
+        }
+
+        return [$filtros, $cliente, $rows, $buscar, $diferencia];
+    }
+
+    public function exportDetalleExcel(): void
+    {
+        $this->requireLeer();
+
+        try {
+            [$filtros, $cliente, $rows, $buscar, $diferencia] = $this->datosDetalleExport();
+            $empresa = (new \App\models\Empresa())->getPorId($filtros['id_empresa']) ?? [];
+
+            $headers = ['Código', 'Producto', 'Unidad', 'Cantidad', 'Documentos', 'Monto Neto', '% del Cliente'];
+            $data = [];
+            foreach ($rows as $r) {
+                $data[] = [$r['producto_codigo'], $r['producto_nombre'], $r['unidad_medida'], $r['cantidad'],
+                           $r['cantidad_documentos'], $r['monto_neto'], $r['pct']];
+            }
+            $data[] = ['', 'TOTAL', '', '', '', array_sum(array_column($rows, 'monto_neto')), ''];
+            if (abs($diferencia) >= 0.01) {
+                $data[] = ['', 'Diferencia con el monto neto del ranking (documentos sin detalle de productos)', '', '', '', $diferencia, ''];
+            }
+
+            $info = [
+                'Cliente'    => $cliente['nombre'] . ' (' . $cliente['identificacion'] . ')',
+                'Período'    => $this->periodoTxt($filtros),
+                'Vendedor'   => $this->nombreVendedor($filtros),
+                'Documentos' => $this->fuentesTxt($filtros),
+            ];
+            if ($buscar !== '') {
+                $info['Filtro'] = $buscar;
+            }
+
+            (new \App\Services\ReportService())->exportToExcel('MejorCliente_Productos', $headers, $data,
+                'Productos', ($empresa['nombre'] ?? '') . ' - Productos vendidos al cliente', $info);
+            exit;
+        } catch (\Throwable $e) {
+            echo 'Error al generar Excel: ' . $e->getMessage();
+        }
+    }
+
+    public function exportDetallePdf(): void
+    {
+        $this->requireLeer();
+
+        try {
+            [$filtros, $cliente, $rows, $buscar, $diferencia] = $this->datosDetalleExport();
+            $empresa = (new \App\models\Empresa())->getPorId($filtros['id_empresa']) ?? [];
+            $nombreEmpresa = $empresa['nombre'] ?? '';
+
+            $pdf = \App\Helpers\ReportePdf::class;
+            $pt  = 8.0;
+            $wProducto = 39.0;
+            $anchoProd = $pdf::anchoPt($wProducto, false);
+
+            $filtrosTxt = [
+                'Cliente'    => $cliente['nombre'],
+                'RUC/Cédula' => $cliente['identificacion'],
+                'Desde'      => $this->fechaTxt($filtros['fecha_desde']),
+                'Hasta'      => $this->fechaTxt($filtros['fecha_hasta']),
+                'Vendedor'   => $this->nombreVendedor($filtros),
+                'Documentos' => $this->fuentesTxt($filtros),
+            ];
+            if ($buscar !== '') {
+                $filtrosTxt['Filtro'] = $buscar;
+            }
+
+            $cols = [
+                ['lbl' => 'Código', 'w' => 14.0,
+                 'val' => static fn (array $r): string => htmlspecialchars((string) $r['producto_codigo'])],
+                ['lbl' => 'Producto', 'w' => $wProducto,
+                 'val' => static fn (array $r): string => $pdf::texto((string) $r['producto_nombre'], $anchoProd, $pt)],
+                ['lbl' => 'Unidad', 'w' => 9.0,
+                 'val' => static fn (array $r): string => htmlspecialchars((string) $r['unidad_medida'])],
+                ['lbl' => 'Cantidad', 'w' => 10.0, 'cls' => 'text-end',
+                 'val' => static fn (array $r): string => rtrim(rtrim(number_format((float) $r['cantidad'], 4), '0'), '.')],
+                ['lbl' => 'Docs.', 'w' => 7.0, 'cls' => 'text-center',
+                 'val' => static fn (array $r): string => (string) (int) $r['cantidad_documentos']],
+                ['lbl' => 'Monto neto', 'w' => 12.0, 'cls' => 'text-end',
+                 'val' => static fn (array $r): string => '<b>' . number_format((float) $r['monto_neto'], 2) . '</b>',
+                 'tot' => static fn (array $fs): float => array_sum(array_column($fs, 'monto_neto'))],
+                ['lbl' => '% cliente', 'w' => 9.0, 'cls' => 'text-end',
+                 'val' => static fn (array $r): string => number_format((float) $r['pct'], 2) . '%'],
+            ];
+
+            $n = count($rows);
+            $html = $pdf::encabezado($filtros['id_empresa'], $nombreEmpresa, 'Productos vendidos al cliente',
+                    $cliente['nombre'] . ' · ' . $this->periodoTxt($filtros))
+                . $pdf::filtros($filtrosTxt)
+                . $pdf::listado($cols, $rows, 'TOTAL (' . $n . ' ' . ($n === 1 ? 'producto' : 'productos') . ')',
+                    'Los documentos de este cliente no tienen detalle de productos.');
+            if (abs($diferencia) >= 0.01) {
+                $html .= "<p style='font-size:7pt;color:#666;margin-top:4px;'>Diferencia con el monto neto del ranking: <b>"
+                    . number_format($diferencia, 2) . '</b> (documentos sin detalle de productos).</p>';
+            }
+
+            $autoload = MVC_ROOT . '/vendor/autoload.php';
+            if (file_exists($autoload)) {
+                require_once $autoload;
+            }
+            $html2pdf = new \Spipu\Html2Pdf\Html2Pdf('P', 'A4', 'es');
+            $html2pdf->writeHTML($pdf::pagina($pt, $html));
+            $html2pdf->output('MejorCliente_Productos_' . date('Ymd_His') . '.pdf', 'D');
+            exit;
+        } catch (\Throwable $e) {
+            echo 'Error al generar PDF: ' . $e->getMessage();
+        }
+    }
+
     /**
      * Arma el documento completo del PDF, reutilizado por descarga y envío por correo. Mismo
      * formato que los demás reportes (App\Helpers\ReportePdf): encabezado con logo, filtros
@@ -214,23 +393,14 @@ class MejorClienteController extends BaseModuloController
     {
         $pdf = \App\Helpers\ReportePdf::class;
         $pt  = 8.0;
-        $fecha = static fn (string $f): string => ($t = strtotime($f)) ? date('d-m-Y', $t) : $f;
+        $fecha = \Closure::fromCallable([$this, 'fechaTxt']);
 
-        $fuentes = array_filter([
-            $filtros['incluir_facturas'] ? 'Facturas' : '',
-            $filtros['incluir_recibos'] ? 'Recibos de venta' : '',
-        ]);
-        // Por id y no por la lista de activos: un vendedor ya inactivo también puede filtrarse.
-        $vendedor = 'Todos';
-        if ((int) $filtros['id_vendedor'] > 0) {
-            $v = (new \App\repositories\modulos\VendedorRepository())->findById((int) $filtros['id_vendedor'], $filtros['id_empresa']);
-            $vendedor = trim((string) ($v['nombre'] ?? '')) ?: 'Vendedor #' . (int) $filtros['id_vendedor'];
-        }
+        $vendedor = $this->nombreVendedor($filtros);
         $filtrosTxt = [
             'Desde'        => $fecha($filtros['fecha_desde']),
             'Hasta'        => $fecha($filtros['fecha_hasta']),
             'Vendedor'     => $vendedor,
-            'Documentos'   => implode(' y ', $fuentes),
+            'Documentos'   => $this->fuentesTxt($filtros),
             'Ordenado por' => $filtros['orden_por'] === 'cantidad' ? 'Cantidad de documentos' : 'Monto neto',
             'Mostrar'      => $filtros['top_x'] > 0 ? 'Top ' . $filtros['top_x'] : 'Todos los clientes',
         ];

@@ -170,13 +170,34 @@
         </div>
     </div>
 
-    <!-- ── Gráfico ── -->
-    <div class="card border-0 shadow-sm mb-4" id="chart-container" style="display: none;">
-        <div class="card-header bg-white border-bottom-0 pt-4 pb-0">
-            <h6 class="mb-0 fw-bold text-dark" style="font-family: 'Outfit', sans-serif;"><i class="bi bi-bar-chart-line text-primary me-2"></i><span id="chart-titulo">Top Clientes por Monto Neto</span></h6>
+    <!-- ── Gráfico: acordeón, cerrado por defecto (el título lo abre/cierra), como en Reporte de Ventas ── -->
+    <div class="card border-0 shadow-sm mb-3" id="chart-container" style="display: none;">
+        <div class="card-header bg-white border-bottom-0 py-2 d-flex justify-content-between align-items-center flex-wrap gap-2">
+            <button type="button" class="btn btn-link p-0 text-decoration-none text-dark fw-bold d-flex align-items-center collapsed"
+                    data-bs-toggle="collapse" data-bs-target="#mc-grafico-body" aria-expanded="false" aria-controls="mc-grafico-body"
+                    style="font-family: 'Outfit', sans-serif;font-size:.95rem;">
+                <i class="bi bi-bar-chart-line text-primary me-2"></i><span id="chart-titulo">Top Clientes por Monto Neto</span>
+            </button>
+            <div class="d-flex align-items-center gap-2">
+                <?= \App\Helpers\PreferenciasHelper::renderEstrellaFavorito($rutaModulo, 'mc-tipo-grafico', 'tipo_grafico') ?>
+                <select id="mc-tipo-grafico" class="form-select form-select-sm shadow-none border" style="width: 140px;" onchange="window.MC_cambiarTipoGrafico()">
+                    <option value="auto">Automático</option>
+                    <option value="bar">Barras</option>
+                    <option value="line">Líneas</option>
+                    <option value="pie">Pastel</option>
+                    <option value="doughnut">Dona</option>
+                </select>
+                <?php // Flecha del acordeón, al extremo derecho: abajo = cerrado, arriba = abierto. ?>
+                <button type="button" class="btn btn-sm btn-light border collapsed" title="Mostrar / ocultar el gráfico"
+                        data-bs-toggle="collapse" data-bs-target="#mc-grafico-body" aria-expanded="false" aria-controls="mc-grafico-body">
+                    <i class="bi bi-chevron-down" id="mc-grafico-chevron"></i>
+                </button>
+            </div>
         </div>
-        <div class="card-body">
-            <canvas id="reporteChart" style="max-height: 300px;"></canvas>
+        <div class="collapse" id="mc-grafico-body">
+            <div class="card-body pt-0">
+                <canvas id="reporteChart" style="max-height: 300px;"></canvas>
+            </div>
         </div>
     </div>
 
@@ -236,7 +257,14 @@
                 <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
             </div>
             <div class="modal-body p-0">
-                <div class="d-flex gap-2 align-items-center px-3 py-2 border-bottom">
+                <div class="d-flex gap-1 align-items-center flex-wrap px-3 py-2 border-bottom">
+                    <button type="button" class="btn btn-sm btn-outline-danger" onclick="window.MC_exportarDetalle('exportDetallePdf')" title="Descargar PDF">
+                        <i class="bi bi-file-earmark-pdf"></i>
+                    </button>
+                    <button type="button" class="btn btn-sm btn-outline-success" onclick="window.MC_exportarDetalle('exportDetalleExcel')" title="Descargar Excel">
+                        <i class="bi bi-file-earmark-spreadsheet"></i>
+                    </button>
+                    <div class="vr mx-1"></div>
                     <div class="input-group input-group-sm" style="width:320px;">
                         <span class="input-group-text"><i class="bi bi-search"></i></span>
                         <input type="text" class="form-control shadow-none" id="mc-det-buscar" placeholder="Filtrar por código o producto" oninput="window.MC_filtrarDetalle()">
