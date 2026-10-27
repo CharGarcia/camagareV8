@@ -591,7 +591,10 @@ class NovedadRepository extends BaseRepository
         $inAnio = implode(',', $anios);
         $colIess = $this->tieneMarcaIess() ? 'aporta_iess' : 'NULL AS aporta_iess';
 
-        $sql = "SELECT id_empleado, tipo_codigo, periodo_mes, periodo_anio, valor, {$colIess}
+        // desembolsado_migrado: en Anticipo/Préstamo Empresa, "ya entregado" y "por pagar"
+        // no son la misma novedad (ver NovedadImportService::claveNovedad).
+        $sql = "SELECT id_empleado, tipo_codigo, periodo_mes, periodo_anio, valor, {$colIess},
+                       COALESCE(desembolsado_migrado, false) AS desembolsado_migrado
                   FROM {$this->table}
                  WHERE id_empresa = :id_empresa AND eliminado = false
                    AND id_empleado IN ($inEmp) AND periodo_anio IN ($inAnio)

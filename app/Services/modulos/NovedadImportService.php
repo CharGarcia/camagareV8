@@ -33,9 +33,13 @@ use Exception;
  *    APORTA_IESS (SI/NO). Se sigue aceptando para las plantillas que ya se
  *    descargaron así.
  *
- * Los Anticipos (3) y las cuotas de Préstamo Empresa (9) del archivo se asumen YA
- * ENTREGADOS al empleado: se guardan con la marca de desembolso (desembolsado_migrado),
- * así el rol los descuenta sin pedir el egreso de Egresos → Nómina (ver yaEntregado()).
+ * Anticipo (3) y Préstamo Empresa (9) tienen dos columnas, YA ENTREGADO / POR PAGAR
+ * (en el préstamo: YA DESEMBOLSADO / POR DESEMBOLSAR). Lo ya entregado se guarda con
+ * la marca de desembolso (desembolsado_migrado) y el rol lo descuenta sin pedir el
+ * egreso; lo por pagar va sin marca: se paga en Egresos → Nómina y luego el rol lo
+ * descuenta. Una columna con solo el nombre del tipo (plantillas anteriores) se toma
+ * como ya entregado (ver yaEntregado()). La columna PRÉSTAMO EMPRESA N° DE CUOTAS
+ * genera una cuota por mes desde el período de la fila (ver expandirCuotas()).
  *
  * Cada importación queda registrada como una CARGA (novedades_cargas) y todas sus
  * novedades guardan el id_carga, para poder revertirla completa desde el módulo
@@ -55,6 +59,7 @@ class NovedadImportService
         'fecha'          => ['FECHA', 'FECHAREGISTRO'],
         'observacion'    => ['OBSERVACION', 'OBSERVACIONES', 'DETALLE', 'CONCEPTO'],
         'aporta_iess'    => ['APORTAIESS', 'APORTAALIESS', 'IESS', 'CONIESS'],
+        'cuotas'         => ['PRESTAMOEMPRESANDECUOTAS', 'NDECUOTAS', 'NCUOTAS', 'NUMERODECUOTAS', 'NUMEROCUOTAS', 'CUOTAS'],
     ];
 
     /** El Aviso de salida se registra a mano en el módulo, no por Excel. */
@@ -74,7 +79,7 @@ class NovedadImportService
     public function procesar(string $archivoTmp, int $idEmpresa, int $idUsuario, string $nombreArchivo = ''): array
     {
         $spreadsheet = IOFactory::load($archivoTmp);
-        // La plantilla trae la hoja "Novedades" y una de "Referencia": se lee siempre
+        // La plantilla trae la hoja "Novedades" y una de "Instrucciones": se lee siempre
         // la de datos, aunque el usuario guarde el archivo con otra hoja activa.
         $hoja = $spreadsheet->getSheetByName('Novedades') ?? $spreadsheet->getActiveSheet();
         // Valores crudos, no el texto formateado: un monto con formato de moneda o de
@@ -183,7 +188,7 @@ class NovedadImportService
         foreach ($preparadas as $p) {
             $data = $p['data'];
             $etiqueta = $p['fila'] . ' · ' . $this->etiqueta($data);
-            unset($data['_nombre_empleado']);
+            unset($data['_nombre_empleado'], $data['_cuota']);
             $data['id_carga'] = $idCarga;
             $aCrear[$etiqueta] = $data;
         }
@@ -222,19 +227,36 @@ class NovedadImportService
      */
     private function leerFilaEmpleado(array $f, array $cols, int $idEmpresa, int $idUsuario): array
     {
-        $celdas = []; // [codigo, iess (true/false/null), texto] de cada celda con valor
+        $celdas = []; // [codigo, iess, entregado, texto] de cada celda con valor
         foreach ($cols['tipos'] as $idx => $col) {
             $txt = trim((string) ($f[$idx] ?? ''));
             if ($txt !== '' && !$this->esCero($txt)) {
-                $celdas[] = ['codigo' => $col['codigo'], 'iess' => $col['iess'], 'txt' => $txt];
+                $celdas[] = ['codigo' => $col['codigo'], 'iess' => $col['iess'], 'entregado' => $col['entregado'], 'txt' => $txt];
             }
-        }
-        if (empty($celdas)) {
-            return ['novedades' => [], 'errores' => [], 'leidas' => 0];
         }
 
         $campos  = $cols['campos'];
         $errores = [];
+
+        // N° de cuotas del Préstamo Empresa (vacía = 1). Sin valor de préstamo en la
+        // fila no tiene a qué aplicarse: es un error, no una fila vacía.
+        $cuotasTxt = trim((string) $this->celda($f, $campos, 'cuotas'));
+        $hayPrestamo = (bool) array_filter($celdas, fn($c) => CatalogoNovedades::esPrestamo($c['codigo']));
+        $nCuotas = 1;
+        if ($cuotasTxt !== '' && !$this->esCero($cuotasTxt)) {
+            if (!$hayPrestamo) {
+                $errores[] = ['N° de cuotas', 'Tiene N° DE CUOTAS pero ningún valor en PRÉSTAMO EMPRESA YA DESEMBOLSADO o POR DESEMBOLSAR.'];
+            }
+            $n = str_replace(',', '.', $cuotasTxt);
+            if (!is_numeric($n) || (float) $n != floor((float) $n) || (int) $n < 1 || (int) $n > NovedadPlantillaService::MAX_CUOTAS) {
+                $errores[] = ['N° de cuotas', "N° DE CUOTAS no válido: «{$cuotasTxt}» (escriba un número entero de 1 a " . NovedadPlantillaService::MAX_CUOTAS . ').'];
+            } else {
+                $nCuotas = (int) $n;
+            }
+        }
+        if (empty($celdas)) {
+            return ['novedades' => [], 'errores' => $errores, 'leidas' => $errores ? 1 : 0];
+        }
 
         $ident  = trim((string) $this->celda($f, $campos, 'identificacion'));
         $nombre = trim((string) $this->celda($f, $campos, 'nombre'));
@@ -273,32 +295,70 @@ class NovedadImportService
         ];
 
         $novedades = [];
+        $leidas    = count($celdas);
         foreach ($celdas as $c) {
-            $codigo = $c['codigo'];
+            $codigo   = $c['codigo'];
+            $etiqueta = $this->etiquetaTipo($codigo, $c['iess'], $c['entregado']);
             if (CatalogoNovedades::esAvisoSalida($codigo)) {
-                $errores[] = [$this->etiquetaTipo($codigo, $c['iess']), self::MSG_AVISO_SALIDA];
+                $errores[] = [$etiqueta, self::MSG_AVISO_SALIDA];
                 continue;
             }
             try {
                 $valor = $this->numero($c['txt']);
             } catch (\Throwable $e) {
-                $errores[] = [$this->etiquetaTipo($codigo, $c['iess']), $e->getMessage()];
+                $errores[] = [$etiqueta, $e->getMessage()];
                 continue;
             }
             if ($idEmp === null || $aplicaEn === null) {
                 continue; // la fila ya tiene su error: no se arma la novedad
             }
-            $novedades[] = $base + [
+            $novedad = $base + [
                 'tipo_codigo'   => $codigo,
                 'valor'         => $valor,
                 'motivo_codigo' => '',
                 'aporta_iess'   => $c['iess'], // null: columna sin CON/SIN IESS → la del tipo
-                'desembolsado_migrado' => $this->yaEntregado($codigo),
+                // Columna YA ENTREGADO / POR PAGAR; sin esa marca (plantilla vieja), ya entregado.
+                'desembolsado_migrado' => $c['entregado'] ?? $this->yaEntregado($codigo),
                 'observacion'   => $obs !== '' ? $obs : $this->observacionPorDefecto($codigo, $mes, $anio),
             ];
+            if (CatalogoNovedades::esPrestamo($codigo) && $nCuotas > 1) {
+                $cuotas = $this->expandirCuotas($novedad, $nCuotas, $obs);
+                $leidas += count($cuotas) - 1;
+                array_push($novedades, ...$cuotas);
+            } else {
+                $novedades[] = $novedad;
+            }
         }
 
-        return ['novedades' => $novedades, 'errores' => $errores, 'leidas' => count($celdas)];
+        return ['novedades' => $novedades, 'errores' => $errores, 'leidas' => $leidas];
+    }
+
+    /**
+     * Una cuota por mes desde el período de la novedad: mismo valor, empleado,
+     * "afecta a", fecha y marca de desembolso. La observación lleva "Cuota k/n"
+     * (sobre la escrita en la fila o, si está vacía, sobre "Tipo - Mes Año" de
+     * cada mes). Así, un préstamo por desembolsar aparece en Egresos → Nómina por la
+     * suma de todas sus cuotas, que es el monto del préstamo.
+     */
+    private function expandirCuotas(array $novedad, int $n, string $obs): array
+    {
+        $cuotas = [];
+        $mes  = (int) $novedad['periodo_mes'];
+        $anio = (int) $novedad['periodo_anio'];
+        for ($k = 1; $k <= $n; $k++) {
+            $base = $obs !== '' ? $obs : $this->observacionPorDefecto($novedad['tipo_codigo'], $mes, $anio);
+            $cuotas[] = array_merge($novedad, [
+                'periodo_mes'  => $mes,
+                'periodo_anio' => $anio,
+                'observacion'  => $base . " - Cuota {$k}/{$n}",
+                '_cuota'       => "{$k}/{$n}", // para los mensajes; se quita antes de guardar
+            ]);
+            if (++$mes > 12) {
+                $mes = 1;
+                $anio++;
+            }
+        }
+        return $cuotas;
     }
 
     /**
@@ -358,20 +418,35 @@ class NovedadImportService
         $marca = CatalogoNovedades::admiteOpcionIess($tipo)
             ? (CatalogoNovedades::aportaIess($tipo, $d['aporta_iess'] ?? null) ? '|I' : '|N')
             : '';
+        // Anticipo / Préstamo Empresa: ya entregado y por pagar son novedades distintas.
+        if (NovedadPlantillaService::requiereEntrega($tipo)) {
+            $marca .= in_array($d['desembolsado_migrado'] ?? null, ['t', true, 1, '1', 'true'], true) ? '|E' : '|P';
+        }
         return ((int) $d['id_empleado']) . '|' . $tipo
             . '|' . ((int) $d['periodo_mes']) . '|' . ((int) $d['periodo_anio']) . $marca
             . '|' . number_format((float) ($d['valor'] ?? 0), 2, '.', '');
     }
 
-    /** Nombre de la novedad para los mensajes: "Descuento", "Horas Nocturnas con IESS"... */
+    /**
+     * Nombre de la novedad para los mensajes: "Descuento", "Horas Nocturnas con IESS",
+     * "Anticipo por pagar", "Préstamo Empresa ya desembolsado (cuota 3/10)"...
+     */
     private function etiqueta(array $d): string
     {
-        return $this->etiquetaTipo((string) $d['tipo_codigo'], $d['aporta_iess'] ?? null);
+        $codigo = (string) $d['tipo_codigo'];
+        $entregado = NovedadPlantillaService::requiereEntrega($codigo)
+            ? in_array($d['desembolsado_migrado'] ?? null, ['t', true, 1, '1', 'true'], true)
+            : null;
+        $texto = $this->etiquetaTipo($codigo, $d['aporta_iess'] ?? null, $entregado);
+        return isset($d['_cuota']) ? $texto . ' (cuota ' . $d['_cuota'] . ')' : $texto;
     }
 
-    private function etiquetaTipo(string $codigo, $iess): string
+    private function etiquetaTipo(string $codigo, $iess, ?bool $entregado = null): string
     {
         $nombre = CatalogoNovedades::nombreTipo($codigo) ?? $codigo;
+        if ($entregado !== null && NovedadPlantillaService::requiereEntrega($codigo)) {
+            return $nombre . ' ' . mb_strtolower(NovedadPlantillaService::marcaEntrega($codigo, $entregado), 'UTF-8');
+        }
         if ($iess === null || !CatalogoNovedades::admiteOpcionIess($codigo)) {
             return $nombre;
         }
@@ -393,10 +468,11 @@ class NovedadImportService
 
     /**
      * Resuelve en qué columna está cada campo leyendo la fila de encabezados:
-     * 'campos' => campo => índice, y 'tipos' => índice => ['codigo', 'iess'] del
-     * tipo de novedad de esa columna (solo en la plantilla actual; vacío en el
-     * formato anterior, que trae una columna TIPO). 'iess' es true/false en las
-     * columnas CON IESS / SIN IESS, y null en las demás.
+     * 'campos' => campo => índice, y 'tipos' => índice => ['codigo', 'iess',
+     * 'entregado'] del tipo de novedad de esa columna (solo en la plantilla actual;
+     * vacío en el formato anterior, que trae una columna TIPO). 'iess' es true/false
+     * en las columnas CON IESS / SIN IESS y 'entregado' en YA ENTREGADO / POR PAGAR
+     * (YA DESEMBOLSADO / POR DESEMBOLSAR); null en las demás.
      */
     private function mapearColumnas(array $encabezados): array
     {
@@ -404,10 +480,16 @@ class NovedadImportService
         foreach (CatalogoNovedades::TIPOS as $t) {
             $codigo = (string) $t['codigo'];
             $nombre = $this->normalizarEncabezado($t['nombre']);
-            $porNombre[$nombre] = ['codigo' => $codigo, 'iess' => null];
+            $porNombre[$nombre] = ['codigo' => $codigo, 'iess' => null, 'entregado' => null];
             if (CatalogoNovedades::admiteOpcionIess($codigo)) {
-                $porNombre[$nombre . 'CONIESS'] = ['codigo' => $codigo, 'iess' => true];
-                $porNombre[$nombre . 'SINIESS'] = ['codigo' => $codigo, 'iess' => false];
+                $porNombre[$nombre . 'CONIESS'] = ['codigo' => $codigo, 'iess' => true, 'entregado' => null];
+                $porNombre[$nombre . 'SINIESS'] = ['codigo' => $codigo, 'iess' => false, 'entregado' => null];
+            }
+            if (NovedadPlantillaService::requiereEntrega($codigo)) {
+                foreach ([true, false] as $ent) {
+                    $marca = $this->normalizarEncabezado(NovedadPlantillaService::marcaEntrega($codigo, $ent));
+                    $porNombre[$nombre . $marca] = ['codigo' => $codigo, 'iess' => null, 'entregado' => $ent];
+                }
             }
         }
 
@@ -421,7 +503,7 @@ class NovedadImportService
             }
             if (isset($porNombre[$norm])) {
                 $col = $porNombre[$norm];
-                $clave = $col['codigo'] . '|' . var_export($col['iess'], true);
+                $clave = $col['codigo'] . '|' . var_export($col['iess'], true) . '|' . var_export($col['entregado'], true);
                 if (!isset($vistos[$clave])) {
                     $vistos[$clave] = true;
                     $tipos[(int) $idx] = $col;
@@ -532,8 +614,9 @@ class NovedadImportService
 
     /**
      * Anticipo y Préstamo Empresa normalmente se pagan primero con un egreso y solo
-     * entonces el rol los descuenta. En la carga por Excel se asume que ya se
-     * entregaron (fuera del sistema): el rol los descuenta directo.
+     * entonces el rol los descuenta. Cuando el archivo no dice si ya se entregaron
+     * (columna sin YA ENTREGADO / POR PAGAR, o el formato de una fila por novedad) se
+     * asume que sí, fuera del sistema: el rol los descuenta directo.
      */
     private function yaEntregado(string $codigo): bool
     {

@@ -18,10 +18,17 @@ use PhpOffice\PhpSpreadsheet\Worksheet\Worksheet;
 /**
  * Arma la plantilla Excel para cargar novedades: una hoja "Novedades" con UNA
  * FILA POR EMPLEADO (todo el personal activo de la empresa) y UNA COLUMNA POR
- * CADA TIPO de novedad del catálogo, más una hoja "Referencia" con las
- * instrucciones y los códigos. Los ingresos que se marcan con o sin IESS (Otros
- * Ingresos y horas, ver CatalogoNovedades::CODS_OPCION_IESS) tienen DOS
- * columnas, una CON IESS y otra SIN IESS: la columna elegida es la marca.
+ * CADA TIPO de novedad del catálogo, más una hoja "Instrucciones" que explica
+ * columna por columna qué se escribe y qué hace en el sistema.
+ *
+ * Algunos tipos tienen DOS columnas y la columna elegida es la marca:
+ *  - Otros Ingresos y horas (CatalogoNovedades::CODS_OPCION_IESS): CON IESS / SIN IESS.
+ *  - Anticipo y Préstamo Empresa (los que normalmente se pagan por egreso antes de
+ *    descontarse): YA ENTREGADO / POR PAGAR. Lo "ya entregado" se guarda con la marca
+ *    de desembolso (el rol lo descuenta directo); lo "por pagar" sigue el camino
+ *    normal: Egresos → Nómina y luego el rol.
+ * Además, junto al Préstamo Empresa va la columna N° DE CUOTAS: con más de una,
+ * el importador crea una cuota por mes desde el período de la fila.
  *
  * El usuario solo escribe el valor en las columnas de novedad que le
  * correspondan a cada empleado: las celdas vacías (o en 0) no crean nada al
@@ -35,6 +42,12 @@ class NovedadPlantillaService
 
     /** Columnas después de las de novedad: aplican a todas las novedades de la fila. */
     public const COLS_FILA = ['MES', 'ANIO', 'AFECTA_A', 'FECHA', 'OBSERVACION'];
+
+    /** Encabezado de la columna con el número de cuotas del Préstamo Empresa. */
+    public const ENC_CUOTAS = 'PRÉSTAMO EMPRESA N° DE CUOTAS';
+
+    /** Tope de cuotas que se generan desde una fila (10 años). */
+    public const MAX_CUOTAS = 120;
 
     /** Ejemplos que acompañan al nombre del tipo en el encabezado de su columna. */
     private const EJEMPLOS_TIPO = ['1' => 'Bonos, comisiones'];
@@ -53,20 +66,28 @@ class NovedadPlantillaService
     }
 
     /**
-     * Columnas de novedad de la hoja, en orden: una por tipo, y dos seguidas (con
-     * IESS y sin IESS) en los ingresos que llevan esa marca. 'iess' es null en
-     * los tipos sin la opción.
+     * Columnas de novedad de la hoja, en orden. Cada una: 'codigo' del tipo, 'iess'
+     * (true/false en CON/SIN IESS, null si el tipo no tiene esa marca), 'entregado'
+     * (true/false en YA ENTREGADO / POR PAGAR, null en los demás) y 'cuotas' (true
+     * solo en la columna N° DE CUOTAS del Préstamo Empresa, que no es una novedad).
      */
     public static function columnasNovedad(): array
     {
         $cols = [];
         foreach (self::tiposPlantilla() as $t) {
             $codigo = (string) $t['codigo'];
+            $base = ['codigo' => $codigo, 'iess' => null, 'entregado' => null, 'cuotas' => false];
             if (CatalogoNovedades::admiteOpcionIess($codigo)) {
-                $cols[] = ['codigo' => $codigo, 'iess' => true];
-                $cols[] = ['codigo' => $codigo, 'iess' => false];
+                $cols[] = ['iess' => true] + $base;
+                $cols[] = ['iess' => false] + $base;
+            } elseif (self::requiereEntrega($codigo)) {
+                $cols[] = ['entregado' => true] + $base;
+                $cols[] = ['entregado' => false] + $base;
+                if (CatalogoNovedades::esPrestamo($codigo)) {
+                    $cols[] = ['cuotas' => true] + $base;
+                }
             } else {
-                $cols[] = ['codigo' => $codigo, 'iess' => null];
+                $cols[] = $base;
             }
         }
         return $cols;
@@ -84,14 +105,36 @@ class NovedadPlantillaService
         ));
     }
 
+    /** Anticipo y Préstamo Empresa: se entregan al empleado y se pagan por egreso antes de descontarse. */
+    public static function requiereEntrega(string $codigo): bool
+    {
+        return CatalogoNovedades::esPagoPorEgreso($codigo) || CatalogoNovedades::esPrestamo($codigo);
+    }
+
     /**
-     * Encabezado de la columna de un tipo de novedad: su nombre, "CON IESS" o "SIN
-     * IESS" si lleva esa marca, los ejemplos si los tiene y, entre paréntesis, qué
-     * se escribe en ella. El importador reconoce la columna por el nombre y la
+     * Texto de la marca YA ENTREGADO / POR PAGAR en el encabezado. El importador
+     * reconoce la columna por el nombre del tipo y esta marca (ver mapearColumnas).
+     */
+    public static function marcaEntrega(string $codigo, bool $entregado): string
+    {
+        if (CatalogoNovedades::esPrestamo($codigo)) {
+            return $entregado ? 'YA DESEMBOLSADO' : 'POR DESEMBOLSAR';
+        }
+        return $entregado ? 'YA ENTREGADO' : 'POR PAGAR';
+    }
+
+    /**
+     * Encabezado de una columna de novedad: el nombre del tipo, su marca (CON/SIN
+     * IESS o YA ENTREGADO/POR PAGAR) si la tiene, los ejemplos y, entre paréntesis,
+     * qué se escribe en ella. El importador reconoce la columna por el nombre y la
      * marca, e ignora todo lo que va entre paréntesis.
      */
-    public static function encabezadoTipo(string $codigo, ?bool $iess = null): string
+    public static function encabezado(array $col): string
     {
+        if ($col['cuotas']) {
+            return self::ENC_CUOTAS;
+        }
+        $codigo = $col['codigo'];
         $unidad = match (CatalogoNovedades::unidadValor($codigo)) {
             'horas'   => 'HORAS',
             'dias'    => 'DÍAS',
@@ -99,8 +142,11 @@ class NovedadPlantillaService
             default   => '$',
         };
         $nombre = (string) CatalogoNovedades::nombreTipo($codigo);
-        if ($iess !== null) {
-            $nombre .= $iess ? ' con IESS' : ' sin IESS';
+        if ($col['iess'] !== null) {
+            $nombre .= $col['iess'] ? ' con IESS' : ' sin IESS';
+        }
+        if ($col['entregado'] !== null) {
+            $nombre .= ' ' . self::marcaEntrega($codigo, $col['entregado']);
         }
         if (isset(self::EJEMPLOS_TIPO[$codigo])) {
             $nombre .= ' (' . self::EJEMPLOS_TIPO[$codigo] . ')';
@@ -108,11 +154,58 @@ class NovedadPlantillaService
         return mb_strtoupper($nombre, 'UTF-8') . " ({$unidad})";
     }
 
-    /** "Otros Ingresos (Bonos, comisiones)": el nombre del tipo con sus ejemplos, si tiene. */
-    private static function nombreConEjemplos(string $codigo): string
+    /**
+     * Explicación de una columna de novedad para la hoja Instrucciones y la nota del
+     * encabezado: [qué escribir, qué hace en el sistema, ejemplo].
+     */
+    public static function explicacion(array $col): array
     {
-        $nombre = (string) CatalogoNovedades::nombreTipo($codigo);
-        return isset(self::EJEMPLOS_TIPO[$codigo]) ? $nombre . ' (' . self::EJEMPLOS_TIPO[$codigo] . ')' : $nombre;
+        $codigo = $col['codigo'];
+        if ($col['cuotas']) {
+            return [
+                'Opcional. Número de cuotas mensuales del préstamo (de 1 a ' . self::MAX_CUOTAS . ').',
+                'Con más de 1, se crea una cuota por mes desde el MES/ANIO de la fila, cada una por el valor escrito en la columna del préstamo. Vacía o 1: solo la cuota de ese mes.',
+                '10',
+            ];
+        }
+        if ($col['entregado'] !== null) {
+            $prestamo = CatalogoNovedades::esPrestamo($codigo);
+            if ($col['entregado']) {
+                return $prestamo
+                    ? ['Valor de la cuota.', 'El préstamo ya se entregó al empleado: el rol descuenta la cuota directo, sin pedir el desembolso en Egresos → Nómina. No genera egreso ni asiento del desembolso.', '80']
+                    : ['Monto del anticipo.', 'El anticipo ya se entregó al empleado: el rol lo descuenta directo, sin pedir el pago en Egresos → Nómina. No genera egreso ni asiento del pago.', '100'];
+            }
+            return $prestamo
+                ? ['Valor de la cuota.', 'El préstamo aún no se entrega: aparece en Egresos → Nómina para desembolsarlo por la suma de sus cuotas, y el rol descuenta cada cuota solo después del desembolso. Use N° DE CUOTAS para registrar todas las cuotas de una vez.', '80']
+                : ['Monto del anticipo.', 'El anticipo aún no se entrega: aparece en Egresos → Nómina para pagarlo, y el rol lo descuenta solo después de pagado. Mientras tanto, el rol muestra el aviso "Pendientes de desembolso".', '100'];
+        }
+        if (in_array($codigo, CatalogoNovedades::CODS_HORAS, true)) {
+            $que = 'Se paga en el rol con el recargo de ese tipo de hora sobre el valor de la hora del empleado.';
+            return ['Número de horas (acepta decimales).', $que . ($col['iess'] ? ' Suma a la base del IESS.' : ' No suma a la base del IESS.'), '8'];
+        }
+        return match ($codigo) {
+            '1' => ['Monto.', 'Ingreso adicional en el rol.' . ($col['iess'] ? ' Suma a la base del IESS.' : ' No suma a la base del IESS.'), '50'],
+            '2' => ['Monto.', 'Se resta del rol directo (multas, consumos, faltantes, etc.).', '25'],
+            '7' => ['Valor de la cuota del mes.', 'Se resta del rol directo. El préstamo lo entrega el IESS, no la empresa.', '45.30'],
+            '8' => ['Valor de la cuota del mes.', 'Se resta del rol directo. El préstamo lo entrega el IESS o el banco, no la empresa.', '120'],
+            '10' => ['Número de días.', 'Resta del sueldo del mes (sueldo / 30 por día). Va siempre al rol mensual, aunque AFECTA_A diga quincena o semanal.', '2'],
+            default => [(string) CatalogoNovedades::labelValor($codigo), '', ''],
+        };
+    }
+
+    /** Explicación de las columnas fijas (empleado y fila): [qué escribir, qué hace, ejemplo]. */
+    private static function explicacionFija(string $columna): array
+    {
+        return match ($columna) {
+            'IDENTIFICACION' => ['Cédula del empleado. Ya viene escrita: no la cambie.', 'Con ella se busca al empleado. Si no existe en la empresa, la fila da error.', '0912345678'],
+            'NOMBRE'         => ['Ya viene escrito.', 'Solo de referencia: el sistema usa la IDENTIFICACION.', 'PÉREZ JUAN'],
+            'MES'            => ['Número del mes (1 a 12). Ya viene escrito.', 'Mes del rol al que se imputa cada novedad de la fila.', '11'],
+            'ANIO'           => ['Año. Ya viene escrito.', 'Año del rol al que se imputa cada novedad de la fila.', '2026'],
+            'AFECTA_A'       => ['rol, quincena o semanal. Ya viene escrito.', 'En qué pago se registran las novedades de la fila. Los días no laborados van siempre al rol mensual.', 'rol'],
+            'FECHA'          => ['Fecha (aaaa-mm-dd). Ya viene escrita con la fecha de hoy.', 'Fecha en que ocurrió la novedad (solo informativa).', '2026-11-05'],
+            'OBSERVACION'    => ['Texto opcional.', 'Se guarda en TODAS las novedades de la fila. Vacía: cada una queda como "Tipo - Mes Año". Para textos distintos, copie la fila del empleado.', 'Descuento por atraso'],
+            default          => ['', '', ''],
+        };
     }
 
     public function construir(int $idEmpresa, int $mes, int $anio, string $aplicaEn): Spreadsheet
@@ -123,7 +216,7 @@ class NovedadPlantillaService
 
         $encabezados = self::COLS_EMPLEADO;
         foreach ($colsNov as $c) {
-            $encabezados[] = self::encabezadoTipo($c['codigo'], $c['iess']);
+            $encabezados[] = self::encabezado($c);
         }
         $encabezados = array_merge($encabezados, self::COLS_FILA);
 
@@ -169,6 +262,18 @@ class NovedadPlantillaService
 
         $this->darFormatoEncabezado($hoja, $ultCol, $primNov, $ultNov);
 
+        // Nota en cada encabezado (el triangulito rojo de Excel): qué hace la columna,
+        // sin tener que ir a la hoja Instrucciones.
+        foreach (self::COLS_EMPLEADO as $i => $campo) {
+            $this->nota($hoja, $letra($i + 1) . '1', self::explicacionFija($campo));
+        }
+        foreach ($colsNov as $i => $c) {
+            $this->nota($hoja, $letra($nEmpleado + 1 + $i) . '1', self::explicacion($c));
+        }
+        foreach ($colFila as $campo => $col) {
+            $this->nota($hoja, $col . '1', self::explicacionFija($campo));
+        }
+
         // Con tantas columnas de novedad la hoja es ancha: el empleado queda fijo a
         // la izquierda y los encabezados arriba al desplazarse.
         $hoja->freezePane('C2');
@@ -181,7 +286,7 @@ class NovedadPlantillaService
             }
         }
 
-        $this->agregarReferencia($ss);
+        $this->agregarInstrucciones($ss, $colsNov);
 
         // Lista desplegable de ayuda. No bloquea lo escrito a mano (el importador
         // valida igual).
@@ -191,7 +296,7 @@ class NovedadPlantillaService
             '"' . implode(',', array_keys(CatalogoNovedades::APLICA_EN)) . '"'
         );
 
-        // El archivo debe abrirse en la hoja de datos, no en la de referencia.
+        // El archivo debe abrirse en la hoja de datos, no en la de instrucciones.
         $ss->setActiveSheetIndex(0);
         return $ss;
     }
@@ -208,9 +313,22 @@ class NovedadPlantillaService
         $nov->getFill()->setFillType(Fill::FILL_SOLID)->getStartColor()->setARGB(self::COLOR_ENC_NOVEDAD);
         $nov->getAlignment()->setHorizontal(Alignment::HORIZONTAL_CENTER);
 
-        // Los nombres largos ("OTROS INGRESOS CON IESS (BONOS, COMISIONES) ($)")
-        // ocupan hasta 4 líneas.
+        // Los nombres largos ("PRÉSTAMO EMPRESA POR DESEMBOLSAR ($)") ocupan hasta 4 líneas.
         $hoja->getRowDimension(1)->setRowHeight(60);
+    }
+
+    /** Nota (comentario) de Excel en la celda: qué escribir y qué hace. */
+    private function nota(Worksheet $hoja, string $celda, array $explicacion): void
+    {
+        [$que, $hace] = $explicacion;
+        $texto = trim($que . ($hace !== '' ? "\n" . $hace : ''));
+        if ($texto === '') {
+            return;
+        }
+        $comentario = $hoja->getComment($celda);
+        $comentario->getText()->createTextRun($texto);
+        $comentario->setWidth('260pt');
+        $comentario->setHeight('110pt');
     }
 
     private function listaDesplegable(Worksheet $hoja, string $rango, string $formula): void
@@ -224,54 +342,101 @@ class NovedadPlantillaService
         $hoja->setDataValidation($rango, $dv);
     }
 
-    /** Hoja de apoyo: cómo se llena la plantilla y los valores válidos. */
-    private function agregarReferencia(Spreadsheet $ss): void
+    /**
+     * Hoja "Instrucciones" (al final del archivo): pasos, una fila por cada columna de
+     * la hoja Novedades —en el mismo orden y armada desde la misma lista que los
+     * encabezados, así nunca queda una columna sin explicar—, casos especiales y lo
+     * que hay que saber de contabilidad.
+     */
+    private function agregarInstrucciones(Spreadsheet $ss, array $colsNov): void
     {
         $ref = $ss->createSheet();
-        $ref->setTitle('Referencia');
+        $ref->setTitle('Instrucciones');
 
         $fila = 1;
         $titulo = function (string $texto) use ($ref, &$fila): void {
             $ref->setCellValue('A' . $fila, $texto);
-            $ref->getStyle('A' . $fila)->getFont()->setBold(true);
+            $ref->getStyle('A' . $fila)->getFont()->setBold(true)->setSize(12);
+            $fila++;
+        };
+        $lineas = function (array $textos) use ($ref, &$fila): void {
+            foreach ($textos as $t) {
+                $ref->setCellValue('A' . $fila++, $t);
+            }
             $fila++;
         };
 
-        $titulo('CÓMO SE LLENA LA HOJA NOVEDADES');
-        foreach ([
-            '• Hay una fila por empleado y una columna por cada tipo de novedad. Escriba el valor solo en las novedades que le correspondan: las celdas vacías o en 0 no crean nada.',
-            '• MES, ANIO, AFECTA_A y FECHA valen para todas las novedades de la fila. Si una novedad va a otro período u otro pago, póngala en una copia de la fila del empleado con esos datos.',
-            '• En la quincena y la semana solo hay ingresos y descuentos: los DÍAS NO LABORADOS van siempre al rol mensual, aunque AFECTA_A diga quincena o semanal.',
-            '• OBSERVACION es opcional: si queda vacía, cada novedad se guarda con "Tipo - Mes Año".',
-            '• El AVISO DE SALIDA no se carga por Excel: regístrelo a mano en el módulo Novedades (botón Nuevo).',
-            '• ANTICIPO y PRÉSTAMO EMPRESA se dan por YA ENTREGADOS al empleado: el rol los descuenta directo, sin pedir el egreso en Egresos → Nómina. Como no hay egreso, ese pago no queda en contabilidad: regístrelo con un asiento si aún no está.',
-            '• Otros Ingresos y las horas tienen dos columnas, CON IESS y SIN IESS: escriba el valor en la que corresponda. Si el empleado no aporta al IESS, se registra sin IESS aunque esté en la columna CON IESS.',
-        ] as $linea) {
-            $ref->setCellValue('A' . $fila++, $linea);
+        $titulo('CÓMO USAR ESTE ARCHIVO');
+        $lineas([
+            '1. En la hoja Novedades hay una fila por empleado y una columna por cada tipo de novedad. Escriba el valor solo en las novedades que le correspondan a cada empleado.',
+            '2. Las celdas vacías o en 0 no crean nada. Los empleados sin ningún valor se omiten: no hace falta borrar filas ni columnas.',
+            '3. Guarde el archivo y súbalo en Novedades → Importar.',
+            '4. La importación es TODO O NADA: si hay un solo error no se importa ninguna novedad, y se indica la fila y la novedad a corregir.',
+            '5. Pase el mouse sobre cada encabezado de la hoja Novedades para ver una nota con lo que hace esa columna.',
+        ]);
+
+        $titulo('QUÉ ES CADA COLUMNA DE LA HOJA NOVEDADES');
+        $ref->fromArray(['COLUMNA', 'QUÉ ESCRIBIR', 'QUÉ HACE EN EL SISTEMA', 'EJEMPLO'], null, 'A' . $fila);
+        $cab = $ref->getStyle("A{$fila}:D{$fila}");
+        $cab->getFont()->setBold(true);
+        $cab->getFill()->setFillType(Fill::FILL_SOLID)->getStartColor()->setARGB(self::COLOR_ENC_FIJO);
+        $fila++;
+        $primTabla = $fila;
+        $filaTabla = function (string $columna, array $exp, bool $novedad) use ($ref, &$fila): void {
+            $ref->setCellValueExplicit('A' . $fila, $columna, DataType::TYPE_STRING);
+            $ref->setCellValueExplicit('B' . $fila, $exp[0], DataType::TYPE_STRING);
+            $ref->setCellValueExplicit('C' . $fila, $exp[1], DataType::TYPE_STRING);
+            $ref->setCellValueExplicit('D' . $fila, $exp[2], DataType::TYPE_STRING);
+            if ($novedad) {
+                $ref->getStyle('A' . $fila)->getFill()->setFillType(Fill::FILL_SOLID)->getStartColor()->setARGB(self::COLOR_ENC_NOVEDAD);
+            }
+            $fila++;
+        };
+        foreach (self::COLS_EMPLEADO as $campo) {
+            $filaTabla($campo, self::explicacionFija($campo), false);
         }
+        foreach ($colsNov as $c) {
+            $filaTabla(self::encabezado($c), self::explicacion($c), true);
+        }
+        foreach (self::COLS_FILA as $campo) {
+            $filaTabla($campo, self::explicacionFija($campo), false);
+        }
+        $ref->getStyle("A{$primTabla}:D" . ($fila - 1))->getAlignment()
+            ->setWrapText(true)->setVertical(Alignment::VERTICAL_TOP);
         $fila++;
 
-        $titulo('TIPOS DE NOVEDAD');
-        $ref->fromArray(['CÓDIGO', 'NOVEDAD', 'QUÉ SE ESCRIBE EN SU COLUMNA', 'APORTA AL IESS'], null, 'A' . $fila);
-        $ref->getStyle("A{$fila}:D{$fila}")->getFont()->setBold(true);
-        $fila++;
-        foreach (self::tiposPlantilla() as $t) {
-            $que = CatalogoNovedades::labelValor($t['codigo']);
-            $iess = CatalogoNovedades::admiteOpcionIess($t['codigo'])
-                ? 'Según la columna: CON IESS o SIN IESS'
-                : 'No aplica';
-            $ref->fromArray([$t['codigo'], self::nombreConEjemplos($t['codigo']), $que, $iess], null, 'A' . $fila++);
-        }
-        $fila++;
+        $titulo('ANTICIPOS Y PRÉSTAMOS EMPRESA: ¿YA ENTREGADO O POR PAGAR?');
+        $lineas([
+            '• Use YA ENTREGADO / YA DESEMBOLSADO cuando el dinero ya se le dio al empleado (fuera del sistema): el rol lo descuenta directo.',
+            '• Use POR PAGAR / POR DESEMBOLSAR cuando todavía hay que entregarlo: se paga en Egresos → Nómina y recién entonces el rol lo descuenta.',
+            '• Plantillas descargadas antes, con una sola columna ANTICIPO o PRÉSTAMO EMPRESA: se toman como YA ENTREGADO.',
+            '• CONTABILIDAD: lo YA ENTREGADO no genera egreso, así que ese pago no queda contabilizado. El asiento del rol acredita la cuenta de Anticipos o de Préstamos Empresa por Cobrar, pero nada la debita: si la entrega aún no está contabilizada, regístrela con un asiento manual. Lo POR PAGAR sí queda contabilizado con su egreso.',
+        ]);
 
-        $titulo('AFECTA_A');
+        $titulo('EJEMPLOS');
+        $lineas([
+            '• Préstamo de $800 en 10 cuotas, todavía sin entregar: escriba 80 en PRÉSTAMO EMPRESA POR DESEMBOLSAR y 10 en ' . self::ENC_CUOTAS . '. Se crean 10 cuotas de $80, una por mes desde el MES/ANIO de la fila, y en Egresos → Nómina aparece el préstamo por $800 para desembolsarlo.',
+            '• Préstamo ya entregado al que le quedan 6 cuotas de $50: escriba 50 en PRÉSTAMO EMPRESA YA DESEMBOLSADO y 6 en ' . self::ENC_CUOTAS . '.',
+            '• Sin N° DE CUOTAS (o con 1) se registra solo la cuota del mes de la fila. Ojo: un préstamo POR DESEMBOLSAR con una sola cuota aparece en Egresos por el valor de esa cuota, no por el total del préstamo.',
+            '• Observaciones distintas para el mismo empleado (por ejemplo "Descuento por atraso" y "Préstamo cuota 1/10"): copie la fila del empleado y deje cada novedad en su propia fila, con su observación.',
+            '• Una novedad de otro mes o de la quincena: copie la fila del empleado, cambie MES/ANIO o AFECTA_A y deje en ella solo esa novedad.',
+        ]);
+
+        $titulo('LO QUE NO SE CARGA CON ESTE ARCHIVO');
+        $lineas([
+            '• El AVISO DE SALIDA: regístrelo a mano en el módulo Novedades (botón Nuevo).',
+        ]);
+
+        $titulo('VALORES DE AFECTA_A');
         foreach (CatalogoNovedades::APLICA_EN as $k => $v) {
             $ref->fromArray([$k, $v], null, 'A' . $fila++);
         }
 
-        $ref->getColumnDimension('A')->setWidth(12);
-        foreach (['B', 'C', 'D'] as $col) {
-            $ref->getColumnDimension($col)->setAutoSize(true);
-        }
+        // Anchos fijos con ajuste de texto en la tabla; las líneas sueltas (pasos,
+        // ejemplos) se leen de corrido porque las columnas de al lado van vacías.
+        $ref->getColumnDimension('A')->setWidth(42);
+        $ref->getColumnDimension('B')->setWidth(36);
+        $ref->getColumnDimension('C')->setWidth(70);
+        $ref->getColumnDimension('D')->setWidth(18);
     }
 }

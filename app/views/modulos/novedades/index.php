@@ -388,10 +388,11 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                     </p>
                     <div class="alert alert-info py-2 px-3 small mb-2">
                         <i class="bi bi-info-circle me-1"></i>
-                        Los <b>Anticipos</b> y las cuotas de <b>Préstamo Empresa</b> que se importan se dan por
-                        <b>ya entregados</b> al empleado: el rol los descuenta directo, sin pedir el egreso en
-                        <i>Egresos → Nómina</i>. Como no hay egreso, ese pago no queda en contabilidad: regístrelo
-                        con un asiento si aún no está.
+                        <b>Anticipo</b> y <b>Préstamo Empresa</b> tienen dos columnas: <b>ya entregado</b> (el rol
+                        los descuenta directo, sin egreso; ese pago no queda en contabilidad, regístrelo con un
+                        asiento si aún no está) y <b>por pagar</b> (se pagan en <i>Egresos → Nómina</i> y luego el
+                        rol los descuenta). Con <b>N° de cuotas</b> se crean todas las cuotas mensuales del préstamo.
+                        La hoja <b>Instrucciones</b> del archivo explica cada columna.
                     </div>
                     <input type="file" id="nov_import_file" class="form-control form-control-sm" accept=".xlsx,.xls">
                     <div id="nov_import_result" class="mt-3"></div>

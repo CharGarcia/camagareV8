@@ -5,8 +5,8 @@ categoria: Nómina
 ruta_modulo: modulos/novedades
 tipo: modulo
 visibilidad: todos
-etiquetas: novedades, novedad, anticipo ya pagado, prestamo ya desembolsado, desembolso, pendiente de desembolso, aviso de desembolso, anticipo cargado por excel, horas extra, faltas, atrasos, prestamo, anticipo, descuento, aviso de salida, motivo de salida, multa, bonos, comisiones, otros ingresos, iess, aporta iess, con iess, sin iess, aporte personal, base del iess, carga masiva, importar, importacion, excel, plantilla, plantilla por empleado, columnas por novedad, subir novedades, eliminar carga, revertir carga, deshacer carga, borrar importacion, historial de cargas, duplicados, repetida, todo o nada, buscar novedades, buscador, filtros, filtrar novedades, buscar por empleado, novedades pagadas, novedades pendientes, chips
-version: 1.12
+etiquetas: novedades, novedad, anticipo por pagar, prestamo por desembolsar, numero de cuotas, cuotas del prestamo, prestamo en cuotas, instrucciones de la plantilla, hoja instrucciones, anticipo ya pagado, prestamo ya desembolsado, desembolso, pendiente de desembolso, aviso de desembolso, anticipo cargado por excel, horas extra, faltas, atrasos, prestamo, anticipo, descuento, aviso de salida, motivo de salida, multa, bonos, comisiones, otros ingresos, iess, aporta iess, con iess, sin iess, aporte personal, base del iess, carga masiva, importar, importacion, excel, plantilla, plantilla por empleado, columnas por novedad, subir novedades, eliminar carga, revertir carga, deshacer carga, borrar importacion, historial de cargas, duplicados, repetida, todo o nada, buscar novedades, buscador, filtros, filtrar novedades, buscar por empleado, novedades pagadas, novedades pendientes, chips
+version: 1.13
 orden: 20
 estado: activo
 ---
@@ -123,7 +123,8 @@ periodo. No hace falta elegir el tipo de novedad.
 |----------|---------------|
 | IDENTIFICACION, NOMBRE | El empleado (ya vienen escritos) |
 | Dos por cada ingreso que aporta o no al IESS: OTROS INGRESOS (bonos, comisiones), HORAS NOCTURNAS, HORAS SUPLEMENTARIAS y HORAS EXTRAORDINARIAS, cada una **CON IESS** y **SIN IESS** | Vacías: aquí se escribe |
-| Una por tipo: DESCUENTO, ANTICIPO, los tres PRÉSTAMOS y DÍAS NO LABORADOS | Vacías: aquí se escribe |
+| Dos para ANTICIPO (**YA ENTREGADO** y **POR PAGAR**) y dos para PRÉSTAMO EMPRESA (**YA DESEMBOLSADO** y **POR DESEMBOLSAR**), más **PRÉSTAMO EMPRESA N° DE CUOTAS** | Vacías: aquí se escribe (ver *Anticipos y préstamos empresa cargados por Excel*) |
+| Una por tipo: DESCUENTO, PRÉSTAMO QUIROGRAFARIO, PRÉSTAMO HIPOTECARIO y DÍAS NO LABORADOS | Vacías: aquí se escribe |
 | MES, ANIO, AFECTA_A, FECHA | Ya escritos con lo que eligió en pantalla y la fecha de hoy |
 | OBSERVACION | Opcional |
 
@@ -162,8 +163,13 @@ Cómo se llenan los casos especiales:
   novedades de la fila.
 
 La plantilla tiene dos hojas: **Novedades** (la que se llena, y la que se abre al
-abrir el archivo) y **Referencia** (instrucciones, qué se escribe en cada
-columna y los valores de *afecta a*). La identificación y
+abrir el archivo) e **Instrucciones**, al final. Instrucciones trae los pasos para
+usar el archivo, una tabla con **cada columna** de la hoja Novedades (qué
+escribir, qué hace en el sistema y un ejemplo), cuándo usar *ya entregado* o *por
+pagar*, ejemplos de préstamos en cuotas y de observaciones distintas, y los
+valores de *afecta a*. Además, cada encabezado de la hoja Novedades tiene una
+**nota** (el triangulito rojo de Excel): al pasar el mouse muestra qué hace esa
+columna. La identificación y
 el nombre quedan fijos a la izquierda al desplazarse por las columnas, y están
 guardados como texto para que una cédula que empieza en cero no pierda ese cero.
 
@@ -179,21 +185,39 @@ Normalmente un **Anticipo** o una cuota de **Préstamo Empresa** se descuenta en
 rol solo después de pagarse con un egreso en **Egresos → Nómina**; mientras
 tanto, el rol muestra el aviso *Pendientes de desembolso*.
 
-Los que se cargan **desde la plantilla Excel** se dan por **ya entregados** al
-empleado: el rol los descuenta directo, no aparecen en *Egresos → Nómina* ni en
-el aviso del rol. Los demás tipos no cambian (Descuento y los préstamos
-quirografario e hipotecario siempre se descuentan directo).
+En la plantilla, cada uno tiene **dos columnas** y la columna donde escriba el
+valor dice si el dinero ya se entregó:
+
+| Columna | Cuándo usarla | Qué pasa |
+|---------|---------------|----------|
+| **ANTICIPO YA ENTREGADO** | El anticipo ya se le dio al empleado, fuera del sistema | El rol lo descuenta directo. No aparece en *Egresos → Nómina* ni en el aviso del rol |
+| **ANTICIPO POR PAGAR** | Todavía hay que entregarlo | Aparece en *Egresos → Nómina*; el rol lo descuenta después de pagado |
+| **PRÉSTAMO EMPRESA YA DESEMBOLSADO** | El préstamo ya se entregó | El rol descuenta cada cuota directo |
+| **PRÉSTAMO EMPRESA POR DESEMBOLSAR** | Todavía hay que entregarlo | El préstamo aparece en *Egresos → Nómina* por la suma de sus cuotas; el rol descuenta cada cuota después del desembolso |
+
+Los demás tipos no cambian (Descuento y los préstamos quirografario e
+hipotecario siempre se descuentan directo). Las plantillas descargadas antes,
+con una sola columna ANTICIPO o PRÉSTAMO EMPRESA, se toman como *ya entregado*.
+
+**Préstamos en cuotas.** En **PRÉSTAMO EMPRESA** se escribe el valor de **una
+cuota**, y en **PRÉSTAMO EMPRESA N° DE CUOTAS** cuántas son. El sistema crea una
+cuota por mes desde el MES y AÑO de la fila, todas por el mismo valor y con
+*"Cuota 1/10"*, *"Cuota 2/10"*... en la observación. Ejemplo: un préstamo de $800
+en 10 cuotas todavía sin entregar es 80 en *POR DESEMBOLSAR* y 10 en *N° DE
+CUOTAS*; en *Egresos → Nómina* aparece el préstamo por **$800**. Si deja N° DE
+CUOTAS vacío (o en 1) se registra solo la cuota de ese mes, y un préstamo *por
+desembolsar* con una sola cuota aparece en Egresos por el valor de esa cuota, no
+por el total del préstamo.
 
 Estas novedades se pueden editar, eliminar o revertir con su carga como
-cualquier otra, mientras el rol del periodo no esté pagado.
+cualquier otra, mientras el rol del periodo no esté pagado (y, en las *por
+pagar*, mientras no se haya registrado su egreso).
 
-> **Contabilidad:** como no hay egreso, ese pago **no queda registrado en
-> contabilidad**. El asiento del rol acredita la cuenta de *Anticipos* o de
-> *Préstamos Empresa por Cobrar*, pero nada la debita. Si la entrega del dinero
-> todavía no está contabilizada, regístrela con un asiento manual.
->
-> Si un anticipo o préstamo **todavía no se ha entregado**, no lo cargue por
-> Excel: regístrelo con **Nuevo** y páguelo desde *Egresos → Nómina*.
+> **Contabilidad:** lo *ya entregado* no tiene egreso, así que ese pago **no
+> queda registrado en contabilidad**. El asiento del rol acredita la cuenta de
+> *Anticipos* o de *Préstamos Empresa por Cobrar*, pero nada la debita. Si la
+> entrega del dinero todavía no está contabilizada, regístrela con un asiento
+> manual. Lo *por pagar* sí queda contabilizado con su egreso.
 
 ### La importación es todo o nada
 
@@ -308,6 +332,11 @@ filtrado.
   mismo monto, regístrela a mano desde **Nuevo**.
 - **"El valor «...» no es un número"**: en las columnas de monto, horas o días
   solo van números (se acepta coma o punto decimal).
+- **"N° DE CUOTAS no válido"**: en *PRÉSTAMO EMPRESA N° DE CUOTAS* va un número
+  entero de 1 a 120.
+- **"Tiene N° DE CUOTAS pero ningún valor en PRÉSTAMO EMPRESA..."**: escribió el
+  número de cuotas pero no el valor de la cuota en *YA DESEMBOLSADO* o *POR
+  DESEMBOLSAR* de esa fila.
 - **"El Aviso de salida ya no se carga por Excel"**: el archivo es una plantilla
   descargada antes y trae algo en la columna *AVISO DE SALIDA*. Borre esa celda
   (o descargue la plantilla nueva) y registre el aviso a mano con **Nuevo**.
@@ -325,6 +354,13 @@ filtrado.
 
 ## Historial de cambios
 
+- **1.13** — **Anticipo y Préstamo Empresa con columnas «ya entregado» y «por
+  pagar» en la plantilla Excel.** Lo *por pagar* sigue el camino normal
+  (*Egresos → Nómina* y luego el rol); lo *ya entregado* se descuenta directo.
+  Nueva columna **PRÉSTAMO EMPRESA N° DE CUOTAS**, que crea todas las cuotas
+  mensuales del préstamo de una vez. La hoja *Referencia* pasa a llamarse
+  **Instrucciones** y explica cada columna, con ejemplos, y cada encabezado de la
+  hoja Novedades tiene una nota con lo que hace.
 - **1.12** — **Los anticipos y préstamos empresa cargados por Excel se dan por
   entregados.** El rol los descuenta directo, sin pedir el egreso de desembolso
   ni mostrar el aviso *Pendientes de desembolso*. Ese pago no se contabiliza:
