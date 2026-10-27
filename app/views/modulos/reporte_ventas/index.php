@@ -58,6 +58,7 @@
                             <?php endif; ?>
                             <option value="MES">Por Mes</option>
                             <option value="PRODUCTO_MES">Unidades por Producto / Mes</option>
+                            <option value="CLIENTE_CATEGORIA">Unidades por Cliente / Categoría</option>
                         </select>
                     </div>
 

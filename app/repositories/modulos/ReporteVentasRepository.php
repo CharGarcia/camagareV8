@@ -328,6 +328,15 @@ class ReporteVentasRepository extends BaseRepository
             'producto_nombre' => 'producto_nombre {dir}',
             'total_unidades'  => 'total_unidades {dir}',
         ],
+        // Unidades por cliente y categoría: también es un pivote armado en PHP. Las columnas
+        // de cada categoría (`cat:<clave>`) se validan contra las categorías del resultado
+        // (ver getReporteClienteCategoria).
+        'CLIENTE_CATEGORIA' => [
+            '_def'           => ['total_venta', 'DESC'],
+            'cliente_nombre' => 'cliente_nombre {dir}',
+            'total_unidades' => 'total_unidades {dir}',
+            'total_venta'    => 'total_venta {dir}',
+        ],
     ];
 
     /** Agrupación que corresponde a cada método (para ordenar el neto Facturas − NC). */
@@ -340,6 +349,7 @@ class ReporteVentasRepository extends BaseRepository
         'getReporteAgrupadoCajero'   => 'CAJERO',
         'getReporteAgrupadoMes'      => 'MES',
         'getUnidadesProductoMesPlano' => 'PRODUCTO_MES',
+        'getClienteCategoriaPlano'    => 'CLIENTE_CATEGORIA',
     ];
 
     /** Columna y dirección efectivas: valida contra la lista blanca del modo. */
@@ -1282,6 +1292,132 @@ class ReporteVentasRepository extends BaseRepository
             $cur   = $cur->modify('+1 month');
         }
         return $out;
+    }
+
+    // ── Unidades vendidas por cliente y categoría ─────────────────────────────
+
+    /**
+     * Filas planas cliente × categoría con las unidades (SUM(cantidad)) y el total sin
+     * impuestos (SUM(precio_total_sin_impuesto)) de las líneas. Es la consulta base de
+     * getReporteClienteCategoria(), que la pivotea; va aparte para que el neto
+     * "Facturas − NC" reste las devoluciones (combinarNeto). La categoría es la de la ficha
+     * del producto; una línea sin producto o un producto sin categoría queda con ''.
+     */
+    public function getClienteCategoriaPlano(int|array $idEmpresa, array $filtros): array
+    {
+        if ($this->esNeto($filtros)) {
+            return $this->combinarNeto($idEmpresa, $filtros, 'getClienteCategoriaPlano',
+                ['id_cliente', 'categoria'], ['cantidad', 'total_venta']);
+        }
+
+        $f = $this->fuente($filtros);
+        list($where, $params) = $this->buildWhereYParams($idEmpresa, $filtros, 'v', 'd');
+
+        $sql = "
+            SELECT
+                c.id AS id_cliente,
+                COALESCE(c.identificacion, '') AS cliente_ruc,
+                c.nombre AS cliente_nombre,
+                COALESCE(TRIM(cat.nombre), '') AS categoria,
+                SUM(d.cantidad) AS cantidad,
+                SUM(d.precio_total_sin_impuesto) AS total_venta
+            FROM {$f['det']} d
+            JOIN {$f['cab']} v ON v.id = d.{$f['fk_det']}
+            JOIN clientes c ON c.id = v.id_cliente
+            LEFT JOIN productos p ON p.id = d.id_producto
+            LEFT JOIN categorias cat ON cat.id = p.id_categoria
+            WHERE {$where}
+            GROUP BY 1, 2, 3, 4
+        ";
+
+        $st = $this->db->prepare($sql);
+        $st->execute($params);
+        return $st->fetchAll(PDO::FETCH_ASSOC);
+    }
+
+    /**
+     * Unidades vendidas por cliente y por categoría: una fila por cliente con las unidades
+     * de cada categoría, el total de unidades y el total vendido sin impuestos. Devuelve
+     * ['categorias' => [clave => nombre, …], 'rows' => […]].
+     *
+     * - Las columnas son las categorías con ventas en el resultado, en orden alfabético, y
+     *   al final "Sin categoría" (líneas sin producto o productos sin categoría), si la hay.
+     * - La categoría se agrupa por nombre (sin distinguir mayúsculas ni espacios): en
+     *   consolidado por RUC cada establecimiento tiene su propia lista y así se suman.
+     * - El cliente se agrupa por identificación (IdentificacionTercero::claveGrupo): en
+     *   consolidado y con cédula/RUC de la misma persona sale una sola fila.
+     * - Solo salen los clientes con unidades o venta mayores que cero (en el neto, los que
+     *   quedaron en cero o en negativo por devoluciones se omiten).
+     * - El orden se aplica en PHP: cliente, totales o cualquier categoría (`cat:<clave>`).
+     */
+    public function getReporteClienteCategoria(int|array $idEmpresa, array $filtros): array
+    {
+        $plano = $this->getClienteCategoriaPlano($idEmpresa, $filtros);
+
+        $catNombre = [];   // clave => nombre a mostrar (el primero que aparece)
+        $idx       = [];
+        foreach ($plano as $r) {
+            $nombreCat = trim((string) ($r['categoria'] ?? ''));
+            // Clave con prefijo de letra: un hash solo de dígitos se volvería clave entera en PHP.
+            $claveCat  = $nombreCat === '' ? 'sin' : 'k' . substr(md5(mb_strtolower($nombreCat)), 0, 11);
+            $catNombre[$claveCat] ??= $nombreCat === '' ? 'Sin categoría' : $nombreCat;
+
+            $k = \App\Helpers\IdentificacionTercero::claveGrupo((string) ($r['cliente_ruc'] ?? ''), 'id:' . $r['id_cliente']);
+            if (!isset($idx[$k])) {
+                $idx[$k] = [
+                    'id_cliente'     => $r['id_cliente'],
+                    'cliente_ruc'    => (string) ($r['cliente_ruc'] ?? ''),
+                    'cliente_nombre' => (string) ($r['cliente_nombre'] ?? ''),
+                    'categorias'     => [],
+                    'total_unidades' => 0.0,
+                    'total_venta'    => 0.0,
+                ];
+            }
+            $cant = (float) ($r['cantidad'] ?? 0);
+            $idx[$k]['categorias'][$claveCat] = ($idx[$k]['categorias'][$claveCat] ?? 0.0) + $cant;
+            $idx[$k]['total_unidades'] += $cant;
+            $idx[$k]['total_venta']    += (float) ($r['total_venta'] ?? 0);
+        }
+        $rows = array_values(array_filter($idx, static fn (array $r): bool
+            => $r['total_unidades'] > 0.000001 || $r['total_venta'] > 0.000001));
+
+        // Columnas: solo las categorías que quedan en las filas, alfabéticas; "Sin categoría" al final.
+        $usadas = [];
+        foreach ($rows as $r) {
+            foreach ($r['categorias'] as $c => $v) {
+                if (abs($v) > 0.000001) { $usadas[$c] = true; }
+            }
+        }
+        $categorias = array_intersect_key($catNombre, $usadas);
+        uksort($categorias, static fn (string $a, string $b): int
+            => ($a === 'sin') <=> ($b === 'sin') ?: strcasecmp($categorias[$a], $categorias[$b]));
+        foreach ($rows as &$r) {
+            $r['categorias'] = array_map(static fn (string $c): float => (float) ($r['categorias'][$c] ?? 0),
+                array_combine(array_keys($categorias), array_keys($categorias)));
+        }
+        unset($r);
+
+        // Orden: una categoría del resultado, o una de las columnas fijas (lista blanca del modo).
+        $colPedida = (string) ($filtros['orden_col'] ?? '');
+        if (preg_match('/^cat:([0-9a-z]{3,12})$/', $colPedida, $m) && isset($categorias[$m[1]])) {
+            $cat = $m[1];
+            $dir = strtoupper((string) ($filtros['orden_dir'] ?? '')) === 'ASC' ? 'ASC' : 'DESC';
+            $val = static fn (array $r) => (float) ($r['categorias'][$cat] ?? 0);
+        } else {
+            [$col, $dir] = $this->resolverOrden($filtros, 'CLIENTE_CATEGORIA');
+            $val = static fn (array $r) => $r[$col] ?? null;
+        }
+        $signo = $dir === 'ASC' ? 1 : -1;
+        usort($rows, static function (array $a, array $b) use ($val, $signo): int {
+            $x = $val($a);
+            $y = $val($b);
+            $cmp = (is_numeric($x) && is_numeric($y))
+                ? ((float) $x <=> (float) $y)
+                : strcasecmp((string) $x, (string) $y);
+            return ($signo * $cmp) ?: strcasecmp($a['cliente_nombre'], $b['cliente_nombre']);
+        });
+
+        return ['categorias' => $categorias, 'rows' => $rows];
     }
 
     /**

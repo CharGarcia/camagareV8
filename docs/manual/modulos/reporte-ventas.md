@@ -5,8 +5,8 @@ categoria: Reportes
 ruta_modulo: modulos/reporte_ventas
 tipo: modulo
 visibilidad: todos
-etiquetas: reporte de ventas, ventas, cuanto vendi, por cliente, por vendedor, por producto, estadisticas, exportar, pdf, excel, establecimientos, sucursales, matriz, mismo ruc, consolidado por ruc, borradores, borrador, facturas en borrador, incluir borradores, documentos sin autorizar, pendientes de enviar al sri, ordenar, ordenamiento, ordenar por columna, de mayor a menor, quien compro mas, saldo por cobrar, saldo x cobrar, cuanto me debe el cliente, nro facturas, numero de documentos, cartera en el reporte de ventas, acceso total, permiso de ver todos, registros propios, solo mis ventas, no veo las ventas de otro, cada usuario ve lo suyo, documentos migrados no aparecen, cartera del vendedor, mis clientes, clientes asignados, vendedor vinculado, usuario del sistema, el vendedor no ve nada, asesor solo ve sus clientes, nivel de usuario, administrador ve todo, el asesor ve las ventas de todos, imprimir el reporte, logo en el pdf, el pdf sale angosto, el pdf no ocupa la hoja, nombre del producto cortado, filtros aplicados en el pdf, encabezado del pdf, totales repetidos en el pdf, pdf horizontal, numero de pagina, boton buscar, no se actualiza, no cambia al elegir, hay que pulsar buscar, boton amarillo, filtros sin aplicar, unidades vendidas, unidades por mes, cantidades por mes, cuantas unidades vendi, ventas por producto y mes, producto por mes, rotacion mensual, tabla por meses, una columna por mes, marca, categoria, filtrar por marca, filtrar por categoria, ventas de una marca, ventas de una categoria, linea de productos, participacion por producto, porcentaje de ventas, porcentaje de unidades, % venta, % unidades, unidad de medida, total venta sin iva, producto mas vendido, cajero, por cajero, por usuario, ventas por usuario, ventas de un cajero, quien facturo, recibos de venta, recibos no aparecen, no salen los recibos, recibos en borrador, todos los documentos, facturas y recibos juntos, facturas recibos y notas de credito, ventas totales, grafico, ocultar grafico, acordeon, vendedores que puede ver, solo algunos vendedores, ocultar vendedores, coordinador de zona, ver las ventas de ciertos vendedores, donde esta el resumen diario
-version: 1.17
+etiquetas: reporte de ventas, ventas, cuanto vendi, por cliente, por vendedor, por producto, estadisticas, exportar, pdf, excel, establecimientos, sucursales, matriz, mismo ruc, consolidado por ruc, borradores, borrador, facturas en borrador, incluir borradores, documentos sin autorizar, pendientes de enviar al sri, ordenar, ordenamiento, ordenar por columna, de mayor a menor, quien compro mas, saldo por cobrar, saldo x cobrar, cuanto me debe el cliente, nro facturas, numero de documentos, cartera en el reporte de ventas, acceso total, permiso de ver todos, registros propios, solo mis ventas, no veo las ventas de otro, cada usuario ve lo suyo, documentos migrados no aparecen, cartera del vendedor, mis clientes, clientes asignados, vendedor vinculado, usuario del sistema, el vendedor no ve nada, asesor solo ve sus clientes, nivel de usuario, administrador ve todo, el asesor ve las ventas de todos, imprimir el reporte, logo en el pdf, el pdf sale angosto, el pdf no ocupa la hoja, nombre del producto cortado, filtros aplicados en el pdf, encabezado del pdf, totales repetidos en el pdf, pdf horizontal, numero de pagina, boton buscar, no se actualiza, no cambia al elegir, hay que pulsar buscar, boton amarillo, filtros sin aplicar, unidades vendidas, unidades por mes, cantidades por mes, cuantas unidades vendi, ventas por producto y mes, producto por mes, rotacion mensual, tabla por meses, una columna por mes, marca, categoria, filtrar por marca, filtrar por categoria, ventas de una marca, ventas de una categoria, linea de productos, participacion por producto, porcentaje de ventas, porcentaje de unidades, % venta, % unidades, unidad de medida, total venta sin iva, producto mas vendido, cajero, por cajero, por usuario, ventas por usuario, ventas de un cajero, quien facturo, recibos de venta, recibos no aparecen, no salen los recibos, recibos en borrador, todos los documentos, facturas y recibos juntos, facturas recibos y notas de credito, ventas totales, grafico, ocultar grafico, acordeon, vendedores que puede ver, solo algunos vendedores, ocultar vendedores, coordinador de zona, ver las ventas de ciertos vendedores, donde esta el resumen diario, cliente por categoria, categorias por cliente, que compro cada cliente, cuanto compro cada cliente de cada categoria, productos por cliente, unidades por cliente, una columna por categoria, total general por cliente
+version: 1.18
 orden: 10
 estado: activo
 ---
@@ -48,8 +48,8 @@ junto a cada uno lo guarda como favorito.
 
 Qué cambia según la vista:
 
-- En **Por producto**, **Por variante** y **Unidades por producto / mes** se
-  filtran las **líneas**: solo aparecen los productos de esa marca o categoría,
+- En **Por producto**, **Por variante**, **Unidades por producto / mes** y
+  **Unidades por cliente / categoría** se filtran las **líneas**: solo aparecen los productos de esa marca o categoría,
   con sus cantidades e importes.
 - En el **Detallado**, **Por cliente**, **Por fecha** y **Por mes** se filtran
   los **documentos**: entra toda factura que tenga al menos una línea de esa
@@ -255,6 +255,41 @@ cada producto se vendieron cada mes*. Es una tabla de cantidades, no de dinero:
   fila TOTAL y el mismo orden; con más de seis meses el PDF sale en hoja
   horizontal.
 
+### Unidades por cliente / categoría
+
+La agrupación **Unidades por Cliente / Categoría** responde a *cuántos productos
+de cada categoría compró cada cliente* (por ejemplo, cuántos implantes y cuántas
+firmas) en las fechas *Desde* y *Hasta* del filtro:
+
+- Una **fila por cliente**, con su nombre y su RUC o cédula debajo.
+- **Una columna por cada categoría** con ventas en el período (las de la ficha
+  del producto, módulo *Productos*), en orden alfabético. Cada celda muestra las
+  **unidades** vendidas de esa categoría a ese cliente; en gris si no compró.
+- Al final de la fila, **Total Unidades** (todas las categorías) y **Total Venta
+  sin IVA** (subtotal de las líneas, sin impuestos, igual que en *Por producto*).
+- La última fila, **TOTAL GENERAL**, suma cada categoría, las unidades y la venta
+  de todos los clientes, e indica cuántos clientes son.
+- Las líneas sin producto del catálogo (concepto libre) y los productos sin
+  categoría van en la columna **Sin categoría**, al final.
+- Solo aparecen las categorías que vendieron algo y los clientes que compraron
+  algo en el período.
+- La **cantidad se suma tal como está en cada línea**, sin convertir unidades
+  (igual que en *Por producto*).
+- Con **Facturas − NC** se restan las unidades y el valor devueltos en notas de
+  crédito; un cliente que quede en cero o en negativo no aparece.
+- En **consolidado por RUC**, las categorías se juntan **por nombre** y el
+  cliente **por su identificación**, así que el mismo cliente o la misma
+  categoría de varios establecimientos salen una sola vez.
+- Se combina con todos los filtros: por ejemplo, *Categoría* para ver una sola
+  columna, *Cliente* para ver un solo cliente o *Vendedor* para su cartera.
+- El gráfico muestra las unidades vendidas de cada categoría (suma de todos los
+  clientes).
+- Ordena por cliente, por los totales o **por cualquier categoría** (clic en la
+  cabecera): *Implantes* de mayor a menor deja arriba a quien más implantes
+  compró. El PDF y el Excel salen con las mismas columnas, la misma fila TOTAL
+  GENERAL y el mismo orden; con más de cuatro categorías el PDF sale en hoja
+  horizontal.
+
 ## Ordenar los resultados
 
 Los títulos de las columnas ordenan el reporte: un clic ordena de menor a mayor y
@@ -413,6 +448,10 @@ El PDF es la misma pantalla en hoja, pensado para imprimir o enviar por correo:
 
 ## Historial de cambios
 
+- **1.18** — Nueva agrupación **Unidades por Cliente / Categoría**: una fila por cliente,
+  una columna por categoría con las unidades compradas, Total Unidades, Total Venta sin IVA
+  y fila TOTAL GENERAL, en pantalla, gráfico, PDF y Excel (ver *Unidades por cliente /
+  categoría*).
 - **1.17** — Se quita el botón **Resumen diario** (ventana, tirilla, PDF y correo). El resumen
   del día pasa a su propio módulo, **Resumen Diario**, que junta ventas, compras, ingresos y
   egresos de un día en pantalla, PDF y Excel.

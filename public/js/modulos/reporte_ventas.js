@@ -255,7 +255,10 @@ window.RV_generarReporte = function () {
     // Actualizar cabeceras de la tabla según la agrupación elegida. En "Unidades por
     // Producto / Mes" las columnas de mes las manda el servidor (res.meses): mientras
     // llega la respuesta se conservan las del reporte anterior, si lo hubo.
-    const colSpanActual = RV_dibujarCabecera(agruparPor, agruparPor === 'PRODUCTO_MES' ? (window.rv_last_meses || {}) : {});
+    // Igual en "Unidades por Cliente / Categoría" con las columnas de categoría (res.categorias).
+    const colSpanActual = RV_dibujarCabecera(agruparPor,
+        agruparPor === 'PRODUCTO_MES' ? (window.rv_last_meses || {})
+        : agruparPor === 'CLIENTE_CATEGORIA' ? (window.rv_last_categorias || []) : {});
 
     const tbody = document.getElementById('rv_tbody');
     tbody.innerHTML = `<tr><td colspan="${colSpanActual}" class="text-center py-4"><div class="spinner-border text-primary" role="status"></div><br><span class="text-muted small mt-2 d-inline-block">Generando reporte...</span></td></tr>`;
@@ -283,6 +286,9 @@ window.RV_generarReporte = function () {
                 // Cabecera definitiva con los meses del período consultado.
                 window.rv_last_meses = res.meses || {};
                 RV_dibujarCabecera('PRODUCTO_MES', window.rv_last_meses);
+            } else if (res.agrupacion === 'CLIENTE_CATEGORIA') {
+                window.rv_last_categorias = res.categorias || [];
+                RV_dibujarCabecera('CLIENTE_CATEGORIA', window.rv_last_categorias);
             }
             tbody.innerHTML = res.rows;
 
@@ -335,6 +341,7 @@ window.RV_generarReporte = function () {
 window.rv_last_raw_data = null;
 window.rv_last_agrupacion = null;
 window.rv_last_meses = null;   // {'YYYY-MM': 'Ene 2026', …} del último "Unidades por Producto / Mes"
+window.rv_last_categorias = null;   // [[clave, nombre], …] del último "Unidades por Cliente / Categoría"
 let chartInstance = null;
 
 // Acordeón del gráfico (cerrado por defecto). Chart.js no puede medir un canvas oculto:
@@ -394,13 +401,18 @@ function RV_dibujarGrafico(rawData, agrupacion) {
     let defaultType = 'bar';
     // Unidades por producto y mes: el gráfico es la curva de unidades vendidas por mes
     // (suma de todos los productos), no un importe: sin "$" en el eje ni en la leyenda.
-    const esUnidades = (agrupacion === 'PRODUCTO_MES');
+    const esUnidades = (agrupacion === 'PRODUCTO_MES' || agrupacion === 'CLIENTE_CATEGORIA');
 
     if (esUnidades) {
         const meses = window.rv_last_meses || {};
         labels = Object.keys(meses).map(m => meses[m]);
         dataTotales = Object.keys(meses).map(m => rawData.reduce((acc, r) => acc + (parseFloat((r.meses || {})[m]) || 0), 0));
         defaultType = 'line';
+    } else if (agrupacion === 'CLIENTE_CATEGORIA') {
+        // Unidades por categoría (suma de todos los clientes de la tabla).
+        const cats = window.rv_last_categorias || [];
+        labels = cats.map(c => c[1]);
+        dataTotales = cats.map(c => rawData.reduce((acc, r) => acc + (parseFloat((r.categorias || {})[c[0]]) || 0), 0));
     } else if (agrupacion === 'CLIENTE') {
         labels = rawData.map(r => r.cliente_nombre);
         dataTotales = rawData.map(r => parseFloat(r.total));
@@ -570,6 +582,16 @@ const RV_COLUMNAS = {
             ['total_unidades',    'Total',            'text-end pe-4'],
         ]
     },
+    // Unidades por cliente y categoría: entre Cliente y los totales van las columnas de
+    // categoría del resultado (res.categorias, clave de orden `cat:<clave>`).
+    CLIENTE_CATEGORIA: {
+        def: ['total_venta', 'DESC'],
+        cols: [
+            ['cliente_nombre',    'Cliente',          'ps-4'],
+            ['total_unidades',    'Total Unidades',   'text-end'],
+            ['total_venta',       'Total Venta sin IVA', 'text-end pe-4'],
+        ]
+    },
     NINGUNO: {
         def: ['fecha_emision', 'DESC'],
         cols: [
@@ -639,6 +661,12 @@ function RV_engancharOrden(modo) {
 // ({'YYYY-MM': 'Ene 2026', …}) entre la descripción y el total.
 function RV_columnasDe(modo, meses) {
     const base = RV_COLUMNAS[modo].cols;
+    if (modo === 'CLIENTE_CATEGORIA') {
+        // El nombre de la categoría lo escribe el usuario: se escapa antes de ir al innerHTML.
+        const esc = s => String(s).replace(/[&<>"']/g, ch => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[ch]));
+        const colsCat = (Array.isArray(meses) ? meses : []).map(([clave, nombre]) => ['cat:' + clave, esc(nombre), 'text-end']);
+        return [base[0], ...colsCat, base[1], base[2]];
+    }
     if (modo !== 'PRODUCTO_MES') return base;
     const colsMes = Object.keys(meses || {}).map(m => ['mes:' + m, meses[m], 'text-end']);
     return [base[0], base[1], ...colsMes, base[2]];
@@ -654,7 +682,9 @@ function RV_dibujarCabecera(agruparPor, meses) {
     // (`mes:…`) se conserva hasta conocer los meses del nuevo: el servidor lo ignora si
     // no está en el período y ordena por el total.
     const [colActual] = RV_ordenActual();
-    if (colActual && !cols.some(c => c[0] === colActual) && !(modo === 'PRODUCTO_MES' && colActual.startsWith('mes:'))) RV_fijarOrden('', 'DESC');
+    if (colActual && !cols.some(c => c[0] === colActual)
+        && !(modo === 'PRODUCTO_MES' && colActual.startsWith('mes:'))
+        && !(modo === 'CLIENTE_CATEGORIA' && colActual.startsWith('cat:'))) RV_fijarOrden('', 'DESC');
 
     document.getElementById('rv_thead').innerHTML =
         '<tr class="text-secondary" style="font-family: \'Outfit\', sans-serif;">'

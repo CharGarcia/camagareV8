@@ -248,8 +248,10 @@ class ReporteVentasController extends BaseModuloController
     }
 
     /**
-     * Filas del reporte según la agrupación elegida. Devuelve [filas, meses]: `meses` solo
-     * trae valor en "Unidades por producto y mes", cuyas columnas dependen del período.
+     * Filas del reporte según la agrupación elegida. Devuelve [filas, columnas]: las
+     * columnas que dependen del resultado. En "Unidades por producto y mes" es la lista de
+     * meses 'YYYY-MM' del período; en "Unidades por cliente y categoría", el mapa
+     * clave => nombre de las categorías; vacío en las demás.
      * Único punto de despacho para la pantalla, el Excel y el PDF.
      */
     private function consultarFilas(int|array $idEmpresa, array $filtros): array
@@ -270,6 +272,9 @@ class ReporteVentasController extends BaseModuloController
             case 'PRODUCTO_MES':
                 $r = $this->repository->getReporteUnidadesProductoMes($idEmpresa, $filtros);
                 return [$r['rows'], $r['meses']];
+            case 'CLIENTE_CATEGORIA':
+                $r = $this->repository->getReporteClienteCategoria($idEmpresa, $filtros);
+                return [$r['rows'], $r['categorias']];
             default:
                 return [$this->repository->getReporteDetallado($idEmpresa, $filtros), []];
         }
@@ -283,6 +288,7 @@ class ReporteVentasController extends BaseModuloController
             'PRODUCTO'     => 7,
             'VARIANTE'     => 8,
             'PRODUCTO_MES' => 3 + count($meses),
+            'CLIENTE_CATEGORIA' => 3 + count($meses),
             default        => 6,
         };
     }
@@ -322,6 +328,28 @@ class ReporteVentasController extends BaseModuloController
             $html .= "<td class='text-end'>" . self::fmtCantidad(self::sumarUnidades($rows, $m)) . "</td>";
         }
         $html .= "<td class='text-end pe-4 text-primary'>" . self::fmtCantidad(self::sumarUnidades($rows, null)) . "</td></tr>";
+        return $html;
+    }
+
+    /** Suma de una categoría (o, con null, del total de unidades) sobre las filas de cliente y categoría. */
+    private static function sumarCategoria(array $rows, ?string $cat): float
+    {
+        return array_sum(array_map(
+            static fn (array $r): float => (float) ($cat === null ? ($r['total_unidades'] ?? 0) : ($r['categorias'][$cat] ?? 0)),
+            $rows
+        ));
+    }
+
+    /** Fila de totales al pie de la tabla "Unidades por cliente y categoría" (pantalla). */
+    private function renderFilaTotalesClienteCategoriaHtml(array $rows, array $categorias): string
+    {
+        $n    = count($rows);
+        $html = "<tr class='table-light fw-bold'><td class='ps-4'>TOTAL GENERAL ({$n} cliente" . ($n !== 1 ? 's' : '') . ")</td>";
+        foreach (array_keys($categorias) as $c) {
+            $html .= "<td class='text-end'>" . self::fmtCantidad(self::sumarCategoria($rows, (string) $c)) . "</td>";
+        }
+        $html .= "<td class='text-end text-primary'>" . self::fmtCantidad(self::sumarCategoria($rows, null)) . "</td>"
+               . "<td class='text-end pe-4 text-success'>" . number_format(self::sumarCampo($rows, 'total_venta'), 2) . "</td></tr>";
         return $html;
     }
 
@@ -392,6 +420,8 @@ class ReporteVentasController extends BaseModuloController
                 }
                 if ($filtros['agrupar_por'] === 'PRODUCTO_MES') {
                     echo $this->renderFilaTotalesUnidadesHtml($rows, $meses);
+                } elseif ($filtros['agrupar_por'] === 'CLIENTE_CATEGORIA') {
+                    echo $this->renderFilaTotalesClienteCategoriaHtml($rows, $meses);
                 } elseif ($filtros['agrupar_por'] === 'PRODUCTO') {
                     echo $this->renderFilaTotalesProductoHtml($rows);
                 }
@@ -407,7 +437,13 @@ class ReporteVentasController extends BaseModuloController
                 'agrupacion'  => $filtros['agrupar_por'],
                 // Columnas de mes de "Unidades por producto y mes" ('YYYY-MM' => 'Ene 2026');
                 // el JS arma la cabecera con ellas. Vacío en las demás agrupaciones.
-                'meses'       => array_combine($meses, array_map([self::class, 'formatearMesCorto'], $meses)) ?: new \stdClass(),
+                'meses'       => ($filtros['agrupar_por'] === 'PRODUCTO_MES' && $meses)
+                    ? array_combine($meses, array_map([self::class, 'formatearMesCorto'], $meses))
+                    : new \stdClass(),
+                // Columnas de "Unidades por cliente y categoría" (clave => nombre), en el orden de la tabla.
+                'categorias'  => ($filtros['agrupar_por'] === 'CLIENTE_CATEGORIA' && $meses)
+                    ? array_map(static fn ($k, $v) => [(string) $k, (string) $v], array_keys($meses), $meses)
+                    : [],
                 'consolidado' => $consolidado,
                 'borradores'  => $filtros['borradores'],
             ]);
@@ -440,7 +476,7 @@ class ReporteVentasController extends BaseModuloController
         // Solo el modo detallado corresponde a un documento real: se marca la fila
         // para poder abrir el panel lateral con su detalle (ver offcanvas_doc_preview).
         $attrs = '';
-        if (!in_array($agruparPor, ['CLIENTE', 'PRODUCTO', 'VARIANTE', 'FECHA', 'CAJERO', 'MES', 'PRODUCTO_MES'], true) && !empty($r['id'])) {
+        if (!in_array($agruparPor, ['CLIENTE', 'PRODUCTO', 'VARIANTE', 'FECHA', 'CAJERO', 'MES', 'PRODUCTO_MES', 'CLIENTE_CATEGORIA'], true) && !empty($r['id'])) {
             // En el neto (Facturas − NC) cada fila trae su propio tipo; si no, deriva del filtro.
             $tipoDoc = $r['_doc_tipo'] ?? match ($tipoDocumento) {
                 'RECIBO'       => 'RECIBO',
@@ -527,6 +563,18 @@ class ReporteVentasController extends BaseModuloController
                     : "<td class='text-end'>".self::fmtCantidad($c)."</td>";
             }
             $html .= "<td class='text-end pe-4 fw-bold text-primary'>".self::fmtCantidad((float) ($r['total_unidades'] ?? 0))."</td>";
+        } elseif ($agruparPor === 'CLIENTE_CATEGORIA') {
+            // Unidades por cliente y categoría: cliente, una celda por categoría (en gris
+            // cuando no compró de ella), total de unidades y total vendido sin impuestos.
+            $html .= "<td class='ps-4'><span class='fw-bold'>".htmlspecialchars($r['cliente_nombre'] ?? '')."</span><br><small class='text-muted'>".htmlspecialchars($r['cliente_ruc'] ?? '')."</small></td>";
+            foreach (array_keys($meses) as $c) {
+                $v = (float) ($r['categorias'][$c] ?? 0);
+                $html .= abs($v) < 0.000001
+                    ? "<td class='text-end text-muted'>0</td>"
+                    : "<td class='text-end'>".self::fmtCantidad($v)."</td>";
+            }
+            $html .= "<td class='text-end fw-bold text-primary'>".self::fmtCantidad((float) ($r['total_unidades'] ?? 0))."</td>";
+            $html .= "<td class='text-end pe-4 fw-bold text-success'>".number_format((float) ($r['total_venta'] ?? 0), 2)."</td>";
         } else {
             // DETALLADO / NINGUNO
             $estado = strtolower($r['estado'] ?? '');
@@ -755,6 +803,25 @@ class ReporteVentasController extends BaseModuloController
                         [self::sumarUnidades($rows, null)]
                     );
                 }
+            } elseif ($filtros['agrupar_por'] === 'CLIENTE_CATEGORIA') {
+                // Una columna por categoría + totales, y la fila TOTAL GENERAL al final.
+                $cats    = array_map('strval', array_keys($meses));
+                $headers = array_merge(['RUC/Cédula', 'Cliente'], array_values($meses), ['Total Unidades', 'Total Venta sin IVA']);
+                $exportData = [];
+                foreach ($rows as $r) {
+                    $exportData[] = array_merge(
+                        [$r['cliente_ruc'], $r['cliente_nombre']],
+                        array_map(static fn (string $c): float => (float) ($r['categorias'][$c] ?? 0), $cats),
+                        [(float) $r['total_unidades'], round((float) $r['total_venta'], 2)]
+                    );
+                }
+                if ($rows) {
+                    $exportData[] = array_merge(
+                        ['TOTAL GENERAL', count($rows) . ' cliente' . (count($rows) !== 1 ? 's' : '')],
+                        array_map(static fn (string $c): float => self::sumarCategoria($rows, $c), $cats),
+                        [self::sumarCategoria($rows, null), round(self::sumarCampo($rows, 'total_venta'), 2)]
+                    );
+                }
             } else {
                 // Consolidado: columna "Estab." al inicio con el establecimiento dueño del documento.
                 // Con borradores: columna "Estado" para distinguirlos de los documentos válidos.
@@ -966,13 +1033,14 @@ class ReporteVentasController extends BaseModuloController
         'CAJERO'       => 'Por cajero',
         'MES'          => 'Por mes',
         'PRODUCTO_MES' => 'Unidades por producto y mes',
+        'CLIENTE_CATEGORIA' => 'Unidades por cliente y categoría',
     ];
 
     /** Qué cuenta cada fila del listado, para la etiqueta "TOTALES GENERALES (N …)". */
     private function sustantivoFilas(string $agrupar, int $n): string
     {
         return match ($agrupar) {
-            'CLIENTE'  => $n === 1 ? 'cliente'   : 'clientes',
+            'CLIENTE', 'CLIENTE_CATEGORIA' => $n === 1 ? 'cliente' : 'clientes',
             'PRODUCTO', 'PRODUCTO_MES' => $n === 1 ? 'producto' : 'productos',
             'VARIANTE' => $n === 1 ? 'variante'  : 'variantes',
             'FECHA'    => $n === 1 ? 'día'       : 'días',
@@ -988,7 +1056,8 @@ class ReporteVentasController extends BaseModuloController
      */
     private static function pdfHorizontal(string $agrupar, array $meses): bool
     {
-        return $agrupar === 'NINGUNO' || ($agrupar === 'PRODUCTO_MES' && count($meses) > 6);
+        return $agrupar === 'NINGUNO' || ($agrupar === 'PRODUCTO_MES' && count($meses) > 6)
+            || ($agrupar === 'CLIENTE_CATEGORIA' && count($meses) > 4);
     }
 
     /**
@@ -997,7 +1066,7 @@ class ReporteVentasController extends BaseModuloController
      */
     private static function pdfFuentePt(string $agrupar, array $meses): float
     {
-        if ($agrupar === 'PRODUCTO_MES' && count($meses) > 12) {
+        if (($agrupar === 'PRODUCTO_MES' && count($meses) > 12) || ($agrupar === 'CLIENTE_CATEGORIA' && count($meses) > 10)) {
             return 6.0;
         }
         return self::pdfHorizontal($agrupar, $meses) ? 7.0 : 8.0;
@@ -1121,6 +1190,33 @@ class ReporteVentasController extends BaseModuloController
             $cols[] = ['lbl' => 'Total', 'w' => $wTot, 'cls' => 'text-end', 'fmt' => $cant,
                        'tot' => static fn (array $rows): float => self::sumarUnidades($rows, null),
                        'val' => static fn (array $r): string => "<span style='font-weight:bold;'>" . $cant($r['total_unidades'] ?? 0) . '</span>'];
+            return $cols;
+        }
+
+        if ($agrupar === 'CLIENTE_CATEGORIA') {
+            // Totales fijos; las categorías se reparten lo que queda hasta dejar al cliente
+            // al menos un 22 %, y cada una se acota entre 4 % y 12 %.
+            $n     = count($meses);
+            $wUni  = 8;
+            $wVta  = 10;
+            $wCat  = $n > 0 ? max(4, min(12, (int) floor((100 - $wUni - $wVta - 22) / $n))) : 0;
+            $wCli  = 100 - $wUni - $wVta - $wCat * $n;
+            $cant  = static fn ($v): string => self::fmtCantidad((float) $v);
+            $cols  = [
+                ['lbl' => 'Cliente', 'w' => $wCli, 'cls' => '',
+                 'val' => static fn (array $r): string => $desc((string) ($r['cliente_nombre'] ?? ''), (string) ($r['cliente_ruc'] ?? ''), $pt($wCli))],
+            ];
+            foreach ($meses as $c => $nombre) {
+                $c = (string) $c;
+                $cols[] = ['lbl' => (string) $nombre, 'w' => $wCat, 'cls' => 'text-end', 'fmt' => $cant,
+                           'tot' => static fn (array $rows): float => self::sumarCategoria($rows, $c),
+                           'val' => static fn (array $r): string => $cant($r['categorias'][$c] ?? 0)];
+            }
+            $cols[] = ['lbl' => 'Total Unid.', 'w' => $wUni, 'cls' => 'text-end', 'fmt' => $cant,
+                       'tot' => static fn (array $rows): float => self::sumarCategoria($rows, null),
+                       'val' => static fn (array $r): string => "<span style='font-weight:bold;'>" . $cant($r['total_unidades'] ?? 0) . '</span>'];
+            $cols[] = ['lbl' => 'Total Venta', 'w' => $wVta, 'cls' => 'text-end', 'tot' => $sumar('total_venta'),
+                       'val' => static fn (array $r): string => "<span style='font-weight:bold;'>" . $num($r['total_venta'] ?? 0) . '</span>'];
             return $cols;
         }
 
