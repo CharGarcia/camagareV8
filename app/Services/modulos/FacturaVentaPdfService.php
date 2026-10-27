@@ -80,7 +80,9 @@ class FacturaVentaPdfService
         $this->pdf->SetAuthor($empresa['nombre'] ?? '');
         $this->pdf->SetTitle('Factura ' . $this->numeroFactura($cabecera));
         $this->pdf->SetMargins($this->marginL, 5, $this->marginR);
-        $this->pdf->SetAutoPageBreak(true, 15);
+        // Margen inferior de 8 mm: el contenido llega hasta y = 289 mm. Todos los
+        // saltos de página (detalle, pie, leyenda) se calculan con getBreakMargin().
+        $this->pdf->SetAutoPageBreak(true, 8);
         $this->pdf->setPrintHeader(false);
         $this->pdf->setPrintFooter(false);
         $this->pdf->AddPage();
@@ -840,7 +842,7 @@ class FacturaVentaPdfService
         // Salto de página del pie según su alto REAL. Antes se saltaba siempre que
         // el detalle terminara después de y = 212 mm, aunque el pie cupiera: una
         // factura cuyo detalle acababa en 214 mm mandaba a la hoja 2 un pie de
-        // ~45 mm que entraba de sobra antes del margen inferior (282 mm). Ahora el
+        // ~45 mm que entraba de sobra antes del margen inferior (289 mm). Ahora el
         // pie completo (la más alta de sus dos columnas) se queda en esta página si
         // cabe, y si no, pasa entero a la siguiente, como antes.
         $filasTotales = count($subtotMap) + 2 + 3 + 1 + count($ivaMap) + ($conPropina ? 1 : 0) + 1
