@@ -769,20 +769,32 @@ class MigracionMysqlService
 
     /**
      * Fija productos_bodegas.stock_actual = kardex vigente (mismo cálculo que getStockActual) para
-     * cada par [id_producto, id_bodega], con su candado de stock (CLAUDE.md §8). Llamar dentro de
-     * la transacción que cambió el kardex. Sin esto, borrar o corregir kardex migrado dejaba el
-     * saldo de Existencias distinto del kardex.
+     * cada par [id_producto, id_bodega]. Sin esto, borrar o corregir kardex migrado dejaba el saldo
+     * de Existencias distinto del kardex (caso 1793209472001: la re-migración corrigió el signo
+     * de las salidas y el saldo siguió sumándolas).
+     *
+     * Llamar DESPUÉS del commit que cambió el kardex: cada saldo va en su propia transacción corta
+     * con su candado de stock (CLAUDE.md §8). Juntar miles de candados en una sola transacción
+     * agota la memoria de candados de PostgreSQL ("out of shared memory").
      *
      * @param array<string, array{0:int,1:int}> $claves
      */
-    private function recalcularSaldosKardex(int $idEmpresa, array $claves, int $idUsuario): void
+    private function recalcularSaldosKardex(PDO $pg, int $idEmpresa, array $claves, int $idUsuario): void
     {
         $inv = new \App\repositories\modulos\InventarioRepository();
-        ksort($claves); // orden fijo de candados
         foreach ($claves as [$idProd, $idBod]) {
-            $inv->lockStock((int) $idProd, (int) $idBod, $idEmpresa);
-            $inv->actualizarStock((int) $idProd, (int) $idBod, $idEmpresa,
-                $inv->getStockActual((int) $idProd, (int) $idBod, $idEmpresa), $idUsuario);
+            $pg->beginTransaction();
+            try {
+                $inv->lockStock((int) $idProd, (int) $idBod, $idEmpresa);
+                $inv->actualizarStock((int) $idProd, (int) $idBod, $idEmpresa,
+                    $inv->getStockActual((int) $idProd, (int) $idBod, $idEmpresa), $idUsuario);
+                $pg->commit();
+            } catch (Throwable $e) {
+                if ($pg->inTransaction()) { $pg->rollBack(); }
+                // El kardex ya quedó bien; el saldo se corrige con el siguiente movimiento o desde
+                // Reporte de inventarios › Auditoría. Se deja constancia para ubicarlo.
+                error_log("[MigracionMysql] Saldo no recalculado (prod {$idProd}, bodega {$idBod}): " . $e->getMessage());
+            }
         }
     }
 
@@ -797,19 +809,21 @@ class MigracionMysqlService
                 'rango' => ($desde !== null || $hasta !== null)];
         [$ids, $idsMapa] = $this->idsEliminar($pg, $idEmpresa, 'inventario', 'inventario_kardex', 'fecha_movimiento', $desde, $hasta);
 
+        $claves = [];
         $pg->beginTransaction();
         try {
             if ($ids) {
-                $claves = [];
                 foreach ($pg->query("SELECT DISTINCT id_producto, id_bodega FROM inventario_kardex WHERE id IN (" . implode(',', $ids) . ")")
                              ->fetchAll(PDO::FETCH_NUM) as [$p, $b]) {
                     $claves[sprintf('%012d-%012d', $p, $b)] = [(int) $p, (int) $b];
                 }
                 $res['cabeceras'] = (int) $pg->exec("DELETE FROM inventario_kardex WHERE id IN (" . implode(',', $ids) . ")");
-                $this->recalcularSaldosKardex($idEmpresa, $claves, (int) ($_SESSION['id_usuario'] ?? 0));
             }
             $res['mapa'] = $this->limpiarMapa($pg, $idEmpresa, 'inventario', $idsMapa);
             $pg->commit();
+            if (!empty($claves)) {
+                $this->recalcularSaldosKardex($pg, $idEmpresa, $claves, (int) ($_SESSION['id_usuario'] ?? 0));
+            }
         } catch (Throwable $e) {
             if ($pg->inTransaction()) { $pg->rollBack(); }
             throw new \RuntimeException('No se pudo eliminar el inventario migrado: ' . $e->getMessage(), 0, $e);
@@ -5075,7 +5089,12 @@ class MigracionMysqlService
                 $entR  = strtoupper(trim((string) $iv['operacion'])) === 'ENTRADA';
                 $magR  = $entR ? (float) $iv['cantidad_entrada'] : (float) $iv['cantidad_salida'];
                 $cantR = $entR ? $magR : -$magR;
-                try { $updRec->execute([':cant' => $cantR, ':cad' => $cadR, ':rt' => ($rtR === 'migracion' ? null : $rtR), ':rid' => $ridR, ':u' => $idUsuario, ':id' => (int) $mapInv[(string) $old]]); }
+                try {
+                    $updRec->execute([':cant' => $cantR, ':cad' => $cadR, ':rt' => ($rtR === 'migracion' ? null : $rtR), ':rid' => $ridR, ':u' => $idUsuario, ':id' => (int) $mapInv[(string) $old]]);
+                    if ($pb = $updRec->fetch(PDO::FETCH_NUM)) {
+                        $reconciliados[sprintf('%012d-%012d', $pb[0], $pb[1])] = [(int) $pb[0], (int) $pb[1]];
+                    }
+                }
                 catch (Throwable $ex) { $res['errores']++; if (empty($res['error_muestra'])) { $res['error_muestra'] = substr($ex->getMessage(), 0, 160); } }
                 $res['ya_migrados']++;
                 continue;
@@ -5125,6 +5144,12 @@ class MigracionMysqlService
                 $res['errores']++;
                 if (empty($res['error_muestra'])) { $res['error_muestra'] = substr($ex->getMessage(), 0, 180); }
             }
+        }
+
+        // El reconcile cambia la cantidad (p. ej. el signo de salidas que migraciones viejas guardaron
+        // en positivo) de movimientos ya migrados: su saldo de bodega se recalcula desde el kardex.
+        if ($reconciliados) {
+            $this->recalcularSaldosKardex($pg, $idEmpresa, $reconciliados, $idUsuario);
         }
         return $res;
     }
