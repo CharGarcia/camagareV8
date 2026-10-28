@@ -177,7 +177,7 @@ class AsientosContablesController extends BaseModuloController
             @set_time_limit(120);
 
             $sincronizador = new \App\Services\modulos\SincronizadorAsientosService();
-            $resultado = $sincronizador->ejecutarPaso($idEmpresa, $idUsuario, $paso);
+            $resultado = $sincronizador->ejecutarPaso($idEmpresa, $idUsuario, $paso, (int) ($_GET['desde'] ?? $_POST['desde'] ?? 0));
 
             echo json_encode(['ok' => true] + $resultado);
         } catch (\Throwable $th) {

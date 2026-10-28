@@ -58,6 +58,13 @@ class SincronizadorAsientosService
      * codigo_unico de su asiento en encabezado_diario; ver MigracionMysqlService::docDeDiario()).
      * Solo estos migrados se generan aquí cuando el histórico no trae su asiento.
      */
+    /**
+     * Segundos de generación por llamada de ejecutarPaso() en un módulo con muchos documentos.
+     * Al cumplirse, la llamada vuelve con lo hecho y la UI pide el resto (muy por debajo del
+     * set_time_limit(120) del endpoint y del tope de 180 s del navegador).
+     */
+    private const LOTE_SEGUNDOS = 15.0;
+
     /** Desde cuántos ms el conteo de pendientes se registra en el log con su detalle por módulo. */
     private const CONTEO_LENTO_MS = 3000;
 
@@ -156,7 +163,7 @@ class SincronizadorAsientosService
      * El llamador (JS) es quien acumula generados/warnings/detalle de cada paso y arma el resumen
      * final — ver public/js/modulos/asientos_pendientes.js.
      */
-    public function ejecutarPaso(int $idEmpresa, int $idUsuario, int $paso): array
+    public function ejecutarPaso(int $idEmpresa, int $idUsuario, int $paso, int $desdeId = 0): array
     {
         $this->idEmpresa = $idEmpresa;
         $db = Database::getConnection();
@@ -166,13 +173,17 @@ class SincronizadorAsientosService
         $totalPasos = count($trabajos) + 3;
 
         $nombrePaso = null;
+        $lote = null;
         if ($paso >= 0 && $paso < count($trabajos)) {
             $t = $trabajos[$paso];
             $nombrePaso = $t['nombre'];
-            $this->sincronizarModulo(
+            // Un módulo con muchos documentos se procesa por lotes de tiempo: la llamada vuelve
+            // a los LOTE_SEGUNDOS con 'continuar' y la UI repite el mismo paso desde 'desdeId',
+            // así la barra avanza y se puede cancelar en medio de un módulo grande.
+            $lote = $this->sincronizarModulo(
                 $db, $t['sql'], $t['params'], $t['factory'], $t['nombre'],
                 $t['dondeConfigurar'], $t['tablaVerif'], $t['colAsiento'], $t['colsDoc'] ?? [],
-                (string) ($t['clave'] ?? '')
+                (string) ($t['clave'] ?? ''), $desdeId, self::LOTE_SEGUNDOS
             );
         } elseif ($paso === count($trabajos)) {
             $nombrePaso = 'Configuración de cuentas (Ingresos/Egresos, Cobros/Pagos, Productos en ventas)';
@@ -185,11 +196,27 @@ class SincronizadorAsientosService
             $this->verificarCosteoVentasPendiente($db, $idEmpresa);
         }
 
+        $continuar = $lote !== null && $lote['quedan'] > 0;
+        $pasoSiguiente = $continuar ? $paso : $paso + 1;
+        $nombreSiguiente = null;
+        if ($pasoSiguiente < count($trabajos)) {
+            $nombreSiguiente = $trabajos[$pasoSiguiente]['nombre'];
+        } elseif ($pasoSiguiente < $totalPasos) {
+            $nombreSiguiente = 'Verificaciones finales';
+        }
+
         return [
             'paso'             => $paso,
             'totalPasos'       => $totalPasos,
             'nombrePaso'       => $nombrePaso,
-            'terminado'        => $paso >= $totalPasos - 1,
+            'nombreSiguiente'  => $nombreSiguiente,
+            // Lote de documentos del módulo (solo pasos de módulo): procesados en esta llamada,
+            // pendientes al empezarla (desde 'desdeId') y desde qué id sigue la próxima.
+            'continuar'        => $continuar,
+            'desdeId'          => $lote['ultimoId'] ?? 0,
+            'loteProcesados'   => $lote['procesados'] ?? 0,
+            'loteTotal'        => $lote['total'] ?? 0,
+            'terminado'        => !$continuar && $paso >= $totalPasos - 1,
             'generados'        => $this->generados,
             'warnings'         => $this->warnings,
             'detalle'          => $this->detalle,
@@ -1421,9 +1448,16 @@ class SincronizadorAsientosService
      *                                al usuario (ej. ['establecimiento','punto_emision','secuencial']),
      *                                para mostrar "001-001-000000123" en los avisos en vez del id interno.
      *                                Vacío = se muestra "#id" (no hay columna de número conocida).
+     * @param int    $desdeId         Lotes: solo procesa los documentos con id mayor (los anteriores ya
+     *                                se intentaron en una llamada previa; los que fallaron siguen sin
+     *                                asiento y no deben repetirse en la misma corrida).
+     * @param float|null $limiteSeg   Lotes: deja de procesar al cumplirse (siempre procesa al menos uno).
+     *                                Null = todos, como en sincronizar().
+     * @return array{procesados:int, total:int, quedan:int, ultimoId:int}
      */
-    private function sincronizarModulo(\PDO $db, string $sql, array $params, callable $serviceFactory, string $nombreModulo, string $dondeConfigurar = 'Asientos Programados', ?string $tablaVerif = null, string $colAsiento = 'id_asiento_contable', array $colsDoc = [], string $clave = ''): void
+    private function sincronizarModulo(\PDO $db, string $sql, array $params, callable $serviceFactory, string $nombreModulo, string $dondeConfigurar = 'Asientos Programados', ?string $tablaVerif = null, string $colAsiento = 'id_asiento_contable', array $colsDoc = [], string $clave = '', int $desdeId = 0, ?float $limiteSeg = null): array
     {
+        $sinLote = ['procesados' => 0, 'total' => 0, 'quedan' => 0, 'ultimoId' => $desdeId];
         try {
             $st = $db->prepare($sql);
             $st->execute($params);
@@ -1432,17 +1466,19 @@ class SincronizadorAsientosService
             // Tabla o columna inexistente (p. ej. migración pendiente en producción):
             // se omite el módulo sin romper la carga de Estados Financieros / Asientos.
             $this->warnings[] = "No se pudo verificar asientos pendientes en $nombreModulo (revise la migración de la base de datos).";
-            return;
+            return $sinLote;
         }
 
+        $ids = array_values(array_filter(array_map('intval', $ids), fn (int $id) => $id > $desdeId));
+        sort($ids);
         if (empty($ids)) {
-            return;
+            return $sinLote;
         }
 
         $service = $serviceFactory();
 
         if (!method_exists($service, 'procesarAsientoContablePorSincronizacion')) {
-            return;
+            return $sinLote;
         }
 
         // Se agrupan los fallos por MOTIVO real (mensaje de la excepción) para que el aviso diga
@@ -1450,8 +1486,16 @@ class SincronizadorAsientosService
         // ocultaba errores reales (p. ej. de BD) detrás de un "Configure las cuentas".
         $errores    = [];
         $intentados = [];
+        $inicio     = microtime(true);
+        $procesados = 0;
+        $ultimoId   = $desdeId;
 
         foreach ($ids as $id) {
+            if ($limiteSeg !== null && $procesados > 0 && (microtime(true) - $inicio) >= $limiteSeg) {
+                break;
+            }
+            $procesados++;
+            $ultimoId = (int) $id;
             try {
                 $service->procesarAsientoContablePorSincronizacion((int)$id);
                 $intentados[] = (int) $id;
@@ -1532,6 +1576,13 @@ class SincronizadorAsientosService
         if ($totalConProblema > 0) {
             $this->resumenPorModulo[$nombreModulo] = ($this->resumenPorModulo[$nombreModulo] ?? 0) + $totalConProblema;
         }
+
+        return [
+            'procesados' => $procesados,
+            'total'      => count($ids),
+            'quedan'     => count($ids) - $procesados,
+            'ultimoId'   => $ultimoId,
+        ];
     }
 
     /**

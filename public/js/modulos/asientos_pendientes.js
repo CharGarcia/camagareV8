@@ -42,17 +42,29 @@
     const escapeHtml = (s) => String(s).replace(/[&<>"']/g,
         c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 
-    function buildProgressHtml(actual, total, nombrePaso) {
-        const pct = total > 0 ? Math.round((Math.min(actual, total) / total) * 100) : 0;
+    /**
+     * @param {number} actual     Pasos terminados.
+     * @param {number} total      Total de pasos.
+     * @param {string} nombrePaso Módulo que se está procesando.
+     * @param {Object} [extra]    { fraccion (0-1 del paso en curso), docs ("350 de 2.000"), generados }
+     */
+    function buildProgressHtml(actual, total, nombrePaso, extra) {
+        extra = extra || {};
+        const avance = Math.min(actual + (extra.fraccion || 0), total);
+        const pct = total > 0 ? Math.round((avance / total) * 100) : 0;
+        const docs = extra.docs ? ` <span class="text-muted">(${escapeHtml(extra.docs)} documentos)</span>` : '';
+        const gen = extra.generados > 0 ? ` · ${extra.generados} asiento(s) generado(s)` : '';
         return `
-            <div class="text-start small mb-2 text-truncate">${nombrePaso ? escapeHtml(nombrePaso) : 'Preparando…'}</div>
+            <div class="text-start small mb-2 text-truncate">${nombrePaso ? escapeHtml(nombrePaso) : 'Preparando…'}${docs}</div>
             <div class="progress" style="height: 20px;">
                 <div class="progress-bar progress-bar-striped progress-bar-animated" role="progressbar"
                      style="width: ${pct}%;" aria-valuenow="${pct}" aria-valuemin="0" aria-valuemax="100">${pct}%</div>
             </div>
-            <div class="text-muted small mt-1">Paso ${Math.min(actual, total)} de ${total}</div>
+            <div class="text-muted small mt-1">Paso ${Math.min(actual + 1, total)} de ${total}${gen} · <span data-reloj-gen>0 s</span></div>
         `;
     }
+
+    const fmtNum = (n) => Number(n).toLocaleString('es-EC');
 
     /** "…/modulos/asientos_contables" → "…/modulos/configuracion-contable" (misma base de la app). */
     function urlConfiguracion(urlBase) {
@@ -288,11 +300,25 @@
         let pendientesReales = 0;
         let generados = 0;
 
+        // Reloj de la ventana: aunque un lote tarde, se ve que el proceso sigue vivo.
+        const inicioGen = Date.now();
+        const relojGen = setInterval(() => {
+            const el = document.querySelector('[data-reloj-gen]');
+            if (!el) return;
+            const s = Math.floor((Date.now() - inicioGen) / 1000);
+            el.textContent = s < 60 ? `${s} s` : `${Math.floor(s / 60)} min ${s % 60} s`;
+        }, 1000);
+
         (async () => {
             let n = 0;
             let totalPasos = 1;
             let interrumpido = false;
             let errorMsg = null;
+            // Lotes dentro de un módulo grande: el servidor vuelve cada ~15 s con 'continuar' y
+            // se repite el mismo paso desde 'desdeId'. totalModulo = pendientes al empezar el paso.
+            let desde = 0;
+            let totalModulo = 0;
+            let hechosModulo = 0;
 
             while (n < totalPasos) {
                 if (cancelado) { interrumpido = true; break; }
@@ -303,7 +329,7 @@
                 const ctrl = new AbortController();
                 const tope = setTimeout(() => ctrl.abort(), TOPE_PASO_MS);
                 try {
-                    const res = await fetch(`${urlBase}/sincronizarPasoAjax?paso=${n}`, {
+                    const res = await fetch(`${urlBase}/sincronizarPasoAjax?paso=${n}&desde=${desde}`, {
                         headers: { 'X-Requested-With': 'XMLHttpRequest' },
                         signal: ctrl.signal,
                     });
@@ -346,12 +372,28 @@
                 if (json.puedeConfigurar) puedeConfigurar = true;
                 pendientesReales += parseInt(json.pendientes, 10) || 0;
 
-                n++;
+                let extra = { generados };
+                let nombreMostrar = json.nombreSiguiente || '';
+                if (json.continuar) {
+                    // Mismo módulo, siguiente lote.
+                    if (desde === 0) totalModulo = parseInt(json.loteTotal, 10) || 0;
+                    hechosModulo += parseInt(json.loteProcesados, 10) || 0;
+                    desde = parseInt(json.desdeId, 10) || 0;
+                    extra.fraccion = totalModulo > 0 ? hechosModulo / totalModulo : 0;
+                    extra.docs = `${fmtNum(hechosModulo)} de ${fmtNum(totalModulo)}`;
+                    nombreMostrar = json.nombrePaso || nombreMostrar;
+                } else {
+                    n++;
+                    desde = 0;
+                    totalModulo = 0;
+                    hechosModulo = 0;
+                }
                 if (!cancelado) {
-                    Swal.update({ html: buildProgressHtml(n, totalPasos, json.nombrePaso || '') });
+                    Swal.update({ html: buildProgressHtml(n, totalPasos, nombreMostrar, extra) });
                 }
             }
 
+            clearInterval(relojGen);
             Swal.close();
 
             if (errorMsg) {

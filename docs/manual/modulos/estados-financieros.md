@@ -33,6 +33,13 @@ inactivo hasta que termina. En empresas con muchos documentos la búsqueda
 puede tardar. **Omitir** corta la búsqueda y deja usar el reporte enseguida
 (equivale a continuar sin generar).
 
+Al pulsar **Generar ahora**, la ventana *Generando asientos…* muestra el módulo
+que se está procesando, cuántos documentos lleva de ese módulo (por ejemplo
+*350 de 2.000*), los asientos generados hasta el momento y el tiempo
+transcurrido. Los módulos con muchos documentos se procesan por partes, así
+que la barra avanza aunque haya miles. **Cancelar** detiene el proceso al
+terminar la parte en curso y conserva lo ya generado.
+
 Si continúa sin generarlos, los informes saldrán sin esos movimientos. Es válido
 para una consulta rápida, pero no para presentar nada.
 
@@ -459,6 +466,8 @@ los otros módulos.
 - **1.17** — Al abrir el módulo se muestra el aviso **Buscando asientos contables
   pendientes…** mientras dura la búsqueda, con el tiempo transcurrido y el botón
   **Omitir**. Antes la pantalla no decía nada y el botón Mostrar quedaba inactivo.
+  La ventana *Generando asientos…* procesa los módulos grandes por partes y muestra
+  documentos procesados, asientos generados y tiempo; antes se quedaba quieta.
 - **1.16** — El aviso de balance descuadrado trae el botón **Ver dónde está la
   diferencia**: lista los asientos que causan la diferencia, con su causa y un
   enlace para abrirlos.
