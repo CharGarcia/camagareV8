@@ -25,8 +25,8 @@ $idEmpresaActOIE = (int)($_SESSION['id_empresa'] ?? 0);
                         <!-- Fila 1: Concepto y Relación -->
                         <div class="col-md-6">
                             <label class="form-label small fw-bold">Nombre / Concepto <span class="text-danger">*</span></label>
-                            <input type="text" name="nombre" id="oie-nombre" class="form-control form-control-sm" placeholder="Ej: SRI, IESS..." required maxlength="20" autocomplete="off">
-                            <div class="form-text" style="font-size: 0.7rem;">Máx. 20 caracteres para evitar desbordes.</div>
+                            <input type="text" name="nombre" id="oie-nombre" class="form-control form-control-sm" placeholder="Ej: SRI, IESS..." required maxlength="50" autocomplete="off">
+                            <div class="form-text" style="font-size: 0.7rem;">Máx. 50 caracteres para evitar desbordes.</div>
                         </div>
 
                         <div class="col-md-6">

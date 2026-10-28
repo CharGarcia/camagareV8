@@ -6,7 +6,7 @@ ruta_modulo: modulos/opciones_ingreso_egreso
 tipo: modulo
 visibilidad: todos
 etiquetas: opciones de ingreso, opciones de egreso, conceptos, motivos, concepto del ingreso, concepto del egreso, cuenta contable del concepto, anticipos, prestamo empleado, relacionado con modulos
-version: 1.2
+version: 1.3
 orden: 71
 estado: activo
 ---
@@ -72,7 +72,7 @@ aparece en ese bloque.
 
 ## Cómo se usa
 
-1. **Nueva** y escriba el nombre del concepto (máx. 20 caracteres: es lo que se
+1. **Nueva** y escriba el nombre del concepto (máx. 50 caracteres: es lo que se
    ve en los combos de Ingresos y Egresos).
 2. Elija en *Relacionado con* si el concepto es libre o pertenece a un módulo.
    Al elegir un módulo, el sistema ya marca la aplicación que corresponde
@@ -86,7 +86,7 @@ aparece en ese bloque.
 
 | Campo | Obligatorio | Qué significa |
 |-------|-------------|---------------|
-| Nombre / Concepto | Sí | Cómo se llama el concepto en los combos. Máx. 20 caracteres |
+| Nombre / Concepto | Sí | Cómo se llama el concepto en los combos. Máx. 50 caracteres |
 | Relacionado con | Sí | Si el concepto es libre o pertenece a un módulo del sistema (ver arriba) |
 | Aplica para | Sí | Ingreso o Egreso — una sola de las dos |
 | Cuenta contable | No | Contrapartida del movimiento. Bloqueada en los conceptos atados a un módulo |
@@ -136,6 +136,7 @@ empresa; sin él, solo los creados por el propio usuario.
 
 ## Historial de cambios
 
+- **1.3** — El **Nombre / Concepto** admite hasta **50 caracteres** (antes 20), tanto en este módulo como en el modal que se abre desde Ingresos y Egresos.
 - **1.2** — Se documenta que la cuenta de un concepto **inactivo** que ya se usa se asigna
   desde este módulo (Configuración Contable solo muestra los activos).
 - **1.1** — La dirección del navegador queda limpia al buscar, cambiar de página u
