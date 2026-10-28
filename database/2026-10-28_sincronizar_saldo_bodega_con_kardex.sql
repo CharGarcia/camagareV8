@@ -50,14 +50,23 @@ BEGIN
       corregido_at    TIMESTAMP DEFAULT CURRENT_TIMESTAMP
   );
 
+  -- Solo los saldos descuadrados: un candado por fila de TODAS las bodegas agotaba la memoria
+  -- de candados de PostgreSQL ("out of shared memory", max_locks_per_transaction). Cada uno se
+  -- vuelve a comprobar bajo su candado más abajo.
   FOR r IN
       SELECT pb.id_empresa, pb.id_producto, pb.id_bodega, pb.stock_actual,
              CAST(e.tipo_ambiente AS VARCHAR(1)) AS amb
       FROM productos_bodegas pb
       JOIN empresas e ON e.id = pb.id_empresa
+      LEFT JOIN LATERAL (
+          SELECT SUM(k.cantidad) AS suma FROM inventario_kardex k
+          WHERE k.id_empresa = pb.id_empresa AND k.id_producto = pb.id_producto AND k.id_bodega = pb.id_bodega
+            AND k.eliminado = false AND k.tipo_ambiente = CAST(e.tipo_ambiente AS VARCHAR(1))
+      ) k ON true
       WHERE pb.eliminado = false
         AND (v_ruc IS NULL OR e.ruc = v_ruc)
         AND NOT (e.ruc = ANY (v_excluir))
+        AND ABS(pb.stock_actual - ROUND(COALESCE(k.suma, 0), 2)) > 0.001
       ORDER BY pb.id_empresa, pb.id_producto, pb.id_bodega
   LOOP
     -- Mismo candado que InventarioRepository::lockStock (se libera al terminar el bloque).
