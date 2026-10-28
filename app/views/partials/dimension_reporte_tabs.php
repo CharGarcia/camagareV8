@@ -43,8 +43,8 @@ if ($dimParte === 'tabs'): ?>
     };
     ?>
     <style>
-        .dim-scroll { max-height: 360px; overflow: auto; }
-        .dim-scroll thead th { position: sticky; top: 0; background: #f8f9fa; z-index: 1; }
+        .dim-tabla { max-height: 360px; overflow: auto; }
+        .dim-tabla thead th { position: sticky; top: 0; background: #f8f9fa; z-index: 1; }
         .dim-doc-row.abrible { cursor: pointer; }
         .dim-kpi { border: 1px solid #e9ecef; border-radius: .5rem; padding: .45rem .6rem; background: #fff; height: 100%; }
         .dim-kpi .lbl { font-size: .68rem; color: #6c757d; text-transform: uppercase; }
@@ -53,7 +53,7 @@ if ($dimParte === 'tabs'): ?>
 
     <div class="tab-pane fade" id="dim-pane-documentos" role="tabpanel">
         <?= $barra('documentos') ?>
-        <div class="dim-scroll border rounded">
+        <div class="dim-tabla border rounded">
             <table class="table table-sm table-hover mb-0 small">
                 <thead>
                     <tr>

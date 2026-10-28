@@ -141,14 +141,14 @@
                 }
 
                 html += '<div class="row g-3"><div class="col-lg-7"><h6 class="small fw-bold text-muted mb-1">Por cuenta contable</h6>'
-                    + '<div class="dim-scroll border rounded"><table class="table table-sm mb-0 small"><thead><tr><th>Cuenta</th><th>Grupo</th>'
+                    + '<div class="dim-tabla border rounded"><table class="table table-sm mb-0 small"><thead><tr><th>Cuenta</th><th>Grupo</th>'
                     + '<th class="text-end">Debe</th><th class="text-end">Haber</th><th class="text-end">Saldo</th></tr></thead><tbody>'
                     + (r.cuentas.length ? r.cuentas.map(c => `<tr><td>${esc(c.codigo)} - ${esc(c.nombre)}</td><td>${esc(c.grupo)}</td>
                         <td class="text-end">${num(c.debe)}</td><td class="text-end">${num(c.haber)}</td><td class="text-end fw-bold">${num(c.saldo)}</td></tr>`).join('')
                         : '<tr><td colspan="5" class="text-center text-muted py-3">Sin movimientos.</td></tr>')
                     + '</tbody></table></div></div>';
                 html += '<div class="col-lg-5"><h6 class="small fw-bold text-muted mb-1">Por mes</h6>'
-                    + '<div class="dim-scroll border rounded"><table class="table table-sm mb-0 small"><thead><tr><th>Mes</th>'
+                    + '<div class="dim-tabla border rounded"><table class="table table-sm mb-0 small"><thead><tr><th>Mes</th>'
                     + '<th class="text-end">Ingresos</th><th class="text-end">Costos y gastos</th><th class="text-end">Resultado</th></tr></thead><tbody>'
                     + (r.meses.length ? r.meses.map(m => `<tr><td>${esc(m.mes_txt)}</td><td class="text-end">${num(m.ingresos)}</td>
                         <td class="text-end">${num(m.costos_gastos)}</td><td class="text-end fw-bold ${m.resultado < 0 ? 'text-danger' : ''}">${num(m.resultado)}</td></tr>`).join('')
