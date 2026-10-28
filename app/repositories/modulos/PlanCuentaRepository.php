@@ -38,13 +38,29 @@ class PlanCuentaRepository extends BaseRepository
 
         // 2. Filas
         $offset = ($page - 1) * $perPage;
-        $sqlRows = "SELECT pc.*, 
-                           cc.nombre as centro_costo_nombre, 
-                           p.nombre as proyecto_nombre 
+        // Centro de costo / proyecto: el sugerido vigente HOY (por periodo, ver
+        // PlanCuentaDimensionRepository). Sin la migración aplicada, el valor fijo antiguo.
+        if ($this->tablaExiste(PlanCuentaDimensionRepository::TABLA)) {
+            $joinDim = "LEFT JOIN LATERAL (
+                            SELECT v.id_centro_costo, v.id_proyecto
+                            FROM " . PlanCuentaDimensionRepository::TABLA . " v
+                            WHERE v.id_cuenta = pc.id AND v.id_empresa = pc.id_empresa AND v.eliminado = false
+                              AND daterange(v.vigente_desde, v.vigente_hasta, '[]') @> CURRENT_DATE
+                            ORDER BY v.vigente_desde DESC NULLS LAST, v.id DESC
+                            LIMIT 1
+                        ) dim ON true
+                        LEFT JOIN centro_costos cc ON cc.id = dim.id_centro_costo
+                        LEFT JOIN proyectos p ON p.id = dim.id_proyecto";
+        } else {
+            $joinDim = "LEFT JOIN centro_costos cc ON cc.id = pc.id_centro_costos
+                        LEFT JOIN proyectos p ON p.id = pc.id_proyecto";
+        }
+        $sqlRows = "SELECT pc.*,
+                           cc.nombre as centro_costo_nombre,
+                           p.nombre as proyecto_nombre
                     FROM {$this->table} pc
-                    LEFT JOIN centro_costos cc ON cc.id = pc.id_centro_costos
-                    LEFT JOIN proyectos p ON p.id = pc.id_proyecto 
-                    {$whereSql} 
+                    {$joinDim}
+                    {$whereSql}
                     ORDER BY pc.{$ordenCol} {$ordenDir}, pc.id DESC";
                     
         if ($perPage > 0) {
@@ -93,9 +109,9 @@ class PlanCuentaRepository extends BaseRepository
 
     public function update(int $id, int $idEmpresa, array $data): bool
     {
-        $sql = "UPDATE {$this->table} SET 
-                id_centro_costos = :id_centro_costos,
-                id_proyecto = :id_proyecto,
+        // id_centro_costos / id_proyecto ya no se tocan aquí: el centro o proyecto de la
+        // cuenta se maneja por periodo (PlanCuentaDimensionService). Quedan como respaldo.
+        $sql = "UPDATE {$this->table} SET
                 codigo = :codigo,
                 nivel = :nivel,
                 nombre = :nombre,
@@ -110,8 +126,6 @@ class PlanCuentaRepository extends BaseRepository
                 WHERE id = :id AND id_empresa = :id_empresa AND eliminado = false";
         $st = $this->db->prepare($sql);
         return $st->execute([
-            ':id_centro_costos' => $data['id_centro_costos'] ?: null,
-            ':id_proyecto'  => $data['id_proyecto'] ?: null,
             ':codigo'       => $data['codigo'],
             ':nivel'        => $data['nivel'],
             ':nombre'       => $data['nombre'],

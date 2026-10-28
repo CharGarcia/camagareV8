@@ -450,6 +450,28 @@
         setupAutocomplete(searchInput, tr.querySelector('.cuenta-id'), tr.querySelector('.cuenta-results'));
     };
 
+    // Centro de costo / proyecto que la cuenta sugiere a la fecha del asiento (Plan de
+    // Cuentas → periodos). Solo llena lo que la línea tiene vacío: nunca pisa lo que el
+    // usuario ya eligió, y lo guardado sigue siendo lo de la línea.
+    async function precargarDimension(tr, idCuenta) {
+        if (!tr || !idCuenta || (!centrosCosto.length && !proyectos.length)) return;
+        const selCentro = tr.querySelector('.centro-costo');
+        const selProyecto = tr.querySelector('.proyecto');
+        if ((!selCentro || selCentro.value) && (!selProyecto || selProyecto.value)) return;
+        const fecha = document.getElementById('asiento_fecha')?.value || '';
+        try {
+            const resp = await fetch(`${API_ASIENTOS}/getDimensionSugeridaAjax?id_cuenta=${encodeURIComponent(idCuenta)}&fecha=${encodeURIComponent(fecha)}`);
+            const json = await resp.json();
+            // La línea pudo cambiar de cuenta mientras llegaba la respuesta.
+            if (!json.ok || !json.data || tr.querySelector('.cuenta-id')?.value !== String(idCuenta)) return;
+            const ponerSi = (sel, valor) => {
+                if (sel && !sel.value && !sel.disabled && valor && sel.querySelector(`option[value="${valor}"]`)) sel.value = String(valor);
+            };
+            ponerSi(selCentro, json.data.id_centro_costo);
+            ponerSi(selProyecto, json.data.id_proyecto);
+        } catch (e) { }
+    }
+
     function setupAutocomplete(input, hiddenInput, resultsDiv) {
         let timeout = null;
 
@@ -487,6 +509,7 @@
                                 // Cambiar de cuenta puede poner o quitar la línea de cartera
                                 // del documento: hay que reevaluar el cuadre en vivo.
                                 calcularTotales();
+                                precargarDimension(input.closest('tr'), item.id);
                             });
                             resultsDiv.appendChild(a);
                         });

@@ -446,7 +446,8 @@
                     Object.keys(extra).forEach(k => qs.set(k, extra[k]));
                 }
                 const json = await (await fetch(`${cfg.previewUrl}?${qs.toString()}`)).json();
-                if (json.ok && json.detalles && json.detalles.length) {
+                const registrarAMano = !!(json.permite_manual && cfg.manualUrl && ids.save && $(ids.save) && !soloVistaPrevia);
+                if (json.ok && json.detalles && json.detalles.length && !registrarAMano) {
                     tbody.innerHTML = '';
                     json.detalles.forEach(d => agregarLinea(
                         d.id_cuenta_contable,
@@ -463,11 +464,12 @@
                         ? '<i class="bi bi-info-circle me-1"></i> Vista previa: complete las cuentas que falten; el asiento se registra al guardar el documento.'
                         : '<i class="bi bi-info-circle me-1"></i> Vista previa: este asiento se generar&aacute; al guardar el documento. Una vez generado, se podr&aacute; corregir aqu&iacute;.',
                         'text-muted');
-                } else if (!json.ok && json.permite_manual && cfg.manualUrl && ids.save && $(ids.save) && !soloVistaPrevia) {
-                    // El documento no cuadra consigo mismo con todas las cuentas configuradas y
-                    // no se puede corregir (comprobante electrónico del SRI): se deja armar el
-                    // asiento a mano partiendo de lo que el sistema sí pudo calcular, y se guarda
-                    // contra el módulo dueño (cfg.manualUrl), que lo enlaza al documento.
+                } else if (registrarAMano) {
+                    // El documento no tiene asiento y el módulo dueño deja registrarlo a mano
+                    // (cfg.manualUrl), partiendo de lo que el sistema sí pudo calcular; al guardar
+                    // lo enlaza al documento. Compras: solo un comprobante electrónico que no
+                    // cuadra consigo mismo. Ingresos/Egresos: cualquiera sin asiento, con
+                    // `mensaje_manual` (ver AsientoManualDocumentoService).
                     nuevoManual = true;
                     editable = true;
                     guardable = true;
@@ -488,9 +490,15 @@
                     const falta = Math.abs(dif) >= 0.005
                         ? ' Falta ' + Math.abs(dif).toFixed(2) + ' al ' + (dif < 0 ? 'Debe' : 'Haber') + ': agregue esa l&iacute;nea con la cuenta que corresponda.'
                         : '';
-                    setStatus('<i class="bi bi-exclamation-triangle-fill me-1"></i> El sistema no pudo generar el asiento: ' + (json.error || '')
-                        + '<br>El comprobante electr&oacute;nico no se puede corregir, as&iacute; que el asiento se registra a mano.' + falta
-                        + ' Al guardarlo queda enlazado al documento y marcado como editado a mano.', 'text-warning-emphasis');
+                    const esc = (s) => String(s || '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+                    if (json.mensaje_manual) {
+                        setStatus((json.ok ? '<i class="bi bi-info-circle me-1"></i> ' : '<i class="bi bi-exclamation-triangle-fill me-1"></i> El sistema no pudo armar el asiento completo: ' + esc(json.error) + '<br>')
+                            + esc(json.mensaje_manual) + falta, json.ok ? 'text-primary-emphasis' : 'text-warning-emphasis');
+                    } else {
+                        setStatus('<i class="bi bi-exclamation-triangle-fill me-1"></i> El sistema no pudo generar el asiento: ' + (json.error || '')
+                            + '<br>El comprobante electr&oacute;nico no se puede corregir, as&iacute; que el asiento se registra a mano.' + falta
+                            + ' Al guardarlo queda enlazado al documento y marcado como editado a mano.', 'text-warning-emphasis');
+                    }
                 } else if (!json.ok) {
                     placeholder('<i class="bi bi-exclamation-triangle-fill me-1"></i> ' + (json.error || 'No se pudo generar el asiento.'), 'text-danger');
                     setStatus('');

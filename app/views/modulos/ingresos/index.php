@@ -2629,6 +2629,10 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
             _ingAsientoTab = window.crearAsientoTab({
                 prefijo: 'ing',
                 moduloOrigen: 'ingreso',
+                // Sin asiento: propone las líneas de las reglas contables y deja registrarlo a
+                // mano (ver AsientoManualDocumentoService).
+                previewUrl: `<?= BASE_URL ?>/<?= $rutaModulo ?>/getAsientoSugeridoAjax`,
+                manualUrl: `<?= BASE_URL ?>/<?= $rutaModulo ?>/registrarAsientoManualAjax`,
                 cuentasUrl: `<?= BASE_URL ?>/modulos/plan-cuentas/searchAjaxCuentas`,
                 asientosUrl: `<?= BASE_URL ?>/modulos/asientos-contables`
             });

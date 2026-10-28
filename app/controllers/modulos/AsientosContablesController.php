@@ -346,6 +346,29 @@ class AsientosContablesController extends BaseModuloController
         exit;
     }
 
+    /**
+     * Centro de costo / proyecto que la cuenta sugiere a la fecha del asiento
+     * (Plan de Cuentas → periodos). GET id_cuenta, fecha (Y-m-d).
+     */
+    public function getDimensionSugeridaAjax(): void
+    {
+        $this->requireLeer();
+        header('Content-Type: application/json');
+
+        try {
+            $sug = \App\Services\modulos\PlanCuentaDimensionService::crear()->sugerencia(
+                (int) ($_GET['id_cuenta'] ?? 0),
+                (int) $_SESSION['id_empresa'],
+                trim((string) ($_GET['fecha'] ?? date('Y-m-d')))
+            );
+            echo json_encode(['ok' => true, 'data' => $sug]);
+        } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
+            echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
+        }
+        exit;
+    }
+
     public function getDocumentoOrigenAjax(): void
     {
         $this->requireLeer();

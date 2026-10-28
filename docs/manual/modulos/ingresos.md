@@ -6,7 +6,7 @@ ruta_modulo: modulos/ingresos
 tipo: modulo
 visibilidad: todos
 etiquetas: ingresos, documentos pendientes, no coincide con cuentas por cobrar, solo mis documentos, vendedor, acceso total, cobro, cobrar, buscar ingreso, buscador, filtros, filtrar ingresos, filtrar por forma de cobro, buscar por factura cobrada, buscar por cheque, buscar por transferencia, filtro de fechas, chips, editar ingreso, modificar ingreso, corregir ingreso, cambiar monto cobrado, quitar factura del ingreso, periodo cerrado, solo lectura, no deja editar, no puedo modificar, ordenar por dos columnas, ordenar por recibi de y fecha, recibo, dinero que entra, anticipo, deposito, efectivo, transferencia, caja, excel, exportar, combinar conceptos, mezclar conceptos, otros conceptos, varios documentos, cobro sin factura, tipo real, tipo de ingreso, numero de ingreso, serie, secuencial, numero repetido, numero duplicado, numeracion por fecha, numero con el año, reiniciar numeracion, reinicio anual, reinicio mensual, correlativo por año, correlativo por mes, modo de numeracion, orden de formas de cobro, saldo de la forma de cobro, saldo disponible, ocultar saldo, aparecen documentos que no busque, resultados que no corresponden, buscar por numero de documento cobrado, cuenta del anticipo, anticipo sin cuenta, cuenta contable del concepto, cuenta por defecto, falta cuenta contable, cobrar factura y dejar anticipo, excedente como anticipo, listado no se actualiza, no aparece el ingreso guardado, no se ve el cambio, vuelve a la primera pagina, se pierde la pagina, refrescar listado, recargar tabla, fila resaltada, observaciones automaticas, observaciones se llenan solas, observaciones se completan solas, glosa del ingreso, concepto del comprobante, descripcion del cobro, cobro factura de venta, falta un centavo, centavo pendiente, no puedo cobrar el centavo, diferencia de un centavo, saldo de 0.01, queda un centavo, referencia muy larga, glosa larga, no guarda el ingreso, no se guarda el cobro, error al guardar ingreso, value too long, texto demasiado largo, se corta la referencia, limite de caracteres, imprimir, impresora, doble clic, ingreso duplicado, cobro duplicado, cobrar dos veces, doble cobro, ya no tiene saldo suficiente, crear cliente desde el ingreso, nuevo cliente, registrar cliente, crear forma de cobro, crear concepto, no aparece el boton de crear cliente, falta el boton nuevo cliente, ingreso anulado con asiento vivo, asiento sigue contabilizado, no se anulo el asiento, asiento de documento anulado, no se pudo anular el asiento contable del ingreso, eliminar ingreso, registrar otro ingreso, guardar y nuevo, guardar y crear otro, seguir en este, varios ingresos seguidos, no cerrar el modal, continuar registrando
-version: 3.16
+version: 3.17
 orden: 10
 estado: activo
 ---
@@ -319,6 +319,23 @@ Diario y en la columna *Documento Ref.* de Mayores. Los asientos ya generados
 conservan su referencia anterior (`Ingreso 001-101-000000008`) hasta que el
 ingreso se vuelva a guardar o se regenere el asiento.
 
+**Registrar el asiento a mano.** Si el ingreso no tiene asiento (por ejemplo, un ingreso
+migrado que el sistema anterior nunca contabilizó, o uno al que le faltó una
+cuenta en la configuración contable), la pestaña *Asiento contable* propone las
+líneas que arman las reglas contables y deja completarlas o corregirlas. Al pulsar
+**Guardar asiento**, el asiento queda enlazado al ingreso, marcado como editado a mano
+(el sistema ya no lo regenera) y deja de aparecer en el aviso de asientos
+pendientes. Si las reglas no alcanzan a armarlo, la pestaña dice qué falta y
+cuánto le falta al Debe o al Haber.
+
+- Hace falta permiso de **modificar** en este módulo y de **ver y modificar**
+  Asientos Contables.
+- El asiento debe cuadrar (Debe = Haber). Si no refleja el valor del ingreso, el
+  sistema avisa y deja guardarlo de todos modos; la confirmación queda en la
+  auditoría.
+- No se permite si el ingreso está anulado, si su fecha está en un período contable
+  cerrado o si ya está enlazado a su asiento del sistema anterior.
+
 ## Cheques posfechados
 
 Si la empresa configuró la cuenta **Cheques posfechados por cobrar** (Configuración
@@ -526,6 +543,7 @@ misma revisión al guardar:
 
 ## Historial de cambios
 
+- **3.17** — La pestaña **Asiento contable** de un ingreso sin asiento propone las líneas de la configuración contable y permite **registrar el asiento a mano**; queda enlazado al ingreso.
 - **3.16** — La pregunta al guardar un ingreso nuevo suma el botón **Cerrar**, que cierra el modal y vuelve al listado.
 - **3.15** — Forma de cobro y concepto creados desde el ingreso: la ventana se cierra sin un aviso que aceptar y quedan seleccionados; un concepto ligado a un módulo también queda elegido; un concepto creado solo para Egresos ya no aparece en Ingresos.
 - **3.14** — Al guardar un ingreso nuevo se pregunta *Registrar nuevo / Seguir en

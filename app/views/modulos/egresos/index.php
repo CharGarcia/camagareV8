@@ -2683,6 +2683,10 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
             _egAsientoTab = window.crearAsientoTab({
                 prefijo: 'eg',
                 moduloOrigen: 'egreso',
+                // Sin asiento: propone las líneas de las reglas contables y deja registrarlo a
+                // mano (ver AsientoManualDocumentoService).
+                previewUrl: `${EGR_URL}/getAsientoSugeridoAjax`,
+                manualUrl: `${EGR_URL}/registrarAsientoManualAjax`,
                 cuentasUrl: `<?= BASE_URL ?>/modulos/plan-cuentas/searchAjaxCuentas`,
                 asientosUrl: `<?= BASE_URL ?>/modulos/asientos-contables`
             });

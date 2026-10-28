@@ -6,7 +6,7 @@ ruta_modulo: modulos/egresos
 tipo: modulo
 visibilidad: todos
 etiquetas: egresos, saldo inicial por pagar, saldos iniciales cxp, cuenta por pagar de apertura, no aparece el saldo inicial, pagar saldo inicial, egreso, pago, buscar egreso, buscador, filtros, filtrar egresos, buscar cheque, buscar por compra pagada, buscar por beneficiario, filtro de fechas, chips, editar egreso, modificar egreso, corregir egreso, cambiar monto pagado, quitar factura del egreso, cambiar beneficiario, periodo cerrado, solo lectura, no deja editar, no puedo modificar, ordenar por dos columnas, ordenar por beneficiario y fecha, pagar, dinero que sale, proveedor, empleado, cheque, transferencia, comprobante de egreso, excel, exportar, anular cheque, cheque anulado, cheque dañado, reimprimir cheque, combinar conceptos, mezclar conceptos, otros conceptos, varios documentos, gasto sin factura, tipo real, tipo de egreso, decimo cuarto, decimo tercero, prestamos, rol de pago, numero de egreso, serie, secuencial, numero repetido, numero duplicado, numeracion por fecha, numero con el año, reiniciar numeracion, reinicio anual, reinicio mensual, correlativo por año, correlativo por mes, modo de numeracion, orden de formas de pago, saldo de la forma de pago, saldo disponible, ocultar saldo, aparecen documentos que no busque, resultados que no corresponden, buscar por numero de documento cobrado, cuenta del anticipo, anticipo sin cuenta, anticipo a proveedor, cuenta contable del concepto, cuenta por defecto, falta cuenta contable, pagar compra y dar anticipo, listado no se actualiza, no aparece el egreso guardado, no se ve el cambio, vuelve a la primera pagina, se pierde la pagina, refrescar listado, recargar tabla, fila resaltada, observaciones automaticas, observaciones se llenan solas, observaciones se completan solas, glosa del egreso, concepto del comprobante, descripcion del pago, pago factura de compra, falta un centavo, centavo pendiente, no puedo pagar el centavo, diferencia de un centavo, saldo de 0.01, queda un centavo, referencia muy larga, no guarda el egreso, no se guarda el pago, error al guardar egreso, value too long, texto demasiado largo, se corta la referencia, limite de caracteres, saldo equivocado, valor a pagar incorrecto, saldo menor al real, nota de venta, retencion de otro proveedor, descuenta una retencion que no es, imprimir, impresora, siguiente egreso, egreso anterior, navegar entre egresos, pasar al siguiente, flechas del modal, recorrer egresos, pago duplicado, pagar dos veces, doble pago, doble clic, egreso duplicado, ya no tiene saldo suficiente, declaracion ya pagada, crear proveedor desde el egreso, nuevo proveedor, nuevo empleado, registrar proveedor, registrar empleado, crear forma de pago, crear concepto, no aparece el boton de crear proveedor, falta el boton nuevo proveedor, asiento de documento anulado, asiento sigue contabilizado, no se anulo el asiento, no se pudo anular el asiento contable, registrar otro egreso, guardar y nuevo, guardar y crear otro, seguir en este, varios egresos seguidos, no cerrar el modal, continuar registrando
-version: 1.45
+version: 1.46
 orden: 20
 estado: activo
 ---
@@ -479,6 +479,23 @@ y en la columna *Documento Ref.* de Mayores. Los asientos ya generados conservan
 su referencia anterior (`Egreso 001-001-000000018`) hasta que el egreso se vuelva
 a guardar o se regenere el asiento.
 
+**Registrar el asiento a mano.** Si el egreso no tiene asiento (por ejemplo, un egreso
+migrado que el sistema anterior nunca contabilizó, o uno al que le faltó una
+cuenta en la configuración contable), la pestaña *Asiento contable* propone las
+líneas que arman las reglas contables y deja completarlas o corregirlas. Al pulsar
+**Guardar asiento**, el asiento queda enlazado al egreso, marcado como editado a mano
+(el sistema ya no lo regenera) y deja de aparecer en el aviso de asientos
+pendientes. Si las reglas no alcanzan a armarlo, la pestaña dice qué falta y
+cuánto le falta al Debe o al Haber.
+
+- Hace falta permiso de **modificar** en este módulo y de **ver y modificar**
+  Asientos Contables.
+- El asiento debe cuadrar (Debe = Haber). Si no refleja el valor del egreso, el
+  sistema avisa y deja guardarlo de todos modos; la confirmación queda en la
+  auditoría.
+- No se permite si el egreso está anulado, si su fecha está en un período contable
+  cerrado o si ya está enlazado a su asiento del sistema anterior.
+
 ## Buscar y filtrar el listado
 
 Arriba de la tabla hay un solo grupo: el botón del **embudo**, el cuadro de
@@ -668,6 +685,7 @@ proveedores), pasa por la misma revisión al guardar:
 
 ## Historial de cambios
 
+- **1.46** — La pestaña **Asiento contable** de un egreso sin asiento propone las líneas de la configuración contable y permite **registrar el asiento a mano**; queda enlazado al egreso.
 - **1.45** — La pregunta al guardar un egreso nuevo suma el botón **Cerrar**, que cierra el modal y vuelve al listado.
 - **1.44** — El buscador de **facturas de compra pendientes** muestra también las **cuentas por pagar cargadas en Saldos Iniciales** (marcadas «SALDO INI.»), para pagarlas desde Egresos junto con las compras. Pagar, editar o anular el egreso actualiza el pendiente del saldo inicial en Saldos Iniciales y Cuentas por Pagar.
 - **1.43** — El botón **Imprimir cheques** pasa a la barra del listado, junto a los botones PDF y Excel.

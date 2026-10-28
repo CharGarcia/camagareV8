@@ -7,6 +7,7 @@ namespace App\controllers\modulos;
 use App\repositories\modulos\PlanCuentaRepository;
 use App\Rules\modulos\PlanCuentaRules;
 use App\Services\LogSistemaService;
+use App\Services\modulos\PlanCuentaDimensionService;
 use App\Services\modulos\PlanCuentaService;
 use App\models\CentroCosto;
 use App\models\Proyecto;
@@ -275,6 +276,84 @@ class PlanCuentasController extends BaseModuloController
                 'supercias_ecp_subcodigo' => $_POST['supercias_ecp_subcodigo'] ?? null,
             ]);
             echo json_encode(['ok' => true, 'msg' => 'Códigos actualizados.', 'cuenta' => $ok]);
+        } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
+            echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
+        }
+        exit;
+    }
+
+    /**
+     * Centro de costo / proyecto sugerido por periodo de una cuenta (sección del modal).
+     * GET id_cuenta.
+     */
+    public function dimensionesAjax(): void
+    {
+        $this->requireLeer();
+        header('Content-Type: application/json');
+
+        $idCuenta  = (int) ($_GET['id_cuenta'] ?? 0);
+        $idEmpresa = (int) $_SESSION['id_empresa'];
+
+        try {
+            $service = PlanCuentaDimensionService::crear();
+            $fmt = fn($d) => !empty($d) ? date('d-m-Y', strtotime((string) $d)) : '';
+            $rows = array_map(fn($r) => $r + [
+                'desde_txt' => $fmt($r['vigente_desde']),
+                'hasta_txt' => $fmt($r['vigente_hasta']),
+            ], $service->listar($idCuenta, $idEmpresa));
+
+            echo json_encode([
+                'ok'         => true,
+                'disponible' => $service->disponible(),
+                'data'       => $rows,
+                'puede_editar' => !empty($this->getPermisos()['actualizar']),
+            ]);
+        } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
+            echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
+        }
+        exit;
+    }
+
+    /** Crea o actualiza un periodo de centro de costo / proyecto de una cuenta. */
+    public function guardarDimensionAjax(): void
+    {
+        $this->requireActualizar();
+        header('Content-Type: application/json');
+
+        $idEmpresa = (int) $_SESSION['id_empresa'];
+        $idUsuario = (int) $_SESSION['id_usuario'];
+
+        try {
+            $id = PlanCuentaDimensionService::crear()->guardar((int) ($_POST['id'] ?? 0), [
+                'id_cuenta'       => $_POST['id_cuenta'] ?? 0,
+                'id_centro_costo' => $_POST['id_centro_costo'] ?? 0,
+                'id_proyecto'     => $_POST['id_proyecto'] ?? 0,
+                'vigente_desde'   => $_POST['vigente_desde'] ?? '',
+                'vigente_hasta'   => $_POST['vigente_hasta'] ?? '',
+                'observacion'     => $_POST['observacion'] ?? '',
+            ], $idEmpresa, $idUsuario);
+            echo json_encode(['ok' => true, 'id' => $id, 'msg' => 'Periodo guardado.']);
+        } catch (\InvalidArgumentException $e) {
+            echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
+        } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
+            echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
+        }
+        exit;
+    }
+
+    public function eliminarDimensionAjax(): void
+    {
+        $this->requireActualizar();
+        header('Content-Type: application/json');
+
+        try {
+            PlanCuentaDimensionService::crear()->eliminar((int) ($_POST['id'] ?? 0), (int) $_SESSION['id_empresa'], (int) $_SESSION['id_usuario']);
+            echo json_encode(['ok' => true, 'msg' => 'Periodo eliminado.']);
+        } catch (\InvalidArgumentException $e) {
+            echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
         } catch (\Throwable $e) {
             \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
@@ -758,7 +837,7 @@ class PlanCuentasController extends BaseModuloController
             $empresa = $empresaModel->getPorId($idEmpresa);
             $nombreEmpresa = $empresa['nombre'] ?? '';
 
-            $headers = ['Código', 'Nombre', 'Nivel', 'Cod. SRI', 'SuperCías ESF', 'SuperCías ERI', 'SuperCías ECP Cod.', 'SuperCías ECP Sub.', 'Map Asiento', 'Centro Costo', 'Proyecto', 'Estado'];
+            $headers = ['Código', 'Nombre', 'Nivel', 'Cod. SRI', 'SuperCías ESF', 'SuperCías ERI', 'SuperCías ECP Cod.', 'SuperCías ECP Sub.', 'Map Asiento', 'Centro Costo (vigente)', 'Proyecto (vigente)', 'Estado'];
             $exportData = [];
             foreach ($rows as $r) {
                 $exportData[] = [

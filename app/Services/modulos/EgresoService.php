@@ -937,49 +937,120 @@ class EgresoService
             return;
         }
 
-        $num        = $egreso['numero_egreso'] ?? (string) $idEgreso;
-        $tipoSujeto = strtolower((string) ($egreso['tipo_sujeto'] ?? ''));
-        // Referencia de cada línea = "Egreso 18 · <detalle de la línea>": el egreso con solo su
-        // secuencial (misma regla que Observaciones) y lo que esa línea representa —"Pago factura
-        // de compra 42869", "Pago: BANCO PICHINCHA (cheque #45)", la descripción de un otro
-        // concepto—. Es lo que muestra la pestaña Asiento y la columna Documento Ref. de Mayores
-        // (documento_referencia manda sobre referencia_detalle). Espejo de IngresoService.
-        $numCorto = AsientoBuilderService::secuencialCorto((string) $num);
-        $prefijo  = 'Egreso ' . ($numCorto !== '' ? $numCorto : $num);
-        foreach ($detalles as &$d) {
-            $refLinea = trim((string) ($d['referencia_detalle'] ?? ''));
-            $d['documento_referencia'] = mb_substr($refLinea !== '' ? $prefijo . ' · ' . $refLinea : $prefijo, 0, 100);
-            if ($refLinea !== '') {
-                $d['referencia_detalle'] = mb_substr($refLinea, 0, 500);
-            }
-            if ($tipoSujeto === 'proveedor' && !empty($egreso['id_proveedor'])) {
-                $d['id_entidad']   = (int) $egreso['id_proveedor'];
-                $d['tipo_entidad'] = 'proveedor';
-            } elseif ($tipoSujeto === 'empleado' && !empty($egreso['id_empleado'])) {
-                $d['id_entidad']   = (int) $egreso['id_empleado'];
-                $d['tipo_entidad'] = 'empleado';
-            }
-        }
-        unset($d);
+        $detalles = $this->decorarLineasAsiento($egreso, $detalles);
 
         $asientoService = $this->asientoContableService();
         $previo    = $asientoService->getAsientoPorOrigen('egreso', $idEgreso, $idEmpresa);
         $idAsiento = $previo ? (int) $previo['id'] : 0;
 
-        $cabecera = [
-            'id'                   => $idAsiento > 0 ? $idAsiento : null,
+        $cabecera = $this->cabeceraAsiento($egreso);
+        $cabecera['id'] = $idAsiento > 0 ? $idAsiento : null;
+
+        $idGenerado = $asientoService->guardarAsiento($cabecera, $detalles, $idEmpresa, $idUsuario);
+        $this->repository->updateAsientoContable($idEgreso, $idGenerado);
+    }
+
+    /** Cabecera del asiento del egreso (sin id). */
+    private function cabeceraAsiento(array $egreso): array
+    {
+        $num = $egreso['numero_egreso'] ?? (string) $egreso['id'];
+        return [
+            'id'                   => null,
             'fecha_asiento'        => $egreso['fecha_emision'],
             'tipo_comprobante'     => 'egresos',
             'numero_comprobante'   => '',
             'concepto'             => 'Egreso ' . $num,
             'estado'               => 'contabilizado',
             'modulo_origen'        => 'egreso',
-            'id_referencia_origen' => $idEgreso,
+            'id_referencia_origen' => (int) $egreso['id'],
             'observaciones'        => $egreso['observaciones'] ?? null,
         ];
+    }
 
-        $idGenerado = $asientoService->guardarAsiento($cabecera, $detalles, $idEmpresa, $idUsuario);
-        $this->repository->updateAsientoContable($idEgreso, $idGenerado);
+    /** "Egreso 18": el egreso con solo su secuencial (misma regla que Observaciones). */
+    private function referenciaAsiento(array $egreso): string
+    {
+        $num = $egreso['numero_egreso'] ?? (string) $egreso['id'];
+        $numCorto = AsientoBuilderService::secuencialCorto((string) $num);
+        return 'Egreso ' . ($numCorto !== '' ? $numCorto : $num);
+    }
+
+    /** Tercero de la cabecera del egreso para las líneas del asiento. */
+    private function terceroAsiento(array $egreso): array
+    {
+        $tipoSujeto = strtolower((string) ($egreso['tipo_sujeto'] ?? ''));
+        if ($tipoSujeto === 'proveedor' && !empty($egreso['id_proveedor'])) {
+            return ['id_entidad' => (int) $egreso['id_proveedor'], 'tipo_entidad' => 'proveedor'];
+        }
+        if ($tipoSujeto === 'empleado' && !empty($egreso['id_empleado'])) {
+            return ['id_entidad' => (int) $egreso['id_empleado'], 'tipo_entidad' => 'empleado'];
+        }
+        return ['id_entidad' => null, 'tipo_entidad' => null];
+    }
+
+    /**
+     * Referencia de cada línea = "Egreso 18 · <detalle de la línea>": lo que esa línea representa
+     * —"Pago factura de compra 42869", "Pago: BANCO PICHINCHA (cheque #45)", la descripción de
+     * un otro concepto—. Es lo que muestra la pestaña Asiento y la columna Documento Ref. de
+     * Mayores (documento_referencia manda sobre referencia_detalle). Espejo de IngresoService.
+     */
+    private function decorarLineasAsiento(array $egreso, array $detalles): array
+    {
+        $prefijo = $this->referenciaAsiento($egreso);
+        $tercero = $this->terceroAsiento($egreso);
+        foreach ($detalles as &$d) {
+            $refLinea = trim((string) ($d['referencia_detalle'] ?? ''));
+            $d['documento_referencia'] = mb_substr($refLinea !== '' ? $prefijo . ' · ' . $refLinea : $prefijo, 0, 100);
+            if ($refLinea !== '') {
+                $d['referencia_detalle'] = mb_substr($refLinea, 0, 500);
+            }
+            if ($tercero['id_entidad'] !== null) {
+                $d['id_entidad']   = $tercero['id_entidad'];
+                $d['tipo_entidad'] = $tercero['tipo_entidad'];
+            }
+        }
+        unset($d);
+        return $detalles;
+    }
+
+    /**
+     * Pestaña «Asiento contable» de un egreso SIN asiento: líneas que proponen las reglas
+     * contables y si se puede registrar a mano (ver AsientoManualDocumentoService).
+     */
+    public function getAsientoSugerido(int $idEgreso, int $idEmpresa, bool $puedeRegistrar): array
+    {
+        $egreso = $this->repository->getPorId($idEgreso, $idEmpresa);
+        if (!$egreso) {
+            return ['ok' => true, 'detalles' => []];
+        }
+        $builder = new AsientoBuilderService();
+        return (new AsientoManualDocumentoService($this->logService))->vistaPrevia(
+            $egreso,
+            fn (): array => $this->decorarLineasAsiento($egreso, $builder->generarAsientoEgreso($idEmpresa, $idEgreso, [])),
+            fn (array $lineas) => AsientoBuilderService::verificarCuadre($lineas, $builder->getMotivosFaltantes()),
+            $puedeRegistrar
+        );
+    }
+
+    /** Registra a mano el asiento de un egreso sin asiento (pestaña «Asiento contable»). */
+    public function registrarAsientoManual(int $idEgreso, int $idEmpresa, int $idUsuario, array $detalles, bool $confirmarDescuadre): array
+    {
+        $egreso = $this->repository->getPorId($idEgreso, $idEmpresa);
+        if (!$egreso) {
+            throw new \Exception('Egreso no encontrado.');
+        }
+        return (new AsientoManualDocumentoService($this->logService))->registrar(
+            $egreso,
+            $this->cabeceraAsiento($egreso),
+            $detalles,
+            $this->terceroAsiento($egreso),
+            $this->referenciaAsiento($egreso),
+            fn (int $idAsiento) => $this->repository->updateAsientoContable($idEgreso, $idAsiento),
+            $idEmpresa,
+            $idUsuario,
+            $confirmarDescuadre,
+            ['accion' => 'Registrar Asiento Manual de Egreso', 'tabla' => 'egresos_cabecera']
+        );
     }
 
     /**

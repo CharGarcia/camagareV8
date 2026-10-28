@@ -782,14 +782,61 @@ class IngresoService
             return;
         }
 
-        $num = $ingreso['numero_ingreso'] ?? (string) $idIngreso;
-        // Referencia de cada línea = "Ingreso 8 · <detalle de la línea>": el ingreso con solo su
-        // secuencial (misma regla que Observaciones) y lo que esa línea representa —"Cobro
-        // facturas de venta 1, 2", "Cobro: BANCO PICHINCHA (transferencia ref. 4455)", la
-        // descripción de un otro concepto—. Es lo que muestra la pestaña Asiento y la columna
-        // Documento Ref. de Mayores (documento_referencia manda sobre referencia_detalle).
+        $detalles = $this->decorarLineasAsiento($ingreso, $detalles);
+
+        $asientoService = $this->asientoContableService();
+        $previo    = $asientoService->getAsientoPorOrigen('ingreso', $idIngreso, $idEmpresa);
+        $idAsiento = $previo ? (int) $previo['id'] : 0;
+
+        $cabecera = $this->cabeceraAsiento($ingreso);
+        $cabecera['id'] = $idAsiento > 0 ? $idAsiento : null;
+
+        $idGenerado = $asientoService->guardarAsiento($cabecera, $detalles, $idEmpresa, $idUsuario);
+        $this->repository->updateAsientoContable($idIngreso, $idGenerado);
+    }
+
+    /** Cabecera del asiento del ingreso (sin id). */
+    private function cabeceraAsiento(array $ingreso): array
+    {
+        $num = $ingreso['numero_ingreso'] ?? (string) $ingreso['id'];
+        return [
+            'id'                   => null,
+            'fecha_asiento'        => $ingreso['fecha_emision'],
+            'tipo_comprobante'     => 'ingresos',
+            'numero_comprobante'   => '',
+            'concepto'             => 'Ingreso ' . $num,
+            'estado'               => 'contabilizado',
+            'modulo_origen'        => 'ingreso',
+            'id_referencia_origen' => (int) $ingreso['id'],
+            'observaciones'        => $ingreso['observaciones'] ?? null,
+        ];
+    }
+
+    /** "Ingreso 8": el ingreso con solo su secuencial (misma regla que Observaciones). */
+    private function referenciaAsiento(array $ingreso): string
+    {
+        $num = $ingreso['numero_ingreso'] ?? (string) $ingreso['id'];
         $numCorto = AsientoBuilderService::secuencialCorto((string) $num);
-        $prefijo  = 'Ingreso ' . ($numCorto !== '' ? $numCorto : $num);
+        return 'Ingreso ' . ($numCorto !== '' ? $numCorto : $num);
+    }
+
+    /** Cliente de la cabecera del ingreso para las líneas del asiento (puede no haberlo). */
+    private function terceroAsiento(array $ingreso): array
+    {
+        return !empty($ingreso['id_cliente'])
+            ? ['id_entidad' => (int) $ingreso['id_cliente'], 'tipo_entidad' => 'cliente']
+            : ['id_entidad' => null, 'tipo_entidad' => null];
+    }
+
+    /**
+     * Referencia de cada línea = "Ingreso 8 · <detalle de la línea>": lo que esa línea representa
+     * —"Cobro facturas de venta 1, 2", "Cobro: BANCO PICHINCHA (transferencia ref. 4455)", la
+     * descripción de un otro concepto—. Es lo que muestra la pestaña Asiento y la columna
+     * Documento Ref. de Mayores (documento_referencia manda sobre referencia_detalle).
+     */
+    private function decorarLineasAsiento(array $ingreso, array $detalles): array
+    {
+        $prefijo = $this->referenciaAsiento($ingreso);
         foreach ($detalles as &$d) {
             $refLinea = trim((string) ($d['referencia_detalle'] ?? ''));
             $d['documento_referencia'] = mb_substr($refLinea !== '' ? $prefijo . ' · ' . $refLinea : $prefijo, 0, 100);
@@ -805,25 +852,47 @@ class IngresoService
             }
         }
         unset($d);
+        return $detalles;
+    }
 
-        $asientoService = $this->asientoContableService();
-        $previo    = $asientoService->getAsientoPorOrigen('ingreso', $idIngreso, $idEmpresa);
-        $idAsiento = $previo ? (int) $previo['id'] : 0;
+    /**
+     * Pestaña «Asiento contable» de un ingreso SIN asiento: líneas que proponen las reglas
+     * contables y si se puede registrar a mano (ver AsientoManualDocumentoService).
+     */
+    public function getAsientoSugerido(int $idIngreso, int $idEmpresa, bool $puedeRegistrar): array
+    {
+        $ingreso = $this->repository->getPorId($idIngreso, $idEmpresa);
+        if (!$ingreso) {
+            return ['ok' => true, 'detalles' => []];
+        }
+        $builder = new AsientoBuilderService();
+        return (new AsientoManualDocumentoService($this->logService))->vistaPrevia(
+            $ingreso,
+            fn (): array => $this->decorarLineasAsiento($ingreso, $builder->generarAsientoIngreso($idEmpresa, $idIngreso, [])),
+            fn (array $lineas) => AsientoBuilderService::verificarCuadre($lineas, $builder->getMotivosFaltantes()),
+            $puedeRegistrar
+        );
+    }
 
-        $cabecera = [
-            'id'                   => $idAsiento > 0 ? $idAsiento : null,
-            'fecha_asiento'        => $ingreso['fecha_emision'],
-            'tipo_comprobante'     => 'ingresos',
-            'numero_comprobante'   => '',
-            'concepto'             => 'Ingreso ' . $num,
-            'estado'               => 'contabilizado',
-            'modulo_origen'        => 'ingreso',
-            'id_referencia_origen' => $idIngreso,
-            'observaciones'        => $ingreso['observaciones'] ?? null,
-        ];
-
-        $idGenerado = $asientoService->guardarAsiento($cabecera, $detalles, $idEmpresa, $idUsuario);
-        $this->repository->updateAsientoContable($idIngreso, $idGenerado);
+    /** Registra a mano el asiento de un ingreso sin asiento (pestaña «Asiento contable»). */
+    public function registrarAsientoManual(int $idIngreso, int $idEmpresa, int $idUsuario, array $detalles, bool $confirmarDescuadre): array
+    {
+        $ingreso = $this->repository->getPorId($idIngreso, $idEmpresa);
+        if (!$ingreso) {
+            throw new \Exception('Ingreso no encontrado.');
+        }
+        return (new AsientoManualDocumentoService($this->logService))->registrar(
+            $ingreso,
+            $this->cabeceraAsiento($ingreso),
+            $detalles,
+            $this->terceroAsiento($ingreso),
+            $this->referenciaAsiento($ingreso),
+            fn (int $idAsiento) => $this->repository->updateAsientoContable($idIngreso, $idAsiento),
+            $idEmpresa,
+            $idUsuario,
+            $confirmarDescuadre,
+            ['accion' => 'Registrar Asiento Manual de Ingreso', 'tabla' => 'ingresos_cabecera']
+        );
     }
 
     /**

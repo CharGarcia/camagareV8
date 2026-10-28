@@ -141,26 +141,11 @@ $proyectos  = $proyectos ?? [];
                             <label class="form-label small fw-bold">Nombre de la Cuenta *</label>
                             <input type="text" class="form-control form-control-sm shadow-none" name="nombre" id="pc_nombre_edit" required placeholder="Ingrese el nombre...">
                         </div>
-                        
-                        <!-- Campos exclusivos de Nivel 5 -->
-                        <div class="col-md-6 wrapper-nivel-5 d-none">
-                            <label class="form-label small fw-bold">Centro de Costo</label>
-                            <select class="form-select form-select-sm shadow-none" name="id_centro_costos" id="pc_id_centro_costos">
-                                <option value="">-- Seleccionar --</option>
-                                <?php foreach ($centros as $c): ?>
-                                    <option value="<?= $c['id'] ?>"><?= htmlspecialchars($c['nombre']) ?></option>
-                                <?php endforeach; ?>
-                            </select>
-                        </div>
-                        <div class="col-md-6 wrapper-nivel-5 d-none">
-                            <label class="form-label small fw-bold">Proyecto</label>
-                            <select class="form-select form-select-sm shadow-none" name="id_proyecto" id="pc_id_proyecto">
-                                <option value="">-- Seleccionar --</option>
-                                <?php foreach ($proyectos as $p): ?>
-                                    <option value="<?= $p['id'] ?>"><?= htmlspecialchars($p['nombre']) ?></option>
-                                <?php endforeach; ?>
-                            </select>
-                        </div>
+                    </div>
+
+                    <!-- Campos exclusivos de Nivel 5: centro de costo / proyecto por periodo -->
+                    <div class="wrapper-nivel-5 d-none">
+                        <?php include __DIR__ . '/_dimensiones.php'; ?>
                     </div>
 
                     <div class="wrapper-nivel-5 d-none mt-3">
@@ -555,8 +540,6 @@ $proyectos  = $proyectos ?? [];
             document.getElementById('pc_codigo_edit').value = item.codigo;
             document.getElementById('pc_nivel_edit').value = item.nivel;
             document.getElementById('pc_nombre_edit').value = item.nombre;
-            document.getElementById('pc_id_centro_costos').value = item.id_centro_costos || '';
-            document.getElementById('pc_id_proyecto').value = item.id_proyecto || '';
             document.getElementById('pc_codigo_sri').value = item.codigo_sri || '';
             document.getElementById('pc_supercias_esf').value = item.supercias_esf || '';
             document.getElementById('pc_supercias_eri').value = item.supercias_eri || '';
@@ -565,6 +548,7 @@ $proyectos  = $proyectos ?? [];
             document.getElementById('pc_status').checked = (parseInt(item.status) === 1);
             
             toggleLevel5Fields(item.nivel);
+            if (parseInt(item.nivel) === 5 && window.PCDIM_cargar) window.PCDIM_cargar(item.id, false);
             document.getElementById('tituloModal').textContent = 'Configuración de Cuenta';
             document.getElementById('modalAlert').classList.add('d-none');
             document.getElementById('wrapper-parent-info').classList.add('d-none');
@@ -604,6 +588,7 @@ $proyectos  = $proyectos ?? [];
                 }
                 
                 toggleLevel5Fields(json.nivel);
+                if (window.PCDIM_cargar) window.PCDIM_cargar(0, false);
                 renderExistingSiblings(codigoPadre);
                 getModal().show();
                 setTimeout(() => document.getElementById('pc_nombre_edit').focus(), 400);

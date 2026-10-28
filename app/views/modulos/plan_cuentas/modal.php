@@ -50,26 +50,11 @@
                             <label class="form-label small fw-bold">Nombre de la Cuenta *</label>
                             <input type="text" class="form-control form-control-sm shadow-none" name="nombre" id="pc_nombre_edit" required placeholder="Ingrese el nombre...">
                         </div>
-                        
-                        <!-- Campos exclusivos de Nivel 5 -->
-                        <div class="col-md-6 wrapper-nivel-5-pc d-none">
-                            <label class="form-label small fw-bold">Centro de Costo</label>
-                            <select class="form-select form-select-sm shadow-none" name="id_centro_costos" id="pc_id_centro_costos">
-                                <option value="">-- Seleccionar --</option>
-                                <?php if(isset($centros)): foreach ($centros as $c): ?>
-                                    <option value="<?= $c['id'] ?>"><?= htmlspecialchars($c['nombre']) ?></option>
-                                <?php endforeach; endif; ?>
-                            </select>
-                        </div>
-                        <div class="col-md-6 wrapper-nivel-5-pc d-none">
-                            <label class="form-label small fw-bold">Proyecto</label>
-                            <select class="form-select form-select-sm shadow-none" name="id_proyecto" id="pc_id_proyecto">
-                                <option value="">-- Seleccionar --</option>
-                                <?php if(isset($proyectos)): foreach ($proyectos as $p): ?>
-                                    <option value="<?= $p['id'] ?>"><?= htmlspecialchars($p['nombre']) ?></option>
-                                <?php endforeach; endif; ?>
-                            </select>
-                        </div>
+                    </div>
+
+                    <!-- Campos exclusivos de Nivel 5: centro de costo / proyecto por periodo -->
+                    <div class="wrapper-nivel-5-pc d-none">
+                        <?php include __DIR__ . '/_dimensiones.php'; ?>
                     </div>
 
                     <div class="wrapper-nivel-5-pc d-none mt-3">
@@ -138,7 +123,7 @@
 
         // Campos editables del formulario (el código y el nivel son siempre de solo lectura:
         // el código de una cuenta nunca se modifica una vez creada; lo refuerza el Service).
-        const camposEditablesPC = ['pc_status', 'pc_nombre_edit', 'pc_id_centro_costos', 'pc_id_proyecto',
+        const camposEditablesPC = ['pc_status', 'pc_nombre_edit',
             'pc_codigo_sri', 'pc_supercias_esf', 'pc_supercias_eri', 'pc_supercias_ecp_codigo', 'pc_supercias_ecp_subcodigo'];
 
         function setSoloLecturaPC(soloLectura) {
@@ -174,8 +159,7 @@
 
                 if (parseInt(data.nivel) === 5) {
                     document.querySelectorAll('.wrapper-nivel-5-pc').forEach(el => el.classList.remove('d-none'));
-                    document.getElementById('pc_id_centro_costos').value = data.id_centro_costos || '';
-                    document.getElementById('pc_id_proyecto').value = data.id_proyecto || '';
+                    if (window.PCDIM_cargar) window.PCDIM_cargar(data.id || 0, !!opts.soloLectura);
                     document.getElementById('pc_codigo_sri').value = data.codigo_sri || '';
                     document.getElementById('pc_supercias_esf').value = data.supercias_esf || '';
                     document.getElementById('pc_supercias_eri').value = data.supercias_eri || '';

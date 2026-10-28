@@ -5,8 +5,8 @@ categoria: Contabilidad
 ruta_modulo: modulos/plan-cuentas
 tipo: modulo
 visibilidad: todos
-etiquetas: plan de cuentas, cuentas contables, catalogo de cuentas, codigo de cuenta, nivel, mayor, auxiliar, plan modelo, cargar plan modelo, configuracion contable automatica, tipos de asiento, map asiento, iva por tarifa, cambiar codigo de cuenta, codigo sri, supercias, entidades de control, eliminar cuenta, cuenta eliminada, balance no cuadra, descuadre
-version: 1.5
+etiquetas: plan de cuentas, cuentas contables, catalogo de cuentas, codigo de cuenta, nivel, mayor, auxiliar, plan modelo, cargar plan modelo, configuracion contable automatica, tipos de asiento, map asiento, iva por tarifa, cambiar codigo de cuenta, codigo sri, supercias, entidades de control, centro de costo, centro de costos, proyecto, proyectos, centro de costo por periodo, cambiar proyecto de una cuenta, vigencia, eliminar cuenta, cuenta eliminada, balance no cuadra, descuadre
+version: 1.6
 orden: 10
 estado: activo
 ---
@@ -55,8 +55,44 @@ Los tres campos son obligatorios.
   una cuenta quedó con un código equivocado, cree la cuenta correcta y, si la
   errada no tiene movimientos, elimínela.
 - **Sí se pueden cambiar**: el nombre, el estado (activa/inactiva) y, en cuentas
-  de nivel 5, el centro de costo, el proyecto y los **códigos de entidades de
-  control** (Código SRI y Supercias ESF, ERI y ECP).
+  de nivel 5, el **centro de costo / proyecto por periodo** y los **códigos de
+  entidades de control** (Código SRI y Supercias ESF, ERI y ECP).
+
+### Centro de costo y proyecto por periodo (nivel 5)
+
+Una cuenta de movimiento puede tener un **centro de costo**, un **proyecto** o
+ambos, y pueden cambiar de un periodo a otro. Por ejemplo, la cuenta *Sueldos*
+puede ir al *Proyecto A* durante 2026 y al *Proyecto B* desde 2027, sin crear
+una cuenta nueva.
+
+En la ficha de la cuenta, la sección **Centro de costo / Proyecto por periodo**
+muestra una fila por periodo:
+
+1. Escriba **Desde** y **Hasta** (déjelos vacíos si el periodo no tiene inicio o
+   no tiene fin).
+2. Elija el centro de costo, el proyecto o ambos.
+3. Pulse el visto (✓) para guardar el periodo. Con el lápiz se edita uno ya
+   registrado y con la papelera se elimina.
+
+La fila que corresponde a la fecha de hoy se marca **Vigente**.
+
+Cómo funciona:
+
+- **Es una sugerencia para los asientos.** Al elegir la cuenta en una línea de
+  un asiento, el sistema pone el centro de costo y el proyecto del periodo que
+  corresponde a la **fecha del asiento**. Si la línea ya tenía uno elegido, no
+  lo cambia, y siempre se puede cambiar a mano.
+- **No modifica lo ya registrado.** Cada línea de asiento guarda su propio
+  centro de costo y proyecto, y eso es lo que usan el Balance de Comprobación,
+  los Estados Financieros y los Mayores. Cambiar o eliminar un periodo no mueve
+  los saldos ya contabilizados.
+- **Los periodos de una misma cuenta no pueden cruzarse.** Para cambiar de
+  proyecto, ponga fecha **Hasta** al periodo anterior y registre el nuevo desde
+  el día siguiente.
+- Si el centro de costo o el proyecto se inactiva, deja de sugerirse.
+- Hasta ahora no se llenan solos los asientos que generan los documentos
+  (facturas, compras, nómina, etc.); solo los que se escriben en el modal del
+  asiento.
 
 ### Códigos de entidades de control (nivel 5)
 
@@ -193,6 +229,12 @@ pendiente y el aviso de asientos pendientes indica qué cuenta revisar.
   cuentas"**: la Configuración Contable apunta a una cuenta eliminada. Cambie la
   cuenta en Configuración Contable (o reactive la cuenta) y vuelva a generar los
   asientos pendientes.
+- **"El periodo se cruza con otro ya registrado para esta cuenta"**: ya hay un
+  periodo que cubre alguna de esas fechas. Ponga fecha *Hasta* al anterior o
+  ajuste las fechas del nuevo.
+- **No aparece la sección de centro de costo / proyecto**: solo se muestra en
+  cuentas de nivel 5 ya guardadas, y si la empresa tiene centros de costo o
+  proyectos activos.
 - **"Las cuentas de nivel 1 al 4 deben estar en MAYÚSCULAS"**: escriba el nombre
   en mayúsculas o baje el nivel de la cuenta.
 - **La cuenta no aparece al configurar un asiento**: revise su nivel; en las
@@ -207,6 +249,10 @@ pendiente y el aviso de asientos pendientes indica qué cuenta revisar.
 
 ## Historial de cambios
 
+- **1.6** — El centro de costo y el proyecto de una cuenta se registran **por
+  periodo** (desde/hasta), en lugar de un único valor fijo que no se usaba en
+  ningún lado. El del periodo se sugiere en las líneas del asiento según su
+  fecha. El valor que tenía cada cuenta pasó a un periodo sin límite de fechas.
 - **1.5** — **Eliminar plan** ya no borra cuentas configuradas en Configuración
   Contable (antes solo miraba los movimientos). Ningún asiento se registra en una
   cuenta eliminada, de otra empresa o inexistente: el asiento queda pendiente con

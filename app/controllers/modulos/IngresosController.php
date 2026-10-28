@@ -687,6 +687,69 @@ class IngresosController extends BaseModuloController
         exit;
     }
 
+    /**
+     * Pestaña «Asiento contable» de un ingreso SIN asiento: líneas que proponen las reglas
+     * contables y si el usuario puede registrarlo a mano (registrarAsientoManualAjax).
+     */
+    public function getAsientoSugeridoAjax(): void
+    {
+        $this->requireLeer();
+        header('Content-Type: application/json');
+        try {
+            $id = (int) ($_GET['id'] ?? 0);
+            if ($id <= 0) {
+                echo json_encode(['ok' => true, 'detalles' => []]);
+                exit;
+            }
+            $puede = !empty($this->getPermisos()['actualizar']) && \App\Helpers\AsientoPestana::puedeEditar();
+            echo json_encode($this->service->getAsientoSugerido($id, (int) $_SESSION['id_empresa'], $puede));
+        } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
+            echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
+        }
+        exit;
+    }
+
+    /**
+     * Registra a mano el asiento de un ingreso que no tiene asiento. Permisos: actualizar Ingresos
+     * y editar el asiento desde la pestaña (ver + actualizar Asientos Contables).
+     */
+    public function registrarAsientoManualAjax(): void
+    {
+        $this->requireActualizar();
+        header('Content-Type: application/json');
+        try {
+            if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
+                throw new \Exception('Método no permitido.');
+            }
+            if (!\App\Helpers\AsientoPestana::puedeEditar()) {
+                throw new \Exception('No tiene permiso para registrar asientos contables.');
+            }
+            $id = (int) ($_POST['id'] ?? 0);
+            $detalles = json_decode((string) ($_POST['detalles_json'] ?? '[]'), true);
+            if ($id <= 0 || !is_array($detalles)) {
+                throw new \Exception('Datos del asiento inválidos.');
+            }
+            $res = $this->service->registrarAsientoManual(
+                $id,
+                (int) $_SESSION['id_empresa'],
+                (int) $_SESSION['id_usuario'],
+                $detalles,
+                !empty($_POST['confirmar_descuadre'])
+            );
+            if (!empty($res['ya_existia'])) {
+                $res['msg'] = 'El asiento de este ingreso ya estaba registrado; no se creó otro.';
+            } elseif (!empty($res['ok'])) {
+                $res['msg'] = 'Asiento registrado a mano y enlazado al ingreso.';
+            }
+            echo json_encode($res);
+        } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
+            echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
+        }
+        exit;
+    }
+
     public function verificarPeriodoAjax(): void
     {
         $this->requireLeer();

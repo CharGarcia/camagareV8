@@ -5,8 +5,8 @@ categoria: Contabilidad
 ruta_modulo: modulos/asientos_contables
 tipo: modulo
 visibilidad: todos
-etiquetas: asientos, cuenta eliminada, cuenta configurada no funciona, asiento contable, diario, debe, haber, partida doble, cuadrado, comprobante, contabilidad, imprimir, pdf, excel, documento origen, cuadre con el documento, total de la factura, cuenta por cobrar, cartera, editar asiento desde el documento, pestaña asiento contable, editado a mano, restaurar asiento automático, permisos de contabilidad, documentos migrados, migración, sistema anterior, buscar asiento, buscador, filtros, filtrar asientos, buscar por cuenta, buscar por referencia, libro diario, chips, asiento descuadrado, búsqueda lenta, se queda buscando, filtrar por origen, origen del asiento, módulo de origen, vista previa, costo de ventas, asiento sin costo, duplicar asiento, copiar asiento, clonar asiento, repetir asiento
-version: 1.39
+etiquetas: asientos, cuenta eliminada, cuenta configurada no funciona, asiento contable, diario, debe, haber, partida doble, cuadrado, comprobante, contabilidad, imprimir, pdf, excel, documento origen, cuadre con el documento, total de la factura, cuenta por cobrar, cartera, editar asiento desde el documento, pestaña asiento contable, editado a mano, restaurar asiento automático, permisos de contabilidad, documentos migrados, migración, sistema anterior, buscar asiento, buscador, filtros, filtrar asientos, buscar por cuenta, buscar por referencia, libro diario, chips, asiento descuadrado, búsqueda lenta, se queda buscando, filtrar por origen, origen del asiento, módulo de origen, vista previa, costo de ventas, asiento sin costo, duplicar asiento, copiar asiento, clonar asiento, repetir asiento, centro de costo sugerido, proyecto sugerido
+version: 1.40
 orden: 20
 estado: activo
 ---
@@ -93,6 +93,11 @@ aparecen si la empresa tiene al menos un centro de costo o un proyecto
 **activo**, respectivamente. Si no tiene ninguno, la columna no se muestra (no
 habría nada que elegir). Al crear el primero, la columna vuelve a aparecer la
 próxima vez que se cargue la página.
+
+Al elegir la cuenta de una línea, si la cuenta tiene un centro de costo o un
+proyecto para la **fecha del asiento** (Plan de Cuentas → *Centro de costo /
+Proyecto por periodo*), se pone solo en la línea. Si la línea ya tenía uno, se
+respeta. Por eso conviene escribir la fecha del asiento antes de las líneas.
 
 ### Columnas Documento/Ref y Detalle
 
@@ -549,6 +554,9 @@ cambiarlos se revierte el cierre en ese módulo y se genera de nuevo.
 
 ## Historial de cambios
 
+- **1.40** — Al elegir la cuenta de una línea se precarga el centro de costo y el
+  proyecto que la cuenta tiene para la fecha del asiento (Plan de Cuentas, por
+  periodo). No pisa lo que la línea ya tenía.
 - **1.39** — Los documentos **migrados que el sistema anterior nunca contabilizó**
   vuelven a aparecer como asientos por generar y se generan como los demás, salvo
   que el diario histórico traiga su asiento o que su fecha esté en un período
