@@ -14,7 +14,10 @@ class ReporteIngresosEgresosController extends BaseModuloController
     private const XL_FECHA      = 'dd-mm-yyyy';
     private const XL_FECHA_HORA = 'dd-mm-yyyy hh:mm:ss';
 
-    private const OPERACIONES = ['TRANSFERENCIA' => 'Transferencia', 'DEPOSITO' => 'Depósito', 'DEBITO' => 'Débito', 'CHEQUE' => 'Cheque'];
+    /** Formas de ver distintas de Documento (detalle). */
+    private const VISTAS_RESUMEN = ['TERCERO', 'FORMA', 'FECHA', 'MES', 'ANTICIPOS'];
+
+    private const OPERACIONES =['TRANSFERENCIA' => 'Transferencia', 'DEPOSITO' => 'Depósito', 'DEBITO' => 'Débito', 'CHEQUE' => 'Cheque'];
 
     private ReporteIngresosEgresosRepository $repository;
 
@@ -95,6 +98,16 @@ class ReporteIngresosEgresosController extends BaseModuloController
                     $rows = $this->repository->getReporteAgrupadoMes($idEmpresa, $f);
                     $rowsHtml = $this->renderPeriodo($rows, 'MES');
                     break;
+                case 'ANTICIPOS':
+                    if ($this->anticiposDeUnTercero($f)) {
+                        $mov  = $this->repository->getAnticiposMovimientos($idEmpresa, $f);
+                        $rows = $mov['movimientos'];
+                        $rowsHtml = $this->renderAnticiposMovimientos($mov);
+                    } else {
+                        $rows = $this->repository->getAnticiposResumen($idEmpresa, $f);
+                        $rowsHtml = $this->renderAnticipos($rows);
+                    }
+                    break;
                 default:
                     $rows = $this->repository->getReporteDetallado($idEmpresa, $f);
                     $rowsHtml = $this->renderDetalle($rows);
@@ -107,14 +120,8 @@ class ReporteIngresosEgresosController extends BaseModuloController
                 'rows'      => $rowsHtml,
                 'total'     => count($rows),
                 'ver_por'   => $f['ver_por'],
-                'stats'     => [
-                    'total_ingresos' => (float)($stats['total_ingresos'] ?? 0),
-                    'total_egresos'  => (float)($stats['total_egresos'] ?? 0),
-                    'neto'           => (float)($stats['neto'] ?? 0),
-                    'n_ingresos'     => (int)($stats['n_ingresos'] ?? 0),
-                    'n_egresos'      => (int)($stats['n_egresos'] ?? 0),
-                    'n_documentos'   => (int)($stats['n_documentos'] ?? 0),
-                ],
+                'movimientos_tercero' => $f['ver_por'] === 'ANTICIPOS' && $this->anticiposDeUnTercero($f),
+                'stats'     => $stats,
                 'excel_url' => $urlBase . '/exportExcel?' . $qs,
                 'pdf_url'   => $urlBase . '/exportPdf?' . $qs,
             ]);
@@ -134,6 +141,12 @@ class ReporteIngresosEgresosController extends BaseModuloController
         $q    = trim($_GET['q'] ?? '');
         echo json_encode(['ok' => true, 'data' => $this->repository->buscarTerceros($idEmpresa, $tipo, $q)]);
         exit;
+    }
+
+    /** Vista Anticipos con un cliente o proveedor elegido: se listan sus movimientos. */
+    private function anticiposDeUnTercero(array $f): bool
+    {
+        return $f['tercero_id'] > 0 && in_array($f['tercero_tipo'], ['CLIENTE', 'PROVEEDOR'], true);
     }
 
     // ── Render de filas ───────────────────────────────────────────────────────
@@ -158,14 +171,6 @@ class ReporteIngresosEgresosController extends BaseModuloController
             $estBadge = $estado === 'anulado'
                 ? '<span class="badge bg-danger bg-opacity-10 text-danger border border-danger border-opacity-25">Anulado</span>'
                 : '<span class="badge bg-secondary bg-opacity-10 text-secondary border border-secondary border-opacity-25">' . htmlspecialchars(ucfirst($estado ?: 'registrado')) . '</span>';
-            // Línea pagada (en todo o en parte) con anticipo: esa parte no suma, ya se
-            // contó en el comprobante que recibió/entregó el anticipo.
-            $anticipo = (float) ($r['monto_anticipo'] ?? 0);
-            $notaAnt  = $anticipo > 0.004
-                ? '<div><span class="badge bg-warning bg-opacity-10 text-warning-emphasis border border-warning border-opacity-25 fw-normal"'
-                  . ' title="Se pagó con un anticipo que ya se contó cuando se recibió o entregó; esta parte no suma en el reporte.">'
-                  . 'Anticipo aplicado $' . number_format($anticipo, 2) . '</span></div>'
-                : '';
             $h .= '<tr>'
                 . '<td>' . $this->badgeFlujo($r['tipo_flujo']) . '</td>'
                 . '<td><code class="text-secondary">' . htmlspecialchars($r['numero'] ?? '') . '</code></td>'
@@ -176,16 +181,39 @@ class ReporteIngresosEgresosController extends BaseModuloController
                 . '<td class="text-truncate text-muted" style="max-width:220px" title="' . htmlspecialchars($r['descripcion'] ?? '') . '">' . htmlspecialchars($r['descripcion'] ?? '') . '</td>'
                 . '<td>' . htmlspecialchars($r['concepto'] ?? '') . '</td>'
                 . '<td class="text-center">' . $estBadge . '</td>'
-                . '<td class="text-end fw-bold ' . $signo . '">$' . number_format((float)($r['monto'] ?? 0), 2) . $notaAnt . '</td>'
+                . '<td class="text-end fw-bold ' . $signo . '">$' . number_format((float)($r['monto'] ?? 0), 2)
+                . self::notaAnticipo((float)($r['monto_anticipo'] ?? 0)) . '</td>'
                 . '</tr>';
         }
         return $h;
     }
 
+    /**
+     * Marca de la parte pagada con anticipo: el monto se muestra completo, pero esa
+     * parte no es entrada/salida de dinero (ya se contó al recibir/entregar el anticipo).
+     */
+    private static function notaAnticipo(float $anticipo): string
+    {
+        if ($anticipo <= 0.004) {
+            return '';
+        }
+        return '<div><span class="badge bg-warning bg-opacity-10 text-warning-emphasis border border-warning border-opacity-25 fw-normal"'
+             . ' title="Pagado con un anticipo: el dinero entró (o salió) cuando se registró el anticipo; esta parte no suma en Entrada/Salida de dinero ni en el Neto.">'
+             . 'Anticipo aplicado $' . number_format($anticipo, 2) . '</span></div>';
+    }
+
+    /** Celda de "con anticipo": guion cuando no hubo. */
+    private static function celdaAnticipo(float $valor): string
+    {
+        return '<td class="text-end">' . ($valor > 0.004
+            ? '<span class="text-warning-emphasis">$' . number_format($valor, 2) . '</span>'
+            : '<span class="text-muted">—</span>') . '</td>';
+    }
+
     private function renderAgrupado(array $rows): string
     {
         if (empty($rows)) {
-            return '<tr><td colspan="6" class="text-center py-5 text-muted"><i class="bi bi-people fs-3 d-block mb-2"></i>Sin resultados para los filtros seleccionados.</td></tr>';
+            return '<tr><td colspan="8" class="text-center py-5 text-muted"><i class="bi bi-people fs-3 d-block mb-2"></i>Sin resultados para los filtros seleccionados.</td></tr>';
         }
         $h = '';
         foreach ($rows as $r) {
@@ -197,7 +225,9 @@ class ReporteIngresosEgresosController extends BaseModuloController
                 . '<td class="fw-medium">' . htmlspecialchars($r['tercero_nombre'] ?? '—') . '<div class="small text-muted">' . htmlspecialchars($r['tercero_ident'] ?? '') . '</div></td>'
                 . '<td class="text-center">' . (int)($r['comprobantes'] ?? 0) . '</td>'
                 . '<td class="text-center">' . (int)($r['documentos'] ?? 0) . '</td>'
-                . '<td class="text-end fw-bold ' . $signo . '">$' . number_format((float)($r['total'] ?? 0), 2) . '</td>'
+                . '<td class="text-end">$' . number_format((float)($r['total'] ?? 0), 2) . '</td>'
+                . self::celdaAnticipo((float)($r['anticipo'] ?? 0))
+                . '<td class="text-end fw-bold ' . $signo . '">$' . number_format((float)($r['caja'] ?? 0), 2) . '</td>'
                 . '</tr>';
         }
         return $h;
@@ -211,12 +241,12 @@ class ReporteIngresosEgresosController extends BaseModuloController
         $h = '';
         foreach ($rows as $r) {
             $signo = $r['tipo_flujo'] === 'INGRESO' ? 'text-success' : 'text-danger';
-            // Forma tipo ANTICIPO: se muestra, pero no suma en los totales del reporte.
+            // Forma tipo ANTICIPO: muestra su total real, marcado como no entrada/salida de dinero.
             $esAnt = !empty($r['es_anticipo']);
             $total = '$' . number_format((float)($r['total'] ?? 0), 2);
             $celdaTotal = $esAnt
-                ? '<td class="text-end text-muted" title="Anticipo aplicado: ya se contó cuando se recibió o entregó; no suma en los totales.">'
-                  . $total . '<div class="small fw-normal">no suma (anticipo aplicado)</div></td>'
+                ? '<td class="text-end fw-bold text-warning-emphasis" title="Anticipo aplicado: el dinero entró (o salió) cuando se registró el anticipo.">'
+                  . $total . '<div class="small fw-normal text-muted">no es entrada/salida de dinero</div></td>'
                 : '<td class="text-end fw-bold ' . $signo . '">' . $total . '</td>';
             $h .= '<tr>'
                 . '<td>' . $this->badgeFlujo($r['tipo_flujo']) . '</td>'
@@ -233,26 +263,85 @@ class ReporteIngresosEgresosController extends BaseModuloController
     private function renderPeriodo(array $rows, string $modo): string
     {
         if (empty($rows)) {
-            return '<tr><td colspan="6" class="text-center py-5 text-muted"><i class="bi bi-calendar3 fs-3 d-block mb-2"></i>Sin resultados para los filtros seleccionados.</td></tr>';
+            return '<tr><td colspan="8" class="text-center py-5 text-muted"><i class="bi bi-calendar3 fs-3 d-block mb-2"></i>Sin resultados para los filtros seleccionados.</td></tr>';
         }
-        $meses = ['01'=>'Enero','02'=>'Febrero','03'=>'Marzo','04'=>'Abril','05'=>'Mayo','06'=>'Junio','07'=>'Julio','08'=>'Agosto','09'=>'Septiembre','10'=>'Octubre','11'=>'Noviembre','12'=>'Diciembre'];
         $h = '';
         foreach ($rows as $r) {
-            $ing = (float)($r['ingresos'] ?? 0); $egr = (float)($r['egresos'] ?? 0); $neto = $ing - $egr;
-            if ($modo === 'MES') {
-                [$a, $m] = array_pad(explode('-', (string)($r['periodo'] ?? '')), 2, '');
-                $etq = ($meses[$m] ?? $m) . ' ' . $a;
-            } else {
-                $etq = !empty($r['periodo']) ? date('d-m-Y', strtotime((string)$r['periodo'])) : '—';
-            }
+            $neto = (float)($r['neto'] ?? 0);
             $h .= '<tr>'
-                . '<td class="fw-medium">' . htmlspecialchars($etq) . '</td>'
-                . '<td class="text-end text-success">$' . number_format($ing, 2) . '</td>'
+                . '<td class="fw-medium">' . htmlspecialchars(self::etiquetaPeriodo((string)($r['periodo'] ?? ''), $modo)) . '</td>'
+                . '<td class="text-end text-success">$' . number_format((float)($r['ingresos'] ?? 0), 2) . '</td>'
+                . self::celdaAnticipo((float)($r['ingresos_anticipo'] ?? 0))
                 . '<td class="text-center text-muted">' . (int)($r['n_ing'] ?? 0) . '</td>'
-                . '<td class="text-end text-danger">$' . number_format($egr, 2) . '</td>'
+                . '<td class="text-end text-danger">$' . number_format((float)($r['egresos'] ?? 0), 2) . '</td>'
+                . self::celdaAnticipo((float)($r['egresos_anticipo'] ?? 0))
                 . '<td class="text-center text-muted">' . (int)($r['n_egr'] ?? 0) . '</td>'
                 . '<td class="text-end fw-bold ' . ($neto >= 0 ? 'text-primary' : 'text-danger') . '">$' . number_format($neto, 2) . '</td>'
                 . '</tr>';
+        }
+        return $h;
+    }
+
+    private static function etiquetaPeriodo(string $periodo, string $modo): string
+    {
+        if ($modo === 'MES') {
+            $meses = ['01'=>'Enero','02'=>'Febrero','03'=>'Marzo','04'=>'Abril','05'=>'Mayo','06'=>'Junio','07'=>'Julio','08'=>'Agosto','09'=>'Septiembre','10'=>'Octubre','11'=>'Noviembre','12'=>'Diciembre'];
+            [$a, $m] = array_pad(explode('-', $periodo), 2, '');
+            return ($meses[$m] ?? $m) . ' ' . $a;
+        }
+        return $periodo !== '' ? date('d-m-Y', strtotime($periodo)) : '—';
+    }
+
+    /** Vista Anticipos: saldo por cliente/proveedor. */
+    private function renderAnticipos(array $rows): string
+    {
+        if (empty($rows)) {
+            return '<tr><td colspan="8" class="text-center py-5 text-muted"><i class="bi bi-piggy-bank fs-3 d-block mb-2"></i>Sin anticipos para los filtros seleccionados.</td></tr>';
+        }
+        $h = '';
+        foreach ($rows as $r) {
+            $fin = (float)($r['saldo_final'] ?? 0);
+            $h .= '<tr>'
+                . '<td>' . $this->badgeFlujo($r['tipo_flujo']) . '</td>'
+                . '<td class="fw-medium">' . htmlspecialchars($r['tercero_nombre'] ?? '—') . '<div class="small text-muted">' . htmlspecialchars($r['tercero_ident'] ?? '') . '</div></td>'
+                . '<td class="text-end">$' . number_format((float)($r['saldo_anterior'] ?? 0), 2) . '</td>'
+                . '<td class="text-end text-success">$' . number_format((float)($r['recibido'] ?? 0), 2) . '</td>'
+                . '<td class="text-end text-warning-emphasis">$' . number_format((float)($r['aplicado'] ?? 0), 2) . '</td>'
+                . '<td class="text-end fw-bold ' . ($fin < 0 ? 'text-danger' : 'text-primary') . '">$' . number_format($fin, 2) . '</td>'
+                . '</tr>';
+        }
+        return $h;
+    }
+
+    /** Vista Anticipos con un tercero elegido: saldo anterior y cada movimiento con su saldo. */
+    private function renderAnticiposMovimientos(array $mov): string
+    {
+        $fila = static fn (string $fecha, string $movimiento, string $num, string $forma, string $detalle, string $rec, string $apl, float $saldo, string $cls = ''): string =>
+            '<tr class="' . $cls . '">'
+            . '<td>' . $fecha . '</td><td>' . $movimiento . '</td>'
+            . '<td><code class="text-secondary">' . htmlspecialchars($num) . '</code></td>'
+            . '<td>' . htmlspecialchars($forma) . '</td>'
+            . '<td class="text-truncate text-muted" style="max-width:260px" title="' . htmlspecialchars($detalle) . '">' . htmlspecialchars($detalle) . '</td>'
+            . '<td class="text-end text-success">' . $rec . '</td>'
+            . '<td class="text-end text-warning-emphasis">' . $apl . '</td>'
+            . '<td class="text-end fw-bold ' . ($saldo < 0 ? 'text-danger' : 'text-primary') . '">$' . number_format($saldo, 2) . '</td>'
+            . '</tr>';
+        $h = $fila('', '<span class="fw-medium">Saldo anterior</span>', '', '', 'Saldos iniciales y movimientos antes del periodo', '', '', (float) $mov['saldo_anterior'], 'table-light');
+        foreach ($mov['movimientos'] as $m) {
+            $esApl = $m['origen'] === 'APLICADO';
+            $etq = $esApl
+                ? '<span class="badge bg-warning bg-opacity-10 text-warning-emphasis border border-warning border-opacity-25">Aplicado</span>'
+                : '<span class="badge bg-success bg-opacity-10 text-success border border-success border-opacity-25">' . ($m['tipo_flujo'] === 'INGRESO' ? 'Recibido' : 'Entregado') . '</span>';
+            $h .= $fila(
+                !empty($m['fecha']) ? date('d-m-Y', strtotime((string) $m['fecha'])) : '—',
+                $etq, (string) $m['numero'], (string) $m['forma'], (string) $m['detalle'],
+                $esApl ? '' : '$' . number_format((float) $m['recibido'], 2),
+                $esApl ? '$' . number_format((float) $m['aplicado'], 2) : '',
+                (float) $m['saldo']
+            );
+        }
+        if (empty($mov['movimientos'])) {
+            $h .= '<tr><td colspan="8" class="text-center py-3 text-muted">Sin movimientos de anticipo en el periodo.</td></tr>';
         }
         return $h;
     }
@@ -280,10 +369,13 @@ class ReporteIngresosEgresosController extends BaseModuloController
             $stats  = $this->repository->getEstadisticas($idEmpresa, $f);
             $dinero = fn($v) => ((float) $v < 0 ? '-$' : '$') . number_format(abs((float) $v), 2);
             $info   = $this->describirFiltros($idEmpresa, $f) + [
-                'Totales'  => sprintf('Ingresos %s (%d)  |  Egresos %s (%d)  |  Neto %s',
-                    $dinero($stats['total_ingresos'] ?? 0), (int)($stats['n_ingresos'] ?? 0),
-                    $dinero($stats['total_egresos'] ?? 0), (int)($stats['n_egresos'] ?? 0),
-                    $dinero($stats['neto'] ?? 0)),
+                'Totales'  => sprintf('Ingresos %s (%d)  |  Egresos %s (%d)',
+                    $dinero($stats['total_ingresos']), $stats['n_ingresos'],
+                    $dinero($stats['total_egresos']), $stats['n_egresos']),
+                'Aplicado con anticipo' => sprintf('Ingresos %s  |  Egresos %s',
+                    $dinero($stats['anticipo_ingresos']), $dinero($stats['anticipo_egresos'])),
+                'Dinero' => sprintf('Entrada %s  |  Salida %s  |  Neto %s',
+                    $dinero($stats['caja_ingresos']), $dinero($stats['caja_egresos']), $dinero($stats['neto'])),
                 'Generado' => date('d-m-Y H:i:s'),
             ];
 
@@ -304,12 +396,15 @@ class ReporteIngresosEgresosController extends BaseModuloController
                 }
             }
 
-            $modo = in_array($f['ver_por'], ['TERCERO', 'FORMA', 'FECHA', 'MES'], true) ? $f['ver_por'] : 'DETALLE';
+            $modo = in_array($f['ver_por'], self::VISTAS_RESUMEN, true) ? $f['ver_por'] : 'DETALLE';
             if ($modo !== 'DETALLE') {
                 $exp = $this->datosExport($idEmpresa, $f);
                 $formatos = [];
                 foreach ($exp['money'] as $i) { $formatos[$i + 1] = self::XL_DINERO; }
-                $hojaModo = match ($modo) { 'TERCERO' => 'Por tercero', 'FORMA' => 'Por forma de pago', 'FECHA' => 'Por día', default => 'Por mes' };
+                $hojaModo = match ($modo) {
+                    'TERCERO' => 'Por tercero', 'FORMA' => 'Por forma de pago', 'FECHA' => 'Por día',
+                    'ANTICIPOS' => 'Anticipos', default => 'Por mes',
+                };
                 $svc->agregarHoja($libro, $exp['headers'], $exp['data'], $hojaModo, $formatos);
             }
             $detalle = $this->hojaDetalle($idEmpresa, $f);
@@ -333,9 +428,10 @@ class ReporteIngresosEgresosController extends BaseModuloController
      */
     private function hojaResumen(int $idEmpresa, array $f): array
     {
-        // "Valor" es lo que movió caja; lo pagado con un anticipo va aparte porque ya
-        // se contó en el comprobante que recibió/entregó el anticipo.
-        $headers = ['Tipo', 'N° Ingreso/Egreso', 'Fecha', 'Cliente / Proveedor / Empleado', 'Valor', 'Anticipo aplicado', 'Detalle', 'Observaciones', 'Asesor'];
+        // "Valor" es el comprobante completo; aparte, cuánto se pagó con anticipo y
+        // cuánto fue entrada/salida de dinero (el anticipo ya movió dinero al registrarse).
+        $headers = ['Tipo', 'N° Ingreso/Egreso', 'Fecha', 'Cliente / Proveedor / Empleado', 'Valor', 'Anticipo aplicado',
+                    'Entrada/salida de dinero', 'Detalle', 'Observaciones', 'Asesor'];
         $data = [];
         foreach ($this->repository->getResumenExport($idEmpresa, $f) as $r) {
             $data[] = [
@@ -345,6 +441,7 @@ class ReporteIngresosEgresosController extends BaseModuloController
                 $r['tercero_nombre'],
                 (float) $r['valor'],
                 self::anticipoXl($r['anticipo']),
+                (float) $r['caja'],
                 $r['detalle'],
                 $r['observaciones'],
                 $r['asesor'],
@@ -353,8 +450,8 @@ class ReporteIngresosEgresosController extends BaseModuloController
         return [
             'headers'  => $headers,
             'data'     => $data,
-            'formatos' => [3 => self::XL_FECHA, 5 => self::XL_DINERO, 6 => self::XL_DINERO],
-            'ajustar'  => [7 => 60, 8 => 40], // columna (1-based) => ancho
+            'formatos' => [3 => self::XL_FECHA, 5 => self::XL_DINERO, 6 => self::XL_DINERO, 7 => self::XL_DINERO],
+            'ajustar'  => [8 => 60, 9 => 40], // columna (1-based) => ancho
         ];
     }
 
@@ -548,37 +645,62 @@ class ReporteIngresosEgresosController extends BaseModuloController
         switch ($f['ver_por']) {
             case 'TERCERO':
                 $rows = $this->repository->getReporteAgrupadoTercero($idEmpresa, $f);
-                $headers = ['Flujo', 'Tipo', 'Tercero', 'Identificación', 'Comprobantes', 'Documentos', 'Total'];
+                $headers = ['Flujo', 'Tipo', 'Tercero', 'Identificación', 'Comprobantes', 'Documentos', 'Total', 'Con anticipo', 'Entrada/salida de dinero'];
                 $data = array_map(fn($r) => [$fl($r['tipo_flujo']), ucfirst(strtolower($r['tercero_tipo'] ?? '')),
-                    $r['tercero_nombre'], $r['tercero_ident'], (int)$r['comprobantes'], (int)$r['documentos'], (float)$r['total']], $rows);
-                return ['headers' => $headers, 'data' => $data, 'right' => [4,5,6], 'money' => [6]];
+                    $r['tercero_nombre'], $r['tercero_ident'], (int)$r['comprobantes'], (int)$r['documentos'], (float)$r['total'],
+                    (float)$r['anticipo'], (float)$r['caja']], $rows);
+                return ['headers' => $headers, 'data' => $data, 'right' => [4,5,6,7,8], 'money' => [6,7,8]];
             case 'FORMA':
                 $rows = $this->repository->getReporteAgrupadoForma($idEmpresa, $f);
-                $headers = ['Flujo', 'Forma', 'Tipo', 'Comprobantes', 'Pagos', 'Total'];
+                $headers = ['Flujo', 'Forma', 'Tipo', 'Comprobantes', 'Pagos', 'Total', 'Entrada/salida de dinero'];
                 $data = array_map(fn($r) => [$fl($r['tipo_flujo']), $r['forma_nombre'], $r['forma_tipo'],
-                    (int)$r['comprobantes'], (int)$r['pagos_n'], (float)$r['total']], $rows);
+                    (int)$r['comprobantes'], (int)$r['pagos_n'], (float)$r['total'],
+                    empty($r['es_anticipo']) ? 'Sí' : 'No (anticipo aplicado)'], $rows);
                 return ['headers' => $headers, 'data' => $data, 'right' => [3,4,5], 'money' => [5]];
             case 'FECHA':
             case 'MES':
                 $esMes = $f['ver_por'] === 'MES';
                 $rows = $esMes ? $this->repository->getReporteAgrupadoMes($idEmpresa, $f)
                                : $this->repository->getReporteAgrupadoFecha($idEmpresa, $f);
-                $headers = [$esMes ? 'Mes' : 'Fecha', 'Ingresos', 'N° Ing.', 'Egresos', 'N° Egr.', 'Neto'];
-                $data = array_map(function ($r) use ($esMes) {
-                    $ing = (float)$r['ingresos']; $egr = (float)$r['egresos'];
-                    $etq = $esMes ? (string)$r['periodo'] : (!empty($r['periodo']) ? date('d-m-Y', strtotime((string)$r['periodo'])) : '');
-                    return [$etq, $ing, (int)$r['n_ing'], $egr, (int)$r['n_egr'], $ing - $egr];
-                }, $rows);
-                return ['headers' => $headers, 'data' => $data, 'right' => [1,2,3,4,5], 'money' => [1,3,5]];
+                $headers = [$esMes ? 'Mes' : 'Fecha', 'Ingresos', 'Ing. con anticipo', 'N° Ing.', 'Egresos', 'Egr. con anticipo', 'N° Egr.', 'Neto (dinero)'];
+                $data = array_map(fn($r) => [self::etiquetaPeriodo((string)$r['periodo'], $esMes ? 'MES' : 'FECHA'),
+                    (float)$r['ingresos'], (float)$r['ingresos_anticipo'], (int)$r['n_ing'],
+                    (float)$r['egresos'], (float)$r['egresos_anticipo'], (int)$r['n_egr'], (float)$r['neto']], $rows);
+                return ['headers' => $headers, 'data' => $data, 'right' => [1,2,3,4,5,6,7], 'money' => [1,2,4,5,7]];
+            case 'ANTICIPOS':
+                if ($this->anticiposDeUnTercero($f)) {
+                    $mov = $this->repository->getAnticiposMovimientos($idEmpresa, $f);
+                    $headers = ['Fecha', 'Movimiento', 'N° Comprobante', 'Forma / concepto', 'Detalle', 'Recibido/entregado', 'Aplicado', 'Saldo'];
+                    $data = [['', 'Saldo anterior', '', '', 'Saldos iniciales y movimientos antes del periodo', null, null, (float)$mov['saldo_anterior']]];
+                    foreach ($mov['movimientos'] as $m) {
+                        $data[] = [!empty($m['fecha']) ? date('d-m-Y', strtotime((string)$m['fecha'])) : '',
+                            self::nombreMovAnticipo($m), $m['numero'], $m['forma'], $m['detalle'],
+                            $m['origen'] === 'APLICADO' ? null : (float)$m['recibido'],
+                            $m['origen'] === 'APLICADO' ? (float)$m['aplicado'] : null, (float)$m['saldo']];
+                    }
+                    return ['headers' => $headers, 'data' => $data, 'right' => [5,6,7], 'money' => [5,6,7]];
+                }
+                $rows = $this->repository->getAnticiposResumen($idEmpresa, $f);
+                $headers = ['Flujo', 'Tercero', 'Identificación', 'Saldo anterior', 'Recibido/entregado', 'Aplicado', 'Saldo final'];
+                $data = array_map(fn($r) => [$fl($r['tipo_flujo']), $r['tercero_nombre'], $r['tercero_ident'],
+                    (float)$r['saldo_anterior'], (float)$r['recibido'], (float)$r['aplicado'], (float)$r['saldo_final']], $rows);
+                return ['headers' => $headers, 'data' => $data, 'right' => [3,4,5,6], 'money' => [3,4,5,6]];
             default:
                 $rows = $this->repository->getReporteDetallado($idEmpresa, $f, 0);
-                $headers = ['Flujo', 'Número', 'Fecha', 'Tercero', 'Asesor', 'Tipo Doc.', 'N° Documento', 'Descripción', 'Concepto', 'Estado', 'Monto'];
+                $headers = ['Flujo', 'Número', 'Fecha', 'Tercero', 'Asesor', 'Tipo Doc.', 'N° Documento', 'Descripción', 'Concepto', 'Estado', 'Monto', 'Anticipo aplicado'];
                 $data = array_map(fn($r) => [$fl($r['tipo_flujo']), $r['numero'],
                     !empty($r['fecha']) ? date('d-m-Y', strtotime($r['fecha'])) : '',
                     $r['tercero_nombre'], $r['vendedor'], $r['tipo_documento'], $r['numero_documento'],
-                    $r['descripcion'], $r['concepto'], ucfirst(strtolower($r['estado'] ?? '')), (float)$r['monto']], $rows);
-                return ['headers' => $headers, 'data' => $data, 'right' => [10], 'money' => [10]];
+                    $r['descripcion'], $r['concepto'], ucfirst(strtolower($r['estado'] ?? '')), (float)$r['monto'],
+                    self::anticipoXl($r['monto_anticipo'])], $rows);
+                return ['headers' => $headers, 'data' => $data, 'right' => [10,11], 'money' => [10,11]];
         }
+    }
+
+    /** "Recibido" / "Entregado" / "Aplicado" de un movimiento de anticipo. */
+    private static function nombreMovAnticipo(array $m): string
+    {
+        return $m['origen'] === 'APLICADO' ? 'Aplicado' : ($m['tipo_flujo'] === 'INGRESO' ? 'Recibido' : 'Entregado');
     }
 
     /**
@@ -596,25 +718,39 @@ class ReporteIngresosEgresosController extends BaseModuloController
         $f = $this->getFiltros();
 
         try {
-            $modo  = in_array($f['ver_por'], ['TERCERO', 'FORMA', 'FECHA', 'MES'], true) ? $f['ver_por'] : 'DETALLE';
-            $filas = match ($modo) {
-                'TERCERO' => $this->repository->getReporteAgrupadoTercero($idEmpresa, $f),
-                'FORMA'   => $this->repository->getReporteAgrupadoForma($idEmpresa, $f),
-                'FECHA'   => $this->repository->getReporteAgrupadoFecha($idEmpresa, $f),
-                'MES'     => $this->repository->getReporteAgrupadoMes($idEmpresa, $f),
-                default   => $this->repository->getReporteDetallado($idEmpresa, $f, 0),
-            };
-            $stats   = $this->repository->getEstadisticas($idEmpresa, $f);
+            $modo = in_array($f['ver_por'], self::VISTAS_RESUMEN, true) ? $f['ver_por'] : 'DETALLE';
+            if ($modo === 'ANTICIPOS' && $this->anticiposDeUnTercero($f)) {
+                // Movimientos de un tercero: primero la fila del saldo anterior.
+                $modo  = 'ANTICIPOS_MOV';
+                $mov   = $this->repository->getAnticiposMovimientos($idEmpresa, $f);
+                $filas = array_merge([['fecha' => null, 'origen' => 'SALDO_ANTERIOR', 'tipo_flujo' => '', 'numero' => '', 'forma' => '',
+                    'detalle' => 'Saldos iniciales y movimientos antes del periodo', 'recibido' => 0, 'aplicado' => 0,
+                    'saldo' => $mov['saldo_anterior']]], $mov['movimientos']);
+            } else {
+                $filas = match ($modo) {
+                    'TERCERO'   => $this->repository->getReporteAgrupadoTercero($idEmpresa, $f),
+                    'FORMA'     => $this->repository->getReporteAgrupadoForma($idEmpresa, $f),
+                    'FECHA'     => $this->repository->getReporteAgrupadoFecha($idEmpresa, $f),
+                    'MES'       => $this->repository->getReporteAgrupadoMes($idEmpresa, $f),
+                    'ANTICIPOS' => $this->repository->getAnticiposResumen($idEmpresa, $f),
+                    default     => $this->repository->getReporteDetallado($idEmpresa, $f, 0),
+                };
+            }
             $empresa = (new \App\models\Empresa())->getPorId($idEmpresa) ?? [];
+            $indicadores = str_starts_with($modo, 'ANTICIPOS')
+                ? $this->indicadoresAnticiposPdf($modo, $filas, $mov ?? null)
+                : $this->indicadoresPdf($this->repository->getEstadisticas($idEmpresa, $f), $f['tipo_flujo']);
 
-            $horizontal = $modo === 'DETALLE';
+            $horizontal = in_array($modo, ['DETALLE', 'ANTICIPOS_MOV'], true);
             $pt         = $horizontal ? 7.0 : 8.0;
             $cols       = \App\Helpers\ReportePdf::completarAnchos($this->columnasPdf($modo, $f, $horizontal, $pt));
 
             [$titulo, $subtitulo] = $this->tituloPdf($idEmpresa, $modo, $f);
             $sustantivo = match ($modo) {
                 'TERCERO' => ['tercero', 'terceros'], 'FORMA' => ['forma de cobro/pago', 'formas de cobro/pago'],
-                'FECHA'   => ['día', 'días'], 'MES' => ['mes', 'meses'], default => ['línea', 'líneas'],
+                'FECHA'   => ['día', 'días'], 'MES' => ['mes', 'meses'],
+                'ANTICIPOS' => ['cliente/proveedor', 'clientes/proveedores'], 'ANTICIPOS_MOV' => ['fila', 'filas'],
+                default => ['línea', 'líneas'],
             };
             $n = count($filas);
             $etiquetaTotal = "TOTALES ({$n} " . ($n === 1 ? $sustantivo[0] : $sustantivo[1]) . ')';
@@ -622,7 +758,7 @@ class ReporteIngresosEgresosController extends BaseModuloController
             $html = \App\Helpers\ReportePdf::pagina($pt,
                 \App\Helpers\ReportePdf::encabezado($idEmpresa, (string) ($empresa['nombre'] ?? ''), $titulo, $subtitulo)
                 . \App\Helpers\ReportePdf::filtros($this->describirFiltros($idEmpresa, $f))
-                . \App\Helpers\ReportePdf::indicadores($this->indicadoresPdf($stats, $f['tipo_flujo']))
+                . \App\Helpers\ReportePdf::indicadores($indicadores)
                 . \App\Helpers\ReportePdf::listado($cols, $filas, $etiquetaTotal)
             );
 
@@ -650,7 +786,8 @@ class ReporteIngresosEgresosController extends BaseModuloController
         };
         $titulo .= match ($modo) {
             'TERCERO' => ' · Por tercero', 'FORMA' => ' · Por forma de cobro/pago',
-            'FECHA'   => ' · Por día', 'MES' => ' · Por mes', default => '',
+            'FECHA'   => ' · Por día', 'MES' => ' · Por mes',
+            'ANTICIPOS', 'ANTICIPOS_MOV' => ' · Anticipos', default => '',
         };
         $sub = [];
         if ($f['id_vendedor'] > 0) {
@@ -664,19 +801,37 @@ class ReporteIngresosEgresosController extends BaseModuloController
         return [$titulo, implode(' · ', $sub)];
     }
 
-    /** Banda de indicadores: solo los del flujo que se muestra. */
+    /**
+     * Banda de indicadores: solo los del flujo que se muestra. Ingresos/egresos son lo
+     * cobrado/pagado completo; aparte, lo aplicado con anticipo y la entrada/salida de
+     * dinero, que es con lo que se calcula el neto.
+     */
     private function indicadoresPdf(array $stats, string $flujo): array
     {
         $d    = static fn ($v): string => ((float) $v < 0 ? '-$' : '$') . number_format(abs((float) $v), 2);
-        $nIng = (int) ($stats['n_ingresos'] ?? 0);
-        $nEgr = (int) ($stats['n_egresos'] ?? 0);
-        $ing  = ['INGRESOS (' . $nIng . ' comprob.)', $d($stats['total_ingresos'] ?? 0), false, '#146c43'];
-        $egr  = ['EGRESOS (' . $nEgr . ' comprob.)',  $d($stats['total_egresos'] ?? 0),  false, '#b02a37'];
+        $nIng = $stats['n_ingresos'];
+        $nEgr = $stats['n_egresos'];
+        $ing  = ['INGRESOS (' . $nIng . ' comprob.)', $d($stats['total_ingresos']), false, '#146c43'];
+        $egr  = ['EGRESOS (' . $nEgr . ' comprob.)',  $d($stats['total_egresos']),  false, '#b02a37'];
         return match ($flujo) {
-            'INGRESO' => [['COMPROBANTES', (string) $nIng], ['LÍNEAS', (string) (int) ($stats['n_documentos'] ?? 0)], $ing],
-            'EGRESO'  => [['COMPROBANTES', (string) $nEgr], ['LÍNEAS', (string) (int) ($stats['n_documentos'] ?? 0)], $egr],
-            default   => [['COMPROBANTES', (string) ($nIng + $nEgr)], $ing, $egr, ['NETO', $d($stats['neto'] ?? 0), true]],
+            'INGRESO' => [['COMPROBANTES', (string) $nIng], $ing, ['CON ANTICIPO', $d($stats['anticipo_ingresos'])],
+                          ['ENTRADA DE DINERO', $d($stats['caja_ingresos']), true]],
+            'EGRESO'  => [['COMPROBANTES', (string) $nEgr], $egr, ['CON ANTICIPO', $d($stats['anticipo_egresos'])],
+                          ['SALIDA DE DINERO', $d($stats['caja_egresos']), true]],
+            default   => [$ing, $egr, ['ENTRADA DE DINERO', $d($stats['caja_ingresos'])], ['SALIDA DE DINERO', $d($stats['caja_egresos'])],
+                          ['NETO (DINERO)', $d($stats['neto']), true]],
         };
+    }
+
+    /** Indicadores de la vista Anticipos: saldo anterior, recibido, aplicado y saldo final. */
+    private function indicadoresAnticiposPdf(string $modo, array $filas, ?array $mov): array
+    {
+        $d = static fn ($v): string => ((float) $v < 0 ? '-$' : '$') . number_format(abs((float) $v), 2);
+        $suma = static fn (string $campo): float => array_sum(array_map(static fn ($r) => (float) ($r[$campo] ?? 0), $filas));
+        $anterior = $modo === 'ANTICIPOS_MOV' ? (float) $mov['saldo_anterior'] : $suma('saldo_anterior');
+        $final    = $modo === 'ANTICIPOS_MOV' ? (float) $mov['saldo_final']    : $suma('saldo_final');
+        return [['SALDO ANTERIOR', $d($anterior)], ['RECIBIDO / ENTREGADO', $d($suma('recibido')), false, '#146c43'],
+                ['APLICADO', $d($suma('aplicado')), false, '#997404'], ['SALDO FINAL', $d($final), true]];
     }
 
     /**
@@ -693,42 +848,73 @@ class ReporteIngresosEgresosController extends BaseModuloController
         $ambos = !in_array($f['tipo_flujo'], ['INGRESO', 'EGRESO'], true);
 
         // Monto de la fila en la columna de su flujo (con ambos flujos) o en una sola columna.
-        // Lo pagado con anticipo no suma (ya se contó al recibir/entregar el anticipo): en
-        // el detalle va como nota bajo el monto y la fila de la forma ANTICIPO queda entre
-        // paréntesis y fuera del total.
-        $sumaFila = static fn (array $r, string $campo): float => !empty($r['es_anticipo']) ? 0.0 : (float) ($r[$campo] ?? 0);
-        $celda = static function (array $r, string $campo) use ($num): string {
-            if (!empty($r['es_anticipo'])) {
-                return '(' . $num($r[$campo] ?? 0) . ')<br><i>no suma</i>';
-            }
+        // El monto va completo; lo pagado con anticipo se anota debajo (detalle) o se marca
+        // en la forma ANTICIPO, y va aparte en las columnas "c/ anticipo" y "dinero".
+        $celda = static function (array $r, string $campo, bool $negrita) use ($num): string {
+            $v   = $num($r[$campo] ?? 0);
             $ant = (float) ($r['monto_anticipo'] ?? 0);
-            return '<b>' . $num($r[$campo] ?? 0) . '</b>' . ($ant > 0.004 ? '<br><i>ant. ' . $num($ant) . '</i>' : '');
+            return ($negrita ? "<b>$v</b>" : $v)
+                . (!empty($r['es_anticipo']) ? '<br><i>anticipo aplicado</i>' : '')
+                . ($ant > 0.004 ? '<br><i>ant. ' . $num($ant) . '</i>' : '');
         };
-        $montos = static function (string $campo, float $w) use ($ambos, $f, $sumar, $sumaFila, $celda): array {
+        $montos = static function (string $campo, float $w, string $sufijo = '', bool $negrita = true) use ($ambos, $f, $sumar, $celda): array {
             if (!$ambos) {
-                return [['lbl' => $f['tipo_flujo'] === 'INGRESO' ? 'Ingreso' : 'Egreso', 'w' => $w * 2, 'cls' => 'text-end',
-                         'tot' => $sumar(static fn ($r) => $sumaFila($r, $campo)),
-                         'val' => static fn (array $r): string => $celda($r, $campo)]];
+                return [['lbl' => ($f['tipo_flujo'] === 'INGRESO' ? 'Ingreso' : 'Egreso') . $sufijo, 'w' => $w * 2, 'cls' => 'text-end',
+                         'tot' => $sumar(static fn ($r) => (float) ($r[$campo] ?? 0)),
+                         'val' => static fn (array $r): string => $celda($r, $campo, $negrita)]];
             }
-            $col = static fn (string $flujo, string $lbl) => ['lbl' => $lbl, 'w' => $w, 'cls' => 'text-end',
-                'tot' => $sumar(static fn ($r) => ($r['tipo_flujo'] ?? '') === $flujo ? $sumaFila($r, $campo) : 0.0),
-                'val' => static fn (array $r): string => ($r['tipo_flujo'] ?? '') === $flujo ? $celda($r, $campo) : ''];
+            $col = static fn (string $flujo, string $lbl) => ['lbl' => $lbl . $sufijo, 'w' => $w, 'cls' => 'text-end',
+                'tot' => $sumar(static fn ($r) => ($r['tipo_flujo'] ?? '') === $flujo ? (float) ($r[$campo] ?? 0) : 0.0),
+                'val' => static fn (array $r): string => ($r['tipo_flujo'] ?? '') === $flujo ? $celda($r, $campo, $negrita) : ''];
             return [$col('INGRESO', 'Ingreso'), $col('EGRESO', 'Egreso')];
         };
+        $dinero = static fn (string $campo, string $lbl, float $w, bool $neg = false): array => ['lbl' => $lbl, 'w' => $w, 'cls' => 'text-end',
+            'tot' => $sumar(static fn ($r) => (float) ($r[$campo] ?? 0)),
+            'val' => static fn (array $r): string => $neg ? '<b>' . $num($r[$campo] ?? 0) . '</b>' : $num($r[$campo] ?? 0)];
+
+        if ($modo === 'ANTICIPOS') {
+            return [
+                ['lbl' => 'Flujo', 'w' => 9, 'cls' => '',
+                 'val' => static fn (array $r): string => ($r['tipo_flujo'] ?? '') === 'INGRESO' ? 'Cliente' : 'Proveedor'],
+                ['lbl' => 'Cliente / Proveedor', 'w' => 31, 'cls' => '', 'flex' => true, 'val' => $txt('tercero_nombre', 31)],
+                ['lbl' => 'Identificación', 'w' => 12, 'cls' => '', 'val' => $txt('tercero_ident', 12)],
+                $dinero('saldo_anterior', 'Saldo anterior', 12),
+                $dinero('recibido', 'Recibido / entregado', 12),
+                $dinero('aplicado', 'Aplicado', 12),
+                $dinero('saldo_final', 'Saldo final', 12, true),
+            ];
+        }
+
+        if ($modo === 'ANTICIPOS_MOV') {
+            $saldo = $dinero('saldo', 'Saldo', 9, true);
+            unset($saldo['tot']); // el saldo es corrido, no se suma
+            return [
+                ['lbl' => 'Fecha', 'w' => 7, 'cls' => 'text-center',
+                 'val' => static fn (array $r): string => !empty($r['fecha']) ? date('d-m-Y', strtotime((string) $r['fecha'])) : ''],
+                ['lbl' => 'Movimiento', 'w' => 9, 'cls' => '',
+                 'val' => static fn (array $r): string => $r['origen'] === 'SALDO_ANTERIOR' ? '<b>Saldo anterior</b>' : self::nombreMovAnticipo($r)],
+                ['lbl' => 'N° Comprobante', 'w' => 11, 'cls' => '', 'val' => $txt('numero', 11)],
+                ['lbl' => 'Forma / concepto', 'w' => 14, 'cls' => '', 'val' => $txt('forma', 14)],
+                ['lbl' => 'Detalle', 'w' => 28, 'cls' => '', 'flex' => true, 'val' => $txt('detalle', 28)],
+                $dinero('recibido', 'Recibido / entregado', 11),
+                $dinero('aplicado', 'Aplicado', 11),
+                $saldo,
+            ];
+        }
 
         if ($modo === 'TERCERO') {
             return array_merge([
-                ['lbl' => 'Tipo', 'w' => 11, 'cls' => '',
+                ['lbl' => 'Tipo', 'w' => 8, 'cls' => '',
                  'val' => static fn (array $r): string => htmlspecialchars(ucfirst(strtolower((string) ($r['tercero_tipo'] ?? ''))))],
-                ['lbl' => 'Tercero', 'w' => 35, 'cls' => '', 'flex' => true, 'val' => $txt('tercero_nombre', 35)],
-                ['lbl' => 'Identificación', 'w' => 14, 'cls' => '', 'val' => $txt('tercero_ident', 14)],
-                ['lbl' => 'Comprobantes', 'w' => 10, 'cls' => 'text-center', 'fmt' => $ent,
+                ['lbl' => 'Tercero', 'w' => 24, 'cls' => '', 'flex' => true, 'val' => $txt('tercero_nombre', 24)],
+                ['lbl' => 'Identificación', 'w' => 11, 'cls' => '', 'val' => $txt('tercero_ident', 11)],
+                ['lbl' => 'Comprob.', 'w' => 7, 'cls' => 'text-center', 'fmt' => $ent,
                  'tot' => $sumar(static fn ($r) => (float) ($r['comprobantes'] ?? 0)),
                  'val' => static fn (array $r): string => (string) (int) ($r['comprobantes'] ?? 0)],
-                ['lbl' => 'Documentos', 'w' => 10, 'cls' => 'text-center', 'fmt' => $ent,
+                ['lbl' => 'Docs.', 'w' => 6, 'cls' => 'text-center', 'fmt' => $ent,
                  'tot' => $sumar(static fn ($r) => (float) ($r['documentos'] ?? 0)),
                  'val' => static fn (array $r): string => (string) (int) ($r['documentos'] ?? 0)],
-            ], $montos('total', 10));
+            ], $montos('total', 7, '', false), $montos('anticipo', 7, ' c/ anticipo', false), $montos('caja', 7, ' dinero'));
         }
 
         if ($modo === 'FORMA') {
@@ -757,9 +943,11 @@ class ReporteIngresosEgresosController extends BaseModuloController
                     return '<b>' . ($p !== '' ? date('d-m-Y', strtotime($p)) : '—') . '</b>';
                 }]];
             $flujo = static fn (string $campo, string $campoN, string $lbl, string $lblN) => [
-                ['lbl' => $lbl, 'w' => 18, 'cls' => 'text-end', 'tot' => $sumar(static fn ($r) => (float) ($r[$campo] ?? 0)),
+                ['lbl' => $lbl, 'w' => 14, 'cls' => 'text-end', 'tot' => $sumar(static fn ($r) => (float) ($r[$campo] ?? 0)),
                  'val' => static fn (array $r): string => $num($r[$campo] ?? 0)],
-                ['lbl' => $lblN, 'w' => 12, 'cls' => 'text-center', 'fmt' => $ent, 'tot' => $sumar(static fn ($r) => (float) ($r[$campoN] ?? 0)),
+                ['lbl' => 'c/ anticipo', 'w' => 11, 'cls' => 'text-end', 'tot' => $sumar(static fn ($r) => (float) ($r[$campo . '_anticipo'] ?? 0)),
+                 'val' => static fn (array $r): string => $num($r[$campo . '_anticipo'] ?? 0)],
+                ['lbl' => $lblN, 'w' => 8, 'cls' => 'text-center', 'fmt' => $ent, 'tot' => $sumar(static fn ($r) => (float) ($r[$campoN] ?? 0)),
                  'val' => static fn (array $r): string => (string) (int) ($r[$campoN] ?? 0)],
             ];
             if ($f['tipo_flujo'] !== 'EGRESO') {
@@ -768,11 +956,12 @@ class ReporteIngresosEgresosController extends BaseModuloController
             if ($f['tipo_flujo'] !== 'INGRESO') {
                 $cols = array_merge($cols, $flujo('egresos', 'n_egr', 'Egresos', 'N° Egr.'));
             }
-            if ($ambos) {
-                $neto = static fn (array $r): float => (float) ($r['ingresos'] ?? 0) - (float) ($r['egresos'] ?? 0);
-                $cols[] = ['lbl' => 'Neto', 'w' => 18, 'cls' => 'text-end', 'tot' => $sumar($neto),
-                           'val' => static fn (array $r): string => '<b>' . $num($neto($r)) . '</b>'];
-            }
+            // Columna de dinero: el neto con ambos flujos; la entrada o salida con uno solo.
+            $cols[] = match ($f['tipo_flujo']) {
+                'INGRESO' => $dinero('ingresos_caja', 'Entrada de dinero', 14, true),
+                'EGRESO'  => $dinero('egresos_caja', 'Salida de dinero', 14, true),
+                default   => $dinero('neto', 'Neto (dinero)', 14, true),
+            };
             return $cols;
         }
 

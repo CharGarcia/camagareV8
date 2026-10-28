@@ -5,7 +5,7 @@ categoria: Reportes
 ruta_modulo: modulos/reporte_ingresos_egresos
 tipo: modulo
 visibilidad: todos
-etiquetas: reporte de ingresos y egresos, anulados, ingresos anulados, egresos anulados, vigentes, movimiento de dinero, cobros y pagos, por tercero, forma de pago, concepto, vendedor, asesor, cobros por vendedor, comisiones, asesor del cliente, otros conceptos, saldo inicial, saldos iniciales, exportar, excel detallado, pdf, imprimir, logo en el pdf, totales en el pdf, reporte de ingresos por vendedor, reporte de egresos, pdf por vendedor, anticipo, anticipos, anticipo aplicado, cruce de anticipo, ingresos repetidos, ingreso duplicado, doble conteo
+etiquetas: reporte de ingresos y egresos, anulados, ingresos anulados, egresos anulados, vigentes, movimiento de dinero, cobros y pagos, por tercero, forma de pago, concepto, vendedor, asesor, cobros por vendedor, comisiones, asesor del cliente, otros conceptos, saldo inicial, saldos iniciales, exportar, excel detallado, pdf, imprimir, logo en el pdf, totales en el pdf, reporte de ingresos por vendedor, reporte de egresos, pdf por vendedor, anticipo, anticipos, anticipo aplicado, cruce de anticipo, ingresos repetidos, ingreso duplicado, doble conteo, saldo de anticipos, anticipos por cliente, anticipos de proveedores, anticipos recibidos, anticipos entregados, entrada de dinero, salida de dinero, flujo de caja
 version: 1.9
 orden: 30
 estado: activo
@@ -47,34 +47,75 @@ Para revisar los anulados, elija **Anulados** en el filtro *Estado*: el reporte
 muestra entonces solo esos. Nunca se mezclan vigentes y anulados en un mismo
 resultado.
 
-## Anticipos aplicados: no se cuentan dos veces
+## Cobrado, aplicado con anticipo y entrada de dinero
 
 Un anticipo pasa por dos comprobantes:
 
 1. **Cuando el cliente entrega el anticipo** (o la empresa se lo entrega al
    proveedor) se registra un ingreso (o egreso) con un concepto de anticipo. Ahí
-   **sí entra (o sale) dinero**, y el reporte lo suma.
+   **sí entra (o sale) dinero**.
 2. **Cuando ese anticipo se aplica a una factura** (o a una compra) se registra
    otro ingreso (o egreso) que la cancela con la forma de cobro/pago de tipo
-   **Anticipo**. Ese comprobante **no mueve caja**: el dinero ya se contó en el
-   paso 1.
+   **Anticipo**. Ese comprobante cancela la factura, pero **no mueve dinero**: el
+   dinero ya entró en el paso 1.
 
-Por eso, lo cobrado o pagado con una forma de tipo Anticipo **no suma** en el
-reporte:
+Si el reporte sumara los dos, el mismo dinero saldría dos veces. Por eso muestra
+tres valores por separado, arriba en los indicadores:
 
-- **Vista Documento**: la línea se sigue viendo (para saber qué factura se canceló
-  con el anticipo), con monto **$0.00** y la marca **Anticipo aplicado $…** debajo.
-  Si el comprobante se pagó una parte con anticipo y otra en efectivo u otra forma,
-  el monto es solo esa otra parte; con varias líneas, lo aplicado se reparte entre
-  ellas en proporción a su valor.
-- **Totales, Tercero, Fecha y Mes**: no suman lo aplicado del anticipo. Un
-  comprobante pagado entero con anticipo tampoco cuenta en el número de
-  comprobantes.
-- **Forma de cobro/pago**: la forma de tipo Anticipo aparece con su valor, en gris
-  y con la nota *no suma*; en el PDF va entre paréntesis y fuera de la fila TOTALES.
-- **Excel**: las hojas *Ingresos y Egresos*, *Detalle completo* y *Cobros y pagos*
-  llevan una columna **Anticipo aplicado** aparte de *Ingreso* / *Egreso*, y el
-  detalle del comprobante indica *(anticipo aplicado $…)*.
+| Indicador | Qué suma |
+|-----------|----------|
+| **Ingresos cobrados / Egresos pagados** | Todo, como en los módulos de Ingresos y Egresos, incluido lo pagado con anticipo |
+| **Aplicado con anticipo** | La parte cancelada con una forma de tipo Anticipo |
+| **Entrada / salida de dinero** | Cobrado (o pagado) menos lo aplicado con anticipo |
+| **Neto (dinero)** | Entrada de dinero menos salida de dinero |
+
+Con *Ingresos y Egresos* juntos, *Aplicado con anticipo* y *Entrada / salida de
+dinero* muestran dos valores: ingresos / egresos.
+
+En cada forma de ver:
+
+- **Documento**: cada línea con su **monto completo**; si se pagó con anticipo,
+  debajo aparece la marca **Anticipo aplicado $…**. Si el comprobante se pagó una
+  parte con anticipo y otra en efectivo u otra forma, la marca muestra solo la
+  parte del anticipo; con varias líneas, se reparte entre ellas en proporción a su
+  valor.
+- **Tercero**: columnas *Total*, *Con anticipo* y *Entrada/salida de dinero*.
+- **Fecha** y **Mes**: ingresos y egresos con su columna *Con anticipo*; el
+  **Neto** es de dinero.
+- **Forma de cobro/pago**: cada forma con su total real; la de tipo Anticipo va
+  marcada *no es entrada/salida de dinero*.
+- **Excel**: las hojas *Ingresos y Egresos* (columnas *Anticipo aplicado* y
+  *Entrada/salida de dinero*), *Detalle completo* y *Cobros y pagos* (columna
+  *Anticipo aplicado*); arriba, los totales de cobrado, aplicado con anticipo y
+  dinero.
+
+Así, al filtrar por la forma de cobro **Anticipo**, el reporte muestra lo que se
+canceló con anticipos (*Ingresos cobrados*), y *Entrada de dinero* queda en cero o
+en la parte pagada con otras formas.
+
+## Anticipos: saldos por cliente y proveedor
+
+En **Ver por → Anticipos (saldos)** el reporte muestra, por cliente (anticipos
+recibidos) y por proveedor (anticipos entregados):
+
+| Columna | Qué es |
+|---------|--------|
+| **Saldo anterior** | Saldos iniciales de anticipos y todo lo recibido menos lo aplicado antes de la fecha *Desde* |
+| **Recibido / entregado** | Ingresos (o egresos) del periodo con un concepto de anticipo |
+| **Aplicado** | Lo cobrado (o pagado) en el periodo con la forma de tipo Anticipo |
+| **Saldo final** | Saldo anterior + recibido − aplicado: lo que aún queda a favor |
+
+- **Con un cliente o proveedor elegido** en el filtro *Tercero*, la vista muestra
+  **sus movimientos**: una fila de saldo anterior y cada anticipo recibido o
+  aplicado (con la factura que canceló), con el saldo después de cada uno.
+- Esta vista usa solo las **fechas**, **Mostrar** (ingresos, egresos o ambos), el
+  **cliente/proveedor** y la **búsqueda** por nombre o identificación. Siempre son
+  comprobantes vigentes. Los demás filtros no la afectan.
+- Usa las mismas fuentes que la pestaña **Anticipos** de la ficha del cliente o
+  proveedor y que el saldo de la forma de cobro tipo Anticipo, así que los saldos
+  cuadran entre esas pantallas (salvo que la empresa esté en ambiente de pruebas:
+  el reporte, como todos, cuenta solo documentos de producción).
+- El PDF y el Excel salen con la misma tabla (hoja *Anticipos* en el Excel).
 
 ## Filtro por vendedor: cuánto cobró cada vendedor
 
@@ -119,6 +160,9 @@ las hojas del Excel.
 - **Forma de cobro/pago**: cuánto entró y salió por cada forma (efectivo, cada
   banco, tarjeta…).
 - **Fecha** y **Mes**: ingresos, egresos y neto por día o por mes.
+- **Anticipos (saldos)**: saldo anterior, recibido/entregado, aplicado y saldo
+  final de anticipos por cliente y proveedor (ver *Anticipos: saldos por cliente
+  y proveedor*).
 
 ## Exportar a Excel y PDF
 
@@ -131,7 +175,7 @@ El **Excel** sale en varias hojas:
   **observaciones** y **asesor**. Arriba lleva los filtros aplicados (periodo,
   vendedor, tercero…) y los totales de ingresos, egresos y neto. El valor de cada
   fila es la suma de sus líneas que cumplen los filtros, así cuadra con los totales.
-- **Por tercero / Por forma de pago / Por día / Por mes**: solo cuando en pantalla
+- **Por tercero / Por forma de pago / Por día / Por mes / Anticipos**: solo cuando en pantalla
   está esa forma de ver; es el mismo resumen que se ve.
 - **Detalle completo**: una fila por cada línea de cada comprobante, con número,
   fecha, estado, concepto, tercero e identificación, vendedor, documento cobrado o
@@ -157,8 +201,10 @@ Reporte de Ventas:
   Si se filtró por **vendedor** o por un **tercero**, su nombre va debajo del
   título (*Vendedor: Juan Pérez*).
 - **Caja "Filtros aplicados"** con el periodo y todos los filtros usados.
-- **Banda de indicadores**: comprobantes, total de ingresos, total de egresos y
-  neto (con un solo flujo, solo los de ese flujo).
+- **Banda de indicadores**: ingresos cobrados, egresos pagados, entrada y salida
+  de dinero y neto (con un solo flujo: comprobantes, lo cobrado o pagado, lo
+  aplicado con anticipo y la entrada o salida de dinero). En la vista Anticipos:
+  saldo anterior, recibido/entregado, aplicado y saldo final.
 - **Las columnas que un filtro deja con un único valor no se repiten en cada
   fila**: al filtrar por vendedor desaparece la columna *Asesor*; al elegir un
   tercero, la de *Cliente / Proveedor / Empleado*; al elegir un concepto o un
@@ -188,11 +234,16 @@ cobró cada vendedor, qué movimientos hubo por encima de cierto monto.
   solo aparece con el filtro *Estado* en *Anulados*.
 - **Los totales no cuadran con el flujo de caja**: compruebe si tiene filtros
   activos que estén acotando el resultado.
-- **Un cobro sale en $0.00 con la marca "Anticipo aplicado"**: es lo esperado; se
-  pagó con un anticipo que ya sumó cuando se recibió (ver *Anticipos aplicados*).
-- **Los totales no cuadran con el módulo de Ingresos o Egresos**: esos módulos
-  muestran el total de cada comprobante, incluido lo pagado con anticipo; este
-  reporte no lo suma para no contar dos veces el mismo dinero.
+- **Un cliente aparece dos veces el mismo día por el mismo valor**: suele ser el
+  ingreso que recibió el anticipo y el que lo aplicó a la factura. Son dos
+  comprobantes distintos; el segundo lleva la marca *Anticipo aplicado* y no suma
+  en *Entrada de dinero*.
+- **La entrada de dinero no cuadra con el módulo de Ingresos o Egresos**: esos
+  módulos muestran el total de cada comprobante, incluido lo pagado con anticipo.
+  Compárelos con *Ingresos cobrados* / *Egresos pagados*, que sí lo incluyen.
+- **El saldo de anticipos no cuadra con la ficha del cliente**: revise si la
+  empresa está en ambiente de pruebas; el reporte cuenta solo documentos de
+  producción.
 - **Al elegir un vendedor no aparecen egresos**: es lo esperado; los egresos no
   tienen vendedor.
 - **Falta un cobro de un vendedor**: revise que la factura cobrada tenga ese
@@ -203,13 +254,15 @@ cobró cada vendedor, qué movimientos hubo por encima de cierto monto.
 
 ## Historial de cambios
 
-- **1.9** — Los **anticipos aplicados ya no se cuentan dos veces**: lo cobrado o
-  pagado con una forma de tipo Anticipo no suma en totales, vistas resumidas,
-  Excel ni PDF, porque ese dinero ya se contó al recibir o entregar el anticipo.
-  En la vista Documento la línea se sigue viendo, marcada *Anticipo aplicado*, y
-  el Excel trae una columna **Anticipo aplicado**. Además, el reporte **ya no se
-  carga solo al entrar** ni al presionar *Limpiar*: los datos salen al presionar
-  **Buscar**.
+- **1.9** — Los **anticipos aplicados ya no se cuentan dos veces**: los
+  indicadores separan *Ingresos cobrados / Egresos pagados* (todo, como en los
+  módulos), *Aplicado con anticipo* y *Entrada / salida de dinero*; el **Neto**
+  es de dinero. Las vistas Tercero, Fecha y Mes, el Excel y el PDF traen las
+  mismas columnas, y en la vista Documento las líneas pagadas con anticipo llevan
+  la marca *Anticipo aplicado*. Nueva forma de ver **Anticipos (saldos)**: saldo
+  anterior, recibido, aplicado y saldo final por cliente y proveedor, o los
+  movimientos de uno solo. Además, el reporte **ya no se carga solo al entrar** ni
+  al presionar *Limpiar*: los datos salen al presionar **Buscar**.
 - **1.8** — Los ingresos y egresos **anulados ya no aparecen ni suman** en el
   reporte. El filtro *Estado* ofrece *Vigentes* (por defecto) o *Anulados*; se
   quitó la opción *Todos*, que los mezclaba en los totales.

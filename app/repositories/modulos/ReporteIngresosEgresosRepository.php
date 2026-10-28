@@ -39,12 +39,6 @@ class ReporteIngresosEgresosRepository extends BaseRepository
     private const SIN_RAMAS = " WHERE c.id_empresa = :id_empresa AND 1=0";
 
     /**
-     * La línea mueve caja: no se pagó entera con anticipo. Los conteos de comprobantes
-     * no cuentan el que solo aplica un anticipo (su dinero se contó al recibirlo).
-     */
-    private const MUEVE_CAJA = "(monto_anticipo < 0.005 OR monto > 0.004)";
-
-    /**
      * Condición de pago vigente en egresos_pagos (alias dado): excluye los pagos
      * eliminados lógicamente (formas de pago reemplazadas al editar) y los cheques
      * anulados, que se conservan como historial pero no cuentan.
@@ -55,11 +49,11 @@ class ReporteIngresosEgresosRepository extends BaseRepository
     }
 
     /**
-     * Lo cobrado/pagado con una forma tipo ANTICIPO por comprobante. Ese dinero ya se
-     * contó cuando entró (o salió) el anticipo —un ingreso/egreso con opción
+     * Lo cobrado/pagado con una forma tipo ANTICIPO por comprobante. Ese dinero ya
+     * entró (o salió) cuando se registró el anticipo —un ingreso/egreso con opción
      * ANTICIPO_CLIENTE/PROVEEDOR—; el comprobante que lo aplica a una factura o compra
-     * no mueve caja, así que el reporte no lo vuelve a sumar. Solo recorre los pagos de
-     * las formas ANTICIPO de la empresa.
+     * no mueve dinero. El reporte muestra el monto completo de cada línea y, aparte,
+     * cuánto de él fue anticipo y cuánto entrada/salida de dinero (monto_caja).
      */
     private static function anticipoPorComprobante(string $flujo): string
     {
@@ -269,9 +263,9 @@ class ReporteIngresosEgresosRepository extends BaseRepository
                            d.tipo_documento AS tipo_documento,
                            d.numero_documento AS numero_documento,
                            d.descripcion    AS descripcion,
-                           d.monto_cobrado - " . self::montoAnticipoLinea('d.monto_cobrado') . " AS monto,
-                           d.monto_cobrado  AS monto_linea,
+                           d.monto_cobrado  AS monto,
                            " . self::montoAnticipoLinea('d.monto_cobrado') . " AS monto_anticipo,
+                           d.monto_cobrado - " . self::montoAnticipoLinea('d.monto_cobrado') . " AS monto_caja,
                            c.observaciones  AS observaciones,
                            d.id             AS id_detalle,
                            ven.nombre       AS vendedor$extraCols
@@ -314,9 +308,9 @@ class ReporteIngresosEgresosRepository extends BaseRepository
                        d.tipo_documento AS tipo_documento,
                        d.numero_documento AS numero_documento,
                        d.descripcion    AS descripcion,
-                       d.monto_pagado - " . self::montoAnticipoLinea('d.monto_pagado') . " AS monto,
-                       d.monto_pagado   AS monto_linea,
+                       d.monto_pagado   AS monto,
                        " . self::montoAnticipoLinea('d.monto_pagado') . " AS monto_anticipo,
+                       d.monto_pagado - " . self::montoAnticipoLinea('d.monto_pagado') . " AS monto_caja,
                        c.observaciones  AS observaciones,
                        d.id             AS id_detalle,
                        NULL::varchar    AS vendedor$extraCols
@@ -572,12 +566,13 @@ class ReporteIngresosEgresosRepository extends BaseRepository
         $linea = "CASE WHEN tipo_documento = 'OTRO' THEN COALESCE(NULLIF(descripcion, ''), 'Otros conceptos')
                        ELSE tipo_documento || COALESCE(' ' || NULLIF(numero_documento, ''), '')
                             || COALESCE(' · ' || NULLIF(descripcion, ''), '') END
-                  || ' \$' || to_char(monto_linea, 'FM999999990.00')
+                  || ' \$' || to_char(monto, 'FM999999990.00')
                   || CASE WHEN monto_anticipo > 0.004
                           THEN ' (anticipo aplicado \$' || to_char(monto_anticipo, 'FM999999990.00') || ')' ELSE '' END";
         $sql = "SELECT tipo_flujo, id_comprobante, numero, fecha, tercero_tipo, tercero_nombre, tercero_ident,
                        SUM(monto) AS valor,
-                       SUM(monto_anticipo) AS anticipo,
+                       ROUND(SUM(monto_anticipo), 2) AS anticipo,
+                       ROUND(SUM(monto_caja), 2)     AS caja,
                        string_agg($linea, E'\\n' ORDER BY id_detalle) AS detalle,
                        MAX(observaciones) AS observaciones,
                        string_agg(DISTINCT vendedor, ', ' ORDER BY vendedor) AS asesor
@@ -595,7 +590,9 @@ class ReporteIngresosEgresosRepository extends BaseRepository
         $sql = "SELECT tipo_flujo, tercero_tipo, tercero_nombre, MAX(tercero_ident) AS tercero_ident,
                        COUNT(DISTINCT id_comprobante) AS comprobantes,
                        COUNT(*)                       AS documentos,
-                       SUM(monto)                     AS total
+                       SUM(monto)                     AS total,
+                       ROUND(SUM(monto_anticipo), 2)  AS anticipo,
+                       ROUND(SUM(monto_caja), 2)      AS caja
                 FROM ( $union ) r WHERE 1=1 $textoWhere
                 GROUP BY tipo_flujo, tercero_tipo, tercero_nombre
                 ORDER BY tipo_flujo, total DESC";
@@ -647,34 +644,239 @@ class ReporteIngresosEgresosRepository extends BaseRepository
     {
         [$union, $params] = $this->armarUnion($idEmpresa, $f);
         $textoWhere = $this->filtroTexto($f, $params);
-        $caja = self::MUEVE_CAJA;
-        $sql = "SELECT $expr AS $alias,
-                    COALESCE(SUM(CASE WHEN tipo_flujo='INGRESO' THEN monto ELSE 0 END), 0) AS ingresos,
-                    COALESCE(SUM(CASE WHEN tipo_flujo='EGRESO'  THEN monto ELSE 0 END), 0) AS egresos,
-                    COUNT(DISTINCT CASE WHEN tipo_flujo='INGRESO' AND $caja THEN id_comprobante END) AS n_ing,
-                    COUNT(DISTINCT CASE WHEN tipo_flujo='EGRESO'  AND $caja THEN id_comprobante END) AS n_egr
+        $sql = "SELECT $expr AS $alias, " . self::SUMAS_FLUJO . "
                 FROM ( $union ) r WHERE 1=1 $textoWhere
                 GROUP BY $expr
                 ORDER BY $alias DESC";
-        return $this->q($sql, $params)->fetchAll(PDO::FETCH_ASSOC);
+        return array_map([self::class, 'conNeto'], $this->q($sql, $params)->fetchAll(PDO::FETCH_ASSOC));
     }
 
-    /** Totales: ingresos, egresos, neto y conteos. */
+    /**
+     * Sumas por flujo de las filas del UNION (alias r): lo cobrado/pagado completo,
+     * la parte aplicada con anticipo y la entrada/salida de dinero, más los conteos.
+     */
+    private const SUMAS_FLUJO = "
+                    COALESCE(SUM(CASE WHEN tipo_flujo='INGRESO' THEN monto ELSE 0 END), 0) AS ingresos,
+                    COALESCE(SUM(CASE WHEN tipo_flujo='EGRESO'  THEN monto ELSE 0 END), 0) AS egresos,
+                    ROUND(COALESCE(SUM(CASE WHEN tipo_flujo='INGRESO' THEN monto_anticipo ELSE 0 END), 0), 2) AS ingresos_anticipo,
+                    ROUND(COALESCE(SUM(CASE WHEN tipo_flujo='EGRESO'  THEN monto_anticipo ELSE 0 END), 0), 2) AS egresos_anticipo,
+                    COUNT(DISTINCT CASE WHEN tipo_flujo='INGRESO' THEN id_comprobante END) AS n_ing,
+                    COUNT(DISTINCT CASE WHEN tipo_flujo='EGRESO'  THEN id_comprobante END) AS n_egr";
+
+    /**
+     * Completa entrada/salida de dinero (cobrado − anticipo) y el neto. El neto es de
+     * dinero: lo aplicado con anticipo ya entró o salió al registrar el anticipo.
+     */
+    private static function conNeto(array $r): array
+    {
+        $r['ingresos_caja'] = round((float) $r['ingresos'] - (float) $r['ingresos_anticipo'], 2);
+        $r['egresos_caja']  = round((float) $r['egresos']  - (float) $r['egresos_anticipo'], 2);
+        $r['neto']          = round($r['ingresos_caja'] - $r['egresos_caja'], 2);
+        return $r;
+    }
+
+    /**
+     * Totales: cobrado/pagado completo, aplicado con anticipo, entrada/salida de dinero,
+     * neto (de dinero) y conteos.
+     */
     public function getEstadisticas(int $idEmpresa, array $f): array
     {
         [$union, $params] = $this->armarUnion($idEmpresa, $f);
         $textoWhere = $this->filtroTexto($f, $params);
-        $caja = self::MUEVE_CAJA;
-        $sql = "SELECT
-                    COALESCE(SUM(CASE WHEN tipo_flujo='INGRESO' THEN monto ELSE 0 END), 0) AS total_ingresos,
-                    COALESCE(SUM(CASE WHEN tipo_flujo='EGRESO'  THEN monto ELSE 0 END), 0) AS total_egresos,
-                    COUNT(DISTINCT CASE WHEN tipo_flujo='INGRESO' AND $caja THEN id_comprobante END) AS n_ingresos,
-                    COUNT(DISTINCT CASE WHEN tipo_flujo='EGRESO'  AND $caja THEN id_comprobante END) AS n_egresos,
-                    COUNT(*) AS n_documentos
+        $sql = "SELECT " . self::SUMAS_FLUJO . ", COUNT(*) AS n_documentos
                 FROM ( $union ) r WHERE 1=1 $textoWhere";
-        $row = $this->q($sql, $params)->fetch(PDO::FETCH_ASSOC) ?: [];
-        $row['neto'] = (float)($row['total_ingresos'] ?? 0) - (float)($row['total_egresos'] ?? 0);
-        return $row;
+        $r = self::conNeto($this->q($sql, $params)->fetch(PDO::FETCH_ASSOC) ?: [
+            'ingresos' => 0, 'egresos' => 0, 'ingresos_anticipo' => 0, 'egresos_anticipo' => 0,
+            'n_ing' => 0, 'n_egr' => 0, 'n_documentos' => 0,
+        ]);
+        return [
+            'total_ingresos'    => (float) $r['ingresos'],
+            'total_egresos'     => (float) $r['egresos'],
+            'anticipo_ingresos' => (float) $r['ingresos_anticipo'],
+            'anticipo_egresos'  => (float) $r['egresos_anticipo'],
+            'caja_ingresos'     => $r['ingresos_caja'],
+            'caja_egresos'      => $r['egresos_caja'],
+            'neto'              => $r['neto'],
+            'n_ingresos'        => (int) $r['n_ing'],
+            'n_egresos'         => (int) $r['n_egr'],
+            'n_documentos'      => (int) $r['n_documentos'],
+        ];
+    }
+
+    // ── Vista Anticipos ───────────────────────────────────────────────────────
+
+    /**
+     * Movimientos de anticipos (alias m) con las mismas fuentes que la pestaña
+     * "Anticipos" de la ficha y el saldo de la forma de cobro/pago
+     * (FormaPagoRepository::sqlMovimientosAnticipo): saldo inicial, recibido/entregado
+     * (ingreso/egreso con opción ANTICIPO_CLIENTE/PROVEEDOR) y aplicado (cobro/pago con
+     * forma tipo ANTICIPO). Para todos los terceros, solo documentos de producción
+     * (regla de reportes) y siempre vigentes. El tercero del comprobante es el cliente
+     * o "recibí de" (ingresos) y el proveedor (egresos).
+     */
+    private function sqlMovimientosAnticipos(array $f): string
+    {
+        $ramas = [];
+        foreach ($this->flujosAnticipos($f) as $flujo) {
+            if ($flujo === 'INGRESO') {
+                $vig = "c.id_empresa = :id_empresa AND c.eliminado = false AND c.tipo_ambiente = " . self::AMB
+                     . " AND LOWER(COALESCE(c.estado, '')) <> 'anulado'";
+                $ramas[] = "SELECT 'INGRESO'::varchar AS tipo_flujo, a.id_cliente AS id_tercero, a.fecha_saldo::date AS fecha,
+                                   'SALDO_INICIAL'::varchar AS origen, ''::varchar AS numero, COALESCE(fp.nombre, '')::varchar AS forma,
+                                   COALESCE(a.observaciones, '')::text AS detalle, a.saldo_inicial AS monto, 0 AS id_doc
+                            FROM saldos_iniciales_anticipos a
+                            LEFT JOIN empresa_formas_pago fp ON fp.id = a.id_forma_pago
+                            WHERE a.id_empresa = :id_empresa AND a.eliminado = false AND a.id_cliente IS NOT NULL";
+                $ramas[] = "SELECT 'INGRESO', COALESCE(c.id_cliente, c.id_recibo_cliente), c.fecha_emision::date,
+                                   'RECIBIDO', c.numero_ingreso, o.nombre,
+                                   COALESCE(NULLIF(c.observaciones, ''), o.nombre, '')::text, c.monto_total, c.id
+                            FROM ingresos_cabecera c
+                            INNER JOIN empresa_opciones_ingreso_egreso o ON o.id = c.id_ingreso_concepto AND o.comportamiento = 'ANTICIPO_CLIENTE'
+                            WHERE $vig";
+                $ramas[] = "SELECT 'INGRESO', COALESCE(c.id_cliente, c.id_recibo_cliente), c.fecha_emision::date,
+                                   'APLICADO', c.numero_ingreso, fp.nombre,
+                                   COALESCE((SELECT string_agg(d.tipo_documento || COALESCE(' ' || d.numero_documento, ''), ', ' ORDER BY d.id)
+                                               FROM ingresos_detalle d WHERE d.id_ingreso = c.id), '')::text,
+                                   p.monto, c.id
+                            FROM ingresos_pagos p
+                            INNER JOIN empresa_formas_pago fp ON fp.id = p.id_forma_cobro AND fp.tipo = 'ANTICIPO'
+                            INNER JOIN ingresos_cabecera c ON c.id = p.id_ingreso
+                            WHERE $vig";
+            } else {
+                $vig = "c.id_empresa = :id_empresa AND c.eliminado = false AND c.tipo_ambiente = " . self::AMB
+                     . " AND LOWER(COALESCE(c.estado, '')) <> 'anulado'";
+                $ramas[] = "SELECT 'EGRESO'::varchar, a.id_proveedor, a.fecha_saldo::date,
+                                   'SALDO_INICIAL'::varchar, ''::varchar, COALESCE(fp.nombre, '')::varchar,
+                                   COALESCE(a.observaciones, '')::text, a.saldo_inicial, 0
+                            FROM saldos_iniciales_anticipos a
+                            LEFT JOIN empresa_formas_pago fp ON fp.id = a.id_forma_pago
+                            WHERE a.id_empresa = :id_empresa AND a.eliminado = false AND a.id_proveedor IS NOT NULL";
+                $ramas[] = "SELECT 'EGRESO', c.id_proveedor, c.fecha_emision::date,
+                                   'RECIBIDO', c.numero_egreso, o.nombre,
+                                   COALESCE(NULLIF(c.observaciones, ''), o.nombre, '')::text, c.monto_total, c.id
+                            FROM egresos_cabecera c
+                            INNER JOIN empresa_opciones_ingreso_egreso o ON o.id = c.id_egreso_concepto AND o.comportamiento = 'ANTICIPO_PROVEEDOR'
+                            WHERE $vig";
+                $ramas[] = "SELECT 'EGRESO', c.id_proveedor, c.fecha_emision::date,
+                                   'APLICADO', c.numero_egreso, fp.nombre,
+                                   COALESCE((SELECT string_agg(d.tipo_documento || COALESCE(' ' || d.numero_documento, ''), ', ' ORDER BY d.id)
+                                               FROM egresos_detalle d WHERE d.id_egreso = c.id AND d.eliminado = false), '')::text,
+                                   p.monto, c.id
+                            FROM egresos_pagos p
+                            INNER JOIN empresa_formas_pago fp ON fp.id = p.id_forma_pago AND fp.tipo = 'ANTICIPO'
+                            INNER JOIN egresos_cabecera c ON c.id = p.id_egreso
+                            WHERE $vig" . self::pagoVigente('p');
+            }
+        }
+        // Ningún flujo aplica (p. ej. un empleado elegido): resultado vacío consistente.
+        return $ramas ? implode("\n UNION ALL \n", $ramas)
+            : "SELECT 'INGRESO'::varchar AS tipo_flujo, 0 AS id_tercero, NULL::date AS fecha, ''::varchar AS origen,
+                      ''::varchar AS numero, ''::varchar AS forma, ''::text AS detalle, 0::numeric AS monto, 0 AS id_doc
+               WHERE CAST(:id_empresa AS int) IS NULL";
+    }
+
+    /**
+     * Flujos de la vista Anticipos según los filtros: clientes (ingresos) y/o
+     * proveedores (egresos). Los empleados no tienen anticipos en este circuito.
+     */
+    private function flujosAnticipos(array $f): array
+    {
+        $flujos = match (strtoupper($f['tipo_flujo'] ?? 'AMBOS')) {
+            'INGRESO' => ['INGRESO'], 'EGRESO' => ['EGRESO'], default => ['INGRESO', 'EGRESO'],
+        };
+        if (!empty($f['tercero_tipo'])) {
+            $flujos = array_values(array_intersect($flujos, match ($f['tercero_tipo']) {
+                'CLIENTE' => ['INGRESO'], 'PROVEEDOR' => ['EGRESO'], default => [],
+            }));
+        }
+        return $flujos;
+    }
+
+    /**
+     * Saldos de anticipos por tercero: saldo anterior (saldos iniciales y todo lo
+     * anterior a "desde"), recibido/entregado y aplicado en el periodo, y saldo final.
+     */
+    public function getAnticiposResumen(int $idEmpresa, array $f): array
+    {
+        $params = [':id_empresa' => $idEmpresa];
+        $mov = $this->sqlMovimientosAnticipos($f);
+        [$antes, $enPeriodo, $where] = $this->periodoAnticipos($f, $params);
+        $sql = "SELECT * FROM (
+                    SELECT m.tipo_flujo, m.id_tercero,
+                           CASE WHEN m.tipo_flujo = 'INGRESO' THEN 'CLIENTE' ELSE 'PROVEEDOR' END AS tercero_tipo,
+                           COALESCE(cl.nombre, pr.razon_social, '— Sin cliente/proveedor —') AS tercero_nombre,
+                           COALESCE(cl.identificacion, pr.identificacion, '') AS tercero_ident,
+                           ROUND(COALESCE(SUM(CASE WHEN $antes THEN CASE WHEN m.origen = 'APLICADO' THEN -m.monto ELSE m.monto END END), 0), 2) AS saldo_anterior,
+                           ROUND(COALESCE(SUM(CASE WHEN m.origen = 'RECIBIDO' AND $enPeriodo THEN m.monto END), 0), 2) AS recibido,
+                           ROUND(COALESCE(SUM(CASE WHEN m.origen = 'APLICADO' AND $enPeriodo THEN m.monto END), 0), 2) AS aplicado,
+                           COUNT(CASE WHEN m.origen <> 'SALDO_INICIAL' AND $enPeriodo THEN 1 END) AS movimientos
+                    FROM ( $mov ) m
+                    LEFT JOIN clientes    cl ON m.tipo_flujo = 'INGRESO' AND cl.id = m.id_tercero
+                    LEFT JOIN proveedores pr ON m.tipo_flujo = 'EGRESO'  AND pr.id = m.id_tercero
+                    WHERE $where
+                    GROUP BY m.tipo_flujo, m.id_tercero, cl.nombre, pr.razon_social, cl.identificacion, pr.identificacion
+                ) r
+                WHERE (saldo_anterior <> 0 OR recibido <> 0 OR aplicado <> 0) " . $this->filtroTexto($f, $params, ['tercero_nombre', 'tercero_ident']) . "
+                ORDER BY tipo_flujo, tercero_nombre";
+        return array_map(static function (array $r): array {
+            $r['saldo_final'] = round((float) $r['saldo_anterior'] + (float) $r['recibido'] - (float) $r['aplicado'], 2);
+            return $r;
+        }, $this->q($sql, $params)->fetchAll(PDO::FETCH_ASSOC));
+    }
+
+    /**
+     * Movimientos de anticipos de un tercero (filtro Cliente/Proveedor elegido): una
+     * fila "Saldo anterior" y luego cada recibido/aplicado del periodo con su saldo.
+     */
+    public function getAnticiposMovimientos(int $idEmpresa, array $f): array
+    {
+        $params = [':id_empresa' => $idEmpresa];
+        $mov = $this->sqlMovimientosAnticipos($f);
+        [$antes, $enPeriodo, $where] = $this->periodoAnticipos($f, $params);
+        $sql = "SELECT m.*, ($antes) AS es_anterior
+                FROM ( $mov ) m
+                WHERE $where
+                ORDER BY ($antes) DESC, m.fecha, CASE m.origen WHEN 'SALDO_INICIAL' THEN 0 WHEN 'RECIBIDO' THEN 1 ELSE 2 END, m.id_doc";
+        // Primero lo que va al saldo anterior; luego los del periodo con su saldo corrido.
+        $anterior = 0.0;
+        $saldo    = 0.0;
+        $filas    = [];
+        foreach ($this->q($sql, $params)->fetchAll(PDO::FETCH_ASSOC) as $m) {
+            $aplica = $m['origen'] === 'APLICADO';
+            if (!empty($m['es_anterior'])) {
+                $anterior = $saldo = round($saldo + ($aplica ? -1 : 1) * (float) $m['monto'], 2);
+                continue;
+            }
+            $m['recibido'] = $aplica ? 0.0 : (float) $m['monto'];
+            $m['aplicado'] = $aplica ? (float) $m['monto'] : 0.0;
+            $m['saldo']    = $saldo = round($saldo + $m['recibido'] - $m['aplicado'], 2);
+            $filas[] = $m;
+        }
+        return ['saldo_anterior' => $anterior, 'movimientos' => $filas, 'saldo_final' => $saldo];
+    }
+
+    /**
+     * Piezas de periodo de la vista Anticipos: [condición "va al saldo anterior",
+     * condición "movimiento del periodo", WHERE común (tercero y "hasta")]. Los saldos
+     * iniciales siempre van al saldo anterior.
+     */
+    private function periodoAnticipos(array $f, array &$params): array
+    {
+        $antes = "m.origen = 'SALDO_INICIAL'";
+        $where = "m.id_tercero IS NOT NULL";
+        if (!empty($f['fecha_desde'])) {
+            $antes .= " OR m.fecha < :adesde";
+            $params[':adesde'] = $f['fecha_desde'];
+        }
+        if (!empty($f['fecha_hasta'])) {
+            $where .= " AND (m.origen = 'SALDO_INICIAL' OR m.fecha <= :ahasta)";
+            $params[':ahasta'] = $f['fecha_hasta'];
+        }
+        if (!empty($f['tercero_id']) && !empty($f['tercero_tipo'])) {
+            $where .= " AND m.id_tercero = :atercero";
+            $params[':atercero'] = (int) $f['tercero_id'];
+        }
+        return ["($antes)", "NOT ($antes)", $where];
     }
 
     // ── Catálogos para los filtros ────────────────────────────────────────────

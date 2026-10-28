@@ -41,6 +41,7 @@
                             <option value="FORMA">Forma de cobro/pago</option>
                             <option value="FECHA">Fecha (total por día)</option>
                             <option value="MES">Mes</option>
+                            <option value="ANTICIPOS">Anticipos (saldos)</option>
                         </select>
                     </div>
                     <div>
@@ -152,25 +153,39 @@
         </div>
         <div class="card-footer bg-white border-top py-2 px-3">
             <div class="cmg-control-card__stats">
-                <div class="cmg-control-card__stat">
+                <div class="cmg-control-card__stat" title="Todo lo cobrado, incluido lo pagado con anticipo (como en el módulo de Ingresos)">
                     <i class="bi bi-arrow-down-circle bg-success bg-opacity-10 text-success"></i>
                     <div>
                         <div class="cmg-control-card__stat-value text-success" id="rie-kpi-ing">$0.00</div>
-                        <div class="cmg-control-card__stat-label">Ingresos <span id="rie-n-ing"></span></div>
+                        <div class="cmg-control-card__stat-label">Ingresos cobrados <span id="rie-n-ing"></span></div>
                     </div>
                 </div>
-                <div class="cmg-control-card__stat">
+                <div class="cmg-control-card__stat" title="Todo lo pagado, incluido lo pagado con anticipo (como en el módulo de Egresos)">
                     <i class="bi bi-arrow-up-circle bg-danger bg-opacity-10 text-danger"></i>
                     <div>
                         <div class="cmg-control-card__stat-value text-danger" id="rie-kpi-egr">$0.00</div>
-                        <div class="cmg-control-card__stat-label">Egresos <span id="rie-n-egr"></span></div>
+                        <div class="cmg-control-card__stat-label">Egresos pagados <span id="rie-n-egr"></span></div>
                     </div>
                 </div>
-                <div class="cmg-control-card__stat">
+                <div class="cmg-control-card__stat" title="Parte cancelada con la forma de tipo Anticipo: el dinero entró o salió cuando se registró el anticipo">
+                    <i class="bi bi-piggy-bank bg-warning bg-opacity-10 text-warning"></i>
+                    <div>
+                        <div class="cmg-control-card__stat-value text-warning-emphasis" id="rie-kpi-ant">$0.00</div>
+                        <div class="cmg-control-card__stat-label">Aplicado con anticipo <span id="rie-kpi-ant-det" class="text-muted"></span></div>
+                    </div>
+                </div>
+                <div class="cmg-control-card__stat" title="Cobrado − aplicado con anticipo / pagado − aplicado con anticipo">
+                    <i class="bi bi-cash-stack bg-info bg-opacity-10 text-info"></i>
+                    <div>
+                        <div class="cmg-control-card__stat-value text-info-emphasis" id="rie-kpi-dinero">$0.00</div>
+                        <div class="cmg-control-card__stat-label">Entrada / salida de dinero</div>
+                    </div>
+                </div>
+                <div class="cmg-control-card__stat" title="Entrada de dinero − salida de dinero">
                     <i class="bi bi-calculator bg-primary bg-opacity-10 text-primary"></i>
                     <div>
                         <div class="cmg-control-card__stat-value text-primary" id="rie-kpi-neto">$0.00</div>
-                        <div class="cmg-control-card__stat-label">Neto (Ing − Egr)</div>
+                        <div class="cmg-control-card__stat-label">Neto (dinero)</div>
                     </div>
                 </div>
             </div>
@@ -185,6 +200,10 @@
                     <button type="button" class="btn btn-outline-danger" id="rieBtnPdf" disabled><i class="bi bi-file-earmark-pdf"></i> PDF</button>
                     <button type="button" class="btn btn-outline-success" id="rieBtnExcel" disabled><i class="bi bi-file-earmark-spreadsheet"></i> Excel</button>
                 </div>
+                <span id="rie-nota-anticipos" class="small text-muted d-none">
+                    <i class="bi bi-info-circle me-1"></i>Anticipos usa solo las fechas, Mostrar, el cliente/proveedor y la búsqueda.
+                    Elija un cliente o proveedor para ver sus movimientos.
+                </span>
             </div>
         </div>
         <div class="card-body p-0">
@@ -199,7 +218,8 @@
                         <tr id="rie-head-tercero" class="d-none">
                             <th class="ps-3">Flujo</th><th>Tipo</th><th>Tercero</th>
                             <th class="text-center">Comprobantes</th><th class="text-center">Documentos</th>
-                            <th class="text-end pe-3">Total</th>
+                            <th class="text-end">Total</th><th class="text-end">Con anticipo</th>
+                            <th class="text-end pe-3">Entrada/salida de dinero</th>
                         </tr>
                         <tr id="rie-head-forma" class="d-none">
                             <th class="ps-3">Flujo</th><th>Forma</th><th>Tipo</th>
@@ -208,9 +228,19 @@
                         </tr>
                         <tr id="rie-head-periodo" class="d-none">
                             <th class="ps-3" id="rie-th-periodo">Fecha</th>
-                            <th class="text-end">Ingresos</th><th class="text-center">N° Ing.</th>
-                            <th class="text-end">Egresos</th><th class="text-center">N° Egr.</th>
-                            <th class="text-end pe-3">Neto</th>
+                            <th class="text-end">Ingresos</th><th class="text-end">Con anticipo</th><th class="text-center">N° Ing.</th>
+                            <th class="text-end">Egresos</th><th class="text-end">Con anticipo</th><th class="text-center">N° Egr.</th>
+                            <th class="text-end pe-3">Neto (dinero)</th>
+                        </tr>
+                        <tr id="rie-head-anticipos" class="d-none">
+                            <th class="ps-3">Flujo</th><th>Cliente / Proveedor</th>
+                            <th class="text-end">Saldo anterior</th><th class="text-end">Recibido / entregado</th>
+                            <th class="text-end">Aplicado</th><th class="text-end pe-3">Saldo final</th>
+                        </tr>
+                        <tr id="rie-head-anticipos-mov" class="d-none">
+                            <th class="ps-3">Fecha</th><th>Movimiento</th><th>N° Comprobante</th><th>Forma / concepto</th>
+                            <th>Detalle</th><th class="text-end">Recibido / entregado</th><th class="text-end">Aplicado</th>
+                            <th class="text-end pe-3">Saldo</th>
                         </tr>
                     </thead>
                     <tbody id="rie-tbody">
@@ -259,6 +289,11 @@
         const esPeriodo = (vp === 'FECHA' || vp === 'MES');
         $('rie-head-periodo').classList.toggle('d-none', !esPeriodo);
         if (esPeriodo) $('rie-th-periodo').textContent = (vp === 'MES') ? 'Mes' : 'Fecha';
+        // Anticipos: resumen por tercero o, con un cliente/proveedor elegido, sus movimientos
+        // (lo decide el servidor; se muestra el encabezado al llegar la respuesta).
+        $('rie-head-anticipos').classList.add('d-none');
+        $('rie-head-anticipos-mov').classList.add('d-none');
+        $('rie-nota-anticipos').classList.toggle('d-none', vp !== 'ANTICIPOS');
         tbody.innerHTML = `<tr><td colspan="10" class="text-center py-4 text-muted"><span class="spinner-border spinner-border-sm me-2"></span>Generando…</td></tr>`;
         $('rieBtnPdf').disabled = true; $('rieBtnExcel').disabled = true;
 
@@ -268,14 +303,24 @@
             const json = await res.json();
             if (!json.ok) { tbody.innerHTML = `<tr><td colspan="10" class="text-center text-danger py-4">${json.mensaje || 'Error'}</td></tr>`; return; }
 
+            if (vp === 'ANTICIPOS') {
+                $(json.movimientos_tercero ? 'rie-head-anticipos-mov' : 'rie-head-anticipos').classList.remove('d-none');
+            }
             tbody.innerHTML = json.rows;
-            $('rie-kpi-ing').textContent  = money(json.stats.total_ingresos);
-            $('rie-kpi-egr').textContent  = money(json.stats.total_egresos);
-            $('rie-kpi-neto').textContent = money(json.stats.neto);
-            $('rie-n-ing').textContent = '(' + json.stats.n_ingresos + ')';
-            $('rie-n-egr').textContent = '(' + json.stats.n_egresos + ')';
-            $('rie-kpi-neto').classList.toggle('text-primary', json.stats.neto >= 0);
-            $('rie-kpi-neto').classList.toggle('text-danger', json.stats.neto < 0);
+            const s = json.stats;
+            $('rie-kpi-ing').textContent  = money(s.total_ingresos);
+            $('rie-kpi-egr').textContent  = money(s.total_egresos);
+            $('rie-n-ing').textContent = '(' + s.n_ingresos + ')';
+            $('rie-n-egr').textContent = '(' + s.n_egresos + ')';
+            // Anticipo y dinero: el valor del flujo elegido o, con ambos, "ingresos / egresos".
+            const par = (ing, egr) => f.tipo_flujo === 'INGRESO' ? money(ing)
+                : f.tipo_flujo === 'EGRESO' ? money(egr) : money(ing) + ' / ' + money(egr);
+            $('rie-kpi-ant').textContent    = par(s.anticipo_ingresos, s.anticipo_egresos);
+            $('rie-kpi-dinero').textContent = par(s.caja_ingresos, s.caja_egresos);
+            $('rie-kpi-ant-det').textContent = f.tipo_flujo === 'AMBOS' ? '(ing. / egr.)' : '';
+            $('rie-kpi-neto').textContent = money(s.neto);
+            $('rie-kpi-neto').classList.toggle('text-primary', s.neto >= 0);
+            $('rie-kpi-neto').classList.toggle('text-danger', s.neto < 0);
 
             $('rieBtnPdf').disabled = json.total === 0;
             $('rieBtnExcel').disabled = json.total === 0;
@@ -329,12 +374,13 @@
     // Sin carga automática: el reporte se consulta solo al presionar Buscar (o Enter
     // en el buscador). Limpiar deja la tabla y los indicadores en blanco.
     function vaciar() {
-        ['rie-head-tercero', 'rie-head-forma', 'rie-head-periodo'].forEach(id => $(id).classList.add('d-none'));
+        ['rie-head-tercero', 'rie-head-forma', 'rie-head-periodo', 'rie-head-anticipos', 'rie-head-anticipos-mov', 'rie-nota-anticipos']
+            .forEach(id => $(id).classList.add('d-none'));
         $('rie-head-detalle').classList.remove('d-none');
         $('rie-tbody').innerHTML = '<tr><td colspan="10" class="text-center py-5 text-muted"><i class="bi bi-funnel fs-3 d-block mb-2"></i>Ajuste los filtros y presione <strong>Buscar</strong>.</td></tr>';
-        ['rie-kpi-ing', 'rie-kpi-egr', 'rie-kpi-neto'].forEach(id => $(id).textContent = money(0));
+        ['rie-kpi-ing', 'rie-kpi-egr', 'rie-kpi-ant', 'rie-kpi-dinero', 'rie-kpi-neto'].forEach(id => $(id).textContent = money(0));
         $('rie-kpi-neto').classList.add('text-primary'); $('rie-kpi-neto').classList.remove('text-danger');
-        $('rie-n-ing').textContent = ''; $('rie-n-egr').textContent = '';
+        $('rie-n-ing').textContent = ''; $('rie-n-egr').textContent = ''; $('rie-kpi-ant-det').textContent = '';
         $('rieBtnPdf').disabled = true; $('rieBtnExcel').disabled = true;
     }
 })();
