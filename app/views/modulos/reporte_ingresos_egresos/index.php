@@ -26,7 +26,7 @@
 
                 <div class="d-flex flex-wrap align-items-start gap-2 mb-2">
                     <div>
-                        <label class="form-label small fw-bold mb-1 d-block text-muted text-uppercase" style="font-size:.65rem;">Mostrar</label>
+                        <label class="form-label small fw-bold mb-1 d-block text-muted text-uppercase" style="font-size:.65rem;">Mostrar<?= \App\Helpers\PreferenciasHelper::renderEstrellaFavorito($rutaModulo, 'rie-tipo-flujo', 'tipo_flujo') ?></label>
                         <select id="rie-tipo-flujo" class="form-select form-select-sm shadow-none border" style="width:150px;">
                             <option value="AMBOS">Ingresos y Egresos</option>
                             <option value="INGRESO">Solo Ingresos</option>
@@ -34,7 +34,7 @@
                         </select>
                     </div>
                     <div>
-                        <label class="form-label small fw-bold mb-1 d-block text-muted text-uppercase" style="font-size:.65rem;">Ver por</label>
+                        <label class="form-label small fw-bold mb-1 d-block text-muted text-uppercase" style="font-size:.65rem;">Ver por<?= \App\Helpers\PreferenciasHelper::renderEstrellaFavorito($rutaModulo, 'rie-ver-por', 'ver_por') ?></label>
                         <select id="rie-ver-por" class="form-select form-select-sm shadow-none border" style="width:170px;">
                             <option value="DETALLE">Documento (detalle)</option>
                             <option value="TERCERO">Tercero (resumen)</option>
@@ -45,17 +45,18 @@
                         </select>
                     </div>
                     <div>
-                        <label class="form-label small fw-bold mb-1 d-block text-muted text-uppercase" style="font-size:.65rem;">Estado</label>
+                        <label class="form-label small fw-bold mb-1 d-block text-muted text-uppercase" style="font-size:.65rem;">Estado<?= \App\Helpers\PreferenciasHelper::renderEstrellaFavorito($rutaModulo, 'rie-estado', 'estado') ?></label>
                         <select id="rie-estado" class="form-select form-select-sm shadow-none border" style="width:110px;">
                             <option value="VIGENTES" selected>Vigentes</option>
                             <option value="ANULADO">Anulados</option>
                         </select>
                     </div>
-                    <div title="Solo monetarios: deja fuera lo cobrado o pagado con formas de tipo Anticipo u Otros, que no entran ni salen de caja o bancos">
-                        <label class="form-label small fw-bold mb-1 d-block text-muted text-uppercase" style="font-size:.65rem;">Movimientos</label>
+                    <div title="Solo monetarios: deja fuera lo cobrado o pagado con formas que no mueven dinero (Anticipo, Otros). Solo no monetarios: muestra únicamente eso">
+                        <label class="form-label small fw-bold mb-1 d-block text-muted text-uppercase" style="font-size:.65rem;">Movimientos<?= \App\Helpers\PreferenciasHelper::renderEstrellaFavorito($rutaModulo, 'rie-movimientos', 'movimientos') ?></label>
                         <select id="rie-movimientos" class="form-select form-select-sm shadow-none border" style="width:140px;">
                             <option value="TODOS" selected>Todos</option>
                             <option value="MONETARIOS">Solo monetarios</option>
+                            <option value="NO_MONETARIOS">Solo no monetarios</option>
                         </select>
                     </div>
                     <div>
@@ -67,7 +68,7 @@
                         <input type="date" id="rie-fecha-hasta" class="form-control form-control-sm shadow-none border" style="width:115px;" value="<?= date('Y-m-d') ?>">
                     </div>
                     <div>
-                        <label class="form-label small fw-bold mb-1 d-block text-muted text-uppercase" style="font-size:.65rem;">Tipo de tercero</label>
+                        <label class="form-label small fw-bold mb-1 d-block text-muted text-uppercase" style="font-size:.65rem;">Tipo de tercero<?= \App\Helpers\PreferenciasHelper::renderEstrellaFavorito($rutaModulo, 'rie-tercero-tipo', 'tercero_tipo') ?></label>
                         <select id="rie-tercero-tipo" class="form-select form-select-sm shadow-none border" style="width:130px;">
                             <option value="">Todos</option>
                             <option value="CLIENTE">Cliente</option>
@@ -82,7 +83,7 @@
                         <div id="rie-tercero-drop" class="list-group shadow position-absolute w-100 d-none" style="z-index:1050;max-height:220px;overflow:auto;margin-top:2px;"></div>
                     </div>
                     <div>
-                        <label class="form-label small fw-bold mb-1 d-block text-muted text-uppercase" style="font-size:.65rem;">Vendedor</label>
+                        <label class="form-label small fw-bold mb-1 d-block text-muted text-uppercase" style="font-size:.65rem;">Vendedor<?= \App\Helpers\PreferenciasHelper::renderEstrellaFavorito($rutaModulo, 'rie-vendedor', 'vendedor') ?></label>
                         <select id="rie-vendedor" class="form-select form-select-sm shadow-none border" style="width:170px;"
                                 title="Cobros de las facturas y recibos de venta de este vendedor. Los egresos no tienen vendedor.">
                             <option value="0">Todos</option>
@@ -95,7 +96,7 @@
 
                 <div class="d-flex flex-wrap align-items-start gap-2 mb-2">
                     <div>
-                        <label class="form-label small fw-bold mb-1 d-block text-muted text-uppercase" style="font-size:.65rem;">Forma de cobro/pago</label>
+                        <label class="form-label small fw-bold mb-1 d-block text-muted text-uppercase" style="font-size:.65rem;">Forma de cobro/pago<?= \App\Helpers\PreferenciasHelper::renderEstrellaFavorito($rutaModulo, 'rie-forma', 'forma') ?></label>
                         <select id="rie-forma" class="form-select form-select-sm shadow-none border" style="width:170px;">
                             <option value="0">Todas</option>
                             <?php foreach ($formas as $fp): ?>
@@ -104,7 +105,7 @@
                         </select>
                     </div>
                     <div>
-                        <label class="form-label small fw-bold mb-1 d-block text-muted text-uppercase" style="font-size:.65rem;">Operación bancaria</label>
+                        <label class="form-label small fw-bold mb-1 d-block text-muted text-uppercase" style="font-size:.65rem;">Operación bancaria<?= \App\Helpers\PreferenciasHelper::renderEstrellaFavorito($rutaModulo, 'rie-opbanc', 'opbanc') ?></label>
                         <select id="rie-opbanc" class="form-select form-select-sm shadow-none border" style="width:150px;">
                             <option value="">Todas</option>
                             <option value="TRANSFERENCIA">Transferencia</option>
@@ -114,7 +115,7 @@
                         </select>
                     </div>
                     <div>
-                        <label class="form-label small fw-bold mb-1 d-block text-muted text-uppercase" style="font-size:.65rem;">Concepto</label>
+                        <label class="form-label small fw-bold mb-1 d-block text-muted text-uppercase" style="font-size:.65rem;">Concepto<?= \App\Helpers\PreferenciasHelper::renderEstrellaFavorito($rutaModulo, 'rie-concepto', 'concepto') ?></label>
                         <select id="rie-concepto" class="form-select form-select-sm shadow-none border" style="width:170px;">
                             <option value="0">Todos</option>
                             <?php foreach ($conceptos as $c): ?>
@@ -123,7 +124,7 @@
                         </select>
                     </div>
                     <div>
-                        <label class="form-label small fw-bold mb-1 d-block text-muted text-uppercase" style="font-size:.65rem;">Tipo de documento</label>
+                        <label class="form-label small fw-bold mb-1 d-block text-muted text-uppercase" style="font-size:.65rem;">Tipo de documento<?= \App\Helpers\PreferenciasHelper::renderEstrellaFavorito($rutaModulo, 'rie-tipo-doc', 'tipo_doc') ?></label>
                         <select id="rie-tipo-doc" class="form-select form-select-sm shadow-none border" style="width:140px;">
                             <option value="">Todos</option>
                             <option value="FACTURA">Factura</option>
@@ -376,7 +377,28 @@
         $('rie-tipo-flujo').value = 'AMBOS'; $('rie-ver-por').value = 'DETALLE'; $('rie-tercero-tipo').value = '';
         $('rie-forma').value = '0'; $('rie-opbanc').value = ''; $('rie-concepto').value = '0'; $('rie-tipo-doc').value = ''; $('rie-estado').value = 'VIGENTES'; $('rie-movimientos').value = 'TODOS';
         $('rie-vendedor').value = '0';
+        aplicarFavoritos(); // Limpiar vuelve a los valores favoritos del usuario, no a los de fábrica
         vaciar();
+    });
+
+    // Favoritos (estrella junto a cada filtro): se aplican al cargar y al limpiar. APP_FAVORITOS
+    // lo define partials/scripts.php, que se carga después de esta vista: esperar al DOM.
+    function aplicarFavoritos() {
+        if (typeof aplicarFavoritosModal === 'function' && typeof APP_FAVORITOS !== 'undefined') {
+            aplicarFavoritosModal('#form-filtros-rie');
+        }
+    }
+    document.addEventListener('DOMContentLoaded', aplicarFavoritos);
+
+    // Clic en una fila (vista Documento o movimientos de Anticipos): panel lateral con el
+    // detalle del ingreso/egreso, por el endpoint de este reporte (su propio permiso).
+    $('rie-tbody').addEventListener('click', e => {
+        const tr = e.target.closest('tr.rie-fila-doc');
+        if (!tr || typeof window.CMG_abrirPreviewDoc !== 'function') return;
+        window.CMG_abrirPreviewDoc(tr.dataset.id, tr.dataset.flujo, {
+            url: `${BASE}/${RUTA}/getComprobanteAjax?flujo=${tr.dataset.flujo}`,
+            numero: tr.dataset.numero, sujeto: tr.dataset.tercero,
+        });
     });
 
     // Sin carga automática: el reporte se consulta solo al presionar Buscar (o Enter
@@ -393,3 +415,6 @@
     }
 })();
 </script>
+
+<?php // Panel lateral con el detalle del ingreso/egreso (clic sobre una fila)
+require_once MVC_APP . '/views/partials/offcanvas_doc_preview.php'; ?>

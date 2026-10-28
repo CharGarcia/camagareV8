@@ -68,8 +68,9 @@ class ReporteIngresosEgresosController extends BaseModuloController
             'monto_min'         => trim($_REQUEST['monto_min'] ?? ''),
             'monto_max'         => trim($_REQUEST['monto_max'] ?? ''),
             'buscar'            => trim($_REQUEST['buscar'] ?? ''),
-            // TODOS | MONETARIOS (sin lo cobrado/pagado con formas tipo Anticipo u Otros)
-            'movimientos'       => strtoupper(trim($_REQUEST['movimientos'] ?? '')) === 'MONETARIOS' ? 'MONETARIOS' : 'TODOS',
+            // TODOS | MONETARIOS (sin lo cobrado/pagado con formas que no mueven dinero:
+            // Anticipo, Otros) | NO_MONETARIOS (solo eso)
+            'movimientos'       => in_array($mov = strtoupper(trim($_REQUEST['movimientos'] ?? '')), ['MONETARIOS', 'NO_MONETARIOS'], true) ? $mov : 'TODOS',
         ];
     }
 
@@ -134,6 +135,26 @@ class ReporteIngresosEgresosController extends BaseModuloController
         exit;
     }
 
+    /**
+     * Detalle de un ingreso o egreso para el panel lateral (clic en una fila): cabecera,
+     * líneas y formas de cobro/pago. Lo valida el permiso de este reporte, no el de los
+     * módulos de Ingresos/Egresos (quien ve el reporte puede no tener acceso a ellos).
+     */
+    public function getComprobanteAjax(): void
+    {
+        $this->requireLeer();
+        header('Content-Type: application/json');
+        $flujo = strtoupper(trim($_GET['flujo'] ?? '')) === 'EGRESO' ? 'EGRESO' : 'INGRESO';
+        $doc = $this->repository->getComprobante((int) $_SESSION['id_empresa'], $flujo, (int) ($_GET['id'] ?? 0));
+        if ($doc === null) {
+            http_response_code(404);
+            echo json_encode(['ok' => false, 'mensaje' => 'No se encontró el ' . ($flujo === 'INGRESO' ? 'ingreso' : 'egreso') . '.']);
+            exit;
+        }
+        echo json_encode(['ok' => true] + $doc);
+        exit;
+    }
+
     public function buscarTercerosAjax(): void
     {
         $this->requireLeer();
@@ -143,6 +164,20 @@ class ReporteIngresosEgresosController extends BaseModuloController
         $q    = trim($_GET['q'] ?? '');
         echo json_encode(['ok' => true, 'data' => $this->repository->buscarTerceros($idEmpresa, $tipo, $q)]);
         exit;
+    }
+
+    /**
+     * <tr> de una fila que abre, al hacer clic, el detalle de su ingreso o egreso en el
+     * panel lateral (partials/offcanvas_doc_preview.php, modo comprobante).
+     */
+    private static function trComprobante(string $flujo, int $id, string $numero, string $tercero, string $cls = ''): string
+    {
+        if ($id <= 0) {
+            return '<tr class="' . $cls . '">';
+        }
+        return '<tr class="rie-fila-doc ' . $cls . '" style="cursor:pointer;" title="Ver el detalle del ' . ($flujo === 'INGRESO' ? 'ingreso' : 'egreso') . '"'
+             . ' data-flujo="' . ($flujo === 'INGRESO' ? 'INGRESO' : 'EGRESO') . '" data-id="' . $id . '"'
+             . ' data-numero="' . htmlspecialchars($numero) . '" data-tercero="' . htmlspecialchars($tercero) . '">';
     }
 
     /** Vista Anticipos con un cliente o proveedor elegido: se listan sus movimientos. */
@@ -173,7 +208,7 @@ class ReporteIngresosEgresosController extends BaseModuloController
             $estBadge = $estado === 'anulado'
                 ? '<span class="badge bg-danger bg-opacity-10 text-danger border border-danger border-opacity-25">Anulado</span>'
                 : '<span class="badge bg-secondary bg-opacity-10 text-secondary border border-secondary border-opacity-25">' . htmlspecialchars(ucfirst($estado ?: 'registrado')) . '</span>';
-            $h .= '<tr>'
+            $h .= self::trComprobante($r['tipo_flujo'], (int) $r['id_comprobante'], (string) ($r['numero'] ?? ''), (string) ($r['tercero_nombre'] ?? ''))
                 . '<td>' . $this->badgeFlujo($r['tipo_flujo']) . '</td>'
                 . '<td><code class="text-secondary">' . htmlspecialchars($r['numero'] ?? '') . '</code></td>'
                 . '<td>' . $fecha . '</td>'
@@ -319,8 +354,9 @@ class ReporteIngresosEgresosController extends BaseModuloController
     /** Vista Anticipos con un tercero elegido: saldo anterior y cada movimiento con su saldo. */
     private function renderAnticiposMovimientos(array $mov): string
     {
-        $fila = static fn (string $fecha, string $movimiento, string $num, string $forma, string $detalle, string $rec, string $apl, float $saldo, string $cls = ''): string =>
-            '<tr class="' . $cls . '">'
+        // Las filas de un ingreso/egreso (recibido, aplicado) abren su detalle al hacer clic.
+        $fila = static fn (string $fecha, string $movimiento, string $num, string $forma, string $detalle, string $rec, string $apl, float $saldo, string $cls = '', array $m = []): string =>
+            self::trComprobante((string) ($m['tipo_flujo'] ?? ''), (int) ($m['id_doc'] ?? 0), $num, '', $cls)
             . '<td>' . $fecha . '</td><td>' . $movimiento . '</td>'
             . '<td><code class="text-secondary">' . htmlspecialchars($num) . '</code></td>'
             . '<td>' . htmlspecialchars($forma) . '</td>'
@@ -340,7 +376,7 @@ class ReporteIngresosEgresosController extends BaseModuloController
                 $etq, (string) $m['numero'], (string) $m['forma'], (string) $m['detalle'],
                 $esApl ? '' : '$' . number_format((float) $m['recibido'], 2),
                 $esApl ? '$' . number_format((float) $m['aplicado'], 2) : '',
-                (float) $m['saldo']
+                (float) $m['saldo'], '', $m
             );
         }
         if (empty($mov['movimientos'])) {
@@ -602,8 +638,10 @@ class ReporteIngresosEgresosController extends BaseModuloController
             $info['Concepto'] = self::nombreEnCatalogo($this->repository->getConceptos($idEmpresa), $f['id_concepto']);
         }
         $info['Estado'] = $f['estado'] === 'ANULADO' ? 'Anulados' : 'Vigentes';
-        if ($f['movimientos'] === 'MONETARIOS') {
-            $info['Movimientos'] = 'Solo monetarios (sin anticipos ni formas tipo Otros)';
+        if ($f['movimientos'] !== 'TODOS') {
+            $info['Movimientos'] = $f['movimientos'] === 'MONETARIOS'
+                ? 'Solo monetarios (sin anticipos ni formas tipo Otros)'
+                : 'Solo no monetarios (anticipos y formas tipo Otros)';
         }
         if ($f['tipo_documento'] !== '') {
             $info['Tipo de documento'] = $f['tipo_documento'];

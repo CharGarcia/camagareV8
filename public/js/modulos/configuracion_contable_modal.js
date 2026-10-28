@@ -416,7 +416,7 @@
                             const btn = document.createElement('button');
                             btn.type = 'button';
                             btn.className = 'list-group-item list-group-item-action py-1 px-2 border-0 small';
-                            btn.textContent = `${item.codigo} - ${item.nombre}`;
+                            ASIENTOPROG_pintarCuentaSugerida(btn, item);
                             btn.addEventListener('click', () => {
                                 input.value = `${item.codigo} - ${item.nombre}`;
                                 hidden.value = item.id;
@@ -607,6 +607,27 @@
         activo: ['Activo', 'success'], pasivo: ['Pasivo', 'danger'], patrimonio: ['Patrimonio', 'dark'],
         ingreso: ['Ingresos', 'primary'], costo: ['Costos', 'info'], gasto: ['Gastos', 'warning']
     };
+
+    /**
+     * Texto de una cuenta en las sugerencias del buscador: «código - nombre» y, si la cuenta
+     * tiene centro de costo o proyecto vigente hoy (Plan de Cuentas → periodos), su nombre
+     * al lado. Con textContent: los nombres no se interpretan como HTML.
+     */
+    function ASIENTOPROG_pintarCuentaSugerida(btn, c) {
+        btn.textContent = `${c.codigo} - ${c.nombre}`;
+        [['centro_costo_nombre', 'bi-diagram-3', 'primary', 'Centro de costo'],
+         ['proyecto_nombre', 'bi-kanban', 'success', 'Proyecto']].forEach(([campo, icono, color, titulo]) => {
+            if (!c[campo]) return;
+            const b = document.createElement('span');
+            b.className = `badge bg-${color} bg-opacity-10 text-${color} border border-${color} border-opacity-25 fw-normal ms-1`;
+            b.title = titulo;
+            const i = document.createElement('i');
+            i.className = `bi ${icono} me-1`;
+            b.appendChild(i);
+            b.appendChild(document.createTextNode(c[campo]));
+            btn.appendChild(b);
+        });
+    }
 
     /**
      * Badges de tipo de cuenta a partir del CSV configurado en la opción/forma (item.tipo_cuenta_contable).
@@ -844,7 +865,7 @@
                             const btn = document.createElement('button');
                             btn.type = 'button';
                             btn.className = 'list-group-item list-group-item-action py-1 px-2 border-0 small';
-                            btn.textContent = `${c.codigo} - ${c.nombre}`;
+                            ASIENTOPROG_pintarCuentaSugerida(btn, c);
                             btn.addEventListener('click', () => {
                                 input.value = `${c.codigo} - ${c.nombre}`;
                                 hidden.value = c.id;
@@ -2426,7 +2447,7 @@
                                 const btn = document.createElement('button');
                                 btn.type = 'button';
                                 btn.className = 'list-group-item list-group-item-action py-1 px-2 border-0 small text-dark bg-white';
-                                btn.textContent = `${c.codigo} - ${c.nombre}`;
+                                ASIENTOPROG_pintarCuentaSugerida(btn, c);
                                 btn.addEventListener('click', () => {
                                     input.value = `${c.codigo} - ${c.nombre}`;
                                     sug.style.display = 'none';

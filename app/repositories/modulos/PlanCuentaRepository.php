@@ -15,6 +15,33 @@ class PlanCuentaRepository extends BaseRepository
     }
 
     /**
+     * JOIN del centro de costo (alias cc) y el proyecto (alias p) de la cuenta `pc`: el
+     * sugerido vigente HOY (por periodo, ver PlanCuentaDimensionRepository). Sin la migración
+     * aplicada, el valor fijo antiguo. La consulta debe exponer pc.id y pc.id_empresa.
+     */
+    private function joinDimensionVigente(): string
+    {
+        if ($this->tablaExiste(PlanCuentaDimensionRepository::TABLA)) {
+            // Centro y proyecto tienen periodos independientes: uno por cada lado.
+            $lateral = fn(string $col, string $alias) => "LEFT JOIN LATERAL (
+                            SELECT v.{$col} AS id_dim
+                            FROM " . PlanCuentaDimensionRepository::TABLA . " v
+                            WHERE v.id_cuenta = pc.id AND v.id_empresa = pc.id_empresa AND v.eliminado = false
+                              AND v.{$col} IS NOT NULL
+                              AND daterange(v.vigente_desde, v.vigente_hasta, '[]') @> CURRENT_DATE
+                            ORDER BY v.vigente_desde DESC NULLS LAST, v.id DESC
+                            LIMIT 1
+                        ) {$alias} ON true";
+            return $lateral('id_centro_costo', 'dimcc') . "
+                        " . $lateral('id_proyecto', 'dimpr') . "
+                        LEFT JOIN centro_costos cc ON cc.id = dimcc.id_dim
+                        LEFT JOIN proyectos p ON p.id = dimpr.id_dim";
+        }
+        return "LEFT JOIN centro_costos cc ON cc.id = pc.id_centro_costos
+                        LEFT JOIN proyectos p ON p.id = pc.id_proyecto";
+    }
+
+    /**
      * Obtiene el listado de cuentas con filtros y paginación.
      */
     public function getListado(int $idEmpresa, string $buscar, int $page, int $perPage, string $ordenCol, string $ordenDir): array
@@ -38,27 +65,7 @@ class PlanCuentaRepository extends BaseRepository
 
         // 2. Filas
         $offset = ($page - 1) * $perPage;
-        // Centro de costo / proyecto: el sugerido vigente HOY (por periodo, ver
-        // PlanCuentaDimensionRepository). Sin la migración aplicada, el valor fijo antiguo.
-        if ($this->tablaExiste(PlanCuentaDimensionRepository::TABLA)) {
-            // Centro y proyecto tienen periodos independientes: uno por cada lado.
-            $lateral = fn(string $col, string $alias) => "LEFT JOIN LATERAL (
-                            SELECT v.{$col} AS id_dim
-                            FROM " . PlanCuentaDimensionRepository::TABLA . " v
-                            WHERE v.id_cuenta = pc.id AND v.id_empresa = pc.id_empresa AND v.eliminado = false
-                              AND v.{$col} IS NOT NULL
-                              AND daterange(v.vigente_desde, v.vigente_hasta, '[]') @> CURRENT_DATE
-                            ORDER BY v.vigente_desde DESC NULLS LAST, v.id DESC
-                            LIMIT 1
-                        ) {$alias} ON true";
-            $joinDim = $lateral('id_centro_costo', 'dimcc') . "
-                        " . $lateral('id_proyecto', 'dimpr') . "
-                        LEFT JOIN centro_costos cc ON cc.id = dimcc.id_dim
-                        LEFT JOIN proyectos p ON p.id = dimpr.id_dim";
-        } else {
-            $joinDim = "LEFT JOIN centro_costos cc ON cc.id = pc.id_centro_costos
-                        LEFT JOIN proyectos p ON p.id = pc.id_proyecto";
-        }
+        $joinDim = $this->joinDimensionVigente();
         $sqlRows = "SELECT pc.*,
                            cc.nombre as centro_costo_nombre,
                            p.nombre as proyecto_nombre
@@ -577,14 +584,23 @@ class PlanCuentaRepository extends BaseRepository
             }
         }
 
-        $sql = "SELECT id, codigo, nombre 
-                FROM plan_cuentas 
-                WHERE id_empresa = :id_e 
-                AND nivel = '5' 
-                AND (codigo ILIKE :q OR nombre ILIKE :q) 
-                AND eliminado = false 
-                {$whereTipo} 
-                ORDER BY codigo ASC LIMIT " . (int)$limit;
+        // Con el centro de costo y el proyecto vigentes hoy, para mostrarlos junto al nombre
+        // en los buscadores (se calculan solo sobre las cuentas ya filtradas y limitadas).
+        $sql = "SELECT pc.id, pc.codigo, pc.nombre,
+                       cc.nombre AS centro_costo_nombre,
+                       p.nombre  AS proyecto_nombre
+                FROM (
+                    SELECT id, id_empresa, codigo, nombre, id_centro_costos, id_proyecto
+                    FROM plan_cuentas
+                    WHERE id_empresa = :id_e
+                    AND nivel = '5'
+                    AND (codigo ILIKE :q OR nombre ILIKE :q)
+                    AND eliminado = false
+                    {$whereTipo}
+                    ORDER BY codigo ASC LIMIT " . (int)$limit . "
+                ) pc
+                " . $this->joinDimensionVigente() . "
+                ORDER BY pc.codigo ASC";
         
         $st = $this->db->prepare($sql);
         $st->execute($params);

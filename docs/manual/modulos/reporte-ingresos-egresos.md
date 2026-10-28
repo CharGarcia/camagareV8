@@ -5,7 +5,7 @@ categoria: Reportes
 ruta_modulo: modulos/reporte_ingresos_egresos
 tipo: modulo
 visibilidad: todos
-etiquetas: reporte de ingresos y egresos, anulados, ingresos anulados, egresos anulados, vigentes, movimiento de dinero, cobros y pagos, por tercero, forma de pago, concepto, vendedor, asesor, cobros por vendedor, comisiones, asesor del cliente, otros conceptos, saldo inicial, saldos iniciales, exportar, excel detallado, pdf, imprimir, logo en el pdf, totales en el pdf, reporte de ingresos por vendedor, reporte de egresos, pdf por vendedor, anticipo, anticipos, anticipo aplicado, cruce de anticipo, ingresos repetidos, ingreso duplicado, doble conteo, saldo de anticipos, anticipos por cliente, anticipos de proveedores, anticipos recibidos, anticipos entregados, entrada de dinero, salida de dinero, flujo de caja, monetario, no monetario, solo monetarios, cruces, compensaciones
+etiquetas: reporte de ingresos y egresos, anulados, ingresos anulados, egresos anulados, vigentes, movimiento de dinero, cobros y pagos, por tercero, forma de pago, concepto, vendedor, asesor, cobros por vendedor, comisiones, asesor del cliente, otros conceptos, saldo inicial, saldos iniciales, exportar, excel detallado, pdf, imprimir, logo en el pdf, totales en el pdf, reporte de ingresos por vendedor, reporte de egresos, pdf por vendedor, anticipo, anticipos, anticipo aplicado, cruce de anticipo, ingresos repetidos, ingreso duplicado, doble conteo, saldo de anticipos, anticipos por cliente, anticipos de proveedores, anticipos recibidos, anticipos entregados, entrada de dinero, salida de dinero, flujo de caja, monetario, no monetario, solo monetarios, cruces, compensaciones, favoritos, filtro favorito, detalle del ingreso, ver comprobante, clic en la fila
 version: 1.9
 orden: 30
 estado: activo
@@ -30,10 +30,17 @@ iniciales y deja la tabla en blanco hasta la siguiente búsqueda.
 | Operación bancaria | Transferencia, cheque, depósito |
 | Concepto | El motivo del ingreso o egreso |
 | Estado | *Vigentes* (por defecto) o *Anulados* |
-| Movimientos | *Todos* (por defecto) o *Solo monetarios*: sin lo cobrado o pagado con formas de tipo Anticipo u Otros |
+| Movimientos | *Todos* (por defecto), *Solo monetarios* (sin lo cobrado o pagado con formas de tipo Anticipo u Otros) o *Solo no monetarios* (solo eso) |
 | Tipo de documento | Qué documento originó el movimiento |
 | Monto | Rango de valores |
 | Texto libre | Búsqueda sobre la descripción |
+
+**Favoritos**: la estrella junto a cada selector (Mostrar, Ver por, Estado,
+Movimientos, Tipo de tercero, Vendedor, Forma de cobro/pago, Operación bancaria,
+Concepto, Tipo de documento) guarda ese valor como su favorito: al entrar al
+reporte, y al presionar **Limpiar**, el filtro toma su valor favorito. Cada usuario
+tiene los suyos. Con un favorito puesto, el reporte igual no carga datos hasta
+presionar **Buscar**.
 
 Todos se combinan entre sí. La consulta típica —*todo lo que le pagué a este
 proveedor por transferencia este trimestre*— sale con tres filtros.
@@ -97,21 +104,28 @@ Así, al filtrar por la forma de cobro **Anticipo**, el reporte muestra lo que s
 canceló con anticipos (*Ingresos cobrados*), y *Entrada de dinero* queda en cero o
 en la parte pagada con otras formas.
 
-### Solo movimientos monetarios
+### Filtro Movimientos: monetarios y no monetarios
 
-El filtro **Movimientos → Solo monetarios** deja el reporte únicamente con el
-dinero que entró o salió:
+El filtro **Movimientos** separa el reporte según la forma de cobro o pago:
 
-- Cada línea muestra solo la parte pagada con formas monetarias; las líneas
-  pagadas enteras con anticipo u otros **no aparecen**.
-- La vista *Forma de cobro/pago* y la hoja *Cobros y pagos* no traen las formas de
-  tipo Anticipo u Otros.
+| Opción | Qué muestra |
+|--------|-------------|
+| **Todos** (por defecto) | Todo, con las marcas de lo no monetario. Cuadra con los módulos de Ingresos y Egresos |
+| **Solo monetarios** | Únicamente el dinero que entró o salió. Úselo para cuadrar con caja y bancos |
+| **Solo no monetarios** | Únicamente lo cobrado o pagado con formas de tipo Anticipo u Otros |
+
+Con *Solo monetarios* o *Solo no monetarios*:
+
+- Cada línea muestra solo su parte de ese tipo (si un comprobante se pagó una parte
+  en efectivo y otra con anticipo, cada opción muestra la suya). Las líneas que no
+  tienen nada de ese tipo **no aparecen**.
+- La vista *Forma de cobro/pago* y la hoja *Cobros y pagos* traen solo las formas
+  de ese tipo.
 - Los totales, el Excel y el PDF salen con el mismo criterio, y el filtro queda
   anotado en *Filtros aplicados*.
+- *Solo monetarios* + *Solo no monetarios* = *Todos*.
 - No afecta a la vista *Anticipos (saldos)*, que justamente muestra los anticipos.
 
-Úselo para cuadrar con caja y bancos; con *Todos* (por defecto), el reporte cuadra
-con los módulos de Ingresos y Egresos.
 ## Anticipos: saldos por cliente y proveedor
 
 En **Ver por → Anticipos (saldos)** el reporte muestra, por cliente (anticipos
@@ -182,6 +196,25 @@ las hojas del Excel.
 - **Anticipos (saldos)**: saldo anterior, recibido/entregado, aplicado y saldo
   final de anticipos por cliente y proveedor (ver *Anticipos: saldos por cliente
   y proveedor*).
+
+## Ver el detalle de un ingreso o egreso
+
+En la vista **Documento**, y en los movimientos de la vista **Anticipos** con un
+cliente o proveedor elegido, **haga clic en cualquier fila**: se abre a la derecha
+un panel con el ingreso o egreso completo:
+
+- **Encabezado**: número, fecha, cliente / proveedor / empleado, concepto, estado
+  y observaciones.
+- **Documentos cobrados o pagados**: cada línea con su valor y, si se pagó con
+  formas que no mueven dinero, la parte de *Anticipo* u *Otros*.
+- **Formas de cobro / pago**: cada forma con su valor, operación bancaria, número
+  de cheque y referencia; las que no mueven dinero llevan la marca *No mueve
+  dinero*.
+- **Totales**: entrada/salida de dinero, no monetario y total del comprobante.
+
+El panel muestra el comprobante entero aunque los filtros dejen ver solo una de
+sus líneas. Lo puede abrir quien tiene acceso a este reporte, aunque no tenga
+permiso en los módulos de Ingresos o Egresos.
 
 ## Exportar a Excel y PDF
 
@@ -284,12 +317,12 @@ cobró cada vendedor, qué movimientos hubo por encima de cierto monto.
   módulos), *No monetario* (formas de tipo Anticipo y Otros) y *Entrada / salida
   de dinero*; el **Neto** es de dinero. Las vistas Tercero, Fecha y Mes, el Excel y
   el PDF traen las mismas columnas, y en la vista Documento las líneas pagadas con
-  esas formas llevan su marca. Nuevo filtro **Movimientos → Solo monetarios**, que
-  deja solo el dinero que entró o salió. Nueva forma de ver **Anticipos (saldos)**:
+  esas formas llevan su marca. Nuevo filtro **Movimientos** (*Todos*, *Solo monetarios*, *Solo no monetarios*), que
+  separa el dinero que entró o salió de lo que no movió dinero. Nueva forma de ver **Anticipos (saldos)**:
   saldo anterior, recibido, aplicado y saldo final por cliente y proveedor, o los
   movimientos de uno solo. El **PDF ya no tarda minutos** con muchas líneas (se
   arma fila por fila). Además, el reporte **ya no se carga solo al entrar** ni al
-  presionar *Limpiar*: los datos salen al presionar **Buscar**.
+  presionar *Limpiar*: los datos salen al presionar **Buscar**. Los filtros tienen **favoritos** (estrella) y, al hacer clic en una fila, se abre el **detalle del ingreso o egreso** con sus documentos y formas de cobro/pago.
 - **1.8** — Los ingresos y egresos **anulados ya no aparecen ni suman** en el
   reporte. El filtro *Estado* ofrece *Vigentes* (por defecto) o *Anulados*; se
   quitó la opción *Todos*, que los mezclaba en los totales.

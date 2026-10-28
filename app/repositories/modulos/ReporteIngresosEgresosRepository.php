@@ -91,24 +91,27 @@ class ReporteIngresosEgresosRepository extends BaseRepository
      * Columnas de monto de una línea. Con todos los movimientos: monto completo, parte
      * con anticipo, parte con otros y entrada/salida de dinero (monto_caja). Con "Solo
      * monetarios" (filtro movimientos = MONETARIOS) el monto ES la parte de dinero y las
-     * partes no monetarias quedan en cero.
+     * partes no monetarias quedan en cero; con "Solo no monetarios" (NO_MONETARIOS), al
+     * revés: el monto es lo pagado con anticipo u otros y la parte de dinero queda en cero.
      */
     private static function columnasMonto(string $montoLinea, array $f): string
     {
-        $caja = "$montoLinea - " . self::parteLinea($montoLinea, 'anticipo + otros');
-        if (self::soloMonetarios($f)) {
-            return "$caja AS monto, 0::numeric AS monto_anticipo, 0::numeric AS monto_otros, $caja AS monto_caja";
-        }
-        return "$montoLinea AS monto,
-                " . self::parteLinea($montoLinea, 'anticipo') . " AS monto_anticipo,
-                " . self::parteLinea($montoLinea, 'otros') . " AS monto_otros,
-                $caja AS monto_caja";
+        $anticipo = self::parteLinea($montoLinea, 'anticipo');
+        $otros    = self::parteLinea($montoLinea, 'otros');
+        $caja     = "$montoLinea - " . self::parteLinea($montoLinea, 'anticipo + otros');
+        return match (self::modoMovimientos($f)) {
+            'MONETARIOS'    => "$caja AS monto, 0::numeric AS monto_anticipo, 0::numeric AS monto_otros, $caja AS monto_caja",
+            'NO_MONETARIOS' => self::parteLinea($montoLinea, 'anticipo + otros') . " AS monto,
+                                $anticipo AS monto_anticipo, $otros AS monto_otros, 0::numeric AS monto_caja",
+            default         => "$montoLinea AS monto, $anticipo AS monto_anticipo, $otros AS monto_otros, $caja AS monto_caja",
+        };
     }
 
-    /** ¿Filtro "Movimientos: Solo monetarios"? */
-    private static function soloMonetarios(array $f): bool
+    /** Filtro "Movimientos": TODOS | MONETARIOS | NO_MONETARIOS. */
+    private static function modoMovimientos(array $f): string
     {
-        return strtoupper((string) ($f['movimientos'] ?? '')) === 'MONETARIOS';
+        $m = strtoupper((string) ($f['movimientos'] ?? ''));
+        return in_array($m, ['MONETARIOS', 'NO_MONETARIOS'], true) ? $m : 'TODOS';
     }
     /**
      * Condición "la línea de ingresos_detalle ($d) es del vendedor :id_vendedor".
@@ -225,10 +228,13 @@ class ReporteIngresosEgresosRepository extends BaseRepository
             $w .= " AND " . self::condVendedor('d'); $params[':id_vendedor'] = (int)$f['id_vendedor'];
         }
         // Solo monetarios: fuera las líneas pagadas enteras con anticipo u otros.
-        if (self::soloMonetarios($f)) {
-            $linea = $esIng ? 'd.monto_cobrado' : 'd.monto_pagado';
-            $w .= " AND ($linea - " . self::parteLinea($linea, 'anticipo + otros') . ") > 0.005";
-        }
+        // Solo no monetarios: solo las líneas que tienen una parte pagada con ellos.
+        $linea = $esIng ? 'd.monto_cobrado' : 'd.monto_pagado';
+        $w .= match (self::modoMovimientos($f)) {
+            'MONETARIOS'    => " AND ($linea - " . self::parteLinea($linea, 'anticipo + otros') . ") > 0.005",
+            'NO_MONETARIOS' => " AND " . self::parteLinea($linea, 'anticipo + otros') . " > 0.005",
+            default         => '',
+        };
         return $w;
     }
 
@@ -255,10 +261,12 @@ class ReporteIngresosEgresosRepository extends BaseRepository
             $w .= " AND EXISTS (SELECT 1 FROM ingresos_detalle dvn WHERE dvn.id_ingreso = c.id AND " . self::condVendedor('dvn') . ")";
             $params[':id_vendedor'] = (int)$f['id_vendedor'];
         }
-        // Solo monetarios: fuera los cobros/pagos con formas que no mueven dinero.
-        if (self::soloMonetarios($f)) {
-            $w .= " AND fp.tipo NOT IN (" . TiposFormaPago::noMonetariosSql() . ")";
-        }
+        // Solo monetarios / no monetarios: los cobros/pagos con formas que sí / no mueven dinero.
+        $w .= match (self::modoMovimientos($f)) {
+            'MONETARIOS'    => " AND fp.tipo NOT IN (" . TiposFormaPago::noMonetariosSql() . ")",
+            'NO_MONETARIOS' => " AND fp.tipo IN (" . TiposFormaPago::noMonetariosSql() . ")",
+            default         => '',
+        };
         return $w;
     }
 
@@ -743,6 +751,61 @@ class ReporteIngresosEgresosRepository extends BaseRepository
             'n_egresos'             => (int) $r['n_egr'],
             'n_documentos'          => (int) $r['n_documentos'],
         ];
+    }
+
+    // ── Detalle de un comprobante (panel lateral al hacer clic en una fila) ──────
+
+    /**
+     * Un ingreso o egreso de la empresa con sus líneas (documentos que cobra o paga, con
+     * la parte pagada con anticipo u otras formas no monetarias) y sus formas de
+     * cobro/pago vigentes. null si no existe, es de otra empresa o está eliminado.
+     */
+    public function getComprobante(int $idEmpresa, string $flujo, int $id): ?array
+    {
+        $esIng  = $flujo === 'INGRESO';
+        $params = [':id' => $id, ':id_empresa' => $idEmpresa];
+        $cab = $this->q($esIng
+            ? "SELECT c.id, c.numero_ingreso AS numero, c.fecha_emision, c.estado, c.monto_total, c.observaciones,
+                      oc.nombre AS concepto, COALESCE(cli.nombre, c.recibo_de, '') AS cliente_nombre,
+                      COALESCE(cli.identificacion, '') AS identificacion
+               FROM ingresos_cabecera c
+               LEFT JOIN clientes cli ON cli.id = COALESCE(c.id_cliente, c.id_recibo_cliente)
+               LEFT JOIN empresa_opciones_ingreso_egreso oc ON oc.id = c.id_ingreso_concepto
+               WHERE c.id = :id AND c.id_empresa = :id_empresa AND c.eliminado = false"
+            : "SELECT c.id, c.numero_egreso AS numero, c.fecha_emision, c.estado, c.monto_total, c.observaciones,
+                      oc.nombre AS concepto, COALESCE(pr.razon_social, emp.nombres_apellidos, '') AS proveedor_nombre,
+                      COALESCE(pr.identificacion, emp.identificacion, '') AS identificacion
+               FROM egresos_cabecera c
+               LEFT JOIN proveedores pr  ON pr.id  = c.id_proveedor
+               LEFT JOIN empleados   emp ON emp.id = c.id_empleado
+               LEFT JOIN empresa_opciones_ingreso_egreso oc ON oc.id = c.id_egreso_concepto
+               WHERE c.id = :id AND c.id_empresa = :id_empresa AND c.eliminado = false", $params)->fetch(PDO::FETCH_ASSOC);
+        if (!$cab) {
+            return null;
+        }
+
+        $linea = $esIng ? 'd.monto_cobrado' : 'd.monto_pagado';
+        $detalles = $this->q("SELECT d.tipo_documento, d.numero_documento, d.descripcion, $linea AS monto,
+                                     ROUND(" . self::parteLinea($linea, 'anticipo') . ", 2) AS monto_anticipo,
+                                     ROUND(" . self::parteLinea($linea, 'otros') . ", 2) AS monto_otros
+                              FROM " . ($esIng ? 'ingresos_detalle' : 'egresos_detalle') . " d
+                              INNER JOIN " . ($esIng ? 'ingresos_cabecera' : 'egresos_cabecera') . " c ON c.id = d." . ($esIng ? 'id_ingreso' : 'id_egreso') . "
+                              LEFT JOIN (" . self::noMonetarioPorComprobante($flujo) . ") nm ON nm.id_comprobante = c.id
+                              WHERE c.id = :id" . ($esIng ? '' : ' AND d.eliminado = false') . "
+                              ORDER BY d.id", $params)->fetchAll(PDO::FETCH_ASSOC);
+
+        $pagos = $this->q("SELECT fp.nombre AS forma, fp.tipo, p.monto, p.referencia, p.numero_cheque, p.fecha_cobro,
+                                  " . self::opBancaria('p.tipo_operacion_bancaria') . " AS operacion_bancaria,
+                                  fp.tipo IN (" . TiposFormaPago::noMonetariosSql() . ") AS no_monetario
+                           FROM " . ($esIng ? 'ingresos_pagos' : 'egresos_pagos') . " p
+                           INNER JOIN empresa_formas_pago fp ON fp.id = p." . ($esIng ? 'id_forma_cobro' : 'id_forma_pago') . "
+                           WHERE p." . ($esIng ? 'id_ingreso' : 'id_egreso') . " = :id" . ($esIng ? '' : self::pagoVigente('p')) . "
+                           ORDER BY p.id", [':id' => $id])->fetchAll(PDO::FETCH_ASSOC);
+
+        $noMonetario = array_sum(array_map(static fn ($p) => !empty($p['no_monetario']) ? (float) $p['monto'] : 0.0, $pagos));
+        $cab['no_monetario'] = round($noMonetario, 2);
+        $cab['dinero']       = round((float) $cab['monto_total'] - $noMonetario, 2);
+        return ['cabecera' => $cab, 'detalles' => $detalles, 'pagos' => $pagos];
     }
 
     // ── Vista Anticipos ───────────────────────────────────────────────────────

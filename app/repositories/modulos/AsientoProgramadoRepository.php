@@ -919,8 +919,10 @@ class AsientoProgramadoRepository extends BaseRepository
 
     /**
      * Reglas de IVA por tarifa para COMPRAS (crédito tributario).
-     * Espejo de getReglasIvaVentas, pero la cuenta es de naturaleza ACTIVO (IVA crédito
-     * tributario) y va al DEBE. tipo_referencia = 'iva_compras_factura'.
+     * Espejo de getReglasIvaVentas, pero va al DEBE. tipo_referencia = 'iva_compras_factura'.
+     * La cuenta es normalmente de ACTIVO (IVA crédito tributario), pero también se admite una de
+     * costo / gasto: el IVA que no se puede usar como crédito (gasto no deducible, empresa que
+     * no lo recupera) se envía al gasto.
      */
     public function getReglasIvaCompras(int $idEmpresa): array
     {
@@ -929,7 +931,7 @@ class AsientoProgramadoRepository extends BaseRepository
                        'Tarifa iva ' || t.tarifa AS concepto,
                        'IVA crédito tributario tarifa ' || t.tarifa AS detalle,
                        'IVA-' || t.codigo AS codigo,
-                       'activo' AS tipo_cuenta,
+                       'activo,costo,gasto' AS tipo_cuenta,
                        'debe' AS debe_haber,
                        ap.id AS id_programado,
                        ap.id_cuenta,

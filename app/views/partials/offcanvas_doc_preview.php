@@ -65,13 +65,19 @@
                 <div class="mt-2 pt-2 border-top">
                     <span class="small text-muted d-block mb-0" id="p-lbl-sujeto" style="font-size:0.7rem;">Cliente / Proveedor</span>
                     <span id="p-txt-sujeto" class="small fw-medium text-dark">—</span>
+                    <div id="p-txt-nota" class="small text-muted mt-1 d-none" style="font-size:0.72rem;"></div>
                 </div>
             </div>
 
             <!-- Ítems -->
             <div class="flex-grow-1 overflow-auto p-3">
-                <h6 class="small fw-bold text-muted mb-2" style="font-size:0.75rem; letter-spacing: 0.5px;">ÍTEMS DETALLADOS</h6>
+                <h6 class="small fw-bold text-muted mb-2" style="font-size:0.75rem; letter-spacing: 0.5px;" id="p-tit-items">ÍTEMS DETALLADOS</h6>
                 <div id="p-container-items" class="d-flex flex-column gap-2"></div>
+                <!-- Formas de cobro/pago: solo en el modo 'comprobante' (ingresos/egresos) -->
+                <div id="p-sec-pagos" class="d-none mt-3">
+                    <h6 class="small fw-bold text-muted mb-2" style="font-size:0.75rem; letter-spacing: 0.5px;">FORMAS DE COBRO / PAGO</h6>
+                    <div id="p-container-pagos" class="d-flex flex-column gap-2"></div>
+                </div>
             </div>
 
             <!-- Totales -->
@@ -129,7 +135,11 @@
         IMPORTACION:   { url: BASE + '/modulos/importaciones/getImportacionAjax',     badge: 'IMPORTACIÓN',     sujeto: 'Proveedor exterior', forma: 'data' },
         PEDIDO:        { url: BASE + '/modulos/pedidos/getPedidoAjax',                badge: 'PEDIDO',           sujeto: 'Cliente',   forma: 'cabecera' },
         RETENCION_COMPRA: { url: BASE + '/modulos/reporte_retenciones/getRetencionCompraAjax', badge: 'RETENCIÓN DE COMPRA', sujeto: 'Proveedor', forma: 'cabecera', modo: 'retencion' },
-        RETENCION_VENTA:  { url: BASE + '/modulos/reporte_retenciones/getRetencionVentaAjax',  badge: 'RETENCIÓN DE VENTA',  sujeto: 'Cliente',   forma: 'cabecera', modo: 'retencion' }
+        RETENCION_VENTA:  { url: BASE + '/modulos/reporte_retenciones/getRetencionVentaAjax',  badge: 'RETENCIÓN DE VENTA',  sujeto: 'Cliente',   forma: 'cabecera', modo: 'retencion' },
+        // Ingreso/egreso: líneas = documentos que cobra o paga, más sus formas de cobro/pago.
+        // Responden {cabecera, detalles, pagos}; el llamador puede pasar extra.url propia.
+        INGRESO:       { url: BASE + '/modulos/reporte_ingresos_egresos/getComprobanteAjax?flujo=INGRESO', badge: 'INGRESO', sujeto: 'Cliente / Recibí de', forma: 'cabecera', modo: 'comprobante' },
+        EGRESO:        { url: BASE + '/modulos/reporte_ingresos_egresos/getComprobanteAjax?flujo=EGRESO',  badge: 'EGRESO',  sujeto: 'Proveedor / Empleado', forma: 'cabecera', modo: 'comprobante' }
     };
 
     const $ = (id) => document.getElementById(id);
@@ -233,6 +243,49 @@
         }).join('');
     }
 
+    // modo 'comprobante' (ingreso/egreso): cada línea es un documento cobrado o pagado
+    // (o un concepto), con la parte pagada con anticipo u otras formas no monetarias.
+    function pintarItemsComprobante(dets) {
+        const nota = (v, txt) => parseFloat(v || 0) > 0.004
+            ? `<span class="badge bg-warning bg-opacity-10 text-warning-emphasis border border-warning border-opacity-25 fw-normal">${txt} ${money(v)}</span>` : '';
+        $('p-container-items').innerHTML = dets.map(d => {
+            const doc = d.tipo_documento === 'OTRO' ? 'Otro concepto'
+                : [d.tipo_documento, d.numero_documento].filter(Boolean).join(' ');
+            const marcas = nota(d.monto_anticipo, 'Anticipo') + nota(d.monto_otros, 'Otros');
+            return `
+                <div class="bg-white border rounded-3 p-2 shadow-sm">
+                    <div class="d-flex justify-content-between align-items-start">
+                        <div style="max-width:70%">
+                            <strong class="d-block text-dark small text-truncate" title="${esc(doc)}">${esc(doc)}</strong>
+                            ${d.descripcion ? `<small class="d-block text-muted" style="font-size:0.7rem;">${esc(d.descripcion)}</small>` : ''}
+                        </div>
+                        <span class="fw-bold text-secondary small">${money(d.monto)}</span>
+                    </div>
+                    ${marcas ? `<div class="mt-1 d-flex gap-1 flex-wrap">${marcas}</div>` : ''}
+                </div>`;
+        }).join('') || '<div class="text-center py-3 text-muted small">Sin líneas registradas.</div>';
+    }
+
+    function pintarPagos(pagos) {
+        $('p-sec-pagos').classList.remove('d-none');
+        $('p-container-pagos').innerHTML = (pagos || []).map(p => {
+            const datos = [p.operacion_bancaria, p.numero_cheque ? 'N° ' + p.numero_cheque : '', p.referencia ? 'Ref. ' + p.referencia : '']
+                .filter(Boolean).join(' · ');
+            const noMon = p.no_monetario === true || p.no_monetario === 't' || p.no_monetario === 1;
+            return `
+                <div class="bg-white border rounded-3 p-2 shadow-sm">
+                    <div class="d-flex justify-content-between align-items-start">
+                        <div style="max-width:70%">
+                            <strong class="d-block text-dark small">${esc(p.forma)}</strong>
+                            <small class="d-block text-muted" style="font-size:0.7rem;">${esc(p.tipo)}${datos ? ' · ' + esc(datos) : ''}</small>
+                        </div>
+                        <span class="fw-bold small ${noMon ? 'text-warning-emphasis' : 'text-secondary'}">${money(p.monto)}</span>
+                    </div>
+                    ${noMon ? '<div class="mt-1"><span class="badge bg-warning bg-opacity-10 text-warning-emphasis border border-warning border-opacity-25 fw-normal">No mueve dinero</span></div>' : ''}
+                </div>`;
+        }).join('') || '<div class="text-center py-3 text-muted small">Sin formas de cobro/pago.</div>';
+    }
+
     function pintarItems(dets, aviso, modo) {
         const cont = $('p-container-items');
         if (aviso) {
@@ -244,6 +297,7 @@
             return;
         }
         if (modo === 'retencion') { pintarItemsRetencion(dets); return; }
+        if (modo === 'comprobante') { pintarItemsComprobante(dets); return; }
         cont.innerHTML = dets.map(d => {
             const cant    = parseFloat(d.cantidad || 0);
             const pUniRaw = (d.precio_unitario ?? d.costo_unitario ?? 0);
@@ -287,6 +341,10 @@
         oc.show();
 
         extra = extra || {};
+        // Piezas solo del modo 'comprobante': ocultas hasta que ese modo las pinte.
+        $('p-sec-pagos').classList.add('d-none');
+        $('p-txt-nota').classList.add('d-none');
+        $('p-tit-items').textContent = 'ÍTEMS DETALLADOS';
 
         // Saldo inicial: no es un documento electrónico, no hay nada que consultar
         if (tipo === 'SALDO_INICIAL') {
@@ -342,7 +400,7 @@
                 if (!cab) throw new Error('El documento no devolvió datos');
                 let dets = (cfg.forma === 'data') ? (cab.detalles || []) : (res.detalles || []);
 
-                const numero = [
+                const numero = cab.numero || [
                     cab.establecimiento || cab.establecimiento_prov || '',
                     cab.punto_emision   || cab.punto_emision_prov   || '',
                     cab.secuencial      || cab.secuencial_prov      || ''
@@ -361,7 +419,20 @@
                 // extra.sujeto arriba (documento sin número o sin cliente) lanzaba
                 // "Cannot access 'extra' before initialization".
                 let subtotal, total, iva, valorExtra, labelSubtotal, labelIva, labelExtra, labelTotal;
-                if (cfg.modo === 'retencion') {
+                if (cfg.modo === 'comprobante') {
+                    // Ingreso/egreso: total del comprobante, separado en dinero y no monetario
+                    // (anticipo, otros); debajo del tercero, el concepto y las observaciones.
+                    labelSubtotal = 'Entrada/salida de dinero'; labelIva = 'No monetario'; labelTotal = 'Total comprobante';
+                    subtotal = parseFloat(cab.dinero || 0);
+                    iva      = parseFloat(cab.no_monetario || 0);
+                    total    = parseFloat(cab.monto_total || 0);
+                    const nota = [cab.concepto ? 'Concepto: ' + cab.concepto : '', cab.estado ? 'Estado: ' + cab.estado : '',
+                                  cab.observaciones || ''].filter(Boolean).join(' · ');
+                    $('p-txt-nota').textContent = nota;
+                    $('p-txt-nota').classList.toggle('d-none', nota === '');
+                    $('p-tit-items').textContent = tipo === 'EGRESO' ? 'DOCUMENTOS PAGADOS' : 'DOCUMENTOS COBRADOS';
+                    pintarPagos(res.pagos);
+                } else if (cfg.modo === 'retencion') {
                     // Una retención no tiene subtotal/IVA/total como una factura: sus 3
                     // componentes son Renta, IVA e ISD (ISD puede no aplicar → 3ra fila oculta si es 0).
                     labelSubtotal = 'Renta'; labelIva = 'IVA'; labelExtra = 'ISD'; labelTotal = 'Total Retenido';

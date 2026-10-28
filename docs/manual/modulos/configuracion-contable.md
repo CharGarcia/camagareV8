@@ -5,8 +5,8 @@ categoria: Contabilidad
 ruta_modulo: modulos/configuracion-contable
 tipo: modulo
 visibilidad: admin
-etiquetas: configuracion contable, cuentas por documento, asiento automatico, parametrizacion, ventas, compras, cierre, tipo de produccion, bien, servicio, filtro por año, periodo, listado de proveedores, listado de clientes, cobros y pagos, ingresos y egresos, forma de pago, cuenta bancaria, efectivo, misma cuenta en los dos bloques, formas hermanas, cheques y transferencias, mismo banco, numero de cuenta, nomina, rol de pagos, prestamo quirografario, prestamo hipotecario, prestamo empresa, prestamos iess, cuentas opcionales, costo de ventas, costo de venta, inventario, asiento sin costo, no sale el costo, cuenta de iva del cliente, reglas por cliente, buscar proveedor, buscar cliente, buscar ficha, filtrar fichas, muchos proveedores, cuentas faltantes, modulos que contabilizan, apagar asientos, no generar asientos, no contabilizar, desactivar contabilidad, interruptor, consignaciones sin asiento, aviso de asientos pendientes, asientos pendientes en el balance, proveedores sin cuentas, clientes sin cuentas, productos sin cuentas, pendientes de configurar, retenciones en venta, retenciones en compra, retencion de renta, no aparecen las retenciones, codigo de retencion, catalogo de retenciones sri, codigo ats, codigo del anexo, retencion mal asignada, codigo de retencion no existe, en que documento esta el error, retencion con codigo invalido, sugerencias, sugerir cuentas, proveedores que compran lo mismo, copiar cuentas de otro proveedor, misma cuenta para varios proveedores, gasolineras, proveedores parecidos, subtotal de compras, cuenta de gasto del proveedor, mostrar las demas cuentas, ver todas las cuentas, tipo de asiento no aparece, falta tipo de asiento en el selector, modulo apagado, personalizar asiento contable, tabla de proveedores, detalle de compras, cuenta de subtotal por proveedor, recibos de venta, copiar configuracion de facturas, recibos con otras cuentas, recibo sin asiento, igualar recibos y facturas, ajustes de inventario, asiento de ajustes, sobrante de inventario, faltante de inventario, merma, perdida de inventario, baja de inventario
-version: 1.38
+etiquetas: configuracion contable, cuentas por documento, asiento automatico, parametrizacion, ventas, compras, cierre, tipo de produccion, bien, servicio, filtro por año, periodo, listado de proveedores, listado de clientes, cobros y pagos, ingresos y egresos, forma de pago, cuenta bancaria, efectivo, misma cuenta en los dos bloques, formas hermanas, cheques y transferencias, mismo banco, numero de cuenta, nomina, rol de pagos, prestamo quirografario, prestamo hipotecario, prestamo empresa, prestamos iess, cuentas opcionales, costo de ventas, costo de venta, inventario, asiento sin costo, no sale el costo, cuenta de iva del cliente, reglas por cliente, buscar proveedor, buscar cliente, buscar ficha, filtrar fichas, muchos proveedores, cuentas faltantes, modulos que contabilizan, apagar asientos, no generar asientos, no contabilizar, desactivar contabilidad, interruptor, consignaciones sin asiento, aviso de asientos pendientes, asientos pendientes en el balance, proveedores sin cuentas, clientes sin cuentas, productos sin cuentas, pendientes de configurar, retenciones en venta, retenciones en compra, retencion de renta, no aparecen las retenciones, codigo de retencion, catalogo de retenciones sri, codigo ats, codigo del anexo, retencion mal asignada, codigo de retencion no existe, en que documento esta el error, retencion con codigo invalido, sugerencias, sugerir cuentas, proveedores que compran lo mismo, copiar cuentas de otro proveedor, misma cuenta para varios proveedores, gasolineras, proveedores parecidos, subtotal de compras, cuenta de gasto del proveedor, mostrar las demas cuentas, ver todas las cuentas, tipo de asiento no aparece, falta tipo de asiento en el selector, modulo apagado, personalizar asiento contable, tabla de proveedores, detalle de compras, cuenta de subtotal por proveedor, recibos de venta, copiar configuracion de facturas, recibos con otras cuentas, recibo sin asiento, igualar recibos y facturas, ajustes de inventario, asiento de ajustes, sobrante de inventario, faltante de inventario, merma, perdida de inventario, baja de inventario, iva al gasto, iva en compras al gasto, iva no deducible, cuenta de gasto en el iva, iva como costo, centro de costo en el buscador, proyecto en el buscador, ver centro de costo de la cuenta
+version: 1.40
 orden: 5
 estado: activo
 ---
@@ -280,13 +280,34 @@ faltantes**, que deja a la vista únicamente las fichas con el aviso rojo
 *faltan N*. El filtro se mantiene al guardar una cuenta, y la ficha recién
 agregada con **Agregar** se muestra siempre.
 
+## Al elegir una cuenta: centro de costo y proyecto
+
+Cuando escribe en el campo de una cuenta, cada cuenta sugerida muestra junto a
+su nombre el **centro de costo** (azul) y el **proyecto** (verde) que tiene
+vigentes hoy en el Plan de Cuentas, si los tiene. Así se distingue, por ejemplo,
+entre dos cuentas de gasto iguales asignadas a proyectos distintos. Si la cuenta
+no tiene centro ni proyecto, solo se ve el código y el nombre.
+
 ## Cada concepto admite un solo tipo de cuenta
 
 Cada concepto (*Cuenta por cobrar*, *Subtotal*, *IVA*, *Costo de Ventas*,
 *Inventario*…) admite cuentas de una naturaleza concreta: la cartera solo acepta
 cuentas de **activo**, el subtotal solo cuentas de **ingreso**, el IVA solo de
-**pasivo**, y así. El buscador de cuentas de cada campo ya ofrece únicamente las
-cuentas de esa naturaleza.
+**pasivo** (en ventas), y así. El buscador de cuentas de cada campo ya ofrece
+únicamente las cuentas de esa naturaleza.
+
+**Excepción: el IVA de las compras.** En *Adquisiciones Compras*, el IVA por
+tarifa admite cuentas de **activo** (IVA en compras, crédito tributario) y también
+de **costo o gasto**. Use una cuenta de gasto cuando ese IVA no se recupera como
+crédito tributario (por ejemplo, un gasto no deducible o una empresa que no
+compensa el IVA): el asiento de la compra lo carga directamente al gasto, en
+lugar de al crédito tributario. Vale igual para la configuración General y para
+las reglas por Proveedor, Ítem, Categoría y Marca.
+
+Esta cuenta solo cambia el **asiento**. La Declaración de IVA y el ATS se arman
+con los datos de las compras (su IVA y su sustento tributario), no con la
+cuenta: si ese IVA no debe tomarse como crédito tributario, revise el sustento
+tributario de la compra.
 
 Si aun así se intenta guardar una cuenta que no corresponde, el sistema la
 rechaza con un mensaje que dice qué tipo de cuenta espera ese concepto. La
@@ -588,6 +609,8 @@ ingresos o egresos. Solo falta asignar la cuenta.
 
 ## Historial de cambios
 
+- **1.40** — Al buscar una cuenta, cada sugerencia muestra el **centro de costo** y el **proyecto** vigentes de la cuenta, si los tiene.
+- **1.39** — En *Adquisiciones Compras*, el **IVA por tarifa** admite también cuentas de **costo o gasto**, para enviar al gasto el IVA que no se usa como crédito tributario.
 - **1.38** — *Cierre del Ejercicio* suma las cuentas de **Utilidades Acumuladas** y **Pérdidas
   Acumuladas**, que usa el nuevo módulo Cierre del Ejercicio para la apertura del año siguiente.
 
