@@ -1005,14 +1005,32 @@ class ProductoRepository extends BaseRepository
 
     public function syncInventarios(int $idProducto, int $idEmpresa, array $inventarios, int $userId): void
     {
-        $sqlDel = "UPDATE productos_bodegas SET eliminado = true, deleted_at = CURRENT_TIMESTAMP, deleted_by = :uid 
+        // Candado de stock de cada bodega que se toca (las de la ficha y las que ya tenía), en
+        // orden fijo, ANTES de leer el kardex (CLAUDE.md §8): un movimiento concurrente no debe
+        // quedar pisado por el saldo que se recalcula abajo.
+        $st = $this->db->prepare("SELECT id_bodega FROM productos_bodegas WHERE id_producto = :p AND id_empresa = :e");
+        $st->execute([':p' => $idProducto, ':e' => $idEmpresa]);
+        $bodegas = array_map('intval', $st->fetchAll(PDO::FETCH_COLUMN));
+        foreach ($inventarios as $inv) {
+            $bodegas[] = (int) ($inv['id_bodega'] ?? 0);
+        }
+        $bodegas = array_values(array_unique(array_filter($bodegas)));
+        sort($bodegas);
+        $inventario = new InventarioRepository();
+        foreach ($bodegas as $idB) {
+            $inventario->lockStock($idProducto, $idB, $idEmpresa);
+        }
+
+        $sqlDel = "UPDATE productos_bodegas SET eliminado = true, deleted_at = CURRENT_TIMESTAMP, deleted_by = :uid
                    WHERE id_producto = :id_p AND id_empresa = :id_e";
         $stDel = $this->db->prepare($sqlDel);
         $stDel->execute([':uid' => $userId, ':id_p' => $idProducto, ':id_e' => $idEmpresa]);
 
+        // stock_actual NO se toma de la ficha: el saldo es siempre el del kardex (se fija abajo).
+        // Antes una bodega nueva nacía con el número que trajera el formulario, sin movimiento.
         $sqlIns = "INSERT INTO productos_bodegas (id_empresa, id_producto, id_bodega, stock_minimo, stock_maximo, stock_actual, created_by, updated_by)
-                   VALUES (:id_e, :id_p, :id_b, :s_min, :s_max, :s_act, :uid, :uid)
-                   ON CONFLICT (id_producto, id_bodega) 
+                   VALUES (:id_e, :id_p, :id_b, :s_min, :s_max, 0, :uid, :uid)
+                   ON CONFLICT (id_producto, id_bodega)
                    DO UPDATE SET eliminado = false, stock_minimo = EXCLUDED.stock_minimo, stock_maximo = EXCLUDED.stock_maximo, updated_by = EXCLUDED.updated_by, updated_at = CURRENT_TIMESTAMP";
         $stIns = $this->db->prepare($sqlIns);
 
@@ -1023,9 +1041,24 @@ class ProductoRepository extends BaseRepository
                 ':id_b'  => $inv['id_bodega'],
                 ':s_min' => $inv['stock_minimo'] ?? 0,
                 ':s_max' => $inv['stock_maximo'] ?? 0,
-                ':s_act' => $inv['stock_actual'] ?? 0,
                 ':uid'   => $userId
             ]);
+        }
+
+        // Saldo de cada bodega = kardex vigente del ambiente actual (mismo cálculo que
+        // getStockActual). Una bodega quitada de la ficha que todavía tiene existencias se
+        // mantiene visible: antes quedaba marcada como eliminada y su stock desaparecía de
+        // Existencias aunque el kardex lo tuviera.
+        foreach ($bodegas as $idB) {
+            $real = $inventario->getStockActual($idProducto, $idB, $idEmpresa);
+            // La decisión se toma aquí (no comparando el parámetro en SQL: con prepares nativos un
+            // saldo como 2.5 se tomaba como integer y fallaba el guardado del producto).
+            $sql = abs($real) > 0.000001
+                ? "UPDATE productos_bodegas SET stock_actual = :real, eliminado = false, deleted_at = NULL, deleted_by = NULL
+                    WHERE id_producto = :p AND id_bodega = :b AND id_empresa = :e"
+                : "UPDATE productos_bodegas SET stock_actual = :real
+                    WHERE id_producto = :p AND id_bodega = :b AND id_empresa = :e";
+            $this->db->prepare($sql)->execute([':real' => $real, ':p' => $idProducto, ':b' => $idB, ':e' => $idEmpresa]);
         }
     }
     

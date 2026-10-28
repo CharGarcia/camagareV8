@@ -824,31 +824,25 @@ class ReciboVentaService
             $this->logService
         );
 
-        // ── 4. Liberar el inventario del recibo para que la factura pueda consumirlo,
-        //       crear la factura y, si falla, restaurar el inventario del recibo. ──
-        $this->getInventarioService()->revertirMovimientosPorReferencia(self::REF_TIPO, $idRecibo, $idEmpresa, $idUsuario, true);
+        // ── 4. Liberar el inventario del recibo para que la factura pueda consumirlo y crear
+        //       la factura, en la MISMA transacción. Si falla, el rollBack deja las salidas del
+        //       recibo como estaban: no hay que "restaurarlas" (antes se volvían a registrar
+        //       encima de las que el rollBack ya había conservado → stock descontado dos veces). ──
         try {
+            $this->getInventarioService()->revertirMovimientosPorReferencia(self::REF_TIPO, $idRecibo, $idEmpresa, $idUsuario, true);
             $idFactura = $facturaService->crear($payload);
             if ($managedTransaction) {
                 $db->commit();
             }
-            // crear() no generó el XML porque esta llamada fue anidada (no controló su propia
-            // transacción): se hace aquí, ya con la factura confirmada.
-            $facturaService->generarYGuardarXml($idFactura, $empresaConfig);
         } catch (\Throwable $e) {
             if ($managedTransaction && $db->inTransaction()) {
                 $db->rollBack();
             }
-            try {
-                $this->getInventarioService()->procesarSalidaPorVenta(
-                    $idRecibo, $detFactura, (int) $recibo['id_establecimiento'],
-                    $idEmpresa, $idUsuario, "Recibo # $numRecibo", false, self::REF_TIPO
-                );
-            } catch (\Throwable $e2) {
-                error_log("[ReciboVenta] No se pudo restaurar inventario del recibo $idRecibo tras fallo de facturación: " . $e2->getMessage());
-            }
             throw $e;
         }
+        // crear() no generó el XML porque esta llamada fue anidada (no controló su propia
+        // transacción): se hace aquí, ya con la factura confirmada.
+        $facturaService->generarYGuardarXml($idFactura, $empresaConfig);
 
         // ── 5. Factura creada: finalizar el recibo (cobros + asiento) y marcarlo facturado ──
         $managed = !$db->inTransaction();
@@ -1001,15 +995,39 @@ class ReciboVentaService
             'info_adicional'      => $infoF,
         ];
 
-        // Si vamos a ELIMINAR la factura borrador, revertimos primero su inventario
-        // para liberar stock (así el recibo lo consume sin chocar con "solo stock
-        // positivo"). El revert es idempotente: el eliminar posterior no lo duplica.
-        if ($eliminarFactura) {
-            $this->getInventarioService()->revertirMovimientosPorReferencia('factura_venta', $idFactura, $idEmpresa, $idUsuario, true);
-        }
-
+        // Todo en la MISMA transacción: liberar el inventario de la factura borrador (así el
+        // recibo lo consume sin chocar con "solo stock positivo"), crear el recibo y eliminar
+        // la factura. Si algo falla, el rollBack deja la factura con su inventario intacto.
+        // Antes: (a) al fallar el recibo se "restauraba" la salida de la factura encima de la
+        // que el rollBack ya había conservado → doble descuento; (b) si después no se podía
+        // eliminar la factura (abierta por otro usuario, ya recibida por el SRI) solo se
+        // registraba en el log y la factura quedaba viva SIN su salida de inventario.
+        $facturaEliminada = false;
         try {
+            if ($eliminarFactura) {
+                $this->getInventarioService()->revertirMovimientosPorReferencia('factura_venta', $idFactura, $idEmpresa, $idUsuario, true);
+            }
+
             $idRecibo = $this->crear($payload);
+
+            // Trazabilidad recibo → factura de origen.
+            $this->repository->setFacturaOrigen($idRecibo, $idFactura);
+
+            if ($eliminarFactura) {
+                $facturaService = new FacturaVentaService(
+                    $facturaRepo,
+                    new \App\Rules\modulos\FacturaVentaRules(),
+                    $this->logService
+                );
+                try {
+                    $facturaService->eliminar($idFactura, $idEmpresa, $idUsuario);
+                } catch (\Throwable $e) {
+                    throw new \Exception("No se generó el recibo porque la factura borrador {$numFactura} no se pudo eliminar: "
+                        . $e->getMessage() . ' Puede generar el recibo dejando la factura tal cual.', 0, $e);
+                }
+                $facturaEliminada = true;
+            }
+
             if ($managedTransaction) {
                 $db->commit();
             }
@@ -1017,37 +1035,7 @@ class ReciboVentaService
             if ($managedTransaction && $db->inTransaction()) {
                 $db->rollBack();
             }
-            if ($eliminarFactura) {
-                // Restaurar el inventario de la factura que revertimos.
-                try {
-                    $this->getInventarioService()->procesarSalidaPorVenta(
-                        $idFactura, $detallesF, (int)$factura['id_establecimiento'],
-                        $idEmpresa, $idUsuario, "Factura # $numFactura", false, 'factura_venta'
-                    );
-                } catch (\Throwable $e2) {
-                    error_log("[ReciboVenta] No se pudo restaurar inventario de factura $idFactura tras fallo de recibo: " . $e2->getMessage());
-                }
-            }
             throw $e;
-        }
-
-        // Trazabilidad recibo → factura de origen.
-        $this->repository->setFacturaOrigen($idRecibo, $idFactura);
-
-        // Eliminar la factura borrador si corresponde (su inventario ya fue revertido).
-        $facturaEliminada = false;
-        if ($eliminarFactura) {
-            try {
-                $facturaService = new FacturaVentaService(
-                    $facturaRepo,
-                    new \App\Rules\modulos\FacturaVentaRules(),
-                    $this->logService
-                );
-                $facturaService->eliminar($idFactura, $idEmpresa, $idUsuario);
-                $facturaEliminada = true;
-            } catch (\Throwable $e) {
-                error_log("[ReciboVenta] Recibo $numeroRecibo creado, pero no se pudo eliminar la factura borrador $idFactura: " . $e->getMessage());
-            }
         }
 
         $this->logService->registrar(

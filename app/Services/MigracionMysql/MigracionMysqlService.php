@@ -768,20 +768,45 @@ class MigracionMysqlService
     }
 
     /**
-     * Borra el kardex migrado (inventario_kardex insertado por la migración) y su mapa. AVISO: no
-     * recalcula saldos corridos; re-migrar inventario los regenera con el saldo sembrado del stock.
+     * Fija productos_bodegas.stock_actual = kardex vigente (mismo cálculo que getStockActual) para
+     * cada par [id_producto, id_bodega], con su candado de stock (CLAUDE.md §8). Llamar dentro de
+     * la transacción que cambió el kardex. Sin esto, borrar o corregir kardex migrado dejaba el
+     * saldo de Existencias distinto del kardex.
+     *
+     * @param array<string, array{0:int,1:int}> $claves
+     */
+    private function recalcularSaldosKardex(int $idEmpresa, array $claves, int $idUsuario): void
+    {
+        $inv = new \App\repositories\modulos\InventarioRepository();
+        ksort($claves); // orden fijo de candados
+        foreach ($claves as [$idProd, $idBod]) {
+            $inv->lockStock((int) $idProd, (int) $idBod, $idEmpresa);
+            $inv->actualizarStock((int) $idProd, (int) $idBod, $idEmpresa,
+                $inv->getStockActual((int) $idProd, (int) $idBod, $idEmpresa), $idUsuario);
+        }
+    }
+
+    /**
+     * Borra el kardex migrado (inventario_kardex insertado por la migración) y su mapa, y deja el
+     * saldo de cada producto/bodega afectado igual al kardex que queda. Los saldos corridos
+     * (stock_anterior/posterior) de los movimientos restantes no se recalculan.
      */
     private function eliminarInventarioMigrado(int $idEmpresa, PDO $pg, ?string $desde = null, ?string $hasta = null): array
     {
         $res = ['entidad' => 'inventario', 'cabeceras' => 0, 'hijos' => 0, 'mapa' => 0, 'vinculados_intactos' => 0,
-                'rango' => ($desde !== null || $hasta !== null),
-                'aviso' => 'Los saldos del kardex no se recalculan al borrar; vuelve a migrar Inventario para regenerarlos.'];
+                'rango' => ($desde !== null || $hasta !== null)];
         [$ids, $idsMapa] = $this->idsEliminar($pg, $idEmpresa, 'inventario', 'inventario_kardex', 'fecha_movimiento', $desde, $hasta);
 
         $pg->beginTransaction();
         try {
             if ($ids) {
+                $claves = [];
+                foreach ($pg->query("SELECT DISTINCT id_producto, id_bodega FROM inventario_kardex WHERE id IN (" . implode(',', $ids) . ")")
+                             ->fetchAll(PDO::FETCH_NUM) as [$p, $b]) {
+                    $claves[sprintf('%012d-%012d', $p, $b)] = [(int) $p, (int) $b];
+                }
                 $res['cabeceras'] = (int) $pg->exec("DELETE FROM inventario_kardex WHERE id IN (" . implode(',', $ids) . ")");
+                $this->recalcularSaldosKardex($idEmpresa, $claves, (int) ($_SESSION['id_usuario'] ?? 0));
             }
             $res['mapa'] = $this->limpiarMapa($pg, $idEmpresa, 'inventario', $idsMapa);
             $pg->commit();
@@ -4989,7 +5014,8 @@ class MigracionMysqlService
                 ON CONFLICT (id_producto, id_bodega)
                 DO UPDATE SET stock_actual = EXCLUDED.stock_actual, updated_by = EXCLUDED.updated_by,
                               updated_at = CURRENT_TIMESTAMP, eliminado = false");
-        $stock  = [];
+        $invRepoMig    = new \App\repositories\modulos\InventarioRepository();
+        $reconciliados = []; // producto/bodega de los movimientos ya migrados que el reconcile corrige
         // Enlace de los movimientos de consignación/retorno al documento migrado. El texto viejo
         // `referencia` trae el número ("Consignación en venta N: 4" / "Retorno consignación en venta N: 4");
         // ese número = clave_natural en el mapa (numero_consignacion de la ENTRADA / del DEVOL). El stock
@@ -5025,8 +5051,8 @@ class MigracionMysqlService
         // re-migrar Inventario corrige el signo sin "Eliminar migrados". No toca stock_anterior/posterior (son
         // niveles absolutos, ya correctos) ni productos_bodegas.
         $updRec = $pg->prepare($tieneMedida
-            ? "UPDATE inventario_kardex SET cantidad = :cant, fecha_caducidad = :cad, id_medida = COALESCE((SELECT id_medida FROM productos WHERE id = inventario_kardex.id_producto), id_medida), referencia_tipo = COALESCE(:rt, referencia_tipo), referencia_id = COALESCE(:rid, referencia_id), updated_at = now(), updated_by = :u WHERE id = :id"
-            : "UPDATE inventario_kardex SET cantidad = :cant, fecha_caducidad = :cad, referencia_tipo = COALESCE(:rt, referencia_tipo), referencia_id = COALESCE(:rid, referencia_id), updated_at = now(), updated_by = :u WHERE id = :id");
+            ? "UPDATE inventario_kardex SET cantidad = :cant, fecha_caducidad = :cad, id_medida = COALESCE((SELECT id_medida FROM productos WHERE id = inventario_kardex.id_producto), id_medida), referencia_tipo = COALESCE(:rt, referencia_tipo), referencia_id = COALESCE(:rid, referencia_id), updated_at = now(), updated_by = :u WHERE id = :id RETURNING id_producto, id_bodega"
+            : "UPDATE inventario_kardex SET cantidad = :cant, fecha_caducidad = :cad, referencia_tipo = COALESCE(:rt, referencia_tipo), referencia_id = COALESCE(:rid, referencia_id), updated_at = now(), updated_by = :u WHERE id = :id RETURNING id_producto, id_bodega");
 
         $sql = "SELECT id_inventario, id_producto, id_bodega, codigo_producto, nombre_producto, cantidad_entrada, cantidad_salida, costo_unitario, precio, operacion, fecha_registro, referencia, lote, fecha_vencimiento
                   FROM inventarios WHERE ruc_empresa LIKE " . $mysql->quote($base . '%') . $this->clausulaEstabOrigen('ruc_empresa', $base, $mysql)
@@ -5065,14 +5091,13 @@ class MigracionMysqlService
                 $idBod  = $mapBod[(string) (int) $iv['id_bodega']] ?? $bodDef;
                 $cu     = (float) ($iv['costo_unitario'] ?: $iv['precio']);
 
-                $key = $idProd . '-' . $idBod;
-                if (!isset($stock[$key])) {
-                    $qStock->execute([$idEmpresa, $idProd, $idBod]);
-                    $stock[$key] = (float) $qStock->fetchColumn();
-                }
-                $ant  = $stock[$key];
+                // Saldo de partida leído del kardex BAJO candado en cada movimiento (CLAUDE.md §8), con
+                // el mismo cálculo que el resto del sistema. Antes se arrastraba en memoria toda la
+                // corrida (y sumando todos los ambientes): una venta hecha mientras corría una
+                // re-sincronización quedaba pisada en el saldo de bodega.
+                $invRepoMig->lockStock($idProd, $idBod, $idEmpresa);
+                $ant  = $invRepoMig->getStockActual($idProd, $idBod, $idEmpresa);
                 $post = $esEntrada ? $ant + $cant : $ant - $cant;
-                $stock[$key] = $post;
 
                 if (!array_key_exists($idProd, $medCache)) { $medStmt->execute([$idProd]); $medCache[$idProd] = ($medStmt->fetchColumn() ?: null); }
                 $idMed = $medCache[$idProd];
@@ -5088,7 +5113,8 @@ class MigracionMysqlService
                 $ins->execute($movParams);
                 $kid = (int) $ins->fetchColumn();
 
-                $upsertStock->execute([$idEmpresa, $idProd, $idBod, $post, $idUsuario, $idUsuario]);
+                // Saldo = kardex ya con este movimiento (si es de otro ambiente, el saldo no cambia).
+                $upsertStock->execute([$idEmpresa, $idProd, $idBod, $invRepoMig->getStockActual($idProd, $idBod, $idEmpresa), $idUsuario, $idUsuario]);
 
                 $insMap->execute([':e' => $idEmpresa, ':o' => $old, ':d' => $kid, ':cn' => (string) $old, ':vin' => 'f', ':cb' => $idUsuario]);
                 $pg->commit();

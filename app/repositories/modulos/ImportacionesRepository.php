@@ -292,6 +292,20 @@ class ImportacionesRepository extends BaseRepository
     // CABECERA
     // ─────────────────────────────────────────────────────────────────────
 
+    /**
+     * Bloquea la cabecera (FOR UPDATE, hasta el COMMIT/ROLLBACK) y devuelve su estado vigente.
+     * Llamar dentro de la transacción que nacionaliza: dos "Procesar" simultáneos (o la
+     * aprobación por correo y por pantalla) quedan en fila y el segundo ve el estado real.
+     */
+    public function bloquearEstado(int $id, int $idEmpresa): ?string
+    {
+        $st = $this->db->prepare("SELECT estado FROM importaciones_cabecera
+                                   WHERE id = :id AND id_empresa = :e AND eliminado = false FOR UPDATE");
+        $st->execute([':id' => $id, ':e' => $idEmpresa]);
+        $estado = $st->fetchColumn();
+        return $estado === false ? null : (string) $estado;
+    }
+
     public function getPorId(int $id, ?int $idEmpresa = null): ?array
     {
         $where  = "WHERE i.id = :id AND i.eliminado = false";

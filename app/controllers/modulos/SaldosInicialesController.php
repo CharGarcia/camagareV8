@@ -871,8 +871,10 @@ class SaldosInicialesController extends BaseModuloController
             $this->jsonOk([
                 'insertados' => $resultado['insertados'],
                 'errores'    => $resultado['errores'],
-                'mensaje'    => "Se importaron {$resultado['insertados']} registros."
-                    . (count($resultado['errores']) > 0 ? ' Con ' . count($resultado['errores']) . ' errores.' : ''),
+                // Todo o nada: con errores no se importó ninguna fila.
+                'mensaje'    => count($resultado['errores']) > 0
+                    ? 'No se importó ninguna fila: el archivo tiene ' . count($resultado['errores']) . ' errores. Corríjalos y vuelva a cargar el archivo completo.'
+                    : "Se importaron {$resultado['insertados']} registros.",
             ]);
         } catch (\Throwable $e) {
             $this->jsonErr('Error al procesar el archivo: ' . $e->getMessage());

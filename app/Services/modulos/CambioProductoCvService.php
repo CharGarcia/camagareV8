@@ -1101,10 +1101,35 @@ class CambioProductoCvService
         // de stock (y el reverso al anular, la subiría de más).
         if (($det['tipo_linea'] ?? '') === 'entrega' && strtoupper((string) ($det['origen_tipo'] ?? '')) === 'CONSIGNACION') return;
 
-        if (!$this->afectaInventario($det, $empresaConfig)) return;
-
         $idProducto  = (int) $det['id_producto'];
+        // ¿Es el reverso (reversarInventario: devolución → salida, entrega → entrada)?
+        $esReverso = ((($det['tipo_linea'] ?? '') === 'devolucion') === ($tipo === 'salida'));
+        if (!$esReverso) {
+            $desdeConsignacion = ($det['tipo_linea'] ?? '') === 'devolucion'
+                && strtoupper((string) ($det['origen_tipo'] ?? '')) === 'CONSIGNACION';
+            // La unidad devuelta de una consignación entra solo si la consignación la sacó de esta
+            // bodega (misma regla que el retorno); el resto sigue la regla del cambio.
+            $mueve = $desdeConsignacion
+                ? (new InventarioService($this->inventarioRepo, $this->logService))
+                    ->consignacionSacoStock((int) ($det['id_origen'] ?? 0), $idProducto, $idBodega, $idEmpresa)
+                : $this->afectaInventario($det, $empresaConfig);
+            if (!$mueve) return;
+        }
+
+        // Candado ANTES de leer el kardex (CLAUDE.md §8).
         $this->inventarioRepo->lockStock($idProducto, $idBodega, $idEmpresa);
+        if ($esReverso) {
+            // Se reversa a lo sumo lo que ESTE cambio tiene vigente en el kardex de ese producto,
+            // bodega y LOTE, no lo que diga la regla ahora: si el producto o la config cambiaron
+            // desde que se emitió, el reverso ya no era igual al movimiento original. Por lote,
+            // para que cambiar una unidad por otra del mismo producto (lotes distintos) revierta
+            // cada lote por su lado (sumados, el neto daba 0 y no se revertía ninguno).
+            $loteDet = (isset($det['lote']) && $det['lote'] !== '') ? (string) $det['lote'] : '';
+            $neto = $this->inventarioRepo->getNetoMovimientos([$refTipo], $refId, $idProducto, $idBodega, $idEmpresa, $loteDet);
+            $cant = min($cant, $tipo === 'salida' ? $neto : -$neto);
+            if ($cant <= 1e-9) return;
+            $det['cantidad'] = $cant;
+        }
         if ($tipo === 'salida') {
             // Entrega desde bodega, o reverso de una devolución al anular/eliminar: la unidad
             // tiene que estar en bodega. Sin esto el lote quedaba en negativo (p. ej. anular un

@@ -370,7 +370,10 @@ class InventarioController extends BaseModuloController
         try {
             $idEmpresa = (int) $_SESSION['id_empresa'];
             $idUsuario = (int) $_SESSION['id_usuario'];
-            $data      = $_POST;
+            // El vínculo con un documento y la fecha los fijan solo los módulos internos: desde el
+            // formulario, un referencia_tipo armado ('compra' + id) hacía que el ajuste se revirtiera
+            // al eliminar ese documento y se saltara el período contable y el asiento.
+            $data      = \App\Services\modulos\InventarioService::soloCamposAjuste($_POST);
 
             if (empty($data['id_producto']) || empty($data['id_bodega'])) {
                 echo json_encode(['ok' => false, 'mensaje' => 'Producto y bodega son obligatorios.']);
@@ -707,35 +710,27 @@ class InventarioController extends BaseModuloController
         }
 
         try {
-            $handle     = fopen($tmpPath, 'r');
-            $header     = fgetcsv($handle); // Leer cabecera
-            $procesados = 0;
-            $errores    = [];
-
+            $handle = fopen($tmpPath, 'r');
+            $header = fgetcsv($handle); // Leer cabecera
+            $filas  = [];
             while (($row = fgetcsv($handle)) !== false) {
                 if (empty(array_filter($row))) continue; // Fila vacía
-
-                $data = array_combine($header, $row);
-
-                if (empty($data['id_producto']) || empty($data['id_bodega']) || empty($data['cantidad'])) {
-                    $errores[] = "Fila inválida: faltan campos obligatorios.";
-                    continue;
-                }
-
-                $tipoDefault = $_POST['tipo_movimiento'] ?? 'entrada';
-                $data['tipo_movimiento'] = $data['tipo_movimiento'] ?? $tipoDefault;
-                $data['contabilizar']    = true; // igual que el ajuste del modal
-
-                $this->service->ajusteManual($data, $idEmpresa, $idUsuario);
-                $procesados++;
+                $filas[] = (count($row) === count($header)) ? array_combine($header, $row) : [];
             }
-
             fclose($handle);
 
-            $msg = "Importación completada.";
-            if (!empty($errores)) $msg .= " " . count($errores) . " filas con errores omitidas.";
+            $res = $this->service->importarAjustes($filas, (string) ($_POST['tipo_movimiento'] ?? 'entrada'), $idEmpresa, $idUsuario);
+            if (!empty($res['errores'])) {
+                echo json_encode([
+                    'ok'      => false,
+                    'mensaje' => 'No se importó ninguna fila: ' . implode(' ', array_slice($res['errores'], 0, 10))
+                        . (count($res['errores']) > 10 ? ' …y ' . (count($res['errores']) - 10) . ' más.' : '')
+                        . ' Corrija el archivo y vuelva a cargarlo completo.',
+                ]);
+                exit;
+            }
 
-            echo json_encode(['ok' => true, 'mensaje' => $msg, 'procesados' => $procesados]);
+            echo json_encode(['ok' => true, 'mensaje' => 'Importación completada.', 'procesados' => $res['procesados']]);
         } catch (\Throwable $e) {
             \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             echo json_encode(['ok' => false, 'mensaje' => $e->getMessage()]);

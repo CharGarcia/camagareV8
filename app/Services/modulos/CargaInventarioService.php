@@ -225,7 +225,7 @@ class CargaInventarioService
      * NUP, cada producto va una vez por bodega y lote, y si el producto tiene stock por lotes
      * en la bodega hay que indicar el lote contado. La diferencia se calcula al aprobar.
      */
-    public function crearDesdeImportacion(int $idEmpresa, int $idUsuario, string $tipoMovimiento, ?string $observacion, array $filas): array
+    public function crearDesdeImportacion(int $idEmpresa, int $idUsuario, string $tipoMovimiento, ?string $observacion, array $filas, ?string $tokenGuardado = null): array
     {
         $this->rules->validarCabecera(['tipo_movimiento' => $tipoMovimiento, 'filas' => $filas]);
         $esAjuste = $tipoMovimiento === 'ajuste';
@@ -306,6 +306,27 @@ class CargaInventarioService
         $db = Database::getConnection();
         $db->beginTransaction();
         try {
+            // Guardado único (CLAUDE.md §8): un reintento tras "Error de conexión" (el servidor sí
+            // registró, se perdió la respuesta) trae la misma clave y no crea otra carga. Antes se
+            // creaba una segunda y, sin aprobación exigida, se aplicaba sola: stock duplicado.
+            $guardado = new \App\Services\GuardadoUnicoService();
+            $previo   = $guardado->previo($tokenGuardado, $idEmpresa, 'cargas_inventario');
+            if ($previo) {
+                $db->rollBack();
+                $existente = $this->repo->getById((int) $previo['id_registro'], $idEmpresa) ?? [];
+                return [
+                    'id'       => (int) $previo['id_registro'],
+                    'numero'   => $previo['numero'] ?? ($existente['numero'] ?? ''),
+                    'estado'   => $existente['estado'] ?? 'pendiente',
+                    'validada' => (bool) ($existente['validada'] ?? true),
+                    'lineas'   => (int) ($existente['total_lineas'] ?? 0),
+                    'errores'  => [],
+                    'requiere_aprobacion' => false,
+                    'error_aplicacion'    => null,
+                    'ya_registrada'       => true,
+                ];
+            }
+
             $numero = $this->repo->siguienteNumero($idEmpresa);
             $idCarga = $this->repo->crearCabecera([
                 'id_empresa'         => $idEmpresa,
@@ -331,6 +352,7 @@ class CargaInventarioService
                 'numero' => $numero, 'tipo' => $tipoMovimiento, 'lineas' => count($lineas), 'validada' => $todasOk,
             ]);
 
+            $guardado->registrar($tokenGuardado, $idEmpresa, 'cargas_inventario', $idCarga, (string) $numero, $idUsuario);
             $db->commit();
         } catch (\Throwable $e) {
             if ($db->inTransaction()) $db->rollBack();
@@ -663,21 +685,44 @@ class CargaInventarioService
         return "El producto tiene stock por lotes en esta bodega ({$muestra}): indique el lote que contó, una línea por lote.";
     }
 
+    /**
+     * Ejecuta $accion con la carga bloqueada (FOR UPDATE) dentro de una transacción. Rechazar y
+     * eliminar leían el estado sin bloquear: si en ese momento otro usuario la aprobaba, la carga
+     * quedaba "rechazada" o eliminada con su stock ya aplicado en el kardex y sin forma de anularlo.
+     * Con el bloqueo, quien llega segundo espera y ve el estado real.
+     */
+    private function conCargaBloqueada(int $idCarga, int $idEmpresa, callable $accion)
+    {
+        $db = Database::getConnection();
+        $managed = !$db->inTransaction();
+        if ($managed) $db->beginTransaction();
+        try {
+            $carga = $this->repo->getByIdParaActualizar($idCarga, $idEmpresa);
+            if (!$carga) {
+                throw new \InvalidArgumentException('Carga no encontrada.');
+            }
+            $res = $accion($carga);
+            if ($managed) $db->commit();
+            return $res;
+        } catch (\Throwable $e) {
+            if ($managed && $db->inTransaction()) $db->rollBack();
+            throw $e;
+        }
+    }
+
     public function rechazar(int $idCarga, int $idEmpresa, int $idUsuario, string $motivo, int $nivel = 3): array
     {
-        $carga = $this->repo->getById($idCarga, $idEmpresa);
-        if (!$carga) {
-            throw new \InvalidArgumentException('Carga no encontrada.');
-        }
-        if ($carga['estado'] !== 'pendiente') {
-            throw new \InvalidArgumentException('Solo se pueden rechazar cargas pendientes.');
-        }
-        if ($nivel < 3 && (int) ($carga['created_by'] ?? 0) === $idUsuario && !$this->sinAprobadores($idEmpresa)) {
-            throw new \InvalidArgumentException('No puede rechazar una carga que usted mismo registró. Si desea, puede eliminarla.');
-        }
-        $this->repo->actualizarEstado($idCarga, $idEmpresa, 'rechazada', null, $motivo);
-        $this->log->registrar($idUsuario, $idEmpresa, 'rechazar', 'inventario_cargas', $idCarga, ['estado' => 'pendiente'], ['estado' => 'rechazada', 'motivo' => $motivo]);
-        return ['ok' => true, 'estado' => 'rechazada'];
+        return $this->conCargaBloqueada($idCarga, $idEmpresa, function (array $carga) use ($idCarga, $idEmpresa, $idUsuario, $motivo, $nivel) {
+            if ($carga['estado'] !== 'pendiente') {
+                throw new \InvalidArgumentException('Solo se pueden rechazar cargas pendientes.');
+            }
+            if ($nivel < 3 && (int) ($carga['created_by'] ?? 0) === $idUsuario && !$this->sinAprobadores($idEmpresa)) {
+                throw new \InvalidArgumentException('No puede rechazar una carga que usted mismo registró. Si desea, puede eliminarla.');
+            }
+            $this->repo->actualizarEstado($idCarga, $idEmpresa, 'rechazada', null, $motivo);
+            $this->log->registrar($idUsuario, $idEmpresa, 'rechazar', 'inventario_cargas', $idCarga, ['estado' => 'pendiente'], ['estado' => 'rechazada', 'motivo' => $motivo]);
+            return ['ok' => true, 'estado' => 'rechazada'];
+        });
     }
 
     /** Cambia la observación general de la carga (vacía = sin observación). */
@@ -757,27 +802,30 @@ class CargaInventarioService
         $cfg = $this->getConfigAprobacion($idEmpresa);
         $aprobadaPor = $cfg['aprobadores'][0] ?? 0;
 
-        $this->repo->actualizarEstado($idCarga, $idEmpresa, 'rechazada', null, $motivo);
-        $this->repo->clearToken($idCarga);
-        $this->log->registrar($aprobadaPor, $idEmpresa, 'rechazar_correo', 'inventario_cargas', $idCarga, ['estado' => 'pendiente'], ['estado' => 'rechazada', 'motivo' => $motivo]);
-        return ['ok' => true, 'estado' => 'rechazada', 'numero' => $carga['numero']];
+        return $this->conCargaBloqueada($idCarga, $idEmpresa, function (array $bloqueada) use ($idCarga, $idEmpresa, $aprobadaPor, $motivo, $carga) {
+            if ($bloqueada['estado'] !== 'pendiente') {
+                throw new \InvalidArgumentException('Esta carga ya no está pendiente (estado: ' . $bloqueada['estado'] . ').');
+            }
+            $this->repo->actualizarEstado($idCarga, $idEmpresa, 'rechazada', null, $motivo);
+            $this->repo->clearToken($idCarga);
+            $this->log->registrar($aprobadaPor, $idEmpresa, 'rechazar_correo', 'inventario_cargas', $idCarga, ['estado' => 'pendiente'], ['estado' => 'rechazada', 'motivo' => $motivo]);
+            return ['ok' => true, 'estado' => 'rechazada', 'numero' => $carga['numero']];
+        });
     }
 
     public function eliminar(int $idCarga, int $idEmpresa, int $idUsuario): bool
     {
-        $carga = $this->repo->getById($idCarga, $idEmpresa);
-        if (!$carga) {
-            throw new \InvalidArgumentException('Carga no encontrada.');
-        }
-        if ($carga['estado'] === 'aprobada') {
-            throw new \InvalidArgumentException('No se puede eliminar una carga ya aprobada (afectó el kardex). Si hay que deshacerla, anúlela.');
-        }
-        if ($carga['estado'] === 'anulada') {
-            throw new \InvalidArgumentException('Una carga anulada no se elimina: queda en el listado como constancia de que su stock se reversó.');
-        }
-        $ok = $this->repo->eliminar($idCarga, $idEmpresa, $idUsuario);
-        $this->log->registrar($idUsuario, $idEmpresa, 'eliminar', 'inventario_cargas', $idCarga, $carga, ['eliminado' => true]);
-        return $ok;
+        return $this->conCargaBloqueada($idCarga, $idEmpresa, function (array $carga) use ($idCarga, $idEmpresa, $idUsuario) {
+            if ($carga['estado'] === 'aprobada') {
+                throw new \InvalidArgumentException('No se puede eliminar una carga ya aprobada (afectó el kardex). Si hay que deshacerla, anúlela.');
+            }
+            if ($carga['estado'] === 'anulada') {
+                throw new \InvalidArgumentException('Una carga anulada no se elimina: queda en el listado como constancia de que su stock se reversó.');
+            }
+            $ok = $this->repo->eliminar($idCarga, $idEmpresa, $idUsuario);
+            $this->log->registrar($idUsuario, $idEmpresa, 'eliminar', 'inventario_cargas', $idCarga, $carga, ['eliminado' => true]);
+            return $ok;
+        });
     }
 
     // ─── Anulación de una carga aprobada ────────────────────────────────────────

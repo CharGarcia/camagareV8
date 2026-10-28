@@ -90,9 +90,9 @@ class ServicioExternoService
     }
 
     /** Revierte (devuelve al stock) los movimientos de inventario de la orden. */
-    private function revertirInventario(int $idOrden, int $idEmpresa, int $idUsuario): void
+    private function revertirInventario(int $idOrden, int $idEmpresa, int $idUsuario, bool $permitirNegativo = false): void
     {
-        $this->getInventarioService()->revertirMovimientosPorReferencia(self::REF_TIPO, $idOrden, $idEmpresa, $idUsuario);
+        $this->getInventarioService()->revertirMovimientosPorReferencia(self::REF_TIPO, $idOrden, $idEmpresa, $idUsuario, $permitirNegativo);
     }
 
     /**
@@ -316,7 +316,25 @@ class ServicioExternoService
         $db = Database::getConnection();
         try {
             $db->beginTransaction();
+            if ($this->repository->bloquearEstado($id, $idEmpresa) !== $actual) {
+                throw new Exception("La orden cambió de estado mientras se procesaba. Vuelva a abrirla.");
+            }
             $this->repository->updateEstado($id, $idEmpresa, $nuevoEstado, $idUsuario);
+
+            // Anular devuelve al stock lo que consumió la orden; reactivarla lo vuelve a
+            // descontar. Antes solo cambiaba el estado y la orden anulada seguía consumiendo
+            // stock hasta que alguien la eliminara. Reactivar es idempotente: una orden anulada
+            // antes de este cambio todavía tiene su salida viva y no se descuenta otra vez.
+            // Devolver nunca empeora el stock: se permite aunque el saldo siga negativo.
+            if ($nuevoEstado === 'anulado') {
+                $this->revertirInventario($id, $idEmpresa, $idUsuario, true);
+            } elseif ($actual === 'anulado' && !$this->repository->tieneMovimientosInventario($id, $idEmpresa)) {
+                $this->aplicarSalidaInventario(
+                    $id, $idEmpresa, $idUsuario, $this->repository->getDetalles($id, $idEmpresa),
+                    (int) ($cab['id_establecimiento'] ?? 0), (int) ($cab['id_bodega'] ?? 0), (string) ($cab['numero_orden'] ?? ''), false
+                );
+            }
+
             $this->logService->registrar($idUsuario, $idEmpresa, 'CAMBIAR_ESTADO_ORDEN_SERVICIO_EXTERNO', 'servicioexterno_ordenes', $id,
                 ['estado' => $actual], ['estado' => $nuevoEstado]);
             $db->commit();
@@ -507,11 +525,15 @@ class ServicioExternoService
             'info_adicional'      => is_array($orden['info_adicional'] ?? null) ? $orden['info_adicional'] : [],
         ];
 
-        // El documento hace su propia salida de inventario: primero devolvemos al stock
-        // lo que consumió la orden, para no descontar dos veces.
-        $this->revertirInventario($idOrden, $idEmpresa, $idUsuario);
-
+        // TODO en UNA transacción: devolver el inventario de la orden (el documento hace su
+        // propia salida) → crear el documento → marcar la orden. Si algo falla, el rollBack deja
+        // la orden exactamente como estaba, incluida su salida de inventario. Antes, al fallar,
+        // se "restauraba" la salida a mano sobre un rollBack que ya la había conservado →
+        // stock descontado dos veces (mismo bug ya corregido en CarWash).
+        $svcFactura = null;
         try {
+            $this->revertirInventario($idOrden, $idEmpresa, $idUsuario);
+
             if ($tipo === 'FACTURA') {
                 $svc = new FacturaVentaService(
                     new \App\repositories\modulos\FacturaVentaRepository(),
@@ -519,6 +541,7 @@ class ServicioExternoService
                     $this->logService
                 );
                 $idDoc = $svc->crear($payload);
+                $svcFactura = $svc;
             } else {
                 $payload['con_impuestos'] = true;
                 $payload['estado']        = 'borrador';
@@ -530,6 +553,12 @@ class ServicioExternoService
                 );
                 $idDoc = $svc->crear($payload);
             }
+
+            // Marcar la orden como facturada con el documento generado.
+            $this->repository->marcarDocumentoGenerado($idOrden, $idEmpresa, $tipo, (int) $idDoc, $numeroDoc, $idUsuario);
+            $this->logService->registrar($idUsuario, $idEmpresa, 'GENERAR_DOCUMENTO_SERVICIO_EXTERNO', 'servicioexterno_ordenes', $idOrden,
+                ['estado' => $orden['estado'] ?? ''], ['tipo_documento' => $tipo, 'id_documento' => $idDoc, 'numero_documento' => $numeroDoc]);
+
             if ($managedTransaction) {
                 $db->commit();
             }
@@ -537,29 +566,13 @@ class ServicioExternoService
             if ($managedTransaction && $db->inTransaction()) {
                 $db->rollBack();
             }
-            // Si falla la emisión, restauramos la salida de inventario de la orden.
-            try {
-                $this->aplicarSalidaInventario(
-                    $idOrden, $idEmpresa, $idUsuario, $detalles, $idEstab, $idBodegaExtra,
-                    (string) ($orden['numero_orden'] ?? ''), false
-                );
-            } catch (\Throwable $e2) {
-                error_log("[ServicioExterno] No se pudo restaurar el inventario de la orden {$idOrden}: " . $e2->getMessage());
-            }
             throw $e;
         }
 
-        // Marcar la orden como facturada con el documento generado.
-        $managed = !$db->inTransaction();
-        if ($managed) $db->beginTransaction();
-        try {
-            $this->repository->marcarDocumentoGenerado($idOrden, $idEmpresa, $tipo, (int) $idDoc, $numeroDoc, $idUsuario);
-            $this->logService->registrar($idUsuario, $idEmpresa, 'GENERAR_DOCUMENTO_SERVICIO_EXTERNO', 'servicioexterno_ordenes', $idOrden,
-                ['estado' => $orden['estado'] ?? ''], ['tipo_documento' => $tipo, 'id_documento' => $idDoc, 'numero_documento' => $numeroDoc]);
-            if ($managed) $db->commit();
-        } catch (\Throwable $e) {
-            if ($managed && $db->inTransaction()) $db->rollBack();
-            throw new Exception("El documento {$numeroDoc} se generó, pero la orden no pudo marcarse como facturada: " . $e->getMessage());
+        // XML de la factura FUERA de la transacción: crear() anidado no lo genera. Si falla,
+        // la factura queda creada y el XML puede regenerarse desde Facturas de Venta.
+        if ($svcFactura !== null && $managedTransaction) {
+            $svcFactura->generarYGuardarXml((int) $idDoc, $empresaConfig);
         }
 
         return ['tipo' => $tipo, 'id_documento' => (int) $idDoc, 'numero_documento' => $numeroDoc];

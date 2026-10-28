@@ -286,8 +286,88 @@ class InventarioRepository extends BaseRepository
         $st->execute([':e' => $idEmpresa, ':p' => $idProducto, ':b' => $idBodega]);
     }
 
+    /**
+     * Primera salida vigente de un componente registrada junto a la salida de su producto padre:
+     * misma referencia, producto, bodega y cantidad, con id >= $desdeId (procesarSalidaPorVenta
+     * inserta el padre y enseguida sus componentes). Sirve para revertir una línea de un
+     * documento que solo guardó el id del movimiento principal (p. ej. líneas de Taller).
+     */
+    public function findSalidaComponente(string $refTipo, int $refId, int $idProducto, int $idBodega, float $cantidad, int $desdeId, int $idEmpresa): ?int
+    {
+        $st = $this->db->prepare("SELECT id FROM inventario_kardex
+                                   WHERE id_empresa = :e AND referencia_tipo = :t AND referencia_id = :r
+                                     AND id_producto = :p AND id_bodega = :b AND eliminado = false
+                                     AND tipo_movimiento = 'salida' AND ABS(cantidad + :c) < 0.000001 AND id >= :d
+                                   ORDER BY id LIMIT 1");
+        $st->execute([':e' => $idEmpresa, ':t' => $refTipo, ':r' => $refId, ':p' => $idProducto,
+                      ':b' => $idBodega, ':c' => $cantidad, ':d' => $desdeId]);
+        $id = $st->fetchColumn();
+        return $id ? (int) $id : null;
+    }
+
+    /**
+     * ¿El documento tiene algún movimiento vigente con estas referencias (cualquier producto)?
+     *
+     * @param string[] $tipos
+     */
+    public function tieneMovimientosReferencia(array $tipos, int $refId, int $idEmpresa): bool
+    {
+        if ($tipos === [] || $refId <= 0) return false;
+        $ph = implode(',', array_fill(0, count($tipos), '?'));
+        $st = $this->db->prepare("SELECT 1 FROM inventario_kardex
+                                   WHERE id_empresa = ? AND referencia_id = ? AND eliminado = false
+                                     AND referencia_tipo IN ({$ph}) LIMIT 1");
+        $st->execute(array_merge([$idEmpresa, $refId], array_values($tipos)));
+        return (bool) $st->fetchColumn();
+    }
+
+    /**
+     * Neto vigente (suma de cantidades con signo, eliminado = false) que un documento movió de
+     * un producto en una bodega, sumando sus referencia_tipo (el original y sus reversos).
+     * Negativo = salió de bodega; positivo = entró. Es lo que de verdad hay que reversar, sin
+     * depender de que la regla "¿afecta inventario?" siga igual que cuando se registró.
+     *
+     * @param string[] $tipos
+     */
+    public function getNetoMovimientos(array $tipos, int $refId, int $idProducto, int $idBodega, int $idEmpresa, ?string $lote = null): float
+    {
+        if ($tipos === [] || $refId <= 0) return 0.0;
+        $ph = implode(',', array_fill(0, count($tipos), '?'));
+        $params = array_merge([$idEmpresa, $refId, $idProducto, $idBodega], array_values($tipos));
+        // $lote (opcional): solo ese lote; '' o 'sin_lote' = movimientos sin lote. null = todos.
+        $whereLote = '';
+        if ($lote !== null) {
+            $whereLote = " AND COALESCE(NULLIF(numero_lote, 'sin_lote'), '') = ?";
+            $params[] = ($lote === 'sin_lote') ? '' : $lote;
+        }
+        $st = $this->db->prepare("SELECT COALESCE(SUM(cantidad), 0) FROM inventario_kardex
+                                   WHERE id_empresa = ? AND referencia_id = ? AND id_producto = ? AND id_bodega = ?
+                                     AND eliminado = false AND referencia_tipo IN ({$ph}){$whereLote}");
+        $st->execute($params);
+        return (float) $st->fetchColumn();
+    }
+
+    /**
+     * Guarda el saldo de la bodega. El valor que se escribe es SIEMPRE el del kardex vigente
+     * (getStockActual: ambiente actual de la empresa, sin exclusiones ni filtro de lote), no el
+     * que calculó el llamador: el saldo de Existencias no puede apartarse del kardex. Antes cada
+     * flujo escribía su propio cálculo y algunos lo hacían mal (tope en 0 de un ajuste sobre
+     * saldo negativo, saldo de un solo lote con "lotes obligatorios", salida excluida al editar
+     * una factura con dos líneas del mismo producto). $nuevoStock queda solo como control: si no
+     * coincide, se deja constancia en el log para ubicar al llamador.
+     *
+     * Llamar con el candado de stock tomado (lockStock) y después de registrar el movimiento.
+     */
     public function actualizarStock(int $idProducto, int $idBodega, int $idEmpresa, float $nuevoStock, int $userId): void
     {
+        $real = $this->getStockActual($idProducto, $idBodega, $idEmpresa);
+        if (abs($real - $nuevoStock) > 0.01) {
+            $origen = debug_backtrace(DEBUG_BACKTRACE_IGNORE_ARGS, 2)[1] ?? [];
+            error_log(sprintf('[Inventario] Saldo calculado %s ≠ kardex %s (prod %d, bodega %d) en %s::%s; se guarda el del kardex.',
+                $nuevoStock, $real, $idProducto, $idBodega, $origen['class'] ?? '?', $origen['function'] ?? '?'));
+        }
+        $nuevoStock = $real;
+
         $sql = "INSERT INTO productos_bodegas (id_empresa, id_producto, id_bodega, stock_actual, created_by, updated_by)
                 VALUES (:e, :p, :b, :stock, :uid, :uid)
                 ON CONFLICT (id_producto, id_bodega)
@@ -574,6 +654,15 @@ class InventarioRepository extends BaseRepository
         if (!$st->fetchColumn()) return [];
 
         $ph = implode(',', array_fill(0, count($ids), '?'));
+        if ($tabla === 'compras_detalle') {
+            // El kardex de compras apunta a la LÍNEA: la compra está eliminada si lo está su
+            // cabecera. Antes se buscaba ese id en compras_cabecera (otra compra).
+            $st = $this->db->prepare("SELECT d.id FROM compras_detalle d
+                                        JOIN compras_cabecera c ON c.id = d.id_compra
+                                       WHERE c.id_empresa = ? AND c.eliminado = true AND d.id IN ({$ph})");
+            $st->execute(array_merge([$idEmpresa], $ids));
+            return array_map('intval', $st->fetchAll(PDO::FETCH_COLUMN));
+        }
         $st = $this->db->prepare("SELECT id FROM {$tabla} WHERE id_empresa = ? AND eliminado = true AND id IN ({$ph})");
         $st->execute(array_merge([$idEmpresa], $ids));
         return array_map('intval', $st->fetchAll(PDO::FETCH_COLUMN));

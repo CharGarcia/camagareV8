@@ -978,7 +978,14 @@ class ProductosController extends BaseModuloController
             // producto y solo reactiva las que vengan en el array). Un [] por defecto
             // disparaba ese borrado en cada guardado normal, dejando el stock invisible en
             // Existencias aunque el kardex siguiera correcto (ver reporte de inventarios).
-            'inventarios'           => !empty($_POST['inventarios']) ? json_decode($_POST['inventarios'], true) : null,
+            // Solo bodega y mínimos/máximos: el stock se mueve únicamente desde Inventario (con su
+            // permiso, período contable y asiento). Un 'ajuste' o 'stock_actual' armado en esta
+            // petición movía el kardex con solo el permiso de actualizar Productos.
+            'inventarios'           => !empty($_POST['inventarios'])
+                ? array_map(static fn($inv) => is_array($inv)
+                    ? array_diff_key($inv, array_flip(['ajuste', 'stock_actual', 'observaciones_ajuste', 'lote_ajuste']))
+                    : $inv, (array) json_decode($_POST['inventarios'], true))
+                : null,
             'precios'               => !empty($_POST['precios']) ? json_decode($_POST['precios'], true) : [],
             'componentes'           => !empty($_POST['componentes']) ? json_decode($_POST['componentes'], true) : [],
             'variantes'             => !empty($_POST['variantes']) ? json_decode($_POST['variantes'], true) : [],

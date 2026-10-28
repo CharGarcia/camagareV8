@@ -341,6 +341,15 @@ class ServicioExternoRepository extends BaseRepository
         return $row ?: null;
     }
 
+    /** ¿La orden tiene hoy su salida de inventario registrada? */
+    public function tieneMovimientosInventario(int $idOrden, int $idEmpresa): bool
+    {
+        $st = $this->db->prepare("SELECT 1 FROM inventario_kardex
+                                   WHERE referencia_tipo = 'servicioexterno_orden' AND referencia_id = :o AND id_empresa = :e AND eliminado = false LIMIT 1");
+        $st->execute([':o' => $idOrden, ':e' => $idEmpresa]);
+        return (bool) $st->fetchColumn();
+    }
+
     public function getDetalles(int $idOrden, int $idEmpresa): array
     {
         $sql = "SELECT d.*, p.codigo AS producto_codigo, b.nombre AS bodega_nombre
@@ -386,6 +395,19 @@ class ServicioExternoRepository extends BaseRepository
             ':s' => $subtotal, ':d' => $descuento, ':i' => $iva, ':t' => $total,
             ':id' => $id, ':e' => $idEmpresa,
         ]);
+    }
+
+    /**
+     * Bloquea la orden (FOR UPDATE, hasta el COMMIT/ROLLBACK) y devuelve su estado vigente. Se
+     * llama dentro de la transacción del cambio de estado: dos cambios simultáneos (p. ej. dos
+     * reactivaciones de una orden anulada) quedan en fila y el segundo ve el estado real.
+     */
+    public function bloquearEstado(int $id, int $idEmpresa): ?string
+    {
+        $st = $this->db->prepare("SELECT estado FROM servicioexterno_ordenes WHERE id = :id AND id_empresa = :e AND eliminado = false FOR UPDATE");
+        $st->execute([':id' => $id, ':e' => $idEmpresa]);
+        $estado = $st->fetchColumn();
+        return $estado === false ? null : (string) $estado;
     }
 
     public function updateEstado(int $id, int $idEmpresa, string $estado, int $idUsuario, bool $setFechaFinalizacion = false): void

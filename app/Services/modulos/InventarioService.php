@@ -30,9 +30,11 @@ class InventarioService
         'factura_venta'       => 'ventas_cabecera',
         'nota_debito'         => 'ventas_cabecera',
         'recibo_venta'        => 'recibos_venta_cabecera',
-        'compra'              => 'compras_cabecera',
-        'nota_credito_compra' => 'compras_cabecera',
-        'nota_credito'        => 'ventas_notas_credito',
+        // referencia_id de compras es el id de la LÍNEA (compras_detalle), no de la cabecera:
+        // getIdsOrigenEliminados() resuelve la cabecera a través del detalle.
+        'compra'              => 'compras_detalle',
+        'nota_credito_compra' => 'compras_detalle',
+        'nota_credito'        => 'notas_credito_cabecera',
         'ajuste_inventario'   => 'inventario_ajustes',
     ];
 
@@ -69,6 +71,8 @@ class InventarioService
     private ?\App\repositories\modulos\ProductoRepository $prodRepo = null;
     private ?\App\repositories\modulos\EmpresaRepository $empRepo = null;
     private ?\App\repositories\modulos\UnidadesMedidaRepository $umRepo = null;
+    /** Ajustes contabilizables creados dentro de una transacción ajena (ver importarAjustes). */
+    private array $ajustesSinAsiento = [];
     /** Facturas ya resueltas por número: una nota de crédito la busca en cada una de sus líneas. */
     private array $ventaPorNumero = [];
     /** Factor y tipo por id de unidad (ver cantidadEnUnidadProducto()). */
@@ -176,6 +180,53 @@ class InventarioService
     public function facturacionAfectaInventario(int $idEstablecimiento): bool
     {
         return self::configAfectaInventario($this->getEmpresaRepository()->getEstablecimientoConfig($idEstablecimiento));
+    }
+
+    /**
+     * ¿La consignación sacó de esta bodega el producto? (salida vigente en su kardex). Es la regla
+     * única de lo que vuelve a entrar desde una consignación: el retorno, la devolución de un
+     * cambio de productos y el reingreso de Facturación de consignaciones devuelven solo lo que
+     * de verdad salió, sea cual sea la regla con que se registró la consignación.
+     *
+     * Consignación migrada cuyo kardex quedó como 'migracion' (sin enlazar a ella): no hay salida
+     * propia que mirar, así que se usa la regla de la factura (establecimiento de su serie con
+     * inventario + producto inventariable que no sea servicio), como se hacía antes.
+     */
+    public function consignacionSacoStock(int $idConsignacion, int $idProducto, int $idBodega, int $idEmpresa): bool
+    {
+        if ($idConsignacion <= 0) return false;
+        $tipos = ['CONSIGNACION_VENTA', 'EDICION_CONSIGNACION_VENTA'];
+        if ($this->repo->getNetoMovimientos($tipos, $idConsignacion, $idProducto, $idBodega, $idEmpresa) < -0.000001) {
+            return true;
+        }
+        if ($this->repo->tieneMovimientosReferencia($tipos, $idConsignacion, $idEmpresa)) {
+            return false; // tiene kardex propio, pero no de este producto/bodega
+        }
+        $cvRepo = new \App\repositories\modulos\ConsignacionVentaRepository();
+        if (!$cvRepo->esMigrado($idConsignacion, $idEmpresa)) {
+            return false;
+        }
+        $prod  = $this->getProductoRepository()->getDatosMovimientoInventario($idProducto, $idEmpresa);
+        $esInv = $prod && ($prod['inventariable'] === true || $prod['inventariable'] === 'true' || $prod['inventariable'] == 1)
+                 && ($prod['tipo_produccion'] ?? '01') !== '02';
+        $cab     = $cvRepo->find($idConsignacion, $idEmpresa);
+        $idPunto = (int) ($cab['id_punto_emision'] ?? 0);
+        // Las migradas suelen no tener punto de emisión: su salida ya está en el kardex 'migracion'.
+        return $esInv && ($idPunto <= 0 || $this->facturacionAfectaInventarioPunto($idPunto, $idEmpresa));
+    }
+
+    /**
+     * Igual que facturacionAfectaInventario(), resolviendo el establecimiento desde el punto de
+     * emisión (serie) del documento. Sin punto (documentos migrados) usa $respaldo: la config
+     * que ya traía el llamador.
+     */
+    public function facturacionAfectaInventarioPunto(int $idPunto, int $idEmpresa, array $respaldo = []): bool
+    {
+        $punto = $idPunto > 0 ? $this->getEmpresaRepository()->getPuntoEmision($idPunto, $idEmpresa) : null;
+        if ($punto && (int) ($punto['id_establecimiento'] ?? 0) > 0) {
+            return $this->facturacionAfectaInventario((int) $punto['id_establecimiento']);
+        }
+        return self::configAfectaInventario($respaldo);
     }
 
     /**
@@ -400,8 +451,16 @@ class InventarioService
             'id_usuario'      => $idUsuario,
         ];
 
+        // Saldo del movimiento = total de la bodega, sin el filtro de lote ni la exclusión del propio
+        // documento que se usaron arriba SOLO para validar. Antes se grababan esos valores parciales
+        // (con "lotes obligatorios", el saldo de un lote; al editar, sin la salida de una línea
+        // anterior del mismo producto) y además se copiaban al saldo de la bodega.
+        $stockTotal = $this->repo->getStockActual($idProducto, $idBodega, $idEmpresa);
+        $kardexData['stock_anterior']  = $stockTotal;
+        $kardexData['stock_posterior'] = $stockTotal - $cantidad;
+
         $idKardex = $this->repo->registrarMovimiento($kardexData);
-        $this->repo->actualizarStock($idProducto, $idBodega, $idEmpresa, $stockPosterior, $idUsuario);
+        $this->repo->actualizarStock($idProducto, $idBodega, $idEmpresa, $stockTotal - $cantidad, $idUsuario);
 
         return $idKardex;
     }
@@ -425,6 +484,77 @@ class InventarioService
     // ────────────────────────────────────────────────────────────────
     // AJUSTE MANUAL
     // ────────────────────────────────────────────────────────────────
+
+    /**
+     * Datos de un ajuste que llegan del usuario (formulario o CSV), sin los campos que solo fijan
+     * los módulos internos: el vínculo con un documento (referencia_tipo / referencia_id), la
+     * fecha del movimiento y la marca contable.
+     */
+    public static function soloCamposAjuste(array $data): array
+    {
+        unset($data['referencia_tipo'], $data['referencia_id'], $data['fecha_movimiento'], $data['contabiliza_ajuste']);
+        return $data;
+    }
+
+    /**
+     * Importa ajustes desde las filas de un CSV, todo o nada: primero se validan todas las filas
+     * y, si alguna falla, no se graba ninguna; si están bien, se graban en una sola transacción.
+     * Antes cada fila se confirmaba por su cuenta: un error a mitad dejaba aplicadas las
+     * anteriores y, al reintentar el archivo, se duplicaban.
+     *
+     * @return array{procesados:int, errores:string[]}
+     */
+    public function importarAjustes(array $filas, string $tipoDefault, int $idEmpresa, int $idUsuario): array
+    {
+        $errores = [];
+        $validas = [];
+        foreach ($filas as $i => $fila) {
+            $nFila = $i + 2; // la 1 es la cabecera
+            $data  = self::soloCamposAjuste($fila);
+            if (empty($data['id_producto']) || empty($data['id_bodega']) || empty($data['cantidad']) || (float) $data['cantidad'] <= 0) {
+                $errores[] = "Fila {$nFila}: faltan producto, bodega o cantidad.";
+                continue;
+            }
+            $data['tipo_movimiento'] = ($data['tipo_movimiento'] ?? '') !== '' ? $data['tipo_movimiento'] : $tipoDefault;
+            if (!in_array($data['tipo_movimiento'], ['entrada', 'salida', 'ajuste'], true)) {
+                $errores[] = "Fila {$nFila}: tipo de movimiento no válido.";
+                continue;
+            }
+            $data['contabilizar'] = true; // igual que el ajuste del modal
+            $validas[$nFila] = $data;
+        }
+        if (!empty($errores)) {
+            return ['procesados' => 0, 'errores' => $errores];
+        }
+
+        $db = \App\core\Database::getConnection();
+        $managed = !$db->inTransaction();
+        if ($managed) $db->beginTransaction();
+        $this->ajustesSinAsiento = [];
+        try {
+            foreach ($validas as $nFila => $data) {
+                try {
+                    $this->ajusteManual($data, $idEmpresa, $idUsuario);
+                } catch (\Throwable $e) {
+                    throw new \Exception("Fila {$nFila}: " . $e->getMessage(), 0, $e);
+                }
+            }
+            if ($managed) $db->commit();
+        } catch (\Throwable $e) {
+            if ($managed && $db->inTransaction()) $db->rollBack();
+            $this->ajustesSinAsiento = [];
+            return ['procesados' => 0, 'errores' => [$e->getMessage()]];
+        }
+
+        // Asientos de los ajustes, fuera de la transacción (como en ajusteManual()).
+        if ($managed) {
+            foreach ($this->ajustesSinAsiento as $idK) {
+                $this->asientoAjuste()->procesarSeguro((int) $idK, $idEmpresa, $idUsuario);
+            }
+        }
+        $this->ajustesSinAsiento = [];
+        return ['procesados' => count($validas), 'errores' => []];
+    }
 
     public function ajusteManual(array $data, int $idEmpresa, int $idUsuario): int
     {
@@ -503,7 +633,8 @@ class InventarioService
                 $finalQty = ($tipo === 'salida') ? -$qtyPerMovement : $qtyPerMovement;
                 
                 $stockActual  = $this->repo->getStockActual($idProducto, $idBodega, $idEmpresa);
-                $stockPost    = max(0, $stockActual + $finalQty);
+                // Sin tope en 0: una entrada sobre saldo negativo deja el saldo real (p. ej. −5 + 2 = −3).
+                $stockPost    = $stockActual + $finalQty;
 
                 $kardexData = [
                     'id_empresa'      => $idEmpresa,
@@ -554,6 +685,9 @@ class InventarioService
                 foreach ($idsKardex as $idK) {
                     $this->asientoAjuste()->procesarSeguro($idK, $idEmpresa, $idUsuario);
                 }
+            } elseif ($contabiliza) {
+                // Anidado (p. ej. importarAjustes): el llamador genera los asientos tras su commit.
+                array_push($this->ajustesSinAsiento, ...$idsKardex);
             }
             return $lastKardexId;
 
@@ -684,23 +818,15 @@ class InventarioService
         if ($managedTransaction) $db->beginTransaction();
 
         try {
-            // Revertir el stock: restamos el impacto original
             $this->repo->lockStock((int)$mov['id_producto'], (int)$mov['id_bodega'], $idEmpresa);
-            $stockActual = $this->repo->getStockActual((int)$mov['id_producto'], (int)$mov['id_bodega'], $idEmpresa);
-            $nuevoStock  = $stockActual - (float)$mov['cantidad'];
 
-            if ($nuevoStock < 0) {
-                if (!$permitirNegativo) {
-                    throw new \Exception("No se puede eliminar el movimiento porque el stock resultante sería negativo ({$nuevoStock}).");
-                }
-                // Modo tolerante (p. ej. al eliminar/anular una NC): no bloquear la
-                // operación; el stock que no alcanza a revertirse se ajusta a 0.
-                error_log("[Inventario] Revert con stock insuficiente (mov #{$id}, prod {$mov['id_producto']}, bodega {$mov['id_bodega']}): resultante {$nuevoStock} → 0.");
-                $nuevoStock = 0.0;
+            // Releer BAJO el candado: si dos procesos revierten el mismo movimiento a la vez,
+            // ambos lo leyeron vigente arriba; el segundo espera el candado y aquí ve que el
+            // primero ya lo anuló. Antes volvía a sumar y el stock se devolvía dos veces.
+            if (!$this->repo->find($id, $idEmpresa)) {
+                if ($managedTransaction) $db->commit();
+                return;
             }
-
-            // Actualizar stock en bodega
-            $this->repo->actualizarStock((int)$mov['id_producto'], (int)$mov['id_bodega'], $idEmpresa, $nuevoStock, $idUsuario);
 
             // Eliminación lógica. Se deja constancia en la observación (además de
             // deleted_at/deleted_by) porque este movimiento no genera una entrada de
@@ -711,9 +837,26 @@ class InventarioService
 
             $sql = "UPDATE inventario_kardex
                     SET eliminado = true, deleted_at = CURRENT_TIMESTAMP, deleted_by = :uid, observaciones = :obs
-                    WHERE id = :id";
+                    WHERE id = :id AND eliminado = false";
             $st = $db->prepare($sql);
             $st->execute([':id' => $id, ':uid' => $idUsuario, ':obs' => $obsAnulado]);
+
+            // El stock de la bodega se recalcula desde el kardex ya sin este movimiento (no
+            // "stock − cantidad"): así el caché queda igual a la suma del kardex aunque el
+            // movimiento sea de otro ambiente (pruebas/producción). Antes, en modo tolerante,
+            // un resultado negativo se forzaba a 0 y el caché quedaba distinto del kardex.
+            $nuevoStock = $this->repo->getStockActual((int)$mov['id_producto'], (int)$mov['id_bodega'], $idEmpresa);
+            if ($nuevoStock < 0) {
+                if (!$permitirNegativo) {
+                    throw new \Exception("No se puede eliminar el movimiento porque el stock resultante sería negativo ({$nuevoStock}).");
+                }
+                // Modo tolerante (p. ej. al eliminar/anular una NC): no se bloquea la operación;
+                // el saldo queda negativo, igual que el kardex, para que se vea y se corrija.
+                error_log("[Inventario] Revert con stock insuficiente (mov #{$id}, prod {$mov['id_producto']}, bodega {$mov['id_bodega']}): saldo {$nuevoStock}.");
+            }
+
+            // Actualizar stock en bodega
+            $this->repo->actualizarStock((int)$mov['id_producto'], (int)$mov['id_bodega'], $idEmpresa, $nuevoStock, $idUsuario);
 
             // Ajuste contabilizado: su asiento se anula en la misma transacción (si el período
             // contable está cerrado, no se anula ninguno de los dos).
@@ -743,6 +886,12 @@ class InventarioService
         if (empty($mov['eliminado'])) throw new \Exception("Este movimiento no está anulado.");
 
         $this->validarRestriccionMovimiento($mov, false, null, $permitirAnularCompra);
+        // La excepción "origen eliminado" sirve para LIMPIAR el kardex de un documento borrado,
+        // nunca para devolverle vigencia: habilitar el movimiento de una factura o compra
+        // eliminada volvería a mover el stock por un documento que ya no existe.
+        if ($this->origenEliminado($mov)) {
+            throw new \Exception("No se puede habilitar el movimiento: su documento de origen está eliminado.");
+        }
         $this->validarPeriodoContable(
             (string) ($mov['fecha_movimiento'] ?? ''),
             $idEmpresa,
@@ -754,16 +903,7 @@ class InventarioService
         if ($managedTransaction) $db->beginTransaction();
 
         try {
-            // Reaplicar el stock: sumamos de vuelta el impacto que se había revertido
             $this->repo->lockStock((int)$mov['id_producto'], (int)$mov['id_bodega'], $idEmpresa);
-            $stockActual = $this->repo->getStockActual((int)$mov['id_producto'], (int)$mov['id_bodega'], $idEmpresa);
-            $nuevoStock  = $stockActual + (float)$mov['cantidad'];
-
-            if ($nuevoStock < 0) {
-                throw new \Exception("No se puede habilitar el movimiento porque el stock resultante sería negativo ({$nuevoStock}).");
-            }
-
-            $this->repo->actualizarStock((int)$mov['id_producto'], (int)$mov['id_bodega'], $idEmpresa, $nuevoStock, $idUsuario);
 
             // Quitar el sufijo " — ANULADO" que dejó eliminarMovimiento(), si está: un
             // movimiento vuelto a habilitar ya no debe leerse como anulado.
@@ -771,12 +911,26 @@ class InventarioService
             $obsRestaurada = preg_replace('/\s*—\s*ANULADO$/u', '', $obsActual);
             if ($obsRestaurada === 'Movimiento anulado') $obsRestaurada = '';
 
+            // "AND eliminado = true" bajo el candado: si otro proceso ya lo habilitó, no se
+            // vuelve a sumar (antes dos clics simultáneos reaplicaban el movimiento dos veces).
             $sql = "UPDATE inventario_kardex
                     SET eliminado = false, deleted_at = NULL, deleted_by = NULL,
                         observaciones = :obs, updated_at = CURRENT_TIMESTAMP, updated_by = :uid
-                    WHERE id = :id";
+                    WHERE id = :id AND eliminado = true";
             $st = $db->prepare($sql);
             $st->execute([':id' => $id, ':uid' => $idUsuario, ':obs' => $obsRestaurada]);
+            if ($st->rowCount() === 0) {
+                if ($managedTransaction) $db->commit();
+                return;
+            }
+
+            // Stock recalculado desde el kardex (mismo criterio que eliminarMovimiento()).
+            $nuevoStock = $this->repo->getStockActual((int)$mov['id_producto'], (int)$mov['id_bodega'], $idEmpresa);
+            if ($nuevoStock < 0) {
+                throw new \Exception("No se puede habilitar el movimiento porque el stock resultante sería negativo ({$nuevoStock}).");
+            }
+
+            $this->repo->actualizarStock((int)$mov['id_producto'], (int)$mov['id_bodega'], $idEmpresa, $nuevoStock, $idUsuario);
 
             $this->log->registrar($idUsuario, $idEmpresa, 'HABILITAR_MOV', 'inventario_kardex', $id, $mov, null);
 
@@ -808,15 +962,21 @@ class InventarioService
 
         if (!$idProducto || !$idBodega || !$idEmpresa || $cantidad <= 0) return;
 
-        // Verificar si el producto es inventariable
+        // Mismo criterio que procesarSalidaPorVenta(): el producto vuelve si es inventariable y
+        // NO es servicio (antes un servicio marcado inventariable no salía con la venta pero sí
+        // entraba con la NC), y sus COMPONENTES vuelven siempre que los tenga (la venta los saca
+        // aunque el padre no sea inventariable; antes la NC no los devolvía).
         $prodData = $this->getProductoRepository()->getDatosMovimientoInventario($idProducto, $idEmpresa);
         if (!$prodData) return;
-        $isInventariable = ($prodData['inventariable'] === true || $prodData['inventariable'] === 'true' || $prodData['inventariable'] == 1);
-        if (!$isInventariable) return;
+        $isInventariable = ($prodData['inventariable'] === true || $prodData['inventariable'] === 'true' || $prodData['inventariable'] == 1)
+                           && ($prodData['tipo_produccion'] ?? '01') !== '02';
+
+        $numDoc = trim((string) ($data['num_doc_modificado'] ?? ''));
 
         // Ítem enlazado a una línea de factura vendida en otra unidad (p. ej. CAJA X100): la
         // devolución entra en la unidad del producto, igual que salió (ver procesarSalidaPorVenta).
-        // Sin enlace no se sabe en qué unidad se vendió y la cantidad entra tal cual.
+        // Sin enlace no se sabe en qué unidad se escribió la cantidad de la nota y entra tal cual
+        // (deducirla de la factura podía multiplicar una cantidad ya escrita en unidades).
         $idUnidadLinea = (int) ($data['linea_origen']['id_unidad_medida'] ?? 0) ?: null;
         $conv = $this->cantidadEnUnidadProducto(
             $cantidad,
@@ -829,7 +989,52 @@ class InventarioService
             $cantidad = $conv['cantidad'];
         }
 
-        $numDoc = trim((string) ($data['num_doc_modificado'] ?? ''));
+        // Componentes (combos/kits): vuelven en la misma proporción en que salieron con la venta
+        // (cantidad del padre × cantidad del componente), con la misma referencia de la NC, así
+        // que anular o eliminar la NC también los revierte.
+        // Candados en el MISMO orden que la venta (documento → producto padre → componentes): con
+        // otro orden, una NC y una factura simultáneas del mismo kit podían interbloquearse.
+        if ($numDoc !== '') {
+            $this->repo->lockDevolucionDocumento($idEmpresa, $numDoc, $idProducto);
+        }
+        $this->repo->lockStock($idProducto, $idBodega, $idEmpresa);
+
+        $componentes = $this->getProductoRepository()->getComponentes($idProducto, $idEmpresa);
+        if (!empty($componentes)) {
+            $nombrePadre = $this->getProductoRepository()->getNombre($idProducto);
+            foreach ($componentes as $comp) {
+                $idHijo   = (int) $comp['id_producto_hijo'];
+                $cantComp = $cantidad * (float) $comp['cantidad'];
+                if ($idHijo <= 0 || $cantComp <= 0) continue;
+
+                $this->repo->lockStock($idHijo, $idBodega, $idEmpresa);
+                $stockHijo = $this->repo->getStockActual($idHijo, $idBodega, $idEmpresa);
+                $costoHijo = $this->repo->getCostoPromedio($idHijo, $idBodega, $idEmpresa);
+                $this->repo->registrarMovimiento([
+                    'id_empresa'      => $idEmpresa,
+                    'id_producto'     => $idHijo,
+                    'id_bodega'       => $idBodega,
+                    'tipo_movimiento' => 'entrada',
+                    'referencia_tipo' => 'nota_credito',
+                    'referencia_id'   => $idRef,
+                    'cantidad'        => $cantComp,
+                    'costo_unitario'  => $costoHijo,
+                    'costo_total'     => round($costoHijo * $cantComp, 2),
+                    'stock_anterior'  => $stockHijo,
+                    'stock_posterior' => $stockHijo + $cantComp,
+                    'numero_lote'     => null,
+                    'fecha_caducidad' => null,
+                    'nup'             => null,
+                    'id_medida'       => !empty($comp['id_medida']) ? (int) $comp['id_medida'] : null,
+                    'observaciones'   => "Entrada componente de '{$nombrePadre}' (#{$idProducto}) vía {$descripcion}",
+                    'id_usuario'      => $idUsuario,
+                ]);
+                $this->repo->actualizarStock($idHijo, $idBodega, $idEmpresa, $stockHijo + $cantComp, $idUsuario);
+            }
+        }
+
+        if (!$isInventariable) return;
+
         $codDoc = (string) ($data['cod_doc_modificado'] ?? '01');
         // Lo disponible por lote de la factura se lee y se consume bajo candado (§8): dos notas
         // simultáneas sobre la misma factura no deben devolver dos veces el mismo lote.
@@ -1140,10 +1345,21 @@ class InventarioService
                 throw new \Exception("Acceso denegado. No tiene permisos para operar en la bodega de destino.");
             }
 
-            // 1. Revertir impacto anterior
-            $this->repo->lockStock((int)$movOld['id_producto'], (int)$movOld['id_bodega'], $idEmpresa);
-            $stockActual = $this->repo->getStockActual((int)$movOld['id_producto'], (int)$movOld['id_bodega'], $idEmpresa);
-            $stockBase   = $stockActual - (float)$movOld['cantidad'];
+            // 1. Revertir impacto anterior. Si la edición cambia de producto o de bodega se tocan
+            //    DOS saldos: el anterior pierde el movimiento y el nuevo lo recibe. Antes solo se
+            //    bloqueaba y leía el anterior y el resultado se escribía en el nuevo: el saldo
+            //    anterior conservaba el movimiento y el nuevo quedaba con un saldo ajeno.
+            $idProdOld = (int) $movOld['id_producto'];
+            $idBodOld  = (int) $movOld['id_bodega'];
+            $idProdNew = (int) $data['id_producto'];
+            $mismaClave = ($idProdOld === $idProdNew && $idBodOld === $idBodega);
+            $claves = [[$idProdOld, $idBodOld], [$idProdNew, $idBodega]];
+            sort($claves); // orden fijo: dos ediciones cruzadas no se bloquean entre sí
+            foreach (array_unique($claves, SORT_REGULAR) as [$p, $b]) {
+                $this->repo->lockStock($p, $b, $idEmpresa);
+            }
+            $stockActual = $this->repo->getStockActual($idProdNew, $idBodega, $idEmpresa);
+            $stockBase   = $mismaClave ? $stockActual - (float)$movOld['cantidad'] : $stockActual;
 
             // 2. Calcular nuevo impacto
             $tipo      = $data['tipo_movimiento'];
@@ -1162,7 +1378,9 @@ class InventarioService
                 
                 // Stock base del lote sin el movimiento anterior (si el anterior era del mismo lote)
                 $stockLoteBase = $stockLoteActual;
-                if ($movOld['tipo_movimiento'] === 'salida' && $movOld['numero_lote'] === $data['numero_lote']) {
+                if (!$mismaClave) {
+                    // El movimiento anterior era de otro producto o bodega: no cuenta en este lote.
+                } elseif ($movOld['tipo_movimiento'] === 'salida' && $movOld['numero_lote'] === $data['numero_lote']) {
                     $stockLoteBase += abs((float)$movOld['cantidad']);
                 } elseif ($movOld['tipo_movimiento'] === 'entrada' && $movOld['numero_lote'] === $data['numero_lote']) {
                     $stockLoteBase -= abs((float)$movOld['cantidad']);
@@ -1213,6 +1431,15 @@ class InventarioService
 
             // 4. Actualizar stock global
             $this->repo->actualizarStock((int)$data['id_producto'], (int)$data['id_bodega'], $idEmpresa, $stockPost, $idUsuario);
+
+            // 4.1 Si cambió de producto o bodega, el saldo anterior se recalcula sin el movimiento.
+            if (!$mismaClave) {
+                $stockOld = $this->repo->getStockActual($idProdOld, $idBodOld, $idEmpresa);
+                if ($stockOld < 0) {
+                    throw new \Exception("La actualización dejaría en negativo ({$stockOld}) el stock del producto y bodega anteriores del movimiento.");
+                }
+                $this->repo->actualizarStock($idProdOld, $idBodOld, $idEmpresa, $stockOld, $idUsuario);
+            }
 
             // 5. Ajuste que ya tiene asiento: se actualiza en la misma transacción (si el período
             //    está cerrado o falta una cuenta, la edición no se guarda y el asiento no se desfasa).
@@ -1284,24 +1511,28 @@ class InventarioService
 
         if (!empty($tipo) && $tipo !== 'ajuste_manual') {
             // Caso especial: Si el documento de origen ya está eliminado, permitimos la limpieza manual del inventario
-            $tablaRef = self::TABLA_ORIGEN[$tipo] ?? null;
-
-            if ($tablaRef && $idRef > 0) {
-                try {
-                    $db = \App\core\Database::getConnection();
-                    $sqlCheck = "SELECT eliminado FROM {$tablaRef} WHERE id = ? AND id_empresa = ?";
-                    $stCheck = $db->prepare($sqlCheck);
-                    $stCheck->execute([$idRef, (int)$mov['id_empresa']]);
-                    if ((bool)$stCheck->fetchColumn() === true) {
-                        return; // El origen está eliminado, permitimos procesar el movimiento en Kardex
-                    }
-                } catch (\Throwable $e) {
-                    // Si falla la consulta a la tabla de referencia (ej. tabla no existe), seguimos con la restricción por seguridad
-                }
+            if ($this->origenEliminado($mov)) {
+                return; // El origen está eliminado, permitimos procesar el movimiento en Kardex
             }
 
             $nombreRef = ucwords(str_replace('_', ' ', $tipo));
             throw new \Exception("Este movimiento está vinculado a [{$nombreRef} #{$mov['referencia_id']}]. No puede ser modificado manualmente desde el Kardex. Por favor, gestione el documento original.");
+        }
+    }
+
+    /**
+     * ¿El documento de origen del movimiento está eliminado? Solo para los orígenes de
+     * TABLA_ORIGEN; ante la duda (tabla inexistente, error de consulta) responde false.
+     */
+    private function origenEliminado(array $mov): bool
+    {
+        $tabla = self::TABLA_ORIGEN[$mov['referencia_tipo'] ?? ''] ?? null;
+        $idRef = (int) ($mov['referencia_id'] ?? 0);
+        if ($tabla === null || $idRef <= 0) return false;
+        try {
+            return $this->repo->getIdsOrigenEliminados($tabla, (int) $mov['id_empresa'], [$idRef]) !== [];
+        } catch (\Throwable $e) {
+            return false;
         }
     }
 }

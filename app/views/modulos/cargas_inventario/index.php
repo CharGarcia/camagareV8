@@ -276,6 +276,7 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosColumnasOcultas($vistaConfig)
             </div>
             <?php // novalidate: los avisos (p. ej. que falta el archivo) salen con SweetAlert, no con la burbuja del navegador. ?>
             <form id="ci-form-importar" novalidate>
+                <input type="hidden" name="token_guardado" value="">
                 <div class="modal-body">
                     <div class="row g-3">
                         <div class="col-md-5">
@@ -470,6 +471,10 @@ function CI_abrirImportar(observacion = '') {
     const form = document.getElementById('ci-form-importar');
     form.reset();
     form.querySelector('input[name=observacion]').value = observacion;
+    // Guardado único (CLAUDE.md §8): una clave por importación; viaja también en el reintento tras
+    // un error de conexión, para que el servidor no registre la misma carga dos veces.
+    form.querySelector('input[name=token_guardado]').value =
+        window.CMG_nuevoTokenGuardado ? window.CMG_nuevoTokenGuardado() : '';
     bootstrap.Modal.getOrCreateInstance(document.getElementById('ci-modal-importar')).show();
 }
 
@@ -514,6 +519,12 @@ document.getElementById('ci-form-importar').addEventListener('submit', async fun
 
 /** Opciones del aviso que resume una importación recién registrada. */
 function CI_resultadoImportacion(d) {
+    if (d.ya_registrada) {
+        // Reintento de un envío que el servidor ya había registrado (guardado único).
+        return { icon: 'info', title: `Carga N.º ${CI_esc(String(d.numero))}`,
+                 text: 'Esta importación ya estaba registrada; no se creó otra carga.',
+                 showCancelButton: true, confirmButtonText: '<i class="bi bi-list-ul me-1"></i>Ver líneas', cancelButtonText: 'Cerrar' };
+    }
     const n = Number(d.lineas) || 0;
     const registradas = n === 1 ? 'Se registró 1 línea' : `Se registraron ${n} líneas`;
     const botones = {

@@ -565,7 +565,25 @@ class OrdenCarWashService
         $db = Database::getConnection();
         try {
             $db->beginTransaction();
+            if ($this->repository->bloquearEstado($id, $idEmpresa) !== $actual) {
+                throw new Exception("La orden cambió de estado mientras se procesaba. Vuelva a abrirla.");
+            }
             $this->repository->updateEstado($id, $idEmpresa, $nuevoEstado, $idUsuario, $setEntrega);
+
+            // Anular devuelve al stock lo que consumió la orden; reactivarla lo vuelve a
+            // descontar. Antes solo cambiaba el estado y la orden anulada seguía consumiendo
+            // stock hasta que alguien la eliminara. Reactivar es idempotente: una orden anulada
+            // antes de este cambio todavía tiene su salida viva y no se descuenta otra vez.
+            if ($nuevoEstado === 'anulado') {
+                $this->revertirInventario($id, $idEmpresa, $idUsuario);
+            } elseif ($actual === 'anulado' && !$this->repository->tieneMovimientosInventario($id, $idEmpresa)) {
+                $idEstab = (int) ($cab['id_establecimiento'] ?? 0);
+                $this->aplicarSalidaInventario(
+                    $id, $idEmpresa, $idUsuario, $this->repository->getDetalles($id, $idEmpresa),
+                    $idEstab, (int) ($cab['id_bodega'] ?? 0), (string) ($cab['numero_orden'] ?? ''),
+                    false, !$this->soloStockPositivo($idEstab)
+                );
+            }
             $this->logService->registrar($idUsuario, $idEmpresa, 'CAMBIAR_ESTADO_ORDEN_CARWASH', 'carwash_ordenes', $id,
                 ['estado' => $actual], ['estado' => $nuevoEstado]);
             $db->commit();

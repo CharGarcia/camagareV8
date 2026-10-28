@@ -6,7 +6,7 @@ ruta_modulo: modulos/productos
 tipo: modulo
 visibilidad: todos
 etiquetas: productos, productos equivalentes, equivalencias, equivalente, sustituto, reemplazo, otra marca, generico, compatible, referencias, codigos de proveedores, homologacion, buscar producto, buscador, filtros, filtrar productos, productos bajo el minimo, reponer stock, buscar por variante, buscar por codigo de proveedor, kits, chips, ordenar por dos columnas, ordenar por categoria y descripcion, articulos, servicios, catalogo, precio, costo, iva, ice, stock, codigo de barras, inventariable, varios precios, lista de precios, mayorista, carga masiva, importar productos, precio editable, cambiar precio en la comanda, precio variable, envio a domicilio, delivery, servicio a domicilio, recargo por servicio, excluir propina, restaurante
-version: 1.15
+version: 1.16
 orden: 10
 estado: activo
 ---
@@ -279,6 +279,7 @@ aparecer al facturar.
 
 ## Historial de cambios
 
+- **1.16** — Al guardar la ficha con su pestaña de bodegas, el saldo de cada bodega sale siempre del Kardex (antes una bodega nueva podía nacer con el número del formulario) y una bodega quitada de la ficha que todavía tiene existencias sigue visible. Desde la ficha ya no se puede mover stock: los ajustes se hacen en Inventario.
 - **1.15** — Nueva sección **Productos equivalentes** en la pestaña *Referencias* de la ficha: se agregan los productos que sirven para lo mismo y, cuando uno no tiene saldo, Facturas de Venta y Car-Wash ofrecen primero sus equivalentes.
 - **1.14** — En la ficha del producto, la pestaña *Detalles* se llama ahora **Adicionales** y la pestaña *Homologaciones* se llama **Referencias** (los códigos con que los proveedores identifican el producto). Si las tenía ocultas, siguen ocultas.
 - **1.13** — Los botones **+** de *Categoría* y *Marca* de la ficha funcionan en todas las pantallas que abren el producto (lavado, taller, servicio externo, proformas, suscripciones, importaciones, cotizaciones); antes solo en Productos, Facturas, Recibos y Compras.

@@ -6,7 +6,7 @@ ruta_modulo: modulos/notas_credito
 tipo: modulo
 visibilidad: todos
 etiquetas: nota de credito, notas de credito, devolucion, descuento, anular factura, corregir factura, sri, buscar nota de credito, buscador, filtros, filtrar notas de credito, buscar por producto, filtro de fechas, documento modificado, chips, aparecen notas que no busque, resultados que no corresponden, buscar por clave de acceso, lote, lotes, nup, serial, numero de serie, caducidad, vencimiento, fecha de vencimiento, devolver al inventario, reingreso de stock, devolucion de mercaderia, lote equivocado, bodega de reintegro, sin bodegas asignadas, no tiene bodegas, no se refleja en inventario, no aparece en inventario, no devolvio stock, informacion adicional, info adicional, limite de caracteres, maximo 300 caracteres, value too long, no se pudo guardar la nota, codigo, codigo del producto, columna codigo, buscar por codigo, iva, tarifa iva, iva 12, 12%, iva anterior, iva historico, factura año anterior, exento, no objeto de impuesto, tarifa 0, descuento por pronto pago, pronto pago, descuento posterior, descuento comercial, rebaja de precio, bonificacion, no afecta inventario, sin afectar inventario, sin devolver mercaderia, nota de credito sin productos, linea libre, linea manual, subtotal negativo, valor negativo, descuento mayor, sin bodega, invalid input syntax for type integer, vendedor, asesor, vendedor de la nota de credito, cambiar vendedor, comision, motivo, cambiar vendedor nota autorizada, corregir vendedor, vendedor de la factura, vendedor equivocado, vendedor del cliente, imprimir, impresora, aviso, avisos, novedad sri, documentos con novedad, devuelto, no autorizado, pendientes de enviar, borrador, borradores, pdf en dos hojas, segunda hoja casi vacia, totales en otra pagina, el pdf corta la pagina, hoja de mas, registrar otra nota, nueva nota despues de guardar, seguir en esta, crear otra, elegir lote, escoger lote, que lote devolver, columna lote, columna nup, devolver a otro lote, lote no salio con la factura, solo quedan por devolver
-version: 1.36
+version: 1.37
 orden: 30
 estado: activo
 ---
@@ -177,6 +177,17 @@ nada que devolver.
 
 La mercadería vuelve **con el mismo lote, NUP / serial y fecha de caducidad** con que
 salió en la factura que la nota modifica; no hay que digitarlos.
+
+La devolución es el espejo exacto de la venta:
+
+- **Combos y kits**: vuelven también sus **componentes**, en la misma proporción en
+  que salieron (3 combos con 2 envases cada uno devuelven 6 envases).
+- **Servicios**: un producto de tipo servicio no sale con la venta y tampoco entra
+  con la nota, aunque esté marcado como inventariable.
+- **Otra unidad** (p. ej. se vendió 1 CAJA X100): vuelve en la unidad del producto
+  (100 unidades). Si el ítem de la nota no quedó enlazado a su línea de la factura,
+  se toma la unidad en que la factura vendió ese producto, siempre que haya sido una
+  sola.
 
 ### La bodega de reintegro, cuando la nota devuelve productos
 
@@ -420,6 +431,7 @@ la operación de inmediato.
 
 ## Historial de cambios
 
+- **1.37** — La devolución es el espejo de la venta: vuelven también los **componentes** de combos y kits, los **servicios** no entran aunque estén marcados como inventariables, y un ítem sin enlace a su línea de factura se convierte con la unidad en que la factura lo vendió (antes vender 1 CAJA x100 sacaba 100 y la nota devolvía 1).
 - **1.36** — Si el establecimiento trabaja con lotes y/o NUP, el detalle muestra las columnas **Lote** y **NUP** para elegir a cuál regresa la mercadería, entre los que salieron con la factura y con lo que aún se puede devolver de cada uno. No deja guardar un lote ajeno a la factura ni más de lo que queda de él. Requiere el SQL `database/20261020_nc_detalle_lote_nup.sql` para volver a mostrar la elección al reabrir la nota.
 - **1.35** — Al guardar una nota de crédito nueva, el sistema pregunta si se desea **registrar una nueva** o **seguir en esta** (mismo modelo que Ingresos). Además, el botón Guardar queda bloqueado hasta que la nota guardada termina de recargarse, para que un segundo clic no cree otra.
 - **1.34** — El botón **Registrar nuevo cliente** no funcionaba (decía «no está disponible»): ahora abre la ficha del cliente y, al guardarlo, queda seleccionado en la nota.

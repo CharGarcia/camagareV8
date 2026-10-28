@@ -743,6 +743,16 @@ class ImportacionesService
         if ($managed) $db->beginTransaction();
 
         try {
+            // El estado se leyó antes de la transacción: se vuelve a leer bajo candado. Sin esto,
+            // dos nacionalizaciones simultáneas ingresaban la mercadería dos veces.
+            $estadoVigente = $this->repository->bloquearEstado($id, $idEmpresa);
+            $estadoEsperado = $viaAprobacion ? 'pendiente_aprobacion' : (string) ($importacion['estado'] ?? '');
+            if ($estadoVigente === null || $estadoVigente !== $estadoEsperado || $estadoVigente === 'nacionalizada') {
+                throw new \Exception($estadoVigente === 'nacionalizada'
+                    ? 'La importación ya fue nacionalizada.'
+                    : 'La importación cambió de estado mientras se procesaba. Vuelva a abrirla.');
+            }
+
             $inventarioService = new InventarioService(new InventarioRepository(), $this->logService);
 
             foreach ($detallesConCosto as $d) {

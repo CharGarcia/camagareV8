@@ -851,6 +851,24 @@ class FacturaVentaRepository extends BaseRepository
         return $porDetalle;
     }
 
+    /**
+     * Notas de crédito vigentes (no anuladas ni eliminadas) emitidas sobre la factura, con el
+     * mismo cruce por número que AbonosVentaSql::subNotasFactura(). Devuelve sus números.
+     */
+    public function getNotasCreditoVigentes(int $idVenta, int $idEmpresa): array
+    {
+        $sql = "SELECT n.establecimiento || '-' || n.punto_emision || '-' || n.secuencial AS numero
+                  FROM ventas_cabecera v
+                  JOIN notas_credito_cabecera n
+                    ON n.id_empresa = v.id_empresa AND n.estado != 'anulado' AND n.eliminado = false
+                   AND " . AbonosVentaSql::normalizar('n.num_doc_modificado') . " = " . AbonosVentaSql::numFactura('v') . "
+                 WHERE v.id = :id AND v.id_empresa = :e
+                 ORDER BY n.id";
+        $st = $this->db->prepare($sql);
+        $st->execute([':id' => $idVenta, ':e' => $idEmpresa]);
+        return $st->fetchAll(\PDO::FETCH_COLUMN);
+    }
+
     public function getPagos(int $idVenta): array
     {
         $sql = "SELECT vp.*, COALESCE(fps.nombre, vp.forma_pago) AS nombre_forma_pago

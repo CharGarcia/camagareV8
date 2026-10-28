@@ -817,39 +817,32 @@ class ConsignacionFacturaService
         $idEstablecimiento = $this->repository->getEstablecimientoPorPunto($idPunto) ?? 0;
         $numDoc = ($doc['serie'] ?? '') . '-' . ($doc['secuencial'] ?? '');
 
-        // 2. Reingreso de inventario a la bodega de origen (transacción propia). Existe para que la
-        //    salida de la factura encuentre el stock, así que solo se hace si la factura la va a
-        //    registrar («La facturación afecta al inventario» en su establecimiento). Sin salida,
-        //    reingresar devolvería a bodega unidades ya vendidas; sin ninguno de los dos
-        //    movimientos, el stock queda como lo dejó la consignación.
+        // 2-4 en UNA transacción: reingreso → factura → enlace y marca 'facturada'. Antes iban en
+        // tres transacciones: si el proceso se cortaba entre el reingreso y la factura, el
+        // reingreso quedaba vivo con el documento en borrador (al reintentar se reingresaba otra
+        // vez: stock fantasma); si fallaba la factura y también deshacer el reingreso, el error se
+        // tragaba; y si fallaba el enlace, la factura quedaba creada sin consumir el saldo (esas
+        // unidades se podían volver a retornar o facturar). Ahora un fallo deja todo como estaba.
+        // La transacción se abre ANTES del secuencial (su candado vive hasta el COMMIT, §8).
         $db = Database::getConnection();
-        if ($this->getInventarioService()->facturacionAfectaInventario((int) $idEstablecimiento)) {
-            $db->beginTransaction();
-            try {
-                foreach ($detalles as $d) {
-                    $this->reingresarLinea($d, $idEmpresa, $idUsuario, $empresaConfig, $idDoc, $numDoc);
-                }
-                $db->commit();
-            } catch (\Throwable $e) {
-                if ($db->inTransaction()) $db->rollBack();
-                throw $e;
-            }
-        }
-
-        // 2.1 Asiento inverso del reingreso (no fatal).
-        $this->procesarAsientoReingresoSeguro($idDoc, $idEmpresa, $idUsuario, $numDoc, $doc['cliente_nombre'] ?? 'Cliente');
-
-        // 3. Crear la factura de venta NORMAL, facturada al cliente del documento. Se abre la
-        // transacción ANTES de calcular el secuencial y se mantiene hasta el INSERT final
-        // (FacturaVentaService::crear() más abajo): el lock de obtenerSiguienteSecuencial() se
-        // libera solo al COMMIT/ROLLBACK (CLAUDE.md §8). Es una transacción independiente de la
-        // del reingreso (paso 2, ya cerrada) y de la del enlace (paso 4, tolerante a fallos).
         $managedTransaction = !$db->inTransaction();
         if ($managedTransaction) {
             $db->beginTransaction();
         }
 
         try {
+        // 2. Reingreso de inventario a la bodega de origen. Existe para que la salida de la
+        //    factura encuentre el stock, así que solo se hace si la factura la va a registrar
+        //    («La facturación afecta al inventario» en su establecimiento). Sin salida, reingresar
+        //    devolvería a bodega unidades ya vendidas; sin ninguno de los dos movimientos, el
+        //    stock queda como lo dejó la consignación.
+        if ($this->getInventarioService()->facturacionAfectaInventario((int) $idEstablecimiento)) {
+            foreach ($detalles as $d) {
+                $this->reingresarLinea($d, $idEmpresa, $idUsuario, $empresaConfig, $idDoc, $numDoc);
+            }
+        }
+
+        // 3. Crear la factura de venta NORMAL, facturada al cliente del documento.
         $sec = (new SecuencialService())->obtenerSiguienteSecuencial($idPunto, 'Facturas de venta');
         $secuencial = $sec['formateado'];
         $numFactura = ($doc['establecimiento'] ?? '') . '-' . ($doc['punto_emision'] ?? '') . '-' . $secuencial;
@@ -931,33 +924,27 @@ class ConsignacionFacturaService
         // global quedó negativo por la consignación).
         $facturaService->sinValidarStock();
 
-        try {
-            $idFactura = $facturaService->crear($payload);
-            if ($ivaCambio) {
-                // Mismo IVA en el documento que en la factura generada (misma transacción).
-                foreach ($detalles as $d) {
-                    $this->repository->updateImpuestoDetalle((int) $d['id'], $idEmpresa, (float) $d['valor_impuesto'], (float) $d['total']);
-                }
-                $this->repository->update($idDoc, $idEmpresa, [
-                    'subtotal'   => $totDoc['subtotal'],
-                    'impuesto'   => $totDoc['impuesto'],
-                    'total'      => $totDoc['total'],
-                    'updated_by' => $idUsuario,
-                    'updated_at' => date('Y-m-d H:i:s'),
-                ]);
+        $idFactura = $facturaService->crear($payload);
+        if ($ivaCambio) {
+            // Mismo IVA en el documento que en la factura generada (misma transacción).
+            foreach ($detalles as $d) {
+                $this->repository->updateImpuestoDetalle((int) $d['id'], $idEmpresa, (float) $d['valor_impuesto'], (float) $d['total']);
             }
-        } catch (\Throwable $e) {
-            if ($managedTransaction && $db->inTransaction()) {
-                $db->rollBack();
-            }
-            // Limpieza tras un fallo: si a su vez falla, se registra y se informa el error original.
-            try {
-                $this->revertirReingreso($idDoc, $idEmpresa, $idUsuario, false); // deshacer reingreso, no cambiar estado
-            } catch (\Throwable $eRev) {
-                error_log("[FacturacionCV] No se pudo deshacer el reingreso del documento $idDoc: " . $eRev->getMessage());
-            }
-            throw new Exception('No se pudo generar la factura: ' . $e->getMessage());
+            $this->repository->update($idDoc, $idEmpresa, [
+                'subtotal'   => $totDoc['subtotal'],
+                'impuesto'   => $totDoc['impuesto'],
+                'total'      => $totDoc['total'],
+                'updated_by' => $idUsuario,
+                'updated_at' => date('Y-m-d H:i:s'),
+            ]);
         }
+
+        // 4. Enlazar y marcar facturada (consume el saldo de las líneas).
+        $this->repository->linkFactura($idDoc, $idEmpresa, $idFactura, $numFactura, $idUsuario);
+        $this->logService->registrar(
+            $idUsuario, $idEmpresa, 'GENERAR_FACTURA_CV', 'consignaciones_facturas', $idDoc,
+            null, ['id_factura' => $idFactura, 'numero_factura' => $numFactura]
+        );
 
         if ($managedTransaction) {
             $db->commit();
@@ -966,19 +953,18 @@ class ConsignacionFacturaService
             if ($managedTransaction && $db->inTransaction()) {
                 $db->rollBack();
             }
-            throw $e;
+            throw new Exception('No se pudo generar la factura: ' . $e->getMessage(), 0, $e);
         }
 
-        // 4. Enlazar y marcar facturada.
-        try {
-            $this->repository->linkFactura($idDoc, $idEmpresa, $idFactura, $numFactura, $idUsuario);
-            $this->logService->registrar(
-                $idUsuario, $idEmpresa, 'GENERAR_FACTURA_CV', 'consignaciones_facturas', $idDoc,
-                null, ['id_factura' => $idFactura, 'numero_factura' => $numFactura]
-            );
-        } catch (\Throwable $e) {
-            error_log("[FacturacionCV] Factura #$numFactura creada pero no se enlazó al documento $idDoc: " . $e->getMessage());
-            throw new Exception("La factura {$numFactura} se generó, pero no se enlazó al documento. Revise manualmente. Detalle: " . $e->getMessage());
+        // Fuera de la transacción (no fatales): asiento inverso del reingreso y XML de la factura
+        // (crear() anidado no lo genera; si falla, se regenera desde Facturas de Venta).
+        $this->procesarAsientoReingresoSeguro($idDoc, $idEmpresa, $idUsuario, $numDoc, $doc['cliente_nombre'] ?? 'Cliente');
+        if ($managedTransaction) {
+            try {
+                $facturaService->generarYGuardarXml($idFactura, $empresaConfig);
+            } catch (\Throwable $e) {
+                error_log("[FacturacionCV] XML de la factura #$numFactura no generado: " . $e->getMessage());
+            }
         }
 
         return ['id_factura' => $idFactura, 'numero_factura' => $numFactura];
@@ -1143,14 +1129,18 @@ class ConsignacionFacturaService
 
     private function reingresarLinea(array $d, int $idEmpresa, int $idUsuario, array $empresaConfig, int $idDoc, string $numDoc): void
     {
-        // La consignación descuenta el stock de forma INCONDICIONAL (registra la salida para toda
-        // línea), así que aquí no se filtra por producto inventariable. Si corresponde reingresar
-        // lo decide generarFactura() con facturacionAfectaInventario() del establecimiento.
+        // Se reingresa solo lo que la consignación de origen sacó de esa bodega (su kardex). La
+        // consignación ya no descuenta toda línea: con la regla de la factura, un producto no
+        // inventariable o una serie sin inventario no salen, y reingresarlos inventaba stock.
+        // Que la factura vaya a sacarlo lo decide generarFactura() (facturacionAfectaInventario).
         $cant = (float) $d['cantidad'];
         $idBodega = (int) ($d['id_bodega'] ?? 0);
         if ($cant <= 0 || $idBodega <= 0) return;
 
         $idProducto  = (int) $d['id_producto'];
+        if (!$this->getInventarioService()->consignacionSacoStock((int) ($d['id_consignacion'] ?? 0), $idProducto, $idBodega, $idEmpresa)) {
+            return;
+        }
         $this->inventarioRepo->lockStock($idProducto, $idBodega, $idEmpresa);
         $stockActual = $this->inventarioRepo->getStockActual($idProducto, $idBodega, $idEmpresa);
         $nuevoStock  = $stockActual + $cant;

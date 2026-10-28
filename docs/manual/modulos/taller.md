@@ -5,8 +5,8 @@ categoria: Operaciones
 ruta_modulo: modulos/taller
 tipo: modulo
 visibilidad: todos
-etiquetas: taller, mecanica, precuenta, whatsapp, mecánica, orden de trabajo, OT, orden de reparacion, enderezada, pintura, latoneria, repuestos, mano de obra, tecnico, diagnostico, informe tecnico, garantia, siniestro, aseguradora, vehiculo, auto, carro, presupuesto, aprobacion, numeracion por fecha, numero con el año, reiniciar numeracion, reinicio anual, reinicio mensual, correlativo por año, correlativo por mes, modo de numeracion, buscar orden, buscar placa, buscador, filtros, filtrar ordenes de trabajo, filtro de fechas, buscar por repuesto, chips, imprimir, impresora
-version: 1.15
+etiquetas: taller, mecanica, precuenta, whatsapp, mecánica, orden de trabajo, OT, orden de reparacion, enderezada, pintura, latoneria, repuestos, mano de obra, tecnico, diagnostico, informe tecnico, garantia, siniestro, aseguradora, vehiculo, auto, carro, presupuesto, aprobacion, numeracion por fecha, numero con el año, reiniciar numeracion, reinicio anual, reinicio mensual, correlativo por año, correlativo por mes, modo de numeracion, buscar orden, buscar placa, buscador, filtros, filtrar ordenes de trabajo, filtro de fechas, buscar por repuesto, chips, imprimir, impresora, anular orden, orden anulada, devolver repuestos, stock descontado dos veces
+version: 1.17
 orden: 0
 estado: activo
 ---
@@ -255,6 +255,12 @@ Detalles muestran solo las órdenes que usted registró.
 - **No se entrega el vehículo con departamentos abiertos.** Todas las etapas
   deben estar cerradas.
 - **Una orden facturada, entregada o anulada ya no se modifica.**
+- **Anular la orden devuelve sus repuestos a la bodega**; si se reactiva, vuelven a
+  salir. Antes la orden anulada seguía consumiendo stock hasta que alguien la
+  eliminara.
+- **Emitir la factura o el recibo es un solo paso**: si algo falla, la orden queda
+  exactamente como estaba. Antes un fallo al emitir dejaba los repuestos
+  descontados dos veces.
 - Solo se facturan las líneas **aprobadas o ejecutadas** y marcadas como
   facturables.
 - El kilometraje más alto registrado queda guardado en la ficha del vehículo.
@@ -330,6 +336,8 @@ documentos admite cada periodo) está en el manual de **Empresa**, sección
 
 ## Historial de cambios
 
+- **1.17** — Las líneas con **kits** (productos con componentes): al quitar, editar o rechazar la línea vuelven también los componentes, y una línea cuyo producto no mueve stock pero sus componentes sí ya no los descuenta otra vez en cada edición.
+- **1.16** — **Anular la orden devuelve sus repuestos a la bodega** (y reactivarla los vuelve a descontar). **Emitir la factura o el recibo** es un solo paso: si falla, la orden queda igual; antes un fallo dejaba los repuestos descontados dos veces y la factura generada sin XML.
 - **1.15** — El producto creado desde **Registrar nuevo producto** queda precargado en el formulario de línea, listo para agregar.
 - **1.14** — Los botones **Vehículo**, **Cliente** y **Producto** de la orden abren
   el formulario correspondiente ya **limpio** (antes podía mostrar los datos del

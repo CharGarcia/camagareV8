@@ -6,7 +6,7 @@ ruta_modulo: modulos/cargas-inventario
 tipo: modulo
 visibilidad: todos
 etiquetas: carga de inventario, errores de carga, no se puede aprobar, lineas con error, comprobada, corregir carga, ajuste masivo, entrada masiva, salida masiva, conteo fisico, inventario fisico, toma fisica, cuadrar stock, saldo contado, diferencia de inventario, faltantes, sobrantes, importar stock, aprobacion, buscar, filtrar, ordenar, columnas, observacion, observaciones, observacion de la linea, creado por, aprobado por, exportar, buscador, filtros, filtrar cargas, buscar por producto, cargas pendientes, chips, detalle de la carga, lineas de la carga, ver lineas, motivo, fila del excel, descargar pdf, descargar excel, exportar lineas, cargando archivo, importar excel, rechazar carga, eliminar carga, anular carga, anular carga aprobada, reversar carga, revertir carga, deshacer carga, modificar carga aprobada, editar carga aprobada, corregir carga aprobada, carga anulada, productos ya usados, no se puede anular, nup, serie, series, serial, numero de serie, varias series, lote, ajuste por lote, imprimir, impresora, quien aprueba, aprobar salida, salida no se aprueba, sin aprobadores, aprobacion automatica, editar observacion, cambiar observacion, corregir observacion
-version: 2.1
+version: 2.2
 orden: 25
 estado: activo
 ---
@@ -393,6 +393,7 @@ para corregir el archivo. Los motivos posibles son:
 
 ## Historial de cambios
 
+- **2.2** — **Importar** una carga registra una sola vez: un reintento tras «Error de conexión» ya no crea una segunda carga (que, sin aprobación exigida, se aplicaba sola). Rechazar o eliminar una carga mientras otro usuario la aprueba ya no la deja «rechazada» con su stock aplicado: quien llega segundo ve el estado real.
 - **2.1** — La **observación general** de la carga se puede editar desde la ventana
   de la carga (botón **Actualizar**, al pie de la ventana), en cualquier estado salvo anulada y con permiso
   de modificar. No cambia líneas ni stock.

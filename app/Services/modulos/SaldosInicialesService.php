@@ -605,7 +605,13 @@ class SaldosInicialesService
 
     public function eliminarSaldoInventario(int $idMov, int $idEmpresa, int $idUsuario): void
     {
-        // ignorarRestriccion=true: es nuestra entrada de apertura controlada (referencia SALDO_INICIAL)
+        // ignorarRestriccion=true salta la restricción de documento: solo vale para NUESTRAS
+        // entradas de apertura. Sin esta comprobación, un id de kardex de una factura, compra o
+        // transferencia se anulaba desde aquí dejando su documento vivo sin su movimiento.
+        $mov = (new \App\repositories\modulos\InventarioRepository())->find($idMov, $idEmpresa);
+        if (!$mov || strtoupper((string) ($mov['referencia_tipo'] ?? '')) !== 'SALDO_INICIAL') {
+            throw new \Exception('El movimiento no es un saldo inicial de inventario.');
+        }
         $this->getInventarioService()->eliminarMovimiento($idMov, $idEmpresa, $idUsuario, true);
     }
 
@@ -613,10 +619,16 @@ class SaldosInicialesService
      * Importa saldos de inventario. Cada fila se resuelve por código de
      * producto y nombre de bodega; si no existen, la fila se rechaza.
      */
+    /**
+     * Todo o nada: primero se validan TODAS las filas y, si alguna tiene error, no se graba
+     * ninguna; si están bien, se graban en una sola transacción. Antes cada fila se grababa por
+     * su cuenta: un archivo con errores quedaba a medias y, al corregirlo y volver a cargarlo,
+     * las filas que ya habían entrado se duplicaban en el stock.
+     */
     public function importarInventarioDesdeArray(int $idEmpresa, int $idUsuario, array $filas): array
     {
         $errores = [];
-        $insertados = 0;
+        $validas = [];
         foreach ($filas as $i => $fila) {
             try {
                 $codigo = trim((string)($fila['codigo'] ?? ''));
@@ -635,7 +647,7 @@ class SaldosInicialesService
                 if (!$bodega) {
                     throw new \RuntimeException("La bodega '{$nombreBodega}' no existe.");
                 }
-                $this->guardarSaldoInventario($idEmpresa, $idUsuario, [
+                $datos = [
                     'id_producto'     => (int)$prod['id'],
                     'id_bodega'       => (int)$bodega['id'],
                     'cantidad'        => $fila['cantidad'] ?? 0,
@@ -644,13 +656,30 @@ class SaldosInicialesService
                     'fecha_caducidad' => $fila['fecha_caducidad'] ?? '',
                     'nup'             => $fila['nup'] ?? '',
                     'observaciones'   => $fila['observaciones'] ?? '',
-                ]);
-                $insertados++;
+                ];
+                $this->rules->validarInventario($datos);
+                $validas[] = $datos;
             } catch (\Throwable $e) {
                 $errores[] = 'Fila ' . ($i + 2) . ': ' . $e->getMessage();
             }
         }
-        return ['insertados' => $insertados, 'errores' => $errores];
+        if (!empty($errores)) {
+            return ['insertados' => 0, 'errores' => $errores];
+        }
+
+        $db = \App\core\Database::getConnection();
+        $managed = !$db->inTransaction();
+        if ($managed) $db->beginTransaction();
+        try {
+            foreach ($validas as $datos) {
+                $this->guardarSaldoInventario($idEmpresa, $idUsuario, $datos);
+            }
+            if ($managed) $db->commit();
+        } catch (\Throwable $e) {
+            if ($managed && $db->inTransaction()) $db->rollBack();
+            throw $e;
+        }
+        return ['insertados' => count($validas), 'errores' => []];
     }
 
     // ─────────────────────────────────────────────────────────

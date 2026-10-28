@@ -240,6 +240,11 @@ class FacturaExpressQrService
         $this->repo->beginTransaction();
         $idFacturaCreada = null;
         try {
+            // El estado se leyó sin bloquear: se vuelve a leer bajo candado. Sin esto, dos
+            // aprobaciones simultáneas emitían dos facturas (doble salida de inventario).
+            if ($this->repo->bloquearEstadoSolicitud($idSolicitud, $idEmpresa) !== 'pendiente') {
+                throw new Exception('Esta solicitud ya fue procesada.');
+            }
             $idFacturaCreada = $this->_facturarSolicitud($idSolicitud, $idEmpresa, $idUsuario, $plantilla ?? [], $datosEditados);
             $this->log->registrar($idUsuario, $idEmpresa, 'aprobar_factura_express', 'factura_express_solicitudes', $idSolicitud, $solicitud, []);
             $this->repo->commit();
@@ -257,6 +262,9 @@ class FacturaExpressQrService
 
         $this->repo->beginTransaction();
         try {
+            if ($this->repo->bloquearEstadoSolicitud($idSolicitud, $idEmpresa) !== 'pendiente') {
+                throw new Exception('Esta solicitud ya fue procesada.');
+            }
             $this->repo->updateEstadoSolicitud($idSolicitud, 'rechazada', $idUsuario, $nota);
             $this->log->registrar($idUsuario, $idEmpresa, 'rechazar_factura_express', 'factura_express_solicitudes', $idSolicitud, $solicitud, ['nota' => $nota]);
             $this->repo->commit();

@@ -5,8 +5,8 @@ categoria: Ventas
 ruta_modulo: modulos/consignaciones-ventas
 tipo: modulo
 visibilidad: todos
-etiquetas: consignacion, consignaciones, buscar consignacion, buscador, filtros, filtrar consignaciones, buscar por producto, buscar por lote, buscar por NUP, chips, asesor, vendedor, vendedor del cliente, asesor automatico, mercaderia en consignacion, entrega, deposito, liquidar, facturar consignacion, numeracion por fecha, numero con el año, reiniciar numeracion, reinicio anual, reinicio mensual, correlativo por año, correlativo por mes, modo de numeracion, cargar desde pedido, llamar pedido, lote, vencimiento, caducidad, fecha de vencimiento, NUP, acceso total, registros propios, solo mis documentos, quien ve que, permiso actualizar, no puedo guardar, boton guardar no aparece, no tengo permiso para esta accion, demora al guardar, guardar lento, se queda guardando, estado del pedido, pedido procesado, pedido pendiente, eliminar consignacion, editar consignacion, no puedo eliminar la consignacion, documentos relacionados, el stock no volvio, devolver stock, costo promedio, kardex anulado, pestana pedidos, pedidos relacionados, pedido de la consignacion, pendiente del pedido, asiento no generado, faltan cuentas, asiento incompleto, aparecen documentos que no busque, resultados que no corresponden, buscar por producto en el listado, codigo del producto, codigo de producto, ver codigo, NUP repetido, nup duplicado, serie repetida, el nup no puede repetirse, mismo nup dos productos, nup por lote, cada unidad su nup, numero de serie repetido, el modal se cierra al guardar, no se cierra el modal, seguir en la consignacion, imprimir despues de guardar, guardar y seguir, no contabilizar consignaciones, sin asiento de consignacion, apagar asiento, modulos que contabilizan, enfoque sin reclasificacion, consignacion sin asiento, aviso de asientos pendientes, asiento de documento anulado, asiento sigue contabilizado, no se anulo el asiento, no se pudo anular el asiento contable, consignacion duplicada, pedido consignado dos veces, dos consignaciones del mismo pedido, ya tiene consignado, saldo del pedido, pedido en dos ventanas, doble clic, guardar dos veces, se guardo dos veces, no se recibio respuesta del servidor, error al guardar, varias bodegas, distintas bodegas, bodega por producto, bodega por linea, bodega por fila, cambiar de bodega, bodega de despacho, se borran los productos al cambiar de bodega, se pierden los productos agregados, sacar de otra bodega, telefono del cliente en el pdf, telefono en la consignacion
-version: 1.44
+etiquetas: consignacion, consignaciones, buscar consignacion, buscador, filtros, filtrar consignaciones, buscar por producto, buscar por lote, buscar por NUP, chips, asesor, vendedor, vendedor del cliente, asesor automatico, mercaderia en consignacion, entrega, deposito, liquidar, facturar consignacion, numeracion por fecha, numero con el año, reiniciar numeracion, reinicio anual, reinicio mensual, correlativo por año, correlativo por mes, modo de numeracion, cargar desde pedido, llamar pedido, lote, vencimiento, caducidad, fecha de vencimiento, NUP, acceso total, registros propios, solo mis documentos, quien ve que, permiso actualizar, no puedo guardar, boton guardar no aparece, no tengo permiso para esta accion, demora al guardar, guardar lento, se queda guardando, estado del pedido, pedido procesado, pedido pendiente, eliminar consignacion, editar consignacion, no puedo eliminar la consignacion, documentos relacionados, el stock no volvio, devolver stock, costo promedio, kardex anulado, pestana pedidos, pedidos relacionados, pedido de la consignacion, pendiente del pedido, asiento no generado, faltan cuentas, asiento incompleto, aparecen documentos que no busque, resultados que no corresponden, buscar por producto en el listado, codigo del producto, codigo de producto, ver codigo, NUP repetido, nup duplicado, serie repetida, el nup no puede repetirse, mismo nup dos productos, nup por lote, cada unidad su nup, numero de serie repetido, el modal se cierra al guardar, no se cierra el modal, seguir en la consignacion, imprimir despues de guardar, guardar y seguir, no contabilizar consignaciones, sin asiento de consignacion, apagar asiento, modulos que contabilizan, enfoque sin reclasificacion, consignacion sin asiento, aviso de asientos pendientes, asiento de documento anulado, asiento sigue contabilizado, no se anulo el asiento, no se pudo anular el asiento contable, consignacion duplicada, pedido consignado dos veces, dos consignaciones del mismo pedido, ya tiene consignado, saldo del pedido, pedido en dos ventanas, doble clic, guardar dos veces, se guardo dos veces, no se recibio respuesta del servidor, error al guardar, varias bodegas, distintas bodegas, bodega por producto, bodega por linea, bodega por fila, cambiar de bodega, bodega de despacho, se borran los productos al cambiar de bodega, se pierden los productos agregados, sacar de otra bodega, telefono del cliente en el pdf, telefono en la consignacion, anular consignacion, consignacion anulada, anular devuelve el stock, reactivar consignacion anulada, no descuenta inventario, facturacion afecta al inventario, producto no inventariable en consignacion
+version: 1.46
 orden: 45
 estado: activo
 ---
@@ -425,6 +425,28 @@ consignación (en borrador o facturadas) o cambios de productos que entregan des
 ella. El mensaje dice cuáles son: hay que anularlos o eliminarlos primero. Los
 documentos **anulados** no cuentan.
 
+## Anular una consignación
+
+Al pasar el estado a **Anulada**, la mercadería **vuelve a la bodega** (sus salidas
+del Kardex quedan como **ANULADO**) y se anula su asiento, igual que al eliminarla.
+Pide las mismas condiciones que eliminar: ningún retorno, facturación de
+consignación ni cambio de productos vigente que la use, y período contable abierto.
+
+Una consignación anulada **ya no se puede reactivar**: el selector de estado queda
+bloqueado. Si se anuló por error, hay que registrar una consignación nueva.
+
+Las consignaciones que se anularon **antes** de este cambio pudieron quedar con su
+mercadería fuera de la bodega. Para devolverla, use **Eliminar** en esa
+consignación: el botón también aparece en las anuladas.
+
+## Qué productos descuentan del inventario
+
+La consignación sigue la **misma regla que la factura**: descuenta stock solo si el
+establecimiento de su serie tiene activa **La facturación afecta al inventario**
+(Empresa → Facturación) y el producto es **inventariable** y no es un servicio. El
+retorno devuelve exactamente lo que la consignación sacó, así que lo que no salió de
+bodega tampoco vuelve a entrar.
+
 ## Errores frecuentes
 
 - **"No se pudo anular el asiento contable de la consignación: …"**: al eliminar una
@@ -552,6 +574,8 @@ Contables**; reabrir el período permite la operación de inmediato.
 
 ## Historial de cambios
 
+- **1.46** — Corregido: editar una consignación con el punto de partida o de llegada vacío fallaba al guardar.
+- **1.45** — **Anular devuelve la mercadería a la bodega** y anula el asiento; antes solo cambiaba el estado y el stock quedaba fuera sin forma de recuperarlo. Una anulada ya no se reactiva, y en las anuladas antiguas aparece **Eliminar** para devolver lo que quedó fuera. La consignación descuenta inventario con la **misma regla que la factura** (establecimiento de su serie con «La facturación afecta al inventario» y producto inventariable que no sea servicio); antes descontaba siempre y el retorno no devolvía esas líneas.
 - **1.44** — Al **cargar desde un pedido**, los productos llegan en el **mismo orden del pedido**. Antes, si el pedido se había editado, el pedido se veía en un orden y la consignación los cargaba en otro.
 - **1.43** — PDF del documento: la **Fecha emisión** muestra también la **hora** en que se registró la consignación. En consignaciones migradas o registradas con una fecha anterior se muestra solo la fecha.
 - **1.42** — **Líneas agregadas a mano vinculadas al pedido.** Al guardar, una línea agregada a mano de un producto pendiente en un pedido que la consignación ya usa queda vinculada a ese pedido (antes el pedido no la contaba y quedaba en «Parcial»). Borrar o cambiar el producto de una fila que vino del pedido ya no deja el vínculo anterior.

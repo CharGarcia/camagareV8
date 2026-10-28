@@ -1003,7 +1003,26 @@ class TallerOrdenService
         try {
             $db->beginTransaction();
 
+            if ($this->repository->bloquearEstado($id, $idEmpresa) !== $actual) {
+                throw new Exception("La orden cambió de estado mientras se procesaba. Vuelva a abrirla.");
+            }
             $this->repository->updateEstado($id, $idEmpresa, $nuevoEstado, $idUsuario, $nuevoEstado === 'entregada');
+
+            // Anular devuelve al stock lo que consumió la orden (las líneas quedan como no
+            // aplicadas); reactivarla lo vuelve a descontar. Antes solo cambiaba el estado y la
+            // orden anulada seguía consumiendo stock. Reactivar es idempotente: una orden anulada
+            // antes de este cambio todavía tiene su salida viva y no se descuenta otra vez.
+            if ($nuevoEstado === 'anulada') {
+                $this->getInventarioService()->revertirMovimientosPorReferencia(self::REF_TIPO, $id, $idEmpresa, $idUsuario, true);
+                foreach ($this->repository->getDetalles($id, $idEmpresa) as $linea) {
+                    if (Booleano::es($linea['inventario_aplicado'] ?? false)) {
+                        $this->repository->marcarInventarioLinea((int) $linea['id'], $idEmpresa, false, null);
+                    }
+                }
+            } elseif ($actual === 'anulada' && !$this->repository->tieneMovimientosInventario($id, $idEmpresa)) {
+                $this->reaplicarInventarioOrden($id, $idEmpresa, $idUsuario);
+            }
+
             $this->registrarBitacora($id, $idEmpresa, $idUsuario, null, 'cambio_estado',
                 'Estado: ' . $actual . ' → ' . $nuevoEstado, null);
 
@@ -1166,6 +1185,9 @@ class TallerOrdenService
         $tipoDocSec = ($tipo === 'FACTURA') ? 'Facturas de venta' : 'Recibos de venta';
         $sec = (new \App\Services\SecuencialService())->obtenerSiguienteSecuencial($idPunto, $tipoDocSec, date('Y-m-d'));
         if (($sec['configurado'] ?? false) === false) {
+            if ($managedTransaction && $db->inTransaction()) {
+                $db->rollBack();
+            }
             throw new Exception(
                 'Esta serie no tiene configurado el secuencial "' . $tipoDocSec . '". '
                 . 'Créelo en Empresa → Secuenciales antes de emitir el documento.'
@@ -1205,17 +1227,21 @@ class TallerOrdenService
             'info_adicional'      => $this->infoAdicionalDocumento($orden),
         ];
 
-        // El documento hace su propia salida de inventario: devolvemos primero lo
-        // que consumió la orden para no descontar dos veces. Las líneas quedan
-        // marcadas como no aplicadas porque su movimiento de kardex ya no existe.
-        $this->getInventarioService()->revertirMovimientosPorReferencia(self::REF_TIPO, $idOrden, $idEmpresa, $idUsuario);
-        foreach ($orden['detalles'] ?? [] as $linea) {
-            if (Booleano::es($linea['inventario_aplicado'] ?? false)) {
-                $this->repository->marcarInventarioLinea((int) $linea['id'], $idEmpresa, false, null);
-            }
-        }
-
+        // TODO en UNA transacción: devolver el inventario de la orden (el documento hace su
+        // propia salida; las líneas quedan como no aplicadas porque su kardex ya no existe) →
+        // crear el documento → marcar la orden. Si algo falla, el rollBack deja la orden
+        // exactamente como estaba (kardex y marcas inventario_aplicado). Antes, al fallar, se
+        // "reaplicaba" el inventario sobre un rollBack que ya lo había conservado → stock
+        // descontado dos veces (mismo bug ya corregido en CarWash).
+        $svcFactura = null;
         try {
+            $this->getInventarioService()->revertirMovimientosPorReferencia(self::REF_TIPO, $idOrden, $idEmpresa, $idUsuario);
+            foreach ($orden['detalles'] ?? [] as $linea) {
+                if (Booleano::es($linea['inventario_aplicado'] ?? false)) {
+                    $this->repository->marcarInventarioLinea((int) $linea['id'], $idEmpresa, false, null);
+                }
+            }
+
             if ($tipo === 'FACTURA') {
                 $svc = new FacturaVentaService(
                     new \App\repositories\modulos\FacturaVentaRepository(),
@@ -1223,6 +1249,7 @@ class TallerOrdenService
                     $this->logService
                 );
                 $idDoc = $svc->crear($payload);
+                $svcFactura = $svc;
             } else {
                 $payload['con_impuestos'] = true;
                 $payload['estado']        = 'borrador';
@@ -1234,6 +1261,14 @@ class TallerOrdenService
                 );
                 $idDoc = $svc->crear($payload);
             }
+
+            $this->repository->marcarDocumentoGenerado($idOrden, $idEmpresa, $tipo, (int) $idDoc, $numeroDoc, $idUsuario);
+            $this->registrarBitacora($idOrden, $idEmpresa, $idUsuario, null, 'facturacion',
+                ($tipo === 'FACTURA' ? 'Factura' : 'Recibo') . ' ' . $numeroDoc, null);
+            $this->logService->registrar($idUsuario, $idEmpresa, 'GENERAR_DOCUMENTO_TALLER', 'taller_ordenes', $idOrden,
+                ['estado' => $orden['estado'] ?? ''],
+                ['tipo_documento' => $tipo, 'id_documento' => $idDoc, 'numero_documento' => $numeroDoc]);
+
             if ($managedTransaction) {
                 $db->commit();
             }
@@ -1241,28 +1276,13 @@ class TallerOrdenService
             if ($managedTransaction && $db->inTransaction()) {
                 $db->rollBack();
             }
-            // Si falla la emisión, restauramos el consumo de la orden.
-            try {
-                $this->reaplicarInventarioOrden($idOrden, $idEmpresa, $idUsuario);
-            } catch (\Throwable $e2) {
-                error_log("[Taller] No se pudo restaurar el inventario de la orden {$idOrden}: " . $e2->getMessage());
-            }
             throw $e;
         }
 
-        $managed = !$db->inTransaction();
-        if ($managed) $db->beginTransaction();
-        try {
-            $this->repository->marcarDocumentoGenerado($idOrden, $idEmpresa, $tipo, (int) $idDoc, $numeroDoc, $idUsuario);
-            $this->registrarBitacora($idOrden, $idEmpresa, $idUsuario, null, 'facturacion',
-                ($tipo === 'FACTURA' ? 'Factura' : 'Recibo') . ' ' . $numeroDoc, null);
-            $this->logService->registrar($idUsuario, $idEmpresa, 'GENERAR_DOCUMENTO_TALLER', 'taller_ordenes', $idOrden,
-                ['estado' => $orden['estado'] ?? ''],
-                ['tipo_documento' => $tipo, 'id_documento' => $idDoc, 'numero_documento' => $numeroDoc]);
-            if ($managed) $db->commit();
-        } catch (\Throwable $e) {
-            if ($managed && $db->inTransaction()) $db->rollBack();
-            throw new Exception("El documento {$numeroDoc} se generó, pero la orden no pudo marcarse como facturada: " . $e->getMessage());
+        // XML de la factura FUERA de la transacción: crear() anidado no lo genera. Si falla,
+        // la factura queda creada y el XML puede regenerarse desde Facturas de Venta.
+        if ($svcFactura !== null && $managedTransaction) {
+            $svcFactura->generarYGuardarXml((int) $idDoc, $empresaConfig);
         }
 
         return ['tipo' => $tipo, 'id_documento' => (int) $idDoc, 'numero_documento' => $numeroDoc];
@@ -1387,9 +1407,13 @@ class TallerOrdenService
             self::REF_TIPO
         );
 
+        // id_kardex de la línea = la salida del producto o, si el producto no mueve stock pero sus
+        // componentes sí (kit), la del primer componente. Antes, en ese caso la línea no quedaba
+        // marcada como aplicada y cada edición o aprobación volvía a descontar los componentes.
         $idKardex = null;
-        if (!empty($res[0]) && is_array($res[0]) && !empty($res[0]['principal'])) {
-            $idKardex = (int) $res[0]['principal'];
+        if (!empty($res[0]) && is_array($res[0])) {
+            $idKardex = !empty($res[0]['principal']) ? (int) $res[0]['principal']
+                : (!empty($res[0]['componentes'][0]) ? (int) $res[0]['componentes'][0] : null);
         }
         // Sin movimiento no hay nada que marcar: puede ser un producto no
         // inventariable o un establecimiento que no trabaja con inventario.
@@ -1398,12 +1422,32 @@ class TallerOrdenService
         }
     }
 
-    /** Devuelve al stock lo que había consumido una línea. */
+    /**
+     * Devuelve al stock lo que había consumido una línea: su salida y la de los componentes del
+     * producto (kits). Antes solo se revertía el producto principal y los componentes quedaban
+     * descontados al quitar, editar o rechazar la línea.
+     */
     private function revertirInventarioLinea(array $linea, int $idEmpresa, int $idUsuario): void
     {
         if (Booleano::no($linea['inventario_aplicado'] ?? false) || empty($linea['id_kardex'])) return;
 
-        $this->getInventarioService()->eliminarMovimiento((int) $linea['id_kardex'], $idEmpresa, $idUsuario, true);
+        $idAncla = (int) $linea['id_kardex'];
+        $invRepo = new \App\repositories\modulos\InventarioRepository();
+        $ancla   = $invRepo->find($idAncla, $idEmpresa);
+        $ids     = [$idAncla];
+        if ($ancla) {
+            $prodRepo = new \App\repositories\modulos\ProductoRepository();
+            foreach ($prodRepo->getComponentes((int) $linea['id_producto'], $idEmpresa) as $comp) {
+                $idComp = $invRepo->findSalidaComponente(
+                    self::REF_TIPO, (int) $linea['id_orden'], (int) $comp['id_producto_hijo'], (int) $ancla['id_bodega'],
+                    (float) $linea['cantidad'] * (float) $comp['cantidad'], $idAncla, $idEmpresa
+                );
+                if ($idComp !== null && !in_array($idComp, $ids, true)) $ids[] = $idComp;
+            }
+        }
+        foreach ($ids as $idK) {
+            $this->getInventarioService()->eliminarMovimiento($idK, $idEmpresa, $idUsuario, true);
+        }
         $this->repository->marcarInventarioLinea((int) $linea['id'], $idEmpresa, false, null);
     }
 

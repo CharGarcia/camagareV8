@@ -6,7 +6,7 @@ ruta_modulo: modulos/retornos-cv
 tipo: modulo
 visibilidad: todos
 etiquetas: retorno, retornos, actualizar retorno, editar retorno, se queda en borrador, el modal se cierra, saldo negativo, consignacion en negativo, ya no esta en bodega, no se puede quitar la entrada, dos usuarios a la vez, observaciones, columna observaciones, ver observaciones, notas del retorno, comentarios, columnas del listado, ordenar listado, ocultar columnas, buscar retorno, buscador, filtros, filtrar retornos, buscar por producto, buscar por lote, buscar por NUP, chips, devolucion de consignacion, mercaderia no vendida, reingreso, saldo consignado, numeracion por fecha, numero con el año, reiniciar numeracion, reinicio anual, reinicio mensual, correlativo por año, correlativo por mes, modo de numeracion, buscar por numero de consignacion, agregar consignacion, numero de consignacion, serie inactiva, punto de emision inactivo, permiso actualizar, no puedo guardar, no tengo permiso para esta accion, costo del retorno, costo promedio, retorno a costo cero, aparecen documentos que no busque, resultados que no corresponden, buscar por producto en el listado, cambiar estado, estado del retorno, anular retorno, pasar a borrador, emitir retorno, selector de estado, columna bodega en el pdf, bodega del retorno, a que bodega regresa, total de cantidades, suma de cantidades, total del pdf, fila total, vencimiento, fecha de vencimiento, caducidad, fecha de caducidad, columna vencimiento, vence, lote vencido, no se ve el vencimiento, asiento sigue a la consignacion, no contabilizar consignaciones, retorno sin asiento, modulos que contabilizan, imprimir, impresora, asiento de documento anulado, asiento sigue contabilizado, no se anulo el asiento, no se pudo anular el asiento contable
-version: 1.26
+version: 1.27
 orden: 46
 estado: activo
 ---
@@ -27,6 +27,10 @@ vuelve a entrar.
    cambia. Si esa consignación es antigua y su salida quedó sin costo, entra al
    costo promedio del producto. Pasarlo a Borrador, anularlo o eliminarlo saca la
    mercadería con ese mismo costo.
+5. Entra **exactamente lo que la consignación sacó** de la bodega: si una línea no
+   descontó stock (producto no inventariable, servicio, o establecimiento sin
+   «La facturación afecta al inventario»), el retorno tampoco la ingresa. Y al
+   anularlo o eliminarlo sale a lo sumo lo que ese retorno ingresó.
 
 Mientras un retorno esté **emitido o en borrador**, la consignación de origen no se
 puede editar ni eliminar.
@@ -281,6 +285,7 @@ Contables**; reabrir el período permite la operación de inmediato.
 
 ## Historial de cambios
 
+- **1.27** — El retorno ingresa a la bodega **exactamente lo que su consignación sacó**, y al anularlo o eliminarlo saca a lo sumo lo que ingresó. Antes decidía con la configuración del primer establecimiento de la empresa, distinta de la regla de la consignación: en esos casos la consignación descontaba y el retorno no devolvía.
 - **1.26** — Al **actualizar** un retorno en *Borrador* ahora queda **Emitido** en el
   mismo guardado (antes seguía en Borrador y había que cambiarle el estado aparte,
   y hasta entonces la mercadería no entraba al inventario). El modal ya no se

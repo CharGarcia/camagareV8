@@ -1732,6 +1732,18 @@ class ComprasController extends BaseModuloController
 
             $db->beginTransaction();
             error_log("INICIO PROCESAR INVENTARIO: Empresa $idEmpresa, Usuario $idUsuario, Compra $idCompra");
+
+            // Guardado único (CLAUDE.md §8): un reintento tras "Error de conexión" (el servidor sí
+            // registró, se perdió la respuesta) o un POST repetido traen la misma clave y no
+            // vuelven a ingresar la mercadería. Antes cada reintento creaba otra entrada.
+            $guardado  = new \App\Services\GuardadoUnicoService();
+            $tokenInv  = $_POST['token_guardado'] ?? '';
+            if ($guardado->previo($tokenInv, $idEmpresa, 'compras_inventario')) {
+                $db->rollBack();
+                echo json_encode(['ok' => true, 'mensaje' => 'Ese envío a inventario ya estaba registrado; no se volvió a ingresar.']);
+                exit;
+            }
+
             $processedCount = 0;
             foreach ($items as $item) {
                 $idDetalle = (int)($item['id_detalle'] ?? 0);
@@ -1879,6 +1891,7 @@ class ComprasController extends BaseModuloController
                 $processedCount++;
             }
 
+            $guardado->registrar($tokenInv, $idEmpresa, 'compras_inventario', $idCompra, null, $idUsuario);
             $db->commit();
             error_log("COMMIT REALIZADO: Procesados $processedCount");
             

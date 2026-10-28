@@ -527,6 +527,19 @@ class TallerOrdenRepository extends BaseRepository
         ]);
     }
 
+    /**
+     * Bloquea la orden (FOR UPDATE, hasta el COMMIT/ROLLBACK) y devuelve su estado vigente. Se
+     * llama dentro de la transacción del cambio de estado: dos cambios simultáneos (p. ej. dos
+     * reactivaciones de una orden anulada) quedan en fila y el segundo ve el estado real.
+     */
+    public function bloquearEstado(int $id, int $idEmpresa): ?string
+    {
+        $st = $this->db->prepare("SELECT estado FROM taller_ordenes WHERE id = :id AND id_empresa = :e AND eliminado = false FOR UPDATE");
+        $st->execute([':id' => $id, ':e' => $idEmpresa]);
+        $estado = $st->fetchColumn();
+        return $estado === false ? null : (string) $estado;
+    }
+
     public function updateEstado(int $id, int $idEmpresa, string $estado, int $idUsuario, bool $setFechaEntrega = false): void
     {
         $extra = $setFechaEntrega ? ", fecha_entrega = CURRENT_TIMESTAMP" : "";
@@ -675,6 +688,15 @@ class TallerOrdenRepository extends BaseRepository
         );
         $st->execute([':id' => $id, ':e' => $idEmpresa]);
         return $st->fetch(PDO::FETCH_ASSOC) ?: null;
+    }
+
+    /** ¿La orden tiene hoy alguna salida de inventario registrada? */
+    public function tieneMovimientosInventario(int $idOrden, int $idEmpresa): bool
+    {
+        $st = $this->db->prepare("SELECT 1 FROM inventario_kardex
+                                   WHERE referencia_tipo = 'taller_orden' AND referencia_id = :o AND id_empresa = :e AND eliminado = false LIMIT 1");
+        $st->execute([':o' => $idOrden, ':e' => $idEmpresa]);
+        return (bool) $st->fetchColumn();
     }
 
     /**

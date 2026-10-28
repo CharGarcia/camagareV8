@@ -307,6 +307,20 @@ class FacturaExpressQrRepository extends BaseRepository
         return $row ?: null;
     }
 
+    /**
+     * Bloquea la solicitud (FOR UPDATE, hasta el COMMIT/ROLLBACK) y devuelve su estado vigente.
+     * Aprobar y rechazar lo llaman dentro de su transacción: dos aprobaciones simultáneas (o una
+     * aprobación y un rechazo) quedan en fila y la segunda ve que ya no está pendiente.
+     */
+    public function bloquearEstadoSolicitud(int $id, int $idEmpresa): ?string
+    {
+        $st = $this->db->prepare("SELECT estado FROM factura_express_solicitudes
+                                   WHERE id = :id AND id_empresa = :e AND eliminado = false FOR UPDATE");
+        $st->execute([':id' => $id, ':e' => $idEmpresa]);
+        $estado = $st->fetchColumn();
+        return $estado === false ? null : (string) $estado;
+    }
+
     public function getSolicitudByTokenCliente(string $token): ?array
     {
         $st = $this->db->prepare(

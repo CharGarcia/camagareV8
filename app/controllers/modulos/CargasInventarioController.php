@@ -276,7 +276,7 @@ class CargasInventarioController extends BaseModuloController
                 return;
             }
 
-            $res = $this->service->crearDesdeImportacion($idEmpresa, $idUsuario, $tipo, $obs !== '' ? $obs : null, $filas);
+            $res = $this->service->crearDesdeImportacion($idEmpresa, $idUsuario, $tipo, $obs !== '' ? $obs : null, $filas, $_POST['token_guardado'] ?? null);
             echo json_encode(['ok' => true, 'data' => $res]);
         } catch (\Throwable $e) {
             \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);

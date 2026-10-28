@@ -5,8 +5,8 @@ categoria: Servicios
 ruta_modulo: modulos/car-wash
 tipo: modulo
 visibilidad: todos
-etiquetas: car wash, lavado, lavadora de autos, lubricadora, cambio de aceite, mecanica, taller, orden de servicio, orden mecanica, orden de trabajo, vehiculo, placa, historial del vehiculo, historial del cliente, visitas, ultima visita, facturar orden, recibo de venta, refacturar, factura anulada, proxima cita, proximo chequeo, editar cliente, editar vehiculo, corregir placa, cambiar datos del cliente, actualizar correo, migracion, sistema anterior, numeracion por fecha, numero con el año, reiniciar numeracion, reinicio anual, reinicio mensual, correlativo por año, correlativo por mes, modo de numeracion, buscar orden, buscar placa, buscador, filtros, filtrar ordenes, filtro de fechas, buscar por servicio, chips, imprimir, impresora, aviso, avisos, ordenes en borrador, ordenes sin facturar, pendientes de facturar, barra superior, sin saldo, sin stock, productos similares, productos equivalentes, equivalencias, reemplazo, otra marca, sugerir otro producto, misma categoria, usar este, pdf en dos hojas, segunda hoja casi vacia, totales en otra pagina, el pdf corta la pagina, hoja de mas
-version: 1.20
+etiquetas: car wash, lavado, lavadora de autos, lubricadora, cambio de aceite, mecanica, taller, orden de servicio, orden mecanica, orden de trabajo, vehiculo, placa, historial del vehiculo, historial del cliente, visitas, ultima visita, facturar orden, recibo de venta, refacturar, factura anulada, proxima cita, proximo chequeo, editar cliente, editar vehiculo, corregir placa, cambiar datos del cliente, actualizar correo, migracion, sistema anterior, numeracion por fecha, numero con el año, reiniciar numeracion, reinicio anual, reinicio mensual, correlativo por año, correlativo por mes, modo de numeracion, buscar orden, buscar placa, buscador, filtros, filtrar ordenes, filtro de fechas, buscar por servicio, chips, imprimir, impresora, aviso, avisos, ordenes en borrador, ordenes sin facturar, pendientes de facturar, barra superior, sin saldo, sin stock, productos similares, productos equivalentes, equivalencias, reemplazo, otra marca, sugerir otro producto, misma categoria, usar este, pdf en dos hojas, segunda hoja casi vacia, totales en otra pagina, el pdf corta la pagina, hoja de mas, anular orden, orden anulada, devolver repuestos, stock descontado dos veces
+version: 1.21
 orden: 10
 estado: activo
 ---
@@ -245,8 +245,9 @@ que se guardó.
   inventario); al editarla se recalcula. Al emitir la factura o el recibo, lo de la
   orden se devuelve y el documento hace su propia salida: el stock nunca se descuenta
   dos veces. Si el documento se anula o elimina, la orden vuelve a descontar. Al
-  eliminar una orden sin documento, se devuelve lo que consumió. Funciona también con
-  stock negativo cuando la empresa lo permite.
+  eliminar una orden sin documento, se devuelve lo que consumió. **Al anularla** también
+  se devuelve, y si se reactiva vuelve a descontar. Funciona también con stock negativo
+  cuando la empresa lo permite.
 - Toda la emisión (número del documento, inventario, documento y marca de la orden)
   ocurre en una sola operación: si algo falla, nada queda a medias.
 - La factura lleva en Info. Adicional la **placa** y el **número de orden**, además de
@@ -395,6 +396,7 @@ documentos admite cada periodo) está en el manual de **Empresa**, sección
 
 ## Historial de cambios
 
+- **1.21** — **Anular una orden devuelve al stock** lo que consumió (y reactivarla lo vuelve a descontar); antes la orden anulada seguía consumiendo stock hasta eliminarla.
 - **1.20** — Si un producto no tiene saldo, la ventana de sugerencias muestra primero sus **productos equivalentes** (ficha del producto, pestaña Referencias). La ventana ahora se enciende en Empresa → Facturación con «Mostrar equivalencias» y «Mostrar sugerencias de productos similares» (vienen apagados); antes salía sola con stock positivo.
 - **1.19** — Enlace **Editar** junto a Cliente y Vehículo en la orden: abre la ficha
   encima de la orden y, al guardar, la orden muestra los datos nuevos (solo si está

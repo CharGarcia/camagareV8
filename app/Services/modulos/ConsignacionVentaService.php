@@ -454,6 +454,9 @@ class ConsignacionVentaService
             $this->ultimoNumeroGenerado = $numero['serie'] . '-' . $numero['secuencial'];
 
             // Detalles y Kardex
+            $afectaInventario = $this->getInventarioService()->facturacionAfectaInventarioPunto(
+                (int) ($numero['id_punto_emision'] ?? 0), $idEmpresa, $data['empresa_config'] ?? []
+            );
             $detalles = $data['detalles'] ?? [];
             foreach ($detalles as $det) {
                 $det['id_consignacion'] = $idConsignacion;
@@ -484,31 +487,33 @@ class ConsignacionVentaService
                     ':idpd' => empty($det['id_pedido_detalle']) ? null : (int)$det['id_pedido_detalle']
                 ]);
 
-                $this->inventarioRepo->lockStock((int)$det['id_producto'], (int)$det['id_bodega'], $idEmpresa);
-
-                // Controlar stock de acuerdo a la configuración de facturación
-                $soloStockPos = (($data['empresa_config']['facturacion_inventario'] ?? true) === 'true' || ($data['empresa_config']['facturacion_inventario'] ?? true) === true);
+                // Misma regla que la factura (y que el retorno y la Facturación de consignaciones,
+                // que devuelven este stock): solo se descuenta si el establecimiento de la serie
+                // trabaja con inventario y el producto es inventariable y no es servicio. Antes la
+                // consignación descontaba SIEMPRE y el retorno solo devolvía con esa regla: el stock
+                // de esas líneas quedaba fuera para siempre.
                 $repoProd = new \App\repositories\modulos\ProductoRepository();
                 $prodData = $repoProd->findById((int)$det['id_producto'], $idEmpresa);
                 $esInv = $prodData && ($prodData['inventariable'] == true || $prodData['inventariable'] == 'true' || $prodData['inventariable'] == 1) && ($prodData['tipo_produccion'] ?? '01') !== '02';
-                
-                if ($soloStockPos && $esInv) {
-                    $loteVal = (!empty($det['lote']) && $det['lote'] !== 'sin_lote') ? $det['lote'] : null;
+                if (!$afectaInventario || !$esInv) {
+                    continue;
+                }
 
-                    $stockTotal = $this->inventarioRepo->getStockActual(
-                        (int)$det['id_producto'],
-                        (int)$det['id_bodega'],
-                        $idEmpresa,
-                        null,
-                        null,
-                        $loteVal
-                    );
-                    
-                    if ($stockTotal < $det['cantidad']) {
-                        $prodNombre = $prodData['nombre'] ?? 'Producto';
-                        $loteStr = $loteVal ? " (Lote: {$loteVal})" : "";
-                        throw new Exception("Stock insuficiente para el producto: {$prodNombre}{$loteStr}. Saldo actual: {$stockTotal}, Requerido: {$det['cantidad']}");
-                    }
+                $this->inventarioRepo->lockStock((int)$det['id_producto'], (int)$det['id_bodega'], $idEmpresa);
+
+                $loteVal = (!empty($det['lote']) && $det['lote'] !== 'sin_lote') ? $det['lote'] : null;
+                $stockTotal = $this->inventarioRepo->getStockActual(
+                    (int)$det['id_producto'],
+                    (int)$det['id_bodega'],
+                    $idEmpresa,
+                    null,
+                    null,
+                    $loteVal
+                );
+                if ($stockTotal < $det['cantidad']) {
+                    $prodNombre = $prodData['nombre'] ?? 'Producto';
+                    $loteStr = $loteVal ? " (Lote: {$loteVal})" : "";
+                    throw new Exception("Stock insuficiente para el producto: {$prodNombre}{$loteStr}. Saldo actual: {$stockTotal}, Requerido: {$det['cantidad']}");
                 }
 
                 // Afectar inventario (salida)
@@ -626,6 +631,11 @@ class ConsignacionVentaService
             )";
             $stDetalle = $db->prepare($sqlDetalle);
 
+            // Serie con la que queda el documento (si cambió de punto de emisión, la nueva).
+            $afectaInventario = $this->getInventarioService()->facturacionAfectaInventarioPunto(
+                (int) ($data['id_punto_emision'] ?? 0) ?: (int) ($cabecera['id_punto_emision'] ?? 0),
+                $idEmpresa, $data['empresa_config'] ?? []
+            );
             $subtotal = 0; $impuesto = 0; $total = 0;
             foreach ($data['detalles'] as $det) {
                 if (empty($det['id_producto'])) continue;
@@ -649,15 +659,15 @@ class ConsignacionVentaService
                     ':idpd' => empty($det['id_pedido_detalle']) ? null : (int)$det['id_pedido_detalle']
                 ]);
 
-                $this->inventarioRepo->lockStock((int)$det['id_producto'], (int)$det['id_bodega'], $idEmpresa);
-
-                // Controlar stock de acuerdo a la configuración de facturación
-                $soloStockPos = (($data['empresa_config']['facturacion_inventario'] ?? true) === 'true' || ($data['empresa_config']['facturacion_inventario'] ?? true) === true);
+                // Misma regla que al crear (y que la factura): solo mueve stock si el establecimiento
+                // de la serie trabaja con inventario y el producto es inventariable y no es servicio.
                 $repoProd = new \App\repositories\modulos\ProductoRepository();
                 $prodData = $repoProd->findById((int)$det['id_producto'], $idEmpresa);
                 $esInv = $prodData && ($prodData['inventariable'] == true || $prodData['inventariable'] == 'true' || $prodData['inventariable'] == 1) && ($prodData['tipo_produccion'] ?? '01') !== '02';
-                
-                if ($soloStockPos && $esInv) {
+
+                if ($afectaInventario && $esInv) {
+                    $this->inventarioRepo->lockStock((int)$det['id_producto'], (int)$det['id_bodega'], $idEmpresa);
+
                     $loteVal = (!empty($det['lote']) && $det['lote'] !== 'sin_lote') ? $det['lote'] : null;
 
                     // Sin excluir la consignación: sus salidas anteriores ya se anularon en el paso 1,
@@ -677,36 +687,36 @@ class ConsignacionVentaService
                         $loteStr = $loteVal ? " (Lote: {$loteVal})" : "";
                         throw new Exception("Stock insuficiente para el producto: {$prodNombre}{$loteStr}. Saldo actual: {$stockTotal}, Requerido: {$det['cantidad']}");
                     }
+
+                    // Afectar inventario (salida)
+                    $stockActual = $this->inventarioRepo->getStockActual((int)$det['id_producto'], (int)$det['id_bodega'], $idEmpresa);
+                    $nuevoStock = $stockActual - $det['cantidad'];
+
+                    // Costo promedio actual → se registra en el kardex para el asiento de reclasificación.
+                    $costoUnitCons  = (float) $this->inventarioRepo->getCostoPromedio((int)$det['id_producto'], (int)$det['id_bodega'], $idEmpresa);
+                    $costoTotalCons = round($costoUnitCons * (float)$det['cantidad'], 2);
+
+                    $this->inventarioRepo->registrarMovimiento([
+                        'id_empresa' => $idEmpresa,
+                        'id_producto' => $det['id_producto'],
+                        'id_bodega' => $det['id_bodega'],
+                        'tipo_movimiento' => 'salida',
+                        'referencia_tipo' => 'CONSIGNACION_VENTA',
+                        'referencia_id' => $id,
+                        'cantidad' => -$det['cantidad'], // negativo para salidas
+                        'costo_unitario' => $costoUnitCons,
+                        'costo_total' => $costoTotalCons,
+                        'stock_anterior' => $stockActual,
+                        'stock_posterior' => $nuevoStock,
+                        'numero_lote' => (isset($det['lote']) && $det['lote'] !== '') ? $det['lote'] : null,
+                        'fecha_caducidad' => (isset($det['fecha_caducidad']) && $det['fecha_caducidad'] !== '') ? $det['fecha_caducidad'] : null,
+                        'nup' => (isset($det['nup']) && $det['nup'] !== '') ? $det['nup'] : null,
+                        'observaciones' => 'Salida por Consignación Venta (Edición) ' . $cabecera['serie'] . '-' . $cabecera['secuencial'],
+                        'id_usuario' => $idUsuario
+                    ]);
+
+                    $this->inventarioRepo->actualizarStock((int)$det['id_producto'], (int)$det['id_bodega'], $idEmpresa, $nuevoStock, $idUsuario);
                 }
-
-                // Afectar inventario (salida)
-                $stockActual = $this->inventarioRepo->getStockActual((int)$det['id_producto'], (int)$det['id_bodega'], $idEmpresa);
-                $nuevoStock = $stockActual - $det['cantidad'];
-
-                // Costo promedio actual → se registra en el kardex para el asiento de reclasificación.
-                $costoUnitCons  = (float) $this->inventarioRepo->getCostoPromedio((int)$det['id_producto'], (int)$det['id_bodega'], $idEmpresa);
-                $costoTotalCons = round($costoUnitCons * (float)$det['cantidad'], 2);
-
-                $this->inventarioRepo->registrarMovimiento([
-                    'id_empresa' => $idEmpresa,
-                    'id_producto' => $det['id_producto'],
-                    'id_bodega' => $det['id_bodega'],
-                    'tipo_movimiento' => 'salida',
-                    'referencia_tipo' => 'CONSIGNACION_VENTA',
-                    'referencia_id' => $id,
-                    'cantidad' => -$det['cantidad'], // negativo para salidas
-                    'costo_unitario' => $costoUnitCons,
-                    'costo_total' => $costoTotalCons,
-                    'stock_anterior' => $stockActual,
-                    'stock_posterior' => $nuevoStock,
-                    'numero_lote' => (isset($det['lote']) && $det['lote'] !== '') ? $det['lote'] : null,
-                    'fecha_caducidad' => (isset($det['fecha_caducidad']) && $det['fecha_caducidad'] !== '') ? $det['fecha_caducidad'] : null,
-                    'nup' => (isset($det['nup']) && $det['nup'] !== '') ? $det['nup'] : null,
-                    'observaciones' => 'Salida por Consignación Venta (Edición) ' . $cabecera['serie'] . '-' . $cabecera['secuencial'],
-                    'id_usuario' => $idUsuario
-                ]);
-                
-                $this->inventarioRepo->actualizarStock((int)$det['id_producto'], (int)$det['id_bodega'], $idEmpresa, $nuevoStock, $idUsuario);
 
                 $subtotal += $det['subtotal'];
                 $total += $det['subtotal']; // asumiendo sin impuestos por ahora para coincidir con crear
@@ -740,8 +750,9 @@ class ConsignacionVentaService
                 'id_vendedor' => empty($data['id_vendedor']) ? null : $data['id_vendedor'],
                 'id_cliente' => empty($data['id_cliente']) ? null : $data['id_cliente'],
                 'id_responsable_traslado' => empty($data['id_responsable_traslado']) ? null : $data['id_responsable_traslado'],
-                'punto_partida' => empty($data['punto_partida']) ? null : trim($data['punto_partida']),
-                'punto_llegada' => empty($data['punto_llegada']) ? null : trim($data['punto_llegada']),
+                // Columnas NOT NULL: vacío se guarda como '' (igual que al crear); null hacía fallar la edición.
+                'punto_partida' => trim((string) ($data['punto_partida'] ?? '')),
+                'punto_llegada' => trim((string) ($data['punto_llegada'] ?? '')),
                 'fecha_entrega' => empty($data['fecha_entrega']) ? null : $data['fecha_entrega'],
                 'hora_entrega_desde' => empty($data['hora_entrega_desde']) ? null : $data['hora_entrega_desde'],
                 'hora_entrega_hasta' => empty($data['hora_entrega_hasta']) ? null : $data['hora_entrega_hasta'],
@@ -852,9 +863,13 @@ class ConsignacionVentaService
     }
 
     /**
-     * Cambia el estado de la consignación (Borrador | Entregada | Anulada).
-     * Solo actualiza el estado; NO reversa inventario ni anula el asiento (eso se maneja
-     * en el flujo de eliminar / retornos, aún por definir para "Anulada").
+     * Cambia el estado de la consignación (Emitida | Borrador | Entregada | Anulada).
+     *
+     * Anular devuelve a la bodega todo lo que la consignación tiene vigente en el kardex y
+     * anula su asiento, igual que eliminar (antes solo cambiaba el estado: el stock quedaba
+     * fuera y, como los retornos exigen 'Entregada', no había forma de devolverlo).
+     * Por eso una consignación Anulada ya no se reactiva: su inventario volvió a la bodega y
+     * reactivarla dejaría una consignación vigente sin salida de stock. Se crea una nueva.
      */
     public function cambiarEstado(int $id, int $idEmpresa, int $idUsuario, string $nuevoEstado, array $datosEntrega = []): void
     {
@@ -870,6 +885,9 @@ class ConsignacionVentaService
         if (($cab['estado'] ?? '') === $nuevoEstado) {
             return; // sin cambios
         }
+        if (($cab['estado'] ?? '') === 'Anulada') {
+            throw new Exception("Una consignación anulada no se puede reactivar: su inventario ya volvió a la bodega. Registre una nueva consignación.");
+        }
         // Las consignaciones migradas traen la factura histórica ya vinculada (bridge de
         // migración, sin asiento ni efecto en inventario real): no debe bloquear la corrección
         // manual del estado, a diferencia de una factura generada en vivo desde este sistema.
@@ -877,10 +895,34 @@ class ConsignacionVentaService
             throw new Exception("No se puede cambiar el estado: la consignación tiene una factura asociada.");
         }
 
+        $anular = ($nuevoEstado === 'Anulada');
+        if ($anular) {
+            // Mismas condiciones que eliminar: nada vigente que dependa de ella y período abierto.
+            $this->verificarSinDocumentosRelacionados($id, $idEmpresa, 'anular');
+            $this->validarPeriodoContable(
+                $cab['fecha_emision'] ?? null,
+                $idEmpresa,
+                'No se puede anular la consignación porque su período contable está cerrado.'
+            );
+        }
+
         $db = Database::getConnection();
         try {
             $db->beginTransaction();
             $this->repository->updateEstado($id, $idEmpresa, $nuevoEstado, $idUsuario);
+
+            if ($anular) {
+                $this->revertirInventarioConsignacion($id, $idEmpresa, $idUsuario);
+
+                $idAsiento = (int) ($cab['id_asiento_contable'] ?? 0);
+                if ($idAsiento > 0) {
+                    (new \App\Services\modulos\AsientoContableService(
+                        new \App\repositories\modulos\AsientoContableRepository(),
+                        new \App\Rules\modulos\AsientoContableRules(),
+                        $this->logService
+                    ))->anularDeDocumento($idAsiento, $idEmpresa, $idUsuario, 'de la consignación');
+                }
+            }
 
             // Al marcar ENTREGADA manualmente desde el web se registra la evidencia de
             // entrega (ubicación + hora + usuario que la realizó, canal 'web'). Si ya existe

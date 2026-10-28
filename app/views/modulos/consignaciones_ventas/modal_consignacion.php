@@ -618,10 +618,13 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosPestanasOcultas($vistaConfigC
                 const conFactura = !!window._CONS_TIENE_FACTURA && !window._CONS_ES_MIGRADA;
                 // Cambiar el estado (entregar / anular) es una actualización: sin permiso
                 // 'u' el selector queda en solo lectura, igual que lo rechaza el endpoint.
-                selEstado.disabled = conFactura || !CONS_PERM.actualizar;
+                // Una anulada ya no se reactiva (su inventario volvió a la bodega).
+                const anulada = (row.estado === 'Anulada');
+                selEstado.disabled = conFactura || !CONS_PERM.actualizar || anulada;
                 selEstado.title = conFactura
                     ? 'La consignación tiene una factura asociada: no se puede cambiar el estado.'
-                    : (!CONS_PERM.actualizar ? 'No tiene permiso para actualizar consignaciones.' : '');
+                    : (!CONS_PERM.actualizar ? 'No tiene permiso para actualizar consignaciones.'
+                    : (anulada ? 'La consignación está anulada: su inventario ya volvió a la bodega y no se puede reactivar.' : ''));
             }
 
             // Modo edición/lectura y visibilidad de botones según el estado (editable solo en Borrador).
@@ -1830,7 +1833,8 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosPestanasOcultas($vistaConfigC
     };
 
     // Aplica el modo edición/lectura a TODO el modal según el estado (campos + botones).
-    // Editable solo en Borrador. Eliminar disponible en Borrador y Emitida (no entregada/anulada).
+    // Editable solo en Borrador. Eliminar disponible en Borrador, Emitida y Anulada (no entregada):
+    // en una anulada antigua (cuando anular no devolvía el stock) eliminar devuelve lo que quedó fuera.
     window.consAplicarEditable = function(estado) {
         // Con factura asociada la consignación queda de solo lectura (no se edita ni se elimina).
         const conFactura = !!window._CONS_TIENE_FACTURA;
@@ -1845,7 +1849,7 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosPestanasOcultas($vistaConfigC
         }
         const btnEliminar = document.getElementById('btnEliminarConsignacion');
         if (btnEliminar) {
-            const puedeEliminar = (estado === 'Borrador' || estado === 'Emitida' || estado === 'Nueva') && !conFactura && CONS_PERM.eliminar;
+            const puedeEliminar = (estado === 'Borrador' || estado === 'Emitida' || estado === 'Nueva' || estado === 'Anulada') && !conFactura && CONS_PERM.eliminar;
             btnEliminar.classList.toggle('d-none', !puedeEliminar);
         }
     };
@@ -1878,7 +1882,7 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosPestanasOcultas($vistaConfigC
         if (nuevo === 'Anulada') {
             const c = await Swal.fire({
                 title: '¿Anular consignación?',
-                text: 'La consignación quedará marcada como Anulada.',
+                text: 'Los productos volverán a la bodega y se anulará su asiento. Una consignación anulada no se puede reactivar.',
                 icon: 'warning',
                 showCancelButton: true,
                 confirmButtonText: 'Sí, anular',
@@ -1918,6 +1922,10 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosPestanasOcultas($vistaConfigC
             const data = await res.json();
             if (data.ok) {
                 sel.dataset.prev = nuevo;
+                if (nuevo === 'Anulada') {
+                    sel.disabled = true; // ya no se reactiva: su inventario volvió a la bodega
+                    sel.title = 'La consignación está anulada: su inventario ya volvió a la bodega y no se puede reactivar.';
+                }
                 consAplicarEditable(nuevo); // bloquea/desbloquea campos y botones según el nuevo estado
                 if (typeof cargarGrid === 'function') cargarGrid();
                 Swal.fire({ icon: 'success', title: 'Estado actualizado', timer: 1200, showConfirmButton: false });

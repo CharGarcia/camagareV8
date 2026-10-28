@@ -26,6 +26,8 @@ class RetornoCvService
 
     /** Tipo de documento en `empresa_secuencial` (SecuencialRepository::DOCUMENT_MAP). */
     private const TIPO_SECUENCIAL = 'Retornos consignaciones ventas';
+    /** referencia_tipo con que un retorno mueve el kardex (la entrada y sus reversos). */
+    private const TIPOS_KARDEX = ['RETORNO_CV', 'ELIMINACION_RETORNO_CV', 'CAMBIO_ESTADO_RETORNO_CV'];
 
     private RetornoCvRepository $repository;
     private RetornoCvRules $rules;
@@ -215,7 +217,7 @@ class RetornoCvService
                 ]);
 
                 // Entrada de inventario (espejo de la salida de la consignación).
-                if ($this->afectaInventario($consLinea, $empresaConfig) && $idBodega > 0) {
+                if ($idBodega > 0 && $this->consignacionSacoStock((int) $consLinea['id_consignacion'], (int) $consLinea['id_producto'], $idBodega, $idEmpresa)) {
                     $this->inventarioRepo->lockStock((int) $consLinea['id_producto'], $idBodega, $idEmpresa);
                     $stockActual = $this->inventarioRepo->getStockActual((int) $consLinea['id_producto'], $idBodega, $idEmpresa);
                     $nuevoStock  = $stockActual + $cant;
@@ -783,8 +785,11 @@ class RetornoCvService
     // ─── Helpers ──────────────────────────────────────────────────────────────
 
     /**
-     * Aplica un movimiento de inventario para una línea de retorno (entrada o salida),
-     * respetando el criterio de si el producto/empresa afectan stock.
+     * Aplica un movimiento de inventario para una línea de retorno (entrada o salida). La entrada
+     * es espejo de la salida de su consignación; el reverso (salida) se limita a lo que el retorno
+     * tiene vigente en el kardex. Antes ambos lados recalculaban "¿afecta inventario?" con la
+     * config del PRIMER establecimiento, distinta de la regla de la consignación: el stock de esas
+     * líneas salía con la consignación y nunca volvía.
      */
     private function moverInventarioLinea(array $det, int $idEmpresa, int $idUsuario, array $empresaConfig, string $tipo, string $refTipo, int $refId, string $obs): void
     {
@@ -792,11 +797,21 @@ class RetornoCvService
         $idBodega = (int) ($det['id_bodega'] ?? 0);
         if ($cant <= 0 || $idBodega <= 0) return;
 
-        // El detalle de getDetalles ya trae inventariable/tipo_produccion (JOIN productos).
-        if (!$this->afectaInventario($det, $empresaConfig)) return;
-
         $idProducto  = (int) $det['id_producto'];
+        // Candado ANTES de leer el kardex (CLAUDE.md §8): el neto de abajo decide cuánto se mueve.
         $this->inventarioRepo->lockStock($idProducto, $idBodega, $idEmpresa);
+        if ($tipo === 'entrada') {
+            // Espejo de la consignación: entra solo lo que su consignación sacó de esta bodega.
+            if (!$this->consignacionSacoStock((int) ($det['id_consignacion'] ?? 0), $idProducto, $idBodega, $idEmpresa)) return;
+        } else {
+            // Reverso: se quita a lo sumo lo que ESTE retorno tiene hoy dentro del kardex, no lo
+            // que diga la regla ahora (si cambió desde que entró, el reverso no cuadraba).
+            $loteDet = (isset($det['lote']) && $det['lote'] !== '') ? (string) $det['lote'] : '';
+            $neto = $this->inventarioRepo->getNetoMovimientos(self::TIPOS_KARDEX, $refId, $idProducto, $idBodega, $idEmpresa, $loteDet);
+            $cant = min($cant, $neto);
+            if ($cant <= 1e-9) return;
+            $det['cantidad'] = $cant;
+        }
         if ($tipo === 'salida') {
             $this->validarStockParaReverso($det, $idProducto, $idBodega, $idEmpresa, $cant);
         }
@@ -884,14 +899,13 @@ class RetornoCvService
     }
 
     /**
-     * Determina si una línea debe mover inventario: producto inventariable, no servicio (tipo 02)
-     * y con el control de inventario de facturación activo (igual criterio que la consignación).
+     * ¿La consignación sacó de esta bodega el producto? (salida vigente en su kardex). Es lo que
+     * decide si el retorno lo devuelve: así entra exactamente lo que salió, sea cual sea la regla
+     * con que se registró la consignación (antes descontaba siempre; hoy, con la de la factura).
      */
-    private function afectaInventario(array $linea, array $empresaConfig): bool
+    private function consignacionSacoStock(int $idConsignacion, int $idProducto, int $idBodega, int $idEmpresa): bool
     {
-        $esInv = ($linea['inventariable'] == true || $linea['inventariable'] === 'true' || $linea['inventariable'] == 1 || $linea['inventariable'] === 't')
-                 && (($linea['tipo_produccion'] ?? '01') !== '02');
-        $soloStockPos = (($empresaConfig['facturacion_inventario'] ?? true) === 'true' || ($empresaConfig['facturacion_inventario'] ?? true) === true);
-        return $esInv && $soloStockPos;
+        return (new InventarioService($this->inventarioRepo, $this->logService))
+            ->consignacionSacoStock($idConsignacion, $idProducto, $idBodega, $idEmpresa);
     }
 }

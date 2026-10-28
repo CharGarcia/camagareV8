@@ -646,6 +646,8 @@ class FacturaVentaService
 
         $this->verificarFacturaLibre($id, (int) $data['id_empresa'], (int) $data['id_usuario']);
 
+        $this->verificarLineasFacturacionCv($id, (int) $data['id_empresa'], $data['detalles'] ?? []);
+
         $this->validarSecuencial($data, $id);
 
         $empresaConfig = $data['empresa_config'] ?? [];
@@ -1282,6 +1284,14 @@ class FacturaVentaService
             'No se puede anular la factura porque su período contable está cerrado.'
         );
 
+        // Una NC vigente ya devolvió (parte de) la mercadería: anular la factura devolvería
+        // todo otra vez y el stock quedaría por encima de lo real. Se anulan primero las NC.
+        // La anulación en lote de migración ($verificarSri=false) no pasa por aquí: sus
+        // documentos traen el kardex histórico ('migracion'), que este flujo no revierte.
+        if ($verificarSri) {
+            $this->verificarSinNotasCredito($id, $idEmpresa, 'anular');
+        }
+
         // 1. VERIFICACIÓN SRI: si la factura fue autorizada, solo se puede anular internamente
         //    cuando el SRI YA NO la reporta como AUTORIZADO (es decir, ya se anuló en el SRI).
         //    $verificarSri=false lo usa la anulación en lote de migración (el WS del SRI reporta
@@ -1444,6 +1454,10 @@ class FacturaVentaService
             'No se puede eliminar la factura porque su período contable está cerrado.'
         );
 
+        // También para el superadministrador: con una NC vigente, eliminar la factura
+        // devolvería la mercadería otra vez (la NC ya devolvió su parte).
+        $this->verificarSinNotasCredito($id, $idEmpresa, 'eliminar');
+
         // A propósito, sin verificación contra el SRI aquí (a diferencia de anular()):
         // el caso de uso es borrar del sistema un documento cargado por error/duplicado
         // (p. ej. ya gestionado en otro sistema, o saldos iniciales) sin intención de
@@ -1536,11 +1550,55 @@ class FacturaVentaService
     }
 
     /**
+     * Rechaza anular/eliminar una factura con notas de crédito vigentes: la NC ya devolvió
+     * su mercadería y revertir la factura la devolvería otra vez (stock inflado).
+     */
+    private function verificarSinNotasCredito(int $idFactura, int $idEmpresa, string $accion): void
+    {
+        $notas = $this->repository->getNotasCreditoVigentes($idFactura, $idEmpresa);
+        if (empty($notas)) {
+            return;
+        }
+        throw new \Exception("No se puede {$accion} la factura porque tiene notas de crédito vigentes: "
+            . implode(', ', $notas) . ". Anule o elimine primero esas notas de crédito.");
+    }
+
+    /**
      * Reversión automática cuando la factura provino de una consignación:
      * deshace el reingreso de inventario y libera el saldo facturable. No hace
      * nada si la factura es normal (sin vínculo de consignación). Participa en la
      * transacción activa de anular/eliminar.
      */
+    /**
+     * Una factura generada desde Facturación de consignaciones nace con un reingreso de inventario
+     * y un saldo consumido de la consignación iguales a sus líneas. Editar productos o cantidades
+     * solo cambiaría la salida de la factura: el reingreso y el saldo quedaban como antes
+     * (p. ej. 10 reingresadas y 6 vendidas → 4 de más en bodega). El resto (cliente, pagos, info
+     * adicional, precios) sí se puede editar.
+     */
+    private function verificarLineasFacturacionCv(int $idFactura, int $idEmpresa, array $detallesNuevos): void
+    {
+        $doc = (new \App\repositories\modulos\ConsignacionFacturaRepository())->getDocPorFactura($idFactura, $idEmpresa);
+        if (!$doc) {
+            return;
+        }
+        // Producto | cantidad de cada línea (la bodega de estas líneas la fija la consignación de
+        // origen y ventas_cabecera no guarda bodega con qué completar las que quedaron sin ella).
+        $firma = static function (array $lineas): array {
+            $out = [];
+            foreach ($lineas as $l) {
+                if (empty($l['id_producto'])) continue;
+                $out[] = (int) $l['id_producto'] . '|' . round((float) ($l['cantidad'] ?? 0), 6);
+            }
+            sort($out);
+            return $out;
+        };
+        if ($firma($this->repository->getDetalles($idFactura)) !== $firma($detallesNuevos)) {
+            $num = trim((string) ($doc['establecimiento'] ?? '') . '-' . ($doc['punto_emision'] ?? '') . '-' . ($doc['secuencial'] ?? ''), '-');
+            throw new \Exception("Esta factura se generó desde Facturación de consignaciones ({$num}): no se pueden cambiar sus productos ni cantidades. Para corregirlos, elimine esta factura y vuelva a generarla desde ese documento.");
+        }
+    }
+
     private function reversarConsignacionSiAplica(int $idFactura, int $idEmpresa, int $idUsuario): void
     {
         $consFacturaService = new \App\Services\modulos\ConsignacionFacturaService(

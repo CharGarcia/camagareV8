@@ -1455,6 +1455,11 @@ class ComandaService
             // aplica sobre el subtotal de ESTE documento, así cada parte de una
             // cuenta dividida carga lo suyo. Viaja al comprobante como <propina>.
             'porcentaje_propina'      => $this->porcentajeServicioComanda($comanda),
+            // Guardado único (CLAUDE.md §8) con una clave FIJA por grupo de cobro: si el documento
+            // se emitió pero no se pudo cerrar el grupo (abajo, en otra transacción), volver a
+            // cobrar ese grupo devuelve el mismo documento en vez de emitir otro (con otra salida
+            // de inventario).
+            'token_guardado'          => 'comanda-grupo-' . (int) $idGrupo,
             // Sin 'autorizar_sri' a propósito: aquí el envío al SRI NO puede ir
             // dentro de cobrar(), va después de cerrar el grupo (ver más abajo).
         ], $empresaConfig);

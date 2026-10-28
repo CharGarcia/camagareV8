@@ -6,7 +6,7 @@ ruta_modulo: modulos/facturacion-cv
 tipo: modulo
 visibilidad: todos
 etiquetas: facturacion de consignacion, registro de cambio, cambio de productos, reposicion, etiqueta cambio, buscar facturacion, buscador, filtros, filtrar facturaciones, buscar por producto, buscar por lote, buscar por consignacion, chips, facturar consignacion, consignacion vendida, liquidacion de consignacion, cobrar consignacion, descuento en consignacion, descuento por linea, descuento porcentaje, aplicar descuento a todos, precio de lista en consignacion, generar factura, borrador, saldo facturable, observaciones en la factura, informacion adicional, info adicional, cajero, vendedor en la factura, vendedor obligatorio, exige vendedor, seleccione el vendedor, lento, demora al generar factura, tarda en guardar, iva del registro de cambio, iva del producto, iva al subtotal, iva linea por linea, calculo del iva, diferencia de centavos en el iva, iva 5%, exento, no objeto de iva, codigo de tarifa, aparecen documentos que no busque, resultados que no corresponden, buscar por producto en el listado, el descuento no se aplica, la factura sale sin descuento, se pierde el descuento, descuento en cero, coma decimal, punto decimal, separador de decimales, escribir con coma, cambios sin guardar, no se pudo generar la factura, observaciones largas, no me deja escribir mas, limite de caracteres, maximo 300 caracteres, value too long, asiento de reingreso, no contabilizar consignaciones, sin reingreso, modulos que contabilizan, acceso denegado a la bodega, bodega no asignada, otra bodega, no me deja facturar, imprimir, impresora, asiento de documento anulado, asiento sigue contabilizado, no se anulo el asiento, no se pudo anular el asiento contable
-version: 1.28
+version: 1.29
 orden: 47
 estado: activo
 ---
@@ -240,6 +240,13 @@ El descuento funciona igual que en [Facturas de Venta](modulos/factura-venta):
   *anulada*. Recorta cada cantidad al saldo vigente y **escala el descuento en la
   misma proporción**; las líneas sin saldo se omiten.
 - Estados: **Borrador** → **Facturada** → **Anulada**.
+- **Generar factura es un solo paso**: el reingreso a la bodega, la factura y la marca
+  *Facturada* se graban juntos. Si algo falla, no queda nada a medias: ni reingreso
+  sin factura ni factura sin consumir el saldo.
+- La factura generada **no admite cambios de productos ni cantidades** desde
+  Facturas de Venta (sí de cliente, pagos o información adicional): esas cantidades
+  son las que se reingresaron y las que consumen el saldo de la consignación. Para
+  corregirlas, elimine la factura (vuelve el documento) y genérela de nuevo.
 
 ## Integraciones con otros módulos
 
@@ -315,6 +322,7 @@ El descuento funciona igual que en [Facturas de Venta](modulos/factura-venta):
 
 ## Historial de cambios
 
+- **1.29** — **Generar factura** es un solo paso (reingreso, factura y marca *Facturada* juntos): un fallo ya no deja reingresos sin factura ni facturas sin consumir el saldo. La factura generada ya no admite cambiar productos ni cantidades desde Facturas de Venta, y ahora nace con su XML.
 - **1.28** — Corrección: al anular o eliminar la factura de venta de origen, si el
   asiento de reingreso no se puede anular, la factura tampoco se anula y se muestra el
   motivo. Antes el documento quedaba Anulado con su asiento de reingreso todavía

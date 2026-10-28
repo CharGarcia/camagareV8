@@ -6,7 +6,7 @@ ruta_modulo: modulos/saldos-iniciales
 tipo: modulo
 visibilidad: admin
 etiquetas: saldos iniciales, apertura, arranque, migracion, cartera inicial, stock inicial, empezar a usar el sistema, numero del cobro, numero del pago, vista previa del numero, secuencial del egreso, secuencial del ingreso, pago duplicado, cobro duplicado, doble clic, no deja pagar saldo inicial, disponible 0, saldo inicial duplicado, cargado dos veces, importar dos veces, documento repetido, ya esta registrado como saldo inicial, ya existe en el sistema
-version: 1.7
+version: 1.9
 orden: 10
 estado: activo
 ---
@@ -85,6 +85,11 @@ Al **importar** un Excel, las filas repetidas (dentro del mismo archivo o con
 cargas anteriores) se informan como error de esa fila y el resto se carga
 normalmente, así que volver a subir el mismo archivo no duplica nada.
 
+El **stock inicial** (inventario) se importa distinto, **todo o nada**: si alguna fila
+tiene error (producto o bodega inexistente, cantidad inválida), no se graba ninguna y
+se listan los errores. Corrija el archivo y vuelva a cargarlo completo; como no entró
+nada, no se duplica el stock.
+
 ## Errores frecuentes
 
 - **"El documento … ya está registrado como saldo inicial de este
@@ -113,6 +118,8 @@ normalmente, así que volver a subir el mismo archivo no duplica nada.
 
 ## Historial de cambios
 
+- **1.9** — La importación del **stock inicial** desde Excel es **todo o nada**: si alguna fila tiene error, no se graba ninguna y se listan los errores; antes entraban las filas buenas y, al corregir y volver a cargar el archivo, se duplicaban.
+- **1.8** — Eliminar un saldo inicial de inventario solo acepta **movimientos de apertura** (saldo inicial). Antes el servidor aceptaba el número de cualquier movimiento del Kardex (de una factura, compra o transferencia) y lo anulaba dejando ese documento sin su movimiento.
 - **1.7** — Las cuentas por pagar de saldos iniciales ya se pueden pagar también desde **Egresos**: aparecen en el buscador de facturas de compra pendientes. Su pendiente se actualiza al pagar, editar o anular ese egreso.
 - **1.6** — En el número de documento (cuentas por cobrar, por pagar y consignaciones) se puede escribir solo el secuencial (`1311`): al salir del campo se completa como `001-001-000001311`. Antes quedaba como `131-1`.
 - **1.5** — Corregido: los botones **Editar** y **Registrar cobro / pago** de las filas (cuentas por cobrar, por pagar, anticipos y consignaciones) no hacían nada, sin mostrar aviso, cuando algún dato del registro (nombre del cliente o proveedor, observaciones, etc.) llevaba un apóstrofo, p. ej. `D'ONOFRIO`.

@@ -3395,15 +3395,27 @@ window.mcProcesarInventario = async function() {
     btn.disabled = true;
     btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span> Procesando...';
 
+    // Guardado único (CLAUDE.md §8): la misma clave viaja en el reintento tras un error de
+    // conexión, para que el servidor no ingrese dos veces lo que ya registró. Se descarta en
+    // cuanto el servidor responde (registró o rechazó) y al cambiar de compra.
+    if (!window.mcInvToken || window.mcInvToken.compra !== idCompra) {
+        window.mcInvToken = {
+            compra: idCompra,
+            token: window.CMG_nuevoTokenGuardado ? window.CMG_nuevoTokenGuardado() : ''
+        };
+    }
+
     try {
         const fd = new FormData();
         fd.append('data', JSON.stringify({ id_compra: idCompra, items: items }));
+        fd.append('token_guardado', window.mcInvToken.token);
         const res = await fetch(`${window.CMG_urlBase}/procesarInventarioAjax`, {
             method: 'POST',
             body: fd,
             headers: { 'X-Requested-With': 'XMLHttpRequest' }
         });
         const data = await res.json();
+        window.mcInvToken = null; // hubo respuesta: el próximo envío es uno nuevo
         if (data.ok) {
             Swal.fire('Éxito', data.mensaje, 'success');
             // Refrescar status de inventario de forma inmediata

@@ -6,7 +6,7 @@ ruta_modulo: modulos/inventario
 tipo: modulo
 visibilidad: todos
 etiquetas: inventario, stock, existencias, kardex, movimientos, ajuste, entradas, salidas, bodega, costo, buscar movimientos, buscador, filtros, filtrar movimientos, buscar por lote, buscar por serial, movimientos por bodega, chips, buscar por codigo de barras, buscar por bodega, buscar movimientos de una factura, buscar por mes, imprimir movimiento, pdf del movimiento, comprobante de movimiento, ficha del movimiento, imprimir registro, imprimir un movimiento, asiento del ajuste, contabilidad del ajuste, merma, faltante, sobrante, perdida de inventario, baja de inventario, asiento contable inventario, buscar por observacion, observacion de la carga, buscar carga de inventario, columna observaciones, editar movimiento, no se puede editar, candado, solo lectura, modificar movimiento, anular movimiento, movimiento bloqueado, costo del producto, costo de la ficha, costo unitario del ajuste, entrada con costo, costo en cero
-version: 1.13
+version: 1.16
 orden: 20
 estado: activo
 ---
@@ -124,7 +124,9 @@ Excepciones:
 
 - Si el **documento de origen ya fue eliminado** (factura, nota de crédito o de
   débito, recibo, compra o nota de crédito de compra), su movimiento queda libre
-  para corregirlo o anularlo aquí.
+  para corregirlo o anularlo aquí. Lo que **no** se puede es **habilitar** de nuevo
+  un movimiento anulado de un documento eliminado: volvería a mover el stock por un
+  documento que ya no existe.
 - Los movimientos de una **compra** no se editan, pero sí se pueden **anular**
   desde aquí.
 - Los que vienen de la **migración** o de un **saldo inicial** no se editan ni se
@@ -255,6 +257,9 @@ problema pero no aparece en el kardex ni tiene stock.
 
 ## Historial de cambios
 
+- **1.16** — El saldo de cada bodega se toma **siempre del Kardex**, sea cual sea el proceso que movió el stock. Corregidos tres casos en que quedaba distinto: un ajuste de entrada sobre saldo negativo lo dejaba en 0, con **lotes obligatorios** se guardaba el saldo de un solo lote como saldo de la bodega, y al editar una factura o recibo con dos líneas del mismo producto el saldo quedaba corrido.
+- **1.15** — Al anular un movimiento cuando el stock ya se consumió, el saldo de la bodega queda en el valor real (negativo, igual que el Kardex) y no en 0. Editar un ajuste cambiando de producto o de bodega actualiza **las dos** bodegas (antes la anterior conservaba el movimiento). La importación de ajustes por CSV es **todo o nada** y ya no acepta columnas de vínculo con documentos. Dos anulaciones simultáneas del mismo movimiento ya no devuelven el stock dos veces.
+- **1.14** — Ya no se puede **habilitar** un movimiento anulado cuyo documento de origen está eliminado. Corregido: los movimientos de una **compra** se reconocían como «de un documento eliminado» mirando otra compra (la del mismo número que la línea), así que a veces quedaban libres para editarlos aquí con la compra vigente, o al revés.
 - **1.13** — En un ajuste de **entrada**, el **Costo Unitario** se llena solo con el
   costo de la ficha del producto al elegirlo (antes salía vacío y, si no se escribía,
   la entrada quedaba con costo 0). Las salidas siguen valorándose al costo promedio.
