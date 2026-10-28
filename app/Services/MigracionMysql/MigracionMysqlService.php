@@ -4460,7 +4460,13 @@ class MigracionMysqlService
             $docPorDiario[(int) $r['codigo_contable']] ??= [$entDoc, (int) $r['id_ing_egr']];
             $diarioPorDoc[$entDoc . '|' . (int) $r['id_ing_egr']] = (int) $r['codigo_contable'];
         }
-        $enlazar = function (array $e, int $idAsiento) use (&$docMapCache, &$updDocStmts, $idEmpresa, $pg, $updRefOrigen, $docPorDiario, $diarioPorDoc): void {
+        // Documento con asiento PROPIO del sistema nuevo (un migrado al que el sistema anterior no le
+        // había hecho asiento y aquí se le generó): el asiento que llega ahora del viejo no lo reemplaza;
+        // se cuenta en 'asientos_con_propio' para que se revise el posible duplicado en la contabilidad.
+        $asientoPropioVivo = $pg->prepare("SELECT 1 FROM asientos_contables_cabecera WHERE id = ? AND id_empresa = ? AND eliminado = false AND estado <> 'anulado' AND COALESCE(modulo_origen, '') <> 'migracion'");
+        $res['asientos_con_propio'] = 0;
+        $res['asientos_con_propio_muestra'] = [];
+        $enlazar = function (array $e, int $idAsiento) use (&$docMapCache, &$updDocStmts, &$res, $idEmpresa, $pg, $updRefOrigen, $docPorDiario, $diarioPorDoc, $asientoPropioVivo): void {
             $r = null;
             $idDiario = (int) $e['id_diario'];
             if (isset($docPorDiario[$idDiario])) {
@@ -4482,6 +4488,19 @@ class MigracionMysqlService
             $r ??= $this->docDeDiario($pg, $idEmpresa, (string) $e['tipo'], (string) $e['codigo_unico'], $docMapCache);
             if ($r === null) { return; }                                             // sin documento o documento no migrado
             [$tabla, $idDocNuevo] = $r;
+            $actual = $pg->prepare("SELECT id_asiento_contable FROM $tabla WHERE id = ? AND id_empresa = ?");
+            $actual->execute([$idDocNuevo, $idEmpresa]);
+            $idActual = (int) $actual->fetchColumn();
+            if ($idActual > 0 && $idActual !== $idAsiento) {
+                $asientoPropioVivo->execute([$idActual, $idEmpresa]);
+                if ($asientoPropioVivo->fetchColumn()) {
+                    $res['asientos_con_propio']++;
+                    if (count($res['asientos_con_propio_muestra']) < 10) {
+                        $res['asientos_con_propio_muestra'][] = (string) $e['codigo_unico'];
+                    }
+                    return;
+                }
+            }
             if (!isset($updDocStmts[$tabla])) { $updDocStmts[$tabla] = $pg->prepare("UPDATE $tabla SET id_asiento_contable = ? WHERE id = ? AND id_empresa = ?"); }
             $updDocStmts[$tabla]->execute([$idAsiento, $idDocNuevo, $idEmpresa]);
             $updRefOrigen->execute([$idDocNuevo, $idAsiento, $idEmpresa]);

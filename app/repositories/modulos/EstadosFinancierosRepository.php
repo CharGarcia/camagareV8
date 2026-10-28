@@ -295,6 +295,79 @@ class EstadosFinancierosRepository
         return $stmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
     }
 
+    /**
+     * Asientos que explican el descuadre del Estado de Situación Financiera, con los mismos
+     * filtros que getSaldos(). Con esa regla, Activos − (Pasivo + Patrimonio + Resultado) es la
+     * suma de (debe − haber) de las líneas que el balance SÍ cuenta: si cada asiento cuadra, da 0.
+     * Por eso se devuelve cada asiento cuyo neto contado no es cero; sus diferencias suman la del
+     * aviso. La causa puede ser que el asiento mismo no cuadre (debe ≠ haber) o que tenga líneas
+     * que el balance no cuenta (lineas_excluidas, con el motivo de cada una). Máximo $limite filas.
+     */
+    public function getAsientosDescuadreBalance(int $idEmpresa, string $fechaInicio, string $fechaFin, ?int $idCentroCosto = null, ?int $idProyecto = null, int $limite = 300): array
+    {
+        $params = [
+            'id_empresa'   => $idEmpresa,
+            'fecha_inicio' => $fechaInicio . ' 00:00:00',
+            'fecha_fin'    => $fechaFin . ' 23:59:59',
+        ];
+        $centroCostoFilter = '';
+        if ($idCentroCosto !== null) {
+            $centroCostoFilter = " AND ad.id_centro_costo = :id_centro_costo";
+            $params['id_centro_costo'] = $idCentroCosto;
+        }
+        $proyectoFilter = '';
+        if ($idProyecto !== null) {
+            $proyectoFilter = " AND ad.id_proyecto = :id_proyecto";
+            $params['id_proyecto'] = $idProyecto;
+        }
+
+        // motivo NULL = la línea entra al balance (clases 1-6 y la 7 de nivel 5, ver
+        // EstadosFinancierosService::calcularResultadoEjercicio).
+        $sql = "
+            WITH lineas AS (
+                SELECT ac.id AS id_asiento, ac.fecha_asiento, ac.numero_comprobante, ac.tipo_comprobante,
+                       ac.modulo_origen, ac.concepto,
+                       CAST(ad.debe AS NUMERIC) AS debe, CAST(ad.haber AS NUMERIC) AS haber,
+                       pc.codigo, pc.nombre,
+                       CASE
+                           WHEN pc.id IS NULL                 THEN 'La cuenta no existe'
+                           WHEN pc.eliminado                  THEN 'La cuenta está eliminada del plan de cuentas'
+                           WHEN pc.id_empresa <> ac.id_empresa THEN 'La cuenta es de otra empresa'
+                           WHEN LEFT(pc.codigo, 1) IN ('1','2','3','4','5','6') THEN NULL
+                           WHEN LEFT(pc.codigo, 1) = '7' AND CAST(pc.nivel AS VARCHAR) = '5' THEN NULL
+                           WHEN LEFT(pc.codigo, 1) = '7'      THEN 'Cuenta de clase 7 que no es de movimiento (nivel 5)'
+                           ELSE 'Cuenta de clase ' || LEFT(pc.codigo, 1) || ', que no entra al balance'
+                       END AS motivo
+                FROM asientos_contables_cabecera ac
+                JOIN asientos_contables_detalle ad ON ad.id_asiento = ac.id AND ad.eliminado = false
+                    $centroCostoFilter
+                    $proyectoFilter
+                LEFT JOIN plan_cuentas pc ON pc.id = ad.id_cuenta_contable
+                WHERE ac.id_empresa = :id_empresa
+                  AND ac.eliminado = false
+                  AND ac.estado = 'contabilizado'
+                  AND ac.fecha_asiento BETWEEN :fecha_inicio AND :fecha_fin
+                  AND ac.tipo_ambiente = '2' AND " . CierreEjercicioSql::rango('ac', ':fecha_inicio') . "
+            )
+            SELECT id_asiento, fecha_asiento, numero_comprobante, tipo_comprobante, modulo_origen, concepto,
+                   ROUND(SUM(debe), 2)  AS debe,
+                   ROUND(SUM(haber), 2) AS haber,
+                   ROUND(SUM(debe - haber), 2) AS descuadre_asiento,
+                   ROUND(COALESCE(SUM(debe - haber) FILTER (WHERE motivo IS NULL), 0), 2) AS diferencia,
+                   json_agg(json_build_object('codigo', codigo, 'nombre', nombre, 'motivo', motivo,
+                                              'debe', debe, 'haber', haber))
+                       FILTER (WHERE motivo IS NOT NULL) AS lineas_excluidas
+            FROM lineas
+            GROUP BY id_asiento, fecha_asiento, numero_comprobante, tipo_comprobante, modulo_origen, concepto
+            HAVING ROUND(COALESCE(SUM(debe - haber) FILTER (WHERE motivo IS NULL), 0), 2) <> 0
+            ORDER BY ABS(COALESCE(SUM(debe - haber) FILTER (WHERE motivo IS NULL), 0)) DESC, fecha_asiento, id_asiento
+            LIMIT " . ((int) $limite + 1);
+
+        $stmt = $this->db->prepare($sql);
+        $stmt->execute($params);
+        return $stmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
+    }
+
     /** Cuántos casilleros activos tiene la estructura Supercías de un tipo (ESF, ERI, ECP, EFE). */
     public function contarCasilleros(string $tipo): int
     {

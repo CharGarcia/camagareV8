@@ -424,6 +424,28 @@ $urlBaseActivosFijos = rtrim($base, '/') . '/modulos/activos-fijos';
     </div>
 </div>
 
+<!-- Modal: asientos que causan el descuadre del balance -->
+<div class="modal fade" id="modalDescuadre" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-xl modal-dialog-centered modal-dialog-scrollable">
+        <div class="modal-content shadow">
+            <div class="modal-header bg-light py-2">
+                <h5 class="modal-title fw-bold" id="tituloModalDescuadre"><i class="bi bi-search text-danger me-2"></i>¿Dónde está la diferencia?</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <div id="loader-descuadre" class="text-center py-5">
+                    <div class="spinner-border text-primary" role="status"><span class="visually-hidden">Cargando...</span></div>
+                    <p class="text-muted small mt-2">Buscando los asientos que no cuadran...</p>
+                </div>
+                <div id="content-descuadre" class="d-none"></div>
+            </div>
+            <div class="modal-footer bg-light py-2">
+                <button type="button" class="btn btn-outline-secondary btn-sm" data-bs-dismiss="modal">Cerrar</button>
+            </div>
+        </div>
+    </div>
+</div>
+
 <!-- Modal para Libro Mayor Auxiliar -->
 <div class="modal fade" id="modalMayor" tabindex="-1" aria-hidden="true">
     <div class="modal-dialog modal-xl modal-dialog-centered modal-dialog-scrollable">
@@ -972,6 +994,7 @@ $urlBaseActivosFijos = rtrim($base, '/') . '/modulos/activos-fijos';
                     Activos (${formatMoney(totalActivos)}) ≠ Pasivo + Patrimonio (${formatMoney(totalPasivoPatrimonio)}) —
                     diferencia de <strong>${formatMoney(Math.abs(diferencia))}</strong>.
                 </div>
+                ${EF_botonDescuadre(diferencia)}
             </div>`;
         }
 
@@ -1000,6 +1023,87 @@ $urlBaseActivosFijos = rtrim($base, '/') . '/modulos/activos-fijos';
         html += generarFilaTotal('TOTAL PASIVO + PATRIMONIO', data.totales.pasivo_patrimonio, nivel, cuadra ? '' : 'text-danger', true);
 
         html += '</tbody></table>';
+        return html;
+    }
+
+    // ── "¿Dónde está la diferencia?" del aviso de descuadre ────────────────────────────────
+    // El botón guarda el establecimiento de la sección (en "Todos" hay un aviso por cada uno).
+    function EF_botonDescuadre(diferencia) {
+        return `<button type="button" class="btn btn-sm btn-danger ms-auto text-nowrap"
+                    onclick="EF_verDescuadre(${EF_empRender}, ${diferencia})">
+                    <i class="bi bi-search me-1"></i>Ver dónde está la diferencia</button>`;
+    }
+
+    async function EF_verDescuadre(idEmpresa, diferenciaAviso) {
+        const esPropia = idEmpresa === EF_EMPRESA_ACTUAL;
+        const etqEst = !esPropia && EF_ESTABLECIMIENTOS[idEmpresa] ? ` <span class="small text-muted fw-normal">(${EF_esc(EF_ESTABLECIMIENTOS[idEmpresa])})</span>` : '';
+        document.getElementById('tituloModalDescuadre').innerHTML = `<i class="bi bi-search text-danger me-2"></i>¿Dónde está la diferencia?${etqEst}`;
+        const loader = document.getElementById('loader-descuadre');
+        const content = document.getElementById('content-descuadre');
+        loader.classList.remove('d-none');
+        content.classList.add('d-none');
+        bootstrap.Modal.getOrCreateInstance(document.getElementById('modalDescuadre')).show();
+
+        const params = new URLSearchParams({
+            fecha_inicio: document.getElementById('fecha_inicio').value,
+            fecha_fin: document.getElementById('fecha_fin').value,
+            centro_costo: esPropia ? document.getElementById('filtro_centro_costo').value : '',
+            proyecto: esPropia ? document.getElementById('filtro_proyecto').value : '',
+            id_establecimiento: esPropia ? '' : String(idEmpresa),
+        });
+        try {
+            const res = await fetch(`${urlBase}/diagnosticoDescuadreAjax?${params.toString()}`).then(r => r.json());
+            if (!res.success) throw new Error(res.error || 'No se pudo revisar el descuadre.');
+            content.innerHTML = EF_renderDescuadre(res.data, diferenciaAviso);
+        } catch (e) {
+            console.error(e);
+            content.innerHTML = `<div class="alert alert-danger small mb-0">${EF_esc(e.message || 'Error de red o servidor.')}</div>`;
+        } finally {
+            loader.classList.add('d-none');
+            content.classList.remove('d-none');
+        }
+    }
+
+    function EF_renderDescuadre(d, diferenciaAviso) {
+        let html = '';
+        if (d.con_filtro) {
+            html += `<div class="alert alert-warning small py-2"><i class="bi bi-funnel me-1"></i>
+                Hay un filtro de <strong>centro de costo o proyecto</strong>: el balance toma solo las líneas de
+                ese centro/proyecto, así que un asiento que sí cuadra puede verse descuadrado si sus líneas
+                están repartidas. Quite el filtro para revisar el descuadre real.</div>`;
+        }
+        if (!d.asientos.length) {
+            return html + `<p class="text-muted text-center py-4 small mb-0">No se encontraron asientos descuadrados en el rango.
+                Vuelva a generar el reporte por si los datos cambiaron.</p>`;
+        }
+        html += `<p class="small mb-2">Estos asientos (contabilizados, del rango y filtros del reporte) hacen que el balance no cuadre.
+            Corrija cada uno desde <strong>Asientos Contables</strong> o desde el documento que lo generó.
+            Suman <strong>${formatMoney(d.total)}</strong>${Math.abs(d.total - diferenciaAviso) < 0.01 ? ', igual que la diferencia del aviso.' : ` (el aviso dice ${formatMoney(diferenciaAviso)}).`}</p>`;
+        if (d.truncado) {
+            html += `<div class="alert alert-info small py-2">Se muestran los ${d.asientos.length} de mayor diferencia.</div>`;
+        }
+        html += `<div class="table-responsive"><table class="table table-sm table-hover table-bordered mb-0" style="font-size:0.82rem;">
+            <thead class="table-light text-center"><tr>
+                <th>Fecha</th><th>Asiento</th><th>Concepto</th><th>Debe</th><th>Haber</th><th>Diferencia</th><th>Causa</th>
+            </tr></thead><tbody>`;
+        d.asientos.forEach(a => {
+            const num = EF_esc(a.numero_comprobante || ('#' + a.id_asiento));
+            const asiento = d.propia
+                ? `<a href="#" onclick="event.preventDefault(); ASIENTO_abrirModal(${a.id_asiento});" class="text-decoration-none fw-bold" title="Ver asiento contable">${num}</a>`
+                : `<span class="fw-bold" title="El asiento se abre desde su propio establecimiento">${num}</span>`;
+            const origen = a.modulo_origen ? `<div class="text-muted" style="font-size:0.72rem;">${EF_esc(a.modulo_origen)}</div>` : '';
+            html += `<tr>
+                <td class="text-nowrap">${EF_esc(a.fecha)}</td>
+                <td class="text-nowrap">${asiento}${origen}</td>
+                <td>${EF_esc(a.concepto || '')}</td>
+                <td class="text-end text-nowrap">${formatMoney(a.debe)}</td>
+                <td class="text-end text-nowrap">${formatMoney(a.haber)}</td>
+                <td class="text-end text-nowrap fw-bold text-danger">${formatMoney(a.diferencia)}</td>
+                <td><ul class="mb-0 ps-3">${a.causas.map(c => `<li>${EF_esc(c)}</li>`).join('')}</ul></td>
+            </tr>`;
+        });
+        html += `</tbody><tfoot><tr class="table-light fw-bold"><td colspan="5" class="text-end">Total</td>
+            <td class="text-end text-nowrap text-danger">${formatMoney(d.total)}</td><td></td></tr></tfoot></table></div>`;
         return html;
     }
 
@@ -1104,6 +1208,7 @@ $urlBaseActivosFijos = rtrim($base, '/') . '/modulos/activos-fijos';
                     Activos (${formatMoney(totalActivos)}) ≠ Pasivo + Patrimonio (${formatMoney(totalPasivoPatrimonio)}) —
                     diferencia de <strong>${formatMoney(Math.abs(diferencia))}</strong>.
                 </div>
+                ${EF_botonDescuadre(diferencia)}
             </div>`;
         }
 

@@ -6,7 +6,7 @@ ruta_modulo: config/migrar-mysql
 tipo: modulo
 visibilidad: superadmin
 etiquetas: migracion, migrar, sistema anterior, mysql, vendedor asignado, vendedor del cliente, clientes sin vendedor, vendedores migracion, asignacion de vendedor, migrar empresas, establecimientos migracion, ruc base, elegir establecimiento, fusionar establecimientos, cliente separado, serie, series, punto de emision, secuencial, numeracion, numero repetido, ingresos sin serie, egresos sin serie, pedidos sin serie, liquidacion pendiente de pago, liquidaciones de compra migradas, pagos migrados, egresos migrados, pago no aparece, cuentas por pagar migradas, compra pendiente de pago, compra pagada sale pendiente, pago no cruza, retencion en borrador, marcas, marca del producto, productos sin marca, catalogo de marcas, migrar marcas, cambios de productos migrados, cambio sin factura, factura del cambio, nup del cambio, recambio, registro de cambio, facturacion de consignacion migrada, unidad duplicada para devolver, iva inflado, iva multiplicado, iva x1000, asiento de compra mal, iva del asiento mayor, nota de credito compra asiento, contabilidad migrada, alumnos, migrar alumnos, estudiantes, campus, niveles, cursos, horarios, pension, servicios del alumno, descuento del alumno, alumnos activos, alumnos pasivos, representante del alumno, vehiculos, migrar vehiculos, placas, placa, chasis, chasis 123456789, año 2022, propietario privado, vehiculos faltantes, vehiculo sin orden, car wash migracion, cobros de recibos, recibo pendiente migrado, recibo sin abono, pago de recibo no cruza, recibos de venta migrados, saldo de recibo, liquidaciones 2020, liquidaciones antiguas pendientes, pagada en el sistema anterior, liquidacion sin pago migrada, egreso sin asiento, asiento no migrado, asiento contable faltante, desde, re-sincronizar contabilidad, registrado tarde, anulado en el sistema anterior, ingreso anulado con asiento, egreso anulado con asiento, asiento migrado vivo, asiento de documento anulado, categorias, categoria del producto, productos sin categoria, grupo de producto, grupo familiar, migrar categorias, suscripciones, facturas programadas, recibos programados, facturacion recurrente, migrar suscripciones, cobro periodico, nota de credito no aparece, nota de credito migrada en pruebas, ambiente de pruebas, saldo de inventario no paso, stock migrado incompleto, kardex migrado falta compra, egreso rol de pagos sin mes, ROL_PAGOS, quincena migrada, mes del rol en el egreso
-version: 1.24
+version: 1.25
 orden: 2
 estado: activo
 ---
@@ -370,6 +370,13 @@ egreso o ingreso):
 - No importa el orden: si **Pagos (egresos)** o **Cobros (ingresos)** se migran
   después de la Contabilidad, se enlazan solos con su asiento ya migrado (el
   resultado lo informa como *documentos enlazados con su asiento contable*).
+- Un documento migrado que el sistema anterior **nunca contabilizó** recibe su
+  asiento en este sistema, con la generación normal de asientos. Si después se
+  contabiliza también en el sistema anterior y se vuelve a migrar la
+  Contabilidad, ese asiento **no reemplaza** al generado aquí: el resultado avisa
+  en rojo *asiento(s) del sistema anterior son de documentos que ya tienen su
+  asiento generado en este sistema*, con ejemplos. Revíselos en Asientos
+  Contables y anule el que sobre para que la contabilidad no quede duplicada.
 - La pestaña **Asiento contable** del documento (egreso, ingreso, factura o
   recibo de venta) muestra ese asiento migrado, con su número del sistema
   anterior (por ejemplo `EGR184544`) y su fecha original. El número interno del
@@ -612,6 +619,9 @@ sistema anterior tampoco los aplicaba al facturar por alumno).
 
 ## Historial de cambios
 
+- **1.25** — Contabilidad ya no reemplaza el asiento que este sistema le generó a
+  un documento migrado que el sistema anterior no había contabilizado; lo informa
+  en el resultado para revisar el duplicado.
 - **1.24** — **Pagos (egresos) de nómina**: el detalle del egreso muestra el
   período del rol (*Rol Mensual 11/2023*, *Quincena 7/2026*) en vez de la llave
   interna del sistema anterior; las líneas sin rol migrado muestran su texto

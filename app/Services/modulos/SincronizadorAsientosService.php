@@ -53,6 +53,22 @@ class SincronizadorAsientosService
      * General (cascada "la entidad manda"): [tipo_referencia, tabla del documento, columna].
      * Liquidaciones de Compra no la lleva: su asiento no aplica reglas por proveedor.
      */
+    /**
+     * Módulos que el sistema anterior contabilizaba (entidad de migracion_mysql_map => prefijo del
+     * codigo_unico de su asiento en encabezado_diario; ver MigracionMysqlService::docDeDiario()).
+     * Solo estos migrados se generan aquí cuando el histórico no trae su asiento.
+     */
+    private const PREFIJO_DIARIO_MIGRACION = [
+        'facturas'           => 'FAC',
+        'recibos'            => 'REC',
+        'notas_credito'      => 'NCV',
+        'compras'            => 'COM',
+        'ingresos'           => 'ING',
+        'egresos'            => 'EGR',
+        'retenciones_venta'  => 'RET',
+        'retenciones_compra' => 'RET',
+    ];
+
     private const AREAS = [
         'facturas_venta'        => ['tipo' => 'ventas_factura',            'nombre' => 'Ventas con Factura',          'entidad' => ['cliente', 'ventas_cabecera', 'id_cliente']],
         'recibos_venta'         => ['tipo' => 'recibos_venta',             'nombre' => 'Recibos de Venta',            'entidad' => ['cliente', 'recibos_venta_cabecera', 'id_cliente']],
@@ -349,8 +365,23 @@ class SincronizadorAsientosService
         // $entidad e $idExpr son literales del código (no entrada de usuario) → seguros de interpolar.
         return function (string $entidad, string $idExpr) use ($tieneMapMig): string {
             $sql = '';
+            $aliasDoc = preg_replace('/\.id$/', '', $idExpr);
             if ($tieneMapMig) {
-                $sql .= " AND NOT EXISTS (SELECT 1 FROM migracion_mysql_map mm WHERE mm.entidad = '{$entidad}' AND mm.id_destino = {$idExpr} AND mm.vinculado IS NOT TRUE) ";
+                // Un migrado SIN asiento en el sistema anterior (caso: egreso 001-001-000000492 de la
+                // empresa 122) sí se genera aquí, como cualquier documento del sistema. Sigue fuera
+                // si el histórico trae su asiento (clave del diario = prefijo + id viejo: hay que
+                // volver a migrar la Contabilidad, que lo enlaza; generarlo duplicaría), si su fecha
+                // está en un período contable cerrado, o si su módulo no se contabilizaba en el
+                // sistema anterior (consignaciones, retornos, cambios, liquidaciones, importaciones…).
+                $prefijo = self::PREFIJO_DIARIO_MIGRACION[$entidad] ?? null;
+                $sinHistorico = '';
+                if ($prefijo !== null && $aliasDoc !== null && $aliasDoc !== '' && $aliasDoc !== $idExpr) {
+                    $sinHistorico = " AND NOT EXISTS (SELECT 1 FROM migracion_mysql_map mc WHERE mc.id_empresa = mm.id_empresa AND mc.entidad = 'contabilidad' AND mc.clave_natural = '{$prefijo}' || mm.id_origen)"
+                        . " AND NOT EXISTS (SELECT 1 FROM periodos_contables pcx WHERE pcx.id_empresa = {$aliasDoc}.id_empresa AND pcx.eliminado = false AND pcx.status = 0"
+                        . " AND CAST({$aliasDoc}.fecha_emision AS DATE) BETWEEN pcx.fecha_inicial AND pcx.fecha_final)";
+                }
+                $sql .= " AND NOT EXISTS (SELECT 1 FROM migracion_mysql_map mm WHERE mm.entidad = '{$entidad}' AND mm.id_destino = {$idExpr} AND mm.vinculado IS NOT TRUE"
+                    . ($sinHistorico !== '' ? " AND NOT (TRUE {$sinHistorico})" : '') . ") ";
             }
             // Segunda condición, independiente del mapa: el documento ya está ENLAZADO a un
             // asiento migrado vivo (documento.id_asiento_contable → modulo_origen = 'migracion').
@@ -360,7 +391,6 @@ class SincronizadorAsientosService
             // asiento (costeo pendiente / sin fila de seguimiento en Facturas, Recibos y NC).
             // Mismo criterio que AsientoContableService::guardarAsiento(), que además corta a
             // cualquier otro camino de generación. Todos los $idExpr son "alias.id".
-            $aliasDoc = preg_replace('/\.id$/', '', $idExpr);
             if ($aliasDoc !== null && $aliasDoc !== '' && $aliasDoc !== $idExpr) {
                 $sql .= " AND NOT EXISTS (SELECT 1 FROM asientos_contables_cabecera am WHERE am.id = {$aliasDoc}.id_asiento_contable AND am.modulo_origen = 'migracion' AND am.eliminado = false AND am.estado <> 'anulado') ";
             }

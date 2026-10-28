@@ -417,6 +417,28 @@ class EstadosFinancierosController extends BaseModuloController
         }
     }
 
+    /**
+     * Asientos que causan el descuadre del Estado de Situación Financiera (aviso "El balance no
+     * cuadra…"), con los mismos filtros de pantalla. En "Todos", la vista manda el establecimiento
+     * de la sección.
+     */
+    public function diagnosticoDescuadreAjax(): void
+    {
+        try {
+            $this->requireLeer();
+            $f = $this->filtrosReporte();
+            if ($f['todos']) {
+                $this->empresaReporte(); // lanza el mensaje de "elija un establecimiento"
+            }
+            $datos = $this->service->diagnosticarDescuadreBalance($f['id_empresa'], $f['fecha_inicio'], $f['fecha_fin'], $f['centro_costo'], $f['proyecto']);
+            $datos['propia'] = $f['id_empresa'] === (int) $_SESSION['id_empresa'];
+            $this->json(['success' => true, 'data' => $datos]);
+        } catch (\Throwable $th) {
+            \App\Services\ErrorLogService::registrar($th, ['ruta' => static::class, 'accion' => __FUNCTION__]);
+            $this->json(['success' => false, 'error' => $th->getMessage()]);
+        }
+    }
+
     protected function getRutaModulo(): string
     {
         return 'modulos/estados-financieros';

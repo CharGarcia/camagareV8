@@ -201,7 +201,7 @@ $bloqueAlumno = function ($i, array $a) use ($e, $opts, $sexos, $sangres, $relac
                         // Representante nuevo: puede elegir el tipo y corregir el número.
                         $identForm = (string) ($cli['identificacion'] ?? ($identificacion ?? ''));
                         $tipoForm  = (string) ($cli['tipo_id'] ?? \App\Rules\modulos\AlumnoPortalRules::tipoIdCliente($identForm)); ?>
-                    <div class="campo corto"><label>Tipo de identificación *</label>
+                    <div class="campo corto"><label>Tipo ID *</label>
                         <select name="cliente[tipo_id]" id="cliTipoId" required><?= $opts(\App\Rules\modulos\AlumnoPortalRules::TIPOS_ID, $tipoForm) ?></select></div>
                     <div class="campo"><label>Número de identificación *</label>
                         <input type="text" name="cliente[identificacion]" id="cliIdent" maxlength="20" required value="<?= $e($identForm) ?>">

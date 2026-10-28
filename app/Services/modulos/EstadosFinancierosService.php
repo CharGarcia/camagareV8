@@ -470,6 +470,59 @@ class EstadosFinancierosService
         ];
     }
 
+    /** Máximo de asientos que lista el detalle del descuadre del balance. */
+    private const MAX_ASIENTOS_DESCUADRE = 300;
+
+    /**
+     * "¿Dónde está la diferencia?" del Estado de Situación Financiera: los asientos cuya suma
+     * contada en el balance no da cero (ver EstadosFinancierosRepository::getAsientosDescuadreBalance),
+     * con la causa de cada uno en palabras. La suma de 'diferencia' es la diferencia del aviso
+     * (Activos − Pasivo y Patrimonio), salvo que la lista venga recortada.
+     */
+    public function diagnosticarDescuadreBalance(int $idEmpresa, string $fechaInicio, string $fechaFin, ?int $idCentroCosto = null, ?int $idProyecto = null): array
+    {
+        $filas = $this->repository->getAsientosDescuadreBalance($idEmpresa, $fechaInicio, $fechaFin, $idCentroCosto, $idProyecto, self::MAX_ASIENTOS_DESCUADRE);
+        $truncado = count($filas) > self::MAX_ASIENTOS_DESCUADRE;
+        if ($truncado) {
+            $filas = array_slice($filas, 0, self::MAX_ASIENTOS_DESCUADRE);
+        }
+
+        $total = 0.0;
+        $asientos = [];
+        foreach ($filas as $f) {
+            $excluidas = $f['lineas_excluidas'] ? (json_decode((string) $f['lineas_excluidas'], true) ?: []) : [];
+            $causas = [];
+            if (round((float) $f['descuadre_asiento'], 2) != 0) {
+                $causas[] = 'El asiento no cuadra: el debe y el haber de sus líneas no son iguales.';
+            }
+            foreach ($excluidas as $l) {
+                $cuenta = trim(($l['codigo'] ?? '') . ' ' . ($l['nombre'] ?? '')) ?: 'Línea sin cuenta';
+                $causas[] = $cuenta . ': ' . $l['motivo'] . ' (debe ' . number_format((float) $l['debe'], 2)
+                    . ', haber ' . number_format((float) $l['haber'], 2) . ').';
+            }
+            $total += (float) $f['diferencia'];
+            $asientos[] = [
+                'id_asiento'         => (int) $f['id_asiento'],
+                'fecha'              => $f['fecha_asiento'] ? date('d-m-Y', strtotime((string) $f['fecha_asiento'])) : '',
+                'numero_comprobante' => $f['numero_comprobante'],
+                'tipo_comprobante'   => $f['tipo_comprobante'],
+                'modulo_origen'      => $f['modulo_origen'],
+                'concepto'           => $f['concepto'],
+                'debe'               => (float) $f['debe'],
+                'haber'              => (float) $f['haber'],
+                'diferencia'         => (float) $f['diferencia'],
+                'causas'             => $causas,
+            ];
+        }
+
+        return [
+            'asientos'   => $asientos,
+            'total'      => round($total, 2),
+            'truncado'   => $truncado,
+            'con_filtro' => $idCentroCosto !== null || $idProyecto !== null,
+        ];
+    }
+
     /**
      * Límite de columnas del reporte "por periodos" (meses). Protege de rangos absurdos
      * (ej. 10 años) que generarían tablas horizontales inmanejables.

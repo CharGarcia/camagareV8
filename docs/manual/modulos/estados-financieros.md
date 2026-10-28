@@ -5,8 +5,8 @@ categoria: Contabilidad
 ruta_modulo: modulos/estados_financieros
 tipo: modulo
 visibilidad: todos
-etiquetas: estados financieros, cuadre con modulos, tarjetas por liquidar, cuenta puente de tarjetas, activos fijos vs contabilidad, depreciacion acumulada vs contabilidad, cuadre de caja, caja vs contabilidad, anticipos vs contabilidad, cuadre de anticipos, cuadrar contabilidad con modulos, contabilidad vs bancos, contabilidad vs cartera, contabilidad vs inventario, comprobar con contabilidad, no cuadra con el modulo, balance, estado de resultados, situacion financiera, perdidas y ganancias, activo pasivo patrimonio, reportes por periodos, comparativo mensual, horizontal por mes, editar cuenta desde el balance, codigo sri, supercias, entidades de control, pdf con logo, firma del contador, firma del representante legal, balances firmados, excel por niveles, columnas por nivel, exportar excel, establecimiento, varios establecimientos, sucursal, sucursales, mismo ruc, todos los establecimientos, matriz, asientos pendientes de otro establecimiento
-version: 1.15
+etiquetas: estados financieros, cuadre con modulos, tarjetas por liquidar, cuenta puente de tarjetas, activos fijos vs contabilidad, depreciacion acumulada vs contabilidad, cuadre de caja, caja vs contabilidad, anticipos vs contabilidad, cuadre de anticipos, cuadrar contabilidad con modulos, contabilidad vs bancos, contabilidad vs cartera, contabilidad vs inventario, comprobar con contabilidad, no cuadra con el modulo, balance, estado de resultados, situacion financiera, perdidas y ganancias, activo pasivo patrimonio, reportes por periodos, comparativo mensual, horizontal por mes, editar cuenta desde el balance, codigo sri, supercias, entidades de control, pdf con logo, firma del contador, firma del representante legal, balances firmados, excel por niveles, columnas por nivel, exportar excel, establecimiento, varios establecimientos, sucursal, sucursales, mismo ruc, todos los establecimientos, matriz, asientos pendientes de otro establecimiento, balance descuadrado, no cuadra, partida doble, asiento descuadrado, donde esta la diferencia, diferencia del balance, cuenta eliminada
+version: 1.16
 orden: 50
 estado: activo
 ---
@@ -358,7 +358,25 @@ suma dos veces lo que la apertura repite.
 
 ## Si el balance no cuadra
 
-Revise en este orden:
+Cuando Activos no es igual a Pasivo + Patrimonio, el reporte muestra el aviso
+*«El balance no cuadra con el principio de partida doble»* con la diferencia y el
+botón **Ver dónde está la diferencia**. Ese botón lista **los asientos que causan
+el descuadre** (con el mismo rango de fechas y filtros del reporte):
+
+- **Fecha, número de asiento y concepto**: haga clic en el número para abrir el
+  asiento y corregirlo (o corríjalo desde el documento que lo generó).
+- **Diferencia** de cada asiento: la suma de la columna es la diferencia del aviso.
+- **Causa**, que puede ser:
+  - *El asiento no cuadra*: el debe y el haber de sus líneas no son iguales.
+  - Una línea usa una **cuenta que el balance no cuenta**: cuenta eliminada del
+    plan de cuentas, de otra empresa, inexistente, de una clase que no es 1 a 6,
+    o de clase 7 que no es de movimiento. Cambie la línea a una cuenta válida.
+
+Si hay un filtro de **centro de costo o proyecto**, el balance toma solo las
+líneas de ese centro/proyecto y un asiento correcto puede verse descuadrado:
+quite el filtro para revisar el descuadre real.
+
+Si la lista sale vacía, revise además:
 
 1. **Asientos pendientes** de generar.
 2. **Periodos** correctos: que el rango de fechas sea el que cree.
@@ -432,6 +450,9 @@ los otros módulos.
 
 ## Historial de cambios
 
+- **1.16** — El aviso de balance descuadrado trae el botón **Ver dónde está la
+  diferencia**: lista los asientos que causan la diferencia, con su causa y un
+  enlace para abrirlos.
 - **1.15** — Los reportes ignoran el asiento de cierre del **Cierre del Ejercicio** y
   cuentan su apertura solo si cae al inicio del rango consultado. Lo mismo aplica al
   Balance de Comprobación, al Supercías y a la ejecución de Presupuestos.

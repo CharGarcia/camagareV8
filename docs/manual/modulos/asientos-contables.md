@@ -6,7 +6,7 @@ ruta_modulo: modulos/asientos_contables
 tipo: modulo
 visibilidad: todos
 etiquetas: asientos, cuenta eliminada, cuenta configurada no funciona, asiento contable, diario, debe, haber, partida doble, cuadrado, comprobante, contabilidad, imprimir, pdf, excel, documento origen, cuadre con el documento, total de la factura, cuenta por cobrar, cartera, editar asiento desde el documento, pestaña asiento contable, editado a mano, restaurar asiento automático, permisos de contabilidad, documentos migrados, migración, sistema anterior, buscar asiento, buscador, filtros, filtrar asientos, buscar por cuenta, buscar por referencia, libro diario, chips, asiento descuadrado, búsqueda lenta, se queda buscando, filtrar por origen, origen del asiento, módulo de origen, vista previa, costo de ventas, asiento sin costo, duplicar asiento, copiar asiento, clonar asiento, repetir asiento
-version: 1.38
+version: 1.39
 orden: 20
 estado: activo
 ---
@@ -354,13 +354,28 @@ Además:
 
 ## Documentos migrados sin asiento contable
 
-Los documentos que llegaron desde el sistema anterior por la migración **no
-generan asiento automático** y **no se revisan** como pendientes. Su
-contabilidad es el diario histórico migrado tal cual: lo que vino sin asiento
-queda así. La generación en masa y el aviso al abrir los módulos contables solo
-miran los documentos **creados en este sistema**.
+Un documento que llegó desde el sistema anterior por la migración trae su
+contabilidad del diario histórico migrado. Si el sistema anterior **nunca le hizo
+asiento**, se trata como un documento de este sistema: aparece en el aviso de
+asientos por generar y se genera igual que los demás.
 
-Si un documento migrado necesita asiento por alguna razón puntual, se registra a
+Se genera solo si se cumplen las tres condiciones:
+
+- El documento es una factura, recibo, nota de crédito, compra, ingreso, egreso
+  o retención (de venta o de compra). Lo demás nunca se contabilizaba en el
+  sistema anterior (consignaciones, retornos, cambios de producto, liquidaciones,
+  importaciones) y no recibe asiento.
+- El diario histórico migrado **no trae** su asiento. Si lo trae pero el
+  documento no quedó enlazado, no se genera otro (lo duplicaría): vuelva a
+  migrar la **Contabilidad** desde la fecha del documento y la migración lo enlaza.
+- Su fecha **no está en un período contable cerrado**. Los de períodos cerrados
+  quedan como vinieron.
+
+Si el sistema anterior sigue en uso y más adelante se contabiliza ahí un
+documento al que este sistema ya le generó asiento, la migración de Contabilidad
+**no lo reemplaza**: lo informa en su resultado para que anule el que sobre.
+
+Si un documento migrado necesita asiento por otra razón puntual, se registra a
 mano desde su pestaña *Asiento contable*.
 
 **Documentos que ya tienen su asiento migrado.** Cuando la migración de
@@ -378,8 +393,8 @@ asiento migrado para corregirlo ahí.
 
 **Cómo saber si un documento es migrado.** Se creó en bloque el día de la
 migración (todos los de esa carga comparten fecha y hora de creación) y su fecha
-de emisión es anterior. La generación en masa nunca lo incluye, así que si
-aparece en un aviso de "asiento por generar" es porque se creó en este sistema.
+de emisión es anterior. Si aparece en el aviso de "asiento por generar", es
+porque se creó en este sistema o porque el sistema anterior nunca lo contabilizó.
 
 ## Diferencias de centavos
 
@@ -534,6 +549,11 @@ cambiarlos se revierte el cierre en ese módulo y se genera de nuevo.
 
 ## Historial de cambios
 
+- **1.39** — Los documentos **migrados que el sistema anterior nunca contabilizó**
+  vuelven a aparecer como asientos por generar y se generan como los demás, salvo
+  que el diario histórico traiga su asiento o que su fecha esté en un período
+  cerrado. La migración de Contabilidad ya no reemplaza el asiento que este
+  sistema le generó a un documento: lo informa para revisar el duplicado.
 - **1.38** — El aviso de asientos sin generar distingue la cuenta **configurada pero
   eliminada** del Plan de Cuentas (o de otra empresa) y la nombra; antes decía
   «Configure las cuentas contables de …» aunque la regla se viera completa. Una factura

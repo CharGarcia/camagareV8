@@ -683,6 +683,11 @@ $base = BASE_URL;
                 if (d.asientos_enlazados > 0) {
                     html += `<br><span class="text-success small">🔗 ${fmt(d.asientos_enlazados)} documento(s) enlazado(s) con su asiento contable ya migrado.</span>`;
                 }
+                // Documentos que ya tenían asiento generado en el sistema nuevo: el del viejo no lo reemplaza.
+                if (d.asientos_con_propio > 0) {
+                    const ej = (d.asientos_con_propio_muestra || []).join(', ').replace(/</g, '&lt;');
+                    html += `<br><span class="text-danger small">⚠ ${fmt(d.asientos_con_propio)} asiento(s) del sistema anterior son de documentos que ya tienen su asiento generado en este sistema: no se enlazaron. Revise en Asientos Contables y anule el que sobre para no duplicar${ej ? ' (ej. ' + ej + ')' : ''}.</span>`;
+                }
                 // Anulados en el sistema anterior después de migrar la Contabilidad: su asiento se anula.
                 if (d.asientos_anulados > 0) {
                     html += `<br><span class="text-warning small">⊘ ${fmt(d.asientos_anulados)} documento(s) anulado(s) en el sistema anterior: se anuló su asiento contable migrado.</span>`;
