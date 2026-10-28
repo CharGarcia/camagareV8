@@ -6,7 +6,7 @@ ruta_modulo: modulos/estados_financieros
 tipo: modulo
 visibilidad: todos
 etiquetas: estados financieros, cuadre con modulos, tarjetas por liquidar, cuenta puente de tarjetas, activos fijos vs contabilidad, depreciacion acumulada vs contabilidad, cuadre de caja, caja vs contabilidad, anticipos vs contabilidad, cuadre de anticipos, cuadrar contabilidad con modulos, contabilidad vs bancos, contabilidad vs cartera, contabilidad vs inventario, comprobar con contabilidad, no cuadra con el modulo, balance, estado de resultados, situacion financiera, perdidas y ganancias, activo pasivo patrimonio, reportes por periodos, comparativo mensual, horizontal por mes, editar cuenta desde el balance, codigo sri, supercias, entidades de control, pdf con logo, firma del contador, firma del representante legal, balances firmados, excel por niveles, columnas por nivel, exportar excel, establecimiento, varios establecimientos, sucursal, sucursales, mismo ruc, todos los establecimientos, matriz, asientos pendientes de otro establecimiento, balance descuadrado, no cuadra, partida doble, asiento descuadrado, donde esta la diferencia, diferencia del balance, cuenta eliminada
-version: 1.16
+version: 1.17
 orden: 50
 estado: activo
 ---
@@ -26,6 +26,12 @@ informes.
 Los estados financieros solo son fiables si la contabilidad está completa. Por
 eso, al abrir el módulo, el sistema **pregunta si desea generar los asientos
 pendientes** cuando detecta documentos sin contabilizar.
+
+Mientras busca, abajo a la derecha aparece el aviso **Buscando asientos
+contables pendientes…** con el tiempo que lleva; el botón **Mostrar** queda
+inactivo hasta que termina. En empresas con muchos documentos la búsqueda
+puede tardar. **Omitir** corta la búsqueda y deja usar el reporte enseguida
+(equivale a continuar sin generar).
 
 Si continúa sin generarlos, los informes saldrán sin esos movimientos. Es válido
 para una consulta rápida, pero no para presentar nada.
@@ -450,6 +456,9 @@ los otros módulos.
 
 ## Historial de cambios
 
+- **1.17** — Al abrir el módulo se muestra el aviso **Buscando asientos contables
+  pendientes…** mientras dura la búsqueda, con el tiempo transcurrido y el botón
+  **Omitir**. Antes la pantalla no decía nada y el botón Mostrar quedaba inactivo.
 - **1.16** — El aviso de balance descuadrado trae el botón **Ver dónde está la
   diferencia**: lista los asientos que causan la diferencia, con su causa y un
   enlace para abrirlos.

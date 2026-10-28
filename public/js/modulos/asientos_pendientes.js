@@ -23,8 +23,11 @@
  * /modulos/configuracion-contable (URL limpia: tipo y sección viajan en sesión vía entrarAjax) si `puedeConfigurar`.
  *
  * `info` es un canal INFORMATIVO (azul): notas que no son error ni pendiente. Los documentos
- * traídos por la migración NO se revisan ni se cuentan: su contabilidad es el histórico migrado
- * tal cual (decisión del usuario, 2026-09-07).
+ * traídos por la migración solo se cuentan si el sistema anterior nunca los contabilizó (ver
+ * SincronizadorAsientosService::construirExclusionMigracion()).
+ *
+ * Mientras se cuentan los pendientes se muestra un indicador abajo a la derecha, con el tiempo
+ * transcurrido y un botón «Omitir» que corta la búsqueda y desbloquea el reporte.
  *   GET {urlBase}/sincronizarAjax             → (respaldo sin barra de progreso, solo si no hay SweetAlert2)
  *
  * Uso:
@@ -194,6 +197,45 @@
         elementosBloqueados = [];
     }
 
+    // ── Indicador "Buscando asientos pendientes…" ──────────────────────────────────────────
+    // El conteo puede tardar en empresas con muchos documentos; mientras tanto los botones del
+    // reporte están bloqueados. El indicador dice qué pasa, cuánto lleva y permite omitir la
+    // búsqueda (equivale a "Continuar sin generar").
+    let indicador = null;
+    let relojIndicador = null;
+
+    function mostrarIndicador(onOmitir) {
+        ocultarIndicador();
+        indicador = document.createElement('div');
+        indicador.className = 'card shadow border-primary border-opacity-25 position-fixed';
+        indicador.setAttribute('role', 'status');
+        indicador.style.cssText = 'right:16px;bottom:16px;z-index:1050;max-width:calc(100vw - 32px);width:340px;';
+        indicador.innerHTML = `
+            <div class="card-body py-2 px-3 d-flex align-items-center gap-2 small">
+                <span class="spinner-border spinner-border-sm text-primary flex-shrink-0" aria-hidden="true"></span>
+                <div class="flex-grow-1">
+                    <div class="fw-semibold">Buscando asientos contables pendientes…</div>
+                    <div class="text-muted" data-reloj>Revisando documentos sin asiento.</div>
+                </div>
+                <button type="button" class="btn btn-sm btn-outline-secondary flex-shrink-0" data-omitir
+                        title="Continuar sin esperar la búsqueda">Omitir</button>
+            </div>`;
+        indicador.querySelector('[data-omitir]').addEventListener('click', onOmitir);
+        document.body.appendChild(indicador);
+
+        const inicio = Date.now();
+        const reloj = indicador.querySelector('[data-reloj]');
+        relojIndicador = setInterval(() => {
+            const s = Math.floor((Date.now() - inicio) / 1000);
+            if (s >= 3) reloj.textContent = `Revisando documentos sin asiento (${s} s). Con muchos documentos puede tardar.`;
+        }, 1000);
+    }
+
+    function ocultarIndicador() {
+        if (relojIndicador) { clearInterval(relojIndicador); relojIndicador = null; }
+        if (indicador) { indicador.remove(); indicador = null; }
+    }
+
     /** true (y avisa) si todavía no se resolvió el aviso de asientos pendientes. */
     window.CMG_asientosPendientesBloqueado = function () {
         if (!verificando) return false;
@@ -354,9 +396,13 @@
 
         bloquear(opts.bloquear);
 
-        fetch(`${urlBase}/contarPendientesAjax`, { headers: { 'X-Requested-With': 'XMLHttpRequest' } })
+        const ctrl = new AbortController();
+        mostrarIndicador(() => { ctrl.abort(); ocultarIndicador(); terminar(); });
+
+        fetch(`${urlBase}/contarPendientesAjax`, { headers: { 'X-Requested-With': 'XMLHttpRequest' }, signal: ctrl.signal })
             .then(r => r.json())
             .then(json => {
+                ocultarIndicador();
                 if (!json || !json.ok) { terminar(); return; }
                 const n = parseInt(json.pendientes, 10) || 0;
                 // `otros` (opcional): pendientes de los demás establecimientos del RUC, que el
@@ -414,6 +460,6 @@
                     else terminar();
                 });
             })
-            .catch(() => { terminar(); /* Silencioso: no bloquear el módulo por el aviso. */ });
+            .catch(() => { ocultarIndicador(); terminar(); /* Silencioso: no bloquear el módulo por el aviso. */ });
     };
 })();

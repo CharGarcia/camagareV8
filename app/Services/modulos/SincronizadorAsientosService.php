@@ -58,6 +58,9 @@ class SincronizadorAsientosService
      * codigo_unico de su asiento en encabezado_diario; ver MigracionMysqlService::docDeDiario()).
      * Solo estos migrados se generan aquí cuando el histórico no trae su asiento.
      */
+    /** Desde cuántos ms el conteo de pendientes se registra en el log con su detalle por módulo. */
+    private const CONTEO_LENTO_MS = 3000;
+
     private const PREFIJO_DIARIO_MIGRACION = [
         'facturas'           => 'FAC',
         'recibos'            => 'REC',
@@ -238,7 +241,10 @@ class SincronizadorAsientosService
         $trabajos = $this->construirTrabajos($idEmpresa, $excMig);
 
         $total = 0;
+        $inicio = microtime(true);
+        $tiempos = [];
         foreach ($trabajos as $t) {
+            $t0 = microtime(true);
             try {
                 $st = $db->prepare("SELECT COUNT(*) FROM (" . $t['sql'] . ") AS _pend");
                 $st->execute($t['params']);
@@ -246,6 +252,17 @@ class SincronizadorAsientosService
             } catch (\Throwable $e) {
                 // Tabla o columna inexistente (migración pendiente): se omite sin romper.
             }
+            $tiempos[$t['clave'] ?? '?'] = (int) round((microtime(true) - $t0) * 1000);
+        }
+
+        // Si el conteo tarda, deja en el log del servidor cuánto tomó cada módulo (el aviso al
+        // abrir Estados Financieros espera esta respuesta) para ubicar la consulta lenta.
+        $totalMs = (int) round((microtime(true) - $inicio) * 1000);
+        if ($totalMs >= self::CONTEO_LENTO_MS) {
+            arsort($tiempos);
+            $lentos = array_map(fn ($k, $v) => "{$k} {$v} ms", array_keys($tiempos), $tiempos);
+            error_log("[contarPendientes] empresa {$idEmpresa}: {$totalMs} ms ({$total} pendientes). Por módulo: "
+                . implode(', ', array_slice($lentos, 0, 8)));
         }
 
         return $total;
@@ -373,15 +390,16 @@ class SincronizadorAsientosService
                 // volver a migrar la Contabilidad, que lo enlaza; generarlo duplicaría), si su fecha
                 // está en un período contable cerrado, o si su módulo no se contabilizaba en el
                 // sistema anterior (consignaciones, retornos, cambios, liquidaciones, importaciones…).
+                // Búsqueda del histórico por (id_empresa, entidad, clave_natural): índice
+                // idx_migmap_clave_natural (database/20261028_migmap_clave_natural.sql).
                 $prefijo = self::PREFIJO_DIARIO_MIGRACION[$entidad] ?? null;
-                $sinHistorico = '';
+                $sigueFuera = '';
                 if ($prefijo !== null && $aliasDoc !== null && $aliasDoc !== '' && $aliasDoc !== $idExpr) {
-                    $sinHistorico = " AND NOT EXISTS (SELECT 1 FROM migracion_mysql_map mc WHERE mc.id_empresa = mm.id_empresa AND mc.entidad = 'contabilidad' AND mc.clave_natural = '{$prefijo}' || mm.id_origen)"
-                        . " AND NOT EXISTS (SELECT 1 FROM periodos_contables pcx WHERE pcx.id_empresa = {$aliasDoc}.id_empresa AND pcx.eliminado = false AND pcx.status = 0"
-                        . " AND CAST({$aliasDoc}.fecha_emision AS DATE) BETWEEN pcx.fecha_inicial AND pcx.fecha_final)";
+                    $sigueFuera = " AND (EXISTS (SELECT 1 FROM migracion_mysql_map mc WHERE mc.id_empresa = mm.id_empresa AND mc.entidad = 'contabilidad' AND mc.clave_natural = '{$prefijo}' || mm.id_origen)"
+                        . " OR EXISTS (SELECT 1 FROM periodos_contables pcx WHERE pcx.id_empresa = {$aliasDoc}.id_empresa AND pcx.eliminado = false AND pcx.status = 0"
+                        . " AND CAST({$aliasDoc}.fecha_emision AS DATE) BETWEEN pcx.fecha_inicial AND pcx.fecha_final))";
                 }
-                $sql .= " AND NOT EXISTS (SELECT 1 FROM migracion_mysql_map mm WHERE mm.entidad = '{$entidad}' AND mm.id_destino = {$idExpr} AND mm.vinculado IS NOT TRUE"
-                    . ($sinHistorico !== '' ? " AND NOT (TRUE {$sinHistorico})" : '') . ") ";
+                $sql .= " AND NOT EXISTS (SELECT 1 FROM migracion_mysql_map mm WHERE mm.entidad = '{$entidad}' AND mm.id_destino = {$idExpr} AND mm.vinculado IS NOT TRUE{$sigueFuera}) ";
             }
             // Segunda condición, independiente del mapa: el documento ya está ENLAZADO a un
             // asiento migrado vivo (documento.id_asiento_contable → modulo_origen = 'migracion').
