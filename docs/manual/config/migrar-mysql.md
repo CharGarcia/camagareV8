@@ -631,8 +631,9 @@ sistema anterior tampoco los aplicaba al facturar por alumno).
   pago** y **Quincenas**, cada rol que trajo la migración se compara con el
   sistema anterior y, si cambió, se restaura (el resultado lo cuenta como
   *reconstruidos*). Las líneas que ya tienen pago conservan su enlace. Un rol
-  en *Generado* vuelve a su estado migrado; *Pagado*, *Contabilizado* y
-  *Anulado* se respetan. Si un rol migrado se eliminó y en su lugar se creó
+  en *Generado*, o en *Contabilizado* con todos sus asientos anulados, vuelve
+  a su estado migrado; *Pagado*, *Anulado* y *Contabilizado* con asiento vivo
+  se respetan. Si un rol migrado se eliminó y en su lugar se creó
   uno en este sistema para el mismo período, se deja como está.
 
 ## Historial de cambios

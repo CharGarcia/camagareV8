@@ -1981,8 +1981,8 @@ class MigracionMysqlService
      * recalculó en el sistema nuevo (abrirlo lo regeneraba: borraba las líneas de los empleados
      * inactivos y cambiaba los valores de los demás). Por empleado: actualiza EN EL SITIO la línea
      * existente (mismo id, así no se rompe el enlace con su pago), inserta la que falta y borra la que
-     * el viejo no tiene SOLO si no tiene pago. Un rol 'generado' vuelve a su estado migrado; 'pagado',
-     * 'contabilizado' o 'anulado' se respetan. Si ya coincide con el viejo no toca nada (false).
+     * el viejo no tiene SOLO si no tiene pago. Un rol 'generado' (o 'contabilizado' sin asiento vivo)
+     * vuelve a su estado migrado; 'pagado', 'anulado' y 'contabilizado' con asiento vivo se respetan. Si ya coincide con el viejo no toca nada (false).
      */
     private function reconstruirRolMigrado(PDO $pg, int $idRol, int $idEmpresa, array $lineas, string $estadoViejo, int $idUsuario): bool
     {
@@ -1998,7 +1998,16 @@ class MigracionMysqlService
 
         $porEmp = [];
         foreach ($lineas as $ln) { $porEmp[(int) $ln['id_empleado']] = $ln; }
-        $nuevoEstado = ($cab['estado'] === 'generado') ? $estadoViejo : (string) $cab['estado'];
+        $nuevoEstado = (string) $cab['estado'];
+        if ($nuevoEstado === 'generado') {
+            $nuevoEstado = $estadoViejo;
+        } elseif ($nuevoEstado === 'contabilizado') {
+            // 'contabilizado' sin ningún asiento de nómina vivo (todos anulados) no refleja nada real.
+            $stAs = $pg->prepare("SELECT 1 FROM asientos_contables_cabecera WHERE id_empresa = ? AND modulo_origen = 'nomina'
+                                    AND id_referencia_origen = ? AND eliminado = false AND estado != 'anulado' LIMIT 1");
+            $stAs->execute([$idEmpresa, $idRol]);
+            if ($stAs->fetchColumn() === false) { $nuevoEstado = $estadoViejo; }
+        }
 
         // ¿Ya coincide con el viejo? (mismos empleados y mismos totales por línea, y estado sin tocar)
         $igual = ($nuevoEstado === $cab['estado']) && count($actual) === count($porEmp);
