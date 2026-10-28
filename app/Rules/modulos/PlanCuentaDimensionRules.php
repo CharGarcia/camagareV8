@@ -6,8 +6,7 @@ namespace App\Rules\modulos;
 
 /**
  * Validaciones del centro de costo / proyecto sugerido por periodo de una cuenta.
- * Cada periodo es de un solo tipo (centro o proyecto). El cruce con otros periodos del
- * mismo tipo se revisa en el Service, bajo candado.
+ * Cada periodo es de un solo tipo (centro o proyecto) y los de un mismo tipo no se cruzan.
  */
 class PlanCuentaDimensionRules
 {
@@ -64,16 +63,28 @@ class PlanCuentaDimensionRules
         }
     }
 
-    /** Mensaje cuando el periodo se cruza con otro del mismo tipo ya registrado. */
-    public function validarSinCruce(?array $cruce, string $tipo): void
+    /**
+     * Las líneas de una pestaña (todas del mismo tipo) no pueden cruzarse entre sí.
+     * $lineas = [['linea' => n, 'datos' => [vigente_desde, vigente_hasta, …]], …]; fecha NULL = sin límite.
+     */
+    public function validarSinCruces(array $lineas, string $tipo): void
     {
-        if ($cruce === null) return;
         $f = static fn($v) => $v ? date('d-m-Y', strtotime((string) $v)) : 'sin límite';
-        throw new \InvalidArgumentException(sprintf(
-            'El periodo se cruza con otro %s ya registrado para esta cuenta (desde %s hasta %s). Ajuste las fechas o cierre el periodo anterior.',
-            $tipo === 'centro' ? 'de centro de costo' : 'de proyecto',
-            $f($cruce['vigente_desde']),
-            $f($cruce['vigente_hasta'])
-        ));
+        $n = count($lineas);
+        for ($i = 0; $i < $n; $i++) {
+            for ($j = $i + 1; $j < $n; $j++) {
+                $a = $lineas[$i]['datos'];
+                $b = $lineas[$j]['datos'];
+                $aAntesDeB = $a['vigente_hasta'] !== null && $b['vigente_desde'] !== null && $a['vigente_hasta'] < $b['vigente_desde'];
+                $bAntesDeA = $b['vigente_hasta'] !== null && $a['vigente_desde'] !== null && $b['vigente_hasta'] < $a['vigente_desde'];
+                if ($aAntesDeB || $bAntesDeA) continue;
+                throw new \InvalidArgumentException(sprintf(
+                    '%s: las líneas %d (desde %s hasta %s) y %d (desde %s hasta %s) se cruzan. Ajuste las fechas para que no se superpongan.',
+                    $tipo === 'centro' ? 'Centro de costos' : 'Proyectos',
+                    $lineas[$i]['linea'], $f($a['vigente_desde']), $f($a['vigente_hasta']),
+                    $lineas[$j]['linea'], $f($b['vigente_desde']), $f($b['vigente_hasta'])
+                ));
+            }
+        }
     }
 }

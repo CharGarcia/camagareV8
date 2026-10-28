@@ -73,7 +73,10 @@
 
             if (data) {
                 // Modo Edición
-                document.getElementById('tituloModalPC').textContent = opts.soloLectura ? 'Cuenta Contable' : 'Editar Cuenta';
+                // Editar: el título es la cuenta (en una subcuenta nueva sin id lo cambia abrirModalCrearHijoBusqueda).
+                document.getElementById('tituloModalPC').textContent = data.id
+                    ? `${data.codigo} - ${data.nombre}`
+                    : (opts.soloLectura ? 'Cuenta Contable' : 'Editar Cuenta');
                 document.getElementById('pc_id').value = data.id;
                 document.getElementById('pc_codigo_edit').value = data.codigo;
                 document.getElementById('pc_nivel_edit').value = data.nivel;
@@ -133,6 +136,17 @@
                 const json = await resp.json();
 
                 if (json.ok) {
+                    // Luego las líneas de Centro de costos / Proyectos (con el id de la cuenta ya guardada).
+                    const idCuenta = id || json.id;
+                    if (!id && json.id) document.getElementById('pc_id').value = json.id; // un nuevo Guardar no crea otra cuenta
+                    const dim = await window.PCDIM_guardar(idCuenta);
+                    if (!dim.ok) {
+                        const alertDiv = document.getElementById('modalAlertPC');
+                        alertDiv.textContent = `La cuenta se guardó, pero no los centros de costo / proyectos: ${dim.error}`;
+                        alertDiv.className = 'alert alert-danger mb-3 py-2 small shadow-sm border-0';
+                        alertDiv.classList.remove('d-none');
+                        return;
+                    }
                     getModalPC().hide();
                     if (window.onAccountSaved) window.onAccountSaved(json);
                     // Si estamos en la página del plan de cuentas, recargar el árbol

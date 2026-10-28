@@ -58,6 +58,15 @@ Los tres campos son obligatorios.
   de nivel 5, el **centro de costo / proyecto por periodo** y los **códigos de
   entidades de control** (Código SRI y Supercias ESF, ERI y ECP).
 
+### Abrir, editar y eliminar una cuenta
+
+- En el árbol, **haga clic sobre una cuenta de nivel 5** (o en el lápiz de
+  cualquier nivel) para abrir su ficha. El encabezado muestra el código y el
+  nombre de la cuenta.
+- El botón **Eliminar** está en el pie de la ficha, a la izquierda. No aparece
+  en las cuentas raíz ni en las que tienen subcuentas, y el sistema rechaza
+  eliminar una cuenta con movimientos.
+
 ### Pestañas de la ficha de la cuenta
 
 La ficha de una cuenta se organiza en pestañas:
@@ -86,18 +95,21 @@ uno se registra en su pestaña y con sus propias fechas. Una cuenta puede tener,
 por ejemplo, el mismo centro de costo todo el año y cambiar de proyecto a mitad
 de año.
 
-En la pestaña **Centro de costos** o **Proyectos**:
+En la pestaña **Centro de costos** o **Proyectos** cada periodo es una línea con
+las columnas **Centro de costo** (o **Proyecto**), **Desde** y **Hasta**:
 
-1. Elija el centro de costo o el proyecto. En **Proyectos**, al elegirlo se
+1. Pulse **Agregar línea**.
+2. Elija el centro de costo o el proyecto. En **Proyectos**, al elegirlo se
    completan solas las fechas **Desde** y **Hasta** con las fechas de inicio y
    fin del proyecto; puede ajustarlas.
-2. Revise **Desde** y **Hasta** (vacías = el periodo no tiene inicio o no tiene
-   fin).
-3. Pulse el visto (✓) para guardar el periodo. Con el lápiz se edita uno ya
-   registrado y con la papelera se elimina.
+3. Revise **Desde** y **Hasta** (vacías = el periodo no tiene inicio o no tiene
+   fin). Las líneas ya registradas se corrigen directamente en la tabla, y con
+   la **x** roja se quita una línea.
+4. Pulse **Guardar** de la ficha: se guardan la cuenta y todas sus líneas de
+   una vez. Si una línea tiene un error (por ejemplo, dos periodos que se
+   cruzan), no se guarda ninguna línea y el aviso dice cuáles revisar.
 
-La fila que corresponde a la fecha de hoy se marca **Vigente**. Las pestañas
-solo se pueden llenar con la cuenta ya guardada.
+La línea que corresponde a la fecha de hoy se resalta en verde.
 
 Cómo funciona:
 
@@ -252,9 +264,12 @@ pendiente y el aviso de asientos pendientes indica qué cuenta revisar.
   cuentas"**: la Configuración Contable apunta a una cuenta eliminada. Cambie la
   cuenta en Configuración Contable (o reactive la cuenta) y vuelva a generar los
   asientos pendientes.
-- **"El periodo se cruza con otro … ya registrado para esta cuenta"**: ya hay un
-  periodo del mismo tipo (centro o proyecto) que cubre alguna de esas fechas. Ponga fecha *Hasta* al anterior o
-  ajuste las fechas del nuevo.
+- **"Centro de costos: las líneas 1 y 2 … se cruzan"** (o *Proyectos*): dos
+  líneas de la misma pestaña cubren alguna fecha en común. Ponga fecha *Hasta* a
+  la anterior o ajuste las fechas de la nueva.
+- **"La cuenta se guardó, pero no los centros de costo / proyectos"**: la cuenta
+  quedó guardada pero alguna línea tiene un error. Corríjala y pulse **Guardar**
+  otra vez; no se crea otra cuenta.
 - **No aparece la pestaña Centro de costos o Proyectos**: solo se muestra en
   cuentas de nivel 5, si la empresa tiene centros de costo o proyectos activos y
   si el usuario no la ocultó con el engranaje de las pestañas.
@@ -278,7 +293,10 @@ pendiente y el aviso de asientos pendientes indica qué cuenta revisar.
   periodo** (desde/hasta), cada uno por su lado, en lugar de un único valor fijo
   que no se usaba en ningún lado; al elegir un proyecto se completan sus fechas.
   El del periodo se sugiere en las líneas del asiento según su fecha. El valor
-  que tenía cada cuenta pasó a un periodo sin límite de fechas.
+  que tenía cada cuenta pasó a un periodo sin límite de fechas. Las líneas se
+  editan en la tabla (*Agregar línea*) y se guardan con la cuenta. Clic sobre
+  una cuenta de nivel 5 abre su ficha, el encabezado muestra la cuenta y se
+  puede eliminar desde el pie de la ficha.
 - **1.5** — **Eliminar plan** ya no borra cuentas configuradas en Configuración
   Contable (antes solo miraba los movimientos). Ningún asiento se registra en una
   cuenta eliminada, de otra empresa o inexistente: el asiento queda pendiente con

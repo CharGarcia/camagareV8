@@ -113,7 +113,10 @@ $proyectos  = $proyectos ?? [];
                 </div>
                 <div class="modal-footer flex-column align-items-stretch bg-light border-0 px-4 py-3">
 
-                    <div class="d-flex justify-content-between align-items-center">
+                    <div class="d-flex justify-content-between align-items-center gap-2">
+                        <?php if (!empty($perm['eliminar'])): ?>
+                        <button type="button" class="btn btn-outline-danger btn-sm d-none" id="btnEliminarPC" title="Eliminar cuenta"><i class="bi bi-trash me-1"></i> Eliminar</button>
+                        <?php endif; ?>
                         <div id="wrapper-auditoria-simple" class="small text-muted d-none">
                             <i class="bi bi-info-circle me-1"></i> <span id="info_creado_at" title="Creado"></span>
                         </div>
@@ -271,13 +274,13 @@ $proyectos  = $proyectos ?? [];
                     }
                 } else {
                     item.innerHTML = `
-                        <div class="d-flex align-items-center py-1 px-3 pc-row-item nivel-${node.nivel}">
+                        <div class="d-flex align-items-center py-1 px-3 pc-row-item nivel-${node.nivel}" role="button" style="cursor:pointer;" title="Editar cuenta" onclick="abrirModalEditarLocal('${node.codigo}')">
                             <span class="ms-3 me-2 text-muted opacity-50"><i class="bi bi-dash"></i></span>
                             <span class="badge bg-light text-dark border badge-nivel me-2" style="width: 20px; height: 20px; font-size: 0.65rem;">${node.nivel}</span>
                             <code class="text-muted small me-2" style="font-size: 0.75rem;">${node.codigo}</code>
                             <span class="text-dark flex-grow-1" style="font-size: 0.85rem;">${node.nombre} ${controlTags}</span>
                             <span class="status-dot ms-2" style="background-color: ${node.status == 1 ? '#198754' : '#6c757d'}"></span>
-                            <div class="d-flex gap-1 ms-3">
+                            <div class="d-flex gap-1 ms-3" onclick="event.stopPropagation()">
                                 <button class="btn btn-outline-primary btn-xs border-0 rounded-circle" onclick="abrirModalEditarLocal('${node.codigo}')" title="Editar"><i class="bi bi-pencil-square"></i></button>
                                 <button class="btn btn-outline-danger btn-xs border-0 rounded-circle" onclick="eliminarAccionDetalle(${node.id})" title="Borrar"><i class="bi bi-trash"></i></button>
                             </div>
@@ -472,7 +475,15 @@ $proyectos  = $proyectos ?? [];
             
             toggleLevel5Fields(item.nivel);
             window.PCFORM_abrir(item.id, item.nivel, false);
-            document.getElementById('tituloModal').textContent = 'Configuración de Cuenta';
+            document.getElementById('tituloModal').textContent = `${item.codigo} - ${item.nombre}`;
+            // Eliminar (pie, a la izquierda): no en las raíces ni en cuentas con subcuentas;
+            // el servidor vuelve a validarlo y además rechaza las que tienen movimientos.
+            const btnEliminar = document.getElementById('btnEliminarPC');
+            if (btnEliminar) {
+                const tieneHijos = pcuentasRaw.some(x => x.codigo.startsWith(item.codigo + '.'));
+                btnEliminar.classList.toggle('d-none', parseInt(item.nivel) <= 1 || tieneHijos);
+                btnEliminar.dataset.id = item.id;
+            }
             document.getElementById('modalAlert').classList.add('d-none');
             document.getElementById('wrapper-parent-info').classList.add('d-none');
             
@@ -495,6 +506,7 @@ $proyectos  = $proyectos ?? [];
                 form.reset();
                 document.getElementById('pc_id').value = '';
                 document.getElementById('tituloModal').textContent = 'Nueva Subcuenta';
+                document.getElementById('btnEliminarPC')?.classList.add('d-none');
                 document.getElementById('pc_codigo_edit').value = json.codigo;
                 document.getElementById('pc_nivel_edit').value = json.nivel;
                 const audSimple = document.getElementById('wrapper-auditoria-simple');
@@ -518,30 +530,46 @@ $proyectos  = $proyectos ?? [];
             } catch (e) { console.error(e); }
         };
 
+        let guardandoPC = false;
         form.addEventListener('submit', async (e) => {
             e.preventDefault();
+            if (guardandoPC) return;
+            guardandoPC = true;
             const id = document.getElementById('pc_id').value;
             const btn = document.getElementById('btnGuardar');
             const alertEl = document.getElementById('modalAlert');
+            const avisar = (texto, ok) => {
+                alertEl.textContent = texto;
+                alertEl.className = `alert alert-${ok ? 'success' : 'danger'} py-2 small shadow-sm border-0`;
+                alertEl.classList.remove('d-none');
+            };
             btn.disabled = true;
             try {
                 const fd = new FormData(form);
                 const resp = await fetch(id ? `${urlBase}/update` : `${urlBase}/store`, { method: 'POST', body: fd });
                 const json = await resp.json();
-                if (json.ok) {
-                    alertEl.textContent = json.msg;
-                    alertEl.className = 'alert alert-success py-2 small shadow-sm border-0';
-                    alertEl.classList.remove('d-none');
-                    setTimeout(() => { getModal().hide(); fetchTree(); }, 800);
-                } else {
-                    alertEl.textContent = json.error;
-                    alertEl.className = 'alert alert-danger py-2 small shadow-sm border-0';
-                    alertEl.classList.remove('d-none');
+                if (!json.ok) { avisar(json.error, false); return; }
+
+                // Luego las líneas de Centro de costos / Proyectos (con el id de la cuenta ya guardada).
+                const idCuenta = id || json.id;
+                if (!id && json.id) document.getElementById('pc_id').value = json.id; // un nuevo Guardar no crea otra cuenta
+                const dim = await window.PCDIM_guardar(idCuenta);
+                if (!dim.ok) {
+                    avisar(`La cuenta se guardó, pero no los centros de costo / proyectos: ${dim.error}`, false);
+                    fetchTree();
+                    return;
                 }
+                avisar(json.msg, true);
+                setTimeout(() => { getModal().hide(); fetchTree(); }, 800);
             } catch (err) { Swal.fire('Error', 'Error de red', 'error'); }
-            finally { btn.disabled = false; }
+            finally { btn.disabled = false; guardandoPC = false; }
         });
 
+        document.getElementById('btnEliminarPC')?.addEventListener('click', async function () {
+            if (await eliminarAccionDetalle(parseInt(this.dataset.id, 10))) getModal().hide();
+        });
+
+        /** Devuelve true si la cuenta se eliminó. */
         window.eliminarAccionDetalle = async function(id) {
             const result = await Swal.fire({
                 title: '¿Eliminar cuenta?',
@@ -552,7 +580,7 @@ $proyectos  = $proyectos ?? [];
                 cancelButtonText: 'Cancelar',
                 confirmButtonColor: '#dc3545'
             });
-            if (!result.isConfirmed) return;
+            if (!result.isConfirmed) return false;
 
             try {
                 const fd = new FormData();
@@ -561,12 +589,13 @@ $proyectos  = $proyectos ?? [];
                 const json = await resp.json();
                 if (json.ok) {
                     fetchTree();
-                } else {
-                    Swal.fire('No se pudo eliminar', json.error, 'error');
+                    return true;
                 }
+                Swal.fire('No se pudo eliminar', json.error, 'error');
             } catch (e) {
                 Swal.fire('Error', 'Error de conexión', 'error');
             }
+            return false;
         };
 
         // Inicializar carga

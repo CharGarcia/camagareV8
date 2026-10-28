@@ -317,42 +317,28 @@ class PlanCuentasController extends BaseModuloController
         exit;
     }
 
-    /** Crea o actualiza un periodo de centro de costo / proyecto de una cuenta. */
-    public function guardarDimensionAjax(): void
+    /**
+     * Guarda las líneas de las pestañas Centro de costos y Proyectos de una cuenta
+     * (lo llama el botón Guardar del modal, junto con la cuenta). POST id_cuenta y
+     * `dimensiones` = JSON {"centro": [...], "proyecto": [...]}, cada línea con
+     * id (0 = nueva), id_dimension, vigente_desde, vigente_hasta. Un tipo que no viene
+     * no se toca (p. ej. si la empresa no tiene proyectos activos).
+     */
+    public function sincronizarDimensionesAjax(): void
     {
         $this->requireActualizar();
         header('Content-Type: application/json');
 
         $idEmpresa = (int) $_SESSION['id_empresa'];
         $idUsuario = (int) $_SESSION['id_usuario'];
+        $idCuenta  = (int) ($_POST['id_cuenta'] ?? 0);
 
         try {
-            $id = PlanCuentaDimensionService::crear()->guardar((int) ($_POST['id'] ?? 0), [
-                'tipo'            => $_POST['tipo'] ?? '',
-                'id_cuenta'       => $_POST['id_cuenta'] ?? 0,
-                'id_dimension'    => $_POST['id_dimension'] ?? 0,
-                'vigente_desde'   => $_POST['vigente_desde'] ?? '',
-                'vigente_hasta'   => $_POST['vigente_hasta'] ?? '',
-                'observacion'     => $_POST['observacion'] ?? '',
-            ], $idEmpresa, $idUsuario);
-            echo json_encode(['ok' => true, 'id' => $id, 'msg' => 'Periodo guardado.']);
-        } catch (\InvalidArgumentException $e) {
-            echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
-        } catch (\Throwable $e) {
-            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
-            echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
-        }
-        exit;
-    }
+            $dims = json_decode((string) ($_POST['dimensiones'] ?? '{}'), true);
+            if (!is_array($dims)) throw new \InvalidArgumentException('Datos de centro de costo / proyecto no válidos.');
 
-    public function eliminarDimensionAjax(): void
-    {
-        $this->requireActualizar();
-        header('Content-Type: application/json');
-
-        try {
-            PlanCuentaDimensionService::crear()->eliminar((int) ($_POST['id'] ?? 0), (int) $_SESSION['id_empresa'], (int) $_SESSION['id_usuario']);
-            echo json_encode(['ok' => true, 'msg' => 'Periodo eliminado.']);
+            $tocadas = PlanCuentaDimensionService::crear()->sincronizar($idCuenta, $dims, $idEmpresa, $idUsuario);
+            echo json_encode(['ok' => true, 'tocadas' => $tocadas]);
         } catch (\InvalidArgumentException $e) {
             echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
         } catch (\Throwable $e) {

@@ -159,6 +159,7 @@ $pcTab = static function (string $pane, string $icono, string $texto, bool $acti
         const general = document.querySelector('#pc-tabs .nav-link[data-bs-target="#pc-pane-general"]');
         if (general) bootstrap.Tab.getOrCreateInstance(general).show();
         if (esNivel5 && window.PCDIM_cargar) window.PCDIM_cargar(idCuenta || 0, !!soloLectura);
+        else if (window.PCDIM_desactivar) window.PCDIM_desactivar();
     };
 })();
 </script>

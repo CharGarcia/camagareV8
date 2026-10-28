@@ -102,31 +102,6 @@ class PlanCuentaDimensionRepository extends BaseRepository
         return $r;
     }
 
-    /**
-     * Periodo del mismo tipo y la misma cuenta que se cruza con el rango dado.
-     * $excluirId = la fila que se está editando.
-     */
-    public function buscarCruce(int $idCuenta, int $idEmpresa, string $tipo, ?string $desde, ?string $hasta, ?int $excluirId): ?array
-    {
-        $col = self::columna($tipo);
-        $sql = "SELECT v.id, v.vigente_desde, v.vigente_hasta
-                FROM {$this->table} v
-                " . $this->getBaseWhere($idEmpresa, 'v') . "
-                  AND v.id_cuenta = :id_cuenta
-                  AND v.{$col} IS NOT NULL
-                  AND daterange(v.vigente_desde, v.vigente_hasta, '[]')
-                      && daterange(CAST(:desde AS date), CAST(:hasta AS date), '[]')";
-        $params = [':id_empresa' => $idEmpresa, ':id_cuenta' => $idCuenta, ':desde' => $desde, ':hasta' => $hasta];
-        if ($excluirId !== null) {
-            $sql .= " AND v.id <> :excluir";
-            $params[':excluir'] = $excluirId;
-        }
-        $st = $this->db->prepare($sql . " LIMIT 1");
-        $st->execute($params);
-        $r = $st->fetch(PDO::FETCH_ASSOC);
-        return $r ?: null;
-    }
-
     /** Candado de los periodos de una cuenta: el chequeo de cruce y la escritura van juntos (§8). */
     public function lockCuenta(int $idCuenta, int $idEmpresa): void
     {
