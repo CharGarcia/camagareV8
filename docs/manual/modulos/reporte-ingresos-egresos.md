@@ -5,8 +5,8 @@ categoria: Reportes
 ruta_modulo: modulos/reporte_ingresos_egresos
 tipo: modulo
 visibilidad: todos
-etiquetas: reporte de ingresos y egresos, anulados, ingresos anulados, egresos anulados, vigentes, movimiento de dinero, cobros y pagos, por tercero, forma de pago, concepto, vendedor, asesor, cobros por vendedor, comisiones, asesor del cliente, otros conceptos, saldo inicial, saldos iniciales, exportar, excel detallado, pdf, imprimir, logo en el pdf, totales en el pdf, reporte de ingresos por vendedor, reporte de egresos, pdf por vendedor
-version: 1.8
+etiquetas: reporte de ingresos y egresos, anulados, ingresos anulados, egresos anulados, vigentes, movimiento de dinero, cobros y pagos, por tercero, forma de pago, concepto, vendedor, asesor, cobros por vendedor, comisiones, asesor del cliente, otros conceptos, saldo inicial, saldos iniciales, exportar, excel detallado, pdf, imprimir, logo en el pdf, totales en el pdf, reporte de ingresos por vendedor, reporte de egresos, pdf por vendedor, anticipo, anticipos, anticipo aplicado, cruce de anticipo, ingresos repetidos, ingreso duplicado, doble conteo
+version: 1.9
 orden: 30
 estado: activo
 ---
@@ -42,6 +42,35 @@ Excel ni el PDF. Así los valores cuadran con los módulos de Ingresos y Egresos
 Para revisar los anulados, elija **Anulados** en el filtro *Estado*: el reporte
 muestra entonces solo esos. Nunca se mezclan vigentes y anulados en un mismo
 resultado.
+
+## Anticipos aplicados: no se cuentan dos veces
+
+Un anticipo pasa por dos comprobantes:
+
+1. **Cuando el cliente entrega el anticipo** (o la empresa se lo entrega al
+   proveedor) se registra un ingreso (o egreso) con un concepto de anticipo. Ahí
+   **sí entra (o sale) dinero**, y el reporte lo suma.
+2. **Cuando ese anticipo se aplica a una factura** (o a una compra) se registra
+   otro ingreso (o egreso) que la cancela con la forma de cobro/pago de tipo
+   **Anticipo**. Ese comprobante **no mueve caja**: el dinero ya se contó en el
+   paso 1.
+
+Por eso, lo cobrado o pagado con una forma de tipo Anticipo **no suma** en el
+reporte:
+
+- **Vista Documento**: la línea se sigue viendo (para saber qué factura se canceló
+  con el anticipo), con monto **$0.00** y la marca **Anticipo aplicado $…** debajo.
+  Si el comprobante se pagó una parte con anticipo y otra en efectivo u otra forma,
+  el monto es solo esa otra parte; con varias líneas, lo aplicado se reparte entre
+  ellas en proporción a su valor.
+- **Totales, Tercero, Fecha y Mes**: no suman lo aplicado del anticipo. Un
+  comprobante pagado entero con anticipo tampoco cuenta en el número de
+  comprobantes.
+- **Forma de cobro/pago**: la forma de tipo Anticipo aparece con su valor, en gris
+  y con la nota *no suma*; en el PDF va entre paréntesis y fuera de la fila TOTALES.
+- **Excel**: las hojas *Ingresos y Egresos*, *Detalle completo* y *Cobros y pagos*
+  llevan una columna **Anticipo aplicado** aparte de *Ingreso* / *Egreso*, y el
+  detalle del comprobante indica *(anticipo aplicado $…)*.
 
 ## Filtro por vendedor: cuánto cobró cada vendedor
 
@@ -155,6 +184,11 @@ cobró cada vendedor, qué movimientos hubo por encima de cierto monto.
   solo aparece con el filtro *Estado* en *Anulados*.
 - **Los totales no cuadran con el flujo de caja**: compruebe si tiene filtros
   activos que estén acotando el resultado.
+- **Un cobro sale en $0.00 con la marca "Anticipo aplicado"**: es lo esperado; se
+  pagó con un anticipo que ya sumó cuando se recibió (ver *Anticipos aplicados*).
+- **Los totales no cuadran con el módulo de Ingresos o Egresos**: esos módulos
+  muestran el total de cada comprobante, incluido lo pagado con anticipo; este
+  reporte no lo suma para no contar dos veces el mismo dinero.
 - **Al elegir un vendedor no aparecen egresos**: es lo esperado; los egresos no
   tienen vendedor.
 - **Falta un cobro de un vendedor**: revise que la factura cobrada tenga ese
@@ -165,6 +199,11 @@ cobró cada vendedor, qué movimientos hubo por encima de cierto monto.
 
 ## Historial de cambios
 
+- **1.9** — Los **anticipos aplicados ya no se cuentan dos veces**: lo cobrado o
+  pagado con una forma de tipo Anticipo no suma en totales, vistas resumidas,
+  Excel ni PDF, porque ese dinero ya se contó al recibir o entregar el anticipo.
+  En la vista Documento la línea se sigue viendo, marcada *Anticipo aplicado*, y
+  el Excel trae una columna **Anticipo aplicado**.
 - **1.8** — Los ingresos y egresos **anulados ya no aparecen ni suman** en el
   reporte. El filtro *Estado* ofrece *Vigentes* (por defecto) o *Anulados*; se
   quitó la opción *Todos*, que los mezclaba en los totales.

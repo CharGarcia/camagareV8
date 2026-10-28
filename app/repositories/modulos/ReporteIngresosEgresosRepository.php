@@ -39,6 +39,12 @@ class ReporteIngresosEgresosRepository extends BaseRepository
     private const SIN_RAMAS = " WHERE c.id_empresa = :id_empresa AND 1=0";
 
     /**
+     * La línea mueve caja: no se pagó entera con anticipo. Los conteos de comprobantes
+     * no cuentan el que solo aplica un anticipo (su dinero se contó al recibirlo).
+     */
+    private const MUEVE_CAJA = "(monto_anticipo < 0.005 OR monto > 0.004)";
+
+    /**
      * Condición de pago vigente en egresos_pagos (alias dado): excluye los pagos
      * eliminados lógicamente (formas de pago reemplazadas al editar) y los cheques
      * anulados, que se conservan como historial pero no cuentan.
@@ -46,6 +52,40 @@ class ReporteIngresosEgresosRepository extends BaseRepository
     private static function pagoVigente(string $alias): string
     {
         return " AND $alias.eliminado = false AND COALESCE($alias.estado_cheque, 'vigente') <> 'anulado'";
+    }
+
+    /**
+     * Lo cobrado/pagado con una forma tipo ANTICIPO por comprobante. Ese dinero ya se
+     * contó cuando entró (o salió) el anticipo —un ingreso/egreso con opción
+     * ANTICIPO_CLIENTE/PROVEEDOR—; el comprobante que lo aplica a una factura o compra
+     * no mueve caja, así que el reporte no lo vuelve a sumar. Solo recorre los pagos de
+     * las formas ANTICIPO de la empresa.
+     */
+    private static function anticipoPorComprobante(string $flujo): string
+    {
+        $esIng = $flujo === 'INGRESO';
+        $pag   = $esIng ? 'ingresos_pagos'    : 'egresos_pagos';
+        $cab   = $esIng ? 'ingresos_cabecera' : 'egresos_cabecera';
+        $fk    = $esIng ? 'id_ingreso'        : 'id_egreso';
+        $forma = $esIng ? 'id_forma_cobro'    : 'id_forma_pago';
+        $vivo  = $esIng ? '' : self::pagoVigente('app');
+        return "SELECT app.$fk AS id_comprobante, SUM(app.monto) AS anticipo
+                FROM $pag app
+                INNER JOIN empresa_formas_pago apf ON apf.id = app.$forma AND apf.tipo = 'ANTICIPO'
+                INNER JOIN $cab apc ON apc.id = app.$fk AND apc.id_empresa = :id_empresa
+                WHERE true$vivo
+                GROUP BY app.$fk";
+    }
+
+    /**
+     * Parte de la línea ($montoLinea) que se pagó con anticipo: el anticipo del
+     * comprobante (alias ant) se reparte entre sus líneas en proporción al total.
+     * El COALESCE va dentro del LEAST: LEAST(1, NULL) devuelve 1 en PostgreSQL (ignora
+     * los NULL), y un comprobante sin anticipo quedaría pagado entero con anticipo.
+     */
+    private static function montoAnticipoLinea(string $montoLinea): string
+    {
+        return "COALESCE($montoLinea * LEAST(1, COALESCE(ant.anticipo, 0) / NULLIF(c.monto_total, 0)), 0)";
     }
 
     /**
@@ -229,12 +269,15 @@ class ReporteIngresosEgresosRepository extends BaseRepository
                            d.tipo_documento AS tipo_documento,
                            d.numero_documento AS numero_documento,
                            d.descripcion    AS descripcion,
-                           d.monto_cobrado  AS monto,
+                           d.monto_cobrado - " . self::montoAnticipoLinea('d.monto_cobrado') . " AS monto,
+                           d.monto_cobrado  AS monto_linea,
+                           " . self::montoAnticipoLinea('d.monto_cobrado') . " AS monto_anticipo,
                            c.observaciones  AS observaciones,
                            d.id             AS id_detalle,
                            ven.nombre       AS vendedor$extraCols
                     FROM ingresos_cabecera c
                     INNER JOIN ingresos_detalle d ON d.id_ingreso = c.id
+                    LEFT  JOIN (" . self::anticipoPorComprobante('INGRESO') . ") ant ON ant.id_comprobante = c.id
                     LEFT  JOIN clientes cli ON cli.id = COALESCE(c.id_cliente, c.id_recibo_cliente)
                     LEFT  JOIN empresa_opciones_ingreso_egreso oc ON oc.id = c.id_ingreso_concepto
                     LEFT  JOIN ventas_cabecera        xf ON d.tipo_documento = 'FACTURA' AND xf.id = d.id_referencia_documento
@@ -271,12 +314,15 @@ class ReporteIngresosEgresosRepository extends BaseRepository
                        d.tipo_documento AS tipo_documento,
                        d.numero_documento AS numero_documento,
                        d.descripcion    AS descripcion,
-                       d.monto_pagado   AS monto,
+                       d.monto_pagado - " . self::montoAnticipoLinea('d.monto_pagado') . " AS monto,
+                       d.monto_pagado   AS monto_linea,
+                       " . self::montoAnticipoLinea('d.monto_pagado') . " AS monto_anticipo,
                        c.observaciones  AS observaciones,
                        d.id             AS id_detalle,
                        NULL::varchar    AS vendedor$extraCols
                 FROM egresos_cabecera c
                 INNER JOIN egresos_detalle d ON d.id_egreso = c.id
+                LEFT  JOIN (" . self::anticipoPorComprobante('EGRESO') . ") ant ON ant.id_comprobante = c.id
                 LEFT  JOIN proveedores pr  ON pr.id  = c.id_proveedor
                 LEFT  JOIN empleados   emp ON emp.id = c.id_empleado
                 LEFT  JOIN empresa_opciones_ingreso_egreso oc ON oc.id = c.id_egreso_concepto$extraJoins";
@@ -526,9 +572,12 @@ class ReporteIngresosEgresosRepository extends BaseRepository
         $linea = "CASE WHEN tipo_documento = 'OTRO' THEN COALESCE(NULLIF(descripcion, ''), 'Otros conceptos')
                        ELSE tipo_documento || COALESCE(' ' || NULLIF(numero_documento, ''), '')
                             || COALESCE(' · ' || NULLIF(descripcion, ''), '') END
-                  || ' \$' || to_char(monto, 'FM999999990.00')";
+                  || ' \$' || to_char(monto_linea, 'FM999999990.00')
+                  || CASE WHEN monto_anticipo > 0.004
+                          THEN ' (anticipo aplicado \$' || to_char(monto_anticipo, 'FM999999990.00') || ')' ELSE '' END";
         $sql = "SELECT tipo_flujo, id_comprobante, numero, fecha, tercero_tipo, tercero_nombre, tercero_ident,
                        SUM(monto) AS valor,
+                       SUM(monto_anticipo) AS anticipo,
                        string_agg($linea, E'\\n' ORDER BY id_detalle) AS detalle,
                        MAX(observaciones) AS observaciones,
                        string_agg(DISTINCT vendedor, ', ' ORDER BY vendedor) AS asesor
@@ -559,6 +608,7 @@ class ReporteIngresosEgresosRepository extends BaseRepository
         [$union, $params] = $this->armarUnionPagos($idEmpresa, $f);
         $textoWhere = $this->filtroTexto($f, $params, ['numero', 'tercero_nombre', 'forma_nombre']);
         $sql = "SELECT tipo_flujo, forma_nombre, MAX(forma_tipo) AS forma_tipo,
+                       BOOL_OR(forma_tipo = 'ANTICIPO') AS es_anticipo,
                        COUNT(DISTINCT id_comprobante) AS comprobantes,
                        COUNT(*)   AS pagos_n,
                        SUM(monto) AS total
@@ -597,11 +647,12 @@ class ReporteIngresosEgresosRepository extends BaseRepository
     {
         [$union, $params] = $this->armarUnion($idEmpresa, $f);
         $textoWhere = $this->filtroTexto($f, $params);
+        $caja = self::MUEVE_CAJA;
         $sql = "SELECT $expr AS $alias,
                     COALESCE(SUM(CASE WHEN tipo_flujo='INGRESO' THEN monto ELSE 0 END), 0) AS ingresos,
                     COALESCE(SUM(CASE WHEN tipo_flujo='EGRESO'  THEN monto ELSE 0 END), 0) AS egresos,
-                    COUNT(DISTINCT CASE WHEN tipo_flujo='INGRESO' THEN id_comprobante END) AS n_ing,
-                    COUNT(DISTINCT CASE WHEN tipo_flujo='EGRESO'  THEN id_comprobante END) AS n_egr
+                    COUNT(DISTINCT CASE WHEN tipo_flujo='INGRESO' AND $caja THEN id_comprobante END) AS n_ing,
+                    COUNT(DISTINCT CASE WHEN tipo_flujo='EGRESO'  AND $caja THEN id_comprobante END) AS n_egr
                 FROM ( $union ) r WHERE 1=1 $textoWhere
                 GROUP BY $expr
                 ORDER BY $alias DESC";
@@ -613,11 +664,12 @@ class ReporteIngresosEgresosRepository extends BaseRepository
     {
         [$union, $params] = $this->armarUnion($idEmpresa, $f);
         $textoWhere = $this->filtroTexto($f, $params);
+        $caja = self::MUEVE_CAJA;
         $sql = "SELECT
                     COALESCE(SUM(CASE WHEN tipo_flujo='INGRESO' THEN monto ELSE 0 END), 0) AS total_ingresos,
                     COALESCE(SUM(CASE WHEN tipo_flujo='EGRESO'  THEN monto ELSE 0 END), 0) AS total_egresos,
-                    COUNT(DISTINCT CASE WHEN tipo_flujo='INGRESO' THEN id_comprobante END) AS n_ingresos,
-                    COUNT(DISTINCT CASE WHEN tipo_flujo='EGRESO'  THEN id_comprobante END) AS n_egresos,
+                    COUNT(DISTINCT CASE WHEN tipo_flujo='INGRESO' AND $caja THEN id_comprobante END) AS n_ingresos,
+                    COUNT(DISTINCT CASE WHEN tipo_flujo='EGRESO'  AND $caja THEN id_comprobante END) AS n_egresos,
                     COUNT(*) AS n_documentos
                 FROM ( $union ) r WHERE 1=1 $textoWhere";
         $row = $this->q($sql, $params)->fetch(PDO::FETCH_ASSOC) ?: [];
