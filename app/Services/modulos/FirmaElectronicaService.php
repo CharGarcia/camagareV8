@@ -825,6 +825,13 @@ class FirmaElectronicaService
                 $data['observaciones'] = $firma['observaciones'] ?? null;
                 $data['motivo']        = self::motivoParaTipo((string) $data['tipo_persona'], $firma['motivo'] ?? null);
                 $this->repository->actualizarDatosPortal((int) $firma['id'], $idEmpresa, $data);
+                // Cambió la validez elegida (o la firma no tenía fecha): se vuelve a estimar.
+                if ((int) $firma['id_producto'] !== (int) $data['id_producto'] || empty($firma['fecha_caducidad'])) {
+                    $estimada = $this->caducidadEstimada((int) $data['id_producto'], $idEmpresa);
+                    if ($estimada) {
+                        $this->repository->actualizarTramite((int) $firma['id'], $idEmpresa, ['fecha_caducidad' => $estimada], null);
+                    }
+                }
                 $this->logService->registrar(0, $idEmpresa, 'actualizar_portal', 'firmas_electronicas', (int) $firma['id'], $firma, $data);
             } else {
                 $this->crearFirmaDesdePortal($sol, $data);
@@ -898,7 +905,8 @@ class FirmaElectronicaService
             'estado'                   => 'borrador',
             'estado_pago'              => 'pendiente',
             'tipo_pago'                => null,
-            'fecha_caducidad'          => null,
+            // Igual que el modal interno: hoy + vigencia del tipo de firma (al emitirla se recalcula).
+            'fecha_caducidad'          => $this->caducidadEstimada((int) ($data['id_producto'] ?? 0), $idEmpresa),
         ]);
         $idFirma = $this->repository->createDesdePortal($firmaData, (int) $sol['id']);
         $this->solRepo->marcarCompletado((int) $sol['id'], $idFirma);
@@ -1880,7 +1888,8 @@ class FirmaElectronicaService
             $copia['facturacion_mismos_datos'] = !in_array($copia['facturacion_mismos_datos'] ?? true, [false, 'f', 0, '0'], true);
             $idNueva = $this->repository->create($copia + [
                 'id_empresa' => $idEmpresa, 'id_usuario' => $owner ?: null,
-                'estado' => 'borrador', 'estado_pago' => 'pendiente', 'tipo_pago' => null, 'fecha_caducidad' => null, 'observaciones' => null,
+                'estado' => 'borrador', 'estado_pago' => 'pendiente', 'tipo_pago' => null, 'observaciones' => null,
+                'fecha_caducidad' => $this->caducidadEstimada((int) ($copia['id_producto'] ?? 0), $idEmpresa),
             ]);
             $this->repository->marcarRenovacion($idNueva, $idFirma, $idSol);
             $this->solRepo->marcarCompletado($idSol, $idNueva);

@@ -133,6 +133,10 @@ Botón del **engranaje**, junto a los botones de PDF y Excel (requiere permiso d
 - Al elegir la **validez de la firma** en la ficha, la fecha de vencimiento se
   llena sola: **hoy + la vigencia** de esa firma. Si usted la escribe a mano ya
   no se cambia, y una firma que ya tenía fecha la conserva.
+- Lo mismo cuando el **cliente llena la solicitud desde el enlace** (o se crea una
+  renovación): la fecha queda puesta con la vigencia de la validez que eligió, y si
+  después cambia la validez desde el enlace, la fecha se vuelve a calcular. Al abrir
+  una ficha que llegó sin fecha, se completa sola y queda guardada al pulsar Guardar.
 - Al confirmarse el pago, si la firma aún no tiene fecha, se pone la estimada.
 - Al **marcar la firma emitida**, la fecha se vuelve a contar **desde ese día**
   (puede corregirla antes de confirmar). Con la API de Uanataca se usa la
@@ -417,6 +421,8 @@ archivo, y volver a cargar la firma no lo soluciona.
 
 ## Historial de cambios
 
+- **3.10** — La fecha de vencimiento también se llena sola en las solicitudes hechas
+  por el cliente desde el enlace y en las renovaciones (antes quedaban sin fecha).
 - **3.9** — Los WhatsApp enviados por la plantilla (enlace de solicitud y aviso de
   vencimiento) quedan registrados en el **chat de WhatsApp** de la empresa, igual que los
   recordatorios de Cuentas por Cobrar.

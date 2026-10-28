@@ -894,6 +894,9 @@
         setVal('firma_fecha_nac', bdADisplay(data.fecha_nacimiento));
         setVal('firma_fecha_cad', bdADisplay(data.fecha_caducidad));
         _cadManual = !!data.fecha_caducidad;
+        // Firmas llegadas por el enlace antes de que se estimara en el servidor: se completa
+        // con la vigencia del tipo de firma y queda guardada al Guardar.
+        if (!data.fecha_caducidad) autocompletarCaducidad();
 
         ajustarTipoId(data.tipo_identificacion || 'cedula');
         actualizarCadBadge();
