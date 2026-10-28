@@ -63,6 +63,9 @@ Los tres campos son obligatorios.
 - En el árbol, **haga clic sobre una cuenta de nivel 5** (o en el lápiz de
   cualquier nivel) para abrir su ficha. El encabezado muestra el código y el
   nombre de la cuenta.
+- Al pulsar **Guardar** la ficha **no se cierra**: queda abierta sobre la cuenta
+  guardada (también si es nueva) para seguir revisándola; un aviso confirma que
+  se guardó o explica qué falta. Se cierra con **Cancelar** o la **X**.
 - El botón **Eliminar** está en el pie de la ficha, a la izquierda. No aparece
   en las cuentas raíz ni en las que tienen subcuentas, y el sistema rechaza
   eliminar una cuenta con movimientos.
@@ -109,7 +112,9 @@ las columnas **Centro de costo** (o **Proyecto**), **Desde** y **Hasta**:
    una vez. Si una línea tiene un error (por ejemplo, dos periodos que se
    cruzan), no se guarda ninguna línea y el aviso dice cuáles revisar.
 
-La línea que corresponde a la fecha de hoy se resalta en verde.
+La línea que corresponde a la fecha de hoy se resalta en verde. En el árbol, la
+fila de la cuenta muestra el centro de costo (azul) y el proyecto (verde)
+vigentes hoy, junto a los códigos del SRI y Supercías.
 
 Cómo funciona:
 
@@ -268,8 +273,8 @@ pendiente y el aviso de asientos pendientes indica qué cuenta revisar.
   líneas de la misma pestaña cubren alguna fecha en común. Ponga fecha *Hasta* a
   la anterior o ajuste las fechas de la nueva.
 - **"La cuenta se guardó, pero no los centros de costo / proyectos"**: la cuenta
-  quedó guardada pero alguna línea tiene un error. Corríjala y pulse **Guardar**
-  otra vez; no se crea otra cuenta.
+  quedó guardada pero alguna línea tiene un error. Corríjala en la ficha (sigue
+  abierta) y pulse **Guardar** otra vez; no se crea otra cuenta.
 - **No aparece la pestaña Centro de costos o Proyectos**: solo se muestra en
   cuentas de nivel 5, si la empresa tiene centros de costo o proyectos activos y
   si el usuario no la ocultó con el engranaje de las pestañas.
@@ -296,7 +301,9 @@ pendiente y el aviso de asientos pendientes indica qué cuenta revisar.
   que tenía cada cuenta pasó a un periodo sin límite de fechas. Las líneas se
   editan en la tabla (*Agregar línea*) y se guardan con la cuenta. Clic sobre
   una cuenta de nivel 5 abre su ficha, el encabezado muestra la cuenta y se
-  puede eliminar desde el pie de la ficha.
+  puede eliminar desde el pie de la ficha. La ficha ya no se cierra al guardar
+  y los avisos salen en una ventana emergente. En el árbol, las cuentas de nivel
+  5 muestran el centro de costo y el proyecto vigentes hoy.
 - **1.5** — **Eliminar plan** ya no borra cuentas configuradas en Configuración
   Contable (antes solo miraba los movimientos). Ningún asiento se registra en una
   cuenta eliminada, de otra empresa o inexistente: el asiento queda pendiente con

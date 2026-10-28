@@ -240,7 +240,12 @@ $proyectos  = $proyectos ?? [];
                 const eriTag = node.supercias_eri ? `<span class="badge bg-warning bg-opacity-10 text-warning border border-warning border-opacity-25 ms-1 px-2" style="font-size: 0.6rem;">ERI: ${node.supercias_eri}</span>` : '';
                 const ecpTag = (node.supercias_ecp_subcodigo || node.supercias_ecp_codigo) ? `<span class="badge bg-warning bg-opacity-10 text-warning border border-warning border-opacity-25 ms-1 px-2" style="font-size: 0.6rem;" title="ECP: columna ${node.supercias_ecp_subcodigo || '—'}${node.supercias_ecp_codigo ? ', fila de cambios ' + node.supercias_ecp_codigo : ''}">ECP: ${node.supercias_ecp_subcodigo || '?'}${node.supercias_ecp_codigo ? ' → ' + node.supercias_ecp_codigo : ''}</span>` : '';
                 
-                const controlTags = `${sriTag}${esfTag}${eriTag}${ecpTag}`;
+                // Centro de costo / proyecto vigentes hoy (periodos de la cuenta; ver PlanCuentaRepository::getListado).
+                const escTag = (s) => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+                const ccTag = node.centro_costo_nombre ? `<span class="badge bg-primary bg-opacity-10 text-primary border border-primary border-opacity-25 ms-1 px-2" style="font-size: 0.6rem;" title="Centro de costo vigente hoy"><i class="bi bi-diagram-3 me-1"></i>${escTag(node.centro_costo_nombre)}</span>` : '';
+                const pyTag = node.proyecto_nombre ? `<span class="badge bg-success bg-opacity-10 text-success border border-success border-opacity-25 ms-1 px-2" style="font-size: 0.6rem;" title="Proyecto vigente hoy"><i class="bi bi-kanban me-1"></i>${escTag(node.proyecto_nombre)}</span>` : '';
+
+                const controlTags = `${sriTag}${esfTag}${eriTag}${ecpTag}${ccTag}${pyTag}`;
 
                 if (hasChildren || parseInt(node.nivel) < 5) {
                     const header = `
@@ -475,17 +480,8 @@ $proyectos  = $proyectos ?? [];
             
             toggleLevel5Fields(item.nivel);
             window.PCFORM_abrir(item.id, item.nivel, false);
-            document.getElementById('tituloModal').textContent = `${item.codigo} - ${item.nombre}`;
-            // Eliminar (pie, a la izquierda): no en las raíces ni en cuentas con subcuentas;
-            // el servidor vuelve a validarlo y además rechaza las que tienen movimientos.
-            const btnEliminar = document.getElementById('btnEliminarPC');
-            if (btnEliminar) {
-                const tieneHijos = pcuentasRaw.some(x => x.codigo.startsWith(item.codigo + '.'));
-                btnEliminar.classList.toggle('d-none', parseInt(item.nivel) <= 1 || tieneHijos);
-                btnEliminar.dataset.id = item.id;
-            }
+            quedarEnCuentaGuardada(parseInt(item.id, 10));
             document.getElementById('modalAlert').classList.add('d-none');
-            document.getElementById('wrapper-parent-info').classList.add('d-none');
             
             // Mostrar hermanos al editar también para referencia
             const parts = item.codigo.split('.');
@@ -537,33 +533,53 @@ $proyectos  = $proyectos ?? [];
             guardandoPC = true;
             const id = document.getElementById('pc_id').value;
             const btn = document.getElementById('btnGuardar');
-            const alertEl = document.getElementById('modalAlert');
-            const avisar = (texto, ok) => {
-                alertEl.textContent = texto;
-                alertEl.className = `alert alert-${ok ? 'success' : 'danger'} py-2 small shadow-sm border-0`;
-                alertEl.classList.remove('d-none');
-            };
+            document.getElementById('modalAlert').classList.add('d-none');
             btn.disabled = true;
             try {
                 const fd = new FormData(form);
                 const resp = await fetch(id ? `${urlBase}/update` : `${urlBase}/store`, { method: 'POST', body: fd });
                 const json = await resp.json();
-                if (!json.ok) { avisar(json.error, false); return; }
+                if (!json.ok) { Swal.fire('No se pudo guardar', json.error || 'Error al guardar la cuenta.', 'warning'); return; }
 
                 // Luego las líneas de Centro de costos / Proyectos (con el id de la cuenta ya guardada).
-                const idCuenta = id || json.id;
+                const idCuenta = parseInt(id || json.id, 10);
                 if (!id && json.id) document.getElementById('pc_id').value = json.id; // un nuevo Guardar no crea otra cuenta
                 const dim = await window.PCDIM_guardar(idCuenta);
+
+                // El modal sigue abierto, ya sobre la cuenta guardada.
+                await fetchTree();
+                quedarEnCuentaGuardada(idCuenta);
                 if (!dim.ok) {
-                    avisar(`La cuenta se guardó, pero no los centros de costo / proyectos: ${dim.error}`, false);
-                    fetchTree();
+                    Swal.fire('Cuenta guardada', `Pero no se guardaron los centros de costo / proyectos: ${dim.error}`, 'warning');
                     return;
                 }
-                avisar(json.msg, true);
-                setTimeout(() => { getModal().hide(); fetchTree(); }, 800);
+                // Las líneas nuevas ya tienen id: se recargan para que otro Guardar no las duplique.
+                const nivel = document.getElementById('pc_nivel_edit').value;
+                if (parseInt(nivel, 10) === 5 && window.PCDIM_cargar) await window.PCDIM_cargar(idCuenta, false);
+                Swal.fire({ icon: 'success', title: 'Guardado', text: json.msg, timer: 1800, showConfirmButton: false });
             } catch (err) { Swal.fire('Error', 'Error de red', 'error'); }
             finally { btn.disabled = false; guardandoPC = false; }
         });
+
+        /**
+         * Modal en modo edición de la cuenta: título con la cuenta, sin el aviso de "se creará
+         * dentro de" y con Eliminar (pie, a la izquierda) salvo en raíces y cuentas con
+         * subcuentas; el servidor vuelve a validarlo y además rechaza las que tienen movimientos.
+         * Se usa al abrir una cuenta y después de guardar (también una recién creada).
+         */
+        function quedarEnCuentaGuardada(idCuenta) {
+            const item = pcuentasRaw.find(x => parseInt(x.id, 10) === idCuenta);
+            if (!item) return;
+            document.getElementById('tituloModal').textContent = `${item.codigo} - ${item.nombre}`;
+            document.getElementById('wrapper-parent-info').classList.add('d-none');
+            renderExistingSiblings(item.codigo.split('.').slice(0, -1).join('.'));
+            const btnEliminar = document.getElementById('btnEliminarPC');
+            if (btnEliminar) {
+                const tieneHijos = pcuentasRaw.some(x => x.codigo.startsWith(item.codigo + '.'));
+                btnEliminar.classList.toggle('d-none', parseInt(item.nivel) <= 1 || tieneHijos);
+                btnEliminar.dataset.id = item.id;
+            }
+        }
 
         document.getElementById('btnEliminarPC')?.addEventListener('click', async function () {
             if (await eliminarAccionDetalle(parseInt(this.dataset.id, 10))) getModal().hide();

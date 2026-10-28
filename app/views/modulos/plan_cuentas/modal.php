@@ -135,30 +135,36 @@
                 const resp = await fetch(url, { method: 'POST', body: formData });
                 const json = await resp.json();
 
-                if (json.ok) {
-                    // Luego las líneas de Centro de costos / Proyectos (con el id de la cuenta ya guardada).
-                    const idCuenta = id || json.id;
-                    if (!id && json.id) document.getElementById('pc_id').value = json.id; // un nuevo Guardar no crea otra cuenta
-                    const dim = await window.PCDIM_guardar(idCuenta);
-                    if (!dim.ok) {
-                        const alertDiv = document.getElementById('modalAlertPC');
-                        alertDiv.textContent = `La cuenta se guardó, pero no los centros de costo / proyectos: ${dim.error}`;
-                        alertDiv.className = 'alert alert-danger mb-3 py-2 small shadow-sm border-0';
-                        alertDiv.classList.remove('d-none');
-                        return;
-                    }
-                    getModalPC().hide();
-                    if (window.onAccountSaved) window.onAccountSaved(json);
-                    // Si estamos en la página del plan de cuentas, recargar el árbol
-                    if (window.fetchTree) window.fetchTree();
-                } else {
-                    const alertDiv = document.getElementById('modalAlertPC');
-                    alertDiv.textContent = json.error || 'Error al guardar';
-                    alertDiv.className = 'alert alert-danger mb-3 py-2 small shadow-sm border-0';
-                    alertDiv.classList.remove('d-none');
+                if (!json.ok) {
+                    Swal.fire('No se pudo guardar', json.error || 'Error al guardar la cuenta.', 'warning');
+                    return;
                 }
+
+                // Luego las líneas de Centro de costos / Proyectos (con el id de la cuenta ya guardada).
+                const idCuenta = parseInt(id || json.id, 10);
+                if (!id && json.id) document.getElementById('pc_id').value = json.id; // un nuevo Guardar no crea otra cuenta
+                const dim = await window.PCDIM_guardar(idCuenta);
+
+                // El modal sigue abierto, ya sobre la cuenta guardada.
+                document.getElementById('tituloModalPC').textContent =
+                    `${document.getElementById('pc_codigo_edit').value} - ${document.getElementById('pc_nombre_edit').value}`;
+                document.getElementById('wrapper-parent-info-pc').classList.add('d-none');
+                if (window.fetchTree) window.fetchTree();
+                if (!dim.ok) {
+                    Swal.fire('Cuenta guardada', `Pero no se guardaron los centros de costo / proyectos: ${dim.error}`, 'warning');
+                    return;
+                }
+                // Las líneas nuevas ya tienen id: se recargan para que otro Guardar no las duplique.
+                if (parseInt(document.getElementById('pc_nivel_edit').value, 10) === 5 && window.PCDIM_cargar) {
+                    await window.PCDIM_cargar(idCuenta, false);
+                }
+                // La página que incluye el modal puede reaccionar (Estados Financieros regenera el
+                // reporte y muestra su propio aviso); si no, el aviso es de aquí.
+                if (window.onAccountSaved) window.onAccountSaved(json);
+                else Swal.fire({ icon: 'success', title: 'Guardado', text: json.msg || '', timer: 1800, showConfirmButton: false });
             } catch (e) {
                 console.error(e);
+                Swal.fire('Error', 'Error de red', 'error');
             } finally {
                 btn.disabled = false;
                 btn.innerHTML = '<i class="bi bi-check-lg me-1"></i> Guardar';
