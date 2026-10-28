@@ -5,8 +5,8 @@ categoria: Nómina
 ruta_modulo: modulos/roles-pago
 tipo: modulo
 visibilidad: todos
-etiquetas: rol de pago, roles, enviar rol por correo, correo del empleado, editar correo, varios correos, destinatario, avisos del rol, avisos tapan el modal, no se puede cerrar el rol, empleados sin periodo, pendientes de desembolso, nomina, sueldo, quincena, semanal, mensual, pago de empleados, descuentos, liquido a recibir, neteo, ingresos de quincena, bono en quincena, horas extra en quincena, observacion, observaciones, detalle de novedad, motivo del descuento, asiento contable, contabilizacion, cuentas de nomina, prestamo quirografario, prestamo hipotecario, prestamo empresa, prestamos iess, aporte iess, base del iess, con iess, sin iess, bonos, comisiones, horas extra, dias no laborados, faltas, dias laborados, sueldo ganado, fondos de reserva, decimo tercero, decimo cuarto, buscar rol de pago, buscador, filtros, filtrar roles, buscar empleado en el rol, buscar rubro, chips, ordenar, ordenamiento, ordenar por periodo, ordenar columnas, orden del listado, periodo mas reciente, imprimir, impresora, eliminar rol, anular rol, rol eliminado, nomina duplicada, nomina contabilizada dos veces, asiento duplicado, asiento general e individual, rol migrado, asiento migrado, cuadre del asiento, asiento no cuadra con el rol, gasto de nomina inflado, asiento sigue contabilizado, asiento de rol eliminado, pagado, pago pendiente, pago parcial, estado de pago, referencia del pago, egreso del rol, ver egreso, pdf del egreso, comprobante de egreso, con que se pago, como se pago, transferencia, cheque, pestaña pago
-version: 1.19
+etiquetas: rol de pago, roles, enviar rol por correo, correo del empleado, editar correo, varios correos, destinatario, avisos del rol, avisos tapan el modal, no se puede cerrar el rol, empleados sin periodo, pendientes de desembolso, nomina, sueldo, quincena, semanal, mensual, pago de empleados, descuentos, liquido a recibir, neteo, ingresos de quincena, bono en quincena, horas extra en quincena, observacion, observaciones, detalle de novedad, motivo del descuento, asiento contable, contabilizacion, cuentas de nomina, prestamo quirografario, prestamo hipotecario, prestamo empresa, prestamos iess, aporte iess, base del iess, con iess, sin iess, bonos, comisiones, horas extra, dias no laborados, faltas, dias laborados, sueldo ganado, fondos de reserva, decimo tercero, decimo cuarto, buscar rol de pago, buscador, filtros, filtrar roles, buscar empleado en el rol, buscar rubro, chips, ordenar, ordenamiento, ordenar por periodo, ordenar columnas, orden del listado, periodo mas reciente, imprimir, impresora, eliminar rol, anular rol, rol eliminado, nomina duplicada, nomina contabilizada dos veces, asiento duplicado, asiento general e individual, rol migrado, asiento migrado, cuadre del asiento, asiento no cuadra con el rol, gasto de nomina inflado, asiento sigue contabilizado, asiento de rol eliminado, pagado, pago pendiente, pago parcial, estado de pago, referencia del pago, egreso del rol, ver egreso, pdf del egreso, comprobante de egreso, con que se pago, como se pago, transferencia, cheque, pestaña pago, rol migrado incompleto, faltan empleados en el rol, empleados inactivos desaparecen, rol migrado cambio de valores, rol migrado se recalcula
+version: 1.20
 orden: 30
 estado: activo
 ---
@@ -239,6 +239,11 @@ nómina del sistema anterior, que se migra aparte. Por eso no se les genera un
 asiento propio. Tampoco se genera el primer asiento de un rol cuyo mes ya tiene
 un asiento de nómina migrado: la nómina de ese mes ya está contabilizada.
 
+Un rol o quincena migrado **conserva los valores del sistema anterior** y no se
+vuelve a calcular: al abrirlo se ve tal como vino, con todos sus empleados,
+incluidos los que hoy están inactivos. El botón **Generar** responde *"Este rol
+se migró del sistema anterior: conserva los valores de ese sistema…"*.
+
 ### Al anular o eliminar un rol
 
 Anular o eliminar un rol **anula todos sus asientos** en la misma operación (un
@@ -333,6 +338,12 @@ módulo. Para regresar al orden de fábrica, ordene por *Período* de mayor a me
 - **"Este rol se migró del sistema anterior …"** / **"La nómina de … ya está contabilizada con asiento(s) migrado(s) …"**: ese mes ya tiene su asiento de nómina del sistema anterior; no hace falta contabilizarlo otra vez.
 - **"El rol quedaría con asientos duplicados …"**: el rol ya tiene otro asiento de nómina vivo. Anule el sobrante en *Contabilidad → Asientos Contables* y vuelva a contabilizar.
 - **Un mes migrado tiene la nómina dos veces (un asiento general y uno por empleado)**: hasta la versión 1.16 el sistema generaba asiento también a los roles migrados. El soporte técnico lo corrige con un script que conserva el asiento migrado y anula los generados.
+- **A un rol migrado le faltan empleados o cambió de valores** (por lo general,
+  los empleados que hoy están inactivos): hasta la versión 1.19, abrir un rol lo
+  recalculaba solo con los empleados activos, también si era migrado. Se
+  corrige volviendo a ejecutar **Roles de pago** y **Quincenas** en la
+  migración desde MySQL: restaura cada rol migrado desde el sistema anterior sin
+  tocar los pagos ya enlazados.
 - **"La quincena debe ser 1 o 2"** / **"La semana debe estar entre 1 y 5"**:
   revise el periodo elegido.
 - **Falta una hora extra en el rol**: la novedad está imputada a otro mes o año.
@@ -344,6 +355,8 @@ módulo. Para regresar al orden de fábrica, ordene por *Período* de mayor a me
   quincena o semana en lugar del rol mensual.
 
 ## Historial de cambios
+
+- **1.20** — Los roles y quincenas migrados del sistema anterior ya no se recalculan al abrirlos ni con **Generar**: antes se perdían las líneas de los empleados inactivos y cambiaban los valores de los demás. Volver a migrarlos los restaura.
 
 - **1.19** — El botón **Enviar por correo** de la ficha del empleado muestra el destinatario antes de enviar y deja editarlo o agregar más correos, como en Facturas de Venta. Ya no se desactiva cuando la ficha no tiene correo.
 

@@ -82,24 +82,135 @@ class PlanCuentaDimensionRepository extends BaseRepository
      */
     public function getVigente(int $idCuenta, int $idEmpresa, string $fecha): ?array
     {
-        if (!$this->disponible()) return null;
+        return $this->getVigentesPorCuentas([$idCuenta], $idEmpresa, $fecha)[$idCuenta] ?? null;
+    }
 
-        $sub = function (string $col, string $tabla): string {
-            return "(SELECT v.{$col}
-                     FROM {$this->table} v
-                     JOIN {$tabla} d ON d.id = v.{$col} AND d.estado = 'activo' AND d.eliminado = false
-                     WHERE v.id_empresa = :id_empresa AND v.eliminado = false AND v.id_cuenta = :id_cuenta
-                       AND daterange(v.vigente_desde, v.vigente_hasta, '[]') @> CAST(:fecha AS date)
-                     ORDER BY v.vigente_desde DESC NULLS LAST, v.id DESC
-                     LIMIT 1)";
-        };
-        $sql = "SELECT " . $sub('id_centro_costo', 'centro_costos') . " AS id_centro_costo, "
-                         . $sub('id_proyecto', 'proyectos') . " AS id_proyecto";
+    /**
+     * Lo mismo que getVigente() para varias cuentas en una sola consulta (las líneas de un
+     * asiento). Devuelve [id_cuenta => ['id_centro_costo' => ?int, 'id_proyecto' => ?int]],
+     * solo con las cuentas que tienen alguno de los dos vigente a esa fecha.
+     */
+    public function getVigentesPorCuentas(array $idsCuenta, int $idEmpresa, string $fecha): array
+    {
+        $idsCuenta = array_values(array_unique(array_filter(array_map('intval', $idsCuenta), fn($v) => $v > 0)));
+        if ($idsCuenta === [] || !$this->disponible() || !$this->empresaUsa($idEmpresa)) return [];
+
+        // Una fila por cuenta y tipo (DISTINCT ON): la de inicio más reciente que cubra la fecha.
+        $sql = "SELECT DISTINCT ON (v.id_cuenta, (v.id_centro_costo IS NULL))
+                       v.id_cuenta, v.id_centro_costo, v.id_proyecto
+                FROM {$this->table} v
+                LEFT JOIN centro_costos cc ON cc.id = v.id_centro_costo
+                LEFT JOIN proyectos     pr ON pr.id = v.id_proyecto
+                " . $this->getBaseWhere($idEmpresa, 'v') . "
+                  AND v.id_cuenta = ANY(CAST(:ids AS int[]))
+                  AND daterange(v.vigente_desde, v.vigente_hasta, '[]') @> CAST(:fecha AS date)
+                  AND (   (v.id_centro_costo IS NOT NULL AND cc.estado = 'activo' AND cc.eliminado = false)
+                       OR (v.id_proyecto     IS NOT NULL AND pr.estado = 'activo' AND pr.eliminado = false))
+                ORDER BY v.id_cuenta, (v.id_centro_costo IS NULL), v.vigente_desde DESC NULLS LAST, v.id DESC";
         $st = $this->db->prepare($sql);
-        $st->execute([':id_empresa' => $idEmpresa, ':id_cuenta' => $idCuenta, ':fecha' => $fecha]);
-        $r = $st->fetch(PDO::FETCH_ASSOC);
-        if (!$r || ($r['id_centro_costo'] === null && $r['id_proyecto'] === null)) return null;
-        return $r;
+        $st->execute([':id_empresa' => $idEmpresa, ':ids' => '{' . implode(',', $idsCuenta) . '}', ':fecha' => $fecha]);
+
+        $out = [];
+        foreach ($st->fetchAll(PDO::FETCH_ASSOC) as $r) {
+            $id = (int) $r['id_cuenta'];
+            $out[$id] ??= ['id_centro_costo' => null, 'id_proyecto' => null];
+            if ($r['id_centro_costo'] !== null) $out[$id]['id_centro_costo'] = (int) $r['id_centro_costo'];
+            if ($r['id_proyecto'] !== null)     $out[$id]['id_proyecto']     = (int) $r['id_proyecto'];
+        }
+        return $out;
+    }
+
+    /**
+     * ¿La empresa tiene algún periodo registrado? Casi ninguna usa centros / proyectos: así
+     * la generación masiva de asientos (sincronizador) no consulta por cada uno. Cacheado por
+     * proceso; una empresa que registra su primer periodo lo ve desde la siguiente petición.
+     */
+    private static array $empresaUsa = [];
+
+    private function empresaUsa(int $idEmpresa): bool
+    {
+        $cache = &self::$empresaUsa;
+        if (!isset($cache[$idEmpresa])) {
+            $st = $this->db->prepare("SELECT EXISTS (SELECT 1 FROM {$this->table} WHERE id_empresa = :id_empresa AND eliminado = false)");
+            $st->execute([':id_empresa' => $idEmpresa]);
+            $cache[$idEmpresa] = (bool) $st->fetchColumn();
+        }
+        return $cache[$idEmpresa];
+    }
+
+    /**
+     * Líneas de asientos YA registrados de la cuenta que quedan dentro de un periodo de
+     * $tipo y tienen ese campo vacío: las que rellenarLineasAsientos() completaría.
+     *
+     * Solo líneas vacías (nunca se cambia un centro / proyecto ya puesto), de asientos no
+     * eliminados ni anulados, fuera de los de cierre / apertura del ejercicio, con el centro /
+     * proyecto activo. $enPeriodoCerrado elige el otro lado: las que NO se tocan porque su
+     * asiento cae en un período contable cerrado (para avisarlo).
+     */
+    private function sqlLineasSinDimension(string $tipo, bool $enPeriodoCerrado): string
+    {
+        $col   = self::columna($tipo);
+        $tabla = $tipo === 'proyecto' ? 'proyectos' : 'centro_costos';
+        return "FROM asientos_contables_detalle d
+                JOIN asientos_contables_cabecera c
+                  ON c.id = d.id_asiento AND c.id_empresa = d.id_empresa
+                 AND c.eliminado = false AND c.estado <> 'anulado'
+                 AND c.modulo_origen NOT IN (:origen_cierre, :origen_apertura)
+                JOIN {$this->table} v
+                  ON v.id_empresa = d.id_empresa AND v.id_cuenta = d.id_cuenta_contable
+                 AND v.eliminado = false AND v.{$col} IS NOT NULL
+                 AND daterange(v.vigente_desde, v.vigente_hasta, '[]') @> CAST(c.fecha_asiento AS date)
+                JOIN {$tabla} x ON x.id = v.{$col} AND x.estado = 'activo' AND x.eliminado = false
+                WHERE d.id_empresa = :id_empresa AND d.id_cuenta_contable = :id_cuenta
+                  AND d.eliminado = false AND d.{$col} IS NULL
+                  AND " . ($enPeriodoCerrado ? '' : 'NOT ') . "EXISTS (
+                      SELECT 1 FROM periodos_contables p
+                      WHERE p.id_empresa = d.id_empresa AND p.eliminado = false AND p.status = 0
+                        AND CAST(c.fecha_asiento AS date) BETWEEN p.fecha_inicial AND p.fecha_final)";
+    }
+
+    private function paramsLineas(int $idCuenta, int $idEmpresa): array
+    {
+        return [
+            ':id_empresa'      => $idEmpresa,
+            ':id_cuenta'       => $idCuenta,
+            ':origen_cierre'   => \App\Helpers\CierreEjercicioSql::ORIGEN_CIERRE,
+            ':origen_apertura' => \App\Helpers\CierreEjercicioSql::ORIGEN_APERTURA,
+        ];
+    }
+
+    /** Cuántas líneas se completarían y cuántas quedan fuera por período cerrado, por tipo. */
+    public function contarLineasSinDimension(int $idCuenta, int $idEmpresa): array
+    {
+        $out = [];
+        foreach (array_keys(self::TIPOS) as $tipo) {
+            $out[$tipo] = ['aplicables' => 0, 'en_cerrado' => 0];
+            if (!$this->disponible()) continue;
+            foreach (['aplicables' => false, 'en_cerrado' => true] as $clave => $cerrado) {
+                $st = $this->db->prepare("SELECT COUNT(*) " . $this->sqlLineasSinDimension($tipo, $cerrado));
+                $st->execute($this->paramsLineas($idCuenta, $idEmpresa));
+                $out[$tipo][$clave] = (int) $st->fetchColumn();
+            }
+        }
+        return $out;
+    }
+
+    /**
+     * Completa el campo vacío ($tipo) de esas líneas con el centro / proyecto del periodo que
+     * cubre la fecha de su asiento. Devuelve las líneas tocadas: [{id, id_asiento, valor}].
+     */
+    public function rellenarLineasAsientos(int $idCuenta, int $idEmpresa, string $tipo, int $idUsuario): array
+    {
+        $col = self::columna($tipo);
+        $sql = "WITH obj AS (SELECT d.id, v.{$col} AS valor " . $this->sqlLineasSinDimension($tipo, false) . ")
+                UPDATE asientos_contables_detalle t
+                   SET {$col} = obj.valor, updated_at = CURRENT_TIMESTAMP, updated_by = :usuario
+                  FROM obj
+                 WHERE t.id = obj.id AND t.{$col} IS NULL
+             RETURNING t.id, t.id_asiento, t.{$col} AS valor";
+        $st = $this->db->prepare($sql);
+        $st->execute($this->paramsLineas($idCuenta, $idEmpresa) + [':usuario' => $idUsuario]);
+        return $st->fetchAll(PDO::FETCH_ASSOC);
     }
 
     /** Candado de los periodos de una cuenta: el chequeo de cruce y la escritura van juntos (§8). */
@@ -129,6 +240,7 @@ class PlanCuentaDimensionRepository extends BaseRepository
              VALUES (:id_empresa, :id_cuenta, :id_centro_costo, :id_proyecto, :desde, :hasta, :observacion, :usuario, CURRENT_TIMESTAMP)
              RETURNING id"
         );
+        unset(self::$empresaUsa[$idEmpresa]);
         $st->execute([
             ':id_empresa'      => $idEmpresa,
             ':id_cuenta'       => $d['id_cuenta'],

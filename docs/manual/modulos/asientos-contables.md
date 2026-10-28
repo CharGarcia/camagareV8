@@ -6,7 +6,7 @@ ruta_modulo: modulos/asientos_contables
 tipo: modulo
 visibilidad: todos
 etiquetas: asientos, cuenta eliminada, cuenta configurada no funciona, asiento contable, diario, debe, haber, partida doble, cuadrado, comprobante, contabilidad, imprimir, pdf, excel, documento origen, cuadre con el documento, total de la factura, cuenta por cobrar, cartera, editar asiento desde el documento, pestaña asiento contable, editado a mano, restaurar asiento automático, permisos de contabilidad, documentos migrados, migración, sistema anterior, buscar asiento, buscador, filtros, filtrar asientos, buscar por cuenta, buscar por referencia, libro diario, chips, asiento descuadrado, búsqueda lenta, se queda buscando, filtrar por origen, origen del asiento, módulo de origen, vista previa, costo de ventas, asiento sin costo, duplicar asiento, copiar asiento, clonar asiento, repetir asiento, centro de costo sugerido, proyecto sugerido
-version: 1.40
+version: 1.41
 orden: 20
 estado: activo
 ---
@@ -98,6 +98,13 @@ Al elegir la cuenta de una línea, si la cuenta tiene un centro de costo o un
 proyecto para la **fecha del asiento** (Plan de Cuentas → *Centro de costo /
 Proyecto por periodo*), se pone solo en la línea. Si la línea ya tenía uno, se
 respeta. Por eso conviene escribir la fecha del asiento antes de las líneas.
+
+Los asientos que **generan los documentos** (facturas, compras, nómina, etc.)
+hacen lo mismo solos: cada línea lleva el centro de costo y el proyecto que su
+cuenta tiene a la fecha del asiento, salvo que el documento ya traiga uno. No se
+aplica a los asientos de cierre y apertura del ejercicio. Para los asientos ya
+registrados, al guardar los periodos de la cuenta en el Plan de Cuentas se ofrece
+completar solo sus líneas vacías (fuera de períodos cerrados).
 
 ### Columnas Documento/Ref y Detalle
 
@@ -554,6 +561,10 @@ cambiarlos se revierte el cierre en ese módulo y se genera de nuevo.
 
 ## Historial de cambios
 
+- **1.41** — Los asientos que generan los documentos se registran con el centro
+  de costo y el proyecto de cada cuenta vigentes a la fecha del asiento
+  (excepto cierre y apertura del ejercicio). Desde el Plan de Cuentas se pueden
+  completar las líneas vacías de los asientos ya registrados.
 - **1.40** — Al elegir la cuenta de una línea se precarga el centro de costo y el
   proyecto que la cuenta tiene para la fecha del asiento (Plan de Cuentas, por
   periodo). No pisa lo que la línea ya tenía.

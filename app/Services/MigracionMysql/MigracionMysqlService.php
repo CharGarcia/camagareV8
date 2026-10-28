@@ -1869,6 +1869,14 @@ class MigracionMysqlService
         $done   = $this->idsMigrados($pg, $idEmpresa, $modo);
         $insMap = $this->stmtMap($pg, $modo);
 
+        $oldEmps = $mysql->query("SELECT DISTINCT d.id_empleado FROM $tablaDet d JOIN $tablaCab c ON c.id = d.$fkDet WHERE c.id_empresa IN ($inList)")->fetchAll(PDO::FETCH_COLUMN);
+        $mapEmp = $this->completarMapaEmpleados($pg, $mysql, $idEmpresa, $mapEmp, $oldEmps);
+        // Roles que esta herramienta INSERTÓ (no los vinculados a un rol nativo): old → rol_cabecera.
+        $insertados = [];
+        $qi = $pg->prepare("SELECT id_origen, id_destino FROM migracion_mysql_map WHERE id_empresa = ? AND entidad = ? AND vinculado = false");
+        $qi->execute([$idEmpresa, $modo]);
+        foreach ($qi->fetchAll(PDO::FETCH_ASSOC) as $r) { $insertados[(string) $r['id_origen']] = (int) $r['id_destino']; }
+
         // Ambiente de la empresa: SIN esto el rol migrado queda en el ambiente por defecto ('1') y el
         // listado de Roles de Pago (que filtra por tipo_ambiente) NO lo muestra cuando la empresa está en
         // producción ('2'). Mismo gotcha que pedidos/kardex/facturas migrados.
@@ -1879,14 +1887,17 @@ class MigracionMysqlService
                                 VALUES (:r, :e, :emp, :dias, :sb, :ti, :teg, :ai, :ap, :neto) RETURNING id");
         $insRub = $pg->prepare("INSERT INTO rol_detalle_rubro (id_detalle, id_empresa, tipo, concepto, codigo, origen, valor, aporta_iess, id_novedad)
                                 VALUES (:d, :e, :tipo, :con, :cod, :ori, :val, :ai, :idn)");
-        $buscar = $pg->prepare("SELECT id FROM rol_cabecera WHERE id_empresa = :e AND tipo_rol = :tr AND periodo_anio = :pa AND periodo_mes = :pm AND numero_periodo = :np AND eliminado = false ORDER BY id LIMIT 1");
+        // Mismo ambiente que el índice único uk_rol_cabecera_periodo: un rol de PRUEBAS del mismo período no
+        // debe absorber al migrado (quedaría vinculado a un rol que el listado de producción no muestra).
+        $buscar = $pg->prepare("SELECT id FROM rol_cabecera WHERE id_empresa = :e AND tipo_ambiente = :amb AND tipo_rol = :tr AND periodo_anio = :pa AND periodo_mes = :pm AND numero_periodo = :np AND eliminado = false ORDER BY id LIMIT 1");
         $updTot = $pg->prepare("UPDATE rol_cabecera SET total_ingresos = :ti, total_egresos = :teg, total_neto = :tn, total_aporte_patronal = :tap, updated_at = now(), updated_by = :cb WHERE id = :id");
 
         foreach ($mysql->query("SELECT id, mes_ano, status FROM $tablaCab WHERE id_empresa IN ($inList) ORDER BY id") as $rc) {
             $res['total']++;
             $old = (int) $rc['id'];
-            if (isset($done[(string) $old])) { $res['ya_migrados']++; continue; }
-            if (!preg_match('/^(\d{1,2})-(\d{4})$/', trim((string) $rc['mes_ano']), $mm)) { $res['omitidos']++; continue; }
+            $yaMigrado = isset($done[(string) $old]);
+            if ($yaMigrado && !isset($insertados[(string) $old])) { $res['ya_migrados']++; continue; } // vinculado a un rol nativo: no se toca
+            if (!preg_match('/^(\d{1,2})-(\d{4})$/', trim((string) $rc['mes_ano']), $mm)) { $res[$yaMigrado ? 'ya_migrados' : 'omitidos']++; continue; }
             $mes = (int) $mm[1]; $anio = (int) $mm[2];
             if ($mes < 1 || $mes > 12 || $anio < 1900) { $res['omitidos']++; continue; }
             $estado = ((int) $rc['status'] === 0) ? 'anulado' : 'pagado';
@@ -1900,10 +1911,27 @@ class MigracionMysqlService
                 if ($idEmp <= 0) { continue; }
                 $lineas[] = $esQuincena ? $this->lineaRolQuincena($d, $idEmp) : $this->lineaRolMensual($d, $idEmp);
             }
+            // Ya migrado (insertado por esta herramienta): si en el sistema nuevo se recalculó y perdió
+            // líneas o cambió valores, se restaura desde el viejo.
+            if ($yaMigrado) {
+                $res['ya_migrados']++;
+                if (!empty($lineas)) {
+                    try {
+                        if ($this->reconstruirRolMigrado($pg, (int) $insertados[(string) $old], $idEmpresa, $lineas, $estado, $idUsuario)) {
+                            $res['reconstruidos'] = ($res['reconstruidos'] ?? 0) + 1;
+                        }
+                    } catch (Throwable $ex) {
+                        if ($pg->inTransaction()) { $pg->rollBack(); }
+                        $res['errores']++;
+                        if (empty($res['error_muestra'])) { $res['error_muestra'] = 'reconstruir: ' . substr($ex->getMessage(), 0, 160); }
+                    }
+                }
+                continue;
+            }
             if (empty($lineas)) { $res['omitidos']++; continue; }
 
             // Si ya existe un rol de ese período (nativo o previo), se vincula (no duplica por el índice único).
-            $buscar->execute([':e' => $idEmpresa, ':tr' => $tipoRol, ':pa' => $anio, ':pm' => $mes, ':np' => $numPeriodo]);
+            $buscar->execute([':e' => $idEmpresa, ':amb' => $amb, ':tr' => $tipoRol, ':pa' => $anio, ':pm' => $mes, ':np' => $numPeriodo]);
             $yaId = $buscar->fetchColumn();
             if ($yaId) { $this->marcarVinculado($res, $done, $pg, $idEmpresa, $old, (int) $yaId, "$tipoRol $mes/$anio", $idUsuario); continue; }
 
@@ -1946,6 +1974,119 @@ class MigracionMysqlService
         $res['pagos_rol_enlazados'] = $this->cruzarEgresosConRoles($idEmpresa);
 
         return $res;
+    }
+
+    /**
+     * Restaura desde el sistema anterior un rol/quincena que esta herramienta insertó y que luego se
+     * recalculó en el sistema nuevo (abrirlo lo regeneraba: borraba las líneas de los empleados
+     * inactivos y cambiaba los valores de los demás). Por empleado: actualiza EN EL SITIO la línea
+     * existente (mismo id, así no se rompe el enlace con su pago), inserta la que falta y borra la que
+     * el viejo no tiene SOLO si no tiene pago. Un rol 'generado' vuelve a su estado migrado; 'pagado',
+     * 'contabilizado' o 'anulado' se respetan. Si ya coincide con el viejo no toca nada (false).
+     */
+    private function reconstruirRolMigrado(PDO $pg, int $idRol, int $idEmpresa, array $lineas, string $estadoViejo, int $idUsuario): bool
+    {
+        $stCab = $pg->prepare("SELECT id, estado, total_ingresos, total_egresos, total_neto, total_aporte_patronal FROM rol_cabecera WHERE id = ? AND id_empresa = ? AND eliminado = false");
+        $stCab->execute([$idRol, $idEmpresa]);
+        $cab = $stCab->fetch(PDO::FETCH_ASSOC);
+        if (!$cab) { return false; }
+
+        $stDet = $pg->prepare("SELECT id_empleado, id, total_ingresos, total_egresos, neto FROM rol_detalle WHERE id_rol = ?");
+        $stDet->execute([$idRol]);
+        $actual = [];
+        foreach ($stDet->fetchAll(PDO::FETCH_ASSOC) as $r) { $actual[(int) $r['id_empleado']] = $r; }
+
+        $porEmp = [];
+        foreach ($lineas as $ln) { $porEmp[(int) $ln['id_empleado']] = $ln; }
+        $nuevoEstado = ($cab['estado'] === 'generado') ? $estadoViejo : (string) $cab['estado'];
+
+        // ¿Ya coincide con el viejo? (mismos empleados y mismos totales por línea, y estado sin tocar)
+        $igual = ($nuevoEstado === $cab['estado']) && count($actual) === count($porEmp);
+        if ($igual) {
+            foreach ($porEmp as $idEmp => $ln) {
+                $a = $actual[$idEmp] ?? null;
+                if ($a === null || abs((float) $a['neto'] - $ln['neto']) > 0.004
+                    || abs((float) $a['total_ingresos'] - $ln['ingresos']) > 0.004 || abs((float) $a['total_egresos'] - $ln['egresos']) > 0.004) {
+                    $igual = false; break;
+                }
+            }
+        }
+        if ($igual) { return false; }
+
+        $pagados = [];
+        $stPag = $pg->prepare("SELECT DISTINCT d.id_empleado FROM rol_detalle d
+                                 JOIN egresos_detalle ed ON ed.id_referencia_documento = d.id AND ed.tipo_documento = 'ROL'
+                                 JOIN egresos_cabecera ec ON ec.id = ed.id_egreso
+                                WHERE d.id_rol = ? AND ec.estado != 'anulado' AND ec.eliminado = false AND ed.eliminado = false");
+        $stPag->execute([$idRol]);
+        foreach ($stPag->fetchAll(PDO::FETCH_COLUMN) as $e) { $pagados[(int) $e] = true; }
+
+        $updDet = $pg->prepare("UPDATE rol_detalle SET dias_trabajados = :dias, sueldo_base = :sb, total_ingresos = :ti, total_egresos = :teg,
+                                       aporte_iess = :ai, aporte_patronal = :ap, neto = :neto WHERE id = :id");
+        $insDet = $pg->prepare("INSERT INTO rol_detalle (id_rol, id_empresa, id_empleado, dias_trabajados, sueldo_base, total_ingresos, total_egresos, aporte_iess, aporte_patronal, neto)
+                                VALUES (:r, :e, :emp, :dias, :sb, :ti, :teg, :ai, :ap, :neto) RETURNING id");
+        $delRub = $pg->prepare("DELETE FROM rol_detalle_rubro WHERE id_detalle = ?");
+        $insRub = $pg->prepare("INSERT INTO rol_detalle_rubro (id_detalle, id_empresa, tipo, concepto, codigo, origen, valor, aporta_iess, id_novedad)
+                                VALUES (:d, :e, :tipo, :con, :cod, :ori, :val, :ai, NULL)");
+        $delDet = $pg->prepare("DELETE FROM rol_detalle WHERE id = ?");
+
+        $pg->beginTransaction();
+        foreach ($porEmp as $idEmp => $ln) {
+            $vals = [':dias' => $ln['dias'], ':sb' => $ln['sueldo_base'], ':ti' => $ln['ingresos'], ':teg' => $ln['egresos'],
+                     ':ai' => $ln['aporte_iess'], ':ap' => $ln['aporte_patronal'], ':neto' => $ln['neto']];
+            if (isset($actual[$idEmp])) {
+                $idDet = (int) $actual[$idEmp]['id'];
+                $updDet->execute($vals + [':id' => $idDet]);
+                $delRub->execute([$idDet]);
+            } else {
+                $insDet->execute($vals + [':r' => $idRol, ':e' => $idEmpresa, ':emp' => $idEmp]);
+                $idDet = (int) $insDet->fetchColumn();
+            }
+            foreach ($ln['rubros'] as $rb) {
+                $insRub->execute([':d' => $idDet, ':e' => $idEmpresa, ':tipo' => $rb[0], ':con' => $rb[1], ':cod' => $rb[2], ':ori' => $rb[3], ':val' => $rb[4], ':ai' => $rb[5] ? 't' : 'f']);
+            }
+        }
+        foreach ($actual as $idEmp => $a) {
+            if (!isset($porEmp[$idEmp]) && !isset($pagados[$idEmp])) { $delDet->execute([(int) $a['id']]); }
+        }
+        $pg->prepare("UPDATE rol_cabecera rc SET estado = :est,
+                             total_ingresos = t.ti, total_egresos = t.teg, total_neto = t.tn, total_aporte_patronal = t.tap,
+                             updated_at = now(), updated_by = :u
+                        FROM (SELECT COALESCE(SUM(total_ingresos), 0) ti, COALESCE(SUM(total_egresos), 0) teg,
+                                     COALESCE(SUM(neto), 0) tn, COALESCE(SUM(aporte_patronal), 0) tap
+                                FROM rol_detalle WHERE id_rol = :r) t
+                       WHERE rc.id = :r")->execute([':est' => $nuevoEstado, ':u' => $idUsuario, ':r' => $idRol]);
+        $stCab->execute([$idRol, $idEmpresa]);
+        $despues = $stCab->fetch(PDO::FETCH_ASSOC) ?: null;
+        (new \App\Services\LogSistemaService())->registrar($idUsuario, $idEmpresa, 'RESTAURAR_MIGRADO', 'rol_cabecera', $idRol, $cab, $despues);
+        $pg->commit();
+        return true;
+    }
+
+    /**
+     * Completa el mapa de empleados viejo→nuevo para los $oldIds que NO están en migracion_mysql_map
+     * (empleado creado a mano o importado en el sistema nuevo, o Empleados no migrado con la herramienta):
+     * los ubica por identificación (documento del viejo), sin importar si están activos o inactivos.
+     * Sin esto, las líneas de rol de esos empleados se descartaban y el rol entero quedaba "omitido".
+     */
+    private function completarMapaEmpleados(PDO $pg, PDO $mysql, int $idEmpresa, array $mapEmp, array $oldIds): array
+    {
+        $faltan = [];
+        foreach ($oldIds as $o) {
+            $o = (int) $o;
+            if ($o > 0 && !isset($mapEmp[(string) $o])) { $faltan[$o] = true; }
+        }
+        if (!$faltan) { return $mapEmp; }
+        $in = implode(',', array_keys($faltan));
+        $buscar = $pg->prepare("SELECT id FROM empleados WHERE id_empresa = :e AND identificacion = :ident ORDER BY eliminado, id LIMIT 1");
+        foreach ($mysql->query("SELECT id, documento FROM empleados WHERE id IN ($in)") as $e) {
+            $ident = trim((string) $e['documento']);
+            if ($ident === '') { continue; }
+            $buscar->execute([':e' => $idEmpresa, ':ident' => $ident]);
+            $id = (int) ($buscar->fetchColumn() ?: 0);
+            if ($id > 0) { $mapEmp[(string) (int) $e['id']] = $id; }
+        }
+        return $mapEmp;
     }
 
     /**
@@ -7405,7 +7546,8 @@ class MigracionMysqlService
             // 3) Mapas viejo→nuevo (cabecera de rol/quincena y empleado).
             $mapRol = $this->mapaDe($pg, $idEmpresa, 'roles_pago'); // oldRol       => newCab
             $mapQ   = $this->mapaDe($pg, $idEmpresa, 'quincenas');  // oldQuincena  => newCab
-            $mapEmp = $this->mapaDe($pg, $idEmpresa, 'empleados');  // oldEmpleado  => newEmpleado
+            $mapEmp = $this->completarMapaEmpleados($pg, $mysql, $idEmpresa, $this->mapaDe($pg, $idEmpresa, 'empleados'),
+                array_column($detInfo, 'emp')); // oldEmpleado => newEmpleado
 
             // 4) Ubicar el rol_detalle (cabecera+empleado) y enlazar. Sirve también para cabeceras
             //    ya existentes/vinculadas (empareja por rol+empleado, no por nuestra inserción).
@@ -8184,12 +8326,19 @@ class MigracionMysqlService
     {
         $tabla = self::DESTINO_TABLA[$entidad] ?? null;
         if ($tabla === null) { return 0; }
+        // Un rol/quincena borrado que el usuario reemplazó por uno hecho aquí (mismo período) no se
+        // revive: chocaría con uk_rol_cabecera_periodo y abortaría toda la migración.
+        $sinReemplazo = ($tabla === 'rol_cabecera')
+            ? " AND NOT EXISTS (SELECT 1 FROM rol_cabecera v WHERE v.id_empresa = t.id_empresa AND v.eliminado = false
+                                 AND v.tipo_ambiente = t.tipo_ambiente AND v.tipo_rol = t.tipo_rol AND v.periodo_anio = t.periodo_anio
+                                 AND v.periodo_mes = t.periodo_mes AND v.numero_periodo = t.numero_periodo)"
+            : '';
         $st = $pg->prepare("UPDATE $tabla t
                 SET eliminado = false, deleted_at = NULL, deleted_by = NULL
               WHERE t.id_empresa = ? AND t.eliminado = true
                 AND EXISTS (SELECT 1 FROM migracion_mysql_map m
                              WHERE m.id_empresa = t.id_empresa AND m.entidad = ?
-                               AND m.id_destino = t.id)");
+                               AND m.id_destino = t.id)" . $sinReemplazo);
         $st->execute([$idEmpresa, $entidad]);
         return $st->rowCount();
     }

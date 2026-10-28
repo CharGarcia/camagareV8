@@ -50,6 +50,87 @@ class PlanCuentaDimensionService
     }
 
     /**
+     * Líneas de asientos ya registrados de la cuenta que quedarían con centro / proyecto si se
+     * aplican sus periodos: ['centro' => ['aplicables' => n, 'en_cerrado' => n], 'proyecto' => …].
+     */
+    public function lineasPorRellenar(int $idCuenta, int $idEmpresa): array
+    {
+        return $this->repository->contarLineasSinDimension($idCuenta, $idEmpresa);
+    }
+
+    /**
+     * Aplica los periodos de la cuenta a sus asientos ya registrados: SOLO a las líneas que
+     * tienen el centro de costo / proyecto vacío. Nunca cambia uno ya puesto, ni toca asientos
+     * anulados, de cierre / apertura del ejercicio o en períodos contables cerrados.
+     * Todo en una transacción, con el candado de la cuenta y auditoría por tipo.
+     * Devuelve ['centro' => n, 'proyecto' => n] líneas completadas.
+     */
+    public function rellenarAsientos(int $idCuenta, int $idEmpresa, int $idUsuario): array
+    {
+        if (!$this->repository->disponible()) {
+            throw new \RuntimeException('Falta aplicar la migración 20261028_plan_cuentas_dimension_vigencia.sql.');
+        }
+        $this->rules->validarCuenta($this->cuentas->findById($idCuenta, $idEmpresa));
+
+        $out = ['centro' => 0, 'proyecto' => 0];
+        $this->repository->beginTransaction();
+        try {
+            // Que nadie cambie los periodos de la cuenta mientras se aplican (§8).
+            $this->repository->lockCuenta($idCuenta, $idEmpresa);
+
+            foreach (array_keys(PlanCuentaDimensionRepository::TIPOS) as $tipo) {
+                $lineas = $this->repository->rellenarLineasAsientos($idCuenta, $idEmpresa, $tipo, $idUsuario);
+                if ($lineas === []) continue;
+                $out[$tipo] = count($lineas);
+
+                // Una entrada por tipo: qué líneas recibieron qué centro / proyecto.
+                $porValor = [];
+                foreach ($lineas as $l) {
+                    $porValor[(int) $l['valor']][] = (int) $l['id'];
+                }
+                $this->log->registrar($idUsuario, $idEmpresa, 'RELLENAR_' . strtoupper($tipo), 'asientos_contables_detalle', null,
+                    ['id_cuenta' => $idCuenta, PlanCuentaDimensionRepository::TIPOS[$tipo] => null],
+                    [
+                        'id_cuenta' => $idCuenta,
+                        'campo'     => PlanCuentaDimensionRepository::TIPOS[$tipo],
+                        'lineas'    => count($lineas),
+                        'asientos'  => array_values(array_unique(array_map(fn($l) => (int) $l['id_asiento'], $lineas))),
+                        'detalle_por_valor' => $porValor,
+                    ]);
+            }
+
+            $this->repository->commit();
+            return $out;
+        } catch (\Throwable $e) {
+            $this->repository->rollBack();
+            throw $e;
+        }
+    }
+
+    /**
+     * Completa el centro de costo y el proyecto de las líneas de un asiento con los vigentes
+     * de cada cuenta a la fecha del asiento. Solo llena lo que la línea trae vacío: si el
+     * módulo ya mandó un centro o un proyecto, se respeta. Una sola consulta por asiento.
+     */
+    public function completarLineas(array $lineas, int $idEmpresa, string $fecha): array
+    {
+        $fecha = substr($fecha, 0, 10);
+        if ($lineas === [] || !preg_match('/^\d{4}-\d{2}-\d{2}$/', $fecha)) return $lineas;
+
+        $vigentes = $this->repository->getVigentesPorCuentas(array_column($lineas, 'id_cuenta_contable'), $idEmpresa, $fecha);
+        if ($vigentes === []) return $lineas;
+
+        foreach ($lineas as &$l) {
+            $v = $vigentes[(int) ($l['id_cuenta_contable'] ?? 0)] ?? null;
+            if ($v === null) continue;
+            if (empty($l['id_centro_costo']) && $v['id_centro_costo'] !== null) $l['id_centro_costo'] = $v['id_centro_costo'];
+            if (empty($l['id_proyecto']) && $v['id_proyecto'] !== null)         $l['id_proyecto']     = $v['id_proyecto'];
+        }
+        unset($l);
+        return $lineas;
+    }
+
+    /**
      * Deja los periodos de la cuenta exactamente como vienen en las líneas de sus pestañas:
      * $porTipo = ['centro' => [...], 'proyecto' => [...]], cada línea con 'id' (0 = nueva),
      * id_dimension, vigente_desde, vigente_hasta. Crea las nuevas, actualiza las que

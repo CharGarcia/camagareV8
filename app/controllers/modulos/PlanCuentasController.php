@@ -348,6 +348,47 @@ class PlanCuentasController extends BaseModuloController
         exit;
     }
 
+    /**
+     * Cuántas líneas de asientos ya registrados de la cuenta quedan dentro de sus periodos
+     * con el centro de costo / proyecto vacío (para ofrecer completarlas). GET id_cuenta.
+     */
+    public function lineasPorRellenarAjax(): void
+    {
+        $this->requireLeer();
+        header('Content-Type: application/json');
+
+        try {
+            $data = PlanCuentaDimensionService::crear()->lineasPorRellenar((int) ($_GET['id_cuenta'] ?? 0), (int) $_SESSION['id_empresa']);
+            echo json_encode(['ok' => true, 'data' => $data]);
+        } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
+            echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
+        }
+        exit;
+    }
+
+    /** Completa esas líneas vacías con el centro de costo / proyecto del periodo. POST id_cuenta. */
+    public function rellenarAsientosAjax(): void
+    {
+        $this->requireActualizar();
+        header('Content-Type: application/json');
+
+        try {
+            $r = PlanCuentaDimensionService::crear()->rellenarAsientos(
+                (int) ($_POST['id_cuenta'] ?? 0),
+                (int) $_SESSION['id_empresa'],
+                (int) $_SESSION['id_usuario']
+            );
+            echo json_encode(['ok' => true, 'data' => $r]);
+        } catch (\InvalidArgumentException $e) {
+            echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
+        } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
+            echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
+        }
+        exit;
+    }
+
     public function getFaltantesAjax(): void
     {
         $this->requireLeer();

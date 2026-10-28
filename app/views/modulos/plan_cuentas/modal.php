@@ -158,10 +158,12 @@
                 if (parseInt(document.getElementById('pc_nivel_edit').value, 10) === 5 && window.PCDIM_cargar) {
                     await window.PCDIM_cargar(idCuenta, false);
                 }
+                // Asientos ya registrados con centro / proyecto vacío dentro de los periodos: se ofrece completarlos.
+                const avisado = await window.PCDIM_ofrecerRelleno(idCuenta);
                 // La página que incluye el modal puede reaccionar (Estados Financieros regenera el
                 // reporte y muestra su propio aviso); si no, el aviso es de aquí.
                 if (window.onAccountSaved) window.onAccountSaved(json);
-                else Swal.fire({ icon: 'success', title: 'Guardado', text: json.msg || '', timer: 1800, showConfirmButton: false });
+                else if (!avisado) Swal.fire({ icon: 'success', title: 'Guardado', text: json.msg || '', timer: 1800, showConfirmButton: false });
             } catch (e) {
                 console.error(e);
                 Swal.fire('Error', 'Error de red', 'error');

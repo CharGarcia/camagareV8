@@ -5,7 +5,7 @@ categoria: Contabilidad
 ruta_modulo: modulos/plan-cuentas
 tipo: modulo
 visibilidad: todos
-etiquetas: plan de cuentas, cuentas contables, catalogo de cuentas, codigo de cuenta, nivel, mayor, auxiliar, plan modelo, cargar plan modelo, configuracion contable automatica, tipos de asiento, map asiento, iva por tarifa, cambiar codigo de cuenta, codigo sri, supercias, entidades de control, centro de costo, centro de costos, proyecto, proyectos, centro de costo por periodo, cambiar proyecto de una cuenta, vigencia, pestañas de la cuenta, ocultar pestañas, eliminar cuenta, cuenta eliminada, balance no cuadra, descuadre
+etiquetas: plan de cuentas, cuentas contables, catalogo de cuentas, codigo de cuenta, nivel, mayor, auxiliar, plan modelo, cargar plan modelo, configuracion contable automatica, tipos de asiento, map asiento, iva por tarifa, cambiar codigo de cuenta, codigo sri, supercias, entidades de control, centro de costo, centro de costos, proyecto, proyectos, centro de costo por periodo, cambiar proyecto de una cuenta, vigencia, asignar centro de costo a asientos registrados, completar proyecto en asientos, pestañas de la cuenta, ocultar pestañas, eliminar cuenta, cuenta eliminada, balance no cuadra, descuadre
 version: 1.6
 orden: 10
 estado: activo
@@ -130,9 +130,25 @@ Cómo funciona:
   proyectos, a la vez). Para cambiar de proyecto, ponga fecha **Hasta** al
   periodo anterior y registre el nuevo desde el día siguiente.
 - Si el centro de costo o el proyecto se inactiva, deja de sugerirse.
-- Hasta ahora no se llenan solos los asientos que generan los documentos
-  (facturas, compras, nómina, etc.); solo los que se escriben en el modal del
-  asiento.
+- **Asientos que generan los documentos** (facturas, compras, notas de
+  crédito, ingresos, egresos, nómina, depreciación, etc.): cada línea toma el
+  centro de costo y el proyecto de su cuenta vigentes a la **fecha del
+  asiento**. Si el documento ya trae uno, se respeta. Se aplica a los asientos
+  que se generan o regeneran desde ahora.
+- **Asientos ya registrados**: al pulsar **Guardar**, si la cuenta tiene líneas
+  de asientos dentro de sus periodos **sin** centro de costo o **sin** proyecto,
+  el sistema muestra cuántas son y pregunta si asignárselo. Con **Sí, asignar**
+  cada línea vacía toma el centro de costo / proyecto del periodo que cubre la
+  fecha de su asiento; con **No, solo los nuevos** no se toca nada (la pregunta
+  vuelve a salir en el siguiente Guardar mientras queden líneas vacías). Nunca
+  se cambia una línea que ya tiene un centro de costo o proyecto, ni asientos
+  anulados, de cierre o apertura del ejercicio o de **períodos contables
+  cerrados** (el aviso dice cuántas quedan fuera por eso). El cambio queda en el
+  registro de auditoría.
+- **No se completan**: los asientos que guarda una persona (modal de Asientos o
+  pestaña *Asiento contable* de un documento), porque ahí la sugerencia ya se ve
+  en pantalla y una línea vacía puede ser a propósito; y los de **cierre y
+  apertura del ejercicio**, que saldan el total del año de cada cuenta.
 
 ### Códigos de entidades de control (nivel 5)
 
@@ -303,7 +319,10 @@ pendiente y el aviso de asientos pendientes indica qué cuenta revisar.
   una cuenta de nivel 5 abre su ficha, el encabezado muestra la cuenta y se
   puede eliminar desde el pie de la ficha. La ficha ya no se cierra al guardar
   y los avisos salen en una ventana emergente. En el árbol, las cuentas de nivel
-  5 muestran el centro de costo y el proyecto vigentes hoy.
+  5 muestran el centro de costo y el proyecto vigentes hoy. Los asientos que
+  generan los documentos se registran con el centro de costo y el proyecto de
+  cada cuenta a la fecha del asiento, y al guardar los periodos se ofrece
+  completar las líneas vacías de los asientos ya registrados.
 - **1.5** — **Eliminar plan** ya no borra cuentas configuradas en Configuración
   Contable (antes solo miraba los movimientos). Ningún asiento se registra en una
   cuenta eliminada, de otra empresa o inexistente: el asiento queda pendiente con

@@ -355,7 +355,7 @@ class RolPagoRepository extends BaseRepository
 
     /**
      * ¿El rol lo INSERTÓ la migración desde el sistema anterior? (migracion_mysql_map, entidad
-     * 'roles_pago', vinculado IS NOT TRUE). Un rol nativo que la migración solo enlazó por período
+     * 'roles_pago' o 'quincenas', vinculado IS NOT TRUE). Un rol nativo que la migración solo enlazó por período
      * (vinculado = true) no cuenta como migrado. Sin la tabla del mapa (empresa sin migración)
      * devuelve false.
      */
@@ -365,7 +365,7 @@ class RolPagoRepository extends BaseRepository
             return false;
         }
         $st = $this->db->prepare("SELECT 1 FROM migracion_mysql_map
-                                   WHERE entidad = 'roles_pago' AND id_destino = :id AND id_empresa = :emp
+                                   WHERE entidad IN ('roles_pago', 'quincenas') AND id_destino = :id AND id_empresa = :emp
                                      AND vinculado IS NOT TRUE LIMIT 1");
         $st->execute([':id' => $idRol, ':emp' => $idEmpresa]);
         return $st->fetchColumn() !== false;

@@ -182,6 +182,64 @@ $pcdimFecha    = static fn($v) => !empty($v) ? substr((string) $v, 0, 10) : '';
         return Promise.all(bloques.map(b => b.cargar(parseInt(idCuenta || 0, 10), soloLectura).catch(e => console.error(e))));
     };
 
+    /**
+     * Después de guardar: si hay asientos ya registrados de la cuenta con el centro de costo /
+     * proyecto VACÍO dentro de sus periodos, pregunta si completarlos. Devuelve true si mostró
+     * algún aviso (el llamador entonces no muestra su "Guardado").
+     */
+    window.PCDIM_ofrecerRelleno = async function (idCuenta) {
+        if (!activo || !idCuenta || !disponible) return false;
+        let info;
+        try {
+            const resp = await fetch(`${URL_PC}/lineasPorRellenarAjax?id_cuenta=${idCuenta}`);
+            const json = await resp.json();
+            if (!json.ok) return false;
+            info = json.data;
+        } catch (e) { return false; }
+
+        const n = (t, k) => (info[t] && info[t][k]) || 0;
+        const total = n('centro', 'aplicables') + n('proyecto', 'aplicables');
+        if (total === 0) return false;
+
+        const filas = [];
+        if (n('centro', 'aplicables'))   filas.push(`<li><b>${n('centro', 'aplicables')}</b> sin centro de costo</li>`);
+        if (n('proyecto', 'aplicables')) filas.push(`<li><b>${n('proyecto', 'aplicables')}</b> sin proyecto</li>`);
+        const cerrados = n('centro', 'en_cerrado') + n('proyecto', 'en_cerrado');
+        const r = await Swal.fire({
+            icon: 'question',
+            title: 'Cuenta guardada',
+            html: `<div class="text-start small">
+                    Esta cuenta ya tiene líneas de asientos dentro de sus periodos:
+                    <ul class="mb-2 mt-1">${filas.join('')}</ul>
+                    ¿Asignarles el centro de costo / proyecto de su periodo?
+                    <div class="text-muted mt-2" style="font-size:.75rem;">
+                        Solo se completan las líneas vacías: las que ya tienen un centro de costo o proyecto no cambian.
+                        No se tocan asientos anulados, de cierre o apertura del ejercicio ni de períodos cerrados${cerrados ? ` (${cerrados} línea${cerrados === 1 ? '' : 's'} en períodos cerrados quedan como están)` : ''}.
+                    </div>
+                   </div>`,
+            showCancelButton: true,
+            confirmButtonText: 'Sí, asignar',
+            cancelButtonText: 'No, solo los nuevos'
+        });
+        if (!r.isConfirmed) return true;
+
+        try {
+            const fd = new FormData();
+            fd.append('id_cuenta', idCuenta);
+            const resp = await fetch(`${URL_PC}/rellenarAsientosAjax`, { method: 'POST', body: fd });
+            const json = await resp.json();
+            if (!json.ok) {
+                Swal.fire('No se pudo asignar', json.error || 'Error al completar los asientos.', 'warning');
+                return true;
+            }
+            const hechas = (json.data.centro || 0) + (json.data.proyecto || 0);
+            Swal.fire({ icon: 'success', title: 'Asientos actualizados', text: `Se completaron ${hechas} línea${hechas === 1 ? '' : 's'} de asientos.`, timer: 2200, showConfirmButton: false });
+        } catch (e) {
+            Swal.fire('Error', 'Error de conexión', 'error');
+        }
+        return true;
+    };
+
     /** La cuenta abierta no es de nivel 5: no hay líneas que guardar. */
     window.PCDIM_desactivar = function () { activo = false; };
 

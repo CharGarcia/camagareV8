@@ -547,6 +547,20 @@ class AsientoContableService
                 $idEmpresa
             );
 
+            // Centro de costo / proyecto de las cuentas (Plan de Cuentas → periodos): en los
+            // asientos que generan los documentos se completan con los vigentes a la fecha del
+            // asiento, solo donde la línea los trae vacíos. Los que guarda una persona (modal,
+            // pestaña del documento) quedan como los dejó: ahí la sugerencia ya se aplicó en
+            // pantalla y una línea vacía puede ser a propósito. Tampoco el cierre / la apertura
+            // del ejercicio: saldan el total del año de cada cuenta, y ponerle el centro vigente
+            // al cierre le cargaría a ese centro el saldo de todo el año.
+            $esCierreApertura = in_array($saveData['modulo_origen'],
+                [\App\Helpers\CierreEjercicioSql::ORIGEN_CIERRE, \App\Helpers\CierreEjercicioSql::ORIGEN_APERTURA], true);
+            if (!$edicionManual && !$esCierreApertura && !empty($saveData['fecha_asiento'])) {
+                $detallesData = PlanCuentaDimensionService::crear()
+                    ->completarLineas($detallesData, $idEmpresa, (string) $saveData['fecha_asiento']);
+            }
+
             foreach ($detallesData as $det) {
                 $detData = [
                     'id_empresa' => $idEmpresa,

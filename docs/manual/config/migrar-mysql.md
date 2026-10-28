@@ -5,8 +5,8 @@ categoria: Configuración global
 ruta_modulo: config/migrar-mysql
 tipo: modulo
 visibilidad: superadmin
-etiquetas: migracion, migrar, sistema anterior, mysql, vendedor asignado, vendedor del cliente, clientes sin vendedor, vendedores migracion, asignacion de vendedor, migrar empresas, establecimientos migracion, ruc base, elegir establecimiento, fusionar establecimientos, cliente separado, serie, series, punto de emision, secuencial, numeracion, numero repetido, ingresos sin serie, egresos sin serie, pedidos sin serie, liquidacion pendiente de pago, liquidaciones de compra migradas, pagos migrados, egresos migrados, pago no aparece, cuentas por pagar migradas, compra pendiente de pago, compra pagada sale pendiente, pago no cruza, retencion en borrador, marcas, marca del producto, productos sin marca, catalogo de marcas, migrar marcas, cambios de productos migrados, cambio sin factura, factura del cambio, nup del cambio, recambio, registro de cambio, facturacion de consignacion migrada, unidad duplicada para devolver, iva inflado, iva multiplicado, iva x1000, asiento de compra mal, iva del asiento mayor, nota de credito compra asiento, contabilidad migrada, alumnos, migrar alumnos, estudiantes, campus, niveles, cursos, horarios, pension, servicios del alumno, descuento del alumno, alumnos activos, alumnos pasivos, representante del alumno, vehiculos, migrar vehiculos, placas, placa, chasis, chasis 123456789, año 2022, propietario privado, vehiculos faltantes, vehiculo sin orden, car wash migracion, cobros de recibos, recibo pendiente migrado, recibo sin abono, pago de recibo no cruza, recibos de venta migrados, saldo de recibo, liquidaciones 2020, liquidaciones antiguas pendientes, pagada en el sistema anterior, liquidacion sin pago migrada, egreso sin asiento, asiento no migrado, asiento contable faltante, desde, re-sincronizar contabilidad, registrado tarde, anulado en el sistema anterior, ingreso anulado con asiento, egreso anulado con asiento, asiento migrado vivo, asiento de documento anulado, categorias, categoria del producto, productos sin categoria, grupo de producto, grupo familiar, migrar categorias, suscripciones, facturas programadas, recibos programados, facturacion recurrente, migrar suscripciones, cobro periodico, nota de credito no aparece, nota de credito migrada en pruebas, ambiente de pruebas, saldo de inventario no paso, stock migrado incompleto, kardex migrado falta compra, egreso rol de pagos sin mes, ROL_PAGOS, quincena migrada, mes del rol en el egreso
-version: 1.25
+etiquetas: migracion, migrar, sistema anterior, mysql, vendedor asignado, vendedor del cliente, clientes sin vendedor, vendedores migracion, asignacion de vendedor, migrar empresas, establecimientos migracion, ruc base, elegir establecimiento, fusionar establecimientos, cliente separado, serie, series, punto de emision, secuencial, numeracion, numero repetido, ingresos sin serie, egresos sin serie, pedidos sin serie, liquidacion pendiente de pago, liquidaciones de compra migradas, pagos migrados, egresos migrados, pago no aparece, cuentas por pagar migradas, compra pendiente de pago, compra pagada sale pendiente, pago no cruza, retencion en borrador, marcas, marca del producto, productos sin marca, catalogo de marcas, migrar marcas, cambios de productos migrados, cambio sin factura, factura del cambio, nup del cambio, recambio, registro de cambio, facturacion de consignacion migrada, unidad duplicada para devolver, iva inflado, iva multiplicado, iva x1000, asiento de compra mal, iva del asiento mayor, nota de credito compra asiento, contabilidad migrada, alumnos, migrar alumnos, estudiantes, campus, niveles, cursos, horarios, pension, servicios del alumno, descuento del alumno, alumnos activos, alumnos pasivos, representante del alumno, vehiculos, migrar vehiculos, placas, placa, chasis, chasis 123456789, año 2022, propietario privado, vehiculos faltantes, vehiculo sin orden, car wash migracion, cobros de recibos, recibo pendiente migrado, recibo sin abono, pago de recibo no cruza, recibos de venta migrados, saldo de recibo, liquidaciones 2020, liquidaciones antiguas pendientes, pagada en el sistema anterior, liquidacion sin pago migrada, egreso sin asiento, asiento no migrado, asiento contable faltante, desde, re-sincronizar contabilidad, registrado tarde, anulado en el sistema anterior, ingreso anulado con asiento, egreso anulado con asiento, asiento migrado vivo, asiento de documento anulado, categorias, categoria del producto, productos sin categoria, grupo de producto, grupo familiar, migrar categorias, suscripciones, facturas programadas, recibos programados, facturacion recurrente, migrar suscripciones, cobro periodico, nota de credito no aparece, nota de credito migrada en pruebas, ambiente de pruebas, saldo de inventario no paso, stock migrado incompleto, kardex migrado falta compra, egreso rol de pagos sin mes, ROL_PAGOS, quincena migrada, mes del rol en el egreso, roles de pago no se migran, roles omitidos, quincenas omitidas, empleado inactivo, empleados inactivos, empleado creado a mano
+version: 1.26
 orden: 2
 estado: activo
 ---
@@ -616,9 +616,33 @@ sistema anterior tampoco los aplicaba al facturar por alumno).
   **Quincenas**, o el SQL
   `database/20261008_egresos_rol_migrados_numero_periodo.sql`, sin volver a
   migrar Pagos.
+- **Roles de pago o quincenas salen *omitidos* aunque el sistema anterior sí
+  los tiene**: un rol se arma con sus empleados, y antes solo se reconocían
+  los empleados traídos con la casilla **Empleados**. Si los empleados se
+  crearon a mano o se importaron en este sistema, todas las líneas quedaban
+  fuera y el rol entero se omitía. Ahora el empleado también se ubica por su
+  cédula, esté **activo o inactivo**. Además, un rol de pruebas del mismo mes
+  ya no impide que se migre el de producción. Basta volver a ejecutar **Roles
+  de pago** y **Quincenas**; si los pagos (egresos) ya estaban migrados, se
+  enlazan solos con cada empleado del rol.
+- **Los roles migrados quedaron incompletos o con otros valores** (sin los
+  empleados inactivos, en estado *Generado*): abrirlos en Roles de Pago los
+  recalculaba con las reglas de este sistema. Al volver a ejecutar **Roles de
+  pago** y **Quincenas**, cada rol que trajo la migración se compara con el
+  sistema anterior y, si cambió, se restaura (el resultado lo cuenta como
+  *reconstruidos*). Las líneas que ya tienen pago conservan su enlace. Un rol
+  en *Generado* vuelve a su estado migrado; *Pagado*, *Contabilizado* y
+  *Anulado* se respetan. Si un rol migrado se eliminó y en su lugar se creó
+  uno en este sistema para el mismo período, se deja como está.
 
 ## Historial de cambios
 
+- **1.26** — **Roles de pago / Quincenas**: al re-ejecutarlos se restauran desde el
+  sistema anterior los roles migrados que se recalcularon en este sistema
+  (perdían a los empleados inactivos). Los empleados que no se migraron con
+  la casilla Empleados (creados a mano o importados) se reconocen por su cédula,
+  activos o inactivos; antes el rol completo quedaba omitido. Un rol de pruebas
+  del mismo período ya no absorbe al migrado.
 - **1.25** — Contabilidad ya no reemplaza el asiento que este sistema le generó a
   un documento migrado que el sistema anterior no había contabilizado; lo informa
   en el resultado para revisar el duplicado.

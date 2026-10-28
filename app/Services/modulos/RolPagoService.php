@@ -280,6 +280,13 @@ class RolPagoService
         if ($cab['estado'] === 'anulado') {
             throw new Exception('No se puede regenerar una corrida anulada.');
         }
+        // Rol/quincena traído del sistema anterior: conserva los valores de ese sistema. Recalcularlo
+        // con las reglas de aquí borraba las líneas de los empleados que hoy están inactivos (solo
+        // se calculan los activos) y cambiaba los demás. refrescarSiCorresponde() atrapa esto y
+        // muestra lo guardado.
+        if ($this->repo->esRolMigrado($id, $idEmpresa)) {
+            throw new Exception('Este rol se migró del sistema anterior: conserva los valores de ese sistema y no se vuelve a calcular.');
+        }
         $this->validarPeriodoAsientosRol($id, $idEmpresa);
         // 'pagado' y 'contabilizado' YA NO bloquean la regeneración: el rol mensual se
         // contabiliza en base devengado (al calcularse, no al pagarse), y debe poder

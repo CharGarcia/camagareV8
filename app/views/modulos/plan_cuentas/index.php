@@ -556,6 +556,8 @@ $proyectos  = $proyectos ?? [];
                 // Las líneas nuevas ya tienen id: se recargan para que otro Guardar no las duplique.
                 const nivel = document.getElementById('pc_nivel_edit').value;
                 if (parseInt(nivel, 10) === 5 && window.PCDIM_cargar) await window.PCDIM_cargar(idCuenta, false);
+                // Asientos ya registrados con centro / proyecto vacío dentro de los periodos: se ofrece completarlos.
+                if (await window.PCDIM_ofrecerRelleno(idCuenta)) return;
                 Swal.fire({ icon: 'success', title: 'Guardado', text: json.msg, timer: 1800, showConfirmButton: false });
             } catch (err) { Swal.fire('Error', 'Error de red', 'error'); }
             finally { btn.disabled = false; guardandoPC = false; }
