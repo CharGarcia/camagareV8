@@ -24,6 +24,9 @@ final class ReportePdf
     public const UTIL_VERTICAL   = 549.9;
     public const UTIL_HORIZONTAL = 796.5;
 
+    /** Espacio (mm) que necesita un listado para empezar en la hoja actual: título, cabecera y una fila. */
+    private const ESPACIO_MIN_LISTADO = 35.0;
+
     /**
      * Ancho de cada carácter en Helvetica/Arial (la fuente core con que escribe Html2Pdf),
      * en milésimas de em. Lo que no está en la tabla vale 556, el ancho del dígito.
@@ -247,35 +250,128 @@ final class ReportePdf
      * Listado (thead que Html2Pdf repite en cada página, filas alternas sombreadas) y, en
      * tabla aparte, la fila de totales: un <tfoot> se repetiría al pie de TODAS las páginas
      * con la cifra global, como si fuera el total de esa hoja.
+     *
+     * Todo en un solo HTML: solo para listados cortos. Un listado que puede traer cientos
+     * de filas va con escribir()/escribirListado(), por bloques (ver escribir()).
      */
     public static function listado(array $cols, array $filas, string $etiquetaTotal, string $vacio = 'Sin resultados para los filtros aplicados.'): string
+    {
+        $cuerpo = implode('', self::filasHtml($cols, $filas, $vacio));
+        $html = "<table><thead>" . self::cabeceraHtml($cols) . "</thead><tbody>{$cuerpo}</tbody></table>";
+        if ($filas) {
+            $html .= "<table class='tot'>" . self::filaTotales($cols, $filas, $etiquetaTotal) . '</table>';
+        }
+        return $html;
+    }
+
+    /**
+     * Documento completo escrito por bloques (App\Helpers\PdfPorBloques): lo mismo que
+     * pagina() + listado(), pero cada fila en su propio writeHTML. Html2Pdf tarda de forma
+     * cuadrática con el tamaño de cada writeHTML (Reporte de Ingresos y Egresos, vista
+     * Documento: 500 filas 10 s, 1.000 filas 35 s); por bloques es lineal. Usarlo en los
+     * listados que pueden traer cientos de filas. `$cabecera` es lo que va sobre la tabla
+     * (encabezado, filtros, indicadores).
+     */
+    public static function escribir(\Spipu\Html2Pdf\Html2Pdf $html2pdf, float $pt, string $cabecera, array $cols, array $filas,
+                                    string $etiquetaTotal, string $vacio = 'Sin resultados para los filtros aplicados.',
+                                    string $despues = ''): void
+    {
+        self::escribirListado($html2pdf, $pt, self::inicio($pt, $cabecera), $cols, $filas, $etiquetaTotal, $vacio, $despues);
+    }
+
+    /**
+     * Primer bloque de un PDF escrito por bloques: estilos, <page> con los márgenes y el pie
+     * "Página x/y" de pagina(), y lo que va arriba de la primera tabla. La página se cierra
+     * en el mismo bloque pero sigue abierta para los writeHTML siguientes. `$css` agrega
+     * estilos propios del reporte.
+     */
+    public static function inicio(float $pt, string $cabecera, string $css = ''): string
+    {
+        return '<style>' . self::css($pt) . $css . '</style>'
+             . '<page backtop="7mm" backbottom="7mm" backleft="3mm" backright="3mm" footer="page">'
+             . $cabecera . '</page>';
+    }
+
+    /**
+     * Escribe por bloques un listado (cabecera de columnas repetida en cada hoja y totales
+     * al final) a continuación de `$antes`, que es inicio() en el primer listado del PDF o
+     * el título de la sección en los siguientes. Varios listados seguidos en el mismo PDF
+     * (p. ej. las secciones del Resumen Diario) se escriben llamándolo una vez por cada uno.
+     */
+    public static function escribirListado(\Spipu\Html2Pdf\Html2Pdf $html2pdf, float $pt, string $antes, array $cols, array $filas,
+                                           string $etiquetaTotal, string $vacio = 'Sin resultados para los filtros aplicados.',
+                                           string $despues = ''): void
+    {
+        $p = $html2pdf->pdf;
+        $horizontal = $p->getPageWidth() > $p->getPageHeight();
+        // Un listado que no es el primero del PDF y empieza al pie de la hoja: a la hoja
+        // siguiente, para no dejar su título y la cabecera de columnas solos abajo.
+        if (!str_contains($antes, '<page') && $p->getPage() > 0
+            && $p->GetY() + self::ESPACIO_MIN_LISTADO > $p->getPageHeight() - $p->getBreakMargin()) {
+            $html2pdf->writeHTML("<page pageset='old'></page>");
+        }
+        $final =($filas ? "<table class='tot'>" . self::filaTotales($cols, $filas, $etiquetaTotal) . '</table>' : '') . $despues;
+        PdfPorBloques::escribir($html2pdf, $antes, self::cabeceraHtml($cols), self::filasHtml($cols, $filas, $vacio, $pt, $horizontal), $final);
+    }
+
+    /** <tr> con los rótulos de las columnas. */
+    private static function cabeceraHtml(array $cols): string
     {
         $th = '';
         foreach ($cols as $c) {
             $th .= "<th style='width:{$c['w']}%;'>" . htmlspecialchars($c['lbl']) . '</th>';
         }
+        return "<tr>{$th}</tr>";
+    }
 
-        $cuerpo = '';
+    /**
+     * Un <tr> por fila (sombreado alterno); sin filas, una fila con el aviso $vacio. Con
+     * `$pt` cada fila va como ['html', 'alto'] con su alto estimado, para que PdfPorBloques
+     * no la deje partida al pie de la hoja cuando trae varias líneas.
+     */
+    private static function filasHtml(array $cols, array $filas, string $vacio, ?float $pt = null, bool $horizontal = false): array
+    {
+        $trs = [];
         $i = 0;
         foreach ($filas as $r) {
             $zebra = (++$i % 2 === 0) ? 'background:#f6f8fa;' : '';
-            $cuerpo .= '<tr>';
+            $tr = '<tr>';
+            $lineas = 1;
             foreach ($cols as $c) {
-                $cls = ($c['cls'] ?? '') !== '' ? " class='{$c['cls']}'" : '';
-                $cuerpo .= "<td{$cls} style='width:{$c['w']}%;{$zebra}'>" . ($c['val'])($r) . '</td>';
+                $cls   = ($c['cls'] ?? '') !== '' ? " class='{$c['cls']}'" : '';
+                $valor = ($c['val'])($r);
+                $tr   .= "<td{$cls} style='width:{$c['w']}%;{$zebra}'>" . $valor . '</td>';
+                if ($pt !== null) {
+                    $lineas = max($lineas, self::lineas($valor, self::anchoPt((float) $c['w'], $horizontal), $pt));
+                }
             }
-            $cuerpo .= '</tr>';
+            $tr .= '</tr>';
+            $trs[] = $pt === null ? $tr : ['html' => $tr, 'alto' => self::altoFila($lineas, $pt)];
         }
-        if ($cuerpo === '') {
-            $cuerpo = "<tr><td colspan='" . count($cols) . "' class='text-center' style='width:100%;padding:8px;'>"
-                    . htmlspecialchars($vacio) . '</td></tr>';
+        if (!$trs) {
+            $trs[] = "<tr><td class='text-center' style='width:100%;padding:8px;'>" . htmlspecialchars($vacio) . '</td></tr>';
         }
+        return $trs;
+    }
 
-        $html = "<table><thead><tr>{$th}</tr></thead><tbody>{$cuerpo}</tbody></table>";
-        if ($filas) {
-            $html .= "<table class='tot'>" . self::filaTotales($cols, $filas, $etiquetaTotal) . '</table>';
+    /** Líneas que ocupa el HTML de una celda en su ancho: los <br> y el ajuste por palabras. */
+    private static function lineas(string $html, float $anchoPt, float $pt): int
+    {
+        $total = 0;
+        foreach (preg_split('/<br\s*\/?>/i', $html) ?: [''] as $tramo) {
+            $texto  = html_entity_decode(strip_tags($tramo), ENT_QUOTES, 'UTF-8');
+            $total += max(1, (int) ceil(self::anchoEm($texto) * $pt / max($anchoPt, 1.0)));
         }
-        return $html;
+        return $total;
+    }
+
+    /**
+     * Alto (mm) que se reserva para una fila: el de PdfPorBloques (13 mm, unas tres líneas)
+     * o más si la fila trae más líneas. Interlineado ~1,25 em más el relleno de la celda.
+     */
+    private static function altoFila(int $lineas, float $pt): float
+    {
+        return max(13.0, $lineas * $pt * 1.25 * 0.3528 + 3.0);
     }
 
     /**
@@ -336,6 +432,7 @@ final class ReportePdf
             .k-lbl { font-size: 6.5pt; color: #55606b; }
             .k-val { font-size: 10pt; font-weight: bold; color: #1b2a3a; }
             .k-tot { color: #146c43; }
+            table.fila { margin-bottom: 0; }
             table.tot { margin-top: 0; }
             table.tot td { border: 1px solid #9aa7b4; background: #e3e9f0; font-weight: bold;
                            font-size: {$fs}; padding: 3px; color: #1b2a3a; }

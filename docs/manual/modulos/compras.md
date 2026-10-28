@@ -5,8 +5,8 @@ categoria: Compras
 ruta_modulo: modulos/compras
 tipo: modulo
 visibilidad: todos
-etiquetas: compras, compra, factura de compra, detalle de items, descripcion completa, descripcion cortada, no se ve el codigo, buscar compra, buscador, aparecen compras que no busque, resultados que no corresponden, la busqueda trae otras compras, buscar por numero de autorizacion, filtros, filtrar compras, buscar por producto comprado, filtro de fechas, saldo pendiente, estado de pago, chips, ordenar por dos columnas, ordenar por proveedor y fecha, asiento contable, editar asiento, pestaña asiento, proveedor, xml, sri, entrada de mercaderia, vincular producto, retencion, orden de compra, vincular orden, pedido a proveedor, comparar pedido vs facturado, entrega parcial, recibido parcial, cerrar orden, sustento tributario, codigo de sustento, autorizacion, fecha de caducidad, ats, persona natural, obligada a llevar contabilidad, tipo de contribuyente, registro manual, compra fisica, pagar la compra, pestaña pagos, saldo pendiente, valores de terceros, otros conceptos, valores adicionales, bomberos, tasa de basura, recoleccion de basura, planilla de luz, planilla de agua, servicios basicos, informacion adicional, info adicional, nombre muy largo, limite de caracteres, value too long, no se pudo guardar la compra, imprimir, impresora, retencion antes de la factura, enlazar retencion, pdf en dos hojas, segunda hoja casi vacia, totales en otra pagina, el pdf corta la pagina, hoja de mas, asiento no cuadra, el asiento no se genera, asiento manual, registrar asiento a mano, importe total no es subtotal mas iva, supera el maximo de ajuste, xml inconsistente, iva de cabecera distinto al de las lineas, seguro campesino, generar contabilidad, otros rubros de terceros, tasa de pernoctacion, tasa turistica, hotel, hospedaje, rubro dentro del total, iva inflado en el listado, nota de credito de compra, devolucion al proveedor, restar inventario, salida de inventario por nota de credito, procesar salidas
-version: 2.37
+etiquetas: compras, compra, factura de compra, detalle de items, descripcion completa, descripcion cortada, no se ve el codigo, buscar compra, buscador, aparecen compras que no busque, resultados que no corresponden, la busqueda trae otras compras, buscar por numero de autorizacion, filtros, filtrar compras, buscar por producto comprado, filtro de fechas, saldo pendiente, estado de pago, chips, ordenar por dos columnas, ordenar por proveedor y fecha, asiento contable, editar asiento, pestaña asiento, proveedor, xml, sri, entrada de mercaderia, vincular producto, retencion, orden de compra, vincular orden, pedido a proveedor, comparar pedido vs facturado, entrega parcial, recibido parcial, cerrar orden, sustento tributario, codigo de sustento, autorizacion, fecha de caducidad, ats, persona natural, obligada a llevar contabilidad, tipo de contribuyente, registro manual, compra fisica, pagar la compra, pestaña pagos, saldo pendiente, valores de terceros, otros conceptos, valores adicionales, bomberos, tasa de basura, recoleccion de basura, planilla de luz, planilla de agua, servicios basicos, informacion adicional, info adicional, nombre muy largo, limite de caracteres, value too long, no se pudo guardar la compra, imprimir, impresora, retencion antes de la factura, enlazar retencion, pdf en dos hojas, segunda hoja casi vacia, totales en otra pagina, el pdf corta la pagina, hoja de mas, asiento no cuadra, el asiento no se genera, asiento manual, registrar asiento a mano, importe total no es subtotal mas iva, supera el maximo de ajuste, xml inconsistente, iva de cabecera distinto al de las lineas, seguro campesino, generar contabilidad, centro de costo, proyecto, centro de costo por factura, proyecto por factura, dos facturas mismo proveedor distinto proyecto, otros rubros de terceros, tasa de pernoctacion, tasa turistica, hotel, hospedaje, rubro dentro del total, iva inflado en el listado, nota de credito de compra, devolucion al proveedor, restar inventario, salida de inventario por nota de credito, procesar salidas
+version: 2.38
 orden: 20
 estado: activo
 ---
@@ -647,6 +647,12 @@ corregirlo sin salir del modal.
   coincidiendo con el total de la compra**. Si hay diferencia, se avisa y usted
   decide si guardar igual; si falta la línea de la cuenta por pagar, no se puede
   guardar.
+- Cada línea tiene las columnas **Centro de costo** y **Proyecto** (se ven
+  si la empresa tiene alguno registrado). Así, dos facturas del mismo
+  proveedor y con la misma cuenta pueden ir a proyectos o centros distintos:
+  abra la compra, cambie el centro o proyecto de la línea y pulse **Guardar
+  asiento**. Al elegir otra cuenta en una línea se propone el centro o
+  proyecto de su periodo (Plan de Cuentas), solo si la línea está vacía.
 - Un asiento corregido a mano **ya no se regenera** al volver a guardar la
   compra. El botón **Restaurar automático** descarta la corrección y lo vuelve a
   armar desde la configuración contable.
@@ -802,6 +808,7 @@ aprobaciones pasa, así que no se paga dos veces.
 
 ## Historial de cambios
 
+- **2.38** — La pestaña **Asiento contable** tiene las columnas **Centro de costo** y **Proyecto** por línea: se puede asignar a cada compra un centro o proyecto distinto del que la cuenta tiene por periodo.
 - **2.37** — El **detalle de ítems** se ve como en Factura de Venta: la descripción ocupa dos filas y el código se ensancha a su contenido, así se leen completos.
 - **2.36** — **Procesar** el envío a inventario registra una sola vez: un reintento tras «Error de conexión» ya no vuelve a ingresar la mercadería.
 - **2.35** — **Notas de crédito de compra**: la pestaña Inventario ahora **resta**

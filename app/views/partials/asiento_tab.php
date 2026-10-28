@@ -16,27 +16,34 @@
 $p = $prefijo ?? 'doc';
 $puedeEditar = \App\Helpers\AsientoPestana::puedeEditar();
 ?>
+<style>
+  .asiento-sin-centro .asiento-col-centro, .asiento-sin-proyecto .asiento-col-proyecto { display: none; }
+</style>
 <div class="border rounded-3 overflow-hidden bg-white shadow-sm">
   <div class="table-responsive" style="max-height: 350px;">
-    <table class="table table-sm table-detalle mb-0 text-nowrap" id="<?= $p ?>-asiento-table">
+    <table class="table table-sm table-detalle mb-0 text-nowrap asiento-sin-centro asiento-sin-proyecto" id="<?= $p ?>-asiento-table">
       <thead>
         <tr class="table-light border-bottom">
-          <th class="ps-3 py-2 small fw-bold text-muted" style="width:45%;">Cuenta Contable</th>
-          <th class="py-2 small fw-bold text-muted text-end pe-3" style="width:20%;">D&eacute;bito / Debe</th>
-          <th class="py-2 small fw-bold text-muted text-end pe-3" style="width:20%;">Cr&eacute;dito / Haber</th>
-          <th class="py-2 small fw-bold text-muted" style="width:15%;">Referencia</th>
+          <th class="ps-3 py-2 small fw-bold text-muted" style="width:35%;">Cuenta Contable</th>
+          <th class="py-2 small fw-bold text-muted text-end pe-3" style="width:13%;">D&eacute;bito / Debe</th>
+          <th class="py-2 small fw-bold text-muted text-end pe-3" style="width:13%;">Cr&eacute;dito / Haber</th>
+          <!-- Centro de costo / proyecto por línea: el componente muestra cada columna solo si la
+               empresa tiene registros de ese tipo o si alguna línea ya trae uno. -->
+          <th class="py-2 small fw-bold text-muted asiento-col-centro" style="width:14%;">Centro de costo</th>
+          <th class="py-2 small fw-bold text-muted asiento-col-proyecto" style="width:14%;">Proyecto</th>
+          <th class="py-2 small fw-bold text-muted" style="width:11%;">Referencia</th>
           <th style="width:40px;"></th>
         </tr>
       </thead>
       <tbody id="<?= $p ?>-asiento-tbody">
-        <tr><td colspan="5" class="text-center py-4 text-muted">Guarda el documento para generar el asiento contable.</td></tr>
+        <tr><td colspan="7" class="text-center py-4 text-muted">Guarda el documento para generar el asiento contable.</td></tr>
       </tbody>
       <tfoot class="bg-light fw-bold border-top sticky-bottom">
         <tr>
           <td class="text-end py-2">Totales:</td>
           <td class="text-end pe-3 py-2 text-primary" id="<?= $p ?>-asiento-debe">0.00</td>
           <td class="text-end pe-3 py-2 text-primary" id="<?= $p ?>-asiento-haber">0.00</td>
-          <td colspan="2" class="py-2">
+          <td colspan="4" class="py-2">
             <div class="d-flex align-items-center gap-2 justify-content-end pe-3">
               <span class="x-small text-muted">Diferencia: <span id="<?= $p ?>-asiento-dif">0.00</span></span>
               <span id="<?= $p ?>-asiento-badge" class="badge bg-success bg-opacity-10 text-success border border-success border-opacity-25 px-2">Cuadrado</span>
@@ -48,7 +55,7 @@ $puedeEditar = \App\Helpers\AsientoPestana::puedeEditar();
         <tr class="d-none border-top" id="<?= $p ?>-asiento-doc">
           <td class="text-end py-2 small text-muted text-uppercase" id="<?= $p ?>-asiento-doc-etiqueta">Documento</td>
           <td class="text-end pe-3 py-2" id="<?= $p ?>-asiento-doc-total">0.00</td>
-          <td colspan="3" class="py-2 ps-2"><span class="small fw-normal" id="<?= $p ?>-asiento-doc-estado"></span></td>
+          <td colspan="5" class="py-2 ps-2"><span class="small fw-normal" id="<?= $p ?>-asiento-doc-estado"></span></td>
         </tr>
       </tfoot>
     </table>

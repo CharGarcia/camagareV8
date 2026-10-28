@@ -51,6 +51,13 @@
                             <option value="ANULADO">Anulados</option>
                         </select>
                     </div>
+                    <div title="Solo monetarios: deja fuera lo cobrado o pagado con formas de tipo Anticipo u Otros, que no entran ni salen de caja o bancos">
+                        <label class="form-label small fw-bold mb-1 d-block text-muted text-uppercase" style="font-size:.65rem;">Movimientos</label>
+                        <select id="rie-movimientos" class="form-select form-select-sm shadow-none border" style="width:140px;">
+                            <option value="TODOS" selected>Todos</option>
+                            <option value="MONETARIOS">Solo monetarios</option>
+                        </select>
+                    </div>
                     <div>
                         <label class="form-label small fw-bold mb-1 d-block text-muted text-uppercase" style="font-size:.65rem;">Desde</label>
                         <input type="date" id="rie-fecha-desde" class="form-control form-control-sm shadow-none border" style="width:115px;" value="<?= date('Y-m-01') ?>">
@@ -167,11 +174,11 @@
                         <div class="cmg-control-card__stat-label">Egresos pagados <span id="rie-n-egr"></span></div>
                     </div>
                 </div>
-                <div class="cmg-control-card__stat" title="Parte cancelada con la forma de tipo Anticipo: el dinero entró o salió cuando se registró el anticipo">
+                <div class="cmg-control-card__stat" title="Parte cancelada con formas de tipo Anticipo u Otros: no entra ni sale dinero de caja o bancos">
                     <i class="bi bi-piggy-bank bg-warning bg-opacity-10 text-warning"></i>
                     <div>
                         <div class="cmg-control-card__stat-value text-warning-emphasis" id="rie-kpi-ant">$0.00</div>
-                        <div class="cmg-control-card__stat-label">Aplicado con anticipo <span id="rie-kpi-ant-det" class="text-muted"></span></div>
+                        <div class="cmg-control-card__stat-label">No monetario <span id="rie-kpi-ant-det" class="text-muted"></span></div>
                     </div>
                 </div>
                 <div class="cmg-control-card__stat" title="Cobrado − aplicado con anticipo / pagado − aplicado con anticipo">
@@ -218,7 +225,7 @@
                         <tr id="rie-head-tercero" class="d-none">
                             <th class="ps-3">Flujo</th><th>Tipo</th><th>Tercero</th>
                             <th class="text-center">Comprobantes</th><th class="text-center">Documentos</th>
-                            <th class="text-end">Total</th><th class="text-end">Con anticipo</th>
+                            <th class="text-end">Total</th><th class="text-end">No monetario</th>
                             <th class="text-end pe-3">Entrada/salida de dinero</th>
                         </tr>
                         <tr id="rie-head-forma" class="d-none">
@@ -228,8 +235,8 @@
                         </tr>
                         <tr id="rie-head-periodo" class="d-none">
                             <th class="ps-3" id="rie-th-periodo">Fecha</th>
-                            <th class="text-end">Ingresos</th><th class="text-end">Con anticipo</th><th class="text-center">N° Ing.</th>
-                            <th class="text-end">Egresos</th><th class="text-end">Con anticipo</th><th class="text-center">N° Egr.</th>
+                            <th class="text-end">Ingresos</th><th class="text-end">No monetario</th><th class="text-center">N° Ing.</th>
+                            <th class="text-end">Egresos</th><th class="text-end">No monetario</th><th class="text-center">N° Egr.</th>
                             <th class="text-end pe-3">Neto (dinero)</th>
                         </tr>
                         <tr id="rie-head-anticipos" class="d-none">
@@ -272,6 +279,7 @@
             operacion_bancaria: $('rie-opbanc').value,
             id_concepto: $('rie-concepto').value,
             estado: $('rie-estado').value,
+            movimientos: $('rie-movimientos').value,
             tipo_documento: $('rie-tipo-doc').value,
             monto_min: $('rie-monto-min').value,
             monto_max: $('rie-monto-max').value,
@@ -315,7 +323,7 @@
             // Anticipo y dinero: el valor del flujo elegido o, con ambos, "ingresos / egresos".
             const par = (ing, egr) => f.tipo_flujo === 'INGRESO' ? money(ing)
                 : f.tipo_flujo === 'EGRESO' ? money(egr) : money(ing) + ' / ' + money(egr);
-            $('rie-kpi-ant').textContent    = par(s.anticipo_ingresos, s.anticipo_egresos);
+            $('rie-kpi-ant').textContent    = par(s.no_monetario_ingresos, s.no_monetario_egresos);
             $('rie-kpi-dinero').textContent = par(s.caja_ingresos, s.caja_egresos);
             $('rie-kpi-ant-det').textContent = f.tipo_flujo === 'AMBOS' ? '(ing. / egr.)' : '';
             $('rie-kpi-neto').textContent = money(s.neto);
@@ -366,7 +374,7 @@
         $('rie-fecha-desde').value = '<?= date('Y-m-01') ?>';
         $('rie-fecha-hasta').value = '<?= date('Y-m-d') ?>';
         $('rie-tipo-flujo').value = 'AMBOS'; $('rie-ver-por').value = 'DETALLE'; $('rie-tercero-tipo').value = '';
-        $('rie-forma').value = '0'; $('rie-opbanc').value = ''; $('rie-concepto').value = '0'; $('rie-tipo-doc').value = ''; $('rie-estado').value = 'VIGENTES';
+        $('rie-forma').value = '0'; $('rie-opbanc').value = ''; $('rie-concepto').value = '0'; $('rie-tipo-doc').value = ''; $('rie-estado').value = 'VIGENTES'; $('rie-movimientos').value = 'TODOS';
         $('rie-vendedor').value = '0';
         vaciar();
     });

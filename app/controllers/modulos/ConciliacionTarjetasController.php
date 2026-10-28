@@ -341,7 +341,7 @@ class ConciliacionTarjetasController extends BaseModuloController
             [$titulo, $encabezados, $filas] = $this->datosExportacionListado();
 
             $html2pdf = new \Spipu\Html2Pdf\Html2Pdf('L', 'A4', 'es');
-            $html2pdf->writeHTML($this->htmlTabla($titulo, $encabezados, $filas));
+            $this->escribirTabla($html2pdf, $titulo, $encabezados, $filas);
             $html2pdf->output('ConciliacionTarjetas_' . date('Ymd_His') . '.pdf', 'D');
             exit;
         } catch (\Throwable $e) {
@@ -387,7 +387,7 @@ class ConciliacionTarjetasController extends BaseModuloController
             );
 
             $html2pdf = new \Spipu\Html2Pdf\Html2Pdf('P', 'A4', 'es');
-            $html2pdf->writeHTML($this->htmlComprobante($detalle));
+            $this->escribirComprobante($html2pdf, $detalle);
             $html2pdf->output('Conciliacion_' . $detalle['cabecera']['numero'] . '.pdf', 'D');
             exit;
         } catch (\Throwable $e) {
@@ -495,9 +495,10 @@ class ConciliacionTarjetasController extends BaseModuloController
      * PDF del listado (A4 horizontal) con el formato común de reportes (App\Helpers\ReportePdf):
      * logo y nombre de la empresa, búsqueda aplicada, anchos fijos por columna (el ancho va
      * en el <th> y en cada <td>, si no Html2Pdf ensancha la tabla y se sale de la hoja) y
-     * fila de totales aparte.
+     * fila de totales aparte. Por bloques: con un solo writeHTML el tiempo crece al cuadrado
+     * de las filas.
      */
-    private function htmlTabla(string $titulo, array $encabezados, array $filas): string
+    private function escribirTabla(\Spipu\Html2Pdf\Html2Pdf $html2pdf, string $titulo, array $encabezados, array $filas): void
     {
         $idEmpresa = (int) $_SESSION['id_empresa'];
         $empresa   = (new \App\models\Empresa())->getPorId($idEmpresa) ?? [];
@@ -530,20 +531,20 @@ class ConciliacionTarjetasController extends BaseModuloController
         $buscar = trim((string) ($_GET['buscar'] ?? ''));
         $n      = count($filas);
 
-        return \App\Helpers\ReportePdf::pagina($pt,
+        \App\Helpers\ReportePdf::escribir($html2pdf, $pt,
             \App\Helpers\ReportePdf::encabezado($idEmpresa, (string) ($empresa['nombre'] ?? ''), $titulo)
-            . ($buscar !== '' ? \App\Helpers\ReportePdf::filtros(['Búsqueda' => $buscar]) : '')
-            . \App\Helpers\ReportePdf::listado($cols, $filas, "TOTALES ({$n} " . ($n === 1 ? 'conciliación' : 'conciliaciones') . ')',
-                'Sin conciliaciones para la búsqueda aplicada.')
-        );
+            . ($buscar !== '' ? \App\Helpers\ReportePdf::filtros(['Búsqueda' => $buscar]) : ''),
+            $cols, $filas, "TOTALES ({$n} " . ($n === 1 ? 'conciliación' : 'conciliaciones') . ')',
+            'Sin conciliaciones para la búsqueda aplicada.');
     }
 
     /**
      * Comprobante de una conciliación (A4 vertical), con el formato común de reportes:
      * encabezado con logo, datos de la conciliación, banda de totales y detalle del estado
      * de cuenta con sus cobros cruzados. Todo con anchos fijos para que encaje en la hoja.
+     * El detalle va por bloques: un estado de cuenta puede traer cientos de líneas.
      */
-    private function htmlComprobante(array $detalle): string
+    private function escribirComprobante(\Spipu\Html2Pdf\Html2Pdf $html2pdf, array $detalle): void
     {
         $cab       = $detalle['cabecera'];
         $t         = $detalle['totales'];
@@ -636,7 +637,7 @@ class ConciliacionTarjetasController extends BaseModuloController
         ];
 
         $n = count($detalle['lineas']);
-        return \App\Helpers\ReportePdf::pagina($pt,
+        \App\Helpers\ReportePdf::escribir($html2pdf, $pt,
             \App\Helpers\ReportePdf::encabezado(
                 $idEmpresa,
                 (string) ($empresa['nombre'] ?? ''),
@@ -645,10 +646,9 @@ class ConciliacionTarjetasController extends BaseModuloController
             )
             . $datos
             . $kpis
-            . "<table class='fil-tit'><tr><td style='width:100%;'>Estado de cuenta de la procesadora</td></tr></table>"
-            . \App\Helpers\ReportePdf::listado($cols, $detalle['lineas'], "TOTALES ({$n} " . ($n === 1 ? 'línea' : 'líneas') . ')',
-                'Sin líneas cargadas.')
-        );
+            . "<table class='fil-tit'><tr><td style='width:100%;'>Estado de cuenta de la procesadora</td></tr></table>",
+            $cols, $detalle['lineas'], "TOTALES ({$n} " . ($n === 1 ? 'línea' : 'líneas') . ')',
+            'Sin líneas cargadas.');
     }
 
     private function etiquetaEstadoLinea(string $estado): string

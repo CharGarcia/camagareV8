@@ -224,9 +224,10 @@ class MayoresService
      * PDF del Mayor con el formato común de los reportes (App\Helpers\ReportePdf): logo del
      * establecimiento, caja "Filtros aplicados", banda de indicadores y pie "Página x/y".
      *
-     * Todo el listado va en UNA sola tabla (cabecera de cada cuenta y su subtotal como filas
-     * con colspan): una tabla por cuenta, cada una con su <thead>, hace que Html2Pdf parta
-     * filas entre páginas cuando la tabla se abre al pie de la hoja.
+     * El listado se escribe por bloques (App\Helpers\PdfPorBloques): una fila por writeHTML,
+     * con la cabecera de columnas repetida en cada hoja. En un solo writeHTML el tiempo crece
+     * al cuadrado de los movimientos. La cabecera de cada cuenta viaja con su primer
+     * movimiento, para no quedar sola al pie de una hoja.
      */
     public function exportarPdf(int $idEmpresa, array $datos, array $filtros, string $empresaNombre): void
     {
@@ -248,21 +249,21 @@ class MayoresService
             $th .= "<th style='width:{$an[$i]}%;'>{$lbl}</th>";
         }
 
-        $cuerpo = '';
-        $nMovs  = 0;
+        // Filas para PdfPorBloques: la cabecera de cada cuenta va junto con su primer
+        // movimiento (nunca sola al pie de una hoja) y, si abre hoja, sin el separador.
+        $filas = [];
+        $nMovs = 0;
         foreach ($datos['cuentas'] as $k => $cuenta) {
-            if ($k > 0) {
-                $cuerpo .= "<tr class='sep'><td colspan='8' style='width:100%;'>&nbsp;</td></tr>";
-            }
-            $cuerpo .= "<tr class='grp'><td colspan='8' style='width:100%;'>"
-                . $e($cuenta['codigo'] . ' - ' . $cuenta['nombre']) . '</td></tr>';
+            $grp = "<tr class='grp'><td style='width:100%;'>" . $e($cuenta['codigo'] . ' - ' . $cuenta['nombre']) . '</td></tr>';
+            $sep = $k > 0 ? ["<tr class='sep'><td style='width:100%;'>&nbsp;</td></tr>"] : [];
+            $pendiente = [$grp];
 
             $i = 0;
             foreach ($cuenta['movimientos'] as $mov) {
                 $nMovs++;
                 $z = (++$i % 2 === 0) ? 'background:#f6f8fa;' : '';
                 $glosa = (string) ($mov['referencia_detalle'] ?: $mov['concepto']);
-                $cuerpo .= '<tr>'
+                $tr = '<tr>'
                     . "<td class='text-center' style='width:{$an[0]}%;{$z}'>" . $fecha($mov['fecha_asiento']) . '</td>'
                     . "<td class='text-center' style='width:{$an[1]}%;{$z}'>" . $texto((string) ($mov['numero_comprobante'] ?: 'S/N'), 1) . '</td>'
                     . "<td style='width:{$an[2]}%;{$z}'>" . $texto((string) $mov['documento_referencia'], 2) . '</td>'
@@ -272,23 +273,31 @@ class MayoresService
                     . "<td class='text-end' style='width:{$an[6]}%;{$z}'>" . $m($mov['haber']) . '</td>'
                     . "<td class='text-end' style='width:{$an[7]}%;{$z}font-weight:bold;'>" . $m($mov['saldo_acumulado']) . '</td>'
                     . '</tr>';
+                if ($pendiente) {
+                    $filas[] = ['html' => array_merge($sep, $pendiente, [$tr]), 'html_salto' => array_merge($pendiente, [$tr]), 'alto' => 21.0];
+                    $pendiente = [];
+                } else {
+                    $filas[] = $tr;
+                }
             }
 
-            $cuerpo .= "<tr class='sub'>"
-                . "<td colspan='5' class='text-end' style='width:{$anTexto}%;'>SUBTOTAL " . $e($cuenta['codigo']) . ':</td>'
+            $sub = "<tr class='sub'>"
+                . "<td class='text-end' style='width:{$anTexto}%;'>SUBTOTAL " . $e($cuenta['codigo']) . ':</td>'
                 . "<td class='text-end' style='width:{$an[5]}%;'>" . $m($cuenta['subtotal_debe']) . '</td>'
                 . "<td class='text-end' style='width:{$an[6]}%;'>" . $m($cuenta['subtotal_haber']) . '</td>'
                 . "<td class='text-end' style='width:{$an[7]}%;'>" . $m($cuenta['saldo_final']) . '</td>'
                 . '</tr>';
+            $filas[] = $pendiente
+                ? ['html' => array_merge($sep, $pendiente, [$sub]), 'html_salto' => array_merge($pendiente, [$sub]), 'alto' => 21.0]
+                : $sub;
         }
 
-        if ($cuerpo === '') {
-            $listado = "<table><thead><tr>{$th}</tr></thead><tbody><tr><td colspan='8' class='text-center' style='width:100%;padding:8px;'>"
-                . 'Sin movimientos para los filtros aplicados.</td></tr></tbody></table>';
+        if (!$filas) {
+            $filas[] = "<tr><td class='text-center' style='width:100%;padding:8px;'>Sin movimientos para los filtros aplicados.</td></tr>";
+            $final   = '';
         } else {
             // El total general va en tabla aparte: un <tfoot> se repetiría al pie de cada hoja.
-            $listado = "<table><thead><tr>{$th}</tr></thead><tbody>{$cuerpo}</tbody></table>"
-                . "<table class='tot'><tr>"
+            $final = "<table class='tot'><tr>"
                 . "<td class='text-end' style='width:{$anTexto}%;'>TOTAL GENERAL:</td>"
                 . "<td class='text-end' style='width:{$an[5]}%;'>" . $m($datos['totales']['debe']) . '</td>'
                 . "<td class='text-end' style='width:{$an[6]}%;'>" . $m($datos['totales']['haber']) . '</td>'
@@ -311,18 +320,17 @@ class MayoresService
                 tr.sub td { background:#f1f4f8; font-weight:bold; color:#2c4a6b; }
                 tr.sep td { border:none; background:#fff; padding:0; font-size:4.5pt; }";
 
-        $html = ReportePdf::pagina($pt,
-            '<style>' . $css . '</style>'
-            . ReportePdf::encabezado($idEmpresa, $empresaNombre, 'MAYORES', $subtitulo)
+        $inicio = ReportePdf::inicio($pt,
+            ReportePdf::encabezado($idEmpresa, $empresaNombre, 'MAYORES', $subtitulo)
             . ReportePdf::filtros($this->describirFiltros($idEmpresa, $datos, $filtros, $subtitulo))
-            . ReportePdf::indicadores($kpis)
-            . $listado
-        );
+            . ReportePdf::indicadores($kpis),
+            $css);
 
         $autoload = \MVC_ROOT . '/vendor/autoload.php';
         if (file_exists($autoload)) require_once $autoload;
         $pdf = new \Spipu\Html2Pdf\Html2Pdf('L', 'A4', 'es');
-        $pdf->writeHTML($html);
+        // Por bloques: con un solo writeHTML el tiempo crece al cuadrado de los movimientos.
+        \App\Helpers\PdfPorBloques::escribir($pdf, $inicio, "<tr>{$th}</tr>", $filas, $final);
         if (ob_get_length()) ob_end_clean();
         $pdf->output('Mayores_' . date('Ymd_His') . '.pdf', 'D');
         exit;

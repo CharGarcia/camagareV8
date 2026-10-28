@@ -361,22 +361,23 @@ class MejorClienteController extends BaseModuloController
             ];
 
             $n = count($rows);
-            $html = $pdf::encabezado($filtros['id_empresa'], $nombreEmpresa, 'Productos vendidos al cliente',
-                    $cliente['nombre'] . ' · ' . $this->periodoTxt($filtros))
-                . $pdf::filtros($filtrosTxt)
-                . $pdf::listado($cols, $rows, 'TOTAL (' . $n . ' ' . ($n === 1 ? 'producto' : 'productos') . ')',
-                    'Los documentos de este cliente no tienen detalle de productos.');
-            if (abs($diferencia) >= 0.01) {
-                $html .= "<p style='font-size:7pt;color:#666;margin-top:4px;'>Diferencia con el monto neto del ranking: <b>"
-                    . number_format($diferencia, 2) . '</b> (documentos sin detalle de productos).</p>';
-            }
+            $nota = abs($diferencia) >= 0.01
+                ? "<p style='font-size:7pt;color:#666;margin-top:4px;'>Diferencia con el monto neto del ranking: <b>"
+                  . number_format($diferencia, 2) . '</b> (documentos sin detalle de productos).</p>'
+                : '';
 
             $autoload = MVC_ROOT . '/vendor/autoload.php';
             if (file_exists($autoload)) {
                 require_once $autoload;
             }
             $html2pdf = new \Spipu\Html2Pdf\Html2Pdf('P', 'A4', 'es');
-            $html2pdf->writeHTML($pdf::pagina($pt, $html));
+            // Por bloques: con un solo writeHTML el tiempo crece al cuadrado de las filas.
+            $pdf::escribir($html2pdf, $pt,
+                $pdf::encabezado($filtros['id_empresa'], $nombreEmpresa, 'Productos vendidos al cliente',
+                    $cliente['nombre'] . ' · ' . $this->periodoTxt($filtros))
+                . $pdf::filtros($filtrosTxt),
+                $cols, $rows, 'TOTAL (' . $n . ' ' . ($n === 1 ? 'producto' : 'productos') . ')',
+                'Los documentos de este cliente no tienen detalle de productos.', $nota);
             $html2pdf->output('MejorCliente_Productos_' . date('Ymd_His') . '.pdf', 'D');
             exit;
         } catch (\Throwable $e) {
@@ -385,11 +386,12 @@ class MejorClienteController extends BaseModuloController
     }
 
     /**
-     * Arma el documento completo del PDF, reutilizado por descarga y envío por correo. Mismo
+     * Escribe el documento completo del PDF, reutilizado por descarga y envío por correo. Mismo
      * formato que los demás reportes (App\Helpers\ReportePdf): encabezado con logo, filtros
-     * aplicados, indicadores del período y listado a todo el ancho de la hoja.
+     * aplicados, indicadores del período y listado a todo el ancho de la hoja, escrito por
+     * bloques (con un solo writeHTML el tiempo crece al cuadrado de las filas).
      */
-    private function construirHtmlReporte(array $rows, array $stats, string $nombreEmpresa, array $filtros): string
+    private function escribirReporte(\Spipu\Html2Pdf\Html2Pdf $html2pdf, array $rows, array $stats, string $nombreEmpresa, array $filtros): void
     {
         $pdf = \App\Helpers\ReportePdf::class;
         $pt  = 8.0;
@@ -451,14 +453,13 @@ class MejorClienteController extends BaseModuloController
             ? "DE LOS {$n} MEJORES CLIENTES"
             : "({$n} " . ($n === 1 ? 'cliente' : 'clientes') . ')');
 
-        return $pdf::pagina($pt,
+        $pdf::escribir($html2pdf, $pt,
             $pdf::encabezado($filtros['id_empresa'], $nombreEmpresa, 'Reporte de Mejor Cliente',
                 'Período del ' . $fecha($filtros['fecha_desde']) . ' al ' . $fecha($filtros['fecha_hasta'])
                 . ' · Vendedor: ' . $vendedor)
             . $pdf::filtros($filtrosTxt)
-            . $pdf::indicadores($kpis)
-            . $pdf::listado($cols, $filas, $etiquetaTotal, 'No se encontraron ventas para los filtros aplicados.')
-        );
+            . $pdf::indicadores($kpis),
+            $cols, $filas, $etiquetaTotal, 'No se encontraron ventas para los filtros aplicados.');
     }
 
     public function exportPdf(): void
@@ -478,9 +479,8 @@ class MejorClienteController extends BaseModuloController
                 require_once $autoload;
             }
 
-            $html = $this->construirHtmlReporte($rows, $stats, $nombreEmpresa, $filtros);
             $html2pdf = new \Spipu\Html2Pdf\Html2Pdf('P', 'A4', 'es');
-            $html2pdf->writeHTML($html);
+            $this->escribirReporte($html2pdf, $rows, $stats, $nombreEmpresa, $filtros);
             $html2pdf->output('MejorCliente_' . date('Ymd_His') . '.pdf', 'D');
             exit;
         } catch (\Throwable $e) {
@@ -520,9 +520,8 @@ class MejorClienteController extends BaseModuloController
                 require_once $autoload;
             }
 
-            $html = $this->construirHtmlReporte($rows, $stats, $nombreEmpresa, $filtros);
             $html2pdf = new \Spipu\Html2Pdf\Html2Pdf('P', 'A4', 'es');
-            $html2pdf->writeHTML($html);
+            $this->escribirReporte($html2pdf, $rows, $stats, $nombreEmpresa, $filtros);
             $pdfString = $html2pdf->output('MejorCliente.pdf', 'S');
 
             $asuntoFinal = $asunto !== '' ? $asunto : ('Reporte de Mejor Cliente — ' . $filtros['fecha_desde'] . ' al ' . $filtros['fecha_hasta']);

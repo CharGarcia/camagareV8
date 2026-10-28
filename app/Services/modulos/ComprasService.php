@@ -1315,6 +1315,8 @@ class ComprasService
                 'documento_referencia' => "Compra # $numDoc",
                 'id_entidad'           => (int) ($compra['id_proveedor'] ?? 0) ?: null,
                 'tipo_entidad'         => 'proveedor',
+                'id_centro_costo'      => !empty($d['id_centro_costo']) ? (int) $d['id_centro_costo'] : null,
+                'id_proyecto'          => !empty($d['id_proyecto']) ? (int) $d['id_proyecto'] : null,
             ];
             $totalDebe  += $debe;
             $totalHaber += $haber;

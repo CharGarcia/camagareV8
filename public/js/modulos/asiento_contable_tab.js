@@ -38,6 +38,26 @@
         return function (...a) { clearTimeout(t); t = setTimeout(() => fn.apply(this, a), ms); };
     }
 
+    function escHtml(s) {
+        return String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+    }
+
+    // Centros de costo y proyectos activos de la empresa: una sola consulta por página, la
+    // comparten todas las pestañas de asiento que haya en ella.
+    let opcionesDimPromesa = null;
+    function cargarOpcionesDim(urlAsientos) {
+        if (!opcionesDimPromesa) {
+            opcionesDimPromesa = fetch(`${urlAsientos}/getSelectDataAjax`)
+                .then(r => r.json())
+                .then(j => ({
+                    centros: (j && j.ok && j.data && j.data.centros_costo) || [],
+                    proyectos: (j && j.ok && j.data && j.data.proyectos) || [],
+                }))
+                .catch(() => { opcionesDimPromesa = null; return { centros: [], proyectos: [] }; });
+        }
+        return opcionesDimPromesa;
+    }
+
     window.crearAsientoTab = function (cfg) {
         const colspan = cfg.colspan || 5;
         const p = cfg.prefijo || null;
@@ -71,6 +91,55 @@
         let nuevoManual = false;   // ¿se arma a mano un asiento que el sistema no pudo generar? (ver cfg.manualUrl)
         let guardando = false;     // un guardado en curso (§8: un guardado = un registro)
         let idDocumento = 0;
+        let opcionesDim = { centros: [], proyectos: [] };
+
+        // ── Centro de costo / proyecto por línea ─────────────────────────────────
+
+        /** <option> del select; si la línea trae uno que ya no está activo, se agrega igual para no perderlo. */
+        function opcionesSelect(lista, valor, nombreActual) {
+            let html = '<option value="">—</option>';
+            let esta = false;
+            lista.forEach(o => {
+                const sel = String(o.id) === String(valor || '');
+                if (sel) esta = true;
+                html += `<option value="${escHtml(o.id)}"${sel ? ' selected' : ''}>${escHtml(o.nombre)}</option>`;
+            });
+            if (valor && !esta) {
+                html += `<option value="${escHtml(valor)}" selected>${escHtml(nombreActual || ('#' + valor))} (inactivo)</option>`;
+            }
+            return html;
+        }
+
+        /** Cada columna se ve si la empresa tiene registros de ese tipo o si alguna línea ya trae uno. */
+        function pintarColumnasDim() {
+            const tabla = p ? $(`${p}-asiento-table`) : null;
+            if (!tabla) return;
+            let hayCentro = opcionesDim.centros.length > 0, hayProyecto = opcionesDim.proyectos.length > 0;
+            filas().forEach(tr => {
+                if (tr.querySelector('.input-centro-costo')?.value) hayCentro = true;
+                if (tr.querySelector('.input-proyecto')?.value) hayProyecto = true;
+            });
+            tabla.classList.toggle('asiento-sin-centro', !hayCentro);
+            tabla.classList.toggle('asiento-sin-proyecto', !hayProyecto);
+        }
+
+        /**
+         * Al elegir la cuenta de una línea se proponen el centro / proyecto de su periodo
+         * (Plan de Cuentas), solo en los selects que estén vacíos.
+         */
+        async function precargarDimension(tr, idCuenta) {
+            const selCc = tr.querySelector('.input-centro-costo'), selPr = tr.querySelector('.input-proyecto');
+            if (!selCc || !selPr || (selCc.value && selPr.value)) return;
+            const fecha = (cabecera && cabecera.fecha_asiento) || new Date().toISOString().slice(0, 10);
+            try {
+                const j = await (await fetch(`${urlAsientos()}/getDimensionSugeridaAjax?id_cuenta=${encodeURIComponent(idCuenta)}&fecha=${encodeURIComponent(fecha)}`)).json();
+                const s = j && j.ok ? j.data : null;
+                if (!s) return;
+                if (!selCc.value && s.id_centro_costo && selCc.querySelector(`option[value="${s.id_centro_costo}"]`)) selCc.value = String(s.id_centro_costo);
+                if (!selPr.value && s.id_proyecto && selPr.querySelector(`option[value="${s.id_proyecto}"]`)) selPr.value = String(s.id_proyecto);
+                pintarColumnasDim();
+            } catch (err) { console.error('Centro / proyecto sugerido:', err); }
+        }
 
         // ── Totales y cuadre ──────────────────────────────────────────────────────
 
@@ -180,12 +249,13 @@
 
             const tr = document.createElement('tr');
             tr.className = 'asiento-linea-row';
-            // Centro de costo y proyecto no se editan en la pestaña (eso vive en el modal del
-            // Libro Diario), pero viajan con la línea: sin esto, guardar desde aquí los borraría.
-            if (extra && extra.id_centro_costo) tr.dataset.idCentroCosto = extra.id_centro_costo;
-            if (extra && extra.id_proyecto) tr.dataset.idProyecto = extra.id_proyecto;
+            // Centro de costo y proyecto de la línea: se eligen aquí (p. ej. dos facturas del mismo
+            // proveedor y la misma cuenta, cada una de un proyecto distinto) y viajan al guardar.
+            const ex = extra || {};
             const dv = parseFloat(debe || 0), hv = parseFloat(haber || 0);
             const ro = editable ? '' : 'readonly';
+            const dis = editable ? '' : 'disabled';
+            const estiloSel = 'padding:0 4px;height:20px;font-size:0.78rem;';
             tr.innerHTML = `
                 <td class="ps-3 position-relative align-middle p-0">
                     <input type="text" class="form-control border-0 bg-transparent input-cuenta-nombre" ${ro} placeholder="${editable ? 'Escriba código o cuenta contable...' : ''}" value="${nombre ? (codigo ? codigo + ' - ' + nombre : nombre) : ''}" style="padding:0 4px;height:20px;font-size:0.78rem;">
@@ -194,6 +264,8 @@
                 </td>
                 <td class="align-middle p-0"><input type="number" step="0.01" class="form-control text-end border-0 bg-transparent fw-medium input-debe text-primary" ${ro} placeholder="0.00" value="${dv.toFixed(2) === '0.00' ? '' : dv.toFixed(2)}" style="padding:0 4px;height:20px;font-size:0.78rem;"></td>
                 <td class="align-middle p-0"><input type="number" step="0.01" class="form-control text-end border-0 bg-transparent fw-medium input-haber text-primary" ${ro} placeholder="0.00" value="${hv.toFixed(2) === '0.00' ? '' : hv.toFixed(2)}" style="padding:0 4px;height:20px;font-size:0.78rem;"></td>
+                <td class="align-middle p-0 asiento-col-centro"><select class="form-select form-select-sm border-0 bg-transparent input-centro-costo" ${dis} style="${estiloSel}">${opcionesSelect(opcionesDim.centros, ex.id_centro_costo, ex.nombre_centro_costo)}</select></td>
+                <td class="align-middle p-0 asiento-col-proyecto"><select class="form-select form-select-sm border-0 bg-transparent input-proyecto" ${dis} style="${estiloSel}">${opcionesSelect(opcionesDim.proyectos, ex.id_proyecto, ex.nombre_proyecto)}</select></td>
                 <td class="align-middle p-0"><input type="text" class="form-control border-0 bg-transparent input-referencia text-muted fst-italic" ${ro} placeholder="${editable ? 'Referencia' : ''}" value="${referencia}" style="padding:0 4px;height:20px;font-size:0.78rem;"></td>
                 <td class="text-center p-0 align-middle" style="width:40px;">
                     ${editable ? '<button type="button" class="btn btn-link btn-sm text-danger p-0 shadow-none border-0 btn-del-asiento-linea" title="Eliminar línea"><i class="bi bi-trash3 fs-6"></i></button>' : ''}
@@ -207,9 +279,12 @@
             const inpHaber = tr.querySelector('.input-haber');
             const inpRef = tr.querySelector('.input-referencia');
 
+            pintarColumnasDim();
             if (!editable) { recalcular(); return; }
 
             tr.querySelector('.btn-del-asiento-linea').addEventListener('click', () => { tr.remove(); manual = true; recalcular(); });
+            tr.querySelector('.input-centro-costo').addEventListener('change', () => { manual = true; });
+            tr.querySelector('.input-proyecto').addEventListener('change', () => { manual = true; });
 
             inpCuenta.addEventListener('input', debounce(async (e) => {
                 const q = e.target.value.trim();
@@ -235,6 +310,7 @@
                                 dropdown.classList.add('d-none');
                                 manual = true;
                                 recalcular();
+                                precargarDimension(tr, c.id);
                             };
                             dropdown.appendChild(btn);
                         });
@@ -352,6 +428,8 @@
             }
             placeholder('<i class="bi bi-hourglass-split me-1"></i> Cargando asiento contable...');
             setStatus('');
+            // Las opciones de centro / proyecto deben estar antes de pintar las líneas.
+            opcionesDim = await cargarOpcionesDim(urlAsientos());
 
             // Asiento ya registrado: es el que se edita.
             function pintarRegistrado() {
@@ -370,7 +448,7 @@
                     parseFloat(d.debe || 0),
                     parseFloat(d.haber || 0),
                     d.documento_referencia || d.referencia_detalle || '',
-                    { id_centro_costo: d.id_centro_costo, id_proyecto: d.id_proyecto }
+                    { id_centro_costo: d.id_centro_costo, id_proyecto: d.id_proyecto, nombre_centro_costo: d.nombre_centro_costo || d.centro_costo, nombre_proyecto: d.nombre_proyecto || d.proyecto }
                 ));
                 manual = false;
                 recalcular();
@@ -456,7 +534,7 @@
                         parseFloat(d.debe || 0),
                         parseFloat(d.haber || 0),
                         d.documento_referencia || d.referencia_detalle || d.referencia || '',
-                        { id_centro_costo: d.id_centro_costo, id_proyecto: d.id_proyecto }
+                        { id_centro_costo: d.id_centro_costo, id_proyecto: d.id_proyecto, nombre_centro_costo: d.nombre_centro_costo || d.centro_costo, nombre_proyecto: d.nombre_proyecto || d.proyecto }
                     ));
                     manual = false;
                     recalcular();
@@ -481,7 +559,8 @@
                         d.cuenta_nombre || d.nombre_cuenta || '',
                         parseFloat(d.debe || 0),
                         parseFloat(d.haber || 0),
-                        d.documento_referencia || d.referencia_detalle || d.referencia || ''
+                        d.documento_referencia || d.referencia_detalle || d.referencia || '',
+                        { id_centro_costo: d.id_centro_costo, id_proyecto: d.id_proyecto }
                     ));
                     if (!filas().length) placeholder('<i class="bi bi-info-circle me-1"></i> Agregue las l&iacute;neas del asiento.');
                     manual = false;
@@ -530,8 +609,8 @@
                     haber: parseFloat(tr.querySelector('.input-haber').value) || 0,
                     referencia_detalle: tr.querySelector('.input-referencia').value,
                     documento_referencia: tr.querySelector('.input-referencia').value,
-                    id_centro_costo: tr.dataset.idCentroCosto || null,
-                    id_proyecto: tr.dataset.idProyecto || null
+                    id_centro_costo: tr.querySelector('.input-centro-costo').value || null,
+                    id_proyecto: tr.querySelector('.input-proyecto').value || null
                 });
             });
             return detalles;

@@ -5,8 +5,8 @@ categoria: Contabilidad
 ruta_modulo: modulos/asientos_contables
 tipo: modulo
 visibilidad: todos
-etiquetas: asientos, cuenta eliminada, cuenta configurada no funciona, asiento contable, diario, debe, haber, partida doble, cuadrado, comprobante, contabilidad, imprimir, pdf, excel, documento origen, cuadre con el documento, total de la factura, cuenta por cobrar, cartera, editar asiento desde el documento, pestaña asiento contable, editado a mano, restaurar asiento automático, permisos de contabilidad, documentos migrados, migración, sistema anterior, buscar asiento, buscador, filtros, filtrar asientos, buscar por cuenta, buscar por referencia, libro diario, chips, asiento descuadrado, búsqueda lenta, se queda buscando, filtrar por origen, origen del asiento, módulo de origen, vista previa, costo de ventas, asiento sin costo, duplicar asiento, copiar asiento, clonar asiento, repetir asiento, centro de costo sugerido, proyecto sugerido
-version: 1.41
+etiquetas: asientos, cuenta eliminada, cuenta configurada no funciona, asiento contable, diario, debe, haber, partida doble, cuadrado, comprobante, contabilidad, imprimir, pdf, excel, documento origen, cuadre con el documento, total de la factura, cuenta por cobrar, cartera, editar asiento desde el documento, pestaña asiento contable, editado a mano, restaurar asiento automático, permisos de contabilidad, documentos migrados, migración, sistema anterior, buscar asiento, buscador, filtros, filtrar asientos, buscar por cuenta, buscar por referencia, libro diario, chips, asiento descuadrado, búsqueda lenta, se queda buscando, filtrar por origen, origen del asiento, módulo de origen, vista previa, costo de ventas, asiento sin costo, duplicar asiento, copiar asiento, clonar asiento, repetir asiento, centro de costo sugerido, proyecto sugerido, cambiar centro de costo desde el documento, cambiar proyecto desde la compra
+version: 1.42
 orden: 20
 estado: activo
 ---
@@ -158,7 +158,10 @@ módulo (*Contabilidad → Asientos Contables*):
 
 1. Abra el documento y vaya a la pestaña **Asiento contable**.
 2. Corrija lo que haga falta: cambiar la cuenta (se busca escribiendo código o
-   nombre), el Debe o el Haber, la referencia, agregar o quitar líneas.
+   nombre), el Debe o el Haber, el **centro de costo** o el **proyecto**, la
+   referencia, agregar o quitar líneas. Las columnas de centro de costo y
+   proyecto aparecen solo si la empresa tiene alguno registrado (o si una línea
+   ya trae uno); al elegir otra cuenta se propone el de su periodo.
 3. Pulse **Guardar asiento**.
 
 **Lo que se comprueba al guardar** es exactamente lo mismo que en el Libro
@@ -561,6 +564,9 @@ cambiarlos se revierte el cierre en ese módulo y se genera de nuevo.
 
 ## Historial de cambios
 
+- **1.42** — La pestaña **Asiento contable** de los documentos (compras,
+  ventas, ingresos, egresos, etc.) permite elegir el centro de costo y el
+  proyecto de cada línea. Solo se aceptan los de la propia empresa.
 - **1.41** — Los asientos que generan los documentos se registran con el centro
   de costo y el proyecto de cada cuenta vigentes a la fecha del asiento
   (excepto cierre y apertura del ejercicio). Desde el Plan de Cuentas se pueden

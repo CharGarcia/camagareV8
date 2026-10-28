@@ -36,15 +36,13 @@ try {
                         <!-- Fila 1: Tipo y Concepto -->
                         <div class="col-md-4">
                             <label class="form-label small fw-bold">Tipo de Forma</label>
+                            <?php // Tipos y si mueven dinero: catálogo único en App\Helpers\TiposFormaPago. ?>
                             <select name="tipo" id="fp-tipo" class="form-select form-select-sm" onchange="toggleCamposBanco(this.value)" required>
-                                <option value="EFECTIVO">Efectivo</option>
-                                <option value="BANCO">Bancaria</option>
-                                <option value="TARJETA">Tarjeta</option>
-                                <option value="PAYPHONE">Payphone</option>
-                                <option value="NUVEI">Nuvei</option>
-                                <option value="ANTICIPO">Anticipo</option>
-                                <option value="OTRO">Otros</option>
+                                <?php foreach (\App\Helpers\TiposFormaPago::CATALOGO as $tipoFP => $infoFP): ?>
+                                    <option value="<?= $tipoFP ?>" data-monetario="<?= $infoFP['monetario'] ? '1' : '0' ?>"><?= htmlspecialchars($infoFP['nombre']) ?></option>
+                                <?php endforeach; ?>
                             </select>
+                            <div class="form-text" id="fp-tipo-dinero" style="font-size: 0.7rem;"></div>
                         </div>
 
                         <div class="col-md-8">
@@ -447,6 +445,15 @@ try {
     function toggleCamposBanco(tipo) {
         const secBanco   = document.getElementById('sec-banco');
         const secTarjeta = document.getElementById('sec-tarjeta');
+
+        // Si el tipo mueve dinero (catálogo TiposFormaPago): lo usa el Reporte de Ingresos y Egresos.
+        const optTipo = document.querySelector('#fp-tipo option[value="' + tipo + '"]');
+        const notaDinero = document.getElementById('fp-tipo-dinero');
+        if (notaDinero && optTipo) {
+            notaDinero.innerHTML = optTipo.dataset.monetario === '1'
+                ? '<i class="bi bi-cash-coin text-success me-1"></i>Mueve dinero: entra o sale de caja o bancos.'
+                : '<i class="bi bi-slash-circle text-warning me-1"></i>No mueve dinero: no suma en la entrada/salida de dinero de los reportes.';
+        }
 
         // Sección Bancaria: solo para BANCO
         if (secBanco) {

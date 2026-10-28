@@ -372,6 +372,11 @@ class AsientoContableService
         $this->rules->validarCabecera($cabeceraData);
         $this->rules->validarDetalles($detallesData, ($cabeceraData['estado'] ?? '') === 'borrador');
         $this->validarCuentasUtilizables($detallesData, $idEmpresa);
+        // Centro de costo / proyecto elegidos por una persona (modal o pestaña del documento):
+        // deben ser de esta empresa. Los que arman los módulos ya salen de la empresa.
+        if ($edicionManual) {
+            PlanCuentaDimensionService::crear()->validarDeEmpresa($detallesData, $idEmpresa);
+        }
 
         // 2b. Período contable: ni se crea ni se modifica un asiento dentro de un período
         // cerrado. En una edición se validan AMBAS fechas —la nueva y la que tiene hoy el

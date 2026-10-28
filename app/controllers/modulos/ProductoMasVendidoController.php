@@ -307,18 +307,19 @@ class ProductoMasVendidoController extends BaseModuloController
             ];
 
             $n = count($rows);
-            $html = $pdf::encabezado($idEmpresa, $empresa['nombre'] ?? '', 'Clientes que compraron el producto',
-                    $producto['nombre'] . ' · ' . $this->periodoTxt($filtros))
-                . $pdf::filtros($filtrosTxt)
-                . $pdf::listado($cols, $rows, 'TOTAL (' . $n . ' ' . ($n === 1 ? 'cliente' : 'clientes') . ')',
-                    'No se encontraron clientes para este producto.');
 
             $autoload = MVC_ROOT . '/vendor/autoload.php';
             if (file_exists($autoload)) {
                 require_once $autoload;
             }
             $html2pdf = new \Spipu\Html2Pdf\Html2Pdf('P', 'A4', 'es');
-            $html2pdf->writeHTML($pdf::pagina($pt, $html));
+            // Por bloques: con un solo writeHTML el tiempo crece al cuadrado de las filas.
+            $pdf::escribir($html2pdf, $pt,
+                $pdf::encabezado($idEmpresa, $empresa['nombre'] ?? '', 'Clientes que compraron el producto',
+                    $producto['nombre'] . ' · ' . $this->periodoTxt($filtros))
+                . $pdf::filtros($filtrosTxt),
+                $cols, $rows, 'TOTAL (' . $n . ' ' . ($n === 1 ? 'cliente' : 'clientes') . ')',
+                'No se encontraron clientes para este producto.');
             $html2pdf->output('ProductoMasVendido_Clientes_' . date('Ymd_His') . '.pdf', 'D');
             exit;
         } catch (\Throwable $e) {
@@ -359,53 +360,43 @@ class ProductoMasVendidoController extends BaseModuloController
     /**
      * HTML del cuerpo del reporte, reutilizado por exportPdf() y enviarCorreoAjax().
      */
-    private function construirHtmlReporte(array $rows, array $stats, string $nombreEmpresa): string
+    /**
+     * Escribe el PDF del ranking (descarga y correo) con el formato común de los reportes
+     * (App\Helpers\ReportePdf), por bloques: con "Todos" puede traer miles de productos y,
+     * en un solo writeHTML, el tiempo crece al cuadrado de las filas. Los totales son los
+     * de todos los productos del período, aunque la tabla muestre solo el top elegido.
+     */
+    private function escribirReporte(\Spipu\Html2Pdf\Html2Pdf $html2pdf, array $rows, array $stats, string $nombreEmpresa): void
     {
-        ob_start();
-        ?>
-        <style>
-            table { width: 100%; border-collapse: collapse; font-family: Arial, sans-serif; font-size: 9pt; margin: 0 auto 20px auto; }
-            th { background: #f2f2f2; border: 1px solid #ccc; padding: 6px; text-align: center; }
-            td { border: 1px solid #ccc; padding: 6px; }
-            .text-end { text-align: right; }
-            .text-center { text-align: center; }
-            .header { text-align: center; margin-bottom: 20px; }
-        </style>
-        <div class="header">
-            <h2><?= htmlspecialchars($nombreEmpresa) ?></h2>
-            <h3>Reporte de Productos Más Vendidos</h3>
-            <p>Fecha de reporte: <?= date('d-m-Y H:i:s') ?></p>
-            <p>Productos distintos: <?= (int) $stats['productos_distintos'] ?> &nbsp;|&nbsp;
-               Unidades vendidas: <?= number_format($stats['total_unidades'], 2) ?> &nbsp;|&nbsp;
-               Total vendido: $<?= number_format($stats['total_vendido'], 2) ?></p>
-        </div>
-        <table>
-            <thead>
-                <tr><th>Ranking</th><th>Código</th><th>Producto</th><th>Cant. Vendida</th><th>N° Documentos</th><th>Total Vendido</th></tr>
-            </thead>
-            <tbody>
-                <?php foreach ($rows as $r): ?>
-                    <tr>
-                        <td class="text-center">#<?= (int) ($r['ranking'] ?? 0) ?></td>
-                        <td><?= htmlspecialchars($r['producto_codigo'] ?? '') ?></td>
-                        <td><?= htmlspecialchars($r['producto_nombre'] ?? '') ?></td>
-                        <td class="text-center"><?= number_format((float) $r['cantidad_vendida'], 2) ?></td>
-                        <td class="text-center"><?= (int) $r['num_documentos'] ?></td>
-                        <td class="text-end"><strong>$<?= number_format((float) $r['total_vendido'], 2) ?></strong></td>
-                    </tr>
-                <?php endforeach; ?>
-            </tbody>
-            <tfoot>
-                <tr style="background-color:#e9ecef;">
-                    <th colspan="3" class="text-center">TOTALES:</th>
-                    <th class="text-center"><?= number_format($stats['total_unidades'], 2) ?></th>
-                    <th></th>
-                    <th class="text-end" style="color:#198754;">$<?= number_format($stats['total_vendido'], 2) ?></th>
-                </tr>
-            </tfoot>
-        </table>
-        <?php
-        return ob_get_clean();
+        $pdf = \App\Helpers\ReportePdf::class;
+        $pt  = 8.0;
+        $anchoProd = $pdf::anchoPt(40.0, false);
+        $cols = [
+            ['lbl' => 'Ranking', 'w' => 9.0, 'cls' => 'text-center',
+             'val' => static fn (array $r): string => '#' . (int) ($r['ranking'] ?? 0)],
+            ['lbl' => 'Código', 'w' => 15.0,
+             'val' => static fn (array $r): string => htmlspecialchars((string) ($r['producto_codigo'] ?? ''))],
+            ['lbl' => 'Producto', 'w' => 40.0,
+             'val' => static fn (array $r): string => $pdf::texto((string) ($r['producto_nombre'] ?? ''), $anchoProd, $pt)],
+            ['lbl' => 'Cant. Vendida', 'w' => 13.0, 'cls' => 'text-end',
+             'val' => static fn (array $r): string => number_format((float) $r['cantidad_vendida'], 2),
+             'tot' => static fn (): float => (float) $stats['total_unidades']],
+            ['lbl' => 'N° Documentos', 'w' => 10.0, 'cls' => 'text-center',
+             'val' => static fn (array $r): string => (string) (int) $r['num_documentos']],
+            ['lbl' => 'Total Vendido', 'w' => 13.0, 'cls' => 'text-end',
+             'val' => static fn (array $r): string => '<b>' . number_format((float) $r['total_vendido'], 2) . '</b>',
+             'tot' => static fn (): float => (float) $stats['total_vendido']],
+        ];
+        $kpis = [
+            ['PRODUCTOS DISTINTOS', (string) (int) $stats['productos_distintos']],
+            ['UNIDADES VENDIDAS', number_format((float) $stats['total_unidades'], 2)],
+            ['TOTAL VENDIDO', '$' . number_format((float) $stats['total_vendido'], 2), true],
+        ];
+        $etiqueta = count($rows) < (int) $stats['productos_distintos'] ? 'TOTALES (todos los productos)' : 'TOTALES';
+        $pdf::escribir($html2pdf, $pt,
+            $pdf::encabezado((int) $_SESSION['id_empresa'], $nombreEmpresa, 'Reporte de Productos Más Vendidos')
+            . $pdf::indicadores($kpis),
+            $cols, $rows, $etiqueta, 'No se encontraron ventas para los filtros aplicados.');
     }
 
     private function guardarExcelEnArchivo(array $rows, array $stats, string $nombreEmpresa, string $path): void
@@ -475,9 +466,8 @@ class ProductoMasVendidoController extends BaseModuloController
             $autoload = MVC_ROOT . '/vendor/autoload.php';
             if (file_exists($autoload)) require_once $autoload;
 
-            $html = $this->construirHtmlReporte($rows, $stats, $nombreEmpresa);
             $html2pdf = new \Spipu\Html2Pdf\Html2Pdf('P', 'A4', 'es');
-            $html2pdf->writeHTML($html);
+            $this->escribirReporte($html2pdf, $rows, $stats, $nombreEmpresa);
             $html2pdf->output('ProductosMasVendidos_' . date('Ymd_His') . '.pdf', 'D');
             exit;
         } catch (\Throwable $e) {
@@ -523,10 +513,9 @@ class ProductoMasVendidoController extends BaseModuloController
             $tmpBase = sys_get_temp_dir() . '/pmv_' . $idEmpresa . '_' . time();
 
             if ($adjuntar === 'pdf' || $adjuntar === 'ambos') {
-                $html = $this->construirHtmlReporte($rows, $stats, $nombreEmpresa);
                 $pdfPath = $tmpBase . '.pdf';
                 $html2pdf = new \Spipu\Html2Pdf\Html2Pdf('P', 'A4', 'es');
-                $html2pdf->writeHTML($html);
+                $this->escribirReporte($html2pdf, $rows, $stats, $nombreEmpresa);
                 $html2pdf->output($pdfPath, 'F');
                 $adjuntosPaths[$pdfPath] = 'ProductosMasVendidos_' . date('Ymd') . '.pdf';
             }

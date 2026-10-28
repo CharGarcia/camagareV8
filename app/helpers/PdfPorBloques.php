@@ -14,7 +14,7 @@ namespace App\Helpers;
  * hojas. Los estilos del primer writeHTML siguen vigentes en los siguientes; el CSS de la
  * página debe traer `table.fila { margin-bottom: 0; }` (cada fila es su propia tabla).
  *
- * Lo usan Cuentas por Cobrar y Cuentas por Pagar.
+ * Lo usan Cuentas por Cobrar, Cuentas por Pagar y ReportePdf::escribir().
  */
 final class PdfPorBloques
 {

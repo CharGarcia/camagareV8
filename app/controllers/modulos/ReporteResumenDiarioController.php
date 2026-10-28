@@ -384,29 +384,30 @@ class ReporteResumenDiarioController extends BaseModuloController
                 $kpis[] = ['Contado', $this->dinero($datos['cierre']['contado'])];
                 $kpis[] = ['Diferencia', $this->dinero($datos['cierre']['diferencia']), true];
             }
-            $html = ReportePdf::encabezado($idEmpresa, (string) ($empresa['nombre'] ?? ''), 'Resumen diario',
-                        'Día ' . date('d-m-Y', strtotime($datos['fecha'])))
-                  . ReportePdf::filtros($this->filtrosTxt($f, $datos))
-                  . ReportePdf::indicadores($kpis);
+            // Piezas en orden: HTML suelto (string) o un listado de sección (array).
+            $piezas = [ReportePdf::encabezado($idEmpresa, (string) ($empresa['nombre'] ?? ''), 'Resumen diario',
+                            'Día ' . date('d-m-Y', strtotime($datos['fecha'])))
+                      . ReportePdf::filtros($this->filtrosTxt($f, $datos))
+                      . ReportePdf::indicadores($kpis)];
 
             if (!$datos['grupos']) {
-                $html .= "<p style='text-align:center;font-size:9pt;'>No hay documentos ni movimientos en este día.</p>";
+                $piezas[] = "<p style='text-align:center;font-size:9pt;'>No hay documentos ni movimientos en este día.</p>";
             }
             foreach ($datos['grupos'] as $g) {
-                $html .= $this->bandaPdf(mb_strtoupper($g['titulo']));
+                $piezas[] = $this->bandaPdf(mb_strtoupper($g['titulo']));
                 foreach ($g['secciones'] as $s) {
-                    $html .= $this->seccionPdf($s, $pt);
+                    $piezas[] = $this->seccionPdf($s, $pt);
                 }
             }
             if ($datos['grupos'] || $datos['resumen']['caja']) {
-                $html .= $this->resumenPdf($datos, $pt);
+                array_push($piezas, ...$this->resumenPdf($datos, $pt));
             }
-            $html .= $this->firmasPdf();
+            $piezas[] = $this->firmasPdf();
 
             $autoload = \MVC_ROOT . '/vendor/autoload.php';
             if (file_exists($autoload)) require_once $autoload;
             $pdf = new \Spipu\Html2Pdf\Html2Pdf('P', 'A4', 'es');
-            $pdf->writeHTML(ReportePdf::pagina($pt, $html));
+            $this->escribirPiezasPdf($pdf, $pt, $piezas);
             $pdf->output('ResumenDiario_' . str_replace('-', '', $datos['fecha']) . '.pdf', 'D');
         } catch (\Throwable $e) {
             if (!$e instanceof \InvalidArgumentException) {
@@ -429,8 +430,30 @@ class ReporteResumenDiarioController extends BaseModuloController
              . "font-weight:bold;font-size:10pt;padding:2px 0;'>" . htmlspecialchars($titulo) . '</td></tr></table>';
     }
 
-    /** Título de la sección y su listado (solo llegan secciones con filas). */
-    private function seccionPdf(array $s, float $pt): string
+    /**
+     * Escribe las piezas del PDF: el HTML suelto se va juntando y cada listado se escribe
+     * por bloques (ReportePdf::escribirListado) detrás de lo acumulado. En un solo
+     * writeHTML el tiempo crece al cuadrado de las filas, y un día con muchas facturas
+     * tardaba minutos.
+     */
+    private function escribirPiezasPdf(\Spipu\Html2Pdf\Html2Pdf $pdf, float $pt, array $piezas): void
+    {
+        $pendiente = ReportePdf::inicio($pt, (string) array_shift($piezas));
+        foreach ($piezas as $p) {
+            if (is_string($p)) {
+                $pendiente .= $p;
+                continue;
+            }
+            ReportePdf::escribirListado($pdf, $pt, $pendiente . $p['titulo'], $p['cols'], $p['filas'], 'TOTAL');
+            $pendiente = '';
+        }
+        if ($pendiente !== '') {
+            $pdf->writeHTML($pendiente);
+        }
+    }
+
+    /** Título de la sección y su listado (solo llegan secciones con filas), como pieza del PDF. */
+    private function seccionPdf(array $s, float $pt): array
     {
         $n      = count($s['filas']);
         $titulo = mb_strtoupper($s['titulo']) . " ({$n})" . ($s['nota'] !== '' ? ' - ' . $s['nota'] : '');
@@ -449,11 +472,11 @@ class ReporteResumenDiarioController extends BaseModuloController
                     'val' => static fn (array $r): string => ReportePdf::texto((string) $r[$k], $ancho, $pt)];
             }
         }
-        return $html . ReportePdf::listado($cols, $s['filas'], 'TOTAL');
+        return ['titulo' => $html, 'cols' => $cols, 'filas' => $s['filas']];
     }
 
-    /** Resumen final: ventas, compras y caja por forma de pago (solo lo que existe). */
-    private function resumenPdf(array $datos, float $pt): string
+    /** Resumen final: ventas, compras y caja por forma de pago (solo lo que existe), como piezas del PDF. */
+    private function resumenPdf(array $datos, float $pt): array
     {
         $r    = $datos['resumen'];
         $html = $this->bandaPdf('RESUMEN DEL DÍA');
@@ -469,10 +492,11 @@ class ReporteResumenDiarioController extends BaseModuloController
             }
             $html .= '</table>';
         }
+        $piezas = [$html];
         if ($r['caja']) {
-            $html .= $this->seccionPdf($r['caja'], $pt);
+            $piezas[] = $this->seccionPdf($r['caja'], $pt);
         }
-        return $html;
+        return $piezas;
     }
 
     /** Firmas: "Realizado por" con quien genera el resumen y "Aprobado por" en blanco. */

@@ -527,10 +527,17 @@ class ReporteCarteraController extends BaseModuloController
     // ────────────────────────────────────────────────────────────────
     // PDF / EXCEL / CORREO
     // ────────────────────────────────────────────────────────────────
-    private function construirHtmlReportePdf(array $ledgers, string $nombreEmpresa, array $filtros): string
+    /**
+     * Escribe el PDF (descarga y correo): un estado de cuenta por cliente/proveedor, cada uno
+     * en hoja nueva, escrito por bloques (App\Helpers\PdfPorBloques): una fila por writeHTML,
+     * con la cabecera de columnas repetida en cada hoja. En un solo writeHTML el tiempo crece
+     * al cuadrado de los movimientos, y "Todos" con muchos clientes tardaba minutos.
+     */
+    private function escribirReportePdf(\Spipu\Html2Pdf\Html2Pdf $html2pdf, array $ledgers, string $nombreEmpresa, array $filtros): void
     {
         $etiqueta = $this->etiquetaEntidad($filtros['tipo']);
         $rango = $this->formatearRango($filtros);
+        $h = static fn ($v): string => htmlspecialchars((string) $v);
 
         // Anchos por columna (table-layout: fixed, suman 100%), repetidos en el <th> y en cada
         // <td>: sin ellos Html2Pdf ensancha la columna hasta que su texto quepa en una línea,
@@ -544,10 +551,9 @@ class ReporteCarteraController extends BaseModuloController
         $celda = static fn (?string $t, int $pct): string
             => \App\Helpers\ReportePdf::texto((string) $t, $pct / 100 * 521.6 - 6.0, 8.5);
 
-        ob_start();
-        ?>
-        <style>
+        $estilos = '<style>
             table { width: 100%; border-collapse: collapse; font-family: Arial, sans-serif; font-size: 8.5pt; margin: 0 0 14px 0; table-layout: fixed; }
+            table.fila { margin-bottom: 0; }
             th { background: #f2f2f2; border: 1px solid #ccc; padding: 4px; text-align: center; }
             td { border: 1px solid #ccc; padding: 4px; overflow: hidden; word-wrap: break-word; }
             .text-end { text-align: right; }
@@ -555,59 +561,49 @@ class ReporteCarteraController extends BaseModuloController
             .header { text-align: center; margin-bottom: 14px; }
             .saldo-row td { background: #f8f9fa; font-weight: bold; }
             .total-row td { background: #e9ecef; font-weight: bold; }
-        </style>
-        <?php // Una <page> por cliente/proveedor: cada estado de cuenta empieza en hoja nueva. ?>
-        <?php foreach ($ledgers as $ledger): $e = $ledger['entidad']; ?>
-            <page backtop="8mm" backbottom="12mm" backleft="8mm" backright="8mm" footer="page">
-            <div class="header">
-                <h2><?= htmlspecialchars($nombreEmpresa) ?></h2>
-                <h3>Estado de Cuenta - <?= htmlspecialchars($etiqueta) ?></h3>
-                <p><strong><?= htmlspecialchars($e['nombre'] ?? '') ?></strong> — <?= htmlspecialchars($e['identificacion'] ?? '') ?></p>
-                <p>Período: <?= htmlspecialchars($rango) ?> &nbsp;|&nbsp; Fecha de reporte: <?= date('d-m-Y H:i:s') ?></p>
-                <?php if (($filtros['documento'] ?? '') !== ''): ?>
-                    <p>Documento: <strong><?= htmlspecialchars($filtros['documento']) ?></strong></p>
-                <?php endif; ?>
-            </div>
-            <table>
-                <thead>
-                    <tr>
-                        <th style="width:<?= $w['fecha'] ?>%;">Fecha</th>
-                        <th style="width:<?= $w['tipo'] ?>%;">Tipo</th>
-                        <th style="width:<?= $w['doc'] ?>%;">Documento</th>
-                        <th style="width:<?= $w['det'] ?>%;">Detalle</th>
-                        <th style="width:<?= $w['deuda'] ?>%;">Deuda Generada</th>
-                        <th style="width:<?= $w['abono'] ?>%;">Abono</th>
-                        <th style="width:<?= $w['saldo'] ?>%;">Saldo</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    <tr class="saldo-row">
-                        <td colspan="6" class="text-end" style="width:<?= 100 - $w['saldo'] ?>%;">Saldo Anterior</td>
-                        <td class="text-end" style="width:<?= $w['saldo'] ?>%;"><?= number_format($ledger['saldo_anterior'], 2) ?></td>
-                    </tr>
-                    <?php foreach ($ledger['movimientos'] as $m): ?>
-                        <tr>
-                            <td class="text-center" style="width:<?= $w['fecha'] ?>%;"><?= date('d-m-Y', strtotime($m['fecha'])) ?></td>
-                            <td class="text-center" style="width:<?= $w['tipo'] ?>%;"><?= htmlspecialchars(ucfirst(strtolower(str_replace('_', ' ', $m['origen'])))) ?></td>
-                            <td style="width:<?= $w['doc'] ?>%;"><?= $celda($m['numero_documento'] ?? '', $w['doc']) ?></td>
-                            <td style="width:<?= $w['det'] ?>%;"><?= $celda($m['detalle'] ?? '', $w['det']) ?></td>
-                            <td class="text-end" style="width:<?= $w['deuda'] ?>%;"><?= $m['tipo_movimiento'] === 'CARGO' ? number_format((float) $m['monto'], 2) : '' ?></td>
-                            <td class="text-end" style="width:<?= $w['abono'] ?>%;"><?= $m['tipo_movimiento'] === 'ABONO' ? number_format((float) $m['monto'], 2) : '' ?></td>
-                            <td class="text-end" style="width:<?= $w['saldo'] ?>%;"><?= number_format((float) $m['saldo'], 2) ?></td>
-                        </tr>
-                    <?php endforeach; ?>
-                    <tr class="total-row">
-                        <td colspan="4" class="text-end" style="width:<?= $w['fecha'] + $w['tipo'] + $w['doc'] + $w['det'] ?>%;">TOTALES</td>
-                        <td class="text-end" style="width:<?= $w['deuda'] ?>%;"><?= number_format($ledger['total_cargos'], 2) ?></td>
-                        <td class="text-end" style="width:<?= $w['abono'] ?>%;"><?= number_format($ledger['total_abonos'], 2) ?></td>
-                        <td class="text-end" style="width:<?= $w['saldo'] ?>%;">$<?= number_format($ledger['saldo_final'], 2) ?></td>
-                    </tr>
-                </tbody>
-            </table>
-            </page>
-        <?php endforeach; ?>
-        <?php
-        return (string) ob_get_clean();
+        </style>';
+        $thead = "<tr><th style='width:{$w['fecha']}%;'>Fecha</th><th style='width:{$w['tipo']}%;'>Tipo</th>"
+               . "<th style='width:{$w['doc']}%;'>Documento</th><th style='width:{$w['det']}%;'>Detalle</th>"
+               . "<th style='width:{$w['deuda']}%;'>Deuda Generada</th><th style='width:{$w['abono']}%;'>Abono</th>"
+               . "<th style='width:{$w['saldo']}%;'>Saldo</th></tr>";
+
+        // Una <page> por cliente/proveedor: cada estado de cuenta empieza en hoja nueva. Los
+        // estilos van solo en el primero; siguen vigentes en los writeHTML siguientes.
+        foreach ($ledgers as $i => $ledger) {
+            $e = $ledger['entidad'];
+            $inicio = ($i === 0 ? $estilos : '')
+                . '<page backtop="8mm" backbottom="12mm" backleft="8mm" backright="8mm" footer="page">'
+                . '<div class="header">'
+                . '<h2>' . $h($nombreEmpresa) . '</h2>'
+                . '<h3>Estado de Cuenta - ' . $h($etiqueta) . '</h3>'
+                . '<p><strong>' . $h($e['nombre'] ?? '') . '</strong> — ' . $h($e['identificacion'] ?? '') . '</p>'
+                . '<p>Período: ' . $h($rango) . ' &nbsp;|&nbsp; Fecha de reporte: ' . date('d-m-Y H:i:s') . '</p>'
+                . (($filtros['documento'] ?? '') !== '' ? '<p>Documento: <strong>' . $h($filtros['documento']) . '</strong></p>' : '')
+                . '</div></page>';
+
+            $filas = ["<tr class='saldo-row'>"
+                . "<td class='text-end' style='width:" . (100 - $w['saldo']) . "%;'>Saldo Anterior</td>"
+                . "<td class='text-end' style='width:{$w['saldo']}%;'>" . number_format($ledger['saldo_anterior'], 2) . '</td></tr>'];
+            foreach ($ledger['movimientos'] as $m) {
+                $filas[] = '<tr>'
+                    . "<td class='text-center' style='width:{$w['fecha']}%;'>" . date('d-m-Y', strtotime($m['fecha'])) . '</td>'
+                    . "<td class='text-center' style='width:{$w['tipo']}%;'>" . $h(ucfirst(strtolower(str_replace('_', ' ', $m['origen'])))) . '</td>'
+                    . "<td style='width:{$w['doc']}%;'>" . $celda($m['numero_documento'] ?? '', $w['doc']) . '</td>'
+                    . "<td style='width:{$w['det']}%;'>" . $celda($m['detalle'] ?? '', $w['det']) . '</td>'
+                    . "<td class='text-end' style='width:{$w['deuda']}%;'>" . ($m['tipo_movimiento'] === 'CARGO' ? number_format((float) $m['monto'], 2) : '') . '</td>'
+                    . "<td class='text-end' style='width:{$w['abono']}%;'>" . ($m['tipo_movimiento'] === 'ABONO' ? number_format((float) $m['monto'], 2) : '') . '</td>'
+                    . "<td class='text-end' style='width:{$w['saldo']}%;'>" . number_format((float) $m['saldo'], 2) . '</td>'
+                    . '</tr>';
+            }
+            $final = "<table class='fila'><tr class='total-row'>"
+                . "<td class='text-end' style='width:" . ($w['fecha'] + $w['tipo'] + $w['doc'] + $w['det']) . "%;'>TOTALES</td>"
+                . "<td class='text-end' style='width:{$w['deuda']}%;'>" . number_format($ledger['total_cargos'], 2) . '</td>'
+                . "<td class='text-end' style='width:{$w['abono']}%;'>" . number_format($ledger['total_abonos'], 2) . '</td>'
+                . "<td class='text-end' style='width:{$w['saldo']}%;'>$" . number_format($ledger['saldo_final'], 2) . '</td>'
+                . '</tr></table>';
+
+            \App\Helpers\PdfPorBloques::escribir($html2pdf, $inicio, $thead, $filas, $final);
+        }
     }
 
     /** @return array{0: array, 1: array} [headers, secciones] para ReportService::exportToExcelSeccionado() */
@@ -703,9 +699,8 @@ class ReporteCarteraController extends BaseModuloController
             $autoload = MVC_ROOT . '/vendor/autoload.php';
             if (file_exists($autoload)) require_once $autoload;
 
-            $html = $this->construirHtmlReportePdf($ledgers, $nombreEmpresa, $filtros);
             $html2pdf = new \Spipu\Html2Pdf\Html2Pdf('P', 'A4', 'es');
-            $html2pdf->writeHTML($html);
+            $this->escribirReportePdf($html2pdf, $ledgers, $nombreEmpresa, $filtros);
             $html2pdf->output('ReporteCartera_' . date('Ymd_His') . '.pdf', 'D');
             exit;
         } catch (\Throwable $e) {
@@ -763,10 +758,9 @@ class ReporteCarteraController extends BaseModuloController
             $tmpBase = sys_get_temp_dir() . '/rc_' . $idEmpresa . '_' . time();
 
             if ($adjuntar === 'pdf' || $adjuntar === 'ambos') {
-                $html = $this->construirHtmlReportePdf($ledgers, $nombreEmpresa, $filtros);
                 $pdfPath = $tmpBase . '.pdf';
                 $html2pdf = new \Spipu\Html2Pdf\Html2Pdf('P', 'A4', 'es');
-                $html2pdf->writeHTML($html);
+                $this->escribirReportePdf($html2pdf, $ledgers, $nombreEmpresa, $filtros);
                 $html2pdf->output($pdfPath, 'F');
                 $adjuntosPaths[$pdfPath] = 'ReporteCartera_' . date('Ymd') . '.pdf';
             }

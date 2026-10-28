@@ -159,7 +159,9 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosColumnasOcultas($vistaConfig 
                         ?>
                             <tr class="clickable-row<?= (empty($r['activo']) || !$r['activo']) ? ' fp-row-inactivo' : '' ?>" onclick="abrirModalFP(<?= $r['id'] ?>)">
                                 <td class="ps-3 fw-medium" data-col="nombre"><?= htmlspecialchars($r['nombre']) ?></td>
-                                <td data-col="tipo"><span class="badge <?= $tipoCls ?> bg-opacity-10 <?= $r['tipo']==='TARJETA'?'text-dark':'text-'.$tipoCls ?> border"><?= $r['tipo'] ?></span></td>
+                                <td data-col="tipo"><span class="badge <?= $tipoCls ?> bg-opacity-10 <?= $r['tipo']==='TARJETA'?'text-dark':'text-'.$tipoCls ?> border"><?= $r['tipo'] ?></span><?php
+                                    if (!\App\Helpers\TiposFormaPago::esMonetario((string) $r['tipo'])): ?>
+                                    <i class="bi bi-slash-circle text-warning ms-1" title="No mueve dinero: no suma en la entrada/salida de dinero de los reportes"></i><?php endif; ?></td>
                                 <td data-col="aplica_en"><span class="badge bg-light text-dark border"><?= $r['aplica_en'] ?></span></td>
                                 <td class="text-center" data-col="orden">
                                     <?php if (isset($r['orden'])): ?>

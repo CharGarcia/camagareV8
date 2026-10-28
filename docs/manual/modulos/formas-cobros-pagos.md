@@ -5,8 +5,8 @@ categoria: Tesorería
 ruta_modulo: modulos/formas_cobros_pagos
 tipo: modulo
 visibilidad: todos
-etiquetas: formas de pago, formas de cobro, efectivo, caja, banco, tarjeta, payphone, anticipo, transferencia, cheque, orden, ordenar formas de pago, primera forma de pago, orden en ingresos, orden en egresos, saldo, mostrar saldo, ocultar saldo, saldo disponible, saldo de caja, saldo del banco
-version: 1.7
+etiquetas: formas de pago, formas de cobro, efectivo, caja, banco, tarjeta, payphone, anticipo, transferencia, cheque, orden, ordenar formas de pago, primera forma de pago, orden en ingresos, orden en egresos, saldo, mostrar saldo, ocultar saldo, saldo disponible, saldo de caja, saldo del banco, mueve dinero, monetario, no monetario, otros, cruce, compensación, nuvei, bancaria
+version: 1.8
 orden: 70
 estado: activo
 ---
@@ -20,17 +20,37 @@ dinero indica por qué forma pasó.
 
 ## Tipos
 
-El tipo determina cómo se comporta la forma de pago:
+El tipo determina cómo se comporta la forma de pago y si **mueve dinero** (entra o
+sale de caja o bancos):
 
-| Tipo | Uso |
-|------|-----|
-| Efectivo | Caja física |
-| Tarjeta | Cobro con tarjeta presente (datáfono). Sirve para cobros y pagos |
-| Payphone | Cobro en línea. **Solo para ingresos** |
-| Anticipo | Dinero entregado por adelantado, que después se aplica a documentos |
+| Tipo | Uso | ¿Mueve dinero? |
+|------|-----|----------------|
+| Efectivo | Caja física | Sí |
+| Bancaria | Cuenta bancaria: transferencias, depósitos, cheques | Sí |
+| Tarjeta | Cobro con tarjeta presente (datáfono). Sirve para cobros y pagos | Sí |
+| Payphone | Cobro en línea. **Solo para ingresos** | Sí |
+| Nuvei | Cobro en línea con enlace de pago. **Solo para ingresos** | Sí |
+| Anticipo | Dinero entregado por adelantado, que después se aplica a documentos | **No** |
+| Otros | Cruces, compensaciones y demás formas que no pasan por caja ni bancos | **No** |
 
 La separación entre **Tarjeta** y **Payphone** es deliberada: una es la tarjeta
 física en el local y la otra el cobro en línea, y no se comportan igual.
+
+### Formas que no mueven dinero
+
+Al elegir el tipo, debajo del selector se indica si **mueve dinero**; en el
+listado, las formas que no lo mueven llevan el ícono ⊘ (círculo tachado) junto a su
+tipo. Lo que se cobra o paga con ellas **no suma** como entrada o salida de dinero
+en el **Reporte de Ingresos y Egresos** (indicador *No monetario*, filtro *Solo
+monetarios*):
+
+- **Anticipo**: el dinero entró (o salió) cuando se registró el anticipo; aplicarlo
+  a una factura no es dinero nuevo, y contarlo otra vez lo duplicaría.
+- **Otros**: no pasa por caja ni bancos.
+
+Si una forma que sí mueve dinero quedó como **Otros**, cámbiele el tipo al que
+corresponda (Efectivo, Bancaria…): de lo contrario el reporte no la contará como
+dinero.
 
 ## Anticipos
 
@@ -152,6 +172,7 @@ por dos medios (p. ej. "Cheques Pichincha" y "Transferencias Pichincha").
 
 ## Historial de cambios
 
+- **1.8** — Cada tipo indica si **mueve dinero**: el modal lo muestra debajo del selector y el listado marca con un ícono las formas que no lo mueven (Anticipo y Otros). El Reporte de Ingresos y Egresos usa esa marca para separar lo no monetario de la entrada y salida de dinero. Se agregan Bancaria y Nuvei a la tabla de tipos.
 - **1.7** — Se documenta que la cuenta de una forma **inactiva** que ya se usa se asigna
   desde este módulo (Configuración Contable solo muestra las activas).
 - **1.6** — La dirección del navegador queda limpia al buscar, cambiar de página u

@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\repositories\modulos;
 
+use App\Helpers\TiposFormaPago;
 use App\repositories\BaseRepository;
 use PDO;
 
@@ -49,13 +50,12 @@ class ReporteIngresosEgresosRepository extends BaseRepository
     }
 
     /**
-     * Lo cobrado/pagado con una forma tipo ANTICIPO por comprobante. Ese dinero ya
-     * entró (o salió) cuando se registró el anticipo —un ingreso/egreso con opción
-     * ANTICIPO_CLIENTE/PROVEEDOR—; el comprobante que lo aplica a una factura o compra
-     * no mueve dinero. El reporte muestra el monto completo de cada línea y, aparte,
-     * cuánto de él fue anticipo y cuánto entrada/salida de dinero (monto_caja).
+     * Lo cobrado/pagado con formas no monetarias por comprobante: anticipo y otros por
+     * separado. El reporte muestra el monto completo de cada línea y, aparte, cuánto fue
+     * anticipo, cuánto otros y cuánto entrada/salida de dinero (monto_caja). Solo recorre
+     * los pagos de esas formas.
      */
-    private static function anticipoPorComprobante(string $flujo): string
+    private static function noMonetarioPorComprobante(string $flujo): string
     {
         $esIng = $flujo === 'INGRESO';
         $pag   = $esIng ? 'ingresos_pagos'    : 'egresos_pagos';
@@ -63,25 +63,53 @@ class ReporteIngresosEgresosRepository extends BaseRepository
         $fk    = $esIng ? 'id_ingreso'        : 'id_egreso';
         $forma = $esIng ? 'id_forma_cobro'    : 'id_forma_pago';
         $vivo  = $esIng ? '' : self::pagoVigente('app');
-        return "SELECT app.$fk AS id_comprobante, SUM(app.monto) AS anticipo
+        $tipos = TiposFormaPago::noMonetariosSql();
+        return "SELECT app.$fk AS id_comprobante,
+                       SUM(CASE WHEN apf.tipo = 'ANTICIPO' THEN app.monto ELSE 0 END) AS anticipo,
+                       SUM(CASE WHEN apf.tipo <> 'ANTICIPO' THEN app.monto ELSE 0 END) AS otros
                 FROM $pag app
-                INNER JOIN empresa_formas_pago apf ON apf.id = app.$forma AND apf.tipo = 'ANTICIPO'
+                INNER JOIN empresa_formas_pago apf ON apf.id = app.$forma AND apf.tipo IN ($tipos)
                 INNER JOIN $cab apc ON apc.id = app.$fk AND apc.id_empresa = :id_empresa
                 WHERE true$vivo
                 GROUP BY app.$fk";
     }
 
     /**
-     * Parte de la línea ($montoLinea) que se pagó con anticipo: el anticipo del
-     * comprobante (alias ant) se reparte entre sus líneas en proporción al total.
-     * El COALESCE va dentro del LEAST: LEAST(1, NULL) devuelve 1 en PostgreSQL (ignora
-     * los NULL), y un comprobante sin anticipo quedaría pagado entero con anticipo.
+     * Parte de la línea ($montoLinea) pagada con formas no monetarias (alias nm): lo de
+     * esas formas se reparte entre las líneas del comprobante en proporción al total.
+     * $partes: 'anticipo', 'otros' o 'anticipo + otros'. El COALESCE va dentro del LEAST:
+     * LEAST(1, NULL) devuelve 1 en PostgreSQL (ignora los NULL), y un comprobante sin
+     * esas formas quedaría pagado entero con ellas.
      */
-    private static function montoAnticipoLinea(string $montoLinea): string
+    private static function parteLinea(string $montoLinea, string $partes): string
     {
-        return "COALESCE($montoLinea * LEAST(1, COALESCE(ant.anticipo, 0) / NULLIF(c.monto_total, 0)), 0)";
+        $suma = implode(' + ', array_map(static fn ($p) => "COALESCE(nm.$p, 0)", explode(' + ', $partes)));
+        return "COALESCE($montoLinea * LEAST(1, ($suma) / NULLIF(c.monto_total, 0)), 0)";
     }
 
+    /**
+     * Columnas de monto de una línea. Con todos los movimientos: monto completo, parte
+     * con anticipo, parte con otros y entrada/salida de dinero (monto_caja). Con "Solo
+     * monetarios" (filtro movimientos = MONETARIOS) el monto ES la parte de dinero y las
+     * partes no monetarias quedan en cero.
+     */
+    private static function columnasMonto(string $montoLinea, array $f): string
+    {
+        $caja = "$montoLinea - " . self::parteLinea($montoLinea, 'anticipo + otros');
+        if (self::soloMonetarios($f)) {
+            return "$caja AS monto, 0::numeric AS monto_anticipo, 0::numeric AS monto_otros, $caja AS monto_caja";
+        }
+        return "$montoLinea AS monto,
+                " . self::parteLinea($montoLinea, 'anticipo') . " AS monto_anticipo,
+                " . self::parteLinea($montoLinea, 'otros') . " AS monto_otros,
+                $caja AS monto_caja";
+    }
+
+    /** ¿Filtro "Movimientos: Solo monetarios"? */
+    private static function soloMonetarios(array $f): bool
+    {
+        return strtoupper((string) ($f['movimientos'] ?? '')) === 'MONETARIOS';
+    }
     /**
      * Condición "la línea de ingresos_detalle ($d) es del vendedor :id_vendedor".
      * El vendedor es el del documento cobrado —factura o recibo de venta—, igual que
@@ -196,6 +224,11 @@ class ReporteIngresosEgresosRepository extends BaseRepository
         if ($esIng && !empty($f['id_vendedor'])) {
             $w .= " AND " . self::condVendedor('d'); $params[':id_vendedor'] = (int)$f['id_vendedor'];
         }
+        // Solo monetarios: fuera las líneas pagadas enteras con anticipo u otros.
+        if (self::soloMonetarios($f)) {
+            $linea = $esIng ? 'd.monto_cobrado' : 'd.monto_pagado';
+            $w .= " AND ($linea - " . self::parteLinea($linea, 'anticipo + otros') . ") > 0.005";
+        }
         return $w;
     }
 
@@ -222,6 +255,10 @@ class ReporteIngresosEgresosRepository extends BaseRepository
             $w .= " AND EXISTS (SELECT 1 FROM ingresos_detalle dvn WHERE dvn.id_ingreso = c.id AND " . self::condVendedor('dvn') . ")";
             $params[':id_vendedor'] = (int)$f['id_vendedor'];
         }
+        // Solo monetarios: fuera los cobros/pagos con formas que no mueven dinero.
+        if (self::soloMonetarios($f)) {
+            $w .= " AND fp.tipo NOT IN (" . TiposFormaPago::noMonetariosSql() . ")";
+        }
         return $w;
     }
 
@@ -231,7 +268,7 @@ class ReporteIngresosEgresosRepository extends BaseRepository
      * formas de cobro/pago y quién registró) sin tocar las columnas base, así el
      * filtro de texto da las mismas filas en pantalla y en el Excel.
      */
-    private function selectFlujo(string $flujo, bool $completo = false): string
+    private function selectFlujo(string $flujo, bool $completo = false, array $f = []): string
     {
         if ($flujo === 'INGRESO') {
             $extraCols = !$completo ? '' : ",
@@ -263,15 +300,13 @@ class ReporteIngresosEgresosRepository extends BaseRepository
                            d.tipo_documento AS tipo_documento,
                            d.numero_documento AS numero_documento,
                            d.descripcion    AS descripcion,
-                           d.monto_cobrado  AS monto,
-                           " . self::montoAnticipoLinea('d.monto_cobrado') . " AS monto_anticipo,
-                           d.monto_cobrado - " . self::montoAnticipoLinea('d.monto_cobrado') . " AS monto_caja,
+                           " . self::columnasMonto('d.monto_cobrado', $f) . ",
                            c.observaciones  AS observaciones,
                            d.id             AS id_detalle,
                            ven.nombre       AS vendedor$extraCols
                     FROM ingresos_cabecera c
                     INNER JOIN ingresos_detalle d ON d.id_ingreso = c.id
-                    LEFT  JOIN (" . self::anticipoPorComprobante('INGRESO') . ") ant ON ant.id_comprobante = c.id
+                    LEFT  JOIN (" . self::noMonetarioPorComprobante('INGRESO') . ") nm ON nm.id_comprobante = c.id
                     LEFT  JOIN clientes cli ON cli.id = COALESCE(c.id_cliente, c.id_recibo_cliente)
                     LEFT  JOIN empresa_opciones_ingreso_egreso oc ON oc.id = c.id_ingreso_concepto
                     LEFT  JOIN ventas_cabecera        xf ON d.tipo_documento = 'FACTURA' AND xf.id = d.id_referencia_documento
@@ -308,15 +343,13 @@ class ReporteIngresosEgresosRepository extends BaseRepository
                        d.tipo_documento AS tipo_documento,
                        d.numero_documento AS numero_documento,
                        d.descripcion    AS descripcion,
-                       d.monto_pagado   AS monto,
-                       " . self::montoAnticipoLinea('d.monto_pagado') . " AS monto_anticipo,
-                       d.monto_pagado - " . self::montoAnticipoLinea('d.monto_pagado') . " AS monto_caja,
+                       " . self::columnasMonto('d.monto_pagado', $f) . ",
                        c.observaciones  AS observaciones,
                        d.id             AS id_detalle,
                        NULL::varchar    AS vendedor$extraCols
                 FROM egresos_cabecera c
                 INNER JOIN egresos_detalle d ON d.id_egreso = c.id
-                LEFT  JOIN (" . self::anticipoPorComprobante('EGRESO') . ") ant ON ant.id_comprobante = c.id
+                LEFT  JOIN (" . self::noMonetarioPorComprobante('EGRESO') . ") nm ON nm.id_comprobante = c.id
                 LEFT  JOIN proveedores pr  ON pr.id  = c.id_proveedor
                 LEFT  JOIN empleados   emp ON emp.id = c.id_empleado
                 LEFT  JOIN empresa_opciones_ingreso_egreso oc ON oc.id = c.id_egreso_concepto$extraJoins";
@@ -492,7 +525,7 @@ class ReporteIngresosEgresosRepository extends BaseRepository
         $ramas  = [];
         foreach (['INGRESO', 'EGRESO'] as $flujo) {
             if (!$this->incluyeFlujo($flujo, $f)) continue;
-            $ramas[] = $this->selectFlujo($flujo, $completo) . "\n WHERE " . $this->whereFlujo($flujo, $f, $params);
+            $ramas[] = $this->selectFlujo($flujo, $completo, $f) . "\n WHERE " . $this->whereFlujo($flujo, $f, $params);
         }
         if (empty($ramas)) {
             // Ningún flujo aplica: forzar resultado vacío consistente
@@ -568,11 +601,13 @@ class ReporteIngresosEgresosRepository extends BaseRepository
                             || COALESCE(' · ' || NULLIF(descripcion, ''), '') END
                   || ' \$' || to_char(monto, 'FM999999990.00')
                   || CASE WHEN monto_anticipo > 0.004
-                          THEN ' (anticipo aplicado \$' || to_char(monto_anticipo, 'FM999999990.00') || ')' ELSE '' END";
+                          THEN ' (anticipo aplicado \$' || to_char(monto_anticipo, 'FM999999990.00') || ')' ELSE '' END
+                  || CASE WHEN monto_otros > 0.004
+                          THEN ' (otros no monetarios \$' || to_char(monto_otros, 'FM999999990.00') || ')' ELSE '' END";
         $sql = "SELECT tipo_flujo, id_comprobante, numero, fecha, tercero_tipo, tercero_nombre, tercero_ident,
                        SUM(monto) AS valor,
-                       ROUND(SUM(monto_anticipo), 2) AS anticipo,
-                       ROUND(SUM(monto_caja), 2)     AS caja,
+                       ROUND(SUM(monto_anticipo + monto_otros), 2) AS no_monetario,
+                       ROUND(SUM(monto_caja), 2) AS caja,
                        string_agg($linea, E'\\n' ORDER BY id_detalle) AS detalle,
                        MAX(observaciones) AS observaciones,
                        string_agg(DISTINCT vendedor, ', ' ORDER BY vendedor) AS asesor
@@ -591,7 +626,7 @@ class ReporteIngresosEgresosRepository extends BaseRepository
                        COUNT(DISTINCT id_comprobante) AS comprobantes,
                        COUNT(*)                       AS documentos,
                        SUM(monto)                     AS total,
-                       ROUND(SUM(monto_anticipo), 2)  AS anticipo,
+                       ROUND(SUM(monto_anticipo + monto_otros), 2) AS no_monetario,
                        ROUND(SUM(monto_caja), 2)      AS caja
                 FROM ( $union ) r WHERE 1=1 $textoWhere
                 GROUP BY tipo_flujo, tercero_tipo, tercero_nombre
@@ -604,8 +639,9 @@ class ReporteIngresosEgresosRepository extends BaseRepository
     {
         [$union, $params] = $this->armarUnionPagos($idEmpresa, $f);
         $textoWhere = $this->filtroTexto($f, $params, ['numero', 'tercero_nombre', 'forma_nombre']);
+        $tipos = TiposFormaPago::noMonetariosSql();
         $sql = "SELECT tipo_flujo, forma_nombre, MAX(forma_tipo) AS forma_tipo,
-                       BOOL_OR(forma_tipo = 'ANTICIPO') AS es_anticipo,
+                       BOOL_OR(forma_tipo IN ($tipos)) AS es_no_monetario,
                        COUNT(DISTINCT id_comprobante) AS comprobantes,
                        COUNT(*)   AS pagos_n,
                        SUM(monto) AS total
@@ -652,32 +688,37 @@ class ReporteIngresosEgresosRepository extends BaseRepository
     }
 
     /**
-     * Sumas por flujo de las filas del UNION (alias r): lo cobrado/pagado completo,
-     * la parte aplicada con anticipo y la entrada/salida de dinero, más los conteos.
+     * Sumas por flujo de las filas del UNION (alias r): lo cobrado/pagado completo, lo
+     * pagado con anticipo, con otras formas no monetarias y la entrada/salida de dinero,
+     * más los conteos.
      */
     private const SUMAS_FLUJO = "
                     COALESCE(SUM(CASE WHEN tipo_flujo='INGRESO' THEN monto ELSE 0 END), 0) AS ingresos,
                     COALESCE(SUM(CASE WHEN tipo_flujo='EGRESO'  THEN monto ELSE 0 END), 0) AS egresos,
                     ROUND(COALESCE(SUM(CASE WHEN tipo_flujo='INGRESO' THEN monto_anticipo ELSE 0 END), 0), 2) AS ingresos_anticipo,
                     ROUND(COALESCE(SUM(CASE WHEN tipo_flujo='EGRESO'  THEN monto_anticipo ELSE 0 END), 0), 2) AS egresos_anticipo,
+                    ROUND(COALESCE(SUM(CASE WHEN tipo_flujo='INGRESO' THEN monto_otros ELSE 0 END), 0), 2) AS ingresos_otros,
+                    ROUND(COALESCE(SUM(CASE WHEN tipo_flujo='EGRESO'  THEN monto_otros ELSE 0 END), 0), 2) AS egresos_otros,
+                    ROUND(COALESCE(SUM(CASE WHEN tipo_flujo='INGRESO' THEN monto_caja ELSE 0 END), 0), 2) AS ingresos_caja,
+                    ROUND(COALESCE(SUM(CASE WHEN tipo_flujo='EGRESO'  THEN monto_caja ELSE 0 END), 0), 2) AS egresos_caja,
                     COUNT(DISTINCT CASE WHEN tipo_flujo='INGRESO' THEN id_comprobante END) AS n_ing,
                     COUNT(DISTINCT CASE WHEN tipo_flujo='EGRESO'  THEN id_comprobante END) AS n_egr";
 
     /**
-     * Completa entrada/salida de dinero (cobrado − anticipo) y el neto. El neto es de
-     * dinero: lo aplicado con anticipo ya entró o salió al registrar el anticipo.
+     * Completa lo no monetario (anticipo + otros) y el neto. El neto es de dinero: lo
+     * pagado con formas no monetarias no entró ni salió de caja o bancos.
      */
     private static function conNeto(array $r): array
     {
-        $r['ingresos_caja'] = round((float) $r['ingresos'] - (float) $r['ingresos_anticipo'], 2);
-        $r['egresos_caja']  = round((float) $r['egresos']  - (float) $r['egresos_anticipo'], 2);
-        $r['neto']          = round($r['ingresos_caja'] - $r['egresos_caja'], 2);
+        $r['ingresos_no_monetario'] = round((float) $r['ingresos_anticipo'] + (float) $r['ingresos_otros'], 2);
+        $r['egresos_no_monetario']  = round((float) $r['egresos_anticipo'] + (float) $r['egresos_otros'], 2);
+        $r['neto'] = round((float) $r['ingresos_caja'] - (float) $r['egresos_caja'], 2);
         return $r;
     }
 
     /**
-     * Totales: cobrado/pagado completo, aplicado con anticipo, entrada/salida de dinero,
-     * neto (de dinero) y conteos.
+     * Totales: cobrado/pagado completo, no monetario (anticipo y otros), entrada/salida
+     * de dinero, neto (de dinero) y conteos.
      */
     public function getEstadisticas(int $idEmpresa, array $f): array
     {
@@ -685,21 +726,22 @@ class ReporteIngresosEgresosRepository extends BaseRepository
         $textoWhere = $this->filtroTexto($f, $params);
         $sql = "SELECT " . self::SUMAS_FLUJO . ", COUNT(*) AS n_documentos
                 FROM ( $union ) r WHERE 1=1 $textoWhere";
-        $r = self::conNeto($this->q($sql, $params)->fetch(PDO::FETCH_ASSOC) ?: [
-            'ingresos' => 0, 'egresos' => 0, 'ingresos_anticipo' => 0, 'egresos_anticipo' => 0,
-            'n_ing' => 0, 'n_egr' => 0, 'n_documentos' => 0,
-        ]);
+        $r = self::conNeto($this->q($sql, $params)->fetch(PDO::FETCH_ASSOC));
         return [
-            'total_ingresos'    => (float) $r['ingresos'],
-            'total_egresos'     => (float) $r['egresos'],
-            'anticipo_ingresos' => (float) $r['ingresos_anticipo'],
-            'anticipo_egresos'  => (float) $r['egresos_anticipo'],
-            'caja_ingresos'     => $r['ingresos_caja'],
-            'caja_egresos'      => $r['egresos_caja'],
-            'neto'              => $r['neto'],
-            'n_ingresos'        => (int) $r['n_ing'],
-            'n_egresos'         => (int) $r['n_egr'],
-            'n_documentos'      => (int) $r['n_documentos'],
+            'total_ingresos'        => (float) $r['ingresos'],
+            'total_egresos'         => (float) $r['egresos'],
+            'anticipo_ingresos'     => (float) $r['ingresos_anticipo'],
+            'anticipo_egresos'      => (float) $r['egresos_anticipo'],
+            'otros_ingresos'        => (float) $r['ingresos_otros'],
+            'otros_egresos'         => (float) $r['egresos_otros'],
+            'no_monetario_ingresos' => $r['ingresos_no_monetario'],
+            'no_monetario_egresos'  => $r['egresos_no_monetario'],
+            'caja_ingresos'         => (float) $r['ingresos_caja'],
+            'caja_egresos'          => (float) $r['egresos_caja'],
+            'neto'                  => $r['neto'],
+            'n_ingresos'            => (int) $r['n_ing'],
+            'n_egresos'             => (int) $r['n_egr'],
+            'n_documentos'          => (int) $r['n_documentos'],
         ];
     }
 

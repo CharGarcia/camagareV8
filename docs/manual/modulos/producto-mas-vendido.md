@@ -6,7 +6,7 @@ ruta_modulo: modulos/producto_mas_vendido
 tipo: modulo
 visibilidad: todos
 etiquetas: producto mas vendido, ranking de ventas, top productos, mejores productos, productos top, reporte de ventas por producto, best sellers, quien compra este producto, clientes por producto, a quien le vendi, grafico de productos, tipo de grafico, documentos de pruebas, recibos en borrador, no salen los recibos, recibos no aparecen
-version: 1.2
+version: 1.3
 orden: 0
 estado: activo
 ---
@@ -127,6 +127,7 @@ escribe en ninguna tabla: es de solo lectura.
 
 ## Historial de cambios
 
+- **1.3** — El **PDF** del ranking toma el formato de los demás reportes (logo, indicadores de productos, unidades y total vendido, y fila de totales) y se arma fila por fila: con *Todos* y miles de productos sale en segundos. Los totales siguen siendo los de todos los productos del período aunque se muestre solo un Top N.
 - **1.2** — **Clientes por producto**: clic sobre un producto abre una ventana con
   los clientes que lo compraron (cantidad, documentos, total y %), descargable en PDF y
   Excel. El **gráfico** toma el diseño de los demás reportes (acordeón y selector de

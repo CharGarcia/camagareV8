@@ -131,6 +131,25 @@ class PlanCuentaDimensionService
     }
 
     /**
+     * Las líneas de un asiento solo pueden llevar centros de costo / proyectos de la propia
+     * empresa (no eliminados). Un inactivo se admite: puede venir de un asiento anterior.
+     * Una consulta por id distinto; sin centro ni proyecto no consulta nada.
+     */
+    public function validarDeEmpresa(array $lineas, int $idEmpresa): void
+    {
+        foreach (PlanCuentaDimensionRepository::TIPOS as $tipo => $col) {
+            $ids = array_unique(array_filter(array_map(fn($l) => (int) ($l[$col] ?? 0), $lineas), fn($v) => $v > 0));
+            foreach ($ids as $id) {
+                if (!$this->repository->getDimension($tipo, $id, $idEmpresa)) {
+                    throw new \InvalidArgumentException($tipo === 'centro'
+                        ? 'Una línea del asiento tiene un centro de costo que no existe en esta empresa.'
+                        : 'Una línea del asiento tiene un proyecto que no existe en esta empresa.');
+                }
+            }
+        }
+    }
+
+    /**
      * Deja los periodos de la cuenta exactamente como vienen en las líneas de sus pestañas:
      * $porTipo = ['centro' => [...], 'proyecto' => [...]], cada línea con 'id' (0 = nueva),
      * id_dimension, vigente_desde, vigente_hasta. Crea las nuevas, actualiza las que
