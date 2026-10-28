@@ -87,6 +87,8 @@ class CentroCostosController extends BaseModuloController
             'ordenJson'  => \App\Helpers\OrdenListado::aJson($orden),
             'ordenParam' => \App\Helpers\OrdenListado::aCadena($orden),
             'vistaConfig'=> $prefsVista,
+            // Pestañas Documentos / Avance-Resumen que ve el usuario (catálogo PestanasModulo).
+            'dimPestanas' => $this->dimPestanas(),
             'fullWidth'  => true,
             // Selects del modal de filtros: solo valores usados en la empresa.
             'opcionesFiltro' => $this->service->getOpcionesFiltroListado($idEmpresa),

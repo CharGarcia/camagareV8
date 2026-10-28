@@ -4,16 +4,17 @@ declare(strict_types=1);
 
 namespace App\Traits;
 
-use App\Helpers\AsientoPestana;
 use App\Services\modulos\DimensionReporteService;
+use App\Services\modulos\PestanasModuloService;
 
 /**
- * Endpoints de las pestañas «Documentos» y «Resumen» de Proyectos y Centros de costo:
- * documentosAjax, resumenAjax, pdfResumen, excelResumen y documentoOrigenAjax.
+ * Endpoints de las pestañas «Documentos» y «Avance / Resumen» de Proyectos y Centros de
+ * costo: documentosAjax, resumenAjax, pdfResumen, excelResumen y documentoOrigenAjax.
  *
- * Muestran importes de los asientos contables, así que además de VER el módulo exigen ver
- * Contabilidad → Asientos Contables (misma regla que la pestaña «Asiento contable» de los
- * documentos, AsientoPestana::puedeVer()).
+ * Permiso: VER el módulo y, para un usuario de nivel 1, que el administrador no le haya
+ * ocultado esa pestaña en /config/permisos-modulos (catálogo App\Helpers\PestanasModulo,
+ * §6). No dependen del permiso de otros módulos. La misma regla dibuja la pestaña y
+ * protege sus datos y exportaciones, para que una URL armada a mano no sirva lo oculto.
  *
  * El controlador que lo usa (extiende BaseModuloController) implementa:
  *   tipoDimension(): 'proyecto' | 'centro'
@@ -25,15 +26,44 @@ trait DimensionReporteTrait
 
     abstract protected function entidadDimension(int $id, int $idEmpresa): ?array;
 
+    private ?array $dimPestanasCache = null;
+
+    /** Clave de la segunda pestaña en el catálogo: 'avance' (proyectos) o 'resumen' (centros). */
+    private function claveResumen(): string
+    {
+        return $this->tipoDimension() === 'proyecto' ? 'avance' : 'resumen';
+    }
+
+    /**
+     * Qué pestañas ve el usuario, una vez por petición: ['documentos' => bool, 'resumen' => bool].
+     * La vista las recibe del index() para dibujar la barra.
+     */
+    protected function dimPestanas(): array
+    {
+        if ($this->dimPestanasCache === null) {
+            $v = PestanasModuloService::crear()->visibles(
+                (int) ($_SESSION['id_empresa'] ?? 0),
+                (int) ($_SESSION['id_usuario'] ?? 0),
+                (int) ($_SESSION['nivel'] ?? 1),
+                $this->getRutaModulo()
+            );
+            $this->dimPestanasCache = [
+                'documentos' => !empty($v['documentos']),
+                'resumen'    => !empty($v[$this->claveResumen()]),
+            ];
+        }
+        return $this->dimPestanasCache;
+    }
+
     /** Fila validada (de la empresa activa) + permisos; corta con error si algo falla. */
-    private function dimensionPedida(bool $json): array
+    private function dimensionPedida(bool $json, string $pestana): array
     {
         $this->requireLeer();
         $idEmpresa = (int) $_SESSION['id_empresa'];
         $id = (int) ($_GET['id'] ?? 0);
         $error = null;
-        if (!AsientoPestana::puedeVer()) {
-            $error = 'No tiene acceso a Contabilidad → Asientos Contables.';
+        if (empty($this->dimPestanas()[$pestana])) {
+            $error = 'No tiene permiso para esta pestaña.';
         } elseif ($id <= 0 || !($entidad = $this->entidadDimension($id, $idEmpresa))) {
             $error = $this->tipoDimension() === 'proyecto' ? 'Proyecto no encontrado.' : 'Centro de costo no encontrado.';
         }
@@ -53,7 +83,7 @@ trait DimensionReporteTrait
 
     public function documentosAjax(): void
     {
-        [$id, $idEmpresa] = $this->dimensionPedida(true);
+        [$id, $idEmpresa] = $this->dimensionPedida(true, 'documentos');
         header('Content-Type: application/json');
         try {
             $datos = DimensionReporteService::crear()->documentos($this->tipoDimension(), $id, $idEmpresa, $_GET['desde'] ?? null, $_GET['hasta'] ?? null);
@@ -67,7 +97,7 @@ trait DimensionReporteTrait
 
     public function resumenAjax(): void
     {
-        [$id, $idEmpresa, $entidad] = $this->dimensionPedida(true);
+        [$id, $idEmpresa, $entidad] = $this->dimensionPedida(true, 'resumen');
         header('Content-Type: application/json');
         try {
             $datos = DimensionReporteService::crear()->resumen($this->tipoDimension(), $id, $idEmpresa, $entidad, $_GET['desde'] ?? null, $_GET['hasta'] ?? null);
@@ -82,7 +112,7 @@ trait DimensionReporteTrait
     /** PDF de UN registro: la vista lo pide con CMG_pdfDocumento() (§9). */
     public function pdfResumen(): void
     {
-        [$id, $idEmpresa, $entidad] = $this->dimensionPedida(false);
+        [$id, $idEmpresa, $entidad] = $this->dimensionPedida(false, 'resumen');
         try {
             DimensionReporteService::crear()->pdf($this->tipoDimension(), $id, $idEmpresa, $entidad, $_GET['desde'] ?? null, $_GET['hasta'] ?? null);
         } catch (\Throwable $e) {
@@ -97,7 +127,7 @@ trait DimensionReporteTrait
 
     public function excelResumen(): void
     {
-        [$id, $idEmpresa, $entidad] = $this->dimensionPedida(false);
+        [$id, $idEmpresa, $entidad] = $this->dimensionPedida(false, 'resumen');
         try {
             DimensionReporteService::crear()->excel($this->tipoDimension(), $id, $idEmpresa, $entidad, $_GET['desde'] ?? null, $_GET['hasta'] ?? null);
         } catch (\Throwable $e) {
@@ -116,14 +146,18 @@ trait DimensionReporteTrait
         header('Content-Type: application/json; charset=utf-8');
         try {
             $this->requireLeer();
-            if (!AsientoPestana::puedeVer()) {
-                throw new \RuntimeException('No tiene acceso a Contabilidad → Asientos Contables.');
+            if (empty($this->dimPestanas()['documentos'])) {
+                throw new \RuntimeException('No tiene permiso para esta pestaña.');
             }
-            $datos = (new \App\Services\modulos\DocumentoOrigenService())->getDetalle(
-                trim((string) ($_GET['modulo'] ?? '')),
-                (int) ($_GET['id'] ?? 0),
-                (int) $_SESSION['id_empresa']
-            );
+            $idEmpresa = (int) $_SESSION['id_empresa'];
+            $modulo = trim((string) ($_GET['modulo'] ?? ''));
+            $idDoc = (int) ($_GET['id'] ?? 0);
+            // Solo documentos de ESTE proyecto / centro: sin esto, el visor abriría cualquier
+            // documento de la empresa con solo cambiar el id en la URL.
+            if (!DimensionReporteService::crear()->documentoPertenece($this->tipoDimension(), (int) ($_GET['dim'] ?? 0), $modulo, $idDoc, $idEmpresa)) {
+                throw new \RuntimeException('El documento no pertenece a este ' . ($this->tipoDimension() === 'proyecto' ? 'proyecto.' : 'centro de costo.'));
+            }
+            $datos = (new \App\Services\modulos\DocumentoOrigenService())->getDetalle($modulo, $idDoc, $idEmpresa);
             echo json_encode(['success' => true, 'data' => $datos]);
         } catch (\Throwable $e) {
             \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);

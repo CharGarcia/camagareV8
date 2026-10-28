@@ -39,6 +39,23 @@ final class PestanasModulo
                 'auditoria'      => ['icono' => 'bi-shield-check',     'titulo' => 'Auditoría'],
             ],
         ],
+        // Pestañas del modal (General siempre se ve). Ver App\Traits\DimensionReporteTrait.
+        'modulos/proyectos' => [
+            'titulo'   => 'Proyectos',
+            'icono'    => 'bi-briefcase',
+            'pestanas' => [
+                'documentos' => ['icono' => 'bi-files',           'titulo' => 'Documentos'],
+                'avance'     => ['icono' => 'bi-graph-up-arrow', 'titulo' => 'Avance (con PDF y Excel)'],
+            ],
+        ],
+        'modulos/centro-costos' => [
+            'titulo'   => 'Centros de costo',
+            'icono'    => 'bi-diagram-3',
+            'pestanas' => [
+                'documentos' => ['icono' => 'bi-files',           'titulo' => 'Documentos'],
+                'resumen'    => ['icono' => 'bi-graph-up-arrow', 'titulo' => 'Resumen (con PDF y Excel)'],
+            ],
+        ],
     ];
 
     /** Todos los módulos configurables, en el orden en que se muestran las tarjetas. */

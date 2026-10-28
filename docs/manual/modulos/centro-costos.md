@@ -6,7 +6,7 @@ ruta_modulo: modulos/centro-costos
 tipo: modulo
 visibilidad: todos
 etiquetas: centro de costos, centros de costo, departamento, sucursal, area, gasto por area, presupuesto, documentos del centro de costo, resumen del centro de costo, pdf centro de costo, excel centro de costo, no se puede eliminar centro de costo, centro en uso
-version: 1.2
+version: 1.3
 orden: 85
 estado: activo
 ---
@@ -38,8 +38,10 @@ Los botones **PDF** y **Excel** sacan este resumen con el logo de la empresa y l
 lista de documentos; el Excel trae cada parte en su propia hoja.
 
 Solo cuentan los asientos **contabilizados** de **producción**, no anulados. Las dos
-pestañas aparecen si el usuario tiene acceso a **Contabilidad → Asientos
-Contables**, y cada usuario puede ocultarlas con el engranaje de las pestañas.
+pestañas las ve todo el que puede ver Centros de costo. Para un usuario de **nivel
+1**, el administrador decide cuáles ve en **Configuración → Permisos de módulos →
+Pestañas que puede ver — Centros de costo**; sin configurar, las ve todas. Cada
+usuario puede además ocultarlas para sí con el engranaje de las pestañas.
 
 ## No se puede eliminar un centro en uso
 
@@ -101,6 +103,7 @@ la flecha indica la prioridad. El orden se guarda para usted.
 
 ## Historial de cambios
 
+- **1.3** — Las pestañas Documentos y Resumen ya no dependen del acceso a Asientos Contables: las ve quien ve Centros de costo, y para nivel 1 el administrador decide en Permisos de módulos.
 - **1.2** — Pestañas **Documentos** y **Resumen** en el modal, con PDF y Excel con logo. Ya no se puede eliminar un centro de costo en uso.
 - **1.1** — Buscador con ventana de filtros (embudo), orden por varias columnas (Shift+clic) y PDF/Excel con el mismo orden; el modal ya no tiene pestaña *Información*.
 - **1.0** — Versión inicial.

@@ -7,7 +7,7 @@ tipo: modulo
 visibilidad: superadmin
 requiere_permiso_modulo: no
 etiquetas: permisos, accesos, roles, niveles, usuarios, modulos asignados, acceso total, buscar usuario, buscar por correo, buscar por cedula, identificacion, email, buscador, buscar empresa, ruc, razon social, nombre comercial, asignar empresa, empresa no asignada, crear usuario, invitacion, correo existente, pdf, imprimir, imprimir permisos, reporte de permisos, descargar permisos, acta de permisos, vendedores que puede ver, reporte de ventas por vendedor, supervisor de ventas, ver ventas de otros vendedores, jefe de ventas, pestañas que puede ver, ocultar pestañas, pestañas por usuario, pestañas del reporte de inventarios, no ve la pestaña, quitar pestaña a un usuario, vendedores que puede ver por reporte, ocultar vendedores a un usuario, limitar vendedores, coordinador de zona, ver solo algunos vendedores
-version: 1.11
+version: 1.12
 orden: 10
 estado: activo
 ---
@@ -94,8 +94,9 @@ abriría las de todos.
 
 Debajo de la tarjeta anterior, también solo para usuarios de **nivel 1**,
 aparece una tarjeta **Pestañas que puede ver** por cada módulo que admite esta
-configuración. Hoy es uno: **Reporte de Inventarios** (Existencias, Movimientos,
-Valorización, Consignaciones y Auditoría). Sirve para que un usuario entre al
+configuración: **Reporte de Inventarios** (Existencias, Movimientos,
+Valorización, Consignaciones y Auditoría), **Proyectos** (Documentos y Avance) y
+**Centros de costo** (Documentos y Resumen). Sirve para que un usuario entre al
 reporte pero vea solo las pestañas que le corresponden: por ejemplo, un bodeguero
 con Existencias y Movimientos, sin Valorización ni Auditoría.
 
@@ -252,6 +253,7 @@ cambio se aplica en la siguiente página que abra.
 
 ## Historial de cambios
 
+- **1.12** — Las tarjetas **Pestañas que puede ver** incluyen **Proyectos** (Documentos, Avance) y **Centros de costo** (Documentos, Resumen).
 - **1.11** — Nuevas tarjetas **Vendedores que puede ver — Reporte de Ventas** y
   **— Cuentas por Cobrar** (usuarios de nivel 1): el administrador desmarca los
   vendedores cuyos documentos el usuario no debe ver en ese módulo; sin

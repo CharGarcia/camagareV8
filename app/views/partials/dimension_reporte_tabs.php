@@ -8,22 +8,28 @@
  *   <?php $dimParte = 'tabs';    $dimTipo = 'proyecto'; require MVC_APP . '/views/partials/dimension_reporte_tabs.php'; ?>
  *   <?php $dimParte = 'paneles'; $dimTipo = 'proyecto'; require MVC_APP . '/views/partials/dimension_reporte_tabs.php'; ?>
  *
- * Solo se incluye si \App\Helpers\AsientoPestana::puedeVer(): muestran importes de los
- * asientos contables. Las pestañas arrancan ocultas (d-none): el JS las muestra al abrir un
+ * Cada pestaña se dibuja solo si $dimPestanas (DimensionReporteTrait::dimPestanas(), que
+ * el controlador pasa a la vista) la permite. Arrancan ocultas (d-none): el JS las muestra al abrir un
  * registro guardado, nunca al crear uno nuevo.
  *
  * Ids: dim-pane-documentos / dim-pane-resumen (claves de la preferencia de pestañas ocultas).
  */
 $dimParte = $dimParte ?? 'tabs';
 $dimTipo  = $dimTipo ?? 'proyecto';
+// Pestañas que el usuario puede ver (DimensionReporteTrait::dimPestanas()).
+$dimVer = ($dimPestanas ?? []) + ['documentos' => false, 'resumen' => false];
 
 if ($dimParte === 'tabs'): ?>
+    <?php if ($dimVer['documentos']): ?>
     <li class="nav-item dim-tab d-none">
         <a class="nav-link py-2 small" data-bs-toggle="tab" href="#dim-pane-documentos" data-bs-target="#dim-pane-documentos" role="tab"><i class="bi bi-files me-1"></i>Documentos</a>
     </li>
+    <?php endif; ?>
+    <?php if ($dimVer['resumen']): ?>
     <li class="nav-item dim-tab d-none">
         <a class="nav-link py-2 small" data-bs-toggle="tab" href="#dim-pane-resumen" data-bs-target="#dim-pane-resumen" role="tab"><i class="bi bi-graph-up-arrow me-1"></i><?= $dimTipo === 'proyecto' ? 'Avance' : 'Resumen' ?></a>
     </li>
+    <?php endif; ?>
 <?php else:
     // Barra de período: la misma en las dos pestañas (el JS las mantiene iguales).
     $barra = static function (string $pane) use ($dimTipo): string {
@@ -51,6 +57,7 @@ if ($dimParte === 'tabs'): ?>
         .dim-kpi .val { font-size: 1rem; font-weight: 700; }
     </style>
 
+    <?php if ($dimVer['documentos']): ?>
     <div class="tab-pane fade" id="dim-pane-documentos" role="tabpanel">
         <?= $barra('documentos') ?>
         <div class="dim-tabla border rounded">
@@ -84,10 +91,14 @@ if ($dimParte === 'tabs'): ?>
         </div>
     </div>
 
+    <?php endif; ?>
+
+    <?php if ($dimVer['resumen']): ?>
     <div class="tab-pane fade" id="dim-pane-resumen" role="tabpanel">
         <?= $barra('resumen') ?>
         <div class="dim-resumen-cuerpo">
             <div class="text-center text-muted py-4">Seleccione la pestaña para calcular el resumen.</div>
         </div>
     </div>
+<?php endif; ?>
 <?php endif;

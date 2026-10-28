@@ -170,9 +170,11 @@
             cargar(nuevoId) {
                 id = parseInt(nuevoId, 10) || 0;
                 cargado = { documentos: false, resumen: false };
+                // El visor de documento solo abre documentos de este proyecto / centro.
+                window.DOCORIGEN_URL = `${cfg.urlBase}/documentoOrigenAjax?dim=${id}`;
                 qa('.dim-desde, .dim-hasta').forEach(i => { i.value = ''; });
-                q('.dim-docs-tbody').innerHTML = '<tr><td colspan="7" class="text-center text-muted py-4">Seleccione la pestaña para cargar los documentos.</td></tr>';
-                q('.dim-resumen-cuerpo').innerHTML = '<div class="text-center text-muted py-4">Seleccione la pestaña para calcular el resumen.</div>';
+                { const tb = q('.dim-docs-tbody'); if (tb) tb.innerHTML = '<tr><td colspan="7" class="text-center text-muted py-4">Seleccione la pestaña para cargar los documentos.</td></tr>'; }
+                { const rc = q('.dim-resumen-cuerpo'); if (rc) rc.innerHTML = '<div class="text-center text-muted py-4">Seleccione la pestaña para calcular el resumen.</div>'; }
                 mostrarTabs(id > 0);
             },
             limpiar() { this.cargar(0); },

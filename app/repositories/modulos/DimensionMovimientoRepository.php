@@ -93,6 +93,23 @@ class DimensionMovimientoRepository extends BaseRepository
         return $st->fetchAll(PDO::FETCH_ASSOC);
     }
 
+    /**
+     * ¿El documento (modulo_origen + id_referencia_origen) tiene un asiento con alguna línea de
+     * esta dimensión? Mismas condiciones que la lista de Documentos: el visor solo abre lo que
+     * la pestaña muestra.
+     */
+    public function documentoPertenece(string $tipo, int $id, string $modulo, int $idRef, int $idEmpresa): bool
+    {
+        $params = [];
+        [$from, $where] = $this->base($tipo, $id, $idEmpresa, null, null, $params);
+        $params[':modulo'] = $modulo;
+        $params[':id_ref'] = $idRef;
+        $st = $this->db->prepare("SELECT EXISTS (SELECT 1 {$from} {$where}
+                                     AND c.modulo_origen = :modulo AND c.id_referencia_origen = :id_ref)");
+        $st->execute($params);
+        return (bool) $st->fetchColumn();
+    }
+
     /** Debe y haber por cuenta contable (todas las clases). */
     public function porCuenta(string $tipo, int $id, int $idEmpresa, ?string $desde, ?string $hasta): array
     {

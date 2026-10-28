@@ -6,7 +6,7 @@ ruta_modulo: modulos/proyectos
 tipo: modulo
 visibilidad: todos
 etiquetas: proyectos, obra, contrato, rentabilidad por proyecto, agrupar gastos, seguimiento, avance del proyecto, porcentaje de ejecucion, ejecucion presupuestaria, presupuesto del proyecto, documentos del proyecto, que documentos tiene el proyecto, pdf del proyecto, excel del proyecto, avance fisico, no se puede eliminar proyecto, proyecto en uso
-version: 1.2
+version: 1.3
 orden: 80
 estado: activo
 ---
@@ -73,9 +73,11 @@ documentos. El Excel trae cada parte en su propia hoja.
 Solo los asientos **contabilizados** de **producción**, no anulados ni eliminados.
 Los de pruebas no se muestran, aunque la empresa esté trabajando en pruebas.
 
-Las pestañas Documentos y Avance solo aparecen si el usuario tiene acceso a
-**Contabilidad → Asientos Contables**, porque muestran sus importes. Cada usuario
-puede ocultarlas con el engranaje de las pestañas.
+Las pestañas Documentos y Avance las ve todo el que puede ver Proyectos. Para un
+usuario de **nivel 1**, el administrador decide cuáles ve en **Configuración →
+Permisos de módulos → Pestañas que puede ver — Proyectos**; sin configurar, las ve
+todas. Una pestaña oculta tampoco deja sacar su PDF o Excel. Además, cada usuario
+puede ocultarlas para sí con el engranaje de las pestañas.
 
 ## No se puede eliminar un proyecto en uso
 
@@ -143,6 +145,7 @@ guarda para usted.
 
 ## Historial de cambios
 
+- **1.3** — Las pestañas Documentos y Avance ya no dependen del acceso a Asientos Contables: las ve quien ve Proyectos, y para nivel 1 el administrador decide en Permisos de módulos.
 - **1.2** — Pestañas **Documentos** y **Avance** en el modal, con PDF y Excel con logo. La columna **% Ejec.** se calcula desde los asientos (ejecutado / presupuesto); el campo digitado pasa a llamarse **% Avance físico**. Ya no se puede eliminar un proyecto en uso.
 - **1.1** — Buscador con ventana de filtros (embudo), orden por varias columnas (Shift+clic, incluidas presupuesto, % de ejecución y fechas) y PDF/Excel con el mismo orden; el modal ya no tiene pestaña *Información*.
 - **1.0** — Versión inicial.

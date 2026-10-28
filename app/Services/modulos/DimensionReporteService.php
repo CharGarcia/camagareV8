@@ -82,6 +82,15 @@ class DimensionReporteService
         return ['filas' => $filas, 'truncado' => $truncado, 'max' => DimensionMovimientoRepository::MAX_DOCUMENTOS];
     }
 
+    /** ¿El documento aparece en la pestaña Documentos de esta dimensión? (guard del visor) */
+    public function documentoPertenece(string $tipo, int $id, string $modulo, int $idRef, int $idEmpresa): bool
+    {
+        if ($id <= 0 || $idRef <= 0 || $modulo === '') {
+            return false;
+        }
+        return $this->repo->documentoPertenece($tipo, $id, $modulo, $idRef, $idEmpresa);
+    }
+
     /**
      * Resumen del avance. Para un proyecto suma el presupuesto, la ejecución presupuestaria
      * (costos y gastos / presupuesto), el avance en el tiempo y el avance físico digitado.

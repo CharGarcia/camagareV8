@@ -529,8 +529,23 @@ class ComprobanteCajaPdfService
         $pdf = $this->pdf;
         $mL  = $this->marginL;
 
-        $wCod = 26; $wDebe = 28; $wHaber = 28;
-        $wCta = $this->contentW - $wCod - $wDebe - $wHaber; // 104
+        // Centro de costo / proyecto: cada columna solo si alguna línea lo tiene; sin ninguno,
+        // el asiento se ve como siempre (Código | Cuenta | Debe | Haber).
+        $conCentro   = false;
+        $conProyecto = false;
+        foreach ($lineas as $d) {
+            if (trim((string)($d['nombre_centro_costo'] ?? '')) !== '') $conCentro = true;
+            if (trim((string)($d['nombre_proyecto'] ?? '')) !== '')     $conProyecto = true;
+        }
+        $nDim = ($conCentro ? 1 : 0) + ($conProyecto ? 1 : 0);
+
+        if ($nDim === 0) {
+            $wCod = 26; $wDebe = 28; $wHaber = 28;
+        } else {
+            $wCod = 22; $wDebe = 24; $wHaber = 24;
+        }
+        $wDim = $nDim === 2 ? 30.0 : 38.0;
+        $wCta = $this->contentW - $wCod - $wDebe - $wHaber - $nDim * $wDim;
 
         // Barra de título
         $pdf->SetXY($mL, $y);
@@ -550,6 +565,8 @@ class ComprobanteCajaPdfService
         $pdf->SetFont('helvetica', 'B', 7);
         $pdf->Cell($wCod, 5, 'Código', 1, 0, 'L', true);
         $pdf->Cell($wCta, 5, 'Cuenta', 1, 0, 'L', true);
+        if ($conCentro)   $pdf->Cell($wDim, 5, 'Centro de costo', 1, 0, 'L', true);
+        if ($conProyecto) $pdf->Cell($wDim, 5, 'Proyecto', 1, 0, 'L', true);
         $pdf->Cell($wDebe, 5, 'Debe', 1, 0, 'R', true);
         $pdf->Cell($wHaber, 5, 'Haber', 1, 1, 'R', true);
 
@@ -562,6 +579,8 @@ class ComprobanteCajaPdfService
             $pdf->SetX($mL);
             $pdf->Cell($wCod, 4.6, (string)($d['codigo_cuenta'] ?? ''), 1, 0, 'L');
             $pdf->Cell($wCta, 4.6, $this->ajustarTexto((string)($d['nombre_cuenta'] ?? ''), $wCta - 2), 1, 0, 'L');
+            if ($conCentro)   $pdf->Cell($wDim, 4.6, $this->ajustarTexto((string)($d['nombre_centro_costo'] ?? ''), $wDim - 2), 1, 0, 'L');
+            if ($conProyecto) $pdf->Cell($wDim, 4.6, $this->ajustarTexto((string)($d['nombre_proyecto'] ?? ''), $wDim - 2), 1, 0, 'L');
             $pdf->Cell($wDebe, 4.6, $debe > 0 ? number_format($debe, 2) : '', 1, 0, 'R');
             $pdf->Cell($wHaber, 4.6, $haber > 0 ? number_format($haber, 2) : '', 1, 1, 'R');
         }
@@ -570,7 +589,7 @@ class ComprobanteCajaPdfService
         $pdf->SetX($mL);
         $pdf->SetFont('helvetica', 'B', 7);
         $pdf->SetFillColor(235, 238, 242);
-        $pdf->Cell($wCod + $wCta, 5, 'TOTALES', 1, 0, 'R', true);
+        $pdf->Cell($wCod + $wCta + $nDim * $wDim, 5, 'TOTALES', 1, 0, 'R', true);
         $pdf->Cell($wDebe, 5, number_format($sumDebe, 2), 1, 0, 'R', true);
         $pdf->Cell($wHaber, 5, number_format($sumHaber, 2), 1, 1, 'R', true);
 

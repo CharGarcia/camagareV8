@@ -25,8 +25,10 @@ $ordenDir   = $ordenDir ?? 'asc';
 $buscar     = $buscar ?? '';
 $from = $total > 0 ? (($page - 1) * $perPage) + 1 : 0;
 $to   = $total > 0 ? min($page * $perPage, $total) : 0;
-// Documentos y Resumen muestran importes de los asientos: requieren ver Asientos Contables.
-$verDimension = \App\Helpers\AsientoPestana::puedeVer();
+// Pestañas Documentos / Resumen: las que el administrador deja ver a este usuario
+// (/config/permisos-modulos → «Pestañas que puede ver»; niveles 2 y 3 ven todas).
+$dimPestanas  = ($dimPestanas ?? []) + ['documentos' => false, 'resumen' => false];
+$verDimension = $dimPestanas['documentos'] || $dimPestanas['resumen'];
 ?>
 <style>
     .cc-header { flex-shrink: 0; }
@@ -181,7 +183,7 @@ $verDimension = \App\Helpers\AsientoPestana::puedeVer();
                             <?php endif; ?>
                         </ul>
                         <?php if ($verDimension): ?>
-                            <?= \App\Helpers\PreferenciasHelper::renderDropdownPestanas(['dim-pane-documentos' => 'Documentos', 'dim-pane-resumen' => 'Resumen'], $vistaConfig ?? [], $rutaModulo) ?>
+                            <?= \App\Helpers\PreferenciasHelper::renderDropdownPestanas(array_filter(['dim-pane-documentos' => $dimPestanas['documentos'] ? 'Documentos' : null, 'dim-pane-resumen' => $dimPestanas['resumen'] ? 'Resumen' : null]), $vistaConfig ?? [], $rutaModulo) ?>
                         <?php endif; ?>
                     </div>
                     <div class="border-bottom mx-3 mb-3"></div>
@@ -271,7 +273,7 @@ $verDimension = \App\Helpers\AsientoPestana::puedeVer();
         window.currentSorts = <?= $ordenJson ?? '[]' ?>;
         let sorter = null;
         // Pestañas Documentos / Resumen (solo si el usuario ve Asientos Contables).
-        const dimReporte = window.CMG_dimReporte && document.getElementById('dim-pane-resumen')
+        const dimReporte = window.CMG_dimReporte && document.querySelector('.dim-tab')
             ? window.CMG_dimReporte({ urlBase, tipo: 'centro', modal: document.getElementById('modalCC') })
             : null;
 

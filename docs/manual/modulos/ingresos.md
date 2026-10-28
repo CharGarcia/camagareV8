@@ -6,7 +6,7 @@ ruta_modulo: modulos/ingresos
 tipo: modulo
 visibilidad: todos
 etiquetas: ingresos, documentos pendientes, no coincide con cuentas por cobrar, solo mis documentos, vendedor, acceso total, cobro, cobrar, buscar ingreso, buscador, filtros, filtrar ingresos, filtrar por forma de cobro, buscar por factura cobrada, buscar por cheque, buscar por transferencia, filtro de fechas, chips, editar ingreso, modificar ingreso, corregir ingreso, cambiar monto cobrado, quitar factura del ingreso, periodo cerrado, solo lectura, no deja editar, no puedo modificar, ordenar por dos columnas, ordenar por recibi de y fecha, recibo, dinero que entra, anticipo, deposito, efectivo, transferencia, caja, excel, exportar, combinar conceptos, mezclar conceptos, otros conceptos, varios documentos, cobro sin factura, tipo real, tipo de ingreso, numero de ingreso, serie, secuencial, numero repetido, numero duplicado, numeracion por fecha, numero con el año, reiniciar numeracion, reinicio anual, reinicio mensual, correlativo por año, correlativo por mes, modo de numeracion, orden de formas de cobro, saldo de la forma de cobro, saldo disponible, ocultar saldo, aparecen documentos que no busque, resultados que no corresponden, buscar por numero de documento cobrado, cuenta del anticipo, anticipo sin cuenta, cuenta contable del concepto, cuenta por defecto, falta cuenta contable, cobrar factura y dejar anticipo, excedente como anticipo, listado no se actualiza, no aparece el ingreso guardado, no se ve el cambio, vuelve a la primera pagina, se pierde la pagina, refrescar listado, recargar tabla, fila resaltada, observaciones automaticas, observaciones se llenan solas, observaciones se completan solas, glosa del ingreso, concepto del comprobante, descripcion del cobro, cobro factura de venta, falta un centavo, centavo pendiente, no puedo cobrar el centavo, diferencia de un centavo, saldo de 0.01, queda un centavo, referencia muy larga, glosa larga, no guarda el ingreso, no se guarda el cobro, error al guardar ingreso, value too long, texto demasiado largo, se corta la referencia, limite de caracteres, imprimir, impresora, doble clic, ingreso duplicado, cobro duplicado, cobrar dos veces, doble cobro, ya no tiene saldo suficiente, crear cliente desde el ingreso, nuevo cliente, registrar cliente, crear forma de cobro, crear concepto, no aparece el boton de crear cliente, falta el boton nuevo cliente, ingreso anulado con asiento vivo, asiento sigue contabilizado, no se anulo el asiento, asiento de documento anulado, no se pudo anular el asiento contable del ingreso, eliminar ingreso, registrar otro ingreso, guardar y nuevo, guardar y crear otro, seguir en este, varios ingresos seguidos, no cerrar el modal, continuar registrando
-version: 3.17
+version: 3.18
 orden: 10
 estado: activo
 ---
@@ -439,6 +439,10 @@ muestra el botón **PDF** (comprobante de ingreso) y, junto a él, el botón
 formas de cobro) en un archivo `.xlsx`. Ambos botones quedan ocultos mientras
 el ingreso es nuevo y no se ha guardado.
 
+El PDF incluye al final el **asiento contable** del ingreso, siempre que esté
+cuadrado. Si alguna línea tiene **centro de costo** o **proyecto**, el asiento
+muestra esas columnas junto a la cuenta; si ninguna los tiene, no aparecen.
+
 ## Crear un cliente, forma de cobro o concepto sin salir del ingreso
 
 A la izquierda de la barra superior del modal hay atajos para registrar, sin
@@ -543,6 +547,7 @@ misma revisión al guardar:
 
 ## Historial de cambios
 
+- **3.18** — El asiento contable del **comprobante PDF** muestra el **centro de costo** y el **proyecto** de cada línea, cuando los tiene.
 - **3.17** — La pestaña **Asiento contable** de un ingreso sin asiento propone las líneas de la configuración contable y permite **registrar el asiento a mano**; queda enlazado al ingreso.
 - **3.16** — La pregunta al guardar un ingreso nuevo suma el botón **Cerrar**, que cierra el modal y vuelve al listado.
 - **3.15** — Forma de cobro y concepto creados desde el ingreso: la ventana se cierra sin un aviso que aceptar y quedan seleccionados; un concepto ligado a un módulo también queda elegido; un concepto creado solo para Egresos ya no aparece en Ingresos.
