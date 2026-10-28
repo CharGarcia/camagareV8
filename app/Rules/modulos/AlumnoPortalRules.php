@@ -38,6 +38,30 @@ class AlumnoPortalRules
         };
     }
 
+    /** Tipos que puede elegir un representante nuevo en el portal. */
+    public const TIPOS_ID = ['05' => 'Cédula', '04' => 'RUC', '06' => 'Pasaporte'];
+
+    /** Número coherente con el tipo elegido (el dígito verificador no bloquea: ver DigitoVerificador). */
+    public function validarTipoIdentificacion(string $tipo, string $ident): void
+    {
+        if (!isset(self::TIPOS_ID[$tipo])) {
+            throw new Exception('Seleccione el tipo de identificación.');
+        }
+        $this->validarIdentificacion($ident);
+        $ok = match ($tipo) {
+            '05' => (bool) preg_match('/^\d{10}$/', $ident),
+            '04' => (bool) preg_match('/^\d{13}$/', $ident),
+            default => (bool) preg_match('/^[A-Z0-9]{3,20}$/', $ident),
+        };
+        if (!$ok) {
+            throw new Exception(match ($tipo) {
+                '05' => 'La cédula debe tener 10 dígitos.',
+                '04' => 'El RUC debe tener 13 dígitos.',
+                default => 'El pasaporte solo admite letras y números (3 a 20 caracteres).',
+            });
+        }
+    }
+
     public function validarCorreo(string $correo): void
     {
         if ($correo === '' || mb_strlen($correo) > 150 || !filter_var($correo, FILTER_VALIDATE_EMAIL)) {

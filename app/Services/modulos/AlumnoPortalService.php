@@ -276,6 +276,36 @@ class AlumnoPortalService
     }
 
     /**
+     * Autocompletar del representante nuevo con el servicio de consulta del SRI.
+     * Exige la sesión verificada (no es un consultor libre de cédulas) y va directo
+     * al SRI sin la búsqueda local (idEmpresa null): a quien no ha verificado su
+     * correo de cliente no se le muestran datos de clientes del colegio.
+     *
+     * @return array{ok:bool, nombre?:string, direccion?:string, error?:string}
+     */
+    public function consultarSri(string $token, string $sesion, string $identificacion): array
+    {
+        $portal = $this->portalOError($token);
+        $c = $this->codigoDeSesion($portal, $sesion);
+        if ($c['id_cliente']) {
+            return ['ok' => false, 'error' => 'Su identificación ya está registrada.'];
+        }
+        $ident = AlumnoPortalRules::normalizarIdentificacion($identificacion);
+        if (!preg_match('/^(\d{10}|\d{13})$/', $ident)) {
+            return ['ok' => false, 'error' => 'Escriba una cédula (10 dígitos) o un RUC (13 dígitos).'];
+        }
+        $r = (new \App\Services\SriIdentificationService())->consultar($ident, null);
+        if (empty($r['ok']) || empty($r['data'])) {
+            return ['ok' => false, 'error' => 'No se encontraron datos en el SRI; escríbalos a mano.'];
+        }
+        return [
+            'ok'        => true,
+            'nombre'    => AlumnoPortalRules::limpiarTexto((string) ($r['data']['nombre'] ?? ''), 300),
+            'direccion' => AlumnoPortalRules::limpiarTexto((string) ($r['data']['direccion'] ?? ''), 300),
+        ];
+    }
+
+    /**
      * Paso 4: guarda (una sola vez). Crea o actualiza el cliente y los alumnos.
      *
      * @return array{actualizados:int, creados:int, cliente:string}
@@ -304,6 +334,20 @@ class AlumnoPortalService
             'telefono'  => AlumnoPortalRules::limpiarTexto((string) ($post['cliente']['telefono'] ?? ''), 50),
         ];
         $this->rules->validarCliente($cli);
+
+        // Representante nuevo: puede corregir el tipo y el número de identificación
+        // que escribió al inicio. Uno ya registrado no la cambia desde aquí.
+        $tipoId = AlumnoPortalRules::tipoIdCliente($ident);
+        if (!$cliente) {
+            $tipoId = (string) ($post['cliente']['tipo_id'] ?? $tipoId);
+            $identNueva = AlumnoPortalRules::normalizarIdentificacion(mb_substr((string) ($post['cliente']['identificacion'] ?? $ident), 0, 20));
+            $this->rules->validarTipoIdentificacion($tipoId, $identNueva);
+            if ($identNueva !== $ident && $this->clientePorIdentificacion($idEmpresa, $identNueva)) {
+                // El correo verificado no autoriza a tomar los datos de otro representante.
+                throw new Exception("La identificación {$identNueva} ya está registrada en la institución. Ingrese de nuevo con esa identificación para recibir el código en su correo.");
+            }
+            $ident = $identNueva;
+        }
 
         $permitidos = [];
         if ($cliente) {
@@ -357,6 +401,7 @@ class AlumnoPortalService
                 throw new Exception('La verificación ya se usó. Para hacer otro cambio, pida un código nuevo.');
             }
             $auditoria = ['origen' => 'portal', 'ip' => $ip, 'identificacion' => $ident, 'correo_verificado' => $c['correo']];
+            if ($ident !== (string) $c['identificacion']) { $auditoria['identificacion_inicial'] = $c['identificacion']; }
             if ($cliente) {
                 $idCliente = (int) $cliente['id'];
                 $this->repo->actualizarCliente($idCliente, $idEmpresa, $cli, $actor);
@@ -364,7 +409,7 @@ class AlumnoPortalService
             } else {
                 // Por si alguien lo registró en el sistema mientras el padre llenaba el formulario.
                 $ya = $this->clientePorIdentificacion($idEmpresa, $ident);
-                $nuevo = $cli + ['tipo_id' => AlumnoPortalRules::tipoIdCliente($ident), 'identificacion' => $ident];
+                $nuevo = $cli + ['tipo_id' => $tipoId, 'identificacion' => $ident];
                 $idCliente = $ya ? (int) $ya['id'] : $this->repo->crearCliente($idEmpresa, $nuevo, $actor);
                 if ($ya) { $this->repo->actualizarCliente($idCliente, $idEmpresa, $cli, $actor); }
                 $this->log->registrar($actor, $idEmpresa, $ya ? 'portal_actualizar' : 'portal_crear', 'clientes', $idCliente, $ya ?: null, $nuevo + $auditoria);

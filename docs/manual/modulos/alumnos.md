@@ -6,7 +6,7 @@ ruta_modulo: modulos/alumnos
 tipo: modulo
 visibilidad: todos
 etiquetas: alumnos, estudiantes, matrícula, matricula, colegio, escuela, centro infantil, campus, sede, nivel, curso, representante, representantes, padres, autorizado, autorizados, retirar, retiro, quién retira, facturación, facturar, generar factura, facturar pensión, facturar mensualidad, facturas del alumno, horario, pensión, pension, imprimir, impresora, filtrar alumnos, filtro por campus, filtro por nivel, alumnos por curso, alumnos por sede, buscar alumno, portal de representantes, qr, codigo qr, padres de familia, actualizar datos, registrar alumno, inscripcion, codigo de verificacion, enlace para padres
-version: 1.7
+version: 1.8
 orden: 0
 estado: activo
 ---
@@ -244,10 +244,14 @@ permiso de *modificar* Alumnos):
    enmascarado, p. ej. *ma***@gmail.com*). Si no está registrado como cliente,
    escribe su correo y el código le llega ahí. Si está registrado **sin
    correo**, se le pide comunicarse con la institución.
-3. Con el código ve sus **datos de facturación** y la lista de **sus hijos**, y
-   puede:
-   - corregir su nombre o razón social, correo, teléfono y dirección (no su
-     cédula/RUC);
+3. Con el código ve sus **datos de facturación** y la lista de **sus hijos**
+   (sección *Mis hijos (Mis representados)*), y puede:
+   - corregir su nombre o razón social, correo, teléfono y dirección. Un
+     representante ya registrado no cambia su cédula/RUC; uno **nuevo** elige el
+     **tipo de identificación** (cédula, RUC o pasaporte) y puede **corregir el
+     número** que escribió al inicio. Al completar una cédula o un RUC, el
+     sistema consulta el **SRI** y llena el nombre y la dirección (solo si están
+     vacíos o los trajo una consulta anterior); se pueden corregir a mano;
    - corregir los datos de cada hijo: nombres, identificación, fecha de
      nacimiento, sexo, nacionalidad, tipo de sangre, alergias, contacto de
      emergencia y **personas autorizadas a retirarlo**;
@@ -264,6 +268,12 @@ permiso de *modificar* Alumnos):
 - Solo ve a **sus** alumnos (los que tienen su identificación como cliente que
   factura). Un representante nuevo no ve ningún dato existente.
 - No se puede registrar un alumno con una identificación que ya existe en el
+  colegio.
+- Un representante nuevo no puede cambiar su número por uno que ya está
+  registrado como cliente: debe volver a ingresar con esa identificación para
+  que el código llegue al correo registrado. La cédula debe tener 10 dígitos,
+  el RUC 13 y el pasaporte solo letras y números. La consulta al SRI solo
+  funciona con el código ya verificado y nunca muestra datos de clientes del
   colegio.
 - Límite de 5 códigos por hora por identificación y de 15 por dispositivo
   (IP), contra abusos; 5 intentos por código.
@@ -343,6 +353,11 @@ pestaña Transacciones aparece solo si el usuario puede **ver** Facturas de Vent
 
 ## Historial de cambios
 
+- **1.8** — Portal de representantes: el representante **nuevo** elige el tipo de
+  identificación (cédula, RUC o pasaporte), puede corregir el número antes de
+  guardar y, al completar una cédula o un RUC, el nombre y la dirección se
+  llenan con la consulta al SRI. La sección de alumnos se titula *Mis hijos
+  (Mis representados)*.
 - **1.7** — **Portal de representantes (QR)**: un QR general del colegio con el
   que los padres, verificados con un código en su correo, actualizan una vez sus
   datos de facturación y los de sus hijos, o registran alumnos nuevos (con su

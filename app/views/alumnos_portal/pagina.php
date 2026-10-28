@@ -197,16 +197,27 @@ $bloqueAlumno = function ($i, array $a) use ($e, $opts, $sexos, $sangres, $relac
 
                 <h2>Datos para la factura</h2>
                 <div class="fila">
+                    <?php if (empty($cliente)):
+                        // Representante nuevo: puede elegir el tipo y corregir el número.
+                        $identForm = (string) ($cli['identificacion'] ?? ($identificacion ?? ''));
+                        $tipoForm  = (string) ($cli['tipo_id'] ?? \App\Rules\modulos\AlumnoPortalRules::tipoIdCliente($identForm)); ?>
+                    <div class="campo corto"><label>Tipo de identificación *</label>
+                        <select name="cliente[tipo_id]" id="cliTipoId" required><?= $opts(\App\Rules\modulos\AlumnoPortalRules::TIPOS_ID, $tipoForm) ?></select></div>
+                    <div class="campo"><label>Número de identificación *</label>
+                        <input type="text" name="cliente[identificacion]" id="cliIdent" maxlength="20" required value="<?= $e($identForm) ?>">
+                        <p class="ayuda" id="cliSriAviso"></p></div>
+                    <?php else: ?>
                     <div class="campo"><label>Cédula / RUC</label><input type="text" value="<?= $e($identificacion ?? '') ?>" readonly></div>
-                    <div class="campo" style="flex-basis:320px;"><label>Nombres completos o razón social *</label><input type="text" name="cliente[nombre]" maxlength="300" required value="<?= $e($cli['nombre'] ?? '') ?>"></div>
+                    <?php endif; ?>
+                    <div class="campo" style="flex-basis:320px;"><label>Nombres completos o razón social *</label><input type="text" name="cliente[nombre]" id="cliNombre" maxlength="300" required value="<?= $e($cli['nombre'] ?? '') ?>"></div>
                 </div>
                 <div class="fila">
                     <div class="campo"><label>Correo para la factura *</label><input type="email" name="cliente[email]" maxlength="150" required value="<?= $e($cli['email'] ?? '') ?>"></div>
                     <div class="campo"><label>Teléfono</label><input type="tel" name="cliente[telefono]" maxlength="50" value="<?= $e($cli['telefono'] ?? '') ?>"></div>
                 </div>
-                <div class="campo"><label>Dirección</label><input type="text" name="cliente[direccion]" maxlength="300" value="<?= $e($cli['direccion'] ?? '') ?>"></div>
+                <div class="campo"><label>Dirección</label><input type="text" name="cliente[direccion]" id="cliDireccion" maxlength="300" value="<?= $e($cli['direccion'] ?? '') ?>"></div>
 
-                <h2 style="margin-top:18px;">Mis hijos</h2>
+                <h2 style="margin-top:18px;">Mis hijos (Mis representados)</h2>
                 <div id="alumnos">
                     <?php foreach ($listaAlumnos as $i => $a) { echo $bloqueAlumno($i, (array) $a); } ?>
                 </div>
@@ -246,6 +257,47 @@ $bloqueAlumno = function ($i, array $a) use ($e, $opts, $sexos, $sangres, $relac
                     return true;
                 }
                 <?php if (!$listaAlumnos): ?>agregarAlumno();<?php endif; ?>
+
+                // Representante nuevo: al completar la cédula o el RUC se traen nombre y
+                // dirección del SRI (solo llena lo vacío o lo que trajo una consulta anterior).
+                (function () {
+                    const tipo = document.getElementById('cliTipoId');
+                    const num  = document.getElementById('cliIdent');
+                    if (!tipo || !num) return;
+                    const aviso = document.getElementById('cliSriAviso');
+                    const campos = [document.getElementById('cliNombre'), document.getElementById('cliDireccion')];
+                    let consultado = num.value.trim();
+                    async function consultar() {
+                        const v = num.value.replace(/[\s.\-]+/g, '');
+                        if (tipo.value !== '06') {
+                            if (/^\d{10}$/.test(v)) tipo.value = '05';
+                            else if (/^\d{13}$/.test(v)) tipo.value = '04';
+                        }
+                        const largo = { '05': 10, '04': 13 }[tipo.value];
+                        if (!largo || !new RegExp('^\\d{' + largo + '}$').test(v) || v === consultado) return;
+                        consultado = v;
+                        aviso.textContent = 'Consultando en el SRI…';
+                        try {
+                            const fd = new FormData();
+                            fd.append('sesion', document.querySelector('#formPortal [name="sesion"]').value);
+                            fd.append('identificacion', v);
+                            const r = await (await fetch(<?= json_encode($accion('sri')) ?>, { method: 'POST', body: fd })).json();
+                            if (!r.ok) { aviso.textContent = r.error || 'No se encontraron datos; escríbalos a mano.'; return; }
+                            [r.nombre, r.direccion].forEach((val, k) => {
+                                const c = campos[k];
+                                if (c && val && (c.value.trim() === '' || c.dataset.sri === '1')) { c.value = val; c.dataset.sri = '1'; }
+                            });
+                            aviso.textContent = 'Datos traídos del SRI; revíselos.';
+                        } catch (e) {
+                            aviso.textContent = 'No se pudo consultar el SRI; escriba los datos a mano.';
+                        }
+                    }
+                    campos.forEach(c => c && c.addEventListener('input', () => { c.dataset.sri = ''; }));
+                    num.addEventListener('change', consultar);
+                    num.addEventListener('input', () => { if (/^\d{10}$|^\d{13}$/.test(num.value.trim())) consultar(); });
+                    tipo.addEventListener('change', () => { consultado = ''; consultar(); });
+                    if (campos[0] && campos[0].value.trim() === '') { consultado = ''; consultar(); }
+                })();
             </script>
         <?php endif; ?>
     </div>

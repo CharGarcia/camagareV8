@@ -13,6 +13,7 @@ use App\Services\modulos\AlumnoPortalService;
  *   /portal-alumnos/{token}/codigo     → (POST) envía el código al correo
  *   /portal-alumnos/{token}/verificar  → (POST) valida el código → formulario
  *   /portal-alumnos/{token}/guardar    → (POST) guarda UNA vez
+ *   /portal-alumnos/{token}/sri        → (POST, AJAX) datos del SRI del representante nuevo
  *
  * Registrado en $publicControllers (Application): no pasa por AuthMiddleware, así
  * que el Service resuelve el token con la empresa activa (§6). Vista standalone.
@@ -95,6 +96,16 @@ class AlumnosPortalController extends Controller
             } catch (\Throwable $e2) {
                 $this->resultado('info', $e->getMessage(), $portal, $token);
             }
+        }
+    }
+
+    /** (POST, AJAX) Datos del SRI para el representante nuevo: nombre y dirección. */
+    public function sri(): void
+    {
+        try {
+            $this->json($this->service->consultarSri($this->token(), (string) ($_POST['sesion'] ?? ''), (string) ($_POST['identificacion'] ?? '')));
+        } catch (\Throwable $e) {
+            $this->json(['ok' => false, 'error' => $e->getMessage()]);
         }
     }
 
