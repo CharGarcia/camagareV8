@@ -110,15 +110,17 @@ trait MigracionAlumnosTrait
 
     /**
      * «8h30 a 14h00», «08:00 - 13:00», «7h a 12h30» → ['08:30', '14:00'] o null si no se entiende.
+     * Solo cuenta como hora «8:30», «8.30» (punto con dos dígitos) o «8h»/«8hs» que no inicien una
+     * palabra: así «2 horas» o «Grupo 1.» no se toman por horas.
      */
     public static function parsearHorario(string $texto): ?array
     {
-        if (!preg_match_all('/(\d{1,2})\s*(?:[h:.]\s*(\d{2})?|hs?\b)/iu', $texto, $m, PREG_SET_ORDER) || count($m) < 2) {
+        if (!preg_match_all('/(?<!\d)(\d{1,2})(?:\s*:\s*(\d{2})|\.(\d{2})|\s*hs?(?![a-záéíóúñ])\s*(\d{2})?)/iu', $texto, $m, PREG_SET_ORDER) || count($m) < 2) {
             return null;
         }
         $hora = static function (array $x): ?string {
             $h = (int) $x[1];
-            $mi = isset($x[2]) && $x[2] !== '' ? (int) $x[2] : 0;
+            $mi = (int) (($x[2] ?? '') . ($x[3] ?? '') . ($x[4] ?? '') ?: 0); // solo una de las tres alternativas trae minutos
             return ($h <= 23 && $mi <= 59) ? sprintf('%02d:%02d', $h, $mi) : null;
         };
         $ini = $hora($m[0]);
@@ -135,7 +137,8 @@ trait MigracionAlumnosTrait
         $res = ['entidad' => 'alumnos', 'total' => 0, 'migrados' => 0, 'vinculados' => 0, 'vinculados_muestra' => [],
                 'ya_migrados' => 0, 'omitidos' => 0, 'omitidos_motivo' => 'alumno sin nombre, o sin cliente (representante) y sin Consumidor Final en la empresa', 'errores' => 0,
                 'sin_cliente' => 0, 'sin_cliente_muestra' => [], 'servicios' => 0, 'servicios_sin_producto' => 0,
-                'horarios' => 0, 'horarios_texto' => 0, 'periodos' => 0];
+                'horarios' => 0, 'horarios_texto' => 0, 'periodos' => 0,
+                'sin_campus' => 0, 'sin_nivel' => 0, 'sin_campus_nivel_muestra' => [], 'nacimiento_descartado' => 0];
 
         $done       = $this->idsMigrados($pg, $idEmpresa, 'alumnos');
         $insMap     = $this->stmtMap($pg, 'alumnos');
@@ -145,6 +148,17 @@ trait MigracionAlumnosTrait
         $mapCampus  = $this->mapaDe($pg, $idEmpresa, 'alumnos_campus');
         $mapNivel   = $this->mapaDe($pg, $idEmpresa, 'alumnos_niveles');
         $idCF       = $cliIdent['9999999999999'] ?? null; // Consumidor Final: respaldo si no hay representante
+
+        // Campus y niveles ANTES que alumnos: un alumno migrado no se vuelve a procesar, así que
+        // migrarlo sin sus catálogos dejaría la matrícula sin campus/nivel para siempre.
+        foreach ([['campus_alumnos', $mapCampus, 'Alumnos: campus'], ['nivel_alumnos', $mapNivel, 'Alumnos: niveles / cursos']] as [$tablaCat, $mapaCat, $labelCat]) {
+            if ($mapaCat) { continue; }
+            $hay = (int) $mysql->query("SELECT COUNT(*) FROM `$tablaCat` WHERE ruc_empresa LIKE " . $mysql->quote($base . '%')
+                . $this->clausulaEstabOrigen('ruc_empresa', $base, $mysql))->fetchColumn();
+            if ($hay > 0) {
+                throw new \RuntimeException("Migre primero «{$labelCat}»: el sistema anterior tiene {$hay} registro(s) y los alumnos los necesitan para su matrícula.");
+            }
+        }
 
         // alumnos_servicios.descuento llega con 20260924_alumnos_facturacion.sql.
         $conDescuento = (bool) $pg->query("SELECT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'alumnos_servicios' AND column_name = 'descuento')")->fetchColumn();
@@ -240,18 +254,35 @@ trait MigracionAlumnosTrait
                     $obs[] = 'Horario del sistema anterior: ' . $horarioTxt;
                 }
 
+                // Matrícula vigente: campus (sucursal_alumno) y nivel (paralelo_alumno) del viejo.
+                // El viejo borraba físicamente sus catálogos: el id puede ya no existir.
+                $idCampus = $mapCampus[(string) (int) ($r['sucursal_alumno'] ?? 0)] ?? null;
+                $idNivel  = $mapNivel[(string) (int) ($r['paralelo_alumno'] ?? 0)] ?? null;
+                $faltan = array_keys(array_filter(['campus' => !$idCampus, 'nivel' => !$idNivel]));
+                if ($faltan) {
+                    $obs[] = 'Sin ' . implode(' ni ', $faltan) . ' en el sistema anterior: asígnelo en la matrícula.';
+                    if (!$idCampus) { $res['sin_campus']++; }
+                    if (!$idNivel)  { $res['sin_nivel']++; }
+                    if (count($res['sin_campus_nivel_muestra']) < 8) { $res['sin_campus_nivel_muestra'][] = $nombreCompleto; }
+                }
+                $fIngreso = self::fechaCorta($r['fecha_ingreso_alumno'] ?? null) ?? self::fechaCorta($r['fecha_agregado'] ?? null) ?? date('Y-m-d');
+
+                // El formulario viejo traía la fecha de nacimiento precargada con la de HOY: si nadie la
+                // cambió, coincide con el ingreso o el registro. Una fecha así no es real; se deja vacía.
+                $fNac = self::fechaCorta($r['fecha_nacimiento_alumno'] ?? null);
+                if ($fNac !== null && ($fNac >= $fIngreso || $fNac === self::fechaCorta($r['fecha_agregado'] ?? null))) {
+                    $fNac = null;
+                    $res['nacimiento_descartado']++;
+                }
+
                 $pg->beginTransaction();
                 $insAlumno->execute([
                     $idEmpresa, $nombres !== '' ? $nombres : $apellidos, $apellidos,
-                    $tipo, $ident !== '' ? $ident : null, self::fechaCorta($r['fecha_nacimiento_alumno'] ?? null), $sexo,
+                    $tipo, $ident !== '' ? $ident : null, $fNac, $sexo,
                     $idCli, $idPunto, $obs ? implode(' ', $obs) : null, $idUsuario, $idUsuario,
                 ]);
                 $idAlu = (int) $insAlumno->fetchColumn();
 
-                // Matrícula vigente: campus (sucursal_alumno) y nivel (paralelo_alumno) del viejo.
-                $idCampus = $mapCampus[(string) (int) ($r['sucursal_alumno'] ?? 0)] ?? null;
-                $idNivel  = $mapNivel[(string) (int) ($r['paralelo_alumno'] ?? 0)] ?? null;
-                $fIngreso = self::fechaCorta($r['fecha_ingreso_alumno'] ?? null) ?? self::fechaCorta($r['fecha_agregado'] ?? null) ?? date('Y-m-d');
                 $insPeriodo->execute([$idAlu, $idEmpresa, $idCampus, $idNivel, $fIngreso, $idUsuario, $idUsuario]);
                 $res['periodos']++;
 

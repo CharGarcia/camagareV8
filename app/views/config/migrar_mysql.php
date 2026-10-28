@@ -789,6 +789,15 @@ $base = BASE_URL;
                 if (d.horarios_texto > 0) {
                     html += `<br><span class="text-warning small">ℹ ${fmt(d.horarios_texto)} horario(s) no tenían horas reconocibles: el texto quedó en las observaciones del alumno.</span>`;
                 }
+                if (d.sin_campus > 0 || d.sin_nivel > 0) {
+                    const muestra = (d.sin_campus_nivel_muestra && d.sin_campus_nivel_muestra.length)
+                        ? ': ' + d.sin_campus_nivel_muestra.map(x => String(x).replace(/</g, '&lt;')).join('; ') + '…'
+                        : '';
+                    html += `<br><span class="text-warning small">ℹ ${fmt(d.sin_campus || 0)} alumno(s) sin campus y ${fmt(d.sin_nivel || 0)} sin nivel (el sistema anterior apuntaba a uno que ya no existía)${muestra}. Asígnelos en la matrícula del alumno.</span>`;
+                }
+                if (d.nacimiento_descartado > 0) {
+                    html += `<br><span class="text-warning small">ℹ ${fmt(d.nacimiento_descartado)} fecha(s) de nacimiento no se migraron: eran iguales o posteriores a la fecha de ingreso (la precargaba el sistema anterior). Complételas en la ficha del alumno.</span>`;
+                }
                 if (d.serie_omitida > 0) {
                     // El sistema anterior numera estos documentos POR ESTABLECIMIENTO: el mismo número
                     // puede existir dos veces y solo uno puede ocupar la serie de destino.

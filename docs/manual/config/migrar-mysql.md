@@ -6,7 +6,7 @@ ruta_modulo: config/migrar-mysql
 tipo: modulo
 visibilidad: superadmin
 etiquetas: migracion, migrar, sistema anterior, mysql, vendedor asignado, vendedor del cliente, clientes sin vendedor, vendedores migracion, asignacion de vendedor, migrar empresas, establecimientos migracion, ruc base, elegir establecimiento, fusionar establecimientos, cliente separado, serie, series, punto de emision, secuencial, numeracion, numero repetido, ingresos sin serie, egresos sin serie, pedidos sin serie, liquidacion pendiente de pago, liquidaciones de compra migradas, pagos migrados, egresos migrados, pago no aparece, cuentas por pagar migradas, compra pendiente de pago, compra pagada sale pendiente, pago no cruza, retencion en borrador, marcas, marca del producto, productos sin marca, catalogo de marcas, migrar marcas, cambios de productos migrados, cambio sin factura, factura del cambio, nup del cambio, recambio, registro de cambio, facturacion de consignacion migrada, unidad duplicada para devolver, iva inflado, iva multiplicado, iva x1000, asiento de compra mal, iva del asiento mayor, nota de credito compra asiento, contabilidad migrada, alumnos, migrar alumnos, estudiantes, campus, niveles, cursos, horarios, pension, servicios del alumno, descuento del alumno, alumnos activos, alumnos pasivos, representante del alumno, vehiculos, migrar vehiculos, placas, placa, chasis, chasis 123456789, año 2022, propietario privado, vehiculos faltantes, vehiculo sin orden, car wash migracion, cobros de recibos, recibo pendiente migrado, recibo sin abono, pago de recibo no cruza, recibos de venta migrados, saldo de recibo, liquidaciones 2020, liquidaciones antiguas pendientes, pagada en el sistema anterior, liquidacion sin pago migrada, egreso sin asiento, asiento no migrado, asiento contable faltante, desde, re-sincronizar contabilidad, registrado tarde, anulado en el sistema anterior, ingreso anulado con asiento, egreso anulado con asiento, asiento migrado vivo, asiento de documento anulado, categorias, categoria del producto, productos sin categoria, grupo de producto, grupo familiar, migrar categorias, suscripciones, facturas programadas, recibos programados, facturacion recurrente, migrar suscripciones, cobro periodico, nota de credito no aparece, nota de credito migrada en pruebas, ambiente de pruebas, saldo de inventario no paso, stock migrado incompleto, kardex migrado falta compra, egreso rol de pagos sin mes, ROL_PAGOS, quincena migrada, mes del rol en el egreso, roles de pago no se migran, roles omitidos, quincenas omitidas, empleado inactivo, empleados inactivos, empleado creado a mano
-version: 1.26
+version: 1.27
 orden: 2
 estado: activo
 ---
@@ -507,19 +507,30 @@ Tres entidades traen el módulo de alumnos del sistema anterior al módulo
      primero); los dos últimos bloques pasan a Apellidos («ANA MARÍA PÉREZ
      LÓPEZ» → Nombres «ANA MARÍA», Apellidos «PÉREZ LÓPEZ»). Con tres palabras
      no se puede saber si la del medio es nombre o apellido: revise esos casos.
-   - Identificación (cédula o pasaporte), fecha de nacimiento y sexo.
+   - Identificación (cédula o pasaporte), fecha de nacimiento y sexo. El
+     sistema anterior precargaba la fecha de nacimiento con la del día: si es
+     igual o posterior a la fecha de ingreso, no se migra (queda vacía) y el
+     resumen dice cuántas fueron, para completarlas en la ficha.
    - **Cliente que factura** (el representante): el cliente del alumno, ya
      migrado. Si el alumno no tenía cliente, o su cliente todavía no se migró,
      queda con **Consumidor Final** y un aviso en sus observaciones para
      asignarlo a mano. El resumen lista cuáles fueron.
    - **Serie** de facturación (p. ej. 001-001), si existe en la empresa.
-   - **Matrícula vigente** con su campus, nivel y fecha de ingreso.
+   - **Matrícula vigente** con su campus, nivel y fecha de ingreso. El sistema
+     anterior borraba campus y niveles: si el alumno apuntaba a uno que ya no
+     existe, la matrícula queda sin él, con un aviso en las observaciones del
+     alumno, y el resumen lista cuáles fueron.
    - **Horario**: el anterior lo guardaba como texto («8h30 a 14h00»); se
      registra de **lunes a viernes** con esas horas. Si el texto no tiene horas
-     reconocibles (p. ej. «MAÑANA»), queda en las observaciones del alumno.
+     reconocibles (p. ej. «MAÑANA» o «7 a 12»), queda en las observaciones del
+     alumno. Números sueltos como «2 horas» o «Grupo 1.» no se toman por horas.
    - **Servicios a facturar** con su cantidad, **precio pactado** y **descuento**
      (valor en $ por servicio, que se resta en cada factura). Los servicios cuyo
      producto no está migrado se omiten y el resumen los cuenta.
+
+**Alumnos activos** no se ejecuta si todavía faltan **Alumnos: campus** o
+**Alumnos: niveles / cursos** y el sistema anterior tiene registros de ellos:
+aparece el mensaje «Migre primero…». Así ningún alumno queda sin su matrícula.
 
 Si un alumno ya existe en el sistema nuevo con la misma identificación, se
 vincula y no se duplica. Volver a ejecutar no repite nada. Los descuentos
@@ -638,6 +649,11 @@ sistema anterior tampoco los aplicaba al facturar por alumno).
 
 ## Historial de cambios
 
+- **1.27** — **Alumnos activos**: no se ejecuta sin migrar antes campus y
+  niveles; avisa (resumen y observaciones del alumno) cuando el campus o nivel
+  del sistema anterior ya no existía; ya no toma «2 horas» o «Grupo 1.» como
+  horas del horario; y descarta la fecha de nacimiento precargada (igual o
+  posterior al ingreso).
 - **1.26** — **Roles de pago / Quincenas**: al re-ejecutarlos se restauran desde el
   sistema anterior los roles migrados que se recalcularon en este sistema
   (perdían a los empleados inactivos). Los empleados que no se migraron con
