@@ -1368,6 +1368,7 @@
             if (!json.ok) throw new Error(json.error);
             _tramite = json;
             renderTramite(json);
+            consultarSaldoUanataca();
             renderUanataca(json);
             renderHistorialEstado(json);
             // Si el trámite cambió de estado (consulta a Uanataca, marcar emitida…), la ficha
@@ -1388,6 +1389,31 @@
         return `<div class="d-flex gap-2 mb-2"><i class="bi ${icon} fs-6"></i><div><div class="fw-semibold text-dark">${titulo}</div>${detalle ? `<div class="text-muted">${detalle}</div>` : ''}</div></div>`;
     }
 
+    // Saldo de Uanacréditos, para saber antes de aprobar el pago si alcanza para registrar
+    // la firma en Uanataca. Solo se consulta si el recuadro de registrar pago está a la vista.
+    async function consultarSaldoUanataca() {
+        const el = document.getElementById('trSaldoUanataca');
+        if (!el) return;
+        el.className = 'text-muted';
+        el.textContent = 'consultando…';
+        try {
+            const json = await (await fetch(`${urlBase}/saldoUanatacaAjax`)).json();
+            if (!json.ok) throw new Error(json.error);
+            const saldo = Number(json.saldo || 0);
+            el.className = saldo > 0 ? 'text-success' : 'text-danger';
+            el.textContent = '$' + saldo.toLocaleString('es-EC', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+            el.title = saldo > 0 ? '' : 'Sin saldo: recargue Uanacréditos antes de registrar la firma.';
+        } catch (e) {
+            el.className = 'text-danger';
+            el.textContent = 'no disponible';
+            el.title = e.message || 'No se pudo consultar el saldo.';
+        }
+    }
+
+    document.addEventListener('click', e => {
+        if (e.target.closest('#trSaldoUanatacaBtn')) consultarSaldoUanataca();
+    });
+
     function renderTramite(t) {
         const puede = !!(window.FIRMAS_PERM && window.FIRMAS_PERM.actualizar);
         const pagoOk = t.estado_pago === 'confirmado';
@@ -1404,6 +1430,11 @@
             <div class="border rounded-3 p-2 mb-2 ${t.estado_pago === 'en_revision' ? 'border-info bg-info bg-opacity-10' : ''}">
                 <div class="fw-semibold mb-1"><i class="bi bi-cash-coin me-1"></i>${t.estado_pago === 'en_revision' ? 'Revisar comprobante de pago' : 'Registrar pago recibido'}</div>
                 ${comprobante ? `<div class="mb-1"><a href="${comprobante.url}" target="_blank"><i class="bi bi-receipt me-1"></i>Ver comprobante: ${esc(comprobante.nombre)}</a></div>` : ''}
+                ${t.uanataca_api ? `<div class="mb-1 d-flex align-items-center gap-1">
+                    <i class="bi bi-wallet2 text-primary"></i><span class="text-muted">Saldo en Uanataca:</span>
+                    <b id="trSaldoUanataca">consultando…</b>
+                    <button type="button" class="btn btn-link btn-sm p-0 ms-1" id="trSaldoUanatacaBtn" title="Volver a consultar"><i class="bi bi-arrow-repeat"></i></button>
+                </div>` : ''}
                 <div class="d-flex flex-wrap gap-2 align-items-end">
                     <div><label class="form-label small mb-0">Cuenta / forma de cobro</label>
                         <select class="form-select form-select-sm" id="trFormaCobro" style="width:220px;"><option value="">— Elegir —</option>${formas}</select></div>

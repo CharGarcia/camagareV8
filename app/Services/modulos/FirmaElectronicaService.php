@@ -982,6 +982,70 @@ class FirmaElectronicaService
             $this->repository->rollBack();
             throw $e;
         }
+
+        // Solicitud nueva completa (sale de borrador una sola vez) o corrección de una
+        // observada (una vez por cada observación): aviso a la empresa.
+        if ($estadoAntes === 'borrador' || $estadoAntes === 'observada') {
+            $this->avisarNuevaSolicitudEmpresa($firma, $nuevo, $estadoAntes === 'observada');
+        }
+    }
+
+    /**
+     * Correo al correo de la empresa (ficha de la empresa) avisando que un cliente completó
+     * su solicitud de firma desde el enlace. No interrumpe al cliente si el correo falla.
+     */
+    private function avisarNuevaSolicitudEmpresa(array $firma, string $estado, bool $correccion = false): void
+    {
+        $que = $correccion ? 'Solicitud de firma electrónica corregida' : 'Nueva solicitud de firma electrónica';
+        $idEmpresa = (int) $firma['id_empresa'];
+        try {
+            $empresa = (new \App\models\Empresa())->getPorId($idEmpresa) ?? [];
+            $correo  = trim((string) ($empresa['mail'] ?? ''));
+            if ($correo === '') {
+                error_log('[Firmas] Empresa ' . $idEmpresa . ' sin correo: no se avisó la solicitud de firma #' . $firma['id'] . '.');
+                return;
+            }
+            $nomEmp  = (string) (($empresa['nombre_comercial'] ?? '') ?: ($empresa['nombre'] ?? ''));
+            $titular = trim(($firma['nombres'] ?? '') . ' ' . ($firma['apellidos'] ?? ''));
+            $pagado  = $estado === 'por_registrar';
+            $filas = [
+                'Titular'        => $titular,
+                'Identificación' => (string) ($firma['numero_identificacion'] ?? ''),
+                'Tipo de firma'  => (string) ($firma['nombre_producto'] ?? ''),
+                'Tipo de persona'=> ($firma['tipo_persona'] ?? '') === 'juridica' ? 'Representante legal' : 'Persona natural',
+                'Correo'         => (string) ($firma['correo'] ?? ''),
+                'Teléfono'       => (string) ($firma['telefono'] ?? ''),
+                'Pago'           => $pagado ? 'Confirmado' : (($firma['estado_pago'] ?? '') === 'en_revision' ? 'Comprobante por revisar' : 'Pendiente'),
+                'Fecha'          => date('d-m-Y H:i:s'),
+            ];
+            $tabla = '';
+            foreach ($filas as $k => $v) {
+                $tabla .= '<tr><td style="padding:4px 12px 4px 0;color:#64748b;">' . self::h($k) . '</td>'
+                    . '<td style="padding:4px 0;font-weight:600;">' . self::h($v !== '' ? $v : '—') . '</td></tr>';
+            }
+            $url = url_absoluta('modulos/firmas_electronicas');
+            $cuerpo = ($correccion
+                    ? '<p>El cliente <b>corrigió su solicitud de firma electrónica</b> desde el enlace. Lo que se le pidió corregir:</p>'
+                        . '<p style="background:#fef9c3;padding:8px 12px;border-radius:6px;">' . self::h((string) ($firma['observacion_cliente'] ?? '') ?: '—') . '</p>'
+                    : '<p>Hay una <b>nueva solicitud de firma electrónica</b>: el cliente completó sus datos y documentos desde el enlace.</p>')
+                . '<table style="border-collapse:collapse;font-size:14px;margin:12px 0;">' . $tabla . '</table>'
+                . '<p>' . ($pagado
+                    ? 'El pago ya está confirmado: revise los documentos y registre la firma en Uanataca.'
+                    : 'Revise la solicitud y continúe con el trámite (pago y registro en Uanataca).') . '</p>'
+                . '<p style="text-align:center;margin:24px 0;"><a href="' . self::h($url) . '" '
+                . 'style="background:#2563eb;color:#fff;padding:12px 22px;border-radius:8px;text-decoration:none;font-weight:600;">'
+                . 'Revisar solicitud</a></p>'
+                . '<p style="font-size:12px;color:#64748b;">Si el botón no funciona, copie este enlace en su navegador:<br>' . self::h($url) . '</p>';
+
+            $ok = (new \App\Services\EnvioDocumentosSRIService())->enviarAvisoSimple(
+                $idEmpresa, $correo, $nomEmp, $que . ' - ' . ($titular !== '' ? $titular : 'cliente'), $cuerpo, $nomEmp
+            );
+            $this->repository->crearEvento($idEmpresa, (int) $firma['id'], 'nota',
+                $ok ? 'Aviso a la empresa enviado: ' . $que : 'No se pudo enviar el aviso a la empresa: ' . $que,
+                $correo, false, null);
+        } catch (\Throwable $e) {
+            error_log('[Firmas] Aviso de nueva solicitud #' . ($firma['id'] ?? '?') . ': ' . $e->getMessage());
+        }
     }
 
     /**

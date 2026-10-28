@@ -88,6 +88,14 @@ cédula, el **código dactilar**.
      aceptación (en PDF). Cada archivo se guarda al subirlo;
    - paga **con tarjeta (Payphone)** o **sube el comprobante de la
      transferencia** (ve los datos bancarios que usted configuró).
+   Cuando el cliente termina de subir sus documentos, llega un **correo al correo
+   de la empresa** (el de la ficha de la empresa) con el asunto *Nueva solicitud
+   de firma electrónica*: trae el titular, la identificación, el tipo de firma, el
+   estado del pago y el botón **Revisar solicitud**. Se envía una sola vez por
+   solicitud y queda anotado en el historial interno de la firma. Si la empresa no
+   tiene correo registrado, no se envía. También llega un correo (*Solicitud de
+   firma electrónica corregida*, con lo que se le pidió corregir) cada vez que el
+   cliente envía la corrección de una solicitud **observada**.
 3. Si pagó con tarjeta, el sistema genera solo la factura (serie configurada),
    la envía al SRI y registra el cobro. Si subió un comprobante, aparece el
    aviso en la barra superior: abra la firma, pestaña **Trámite**, elija la
@@ -96,6 +104,10 @@ cédula, el **código dactilar**.
    La imagen del comprobante se ve directamente en la pestaña **Pago** (un PDF se
    muestra en un visor); al tocarla se abre en tamaño completo. Se ve aunque la
    forma de pago aún no esté elegida.
+   Si la conexión con Uanataca está activa, el recuadro de registrar el pago muestra
+   el **saldo de Uanacréditos** (en verde si hay saldo, en rojo si está en cero), para
+   saber antes de aprobar si alcanza para registrar la firma; el botón de flechas lo
+   vuelve a consultar.
 4. Con la factura autorizada, el cliente recibe un correo con la factura (PDF y
    XML) y el botón **«Confirmo que recibí mi factura»**. Así se comprueba que el
    correo es suyo: ahí le llegará la activación de Uanataca.
@@ -427,7 +439,10 @@ archivo, y volver a cargar la firma no lo soluciona.
 - **3.10** — La fecha de vencimiento también se llena sola en las solicitudes hechas
   por el cliente desde el enlace y en las renovaciones (antes quedaban sin fecha).
   En la pestaña **Pago** se ve la imagen (o el PDF) del comprobante adjunto, aunque la
-  forma de pago aún no esté elegida.
+  forma de pago aún no esté elegida. Al registrar el pago (pestaña **Trámite**) se ve
+  el saldo de Uanacréditos de Uanataca. Cuando un cliente completa su solicitud desde
+  el enlace, llega un correo al correo de la empresa avisando la nueva solicitud (y otro
+  cuando corrige una solicitud observada).
 - **3.9** — Los WhatsApp enviados por la plantilla (enlace de solicitud y aviso de
   vencimiento) quedan registrados en el **chat de WhatsApp** de la empresa, igual que los
   recordatorios de Cuentas por Cobrar.
