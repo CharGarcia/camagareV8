@@ -259,7 +259,7 @@
             <div class="mt-4">
               <div class="border rounded-3 overflow-hidden bg-white shadow-sm">
                 <div class="table-responsive" style="max-height: 350px;">
-                  <table class="table table-sm table-detalle mb-0">
+                  <table class="table table-sm table-detalle mb-0 text-nowrap">
                     <thead>
                       <tr class="table-light border-bottom">
                         <th class="ps-3 py-2 small fw-bold text-muted" style="width: 12%;" title="Código del producto vinculado; en gris, el del proveedor si aún no se vincula">Código</th>

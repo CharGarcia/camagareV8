@@ -58,6 +58,18 @@ $to         = $to         ?? 0;
         vertical-align: middle;
     }
 
+    /* Detalle de ítems como en Factura de Venta: el código se ensancha a su contenido y la
+       descripción (textarea de 2 filas) se ve completa; si no cabe, scroll horizontal. */
+    #tbodyDetalle .mc-det-codigo {
+        field-sizing: content;
+        min-width: 100%;
+        max-width: 320px;
+    }
+
+    #tbodyDetalle .input-descripcion {
+        min-width: 260px;
+    }
+
     .total-row td {
         font-weight: 600;
         background: #f8f9fa;

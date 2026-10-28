@@ -124,6 +124,12 @@ document.addEventListener('DOMContentLoaded', () => {
     if (modal) {
         modal.addEventListener('keydown', function(e) {
             const isInputOrSelect = ['INPUT', 'SELECT', 'TEXTAREA'].includes(e.target.tagName);
+            // La descripción del ítem es un textarea (se ve envuelta en 2 filas, como en Factura
+            // de Venta), pero se guarda en una sola línea: Enter no inserta salto de línea.
+            if (e.key === 'Enter' && e.target.classList.contains('input-descripcion')) {
+                e.preventDefault();
+                return;
+            }
             if (e.key === 'Enter' && isInputOrSelect && !e.target.classList.contains('input-descripcion')) {
                 e.preventDefault();
                 const formInputs = Array.from(modal.querySelectorAll('input, select, textarea')).filter(i => {
@@ -854,7 +860,7 @@ function mcActualizarBloqueoCampos() {
     if (document.getElementById('mcSustento')) document.getElementById('mcSustento').disabled = false;
 
     // Bloquear tabla de detalles
-    document.querySelectorAll('#tbodyDetalle input, #tbodyDetalle select, #tbodyDetalle button').forEach(el => {
+    document.querySelectorAll('#tbodyDetalle input, #tbodyDetalle textarea, #tbodyDetalle select, #tbodyDetalle button').forEach(el => {
         el.disabled = isElectronico;
     });
 
@@ -1841,7 +1847,7 @@ function CMG_agregarFilaDetalle(det) {
     tr.innerHTML = `
         <td class="ps-3"><input type="text" class="form-control form-control-sm input-detalle mc-det-codigo" readonly tabindex="-1"></td>
         <td>
-            <input type="text" class="form-control form-control-sm input-detalle input-descripcion" value="${_esc(det.descripcion||'')}" placeholder="Descripción del producto..." oninput="CMG_recalcularTotales()">
+            <textarea rows="2" class="form-control form-control-sm input-detalle input-descripcion" style="resize:none; overflow:auto; line-height:1.15;" placeholder="Descripción del producto..." oninput="CMG_recalcularTotales()">${_esc(det.descripcion||'')}</textarea>
             <input type="hidden" class="input-id-detalle" value="${det.id || ''}">
             <input type="hidden" class="input-id-producto" value="${det.id_producto || det.id_producto_vinculado || ''}">
             <input type="hidden" class="input-codigo" value="${det.codigo_principal || ''}">
