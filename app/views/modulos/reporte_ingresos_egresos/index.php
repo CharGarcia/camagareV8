@@ -323,9 +323,19 @@
         $('rie-tipo-flujo').value = 'AMBOS'; $('rie-ver-por').value = 'DETALLE'; $('rie-tercero-tipo').value = '';
         $('rie-forma').value = '0'; $('rie-opbanc').value = ''; $('rie-concepto').value = '0'; $('rie-tipo-doc').value = ''; $('rie-estado').value = 'VIGENTES';
         $('rie-vendedor').value = '0';
-        generar();
+        vaciar();
     });
 
-    generar(); // primera carga
+    // Sin carga automática: el reporte se consulta solo al presionar Buscar (o Enter
+    // en el buscador). Limpiar deja la tabla y los indicadores en blanco.
+    function vaciar() {
+        ['rie-head-tercero', 'rie-head-forma', 'rie-head-periodo'].forEach(id => $(id).classList.add('d-none'));
+        $('rie-head-detalle').classList.remove('d-none');
+        $('rie-tbody').innerHTML = '<tr><td colspan="10" class="text-center py-5 text-muted"><i class="bi bi-funnel fs-3 d-block mb-2"></i>Ajuste los filtros y presione <strong>Buscar</strong>.</td></tr>';
+        ['rie-kpi-ing', 'rie-kpi-egr', 'rie-kpi-neto'].forEach(id => $(id).textContent = money(0));
+        $('rie-kpi-neto').classList.add('text-primary'); $('rie-kpi-neto').classList.remove('text-danger');
+        $('rie-n-ing').textContent = ''; $('rie-n-egr').textContent = '';
+        $('rieBtnPdf').disabled = true; $('rieBtnExcel').disabled = true;
+    }
 })();
 </script>

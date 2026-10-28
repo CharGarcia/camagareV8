@@ -15,6 +15,10 @@ Este reporte junta **ingresos y egresos en un mismo listado**, al nivel de cada
 línea de detalle. Es la vista completa del movimiento de dinero: qué entró, qué
 salió, de quién y por qué concepto.
 
+Al entrar, el reporte **no carga datos**: elija los filtros y presione **Buscar**
+(o Enter en el cuadro de búsqueda). **Limpiar** devuelve los filtros a los valores
+iniciales y deja la tabla en blanco hasta la siguiente búsqueda.
+
 ## Filtros combinables
 
 | Filtro | Para qué |
@@ -203,7 +207,9 @@ cobró cada vendedor, qué movimientos hubo por encima de cierto monto.
   pagado con una forma de tipo Anticipo no suma en totales, vistas resumidas,
   Excel ni PDF, porque ese dinero ya se contó al recibir o entregar el anticipo.
   En la vista Documento la línea se sigue viendo, marcada *Anticipo aplicado*, y
-  el Excel trae una columna **Anticipo aplicado**.
+  el Excel trae una columna **Anticipo aplicado**. Además, el reporte **ya no se
+  carga solo al entrar** ni al presionar *Limpiar*: los datos salen al presionar
+  **Buscar**.
 - **1.8** — Los ingresos y egresos **anulados ya no aparecen ni suman** en el
   reporte. El filtro *Estado* ofrece *Vigentes* (por defecto) o *Anulados*; se
   quitó la opción *Todos*, que los mezclaba en los totales.
