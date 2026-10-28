@@ -71,12 +71,20 @@
             .forEach(el => { el.colSpan = colspan; });
     }
 
-    function generarSelectOptions(lista, valueKey, textKey, selectedValue) {
+    function generarSelectOptions(lista, valueKey, textKey, selectedValue, nombreActual) {
+        const esc = (s) => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
         let html = '<option value="">-- Seleccionar --</option>';
+        let esta = false;
         lista.forEach(item => {
-            const selected = (item[valueKey] == selectedValue) ? 'selected' : '';
-            html += `<option value="${item[valueKey]}" ${selected}>${item[textKey]}</option>`;
+            const sel = (item[valueKey] == selectedValue);
+            if (sel) esta = true;
+            html += `<option value="${esc(item[valueKey])}" ${sel ? 'selected' : ''}>${esc(item[textKey])}</option>`;
         });
+        // La lista trae solo los activos: uno ya inactivo que tiene la línea se agrega igual,
+        // si no el select quedaba vacío y al guardar se borraba sin que el usuario lo notara.
+        if (selectedValue && !esta) {
+            html += `<option value="${esc(selectedValue)}" selected>${esc(nombreActual || ('#' + selectedValue))} (inactivo)</option>`;
+        }
         return html;
     }
 
@@ -394,12 +402,12 @@
             </td>
             <td class="asiento-col-centro${centrosCosto.length ? '' : ' d-none'}">
                 <select class="form-select form-select-sm centro-costo">
-                    ${generarSelectOptions(centrosCosto, 'id', 'nombre', idCentro)}
+                    ${generarSelectOptions(centrosCosto, 'id', 'nombre', idCentro, datos ? datos.nombre_centro_costo : '')}
                 </select>
             </td>
             <td class="asiento-col-proyecto${proyectos.length ? '' : ' d-none'}">
                 <select class="form-select form-select-sm proyecto">
-                    ${generarSelectOptions(proyectos, 'id', 'nombre', idProyecto)}
+                    ${generarSelectOptions(proyectos, 'id', 'nombre', idProyecto, datos ? datos.nombre_proyecto : '')}
                 </select>
             </td>
             <td><input type="text" class="form-control form-control-sm doc-ref" value="${docRef}"></td>

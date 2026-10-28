@@ -189,12 +189,7 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                                 <td data-col="descripcion" class="small text-muted"><?= htmlspecialchars($r['descripcion'] ?? '-') ?></td>
                                 <td data-col="cliente_nombre"><?= htmlspecialchars($r['cliente_nombre'] ?? '-') ?></td>
                                 <td class="text-end" data-col="presupuesto">$<?= number_format((float)($r['presupuesto'] ?? 0), 2) ?></td>
-                                <td class="text-center" data-col="porcentaje_ejecucion">
-                                    <div class="progress progress-sm w-100 mx-auto mb-1" style="max-width: 60px;" title="<?= (int)($r['porcentaje_ejecucion'] ?? 0) ?>%">
-                                        <div class="progress-bar" role="progressbar" style="width: <?= (int)($r['porcentaje_ejecucion'] ?? 0) ?>%"></div>
-                                    </div>
-                                    <span class="small" style="font-size: 0.75rem;"><?= (int)($r['porcentaje_ejecucion'] ?? 0) ?>%</span>
-                                </td>
+                                <?= \App\controllers\modulos\ProyectosController::celdaEjecucion($r) ?>
                                 <td class="small" data-col="fecha_inicio"><?= htmlspecialchars($r['fecha_inicio'] ?? '-') ?></td>
                                 <td class="small" data-col="fecha_fin"><?= htmlspecialchars($r['fecha_fin'] ?? '-') ?></td>
                                 <td class="text-center pe-3" data-col="estado">

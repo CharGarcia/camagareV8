@@ -6,7 +6,7 @@ ruta_modulo: modulos/asientos_contables
 tipo: modulo
 visibilidad: todos
 etiquetas: asientos, cuenta eliminada, cuenta configurada no funciona, asiento contable, diario, debe, haber, partida doble, cuadrado, comprobante, contabilidad, imprimir, pdf, excel, documento origen, cuadre con el documento, total de la factura, cuenta por cobrar, cartera, editar asiento desde el documento, pestaña asiento contable, editado a mano, restaurar asiento automático, permisos de contabilidad, documentos migrados, migración, sistema anterior, buscar asiento, buscador, filtros, filtrar asientos, buscar por cuenta, buscar por referencia, libro diario, chips, asiento descuadrado, búsqueda lenta, se queda buscando, filtrar por origen, origen del asiento, módulo de origen, vista previa, costo de ventas, asiento sin costo, duplicar asiento, copiar asiento, clonar asiento, repetir asiento, centro de costo sugerido, proyecto sugerido, cambiar centro de costo desde el documento, cambiar proyecto desde la compra
-version: 1.42
+version: 1.43
 orden: 20
 estado: activo
 ---
@@ -564,6 +564,7 @@ cambiarlos se revierte el cierre en ese módulo y se genera de nuevo.
 
 ## Historial de cambios
 
+- **1.43** — En el modal del asiento, una línea con un centro de costo o proyecto **inactivo** lo muestra como «(inactivo)» en lugar de dejar el campo vacío; antes, guardar el asiento lo borraba sin aviso.
 - **1.42** — La pestaña **Asiento contable** de los documentos (compras,
   ventas, ingresos, egresos, etc.) permite elegir el centro de costo y el
   proyecto de cada línea. Solo se aceptan los de la propia empresa.

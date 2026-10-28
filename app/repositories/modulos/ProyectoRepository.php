@@ -20,12 +20,21 @@ class ProyectoRepository extends BaseRepository
         'descripcion'          => 'p.descripcion',
         'estado'               => 'p.estado',
         'presupuesto'          => 'p.presupuesto',
-        'porcentaje_ejecucion' => 'p.porcentaje_ejecucion',
+        // % de ejecución calculado desde los asientos (ver EJECUCION_SQL), no el digitado.
+        'porcentaje_ejecucion' => self::EJECUCION_SQL,
+        'avance_fisico'        => 'p.porcentaje_ejecucion',
         'fecha_inicio'         => 'p.fecha_inicio',
         'fecha_fin'            => 'p.fecha_fin',
         // Columna que viene de un JOIN: se prefija la tabla correcta.
         'cliente_nombre'       => 'cl.nombre',
     ];
+
+    /**
+     * Ejecución presupuestaria: costos y gastos del proyecto en asientos de producción
+     * (LATERAL `ej`, DimensionMovimientoRepository::sqlLateralEjecutado) sobre el
+     * presupuesto. NULL si el proyecto no tiene presupuesto.
+     */
+    public const EJECUCION_SQL = '(CASE WHEN p.presupuesto > 0 THEN ROUND(COALESCE(ej.ejecutado, 0) / p.presupuesto * 100, 2) END)';
 
     /** @deprecated Usar MAPA_ORDEN; se conserva por compatibilidad. */
     public const COLUMNAS_ORDEN = [
@@ -63,7 +72,9 @@ class ProyectoRepository extends BaseRepository
 
         // El JOIN del cliente participa del WHERE (texto libre y filtro cliente:), así
         // que va igual en el COUNT y en el SELECT de filas.
-        $joinsFiltro = "LEFT JOIN clientes cl ON cl.id = p.id_cliente";
+        // El de la ejecución también: se ordena y se filtra por el % calculado.
+        $joinsFiltro = "LEFT JOIN clientes cl ON cl.id = p.id_cliente "
+            . DimensionMovimientoRepository::sqlLateralEjecutado('proyecto', 'p', 'ej');
 
         $parsed = \App\Helpers\FiltrosBusqueda::parsear($buscar);
         if ($parsed['texto_libre'] !== '') {
@@ -101,7 +112,8 @@ class ProyectoRepository extends BaseRepository
             ],
             'numerico' => [
                 'presupuesto' => 'p.presupuesto',
-                'ejecucion'   => 'p.porcentaje_ejecucion',
+                'ejecucion'   => self::EJECUCION_SQL,
+                'avance_fisico' => 'p.porcentaje_ejecucion',
             ],
         ]);
 
@@ -114,7 +126,9 @@ class ProyectoRepository extends BaseRepository
         // 2. Obtener filas
         $offset = ($page - 1) * $perPage;
 
-        $sqlRows = "SELECT p.*, cl.nombre AS cliente_nombre
+        $sqlRows = "SELECT p.*, cl.nombre AS cliente_nombre,
+                           ROUND(COALESCE(ej.ejecutado, 0), 2) AS ejecutado,
+                           " . self::EJECUCION_SQL . " AS ejecucion_pct
                     FROM {$this->table} p
                     {$joinsFiltro}
                     {$whereSql}

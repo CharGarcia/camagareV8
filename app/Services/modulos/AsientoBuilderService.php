@@ -3166,7 +3166,7 @@ class AsientoBuilderService
             ];
         };
 
-        // IVA crédito tributario (lado natural Debe; se invierte en notas de crédito)
+        // IVA en compras (lado natural Debe; se invierte en notas de crédito)
         foreach ($ivaRows as $iva) {
             $valorIva = round((float)($iva['valor'] ?? 0), 2);
             if ($valorIva <= 0) continue;
@@ -3178,7 +3178,7 @@ class AsientoBuilderService
                 ['id_cuenta' => (int)$iva['id_cuenta'], 'cuenta_codigo' => $iva['cuenta_codigo'] ?? '', 'cuenta_nombre' => $iva['cuenta_nombre'] ?? ''],
                 $valorIva,
                 'debe',
-                'IVA crédito tributario'
+                'IVA en compras'
             );
         }
 

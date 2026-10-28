@@ -129,12 +129,7 @@ class ProyectosController extends BaseModuloController
                         <td data-col="descripcion" class="small text-muted">' . htmlspecialchars($r['descripcion'] ?? '—') . '</td>
                         <td data-col="cliente_nombre">' . htmlspecialchars($r['cliente_nombre'] ?? '—') . '</td>
                         <td class="text-end" data-col="presupuesto">$' . number_format((float)($r['presupuesto'] ?? 0), 2) . '</td>
-                        <td class="text-center" data-col="porcentaje_ejecucion">
-                            <div class="progress" style="height: 6px; width: 60px; margin: 0 auto;" title="' . (int)($r['porcentaje_ejecucion'] ?? 0) . '%">
-                                <div class="progress-bar" role="progressbar" style="width: ' . (int)($r['porcentaje_ejecucion'] ?? 0) . '%"></div>
-                            </div>
-                            <span class="small" style="font-size: 0.7rem;">' . (int)($r['porcentaje_ejecucion'] ?? 0) . '%</span>
-                        </td>
+                        ' . self::celdaEjecucion($r) . '
                         <td class="small" data-col="fecha_inicio">' . htmlspecialchars($r['fecha_inicio'] ?? '—') . '</td>
                         <td class="small" data-col="fecha_fin">' . htmlspecialchars($r['fecha_fin'] ?? '—') . '</td>
                         <td class="text-center pe-3" data-col="estado">' . $statusBadge . '</td>
@@ -380,6 +375,25 @@ class ProyectosController extends BaseModuloController
             echo "Error al generar Excel: " . $e->getMessage();
             exit;
         }
+    }
+
+    /**
+     * Celda «% Ejec.» del listado: ejecución presupuestaria calculada desde los asientos
+     * (costos y gastos del proyecto / presupuesto). Sin presupuesto no hay % que mostrar.
+     * La usan el listado inicial (vista) y el de searchAjax.
+     */
+    public static function celdaEjecucion(array $r): string
+    {
+        if (!isset($r['ejecucion_pct']) || $r['ejecucion_pct'] === '') {
+            return '<td class="text-center small text-muted" data-col="porcentaje_ejecucion" title="Sin presupuesto: no hay con qué comparar lo ejecutado">—</td>';
+        }
+        $pct = (float) $r['ejecucion_pct'];
+        $color = $pct > 100 ? 'bg-danger' : ($pct >= 90 ? 'bg-warning' : 'bg-primary');
+        $title = 'Ejecutado $' . number_format((float) ($r['ejecutado'] ?? 0), 2) . ' de $' . number_format((float) ($r['presupuesto'] ?? 0), 2);
+        return '<td class="text-center" data-col="porcentaje_ejecucion" title="' . htmlspecialchars($title) . '">'
+            . '<div class="progress mx-auto mb-1" style="height:6px;width:60px;">'
+            . '<div class="progress-bar ' . $color . '" role="progressbar" style="width:' . min(100, max(0, $pct)) . '%"></div></div>'
+            . '<span class="small" style="font-size:0.72rem;">' . number_format($pct, 2) . '%</span></td>';
     }
 
     private function recogerDatosFormulario(): array

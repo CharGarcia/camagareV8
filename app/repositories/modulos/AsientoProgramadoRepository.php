@@ -929,7 +929,7 @@ class AsientoProgramadoRepository extends BaseRepository
         $sql = "SELECT 0 AS id_asiento_tipo,
                        'adquisiciones_compras' AS tipo_asiento,
                        'Tarifa iva ' || t.tarifa AS concepto,
-                       'IVA crédito tributario tarifa ' || t.tarifa AS detalle,
+                       'IVA en compras tarifa ' || t.tarifa AS detalle,
                        'IVA-' || t.codigo AS codigo,
                        'activo,costo,gasto' AS tipo_cuenta,
                        'debe' AS debe_haber,

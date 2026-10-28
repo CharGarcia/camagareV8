@@ -114,6 +114,8 @@ class ProyectoService
 
         $this->repository->beginTransaction();
         try {
+            // Ya usado (asientos, periodos del plan de cuentas, presupuestos): no se elimina.
+            DimensionReporteService::crear()->validarSinUsos('proyecto', $id, $idEmpresa);
             $res = $this->repository->delete($id, $idEmpresa, $idUsuario);
             
             $this->logService->registrar(
