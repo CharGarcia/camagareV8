@@ -712,8 +712,12 @@
     const bloqueTransferencia = document.getElementById('bloquePagoTransferencia');
     const bloqueTarjeta       = document.getElementById('bloquePagoTarjeta');
 
+    // Hay comprobante adjunto (p. ej. lo subió el cliente desde el enlace, que aún no fija
+    // la forma de pago): el bloque de transferencia se muestra igual para poder verlo.
+    let _hayComprobante = false;
+
     function mostrarBloquePago(tipo) {
-        if (bloqueTransferencia) bloqueTransferencia.style.display = tipo === 'transferencia' ? '' : 'none';
+        if (bloqueTransferencia) bloqueTransferencia.style.display = (tipo === 'transferencia' || _hayComprobante) ? '' : 'none';
         if (bloqueTarjeta)       bloqueTarjeta.style.display       = (tipo === 'tarjeta' || tipo === 'payphone') ? '' : 'none';
     }
 
@@ -1141,14 +1145,28 @@
 
     function renderListaComprobantes(adjuntos) {
         const el = document.getElementById('listaComprobantes');
+        _hayComprobante = adjuntos.length > 0;
+        mostrarBloquePago(selectTipoPago?.value || '');
         if (!el) return;
         if (adjuntos.length === 0) { el.innerHTML = ''; return; }
-        el.innerHTML = adjuntos.map(a =>
-            `<div class="d-flex align-items-center gap-2 mb-1">
-                <a href="${a.url_ver}" target="_blank" class="btn btn-outline-secondary btn-sm flex-grow-1 text-start" style="font-size:.75rem;"><i class="bi bi-file-earmark me-1"></i>${escNombre(a.nombre_original)}</a>
-                <button type="button" class="btn btn-outline-danger btn-sm" style="padding:2px 6px;" onclick="eliminarAdjunto(${a.id})"><i class="bi bi-trash"></i></button>
-            </div>`
-        ).join('');
+        // El más reciente primero; la imagen se ve en la pestaña y abre en grande al tocarla.
+        el.innerHTML = adjuntos.slice().reverse().map(a => {
+            const nombre = escNombre(a.nombre_original);
+            const ext = (a.nombre_original || '').split('.').pop().toLowerCase();
+            const vista = ['jpg', 'jpeg', 'png', 'webp'].includes(ext)
+                ? `<a href="${a.url_ver}" target="_blank" title="Abrir en tamaño completo"><img src="${a.url_ver}" class="img-fluid rounded border" style="max-height:320px;object-fit:contain;" alt="${nombre}"></a>`
+                : ext === 'pdf'
+                    ? `<iframe src="${a.url_ver}" class="w-100 rounded border" style="height:320px;" title="${nombre}"></iframe>`
+                    : '';
+            return `<div class="border rounded-3 p-2 mb-2">
+                ${vista ? `<div class="mb-1">${vista}</div>` : ''}
+                <div class="d-flex align-items-center gap-2">
+                    <a href="${a.url_ver}" target="_blank" class="btn btn-outline-secondary btn-sm flex-grow-1 text-start text-truncate" style="font-size:.75rem;"><i class="bi bi-file-earmark me-1"></i>${nombre}</a>
+                    <span class="text-muted text-nowrap" style="font-size:.7rem;">${escNombre(a.created_at || '')}</span>
+                    <button type="button" class="btn btn-outline-danger btn-sm" style="padding:2px 6px;" title="Eliminar" onclick="eliminarAdjunto(${a.id})"><i class="bi bi-trash"></i></button>
+                </div>
+            </div>`;
+        }).join('');
     }
 
     function desactivarSubidaArchivos() {
@@ -1181,6 +1199,7 @@
     }
 
     function limpiarPreviews() {
+        _hayComprobante = false;
         [
             'previewCedulaFrontal', 'previewCedulaPosterior', 'previewSelfie', 'listaComprobantes',
             'previewRucEmpresa', 'previewConstitucion', 'previewNombramiento', 'previewAceptacion', 'previewCedulaRepresentante', 'previewAutorizacion',

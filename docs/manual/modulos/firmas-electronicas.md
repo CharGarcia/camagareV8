@@ -93,6 +93,9 @@ cédula, el **código dactilar**.
    aviso en la barra superior: abra la firma, pestaña **Trámite**, elija la
    cuenta donde llegó el dinero y pulse **Aprobar y facturar** (o
    **Rechazar** con el motivo; el cliente lo ve y puede subir otro).
+   La imagen del comprobante se ve directamente en la pestaña **Pago** (un PDF se
+   muestra en un visor); al tocarla se abre en tamaño completo. Se ve aunque la
+   forma de pago aún no esté elegida.
 4. Con la factura autorizada, el cliente recibe un correo con la factura (PDF y
    XML) y el botón **«Confirmo que recibí mi factura»**. Así se comprueba que el
    correo es suyo: ahí le llegará la activación de Uanataca.
@@ -423,6 +426,8 @@ archivo, y volver a cargar la firma no lo soluciona.
 
 - **3.10** — La fecha de vencimiento también se llena sola en las solicitudes hechas
   por el cliente desde el enlace y en las renovaciones (antes quedaban sin fecha).
+  En la pestaña **Pago** se ve la imagen (o el PDF) del comprobante adjunto, aunque la
+  forma de pago aún no esté elegida.
 - **3.9** — Los WhatsApp enviados por la plantilla (enlace de solicitud y aviso de
   vencimiento) quedan registrados en el **chat de WhatsApp** de la empresa, igual que los
   recordatorios de Cuentas por Cobrar.
