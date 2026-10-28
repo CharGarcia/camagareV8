@@ -11,8 +11,21 @@ use App\Services\modulos\CentroCostoService;
 
 class CentroCostosController extends BaseModuloController
 {
+    // Pestañas Documentos / Resumen del modal y su PDF / Excel.
+    use \App\Traits\DimensionReporteTrait;
+
     private CentroCostoService $service;
     private const RUTA_MODULO = 'modulos/centro-costos';
+
+    protected function tipoDimension(): string
+    {
+        return 'centro';
+    }
+
+    protected function entidadDimension(int $id, int $idEmpresa): ?array
+    {
+        return (new CentroCostoRepository())->getDetalleCompleto($id, $idEmpresa);
+    }
 
     public function __construct()
     {

@@ -11,8 +11,21 @@ use App\Services\modulos\ProyectoService;
 
 class ProyectosController extends BaseModuloController
 {
+    // Pestañas Documentos / Resumen del modal y su PDF / Excel.
+    use \App\Traits\DimensionReporteTrait;
+
     private ProyectoService $service;
     private const RUTA_MODULO = 'modulos/proyectos';
+
+    protected function tipoDimension(): string
+    {
+        return 'proyecto';
+    }
+
+    protected function entidadDimension(int $id, int $idEmpresa): ?array
+    {
+        return (new ProyectoRepository())->getDetalleCompleto($id, $idEmpresa);
+    }
 
     public function __construct()
     {
@@ -353,7 +366,7 @@ class ProyectosController extends BaseModuloController
             $empresa = $empresaModel->getPorId($idEmpresa);
             $nombreEmpresa = $empresa['nombre'] ?? '';
 
-            $headers = ['Código', 'Nombre', 'Cliente', 'Presupuesto', 'Ejecución %', 'Inicio', 'Fin', 'Estado'];
+            $headers = ['Código', 'Nombre', 'Cliente', 'Presupuesto', 'Ejecutado', 'Ejecución %', 'Avance físico %', 'Inicio', 'Fin', 'Estado'];
             $exportData = [];
             foreach ($rows as $r) {
                 $exportData[] = [
@@ -361,6 +374,8 @@ class ProyectosController extends BaseModuloController
                     (string)($r['nombre'] ?? ''),
                     (string)($r['cliente_nombre'] ?? '—'),
                     (float)($r['presupuesto'] ?? 0),
+                    (float)($r['ejecutado'] ?? 0),
+                    $r['ejecucion_pct'] !== null ? (float) $r['ejecucion_pct'] : '',
                     (float)($r['porcentaje_ejecucion'] ?? 0),
                     (string)($r['fecha_inicio'] ?? ''),
                     (string)($r['fecha_fin'] ?? ''),

@@ -25,6 +25,8 @@ $ordenDir   = $ordenDir ?? 'asc';
 $buscar     = $buscar ?? '';
 $from = $total > 0 ? (($page - 1) * $perPage) + 1 : 0;
 $to   = $total > 0 ? min($page * $perPage, $total) : 0;
+// Documentos y Resumen muestran importes de los asientos: requieren ver Asientos Contables.
+$verDimension = \App\Helpers\AsientoPestana::puedeVer();
 ?>
 <style>
     .cc-header { flex-shrink: 0; }
@@ -34,6 +36,7 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
     .cc-row:hover { background-color: rgba(0, 0, 0, .04); }
 </style>
 <?= \App\Helpers\PreferenciasHelper::renderEstilosColumnasOcultas($vistaConfig ?? []) ?>
+<?= \App\Helpers\PreferenciasHelper::renderEstilosPestanasOcultas($vistaConfig ?? []) ?>
 
 <div class="cc-header d-flex justify-content-between align-items-center flex-wrap gap-2 mb-3">
     <h5 class="mb-0 fw-bold"><i class="bi bi-diagram-3"></i> <?= htmlspecialchars($titulo) ?></h5>
@@ -157,7 +160,7 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
 
 <!-- Modal Centro de Costos -->
 <div class="modal fade" id="modalCC" tabindex="-1" aria-hidden="true" data-bs-backdrop="static">
-    <div class="modal-dialog modal-md modal-dialog-centered">
+    <div class="modal-dialog <?= $verDimension ? 'modal-xl modal-dialog-scrollable' : 'modal-md' ?> modal-dialog-centered">
         <div class="modal-content">
             <form id="formCC" novalidate>
                 <div class="modal-header bg-light">
@@ -173,7 +176,13 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                             <li class="nav-item">
                                 <a class="nav-link active py-2 small" id="tab-general-btn" data-bs-toggle="tab" href="#tab-general" role="tab">General</a>
                             </li>
+                            <?php if ($verDimension): ?>
+                                <?php $dimParte = 'tabs'; $dimTipo = 'centro'; require MVC_APP . '/views/partials/dimension_reporte_tabs.php'; ?>
+                            <?php endif; ?>
                         </ul>
+                        <?php if ($verDimension): ?>
+                            <?= \App\Helpers\PreferenciasHelper::renderDropdownPestanas(['dim-pane-documentos' => 'Documentos', 'dim-pane-resumen' => 'Resumen'], $vistaConfig ?? [], $rutaModulo) ?>
+                        <?php endif; ?>
                     </div>
                     <div class="border-bottom mx-3 mb-3"></div>
 
@@ -201,6 +210,9 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                                 </div>
                             </div>
                         </div>
+                        <?php if ($verDimension): ?>
+                            <?php $dimParte = 'paneles'; $dimTipo = 'centro'; require MVC_APP . '/views/partials/dimension_reporte_tabs.php'; ?>
+                        <?php endif; ?>
                     </div>
                 </div>
                 <div class="modal-footer justify-content-between bg-light border-top p-2">
@@ -225,6 +237,26 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
     </div>
 </div>
 
+<?php if ($verDimension): ?>
+    <?php // Visor del documento de cada fila de la pestaña Documentos (encima del modal). ?>
+    <?php include MVC_APP . '/views/modulos/documento_origen/modal_documento.php'; ?>
+    <script>window.DOCORIGEN_URL = '<?= $urlBaseCC ?>/documentoOrigenAjax';</script>
+    <script src="<?= $base ?>/js/modulos/documento_origen_modal.js?v=<?= asset_ver('/js/modulos/documento_origen_modal.js') ?>"></script>
+    <script src="<?= $base ?>/js/modulos/dimension_reporte.js?v=<?= asset_ver('/js/modulos/dimension_reporte.js') ?>"></script>
+    <script>
+        // Misma altura que todos los modales (.modal z-index 5060 !important): el visor se
+        // sube por encima con inline !important, como en el Libro Diario.
+        document.addEventListener('show.bs.modal', function(ev) {
+            if (ev.target.id !== 'modalDocumentoOrigen') return;
+            ev.target.style.setProperty('z-index', '5080', 'important');
+            setTimeout(function() {
+                var bds = document.querySelectorAll('.modal-backdrop');
+                if (bds.length) bds[bds.length - 1].style.setProperty('z-index', '5075', 'important');
+            }, 0);
+        });
+    </script>
+<?php endif; ?>
+
 <script>
     (function() {
         'use strict';
@@ -238,6 +270,10 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
         // OrdenListado en PHP. currentSort/currentDir quedan como el principal.
         window.currentSorts = <?= $ordenJson ?? '[]' ?>;
         let sorter = null;
+        // Pestañas Documentos / Resumen (solo si el usuario ve Asientos Contables).
+        const dimReporte = window.CMG_dimReporte && document.getElementById('dim-pane-resumen')
+            ? window.CMG_dimReporte({ urlBase, tipo: 'centro', modal: document.getElementById('modalCC') })
+            : null;
 
         function getModal() {
             if (!modalInst) modalInst = new bootstrap.Modal(document.getElementById('modalCC'));
@@ -253,6 +289,7 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
             document.getElementById('cc_estado').checked = true;
             const tabGen = document.getElementById('tab-general-btn');
             if (tabGen) (bootstrap.Tab.getInstance(tabGen) || new bootstrap.Tab(tabGen)).show();
+            if (dimReporte) dimReporte.limpiar(); // centro nuevo: sin Documentos ni Resumen
             getModal().show();
             setTimeout(() => document.getElementById('cc_nombre').focus(), 400);
         };
@@ -265,12 +302,12 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
             document.getElementById('cc_nombre').value = data.nombre || '';
             document.getElementById('cc_descripcion').value = data.descripcion || '';
             document.getElementById('cc_estado').checked = data.estado === 'activo';
-            document.getElementById('tituloModal').textContent = 'Editar Centro de Costo';
+            document.getElementById('tituloModal').textContent = (data.codigo ? data.codigo + ' - ' : '') + (data.nombre || 'Editar Centro de Costo');
             document.getElementById('modalAlert').classList.add('d-none');
             document.getElementById('btnEliminar')?.classList.remove('d-none');
             const tabGen = document.getElementById('tab-general-btn');
             if (tabGen) (bootstrap.Tab.getInstance(tabGen) || new bootstrap.Tab(tabGen)).show();
-
+            if (dimReporte) dimReporte.cargar(data.id);
             getModal().show();
         };
 
@@ -349,7 +386,11 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
         }, { sorts: window.currentSorts, multi: true, container: '.cc-scroll', reload: false });
 
         window.eliminarRegistro = async function() {
-            if (!confirm('¿Seguro que desea eliminar este centro de costo?')) return;
+            const conf = await Swal.fire({
+                icon: 'warning', title: '¿Eliminar este centro de costo?', showCancelButton: true,
+                confirmButtonText: 'Eliminar', cancelButtonText: 'Cancelar', confirmButtonColor: '#d33', reverseButtons: true,
+            });
+            if (!conf.isConfirmed) return;
             const id = document.getElementById('cc_id').value;
             try {
                 const fd = new FormData();
@@ -360,9 +401,10 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                     getModal().hide();
                     fetchSearch(currentPage);
                 } else {
-                    alert(json.error);
+                    // P. ej. ya usado en asientos: no se elimina (se puede inactivar).
+                    Swal.fire('No se puede eliminar', json.error || 'No se pudo eliminar el centro de costo.', 'warning');
                 }
-            } catch (e) { alert('Error de conexión'); }
+            } catch (e) { Swal.fire('Error', 'Error de conexión', 'error'); }
         };
     })();
 </script>

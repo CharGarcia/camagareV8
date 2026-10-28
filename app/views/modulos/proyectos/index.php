@@ -26,6 +26,8 @@ $ordenCol   = $ordenCol ?? 'nombre';
 $ordenDir   = $ordenDir ?? 'asc';
 $buscar     = $buscar ?? '';
 $from = $total > 0 ? (($page - 1) * $perPage) + 1 : 0;
+// Documentos y Avance muestran importes de los asientos: requieren ver Asientos Contables.
+$verDimension = \App\Helpers\AsientoPestana::puedeVer();
 $to   = $total > 0 ? min($page * $perPage, $total) : 0;
 ?>
 <style>
@@ -61,6 +63,7 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
     }
 </style>
 <?= \App\Helpers\PreferenciasHelper::renderEstilosColumnasOcultas($vistaConfig ?? []) ?>
+<?= \App\Helpers\PreferenciasHelper::renderEstilosPestanasOcultas($vistaConfig ?? []) ?>
 
 <div class="pr-header d-flex justify-content-between align-items-center flex-wrap gap-2 mb-3">
     <h5 class="mb-0 fw-bold"><i class="bi bi-briefcase"></i> <?= htmlspecialchars($titulo) ?></h5>
@@ -207,7 +210,7 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
 </div>
 
 <div class="modal fade" id="modalPR" tabindex="-1" aria-hidden="true" data-bs-backdrop="static">
-    <div class="modal-dialog modal-lg modal-dialog-centered">
+    <div class="modal-dialog modal-xl modal-dialog-centered modal-dialog-scrollable">
         <div class="modal-content">
             <form id="formPR" novalidate>
                 <div class="modal-header bg-light">
@@ -223,7 +226,13 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                             <li class="nav-item">
                                 <a class="nav-link active py-2 small" id="tab-general-btn" data-bs-toggle="tab" href="#tab-general" role="tab">General</a>
                             </li>
+                            <?php if ($verDimension): ?>
+                                <?php $dimParte = 'tabs'; $dimTipo = 'proyecto'; require MVC_APP . '/views/partials/dimension_reporte_tabs.php'; ?>
+                            <?php endif; ?>
                         </ul>
+                        <?php if ($verDimension): ?>
+                            <?= \App\Helpers\PreferenciasHelper::renderDropdownPestanas(['dim-pane-documentos' => 'Documentos', 'dim-pane-resumen' => 'Avance'], $vistaConfig ?? [], $rutaModulo) ?>
+                        <?php endif; ?>
                     </div>
                     <div class="border-bottom mx-3 mb-3"></div>
 
@@ -253,7 +262,7 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                                     <input type="number" step="0.01" class="form-control form-control-sm text-end" name="presupuesto" id="pr_presupuesto" value="0.00">
                                 </div>
                                 <div class="col-md-3">
-                                    <label class="form-label small fw-bold">% Ejecución</label>
+                                    <label class="form-label small fw-bold" title="Avance de la obra que usted estima. El % de ejecución del presupuesto se calcula solo, desde los asientos (pestaña Avance).">% Avance físico</label>
                                     <div class="input-group input-group-sm">
                                         <input type="number" step="0.01" min="0" max="100" class="form-control text-end" name="porcentaje_ejecucion" id="pr_porcentaje_ejecucion" value="0">
                                         <span class="input-group-text">%</span>
@@ -282,6 +291,9 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                                 </div>
                             </div>
                         </div>
+                        <?php if ($verDimension): ?>
+                            <?php $dimParte = 'paneles'; $dimTipo = 'proyecto'; require MVC_APP . '/views/partials/dimension_reporte_tabs.php'; ?>
+                        <?php endif; ?>
                     </div>
                 </div>
                 <div class="modal-footer justify-content-between bg-light border-top p-2">
@@ -306,6 +318,26 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
     </div>
 </div>
 
+<?php if ($verDimension): ?>
+    <?php // Visor del documento de cada fila de la pestaña Documentos (encima del modal del proyecto). ?>
+    <?php include MVC_APP . '/views/modulos/documento_origen/modal_documento.php'; ?>
+    <script>window.DOCORIGEN_URL = '<?= $urlBasePR ?>/documentoOrigenAjax';</script>
+    <script src="<?= $base ?>/js/modulos/documento_origen_modal.js?v=<?= asset_ver('/js/modulos/documento_origen_modal.js') ?>"></script>
+    <script src="<?= $base ?>/js/modulos/dimension_reporte.js?v=<?= asset_ver('/js/modulos/dimension_reporte.js') ?>"></script>
+    <script>
+        // Misma altura que todos los modales (.modal z-index 5060 !important): el visor se
+        // sube por encima con inline !important, como en el Libro Diario.
+        document.addEventListener('show.bs.modal', function(ev) {
+            if (ev.target.id !== 'modalDocumentoOrigen') return;
+            ev.target.style.setProperty('z-index', '5080', 'important');
+            setTimeout(function() {
+                var bds = document.querySelectorAll('.modal-backdrop');
+                if (bds.length) bds[bds.length - 1].style.setProperty('z-index', '5075', 'important');
+            }, 0);
+        });
+    </script>
+<?php endif; ?>
+
 <script>
     (function() {
         'use strict';
@@ -319,6 +351,10 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
         // OrdenListado en PHP. currentSort/currentDir quedan como el principal.
         window.currentSorts = <?= $ordenJson ?? '[]' ?>;
         let sorter = null;
+        // Pestañas Documentos / Avance (solo si el usuario ve Asientos Contables).
+        const dimReporte = window.CMG_dimReporte && document.getElementById('dim-pane-resumen')
+            ? window.CMG_dimReporte({ urlBase, tipo: 'proyecto', modal: document.getElementById('modalPR') })
+            : null;
 
         function getModal() {
             if (!modalInst) modalInst = new bootstrap.Modal(document.getElementById('modalPR'));
@@ -332,7 +368,8 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
             document.getElementById('modalAlert').classList.add('d-none');
             document.getElementById('btnEliminar')?.classList.add('d-none');
             document.getElementById('pr_estado').checked = true;
-            bootstrap.Tab.getInstance(document.getElementById('tab-general-btn')).show();
+            bootstrap.Tab.getOrCreateInstance(document.getElementById('tab-general-btn')).show();
+            if (dimReporte) dimReporte.limpiar(); // proyecto nuevo: sin Documentos ni Avance
             getModal().show();
             setTimeout(() => document.getElementById('pr_nombre').focus(), 400);
         };
@@ -350,10 +387,11 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
             document.getElementById('pr_fecha_fin').value = data.fecha_fin || '';
             document.getElementById('pr_descripcion').value = data.descripcion || '';
             document.getElementById('pr_estado').checked = data.estado === 'activo';
-            document.getElementById('tituloModal').textContent = 'Editar Proyecto';
+            document.getElementById('tituloModal').textContent = (data.codigo ? data.codigo + ' - ' : '') + (data.nombre || 'Editar Proyecto');
             document.getElementById('modalAlert').classList.add('d-none');
             document.getElementById('btnEliminar')?.classList.remove('d-none');
-            bootstrap.Tab.getInstance(document.getElementById('tab-general-btn')).show();
+            bootstrap.Tab.getOrCreateInstance(document.getElementById('tab-general-btn')).show();
+            if (dimReporte) dimReporte.cargar(data.id);
             getModal().show();
         };
 
@@ -435,7 +473,11 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
         }, { sorts: window.currentSorts, multi: true, container: '.pr-scroll', reload: false });
 
         window.eliminarRegistro = async function() {
-            if (!confirm('¿Seguro que desea eliminar este proyecto?')) return;
+            const conf = await Swal.fire({
+                icon: 'warning', title: '¿Eliminar este proyecto?', showCancelButton: true,
+                confirmButtonText: 'Eliminar', cancelButtonText: 'Cancelar', confirmButtonColor: '#d33', reverseButtons: true,
+            });
+            if (!conf.isConfirmed) return;
             const id = document.getElementById('pr_id').value;
             try {
                 const fd = new FormData();
@@ -449,10 +491,11 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                     getModal().hide();
                     fetchSearch(currentPage);
                 } else {
-                    alert(json.error);
+                    // P. ej. ya usado en asientos: no se elimina (se puede inactivar).
+                    Swal.fire('No se puede eliminar', json.error || 'No se pudo eliminar el proyecto.', 'warning');
                 }
             } catch (e) {
-                alert('Error de conexión');
+                Swal.fire('Error', 'Error de conexión', 'error');
             }
         };
     })();
