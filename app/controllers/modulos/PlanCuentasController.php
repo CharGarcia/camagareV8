@@ -293,6 +293,7 @@ class PlanCuentasController extends BaseModuloController
         header('Content-Type: application/json');
 
         $idCuenta  = (int) ($_GET['id_cuenta'] ?? 0);
+        $tipo      = ($_GET['tipo'] ?? '') === 'proyecto' ? 'proyecto' : 'centro';
         $idEmpresa = (int) $_SESSION['id_empresa'];
 
         try {
@@ -301,7 +302,7 @@ class PlanCuentasController extends BaseModuloController
             $rows = array_map(fn($r) => $r + [
                 'desde_txt' => $fmt($r['vigente_desde']),
                 'hasta_txt' => $fmt($r['vigente_hasta']),
-            ], $service->listar($idCuenta, $idEmpresa));
+            ], $service->listar($idCuenta, $idEmpresa, $tipo));
 
             echo json_encode([
                 'ok'         => true,
@@ -327,9 +328,9 @@ class PlanCuentasController extends BaseModuloController
 
         try {
             $id = PlanCuentaDimensionService::crear()->guardar((int) ($_POST['id'] ?? 0), [
+                'tipo'            => $_POST['tipo'] ?? '',
                 'id_cuenta'       => $_POST['id_cuenta'] ?? 0,
-                'id_centro_costo' => $_POST['id_centro_costo'] ?? 0,
-                'id_proyecto'     => $_POST['id_proyecto'] ?? 0,
+                'id_dimension'    => $_POST['id_dimension'] ?? 0,
                 'vigente_desde'   => $_POST['vigente_desde'] ?? '',
                 'vigente_hasta'   => $_POST['vigente_hasta'] ?? '',
                 'observacion'     => $_POST['observacion'] ?? '',

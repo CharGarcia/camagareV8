@@ -6,96 +6,19 @@
 ?>
 <!-- Modal Principal (Edit/Create) -->
 <div class="modal fade" id="modalPC" tabindex="-1" aria-hidden="true" data-bs-backdrop="static">
-    <div class="modal-dialog modal-md modal-dialog-centered">
+    <div class="modal-dialog modal-lg modal-dialog-centered">
         <div class="modal-content border-0 shadow-lg">
             <form id="formPC" novalidate>
                 <div class="modal-header">
                     <h5 class="modal-title fw-bold"><i class="bi bi-pencil-square text-primary me-2"></i><span id="tituloModalPC">Cuenta</span></h5>
                     <button type="button" class="btn-close shadow-none" data-bs-dismiss="modal" aria-label="Cerrar"></button>
                 </div>
-                <div class="modal-body p-4">
-                    <div id="modalAlertPC" class="alert d-none mb-3 py-2 small shadow-sm border-0"></div>
-                    
-                    <div id="wrapper-parent-info-pc" class="alert alert-primary py-1 mb-2 small border-0 shadow-sm d-none" style="background-color: rgba(13, 110, 253, 0.05); color: #0d6efd;">
-                        <i class="bi bi-info-circle-fill me-2"></i>
-                        <span>La cuenta que se va a crear estará dentro de: <strong id="parent-account-name-pc"></strong></span>
-                    </div>
-
-                    <!-- Visualización de cuentas existentes en el mismo nivel -->
-                    <div id="wrapper-existing-accounts-pc" class="mb-3 d-none p-2 border rounded bg-light bg-opacity-50">
-                        <h6 class="small fw-bold text-muted mb-1" style="font-size: 0.7rem;"><i class="bi bi-list-ul me-1"></i> CUENTAS EXISTENTES EN ESTE NIVEL</h6>
-                        <div id="existing-accounts-list-pc" class="list-group list-group-flush" style="max-height: 100px; overflow-y: auto;">
-                            <!-- Items dinámicos -->
-                        </div>
-                    </div>
-
-                    <input type="hidden" name="id" id="pc_id" value="">
-
-                    <div class="row g-3">
-                        <div class="col-md-5">
-                            <label class="form-label small fw-bold">Código</label>
-                            <input type="text" class="form-control form-control-sm bg-light fw-bold" name="codigo" id="pc_codigo_edit" readonly>
-                        </div>
-                        <div class="col-md-3">
-                            <label class="form-label small fw-bold">Nivel</label>
-                            <input type="text" class="form-control form-control-sm bg-light text-center" name="nivel" id="pc_nivel_edit" readonly>
-                        </div>
-                        <div class="col-md-4 text-end">
-                            <label class="form-label small fw-bold d-block">Estado</label>
-                            <div class="form-check form-switch d-inline-block mt-1">
-                                <input class="form-check-input shadow-none" type="checkbox" role="switch" name="status" id="pc_status" value="1" checked>
-                            </div>
-                        </div>
-                        <div class="col-12">
-                            <label class="form-label small fw-bold">Nombre de la Cuenta *</label>
-                            <input type="text" class="form-control form-control-sm shadow-none" name="nombre" id="pc_nombre_edit" required placeholder="Ingrese el nombre...">
-                        </div>
-                    </div>
-
-                    <!-- Campos exclusivos de Nivel 5: centro de costo / proyecto por periodo -->
-                    <div class="wrapper-nivel-5-pc d-none">
-                        <?php include __DIR__ . '/_dimensiones.php'; ?>
-                    </div>
-
-                    <div class="wrapper-nivel-5-pc d-none mt-3">
-                        <div class="accordion accordion-flush" id="accordionPCControl">
-                            <div class="accordion-item border-0 bg-transparent">
-                                <h2 class="accordion-header">
-                                    <button class="accordion-button collapsed py-2 px-0 fw-bold small text-muted bg-transparent shadow-none" type="button" data-bs-toggle="collapse" data-bs-target="#collapsePCControl" style="border-bottom: 1px dashed #dee2e6;">
-                                        <i class="bi bi-gear-fill me-2"></i> Configurar códigos entidades de control
-                                    </button>
-                                </h2>
-                                <div id="collapsePCControl" class="accordion-collapse collapse">
-                                    <div class="accordion-body px-0 pt-3">
-                                        <div class="row g-3">
-                                            <div class="col-12">
-                                                <label class="form-label small fw-bold text-muted">Código SRI</label>
-                                                <input type="text" class="form-control form-control-sm shadow-none" name="codigo_sri" id="pc_codigo_sri">
-                                            </div>
-                                            <div class="col-md-6">
-                                                <label class="form-label small fw-bold text-muted">Supercias ESF</label>
-                                                <input type="text" class="form-control form-control-sm shadow-none" name="supercias_esf" id="pc_supercias_esf">
-                                            </div>
-                                            <div class="col-md-6">
-                                                <label class="form-label small fw-bold text-muted">Supercias ERI</label>
-                                                <input type="text" class="form-control form-control-sm shadow-none" name="supercias_eri" id="pc_supercias_eri">
-                                            </div>
-                                            <div class="col-md-6">
-                                                <label class="form-label small fw-bold text-muted">Supercias ECP Columna</label>
-                                                <input type="text" class="form-control form-control-sm shadow-none" name="supercias_ecp_subcodigo" id="pc_supercias_ecp_subcodigo" placeholder="Ej: 301" title="Componente del patrimonio en el Estado de Cambios en el Patrimonio: 301, 302, 303, 30401, 30402, 30501-30504, 30601-30607, 30701, 30702">
-                                                <div class="form-text" style="font-size:.65rem;">Componente del patrimonio (301 Capital, 30401 Reserva legal, 30601 Ganancias acumuladas…).</div>
-                                            </div>
-                                            <div class="col-md-6">
-                                                <label class="form-label small fw-bold text-muted">Supercias ECP Fila de cambios <span class="fw-normal">(opcional)</span></label>
-                                                <input type="text" class="form-control form-control-sm shadow-none" name="supercias_ecp_codigo" id="pc_supercias_ecp_codigo" placeholder="Ej: 990204" title="Solo si el movimiento del año de esta cuenta no va a la fila por defecto de su columna. Filas: 990102, 990103, 990201 a 990209">
-                                                <div class="form-text" style="font-size:.65rem;">Solo si el movimiento del año no va a la fila por defecto (ej. 990204 Dividendos).</div>
-                                            </div>
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
+                <div class="modal-body p-0">
+                    <?php
+                    // Pestañas General / Centro de costos / Proyectos / SRI / Supercias (compartidas con el otro modal de cuenta).
+                    $pcIds = ['alert' => 'modalAlertPC', 'parent' => 'wrapper-parent-info-pc', 'parentName' => 'parent-account-name-pc', 'existing' => 'wrapper-existing-accounts-pc', 'existingList' => 'existing-accounts-list-pc', 'nivel5' => 'wrapper-nivel-5-pc'];
+                    include __DIR__ . '/_form_cuenta.php';
+                    ?>
                 </div>
                 <div class="modal-footer justify-content-between bg-light border-0 px-4 py-3">
                     <div class="ms-auto">
@@ -158,17 +81,15 @@
                 document.getElementById('pc_status').checked = (parseInt(data.status) === 1);
 
                 if (parseInt(data.nivel) === 5) {
-                    document.querySelectorAll('.wrapper-nivel-5-pc').forEach(el => el.classList.remove('d-none'));
-                    if (window.PCDIM_cargar) window.PCDIM_cargar(data.id || 0, !!opts.soloLectura);
                     document.getElementById('pc_codigo_sri').value = data.codigo_sri || '';
                     document.getElementById('pc_supercias_esf').value = data.supercias_esf || '';
                     document.getElementById('pc_supercias_eri').value = data.supercias_eri || '';
                     document.getElementById('pc_supercias_ecp_codigo').value = data.supercias_ecp_codigo || '';
                     document.getElementById('pc_supercias_ecp_subcodigo').value = data.supercias_ecp_subcodigo || '';
-                } else {
-                    document.querySelectorAll('.wrapper-nivel-5-pc').forEach(el => el.classList.add('d-none'));
                 }
             }
+            // Pestañas: vuelve a General; Centro de costos, Proyectos, SRI y Supercias solo en nivel 5.
+            window.PCFORM_abrir(data ? (data.id || 0) : 0, data ? data.nivel : 0, !!opts.soloLectura);
             getModalPC().show();
         };
 

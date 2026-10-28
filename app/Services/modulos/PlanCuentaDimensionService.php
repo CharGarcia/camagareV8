@@ -36,9 +36,10 @@ class PlanCuentaDimensionService
         return $this->repository->disponible();
     }
 
-    public function listar(int $idCuenta, int $idEmpresa): array
+    /** $tipo = 'centro' | 'proyecto'. */
+    public function listar(int $idCuenta, int $idEmpresa, string $tipo): array
     {
-        return $this->repository->listarPorCuenta($idCuenta, $idEmpresa);
+        return $this->repository->listarPorCuenta($idCuenta, $idEmpresa, $tipo);
     }
 
     /** Centro/proyecto a proponer en una línea de asiento con esa cuenta y esa fecha. */
@@ -57,11 +58,10 @@ class PlanCuentaDimensionService
 
         $d = $this->rules->normalizar($datos);
         $this->rules->validarCuenta($this->cuentas->findById($d['id_cuenta'], $idEmpresa));
-        if ($d['id_centro_costo'] !== null && !$this->repository->existeDimension('centro', $d['id_centro_costo'], $idEmpresa)) {
-            throw new \InvalidArgumentException('Centro de costo no encontrado.');
-        }
-        if ($d['id_proyecto'] !== null && !$this->repository->existeDimension('proyecto', $d['id_proyecto'], $idEmpresa)) {
-            throw new \InvalidArgumentException('Proyecto no encontrado.');
+        $tipo = $d['tipo'];
+        unset($d['tipo']);
+        if (!$this->repository->getDimension($tipo, (int) ($d['id_centro_costo'] ?? $d['id_proyecto']), $idEmpresa)) {
+            throw new \InvalidArgumentException($tipo === 'centro' ? 'Centro de costo no encontrado.' : 'Proyecto no encontrado.');
         }
 
         $this->repository->beginTransaction();
@@ -72,13 +72,16 @@ class PlanCuentaDimensionService
             $antes = null;
             if ($id > 0) {
                 $antes = $this->repository->findById($id, $idEmpresa);
-                if (!$antes || (int) $antes['id_cuenta'] !== $d['id_cuenta']) {
+                $col = PlanCuentaDimensionRepository::TIPOS[$tipo];
+                // Un periodo no cambia de tipo: el de centro sigue siendo de centro.
+                if (!$antes || (int) $antes['id_cuenta'] !== $d['id_cuenta'] || $antes[$col] === null) {
                     throw new \InvalidArgumentException('Periodo no encontrado.');
                 }
             }
 
             $this->rules->validarSinCruce(
-                $this->repository->buscarCruce($d['id_cuenta'], $idEmpresa, $d['vigente_desde'], $d['vigente_hasta'], $id > 0 ? $id : null)
+                $this->repository->buscarCruce($d['id_cuenta'], $idEmpresa, $tipo, $d['vigente_desde'], $d['vigente_hasta'], $id > 0 ? $id : null),
+                $tipo
             );
 
             if ($id > 0) {

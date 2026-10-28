@@ -15,10 +15,14 @@ use PDO;
  * reportes es el centro/proyecto guardado en cada línea (asientos_contables_detalle).
  * Por eso una cuenta puede cambiar de proyecto de un periodo a otro sin tocar lo ya
  * registrado. vigente_desde / vigente_hasta en NULL = sin límite por ese lado.
+ *
+ * Cada fila es de UN tipo (centro o proyecto): los periodos de centro de costo y los de
+ * proyecto son independientes y solo no pueden cruzarse entre los del mismo tipo.
  */
 class PlanCuentaDimensionRepository extends BaseRepository
 {
     public const TABLA = 'plan_cuentas_dimension_vigencia';
+    public const TIPOS = ['centro' => 'id_centro_costo', 'proyecto' => 'id_proyecto'];
 
     public function __construct()
     {
@@ -31,10 +35,19 @@ class PlanCuentaDimensionRepository extends BaseRepository
         return $this->tablaExiste(self::TABLA);
     }
 
-    /** Periodos de una cuenta, del más reciente al más antiguo. */
-    public function listarPorCuenta(int $idCuenta, int $idEmpresa): array
+    private static function columna(string $tipo): string
+    {
+        if (!isset(self::TIPOS[$tipo])) {
+            throw new \InvalidArgumentException('Tipo no válido.');
+        }
+        return self::TIPOS[$tipo];
+    }
+
+    /** Periodos de un tipo para una cuenta, del más reciente al más antiguo. */
+    public function listarPorCuenta(int $idCuenta, int $idEmpresa, string $tipo): array
     {
         if (!$this->disponible()) return [];
+        $col = self::columna($tipo);
 
         $sql = "SELECT v.id, v.id_cuenta, v.id_centro_costo, v.id_proyecto,
                        v.vigente_desde, v.vigente_hasta, v.observacion,
@@ -46,6 +59,7 @@ class PlanCuentaDimensionRepository extends BaseRepository
                 LEFT JOIN proyectos     pr ON pr.id = v.id_proyecto
                 " . $this->getBaseWhere($idEmpresa, 'v') . "
                   AND v.id_cuenta = :id_cuenta
+                  AND v.{$col} IS NOT NULL
                 ORDER BY v.vigente_desde DESC NULLS LAST, v.id DESC";
         $st = $this->db->prepare($sql);
         $st->execute([':id_empresa' => $idEmpresa, ':id_cuenta' => $idCuenta]);
@@ -63,23 +77,24 @@ class PlanCuentaDimensionRepository extends BaseRepository
     }
 
     /**
-     * Sugerencia vigente a una fecha. Solo devuelve centros/proyectos activos: uno que
-     * se inactivó después no se propone (la línea queda vacía y el usuario elige).
+     * Centro y proyecto vigentes a una fecha (cada uno de su propio periodo). Solo
+     * devuelve centros/proyectos activos: uno que se inactivó después no se propone.
      */
     public function getVigente(int $idCuenta, int $idEmpresa, string $fecha): ?array
     {
         if (!$this->disponible()) return null;
 
-        $sql = "SELECT CASE WHEN cc.estado = 'activo' AND cc.eliminado = false THEN v.id_centro_costo END AS id_centro_costo,
-                       CASE WHEN pr.estado = 'activo' AND pr.eliminado = false THEN v.id_proyecto END AS id_proyecto
-                FROM {$this->table} v
-                LEFT JOIN centro_costos cc ON cc.id = v.id_centro_costo
-                LEFT JOIN proyectos     pr ON pr.id = v.id_proyecto
-                " . $this->getBaseWhere($idEmpresa, 'v') . "
-                  AND v.id_cuenta = :id_cuenta
-                  AND daterange(v.vigente_desde, v.vigente_hasta, '[]') @> CAST(:fecha AS date)
-                ORDER BY v.vigente_desde DESC NULLS LAST, v.id DESC
-                LIMIT 1";
+        $sub = function (string $col, string $tabla): string {
+            return "(SELECT v.{$col}
+                     FROM {$this->table} v
+                     JOIN {$tabla} d ON d.id = v.{$col} AND d.estado = 'activo' AND d.eliminado = false
+                     WHERE v.id_empresa = :id_empresa AND v.eliminado = false AND v.id_cuenta = :id_cuenta
+                       AND daterange(v.vigente_desde, v.vigente_hasta, '[]') @> CAST(:fecha AS date)
+                     ORDER BY v.vigente_desde DESC NULLS LAST, v.id DESC
+                     LIMIT 1)";
+        };
+        $sql = "SELECT " . $sub('id_centro_costo', 'centro_costos') . " AS id_centro_costo, "
+                         . $sub('id_proyecto', 'proyectos') . " AS id_proyecto";
         $st = $this->db->prepare($sql);
         $st->execute([':id_empresa' => $idEmpresa, ':id_cuenta' => $idCuenta, ':fecha' => $fecha]);
         $r = $st->fetch(PDO::FETCH_ASSOC);
@@ -88,15 +103,17 @@ class PlanCuentaDimensionRepository extends BaseRepository
     }
 
     /**
-     * Periodo de la misma cuenta que se cruza con el rango dado (para no tener dos
-     * sugerencias a la vez). $excluirId = la fila que se está editando.
+     * Periodo del mismo tipo y la misma cuenta que se cruza con el rango dado.
+     * $excluirId = la fila que se está editando.
      */
-    public function buscarCruce(int $idCuenta, int $idEmpresa, ?string $desde, ?string $hasta, ?int $excluirId): ?array
+    public function buscarCruce(int $idCuenta, int $idEmpresa, string $tipo, ?string $desde, ?string $hasta, ?int $excluirId): ?array
     {
+        $col = self::columna($tipo);
         $sql = "SELECT v.id, v.vigente_desde, v.vigente_hasta
                 FROM {$this->table} v
                 " . $this->getBaseWhere($idEmpresa, 'v') . "
                   AND v.id_cuenta = :id_cuenta
+                  AND v.{$col} IS NOT NULL
                   AND daterange(v.vigente_desde, v.vigente_hasta, '[]')
                       && daterange(CAST(:desde AS date), CAST(:hasta AS date), '[]')";
         $params = [':id_empresa' => $idEmpresa, ':id_cuenta' => $idCuenta, ':desde' => $desde, ':hasta' => $hasta];
@@ -117,13 +134,16 @@ class PlanCuentaDimensionRepository extends BaseRepository
         $st->execute([':e' => $idEmpresa, ':c' => $idCuenta]);
     }
 
-    /** ¿Existe el centro de costo / proyecto en la empresa (activo o no, pero no eliminado)? */
-    public function existeDimension(string $tipo, int $id, int $idEmpresa): bool
+    /** Centro de costo / proyecto de la empresa (activo o no, pero no eliminado). */
+    public function getDimension(string $tipo, int $id, int $idEmpresa): ?array
     {
-        $tabla = $tipo === 'proyecto' ? 'proyectos' : 'centro_costos';
-        $st = $this->db->prepare("SELECT 1 FROM {$tabla} WHERE id = :id AND id_empresa = :id_empresa AND eliminado = false");
+        $sql = $tipo === 'proyecto'
+            ? "SELECT id, nombre, fecha_inicio, fecha_fin FROM proyectos WHERE id = :id AND id_empresa = :id_empresa AND eliminado = false"
+            : "SELECT id, nombre FROM centro_costos WHERE id = :id AND id_empresa = :id_empresa AND eliminado = false";
+        $st = $this->db->prepare($sql);
         $st->execute([':id' => $id, ':id_empresa' => $idEmpresa]);
-        return (bool) $st->fetchColumn();
+        $r = $st->fetch(PDO::FETCH_ASSOC);
+        return $r ?: null;
     }
 
     public function crear(array $d, int $idEmpresa, int $idUsuario): int

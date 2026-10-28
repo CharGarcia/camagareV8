@@ -13,7 +13,7 @@ class Proyecto extends BaseModel
     {
         $id = (int) $idEmpresa;
         return $this->query(
-            "SELECT id, nombre, codigo
+            "SELECT id, nombre, codigo, fecha_inicio, fecha_fin
              FROM proyectos
              WHERE id_empresa = {$id} AND estado = 'activo' AND eliminado = false
              ORDER BY nombre ASC"

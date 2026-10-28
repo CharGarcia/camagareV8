@@ -41,16 +41,20 @@ class PlanCuentaRepository extends BaseRepository
         // Centro de costo / proyecto: el sugerido vigente HOY (por periodo, ver
         // PlanCuentaDimensionRepository). Sin la migración aplicada, el valor fijo antiguo.
         if ($this->tablaExiste(PlanCuentaDimensionRepository::TABLA)) {
-            $joinDim = "LEFT JOIN LATERAL (
-                            SELECT v.id_centro_costo, v.id_proyecto
+            // Centro y proyecto tienen periodos independientes: uno por cada lado.
+            $lateral = fn(string $col, string $alias) => "LEFT JOIN LATERAL (
+                            SELECT v.{$col} AS id_dim
                             FROM " . PlanCuentaDimensionRepository::TABLA . " v
                             WHERE v.id_cuenta = pc.id AND v.id_empresa = pc.id_empresa AND v.eliminado = false
+                              AND v.{$col} IS NOT NULL
                               AND daterange(v.vigente_desde, v.vigente_hasta, '[]') @> CURRENT_DATE
                             ORDER BY v.vigente_desde DESC NULLS LAST, v.id DESC
                             LIMIT 1
-                        ) dim ON true
-                        LEFT JOIN centro_costos cc ON cc.id = dim.id_centro_costo
-                        LEFT JOIN proyectos p ON p.id = dim.id_proyecto";
+                        ) {$alias} ON true";
+            $joinDim = $lateral('id_centro_costo', 'dimcc') . "
+                        " . $lateral('id_proyecto', 'dimpr') . "
+                        LEFT JOIN centro_costos cc ON cc.id = dimcc.id_dim
+                        LEFT JOIN proyectos p ON p.id = dimpr.id_dim";
         } else {
             $joinDim = "LEFT JOIN centro_costos cc ON cc.id = pc.id_centro_costos
                         LEFT JOIN proyectos p ON p.id = pc.id_proyecto";
