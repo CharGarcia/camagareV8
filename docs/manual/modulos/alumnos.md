@@ -5,7 +5,7 @@ categoria: Ventas
 ruta_modulo: modulos/alumnos
 tipo: modulo
 visibilidad: todos
-etiquetas: alumnos, estudiantes, matrícula, matricula, colegio, escuela, centro infantil, campus, sede, nivel, curso, representante, representantes, padres, autorizado, autorizados, retirar, retiro, quién retira, facturación, facturar, generar factura, facturar pensión, facturar mensualidad, facturas del alumno, horario, pensión, pension, imprimir, impresora, filtrar alumnos, filtro por campus, filtro por nivel, alumnos por curso, alumnos por sede, buscar alumno, portal de representantes, qr, codigo qr, padres de familia, actualizar datos, registrar alumno, inscripcion, codigo de verificacion, enlace para padres, cargar facturación, carga masiva, importar excel, plantilla excel, precios por alumno, servicios por alumno, pensiones masivas, generar facturas, facturación masiva, facturar a todos, facturar todos los alumnos, facturas del mes, pensiones del mes, emitir pensiones
+etiquetas: alumnos, estudiantes, matrícula, matricula, colegio, escuela, centro infantil, campus, sede, nivel, curso, representante, representantes, padres, autorizado, autorizados, retirar, retiro, quién retira, facturación, facturar, generar factura, facturar pensión, facturar mensualidad, facturas del alumno, horario, pensión, pension, imprimir, impresora, filtrar alumnos, filtro por campus, filtro por nivel, alumnos por curso, alumnos por sede, buscar alumno, portal de representantes, qr, codigo qr, padres de familia, actualizar datos, registrar alumno, inscripcion, codigo de verificacion, enlace para padres, cargar facturación, carga masiva, importar excel, plantilla excel, precios por alumno, servicios por alumno, pensiones masivas, generar facturas, facturación masiva, facturar a todos, facturar todos los alumnos, facturas del mes, pensiones del mes, emitir pensiones, historial de cargas, deshacer carga, revertir carga, eliminar carga
 version: 1.9
 orden: 0
 estado: activo
@@ -258,6 +258,31 @@ alumno, en vez de abrir ficha por ficha. Funciona igual que la carga de
 - Cada alumno modificado queda en el historial de cambios del sistema
   (`log_sistema`) con los servicios de antes y de después.
 
+### Historial de cargas y cómo deshacer una
+
+La ventana **Cargar facturación** tiene dos pestañas: **Importar** y
+**Historial**. El Historial muestra las **últimas 10 cargas** que cambiaron algo,
+con su fecha, archivo, cuántos alumnos cambiaron, qué cambió y quién la subió.
+Sin acceso total, cada usuario ve solo sus propias cargas.
+
+- El botón de **eliminar** (papelera) **deshace la carga completa**: cada alumno
+  vuelve a tener los servicios, precios, Adicional e información adicional que
+  tenía **antes** de subir ese archivo. La carga sale del historial.
+- Se puede eliminar solo si, para **todos** sus alumnos:
+  - **no se ha generado ninguna factura** desde el alumno después de la carga
+    (si la factura se anula, la carga se vuelve a poder eliminar); y
+  - **nadie cambió al alumno después**, ni en su ficha ni en otra carga más
+    nueva.
+- Si no se puede, en lugar de la papelera aparece un **candado**, y debajo de los
+  cambios se lee el motivo (por ejemplo: *Ya se facturó a … después de esta
+  carga*).
+- Si hay varias cargas sobre los mismos alumnos, se eliminan **de la más nueva a
+  la más vieja**: al eliminar la más nueva, la anterior se vuelve a poder
+  eliminar.
+- Hace falta permiso de **eliminar** en Alumnos.
+- Las cargas que se subieron antes de que existiera el historial no aparecen y
+  no se pueden deshacer desde aquí.
+
 ## Generar las facturas de todos los alumnos
 
 En el listado de Alumnos, botón **Generar facturas** (solo usuarios que pueden
@@ -467,6 +492,12 @@ pestaña Transacciones aparece solo si el usuario puede **ver** Facturas de Vent
 - **Cargar facturación: "Cada fila de información adicional necesita concepto y
   detalle"**: en la ventana quedó una fila con solo uno de los dos; complétela o
   quítela con la X.
+- **Historial de cargas: aparece un candado en vez de la papelera**: la carga ya
+  se facturó o alguno de sus alumnos se cambió después; pase el puntero por el
+  candado o lea el motivo bajo los cambios.
+- **Historial de cargas: "Falta ejecutar en la base el script
+  …20261029_alumnos_cargas_facturacion.sql"**: el administrador debe ejecutar ese
+  script; mientras tanto la carga funciona, pero no queda en el historial.
 - **La cédula muestra "No encontrado"**: el número no está en el registro
   consultado o el servicio no respondió; se pueden escribir los nombres a
   mano y guardar normalmente.
@@ -478,7 +509,9 @@ pestaña Transacciones aparece solo si el usuario puede **ver** Facturas de Vent
   por servicio activo, con las celdas vacías; al subirla se agregan, cambian (precio)
   o quitan (0) los servicios de cada alumno, y las celdas vacías no cambian nada
   (todo o nada). En la misma ventana se puede escribir el Adicional de cada ítem
-  y la información adicional de la factura. Botón **Generar facturas**: genera
+  y la información adicional de la factura, y la pestaña **Historial** muestra
+  las últimas cargas y permite deshacer una mientras sus alumnos no se hayan
+  facturado ni modificado después. Botón **Generar facturas**: genera
   en borrador la factura del mes de todos los alumnos activos del listado (con
   su filtro), con vista previa, avance y omitiendo a los ya facturados.
 - **1.8** — Portal de representantes: el representante **nuevo** elige el tipo de

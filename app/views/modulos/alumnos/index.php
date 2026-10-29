@@ -265,6 +265,12 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
     })();
 </script>
 
+<?php
+// Pestañas ocultas de esta ventana: preferencia propia (no la de 'alumnos'), porque el
+// menú guarda la lista completa y pisaría las pestañas ocultas de la ficha del alumno.
+$vistaCargaAlu = \App\Helpers\PreferenciasHelper::getPreferenciasVista('alumnos_carga_facturacion');
+echo \App\Helpers\PreferenciasHelper::renderEstilosPestanasOcultas($vistaCargaAlu, 'estiloVistaPestanasAluCarga');
+?>
 <!-- Modal: Cargar facturación desde Excel (servicios de cada alumno) -->
 <div class="modal fade" id="modalCargaFactAlu" tabindex="-1" aria-hidden="true" data-cmg-nav="off">
     <div class="modal-dialog modal-dialog-centered modal-lg">
@@ -273,7 +279,28 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                 <h5 class="modal-title fw-bold mb-0"><i class="bi bi-upload me-2 text-primary"></i>Cargar facturación desde Excel</h5>
                 <button type="button" class="btn-close shadow-none" data-bs-dismiss="modal" aria-label="Cerrar"></button>
             </div>
-            <div class="modal-body">
+            <!-- Pestañas: Importar / Historial (como la carga de Novedades) -->
+            <div class="d-flex align-items-center bg-light px-3 pt-2">
+                <ul class="nav nav-tabs border-bottom-0 flex-grow-1 tab-pestaña" role="tablist">
+                    <li class="nav-item">
+                        <a class="nav-link active py-2 small fw-bold" id="alu-cf-btn-importar" data-bs-toggle="tab"
+                           href="#alu-cf-pane-importar" data-bs-target="#alu-cf-pane-importar" role="tab">
+                            <i class="bi bi-upload me-1"></i> Importar
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link py-2 small fw-bold" id="alu-cf-btn-historial" data-bs-toggle="tab"
+                           href="#alu-cf-pane-historial" data-bs-target="#alu-cf-pane-historial" role="tab">
+                            <i class="bi bi-clock-history me-1"></i> Historial
+                        </a>
+                    </li>
+                </ul>
+                <div class="ms-auto pb-1">
+                    <?= \App\Helpers\PreferenciasHelper::renderDropdownPestanas(['alu-cf-pane-historial' => 'Historial'], $vistaCargaAlu, 'alumnos_carga_facturacion', '__pestanas_ocultas__', 'estiloVistaPestanasAluCarga') ?>
+                </div>
+            </div>
+            <div class="modal-body tab-content">
+                <div class="tab-pane fade show active" id="alu-cf-pane-importar" role="tabpanel">
                 <h6 class="fw-bold mb-1"><span class="badge bg-secondary me-1">1</span> Descargar la plantilla</h6>
                 <p class="small text-muted mb-2">
                     Trae una fila por cada <b>alumno activo</b> y una columna por cada <b>servicio activo</b> de Productos,
@@ -327,10 +354,24 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                     <code>{mes}</code> <code>{MES}</code> <code>{anio}</code> <code>{mes_anio}</code>.
                 </div>
                 <div id="aluCargaFactResult" class="mt-3"></div>
+                </div>
+                <!-- ── Pestaña: Historial ─────────────────────────────────── -->
+                <div class="tab-pane fade" id="alu-cf-pane-historial" role="tabpanel">
+                    <div class="d-flex justify-content-between align-items-start gap-2 mb-2">
+                        <div class="small text-muted">
+                            Últimas <b><?= \App\Services\modulos\AlumnoCargaFacturacionService::HISTORIAL ?></b> cargas. Una carga se puede eliminar
+                            (los alumnos vuelven a como estaban antes) mientras <b>ninguno</b> de sus alumnos se haya facturado ni modificado después.
+                        </div>
+                        <button type="button" class="btn btn-sm btn-outline-secondary border-0 px-2" onclick="aluCargarHistorialFact()" title="Actualizar">
+                            <i class="bi bi-arrow-clockwise"></i>
+                        </button>
+                    </div>
+                    <div id="aluCargasFactLista" class="border rounded-2" style="max-height:50vh;overflow:auto;"></div>
+                </div>
             </div>
             <div class="modal-footer bg-light border-top p-2">
                 <button type="button" class="btn btn-secondary btn-sm ms-auto" data-bs-dismiss="modal"><i class="fa-solid fa-xmark me-1"></i>Cerrar</button>
-                <button type="button" class="btn btn-primary btn-sm px-4 shadow-sm" id="btnAluCargaFact" onclick="aluImportarFacturacion()"><i class="bi bi-upload me-1"></i> Importar</button>
+                <button type="button" class="btn btn-primary btn-sm px-4 shadow-sm alu-cf-accion" id="btnAluCargaFact" onclick="aluImportarFacturacion()"><i class="bi bi-upload me-1"></i> Importar</button>
             </div>
         </div>
     </div>
@@ -359,7 +400,106 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
         window.aluAbrirCargaFacturacion = function () {
             document.getElementById('aluCargaFactFile').value = '';
             document.getElementById('aluCargaFactResult').innerHTML = '';
+            // Siempre se abre en la pestaña Importar.
+            const btnTab = document.getElementById('alu-cf-btn-importar');
+            if (btnTab && !btnTab.classList.contains('active')) bootstrap.Tab.getOrCreateInstance(btnTab).show();
+            document.querySelectorAll('.alu-cf-accion').forEach(x => x.classList.remove('d-none'));
             bootstrap.Modal.getOrCreateInstance(el()).show();
+        };
+
+        // El botón Importar solo aplica a la pestaña Importar; el historial se carga al entrar.
+        document.getElementById('alu-cf-btn-historial')?.addEventListener('shown.bs.tab', () => {
+            document.querySelectorAll('.alu-cf-accion').forEach(x => x.classList.add('d-none'));
+            window.aluCargarHistorialFact();
+        });
+        document.getElementById('alu-cf-btn-importar')?.addEventListener('shown.bs.tab', () => {
+            document.querySelectorAll('.alu-cf-accion').forEach(x => x.classList.remove('d-none'));
+        });
+
+        // ── Historial de cargas: listado y reversión ─────────────────────────
+        function filaCarga(c, puedeEliminar) {
+            let accion;
+            if (!puedeEliminar) {
+                accion = '<span class="text-muted" title="No tiene permiso para eliminar"><i class="bi bi-lock-fill"></i></span>';
+            } else if (c.reversible) {
+                accion = `<button type="button" class="btn btn-outline-danger btn-sm border-0 px-2"
+                                  onclick="aluEliminarCargaFact(${c.id}, ${c.alumnos})" title="Eliminar la carga: los alumnos vuelven a como estaban antes">
+                              <i class="bi bi-trash"></i></button>`;
+            } else {
+                accion = `<span class="text-muted" title="${esc(c.motivo_bloqueo)}"><i class="bi bi-lock-fill"></i></span>`;
+            }
+            const cambios = [
+                c.agregados ? `${c.agregados} agregado(s)` : '',
+                c.cambiados ? `${c.cambiados} cambiado(s)` : '',
+                c.quitados ? `${c.quitados} quitado(s)` : '',
+                c.info ? `info. adicional en ${c.info}` : '',
+            ].filter(Boolean).join(', ');
+            return `<tr>
+                        <td class="ps-2 text-nowrap">${esc(c.fecha)}</td>
+                        <td class="text-truncate" style="max-width:170px;" title="${esc(c.archivo)}">${esc(c.archivo) || '—'}</td>
+                        <td class="text-center">${c.alumnos}</td>
+                        <td class="small">${esc(cambios) || '—'}${c.reversible ? '' : `<div class="text-muted" style="font-size:.7rem;">${esc(c.motivo_bloqueo)}</div>`}</td>
+                        <td class="text-truncate" style="max-width:120px;">${esc(c.usuario)}</td>
+                        <td class="text-center pe-2">${accion}</td>
+                    </tr>`;
+        }
+
+        window.aluCargarHistorialFact = async function () {
+            const cont = document.getElementById('aluCargasFactLista');
+            cont.innerHTML = '<div class="text-center text-muted small py-3"><span class="spinner-border spinner-border-sm me-1"></span>Cargando…</div>';
+            try {
+                const resp = await fetch(`${urlBase}/cargas-facturacion-ajax`);
+                const json = await resp.json();
+                if (!json.ok) {
+                    cont.innerHTML = `<div class="text-center text-muted small py-3">${esc(json.error)}</div>`;
+                    return;
+                }
+                if (!json.data.length) {
+                    cont.innerHTML = '<div class="text-center text-muted small py-3">Todavía no hay cargas registradas.</div>';
+                    return;
+                }
+                cont.innerHTML = `<table class="table table-sm table-hover align-middle mb-0" style="font-size:.8rem;">
+                        <thead class="table-light">
+                            <tr>
+                                <th class="ps-2">Fecha</th><th>Archivo</th><th class="text-center">Alumnos</th>
+                                <th>Cambios</th><th>Usuario</th><th class="text-center pe-2" style="width:40px;"></th>
+                            </tr>
+                        </thead>
+                        <tbody>${json.data.map(c => filaCarga(c, json.puede_eliminar)).join('')}</tbody>
+                    </table>`;
+            } catch (e) {
+                cont.innerHTML = '<div class="text-center text-muted small py-3">No se pudo cargar el historial.</div>';
+            }
+        };
+
+        let eliminandoCarga = false;
+        window.aluEliminarCargaFact = async function (id, alumnos) {
+            if (eliminandoCarga) return;
+            eliminandoCarga = true;
+            try {
+                const r = await Swal.fire({
+                    target: el(), heightAuto: false, icon: 'warning',
+                    title: '¿Eliminar la carga?',
+                    html: `Los <b>${alumnos}</b> alumno(s) de esta carga volverán a tener los servicios, precios y textos que tenían antes de subirla.`,
+                    showCancelButton: true, confirmButtonColor: '#d33', reverseButtons: true,
+                    confirmButtonText: 'Sí, eliminar la carga', cancelButtonText: 'Cancelar',
+                });
+                if (!r.isConfirmed) return;
+                const fd = new FormData();
+                fd.append('id_carga', id);
+                const resp = await fetch(`${urlBase}/eliminar-carga-facturacion`, { method: 'POST', body: fd });
+                const json = await resp.json();
+                if (json.ok) {
+                    Swal.fire({ target: el(), heightAuto: false, icon: 'success', title: 'Carga eliminada', text: json.msg, timer: 2500, showConfirmButton: false });
+                } else {
+                    Swal.fire({ target: el(), heightAuto: false, icon: 'error', title: 'No se pudo eliminar', text: json.error || 'Error al eliminar la carga.', confirmButtonText: 'Aceptar' });
+                }
+                window.aluCargarHistorialFact();
+            } catch (e) {
+                Swal.fire({ target: el(), heightAuto: false, icon: 'error', title: 'Error de red', text: 'No se pudo conectar con el servidor.', confirmButtonText: 'Aceptar' });
+            } finally {
+                eliminandoCarga = false;
+            }
         };
 
         window.aluImportarFacturacion = async function () {

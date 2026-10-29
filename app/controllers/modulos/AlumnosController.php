@@ -943,6 +943,52 @@ class AlumnosController extends BaseModuloController
         exit;
     }
 
+    /** Pestaña Historial de Cargar facturación: últimas cargas y si se pueden revertir. */
+    public function cargasFacturacionAjax(): void
+    {
+        $this->requireActualizar();
+        header('Content-Type: application/json');
+        try {
+            $data = $this->cargaFacturacionService()->listar((int) $_SESSION['id_empresa'], $this->alumnosFiltroUsuario());
+            echo json_encode([
+                'ok'             => true,
+                'data'           => $data,
+                'puede_eliminar' => !empty($this->getPermisos()['eliminar']),
+            ]);
+        } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
+            echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
+        }
+        exit;
+    }
+
+    /** Revierte una carga completa (si ninguno de sus alumnos se facturó ni se modificó después). */
+    public function eliminarCargaFacturacion(): void
+    {
+        $this->requireEliminar();
+        header('Content-Type: application/json');
+        try {
+            $idCarga = (int) ($_POST['id_carga'] ?? 0);
+            if ($idCarga <= 0) throw new Exception('Carga no válida.');
+            $res = $this->cargaFacturacionService()->revertir(
+                $idCarga,
+                (int) $_SESSION['id_empresa'],
+                (int) $_SESSION['id_usuario'],
+                $this->alumnosFiltroUsuario()
+            );
+            echo json_encode(['ok' => true, 'msg' => "Carga revertida: {$res['alumnos']} alumno(s) volvieron a como estaban antes."] + $res);
+        } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
+            echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
+        }
+        exit;
+    }
+
+    private function cargaFacturacionService(): \App\Services\modulos\AlumnoCargaFacturacionService
+    {
+        return new \App\Services\modulos\AlumnoCargaFacturacionService(new AlumnoRepository(), new LogSistemaService());
+    }
+
     public function exportExcel(): void
     {
         $this->requireLeer();

@@ -32,6 +32,10 @@ use Exception;
  *  - 'info_adicional': filas concepto/detalle de la factura; reemplazan las del
  *    alumno en cada fila del archivo que tenga al menos una celda escrita.
  *
+ * Cada carga con cambios queda en alumnos_cargas (con la foto antes/después de
+ * cada alumno en alumnos_cargas_detalle) para poder revertirla desde la pestaña
+ * Historial: ver AlumnoCargaFacturacionService.
+ *
  * Es TODO O NADA, como Novedades: primero se revisa el archivo completo y, solo si
  * no hay ni un error, se graba en una sola transacción. Al grabar, cada alumno se
  * bloquea (AlumnoRepository::lockServicios) y sus líneas se vuelven a leer bajo el
@@ -187,6 +191,8 @@ class AlumnoFacturacionImportService
         // ── Fase 2: grabar todo en una transacción, alumno por alumno bajo candado ──
         $tot = ['agregados' => 0, 'cambiados' => 0, 'quitados' => 0, 'info' => 0];
         $actualizados = 0;
+        $idCarga = null; // se crea con el primer alumno que cambia (sin el SQL del historial, no se registra)
+        $conHistorial = $this->repo->existeTablaCargas();
         $this->repo->beginTransaction();
         try {
             foreach (array_keys($planes) as $idAlumno) {
@@ -220,6 +226,20 @@ class AlumnoFacturacionImportService
                 }
                 $tot['info'] += $cambiaInfo ? 1 : 0;
                 $actualizados++;
+
+                // Historial (pestaña Historial): cómo estaba y cómo quedó, para poder revertir la carga.
+                if ($conHistorial) {
+                    $idCarga ??= $this->repo->crearCarga($idEmpresa, $nombreArchivo, $idUsuario);
+                    $infoPrevia = $this->decodificarInfo($infoAntes);
+                    $this->repo->guardarDetalleCarga($idCarga, $idEmpresa, $idAlumno,
+                        ['servicios' => AlumnoCargaFacturacionService::fotoLineas($antes), 'info_adicional' => $infoPrevia, 'info_cambiada' => $cambiaInfo],
+                        ['servicios' => AlumnoCargaFacturacionService::fotoLineas($plan['cambios'] ? $plan['lineas'] : $antes),
+                         'info_adicional' => $cambiaInfo ? $this->infoAdicional : $infoPrevia, 'info_cambiada' => $cambiaInfo],
+                        $idUsuario);
+                }
+            }
+            if ($idCarga !== null) {
+                $this->repo->cerrarCarga($idCarga, $idEmpresa, ['alumnos' => $actualizados] + $tot, $idUsuario);
             }
             $this->repo->commit();
         } catch (\Throwable $e) {
@@ -228,7 +248,7 @@ class AlumnoFacturacionImportService
         }
 
         return ['ok_cambios' => true, 'alumnos' => $actualizados] + $tot
-            + ['sin_cambios' => count($pedidos) - $actualizados, 'errores' => [], 'abortada' => false];
+            + ['sin_cambios' => count($pedidos) - $actualizados, 'errores' => [], 'abortada' => false, 'id_carga' => $idCarga];
     }
 
     /**

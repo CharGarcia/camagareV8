@@ -710,6 +710,154 @@ class AlumnoRepository extends BaseRepository
     }
 
     // ------------------------------------------------------------------
+    // Historial de cargas de facturación por Excel (alumnos_cargas +
+    // alumnos_cargas_detalle, SQL 20261029_alumnos_cargas_facturacion.sql).
+    // ------------------------------------------------------------------
+
+    private ?bool $hayTablaCargas = null;
+
+    /** ¿Ya se aplicó el SQL del historial de cargas? Sin él la carga funciona, pero no queda registrada. */
+    public function existeTablaCargas(): bool
+    {
+        if ($this->hayTablaCargas === null) {
+            $st = $this->db->query("SELECT to_regclass('public.alumnos_cargas') IS NOT NULL AND to_regclass('public.alumnos_cargas_detalle') IS NOT NULL");
+            $this->hayTablaCargas = (bool) $st->fetchColumn();
+        }
+        return $this->hayTablaCargas;
+    }
+
+    public function crearCarga(int $idEmpresa, string $archivo, int $idUsuario): int
+    {
+        $st = $this->db->prepare("INSERT INTO alumnos_cargas (id_empresa, archivo, created_by, updated_by)
+                                  VALUES (:e, :a, :u, :u) RETURNING id");
+        $st->execute([':e' => $idEmpresa, ':a' => mb_substr($archivo, 0, 255), ':u' => $idUsuario]);
+        return (int) $st->fetchColumn();
+    }
+
+    public function cerrarCarga(int $idCarga, int $idEmpresa, array $totales, int $idUsuario): void
+    {
+        $st = $this->db->prepare("UPDATE alumnos_cargas
+                                  SET alumnos = :al, agregados = :ag, cambiados = :ca, quitados = :qu, info = :in,
+                                      updated_by = :u, updated_at = CURRENT_TIMESTAMP
+                                  WHERE id = :id AND id_empresa = :e");
+        $st->execute([
+            ':al' => (int) ($totales['alumnos'] ?? 0), ':ag' => (int) ($totales['agregados'] ?? 0),
+            ':ca' => (int) ($totales['cambiados'] ?? 0), ':qu' => (int) ($totales['quitados'] ?? 0),
+            ':in' => (int) ($totales['info'] ?? 0), ':u' => $idUsuario, ':id' => $idCarga, ':e' => $idEmpresa,
+        ]);
+    }
+
+    public function guardarDetalleCarga(int $idCarga, int $idEmpresa, int $idAlumno, array $antes, array $despues, int $idUsuario): void
+    {
+        $st = $this->db->prepare("INSERT INTO alumnos_cargas_detalle (id_empresa, id_carga, id_alumno, antes, despues, created_by, updated_by)
+                                  VALUES (:e, :c, :a, CAST(:antes AS jsonb), CAST(:despues AS jsonb), :u, :u)");
+        $st->execute([
+            ':e' => $idEmpresa, ':c' => $idCarga, ':a' => $idAlumno, ':u' => $idUsuario,
+            ':antes'   => json_encode($antes, JSON_UNESCAPED_UNICODE),
+            ':despues' => json_encode($despues, JSON_UNESCAPED_UNICODE),
+        ]);
+    }
+
+    /** Últimas cargas vigentes (no revertidas), las más nuevas primero; con $idUsuarioFiltro, solo las propias. */
+    public function getCargas(int $idEmpresa, int $limite, ?int $idUsuarioFiltro = null): array
+    {
+        $where  = $this->getBaseWhere($idEmpresa, 'c', $idUsuarioFiltro);
+        $params = [':id_empresa' => $idEmpresa];
+        if ($idUsuarioFiltro !== null) {
+            $params[':id_usuario_filtro'] = $idUsuarioFiltro;
+        }
+        $sql = "SELECT c.*, u.nombre AS usuario_nombre
+                FROM alumnos_cargas c
+                LEFT JOIN usuarios u ON u.id = c.created_by
+                {$where}
+                ORDER BY c.id DESC
+                LIMIT " . max(1, $limite);
+        $st = $this->db->prepare($sql);
+        $st->execute($params);
+        return $st->fetchAll(PDO::FETCH_ASSOC);
+    }
+
+    /** Una carga vigente de la empresa (y propia, con $idUsuarioFiltro). */
+    public function getCarga(int $idCarga, int $idEmpresa, ?int $idUsuarioFiltro = null): ?array
+    {
+        $where  = $this->getBaseWhere($idEmpresa, 'c', $idUsuarioFiltro);
+        $params = [':id_empresa' => $idEmpresa, ':id' => $idCarga];
+        if ($idUsuarioFiltro !== null) {
+            $params[':id_usuario_filtro'] = $idUsuarioFiltro;
+        }
+        $st = $this->db->prepare("SELECT c.* FROM alumnos_cargas c {$where} AND c.id = :id");
+        $st->execute($params);
+        return $st->fetch(PDO::FETCH_ASSOC) ?: null;
+    }
+
+    /** Detalle (antes/después por alumno) de varias cargas: id_carga => [filas], con el nombre del alumno. */
+    public function getDetallesCargas(array $idsCarga, int $idEmpresa): array
+    {
+        $ids = array_values(array_unique(array_filter(array_map('intval', $idsCarga))));
+        if (!$ids) {
+            return [];
+        }
+        $ph = implode(',', array_fill(0, count($ids), '?'));
+        $st = $this->db->prepare("SELECT d.id_carga, d.id_alumno, d.antes, d.despues,
+                                         TRIM(COALESCE(a.apellidos, '') || ' ' || COALESCE(a.nombres, '')) AS alumno,
+                                         a.eliminado AS alumno_eliminado
+                                  FROM alumnos_cargas_detalle d
+                                  JOIN alumnos a ON a.id = d.id_alumno
+                                  WHERE d.id_empresa = ? AND d.eliminado = false AND d.id_carga IN ($ph)
+                                  ORDER BY d.id_carga, d.id");
+        $st->execute(array_merge([$idEmpresa], $ids));
+        $out = [];
+        foreach ($st->fetchAll(PDO::FETCH_ASSOC) as $r) {
+            $out[(int) $r['id_carga']][] = $r;
+        }
+        return $out;
+    }
+
+    /**
+     * Fecha de la última factura VIGENTE (no eliminada ni anulada) generada desde
+     * cada alumno: id_alumno => created_at de alumnos_facturas.
+     */
+    public function getUltimaFacturaAlumnos(array $idsAlumno, int $idEmpresa): array
+    {
+        $ids = array_values(array_unique(array_filter(array_map('intval', $idsAlumno))));
+        if (!$ids || !$this->existeEsquemaFacturacion()) {
+            return [];
+        }
+        $ph = implode(',', array_fill(0, count($ids), '?'));
+        $st = $this->db->prepare("SELECT af.id_alumno, MAX(af.created_at) AS ultima
+                                  FROM alumnos_facturas af
+                                  JOIN ventas_cabecera v ON v.id = af.id_factura AND v.id_empresa = af.id_empresa
+                                  WHERE af.id_empresa = ? AND af.eliminado = false
+                                    AND v.eliminado = false AND v.estado <> 'anulado'
+                                    AND af.id_alumno IN ($ph)
+                                  GROUP BY af.id_alumno");
+        $st->execute(array_merge([$idEmpresa], $ids));
+        $out = [];
+        foreach ($st->fetchAll(PDO::FETCH_ASSOC) as $r) {
+            $out[(int) $r['id_alumno']] = (string) $r['ultima'];
+        }
+        return $out;
+    }
+
+    /** Revertir una carga = baja lógica de la carga y de su detalle (el historial queda en la BD). */
+    public function eliminarCarga(int $idCarga, int $idEmpresa, int $idUsuario): void
+    {
+        $st = $this->db->prepare("UPDATE alumnos_cargas SET eliminado = true, deleted_at = CURRENT_TIMESTAMP, deleted_by = :u
+                                  WHERE id = :id AND id_empresa = :e AND eliminado = false");
+        $st->execute([':u' => $idUsuario, ':id' => $idCarga, ':e' => $idEmpresa]);
+        $st = $this->db->prepare("UPDATE alumnos_cargas_detalle SET eliminado = true, deleted_at = CURRENT_TIMESTAMP, deleted_by = :u
+                                  WHERE id_carga = :id AND id_empresa = :e AND eliminado = false");
+        $st->execute([':u' => $idUsuario, ':id' => $idCarga, ':e' => $idEmpresa]);
+    }
+
+    /** Candado de una carga (CLAUDE.md §8): dos reversiones a la vez de la misma carga no se pisan. */
+    public function lockCarga(int $idCarga, int $idEmpresa): void
+    {
+        $st = $this->db->prepare("SELECT pg_advisory_xact_lock(hashtext('alumno_carga:' || :e || ':' || :c))");
+        $st->execute([':e' => (string) $idEmpresa, ':c' => (string) $idCarga]);
+    }
+
+    // ------------------------------------------------------------------
     // Generación masiva de facturas (listado → Generar facturas).
     // ------------------------------------------------------------------
 
