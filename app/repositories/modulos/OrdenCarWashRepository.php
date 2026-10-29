@@ -816,7 +816,8 @@ class OrdenCarWashRepository extends BaseRepository
 
         $limit = max(1, min(500, $limit));
         $sql = "SELECT o.id, o.numero_orden, o.fecha_ingreso, o.placa, o.marca, o.kilometraje, o.total, o.estado,
-                       o.tipo_documento, o.numero_documento, o.id_vehiculo, o.id_cliente,
+                       o.tipo_documento, o.numero_documento, o.id_documento, o.id_vehiculo, o.id_cliente,
+                       " . self::SQL_DOC_VIGENTE . " AS documento_vigente,
                        c.nombre AS cliente_nombre, c.identificacion AS cliente_identificacion,
                        (SELECT STRING_AGG(d.descripcion, ', ' ORDER BY d.id)
                           FROM carwash_ordenes_detalle d

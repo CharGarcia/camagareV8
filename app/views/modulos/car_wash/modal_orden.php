@@ -2056,6 +2056,8 @@
                 if (guardada) {
                     // Conserva lo que solo sabe el servidor (número de documento, nombre del cliente).
                     act.numero_documento = guardada.numero_documento || '';
+                    act.id_documento = guardada.id_documento || 0;
+                    act.documento_vigente = guardada.documento_vigente;
                     act.tipo_documento = guardada.tipo_documento || act.tipo_documento;
                     act.estado = guardada.estado || act.estado;
                     if (!act.cliente_nombre) act.cliente_nombre = guardada.cliente_nombre || '';
@@ -2083,7 +2085,11 @@
             const nombres = { borrador: ['warning', 'Borrador'], facturado: ['success', 'Facturado'], anulado: ['danger', 'Anulado'] };
             tbody.innerHTML = rows.map((r, i) => {
                 const e = nombres[r.estado] || ['secondary', r.estado || ''];
-                const doc = r.numero_documento ? `${r.tipo_documento === 'FACTURA' ? 'Fact.' : 'Rec.'} ${esc(r.numero_documento)}` : '<span class="text-muted">—</span>';
+                // documento_vigente llega de PostgreSQL como true/false o 't'/'f'.
+                const docVigente = r.id_documento && (r.documento_vigente === true || r.documento_vigente === 't');
+                const doc = r.numero_documento
+                    ? `${r.tipo_documento === 'FACTURA' ? 'Fact.' : 'Rec.'} ${esc(r.numero_documento)}${r.id_documento && !docVigente ? ' <span class="text-danger fw-normal">(anulado)</span>' : ''}`
+                    : '<span class="text-muted">—</span>';
                 const lineas = (r.lineas || []).map(l => `<tr>
                         <td class="ps-4 text-muted" style="width:40px">${l.tipo_linea === 'producto' ? '<i class="bi bi-box-seam"></i>' : '<i class="bi bi-tools"></i>'}</td>
                         <td>${esc(l.producto_codigo ? l.producto_codigo + ' - ' : '')}${esc(l.descripcion)}</td>
@@ -2094,12 +2100,16 @@
                 // PDF de la orden (lo guardado): Imprimir / Descargar / Ver. Una orden sin guardar no tiene.
                 const pdf = r.id
                     ? `<button type="button" class="btn btn-link btn-sm p-0 text-danger" onclick="event.stopPropagation(); CMG_pdfDocumento('${RUTA}/exportarPdfAjax?id=${parseInt(r.id, 10)}')" title="PDF de la orden ${esc(r.numero_orden || '')}"><i class="bi bi-file-earmark-pdf me-1"></i>PDF de la orden</button>` : '';
+                // PDF de la factura o recibo emitido, solo si sigue vigente (uno anulado o eliminado no).
+                const etqDoc = r.tipo_documento === 'FACTURA' ? 'PDF de la factura' : 'PDF del recibo';
+                const pdfDoc = docVigente
+                    ? `<button type="button" class="btn btn-link btn-sm p-0 text-danger" onclick="event.stopPropagation(); CMG_pdfDocumento('${CW_BASE}/modulos/${r.tipo_documento === 'FACTURA' ? 'factura-venta' : 'recibo-venta'}/exportarPdfAjax?id=${parseInt(r.id_documento, 10)}')" title="${etqDoc} ${esc(r.numero_documento || '')}"><i class="bi bi-file-earmark-pdf me-1"></i>${etqDoc}</button>` : '';
                 // Placa (si se consultó por cliente), km y documento ya no son columnas: van al
-                // pie del detalle desplegado, junto con el PDF de la orden.
+                // pie del detalle desplegado, junto con los PDF de la orden y del documento.
                 const pie = [
                     modo === 'cliente' && r.placa ? `Placa: <b>${esc(r.placa)}</b>` : '',
                     r.kilometraje ? `Km: <b>${esc(Number(r.kilometraje).toLocaleString('es-EC'))}</b>` : '',
-                    `Documento: <b>${doc}</b>`, pdf,
+                    `Documento: <b>${doc}</b>`, pdf, pdfDoc,
                 ].filter(Boolean).join('<span class="text-muted mx-2">·</span>');
                 // Todas las órdenes (también la abierta) arrancan encogidas; un clic las despliega.
                 return `<tr class="cw-hist-orden ${r.actual ? 'table-primary' : ''}" role="button" data-i="${i}">
