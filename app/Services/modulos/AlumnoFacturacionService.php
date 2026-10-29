@@ -28,7 +28,8 @@ class AlumnoFacturacionService
     ) {}
 
     /** Filas por defecto de la información adicional si el alumno no tiene propias. */
-    public const INFO_ADICIONAL_DEFECTO = [['concepto' => 'Alumno', 'detalle' => '{alumno}']];
+    // «Niño: PÉREZ JUAN» / «Niña: …» según el sexo. Igual en alumnos_modal.js (INFO_ADICIONAL_DEFECTO).
+    public const INFO_ADICIONAL_DEFECTO = [['concepto' => '{niño}', 'detalle' => '{alumno}']];
 
     /**
      * Marcadores propios del alumno. Los del mes ({mes}, {MES}, {anio}…) los

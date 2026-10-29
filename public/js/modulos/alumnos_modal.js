@@ -387,7 +387,8 @@
     }
 
     // ── Información adicional de la factura (concepto / detalle) ───────────
-    const INFO_ADICIONAL_DEFECTO = [{ concepto: 'Alumno', detalle: '{alumno}' }];
+    // Igual que AlumnoFacturacionService::INFO_ADICIONAL_DEFECTO (lo que sale en la factura).
+    const INFO_ADICIONAL_DEFECTO = [{ concepto: '{niño}', detalle: '{alumno}' }];
 
     window.aluAgregarFilaInfo = function (data = {}) {
         const tbody = document.querySelector('#tablaInfoAdicional tbody');

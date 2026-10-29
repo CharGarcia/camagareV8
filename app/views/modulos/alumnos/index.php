@@ -403,19 +403,32 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosPestanasOcultas($vistaCargaAl
         const tbodyInfo = () => document.querySelector('#aluCargaFactInfo tbody');
 
         // Misma lista de conceptos sugeridos que la ficha del alumno (datalist aluConceptosInfo).
-        window.aluCargaFactAgregarInfo = function () {
+        window.aluCargaFactAgregarInfo = function (fila = null) {
             if (tbodyInfo().rows.length >= 10) return;
             const tr = document.createElement('tr');
             tr.innerHTML = `<td class="p-0"><input type="text" class="form-control form-control-sm border-0 shadow-none alu-cf-concepto" maxlength="300" list="aluConceptosInfo" style="padding:0 4px;height:24px;font-size:0.78rem;"></td>
                 <td class="p-0"><input type="text" class="form-control form-control-sm border-0 shadow-none alu-cf-detalle" maxlength="300" style="padding:0 4px;height:24px;font-size:0.78rem;"></td>
                 <td class="p-0 text-center align-middle"><button type="button" class="btn btn-link btn-sm text-danger p-0" title="Quitar" onclick="this.closest('tr').remove()"><i class="bi bi-x-lg"></i></button></td>`;
             tbodyInfo().appendChild(tr);
-            tr.querySelector('input').focus();
+            if (fila) {
+                tr.querySelector('.alu-cf-concepto').value = fila.concepto || '';
+                tr.querySelector('.alu-cf-detalle').value = fila.detalle || '';
+            } else {
+                tr.querySelector('input').focus();
+            }
         };
+
+        // Valores con los que se abre la ventana (el usuario los cambia o borra antes de importar):
+        // ítem «NOVIEMBRE 2026» y en la factura «Niño/Niña: APELLIDOS NOMBRES».
+        const DETALLE_DEFECTO = '{MES} {anio}';
+        const INFO_DEFECTO = [{ concepto: '{niño}', detalle: '{alumno}' }];
 
         window.aluAbrirCargaFacturacion = function () {
             document.getElementById('aluCargaFactFile').value = '';
             document.getElementById('aluCargaFactResult').innerHTML = '';
+            document.getElementById('aluCargaFactDetalle').value = DETALLE_DEFECTO;
+            tbodyInfo().innerHTML = '';
+            INFO_DEFECTO.forEach(f => window.aluCargaFactAgregarInfo(f));
             // Siempre se abre en la pestaña Importar.
             const btnTab = document.getElementById('alu-cf-btn-importar');
             if (btnTab && !btnTab.classList.contains('active')) bootstrap.Tab.getOrCreateInstance(btnTab).show();
