@@ -318,17 +318,13 @@
                                     <th style="width:28px;"></th>
                                     <th>Fecha</th>
                                     <th>N° Orden</th>
-                                    <th>Placa</th>
                                     <th>Cliente</th>
-                                    <th class="text-end">Km</th>
-                                    <th>Servicios / productos</th>
                                     <th class="text-end">Total</th>
-                                    <th>Documento</th>
                                     <th class="text-center pe-2">Estado</th>
                                 </tr>
                             </thead>
                             <tbody id="cw_hist_body">
-                                <tr><td colspan="10" class="text-center text-muted py-4">Busque un vehículo o un cliente.</td></tr>
+                                <tr><td colspan="6" class="text-center text-muted py-4">Busque un vehículo o un cliente.</td></tr>
                             </tbody>
                         </table>
                     </div>
@@ -606,7 +602,7 @@
         if (tabGen) bootstrap.Tab.getOrCreateInstance(tabGen).show();
         document.getElementById('cw_hist_q').value = '';
         document.getElementById('cw_hist_resumen').innerHTML = '';
-        document.getElementById('cw_hist_body').innerHTML = '<tr><td colspan="10" class="text-center text-muted py-4">Busque un vehículo o un cliente.</td></tr>';
+        document.getElementById('cw_hist_body').innerHTML = '<tr><td colspan="6" class="text-center text-muted py-4">Busque un vehículo o un cliente.</td></tr>';
         cwRenderDocumentos([]);
     }
 
@@ -1996,7 +1992,7 @@
         if (modo === 'cliente' && idCli) { cwCargarHistorial({ id_cliente: idCli }); return; }
         if (modo === 'vehiculo' && idVeh) { cwCargarHistorial({ id_vehiculo: idVeh }); return; }
         document.getElementById('cw_hist_resumen').innerHTML = '';
-        document.getElementById('cw_hist_body').innerHTML = `<tr><td colspan="10" class="text-center text-muted py-4">La orden no tiene ${modo === 'cliente' ? 'cliente' : 'vehículo'} seleccionado. Escriba para buscar.</td></tr>`;
+        document.getElementById('cw_hist_body').innerHTML = `<tr><td colspan="6" class="text-center text-muted py-4">La orden no tiene ${modo === 'cliente' ? 'cliente' : 'vehículo'} seleccionado. Escriba para buscar.</td></tr>`;
     };
 
     // La orden abierta, tal como está EN PANTALLA (aunque no se haya guardado o tenga cambios
@@ -2039,7 +2035,7 @@
     async function cwCargarHistorial(filtro) {
         const modo = document.getElementById('cw_hist_modo').value;
         const tbody = document.getElementById('cw_hist_body');
-        tbody.innerHTML = '<tr><td colspan="10" class="text-center text-muted py-4"><span class="spinner-border spinner-border-sm me-1"></span>Buscando...</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="6" class="text-center text-muted py-4"><span class="spinner-border spinner-border-sm me-1"></span>Buscando...</td></tr>';
         try {
             const params = new URLSearchParams({ modo, ...filtro });
             const res = await fetch(`${RUTA}/historialAjax?${params.toString()}`);
@@ -2069,7 +2065,7 @@
 
             if (!rows.length) {
                 document.getElementById('cw_hist_resumen').innerHTML = '';
-                tbody.innerHTML = '<tr><td colspan="10" class="text-center text-muted py-4">Sin órdenes registradas.</td></tr>';
+                tbody.innerHTML = '<tr><td colspan="6" class="text-center text-muted py-4">Sin órdenes registradas.</td></tr>';
                 return;
             }
             const previas = rows.filter(r => !r.actual);
@@ -2081,7 +2077,8 @@
                 <span><i class="bi bi-list-check text-primary me-1"></i><b>${rows.length}</b> ${rows.length === 1 ? 'orden' : 'órdenes'}${previas.length >= 500 ? ' (últimas 500)' : ''}</span>
                 <span><i class="bi bi-cash-stack text-success me-1"></i>Total: <b>${fmt(total, 2)}</b></span>
                 <span><i class="bi bi-calendar-check text-info me-1"></i>Última visita: <b>${esc((previas[0] || {}).fecha || '—')}</b></span>
-                ${modo === 'vehiculo' ? `<span><i class="bi bi-calendar-event text-warning me-1"></i>Próxima cita: <b>${esc(fechaCita || '—')}</b></span>` : ''}
+                ${modo === 'vehiculo' ? `<span><i class="bi bi-calendar-event text-warning me-1"></i>Próxima cita: <b>${esc(fechaCita || '—')}</b></span>
+                    <span><i class="bi bi-car-front text-secondary me-1"></i>Placa: <b>${esc([...placas].join(', ') || '—')}</b></span>` : ''}
                 ${modo === 'cliente' ? `<span><i class="bi bi-car-front text-secondary me-1"></i>${placas.size} vehículo(s)</span>` : `<span><i class="bi bi-person text-secondary me-1"></i>${clientes.size} cliente(s)</span>`}`;
             const nombres = { borrador: ['warning', 'Borrador'], facturado: ['success', 'Facturado'], anulado: ['danger', 'Anulado'] };
             tbody.innerHTML = rows.map((r, i) => {
@@ -2094,24 +2091,28 @@
                         <td class="text-end pe-3">${fmt(l.total_linea, 2)}</td></tr>`).join('');
                 const etqActual = r.actual
                     ? ` <span class="badge bg-primary bg-opacity-10 text-primary ms-1">${r.id ? 'Orden abierta' : 'En curso · sin guardar'}</span>` : '';
-                const abrir = !r.actual && r.id
-                    ? `<div class="ps-4 pb-1"><button type="button" class="btn btn-link btn-sm p-0" onclick="event.stopPropagation(); cwAbrirVerId(${parseInt(r.id, 10)}, false)"><i class="bi bi-box-arrow-up-right me-1"></i>Abrir la orden</button></div>` : '';
-                // La orden actual se muestra desplegada: es lo que se está trabajando ahora.
+                // PDF de la orden (lo guardado): Imprimir / Descargar / Ver. Una orden sin guardar no tiene.
+                const pdf = r.id
+                    ? `<button type="button" class="btn btn-link btn-sm p-0 text-danger" onclick="event.stopPropagation(); CMG_pdfDocumento('${RUTA}/exportarPdfAjax?id=${parseInt(r.id, 10)}')" title="PDF de la orden ${esc(r.numero_orden || '')}"><i class="bi bi-file-earmark-pdf me-1"></i>PDF de la orden</button>` : '';
+                // Placa (si se consultó por cliente), km y documento ya no son columnas: van al
+                // pie del detalle desplegado, junto con el PDF de la orden.
+                const pie = [
+                    modo === 'cliente' && r.placa ? `Placa: <b>${esc(r.placa)}</b>` : '',
+                    r.kilometraje ? `Km: <b>${esc(Number(r.kilometraje).toLocaleString('es-EC'))}</b>` : '',
+                    `Documento: <b>${doc}</b>`, pdf,
+                ].filter(Boolean).join('<span class="text-muted mx-2">·</span>');
+                // Todas las órdenes (también la abierta) arrancan encogidas; un clic las despliega.
                 return `<tr class="cw-hist-orden ${r.actual ? 'table-primary' : ''}" role="button" data-i="${i}">
-                        <td class="text-center"><i class="bi ${r.actual ? 'bi-chevron-down' : 'bi-chevron-right'} small"></i></td>
+                        <td class="text-center"><i class="bi bi-chevron-right small"></i></td>
                         <td>${esc(r.fecha || '')}</td>
                         <td class="fw-semibold text-primary">${esc(r.numero_orden || '')}${etqActual}</td>
-                        <td>${esc(r.placa || '')}</td>
-                        <td class="text-truncate" style="max-width:200px">${esc(r.cliente_nombre || '')}</td>
-                        <td class="text-end">${r.kilometraje ? esc(Number(r.kilometraje).toLocaleString('es-EC')) : ''}</td>
-                        <td class="text-truncate" style="max-width:300px" title="${esc(r.servicios || '')}">${esc(r.servicios || '')}</td>
+                        <td class="text-truncate" style="max-width:260px">${esc(r.cliente_nombre || '')}</td>
                         <td class="text-end">${fmt(r.total, 2)}</td>
-                        <td>${doc}</td>
                         <td class="text-center pe-2"><span class="badge bg-${e[0]} bg-opacity-10 text-${e[0]}">${esc(e[1])}</span></td>
                     </tr>
-                    <tr class="cw-hist-detalle bg-light ${r.actual ? '' : 'd-none'}" data-det="${i}"><td colspan="10" class="p-0">
+                    <tr class="cw-hist-detalle bg-light d-none" data-det="${i}"><td colspan="6" class="p-0">
                         <table class="table table-sm mb-0 bg-light" style="font-size:.75rem;"><tbody>${lineas || '<tr><td class="ps-4 text-muted">Sin líneas.</td></tr>'}</tbody></table>
-                        ${abrir}
+                        <div class="ps-4 py-1 small">${pie}</div>
                     </td></tr>`;
             }).join('');
             tbody.querySelectorAll('.cw-hist-orden').forEach(tr => tr.addEventListener('click', () => {
@@ -2120,7 +2121,7 @@
                 tr.querySelector('i.bi').className = 'bi small ' + (abierto ? 'bi-chevron-down' : 'bi-chevron-right');
             }));
         } catch (e) {
-            tbody.innerHTML = `<tr><td colspan="10" class="text-center text-danger py-4">${esc(e.message)}</td></tr>`;
+            tbody.innerHTML = `<tr><td colspan="6" class="text-center text-danger py-4">${esc(e.message)}</td></tr>`;
         }
     }
     // Al entrar a la pestaña Historial sin búsqueda previa, carga el de esta orden.

@@ -212,14 +212,14 @@ En la pestaña **Historial** elija **Buscar por**: *Vehículo* o *Cliente*.
   identificación del cliente). Se aceptan varias palabras en cualquier orden y no
   importan mayúsculas ni tildes.
 - Arriba se resume: número de órdenes, total facturado (sin las anuladas), fecha de
-  la última visita, la **próxima cita** pendiente del vehículo y cuántos vehículos o
-  clientes distintos aparecen.
-- Se ve igual que la pestaña **Transacciones** de la ficha del vehículo: cada fila
-  muestra fecha, número de orden, placa, cliente, kilometraje, servicios, total,
-  documento emitido y estado. Un clic en la fila **despliega sus servicios y
-  productos** (código, cantidad × precio, descuento y total de cada línea) y el
-  botón **Abrir la orden**.
-- **La orden que tiene abierta aparece primero, desplegada y resaltada**, con lo que
+  la última visita, la **próxima cita** pendiente y la **placa** del vehículo (o,
+  por cliente, cuántos vehículos distintos aparecen).
+- Columnas: **Fecha, N° Orden, Cliente, Total y Estado**. Todas las órdenes aparecen
+  encogidas; un clic en la fila **despliega sus servicios y productos** (código,
+  cantidad × precio, descuento y total de cada línea) y, al pie, el kilometraje, el
+  documento emitido (factura o recibo) y el botón **PDF de la orden**, que pregunta
+  si imprimir, descargar o ver el PDF.
+- **La orden que tiene abierta aparece primero y resaltada**, con lo que
   está en pantalla en ese momento: si todavía no la guardó se marca *En curso · sin
   guardar*, y si ya está guardada, *Orden abierta* (con los cambios que aún no haya
   guardado). Al volver a la pestaña se actualiza.
@@ -432,7 +432,7 @@ documentos admite cada periodo) está en el manual de **Empresa**, sección
 
 ## Historial de cambios
 
-- **1.24** — La pestaña **Historial** se ve como Transacciones del vehículo: cada orden se despliega con sus servicios y productos, muestra el kilometraje y la próxima cita, y la orden abierta aparece primero con lo que está en pantalla (aunque no se haya guardado). Ahora muestra hasta 500 órdenes.
+- **1.24** — La pestaña **Historial** se ve como Transacciones del vehículo: cada orden se despliega con sus servicios y productos, muestra el kilometraje y la próxima cita, y la orden abierta aparece primero con lo que está en pantalla (aunque no se haya guardado); todas las órdenes aparecen encogidas hasta hacer clic. Columnas: Fecha, N° Orden, Cliente, Total y Estado; la placa va en el resumen y cada orden desplegada tiene su botón PDF. Ahora muestra hasta 500 órdenes.
 - **1.23** — Nueva pestaña **Reporte de salida** (junto a Condiciones de ingreso) para anotar el trabajo realizado, las recomendaciones y lo que se debe hacer en la próxima cita; se puede completar aunque la orden ya esté facturada. Nuevo PDF **Reporte de salida del vehículo** con los servicios y productos aplicados y el número de la factura o recibo emitido; se imprime o se envía por correo. Requiere el SQL `database/migrations/20261029_carwash_reporte_salida.sql`.
 - **1.22** — La **Info. Adicional** ya no se pierde al guardar: una línea con solo Concepto o solo Detalle se descartaba sin aviso; ahora se guarda con el concepto «Observación» y pasa a la factura o recibo. Cada campo admite hasta 300 caracteres (tope del SRI), así un texto largo ya no hace fallar el recibo.
 - **1.21** — **Anular una orden devuelve al stock** lo que consumió (y reactivarla lo vuelve a descontar); antes la orden anulada seguía consumiendo stock hasta eliminarla.
