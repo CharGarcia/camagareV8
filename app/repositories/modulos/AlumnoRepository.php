@@ -49,10 +49,24 @@ class AlumnoRepository extends BaseRepository
                 $whereSql .= ' AND ' . $condTexto;
             }
         }
-        \App\Helpers\FiltrosBusqueda::aplicarFiltros($whereSql, $params, $parsed['filtros'], [
+        // facturado:si|no + mes_factura:AAAA-MM (sin mes, el actual): se arma aparte porque
+        // combina dos claves; el resto va por el helper estándar.
+        $filtros = $parsed['filtros'];
+        $this->aplicarFiltroFacturado($whereSql, $params, $filtros);
+        \App\Helpers\FiltrosBusqueda::aplicarFiltros($whereSql, $params, $filtros, [
             'exacto' => [
-                'campus' => 'per.id_campus',
-                'nivel'  => 'per.id_nivel',
+                'campus'    => 'per.id_campus',
+                'nivel'     => 'per.id_nivel',
+                'estado'    => 'a.estado_academico',
+                'matricula' => "CASE WHEN per.fecha_salida IS NULL AND per.fecha_ingreso IS NOT NULL THEN 'vigente' ELSE 'sin' END",
+            ],
+            'existe' => [
+                // Alumnos que tienen ese servicio/producto activo en su pestaña Facturación.
+                'servicio' => [
+                    'sql'  => 'EXISTS (SELECT 1 FROM alumnos_servicios fs WHERE fs.id_alumno = a.id AND fs.id_empresa = a.id_empresa AND fs.eliminado = false AND fs.activo = true AND {cond})',
+                    'col'  => 'fs.id_producto',
+                    'tipo' => 'exacto',
+                ],
             ],
         ]);
 
@@ -100,6 +114,49 @@ class AlumnoRepository extends BaseRepository
         $stRows->execute($params);
 
         return ['total' => $total, 'rows' => $stRows->fetchAll(PDO::FETCH_ASSOC)];
+    }
+
+    /**
+     * Filtro «Facturado en el mes» del buscador: facturado:si (o no) y mes_factura:AAAA-MM.
+     * Factura vigente = la misma regla de getFacturasAlumno() con período (no eliminada ni
+     * anulada). Quita ambas claves de $filtros. Sin el SQL de facturación se ignora.
+     */
+    private function aplicarFiltroFacturado(string &$where, array &$params, array &$filtros): void
+    {
+        $fact = $filtros['facturado'] ?? null;
+        $mes  = $filtros['mes_factura'] ?? null;
+        unset($filtros['facturado'], $filtros['mes_factura']);
+        if ($fact === null || !$this->existeEsquemaFacturacion()) {
+            return;
+        }
+        $valor = strtolower(trim((string) (is_array($fact['valor']) ? ($fact['valor'][0] ?? '') : $fact['valor'])));
+        if (!in_array($valor, ['si', 'no'], true)) {
+            return;
+        }
+        $conFactura = ($valor === 'si') !== $fact['neg']; // -facturado:si = no facturado
+        $mesTxt = $mes !== null ? trim((string) (is_array($mes['valor']) ? ($mes['valor'][0] ?? '') : $mes['valor'])) : '';
+        if (!preg_match('/^(\d{4})-(0[1-9]|1[0-2])$/', $mesTxt)) {
+            $mesTxt = date('Y-m');
+        }
+        $where .= ($conFactura ? ' AND ' : ' AND NOT ') . "EXISTS (
+                    SELECT 1 FROM alumnos_facturas ff
+                    JOIN ventas_cabecera fv ON fv.id = ff.id_factura AND fv.id_empresa = ff.id_empresa
+                    WHERE ff.id_alumno = a.id AND ff.id_empresa = a.id_empresa AND ff.eliminado = false
+                      AND fv.eliminado = false AND fv.estado <> 'anulado' AND ff.periodo = :f_fact_periodo)";
+        $params[':f_fact_periodo'] = $mesTxt . '-01';
+    }
+
+    /** Servicios y productos asignados a algún alumno de la empresa: opciones del filtro «Servicio». */
+    public function getProductosAsignados(int $idEmpresa): array
+    {
+        $st = $this->db->prepare("SELECT DISTINCT p.id, p.codigo, p.nombre
+                                  FROM alumnos_servicios s
+                                  JOIN alumnos a ON a.id = s.id_alumno AND a.eliminado = false
+                                  JOIN productos p ON p.id = s.id_producto AND p.id_empresa = s.id_empresa AND p.eliminado = false
+                                  WHERE s.id_empresa = :e AND s.eliminado = false AND s.activo = true
+                                  ORDER BY p.nombre, p.id");
+        $st->execute([':e' => $idEmpresa]);
+        return $st->fetchAll(PDO::FETCH_ASSOC);
     }
 
     public function create(array $data): int

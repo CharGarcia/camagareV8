@@ -46,9 +46,25 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
             // PDF y Excel respetan los mismos filtros.
             $optCampus = array_map(fn($c) => ['v' => (string) $c['id'], 'l' => $c['nombre']], $opcionesCampus ?? []);
             $optNivel  = array_map(fn($n) => ['v' => (string) $n['id'], 'l' => $n['nombre']], $opcionesNivel ?? []);
+            $optServicio = array_map(fn($p) => ['v' => (string) $p['id'], 'l' => trim(($p['codigo'] ? $p['codigo'] . ' - ' : '') . $p['nombre'])], $opcionesServicio ?? []);
+            // Meses para «Facturado en el mes»: del mes que viene hacia atrás, un año.
+            $optMes = [];
+            $nombresMes = ['', 'Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'];
+            for ($m = 1; $m >= -12; $m--) {
+                $t = strtotime(date('Y-m-01') . " {$m} month");
+                $optMes[] = ['v' => date('Y-m', $t), 'l' => $nombresMes[(int) date('n', $t)] . ' ' . date('Y', $t)];
+            }
             $filtrosAlumnos = [
                 ['key' => 'campus', 'label' => 'Campus',      'icon' => 'bi-geo-alt',  'type' => 'select', 'grupo' => 'Matrícula', 'col' => 6, 'options' => $optCampus],
                 ['key' => 'nivel',  'label' => 'Nivel / Curso', 'icon' => 'bi-mortarboard', 'type' => 'select', 'grupo' => 'Matrícula', 'col' => 6, 'options' => $optNivel],
+                ['key' => 'matricula', 'label' => 'Matrícula', 'icon' => 'bi-journal-check', 'type' => 'select', 'grupo' => 'Matrícula', 'col' => 6,
+                 'options' => [['v' => 'vigente', 'l' => 'Vigente'], ['v' => 'sin', 'l' => 'Sin matrícula vigente']]],
+                ['key' => 'estado', 'label' => 'Estado académico', 'icon' => 'bi-person-check', 'type' => 'select', 'grupo' => 'Matrícula', 'col' => 6,
+                 'options' => [['v' => 'activo', 'l' => 'Activo'], ['v' => 'retirado', 'l' => 'Retirado'], ['v' => 'egresado', 'l' => 'Egresado'], ['v' => 'suspendido', 'l' => 'Suspendido']]],
+                ['key' => 'servicio', 'label' => 'Servicio / producto', 'icon' => 'bi-cart-check', 'type' => 'select', 'grupo' => 'Facturación', 'col' => 12, 'options' => $optServicio],
+                ['key' => 'facturado', 'label' => 'Facturado en el mes', 'icon' => 'bi-receipt', 'type' => 'select', 'grupo' => 'Facturación', 'col' => 6,
+                 'options' => [['v' => 'si', 'l' => 'Con factura'], ['v' => 'no', 'l' => 'Sin factura']]],
+                ['key' => 'mes_factura', 'label' => 'Mes (vacío = el actual)', 'icon' => 'bi-calendar-month', 'type' => 'select', 'grupo' => 'Facturación', 'col' => 6, 'options' => $optMes],
             ];
             ?>
             <link rel="stylesheet" href="<?= rtrim(BASE_URL, '/') ?>/css/components/filtros_modal.css?v=<?= asset_ver('/css/components/filtros_modal.css') ?>">

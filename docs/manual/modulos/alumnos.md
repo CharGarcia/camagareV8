@@ -5,7 +5,7 @@ categoria: Ventas
 ruta_modulo: modulos/alumnos
 tipo: modulo
 visibilidad: todos
-etiquetas: alumnos, estudiantes, matrícula, matricula, colegio, escuela, centro infantil, campus, sede, nivel, curso, representante, representantes, padres, autorizado, autorizados, retirar, retiro, quién retira, facturación, facturar, generar factura, facturar pensión, facturar mensualidad, facturas del alumno, horario, pensión, pension, imprimir, impresora, filtrar alumnos, filtro por campus, filtro por nivel, alumnos por curso, alumnos por sede, buscar alumno, portal de representantes, qr, codigo qr, padres de familia, actualizar datos, registrar alumno, inscripcion, codigo de verificacion, enlace para padres, cargar facturación, carga masiva, importar excel, plantilla excel, precios por alumno, servicios por alumno, pensiones masivas, generar facturas, facturación masiva, facturar a todos, facturar todos los alumnos, facturas del mes, pensiones del mes, emitir pensiones, historial de cargas, deshacer carga, revertir carga, eliminar carga
+etiquetas: alumnos, estudiantes, matrícula, matricula, colegio, escuela, centro infantil, campus, sede, nivel, curso, representante, representantes, padres, autorizado, autorizados, retirar, retiro, quién retira, facturación, facturar, generar factura, facturar pensión, facturar mensualidad, facturas del alumno, horario, pensión, pension, imprimir, impresora, filtrar alumnos, filtro por campus, filtro por nivel, alumnos por curso, alumnos por sede, buscar alumno, portal de representantes, qr, codigo qr, padres de familia, actualizar datos, registrar alumno, inscripcion, codigo de verificacion, enlace para padres, cargar facturación, carga masiva, importar excel, plantilla excel, precios por alumno, servicios por alumno, pensiones masivas, generar facturas, facturación masiva, facturar a todos, facturar todos los alumnos, facturas del mes, pensiones del mes, emitir pensiones, historial de cargas, deshacer carga, revertir carga, eliminar carga, filtrar por servicio, alumnos sin factura, alumnos facturados, filtro por estado, retirados, matrícula vigente
 version: 1.10
 orden: 0
 estado: activo
@@ -127,12 +127,30 @@ El cuadro de búsqueda del listado busca a la vez en apellidos y nombres, númer
 de identificación, representante (cliente que factura), campus y nivel/curso;
 se pueden escribir varias palabras en cualquier orden.
 
-El botón **Filtros**, junto al buscador, abre los filtros por **Campus** y
-**Nivel / Curso** de la matrícula del alumno (la vigente o, si no tiene, la más
-reciente, que es la que muestra el listado). Se aplican con el botón *Aplicar*
-y quedan como etiquetas junto al buscador; se quitan con la ✕ de cada una. Se
-pueden combinar entre sí y con el texto. Las descargas en **PDF** y **Excel**
-respetan los mismos filtros.
+El botón **Filtros**, junto al buscador, abre estos filtros:
+
+- **Matrícula**:
+  - **Campus** y **Nivel / Curso** de la matrícula del alumno (la vigente o, si
+    no tiene, la más reciente, que es la que muestra el listado).
+  - **Matrícula**: *Vigente* (tiene un período sin fecha de salida) o *Sin
+    matrícula vigente*.
+  - **Estado académico**: activo, retirado, egresado o suspendido.
+- **Facturación**:
+  - **Servicio / producto**: alumnos que tienen ese servicio **activo** en su
+    pestaña Facturación (por ejemplo, todos los que usan Transporte).
+  - **Facturado en el mes**: *Con factura* o *Sin factura* vigente (no anulada)
+    en el **Mes** elegido al lado; si no se elige mes, el actual. El mes solo,
+    sin «Facturado en el mes», no filtra.
+
+Se aplican con el botón *Aplicar* y quedan como etiquetas junto al buscador; se
+quitan con la ✕ de cada una. Se pueden combinar entre sí y con el texto. Las
+descargas en **PDF** y **Excel**, el envío del portal por correo y la ventana
+**Generar facturas** respetan los mismos filtros: por ejemplo, *Sin factura* de
+este mes + **Generar facturas** muestra solo a los que faltan.
+
+Al recargar la página (F5) el listado sale sin filtros. Los enlaces que abren
+Alumnos ya filtrado (el número de alumnos en Campus o en Niveles) dejan la
+dirección limpia, `modulos/alumnos`, sin el filtro en la URL.
 
 ## Facturar los servicios del alumno
 
@@ -522,7 +540,10 @@ pestaña Transacciones aparece solo si el usuario puede **ver** Facturas de Vent
   correo, y el botón **Agregar a la lista** para copiarlo como representante.
   Si falta el script `20260924_alumnos_representantes.sql`, la pestaña lo avisa
   y el guardado se rechaza cuando hay representantes escritos (antes se
-  descartaban sin aviso).
+  descartaban sin aviso). Filtros nuevos del listado: **Matrícula**, **Estado
+  académico**, **Servicio / producto** y **Facturado en el mes**. Al recargar ya
+  no reaparece el último filtro usado, y los enlaces desde Campus y Niveles
+  abren Alumnos con la dirección limpia.
 - **1.9** — Botón **Cargar facturación** en el listado, junto a QR
   representantes: plantilla Excel con una fila por alumno activo y una columna
   por servicio activo, con las celdas vacías; al subirla se agregan, cambian (precio)

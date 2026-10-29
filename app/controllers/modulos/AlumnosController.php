@@ -13,6 +13,8 @@ use Exception;
 class AlumnosController extends BaseModuloController
 {
     private const RUTA_MODULO = 'modulos/alumnos';
+    /** Filtro inicial del listado que llega por enlace (ver index()). */
+    private const SESION_BUSCAR = 'alumnos_buscar_inicial';
     private AlumnoService $service;
 
     public function __construct()
@@ -37,7 +39,16 @@ class AlumnosController extends BaseModuloController
         $idEmpresa = (int) $_SESSION['id_empresa'];
         $prefsVista = \App\Helpers\PreferenciasHelper::getPreferenciasVista(self::RUTA_MODULO);
 
-        $buscar   = trim($_GET['b'] ?? $_POST['b'] ?? '');
+        // URL limpia: un enlace que llega con ?b= (p. ej. «ver los alumnos» desde Campus o
+        // Niveles) deja el filtro en sesión y vuelve a modulos/alumnos sin parámetros.
+        // Se usa una sola vez: al recargar, el listado sale sin filtro.
+        if (isset($_GET['b'])) {
+            $_SESSION[self::SESION_BUSCAR] = mb_substr(trim((string) $_GET['b']), 0, 500);
+            header('Location: ' . BASE_URL . '/' . self::RUTA_MODULO);
+            exit;
+        }
+        $buscar = trim((string) ($_SESSION[self::SESION_BUSCAR] ?? $_POST['b'] ?? ''));
+        unset($_SESSION[self::SESION_BUSCAR]);
         $page     = max(1, (int) ($_GET['page'] ?? $_POST['page'] ?? 1));
         $ordenCol = trim($_GET['sort'] ?? $_POST['sort'] ?? $prefsVista['__ordenCol__'] ?? 'apellidos');
         $ordenDir = strtoupper(trim($_GET['dir'] ?? $_POST['dir'] ?? $prefsVista['__ordenDir__'] ?? 'asc'));
@@ -76,6 +87,7 @@ class AlumnosController extends BaseModuloController
             // Opciones de los filtros Campus / Nivel del buscador (mismos catálogos del modal).
             'opcionesCampus' => (new \App\repositories\modulos\AlumnoCampusRepository())->getParaSelect($idEmpresa),
             'opcionesNivel'  => (new \App\repositories\modulos\AlumnoNivelRepository())->getParaSelect($idEmpresa),
+            'opcionesServicio' => (new AlumnoRepository())->getProductosAsignados($idEmpresa),
             // Generar facturas desde el listado: mismo permiso que el botón de la ficha.
             'puedeFacturar'     => $puedeFacturar = \App\Helpers\Permisos::puedeCrear(self::RUTA_FACTURAS),
             'seriesFacturacion' => $puedeFacturar ? $this->service->getPuntosEmisionParaSelect($idEmpresa) : [],

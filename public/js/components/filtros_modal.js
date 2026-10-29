@@ -181,6 +181,14 @@
 
             this.buildModal();
 
+            // Al recargar (F5) o volver atrás, el navegador restaura el valor que tenía el
+            // input oculto (Firefox siempre, Chrome a veces) y el buscador mostraba un filtro
+            // que la lista —armada por el servidor sin él— no aplicaba. Manda el valor que
+            // escribió el servidor en el HTML (defaultValue = atributo value).
+            if (this.elHidden && this.elHidden.value !== this.elHidden.defaultValue) {
+                this.elHidden.value = this.elHidden.defaultValue;
+            }
+
             const base = (this.elHidden ? this.elHidden.value : '') || this.opts.initialValue || '';
             const ini = parseInitial(base);
             this.state.filters   = ini.filters;
