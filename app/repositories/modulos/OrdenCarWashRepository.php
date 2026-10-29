@@ -448,6 +448,25 @@ class OrdenCarWashRepository extends BaseRepository
         return $tiene;
     }
 
+    /** ¿Existe ya carwash_ordenes.reporte_salida_html? (database/migrations/20261029_carwash_reporte_salida.sql) */
+    public function tieneColumnaReporteSalida(): bool
+    {
+        static $tiene = false;
+        if (!$tiene) {
+            $tiene = (bool) $this->db->query("SELECT 1 FROM information_schema.columns WHERE table_name = 'carwash_ordenes' AND column_name = 'reporte_salida_html'")->fetchColumn();
+        }
+        return $tiene;
+    }
+
+    /** Guarda solo el Reporte de salida (se puede completar aunque la orden ya esté facturada). */
+    public function updateReporteSalida(int $id, int $idEmpresa, ?string $html, int $idUsuario): void
+    {
+        $this->db->prepare("UPDATE carwash_ordenes
+                            SET reporte_salida_html = :h, updated_by = :u, updated_at = NOW()
+                            WHERE id = :id AND id_empresa = :e AND eliminado = false")
+                 ->execute([':h' => $html, ':u' => $idUsuario, ':id' => $id, ':e' => $idEmpresa]);
+    }
+
     /** ¿Existen ya las columnas lote/fecha_caducidad/nup/id_unidad_medida en el detalle? */
     public function tieneColumnasLote(): bool
     {

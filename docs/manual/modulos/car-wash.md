@@ -5,8 +5,8 @@ categoria: Servicios
 ruta_modulo: modulos/car-wash
 tipo: modulo
 visibilidad: todos
-etiquetas: car wash, lavado, lavadora de autos, lubricadora, cambio de aceite, mecanica, taller, orden de servicio, orden mecanica, orden de trabajo, vehiculo, placa, historial del vehiculo, historial del cliente, visitas, ultima visita, facturar orden, recibo de venta, refacturar, factura anulada, proxima cita, proximo chequeo, editar cliente, editar vehiculo, corregir placa, cambiar datos del cliente, actualizar correo, migracion, sistema anterior, numeracion por fecha, numero con el año, reiniciar numeracion, reinicio anual, reinicio mensual, correlativo por año, correlativo por mes, modo de numeracion, buscar orden, buscar placa, buscador, filtros, filtrar ordenes, filtro de fechas, buscar por servicio, chips, imprimir, impresora, aviso, avisos, ordenes en borrador, ordenes sin facturar, pendientes de facturar, barra superior, sin saldo, sin stock, productos similares, productos equivalentes, equivalencias, reemplazo, otra marca, sugerir otro producto, misma categoria, usar este, pdf en dos hojas, segunda hoja casi vacia, totales en otra pagina, el pdf corta la pagina, hoja de mas, anular orden, orden anulada, devolver repuestos, stock descontado dos veces
-version: 1.21
+etiquetas: car wash, lavado, lavadora de autos, lubricadora, cambio de aceite, mecanica, taller, orden de servicio, orden mecanica, orden de trabajo, vehiculo, placa, historial del vehiculo, historial del cliente, visitas, ultima visita, facturar orden, recibo de venta, refacturar, factura anulada, proxima cita, proximo chequeo, editar cliente, editar vehiculo, corregir placa, cambiar datos del cliente, actualizar correo, migracion, sistema anterior, numeracion por fecha, numero con el año, reiniciar numeracion, reinicio anual, reinicio mensual, correlativo por año, correlativo por mes, modo de numeracion, buscar orden, buscar placa, buscador, filtros, filtrar ordenes, filtro de fechas, buscar por servicio, chips, imprimir, impresora, aviso, avisos, ordenes en borrador, ordenes sin facturar, pendientes de facturar, barra superior, sin saldo, sin stock, productos similares, productos equivalentes, equivalencias, reemplazo, otra marca, sugerir otro producto, misma categoria, usar este, pdf en dos hojas, segunda hoja casi vacia, totales en otra pagina, el pdf corta la pagina, hoja de mas, reporte de salida, acta de salida, informe de entrega, entrega del vehiculo, trabajo realizado, recomendaciones, proxima cita, anular orden, orden anulada, devolver repuestos, stock descontado dos veces
+version: 1.23
 orden: 10
 estado: activo
 ---
@@ -142,6 +142,31 @@ Deja constancia de cómo ingresa el vehículo; no lleva servicios, productos ni 
 Para enviarla, pulse **Correo** y elija el documento *Acta de ingreso del vehículo*
 (o *Orden de servicio*).
 
+## Reporte de salida del vehículo
+
+Junto a **Condiciones de ingreso** está la pestaña **Reporte de salida**, con el mismo
+editor de texto con formato. Ahí se anota lo que se entrega al cliente con el vehículo:
+el trabajo realizado, las recomendaciones (por ejemplo, «pastillas al 30 %») y lo que
+se debe hacer en la **próxima cita**.
+
+- Se guarda con el botón **Guardar** de la orden mientras esté en borrador.
+- Una orden **ya facturada** sigue de solo lectura, pero el reporte de salida se puede
+  completar igual: en esa pestaña aparece **Guardar reporte**, que guarda solo ese
+  texto y no cambia la factura ni el recibo. En una orden anulada no se puede editar.
+
+Con la orden guardada, el botón de salida de la barra superior (o **Reporte de salida**
+dentro de la pestaña) genera el PDF **Reporte de salida del vehículo**. Lleva:
+
+- los datos del vehículo y del cliente;
+- el **documento de venta** emitido: factura o recibo, su número y fecha (o
+  *Pendiente de facturar* si todavía no se emite o si el documento se anuló);
+- los **servicios y productos aplicados**, con su cantidad (sin precios);
+- el texto del reporte de salida y la próxima cita sugerida;
+- las firmas de quien entrega (taller) y de quien recibe conforme (cliente).
+
+Para enviarlo, pulse **Correo** y elija *Reporte de salida*. Por defecto va al correo
+del cliente.
+
 ## La orden sigue la configuración de facturación
 
 La orden aplica la misma configuración de facturación del establecimiento que la
@@ -220,7 +245,8 @@ rastro completo.
 | Próx. cita | Fecha sugerida para la siguiente visita (no puede ser anterior a hoy al crear la orden). |
 | Bodega | De dónde se toman los productos. Aplica a toda la orden. En una orden nueva viene marcada: la favorita, la asignada al usuario o la única que hay. |
 | Servicios / productos | Grilla igual a la de la factura: precio, descuento e IVA por línea. |
-| Info. Adicional | Novedades, observaciones y el correo del cliente; viajan a la factura. |
+| Reporte de salida | Trabajo realizado, recomendaciones y qué hacer en la próxima cita. Sale en el PDF Reporte de salida; se puede completar aunque la orden ya esté facturada. |
+| Info. Adicional | Novedades, observaciones y el correo del cliente; viajan a la factura y al recibo. Cada línea tiene Concepto y Detalle (hasta 300 caracteres cada uno, tope del SRI); si solo se llena uno de los dos, se guarda con el concepto **Observación**. |
 
 ## Permisos
 
@@ -250,8 +276,8 @@ que se guardó.
   cuando la empresa lo permite.
 - Toda la emisión (número del documento, inventario, documento y marca de la orden)
   ocurre en una sola operación: si algo falla, nada queda a medias.
-- La factura lleva en Info. Adicional la **placa** y el **número de orden**, además de
-  lo que se haya escrito en la orden.
+- La factura y el recibo llevan en Info. Adicional la **placa** y el **número de orden**,
+  además de todo lo que se haya escrito en la Info. Adicional de la orden.
 - Una orden con documento vigente no se puede editar, eliminar ni volver a facturar. Al
   abrirla se muestra en **solo lectura**: un aviso indica en qué factura o recibo se
   emitió, las líneas, la Info. Adicional y las condiciones no se pueden cambiar y no
@@ -361,6 +387,9 @@ solo los suyos.
 
 ## Errores frecuentes
 
+- **La pestaña Reporte de salida avisa que falta el SQL**: el administrador debe
+  ejecutar `database/migrations/20261029_carwash_reporte_salida.sql`.
+
 - **La orden no aparece en ventas**: falta emitir la factura o el recibo desde la orden.
 - **"Debe asignar un cliente a la orden antes de facturar"**: elija el cliente y
   guarde antes de pulsar Factura o Recibo.
@@ -396,6 +425,8 @@ documentos admite cada periodo) está en el manual de **Empresa**, sección
 
 ## Historial de cambios
 
+- **1.23** — Nueva pestaña **Reporte de salida** (junto a Condiciones de ingreso) para anotar el trabajo realizado, las recomendaciones y lo que se debe hacer en la próxima cita; se puede completar aunque la orden ya esté facturada. Nuevo PDF **Reporte de salida del vehículo** con los servicios y productos aplicados y el número de la factura o recibo emitido; se imprime o se envía por correo. Requiere el SQL `database/migrations/20261029_carwash_reporte_salida.sql`.
+- **1.22** — La **Info. Adicional** ya no se pierde al guardar: una línea con solo Concepto o solo Detalle se descartaba sin aviso; ahora se guarda con el concepto «Observación» y pasa a la factura o recibo. Cada campo admite hasta 300 caracteres (tope del SRI), así un texto largo ya no hace fallar el recibo.
 - **1.21** — **Anular una orden devuelve al stock** lo que consumió (y reactivarla lo vuelve a descontar); antes la orden anulada seguía consumiendo stock hasta eliminarla.
 - **1.20** — Si un producto no tiene saldo, la ventana de sugerencias muestra primero sus **productos equivalentes** (ficha del producto, pestaña Referencias). La ventana ahora se enciende en Empresa → Facturación con «Mostrar equivalencias» y «Mostrar sugerencias de productos similares» (vienen apagados); antes salía sola con stock positivo.
 - **1.19** — Enlace **Editar** junto a Cliente y Vehículo en la orden: abre la ficha

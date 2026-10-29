@@ -429,6 +429,9 @@ class OrdenCarWashService
                 // Mismo saneamiento que las Condiciones de la Proforma (solo etiquetas de formato).
                 $cabecera['condiciones_html'] = \App\Rules\modulos\ProformaRules::sanitizarCondiciones($data['condiciones_html'] ?? null);
             }
+            if ($this->repository->tieneColumnaReporteSalida()) {
+                $cabecera['reporte_salida_html'] = \App\Rules\modulos\ProformaRules::sanitizarCondiciones($data['reporte_salida_html'] ?? null);
+            }
             $idOrden = $this->repository->create($cabecera);
 
             $tot = $this->guardarLineas($idOrden, $idEmpresa, $data, $this->modoIvaEstablecimiento($idEstab));
@@ -509,6 +512,9 @@ class OrdenCarWashService
             ] + ($this->repository->tieneColumnaCondiciones()
                 ? ['condiciones_html' => \App\Rules\modulos\ProformaRules::sanitizarCondiciones($data['condiciones_html'] ?? null)]
                 : []
+            ) + ($this->repository->tieneColumnaReporteSalida()
+                ? ['reporte_salida_html' => \App\Rules\modulos\ProformaRules::sanitizarCondiciones($data['reporte_salida_html'] ?? null)]
+                : []
             ) + ($this->documentoLiberado($cab) && $this->repository->existeTablaDocumentos() ? [
                 // Su factura/recibo se anuló: la orden vuelve a borrador para re-facturarla.
                 // El documento anterior queda en el historial de Facturación.
@@ -534,6 +540,45 @@ class OrdenCarWashService
 
             $db->commit();
         } catch (Exception $e) {
+            if ($db->inTransaction()) $db->rollBack();
+            throw $e;
+        }
+    }
+
+    // ─── Reporte de salida ────────────────────────────────────────────────────
+
+    /** ¿Ya se ejecutó el SQL del Reporte de salida? Sin él la pestaña avisa y no deja escribir. */
+    public function reporteSalidaDisponible(): bool
+    {
+        return $this->repository->tieneColumnaReporteSalida();
+    }
+
+    /**
+     * Guarda solo el Reporte de salida (trabajos realizados, recomendaciones y lo que se debe
+     * hacer en la próxima cita). A diferencia del resto de la orden, se puede completar aunque
+     * ya esté facturada: es información para el cliente, no cambia el documento emitido. Una
+     * orden anulada no se toca.
+     */
+    public function guardarReporteSalida(int $id, int $idEmpresa, int $idUsuario, ?string $html): void
+    {
+        if (!$this->repository->tieneColumnaReporteSalida()) {
+            throw new Exception('Falta ejecutar el SQL del Reporte de salida (database/migrations/20261029_carwash_reporte_salida.sql).');
+        }
+        $db = Database::getConnection();
+        try {
+            $db->beginTransaction();
+            // Candado de la fila: dos guardados a la vez quedan en fila y se audita el valor real.
+            $estado = $this->repository->bloquearEstado($id, $idEmpresa);
+            if ($estado === null) throw new Exception('Orden no encontrada.');
+            if ($estado === 'anulado') throw new Exception('No se puede modificar una orden anulada.');
+
+            $cab   = $this->repository->find($id, $idEmpresa);
+            $nuevo = \App\Rules\modulos\ProformaRules::sanitizarCondiciones($html);
+            $this->repository->updateReporteSalida($id, $idEmpresa, $nuevo, $idUsuario);
+            $this->logService->registrar($idUsuario, $idEmpresa, 'ACTUALIZAR_REPORTE_SALIDA_CARWASH', 'carwash_ordenes', $id,
+                ['reporte_salida_html' => $cab['reporte_salida_html'] ?? null], ['reporte_salida_html' => $nuevo]);
+            $db->commit();
+        } catch (\Throwable $e) {
             if ($db->inTransaction()) $db->rollBack();
             throw $e;
         }
@@ -752,7 +797,9 @@ class OrdenCarWashService
 
         // Info adicional del documento: la de la orden + placa y número de orden (como hacía el
         // sistema anterior), sin duplicar si el usuario ya los escribió.
-        $infoAdicional = is_array($orden['info_adicional'] ?? null) ? $orden['info_adicional'] : [];
+        // Normalizada igual que al guardar (filas incompletas y tope de 300 del SRI): una orden
+        // guardada antes puede traer textos largos que harían fallar el recibo (varchar 300).
+        $infoAdicional = json_decode((string) $this->encodeInfoAdicional($orden['info_adicional'] ?? []), true) ?: [];
         $yaTiene = array_map(fn($ia) => mb_strtolower(trim((string) ($ia['nombre'] ?? ''))), $infoAdicional);
         if (!empty($orden['placa']) && !in_array('placa', $yaTiene, true)) {
             $infoAdicional[] = ['nombre' => 'Placa', 'valor' => (string) $orden['placa']];
@@ -897,11 +944,18 @@ class OrdenCarWashService
         if (!is_array($info)) return null;
         $limpio = [];
         foreach ($info as $ia) {
+            if (!is_array($ia)) continue;
             $nom = trim((string) ($ia['nombre'] ?? ''));
             $val = trim((string) ($ia['valor'] ?? ''));
-            if ($nom !== '' && $val !== '') {
-                $limpio[] = ['nombre' => $nom, 'valor' => $val];
+            if ($nom === '' && $val === '') continue;
+            // Solo Concepto o solo Detalle: antes la fila se perdía sin aviso. El texto escrito
+            // pasa a Detalle bajo "Observación" (el SRI exige nombre y valor en cada campo).
+            if ($nom === '' || $val === '') {
+                $val = $val !== '' ? $val : $nom;
+                $nom = 'Observación';
             }
+            // 300 = tope del SRI y de ventas_adicional / recibos_venta_adicional.
+            $limpio[] = ['nombre' => mb_substr($nom, 0, 300), 'valor' => mb_substr($val, 0, 300)];
         }
         return empty($limpio) ? null : json_encode($limpio, JSON_UNESCAPED_UNICODE);
     }

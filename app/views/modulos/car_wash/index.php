@@ -238,6 +238,8 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
         editarCliente:  <?= !empty($puedeEditarCliente) ? 'true' : 'false' ?>,
         editarVehiculo: <?= !empty($puedeEditarVehiculo) ? 'true' : 'false' ?>
     };
+    // Sin el SQL del Reporte de salida la pestaña avisa y no deja escribir (no se perdería en silencio).
+    window.CW_SALIDA_OK = <?= !empty($reporteSalidaDisponible) ? 'true' : 'false' ?>;
     <?php $bt = fn($k, $def) => ((($empresa[$k] ?? $def) === 'true' || ($empresa[$k] ?? $def) === true) ? 'true' : 'false'); ?>
     window.EMPRESA_CONFIG = {
         facturacion_libre: <?= $bt('facturacion_libre', false) ?>,

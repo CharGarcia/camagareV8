@@ -32,6 +32,7 @@
                 <div class="vr mx-1"></div>
                 <button type="button" id="cw_btn_pdf" class="btn btn-outline-danger btn-sm px-2" onclick="cwPdf()" title="PDF de la orden" disabled><i class="bi bi-file-earmark-pdf"></i></button>
                 <button type="button" id="cw_btn_acta" class="btn btn-outline-danger btn-sm px-2" onclick="cwPdfIngreso()" title="Acta de ingreso del vehículo (PDF)" disabled><i class="bi bi-clipboard2-check"></i></button>
+                <button type="button" id="cw_btn_salida" class="btn btn-outline-danger btn-sm px-2" onclick="cwPdfSalida()" title="Reporte de salida del vehículo (PDF)" disabled><i class="bi bi-box-arrow-right"></i></button>
                 <button type="button" id="cw_btn_correo" class="btn btn-outline-info btn-sm px-2" onclick="cwCorreo()" title="Enviar por correo" disabled><i class="bi bi-envelope"></i></button>
                 <button type="button" id="cw_btn_whatsapp" class="btn btn-outline-success btn-sm px-2" onclick="cwWhatsapp()" title="Enviar por WhatsApp" disabled><i class="bi bi-whatsapp"></i></button>
             </div>
@@ -214,6 +215,7 @@
                             <ul class="nav nav-tabs nav-tabs-sm mb-0" role="tablist">
                                 <li class="nav-item"><button class="nav-link active py-1 small" data-bs-toggle="tab" data-bs-target="#cw-subtab-info" type="button"><i class="bi bi-info-circle me-1"></i>Info. Adicional</button></li>
                                 <li class="nav-item"><button class="nav-link py-1 small" data-bs-toggle="tab" data-bs-target="#cw-subtab-condiciones" type="button"><i class="bi bi-clipboard2-check me-1"></i>Condiciones de ingreso</button></li>
+                                <li class="nav-item"><button class="nav-link py-1 small" data-bs-toggle="tab" data-bs-target="#cw-subtab-salida" type="button"><i class="bi bi-box-arrow-right me-1"></i>Reporte de salida</button></li>
                             </ul>
                             <div class="tab-content bg-white border p-2 rounded-bottom" style="min-height:120px;">
                                 <div class="tab-pane fade show active" id="cw-subtab-info" role="tabpanel">
@@ -247,6 +249,24 @@
                                         </button>
                                     </div>
                                     <div id="cw_condicionesEditor" class="cw-quill bg-white"></div>
+                                </div>
+                                <!-- Reporte de salida: trabajo realizado, recomendaciones y lo que se debe hacer en
+                                     la próxima cita. Se imprime en el PDF "Reporte de salida" (con los servicios y el
+                                     documento emitido). Se puede completar aunque la orden ya esté facturada. -->
+                                <div class="tab-pane fade" id="cw-subtab-salida" role="tabpanel">
+                                    <div class="d-flex align-items-center gap-2 mb-1">
+                                        <span class="x-small text-muted">Lo que se realizó, recomendaciones al cliente y qué hacer en la próxima cita. Sale en el Reporte de salida junto con los servicios aplicados y la factura o recibo emitido.</span>
+                                        <button type="button" id="cw_btn_guardar_salida" class="btn btn-outline-primary btn-sm px-2 flex-shrink-0 d-none" onclick="cwGuardarSalida()" title="Guardar el reporte de salida">
+                                            <i class="bi bi-save me-1"></i>Guardar reporte
+                                        </button>
+                                        <button type="button" class="btn btn-outline-danger btn-sm px-2 ms-auto flex-shrink-0" onclick="cwPdfSalida()" title="Reporte de salida del vehículo">
+                                            <i class="bi bi-file-earmark-pdf me-1"></i>Reporte de salida
+                                        </button>
+                                    </div>
+                                    <div id="cw_salida_sin_sql" class="alert alert-warning py-1 px-2 small mb-1 d-none">
+                                        Falta ejecutar el SQL <code>database/migrations/20261029_carwash_reporte_salida.sql</code> para guardar el reporte de salida.
+                                    </div>
+                                    <div id="cw_salidaEditor" class="cw-quill bg-white"></div>
                                 </div>
                             </div>
                         </div>
@@ -407,6 +427,22 @@
     }
     function cwCondicionesHtml() { const q = cwQuill(); return (q && q.getText().trim()) ? q.root.innerHTML : ''; }
     function cwSetCondiciones(html) { const q = cwQuill(); if (q) q.setContents(html ? q.clipboard.convert(html) : [], 'silent'); }
+
+    // ─── Editor del Reporte de salida (mismo Quill y mismas opciones) ─────────
+    let cwQuillSalidaInst = null;
+    function cwQuillSalida() {
+        if (!cwQuillSalidaInst && window.Quill && document.getElementById('cw_salidaEditor')) {
+            cwQuillSalidaInst = new Quill('#cw_salidaEditor', {
+                theme: 'snow',
+                placeholder: 'Ej.: se cambió aceite 5W-30 y filtro; pastillas delanteras al 30 %, cambiar en la próxima cita; revisar presión de llantas…',
+                modules: { toolbar: [['bold', 'italic', 'underline'], [{ color: [] }], [{ list: 'ordered' }, { list: 'bullet' }], ['clean']] },
+            });
+            cwQuillSalidaInst.on('text-change', (d, o, source) => { if (source === 'user') cwBorradorCambio(); });
+        }
+        return cwQuillSalidaInst;
+    }
+    function cwSalidaHtml() { const q = cwQuillSalida(); return (q && q.getText().trim()) ? q.root.innerHTML : ''; }
+    function cwSetSalida(html) { const q = cwQuillSalida(); if (q) q.setContents(html ? q.clipboard.convert(html) : [], 'silent'); }
     const DEC_P = (window.EMPRESA_CONFIG && window.EMPRESA_CONFIG.decimales_precio) || 2;
     let modal, vehTimer = null, cliTimer = null, prodTimers = {};
     let CW_CUR = { id: 0, id_documento: 0, tipo_documento: '', estado: '', id_vehiculo: 0, id_cliente: 0 };
@@ -458,7 +494,7 @@
             id_vehiculo: val('cw_id_vehiculo'), vehiculo_texto: veh.value, placa: veh.dataset.placa || '', marca: veh.dataset.marca || '', modelo: veh.dataset.modelo || '',
             id_cliente: val('cw_id_cliente'), cliente_texto: val('cw_cliente_busqueda'),
             kilometraje: val('cw_kilometraje'), combustible: val('cw_nivel_combustible'), proxima_cita: val('cw_proxima_cita'), id_bodega: val('cw_id_bodega'),
-            lineas, info, condiciones_html: cwCondicionesHtml(),
+            lineas, info, condiciones_html: cwCondicionesHtml(), reporte_salida_html: cwSalidaHtml(),
         };
     }
     function cwBorrEscribir() {
@@ -466,7 +502,7 @@
         if (!CW_BORR_ON) return;
         const snap = cwBorrSnapshot();
         // Sin nada que valga la pena recuperar: no se deja basura guardada.
-        if (!snap.id_vehiculo && !snap.id_cliente && !snap.lineas.length && !snap.condiciones_html) { cwBorrBorrar(); return; }
+        if (!snap.id_vehiculo && !snap.id_cliente && !snap.lineas.length && !snap.condiciones_html && !snap.reporte_salida_html) { cwBorrBorrar(); return; }
         try { localStorage.setItem(cwBorrKey(), JSON.stringify(snap)); } catch (e) {}
     }
     window.cwBorradorCambio = function () {
@@ -498,6 +534,7 @@
         document.getElementById('cw_info_body').innerHTML = '';
         (b.info || []).forEach(ia => ia.tipo === 'correo-cliente' ? cwActualizarInfoCorreoCliente(ia.valor) : cwAgregarInfo(ia));
         if (b.condiciones_html) cwSetCondiciones(b.condiciones_html);
+        if (b.reporte_salida_html) cwSetSalida(b.reporte_salida_html);
         cwCalcTotales();
     }
     // Si hay un borrador para la orden que se abre, pregunta si recuperarlo.
@@ -558,6 +595,7 @@
         document.getElementById('cw_info_body').innerHTML = '';
         document.getElementById('cw_info_cliente').innerHTML = '';
         cwSetCondiciones('');
+        cwSetSalida('');
         CW_CUR = { id: 0, id_documento: 0, tipo_documento: '', estado: '', id_vehiculo: 0, id_cliente: 0 };
         cwToggleDocBtns(false);
         cwRecalcular();
@@ -579,6 +617,13 @@
         if (document.getElementById('cw_id').value) document.getElementById('cw_select_serie').disabled = true;
         document.getElementById('cw_btn_guardar').classList.toggle('d-none', !editable);
         const q = cwQuill(); if (q) q.enable(!!editable);
+        // Reporte de salida: también se completa en una orden ya facturada (se entrega con el
+        // vehículo, no cambia el documento emitido); no en una anulada ni sin permiso o sin SQL.
+        const idGuardada = document.getElementById('cw_id').value;
+        const salidaAbierta = !editable && !!idGuardada && CW_CUR.estado !== 'anulado' && window.CW_PERM.actualizar;
+        const qs = cwQuillSalida(); if (qs) qs.enable(window.CW_SALIDA_OK && (!!editable || salidaAbierta));
+        document.getElementById('cw_btn_guardar_salida').classList.toggle('d-none', !(window.CW_SALIDA_OK && salidaAbierta));
+        document.getElementById('cw_salida_sin_sql').classList.toggle('d-none', !!window.CW_SALIDA_OK);
         // Grilla e info adicional: una orden facturada (documento vigente) o anulada es solo de
         // consulta. Solo se deshabilita: al abrir otra orden las filas se vuelven a crear, así
         // no se re-habilitan campos que la configuración deja fijos (p. ej. el IVA).
@@ -671,6 +716,7 @@
             (o.detalles || []).forEach(d => cwCargarLineaGuardada(d));
             (o.info_adicional || []).forEach(ia => cwAgregarInfo(ia));
             cwSetCondiciones(o.condiciones_html || '');
+            cwSetSalida(o.reporte_salida_html || '');
             // Novedades antiguas (órdenes previas) se muestran como líneas de Info. Adicional.
             (o.novedades || []).forEach(n => cwAgregarInfo({ nombre: 'Novedad', valor: n.descripcion }));
             if (!(o.detalles || []).length) cwAgregarLinea();
@@ -735,6 +781,7 @@
         ['cw_btn_factura','cw_btn_recibo'].forEach(id => { const b = document.getElementById(id); if (b) b.disabled = !puedeFacturar; });
         const bp = document.getElementById('cw_btn_pdf'); if (bp) bp.disabled = !ordenGuardada; // PDF de la orden
         const ba = document.getElementById('cw_btn_acta'); if (ba) ba.disabled = !ordenGuardada; // Acta de ingreso
+        const bs = document.getElementById('cw_btn_salida'); if (bs) bs.disabled = !ordenGuardada; // Reporte de salida
         const bc = document.getElementById('cw_btn_correo'); if (bc) bc.disabled = !ordenGuardada; // Correo de la orden
         const bw = document.getElementById('cw_btn_whatsapp'); if (bw) bw.disabled = !esFactura;
     }
@@ -1589,8 +1636,8 @@
         const tr = document.createElement('tr');
         tr.className = 'row-info-adicional';
         tr.innerHTML = `
-            <td class="p-0"><input type="text" class="form-control form-control-sm border-0 bg-transparent input-info-concepto" style="padding:0 4px;height:20px;font-size:0.78rem;" placeholder="Concepto..." value="${esc(ia.nombre || '')}"></td>
-            <td class="p-0"><input type="text" class="form-control form-control-sm border-0 bg-transparent input-info-detalle" style="padding:0 4px;height:20px;font-size:0.78rem;" placeholder="Detalle..." value="${esc(ia.valor || '')}"></td>
+            <td class="p-0"><input type="text" class="form-control form-control-sm border-0 bg-transparent input-info-concepto" style="padding:0 4px;height:20px;font-size:0.78rem;" maxlength="300" placeholder="Concepto..." value="${esc(ia.nombre || '')}"></td>
+            <td class="p-0"><input type="text" class="form-control form-control-sm border-0 bg-transparent input-info-detalle" style="padding:0 4px;height:20px;font-size:0.78rem;" maxlength="300" placeholder="Detalle..." value="${esc(ia.valor || '')}"></td>
             <td class="p-0 text-center pe-1"><button type="button" class="btn btn-link btn-sm p-0 m-0 text-danger shadow-none" onclick="this.closest('tr').remove(); cwBorradorCambio();"><i class="bi bi-x-circle-fill"></i></button></td>`;
         const primeraFija = tbody.querySelector('tr[data-tipo]');
         if (primeraFija) tbody.insertBefore(tr, primeraFija);
@@ -1653,7 +1700,10 @@
         document.querySelectorAll('#cw_info_body .row-info-adicional').forEach(row => {
             const nom = (row.querySelector('.input-info-concepto')?.value || '').trim();
             const val = (row.querySelector('.input-info-detalle')?.value || '').trim();
+            // Una fila con solo Concepto o solo Detalle también se guarda (antes se descartaba
+            // en silencio): el texto escrito pasa a Detalle bajo el concepto "Observación".
             if (nom && val) info_adicional.push({ nombre: nom, valor: val });
+            else if (nom || val) info_adicional.push({ nombre: 'Observación', valor: val || nom });
         });
 
         const vehInp = document.getElementById('cw_vehiculo_busqueda');
@@ -1677,6 +1727,7 @@
             proxima_cita: document.getElementById('cw_proxima_cita').value,
             detalles, novedades: [], info_adicional,
             condiciones_html: cwCondicionesHtml(),
+            reporte_salida_html: cwSalidaHtml(),
         };
 
         const keyBorrador = cwBorrKey();
@@ -1775,6 +1826,33 @@
         if (!id) { Swal.fire({ icon: 'warning', title: 'Atención', text: 'Guarde la orden antes de generar el acta de ingreso.', target: document.getElementById('modalOrdenCW') }); return; }
         CMG_pdfDocumento(`${RUTA}/exportarIngresoPdfAjax?id=${id}`);
     };
+    // Reporte de salida del vehículo (se genera desde lo GUARDADO en la orden).
+    window.cwPdfSalida = function () {
+        const id = document.getElementById('cw_id').value || CW_CUR.id;
+        if (!id) { Swal.fire({ icon: 'warning', title: 'Atención', text: 'Guarde la orden antes de generar el reporte de salida.', target: document.getElementById('modalOrdenCW') }); return; }
+        CMG_pdfDocumento(`${RUTA}/exportarSalidaPdfAjax?id=${id}`);
+    };
+    // Guardar solo el Reporte de salida (orden facturada: el resto de la orden es de solo lectura).
+    let cwGuardandoSalida = false;
+    window.cwGuardarSalida = async function () {
+        if (cwGuardandoSalida) return;
+        const id = document.getElementById('cw_id').value;
+        if (!id) return;
+        cwGuardandoSalida = true;
+        const btn = document.getElementById('cw_btn_guardar_salida');
+        const orig = btn.innerHTML; btn.disabled = true; btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Guardando...';
+        try {
+            const fd = new FormData(); fd.append('id', id); fd.append('reporte_salida_html', cwSalidaHtml());
+            const res = await fetch(`${RUTA}/guardarReporteSalidaAjax`, { method: 'POST', body: fd });
+            const data = await res.json();
+            if (!data.ok) throw new Error(data.error || 'No se pudo guardar el reporte de salida.');
+            Swal.fire({ icon: 'success', title: 'Listo', text: data.msg, target: document.getElementById('modalOrdenCW'), timer: 1400, showConfirmButton: false });
+        } catch (e) {
+            Swal.fire({ icon: 'error', title: 'Error', text: e.message, target: document.getElementById('modalOrdenCW') });
+        } finally {
+            cwGuardandoSalida = false; btn.disabled = false; btn.innerHTML = orig;
+        }
+    };
     // PDF del documento generado (factura/recibo).
     window.cwPdfDocumento = function () {
         if (!CW_CUR.id_documento) return;
@@ -1794,6 +1872,7 @@
                     <select id="cwMailTipo" class="form-select form-select-sm mb-2">
                         <option value="orden">Orden de servicio (PDF)</option>
                         <option value="ingreso">Acta de ingreso del vehículo (condiciones y servicios)</option>
+                        <option value="salida">Reporte de salida (trabajo realizado y próxima cita)</option>
                     </select>
                     <label class="form-label small fw-semibold mb-1">Correo(s) destino, separados por coma</label>
                     <input id="cwMailPara" class="form-control form-control-sm" placeholder="cliente@correo.com" value="${esc(correoActual)}">

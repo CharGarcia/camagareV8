@@ -555,6 +555,103 @@ class OrdenCarWashPdfService
         $this->pdf->Output($nombre, $outputDest);
     }
 
+    // ─── REPORTE DE SALIDA DEL VEHÍCULO ───────────────────────────────────────
+    /**
+     * PDF que se entrega al cliente con el vehículo: servicios y productos realizados (solo
+     * descripción y cantidad, sin valores), el texto de la pestaña "Reporte de salida"
+     * (trabajo hecho, recomendaciones, qué hacer en la próxima cita) y la próxima cita, con
+     * firmas de entrega. No es un comprobante: no lleva información tributaria.
+     *
+     * @param string $outputDest 'I' inline, 'D' descarga, 'S' string
+     */
+    public function generarSalida(array $orden, array $empresa, string $outputDest = 'D')
+    {
+        $orden   = \App\Helpers\TextoUnicodeHelper::nfcArray($orden);
+        $empresa = \App\Helpers\TextoUnicodeHelper::nfcArray($empresa);
+        $this->decCantidad = max(0, min(6, (int) ($empresa['decimales_cantidad'] ?? 2)));
+
+        $this->pdf = new TCPDF('P', 'mm', 'A4', true, 'UTF-8', false);
+        $this->pdf->SetCreator('Sistema');
+        $this->pdf->SetAuthor($empresa['nombre'] ?? '');
+        $this->pdf->SetTitle('Reporte de salida ' . ($orden['numero_orden'] ?? ''));
+        $this->pdf->SetMargins($this->marginL, 10, $this->marginR);
+        $this->pdf->SetAutoPageBreak(true, 15);
+        $this->pdf->setPrintHeader(false);
+        $this->pdf->setPrintFooter(false);
+        $this->pdf->AddPage();
+
+        $y = $this->dibujarEncabezado($empresa, $orden, 'REPORTE DE SALIDA', 'DEL VEHÍCULO');
+        $y = $this->ingresoDatosVehiculo($orden, $y + 3);
+        $y = $this->ingresoDatosCliente($orden, $y + 2);
+        $y = $this->salidaDocumento($orden, $y + 2);
+        $y = $this->salidaServicios($orden, $y + 2);
+        $y = $this->bloqueTextoFormato((string) ($orden['reporte_salida_html'] ?? ''),
+            'TRABAJO REALIZADO, RECOMENDACIONES Y PRÓXIMA CITA', 'No se registraron observaciones de salida.', $y + 2);
+        $y = $this->ingresoProximaCita($orden, $y + 2);
+        $this->dibujarFirmas($orden, $y + 3, ['Entregado por (taller)', 'Recibí conforme (cliente)']);
+
+        $nombre = 'Reporte_Salida_' . (($orden['numero_orden'] ?? '') !== '' ? $orden['numero_orden'] : 'orden') . '.pdf';
+        if ($outputDest === 'S') {
+            return $this->pdf->Output($nombre, 'S');
+        }
+        $this->pdf->Output($nombre, $outputDest);
+    }
+
+    /**
+     * Referencia del documento de venta VIGENTE de la orden (factura o recibo, número y fecha).
+     * Un documento anulado o eliminado no cuenta: la orden queda como pendiente de facturar.
+     */
+    private function salidaDocumento(array $o, float $y): float
+    {
+        $hayDoc = !empty($o['id_documento']) && ($o['documento_vigente'] ?? null) !== false;
+        $tipo = $numero = $fecha = '';
+        if ($hayDoc) {
+            $tipo   = ($o['tipo_documento'] ?? '') === 'RECIBO' ? 'Recibo de venta' : 'Factura';
+            $numero = (string) ($o['numero_documento'] ?? '');
+            foreach ($o['documentos'] ?? [] as $d) {
+                if ((int) ($d['id_documento'] ?? 0) === (int) $o['id_documento'] && ($d['tipo_documento'] ?? '') === ($o['tipo_documento'] ?? '')) {
+                    $fecha = !empty($d['fecha_emision']) ? date('d-m-Y H:i:s', strtotime((string) $d['fecha_emision'])) : '';
+                    break;
+                }
+            }
+        }
+        $y = $this->tituloSeccion('DOCUMENTO DE VENTA', $y);
+        return $this->grillaDatos([
+            ['Documento', $hayDoc ? $tipo : 'Pendiente de facturar'],
+            ['Número',    $numero],
+            ['Fecha',     $fecha],
+            ['Orden N.',  (string) ($o['numero_orden'] ?? '')],
+        ], $y);
+    }
+
+    /** Servicios y productos realizados: descripción y cantidad, sin valores. */
+    private function salidaServicios(array $o, float $y): float
+    {
+        $lineas = array_values(array_filter($o['detalles'] ?? [], fn($d) => trim((string) ($d['descripcion'] ?? '')) !== ''));
+        if (!$lineas) return $y;
+
+        $pdf = $this->pdf;
+        $y = $this->tituloSeccion('SERVICIOS Y PRODUCTOS REALIZADOS', $y);
+        $cantW = 25; $descW = $this->contentW - $cantW;
+        $limiteY = $pdf->getPageHeight() - $pdf->getBreakMargin();
+        $pdf->SetFont('helvetica', 'B', self::FUENTE_ENCABEZADO_TABLA);
+        $pdf->SetXY($this->marginL, $y);
+        $pdf->Cell($cantW, 5, 'Cant.', 1, 0, 'C');
+        $pdf->Cell($descW, 5, 'Descripción', 1, 1, 'L');
+        $y += 5;
+        foreach ($lineas as $d) {
+            $desc = (string) $d['descripcion'];
+            $pdf->SetFont('helvetica', '', self::FUENTE_CUERPO);
+            $h = max(self::ALTO_MIN_FILA, max(1, $pdf->getNumLines($desc, $descW)) * self::LINEA_CUERPO);
+            if ($y + $h > $limiteY) { $pdf->AddPage(); $y = $pdf->GetY(); }
+            $pdf->SetXY($this->marginL, $y);
+            $pdf->MultiCell($cantW, $h, number_format((float) ($d['cantidad'] ?? 0), $this->decCantidad), 1, 'C', false, 0, '', '', true, 0, false, true, $h, 'M');
+            $pdf->MultiCell($descW, $h, $desc, 1, 'L', false, 1, '', '', true, 0, false, true, $h, 'M');
+            $y += $h;
+        }
+        return $y;
+    }
+
     /** Barra de título de sección (mismo estilo que los títulos del RIDE de factura). */
     private function tituloSeccion(string $titulo, float $y): float
     {
@@ -631,14 +728,21 @@ class OrdenCarWashPdfService
     /** Condiciones de ingreso: texto con formato del editor (como las condiciones de la proforma). */
     private function ingresoCondiciones(array $o, float $y): float
     {
+        return $this->bloqueTextoFormato((string) ($o['condiciones_html'] ?? ''),
+            'CONDICIONES DE INGRESO DEL VEHÍCULO', 'No se registraron condiciones de ingreso.', $y);
+    }
+
+    /** Sección con título y texto con formato del editor (Condiciones de ingreso / Reporte de salida). */
+    private function bloqueTextoFormato(string $html, string $titulo, string $textoVacio, float $y): float
+    {
         $pdf  = $this->pdf;
-        $html = trim((string) ($o['condiciones_html'] ?? ''));
-        $y = $this->tituloSeccion('CONDICIONES DE INGRESO DEL VEHÍCULO', $y);
+        $html = trim($html);
+        $y = $this->tituloSeccion($titulo, $y);
         $pdf->SetXY($this->marginL, $y + 1);
         $pdf->SetFont('helvetica', '', self::FUENTE_CUERPO);
         if ($html === '' || trim(html_entity_decode(strip_tags($html))) === '') {
             $pdf->SetTextColor(110, 116, 124);
-            $pdf->MultiCell($this->contentW, self::LINEA_CUERPO, 'No se registraron condiciones de ingreso.', 0, 'L', false, 1);
+            $pdf->MultiCell($this->contentW, self::LINEA_CUERPO, $textoVacio, 0, 'L', false, 1);
             $pdf->SetTextColor(0, 0, 0);
         } else {
             $pdf->writeHTMLCell($this->contentW, 0, $this->marginL, $y + 1, ProformaCondicionesPdfService::htmlParaTcpdf($html), 0, 1, false, true, 'L', true);
