@@ -76,6 +76,9 @@ class AlumnosController extends BaseModuloController
             // Opciones de los filtros Campus / Nivel del buscador (mismos catálogos del modal).
             'opcionesCampus' => (new \App\repositories\modulos\AlumnoCampusRepository())->getParaSelect($idEmpresa),
             'opcionesNivel'  => (new \App\repositories\modulos\AlumnoNivelRepository())->getParaSelect($idEmpresa),
+            // Generar facturas desde el listado: mismo permiso que el botón de la ficha.
+            'puedeFacturar'     => $puedeFacturar = \App\Helpers\Permisos::puedeCrear(self::RUTA_FACTURAS),
+            'seriesFacturacion' => $puedeFacturar ? $this->service->getPuntosEmisionParaSelect($idEmpresa) : [],
         ]);
     }
 
@@ -422,6 +425,67 @@ class AlumnosController extends BaseModuloController
             echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
         }
         exit;
+    }
+
+    /**
+     * Generación masiva, paso 1: alumnos activos del listado (con el mismo filtro
+     * de la pantalla, ?b=, y los registros propios) y su estado para el mes.
+     */
+    public function prepararFacturasMasivoAjax(): void
+    {
+        $this->requireLeer();
+        header('Content-Type: application/json; charset=utf-8');
+        $this->exigirPermisoFacturar();
+
+        try {
+            $idEmpresa = (int) $_SESSION['id_empresa'];
+            $alumnos = $this->service->getListado($idEmpresa, trim((string) ($_GET['b'] ?? '')), 1, 0, 'apellidos', 'ASC', $this->alumnosFiltroUsuario());
+            $data = $this->facturacionService()->prepararMasivo($alumnos['rows'], $idEmpresa, trim((string) ($_GET['mes'] ?? date('Y-m'))));
+            echo json_encode(['ok' => true, 'lote' => \App\Services\modulos\AlumnoFacturacionService::LOTE_MASIVO] + $data);
+        } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
+            echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
+        }
+        exit;
+    }
+
+    /** Generación masiva, paso 2: factura un lote de alumnos (la pantalla manda los lotes en orden). */
+    public function generarFacturasMasivoAjax(): void
+    {
+        $this->requireLeer();
+        header('Content-Type: application/json; charset=utf-8');
+        $this->exigirPermisoFacturar();
+
+        try {
+            if ($_SERVER['REQUEST_METHOD'] !== 'POST') throw new Exception('Método no permitido.');
+            $idEmpresa = (int) $_SESSION['id_empresa'];
+            $ids = json_decode((string) ($_POST['ids'] ?? '[]'), true);
+            $ids = is_array($ids) ? $ids : [];
+            $visibles = array_keys((new AlumnoRepository())->getAlumnosPorIds($ids, $idEmpresa, $this->alumnosFiltroUsuario()));
+
+            $resultados = $this->facturacionService()->generarMasivo(
+                $ids,
+                $visibles,
+                $idEmpresa,
+                (int) $_SESSION['id_usuario'],
+                trim((string) ($_POST['mes'] ?? '')),
+                (int) ($_POST['id_punto_emision'] ?? 0),
+                !empty($_POST['usar_serie_alumno']),
+                trim((string) ($_POST['texto_item'] ?? '')),
+                !empty($_POST['incluir_facturados'])
+            );
+            echo json_encode(['ok' => true, 'resultados' => $resultados]);
+        } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
+            echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
+        }
+        exit;
+    }
+
+    /** Registros propios (CLAUDE.md §6): sin acceso total, solo los alumnos que creó el usuario. */
+    private function alumnosFiltroUsuario(): ?int
+    {
+        return empty($this->getPermisos()['todo']) ? (int) $_SESSION['id_usuario'] : null;
     }
 
     /** Pestaña Facturas: documentos generados desde este alumno. */
@@ -858,12 +922,18 @@ class AlumnosController extends BaseModuloController
                 new LogSistemaService(),
                 $this->service->getConfigFacturacion($idEmpresa)
             );
+            // Adicional de cada ítem e información adicional de la factura (opcionales).
+            $info = json_decode((string) ($_POST['info_adicional_json'] ?? ''), true);
             $res = $import->procesar(
                 $_FILES['archivo']['tmp_name'],
                 $idEmpresa,
                 (int) $_SESSION['id_usuario'],
                 $idUsuarioFiltro,
-                (string) ($_FILES['archivo']['name'] ?? '')
+                (string) ($_FILES['archivo']['name'] ?? ''),
+                [
+                    'detalle'        => (string) ($_POST['detalle'] ?? ''),
+                    'info_adicional' => is_array($info) ? $info : [],
+                ]
             );
             echo json_encode(['ok' => true] + $res);
         } catch (\Throwable $e) {

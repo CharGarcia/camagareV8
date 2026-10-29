@@ -287,6 +287,168 @@ class AlumnoFacturacionService
         return ['generadas' => $generadas, 'errores' => $errores];
     }
 
+    /** Alumnos por petición en la generación masiva: la pantalla manda lotes y muestra el avance. */
+    public const LOTE_MASIVO = 10;
+
+    /**
+     * Vista previa de la generación masiva: una fila por alumno ACTIVO del listado
+     * ($alumnos = filas de AlumnoRepository::getListado, ya con el filtro de la
+     * pantalla y los registros propios), con su estado para el mes:
+     *  - 'listo': tiene cliente y servicios activos con monto;
+     *  - 'facturado': ya tiene una factura vigente de ese mes;
+     *  - 'sin_servicios': ningún servicio activo con monto;
+     *  - 'sin_cliente': el cliente que factura no existe o fue eliminado.
+     */
+    public function prepararMasivo(array $alumnos, int $idEmpresa, string $mes): array
+    {
+        $this->exigirEsquema();
+        $periodo = self::periodoAFecha($mes);
+        $activos = array_values(array_filter($alumnos, fn($a) => ($a['estado_academico'] ?? 'activo') === 'activo'));
+        $resumen = $this->repository->getResumenFacturacionMasiva(array_column($activos, 'id'), $idEmpresa, $periodo);
+
+        $filas = [];
+        $tot = ['listos' => 0, 'facturados' => 0, 'sin_servicios' => 0, 'sin_cliente' => 0, 'subtotal_listos' => 0.0];
+        foreach ($activos as $a) {
+            $r = $resumen[(int) $a['id']] ?? null;
+            if ($r === null) {
+                continue;
+            }
+            $yaFacturado = in_array($r['ya_facturado'], [true, 't', 'true', 1, '1'], true);
+            $estado = match (true) {
+                ($r['cliente_nombre'] ?? null) === null => 'sin_cliente',
+                (int) $r['servicios'] === 0             => 'sin_servicios',
+                $yaFacturado                            => 'facturado',
+                default                                 => 'listo',
+            };
+            $subtotal = round((float) $r['subtotal'], 2);
+            $clave = ['listo' => 'listos', 'facturado' => 'facturados', 'sin_servicios' => 'sin_servicios', 'sin_cliente' => 'sin_cliente'][$estado];
+            $tot[$clave]++;
+            if ($estado === 'listo') {
+                $tot['subtotal_listos'] += $subtotal;
+            }
+            $filas[] = [
+                'id'               => (int) $a['id'],
+                'alumno'           => trim(($a['apellidos'] ?? '') . ' ' . ($a['nombres'] ?? '')),
+                'campus'           => (string) ($a['campus_actual_nombre'] ?? ''),
+                'nivel'            => (string) ($a['nivel_actual_nombre'] ?? ''),
+                'cliente'          => (string) ($r['cliente_nombre'] ?? ''),
+                'cliente_identificacion' => (string) ($r['cliente_identificacion'] ?? ''),
+                'servicios'        => (int) $r['servicios'],
+                'subtotal'         => $subtotal,
+                'ya_facturado'     => $yaFacturado,
+                'id_punto_emision' => $r['id_punto_emision'] !== null ? (int) $r['id_punto_emision'] : null,
+                'estado'           => $estado,
+            ];
+        }
+        $tot['subtotal_listos'] = round($tot['subtotal_listos'], 2);
+        return ['filas' => $filas, 'totales' => $tot];
+    }
+
+    /**
+     * Genera la factura del mes de cada alumno del lote, con todos sus servicios
+     * activos con monto (lo mismo que sale marcado en la ventana del alumno) y
+     * reutilizando generar(). Cada alumno es independiente: si uno falla, los
+     * demás siguen.
+     *
+     * Un guardado = un registro (CLAUDE.md §8): cada alumno se procesa bajo
+     * lockFacturaPeriodo() y, sin $incluirFacturados, el mes ya facturado se vuelve
+     * a revisar bajo ese candado y se OMITE. Así, reenviar el mismo lote (doble
+     * clic, reintento tras perderse la respuesta) no crea una segunda factura.
+     *
+     * @param array $idsVisibles ids que el usuario puede gestionar (registros propios ya aplicados)
+     * @return array<int, array{id:int, alumno:string, estado:string, mensaje:string, importe:float}>
+     */
+    public function generarMasivo(
+        array $idsAlumno,
+        array $idsVisibles,
+        int $idEmpresa,
+        int $idUsuario,
+        string $mes,
+        int $idPuntoEmision,
+        bool $usarSerieAlumno,
+        string $textoItem,
+        bool $incluirFacturados
+    ): array {
+        $this->exigirEsquema();
+        $periodo = self::periodoAFecha($mes);
+        $ids = array_values(array_unique(array_filter(array_map('intval', $idsAlumno))));
+        if (!$ids) {
+            throw new Exception('No hay alumnos para facturar.');
+        }
+        if (count($ids) > self::LOTE_MASIVO) {
+            throw new Exception('Se pueden facturar máximo ' . self::LOTE_MASIVO . ' alumnos por petición.');
+        }
+        if ($idPuntoEmision <= 0) {
+            throw new Exception('Seleccione la serie (punto de emisión) de las facturas.');
+        }
+        $series = array_map('intval', array_column($this->repository->getPuntosEmisionParaSelect($idEmpresa), 'id'));
+        if (!in_array($idPuntoEmision, $series, true)) {
+            throw new Exception('La serie seleccionada no es válida o está inactiva.');
+        }
+
+        $resultados = [];
+        foreach ($ids as $idAlumno) {
+            $fila = ['id' => $idAlumno, 'alumno' => "Alumno {$idAlumno}", 'estado' => 'error', 'mensaje' => '', 'importe' => 0.0];
+            if (!in_array($idAlumno, $idsVisibles, true)) {
+                $fila['mensaje'] = 'El alumno no existe o no tiene acceso a él.';
+                $resultados[] = $fila;
+                continue;
+            }
+            $this->repository->lockFacturaPeriodo($idAlumno, $idEmpresa, $periodo);
+            try {
+                $alumno = $this->repository->findById($idAlumno, $idEmpresa);
+                if (!$alumno) {
+                    throw new Exception('El alumno no existe o ha sido eliminado.');
+                }
+                $fila['alumno'] = trim(($alumno['apellidos'] ?? '') . ' ' . ($alumno['nombres'] ?? ''));
+
+                if (!$incluirFacturados && $this->repository->getFacturasAlumno($idAlumno, $idEmpresa, $periodo)) {
+                    $fila['estado'] = 'omitida';
+                    $fila['mensaje'] = 'Ya tiene factura de ' . date('m-Y', strtotime($periodo)) . '.';
+                    $resultados[] = $fila;
+                    continue;
+                }
+
+                $lineas = [];
+                foreach ($this->repository->getServiciosParaFacturar($idAlumno, $idEmpresa) as $s) {
+                    $precio = $s['precio_override'] !== null ? (float) $s['precio_override'] : (float) $s['precio_base'];
+                    if (round((float) $s['cantidad_default'] * $precio - (float) ($s['descuento'] ?? 0), 2) > 0) {
+                        $lineas[] = (int) $s['id'];
+                    }
+                }
+                if (!$lineas) {
+                    $fila['estado'] = 'omitida';
+                    $fila['mensaje'] = 'No tiene servicios activos con monto (o falta el cliente que factura).';
+                    $resultados[] = $fila;
+                    continue;
+                }
+
+                // La serie preferida del alumno solo si sigue siendo una serie válida.
+                $punto = $idPuntoEmision;
+                $prefer = (int) ($alumno['id_punto_emision'] ?? 0);
+                if ($usarSerieAlumno && $prefer > 0 && in_array($prefer, $series, true)) {
+                    $punto = $prefer;
+                }
+
+                $res = $this->generar($idAlumno, $idEmpresa, $idUsuario, $punto, $mes, $lineas, $textoItem);
+                if ($res['generadas']) {
+                    $fila['estado']  = 'generada';
+                    $fila['importe'] = round(array_sum(array_map(fn($g) => (float) $g['importe'], $res['generadas'])), 2);
+                    $fila['mensaje'] = implode(' | ', $res['errores']);
+                } else {
+                    $fila['mensaje'] = implode(' | ', $res['errores']) ?: 'No se generó la factura.';
+                }
+            } catch (\Throwable $e) {
+                \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => 'generarMasivo#alumno_' . $idAlumno]);
+                $fila['mensaje'] = $e->getMessage();
+            } finally {
+                $this->repository->unlockFacturaPeriodo($idAlumno, $idEmpresa, $periodo);
+            }
+            $resultados[] = $fila;
+        }
+        return $resultados;
+    }
+
     public function getFacturas(int $idAlumno, int $idEmpresa): array
     {
         if (!$this->repository->existeEsquemaFacturacion()) {

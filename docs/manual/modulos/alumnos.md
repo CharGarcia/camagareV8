@@ -5,7 +5,7 @@ categoria: Ventas
 ruta_modulo: modulos/alumnos
 tipo: modulo
 visibilidad: todos
-etiquetas: alumnos, estudiantes, matrícula, matricula, colegio, escuela, centro infantil, campus, sede, nivel, curso, representante, representantes, padres, autorizado, autorizados, retirar, retiro, quién retira, facturación, facturar, generar factura, facturar pensión, facturar mensualidad, facturas del alumno, horario, pensión, pension, imprimir, impresora, filtrar alumnos, filtro por campus, filtro por nivel, alumnos por curso, alumnos por sede, buscar alumno, portal de representantes, qr, codigo qr, padres de familia, actualizar datos, registrar alumno, inscripcion, codigo de verificacion, enlace para padres, cargar facturación, carga masiva, importar excel, plantilla excel, precios por alumno, servicios por alumno, pensiones masivas
+etiquetas: alumnos, estudiantes, matrícula, matricula, colegio, escuela, centro infantil, campus, sede, nivel, curso, representante, representantes, padres, autorizado, autorizados, retirar, retiro, quién retira, facturación, facturar, generar factura, facturar pensión, facturar mensualidad, facturas del alumno, horario, pensión, pension, imprimir, impresora, filtrar alumnos, filtro por campus, filtro por nivel, alumnos por curso, alumnos por sede, buscar alumno, portal de representantes, qr, codigo qr, padres de familia, actualizar datos, registrar alumno, inscripcion, codigo de verificacion, enlace para padres, cargar facturación, carga masiva, importar excel, plantilla excel, precios por alumno, servicios por alumno, pensiones masivas, generar facturas, facturación masiva, facturar a todos, facturar todos los alumnos, facturas del mes, pensiones del mes, emitir pensiones
 version: 1.9
 orden: 0
 estado: activo
@@ -218,15 +218,26 @@ alumno, en vez de abrir ficha por ficha. Funciona igual que la carga de
    - **X** para usar el precio base del servicio;
    - **0** para quitarle el servicio;
    - **vacía**: no cambia nada de lo que el alumno ya tiene.
-3. **Subir** el archivo con **Importar**. Al terminar se informa cuántos alumnos
-   cambiaron y cuántos servicios se agregaron, cambiaron o quitaron.
+3. **Textos de la factura** (opcional), en la misma ventana:
+   - **Adicional de cada ítem**: el texto que sale bajo la descripción de cada
+     servicio en la factura. Se pone en cada servicio al que se le escribió un
+     precio o **X** en el archivo, aunque el precio no cambie.
+   - **Información adicional de la factura**: filas *concepto / detalle* (hasta
+     10). Reemplazan la información adicional de cada alumno del archivo que
+     tenga al menos una celda escrita.
+   - Ambos admiten los mismos marcadores de la ficha (`{alumno}`, `{curso}`,
+     `{MES}`, `{anio}`, etc.). Si se dejan vacíos, cada alumno conserva lo que ya
+     tiene.
+4. **Subir** el archivo con **Importar**. Al terminar se informa cuántos alumnos
+   cambiaron, cuántos servicios se agregaron, cambiaron o quitaron, y a cuántos
+   se les puso la información adicional.
 
 ### Qué hace y qué no hace la carga
 
-- Solo cambia el **precio**. La **cantidad**, el **descuento**, el texto
-  **Adicional** y el **IVA** que el servicio tenga en la ficha se conservan. Un
-  servicio nuevo entra con cantidad 1, sin descuento ni texto y con el IVA del
-  producto.
+- Cambia el **precio** y, si se llenó en la ventana, el **Adicional**. La
+  **cantidad**, el **descuento** y el **IVA** que el servicio tenga en la ficha se
+  conservan. Un servicio nuevo entra con cantidad 1, sin descuento, con el IVA
+  del producto y con el Adicional de la ventana (si se escribió).
 - Si el precio escrito es igual al precio base, el servicio queda siguiendo al
   producto: cuando cambie el precio base en Productos, cambia también para el
   alumno.
@@ -241,10 +252,55 @@ alumno, en vez de abrir ficha por ficha. Funciona igual que la carga de
   muestra la fila y el servicio que hay que corregir.
 - Sin **acceso total**, la plantilla trae solo los alumnos que registró el propio
   usuario, y la carga no puede cambiar los alumnos de otros usuarios.
-- La carga **no genera facturas**: las facturas se siguen generando desde cada
-  alumno, con el botón **Generar factura**.
+- La carga **no genera facturas**: después de cargar, use **Generar facturas**
+  en el listado (ver la sección siguiente) o el botón **Generar factura** de
+  cada alumno.
 - Cada alumno modificado queda en el historial de cambios del sistema
   (`log_sistema`) con los servicios de antes y de después.
+
+## Generar las facturas de todos los alumnos
+
+En el listado de Alumnos, botón **Generar facturas** (solo usuarios que pueden
+**crear** en Facturas de Venta). Genera de una vez la factura del mes de cada
+alumno, con lo mismo que saldría desde el botón **Generar factura** de su ficha.
+
+1. Filtre el listado si quiere facturar por grupos (por ejemplo, un campus o un
+   curso). La ventana toma **los alumnos activos del listado con el filtro
+   actual**; sin filtro, todos.
+2. Elija el **Mes** y la **Serie**. Opciones:
+   - **Usar la serie de cada alumno**: si el alumno tiene una serie en su
+     pestaña Facturación, se usa esa; si no, la elegida aquí.
+   - **Texto para ítems sin adicional**: el texto que llevan los servicios que no
+     tienen su propio Adicional (admite marcadores como `{MES} {anio}`).
+   - **Permitir alumnos ya facturados en el mes**: normalmente se omiten.
+3. Pulse **Mostrar**. Se ve una fila por alumno con su cliente, cuántos servicios
+   se facturarían, el subtotal (sin IVA) y su estado:
+   - **Lista para facturar**: sale marcada.
+   - **Ya facturado en el mes**: tiene una factura vigente (no anulada) de ese
+     mes; no se puede marcar salvo con la opción de arriba.
+   - **Sin servicios con monto** o **Sin cliente que factura**: no se puede
+     facturar; complete la ficha (o use Cargar facturación).
+4. Desmarque los que no quiera y pulse **Generar**. Se confirma y la ventana va
+   procesando los alumnos por partes, con una barra de avance. No la cierre
+   hasta que termine.
+5. Al final se informa cuántas facturas se generaron y por cuánto, y la lista de
+   omitidos y errores con el motivo de cada uno.
+
+### Qué hace y qué no hace la generación
+
+- Cada alumno recibe **una factura en borrador**, con todos sus servicios activos
+  con monto, el Adicional de cada ítem y su información adicional, al cliente
+  que factura. Las mismas reglas de IVA, secuencial y XML que la factura hecha
+  desde la ficha.
+- Las facturas **no se envían al SRI**: se revisan y envían desde **Facturas de
+  Venta**. Cada una queda también en la pestaña **Transacciones** del alumno.
+- Cada alumno es independiente: si uno falla (por ejemplo, Consumidor Final con
+  $50 o más), los demás se generan igual y el error se muestra al final.
+- Volver a pulsar Generar, o reintentar tras un error de conexión, **no duplica**
+  facturas: el alumno que ya tiene factura de ese mes se omite. Si hubo un error
+  de conexión, pulse **Mostrar** para ver cuáles alcanzaron a generarse.
+- Sin **acceso total**, solo se facturan los alumnos que registró el propio
+  usuario.
 
 ## Transacciones del alumno
 
@@ -341,7 +397,8 @@ permisos independientes (`modulos/alumnos-campus`, `modulos/alumnos-niveles`),
 aunque normalmente se gestionan desde el propio modal de Alumno.
 
 Para **generar facturas** desde el alumno hace falta, además, permiso para
-**crear** en **Facturas de Venta**; sin él no aparece el botón. El PDF de la
+**crear** en **Facturas de Venta**; sin él no aparecen el botón de la ficha ni
+**Generar facturas** del listado. El PDF de la
 pestaña Transacciones aparece solo si el usuario puede **ver** Facturas de Venta.
 
 ## Reglas de negocio
@@ -407,6 +464,9 @@ pestaña Transacciones aparece solo si el usuario puede **ver** Facturas de Vent
 - **Cargar facturación: "El producto está inactivo"**: el archivo se descargó
   antes de desactivar ese producto; borre esa columna o descargue la plantilla
   de nuevo.
+- **Cargar facturación: "Cada fila de información adicional necesita concepto y
+  detalle"**: en la ventana quedó una fila con solo uno de los dos; complétela o
+  quítela con la X.
 - **La cédula muestra "No encontrado"**: el número no está en el registro
   consultado o el servicio no respondió; se pueden escribir los nombres a
   mano y guardar normalmente.
@@ -417,7 +477,10 @@ pestaña Transacciones aparece solo si el usuario puede **ver** Facturas de Vent
   representantes: plantilla Excel con una fila por alumno activo y una columna
   por servicio activo, con las celdas vacías; al subirla se agregan, cambian (precio)
   o quitan (0) los servicios de cada alumno, y las celdas vacías no cambian nada
-  (todo o nada).
+  (todo o nada). En la misma ventana se puede escribir el Adicional de cada ítem
+  y la información adicional de la factura. Botón **Generar facturas**: genera
+  en borrador la factura del mes de todos los alumnos activos del listado (con
+  su filtro), con vista previa, avance y omitiendo a los ya facturados.
 - **1.8** — Portal de representantes: el representante **nuevo** elige el tipo de
   identificación (cédula, RUC o pasaporte), puede corregir el número antes de
   guardar y, al completar una cédula o un RUC, el nombre y la dirección se

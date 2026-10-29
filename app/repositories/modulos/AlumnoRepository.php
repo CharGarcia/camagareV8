@@ -627,7 +627,8 @@ class AlumnoRepository extends BaseRepository
             return [];
         }
         $params = [$idEmpresa];
-        $sql = "SELECT id, nombres, apellidos, estado_academico FROM {$this->table}
+        $colInfo = $this->existeColumnasFacturacion() ? 'info_adicional' : 'NULL AS info_adicional';
+        $sql = "SELECT id, nombres, apellidos, estado_academico, {$colInfo} FROM {$this->table}
                 WHERE id_empresa = ? AND eliminado = false";
         if ($idUsuarioFiltro !== null) {
             $sql .= ' AND created_by = ?';
@@ -706,6 +707,70 @@ class AlumnoRepository extends BaseRepository
     {
         $st = $this->db->prepare("SELECT pg_advisory_xact_lock(hashtext('alumno_servicios:' || :e || ':' || :a))");
         $st->execute([':e' => (string) $idEmpresa, ':a' => (string) $idAlumno]);
+    }
+
+    // ------------------------------------------------------------------
+    // Generación masiva de facturas (listado → Generar facturas).
+    // ------------------------------------------------------------------
+
+    /**
+     * Resumen por alumno para la vista previa de la generación masiva: cliente que
+     * factura, servicios activos con monto, subtotal (cantidad × precio − descuento)
+     * y si el mes ya tiene una factura vigente (mismo criterio que getFacturasAlumno()
+     * con período: factura no eliminada ni anulada). id_alumno => fila.
+     */
+    public function getResumenFacturacionMasiva(array $idsAlumno, int $idEmpresa, string $periodo): array
+    {
+        $ids = array_values(array_unique(array_filter(array_map('intval', $idsAlumno))));
+        if (!$ids) {
+            return [];
+        }
+        $desc = $this->existeColumnasFacturacion() ? 's.descuento' : '0';
+        $ph = implode(',', array_fill(0, count($ids), '?'));
+        $sql = "SELECT a.id, a.id_punto_emision,
+                       c.nombre AS cliente_nombre, c.identificacion AS cliente_identificacion,
+                       COALESCE(sv.n, 0) AS servicios, COALESCE(sv.subtotal, 0) AS subtotal,
+                       EXISTS (SELECT 1 FROM alumnos_facturas af
+                               JOIN ventas_cabecera v ON v.id = af.id_factura AND v.id_empresa = af.id_empresa
+                               WHERE af.id_alumno = a.id AND af.id_empresa = a.id_empresa AND af.eliminado = false
+                                 AND af.periodo = ? AND v.eliminado = false AND v.estado <> 'anulado') AS ya_facturado
+                FROM alumnos a
+                LEFT JOIN clientes c ON c.id = a.id_cliente AND c.id_empresa = a.id_empresa AND c.eliminado = false
+                LEFT JOIN LATERAL (
+                      SELECT count(*) AS n,
+                             SUM(ROUND(s.cantidad_default * COALESCE(s.precio_override, p.precio_base) - {$desc}, 2)) AS subtotal
+                      FROM alumnos_servicios s
+                      JOIN productos p ON p.id = s.id_producto AND p.id_empresa = s.id_empresa AND p.eliminado = false
+                      WHERE s.id_alumno = a.id AND s.id_empresa = a.id_empresa AND s.eliminado = false AND s.activo = true
+                        AND ROUND(s.cantidad_default * COALESCE(s.precio_override, p.precio_base) - {$desc}, 2) > 0
+                ) sv ON true
+                WHERE a.id_empresa = ? AND a.eliminado = false AND a.id IN ($ph)";
+        $st = $this->db->prepare($sql);
+        $st->execute(array_merge([$periodo, $idEmpresa], $ids));
+        $out = [];
+        foreach ($st->fetchAll(PDO::FETCH_ASSOC) as $r) {
+            $out[(int) $r['id']] = $r;
+        }
+        return $out;
+    }
+
+    /**
+     * Candado de la factura de un alumno en un mes, a nivel de SESIÓN (no de
+     * transacción): el generador de facturas confirma su propia transacción y
+     * después arma el XML fuera de ella, así que un candado transaccional se
+     * soltaría antes de registrar alumnos_facturas. Liberar SIEMPRE con
+     * unlockFacturaPeriodo() en un finally (si la conexión se cae, PostgreSQL lo suelta).
+     */
+    public function lockFacturaPeriodo(int $idAlumno, int $idEmpresa, string $periodo): void
+    {
+        $st = $this->db->prepare("SELECT pg_advisory_lock(hashtext('alumno_factura:' || :e || ':' || :a || ':' || :p))");
+        $st->execute([':e' => (string) $idEmpresa, ':a' => (string) $idAlumno, ':p' => $periodo]);
+    }
+
+    public function unlockFacturaPeriodo(int $idAlumno, int $idEmpresa, string $periodo): void
+    {
+        $st = $this->db->prepare("SELECT pg_advisory_unlock(hashtext('alumno_factura:' || :e || ':' || :a || ':' || :p))");
+        $st->execute([':e' => (string) $idEmpresa, ':a' => (string) $idAlumno, ':p' => $periodo]);
     }
 
     // ------------------------------------------------------------------

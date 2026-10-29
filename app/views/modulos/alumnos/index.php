@@ -90,6 +90,9 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                 <button type="button" class="btn btn-outline-primary" onclick="aluAbrirPortal()" title="QR y enlace para que los representantes actualicen sus datos"><i class="bi bi-qr-code"></i> QR representantes</button>
                 <button type="button" class="btn btn-outline-primary" onclick="aluAbrirCargaFacturacion()" title="Cargar desde Excel los servicios que se facturan a cada alumno"><i class="bi bi-upload"></i> Cargar facturación</button>
                 <?php endif; ?>
+                <?php if (!empty($puedeFacturar)): ?>
+                <button type="button" class="btn btn-outline-success" onclick="aluAbrirFacturarMasivo()" title="Generar la factura del mes de todos los alumnos del listado"><i class="bi bi-receipt-cutoff"></i> Generar facturas</button>
+                <?php endif; ?>
             </div>
         </div>
 
@@ -290,7 +293,39 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                     Se conservan la cantidad, el descuento, el texto Adicional y el IVA que cada servicio tenga en la
                     ficha del alumno. La carga es <b>todo o nada</b>: con un solo error no se cambia ningún alumno.
                 </div>
-                <input type="file" id="aluCargaFactFile" class="form-control form-control-sm" accept=".xlsx,.xls">
+                <input type="file" id="aluCargaFactFile" class="form-control form-control-sm mb-3" accept=".xlsx,.xls">
+
+                <h6 class="fw-bold mb-1"><span class="badge bg-secondary me-1">3</span> Textos de la factura <span class="fw-normal text-muted small">(opcional)</span></h6>
+                <p class="small text-muted mb-2">
+                    Se aplican a los alumnos del archivo que tengan alguna celda escrita. Vacíos: cada alumno conserva lo que ya tiene.
+                </p>
+                <label class="form-label small fw-bold text-muted mb-1 d-block" for="aluCargaFactDetalle">Adicional de cada ítem</label>
+                <input type="text" id="aluCargaFactDetalle" class="form-control form-control-sm mb-1" maxlength="300" placeholder="Ej. Pensión {MES} {anio} - {alumno}">
+                <div class="text-muted mb-3" style="font-size:.72rem;">Sale bajo la descripción de cada servicio escrito en el archivo (precio o X).</div>
+
+                <div class="small fw-bold text-muted mb-1">Información adicional de la factura</div>
+                <div class="border rounded overflow-hidden">
+                    <table class="table table-sm mb-0" id="aluCargaFactInfo">
+                        <thead>
+                            <tr class="border-bottom">
+                                <th style="width:35%;">Concepto</th>
+                                <th>Detalle</th>
+                                <th style="width:30px;"></th>
+                            </tr>
+                        </thead>
+                        <tbody></tbody>
+                    </table>
+                    <div class="p-2 border-top bg-light">
+                        <button type="button" class="btn btn-link btn-sm p-0 text-decoration-none fw-bold" onclick="aluCargaFactAgregarInfo()">
+                            <i class="bi bi-plus-circle me-1"></i> Agregar información
+                        </button>
+                    </div>
+                </div>
+                <div class="text-muted mt-1" style="font-size:.72rem;">
+                    Reemplaza la información adicional de cada alumno del archivo. Marcadores: <code>{niño}</code> <code>{alumno}</code>
+                    <code>{nombres}</code> <code>{apellidos}</code> <code>{cedula}</code> <code>{campus}</code> <code>{curso}</code>
+                    <code>{mes}</code> <code>{MES}</code> <code>{anio}</code> <code>{mes_anio}</code>.
+                </div>
                 <div id="aluCargaFactResult" class="mt-3"></div>
             </div>
             <div class="modal-footer bg-light border-top p-2">
@@ -307,6 +342,19 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
         const el = () => document.getElementById('modalCargaFactAlu');
         const esc = (s) => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
         let importando = false;
+
+        const tbodyInfo = () => document.querySelector('#aluCargaFactInfo tbody');
+
+        // Misma lista de conceptos sugeridos que la ficha del alumno (datalist aluConceptosInfo).
+        window.aluCargaFactAgregarInfo = function () {
+            if (tbodyInfo().rows.length >= 10) return;
+            const tr = document.createElement('tr');
+            tr.innerHTML = `<td class="p-0"><input type="text" class="form-control form-control-sm border-0 shadow-none alu-cf-concepto" maxlength="300" list="aluConceptosInfo" style="padding:0 4px;height:24px;font-size:0.78rem;"></td>
+                <td class="p-0"><input type="text" class="form-control form-control-sm border-0 shadow-none alu-cf-detalle" maxlength="300" style="padding:0 4px;height:24px;font-size:0.78rem;"></td>
+                <td class="p-0 text-center align-middle"><button type="button" class="btn btn-link btn-sm text-danger p-0" title="Quitar" onclick="this.closest('tr').remove()"><i class="bi bi-x-lg"></i></button></td>`;
+            tbodyInfo().appendChild(tr);
+            tr.querySelector('input').focus();
+        };
 
         window.aluAbrirCargaFacturacion = function () {
             document.getElementById('aluCargaFactFile').value = '';
@@ -328,6 +376,12 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
             cont.innerHTML = '';
             try {
                 const fd = new FormData(); fd.append('archivo', fileInput.files[0]);
+                fd.append('detalle', document.getElementById('aluCargaFactDetalle').value.trim());
+                const info = [...tbodyInfo().rows].map(tr => ({
+                    concepto: tr.querySelector('.alu-cf-concepto').value.trim(),
+                    detalle: tr.querySelector('.alu-cf-detalle').value.trim(),
+                })).filter(f => f.concepto !== '' || f.detalle !== '');
+                fd.append('info_adicional_json', JSON.stringify(info));
                 const resp = await fetch(`${urlBase}/importar-facturacion`, { method: 'POST', body: fd });
                 const json = await resp.json();
                 if (!json.ok) {
@@ -346,7 +400,7 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                 } else {
                     cont.innerHTML = `<div class="alert alert-success small py-2 mb-0">
                             <b>${json.alumnos}</b> alumno(s) actualizado(s): ${json.agregados} servicio(s) agregado(s),
-                            ${json.cambiados} con precio cambiado o reactivado(s) y ${json.quitados} quitado(s).
+                            ${json.cambiados} cambiado(s) o reactivado(s) y ${json.quitados} quitado(s)${json.info ? `; información adicional en ${json.info} alumno(s)` : ''}.
                             <span class="text-muted">${json.sin_cambios} alumno(s) sin cambios.</span></div>`;
                 }
             } catch (e) {
@@ -354,6 +408,305 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
             }
             importando = false;
             btn.disabled = false; btn.innerHTML = '<i class="bi bi-upload me-1"></i> Importar';
+        };
+    })();
+</script>
+<?php endif; ?>
+
+<?php if (!empty($puedeFacturar)): ?>
+<style>
+    .alu-fm-scroll { max-height: 48vh; overflow: auto; }
+    .alu-fm-scroll thead th { position: sticky; top: 0; z-index: 2; background: #f8f9fa; }
+    #formAluFacturarMasivo .form-select, #formAluFacturarMasivo .form-control, #formAluFacturarMasivo .btn { height: 28px; font-size: .75rem; }
+</style>
+<!-- Modal: Generar las facturas del mes de los alumnos del listado -->
+<div class="modal fade" id="modalAluFacturarMasivo" tabindex="-1" aria-hidden="true" data-bs-backdrop="static" data-cmg-nav="off">
+    <div class="modal-dialog modal-dialog-centered modal-xl">
+        <div class="modal-content shadow-lg border-0">
+            <div class="modal-header bg-light py-2">
+                <h5 class="modal-title fw-bold mb-0"><i class="bi bi-receipt-cutoff me-2 text-success"></i>Generar facturas de alumnos</h5>
+                <button type="button" class="btn-close shadow-none" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+            </div>
+            <div class="modal-body">
+                <form id="formAluFacturarMasivo" class="d-flex flex-wrap align-items-start gap-2 mb-2" onsubmit="return false;">
+                    <div style="width:140px;">
+                        <label class="form-label small fw-bold text-muted mb-1 d-block" for="aluFmMes">Mes</label>
+                        <input type="month" class="form-control form-control-sm" id="aluFmMes">
+                    </div>
+                    <div style="width:150px;">
+                        <label class="form-label small fw-bold text-muted mb-1 d-block" for="aluFmSerie">Serie</label>
+                        <select class="form-select form-select-sm" id="aluFmSerie">
+                            <?php if (count($seriesFacturacion ?? []) !== 1): ?>
+                                <option value=""><?= empty($seriesFacturacion) ? '-- No hay series activas --' : '-- Seleccione --' ?></option>
+                            <?php endif; ?>
+                            <?php foreach ($seriesFacturacion ?? [] as $s): ?>
+                                <option value="<?= (int) $s['id'] ?>" title="<?= htmlspecialchars((string) ($s['nombre'] ?? '')) ?>"><?= htmlspecialchars((string) $s['serie']) ?></option>
+                            <?php endforeach; ?>
+                        </select>
+                    </div>
+                    <div style="width:300px;">
+                        <label class="form-label small fw-bold text-muted mb-1 d-block" for="aluFmTexto" title="Se usa en los servicios que no tienen «Adicional» propio">Texto para ítems sin adicional</label>
+                        <input type="text" class="form-control form-control-sm" id="aluFmTexto" maxlength="300" placeholder="Ej. {MES} {anio}">
+                    </div>
+                    <div class="d-flex flex-wrap align-items-start gap-2">
+                        <div>
+                            <label class="form-label small mb-1 d-block">&nbsp;</label>
+                            <div class="form-check small mb-0">
+                                <input class="form-check-input" type="checkbox" id="aluFmSerieAlumno" checked>
+                                <label class="form-check-label" for="aluFmSerieAlumno" title="Si el alumno tiene una serie en su pestaña Facturación, se usa esa; si no, la elegida aquí">Usar la serie de cada alumno</label>
+                            </div>
+                            <div class="form-check small mb-0">
+                                <input class="form-check-input" type="checkbox" id="aluFmIncluirFacturados">
+                                <label class="form-check-label" for="aluFmIncluirFacturados">Permitir alumnos ya facturados en el mes</label>
+                            </div>
+                        </div>
+                        <div>
+                            <label class="form-label small mb-1 d-block">&nbsp;</label>
+                            <button type="button" class="btn btn-primary btn-sm px-3" id="btnAluFmMostrar" onclick="aluFmMostrar()"><i class="bi bi-search me-1"></i>Mostrar</button>
+                        </div>
+                    </div>
+                </form>
+                <div class="small text-muted mb-2" id="aluFmAlcance"></div>
+                <div class="border rounded alu-fm-scroll">
+                    <table class="table table-sm table-hover mb-0 text-nowrap" style="font-size:.78rem;">
+                        <thead>
+                            <tr class="border-bottom">
+                                <th style="width:30px;" class="text-center"><input type="checkbox" class="form-check-input" id="aluFmTodos" title="Marcar / desmarcar todos"></th>
+                                <th>Alumno</th>
+                                <th>Campus</th>
+                                <th>Curso</th>
+                                <th>Cliente que factura</th>
+                                <th class="text-center">Servicios</th>
+                                <th class="text-end">Subtotal</th>
+                                <th>Estado</th>
+                            </tr>
+                        </thead>
+                        <tbody id="aluFmFilas">
+                            <tr><td colspan="8" class="text-center text-muted py-4">Elija el mes y pulse <b>Mostrar</b>.</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+                <div id="aluFmProgreso" class="mt-3 d-none">
+                    <div class="progress" style="height:18px;">
+                        <div class="progress-bar progress-bar-striped progress-bar-animated bg-success" id="aluFmBarra" style="width:0%">0%</div>
+                    </div>
+                    <div class="small text-muted mt-1" id="aluFmProgresoTxt"></div>
+                </div>
+                <div id="aluFmResultado" class="mt-3"></div>
+                <div class="small text-muted mt-2">
+                    Cada alumno marcado recibe <b>una factura en borrador</b> con todos sus servicios activos, su información adicional y el adicional de cada ítem,
+                    igual que con el botón <i class="bi bi-receipt-cutoff"></i> de su ficha. Se envían al SRI desde Facturas de Venta.
+                    Los alumnos que ya tienen factura del mes se omiten, salvo que marque la opción de arriba.
+                </div>
+            </div>
+            <div class="modal-footer bg-light border-top p-2">
+                <div class="small fw-bold me-auto" id="aluFmResumen"></div>
+                <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal" id="btnAluFmCerrar"><i class="fa-solid fa-xmark me-1"></i>Cerrar</button>
+                <button type="button" class="btn btn-success btn-sm px-4 shadow-sm" id="btnAluFmGenerar" onclick="aluFmGenerar()" disabled><i class="bi bi-receipt-cutoff me-1"></i> Generar</button>
+            </div>
+        </div>
+    </div>
+</div>
+<script>
+    (function () {
+        'use strict';
+        const urlBase = '<?= $urlBaseAlu ?>';
+        const el = () => document.getElementById('modalAluFacturarMasivo');
+        const $ = (id) => document.getElementById(id);
+        const esc = (s) => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+        const money = (v) => (typeof window.CMG_r2 === 'function' ? window.CMG_r2(v) : Number(v || 0)).toFixed(2);
+        const swal = (o) => Swal.fire(Object.assign({ target: el(), heightAuto: false, confirmButtonText: 'Aceptar' }, o));
+        const ESTADOS = {
+            listo:         ['Lista para facturar', 'success'],
+            facturado:     ['Ya facturado en el mes', 'warning'],
+            sin_servicios: ['Sin servicios con monto', 'secondary'],
+            sin_cliente:   ['Sin cliente que factura', 'danger'],
+        };
+        let filas = [];
+        let lote = 10;
+        let mesMostrado = '';
+        let generando = false;
+
+        const marcable = (f) => f.estado === 'listo' || (f.estado === 'facturado' && $('aluFmIncluirFacturados').checked);
+
+        function pintar() {
+            const tbody = $('aluFmFilas');
+            if (!filas.length) {
+                tbody.innerHTML = '<tr><td colspan="8" class="text-center text-muted py-4">No hay alumnos activos en el listado actual.</td></tr>';
+            } else {
+                tbody.innerHTML = filas.map((f, i) => {
+                    const [txt, color] = ESTADOS[f.estado] || [f.estado, 'secondary'];
+                    const ok = marcable(f);
+                    return `<tr>
+                        <td class="text-center"><input type="checkbox" class="form-check-input alu-fm-chk" data-i="${i}" ${ok && f.marcado ? 'checked' : ''} ${ok ? '' : 'disabled'}></td>
+                        <td>${esc(f.alumno)}</td>
+                        <td>${esc(f.campus)}</td>
+                        <td>${esc(f.nivel)}</td>
+                        <td title="${esc(f.cliente_identificacion)}">${esc(f.cliente)}</td>
+                        <td class="text-center">${f.servicios}</td>
+                        <td class="text-end">${money(f.subtotal)}</td>
+                        <td><span class="badge bg-${color} bg-opacity-10 text-${color} border border-${color} border-opacity-25">${esc(f.resultado || txt)}</span></td>
+                    </tr>`;
+                }).join('');
+            }
+            resumen();
+        }
+
+        function seleccionados() { return filas.filter(f => marcable(f) && f.marcado); }
+
+        function resumen() {
+            const sel = seleccionados();
+            const total = sel.reduce((a, f) => a + Number(f.subtotal || 0), 0);
+            $('aluFmResumen').textContent = filas.length
+                ? `${sel.length} alumno(s) a facturar · subtotal ${money(total)} (sin IVA)`
+                : '';
+            $('btnAluFmGenerar').disabled = generando || !sel.length;
+            $('btnAluFmGenerar').innerHTML = `<i class="bi bi-receipt-cutoff me-1"></i> Generar${sel.length ? ' ' + sel.length + ' factura(s)' : ''}`;
+        }
+
+        $('aluFmFilas').addEventListener('change', (e) => {
+            if (!e.target.classList.contains('alu-fm-chk')) return;
+            filas[+e.target.dataset.i].marcado = e.target.checked;
+            resumen();
+        });
+        $('aluFmTodos').addEventListener('change', (e) => {
+            filas.forEach(f => { if (marcable(f)) f.marcado = e.target.checked; });
+            pintar();
+        });
+        $('aluFmIncluirFacturados').addEventListener('change', () => pintar());
+        // Si cambia el mes después de mostrar, la lista ya no corresponde: hay que volver a mostrar.
+        $('aluFmMes').addEventListener('change', () => {
+            if (mesMostrado && $('aluFmMes').value !== mesMostrado) {
+                filas = []; mesMostrado = '';
+                $('aluFmFilas').innerHTML = '<tr><td colspan="8" class="text-center text-muted py-4">Cambió el mes: pulse <b>Mostrar</b>.</td></tr>';
+                resumen();
+            }
+        });
+        // No se cierra a mitad de la generación (los lotes los manda esta pantalla).
+        el().addEventListener('hide.bs.modal', (e) => {
+            if (generando) { e.preventDefault(); swal({ icon: 'info', title: 'Generando facturas', text: 'Espere a que termine el proceso.' }); }
+        });
+
+        window.aluAbrirFacturarMasivo = function () {
+            if (!$('aluFmMes').value) {
+                const d = new Date();
+                $('aluFmMes').value = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+            }
+            const b = document.getElementById('buscarAlumno')?.value || '';
+            $('aluFmAlcance').innerHTML = b
+                ? `<i class="bi bi-funnel me-1"></i>Alumnos activos del listado con el filtro aplicado: <code>${esc(b)}</code>`
+                : '<i class="bi bi-people me-1"></i>Todos los alumnos activos del listado.';
+            $('aluFmResultado').innerHTML = '';
+            bootstrap.Modal.getOrCreateInstance(el()).show();
+        };
+
+        window.aluFmMostrar = async function () {
+            if (generando) return;
+            const mes = $('aluFmMes').value;
+            if (!mes) { swal({ icon: 'info', title: 'Elija el mes' }); return; }
+            const b = document.getElementById('buscarAlumno')?.value || '';
+            $('aluFmFilas').innerHTML = '<tr><td colspan="8" class="text-center py-4"><span class="spinner-border spinner-border-sm text-primary"></span></td></tr>';
+            $('aluFmResultado').innerHTML = '';
+            try {
+                const r = await fetch(`${urlBase}/prepararFacturasMasivoAjax?mes=${encodeURIComponent(mes)}&b=${encodeURIComponent(b)}`);
+                const j = await r.json();
+                if (!j.ok) { filas = []; pintar(); swal({ icon: 'error', title: 'Error', text: j.error || 'No se pudo preparar.' }); return; }
+                lote = j.lote || 10;
+                mesMostrado = mes;
+                filas = j.filas.map(f => Object.assign(f, { marcado: f.estado === 'listo', resultado: '' }));
+                $('aluFmTodos').checked = true;
+                pintar();
+            } catch (e) {
+                filas = []; pintar();
+                swal({ icon: 'error', title: 'Error', text: 'Error de conexión.' });
+            }
+        };
+
+        window.aluFmGenerar = async function () {
+            if (generando) return;
+            generando = true; // antes del primer await (CLAUDE.md §8)
+            resumen();
+            const sel = seleccionados();
+            const serieSel = $('aluFmSerie');
+            if (!sel.length || !serieSel.value || mesMostrado !== $('aluFmMes').value) {
+                generando = false; resumen();
+                swal({ icon: 'info', title: 'Atención', text: !serieSel.value ? 'Seleccione la serie de las facturas.' : 'Pulse Mostrar para cargar los alumnos del mes.' });
+                return;
+            }
+            const serieTxt = serieSel.options[serieSel.selectedIndex].text;
+            const mesTxt = mesMostrado.split('-').reverse().join('-');
+            const conf = await swal({
+                icon: 'question', title: 'Generar facturas',
+                html: `Se generarán <b>${sel.length}</b> factura(s) en <b>borrador</b> del mes <b>${esc(mesTxt)}</b>, serie <b>${esc(serieTxt)}</b>`
+                    + ($('aluFmSerieAlumno').checked ? ' (o la serie de cada alumno)' : '') + '.',
+                showCancelButton: true, confirmButtonText: 'Generar', cancelButtonText: 'Cancelar', reverseButtons: true,
+            });
+            if (!conf.isConfirmed) { generando = false; resumen(); return; }
+
+            document.querySelectorAll('#formAluFacturarMasivo input, #formAluFacturarMasivo select, #formAluFacturarMasivo button, .alu-fm-chk, #aluFmTodos')
+                .forEach(x => { x.dataset.antes = x.disabled ? '1' : ''; x.disabled = true; });
+            $('btnAluFmCerrar').disabled = true;
+            $('aluFmProgreso').classList.remove('d-none');
+            $('aluFmResultado').innerHTML = '';
+
+            const res = { generada: [], omitida: [], error: [] };
+            let hechos = 0;
+            const avance = () => {
+                const pct = Math.round(hechos * 100 / sel.length);
+                $('aluFmBarra').style.width = pct + '%';
+                $('aluFmBarra').textContent = pct + '%';
+                $('aluFmProgresoTxt').textContent = `${hechos} de ${sel.length} alumno(s) procesados`;
+            };
+            avance();
+            for (let i = 0; i < sel.length; i += lote) {
+                const grupo = sel.slice(i, i + lote);
+                const fd = new FormData();
+                fd.append('ids', JSON.stringify(grupo.map(f => f.id)));
+                fd.append('mes', mesMostrado);
+                fd.append('id_punto_emision', serieSel.value);
+                fd.append('usar_serie_alumno', $('aluFmSerieAlumno').checked ? '1' : '');
+                fd.append('incluir_facturados', $('aluFmIncluirFacturados').checked ? '1' : '');
+                fd.append('texto_item', $('aluFmTexto').value.trim());
+                let lista = null;
+                try {
+                    const r = await fetch(`${urlBase}/generarFacturasMasivoAjax`, { method: 'POST', body: fd });
+                    const j = await r.json();
+                    lista = j.ok ? j.resultados : grupo.map(f => ({ id: f.id, alumno: f.alumno, estado: 'error', mensaje: j.error || 'Error' }));
+                } catch (e) {
+                    // Sin respuesta: puede que se hayan generado. Al volver a Mostrar, los ya facturados salen marcados así y no se repiten.
+                    lista = grupo.map(f => ({ id: f.id, alumno: f.alumno, estado: 'error', mensaje: 'Error de conexión: pulse Mostrar para ver si se generó antes de reintentar.' }));
+                }
+                lista.forEach(x => {
+                    (res[x.estado] || res.error).push(x);
+                    const f = filas.find(y => y.id === x.id);
+                    if (f) {
+                        f.resultado = x.estado === 'generada' ? 'Factura generada' : (x.estado === 'omitida' ? 'Omitido' : 'Con error');
+                        f.estado = x.estado === 'generada' ? 'facturado' : f.estado;
+                        f.marcado = false;
+                    }
+                });
+                hechos += grupo.length;
+                avance();
+            }
+
+            generando = false;
+            document.querySelectorAll('#formAluFacturarMasivo input, #formAluFacturarMasivo select, #formAluFacturarMasivo button, #aluFmTodos')
+                .forEach(x => { x.disabled = x.dataset.antes === '1'; });
+            $('btnAluFmCerrar').disabled = false;
+            $('aluFmBarra').classList.remove('progress-bar-animated');
+            pintar();
+
+            const total = res.generada.reduce((a, x) => a + Number(x.importe || 0), 0);
+            let html = `<div class="alert alert-${res.error.length ? 'warning' : 'success'} small py-2 mb-2">
+                    <b>${res.generada.length}</b> factura(s) generada(s) en borrador por <b>${money(total)}</b>.
+                    ${res.omitida.length ? `${res.omitida.length} alumno(s) omitido(s). ` : ''}${res.error.length ? `<b>${res.error.length}</b> con error.` : ''}
+                    Envíelas al SRI desde <b>Facturas de Venta</b>.</div>`;
+            const detalle = [...res.error, ...res.omitida, ...res.generada.filter(x => x.mensaje)];
+            if (detalle.length) {
+                html += '<div class="alert alert-light border small py-2 mb-0" style="max-height:200px;overflow:auto;"><ul class="mb-0 ps-3">'
+                    + detalle.map(x => `<li><b>${esc(x.alumno)}</b>: ${esc(x.mensaje)}</li>`).join('') + '</ul></div>';
+            }
+            $('aluFmResultado').innerHTML = html;
         };
     })();
 </script>
