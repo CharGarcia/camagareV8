@@ -102,12 +102,13 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                 ?>
                 <a id="btnExportPdf" href="<?= $urlBaseAlu ?>/export-pdf?b=<?= urlencode($buscar) ?>&sort=<?= urlencode($ordenCol) ?>&dir=<?= urlencode($ordenDir) ?>" class="btn btn-outline-danger" title="PDF"><i class="bi bi-file-earmark-pdf"></i> PDF</a>
                 <a id="btnExportExcel" href="<?= $urlBaseAlu ?>/export-excel?b=<?= urlencode($buscar) ?>&sort=<?= urlencode($ordenCol) ?>&dir=<?= urlencode($ordenDir) ?>" class="btn btn-outline-success" title="Excel"><i class="bi bi-file-earmark-spreadsheet"></i> Excel</a>
+                <?php // Rótulos largos: solo el ícono por debajo de xl (en móvil el grupo pasa a su propia fila y no cabría); el nombre queda en title/aria-label. ?>
                 <?php if (!empty($perm['actualizar'])): ?>
-                <button type="button" class="btn btn-outline-primary" onclick="aluAbrirPortal()" title="QR y enlace para que los representantes actualicen sus datos"><i class="bi bi-qr-code"></i> QR representantes</button>
-                <button type="button" class="btn btn-outline-primary" onclick="aluAbrirCargaFacturacion()" title="Cargar desde Excel los servicios que se facturan a cada alumno"><i class="bi bi-upload"></i> Cargar facturación</button>
+                <button type="button" class="btn btn-outline-primary" onclick="aluAbrirPortal()" title="QR representantes: QR y enlace para que los representantes actualicen sus datos" aria-label="QR representantes"><i class="bi bi-qr-code"></i><span class="d-none d-xl-inline"> QR representantes</span></button>
+                <button type="button" class="btn btn-outline-primary" onclick="aluAbrirCargaFacturacion()" title="Cargar facturación: servicios que se facturan a cada alumno, desde Excel" aria-label="Cargar facturación"><i class="bi bi-upload"></i><span class="d-none d-xl-inline"> Cargar facturación</span></button>
                 <?php endif; ?>
                 <?php if (!empty($puedeFacturar)): ?>
-                <button type="button" class="btn btn-outline-success" onclick="aluAbrirFacturarMasivo()" title="Generar la factura del mes de todos los alumnos del listado"><i class="bi bi-receipt-cutoff"></i> Generar facturas</button>
+                <button type="button" class="btn btn-outline-success" onclick="aluAbrirFacturarMasivo()" title="Generar facturas: la factura del mes de todos los alumnos del listado" aria-label="Generar facturas"><i class="bi bi-receipt-cutoff"></i><span class="d-none d-xl-inline"> Generar facturas</span></button>
                 <?php endif; ?>
             </div>
         </div>

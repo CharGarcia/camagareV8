@@ -31,7 +31,10 @@ class AlumnoFacturacionService
     // «Niño: PÉREZ JUAN» / «Niña: …» según el sexo. Igual en alumnos_modal.js (INFO_ADICIONAL_DEFECTO).
     public const INFO_ADICIONAL_DEFECTO = [['concepto' => '{niño}', 'detalle' => '{alumno}']];
 
-    /** Adicional con que nace cada ítem nuevo del alumno. Igual en alumnos_modal.js (DETALLE_ITEM_DEFECTO). */
+    /**
+     * Adicional de todo ítem sin uno propio: con él nacen las líneas nuevas, lo muestra la
+     * ficha en las guardadas vacías y lo lleva la factura. Igual en alumnos_modal.js (DETALLE_ITEM_DEFECTO).
+     */
     public const DETALLE_ITEM_DEFECTO = '{MES} {anio}';
 
     /**
@@ -118,7 +121,9 @@ class AlumnoFacturacionService
                 'id_cliente'      => (int) $s['id_cliente'],
                 'cliente'         => $s['cliente_nombre'],
                 'cliente_identificacion' => $s['cliente_identificacion'],
-                'detalle'         => strtr(trim((string) ($s['detalle'] ?? '')), $marcas),
+                // Sin Adicional propio, el de por defecto (igual que la ficha); el texto general
+                // de la ventana, si se escribe, lo reemplaza al generar.
+                'detalle'         => strtr(trim((string) ($s['detalle'] ?? '')) ?: self::DETALLE_ITEM_DEFECTO, $marcas),
                 'marcada'         => $base > 0,
                 'aviso'           => null,
             ];
@@ -212,8 +217,11 @@ class AlumnoFacturacionService
                 'porcentaje_iva'    => (float) $s['porcentaje_iva'],
                 'codigo_porcentaje' => $s['codigo_porcentaje'],
                 'id_tarifa_iva'     => $s['id_tarifa_iva'],
-                // Texto del ítem propio de la línea; vacío = el texto general del lote.
-                'info_item'         => strtr(trim((string) ($s['detalle'] ?? '')), $marcas),
+                // Texto del ítem propio de la línea. Sin uno propio: el texto general del lote si
+                // se escribió (info_item vacío → el generador usa texto_item) y, si no, el de por
+                // defecto, el mismo que muestra la ficha en esa línea.
+                'info_item'         => strtr(trim((string) ($s['detalle'] ?? ''))
+                                         ?: (trim($textoItem) !== '' ? '' : self::DETALLE_ITEM_DEFECTO), $marcas),
             ];
             $grupos[$idCli]['items'][] = ['id_producto' => (int) $s['id_producto']];
         }
