@@ -6,7 +6,7 @@ ruta_modulo: modulos/alumnos
 tipo: modulo
 visibilidad: todos
 etiquetas: alumnos, estudiantes, matrícula, matricula, colegio, escuela, centro infantil, campus, sede, nivel, curso, representante, representantes, padres, autorizado, autorizados, retirar, retiro, quién retira, facturación, facturar, generar factura, facturar pensión, facturar mensualidad, facturas del alumno, horario, pensión, pension, imprimir, impresora, filtrar alumnos, filtro por campus, filtro por nivel, alumnos por curso, alumnos por sede, buscar alumno, portal de representantes, qr, codigo qr, padres de familia, actualizar datos, registrar alumno, inscripcion, codigo de verificacion, enlace para padres, cargar facturación, carga masiva, importar excel, plantilla excel, precios por alumno, servicios por alumno, pensiones masivas, generar facturas, facturación masiva, facturar a todos, facturar todos los alumnos, facturas del mes, pensiones del mes, emitir pensiones, historial de cargas, deshacer carga, revertir carga, eliminar carga
-version: 1.9
+version: 1.10
 orden: 0
 estado: activo
 ---
@@ -70,6 +70,12 @@ perder el historial de los anteriores.
    alumno y observación. Se escriben libremente, no hace falta que sean
    Clientes. Marcar **Puede retirar** en quienes están autorizados a retirar
    al alumno del centro educativo (por ejemplo, un abuelo o el transporte).
+   Arriba de la lista se ve siempre el **representante que factura** (el
+   cliente de la pestaña Facturación) con su identificación, teléfono y
+   correo; ese cliente **no** forma parte de la lista hasta que se pulse
+   **Agregar a la lista**, que copia sus datos en una fila nueva. En los alumnos
+   migrados del sistema anterior la lista viene vacía, porque allá el
+   representante era solo el cliente que factura.
    En **Facturación**, buscar y seleccionar el Cliente al que se factura,
    opcionalmente la serie de facturación preferida, y agregar debajo los
    **servicios y productos** que se le facturan (ver *Facturar los servicios
@@ -498,12 +504,25 @@ pestaña Transacciones aparece solo si el usuario puede **ver** Facturas de Vent
 - **Historial de cargas: "Falta ejecutar en la base el script
   …20261029_alumnos_cargas_facturacion.sql"**: el administrador debe ejecutar ese
   script; mientras tanto la carga funciona, pero no queda en el historial.
+- **La pestaña Representantes sale vacía**: la lista solo tiene las personas
+  agregadas a mano (o desde el portal). El representante que factura se ve en
+  la tarjeta de arriba; pulse **Agregar a la lista** si también debe figurar ahí
+  (por ejemplo, para marcarlo como autorizado a retirar).
+- **"No se pueden guardar los representantes: falta ejecutar … 20260924_alumnos_representantes.sql"**:
+  el administrador debe ejecutar ese script; mientras tanto, quite las filas de
+  Representantes para guardar el resto del alumno.
 - **La cédula muestra "No encontrado"**: el número no está en el registro
   consultado o el servicio no respondió; se pueden escribir los nombres a
   mano y guardar normalmente.
 
 ## Historial de cambios
 
+- **1.10** — Pestaña **Representantes**: muestra arriba al representante que
+  factura (cliente de la pestaña Facturación) con su identificación, teléfono y
+  correo, y el botón **Agregar a la lista** para copiarlo como representante.
+  Si falta el script `20260924_alumnos_representantes.sql`, la pestaña lo avisa
+  y el guardado se rechaza cuando hay representantes escritos (antes se
+  descartaban sin aviso).
 - **1.9** — Botón **Cargar facturación** en el listado, junto a QR
   representantes: plantilla Excel con una fila por alumno activo y una columna
   por servicio activo, con las celdas vacías; al subirla se agregan, cambian (precio)

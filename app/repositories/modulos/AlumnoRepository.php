@@ -400,7 +400,8 @@ class AlumnoRepository extends BaseRepository
      */
     public function findDetalle(int $id, int $idEmpresa): ?array
     {
-        $sql = "SELECT a.*, cli.nombre AS representante_nombre, cli.identificacion AS representante_identificacion
+        $sql = "SELECT a.*, cli.nombre AS representante_nombre, cli.identificacion AS representante_identificacion,
+                       cli.telefono AS representante_telefono, cli.email AS representante_email
                 FROM {$this->table} a
                 LEFT JOIN clientes cli ON cli.id = a.id_cliente
                 WHERE a.id = :id AND a.id_empresa = :id_empresa AND a.eliminado = false";

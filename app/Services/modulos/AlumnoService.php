@@ -45,8 +45,7 @@ class AlumnoService
             if (isset($data['servicios'])) {
                 $this->repository->syncServicios($id, $idEmpresa, $data['servicios'], $idUsuario);
             }
-            // Sin la tabla (SQL 20260924 aún no aplicado) se omite: ver existeTablaRepresentantes().
-            if (isset($data['representantes']) && $this->repository->existeTablaRepresentantes()) {
+            if (isset($data['representantes']) && $this->hayTablaParaRepresentantes($data['representantes'])) {
                 $this->repository->syncRepresentantes($id, $idEmpresa, $data['representantes'], $idUsuario);
             }
 
@@ -87,8 +86,7 @@ class AlumnoService
             if (isset($data['servicios'])) {
                 $this->repository->syncServicios($id, $idEmpresa, $data['servicios'], $idUsuario);
             }
-            // Sin la tabla (SQL 20260924 aún no aplicado) se omite: ver existeTablaRepresentantes().
-            if (isset($data['representantes']) && $this->repository->existeTablaRepresentantes()) {
+            if (isset($data['representantes']) && $this->hayTablaParaRepresentantes($data['representantes'])) {
                 $this->repository->syncRepresentantes($id, $idEmpresa, $data['representantes'], $idUsuario);
             }
 
@@ -117,6 +115,25 @@ class AlumnoService
             $this->repository->rollBack();
             throw $e;
         }
+    }
+
+    /**
+     * ¿Se pueden guardar los representantes? Sin la tabla (SQL 20260924_alumnos_representantes.sql
+     * aún no aplicado) el resto del alumno se guarda igual, pero si se escribió algún
+     * representante se rechaza el guardado: antes se descartaba en silencio y el usuario
+     * creía que había quedado registrado.
+     */
+    private function hayTablaParaRepresentantes(array $representantes): bool
+    {
+        if ($this->repository->existeTablaRepresentantes()) {
+            return true;
+        }
+        foreach ($representantes as $r) {
+            if (trim((string) ($r['nombres'] ?? '')) !== '') {
+                throw new Exception('No se pueden guardar los representantes: falta ejecutar en la base el script database/migrations/20260924_alumnos_representantes.sql. Quite las filas de la pestaña Representantes para guardar el resto del alumno.');
+            }
+        }
+        return false;
     }
 
     /**
@@ -232,6 +249,8 @@ class AlumnoService
         $alumno['horarios']   = $this->repository->getHorarios($id, $idEmpresa);
         $alumno['servicios']  = $this->repository->getServicios($id, $idEmpresa);
         $alumno['representantes'] = $this->repository->getRepresentantes($id, $idEmpresa);
+        // Sin la tabla, la pestaña Representantes avisa en vez de mostrarse vacía sin motivo.
+        $alumno['hay_tabla_representantes'] = $this->repository->existeTablaRepresentantes();
         $alumno['documentos'] = $this->repository->getDocumentos($id, $idEmpresa);
         return $alumno;
     }

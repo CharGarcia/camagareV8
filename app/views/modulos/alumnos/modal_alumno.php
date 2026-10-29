@@ -189,6 +189,22 @@ $pestanasConfigAlu = [
 
                         <!-- ============ TAB: REPRESENTANTES Y AUTORIZADOS A RETIRAR ============ -->
                         <div class="tab-pane fade" id="tab-representante" role="tabpanel">
+                            <?php // La lista de abajo NO incluye al cliente que factura (pestaña Facturación): se muestra aquí para que se vea quién es el representante. ?>
+                            <div id="aluRepSinTabla" class="alert alert-warning small py-2 mb-2 d-none">
+                                <i class="bi bi-exclamation-triangle me-1"></i>
+                                Falta ejecutar en la base el script <code>20260924_alumnos_representantes.sql</code>: los representantes no se pueden guardar todavía.
+                            </div>
+                            <div id="aluRepFactura" class="d-flex align-items-center flex-wrap gap-2 p-2 mb-2 border rounded-3 bg-light small">
+                                <i class="bi bi-person-vcard text-primary fs-5"></i>
+                                <div class="me-auto">
+                                    <div class="text-muted" style="font-size:.7rem;">Representante que factura (pestaña Facturación)</div>
+                                    <div class="fw-bold" id="aluRepFacturaNombre">—</div>
+                                    <div class="text-muted" id="aluRepFacturaDatos"></div>
+                                </div>
+                                <button type="button" class="btn btn-outline-primary btn-sm" id="aluRepFacturaAgregar" onclick="window.aluAgregarClienteComoRepresentante()" title="Copia sus datos a la lista de representantes">
+                                    <i class="bi bi-person-plus me-1"></i>Agregar a la lista
+                                </button>
+                            </div>
                             <div class="border rounded overflow-hidden">
                                 <div class="table-responsive" style="max-height: 320px;">
                                     <table class="table table-sm alu-grid mb-0 text-nowrap" id="tablaRepresentantes">

@@ -520,6 +520,52 @@
         row.querySelector('.remove-row').addEventListener('click', () => row.remove());
     };
 
+    // ── Representante que factura (tarjeta de la pestaña Representantes) ────
+    // La lista de representantes es aparte del cliente que factura; en los alumnos
+    // migrados del sistema anterior solo existe el cliente, así que se muestra aquí.
+    let repFactura = null; // datos del cliente que factura según la ficha cargada
+    const sinIdentEnEtiqueta = (txt) => String(txt || '').replace(/\s*\([^()]*\)\s*$/, '').trim();
+
+    function datosClienteFactura() {
+        const id = document.getElementById('alu_id_cliente')?.value || '';
+        if (!id) return null;
+        if (repFactura && String(repFactura.id) === String(id)) return repFactura;
+        // Cliente elegido o cambiado en esta edición: solo se conoce la etiqueta del buscador.
+        const label = document.getElementById('alu_cliente_texto')?.value || '';
+        const m = label.match(/\(([^()]*)\)\s*$/);
+        return { id, nombre: sinIdentEnEtiqueta(label), identificacion: m ? m[1] : '', telefono: '', email: '' };
+    }
+
+    function pintarRepFactura() {
+        const d = datosClienteFactura();
+        const nombre = document.getElementById('aluRepFacturaNombre');
+        const datos = document.getElementById('aluRepFacturaDatos');
+        const btn = document.getElementById('aluRepFacturaAgregar');
+        if (!nombre) return;
+        if (!d) {
+            nombre.textContent = 'Sin cliente que factura';
+            datos.textContent = 'Elíjalo en la pestaña Facturación.';
+            btn.classList.add('d-none');
+            return;
+        }
+        nombre.textContent = d.nombre || '—';
+        datos.textContent = [d.identificacion, d.telefono, d.email].filter(Boolean).join(' · ');
+        btn.classList.remove('d-none');
+    }
+    document.getElementById('tab-representante-btn')?.addEventListener('shown.bs.tab', pintarRepFactura);
+
+    window.aluAgregarClienteComoRepresentante = function () {
+        const d = datosClienteFactura();
+        if (!d) return;
+        const yaEsta = Array.from(document.querySelectorAll('#tablaRepresentantes tbody tr')).some(tr => {
+            const ident = tr.querySelector('.txt-rep-ident')?.value.trim() || '';
+            const nom = tr.querySelector('.txt-rep-nombres')?.value.trim().toUpperCase() || '';
+            return (d.identificacion && ident === d.identificacion) || (nom !== '' && nom === String(d.nombre).toUpperCase());
+        });
+        if (yaEsta) { aviso('info', 'Ese representante ya está en la lista.'); return; }
+        window.aluAgregarFilaRepresentante({ nombres: d.nombre, identificacion: d.identificacion, telefono: d.telefono });
+    };
+
     // ── Filas dinámicas: Horario ────────────────────────────────────────────
     const DIAS = ['', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado', 'Domingo'];
     window.aluAgregarFilaHorario = function (data = {}) {
@@ -1149,6 +1195,8 @@
         reiniciarSriAlu();
         limpiarTablas();
         idAlumnoActual = null;
+        repFactura = null;
+        document.getElementById('aluRepSinTabla')?.classList.add('d-none');
 
         document.getElementById('alu_id').value = '';
         document.getElementById('alu_id_cliente').value = '';
@@ -1216,6 +1264,15 @@
             document.getElementById('alu_cliente_texto').value = d.representante_nombre
                 ? `${d.representante_nombre}${d.representante_identificacion ? ' (' + d.representante_identificacion + ')' : ''}`
                 : '';
+            repFactura = d.id_cliente && d.representante_nombre ? {
+                id: d.id_cliente,
+                nombre: d.representante_nombre,
+                identificacion: d.representante_identificacion || '',
+                telefono: d.representante_telefono || '',
+                email: d.representante_email || '',
+            } : null;
+            document.getElementById('aluRepSinTabla')?.classList.toggle('d-none', d.hay_tabla_representantes !== false);
+            pintarRepFactura();
             aplicarSerie(document.getElementById('alu_punto_emision'), d.id_punto_emision);
 
             document.getElementById('alu_tipo_sangre').value = d.tipo_sangre || '';
