@@ -70,6 +70,11 @@ $to         = $to         ?? 0;
         min-width: 260px;
     }
 
+    /* El adicional del ítem se lee igual que la descripción: 2 filas y desplazamiento si es más largo. */
+    #tbodyDetalle .input-adicional {
+        min-width: 200px;
+    }
+
     .total-row td {
         font-weight: 600;
         background: #f8f9fa;

@@ -124,13 +124,14 @@ document.addEventListener('DOMContentLoaded', () => {
     if (modal) {
         modal.addEventListener('keydown', function(e) {
             const isInputOrSelect = ['INPUT', 'SELECT', 'TEXTAREA'].includes(e.target.tagName);
-            // La descripción del ítem es un textarea (se ve envuelta en 2 filas, como en Factura
-            // de Venta), pero se guarda en una sola línea: Enter no inserta salto de línea.
-            if (e.key === 'Enter' && e.target.classList.contains('input-descripcion')) {
+            // La descripción y el adicional del ítem son textareas (se ven envueltos en 2 filas,
+            // como en Factura de Venta), pero se guardan en una sola línea: Enter no inserta salto.
+            const esTextoItem = e.target.classList.contains('input-descripcion') || e.target.classList.contains('input-adicional');
+            if (e.key === 'Enter' && esTextoItem) {
                 e.preventDefault();
                 return;
             }
-            if (e.key === 'Enter' && isInputOrSelect && !e.target.classList.contains('input-descripcion')) {
+            if (e.key === 'Enter' && isInputOrSelect && !esTextoItem) {
                 e.preventDefault();
                 const formInputs = Array.from(modal.querySelectorAll('input, select, textarea')).filter(i => {
                     const style = window.getComputedStyle(i);
@@ -1857,7 +1858,7 @@ function CMG_agregarFilaDetalle(det) {
             <input type="hidden" class="input-ice-cod" value="${_esc(String(iceCod))}">
             <input type="hidden" class="input-ice-pct" value="${icePct}">
         </td>
-        <td><input type="text" class="form-control form-control-sm input-detalle input-adicional text-muted fst-italic" maxlength="300" placeholder="Info adicional" title="${_esc(det.info_adicional||'')}" value="${_esc(det.info_adicional||'')}"></td>
+        <td><textarea rows="2" class="form-control form-control-sm input-detalle input-adicional text-muted fst-italic" style="resize:none; overflow:auto; line-height:1.15;" maxlength="300" placeholder="Info adicional">${_esc(det.info_adicional||'')}</textarea></td>
         <td><input type="number" class="form-control form-control-sm input-detalle text-center input-cantidad" value="${det.cantidad != null ? _fmtExacto(det.cantidad) : '1'}" min="0.0001" step="any" oninput="mcMarcarFilaEditada(this);CMG_recalcularFila(this)"></td>
         <td><input type="number" class="form-control form-control-sm input-detalle text-end input-precio" value="${det.precio_unitario != null ? _fmtExacto(det.precio_unitario) : '0'}" min="0" step="any" oninput="mcMarcarFilaEditada(this);CMG_recalcularFila(this)"></td>
         <td><input type="number" class="form-control form-control-sm input-detalle text-end text-danger input-desc" value="${parseFloat(det.descuento||0).toFixed(2)}" min="0" step="any" oninput="mcMarcarFilaEditada(this);CMG_recalcularFila(this)"></td>
@@ -2203,7 +2204,7 @@ window.CMG_guardar = async function() {
             id_producto: tr.querySelector('.input-id-producto')?.value || null,
             codigo_principal: tr.querySelector('.input-codigo')?.value || '',
             descripcion: descInput.value.trim(),
-            info_adicional: (tr.querySelector('.input-adicional')?.value || '').trim(),
+            info_adicional: (tr.querySelector('.input-adicional')?.value || '').replace(/\s+/g, ' ').trim(),
             cantidad: cant,
             precio_unitario: precio,
             descuento: descVal,

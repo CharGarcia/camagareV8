@@ -519,7 +519,8 @@ inserta saltos.
 
 Junto a la descripción está la columna **Adicional**, igual que en Factura de
 Venta: un dato extra de la línea (lote, serie, placa, período, etc.), hasta 300
-caracteres.
+caracteres. Se ve igual que la descripción: en dos filas y, si es más largo, con
+desplazamiento dentro de la celda; se guarda en una sola línea.
 
 - En una compra **electrónica**, se llena sola con lo que el proveedor puso en el
   XML de cada ítem (*detalles adicionales*), tanto al cargar el XML como al
@@ -530,6 +531,14 @@ caracteres.
 
 En el **PDF** de la compra aparece la columna **Det. Adicional** solo cuando algún
 ítem tiene información.
+
+Las compras electrónicas registradas **antes** de esta columna no la traen, pero
+el dato está en su XML guardado. El administrador del sistema lo recupera con
+`database/2026-10-29_compras_detalle_info_adicional_desde_xml.sql`: primero en
+vista previa (no cambia nada, lista qué compras se actualizarían) y luego
+aplicándolo. Solo llena líneas que tienen el adicional vacío y omite, con aviso,
+las compras cuyas líneas ya no coinciden con el XML (se agregaron o quitaron
+líneas, o cambió la cantidad o el precio).
 
 ### Los totales son los del comprobante
 
@@ -824,7 +833,7 @@ aprobaciones pasa, así que no se paga dos veces.
 
 ## Historial de cambios
 
-- **2.40** — Nueva columna **Adicional** en el detalle de ítems: se toma del XML del proveedor (también en las descargas del SRI) o se escribe a mano en las compras manuales, y sale en el PDF como *Det. Adicional* cuando hay información. Requiere `database/2026-10-29_compras_detalle_info_adicional.sql`.
+- **2.40** — Nueva columna **Adicional** en el detalle de ítems: se toma del XML del proveedor (también en las descargas del SRI) o se escribe a mano en las compras manuales, y sale en el PDF como *Det. Adicional* cuando hay información. Requiere `database/2026-10-29_compras_detalle_info_adicional.sql`; las compras ya registradas se completan desde su XML con `database/2026-10-29_compras_detalle_info_adicional_desde_xml.sql`.
 - **2.39** — En el asiento de la compra, la línea del IVA se rotula **IVA en compras** (antes *IVA crédito tributario*).
 - **2.38** — La pestaña **Asiento contable** tiene las columnas **Centro de costo** y **Proyecto** por línea: se puede asignar a cada compra un centro o proyecto distinto del que la cuenta tiene por periodo.
 - **2.37** — El **detalle de ítems** se ve como en Factura de Venta: la descripción ocupa dos filas y el código se ensancha a su contenido, así se leen completos.
