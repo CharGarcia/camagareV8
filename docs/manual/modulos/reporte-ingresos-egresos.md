@@ -5,8 +5,8 @@ categoria: Reportes
 ruta_modulo: modulos/reporte_ingresos_egresos
 tipo: modulo
 visibilidad: todos
-etiquetas: reporte de ingresos y egresos, anulados, ingresos anulados, egresos anulados, vigentes, movimiento de dinero, cobros y pagos, por tercero, forma de pago, concepto, vendedor, asesor, cobros por vendedor, comisiones, asesor del cliente, otros conceptos, saldo inicial, saldos iniciales, exportar, excel detallado, pdf, imprimir, logo en el pdf, totales en el pdf, reporte de ingresos por vendedor, reporte de egresos, pdf por vendedor, anticipo, anticipos, anticipo aplicado, cruce de anticipo, ingresos repetidos, ingreso duplicado, doble conteo, saldo de anticipos, anticipos por cliente, anticipos de proveedores, anticipos recibidos, anticipos entregados, entrada de dinero, salida de dinero, flujo de caja, monetario, no monetario, solo monetarios, cruces, compensaciones, favoritos, filtro favorito, detalle del ingreso, ver comprobante, clic en la fila
-version: 1.9
+etiquetas: reporte de ingresos y egresos, anulados, ingresos anulados, egresos anulados, vigentes, movimiento de dinero, cobros y pagos, por tercero, forma de pago, concepto, vendedor, asesor, cobros por vendedor, comisiones, asesor del cliente, otros conceptos, saldo inicial, saldos iniciales, exportar, excel detallado, pdf, imprimir, logo en el pdf, totales en el pdf, reporte de ingresos por vendedor, reporte de egresos, pdf por vendedor, anticipo, anticipos, anticipo aplicado, cruce de anticipo, ingresos repetidos, ingreso duplicado, doble conteo, saldo de anticipos, anticipos por cliente, anticipos de proveedores, anticipos recibidos, anticipos entregados, entrada de dinero, salida de dinero, flujo de caja, monetario, no monetario, solo monetarios, cruces, compensaciones, favoritos, filtro favorito, detalle del ingreso, ver comprobante, clic en la fila, agrupado, por comprobante, una fila por ingreso, sin detallar facturas, como en el ingreso
+version: 1.10
 orden: 30
 estado: activo
 ---
@@ -186,8 +186,16 @@ las hojas del Excel.
 
 ## Formas de ver
 
-- **Documento (detalle)**: cada línea de cada comprobante, con su asesor. Es la
-  vista de auditoría.
+- **Documento (agrupado)** — *la vista por defecto*: una fila por cada ingreso o
+  egreso, **tal como se registró**, en lugar de una fila por cada factura cobrada
+  o pagada. La columna
+  *Documentos* junta las facturas, recibos o compras que cancela (con *N doc.* si
+  son varias; al pasar el mouse se ve el valor de cada una) y el *Valor* es el del
+  comprobante. Si un filtro (tipo de documento, monto, búsqueda) deja fuera
+  alguna línea, el valor es la suma de las líneas que sí cumplen, igual que en
+  los totales.
+- **Documento (detalle)**: cada línea de cada comprobante (una por factura
+  cobrada o pagada), con su asesor. Es la vista de auditoría.
 - **Tercero (resumen)**: agrupado por cliente, proveedor o empleado, para saber
   cuánto se movió con cada uno.
 - **Forma de cobro/pago**: cuánto entró y salió por cada forma (efectivo, cada
@@ -199,7 +207,7 @@ las hojas del Excel.
 
 ## Ver el detalle de un ingreso o egreso
 
-En la vista **Documento**, y en los movimientos de la vista **Anticipos** con un
+En las vistas **Documento (agrupado)** y **Documento (detalle)**, y en los movimientos de la vista **Anticipos** con un
 cliente o proveedor elegido, **haga clic en cualquier fila**: se abre a la derecha
 un panel con el ingreso o egreso completo:
 
@@ -269,7 +277,7 @@ Reporte de Ventas:
 - Al final, la fila **TOTALES** con la suma de cada columna de valores y de
   conteos (en *Forma de cobro/pago* no se suman los comprobantes, porque uno
   cobrado con dos formas se contaría dos veces; sí los pagos).
-- La vista Documento sale en hoja **horizontal**; las vistas resumidas, en
+- Las vistas Documento (agrupado y detalle) salen en hoja **horizontal**; las resumidas, en
   vertical. La cabecera de la tabla se repite en cada página y abajo va
   *Página X/Y*.
 - El PDF se arma fila por fila, así que sale en segundos aunque traiga miles de
@@ -311,6 +319,12 @@ cobró cada vendedor, qué movimientos hubo por encima de cierto monto.
   cliente; el reporte lo toma de ahí al instante.
 
 ## Historial de cambios
+
+- **1.10** — Nueva forma de ver **Documento (agrupado)**, que ahora es la vista
+  por defecto: una fila por ingreso o
+  egreso, como se registró, con sus documentos juntos en una celda, en lugar de
+  una fila por cada factura. Funciona también en el PDF (horizontal, columna
+  *Documentos*); en el Excel ya era la primera hoja.
 
 - **1.9** — Los **anticipos aplicados ya no se cuentan dos veces**: los
   indicadores separan *Ingresos cobrados / Egresos pagados* (todo, como en los

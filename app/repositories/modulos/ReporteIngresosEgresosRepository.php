@@ -612,17 +612,35 @@ class ReporteIngresosEgresosRepository extends BaseRepository
                           THEN ' (anticipo aplicado \$' || to_char(monto_anticipo, 'FM999999990.00') || ')' ELSE '' END
                   || CASE WHEN monto_otros > 0.004
                           THEN ' (otros no monetarios \$' || to_char(monto_otros, 'FM999999990.00') || ')' ELSE '' END";
+        $doc = "CASE WHEN tipo_documento = 'OTRO' THEN COALESCE(NULLIF(descripcion, ''), 'Otros conceptos')
+                     ELSE tipo_documento || COALESCE(' ' || NULLIF(numero_documento, ''), '') END";
         $sql = "SELECT tipo_flujo, id_comprobante, numero, fecha, tercero_tipo, tercero_nombre, tercero_ident,
                        SUM(monto) AS valor,
+                       ROUND(SUM(monto_anticipo), 2) AS monto_anticipo,
+                       ROUND(SUM(monto_otros), 2)    AS monto_otros,
                        ROUND(SUM(monto_anticipo + monto_otros), 2) AS no_monetario,
                        ROUND(SUM(monto_caja), 2) AS caja,
+                       COUNT(*) AS lineas,
                        string_agg($linea, E'\\n' ORDER BY id_detalle) AS detalle,
+                       string_agg($doc, ', ' ORDER BY id_detalle) AS documentos,
+                       MAX(concepto) AS concepto,
+                       MAX(estado) AS estado,
                        MAX(observaciones) AS observaciones,
                        string_agg(DISTINCT vendedor, ', ' ORDER BY vendedor) AS asesor
                 FROM ( $union ) r WHERE 1=1 $textoWhere
                 GROUP BY tipo_flujo, id_comprobante, numero, fecha, tercero_tipo, tercero_nombre, tercero_ident
                 ORDER BY fecha DESC, numero DESC, tipo_flujo";
         return $this->q($sql, $params)->fetchAll(PDO::FETCH_ASSOC);
+    }
+
+    /**
+     * Vista "Comprobante (agrupado)": una fila por ingreso/egreso, tal como se registró,
+     * en lugar de una por factura cobrada. Son las mismas filas de la primera hoja del
+     * Excel, con el valor de las líneas que cumplen los filtros.
+     */
+    public function getReporteAgrupadoComprobante(int $idEmpresa, array $f): array
+    {
+        return $this->getResumenExport($idEmpresa, $f);
     }
 
     /** Agrupado por tercero (cliente/proveedor/empleado). */

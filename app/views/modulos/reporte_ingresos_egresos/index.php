@@ -36,6 +36,7 @@
                     <div>
                         <label class="form-label small fw-bold mb-1 d-block text-muted text-uppercase" style="font-size:.65rem;">Ver por<?= \App\Helpers\PreferenciasHelper::renderEstrellaFavorito($rutaModulo, 'rie-ver-por', 'ver_por') ?></label>
                         <select id="rie-ver-por" class="form-select form-select-sm shadow-none border" style="width:170px;">
+                            <option value="COMPROBANTE" selected>Documento (agrupado)</option>
                             <option value="DETALLE">Documento (detalle)</option>
                             <option value="TERCERO">Tercero (resumen)</option>
                             <option value="FORMA">Forma de cobro/pago</option>
@@ -218,10 +219,15 @@
             <div class="rie-scroll">
                 <table class="table table-sm table-hover table-striped mb-0" style="font-size:0.82rem;">
                     <thead class="table-light">
-                        <tr id="rie-head-detalle">
+                        <tr id="rie-head-detalle" class="d-none">
                             <th class="ps-3">Flujo</th><th>Número</th><th>Fecha</th><th>Tercero</th><th>Asesor</th>
                             <th>Documento</th><th>Descripción</th><th>Concepto</th><th class="text-center">Estado</th>
                             <th class="text-end pe-3">Monto</th>
+                        </tr>
+                        <tr id="rie-head-comprobante">
+                            <th class="ps-3">Flujo</th><th>Número</th><th>Fecha</th><th>Tercero</th><th>Asesor</th>
+                            <th>Documentos</th><th>Observaciones</th><th>Concepto</th><th class="text-center">Estado</th>
+                            <th class="text-end pe-3">Valor</th>
                         </tr>
                         <tr id="rie-head-tercero" class="d-none">
                             <th class="ps-3">Flujo</th><th>Tipo</th><th>Tercero</th>
@@ -293,6 +299,7 @@
         const tbody = $('rie-tbody');
         const vp = f.ver_por;
         $('rie-head-detalle').classList.toggle('d-none', vp !== 'DETALLE');
+        $('rie-head-comprobante').classList.toggle('d-none', vp !== 'COMPROBANTE');
         $('rie-head-tercero').classList.toggle('d-none', vp !== 'TERCERO');
         $('rie-head-forma').classList.toggle('d-none', vp !== 'FORMA');
         const esPeriodo = (vp === 'FECHA' || vp === 'MES');
@@ -374,7 +381,7 @@
         ['rie-tercero-txt','rie-tercero-id','rie-monto-min','rie-monto-max','rie-buscar'].forEach(id => $(id).value = '');
         $('rie-fecha-desde').value = '<?= date('Y-m-01') ?>';
         $('rie-fecha-hasta').value = '<?= date('Y-m-d') ?>';
-        $('rie-tipo-flujo').value = 'AMBOS'; $('rie-ver-por').value = 'DETALLE'; $('rie-tercero-tipo').value = '';
+        $('rie-tipo-flujo').value = 'AMBOS'; $('rie-ver-por').value = 'COMPROBANTE'; $('rie-tercero-tipo').value = '';
         $('rie-forma').value = '0'; $('rie-opbanc').value = ''; $('rie-concepto').value = '0'; $('rie-tipo-doc').value = ''; $('rie-estado').value = 'VIGENTES'; $('rie-movimientos').value = 'TODOS';
         $('rie-vendedor').value = '0';
         aplicarFavoritos(); // Limpiar vuelve a los valores favoritos del usuario, no a los de fábrica
@@ -390,7 +397,7 @@
     }
     document.addEventListener('DOMContentLoaded', aplicarFavoritos);
 
-    // Clic en una fila (vista Documento o movimientos de Anticipos): panel lateral con el
+    // Clic en una fila (Documento agrupado o detalle, o movimientos de Anticipos): panel lateral con el
     // detalle del ingreso/egreso, por el endpoint de este reporte (su propio permiso).
     $('rie-tbody').addEventListener('click', e => {
         const tr = e.target.closest('tr.rie-fila-doc');
@@ -404,9 +411,9 @@
     // Sin carga automática: el reporte se consulta solo al presionar Buscar (o Enter
     // en el buscador). Limpiar deja la tabla y los indicadores en blanco.
     function vaciar() {
-        ['rie-head-tercero', 'rie-head-forma', 'rie-head-periodo', 'rie-head-anticipos', 'rie-head-anticipos-mov', 'rie-nota-anticipos']
+        ['rie-head-detalle', 'rie-head-tercero', 'rie-head-forma', 'rie-head-periodo', 'rie-head-anticipos', 'rie-head-anticipos-mov', 'rie-nota-anticipos']
             .forEach(id => $(id).classList.add('d-none'));
-        $('rie-head-detalle').classList.remove('d-none');
+        $('rie-head-comprobante').classList.remove('d-none');
         $('rie-tbody').innerHTML = '<tr><td colspan="10" class="text-center py-5 text-muted"><i class="bi bi-funnel fs-3 d-block mb-2"></i>Ajuste los filtros y presione <strong>Buscar</strong>.</td></tr>';
         ['rie-kpi-ing', 'rie-kpi-egr', 'rie-kpi-ant', 'rie-kpi-dinero', 'rie-kpi-neto'].forEach(id => $(id).textContent = money(0));
         $('rie-kpi-neto').classList.add('text-primary'); $('rie-kpi-neto').classList.remove('text-danger');

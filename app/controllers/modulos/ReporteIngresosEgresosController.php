@@ -54,7 +54,7 @@ class ReporteIngresosEgresosController extends BaseModuloController
     {
         return [
             'tipo_flujo'        => strtoupper(trim($_REQUEST['tipo_flujo'] ?? 'AMBOS')),
-            'ver_por'           => strtoupper(trim($_REQUEST['ver_por'] ?? 'DETALLE')), // DETALLE | TERCERO
+            'ver_por'           => strtoupper(trim($_REQUEST['ver_por'] ?? 'COMPROBANTE')), // DETALLE | COMPROBANTE | TERCERO | FORMA | FECHA | MES | ANTICIPOS
             'fecha_desde'       => trim($_REQUEST['fecha_desde'] ?? ''),
             'fecha_hasta'       => trim($_REQUEST['fecha_hasta'] ?? ''),
             'tercero_tipo'      => strtoupper(trim($_REQUEST['tercero_tipo'] ?? '')),
@@ -85,6 +85,10 @@ class ReporteIngresosEgresosController extends BaseModuloController
             $stats = $this->repository->getEstadisticas($idEmpresa, $f);
 
             switch ($f['ver_por']) {
+                case 'COMPROBANTE':
+                    $rows = $this->repository->getReporteAgrupadoComprobante($idEmpresa, $f);
+                    $rowsHtml = $this->renderComprobante($rows);
+                    break;
                 case 'TERCERO':
                     $rows = $this->repository->getReporteAgrupadoTercero($idEmpresa, $f);
                     $rowsHtml = $this->renderAgrupado($rows);
@@ -219,6 +223,43 @@ class ReporteIngresosEgresosController extends BaseModuloController
                 . '<td>' . htmlspecialchars($r['concepto'] ?? '') . '</td>'
                 . '<td class="text-center">' . $estBadge . '</td>'
                 . '<td class="text-end fw-bold ' . $signo . '">$' . number_format((float)($r['monto'] ?? 0), 2)
+                . self::notaNoMonetario((float)($r['monto_anticipo'] ?? 0), (float)($r['monto_otros'] ?? 0)) . '</td>'
+                . '</tr>';
+        }
+        return $h;
+    }
+
+    /**
+     * Vista Documento (agrupado): una fila por ingreso/egreso, como se registró; los
+     * documentos que cancela van juntos en una sola celda.
+     */
+    private function renderComprobante(array $rows): string
+    {
+        if (empty($rows)) {
+            return '<tr><td colspan="10" class="text-center py-5 text-muted"><i class="bi bi-search fs-3 d-block mb-2"></i>Sin resultados para los filtros seleccionados.</td></tr>';
+        }
+        $h = '';
+        foreach ($rows as $r) {
+            $fecha = !empty($r['fecha']) ? date('d-m-Y', strtotime($r['fecha'])) : '—';
+            $signo = $r['tipo_flujo'] === 'INGRESO' ? 'text-success' : 'text-danger';
+            $estado = strtolower($r['estado'] ?? '');
+            $estBadge = $estado === 'anulado'
+                ? '<span class="badge bg-danger bg-opacity-10 text-danger border border-danger border-opacity-25">Anulado</span>'
+                : '<span class="badge bg-secondary bg-opacity-10 text-secondary border border-secondary border-opacity-25">' . htmlspecialchars(ucfirst($estado ?: 'registrado')) . '</span>';
+            $lineas = (int) ($r['lineas'] ?? 0);
+            $h .= self::trComprobante($r['tipo_flujo'], (int) $r['id_comprobante'], (string) ($r['numero'] ?? ''), (string) ($r['tercero_nombre'] ?? ''))
+                . '<td>' . $this->badgeFlujo($r['tipo_flujo']) . '</td>'
+                . '<td><code class="text-secondary">' . htmlspecialchars($r['numero'] ?? '') . '</code></td>'
+                . '<td>' . $fecha . '</td>'
+                . '<td class="text-truncate" style="max-width:220px" title="' . htmlspecialchars($r['tercero_nombre'] ?? '') . '">' . htmlspecialchars($r['tercero_nombre'] ?? '—') . '</td>'
+                . '<td class="text-truncate" style="max-width:140px" title="' . htmlspecialchars($r['asesor'] ?? '') . '">' . htmlspecialchars($r['asesor'] ?? '') . '</td>'
+                . '<td class="text-truncate" style="max-width:320px" title="' . htmlspecialchars($r['detalle'] ?? '') . '">'
+                . ($lineas > 1 ? '<span class="badge bg-light text-dark border me-1">' . $lineas . ' doc.</span>' : '')
+                . htmlspecialchars($r['documentos'] ?? '') . '</td>'
+                . '<td class="text-truncate text-muted" style="max-width:200px" title="' . htmlspecialchars($r['observaciones'] ?? '') . '">' . htmlspecialchars($r['observaciones'] ?? '') . '</td>'
+                . '<td>' . htmlspecialchars($r['concepto'] ?? '') . '</td>'
+                . '<td class="text-center">' . $estBadge . '</td>'
+                . '<td class="text-end fw-bold ' . $signo . '">$' . number_format((float)($r['valor'] ?? 0), 2)
                 . self::notaNoMonetario((float)($r['monto_anticipo'] ?? 0), (float)($r['monto_otros'] ?? 0)) . '</td>'
                 . '</tr>';
         }
@@ -763,7 +804,7 @@ class ReporteIngresosEgresosController extends BaseModuloController
         $f = $this->getFiltros();
 
         try {
-            $modo = in_array($f['ver_por'], self::VISTAS_RESUMEN, true) ? $f['ver_por'] : 'DETALLE';
+            $modo = in_array($f['ver_por'], [...self::VISTAS_RESUMEN, 'COMPROBANTE'], true) ? $f['ver_por'] : 'DETALLE';
             if ($modo === 'ANTICIPOS' && $this->anticiposDeUnTercero($f)) {
                 // Movimientos de un tercero: primero la fila del saldo anterior.
                 $modo  = 'ANTICIPOS_MOV';
@@ -778,6 +819,7 @@ class ReporteIngresosEgresosController extends BaseModuloController
                     'FECHA'     => $this->repository->getReporteAgrupadoFecha($idEmpresa, $f),
                     'MES'       => $this->repository->getReporteAgrupadoMes($idEmpresa, $f),
                     'ANTICIPOS' => $this->repository->getAnticiposResumen($idEmpresa, $f),
+                    'COMPROBANTE' => $this->repository->getReporteAgrupadoComprobante($idEmpresa, $f),
                     default     => $this->repository->getReporteDetallado($idEmpresa, $f, 0),
                 };
             }
@@ -786,7 +828,7 @@ class ReporteIngresosEgresosController extends BaseModuloController
                 ? $this->indicadoresAnticiposPdf($modo, $filas, $mov ?? null)
                 : $this->indicadoresPdf($this->repository->getEstadisticas($idEmpresa, $f), $f['tipo_flujo']);
 
-            $horizontal = in_array($modo, ['DETALLE', 'ANTICIPOS_MOV'], true);
+            $horizontal = in_array($modo, ['DETALLE', 'COMPROBANTE', 'ANTICIPOS_MOV'], true);
             $pt         = $horizontal ? 7.0 : 8.0;
             $cols       = \App\Helpers\ReportePdf::completarAnchos($this->columnasPdf($modo, $f, $horizontal, $pt));
 
@@ -795,6 +837,7 @@ class ReporteIngresosEgresosController extends BaseModuloController
                 'TERCERO' => ['tercero', 'terceros'], 'FORMA' => ['forma de cobro/pago', 'formas de cobro/pago'],
                 'FECHA'   => ['día', 'días'], 'MES' => ['mes', 'meses'],
                 'ANTICIPOS' => ['cliente/proveedor', 'clientes/proveedores'], 'ANTICIPOS_MOV' => ['fila', 'filas'],
+                'COMPROBANTE' => ['comprobante', 'comprobantes'],
                 default => ['línea', 'líneas'],
             };
             $n = count($filas);
@@ -828,6 +871,7 @@ class ReporteIngresosEgresosController extends BaseModuloController
             'INGRESO' => 'Reporte de Ingresos', 'EGRESO' => 'Reporte de Egresos', default => 'Reporte de Ingresos y Egresos',
         };
         $titulo .= match ($modo) {
+            'COMPROBANTE' => ' · Documentos agrupados',
             'TERCERO' => ' · Por tercero', 'FORMA' => ' · Por forma de cobro/pago',
             'FECHA'   => ' · Por día', 'MES' => ' · Por mes',
             'ANTICIPOS', 'ANTICIPOS_MOV' => ' · Anticipos', default => '',
@@ -1008,6 +1052,27 @@ class ReporteIngresosEgresosController extends BaseModuloController
                 default   => $dinero('neto', 'Neto (dinero)', 14, true),
             };
             return $cols;
+        }
+
+        if ($modo === 'COMPROBANTE') {
+            // A4 horizontal: una fila por ingreso/egreso; sus documentos juntos en una celda.
+            $cols = [
+                ['lbl' => 'Número', 'w' => 10, 'cls' => '', 'val' => $txt('numero', 10)],
+                ['lbl' => 'Fecha', 'w' => 6, 'cls' => 'text-center',
+                 'val' => static fn (array $r): string => !empty($r['fecha']) ? date('d-m-Y', strtotime((string) $r['fecha'])) : '—'],
+            ];
+            if ($f['tercero_id'] <= 0) {
+                $cols[] = ['lbl' => 'Cliente / Proveedor / Empleado', 'w' => 18, 'cls' => '', 'flex' => true, 'val' => $txt('tercero_nombre', 18)];
+            }
+            if ($f['id_vendedor'] <= 0) {
+                $cols[] = ['lbl' => 'Asesor', 'w' => 10, 'cls' => '', 'val' => $txt('asesor', 10)];
+            }
+            $cols[] = ['lbl' => 'Documentos', 'w' => 24, 'cls' => '', 'flex' => true,
+                       'val' => static fn (array $r): string => htmlspecialchars((string) ($r['documentos'] ?? ''))];
+            if ($f['id_concepto'] <= 0) {
+                $cols[] = ['lbl' => 'Concepto', 'w' => 8, 'cls' => '', 'val' => $txt('concepto', 8)];
+            }
+            return array_merge($cols, $montos('valor', 6));
         }
 
         // DETALLE (A4 horizontal): una fila por línea del comprobante. Se omiten las
