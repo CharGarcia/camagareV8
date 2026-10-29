@@ -594,7 +594,12 @@
     };
 
     // ── Filas dinámicas: Servicios y Productos ──────────────────────────────
+    // Adicional con que nace cada ítem nuevo («NOVIEMBRE 2026» en la factura). Igual que
+    // AlumnoFacturacionService::DETALLE_ITEM_DEFECTO. Las líneas ya guardadas conservan el suyo.
+    const DETALLE_ITEM_DEFECTO = '{MES} {anio}';
+
     window.aluAgregarFilaServicio = function (data = {}) {
+        const esNueva = !data.id && !data.id_producto;
         const tbody = document.querySelector('#tablaServicios tbody');
         if (!tbody) return;
         const row = document.createElement('tr');
@@ -616,7 +621,7 @@
                 <input type="hidden" class="hid-producto" value="${escAttr(data.id_producto)}">
                 <div class="list-group shadow alu-typeahead-dropdown producto-dropdown d-none"></div>
             </td>
-            <td><input type="text" class="form-control form-control-sm input-alu txt-detalle" maxlength="300" placeholder="Ej. Pensión {MES} {anio}" value="${escAttr(data.detalle)}"></td>
+            <td><input type="text" class="form-control form-control-sm input-alu txt-detalle" maxlength="300" placeholder="Ej. Pensión {MES} {anio}" value="${escAttr(esNueva ? DETALLE_ITEM_DEFECTO : data.detalle)}"></td>
             <td><input type="number" step="0.01" min="0" class="form-control form-control-sm input-alu txt-cantidad" value="${escAttr(data.cantidad_default ?? 1)}"></td>
             <td><input type="number" step="0.01" min="0" class="form-control form-control-sm input-alu txt-precio" placeholder="${escAttr(baseTxt)}" title="Vacío = precio base del producto" value="${escAttr(precioInicial)}"></td>
             <td><input type="number" step="0.01" min="0" class="form-control form-control-sm input-alu txt-descuento" placeholder="0.00" value="${escAttr(Number(data.descuento || 0) > 0 ? Number(data.descuento).toFixed(2) : '')}"></td>

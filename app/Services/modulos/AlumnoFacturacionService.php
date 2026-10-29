@@ -31,6 +31,9 @@ class AlumnoFacturacionService
     // «Niño: PÉREZ JUAN» / «Niña: …» según el sexo. Igual en alumnos_modal.js (INFO_ADICIONAL_DEFECTO).
     public const INFO_ADICIONAL_DEFECTO = [['concepto' => '{niño}', 'detalle' => '{alumno}']];
 
+    /** Adicional con que nace cada ítem nuevo del alumno. Igual en alumnos_modal.js (DETALLE_ITEM_DEFECTO). */
+    public const DETALLE_ITEM_DEFECTO = '{MES} {anio}';
+
     /**
      * Marcadores propios del alumno. Los del mes ({mes}, {MES}, {anio}…) los
      * resuelve después el generador de Suscripciones con el período facturado.

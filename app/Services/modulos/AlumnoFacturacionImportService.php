@@ -372,7 +372,7 @@ class AlumnoFacturacionImportService
 
             if ($linea === null) {
                 $nuevas[] = ['id_producto' => $idProd, 'cantidad_default' => 1, 'precio_override' => $override,
-                             'frecuencia' => 'mensual', 'activo' => true, 'detalle' => $this->detalle,
+                             'frecuencia' => 'mensual', 'activo' => true, 'detalle' => $this->detalle ?? AlumnoFacturacionService::DETALLE_ITEM_DEFECTO,
                              'id_tarifa_iva' => null, 'descuento' => 0];
                 $cuenta['agregados']++;
                 $notas[] = 'Agregado: ' . $c['servicio'] . ' a ' . number_format($valor, 2, '.', '');

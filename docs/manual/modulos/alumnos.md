@@ -116,7 +116,7 @@ perder el historial de los anteriores.
 | Tipo de sangre / Alergias / Contacto de emergencia | No | Información útil en caso de emergencia. |
 | Servicios y productos (producto, cantidad, precio, activo) | No | En la pestaña **Facturación**, debajo del cliente. Productos o servicios del catálogo que se le facturan al alumno. Al elegir el producto (o al abrir un alumno cuya línea no tenía precio propio), el **precio** se llena con su precio base y se puede cambiar para este alumno. Ese precio queda guardado en la línea: si luego cambia el precio base del producto, hay que actualizarlo aquí. Si se borra, se usa el precio base vigente al facturar. El **IVA** viene de la tarifa del producto y se puede cambiar en la línea si la configuración de facturación lo permite; el **Total** se calcula solo. |
 | Descuento (por ítem) | No | Valor en $ que se resta de esa línea en cada factura (no puede superar cantidad × precio). Sale como descuento de la línea, igual que en Facturas de Venta, y se suma en «(-) Descuento» de los totales. |
-| Adicional (por ítem) | No | Texto que sale bajo la descripción de esa línea en la factura (máx. 300 caracteres). Admite marcadores, p. ej. `{alumno} - Pensión {MES} {anio}`. |
+| Adicional (por ítem) | No | Texto que sale bajo la descripción de esa línea en la factura (máx. 300 caracteres). Admite marcadores, p. ej. `{alumno} - Pensión {MES} {anio}`. Cada fila nueva viene con `{MES} {anio}` (en la factura: *NOVIEMBRE 2026*); las ya guardadas conservan el suyo. |
 | Información adicional | No | Filas concepto / detalle que se agregan a cada factura del alumno (máx. 10). Un alumno nuevo viene con «{niño}: {alumno}» (en la factura: *Niño: PÉREZ JUAN* o *Niña: …* según el sexo). |
 | Foto del alumno | No | Imagen del alumno. Se carga en la pestaña **Documentos**, también al crear el alumno. |
 | Documentos | No | Archivos adjuntos (PDF/imagen) asociados al alumno. |
@@ -550,7 +550,9 @@ pestaña Transacciones aparece solo si el usuario puede **ver** Facturas de Vent
   abren Alumnos con la dirección limpia. **Cargar facturación** se abre con el
   Adicional `{MES} {anio}` y la información adicional `{niño}` → `{alumno}`. Esa
   misma fila pasa a ser la información adicional por defecto de la ficha (antes
-  «Alumno: {alumno}»): la usan los alumnos que nunca guardaron una propia.
+  «Alumno: {alumno}»): la usan los alumnos que nunca guardaron una propia. Cada
+  ítem nuevo de la pestaña Facturación (y cada servicio que entra nuevo por
+  Excel sin Adicional en la ventana) nace con el Adicional `{MES} {anio}`.
 - **1.9** — Botón **Cargar facturación** en el listado, junto a QR
   representantes: plantilla Excel con una fila por alumno activo y una columna
   por servicio activo, con las celdas vacías; al subirla se agregan, cambian (precio)
