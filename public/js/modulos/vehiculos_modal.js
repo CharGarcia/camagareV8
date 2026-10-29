@@ -91,7 +91,63 @@
         const badge = document.getElementById('veh-badge-trx'); if (badge) badge.classList.add('d-none');
         const tb = document.getElementById('veh_trx_body'); if (tb) tb.innerHTML = '<tr><td colspan="9" class="text-center text-muted py-4">Sin transacciones.</td></tr>';
         const rs = document.getElementById('veh_trx_resumen'); if (rs) rs.innerHTML = '';
+        const bq = document.getElementById('veh_trx_buscar'); if (bq) bq.value = '';
+        document.getElementById('veh_trx_limpiar')?.classList.add('d-none');
+        const cn = document.getElementById('veh_trx_conteo'); if (cn) cn.textContent = '';
     }
+
+    // ─── Buscar ítems dentro de las órdenes (Transacciones) ───────────────────
+    // Filtra en el navegador (las líneas ya vienen con las órdenes). Varias palabras en
+    // cualquier orden, sin importar mayúsculas ni tildes. Una orden queda si alguno de sus
+    // ítems (código + descripción) tiene todas las palabras; también si las tiene su número
+    // de orden o de documento. Mientras hay búsqueda, las órdenes que coinciden se muestran
+    // desplegadas con los ítems encontrados resaltados; al limpiar vuelven a encogerse.
+    const vehNorm = s => String(s == null ? '' : s).normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
+    let vehTrxTimer = null;
+    function vehFiltrarTransacciones() {
+        const tbody = document.getElementById('veh_trx_body');
+        const inp = document.getElementById('veh_trx_buscar');
+        if (!tbody || !inp) return;
+        const palabras = vehNorm(inp.value).split(/\s+/).filter(Boolean);
+        const tiene = txt => palabras.every(p => txt.includes(p));
+        document.getElementById('veh_trx_limpiar')?.classList.toggle('d-none', !palabras.length);
+        let total = 0, visibles = 0;
+        tbody.querySelectorAll('tr.veh-trx-orden').forEach(tr => {
+            total++;
+            const det = tbody.querySelector(`tr[data-det="${tr.dataset.id}"]`);
+            const lineas = det ? det.querySelectorAll('tr[data-txt]') : [];
+            let coinciden = 0;
+            lineas.forEach(l => {
+                const si = palabras.length > 0 && tiene(l.dataset.txt);
+                l.classList.toggle('veh-trx-coincide', si);
+                if (si) coinciden++;
+            });
+            const muestra = !palabras.length || coinciden > 0 || tiene(tr.dataset.txt || '');
+            tr.classList.toggle('d-none', !muestra);
+            if (muestra) visibles++;
+            if (det) {
+                const abrir = muestra && palabras.length > 0;
+                det.classList.toggle('d-none', !abrir);
+                tr.querySelector('i.bi').className = 'bi small ' + (abrir ? 'bi-chevron-down' : 'bi-chevron-right');
+            }
+        });
+        const vacio = tbody.querySelector('tr.veh-trx-sin-resultados');
+        if (palabras.length && total && !visibles) {
+            if (!vacio) tbody.insertAdjacentHTML('beforeend', '<tr class="veh-trx-sin-resultados"><td colspan="9" class="text-center text-muted py-4">Ningún ítem coincide con la búsqueda.</td></tr>');
+        } else if (vacio) {
+            vacio.remove();
+        }
+        const cn = document.getElementById('veh_trx_conteo');
+        if (cn) cn.textContent = palabras.length ? `${visibles} de ${total} ${total === 1 ? 'orden' : 'órdenes'}` : '';
+    }
+    document.getElementById('veh_trx_buscar')?.addEventListener('input', () => {
+        clearTimeout(vehTrxTimer);
+        vehTrxTimer = setTimeout(vehFiltrarTransacciones, 200);
+    });
+    document.getElementById('veh_trx_limpiar')?.addEventListener('click', () => {
+        const inp = document.getElementById('veh_trx_buscar');
+        inp.value = ''; vehFiltrarTransacciones(); inp.focus();
+    });
 
     document.getElementById('veh-tab-transacciones')?.addEventListener('shown.bs.tab', () => { if (!vehCargado.trx) vehCargarTransacciones(); });
     document.getElementById('veh-tab-recordatorios')?.addEventListener('shown.bs.tab', () => { if (!vehCargado.rec) vehCargarRecordatorios(); });
@@ -120,12 +176,12 @@
             tbody.innerHTML = ordenes.map(o => {
                 const e = estados[o.estado] || ['secondary', o.estado || ''];
                 const doc = o.numero_documento ? `${o.tipo_documento === 'FACTURA' ? 'Fact.' : 'Rec.'} ${vehEsc(o.numero_documento)}` : '<span class="text-muted">—</span>';
-                const lineas = (o.lineas || []).map(l => `<tr>
+                const lineas = (o.lineas || []).map(l => `<tr data-txt="${vehEsc(vehNorm((l.producto_codigo || '') + ' ' + (l.descripcion || '')))}">
                         <td class="ps-4 text-muted">${l.tipo_linea === 'producto' ? '<i class="bi bi-box-seam"></i>' : '<i class="bi bi-tools"></i>'}</td>
                         <td colspan="4">${vehEsc(l.producto_codigo ? l.producto_codigo + ' - ' : '')}${vehEsc(l.descripcion)}</td>
                         <td class="text-end">${(parseFloat(l.cantidad) || 0).toLocaleString('en-US', { maximumFractionDigits: 6 })} × ${vehFmt(l.precio_unitario)}${parseFloat(l.descuento) > 0 ? ' − ' + vehFmt(l.descuento) : ''}</td>
                         <td class="text-end">${vehFmt(l.total_linea)}</td><td colspan="2"></td></tr>`).join('');
-                return `<tr class="veh-trx-orden" role="button" data-id="${o.id}">
+                return `<tr class="veh-trx-orden" role="button" data-id="${o.id}" data-txt="${vehEsc(vehNorm((o.numero_orden || '') + ' ' + (o.numero_documento || '')))}">
                         <td class="text-center"><i class="bi bi-chevron-right small"></i></td>
                         <td>${vehEsc(o.fecha || '')}</td>
                         <td class="fw-semibold text-primary">${vehEsc(o.numero_orden || '')}</td>
@@ -146,6 +202,8 @@
                 const abierto = det.classList.toggle('d-none') === false;
                 tr.querySelector('i.bi').className = 'bi small ' + (abierto ? 'bi-chevron-down' : 'bi-chevron-right');
             }));
+            // Si ya había algo escrito en el buscador, se aplica a lo recién cargado.
+            vehFiltrarTransacciones();
         } catch (e) {
             tbody.innerHTML = `<tr><td colspan="9" class="text-center text-danger py-4">${vehEsc(e.message)}</td></tr>`;
         }

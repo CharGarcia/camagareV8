@@ -5,8 +5,8 @@ categoria: Servicios
 ruta_modulo: modulos/vehiculos
 tipo: modulo
 visibilidad: todos
-etiquetas: vehiculos, vehiculo, carro, auto, placa, propietario, dueño, consulta sri, consultar placa, datos del vehiculo por placa, matricula, marca, año, historial del vehiculo, transacciones, visitas, ordenes car wash, lavado, taller, proxima cita, recordatorio, recordar cita, aviso al cliente, whatsapp, correo, automatizacion, buscar placa, filtros
-version: 1.6
+etiquetas: vehiculos, vehiculo, carro, auto, placa, propietario, dueño, consulta sri, consultar placa, datos del vehiculo por placa, matricula, marca, año, historial del vehiculo, transacciones, visitas, ordenes car wash, lavado, taller, proxima cita, recordatorio, recordar cita, aviso al cliente, whatsapp, correo, automatizacion, buscar placa, placa sin guion, buscar sin guion, buscar item, buscar servicio, buscar producto, cuando se cambio el aceite, filtros
+version: 1.8
 orden: 11
 estado: activo
 ---
@@ -52,7 +52,7 @@ placas antiguas de 3 números se completan con un 0 al salir del campo
 Al **editar** un vehículo ya guardado no se aplica la máscara, para no estropear
 placas registradas en otro formato (motos, vehículos migrados). La placa se
 considera la misma con o sin guion: `ABC-1234` y `ABC1234` no pueden registrarse
-dos veces, y los buscadores de vehículos de Car-Wash y Taller encuentran la placa
+dos veces, y el buscador del listado y los de Car-Wash y Taller encuentran la placa
 escrita de cualquiera de las dos formas.
 
 ## Traer marca, modelo y año desde el SRI (consulta por placa)
@@ -76,6 +76,10 @@ El cuadro de búsqueda busca en todas las columnas (marca, placa, chasis, año,
 propietario, correo, teléfono, modelo, color y fecha de registro). Se pueden escribir
 varias palabras en cualquier orden y no importan mayúsculas ni tildes.
 
+La placa se encuentra con o sin guion: `pdj4685` encuentra `PDJ-4685` y
+`PDJ-4685` encuentra una placa guardada como `PDJ4685`. También sirve una parte
+(por ejemplo `4685`).
+
 El botón del **embudo** abre la ventana de **filtros**: placa, marca, modelo, color,
 chasis, año (desde / hasta), estado, propietario, correo, teléfono, fecha de registro,
 usuario que lo registró y, de Car-Wash, **con o sin órdenes**, **última visita** y
@@ -94,6 +98,19 @@ líneas (código, descripción, cantidad × precio, descuento y total).
 
 Arriba se resume: número de visitas, total (sin las órdenes anuladas), fecha de la
 última visita y la próxima cita.
+
+### Buscar un ítem en las órdenes
+
+El cuadro **Buscar ítem** encuentra en qué órdenes se aplicó un servicio o producto:
+escriba el código o parte de la descripción (por ejemplo *aceite* o *filtro aire*).
+Se aceptan varias palabras en cualquier orden y no importan mayúsculas ni tildes.
+
+- Solo quedan las órdenes que tienen ese ítem; también se puede escribir el número
+  de orden o de la factura o recibo.
+- Las órdenes encontradas se muestran **desplegadas** y el ítem que coincide se
+  resalta en amarillo. Al lado del cuadro se indica cuántas órdenes coinciden
+  (por ejemplo *3 de 12 órdenes*).
+- La **X** limpia la búsqueda y las órdenes vuelven a encogerse.
 
 Si abre el vehículo desde la pantalla de Car-Wash, el enlace **Abrir la orden** abre
 esa orden.
@@ -194,6 +211,8 @@ Meta con las variables en el orden indicado.
 
 ## Historial de cambios
 
+- **1.8** — Pestaña **Transacciones**: nuevo cuadro **Buscar ítem** para encontrar en qué órdenes se aplicó un servicio o producto (por código o descripción); las órdenes encontradas se despliegan con el ítem resaltado.
+- **1.7** — El buscador del listado encuentra la **placa sin guion** (`pdj4685` → `PDJ-4685`) y también con guion cuando se guardó sin él.
 - **1.6** — En el listado, la primera columna es **Placa** y le sigue **Marca y
   modelo** (antes iba primero la marca). El mismo orden se aplica al exportar a PDF
   y Excel.

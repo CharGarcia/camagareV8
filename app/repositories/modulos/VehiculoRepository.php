@@ -37,10 +37,19 @@ class VehiculoRepository extends BaseRepository
         // de la ventana de filtros (FiltrosModal). Nunca se concatena la entrada del usuario.
         $parsed = \App\Helpers\FiltrosBusqueda::parsear($buscar);
         if ($parsed['texto_libre'] !== '') {
+            // Placa sin guion ni espacios, en las dos direcciones (como existePlaca y el buscador
+            // de Car-Wash): "pdj4685" encuentra "PDJ-4685" por la columna normalizada, y
+            // "PDJ-4685" encuentra "PDJ4685" porque a una palabra con forma de placa
+            // (letras-guion-números) se le quita el guion. Las fechas (solo dígitos) no se tocan.
+            $texto = implode(' ', array_map(
+                fn($p) => preg_match('/^[A-Za-z]{1,4}-+\d{1,5}[A-Za-z]?$/', $p) ? str_replace('-', '', $p) : $p,
+                preg_split('/\s+/u', $parsed['texto_libre']) ?: []
+            ));
             $condicion = \App\Helpers\FiltrosBusqueda::condicionTexto([
-                'v.marca', 'v.placa', 'v.chasis', 'v.anio::text', 'v.propietario', 'v.correo', 'v.telefono',
+                'v.marca', 'v.placa', "REGEXP_REPLACE(v.placa, '[^A-Za-z0-9]', '', 'g')",
+                'v.chasis', 'v.anio::text', 'v.propietario', 'v.correo', 'v.telefono',
                 'v.modelo', 'v.color', "TO_CHAR(v.created_at, 'DD-MM-YYYY')",
-            ], $parsed['texto_libre'], $params, 'tl');
+            ], $texto, $params, 'tl');
             if ($condicion !== '') {
                 $whereSql .= " AND {$condicion}";
             }

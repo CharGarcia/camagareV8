@@ -112,9 +112,22 @@ $urlBaseVehShared = BASE_URL . '/modulos/vehiculos';
                     </div><!-- /veh-pane-general -->
 
                     <!-- Transacciones: todo lo que se le ha hecho al vehículo (órdenes de Car-Wash) -->
+                    <style>
+                        /* Ítem encontrado por el buscador de Transacciones. */
+                        #veh_trx_body tr.veh-trx-coincide > td { background: rgba(255, 193, 7, .25) !important; }
+                    </style>
                     <div class="tab-pane fade" id="veh-pane-transacciones" role="tabpanel">
                         <div class="px-3 py-2">
                             <div class="d-flex flex-wrap gap-3 small mb-2" id="veh_trx_resumen"></div>
+                            <!-- Buscar ítems (servicios/productos) dentro de las órdenes del vehículo -->
+                            <div class="d-flex align-items-center gap-2 mb-2">
+                                <div class="input-group input-group-sm" style="width:360px; max-width:100%;">
+                                    <span class="input-group-text bg-white"><i class="bi bi-search"></i></span>
+                                    <input type="text" id="veh_trx_buscar" class="form-control" placeholder="Buscar ítem: código o descripción (ej. aceite, filtro)..." autocomplete="off">
+                                    <button type="button" class="btn btn-outline-secondary d-none" id="veh_trx_limpiar" title="Limpiar búsqueda"><i class="bi bi-x-lg"></i></button>
+                                </div>
+                                <span class="small text-muted" id="veh_trx_conteo"></span>
+                            </div>
                             <div class="border rounded-3 bg-white veh-trx-lista" style="max-height:55vh; overflow:auto;">
                                 <table class="table table-sm table-hover mb-0 text-nowrap" style="font-size:.8rem;">
                                     <thead class="table-light" style="position:sticky; top:0; z-index:1;">
