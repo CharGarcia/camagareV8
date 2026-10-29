@@ -306,10 +306,33 @@ class OrdenCarWashService
         return ['codigo' => $codigo, 'nombre' => $nombres[$codigo] ?? '', 'origen' => $origen];
     }
 
-    /** Historial de órdenes por vehículo o por cliente (pestaña Historial del modal). */
+    /**
+     * Historial de órdenes por vehículo o por cliente (pestaña Historial del modal), con el
+     * mismo desglose que Vehículos → Transacciones: las líneas (servicios/productos) de cada
+     * orden y, para un vehículo concreto, su próxima cita pendiente.
+     *
+     * @return array{ordenes: array, proxima_cita: ?string}
+     */
     public function getHistorial(int $idEmpresa, string $modo, string $q, ?int $idVehiculo, ?int $idCliente, ?int $idUsuarioFiltro): array
     {
-        return $this->repository->getHistorial($idEmpresa, $modo === 'cliente' ? 'cliente' : 'vehiculo', $q, $idVehiculo, $idCliente, $idUsuarioFiltro);
+        $modo    = $modo === 'cliente' ? 'cliente' : 'vehiculo';
+        $ordenes = $this->repository->getHistorial($idEmpresa, $modo, $q, $idVehiculo, $idCliente, $idUsuarioFiltro, 500);
+        $lineas  = $this->repository->getLineasPorOrdenes(array_column($ordenes, 'id'), $idEmpresa);
+        foreach ($ordenes as &$o) {
+            $o['lineas'] = $lineas[(int) $o['id']] ?? [];
+        }
+        unset($o);
+
+        // Próxima cita: la más cercana de hoy en adelante (mismo cálculo que Vehículos).
+        $proxima = null;
+        if ($modo === 'vehiculo' && $idVehiculo) {
+            $hoy = date('Y-m-d');
+            foreach ((new CarWashRecordatorioService())->citasVehiculo($idVehiculo, $idEmpresa, $idUsuarioFiltro) as $c) {
+                $f = substr((string) $c['proxima_cita'], 0, 10);
+                if ($f >= $hoy && ($proxima === null || $f < $proxima)) $proxima = $f;
+            }
+        }
+        return ['ordenes' => $ordenes, 'proxima_cita' => $proxima];
     }
 
     /** Solo se puede asignar (y facturar a) un cliente activo y no eliminado de la empresa. */

@@ -339,18 +339,19 @@ class CarWashController extends BaseModuloController
             $idVehiculo = (int) ($_GET['id_vehiculo'] ?? 0) ?: null;
             $idCliente  = (int) ($_GET['id_cliente'] ?? 0) ?: null;
             if ($q === '' && !$idVehiculo && !$idCliente) {
-                echo json_encode(['ok' => true, 'data' => []]);
+                echo json_encode(['ok' => true, 'data' => [], 'proxima_cita' => null]);
                 exit;
             }
             $perm = $this->getPermisos();
             $idUsuarioFiltro = empty($perm['todo']) ? (int) $_SESSION['id_usuario'] : null;
 
-            $rows = $this->service->getHistorial((int) $_SESSION['id_empresa'], $modo, $q, $idVehiculo, $idCliente, $idUsuarioFiltro);
+            $hist = $this->service->getHistorial((int) $_SESSION['id_empresa'], $modo, $q, $idVehiculo, $idCliente, $idUsuarioFiltro);
+            $rows = $hist['ordenes'];
             foreach ($rows as &$r) {
                 $r['fecha'] = !empty($r['fecha_ingreso']) ? date('d-m-Y H:i:s', strtotime($r['fecha_ingreso'])) : '';
             }
             unset($r);
-            echo json_encode(['ok' => true, 'data' => $rows], JSON_UNESCAPED_UNICODE);
+            echo json_encode(['ok' => true, 'data' => $rows, 'proxima_cita' => $hist['proxima_cita']], JSON_UNESCAPED_UNICODE);
         } catch (\Throwable $e) {
             \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             echo json_encode(['ok' => false, 'data' => [], 'error' => $e->getMessage()]);

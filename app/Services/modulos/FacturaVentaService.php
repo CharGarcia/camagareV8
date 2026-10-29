@@ -1573,12 +1573,16 @@ class FacturaVentaService
      * Una factura generada desde Facturación de consignaciones nace con un reingreso de inventario
      * y un saldo consumido de la consignación iguales a sus líneas. Editar productos o cantidades
      * solo cambiaría la salida de la factura: el reingreso y el saldo quedaban como antes
-     * (p. ej. 10 reingresadas y 6 vendidas → 4 de más en bodega). El resto (cliente, pagos, info
-     * adicional, precios) sí se puede editar.
+     * (p. ej. 10 reingresadas y 6 vendidas → 4 de más en bodega). Por eso esas líneas deben
+     * seguir TODAS, con el mismo producto y cantidad; sí se pueden AGREGAR líneas nuevas (un
+     * servicio de envío, otro producto), que son venta normal de la factura y no tocan el
+     * reingreso ni el saldo de la consignación. El resto (cliente, pagos, info adicional,
+     * precios) también se puede editar.
      */
     private function verificarLineasFacturacionCv(int $idFactura, int $idEmpresa, array $detallesNuevos): void
     {
-        $doc = (new \App\repositories\modulos\ConsignacionFacturaRepository())->getDocPorFactura($idFactura, $idEmpresa);
+        $repoCv = new \App\repositories\modulos\ConsignacionFacturaRepository();
+        $doc = $repoCv->getDocPorFactura($idFactura, $idEmpresa);
         if (!$doc) {
             return;
         }
@@ -1593,9 +1597,27 @@ class FacturaVentaService
             sort($out);
             return $out;
         };
-        if ($firma($this->repository->getDetalles($idFactura)) !== $firma($detallesNuevos)) {
+        // ¿Están todas las líneas de $base en $lineas? Multiconjunto: dos líneas iguales en la base
+        // exigen dos en $lineas; lo que sobre en $lineas son líneas agregadas.
+        $contiene = static function (array $lineas, array $base): bool {
+            $disp = array_count_values($lineas);
+            foreach ($base as $f) {
+                if (empty($disp[$f])) return false;
+                $disp[$f]--;
+            }
+            return true;
+        };
+        // Base = las líneas del documento de consignación, así un ítem agregado se puede volver a
+        // quitar. Si la factura guardada no las contiene (datos migrados del sistema anterior, donde
+        // documento y factura no siempre cuadran), la base es la factura tal como está guardada.
+        $actuales = $firma($this->repository->getDetalles($idFactura));
+        $base = $firma($repoCv->getDetalles((int) $doc['id'], $idEmpresa));
+        if (!$contiene($actuales, $base)) {
+            $base = $actuales;
+        }
+        if (!$contiene($firma($detallesNuevos), $base)) {
             $num = trim((string) ($doc['establecimiento'] ?? '') . '-' . ($doc['punto_emision'] ?? '') . '-' . ($doc['secuencial'] ?? ''), '-');
-            throw new \Exception("Esta factura se generó desde Facturación de consignaciones ({$num}): no se pueden cambiar sus productos ni cantidades. Para corregirlos, elimine esta factura y vuelva a generarla desde ese documento.");
+            throw new \Exception("Esta factura se generó desde Facturación de consignaciones ({$num}): sus productos y cantidades de consignación no se pueden quitar ni cambiar (sí puede agregar ítems nuevos). Para corregirlos, elimine esta factura y vuelva a generarla desde ese documento.");
         }
     }
 

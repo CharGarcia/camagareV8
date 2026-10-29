@@ -311,14 +311,16 @@
                         </div>
                     </div>
                     <div class="d-flex flex-wrap gap-3 small mb-2" id="cw_hist_resumen"></div>
-                    <div class="border rounded-3 overflow-auto bg-white" style="max-height:420px;">
+                    <div class="border rounded-3 overflow-auto bg-white" style="max-height:55vh;">
                         <table class="table table-sm table-hover mb-0 text-nowrap" style="font-size:.8rem;">
-                            <thead class="table-light">
+                            <thead class="table-light" style="position:sticky; top:0; z-index:1;">
                                 <tr>
-                                    <th class="ps-2">Fecha</th>
+                                    <th style="width:28px;"></th>
+                                    <th>Fecha</th>
                                     <th>N° Orden</th>
                                     <th>Placa</th>
                                     <th>Cliente</th>
+                                    <th class="text-end">Km</th>
                                     <th>Servicios / productos</th>
                                     <th class="text-end">Total</th>
                                     <th>Documento</th>
@@ -326,7 +328,7 @@
                                 </tr>
                             </thead>
                             <tbody id="cw_hist_body">
-                                <tr><td colspan="8" class="text-center text-muted py-4">Busque un vehículo o un cliente.</td></tr>
+                                <tr><td colspan="10" class="text-center text-muted py-4">Busque un vehículo o un cliente.</td></tr>
                             </tbody>
                         </table>
                     </div>
@@ -604,7 +606,7 @@
         if (tabGen) bootstrap.Tab.getOrCreateInstance(tabGen).show();
         document.getElementById('cw_hist_q').value = '';
         document.getElementById('cw_hist_resumen').innerHTML = '';
-        document.getElementById('cw_hist_body').innerHTML = '<tr><td colspan="8" class="text-center text-muted py-4">Busque un vehículo o un cliente.</td></tr>';
+        document.getElementById('cw_hist_body').innerHTML = '<tr><td colspan="10" class="text-center text-muted py-4">Busque un vehículo o un cliente.</td></tr>';
         cwRenderDocumentos([]);
     }
 
@@ -1994,50 +1996,131 @@
         if (modo === 'cliente' && idCli) { cwCargarHistorial({ id_cliente: idCli }); return; }
         if (modo === 'vehiculo' && idVeh) { cwCargarHistorial({ id_vehiculo: idVeh }); return; }
         document.getElementById('cw_hist_resumen').innerHTML = '';
-        document.getElementById('cw_hist_body').innerHTML = `<tr><td colspan="8" class="text-center text-muted py-4">La orden no tiene ${modo === 'cliente' ? 'cliente' : 'vehículo'} seleccionado. Escriba para buscar.</td></tr>`;
+        document.getElementById('cw_hist_body').innerHTML = `<tr><td colspan="10" class="text-center text-muted py-4">La orden no tiene ${modo === 'cliente' ? 'cliente' : 'vehículo'} seleccionado. Escriba para buscar.</td></tr>`;
     };
+
+    // La orden abierta, tal como está EN PANTALLA (aunque no se haya guardado o tenga cambios
+    // sin guardar): mismas columnas que una orden del historial, con sus líneas.
+    function cwHistorialOrdenActual() {
+        const lineas = [];
+        document.querySelectorAll('#cw_tbodyDetalle .row-detalle').forEach(tr => {
+            const desc = (tr.querySelector('.input-descripcion')?.value || '').trim();
+            const cant = num(tr.querySelector('.input-cantidad')?.value);
+            if (!desc || cant <= 0) return;
+            const prec = num(tr.querySelector('.input-precio')?.value), dsc = num(tr.querySelector('.input-desc')?.value);
+            const sel = tr.querySelector('.input-iva'), opt = sel ? sel.options[sel.selectedIndex] : null;
+            const base = cwBaseLinea(cant, prec, dsc);
+            lineas.push({
+                tipo_linea: tr.dataset.tipoProduccion === '02' || !(tr.querySelector('.input-id-producto')?.value) ? 'servicio' : 'producto',
+                producto_codigo: (tr.querySelector('.input-codigo')?.value || '').trim(), descripcion: desc,
+                cantidad: cant, precio_unitario: prec, descuento: dsc,
+                total_linea: r2(base + CMG_iva(base, num(opt ? opt.value : 0))),
+            });
+        });
+        const veh = document.getElementById('cw_vehiculo_busqueda');
+        const cli = (document.getElementById('cw_cliente_busqueda').value || '').split(' — ');
+        const fi = document.getElementById('cw_fecha_ingreso').value || '';
+        const m = fi.match(/^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})/);
+        return {
+            id: parseInt(document.getElementById('cw_id').value || 0, 10) || 0,
+            numero_orden: document.getElementById('cw_numero_orden').value || '',
+            fecha: m ? `${m[3]}-${m[2]}-${m[1]} ${m[4]}:${m[5]}:00` : '',
+            placa: veh.dataset.placa || (veh.value.split(' — ')[0] || ''),
+            cliente_nombre: cli.length > 1 ? cli.slice(1).join(' — ') : '',
+            kilometraje: document.getElementById('cw_kilometraje').value,
+            servicios: lineas.map(l => l.descripcion).join(', '),
+            total: num(document.getElementById('cw-lbl-total').textContent),
+            estado: CW_CUR.estado || 'borrador',
+            tipo_documento: CW_CUR.tipo_documento || '', numero_documento: '',
+            lineas, actual: true,
+        };
+    }
+
     async function cwCargarHistorial(filtro) {
         const modo = document.getElementById('cw_hist_modo').value;
         const tbody = document.getElementById('cw_hist_body');
-        tbody.innerHTML = '<tr><td colspan="8" class="text-center text-muted py-4"><span class="spinner-border spinner-border-sm me-1"></span>Buscando...</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="10" class="text-center text-muted py-4"><span class="spinner-border spinner-border-sm me-1"></span>Buscando...</td></tr>';
         try {
             const params = new URLSearchParams({ modo, ...filtro });
             const res = await fetch(`${RUTA}/historialAjax?${params.toString()}`);
             const data = await res.json();
             if (!data.ok) throw new Error(data.error || 'No se pudo cargar el historial.');
-            const rows = data.data || [];
-            const idActual = parseInt(document.getElementById('cw_id').value || 0, 10);
+            let rows = data.data || [];
+
+            // Lo que ahora tiene la orden abierta va primero y con lo que está en pantalla. Solo
+            // si es del vehículo/cliente consultado (al buscar otro, no se mezcla).
+            const act = cwHistorialOrdenActual();
+            const guardada = rows.find(r => act.id && parseInt(r.id, 10) === act.id);
+            const idVehOrden = String(document.getElementById('cw_id_vehiculo').value || '');
+            const idCliOrden = String(document.getElementById('cw_id_cliente').value || '');
+            const esDeEsta = guardada
+                || (modo === 'vehiculo' && filtro.id_vehiculo && String(filtro.id_vehiculo) === idVehOrden)
+                || (modo === 'cliente' && filtro.id_cliente && String(filtro.id_cliente) === idCliOrden);
+            if (esDeEsta && (act.lineas.length || guardada)) {
+                if (guardada) {
+                    // Conserva lo que solo sabe el servidor (número de documento, nombre del cliente).
+                    act.numero_documento = guardada.numero_documento || '';
+                    act.tipo_documento = guardada.tipo_documento || act.tipo_documento;
+                    act.estado = guardada.estado || act.estado;
+                    if (!act.cliente_nombre) act.cliente_nombre = guardada.cliente_nombre || '';
+                }
+                rows = [act, ...rows.filter(r => r !== guardada)];
+            }
+
             if (!rows.length) {
                 document.getElementById('cw_hist_resumen').innerHTML = '';
-                tbody.innerHTML = '<tr><td colspan="8" class="text-center text-muted py-4">Sin órdenes registradas.</td></tr>';
+                tbody.innerHTML = '<tr><td colspan="10" class="text-center text-muted py-4">Sin órdenes registradas.</td></tr>';
                 return;
             }
+            const previas = rows.filter(r => !r.actual);
             const total = rows.reduce((a, r) => a + (r.estado === 'anulado' ? 0 : num(r.total)), 0);
             const placas = new Set(rows.map(r => (r.placa || '').toUpperCase()).filter(Boolean));
             const clientes = new Set(rows.map(r => r.cliente_nombre).filter(Boolean));
+            const fechaCita = data.proxima_cita ? String(data.proxima_cita).slice(0, 10).split('-').reverse().join('-') : '';
             document.getElementById('cw_hist_resumen').innerHTML = `
-                <span><i class="bi bi-list-check text-primary me-1"></i><b>${rows.length}</b> ${rows.length === 1 ? 'orden' : 'órdenes'}${rows.length >= 200 ? ' (últimas 200)' : ''}</span>
+                <span><i class="bi bi-list-check text-primary me-1"></i><b>${rows.length}</b> ${rows.length === 1 ? 'orden' : 'órdenes'}${previas.length >= 500 ? ' (últimas 500)' : ''}</span>
                 <span><i class="bi bi-cash-stack text-success me-1"></i>Total: <b>${fmt(total, 2)}</b></span>
-                <span><i class="bi bi-calendar-check text-info me-1"></i>Última visita: <b>${esc(rows[0].fecha || '')}</b></span>
+                <span><i class="bi bi-calendar-check text-info me-1"></i>Última visita: <b>${esc((previas[0] || {}).fecha || '—')}</b></span>
+                ${modo === 'vehiculo' ? `<span><i class="bi bi-calendar-event text-warning me-1"></i>Próxima cita: <b>${esc(fechaCita || '—')}</b></span>` : ''}
                 ${modo === 'cliente' ? `<span><i class="bi bi-car-front text-secondary me-1"></i>${placas.size} vehículo(s)</span>` : `<span><i class="bi bi-person text-secondary me-1"></i>${clientes.size} cliente(s)</span>`}`;
             const nombres = { borrador: ['warning', 'Borrador'], facturado: ['success', 'Facturado'], anulado: ['danger', 'Anulado'] };
-            tbody.innerHTML = rows.map(r => {
+            tbody.innerHTML = rows.map((r, i) => {
                 const e = nombres[r.estado] || ['secondary', r.estado || ''];
                 const doc = r.numero_documento ? `${r.tipo_documento === 'FACTURA' ? 'Fact.' : 'Rec.'} ${esc(r.numero_documento)}` : '<span class="text-muted">—</span>';
-                const actual = parseInt(r.id, 10) === idActual;
-                return `<tr role="button" class="${actual ? 'table-primary' : ''}" title="${actual ? 'Orden abierta' : 'Abrir esta orden'}" onclick="${actual ? '' : `cwAbrirVerId(${parseInt(r.id, 10)}, false)`}">
-                    <td class="ps-2">${esc(r.fecha || '')}</td>
-                    <td class="fw-semibold text-primary">${esc(r.numero_orden || '')}</td>
-                    <td>${esc(r.placa || '')}</td>
-                    <td class="text-truncate" style="max-width:200px">${esc(r.cliente_nombre || '')}</td>
-                    <td class="text-truncate" style="max-width:320px" title="${esc(r.servicios || '')}">${esc(r.servicios || '')}</td>
-                    <td class="text-end">${fmt(r.total, 2)}</td>
-                    <td>${doc}</td>
-                    <td class="text-center pe-2"><span class="badge bg-${e[0]} bg-opacity-10 text-${e[0]}">${esc(e[1])}</span></td>
-                </tr>`;
+                const lineas = (r.lineas || []).map(l => `<tr>
+                        <td class="ps-4 text-muted" style="width:40px">${l.tipo_linea === 'producto' ? '<i class="bi bi-box-seam"></i>' : '<i class="bi bi-tools"></i>'}</td>
+                        <td>${esc(l.producto_codigo ? l.producto_codigo + ' - ' : '')}${esc(l.descripcion)}</td>
+                        <td class="text-end">${num(l.cantidad).toLocaleString('en-US', { maximumFractionDigits: 6 })} × ${fmt(l.precio_unitario, 2)}${num(l.descuento) > 0 ? ' − ' + fmt(l.descuento, 2) : ''}</td>
+                        <td class="text-end pe-3">${fmt(l.total_linea, 2)}</td></tr>`).join('');
+                const etqActual = r.actual
+                    ? ` <span class="badge bg-primary bg-opacity-10 text-primary ms-1">${r.id ? 'Orden abierta' : 'En curso · sin guardar'}</span>` : '';
+                const abrir = !r.actual && r.id
+                    ? `<div class="ps-4 pb-1"><button type="button" class="btn btn-link btn-sm p-0" onclick="event.stopPropagation(); cwAbrirVerId(${parseInt(r.id, 10)}, false)"><i class="bi bi-box-arrow-up-right me-1"></i>Abrir la orden</button></div>` : '';
+                // La orden actual se muestra desplegada: es lo que se está trabajando ahora.
+                return `<tr class="cw-hist-orden ${r.actual ? 'table-primary' : ''}" role="button" data-i="${i}">
+                        <td class="text-center"><i class="bi ${r.actual ? 'bi-chevron-down' : 'bi-chevron-right'} small"></i></td>
+                        <td>${esc(r.fecha || '')}</td>
+                        <td class="fw-semibold text-primary">${esc(r.numero_orden || '')}${etqActual}</td>
+                        <td>${esc(r.placa || '')}</td>
+                        <td class="text-truncate" style="max-width:200px">${esc(r.cliente_nombre || '')}</td>
+                        <td class="text-end">${r.kilometraje ? esc(Number(r.kilometraje).toLocaleString('es-EC')) : ''}</td>
+                        <td class="text-truncate" style="max-width:300px" title="${esc(r.servicios || '')}">${esc(r.servicios || '')}</td>
+                        <td class="text-end">${fmt(r.total, 2)}</td>
+                        <td>${doc}</td>
+                        <td class="text-center pe-2"><span class="badge bg-${e[0]} bg-opacity-10 text-${e[0]}">${esc(e[1])}</span></td>
+                    </tr>
+                    <tr class="cw-hist-detalle bg-light ${r.actual ? '' : 'd-none'}" data-det="${i}"><td colspan="10" class="p-0">
+                        <table class="table table-sm mb-0 bg-light" style="font-size:.75rem;"><tbody>${lineas || '<tr><td class="ps-4 text-muted">Sin líneas.</td></tr>'}</tbody></table>
+                        ${abrir}
+                    </td></tr>`;
             }).join('');
+            tbody.querySelectorAll('.cw-hist-orden').forEach(tr => tr.addEventListener('click', () => {
+                const det = tbody.querySelector(`tr[data-det="${tr.dataset.i}"]`);
+                const abierto = det.classList.toggle('d-none') === false;
+                tr.querySelector('i.bi').className = 'bi small ' + (abierto ? 'bi-chevron-down' : 'bi-chevron-right');
+            }));
         } catch (e) {
-            tbody.innerHTML = `<tr><td colspan="8" class="text-center text-danger py-4">${esc(e.message)}</td></tr>`;
+            tbody.innerHTML = `<tr><td colspan="10" class="text-center text-danger py-4">${esc(e.message)}</td></tr>`;
         }
     }
     // Al entrar a la pestaña Historial sin búsqueda previa, carga el de esta orden.

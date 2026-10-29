@@ -5,8 +5,8 @@ categoria: Servicios
 ruta_modulo: modulos/car-wash
 tipo: modulo
 visibilidad: todos
-etiquetas: car wash, lavado, lavadora de autos, lubricadora, cambio de aceite, mecanica, taller, orden de servicio, orden mecanica, orden de trabajo, vehiculo, placa, historial del vehiculo, historial del cliente, visitas, ultima visita, facturar orden, recibo de venta, refacturar, factura anulada, proxima cita, proximo chequeo, editar cliente, editar vehiculo, corregir placa, cambiar datos del cliente, actualizar correo, migracion, sistema anterior, numeracion por fecha, numero con el año, reiniciar numeracion, reinicio anual, reinicio mensual, correlativo por año, correlativo por mes, modo de numeracion, buscar orden, buscar placa, buscador, filtros, filtrar ordenes, filtro de fechas, buscar por servicio, chips, imprimir, impresora, aviso, avisos, ordenes en borrador, ordenes sin facturar, pendientes de facturar, barra superior, sin saldo, sin stock, productos similares, productos equivalentes, equivalencias, reemplazo, otra marca, sugerir otro producto, misma categoria, usar este, pdf en dos hojas, segunda hoja casi vacia, totales en otra pagina, el pdf corta la pagina, hoja de mas, reporte de salida, acta de salida, informe de entrega, entrega del vehiculo, trabajo realizado, recomendaciones, proxima cita, anular orden, orden anulada, devolver repuestos, stock descontado dos veces
-version: 1.23
+etiquetas: car wash, lavado, lavadora de autos, lubricadora, cambio de aceite, mecanica, taller, orden de servicio, orden mecanica, orden de trabajo, vehiculo, placa, historial del vehiculo, historial del cliente, visitas, ultima visita, facturar orden, recibo de venta, refacturar, factura anulada, proxima cita, proximo chequeo, editar cliente, editar vehiculo, corregir placa, cambiar datos del cliente, actualizar correo, migracion, sistema anterior, numeracion por fecha, numero con el año, reiniciar numeracion, reinicio anual, reinicio mensual, correlativo por año, correlativo por mes, modo de numeracion, buscar orden, buscar placa, buscador, filtros, filtrar ordenes, filtro de fechas, buscar por servicio, chips, imprimir, impresora, aviso, avisos, ordenes en borrador, ordenes sin facturar, pendientes de facturar, barra superior, sin saldo, sin stock, productos similares, productos equivalentes, equivalencias, reemplazo, otra marca, sugerir otro producto, misma categoria, usar este, pdf en dos hojas, segunda hoja casi vacia, totales en otra pagina, el pdf corta la pagina, hoja de mas, historial del vehiculo, transacciones del vehiculo, que se le hizo al carro, reporte de salida, acta de salida, informe de entrega, entrega del vehiculo, trabajo realizado, recomendaciones, proxima cita, anular orden, orden anulada, devolver repuestos, stock descontado dos veces
+version: 1.24
 orden: 10
 estado: activo
 ---
@@ -212,12 +212,19 @@ En la pestaña **Historial** elija **Buscar por**: *Vehículo* o *Cliente*.
   identificación del cliente). Se aceptan varias palabras en cualquier orden y no
   importan mayúsculas ni tildes.
 - Arriba se resume: número de órdenes, total facturado (sin las anuladas), fecha de
-  la última visita y cuántos vehículos o clientes distintos aparecen.
-- Cada fila muestra fecha, número de orden, placa, cliente, servicios, total,
-  documento emitido y estado. Un clic en una fila abre esa orden. La orden abierta
-  se resalta.
+  la última visita, la **próxima cita** pendiente del vehículo y cuántos vehículos o
+  clientes distintos aparecen.
+- Se ve igual que la pestaña **Transacciones** de la ficha del vehículo: cada fila
+  muestra fecha, número de orden, placa, cliente, kilometraje, servicios, total,
+  documento emitido y estado. Un clic en la fila **despliega sus servicios y
+  productos** (código, cantidad × precio, descuento y total de cada línea) y el
+  botón **Abrir la orden**.
+- **La orden que tiene abierta aparece primero, desplegada y resaltada**, con lo que
+  está en pantalla en ese momento: si todavía no la guardó se marca *En curso · sin
+  guardar*, y si ya está guardada, *Orden abierta* (con los cambios que aún no haya
+  guardado). Al volver a la pestaña se actualiza.
 
-Se muestran hasta las 200 órdenes más recientes.
+Se muestran hasta las 500 órdenes más recientes.
 
 ## Facturación: en qué documento se emitió la orden
 
@@ -425,6 +432,7 @@ documentos admite cada periodo) está en el manual de **Empresa**, sección
 
 ## Historial de cambios
 
+- **1.24** — La pestaña **Historial** se ve como Transacciones del vehículo: cada orden se despliega con sus servicios y productos, muestra el kilometraje y la próxima cita, y la orden abierta aparece primero con lo que está en pantalla (aunque no se haya guardado). Ahora muestra hasta 500 órdenes.
 - **1.23** — Nueva pestaña **Reporte de salida** (junto a Condiciones de ingreso) para anotar el trabajo realizado, las recomendaciones y lo que se debe hacer en la próxima cita; se puede completar aunque la orden ya esté facturada. Nuevo PDF **Reporte de salida del vehículo** con los servicios y productos aplicados y el número de la factura o recibo emitido; se imprime o se envía por correo. Requiere el SQL `database/migrations/20261029_carwash_reporte_salida.sql`.
 - **1.22** — La **Info. Adicional** ya no se pierde al guardar: una línea con solo Concepto o solo Detalle se descartaba sin aviso; ahora se guarda con el concepto «Observación» y pasa a la factura o recibo. Cada campo admite hasta 300 caracteres (tope del SRI), así un texto largo ya no hace fallar el recibo.
 - **1.21** — **Anular una orden devuelve al stock** lo que consumió (y reactivarla lo vuelve a descontar); antes la orden anulada seguía consumiendo stock hasta eliminarla.
