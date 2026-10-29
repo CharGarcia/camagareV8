@@ -181,6 +181,8 @@ class ConsignacionVentaService
             foreach ($candidatas[$idProd] as $idPd) {
                 $s = $saldos[$idPd] ?? null;
                 if ($s === null) continue;
+                // Solo en la misma unidad: el saldo del pedido se compara cantidad contra cantidad.
+                if ($s['id_unidad_medida'] !== ($det['id_unidad_medida'] ?? null)) continue;
                 $pendiente = $s['cantidad_pedido'] - $s['consignado'] - ($asignado[$idPd] ?? 0.0);
                 if ($cant <= $pendiente + 0.000001) {
                     $detalles[$i]['id_pedido_detalle'] = $idPd;
@@ -190,6 +192,111 @@ class ConsignacionVentaService
             }
         }
         return $detalles;
+    }
+
+    /**
+     * Unidad de cada línea (CAJA X100…, Empresa → Facturación → «Mostrar unidad de medida»): solo
+     * se guarda si es compatible con la del producto; si no, NULL (= unidad del producto). La
+     * cantidad de la línea queda en esa unidad y el kardex sale convertido (cantidadKardex()).
+     */
+    private function normalizarUnidadesLineas(array $detalles, int $idEmpresa): array
+    {
+        $conColumna = $this->repository->columnaUnidadMedidaExiste();
+        $prodRepo = null;
+        foreach ($detalles as $i => $det) {
+            $idUnidad = (int) ($det['id_unidad_medida'] ?? 0);
+            $detalles[$i]['id_unidad_medida'] = null;
+            if (!$conColumna || $idUnidad <= 0 || empty($det['id_producto'])) {
+                continue;
+            }
+            $prodRepo ??= new \App\repositories\modulos\ProductoRepository();
+            $prod = $prodRepo->getDatosMovimientoInventario((int) $det['id_producto'], $idEmpresa);
+            $detalles[$i]['id_unidad_medida'] = $this->getInventarioService()->unidadLineaGuardable(
+                $idUnidad,
+                !empty($prod['id_medida']) ? (int) $prod['id_medida'] : null,
+                $idEmpresa
+            );
+        }
+        return $detalles;
+    }
+
+    /**
+     * Una línea tomada de un pedido va en la unidad de esa línea del pedido: su saldo (pedido −
+     * consignado) se compara cantidad contra cantidad. La pantalla ya bloquea el selector; esto
+     * lo asegura aunque la petición llegue con otra unidad.
+     */
+    private function aplicarUnidadPedido(array $detalles, int $idEmpresa): array
+    {
+        if (!$this->repository->columnaUnidadMedidaExiste()) {
+            return $detalles;
+        }
+        $ids = array_filter(array_map(static fn($d) => (int) ($d['id_pedido_detalle'] ?? 0), $detalles));
+        if (empty($ids)) {
+            return $detalles;
+        }
+        $unidades = $this->repository->getUnidadesPedidoDetalle($ids, $idEmpresa);
+        foreach ($detalles as $i => $det) {
+            $idPd = (int) ($det['id_pedido_detalle'] ?? 0);
+            if ($idPd > 0 && array_key_exists($idPd, $unidades)) {
+                $detalles[$i]['id_unidad_medida'] = $unidades[$idPd];
+            }
+        }
+        return $detalles;
+    }
+
+    /**
+     * Lo que la línea saca del kardex, en la unidad del producto (4 CAJA X100 = 400), con la nota
+     * de conversión para la observación del movimiento.
+     *
+     * @return array{cantidad:float,nota:string}
+     */
+    private function cantidadKardex(array $det, ?array $prodData, int $idEmpresa): array
+    {
+        return $this->getInventarioService()->cantidadKardexLinea(
+            (float) $det['cantidad'],
+            !empty($det['id_unidad_medida']) ? (int) $det['id_unidad_medida'] : null,
+            !empty($prodData['id_medida']) ? (int) $prodData['id_medida'] : null,
+            $idEmpresa
+        );
+    }
+
+    /** INSERT de una línea (con su unidad cuando ya existe la columna). */
+    private function sqlInsertDetalle(): string
+    {
+        $conUnidad = $this->repository->columnaUnidadMedidaExiste();
+        return "INSERT INTO consignaciones_ventas_detalles (
+                    id_consignacion, id_empresa, id_producto, cantidad, nup, lote, fecha_caducidad, precio_unitario, subtotal,
+                    id_impuesto, porcentaje_impuesto, valor_impuesto, total, id_bodega, eliminado, id_pedido_detalle"
+                . ($conUnidad ? ", id_unidad_medida" : "") . "
+                ) VALUES (
+                    :idc, :e, :prod, :cant, :nup, :lote, :fc, :pu, :sub, :idi, :pi, :vi, :tot, :idb, false, :idpd"
+                . ($conUnidad ? ", :idum" : "") . "
+                )";
+    }
+
+    private function paramsInsertDetalle(int $idConsignacion, int $idEmpresa, array $det): array
+    {
+        $params = [
+            ':idc' => $idConsignacion,
+            ':e' => $idEmpresa,
+            ':prod' => $det['id_producto'],
+            ':cant' => $det['cantidad'],
+            ':nup' => (isset($det['nup']) && $det['nup'] !== '') ? $det['nup'] : null,
+            ':lote' => (isset($det['lote']) && $det['lote'] !== '') ? $det['lote'] : null,
+            ':fc' => (isset($det['fecha_caducidad']) && $det['fecha_caducidad'] !== '') ? $det['fecha_caducidad'] : null,
+            ':pu' => $det['precio_unitario'],
+            ':sub' => $det['subtotal'],
+            ':idi' => $det['id_impuesto'] ?? null,
+            ':pi' => $det['porcentaje_impuesto'] ?? 0,
+            ':vi' => $det['valor_impuesto'] ?? 0,
+            ':tot' => $det['total'] ?? 0,
+            ':idb' => $det['id_bodega'],
+            ':idpd' => empty($det['id_pedido_detalle']) ? null : (int) $det['id_pedido_detalle'],
+        ];
+        if ($this->repository->columnaUnidadMedidaExiste()) {
+            $params[':idum'] = $det['id_unidad_medida'] ?? null;
+        }
+        return $params;
     }
 
     /**
@@ -401,8 +508,11 @@ class ConsignacionVentaService
                 }
             }
 
-            // Líneas agregadas a mano de un producto pendiente en el pedido usado: se vinculan.
-            $data['detalles'] = $this->vincularLineasManualesAPedidos($data['detalles'] ?? [], (int) $idEmpresa);
+            // Unidad de cada línea; las agregadas a mano de un producto pendiente en el pedido
+            // usado (en la misma unidad) se vinculan, y las del pedido llevan la unidad del pedido.
+            $data['detalles'] = $this->normalizarUnidadesLineas($data['detalles'] ?? [], (int) $idEmpresa);
+            $data['detalles'] = $this->vincularLineasManualesAPedidos($data['detalles'], (int) $idEmpresa);
+            $data['detalles'] = $this->aplicarUnidadPedido($data['detalles'], (int) $idEmpresa);
 
             // Saldo de los pedidos, bajo candado y antes del secuencial y del stock.
             $this->validarSaldoPedidos($data['detalles'], (int) $idEmpresa);
@@ -461,31 +571,9 @@ class ConsignacionVentaService
             foreach ($detalles as $det) {
                 $det['id_consignacion'] = $idConsignacion;
                 $det['id_bodega'] = (int) ($det['id_bodega'] ?? ($data['id_bodega'] ?? 0));
-                
-                $sqlDet = "INSERT INTO consignaciones_ventas_detalles (
-                               id_consignacion, id_empresa, id_producto, cantidad, nup, lote, fecha_caducidad, precio_unitario, subtotal, 
-                               id_impuesto, porcentaje_impuesto, valor_impuesto, total, id_bodega, eliminado, id_pedido_detalle
-                           ) VALUES (
-                               :idc, :e, :prod, :cant, :nup, :lote, :fc, :pu, :sub, :idi, :pi, :vi, :tot, :idb, false, :idpd
-                           )";
-                $st = $db->prepare($sqlDet);
-                $st->execute([
-                    ':idc' => $idConsignacion,
-                    ':e' => $idEmpresa,
-                    ':prod' => $det['id_producto'],
-                    ':cant' => $det['cantidad'],
-                    ':nup' => (isset($det['nup']) && $det['nup'] !== '') ? $det['nup'] : null,
-                    ':lote' => (isset($det['lote']) && $det['lote'] !== '') ? $det['lote'] : null,
-                    ':fc' => (isset($det['fecha_caducidad']) && $det['fecha_caducidad'] !== '') ? $det['fecha_caducidad'] : null,
-                    ':pu' => $det['precio_unitario'],
-                    ':sub' => $det['subtotal'],
-                    ':idi' => $det['id_impuesto'] ?? null,
-                    ':pi' => $det['porcentaje_impuesto'] ?? 0,
-                    ':vi' => $det['valor_impuesto'] ?? 0,
-                    ':tot' => $det['total'] ?? 0,
-                    ':idb' => $det['id_bodega'],
-                    ':idpd' => empty($det['id_pedido_detalle']) ? null : (int)$det['id_pedido_detalle']
-                ]);
+
+                $st = $db->prepare($this->sqlInsertDetalle());
+                $st->execute($this->paramsInsertDetalle((int) $idConsignacion, (int) $idEmpresa, $det));
 
                 // Misma regla que la factura (y que el retorno y la Facturación de consignaciones,
                 // que devuelven este stock): solo se descuenta si el establecimiento de la serie
@@ -501,6 +589,10 @@ class ConsignacionVentaService
 
                 $this->inventarioRepo->lockStock((int)$det['id_producto'], (int)$det['id_bodega'], $idEmpresa);
 
+                // Stock y kardex en la unidad del producto (4 CAJA X100 = 400).
+                $kx = $this->cantidadKardex($det, $prodData, (int) $idEmpresa);
+                $cantKardex = $kx['cantidad'];
+
                 $loteVal = (!empty($det['lote']) && $det['lote'] !== 'sin_lote') ? $det['lote'] : null;
                 $stockTotal = $this->inventarioRepo->getStockActual(
                     (int)$det['id_producto'],
@@ -510,19 +602,19 @@ class ConsignacionVentaService
                     null,
                     $loteVal
                 );
-                if ($stockTotal < $det['cantidad']) {
+                if ($stockTotal < $cantKardex) {
                     $prodNombre = $prodData['nombre'] ?? 'Producto';
                     $loteStr = $loteVal ? " (Lote: {$loteVal})" : "";
-                    throw new Exception("Stock insuficiente para el producto: {$prodNombre}{$loteStr}. Saldo actual: {$stockTotal}, Requerido: {$det['cantidad']}");
+                    throw new Exception("Stock insuficiente para el producto: {$prodNombre}{$loteStr}. Saldo actual: {$stockTotal}, Requerido: {$cantKardex}{$kx['nota']}");
                 }
 
                 // Afectar inventario (salida)
                 $stockActual = $this->inventarioRepo->getStockActual((int)$det['id_producto'], (int)$det['id_bodega'], $idEmpresa);
-                $nuevoStock = $stockActual - $det['cantidad'];
+                $nuevoStock = $stockActual - $cantKardex;
 
                 // Costo promedio actual → se registra en el kardex para el asiento de reclasificación.
                 $costoUnitCons  = (float) $this->inventarioRepo->getCostoPromedio((int)$det['id_producto'], (int)$det['id_bodega'], $idEmpresa);
-                $costoTotalCons = round($costoUnitCons * (float)$det['cantidad'], 2);
+                $costoTotalCons = round($costoUnitCons * $cantKardex, 2);
 
                 $this->inventarioRepo->registrarMovimiento([
                     'id_empresa' => $idEmpresa,
@@ -531,7 +623,7 @@ class ConsignacionVentaService
                     'tipo_movimiento' => 'salida',
                     'referencia_tipo' => 'CONSIGNACION_VENTA',
                     'referencia_id' => $idConsignacion,
-                    'cantidad' => -$det['cantidad'], // negativo para salidas
+                    'cantidad' => -$cantKardex, // negativo para salidas
                     'costo_unitario' => $costoUnitCons,
                     'costo_total' => $costoTotalCons,
                     'stock_anterior' => $stockActual,
@@ -540,7 +632,7 @@ class ConsignacionVentaService
                     'fecha_caducidad' => (isset($det['fecha_caducidad']) && $det['fecha_caducidad'] !== '') ? $det['fecha_caducidad'] : null,
                     'nup' => (isset($det['nup']) && $det['nup'] !== '') ? $det['nup'] : null,
                     // El número REAL asignado por el servidor, no el de la vista previa del modal.
-                    'observaciones' => 'Salida por Consignación Venta ' . $numero['serie'] . '-' . $numero['secuencial'],
+                    'observaciones' => 'Salida por Consignación Venta ' . $numero['serie'] . '-' . $numero['secuencial'] . $kx['nota'],
                     'id_usuario' => $idUsuario
                 ]);
                 
@@ -614,7 +706,9 @@ class ConsignacionVentaService
                     $cantidadesPrevias[$idPd] = ($cantidadesPrevias[$idPd] ?? 0.0) + (float) $da['cantidad'];
                 }
             }
-            $data['detalles'] = $this->vincularLineasManualesAPedidos($data['detalles'] ?? [], $idEmpresa, $id);
+            $data['detalles'] = $this->normalizarUnidadesLineas($data['detalles'] ?? [], $idEmpresa);
+            $data['detalles'] = $this->vincularLineasManualesAPedidos($data['detalles'], $idEmpresa, $id);
+            $data['detalles'] = $this->aplicarUnidadPedido($data['detalles'], $idEmpresa);
             $this->validarSaldoPedidos($data['detalles'], $idEmpresa, $id, $cantidadesPrevias);
 
             $this->revertirInventarioConsignacion($id, $idEmpresa, $idUsuario);
@@ -623,13 +717,7 @@ class ConsignacionVentaService
             $this->repository->deleteDetalles($id, $idEmpresa);
 
             // 3. Insertar nuevos detalles y descontar inventario
-            $sqlDetalle = "INSERT INTO consignaciones_ventas_detalles (
-                id_consignacion, id_empresa, id_producto, cantidad, nup, lote, fecha_caducidad, precio_unitario, subtotal, 
-                id_impuesto, porcentaje_impuesto, valor_impuesto, total, id_bodega, eliminado, id_pedido_detalle
-            ) VALUES (
-                :idc, :e, :prod, :cant, :nup, :lote, :fc, :pu, :sub, :idi, :pi, :vi, :tot, :idb, false, :idpd
-            )";
-            $stDetalle = $db->prepare($sqlDetalle);
+            $stDetalle = $db->prepare($this->sqlInsertDetalle());
 
             // Serie con la que queda el documento (si cambió de punto de emisión, la nueva).
             $afectaInventario = $this->getInventarioService()->facturacionAfectaInventarioPunto(
@@ -641,23 +729,7 @@ class ConsignacionVentaService
                 if (empty($det['id_producto'])) continue;
                 $det['id_bodega'] = (int) ($det['id_bodega'] ?? ($data['id_bodega'] ?? 0));
                 
-                $stDetalle->execute([
-                    ':idc' => $id,
-                    ':e' => $idEmpresa,
-                    ':prod' => $det['id_producto'],
-                    ':cant' => $det['cantidad'],
-                    ':nup' => (isset($det['nup']) && $det['nup'] !== '') ? $det['nup'] : null,
-                    ':lote' => (isset($det['lote']) && $det['lote'] !== '') ? $det['lote'] : null,
-                    ':fc' => (isset($det['fecha_caducidad']) && $det['fecha_caducidad'] !== '') ? $det['fecha_caducidad'] : null,
-                    ':pu' => $det['precio_unitario'],
-                    ':sub' => $det['subtotal'],
-                    ':idi' => $det['id_impuesto'] ?? null,
-                    ':pi' => $det['porcentaje_impuesto'] ?? 0,
-                    ':vi' => $det['valor_impuesto'] ?? 0,
-                    ':tot' => $det['total'] ?? 0,
-                    ':idb' => $det['id_bodega'],
-                    ':idpd' => empty($det['id_pedido_detalle']) ? null : (int)$det['id_pedido_detalle']
-                ]);
+                $stDetalle->execute($this->paramsInsertDetalle($id, $idEmpresa, $det));
 
                 // Misma regla que al crear (y que la factura): solo mueve stock si el establecimiento
                 // de la serie trabaja con inventario y el producto es inventariable y no es servicio.
@@ -667,6 +739,10 @@ class ConsignacionVentaService
 
                 if ($afectaInventario && $esInv) {
                     $this->inventarioRepo->lockStock((int)$det['id_producto'], (int)$det['id_bodega'], $idEmpresa);
+
+                    // Stock y kardex en la unidad del producto (4 CAJA X100 = 400).
+                    $kx = $this->cantidadKardex($det, $prodData, $idEmpresa);
+                    $cantKardex = $kx['cantidad'];
 
                     $loteVal = (!empty($det['lote']) && $det['lote'] !== 'sin_lote') ? $det['lote'] : null;
 
@@ -682,19 +758,19 @@ class ConsignacionVentaService
                         $loteVal
                     );
                     
-                    if ($stockTotal < $det['cantidad']) {
+                    if ($stockTotal < $cantKardex) {
                         $prodNombre = $prodData['nombre'] ?? 'Producto';
                         $loteStr = $loteVal ? " (Lote: {$loteVal})" : "";
-                        throw new Exception("Stock insuficiente para el producto: {$prodNombre}{$loteStr}. Saldo actual: {$stockTotal}, Requerido: {$det['cantidad']}");
+                        throw new Exception("Stock insuficiente para el producto: {$prodNombre}{$loteStr}. Saldo actual: {$stockTotal}, Requerido: {$cantKardex}{$kx['nota']}");
                     }
 
                     // Afectar inventario (salida)
                     $stockActual = $this->inventarioRepo->getStockActual((int)$det['id_producto'], (int)$det['id_bodega'], $idEmpresa);
-                    $nuevoStock = $stockActual - $det['cantidad'];
+                    $nuevoStock = $stockActual - $cantKardex;
 
                     // Costo promedio actual → se registra en el kardex para el asiento de reclasificación.
                     $costoUnitCons  = (float) $this->inventarioRepo->getCostoPromedio((int)$det['id_producto'], (int)$det['id_bodega'], $idEmpresa);
-                    $costoTotalCons = round($costoUnitCons * (float)$det['cantidad'], 2);
+                    $costoTotalCons = round($costoUnitCons * $cantKardex, 2);
 
                     $this->inventarioRepo->registrarMovimiento([
                         'id_empresa' => $idEmpresa,
@@ -703,7 +779,7 @@ class ConsignacionVentaService
                         'tipo_movimiento' => 'salida',
                         'referencia_tipo' => 'CONSIGNACION_VENTA',
                         'referencia_id' => $id,
-                        'cantidad' => -$det['cantidad'], // negativo para salidas
+                        'cantidad' => -$cantKardex, // negativo para salidas
                         'costo_unitario' => $costoUnitCons,
                         'costo_total' => $costoTotalCons,
                         'stock_anterior' => $stockActual,
@@ -711,7 +787,7 @@ class ConsignacionVentaService
                         'numero_lote' => (isset($det['lote']) && $det['lote'] !== '') ? $det['lote'] : null,
                         'fecha_caducidad' => (isset($det['fecha_caducidad']) && $det['fecha_caducidad'] !== '') ? $det['fecha_caducidad'] : null,
                         'nup' => (isset($det['nup']) && $det['nup'] !== '') ? $det['nup'] : null,
-                        'observaciones' => 'Salida por Consignación Venta (Edición) ' . $cabecera['serie'] . '-' . $cabecera['secuencial'],
+                        'observaciones' => 'Salida por Consignación Venta (Edición) ' . $cabecera['serie'] . '-' . $cabecera['secuencial'] . $kx['nota'],
                         'id_usuario' => $idUsuario
                     ]);
 

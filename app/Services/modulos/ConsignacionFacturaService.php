@@ -795,6 +795,9 @@ class ConsignacionFacturaService
                 'nombre'                    => $d['producto_nombre'] ?? '',
                 'codigo_principal'          => $d['producto_codigo'] ?? null,
                 'cantidad'                  => $cant,
+                // Unidad de la línea de consignación (CAJA X100…): el RIDE la muestra y la salida
+                // de la factura la convierte a la unidad del producto, igual que el reingreso.
+                'id_unidad_medida'          => !empty($d['id_unidad_medida']) ? (int) $d['id_unidad_medida'] : null,
                 'precio_unitario'           => (float) $d['precio_unitario'],
                 'descuento'                 => (float) ($d['descuento'] ?? 0),
                 'precio_total_sin_impuesto' => $base,
@@ -1142,6 +1145,14 @@ class ConsignacionFacturaService
             return;
         }
         $this->inventarioRepo->lockStock($idProducto, $idBodega, $idEmpresa);
+        // En la unidad del producto, como salió con la consignación (4 CAJA X100 = 400).
+        $kx = $this->getInventarioService()->cantidadKardexLinea(
+            $cant,
+            !empty($d['id_unidad_medida']) ? (int) $d['id_unidad_medida'] : null,
+            !empty($d['id_medida']) ? (int) $d['id_medida'] : null,
+            $idEmpresa
+        );
+        $cant = $kx['cantidad'];
         $stockActual = $this->inventarioRepo->getStockActual($idProducto, $idBodega, $idEmpresa);
         $nuevoStock  = $stockActual + $cant;
         $costoUnit   = $this->repository->getCostoUnitarioConsignacion((int) $d['id_consignacion'], $idProducto);
@@ -1162,7 +1173,7 @@ class ConsignacionFacturaService
             'numero_lote'     => (isset($d['lote']) && $d['lote'] !== '') ? $d['lote'] : null,
             'fecha_caducidad' => (isset($d['fecha_caducidad']) && $d['fecha_caducidad'] !== '') ? $d['fecha_caducidad'] : null,
             'nup'             => (isset($d['nup']) && $d['nup'] !== '') ? $d['nup'] : null,
-            'observaciones'   => 'Reingreso por facturación de consignación ' . $numDoc,
+            'observaciones'   => 'Reingreso por facturación de consignación ' . $numDoc . $kx['nota'],
             'id_usuario'      => $idUsuario,
         ]);
         $this->inventarioRepo->actualizarStock($idProducto, $idBodega, $idEmpresa, $nuevoStock, $idUsuario);

@@ -219,8 +219,11 @@ class RetornoCvService
                 // Entrada de inventario (espejo de la salida de la consignación).
                 if ($idBodega > 0 && $this->consignacionSacoStock((int) $consLinea['id_consignacion'], (int) $consLinea['id_producto'], $idBodega, $idEmpresa)) {
                     $this->inventarioRepo->lockStock((int) $consLinea['id_producto'], $idBodega, $idEmpresa);
+                    // En la unidad del producto, como salió con la consignación (4 CAJA X100 = 400).
+                    $kx          = $this->cantidadKardex($cant, $consLinea, $idEmpresa);
+                    $cantKardex  = $kx['cantidad'];
                     $stockActual = $this->inventarioRepo->getStockActual((int) $consLinea['id_producto'], $idBodega, $idEmpresa);
-                    $nuevoStock  = $stockActual + $cant;
+                    $nuevoStock  = $stockActual + $cantKardex;
                     $costoUnit   = $this->costoUnitarioRetorno((int) $consLinea['id_consignacion'], (int) $consLinea['id_producto'], $idBodega, $idEmpresa);
 
                     $this->inventarioRepo->registrarMovimiento([
@@ -230,15 +233,15 @@ class RetornoCvService
                         'tipo_movimiento' => 'entrada',
                         'referencia_tipo' => 'RETORNO_CV',
                         'referencia_id'   => $idRetorno,
-                        'cantidad'        => $cant,
+                        'cantidad'        => $cantKardex,
                         'costo_unitario'  => $costoUnit,
-                        'costo_total'     => round($costoUnit * $cant, 2),
+                        'costo_total'     => round($costoUnit * $cantKardex, 2),
                         'stock_anterior'  => $stockActual,
                         'stock_posterior' => $nuevoStock,
                         'numero_lote'     => (isset($consLinea['lote']) && $consLinea['lote'] !== '') ? $consLinea['lote'] : null,
                         'fecha_caducidad' => (isset($consLinea['fecha_caducidad']) && $consLinea['fecha_caducidad'] !== '') ? $consLinea['fecha_caducidad'] : null,
                         'nup'             => (isset($consLinea['nup']) && $consLinea['nup'] !== '') ? $consLinea['nup'] : null,
-                        'observaciones'   => 'Entrada por Retorno de Consignación ' . ($cabecera['serie'] ?? '') . '-' . ($cabecera['secuencial'] ?? '') . ' (Consig. ' . ($consLinea['serie'] ?? '') . '-' . ($consLinea['secuencial'] ?? '') . ')',
+                        'observaciones'   => 'Entrada por Retorno de Consignación ' . ($cabecera['serie'] ?? '') . '-' . ($cabecera['secuencial'] ?? '') . ' (Consig. ' . ($consLinea['serie'] ?? '') . '-' . ($consLinea['secuencial'] ?? '') . ')' . $kx['nota'],
                         'id_usuario'      => $idUsuario,
                     ]);
 
@@ -793,7 +796,10 @@ class RetornoCvService
      */
     private function moverInventarioLinea(array $det, int $idEmpresa, int $idUsuario, array $empresaConfig, string $tipo, string $refTipo, int $refId, string $obs): void
     {
-        $cant = (float) $det['cantidad'];
+        // En la unidad del producto: la línea está en la de su consignación (4 CAJA X100 = 400).
+        $kx = $this->cantidadKardex((float) $det['cantidad'], $det, $idEmpresa);
+        $cant = $kx['cantidad'];
+        $obs .= $kx['nota'];
         $idBodega = (int) ($det['id_bodega'] ?? 0);
         if ($cant <= 0 || $idBodega <= 0) return;
 
@@ -885,7 +891,7 @@ class RetornoCvService
     private function getConsignacionDetalle(PDO $db, int $idConsDet, int $idEmpresa): ?array
     {
         $sql = "SELECT cvd.*, cv.serie, cv.secuencial, cv.id_cliente,
-                       p.nombre as producto_nombre, p.inventariable, p.tipo_produccion
+                       p.nombre as producto_nombre, p.inventariable, p.tipo_produccion, p.id_medida
                 FROM consignaciones_ventas_detalles cvd
                 INNER JOIN consignaciones_ventas cv ON cv.id = cvd.id_consignacion
                 INNER JOIN productos p ON p.id = cvd.id_producto
@@ -907,5 +913,22 @@ class RetornoCvService
     {
         return (new InventarioService($this->inventarioRepo, $this->logService))
             ->consignacionSacoStock($idConsignacion, $idProducto, $idBodega, $idEmpresa);
+    }
+
+    /**
+     * Cantidad que mueve el kardex: la de la línea en la unidad de su consignación (CAJA X100…)
+     * llevada a la del producto, como salió con la consignación. $linea trae id_unidad_medida
+     * (de la línea de consignación) e id_medida (del producto).
+     *
+     * @return array{cantidad:float,nota:string}
+     */
+    private function cantidadKardex(float $cantidad, array $linea, int $idEmpresa): array
+    {
+        return (new InventarioService($this->inventarioRepo, $this->logService))->cantidadKardexLinea(
+            $cantidad,
+            !empty($linea['id_unidad_medida']) ? (int) $linea['id_unidad_medida'] : null,
+            !empty($linea['id_medida']) ? (int) $linea['id_medida'] : null,
+            $idEmpresa
+        );
     }
 }

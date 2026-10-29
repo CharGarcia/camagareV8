@@ -86,6 +86,11 @@ class PedidosController extends BaseModuloController {
             } catch (\Throwable $e) {}
         }
 
+        // Sin el SQL de la columna no se ofrece el selector de medida: la unidad no se guardaría.
+        if (!$this->repository->columnaUnidadMedidaExiste()) {
+            $empresaData['mostrar_unidad_medida'] = 'false';
+        }
+
         $responsableRepo = new ResponsableTrasladoRepository();
         $responsables = $responsableRepo->listarPorEmpresa($idEmpresa);
 
@@ -425,7 +430,14 @@ class PedidosController extends BaseModuloController {
                 if ($consumida > 0.0001) {
                     $advertencias[] = 'El producto "' . $producto['nombre'] . '" ya tiene ' . $consumida . ' registrado en otra consignación o factura; se prellenó solo el saldo (' . $cantidadDisponible . ').';
                 }
-                $lineas[] = ['producto' => $producto, 'cantidad' => $cantidadDisponible, 'id_pedido_detalle' => $idDetalle];
+                // La cantidad está en la unidad de la línea del pedido (CAJA X100…): la factura la
+                // abre en esa misma unidad.
+                $lineas[] = [
+                    'producto'          => $producto,
+                    'cantidad'          => $cantidadDisponible,
+                    'id_pedido_detalle' => $idDetalle,
+                    'id_unidad_medida'  => !empty($d['id_unidad_medida']) ? (int) $d['id_unidad_medida'] : null,
+                ];
             }
 
             if (empty($lineas)) {
@@ -952,7 +964,7 @@ class PedidosController extends BaseModuloController {
                 $where .= " AND {$condicion}";
             }
 
-            $sql = "SELECT p.id, p.codigo, p.nombre
+            $sql = "SELECT p.id, p.codigo, p.nombre, p.id_medida, p.id_tipo_medida
                     FROM productos p
                     WHERE {$where}
                     ORDER BY p.nombre ASC

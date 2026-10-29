@@ -5,8 +5,8 @@ categoria: Ventas
 ruta_modulo: modulos/pedidos
 tipo: modulo
 visibilidad: todos
-etiquetas: pedidos, pedido desde proforma, proforma a pedido, enviar a pedidos, generar pedido desde cotizacion, pedido de cliente, vendedor del cliente, asesor, quien atiende al cliente, solicitado por, quien hizo el pedido, usuario que registro el pedido, buscar pedidos, buscador, filtros, filtrar pedidos, buscar por producto, buscar por cliente, ordenar por estado y fecha de entrega, ordenar por dos columnas, encargo, orden de pedido, reserva, entregas, despacho, agenda de entrega, hora de entrega, responsable de entrega, rango horario, pedidos pendientes, aparecen pedidos que no busque, resultados que no corresponden, buscar por producto en el listado, imprimir, impresora
-version: 1.18
+etiquetas: pedidos, unidad de medida, cajas, caja, ciento, docena, pedir por caja, medida, pedido desde proforma, proforma a pedido, enviar a pedidos, generar pedido desde cotizacion, pedido de cliente, vendedor del cliente, asesor, quien atiende al cliente, solicitado por, quien hizo el pedido, usuario que registro el pedido, buscar pedidos, buscador, filtros, filtrar pedidos, buscar por producto, buscar por cliente, ordenar por estado y fecha de entrega, ordenar por dos columnas, encargo, orden de pedido, reserva, entregas, despacho, agenda de entrega, hora de entrega, responsable de entrega, rango horario, pedidos pendientes, aparecen pedidos que no busque, resultados que no corresponden, buscar por producto en el listado, imprimir, impresora
+version: 1.19
 orden: 0
 estado: activo
 ---
@@ -54,8 +54,25 @@ Los pedidos son por empresa: solo se ven los de la empresa activa.
    del catálogo, justo debajo del campo (o encima, si abajo no cabe); toque o haga
    clic en una para cargarla en la línea. En el celular, si el teclado tapa el campo, el
    formulario lo sube solo para dejar sitio y la lista sale igualmente pegada a él.
+   Si la empresa trabaja con **unidades de medida** (ver abajo), elija en **Medida**
+   en qué unidad pide el cliente: 4 *CIENTO* son 4 cientos, no 4 unidades.
 6. Guarde. El pedido nace en estado **Pendiente**.
 7. Para modificarlo, haga clic en la fila del listado.
+
+### Pedir en cajas, cientos o docenas (unidad de medida)
+
+Con **Empresa → Facturación → Mostrar unidad de medida** activo, cada línea del pedido
+muestra la columna **Medida**, igual que en Facturas de venta. Ofrece las unidades del
+mismo tipo que la del producto (UNIDAD, PAR, DOCENA, CIENTO…) y la **cantidad queda en la
+unidad elegida**. Si la opción está apagada la columna no aparece y todo va en la unidad
+del producto, como siempre.
+
+- La **consignación** y la **factura** que se hagan desde el pedido toman esa misma unidad:
+  4 CIENTO del pedido llegan como 4 CIENTO y del inventario salen 400 unidades.
+- Lo ya consignado o facturado se cuenta en la unidad del pedido. Si una factura usa otra
+  unidad (por ejemplo, 50 UNIDAD contra un pedido en CIENTO), cuenta como 0,5 CIENTO.
+- Una línea que ya tiene algo consignado o facturado **no puede cambiar de unidad**: el
+  selector queda bloqueado y el sistema lo rechaza al guardar.
 
 Desde el formulario de un pedido guardado, la barra superior permite descargarlo en
 **PDF** o **Excel** y **enviarlo por correo** al cliente (la dirección se puede
@@ -224,6 +241,7 @@ búsqueda**. La **×** quita solo ese filtro, y con el cuadro vacío la tecla
 | Observaciones Generales | No | Notas que acompañan al pedido (salen en el PDF). |
 | Observaciones Internas | No | Notas para el equipo. |
 | Productos: Descripción y Cantidad | Sí | Al menos un producto con cantidad mayor a cero. Sin precios. |
+| Productos: Medida | No | Unidad en que está la cantidad (CIENTO, DOCENA…). Solo aparece con **Mostrar unidad de medida** activo en Empresa → Facturación. Por defecto, la unidad del producto. |
 
 ## Permisos
 
@@ -336,6 +354,7 @@ esas líneas primero. El detalle está en el manual de **Proformas**, sección
 
 ## Historial de cambios
 
+- **1.19** — **Unidad de medida por línea.** Con *Mostrar unidad de medida* activo (Empresa → Facturación) cada producto se puede pedir en otra unidad del mismo tipo (CIENTO, DOCENA…); la consignación y la factura generadas desde el pedido la respetan y el inventario descuenta la cantidad convertida. Lo consignado o facturado se cuenta en la unidad del pedido.
 - **1.18** — Los productos del pedido se muestran siempre en el **orden en que se capturaron** (pantalla, PDF, Excel y app móvil). Antes, después de editar un pedido, las líneas podían aparecer en otro orden.
 - **1.17** — Un pedido **nuevo** ya no acepta una fecha de emisión anterior a hoy (al editar uno guardado se respeta su fecha). Y si la entrega es hoy, la **hora máxima** no puede ser anterior a la hora actual. Se valida en el formulario y al guardar (también desde la app móvil). Además, al abrir un pedido nuevo la fecha de emisión vuelve a ser la de hoy aunque antes se haya abierto un pedido de otro día.
 - **1.16** — El PDF del pedido con muchos productos ya no se desordena al pasar de página: cada fila queda completa en una sola hoja, el encabezado de la tabla (Código / Descripción / Cantidad) se repite en cada página y los códigos o descripciones largos se ajustan dentro de su celda.

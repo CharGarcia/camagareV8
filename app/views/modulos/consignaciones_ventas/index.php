@@ -278,8 +278,13 @@ if (\App\Helpers\Permisos::puedeCrear('modulos/vendedores')) {
         obligatorio_caducidad: <?= (($empresa['obligatorio_caducidad'] ?? false) === 'true' || ($empresa['obligatorio_caducidad'] ?? false) === true) ? 'true' : 'false' ?>,
         obligatorio_nup: <?= (($empresa['obligatorio_nup'] ?? false) === 'true'       || ($empresa['obligatorio_nup'] ?? false)       === true)       ? 'true' : 'false' ?>,
         decimales_precio: <?= (int) ($empresa['decimales_precio'] ?? 2) ?>,
-        decimales_cantidad: <?= (int) ($empresa['decimales_cantidad'] ?? 2) ?>
+        decimales_cantidad: <?= (int) ($empresa['decimales_cantidad'] ?? 2) ?>,
+        // Selector de medida por línea, como en Factura de venta (Empresa → Facturación). Sin el
+        // SQL de la columna no se ofrece: la unidad no se guardaría.
+        mostrar_unidad_medida: <?= !empty($unidadMedidaDisponible) && (($empresa['mostrar_unidad_medida'] ?? true) === 'true' || ($empresa['mostrar_unidad_medida'] ?? true) === true) ? 'true' : 'false' ?>
     };
+    // Unidades activas de la empresa (id, id_tipo, nombre, factor_base) para el selector de medida.
+    const CONS_UNIDADES = <?= json_encode($unidades ?? []) ?>;
 
     document.addEventListener("DOMContentLoaded", function() {
         const headers = document.querySelectorAll('#tablaConsignaciones th.sortable-header');

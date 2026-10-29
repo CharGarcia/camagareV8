@@ -8829,6 +8829,14 @@ window.fvCancelarPagoNuvei = function(devRef) {
                         window.fvSeleccionarProductoEnFila(linea.producto, fila);
                         var inputPedidoDetalle = fila.querySelector('.input-id-pedido-detalle');
                         if (inputPedidoDetalle) inputPedidoDetalle.value = linea.id_pedido_detalle || '';
+                        // La cantidad del pedido está en la unidad de su línea (CAJA X100…): la
+                        // factura la abre en esa unidad y su onchange convierte el precio.
+                        var selMedida = fila.querySelector('.input-medida');
+                        if (selMedida && linea.id_unidad_medida
+                            && Array.from(selMedida.options).some(function (o) { return String(o.value) === String(linea.id_unidad_medida); })) {
+                            selMedida.value = String(linea.id_unidad_medida);
+                            if (typeof selMedida.onchange === 'function') selMedida.onchange();
+                        }
                         var inputCantidad = fila.querySelector('.input-cantidad');
                         if (inputCantidad) {
                             inputCantidad.value = linea.cantidad;

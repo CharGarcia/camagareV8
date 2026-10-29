@@ -1095,6 +1095,21 @@ class CambioProductoCvService
         $idBodega = (int) ($det['id_bodega'] ?? 0);
         if ($cant <= 0 || $idBodega <= 0) return;
 
+        // Devolución de una línea de consignación: su cantidad está en la unidad de esa línea
+        // (CAJA X100…) y vuelve al kardex en la del producto, como salió (4 CAJA X100 = 400).
+        $idOrigenDet = (int) ($det['id_origen_detalle'] ?? 0);
+        if (($det['tipo_linea'] ?? '') === 'devolucion' && $idOrigenDet > 0
+            && strtoupper((string) ($det['origen_tipo'] ?? '')) === 'CONSIGNACION') {
+            $u = (new \App\repositories\modulos\ConsignacionVentaRepository())->getUnidadesLineas([$idOrigenDet], $idEmpresa)[$idOrigenDet] ?? null;
+            if ($u) {
+                $kx = (new InventarioService($this->inventarioRepo, $this->logService))
+                    ->cantidadKardexLinea($cant, $u['id_unidad_medida'], $u['id_medida'], $idEmpresa);
+                $cant = $kx['cantidad'];
+                $det['cantidad'] = $cant;
+                $obs .= $kx['nota'];
+            }
+        }
+
         // Entrega tomada de una consignación: la mercadería ya salió de bodega con la
         // consignación (kardex CONSIGNACION_VENTA) y está en poder del cliente. Aquí solo
         // se consume el saldo de esa consignación; volver a dar salida duplicaría la baja

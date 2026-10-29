@@ -75,6 +75,33 @@ class PedidoService {
         return $fila;
     }
 
+    /**
+     * Unidad de cada línea (CAJA X100…, Empresa → Facturación → «Mostrar unidad de medida»): solo
+     * se guarda si es compatible con la del producto; si no, NULL (= unidad del producto). La
+     * cantidad del pedido queda en esa unidad; Consignación y Factura la heredan.
+     */
+    private function normalizarUnidades(array $detalles, int $idEmpresa): array {
+        $conColumna = $this->repository->columnaUnidadMedidaExiste();
+        $inv = null;
+        $prodRepo = null;
+        foreach ($detalles as $i => $det) {
+            $idUnidad = (int) ($det['id_unidad_medida'] ?? 0);
+            $detalles[$i]['id_unidad_medida'] = null;
+            if (!$conColumna || $idUnidad <= 0 || empty($det['id_producto'])) {
+                continue;
+            }
+            $inv      ??= new \App\Services\modulos\InventarioService(new \App\repositories\modulos\InventarioRepository(), $this->logService);
+            $prodRepo ??= new \App\repositories\modulos\ProductoRepository();
+            $prod = $prodRepo->getDatosMovimientoInventario((int) $det['id_producto'], $idEmpresa);
+            $detalles[$i]['id_unidad_medida'] = $inv->unidadLineaGuardable(
+                $idUnidad,
+                !empty($prod['id_medida']) ? (int) $prod['id_medida'] : null,
+                $idEmpresa
+            );
+        }
+        return $detalles;
+    }
+
     public function guardarPedido($cabecera, $detalles, $id_empresa, $id_usuario) {
         // Defensa en profundidad: aunque la UI ya deshabilita "Guardar" cuando otro usuario
         // tiene el pedido en uso (edición o consumo desde Consignaciones), se re-verifica aquí
@@ -85,6 +112,8 @@ class PedidoService {
                 throw new Exception("Este pedido lo está usando ahora mismo {$enUso['usuario']}. Espera a que termine e intenta de nuevo.");
             }
         }
+
+        $detalles = $this->normalizarUnidades($detalles, (int) $id_empresa);
 
         $guardado = new \App\Services\GuardadoUnicoService();
         try {
@@ -267,22 +296,10 @@ class PedidoService {
             }
 
             // Insertar Detalles (pedido nuevo: no hay nada que proteger todavía)
-            $sqlDet = "INSERT INTO pedidos_detalle
-                       (id_pedido, id_producto, cantidad, precio_unitario, subtotal, iva, total)
-                       VALUES (:id_pedido, :id_producto, :cantidad, :precio, :subtotal, :iva, :total)";
-
-            $stmtDet = $this->db->prepare($sqlDet);
+            $stmtDet = $this->prepararInsertDetalle();
 
             foreach ($detalles as $det) {
-                $stmtDet->execute([
-                    'id_pedido' => $id_pedido,
-                    'id_producto' => $det['id_producto'],
-                    'cantidad' => $det['cantidad'],
-                    'precio' => $det['precio_unitario'] ?? 0,
-                    'subtotal' => $det['subtotal'] ?? 0,
-                    'iva' => $det['iva'] ?? 0,
-                    'total' => $det['total'] ?? 0
-                ]);
+                $stmtDet->execute($this->paramsInsertDetalle((int) $id_pedido, $det));
             }
 
             $guardado->registrar($cabecera['token_guardado'] ?? '', (int) $id_empresa, 'pedidos', (int) $id_pedido, $secuencial, (int) $id_usuario);
@@ -318,9 +335,11 @@ class PedidoService {
             }
         }
 
+        $conUnidad = $this->repository->columnaUnidadMedidaExiste();
         $stmtUpdate = $this->db->prepare(
             "UPDATE pedidos_detalle SET id_producto = :id_producto, cantidad = :cantidad,
-                precio_unitario = :precio, subtotal = :subtotal, iva = :iva, total = :total
+                precio_unitario = :precio, subtotal = :subtotal, iva = :iva, total = :total"
+            . ($conUnidad ? ", id_unidad_medida = :id_unidad_medida" : "") . "
              WHERE id = :id"
         );
         $stmtBaja = $this->db->prepare("UPDATE pedidos_detalle SET eliminado = true WHERE id = :id");
@@ -346,12 +365,19 @@ class PedidoService {
                 throw new Exception("No se puede cambiar el producto de \"{$nombre}\": ya tiene {$consumida} registrado en una consignación o factura.");
             }
 
+            // Lo consumido está contado en la unidad de la línea: cambiarla cambiaría el saldo.
+            $unidadNueva = $nuevo['id_unidad_medida'] ?? null;
+            $unidadAntes = !empty($existente['id_unidad_medida']) ? (int) $existente['id_unidad_medida'] : null;
+            if ($conUnidad && $consumida > 0.0001 && $unidadNueva !== $unidadAntes) {
+                throw new Exception("No se puede cambiar la unidad de medida de \"{$nombre}\": ya tiene {$consumida} registrado en una consignación o factura.");
+            }
+
             $nuevaCantidad = (float) ($nuevo['cantidad'] ?? 0);
             if ($nuevaCantidad < $consumida - 0.0001) {
                 throw new Exception("No se puede reducir la cantidad de \"{$nombre}\" a {$nuevaCantidad}: ya tiene {$consumida} registrado en una consignación o factura.");
             }
 
-            $stmtUpdate->execute([
+            $params = [
                 'id_producto' => $nuevo['id_producto'],
                 'cantidad' => $nuevaCantidad,
                 'precio' => $nuevo['precio_unitario'] ?? 0,
@@ -359,28 +385,48 @@ class PedidoService {
                 'iva' => $nuevo['iva'] ?? 0,
                 'total' => $nuevo['total'] ?? 0,
                 'id' => $idExistente,
-            ]);
+            ];
+            if ($conUnidad) {
+                $params['id_unidad_medida'] = $unidadNueva;
+            }
+            $stmtUpdate->execute($params);
         }
 
-        $stmtIns = $this->db->prepare(
-            "INSERT INTO pedidos_detalle (id_pedido, id_producto, cantidad, precio_unitario, subtotal, iva, total)
-             VALUES (:id_pedido, :id_producto, :cantidad, :precio, :subtotal, :iva, :total)"
-        );
+        $stmtIns = $this->prepararInsertDetalle();
         foreach ($detallesNuevos as $det) {
             $idDet = (int) ($det['id'] ?? 0);
             if ($idDet > 0) {
                 continue; // ya se procesó como actualización arriba (o se ignoró un id ajeno a este pedido)
             }
-            $stmtIns->execute([
-                'id_pedido' => $id_pedido,
-                'id_producto' => $det['id_producto'],
-                'cantidad' => $det['cantidad'],
-                'precio' => $det['precio_unitario'] ?? 0,
-                'subtotal' => $det['subtotal'] ?? 0,
-                'iva' => $det['iva'] ?? 0,
-                'total' => $det['total'] ?? 0,
-            ]);
+            $stmtIns->execute($this->paramsInsertDetalle($id_pedido, $det));
         }
+    }
+
+    /** INSERT de una línea del pedido (con su unidad cuando ya existe la columna). */
+    private function prepararInsertDetalle(): \PDOStatement {
+        $conUnidad = $this->repository->columnaUnidadMedidaExiste();
+        return $this->db->prepare(
+            "INSERT INTO pedidos_detalle (id_pedido, id_producto, cantidad, precio_unitario, subtotal, iva, total"
+            . ($conUnidad ? ", id_unidad_medida" : "") . ")
+             VALUES (:id_pedido, :id_producto, :cantidad, :precio, :subtotal, :iva, :total"
+            . ($conUnidad ? ", :id_unidad_medida" : "") . ")"
+        );
+    }
+
+    private function paramsInsertDetalle(int $idPedido, array $det): array {
+        $params = [
+            'id_pedido' => $idPedido,
+            'id_producto' => $det['id_producto'],
+            'cantidad' => $det['cantidad'],
+            'precio' => $det['precio_unitario'] ?? 0,
+            'subtotal' => $det['subtotal'] ?? 0,
+            'iva' => $det['iva'] ?? 0,
+            'total' => $det['total'] ?? 0,
+        ];
+        if ($this->repository->columnaUnidadMedidaExiste()) {
+            $params['id_unidad_medida'] = $det['id_unidad_medida'] ?? null;
+        }
+        return $params;
     }
 
     public function eliminarPedido($id, $id_empresa, $id_usuario) {

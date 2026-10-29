@@ -599,15 +599,25 @@ class RetornoCvRepository extends BaseRepository
 
     public function getDetalles(int $idRetorno, int $idEmpresa): array
     {
+        // La cantidad retornada está en la unidad de su línea de consignación (CAJA X100…): el
+        // kardex la convierte a la del producto (p.id_medida).
+        $conUnidad = $this->columnaExiste('consignaciones_ventas_detalles', 'id_unidad_medida');
+        $unidad = $conUnidad ? "cvd.id_unidad_medida, um.nombre AS unidad_nombre" : "NULL::integer AS id_unidad_medida, NULL AS unidad_nombre";
+        $joinUnidad = $conUnidad
+            ? "LEFT JOIN consignaciones_ventas_detalles cvd ON cvd.id = d.id_consignacion_detalle
+            LEFT JOIN unidades_medida um ON um.id = cvd.id_unidad_medida"
+            : "";
         $sql = "
             SELECT d.*,
                    p.nombre as producto_nombre, p.codigo as producto_codigo, p.inventariable, p.tipo_produccion,
+                   p.id_medida, {$unidad},
                    b.nombre as bodega_nombre,
                    cv.serie as consignacion_serie, cv.secuencial as consignacion_secuencial
             FROM retornos_cv_detalles d
             INNER JOIN productos p ON p.id = d.id_producto
             LEFT JOIN bodegas b ON b.id = d.id_bodega
             LEFT JOIN consignaciones_ventas cv ON cv.id = d.id_consignacion
+            {$joinUnidad}
             WHERE d.id_retorno = :id AND d.id_empresa = :e AND (d.eliminado = false OR d.eliminado IS NULL)
             ORDER BY d.id ASC
         ";

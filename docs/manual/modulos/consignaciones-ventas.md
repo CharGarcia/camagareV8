@@ -5,8 +5,8 @@ categoria: Ventas
 ruta_modulo: modulos/consignaciones-ventas
 tipo: modulo
 visibilidad: todos
-etiquetas: consignacion, consignaciones, buscar consignacion, buscador, filtros, filtrar consignaciones, buscar por producto, buscar por lote, buscar por NUP, chips, asesor, vendedor, vendedor del cliente, asesor automatico, mercaderia en consignacion, entrega, deposito, liquidar, facturar consignacion, numeracion por fecha, numero con el año, reiniciar numeracion, reinicio anual, reinicio mensual, correlativo por año, correlativo por mes, modo de numeracion, cargar desde pedido, llamar pedido, lote, vencimiento, caducidad, fecha de vencimiento, NUP, acceso total, registros propios, solo mis documentos, quien ve que, permiso actualizar, no puedo guardar, boton guardar no aparece, no tengo permiso para esta accion, demora al guardar, guardar lento, se queda guardando, estado del pedido, pedido procesado, pedido pendiente, eliminar consignacion, editar consignacion, no puedo eliminar la consignacion, documentos relacionados, el stock no volvio, devolver stock, costo promedio, kardex anulado, pestana pedidos, pedidos relacionados, pedido de la consignacion, pendiente del pedido, asiento no generado, faltan cuentas, asiento incompleto, aparecen documentos que no busque, resultados que no corresponden, buscar por producto en el listado, codigo del producto, codigo de producto, ver codigo, NUP repetido, nup duplicado, serie repetida, el nup no puede repetirse, mismo nup dos productos, nup por lote, cada unidad su nup, numero de serie repetido, el modal se cierra al guardar, no se cierra el modal, seguir en la consignacion, imprimir despues de guardar, guardar y seguir, no contabilizar consignaciones, sin asiento de consignacion, apagar asiento, modulos que contabilizan, enfoque sin reclasificacion, consignacion sin asiento, aviso de asientos pendientes, asiento de documento anulado, asiento sigue contabilizado, no se anulo el asiento, no se pudo anular el asiento contable, consignacion duplicada, pedido consignado dos veces, dos consignaciones del mismo pedido, ya tiene consignado, saldo del pedido, pedido en dos ventanas, doble clic, guardar dos veces, se guardo dos veces, no se recibio respuesta del servidor, error al guardar, varias bodegas, distintas bodegas, bodega por producto, bodega por linea, bodega por fila, cambiar de bodega, bodega de despacho, se borran los productos al cambiar de bodega, se pierden los productos agregados, sacar de otra bodega, telefono del cliente en el pdf, telefono en la consignacion, anular consignacion, consignacion anulada, anular devuelve el stock, reactivar consignacion anulada, no descuenta inventario, facturacion afecta al inventario, producto no inventariable en consignacion
-version: 1.46
+etiquetas: consignacion, consignaciones, unidad de medida, cajas, caja, ciento, docena, consignar por caja, salen unidades en vez de cajas, medida, buscar consignacion, buscador, filtros, filtrar consignaciones, buscar por producto, buscar por lote, buscar por NUP, chips, asesor, vendedor, vendedor del cliente, asesor automatico, mercaderia en consignacion, entrega, deposito, liquidar, facturar consignacion, numeracion por fecha, numero con el año, reiniciar numeracion, reinicio anual, reinicio mensual, correlativo por año, correlativo por mes, modo de numeracion, cargar desde pedido, llamar pedido, lote, vencimiento, caducidad, fecha de vencimiento, NUP, acceso total, registros propios, solo mis documentos, quien ve que, permiso actualizar, no puedo guardar, boton guardar no aparece, no tengo permiso para esta accion, demora al guardar, guardar lento, se queda guardando, estado del pedido, pedido procesado, pedido pendiente, eliminar consignacion, editar consignacion, no puedo eliminar la consignacion, documentos relacionados, el stock no volvio, devolver stock, costo promedio, kardex anulado, pestana pedidos, pedidos relacionados, pedido de la consignacion, pendiente del pedido, asiento no generado, faltan cuentas, asiento incompleto, aparecen documentos que no busque, resultados que no corresponden, buscar por producto en el listado, codigo del producto, codigo de producto, ver codigo, NUP repetido, nup duplicado, serie repetida, el nup no puede repetirse, mismo nup dos productos, nup por lote, cada unidad su nup, numero de serie repetido, el modal se cierra al guardar, no se cierra el modal, seguir en la consignacion, imprimir despues de guardar, guardar y seguir, no contabilizar consignaciones, sin asiento de consignacion, apagar asiento, modulos que contabilizan, enfoque sin reclasificacion, consignacion sin asiento, aviso de asientos pendientes, asiento de documento anulado, asiento sigue contabilizado, no se anulo el asiento, no se pudo anular el asiento contable, consignacion duplicada, pedido consignado dos veces, dos consignaciones del mismo pedido, ya tiene consignado, saldo del pedido, pedido en dos ventanas, doble clic, guardar dos veces, se guardo dos veces, no se recibio respuesta del servidor, error al guardar, varias bodegas, distintas bodegas, bodega por producto, bodega por linea, bodega por fila, cambiar de bodega, bodega de despacho, se borran los productos al cambiar de bodega, se pierden los productos agregados, sacar de otra bodega, telefono del cliente en el pdf, telefono en la consignacion, anular consignacion, consignacion anulada, anular devuelve el stock, reactivar consignacion anulada, no descuenta inventario, facturacion afecta al inventario, producto no inventariable en consignacion
+version: 1.47
 orden: 45
 estado: activo
 ---
@@ -40,6 +40,26 @@ y al lado el nombre. El código se llena solo al elegir el producto, ya sea
 buscándolo por nombre o por código, o al cargarlo desde un pedido. No se escribe
 a mano: sale del catálogo de productos. La pestaña **Resumen** también muestra el
 código antes del nombre de cada producto.
+
+### Consignar en cajas, cientos o docenas (unidad de medida)
+
+Con **Empresa → Facturación → Mostrar unidad de medida** activo, cada línea muestra la
+columna **Medida**, igual que en Facturas de venta: las unidades del mismo tipo que la
+del producto (UNIDAD, PAR, DOCENA, CIENTO…). La **cantidad y el precio quedan en la unidad
+elegida** y el inventario descuenta la cantidad convertida a la unidad del producto:
+4 CIENTO salen como **400** unidades, y el kardex lo anota en la observación
+(*«… (4 CIENTO = 400)»*). Con la opción apagada no hay columna y todo va en la unidad del
+producto, como siempre.
+
+- Al cambiar de unidad, el precio se convierte solo (precio del producto × unidades que
+  trae la medida), igual que en la factura.
+- Las líneas que vienen de un **pedido** traen la unidad del pedido y no se puede cambiar
+  (el saldo del pedido se compara en esa unidad).
+- El **retorno**, el **cambio de productos** y la **facturación** de la consignación usan la
+  unidad de la línea: retornar 1 CIENTO devuelve 100 unidades a la bodega, y la factura
+  generada sale en CIENTO.
+- Las consignaciones registradas antes de este cambio no tienen unidad: siguen en la unidad
+  del producto.
 
 ## El asesor se llena solo al elegir el cliente
 
@@ -574,6 +594,7 @@ Contables**; reabrir el período permite la operación de inmediato.
 
 ## Historial de cambios
 
+- **1.47** — **Unidad de medida por línea** (Empresa → Facturación → *Mostrar unidad de medida*), como en Facturas de venta: 4 CIENTO descuentan 400 unidades del inventario. Antes no había selector y la cantidad salía siempre en la unidad del producto (4 cajas salían como 4 unidades). Las líneas cargadas desde un pedido heredan su unidad; retornos, cambios y facturación convierten igual.
 - **1.46** — Corregido: editar una consignación con el punto de partida o de llegada vacío fallaba al guardar.
 - **1.45** — **Anular devuelve la mercadería a la bodega** y anula el asiento; antes solo cambiaba el estado y el stock quedaba fuera sin forma de recuperarlo. Una anulada ya no se reactiva, y en las anuladas antiguas aparece **Eliminar** para devolver lo que quedó fuera. La consignación descuenta inventario con la **misma regla que la factura** (establecimiento de su serie con «La facturación afecta al inventario» y producto inventariable que no sea servicio); antes descontaba siempre y el retorno no devolvía esas líneas.
 - **1.44** — Al **cargar desde un pedido**, los productos llegan en el **mismo orden del pedido**. Antes, si el pedido se había editado, el pedido se veía en un orden y la consignación los cargaba en otro.

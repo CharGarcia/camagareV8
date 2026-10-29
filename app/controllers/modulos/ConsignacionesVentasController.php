@@ -101,6 +101,9 @@ class ConsignacionesVentasController extends BaseModuloController
             // Selects del modal de filtros del listado (solo valores usados por la empresa).
             'opcionesFiltros' => $this->service->getOpcionesFiltros($idEmpresa),
             'empresa'        => $empresaData,
+            // Selector de medida por línea (Empresa → Facturación → «Mostrar unidad de medida»).
+            'unidades'       => (new \App\repositories\modulos\UnidadesMedidaRepository())->getActive($idEmpresa),
+            'unidadMedidaDisponible' => (new \App\repositories\modulos\ConsignacionVentaRepository())->columnaUnidadMedidaExiste(),
             'rows'           => $rows,
             'total'          => $total,
             'page'       => $page,
@@ -1283,9 +1286,15 @@ class ConsignacionesVentasController extends BaseModuloController
                 throw new \Exception("Pedido no encontrado o no pertenece a la empresa.");
             }
 
-            $sqlD = "SELECT d.*, p.nombre as producto_nombre, p.codigo as producto_codigo, p.tipo_produccion, p.inventariable, p.precio_base as precio_base
+            // Unidad de la línea del pedido (CAJA X100…): la consignación la hereda y convierte
+            // precios y stock con ella. Sin la columna, todo va en la unidad del producto.
+            $conUnidad = (new \App\repositories\modulos\ConsignacionVentaRepository())->columnaUnidadMedidaExiste();
+            $sqlD = "SELECT d.*, p.nombre as producto_nombre, p.codigo as producto_codigo, p.tipo_produccion, p.inventariable, p.precio_base as precio_base,
+                            p.id_medida, p.id_tipo_medida, "
+                     . ($conUnidad ? "um.nombre AS unidad_nombre" : "NULL::integer AS id_unidad_medida, NULL AS unidad_nombre") . "
                      FROM pedidos_detalle d
-                     JOIN productos p ON d.id_producto = p.id
+                     JOIN productos p ON d.id_producto = p.id"
+                     . ($conUnidad ? " LEFT JOIN unidades_medida um ON um.id = d.id_unidad_medida" : "") . "
                      WHERE d.id_pedido = :id_pedido AND d.eliminado = false
                      ORDER BY d.id ASC";
             $stmtD = $db->prepare($sqlD);

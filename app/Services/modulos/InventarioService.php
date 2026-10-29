@@ -167,6 +167,41 @@ class InventarioService
         ];
     }
 
+    /**
+     * Unidad que se guarda en una línea (Pedidos, Consignaciones): la elegida si es del mismo tipo
+     * de medida que la del producto y con factor válido. NULL = la unidad del producto (también
+     * cuando la elegida ES la del producto, o no es compatible): así una línea sin conversión
+     * queda igual que las anteriores a esta columna.
+     */
+    /**
+     * Cantidad de una línea escrita en $idUnidadLinea, llevada a la unidad del producto para el
+     * kardex, con la nota de conversión para su observación (" (4 CAJA X100 = 400)", vacía si no
+     * hubo conversión). Para documentos que guardan la unidad de la línea (consignaciones y lo que
+     * sale de ellas: retornos, cambios, facturación).
+     *
+     * @return array{cantidad:float,nota:string}
+     */
+    public function cantidadKardexLinea(float $cantidad, ?int $idUnidadLinea, ?int $idUnidadProducto, int $idEmpresa): array
+    {
+        $conv = $this->cantidadEnUnidadProducto($cantidad, $idUnidadLinea, $idUnidadProducto, $idEmpresa);
+        return [
+            'cantidad' => $conv['cantidad'],
+            'nota'     => $conv['convertida']
+                ? " ({$this->fmtCantidad($cantidad)} {$conv['unidad_linea']} = {$this->fmtCantidad($conv['cantidad'])})"
+                : '',
+        ];
+    }
+
+    public function unidadLineaGuardable(?int $idUnidadLinea, ?int $idUnidadProducto, int $idEmpresa): ?int
+    {
+        if (!$idUnidadLinea || !$idUnidadProducto || $idUnidadLinea === $idUnidadProducto) {
+            return null;
+        }
+        return $this->cantidadEnUnidadProducto(1.0, $idUnidadLinea, $idUnidadProducto, $idEmpresa)['convertida']
+            ? $idUnidadLinea
+            : null;
+    }
+
     // ────────────────────────────────────────────────────────────────
     // SALIDA POR FACTURA DE VENTA
     // ────────────────────────────────────────────────────────────────

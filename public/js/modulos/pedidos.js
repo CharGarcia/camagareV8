@@ -573,6 +573,44 @@ function pedPosicionarDropdownProductos(inputEl) {
 /**
  * Agrega una fila de producto al detalle (Simplificada: Código, Descripción, Cantidad)
  */
+/** Empresa → Facturación → «Mostrar unidad de medida» (sin configurar: se muestra, como en Factura de venta). */
+function pedMostrarUnidad() {
+    const v = (typeof EMPRESA_CONFIG !== 'undefined') ? EMPRESA_CONFIG.mostrar_unidad_medida : undefined;
+    return v === undefined || v === null || v === true || v === 'true' || v === 't' || v === 1 || v === '1';
+}
+
+/**
+ * Selector de unidad de una fila (CAJA X100…): las unidades del mismo tipo de medida que el
+ * producto, igual que en Factura de venta. La cantidad del pedido queda en la unidad elegida.
+ * Con la opción de empresa apagada el selector no se ve, salvo en una línea que ya guardó otra
+ * unidad (para no ocultar en qué unidad se pidió).
+ */
+function pedConfigurarMedida(tr, p, idUnidadSel, bloqueada) {
+    const sel = tr.querySelector('.input-medida');
+    if (!sel) return;
+    const unidades = (typeof UNIDADES !== 'undefined' && Array.isArray(UNIDADES)) ? UNIDADES : [];
+    let compatibles = p.id_tipo_medida ? unidades.filter(u => String(u.id_tipo) === String(p.id_tipo_medida)) : [];
+    if (!compatibles.length && p.id_medida) compatibles = unidades.filter(u => String(u.id) === String(p.id_medida));
+
+    const elegida = String(idUnidadSel || p.id_medida || '');
+    sel.innerHTML = '';
+    compatibles.forEach(u => sel.appendChild(new Option(u.nombre, u.id, false, String(u.id) === elegida)));
+    // Unidad guardada que ya no está activa en el catálogo: se muestra igual.
+    if (idUnidadSel && !compatibles.some(u => String(u.id) === String(idUnidadSel))) {
+        sel.appendChild(new Option(p.unidad_nombre || 'Unidad guardada', idUnidadSel, true, true));
+    }
+    sel.disabled = !!bloqueada;
+    const otraUnidad = !!idUnidadSel && String(idUnidadSel) !== String(p.id_medida || '');
+    sel.classList.toggle('d-none', !(sel.options.length > 0 && (pedMostrarUnidad() || otraUnidad)));
+    pedActualizarColumnaMedida();
+}
+
+/** La columna Medida aparece solo si alguna fila muestra su selector. */
+function pedActualizarColumnaMedida() {
+    const hay = !!document.querySelector('#detalle-productos .input-medida:not(.d-none)');
+    document.querySelectorAll('#modalPedido .ped-col-medida').forEach(el => el.classList.toggle('d-none', !hay));
+}
+
 function agregarFilaProducto(prod = null) {
     const tbody = document.getElementById('detalle-productos');
     if (!tbody) return;
@@ -589,7 +627,7 @@ function agregarFilaProducto(prod = null) {
         ? `<button type="button" class="btn btn-link btn-sm text-info p-0 shadow-none border-0" onclick="verHistorialItem(this)" title="Ver historial (no se puede eliminar: ya está registrado)">
                <i class="bi bi-clock-history fs-6"></i>
            </button>`
-        : `<button type="button" class="btn btn-link btn-sm text-danger p-0 shadow-none border-0" onclick="this.closest('tr').remove(); calcTotales(); pedActualizarColumnaEstado();" title="Eliminar ítem">
+        : `<button type="button" class="btn btn-link btn-sm text-danger p-0 shadow-none border-0" onclick="this.closest('tr').remove(); calcTotales(); pedActualizarColumnaEstado(); pedActualizarColumnaMedida();" title="Eliminar ítem">
                <i class="bi bi-trash3 fs-6"></i>
            </button>`;
 
@@ -609,6 +647,9 @@ function agregarFilaProducto(prod = null) {
             <input type="hidden" class="input-id-producto" value="${prod ? prod.id_producto : ''}">
             <input type="hidden" class="input-id-detalle" value="${prod && prod.id ? prod.id : ''}">
         </td>
+        <td class="align-middle ped-col-medida d-none">
+            <select class="form-select form-select-sm input-detalle input-medida d-none" title="Unidad en que se pide la cantidad"></select>
+        </td>
         <td class="align-middle text-center ped-col-estado d-none">${badgeHtml}</td>
         <td class="align-middle text-center" style="width: 15%;">
             <input type="number" class="form-control form-control-sm input-detalle text-center input-cantidad" value="${cantidadOriginal}" step="any" min="${consumida}" oninput="calcFila(this)">
@@ -619,6 +660,10 @@ function agregarFilaProducto(prod = null) {
     `;
     tbody.appendChild(tr);
     pedActualizarColumnaEstado();
+    // Una línea ya registrada en una consignación o factura conserva su unidad: lo
+    // consumido está contado en ella (el servidor también lo rechaza).
+    if (prod) pedConfigurarMedida(tr, prod, prod.id_unidad_medida, registrada);
+    else pedActualizarColumnaMedida();
     // La fila nace con cantidad, así que el pie (ítems y total de cantidades) se
     // recalcula acá: antes solo se actualizaba al tocar una cantidad.
     calcTotales();
@@ -653,6 +698,7 @@ function agregarFilaProducto(prod = null) {
         row.querySelector('.input-descripcion').value = p.nombre;
         row.querySelector('.input-id-producto').value = p.id;
         row.dataset.idProducto = p.id;
+        pedConfigurarMedida(row, p, null, false);
 
         const inCant = row.querySelector('.input-cantidad');
         inCant.focus();
@@ -740,6 +786,7 @@ function agregarFilaProducto(prod = null) {
                     inputDesc.value = '';
                     inputIdProd.value = '';
                     tr.dataset.idProducto = '';
+                    pedConfigurarMedida(tr, {}, null, false);
                     dropdownGlobal.classList.add('d-none');
                 }
             }
@@ -1120,6 +1167,8 @@ async function guardarPedido() {
             detalles.push({
                 id: tr.querySelector('.input-id-detalle')?.value || '',
                 id_producto: idProd,
+                // Aunque la columna esté oculta, se manda la unidad que la línea ya tenía.
+                id_unidad_medida: tr.querySelector('.input-medida')?.value || '',
                 cantidad: cant,
                 precio_unitario: 0,
                 subtotal: 0,
@@ -1161,6 +1210,7 @@ async function guardarPedido() {
         detalles.forEach((d, i) => {
             formData.append(`detalles[${i}][id]`, d.id);
             formData.append(`detalles[${i}][id_producto]`, d.id_producto);
+            formData.append(`detalles[${i}][id_unidad_medida]`, d.id_unidad_medida);
             formData.append(`detalles[${i}][cantidad]`, d.cantidad);
             formData.append(`detalles[${i}][precio_unitario]`, d.precio_unitario);
             formData.append(`detalles[${i}][subtotal]`, d.subtotal);

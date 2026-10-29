@@ -547,14 +547,88 @@ class ConsignacionVentaRepository extends BaseRepository
         return (bool) $st->fetchColumn();
     }
 
+    /** ¿Ya se desplegó database/2026-10-29_pedidos_consignaciones_unidad_medida.sql? */
+    public function columnaUnidadMedidaExiste(): bool
+    {
+        return $this->columnaExiste('pedidos_detalle', 'id_unidad_medida')
+            && $this->columnaExiste('consignaciones_ventas_detalles', 'id_unidad_medida');
+    }
+
+    /**
+     * Unidad de cada línea de pedido de la empresa (NULL = la del producto).
+     *
+     * @param int[] $idsPedidoDetalle
+     * @return array<int,?int> [id_pedido_detalle => id_unidad_medida]
+     */
+    public function getUnidadesPedidoDetalle(array $idsPedidoDetalle, int $idEmpresa): array
+    {
+        $ids = array_values(array_unique(array_filter(array_map('intval', $idsPedidoDetalle))));
+        if (empty($ids) || !$this->columnaUnidadMedidaExiste()) {
+            return [];
+        }
+        $in = implode(',', array_fill(0, count($ids), '?'));
+        $st = $this->db->prepare(
+            "SELECT pd.id, pd.id_unidad_medida
+               FROM pedidos_detalle pd
+               JOIN pedidos_cabecera pc ON pc.id = pd.id_pedido AND pc.id_empresa = ?
+              WHERE pd.id IN ($in)"
+        );
+        $st->execute([$idEmpresa, ...$ids]);
+        $out = [];
+        foreach ($st->fetchAll(PDO::FETCH_ASSOC) as $r) {
+            $out[(int) $r['id']] = $r['id_unidad_medida'] !== null ? (int) $r['id_unidad_medida'] : null;
+        }
+        return $out;
+    }
+
+    /**
+     * Unidad de líneas de consignación (CAJA X100…) y la del producto, para llevar a la unidad del
+     * producto lo que vuelve de ellas al kardex (cambios de productos).
+     *
+     * @param int[] $idsLinea
+     * @return array<int,array{id_unidad_medida:?int,id_medida:?int}>
+     */
+    public function getUnidadesLineas(array $idsLinea, int $idEmpresa): array
+    {
+        $ids = array_values(array_unique(array_filter(array_map('intval', $idsLinea))));
+        if (empty($ids) || !$this->columnaUnidadMedidaExiste()) {
+            return [];
+        }
+        $in = implode(',', array_fill(0, count($ids), '?'));
+        $st = $this->db->prepare(
+            "SELECT d.id, d.id_unidad_medida, p.id_medida
+               FROM consignaciones_ventas_detalles d
+               JOIN productos p ON p.id = d.id_producto
+              WHERE d.id_empresa = ? AND d.id IN ($in)"
+        );
+        $st->execute([$idEmpresa, ...$ids]);
+        $out = [];
+        foreach ($st->fetchAll(PDO::FETCH_ASSOC) as $r) {
+            $out[(int) $r['id']] = [
+                'id_unidad_medida' => $r['id_unidad_medida'] !== null ? (int) $r['id_unidad_medida'] : null,
+                'id_medida'        => $r['id_medida'] !== null ? (int) $r['id_medida'] : null,
+            ];
+        }
+        return $out;
+    }
+
     public function getDetalles(int $idConsignacion, int $idEmpresa): array
     {
+        // Unidad de la línea (CAJA X100…) y la del producto, para el selector de medida.
+        $unidad = $this->columnaUnidadMedidaExiste()
+            ? "um.nombre AS unidad_nombre"
+            : "NULL::integer AS id_unidad_medida, NULL AS unidad_nombre";
+        $joinUnidad = $this->columnaUnidadMedidaExiste()
+            ? "LEFT JOIN unidades_medida um ON um.id = d.id_unidad_medida"
+            : "";
         $sql = "
             SELECT d.*, p.nombre as producto_nombre, p.codigo as producto_codigo, p.tipo_produccion, p.inventariable, p.precio_base as precio_base,
+                   p.id_medida, p.id_tipo_medida, {$unidad},
                    b.nombre as bodega_nombre
             FROM consignaciones_ventas_detalles d
             INNER JOIN productos p ON p.id = d.id_producto
             LEFT JOIN bodegas b ON b.id = d.id_bodega
+            {$joinUnidad}
             WHERE d.id_consignacion = :id AND d.id_empresa = :e AND (d.eliminado = false OR d.eliminado IS NULL)
             ORDER BY d.id ASC
         ";
@@ -948,8 +1022,10 @@ class ConsignacionVentaRepository extends BaseRepository
             $in[] = ":pd{$i}";
             $params[":pd{$i}"] = $id;
         }
+        $unidad = $this->columnaUnidadMedidaExiste() ? 'pd.id_unidad_medida' : 'NULL::integer';
         $sql = "SELECT pd.id,
                        pd.cantidad AS cantidad_pedido,
+                       {$unidad} AS id_unidad_medida,
                        pc.establecimiento || '-' || pc.punto_emision || '-' || pc.secuencial AS pedido,
                        TRIM(CONCAT_WS(' ', NULLIF(pr.codigo, ''), pr.nombre)) AS producto,
                        COALESCE(SUM(cvd.cantidad) FILTER (WHERE cv.id IS NOT NULL), 0) AS consignado,
@@ -964,7 +1040,7 @@ class ConsignacionVentaRepository extends BaseRepository
                   LEFT JOIN consignaciones_ventas cv
                          ON cv.id = cvd.id_consignacion AND cv.id_empresa = :e AND cv.eliminado = false
                  WHERE pd.id IN (" . implode(', ', $in) . ")
-                 GROUP BY pd.id, pd.cantidad, pc.establecimiento, pc.punto_emision, pc.secuencial, pr.codigo, pr.nombre";
+                 GROUP BY pd.id, pd.cantidad, {$unidad}, pc.establecimiento, pc.punto_emision, pc.secuencial, pr.codigo, pr.nombre";
         $st = $this->db->prepare($sql);
         $st->execute($params);
 
@@ -972,6 +1048,7 @@ class ConsignacionVentaRepository extends BaseRepository
         foreach ($st->fetchAll(PDO::FETCH_ASSOC) as $r) {
             $out[(int) $r['id']] = [
                 'cantidad_pedido' => (float) $r['cantidad_pedido'],
+                'id_unidad_medida' => $r['id_unidad_medida'] !== null ? (int) $r['id_unidad_medida'] : null,
                 'consignado'      => (float) $r['consignado'],
                 'pedido'          => (string) $r['pedido'],
                 'producto'        => (string) $r['producto'],

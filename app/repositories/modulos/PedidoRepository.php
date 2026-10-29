@@ -14,6 +14,9 @@ class PedidoRepository {
     /** Caché por request: ¿existe pedidos_cabecera.id_proforma? (migración database/migrations/20260921_add_id_proforma_to_pedidos.sql). */
     private ?bool $columnaProformaExiste = null;
 
+    /** Caché por request: ¿existen las columnas de database/2026-10-29_pedidos_consignaciones_unidad_medida.sql? */
+    private ?bool $columnaUnidadMedidaExiste = null;
+
     /**
      * Orden lógico del estado para el ORDER BY (no alfabético).
      * Los estados reales son Pendiente / Procesado / Anulado (la migración mapea
@@ -463,8 +466,13 @@ class PedidoRepository {
         // ORDER BY d.id = orden en que se capturaron las líneas. Sin él PostgreSQL las devolvía en
         // orden físico, que cambia tras editar el pedido (cada UPDATE mueve la fila), y el pedido
         // se veía en un orden distinto al que usa la Consignación de Venta al cargarlo (d.id).
-        $sql = "SELECT d.*, p.nombre as producto_nombre, p.codigo as producto_codigo
-                FROM pedidos_detalle d
+        // Unidad de la línea (CAJA X100…) y la del producto: la pantalla arma el selector de
+        // medida y Factura/Consignación la heredan. Sin la columna, todo va en la del producto.
+        $unidad = $this->columnaUnidadMedidaExiste()
+            ? "um.nombre AS unidad_nombre FROM pedidos_detalle d LEFT JOIN unidades_medida um ON um.id = d.id_unidad_medida"
+            : "NULL::integer AS id_unidad_medida, NULL AS unidad_nombre FROM pedidos_detalle d";
+        $sql = "SELECT d.*, p.nombre as producto_nombre, p.codigo as producto_codigo,
+                       p.id_medida, p.id_tipo_medida, {$unidad}
                 JOIN productos p ON d.id_producto = p.id
                 WHERE d.id_pedido = :id_pedido
                 AND d.eliminado = false
@@ -496,6 +504,43 @@ class PedidoRepository {
             $this->columnaProformaExiste = (bool) $this->db->query($sql)->fetchColumn();
         }
         return $this->columnaProformaExiste;
+    }
+
+    /** ¿Ya se desplegó database/2026-10-29_pedidos_consignaciones_unidad_medida.sql? Degradación segura si no. */
+    public function columnaUnidadMedidaExiste(): bool {
+        if ($this->columnaUnidadMedidaExiste === null) {
+            $sql = "SELECT COUNT(*) = 2 FROM information_schema.columns
+                     WHERE column_name = 'id_unidad_medida'
+                       AND table_name IN ('pedidos_detalle', 'consignaciones_ventas_detalles')";
+            $this->columnaUnidadMedidaExiste = (bool) $this->db->query($sql)->fetchColumn();
+        }
+        return $this->columnaUnidadMedidaExiste;
+    }
+
+    /**
+     * Expresión SQL que lleva la cantidad de un documento que consume la línea del pedido (pd) a
+     * la unidad de esa línea: 1 CAJA X100 facturada consume 100 de un pedido en UNIDAD. Sin unidad
+     * en alguno de los dos, cuenta la del producto (pr.id_medida). Unidades de distinto tipo o
+     * factores inválidos: la cantidad tal cual (mismo criterio que
+     * InventarioService::cantidadEnUnidadProducto()). Requiere los JOIN de joinsUnidadPedido().
+     */
+    private function exprCantidadEnUnidadPedido(string $cantidad): string {
+        return "({$cantidad} * CASE WHEN uml.id IS NOT NULL AND ump.id IS NOT NULL AND uml.id_tipo = ump.id_tipo
+                                     AND uml.factor_base > 0 AND ump.factor_base > 0
+                                    THEN uml.factor_base / ump.factor_base ELSE 1 END)";
+    }
+
+    /**
+     * JOIN para exprCantidadEnUnidadPedido(). $alias es la línea del documento consumidor (con
+     * id_pedido_detalle); $docTieneUnidad, si esa tabla tiene id_unidad_medida.
+     */
+    private function joinsUnidadPedido(string $alias, bool $docTieneUnidad): string {
+        $unidadDoc    = $docTieneUnidad ? "{$alias}.id_unidad_medida" : 'NULL::integer';
+        $unidadPedido = $this->columnaUnidadMedidaExiste() ? 'pd.id_unidad_medida' : 'NULL::integer';
+        return "JOIN pedidos_detalle pd ON pd.id = {$alias}.id_pedido_detalle
+                LEFT JOIN productos pr ON pr.id = pd.id_producto
+                LEFT JOIN unidades_medida uml ON uml.id = COALESCE({$unidadDoc}, pr.id_medida)
+                LEFT JOIN unidades_medida ump ON ump.id = COALESCE({$unidadPedido}, pr.id_medida)";
     }
 
     /**
@@ -536,10 +581,13 @@ class PedidoRepository {
         }
         $placeholders = implode(',', $idsDetalle);
 
+        // Lo consumido se cuenta en la unidad de la línea del pedido (una factura puede elegir
+        // otra unidad: 1 CAJA X100 consume 100 de un pedido en UNIDAD).
         $sqlConsignacion = "
-            SELECT cvd.id_pedido_detalle AS id, SUM(cvd.cantidad) AS cantidad
+            SELECT cvd.id_pedido_detalle AS id, SUM({$this->exprCantidadEnUnidadPedido('cvd.cantidad')}) AS cantidad
             FROM consignaciones_ventas_detalles cvd
             JOIN consignaciones_ventas cv ON cv.id = cvd.id_consignacion
+            {$this->joinsUnidadPedido('cvd', $this->columnaUnidadMedidaExiste())}
             WHERE cv.eliminado = false AND cvd.eliminado = false
               AND cvd.id_pedido_detalle IN ({$placeholders})
             GROUP BY cvd.id_pedido_detalle
@@ -547,9 +595,10 @@ class PedidoRepository {
 
         $sqlFactura = $this->columnaVentasDetalleExiste() ? "
             UNION ALL
-            SELECT vd.id_pedido_detalle AS id, SUM(vd.cantidad) AS cantidad
+            SELECT vd.id_pedido_detalle AS id, SUM({$this->exprCantidadEnUnidadPedido('vd.cantidad')}) AS cantidad
             FROM ventas_detalle vd
             JOIN ventas_cabecera v ON v.id = vd.id_venta
+            {$this->joinsUnidadPedido('vd', true)}
             WHERE v.eliminado = false AND v.estado <> 'anulado'
               AND vd.id_pedido_detalle IN ({$placeholders})
             GROUP BY vd.id_pedido_detalle
@@ -587,10 +636,11 @@ class PedidoRepository {
             SELECT 'Consignación de Venta' AS tipo,
                    (cv.establecimiento || '-' || cv.punto_emision || '-' || cv.secuencial) AS numero,
                    cv.fecha_emision AS fecha,
-                   cvd.cantidad AS cantidad,
+                   {$this->exprCantidadEnUnidadPedido('cvd.cantidad')} AS cantidad,
                    cv.estado AS estado
             FROM consignaciones_ventas_detalles cvd
             JOIN consignaciones_ventas cv ON cv.id = cvd.id_consignacion
+            {$this->joinsUnidadPedido('cvd', $this->columnaUnidadMedidaExiste())}
             WHERE cvd.id_pedido_detalle = :id AND cv.eliminado = false AND cvd.eliminado = false
         ";
 
@@ -599,10 +649,11 @@ class PedidoRepository {
             SELECT 'Factura de Venta' AS tipo,
                    (v.establecimiento || '-' || v.punto_emision || '-' || v.secuencial) AS numero,
                    v.fecha_emision AS fecha,
-                   vd.cantidad AS cantidad,
+                   {$this->exprCantidadEnUnidadPedido('vd.cantidad')} AS cantidad,
                    v.estado AS estado
             FROM ventas_detalle vd
             JOIN ventas_cabecera v ON v.id = vd.id_venta
+            {$this->joinsUnidadPedido('vd', true)}
             WHERE vd.id_pedido_detalle = :id2 AND v.eliminado = false
         " : '';
 

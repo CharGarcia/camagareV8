@@ -627,8 +627,16 @@ class ConsignacionFacturaRepository extends BaseRepository
             - COALESCE(( " . $this->sqlFacturado('cfd.id_consignacion_detalle') . " ), 0)
             - COALESCE(( " . $this->sqlCambiado('cfd.id_consignacion_detalle') . " ), 0)
         )";
+        // Cantidad en la unidad de su línea de consignación (CAJA X100…): la factura generada la
+        // lleva y el reingreso la convierte a la del producto (p.id_medida).
+        $conUnidad = $this->columnaExiste('consignaciones_ventas_detalles', 'id_unidad_medida');
+        $unidad = $conUnidad ? "cvdu.id_unidad_medida, um.nombre AS unidad_nombre" : "NULL::integer AS id_unidad_medida, NULL AS unidad_nombre";
+        $joinUnidad = $conUnidad
+            ? "LEFT JOIN consignaciones_ventas_detalles cvdu ON cvdu.id = cfd.id_consignacion_detalle
+                LEFT JOIN unidades_medida um ON um.id = cvdu.id_unidad_medida"
+            : "";
         $sql = "SELECT cfd.*, p.nombre AS producto_nombre, p.codigo AS producto_codigo,
-                       p.inventariable, p.tipo_produccion,
+                       p.inventariable, p.tipo_produccion, p.id_medida, {$unidad},
                        b.nombre AS bodega_nombre,
                        cv.serie AS consignacion_serie, cv.secuencial AS consignacion_secuencial,
                        ti.codigo AS tarifa_codigo_sri, ti.porcentaje_iva AS tarifa_porcentaje,
@@ -638,6 +646,7 @@ class ConsignacionFacturaRepository extends BaseRepository
                 LEFT JOIN tarifa_iva ti ON ti.id = cfd.id_impuesto
                 LEFT JOIN bodegas b ON b.id = cfd.id_bodega
                 LEFT JOIN consignaciones_ventas cv ON cv.id = cfd.id_consignacion
+                {$joinUnidad}
                 WHERE cfd.id_consignacion_factura = :id AND cfd.id_empresa = :e
                   AND (cfd.eliminado = false OR cfd.eliminado IS NULL)
                 ORDER BY cfd.id ASC";

@@ -286,6 +286,9 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosPestanasOcultas($vistaConfigC
                                                 <th class="py-2 small fw-bold text-muted">Producto</th>
                                                 <th class="py-2 small fw-bold text-muted" style="width:120px;">Precios</th>
                                                 <th class="py-2 small fw-bold text-muted text-end" style="width:120px;">Precio</th>
+                                                <!-- Medida (CAJA X100…): solo con Empresa → Facturación → «Mostrar unidad de medida»
+                                                     y algún producto con unidades compatibles. Ver consConfigurarMedida(). -->
+                                                <th class="py-2 small fw-bold text-muted d-none th-medida" style="width:130px;">Medida</th>
                                                 <th class="py-2 small fw-bold text-muted text-center" style="width:100px;">Cantidad</th>
                                                 <th class="py-2 small fw-bold text-muted d-none th-bodega" style="width:150px;" title="Bodega de la que sale cada línea. La bodega de la cabecera es solo la bodega por defecto.">Bodega</th>
                                                 <th class="py-2 small fw-bold text-muted d-none th-lote" style="width:120px;">Lote</th>
@@ -787,30 +790,9 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosPestanasOcultas($vistaConfigC
                         inputCant.value = parseFloat(d.cantidad) || 0;
                         inputPrecio.value = parseFloat(d.precio_unitario).toFixed(EMPRESA_CONFIG.decimales_precio);
 
-                        selLista.innerHTML = `<option value="${pBase}">P. Base ($${pBase.toFixed(2)})</option>`;
-                        if (d.precios_lista && d.precios_lista.length > 0) {
-                            d.precios_lista.forEach(pl => {
-                                selLista.innerHTML += `<option value="${pl.precio}">${pl.nombre_precio} ($${parseFloat(pl.precio).toFixed(2)})</option>`;
-                            });
-                        }
-
-                        const precioGuardado = parseFloat(d.precio_unitario);
-                        const matchPrice = Array.from(selLista.options).some(opt => parseFloat(opt.value).toFixed(2) === precioGuardado.toFixed(2));
-                        if (!matchPrice) {
-                            selLista.innerHTML = `<option value="${precioGuardado}" selected>Precio Guardado ($${precioGuardado.toFixed(2)})</option>` + selLista.innerHTML;
-                        } else {
-                            for (let i = 0; i < selLista.options.length; i++) {
-                                if (parseFloat(selLista.options[i].value).toFixed(2) === precioGuardado.toFixed(2)) {
-                                    selLista.selectedIndex = i;
-                                    break;
-                                }
-                            }
-                        }
-
-                        selLista.onchange = () => {
-                            tr.querySelector('.input-precio').value = parseFloat(selLista.value).toFixed(EMPRESA_CONFIG.decimales_precio);
-                            consCalcFila(selLista);
-                        };
+                        // Cantidad y precio guardados están en la unidad de la línea.
+                        consConfigurarMedida(tr, d, d.id_unidad_medida, !!d.id_pedido_detalle);
+                        consLlenarListaPrecios(tr, pBase, d.precios_lista, parseFloat(d.precio_unitario) || 0, 'Precio Guardado');
 
                         consCalcFila(inputCant);
                         filas.push({ tr, d });
@@ -953,7 +935,122 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosPestanasOcultas($vistaConfigC
         if (countSpan) {
             countSpan.textContent = rows.length;
         }
+        consActualizarColumnaMedida();
     };
+
+    // ---- Unidad de medida por línea (CAJA X100…), igual que en Factura de venta ----
+    // La cantidad de la línea queda en la unidad elegida; el servidor saca del kardex la
+    // cantidad convertida a la unidad del producto (4 CAJA X100 = 400). Las listas de precios
+    // guardan precios por unidad del producto: el precio de la línea es lista × factor.
+    function consUnidades() {
+        return (typeof CONS_UNIDADES !== 'undefined' && Array.isArray(CONS_UNIDADES)) ? CONS_UNIDADES : [];
+    }
+
+    /** Unidades del producto que hay en 1 de la unidad de la línea (CAJA X100 → 100). 1 = sin conversión. */
+    function consRatioUnidad(idUnidadLinea, idUnidadProducto) {
+        if (!idUnidadLinea || !idUnidadProducto || String(idUnidadLinea) === String(idUnidadProducto)) return 1;
+        const ul = consUnidades().find(u => String(u.id) === String(idUnidadLinea));
+        const up = consUnidades().find(u => String(u.id) === String(idUnidadProducto));
+        if (!ul || !up || String(ul.id_tipo) !== String(up.id_tipo)) return 1;
+        const fl = parseFloat(ul.factor_base), fp = parseFloat(up.factor_base);
+        return (fl > 0 && fp > 0) ? fl / fp : 1;
+    }
+
+    function consRatioFila(tr) {
+        return consRatioUnidad(tr.querySelector('.input-medida')?.value, tr.dataset.idMedidaProducto);
+    }
+
+    /**
+     * Arma el selector de medida de una fila con las unidades del mismo tipo que el producto.
+     * p: { id_medida, id_tipo_medida, unidad_nombre }. bloqueada: la línea viene de un pedido y
+     * conserva la unidad del pedido (el saldo del pedido se compara en ella). Con la opción de
+     * empresa apagada no se ve, salvo en una línea que ya guardó otra unidad.
+     */
+    function consConfigurarMedida(tr, p, idUnidadSel, bloqueada) {
+        const sel = tr.querySelector('.input-medida');
+        if (!sel) return;
+        tr.dataset.idMedidaProducto = p.id_medida || '';
+        tr.dataset.idTipoMedida = p.id_tipo_medida || '';
+        let compatibles = p.id_tipo_medida ? consUnidades().filter(u => String(u.id_tipo) === String(p.id_tipo_medida)) : [];
+        if (!compatibles.length && p.id_medida) compatibles = consUnidades().filter(u => String(u.id) === String(p.id_medida));
+
+        const elegida = String(idUnidadSel || p.id_medida || '');
+        sel.innerHTML = '';
+        compatibles.forEach(u => sel.appendChild(new Option(u.nombre, u.id, false, String(u.id) === elegida)));
+        // Unidad guardada que ya no está activa en el catálogo: se muestra igual.
+        if (idUnidadSel && !compatibles.some(u => String(u.id) === String(idUnidadSel))) {
+            sel.appendChild(new Option(p.unidad_nombre || 'Unidad guardada', idUnidadSel, true, true));
+        }
+        sel.disabled = !!bloqueada;
+        sel.title = bloqueada ? 'Unidad de la línea del pedido' : 'Unidad en que se consigna la cantidad';
+        const mostrar = typeof EMPRESA_CONFIG !== 'undefined' && EMPRESA_CONFIG.mostrar_unidad_medida;
+        const otraUnidad = !!idUnidadSel && String(idUnidadSel) !== String(p.id_medida || '');
+        sel.classList.toggle('d-none', !(sel.options.length > 0 && (mostrar || otraUnidad)));
+        sel.onchange = () => {
+            const selLista = tr.querySelector('.input-lista-precios');
+            const base = parseFloat(selLista?.value) || parseFloat(tr.querySelector('.input-precio-base-original').value) || 0;
+            tr.querySelector('.input-precio').value = (base * consRatioFila(tr)).toFixed(EMPRESA_CONFIG.decimales_precio);
+            consRotularPrecios(tr);
+            consCalcFila(sel);
+        };
+        consActualizarColumnaMedida();
+    }
+
+    /** Vacía el selector (fila sin producto). */
+    function consLimpiarMedida(tr) {
+        const sel = tr.querySelector('.input-medida');
+        if (sel) { sel.innerHTML = ''; sel.classList.add('d-none'); sel.disabled = false; }
+        tr.dataset.idMedidaProducto = '';
+        consActualizarColumnaMedida();
+    }
+
+    /** La columna Medida aparece solo si alguna fila muestra su selector. */
+    function consActualizarColumnaMedida() {
+        const hay = !!document.querySelector('#cons_detalles_body .input-medida:not(.d-none)');
+        document.querySelectorAll('#consTablaDetalles .th-medida').forEach(el => el.classList.toggle('d-none', !hay));
+    }
+
+    /** Rótulos de la lista de precios en la unidad elegida de la fila. */
+    function consRotularPrecios(tr) {
+        const ratio = consRatioFila(tr);
+        Array.from(tr.querySelector('.input-lista-precios')?.options || []).forEach(o => {
+            if (o.dataset.nombre) o.textContent = `${o.dataset.nombre} ($${(parseFloat(o.value) * ratio).toFixed(2)})`;
+        });
+    }
+
+    /**
+     * Opciones de la lista de precios (valores por unidad del producto) y el precio de la fila,
+     * que ya viene en la unidad de la línea. Si ese precio no está en la lista, se agrega como
+     * opción propia (rótulo), guardada también por unidad del producto.
+     */
+    function consLlenarListaPrecios(tr, pBase, preciosLista, precioLinea, rotuloPropio) {
+        const selLista = tr.querySelector('.input-lista-precios');
+        const ratio = consRatioFila(tr);
+        selLista.innerHTML = '';
+        const agregar = (nombre, valor) => {
+            const o = new Option('', valor);
+            o.dataset.nombre = nombre;
+            selLista.appendChild(o);
+            return o;
+        };
+        agregar('P. Base', pBase);
+        (preciosLista || []).forEach(pl => agregar(pl.nombre_precio, pl.precio));
+        if (precioLinea !== null && precioLinea !== undefined) {
+            const idx = Array.from(selLista.options).findIndex(o => (parseFloat(o.value) * ratio).toFixed(2) === precioLinea.toFixed(2));
+            if (idx >= 0) {
+                selLista.selectedIndex = idx;
+            } else {
+                const o = agregar(rotuloPropio, precioLinea / ratio);
+                selLista.insertBefore(o, selLista.firstChild);
+                o.selected = true;
+            }
+        }
+        consRotularPrecios(tr);
+        selLista.onchange = () => {
+            tr.querySelector('.input-precio').value = (parseFloat(selLista.value) * consRatioFila(tr)).toFixed(EMPRESA_CONFIG.decimales_precio);
+            consCalcFila(selLista);
+        };
+    }
 
     function agregarFilaConsignacion() {
             const tbody = document.getElementById('cons_detalles_body');
@@ -975,6 +1072,9 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosPestanasOcultas($vistaConfigC
                     </select>
                 </td>
                 <td><input type="number" class="form-control form-control-sm input-detalle text-end input-precio" value="0.00" step="any" oninput="consCalcFila(this)" onblur="this.value=parseFloat(this.value||0).toFixed(EMPRESA_CONFIG.decimales_precio)"></td>
+                <td class="th-medida d-none">
+                    <select class="form-select form-select-sm input-detalle input-medida d-none" title="Unidad en que se consigna la cantidad"></select>
+                </td>
                 <td><input type="number" class="form-control form-control-sm input-detalle text-center input-cantidad" value="1" step="any" oninput="consCalcFila(this)"></td>
                 <td class="th-bodega ${consMultiBodega() ? '' : 'd-none'}">
                     <select class="form-select form-select-sm input-detalle input-bodega" title="Bodega de la que sale esta línea"></select>
@@ -1035,17 +1135,10 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosPestanasOcultas($vistaConfigC
                 tr.querySelector('.input-precio-base-original').value = pBase;
                 tr.querySelector('.input-precio').value = pBase.toFixed(EMPRESA_CONFIG.decimales_precio);
 
+                // Arranca en la unidad del producto; el selector de medida convierte el precio.
+                consConfigurarMedida(tr, p, null, false);
+                consLlenarListaPrecios(tr, pBase, p.precios_lista, null);
                 const selPrecios = tr.querySelector('.input-lista-precios');
-                selPrecios.innerHTML = `<option value="${pBase}">P. Base ($${pBase.toFixed(2)})</option>`;
-                if (p.precios_lista && p.precios_lista.length > 0) {
-                    p.precios_lista.forEach(pl => {
-                        selPrecios.innerHTML += `<option value="${pl.precio}">${pl.nombre_precio} ($${parseFloat(pl.precio).toFixed(2)})</option>`;
-                    });
-                }
-                selPrecios.onchange = () => {
-                    tr.querySelector('.input-precio').value = parseFloat(selPrecios.value).toFixed(EMPRESA_CONFIG.decimales_precio);
-                    consCalcFila(selPrecios);
-                };
 
                 const esInv = (p.inventariable == true || p.inventariable == 'true' || p.inventariable == 1) && p.tipo_produccion !== '02';
                 if (esInv && typeof EMPRESA_CONFIG !== 'undefined' && EMPRESA_CONFIG.facturacion_inventario) {
@@ -1088,7 +1181,8 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosPestanasOcultas($vistaConfigC
                         tr.removeAttribute('data-tipo-produccion');
                         tr.querySelector('.input-precio-base-original').value = '0';
                         tr.querySelector('.input-precio').value = '0.00';
-                        
+                        consLimpiarMedida(tr);
+
                         const selPrecios = tr.querySelector('.input-lista-precios');
                         selPrecios.innerHTML = '<option value="0">Precios...</option>';
                         selPrecios.value = '0';
@@ -1715,6 +1809,8 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosPestanasOcultas($vistaConfigC
                 nup: (tr.querySelector('.input-nup') && !tr.querySelector('.input-nup').classList.contains('d-none')) ? tr.querySelector('.input-nup').value : '',
                 subtotal: parseFloat(tr.querySelector('.subtotal-line').textContent) || 0,
                 id_pedido_detalle: tr.querySelector('.input-id-pedido-detalle') ? tr.querySelector('.input-id-pedido-detalle').value : '',
+                // Unidad de la cantidad (aunque la columna esté oculta: la que la línea ya tenía).
+                id_unidad_medida: tr.querySelector('.input-medida')?.value || '',
                 id_bodega: tr.dataset.idBodega || document.getElementById('cons_id_bodega').value || ''
             })),
             asiento_detalles: (typeof consCapturarDetallesAsiento === 'function') ? consCapturarDetallesAsiento() : []
@@ -2173,10 +2269,16 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosPestanasOcultas($vistaConfigC
             if (info.stock === null) {
                 badge.innerHTML = '';
             } else {
-                // Verde si alcanza para despachar todo lo pendiente, rojo si no.
-                const alcanza = info.stock >= datos.cantPendiente;
+                // Verde si alcanza para despachar todo lo pendiente, rojo si no. El stock viene en la
+                // unidad del producto y se muestra en la de la línea del pedido (400 UNIDAD = 4 CAJA X100).
+                const ratio = datos.ratio || 1;
+                const stockLinea = info.stock / ratio;
+                const alcanza = stockLinea >= datos.cantPendiente - 0.000001;
                 const cls = alcanza ? 'bg-success bg-opacity-10 text-success border-success' : 'bg-danger bg-opacity-10 text-danger border-danger';
-                badge.innerHTML = `<span class="badge ${cls} border border-opacity-25" title="Stock disponible en la bodega de esta fila">Stock: ${info.stock.toFixed(2)}</span>`;
+                const tituloStock = ratio !== 1
+                    ? `Stock disponible en la bodega de esta fila (${info.stock.toFixed(2)} en la unidad del producto)`
+                    : 'Stock disponible en la bodega de esta fila';
+                badge.innerHTML = `<span class="badge ${cls} border border-opacity-25" title="${tituloStock}">Stock: ${stockLinea.toFixed(2)}</span>`;
             }
         }
         if (datos.manejaNup) bpPintarLotesFila(tr, info.lotes);
@@ -2306,7 +2408,10 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosPestanasOcultas($vistaConfigC
                 const itemsPreparados = [];
                 for (const item of pendingItems) {
                     const cantPendiente = parseFloat(item.cantidad_pendiente) || 0;
-                    const pBase = parseFloat(item.precio_base) || 0;
+                    // Cantidades del pedido en la unidad de su línea (CAJA X100…): precios y stock
+                    // de esta tabla se muestran en esa misma unidad.
+                    const ratio = consRatioUnidad(item.id_unidad_medida, item.id_medida);
+                    const pBase = (parseFloat(item.precio_base) || 0) * ratio;
                     // Los pedidos (módulo Pedidos) no capturan precio por línea (siempre llega en 0):
                     // si el pedido no trae precio, se usa el precio base del producto.
                     const precioPedido = (parseFloat(item.precio_unitario) || 0) > 0 ? parseFloat(item.precio_unitario) : pBase;
@@ -2314,7 +2419,8 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosPestanasOcultas($vistaConfigC
                     let listaOptions = `<option value="${pBase}">P. Base ($${pBase.toFixed(2)})</option>`;
                     if (item.precios_lista && item.precios_lista.length > 0) {
                         item.precios_lista.forEach(pl => {
-                            listaOptions += `<option value="${pl.precio}">${pl.nombre_precio} ($${parseFloat(pl.precio).toFixed(2)})</option>`;
+                            const pl2 = parseFloat(pl.precio) * ratio;
+                            listaOptions += `<option value="${pl2}">${pl.nombre_precio} ($${pl2.toFixed(2)})</option>`;
                         });
                     }
 
@@ -2324,7 +2430,7 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosPestanasOcultas($vistaConfigC
                     // como "obligatorio" globalmente (puede usarse sin serlo).
                     const manejaNup = esInv && typeof EMPRESA_CONFIG !== 'undefined' && EMPRESA_CONFIG.facturacion_inventario;
 
-                    itemsPreparados.push({ item, cantPendiente, precioPedido, listaOptions, esInv, manejaNup });
+                    itemsPreparados.push({ item, cantPendiente, precioPedido, listaOptions, esInv, manejaNup, ratio });
                 }
                 // El stock de bodega se muestra para cualquier producto inventariable (no solo los
                 // que manejan NUP): el mismo endpoint trae lotes y stock total de esa bodega.
@@ -2420,7 +2526,7 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosPestanasOcultas($vistaConfigC
                                 <td class="align-middle">
                                     <div class="d-flex justify-content-between align-items-center gap-2">
                                         <div>
-                                            <div class="fw-bold small text-dark">${item.producto_nombre}${etiquetaUnidad}</div>
+                                            <div class="fw-bold small text-dark">${item.producto_nombre}${item.id_unidad_medida && item.unidad_nombre ? ` <span class="badge bg-secondary bg-opacity-10 text-secondary border border-secondary border-opacity-25" title="Unidad de la línea del pedido">${item.unidad_nombre}</span>` : ''}${etiquetaUnidad}</div>
                                             <div class="text-muted" style="font-size: 0.75rem;">${item.producto_codigo}</div>
                                         </div>
                                         ${badgeStock}
@@ -2773,37 +2879,18 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosPestanasOcultas($vistaConfigC
                 inputPedidoDet.value = item.id_pedido_detalle;
             }
 
-            const pBase = parseFloat(item.precio_base) || 0;
+            // Precio base del PRODUCTO (por su unidad): la tabla del pedido ya lo mostró
+            // convertido a la unidad de la línea, que aquí se hereda del pedido y no se cambia.
+            const pBase = parseFloat(item.original.precio_base) || 0;
             tr.querySelector('.input-precio-base-original').value = pBase;
 
             inputCant.value = item.cantidad;
-            
-            selLista.innerHTML = `<option value="${pBase}">P. Base ($${pBase.toFixed(2)})</option>`;
-            if (item.original.precios_lista && item.original.precios_lista.length > 0) {
-                item.original.precios_lista.forEach(pl => {
-                    selLista.innerHTML += `<option value="${pl.precio}">${pl.nombre_precio} ($${parseFloat(pl.precio).toFixed(2)})</option>`;
-                });
-            }
-            
-            const matchPrice = Array.from(selLista.options).some(opt => parseFloat(opt.value).toFixed(2) === item.precio_unitario.toFixed(2));
-            if (!matchPrice) {
-                selLista.innerHTML = `<option value="${item.precio_unitario}" selected>Precio Pedido ($${item.precio_unitario.toFixed(2)})</option>` + selLista.innerHTML;
-            } else {
-                for (let i = 0; i < selLista.options.length; i++) {
-                    if (parseFloat(selLista.options[i].value).toFixed(2) === item.precio_unitario.toFixed(2)) {
-                        selLista.selectedIndex = i;
-                        break;
-                    }
-                }
-            }
+
+            consConfigurarMedida(tr, item.original, item.original.id_unidad_medida || null, true);
+            consLlenarListaPrecios(tr, pBase, item.original.precios_lista, item.precio_unitario, 'Precio Pedido');
 
             // Set price and call calculation AFTER select list is completely built
             inputPrecio.value = item.precio_unitario.toFixed(EMPRESA_CONFIG.decimales_precio);
-
-            selLista.onchange = () => {
-                tr.querySelector('.input-precio').value = parseFloat(selLista.value).toFixed(EMPRESA_CONFIG.decimales_precio);
-                consCalcFila(selLista);
-            };
 
             let esInv = (item.original.inventariable == true || item.original.inventariable == 'true' || item.original.inventariable == 1) && item.original.tipo_produccion !== '02';
             if (esInv && typeof EMPRESA_CONFIG !== 'undefined' && EMPRESA_CONFIG.facturacion_inventario) {
@@ -3096,6 +3183,9 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosPestanasOcultas($vistaConfigC
                 precio:           tr.querySelector('.input-precio')?.value || '',
                 precio_base:      tr.querySelector('.input-precio-base-original')?.value || '0',
                 id_pedido_detalle: tr.querySelector('.input-id-pedido-detalle')?.value || '',
+                id_unidad_medida: tr.querySelector('.input-medida')?.value || '',
+                id_medida:        tr.dataset.idMedidaProducto || '',
+                id_tipo_medida:   tr.dataset.idTipoMedida || '',
                 id_bodega:        tr.dataset.idBodega || '',
                 inventariable:    tr.dataset.inventariable || '',
                 tipo_produccion:  tr.dataset.tipoProduccion || '01',
@@ -3228,15 +3318,8 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosPestanasOcultas($vistaConfigC
             const precioGuardado = parseFloat(d.precio) || 0;
             tr.querySelector('.input-precio').value = precioGuardado.toFixed(EMPRESA_CONFIG.decimales_precio);
 
-            const selLista = tr.querySelector('.input-lista-precios');
-            selLista.innerHTML = `<option value="${pBase}">P. Base ($${pBase.toFixed(2)})</option>`;
-            if (Math.abs(precioGuardado - pBase) > 0.001) {
-                selLista.innerHTML = `<option value="${precioGuardado}" selected>Precio Guardado ($${precioGuardado.toFixed(2)})</option>` + selLista.innerHTML;
-            }
-            selLista.onchange = () => {
-                tr.querySelector('.input-precio').value = parseFloat(selLista.value).toFixed(EMPRESA_CONFIG.decimales_precio);
-                consCalcFila(selLista);
-            };
+            if (d.id_producto) consConfigurarMedida(tr, d, d.id_unidad_medida || null, !!d.id_pedido_detalle);
+            consLlenarListaPrecios(tr, pBase, [], precioGuardado, 'Precio Guardado');
 
             const esInv = (d.inventariable == true || d.inventariable == 'true' || d.inventariable == 1) && d.tipo_produccion !== '02';
             if (esInv && typeof EMPRESA_CONFIG !== 'undefined' && EMPRESA_CONFIG.facturacion_inventario) {
