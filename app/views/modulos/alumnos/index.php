@@ -274,7 +274,7 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                 <h6 class="fw-bold mb-1"><span class="badge bg-secondary me-1">1</span> Descargar la plantilla</h6>
                 <p class="small text-muted mb-2">
                     Trae una fila por cada <b>alumno activo</b> y una columna por cada <b>servicio activo</b> de Productos,
-                    con el precio que hoy se le factura a cada alumno (vacía si no lo tiene).
+                    con las celdas vacías.
                 </p>
                 <a href="<?= $urlBaseAlu ?>/plantilla-facturacion" class="btn btn-outline-secondary btn-sm mb-3">
                     <i class="bi bi-download me-1"></i>Descargar plantilla
@@ -282,8 +282,8 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
 
                 <h6 class="fw-bold mb-1"><span class="badge bg-secondary me-1">2</span> Subir la plantilla completada</h6>
                 <p class="small text-muted mb-2">
-                    Escriba el precio para agregar o cambiar un servicio, <b>X</b> para el precio base, y deje la celda
-                    vacía (o en 0) para quitárselo. Las filas sin cambios no se tocan.
+                    Escriba el precio para agregar o cambiar un servicio, <b>X</b> para el precio base y <b>0</b> para
+                    quitárselo. Las celdas vacías no cambian nada de lo que el alumno ya tiene.
                 </p>
                 <div class="alert alert-info py-2 px-3 small mb-2">
                     <i class="bi bi-info-circle me-1"></i>

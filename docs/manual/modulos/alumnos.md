@@ -209,14 +209,15 @@ alumno, en vez de abrir ficha por ficha. Funciona igual que la carga de
 **Novedades**.
 
 1. **Descargar plantilla**: un Excel con **una fila por cada alumno activo** y
-   **una columna por cada servicio activo** de Productos (tipo *Servicio*). Cada
-   celda trae el precio con el que **hoy** se le factura ese servicio al alumno;
-   vacía si no lo tiene. Las primeras columnas (ID, identificación, alumno,
-   campus, curso y cliente) son de referencia.
-2. **Llenar** en cada celda:
+   **una columna por cada servicio activo** de Productos (tipo *Servicio*). Los
+   productos y servicios **inactivos** no salen. Las celdas de servicio vienen
+   **vacías**. Las primeras columnas (ID, alumno, campus y cliente) son de
+   referencia.
+2. **Llenar** solo lo que se quiere cambiar:
    - un **precio** para agregar el servicio o cambiarle el precio;
    - **X** para usar el precio base del servicio;
-   - **vacío o 0** para quitarle el servicio.
+   - **0** para quitarle el servicio;
+   - **vacía**: no cambia nada de lo que el alumno ya tiene.
 3. **Subir** el archivo con **Importar**. Al terminar se informa cuántos alumnos
    cambiaron y cuántos servicios se agregaron, cambiaron o quitaron.
 
@@ -229,12 +230,13 @@ alumno, en vez de abrir ficha por ficha. Funciona igual que la carga de
 - Si el precio escrito es igual al precio base, el servicio queda siguiendo al
   producto: cuando cambie el precio base en Productos, cambia también para el
   alumno.
-- Un servicio **desactivado** en la ficha aparece vacío; si se le escribe un
+- Si el alumno tenía el servicio **desactivado** en su ficha y se le escribe un
   precio, se vuelve a activar.
 - Los productos que no son servicios, y los servicios inactivos, no tienen
-  columna y no se tocan.
-- Las filas sin cambios no se tocan, así que subir dos veces el mismo archivo no
-  duplica nada.
+  columna y no se tocan. Si un archivo viejo trae la columna de un producto que
+  ya está inactivo, la carga lo rechaza.
+- Lo que ya está igual no se vuelve a grabar, así que subir dos veces el mismo
+  archivo no duplica nada.
 - Es **todo o nada**: si hay un solo error, no se cambia ningún alumno y se
   muestra la fila y el servicio que hay que corregir.
 - Sin **acceso total**, la plantilla trae solo los alumnos que registró el propio
@@ -402,6 +404,9 @@ pestaña Transacciones aparece solo si el usuario puede **ver** Facturas de Vent
 - **Cargar facturación: "No existe un producto con ese código"**: se cambió el
   `[CÓDIGO]` de un encabezado o se borró el producto; descargue la plantilla de
   nuevo.
+- **Cargar facturación: "El producto está inactivo"**: el archivo se descargó
+  antes de desactivar ese producto; borre esa columna o descargue la plantilla
+  de nuevo.
 - **La cédula muestra "No encontrado"**: el número no está en el registro
   consultado o el servicio no respondió; se pueden escribir los nombres a
   mano y guardar normalmente.
@@ -410,8 +415,9 @@ pestaña Transacciones aparece solo si el usuario puede **ver** Facturas de Vent
 
 - **1.9** — Botón **Cargar facturación** en el listado, junto a QR
   representantes: plantilla Excel con una fila por alumno activo y una columna
-  por servicio activo, con los precios actuales; al subirla se agregan, cambian o
-  quitan los servicios de cada alumno (todo o nada).
+  por servicio activo, con las celdas vacías; al subirla se agregan, cambian (precio)
+  o quitan (0) los servicios de cada alumno, y las celdas vacías no cambian nada
+  (todo o nada).
 - **1.8** — Portal de representantes: el representante **nuevo** elige el tipo de
   identificación (cédula, RUC o pasaporte), puede corregir el número antes de
   guardar y, al completar una cédula o un RUC, el nombre y la dirección se

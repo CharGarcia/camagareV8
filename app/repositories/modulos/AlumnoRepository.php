@@ -588,8 +588,9 @@ class AlumnoRepository extends BaseRepository
     // ------------------------------------------------------------------
 
     /**
-     * Alumnos activos de la empresa para la plantilla, con el campus/curso de la
-     * matrícula vigente (o la más reciente, igual que el listado) y el cliente que factura.
+     * Alumnos activos de la empresa para la plantilla, con el campus de la matrícula
+     * vigente (o la más reciente, igual que el listado) y el cliente que factura.
+     * Se ordenan por campus y curso para que el Excel salga agrupado.
      */
     public function getActivosParaPlantilla(int $idEmpresa, ?int $idUsuarioFiltro = null): array
     {
@@ -598,8 +599,7 @@ class AlumnoRepository extends BaseRepository
         if ($idUsuarioFiltro !== null) {
             $params[':id_usuario_filtro'] = $idUsuarioFiltro;
         }
-        $sql = "SELECT a.id, a.numero_identificacion, a.nombres, a.apellidos,
-                       camp.nombre AS campus_nombre, niv.nombre AS nivel_nombre,
+        $sql = "SELECT a.id, a.nombres, a.apellidos, camp.nombre AS campus_nombre,
                        cli.nombre AS cliente_nombre
                 FROM {$this->table} a
                 LEFT JOIN clientes cli ON cli.id = a.id_cliente
@@ -648,13 +648,13 @@ class AlumnoRepository extends BaseRepository
     {
         $st = $this->db->prepare("SELECT id, codigo, nombre, precio_base FROM productos
                                   WHERE id_empresa = :e AND eliminado = false
-                                    AND COALESCE(status, 1) = 1 AND tipo_produccion = '02'
+                                    AND status = 1 AND tipo_produccion = '02'
                                   ORDER BY nombre, id");
         $st->execute([':e' => $idEmpresa]);
         return $st->fetchAll(PDO::FETCH_ASSOC);
     }
 
-    /** Productos vivos de la empresa por código (los encabezados del Excel): codigo => fila. */
+    /** Productos vivos de la empresa por código (los encabezados del Excel), con su status: codigo => fila. */
     public function getProductosPorCodigo(array $codigos, int $idEmpresa): array
     {
         $codigos = array_values(array_unique(array_filter(array_map('strval', $codigos), fn($c) => $c !== '')));
@@ -662,7 +662,7 @@ class AlumnoRepository extends BaseRepository
             return [];
         }
         $ph = implode(',', array_fill(0, count($codigos), '?'));
-        $st = $this->db->prepare("SELECT id, codigo, nombre, precio_base FROM productos
+        $st = $this->db->prepare("SELECT id, codigo, nombre, precio_base, status FROM productos
                                   WHERE id_empresa = ? AND eliminado = false AND codigo IN ($ph)
                                   ORDER BY id");
         $st->execute(array_merge([$idEmpresa], $codigos));

@@ -14,15 +14,17 @@ use Exception;
  * Importa la facturación de los alumnos desde la plantilla de
  * AlumnoFacturacionPlantillaService (una fila por alumno, una columna por servicio).
  *
- * Qué hace cada celda de servicio con el alumno de la fila:
+ * Qué hace cada celda de servicio con el alumno de la fila (la plantilla las trae vacías):
+ *  - vacía: no cambia nada.
  *  - precio > 0: si no tiene el servicio, se agrega (cantidad 1, IVA del producto);
  *    si lo tiene con otro precio, se cambia el precio; si lo tenía desactivado, se
  *    reactiva con ese precio. "X" = precio base del producto.
- *  - vacía o 0: si tiene el servicio activo, se le quita (baja lógica). Las líneas
- *    desactivadas no se tocan (la plantilla las muestra vacías).
+ *  - 0: si tiene el servicio activo, se le quita (baja lógica). Las líneas
+ *    desactivadas no se tocan.
  * Cantidad, descuento, detalle e IVA de las líneas existentes se conservan. Los
  * servicios sin columna (productos que no son servicio, servicios inactivos) no se
- * tocan. Precio igual al base → precio_override NULL: la línea sigue al producto.
+ * tocan; una columna de un producto inactivo (plantilla vieja) se rechaza. Precio
+ * igual al base → precio_override NULL: la línea sigue al producto.
  *
  * Es TODO O NADA, como Novedades: primero se revisa el archivo completo y, solo si
  * no hay ni un error, se graba en una sola transacción. Al grabar, cada alumno se
@@ -88,6 +90,8 @@ class AlumnoFacturacionImportService
         foreach (array_unique($colsServicio) as $codigo) {
             if (!isset($productos[$codigo])) {
                 $errores[] = ['fila' => 1, 'servicio' => $codigo, 'error' => 'No existe un producto con ese código en la empresa.'];
+            } elseif ((int) $productos[$codigo]['status'] !== 1) {
+                $errores[] = ['fila' => 1, 'servicio' => $codigo, 'error' => 'El producto está inactivo: borre la columna o descargue la plantilla de nuevo.'];
             }
         }
         if ($errores) {
@@ -121,14 +125,17 @@ class AlumnoFacturacionImportService
                 if (preg_match('/^\d+,\d{1,2}$/', $txt)) {
                     $txt = str_replace(',', '.', $txt); // "12,50" escrito como texto
                 }
-                if ($txt === '' || (is_numeric($txt) && (float) $txt == 0.0)) {
-                    $valor = null;
+                if ($txt === '') {
+                    continue; // vacía: no se toca ese servicio
+                }
+                if (is_numeric($txt) && (float) $txt == 0.0) {
+                    $valor = null; // 0: se le quita
                 } elseif (strtoupper($txt) === 'X') {
                     $valor = round((float) $p['precio_base'], 2);
                 } elseif (is_numeric($txt)) {
                     $valor = round((float) $txt, 2);
                 } else {
-                    $errores[] = ['fila' => $nf, 'servicio' => $etq, 'error' => "«{$txt}» no es un precio: escriba un número, X o déjela vacía."];
+                    $errores[] = ['fila' => $nf, 'servicio' => $etq, 'error' => "«{$txt}» no es un precio: escriba un número, X (precio base), 0 (quitar) o déjela vacía."];
                     continue;
                 }
                 $celdas[(int) $p['id']] = ['valor' => $valor, 'servicio' => $etq, 'precio_base' => round((float) $p['precio_base'], 2)];

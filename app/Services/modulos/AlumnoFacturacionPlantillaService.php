@@ -16,12 +16,11 @@ use PhpOffice\PhpSpreadsheet\Worksheet\Worksheet;
 /**
  * Arma la plantilla Excel para cargar la facturación de los alumnos (mismo
  * patrón que la de Novedades): una hoja "Facturacion" con UNA FILA POR ALUMNO
- * ACTIVO y UNA COLUMNA POR CADA SERVICIO activo del catálogo de la empresa
- * (productos tipo 02), más una hoja "Instrucciones".
+ * ACTIVO y UNA COLUMNA POR CADA SERVICIO ACTIVO del catálogo de la empresa
+ * (productos tipo 02 con status = 1), más una hoja "Instrucciones".
  *
- * Cada celda de servicio trae ya escrito el precio con el que hoy se le factura
- * ese servicio al alumno (vacía si no lo tiene): el usuario cambia, agrega o
- * borra precios y sube el archivo. Lo que hace cada valor al importar está en
+ * Las celdas de servicio van VACÍAS: el usuario escribe solo lo que quiere
+ * cambiar (vacía = no se toca). Lo que hace cada valor al importar está en
  * AlumnoFacturacionImportService.
  *
  * El encabezado de cada servicio termina en [CODIGO]: el importador reconoce la
@@ -32,7 +31,7 @@ class AlumnoFacturacionPlantillaService
     public const HOJA_DATOS = 'Facturacion';
 
     /** Columnas del alumno, antes de las de servicio. Solo ID_ALUMNO se usa al importar. */
-    public const COLS_ALUMNO = ['ID_ALUMNO', 'IDENTIFICACION', 'ALUMNO', 'CAMPUS', 'CURSO', 'CLIENTE_FACTURA'];
+    public const COLS_ALUMNO = ['ID_ALUMNO', 'ALUMNO', 'CAMPUS', 'CLIENTE_FACTURA'];
 
     private const COLOR_ENC_SERVICIO = 'FFFFF2CC'; // columnas que llena el usuario
     private const COLOR_ENC_FIJO     = 'FFE9ECEF'; // columnas de referencia
@@ -73,7 +72,6 @@ class AlumnoFacturacionPlantillaService
     {
         $servicios = $this->repo->getCatalogoServicios($idEmpresa);
         $alumnos   = $this->repo->getActivosParaPlantilla($idEmpresa, $idUsuarioFiltro);
-        $lineas    = $this->repo->getServiciosDeAlumnos(array_column($alumnos, 'id'), $idEmpresa);
 
         $letra   = fn(int $n) => Coordinate::stringFromColumnIndex($n);
         $nFijas  = count(self::COLS_ALUMNO);
@@ -88,31 +86,15 @@ class AlumnoFacturacionPlantillaService
         $hoja = $ss->getActiveSheet();
         $hoja->setTitle(self::HOJA_DATOS);
         $hoja->fromArray($encabezados, null, 'A1');
-        // Cédula y nombres como texto: una cédula como 0705210052 no pierde el cero.
-        $hoja->getStyle('B:F')->getNumberFormat()->setFormatCode(NumberFormat::FORMAT_TEXT);
+        $hoja->getStyle('B:D')->getNumberFormat()->setFormatCode(NumberFormat::FORMAT_TEXT);
 
         $fila = 2;
         foreach ($alumnos as $a) {
             $hoja->setCellValue("A{$fila}", (int) $a['id']);
-            $hoja->setCellValueExplicit("B{$fila}", (string) ($a['numero_identificacion'] ?? ''), DataType::TYPE_STRING);
-            $hoja->setCellValueExplicit("C{$fila}", trim(($a['apellidos'] ?? '') . ' ' . ($a['nombres'] ?? '')), DataType::TYPE_STRING);
-            $hoja->setCellValueExplicit("D{$fila}", (string) ($a['campus_nombre'] ?? ''), DataType::TYPE_STRING);
-            $hoja->setCellValueExplicit("E{$fila}", (string) ($a['nivel_nombre'] ?? ''), DataType::TYPE_STRING);
-            $hoja->setCellValueExplicit("F{$fila}", (string) ($a['cliente_nombre'] ?? ''), DataType::TYPE_STRING);
-
-            // Precio actual de cada servicio ACTIVO del alumno (si tiene dos líneas
-            // del mismo servicio, el de la primera: ver el importador).
-            $precios = [];
-            foreach ($lineas[(int) $a['id']] ?? [] as $l) {
-                if (self::lineaActiva($l)) {
-                    $precios[(int) $l['id_producto']] ??= self::precioLinea($l);
-                }
-            }
-            foreach ($servicios as $i => $p) {
-                if (isset($precios[(int) $p['id']])) {
-                    $hoja->setCellValue($letra($nFijas + 1 + $i) . $fila, $precios[(int) $p['id']]);
-                }
-            }
+            $hoja->setCellValueExplicit("B{$fila}", trim(($a['apellidos'] ?? '') . ' ' . ($a['nombres'] ?? '')), DataType::TYPE_STRING);
+            $hoja->setCellValueExplicit("C{$fila}", (string) ($a['campus_nombre'] ?? ''), DataType::TYPE_STRING);
+            $hoja->setCellValueExplicit("D{$fila}", (string) ($a['cliente_nombre'] ?? ''), DataType::TYPE_STRING);
+            // Las columnas de servicio van vacías: las completa el usuario.
             $fila++;
         }
         $ultFila = max(2, $fila - 1);
@@ -132,22 +114,20 @@ class AlumnoFacturacionPlantillaService
 
         // Nota en cada encabezado: qué hace la columna (y el precio base del servicio).
         $this->nota($hoja, 'A1', 'Número interno del alumno. No lo cambie: con él se ubica al alumno al importar.');
-        foreach (['B1', 'C1', 'D1', 'E1', 'F1'] as $c) {
+        foreach (['B1', 'C1', 'D1'] as $c) {
             $this->nota($hoja, $c, 'Solo de referencia: no se importa.');
         }
         foreach ($servicios as $i => $p) {
             $this->nota($hoja, $letra($nFijas + 1 + $i) . '1',
-                'Precio mensual de este servicio para el alumno. Vacía o 0: no se le factura. X: precio base ('
+                'Precio mensual de este servicio para el alumno. Vacía: no cambia nada. 0: se le quita. X: precio base ('
                 . number_format((float) $p['precio_base'], 2, '.', '') . ').');
         }
 
         $hoja->freezePane($letra($nFijas + 1) . '2');
         $hoja->getColumnDimension('A')->setWidth(11);
-        $hoja->getColumnDimension('B')->setWidth(14);
-        $hoja->getColumnDimension('C')->setWidth(34);
-        $hoja->getColumnDimension('D')->setWidth(16);
-        $hoja->getColumnDimension('E')->setWidth(16);
-        $hoja->getColumnDimension('F')->setWidth(28);
+        $hoja->getColumnDimension('B')->setWidth(34);
+        $hoja->getColumnDimension('C')->setWidth(16);
+        $hoja->getColumnDimension('D')->setWidth(28);
         for ($c = $nFijas + 1; $c <= count($encabezados); $c++) {
             $hoja->getColumnDimension($letra($c))->setWidth(18);
         }
@@ -185,9 +165,9 @@ class AlumnoFacturacionPlantillaService
         $titulo('CÓMO USAR ESTE ARCHIVO');
         $lineas([
             '1. En la hoja Facturacion hay una fila por alumno activo y una columna por cada servicio activo del catálogo.',
-            '2. Cada celda trae el precio con el que HOY se le factura ese servicio al alumno (vacía = no lo tiene).',
-            '3. Escriba el precio para agregar o cambiar un servicio; bórrelo (o ponga 0) para quitárselo. X = precio base del servicio.',
-            '4. Las filas que no cambie no se tocan. No hace falta borrar alumnos ni columnas.',
+            '2. Escriba solo lo que quiere cambiar. Las celdas vacías no cambian nada de lo que el alumno ya tiene.',
+            '3. Un precio agrega el servicio al alumno o le cambia el precio. X = precio base del servicio. 0 = se le quita el servicio.',
+            '4. No hace falta borrar alumnos ni columnas.',
             '5. Guarde el archivo y súbalo en Alumnos → Cargar facturación.',
             '6. La carga es TODO O NADA: con un solo error no se cambia ningún alumno, y se indica la fila y el servicio a corregir.',
         ]);
@@ -197,9 +177,9 @@ class AlumnoFacturacionPlantillaService
             '• La cantidad, el descuento, el texto Adicional y el IVA elegido en la ficha del alumno no cambian: el Excel solo pone el precio.',
             '• Un servicio nuevo entra con cantidad 1, sin descuento ni adicional y con el IVA del producto.',
             '• Si el precio es igual al precio base, el servicio queda «siguiendo» al producto: cuando cambie el precio base, cambia también aquí.',
-            '• Un servicio que el alumno tiene desactivado aparece vacío; si le escribe un precio, se vuelve a activar.',
-            '• Los productos que no son servicios (o servicios inactivos) no tienen columna y no se tocan.',
-            '• Si un alumno tiene dos líneas del mismo servicio, edítelo en su ficha: en el Excel deje ese precio igual.',
+            '• Si el alumno tenía el servicio desactivado y se le escribe un precio, se vuelve a activar.',
+            '• Los productos que no son servicios y los servicios inactivos no tienen columna y no se tocan.',
+            '• Si un alumno tiene dos líneas del mismo servicio, cambie el precio en su ficha (con 0 sí se quitan las dos).',
         ]);
 
         $titulo('SERVICIOS DE ESTA PLANTILLA');
