@@ -2,10 +2,12 @@
 /** @var array $perm */
 /** @var string $rutaModulo */
 
-$urlBaseCampusShared = BASE_URL . '/modulos/alumnos-campus';
+// Eliminar solo desde su propio listado y con permiso; incluido en otro módulo
+// (p. ej. el modal de Alumno) el modal solo sirve para crear al vuelo.
+$puedeEliminarCampus = ($rutaModulo ?? '') === 'modulos/alumnos-campus' && !empty($perm['eliminar']);
 ?>
 <!-- Modal Ficha de Campus -->
-<div class="modal fade" id="modalCampus" tabindex="-1" aria-hidden="true" data-bs-backdrop="static" style="z-index: 1060;">
+<div class="modal fade" id="modalCampus" tabindex="-1" aria-hidden="true" data-bs-backdrop="static">
     <div class="modal-dialog modal-dialog-centered">
         <div class="modal-content shadow-lg border-0">
             <form id="formCampusModal" novalidate onsubmit="return false;">
@@ -41,9 +43,11 @@ $urlBaseCampusShared = BASE_URL . '/modulos/alumnos-campus';
 
                 <div class="modal-footer justify-content-between bg-light border-top p-2">
                     <div>
-                        <button type="button" class="btn btn-outline-danger btn-sm px-3 d-none" id="btnEliminarCampusModal" onclick="eliminarCampusModal()">
-                            <i class="bi bi-trash3 me-1"></i> Eliminar
-                        </button>
+                        <?php if ($puedeEliminarCampus): ?>
+                            <button type="button" class="btn btn-outline-danger btn-sm px-3 d-none" id="btnEliminarCampusModal" onclick="eliminarCampusModal()">
+                                <i class="bi bi-trash3 me-1"></i> Eliminar
+                            </button>
+                        <?php endif; ?>
                     </div>
                     <div>
                         <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">

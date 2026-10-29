@@ -22,6 +22,9 @@ class AlumnoNivelRules
         } elseif (mb_strlen(trim($data['nombre'])) > 150) {
             $errores[] = 'El nombre del nivel/curso no puede exceder 150 caracteres.';
         }
+        if (!in_array($data['estado'] ?? 'activo', ['activo', 'inactivo'], true)) {
+            $errores[] = 'El estado no es válido.';
+        }
 
         if (!empty($errores)) {
             throw new Exception(implode(' ', $errores));

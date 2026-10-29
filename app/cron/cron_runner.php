@@ -149,6 +149,21 @@ try {
     echo "[" . date('Y-m-d H:i:s') . "] Error en reintentos de comprobantes SRI: " . $e->getMessage() . "\n";
 }
 
+// ── SRI: comprobantes emitidos entre empresas del sistema ────────────────────
+//    Va DESPUÉS de los reintentos: lo que acaban de autorizar ya queda encolado y
+//    se registra en la empresa receptora en este mismo tick. Corre en cada tick;
+//    idempotente (la cola y el registrador descartan duplicados).
+try {
+    $resEntreEmp = (new \App\Services\modulos\DocumentoEntreEmpresasService())->procesarPendientes();
+    if ($resEntreEmp['procesados'] > 0) {
+        echo "[" . date('Y-m-d H:i:s') . "] Documentos entre empresas: {$resEntreEmp['procesados']} procesado(s), "
+            . "{$resEntreEmp['registrados']} registrado(s), {$resEntreEmp['existentes']} ya existían, "
+            . "{$resEntreEmp['ignorados']} ignorado(s), {$resEntreEmp['errores']} error(es).\n";
+    }
+} catch (\Throwable $e) {
+    echo "[" . date('Y-m-d H:i:s') . "] Error en documentos entre empresas: " . $e->getMessage() . "\n";
+}
+
 // ── Firma electrónica: aviso por correo de caducidad (FIJO, 1 vez al día) ─────
 //    Complementa al ícono del navbar: avisa al correo registrado en la ficha de
 //    la empresa (empresas.mail) 15 días antes si es sociedad o 5 si es persona

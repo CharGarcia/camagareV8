@@ -70,43 +70,43 @@ class SriEnvioService
 
     public function enviarFacturaVenta(int $idVenta, int $idEmpresa, int $idUsuario): array
     {
-        return $this->conCandadoYTiempo('factura_venta', $idVenta,
+        return $this->conCandadoYTiempo('factura_venta', $idVenta, $idEmpresa, $idUsuario,
             fn () => $this->procesarEnvioFacturaVenta($idVenta, $idEmpresa, $idUsuario));
     }
 
     public function enviarFacturaReembolso(int $idFR, int $idEmpresa, int $idUsuario): array
     {
-        return $this->conCandadoYTiempo('factura_reembolso', $idFR,
+        return $this->conCandadoYTiempo('factura_reembolso', $idFR, $idEmpresa, $idUsuario,
             fn () => $this->procesarEnvioFacturaReembolso($idFR, $idEmpresa, $idUsuario));
     }
 
     public function enviarNotaCredito(int $idNC, int $idEmpresa, int $idUsuario): array
     {
-        return $this->conCandadoYTiempo('nota_credito', $idNC,
+        return $this->conCandadoYTiempo('nota_credito', $idNC, $idEmpresa, $idUsuario,
             fn () => $this->procesarEnvioNotaCredito($idNC, $idEmpresa, $idUsuario));
     }
 
     public function enviarNotaDebito(int $idND, int $idEmpresa, int $idUsuario): array
     {
-        return $this->conCandadoYTiempo('nota_debito', $idND,
+        return $this->conCandadoYTiempo('nota_debito', $idND, $idEmpresa, $idUsuario,
             fn () => $this->procesarEnvioNotaDebito($idND, $idEmpresa, $idUsuario));
     }
 
     public function enviarRetencionCompra(int $idRetencion, int $idEmpresa, int $idUsuario): array
     {
-        return $this->conCandadoYTiempo('retencion_compra', $idRetencion,
+        return $this->conCandadoYTiempo('retencion_compra', $idRetencion, $idEmpresa, $idUsuario,
             fn () => $this->procesarEnvioRetencionCompra($idRetencion, $idEmpresa, $idUsuario));
     }
 
     public function enviarGuiaRemision(int $idGuia, int $idEmpresa, int $idUsuario): array
     {
-        return $this->conCandadoYTiempo('guia_remision', $idGuia,
+        return $this->conCandadoYTiempo('guia_remision', $idGuia, $idEmpresa, $idUsuario,
             fn () => $this->procesarEnvioGuiaRemision($idGuia, $idEmpresa, $idUsuario));
     }
 
     public function enviarLiquidacionCompra(int $idLiq, int $idEmpresa, int $idUsuario): array
     {
-        return $this->conCandadoYTiempo('liquidacion_compra', $idLiq,
+        return $this->conCandadoYTiempo('liquidacion_compra', $idLiq, $idEmpresa, $idUsuario,
             fn () => $this->procesarEnvioLiquidacionCompra($idLiq, $idEmpresa, $idUsuario));
     }
 
@@ -122,8 +122,12 @@ class SriEnvioService
      *     (y con el pool en modo Session, el DISCARD ALL al devolverla).
      *  2. Reloj del tiempo máximo total (TIEMPO_MAXIMO_SEGUNDOS), que se reinicia en cada
      *     documento (el lote y el cron reutilizan la misma instancia).
+     *  3. Al quedar autorizado (por cualquier vía: envío normal o pre-verificación), si el
+     *     receptor es otra empresa del sistema, el comprobante se encola para registrarse
+     *     allá (DocumentoEntreEmpresasService). Solo encola: no suma tiempo ni puede fallar
+     *     el envío.
      */
-    private function conCandadoYTiempo(string $tipo, int $id, callable $envio): array
+    private function conCandadoYTiempo(string $tipo, int $id, int $idEmpresa, int $idUsuario, callable $envio): array
     {
         $db = Database::getConnection();
         $st = $db->prepare("SELECT pg_try_advisory_lock(hashtext(:k))");
@@ -142,6 +146,10 @@ class SriEnvioService
             if ($this->tiempoAgotado && ($resultado['estado'] ?? '') === 'en_procesamiento') {
                 $resultado['mensaje'] = self::mensajeTiempoAgotado();
                 $resultado['tiempo_agotado'] = true;
+            }
+            if (in_array($resultado['estado'] ?? '', ['autorizado', 'autorizada'], true)) {
+                (new \App\Services\modulos\DocumentoEntreEmpresasService())
+                    ->encolarSiCorresponde($tipo, $id, $idEmpresa, $idUsuario);
             }
             return $resultado;
         } finally {

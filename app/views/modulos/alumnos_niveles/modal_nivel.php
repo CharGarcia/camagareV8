@@ -1,9 +1,13 @@
 <?php
 /** @var array $perm */
 /** @var string $rutaModulo */
+
+// Eliminar solo desde su propio listado y con permiso; incluido en otro módulo
+// (p. ej. el modal de Alumno) el modal solo sirve para crear al vuelo.
+$puedeEliminarNivel = ($rutaModulo ?? '') === 'modulos/alumnos-niveles' && !empty($perm['eliminar']);
 ?>
 <!-- Modal Ficha de Nivel/Curso -->
-<div class="modal fade" id="modalNivel" tabindex="-1" aria-hidden="true" data-bs-backdrop="static" style="z-index: 1060;">
+<div class="modal fade" id="modalNivel" tabindex="-1" aria-hidden="true" data-bs-backdrop="static">
     <div class="modal-dialog modal-dialog-centered">
         <div class="modal-content shadow-lg border-0">
             <form id="formNivelModal" novalidate onsubmit="return false;">
@@ -39,9 +43,11 @@
 
                 <div class="modal-footer justify-content-between bg-light border-top p-2">
                     <div>
-                        <button type="button" class="btn btn-outline-danger btn-sm px-3 d-none" id="btnEliminarNivelModal" onclick="eliminarNivelModal()">
-                            <i class="bi bi-trash3 me-1"></i> Eliminar
-                        </button>
+                        <?php if ($puedeEliminarNivel): ?>
+                            <button type="button" class="btn btn-outline-danger btn-sm px-3 d-none" id="btnEliminarNivelModal" onclick="eliminarNivelModal()">
+                                <i class="bi bi-trash3 me-1"></i> Eliminar
+                            </button>
+                        <?php endif; ?>
                     </div>
                     <div>
                         <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">

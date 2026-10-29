@@ -10,6 +10,29 @@ class AlumnoNivelRepository extends BaseRepository
 {
     protected string $table = 'alumnos_niveles';
 
+    /**
+     * Columnas ordenables del listado: clave que manda la vista (`data-sort`) =>
+     * expresión SQL. Es la whitelist del ORDER BY y el mapa de `OrdenListado::clausula()`.
+     */
+    public const MAPA_ORDEN = [
+        'orden'   => 'n.orden',
+        'nombre'  => 'n.nombre',
+        'alumnos' => 'cnt.total',
+        'estado'  => 'n.estado',
+    ];
+
+    /**
+     * Alumnos con matrícula vigente (período abierto) en cada nivel. LATERAL para
+     * contar solo los niveles de la página, apoyado en idx_alumnos_periodos_nivel.
+     */
+    private const JOIN_CONTEO = "LEFT JOIN LATERAL (
+                SELECT COUNT(DISTINCT ap.id_alumno) AS total
+                  FROM alumnos_periodos ap
+                  JOIN alumnos a ON a.id = ap.id_alumno AND a.eliminado = false
+                 WHERE ap.id_nivel = n.id AND ap.id_empresa = n.id_empresa
+                   AND ap.eliminado = false AND ap.fecha_salida IS NULL
+            ) cnt ON true";
+
     public function __construct()
     {
         parent::__construct($this->table);
@@ -22,29 +45,56 @@ class AlumnoNivelRepository extends BaseRepository
         int $perPage,
         string $ordenCol,
         string $ordenDir,
-        ?int $idUsuarioFiltro = null
+        ?int $idUsuarioFiltro = null,
+        array $ordenMulti = []
     ): array {
+        // Una o varias columnas (Shift+clic), validadas contra MAPA_ORDEN, con n.id
+        // como desempate para que las filas empatadas no bailen entre páginas.
+        $ordenMulti = \App\Helpers\OrdenListado::normalizar(
+            $ordenMulti !== [] ? $ordenMulti : [['col' => $ordenCol, 'dir' => $ordenDir]]
+        );
+        $orderBy = \App\Helpers\OrdenListado::clausula($ordenMulti, self::MAPA_ORDEN, 'n.orden', 'n.id DESC');
+
         $whereSql = $this->getBaseWhere($idEmpresa, 'n', $idUsuarioFiltro);
         $params   = [':id_empresa' => $idEmpresa];
         if ($idUsuarioFiltro !== null) {
             $params[':id_usuario_filtro'] = $idUsuarioFiltro;
         }
 
-        if ($buscar !== '') {
-            $whereSql .= " AND (n.nombre ILIKE :b)";
-            $params[':b'] = '%' . $buscar . '%';
+        $parsed = \App\Helpers\FiltrosBusqueda::parsear($buscar);
+        if ($parsed['texto_libre'] !== '') {
+            $cond = \App\Helpers\FiltrosBusqueda::condicionTexto(['n.nombre'], $parsed['texto_libre'], $params, 'niv_b');
+            if ($cond !== '') {
+                $whereSql .= ' AND ' . $cond;
+            }
         }
 
-        $cols = ['nombre' => 'n.nombre', 'orden' => 'n.orden', 'estado' => 'n.estado'];
-        $col  = $cols[$ordenCol] ?? 'n.orden';
-        $dir  = ($ordenDir === 'DESC') ? 'DESC' : 'ASC';
+        \App\Helpers\FiltrosBusqueda::aplicarFiltros($whereSql, $params, $parsed['filtros'], [
+            'texto'    => [
+                'nombre' => 'n.nombre',
+            ],
+            'exacto'   => [
+                'estado'  => 'n.estado',
+                'usuario' => 'n.created_by',
+            ],
+            'numerico' => [
+                'orden'   => 'n.orden',
+                'alumnos' => 'COALESCE(cnt.total, 0)',
+            ],
+            'fecha'    => [
+                'registro'   => 'n.created_at',
+                'created_at' => 'n.created_at',
+            ],
+        ]);
 
-        $stCount = $this->db->prepare("SELECT COUNT(*) FROM {$this->table} n {$whereSql}");
+        $from = "{$this->table} n " . self::JOIN_CONTEO;
+
+        $stCount = $this->db->prepare("SELECT COUNT(*) FROM {$from} {$whereSql}");
         $stCount->execute($params);
         $total = (int) $stCount->fetchColumn();
 
-        $offset = ($page - 1) * $perPage;
-        $sqlRows = "SELECT n.* FROM {$this->table} n {$whereSql} ORDER BY {$col} {$dir}, n.id DESC";
+        $offset  = ($page - 1) * $perPage;
+        $sqlRows = "SELECT n.*, COALESCE(cnt.total, 0) AS alumnos FROM {$from} {$whereSql} {$orderBy}";
         if ($perPage > 0) {
             $sqlRows .= " LIMIT " . (int)$perPage . " OFFSET " . (int)$offset;
         }
@@ -53,6 +103,25 @@ class AlumnoNivelRepository extends BaseRepository
         $stRows->execute($params);
 
         return ['total' => $total, 'rows' => $stRows->fetchAll(PDO::FETCH_ASSOC)];
+    }
+
+    /**
+     * Opciones de los selects del modal de filtros: solo los usuarios que realmente
+     * registraron niveles en la empresa.
+     *
+     * @return array{usuarios: array}
+     */
+    public function getOpcionesFiltroListado(int $idEmpresa): array
+    {
+        $st = $this->db->prepare(
+            "SELECT DISTINCT u.id, u.nombre
+               FROM {$this->table} n
+               JOIN usuarios u ON u.id = n.created_by
+              WHERE n.id_empresa = :id_empresa AND n.eliminado = false
+              ORDER BY u.nombre"
+        );
+        $st->execute([':id_empresa' => $idEmpresa]);
+        return ['usuarios' => $st->fetchAll(PDO::FETCH_ASSOC)];
     }
 
     /**
@@ -84,7 +153,9 @@ class AlumnoNivelRepository extends BaseRepository
 
     public function contarAlumnosAsignados(int $id, int $idEmpresa): int
     {
+        // Cualquier período (vigente o histórico) de un alumno no eliminado bloquea.
         $sql = "SELECT COUNT(DISTINCT ap.id_alumno) FROM alumnos_periodos ap
+                JOIN alumnos a ON a.id = ap.id_alumno AND a.eliminado = false
                 WHERE ap.id_nivel = :id AND ap.id_empresa = :id_empresa AND ap.eliminado = false";
         $st = $this->db->prepare($sql);
         $st->execute([':id' => $id, ':id_empresa' => $idEmpresa]);

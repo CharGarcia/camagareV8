@@ -132,11 +132,16 @@
             datosCatalogos.niveles.map(n => `<option value="${n.id}" ${String(n.id) === String(seleccionado) ? 'selected' : ''}>${n.nombre}</option>`).join('');
     }
 
-    window.addEventListener('campusGuardado', (e) => {
+    // Altas al vuelo desde los modales de Campus / Nivel (emiten en `document` con
+    // { id, nombre, nuevo }). Solo se colocan si es un alta y el modal de Alumno está
+    // abierto; una edición solo refresca el nombre en los selects.
+    document.addEventListener('campusGuardado', (e) => {
         const c = e.detail;
-        if (!datosCatalogos.campus.some(x => String(x.id) === String(c.id))) datosCatalogos.campus.push({ id: c.id, nombre: c.nombre });
+        const previo = datosCatalogos.campus.find(x => String(x.id) === String(c.id));
+        if (previo) previo.nombre = c.nombre; else datosCatalogos.campus.push({ id: c.id, nombre: c.nombre });
+        const colocar = c.nuevo === true && modalEl && modalEl.classList.contains('show');
         // Sin fila de destino (alta desde la barra superior) va al campus de General.
-        const objetivoCampus = selCampusObjetivo || document.getElementById('alu_campus_actual');
+        const objetivoCampus = colocar ? (selCampusObjetivo || document.getElementById('alu_campus_actual')) : null;
         document.querySelectorAll('.sel-campus').forEach(sel => {
             const val = (sel === objetivoCampus) ? c.id : sel.value;
             llenarSelectCampus(sel, val);
@@ -145,10 +150,12 @@
         if (objetivoCampus && objetivoCampus.id === 'alu_campus_actual') asegurarPeriodoVigente();
     });
 
-    window.addEventListener('nivelGuardado', (e) => {
+    document.addEventListener('nivelGuardado', (e) => {
         const n = e.detail;
-        if (!datosCatalogos.niveles.some(x => String(x.id) === String(n.id))) datosCatalogos.niveles.push({ id: n.id, nombre: n.nombre });
-        const objetivoNivel = selNivelObjetivo || document.getElementById('alu_nivel_actual');
+        const previo = datosCatalogos.niveles.find(x => String(x.id) === String(n.id));
+        if (previo) previo.nombre = n.nombre; else datosCatalogos.niveles.push({ id: n.id, nombre: n.nombre });
+        const colocar = n.nuevo === true && modalEl && modalEl.classList.contains('show');
+        const objetivoNivel = colocar ? (selNivelObjetivo || document.getElementById('alu_nivel_actual')) : null;
         document.querySelectorAll('.sel-nivel').forEach(sel => {
             const val = (sel === objetivoNivel) ? n.id : sel.value;
             llenarSelectNivel(sel, val);

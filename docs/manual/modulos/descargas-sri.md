@@ -5,8 +5,8 @@ categoria: Compras
 ruta_modulo: modulos/descargas-sri
 tipo: modulo
 visibilidad: todos
-etiquetas: descargas sri, comprobantes recibidos, xml, facturas de proveedores, importar compras, portal sri
-version: 1.12
+etiquetas: descargas sri, comprobantes recibidos, xml, facturas de proveedores, importar compras, portal sri, empresas del sistema, documentos entre empresas, compra automática, factura entre empresas
+version: 1.13
 orden: 50
 estado: activo
 ---
@@ -38,6 +38,41 @@ puede generar entrada de inventario.
 
 Recuerde que las líneas traen los **códigos del proveedor**: para que la
 mercadería entre al inventario hay que vincularlas con productos de su catálogo.
+
+## Documentos que le emiten otras empresas del sistema
+
+Si el emisor también usa este sistema, no hace falta descargar su comprobante
+del SRI: cuando esa empresa lo emite y el SRI lo **autoriza en producción**, se
+registra **solo** en su empresa a los pocos minutos, igual que si lo hubiera
+descargado aquí.
+
+- **Qué documentos**: facturas (quedan como compra o gasto personal), notas de
+  crédito, notas de débito, retenciones que le practicaron (retención en ventas)
+  y liquidaciones de compra donde usted es el proveedor. Las guías de remisión
+  no se registran.
+- **Solo producción**: los comprobantes emitidos en ambiente de pruebas no se
+  registran, porque no tienen validez tributaria.
+- **Mismas reglas que la descarga**: respeta la lista de *documentos ignorados*,
+  no registra en un periodo contable cerrado y genera la
+  retención y el egreso automáticos, y la aprobación de compras, igual que un
+  documento descargado. Si después descarga el mismo comprobante del SRI,
+  aparece como *Ya estaba registrado*: nunca se duplica.
+- **Varias empresas con el mismo RUC** (establecimientos): el comprobante se
+  registra **una sola vez**, en la primera empresa creada con ese RUC.
+- **Si no se puede registrar** (p. ej. periodo cerrado), el sistema lo intenta
+  **una vez más** a los 30 minutos. Si vuelve a fallar queda con error en el
+  historial y ya no insiste: cárguelo desde esta pantalla como cualquier otro
+  comprobante. El registro corre en segundo plano y no hace más lenta la
+  emisión ni el uso del sistema.
+- **Dónde se ve**: en el *Historial de Descargas*, con el ícono de empresas
+  conectadas y origen *empresa_sistema*. El detalle muestra cada documento y si
+  se registró, ya existía, se ignoró o tuvo error.
+
+La tarjeta **Documentos de empresas del sistema** tiene el interruptor
+*Registrar automáticamente lo que me emiten*. Viene **activado**; solo los
+administradores (nivel 2) y superadministradores (nivel 3) pueden cambiarlo, y
+el cambio vale para todas las empresas del mismo RUC. Si lo desactiva, esos
+comprobantes se siguen pudiendo bajar del SRI como cualquier otro.
 
 ## Permisos
 
@@ -182,6 +217,10 @@ se escribe una nueva; no hay forma de recuperarla desde el sistema.
 
 ## Historial de cambios
 
+- **1.13** — Los comprobantes que le emite **otra empresa del sistema** se
+  registran solos al ser autorizados por el SRI en producción, sin descargarlos.
+  Nueva sección *Documentos que le emiten otras empresas del sistema* y tarjeta
+  para activarlo o desactivarlo.
 - **1.12** — Extensión de Chrome **1.22.0**: al ingresar al portal del SRI, la
   extensión **borra por completo** el RUC y la clave que el navegador hubiera
   dejado puestos (de otra empresa) y **comprueba** que los campos quedaron con

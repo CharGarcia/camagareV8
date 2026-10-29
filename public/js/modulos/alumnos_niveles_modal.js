@@ -1,16 +1,20 @@
 /**
  * Lógica compartida para el Modal de Niveles/Cursos (Alumnos).
- * Al guardar dispara el evento `nivelGuardado` para que cualquier módulo que
- * incluya este sub-modal (p. ej. el modal de Alumno) pueda agregar el nuevo
- * valor a su select y seleccionarlo automáticamente.
+ * Al guardar emite en `document` el evento `nivelGuardado` con
+ * { id, nombre, nuevo }: el modal de Alumno lo usa para dejar el nivel recién
+ * creado seleccionado (CLAUDE.md §9, "Crear al vuelo"). Si se abrió encima de
+ * otro modal y es un alta, se cierra solo; desde su propio listado queda abierto.
  */
 (function (window, document) {
     'use strict';
 
+    if (window.__CMG_nivelModal) return;
+    window.__CMG_nivelModal = true;
+
     const urlBase = (typeof BASE_URL !== 'undefined') ? (BASE_URL + '/modulos/alumnos-niveles') : (window.location.origin + '/sistema/public/modulos/alumnos-niveles');
     const modalEl = document.getElementById('modalNivel');
     let modalInst = null;
-
+    let guardando = false;
 
     // ── Mensajes (SweetAlert) ────────────────────────────────────────────────
     // Con un modal abierto el popup cuelga DENTRO de él (target): colgado de <body>
@@ -56,6 +60,26 @@
         return modalInst;
     }
 
+    // Encima del modal de Alumno: los modales están forzados a 5060 !important
+    // (app.css), así que el submodal y su backdrop se suben con inline important.
+    if (modalEl) {
+        modalEl.addEventListener('show.bs.modal', () => {
+            if (!(typeof window.CMG_modalSobreOtro === 'function' && window.CMG_modalSobreOtro(modalEl))) return;
+            modalEl.style.setProperty('z-index', '5080', 'important');
+            setTimeout(() => {
+                const bds = document.querySelectorAll('.modal-backdrop');
+                if (bds.length) bds[bds.length - 1].style.setProperty('z-index', '5075', 'important');
+            }, 0);
+        });
+        modalEl.addEventListener('hidden.bs.modal', () => modalEl.style.removeProperty('z-index'));
+    }
+
+    function modoEdicion(id) {
+        document.getElementById('nivel_id_modal').value = id;
+        document.getElementById('tituloModalNivel').textContent = 'Editar Nivel/Curso';
+        document.getElementById('btnEliminarNivelModal')?.classList.remove('d-none');
+    }
+
     window.abrirModalNivelCrear = function () {
         const form = document.getElementById('formNivelModal');
         if (!form) return;
@@ -64,76 +88,73 @@
         document.getElementById('nivel_id_modal').value = '';
         document.getElementById('nivel_orden_modal').value = '0';
         document.getElementById('tituloModalNivel').textContent = 'Nuevo Nivel/Curso';
-        document.getElementById('modalAlertNivel').classList.add('d-none');
-        document.getElementById('btnEliminarNivelModal').classList.add('d-none');
+        document.getElementById('modalAlertNivel')?.classList.add('d-none');
+        document.getElementById('btnEliminarNivelModal')?.classList.add('d-none');
 
         getModal()?.show();
-        setTimeout(() => {
-            const nomInput = document.getElementById('nivel_nombre_modal');
-            if (nomInput) nomInput.focus();
-        }, 400);
+        setTimeout(() => document.getElementById('nivel_nombre_modal')?.focus(), 400);
     };
 
     window.abrirModalNivelEditar = function (rowOrData) {
-        let data;
-        if (rowOrData instanceof HTMLElement) {
-            data = typeof rowOrData.dataset.row === 'string' ? JSON.parse(rowOrData.dataset.row) : rowOrData;
-        } else {
-            data = rowOrData;
-        }
-
+        const data = (rowOrData instanceof HTMLElement) ? JSON.parse(rowOrData.dataset.row) : rowOrData;
         const form = document.getElementById('formNivelModal');
         if (!form || !data) return;
         form.reset();
 
-        document.getElementById('nivel_id_modal').value = data.id;
         document.getElementById('nivel_nombre_modal').value = data.nombre || '';
         document.getElementById('nivel_orden_modal').value = data.orden ?? 0;
         document.getElementById('nivel_estado_modal').value = data.estado || 'activo';
-
-        document.getElementById('tituloModalNivel').textContent = 'Editar Nivel/Curso';
-        document.getElementById('modalAlertNivel').classList.add('d-none');
-        document.getElementById('btnEliminarNivelModal').classList.remove('d-none');
+        document.getElementById('modalAlertNivel')?.classList.add('d-none');
+        modoEdicion(data.id);
 
         getModal()?.show();
     };
 
     window.guardarNivelModal = async function () {
+        // Bandera antes del primer await: un doble clic no crea dos niveles.
+        if (guardando) return;
         const form = document.getElementById('formNivelModal');
-        const id = document.getElementById('nivel_id_modal')?.value;
-        const actionUrl = id ? `${urlBase}/update` : `${urlBase}/store`;
         const btn = document.getElementById('btnGuardarNivelModal');
-        const alertEl = document.getElementById('modalAlertNivel');
-
         if (!form || !btn) return;
+        guardando = true;
 
+        const id = document.getElementById('nivel_id_modal')?.value;
+        const nuevo = !id;
         btn.disabled = true;
         btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>';
 
         try {
             const fd = new FormData(form);
-            const resp = await fetch(actionUrl, { method: 'POST', body: fd });
+            const resp = await fetch(nuevo ? `${urlBase}/store` : `${urlBase}/update`, { method: 'POST', body: fd });
             const json = await resp.json();
 
             if (!json.ok) {
                 aviso('error', json.error || json.msg || 'No se pudo guardar.');
+                return;
             }
 
-            if (json.ok) {
-                await aviso('success', json.msg || 'Guardado correctamente.', { timer: 1200, showConfirmButton: false });
-                setTimeout(() => {
-                    getModal()?.hide();
-                    if (window.fetchSearchNivel) window.fetchSearchNivel();
-                    window.dispatchEvent(new CustomEvent('nivelGuardado', {
-                        detail: { id: json.id || id, nombre: json.nombre || fd.get('nombre') }
-                    }));
-                }, 600);
+            const idGuardado = json.id || id;
+            // El id queda puesto antes de reactivar Guardar: el siguiente clic actualiza.
+            if (nuevo) modoEdicion(idGuardado);
+
+            const alVuelo = nuevo && typeof window.CMG_modalSobreOtro === 'function' && window.CMG_modalSobreOtro(modalEl);
+            document.dispatchEvent(new CustomEvent('nivelGuardado', {
+                detail: { id: idGuardado, nombre: json.nombre || fd.get('nombre'), nuevo }
+            }));
+            if (window.fetchSearchNivel) window.fetchSearchNivel();
+
+            if (alVuelo) {
+                getModal()?.hide();
+                aviso('success', 'Nivel/curso creado y seleccionado.', { timer: 1400, showConfirmButton: false });
+            } else {
+                aviso('success', json.msg || 'Guardado correctamente.', { timer: 1200, showConfirmButton: false });
             }
         } catch (e) {
             aviso('error', 'Error de conexión con el servidor.');
         } finally {
+            guardando = false;
             btn.disabled = false;
-            btn.innerHTML = '<i class="bi bi-check-lg"></i> Guardar';
+            btn.innerHTML = '<i class="bi bi-check2-circle me-1"></i> Guardar';
         }
     };
 

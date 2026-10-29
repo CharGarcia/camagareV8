@@ -583,6 +583,132 @@ class AlumnoRepository extends BaseRepository
     }
 
     // ------------------------------------------------------------------
+    // Carga de la facturación por Excel (una fila por alumno, una columna
+    // por servicio). Ver AlumnoFacturacionPlantillaService / ...ImportService.
+    // ------------------------------------------------------------------
+
+    /**
+     * Alumnos activos de la empresa para la plantilla, con el campus/curso de la
+     * matrícula vigente (o la más reciente, igual que el listado) y el cliente que factura.
+     */
+    public function getActivosParaPlantilla(int $idEmpresa, ?int $idUsuarioFiltro = null): array
+    {
+        $where  = $this->getBaseWhere($idEmpresa, 'a', $idUsuarioFiltro);
+        $params = [':id_empresa' => $idEmpresa];
+        if ($idUsuarioFiltro !== null) {
+            $params[':id_usuario_filtro'] = $idUsuarioFiltro;
+        }
+        $sql = "SELECT a.id, a.numero_identificacion, a.nombres, a.apellidos,
+                       camp.nombre AS campus_nombre, niv.nombre AS nivel_nombre,
+                       cli.nombre AS cliente_nombre
+                FROM {$this->table} a
+                LEFT JOIN clientes cli ON cli.id = a.id_cliente
+                LEFT JOIN LATERAL (
+                      SELECT ap.id_campus, ap.id_nivel
+                      FROM alumnos_periodos ap
+                      WHERE ap.id_alumno = a.id AND ap.eliminado = false
+                      ORDER BY (ap.fecha_salida IS NULL) DESC, ap.fecha_ingreso DESC
+                      LIMIT 1
+                ) per ON true
+                LEFT JOIN alumnos_campus camp ON camp.id = per.id_campus
+                LEFT JOIN alumnos_niveles niv ON niv.id = per.id_nivel
+                {$where} AND COALESCE(a.estado_academico, 'activo') = 'activo'
+                ORDER BY camp.nombre NULLS LAST, niv.nombre NULLS LAST, a.apellidos, a.nombres, a.id";
+        $st = $this->db->prepare($sql);
+        $st->execute($params);
+        return $st->fetchAll(PDO::FETCH_ASSOC);
+    }
+
+    /** Alumnos vivos de la empresa (y propios, con $idUsuarioFiltro) entre los ids dados: id => fila. */
+    public function getAlumnosPorIds(array $ids, int $idEmpresa, ?int $idUsuarioFiltro = null): array
+    {
+        $ids = array_values(array_unique(array_filter(array_map('intval', $ids))));
+        if (!$ids) {
+            return [];
+        }
+        $params = [$idEmpresa];
+        $sql = "SELECT id, nombres, apellidos, estado_academico FROM {$this->table}
+                WHERE id_empresa = ? AND eliminado = false";
+        if ($idUsuarioFiltro !== null) {
+            $sql .= ' AND created_by = ?';
+            $params[] = $idUsuarioFiltro;
+        }
+        $sql .= ' AND id IN (' . implode(',', array_fill(0, count($ids), '?')) . ')';
+        $st = $this->db->prepare($sql);
+        $st->execute(array_merge($params, $ids));
+        $out = [];
+        foreach ($st->fetchAll(PDO::FETCH_ASSOC) as $r) {
+            $out[(int) $r['id']] = $r;
+        }
+        return $out;
+    }
+
+    /** Servicios activos del catálogo de la empresa (productos tipo 02): una columna de la plantilla cada uno. */
+    public function getCatalogoServicios(int $idEmpresa): array
+    {
+        $st = $this->db->prepare("SELECT id, codigo, nombre, precio_base FROM productos
+                                  WHERE id_empresa = :e AND eliminado = false
+                                    AND COALESCE(status, 1) = 1 AND tipo_produccion = '02'
+                                  ORDER BY nombre, id");
+        $st->execute([':e' => $idEmpresa]);
+        return $st->fetchAll(PDO::FETCH_ASSOC);
+    }
+
+    /** Productos vivos de la empresa por código (los encabezados del Excel): codigo => fila. */
+    public function getProductosPorCodigo(array $codigos, int $idEmpresa): array
+    {
+        $codigos = array_values(array_unique(array_filter(array_map('strval', $codigos), fn($c) => $c !== '')));
+        if (!$codigos) {
+            return [];
+        }
+        $ph = implode(',', array_fill(0, count($codigos), '?'));
+        $st = $this->db->prepare("SELECT id, codigo, nombre, precio_base FROM productos
+                                  WHERE id_empresa = ? AND eliminado = false AND codigo IN ($ph)
+                                  ORDER BY id");
+        $st->execute(array_merge([$idEmpresa], $codigos));
+        $out = [];
+        foreach ($st->fetchAll(PDO::FETCH_ASSOC) as $r) {
+            $out[(string) $r['codigo']] ??= $r;
+        }
+        return $out;
+    }
+
+    /**
+     * Líneas de servicio vivas (activas e inactivas) de varios alumnos, con el
+     * precio base del producto: id_alumno => [líneas], en el orden de la ficha.
+     */
+    public function getServiciosDeAlumnos(array $idsAlumno, int $idEmpresa): array
+    {
+        $ids = array_values(array_unique(array_filter(array_map('intval', $idsAlumno))));
+        if (!$ids) {
+            return [];
+        }
+        $ph = implode(',', array_fill(0, count($ids), '?'));
+        $st = $this->db->prepare("SELECT s.*, p.precio_base AS producto_precio_base
+                                  FROM alumnos_servicios s
+                                  LEFT JOIN productos p ON p.id = s.id_producto
+                                  WHERE s.id_empresa = ? AND s.eliminado = false AND s.id_alumno IN ($ph)
+                                  ORDER BY s.id_alumno, s.id");
+        $st->execute(array_merge([$idEmpresa], $ids));
+        $out = [];
+        foreach ($st->fetchAll(PDO::FETCH_ASSOC) as $r) {
+            $out[(int) $r['id_alumno']][] = $r;
+        }
+        return $out;
+    }
+
+    /**
+     * Candado de los servicios de un alumno (CLAUDE.md §8): la carga por Excel lee
+     * las líneas, calcula y reescribe; dos cargas a la vez no deben pisarse. Se
+     * libera solo al COMMIT/ROLLBACK.
+     */
+    public function lockServicios(int $idAlumno, int $idEmpresa): void
+    {
+        $st = $this->db->prepare("SELECT pg_advisory_xact_lock(hashtext('alumno_servicios:' || :e || ':' || :a))");
+        $st->execute([':e' => (string) $idEmpresa, ':a' => (string) $idAlumno]);
+    }
+
+    // ------------------------------------------------------------------
     // Documentos adjuntos (altas/bajas individuales, no se sincronizan
     // en bloque porque cada fila representa un archivo ya subido).
     // ------------------------------------------------------------------

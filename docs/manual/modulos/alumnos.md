@@ -5,8 +5,8 @@ categoria: Ventas
 ruta_modulo: modulos/alumnos
 tipo: modulo
 visibilidad: todos
-etiquetas: alumnos, estudiantes, matrícula, matricula, colegio, escuela, centro infantil, campus, sede, nivel, curso, representante, representantes, padres, autorizado, autorizados, retirar, retiro, quién retira, facturación, facturar, generar factura, facturar pensión, facturar mensualidad, facturas del alumno, horario, pensión, pension, imprimir, impresora, filtrar alumnos, filtro por campus, filtro por nivel, alumnos por curso, alumnos por sede, buscar alumno, portal de representantes, qr, codigo qr, padres de familia, actualizar datos, registrar alumno, inscripcion, codigo de verificacion, enlace para padres
-version: 1.8
+etiquetas: alumnos, estudiantes, matrícula, matricula, colegio, escuela, centro infantil, campus, sede, nivel, curso, representante, representantes, padres, autorizado, autorizados, retirar, retiro, quién retira, facturación, facturar, generar factura, facturar pensión, facturar mensualidad, facturas del alumno, horario, pensión, pension, imprimir, impresora, filtrar alumnos, filtro por campus, filtro por nivel, alumnos por curso, alumnos por sede, buscar alumno, portal de representantes, qr, codigo qr, padres de familia, actualizar datos, registrar alumno, inscripcion, codigo de verificacion, enlace para padres, cargar facturación, carga masiva, importar excel, plantilla excel, precios por alumno, servicios por alumno, pensiones masivas
+version: 1.9
 orden: 0
 estado: activo
 ---
@@ -200,6 +200,50 @@ según la configuración de facturación del establecimiento:
 - **Precio**: si la configuración no permite editar el precio, se usa el
   precio base del producto (los conceptos libres sí llevan su precio).
 
+## Cargar la facturación de todos los alumnos desde Excel
+
+En el listado de Alumnos, botón **Cargar facturación**, junto a **QR
+representantes** (solo usuarios con permiso de *modificar* Alumnos). Sirve para
+fijar o cambiar de una vez los servicios y precios que se facturan a cada
+alumno, en vez de abrir ficha por ficha. Funciona igual que la carga de
+**Novedades**.
+
+1. **Descargar plantilla**: un Excel con **una fila por cada alumno activo** y
+   **una columna por cada servicio activo** de Productos (tipo *Servicio*). Cada
+   celda trae el precio con el que **hoy** se le factura ese servicio al alumno;
+   vacía si no lo tiene. Las primeras columnas (ID, identificación, alumno,
+   campus, curso y cliente) son de referencia.
+2. **Llenar** en cada celda:
+   - un **precio** para agregar el servicio o cambiarle el precio;
+   - **X** para usar el precio base del servicio;
+   - **vacío o 0** para quitarle el servicio.
+3. **Subir** el archivo con **Importar**. Al terminar se informa cuántos alumnos
+   cambiaron y cuántos servicios se agregaron, cambiaron o quitaron.
+
+### Qué hace y qué no hace la carga
+
+- Solo cambia el **precio**. La **cantidad**, el **descuento**, el texto
+  **Adicional** y el **IVA** que el servicio tenga en la ficha se conservan. Un
+  servicio nuevo entra con cantidad 1, sin descuento ni texto y con el IVA del
+  producto.
+- Si el precio escrito es igual al precio base, el servicio queda siguiendo al
+  producto: cuando cambie el precio base en Productos, cambia también para el
+  alumno.
+- Un servicio **desactivado** en la ficha aparece vacío; si se le escribe un
+  precio, se vuelve a activar.
+- Los productos que no son servicios, y los servicios inactivos, no tienen
+  columna y no se tocan.
+- Las filas sin cambios no se tocan, así que subir dos veces el mismo archivo no
+  duplica nada.
+- Es **todo o nada**: si hay un solo error, no se cambia ningún alumno y se
+  muestra la fila y el servicio que hay que corregir.
+- Sin **acceso total**, la plantilla trae solo los alumnos que registró el propio
+  usuario, y la carga no puede cambiar los alumnos de otros usuarios.
+- La carga **no genera facturas**: las facturas se siguen generando desde cada
+  alumno, con el botón **Generar factura**.
+- Cada alumno modificado queda en el historial de cambios del sistema
+  (`log_sistema`) con los servicios de antes y de después.
+
 ## Transacciones del alumno
 
 La pestaña **Transacciones**, junto a **Facturación**, muestra el **detalle
@@ -347,12 +391,27 @@ pestaña Transacciones aparece solo si el usuario puede **ver** Facturas de Vent
   un cliente con identificación en la pestaña Facturación.
 - **"Falta ejecutar en la base el script …20260924_alumnos_facturacion.sql"**:
   el administrador debe ejecutar ese script en la base de datos.
+- **Cargar facturación: "La configuración de facturación no permite cambiar el
+  precio"**: el establecimiento no permite editar el precio en la factura; deje
+  el precio base o escriba **X**.
+- **Cargar facturación: "El alumno tiene 2 líneas de este servicio"**: ese
+  alumno tiene el mismo servicio repetido en su ficha; cámbielo ahí y deje esa
+  celda del Excel como estaba.
+- **Cargar facturación: "El descuento de la línea sería mayor que cantidad ×
+  precio"**: baje primero el descuento en la ficha del alumno.
+- **Cargar facturación: "No existe un producto con ese código"**: se cambió el
+  `[CÓDIGO]` de un encabezado o se borró el producto; descargue la plantilla de
+  nuevo.
 - **La cédula muestra "No encontrado"**: el número no está en el registro
   consultado o el servicio no respondió; se pueden escribir los nombres a
   mano y guardar normalmente.
 
 ## Historial de cambios
 
+- **1.9** — Botón **Cargar facturación** en el listado, junto a QR
+  representantes: plantilla Excel con una fila por alumno activo y una columna
+  por servicio activo, con los precios actuales; al subirla se agregan, cambian o
+  quitan los servicios de cada alumno (todo o nada).
 - **1.8** — Portal de representantes: el representante **nuevo** elige el tipo de
   identificación (cédula, RUC o pasaporte), puede corregir el número antes de
   guardar y, al completar una cédula o un RUC, el nombre y la dirección se

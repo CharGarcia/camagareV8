@@ -495,6 +495,7 @@ function cargarConfigDescarga() {
     // si la empresa no tiene configuración (data.ok = false) o el fetch falla,
     // la cadena se cortaba antes y la tabla quedaba en "Cargando historial...".
     cargarHistorialDescargas();
+    cargarRecepcionEntreEmpresas();
 
     fetch(`${BASE_URL}/modulos/descargas_sri/obtenerConfigDescargaAjax`)
         .then(r => r.json())
@@ -567,6 +568,63 @@ function renderUltimoEstado(c) {
     `;
 }
 
+// ── Documentos emitidos por otras empresas del sistema ──────────────────────
+function cargarRecepcionEntreEmpresas() {
+    const card = document.getElementById('card_entre_empresas');
+    if (!card) return;
+    fetch(`${BASE_URL}/modulos/descargas_sri/obtenerRecepcionEntreEmpresasAjax`)
+        .then(r => r.json())
+        .then(data => {
+            if (!data.ok || !data.config || !data.config.disponible) return;
+            const c = data.config;
+            card.classList.remove('d-none');
+            const sw = document.getElementById('entre_empresas_recibir');
+            sw.checked  = !!c.recibir;
+            sw.disabled = !c.puede_configurar;
+
+            const r = c.resumen || {};
+            const partes = [];
+            if (r.registrado) partes.push(`<span class="text-success fw-semibold">${r.registrado} registrado(s)</span>`);
+            if (r.existente)  partes.push(`${r.existente} ya existían`);
+            if (r.pendiente)  partes.push(`${r.pendiente} en cola`);
+            if (r.ignorado)   partes.push(`${r.ignorado} ignorado(s)`);
+            if (r.error)      partes.push(`<span class="text-danger fw-semibold">${r.error} con error</span>`);
+            document.getElementById('entre_empresas_resumen').innerHTML = partes.length
+                ? `<span class="text-muted">Últimos 30 días:</span> ${partes.join(' · ')}`
+                : '';
+        })
+        .catch(() => {});
+}
+
+let guardandoEntreEmpresas = false;
+function guardarRecepcionEntreEmpresas(sw) {
+    if (guardandoEntreEmpresas) return;
+    guardandoEntreEmpresas = true;
+    sw.disabled = true;
+
+    const formData = new FormData();
+    formData.append('recibir', sw.checked ? '1' : '0');
+
+    fetch(`${BASE_URL}/modulos/descargas_sri/guardarRecepcionEntreEmpresasAjax`, { method: 'POST', body: formData })
+        .then(r => r.json())
+        .then(data => {
+            if (data.ok) {
+                Swal.fire({ icon: 'success', title: 'Guardado', text: data.mensaje, timer: 2500, showConfirmButton: false });
+            } else {
+                sw.checked = !sw.checked;
+                Swal.fire('Error', data.error || 'No se pudo guardar.', 'error');
+            }
+        })
+        .catch(() => {
+            sw.checked = !sw.checked;
+            Swal.fire('Error', 'Error de conexión.', 'error');
+        })
+        .finally(() => {
+            guardandoEntreEmpresas = false;
+            sw.disabled = false;
+        });
+}
+
 function guardarConfigDescarga() {
     // La tarjeta de credenciales solo existe para nivel 2 y 3: en nivel 1 la vista no la
     // pinta, así que estos campos no están en el DOM y leerlos daría un error. El servidor
@@ -634,7 +692,9 @@ function cargarHistorialDescargas() {
 
                 const origenIcon = row.origen === 'manual'
                     ? '<i class="bi bi-person-fill text-primary" title="Manual"></i>'
-                    : '<i class="bi bi-robot text-muted" title="Automático (cron)"></i>';
+                    : row.origen === 'empresa_sistema'
+                        ? '<i class="bi bi-diagram-3 text-success" title="Emitido por una empresa del sistema"></i>'
+                        : '<i class="bi bi-robot text-muted" title="Automático (cron)"></i>';
 
                 return `<tr>
                     <td class="ps-3 py-1" style="white-space:nowrap;">${row.fecha_proceso}</td>

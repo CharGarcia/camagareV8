@@ -1,16 +1,20 @@
 /**
  * Lógica compartida para el Modal de Campus (Alumnos).
- * Al guardar dispara el evento `campusGuardado` para que cualquier módulo que
- * incluya este sub-modal (p. ej. el modal de Alumno) pueda agregar el nuevo
- * valor a su select y seleccionarlo automáticamente.
+ * Al guardar emite en `document` el evento `campusGuardado` con
+ * { id, nombre, nuevo }: el modal de Alumno lo usa para dejar el campus recién
+ * creado seleccionado (CLAUDE.md §9, "Crear al vuelo"). Si se abrió encima de
+ * otro modal y es un alta, se cierra solo; desde su propio listado queda abierto.
  */
 (function (window, document) {
     'use strict';
 
+    if (window.__CMG_campusModal) return;
+    window.__CMG_campusModal = true;
+
     const urlBase = (typeof BASE_URL !== 'undefined') ? (BASE_URL + '/modulos/alumnos-campus') : (window.location.origin + '/sistema/public/modulos/alumnos-campus');
     const modalEl = document.getElementById('modalCampus');
     let modalInst = null;
-
+    let guardando = false;
 
     // ── Mensajes (SweetAlert) ────────────────────────────────────────────────
     // Con un modal abierto el popup cuelga DENTRO de él (target): colgado de <body>
@@ -56,90 +60,100 @@
         return modalInst;
     }
 
+    // Encima del modal de Alumno: los modales están forzados a 5060 !important
+    // (app.css), así que el submodal y su backdrop se suben con inline important.
+    if (modalEl) {
+        modalEl.addEventListener('show.bs.modal', () => {
+            if (!(typeof window.CMG_modalSobreOtro === 'function' && window.CMG_modalSobreOtro(modalEl))) return;
+            modalEl.style.setProperty('z-index', '5080', 'important');
+            setTimeout(() => {
+                const bds = document.querySelectorAll('.modal-backdrop');
+                if (bds.length) bds[bds.length - 1].style.setProperty('z-index', '5075', 'important');
+            }, 0);
+        });
+        modalEl.addEventListener('hidden.bs.modal', () => modalEl.style.removeProperty('z-index'));
+    }
+
+    function modoEdicion(id) {
+        document.getElementById('campus_id_modal').value = id;
+        document.getElementById('tituloModalCampus').textContent = 'Editar Campus';
+        document.getElementById('btnEliminarCampusModal')?.classList.remove('d-none');
+    }
+
     window.abrirModalCampusCrear = function () {
         const form = document.getElementById('formCampusModal');
         if (!form) return;
         form.reset();
 
-        const cid = document.getElementById('campus_id_modal');
-        if (cid) cid.value = '';
-
-        const title = document.getElementById('tituloModalCampus');
-        if (title) title.textContent = 'Nuevo Campus';
-
-        const alertEl = document.getElementById('modalAlertCampus');
-        if (alertEl) alertEl.classList.add('d-none');
-
-        const btnElim = document.getElementById('btnEliminarCampusModal');
-        if (btnElim) btnElim.classList.add('d-none');
+        document.getElementById('campus_id_modal').value = '';
+        document.getElementById('tituloModalCampus').textContent = 'Nuevo Campus';
+        document.getElementById('modalAlertCampus')?.classList.add('d-none');
+        document.getElementById('btnEliminarCampusModal')?.classList.add('d-none');
 
         getModal()?.show();
-        setTimeout(() => {
-            const nomInput = document.getElementById('campus_nombre_modal');
-            if (nomInput) nomInput.focus();
-        }, 400);
+        setTimeout(() => document.getElementById('campus_nombre_modal')?.focus(), 400);
     };
 
     window.abrirModalCampusEditar = function (rowOrData) {
-        let data;
-        if (rowOrData instanceof HTMLElement) {
-            data = typeof rowOrData.dataset.row === 'string' ? JSON.parse(rowOrData.dataset.row) : rowOrData;
-        } else {
-            data = rowOrData;
-        }
-
+        const data = (rowOrData instanceof HTMLElement) ? JSON.parse(rowOrData.dataset.row) : rowOrData;
         const form = document.getElementById('formCampusModal');
         if (!form || !data) return;
         form.reset();
 
-        document.getElementById('campus_id_modal').value = data.id;
         document.getElementById('campus_nombre_modal').value = data.nombre || '';
         document.getElementById('campus_direccion_modal').value = data.direccion || '';
         document.getElementById('campus_estado_modal').value = data.estado || 'activo';
-
-        document.getElementById('tituloModalCampus').textContent = 'Editar Campus';
-        document.getElementById('modalAlertCampus').classList.add('d-none');
-        document.getElementById('btnEliminarCampusModal').classList.remove('d-none');
+        document.getElementById('modalAlertCampus')?.classList.add('d-none');
+        modoEdicion(data.id);
 
         getModal()?.show();
     };
 
     window.guardarCampusModal = async function () {
+        // Bandera antes del primer await: un doble clic no crea dos campus.
+        if (guardando) return;
         const form = document.getElementById('formCampusModal');
-        const id = document.getElementById('campus_id_modal')?.value;
-        const actionUrl = id ? `${urlBase}/update` : `${urlBase}/store`;
         const btn = document.getElementById('btnGuardarCampusModal');
-        const alertEl = document.getElementById('modalAlertCampus');
-
         if (!form || !btn) return;
+        guardando = true;
 
+        const id = document.getElementById('campus_id_modal')?.value;
+        const nuevo = !id;
         btn.disabled = true;
         btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>';
 
         try {
             const fd = new FormData(form);
-            const resp = await fetch(actionUrl, { method: 'POST', body: fd });
+            const resp = await fetch(nuevo ? `${urlBase}/store` : `${urlBase}/update`, { method: 'POST', body: fd });
             const json = await resp.json();
 
             if (!json.ok) {
                 aviso('error', json.error || json.msg || 'No se pudo guardar.');
+                return;
             }
 
-            if (json.ok) {
-                await aviso('success', json.msg || 'Guardado correctamente.', { timer: 1200, showConfirmButton: false });
-                setTimeout(() => {
-                    getModal()?.hide();
-                    if (window.fetchSearchCampus) window.fetchSearchCampus();
-                    window.dispatchEvent(new CustomEvent('campusGuardado', {
-                        detail: { id: json.id || id, nombre: json.nombre || fd.get('nombre') }
-                    }));
-                }, 600);
+            const idGuardado = json.id || id;
+            // El id queda puesto antes de reactivar Guardar: el siguiente clic actualiza.
+            if (nuevo) modoEdicion(idGuardado);
+
+            const alVuelo = nuevo && typeof window.CMG_modalSobreOtro === 'function' && window.CMG_modalSobreOtro(modalEl);
+            document.dispatchEvent(new CustomEvent('campusGuardado', {
+                detail: { id: idGuardado, nombre: json.nombre || fd.get('nombre'), nuevo }
+            }));
+            if (window.fetchSearchCampus) window.fetchSearchCampus();
+
+            if (alVuelo) {
+                getModal()?.hide();
+                aviso('success', 'Campus creado y seleccionado.', { timer: 1400, showConfirmButton: false });
+            } else {
+                aviso('success', json.msg || 'Guardado correctamente.', { timer: 1200, showConfirmButton: false });
             }
         } catch (e) {
             aviso('error', 'Error de conexión con el servidor.');
         } finally {
+            guardando = false;
             btn.disabled = false;
-            btn.innerHTML = '<i class="bi bi-check-lg"></i> Guardar';
+            btn.innerHTML = '<i class="bi bi-check2-circle me-1"></i> Guardar';
         }
     };
 

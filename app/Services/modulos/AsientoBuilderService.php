@@ -2222,7 +2222,8 @@ class AsientoBuilderService
                             $reglasSinCuenta[] = $refBase . ' (para la propina; configure la cuenta en Cliente o en la General)';
                         }
                     }
-                } elseif (!empty($r['id_cuenta'])) {
+                } elseif (!empty($r['id_cuenta']) && $importeTotal > 0) {
+                    // Total en cero (p. ej. descuento del 100 %): sin línea 0,00/0,00 de Cuenta por Cobrar.
                     $detalles[] = [
                         'id_cuenta_contable' => (int)$r['id_cuenta'], 'cuenta_codigo' => $r['cuenta_codigo'], 'cuenta_nombre' => $r['cuenta_nombre'],
                         'debe' => $lado === 'debe' ? round($importeTotal, 2) : 0.0, 'haber' => $lado === 'debe' ? 0.0 : round($importeTotal, 2),
@@ -2692,7 +2693,8 @@ class AsientoBuilderService
                             $reglasSinCuenta[] = $refBase . ' (para la propina; configure la cuenta en Cliente o en la General)';
                         }
                     }
-                } elseif (!empty($r['id_cuenta'])) {
+                } elseif (!empty($r['id_cuenta']) && $importeTotal > 0) {
+                    // Total en cero (p. ej. descuento del 100 %): sin línea 0,00/0,00 de Cuenta por Cobrar.
                     $detalles[] = [
                         'id_cuenta_contable' => (int)$r['id_cuenta'], 'cuenta_codigo' => $r['cuenta_codigo'], 'cuenta_nombre' => $r['cuenta_nombre'],
                         'debe' => $lado === 'debe' ? round($importeTotal, 2) : 0.0, 'haber' => $lado === 'debe' ? 0.0 : round($importeTotal, 2),
@@ -3953,7 +3955,7 @@ class AsientoBuilderService
                         '(d.precio_total_sin_impuesto + COALESCE(imp_cxc.total_impuestos, 0))', $joinImpuestosPorLinea,
                         $refBase, false, $comercial, $costoLineas, $reglasSinCuenta
                     );
-                } elseif (!empty($r['id_cuenta'])) {
+                } elseif (!empty($r['id_cuenta']) && $importeTotal > 0) {
                     $lado = (($r['debe_haber'] ?? 'debe') === 'debe') ? 'debe' : 'haber';
                     $comercial[] = [
                         'id_cuenta_contable' => (int)$r['id_cuenta'], 'cuenta_codigo' => $r['cuenta_codigo'] ?? '', 'cuenta_nombre' => $r['cuenta_nombre'] ?? '',

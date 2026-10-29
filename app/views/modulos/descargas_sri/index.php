@@ -236,6 +236,28 @@ $rucEmpresa = htmlspecialchars($rucEmpresa ?? '');
                             </div>
                             <?php endif; ?>
 
+                            <!-- Comprobantes emitidos por otras empresas del sistema
+                                 (DocumentoEntreEmpresasService). El interruptor solo lo
+                                 cambian nivel 2 y 3; el endpoint lo revalida. -->
+                            <div class="card border border-success border-opacity-25 shadow-sm rounded-3 mb-3 d-none" id="card_entre_empresas">
+                                <div class="card-header bg-success bg-opacity-10 border-bottom border-success border-opacity-25 py-2 px-3">
+                                    <h6 class="mb-0 fw-bold text-success small"><i class="bi bi-diagram-3 me-2"></i>Documentos de empresas del sistema</h6>
+                                </div>
+                                <div class="card-body px-3 py-3">
+                                    <div class="form-check form-switch mb-2">
+                                        <input class="form-check-input" type="checkbox" role="switch" id="entre_empresas_recibir" onchange="guardarRecepcionEntreEmpresas(this)">
+                                        <label class="form-check-label small fw-semibold" for="entre_empresas_recibir">Registrar automáticamente lo que me emiten</label>
+                                    </div>
+                                    <div class="small text-muted">
+                                        Si otra empresa que usa este sistema le emite una factura, nota de crédito, nota de débito,
+                                        retención o liquidación y el SRI la <strong>autoriza en producción</strong>, se registra sola aquí
+                                        (en unos minutos), igual que si la descargara del SRI. Aparece en el historial con el ícono
+                                        <i class="bi bi-diagram-3 text-success"></i>.
+                                    </div>
+                                    <div class="small mt-2" id="entre_empresas_resumen"></div>
+                                </div>
+                            </div>
+
                             <!-- Descarga del SRI con la extensión -->
                             <div class="card border border-primary border-opacity-25 shadow-sm rounded-3 mb-3">
                                 <div class="card-header bg-primary bg-opacity-10 border-bottom border-primary border-opacity-25 py-2 px-3">

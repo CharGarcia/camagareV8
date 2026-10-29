@@ -76,6 +76,28 @@ class AlumnoRules
     }
 
     /**
+     * Precio de un servicio que llega en la carga por Excel (una celda de la
+     * plantilla). Mismas reglas que la ficha: sin «editar precio en la factura»
+     * solo vale el precio base del producto, y el descuento ya fijado en la línea
+     * no puede superar cantidad × precio. Devuelve el mensaje de error o null.
+     */
+    public function validarPrecioCarga(float $precio, float $precioBase, float $cantidad, float $descuento, bool $editarPrecio): ?string
+    {
+        if ($precio < 0) {
+            return 'El precio no puede ser negativo.';
+        }
+        if (!$editarPrecio && round($precio, 2) !== round($precioBase, 2)) {
+            return 'La configuración de facturación no permite cambiar el precio: deje el precio base ('
+                . number_format($precioBase, 2, '.', '') . ') o escriba X.';
+        }
+        if ($descuento > 0 && $descuento > round($cantidad * $precio, 2)) {
+            return 'El descuento de la línea (' . number_format($descuento, 2, '.', '')
+                . ') sería mayor que cantidad × precio; cámbielo primero en la ficha del alumno.';
+        }
+        return null;
+    }
+
+    /**
      * Servicios a facturar, con las mismas reglas que la Factura de Venta
      * (FacturaVentaRules::validarReglasEstablecimiento):
      *  - un ítem libre (concepto escrito a mano, sin producto) solo si el

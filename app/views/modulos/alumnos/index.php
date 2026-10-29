@@ -88,6 +88,7 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                 <a id="btnExportExcel" href="<?= $urlBaseAlu ?>/export-excel?b=<?= urlencode($buscar) ?>&sort=<?= urlencode($ordenCol) ?>&dir=<?= urlencode($ordenDir) ?>" class="btn btn-outline-success" title="Excel"><i class="bi bi-file-earmark-spreadsheet"></i> Excel</a>
                 <?php if (!empty($perm['actualizar'])): ?>
                 <button type="button" class="btn btn-outline-primary" onclick="aluAbrirPortal()" title="QR y enlace para que los representantes actualicen sus datos"><i class="bi bi-qr-code"></i> QR representantes</button>
+                <button type="button" class="btn btn-outline-primary" onclick="aluAbrirCargaFacturacion()" title="Cargar desde Excel los servicios que se facturan a cada alumno"><i class="bi bi-upload"></i> Cargar facturación</button>
                 <?php endif; ?>
             </div>
         </div>
@@ -257,6 +258,102 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                 if (j.fallidos) txt += ` Fallidos: ${j.fallidos} (revise la configuración de correo).`;
                 aviso(j.fallidos || j.sin_correo ? 'warning' : 'success', txt);
             } catch (e) { aviso('error', 'Error de conexión.'); }
+        };
+    })();
+</script>
+
+<!-- Modal: Cargar facturación desde Excel (servicios de cada alumno) -->
+<div class="modal fade" id="modalCargaFactAlu" tabindex="-1" aria-hidden="true" data-cmg-nav="off">
+    <div class="modal-dialog modal-dialog-centered modal-lg">
+        <div class="modal-content shadow-lg border-0">
+            <div class="modal-header bg-light py-2">
+                <h5 class="modal-title fw-bold mb-0"><i class="bi bi-upload me-2 text-primary"></i>Cargar facturación desde Excel</h5>
+                <button type="button" class="btn-close shadow-none" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+            </div>
+            <div class="modal-body">
+                <h6 class="fw-bold mb-1"><span class="badge bg-secondary me-1">1</span> Descargar la plantilla</h6>
+                <p class="small text-muted mb-2">
+                    Trae una fila por cada <b>alumno activo</b> y una columna por cada <b>servicio activo</b> de Productos,
+                    con el precio que hoy se le factura a cada alumno (vacía si no lo tiene).
+                </p>
+                <a href="<?= $urlBaseAlu ?>/plantilla-facturacion" class="btn btn-outline-secondary btn-sm mb-3">
+                    <i class="bi bi-download me-1"></i>Descargar plantilla
+                </a>
+
+                <h6 class="fw-bold mb-1"><span class="badge bg-secondary me-1">2</span> Subir la plantilla completada</h6>
+                <p class="small text-muted mb-2">
+                    Escriba el precio para agregar o cambiar un servicio, <b>X</b> para el precio base, y deje la celda
+                    vacía (o en 0) para quitárselo. Las filas sin cambios no se tocan.
+                </p>
+                <div class="alert alert-info py-2 px-3 small mb-2">
+                    <i class="bi bi-info-circle me-1"></i>
+                    Se conservan la cantidad, el descuento, el texto Adicional y el IVA que cada servicio tenga en la
+                    ficha del alumno. La carga es <b>todo o nada</b>: con un solo error no se cambia ningún alumno.
+                </div>
+                <input type="file" id="aluCargaFactFile" class="form-control form-control-sm" accept=".xlsx,.xls">
+                <div id="aluCargaFactResult" class="mt-3"></div>
+            </div>
+            <div class="modal-footer bg-light border-top p-2">
+                <button type="button" class="btn btn-secondary btn-sm ms-auto" data-bs-dismiss="modal"><i class="fa-solid fa-xmark me-1"></i>Cerrar</button>
+                <button type="button" class="btn btn-primary btn-sm px-4 shadow-sm" id="btnAluCargaFact" onclick="aluImportarFacturacion()"><i class="bi bi-upload me-1"></i> Importar</button>
+            </div>
+        </div>
+    </div>
+</div>
+<script>
+    (function () {
+        'use strict';
+        const urlBase = '<?= $urlBaseAlu ?>';
+        const el = () => document.getElementById('modalCargaFactAlu');
+        const esc = (s) => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+        let importando = false;
+
+        window.aluAbrirCargaFacturacion = function () {
+            document.getElementById('aluCargaFactFile').value = '';
+            document.getElementById('aluCargaFactResult').innerHTML = '';
+            bootstrap.Modal.getOrCreateInstance(el()).show();
+        };
+
+        window.aluImportarFacturacion = async function () {
+            if (importando) return;
+            const fileInput = document.getElementById('aluCargaFactFile');
+            if (!fileInput.files.length) {
+                Swal.fire({ target: el(), icon: 'info', title: 'Seleccione un archivo', timer: 1500, showConfirmButton: false });
+                return;
+            }
+            importando = true;
+            const btn = document.getElementById('btnAluCargaFact');
+            const cont = document.getElementById('aluCargaFactResult');
+            btn.disabled = true; btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Importando...';
+            cont.innerHTML = '';
+            try {
+                const fd = new FormData(); fd.append('archivo', fileInput.files[0]);
+                const resp = await fetch(`${urlBase}/importar-facturacion`, { method: 'POST', body: fd });
+                const json = await resp.json();
+                if (!json.ok) {
+                    cont.innerHTML = `<div class="alert alert-danger small py-2 mb-0">${esc(json.error)}</div>`;
+                } else if (json.errores && json.errores.length) {
+                    let html = `<div class="alert alert-danger small py-2 mb-2"><b>No se cambió ningún alumno.</b>
+                            Corrija ${json.errores.length} error(es) de la plantilla y vuelva a subirla.</div>
+                        <div class="alert alert-warning small py-2 mb-0" style="max-height:220px;overflow:auto;">
+                            <b>Filas con error:</b><ul class="mb-0 mt-1 ps-3">`;
+                    json.errores.forEach(e => {
+                        html += `<li>Fila ${e.fila}${e.servicio ? ' · <b>' + esc(e.servicio) + '</b>' : ''}: ${esc(e.error)}</li>`;
+                    });
+                    cont.innerHTML = html + '</ul></div>';
+                } else if (!json.alumnos) {
+                    cont.innerHTML = `<div class="alert alert-secondary small py-2 mb-0">No hubo cambios: el archivo coincide con lo que ya tienen los alumnos (${json.sin_cambios} revisado(s)).</div>`;
+                } else {
+                    cont.innerHTML = `<div class="alert alert-success small py-2 mb-0">
+                            <b>${json.alumnos}</b> alumno(s) actualizado(s): ${json.agregados} servicio(s) agregado(s),
+                            ${json.cambiados} con precio cambiado o reactivado(s) y ${json.quitados} quitado(s).
+                            <span class="text-muted">${json.sin_cambios} alumno(s) sin cambios.</span></div>`;
+                }
+            } catch (e) {
+                cont.innerHTML = '<div class="alert alert-danger small py-2 mb-0">Error de red al importar.</div>';
+            }
+            importando = false;
+            btn.disabled = false; btn.innerHTML = '<i class="bi bi-upload me-1"></i> Importar';
         };
     })();
 </script>

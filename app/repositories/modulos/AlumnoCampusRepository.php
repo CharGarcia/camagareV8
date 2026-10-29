@@ -10,6 +10,29 @@ class AlumnoCampusRepository extends BaseRepository
 {
     protected string $table = 'alumnos_campus';
 
+    /**
+     * Columnas ordenables del listado: clave que manda la vista (`data-sort`) =>
+     * expresión SQL. Es la whitelist del ORDER BY y el mapa de `OrdenListado::clausula()`.
+     */
+    public const MAPA_ORDEN = [
+        'nombre'    => 'c.nombre',
+        'direccion' => 'c.direccion',
+        'alumnos'   => 'cnt.total',
+        'estado'    => 'c.estado',
+    ];
+
+    /**
+     * Alumnos con matrícula vigente (período abierto) en cada campus. LATERAL para
+     * contar solo los campus de la página, apoyado en idx_alumnos_periodos_campus.
+     */
+    private const JOIN_CONTEO = "LEFT JOIN LATERAL (
+                SELECT COUNT(DISTINCT ap.id_alumno) AS total
+                  FROM alumnos_periodos ap
+                  JOIN alumnos a ON a.id = ap.id_alumno AND a.eliminado = false
+                 WHERE ap.id_campus = c.id AND ap.id_empresa = c.id_empresa
+                   AND ap.eliminado = false AND ap.fecha_salida IS NULL
+            ) cnt ON true";
+
     public function __construct()
     {
         parent::__construct($this->table);
@@ -22,29 +45,61 @@ class AlumnoCampusRepository extends BaseRepository
         int $perPage,
         string $ordenCol,
         string $ordenDir,
-        ?int $idUsuarioFiltro = null
+        ?int $idUsuarioFiltro = null,
+        array $ordenMulti = []
     ): array {
+        // Una o varias columnas (Shift+clic), validadas contra MAPA_ORDEN, con c.id
+        // como desempate para que las filas empatadas no bailen entre páginas.
+        $ordenMulti = \App\Helpers\OrdenListado::normalizar(
+            $ordenMulti !== [] ? $ordenMulti : [['col' => $ordenCol, 'dir' => $ordenDir]]
+        );
+        $orderBy = \App\Helpers\OrdenListado::clausula($ordenMulti, self::MAPA_ORDEN, 'c.nombre', 'c.id DESC');
+
         $whereSql = $this->getBaseWhere($idEmpresa, 'c', $idUsuarioFiltro);
         $params   = [':id_empresa' => $idEmpresa];
         if ($idUsuarioFiltro !== null) {
             $params[':id_usuario_filtro'] = $idUsuarioFiltro;
         }
 
-        if ($buscar !== '') {
-            $whereSql .= " AND (c.nombre ILIKE :b OR c.direccion ILIKE :b)";
-            $params[':b'] = '%' . $buscar . '%';
+        $parsed = \App\Helpers\FiltrosBusqueda::parsear($buscar);
+        if ($parsed['texto_libre'] !== '') {
+            $cond = \App\Helpers\FiltrosBusqueda::condicionTexto(
+                ['c.nombre', 'c.direccion'],
+                $parsed['texto_libre'],
+                $params,
+                'camp_b'
+            );
+            if ($cond !== '') {
+                $whereSql .= ' AND ' . $cond;
+            }
         }
 
-        $cols = ['nombre' => 'c.nombre', 'estado' => 'c.estado'];
-        $col  = $cols[$ordenCol] ?? 'c.nombre';
-        $dir  = ($ordenDir === 'DESC') ? 'DESC' : 'ASC';
+        \App\Helpers\FiltrosBusqueda::aplicarFiltros($whereSql, $params, $parsed['filtros'], [
+            'texto'    => [
+                'nombre'    => 'c.nombre',
+                'direccion' => 'c.direccion',
+            ],
+            'exacto'   => [
+                'estado'  => 'c.estado',
+                'usuario' => 'c.created_by',
+            ],
+            'numerico' => [
+                'alumnos' => 'COALESCE(cnt.total, 0)',
+            ],
+            'fecha'    => [
+                'registro'   => 'c.created_at',
+                'created_at' => 'c.created_at',
+            ],
+        ]);
 
-        $stCount = $this->db->prepare("SELECT COUNT(*) FROM {$this->table} c {$whereSql}");
+        $from = "{$this->table} c " . self::JOIN_CONTEO;
+
+        $stCount = $this->db->prepare("SELECT COUNT(*) FROM {$from} {$whereSql}");
         $stCount->execute($params);
         $total = (int) $stCount->fetchColumn();
 
-        $offset = ($page - 1) * $perPage;
-        $sqlRows = "SELECT c.* FROM {$this->table} c {$whereSql} ORDER BY {$col} {$dir}, c.id DESC";
+        $offset  = ($page - 1) * $perPage;
+        $sqlRows = "SELECT c.*, COALESCE(cnt.total, 0) AS alumnos FROM {$from} {$whereSql} {$orderBy}";
         if ($perPage > 0) {
             $sqlRows .= " LIMIT " . (int)$perPage . " OFFSET " . (int)$offset;
         }
@@ -53,6 +108,25 @@ class AlumnoCampusRepository extends BaseRepository
         $stRows->execute($params);
 
         return ['total' => $total, 'rows' => $stRows->fetchAll(PDO::FETCH_ASSOC)];
+    }
+
+    /**
+     * Opciones de los selects del modal de filtros: solo los usuarios que realmente
+     * registraron campus en la empresa.
+     *
+     * @return array{usuarios: array}
+     */
+    public function getOpcionesFiltroListado(int $idEmpresa): array
+    {
+        $st = $this->db->prepare(
+            "SELECT DISTINCT u.id, u.nombre
+               FROM {$this->table} c
+               JOIN usuarios u ON u.id = c.created_by
+              WHERE c.id_empresa = :id_empresa AND c.eliminado = false
+              ORDER BY u.nombre"
+        );
+        $st->execute([':id_empresa' => $idEmpresa]);
+        return ['usuarios' => $st->fetchAll(PDO::FETCH_ASSOC)];
     }
 
     /**
@@ -84,7 +158,9 @@ class AlumnoCampusRepository extends BaseRepository
 
     public function contarAlumnosAsignados(int $id, int $idEmpresa): int
     {
+        // Cualquier período (vigente o histórico) de un alumno no eliminado bloquea.
         $sql = "SELECT COUNT(DISTINCT ap.id_alumno) FROM alumnos_periodos ap
+                JOIN alumnos a ON a.id = ap.id_alumno AND a.eliminado = false
                 WHERE ap.id_campus = :id AND ap.id_empresa = :id_empresa AND ap.eliminado = false";
         $st = $this->db->prepare($sql);
         $st->execute([':id' => $id, ':id_empresa' => $idEmpresa]);

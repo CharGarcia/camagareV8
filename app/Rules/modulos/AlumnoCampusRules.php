@@ -22,6 +22,12 @@ class AlumnoCampusRules
         } elseif (mb_strlen(trim($data['nombre'])) > 150) {
             $errores[] = 'El nombre del campus no puede exceder 150 caracteres.';
         }
+        if (mb_strlen(trim($data['direccion'] ?? '')) > 300) {
+            $errores[] = 'La dirección no puede exceder 300 caracteres.';
+        }
+        if (!in_array($data['estado'] ?? 'activo', ['activo', 'inactivo'], true)) {
+            $errores[] = 'El estado no es válido.';
+        }
 
         if (!empty($errores)) {
             throw new Exception(implode(' ', $errores));

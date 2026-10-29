@@ -812,6 +812,67 @@ class AlumnosController extends BaseModuloController
         }
     }
 
+    /**
+     * Plantilla Excel para cargar la facturación (mismo patrón que Novedades): una
+     * fila por alumno activo y una columna por servicio activo de la empresa, con
+     * el precio que hoy tiene cada alumno.
+     */
+    public function plantillaFacturacion(): void
+    {
+        $this->requireActualizar();
+        $idUsuarioFiltro = empty($this->getPermisos()['todo']) ? (int) $_SESSION['id_usuario'] : null;
+
+        try {
+            $ss = (new \App\Services\modulos\AlumnoFacturacionPlantillaService(new AlumnoRepository()))
+                ->construir((int) $_SESSION['id_empresa'], $idUsuarioFiltro);
+            header('Content-Type: application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+            header('Content-Disposition: attachment; filename="facturacion_alumnos_' . date('Ymd') . '.xlsx"');
+            header('Cache-Control: max-age=0');
+            (new \PhpOffice\PhpSpreadsheet\Writer\Xlsx($ss))->save('php://output');
+        } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
+            header('Content-Type: application/json');
+            echo json_encode(['ok' => false, 'error' => 'No se pudo generar la plantilla: ' . $e->getMessage()]);
+        }
+        exit;
+    }
+
+    /** Carga la facturación de los alumnos desde la plantilla (todo o nada). */
+    public function importarFacturacion(): void
+    {
+        $this->requireActualizar();
+        header('Content-Type: application/json');
+        try {
+            if (empty($_FILES['archivo']['tmp_name']) || !is_uploaded_file($_FILES['archivo']['tmp_name'])) {
+                throw new Exception('No se recibió ningún archivo.');
+            }
+            $ext = strtolower(pathinfo($_FILES['archivo']['name'] ?? '', PATHINFO_EXTENSION));
+            if (!in_array($ext, ['xlsx', 'xls'], true)) {
+                throw new Exception('El archivo debe ser Excel (.xlsx o .xls).');
+            }
+            $idEmpresa = (int) $_SESSION['id_empresa'];
+            $idUsuarioFiltro = empty($this->getPermisos()['todo']) ? (int) $_SESSION['id_usuario'] : null;
+            $import = new \App\Services\modulos\AlumnoFacturacionImportService(
+                new AlumnoRepository(),
+                new AlumnoRules(),
+                new LogSistemaService(),
+                $this->service->getConfigFacturacion($idEmpresa)
+            );
+            $res = $import->procesar(
+                $_FILES['archivo']['tmp_name'],
+                $idEmpresa,
+                (int) $_SESSION['id_usuario'],
+                $idUsuarioFiltro,
+                (string) ($_FILES['archivo']['name'] ?? '')
+            );
+            echo json_encode(['ok' => true] + $res);
+        } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
+            echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
+        }
+        exit;
+    }
+
     public function exportExcel(): void
     {
         $this->requireLeer();

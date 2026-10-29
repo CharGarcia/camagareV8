@@ -6,6 +6,7 @@ namespace App\controllers\modulos;
 
 use App\Services\SriService;
 use App\Services\modulos\DocumentoAutomatedRegisterService;
+use App\Services\modulos\DocumentoEntreEmpresasService;
 use App\Services\modulos\SriDescargaAutomaticaService;
 use App\models\Usuario;
 use App\models\EmpresaAsignada;
@@ -497,6 +498,55 @@ class DescargasSriController extends BaseModuloController
         $res  = $repo->guardarConfig($_POST, $idEmpresa, $idUsuario);
 
         echo json_encode($res);
+        exit;
+    }
+
+    /**
+     * Recepción automática de comprobantes emitidos por otras empresas del sistema
+     * (DocumentoEntreEmpresasService): estado de la opción y resumen de 30 días.
+     */
+    public function obtenerRecepcionEntreEmpresasAjax(): void
+    {
+        $this->requireLeer();
+        header('Content-Type: application/json');
+
+        $idEmpresa = (int) ($_SESSION['id_empresa'] ?? 0);
+        $config    = (new DocumentoEntreEmpresasService())->getConfig($idEmpresa);
+        $config['puede_configurar'] = $this->puedeAdministrarCredenciales();
+
+        echo json_encode(['ok' => true, 'config' => $config]);
+        exit;
+    }
+
+    public function guardarRecepcionEntreEmpresasAjax(): void
+    {
+        $this->requireActualizar();
+        header('Content-Type: application/json');
+
+        // Decide qué compras entran solas a la contabilidad: solo nivel 2 y 3, como las
+        // credenciales del portal.
+        if (!$this->puedeAdministrarCredenciales()) {
+            http_response_code(403);
+            echo json_encode(['ok' => false, 'error' => 'No tiene permiso para cambiar esta configuración.']);
+            return;
+        }
+        if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
+            echo json_encode(['ok' => false, 'error' => 'Método no permitido.']);
+            return;
+        }
+
+        $idEmpresa = (int) ($_SESSION['id_empresa'] ?? 0);
+        $idUsuario = (int) ($_SESSION['id_usuario'] ?? 0);
+        $recibir   = ($_POST['recibir'] ?? '') === '1';
+
+        try {
+            (new DocumentoEntreEmpresasService())->guardarRecibir($idEmpresa, $recibir, $idUsuario);
+            echo json_encode(['ok' => true, 'mensaje' => $recibir
+                ? 'Se registrarán automáticamente los comprobantes que le emitan empresas del sistema.'
+                : 'Ya no se registrarán automáticamente los comprobantes de empresas del sistema.']);
+        } catch (\Throwable $e) {
+            echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
+        }
         exit;
     }
 
