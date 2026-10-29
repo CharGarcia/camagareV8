@@ -342,6 +342,17 @@ class ComprasPdfService
             ['key' => 'ptot', 'titulo' => "Precio\nTotal",    'w' => 24, 'align' => 'R'],
         ];
 
+        // "Det. Adicional" solo se dibuja si algún ítem trae información (mismo criterio
+        // que la factura y la liquidación); su ancho sale de la descripción.
+        $hayDetalle = false;
+        foreach ($detalles as $d) {
+            if (trim((string)($d['info_adicional'] ?? '')) !== '') { $hayDetalle = true; break; }
+        }
+        if ($hayDetalle) {
+            $cols[2]['w'] -= 32;
+            array_splice($cols, 3, 0, [['key' => 'deta', 'titulo' => "Det.\nAdicional", 'w' => 32, 'align' => 'L']]);
+        }
+
         // Ajustar Descripción para que la suma sea exactamente contentW
         $sumaW = array_sum(array_column($cols, 'w'));
         if ($sumaW !== (int)$cW) {
@@ -385,14 +396,22 @@ class ComprasPdfService
                 'codp' => $d['codigo_principal'] ?? ($d['producto_codigo'] ?? ''),
                 'cant' => number_format((float)($d['cantidad'] ?? 0), $this->decCantidad),
                 'desc' => $d['descripcion'] ?? ($d['producto_nombre'] ?? ''),
+                'deta' => trim((string)($d['info_adicional'] ?? '')),
                 'pu'   => number_format($pu, $this->decPrecio),
                 'dcto' => number_format($dcto, 2),
                 'ptot' => number_format($ptot, 2),
             ];
 
-            $idxDesc = 2;
-            $nDesc = max(1, (int)ceil($pdf->GetStringWidth($vals['desc']) / ($cols[$idxDesc]['w'] - 2)));
-            $ch    = max(5, $nDesc * 4.5);
+            // Alto de la fila: el de la columna de texto (Descripción / Det. Adicional) que más
+            // ocupe. Se toma también el alto real del texto: la estimación por ancho se queda
+            // corta cuando el corte por palabras deja líneas incompletas (columnas angostas).
+            $ch = 5;
+            foreach ($cols as $col) {
+                if ($col['key'] === 'desc' || $col['key'] === 'deta') {
+                    $nLineas = max(1, (int)ceil($pdf->GetStringWidth($vals[$col['key']]) / ($col['w'] - 2)));
+                    $ch = max($ch, $nLineas * 4.5, $pdf->getStringHeight($col['w'], $vals[$col['key']], false, true, null, 1));
+                }
+            }
 
             $xCur = $mL;
             $yRow = $pdf->GetY();
@@ -410,7 +429,7 @@ class ComprasPdfService
             foreach ($cols as $col) {
                 $val = $vals[$col['key']];
                 $pdf->SetXY($xCur, $yRow);
-                if ($col['key'] === 'desc') {
+                if ($col['key'] === 'desc' || $col['key'] === 'deta') {
                     $pdf->MultiCell($col['w'], $ch, $val, 1, $col['align'], true, 0, '', '', true, 0, false, true, 0, 'M');
                 } else {
                     $pdf->Cell($col['w'], $ch, $val, 1, 0, $col['align'], true);

@@ -1580,6 +1580,7 @@ class SuscripcionesRepository extends BaseRepository
                   AND ep.estado = 'activo'
                   AND ep.eliminado = false
                   AND pe.eliminado = false
+                  AND LOWER(COALESCE(pe.estado, '')) = 'activo'
                 ORDER BY ep.codigo ASC, pe.codigo_punto ASC";
         $st = $this->db->prepare($sql);
         $st->execute([':id_empresa' => $idEmpresa]);

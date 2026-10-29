@@ -929,6 +929,7 @@ class ComprasService
                 'precio_unitario'           => (float) ($d->precioUnitario ?? 0),
                 'descuento'                 => (float) ($d->descuento ?? 0),
                 'precio_total_sin_impuesto' => (float) ($d->precioTotalSinImpuesto ?? 0),
+                'info_adicional'            => \App\Helpers\DetalleAdicionalXmlHelper::texto($d),
                 'impuestos'                 => $impuestos,
             ];
         }

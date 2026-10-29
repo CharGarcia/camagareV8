@@ -5,8 +5,8 @@ categoria: Servicios
 ruta_modulo: modulos/vehiculos
 tipo: modulo
 visibilidad: todos
-etiquetas: vehiculos, vehiculo, carro, auto, placa, propietario, dueño, consulta sri, consultar placa, datos del vehiculo por placa, matricula, marca, año, historial del vehiculo, transacciones, visitas, ordenes car wash, lavado, taller, proxima cita, recordatorio, recordar cita, aviso al cliente, whatsapp, correo, automatizacion, buscar placa, placa sin guion, buscar sin guion, buscar item, buscar servicio, buscar producto, cuando se cambio el aceite, filtros
-version: 1.8
+etiquetas: vehiculos, vehiculo, carro, auto, placa, propietario, dueño, consulta sri, consultar placa, datos del vehiculo por placa, matricula, marca, año, historial del vehiculo, transacciones, visitas, ordenes car wash, lavado, taller, proxima cita, recordatorio, recordar cita, aviso al cliente, whatsapp, correo, automatizacion, buscar placa, placa sin guion, buscar sin guion, buscar item, buscar servicio, buscar producto, categoria, marca del producto, filtrar por marca, filtrar por categoria, cuando se cambio el aceite, filtros
+version: 1.9
 orden: 11
 estado: activo
 ---
@@ -92,25 +92,30 @@ Excel con los filtros aplicados.
 ## Pestaña Transacciones
 
 Muestra todas las **órdenes de Car-Wash** del vehículo, de la más reciente a la más
-antigua: fecha, número de orden, cliente, kilometraje, servicios y productos, total,
-documento emitido (factura o recibo) y estado. Un clic en la orden despliega sus
-líneas (código, descripción, cantidad × precio, descuento y total).
+antigua, con las columnas **Fecha, N° Orden, Cliente, Total, Documento** (factura o
+recibo) y **Estado**. Un clic en la orden despliega sus ítems (código, descripción,
+categoría y marca del producto, cantidad × precio, descuento y total) y, al pie, el
+kilometraje con el que ingresó.
 
 Arriba se resume: número de visitas, total (sin las órdenes anuladas), fecha de la
 última visita y la próxima cita.
 
 ### Buscar un ítem en las órdenes
 
-El cuadro **Buscar ítem** encuentra en qué órdenes se aplicó un servicio o producto:
-escriba el código o parte de la descripción (por ejemplo *aceite* o *filtro aire*).
-Se aceptan varias palabras en cualquier orden y no importan mayúsculas ni tildes.
+Para saber en qué órdenes se aplicó un servicio o producto:
 
-- Solo quedan las órdenes que tienen ese ítem; también se puede escribir el número
-  de orden o de la factura o recibo.
-- Las órdenes encontradas se muestran **desplegadas** y el ítem que coincide se
-  resalta en amarillo. Al lado del cuadro se indica cuántas órdenes coinciden
-  (por ejemplo *3 de 12 órdenes*).
-- La **X** limpia la búsqueda y las órdenes vuelven a encogerse.
+- **Buscar ítem**: escriba el código o parte de la descripción, la categoría o la
+  marca (por ejemplo *aceite* o *filtro aire*). Se aceptan varias palabras en
+  cualquier orden y no importan mayúsculas ni tildes. También sirve el número de
+  orden o de la factura o recibo.
+- **Categoría** y **Marca**: listas con las categorías y marcas de los productos que
+  se le han aplicado a este vehículo. Se combinan con el texto: por ejemplo, marca
+  *Mobil* + texto *aceite* deja solo las órdenes con un aceite de esa marca.
+
+Las órdenes encontradas se muestran **desplegadas** y los ítems que coinciden se
+resaltan en amarillo. Al lado se indica cuántas órdenes coinciden (por ejemplo
+*3 de 12 órdenes*). **Limpiar** borra el texto y los filtros, y las órdenes vuelven
+a encogerse.
 
 Si abre el vehículo desde la pantalla de Car-Wash, el enlace **Abrir la orden** abre
 esa orden.
@@ -211,6 +216,7 @@ Meta con las variables en el orden indicado.
 
 ## Historial de cambios
 
+- **1.9** — Pestaña **Transacciones**: filtros por **Categoría** y **Marca** del producto (y el buscador también encuentra por categoría o marca); se quitaron las columnas Km y Servicios/productos (el km va al pie de cada orden desplegada).
 - **1.8** — Pestaña **Transacciones**: nuevo cuadro **Buscar ítem** para encontrar en qué órdenes se aplicó un servicio o producto (por código o descripción); las órdenes encontradas se despliegan con el ítem resaltado.
 - **1.7** — El buscador del listado encuentra la **placa sin guion** (`pdj4685` → `PDJ-4685`) y también con guion cuando se guardó sin él.
 - **1.6** — En el listado, la primera columna es **Placa** y le sigue **Marca y

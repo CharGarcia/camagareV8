@@ -749,7 +749,8 @@ class DocumentoAutomatedRegisterService
                         'cantidad' => (float)$d->cantidad,
                         'precio_unitario' => (float)$d->precioUnitario,
                         'descuento' => (float)$d->descuento,
-                        'precio_total_sin_impuesto' => (float)$d->precioTotalSinImpuesto
+                        'precio_total_sin_impuesto' => (float)$d->precioTotalSinImpuesto,
+                        'info_adicional' => \App\Helpers\DetalleAdicionalXmlHelper::texto($d)
                     ]);
 
                     // 3. Impuestos por detalle

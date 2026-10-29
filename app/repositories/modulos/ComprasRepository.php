@@ -1127,14 +1127,38 @@ class ComprasRepository extends BaseRepository
     // INSERTS / DELETES — DETALLE
     // ─────────────────────────────────────────────────────────────────────────
 
+    /** Cache de si existe compras_detalle.info_adicional. */
+    private ?bool $tieneInfoAdicionalDetalle = null;
+
+    /**
+     * La columna "Adicional" por ítem (compras_detalle.info_adicional) llega con
+     * database/2026-10-29_compras_detalle_info_adicional.sql; mientras no se haya
+     * corrido, el detalle se guarda sin ella en vez de fallar.
+     */
+    public function tieneInfoAdicionalDetalle(): bool
+    {
+        if ($this->tieneInfoAdicionalDetalle === null) {
+            try {
+                $this->tieneInfoAdicionalDetalle = $this->db->query("SELECT 1 FROM information_schema.columns WHERE table_name = 'compras_detalle' AND column_name = 'info_adicional'")->fetchColumn() !== false;
+            } catch (\Throwable $e) {
+                $this->tieneInfoAdicionalDetalle = false;
+            }
+        }
+        return $this->tieneInfoAdicionalDetalle;
+    }
+
+    /** Texto del "Adicional" de una línea: recortado a 300 (varchar) y NULL si viene vacío. */
+    private static function infoAdicionalDetalle($valor): ?string
+    {
+        $valor = trim((string) ($valor ?? ''));
+        return $valor !== '' ? mb_substr($valor, 0, 300) : null;
+    }
+
     public function insertDetalle(array $data): int
     {
-        $sql = "INSERT INTO compras_detalle (
-                    id_compra, id_producto, codigo_principal, codigo_auxiliar,
-                    descripcion, cantidad, precio_unitario, descuento, precio_total_sin_impuesto
-                ) VALUES (?,?,?,?,?,?,?,?,?) RETURNING id";
-
-        return (int) $this->query($sql, [
+        $cols = 'id_compra, id_producto, codigo_principal, codigo_auxiliar,
+                 descripcion, cantidad, precio_unitario, descuento, precio_total_sin_impuesto';
+        $params = [
             (int)   $data['id_compra'],
             !empty($data['id_producto']) ? (int)$data['id_producto'] : null,
             $data['codigo_principal'] ?? '',
@@ -1144,7 +1168,15 @@ class ComprasRepository extends BaseRepository
             (float) ($data['precio_unitario'] ?? 0),
             (float) ($data['descuento'] ?? 0),
             (float) ($data['precio_total_sin_impuesto'] ?? 0),
-        ])->fetchColumn();
+        ];
+        if ($this->tieneInfoAdicionalDetalle()) {
+            $cols    .= ', info_adicional';
+            $params[] = self::infoAdicionalDetalle($data['info_adicional'] ?? null);
+        }
+        $ph  = implode(',', array_fill(0, count($params), '?'));
+        $sql = "INSERT INTO compras_detalle ({$cols}) VALUES ({$ph}) RETURNING id";
+
+        return (int) $this->query($sql, $params)->fetchColumn();
     }
 
     public function insertImpuesto(array $data): void
@@ -1188,9 +1220,8 @@ class ComprasRepository extends BaseRepository
         $sql = "UPDATE compras_detalle SET
                     id_producto = ?, codigo_principal = ?, codigo_auxiliar = ?,
                     descripcion = ?, cantidad = ?, precio_unitario = ?, descuento = ?,
-                    precio_total_sin_impuesto = ?
-                WHERE id = ?";
-        $this->query($sql, [
+                    precio_total_sin_impuesto = ?";
+        $params = [
             !empty($data['id_producto']) ? (int)$data['id_producto'] : null,
             $data['codigo_principal'] ?? '',
             $data['codigo_auxiliar'] ?? null,
@@ -1199,8 +1230,15 @@ class ComprasRepository extends BaseRepository
             (float) ($data['precio_unitario'] ?? 0),
             (float) ($data['descuento'] ?? 0),
             (float) ($data['precio_total_sin_impuesto'] ?? 0),
-            (int)   $data['id'],
-        ]);
+        ];
+        // Solo se toca si la línea lo trae: un llamador que no conoce el campo no lo borra.
+        if (array_key_exists('info_adicional', $data) && $this->tieneInfoAdicionalDetalle()) {
+            $sql     .= ", info_adicional = ?";
+            $params[] = self::infoAdicionalDetalle($data['info_adicional']);
+        }
+        $sql     .= " WHERE id = ?";
+        $params[] = (int) $data['id'];
+        $this->query($sql, $params);
     }
 
     public function deleteImpuestosDeDetalle(int $idDetalle): void

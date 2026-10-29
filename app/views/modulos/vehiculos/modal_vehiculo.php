@@ -120,12 +120,18 @@ $urlBaseVehShared = BASE_URL . '/modulos/vehiculos';
                         <div class="px-3 py-2">
                             <div class="d-flex flex-wrap gap-3 small mb-2" id="veh_trx_resumen"></div>
                             <!-- Buscar ítems (servicios/productos) dentro de las órdenes del vehículo -->
-                            <div class="d-flex align-items-center gap-2 mb-2">
-                                <div class="input-group input-group-sm" style="width:360px; max-width:100%;">
+                            <div class="d-flex flex-wrap align-items-center gap-2 mb-2">
+                                <div class="input-group input-group-sm" style="width:340px; max-width:100%;">
                                     <span class="input-group-text bg-white"><i class="bi bi-search"></i></span>
-                                    <input type="text" id="veh_trx_buscar" class="form-control" placeholder="Buscar ítem: código o descripción (ej. aceite, filtro)..." autocomplete="off">
-                                    <button type="button" class="btn btn-outline-secondary d-none" id="veh_trx_limpiar" title="Limpiar búsqueda"><i class="bi bi-x-lg"></i></button>
+                                    <input type="text" id="veh_trx_buscar" class="form-control" placeholder="Buscar ítem: código, descripción, categoría o marca..." autocomplete="off">
                                 </div>
+                                <select id="veh_trx_categoria" class="form-select form-select-sm" style="width:180px;" title="Filtrar por categoría del producto">
+                                    <option value="">Todas las categorías</option>
+                                </select>
+                                <select id="veh_trx_marca" class="form-select form-select-sm" style="width:180px;" title="Filtrar por marca del producto">
+                                    <option value="">Todas las marcas</option>
+                                </select>
+                                <button type="button" class="btn btn-sm btn-outline-secondary d-none" id="veh_trx_limpiar" title="Limpiar búsqueda y filtros"><i class="bi bi-x-lg me-1"></i>Limpiar</button>
                                 <span class="small text-muted" id="veh_trx_conteo"></span>
                             </div>
                             <div class="border rounded-3 bg-white veh-trx-lista" style="max-height:55vh; overflow:auto;">
@@ -136,14 +142,12 @@ $urlBaseVehShared = BASE_URL . '/modulos/vehiculos';
                                             <th>Fecha</th>
                                             <th>N° Orden</th>
                                             <th>Cliente</th>
-                                            <th class="text-end">Km</th>
-                                            <th>Servicios / productos</th>
                                             <th class="text-end">Total</th>
                                             <th>Documento</th>
                                             <th class="text-center">Estado</th>
                                         </tr>
                                     </thead>
-                                    <tbody id="veh_trx_body"><tr><td colspan="9" class="text-center text-muted py-4">Sin transacciones.</td></tr></tbody>
+                                    <tbody id="veh_trx_body"><tr><td colspan="7" class="text-center text-muted py-4">Sin transacciones.</td></tr></tbody>
                                 </table>
                             </div>
                         </div>

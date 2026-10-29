@@ -6,7 +6,7 @@ ruta_modulo: modulos/suscripciones
 tipo: modulo
 visibilidad: todos
 etiquetas: suscripciones, suscripcion, cobro recurrente, facturacion recurrente, factura recurrente, mensualidad, pension, plan mensual, membresia, renovacion, periodicidad, proximo cobro, generar documentos, generar facturas, facturacion automatica, facturas del cliente, facturas emitidas, historial de facturas, detalle de facturas, recibos del cliente, que le facture, saldo del cliente, facturas pendientes, facturas pagadas, facturas abonadas, cobro con tarjeta, debito automatico, nuvei, kushki, aviso de vencimiento, pagos reportados, comprobante de pago, reporte de pago, revisar pago, rechazar pago, ya pague, transferencia del cliente, imprimir, impresora, excel, exportar, resumen de valores, total por periodicidad, proyeccion anual, ingresos recurrentes, iva por tarifa, resumen por concepto, detalle por cliente, que se le factura a cada cliente, items por cliente, informacion adicional en excel, resumen en pdf, detalle por cliente en pdf, pdf de la suscripcion, imprimir suscripcion, contrato, ficha de la suscripcion, detalle de la suscripcion en pdf, devengado, devengo, ingreso diferido, ingresos diferidos, ingreso anticipado, cobro por adelantado, mes caido, mes vencido, facturacion vencida, niif 15, seccion 23, reconocimiento de ingresos, provision de ingresos, ingresos por facturar
-version: 1.29
+version: 1.30
 orden: 0
 estado: activo
 ---
@@ -152,6 +152,9 @@ Los documentos de cada período se pueden generar de dos formas:
   fechas de inicio y fin.
 - **Automáticamente**: automatización **Suscripciones → Generar facturación**, que
   procesa todas las periodicidades y se pone al día con los períodos atrasados.
+
+En ambos casos, el selector de **serie** solo ofrece los puntos de emisión **activos**;
+un punto inactivo o eliminado no aparece.
 
 Cada documento generado nace en **borrador** (la factura se envía al SRI con la
 automatización de Facturas de venta), avanza el próximo cobro de la suscripción y
@@ -453,6 +456,8 @@ registrados*.
 
 ## Historial de cambios
 
+- **1.30** — Al configurar la automatización *Generar facturación*, el selector de
+  **serie** muestra solo los puntos de emisión activos (antes salían también los inactivos).
 - **1.29** — Se quita la columna **Inmueble** del listado, del PDF y del Excel. Se corrige el
   listado que, al abrir la página, mostraba los datos corridos una columna.
 - **1.28** — Condominios: se quita el selector **Inmueble** del formulario. El inmueble que deba

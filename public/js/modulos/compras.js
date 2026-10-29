@@ -1857,6 +1857,7 @@ function CMG_agregarFilaDetalle(det) {
             <input type="hidden" class="input-ice-cod" value="${_esc(String(iceCod))}">
             <input type="hidden" class="input-ice-pct" value="${icePct}">
         </td>
+        <td><input type="text" class="form-control form-control-sm input-detalle input-adicional text-muted fst-italic" maxlength="300" placeholder="Info adicional" title="${_esc(det.info_adicional||'')}" value="${_esc(det.info_adicional||'')}"></td>
         <td><input type="number" class="form-control form-control-sm input-detalle text-center input-cantidad" value="${det.cantidad != null ? _fmtExacto(det.cantidad) : '1'}" min="0.0001" step="any" oninput="mcMarcarFilaEditada(this);CMG_recalcularFila(this)"></td>
         <td><input type="number" class="form-control form-control-sm input-detalle text-end input-precio" value="${det.precio_unitario != null ? _fmtExacto(det.precio_unitario) : '0'}" min="0" step="any" oninput="mcMarcarFilaEditada(this);CMG_recalcularFila(this)"></td>
         <td><input type="number" class="form-control form-control-sm input-detalle text-end text-danger input-desc" value="${parseFloat(det.descuento||0).toFixed(2)}" min="0" step="any" oninput="mcMarcarFilaEditada(this);CMG_recalcularFila(this)"></td>
@@ -2202,6 +2203,7 @@ window.CMG_guardar = async function() {
             id_producto: tr.querySelector('.input-id-producto')?.value || null,
             codigo_principal: tr.querySelector('.input-codigo')?.value || '',
             descripcion: descInput.value.trim(),
+            info_adicional: (tr.querySelector('.input-adicional')?.value || '').trim(),
             cantidad: cant,
             precio_unitario: precio,
             descuento: descVal,
@@ -2601,6 +2603,7 @@ function mcCapturarEstado() {
                 id_producto: idProd,
                 codigo_principal: tr.querySelector('.input-codigo')?.value || '',
                 descripcion: desc,
+                info_adicional: tr.querySelector('.input-adicional')?.value || '',
                 cantidad: tr.querySelector('.input-cantidad')?.value || '',
                 precio_unitario: tr.querySelector('.input-precio')?.value || '',
                 descuento: tr.querySelector('.input-desc')?.value || '',
@@ -2720,6 +2723,7 @@ async function mcEjecutarRestauracion(estado) {
                 id_producto: d.id_producto,
                 codigo_principal: d.codigo_principal,
                 descripcion: d.descripcion,
+                info_adicional: d.info_adicional || '',
                 cantidad: d.cantidad,
                 precio_unitario: d.precio_unitario,
                 descuento: d.descuento,

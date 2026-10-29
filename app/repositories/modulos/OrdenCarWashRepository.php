@@ -680,9 +680,12 @@ class OrdenCarWashRepository extends BaseRepository
         if (!$ids) return [];
         $in = implode(',', $ids); // enteros ya saneados
         $st = $this->db->prepare("SELECT d.id_orden, d.tipo_linea, d.descripcion, d.cantidad, d.precio_unitario, d.descuento, d.total_linea,
-                                         p.codigo AS producto_codigo
+                                         p.codigo AS producto_codigo,
+                                         cat.nombre AS categoria, mar.nombre AS marca
                                     FROM carwash_ordenes_detalle d
                                LEFT JOIN productos p ON p.id = d.id_producto
+                               LEFT JOIN categorias cat ON cat.id = p.id_categoria
+                               LEFT JOIN marcas mar ON mar.id = p.id_marca
                                    WHERE d.id_empresa = :e AND d.eliminado = false AND d.id_orden IN ($in)
                                    ORDER BY d.id_orden, d.id");
         $st->execute([':e' => $idEmpresa]);

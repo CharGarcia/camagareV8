@@ -5,8 +5,8 @@ categoria: Compras
 ruta_modulo: modulos/descargas-sri
 tipo: modulo
 visibilidad: todos
-etiquetas: descargas sri, comprobantes recibidos, xml, facturas de proveedores, importar compras, portal sri, empresas del sistema, documentos entre empresas, compra automática, factura entre empresas
-version: 1.13
+etiquetas: descargas sri, comprobantes recibidos, xml, facturas de proveedores, importar compras, portal sri, empresas del sistema, documentos entre empresas, compra automática, factura entre empresas, adicional del item, detalle adicional
+version: 1.14
 orden: 50
 estado: activo
 ---
@@ -217,6 +217,9 @@ se escribe una nueva; no hay forma de recuperarla desde el sistema.
 
 ## Historial de cambios
 
+- **1.14** — Al registrar una factura descargada, el **adicional de cada ítem**
+  que trae el XML del proveedor se guarda en la columna *Adicional* del detalle
+  de la compra.
 - **1.13** — Los comprobantes que le emite **otra empresa del sistema** se
   registran solos al ser autorizados por el SRI en producción, sin descargarlos.
   Nueva sección *Documentos que le emiten otras empresas del sistema* y tarjeta

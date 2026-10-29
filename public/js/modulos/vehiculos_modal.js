@@ -89,19 +89,34 @@
         const gen = document.getElementById('veh-tab-general');
         if (gen && typeof bootstrap !== 'undefined') bootstrap.Tab.getOrCreateInstance(gen).show();
         const badge = document.getElementById('veh-badge-trx'); if (badge) badge.classList.add('d-none');
-        const tb = document.getElementById('veh_trx_body'); if (tb) tb.innerHTML = '<tr><td colspan="9" class="text-center text-muted py-4">Sin transacciones.</td></tr>';
+        const tb = document.getElementById('veh_trx_body'); if (tb) tb.innerHTML = '<tr><td colspan="7" class="text-center text-muted py-4">Sin transacciones.</td></tr>';
         const rs = document.getElementById('veh_trx_resumen'); if (rs) rs.innerHTML = '';
         const bq = document.getElementById('veh_trx_buscar'); if (bq) bq.value = '';
+        vehLlenarFiltroTrx('veh_trx_categoria', 'Todas las categorías', []);
+        vehLlenarFiltroTrx('veh_trx_marca', 'Todas las marcas', []);
         document.getElementById('veh_trx_limpiar')?.classList.add('d-none');
         const cn = document.getElementById('veh_trx_conteo'); if (cn) cn.textContent = '';
     }
 
+    // Opciones de Categoría / Marca: solo las que aparecen en los ítems de este vehículo.
+    function vehLlenarFiltroTrx(id, etiquetaTodas, valores) {
+        const sel = document.getElementById(id);
+        if (!sel) return;
+        const unicos = [...new Set(valores.map(v => String(v || '').trim()).filter(Boolean))]
+            .sort((a, b) => a.localeCompare(b, 'es', { sensitivity: 'base' }));
+        sel.innerHTML = `<option value="">${vehEsc(etiquetaTodas)}</option>`
+            + unicos.map(v => `<option value="${vehEsc(vehNorm(v))}">${vehEsc(v)}</option>`).join('');
+        sel.disabled = !unicos.length;
+    }
+
     // ─── Buscar ítems dentro de las órdenes (Transacciones) ───────────────────
     // Filtra en el navegador (las líneas ya vienen con las órdenes). Varias palabras en
-    // cualquier orden, sin importar mayúsculas ni tildes. Una orden queda si alguno de sus
-    // ítems (código + descripción) tiene todas las palabras; también si las tiene su número
-    // de orden o de documento. Mientras hay búsqueda, las órdenes que coinciden se muestran
-    // desplegadas con los ítems encontrados resaltados; al limpiar vuelven a encogerse.
+    // cualquier orden, sin importar mayúsculas ni tildes, sobre código + descripción +
+    // categoría + marca del ítem; además, los selectores de Categoría y Marca. Una orden queda
+    // si alguno de sus ítems cumple TODO lo pedido (texto, categoría y marca); con solo texto,
+    // también si las palabras están en su número de orden o de documento. Mientras hay un
+    // filtro, las órdenes que coinciden se muestran desplegadas con los ítems encontrados
+    // resaltados; al limpiar vuelven a encogerse.
     const vehNorm = s => String(s == null ? '' : s).normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
     let vehTrxTimer = null;
     function vehFiltrarTransacciones() {
@@ -109,8 +124,11 @@
         const inp = document.getElementById('veh_trx_buscar');
         if (!tbody || !inp) return;
         const palabras = vehNorm(inp.value).split(/\s+/).filter(Boolean);
+        const cat = document.getElementById('veh_trx_categoria')?.value || '';
+        const mar = document.getElementById('veh_trx_marca')?.value || '';
+        const hayFiltro = palabras.length > 0 || cat !== '' || mar !== '';
         const tiene = txt => palabras.every(p => txt.includes(p));
-        document.getElementById('veh_trx_limpiar')?.classList.toggle('d-none', !palabras.length);
+        document.getElementById('veh_trx_limpiar')?.classList.toggle('d-none', !hayFiltro);
         let total = 0, visibles = 0;
         tbody.querySelectorAll('tr.veh-trx-orden').forEach(tr => {
             total++;
@@ -118,35 +136,42 @@
             const lineas = det ? det.querySelectorAll('tr[data-txt]') : [];
             let coinciden = 0;
             lineas.forEach(l => {
-                const si = palabras.length > 0 && tiene(l.dataset.txt);
+                const si = hayFiltro && tiene(l.dataset.txt)
+                    && (cat === '' || l.dataset.cat === cat) && (mar === '' || l.dataset.mar === mar);
                 l.classList.toggle('veh-trx-coincide', si);
                 if (si) coinciden++;
             });
-            const muestra = !palabras.length || coinciden > 0 || tiene(tr.dataset.txt || '');
+            // El número de orden/documento solo cuenta cuando no se eligió categoría ni marca.
+            const porNumero = palabras.length > 0 && cat === '' && mar === '' && tiene(tr.dataset.txt || '');
+            const muestra = !hayFiltro || coinciden > 0 || porNumero;
             tr.classList.toggle('d-none', !muestra);
             if (muestra) visibles++;
             if (det) {
-                const abrir = muestra && palabras.length > 0;
+                const abrir = muestra && hayFiltro;
                 det.classList.toggle('d-none', !abrir);
                 tr.querySelector('i.bi').className = 'bi small ' + (abrir ? 'bi-chevron-down' : 'bi-chevron-right');
             }
         });
         const vacio = tbody.querySelector('tr.veh-trx-sin-resultados');
-        if (palabras.length && total && !visibles) {
-            if (!vacio) tbody.insertAdjacentHTML('beforeend', '<tr class="veh-trx-sin-resultados"><td colspan="9" class="text-center text-muted py-4">Ningún ítem coincide con la búsqueda.</td></tr>');
+        if (hayFiltro && total && !visibles) {
+            if (!vacio) tbody.insertAdjacentHTML('beforeend', '<tr class="veh-trx-sin-resultados"><td colspan="7" class="text-center text-muted py-4">Ningún ítem coincide con la búsqueda.</td></tr>');
         } else if (vacio) {
             vacio.remove();
         }
         const cn = document.getElementById('veh_trx_conteo');
-        if (cn) cn.textContent = palabras.length ? `${visibles} de ${total} ${total === 1 ? 'orden' : 'órdenes'}` : '';
+        if (cn) cn.textContent = hayFiltro ? `${visibles} de ${total} ${total === 1 ? 'orden' : 'órdenes'}` : '';
     }
     document.getElementById('veh_trx_buscar')?.addEventListener('input', () => {
         clearTimeout(vehTrxTimer);
         vehTrxTimer = setTimeout(vehFiltrarTransacciones, 200);
     });
+    ['veh_trx_categoria', 'veh_trx_marca'].forEach(id =>
+        document.getElementById(id)?.addEventListener('change', vehFiltrarTransacciones));
     document.getElementById('veh_trx_limpiar')?.addEventListener('click', () => {
         const inp = document.getElementById('veh_trx_buscar');
-        inp.value = ''; vehFiltrarTransacciones(); inp.focus();
+        inp.value = '';
+        ['veh_trx_categoria', 'veh_trx_marca'].forEach(id => { const s = document.getElementById(id); if (s) s.value = ''; });
+        vehFiltrarTransacciones(); inp.focus();
     });
 
     document.getElementById('veh-tab-transacciones')?.addEventListener('shown.bs.tab', () => { if (!vehCargado.trx) vehCargarTransacciones(); });
@@ -155,12 +180,15 @@
     async function vehCargarTransacciones() {
         const tbody = document.getElementById('veh_trx_body');
         if (!vehIdActual || !tbody) return;
-        tbody.innerHTML = '<tr><td colspan="9" class="text-center text-muted py-4"><span class="spinner-border spinner-border-sm me-1"></span>Cargando...</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="7" class="text-center text-muted py-4"><span class="spinner-border spinner-border-sm me-1"></span>Cargando...</td></tr>';
         try {
             const json = await (await fetch(`${urlBaseVeh}/transaccionesAjax?id=${vehIdActual}`)).json();
             if (!json.ok) throw new Error(json.error || 'No se pudo cargar.');
             vehCargado.trx = true;
             const { ordenes, resumen } = json.data;
+            const todasLineas = ordenes.flatMap(o => o.lineas || []);
+            vehLlenarFiltroTrx('veh_trx_categoria', 'Todas las categorías', todasLineas.map(l => l.categoria));
+            vehLlenarFiltroTrx('veh_trx_marca', 'Todas las marcas', todasLineas.map(l => l.marca));
             const badge = document.getElementById('veh-badge-trx');
             if (badge) { badge.textContent = ordenes.length; badge.classList.toggle('d-none', !ordenes.length); }
             document.getElementById('veh_trx_resumen').innerHTML = `
@@ -169,32 +197,39 @@
                 <span><i class="bi bi-calendar-check text-info me-1"></i>Última visita: <b>${vehEsc(vehFecha(resumen.ultima_visita) || '—')}</b></span>
                 <span><i class="bi bi-calendar-event text-warning me-1"></i>Próxima cita: <b>${vehEsc(vehFecha(resumen.proxima_cita) || '—')}</b></span>`;
             if (!ordenes.length) {
-                tbody.innerHTML = '<tr><td colspan="9" class="text-center text-muted py-4">Este vehículo aún no tiene órdenes de Car-Wash.</td></tr>';
+                tbody.innerHTML = '<tr><td colspan="7" class="text-center text-muted py-4">Este vehículo aún no tiene órdenes de Car-Wash.</td></tr>';
                 return;
             }
             const estados = { borrador: ['warning', 'Borrador'], facturado: ['success', 'Facturado'], anulado: ['danger', 'Anulado'] };
             tbody.innerHTML = ordenes.map(o => {
                 const e = estados[o.estado] || ['secondary', o.estado || ''];
                 const doc = o.numero_documento ? `${o.tipo_documento === 'FACTURA' ? 'Fact.' : 'Rec.'} ${vehEsc(o.numero_documento)}` : '<span class="text-muted">—</span>';
-                const lineas = (o.lineas || []).map(l => `<tr data-txt="${vehEsc(vehNorm((l.producto_codigo || '') + ' ' + (l.descripcion || '')))}">
+                const lineas = (o.lineas || []).map(l => `<tr data-txt="${vehEsc(vehNorm([l.producto_codigo, l.descripcion, l.categoria, l.marca].filter(Boolean).join(' ')))}"
+                        data-cat="${vehEsc(vehNorm(String(l.categoria || '').trim()))}" data-mar="${vehEsc(vehNorm(String(l.marca || '').trim()))}">
                         <td class="ps-4 text-muted">${l.tipo_linea === 'producto' ? '<i class="bi bi-box-seam"></i>' : '<i class="bi bi-tools"></i>'}</td>
-                        <td colspan="4">${vehEsc(l.producto_codigo ? l.producto_codigo + ' - ' : '')}${vehEsc(l.descripcion)}</td>
+                        <td colspan="4">${vehEsc(l.producto_codigo ? l.producto_codigo + ' - ' : '')}${vehEsc(l.descripcion)}${(l.categoria || l.marca)
+                            ? ` <span class="text-muted ms-1">· ${vehEsc([l.categoria, l.marca].filter(Boolean).join(' · '))}</span>` : ''}</td>
                         <td class="text-end">${(parseFloat(l.cantidad) || 0).toLocaleString('en-US', { maximumFractionDigits: 6 })} × ${vehFmt(l.precio_unitario)}${parseFloat(l.descuento) > 0 ? ' − ' + vehFmt(l.descuento) : ''}</td>
                         <td class="text-end">${vehFmt(l.total_linea)}</td><td colspan="2"></td></tr>`).join('');
                 return `<tr class="veh-trx-orden" role="button" data-id="${o.id}" data-txt="${vehEsc(vehNorm((o.numero_orden || '') + ' ' + (o.numero_documento || '')))}">
                         <td class="text-center"><i class="bi bi-chevron-right small"></i></td>
                         <td>${vehEsc(o.fecha || '')}</td>
                         <td class="fw-semibold text-primary">${vehEsc(o.numero_orden || '')}</td>
-                        <td class="text-truncate" style="max-width:200px">${vehEsc(o.cliente_nombre || '')}</td>
-                        <td class="text-end">${o.kilometraje ? vehEsc(Number(o.kilometraje).toLocaleString('es-EC')) : ''}</td>
-                        <td class="text-truncate" style="max-width:300px" title="${vehEsc(o.servicios || '')}">${vehEsc(o.servicios || '')}</td>
+                        <td class="text-truncate" style="max-width:260px">${vehEsc(o.cliente_nombre || '')}</td>
                         <td class="text-end">${vehFmt(o.total)}</td>
                         <td>${doc}</td>
                         <td class="text-center"><span class="badge bg-${e[0]} bg-opacity-10 text-${e[0]}">${vehEsc(e[1])}</span></td>
                     </tr>
-                    <tr class="veh-trx-detalle d-none bg-light" data-det="${o.id}"><td colspan="9" class="p-0">
+                    <tr class="veh-trx-detalle d-none bg-light" data-det="${o.id}"><td colspan="7" class="p-0">
                         <table class="table table-sm mb-0 bg-light" style="font-size:.75rem;"><tbody>${lineas || '<tr><td class="ps-4 text-muted">Sin líneas.</td></tr>'}</tbody></table>
-                        ${typeof window.cwAbrirVerId === 'function' ? `<div class="ps-4 pb-1"><button type="button" class="btn btn-link btn-sm p-0" onclick="event.stopPropagation(); vehAbrirOrden(${o.id})"><i class="bi bi-box-arrow-up-right me-1"></i>Abrir la orden</button></div>` : ''}
+                        ${(() => {
+                            // El kilometraje ya no es columna: va al pie del detalle desplegado.
+                            const pie = [
+                                o.kilometraje ? `Km: <b>${vehEsc(Number(o.kilometraje).toLocaleString('es-EC'))}</b>` : '',
+                                typeof window.cwAbrirVerId === 'function' ? `<button type="button" class="btn btn-link btn-sm p-0" onclick="event.stopPropagation(); vehAbrirOrden(${o.id})"><i class="bi bi-box-arrow-up-right me-1"></i>Abrir la orden</button>` : '',
+                            ].filter(Boolean).join('<span class="text-muted mx-2">·</span>');
+                            return pie ? `<div class="ps-4 py-1 small">${pie}</div>` : '';
+                        })()}
                     </td></tr>`;
             }).join('');
             tbody.querySelectorAll('.veh-trx-orden').forEach(tr => tr.addEventListener('click', () => {
@@ -205,7 +240,7 @@
             // Si ya había algo escrito en el buscador, se aplica a lo recién cargado.
             vehFiltrarTransacciones();
         } catch (e) {
-            tbody.innerHTML = `<tr><td colspan="9" class="text-center text-danger py-4">${vehEsc(e.message)}</td></tr>`;
+            tbody.innerHTML = `<tr><td colspan="7" class="text-center text-danger py-4">${vehEsc(e.message)}</td></tr>`;
         }
     }
 
