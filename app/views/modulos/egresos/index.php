@@ -2371,7 +2371,6 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
 
         const b = document.getElementById('btnGuardarEgreso'); b.disabled = true;
         const eraNuevo = !document.getElementById('eg-input-id').value; // "Registrar nuevo" solo al crear
-        Swal.update({ text: 'Registrando el egreso y su asiento contable. No cierre esta ventana.' });
         return fetch(`${EGR_URL}/guardarAjax`, {
             method:'POST', headers:{'Content-Type':'application/x-www-form-urlencoded'},
             body: 'data=' + encodeURIComponent(JSON.stringify(data))
@@ -2379,7 +2378,6 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
             if(res.ok) {
                 // Actualizar el registro en el listado (misma página, orden y filtros)
                 EGR_mostrarRegistroGuardado(res.id, res.fila);
-                Swal.update({ text: 'Egreso guardado. Cargando el documento…' });
                 // El modal NO se cierra: se recarga en el mismo lugar con el egreso ya guardado
                 // (número asignado, botones de PDF/correo/cheques, pestaña Asiento), para seguir
                 // trabajando sobre él. abrirModalEgreso() usa getOrCreateInstance, así que el
@@ -2412,9 +2410,10 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
     function egMostrarGuardando(nuevo) {
         Swal.fire({
             title: nuevo ? 'Guardando egreso…' : 'Actualizando egreso…',
-            text: 'Verificando el periodo contable…',
+            text: 'Por favor espere.',
             allowOutsideClick: false,
             allowEscapeKey: false,
+            showConfirmButton: false,
             didOpen: () => Swal.showLoading()
         });
     }

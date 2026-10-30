@@ -268,10 +268,9 @@ modal**. Atajo de teclado: **Alt + ←** y **Alt + →**.
 
 ## Qué pasa en el listado al guardar
 
-Mientras se guarda aparece el aviso **«Guardando egreso…»** (o **«Actualizando
-egreso…»**) con lo que está haciendo en ese momento: verificar el periodo
-contable, registrar el egreso y su asiento, y volver a cargar el documento. No
-cierre la ventana mientras se muestra; el aviso desaparece solo cuando sale el
+Mientras se guarda aparece el aviso **«Guardando egreso…»** (o **«Actualizando egreso…»**) con una rueda de carga mientras el sistema
+verifica el periodo, registra el egreso y su asiento y vuelve a abrir el
+documento. No cierre la ventana mientras se muestra; el aviso desaparece solo cuando sale el
 mensaje de guardado o el de error.
 
 Al pulsar **Guardar** (egreso nuevo) o **Actualizar** (egreso editado), el modal

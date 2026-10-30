@@ -2301,7 +2301,6 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
         const eraNuevo = !data.id; // "Registrar nuevo" se ofrece solo al crear, no al actualizar
         btn.disabled = true;
         btn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Procesando...';
-        Swal.update({ text: 'Registrando el ingreso y su asiento contable. No cierre esta ventana.' });
 
         return fetch(`<?= BASE_URL ?>/<?= $rutaModulo ?>/guardarAjax`, {
                 method: 'POST',
@@ -2315,7 +2314,6 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                 if (res.ok) {
                     // Actualizar el registro en el listado (misma página, orden y filtros)
                     ING_mostrarRegistroGuardado(res.id, res.fila);
-                    Swal.update({ text: 'Ingreso guardado. Cargando el documento…' });
 
                     // El modal NO se cierra: se recarga en el mismo lugar con el ingreso ya guardado
                     // (número asignado, botones de PDF/correo, pestaña Asiento), para seguir
@@ -2354,9 +2352,10 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
     function ingMostrarGuardando(nuevo) {
         Swal.fire({
             title: nuevo ? 'Guardando ingreso…' : 'Actualizando ingreso…',
-            text: 'Verificando el periodo contable…',
+            text: 'Por favor espere.',
             allowOutsideClick: false,
             allowEscapeKey: false,
+            showConfirmButton: false,
             didOpen: () => Swal.showLoading()
         });
     }

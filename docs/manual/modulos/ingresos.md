@@ -197,10 +197,9 @@ el historial de auditoría con los datos anteriores y los nuevos.
 
 ## Qué pasa en el listado al guardar
 
-Mientras se guarda aparece el aviso **«Guardando ingreso…»** (o **«Actualizando
-ingreso…»**) con lo que está haciendo en ese momento: verificar el periodo
-contable, registrar el ingreso y su asiento, y volver a cargar el documento. No
-cierre la ventana mientras se muestra; el aviso desaparece solo cuando sale el
+Mientras se guarda aparece el aviso **«Guardando ingreso…»** (o **«Actualizando ingreso…»**) con una rueda de carga mientras el sistema
+verifica el periodo, registra el ingreso y su asiento y vuelve a abrir el
+documento. No cierre la ventana mientras se muestra; el aviso desaparece solo cuando sale el
 mensaje de guardado o el de error.
 
 Al pulsar **Guardar** (ingreso nuevo) o **Actualizar** (ingreso editado), el
