@@ -421,15 +421,25 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                         <div class="tab-pane fade show active" id="m-tab-general" role="tabpanel">
 
                             <!-- Cabecera Principal -->
+                            <?php if (!empty($proyectos)): ?>
+                            <style>
+                                /* Con proyectos activos, el selector Proyecto entra en la misma fila: los
+                                   campos cortos pasan a ancho fijo y el buscador y Proyecto se reparten el resto. */
+                                @media (min-width: 768px) {
+                                    .cab-con-proyecto > .cab-fijo { flex: 0 0 auto; width: var(--w); }
+                                    .cab-con-proyecto > .cab-flex { flex: var(--g, 1) 1 0; width: auto; min-width: 0; }
+                                }
+                            </style>
+                            <?php endif; ?>
                             <div class="p-3 bg-white border-bottom">
-                                <div class="row g-3">
+                                <div class="row g-3<?= !empty($proyectos) ? ' cab-con-proyecto' : '' ?>">
 
-                                    <!-- Fila: Fecha, Serie, Secuencial y Recibo de -->
-                                    <div class="col-md-2">
+                                    <!-- Fila: Fecha, Serie, Secuencial, Recibo de y Proyecto -->
+                                    <div class="col-md-2 cab-fijo" style="--w:135px">
                                         <label class="form-label small fw-bold">Fecha de Emisión</label>
                                         <input type="date" name="fecha_emision" id="m-input-fecha" class="form-control form-control-sm" value="<?= date('Y-m-d') ?>" max="<?= date('Y-m-d') ?>" required>
                                     </div>
-                                    <div class="col-md-2">
+                                    <div class="col-md-2 cab-fijo" style="--w:120px">
                                         <label class="form-label small fw-bold d-flex align-items-center">Serie <?= \App\Helpers\PreferenciasHelper::renderEstrellaFavorito('ingresos', 'm-select-punto', 'id_punto_emision') ?></label>
                                         <select name="id_punto_emision" id="m-select-punto" class="form-select form-select-sm" onchange="syncIngresoSecuencial(this.value)" required>
                                             <?php foreach ($puntos as $p): ?>
@@ -445,12 +455,12 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                                         <input type="hidden" name="establecimiento" id="m-txt-establecimiento">
                                         <input type="hidden" name="punto_emision" id="m-txt-punto">
                                     </div>
-                                    <div class="col-md-2">
+                                    <div class="col-md-2 cab-fijo" style="--w:120px">
                                         <label class="form-label small fw-bold">Secuencial</label>
                                         <input type="text" name="secuencial" id="m-input-secuencial" class="form-control form-control-sm bg-light" readonly>
                                     </div>
                                     <!-- Recibo de -->
-                                    <div class="col-md-6">
+                                    <div class="col-md-6 cab-flex" style="--g:3">
                                         <label class="form-label small fw-bold">
                                             <i class="bi bi-person-badge text-primary me-1"></i> Recibo de <span class="text-danger">*</span>
                                         </label>
@@ -465,6 +475,19 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                                             <div id="m-dropdown-recibo-de" class="list-group shadow dropdown-predictivo position-absolute d-none w-100" style="max-height:200px; overflow-y:auto; z-index:2100;"></div>
                                         </div>
                                     </div>
+
+                                    <?php if (!empty($proyectos)): // solo si la empresa tiene proyectos activos ?>
+                                    <!-- Proyecto del ingreso: al generar el asiento se copia a todas sus líneas -->
+                                    <div class="col-md-4 cab-flex" style="--g:2">
+                                        <label class="form-label small fw-bold d-flex align-items-center" for="m-select-proyecto">Proyecto <?= \App\Helpers\PreferenciasHelper::renderEstrellaFavorito('ingresos', 'm-select-proyecto', 'id_proyecto_default') ?></label>
+                                        <select name="id_proyecto" id="m-select-proyecto" class="form-select form-select-sm">
+                                            <option value="">— Sin proyecto —</option>
+                                            <?php foreach ($proyectos as $pr): ?>
+                                                <option value="<?= (int) $pr['id'] ?>"><?= htmlspecialchars(trim(($pr['codigo'] ? $pr['codigo'] . ' - ' : '') . $pr['nombre'])) ?></option>
+                                            <?php endforeach; ?>
+                                        </select>
+                                    </div>
+                                    <?php endif; ?>
                                     <!-- Select oculto: fuente de verdad del concepto seleccionado -->
                                     <select name="id_ingreso_concepto" id="m-select-concepto" class="d-none" onchange="manejarCambioConceptoIngreso(this)">
                                         <option value="" data-comportamiento="GENERAL"></option>
@@ -2019,6 +2042,28 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
         document.getElementById('m-add-cobro-monto').value = (diff > 0.009) ? diff.toFixed(2) : '0.00';
     }
 
+    // ── Proyecto del ingreso ───────────────────────────────────────────────────
+    // Un solo proyecto por ingreso; el servidor lo copia a todas las líneas del asiento. El
+    // selector solo existe si la empresa tiene proyectos activos: sin él no se manda la clave y
+    // el servidor conserva el proyecto que ya tenía el ingreso.
+    function ingProyectoPayload() {
+        const sel = document.getElementById('m-select-proyecto');
+        return sel ? { id_proyecto: sel.value } : {};
+    }
+
+    /** Fija el proyecto guardado; si ya no está activo (no viene en el combo) lo agrega temporalmente. */
+    function ingSeleccionarProyecto(ing) {
+        const sel = document.getElementById('m-select-proyecto');
+        if (!sel) return;
+        const id = ing.id_proyecto ? String(ing.id_proyecto) : '';
+        if (id && !sel.querySelector(`option[value="${id}"]`)) {
+            const opt = new Option(ing.proyecto_nombre || ('Proyecto #' + id), id);
+            opt.dataset.temporal = '1';
+            sel.appendChild(opt);
+        }
+        sel.value = id;
+    }
+
     function abrirModalIngreso() {
         // Reset form UI
         document.getElementById('modalIngresoTitulo').textContent = 'Registrar Nuevo Ingreso';
@@ -2036,6 +2081,7 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
         // un documento cuyo punto ya no está en el combo: un ingreso NUEVO solo puede emitirse
         // con las series activas que renderizó el servidor.
         document.querySelectorAll('#m-select-punto option[data-temporal]').forEach(o => o.remove());
+        document.querySelectorAll('#m-select-proyecto option[data-temporal]').forEach(o => o.remove());
         document.getElementById('m-input-id').value = '';
         document.getElementById('m-input-id-cliente').value = '';
         document.getElementById('m-recibo-de-input').value = '';
@@ -2057,7 +2103,7 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
         const fieldsToUnlock = [
             'm-input-fecha', 'm-select-concepto',
             'm-recibo-de-input',
-            'm-input-observaciones',
+            'm-input-observaciones', 'm-select-proyecto',
             'm-manual-desc', 'm-manual-monto',
             'm-add-cobro-forma', 'm-add-cobro-monto', 'm-add-cobro-ref',
             'm-add-cobro-tipo-banco', 'm-add-cobro-num-cheque', 'm-add-cobro-fecha-cheque'
@@ -2155,6 +2201,7 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
             secuencial:         document.getElementById('m-input-secuencial').value,
             tipo_ingreso:       tipo,
             observaciones:      document.getElementById('m-input-observaciones').value,
+            ...ingProyectoPayload(),
             id_cliente:         null, // se llena abajo solo cuando hay un único cliente de referencia
             id_ingreso_concepto: idConc,
             recibo_de:          reciboDe,
@@ -2479,6 +2526,7 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                 document.getElementById('m-select-concepto').value = ing.id_ingreso_concepto;
                 sincronizarBotonesConcepto(ing.id_ingreso_concepto);
                 document.getElementById('m-input-observaciones').value = ing.observaciones || '';
+                ingSeleccionarProyecto(ing);
 
                 if (soloLectura) {
                     // Modo estrictamente solo lectura: anulado o periodo contable cerrado
@@ -2486,6 +2534,8 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                     setConceptoBotonesDisabled(true);
                     document.getElementById('m-recibo-de-input').disabled = true;
                     document.getElementById('m-input-observaciones').disabled = true;
+                    const selProy = document.getElementById('m-select-proyecto');
+                    if (selProy) selProy.disabled = true;
                     document.getElementById('m-input-fecha').disabled = true;
                     document.getElementById('m-select-punto').disabled = true;
 

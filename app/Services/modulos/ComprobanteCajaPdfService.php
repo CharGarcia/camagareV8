@@ -204,11 +204,14 @@ class ComprobanteCajaPdfService
             $fecha = $ts ? date('d/m/Y', $ts) : (string)$cabecera['fecha_emision'];
         }
         $estado = ucfirst((string)($cabecera['estado'] ?? 'registrado'));
+        // Proyecto del documento (ingresos/egresos): una línea más, solo si lo tiene.
+        $proyecto = trim((string)($cabecera['proyecto_nombre'] ?? ''));
+        $alto     = $proyecto !== '' ? 25 : 20;
 
         $pdf->SetLineWidth(0.2);
         $pdf->SetDrawColor(120, 120, 120);
         $pdf->SetFillColor(245, 245, 245);
-        $pdf->RoundedRect($mL, $y, $w, 20, 1.5, '1111', 'DF');
+        $pdf->RoundedRect($mL, $y, $w, $alto, 1.5, '1111', 'DF');
 
         $pdf->SetFont('helvetica', 'B', 8);
         $pdf->SetXY($mL + 2, $y + 2);
@@ -234,6 +237,14 @@ class ComprobanteCajaPdfService
             $pdf->Cell(0, 5, $estado, 0, 1, 'L');
         }
 
+        if ($proyecto !== '') {
+            $pdf->SetXY($mL + 2, $pdf->GetY());
+            $pdf->SetFont('helvetica', 'B', 8);
+            $pdf->Cell(28, 5, 'Proyecto:', 0, 0, 'L');
+            $pdf->SetFont('helvetica', '', 9);
+            $pdf->Cell($w - 32, 5, $this->ajustarTexto($proyecto, $w - 32), 0, 1, 'L');
+        }
+
         $obs = trim((string)($cabecera['observaciones'] ?? ''));
         $pdf->SetXY($mL + 2, $pdf->GetY());
         $pdf->SetFont('helvetica', 'B', 8);
@@ -241,7 +252,7 @@ class ComprobanteCajaPdfService
         $pdf->SetFont('helvetica', '', 9);
         $pdf->MultiCell($w - 32, 5, $obs !== '' ? $obs : '—', 0, 'L', false, 1);
 
-        return $y + 20;
+        return $y + $alto;
     }
 
     /** Caja con Fecha, Estado y Observaciones del traspaso (equivalente a dibujarDatosSujeto). */

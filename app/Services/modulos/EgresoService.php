@@ -7,6 +7,7 @@ namespace App\Services\modulos;
 use App\repositories\modulos\EgresoRepository;
 use App\repositories\modulos\AsientoProgramadoRepository;
 use App\Rules\modulos\EgresoRules;
+use App\Rules\modulos\ProyectoDocumentoRules;
 use App\Rules\modulos\ControlBancarioRules;
 use App\repositories\modulos\FormaPagoRepository;
 use App\Services\LogSistemaService;
@@ -216,7 +217,10 @@ class EgresoService
     {
         // 1. Validar reglas negocio
         $this->rules->validar($data);
-        
+        $idProyecto = $this->repository->usaProyecto()
+            ? (new ProyectoDocumentoRules())->resolver($data['id_proyecto'] ?? null, (int) $data['id_empresa'])
+            : null;
+
         // 2. Validar secuencial duplicado
         $this->validarSecuencial($data);
 
@@ -237,6 +241,9 @@ class EgresoService
 
             // Insertar Cabecera
             $idEgreso = $this->repository->insertCabecera($data);
+            if ($idProyecto !== null) {
+                $this->repository->updateProyecto($idEgreso, (int) $data['id_empresa'], $idProyecto);
+            }
 
             // Insertar Detalles
             if (!empty($data['detalles'])) {
@@ -263,7 +270,7 @@ class EgresoService
                 'egresos_cabecera',
                 $idEgreso,
                 null,
-                ['monto' => $data['monto_total'], 'tipo' => $data['tipo_egreso']]
+                ['monto' => $data['monto_total'], 'tipo' => $data['tipo_egreso'], 'id_proyecto' => $idProyecto]
             );
 
             $this->sincronizarSaldosInicialesCxp($this->idsSaldoInicialCxp($data['detalles'] ?? []), (int) $data['id_empresa']);
@@ -476,6 +483,15 @@ class EgresoService
             }
         }
 
+        // Proyecto del egreso: solo cambia si el modal lo mandó. Al regenerar el asiento (abajo)
+        // se copia a todas sus líneas.
+        $proyectoAnterior = !empty($egreso['id_proyecto']) ? (int) $egreso['id_proyecto'] : null;
+        $cambiaProyecto   = false;
+        if ($this->repository->usaProyecto() && array_key_exists('id_proyecto', $extraData)) {
+            $idProyecto     = (new ProyectoDocumentoRules())->resolver($extraData['id_proyecto'], $idEmpresa, $proyectoAnterior);
+            $cambiaProyecto = $idProyecto !== $proyectoAnterior;
+        }
+
         $db = Database::getConnection();
         $inTrans = $db->inTransaction();
         if (!$inTrans) $db->beginTransaction();
@@ -578,6 +594,12 @@ class EgresoService
                 );
                 $datosAnteriores['fecha_emision'] = $egreso['fecha_emision'];
                 $datosNuevos['fecha_emision']     = $fechaEmision;
+            }
+
+            if ($cambiaProyecto) {
+                $this->repository->updateProyecto($id, $idEmpresa, $idProyecto);
+                $datosAnteriores['id_proyecto'] = $proyectoAnterior;
+                $datosNuevos['id_proyecto']     = $idProyecto;
             }
 
             // 5. Registrar en Auditoría
@@ -738,6 +760,12 @@ class EgresoService
      * porque la cuenta de la línea manda sobre la del concepto
      * (AsientoBuilderService::contrapartidaPorCuenta()).
      */
+    /** Proyectos activos para el selector del modal; vacío si la instalación aún no tiene la columna. */
+    public function getProyectosActivos(int $idEmpresa): array
+    {
+        return $this->repository->usaProyecto() ? (new \App\models\Proyecto())->getActivosPorEmpresa($idEmpresa) : [];
+    }
+
     public function getConceptosEgreso(int $idEmpresa): array
     {
         $programadoRepo = new AsientoProgramadoRepository();
@@ -998,7 +1026,13 @@ class EgresoService
     {
         $prefijo = $this->referenciaAsiento($egreso);
         $tercero = $this->terceroAsiento($egreso);
+        // El egreso es de un solo proyecto: va en TODAS las líneas del asiento, sin tener que
+        // asignarlo a mano en la pestaña Asiento contable.
+        $idProyecto = (int) ($egreso['id_proyecto'] ?? 0);
         foreach ($detalles as &$d) {
+            if ($idProyecto > 0) {
+                $d['id_proyecto'] = $idProyecto;
+            }
             $refLinea = trim((string) ($d['referencia_detalle'] ?? ''));
             $d['documento_referencia'] = mb_substr($refLinea !== '' ? $prefijo . ' · ' . $refLinea : $prefijo, 0, 100);
             if ($refLinea !== '') {

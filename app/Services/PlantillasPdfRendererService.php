@@ -855,6 +855,7 @@ class PlantillasPdfRendererService
                 '{cc_monto_letras}'    => $this->montoEnLetras((float) ($cabecera['monto_total'] ?? $cabecera['monto'] ?? 0)),
                 '{cc_usuario_nombre}'  => (string) ($cabecera['usuario_nombre'] ?? ''),
                 '{cc_estado}'          => (string) ($cabecera['estado'] ?? ''),
+                '{cc_proyecto}'        => (string) ($cabecera['proyecto_nombre'] ?? ''),
                 '{titulo_documento}'   => match ($tipo) { 'egreso' => 'Comprobante de Egreso', 'ingreso' => 'Comprobante de Ingreso', default => 'Comprobante de Traspaso' },
             ],
             'proforma' => [

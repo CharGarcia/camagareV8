@@ -7,6 +7,7 @@ namespace App\Services\modulos;
 use App\repositories\modulos\IngresoRepository;
 use App\repositories\modulos\AsientoProgramadoRepository;
 use App\Rules\modulos\IngresoRules;
+use App\Rules\modulos\ProyectoDocumentoRules;
 use App\Rules\modulos\ControlBancarioRules;
 use App\repositories\modulos\FormaPagoRepository;
 use App\Services\LogSistemaService;
@@ -143,6 +144,9 @@ class IngresoService
 
         // 2. Aplicar Reglas de Validación
         $this->rules->validar($data);
+        $idProyecto = $this->repository->usaProyecto()
+            ? (new ProyectoDocumentoRules())->resolver($data['id_proyecto'] ?? null, (int) $data['id_empresa'])
+            : null;
 
         // 3. Validar Periodo Contable
         $this->validarPeriodo($data, 'No se puede registrar el ingreso porque el periodo contable está cerrado.');
@@ -172,6 +176,9 @@ class IngresoService
 
             // Insert Cabecera
             $idIngreso = $this->repository->insertCabecera($data);
+            if ($idProyecto !== null) {
+                $this->repository->updateProyecto($idIngreso, $idEmpresa, $idProyecto);
+            }
 
             // Insert Detalles
             if (!empty($data['detalles']) && is_array($data['detalles'])) {
@@ -201,7 +208,7 @@ class IngresoService
                 'ingresos_cabecera',
                 $idIngreso,
                 null,
-                ['id_ingreso' => $idIngreso, 'monto_total' => $data['monto_total']]
+                ['id_ingreso' => $idIngreso, 'monto_total' => $data['monto_total'], 'id_proyecto' => $idProyecto]
             );
 
             if ($managedTransaction) {
@@ -275,6 +282,14 @@ class IngresoService
 
         // 2. Aplicar Reglas de Validación
         $this->rules->validar($data);
+        // Proyecto del ingreso: solo cambia si el modal lo mandó; al regenerar el asiento se
+        // copia a todas sus líneas.
+        $proyectoAnterior = !empty($original['id_proyecto']) ? (int) $original['id_proyecto'] : null;
+        $cambiaProyecto   = false;
+        if ($this->repository->usaProyecto() && array_key_exists('id_proyecto', $data)) {
+            $data['id_proyecto'] = (new ProyectoDocumentoRules())->resolver($data['id_proyecto'], (int) $data['id_empresa'], $proyectoAnterior);
+            $cambiaProyecto      = $data['id_proyecto'] !== $proyectoAnterior;
+        }
 
         $db = Database::getConnection();
         $managedTransaction = !$db->inTransaction();
@@ -311,6 +326,9 @@ class IngresoService
 
             // Update Cabecera
             $this->repository->updateCabecera($id, $data);
+            if ($cambiaProyecto) {
+                $this->repository->updateProyecto($id, $idEmpresa, $data['id_proyecto']);
+            }
 
             // Un cheque posfechado ya cobrado tiene su asiento de cobro ligado a esta línea de pago,
             // que se borra y se vuelve a crear aquí abajo: se exige quitar antes su Fecha Banco.
@@ -523,6 +541,12 @@ class IngresoService
      * se colara en una línea manual, el asiento la tomaría tal cual, porque la cuenta de la línea
      * manda sobre la del concepto (AsientoBuilderService::contrapartidaPorCuenta()).
      */
+    /** Proyectos activos para el selector del modal; vacío si la instalación aún no tiene la columna. */
+    public function getProyectosActivos(int $idEmpresa): array
+    {
+        return $this->repository->usaProyecto() ? (new \App\models\Proyecto())->getActivosPorEmpresa($idEmpresa) : [];
+    }
+
     public function getConceptosIngreso(int $idEmpresa): array
     {
         $programadoRepo = new AsientoProgramadoRepository();
@@ -837,7 +861,13 @@ class IngresoService
     private function decorarLineasAsiento(array $ingreso, array $detalles): array
     {
         $prefijo = $this->referenciaAsiento($ingreso);
+        // El ingreso es de un solo proyecto: va en TODAS las líneas del asiento, sin tener que
+        // asignarlo a mano en la pestaña Asiento contable.
+        $idProyecto = (int) ($ingreso['id_proyecto'] ?? 0);
         foreach ($detalles as &$d) {
+            if ($idProyecto > 0) {
+                $d['id_proyecto'] = $idProyecto;
+            }
             $refLinea = trim((string) ($d['referencia_detalle'] ?? ''));
             $d['documento_referencia'] = mb_substr($refLinea !== '' ? $prefijo . ' · ' . $refLinea : $prefijo, 0, 100);
             if ($refLinea !== '') {

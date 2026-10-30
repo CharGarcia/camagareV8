@@ -373,7 +373,11 @@ class IngresoRepository extends BaseRepository
 
     public function getPorId(int $id, int $idEmpresa): ?array
     {
-        $sql = "SELECT i.*,
+        // Proyecto del documento: la columna llega con database/2026-10-30_ingresos_egresos_proyecto.sql.
+        [$selProyecto, $joinProyecto] = $this->usaProyecto()
+            ? ['pry.nombre AS proyecto_nombre,', 'LEFT JOIN proyectos pry ON pry.id = i.id_proyecto AND pry.id_empresa = i.id_empresa']
+            : ['', ''];
+        $sql = "SELECT i.*, {$selProyecto}
                        c.nombre AS cliente_nombre,
                        c.identificacion AS cliente_ruc,
                        c.email AS cliente_email,
@@ -390,6 +394,7 @@ class IngresoRepository extends BaseRepository
                 LEFT JOIN empresa_opciones_ingreso_egreso eic ON i.id_ingreso_concepto = eic.id
                 LEFT JOIN empresa_establecimiento est ON i.id_establecimiento = est.id
                 LEFT JOIN empresa_punto_emision pto ON i.id_punto_emision = pto.id
+                {$joinProyecto}
                 WHERE i.id = :id AND i.id_empresa = :id_empresa AND i.eliminado = FALSE";
         
         $st = $this->db->prepare($sql);
@@ -978,6 +983,24 @@ class IngresoRepository extends BaseRepository
     public function deleteDetalles(int $idIngreso): void
     {
         $this->query("DELETE FROM ingresos_detalle WHERE id_ingreso = ?", [$idIngreso]);
+    }
+
+    /** ¿Ya existe la columna id_proyecto (database/2026-10-30_ingresos_egresos_proyecto.sql)? */
+    public function usaProyecto(): bool
+    {
+        return $this->columnaExiste('ingresos_cabecera', 'id_proyecto');
+    }
+
+    /** Fija (o quita con null) el proyecto del ingreso. Sin la columna no hace nada. */
+    public function updateProyecto(int $id, int $idEmpresa, ?int $idProyecto): void
+    {
+        if (!$this->usaProyecto()) {
+            return;
+        }
+        $this->query(
+            "UPDATE ingresos_cabecera SET id_proyecto = ? WHERE id = ? AND id_empresa = ?",
+            [$idProyecto, $id, $idEmpresa]
+        );
     }
 
     /** Enlaza (o desvincula con null) el asiento contable generado al ingreso. */

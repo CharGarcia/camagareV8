@@ -5,8 +5,8 @@ categoria: Tesorería
 ruta_modulo: modulos/egresos
 tipo: modulo
 visibilidad: todos
-etiquetas: egresos, saldo inicial por pagar, saldos iniciales cxp, cuenta por pagar de apertura, no aparece el saldo inicial, pagar saldo inicial, egreso, pago, buscar egreso, buscador, filtros, filtrar egresos, buscar cheque, buscar por compra pagada, buscar por beneficiario, filtro de fechas, chips, editar egreso, modificar egreso, corregir egreso, cambiar monto pagado, quitar factura del egreso, cambiar beneficiario, periodo cerrado, solo lectura, no deja editar, no puedo modificar, ordenar por dos columnas, ordenar por beneficiario y fecha, pagar, dinero que sale, proveedor, empleado, cheque, transferencia, comprobante de egreso, excel, exportar, anular cheque, cheque anulado, cheque dañado, reimprimir cheque, combinar conceptos, mezclar conceptos, otros conceptos, varios documentos, gasto sin factura, tipo real, tipo de egreso, decimo cuarto, decimo tercero, prestamos, rol de pago, numero de egreso, serie, secuencial, numero repetido, numero duplicado, numeracion por fecha, numero con el año, reiniciar numeracion, reinicio anual, reinicio mensual, correlativo por año, correlativo por mes, modo de numeracion, orden de formas de pago, saldo de la forma de pago, saldo disponible, ocultar saldo, aparecen documentos que no busque, resultados que no corresponden, buscar por numero de documento cobrado, cuenta del anticipo, anticipo sin cuenta, anticipo a proveedor, cuenta contable del concepto, cuenta por defecto, falta cuenta contable, pagar compra y dar anticipo, listado no se actualiza, no aparece el egreso guardado, no se ve el cambio, vuelve a la primera pagina, se pierde la pagina, refrescar listado, recargar tabla, fila resaltada, observaciones automaticas, observaciones se llenan solas, observaciones se completan solas, glosa del egreso, concepto del comprobante, descripcion del pago, pago factura de compra, falta un centavo, centavo pendiente, no puedo pagar el centavo, diferencia de un centavo, saldo de 0.01, queda un centavo, referencia muy larga, no guarda el egreso, no se guarda el pago, error al guardar egreso, value too long, texto demasiado largo, se corta la referencia, limite de caracteres, saldo equivocado, valor a pagar incorrecto, saldo menor al real, nota de venta, retencion de otro proveedor, descuenta una retencion que no es, imprimir, impresora, siguiente egreso, egreso anterior, navegar entre egresos, pasar al siguiente, flechas del modal, recorrer egresos, pago duplicado, pagar dos veces, doble pago, doble clic, egreso duplicado, ya no tiene saldo suficiente, declaracion ya pagada, crear proveedor desde el egreso, nuevo proveedor, nuevo empleado, registrar proveedor, registrar empleado, crear forma de pago, crear concepto, no aparece el boton de crear proveedor, falta el boton nuevo proveedor, asiento de documento anulado, asiento sigue contabilizado, no se anulo el asiento, no se pudo anular el asiento contable, registrar otro egreso, guardar y nuevo, guardar y crear otro, seguir en este, varios egresos seguidos, no cerrar el modal, continuar registrando, no pasa nada al guardar, se queda pensando, tarda en guardar, guardando, demora al guardar, no muestra mensaje al guardar
-version: 1.48
+etiquetas: egresos, proyecto, egreso de un proyecto, obra, asignar proyecto, gasto por proyecto, proyecto en el pdf, saldo inicial por pagar, saldos iniciales cxp, cuenta por pagar de apertura, no aparece el saldo inicial, pagar saldo inicial, egreso, pago, buscar egreso, buscador, filtros, filtrar egresos, buscar cheque, buscar por compra pagada, buscar por beneficiario, filtro de fechas, chips, editar egreso, modificar egreso, corregir egreso, cambiar monto pagado, quitar factura del egreso, cambiar beneficiario, periodo cerrado, solo lectura, no deja editar, no puedo modificar, ordenar por dos columnas, ordenar por beneficiario y fecha, pagar, dinero que sale, proveedor, empleado, cheque, transferencia, comprobante de egreso, excel, exportar, anular cheque, cheque anulado, cheque dañado, reimprimir cheque, combinar conceptos, mezclar conceptos, otros conceptos, varios documentos, gasto sin factura, tipo real, tipo de egreso, decimo cuarto, decimo tercero, prestamos, rol de pago, numero de egreso, serie, secuencial, numero repetido, numero duplicado, numeracion por fecha, numero con el año, reiniciar numeracion, reinicio anual, reinicio mensual, correlativo por año, correlativo por mes, modo de numeracion, orden de formas de pago, saldo de la forma de pago, saldo disponible, ocultar saldo, aparecen documentos que no busque, resultados que no corresponden, buscar por numero de documento cobrado, cuenta del anticipo, anticipo sin cuenta, anticipo a proveedor, cuenta contable del concepto, cuenta por defecto, falta cuenta contable, pagar compra y dar anticipo, listado no se actualiza, no aparece el egreso guardado, no se ve el cambio, vuelve a la primera pagina, se pierde la pagina, refrescar listado, recargar tabla, fila resaltada, observaciones automaticas, observaciones se llenan solas, observaciones se completan solas, glosa del egreso, concepto del comprobante, descripcion del pago, pago factura de compra, falta un centavo, centavo pendiente, no puedo pagar el centavo, diferencia de un centavo, saldo de 0.01, queda un centavo, referencia muy larga, no guarda el egreso, no se guarda el pago, error al guardar egreso, value too long, texto demasiado largo, se corta la referencia, limite de caracteres, saldo equivocado, valor a pagar incorrecto, saldo menor al real, nota de venta, retencion de otro proveedor, descuenta una retencion que no es, imprimir, impresora, siguiente egreso, egreso anterior, navegar entre egresos, pasar al siguiente, flechas del modal, recorrer egresos, pago duplicado, pagar dos veces, doble pago, doble clic, egreso duplicado, ya no tiene saldo suficiente, declaracion ya pagada, crear proveedor desde el egreso, nuevo proveedor, nuevo empleado, registrar proveedor, registrar empleado, crear forma de pago, crear concepto, no aparece el boton de crear proveedor, falta el boton nuevo proveedor, asiento de documento anulado, asiento sigue contabilizado, no se anulo el asiento, no se pudo anular el asiento contable, registrar otro egreso, guardar y nuevo, guardar y crear otro, seguir en este, varios egresos seguidos, no cerrar el modal, continuar registrando, no pasa nada al guardar, se queda pensando, tarda en guardar, guardando, demora al guardar, no muestra mensaje al guardar
+version: 1.49
 orden: 20
 estado: activo
 ---
@@ -461,6 +461,33 @@ El detalle completo (qué tipos lo permiten, qué pasa al cambiar de modo y
 cuántos documentos admite cada periodo) está en el manual de **Empresa**, sección
 *Secuenciales por punto de emisión*.
 
+## Proyecto del egreso
+
+Si la empresa tiene al menos un **proyecto activo** (Contabilidad → Proyectos), el
+modal muestra el campo **Proyecto** debajo de **Buscar Proveedor / Empleado**. Si no tiene ninguno, el
+campo no aparece y el egreso se registra como siempre.
+
+- Cada egreso pertenece a **un solo proyecto**. Se elige en la cabecera y no
+  hace falta tocar el asiento.
+- Al generarse el asiento contable, el proyecto se pone en **todas sus líneas**
+  (cuentas del concepto, documentos pagados y banco o caja). Así el egreso aparece
+  en la pestaña **Documentos** del proyecto, y su gasto o ingreso cuenta en la
+  pestaña **Avance**.
+- Si se cambia o se quita el proyecto al editar el egreso, el asiento se regenera
+  con el nuevo valor.
+- El nombre del proyecto sale en el **comprobante PDF**, en el recuadro de datos
+  del encabezado (línea **Proyecto**). En las plantillas PDF personalizadas está la
+  variable `{cc_proyecto}`.
+- La estrella junto al campo deja un proyecto como favorito para los egresos nuevos.
+- Solo se pueden elegir proyectos activos. Un egreso que ya tenía un proyecto que
+  después se cerró lo conserva al editarlo.
+- Si el asiento fue **corregido a mano** desde la pestaña *Asiento contable*, el
+  sistema ya no lo regenera: cambiar el proyecto del egreso no lo actualiza hasta
+  pulsar **Restaurar automático** en esa pestaña.
+- Pagar una compra o cobrar una factura desde aquí no carga el costo o la venta al
+  proyecto: eso está en el asiento de la compra o de la factura. Para que cuente
+  en *Ejecutado*, el proyecto se asigna en el documento original.
+
 ## Asiento contable
 
 Cada egreso genera su asiento automáticamente según la configuración contable de
@@ -694,6 +721,7 @@ proveedores), pasa por la misma revisión al guardar:
 
 ## Historial de cambios
 
+- **1.49** — Campo **Proyecto** en el modal (si la empresa tiene proyectos activos): el egreso pertenece a un proyecto, que se pone en todas las líneas de su asiento y sale en el encabezado del comprobante PDF.
 - **1.48** — Al pulsar **Guardar** o **Actualizar** aparece el aviso **«Guardando egreso…»** mientras el sistema verifica el periodo, registra el egreso y su asiento y recarga el documento; antes no se veía ninguna señal hasta el mensaje final.
 - **1.47** — El asiento contable del **comprobante PDF** muestra el **centro de costo** y el **proyecto** de cada línea, cuando los tiene.
 - **1.46** — La pestaña **Asiento contable** de un egreso sin asiento propone las líneas de la configuración contable y permite **registrar el asiento a mano**; queda enlazado al egreso.

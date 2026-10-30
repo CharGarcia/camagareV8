@@ -373,7 +373,11 @@ class EgresoRepository extends BaseRepository
 
     public function getPorId(int $id, int $idEmpresa): ?array
     {
-        $sql = "SELECT e.*,
+        // Proyecto del documento: la columna llega con database/2026-10-30_ingresos_egresos_proyecto.sql.
+        [$selProyecto, $joinProyecto] = $this->usaProyecto()
+            ? ['pry.nombre AS proyecto_nombre,', 'LEFT JOIN proyectos pry ON pry.id = e.id_proyecto AND pry.id_empresa = e.id_empresa']
+            : ['', ''];
+        $sql = "SELECT e.*, {$selProyecto}
                        COALESCE(p.razon_social, emp.nombres_apellidos, e.beneficiario_nombre, 'N/A') AS sujeto_nombre,
                        COALESCE(p.identificacion, emp.identificacion, '') AS sujeto_ruc,
                        COALESCE(p.email, emp.email) AS sujeto_email,
@@ -384,6 +388,7 @@ class EgresoRepository extends BaseRepository
                 LEFT JOIN empleados emp ON e.id_empleado = emp.id
                 LEFT JOIN usuarios u ON e.created_by = u.id
                 LEFT JOIN empresa_opciones_ingreso_egreso ec ON e.id_egreso_concepto = ec.id
+                {$joinProyecto}
                 WHERE e.id = :id AND e.id_empresa = :id_empresa AND e.eliminado = FALSE";
         
         $st = $this->db->prepare($sql);
@@ -883,6 +888,24 @@ class EgresoRepository extends BaseRepository
         $st = $this->db->prepare($sql);
         $st->execute([':id' => $id, ':emp' => $idEmpresa, ':usr' => $idUsuario]);
         return $st->rowCount() > 0;
+    }
+
+    /** ¿Ya existe la columna id_proyecto (database/2026-10-30_ingresos_egresos_proyecto.sql)? */
+    public function usaProyecto(): bool
+    {
+        return $this->columnaExiste('egresos_cabecera', 'id_proyecto');
+    }
+
+    /** Fija (o quita con null) el proyecto del egreso. Sin la columna no hace nada. */
+    public function updateProyecto(int $id, int $idEmpresa, ?int $idProyecto): void
+    {
+        if (!$this->usaProyecto()) {
+            return;
+        }
+        $this->query(
+            "UPDATE egresos_cabecera SET id_proyecto = ? WHERE id = ? AND id_empresa = ?",
+            [$idProyecto, $id, $idEmpresa]
+        );
     }
 
     /** Enlaza (o desvincula con null) el asiento contable generado al egreso. */

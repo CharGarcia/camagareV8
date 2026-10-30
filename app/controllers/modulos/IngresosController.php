@@ -143,6 +143,7 @@ class IngresosController extends BaseModuloController
             'usuariosFiltro'    => $usuariosFiltro,
             'formasCobro'       => $formasCobro,
             'conceptos'         => $conceptos,
+            'proyectos'         => $this->service->getProyectosActivos($idEmpresa),
             'comportamientosConPendientes' => $comportamientosConPendientes,
             'permAtajos'        => $permAtajos,
             'fullWidth'         => true,

@@ -127,6 +127,7 @@ class EgresosController extends BaseModuloController
             'usuariosFiltro'    => $usuariosFiltro,
             'formasPago'        => $formasPago,
             'conceptos'         => $conceptos,
+            'proyectos'         => $this->service->getProyectosActivos($idEmpresa),
             'comportamientosConPendientes' => $comportamientosConPendientes,
             'permAtajos'        => $permAtajos,
             'fullWidth'         => true,

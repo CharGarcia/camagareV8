@@ -5,8 +5,8 @@ categoria: Contabilidad
 ruta_modulo: modulos/proyectos
 tipo: modulo
 visibilidad: todos
-etiquetas: proyectos, obra, contrato, rentabilidad por proyecto, agrupar gastos, seguimiento, avance del proyecto, porcentaje de ejecucion, ejecucion presupuestaria, presupuesto del proyecto, documentos del proyecto, que documentos tiene el proyecto, pdf del proyecto, excel del proyecto, avance fisico, no se puede eliminar proyecto, proyecto en uso
-version: 1.3
+etiquetas: proyectos, egreso del proyecto, ingreso del proyecto, asignar proyecto a un egreso, obra, contrato, rentabilidad por proyecto, agrupar gastos, seguimiento, avance del proyecto, porcentaje de ejecucion, ejecucion presupuestaria, presupuesto del proyecto, documentos del proyecto, que documentos tiene el proyecto, pdf del proyecto, excel del proyecto, avance fisico, no se puede eliminar proyecto, proyecto en uso
+version: 1.4
 orden: 80
 estado: activo
 ---
@@ -21,7 +21,9 @@ Es una dimensión de análisis: no cambia la contabilidad, la organiza.
 1. Registre el proyecto con su nombre, presupuesto y fechas de inicio y fin.
 2. Asigne el proyecto a los documentos: por periodo en la cuenta contable (Plan de
    Cuentas) o, documento por documento, en la pestaña **Asiento contable** de cada
-   compra, factura o egreso.
+   compra, factura o egreso. En **Ingresos** y **Egresos** basta elegir el
+   proyecto en el campo **Proyecto** del modal: se pone solo en todas las líneas
+   del asiento.
 3. Abra el proyecto y consulte sus pestañas **Documentos** y **Avance**.
 
 ## % de ejecución del listado
@@ -145,6 +147,7 @@ guarda para usted.
 
 ## Historial de cambios
 
+- **1.4** — Ingresos y Egresos tienen el campo **Proyecto** en su modal; el proyecto se pone en todas las líneas de su asiento, sin editarlo a mano.
 - **1.3** — Las pestañas Documentos y Avance ya no dependen del acceso a Asientos Contables: las ve quien ve Proyectos, y para nivel 1 el administrador decide en Permisos de módulos.
 - **1.2** — Pestañas **Documentos** y **Avance** en el modal, con PDF y Excel con logo. La columna **% Ejec.** se calcula desde los asientos (ejecutado / presupuesto); el campo digitado pasa a llamarse **% Avance físico**. Ya no se puede eliminar un proyecto en uso.
 - **1.1** — Buscador con ventana de filtros (embudo), orden por varias columnas (Shift+clic, incluidas presupuesto, % de ejecución y fechas) y PDF/Excel con el mismo orden; el modal ya no tiene pestaña *Información*.

@@ -186,6 +186,7 @@ class PlantillasPdfService
                 '{cc_monto_letras}'    => 'Monto en letras',
                 '{cc_usuario_nombre}'  => 'Registrado por',
                 '{cc_estado}'          => 'Estado',
+                '{cc_proyecto}'        => 'Proyecto',
                 '{observaciones}'      => 'Observaciones / Por concepto de',
             ],
             'Tablas'     => [
@@ -206,6 +207,7 @@ class PlantillasPdfService
                 '{cc_monto_letras}'    => 'Monto en letras',
                 '{cc_usuario_nombre}'  => 'Registrado por',
                 '{cc_estado}'          => 'Estado',
+                '{cc_proyecto}'        => 'Proyecto',
                 '{observaciones}'      => 'Observaciones / Por concepto de',
             ],
             'Tablas'     => [

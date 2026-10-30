@@ -440,14 +440,24 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                         <div class="tab-pane fade show active" id="eg-tab-general" role="tabpanel">
                             
                             <!-- Cabecera Principal -->
+                            <?php if (!empty($proyectos)): ?>
+                            <style>
+                                /* Con proyectos activos, el selector Proyecto entra en la misma fila: los
+                                   campos cortos pasan a ancho fijo y el buscador y Proyecto se reparten el resto. */
+                                @media (min-width: 768px) {
+                                    .cab-con-proyecto > .cab-fijo { flex: 0 0 auto; width: var(--w); }
+                                    .cab-con-proyecto > .cab-flex { flex: var(--g, 1) 1 0; width: auto; min-width: 0; }
+                                }
+                            </style>
+                            <?php endif; ?>
                             <div class="p-3 bg-white border-bottom">
-                                <div class="row g-3">
-                                    <!-- Fila única: Fecha, Serie, Secuencial, Tipo Sujeto, Beneficiario -->
-                                    <div class="col-md-2">
+                                <div class="row g-3<?= !empty($proyectos) ? ' cab-con-proyecto' : '' ?>">
+                                    <!-- Fila única: Fecha, Serie, Secuencial, Tipo Sujeto, Beneficiario y Proyecto -->
+                                    <div class="col-md-2 cab-fijo" style="--w:135px">
                                         <label class="form-label small fw-bold">Fecha de Emisión</label>
                                         <input type="date" name="fecha_emision" id="eg-input-fecha" class="form-control form-control-sm" value="<?= date('Y-m-d') ?>" max="<?= date('Y-m-d') ?>" required>
                                     </div>
-                                    <div class="col-md-2">
+                                    <div class="col-md-2 cab-fijo" style="--w:120px">
                                         <label class="form-label small fw-bold d-flex align-items-center">Serie <?= \App\Helpers\PreferenciasHelper::renderEstrellaFavorito('egresos', 'eg-select-punto', 'id_punto_emision_default') ?></label>
                                         <select name="id_punto_emision" id="eg-select-punto" class="form-select form-select-sm" onchange="syncEgresoSecuencial(this.value)" required>
                                             <?php foreach ($puntos as $p): ?>
@@ -463,18 +473,18 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                                         <input type="hidden" name="establecimiento" id="eg-txt-establecimiento">
                                         <input type="hidden" name="punto_emision" id="eg-txt-punto">
                                     </div>
-                                    <div class="col-md-2">
+                                    <div class="col-md-2 cab-fijo" style="--w:120px">
                                         <label class="form-label small fw-bold">Secuencial</label>
                                         <input type="text" name="secuencial" id="eg-input-secuencial" class="form-control form-control-sm bg-light" readonly>
                                     </div>
-                                    <div class="col-md-2">
+                                    <div class="col-md-2 cab-fijo" style="--w:135px">
                                         <label class="form-label small fw-bold d-flex align-items-center">Tipo Sujeto <?= \App\Helpers\PreferenciasHelper::renderEstrellaFavorito('egresos', 'eg-select-tipo-sujeto', 'tipo_sujeto_default') ?></label>
                                         <select name="tipo_sujeto" id="eg-select-tipo-sujeto" class="form-select form-select-sm" onchange="toggleBuscadorSujeto(this.value)">
                                             <option value="PROVEEDOR">Proveedor</option>
                                             <option value="EMPLEADO">Empleado</option>
                                         </select>
                                     </div>
-                                    <div class="col-md-4" id="eg-box-search-sujeto">
+                                    <div class="col-md-4 cab-flex" style="--g:3" id="eg-box-search-sujeto">
                                         <label class="form-label small fw-bold" id="eg-lbl-search">Buscar Proveedor</label>
                                         <div class="position-relative">
                                             <div class="input-group input-group-sm">
@@ -485,6 +495,19 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                                             <div id="eg-dropdown-sujetos" class="list-group shadow dropdown-predictivo position-absolute d-none w-100" style="max-height:200px; overflow-y:auto;"></div>
                                         </div>
                                     </div>
+
+                                    <?php if (!empty($proyectos)): // solo si la empresa tiene proyectos activos ?>
+                                    <!-- Proyecto del egreso: al generar el asiento se copia a todas sus líneas -->
+                                    <div class="col-md-4 cab-flex" style="--g:2">
+                                        <label class="form-label small fw-bold d-flex align-items-center" for="eg-select-proyecto">Proyecto <?= \App\Helpers\PreferenciasHelper::renderEstrellaFavorito('egresos', 'eg-select-proyecto', 'id_proyecto_default') ?></label>
+                                        <select name="id_proyecto" id="eg-select-proyecto" class="form-select form-select-sm">
+                                            <option value="">— Sin proyecto —</option>
+                                            <?php foreach ($proyectos as $pr): ?>
+                                                <option value="<?= (int) $pr['id'] ?>"><?= htmlspecialchars(trim(($pr['codigo'] ? $pr['codigo'] . ' - ' : '') . $pr['nombre'])) ?></option>
+                                            <?php endforeach; ?>
+                                        </select>
+                                    </div>
+                                    <?php endif; ?>
 
                                     <!-- Select oculto: fuente de verdad del concepto seleccionado -->
                                     <select name="id_egreso_concepto" id="eg-select-concepto" class="d-none" onchange="manejarCambioConceptoEgreso(this)">
@@ -2128,6 +2151,7 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
         // un documento cuyo punto ya no está en el combo: un egreso NUEVO solo puede emitirse
         // con las series activas que renderizó el servidor.
         document.querySelectorAll('#eg-select-punto option[data-temporal]').forEach(o => o.remove());
+        document.querySelectorAll('#eg-select-proyecto option[data-temporal]').forEach(o => o.remove());
         document.getElementById('eg-input-id').value = '';
         document.getElementById('eg-input-id-sujeto').value = '';
 
@@ -2310,6 +2334,7 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
             id_egreso_concepto: document.getElementById('eg-select-concepto').value,
             tipo_sujeto: tS,
             observaciones: document.getElementById('eg-input-obs').value,
+            ...egProyectoPayload(),
             detalles: [],
             pagos: pagosEgreso.map(p=>({
                 id_forma_pago: p.id_forma,
@@ -2514,6 +2539,7 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
             seleccionarSerieDocumentoEgreso(e);
             document.getElementById('eg-input-secuencial').value = String(e.secuencial ?? '').padStart(9,'0');
             document.getElementById('eg-input-obs').value = e.observaciones || '';
+            egSeleccionarProyecto(e);
             const comp = e.tipo_egreso || 'GENERAL';
             document.getElementById('eg-input-tipo-egreso').value = comp;
             document.getElementById('eg-select-concepto').value = e.id_egreso_concepto;
@@ -2719,10 +2745,32 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
         if (tab) tab.cargar(id);
     }
 
+    // ── Proyecto del egreso ────────────────────────────────────────────────────
+    // Un solo proyecto por egreso; el servidor lo copia a todas las líneas del asiento. El
+    // selector solo existe si la empresa tiene proyectos activos: sin él no se manda la clave y
+    // el servidor conserva el proyecto que ya tenía el egreso.
+    function egProyectoPayload() {
+        const sel = document.getElementById('eg-select-proyecto');
+        return sel ? { id_proyecto: sel.value } : {};
+    }
+
+    /** Fija el proyecto guardado; si ya no está activo (no viene en el combo) lo agrega temporalmente. */
+    function egSeleccionarProyecto(e) {
+        const sel = document.getElementById('eg-select-proyecto');
+        if (!sel) return;
+        const id = e.id_proyecto ? String(e.id_proyecto) : '';
+        if (id && !sel.querySelector(`option[value="${id}"]`)) {
+            const opt = new Option(e.proyecto_nombre || ('Proyecto #' + id), id);
+            opt.dataset.temporal = '1';
+            sel.appendChild(opt);
+        }
+        sel.value = id;
+    }
+
     function setControlesGeneralesHabilitados(hab) {
         const els = [
             'eg-select-punto', 'eg-select-concepto',
-            'eg-select-tipo-sujeto', 'eg-search-input', 'eg-input-obs'
+            'eg-select-tipo-sujeto', 'eg-search-input', 'eg-input-obs', 'eg-select-proyecto'
         ];
         els.forEach(id => {
             const el = document.getElementById(id);
@@ -2808,6 +2856,7 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
             id_proveedor: ts === 'PROVEEDOR' ? valSujeto : null,
             id_empleado: ts === 'EMPLEADO' ? valSujeto : null,
             observaciones: document.getElementById('eg-input-obs').value,
+            ...egProyectoPayload(),
             detalles: construido.detalles,
             monto_total: montoTotal,
             pagos: pagosEgreso.map(p => ({
