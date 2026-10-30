@@ -50,6 +50,7 @@ $urlBaseVehShared = BASE_URL . '/modulos/vehiculos';
                         'veh-pane-general'       => 'General',
                         'veh-pane-transacciones' => 'Transacciones',
                         'veh-pane-recordatorios' => 'Recordatorios',
+                        'veh-pane-mantenimiento' => 'Mantenimiento',
                     ];
                     ?>
                     <ul class="nav nav-tabs nav-tabs-sm px-3 pt-2 align-items-center" role="tablist" id="vehTabs">
@@ -61,6 +62,9 @@ $urlBaseVehShared = BASE_URL . '/modulos/vehiculos';
                         </li>
                         <li class="nav-item" role="presentation">
                             <a class="nav-link py-1 small veh-tab-requiere-id" id="veh-tab-recordatorios" data-bs-toggle="tab" href="#veh-pane-recordatorios" data-bs-target="#veh-pane-recordatorios" role="tab"><i class="bi bi-bell me-1"></i>Recordatorios</a>
+                        </li>
+                        <li class="nav-item" role="presentation">
+                            <a class="nav-link py-1 small veh-tab-requiere-id" id="veh-tab-mantenimiento" data-bs-toggle="tab" href="#veh-pane-mantenimiento" data-bs-target="#veh-pane-mantenimiento" role="tab"><i class="bi bi-speedometer2 me-1"></i>Mantenimiento <span class="badge bg-danger bg-opacity-10 text-danger ms-1 d-none" id="veh-badge-mant"></span></a>
                         </li>
                         <?= \App\Helpers\PreferenciasHelper::renderDropdownPestanas($pestanasVeh, $vistaConfigVeh ?? [], 'modulos/vehiculos', '__pestanas_ocultas__', 'estiloVistaPestanasVeh') ?>
                     </ul>
@@ -82,11 +86,16 @@ $urlBaseVehShared = BASE_URL . '/modulos/vehiculos';
                                 <label class="form-label mb-1 small fw-bold text-muted">Marca y modelo *</label>
                                 <input type="text" class="form-control form-control-sm shadow-none" name="marca" id="vehiculo_marca" required maxlength="100" placeholder="Ej. TOYOTA COROLLA">
                             </div>
-                            <div class="col-md-6">
+                            <div class="col-md-4">
                                 <label class="form-label mb-1 small fw-bold text-muted">Chasis</label>
                                 <input type="text" class="form-control form-control-sm shadow-none" name="chasis" id="vehiculo_chasis" maxlength="100">
                             </div>
                             <div class="col-md-3">
+                                <?php // Sirve para sugerir los km de mantenimiento de vehículos con el mismo motor. ?>
+                                <label class="form-label mb-1 small fw-bold text-muted">Motor</label>
+                                <input type="text" class="form-control form-control-sm shadow-none" name="motor" id="vehiculo_motor" maxlength="100" placeholder="Ej. 1.6 GASOLINA">
+                            </div>
+                            <div class="col-md-2">
                                 <label class="form-label mb-1 small fw-bold text-muted">Año</label>
                                 <input type="number" class="form-control form-control-sm shadow-none" name="anio" id="vehiculo_anio" min="1900" max="2100">
                             </div>
@@ -183,6 +192,51 @@ $urlBaseVehShared = BASE_URL . '/modulos/vehiculos';
                             <div class="form-text mt-2"><i class="bi bi-robot me-1"></i>Para enviarlos solos cada día, cree una automatización <b>Car-Wash → Recordatorio de próxima cita</b> en el módulo Automatizaciones (por correo o por WhatsApp). Cada cita se avisa una sola vez.</div>
                         </div>
                     </div>
+
+                    <!-- Mantenimiento: próximos cambios por kilometraje (aceite de motor, de caja…) -->
+                    <div class="tab-pane fade" id="veh-pane-mantenimiento" role="tabpanel">
+                        <div class="px-3 py-2">
+                            <div id="veh_mant_aviso"></div>
+                            <div class="d-flex flex-wrap align-items-center gap-2 mb-1">
+                                <div class="small text-muted"><i class="bi bi-speedometer me-1"></i>Último km conocido: <b id="veh_mant_km">—</b>
+                                    <span class="ms-2" id="veh_mant_est"></span></div>
+                                <div class="ms-auto d-flex gap-1">
+                                    <button type="button" class="btn btn-sm btn-outline-info py-0" id="veh_mant_aviso_correo" disabled title="Avisar al cliente por correo el próximo mantenimiento"><i class="bi bi-envelope"></i></button>
+                                    <button type="button" class="btn btn-sm btn-outline-success py-0" id="veh_mant_aviso_wa" disabled title="Avisar al cliente por WhatsApp el próximo mantenimiento"><i class="bi bi-whatsapp"></i></button>
+                                    <button type="button" class="btn btn-sm btn-outline-secondary py-0" id="veh_mant_servicios" title="Servicios que se controlan y su km por defecto"><i class="bi bi-gear me-1"></i>Servicios</button>
+                                    <button type="button" class="btn btn-sm btn-outline-primary py-0" id="veh_mant_registrar" disabled><i class="bi bi-plus-lg me-1"></i>Registrar cambio</button>
+                                </div>
+                            </div>
+                            <div class="border rounded-3 bg-white mb-3 veh-mant-lista" style="max-height:30vh; overflow:auto;">
+                                <table class="table table-sm table-hover mb-0 text-nowrap align-middle" style="font-size:.8rem;">
+                                    <thead class="table-light" style="position:sticky; top:0; z-index:1;">
+                                        <tr><th>Servicio</th><th style="width:150px;">Cada (km)</th><th>Último cambio</th><th>Próximo cambio</th><th>Estado</th></tr>
+                                    </thead>
+                                    <tbody id="veh_mant_body"><tr><td colspan="5" class="text-center text-muted py-3">Sin datos.</td></tr></tbody>
+                                </table>
+                            </div>
+                            <div class="fw-semibold small text-muted mb-1"><i class="bi bi-clock-history me-1"></i>Cambios realizados</div>
+                            <div class="border rounded-3 bg-white veh-mant-lista" style="max-height:25vh; overflow:auto;">
+                                <table class="table table-sm mb-0 text-nowrap" style="font-size:.8rem;">
+                                    <thead class="table-light" style="position:sticky; top:0; z-index:1;">
+                                        <tr><th>Fecha</th><th>Servicio</th><th class="text-end">Km</th><th class="text-end">Próximo</th><th>Registrado en</th><th>Usuario</th><th></th></tr>
+                                    </thead>
+                                    <tbody id="veh_mant_hist"><tr><td colspan="7" class="text-center text-muted py-3">Aún no hay cambios registrados.</td></tr></tbody>
+                                </table>
+                            </div>
+                            <div class="fw-semibold small text-muted mb-1 mt-3"><i class="bi bi-send-check me-1"></i>Avisos enviados al cliente</div>
+                            <div class="border rounded-3 bg-white veh-mant-lista" style="max-height:20vh; overflow:auto;">
+                                <table class="table table-sm mb-0 text-nowrap" style="font-size:.8rem;">
+                                    <thead class="table-light" style="position:sticky; top:0; z-index:1;">
+                                        <tr><th>Enviado</th><th>Servicio</th><th class="text-end">Próximo</th><th>Canal</th><th>Destinatario</th><th class="text-center">Estado</th><th>Origen</th><th>Usuario</th></tr>
+                                    </thead>
+                                    <tbody id="veh_mant_avisos"><tr><td colspan="8" class="text-center text-muted py-3">Aún no se han enviado avisos.</td></tr></tbody>
+                                </table>
+                            </div>
+                            <div class="form-text mt-2"><i class="bi bi-info-circle me-1"></i>El cambio se marca normalmente en la orden de Car-Wash (pestaña <b>Mantenimiento</b>). Aquí se registra uno hecho en otro lugar. El estado se calcula con el km <b>estimado de hoy</b>: el último km conocido más lo que el vehículo suele recorrer por día según sus órdenes.
+                                Para avisar solos a los clientes, cree una automatización <b>Car-Wash → Aviso de próximo mantenimiento</b>.</div>
+                        </div>
+                    </div>
                     </div><!-- /tab-content -->
                 </div>
 
@@ -205,3 +259,5 @@ $urlBaseVehShared = BASE_URL . '/modulos/vehiculos';
         </div>
     </div>
 </div>
+<?php // Catálogo de servicios de mantenimiento (fuera del modal del vehículo: se abre encima de él o de la orden).
+include_once __DIR__ . '/modal_mantenimiento_servicios.php'; ?>

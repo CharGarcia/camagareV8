@@ -39,6 +39,21 @@ class HandlerFactory
 
     private static array $catalogo = [];
 
+    /** Parámetros comunes de los avisos de próximo mantenimiento (Car-Wash). */
+    private static function parametrosAvisoMantenimiento(): array
+    {
+        return [
+            ['key' => 'reavisar_cada_dias', 'label' => 'Si sigue vencido, volver a avisar cada (días)', 'tipo' => 'number', 'default' => 7,
+             'ayuda' => 'Después del primer aviso, si el cambio sigue sin hacerse y el km estimado ya lo pasó, se recuerda cada estos días. 0 = solo el primer aviso.'],
+            ['key' => 'max_reavisos', 'label' => 'Máximo de recordatorios por vencido', 'tipo' => 'number', 'default' => 3,
+             'ayuda' => 'Cuántas veces como máximo se recuerda un mismo cambio vencido (sin contar el primer aviso).'],
+            ['key' => 'km_mes_defecto', 'label' => 'Km por mes de un vehículo con una sola lectura', 'tipo' => 'number', 'default' => \App\Services\modulos\MantenimientoAvisoService::KM_MES_DEFECTO,
+             'ayuda' => 'Para estimar el km de hoy se usa lo que recorre cada vehículo según sus órdenes. Si solo tiene un km registrado, se supone este recorrido mensual.'],
+            ['key' => 'servicios', 'label' => 'Servicios a avisar (vacío = todos)', 'tipo' => 'text', 'default' => '',
+             'ayuda' => 'Nombres separados por coma, como en la lista de Servicios (p. ej. «Aceite de motor, Aceite de caja»). Vacío = todos los servicios activos.'],
+        ];
+    }
+
     private static function getCatalogo(): array
     {
         if (!empty(self::$catalogo)) {
@@ -176,6 +191,39 @@ class HandlerFactory
                             ['key' => 'plantilla_whatsapp', 'label' => 'Plantilla de WhatsApp', 'tipo' => 'select_dinamico', 'fuente' => 'whatsapp_plantillas', 'default' => '',
                              'ayuda' => 'Plantilla aprobada por Meta. Variables del cuerpo, en orden: {{1}} cliente, {{2}} placa, {{3}} fecha de la cita, {{4}} empresa, {{5}} N.° de orden.'],
                         ],
+                    ],
+                    'aviso_mantenimiento_correo' => [
+                        'label'       => 'Aviso de próximo mantenimiento (Correo)',
+                        'descripcion' => 'Avisa por correo a los clientes cuyo vehículo está por llegar (o ya pasó) al km del próximo cambio de aceite de motor, de caja u otro servicio de mantenimiento. El km de hoy se estima con los km registrados en las órdenes. Un mensaje por vehículo con todos sus servicios por avisar; cada cambio se avisa una vez y, si sigue vencido, se recuerda según lo configurado. Puede programarse a diario. Destinatario: el correo del vehículo o, si no tiene, el del cliente de su última orden.',
+                        'handler'     => Handlers\MantenimientoAvisoHandler::class,
+                        'parametros'  => array_merge(self::parametrosAvisoMantenimiento(), [
+                            ['key' => 'asunto', 'label' => 'Asunto del correo', 'tipo' => 'text', 'default' => \App\Services\modulos\MantenimientoAvisoService::ASUNTO_DEFECTO,
+                             'ayuda' => 'Etiquetas: ' . \App\Services\modulos\MantenimientoAvisoService::ETIQUETAS . '.'],
+                            ['key' => 'cuerpo', 'label' => 'Mensaje', 'tipo' => 'textarea', 'default' => \App\Services\modulos\MantenimientoAvisoService::MENSAJE_DEFECTO,
+                             'ayuda' => 'Etiquetas: ' . \App\Services\modulos\MantenimientoAvisoService::ETIQUETAS . '. {servicios} es la lista de servicios por avisar con su km.'],
+                        ]),
+                    ],
+                    'aviso_mantenimiento_whatsapp' => [
+                        'label'       => 'Aviso de próximo mantenimiento (WhatsApp)',
+                        'descripcion' => 'Avisa por WhatsApp, con una plantilla aprobada por Meta, a los clientes cuyo vehículo está por llegar (o ya pasó) al km del próximo cambio de aceite u otro servicio de mantenimiento. Un mensaje por vehículo; cada cambio se avisa una vez y, si sigue vencido, se recuerda según lo configurado. Teléfono: el del vehículo o, si no tiene, el del cliente de su última orden.',
+                        'handler'     => Handlers\MantenimientoAvisoHandler::class,
+                        'parametros'  => array_merge(self::parametrosAvisoMantenimiento(), [
+                            ['key' => 'plantilla_whatsapp', 'label' => 'Plantilla de WhatsApp', 'tipo' => 'select_dinamico', 'fuente' => 'whatsapp_plantillas', 'default' => '',
+                             'ayuda' => 'Plantilla aprobada por Meta. Variables del cuerpo, en orden: {{1}} cliente, {{2}} placa, {{3}} servicios con su km (p. ej. «Aceite de motor a los 85.000 km»), {{4}} empresa, {{5}} km estimado de hoy. El cuerpo no puede terminar en una variable.'],
+                        ]),
+                    ],
+                    'aviso_mantenimiento_correo_whatsapp' => [
+                        'label'       => 'Aviso de próximo mantenimiento (Correo y WhatsApp)',
+                        'descripcion' => 'Envía el aviso de próximo mantenimiento por los DOS canales en la misma ejecución: correo (si hay correo) y WhatsApp con plantilla aprobada por Meta (si hay teléfono). Cada canal lleva su propio control de lo ya avisado.',
+                        'handler'     => Handlers\MantenimientoAvisoHandler::class,
+                        'parametros'  => array_merge(self::parametrosAvisoMantenimiento(), [
+                            ['key' => 'asunto', 'label' => 'Asunto del correo', 'tipo' => 'text', 'default' => \App\Services\modulos\MantenimientoAvisoService::ASUNTO_DEFECTO,
+                             'ayuda' => 'Etiquetas: ' . \App\Services\modulos\MantenimientoAvisoService::ETIQUETAS . '.'],
+                            ['key' => 'cuerpo', 'label' => 'Mensaje del correo', 'tipo' => 'textarea', 'default' => \App\Services\modulos\MantenimientoAvisoService::MENSAJE_DEFECTO,
+                             'ayuda' => 'Etiquetas: ' . \App\Services\modulos\MantenimientoAvisoService::ETIQUETAS . '.'],
+                            ['key' => 'plantilla_whatsapp', 'label' => 'Plantilla de WhatsApp', 'tipo' => 'select_dinamico', 'fuente' => 'whatsapp_plantillas', 'default' => '',
+                             'ayuda' => 'Variables del cuerpo, en orden: {{1}} cliente, {{2}} placa, {{3}} servicios con su km, {{4}} empresa, {{5}} km estimado de hoy.'],
+                        ]),
                     ],
                 ],
             ],

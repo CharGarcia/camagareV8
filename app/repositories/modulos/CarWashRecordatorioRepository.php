@@ -233,6 +233,8 @@ class CarWashRecordatorioRepository extends BaseRepository
           " . ($manual ? 'LEFT JOIN vehiculos_recordatorios vr ON vr.id = r.id_recordatorio' : '') . "
           LEFT JOIN usuarios u ON u.id = r.created_by
               WHERE r.id_empresa = :e AND r.id_vehiculo = :v AND r.eliminado = false
+              " . ($this->columnaExiste('carwash_recordatorios', 'id_vehiculo_mantenimiento')
+                    ? 'AND r.id_vehiculo_mantenimiento IS NULL' : '') /* los avisos de mantenimiento van en su pestaña */ . "
               ORDER BY r.created_at DESC, r.id DESC
               LIMIT $limite"
         );

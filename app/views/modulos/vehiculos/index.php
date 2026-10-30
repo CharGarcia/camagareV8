@@ -83,6 +83,13 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                 ]],
                 ['tab' => $tV, 'key' => 'ultima_visita', 'label' => 'Última visita',  'icon' => 'bi-calendar-check', 'type' => 'date_range',   'grupo' => 'Car-Wash', 'col' => 4],
                 ['tab' => $tV, 'key' => 'proxima_cita',  'label' => 'Próxima cita',   'icon' => 'bi-calendar-plus',  'type' => 'date_range',   'grupo' => 'Car-Wash', 'col' => 4],
+                // El más urgente de sus mantenimientos (aceite de motor, de caja…) con el km estimado de hoy.
+                ['tab' => $tV, 'key' => 'mantenimiento', 'label' => 'Mantenimiento',  'icon' => 'bi-speedometer2',   'type' => 'select',       'grupo' => 'Car-Wash', 'col' => 4, 'options' => [
+                    ['v' => 'vencido', 'l' => 'Vencido'],
+                    ['v' => 'proximo', 'l' => 'Próximo'],
+                    ['v' => 'vencido,proximo', 'l' => 'Vencido o próximo'],
+                    ['v' => 'al_dia',  'l' => 'Al día'],
+                ]],
             ];
             $columnasTabla = [
                 'placa' => 'Placa',

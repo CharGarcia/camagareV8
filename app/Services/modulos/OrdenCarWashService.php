@@ -50,6 +50,13 @@ class OrdenCarWashService
         return $this->inventarioService;
     }
 
+    private ?VehiculoMantenimientoService $mantenimientoService = null;
+
+    private function mantenimientoService(): VehiculoMantenimientoService
+    {
+        return $this->mantenimientoService ??= new VehiculoMantenimientoService(null, $this->logService);
+    }
+
     /**
      * Líneas de la orden en el formato que espera el motor de inventario.
      * Solo productos del catálogo (los servicios libres no mueven stock);
@@ -258,6 +265,7 @@ class OrdenCarWashService
         $cab['puede_facturar'] = $this->puedeFacturar($cab);
         $cab['forma_pago_sri'] = $this->resolverFormaPagoSri($cab);
         $cab['editable'] = $this->esEditable($cab);
+        $cab['mantenimientos'] = $this->mantenimientosOrden($cab); // PDF y correo
         return $cab;
     }
 
@@ -471,6 +479,14 @@ class OrdenCarWashService
                 $idEstab, (int) ($data['id_bodega'] ?? 0), $numeroOrden, false
             );
 
+            // Mantenimientos (aceite de motor, de caja…) marcados en la pestaña Mantenimiento.
+            if (isset($data['mantenimientos']) && is_array($data['mantenimientos'])) {
+                $this->mantenimientoService()->aplicarDesdeOrden(
+                    $idOrden, $idEmpresa, $idUsuario, (int) $data['id_vehiculo'], $cabecera['kilometraje'],
+                    (string) $data['fecha_ingreso'], $data['mantenimientos'], !empty($data['puede_configurar_mant'])
+                );
+            }
+
             $this->logService->registrar($idUsuario, $idEmpresa, 'CREAR_ORDEN_CARWASH', 'carwash_ordenes', $idOrden, null, $cabecera);
 
             $db->commit();
@@ -559,6 +575,17 @@ class OrdenCarWashService
                 (string) ($cab['numero_orden'] ?? ''), true
             );
 
+            // Mantenimientos: los de la pestaña; si no llegaron pero cambió el vehículo, los
+            // cambios que la orden había registrado en el vehículo anterior se dan de baja.
+            $km = ($data['kilometraje'] ?? '') === '' ? null : (int) $data['kilometraje'];
+            $mant = isset($data['mantenimientos']) && is_array($data['mantenimientos']) ? $data['mantenimientos'] : null;
+            if ($mant !== null || (int) $data['id_vehiculo'] !== (int) ($cab['id_vehiculo'] ?? 0)) {
+                $this->mantenimientoService()->aplicarDesdeOrden(
+                    $id, $idEmpresa, $idUsuario, (int) $data['id_vehiculo'], $km,
+                    (string) $data['fecha_ingreso'], $mant ?? [], !empty($data['puede_configurar_mant'])
+                );
+            }
+
             $this->logService->registrar($idUsuario, $idEmpresa, 'ACTUALIZAR_ORDEN_CARWASH', 'carwash_ordenes', $id, $cab, $data);
 
             $db->commit();
@@ -607,6 +634,42 @@ class OrdenCarWashService
         }
     }
 
+    // ─── Mantenimientos de una orden ya facturada ─────────────────────────────
+
+    /**
+     * Guarda solo la pestaña Mantenimiento. Como el Reporte de salida, se puede completar
+     * aunque la orden ya esté facturada (no cambia el documento emitido); no en una anulada.
+     * Usa el vehículo, el km y la fecha guardados en la orden.
+     */
+    public function guardarMantenimientos(int $id, int $idEmpresa, int $idUsuario, array $items, bool $puedeConfigurar): void
+    {
+        if (!$this->mantenimientoService()->disponible()) {
+            throw new Exception('Falta aplicar el SQL de mantenimientos (database/migrations/20261030_vehiculos_mantenimientos.sql).');
+        }
+        $db = Database::getConnection();
+        try {
+            $db->beginTransaction();
+            $estado = $this->repository->bloquearEstado($id, $idEmpresa);
+            if ($estado === null) throw new Exception('Orden no encontrada.');
+            if ($estado === 'anulado') throw new Exception('No se puede modificar una orden anulada.');
+            $cab = $this->repository->find($id, $idEmpresa);
+            $km  = ($cab['kilometraje'] ?? null) === null ? null : (int) $cab['kilometraje'];
+            $this->mantenimientoService()->aplicarDesdeOrden(
+                $id, $idEmpresa, $idUsuario, (int) $cab['id_vehiculo'], $km, (string) $cab['fecha_ingreso'], $items, $puedeConfigurar
+            );
+            $db->commit();
+        } catch (\Throwable $e) {
+            if ($db->inTransaction()) $db->rollBack();
+            throw $e;
+        }
+    }
+
+    /** Mantenimientos de la orden para el PDF y el correo (lo hecho en ella y los próximos cambios). */
+    public function mantenimientosOrden(array $orden): array
+    {
+        return $this->mantenimientoService()->resumenOrden((int) ($orden['id'] ?? 0), (int) ($orden['id_vehiculo'] ?? 0), (int) ($orden['id_empresa'] ?? 0));
+    }
+
     // ─── Cambio de estado ─────────────────────────────────────────────────────
 
     public function cambiarEstado(int $id, int $idEmpresa, int $idUsuario, string $nuevoEstado): void
@@ -642,6 +705,13 @@ class OrdenCarWashService
             // descontar. Antes solo cambiaba el estado y la orden anulada seguía consumiendo
             // stock hasta que alguien la eliminara. Reactivar es idempotente: una orden anulada
             // antes de este cambio todavía tiene su salida viva y no se descuenta otra vez.
+            // Los mantenimientos que registró la orden salen al anularla y vuelven si se reactiva.
+            if ($nuevoEstado === 'anulado') {
+                $this->mantenimientoService()->darDeBajaPorOrden($id, $idEmpresa, $idUsuario, true);
+            } elseif ($actual === 'anulado') {
+                $this->mantenimientoService()->restaurarPorOrden($id, $idEmpresa, $idUsuario);
+            }
+
             if ($nuevoEstado === 'anulado') {
                 $this->revertirInventario($id, $idEmpresa, $idUsuario);
             } elseif ($actual === 'anulado' && !$this->repository->tieneMovimientosInventario($id, $idEmpresa)) {
@@ -678,6 +748,8 @@ class OrdenCarWashService
             $db->beginTransaction();
             // Devolver al stock lo que la orden había consumido.
             $this->revertirInventario($id, $idEmpresa, $idUsuario);
+            // Los mantenimientos que registró la orden se quitan (vuelve el próximo cambio anterior).
+            $this->mantenimientoService()->darDeBajaPorOrden($id, $idEmpresa, $idUsuario, false);
             $this->repository->eliminar($id, $idEmpresa, $idUsuario);
             $this->logService->registrar($idUsuario, $idEmpresa, 'ELIMINAR_ORDEN_CARWASH', 'carwash_ordenes', $id, $cab, null);
             $db->commit();
@@ -829,6 +901,15 @@ class OrdenCarWashService
         }
         if (!empty($orden['numero_orden']) && !in_array('orden n.', $yaTiene, true)) {
             $infoAdicional[] = ['nombre' => 'Orden N.', 'valor' => (string) $orden['numero_orden']];
+        }
+        // Próximo cambio de cada mantenimiento hecho en esta orden (p. ej. "Próximo cambio
+        // Aceite de motor: 85.000 km"), para que el cliente lo vea en su factura/recibo.
+        // Se deja sitio para el correo del cliente: el SRI acepta hasta 15 campos adicionales.
+        foreach ($this->mantenimientosOrden($orden) as $m) {
+            if (!$m['realizado'] || $m['proximo_km'] === null || count($infoAdicional) >= 14) continue;
+            $nom = mb_substr('Próximo cambio ' . $m['servicio'], 0, 300);
+            if (in_array(mb_strtolower($nom), $yaTiene, true)) continue;
+            $infoAdicional[] = ['nombre' => $nom, 'valor' => VehiculoMantenimientoService::km($m['proximo_km'])];
         }
         // "Correo del cliente": UNA sola fila y con el correo VIGENTE del cliente, igual en
         // factura y recibo. La factura ya lo hacía (FacturaVentaService actualiza la fila),

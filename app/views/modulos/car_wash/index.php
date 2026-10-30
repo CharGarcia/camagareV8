@@ -286,6 +286,8 @@ echo \App\Helpers\PreferenciasHelper::getJavascriptVariables($rutaModulo); ?>
 <script src="<?= BASE_URL ?>/js/modulos/vehiculos_modal.js?v=<?= asset_ver('/js/modulos/vehiculos_modal.js') ?>"></script>
 <script src="<?= BASE_URL ?>/js/modulos/clientes_modal.js?v=<?= asset_ver('/js/modulos/clientes_modal.js') ?>"></script>
 <script src="<?= BASE_URL ?>/js/modulos/productos_modal.js?v=<?= asset_ver('/js/modulos/productos_modal.js') ?>"></script>
+<!-- Pestaña Mantenimiento de la orden (aceite de motor, de caja…); usa MANT_UI de mantenimiento_servicios.js -->
+<script src="<?= BASE_URL ?>/js/modulos/car_wash_mantenimiento.js?v=<?= asset_ver('/js/modulos/car_wash_mantenimiento.js') ?>"></script>
 
 <!-- Dropdown global de búsqueda de productos de la grilla (igual que factura) -->
 <div id="cw-dropdown-productos-global" class="list-group shadow position-fixed d-none" style="z-index: 9999; min-width: 400px; max-height: 250px; overflow-y: auto; background-color: white;"></div>

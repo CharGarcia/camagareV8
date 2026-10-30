@@ -47,6 +47,7 @@
                 <?php
                 $pestanasCW = [
                     'cw-pane-general'     => 'General',
+                    'cw-pane-mantenimiento' => 'Mantenimiento',
                     'cw-pane-historial'   => 'Historial',
                     'cw-pane-facturacion' => 'Facturación',
                 ];
@@ -55,6 +56,11 @@
                     <li class="nav-item" role="presentation">
                         <a class="nav-link active py-1 small" id="cw-tab-general" data-bs-toggle="tab" href="#cw-pane-general" data-bs-target="#cw-pane-general" role="tab">
                             <i class="bi bi-card-list me-1"></i>General
+                        </a>
+                    </li>
+                    <li class="nav-item" role="presentation">
+                        <a class="nav-link py-1 small" id="cw-tab-mantenimiento" data-bs-toggle="tab" href="#cw-pane-mantenimiento" data-bs-target="#cw-pane-mantenimiento" role="tab">
+                            <i class="bi bi-speedometer2 me-1"></i>Mantenimiento <span class="badge bg-danger bg-opacity-10 text-danger ms-1 d-none" id="cw-badge-mant"></span>
                         </a>
                     </li>
                     <li class="nav-item" role="presentation">
@@ -162,6 +168,8 @@
                         </div>
                         <input type="hidden" id="cw_numero_orden">
                         <div class="mt-1" id="cw_info_cliente" style="font-size:.78rem"></div>
+                        <!-- Próximos mantenimientos del vehículo (aceite de motor, de caja…): detalle en la pestaña Mantenimiento -->
+                        <div class="mt-1 d-flex flex-wrap gap-1 align-items-center" id="cw_mant_franja" style="font-size:.78rem"></div>
                     </div>
 
                     <!-- Orden facturada / anulada: solo lectura (lo valida también el servidor). -->
@@ -285,6 +293,43 @@
                     </div>
                 </form>
                 </div><!-- /cw-pane-general -->
+
+                <!-- Mantenimiento: cambios de aceite de motor, de caja… hechos en esta orden y próximo cambio por km -->
+                <div class="tab-pane fade" id="cw-pane-mantenimiento" role="tabpanel">
+                    <div id="cw_mant_aviso"></div>
+                    <div class="d-flex flex-wrap align-items-center gap-2 mb-2">
+                        <div class="small text-muted">
+                            <i class="bi bi-speedometer me-1"></i>Km de esta orden: <b id="cw_mant_km">—</b>
+                            <span class="ms-3">Último km conocido del vehículo: <b id="cw_mant_km_ant">—</b></span>
+                        </div>
+                        <div class="ms-auto d-flex gap-1">
+                            <button type="button" class="btn btn-outline-secondary btn-sm d-none" id="cw_mant_btn_servicios" title="Servicios que se controlan y su km por defecto"><i class="bi bi-gear me-1"></i>Servicios</button>
+                            <button type="button" class="btn btn-outline-primary btn-sm d-none" id="cw_mant_btn_guardar" title="Guardar los mantenimientos (la orden ya está facturada)"><i class="bi bi-save me-1"></i>Guardar mantenimientos</button>
+                        </div>
+                    </div>
+                    <div class="border rounded-3 bg-white overflow-auto" style="max-height:55vh;">
+                        <table class="table table-sm mb-0 text-nowrap align-middle" style="font-size:.8rem;">
+                            <thead class="table-light" style="position:sticky; top:0; z-index:1;">
+                                <tr>
+                                    <th class="ps-2">Servicio</th>
+                                    <th>Último cambio</th>
+                                    <th style="width:150px;">Cada (km)</th>
+                                    <th class="text-center" style="width:95px;">¿Se cambió?</th>
+                                    <th style="width:130px;">Próximo cambio (km)</th>
+                                    <th>Estado</th>
+                                </tr>
+                            </thead>
+                            <tbody id="cw_mant_body">
+                                <tr><td colspan="6" class="text-center text-muted py-4">Elija el vehículo de la orden.</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+                    <div class="form-text mt-2">
+                        <i class="bi bi-info-circle me-1"></i>Marque <b>¿Se cambió?</b> en lo que se hizo en esta orden: se toma el km de la orden y el próximo
+                        cambio se calcula con <b>Cada (km)</b> (puede corregirlo). Cambiar <b>Cada (km)</b> lo deja como el intervalo de este vehículo.
+                        Lo marcado sale en el PDF de la orden, en el correo y en la factura o recibo.
+                    </div>
+                </div>
 
                 <!-- Historial: todas las órdenes de un vehículo o de un cliente -->
                 <div class="tab-pane fade" id="cw-pane-historial" role="tabpanel">
@@ -594,6 +639,7 @@
         document.getElementById('cw_info_cliente').innerHTML = '';
         cwSetCondiciones('');
         cwSetSalida('');
+        window.CW_MANT?.reset();
         CW_CUR = { id: 0, id_documento: 0, tipo_documento: '', estado: '', id_vehiculo: 0, id_cliente: 0 };
         cwToggleDocBtns(false);
         cwRecalcular();
@@ -622,6 +668,8 @@
         const qs = cwQuillSalida(); if (qs) qs.enable(window.CW_SALIDA_OK && (!!editable || salidaAbierta));
         document.getElementById('cw_btn_guardar_salida').classList.toggle('d-none', !(window.CW_SALIDA_OK && salidaAbierta));
         document.getElementById('cw_salida_sin_sql').classList.toggle('d-none', !!window.CW_SALIDA_OK);
+        // Mantenimiento: con la orden; en una facturada se guarda aparte (como el Reporte de salida).
+        window.CW_MANT?.setEditable(!!editable, salidaAbierta);
         // Grilla e info adicional: una orden facturada (documento vigente) o anulada es solo de
         // consulta. Solo se deshabilita: al abrir otra orden las filas se vuelven a crear, así
         // no se re-habilitan campos que la configuración deja fijos (p. ej. el IVA).
@@ -709,6 +757,7 @@
             document.getElementById('cw_nivel_combustible').value = o.nivel_combustible || '';
             document.getElementById('cw_id_bodega').value = o.id_bodega || '';
             document.getElementById('cw_proxima_cita').value = o.proxima_cita ? String(o.proxima_cita).slice(0, 10) : '';
+            if (o.id_vehiculo) window.CW_MANT?.cargar(o.id_vehiculo, o.id);
 
             CW_DET.pausarAjuste(true);   // cientos de líneas: medir las descripciones una sola vez al final
             (o.detalles || []).forEach(d => cwCargarLineaGuardada(d));
@@ -852,6 +901,7 @@
         document.getElementById('cw_veh_dropdown').classList.add('d-none');
         cwSetVehiculoDatos(v.placa, v.marca, v.modelo);
         cwEnlacesEditar();
+        window.CW_MANT?.cargar(v.id, document.getElementById('cw_id').value);
     }
 
     // Enlaces «Editar» junto a Cliente / Vehículo: solo con uno elegido y con permiso de
@@ -1704,6 +1754,17 @@
             else if (nom || val) info_adicional.push({ nombre: 'Observación', valor: val || nom });
         });
 
+        // 4º Mantenimientos: un cambio marcado necesita el km de la orden.
+        if (window.CW_MANT) {
+            const errMant = window.CW_MANT.validar();
+            if (errMant) {
+                await Swal.fire('Atención', errMant, 'warning');
+                window.CW_MANT.mostrar();
+                return;
+            }
+            if (!(await window.CW_MANT.confirmarKm())) return;
+        }
+
         const vehInp = document.getElementById('cw_vehiculo_busqueda');
         const serie = document.getElementById('cw_serie').value;
         const payload = {
@@ -1726,6 +1787,8 @@
             detalles, novedades: [], info_adicional,
             condiciones_html: cwCondicionesHtml(),
             reporte_salida_html: cwSalidaHtml(),
+            // Solo si la pestaña tiene cargado el vehículo de la orden (si no, no se envía y no se toca nada).
+            mantenimientos: window.CW_MANT ? window.CW_MANT.items(idVeh) : undefined,
         };
 
         const keyBorrador = cwBorrKey();

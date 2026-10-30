@@ -19,6 +19,9 @@ use Exception;
  */
 class CarWashController extends BaseModuloController
 {
+    // Pestaña Mantenimiento de la orden (aceite de motor, de caja…) con el permiso de Car-Wash.
+    use \App\Traits\MantenimientoVehiculoTrait;
+
     private OrdenCarWashService $service;
     private OrdenCarWashRepository $repository;
     private const RUTA_MODULO = 'modulos/car-wash';
@@ -254,6 +257,8 @@ class CarWashController extends BaseModuloController
             }
             $input['id_empresa'] = (int) $_SESSION['id_empresa'];
             $input['id_usuario'] = (int) $_SESSION['id_usuario'];
+            // Cambiar el intervalo de un mantenimiento requiere permiso de modificar (no viene del navegador).
+            $input['puede_configurar_mant'] = $this->mantPuedeConfigurar();
 
             if (!empty($input['id'])) {
                 $this->requireActualizar();
@@ -462,6 +467,26 @@ class CarWashController extends BaseModuloController
         exit;
     }
 
+    /** Guarda solo la pestaña Mantenimiento (también en una orden ya facturada; no en una anulada). */
+    public function guardarMantenimientosAjax(): void
+    {
+        $this->requireActualizar();
+        header('Content-Type: application/json');
+
+        try {
+            $input = json_decode(file_get_contents('php://input'), true) ?: [];
+            $id = (int) ($input['id'] ?? 0);
+            if ($id <= 0) throw new Exception("ID no válido.");
+            $this->service->guardarMantenimientos($id, (int) $_SESSION['id_empresa'], (int) $_SESSION['id_usuario'],
+                is_array($input['mantenimientos'] ?? null) ? $input['mantenimientos'] : [], $this->mantPuedeConfigurar());
+            echo json_encode(['ok' => true, 'msg' => 'Mantenimientos guardados.']);
+        } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
+            echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
+        }
+        exit;
+    }
+
     /**
      * Envía por correo el PDF de la orden o, con tipo=ingreso / tipo=salida, el Acta de
      * ingreso o el Reporte de salida del vehículo (mismo patrón que consignaciones de venta).
@@ -517,9 +542,30 @@ class CarWashController extends BaseModuloController
             } else {
                 $parrafo = 'Adjunto encontrará el comprobante de la orden de servicio <strong>' . htmlspecialchars($numero) . '</strong>.';
             }
+            // Próximos mantenimientos (aceite de motor, de caja…): en el correo de la orden y del
+            // reporte de salida, para que el cliente los vea sin abrir el adjunto.
+            $mantHtml = '';
+            if (!$esIngreso && !empty($orden['mantenimientos'])) {
+                $filas = '';
+                foreach ($orden['mantenimientos'] as $m) {
+                    if ($m['proximo_km'] === null) continue;
+                    $filas .= '<tr><td style="padding:4px 10px;border-bottom:1px solid #eee;">' . htmlspecialchars($m['servicio'])
+                        . ($m['realizado'] ? ' <span style="color:#198754;">(cambiado hoy)</span>' : '') . '</td>'
+                        . '<td style="padding:4px 10px;border-bottom:1px solid #eee;text-align:right;"><strong>'
+                        . htmlspecialchars(\App\Services\modulos\VehiculoMantenimientoService::km($m['proximo_km'])) . '</strong></td></tr>';
+                }
+                if ($filas !== '') {
+                    $mantHtml = "<p style='margin-bottom:4px;'><strong>Próximos mantenimientos de su vehículo:</strong></p>"
+                        . "<table style='border-collapse:collapse;font-size:14px;'>"
+                        . "<tr><th style='padding:4px 10px;text-align:left;border-bottom:2px solid #ddd;'>Servicio</th>"
+                        . "<th style='padding:4px 10px;text-align:right;border-bottom:2px solid #ddd;'>Próximo cambio</th></tr>"
+                        . $filas . '</table>';
+                }
+            }
             $cuerpo = "<div style='font-family:Arial,sans-serif;line-height:1.5;'>"
                 . "<p>Estimad@ " . htmlspecialchars($clienteNombre) . ",</p>"
                 . "<p>" . $parrafo . "</p>"
+                . $mantHtml
                 . "<p>Saludos cordiales,<br>" . htmlspecialchars($empresaNombre) . "</p>"
                 . "</div>";
 

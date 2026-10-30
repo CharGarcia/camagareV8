@@ -11,6 +11,9 @@ use App\Services\modulos\VehiculoService;
 
 class VehiculosController extends BaseModuloController
 {
+    // Pestaña Mantenimiento de la ficha (aceite de motor, de caja…).
+    use \App\Traits\MantenimientoVehiculoTrait;
+
     private const RUTA_MODULO = 'modulos/vehiculos';
     private VehiculoService $service;
 
@@ -420,6 +423,7 @@ class VehiculosController extends BaseModuloController
             'marca'       => trim($_POST['marca'] ?? ''),
             'placa'       => trim($_POST['placa'] ?? ''),
             'chasis'      => trim($_POST['chasis'] ?? ''),
+            'motor'       => trim($_POST['motor'] ?? ''),
             'anio'        => (int) ($_POST['anio'] ?? 0),
             'propietario' => trim($_POST['propietario'] ?? ''),
             'estado'      => trim($_POST['estado'] ?? 'activo'),

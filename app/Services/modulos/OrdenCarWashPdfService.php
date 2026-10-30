@@ -59,6 +59,7 @@ class OrdenCarWashPdfService
         $y = $this->dibujarEncabezado($empresa, $orden);
         $y = $this->dibujarDatosOrden($orden, $y + 3);
         $y = $this->dibujarTablaDetalle($orden['detalles'] ?? [], $y + 2);
+        $y = $this->bloqueMantenimientos($orden, $y + 2);
         // Pie + firmas: si no caben enteros en esta hoja, pasan juntos a la
         // siguiente (las firmas no quedan solas en una hoja). Se mide dibujándolos
         // de prueba (PdfBloque::cabe) en vez de con un umbral fijo de Y.
@@ -585,6 +586,7 @@ class OrdenCarWashPdfService
         $y = $this->ingresoDatosCliente($orden, $y + 2);
         $y = $this->salidaDocumento($orden, $y + 2);
         $y = $this->salidaServicios($orden, $y + 2);
+        $y = $this->bloqueMantenimientos($orden, $y + 2);
         $y = $this->bloqueTextoFormato((string) ($orden['reporte_salida_html'] ?? ''),
             'TRABAJO REALIZADO, RECOMENDACIONES Y PRÓXIMA CITA', 'No se registraron observaciones de salida.', $y + 2);
         $y = $this->ingresoProximaCita($orden, $y + 2);
@@ -648,6 +650,40 @@ class OrdenCarWashPdfService
             $pdf->MultiCell($cantW, $h, number_format((float) ($d['cantidad'] ?? 0), $this->decCantidad), 1, 'C', false, 0, '', '', true, 0, false, true, $h, 'M');
             $pdf->MultiCell($descW, $h, $desc, 1, 'L', false, 1, '', '', true, 0, false, true, $h, 'M');
             $y += $h;
+        }
+        return $y;
+    }
+
+    /**
+     * Próximos mantenimientos por kilometraje (aceite de motor, de caja…): lo cambiado en esta
+     * orden y el próximo cambio vigente de los demás servicios del vehículo.
+     */
+    private function bloqueMantenimientos(array $o, float $y): float
+    {
+        $filas = $o['mantenimientos'] ?? [];
+        if (!$filas) return $y;
+
+        $pdf = $this->pdf;
+        $y = $this->tituloSeccion('PRÓXIMOS MANTENIMIENTOS', $y);
+        $w = [$this->contentW * 0.40, $this->contentW * 0.20, $this->contentW * 0.20, $this->contentW * 0.20];
+        $pdf->SetFont('helvetica', 'B', self::FUENTE_ENCABEZADO_TABLA);
+        $pdf->SetXY($this->marginL, $y);
+        $pdf->Cell($w[0], 5, 'Servicio', 1, 0, 'L');
+        $pdf->Cell($w[1], 5, 'En esta orden', 1, 0, 'C');
+        $pdf->Cell($w[2], 5, 'Km del cambio', 1, 0, 'R');
+        $pdf->Cell($w[3], 5, 'Próximo cambio', 1, 1, 'R');
+        $y += 5;
+        $limiteY = $pdf->getPageHeight() - $pdf->getBreakMargin();
+        foreach ($filas as $m) {
+            if ($y + self::ALTO_MIN_FILA > $limiteY) { $pdf->AddPage(); $y = $pdf->GetY(); }
+            $pdf->SetXY($this->marginL, $y);
+            $pdf->SetFont('helvetica', '', self::FUENTE_CUERPO);
+            $pdf->Cell($w[0], self::ALTO_MIN_FILA, $this->ajustarTexto((string) $m['servicio'], $w[0] - 2), 1, 0, 'L');
+            $pdf->Cell($w[1], self::ALTO_MIN_FILA, !empty($m['realizado']) ? 'Cambiado' : '—', 1, 0, 'C');
+            $pdf->Cell($w[2], self::ALTO_MIN_FILA, VehiculoMantenimientoService::km($m['km_cambio'] ?? null), 1, 0, 'R');
+            $pdf->SetFont('helvetica', 'B', self::FUENTE_CUERPO);
+            $pdf->Cell($w[3], self::ALTO_MIN_FILA, VehiculoMantenimientoService::km($m['proximo_km'] ?? null), 1, 1, 'R');
+            $y += self::ALTO_MIN_FILA;
         }
         return $y;
     }

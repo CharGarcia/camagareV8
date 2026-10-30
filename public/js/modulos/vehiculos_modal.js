@@ -51,6 +51,7 @@
         document.getElementById('vehiculo_marca').value = data.marca || '';
         document.getElementById('vehiculo_placa').value = data.placa || '';
         document.getElementById('vehiculo_chasis').value = data.chasis || '';
+        const inpMotor = document.getElementById('vehiculo_motor'); if (inpMotor) inpMotor.value = data.motor || '';
         document.getElementById('vehiculo_anio').value = data.anio > 0 ? data.anio : '';
         document.getElementById('vehiculo_propietario').value = data.propietario || '';
         document.getElementById('vehiculo_estado').value = data.estado || 'activo';
@@ -76,12 +77,19 @@
     const vehFmt = v => (parseFloat(v) || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
     const vehFecha = f => { const m = String(f || '').match(/^(\d{4})-(\d{2})-(\d{2})(?:[ T](\d{2}):(\d{2})(?::(\d{2}))?)?/); return m ? `${m[3]}-${m[2]}-${m[1]}` + (m[4] ? ` ${m[4]}:${m[5]}:${m[6] || '00'}` : '') : ''; };
     let vehIdActual = 0;
-    const vehCargado = { trx: false, rec: false };
+    const vehCargado = { trx: false, rec: false, mant: false };
 
     // Reinicia las pestañas: siempre se abre en General; las otras solo con un vehículo guardado.
     function vehPrepararPestanas(id) {
         vehIdActual = parseInt(id, 10) || 0;
-        vehCargado.trx = false; vehCargado.rec = false;
+        vehCargado.trx = false; vehCargado.rec = false; vehCargado.mant = false;
+        const bm = document.getElementById('veh-badge-mant'); if (bm) bm.classList.add('d-none');
+        const mb = document.getElementById('veh_mant_body'); if (mb) mb.innerHTML = '<tr><td colspan="5" class="text-center text-muted py-3">Sin datos.</td></tr>';
+        const mh = document.getElementById('veh_mant_hist'); if (mh) mh.innerHTML = '<tr><td colspan="7" class="text-center text-muted py-3">Aún no hay cambios registrados.</td></tr>';
+        const mr = document.getElementById('veh_mant_registrar'); if (mr) mr.disabled = true;
+        const ma = document.getElementById('veh_mant_avisos'); if (ma) ma.innerHTML = '<tr><td colspan="8" class="text-center text-muted py-3">Aún no se han enviado avisos.</td></tr>';
+        const me = document.getElementById('veh_mant_est'); if (me) me.innerHTML = '';
+        ['veh_mant_aviso_correo', 'veh_mant_aviso_wa'].forEach(id => { const b = document.getElementById(id); if (b) b.disabled = true; });
         document.querySelectorAll('#vehTabs .veh-tab-requiere-id').forEach(a => {
             a.classList.toggle('disabled', !vehIdActual);
             a.title = vehIdActual ? '' : 'Guarde el vehículo para ver su información';
@@ -181,6 +189,254 @@
 
     document.getElementById('veh-tab-transacciones')?.addEventListener('shown.bs.tab', () => { if (!vehCargado.trx) vehCargarTransacciones(); });
     document.getElementById('veh-tab-recordatorios')?.addEventListener('shown.bs.tab', () => { if (!vehCargado.rec) vehCargarRecordatorios(); });
+    document.getElementById('veh-tab-mantenimiento')?.addEventListener('shown.bs.tab', () => { if (!vehCargado.mant) vehCargarMantenimiento(); });
+
+    // ─── Pestaña Mantenimiento (próximos cambios por kilometraje) ─────────────
+    let vehMant = null;      // última respuesta de mantEstadoAjax
+    let vehMantOcupado = false;
+    const vehModalEl = () => document.getElementById('modalVehiculo');
+
+    async function vehCargarMantenimiento() {
+        const body = document.getElementById('veh_mant_body');
+        const hist = document.getElementById('veh_mant_hist');
+        if (!vehIdActual || !body || !window.MANT_UI) return;
+        const U = window.MANT_UI;
+        body.innerHTML = '<tr><td colspan="5" class="text-center text-muted py-3"><span class="spinner-border spinner-border-sm me-1"></span>Cargando...</td></tr>';
+        try {
+            const json = await (await fetch(`${urlBaseVeh}/mantEstadoAjax?id_vehiculo=${vehIdActual}&historial=1`)).json();
+            if (!json.ok) throw new Error(json.error || 'No se pudo cargar.');
+            vehCargado.mant = true;
+            vehMant = json.data;
+            const d = vehMant;
+            document.getElementById('veh_mant_aviso').innerHTML = d.disponible ? ''
+                : '<div class="alert alert-warning py-1 small mb-2">Falta aplicar el SQL <code>database/migrations/20261030_vehiculos_mantenimientos.sql</code>.</div>';
+            document.getElementById('veh_mant_km').textContent = d.km_actual != null ? U.km(d.km_actual) : '—';
+            const es = d.estimacion;
+            document.getElementById('veh_mant_est').innerHTML = es
+                ? `· Estimado hoy: <b>${U.esc(U.km(es.km_est))}</b> <span title="${es.dia_defecto ? 'Con una sola lectura de km se supone 1.000 km al mes' : 'Según el km de sus órdenes'}">(≈ ${U.esc(String(Math.round(es.km_dia)))} km/día${es.dia_defecto ? ', supuesto' : ''})</span>`
+                : '';
+            const puedeMod = !!d.disponible && !!window.VEH_PERM_ACTUALIZAR;
+            document.getElementById('veh_mant_registrar').disabled = !puedeMod;
+            const hayProximos = (d.servicios || []).some(s => s.proximo_vigente != null);
+            ['veh_mant_aviso_correo', 'veh_mant_aviso_wa'].forEach(id => {
+                const b = document.getElementById(id);
+                b.disabled = !(puedeMod && d.avisos_disponible && hayProximos);
+                b.title = !d.avisos_disponible ? 'Falta aplicar el SQL de avisos (20261031_mantenimientos_avisos.sql)'
+                    : (!hayProximos ? 'El vehículo no tiene próximos cambios registrados' : (id.endsWith('wa') ? 'Avisar al cliente por WhatsApp' : 'Avisar al cliente por correo'));
+            });
+            const canal = { correo: '<i class="bi bi-envelope text-info me-1"></i>Correo', whatsapp: '<i class="bi bi-whatsapp text-success me-1"></i>WhatsApp' };
+            document.getElementById('veh_mant_avisos').innerHTML = (d.avisos || []).map(a => `<tr>
+                    <td>${U.esc(a.creado_txt)}</td>
+                    <td>${U.esc(a.servicio || '')}</td>
+                    <td class="text-end">${U.esc(U.km(a.proximo_km))}</td>
+                    <td>${canal[a.canal] || U.esc(a.canal)}</td>
+                    <td class="text-truncate" style="max-width:180px">${U.esc(a.destinatario || '')}</td>
+                    <td class="text-center">${a.estado === 'enviado' ? '<span class="badge bg-success bg-opacity-10 text-success">Enviado</span>' : `<span class="badge bg-danger bg-opacity-10 text-danger" title="${U.esc(a.detalle || '')}">Error</span>`}</td>
+                    <td>${a.origen === 'automatico' ? `<i class="bi bi-robot me-1"></i>Automático${a.aviso_n > 1 ? ` <span class="text-muted">(recordatorio ${a.aviso_n - 1})</span>` : ''}` : 'Manual'}</td>
+                    <td class="text-muted">${U.esc(a.usuario || '')}</td></tr>`).join('')
+                || '<tr><td colspan="8" class="text-center text-muted py-3">Aún no se han enviado avisos.</td></tr>';
+            document.getElementById('veh_mant_servicios').disabled = !d.disponible;
+
+            let vencidos = 0;
+            body.innerHTML = (d.servicios || []).map(s => {
+                const e = { estado: s.estado, faltan: s.faltan_km };
+                if (s.estado === 'vencido') vencidos++;
+                return `<tr data-servicio="${s.id_servicio}">
+                    <td class="fw-semibold">${U.esc(s.nombre)}</td>
+                    <td><div class="d-flex align-items-center gap-1">
+                        <input type="number" min="1" step="500" class="form-control form-control-sm py-0 veh-mant-int" style="width:90px" value="${s.intervalo_km}" data-propio="${s.intervalo_propio ?? ''}" ${puedeMod ? '' : 'disabled'} title="${U.esc(s.intervalo_detalle)}">
+                        ${U.origen(s)}
+                        ${puedeMod ? `<button type="button" class="btn btn-link btn-sm p-0 veh-mant-marca" title="Aplicar este intervalo a otros vehículos de la misma marca"><i class="bi bi-diagram-3"></i></button>` : ''}
+                    </div></td>
+                    <td>${vehMantUltimo(s) || '<span class="text-muted">—</span>'}</td>
+                    <td class="fw-semibold">${s.proximo_vigente != null ? U.esc(U.km(s.proximo_vigente)) : '<span class="text-muted">—</span>'}</td>
+                    <td>${U.badge(e)}</td></tr>`;
+            }).join('') || '<tr><td colspan="5" class="text-center text-muted py-3">No hay servicios activos. Use <b>Servicios</b> para agregarlos.</td></tr>';
+            const bm = document.getElementById('veh-badge-mant');
+            if (bm) { bm.textContent = vencidos; bm.classList.toggle('d-none', !vencidos); bm.title = 'Mantenimientos vencidos'; }
+
+            const puedeElim = !!d.disponible && !!window.VEH_PERM_ELIMINAR;
+            hist.innerHTML = (d.historial || []).map(h => `<tr>
+                    <td>${U.esc(h.fecha_txt)}</td>
+                    <td>${U.esc(h.servicio)}</td>
+                    <td class="text-end">${U.esc(U.km(h.km))}</td>
+                    <td class="text-end">${U.esc(U.km(h.proximo_km))}</td>
+                    <td>${h.origen === 'orden'
+                        ? `<i class="bi bi-droplet-half text-info me-1"></i>Orden ${U.esc(h.numero_orden || '')}`
+                        : `<i class="bi bi-pencil-square text-secondary me-1"></i>A mano${h.observacion ? ` <span class="text-muted d-inline-block text-truncate align-bottom" style="max-width:160px" title="${U.esc(h.observacion)}">· ${U.esc(h.observacion)}</span>` : ''}`}</td>
+                    <td class="text-muted">${U.esc(h.usuario || '')}</td>
+                    <td class="text-center">${h.origen === 'manual'
+                        ? `<button type="button" class="btn btn-outline-danger btn-sm py-0 px-2" title="Eliminar este cambio" ${puedeElim ? '' : 'disabled'} onclick="vehMantEliminarCambio(${h.id})"><i class="bi bi-trash3"></i></button>` : ''}</td>
+                </tr>`).join('') || '<tr><td colspan="7" class="text-center text-muted py-3">Aún no hay cambios registrados.</td></tr>';
+        } catch (e) {
+            body.innerHTML = `<tr><td colspan="5" class="text-center text-danger py-3">${vehEsc(e.message)}</td></tr>`;
+        }
+    }
+
+    // "Último cambio" vigente (con el de la última orden): km · fecha.
+    function vehMantUltimo(s) {
+        const h = (vehMant?.historial || []).find(x => String(x.id_servicio) === String(s.id_servicio));
+        if (!h) return '';
+        return `${vehEsc(window.MANT_UI.km(h.km))} <span class="text-muted">· ${vehEsc(h.fecha_txt)}</span>`;
+    }
+
+    // Cambiar "Cada (km)": queda como intervalo propio del vehículo (vacío = volver al sugerido).
+    document.getElementById('veh_mant_body')?.addEventListener('change', async (ev) => {
+        const inp = ev.target.closest('.veh-mant-int');
+        if (!inp || vehMantOcupado) return;
+        const sid = inp.closest('tr').dataset.servicio;
+        const valor = inp.value.trim();
+        if (valor !== '' && !(parseInt(valor, 10) > 0)) { inp.value = inp.defaultValue; return; }
+        vehMantOcupado = true; inp.disabled = true;
+        try {
+            const fd = new FormData();
+            fd.append('id_vehiculo', vehIdActual); fd.append('id_servicio', sid); fd.append('intervalo_km', valor);
+            const j = await (await fetch(`${urlBaseVeh}/mantGuardarIntervaloAjax`, { method: 'POST', body: fd })).json();
+            if (!j.ok) throw new Error(j.error || 'No se pudo guardar.');
+            Swal.fire({ toast: true, position: 'top-end', icon: 'success', title: j.msg, timer: 1400, showConfirmButton: false });
+            await vehCargarMantenimiento();
+        } catch (e) {
+            Swal.fire({ icon: 'error', title: 'Error', text: e.message, target: vehModalEl(), heightAuto: false });
+            inp.value = inp.defaultValue;
+        } finally { vehMantOcupado = false; inp.disabled = false; }
+    });
+    document.getElementById('veh_mant_body')?.addEventListener('click', async (ev) => {
+        const b = ev.target.closest('.veh-mant-marca');
+        if (!b) return;
+        const tr = b.closest('tr');
+        const s = (vehMant?.servicios || []).find(x => String(x.id_servicio) === tr.dataset.servicio);
+        if (s && await window.MANT_UI.aplicarMismaMarca(urlBaseVeh, vehIdActual, s.id_servicio, s.nombre, tr.querySelector('.veh-mant-int').value, vehModalEl())) {
+            await vehCargarMantenimiento();
+        }
+    });
+    document.getElementById('veh_mant_servicios')?.addEventListener('click', () => window.mantAbrirServicios?.(urlBaseVeh));
+    document.addEventListener('mantenimientoServicioGuardado', () => {
+        if (vehModalEl()?.classList.contains('show') && vehCargado.mant) vehCargarMantenimiento();
+    });
+
+    // Registrar a mano un cambio hecho fuera (o sin orden): servicio, km, fecha y próximo cambio.
+    document.getElementById('veh_mant_registrar')?.addEventListener('click', async () => {
+        if (vehMantOcupado || !vehIdActual || !vehMant) return;
+        const U = window.MANT_UI;
+        const servs = (vehMant.servicios || []).filter(s => s.activo);
+        if (!servs.length) { Swal.fire({ icon: 'info', title: 'No hay servicios activos', target: vehModalEl(), heightAuto: false }); return; }
+        const hoy = new Date(); const hoyIso = `${hoy.getFullYear()}-${String(hoy.getMonth() + 1).padStart(2, '0')}-${String(hoy.getDate()).padStart(2, '0')}`;
+        const { value: form } = await Swal.fire({
+            title: 'Registrar cambio', width: 520, target: vehModalEl(), heightAuto: false,
+            html: `<div class="text-start small">
+                <label class="fw-semibold mb-1 d-block">Servicio</label>
+                <select id="vehMantSrv" class="form-select form-select-sm mb-2">${servs.map(s => `<option value="${s.id_servicio}" data-int="${s.intervalo_km}">${U.esc(s.nombre)}</option>`).join('')}</select>
+                <div class="row g-2 mb-2">
+                    <div class="col-4"><label class="fw-semibold mb-1 d-block">Km del cambio</label><input type="number" min="0" id="vehMantKm" class="form-control form-control-sm" value="${vehMant.km_actual ?? ''}"></div>
+                    <div class="col-4"><label class="fw-semibold mb-1 d-block">Fecha</label><input type="date" id="vehMantFecha" class="form-control form-control-sm" max="${hoyIso}" value="${hoyIso}"></div>
+                    <div class="col-4"><label class="fw-semibold mb-1 d-block">Próximo (km)</label><input type="number" min="1" id="vehMantProx" class="form-control form-control-sm"></div>
+                </div>
+                <label class="fw-semibold mb-1 d-block">Observación <span class="text-muted fw-normal">(opcional, p. ej. dónde se hizo)</span></label>
+                <input id="vehMantObs" class="form-control form-control-sm" maxlength="300">
+                <div class="form-text">El próximo cambio se calcula con el intervalo del vehículo; puede corregirlo.</div></div>`,
+            showCancelButton: true, confirmButtonText: '<i class="bi bi-check2-circle me-1"></i> Registrar', cancelButtonText: 'Cancelar',
+            didOpen: () => {
+                const sel = document.getElementById('vehMantSrv'), km = document.getElementById('vehMantKm'), px = document.getElementById('vehMantProx');
+                const calc = () => { if (px.dataset.manual) return; const k = parseInt(km.value, 10); px.value = k >= 0 ? k + (parseInt(sel.selectedOptions[0].dataset.int, 10) || 0) : ''; };
+                px.addEventListener('input', () => { px.dataset.manual = px.value ? '1' : ''; });
+                sel.addEventListener('change', calc); km.addEventListener('input', calc); calc();
+                km.focus();
+            },
+            preConfirm: () => {
+                const km = document.getElementById('vehMantKm').value, px = document.getElementById('vehMantProx').value;
+                if (km === '' || parseInt(km, 10) < 0) { Swal.showValidationMessage('Ingrese el km del cambio.'); return false; }
+                if (!(parseInt(px, 10) > parseInt(km, 10))) { Swal.showValidationMessage('El próximo cambio debe ser mayor que el km del cambio.'); return false; }
+                return { id_servicio: document.getElementById('vehMantSrv').value, km, fecha: document.getElementById('vehMantFecha').value, proximo_km: px, observacion: document.getElementById('vehMantObs').value.trim() };
+            }
+        });
+        if (!form || vehMantOcupado) return;
+        vehMantOcupado = true;
+        try {
+            const fd = new FormData(); fd.append('id_vehiculo', vehIdActual);
+            Object.entries(form).forEach(([k, v]) => fd.append(k, v));
+            const j = await (await fetch(`${urlBaseVeh}/mantRegistrarCambioAjax`, { method: 'POST', body: fd })).json();
+            if (!j.ok) throw new Error(j.error || 'No se pudo registrar.');
+            Swal.fire({ icon: 'success', title: j.msg, target: vehModalEl(), heightAuto: false, timer: 1400, showConfirmButton: false });
+            await vehCargarMantenimiento(); // recargar antes de liberar: un segundo clic ya ve el cambio creado
+        } catch (e) {
+            Swal.fire({ icon: 'error', title: 'No se registró', text: e.message, target: vehModalEl(), heightAuto: false });
+        } finally { vehMantOcupado = false; }
+    });
+
+    // Aviso manual al cliente del próximo mantenimiento (correo o WhatsApp), con el mensaje armado.
+    async function vehMantAviso(canal) {
+        if (vehMantOcupado || !vehIdActual) return;
+        const modalEl = vehModalEl();
+        let g;
+        try {
+            const j = await (await fetch(`${urlBaseVeh}/mantAvisoPreviewAjax?id_vehiculo=${vehIdActual}`)).json();
+            if (!j.ok) throw new Error(j.error || 'No se pudo preparar el aviso.');
+            g = j.data;
+        } catch (e) { Swal.fire({ icon: 'warning', title: 'Atención', text: e.message, target: modalEl, heightAuto: false }); return; }
+        const esCorreo = canal === 'correo';
+        const { value: form } = await Swal.fire({
+            title: esCorreo ? 'Aviso de mantenimiento por correo' : 'Aviso de mantenimiento por WhatsApp', width: 600, target: modalEl, heightAuto: false,
+            html: `<div class="text-start small">
+                <label class="fw-semibold mb-1">${esCorreo ? 'Para (separe varios con coma)' : 'Teléfono'}</label>
+                <input id="vehMantAvDest" class="form-control form-control-sm mb-2" value="${vehEsc(esCorreo ? g.correo_destino : g.telefono_destino)}" placeholder="${esCorreo ? 'correo@ejemplo.com' : '0987654321'}">
+                ${esCorreo ? `<label class="fw-semibold mb-1">Asunto</label><input id="vehMantAvAsunto" class="form-control form-control-sm mb-2" value="${vehEsc(g.asunto_defecto)}">` : ''}
+                <label class="fw-semibold mb-1">Mensaje</label>
+                <textarea id="vehMantAvMsg" class="form-control form-control-sm" rows="8">${vehEsc(g.mensaje_defecto)}</textarea>
+                <div class="form-text">${esCorreo ? 'El sistema envía el correo y lo deja en el historial de avisos.' : 'Se abrirá WhatsApp con el mensaje listo para enviarlo; el sistema deja constancia.'}</div></div>`,
+            showCancelButton: true, cancelButtonText: 'Cancelar',
+            confirmButtonText: esCorreo ? '<i class="bi bi-send me-1"></i> Enviar' : '<i class="bi bi-whatsapp me-1"></i> Abrir WhatsApp',
+            preConfirm: () => {
+                const dest = document.getElementById('vehMantAvDest').value.trim();
+                if (!dest) { Swal.showValidationMessage(esCorreo ? 'Escriba el correo de destino.' : 'Escriba el teléfono.'); return false; }
+                let tel = '';
+                if (!esCorreo) {
+                    tel = dest.replace(/\D/g, '');
+                    if (tel.length < 9) { Swal.showValidationMessage('Escriba un teléfono válido.'); return false; }
+                    if (!tel.startsWith('593')) tel = '593' + (tel.startsWith('0') ? tel.slice(1) : tel);
+                }
+                return { dest: esCorreo ? dest : tel, asunto: document.getElementById('vehMantAvAsunto')?.value || '', mensaje: document.getElementById('vehMantAvMsg').value };
+            }
+        });
+        if (!form || vehMantOcupado) return;
+        vehMantOcupado = true;
+        try {
+            const fd = new FormData(); fd.append('id_vehiculo', vehIdActual); fd.append('mensaje', form.mensaje);
+            if (esCorreo) {
+                fd.append('destinatarios', form.dest); fd.append('asunto', form.asunto);
+                Swal.fire({ title: 'Enviando...', target: modalEl, heightAuto: false, allowOutsideClick: false, didOpen: () => Swal.showLoading() });
+                const j = await (await fetch(`${urlBaseVeh}/mantAvisoCorreoAjax`, { method: 'POST', body: fd })).json();
+                if (!j.ok) throw new Error(j.error || 'No se pudo enviar.');
+                Swal.fire({ icon: 'success', title: 'Aviso enviado', text: j.msg, target: modalEl, heightAuto: false, timer: 1800, showConfirmButton: false });
+            } else {
+                window.open(`https://wa.me/${form.dest}?text=${encodeURIComponent(form.mensaje)}`, '_blank');
+                fd.append('telefono', form.dest);
+                const j = await (await fetch(`${urlBaseVeh}/mantAvisoWhatsappAjax`, { method: 'POST', body: fd })).json();
+                if (!j.ok) throw new Error(j.error || 'No se pudo registrar el aviso.');
+            }
+            await vehCargarMantenimiento();
+        } catch (e) {
+            Swal.fire({ icon: 'error', title: 'Error', text: e.message, target: modalEl, heightAuto: false });
+            vehCargarMantenimiento(); // un correo fallido también queda en el historial
+        } finally { vehMantOcupado = false; }
+    }
+    document.getElementById('veh_mant_aviso_correo')?.addEventListener('click', () => vehMantAviso('correo'));
+    document.getElementById('veh_mant_aviso_wa')?.addEventListener('click', () => vehMantAviso('whatsapp'));
+
+    window.vehMantEliminarCambio = async function (id) {
+        if (vehMantOcupado) return;
+        const c = await Swal.fire({ icon: 'warning', title: '¿Eliminar este cambio?', text: 'El próximo cambio vuelve a calcularse con el cambio anterior.', target: vehModalEl(), heightAuto: false,
+            showCancelButton: true, confirmButtonText: 'Sí, eliminar', cancelButtonText: 'Cancelar', confirmButtonColor: '#dc3545' });
+        if (!c.isConfirmed) return;
+        vehMantOcupado = true;
+        try {
+            const fd = new FormData(); fd.append('id', id); fd.append('id_vehiculo', vehIdActual);
+            const j = await (await fetch(`${urlBaseVeh}/mantEliminarCambioAjax`, { method: 'POST', body: fd })).json();
+            if (!j.ok) throw new Error(j.error || 'No se pudo eliminar.');
+            await vehCargarMantenimiento();
+        } catch (e) {
+            Swal.fire({ icon: 'error', title: 'Error', text: e.message, target: vehModalEl(), heightAuto: false });
+        } finally { vehMantOcupado = false; }
+    };
 
     async function vehCargarTransacciones() {
         const tbody = document.getElementById('veh_trx_body');

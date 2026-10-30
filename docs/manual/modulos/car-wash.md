@@ -5,8 +5,8 @@ categoria: Servicios
 ruta_modulo: modulos/car-wash
 tipo: modulo
 visibilidad: todos
-etiquetas: car wash, lavado, lavadora de autos, lubricadora, cambio de aceite, mecanica, taller, orden de servicio, orden mecanica, orden de trabajo, vehiculo, placa, historial del vehiculo, historial del cliente, visitas, ultima visita, facturar orden, recibo de venta, refacturar, factura anulada, proxima cita, proximo chequeo, editar cliente, editar vehiculo, corregir placa, cambiar datos del cliente, actualizar correo, migracion, sistema anterior, numeracion por fecha, numero con el año, reiniciar numeracion, reinicio anual, reinicio mensual, correlativo por año, correlativo por mes, modo de numeracion, buscar orden, buscar placa, buscador, filtros, filtrar ordenes, filtro de fechas, buscar por servicio, chips, imprimir, impresora, aviso, avisos, ordenes en borrador, ordenes sin facturar, pendientes de facturar, barra superior, sin saldo, sin stock, productos similares, productos equivalentes, equivalencias, reemplazo, otra marca, sugerir otro producto, misma categoria, usar este, pdf en dos hojas, segunda hoja casi vacia, totales en otra pagina, el pdf corta la pagina, hoja de mas, historial del vehiculo, transacciones del vehiculo, que se le hizo al carro, reporte de salida, acta de salida, informe de entrega, entrega del vehiculo, trabajo realizado, recomendaciones, proxima cita, anular orden, orden anulada, devolver repuestos, stock descontado dos veces
-version: 1.24
+etiquetas: car wash, lavado, lavadora de autos, lubricadora, cambio de aceite, mecanica, taller, orden de servicio, orden mecanica, orden de trabajo, vehiculo, placa, historial del vehiculo, historial del cliente, visitas, ultima visita, facturar orden, recibo de venta, refacturar, factura anulada, proxima cita, proximo chequeo, editar cliente, editar vehiculo, corregir placa, cambiar datos del cliente, actualizar correo, migracion, sistema anterior, numeracion por fecha, numero con el año, reiniciar numeracion, reinicio anual, reinicio mensual, correlativo por año, correlativo por mes, modo de numeracion, buscar orden, buscar placa, buscador, filtros, filtrar ordenes, filtro de fechas, buscar por servicio, chips, imprimir, impresora, aviso, avisos, ordenes en borrador, ordenes sin facturar, pendientes de facturar, barra superior, sin saldo, sin stock, productos similares, productos equivalentes, equivalencias, reemplazo, otra marca, sugerir otro producto, misma categoria, usar este, pdf en dos hojas, segunda hoja casi vacia, totales en otra pagina, el pdf corta la pagina, hoja de mas, historial del vehiculo, transacciones del vehiculo, que se le hizo al carro, reporte de salida, acta de salida, informe de entrega, entrega del vehiculo, trabajo realizado, recomendaciones, proxima cita, anular orden, orden anulada, devolver repuestos, stock descontado dos veces, mantenimiento, mantenimientos, proximo cambio de aceite, aceite de motor, aceite de caja, cambio de aceite de caja, kilometraje, km, cada cuantos km, intervalo, filtro de aire, servicios de mantenimiento, sticker de aceite, vencido, cambio pendiente, aviso de cambio de aceite, avisar al cliente, aviso automatico de mantenimiento, km estimado
+version: 1.26
 orden: 10
 estado: activo
 ---
@@ -202,6 +202,64 @@ que sugerir, con **"¿Trabajar con stock positivo?"** se avisa *Sin saldo*; con 
 negativo permitido el producto se agrega sin aviso. Es la misma ventana que usa
 **Facturas de Venta**.
 
+## Mantenimientos: próximo cambio de aceite (motor, caja y otros)
+
+La pestaña **Mantenimiento** de la orden controla los cambios que se hacen **por
+kilometraje**: aceite de motor, aceite de caja y cualquier otro servicio que la
+empresa agregue (filtro de aire, refrigerante, frenos…). Todo se basa en los **km
+registrados**; no depende de los productos de la orden.
+
+Al elegir el vehículo, la tabla muestra por cada servicio:
+
+| Columna | Qué es |
+|---------|--------|
+| Último cambio | Km, fecha y orden del cambio anterior. |
+| Cada (km) | Cada cuántos km se hace el servicio **en este vehículo**. El ícono dice de dónde sale: propio del vehículo, sugerido por otros vehículos de la misma marca, o el valor por defecto del servicio. |
+| ¿Se cambió? | Márquelo si el cambio se hizo en esta orden. |
+| Próximo cambio (km) | Se calcula solo: km de la orden + *Cada (km)*. Se puede corregir (p. ej. un aceite sintético que dura más). |
+| Estado | *Al día*, *Próximo* (faltan menos km que los de aviso del servicio) o *Vencido*, con el km de la orden. |
+
+**Cómo se registra un cambio de aceite:**
+
+1. Escriba el **Kilometraje** de la orden en la pestaña General.
+2. En **Mantenimiento**, marque **¿Se cambió?** en *Aceite de motor* (o el que corresponda).
+3. Revise el **Próximo cambio** y guarde la orden.
+
+En la pestaña General, bajo el vehículo, aparece un aviso con lo que está **próximo** o
+**vencido** (p. ej. *Aceite de motor: vencido hace 800 km*), para ofrecerle el servicio
+al cliente. Si el km escrito es menor que el último registrado del vehículo, también
+se avisa y al guardar se pide confirmar.
+
+**Cada (km) por vehículo y sugerencia por marca:** cambiar *Cada (km)* lo deja como el
+intervalo de ese vehículo para las próximas visitas. Un vehículo que aún no tiene
+intervalo toma el más usado entre los vehículos de la empresa con la misma **marca y
+modelo y el mismo motor**; si no hay, de la misma marca y modelo; luego de la misma
+marca; y si no hay ninguno, el del servicio. El botón del diagrama junto a *Cada (km)*
+aplica ese intervalo a los demás vehículos de la misma marca y modelo o de toda la
+marca (los próximos cambios ya registrados no cambian).
+
+**Servicios:** el botón **Servicios** abre la lista de la empresa: nombre, cada cuántos
+km, cuántos km antes avisar, orden y si está activo. La primera vez se crean *Aceite de
+motor* (5.000 km, avisar 500 km antes) y *Aceite de caja* (50.000 km, avisar 3.000 km
+antes). Un servicio nuevo aparece de inmediato en la orden abierta.
+
+**Dónde sale:** en el PDF de la orden y en el Reporte de salida (tabla *Próximos
+mantenimientos*), en el correo de la orden, y en la **Información adicional** de la
+factura o recibo emitido desde la orden (*Próximo cambio Aceite de motor: 85.000 km*).
+
+**Orden facturada:** la pestaña se puede completar igual y se guarda con su botón
+**Guardar mantenimientos**. **Anular** la orden quita sus cambios (vuelven si se
+reactiva) y **eliminarla** también los quita: el próximo cambio vuelve al anterior.
+
+La misma información se ve en la ficha del vehículo (pestaña **Mantenimiento**), donde
+además se registra a mano un cambio hecho en otro lugar.
+
+**Avisos al cliente:** con la automatización **Car-Wash → Aviso de próximo mantenimiento**
+el sistema avisa solo, por correo o WhatsApp, cuando el km estimado del vehículo llega a
+los km de aviso del servicio o lo pasa (con recordatorios si sigue vencido). También se
+puede avisar a mano desde la ficha del vehículo. Detalle en el manual de Vehículos
+(*Avisos de próximo mantenimiento al cliente*).
+
 ## Historial por vehículo o por cliente
 
 En la pestaña **Historial** elija **Buscar por**: *Vehículo* o *Cliente*.
@@ -265,6 +323,11 @@ rastro completo.
 - **Eliminar**: eliminar órdenes sin documento vigente.
 - **Acceso total**: ver las órdenes de toda la empresa; sin él, cada usuario ve solo
   las que registró (también en el Historial).
+
+En la pestaña **Mantenimiento**, marcar un cambio va con el guardado de la orden (crear
+o modificar). Cambiar **Cada (km)**, aplicar el intervalo a otros vehículos y editar la
+lista de **Servicios** requieren permiso de **modificar** en Car-Wash (no hace falta
+permiso en Vehículos).
 
 Los botones **PDF**, **Correo** y **WhatsApp** del documento generado usan los
 módulos de Facturas y Recibos de venta, así que requieren permiso de lectura en ellos.
@@ -396,6 +459,12 @@ solo los suyos.
 
 ## Errores frecuentes
 
+- **"Ingrese el kilometraje de la orden para registrar el cambio de…"**: se marcó
+  *¿Se cambió?* sin escribir el kilometraje en la pestaña General.
+- **La pestaña Mantenimiento avisa que falta el SQL**: el administrador debe ejecutar
+  `database/migrations/20261030_vehiculos_mantenimientos.sql`.
+- **No puedo cambiar *Cada (km)* ni veo el botón Servicios**: requiere permiso de
+  modificar en Car-Wash.
 - **La pestaña Reporte de salida avisa que falta el SQL**: el administrador debe
   ejecutar `database/migrations/20261029_carwash_reporte_salida.sql`.
 
@@ -434,6 +503,8 @@ documentos admite cada periodo) está en el manual de **Empresa**, sección
 
 ## Historial de cambios
 
+- **1.26** — Avisos automáticos y manuales del próximo mantenimiento al cliente (correo y WhatsApp), con el km estimado de cada vehículo. Ver el manual de Vehículos. Requiere el SQL `database/migrations/20261031_mantenimientos_avisos.sql`.
+- **1.25** — Nueva pestaña **Mantenimiento**: control del próximo cambio de aceite de motor, de caja y de otros servicios por kilometraje. Se marca *¿Se cambió?*, el próximo cambio se calcula con el km de la orden y el intervalo del vehículo (sugerido por la marca y el motor), y sale en el PDF, el Reporte de salida, el correo y la información adicional de la factura o recibo. Aviso de mantenimientos próximos o vencidos bajo el vehículo. Requiere el SQL `database/migrations/20261030_vehiculos_mantenimientos.sql`.
 - **1.24** — La pestaña **Historial** se ve como Transacciones del vehículo: cada orden se despliega con sus servicios y productos, muestra el kilometraje y la próxima cita, y la orden abierta aparece primero con lo que está en pantalla (aunque no se haya guardado); todas las órdenes aparecen encogidas hasta hacer clic. Columnas: Fecha, N° Orden, Cliente, Total y Estado; la placa va en el resumen y cada orden desplegada tiene el PDF de la orden y el de su factura o recibo vigente. Ahora muestra hasta 500 órdenes.
 - **1.23** — Nueva pestaña **Reporte de salida** (junto a Condiciones de ingreso) para anotar el trabajo realizado, las recomendaciones y lo que se debe hacer en la próxima cita; se puede completar aunque la orden ya esté facturada. Nuevo PDF **Reporte de salida del vehículo** con los servicios y productos aplicados y el número de la factura o recibo emitido; se imprime o se envía por correo. Requiere el SQL `database/migrations/20261029_carwash_reporte_salida.sql`.
 - **1.22** — La **Info. Adicional** ya no se pierde al guardar: una línea con solo Concepto o solo Detalle se descartaba sin aviso; ahora se guarda con el concepto «Observación» y pasa a la factura o recibo. Cada campo admite hasta 300 caracteres (tope del SRI), así un texto largo ya no hace fallar el recibo.
