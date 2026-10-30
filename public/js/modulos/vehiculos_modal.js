@@ -115,8 +115,8 @@
     // categoría + marca del ítem; además, los selectores de Categoría y Marca. Una orden queda
     // si alguno de sus ítems cumple TODO lo pedido (texto, categoría y marca); con solo texto,
     // también si las palabras están en su número de orden o de documento. Mientras hay un
-    // filtro, las órdenes que coinciden se muestran desplegadas con los ítems encontrados
-    // resaltados; al limpiar vuelven a encogerse.
+    // filtro, las órdenes que coinciden se muestran desplegadas solo con los ítems encontrados
+    // (resaltados); al limpiar vuelven a encogerse con todos sus ítems.
     const vehNorm = s => String(s == null ? '' : s).normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
     let vehTrxTimer = null;
     function vehFiltrarTransacciones() {
@@ -144,6 +144,10 @@
             // El número de orden/documento solo cuenta cuando no se eligió categoría ni marca.
             const porNumero = palabras.length > 0 && cat === '' && mar === '' && tiene(tr.dataset.txt || '');
             const muestra = !hayFiltro || coinciden > 0 || porNumero;
+            // Con un filtro solo se ven los ítems que coinciden; si la orden se encontró por su
+            // número, se ven todos sus ítems.
+            lineas.forEach(l => l.classList.toggle('d-none',
+                hayFiltro && !porNumero && !l.classList.contains('veh-trx-coincide')));
             tr.classList.toggle('d-none', !muestra);
             if (muestra) visibles++;
             if (det) {

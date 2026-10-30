@@ -6,7 +6,7 @@ ruta_modulo: modulos/vehiculos
 tipo: modulo
 visibilidad: todos
 etiquetas: vehiculos, vehiculo, carro, auto, placa, propietario, dueño, consulta sri, consultar placa, datos del vehiculo por placa, matricula, marca, año, historial del vehiculo, transacciones, visitas, ordenes car wash, lavado, taller, proxima cita, recordatorio, recordar cita, aviso al cliente, whatsapp, correo, automatizacion, buscar placa, placa sin guion, buscar sin guion, buscar item, buscar servicio, buscar producto, categoria, marca del producto, filtrar por marca, filtrar por categoria, cuando se cambio el aceite, filtros
-version: 1.9
+version: 1.10
 orden: 11
 estado: activo
 ---
@@ -112,10 +112,12 @@ Para saber en qué órdenes se aplicó un servicio o producto:
   se le han aplicado a este vehículo. Se combinan con el texto: por ejemplo, marca
   *Mobil* + texto *aceite* deja solo las órdenes con un aceite de esa marca.
 
-Las órdenes encontradas se muestran **desplegadas** y los ítems que coinciden se
-resaltan en amarillo. Al lado se indica cuántas órdenes coinciden (por ejemplo
+Solo quedan a la vista las órdenes que tienen lo buscado, **desplegadas** y mostrando
+**únicamente los ítems que coinciden** (resaltados en amarillo); los demás ítems de
+esa orden se ocultan. Si la orden se encontró por su número de orden o de documento,
+se ven todos sus ítems. Al lado se indica cuántas órdenes coinciden (por ejemplo
 *3 de 12 órdenes*). **Limpiar** borra el texto y los filtros, y las órdenes vuelven
-a encogerse.
+a encogerse con todos sus ítems.
 
 Si abre el vehículo desde la pantalla de Car-Wash, el enlace **Abrir la orden** abre
 esa orden.
@@ -216,6 +218,7 @@ Meta con las variables en el orden indicado.
 
 ## Historial de cambios
 
+- **1.10** — Pestaña **Transacciones**: al buscar o filtrar, cada orden muestra solo los ítems que coinciden; los demás ya no aparecen.
 - **1.9** — Pestaña **Transacciones**: filtros por **Categoría** y **Marca** del producto (y el buscador también encuentra por categoría o marca); se quitaron las columnas Km y Servicios/productos (el km va al pie de cada orden desplegada).
 - **1.8** — Pestaña **Transacciones**: nuevo cuadro **Buscar ítem** para encontrar en qué órdenes se aplicó un servicio o producto (por código o descripción); las órdenes encontradas se despliegan con el ítem resaltado.
 - **1.7** — El buscador del listado encuentra la **placa sin guion** (`pdj4685` → `PDJ-4685`) y también con guion cuando se guardó sin él.
