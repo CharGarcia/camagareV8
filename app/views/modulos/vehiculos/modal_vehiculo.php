@@ -204,15 +204,14 @@ $urlBaseVehShared = BASE_URL . '/modulos/vehiculos';
                                     <button type="button" class="btn btn-sm btn-outline-info py-0" id="veh_mant_aviso_correo" disabled title="Avisar al cliente por correo el próximo mantenimiento"><i class="bi bi-envelope"></i></button>
                                     <button type="button" class="btn btn-sm btn-outline-success py-0" id="veh_mant_aviso_wa" disabled title="Avisar al cliente por WhatsApp el próximo mantenimiento"><i class="bi bi-whatsapp"></i></button>
                                     <button type="button" class="btn btn-sm btn-outline-secondary py-0" id="veh_mant_servicios" title="Servicios que se controlan y su km por defecto"><i class="bi bi-gear me-1"></i>Servicios</button>
-                                    <button type="button" class="btn btn-sm btn-outline-primary py-0" id="veh_mant_registrar" disabled><i class="bi bi-plus-lg me-1"></i>Registrar cambio</button>
                                 </div>
                             </div>
                             <div class="border rounded-3 bg-white mb-3 veh-mant-lista" style="max-height:30vh; overflow:auto;">
                                 <table class="table table-sm table-hover mb-0 text-nowrap align-middle" style="font-size:.8rem;">
                                     <thead class="table-light" style="position:sticky; top:0; z-index:1;">
-                                        <tr><th>Servicio</th><th style="width:150px;">Cada (km)</th><th>Último cambio</th><th>Próximo cambio</th><th>Estado</th></tr>
+                                        <tr><th>Servicio</th><th style="width:150px;">Cada (km)</th><th>Último cambio</th><th>Próximo cambio</th><th>Estado</th><th class="text-center" style="width:60px;"></th></tr>
                                     </thead>
-                                    <tbody id="veh_mant_body"><tr><td colspan="5" class="text-center text-muted py-3">Sin datos.</td></tr></tbody>
+                                    <tbody id="veh_mant_body"><tr><td colspan="6" class="text-center text-muted py-3">Sin datos.</td></tr></tbody>
                                 </table>
                             </div>
                             <div class="fw-semibold small text-muted mb-1"><i class="bi bi-clock-history me-1"></i>Cambios realizados</div>
@@ -233,7 +232,7 @@ $urlBaseVehShared = BASE_URL . '/modulos/vehiculos';
                                     <tbody id="veh_mant_avisos"><tr><td colspan="8" class="text-center text-muted py-3">Aún no se han enviado avisos.</td></tr></tbody>
                                 </table>
                             </div>
-                            <div class="form-text mt-2"><i class="bi bi-info-circle me-1"></i>El cambio se marca normalmente en la orden de Car-Wash (pestaña <b>Mantenimiento</b>). Aquí se registra uno hecho en otro lugar. El estado se calcula con el km <b>estimado de hoy</b>: el último km conocido más lo que el vehículo suele recorrer por día según sus órdenes.
+                            <div class="form-text mt-2"><i class="bi bi-info-circle me-1"></i>El cambio se marca normalmente en la orden de Car-Wash (pestaña <b>Mantenimiento</b>). Aquí, con el botón <i class="bi bi-plus-circle"></i> de cada servicio, se registra uno hecho en otro lugar. El estado se calcula con el km <b>estimado de hoy</b>: el último km conocido más lo que el vehículo suele recorrer por día según sus órdenes.
                                 Para avisar solos a los clientes, cree una automatización <b>Car-Wash → Aviso de próximo mantenimiento</b>.</div>
                         </div>
                     </div>

@@ -84,9 +84,8 @@
         vehIdActual = parseInt(id, 10) || 0;
         vehCargado.trx = false; vehCargado.rec = false; vehCargado.mant = false;
         const bm = document.getElementById('veh-badge-mant'); if (bm) bm.classList.add('d-none');
-        const mb = document.getElementById('veh_mant_body'); if (mb) mb.innerHTML = '<tr><td colspan="5" class="text-center text-muted py-3">Sin datos.</td></tr>';
+        const mb = document.getElementById('veh_mant_body'); if (mb) mb.innerHTML = '<tr><td colspan="6" class="text-center text-muted py-3">Sin datos.</td></tr>';
         const mh = document.getElementById('veh_mant_hist'); if (mh) mh.innerHTML = '<tr><td colspan="7" class="text-center text-muted py-3">Aún no hay cambios registrados.</td></tr>';
-        const mr = document.getElementById('veh_mant_registrar'); if (mr) mr.disabled = true;
         const ma = document.getElementById('veh_mant_avisos'); if (ma) ma.innerHTML = '<tr><td colspan="8" class="text-center text-muted py-3">Aún no se han enviado avisos.</td></tr>';
         const me = document.getElementById('veh_mant_est'); if (me) me.innerHTML = '';
         ['veh_mant_aviso_correo', 'veh_mant_aviso_wa'].forEach(id => { const b = document.getElementById(id); if (b) b.disabled = true; });
@@ -201,7 +200,7 @@
         const hist = document.getElementById('veh_mant_hist');
         if (!vehIdActual || !body || !window.MANT_UI) return;
         const U = window.MANT_UI;
-        body.innerHTML = '<tr><td colspan="5" class="text-center text-muted py-3"><span class="spinner-border spinner-border-sm me-1"></span>Cargando...</td></tr>';
+        body.innerHTML = '<tr><td colspan="6" class="text-center text-muted py-3"><span class="spinner-border spinner-border-sm me-1"></span>Cargando...</td></tr>';
         try {
             const json = await (await fetch(`${urlBaseVeh}/mantEstadoAjax?id_vehiculo=${vehIdActual}&historial=1`)).json();
             if (!json.ok) throw new Error(json.error || 'No se pudo cargar.');
@@ -216,7 +215,6 @@
                 ? `· Estimado hoy: <b>${U.esc(U.km(es.km_est))}</b> <span title="${es.dia_defecto ? 'Con una sola lectura de km se supone 1.000 km al mes' : 'Según el km de sus órdenes'}">(≈ ${U.esc(String(Math.round(es.km_dia)))} km/día${es.dia_defecto ? ', supuesto' : ''})</span>`
                 : '';
             const puedeMod = !!d.disponible && !!window.VEH_PERM_ACTUALIZAR;
-            document.getElementById('veh_mant_registrar').disabled = !puedeMod;
             const hayProximos = (d.servicios || []).some(s => s.proximo_vigente != null);
             ['veh_mant_aviso_correo', 'veh_mant_aviso_wa'].forEach(id => {
                 const b = document.getElementById(id);
@@ -250,8 +248,10 @@
                     </div></td>
                     <td>${vehMantUltimo(s) || '<span class="text-muted">—</span>'}</td>
                     <td class="fw-semibold">${s.proximo_vigente != null ? U.esc(U.km(s.proximo_vigente)) : '<span class="text-muted">—</span>'}</td>
-                    <td>${U.badge(e)}</td></tr>`;
-            }).join('') || '<tr><td colspan="5" class="text-center text-muted py-3">No hay servicios activos. Use <b>Servicios</b> para agregarlos.</td></tr>';
+                    <td>${U.badge(e)}</td>
+                    <td class="text-center"><button type="button" class="btn btn-outline-primary btn-sm py-0 px-2 veh-mant-reg" ${puedeMod && s.activo ? '' : 'disabled'}
+                        title="${puedeMod ? 'Registrar un cambio de ' + U.esc(s.nombre) + ' hecho en otro lugar' : 'Requiere permiso de modificar'}"><i class="bi bi-plus-circle"></i></button></td></tr>`;
+            }).join('') || '<tr><td colspan="6" class="text-center text-muted py-3">No hay servicios activos. Use <b>Servicios</b> para agregarlos.</td></tr>';
             const bm = document.getElementById('veh-badge-mant');
             if (bm) { bm.textContent = vencidos; bm.classList.toggle('d-none', !vencidos); bm.title = 'Mantenimientos vencidos'; }
 
@@ -269,7 +269,7 @@
                         ? `<button type="button" class="btn btn-outline-danger btn-sm py-0 px-2" title="Eliminar este cambio" ${puedeElim ? '' : 'disabled'} onclick="vehMantEliminarCambio(${h.id})"><i class="bi bi-trash3"></i></button>` : ''}</td>
                 </tr>`).join('') || '<tr><td colspan="7" class="text-center text-muted py-3">Aún no hay cambios registrados.</td></tr>';
         } catch (e) {
-            body.innerHTML = `<tr><td colspan="5" class="text-center text-danger py-3">${vehEsc(e.message)}</td></tr>`;
+            body.innerHTML = `<tr><td colspan="6" class="text-center text-danger py-3">${vehEsc(e.message)}</td></tr>`;
         }
     }
 
@@ -301,6 +301,8 @@
         } finally { vehMantOcupado = false; inp.disabled = false; }
     });
     document.getElementById('veh_mant_body')?.addEventListener('click', async (ev) => {
+        const reg = ev.target.closest('.veh-mant-reg');
+        if (reg) { vehMantRegistrar(reg.closest('tr').dataset.servicio); return; }
         const b = ev.target.closest('.veh-mant-marca');
         if (!b) return;
         const tr = b.closest('tr');
@@ -314,18 +316,18 @@
         if (vehModalEl()?.classList.contains('show') && vehCargado.mant) vehCargarMantenimiento();
     });
 
-    // Registrar a mano un cambio hecho fuera (o sin orden): servicio, km, fecha y próximo cambio.
-    document.getElementById('veh_mant_registrar')?.addEventListener('click', async () => {
+    // Registrar a mano un cambio hecho fuera (o sin orden) del servicio de la línea: km, fecha y próximo cambio.
+    async function vehMantRegistrar(idServicio) {
         if (vehMantOcupado || !vehIdActual || !vehMant) return;
         const U = window.MANT_UI;
-        const servs = (vehMant.servicios || []).filter(s => s.activo);
-        if (!servs.length) { Swal.fire({ icon: 'info', title: 'No hay servicios activos', target: vehModalEl(), heightAuto: false }); return; }
+        const s = (vehMant.servicios || []).find(x => String(x.id_servicio) === String(idServicio) && x.activo);
+        if (!s) return;
         const hoy = new Date(); const hoyIso = `${hoy.getFullYear()}-${String(hoy.getMonth() + 1).padStart(2, '0')}-${String(hoy.getDate()).padStart(2, '0')}`;
         const { value: form } = await Swal.fire({
-            title: 'Registrar cambio', width: 520, target: vehModalEl(), heightAuto: false,
+            title: 'Registrar cambio: ' + U.esc(s.nombre), width: 520, target: vehModalEl(), heightAuto: false,
             html: `<div class="text-start small">
-                <label class="fw-semibold mb-1 d-block">Servicio</label>
-                <select id="vehMantSrv" class="form-select form-select-sm mb-2">${servs.map(s => `<option value="${s.id_servicio}" data-int="${s.intervalo_km}">${U.esc(s.nombre)}</option>`).join('')}</select>
+                <select id="vehMantSrv" class="d-none"><option value="${s.id_servicio}" data-int="${s.intervalo_km}"></option></select>
+                <div class="text-muted mb-2">Cada <b>${U.esc(U.km(s.intervalo_km))}</b> en este vehículo${s.proximo_vigente != null ? ` · próximo cambio actual: <b>${U.esc(U.km(s.proximo_vigente))}</b>` : ''}.</div>
                 <div class="row g-2 mb-2">
                     <div class="col-4"><label class="fw-semibold mb-1 d-block">Km del cambio</label><input type="number" min="0" id="vehMantKm" class="form-control form-control-sm" value="${vehMant.km_actual ?? ''}"></div>
                     <div class="col-4"><label class="fw-semibold mb-1 d-block">Fecha</label><input type="date" id="vehMantFecha" class="form-control form-control-sm" max="${hoyIso}" value="${hoyIso}"></div>
@@ -361,7 +363,7 @@
         } catch (e) {
             Swal.fire({ icon: 'error', title: 'No se registró', text: e.message, target: vehModalEl(), heightAuto: false });
         } finally { vehMantOcupado = false; }
-    });
+    }
 
     // Aviso manual al cliente del próximo mantenimiento (correo o WhatsApp), con el mensaje armado.
     async function vehMantAviso(canal) {

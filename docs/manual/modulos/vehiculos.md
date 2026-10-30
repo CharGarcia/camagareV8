@@ -6,7 +6,7 @@ ruta_modulo: modulos/vehiculos
 tipo: modulo
 visibilidad: todos
 etiquetas: vehiculos, vehiculo, carro, auto, placa, propietario, dueño, consulta sri, consultar placa, datos del vehiculo por placa, matricula, marca, año, historial del vehiculo, transacciones, visitas, ordenes car wash, lavado, taller, proxima cita, recordatorio, recordar cita, agregar recordatorio, nuevo recordatorio, crear recordatorio, recordatorio manual, motivo, cambio de aceite, mantenimiento, aviso al cliente, whatsapp, correo, automatizacion, buscar placa, placa sin guion, buscar sin guion, buscar item, buscar servicio, buscar producto, categoria, marca del producto, filtrar por marca, filtrar por categoria, cuando se cambio el aceite, filtros, mantenimientos, proximo cambio de aceite, aceite de motor, aceite de caja, kilometraje, km, cada cuantos km, intervalo, motor, cilindraje, registrar cambio de aceite, cambio hecho en otro lugar, vencido, servicios de mantenimiento, misma marca, sugerido, aviso de cambio de aceite, avisar cambio de aceite, recordar mantenimiento, km estimado, kilometraje estimado, aviso automatico de mantenimiento, plantilla whatsapp mantenimiento, mantenimiento vencido, filtrar vencidos
-version: 1.13
+version: 1.14
 orden: 11
 estado: activo
 ---
@@ -207,8 +207,8 @@ Car-Wash y sus cambios registrados). La pestaña lleva un contador rojo con los 
   la misma marca y modelo con el mismo **Motor**, luego de la misma marca y modelo y
   luego de la misma marca; si no hay ninguno, el del servicio. El botón del diagrama lo
   aplica a los demás vehículos de la misma marca y modelo o de toda la marca.
-- **Registrar cambio**: para un cambio hecho en otro lugar o sin orden: servicio, km,
-  fecha, próximo cambio (se calcula con el intervalo) y una observación.
+- **Registrar cambio** (botón **+** de cada servicio): para un cambio hecho en otro lugar o sin
+  orden: km, fecha, próximo cambio (se calcula con el intervalo) y una observación.
 - **Cambios realizados**: historial con la orden de Car-Wash en que se hizo o *A mano*.
   Los registrados a mano se pueden eliminar aquí; los de una orden se quitan desde la orden.
 - **Servicios**: lista de servicios de la empresa (nombre, cada cuántos km, cuántos km
@@ -326,6 +326,7 @@ km estimado de hoy: sirve para llamar a los clientes.
 
 ## Historial de cambios
 
+- **1.14** — El cambio hecho a mano se registra con el botón **+** de la línea de cada servicio (antes, un botón general con selector de servicio).
 - **1.13** — **Avisos de próximo mantenimiento**: automatización *Car-Wash → Aviso de próximo mantenimiento* (correo, WhatsApp o ambos) con primer aviso y recordatorios si sigue vencido; avisos manuales desde la pestaña Mantenimiento; historial de avisos; km estimado de hoy; filtro **Mantenimiento** en el listado. Requiere el SQL `database/migrations/20261031_mantenimientos_avisos.sql`.
 - **1.12** — Nueva pestaña **Mantenimiento**: próximo cambio de aceite de motor, de caja y otros servicios por kilometraje, con intervalo por vehículo (sugerido por la marca, el modelo y el motor), registro manual de cambios y lista de **Servicios** de la empresa. Nuevo campo **Motor**.
 - **1.11** — Pestaña **Recordatorios**: botón **Agregar recordatorio** (fecha + motivo + observación) para avisar al cliente sin necesidad de una orden; se editan, eliminan y envían por correo o WhatsApp desde la misma lista, y la automatización también los avisa.
