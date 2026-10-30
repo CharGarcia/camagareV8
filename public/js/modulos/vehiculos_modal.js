@@ -85,7 +85,7 @@
         vehCargado.trx = false; vehCargado.rec = false; vehCargado.mant = false;
         const bm = document.getElementById('veh-badge-mant'); if (bm) bm.classList.add('d-none');
         const mb = document.getElementById('veh_mant_body'); if (mb) mb.innerHTML = '<tr><td colspan="6" class="text-center text-muted py-3">Sin datos.</td></tr>';
-        const mh = document.getElementById('veh_mant_hist'); if (mh) mh.innerHTML = '<tr><td colspan="7" class="text-center text-muted py-3">Aún no hay cambios registrados.</td></tr>';
+        const mh = document.getElementById('veh_mant_hist'); if (mh) mh.innerHTML = '<tr><td colspan="8" class="text-center text-muted py-3">Aún no hay cambios registrados.</td></tr>';
         const ma = document.getElementById('veh_mant_avisos'); if (ma) ma.innerHTML = '<tr><td colspan="8" class="text-center text-muted py-3">Aún no se han enviado avisos.</td></tr>';
         const me = document.getElementById('veh_mant_est'); if (me) me.innerHTML = '';
         ['veh_mant_aviso_correo', 'veh_mant_aviso_wa'].forEach(id => { const b = document.getElementById(id); if (b) b.disabled = true; });
@@ -263,11 +263,12 @@
                     <td class="text-end">${U.esc(U.km(h.proximo_km))}</td>
                     <td>${h.origen === 'orden'
                         ? `<i class="bi bi-droplet-half text-info me-1"></i>Orden ${U.esc(h.numero_orden || '')}`
-                        : `<i class="bi bi-pencil-square text-secondary me-1"></i>A mano${h.observacion ? ` <span class="text-muted d-inline-block text-truncate align-bottom" style="max-width:160px" title="${U.esc(h.observacion)}">· ${U.esc(h.observacion)}</span>` : ''}`}</td>
+                        : '<i class="bi bi-pencil-square text-secondary me-1"></i>A mano'}</td>
+                    <td style="white-space:normal; min-width:200px;">${h.observacion ? U.esc(h.observacion) : '<span class="text-muted">—</span>'}</td>
                     <td class="text-muted">${U.esc(h.usuario || '')}</td>
                     <td class="text-center">${h.origen === 'manual'
                         ? `<button type="button" class="btn btn-outline-danger btn-sm py-0 px-2" title="Eliminar este cambio" ${puedeElim ? '' : 'disabled'} onclick="vehMantEliminarCambio(${h.id})"><i class="bi bi-trash3"></i></button>` : ''}</td>
-                </tr>`).join('') || '<tr><td colspan="7" class="text-center text-muted py-3">Aún no hay cambios registrados.</td></tr>';
+                </tr>`).join('') || '<tr><td colspan="8" class="text-center text-muted py-3">Aún no hay cambios registrados.</td></tr>';
         } catch (e) {
             body.innerHTML = `<tr><td colspan="6" class="text-center text-danger py-3">${vehEsc(e.message)}</td></tr>`;
         }

@@ -218,9 +218,9 @@ $urlBaseVehShared = BASE_URL . '/modulos/vehiculos';
                             <div class="border rounded-3 bg-white veh-mant-lista" style="max-height:25vh; overflow:auto;">
                                 <table class="table table-sm mb-0 text-nowrap" style="font-size:.8rem;">
                                     <thead class="table-light" style="position:sticky; top:0; z-index:1;">
-                                        <tr><th>Fecha</th><th>Servicio</th><th class="text-end">Km</th><th class="text-end">Próximo</th><th>Registrado en</th><th>Usuario</th><th></th></tr>
+                                        <tr><th>Fecha</th><th>Servicio</th><th class="text-end">Km</th><th class="text-end">Próximo</th><th>Registrado en</th><th>Observación</th><th>Usuario</th><th></th></tr>
                                     </thead>
-                                    <tbody id="veh_mant_hist"><tr><td colspan="7" class="text-center text-muted py-3">Aún no hay cambios registrados.</td></tr></tbody>
+                                    <tbody id="veh_mant_hist"><tr><td colspan="8" class="text-center text-muted py-3">Aún no hay cambios registrados.</td></tr></tbody>
                                 </table>
                             </div>
                             <div class="fw-semibold small text-muted mb-1 mt-3"><i class="bi bi-send-check me-1"></i>Avisos enviados al cliente</div>

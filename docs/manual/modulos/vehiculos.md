@@ -209,7 +209,8 @@ Car-Wash y sus cambios registrados). La pestaña lleva un contador rojo con los 
   aplica a los demás vehículos de la misma marca y modelo o de toda la marca.
 - **Registrar cambio** (botón **+** de cada servicio): para un cambio hecho en otro lugar o sin
   orden: km, fecha, próximo cambio (se calcula con el intervalo) y una observación.
-- **Cambios realizados**: historial con la orden de Car-Wash en que se hizo o *A mano*.
+- **Cambios realizados**: historial con la orden de Car-Wash en que se hizo o *A mano*, y la
+  **Observación** completa de los registrados a mano.
   Los registrados a mano se pueden eliminar aquí; los de una orden se quitan desde la orden.
 - **Servicios**: lista de servicios de la empresa (nombre, cada cuántos km, cuántos km
   antes avisar, orden, activo).
@@ -326,7 +327,7 @@ km estimado de hoy: sirve para llamar a los clientes.
 
 ## Historial de cambios
 
-- **1.14** — El cambio hecho a mano se registra con el botón **+** de la línea de cada servicio (antes, un botón general con selector de servicio).
+- **1.14** — El cambio hecho a mano se registra con el botón **+** de la línea de cada servicio (antes, un botón general con selector de servicio). La tabla *Cambios realizados* muestra la observación en su propia columna, completa.
 - **1.13** — **Avisos de próximo mantenimiento**: automatización *Car-Wash → Aviso de próximo mantenimiento* (correo, WhatsApp o ambos) con primer aviso y recordatorios si sigue vencido; avisos manuales desde la pestaña Mantenimiento; historial de avisos; km estimado de hoy; filtro **Mantenimiento** en el listado. Requiere el SQL `database/migrations/20261031_mantenimientos_avisos.sql`.
 - **1.12** — Nueva pestaña **Mantenimiento**: próximo cambio de aceite de motor, de caja y otros servicios por kilometraje, con intervalo por vehículo (sugerido por la marca, el modelo y el motor), registro manual de cambios y lista de **Servicios** de la empresa. Nuevo campo **Motor**.
 - **1.11** — Pestaña **Recordatorios**: botón **Agregar recordatorio** (fecha + motivo + observación) para avisar al cliente sin necesidad de una orden; se editan, eliminan y envían por correo o WhatsApp desde la misma lista, y la automatización también los avisa.
