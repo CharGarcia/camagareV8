@@ -128,6 +128,8 @@ class EgresosController extends BaseModuloController
             'formasPago'        => $formasPago,
             'conceptos'         => $conceptos,
             'proyectos'         => $this->service->getProyectosActivos($idEmpresa),
+            // Filtro Proyecto del listado: todos los proyectos (también cerrados), solo si hay activos.
+            'proyectosFiltro'   => $this->conProyecto() ? $this->service->getProyectosFiltro($idEmpresa) : [],
             'comportamientosConPendientes' => $comportamientosConPendientes,
             'permAtajos'        => $permAtajos,
             'fullWidth'         => true,
@@ -155,6 +157,17 @@ class EgresosController extends BaseModuloController
         return $this->service->getListado($idEmpresa, $buscar, 1, 0, $ordenCol, $ordenDir, $orden, $idUsuarioFiltro);
     }
 
+    private ?bool $conProyecto = null;
+
+    /**
+     * ¿La empresa tiene proyectos activos? Solo entonces el listado, sus filtros y sus
+     * exportaciones muestran la columna Proyecto. Se resuelve una vez por petición.
+     */
+    private function conProyecto(): bool
+    {
+        return $this->conProyecto ??= $this->service->getProyectosActivos((int) $_SESSION['id_empresa']) !== [];
+    }
+
     /** Exporta a Excel el listado de Egresos (con los mismos filtros/orden del buscador). */
     public function exportExcel(): void
     {
@@ -166,7 +179,11 @@ class EgresosController extends BaseModuloController
         $empresa       = $empresaModel->getPorId($idEmpresa);
         $nombreEmpresa = $empresa['nombre'] ?? '';
 
+        $conProyecto = $this->conProyecto();
         $headers    = ['Nº Egreso', 'Fecha', 'Tipo', 'Beneficiario', 'Observaciones', 'Monto', 'Estado'];
+        if ($conProyecto) {
+            array_splice($headers, 5, 0, ['Proyecto']);
+        }
         $exportData = [];
         foreach ($rows as $r) {
             $tipoLabel = \App\Helpers\TipoDocumentoHelper::egresoLabel(
@@ -174,7 +191,7 @@ class EgresosController extends BaseModuloController
                 $r['tipo_egreso'] ?? null,
                 $r['concepto_nombre'] ?? null
             );
-            $exportData[] = [
+            $fila = [
                 (string)($r['numero_egreso'] ?? ''),
                 !empty($r['fecha_emision']) ? date('d-m-Y', strtotime($r['fecha_emision'])) : '',
                 $tipoLabel,
@@ -183,6 +200,10 @@ class EgresosController extends BaseModuloController
                 (float)($r['monto_total'] ?? 0),
                 ucfirst((string)($r['estado'] ?? '')),
             ];
+            if ($conProyecto) {
+                array_splice($fila, 5, 0, [(string)($r['proyecto_nombre'] ?? '')]);
+            }
+            $exportData[] = $fila;
         }
 
         try {
@@ -209,6 +230,7 @@ class EgresosController extends BaseModuloController
         $empresaModel  = new Empresa();
         $empresa       = $empresaModel->getPorId($idEmpresa);
         $nombreEmpresa = $empresa['nombre'] ?? 'REPORTE DE EGRESOS';
+        $conProyecto   = $this->conProyecto();
 
         try {
             $autoload = MVC_ROOT . '/vendor/autoload.php';
@@ -239,7 +261,8 @@ class EgresosController extends BaseModuloController
                             <th style="width: 8%">Fecha</th>
                             <th style="width: 14%">Tipo</th>
                             <th style="width: 20%">Beneficiario</th>
-                            <th style="width: 26%">Observaciones</th>
+                            <th style="width: <?= $conProyecto ? 14 : 26 ?>%">Observaciones</th>
+                            <?php if ($conProyecto): ?><th style="width: 12%">Proyecto</th><?php endif; ?>
                             <th style="width: 10%" class="text-end">Monto</th>
                             <th style="width: 10%">Estado</th>
                         </tr>
@@ -259,6 +282,7 @@ class EgresosController extends BaseModuloController
                                 <td><?= htmlspecialchars($tipoLabel) ?></td>
                                 <td><?= htmlspecialchars((string)($r['sujeto_nombre'] ?? '')) ?></td>
                                 <td><?= htmlspecialchars((string)($r['observaciones'] ?? '')) ?></td>
+                                <?php if ($conProyecto): ?><td><?= htmlspecialchars((string)($r['proyecto_nombre'] ?? '')) ?></td><?php endif; ?>
                                 <td class="text-end"><?= number_format((float)($r['monto_total'] ?? 0), 2) ?></td>
                                 <td><?= ucfirst((string)($r['estado'] ?? '')) ?></td>
                             </tr>
@@ -389,7 +413,7 @@ class EgresosController extends BaseModuloController
 
         ob_start();
         if (empty($rows)) {
-            echo '<tr><td colspan="7" class="text-center py-5 text-muted"><i class="bi bi-cash-stack fs-3 d-block mb-2"></i>No se encontraron egresos.</td></tr>';
+            echo '<tr><td colspan="' . ($this->conProyecto() ? 8 : 7) . '" class="text-center py-5 text-muted"><i class="bi bi-cash-stack fs-3 d-block mb-2"></i>No se encontraron egresos.</td></tr>';
         } else {
             foreach ($rows as $r) {
                 echo $this->renderFila($r);
@@ -419,6 +443,7 @@ class EgresosController extends BaseModuloController
      */
     private function renderFila(array $r): string
     {
+        $conProyecto = $this->conProyecto();
         ob_start();
         include MVC_APP . '/views/modulos/egresos/_fila.php';
         return (string) ob_get_clean();

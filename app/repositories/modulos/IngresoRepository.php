@@ -137,6 +137,8 @@ class IngresoRepository extends BaseRepository
         // que en la columna del listado (un ingreso puede no tener cliente asociado).
         'cliente_nombre' => "COALESCE(i.recibo_de, c.nombre, '—')",
         'recibo_de'      => "COALESCE(i.recibo_de, c.nombre, '—')",
+        // Solo si existe ingresos_cabecera.id_proyecto (ver mapaOrden()).
+        'proyecto'       => 'pry.nombre',
     ];
 
     /**
@@ -180,6 +182,7 @@ class IngresoRepository extends BaseRepository
                     'c.nombre',
                     'rc.nombre',
                     'i.observaciones',                                    // Observaciones
+                    ...($this->usaProyecto() ? ['pry.nombre'] : []),     // Proyecto
                     ['sql' => 'i.fecha_emision', 'si' => $digitos],       // Fecha
                     ['sql' => 'i.monto_total', 'si' => $digitos],         // Monto
                 ],
@@ -206,9 +209,12 @@ class IngresoRepository extends BaseRepository
                 'concepto'       => 'i.observaciones',
                 'obs'            => 'i.observaciones',
                 'observaciones'  => 'i.observaciones',
+                ...($this->usaProyecto() ? ['proyecto' => 'pry.nombre'] : []),
             ],
             'exacto'   => [
                 'estado'      => 'i.estado',
+                // Proyecto del ingreso (filtro del modal); sin la columna la clave se ignora.
+                ...($this->usaProyecto() ? ['id_proyecto' => 'i.id_proyecto'] : []),
                 'tipo'        => 'i.tipo_ingreso',
                 // Serie = establecimiento-puntoEmision (ej. "001-001"), tal como se
                 // muestra en el selector "Serie" del buscador.
@@ -277,7 +283,7 @@ class IngresoRepository extends BaseRepository
         );
         $orderBy = \App\Helpers\OrdenListado::clausula(
             $ordenMulti,
-            self::MAPA_ORDEN,
+            $this->mapaOrden(),
             'i.fecha_emision',
             'i.id DESC'
         );
@@ -290,14 +296,14 @@ class IngresoRepository extends BaseRepository
             [
                 'tabla'       => 'ingresos_cabecera',
                 'alias'       => 'i',
-                'joinsFiltro' => self::LISTADO_JOINS,
-                'joinsFinal'  => self::LISTADO_JOINS,
+                'joinsFiltro' => $this->listadoJoins(),
+                'joinsFinal'  => $this->listadoJoins(),
                 'where'       => $where,
                 'orderBy'     => $orderBy,
                 'perPage'     => $perPage,
                 'conBusqueda' => trim($buscar) !== '',   // sin buscar: forma liviana (ids por índice + COUNT aparte)
                 'offset'      => $offset,
-                'select'      => self::LISTADO_SELECT,
+                'select'      => $this->listadoSelect(),
             ],
             $params
         );
@@ -326,6 +332,30 @@ class IngresoRepository extends BaseRepository
                            ORDER BY t
                        ) sub) AS tipos_detalle";
 
+    /** Joins del listado; con la columna id_proyecto suma el proyecto del ingreso. */
+    private function listadoJoins(): string
+    {
+        return self::LISTADO_JOINS . ($this->usaProyecto()
+            ? "
+                LEFT JOIN proyectos pry ON pry.id = i.id_proyecto AND pry.id_empresa = i.id_empresa"
+            : '');
+    }
+
+    private function listadoSelect(): string
+    {
+        return self::LISTADO_SELECT . ($this->usaProyecto() ? ', pry.nombre AS proyecto_nombre' : '');
+    }
+
+    /** MAPA_ORDEN sin `proyecto` mientras la instalación no tenga la columna. */
+    private function mapaOrden(): array
+    {
+        $mapa = self::MAPA_ORDEN;
+        if (!$this->usaProyecto()) {
+            unset($mapa['proyecto']);
+        }
+        return $mapa;
+    }
+
     /**
      * Una fila del listado (mismas columnas que getListado()) para el ingreso recién
      * guardado: la vista la usa para actualizar ese registro en el listado sin perder la
@@ -342,9 +372,9 @@ class IngresoRepository extends BaseRepository
             $params[':id_usuario'] = $idUsuario;
         }
 
-        $sql = "SELECT " . self::LISTADO_SELECT . "
+        $sql = "SELECT " . $this->listadoSelect() . "
                 FROM ingresos_cabecera i
-                " . self::LISTADO_JOINS . "
+                " . $this->listadoJoins() . "
                 $where";
 
         $fila = $this->query($sql, $params)->fetch(PDO::FETCH_ASSOC);

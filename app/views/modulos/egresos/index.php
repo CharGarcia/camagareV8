@@ -1,6 +1,8 @@
 <?php
 
 /** @var string $titulo */
+// Columna y filtro Proyecto: solo si la empresa tiene proyectos activos (también lo usa _fila.php).
+$conProyecto = !empty($proyectos);
 /** @var array $perm */
 /** @var string $rutaModulo */
 /** @var array $rows */
@@ -184,6 +186,11 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                 ['tab' => $tE, 'key' => 'ruc',         'label' => 'RUC / Cédula',       'icon' => 'bi-card-text',       'type' => 'text',         'grupo' => 'Beneficiario', 'col' => 3],
                 ['tab' => $tE, 'key' => 'observaciones','label' => 'Observaciones',     'icon' => 'bi-chat-left-text',  'type' => 'text',         'grupo' => 'Beneficiario', 'col' => 3],
             ];
+            if ($conProyecto) {
+                // Todos los proyectos de la empresa (también cerrados): un egreso viejo puede ser de uno ya terminado.
+                $filtrosEgresos[] = ['tab' => $tE, 'key' => 'id_proyecto', 'label' => 'Proyecto', 'icon' => 'bi-kanban', 'type' => 'select', 'grupo' => 'Proyecto', 'col' => 6,
+                    'options' => array_map(fn($p) => ['v' => (string) $p['id'], 'l' => trim(($p['codigo'] ? $p['codigo'] . ' - ' : '') . $p['nombre']) . ($p['estado'] !== 'activo' ? ' (cerrado)' : '')], $proyectosFiltro ?? [])];
+            }
             ?>
             <link rel="stylesheet" href="<?= rtrim(BASE_URL, '/') ?>/css/components/filtros_modal.css?v=<?= asset_ver('/css/components/filtros_modal.css') ?>">
             <script src="<?= rtrim(BASE_URL, '/') ?>/js/components/filtros_modal.js?v=<?= asset_ver('/js/components/filtros_modal.js') ?>"></script>
@@ -236,6 +243,7 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                     'tipo_egreso'   => 'Tipo',
                     'sujeto_nombre' => 'Beneficiario',
                     'observaciones'  => 'Observaciones',
+                    ...($conProyecto ? ['proyecto' => 'Proyecto'] : []),
                     'monto_total'    => 'Monto',
                     'estado'         => 'Estado',
                 ];
@@ -285,6 +293,11 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                         <th class="sortable-header" role="button" data-sort="observaciones" data-col="observaciones">
                             Observaciones <i class="bi <?= $ordenCol === 'observaciones' ? ($ordenDir === 'ASC' ? 'bi-sort-alpha-down text-primary' : 'bi-sort-alpha-up text-primary') : 'bi-arrow-down-up small text-muted' ?> ms-1"></i>
                         </th>
+                        <?php if ($conProyecto): ?>
+                        <th class="sortable-header" role="button" data-sort="proyecto" data-col="proyecto">
+                            Proyecto <i class="bi <?= $ordenCol === 'proyecto' ? ($ordenDir === 'ASC' ? 'bi-sort-alpha-down text-primary' : 'bi-sort-alpha-up text-primary') : 'bi-arrow-down-up small text-muted' ?> ms-1"></i>
+                        </th>
+                        <?php endif; ?>
                         <th class="sortable-header text-end" role="button" data-sort="monto_total" data-col="monto_total">
                             Monto <i class="bi <?= $ordenCol === 'monto_total' ? ($ordenDir === 'ASC' ? 'bi-sort-alpha-down text-primary' : 'bi-sort-alpha-up text-primary') : 'bi-arrow-down-up small text-muted' ?> ms-1"></i>
                         </th>
@@ -296,7 +309,7 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                 <tbody id="tbodyEgresos">
                     <?php if (empty($rows)): ?>
                         <tr>
-                            <td colspan="7" class="text-center py-5 text-muted"><i class="bi bi-cash-stack fs-3 d-block mb-2"></i>No se encontraron egresos.</td>
+                            <td colspan="<?= $conProyecto ? 8 : 7 ?>" class="text-center py-5 text-muted"><i class="bi bi-cash-stack fs-3 d-block mb-2"></i>No se encontraron egresos.</td>
                         </tr>
                     <?php else: ?>
                         <?php foreach ($rows as $r): ?>

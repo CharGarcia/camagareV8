@@ -43,6 +43,7 @@ class ReporteIngresosEgresosController extends BaseModuloController
             'rutaModulo'  => $this->getRutaModulo(),
             'formas'      => $this->repository->getFormasPago($idEmpresa),
             'conceptos'   => $this->repository->getConceptos($idEmpresa),
+            'proyectos'   => $this->repository->getProyectos($idEmpresa),
             'vendedores'  => (new VendedorRepository())->getVendedoresActivos($idEmpresa),
             'anios'       => $this->repository->getAnios($idEmpresa),
             'fullWidth'   => true,
@@ -63,6 +64,7 @@ class ReporteIngresosEgresosController extends BaseModuloController
             'id_forma'          => (int) ($_REQUEST['id_forma'] ?? 0),
             'operacion_bancaria'=> strtoupper(trim($_REQUEST['operacion_bancaria'] ?? '')),
             'id_concepto'       => (int) ($_REQUEST['id_concepto'] ?? 0),
+            'id_proyecto'       => (int) ($_REQUEST['id_proyecto'] ?? 0),
             'estado'            => strtoupper(trim($_REQUEST['estado'] ?? '')) === 'ANULADO' ? 'ANULADO' : 'VIGENTES',
             'tipo_documento'    => strtoupper(trim($_REQUEST['tipo_documento'] ?? '')),
             'monto_min'         => trim($_REQUEST['monto_min'] ?? ''),
@@ -677,6 +679,9 @@ class ReporteIngresosEgresosController extends BaseModuloController
         }
         if ($f['id_concepto'] > 0) {
             $info['Concepto'] = self::nombreEnCatalogo($this->repository->getConceptos($idEmpresa), $f['id_concepto']);
+        }
+        if ($f['id_proyecto'] > 0) {
+            $info['Proyecto'] = self::nombreEnCatalogo($this->repository->getProyectos($idEmpresa), $f['id_proyecto']);
         }
         $info['Estado'] = $f['estado'] === 'ANULADO' ? 'Anulados' : 'Vigentes';
         if ($f['movimientos'] !== 'TODOS') {

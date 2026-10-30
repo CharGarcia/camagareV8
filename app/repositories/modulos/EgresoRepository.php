@@ -159,6 +159,8 @@ class EgresoRepository extends BaseRepository
         // A quién se le paga: puede ser proveedor, empleado o un beneficiario suelto,
         // igual que la columna del listado.
         'sujeto_nombre' => "COALESCE(p.razon_social, emp.nombres_apellidos, e.beneficiario_nombre, 'OTRO')",
+        // Solo si existe egresos_cabecera.id_proyecto (ver mapaOrden()).
+        'proyecto'      => 'pry.nombre',
     ];
 
     /**
@@ -207,6 +209,7 @@ class EgresoRepository extends BaseRepository
                     'emp.nombres_apellidos',
                     'e.beneficiario_nombre',
                     'e.observaciones',                                    // Observaciones
+                    ...($this->usaProyecto() ? ['pry.nombre'] : []),     // Proyecto
                     ['sql' => 'e.fecha_emision', 'si' => \App\Helpers\FiltrosBusqueda::SI_DIGITOS], // Fecha
                     ['sql' => 'e.monto_total', 'si' => \App\Helpers\FiltrosBusqueda::SI_DIGITOS],   // Monto
                 ],
@@ -234,9 +237,12 @@ class EgresoRepository extends BaseRepository
                 'concepto'      => 'e.observaciones',
                 'obs'           => 'e.observaciones',
                 'observaciones' => 'e.observaciones',
+                ...($this->usaProyecto() ? ['proyecto' => 'pry.nombre'] : []),
             ],
             'exacto'   => [
                 'estado'       => 'e.estado',
+                // Proyecto del egreso (filtro del modal); sin la columna la clave se ignora.
+                ...($this->usaProyecto() ? ['id_proyecto' => 'e.id_proyecto'] : []),
                 'tipo'         => 'e.tipo_egreso',
                 // Serie = establecimiento-puntoEmision (ej. "001-001"), tal como se
                 // muestra en el selector "Serie" del buscador.
@@ -278,7 +284,7 @@ class EgresoRepository extends BaseRepository
         );
         $orderBy = \App\Helpers\OrdenListado::clausula(
             $ordenMulti,
-            self::MAPA_ORDEN,
+            $this->mapaOrden(),
             'e.fecha_emision',
             'e.id DESC'
         );
@@ -291,14 +297,14 @@ class EgresoRepository extends BaseRepository
             [
                 'tabla'       => 'egresos_cabecera',
                 'alias'       => 'e',
-                'joinsFiltro' => self::LISTADO_JOINS,
-                'joinsFinal'  => self::LISTADO_JOINS,
+                'joinsFiltro' => $this->listadoJoins(),
+                'joinsFinal'  => $this->listadoJoins(),
                 'where'       => $where,
                 'orderBy'     => $orderBy,
                 'perPage'     => $perPage,
                 'conBusqueda' => trim($buscar) !== '',   // sin buscar: forma liviana (ids por índice + COUNT aparte)
                 'offset'      => $offset,
-                'select'      => self::LISTADO_SELECT,
+                'select'      => $this->listadoSelect(),
             ],
             $params
         );
@@ -326,6 +332,30 @@ class EgresoRepository extends BaseRepository
                            ORDER BY t
                        ) sub) AS tipos_detalle";
 
+    /** Joins del listado; con la columna id_proyecto suma el proyecto del egreso. */
+    private function listadoJoins(): string
+    {
+        return self::LISTADO_JOINS . ($this->usaProyecto()
+            ? "
+                LEFT JOIN proyectos pry ON pry.id = e.id_proyecto AND pry.id_empresa = e.id_empresa"
+            : '');
+    }
+
+    private function listadoSelect(): string
+    {
+        return self::LISTADO_SELECT . ($this->usaProyecto() ? ', pry.nombre AS proyecto_nombre' : '');
+    }
+
+    /** MAPA_ORDEN sin `proyecto` mientras la instalación no tenga la columna. */
+    private function mapaOrden(): array
+    {
+        $mapa = self::MAPA_ORDEN;
+        if (!$this->usaProyecto()) {
+            unset($mapa['proyecto']);
+        }
+        return $mapa;
+    }
+
     /**
      * Una fila del listado (mismas columnas que getListado()) para el egreso recién
      * guardado: la vista la usa para actualizar ese registro en el listado sin perder la
@@ -342,9 +372,9 @@ class EgresoRepository extends BaseRepository
             $params[':id_usuario'] = $idUsuario;
         }
 
-        $sql = "SELECT " . self::LISTADO_SELECT . "
+        $sql = "SELECT " . $this->listadoSelect() . "
                 FROM egresos_cabecera e
-                " . self::LISTADO_JOINS . "
+                " . $this->listadoJoins() . "
                 $where";
 
         $fila = $this->query($sql, $params)->fetch(PDO::FETCH_ASSOC);

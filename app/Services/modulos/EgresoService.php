@@ -766,6 +766,12 @@ class EgresoService
         return $this->repository->usaProyecto() ? (new \App\models\Proyecto())->getActivosPorEmpresa($idEmpresa) : [];
     }
 
+    /** Todos los proyectos de la empresa (activos y cerrados) para el filtro Proyecto del listado. */
+    public function getProyectosFiltro(int $idEmpresa): array
+    {
+        return $this->repository->usaProyecto() ? (new \App\repositories\modulos\ProyectoRepository())->getParaFiltro($idEmpresa) : [];
+    }
+
     public function getConceptosEgreso(int $idEmpresa): array
     {
         $programadoRepo = new AsientoProgramadoRepository();

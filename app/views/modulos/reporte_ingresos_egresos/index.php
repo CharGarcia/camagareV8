@@ -124,6 +124,17 @@
                             <?php endforeach; ?>
                         </select>
                     </div>
+                    <?php if (!empty($proyectos)): // solo si la empresa tiene proyectos ?>
+                    <div>
+                        <label class="form-label small fw-bold mb-1 d-block text-muted text-uppercase" style="font-size:.65rem;">Proyecto<?= \App\Helpers\PreferenciasHelper::renderEstrellaFavorito($rutaModulo, 'rie-proyecto', 'proyecto') ?></label>
+                        <select id="rie-proyecto" class="form-select form-select-sm shadow-none border" style="width:170px;">
+                            <option value="0">Todos</option>
+                            <?php foreach ($proyectos as $p): ?>
+                                <option value="<?= (int)$p['id'] ?>"><?= htmlspecialchars(trim(($p['codigo'] ? $p['codigo'] . ' - ' : '') . $p['nombre']) . ($p['estado'] !== 'activo' ? ' (cerrado)' : '')) ?></option>
+                            <?php endforeach; ?>
+                        </select>
+                    </div>
+                    <?php endif; ?>
                     <div>
                         <label class="form-label small fw-bold mb-1 d-block text-muted text-uppercase" style="font-size:.65rem;">Tipo de documento<?= \App\Helpers\PreferenciasHelper::renderEstrellaFavorito($rutaModulo, 'rie-tipo-doc', 'tipo_doc') ?></label>
                         <select id="rie-tipo-doc" class="form-select form-select-sm shadow-none border" style="width:140px;">
@@ -285,6 +296,7 @@
             id_forma: $('rie-forma').value,
             operacion_bancaria: $('rie-opbanc').value,
             id_concepto: $('rie-concepto').value,
+            id_proyecto: $('rie-proyecto')?.value || 0,
             estado: $('rie-estado').value,
             movimientos: $('rie-movimientos').value,
             tipo_documento: $('rie-tipo-doc').value,
@@ -382,7 +394,7 @@
         $('rie-fecha-desde').value = '<?= date('Y-m-01') ?>';
         $('rie-fecha-hasta').value = '<?= date('Y-m-d') ?>';
         $('rie-tipo-flujo').value = 'AMBOS'; $('rie-ver-por').value = 'COMPROBANTE'; $('rie-tercero-tipo').value = '';
-        $('rie-forma').value = '0'; $('rie-opbanc').value = ''; $('rie-concepto').value = '0'; $('rie-tipo-doc').value = ''; $('rie-estado').value = 'VIGENTES'; $('rie-movimientos').value = 'TODOS';
+        $('rie-forma').value = '0'; $('rie-opbanc').value = ''; $('rie-concepto').value = '0'; if ($('rie-proyecto')) $('rie-proyecto').value = '0'; $('rie-tipo-doc').value = ''; $('rie-estado').value = 'VIGENTES'; $('rie-movimientos').value = 'TODOS';
         $('rie-vendedor').value = '0';
         aplicarFavoritos(); // Limpiar vuelve a los valores favoritos del usuario, no a los de fábrica
         vaciar();

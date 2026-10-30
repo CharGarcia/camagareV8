@@ -149,6 +149,21 @@ class ProyectoRepository extends BaseRepository
     }
 
     /**
+     * Todos los proyectos de la empresa (activos y cerrados), para filtrar documentos por
+     * proyecto: un documento viejo puede ser de un proyecto ya cerrado.
+     */
+    public function getParaFiltro(int $idEmpresa): array
+    {
+        $st = $this->db->prepare(
+            "SELECT id, codigo, nombre, estado FROM {$this->table}
+             WHERE id_empresa = :id_empresa AND eliminado = false
+             ORDER BY (estado = 'activo') DESC, nombre"
+        );
+        $st->execute([':id_empresa' => $idEmpresa]);
+        return $st->fetchAll(PDO::FETCH_ASSOC);
+    }
+
+    /**
      * Opciones de los selects del modal de filtros: solo los clientes y usuarios que
      * realmente aparecen en los proyectos de la empresa.
      *

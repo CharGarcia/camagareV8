@@ -8,6 +8,7 @@
  * `data-id` es lo que usa la vista para ubicar la fila del ingreso guardado.
  *
  * @var array $r Fila de IngresoRepository::getListado() / getFilaListado()
+ * @var bool  $conProyecto Columna Proyecto (la empresa tiene proyectos activos)
  */
 $tipoLabel = \App\Helpers\TipoDocumentoHelper::ingresoLabel(
     $r['tipos_detalle'] ?? null,
@@ -27,6 +28,9 @@ $estadoClass = match ($estado) {
     <td data-col="tipo_ingreso"><span class="badge bg-light text-dark border"><?= htmlspecialchars($tipoLabel) ?></span></td>
     <td class="fw-medium text-truncate" data-col="recibo_de" style="max-width:200px"><?= htmlspecialchars($r['recibo_de'] ?? $r['cliente_nombre'] ?? $r['concepto_nombre'] ?? '—') ?></td>
     <td data-col="observaciones" class="text-truncate text-muted" style="max-width:200px"><?= htmlspecialchars($r['observaciones'] ?? '') ?></td>
+    <?php if (!empty($conProyecto)): ?>
+    <td class="text-truncate" data-col="proyecto" style="max-width:180px"><?= htmlspecialchars($r['proyecto_nombre'] ?? '') ?></td>
+    <?php endif; ?>
     <td class="text-end fw-bold" data-col="monto_total">$<?= number_format((float) ($r['monto_total'] ?? 0), 2) ?></td>
     <td class="text-center pe-3" data-col="estado"><span class="badge <?= $estadoClass ?> border border-opacity-25"><?= ucfirst($estado) ?></span></td>
 </tr>

@@ -5,8 +5,8 @@ categoria: Reportes
 ruta_modulo: modulos/reporte_ingresos_egresos
 tipo: modulo
 visibilidad: todos
-etiquetas: reporte de ingresos y egresos, anulados, ingresos anulados, egresos anulados, vigentes, movimiento de dinero, cobros y pagos, por tercero, forma de pago, concepto, vendedor, asesor, cobros por vendedor, comisiones, asesor del cliente, otros conceptos, saldo inicial, saldos iniciales, exportar, excel detallado, pdf, imprimir, logo en el pdf, totales en el pdf, reporte de ingresos por vendedor, reporte de egresos, pdf por vendedor, anticipo, anticipos, anticipo aplicado, cruce de anticipo, ingresos repetidos, ingreso duplicado, doble conteo, saldo de anticipos, anticipos por cliente, anticipos de proveedores, anticipos recibidos, anticipos entregados, entrada de dinero, salida de dinero, flujo de caja, monetario, no monetario, solo monetarios, cruces, compensaciones, favoritos, filtro favorito, detalle del ingreso, ver comprobante, clic en la fila, agrupado, por comprobante, una fila por ingreso, sin detallar facturas, como en el ingreso
-version: 1.10
+etiquetas: reporte de ingresos y egresos, proyecto, por proyecto, ingresos y egresos de un proyecto, obra, anulados, ingresos anulados, egresos anulados, vigentes, movimiento de dinero, cobros y pagos, por tercero, forma de pago, concepto, vendedor, asesor, cobros por vendedor, comisiones, asesor del cliente, otros conceptos, saldo inicial, saldos iniciales, exportar, excel detallado, pdf, imprimir, logo en el pdf, totales en el pdf, reporte de ingresos por vendedor, reporte de egresos, pdf por vendedor, anticipo, anticipos, anticipo aplicado, cruce de anticipo, ingresos repetidos, ingreso duplicado, doble conteo, saldo de anticipos, anticipos por cliente, anticipos de proveedores, anticipos recibidos, anticipos entregados, entrada de dinero, salida de dinero, flujo de caja, monetario, no monetario, solo monetarios, cruces, compensaciones, favoritos, filtro favorito, detalle del ingreso, ver comprobante, clic en la fila, agrupado, por comprobante, una fila por ingreso, sin detallar facturas, como en el ingreso
+version: 1.11
 orden: 30
 estado: activo
 ---
@@ -29,6 +29,7 @@ iniciales y deja la tabla en blanco hasta la siguiente búsqueda.
 | Forma de pago | Efectivo, banco, tarjeta… |
 | Operación bancaria | Transferencia, cheque, depósito |
 | Concepto | El motivo del ingreso o egreso |
+| Proyecto | Los ingresos y egresos de un proyecto (el elegido en su cabecera). Solo aparece si la empresa tiene proyectos; incluye los cerrados. No se aplica a la vista *Anticipos* |
 | Estado | *Vigentes* (por defecto) o *Anulados* |
 | Movimientos | *Todos* (por defecto), *Solo monetarios* (sin lo cobrado o pagado con formas de tipo Anticipo u Otros) o *Solo no monetarios* (solo eso) |
 | Tipo de documento | Qué documento originó el movimiento |
@@ -37,7 +38,7 @@ iniciales y deja la tabla en blanco hasta la siguiente búsqueda.
 
 **Favoritos**: la estrella junto a cada selector (Mostrar, Ver por, Estado,
 Movimientos, Tipo de tercero, Vendedor, Forma de cobro/pago, Operación bancaria,
-Concepto, Tipo de documento) guarda ese valor como su favorito: al entrar al
+Concepto, Proyecto, Tipo de documento) guarda ese valor como su favorito: al entrar al
 reporte, y al presionar **Limpiar**, el filtro toma su valor favorito. Cada usuario
 tiene los suyos. Con un favorito puesto, el reporte igual no carga datos hasta
 presionar **Buscar**.
@@ -320,6 +321,7 @@ cobró cada vendedor, qué movimientos hubo por encima de cierto monto.
 
 ## Historial de cambios
 
+- **1.11** — Filtro **Proyecto**: muestra los ingresos y egresos de un proyecto; el PDF y el Excel lo indican en los filtros aplicados.
 - **1.10** — Nueva forma de ver **Documento (agrupado)**, que ahora es la vista
   por defecto: una fila por ingreso o
   egreso, como se registró, con sus documentos juntos en una celda, en lugar de

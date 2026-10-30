@@ -5,8 +5,8 @@ categoria: Tesorería
 ruta_modulo: modulos/ingresos
 tipo: modulo
 visibilidad: todos
-etiquetas: ingresos, proyecto, ingreso de un proyecto, obra, asignar proyecto, ingreso por proyecto, proyecto en el pdf, documentos pendientes, no coincide con cuentas por cobrar, solo mis documentos, vendedor, acceso total, cobro, cobrar, buscar ingreso, buscador, filtros, filtrar ingresos, filtrar por forma de cobro, buscar por factura cobrada, buscar por cheque, buscar por transferencia, filtro de fechas, chips, editar ingreso, modificar ingreso, corregir ingreso, cambiar monto cobrado, quitar factura del ingreso, periodo cerrado, solo lectura, no deja editar, no puedo modificar, ordenar por dos columnas, ordenar por recibi de y fecha, recibo, dinero que entra, anticipo, deposito, efectivo, transferencia, caja, excel, exportar, combinar conceptos, mezclar conceptos, otros conceptos, varios documentos, cobro sin factura, tipo real, tipo de ingreso, numero de ingreso, serie, secuencial, numero repetido, numero duplicado, numeracion por fecha, numero con el año, reiniciar numeracion, reinicio anual, reinicio mensual, correlativo por año, correlativo por mes, modo de numeracion, orden de formas de cobro, saldo de la forma de cobro, saldo disponible, ocultar saldo, aparecen documentos que no busque, resultados que no corresponden, buscar por numero de documento cobrado, cuenta del anticipo, anticipo sin cuenta, cuenta contable del concepto, cuenta por defecto, falta cuenta contable, cobrar factura y dejar anticipo, excedente como anticipo, listado no se actualiza, no aparece el ingreso guardado, no se ve el cambio, vuelve a la primera pagina, se pierde la pagina, refrescar listado, recargar tabla, fila resaltada, observaciones automaticas, observaciones se llenan solas, observaciones se completan solas, glosa del ingreso, concepto del comprobante, descripcion del cobro, cobro factura de venta, falta un centavo, centavo pendiente, no puedo cobrar el centavo, diferencia de un centavo, saldo de 0.01, queda un centavo, referencia muy larga, glosa larga, no guarda el ingreso, no se guarda el cobro, error al guardar ingreso, value too long, texto demasiado largo, se corta la referencia, limite de caracteres, imprimir, impresora, doble clic, ingreso duplicado, cobro duplicado, cobrar dos veces, doble cobro, ya no tiene saldo suficiente, crear cliente desde el ingreso, nuevo cliente, registrar cliente, crear forma de cobro, crear concepto, no aparece el boton de crear cliente, falta el boton nuevo cliente, ingreso anulado con asiento vivo, asiento sigue contabilizado, no se anulo el asiento, asiento de documento anulado, no se pudo anular el asiento contable del ingreso, eliminar ingreso, registrar otro ingreso, guardar y nuevo, guardar y crear otro, seguir en este, varios ingresos seguidos, no cerrar el modal, continuar registrando, no pasa nada al guardar, se queda pensando, tarda en guardar, guardando, demora al guardar, no muestra mensaje al guardar
-version: 3.20
+etiquetas: ingresos, proyecto, filtrar por proyecto, columna proyecto, ingresos de un proyecto, ingreso de un proyecto, obra, asignar proyecto, ingreso por proyecto, proyecto en el pdf, documentos pendientes, no coincide con cuentas por cobrar, solo mis documentos, vendedor, acceso total, cobro, cobrar, buscar ingreso, buscador, filtros, filtrar ingresos, filtrar por forma de cobro, buscar por factura cobrada, buscar por cheque, buscar por transferencia, filtro de fechas, chips, editar ingreso, modificar ingreso, corregir ingreso, cambiar monto cobrado, quitar factura del ingreso, periodo cerrado, solo lectura, no deja editar, no puedo modificar, ordenar por dos columnas, ordenar por recibi de y fecha, recibo, dinero que entra, anticipo, deposito, efectivo, transferencia, caja, excel, exportar, combinar conceptos, mezclar conceptos, otros conceptos, varios documentos, cobro sin factura, tipo real, tipo de ingreso, numero de ingreso, serie, secuencial, numero repetido, numero duplicado, numeracion por fecha, numero con el año, reiniciar numeracion, reinicio anual, reinicio mensual, correlativo por año, correlativo por mes, modo de numeracion, orden de formas de cobro, saldo de la forma de cobro, saldo disponible, ocultar saldo, aparecen documentos que no busque, resultados que no corresponden, buscar por numero de documento cobrado, cuenta del anticipo, anticipo sin cuenta, cuenta contable del concepto, cuenta por defecto, falta cuenta contable, cobrar factura y dejar anticipo, excedente como anticipo, listado no se actualiza, no aparece el ingreso guardado, no se ve el cambio, vuelve a la primera pagina, se pierde la pagina, refrescar listado, recargar tabla, fila resaltada, observaciones automaticas, observaciones se llenan solas, observaciones se completan solas, glosa del ingreso, concepto del comprobante, descripcion del cobro, cobro factura de venta, falta un centavo, centavo pendiente, no puedo cobrar el centavo, diferencia de un centavo, saldo de 0.01, queda un centavo, referencia muy larga, glosa larga, no guarda el ingreso, no se guarda el cobro, error al guardar ingreso, value too long, texto demasiado largo, se corta la referencia, limite de caracteres, imprimir, impresora, doble clic, ingreso duplicado, cobro duplicado, cobrar dos veces, doble cobro, ya no tiene saldo suficiente, crear cliente desde el ingreso, nuevo cliente, registrar cliente, crear forma de cobro, crear concepto, no aparece el boton de crear cliente, falta el boton nuevo cliente, ingreso anulado con asiento vivo, asiento sigue contabilizado, no se anulo el asiento, asiento de documento anulado, no se pudo anular el asiento contable del ingreso, eliminar ingreso, registrar otro ingreso, guardar y nuevo, guardar y crear otro, seguir en este, varios ingresos seguidos, no cerrar el modal, continuar registrando, no pasa nada al guardar, se queda pensando, tarda en guardar, guardando, demora al guardar, no muestra mensaje al guardar
+version: 3.21
 orden: 10
 estado: activo
 ---
@@ -303,8 +303,8 @@ cuántos documentos admite cada periodo) está en el manual de **Empresa**, secc
 ## Proyecto del ingreso
 
 Si la empresa tiene al menos un **proyecto activo** (Contabilidad → Proyectos), el
-modal muestra el campo **Proyecto** debajo de **Recibo de**. Si no tiene ninguno, el
-campo no aparece y el ingreso se registra como siempre.
+modal muestra el campo **Proyecto** en la primera fila, a continuación de **Recibo
+de**. Si no tiene ninguno, el campo no aparece y el ingreso se registra como siempre.
 
 - Cada ingreso pertenece a **un solo proyecto**. Se elige en la cabecera y no
   hace falta tocar el asiento.
@@ -318,6 +318,12 @@ campo no aparece y el ingreso se registra como siempre.
   del encabezado (línea **Proyecto**). En las plantillas PDF personalizadas está la
   variable `{cc_proyecto}`.
 - La estrella junto al campo deja un proyecto como favorito para los ingresos nuevos.
+- En el **listado**, la columna **Proyecto** (se puede ocultar y ordenar como las
+  demás) y el filtro **Proyecto** del embudo, que incluye también los proyectos ya
+  cerrados. En el buscador, `proyecto:obra` busca por nombre y el texto libre
+  también encuentra el nombre del proyecto. El PDF y el Excel del listado traen la
+  columna. Todo esto aparece solo si la empresa tiene proyectos activos.
+- En el **Reporte de Ingresos y Egresos** se pueden filtrar los ingresos de un proyecto.
 - Solo se pueden elegir proyectos activos. Un ingreso que ya tenía un proyecto que
   después se cerró lo conserva al editarlo.
 - Si el asiento fue **corregido a mano** desde la pestaña *Asiento contable*, el
@@ -579,6 +585,7 @@ misma revisión al guardar:
 
 ## Historial de cambios
 
+- **3.21** — Columna y filtro **Proyecto** en el listado (y en su PDF/Excel), y filtro Proyecto en el Reporte de Ingresos y Egresos; el campo Proyecto del modal pasa a la primera fila.
 - **3.20** — Campo **Proyecto** en el modal (si la empresa tiene proyectos activos): el ingreso pertenece a un proyecto, que se pone en todas las líneas de su asiento y sale en el encabezado del comprobante PDF.
 - **3.19** — Al pulsar **Guardar** o **Actualizar** aparece el aviso **«Guardando ingreso…»** mientras el sistema verifica el periodo, registra el ingreso y su asiento y recarga el documento; antes no se veía ninguna señal hasta el mensaje final.
 - **3.18** — El asiento contable del **comprobante PDF** muestra el **centro de costo** y el **proyecto** de cada línea, cuando los tiene.

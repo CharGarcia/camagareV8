@@ -179,6 +179,10 @@ class ReporteIngresosEgresosRepository extends BaseRepository
             $col = $esIng ? 'id_ingreso_concepto' : 'id_egreso_concepto';
             $w .= " AND c.$col = :concepto"; $params[':concepto'] = (int)$f['id_concepto'];
         }
+        // Proyecto del comprobante (elegido en la cabecera del ingreso/egreso).
+        if (!empty($f['id_proyecto']) && $this->columnaExiste($esIng ? 'ingresos_cabecera' : 'egresos_cabecera', 'id_proyecto')) {
+            $w .= " AND c.id_proyecto = :proyecto"; $params[':proyecto'] = (int)$f['id_proyecto'];
+        }
         if (!empty($f['tercero_id']) && !empty($f['tercero_tipo'])) {
             if ($esIng && $f['tercero_tipo'] === 'CLIENTE') {
                 $w .= " AND (c.id_cliente = :tercero_id OR c.id_recibo_cliente = :tercero_id)";
@@ -1009,6 +1013,18 @@ class ReporteIngresosEgresosRepository extends BaseRepository
         return $this->q("SELECT id, nombre, tipo FROM empresa_formas_pago
                          WHERE id_empresa = :e AND eliminado = false AND activo = true
                          ORDER BY nombre", [':e' => $idEmpresa])->fetchAll(PDO::FETCH_ASSOC);
+    }
+
+    /**
+     * Proyectos de la empresa (activos y cerrados) para el filtro Proyecto. Vacío mientras la
+     * instalación no tenga la columna (database/2026-10-30_ingresos_egresos_proyecto.sql).
+     */
+    public function getProyectos(int $idEmpresa): array
+    {
+        if (!$this->columnaExiste('ingresos_cabecera', 'id_proyecto') && !$this->columnaExiste('egresos_cabecera', 'id_proyecto')) {
+            return [];
+        }
+        return (new ProyectoRepository())->getParaFiltro($idEmpresa);
     }
 
     public function getConceptos(int $idEmpresa): array
