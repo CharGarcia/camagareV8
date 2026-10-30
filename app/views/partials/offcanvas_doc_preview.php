@@ -229,7 +229,7 @@
                     <div class="d-flex justify-content-between align-items-start">
                         <div style="max-width:70%">
                             ${cod ? `<small class="d-block text-muted" style="font-size:0.7rem;">Cód: ${esc(cod)}</small>` : ''}
-                            <strong class="d-block text-dark small text-truncate" title="${esc(concepto)}">${esc(concepto)}</strong>
+                            <strong class="d-block text-dark small text-break" style="white-space:normal;">${esc(concepto)}</strong>
                         </div>
                         <div class="text-end">
                             <span class="fw-bold text-secondary small">${money(val)}</span>
@@ -256,7 +256,7 @@
                 <div class="bg-white border rounded-3 p-2 shadow-sm">
                     <div class="d-flex justify-content-between align-items-start">
                         <div style="max-width:70%">
-                            <strong class="d-block text-dark small text-truncate" title="${esc(doc)}">${esc(doc)}</strong>
+                            <strong class="d-block text-dark small text-break" style="white-space:normal;">${esc(doc)}</strong>
                             ${d.descripcion ? `<small class="d-block text-muted" style="font-size:0.7rem;">${esc(d.descripcion)}</small>` : ''}
                         </div>
                         <span class="fw-bold text-secondary small">${money(d.monto)}</span>
@@ -310,7 +310,7 @@
                     <div class="d-flex justify-content-between align-items-start">
                         <div style="max-width:70%">
                             ${cod ? `<small class="d-block text-muted" style="font-size:0.7rem;">Cod: ${esc(cod)}</small>` : ''}
-                            <strong class="d-block text-dark small text-truncate" title="${esc(desc)}">${esc(desc)}</strong>
+                            <strong class="d-block text-dark small text-break" style="white-space:normal;">${esc(desc)}</strong>
                         </div>
                         <div class="text-end">
                             <span class="fw-bold text-secondary small">${money(dTotal)}</span>

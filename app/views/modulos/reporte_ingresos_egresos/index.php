@@ -130,7 +130,7 @@
                         <select id="rie-proyecto" class="form-select form-select-sm shadow-none border" style="width:170px;">
                             <option value="0">Todos</option>
                             <?php foreach ($proyectos as $p): ?>
-                                <option value="<?= (int)$p['id'] ?>"><?= htmlspecialchars(trim(($p['codigo'] ? $p['codigo'] . ' - ' : '') . $p['nombre']) . ($p['estado'] !== 'activo' ? ' (cerrado)' : '')) ?></option>
+                                <option value="<?= (int)$p['id'] ?>"><?= htmlspecialchars($p['nombre'] . ($p['estado'] !== 'activo' ? ' (cerrado)' : '')) ?></option>
                             <?php endforeach; ?>
                         </select>
                     </div>

@@ -189,7 +189,7 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
             if ($conProyecto) {
                 // Todos los proyectos de la empresa (también cerrados): un egreso viejo puede ser de uno ya terminado.
                 $filtrosEgresos[] = ['tab' => $tE, 'key' => 'id_proyecto', 'label' => 'Proyecto', 'icon' => 'bi-kanban', 'type' => 'select', 'grupo' => 'Proyecto', 'col' => 6,
-                    'options' => array_map(fn($p) => ['v' => (string) $p['id'], 'l' => trim(($p['codigo'] ? $p['codigo'] . ' - ' : '') . $p['nombre']) . ($p['estado'] !== 'activo' ? ' (cerrado)' : '')], $proyectosFiltro ?? [])];
+                    'options' => array_map(fn($p) => ['v' => (string) $p['id'], 'l' => $p['nombre'] . ($p['estado'] !== 'activo' ? ' (cerrado)' : '')], $proyectosFiltro ?? [])];
             }
             ?>
             <link rel="stylesheet" href="<?= rtrim(BASE_URL, '/') ?>/css/components/filtros_modal.css?v=<?= asset_ver('/css/components/filtros_modal.css') ?>">
@@ -516,7 +516,7 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                                         <select name="id_proyecto" id="eg-select-proyecto" class="form-select form-select-sm">
                                             <option value="">— Sin proyecto —</option>
                                             <?php foreach ($proyectos as $pr): ?>
-                                                <option value="<?= (int) $pr['id'] ?>"><?= htmlspecialchars(trim(($pr['codigo'] ? $pr['codigo'] . ' - ' : '') . $pr['nombre'])) ?></option>
+                                                <option value="<?= (int) $pr['id'] ?>"><?= htmlspecialchars($pr['nombre']) ?></option>
                                             <?php endforeach; ?>
                                         </select>
                                     </div>
@@ -3821,8 +3821,8 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                         card.innerHTML = `
                             <div class="d-flex justify-content-between align-items-start">
                                 <div style="max-width:70%">
-                                    <small class="d-block text-muted" style="font-size: 0.7rem;">${cod ? `Cod: ${cod}` : ''}</small>
-                                    <strong class="d-block text-dark small text-truncate" title="${desc}">${desc}</strong>
+                                    <small class="d-block text-muted" style="font-size: 0.7rem;">${cod ? `Cod: ${escapeHtmlEg(cod)}` : ''}</small>
+                                    <strong class="d-block text-dark small text-break" style="white-space:normal;">${escapeHtmlEg(desc)}</strong>
                                 </div>
                                 <div class="text-end">
                                     <span class="fw-bold text-secondary small">$${dTotal.toFixed(2)}</span>

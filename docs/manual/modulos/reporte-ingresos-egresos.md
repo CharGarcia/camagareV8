@@ -6,7 +6,7 @@ ruta_modulo: modulos/reporte_ingresos_egresos
 tipo: modulo
 visibilidad: todos
 etiquetas: reporte de ingresos y egresos, proyecto, por proyecto, ingresos y egresos de un proyecto, obra, anulados, ingresos anulados, egresos anulados, vigentes, movimiento de dinero, cobros y pagos, por tercero, forma de pago, concepto, vendedor, asesor, cobros por vendedor, comisiones, asesor del cliente, otros conceptos, saldo inicial, saldos iniciales, exportar, excel detallado, pdf, imprimir, logo en el pdf, totales en el pdf, reporte de ingresos por vendedor, reporte de egresos, pdf por vendedor, anticipo, anticipos, anticipo aplicado, cruce de anticipo, ingresos repetidos, ingreso duplicado, doble conteo, saldo de anticipos, anticipos por cliente, anticipos de proveedores, anticipos recibidos, anticipos entregados, entrada de dinero, salida de dinero, flujo de caja, monetario, no monetario, solo monetarios, cruces, compensaciones, favoritos, filtro favorito, detalle del ingreso, ver comprobante, clic en la fila, agrupado, por comprobante, una fila por ingreso, sin detallar facturas, como en el ingreso
-version: 1.11
+version: 1.12
 orden: 30
 estado: activo
 ---
@@ -321,6 +321,7 @@ cobró cada vendedor, qué movimientos hubo por encima de cierto monto.
 
 ## Historial de cambios
 
+- **1.12** — El panel lateral del detalle muestra completas las descripciones de los documentos, ítems y formas de cobro/pago, en lugar de cortarlas con «…».
 - **1.11** — Filtro **Proyecto**: muestra los ingresos y egresos de un proyecto; el PDF y el Excel lo indican en los filtros aplicados.
 - **1.10** — Nueva forma de ver **Documento (agrupado)**, que ahora es la vista
   por defecto: una fila por ingreso o
