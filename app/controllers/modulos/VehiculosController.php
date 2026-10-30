@@ -238,6 +238,7 @@ class VehiculosController extends BaseModuloController
             $svc = new \App\Services\modulos\CarWashRecordatorioService();
             echo json_encode(['ok' => true, 'data' => [
                 'disponible' => $svc->tablaDisponible(),
+                'manual'     => $svc->manualDisponible(),
                 'citas'      => $svc->citasVehiculo($id, $idEmpresa, $idUsuarioFiltro),
                 'historial'  => $svc->historialVehiculo($id, $idEmpresa),
             ]], JSON_UNESCAPED_UNICODE);
@@ -257,7 +258,8 @@ class VehiculosController extends BaseModuloController
         try {
             $res = (new \App\Services\modulos\CarWashRecordatorioService())->enviarCorreo(
                 (int) ($_POST['id_orden'] ?? 0), (int) $_SESSION['id_empresa'], (int) $_SESSION['id_usuario'],
-                trim((string) ($_POST['destinatarios'] ?? '')), trim((string) ($_POST['asunto'] ?? '')), trim((string) ($_POST['mensaje'] ?? ''))
+                trim((string) ($_POST['destinatarios'] ?? '')), trim((string) ($_POST['asunto'] ?? '')), trim((string) ($_POST['mensaje'] ?? '')),
+                'manual', (int) ($_POST['id_recordatorio'] ?? 0)
             );
             echo json_encode(['ok' => $res['ok'], 'msg' => $res['mensaje'], 'error' => $res['ok'] ? null : $res['mensaje']]);
         } catch (\Throwable $e) {
@@ -275,9 +277,52 @@ class VehiculosController extends BaseModuloController
         try {
             (new \App\Services\modulos\CarWashRecordatorioService())->registrarWhatsappManual(
                 (int) ($_POST['id_orden'] ?? 0), (int) $_SESSION['id_empresa'], (int) $_SESSION['id_usuario'],
-                trim((string) ($_POST['telefono'] ?? '')), trim((string) ($_POST['mensaje'] ?? ''))
+                trim((string) ($_POST['telefono'] ?? '')), trim((string) ($_POST['mensaje'] ?? '')),
+                (int) ($_POST['id_recordatorio'] ?? 0)
             );
             echo json_encode(['ok' => true]);
+        } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
+            echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
+        }
+        exit;
+    }
+
+    /** Agrega (sin id) o edita un recordatorio propio del vehículo: fecha + motivo. */
+    public function guardarRecordatorioAjax(): void
+    {
+        $this->requireActualizar();
+        header('Content-Type: application/json');
+        try {
+            $idVehiculo = (int) ($_POST['id_vehiculo'] ?? 0);
+            $idEmpresa  = (int) $_SESSION['id_empresa'];
+            if ($idVehiculo <= 0 || !$this->service->findById($idVehiculo, $idEmpresa)) throw new \Exception('Vehículo no encontrado.');
+            $id = (int) ($_POST['id_recordatorio'] ?? 0);
+            $idUsuarioFiltro = empty($this->getPermisos()['todo']) ? (int) $_SESSION['id_usuario'] : null;
+            $nuevoId = (new \App\Services\modulos\CarWashRecordatorioService())->guardarRecordatorio(
+                $id, $idVehiculo, $idEmpresa, (int) $_SESSION['id_usuario'],
+                ['fecha' => $_POST['fecha'] ?? '', 'motivo' => $_POST['motivo'] ?? '', 'observacion' => $_POST['observacion'] ?? ''],
+                $idUsuarioFiltro
+            );
+            echo json_encode(['ok' => true, 'id' => $nuevoId, 'msg' => $id ? 'Recordatorio actualizado.' : 'Recordatorio agregado.']);
+        } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
+            echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
+        }
+        exit;
+    }
+
+    /** Elimina (lógicamente) un recordatorio propio del vehículo. */
+    public function eliminarRecordatorioAjax(): void
+    {
+        $this->requireEliminar();
+        header('Content-Type: application/json');
+        try {
+            $idUsuarioFiltro = empty($this->getPermisos()['todo']) ? (int) $_SESSION['id_usuario'] : null;
+            (new \App\Services\modulos\CarWashRecordatorioService())->eliminarRecordatorio(
+                (int) ($_POST['id_recordatorio'] ?? 0), (int) $_SESSION['id_empresa'], (int) $_SESSION['id_usuario'], $idUsuarioFiltro
+            );
+            echo json_encode(['ok' => true, 'msg' => 'Recordatorio eliminado.']);
         } catch (\Throwable $e) {
             \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             echo json_encode(['ok' => false, 'error' => $e->getMessage()]);

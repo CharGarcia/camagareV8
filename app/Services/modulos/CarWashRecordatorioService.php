@@ -5,6 +5,8 @@ namespace App\Services\modulos;
 
 use App\core\Database;
 use App\repositories\modulos\CarWashRecordatorioRepository;
+use App\repositories\modulos\VehiculoRecordatorioRepository;
+use App\Rules\modulos\VehiculoRecordatorioRules;
 use App\Services\LogSistemaService;
 use Exception;
 
@@ -18,16 +20,24 @@ use Exception;
  *    Automatizaciones (Handlers\CarWashRecordatorioHandler): correo o plantilla de WhatsApp.
  * Todo envío queda en carwash_recordatorios (historial + evita duplicar el automático).
  *
- * Destinatario: correo / teléfono del VEHÍCULO y, si no tiene, los del CLIENTE de la orden.
+ * Además de la cita de cada orden, el usuario puede AGREGAR recordatorios propios del
+ * vehículo (fecha + motivo, tabla vehiculos_recordatorios); se listan y se avisan igual.
+ * Una cita se identifica por id_orden (cita de una orden) o por id_recordatorio.
+ *
+ * Destinatario: correo / teléfono del VEHÍCULO y, si no tiene, los del CLIENTE de la orden
+ * (en un recordatorio agregado, el de la última orden del vehículo).
  */
 class CarWashRecordatorioService
 {
     public const ASUNTO_DEFECTO  = 'Recordatorio de su próxima cita - {empresa}';
     public const MENSAJE_DEFECTO = "Hola {cliente}:\n\nLe recordamos que su vehículo {placa} tiene su próxima cita en {empresa} el {fecha_cita}.\n\n¡Le esperamos!";
-    public const ETIQUETAS       = '{cliente} {placa} {marca} {fecha_cita} {empresa} {orden}';
+    /** Mensaje por defecto de un recordatorio agregado a mano (lleva su motivo). */
+    public const MENSAJE_DEFECTO_MOTIVO = "Hola {cliente}:\n\nLe recordamos que su vehículo {placa} tiene su próxima cita en {empresa} el {fecha_cita} para: {motivo}.\n\n¡Le esperamos!";
+    public const ETIQUETAS       = '{cliente} {placa} {marca} {fecha_cita} {empresa} {orden} {motivo}';
 
     private CarWashRecordatorioRepository $repo;
     private LogSistemaService $log;
+    private ?VehiculoRecordatorioRepository $repoManual = null;
 
     /** Motivo del último envío fallido (lo muestra el log de Automatizaciones). */
     public ?string $ultimoError = null;
@@ -41,6 +51,87 @@ class CarWashRecordatorioService
     public function tablaDisponible(): bool
     {
         return $this->repo->existeTabla();
+    }
+
+    /** ¿Se pueden agregar recordatorios a mano? (SQL 20261030_vehiculos_recordatorios.sql aplicado). */
+    public function manualDisponible(): bool
+    {
+        return $this->repo->existeManual();
+    }
+
+    // ─── Recordatorios agregados a mano ───────────────────────────────────────
+
+    /**
+     * Crea ($idRecordatorio = 0) o edita un recordatorio del vehículo. Sin acceso total
+     * ($idUsuarioFiltro), el usuario solo edita los que él creó.
+     */
+    public function guardarRecordatorio(int $idRecordatorio, int $idVehiculo, int $idEmpresa, int $idUsuario, array $data, ?int $idUsuarioFiltro = null): int
+    {
+        if (!$this->manualDisponible()) {
+            throw new Exception('Falta aplicar el SQL de recordatorios del vehículo (20261030_vehiculos_recordatorios.sql).');
+        }
+        $repo  = $this->repoManual();
+        $datos = [
+            'fecha'       => trim((string) ($data['fecha'] ?? '')),
+            'motivo'      => trim(preg_replace('/\s+/u', ' ', (string) ($data['motivo'] ?? ''))),
+            'observacion' => trim((string) ($data['observacion'] ?? '')),
+        ];
+        $antes = null;
+        if ($idRecordatorio > 0) {
+            $antes = $this->recordatorioPropio($idRecordatorio, $idEmpresa, $idUsuarioFiltro);
+            if ((int) $antes['id_vehiculo'] !== $idVehiculo) throw new Exception('El recordatorio no pertenece a este vehículo.');
+        }
+        (new VehiculoRecordatorioRules())->validar($datos, $antes['fecha'] ?? null);
+
+        $repo->beginTransaction();
+        try {
+            if ($idRecordatorio > 0) {
+                $repo->actualizar($idRecordatorio, $idEmpresa, $datos + ['id_usuario' => $idUsuario]);
+                $this->log->registrar($idUsuario, $idEmpresa, 'actualizar', 'vehiculos_recordatorios', $idRecordatorio, $antes, $datos);
+            } else {
+                $idRecordatorio = $repo->crear($datos + ['id_empresa' => $idEmpresa, 'id_vehiculo' => $idVehiculo, 'id_usuario' => $idUsuario]);
+                $this->log->registrar($idUsuario, $idEmpresa, 'crear', 'vehiculos_recordatorios', $idRecordatorio, null, $datos + ['id_vehiculo' => $idVehiculo]);
+            }
+            $repo->commit();
+            return $idRecordatorio;
+        } catch (\Throwable $e) {
+            $repo->rollBack();
+            throw $e;
+        }
+    }
+
+    /** Eliminación lógica de un recordatorio agregado (su historial de envíos se conserva). */
+    public function eliminarRecordatorio(int $idRecordatorio, int $idEmpresa, int $idUsuario, ?int $idUsuarioFiltro = null): void
+    {
+        if (!$this->manualDisponible()) {
+            throw new Exception('Falta aplicar el SQL de recordatorios del vehículo (20261030_vehiculos_recordatorios.sql).');
+        }
+        $repo  = $this->repoManual();
+        $antes = $this->recordatorioPropio($idRecordatorio, $idEmpresa, $idUsuarioFiltro);
+        $repo->beginTransaction();
+        try {
+            $repo->eliminar($idRecordatorio, $idEmpresa, $idUsuario);
+            $this->log->registrar($idUsuario, $idEmpresa, 'eliminar', 'vehiculos_recordatorios', $idRecordatorio, $antes, null);
+            $repo->commit();
+        } catch (\Throwable $e) {
+            $repo->rollBack();
+            throw $e;
+        }
+    }
+
+    private function recordatorioPropio(int $idRecordatorio, int $idEmpresa, ?int $idUsuarioFiltro): array
+    {
+        $r = $this->repoManual()->findById($idRecordatorio, $idEmpresa);
+        if (!$r) throw new Exception('Recordatorio no encontrado.');
+        if ($idUsuarioFiltro !== null && (int) $r['created_by'] !== $idUsuarioFiltro) {
+            throw new Exception('Solo puede modificar los recordatorios que usted registró.');
+        }
+        return $r;
+    }
+
+    private function repoManual(): VehiculoRecordatorioRepository
+    {
+        return $this->repoManual ??= new VehiculoRecordatorioRepository();
     }
 
     /**
@@ -57,7 +148,7 @@ class CarWashRecordatorioService
             $c['telefono_destino'] = $dest['telefono'];
             $c['nombre_destino']   = $dest['nombre'];
             $c['asunto_defecto']   = $this->aplicarEtiquetas(self::ASUNTO_DEFECTO, $c, $empresa);
-            $c['mensaje_defecto']  = $this->aplicarEtiquetas(self::MENSAJE_DEFECTO, $c, $empresa);
+            $c['mensaje_defecto']  = $this->aplicarEtiquetas(self::mensajeDefecto($c), $c, $empresa);
             $c['vencida']          = substr((string) $c['proxima_cita'], 0, 10) < $hoy;
             return $c;
         }, $this->repo->citasPorVehiculo($idVehiculo, $idEmpresa, $idUsuarioFiltro));
@@ -69,12 +160,13 @@ class CarWashRecordatorioService
     }
 
     /**
-     * Envía por correo el recordatorio de la cita de una orden y lo registra.
+     * Envía por correo el recordatorio de la cita de una orden ($idOrden) o de un
+     * recordatorio agregado ($idRecordatorio, con $idOrden = 0) y lo registra.
      * @return array{ok:bool, mensaje:string}
      */
-    public function enviarCorreo(int $idOrden, int $idEmpresa, int $idUsuario, string $destinatarios, string $asunto, string $mensaje, string $origen = 'manual'): array
+    public function enviarCorreo(int $idOrden, int $idEmpresa, int $idUsuario, string $destinatarios, string $asunto, string $mensaje, string $origen = 'manual', int $idRecordatorio = 0): array
     {
-        $cita = $this->citaValida($idOrden, $idEmpresa);
+        $cita = $this->citaValida($idOrden, $idEmpresa, $idRecordatorio);
         $empresa = $this->empresaNombre($idEmpresa);
         $destinatarios = trim($destinatarios) !== '' ? trim($destinatarios) : $this->destinatarios($cita)['correo'];
         if ($destinatarios === '') {
@@ -86,7 +178,7 @@ class CarWashRecordatorioService
             }
         }
         $asunto  = trim($asunto) !== '' ? $asunto : $this->aplicarEtiquetas(self::ASUNTO_DEFECTO, $cita, $empresa);
-        $mensaje = trim($mensaje) !== '' ? $mensaje : $this->aplicarEtiquetas(self::MENSAJE_DEFECTO, $cita, $empresa);
+        $mensaje = trim($mensaje) !== '' ? $mensaje : $this->aplicarEtiquetas(self::mensajeDefecto($cita), $cita, $empresa);
 
         $html = "<div style='font-family:Arial,sans-serif;line-height:1.5;color:#333;'>"
               . nl2br(htmlspecialchars($mensaje, ENT_QUOTES, 'UTF-8')) . '</div>';
@@ -109,9 +201,9 @@ class CarWashRecordatorioService
      * Registra un recordatorio enviado a mano por WhatsApp (la pantalla abre WhatsApp con
      * el mensaje listo; el sistema no puede confirmar la entrega, solo deja constancia).
      */
-    public function registrarWhatsappManual(int $idOrden, int $idEmpresa, int $idUsuario, string $telefono, string $mensaje): void
+    public function registrarWhatsappManual(int $idOrden, int $idEmpresa, int $idUsuario, string $telefono, string $mensaje, int $idRecordatorio = 0): void
     {
-        $cita = $this->citaValida($idOrden, $idEmpresa);
+        $cita = $this->citaValida($idOrden, $idEmpresa, $idRecordatorio);
         $tel  = self::normalizarTelefono($telefono !== '' ? $telefono : $this->destinatarios($cita)['telefono']);
         if ($tel === '') {
             throw new Exception('Ni el vehículo ni el cliente tienen teléfono registrado. Escriba un número.');
@@ -123,7 +215,8 @@ class CarWashRecordatorioService
     /**
      * Envía el recordatorio con una plantilla de WhatsApp aprobada por Meta (envío
      * automático). Variables del cuerpo, EN ORDEN: {{1}} cliente, {{2}} placa,
-     * {{3}} fecha de la cita, {{4}} empresa, {{5}} N.° de orden.
+     * {{3}} fecha de la cita, {{4}} empresa, {{5}} N.° de orden (en un recordatorio
+     * agregado a mano, que no tiene orden, va su motivo).
      */
     public function enviarWhatsappPlantilla(array $cita, int $idEmpresa, int $idUsuario, string $plantilla, string $idioma, int $numVars, string $origen = 'automatico'): bool
     {
@@ -135,7 +228,7 @@ class CarWashRecordatorioService
             (string) ($cita['placa'] ?? ''),
             date('d-m-Y', strtotime((string) $cita['proxima_cita'])),
             $empresa,
-            (string) ($cita['numero_orden'] ?? ''),
+            (string) (($cita['numero_orden'] ?? '') ?: ($cita['motivo'] ?? '')),
         ];
         $components = [];
         if ($numVars > 0) {
@@ -200,7 +293,14 @@ class CarWashRecordatorioService
             '{fecha_cita}' => !empty($cita['proxima_cita']) ? date('d-m-Y', strtotime((string) $cita['proxima_cita'])) : '',
             '{empresa}'    => $empresa,
             '{orden}'      => (string) ($cita['numero_orden'] ?? ''),
+            '{motivo}'     => (string) ($cita['motivo'] ?? ''),
         ]);
+    }
+
+    /** Plantilla por defecto: con el motivo si es un recordatorio agregado a mano. */
+    public static function mensajeDefecto(array $cita): string
+    {
+        return !empty($cita['id_recordatorio']) ? self::MENSAJE_DEFECTO_MOTIVO : self::MENSAJE_DEFECTO;
     }
 
     public function empresaNombre(int $idEmpresa): string
@@ -223,10 +323,15 @@ class CarWashRecordatorioService
         return '593' . $tel;
     }
 
-    private function citaValida(int $idOrden, int $idEmpresa): array
+    private function citaValida(int $idOrden, int $idEmpresa, int $idRecordatorio = 0): array
     {
         if (!$this->repo->existeTabla()) {
             throw new Exception('Falta aplicar el SQL de recordatorios (20260929_carwash_recordatorios.sql).');
+        }
+        if ($idOrden <= 0 && $idRecordatorio > 0) {
+            $cita = $this->repo->citaPorRecordatorio($idRecordatorio, $idEmpresa);
+            if (!$cita) throw new Exception('Recordatorio no encontrado.');
+            return $cita;
         }
         $cita = $this->repo->citaPorOrden($idOrden, $idEmpresa);
         if (!$cita) throw new Exception('Orden no encontrada.');
@@ -242,7 +347,8 @@ class CarWashRecordatorioService
         try {
             $id = $this->repo->registrar([
                 'id_empresa'   => $idEmpresa,
-                'id_orden'     => (int) $cita['id_orden'],
+                'id_orden'        => (int) ($cita['id_orden'] ?? 0),
+                'id_recordatorio' => (int) ($cita['id_recordatorio'] ?? 0),
                 'id_vehiculo'  => (int) ($cita['id_vehiculo'] ?? 0),
                 'id_cliente'   => (int) ($cita['id_cliente'] ?? 0),
                 'fecha_cita'   => substr((string) $cita['proxima_cita'], 0, 10),
@@ -256,7 +362,7 @@ class CarWashRecordatorioService
                 'id_usuario'   => $idUsuario,
             ]);
             $this->log->registrar($idUsuario, $idEmpresa, 'RECORDATORIO_CITA_CARWASH', 'carwash_recordatorios', $id, null,
-                ['id_orden' => (int) $cita['id_orden'], 'canal' => $canal, 'destinatario' => $destino, 'estado' => $ok ? 'enviado' : 'error', 'origen' => $origen]);
+                ['id_orden' => (int) ($cita['id_orden'] ?? 0), 'id_recordatorio' => (int) ($cita['id_recordatorio'] ?? 0), 'canal' => $canal, 'destinatario' => $destino, 'estado' => $ok ? 'enviado' : 'error', 'origen' => $origen]);
             if ($managed) $db->commit();
         } catch (\Throwable $e) {
             if ($managed && $db->inTransaction()) $db->rollBack();

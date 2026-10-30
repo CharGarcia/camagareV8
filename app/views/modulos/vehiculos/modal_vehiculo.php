@@ -25,6 +25,8 @@ $urlBaseVehShared = BASE_URL . '/modulos/vehiculos';
 <script>
     // Enviar recordatorios requiere permiso de modificar en Vehículos.
     window.VEH_PERM_ACTUALIZAR = <?= (!empty($permVeh['actualizar']) || !empty($permVeh['todo'])) ? 'true' : 'false' ?>;
+    // Agregar/editar recordatorios: modificar; eliminarlos: eliminar.
+    window.VEH_PERM_ELIMINAR = <?= (!empty($permVeh['eliminar']) || !empty($permVeh['todo'])) ? 'true' : 'false' ?>;
 </script>
 <!-- Modal Vehículo -->
 <div class="modal fade" id="modalVehiculo" tabindex="-1" aria-hidden="true" data-bs-backdrop="static" style="z-index: 1060;">
@@ -153,15 +155,18 @@ $urlBaseVehShared = BASE_URL . '/modulos/vehiculos';
                         </div>
                     </div>
 
-                    <!-- Recordatorios: próximas citas (de Car-Wash) y envío por correo / WhatsApp -->
+                    <!-- Recordatorios: citas de las órdenes de Car-Wash + recordatorios agregados a mano; envío por correo / WhatsApp -->
                     <div class="tab-pane fade" id="veh-pane-recordatorios" role="tabpanel">
                         <div class="px-3 py-2">
                             <div id="veh_rec_aviso"></div>
-                            <div class="fw-semibold small text-muted mb-1"><i class="bi bi-calendar-event me-1"></i>Citas del vehículo (fijadas en las órdenes de Car-Wash)</div>
+                            <div class="d-flex align-items-center justify-content-between mb-1">
+                                <div class="fw-semibold small text-muted"><i class="bi bi-calendar-event me-1"></i>Citas y recordatorios del vehículo</div>
+                                <button type="button" class="btn btn-sm btn-outline-primary py-0" id="veh_rec_agregar" disabled onclick="vehRecordatorioEditar(0)"><i class="bi bi-plus-lg me-1"></i>Agregar recordatorio</button>
+                            </div>
                             <div class="border rounded-3 bg-white mb-3 veh-rec-lista" style="max-height:30vh; overflow:auto;">
                                 <table class="table table-sm table-hover mb-0 text-nowrap" style="font-size:.8rem;">
                                     <thead class="table-light" style="position:sticky; top:0; z-index:1;">
-                                        <tr><th>Próxima cita</th><th>N° Orden</th><th>Cliente</th><th>Correo</th><th>Teléfono</th><th>Último aviso</th><th class="text-center">Enviar</th></tr>
+                                        <tr><th>Fecha</th><th>Orden / Motivo</th><th>Cliente</th><th>Correo</th><th>Teléfono</th><th>Último aviso</th><th class="text-center">Acciones</th></tr>
                                     </thead>
                                     <tbody id="veh_rec_citas"><tr><td colspan="7" class="text-center text-muted py-3">Sin citas.</td></tr></tbody>
                                 </table>
@@ -170,7 +175,7 @@ $urlBaseVehShared = BASE_URL . '/modulos/vehiculos';
                             <div class="border rounded-3 bg-white veh-rec-lista" style="max-height:25vh; overflow:auto;">
                                 <table class="table table-sm mb-0 text-nowrap" style="font-size:.8rem;">
                                     <thead class="table-light" style="position:sticky; top:0; z-index:1;">
-                                        <tr><th>Enviado</th><th>Cita</th><th>N° Orden</th><th>Canal</th><th>Destinatario</th><th class="text-center">Estado</th><th>Origen</th><th>Usuario</th></tr>
+                                        <tr><th>Enviado</th><th>Cita</th><th>Orden / Motivo</th><th>Canal</th><th>Destinatario</th><th class="text-center">Estado</th><th>Origen</th><th>Usuario</th></tr>
                                     </thead>
                                     <tbody id="veh_rec_historial"><tr><td colspan="8" class="text-center text-muted py-3">Aún no se han enviado recordatorios.</td></tr></tbody>
                                 </table>

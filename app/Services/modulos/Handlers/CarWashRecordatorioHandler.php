@@ -8,8 +8,9 @@ use App\Services\modulos\CarWashRecordatorioService;
 /**
  * Recordatorio automático de la PRÓXIMA CITA de Car-Wash (Automatizaciones).
  *
- * En cada ejecución busca las órdenes cuya próxima cita cae entre hoy y hoy + N días y
- * que aún no tienen recordatorio automático enviado por ese canal, y avisa al cliente:
+ * En cada ejecución busca las órdenes cuya próxima cita cae entre hoy y hoy + N días (y
+ * los recordatorios agregados a mano en la ficha del vehículo en ese rango) que aún no
+ * tienen recordatorio automático enviado por ese canal, y avisa al cliente:
  *  - enviar_correo:   correo con asunto y mensaje configurables (etiquetas {cliente}…);
  *  - enviar_whatsapp: plantilla de WhatsApp aprobada por Meta;
  *  - correo_whatsapp: los dos canales en la misma ejecución.
@@ -45,7 +46,7 @@ class CarWashRecordatorioHandler extends BaseHandler
     {
         $dias   = max(0, (int) ($p['dias_anticipacion'] ?? 1));
         $asunto = trim((string) ($p['asunto'] ?? '')) ?: CarWashRecordatorioService::ASUNTO_DEFECTO;
-        $cuerpo = trim((string) ($p['cuerpo'] ?? '')) ?: CarWashRecordatorioService::MENSAJE_DEFECTO;
+        $cuerpo = trim((string) ($p['cuerpo'] ?? '')); // vacío = el mensaje por defecto de cada cita
 
         $citas = $svc->citasPendientes($idEmpresa, $dias, 'correo', $idEst ?: null);
         if (!$citas) {
@@ -56,8 +57,9 @@ class CarWashRecordatorioHandler extends BaseHandler
         foreach ($citas as $c) {
             if ($svc->destinatarios($c)['correo'] === '') { $sinCorreo++; continue; }
             try {
-                $r = $svc->enviarCorreo((int) $c['id_orden'], $idEmpresa, $idUsuario, '',
-                    $svc->aplicarEtiquetas($asunto, $c, $empresa), $svc->aplicarEtiquetas($cuerpo, $c, $empresa), 'automatico');
+                $r = $svc->enviarCorreo((int) ($c['id_orden'] ?? 0), $idEmpresa, $idUsuario, '',
+                    $svc->aplicarEtiquetas($asunto, $c, $empresa), $svc->aplicarEtiquetas($cuerpo ?: CarWashRecordatorioService::mensajeDefecto($c), $c, $empresa), 'automatico',
+                    (int) ($c['id_recordatorio'] ?? 0));
                 $r['ok'] ? $enviados++ : $errores++;
             } catch (\Throwable $e) {
                 $errores++;

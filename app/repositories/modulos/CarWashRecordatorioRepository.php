@@ -8,7 +8,8 @@ use PDO;
 
 /**
  * Recordatorios de la próxima cita de Car-Wash (tabla carwash_recordatorios) y las
- * citas que salen de las órdenes (carwash_ordenes.proxima_cita).
+ * citas que salen de las órdenes (carwash_ordenes.proxima_cita) o de los recordatorios
+ * agregados a mano en la ficha del vehículo (vehiculos_recordatorios).
  *
  * Todas las consultas filtran por empresa, eliminado = false y el ambiente vigente de
  * la empresa (como el listado de Car-Wash). Las órdenes anuladas no generan citas.
@@ -32,6 +33,22 @@ class CarWashRecordatorioRepository extends BaseRepository
         return $existe;
     }
 
+    /**
+     * ¿Ya se aplicó el SQL de recordatorios agregados a mano (vehiculos_recordatorios +
+     * carwash_recordatorios.id_recordatorio)? Sin él, solo existen las citas de las órdenes.
+     */
+    public function existeManual(): bool
+    {
+        static $existe = false;
+        if (!$existe && $this->existeTabla()) {
+            $existe = (bool) $this->db->query(
+                "SELECT 1 FROM information_schema.columns
+                  WHERE table_schema = 'public' AND table_name = 'carwash_recordatorios' AND column_name = 'id_recordatorio'"
+            )->fetchColumn();
+        }
+        return $existe;
+    }
+
     /** Columnas comunes de una cita (orden + cliente + vehículo) para armar el mensaje. */
     private function selectCita(): string
     {
@@ -39,12 +56,37 @@ class CarWashRecordatorioRepository extends BaseRepository
             ? "(SELECT MAX(r.created_at) FROM carwash_recordatorios r
                  WHERE r.id_orden = o.id AND r.fecha_cita = o.proxima_cita AND r.estado = 'enviado' AND r.eliminado = false)"
             : "NULL";
-        return "o.id AS id_orden, o.id_empresa, o.numero_orden, o.proxima_cita, o.fecha_ingreso, o.placa, o.marca,
+        return "o.id AS id_orden, NULL AS id_recordatorio, NULL AS motivo, o.id_empresa, o.numero_orden, o.proxima_cita, o.fecha_ingreso, o.placa, o.marca,
                 o.id_vehiculo, o.id_cliente,
                 c.nombre AS cliente_nombre, c.email AS cliente_email, c.telefono AS cliente_telefono,
                 v.propietario AS vehiculo_propietario, v.correo AS vehiculo_correo, v.telefono AS vehiculo_telefono,
                 v.marca AS vehiculo_marca, v.modelo AS vehiculo_modelo,
                 $ultimo AS ultimo_envio";
+    }
+
+    /**
+     * Cita de un recordatorio agregado a mano, con las mismas columnas que la de una orden.
+     * El cliente es el de la última orden de Car-Wash del vehículo (si tiene), para tener
+     * a quién saludar y un correo/teléfono de respaldo.
+     */
+    private function sqlCitaManual(string $where): string
+    {
+        return "SELECT NULL AS id_orden, r.id AS id_recordatorio, r.motivo, r.id_empresa, NULL AS numero_orden,
+                       r.fecha AS proxima_cita, NULL AS fecha_ingreso, v.placa, v.marca,
+                       r.id_vehiculo, uo.id_cliente,
+                       c.nombre AS cliente_nombre, c.email AS cliente_email, c.telefono AS cliente_telefono,
+                       v.propietario AS vehiculo_propietario, v.correo AS vehiculo_correo, v.telefono AS vehiculo_telefono,
+                       v.marca AS vehiculo_marca, v.modelo AS vehiculo_modelo, r.observacion,
+                       (SELECT MAX(x.created_at) FROM carwash_recordatorios x
+                         WHERE x.id_recordatorio = r.id AND x.fecha_cita = r.fecha AND x.estado = 'enviado' AND x.eliminado = false) AS ultimo_envio
+                  FROM vehiculos_recordatorios r
+                  JOIN vehiculos v ON v.id = r.id_vehiculo
+             LEFT JOIN LATERAL (SELECT o.id_cliente FROM carwash_ordenes o
+                                 WHERE o.id_empresa = r.id_empresa AND o.id_vehiculo = r.id_vehiculo
+                                   AND o.eliminado = false AND o.id_cliente IS NOT NULL
+                                 ORDER BY o.fecha_ingreso DESC, o.id DESC LIMIT 1) uo ON true
+             LEFT JOIN clientes c ON c.id = uo.id_cliente
+                 WHERE r.id_empresa = :e AND r.eliminado = false AND $where";
     }
 
     /**
@@ -70,7 +112,27 @@ class CarWashRecordatorioRepository extends BaseRepository
                 LIMIT $limite";
         $st = $this->db->prepare($sql);
         $st->execute($params);
-        return $st->fetchAll(PDO::FETCH_ASSOC);
+        $citas = $st->fetchAll(PDO::FETCH_ASSOC);
+
+        // Recordatorios agregados a mano, mezclados con las citas de las órdenes por fecha.
+        if ($this->existeManual()) {
+            $where = 'r.id_vehiculo = :v' . ($idUsuarioFiltro !== null ? ' AND r.created_by = :u' : '');
+            $st = $this->db->prepare($this->sqlCitaManual($where) . " ORDER BY r.fecha DESC, r.id DESC LIMIT $limite");
+            $st->execute($params);
+            $citas = array_merge($citas, $st->fetchAll(PDO::FETCH_ASSOC));
+            usort($citas, fn($a, $b) => strcmp((string) $b['proxima_cita'], (string) $a['proxima_cita']));
+        }
+        return $citas;
+    }
+
+    /** Un recordatorio agregado a mano, como cita. */
+    public function citaPorRecordatorio(int $idRecordatorio, int $idEmpresa): ?array
+    {
+        if (!$this->existeManual()) return null;
+        $st = $this->db->prepare($this->sqlCitaManual('r.id = :id'));
+        $st->execute([':id' => $idRecordatorio, ':e' => $idEmpresa]);
+        $row = $st->fetch(PDO::FETCH_ASSOC);
+        return $row ?: null;
     }
 
     /** Una cita (orden) concreta de la empresa. */
@@ -112,20 +174,34 @@ class CarWashRecordatorioRepository extends BaseRepository
                 ORDER BY o.id_vehiculo, o.proxima_cita, o.id DESC";
         $st = $this->db->prepare($sql);
         $st->execute($params);
-        return $st->fetchAll(PDO::FETCH_ASSOC);
+        $citas = $st->fetchAll(PDO::FETCH_ASSOC);
+
+        // Recordatorios agregados a mano: no dependen de un establecimiento, entran siempre.
+        if ($this->existeManual()) {
+            $st = $this->db->prepare($this->sqlCitaManual(
+                "r.fecha BETWEEN CURRENT_DATE AND CURRENT_DATE + CAST(:d AS INTEGER)
+                 AND NOT EXISTS (SELECT 1 FROM carwash_recordatorios x
+                                  WHERE x.id_empresa = r.id_empresa AND x.id_recordatorio = r.id AND x.fecha_cita = r.fecha
+                                    AND x.canal = :c AND x.estado = 'enviado' AND x.origen = 'automatico' AND x.eliminado = false)"
+            ) . ' ORDER BY r.fecha, r.id');
+            $st->execute([':e' => $idEmpresa, ':d' => max(0, $dias), ':c' => $canal]);
+            $citas = array_merge($citas, $st->fetchAll(PDO::FETCH_ASSOC));
+        }
+        return $citas;
     }
 
     /** Registra un recordatorio (enviado o con error). */
     public function registrar(array $d): int
     {
+        $manual = $this->existeManual();
         $st = $this->db->prepare(
             "INSERT INTO carwash_recordatorios
-                (id_empresa, id_orden, id_vehiculo, id_cliente, fecha_cita, canal, destinatario, asunto, mensaje, estado, detalle, origen, created_by, updated_by)
-             VALUES (:e, :o, :v, :c, :f, :canal, :dest, :asunto, :msg, :estado, :det, :origen, :u, :u) RETURNING id"
+                (id_empresa, id_orden, " . ($manual ? 'id_recordatorio, ' : '') . "id_vehiculo, id_cliente, fecha_cita, canal, destinatario, asunto, mensaje, estado, detalle, origen, created_by, updated_by)
+             VALUES (:e, :o, " . ($manual ? ':r, ' : '') . ":v, :c, :f, :canal, :dest, :asunto, :msg, :estado, :det, :origen, :u, :u) RETURNING id"
         );
-        $st->execute([
+        $params = [
             ':e'      => $d['id_empresa'],
-            ':o'      => $d['id_orden'],
+            ':o'      => $d['id_orden'] ?: null,
             ':v'      => $d['id_vehiculo'] ?: null,
             ':c'      => $d['id_cliente'] ?: null,
             ':f'      => $d['fecha_cita'],
@@ -137,7 +213,9 @@ class CarWashRecordatorioRepository extends BaseRepository
             ':det'    => $d['detalle'] ?? null,
             ':origen' => $d['origen'] ?? 'manual',
             ':u'      => $d['id_usuario'] ?: null,
-        ]);
+        ];
+        if ($manual) $params[':r'] = ($d['id_recordatorio'] ?? 0) ?: null;
+        $st->execute($params);
         return (int) $st->fetchColumn();
     }
 
@@ -146,11 +224,13 @@ class CarWashRecordatorioRepository extends BaseRepository
     {
         if (!$this->existeTabla()) return [];
         $limite = max(1, min(200, $limite));
+        $manual = $this->existeManual();
         $st = $this->db->prepare(
             "SELECT r.id, r.fecha_cita, r.canal, r.destinatario, r.estado, r.detalle, r.origen, r.created_at,
-                    o.numero_orden, u.nombre AS usuario
+                    o.numero_orden, " . ($manual ? 'vr.motivo' : 'NULL') . " AS motivo, u.nombre AS usuario
                FROM carwash_recordatorios r
-               JOIN carwash_ordenes o ON o.id = r.id_orden
+          LEFT JOIN carwash_ordenes o ON o.id = r.id_orden
+          " . ($manual ? 'LEFT JOIN vehiculos_recordatorios vr ON vr.id = r.id_recordatorio' : '') . "
           LEFT JOIN usuarios u ON u.id = r.created_by
               WHERE r.id_empresa = :e AND r.id_vehiculo = :v AND r.eliminado = false
               ORDER BY r.created_at DESC, r.id DESC

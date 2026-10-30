@@ -96,6 +96,7 @@
         vehLlenarFiltroTrx('veh_trx_marca', 'Todas las marcas', []);
         document.getElementById('veh_trx_limpiar')?.classList.add('d-none');
         const cn = document.getElementById('veh_trx_conteo'); if (cn) cn.textContent = '';
+        const ag = document.getElementById('veh_rec_agregar'); if (ag) ag.disabled = true; // se habilita al cargar la pestaña
     }
 
     // Opciones de Categoría / Marca: solo las que aparecen en los ítems de este vehículo.
@@ -264,34 +265,52 @@
             const json = await (await fetch(`${urlBaseVeh}/recordatoriosAjax?id=${vehIdActual}`)).json();
             if (!json.ok) throw new Error(json.error || 'No se pudo cargar.');
             vehCargado.rec = true;
-            const { citas, historial, disponible } = json.data;
-            aviso.innerHTML = disponible ? '' : '<div class="alert alert-warning py-1 small mb-2">Falta aplicar el SQL de recordatorios (20260929_carwash_recordatorios.sql): se pueden ver las citas, pero aún no enviar recordatorios.</div>';
+            const { citas, historial, disponible, manual } = json.data;
+            aviso.innerHTML = !disponible
+                ? '<div class="alert alert-warning py-1 small mb-2">Falta aplicar el SQL de recordatorios (20260929_carwash_recordatorios.sql): se pueden ver las citas, pero aún no enviar recordatorios.</div>'
+                : (!manual ? '<div class="alert alert-warning py-1 small mb-2">Falta aplicar el SQL 20261030_vehiculos_recordatorios.sql para poder agregar recordatorios.</div>' : '');
+            const btnAgregar = document.getElementById('veh_rec_agregar');
+            if (btnAgregar) {
+                btnAgregar.disabled = !(manual && window.VEH_PERM_ACTUALIZAR);
+                btnAgregar.title = !manual ? 'Falta aplicar el SQL de recordatorios del vehículo' : (window.VEH_PERM_ACTUALIZAR ? '' : 'Requiere permiso de modificar');
+            }
+            // Clave de cada cita: 'o<id>' (cita de una orden) o 'r<id>' (recordatorio agregado).
             window.VEH_CITAS = {};
             const hoy = new Date().toISOString().slice(0, 10);
             tCitas.innerHTML = citas.length ? citas.map(c => {
-                window.VEH_CITAS[c.id_orden] = c;
+                const clave = c.id_recordatorio ? `r${c.id_recordatorio}` : `o${c.id_orden}`;
+                window.VEH_CITAS[clave] = c;
                 const f = String(c.proxima_cita).slice(0, 10);
                 const badge = c.vencida ? '<span class="badge bg-secondary bg-opacity-10 text-secondary ms-1">pasada</span>'
                     : (f === hoy ? '<span class="badge bg-warning bg-opacity-10 text-warning ms-1">hoy</span>' : '<span class="badge bg-success bg-opacity-10 text-success ms-1">próxima</span>');
                 const puede = disponible && window.VEH_PERM_ACTUALIZAR;
+                const origen = c.id_recordatorio
+                    ? `<i class="bi bi-bookmark-star text-primary me-1" title="Recordatorio agregado"></i><span class="d-inline-block text-truncate align-bottom" style="max-width:200px" title="${vehEsc(c.motivo + (c.observacion ? ' — ' + c.observacion : ''))}">${vehEsc(c.motivo || '')}</span>`
+                    : vehEsc(c.numero_orden || '');
+                const editar = c.id_recordatorio
+                    ? `<span class="vr mx-1 align-middle"></span>
+                       <button type="button" class="btn btn-outline-secondary btn-sm py-0 px-2" title="Editar recordatorio" ${window.VEH_PERM_ACTUALIZAR ? '' : 'disabled'} onclick="vehRecordatorioEditar(${c.id_recordatorio})"><i class="bi bi-pencil"></i></button>
+                       <button type="button" class="btn btn-outline-danger btn-sm py-0 px-2" title="Eliminar recordatorio" ${window.VEH_PERM_ELIMINAR ? '' : 'disabled'} onclick="vehRecordatorioEliminar(${c.id_recordatorio})"><i class="bi bi-trash3"></i></button>`
+                    : '';
                 return `<tr>
                     <td class="fw-semibold">${vehEsc(vehFecha(f))}${badge}</td>
-                    <td>${vehEsc(c.numero_orden || '')}</td>
+                    <td>${origen}</td>
                     <td class="text-truncate" style="max-width:180px">${vehEsc(c.nombre_destino || '')}</td>
                     <td>${c.correo_destino ? vehEsc(c.correo_destino) : '<span class="text-muted">—</span>'}</td>
                     <td>${c.telefono_destino ? vehEsc(c.telefono_destino) : '<span class="text-muted">—</span>'}</td>
                     <td>${c.ultimo_envio ? vehEsc(vehFecha(c.ultimo_envio)) : '<span class="text-muted">—</span>'}</td>
                     <td class="text-center">
-                        <button type="button" class="btn btn-outline-info btn-sm py-0 px-2" title="Enviar por correo" ${puede ? '' : 'disabled'} onclick="vehRecordatorioCorreo(${c.id_orden})"><i class="bi bi-envelope"></i></button>
-                        <button type="button" class="btn btn-outline-success btn-sm py-0 px-2" title="Enviar por WhatsApp" ${puede ? '' : 'disabled'} onclick="vehRecordatorioWhatsapp(${c.id_orden})"><i class="bi bi-whatsapp"></i></button>
+                        <button type="button" class="btn btn-outline-info btn-sm py-0 px-2" title="Enviar por correo" ${puede ? '' : 'disabled'} onclick="vehRecordatorioCorreo('${clave}')"><i class="bi bi-envelope"></i></button>
+                        <button type="button" class="btn btn-outline-success btn-sm py-0 px-2" title="Enviar por WhatsApp" ${puede ? '' : 'disabled'} onclick="vehRecordatorioWhatsapp('${clave}')"><i class="bi bi-whatsapp"></i></button>
+                        ${editar}
                     </td></tr>`;
-            }).join('') : '<tr><td colspan="7" class="text-center text-muted py-3">Este vehículo no tiene citas registradas. La próxima cita se fija en la orden de Car-Wash.</td></tr>';
+            }).join('') : '<tr><td colspan="7" class="text-center text-muted py-3">Este vehículo no tiene citas ni recordatorios. Use <b>Agregar recordatorio</b> o fije la próxima cita en la orden de Car-Wash.</td></tr>';
 
             const canal = { correo: '<i class="bi bi-envelope text-info me-1"></i>Correo', whatsapp: '<i class="bi bi-whatsapp text-success me-1"></i>WhatsApp' };
             tHist.innerHTML = historial.length ? historial.map(h => `<tr>
                     <td>${vehEsc(vehFecha(h.created_at))}</td>
                     <td>${vehEsc(vehFecha(h.fecha_cita))}</td>
-                    <td>${vehEsc(h.numero_orden || '')}</td>
+                    <td class="text-truncate" style="max-width:200px">${vehEsc(h.numero_orden || h.motivo || '')}</td>
                     <td>${canal[h.canal] || vehEsc(h.canal)}</td>
                     <td class="text-truncate" style="max-width:200px">${vehEsc(h.destinatario || '')}</td>
                     <td class="text-center">${h.estado === 'enviado' ? '<span class="badge bg-success bg-opacity-10 text-success">Enviado</span>' : `<span class="badge bg-danger bg-opacity-10 text-danger" title="${vehEsc(h.detalle || '')}">Error</span>`}</td>
@@ -303,8 +322,89 @@
         }
     }
 
-    window.vehRecordatorioCorreo = async function (idOrden) {
-        const c = (window.VEH_CITAS || {})[idOrden]; if (!c) return;
+    // Agregar (id = 0) o editar un recordatorio propio del vehículo: fecha + motivo.
+    let vehRecGuardando = false;
+    window.vehRecordatorioEditar = async function (id) {
+        if (vehRecGuardando || !vehIdActual) return;
+        const c = id ? (window.VEH_CITAS || {})[`r${id}`] : null;
+        if (id && !c) return;
+        const modalEl = document.getElementById('modalVehiculo');
+        const hoy = new Date();
+        const hoyIso = `${hoy.getFullYear()}-${String(hoy.getMonth() + 1).padStart(2, '0')}-${String(hoy.getDate()).padStart(2, '0')}`;
+        const { value: form } = await Swal.fire({
+            title: id ? 'Editar recordatorio' : 'Agregar recordatorio', width: 520, target: modalEl, heightAuto: false,
+            html: `<div class="text-start small">
+                <label class="fw-semibold mb-1 d-block">Fecha</label>
+                <input type="date" id="vehRecFecha" class="form-control form-control-sm mb-2" min="${c ? '' : hoyIso}" value="${vehEsc(c ? String(c.proxima_cita).slice(0, 10) : '')}">
+                <label class="fw-semibold mb-1 d-block">Motivo</label>
+                <input id="vehRecMotivo" class="form-control form-control-sm mb-2" maxlength="200" value="${vehEsc(c ? c.motivo : '')}" placeholder="Ej.: Cambio de aceite, revisión de frenos, lavado de tapicería...">
+                <label class="fw-semibold mb-1 d-block">Observación <span class="text-muted fw-normal">(opcional, uso interno)</span></label>
+                <textarea id="vehRecObs" class="form-control form-control-sm" rows="3">${vehEsc(c ? (c.observacion || '') : '')}</textarea>
+                <div class="form-text">Se avisa al cliente por correo o WhatsApp, a mano o con la automatización de recordatorios.</div></div>`,
+            showCancelButton: true, confirmButtonText: '<i class="bi bi-check2-circle me-1"></i> Guardar', cancelButtonText: 'Cancelar',
+            didOpen: () => document.getElementById(id ? 'vehRecMotivo' : 'vehRecFecha')?.focus(),
+            preConfirm: () => {
+                const fecha = document.getElementById('vehRecFecha').value;
+                const motivo = document.getElementById('vehRecMotivo').value.trim();
+                if (!fecha) { Swal.showValidationMessage('Elija la fecha.'); return false; }
+                if (!motivo) { Swal.showValidationMessage('Escriba el motivo.'); return false; }
+                return { fecha, motivo, observacion: document.getElementById('vehRecObs').value.trim() };
+            }
+        });
+        if (!form || vehRecGuardando) return;
+        vehRecGuardando = true;
+        try {
+            const fd = new FormData();
+            fd.append('id_vehiculo', vehIdActual); fd.append('id_recordatorio', id || 0);
+            fd.append('fecha', form.fecha); fd.append('motivo', form.motivo); fd.append('observacion', form.observacion);
+            const json = await (await fetch(`${urlBaseVeh}/guardarRecordatorioAjax`, { method: 'POST', body: fd })).json();
+            if (!json.ok) {
+                Swal.fire({ icon: 'error', title: 'No se guardó', text: json.error || 'Error al guardar.', target: modalEl, heightAuto: false });
+                return;
+            }
+            Swal.fire({ icon: 'success', title: json.msg || 'Guardado', target: modalEl, heightAuto: false, timer: 1500, showConfirmButton: false });
+            // Recargar antes de liberar la bandera: así un segundo clic ya ve el recordatorio creado.
+            await vehCargarRecordatorios();
+            vehCargado.trx = false; // el resumen de Transacciones muestra la próxima cita
+        } catch (e) {
+            Swal.fire({ icon: 'error', title: 'Error', text: 'No se pudo conectar con el servidor.', target: modalEl, heightAuto: false });
+        } finally {
+            vehRecGuardando = false;
+        }
+    };
+
+    window.vehRecordatorioEliminar = async function (id) {
+        const c = (window.VEH_CITAS || {})[`r${id}`]; if (!c) return;
+        const modalEl = document.getElementById('modalVehiculo');
+        const conf = await Swal.fire({
+            icon: 'warning', title: '¿Eliminar recordatorio?', target: modalEl, heightAuto: false,
+            html: `<b>${vehEsc(c.motivo || '')}</b> del ${vehEsc(vehFecha(c.proxima_cita))}.<br><span class="small text-muted">Los avisos ya enviados quedan en el historial.</span>`,
+            showCancelButton: true, confirmButtonColor: '#d33', confirmButtonText: 'Sí, eliminar', cancelButtonText: 'Cancelar'
+        });
+        if (!conf.isConfirmed) return;
+        try {
+            const fd = new FormData(); fd.append('id_recordatorio', id);
+            const json = await (await fetch(`${urlBaseVeh}/eliminarRecordatorioAjax`, { method: 'POST', body: fd })).json();
+            if (!json.ok) {
+                Swal.fire({ icon: 'error', title: 'No se eliminó', text: json.error || 'Error al eliminar.', target: modalEl, heightAuto: false });
+                return;
+            }
+            Swal.fire({ icon: 'success', title: json.msg || 'Eliminado', target: modalEl, heightAuto: false, timer: 1500, showConfirmButton: false });
+            vehCargado.trx = false;
+            vehCargarRecordatorios();
+        } catch (e) {
+            Swal.fire({ icon: 'error', title: 'Error', text: 'No se pudo conectar con el servidor.', target: modalEl, heightAuto: false });
+        }
+    };
+
+    // Datos que identifican la cita al enviar: la orden o el recordatorio agregado.
+    const vehRecIds = (fd, c) => {
+        fd.append('id_orden', c.id_orden || 0);
+        fd.append('id_recordatorio', c.id_recordatorio || 0);
+    };
+
+    window.vehRecordatorioCorreo = async function (clave) {
+        const c = (window.VEH_CITAS || {})[clave]; if (!c) return;
         const modalEl = document.getElementById('modalVehiculo');
         const { value: form } = await Swal.fire({
             title: 'Recordatorio por correo', width: 600, target: modalEl, heightAuto: false,
@@ -326,7 +426,7 @@
         Swal.fire({ title: 'Enviando...', allowOutsideClick: false, target: modalEl, heightAuto: false, didOpen: () => Swal.showLoading() });
         try {
             const fd = new FormData();
-            fd.append('id_orden', idOrden); fd.append('destinatarios', form.para); fd.append('asunto', form.asunto); fd.append('mensaje', form.mensaje);
+            vehRecIds(fd, c); fd.append('destinatarios', form.para); fd.append('asunto', form.asunto); fd.append('mensaje', form.mensaje);
             const json = await (await fetch(`${urlBaseVeh}/enviarRecordatorioCorreoAjax`, { method: 'POST', body: fd })).json();
             if (json.ok) Swal.fire({ icon: 'success', title: 'Enviado', text: json.msg, target: modalEl, heightAuto: false, timer: 2200, showConfirmButton: false });
             else Swal.fire({ icon: 'error', title: 'No se envió', text: json.error || 'Error al enviar.', target: modalEl, heightAuto: false });
@@ -337,8 +437,8 @@
     };
 
     // WhatsApp: abre WhatsApp (web o app) con el mensaje listo; el sistema deja constancia del envío.
-    window.vehRecordatorioWhatsapp = async function (idOrden) {
-        const c = (window.VEH_CITAS || {})[idOrden]; if (!c) return;
+    window.vehRecordatorioWhatsapp = async function (clave) {
+        const c = (window.VEH_CITAS || {})[clave]; if (!c) return;
         const modalEl = document.getElementById('modalVehiculo');
         const { value: form } = await Swal.fire({
             title: 'Recordatorio por WhatsApp', width: 560, target: modalEl, heightAuto: false,
@@ -360,7 +460,7 @@
         window.open(`https://wa.me/${form.tel}?text=${encodeURIComponent(form.mensaje)}`, '_blank');
         try {
             const fd = new FormData();
-            fd.append('id_orden', idOrden); fd.append('telefono', form.tel); fd.append('mensaje', form.mensaje);
+            vehRecIds(fd, c); fd.append('telefono', form.tel); fd.append('mensaje', form.mensaje);
             const json = await (await fetch(`${urlBaseVeh}/registrarRecordatorioWhatsappAjax`, { method: 'POST', body: fd })).json();
             if (!json.ok) Swal.fire({ icon: 'warning', title: 'Atención', text: json.error || 'No se pudo registrar el envío.', target: modalEl, heightAuto: false });
         } catch (e) { /* el mensaje ya se abrió en WhatsApp; solo no quedó registrado */ }

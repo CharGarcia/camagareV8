@@ -5,8 +5,8 @@ categoria: Servicios
 ruta_modulo: modulos/vehiculos
 tipo: modulo
 visibilidad: todos
-etiquetas: vehiculos, vehiculo, carro, auto, placa, propietario, dueño, consulta sri, consultar placa, datos del vehiculo por placa, matricula, marca, año, historial del vehiculo, transacciones, visitas, ordenes car wash, lavado, taller, proxima cita, recordatorio, recordar cita, aviso al cliente, whatsapp, correo, automatizacion, buscar placa, placa sin guion, buscar sin guion, buscar item, buscar servicio, buscar producto, categoria, marca del producto, filtrar por marca, filtrar por categoria, cuando se cambio el aceite, filtros
-version: 1.10
+etiquetas: vehiculos, vehiculo, carro, auto, placa, propietario, dueño, consulta sri, consultar placa, datos del vehiculo por placa, matricula, marca, año, historial del vehiculo, transacciones, visitas, ordenes car wash, lavado, taller, proxima cita, recordatorio, recordar cita, agregar recordatorio, nuevo recordatorio, crear recordatorio, recordatorio manual, motivo, cambio de aceite, mantenimiento, aviso al cliente, whatsapp, correo, automatizacion, buscar placa, placa sin guion, buscar sin guion, buscar item, buscar servicio, buscar producto, categoria, marca del producto, filtrar por marca, filtrar por categoria, cuando se cambio el aceite, filtros
+version: 1.11
 orden: 11
 estado: activo
 ---
@@ -124,36 +124,65 @@ esa orden.
 
 ## Pestaña Recordatorios
 
-**Citas del vehículo:** cada orden con próxima cita, marcada como *próxima*, *hoy* o
-*pasada*, con el correo y el teléfono a los que se avisará y la fecha del último
-aviso. Botones:
+**Citas y recordatorios del vehículo:** en una sola lista, ordenada por fecha, salen:
+
+- la **próxima cita de cada orden** de Car-Wash (columna *Orden / Motivo* con el
+  número de orden), y
+- los **recordatorios agregados a mano** (con el ícono de marcador y su motivo).
+
+Cada fila se marca como *próxima*, *hoy* o *pasada*, con el correo y el teléfono a
+los que se avisará y la fecha del último aviso. Botones:
 
 - **Correo**: abre una ventana con el destinatario, el asunto y el mensaje ya
   escritos (se pueden cambiar) y el sistema lo envía.
 - **WhatsApp**: abre WhatsApp (web o aplicación) con el mensaje listo para enviar. El
   sistema deja constancia del envío.
+- **Editar** y **Eliminar**: solo en los recordatorios agregados a mano.
+
+### Agregar un recordatorio
+
+Para avisar al cliente de algo que no depende de una orden (cambio de aceite,
+revisión de frenos, cambio de llantas, etc.):
+
+1. Con el vehículo guardado, abra la pestaña **Recordatorios**.
+2. Pulse **Agregar recordatorio**.
+3. Elija la **fecha**, escriba el **motivo** y, si quiere, una **observación** (uso
+   interno; no se envía al cliente).
+4. Pulse **Guardar**. El recordatorio aparece en la lista y desde ahí se envía por
+   correo o WhatsApp, igual que una cita de una orden.
+
+El mensaje por defecto incluye el motivo (*"…tiene su próxima cita el 04-11-2026
+para: Alineación"*). La fecha no puede ser anterior a hoy. Al eliminar un
+recordatorio, los avisos que ya se enviaron siguen en el historial.
 
 **Recordatorios enviados:** historial de todos los avisos del vehículo: cuándo, de
 qué cita, por qué canal, a quién, si se envió o dio error, si fue manual o
 automático y qué usuario lo hizo.
 
 El correo y el teléfono se toman de la ficha del **vehículo** y, si no los tiene, del
-**cliente** de la orden. El saludo usa el nombre del cliente o, si la orden es a
-Consumidor Final, el del propietario del vehículo.
+**cliente** de la orden (en un recordatorio agregado, del cliente de la última orden
+de Car-Wash del vehículo). El saludo usa el nombre del cliente o, si la orden es a
+Consumidor Final o no hay cliente, el del propietario del vehículo.
 
 ## Recordatorios automáticos
 
 En **Automatizaciones** cree una tarea del módulo **Car-Wash**:
 
 - **Recordatorio de próxima cita (Correo)**: con los días de anticipación, el asunto y
-  el mensaje (etiquetas {cliente} {placa} {marca} {fecha_cita} {empresa} {orden}).
+  el mensaje (etiquetas {cliente} {placa} {marca} {fecha_cita} {empresa} {orden}
+  {motivo}). {motivo} solo tiene valor en los recordatorios agregados a mano y
+  {orden} solo en las citas de las órdenes. Si deja el mensaje vacío, cada aviso usa
+  el mensaje por defecto (el de los recordatorios agregados lleva el motivo).
 - **Recordatorio de próxima cita (WhatsApp)**: con los días de anticipación y la
   plantilla aprobada por Meta. Variables del cuerpo, en orden: {{1}} cliente,
-  {{2}} placa, {{3}} fecha de la cita, {{4}} empresa, {{5}} N.° de orden.
+  {{2}} placa, {{3}} fecha de la cita, {{4}} empresa, {{5}} N.° de orden (en un
+  recordatorio agregado a mano, que no tiene orden, va su motivo).
 - **Recordatorio de próxima cita (Correo y WhatsApp)**: los dos canales en la misma
   tarea (correo a quien tenga correo, WhatsApp a quien tenga teléfono).
 
-Programada a diario, avisa las citas que caen entre hoy y hoy + los días indicados.
+Programada a diario, avisa las citas de las órdenes **y los recordatorios agregados a
+mano** que caen entre hoy y hoy + los días indicados (los agregados a mano no
+dependen del establecimiento de la automatización).
 **Cada cita se avisa una sola vez por canal**, aunque la tarea corra varias veces.
 Los envíos aparecen en el historial de la pestaña Recordatorios como *Automático*.
 Si en una ejecución ninguno sale (por ejemplo, el correo de la empresa no está
@@ -179,10 +208,11 @@ Meta con las variables en el orden indicado.
 ## Permisos
 
 - **Ver**: listado, ficha, transacciones y recordatorios.
-- **Crear / Modificar / Eliminar**: la ficha del vehículo. **Enviar recordatorios**
-  requiere permiso de modificar.
-- **Acceso total**: sin él, el usuario ve solo los vehículos y las órdenes que él
-  registró.
+- **Crear / Modificar / Eliminar**: la ficha del vehículo. **Enviar recordatorios** y
+  **agregar o editar** un recordatorio requieren permiso de modificar; **eliminarlo**,
+  permiso de eliminar.
+- **Acceso total**: sin él, el usuario ve solo los vehículos, las órdenes y los
+  recordatorios que él registró (y solo edita o elimina los suyos).
 
 ## Reglas de negocio
 
@@ -210,7 +240,11 @@ Meta con las variables en el orden indicado.
 
 - **Las pestañas Transacciones y Recordatorios están deshabilitadas**: el vehículo
   aún no se ha guardado.
-- **No aparecen citas**: la próxima cita se fija en la orden de Car-Wash.
+- **No aparecen citas**: la próxima cita se fija en la orden de Car-Wash; o agregue un
+  recordatorio con **Agregar recordatorio**.
+- **El botón Agregar recordatorio está deshabilitado**: falta permiso de modificar
+  Vehículos, o (aviso amarillo en la pestaña) el administrador aún no aplicó la
+  actualización de la base de datos.
 - **"Ni el vehículo ni el cliente tienen correo registrado"**: escriba el correo en la
   ventana de envío o regístrelo en la ficha del vehículo o del cliente.
 - **El recordatorio sale con error**: revise la configuración de correo de la empresa;
@@ -218,6 +252,7 @@ Meta con las variables en el orden indicado.
 
 ## Historial de cambios
 
+- **1.11** — Pestaña **Recordatorios**: botón **Agregar recordatorio** (fecha + motivo + observación) para avisar al cliente sin necesidad de una orden; se editan, eliminan y envían por correo o WhatsApp desde la misma lista, y la automatización también los avisa.
 - **1.10** — Pestaña **Transacciones**: al buscar o filtrar, cada orden muestra solo los ítems que coinciden; los demás ya no aparecen.
 - **1.9** — Pestaña **Transacciones**: filtros por **Categoría** y **Marca** del producto (y el buscador también encuentra por categoría o marca); se quitaron las columnas Km y Servicios/productos (el km va al pie de cada orden desplegada).
 - **1.8** — Pestaña **Transacciones**: nuevo cuadro **Buscar ítem** para encontrar en qué órdenes se aplicó un servicio o producto (por código o descripción); las órdenes encontradas se despliegan con el ítem resaltado.
