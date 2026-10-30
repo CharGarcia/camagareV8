@@ -6,7 +6,7 @@ ruta_modulo: modulos/car-wash
 tipo: modulo
 visibilidad: todos
 etiquetas: car wash, lavado, lavadora de autos, lubricadora, cambio de aceite, mecanica, taller, orden de servicio, orden mecanica, orden de trabajo, vehiculo, placa, historial del vehiculo, historial del cliente, visitas, ultima visita, facturar orden, recibo de venta, refacturar, factura anulada, proxima cita, proximo chequeo, editar cliente, editar vehiculo, corregir placa, cambiar datos del cliente, actualizar correo, migracion, sistema anterior, numeracion por fecha, numero con el año, reiniciar numeracion, reinicio anual, reinicio mensual, correlativo por año, correlativo por mes, modo de numeracion, buscar orden, buscar placa, buscador, filtros, filtrar ordenes, filtro de fechas, buscar por servicio, chips, imprimir, impresora, aviso, avisos, ordenes en borrador, ordenes sin facturar, pendientes de facturar, barra superior, sin saldo, sin stock, productos similares, productos equivalentes, equivalencias, reemplazo, otra marca, sugerir otro producto, misma categoria, usar este, pdf en dos hojas, segunda hoja casi vacia, totales en otra pagina, el pdf corta la pagina, hoja de mas, historial del vehiculo, transacciones del vehiculo, que se le hizo al carro, reporte de salida, acta de salida, informe de entrega, entrega del vehiculo, trabajo realizado, recomendaciones, proxima cita, anular orden, orden anulada, devolver repuestos, stock descontado dos veces, mantenimiento, mantenimientos, proximo cambio de aceite, aceite de motor, aceite de caja, cambio de aceite de caja, kilometraje, km, cada cuantos km, intervalo, filtro de aire, servicios de mantenimiento, sticker de aceite, vencido, cambio pendiente, aviso de cambio de aceite, avisar al cliente, aviso automatico de mantenimiento, km estimado
-version: 1.27
+version: 1.28
 orden: 10
 estado: activo
 ---
@@ -55,17 +55,20 @@ se le entrega al cliente.
    rótulo: abre su ficha encima de la orden para corregir, por ejemplo, la placa,
    el correo o el teléfono. Al guardar se vuelve a la orden con los datos nuevos.
 3. Agregue los **servicios y productos** en la grilla (igual que en una factura).
-4. Anote las novedades en **Info. Adicional** y pulse **Guardar**.
-5. Para cobrar, abra la orden y pulse **Factura** o **Recibo** en la barra superior y
+4. Anote las novedades en **Info. Adicional** y pulse **Guardar**. La orden **no se cierra**:
+   queda abierta, ya guardada y con su número, en la misma pestaña en que estaba, para
+   seguir trabajando (mantenimientos, factura, PDF, correo). Se cierra con **Cerrar**.
+5. Para cobrar, pulse **Factura** o **Recibo** en la barra superior y
    confirme. La **forma de pago SRI** no se pregunta: se toma de la ficha del
    **cliente** o, si no la tiene, de la **configuración de facturación** (Empresa →
    Facturación); si ninguna está definida, se usa *01 - Sin utilización del sistema
    financiero*. La orden pasa a **Facturado** y queda
    bloqueada.
 
-El modal tiene tres pestañas:
+El modal tiene cuatro pestañas:
 
 - **General**: la orden en sí (cabecera, servicios, info adicional y totales).
+- **Mantenimiento**: cambios de aceite y demás servicios por kilometraje (ver abajo).
 - **Historial**: todas las órdenes de un **vehículo** o de un **cliente** (ver abajo).
 - **Facturación**: en qué factura(s) o recibo(s) se emitió esta orden y el estado
   actual de cada documento.
@@ -507,6 +510,7 @@ documentos admite cada periodo) está en el manual de **Empresa**, sección
 
 ## Historial de cambios
 
+- **1.28** — Al pulsar **Guardar**, la orden ya no se cierra: queda abierta y guardada (con su número) en la misma pestaña; se cierra con **Cerrar**.
 - **1.27** — Pestaña Mantenimiento: botón **No aplica a este vehículo** por servicio (reversible).
 - **1.26** — Avisos automáticos y manuales del próximo mantenimiento al cliente (correo y WhatsApp), con el km estimado de cada vehículo. Ver el manual de Vehículos. Requiere el SQL `database/migrations/20261031_mantenimientos_avisos.sql`.
 - **1.25** — Nueva pestaña **Mantenimiento**: control del próximo cambio de aceite de motor, de caja y de otros servicios por kilometraje. Se marca *¿Se cambió?*, el próximo cambio se calcula con el km de la orden y el intervalo del vehículo (sugerido por la marca y el motor), y sale en el PDF, el Reporte de salida, el correo y la información adicional de la factura o recibo. Aviso de mantenimientos próximos o vencidos bajo el vehículo. Requiere el SQL `database/migrations/20261030_vehiculos_mantenimientos.sql`.

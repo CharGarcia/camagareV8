@@ -1802,8 +1802,17 @@
             if (!data.ok) throw new Error(data.error || 'Error al guardar');
             CW_BORR_ON = false; clearTimeout(borrTimer); borrTimer = null;
             cwBorrBorrar(keyBorrador);
-            getModal().hide();
-            await Swal.fire({ icon: 'success', title: 'Listo', text: data.msg, timer: 1400, showConfirmButton: false });
+            // La orden NO se cierra al guardar (se cierra con «Cerrar»): se vuelve a abrir la orden
+            // guardada en el mismo modal, así queda con su id (el siguiente Guardar la edita, no crea
+            // otra) y con lo que realmente quedó grabado. Se vuelve a la pestaña en que estaba.
+            const idGuardado = data.id || payload.id;
+            const tabActiva = document.querySelector('#cwTabs .nav-link.active')?.id;
+            await cwAbrirVerId(idGuardado, false);
+            if (tabActiva && tabActiva !== 'cw-tab-general') {
+                const t = document.getElementById(tabActiva);
+                if (t && !t.classList.contains('d-none')) bootstrap.Tab.getOrCreateInstance(t).show();
+            }
+            Swal.fire({ toast: true, position: 'top-end', icon: 'success', title: data.msg, timer: 1800, showConfirmButton: false });
             if (typeof cwRecargarTablero === 'function') cwRecargarTablero();
             if (typeof cargarGrid === 'function') cargarGrid();
         } catch (e) {
