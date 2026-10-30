@@ -317,13 +317,15 @@
                                     <th class="text-center" style="width:95px;">¿Se cambió?</th>
                                     <th style="width:130px;">Próximo cambio (km)</th>
                                     <th>Estado</th>
+                                    <th style="width:45px;"></th>
                                 </tr>
                             </thead>
                             <tbody id="cw_mant_body">
-                                <tr><td colspan="6" class="text-center text-muted py-4">Elija el vehículo de la orden.</td></tr>
+                                <tr><td colspan="7" class="text-center text-muted py-4">Elija el vehículo de la orden.</td></tr>
                             </tbody>
                         </table>
                     </div>
+                    <a href="#" class="small d-none d-inline-block mt-1" id="cw_mant_ocultos"></a>
                     <div class="form-text mt-2">
                         <i class="bi bi-info-circle me-1"></i>Marque <b>¿Se cambió?</b> en lo que se hizo en esta orden: se toma el km de la orden y el próximo
                         cambio se calcula con <b>Cada (km)</b> (puede corregirlo). Cambiar <b>Cada (km)</b> lo deja como el intervalo de este vehículo.

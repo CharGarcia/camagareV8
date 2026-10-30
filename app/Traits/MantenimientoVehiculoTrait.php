@@ -115,6 +115,20 @@ trait MantenimientoVehiculoTrait
         });
     }
 
+    /** "No aplica a este vehículo" (no_aplica=1) o "vuelve a aplicar" (no_aplica=0). */
+    public function mantNoAplicaAjax(): void
+    {
+        $this->requireActualizar();
+        $this->mantResponder(function () {
+            $no = ($_POST['no_aplica'] ?? '1') === '1';
+            (new VehiculoMantenimientoService())->marcarNoAplica(
+                (int) ($_POST['id_vehiculo'] ?? 0), (int) ($_POST['id_servicio'] ?? 0),
+                (int) $_SESSION['id_empresa'], (int) $_SESSION['id_usuario'], $no
+            );
+            return ['msg' => $no ? 'El servicio ya no aplica a este vehículo.' : 'El servicio vuelve a aplicar a este vehículo.'];
+        });
+    }
+
     /** Cuántos vehículos más hay de la misma marca y modelo / marca. */
     public function mantAlcanceMarcaAjax(): void
     {

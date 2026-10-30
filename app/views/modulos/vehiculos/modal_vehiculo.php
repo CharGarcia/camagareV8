@@ -214,6 +214,7 @@ $urlBaseVehShared = BASE_URL . '/modulos/vehiculos';
                                     <tbody id="veh_mant_body"><tr><td colspan="6" class="text-center text-muted py-3">Sin datos.</td></tr></tbody>
                                 </table>
                             </div>
+                            <a href="#" class="small d-none d-inline-block mb-3" id="veh_mant_ocultos" style="margin-top:-.5rem;"></a>
                             <div class="fw-semibold small text-muted mb-1"><i class="bi bi-clock-history me-1"></i>Cambios realizados</div>
                             <div class="border rounded-3 bg-white veh-mant-lista" style="max-height:25vh; overflow:auto;">
                                 <table class="table table-sm mb-0 text-nowrap" style="font-size:.8rem;">

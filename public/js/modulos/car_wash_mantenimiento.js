@@ -23,6 +23,7 @@
     let aparte = false;      // orden facturada: se guarda con "Guardar mantenimientos"
     let seq = 0;             // descarta respuestas viejas si se cambia de vehículo rápido
     let guardando = false;
+    let verOcultos = false;  // mostrar los servicios marcados "no aplica"
 
     const kmOrden = () => {
         const v = ($('cw_kilometraje')?.value || '').trim();
@@ -33,11 +34,12 @@
 
     function placeholder(texto) {
         const b = $('cw_mant_body');
-        if (b) b.innerHTML = `<tr><td colspan="6" class="text-center text-muted py-4">${texto}</td></tr>`;
+        if (b) b.innerHTML = `<tr><td colspan="7" class="text-center text-muted py-4">${texto}</td></tr>`;
     }
 
     function reset() {
-        cur = null; seq++;
+        cur = null; seq++; verOcultos = false;
+        $('cw_mant_ocultos')?.classList.add('d-none');
         placeholder('Elija el vehículo de la orden.');
         const f = $('cw_mant_franja'); if (f) f.innerHTML = '';
         $('cw-badge-mant')?.classList.add('d-none');
@@ -95,7 +97,17 @@
         const dis = habilitado() ? '' : 'disabled';
         const disInt = puedeConfigurar() ? '' : 'disabled';
         const inp = 'form-control form-control-sm py-0';
+        const puedeNA = puedeConfigurar() && !!d.no_aplica_disponible;
+        // "No aplica a este vehículo": oculto (salvo que esta orden ya registró su cambio); se ve con el enlace.
+        const ocultos = (d.servicios || []).filter(s => s.no_aplica && !s.en_orden);
         $('cw_mant_body').innerHTML = (d.servicios || []).map(s => {
+            if (s.no_aplica && !s.en_orden) {
+                if (!verOcultos) return '';
+                return `<tr data-servicio-oculto="${s.id_servicio}" class="text-muted">
+                    <td class="ps-2 fw-semibold"><s>${esc(s.nombre)}</s></td>
+                    <td colspan="5"><i class="bi bi-eye-slash me-1"></i>No aplica a este vehículo: no se muestra ni se avisa al cliente.</td>
+                    <td class="text-center"><button type="button" class="btn btn-outline-success btn-sm py-0 px-2 cw-mant-na" data-no-aplica="0" ${puedeNA ? '' : 'disabled'} title="Vuelve a aplicar a este vehículo"><i class="bi bi-eye"></i></button></td></tr>`;
+            }
             const p = preservar?.[s.id_servicio];
             const eo = s.en_orden;
             const intervalo = p ? p.intervalo : (eo?.intervalo_km ?? s.intervalo_km);
@@ -118,8 +130,16 @@
                 <td><input type="number" min="1" class="${inp} cw-mant-prox" style="width:110px" value="${esc(proximo)}" data-manual="${manual}" ${cambiado && habilitado() ? '' : 'disabled'}
                         placeholder="${s.proximo_km != null ? esc(U().km(s.proximo_km)) : ''}"></td>
                 <td class="cw-mant-estado"></td>
+                <td class="text-center">${puedeNA && !cambiado ? `<button type="button" class="btn btn-outline-secondary btn-sm py-0 px-2 cw-mant-na" data-no-aplica="1" title="No aplica a este vehículo (deja de mostrarse y de avisarse)"><i class="bi bi-eye-slash"></i></button>` : ''}</td>
             </tr>`;
-        }).join('') || '<tr><td colspan="6" class="text-center text-muted py-4">No hay servicios activos. Use <b>Servicios</b> para agregarlos.</td></tr>';
+        }).join('') || `<tr><td colspan="7" class="text-center text-muted py-4">${ocultos.length ? 'Todos los servicios están marcados como «no aplica» en este vehículo.' : 'No hay servicios activos. Use <b>Servicios</b> para agregarlos.'}</td></tr>`;
+        const lnk = $('cw_mant_ocultos');
+        if (lnk) {
+            lnk.classList.toggle('d-none', !ocultos.length);
+            lnk.innerHTML = verOcultos
+                ? '<i class="bi bi-eye-slash me-1"></i>Esconder los servicios que no aplican'
+                : `<i class="bi bi-eye me-1"></i>Mostrar ${ocultos.length} ${ocultos.length === 1 ? 'servicio que no aplica' : 'servicios que no aplican'} a este vehículo`;
+        }
         recalcular();
     }
 
@@ -258,6 +278,37 @@
             tr.dataset.intEditado = ''; // ya quedó guardado como intervalo del vehículo
             await cargar(cur.idVehiculo, cur.idOrden);
         }
+    });
+    // "No aplica a este vehículo" / "vuelve a aplicar" (permiso de modificar de Car-Wash).
+    $('cw_mant_body')?.addEventListener('click', async (ev) => {
+        const b = ev.target.closest('.cw-mant-na'); if (!b || !cur || guardando) return;
+        const tr = b.closest('tr');
+        const sid = tr.dataset.servicio || tr.dataset.servicioOculto;
+        const s = (cur.data.servicios || []).find(x => String(x.id_servicio) === String(sid));
+        const no = b.dataset.noAplica === '1';
+        if (!s) return;
+        if (no) {
+            const c = await Swal.fire({ icon: 'question', title: `¿${esc(s.nombre)} no aplica a este vehículo?`, target: modal(), heightAuto: false,
+                html: 'Deja de mostrarse en el vehículo y en sus órdenes, y no se le avisará al cliente. El historial se conserva y se puede volver a activar.',
+                showCancelButton: true, confirmButtonText: 'Sí, no aplica', cancelButtonText: 'Cancelar' });
+            if (!c.isConfirmed) return;
+        }
+        guardando = true;
+        try {
+            const fd = new FormData();
+            fd.append('id_vehiculo', cur.idVehiculo); fd.append('id_servicio', sid); fd.append('no_aplica', no ? '1' : '0');
+            const j = await (await fetch(`${RUTA}/mantNoAplicaAjax`, { method: 'POST', body: fd })).json();
+            if (!j.ok) throw new Error(j.error || 'No se pudo guardar.');
+            Swal.fire({ toast: true, position: 'top-end', icon: 'success', title: j.msg, timer: 1600, showConfirmButton: false });
+            await cargar(cur.idVehiculo, cur.idOrden);
+        } catch (e) {
+            Swal.fire({ icon: 'error', title: 'Error', text: e.message, target: modal(), heightAuto: false });
+        } finally { guardando = false; }
+    });
+    $('cw_mant_ocultos')?.addEventListener('click', (ev) => {
+        ev.preventDefault();
+        verOcultos = !verOcultos;
+        if (cur?.data) render(capturar());
     });
     $('cw_mant_franja')?.addEventListener('click', (ev) => {
         if (!ev.target.closest('.cw-mant-ir')) return;

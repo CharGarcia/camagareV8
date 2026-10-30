@@ -62,6 +62,9 @@ CREATE TABLE IF NOT EXISTS vehiculos_mantenimientos (
     deleted_by      INTEGER
 );
 
+-- "No aplica a este vehículo": el servicio no se muestra en ese vehículo ni se avisa (reversible).
+ALTER TABLE vehiculos_mantenimientos ADD COLUMN IF NOT EXISTS no_aplica BOOLEAN NOT NULL DEFAULT FALSE;
+
 CREATE UNIQUE INDEX IF NOT EXISTS uq_vehiculos_mant_servicio
     ON vehiculos_mantenimientos (id_vehiculo, id_servicio) WHERE eliminado = false;
 CREATE INDEX IF NOT EXISTS idx_vehiculos_mant_empresa

@@ -269,6 +269,8 @@ class VehiculoMantenimientoService
                 'proximo_km'       => $p ? (int) $p['proximo_km'] : null,
                 'en_orden'         => $eo ? ['km' => (int) $eo['km'], 'proximo_km' => (int) $eo['proximo_km'], 'intervalo_km' => $eo['intervalo_km'] !== null ? (int) $eo['intervalo_km'] : null] : null,
                 'proximo_vigente'  => $vigente,
+                // "No aplica a este vehículo": la pantalla la oculta (salvo que esta orden ya la registró).
+                'no_aplica'        => self::bool($estados[$sid]['no_aplica'] ?? false),
             ] + self::calcularEstado($kmRef, $vigente, (int) $s['aviso_km']);
         }
 
@@ -276,6 +278,7 @@ class VehiculoMantenimientoService
             'disponible' => true,
             'vehiculo'   => ['id' => (int) $vehiculo['id'], 'placa' => $vehiculo['placa'], 'marca' => $vehiculo['marca'], 'motor' => $vehiculo['motor'] ?? null],
             'km_actual'  => $kmActual,
+            'no_aplica_disponible' => $this->repo->noAplicaDisponible(),
             'estimacion' => $est ? [
                 'km_est'      => (int) $est['km_est'],
                 'km_ult'      => (int) $est['km_ult'],
@@ -487,6 +490,25 @@ class VehiculoMantenimientoService
             $this->repo->bajaHistorial($idHistorial, $idEmpresa, $idUsuario);
             $this->repo->recalcularEstado($idEmpresa, (int) $h['id_vehiculo'], (int) $h['id_servicio'], $idUsuario);
             $this->log->registrar($idUsuario, $idEmpresa, 'eliminar', 'vehiculos_mantenimientos_historial', $idHistorial, $h, null);
+        });
+    }
+
+    /**
+     * "No aplica a este vehículo" (p. ej. aceite de motor en un eléctrico): el servicio deja de
+     * mostrarse en el vehículo, no se avisa y no cuenta en el filtro del listado. Reversible;
+     * el historial de cambios se conserva.
+     */
+    public function marcarNoAplica(int $idVehiculo, int $idServicio, int $idEmpresa, int $idUsuario, bool $noAplica): void
+    {
+        if (!$this->repo->noAplicaDisponible()) {
+            throw new Exception('Falta aplicar la versión actual del SQL de mantenimientos (database/migrations/20261030_vehiculos_mantenimientos.sql).');
+        }
+        if (!$this->repo->getVehiculo($idVehiculo, $idEmpresa)) throw new Exception('Vehículo no encontrado.');
+        if (!$this->repo->findServicio($idServicio, $idEmpresa)) throw new Exception('Servicio no encontrado.');
+        $this->enTransaccion(function () use ($idVehiculo, $idServicio, $idEmpresa, $idUsuario, $noAplica) {
+            $this->repo->setNoAplica($idEmpresa, $idVehiculo, $idServicio, $noAplica, $idUsuario);
+            $this->log->registrar($idUsuario, $idEmpresa, $noAplica ? 'MANTENIMIENTO_NO_APLICA' : 'MANTENIMIENTO_VUELVE_A_APLICAR',
+                'vehiculos_mantenimientos', $idVehiculo, null, ['id_servicio' => $idServicio, 'no_aplica' => $noAplica]);
         });
     }
 

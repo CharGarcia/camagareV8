@@ -88,6 +88,8 @@
         const mh = document.getElementById('veh_mant_hist'); if (mh) mh.innerHTML = '<tr><td colspan="8" class="text-center text-muted py-3">Aún no hay cambios registrados.</td></tr>';
         const ma = document.getElementById('veh_mant_avisos'); if (ma) ma.innerHTML = '<tr><td colspan="8" class="text-center text-muted py-3">Aún no se han enviado avisos.</td></tr>';
         const me = document.getElementById('veh_mant_est'); if (me) me.innerHTML = '';
+        vehMantVerOcultos = false;
+        document.getElementById('veh_mant_ocultos')?.classList.add('d-none');
         ['veh_mant_aviso_correo', 'veh_mant_aviso_wa'].forEach(id => { const b = document.getElementById(id); if (b) b.disabled = true; });
         document.querySelectorAll('#vehTabs .veh-tab-requiere-id').forEach(a => {
             a.classList.toggle('disabled', !vehIdActual);
@@ -215,7 +217,7 @@
                 ? `· Estimado hoy: <b>${U.esc(U.km(es.km_est))}</b> <span title="${es.dia_defecto ? 'Con una sola lectura de km se supone 1.000 km al mes' : 'Según el km de sus órdenes'}">(≈ ${U.esc(String(Math.round(es.km_dia)))} km/día${es.dia_defecto ? ', supuesto' : ''})</span>`
                 : '';
             const puedeMod = !!d.disponible && !!window.VEH_PERM_ACTUALIZAR;
-            const hayProximos = (d.servicios || []).some(s => s.proximo_vigente != null);
+            const hayProximos = (d.servicios || []).some(s => s.proximo_vigente != null && !s.no_aplica);
             ['veh_mant_aviso_correo', 'veh_mant_aviso_wa'].forEach(id => {
                 const b = document.getElementById(id);
                 b.disabled = !(puedeMod && d.avisos_disponible && hayProximos);
@@ -236,8 +238,19 @@
             document.getElementById('veh_mant_servicios').disabled = !d.disponible;
 
             let vencidos = 0;
+            const ocultos = (d.servicios || []).filter(s => s.no_aplica);
+            const puedeNoAplica = puedeMod && !!d.no_aplica_disponible;
             body.innerHTML = (d.servicios || []).map(s => {
                 const e = { estado: s.estado, faltan: s.faltan_km };
+                // "No aplica a este vehículo": oculto salvo que se pida verlos; no cuenta ni se avisa.
+                if (s.no_aplica) {
+                    if (!vehMantVerOcultos) return '';
+                    return `<tr data-servicio="${s.id_servicio}" class="text-muted">
+                        <td class="fw-semibold"><s>${U.esc(s.nombre)}</s></td>
+                        <td colspan="4"><i class="bi bi-eye-slash me-1"></i>No aplica a este vehículo: no se muestra ni se avisa al cliente.</td>
+                        <td class="text-center"><button type="button" class="btn btn-outline-success btn-sm py-0 px-2 veh-mant-noaplica" data-no-aplica="0" ${puedeNoAplica ? '' : 'disabled'}
+                            title="Vuelve a aplicar a este vehículo"><i class="bi bi-eye"></i></button></td></tr>`;
+                }
                 if (s.estado === 'vencido') vencidos++;
                 return `<tr data-servicio="${s.id_servicio}">
                     <td class="fw-semibold">${U.esc(s.nombre)}</td>
@@ -250,8 +263,17 @@
                     <td class="fw-semibold">${s.proximo_vigente != null ? U.esc(U.km(s.proximo_vigente)) : '<span class="text-muted">—</span>'}</td>
                     <td>${U.badge(e)}</td>
                     <td class="text-center"><button type="button" class="btn btn-outline-primary btn-sm py-0 px-2 veh-mant-reg" ${puedeMod && s.activo ? '' : 'disabled'}
-                        title="${puedeMod ? 'Registrar un cambio de ' + U.esc(s.nombre) + ' hecho en otro lugar' : 'Requiere permiso de modificar'}"><i class="bi bi-plus-circle"></i></button></td></tr>`;
-            }).join('') || '<tr><td colspan="6" class="text-center text-muted py-3">No hay servicios activos. Use <b>Servicios</b> para agregarlos.</td></tr>';
+                        title="${puedeMod ? 'Registrar un cambio de ' + U.esc(s.nombre) + ' hecho en otro lugar' : 'Requiere permiso de modificar'}"><i class="bi bi-plus-circle"></i></button>
+                        <button type="button" class="btn btn-outline-secondary btn-sm py-0 px-2 veh-mant-noaplica" data-no-aplica="1" ${puedeNoAplica ? '' : 'disabled'}
+                        title="${!d.no_aplica_disponible ? 'Falta aplicar la versión actual del SQL de mantenimientos' : 'No aplica a este vehículo (deja de mostrarse y de avisarse)'}"><i class="bi bi-eye-slash"></i></button></td></tr>`;
+            }).join('') || `<tr><td colspan="6" class="text-center text-muted py-3">${ocultos.length ? 'Todos los servicios están marcados como «no aplica».' : 'No hay servicios activos. Use <b>Servicios</b> para agregarlos.'}</td></tr>`;
+            const lnk = document.getElementById('veh_mant_ocultos');
+            if (lnk) {
+                lnk.classList.toggle('d-none', !ocultos.length);
+                lnk.innerHTML = vehMantVerOcultos
+                    ? '<i class="bi bi-eye-slash me-1"></i>Esconder los servicios que no aplican'
+                    : `<i class="bi bi-eye me-1"></i>Mostrar ${ocultos.length} ${ocultos.length === 1 ? 'servicio que no aplica' : 'servicios que no aplican'}`;
+            }
             const bm = document.getElementById('veh-badge-mant');
             if (bm) { bm.textContent = vencidos; bm.classList.toggle('d-none', !vencidos); bm.title = 'Mantenimientos vencidos'; }
 
@@ -304,6 +326,8 @@
     document.getElementById('veh_mant_body')?.addEventListener('click', async (ev) => {
         const reg = ev.target.closest('.veh-mant-reg');
         if (reg) { vehMantRegistrar(reg.closest('tr').dataset.servicio); return; }
+        const na = ev.target.closest('.veh-mant-noaplica');
+        if (na) { vehMantNoAplica(na.closest('tr').dataset.servicio, na.dataset.noAplica === '1'); return; }
         const b = ev.target.closest('.veh-mant-marca');
         if (!b) return;
         const tr = b.closest('tr');
@@ -315,6 +339,38 @@
     document.getElementById('veh_mant_servicios')?.addEventListener('click', () => window.mantAbrirServicios?.(urlBaseVeh));
     document.addEventListener('mantenimientoServicioGuardado', () => {
         if (vehModalEl()?.classList.contains('show') && vehCargado.mant) vehCargarMantenimiento();
+    });
+
+    // "No aplica a este vehículo" / "vuelve a aplicar": oculta la línea y deja de avisarse (reversible).
+    let vehMantVerOcultos = false;
+    async function vehMantNoAplica(idServicio, noAplica) {
+        if (vehMantOcupado || !vehIdActual || !vehMant) return;
+        const s = (vehMant.servicios || []).find(x => String(x.id_servicio) === String(idServicio));
+        if (!s) return;
+        if (noAplica) {
+            const c = await Swal.fire({
+                icon: 'question', title: `¿${vehEsc(s.nombre)} no aplica a este vehículo?`, target: vehModalEl(), heightAuto: false,
+                html: 'Deja de mostrarse en el vehículo y en sus órdenes, y no se le avisará al cliente. El historial de cambios se conserva y se puede volver a activar con <b>Mostrar servicios que no aplican</b>.',
+                showCancelButton: true, confirmButtonText: 'Sí, no aplica', cancelButtonText: 'Cancelar',
+            });
+            if (!c.isConfirmed) return;
+        }
+        vehMantOcupado = true;
+        try {
+            const fd = new FormData();
+            fd.append('id_vehiculo', vehIdActual); fd.append('id_servicio', idServicio); fd.append('no_aplica', noAplica ? '1' : '0');
+            const j = await (await fetch(`${urlBaseVeh}/mantNoAplicaAjax`, { method: 'POST', body: fd })).json();
+            if (!j.ok) throw new Error(j.error || 'No se pudo guardar.');
+            Swal.fire({ toast: true, position: 'top-end', icon: 'success', title: j.msg, timer: 1600, showConfirmButton: false });
+            await vehCargarMantenimiento();
+        } catch (e) {
+            Swal.fire({ icon: 'error', title: 'Error', text: e.message, target: vehModalEl(), heightAuto: false });
+        } finally { vehMantOcupado = false; }
+    }
+    document.getElementById('veh_mant_ocultos')?.addEventListener('click', (ev) => {
+        ev.preventDefault();
+        vehMantVerOcultos = !vehMantVerOcultos;
+        vehCargarMantenimiento();
     });
 
     // Registrar a mano un cambio hecho fuera (o sin orden) del servicio de la línea: km, fecha y próximo cambio.

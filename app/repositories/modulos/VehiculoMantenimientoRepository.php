@@ -87,15 +87,16 @@ class VehiculoMantenimientoRepository extends BaseRepository
      * 'vencido', 'proximo', 'al_dia' o NULL (sin cambios registrados). Para el filtro del
      * listado de Vehículos.
      */
-    public static function sqlEstadoVehiculo(string $colVeh, string $colEmp, float $kmDiaDefecto): string
+    public static function sqlEstadoVehiculo(string $colVeh, string $colEmp, float $kmDiaDefecto, bool $conNoAplica = true): string
     {
+        $noAplica = $conNoAplica ? " AND vm.no_aplica = false" : "";
         return "(SELECT CASE WHEN bool_or(vm.proximo_km - k.km_est <= 0) THEN 'vencido'
                              WHEN bool_or(vm.proximo_km - k.km_est <= s.aviso_km) THEN 'proximo'
                              WHEN COUNT(*) > 0 THEN 'al_dia' END
                    FROM vehiculos_mantenimientos vm
                    JOIN mantenimiento_servicios s ON s.id = vm.id_servicio AND s.eliminado = false AND s.activo = true
                    CROSS JOIN LATERAL (" . self::sqlEstimacion($colVeh, $colEmp, $kmDiaDefecto) . ") k
-                  WHERE vm.id_vehiculo = $colVeh AND vm.id_empresa = $colEmp AND vm.eliminado = false AND vm.proximo_km IS NOT NULL)";
+                  WHERE vm.id_vehiculo = $colVeh AND vm.id_empresa = $colEmp AND vm.eliminado = false AND vm.proximo_km IS NOT NULL$noAplica)";
     }
 
     public function estimacion(int $idVehiculo, int $idEmpresa, float $kmDiaDefecto): ?array
@@ -168,7 +169,7 @@ class VehiculoMantenimientoRepository extends BaseRepository
                               WHERE r.id_vehiculo_mantenimiento = vm.id AND r.proximo_km = vm.proximo_km
                                 AND r.canal = :canal AND r.origen = 'automatico' AND r.estado = 'enviado' AND r.eliminado = false) a ON true
                " . $this->joinContacto() . "
-              WHERE vm.id_empresa = :e AND vm.eliminado = false AND vm.proximo_km IS NOT NULL
+              WHERE vm.id_empresa = :e AND vm.eliminado = false AND vm.proximo_km IS NOT NULL AND {$this->noAplicaFalso()}
                 AND vm.proximo_km - k.km_est <= s.aviso_km $filtroServ
            ORDER BY v.id, s.orden, s.nombre"
         );
@@ -187,6 +188,7 @@ class VehiculoMantenimientoRepository extends BaseRepository
                JOIN vehiculos v ON v.id = vm.id_vehiculo
          CROSS JOIN LATERAL (" . self::sqlEstimacion('v.id', 'v.id_empresa', $kmDiaDefecto) . ") k
               WHERE vm.id_vehiculo = :v AND vm.id_empresa = :e AND vm.eliminado = false AND vm.proximo_km IS NOT NULL
+                AND {$this->noAplicaFalso()}
            ORDER BY s.orden, s.nombre"
         );
         $st->execute([':v' => $idVehiculo, ':e' => $idEmpresa]);
@@ -375,7 +377,7 @@ class VehiculoMantenimientoRepository extends BaseRepository
     public function getEstados(int $idVehiculo, int $idEmpresa): array
     {
         $st = $this->db->prepare(
-            "SELECT id, id_servicio, intervalo_km, ultimo_km, ultima_fecha, proximo_km, id_orden
+            "SELECT id, id_servicio, intervalo_km, ultimo_km, ultima_fecha, proximo_km, id_orden, " . ($this->noAplicaDisponible() ? "no_aplica" : "false AS no_aplica") . "
                FROM vehiculos_mantenimientos
               WHERE id_vehiculo = :v AND id_empresa = :e AND eliminado = false"
         );
@@ -444,6 +446,30 @@ class VehiculoMantenimientoRepository extends BaseRepository
         );
         $st->execute([':v' => $idVehiculo, ':e' => $idEmpresa]);
         return array_map('intval', $st->fetchAll(PDO::FETCH_COLUMN));
+    }
+
+    /** ¿Ya existe la columna no_aplica (SQL 20261030_vehiculos_mantenimientos.sql actualizado)? */
+    public function noAplicaDisponible(): bool
+    {
+        return $this->disponible() && $this->columnaExiste('vehiculos_mantenimientos', 'no_aplica');
+    }
+
+    /** Condición SQL "el servicio aplica a este vehículo" (alias vm). */
+    private function noAplicaFalso(): string
+    {
+        return $this->noAplicaDisponible() ? 'vm.no_aplica = false' : 'true';
+    }
+
+    /** Marca (o desmarca) que el servicio no aplica al vehículo: no se muestra ni se avisa. */
+    public function setNoAplica(int $idEmpresa, int $idVehiculo, int $idServicio, bool $noAplica, int $idUsuario): void
+    {
+        $st = $this->db->prepare(
+            "INSERT INTO vehiculos_mantenimientos (id_empresa, id_vehiculo, id_servicio, no_aplica, created_by, updated_by)
+             VALUES (:e, :v, :s, :n, :u, :u)
+             ON CONFLICT (id_vehiculo, id_servicio) WHERE eliminado = false
+             DO UPDATE SET no_aplica = EXCLUDED.no_aplica, updated_at = CURRENT_TIMESTAMP, updated_by = EXCLUDED.updated_by"
+        );
+        $st->execute([':e' => $idEmpresa, ':v' => $idVehiculo, ':s' => $idServicio, ':n' => $noAplica ? 'true' : 'false', ':u' => $idUsuario]);
     }
 
     /** Fija (o quita, con NULL) el intervalo propio del vehículo para un servicio. */
@@ -607,7 +633,7 @@ class VehiculoMantenimientoRepository extends BaseRepository
           LEFT JOIN vehiculos_mantenimientos vm
                  ON vm.id_servicio = s.id AND vm.id_vehiculo = :v AND vm.id_empresa = :e AND vm.eliminado = false
               WHERE s.id_empresa = :e AND s.eliminado = false
-                AND (h.id IS NOT NULL OR vm.proximo_km IS NOT NULL)
+                AND (h.id IS NOT NULL OR (vm.proximo_km IS NOT NULL AND " . $this->noAplicaFalso() . "))
            ORDER BY s.orden, s.nombre, s.id"
         );
         $st->execute([':o' => $idOrden, ':v' => $idVehiculo, ':e' => $idEmpresa]);

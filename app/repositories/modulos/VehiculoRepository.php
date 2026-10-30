@@ -60,7 +60,8 @@ class VehiculoRepository extends BaseRepository
         // (mismo cálculo que los avisos automáticos). Sin el SQL de mantenimientos no se ofrece.
         $mapaMant = $this->tablaExiste('vehiculos_mantenimientos_historial')
             ? ['mantenimiento' => VehiculoMantenimientoRepository::sqlEstadoVehiculo('v.id', 'v.id_empresa',
-                \App\Services\modulos\MantenimientoAvisoService::kmDia(\App\Services\modulos\MantenimientoAvisoService::KM_MES_DEFECTO))]
+                \App\Services\modulos\MantenimientoAvisoService::kmDia(\App\Services\modulos\MantenimientoAvisoService::KM_MES_DEFECTO),
+                $this->columnaExiste('vehiculos_mantenimientos', 'no_aplica'))]
             : [];
         \App\Helpers\FiltrosBusqueda::aplicarFiltros($whereSql, $params, $parsed['filtros'], [
             'texto' => [
