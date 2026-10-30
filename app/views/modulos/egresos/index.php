@@ -2284,6 +2284,8 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
         try {
             await guardarEgresoInterno();
         } finally {
+            // Si algo terminó sin mostrar otro mensaje, no dejar colgado el aviso "Guardando…".
+            if (Swal.isLoading()) Swal.close();
             egGuardando = false;
             if (btnG) btnG.disabled = false;
         }
@@ -2349,6 +2351,11 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
             }
         }
 
+        // Desde aquí todo va al servidor (periodo, guardado, asiento y recarga del egreso): se avisa
+        // para que el usuario no quede sin respuesta hasta el mensaje final. Cualquier Swal posterior
+        // (error, pregunta "Registrar nuevo", toast) reemplaza este aviso.
+        egMostrarGuardando(!document.getElementById('eg-input-id').value);
+
         // Validación 2 (servidor): verificar que la fecha esté dentro de un periodo contable abierto
         try {
             const periodoRes = await fetch(`${EGR_URL}/verificarPeriodoAjax?fecha=${encodeURIComponent(data.fecha_emision)}`);
@@ -2364,6 +2371,7 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
 
         const b = document.getElementById('btnGuardarEgreso'); b.disabled = true;
         const eraNuevo = !document.getElementById('eg-input-id').value; // "Registrar nuevo" solo al crear
+        Swal.update({ text: 'Registrando el egreso y su asiento contable. No cierre esta ventana.' });
         return fetch(`${EGR_URL}/guardarAjax`, {
             method:'POST', headers:{'Content-Type':'application/x-www-form-urlencoded'},
             body: 'data=' + encodeURIComponent(JSON.stringify(data))
@@ -2371,8 +2379,7 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
             if(res.ok) {
                 // Actualizar el registro en el listado (misma página, orden y filtros)
                 EGR_mostrarRegistroGuardado(res.id, res.fila);
-                // Al crear uno nuevo, el aviso lo da la pregunta "Registrar nuevo / Seguir en este".
-                if (!eraNuevo) Toast.fire({ icon: 'success', title: res.mensaje });
+                Swal.update({ text: 'Egreso guardado. Cargando el documento…' });
                 // El modal NO se cierra: se recarga en el mismo lugar con el egreso ya guardado
                 // (número asignado, botones de PDF/correo/cheques, pestaña Asiento), para seguir
                 // trabajando sobre él. abrirModalEgreso() usa getOrCreateInstance, así que el
@@ -2382,7 +2389,10 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                 return abrirModalEgresoVer(res.id).then(() => {
                     // Egreso nuevo ya recargado (eg-input-id con el id creado): ofrecer seguir
                     // con otro en el mismo modal sin cerrar y volver a pulsar "Nuevo".
+                    // Al actualizar, el aviso es el toast (va después de la recarga para no
+                    // cerrar antes de tiempo el "Guardando…").
                     if (eraNuevo) egPreguntarRegistrarOtro(res.mensaje);
+                    else Toast.fire({ icon: 'success', title: res.mensaje });
                 }, () => {
                     // Guardado pero sin poder recargarlo: se oculta Guardar para no crear otro.
                     b.classList.add('d-none');
@@ -2395,6 +2405,17 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
         }).catch(e=> { 
             b.disabled = false; 
             Swal.fire('Error de Red', 'No se pudo completar la operación en este momento.', 'error'); 
+        });
+    }
+
+    // Aviso bloqueante mientras el guardado va al servidor (el botón desactivado solo no se nota).
+    function egMostrarGuardando(nuevo) {
+        Swal.fire({
+            title: nuevo ? 'Guardando egreso…' : 'Actualizando egreso…',
+            text: 'Verificando el periodo contable…',
+            allowOutsideClick: false,
+            allowEscapeKey: false,
+            didOpen: () => Swal.showLoading()
         });
     }
 

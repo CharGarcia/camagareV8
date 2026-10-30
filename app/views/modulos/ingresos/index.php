@@ -2133,6 +2133,8 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
         try {
             await guardarIngresoInterno();
         } finally {
+            // Si algo terminó sin mostrar otro mensaje, no dejar colgado el aviso "Guardando…".
+            if (Swal.isLoading()) Swal.close();
             ingGuardando = false;
             if (btnG) btnG.disabled = false;
         }
@@ -2276,6 +2278,11 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
             }
         }
 
+        // Desde aquí todo va al servidor (periodo, guardado, asiento y recarga del ingreso): se avisa
+        // para que el usuario no quede sin respuesta hasta el mensaje final. Cualquier Swal posterior
+        // (error, pregunta "Registrar nuevo", toast) reemplaza este aviso.
+        ingMostrarGuardando(!data.id);
+
         // ── Validar periodo contable ───────────────────────────────────────────
         try {
             const periodoRes = await fetch(`<?= BASE_URL ?>/<?= $rutaModulo ?>/verificarPeriodoAjax?fecha=${encodeURIComponent(data.fecha_emision)}`);
@@ -2294,6 +2301,7 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
         const eraNuevo = !data.id; // "Registrar nuevo" se ofrece solo al crear, no al actualizar
         btn.disabled = true;
         btn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Procesando...';
+        Swal.update({ text: 'Registrando el ingreso y su asiento contable. No cierre esta ventana.' });
 
         return fetch(`<?= BASE_URL ?>/<?= $rutaModulo ?>/guardarAjax`, {
                 method: 'POST',
@@ -2307,9 +2315,7 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                 if (res.ok) {
                     // Actualizar el registro en el listado (misma página, orden y filtros)
                     ING_mostrarRegistroGuardado(res.id, res.fila);
-
-                    // Alerta visual atractiva (al crear uno nuevo la reemplaza la pregunta de abajo)
-                    if (!eraNuevo) Toast.fire({ icon: 'success', title: res.mensaje });
+                    Swal.update({ text: 'Ingreso guardado. Cargando el documento…' });
 
                     // El modal NO se cierra: se recarga en el mismo lugar con el ingreso ya guardado
                     // (número asignado, botones de PDF/correo, pestaña Asiento), para seguir
@@ -2322,7 +2328,10 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                         btn.innerHTML = oldHtml;
                         // Ingreso nuevo ya recargado (m-input-id con el id creado): ofrecer seguir
                         // con otro en el mismo modal sin cerrar y volver a pulsar "Nuevo".
+                        // Al actualizar, el aviso es el toast (va después de la recarga para no
+                        // cerrar antes de tiempo el "Guardando…").
                         if (eraNuevo) ingPreguntarRegistrarOtro(res.mensaje);
+                        else Toast.fire({ icon: 'success', title: res.mensaje });
                     }, () => {
                         // Guardado pero sin poder recargarlo: se oculta Guardar para no crear otro.
                         btn.classList.add('d-none');
@@ -2339,6 +2348,17 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                 btn.innerHTML = oldHtml;
                 Swal.fire('Error de Red', e.message, 'error');
             });
+    }
+
+    // Aviso bloqueante mientras el guardado va al servidor (el spinner del botón solo no se nota).
+    function ingMostrarGuardando(nuevo) {
+        Swal.fire({
+            title: nuevo ? 'Guardando ingreso…' : 'Actualizando ingreso…',
+            text: 'Verificando el periodo contable…',
+            allowOutsideClick: false,
+            allowEscapeKey: false,
+            didOpen: () => Swal.showLoading()
+        });
     }
 
     // Tras crear un ingreso: "Registrar nuevo" limpia el modal (abrirModalIngreso) para empezar
