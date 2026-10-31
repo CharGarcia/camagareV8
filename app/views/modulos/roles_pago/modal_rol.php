@@ -16,7 +16,8 @@ $mesActual  = (int) date('n');
                 </div>
                 <div class="modal-body">
                     <input type="hidden" name="id" id="rol_id" value="">
-                    <div class="row g-3">
+                    <!-- Centrada: sin el selector de semana (mensual/quincena) quedan 10 de 12 columnas. -->
+                    <div class="row g-3 justify-content-center">
                         <div class="col-md-4">
                             <label class="form-label mb-1 small fw-bold text-muted">Tipo de Rol *</label>
                             <select class="form-select form-select-sm shadow-none" name="tipo_rol" id="rol_tipo_rol" onchange="window.rolToggleNumero()">
