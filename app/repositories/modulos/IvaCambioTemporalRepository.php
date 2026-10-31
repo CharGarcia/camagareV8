@@ -8,7 +8,7 @@ use App\repositories\BaseRepository;
 use PDO;
 
 /**
- * Cambio temporal de IVA en productos (empresas de turismo — IVA 8% en feriados).
+ * Cambio temporal de IVA en productos (prestadores de servicios turísticos — IVA 8% en feriados).
  *
  * Cada registro de iva_cambios_temporales es "tarifa actual → tarifa nueva" entre
  * dos fechas para los productos de una empresa. Al aplicarlo se guarda en el detalle

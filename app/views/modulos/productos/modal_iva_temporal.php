@@ -1,7 +1,7 @@
 <?php
 /**
- * Modal "Cambio temporal de IVA" (empresas de turismo — IVA 8% en feriados).
- * Lo incluye productos/index.php solo si la empresa está marcada como de turismo
+ * Modal "Cambio temporal de IVA" (prestadores de servicios turísticos — IVA 8% en feriados).
+ * Lo incluye productos/index.php solo si la empresa está marcada como prestador de servicios turísticos
  * y el usuario la administra. Lógica: public/js/modulos/productos_iva_temporal.js.
  */
 ?>

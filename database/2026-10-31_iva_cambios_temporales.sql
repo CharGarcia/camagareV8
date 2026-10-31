@@ -1,12 +1,14 @@
 -- ============================================================================
--- Cambio temporal de IVA en productos (empresas de turismo — IVA 8% en feriados)
+-- Cambio temporal de IVA en productos (prestadores de servicios turísticos — IVA 8% en feriados)
 -- ----------------------------------------------------------------------------
 -- Base legal: art. innumerado a continuación del art. 65 LRTI. Por decreto
 -- ejecutivo, el Presidente reduce al 8% la tarifa de IVA de los servicios
 -- turísticos (art. 5 Ley de Turismo) en feriados. Normas de emisión del SRI:
 -- Res. NAC-DGERCGC22-00000010 (reformada por la 22-00000011 y la 23-00000005).
 --
--- es_empresa_turismo: marca en la EMPRESA. Solo la define el superadmin en
+-- es_prestador_turistico: marca en la EMPRESA ("prestador de servicios turísticos":
+-- realiza actividades del art. 5 y tiene Registro de Turismo y LUAF, art. 8 Ley de
+-- Turismo). Solo la define el superadmin en
 -- config/empresas-sistema (igual que factura_operadora_transporte). Apagado =
 -- el botón "Cambio temporal de IVA" no aparece en Productos.
 --
@@ -17,10 +19,10 @@
 -- ============================================================================
 
 ALTER TABLE empresas
-    ADD COLUMN IF NOT EXISTS es_empresa_turismo VARCHAR(10) DEFAULT 'false';
+    ADD COLUMN IF NOT EXISTS es_prestador_turistico VARCHAR(10) DEFAULT 'false';
 
 UPDATE empresas
-   SET es_empresa_turismo = COALESCE(es_empresa_turismo, 'false');
+   SET es_prestador_turistico = COALESCE(es_prestador_turistico, 'false');
 
 CREATE TABLE IF NOT EXISTS iva_cambios_temporales (
     id                SERIAL PRIMARY KEY,

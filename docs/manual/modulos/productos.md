@@ -5,7 +5,7 @@ categoria: Inventario
 ruta_modulo: modulos/productos
 tipo: modulo
 visibilidad: todos
-etiquetas: productos, iva temporal, iva 8, iva feriado, cambiar iva masivo, turismo, productos equivalentes, equivalencias, equivalente, sustituto, reemplazo, otra marca, generico, compatible, referencias, codigos de proveedores, homologacion, buscar producto, buscador, filtros, filtrar productos, productos bajo el minimo, reponer stock, buscar por variante, buscar por codigo de proveedor, kits, chips, ordenar por dos columnas, ordenar por categoria y descripcion, articulos, servicios, catalogo, precio, costo, iva, ice, stock, codigo de barras, inventariable, varios precios, lista de precios, mayorista, carga masiva, importar productos, precio editable, cambiar precio en la comanda, precio variable, envio a domicilio, delivery, servicio a domicilio, recargo por servicio, excluir propina, restaurante
+etiquetas: productos, iva temporal, iva 8, iva feriado, cambiar iva masivo, turismo, prestador de servicios turisticos, productos equivalentes, equivalencias, equivalente, sustituto, reemplazo, otra marca, generico, compatible, referencias, codigos de proveedores, homologacion, buscar producto, buscador, filtros, filtrar productos, productos bajo el minimo, reponer stock, buscar por variante, buscar por codigo de proveedor, kits, chips, ordenar por dos columnas, ordenar por categoria y descripcion, articulos, servicios, catalogo, precio, costo, iva, ice, stock, codigo de barras, inventariable, varios precios, lista de precios, mayorista, carga masiva, importar productos, precio editable, cambiar precio en la comanda, precio variable, envio a domicilio, delivery, servicio a domicilio, recargo por servicio, excluir propina, restaurante
 version: 1.17
 orden: 10
 estado: activo
@@ -252,9 +252,9 @@ Las columnas calculadas se ordenan por su valor real, no por el texto: el
 El orden se guarda para usted y las exportaciones salen con ese mismo orden.
 Detalles en *Cómo ordenar los listados*.
 
-## Cambio temporal de IVA (empresas de turismo)
+## Cambio temporal de IVA (prestadores de servicios turísticos)
 
-En las empresas marcadas como **de turismo**, el botón **IVA temporal** (junto a
+En las empresas marcadas como **prestador de servicios turísticos**, el botón **IVA temporal** (junto a
 PDF y Excel) permite programar que los productos con una tarifa (por ejemplo
 15%) pasen a otra (por ejemplo 8%) entre dos fechas, para todos, solo servicios
 o solo bienes. Al terminar, cada producto vuelve solo a la tarifa que tenía.
@@ -289,7 +289,7 @@ aparecer al facturar.
 
 ## Historial de cambios
 
-- **1.17** — Botón **IVA temporal** (solo empresas de turismo): programa el cambio de tarifa de IVA de los productos entre dos fechas (IVA 8% en feriados) y lo restaura solo al terminar.
+- **1.17** — Botón **IVA temporal** (solo prestadores de servicios turísticos): programa el cambio de tarifa de IVA de los productos entre dos fechas (IVA 8% en feriados) y lo restaura solo al terminar.
 - **1.16** — Al guardar la ficha con su pestaña de bodegas, el saldo de cada bodega sale siempre del Kardex (antes una bodega nueva podía nacer con el número del formulario) y una bodega quitada de la ficha que todavía tiene existencias sigue visible. Desde la ficha ya no se puede mover stock: los ajustes se hacen en Inventario.
 - **1.15** — Nueva sección **Productos equivalentes** en la pestaña *Referencias* de la ficha: se agregan los productos que sirven para lo mismo y, cuando uno no tiene saldo, Facturas de Venta y Car-Wash ofrecen primero sus equivalentes.
 - **1.14** — En la ficha del producto, la pestaña *Detalles* se llama ahora **Adicionales** y la pestaña *Homologaciones* se llama **Referencias** (los códigos con que los proveedores identifican el producto). Si las tenía ocultas, siguen ocultas.

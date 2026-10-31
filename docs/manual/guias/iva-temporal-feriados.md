@@ -1,5 +1,5 @@
 ---
-titulo: Cambio temporal de IVA en feriados (empresas de turismo)
+titulo: Cambio temporal de IVA en feriados (prestadores de servicios turísticos)
 resumen: Cómo programar que los productos y servicios pasen al 8% de IVA durante un feriado y vuelvan solos a su tarifa al terminar.
 categoria: Inventario
 tipo: guia
@@ -12,7 +12,7 @@ estado: activo
 
 En Ecuador, el Presidente puede bajar por **decreto ejecutivo** la tarifa de IVA
 del 15% al **8%** para los **servicios turísticos** durante un feriado. Las
-empresas de turismo pueden programar ese cambio desde **Productos**: eligen qué
+empresas marcadas como prestador de servicios turísticos pueden programar ese cambio desde **Productos**: eligen qué
 tarifa cambiar, por cuál, a qué productos y entre qué fechas. Al terminar, cada
 producto vuelve **solo** a la tarifa que tenía.
 
@@ -34,7 +34,7 @@ productos. El sistema no compara las fechas con el decreto oficial.
 
 ## Requisitos previos
 
-- La empresa debe estar marcada como **Empresa de turismo**. Esa marca la pone
+- La empresa debe estar marcada como **Prestador de servicios turísticos**. Esa marca la pone
   únicamente el superadministrador del sistema, en *Empresas del sistema*.
   Mientras no esté marcada, el botón no aparece.
 - El usuario debe tener permiso de **modificar** productos y ser administrador
@@ -79,7 +79,7 @@ Debajo del formulario está la lista de cambios con su estado:
 | Programado | Todavía no llega la fecha desde. Se puede **cancelar** (✕). |
 | Aplicado | Los productos tienen la tarifa nueva. Se puede **restaurar ahora** (↺) sin esperar la fecha hasta. |
 | Restaurado | Los productos volvieron a su tarifa. |
-| Cancelado | Se canceló antes de aplicarse, o la empresa dejó de ser de turismo. |
+| Cancelado | Se canceló antes de aplicarse, o la empresa dejó de estar marcada como prestador de servicios turísticos. |
 | Vencido sin aplicar | El período pasó sin que el sistema se usara. No cambió nada. |
 
 El botón de la lista (☰) muestra los productos del cambio con su tarifa anterior,
@@ -107,7 +107,7 @@ emitieron.
 
 ## Errores frecuentes
 
-- **No veo el botón IVA temporal**: la empresa no está marcada como de turismo
+- **No veo el botón IVA temporal**: la empresa no está marcada como prestador de servicios turísticos
   (pídalo al superadministrador), o su usuario no tiene permiso de modificar
   productos con nivel de administrador o acceso total.
 - **«Ya hay un cambio de IVA programado o vigente…»**: las fechas se cruzan con

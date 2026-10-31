@@ -5,7 +5,7 @@ categoria: Configuración global
 ruta_modulo: config/empresas-sistema
 tipo: modulo
 visibilidad: superadmin
-etiquetas: empresas del sistema, empresa de turismo, turismo, iva 8 feriados, aviso empresas sin suscripcion, aviso navbar, empresas por revisar, empresas sin suscripcion, sin suscripcion, no pagan, empresas que no pagan, regalia, sin cobro, cortesia, plan sin costo, exonerar suscripcion, empresa gratis, empresa administradora, administradora de suscripciones, empresa que controla las suscripciones, controladora, suscripcion por defecto, crear empresa, alta de empresa, establecimientos, sucursales, matriz, usuarios asignados, documentos legales, suscripcion, empresas del grupo, eliminar establecimiento, establecimiento activo, un solo establecimiento activo, buscar empresa, filtrar empresas, filtros de empresas, exportar empresas, pdf de empresas, excel de empresas, ordenar empresas, columnas del listado, telefono de la empresa, correo de la empresa, empresa como cliente, registrar cliente automaticamente, cliente de la controladora, facturar a la empresa
+etiquetas: empresas del sistema, prestador de servicios turisticos, prestador turistico, empresa de turismo, turismo, iva 8 feriados, aviso empresas sin suscripcion, aviso navbar, empresas por revisar, empresas sin suscripcion, sin suscripcion, no pagan, empresas que no pagan, regalia, sin cobro, cortesia, plan sin costo, exonerar suscripcion, empresa gratis, empresa administradora, administradora de suscripciones, empresa que controla las suscripciones, controladora, suscripcion por defecto, crear empresa, alta de empresa, establecimientos, sucursales, matriz, usuarios asignados, documentos legales, suscripcion, empresas del grupo, eliminar establecimiento, establecimiento activo, un solo establecimiento activo, buscar empresa, filtrar empresas, filtros de empresas, exportar empresas, pdf de empresas, excel de empresas, ordenar empresas, columnas del listado, telefono de la empresa, correo de la empresa, empresa como cliente, registrar cliente automaticamente, cliente de la controladora, facturar a la empresa
 version: 1.22
 orden: 1
 estado: activo
@@ -182,9 +182,9 @@ del grupo, demo comercial…): *Editar → Cobro y vigencia* → interruptor
   quién lo hizo y los datos anteriores y nuevos.
 - Requiere el SQL `database/20261009_empresas_regalia_suscripcion.sql`.
 
-## Empresa de turismo (IVA 8% en feriados)
+## Prestador de servicios turísticos (IVA 8% en feriados)
 
-El interruptor **Empresa de turismo** (crear y editar empresa) habilita en
+El interruptor **Prestador de servicios turísticos** (crear y editar empresa) habilita en
 **Productos** el botón *IVA temporal*, con el que la propia empresa programa el
 cambio de tarifa de IVA durante los feriados decretados (ver la guía
 [Cambio temporal de IVA en feriados](guias/iva-temporal-feriados)).
@@ -192,10 +192,10 @@ cambio de tarifa de IVA durante los feriados decretados (ver la guía
 - Solo lo cambia el **superadministrador**: un administrador (nivel 2) que edita
   su propia empresa no ve el interruptor y el servidor ignora el valor.
 - Márquelo solo a empresas con **Registro de Turismo** y **LUAF**.
-- Marcarlo o quitarlo queda en la bitácora (`log_sistema`: TURISMO_ACTIVAR /
-  TURISMO_QUITAR). Si se quita con un cambio de IVA programado, ese cambio se
+- Marcarlo o quitarlo queda en la bitácora (`log_sistema`: PRESTADOR_TURISTICO_ACTIVAR /
+  PRESTADOR_TURISTICO_QUITAR). Si se quita con un cambio de IVA programado, ese cambio se
   cancela al llegar su fecha; uno ya aplicado se restaura igual al terminar.
-- Filtro *Empresa de turismo* en el modal de filtros (`turismo:si`).
+- Filtro *Prestador de servicios turísticos* en el modal de filtros (`prestador_turistico:si`).
 - Requiere el SQL `database/2026-10-31_iva_cambios_temporales.sql`.
 
 ## Permisos
@@ -226,8 +226,8 @@ las empresas que ese usuario tiene asignadas.
 
 ## Historial de cambios
 
-- **1.22** — Nuevo interruptor **Empresa de turismo** (solo superadministrador): habilita el
-  cambio temporal de IVA en Productos (8% en feriados). Filtro *Empresa de turismo*.
+- **1.22** — Nuevo interruptor **Prestador de servicios turísticos** (solo superadministrador): habilita el
+  cambio temporal de IVA en Productos (8% en feriados). Filtro *Prestador de servicios turísticos*.
 - **1.21** — Al crear una empresa, queda registrada automáticamente como cliente de su
   empresa controladora de suscripciones (sin duplicar si ya existe con ese RUC).
 - **1.20** — Aviso en la barra superior (superadministrador, dentro de la empresa que vende el

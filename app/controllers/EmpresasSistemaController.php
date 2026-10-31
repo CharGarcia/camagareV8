@@ -355,7 +355,7 @@ class EmpresasSistemaController extends Controller
             . ' data-estado-pago="' . htmlspecialchars($r['estado_pago'] ?? 'pendiente') . '"'
             . ' data-obligado-contabilidad="' . htmlspecialchars($r['obligado_contabilidad'] ?? 'NO') . '"'
             . ' data-operadora-transporte="' . ((($r['factura_operadora_transporte'] ?? 'false') === 'true' || ($r['factura_operadora_transporte'] ?? false) === true) ? 'true' : 'false') . '"'
-            . ' data-empresa-turismo="' . ((($r['es_empresa_turismo'] ?? 'false') === 'true' || ($r['es_empresa_turismo'] ?? false) === true) ? 'true' : 'false') . '"'
+            . ' data-prestador-turistico="' . ((($r['es_prestador_turistico'] ?? 'false') === 'true' || ($r['es_prestador_turistico'] ?? false) === true) ? 'true' : 'false') . '"'
             . ' data-max-usuarios="' . (int) ($r['max_usuarios'] ?? 3) . '"'
             // Vínculo a una controladora borrada/inexistente (ctrl_nombre vacío): se manda 0
             // para que el campo se vea vacío y, al guardar, el vínculo colgado se limpie.
@@ -465,8 +465,8 @@ class EmpresasSistemaController extends Controller
             'obligado_contabilidad' => strtoupper(trim($_POST['obligado_contabilidad'] ?? 'NO')) === 'SI' ? 'SI' : 'NO',
             // Operadora de transporte comercial (Ficha SRI v2.34, Anexo 25): placa obligatoria en factura.
             'factura_operadora_transporte' => !empty($_POST['factura_operadora_transporte']) && $_POST['factura_operadora_transporte'] !== 'false' ? 'true' : 'false',
-            // Empresa de turismo: habilita el cambio temporal de IVA (8% en feriados) en Productos.
-            'es_empresa_turismo' => !empty($_POST['es_empresa_turismo']) && $_POST['es_empresa_turismo'] !== 'false' ? 'true' : 'false',
+            // Prestador de servicios turísticos: habilita el cambio temporal de IVA (8% en feriados) en Productos.
+            'es_prestador_turistico' => !empty($_POST['es_prestador_turistico']) && $_POST['es_prestador_turistico'] !== 'false' ? 'true' : 'false',
             'id_usuario' => (string) $idUsuario,
             'valor_cobro' => $_POST['valor_cobro'] ?? null,
             'periodo_vigencia_desde' => trim($_POST['periodo_vigencia_desde'] ?? ''),
@@ -494,8 +494,8 @@ class EmpresasSistemaController extends Controller
         try {
             $id = $this->model->crear($data);
             $idUsuario = (int) ($_SESSION['id_usuario'] ?? 0);
-            if ($data['es_empresa_turismo'] === 'true') {
-                $this->auditarTurismo($id, $idUsuario, false);
+            if ($data['es_prestador_turistico'] === 'true') {
+                $this->auditarPrestadorTuristico($id, $idUsuario, false);
             }
             if ($idUsuario > 0) {
                 $ea = new EmpresaAsignada();
@@ -699,14 +699,14 @@ class EmpresasSistemaController extends Controller
             $_POST['factura_operadora_transporte'] =
                 (!empty($_POST['factura_operadora_transporte']) && $_POST['factura_operadora_transporte'] !== 'false') ? 'true' : 'false';
         }
-        // Empresa de turismo: solo el superadmin la marca o desmarca. Un admin (nivel 2)
+        // Prestador de servicios turísticos: solo el superadmin la marca o desmarca. Un admin (nivel 2)
         // que edita su propia empresa no puede habilitarse el IVA reducido por su cuenta.
-        $turismoAntes = null;
-        if (array_key_exists('es_empresa_turismo', $_POST) && $nivel >= 3) {
-            $allKeys[] = 'es_empresa_turismo';
-            $_POST['es_empresa_turismo'] =
-                (!empty($_POST['es_empresa_turismo']) && $_POST['es_empresa_turismo'] !== 'false') ? 'true' : 'false';
-            $turismoAntes = $this->model->esEmpresaTurismo($id);
+        $prestadorAntes = null;
+        if (array_key_exists('es_prestador_turistico', $_POST) && $nivel >= 3) {
+            $allKeys[] = 'es_prestador_turistico';
+            $_POST['es_prestador_turistico'] =
+                (!empty($_POST['es_prestador_turistico']) && $_POST['es_prestador_turistico'] !== 'false') ? 'true' : 'false';
+            $prestadorAntes = $this->model->esPrestadorTuristico($id);
         }
         $data = [];
         foreach ($allKeys as $k) {
@@ -752,8 +752,8 @@ class EmpresasSistemaController extends Controller
                     $this->auditarRegalia($id, $idUsuario, $regaliaAntes);
                     \App\Services\VigenciaSuscripcionService::invalidar($id);
                 }
-                if ($turismoAntes !== null) {
-                    $this->auditarTurismo($id, $idUsuario, $turismoAntes);
+                if ($prestadorAntes !== null) {
+                    $this->auditarPrestadorTuristico($id, $idUsuario, $prestadorAntes);
                 }
                 (new \App\Services\EmpresaInicializadorService())->inicializar($id, $idUsuario);
 
@@ -1044,24 +1044,24 @@ class EmpresasSistemaController extends Controller
     }
 
     /**
-     * Auditoría de la marca "empresa de turismo": habilita a la empresa a bajar el IVA
+     * Auditoría de la marca "prestador de servicios turísticos": habilita a la empresa a bajar el IVA
      * de sus productos (8% en feriados), así que debe quedar quién la cambió y cuándo.
      * Solo registra si cambió; un fallo aquí no revierte el guardado ya hecho.
      */
-    private function auditarTurismo(int $idEmpresa, int $idUsuario, bool $antes): void
+    private function auditarPrestadorTuristico(int $idEmpresa, int $idUsuario, bool $antes): void
     {
         try {
-            $despues = $this->model->esEmpresaTurismo($idEmpresa);
+            $despues = $this->model->esPrestadorTuristico($idEmpresa);
             if ($despues === $antes) {
                 return;
             }
             (new \App\Services\LogSistemaService())->registrar(
-                $idUsuario, $idEmpresa, $despues ? 'TURISMO_ACTIVAR' : 'TURISMO_QUITAR', 'empresas', $idEmpresa,
-                ['es_empresa_turismo' => $antes ? 'true' : 'false'],
-                ['es_empresa_turismo' => $despues ? 'true' : 'false']
+                $idUsuario, $idEmpresa, $despues ? 'PRESTADOR_TURISTICO_ACTIVAR' : 'PRESTADOR_TURISTICO_QUITAR', 'empresas', $idEmpresa,
+                ['es_prestador_turistico' => $antes ? 'true' : 'false'],
+                ['es_prestador_turistico' => $despues ? 'true' : 'false']
             );
         } catch (\Throwable $e) {
-            error_log('EmpresasSistemaController::auditarTurismo ' . $e->getMessage());
+            error_log('EmpresasSistemaController::auditarPrestadorTuristico ' . $e->getMessage());
         }
     }
 

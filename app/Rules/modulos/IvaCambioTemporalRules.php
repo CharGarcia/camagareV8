@@ -7,7 +7,7 @@ namespace App\Rules\modulos;
 use Exception;
 
 /**
- * Validaciones del cambio temporal de IVA en productos (empresas de turismo).
+ * Validaciones del cambio temporal de IVA en productos (prestadores de servicios turísticos).
  */
 class IvaCambioTemporalRules
 {

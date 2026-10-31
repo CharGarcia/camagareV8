@@ -1,5 +1,5 @@
 /**
- * Cambio temporal de IVA en Productos (empresas de turismo — IVA 8% en feriados).
+ * Cambio temporal de IVA en Productos (prestadores de servicios turísticos — IVA 8% en feriados).
  * Modal: app/views/modulos/productos/modal_iva_temporal.php
  * Servidor: ProductosController::ivaTemporal*Ajax → IvaCambioTemporalService.
  */

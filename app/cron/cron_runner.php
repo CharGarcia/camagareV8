@@ -284,7 +284,7 @@ try {
 }
 
 // ── Cambio temporal de IVA en productos (FIJO, cada tick) ─────────────────────
-//    Empresas de turismo (IVA 8% en feriados): al llegar la fecha desde cambia la
+//    Prestadores de servicios turísticos (IVA 8% en feriados): al llegar la fecha desde cambia la
 //    tarifa de sus productos y al pasar la fecha hasta la restaura. Barato: una
 //    consulta indexada; solo escribe cuando hay algo que aplicar o restaurar.
 try {

@@ -61,7 +61,7 @@ class AuthMiddleware
             }
         }
 
-        // Cambio temporal de IVA (empresas de turismo): respaldo del cron. Si llegó la
+        // Cambio temporal de IVA (prestadores de servicios turísticos): respaldo del cron. Si llegó la
         // fecha desde o pasó la fecha hasta y el cron no corrió, se aplica o restaura
         // aquí, antes de que el usuario facture con la tarifa equivocada. Cada 5 min y,
         // además, en la primera petición después de medianoche (cambia el día).

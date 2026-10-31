@@ -92,15 +92,15 @@ class ProductosController extends BaseModuloController
             'fullWidth'  => true,
             // Selects del modal de filtros: solo valores que la empresa usa en sus productos.
             'opcionesFiltro' => $this->service->getOpcionesFiltroListado($idEmpresa),
-            // Botón "Cambio temporal de IVA": solo empresas de turismo y administradores.
+            // Botón "Cambio temporal de IVA": solo prestadores de servicios turísticos y administradores.
             'puedeIvaTemporal' => $this->puedeIvaTemporal($idEmpresa),
         ]);
     }
 
-    // ── Cambio temporal de IVA (empresas de turismo — IVA 8% en feriados) ──────
+    // ── Cambio temporal de IVA (prestadores de servicios turísticos — IVA 8% en feriados) ──────
 
     /**
-     * Empresa marcada como de turismo (lo decide el superadmin) + usuario que puede
+     * Empresa marcada como prestador de servicios turísticos (lo decide el superadmin) + usuario que puede
      * actualizar productos y administra la empresa: nivel 2/3 o acceso total.
      */
     private function puedeIvaTemporal(int $idEmpresa): bool
@@ -125,7 +125,7 @@ class ProductosController extends BaseModuloController
         if (!$this->puedeIvaTemporal((int) $_SESSION['id_empresa'])) {
             http_response_code(403);
             header('Content-Type: application/json');
-            echo json_encode(['ok' => false, 'error' => 'El cambio temporal de IVA solo está disponible para administradores de empresas de turismo.']);
+            echo json_encode(['ok' => false, 'error' => 'El cambio temporal de IVA solo está disponible para administradores de empresas marcadas como prestador de servicios turísticos.']);
             exit;
         }
     }

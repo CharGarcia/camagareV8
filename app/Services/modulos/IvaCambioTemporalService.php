@@ -11,9 +11,9 @@ use App\Services\LogSistemaService;
 use Exception;
 
 /**
- * Cambio temporal de IVA en productos (empresas de turismo — IVA 8% en feriados).
+ * Cambio temporal de IVA en productos (prestadores de servicios turísticos — IVA 8% en feriados).
  *
- * La empresa (marcada como de turismo por el superadmin) programa desde Productos
+ * La empresa (marcada como prestador de servicios turísticos por el superadmin) programa desde Productos
  * "tarifa actual → tarifa nueva" entre dos fechas. Al llegar la fecha desde se
  * cambia la tarifa de los productos que cumplen el filtro; al pasar la fecha hasta
  * cada uno vuelve a la tarifa que tenía. Lo dispara el cron cada minuto y, como
@@ -37,10 +37,10 @@ class IvaCambioTemporalService
         return new self(new IvaCambioTemporalRepository(), new IvaCambioTemporalRules(), new LogSistemaService());
     }
 
-    /** ¿La empresa puede usar el cambio temporal de IVA? (migración aplicada + empresa de turismo). */
+    /** ¿La empresa puede usar el cambio temporal de IVA? (migración aplicada + prestador de servicios turísticos). */
     public function disponible(int $idEmpresa): bool
     {
-        return $this->repo->tablaDisponible() && (new Empresa())->esEmpresaTurismo($idEmpresa);
+        return $this->repo->tablaDisponible() && (new Empresa())->esPrestadorTuristico($idEmpresa);
     }
 
     /** Datos del modal: tarifas con su conteo de productos e historial de cambios. */
@@ -164,7 +164,7 @@ class IvaCambioTemporalService
      */
     public function restaurarAhora(int $id, int $idEmpresa, int $idUsuario): array
     {
-        // Sin exigir "empresa de turismo": si el superadmin quitó la marca con un
+        // Sin exigir "prestador de servicios turísticos": si el superadmin quitó la marca con un
         // cambio aplicado, la empresa igual debe poder volver a sus tarifas.
         if (!$this->repo->tablaDisponible()) {
             throw new Exception('El cambio temporal de IVA no está disponible.');
@@ -254,11 +254,11 @@ class IvaCambioTemporalService
                         ['estado' => 'programado'], ['estado' => 'vencido']);
                     $resultado = 'vencido sin aplicarse';
                 } elseif ($cambio['estado'] === 'programado' && $cambio['fecha_desde'] <= $hoy) {
-                    if (!(new Empresa())->esEmpresaTurismo($idEmpresa)) {
+                    if (!(new Empresa())->esPrestadorTuristico($idEmpresa)) {
                         $this->repo->actualizarEstado($id, $idEmpresa, 'cancelado', $idUsuario);
                         $this->log->registrar($idUsuario, $idEmpresa, 'IVA_TEMPORAL_CANCELAR', 'iva_cambios_temporales', $id,
-                            ['estado' => 'programado'], ['estado' => 'cancelado', 'motivo' => 'La empresa ya no está marcada como de turismo.']);
-                        $resultado = 'cancelado: la empresa ya no es de turismo';
+                            ['estado' => 'programado'], ['estado' => 'cancelado', 'motivo' => 'La empresa ya no está marcada como prestador de servicios turísticos.']);
+                        $resultado = 'cancelado: la empresa ya no está marcada como prestador de servicios turísticos';
                     } else {
                         $n = $this->repo->aplicarProductos($cambio, $idUsuario);
                         $this->repo->actualizarEstado($id, $idEmpresa, 'aplicado', $idUsuario, ['total_productos' => $n]);
@@ -299,7 +299,7 @@ class IvaCambioTemporalService
     private function exigirDisponible(int $idEmpresa): void
     {
         if (!$this->disponible($idEmpresa)) {
-            throw new Exception('El cambio temporal de IVA solo está disponible para empresas marcadas como de turismo.');
+            throw new Exception('El cambio temporal de IVA solo está disponible para empresas marcadas como prestador de servicios turísticos (Registro de Turismo y LUAF).');
         }
     }
 }

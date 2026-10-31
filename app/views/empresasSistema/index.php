@@ -157,7 +157,7 @@ document.addEventListener('DOMContentLoaded', function () {
                 // ── Registro ──
                 ['tab' => $tE, 'key' => 'registro',  'label' => 'Fecha de registro',      'icon' => 'bi-calendar-event', 'type' => 'date_range', 'grupo' => 'Registro', 'col' => 6, 'atajos' => true],
                 ['tab' => $tE, 'key' => 'operadora', 'label' => 'Operadora de transporte', 'icon' => 'bi-truck',         'type' => 'select',     'grupo' => 'Registro', 'col' => 6, 'options' => $opcionesSiNo('Sí', 'No')],
-                ['tab' => $tE, 'key' => 'turismo',   'label' => 'Empresa de turismo',      'icon' => 'bi-airplane',      'type' => 'select',     'grupo' => 'Registro', 'col' => 6, 'options' => $opcionesSiNo('Sí', 'No')],
+                ['tab' => $tE, 'key' => 'prestador_turistico', 'label' => 'Prestador de servicios turísticos', 'icon' => 'bi-airplane',      'type' => 'select',     'grupo' => 'Registro', 'col' => 6, 'options' => $opcionesSiNo('Sí', 'No')],
             ]);
             ?>
             <link rel="stylesheet" href="<?= rtrim(BASE_URL, '/') ?>/css/components/filtros_modal.css?v=<?= asset_ver('/css/components/filtros_modal.css') ?>">
@@ -310,11 +310,11 @@ document.addEventListener('DOMContentLoaded', function () {
                         </div>
                         <div class="col-12">
                             <!-- El hidden garantiza que la clave llegue también con el switch apagado -->
-                            <input type="hidden" name="es_empresa_turismo" value="false">
+                            <input type="hidden" name="es_prestador_turistico" value="false">
                             <div class="form-check form-switch mb-0">
-                                <input class="form-check-input" type="checkbox" role="switch" id="crear-empresa-turismo" name="es_empresa_turismo" value="true">
-                                <label class="form-check-label small" for="crear-empresa-turismo">Empresa de turismo</label>
-                                <div class="form-text mt-0" style="font-size:0.7rem;">Con Registro de Turismo y LUAF: podrá programar en <strong>Productos</strong> el cambio temporal de IVA (8% en feriados por decreto).</div>
+                                <input class="form-check-input" type="checkbox" role="switch" id="crear-prestador-turistico" name="es_prestador_turistico" value="true">
+                                <label class="form-check-label small" for="crear-prestador-turistico">Prestador de servicios turísticos</label>
+                                <div class="form-text mt-0" style="font-size:0.7rem;">Con Registro de Turismo y LUAF (art. 5 y 8 Ley de Turismo): podrá programar en <strong>Productos</strong> el cambio temporal de IVA (8% en feriados por decreto).</div>
                             </div>
                         </div>
                         <div class="col-12">
@@ -489,11 +489,11 @@ document.addEventListener('DOMContentLoaded', function () {
                                 <?php if ((int) ($nivel ?? 1) >= 3): ?>
                                 <div class="col-md-10 offset-md-2 d-flex align-items-center">
                                     <!-- Solo el superadmin la cambia (el servidor ignora la clave para nivel 2) -->
-                                    <input type="hidden" name="es_empresa_turismo" value="false">
+                                    <input type="hidden" name="es_prestador_turistico" value="false">
                                     <div class="form-check form-switch mb-0">
-                                        <input class="form-check-input" type="checkbox" role="switch" id="edit-empresa-turismo" name="es_empresa_turismo" value="true">
-                                        <label class="form-check-label small" for="edit-empresa-turismo">Empresa de turismo</label>
-                                        <div class="form-text mt-0" style="font-size:0.7rem;">Con Registro de Turismo y LUAF: podrá programar en <strong>Productos</strong> el cambio temporal de IVA (8% en feriados por decreto).</div>
+                                        <input class="form-check-input" type="checkbox" role="switch" id="edit-prestador-turistico" name="es_prestador_turistico" value="true">
+                                        <label class="form-check-label small" for="edit-prestador-turistico">Prestador de servicios turísticos</label>
+                                        <div class="form-text mt-0" style="font-size:0.7rem;">Con Registro de Turismo y LUAF (art. 5 y 8 Ley de Turismo): podrá programar en <strong>Productos</strong> el cambio temporal de IVA (8% en feriados por decreto).</div>
                                     </div>
                                 </div>
                                 <?php endif; ?>
@@ -884,8 +884,8 @@ window.EMPSIS_confirmar = function (titulo, texto, boton, peligro) {
         document.getElementById('edit-mail').value = el.dataset.mail || '';
         document.getElementById('edit-obligado-contabilidad').value = (el.dataset.obligadoContabilidad || 'NO').toUpperCase() === 'SI' ? 'SI' : 'NO';
         document.getElementById('edit-operadora-transporte').checked = (el.dataset.operadoraTransporte || 'false') === 'true';
-        const swTurismo = document.getElementById('edit-empresa-turismo');
-        if (swTurismo) swTurismo.checked = (el.dataset.empresaTurismo || 'false') === 'true';
+        const swPrestador = document.getElementById('edit-prestador-turistico');
+        if (swPrestador) swPrestador.checked = (el.dataset.prestadorTuristico || 'false') === 'true';
         document.getElementById('edit-estado').value = (el.dataset.estado === '1') ? '1' : '0';
         var codProv = el.dataset.codProv || '';
         var codCiudad = el.dataset.codCiudad || '';
