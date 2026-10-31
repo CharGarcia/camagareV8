@@ -6,7 +6,7 @@ ruta_modulo: modulos/car-wash
 tipo: modulo
 visibilidad: todos
 etiquetas: car wash, lavado, lavadora de autos, lubricadora, cambio de aceite, mecanica, taller, orden de servicio, orden mecanica, orden de trabajo, vehiculo, placa, historial del vehiculo, historial del cliente, visitas, ultima visita, facturar orden, recibo de venta, refacturar, factura anulada, proxima cita, proximo chequeo, editar cliente, editar vehiculo, corregir placa, cambiar datos del cliente, actualizar correo, migracion, sistema anterior, numeracion por fecha, numero con el año, reiniciar numeracion, reinicio anual, reinicio mensual, correlativo por año, correlativo por mes, modo de numeracion, buscar orden, buscar placa, buscador, filtros, filtrar ordenes, filtro de fechas, buscar por servicio, chips, imprimir, impresora, aviso, avisos, ordenes en borrador, ordenes sin facturar, pendientes de facturar, barra superior, sin saldo, sin stock, productos similares, productos equivalentes, equivalencias, reemplazo, otra marca, sugerir otro producto, misma categoria, usar este, pdf en dos hojas, segunda hoja casi vacia, totales en otra pagina, el pdf corta la pagina, hoja de mas, historial del vehiculo, transacciones del vehiculo, que se le hizo al carro, reporte de salida, acta de salida, informe de entrega, entrega del vehiculo, trabajo realizado, recomendaciones, proxima cita, anular orden, orden anulada, devolver repuestos, stock descontado dos veces, mantenimiento, mantenimientos, proximo cambio de aceite, aceite de motor, aceite de caja, cambio de aceite de caja, kilometraje, km, cada cuantos km, intervalo, filtro de aire, servicios de mantenimiento, sticker de aceite, vencido, cambio pendiente, aviso de cambio de aceite, avisar al cliente, aviso automatico de mantenimiento, km estimado
-version: 1.28
+version: 1.29
 orden: 10
 estado: activo
 ---
@@ -127,6 +127,12 @@ empresa permite editar descuentos): abre una ventana para aplicar el descuento p
 la orden. Muestra el valor calculado antes de confirmar. No acepta más del 100 % ni un
 valor mayor que el subtotal de la línea, y deja el descuento con 2 decimales, igual
 que en la factura o el recibo que se emite.
+
+**Al guardar.** Las filas **sin descripción** no se guardan (aunque tengan cantidad o
+precio): se ignoran sin aviso. Si una fila **tiene descripción pero no tiene
+cantidad** (vacía o 0), la orden no se guarda: aparece el aviso *Falta la cantidad*
+con la lista de esas líneas, la celda de cantidad se marca en rojo y el cursor queda
+en la primera. La marca se quita al escribir la cantidad.
 
 ## Condiciones de ingreso y Acta de ingreso del vehículo
 
@@ -466,6 +472,8 @@ solo los suyos.
 
 ## Errores frecuentes
 
+- **"Falta la cantidad"** al guardar: hay líneas con descripción y sin cantidad
+  (vacía o 0). Escriba la cantidad en las celdas marcadas en rojo o borre esas líneas.
 - **"Ingrese el kilometraje de la orden para registrar el cambio de…"**: se marcó
   *¿Se cambió?* sin escribir el kilometraje en la pestaña General.
 - **La pestaña Mantenimiento avisa que falta el SQL**: el administrador debe ejecutar
@@ -510,6 +518,7 @@ documentos admite cada periodo) está en el manual de **Empresa**, sección
 
 ## Historial de cambios
 
+- **1.29** — Al guardar, una línea con descripción y sin cantidad ya no se descarta sin aviso: se muestra *Falta la cantidad* con la lista de líneas y se marca la celda. Las filas sin descripción no se guardan (antes el servidor rechazaba la orden si alguna traía cantidad sin descripción).
 - **1.28** — Al pulsar **Guardar**, la orden ya no se cierra: queda abierta y guardada (con su número) en la misma pestaña; se cierra con **Cerrar**.
 - **1.27** — Pestaña Mantenimiento: botón **No aplica a este vehículo** por servicio (reversible).
 - **1.26** — Avisos automáticos y manuales del próximo mantenimiento al cliente (correo y WhatsApp), con el km estimado de cada vehículo. Ver el manual de Vehículos. Requiere el SQL `database/migrations/20261031_mantenimientos_avisos.sql`.

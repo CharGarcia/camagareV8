@@ -1699,6 +1699,10 @@
     window.cwRecalcular = function () { cwCalcTotales(); };
 
     // ─── Guardar ──────────────────────────────────────────────────────────────
+    // La marca roja de "falta la cantidad" se quita en cuanto se escribe en esa celda.
+    document.getElementById('cw_tbodyDetalle')?.addEventListener('input', e => {
+        if (e.target.classList?.contains('input-cantidad')) e.target.classList.remove('is-invalid');
+    });
     window.cwGuardar = async function () {
         const idVeh = document.getElementById('cw_id_vehiculo').value;
         const idCli = document.getElementById('cw_id_cliente').value;
@@ -1711,10 +1715,14 @@
         }
 
         const detalles = [];
+        const sinCantidad = []; // filas con descripción pero sin cantidad (> 0)
         document.querySelectorAll('#cw_tbodyDetalle .row-detalle').forEach(tr => {
             const desc = (tr.querySelector('.input-descripcion')?.value || '').trim();
             const cant = num(tr.querySelector('.input-cantidad')?.value);
-            if (!desc || cant <= 0) return;
+            // Fila sin descripción: no se guarda (aunque tenga cantidad o precio).
+            if (!desc) return;
+            // Con descripción y sin cantidad: antes se descartaba en silencio; ahora se avisa.
+            if (cant <= 0) { sinCantidad.push({ tr, desc }); return; }
             const selIva = tr.querySelector('.input-iva');
             const optIva = selIva ? selIva.options[selIva.selectedIndex] : null;
             const idProd = tr.querySelector('.input-id-producto')?.value || '';
@@ -1737,7 +1745,20 @@
                 id_unidad_medida: (() => { const m = tr.querySelector('.input-medida'); return (m && !m.classList.contains('d-none') && m.value) ? m.value : null; })(),
             });
         });
-        // 3º Al menos un servicio/producto
+        // 3º Toda línea con descripción debe tener cantidad
+        if (sinCantidad.length) {
+            const lista = sinCantidad.slice(0, 8).map(s => `<li>${esc(s.desc)}</li>`).join('')
+                + (sinCantidad.length > 8 ? `<li>… y ${sinCantidad.length - 8} más</li>` : '');
+            await Swal.fire({
+                icon: 'warning', title: 'Falta la cantidad', target: document.getElementById('modalOrdenCW'),
+                html: `Ingrese la cantidad (mayor a 0) en ${sinCantidad.length === 1 ? 'esta línea' : 'estas líneas'}:<ul class="text-start small mt-2 mb-0">${lista}</ul>`,
+            });
+            const inp = sinCantidad[0].tr.querySelector('.input-cantidad');
+            sinCantidad.forEach(s => s.tr.querySelector('.input-cantidad')?.classList.add('is-invalid'));
+            if (inp) { inp.focus(); inp.select?.(); }
+            return;
+        }
+        // 4º Al menos un servicio/producto
         if (!detalles.length) {
             await Swal.fire('Atención', 'Agregue al menos un servicio o producto.', 'warning');
             let fila = document.querySelector('#cw_tbodyDetalle .row-detalle .input-descripcion');

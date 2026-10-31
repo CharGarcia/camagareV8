@@ -33,11 +33,8 @@ class OrdenCarWashRules
         foreach ($data['detalles'] as $idx => $det) {
             $cant = (float) ($det['cantidad'] ?? 0);
             $desc = trim((string) ($det['descripcion'] ?? ''));
-            if ($cant <= 0 && $desc === '') {
-                continue; // línea vacía, se ignora
-            }
             if ($desc === '') {
-                throw new Exception("Hay una línea sin descripción en la fila " . ($idx + 1) . ".");
+                continue; // fila sin descripción: no se guarda (el Service ya la quitó)
             }
             if ($cant <= 0) {
                 throw new Exception("La cantidad debe ser mayor a 0 en \"" . $desc . "\".");

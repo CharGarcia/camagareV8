@@ -400,8 +400,22 @@ class OrdenCarWashService
 
     // ─── Crear ────────────────────────────────────────────────────────────────
 
+    /**
+     * Quita las filas sin descripción: no se guardan, aunque traigan cantidad o precio. Así
+     * tampoco cuentan para bodegas, stock ni salida de inventario.
+     */
+    private function sinFilasVacias(array $data): array
+    {
+        $data['detalles'] = array_values(array_filter(
+            is_array($data['detalles'] ?? null) ? $data['detalles'] : [],
+            fn($d) => is_array($d) && trim((string) ($d['descripcion'] ?? '')) !== ''
+        ));
+        return $data;
+    }
+
     public function crear(array $data): int
     {
+        $data = $this->sinFilasVacias($data);
         $this->rules->validarCreacion($data);
 
         $idEmpresa = (int) $data['id_empresa'];
@@ -501,6 +515,7 @@ class OrdenCarWashService
 
     public function actualizar(int $id, int $idEmpresa, array $data): void
     {
+        $data = $this->sinFilasVacias($data);
         $this->rules->validarCreacion($data);
 
         $cab = $this->repository->find($id, $idEmpresa);
