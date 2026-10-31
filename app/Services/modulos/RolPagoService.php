@@ -101,6 +101,11 @@ class RolPagoService
         $inicioMes = sprintf('%04d-%02d-01', (int) $cab['periodo_anio'], (int) $cab['periodo_mes']);
         $finMes    = date('Y-m-t', mktime(0, 0, 0, (int) $cab['periodo_mes'], 1, (int) $cab['periodo_anio']));
         $cab['empleados_sin_periodo'] = $this->repo->getEmpleadosActivosSinPeriodo($idEmpresa, $inicioMes, $finMes);
+        // Aviso (solo MENSUAL): semanas/quincenas del mes sin pagar. No se descuentan y, hasta
+        // pagarlas o anularlas, Egresos no deja pagar el rol mensual de ese empleado.
+        $cab['parciales_pendientes'] = $cab['tipo_rol'] === 'MENSUAL'
+            ? $this->repo->getParcialesPendientesPeriodo($idEmpresa, (int) $cab['periodo_anio'], (int) $cab['periodo_mes'])
+            : [];
         return $cab;
     }
 

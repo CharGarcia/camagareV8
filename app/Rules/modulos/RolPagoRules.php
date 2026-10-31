@@ -27,8 +27,10 @@ class RolPagoRules
         }
 
         $num = (int) ($data['numero_periodo'] ?? 0);
-        if ($tipo === 'QUINCENA' && ($num < 1 || $num > 2)) {
-            throw new Exception('La quincena debe ser 1 o 2.');
+        // Una sola quincena por mes (la 1): con dos, las novedades de quincena del mes se
+        // cargaban en ambas corridas.
+        if ($tipo === 'QUINCENA' && $num !== 1) {
+            throw new Exception('Solo se puede generar una quincena por mes.');
         }
         if ($tipo === 'SEMANAL' && ($num < 1 || $num > 5)) {
             throw new Exception('La semana debe estar entre 1 y 5.');

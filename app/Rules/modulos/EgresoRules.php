@@ -140,4 +140,116 @@ class EgresoRules
             throw new Exception("La compra {$numeroDocumento} {$motivo}: no se puede pagar.");
         }
     }
+
+    /**
+     * Semanas/quincenas contra el rol mensual del mismo empleado y mes. El mensual descuenta
+     * solo lo YA pagado en ellas, así que:
+     *  (A) el MENSUAL no se paga mientras haya semanas/quincenas con saldo pendiente;
+     *  (B) una SEMANAL/QUINCENA no se paga si el MENSUAL ya tiene pagos.
+     *
+     * @param array $linea      EgresoRepository::getLineaRolNomina()
+     * @param array $pendientes EgresoRepository::getParcialesPendientesEmpleado() (solo para A)
+     */
+    public function validarNominaParcialMensual(array $linea, array $pendientes, bool $mensualPagado): void
+    {
+        $mesAnio  = str_pad((string) $linea['periodo_mes'], 2, '0', STR_PAD_LEFT) . '/' . $linea['periodo_anio'];
+        $empleado = (string) $linea['empleado'];
+
+        if ($linea['tipo_rol'] === 'MENSUAL' && $pendientes) {
+            $lista = implode(', ', array_map(
+                fn($p) => self::nombreParcial((string) $p['tipo_rol'], (int) $p['numero_periodo']) . ' ($' . number_format((float) $p['saldo'], 2) . ')',
+                $pendientes
+            ));
+            throw new Exception(
+                "No se puede pagar el Rol Mensual {$mesAnio} de {$empleado}: tiene pendiente de pago {$lista}. "
+                . "Pague primero esa semana/quincena en otro egreso (el rol mensual la descontará) o anúlela si no se va a pagar."
+            );
+        }
+        if ($linea['tipo_rol'] !== 'MENSUAL' && $mensualPagado) {
+            $nombre = self::nombreParcial((string) $linea['tipo_rol'], (int) $linea['numero_periodo']);
+            throw new Exception(
+                "No se puede pagar la {$nombre} {$mesAnio} de {$empleado}: su Rol Mensual {$mesAnio} ya fue pagado "
+                . "sin descontarla, así que pagarla ahora sería un doble pago."
+            );
+        }
+    }
+
+    /**
+     * (A) Una línea de rol no se paga mientras tenga anticipos sin pagar o cuotas de Préstamo
+     * Empresa sin desembolsar en su período: el rol no los descontó.
+     *
+     * @param array $novedades EgresoRepository::getNovedadesSinDesembolsoLinea()
+     */
+    public function validarRolSinNovedadesPendientes(array $linea, array $novedades): void
+    {
+        if (!$novedades) {
+            return;
+        }
+        $lista = implode(', ', array_map(
+            fn($n) => $n['tipo_nombre'] . ' ($' . number_format((float) $n['monto'], 2) . ', '
+                . ((string) $n['tipo_codigo'] === '3' ? 'sin pagar' : 'préstamo sin desembolsar') . ')',
+            $novedades
+        ));
+        throw new Exception(
+            'No se puede pagar ' . self::conArticulo((string) $linea['tipo_rol'], (int) $linea['numero_periodo']) . ' '
+            . self::mesAnio($linea) . " de {$linea['empleado']}: tiene {$lista}, que el rol no descontó. "
+            . 'Páguelo primero en otro egreso (Egresos → Nómina; el rol se recalcula y lo descuenta) o cambie la novedad a otro período.'
+        );
+    }
+
+    /** (B) Un anticipo no se paga si el rol donde se descontaría ya tiene pagos. */
+    public function validarAnticipoSinRolPagado(array $anticipo, bool $rolPagado): void
+    {
+        if (!$rolPagado) {
+            return;
+        }
+        throw new Exception(
+            "No se puede pagar el {$anticipo['tipo_nombre']} " . self::mesAnio($anticipo) . " de {$anticipo['empleado']}: "
+            . self::conArticulo((string) $anticipo['tipo_rol'], 0) . ' de ese período ya se pagó sin descontarlo, así que no se recuperaría. '
+            . 'Si corresponde pagarlo, anule primero el egreso de ese rol, pague el anticipo y vuelva a pagar el rol (ya con el descuento).'
+        );
+    }
+
+    /**
+     * (B) El Préstamo Empresa no se desembolsa si alguna de sus cuotas cae en un rol ya pagado
+     * que no la descontó: esa cuota no se cobraría nunca.
+     *
+     * @param array $perdidas EgresoRepository::getCuotasPrestamoPerdidas()
+     */
+    public function validarPrestamoSinCuotasPerdidas(array $perdidas): void
+    {
+        if (!$perdidas) {
+            return;
+        }
+        $empleado = (string) $perdidas[0]['empleado'];
+        $lista = implode(', ', array_map(
+            fn($c) => self::nombreRol((string) $c['tipo_rol'], 0) . ' ' . self::mesAnio($c) . ' ($' . number_format((float) $c['valor'], 2) . ')',
+            $perdidas
+        ));
+        throw new Exception(
+            "No se puede desembolsar el Préstamo Empresa de {$empleado}: estas cuotas caen en roles ya pagados que no las descontaron: {$lista}. "
+            . 'Anule primero el egreso de esos roles, registre el desembolso y vuelva a pagarlos (ya con la cuota descontada).'
+        );
+    }
+
+    private static function nombreRol(string $tipoRol, int $numero): string
+    {
+        return $tipoRol === 'MENSUAL' ? 'Rol Mensual' : self::nombreParcial($tipoRol, $numero);
+    }
+
+    /** "el Rol Mensual" / "la Quincena 1" / "la Semana". */
+    private static function conArticulo(string $tipoRol, int $numero): string
+    {
+        return ($tipoRol === 'MENSUAL' ? 'el ' : 'la ') . self::nombreRol($tipoRol, $numero);
+    }
+
+    private static function mesAnio(array $r): string
+    {
+        return str_pad((string) $r['periodo_mes'], 2, '0', STR_PAD_LEFT) . '/' . $r['periodo_anio'];
+    }
+
+    private static function nombreParcial(string $tipoRol, int $numero): string
+    {
+        return ($tipoRol === 'SEMANAL' ? 'Semana' : 'Quincena') . ($numero > 0 ? ' ' . $numero : '');
+    }
 }

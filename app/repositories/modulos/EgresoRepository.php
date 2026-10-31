@@ -638,6 +638,12 @@ class EgresoRepository extends BaseRepository
                   AND ROUND(ud.valor - COALESCE(put.total_pagado, 0), 2) > 0";
         }
 
+        // Rol vs. semanas/quincenas, anticipos y préstamos: no ofrecer lo que todavía no se
+        // puede pagar (ver sqlLineaRolPagable).
+        $filtroRolPagable = $this->sqlLineaRolPagable('rd', 'rc');
+        $filtroAntPagable = ' AND NOT ' . $this->sqlRolDelAnticipoPagado('n', '');
+        $filtroPrePagable = ' AND NOT EXISTS (SELECT 1 ' . $this->sqlCuotasPrestamoPerdidas('n.id_empresa', 'n.id_empleado', '') . ')';
+
         $sql = "WITH pagado_rol AS (
                     SELECT d.id_referencia_documento, SUM(d.monto_pagado) AS total_pagado
                     FROM egresos_detalle d INNER JOIN egresos_cabecera e ON d.id_egreso = e.id
@@ -683,6 +689,7 @@ class EgresoRepository extends BaseRepository
                 WHERE rd.id_empleado = :id_emp AND rd.id_empresa = :id_empresa
                   AND rc.eliminado = FALSE AND rc.estado IN ('generado','pagado','contabilizado')
                   AND ROUND(rd.neto - COALESCE(p.total_pagado, 0), 2) > 0
+                  {$filtroRolPagable}
                 UNION ALL
                 SELECT 'ANTICIPO' AS tipo_doc_bd, n.id,
                        n.tipo_nombre || ' ' || n.periodo_mes || '/' || n.periodo_anio AS numero_documento,
@@ -697,6 +704,7 @@ class EgresoRepository extends BaseRepository
                   AND n.eliminado = FALSE AND n.estado = 'activo' AND n.tipo_codigo = '3'
                   AND n.desembolsado_migrado = FALSE
                   AND ROUND(n.valor - COALESCE(pa.total_pagado, 0), 2) > 0
+                  {$filtroAntPagable}
                 UNION ALL
                 -- Solo el préstamo tipo 9 (Préstamo Empresa) requiere desembolso por egreso:
                 -- el 7 (Quirografario) y el 8 (Hipotecario) los desembolsa el IESS/banco
@@ -714,6 +722,7 @@ class EgresoRepository extends BaseRepository
                 WHERE n.id_empleado = :id_emp AND n.id_empresa = :id_empresa
                   AND n.eliminado = FALSE AND n.estado = 'activo' AND n.tipo_codigo = '9'
                   AND n.desembolsado_migrado = FALSE
+                  {$filtroPrePagable}
                 GROUP BY n.id_empleado, n.tipo_codigo, pp.total_pagado
                 HAVING ROUND(SUM(n.valor) - COALESCE(pp.total_pagado, 0), 2) > 0
                 UNION ALL
@@ -1177,6 +1186,15 @@ class EgresoRepository extends BaseRepository
                 $filtroDt  = " AND (emp.nombres_apellidos ILIKE :q OR emp.identificacion ILIKE :q)";
                 $params[':q'] = '%' . $q . '%';
             }
+            // Semanas/quincenas contra el mensual (ver sqlLineaRolPagable). Solo en el listado:
+            // al recalcular el saldo de UN documento ($soloId) no se filtra; el guardado lo
+            // valida aparte con un mensaje claro (EgresoService::validarNominaParcialMensual).
+            $filtroRolPagable = $soloId === null ? $this->sqlLineaRolPagable('rd', 'rc', $excluirSql) : '';
+            // Anticipo / desembolso cuyo rol ya se pagó sin descontarlo (regla B, mismo criterio).
+            $filtroAntPagable = $soloId === null ? ' AND NOT ' . $this->sqlRolDelAnticipoPagado('n', $excluirSql) : '';
+            $filtroPrePagable = $soloId === null
+                ? ' AND NOT EXISTS (SELECT 1 ' . $this->sqlCuotasPrestamoPerdidas('n.id_empresa', 'n.id_empleado', $excluirSql) . ')'
+                : '';
             $sql = "WITH pagado_rol AS (
                         SELECT d.id_referencia_documento, SUM(d.monto_pagado) AS total_pagado
                         FROM egresos_detalle d INNER JOIN egresos_cabecera e ON d.id_egreso = e.id
@@ -1236,6 +1254,7 @@ class EgresoRepository extends BaseRepository
                           AND rc.tipo_ambiente = (SELECT CAST(tipo_ambiente AS VARCHAR(1)) FROM empresas WHERE id = :id_empresa)
                           AND ROUND(rd.neto - COALESCE(p.total_pagado, 0), 2) > 0
                           $filtroRol
+                          $filtroRolPagable
                         UNION ALL
                         SELECT 'ANTICIPO' AS tipo_doc_bd,
                                n.id,
@@ -1258,6 +1277,7 @@ class EgresoRepository extends BaseRepository
                           AND n.tipo_ambiente = (SELECT CAST(tipo_ambiente AS VARCHAR(1)) FROM empresas WHERE id = :id_empresa)
                           AND ROUND(n.valor - COALESCE(pa.total_pagado, 0), 2) > 0
                           $filtroAnt
+                          $filtroAntPagable
                         UNION ALL
                         -- PRÉSTAMOS AGRUPADOS: una línea por empleado+tipo = desembolso (suma de cuotas).
                         -- Solo tipo 9 (Préstamo Empresa): el 7 (Quirografario) y el 8 (Hipotecario)
@@ -1283,6 +1303,7 @@ class EgresoRepository extends BaseRepository
                           AND n.desembolsado_migrado = FALSE
                           AND n.tipo_ambiente = (SELECT CAST(tipo_ambiente AS VARCHAR(1)) FROM empresas WHERE id = :id_empresa)
                           $filtroPre
+                          $filtroPrePagable
                         GROUP BY n.id_empleado, n.tipo_codigo, emp.id, emp.nombres_apellidos, emp.identificacion, pp.total_pagado
                         HAVING ROUND(SUM(n.valor) - COALESCE(pp.total_pagado, 0), 2) > 0
                         UNION ALL
@@ -1520,6 +1541,305 @@ class EgresoRepository extends BaseRepository
         }
         $num = $this->query($sql . ' LIMIT 1', $params)->fetchColumn();
         return $num === false ? null : (string) $num;
+    }
+
+    // ─── Nómina: lo que el rol descuenta SOLO si ya se pagó ────────────────────────────
+    // El rol descuenta tres cosas únicamente cuando ya salieron de caja por egreso:
+    //  - en el MENSUAL, lo pagado en las SEMANAL/QUINCENA del mes (neteo);
+    //  - el Anticipo (3) del período, por lo pagado;
+    //  - la cuota del Préstamo Empresa (9), solo si el préstamo ya se desembolsó.
+    // Pagar el rol antes que ellos deja algo sin descontar (doble pago o cuota perdida), así
+    // que por empleado y período:
+    //  (A) una línea de rol no se paga mientras tenga algo de eso pendiente;
+    //  (B) eso pendiente no se paga si la línea de rol donde se descontaría ya tiene pagos.
+    // A deja de aplicar en cuanto la línea de rol empieza a pagarse: lo pendiente queda
+    // bloqueado por B y el resto del rol se debe poder terminar de pagar.
+
+    /** tipo_rol de la corrida donde descuenta una novedad ($n = alias de novedades). */
+    private function sqlTipoRolDeNovedad(string $n): string
+    {
+        return "(CASE {$n}.aplica_en WHEN 'quincena' THEN 'QUINCENA' WHEN 'semanal' THEN 'SEMANAL' ELSE 'MENSUAL' END)";
+    }
+
+    /** aplica_en de las novedades que descuenta una corrida ($c = alias de rol_cabecera). */
+    private function sqlAplicaEnDeRol(string $c): string
+    {
+        return "(CASE {$c}.tipo_rol WHEN 'QUINCENA' THEN 'quincena' WHEN 'SEMANAL' THEN 'semanal' ELSE 'rol' END)";
+    }
+
+    /** Saldo pendiente SQL de una línea de rol ($d = alias de rol_detalle). */
+    private function sqlSaldoLineaRol(string $d, string $excluirSql): string
+    {
+        return "ROUND({$d}.neto - COALESCE((SELECT SUM(edx.monto_pagado)
+                        FROM egresos_detalle edx JOIN egresos_cabecera e ON e.id = edx.id_egreso
+                        WHERE edx.tipo_documento = 'ROL' AND edx.id_referencia_documento = {$d}.id
+                          AND e.estado <> 'anulado' AND e.eliminado = FALSE AND edx.eliminado = FALSE
+                          {$excluirSql}), 0), 2)";
+    }
+
+    /** Condición SQL: la línea de rol ya tiene pagos (egreso vigente o corrida marcada 'pagado'). */
+    private function sqlLineaRolConPago(string $d, string $c, string $excluirSql): string
+    {
+        return "(EXISTS (SELECT 1 FROM egresos_detalle edx JOIN egresos_cabecera e ON e.id = edx.id_egreso
+                        WHERE edx.tipo_documento = 'ROL' AND edx.id_referencia_documento = {$d}.id
+                          AND e.estado <> 'anulado' AND e.eliminado = FALSE AND edx.eliminado = FALSE
+                          {$excluirSql})
+                OR {$c}.estado = 'pagado')";
+    }
+
+    /** Saldo SQL de un anticipo ($n = alias de novedades): valor − pagado por egreso. */
+    private function sqlSaldoAnticipo(string $n, string $excluirSql): string
+    {
+        return "ROUND({$n}.valor - COALESCE((SELECT SUM(edx.monto_pagado)
+                        FROM egresos_detalle edx JOIN egresos_cabecera e ON e.id = edx.id_egreso
+                        WHERE edx.tipo_documento = 'ANTICIPO' AND edx.id_referencia_documento = {$n}.id
+                          AND e.estado <> 'anulado' AND e.eliminado = FALSE AND edx.eliminado = FALSE
+                          {$excluirSql}), 0), 2)";
+    }
+
+    /**
+     * Falta por desembolsar del Préstamo Empresa del empleado de la cuota $n: total de cuotas
+     * − desembolsado por egreso − cuotas ya entregadas (migradas o "ya desembolsado" del Excel).
+     * Mismo criterio que RolPagoRepository::getPrestamosNoDesembolsadosMasivo.
+     */
+    private function sqlFaltaDesembolsoPrestamo(string $n, string $excluirSql): string
+    {
+        return "ROUND((SELECT COALESCE(SUM(n2.valor), 0) FROM novedades n2
+                        WHERE n2.id_empresa = {$n}.id_empresa AND n2.id_empleado = {$n}.id_empleado
+                          AND n2.tipo_codigo = '9' AND n2.eliminado = FALSE AND n2.estado = 'activo')
+                    - (SELECT COALESCE(SUM(edx.monto_pagado), 0)
+                        FROM egresos_detalle edx JOIN egresos_cabecera e ON e.id = edx.id_egreso
+                        WHERE edx.tipo_documento = 'PRESTAMO9' AND edx.id_referencia_documento = {$n}.id_empleado
+                          AND e.estado <> 'anulado' AND e.eliminado = FALSE AND edx.eliminado = FALSE
+                          {$excluirSql})
+                    - (SELECT COALESCE(SUM(n3.valor), 0) FROM novedades n3
+                        WHERE n3.id_empresa = {$n}.id_empresa AND n3.id_empleado = {$n}.id_empleado
+                          AND n3.tipo_codigo = '9' AND n3.desembolsado_migrado = TRUE
+                          AND n3.eliminado = FALSE AND n3.estado = 'activo'), 2)";
+    }
+
+    /**
+     * SELECT de los anticipos sin pagar y cuotas de préstamo sin desembolsar que descuenta la
+     * línea de rol $rd/$rc (empleado, período y tipo de corrida). Lo cargado por Excel como
+     * "ya entregado / ya desembolsado" lleva desembolsado_migrado y no cuenta.
+     */
+    private function sqlNovedadesSinDesembolso(string $rd, string $rc, string $excluirSql): string
+    {
+        $saldoAnt = $this->sqlSaldoAnticipo('nx', $excluirSql);
+        $faltaPre = $this->sqlFaltaDesembolsoPrestamo('nx', $excluirSql);
+        return "SELECT nx.tipo_codigo, nx.tipo_nombre,
+                       CASE WHEN nx.tipo_codigo = '3' THEN {$saldoAnt} ELSE nx.valor END AS monto
+                FROM novedades nx
+                WHERE nx.id_empresa = {$rd}.id_empresa AND nx.id_empleado = {$rd}.id_empleado
+                  AND nx.periodo_anio = {$rc}.periodo_anio AND nx.periodo_mes = {$rc}.periodo_mes
+                  AND nx.aplica_en = {$this->sqlAplicaEnDeRol($rc)}
+                  AND nx.tipo_ambiente = {$rc}.tipo_ambiente
+                  AND nx.estado = 'activo' AND nx.eliminado = FALSE AND nx.desembolsado_migrado = FALSE
+                  AND ((nx.tipo_codigo = '3' AND {$saldoAnt} > 0)
+                    OR (nx.tipo_codigo = '9' AND {$faltaPre} > 0))";
+    }
+
+    /**
+     * Condición SQL que deja fuera del buscador de Egresos → Nómina las líneas de rol que
+     * todavía no se pueden pagar (regla A, y B para semanas/quincenas). $rd / $rc = alias de
+     * rol_detalle / rol_cabecera de la consulta que la usa.
+     */
+    private function sqlLineaRolPagable(string $rd, string $rc, string $excluirSql = ''): string
+    {
+        $saldoParcial = $this->sqlSaldoLineaRol('dpx', $excluirSql);
+        $mensualPago  = $this->sqlLineaRolConPago('dmx', 'cmx', $excluirSql);
+        $estaPagada   = $this->sqlLineaRolConPago($rd, $rc, $excluirSql);
+        $novPend      = $this->sqlNovedadesSinDesembolso($rd, $rc, $excluirSql);
+        return " AND ({$estaPagada} OR (
+                    NOT ({$rc}.tipo_rol = 'MENSUAL' AND EXISTS (
+                        SELECT 1 FROM rol_detalle dpx JOIN rol_cabecera cpx ON cpx.id = dpx.id_rol
+                        WHERE dpx.id_empresa = {$rd}.id_empresa AND dpx.id_empleado = {$rd}.id_empleado
+                          AND cpx.tipo_rol IN ('SEMANAL','QUINCENA')
+                          AND cpx.periodo_anio = {$rc}.periodo_anio AND cpx.periodo_mes = {$rc}.periodo_mes
+                          AND cpx.estado IN ('generado','pagado','contabilizado') AND cpx.eliminado = FALSE
+                          AND cpx.tipo_ambiente = {$rc}.tipo_ambiente
+                          AND {$saldoParcial} > 0))
+                    AND NOT EXISTS ({$novPend})))
+                 AND NOT ({$rc}.tipo_rol IN ('SEMANAL','QUINCENA') AND EXISTS (
+                    SELECT 1 FROM rol_detalle dmx JOIN rol_cabecera cmx ON cmx.id = dmx.id_rol
+                    WHERE dmx.id_empresa = {$rd}.id_empresa AND dmx.id_empleado = {$rd}.id_empleado
+                      AND cmx.tipo_rol = 'MENSUAL'
+                      AND cmx.periodo_anio = {$rc}.periodo_anio AND cmx.periodo_mes = {$rc}.periodo_mes
+                      AND cmx.estado <> 'anulado' AND cmx.eliminado = FALSE
+                      AND cmx.tipo_ambiente = {$rc}.tipo_ambiente
+                      AND {$mensualPago}))";
+    }
+
+    /** Condición SQL (B): la corrida donde descuenta el anticipo $n ya tiene pagos para su empleado. */
+    private function sqlRolDelAnticipoPagado(string $n, string $excluirSql): string
+    {
+        return "EXISTS (SELECT 1 FROM rol_detalle dax JOIN rol_cabecera cax ON cax.id = dax.id_rol
+                        WHERE dax.id_empresa = {$n}.id_empresa AND dax.id_empleado = {$n}.id_empleado
+                          AND cax.tipo_rol = {$this->sqlTipoRolDeNovedad($n)}
+                          AND cax.periodo_anio = {$n}.periodo_anio AND cax.periodo_mes = {$n}.periodo_mes
+                          AND cax.estado <> 'anulado' AND cax.eliminado = FALSE
+                          AND cax.tipo_ambiente = {$n}.tipo_ambiente
+                          AND {$this->sqlLineaRolConPago('dax', 'cax', $excluirSql)})";
+    }
+
+    /**
+     * FROM/WHERE (B) de las cuotas del Préstamo Empresa del empleado $empleadoCol que ya se
+     * perdieron: su rol ya tiene pagos y no las descontó (no hay rubro con esa novedad).
+     */
+    private function sqlCuotasPrestamoPerdidas(string $empresaCol, string $empleadoCol, string $excluirSql): string
+    {
+        return "FROM novedades nq
+                JOIN rol_detalle dq ON dq.id_empresa = nq.id_empresa AND dq.id_empleado = nq.id_empleado
+                JOIN rol_cabecera cq ON cq.id = dq.id_rol
+                WHERE nq.id_empresa = {$empresaCol} AND nq.id_empleado = {$empleadoCol}
+                  AND nq.tipo_codigo = '9' AND nq.estado = 'activo' AND nq.eliminado = FALSE
+                  AND nq.desembolsado_migrado = FALSE
+                  AND cq.tipo_rol = {$this->sqlTipoRolDeNovedad('nq')}
+                  AND cq.periodo_anio = nq.periodo_anio AND cq.periodo_mes = nq.periodo_mes
+                  AND cq.estado <> 'anulado' AND cq.eliminado = FALSE AND cq.tipo_ambiente = nq.tipo_ambiente
+                  AND {$this->sqlLineaRolConPago('dq', 'cq', $excluirSql)}
+                  AND NOT EXISTS (SELECT 1 FROM rol_detalle_rubro rq WHERE rq.id_detalle = dq.id AND rq.id_novedad = nq.id)";
+    }
+
+    private function paramsExcluir(array $params, ?int $excluirEgresoId): array
+    {
+        if ($excluirEgresoId !== null) {
+            $params[':excluir'] = $excluirEgresoId;
+        }
+        return $params;
+    }
+
+    /** Empleado, tipo de corrida y período de una línea de rol (reglas A y B). */
+    public function getLineaRolNomina(int $idRolDetalle, int $idEmpresa): ?array
+    {
+        $row = $this->query(
+            "SELECT d.id, d.id_empleado, emp.nombres_apellidos AS empleado, c.tipo_rol,
+                    c.periodo_anio, c.periodo_mes, c.numero_periodo, c.tipo_ambiente
+             FROM rol_detalle d
+             JOIN rol_cabecera c ON c.id = d.id_rol
+             JOIN empleados emp ON emp.id = d.id_empleado
+             WHERE d.id = :id AND d.id_empresa = :id_empresa",
+            [':id' => $idRolDetalle, ':id_empresa' => $idEmpresa]
+        )->fetch(PDO::FETCH_ASSOC);
+        return $row ?: null;
+    }
+
+    /** Empleado, período y corrida de un anticipo (regla B). */
+    public function getAnticipoNomina(int $idNovedad, int $idEmpresa): ?array
+    {
+        $row = $this->query(
+            "SELECT n.id, n.id_empleado, emp.nombres_apellidos AS empleado, n.tipo_nombre,
+                    n.periodo_anio, n.periodo_mes, n.aplica_en, n.tipo_ambiente,
+                    {$this->sqlTipoRolDeNovedad('n')} AS tipo_rol
+             FROM novedades n JOIN empleados emp ON emp.id = n.id_empleado
+             WHERE n.id = :id AND n.id_empresa = :id_empresa",
+            [':id' => $idNovedad, ':id_empresa' => $idEmpresa]
+        )->fetch(PDO::FETCH_ASSOC);
+        return $row ?: null;
+    }
+
+    /** Períodos de las cuotas vigentes del Préstamo Empresa de un empleado (para los candados). */
+    public function getPeriodosCuotasPrestamo(int $idEmpresa, int $idEmpleado): array
+    {
+        return $this->query(
+            "SELECT DISTINCT periodo_anio, periodo_mes FROM novedades
+             WHERE id_empresa = :id_empresa AND id_empleado = :emp AND tipo_codigo = '9'
+               AND estado = 'activo' AND eliminado = FALSE AND desembolsado_migrado = FALSE",
+            [':id_empresa' => $idEmpresa, ':emp' => $idEmpleado]
+        )->fetchAll(PDO::FETCH_ASSOC);
+    }
+
+    /**
+     * Candado (CLAUDE.md §8) de la nómina de un empleado en un mes: serializa el pago de sus
+     * roles, semanas/quincenas, anticipos y desembolsos, que son documentos con candados distintos.
+     */
+    public function lockNominaEmpleadoPeriodo(int $idEmpresa, int $idEmpleado, int $anio, int $mes): void
+    {
+        $this->query(
+            "SELECT pg_advisory_xact_lock(hashtext('nomina_pago:' || :id_empresa || ':' || :emp || ':' || :a || ':' || :m))",
+            [':id_empresa' => $idEmpresa, ':emp' => $idEmpleado, ':a' => $anio, ':m' => $mes]
+        );
+    }
+
+    /** ¿La línea de rol ya tiene pagos? Si sí, la regla A ya no aplica. */
+    public function lineaRolTienePago(int $idRolDetalle, int $idEmpresa, ?int $excluirEgresoId = null): bool
+    {
+        $excluirSql = $excluirEgresoId !== null ? ' AND e.id <> :excluir' : '';
+        return (bool) $this->query(
+            "SELECT 1 FROM rol_detalle d JOIN rol_cabecera c ON c.id = d.id_rol
+             WHERE d.id = :id AND d.id_empresa = :id_empresa AND {$this->sqlLineaRolConPago('d', 'c', $excluirSql)}",
+            $this->paramsExcluir([':id' => $idRolDetalle, ':id_empresa' => $idEmpresa], $excluirEgresoId)
+        )->fetchColumn();
+    }
+
+    /**
+     * Semanas/quincenas del empleado en el mes con saldo pendiente (regla A del mensual).
+     * @return array<int,array{tipo_rol:string,numero_periodo:int,saldo:float}>
+     */
+    public function getParcialesPendientesEmpleado(int $idEmpresa, int $idEmpleado, int $anio, int $mes, string $tipoAmbiente, ?int $excluirEgresoId = null): array
+    {
+        $excluirSql = $excluirEgresoId !== null ? ' AND e.id <> :excluir' : '';
+        $saldo = $this->sqlSaldoLineaRol('d', $excluirSql);
+        return $this->query(
+            "SELECT * FROM (
+                SELECT c.tipo_rol, c.numero_periodo, {$saldo} AS saldo
+                FROM rol_detalle d JOIN rol_cabecera c ON c.id = d.id_rol
+                WHERE d.id_empresa = :id_empresa AND d.id_empleado = :emp
+                  AND c.tipo_rol IN ('SEMANAL','QUINCENA') AND c.periodo_anio = :a AND c.periodo_mes = :m
+                  AND c.estado IN ('generado','pagado','contabilizado') AND c.eliminado = FALSE
+                  AND c.tipo_ambiente = :amb
+             ) t WHERE t.saldo > 0
+             ORDER BY t.tipo_rol, t.numero_periodo",
+            $this->paramsExcluir([':id_empresa' => $idEmpresa, ':emp' => $idEmpleado, ':a' => $anio, ':m' => $mes, ':amb' => $tipoAmbiente], $excluirEgresoId)
+        )->fetchAll(PDO::FETCH_ASSOC);
+    }
+
+    /**
+     * Anticipos sin pagar y cuotas de Préstamo Empresa sin desembolsar que descuenta la línea
+     * de rol (regla A). @return array<int,array{tipo_codigo:string,tipo_nombre:string,monto:float}>
+     */
+    public function getNovedadesSinDesembolsoLinea(int $idRolDetalle, int $idEmpresa, ?int $excluirEgresoId = null): array
+    {
+        $excluirSql = $excluirEgresoId !== null ? ' AND e.id <> :excluir' : '';
+        $novPend = $this->sqlNovedadesSinDesembolso('d', 'c', $excluirSql);
+        return $this->query(
+            "SELECT p.* FROM rol_detalle d JOIN rol_cabecera c ON c.id = d.id_rol
+             CROSS JOIN LATERAL ({$novPend}) p
+             WHERE d.id = :id AND d.id_empresa = :id_empresa
+             ORDER BY p.tipo_codigo",
+            $this->paramsExcluir([':id' => $idRolDetalle, ':id_empresa' => $idEmpresa], $excluirEgresoId)
+        )->fetchAll(PDO::FETCH_ASSOC);
+    }
+
+    /** ¿La corrida $tipoRol del empleado en el mes ya tiene pagos? (regla B) */
+    public function rolTienePagoEmpleado(int $idEmpresa, int $idEmpleado, string $tipoRol, int $anio, int $mes, string $tipoAmbiente, ?int $excluirEgresoId = null): bool
+    {
+        $excluirSql = $excluirEgresoId !== null ? ' AND e.id <> :excluir' : '';
+        return (bool) $this->query(
+            "SELECT 1 FROM rol_detalle d JOIN rol_cabecera c ON c.id = d.id_rol
+             WHERE d.id_empresa = :id_empresa AND d.id_empleado = :emp
+               AND c.tipo_rol = :tipo AND c.periodo_anio = :a AND c.periodo_mes = :m
+               AND c.estado <> 'anulado' AND c.eliminado = FALSE AND c.tipo_ambiente = :amb
+               AND {$this->sqlLineaRolConPago('d', 'c', $excluirSql)}
+             LIMIT 1",
+            $this->paramsExcluir([':id_empresa' => $idEmpresa, ':emp' => $idEmpleado, ':tipo' => $tipoRol, ':a' => $anio, ':m' => $mes, ':amb' => $tipoAmbiente], $excluirEgresoId)
+        )->fetchColumn();
+    }
+
+    /**
+     * Cuotas del Préstamo Empresa del empleado que su rol ya pagado no descontó (regla B del
+     * desembolso). @return array<int,array{empleado:string,periodo_anio:int,periodo_mes:int,tipo_rol:string,valor:float}>
+     */
+    public function getCuotasPrestamoPerdidas(int $idEmpresa, int $idEmpleado, ?int $excluirEgresoId = null): array
+    {
+        $excluirSql = $excluirEgresoId !== null ? ' AND e.id <> :excluir' : '';
+        return $this->query(
+            "SELECT DISTINCT nq.id, nq.periodo_anio, nq.periodo_mes, cq.tipo_rol, nq.valor,
+                    (SELECT emp.nombres_apellidos FROM empleados emp WHERE emp.id = nq.id_empleado) AS empleado
+             {$this->sqlCuotasPrestamoPerdidas(':id_empresa', ':emp', $excluirSql)}
+             ORDER BY nq.periodo_anio, nq.periodo_mes",
+            $this->paramsExcluir([':id_empresa' => $idEmpresa, ':emp' => $idEmpleado], $excluirEgresoId)
+        )->fetchAll(PDO::FETCH_ASSOC);
     }
 
     /**

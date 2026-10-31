@@ -6,7 +6,7 @@ ruta_modulo: modulos/egresos
 tipo: modulo
 visibilidad: todos
 etiquetas: egresos, proyecto, filtrar por proyecto, columna proyecto, egresos de un proyecto, egreso de un proyecto, obra, asignar proyecto, gasto por proyecto, proyecto en el pdf, saldo inicial por pagar, saldos iniciales cxp, cuenta por pagar de apertura, no aparece el saldo inicial, pagar saldo inicial, egreso, pago, buscar egreso, buscador, filtros, filtrar egresos, buscar cheque, buscar por compra pagada, buscar por beneficiario, filtro de fechas, chips, editar egreso, modificar egreso, corregir egreso, cambiar monto pagado, quitar factura del egreso, cambiar beneficiario, periodo cerrado, solo lectura, no deja editar, no puedo modificar, ordenar por dos columnas, ordenar por beneficiario y fecha, pagar, dinero que sale, proveedor, empleado, cheque, transferencia, comprobante de egreso, excel, exportar, anular cheque, cheque anulado, cheque dañado, reimprimir cheque, combinar conceptos, mezclar conceptos, otros conceptos, varios documentos, gasto sin factura, tipo real, tipo de egreso, decimo cuarto, decimo tercero, prestamos, rol de pago, numero de egreso, serie, secuencial, numero repetido, numero duplicado, numeracion por fecha, numero con el año, reiniciar numeracion, reinicio anual, reinicio mensual, correlativo por año, correlativo por mes, modo de numeracion, orden de formas de pago, saldo de la forma de pago, saldo disponible, ocultar saldo, aparecen documentos que no busque, resultados que no corresponden, buscar por numero de documento cobrado, cuenta del anticipo, anticipo sin cuenta, anticipo a proveedor, cuenta contable del concepto, cuenta por defecto, falta cuenta contable, pagar compra y dar anticipo, listado no se actualiza, no aparece el egreso guardado, no se ve el cambio, vuelve a la primera pagina, se pierde la pagina, refrescar listado, recargar tabla, fila resaltada, observaciones automaticas, observaciones se llenan solas, observaciones se completan solas, glosa del egreso, concepto del comprobante, descripcion del pago, pago factura de compra, falta un centavo, centavo pendiente, no puedo pagar el centavo, diferencia de un centavo, saldo de 0.01, queda un centavo, referencia muy larga, no guarda el egreso, no se guarda el pago, error al guardar egreso, value too long, texto demasiado largo, se corta la referencia, limite de caracteres, saldo equivocado, valor a pagar incorrecto, saldo menor al real, nota de venta, retencion de otro proveedor, descuenta una retencion que no es, imprimir, impresora, siguiente egreso, egreso anterior, navegar entre egresos, pasar al siguiente, flechas del modal, recorrer egresos, pago duplicado, pagar dos veces, doble pago, doble clic, egreso duplicado, ya no tiene saldo suficiente, declaracion ya pagada, crear proveedor desde el egreso, nuevo proveedor, nuevo empleado, registrar proveedor, registrar empleado, crear forma de pago, crear concepto, no aparece el boton de crear proveedor, falta el boton nuevo proveedor, asiento de documento anulado, asiento sigue contabilizado, no se anulo el asiento, no se pudo anular el asiento contable, registrar otro egreso, guardar y nuevo, guardar y crear otro, seguir en este, varios egresos seguidos, no cerrar el modal, continuar registrando, no pasa nada al guardar, se queda pensando, tarda en guardar, guardando, demora al guardar, no muestra mensaje al guardar
-version: 1.51
+version: 1.52
 orden: 20
 estado: activo
 ---
@@ -119,6 +119,20 @@ quedado enlazado en la migración. Los **roles y quincenas migrados**, en cambio
 sí aparecen mientras tengan saldo: solo cuenta como pagado lo que tenga un
 egreso enlazado (si el pago viejo existía y no se cruzó, vuelva a migrar
 *Egresos*).
+
+El rol **mensual** de un empleado no aparece mientras ese empleado tenga una
+quincena o semana del mismo mes sin pagar, y una quincena o semana no aparece si
+el rol mensual de ese empleado ya tiene pagos: el mensual solo descuenta lo ya
+pagado, así que cualquiera de los dos casos pagaría dos veces lo mismo. Al
+guardar se vuelve a comprobar (ver *Roles de pago → Quincenas o semanas sin
+pagar bloquean el pago del rol mensual*).
+
+Lo mismo con anticipos y préstamos empresa: un rol no aparece mientras su
+empleado tenga en ese período un anticipo sin pagar o una cuota de préstamo sin
+desembolsar; un anticipo no aparece si el rol donde se descontaría ya tiene
+pagos; y el desembolso de un préstamo no aparece si alguna cuota cae en un rol
+ya pagado que no la descontó (ver *Roles de pago → Anticipos y préstamos
+empresa sin pagar también bloquean el pago del rol*).
 
 Si el egreso combina más de un tipo (ver "Combinar varios conceptos" arriba),
 la columna los junta con `+` (p. ej. "Compra + Otros Conceptos"). Si es un
@@ -682,6 +696,11 @@ proveedores), pasa por la misma revisión al guardar:
 
 ## Errores frecuentes
 
+- **"No se puede pagar el Rol Mensual … tiene pendiente de pago Quincena …"** /
+  **"No se puede pagar la Quincena … su Rol Mensual … ya fue pagado"** /
+  **"… tiene Anticipo (… sin pagar)"** / **"No se puede pagar el Anticipo …"** /
+  **"No se puede desembolsar el Préstamo Empresa …"**: ver
+  *Roles de pago → Errores frecuentes*.
 - **"No se pudo anular el asiento contable del egreso: …"**: al anular un egreso, su
   asiento contable se anula en la misma operación; si no se puede, no se cambia nada y
   el texto que sigue dice por qué (lo más común, un período contable cerrado en la
@@ -728,6 +747,7 @@ proveedores), pasa por la misma revisión al guardar:
 
 ## Historial de cambios
 
+- **1.52** — En **Nómina**, el rol mensual de un empleado no se ofrece ni se puede guardar mientras tenga una quincena o semana del mes sin pagar, y una quincena o semana no se ofrece ni se puede guardar si el rol mensual de ese empleado ya tiene pagos (evita el doble pago). Igual con anticipos y préstamos empresa: el rol no se paga con un anticipo sin pagar o un préstamo sin desembolsar de su período, el anticipo no se paga si su rol ya se pagó, y el préstamo no se desembolsa si alguna cuota cae en un rol ya pagado.
 - **1.51** — El panel lateral con el detalle de una compra o liquidación (clic en su número dentro del egreso) muestra la **descripción completa** de cada ítem, en varias líneas, en lugar de cortarla con «…».
 - **1.50** — Columna y filtro **Proyecto** en el listado (y en su PDF/Excel), y filtro Proyecto en el Reporte de Ingresos y Egresos; el campo Proyecto del modal pasa a la primera fila.
 - **1.49** — Campo **Proyecto** en el modal (si la empresa tiene proyectos activos): el egreso pertenece a un proyecto, que se pone en todas las líneas de su asiento y sale en el encabezado del comprobante PDF.

@@ -6,7 +6,7 @@ ruta_modulo: modulos/novedades
 tipo: modulo
 visibilidad: todos
 etiquetas: novedades, novedad, anticipo por pagar, prestamo por desembolsar, numero de cuotas, cuotas del prestamo, prestamo en cuotas, instrucciones de la plantilla, hoja instrucciones, anticipo ya pagado, prestamo ya desembolsado, desembolso, pendiente de desembolso, aviso de desembolso, anticipo cargado por excel, horas extra, faltas, atrasos, prestamo, anticipo, descuento, aviso de salida, motivo de salida, multa, bonos, comisiones, otros ingresos, iess, aporta iess, con iess, sin iess, aporte personal, base del iess, carga masiva, importar, importacion, excel, plantilla, plantilla por empleado, columnas por novedad, subir novedades, eliminar carga, revertir carga, deshacer carga, borrar importacion, historial de cargas, duplicados, repetida, todo o nada, buscar novedades, buscador, filtros, filtrar novedades, buscar por empleado, novedades pagadas, novedades pendientes, chips
-version: 1.13
+version: 1.14
 orden: 20
 estado: activo
 ---
@@ -195,6 +195,12 @@ valor dice si el dinero ya se entregó:
 | **PRÉSTAMO EMPRESA YA DESEMBOLSADO** | El préstamo ya se entregó | El rol descuenta cada cuota directo |
 | **PRÉSTAMO EMPRESA POR DESEMBOLSAR** | Todavía hay que entregarlo | El préstamo aparece en *Egresos → Nómina* por la suma de sus cuotas; el rol descuenta cada cuota después del desembolso |
 
+Mientras un anticipo *por pagar* o un préstamo *por desembolsar* siga pendiente,
+el rol de ese empleado en ese período **no se puede pagar** en Egresos (el rol
+no lo descontó); pague primero el anticipo o el desembolso. Lo *ya entregado*
+no bloquea nada. Ver *Roles de pago → Anticipos y préstamos empresa sin pagar
+también bloquean el pago del rol*.
+
 Los demás tipos no cambian (Descuento y los préstamos quirografario e
 hipotecario siempre se descuentan directo). Las plantillas descargadas antes,
 con una sola columna ANTICIPO o PRÉSTAMO EMPRESA, se toman como *ya entregado*.
@@ -354,6 +360,7 @@ filtrado.
 
 ## Historial de cambios
 
+- **1.14** — Un anticipo *por pagar* o un préstamo empresa *por desembolsar* (a mano o por Excel) pendiente impide pagar el rol de ese período en Egresos hasta pagarlo o desembolsarlo; y ya no se puede pagar el anticipo ni desembolsar el préstamo si el rol donde se descuentan ya se pagó sin descontarlos.
 - **1.13** — **Anticipo y Préstamo Empresa con columnas «ya entregado» y «por
   pagar» en la plantilla Excel.** Lo *por pagar* sigue el camino normal
   (*Egresos → Nómina* y luego el rol); lo *ya entregado* se descuenta directo.

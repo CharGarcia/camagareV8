@@ -46,8 +46,10 @@
         const tipo = $('rol_tipo_rol').value;
         const cont = $('rol_container_numero'), sel = $('rol_numero_periodo'), lbl = $('rol_label_numero');
         if (tipo === 'MENSUAL') { sel.innerHTML = '<option value="0">-</option>'; cont.classList.add('d-none'); return; }
-        const max = tipo === 'QUINCENA' ? 2 : 5;
-        lbl.textContent = tipo === 'QUINCENA' ? 'Quincena' : 'Semana';
+        // Una sola quincena por mes: no hay número que elegir.
+        if (tipo === 'QUINCENA') { sel.innerHTML = '<option value="1">1</option>'; cont.classList.add('d-none'); return; }
+        const max = 5;
+        lbl.textContent = 'Semana';
         let opts = '';
         for (let i = 1; i <= max; i++) opts += `<option value="${i}">${i}</option>`;
         sel.innerHTML = opts;
@@ -118,7 +120,7 @@
                 renderVer(json.data);
                 modalVer()?.show();
                 window.dispatchEvent(new CustomEvent('rolGuardado'));
-                avisarPendientes(json.data.avisos || [], json.data.empleados_sin_periodo || []);
+                avisarPendientes(json.data.avisos || [], json.data.empleados_sin_periodo || [], json.data.parciales_pendientes || []);
             } else {
                 Swal.fire({ icon: 'error', title: 'Atención', text: json.error || 'No se pudo generar.' });
             }
@@ -186,7 +188,7 @@
         rolActual = { id: rol.id, estado: rol.estado, tipo_rol: rol.tipo_rol };
         $('rolver_periodo').textContent = periodoTexto;
         $('rolver_totales').innerHTML = `Ingresos <b>${money(rol.total_ingresos)}</b> · Egresos <b>${money(rol.total_egresos)}</b> · Neto <b>${money(rol.total_neto)}</b>`;
-        renderAvisos(rol.avisos || [], rol.empleados_sin_periodo || []);
+        renderAvisos(rol.avisos || [], rol.empleados_sin_periodo || [], rol.parciales_pendientes || []);
 
         const det = rol.detalle || [];
         if (!det.length) { $('rolver_lista').innerHTML = '<tr><td colspan="5" class="text-center py-4 text-muted">Sin empleados con conceptos.</td></tr>'; $('rolver_conteo').textContent = ''; return; }
@@ -204,10 +206,14 @@
         $('rolver_conteo').textContent = det.length + ' empleados';
     }
 
+    // "Quincena 1 10/2026 de Juan Pérez: $250.00" — semanas/quincenas sin pagar (rol mensual).
+    const liParcial = p => `<li>${esc(p.empleado)} — <b>${p.tipo_rol === 'SEMANAL' ? 'Semana' : 'Quincena'} ${esc(p.numero_periodo || '')}</b>: ${money(p.saldo)}</li>`;
+
     // Avisos en acordeón (cerrados): (1) empleados activos NO incluidos por falta de período,
-    // (2) anticipos/préstamos pendientes de desembolso (no se descuentan hasta pagarlos).
+    // (2) anticipos/préstamos pendientes de desembolso (no se descuentan hasta pagarlos),
+    // (3) solo mensual: semanas/quincenas del mes sin pagar (bloquean el pago del mensual).
     // Cerrados y con scroll propio para que, con muchos avisos, no tapen la tabla ni el footer.
-    function renderAvisos(avisos, sinPeriodo) {
+    function renderAvisos(avisos, sinPeriodo, parciales) {
         const box = $('rolver_avisos');
         if (!box) return;
         const item = (id, color, icono, titulo, cuerpo) => `
@@ -238,17 +244,26 @@
             ).join('');
             html += item('rolver_av_desembolso', 'warning', 'bi-exclamation-triangle-fill',
                 `<b>${avisos.length} novedad(es) pendiente(s) de desembolso</b>`,
-                `Estas novedades NO se descuentan en el rol hasta pagarlas en <b>Egresos → Nómina</b>:
+                `Estas novedades NO se descuentan en el rol hasta pagarlas en <b>Egresos → Nómina</b>, y el rol de estos empleados
+                <b>no se podrá pagar</b> mientras sigan pendientes (o cámbielas a otro período):
                 <ul class="mb-0 mt-1">${li}</ul>`);
         }
-        box.innerHTML = html ? `<div class="accordion py-2" id="rolver_avisos_acc">${html}</div>` : '';
+        if (parciales && parciales.length) {
+            html += item('rolver_av_parciales', 'danger', 'bi-calendar-x-fill',
+                `<b>${parciales.length} semana(s)/quincena(s) del mes sin pagar</b>`,
+                `El rol mensual solo descuenta lo ya pagado, así que estas NO se descontaron. El rol mensual de estos empleados
+                <b>no se podrá pagar en Egresos</b> hasta pagarlas (el rol se recalcula solo) o anularlas:
+                <ul class="mb-0 mt-1">${parciales.map(liParcial).join('')}</ul>`);
+        }
+        box.innerHTML = html ?`<div class="accordion py-2" id="rolver_avisos_acc">${html}</div>` : '';
     }
 
     // Aviso emergente al generar, si hay empleados sin período o novedades sin desembolsar.
-    function avisarPendientes(avisos, sinPeriodo) {
+    function avisarPendientes(avisos, sinPeriodo, parciales) {
         const hayAvisos = avisos && avisos.length;
         const haySinPeriodo = sinPeriodo && sinPeriodo.length;
-        if (!hayAvisos && !haySinPeriodo) return;
+        const hayParciales = parciales && parciales.length;
+        if (!hayAvisos && !haySinPeriodo && !hayParciales) return;
 
         let html = '';
         if (haySinPeriodo) {
@@ -257,7 +272,10 @@
         }
         if (hayAvisos) {
             const li = avisos.map(a => `<li>${esc(a.empleado)} — ${esc(a.concepto)}: ${money(a.monto)}</li>`).join('');
-            html += `<div>Estos anticipos/préstamos <b>no se descontaron</b> en el rol porque aún no se han pagado en <b>Egresos → Nómina</b>:<ul class="mt-1 mb-0">${li}</ul></div>`;
+            html += `<div>Estos anticipos/préstamos <b>no se descontaron</b> en el rol porque aún no se han pagado en <b>Egresos → Nómina</b>. El rol de estos empleados <b>no se podrá pagar</b> hasta pagarlos o cambiarlos de período:<ul class="mt-1 mb-0">${li}</ul></div>`;
+        }
+        if (hayParciales) {
+            html += `<div class="mt-2">Estas semanas/quincenas del mes <b>no se descontaron</b> porque aún no se han pagado. El rol mensual de estos empleados <b>no se podrá pagar</b> hasta pagarlas o anularlas:<ul class="mt-1 mb-0">${parciales.map(liParcial).join('')}</ul></div>`;
         }
         Swal.fire({
             icon: 'warning',

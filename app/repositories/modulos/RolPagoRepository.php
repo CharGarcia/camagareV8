@@ -891,6 +891,50 @@ class RolPagoRepository extends BaseRepository
         return $avisos;
     }
 
+    /**
+     * Semanas/quincenas del mes con saldo pendiente, por empleado: su rol MENSUAL no las
+     * descuenta (solo resta lo ya pagado) y Egresos no deja pagarlo hasta que se paguen o
+     * anulen (EgresoRules::validarNominaParcialMensual). Para el aviso del rol mensual.
+     * @return array<int,array{empleado:string,tipo_rol:string,numero_periodo:int,saldo:float}>
+     */
+    public function getParcialesPendientesPeriodo(int $idEmpresa, int $anio, int $mes): array
+    {
+        $sql = "SELECT * FROM (
+                    SELECT emp.nombres_apellidos AS empleado, c.tipo_rol, c.numero_periodo,
+                           ROUND(d.neto - COALESCE((SELECT SUM(ed.monto_pagado)
+                                 FROM egresos_detalle ed JOIN egresos_cabecera ec ON ec.id = ed.id_egreso
+                                 WHERE ed.tipo_documento = 'ROL' AND ed.id_referencia_documento = d.id
+                                   AND ec.estado <> 'anulado' AND ec.eliminado = false AND ed.eliminado = false), 0), 2) AS saldo
+                    FROM rol_detalle d
+                    JOIN rol_cabecera c ON c.id = d.id_rol
+                    JOIN empleados emp ON emp.id = d.id_empleado
+                    WHERE d.id_empresa = :emp AND c.tipo_rol IN ('SEMANAL','QUINCENA')
+                      AND c.periodo_anio = :a AND c.periodo_mes = :m
+                      AND c.estado IN ('generado','pagado','contabilizado') AND c.eliminado = false
+                      AND c.tipo_ambiente = (SELECT CAST(tipo_ambiente AS VARCHAR(1)) FROM empresas WHERE id = :emp)
+                      -- Si el mensual ya empezó a pagarse, ya no bloquea: es esa semana/quincena la
+                      -- que no se puede pagar (doble pago), y eso lo informa Egresos.
+                      AND NOT EXISTS (
+                          SELECT 1 FROM rol_detalle dm JOIN rol_cabecera cm ON cm.id = dm.id_rol
+                          WHERE dm.id_empresa = d.id_empresa AND dm.id_empleado = d.id_empleado
+                            AND cm.tipo_rol = 'MENSUAL' AND cm.periodo_anio = c.periodo_anio AND cm.periodo_mes = c.periodo_mes
+                            AND cm.estado <> 'anulado' AND cm.eliminado = false AND cm.tipo_ambiente = c.tipo_ambiente
+                            AND (cm.estado = 'pagado' OR EXISTS (
+                                SELECT 1 FROM egresos_detalle ed2 JOIN egresos_cabecera ec2 ON ec2.id = ed2.id_egreso
+                                WHERE ed2.tipo_documento = 'ROL' AND ed2.id_referencia_documento = dm.id
+                                  AND ec2.estado <> 'anulado' AND ec2.eliminado = false AND ed2.eliminado = false)))
+                ) t
+                WHERE t.saldo > 0
+                ORDER BY t.empleado, t.tipo_rol, t.numero_periodo";
+        try {
+            $st = $this->db->prepare($sql);
+            $st->execute([':emp' => $idEmpresa, ':a' => $anio, ':m' => $mes]);
+            return $st->fetchAll(PDO::FETCH_ASSOC);
+        } catch (\Throwable $e) {
+            return []; // egresos no disponible → sin aviso
+        }
+    }
+
     /** [id_empleado => true] de empleados con rol MENSUAL PAGADO ese período (exclusión semanal/quincena). */
     public function getMensualPagadoMasivo(int $idEmpresa, array $ids, int $anio, int $mes): array
     {

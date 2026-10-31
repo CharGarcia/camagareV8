@@ -658,12 +658,27 @@ class EgresoService
     private function validarSaldoDocumentos(array $detalles, int $idEmpresa, ?int $excluirEgresoId = null): void
     {
         $comprasYaPagadas = [];
+        $nominaYaPagada   = []; // 'TIPO:id' de rol/anticipo/desembolso que el egreso ya pagaba
         if ($excluirEgresoId !== null) {
             foreach ($this->repository->getDetalles($excluirEgresoId) as $previo) {
                 if (($previo['tipo_documento'] ?? '') === 'COMPRA') {
                     $comprasYaPagadas[(int) $previo['id_referencia_documento']] = true;
                 }
+                $nominaYaPagada[($previo['tipo_documento'] ?? '') . ':' . (int) $previo['id_referencia_documento']] = true;
             }
+        }
+
+        // Nómina nueva en este egreso (lo que ya pagaba, al editarlo, no se revalida).
+        $nominaNueva = [];
+        foreach ($detalles as $det) {
+            $tipo = (string) ($det['tipo_documento'] ?? '');
+            $id   = (int) ($det['id_referencia_documento'] ?? 0);
+            if (in_array($tipo, ['ROL', 'ANTICIPO', 'PRESTAMO9'], true) && $id > 0 && !isset($nominaYaPagada["$tipo:$id"])) {
+                $nominaNueva["$tipo:$id"] = [$tipo, $id];
+            }
+        }
+        if ($nominaNueva) {
+            $this->validarNominaCruzada(array_values($nominaNueva), $idEmpresa, $excluirEgresoId);
         }
 
         $montoPorDoc  = [];
@@ -706,6 +721,65 @@ class EgresoService
                     "). Es posible que otro egreso lo haya pagado mientras tanto; cierre y vuelva a abrir la búsqueda de documentos pendientes."
                 );
             }
+        }
+    }
+
+    /**
+     * Lo que el rol descuenta solo si ya se pagó (semanas/quincenas en el mensual, anticipos,
+     * cuotas de Préstamo Empresa) contra el rol donde se descuenta (ver EgresoRepository,
+     * sección "Nómina"): (A) el rol no se paga con eso pendiente; (B) eso no se paga si el rol
+     * ya tiene pagos. Todo bajo el candado de la nómina de cada empleado y mes; los candados se
+     * toman primero y en orden, así dos egresos con los mismos documentos no se traban.
+     *
+     * @param array<int,array{0:string,1:int}> $docs [tipo_documento, id_referencia] que el egreso empieza a pagar
+     */
+    private function validarNominaCruzada(array $docs, int $idEmpresa, ?int $excluirEgresoId): void
+    {
+        $lineas = []; $anticipos = []; $prestamos = []; $claves = [];
+        $clave = function (int $idEmpleado, $anio, $mes) use (&$claves): void {
+            $claves[sprintf('%d:%04d:%02d', $idEmpleado, $anio, $mes)] = [$idEmpleado, (int) $anio, (int) $mes];
+        };
+        foreach ($docs as [$tipo, $id]) {
+            if ($tipo === 'ROL' && ($l = $this->repository->getLineaRolNomina($id, $idEmpresa))) {
+                $lineas[] = $l;
+                $clave((int) $l['id_empleado'], $l['periodo_anio'], $l['periodo_mes']);
+            } elseif ($tipo === 'ANTICIPO' && ($n = $this->repository->getAnticipoNomina($id, $idEmpresa))) {
+                $anticipos[] = $n;
+                $clave((int) $n['id_empleado'], $n['periodo_anio'], $n['periodo_mes']);
+            } elseif ($tipo === 'PRESTAMO9') { // id_referencia = id del empleado
+                $prestamos[] = $id;
+                foreach ($this->repository->getPeriodosCuotasPrestamo($idEmpresa, $id) as $p) {
+                    $clave($id, $p['periodo_anio'], $p['periodo_mes']);
+                }
+            }
+        }
+        ksort($claves);
+        foreach ($claves as [$idEmpleado, $anio, $mes]) {
+            $this->repository->lockNominaEmpleadoPeriodo($idEmpresa, $idEmpleado, $anio, $mes);
+        }
+
+        foreach ($lineas as $l) {
+            $args = [$idEmpresa, (int) $l['id_empleado'], (int) $l['periodo_anio'], (int) $l['periodo_mes'], (string) $l['tipo_ambiente'], $excluirEgresoId];
+            // A solo mientras la línea no tenga pagos: si ya empezó a pagarse, lo pendiente queda
+            // bloqueado por B y el resto del rol se debe poder terminar de pagar.
+            $lineaPagada = $this->repository->lineaRolTienePago((int) $l['id'], $idEmpresa, $excluirEgresoId);
+            $esMensual   = $l['tipo_rol'] === 'MENSUAL';
+            $this->rules->validarNominaParcialMensual(
+                $l,
+                ($esMensual && !$lineaPagada) ? $this->repository->getParcialesPendientesEmpleado(...$args) : [],
+                $esMensual ? $lineaPagada : $this->repository->rolTienePagoEmpleado($idEmpresa, (int) $l['id_empleado'], 'MENSUAL', (int) $l['periodo_anio'], (int) $l['periodo_mes'], (string) $l['tipo_ambiente'], $excluirEgresoId)
+            );
+            if (!$lineaPagada) {
+                $this->rules->validarRolSinNovedadesPendientes($l, $this->repository->getNovedadesSinDesembolsoLinea((int) $l['id'], $idEmpresa, $excluirEgresoId));
+            }
+        }
+        foreach ($anticipos as $n) {
+            $this->rules->validarAnticipoSinRolPagado($n, $this->repository->rolTienePagoEmpleado(
+                $idEmpresa, (int) $n['id_empleado'], (string) $n['tipo_rol'], (int) $n['periodo_anio'], (int) $n['periodo_mes'], (string) $n['tipo_ambiente'], $excluirEgresoId
+            ));
+        }
+        foreach ($prestamos as $idEmpleado) {
+            $this->rules->validarPrestamoSinCuotasPerdidas($this->repository->getCuotasPrestamoPerdidas($idEmpresa, $idEmpleado, $excluirEgresoId));
         }
     }
 

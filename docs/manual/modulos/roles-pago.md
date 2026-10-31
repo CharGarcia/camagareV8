@@ -5,8 +5,8 @@ categoria: Nómina
 ruta_modulo: modulos/roles-pago
 tipo: modulo
 visibilidad: todos
-etiquetas: rol de pago, roles, enviar rol por correo, correo del empleado, editar correo, varios correos, destinatario, avisos del rol, avisos tapan el modal, no se puede cerrar el rol, empleados sin periodo, pendientes de desembolso, nomina, sueldo, quincena, semanal, mensual, pago de empleados, descuentos, liquido a recibir, neteo, ingresos de quincena, bono en quincena, horas extra en quincena, observacion, observaciones, detalle de novedad, motivo del descuento, asiento contable, contabilizacion, cuentas de nomina, prestamo quirografario, prestamo hipotecario, prestamo empresa, prestamos iess, aporte iess, base del iess, con iess, sin iess, bonos, comisiones, horas extra, dias no laborados, faltas, dias laborados, sueldo ganado, fondos de reserva, decimo tercero, decimo cuarto, buscar rol de pago, buscador, filtros, filtrar roles, buscar empleado en el rol, buscar rubro, chips, ordenar, ordenamiento, ordenar por periodo, ordenar columnas, orden del listado, periodo mas reciente, imprimir, impresora, eliminar rol, anular rol, rol eliminado, nomina duplicada, nomina contabilizada dos veces, asiento duplicado, asiento general e individual, rol migrado, asiento migrado, cuadre del asiento, asiento no cuadra con el rol, gasto de nomina inflado, asiento sigue contabilizado, asiento de rol eliminado, pagado, pago pendiente, pago parcial, estado de pago, referencia del pago, egreso del rol, ver egreso, pdf del egreso, comprobante de egreso, con que se pago, como se pago, transferencia, cheque, pestaña pago, rol migrado incompleto, faltan empleados en el rol, empleados inactivos desaparecen, rol migrado cambio de valores, rol migrado se recalcula
-version: 1.20
+etiquetas: rol de pago, roles, enviar rol por correo, correo del empleado, editar correo, varios correos, destinatario, avisos del rol, avisos tapan el modal, no se puede cerrar el rol, empleados sin periodo, pendientes de desembolso, nomina, sueldo, quincena, semanal, mensual, pago de empleados, descuentos, liquido a recibir, neteo, quincena sin pagar, quincena pendiente, no aparece el rol mensual en egresos, no puedo pagar el rol mensual, doble pago, pagar dos veces, anticipo sin pagar, prestamo sin desembolsar, no puedo desembolsar el prestamo, cuota perdida, cargar novedades por excel, por pagar, ya entregado, ingresos de quincena, bono en quincena, horas extra en quincena, observacion, observaciones, detalle de novedad, motivo del descuento, asiento contable, contabilizacion, cuentas de nomina, prestamo quirografario, prestamo hipotecario, prestamo empresa, prestamos iess, aporte iess, base del iess, con iess, sin iess, bonos, comisiones, horas extra, dias no laborados, faltas, dias laborados, sueldo ganado, fondos de reserva, decimo tercero, decimo cuarto, buscar rol de pago, buscador, filtros, filtrar roles, buscar empleado en el rol, buscar rubro, chips, ordenar, ordenamiento, ordenar por periodo, ordenar columnas, orden del listado, periodo mas reciente, imprimir, impresora, eliminar rol, anular rol, rol eliminado, nomina duplicada, nomina contabilizada dos veces, asiento duplicado, asiento general e individual, rol migrado, asiento migrado, cuadre del asiento, asiento no cuadra con el rol, gasto de nomina inflado, asiento sigue contabilizado, asiento de rol eliminado, pagado, pago pendiente, pago parcial, estado de pago, referencia del pago, egreso del rol, ver egreso, pdf del egreso, comprobante de egreso, con que se pago, como se pago, transferencia, cheque, pestaña pago, rol migrado incompleto, faltan empleados en el rol, empleados inactivos desaparecen, rol migrado cambio de valores, rol migrado se recalcula
+version: 1.21
 orden: 30
 estado: activo
 ---
@@ -21,8 +21,14 @@ Un mismo módulo cubre los tres ritmos de pago:
 | Tipo | Periodo | Dato adicional |
 |------|---------|----------------|
 | Mensual | Un mes completo | — |
-| Quincenal | Media quincena | **Quincena**: 1 o 2 |
+| Quincenal | Una quincena por mes (el anticipo de mitad de mes) | — |
 | Semanal | Una semana | **Semana**: de 1 a 5 |
+
+Por mes se genera **una sola quincena**: al elegir *Quincena* en **Nuevo** no
+hay número que escoger. Las novedades que se registran para la quincena se
+descuentan en esa única corrida (con dos quincenas se cargaban en ambas). Las
+quincenas 2 que ya existían, por ejemplo las migradas del sistema anterior, se
+siguen viendo y pagando.
 
 En el listado, la columna **Tipo** distingue cada ritmo con su propio color e
 ícono de calendario: **Rol Mensual** en celeste, **Quincena** en gris oscuro y
@@ -33,7 +39,7 @@ La columna **Período** dice de qué parte del mes se trata, sin números suelto
 | Tipo | Cómo se muestra |
 |------|-----------------|
 | Mensual | *Mayo 2026* |
-| Quincenal | *Quincena 1 · 1 al 15 de Mayo 2026* / *Quincena 2 · 16 al 31 de Mayo 2026* |
+| Quincenal | *Quincena 1 · 1 al 15 de Mayo 2026* (una quincena 2 anterior: *Quincena 2 · 16 al 31 de Mayo 2026*) |
 | Semanal | *Semana 3 · 15 al 21 de Mayo 2026* |
 
 Los días son **por convención**, no fechas registradas: la quincena 1 va del 1
@@ -84,6 +90,52 @@ menos el IESS de ambos.
 Solo se netean las quincenas y semanas que **ya tienen un pago** registrado en
 Egresos; si una quincena todavía no se pagó, sus ingresos se cobran cuando se
 pague esa quincena.
+
+### Quincenas o semanas sin pagar bloquean el pago del rol mensual
+
+Como el mensual solo resta lo ya pagado, pagarlo mientras una quincena o semana
+del mismo mes sigue pendiente le entregaría al empleado el mes completo **y**
+después esa quincena. Para evitar el doble pago, por empleado:
+
+- **El rol mensual no se puede pagar** mientras el empleado tenga una quincena o
+  semana del mes con saldo pendiente. En **Egresos → Nómina** su rol mensual no
+  aparece, *Generar egresos* lo deja en la lista de errores con el motivo, y al
+  ver el rol mensual sale el aviso **«semana(s)/quincena(s) del mes sin
+  pagar»** con cada empleado y el saldo. Pague primero esa quincena (el rol
+  mensual se recalcula solo y la descuenta) o anúlela si no se va a pagar.
+- **Una quincena o semana no se puede pagar** si el rol mensual de ese empleado
+  ya tiene un pago (o el rol está marcado *Pagado*): no se descontó en el mes,
+  así que pagarla sería pagar dos veces. Tampoco aparece en Egresos → Nómina.
+  En ese caso el resto del rol mensual sí se puede terminar de pagar.
+- Una quincena y el rol mensual del mismo empleado no pueden ir **en el mismo
+  egreso**: registre primero el egreso de la quincena.
+
+Los demás empleados del rol no se ven afectados.
+
+### Anticipos y préstamos empresa sin pagar también bloquean el pago del rol
+
+El rol descuenta el **Anticipo** solo por lo que ya se le entregó al empleado
+por egreso, y la cuota del **Préstamo Empresa** solo cuando el préstamo ya se
+desembolsó. La misma regla se aplica, por empleado y período, al rol (mensual,
+quincena o semana) donde se descuentan:
+
+- **El rol no se puede pagar** mientras tenga un anticipo sin pagar o una cuota
+  de un préstamo empresa sin desembolsar en su período. Pague primero el anticipo
+  o el desembolso en **Egresos → Nómina** (el rol se recalcula y lo descuenta) o
+  cambie la novedad a otro período. El aviso amarillo del rol los lista.
+- **El anticipo no se puede pagar** si el rol donde se descontaría ya tiene un
+  pago: ya no se recuperaría.
+- **El préstamo empresa no se puede desembolsar** si alguna de sus cuotas cae en
+  un rol ya pagado que no la descontó: esa cuota no se cobraría nunca.
+- En esos dos casos la novedad tampoco se puede mover de período (su rol ya está
+  pagado). Si corresponde pagarla: anule el egreso de ese rol, pague el anticipo
+  o el desembolso, y vuelva a pagar el rol, que ya sale con el descuento.
+
+Aplica igual a las novedades registradas a mano y a las **cargadas por Excel**
+en la columna *POR PAGAR / POR DESEMBOLSAR*. Las cargadas como *YA ENTREGADO /
+YA DESEMBOLSADO* ya se dan por pagadas: se descuentan sin pedir el egreso y no
+bloquean nada. Los préstamos quirografario e hipotecario no entran aquí: los
+desembolsa el IESS o el banco y se descuentan directo.
 
 ## De dónde salen las cifras
 
@@ -344,7 +396,24 @@ módulo. Para regresar al orden de fábrica, ordene por *Período* de mayor a me
   corrige volviendo a ejecutar **Roles de pago** y **Quincenas** en la
   migración desde MySQL: restaura cada rol migrado desde el sistema anterior sin
   tocar los pagos ya enlazados.
-- **"La quincena debe ser 1 o 2"** / **"La semana debe estar entre 1 y 5"**:
+- **"No se puede pagar el Rol Mensual … tiene pendiente de pago Quincena 1 …"**:
+  pague primero esa quincena o semana en otro egreso (el rol mensual la
+  descontará) o anúlela. Ver *Quincenas o semanas sin pagar bloquean el pago del
+  rol mensual*.
+- **"No se puede pagar la Quincena … su Rol Mensual … ya fue pagado"**: el mes
+  ya se pagó completo sin descontar esa quincena; pagarla sería un doble pago.
+  Si de verdad corresponde, anule el egreso del rol mensual, pague la quincena y
+  vuelva a pagar el mensual (ya con el descuento).
+- **"No se puede pagar el Rol Mensual … tiene Anticipo (… sin pagar)"** o
+  **"… préstamo sin desembolsar"**: pague primero el anticipo o el desembolso en
+  Egresos → Nómina, o cambie la novedad a otro período.
+- **"No se puede pagar el Anticipo … ya se pagó sin descontarlo"** / **"No se
+  puede desembolsar el Préstamo Empresa … cuotas caen en roles ya pagados"**:
+  anule el egreso de ese rol, pague el anticipo o el desembolso y vuelva a pagar
+  el rol (ya con el descuento).
+- **"Solo se puede generar una quincena por mes"** / **"Ya existe una corrida
+  para ese tipo y período"**: ese mes ya tiene su quincena; ábrala desde el listado.
+- **"La semana debe estar entre 1 y 5"**:
   revise el periodo elegido.
 - **Falta una hora extra en el rol**: la novedad está imputada a otro mes o año.
 - **El líquido no coincide con lo esperado**: compare con las novedades del
@@ -355,6 +424,8 @@ módulo. Para regresar al orden de fábrica, ordene por *Período* de mayor a me
   quincena o semana en lugar del rol mensual.
 
 ## Historial de cambios
+
+- **1.21** — El rol mensual de un empleado ya no se puede pagar mientras tenga una quincena o semana del mes sin pagar (no estaba descontada), y una quincena o semana ya no se puede pagar si el rol mensual de ese empleado ya tiene pagos. Al ver el rol mensual, un aviso lista las quincenas/semanas pendientes. Igual con anticipos y préstamos empresa (a mano o cargados por Excel como *por pagar*): el rol no se paga con un anticipo sin pagar o un préstamo sin desembolsar de su período, el anticipo no se paga si su rol ya se pagó, y el préstamo no se desembolsa si alguna cuota cae en un rol ya pagado. Evita pagar dos veces o perder una cuota. Además, **Nuevo** genera una sola quincena por mes (ya no se elige quincena 1 o 2).
 
 - **1.20** — Los roles y quincenas migrados del sistema anterior ya no se recalculan al abrirlos ni con **Generar**: antes se perdían las líneas de los empleados inactivos y cambiaban los valores de los demás. Volver a migrarlos los restaura.
 
