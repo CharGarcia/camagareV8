@@ -5,8 +5,8 @@ categoria: Compras
 ruta_modulo: modulos/liquidacion-compra
 tipo: modulo
 visibilidad: todos
-etiquetas: liquidacion de compra, liquidacion, proveedor sin factura, comprobante 03, sri, sustento, eliminar, borrar, borrador, anular, buscar liquidacion, buscador, filtros, filtrar liquidaciones, buscar por producto, saldo pendiente, estado de pago, chips, aparecen documentos que no busque, resultados que no corresponden, la busqueda trae otros documentos, totales, subtotal, descuento, iva, redondeo, centavos, decimales, decimales de precio, calculo del iva, al subtotal, linea por linea, no cuadra, diferencia de un centavo, error en diferencias, exento, no objeto de iva, codigo del item, item sin codigo, item sin descripcion, falta el codigo, error en estructura de comprobante, rechazado por estructura, no autorizado, informacion adicional, ruc proveedor, campo que no se puede borrar, no me deja eliminar la fila, concepto muy largo, limite de caracteres, maximo 100 caracteres, value too long, no se pudo guardar la liquidacion, registrar pago, pagar liquidacion, egreso de liquidacion, pestaña pagos, no deja pagar, error al registrar pago, secuencial de egreso, imprimir, impresora, retencion, emitir retencion, retener liquidacion, pestaña retenciones, comprobante de retencion, columna saldo, cuanto se debe, saldo por pagar, datos de otra liquidacion, modal no se actualiza, pestaña liquidacion, pagada en el sistema anterior, liquidaciones migradas pendientes, liquidaciones 2020, liquidaciones antiguas sin pago, sistema anterior no registraba pagos, aviso, avisos, novedad sri, documentos con novedad, devuelto, no autorizado, pendientes de enviar, borrador, borradores
-version: 1.24
+etiquetas: liquidacion de compra, liquidacion, proveedor sin factura, comprobante 03, sri, sustento, eliminar, borrar, borrador, anular, buscar liquidacion, buscador, filtros, filtrar liquidaciones, buscar por producto, saldo pendiente, estado de pago, chips, aparecen documentos que no busque, resultados que no corresponden, la busqueda trae otros documentos, totales, subtotal, descuento, iva, redondeo, centavos, decimales, decimales de precio, calculo del iva, al subtotal, linea por linea, no cuadra, diferencia de un centavo, error en diferencias, exento, no objeto de iva, codigo del item, item sin codigo, item sin descripcion, falta el codigo, error en estructura de comprobante, rechazado por estructura, no autorizado, informacion adicional, ruc proveedor, campo que no se puede borrar, no me deja eliminar la fila, concepto muy largo, limite de caracteres, maximo 100 caracteres, value too long, no se pudo guardar la liquidacion, registrar pago, pagar liquidacion, egreso de liquidacion, pestaña pagos, no deja pagar, error al registrar pago, secuencial de egreso, imprimir, impresora, retencion, emitir retencion, retener liquidacion, pestaña retenciones, comprobante de retencion, columna saldo, cuanto se debe, saldo por pagar, datos de otra liquidacion, modal no se actualiza, pestaña liquidacion, pagada en el sistema anterior, liquidaciones migradas pendientes, liquidaciones 2020, liquidaciones antiguas sin pago, sistema anterior no registraba pagos, aviso, avisos, novedad sri, documentos con novedad, devuelto, no autorizado, pendientes de enviar, borrador, borradores, proveedor del exterior, proveedor extranjero, no residente, identificacion del exterior, pasaporte, importacion de servicios, servicios del exterior, pago al exterior, pais de pago, convenio de doble tributacion, ats pago exterior, no aparece el proveedor
+version: 1.26
 orden: 40
 estado: activo
 ---
@@ -22,6 +22,40 @@ obligadas a facturar en ciertos supuestos, servicios ocasionales.
 
 No es un sustituto de la factura: si el proveedor puede emitirla, corresponde
 registrar una compra normal.
+
+El proveedor debe estar registrado con **cédula**, **pasaporte** o
+**identificación del exterior**. Con RUC no se puede emitir: ese proveedor
+factura. En el buscador del formulario solo aparecen los proveedores con esos
+tres tipos de identificación.
+
+## Proveedores del exterior (servicios de no residentes)
+
+La liquidación también se emite al pagar **servicios** a una persona o empresa
+**no residente** en Ecuador que no tiene establecimiento en el país (por ejemplo,
+una asesoría, una licencia o un servicio técnico contratado afuera). Es lo que
+se conoce como *importación de servicios*.
+
+1. Registre al proveedor en **Proveedores** con el tipo **Identificación del
+   exterior**.
+2. Elíjalo en la liquidación. El sistema marca solo el **Pago al exterior**.
+3. En la subpestaña **Pago al exterior** (junto a *Sustento Tributario*)
+   complete:
+
+| Campo | Qué indicar |
+|---|---|
+| Tipo de pago | *02 - Pago al exterior* (o *01 - Pago local* si se pagó en Ecuador) |
+| País donde se efectuó el pago | País de la tabla del SRI |
+| Aplica convenio de doble tributación | SI / NO |
+| Sujeto a retención según norma legal | SI / NO |
+
+Con pago al exterior los tres datos son obligatorios: sin ellos no se guarda y la
+subpestaña muestra un **!**. El **ATS** los reporta en el bloque *pago al
+exterior* de la liquidación; con pago local van como *NA*.
+
+> La compra de **bienes** al exterior no se respalda con liquidación: es una
+> importación y se sustenta con la declaración aduanera. Las retenciones de IVA y
+> de renta del pago al exterior se emiten desde la pestaña **Retenciones**, con
+> los porcentajes que indique su contador.
 
 ## Cómo se emite
 
@@ -354,6 +388,12 @@ la operación de inmediato.
 
 ## Historial de cambios
 
+- **1.26** — **Proveedores del exterior**: el buscador de proveedor ahora muestra
+  también a los proveedores con **identificación del exterior** (antes solo
+  cédula y pasaporte, aunque el SRI los acepta). Nueva subpestaña **Pago al
+  exterior** (tipo de pago, país, convenio de doble tributación y sujeción a
+  retención), que el **ATS** reporta en la liquidación; antes toda liquidación se
+  declaraba como pago local.
 - **1.25** — La retención de una liquidación solo se puede emitir cuando la
   liquidación ya está **autorizada por el SRI**. En borrador o sin autorizar, el
   botón **Emitir Retención** queda inhabilitado con el motivo a la vista, y el

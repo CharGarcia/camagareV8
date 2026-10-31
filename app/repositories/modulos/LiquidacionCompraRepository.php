@@ -438,10 +438,13 @@ class LiquidacionCompraRepository extends BaseRepository
                     id_sustento_tributario, fecha_emision, establecimiento, punto_emision, secuencial,
                     total_sin_impuestos, total_descuento, importe_total,
                     moneda, estado, observaciones, created_by, updated_by,
-                    tipo_ambiente, tipo_emision, clave_acceso
+                    tipo_ambiente, tipo_emision, clave_acceso,
+                    pago_loc_ext, cod_pais_pago, aplic_conv_dob_trib, pag_ext_suj_ret_nor_leg
                 ) VALUES (
-                    ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
+                    ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
                 ) RETURNING id";
+
+        $pagoExt = $this->paramsPagoExterior($data);
 
         $params = [
             (int) $data['id_empresa'],
@@ -464,7 +467,11 @@ class LiquidacionCompraRepository extends BaseRepository
             (int) $data['id_usuario'],
             $data['tipo_ambiente'] ?? null,
             $data['tipo_emision'] ?? null,
-            $data['clave_acceso'] ?? null
+            $data['clave_acceso'] ?? null,
+            $pagoExt['pago_loc_ext'],
+            $pagoExt['cod_pais_pago'],
+            $pagoExt['aplic_conv_dob_trib'],
+            $pagoExt['pag_ext_suj_ret_nor_leg'],
         ];
 
         return (int) $this->query($sql, $params)->fetchColumn();
@@ -478,8 +485,11 @@ class LiquidacionCompraRepository extends BaseRepository
                     punto_emision = ?, secuencial = ?, total_sin_impuestos = ?, 
                     total_descuento = ?, importe_total = ?, 
                     observaciones = ?, updated_by = ?, updated_at = NOW(),
-                    tipo_ambiente = ?, tipo_emision = ?, clave_acceso = ?
+                    tipo_ambiente = ?, tipo_emision = ?, clave_acceso = ?,
+                    pago_loc_ext = ?, cod_pais_pago = ?, aplic_conv_dob_trib = ?, pag_ext_suj_ret_nor_leg = ?
                 WHERE id = ? AND id_empresa = ? AND eliminado = false";
+
+        $pagoExt = $this->paramsPagoExterior($data);
 
         $params = [
             (int)   $data['id_establecimiento'],
@@ -498,11 +508,56 @@ class LiquidacionCompraRepository extends BaseRepository
                     $data['tipo_ambiente'] ?? null,
                     $data['tipo_emision'] ?? null,
                     $data['clave_acceso'] ?? null,
+                    $pagoExt['pago_loc_ext'],
+                    $pagoExt['cod_pais_pago'],
+                    $pagoExt['aplic_conv_dob_trib'],
+                    $pagoExt['pag_ext_suj_ret_nor_leg'],
             $id,
             (int)   $data['id_empresa']
         ];
 
         $this->query($sql, $params);
+    }
+
+    /**
+     * Bloque <pagoExterior> del ATS normalizado para guardar (mismo criterio que
+     * ComprasRepository). Con pago local ('01') los otros tres quedan en NULL: el
+     * ATS los reporta como "NA". Un `$data` sin estas claves (registro automático
+     * desde XML) cae en pago local.
+     *
+     * @return array{pago_loc_ext:string, cod_pais_pago:?string,
+     *               aplic_conv_dob_trib:?string, pag_ext_suj_ret_nor_leg:?string}
+     */
+    private function paramsPagoExterior(array $data): array
+    {
+        $esExterior = ($data['pago_loc_ext'] ?? '01') === '02';
+
+        return [
+            'pago_loc_ext'            => $esExterior ? '02' : '01',
+            'cod_pais_pago'           => $esExterior ? (($data['cod_pais_pago'] ?? '') ?: null) : null,
+            'aplic_conv_dob_trib'     => $esExterior ? (($data['aplic_conv_dob_trib'] ?? '') ?: null) : null,
+            'pag_ext_suj_ret_nor_leg' => $esExterior ? (($data['pag_ext_suj_ret_nor_leg'] ?? '') ?: null) : null,
+        ];
+    }
+
+    /**
+     * Buscador de proveedor del modal: solo los tipos de identificación a los que
+     * se puede emitir una liquidación de compra — cédula (05), pasaporte (06) e
+     * identificación del exterior (08). Debe coincidir con
+     * LiquidacionCompraRules::validarTipoIdentificacionProveedor().
+     */
+    public function buscarProveedoresLiquidables(int $idEmpresa, string $buscar): array
+    {
+        $sql = "SELECT p.id, p.razon_social AS nombre, p.identificacion,
+                       p.tipo_id_proveedor AS tipo_id, p.email
+                FROM proveedores p
+                WHERE p.id_empresa = ? AND p.eliminado = false
+                  AND LPAD(TRIM(p.tipo_id_proveedor), 2, '0') IN ('05', '06', '08')
+                  AND (p.razon_social ILIKE ? OR p.identificacion ILIKE ?)
+                ORDER BY p.razon_social ASC, p.id ASC
+                LIMIT 15";
+        $like = '%' . $buscar . '%';
+        return $this->query($sql, [$idEmpresa, $like, $like])->fetchAll(\PDO::FETCH_ASSOC);
     }
 
     public function deleteDetalles(int $idCabecera): void

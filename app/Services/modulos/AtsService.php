@@ -1072,9 +1072,9 @@ class AtsService
      * se reportan como "NA" cuando el pago es local, que es como el SRI espera
      * un bloque de pago nacional.
      *
-     * Los datos se capturan en la pestaña "Pago al exterior" del módulo Compras.
-     * Un documento anterior a esos campos (o una liquidación de compra) llega sin
-     * ellos y se reporta como pago local, igual que antes.
+     * Los datos se capturan en la pestaña "Pago al exterior" del módulo Compras y
+     * en la subpestaña del mismo nombre de Liquidaciones de Compra. Un documento
+     * anterior a esos campos llega sin ellos y se reporta como pago local.
      *
      * @return array{pagoLocExt:string, paisEfecPago:string,
      *               aplicConvDobTrib:string, pagExtSujRetNorLeg:string}

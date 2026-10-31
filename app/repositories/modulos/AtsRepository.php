@@ -176,12 +176,13 @@ class AtsRepository extends BaseRepository
                        l.importe_total,
                        false AS parte_relacionada,
                        NULL  AS documento_modificado,
-                       -- Las liquidaciones de compra las emite la propia empresa en
-                       -- Ecuador: el pago siempre es local, no hay campos que leer.
-                       '01'  AS pago_loc_ext,
-                       NULL  AS cod_pais_pago,
-                       NULL  AS aplic_conv_dob_trib,
-                       NULL  AS pag_ext_suj_ret_nor_leg,
+                       -- Pago al exterior: servicios de un no residente (proveedor
+                       -- con identificación del exterior). Una liquidación anterior a
+                       -- estos campos queda en NULL y se reporta como pago local.
+                       COALESCE(l.pago_loc_ext, '01') AS pago_loc_ext,
+                       l.cod_pais_pago,
+                       l.aplic_conv_dob_trib,
+                       l.pag_ext_suj_ret_nor_leg,
                        p.tipo_id_proveedor,
                        p.identificacion AS prov_identificacion,
                        p.razon_social   AS prov_razon_social,

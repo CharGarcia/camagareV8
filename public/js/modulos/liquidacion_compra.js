@@ -100,6 +100,10 @@
         initSortableHeaders();
         initProviderSearch();
 
+        ['liq-pago-loc-ext', ...LC_IDS_PAGO_EXT].forEach(id => {
+            document.getElementById(id)?.addEventListener('change', lcSincronizarPagoExterior);
+        });
+
         // Escuchar cuando se guarda un proveedor desde el modal compartido
         document.addEventListener('proveedorGuardado', (e) => {
             const res = e.detail;
@@ -111,6 +115,7 @@
                     id: res.id,
                     nombre: res.nombre || res.data.razon_social || res.data.nombre,
                     identificacion: res.data.identificacion,
+                    tipo_id: res.data.tipo_id_proveedor,
                     email: res.data.email
                 });
             }
@@ -264,6 +269,7 @@
         document.getElementById('liq-id').value = '';
         document.getElementById('liq-id-proveedor').value = '';
         document.getElementById('search-proveedor').value = '';
+        lcCargarPagoExterior({});
         document.getElementById('tituloModalLiq').textContent = 'Nueva Liquidación de Compras y Servicios';
         liqResetSri();
 
@@ -393,6 +399,10 @@
         const btnSri = document.getElementById('btnEnviarSri');
         if (btnSri) btnSri.style.display = (estado === 'autorizado') ? 'none' : '';
 
+        // Pago al exterior: respeta el bloqueo y, si no lo hay, la dependencia
+        // tipo de pago → país/convenio/retención.
+        lcSincronizarPagoExterior();
+
         // Eliminar: solo con la liquidación ya guardada y en BORRADOR (un comprobante
         // emitido se anula, no se borra). El botón no existe si el usuario no tiene
         // permiso de eliminar (lo condiciona la vista).
@@ -488,6 +498,7 @@
         document.getElementById('liq-id-proveedor').value = cab.id_proveedor;
         document.getElementById('search-proveedor').value = cab.proveedor_nombre || '';
         document.getElementById('liq-sustento').value = cab.id_sustento_tributario || '';
+        lcCargarPagoExterior(cab);
 
         // Poblar datos SRI
         liqPoblarSri(cab);
@@ -824,6 +835,7 @@
             id_sustento_tributario: document.getElementById('liq-sustento')?.value || '',
             fecha_emision: document.getElementById('liq-fecha')?.value || '',
             id_punto_emision: document.getElementById('liq-punto')?.value || '',
+            pago_exterior: lcRecolectarPagoExterior(),
             detalles: [],
             pagos: [],
             info_adicional: []
@@ -934,6 +946,8 @@
         infoAdicional = (estado.info_adicional || []).map(ia => ({ nombre: ia.nombre, valor: ia.valor }));
         renderInfoAdicional();
 
+        lcCargarPagoExterior(estado.pago_exterior || {});
+
         LC_calcTotales();
     }
 
@@ -997,6 +1011,15 @@
         document.getElementById('search-proveedor').value = p.nombre;
         document.getElementById('dropdown-proveedores').classList.add('d-none');
 
+        // Proveedor con identificación del exterior (08): servicios de un no
+        // residente → sugerir pago al exterior. El pasaporte (06) no se sugiere:
+        // suele ser una persona que vende o presta el servicio en el país.
+        if (String(p.tipo_id || '').padStart(2, '0') === '08'
+            && document.getElementById('liq-pago-loc-ext').value !== '02') {
+            document.getElementById('liq-pago-loc-ext').value = '02';
+        }
+        lcSincronizarPagoExterior();
+
         // Automatización del correo
         const container = document.getElementById('container-info-adicional');
         if (container) {
@@ -1014,6 +1037,77 @@
         if (firstDesc) {
             firstDesc.focus();
         }
+    }
+
+    // =====================================================================
+    // PAGO AL EXTERIOR — bloque <pagoExterior> del ATS
+    //
+    // Con pago local (01) país/convenio/retención se reportan como "NA" y aquí
+    // quedan deshabilitados; con pago al exterior (02) son obligatorios y
+    // LiquidacionCompraRules los verifica en el servidor. Mismo criterio que Compras.
+    // =====================================================================
+
+    const LC_IDS_PAGO_EXT = ['liq-cod-pais-pago', 'liq-aplic-conv-dob-trib', 'liq-pag-ext-suj-ret'];
+
+    /** Habilita los campos dependientes y marca la pestaña si falta algo. */
+    function lcSincronizarPagoExterior() {
+        const sel = document.getElementById('liq-pago-loc-ext');
+        if (!sel) return;
+        const esExterior = sel.value === '02';
+        const campos = LC_IDS_PAGO_EXT.map(id => document.getElementById(id));
+
+        sel.disabled = LC_BLOQUEADO;
+        campos.forEach(el => {
+            if (!esExterior) el.value = '';
+            el.disabled = LC_BLOQUEADO || !esExterior;
+        });
+
+        const incompleto = esExterior && campos.some(el => !el.value);
+        document.getElementById('liq-badge-pago-exterior')?.classList.toggle('d-none', !incompleto);
+    }
+
+    /** Vuelca en el formulario el pago al exterior de una liquidación (o lo limpia). */
+    function lcCargarPagoExterior(d) {
+        document.getElementById('liq-pago-loc-ext').value        = d.pago_loc_ext === '02' ? '02' : '01';
+        document.getElementById('liq-cod-pais-pago').value       = d.cod_pais_pago || '';
+        document.getElementById('liq-aplic-conv-dob-trib').value = d.aplic_conv_dob_trib || '';
+        document.getElementById('liq-pag-ext-suj-ret').value     = d.pag_ext_suj_ret_nor_leg || '';
+        lcSincronizarPagoExterior();
+    }
+
+    /** Campos del pago al exterior para el payload de guardado. */
+    function lcRecolectarPagoExterior() {
+        const esExterior = document.getElementById('liq-pago-loc-ext').value === '02';
+        return {
+            pago_loc_ext:            esExterior ? '02' : '01',
+            cod_pais_pago:           esExterior ? document.getElementById('liq-cod-pais-pago').value : '',
+            aplic_conv_dob_trib:     esExterior ? document.getElementById('liq-aplic-conv-dob-trib').value : '',
+            pag_ext_suj_ret_nor_leg: esExterior ? document.getElementById('liq-pag-ext-suj-ret').value : '',
+        };
+    }
+
+    /**
+     * Avisa antes de enviar si el pago al exterior está incompleto (el servidor lo
+     * rechaza igual; esto ahorra el viaje y abre la subpestaña). false = corregir.
+     */
+    function lcValidarPagoExterior() {
+        if (document.getElementById('liq-pago-loc-ext').value !== '02') return true;
+
+        const faltantes = [
+            ['liq-cod-pais-pago',       'el país donde se efectuó el pago'],
+            ['liq-aplic-conv-dob-trib', 'si aplica convenio de doble tributación'],
+            ['liq-pag-ext-suj-ret',     'si está sujeto a retención según la norma legal'],
+        ].filter(([id]) => !document.getElementById(id).value).map(([, texto]) => texto);
+
+        if (!faltantes.length) return true;
+
+        const msg = `La liquidación está marcada como pago al exterior. Falta indicar ${faltantes.join(', ')} (subpestaña «Pago al exterior»).`;
+        if (typeof Swal !== 'undefined') Swal.fire('Pago al exterior', msg, 'warning');
+        else alert(msg);
+
+        const tab = document.getElementById('liq-tab-pago-exterior');
+        if (tab && window.bootstrap) bootstrap.Tab.getOrCreateInstance(tab).show();
+        return false;
     }
 
     function syncSecuencialFn(idPunto) {
@@ -1201,6 +1295,8 @@
             return;
         }
 
+        if (!lcValidarPagoExterior()) return;
+
         // Recolectar info adicional
         const infoDom = [];
         document.querySelectorAll('#container-info-adicional .row-info-extra').forEach(div => {
@@ -1228,6 +1324,7 @@
             total_sin_impuestos: document.getElementById('liq-lbl-subtotal').innerText,
             total_descuento: document.getElementById('liq-lbl-descuento').innerText,
             importe_total: document.getElementById('liq-lbl-total').innerText,
+            ...lcRecolectarPagoExterior(),
             detalles: detallesDom,
             pagos: pagosDom,
             info_adicional: infoDom

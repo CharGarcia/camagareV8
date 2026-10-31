@@ -122,6 +122,7 @@ class LiquidacionCompraController extends BaseModuloController
             'formasPago'          => $this->repository->getFormasPago(),
             'tarifasIva'          => $this->repository->getTarifasIva(),
             'sustentos'           => $this->repository->getSustentosTributarios(),
+            'paisesSri'           => \App\Helpers\CatalogoPaisesSri::ordenados(),
             'puntos'              => $puntos,
             'permRetencion'       => $permRetencion,
             'puntosRetencion'     => $puntosRetencion,
@@ -371,24 +372,9 @@ class LiquidacionCompraController extends BaseModuloController
         $idEmpresa = (int) $_SESSION['id_empresa'];
         $buscar = trim($_GET['q'] ?? '');
 
-        // Búsqueda filtrada: Solo Cédula (02) y Pasaporte (03) en este sistema
-        $db = \App\core\Database::getConnection();
-        $sql = "SELECT p.id, p.razon_social as nombre, p.identificacion, p.tipo_id_proveedor as tipo_id, p.email 
-                FROM proveedores p
-                LEFT JOIN identificador_comprador_vendedor icv ON icv.codigo = p.tipo_id_proveedor AND icv.tipo = 1
-                WHERE p.id_empresa = ? AND p.eliminado = false 
-                  AND (
-                    p.tipo_id_proveedor IN ('05', '5', '06', '6') 
-                    OR icv.nombre ILIKE '%CEDULA%' 
-                    OR icv.nombre ILIKE '%CÉDULA%' 
-                    OR icv.nombre ILIKE '%PASAPORTE%'
-                  )
-                  AND (p.razon_social ILIKE ? OR p.identificacion ILIKE ?)
-                ORDER BY p.razon_social ASC LIMIT 15";
-
-        $st = $db->prepare($sql);
-        $st->execute([$idEmpresa, "%$buscar%", "%$buscar%"]);
-        $result = $st->fetchAll();
+        // Solo proveedores a los que se puede emitir liquidación: cédula, pasaporte
+        // o identificación del exterior (mismos tipos que LiquidacionCompraRules).
+        $result = $this->repository->buscarProveedoresLiquidables($idEmpresa, $buscar);
 
         echo json_encode(['ok' => true, 'data' => $result]);
         exit;

@@ -510,6 +510,7 @@ $pestanasConfigLiq = array_merge(
                                                 <li class="nav-item"><button class="nav-link active py-1 px-3 small" data-bs-toggle="tab" data-bs-target="#subtab-info-extra" type="button">Info. Adicional</button></li>
                                                 <li class="nav-item"><button class="nav-link py-1 px-3 small" data-bs-toggle="tab" data-bs-target="#subtab-pagos-sri" type="button">Pagos SRI</button></li>
                                                 <li class="nav-item"><button class="nav-link py-1 px-3 small" data-bs-toggle="tab" data-bs-target="#subtab-sustento" type="button">Sustento Tributario</button></li>
+                                                <li class="nav-item"><button class="nav-link py-1 px-3 small" data-bs-toggle="tab" data-bs-target="#subtab-pago-exterior" type="button" id="liq-tab-pago-exterior">Pago al exterior <span id="liq-badge-pago-exterior" class="badge bg-warning text-dark ms-1 d-none" title="Datos de pago al exterior incompletos">!</span></button></li>
                                             </ul>
                                             <div class="tab-content border rounded p-2 bg-light" style="min-height: 140px;">
                                                 <!-- Info Extra -->
@@ -546,6 +547,50 @@ $pestanasConfigLiq = array_merge(
                                                             <option value="<?= $s['id'] ?>"><?= $s['codigo'] ?> - <?= htmlspecialchars($s['nombre']) ?></option>
                                                         <?php endforeach; ?>
                                                     </select>
+                                                </div>
+                                                <!-- Pago al exterior: bloque <pagoExterior> del ATS. Se usa al
+                                                     pagar servicios de un no residente (proveedor con
+                                                     identificación del exterior); con pago local el anexo
+                                                     reporta "NA" en los tres campos dependientes. -->
+                                                <div class="tab-pane fade" id="subtab-pago-exterior">
+                                                    <div class="row g-2">
+                                                        <div class="col-md-5">
+                                                            <label for="liq-pago-loc-ext" class="x-small text-muted d-block mb-1">Tipo de pago</label>
+                                                            <select class="form-select form-select-sm" id="liq-pago-loc-ext">
+                                                                <option value="01">01 - Pago local</option>
+                                                                <option value="02">02 - Pago al exterior</option>
+                                                            </select>
+                                                        </div>
+                                                        <div class="col-md-7">
+                                                            <label for="liq-cod-pais-pago" class="x-small text-muted d-block mb-1">País donde se efectuó el pago</label>
+                                                            <select class="form-select form-select-sm" id="liq-cod-pais-pago" disabled>
+                                                                <option value="">-- Seleccione --</option>
+                                                                <?php foreach (($paisesSri ?? []) as $codPais => $nombrePais): ?>
+                                                                    <option value="<?= htmlspecialchars((string) $codPais) ?>"><?= htmlspecialchars($codPais . ' - ' . $nombrePais) ?></option>
+                                                                <?php endforeach; ?>
+                                                            </select>
+                                                        </div>
+                                                        <div class="col-md-6">
+                                                            <label for="liq-aplic-conv-dob-trib" class="x-small text-muted d-block mb-1">Aplica convenio de doble tributación</label>
+                                                            <select class="form-select form-select-sm" id="liq-aplic-conv-dob-trib" disabled>
+                                                                <option value="">-- Seleccione --</option>
+                                                                <option value="SI">SI</option>
+                                                                <option value="NO">NO</option>
+                                                            </select>
+                                                        </div>
+                                                        <div class="col-md-6">
+                                                            <label for="liq-pag-ext-suj-ret" class="x-small text-muted d-block mb-1">Sujeto a retención según norma legal</label>
+                                                            <select class="form-select form-select-sm" id="liq-pag-ext-suj-ret" disabled>
+                                                                <option value="">-- Seleccione --</option>
+                                                                <option value="SI">SI</option>
+                                                                <option value="NO">NO</option>
+                                                            </select>
+                                                        </div>
+                                                    </div>
+                                                    <div class="x-small text-muted mt-2">
+                                                        Servicios de un no residente (proveedor con identificación del exterior):
+                                                        el ATS los declara como pago al exterior.
+                                                    </div>
                                                 </div>
                                             </div>
                                         </div>

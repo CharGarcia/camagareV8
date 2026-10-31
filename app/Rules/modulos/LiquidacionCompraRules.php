@@ -50,10 +50,40 @@ class LiquidacionCompraRules
             throw new \Exception('Debe ingresar al menos una forma de pago.');
         }
 
-        // Validar tipo de identificación del proveedor (Cédula 05 o Pasaporte 06)
+        // Validar tipo de identificación del proveedor (Cédula 05, Pasaporte 06 o Exterior 08)
         $this->validarTipoIdentificacionProveedor((int)$data['id_proveedor'], (int)$data['id_empresa']);
 
+        $this->validarPagoExterior($data);
+
         $this->validarFichaTecnicaSri($data);
+    }
+
+    /**
+     * Bloque <pagoExterior> del ATS (mismo criterio que ComprasRules). Solo se
+     * valida cuando la liquidación se marcó como pago al exterior —servicios de un
+     * no residente—: el SRI exige país, convenio de doble tributación y sujeción a
+     * retención. Con pago local el anexo los reporta como "NA".
+     */
+    private function validarPagoExterior(array $data): void
+    {
+        if (($data['pago_loc_ext'] ?? '01') !== '02') {
+            return;
+        }
+
+        $pais = trim((string) ($data['cod_pais_pago'] ?? ''));
+        if ($pais === '') {
+            throw new \Exception('Indique el país donde se efectuó el pago al exterior.');
+        }
+        if (!\App\Helpers\CatalogoPaisesSri::existe($pais)) {
+            throw new \Exception('El país del pago al exterior no corresponde a la tabla de países del SRI.');
+        }
+
+        if (!in_array((string) ($data['aplic_conv_dob_trib'] ?? ''), ['SI', 'NO'], true)) {
+            throw new \Exception('Indique si al pago al exterior se le aplica convenio de doble tributación.');
+        }
+        if (!in_array((string) ($data['pag_ext_suj_ret_nor_leg'] ?? ''), ['SI', 'NO'], true)) {
+            throw new \Exception('Indique si el pago al exterior está sujeto a retención según la norma legal.');
+        }
     }
 
     /**
