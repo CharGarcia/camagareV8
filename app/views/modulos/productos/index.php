@@ -205,6 +205,11 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                 <?= \App\Helpers\PreferenciasHelper::renderDropdownColumnas($columnasTabla, $vistaConfig ?? [], $rutaModulo) ?>
                 <a id="btnExportPdf" href="<?= $urlBaseProd ?>/export-pdf?b=<?= urlencode($buscar) ?>&orden=<?= urlencode($ordenParam ?? '') ?>" class="btn btn-outline-danger" title="Descargar PDF"><i class="bi bi-file-earmark-pdf"></i><span class="d-none d-md-inline"> PDF</span></a>
                 <a id="btnExportExcel" href="<?= $urlBaseProd ?>/export-excel?b=<?= urlencode($buscar) ?>&orden=<?= urlencode($ordenParam ?? '') ?>" class="btn btn-outline-success" title="Descargar Excel"><i class="bi bi-file-earmark-spreadsheet"></i><span class="d-none d-md-inline"> Excel</span></a>
+                <?php if (!empty($puedeIvaTemporal)): ?>
+                    <button type="button" class="btn btn-outline-primary" onclick="abrirModalIvaTemporal()" title="Cambiar temporalmente la tarifa de IVA de los productos (IVA 8% en feriados)">
+                        <i class="bi bi-percent"></i><span class="d-none d-md-inline"> IVA temporal</span>
+                    </button>
+                <?php endif; ?>
                 <?php if (!empty($perm['actualizar'])): ?>
                     <button type="button" class="btn btn-outline-primary" onclick="actualizarCostosMasivo()" title="Recalcula el costo de todos los productos inventariables desde el Kardex">
                         <i class="bi bi-arrow-repeat"></i> Actualizar Costos
@@ -341,6 +346,10 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
 <script src="<?= $base ?>/js/modulos/productos_modal.js?v=<?= asset_ver('/js/modulos/productos_modal.js') ?>"></script>
 <script src="<?= $base ?>/js/modulos/categorias_modal.js?v=<?= asset_ver('/js/modulos/categorias_modal.js') ?>"></script>
 <script src="<?= $base ?>/js/modulos/marcas_modal.js?v=<?= asset_ver('/js/modulos/marcas_modal.js') ?>"></script>
+<?php if (!empty($puedeIvaTemporal)): ?>
+    <?php include 'modal_iva_temporal.php'; ?>
+    <script src="<?= $base ?>/js/modulos/productos_iva_temporal.js?v=<?= asset_ver('/js/modulos/productos_iva_temporal.js') ?>"></script>
+<?php endif; ?>
 
 <script>
     (function() {

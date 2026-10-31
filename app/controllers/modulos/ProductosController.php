@@ -92,7 +92,140 @@ class ProductosController extends BaseModuloController
             'fullWidth'  => true,
             // Selects del modal de filtros: solo valores que la empresa usa en sus productos.
             'opcionesFiltro' => $this->service->getOpcionesFiltroListado($idEmpresa),
+            // Botón "Cambio temporal de IVA": solo empresas de turismo y administradores.
+            'puedeIvaTemporal' => $this->puedeIvaTemporal($idEmpresa),
         ]);
+    }
+
+    // ── Cambio temporal de IVA (empresas de turismo — IVA 8% en feriados) ──────
+
+    /**
+     * Empresa marcada como de turismo (lo decide el superadmin) + usuario que puede
+     * actualizar productos y administra la empresa: nivel 2/3 o acceso total.
+     */
+    private function puedeIvaTemporal(int $idEmpresa): bool
+    {
+        $perm = $this->getPermisos();
+        if (empty($perm['actualizar'])) {
+            return false;
+        }
+        if ((int) ($_SESSION['nivel'] ?? 1) < 2 && empty($perm['todo'])) {
+            return false;
+        }
+        try {
+            return \App\Services\modulos\IvaCambioTemporalService::crear()->disponible($idEmpresa);
+        } catch (\Throwable $e) {
+            return false;
+        }
+    }
+
+    private function requireIvaTemporal(): void
+    {
+        $this->requireActualizar();
+        if (!$this->puedeIvaTemporal((int) $_SESSION['id_empresa'])) {
+            http_response_code(403);
+            header('Content-Type: application/json');
+            echo json_encode(['ok' => false, 'error' => 'El cambio temporal de IVA solo está disponible para administradores de empresas de turismo.']);
+            exit;
+        }
+    }
+
+    /** Tarifas con su conteo de productos e historial de cambios de la empresa. */
+    public function ivaTemporalDatosAjax(): void
+    {
+        $this->requireIvaTemporal();
+        $idEmpresa = (int) $_SESSION['id_empresa'];
+        $this->liberarSesion();
+        header('Content-Type: application/json');
+        try {
+            $datos = \App\Services\modulos\IvaCambioTemporalService::crear()->datosModal($idEmpresa);
+            foreach ($datos['historial'] as &$h) {
+                $h['created_at']    = !empty($h['created_at']) ? date('d-m-Y H:i:s', strtotime($h['created_at'])) : '';
+                $h['aplicado_at']   = !empty($h['aplicado_at']) ? date('d-m-Y H:i:s', strtotime($h['aplicado_at'])) : '';
+                $h['restaurado_at'] = !empty($h['restaurado_at']) ? date('d-m-Y H:i:s', strtotime($h['restaurado_at'])) : '';
+            }
+            unset($h);
+            echo json_encode(['ok' => true] + $datos);
+        } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
+            echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
+        }
+        exit;
+    }
+
+    /** Productos afectados por un cambio (tarifa anterior, aplicada y la de hoy). */
+    public function ivaTemporalDetalleAjax(): void
+    {
+        $this->requireIvaTemporal();
+        $idEmpresa = (int) $_SESSION['id_empresa'];
+        $this->liberarSesion();
+        header('Content-Type: application/json');
+        try {
+            $rows = \App\Services\modulos\IvaCambioTemporalService::crear()
+                ->getDetalle((int) ($_GET['id'] ?? 0), $idEmpresa);
+            echo json_encode(['ok' => true, 'rows' => $rows]);
+        } catch (\Throwable $e) {
+            echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
+        }
+        exit;
+    }
+
+    public function ivaTemporalProgramarAjax(): void
+    {
+        $this->requireIvaTemporal();
+        header('Content-Type: application/json');
+        $idEmpresa = (int) $_SESSION['id_empresa'];
+        $idUsuario = (int) $_SESSION['id_usuario'];
+        try {
+            $res = \App\Services\modulos\IvaCambioTemporalService::crear()->programar([
+                'id_tarifa_actual' => $_POST['id_tarifa_actual'] ?? 0,
+                'id_tarifa_nueva'  => $_POST['id_tarifa_nueva'] ?? 0,
+                'aplica_a'         => $_POST['aplica_a'] ?? '',
+                'fecha_desde'      => $_POST['fecha_desde'] ?? '',
+                'fecha_hasta'      => $_POST['fecha_hasta'] ?? '',
+                'observaciones'    => $_POST['observaciones'] ?? '',
+            ], $idEmpresa, $idUsuario);
+            $msg = $res['estado'] === 'aplicado'
+                ? "Cambio aplicado: {$res['total_productos']} producto(s) ya tienen la tarifa nueva."
+                : 'Cambio programado. Se aplicará automáticamente en la fecha desde.';
+            echo json_encode(['ok' => true, 'msg' => $msg] + $res);
+        } catch (\Throwable $e) {
+            echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
+        }
+        exit;
+    }
+
+    public function ivaTemporalCancelarAjax(): void
+    {
+        $this->requireIvaTemporal();
+        header('Content-Type: application/json');
+        try {
+            \App\Services\modulos\IvaCambioTemporalService::crear()
+                ->cancelar((int) ($_POST['id'] ?? 0), (int) $_SESSION['id_empresa'], (int) $_SESSION['id_usuario']);
+            echo json_encode(['ok' => true, 'msg' => 'Cambio cancelado. Los productos no se modificaron.']);
+        } catch (\Throwable $e) {
+            echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
+        }
+        exit;
+    }
+
+    public function ivaTemporalRestaurarAjax(): void
+    {
+        $this->requireIvaTemporal();
+        header('Content-Type: application/json');
+        try {
+            $res = \App\Services\modulos\IvaCambioTemporalService::crear()
+                ->restaurarAhora((int) ($_POST['id'] ?? 0), (int) $_SESSION['id_empresa'], (int) $_SESSION['id_usuario']);
+            $msg = "Tarifa restaurada en {$res['restaurados']} producto(s).";
+            if ($res['omitidos'] > 0) {
+                $msg .= " {$res['omitidos']} no se tocaron porque su tarifa se cambió a mano durante el período.";
+            }
+            echo json_encode(['ok' => true, 'msg' => $msg] + $res);
+        } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
+            echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
+        }
+        exit;
     }
 
     /**

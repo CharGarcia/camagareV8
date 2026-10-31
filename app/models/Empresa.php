@@ -150,6 +150,12 @@ class Empresa extends BaseModel
         $selRegalia = $conRegalia
             ? "COALESCE(e.sin_cobro_suscripcion, false) AS sin_cobro_suscripcion, e.sin_cobro_motivo, e.sin_cobro_hasta, {$exprRegalia} AS regalia_vigente,"
             : "false AS sin_cobro_suscripcion, NULL AS sin_cobro_motivo, NULL AS sin_cobro_hasta, 'no' AS regalia_vigente,";
+        // Empresa de turismo (IVA 8% en feriados): columna opcional hasta aplicar
+        // database/2026-10-31_iva_cambios_temporales.sql.
+        $conTurismo = $this->tieneColumnaTurismo();
+        $selTurismo = $conTurismo
+            ? "COALESCE(e.es_empresa_turismo, 'false') AS es_empresa_turismo,"
+            : "'false' AS es_empresa_turismo,";
         // Las claves de MAPA_ORDEN que apuntan a estos alias se resuelven aquí.
         $orderBy = strtr($orderBy, ['usuarios_asignados' => $exprUsuarios, 'doc_estado' => $exprDocEstado]);
 
@@ -204,6 +210,7 @@ class Empresa extends BaseModel
                 'controladora'  => $this->exprSituacionControladora(),
                 'id_administradora' => 'e.id_empresa_suscripciones',
                 'operadora'     => "CASE WHEN COALESCE(e.factura_operadora_transporte, 'false') = 'true' THEN 'si' ELSE 'no' END",
+                'turismo'       => $conTurismo ? "CASE WHEN COALESCE(e.es_empresa_turismo, 'false') = 'true' THEN 'si' ELSE 'no' END" : "'no'",
                 'cupo_lleno'    => "CASE WHEN {$exprUsuarios} >= COALESCE(e.max_usuarios, 3) THEN 'si' ELSE 'no' END",
             ],
             'fecha' => [
@@ -229,6 +236,7 @@ class Empresa extends BaseModel
                 e.id_cliente_facturado,
                 e.id_suscripcion,
                 {$selRegalia}
+                {$selTurismo}
                 COALESCE(e.factura_operadora_transporte, 'false') AS factura_operadora_transporte,
                 COALESCE(NULLIF(ctrl.nombre_comercial,''), ctrl.nombre) AS ctrl_nombre, ctrl.ruc AS ctrl_ruc, ctrl.establecimiento AS ctrl_estab,
                 cli.nombre AS cli_nombre, cli.identificacion AS cli_identificacion,
@@ -505,6 +513,12 @@ class Empresa extends BaseModel
         $this->execute($sql);
         $id = $this->lastInsertId('empresas_id_seq');
 
+        // Empresa de turismo: aparte del INSERT porque la columna es opcional hasta
+        // aplicar database/2026-10-31_iva_cambios_temporales.sql.
+        if ($this->tieneColumnaTurismo() && $this->esValorVerdadero($data['es_empresa_turismo'] ?? null)) {
+            $this->execute("UPDATE empresas SET es_empresa_turismo = 'true' WHERE id = " . (int) $id);
+        }
+
         // Insertar establecimiento por defecto en la nueva tabla
         $estCod = $this->escape($establecimiento);
         $estNom = ($nombreComercial !== '') ? $nombreComercial : $nombre;
@@ -604,6 +618,12 @@ class Empresa extends BaseModel
         $campos = ['nombre', 'nombre_comercial', 'ruc', 'establecimiento', 'direccion', 'telefono', 'mail', 'nom_rep_legal', 'ced_rep_legal', 'cod_prov', 'cod_ciudad', 'nombre_contador', 'ruc_contador', 'estado', 'valor_cobro', 'periodo_vigencia_desde', 'periodo_vigencia_hasta', 'estado_pago', 'obligado_contabilidad', 'max_usuarios', 'id_empresa_suscripciones', 'es_administradora_suscripciones', 'id_cliente_facturado', 'id_suscripcion', 'factura_operadora_transporte'];
         if ($this->tieneColumnasRegalia()) {
             $campos = array_merge($campos, ['sin_cobro_suscripcion', 'sin_cobro_motivo', 'sin_cobro_hasta']);
+        }
+        if ($this->tieneColumnaTurismo()) {
+            $campos[] = 'es_empresa_turismo';
+            if (array_key_exists('es_empresa_turismo', $data)) {
+                $data['es_empresa_turismo'] = $this->esValorVerdadero($data['es_empresa_turismo']) ? 'true' : 'false';
+            }
         }
         foreach ($campos as $c) {
             if (array_key_exists($c, $data)) {
@@ -802,6 +822,43 @@ class Empresa extends BaseModel
     }
 
     /** Datos de regalía de una empresa (para auditar el cambio). Vacío si no hay columnas. */
+    /** Cache por request: ¿ya se aplicó la migración de empresa de turismo? */
+    private static ?bool $colTurismo = null;
+
+    /**
+     * ¿Existe la columna es_empresa_turismo? Mientras no se aplique
+     * database/2026-10-31_iva_cambios_temporales.sql, la empresa se trata como
+     * no turística y el guardado ignora el switch.
+     */
+    public function tieneColumnaTurismo(): bool
+    {
+        if (self::$colTurismo === null) {
+            try {
+                $r = $this->query(
+                    "SELECT 1 FROM information_schema.columns
+                      WHERE table_name = 'empresas' AND column_name = 'es_empresa_turismo' LIMIT 1"
+                );
+                self::$colTurismo = !empty($r);
+            } catch (\Throwable $e) {
+                self::$colTurismo = false;
+            }
+        }
+        return self::$colTurismo;
+    }
+
+    /**
+     * ¿La empresa está marcada como de turismo? Solo así puede programar el
+     * cambio temporal de IVA (8% en feriados) en Productos.
+     */
+    public function esEmpresaTurismo(int $id): bool
+    {
+        if ($id <= 0 || !$this->tieneColumnaTurismo()) {
+            return false;
+        }
+        $r = $this->query("SELECT COALESCE(es_empresa_turismo, 'false') AS v FROM empresas WHERE id = " . (int) $id);
+        return $this->esValorVerdadero($r[0]['v'] ?? 'false');
+    }
+
     public function getRegalia(int $id): array
     {
         if (!$this->tieneColumnasRegalia()) {

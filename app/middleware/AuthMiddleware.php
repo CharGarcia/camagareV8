@@ -61,6 +61,22 @@ class AuthMiddleware
             }
         }
 
+        // Cambio temporal de IVA (empresas de turismo): respaldo del cron. Si llegó la
+        // fecha desde o pasó la fecha hasta y el cron no corrió, se aplica o restaura
+        // aquí, antes de que el usuario facture con la tarifa equivocada. Cada 5 min y,
+        // además, en la primera petición después de medianoche (cambia el día).
+        if (!empty($_SESSION['id_empresa'])) {
+            $ultimaIva = (int) ($_SESSION['_iva_temporal_last_check'] ?? 0);
+            if (time() - $ultimaIva > 300 || date('Y-m-d', $ultimaIva) !== date('Y-m-d')) {
+                $_SESSION['_iva_temporal_last_check'] = time();
+                try {
+                    \App\Services\modulos\IvaCambioTemporalService::crear()->procesarEmpresa((int) $_SESSION['id_empresa']);
+                } catch (\Throwable $e) {
+                    // Nunca bloquear la navegación por esto.
+                }
+            }
+        }
+
         return true;
     }
 
