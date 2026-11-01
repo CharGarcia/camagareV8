@@ -6,7 +6,7 @@ ruta_modulo: modulos/firmas_electronicas
 tipo: modulo
 visibilidad: admin
 etiquetas: firma electronica, nueva solicitud con estos datos, volver a pedir firma, reutilizar documentos, segunda firma del mismo cliente, solicitar una nueva firma, mismo enlace, firma para persona natural, firma para representante legal, tipo de persona de la firma, vender firmas, aviso de vencimiento al cliente, recordatorio de renovacion, renovar firma del cliente, firma por vencer, enlace de renovacion, api uanataca, uanacreditos, creditos uanataca, precompra, distribuidor uanataca, miembro de empresa, representante legal, solicitud de firma, tramite de firma, uanataca, enlace para el cliente, formulario de firma, link de firma, whatsapp, pagar firma, payphone, transferencia, comprobante de pago, confirmar correo, factura de la firma, registrar en uanataca, firma emitida, observada, corregir solicitud, enlace fijo, qr de firma, certificado, p12, caducada, por caducar, renovar firma, firma invalida, xades, anf, security data, buscar firma, filtros, firmas por facturar
-version: 3.11
+version: 3.12
 orden: 20
 estado: activo
 ---
@@ -282,6 +282,13 @@ crear otra. Las fotos de más de 1 MB se reducen antes de enviarlas.
 
 ## Reglas de negocio
 
+- **Identificación del titular** (en la ficha y en el enlace del cliente): solo
+  **Cédula** o **Pasaporte**. Con cédula solo se pueden escribir **10 dígitos**; con
+  pasaporte, letras y números hasta **20 caracteres**. Al cambiar el tipo, lo escrito
+  se ajusta (por ejemplo, al pasar de pasaporte a cédula se quitan las letras). Con
+  pasaporte no se consultan datos en el SRI. Quien tiene RUC como persona natural se
+  identifica con su cédula y activa **Firma electrónica con RUC**. El RUC sí se puede
+  usar en los datos de **facturación** (factura a otro nombre).
 - Un enlace genera **una sola** solicitud; un pago genera **una sola** factura y
   un solo cobro aunque se repita el clic o Payphone avise dos veces.
 - El cliente puede corregir sus datos y documentos mientras la solicitud está
@@ -474,6 +481,10 @@ archivo, y volver a cargar la firma no lo soluciona.
 
 ## Historial de cambios
 
+- **3.12** — Número de identificación: con cédula solo se pueden escribir 10 dígitos
+  y con pasaporte letras y números hasta 20, tanto en la ficha como en el enlace del
+  cliente (antes se podía escribir cualquier cosa y el error salía recién al guardar).
+  El enlace del cliente ya no ofrece RUC como tipo de identificación del titular.
 - **3.11** — Botón **Nueva solicitud con estos datos** (pestaña Trámite): cuando el
   cliente vuelve a pedir una firma se reutilizan sus datos y documentos; el pago
   empieza de cero. El enlace de renovación de los avisos de vencimiento también trae

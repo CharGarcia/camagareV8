@@ -301,8 +301,9 @@ class FirmaElectronicaRules
     {
         $errores = [];
         $tipoId = trim($data['tipo_identificacion'] ?? '');
-        if (!in_array($tipoId, ['cedula', 'ruc', 'pasaporte'], true)) {
-            $errores[] = 'El tipo de identificación no es válido.';
+        // Del titular: solo cédula o pasaporte (la firma con RUC de persona natural va por el interruptor con_ruc).
+        if (!in_array($tipoId, ['cedula', 'pasaporte'], true)) {
+            $errores[] = 'El tipo de identificación debe ser Cédula o Pasaporte.';
         }
 
         $numId = trim($data['numero_identificacion'] ?? '');
@@ -310,8 +311,6 @@ class FirmaElectronicaRules
             $errores[] = 'El número de identificación es obligatorio.';
         } elseif ($tipoId === 'cedula' && !preg_match('/^\d{10}$/', $numId)) {
             $errores[] = 'La cédula debe tener exactamente 10 dígitos numéricos.';
-        } elseif ($tipoId === 'ruc' && !preg_match('/^\d{13}$/', $numId)) {
-            $errores[] = 'El RUC debe tener exactamente 13 dígitos numéricos.';
         } elseif ($tipoId === 'pasaporte' && !preg_match('/^[a-zA-Z0-9]{1,20}$/', $numId)) {
             $errores[] = 'El pasaporte solo puede contener letras y números (máx. 20).';
         }

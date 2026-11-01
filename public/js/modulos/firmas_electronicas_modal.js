@@ -152,6 +152,13 @@
     const selectTipoId = document.getElementById('firma_tipo_id');
     const inputNumId   = document.getElementById('firma_num_id');
 
+    // Cédula: solo 10 dígitos. Pasaporte: letras y números, hasta 20. Se filtra al escribir o pegar.
+    function filtrarNumId(tipo, valor) {
+        return tipo === 'cedula'
+            ? String(valor).replace(/\D/g, '').slice(0, 10)
+            : String(valor).replace(/[^a-zA-Z0-9]/g, '').slice(0, 20);
+    }
+
     function ajustarTipoId(tipo) {
         if (!inputNumId) return;
         if (tipo === 'cedula') {
@@ -163,6 +170,8 @@
             inputNumId.maxLength   = 20;
             inputNumId.inputMode   = 'text';
         }
+        const limpio = filtrarNumId(tipo, inputNumId.value);
+        if (limpio !== inputNumId.value) inputNumId.value = limpio;
     }
 
     if (selectTipoId) {
@@ -178,6 +187,8 @@
             limpiarBadgeFirmaSri();
             clearTimeout(_sriDebounce);
             const tipo  = selectTipoId ? selectTipoId.value : 'cedula';
+            const limpio = filtrarNumId(tipo, this.value);
+            if (limpio !== this.value) this.value = limpio;
             const valor = this.value.trim();
             if (tipo === 'cedula' && valor.length === 10) {
                 _sriDebounce = setTimeout(() => consultarFirmaSri(valor), 700);

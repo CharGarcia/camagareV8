@@ -292,7 +292,7 @@ $nacionalidades = ['Ecuatoriana', 'Colombiana', 'Peruana', 'Venezolana', 'Cubana
                 <div class="col-12 col-sm-4">
                     <label class="form-label">Tipo <span class="req">*</span></label>
                     <select class="form-select form-select-sm" name="tipo_identificacion" id="tipo_identificacion">
-                        <?php foreach (['cedula' => 'Cédula', 'ruc' => 'RUC', 'pasaporte' => 'Pasaporte'] as $k => $lbl): ?>
+                        <?php foreach (['cedula' => 'Cédula', 'pasaporte' => 'Pasaporte'] as $k => $lbl): ?>
                             <option value="<?= $k ?>" <?= ($f['tipo_identificacion'] ?? 'cedula') === $k ? 'selected' : '' ?>><?= $lbl ?></option>
                         <?php endforeach; ?>
                     </select>
@@ -684,8 +684,8 @@ $nacionalidades = ['Ecuatoriana', 'Colombiana', 'Peruana', 'Venezolana', 'Cubana
         let ultimaSri = '';
         async function buscarTitularSri(manual) {
             const id = valor('numero_identificacion').replace(/\D/g, '');
-            if (!/^\d{10}(\d{3})?$/.test(id)) {
-                if (manual) aviso('Escriba una cédula (10 dígitos) o RUC (13 dígitos).');
+            if (document.getElementById('tipo_identificacion')?.value === 'pasaporte' || !/^\d{10}$/.test(id)) {
+                if (manual) aviso('Escriba una cédula de 10 dígitos (con pasaporte, escriba sus datos a mano).');
                 return;
             }
             if (!manual && id === ultimaSri) return;
@@ -708,8 +708,8 @@ $nacionalidades = ['Ecuatoriana', 'Colombiana', 'Peruana', 'Venezolana', 'Cubana
                         document.getElementById('cod_prov').value = d.cod_prov;
                         cargarCiudades(d.cod_prov, d.cod_ciudad || '');
                     }
-                    if (id.length === 10) document.getElementById('tipo_identificacion').value = 'cedula';
-                    else if (id.length === 13) document.getElementById('tipo_identificacion').value = 'ruc';
+                    document.getElementById('tipo_identificacion').value = 'cedula';
+                    ajustarNumId();
                     aviso('Encontramos tus datos en el SRI. Revísalos antes de continuar.', 'success');
                 } else if (manual || data.advertencia) {
                     aviso(data.advertencia || data.error || 'No se encontraron datos. Escríbalos a mano.', 'warning');
@@ -718,9 +718,30 @@ $nacionalidades = ['Ecuatoriana', 'Colombiana', 'Peruana', 'Venezolana', 'Cubana
             finally { icon.classList.remove('d-none'); loader.classList.add('d-none'); }
         }
         document.getElementById('btnBuscarSri')?.addEventListener('click', () => buscarTitularSri(true));
-        document.getElementById('numero_identificacion')?.addEventListener('input', function () {
-            const n = this.value.replace(/\D/g, '');
-            if (n.length === 10 || n.length === 13) buscarTitularSri(false);
+        // Cédula: solo 10 dígitos; pasaporte: letras y números, hasta 20.
+        // Se filtra al escribir, al pegar y al cambiar el tipo.
+        const selTipoId = document.getElementById('tipo_identificacion');
+        const inpNumId  = document.getElementById('numero_identificacion');
+        const LIMITE_ID = { cedula: 10, pasaporte: 20 };
+        function ajustarNumId() {
+            if (!selTipoId || !inpNumId) return;
+            const tipo = selTipoId.value;
+            const max  = LIMITE_ID[tipo] || 20;
+            const numerico = tipo !== 'pasaporte';
+            inpNumId.maxLength = max;
+            inpNumId.inputMode = numerico ? 'numeric' : 'text';
+            inpNumId.placeholder = tipo === 'cedula' ? '10 dígitos' : 'Letras y números';
+            const limpio = (numerico ? inpNumId.value.replace(/\D/g, '') : inpNumId.value.replace(/[^a-zA-Z0-9]/g, '')).slice(0, max);
+            if (limpio !== inpNumId.value) inpNumId.value = limpio;
+        }
+        selTipoId?.addEventListener('change', ajustarNumId);
+        ajustarNumId();
+        inpNumId?.addEventListener('input', function () {
+            ajustarNumId();
+            // Con pasaporte no se consulta al SRI.
+            if (selTipoId?.value === 'pasaporte') return;
+            const n = this.value;
+            if (n.length === 10) buscarTitularSri(false);
         });
 
         // Factura a otro nombre: nombre completo / razón social y dirección.
