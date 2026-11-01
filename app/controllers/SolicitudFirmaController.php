@@ -139,6 +139,14 @@ class SolicitudFirmaController extends Controller
         });
     }
 
+    /** «Solicitar una nueva firma» desde el enlace de una firma emitida o cancelada. */
+    public function nueva(): void
+    {
+        $this->responder(function () {
+            return ['url' => $this->service->nuevaSolicitudDesdePortal($this->token())];
+        });
+    }
+
     // ── AJAX auxiliares ───────────────────────────────────────
 
     public function ciudades(): void

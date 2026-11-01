@@ -149,6 +149,18 @@ $nacionalidades = ['Ecuatoriana', 'Colombiana', 'Peruana', 'Venezolana', 'Cubana
                 <div class="mt-1">Corrige tus datos o documentos y pulsa <b>Enviar corrección</b>.</div>
             </div>
         <?php endif; ?>
+        <?php if (!$esFijo && in_array($estado, FirmaElectronicaService::ESTADOS_PERMITEN_NUEVA_PORTAL, true)): ?>
+            <div class="border-top p-3 d-flex flex-wrap align-items-center gap-2">
+                <div class="flex-grow-1 small text-muted">
+                    <?= !empty($f['id_firma_renovacion'])
+                        ? 'Ya iniciaste una nueva solicitud de firma.'
+                        : '¿Necesitas otra firma? Usamos tus datos y documentos de esta solicitud; solo revisas y pagas.' ?>
+                </div>
+                <button type="button" class="btn btn-sm btn-success fw-semibold" id="btnNuevaSolicitud">
+                    <i class="bi bi-plus-circle me-1"></i><?= !empty($f['id_firma_renovacion']) ? 'Ver mi nueva solicitud' : 'Solicitar una nueva firma' ?>
+                </button>
+            </div>
+        <?php endif; ?>
     </div>
 <?php endif; ?>
 
@@ -850,6 +862,16 @@ $nacionalidades = ['Ecuatoriana', 'Colombiana', 'Peruana', 'Venezolana', 'Cubana
         try {
             await enviar(`${urlBase}/documentos`, new FormData());
             window.location.reload();
+        } catch (err) { aviso(err.message); ocupado(this, false); }
+    });
+
+    // Firma emitida o cancelada: pedir otra con los mismos datos y documentos (lleva a su enlace nuevo).
+    document.getElementById('btnNuevaSolicitud')?.addEventListener('click', async function () {
+        if (this.disabled) return;
+        ocupado(this, true, 'Preparando...');
+        try {
+            const data = await enviar(`${urlBase}/nueva`, new FormData());
+            window.location.href = data.url;
         } catch (err) { aviso(err.message); ocupado(this, false); }
     });
 

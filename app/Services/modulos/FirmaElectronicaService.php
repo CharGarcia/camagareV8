@@ -1926,6 +1926,28 @@ class FirmaElectronicaService
     }
 
     /**
+     * Portal: el cliente, desde el enlace de su firma emitida o cancelada, pide otra. El enlace
+     * es personal (solo lo tiene el titular), así que puede ver sus propios documentos. Si ya
+     * hay una nueva creada desde esa firma (en cualquier estado), lo lleva a esa.
+     */
+    public function nuevaSolicitudDesdePortal(string $token): string
+    {
+        [, $firma] = $this->firmaDelPortal($token);
+        if (!in_array((string) $firma['estado'], self::ESTADOS_PERMITEN_NUEVA_PORTAL, true)) {
+            throw new Exception('Tu solicitud actual sigue en curso. Cuando termine podrás pedir una nueva firma desde aquí.');
+        }
+        // Defensa en profundidad (CLAUDE.md §6): firmaDelPortal ya exige empresa activa al resolver el token.
+        $empresa = (new \App\models\Empresa())->getPorId((int) $firma['id_empresa']);
+        if (!$empresa || (string) ($empresa['estado'] ?? '') !== '1' || in_array($empresa['eliminado'] ?? false, [true, 't', 1, '1'], true)) {
+            throw new Exception('Este enlace ya no está disponible. Solicite uno nuevo a la empresa.');
+        }
+        return self::urlPortal($this->crearRenovacion($firma, null)['token']);
+    }
+
+    /** Estados de una firma desde cuyo enlace el cliente puede pedir otra. */
+    public const ESTADOS_PERMITEN_NUEVA_PORTAL = ['emitida', 'cancelada'];
+
+    /**
      * Crea (o reutiliza) la solicitud nueva a partir de otra firma: copia los datos del titular
      * y sus documentos; pago, comprobante, factura y trámite empiezan de cero.
      * $soloEditable: si la que ya existe pasó del paso de documentos (pagada, en trámite…),

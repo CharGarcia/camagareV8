@@ -109,7 +109,7 @@ class Router
                 $accionesPortal = [
                     'enviar' => 'guardar', 'guardar' => 'guardar', 'adjunto' => 'adjunto',
                     'quitar-adjunto' => 'quitarAdjunto', 'documentos' => 'documentos',
-                    'pagar' => 'pagar', 'comprobante' => 'comprobante',
+                    'pagar' => 'pagar', 'comprobante' => 'comprobante', 'nueva' => 'nueva',
                 ];
                 // Sub-rutas AJAX: /solicitud-firma/ciudades y /solicitud-firma/sri
                 if (in_array($part1, ['ciudades', 'sri'], true)) {
