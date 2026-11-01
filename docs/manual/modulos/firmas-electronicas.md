@@ -5,7 +5,7 @@ categoria: Ventas
 ruta_modulo: modulos/firmas_electronicas
 tipo: modulo
 visibilidad: admin
-etiquetas: firma electronica, nueva solicitud con estos datos, volver a pedir firma, reutilizar documentos, segunda firma del mismo cliente, firma para persona natural, firma para representante legal, tipo de persona de la firma, vender firmas, aviso de vencimiento al cliente, recordatorio de renovacion, renovar firma del cliente, firma por vencer, enlace de renovacion, api uanataca, uanacreditos, creditos uanataca, precompra, distribuidor uanataca, miembro de empresa, representante legal, solicitud de firma, tramite de firma, uanataca, enlace para el cliente, formulario de firma, link de firma, whatsapp, pagar firma, payphone, transferencia, comprobante de pago, confirmar correo, factura de la firma, registrar en uanataca, firma emitida, observada, corregir solicitud, enlace fijo, qr de firma, certificado, p12, caducada, por caducar, renovar firma, firma invalida, xades, anf, security data, buscar firma, filtros, firmas por facturar
+etiquetas: firma electronica, nueva solicitud con estos datos, volver a pedir firma, reutilizar documentos, segunda firma del mismo cliente, solicitar una nueva firma, mismo enlace, firma para persona natural, firma para representante legal, tipo de persona de la firma, vender firmas, aviso de vencimiento al cliente, recordatorio de renovacion, renovar firma del cliente, firma por vencer, enlace de renovacion, api uanataca, uanacreditos, creditos uanataca, precompra, distribuidor uanataca, miembro de empresa, representante legal, solicitud de firma, tramite de firma, uanataca, enlace para el cliente, formulario de firma, link de firma, whatsapp, pagar firma, payphone, transferencia, comprobante de pago, confirmar correo, factura de la firma, registrar en uanataca, firma emitida, observada, corregir solicitud, enlace fijo, qr de firma, certificado, p12, caducada, por caducar, renovar firma, firma invalida, xades, anf, security data, buscar firma, filtros, firmas por facturar
 version: 3.11
 orden: 20
 estado: activo
@@ -217,6 +217,14 @@ el cobro y el trámite en Uanataca; todo eso empieza de cero.
   se borra del servidor apenas ninguna solicitud lo usa; mientras la firma anterior
   lo tenga, se conserva (es lo que se envió a Uanataca en su momento).
 - Lo mismo pasa con el **enlace de renovación** de los avisos de vencimiento.
+
+**El cliente también puede pedirla solo, con su mismo enlace.** Cuando su firma está
+*Emitida* o *Cancelada*, al abrir el enlace que ya tenía ve el botón **Solicitar una
+nueva firma**: se crea la solicitud nueva con sus datos y documentos y lo lleva a su
+enlace nuevo, donde revisa y paga. Si ya la había iniciado, el botón dice **Ver mi
+nueva solicitud** y lo lleva a esa (no se crea otra). Mientras la solicitud actual siga
+en curso, el botón no aparece. La empresa recibe el correo de siempre cuando el cliente
+termina de enviar sus documentos.
 
 ## Envío automático a Uanataca (API Precompra)
 
@@ -471,7 +479,8 @@ archivo, y volver a cargar la firma no lo soluciona.
   empieza de cero. El enlace de renovación de los avisos de vencimiento también trae
   los documentos ya cargados. Los documentos no se duplican en el servidor: la
   solicitud nueva usa el mismo archivo, y un documento reemplazado o eliminado se
-  borra del servidor cuando ninguna solicitud lo usa.
+  borra del servidor cuando ninguna solicitud lo usa. Desde el enlace de una firma
+  emitida o cancelada, el cliente puede **Solicitar una nueva firma** él mismo.
 - **3.10** — La fecha de vencimiento también se llena sola en las solicitudes hechas
   por el cliente desde el enlace y en las renovaciones (antes quedaban sin fecha).
   En la pestaña **Pago** se ve la imagen (o el PDF) del comprobante adjunto, aunque la
