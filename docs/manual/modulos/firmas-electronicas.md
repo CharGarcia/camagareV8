@@ -5,8 +5,8 @@ categoria: Ventas
 ruta_modulo: modulos/firmas_electronicas
 tipo: modulo
 visibilidad: admin
-etiquetas: firma electronica, firma para persona natural, firma para representante legal, tipo de persona de la firma, vender firmas, aviso de vencimiento al cliente, recordatorio de renovacion, renovar firma del cliente, firma por vencer, enlace de renovacion, api uanataca, uanacreditos, creditos uanataca, precompra, distribuidor uanataca, miembro de empresa, representante legal, solicitud de firma, tramite de firma, uanataca, enlace para el cliente, formulario de firma, link de firma, whatsapp, pagar firma, payphone, transferencia, comprobante de pago, confirmar correo, factura de la firma, registrar en uanataca, firma emitida, observada, corregir solicitud, enlace fijo, qr de firma, certificado, p12, caducada, por caducar, renovar firma, firma invalida, xades, anf, security data, buscar firma, filtros, firmas por facturar
-version: 3.9
+etiquetas: firma electronica, nueva solicitud con estos datos, volver a pedir firma, reutilizar documentos, segunda firma del mismo cliente, firma para persona natural, firma para representante legal, tipo de persona de la firma, vender firmas, aviso de vencimiento al cliente, recordatorio de renovacion, renovar firma del cliente, firma por vencer, enlace de renovacion, api uanataca, uanacreditos, creditos uanataca, precompra, distribuidor uanataca, miembro de empresa, representante legal, solicitud de firma, tramite de firma, uanataca, enlace para el cliente, formulario de firma, link de firma, whatsapp, pagar firma, payphone, transferencia, comprobante de pago, confirmar correo, factura de la firma, registrar en uanataca, firma emitida, observada, corregir solicitud, enlace fijo, qr de firma, certificado, p12, caducada, por caducar, renovar firma, firma invalida, xades, anf, security data, buscar firma, filtros, firmas por facturar
+version: 3.11
 orden: 20
 estado: activo
 ---
@@ -177,9 +177,10 @@ firma va a vencer, para que la renueve a tiempo con usted.
   proceso corra varias veces. Si un día el servidor no lo ejecutó, al siguiente
   sale el aviso de la etapa que corresponde ese día, no uno atrasado.
 - **Enlace de renovación**: cada aviso lleva un enlace personal que abre el
-  formulario con los datos del cliente ya llenos y el mismo tipo de firma; el
-  cliente vuelve a subir sus documentos y paga. Esa solicitud aparece en el
-  listado como una firma nueva en *Borrador*.
+  formulario con los datos del cliente ya llenos, el mismo tipo de firma y sus
+  **documentos ya cargados** (ver *Nueva solicitud con los datos y documentos del
+  cliente*); el cliente revisa, cambia lo que haga falta y paga. Esa solicitud
+  aparece en el listado como una firma nueva en *Borrador*.
 - **WhatsApp**: necesita la plantilla rápida **Renovación Firma Electrónica**
   (`renovacion_firma_electronica`) aprobada en Meta. Con la versión de 3
   variables lleva el enlace; una plantilla aprobada de 2 variables sigue
@@ -188,6 +189,34 @@ firma va a vencer, para que la renueve a tiempo con usted.
   salieron) y el botón **Enviar aviso ahora** para mandarlo a mano.
 - Para ver las firmas por vencer use el filtro **Vigencia → Por vencer** del
   listado.
+
+## Nueva solicitud con los datos y documentos del cliente
+
+Cuando un cliente que ya pidió una firma vuelve a pedir otra (renovación, otra
+validez, la anterior se canceló…), no hace falta que llene todo de nuevo.
+
+1. Abra la firma anterior del cliente, pestaña **Trámite**, y pulse **Nueva
+   solicitud con estos datos** (requiere permiso de crear; no aparece mientras la
+   firma está en *Borrador*).
+2. Se crea una firma nueva en *Borrador* con los datos del titular, de facturación
+   y de la empresa (si es representante legal), y con sus **documentos ya
+   cargados**: cédula, selfie, RUC, constitución, nombramiento, etc.
+3. Se abre el cuadro **Enviar enlace** para mandarle al cliente su enlace por
+   correo o WhatsApp. En el portal ve sus datos y documentos listos, con el aviso de
+   revisar que sigan vigentes; si alguno cambió, sube el nuevo y luego paga.
+
+Qué **no** se copia: el **pago** (ni el comprobante de transferencia), la factura,
+el cobro y el trámite en Uanataca; todo eso empieza de cero.
+
+- **Un clic = una solicitud**: si pulsa el botón otra vez (o ya existe una nueva
+  solicitud en curso creada desde esa firma), se abre la misma, no se crea otra. Si
+  la nueva ya se pagó o está en trámite, el sistema avisa: para pedir otra firma
+  más, hágalo desde la más reciente.
+- **Los documentos no se duplican en el servidor**: la solicitud nueva usa el mismo
+  archivo que la anterior. Si el cliente reemplaza un documento, el archivo viejo
+  se borra del servidor apenas ninguna solicitud lo usa; mientras la firma anterior
+  lo tenga, se conserva (es lo que se envió a Uanataca en su momento).
+- Lo mismo pasa con el **enlace de renovación** de los avisos de vencimiento.
 
 ## Envío automático a Uanataca (API Precompra)
 
@@ -235,8 +264,9 @@ crear otra. Las fotos de más de 1 MB se reducen antes de enviarlas.
 - **Ver**: listado, fichas y documentos, incluido el **PDF de la factura** de
   la firma (botón en la pestaña Facturación: ver, imprimir o descargar), sin
   necesitar permiso en Facturas de Venta.
-- **Crear**: registrar firmas a mano, enviar enlaces y generar la factura en
-  borrador desde la pestaña Facturación.
+- **Crear**: registrar firmas a mano, enviar enlaces, crear una **nueva solicitud
+  con los datos y documentos** de otra firma y generar la factura en borrador
+  desde la pestaña Facturación.
 - **Modificar**: aprobar o rechazar pagos, avanzar el trámite, reenviar el
   correo de confirmación y la configuración del módulo.
 - Sin **acceso total**, el usuario ve solo las solicitudes que él creó o cuyos
@@ -436,6 +466,12 @@ archivo, y volver a cargar la firma no lo soluciona.
 
 ## Historial de cambios
 
+- **3.11** — Botón **Nueva solicitud con estos datos** (pestaña Trámite): cuando el
+  cliente vuelve a pedir una firma se reutilizan sus datos y documentos; el pago
+  empieza de cero. El enlace de renovación de los avisos de vencimiento también trae
+  los documentos ya cargados. Los documentos no se duplican en el servidor: la
+  solicitud nueva usa el mismo archivo, y un documento reemplazado o eliminado se
+  borra del servidor cuando ninguna solicitud lo usa.
 - **3.10** — La fecha de vencimiento también se llena sola en las solicitudes hechas
   por el cliente desde el enlace y en las renovaciones (antes quedaban sin fecha).
   En la pestaña **Pago** se ve la imagen (o el PDF) del comprobante adjunto, aunque la

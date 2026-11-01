@@ -384,13 +384,8 @@ class FirmasElectronicasController extends BaseModuloController
 
         try {
             if ($id <= 0) throw new \Exception('ID no válido.');
-            $adj = $this->repo->getAdjuntoPorId($id, $idEmpresa);
-            if (!$adj) throw new \Exception('Adjunto no encontrado.');
-
-            $ruta = MVC_ROOT . '/storage/' . $adj['ruta_relativa'];
-            if (file_exists($ruta)) @unlink($ruta);
-
-            $this->repo->deleteAdjunto($id, $idEmpresa, $idUsuario);
+            // El archivo solo se borra del disco si ninguna otra firma lo usa (documentos reutilizados).
+            $this->service->eliminarAdjunto($id, $idEmpresa, $idUsuario);
             echo json_encode(['ok' => true, 'msg' => 'Archivo eliminado.']);
         } catch (\Throwable $e) {
             \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
@@ -697,6 +692,25 @@ class FirmasElectronicasController extends BaseModuloController
         $this->responderJson(function () {
             $this->service->marcarCorreoConfirmado((int) ($_POST['id'] ?? 0), (int) $_SESSION['id_empresa'], (int) $_SESSION['id_usuario']);
             return ['msg' => 'Correo marcado como confirmado.'];
+        });
+    }
+
+    /** «Nueva solicitud con estos datos»: el cliente pide otra firma; se reutilizan sus datos y documentos. */
+    public function nuevaSolicitudAjax(): void
+    {
+        $this->requireCrear();
+        $this->responderJson(function () {
+            $r = $this->service->nuevaSolicitudDesdeFirma((int) ($_POST['id'] ?? 0), (int) $_SESSION['id_empresa'], (int) $_SESSION['id_usuario']);
+            $firma = $this->repo->findById($r['id_firma'], (int) $_SESSION['id_empresa']) ?? [];
+            return $r + [
+                'nombres'   => $firma['nombres'] ?? '',
+                'apellidos' => $firma['apellidos'] ?? '',
+                'correo'    => $firma['correo'] ?? '',
+                'telefono'  => $firma['telefono'] ?? '',
+                'msg'       => $r['existente']
+                    ? 'Ya existía una nueva solicitud creada desde esta firma; no se creó otra.'
+                    : 'Nueva solicitud creada con los datos' . ($r['adjuntos'] > 0 ? ' y ' . $r['adjuntos'] . ' documento(s)' : '') . ' del cliente.',
+            ];
         });
     }
 

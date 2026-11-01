@@ -310,7 +310,7 @@ class FirmaElectronicaRepository extends BaseRepository
 
     public function getAdjuntos(int $idFirma, int $idEmpresa): array
     {
-        $sql = "SELECT id, tipo, nombre_original, nombre_archivo, mime_type, tamano_bytes, created_at
+        $sql = "SELECT id, tipo, nombre_original, nombre_archivo, ruta_relativa, mime_type, tamano_bytes, created_at
                 FROM firmas_electronicas_adjuntos
                 WHERE id_firma = :id_firma AND id_empresa = :id_empresa AND eliminado = false
                 ORDER BY created_at ASC";
@@ -355,6 +355,17 @@ class FirmaElectronicaRepository extends BaseRepository
                 WHERE id = :id AND id_empresa = :id_empresa";
         $st = $this->db->prepare($sql);
         return $st->execute([':id' => $id, ':id_empresa' => $idEmpresa, ':u' => $idUsuario]);
+    }
+
+    /** ¿Algún adjunto vigente usa este archivo? (las solicitudes nuevas reutilizan los de la anterior). */
+    public function archivoAdjuntoEnUso(string $rutaRelativa, int $idEmpresa): bool
+    {
+        $st = $this->db->prepare(
+            "SELECT 1 FROM firmas_electronicas_adjuntos
+             WHERE ruta_relativa = :r AND id_empresa = :ie AND eliminado = false LIMIT 1"
+        );
+        $st->execute([':r' => $rutaRelativa, ':ie' => $idEmpresa]);
+        return (bool) $st->fetchColumn();
     }
 
     // ── Trámite (portal del cliente, pago, Uanataca) ──────────

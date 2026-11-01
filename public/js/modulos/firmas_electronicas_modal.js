@@ -1493,6 +1493,13 @@
                 ${puede && t.fecha_caducidad ? '<button type="button" class="btn btn-outline-primary btn-sm" data-tr="aviso_vencimiento"><i class="bi bi-send me-1"></i>Enviar aviso ahora</button>' : ''}
             </div>`;
         }
+        // El cliente vuelve a pedir una firma: solicitud nueva con sus datos y documentos (no el pago).
+        if (window.FIRMAS_PERM?.crear && t.estado !== 'borrador') {
+            acciones += `<div class="border rounded-3 p-2 mb-2">
+                <div class="small text-muted mb-1">¿El cliente pide otra firma? Se crea una solicitud nueva con sus datos y documentos ya cargados; el pago empieza de cero.</div>
+                <button type="button" class="btn btn-outline-primary btn-sm" data-tr="nueva_solicitud"><i class="bi bi-files me-1"></i>Nueva solicitud con estos datos</button>
+            </div>`;
+        }
         if (puede && !['emitida', 'cancelada'].includes(t.estado)) {
             acciones += `<div class="d-flex flex-wrap gap-2 mb-2">
                 ${!['borrador', 'aprobada'].includes(t.estado) ? '<button type="button" class="btn btn-outline-warning btn-sm" data-tr="observar"><i class="bi bi-exclamation-triangle me-1"></i>Pedir corrección al cliente</button>' : ''}
@@ -1634,6 +1641,26 @@
             } else if (accion === 'aviso_vencimiento') {
                 if (await confirmar('Se enviará al cliente el aviso de vencimiento con el enlace para renovar (correo y, si hay plantilla aprobada, WhatsApp).', 'Sí, enviar')) {
                     await postTramite('avisoVencimientoAjax', null, ['Enviando el aviso…', 'Correo y, si hay plantilla aprobada, WhatsApp.']);
+                }
+            } else if (accion === 'nueva_solicitud') {
+                if (await confirmar('Se creará una nueva solicitud de firma con los datos y documentos de este cliente (el pago no se copia). Luego podrá enviarle el enlace.', 'Sí, crear')) {
+                    const fd = new FormData();
+                    fd.append('id', _idFirmaActual);
+                    mostrarCargando('Creando la nueva solicitud…', 'Se reutilizan los datos y documentos del cliente.');
+                    let json;
+                    try {
+                        json = await (await fetch(`${urlBase}/nuevaSolicitudAjax`, { method: 'POST', body: fd })).json();
+                    } finally {
+                        cerrarCargando();
+                    }
+                    mostrarAlerta(json.ok ? json.msg : json.error, json.ok ? 'success' : 'danger');
+                    if (json.ok) {
+                        cargarTramite(_idFirmaActual);
+                        if (window.fetchSearchFirmas) window.fetchSearchFirmas();
+                        if (window.abrirModalEnviarFormulario) {
+                            window.abrirModalEnviarFormulario({ id: json.id_firma, nombres: json.nombres, apellidos: json.apellidos, correo: json.correo, telefono: json.telefono });
+                        }
+                    }
                 }
             } else if (accion === 'sincronizar_uanataca') {
                 await postTramite('sincronizarUanatacaAjax', null, ['Consultando a Uanataca…', '']);

@@ -445,6 +445,12 @@ $nacionalidades = ['Ecuatoriana', 'Colombiana', 'Peruana', 'Venezolana', 'Cubana
     <div class="card-body p-3">
         <p class="section-title"><i class="bi bi-file-earmark-image me-1"></i>Tus documentos</p>
         <p class="text-muted small mb-3">Fotos claras y completas de tu cédula y una selfie sosteniéndola. Los documentos de la empresa en PDF. Máximo 5 MB cada uno. Cada archivo se guarda al subirlo.</p>
+        <?php if (($f['origen'] ?? '') === 'renovacion' && $subidos && $estado === 'borrador'): ?>
+            <div class="alert alert-info small py-2">
+                <i class="bi bi-info-circle me-1"></i>Cargamos los documentos de tu solicitud anterior. Revisa que sigan
+                vigentes (cédula no caducada, nombramiento actualizado); si alguno cambió, tócalo para subir el nuevo.
+            </div>
+        <?php endif; ?>
         <div class="row g-3">
             <?php foreach ($portal['requeridos'] as $tipo):
                 [$icono, $accept] = $documentos[$tipo];

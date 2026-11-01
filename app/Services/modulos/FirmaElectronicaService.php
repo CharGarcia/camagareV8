@@ -944,6 +944,7 @@ class FirmaElectronicaService
             $this->repository->rollBack();
             throw $e;
         }
+        $this->borrarArchivoSiHuerfano((string) $adj['ruta_relativa'], $idEmpresa);
     }
 
     /** Paso 2 del portal: confirma que subió todo. Pasa a pendiente de pago (o vuelve a revisión si ya pagó). */
@@ -1899,11 +1900,39 @@ class FirmaElectronicaService
     }
 
     /**
-     * Enlace personal de renovación: una solicitud nueva con los datos del titular ya
-     * llenos (el cliente vuelve a subir sus documentos y paga). Se crea una vez y se
-     * reutiliza en los avisos siguientes mientras siga en curso.
+     * Enlace personal de renovación: una solicitud nueva con los datos y los documentos del
+     * titular ya cargados (el cliente revisa, cambia lo que haga falta y paga). Se crea una
+     * vez y se reutiliza en los avisos siguientes mientras siga en curso.
      */
     public function enlaceRenovacion(array $firma, ?int $idUsuario = null): string
+    {
+        return self::urlPortal($this->crearRenovacion($firma, $idUsuario)['token']);
+    }
+
+    /**
+     * Botón «Nueva solicitud con estos datos» de la ficha: el cliente vuelve a pedir una
+     * firma y se reutilizan sus datos y documentos (no el pago). Si ya hay una en curso
+     * creada desde esta firma, devuelve esa (doble clic / reintento = la misma solicitud).
+     * @return array{id_firma:int, url:string, existente:bool, adjuntos:int}
+     */
+    public function nuevaSolicitudDesdeFirma(int $idFirma, int $idEmpresa, int $idUsuario): array
+    {
+        $firma = $this->repository->findById($idFirma, $idEmpresa);
+        if (!$firma) {
+            throw new Exception('Firma no encontrada.');
+        }
+        $r = $this->crearRenovacion($firma, $idUsuario, true);
+        return ['id_firma' => $r['id_firma'], 'url' => self::urlPortal($r['token']), 'existente' => $r['existente'], 'adjuntos' => $r['adjuntos']];
+    }
+
+    /**
+     * Crea (o reutiliza) la solicitud nueva a partir de otra firma: copia los datos del titular
+     * y sus documentos; pago, comprobante, factura y trámite empiezan de cero.
+     * $soloEditable: si la que ya existe pasó del paso de documentos (pagada, en trámite…),
+     * no se devuelve; se avisa para que trabajen sobre la más reciente.
+     * @return array{id_firma:int, token:string, existente:bool, adjuntos:int}
+     */
+    private function crearRenovacion(array $firma, ?int $idUsuario, bool $soloEditable = false): array
     {
         $idEmpresa = (int) $firma['id_empresa'];
         $idFirma   = (int) $firma['id'];
@@ -1919,10 +1948,20 @@ class FirmaElectronicaService
                 $ren = $this->repository->findById((int) $firma['id_firma_renovacion'], $idEmpresa);
                 if ($ren && $ren['estado'] !== 'cancelada' && !empty($ren['id_solicitud'])
                     && ($sol = $this->solRepo->getById((int) $ren['id_solicitud'], $idEmpresa))) {
+                    $editable = in_array((string) $ren['estado'], FirmaElectronicaRules::ESTADOS_EDITABLES_PORTAL, true);
+                    if ($soloEditable && !$editable) {
+                        throw new Exception('Ya se creó una nueva solicitud a partir de esta firma y está «'
+                            . self::etiquetaEstado((string) $ren['estado']) . '». Ábrala desde el listado (o cree la siguiente desde ella).');
+                    }
+                    // Renovaciones creadas antes de que se copiaran los documentos: se completan ahora.
+                    $n = 0;
+                    if ($editable && !$this->repository->getAdjuntos((int) $ren['id'], $idEmpresa)) {
+                        $n = $this->copiarAdjuntos($firma, (int) $ren['id'], $idUsuario);
+                    }
                     if ($managed) {
                         $db->commit();
                     }
-                    return self::urlPortal((string) $sol['token']);
+                    return ['id_firma' => (int) $ren['id'], 'token' => (string) $sol['token'], 'existente' => true, 'adjuntos' => $n];
                 }
             }
 
@@ -1938,7 +1977,7 @@ class FirmaElectronicaService
                 'expira_at'        => date('Y-m-d H:i:s', strtotime('+60 days')),
                 'created_by'       => $owner ?: null,
             ]);
-            // Copia de los datos del titular; documentos, pago, factura y trámite empiezan de cero.
+            // Copia de los datos del titular y sus documentos; pago, factura y trámite empiezan de cero.
             $copia = array_intersect_key($firma, array_flip([
                 'id_producto', 'nombre_producto', 'tipo_persona', 'con_ruc', 'ruc_empresa', 'nombre_empresa', 'cargo',
                 'tipo_identificacion', 'numero_identificacion', 'codigo_dactilar', 'nombres', 'apellidos', 'fecha_nacimiento',
@@ -1957,20 +1996,96 @@ class FirmaElectronicaService
             ]);
             $this->repository->marcarRenovacion($idNueva, $idFirma, $idSol);
             $this->solRepo->marcarCompletado($idSol, $idNueva);
+            $n = $this->copiarAdjuntos($firma, $idNueva, $idUsuario);
             $this->repository->actualizarTramite($idFirma, $idEmpresa, ['id_firma_renovacion' => $idNueva], $idUsuario);
-            $this->repository->crearEvento($idEmpresa, $idNueva, 'renovacion', 'Renovación de tu firma electrónica',
-                'Revisa tus datos y sube nuevamente tus documentos.', true, $idUsuario);
-            $this->logService->registrar((int) $idUsuario, $idEmpresa, 'crear_renovacion', 'firmas_electronicas', $idNueva, null, ['id_firma_anterior' => $idFirma]);
+            $this->repository->crearEvento($idEmpresa, $idNueva, 'renovacion', 'Nueva solicitud de tu firma electrónica',
+                $n > 0
+                    ? 'Tus datos y documentos de la solicitud anterior ya están cargados: revisa que sigan vigentes, cambia lo que haga falta y envíalos.'
+                    : 'Revisa tus datos y sube tus documentos.', true, $idUsuario);
+            $this->logService->registrar((int) $idUsuario, $idEmpresa, 'crear_renovacion', 'firmas_electronicas', $idNueva, null,
+                ['id_firma_anterior' => $idFirma, 'adjuntos_reutilizados' => $n]);
             if ($managed) {
                 $db->commit();
             }
-            return self::urlPortal($token);
+            return ['id_firma' => $idNueva, 'token' => $token, 'existente' => false, 'adjuntos' => $n];
         } catch (\Throwable $e) {
             if ($managed && $db->inTransaction()) {
                 $db->rollBack();
             }
             throw $e;
         }
+    }
+
+    /**
+     * Reutiliza en otra firma los documentos del titular (no el comprobante de pago). No se
+     * copia el archivo: la fila nueva apunta al mismo archivo, así cada documento se guarda
+     * una sola vez en el servidor. Un archivo se borra del disco solo cuando ninguna firma lo
+     * usa (borrarArchivoSiHuerfano).
+     */
+    private function copiarAdjuntos(array $origen, int $idDestino, ?int $idUsuario): int
+    {
+        $idEmpresa = (int) $origen['id_empresa'];
+        $n = 0;
+        foreach ($this->repository->getAdjuntos((int) $origen['id'], $idEmpresa) as $a) {
+            if ($a['tipo'] === 'comprobante_transferencia') {
+                continue;
+            }
+            if (!is_file(MVC_ROOT . '/storage/' . $a['ruta_relativa'])) {
+                error_log('[Firmas] Adjunto sin archivo, no se reutiliza: #' . $a['id'] . ' ' . $a['ruta_relativa']);
+                continue;
+            }
+            $idAdj = $this->repository->createAdjunto([
+                'id_firma'        => $idDestino,
+                'id_empresa'      => $idEmpresa,
+                'tipo'            => $a['tipo'],
+                'nombre_original' => $a['nombre_original'],
+                'nombre_archivo'  => $a['nombre_archivo'],
+                'ruta_relativa'   => $a['ruta_relativa'],
+                'mime_type'       => $a['mime_type'],
+                'tamano_bytes'    => (int) $a['tamano_bytes'],
+                'created_by'      => $idUsuario,
+            ]);
+            $this->logService->registrar((int) $idUsuario, $idEmpresa, 'reutilizar_adjunto', 'firmas_electronicas_adjuntos', $idAdj, null,
+                ['id_firma' => $idDestino, 'tipo' => $a['tipo'], 'id_adjunto_origen' => (int) $a['id']]);
+            $n++;
+        }
+        return $n;
+    }
+
+    /**
+     * Borra del disco el archivo de un adjunto ya eliminado si ninguna otra firma lo usa
+     * (los documentos reutilizados en una nueva solicitud comparten archivo). Llamar
+     * después del COMMIT.
+     */
+    private function borrarArchivoSiHuerfano(string $rutaRelativa, int $idEmpresa): void
+    {
+        if ($rutaRelativa === '' || str_contains($rutaRelativa, '..')
+            || $this->repository->archivoAdjuntoEnUso($rutaRelativa, $idEmpresa)) {
+            return;
+        }
+        $ruta = MVC_ROOT . '/storage/' . $rutaRelativa;
+        if (is_file($ruta)) {
+            @unlink($ruta);
+        }
+    }
+
+    /** Elimina un documento desde la ficha (lógico) y su archivo si ya nadie lo usa. */
+    public function eliminarAdjunto(int $idAdjunto, int $idEmpresa, int $idUsuario): void
+    {
+        $adj = $this->repository->getAdjuntoPorId($idAdjunto, $idEmpresa);
+        if (!$adj) {
+            throw new Exception('Adjunto no encontrado.');
+        }
+        $this->repository->beginTransaction();
+        try {
+            $this->repository->deleteAdjunto($idAdjunto, $idEmpresa, $idUsuario);
+            $this->logService->registrar($idUsuario, $idEmpresa, 'eliminar_adjunto', 'firmas_electronicas_adjuntos', $idAdjunto, $adj, null);
+            $this->repository->commit();
+        } catch (\Throwable $e) {
+            $this->repository->rollBack();
+            throw $e;
+        }
+        $this->borrarArchivoSiHuerfano((string) $adj['ruta_relativa'], $idEmpresa);
     }
 
     public function getAvisosVencimiento(int $idFirma, int $idEmpresa): array
@@ -2679,12 +2794,14 @@ class FirmaElectronicaService
             throw new Exception('Error al guardar el archivo en el servidor.');
         }
 
+        $reemplazados = [];
         $this->repository->beginTransaction();
         try {
             if ($reemplazar && $tipo !== 'otro') {
                 foreach ($this->repository->getAdjuntos($idFirma, $idEmpresa) as $a) {
                     if ($a['tipo'] === $tipo) {
                         $this->repository->deleteAdjunto((int) $a['id'], $idEmpresa, (int) $idUsuario);
+                        $reemplazados[] = (string) $a['ruta_relativa'];
                     }
                 }
             }
@@ -2706,6 +2823,10 @@ class FirmaElectronicaService
             $this->repository->rollBack();
             @unlink($dir . '/' . $nombreArchivo);
             throw $e;
+        }
+        // Solo queda el último documento de cada tipo: el reemplazado sale del disco si ninguna otra firma lo usa.
+        foreach ($reemplazados as $ruta) {
+            $this->borrarArchivoSiHuerfano($ruta, $idEmpresa);
         }
         return ['id' => $idAdj, 'tipo' => $tipo, 'nombre_original' => $nombreOriginal];
     }
