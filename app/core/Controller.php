@@ -36,6 +36,8 @@ abstract class Controller
         $idEmpresaFavorita = null;
         $tipoMenu = 'horizontal';
         $sidebarColapsado = false;
+        $inicioMenu = 'accesos';
+        $puedeDashboardMenu = false;
         if (isset($_SESSION['id_usuario'])) {
             $idUsuario = (int) $_SESSION['id_usuario'];
             $nivelUsuario = (int) ($_SESSION['nivel'] ?? 1);
@@ -102,10 +104,29 @@ abstract class Controller
                         ? $menuUsuario['orden']
                         : $this->leerOrdenMenuEmpresa((int) $_SESSION['id_usuario'], $idEmpresa);
                     $menuModulos = $this->aplicarOrdenPersonalizadoMenu($menuModulos, $orden);
-                    if (($menuUsuario['tipo'] ?? '') === 'vertical') {
-                        $tipoMenu = 'vertical';
+                    if (in_array($menuUsuario['tipo'] ?? '', ['vertical', 'horizontal_filas'], true)) {
+                        $tipoMenu = $menuUsuario['tipo'];
                     }
                     $sidebarColapsado = !empty($menuUsuario['colapsado']);
+                    // «Al ingresar mostrar» (Personalizar menú): solo tiene sentido si el
+                    // dashboard está entre sus submódulos. Por defecto, Inicio con los
+                    // accesos frecuentes (HomeController::index).
+                    foreach ($menuModulos as $mod) {
+                        foreach ($mod['submodulos'] ?? [] as $sub) {
+                            if (str_ends_with(rtrim((string) ($sub['ruta'] ?? ''), '/'), '/modulos/dashboard')) {
+                                $puedeDashboardMenu = true;
+                                break 2;
+                            }
+                        }
+                    }
+                    $inicioMenu = ($menuUsuario['inicio'] ?? '') === 'dashboard' ? 'dashboard' : 'accesos';
+                    // Accesos frecuentes de la pantalla Inicio: cuenta la pantalla que se abre.
+                    (new \App\Services\AccesosFrecuentesService())->registrarVisita(
+                        (int) $_SESSION['id_usuario'],
+                        $idEmpresa,
+                        $menuModulos,
+                        (string) (parse_url($_SERVER['REQUEST_URI'] ?? '', PHP_URL_PATH) ?: '')
+                    );
                 } catch (\Throwable $e) {
                     $menuModulos = [];
                 }
@@ -119,6 +140,8 @@ abstract class Controller
             'idEmpresaFavorita' => $idEmpresaFavorita,
             'tipoMenu' => $tipoMenu,
             'sidebarColapsado' => $sidebarColapsado,
+            'inicioMenu' => $inicioMenu,
+            'puedeDashboardMenu' => $puedeDashboardMenu,
         ];
     }
 

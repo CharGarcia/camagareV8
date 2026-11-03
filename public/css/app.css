@@ -424,6 +424,17 @@ body.cmg-has-table .cmg-main-content > .container-fluid > div:has(> h5) {
   flex-shrink: 0;
   position: relative;
 }
+/* Horizontal en dos filas (preferencia del usuario 'horizontal_filas'): sin flechas;
+   los módulos que no caben pasan a la fila de abajo. El header crece y
+   --cmg-sticky-h se vuelve a medir solo (layouts/main.php). */
+.cmg-menu-modulos--filas .cmg-menu-scroll-wrap {
+  min-width: 0;
+  overflow: visible;
+}
+.cmg-menu-modulos--filas .cmg-menu-list {
+  flex-wrap: wrap;
+  row-gap: 2px;
+}
 .cmg-menu-modulo-btn {
   display: inline-flex;
   align-items: center;
@@ -487,9 +498,102 @@ body.cmg-has-table .cmg-main-content > .container-fluid > div:has(> h5) {
 .cmg-menu-item.cmg-menu-dragging {
   opacity: 0.4;
 }
-.cmg-menu-reordenar-btn.active {
+/* Mientras se reordena, el botón del módulo no recibe el mouse: el arrastre
+   empieza en el <li> (Firefox no inicia un arrastre sobre un <button>) y un
+   clic no abre el módulo. */
+.cmg-menu-reordenando .cmg-menu-modulo-btn,
+.cmg-sidebar--reordenando .cmg-sidebar__modulo {
+  pointer-events: none;
+}
+.cmg-menu-reordenando .cmg-menu-modulo-btn {
+  border: 1px dashed #ced4da;
+  margin: 0 2px;
+}
+
+/* ── Personalizar menú (bi-sliders2) — public/js/menu-personalizar.js ── */
+.cmg-menu-ajustes-btn.active,
+.cmg-sidebar__tool.active {
   background: rgba(13, 110, 253, 0.15);
   color: var(--cmg-primary, #0d6efd);
+}
+.cmg-menu-ajustes-btn:disabled,
+.cmg-sidebar__tool:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+.cmg-menu-ajustes {
+  position: fixed;
+  z-index: 5065; /* igual que los submenús: sobre el navbar, bajo los modales */
+  min-width: 250px;
+  padding: 0.35rem;
+  background: #fff;
+  border: 1px solid #dee2e6;
+  border-radius: 8px;
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.15);
+  font-size: 0.85rem;
+}
+.cmg-menu-ajustes__titulo {
+  padding: 0.3rem 0.6rem 0.4rem;
+  font-weight: 600;
+  color: #212529;
+  border-bottom: 1px solid #eef0f2;
+  margin-bottom: 0.25rem;
+}
+.cmg-menu-ajustes__grupo {
+  padding: 0.25rem 0.6rem 0.15rem;
+  font-size: 0.72rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  color: #6c757d;
+}
+.cmg-menu-ajustes__opcion {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  width: 100%;
+  padding: 0.4rem 0.6rem;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: #495057;
+  text-align: left;
+  white-space: nowrap;
+}
+.cmg-menu-ajustes__opcion:hover,
+.cmg-menu-ajustes__opcion:focus-visible {
+  background: #f0f4f8;
+  color: var(--cmg-primary, #0d6efd);
+  outline: none;
+}
+.cmg-menu-ajustes__opcion.activo { color: var(--cmg-primary, #0d6efd); font-weight: 600; }
+.cmg-menu-ajustes__opcion:disabled { opacity: 0.6; }
+.cmg-menu-ajustes__radio { font-size: 0.8rem; }
+.cmg-menu-ajustes__sep { height: 1px; background: #eef0f2; margin: 0.3rem 0; }
+
+/* Franja del modo «Reordenar módulos»: texto + Cancelar / Listo */
+.cmg-menu-franja-reordenar {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  flex-shrink: 0;
+  padding: 0.2rem 0.6rem;
+  background: rgba(13, 110, 253, 0.08);
+  border-right: 1px solid #dee2e6;
+  font-size: 0.8rem;
+  color: var(--cmg-primary, #0d6efd);
+  white-space: nowrap;
+}
+.cmg-menu-franja-reordenar .btn {
+  padding: 0.1rem 0.6rem;
+  font-size: 0.78rem;
+}
+.cmg-menu-franja-reordenar--lateral {
+  flex-direction: column;
+  align-items: stretch;
+  border-right: 0;
+  border-bottom: 1px solid #dee2e6;
+  padding: 0.45rem 0.5rem;
+  white-space: normal;
 }
 
 /* ============================================================
@@ -547,7 +651,6 @@ body.cmg-menu-vertical.cmg-sidebar-colapsado { --cmg-sidebar-w: 56px; }
   flex-shrink: 0;
 }
 .cmg-sidebar__tool:hover { background: #f0f4f8; color: var(--cmg-primary, #0d6efd); }
-.cmg-sidebar__tool.active { background: rgba(13, 110, 253, 0.15); color: var(--cmg-primary, #0d6efd); }
 
 /* Cuerpo fijo: la lista hace scroll dentro, y el degradado (::before arriba,
    ::after abajo) aparece solo cuando hay módulos fuera de la vista
@@ -651,7 +754,8 @@ body.cmg-menu-vertical.cmg-sidebar-colapsado { --cmg-sidebar-w: 56px; }
 /* Reordenar: asa visible y cursor de arrastre */
 .cmg-sidebar__grip { display: none; cursor: grab; opacity: 0.6; font-size: 0.85rem; }
 .cmg-sidebar--reordenando .cmg-sidebar__grip { display: inline-flex; }
-.cmg-sidebar--reordenando .cmg-sidebar__item { cursor: grab; }
+.cmg-sidebar--reordenando .cmg-sidebar__item { cursor: grab; border: 1px dashed #ced4da; border-radius: 6px; margin-bottom: 2px; }
+.cmg-sidebar--reordenando .cmg-sidebar__sub { display: none !important; } /* lista compacta: solo módulos */
 .cmg-sidebar__item--arrastrando { opacity: 0.4; }
 
 /* Contraído: solo íconos; los submódulos salen flotando a la derecha */

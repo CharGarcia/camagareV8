@@ -6,12 +6,12 @@ ruta_modulo: modulos/dashboard
 tipo: modulo
 visibilidad: todos
 etiquetas: tablero, dashboard, inicio, resumen, indicadores, avisos, pantalla principal, home, ordenar tarjetas, mover tarjetas, arrastrar, reubicar, personalizar tablero, filtros fijos, ancho de tarjetas, redimensionar, cambiar tamaño, columnas, saldo cxc, saldo cxp, cartera, cuentas por cobrar, cuentas por pagar, comparativo mensual, nómina, sin iva, con iva, notas de crédito, ventas netas
-version: 1.4
+version: 1.5
 orden: 2
 estado: activo
 ---
 
-El **tablero** es la pantalla de inicio: el resumen de cómo va la empresa y lo
+El **tablero** es el resumen de cómo va la empresa y lo
 que requiere atención hoy.
 
 ## Qué muestra
@@ -128,6 +128,11 @@ Suele ser una de tres cosas:
 
 ## Historial de cambios
 
+- **1.5** — Al ingresar se muestra la pantalla
+  [Inicio con los accesos frecuentes](../guias/inicio-accesos-frecuentes.md), con
+  el ícono del tablero siempre primero para quien lo tiene asignado. Quien prefiera
+  entrar directo al tablero lo elige en **Personalizar menú → Al ingresar
+  mostrar → Dashboard**.
 - **1.4** — *Ventas* y *Compras* muestran ahora el valor **sin IVA** como cifra
   principal y, debajo en letra pequeña, el total con impuestos. En *Ventas* las
   **notas de crédito autorizadas restan** (antes no se descontaban y la tarjeta

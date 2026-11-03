@@ -5,8 +5,8 @@ categoria: Ventas
 ruta_modulo: modulos/factura-reembolso
 tipo: modulo
 visibilidad: todos
-etiquetas: factura de reembolso, reembolso de gastos, ats 41, comprobante de venta emitido por reembolso, intermediario, terceros reembolsados, sri, comprobante electronico, buscar factura de reembolso, buscador, filtros, filtrar facturas de reembolso, buscar por proveedor, comprobante de terceros, filtro de fechas, chips, aparecen documentos que no busque, resultados que no corresponden, la busqueda trae otros documentos, informacion adicional, info adicional, limite de caracteres, maximo 300 caracteres, value too long, no se pudo guardar, imprimir, impresora, pdf en dos hojas, segunda hoja casi vacia, totales en otra pagina, el pdf corta la pagina, hoja de mas, asiento contable, no deja agregar lineas al asiento, registrar asiento a mano, asiento manual, factura autorizada sin asiento
-version: 2.0
+etiquetas: factura de reembolso, reembolso de gastos, cobrar factura de reembolso, cobro, saldo pendiente, cobros, ingresos, no deja anular, tiene cobros registrados, ats 41, comprobante de venta emitido por reembolso, intermediario, terceros reembolsados, sri, comprobante electronico, buscar factura de reembolso, buscador, filtros, filtrar facturas de reembolso, buscar por proveedor, comprobante de terceros, filtro de fechas, chips, aparecen documentos que no busque, resultados que no corresponden, la busqueda trae otros documentos, informacion adicional, info adicional, limite de caracteres, maximo 300 caracteres, value too long, no se pudo guardar, imprimir, impresora, pdf en dos hojas, segunda hoja casi vacia, totales en otra pagina, el pdf corta la pagina, hoja de mas, asiento contable, no deja agregar lineas al asiento, registrar asiento a mano, asiento manual, factura autorizada sin asiento
+version: 2.1
 orden: 21
 estado: activo
 ---
@@ -56,6 +56,28 @@ reembolsado (proveedor, documento y su IVA).
    **Correo** (el correo también se envía automáticamente al autorizarse).
    El botón **Excel** (icono verde) descarga el detalle, los terceros
    reembolsados y los totales en una hoja de cálculo.
+7. Para registrar el pago del cliente vaya a **Ingresos**, pulse el concepto
+   **Factura de reembolso** y elija la factura (ver *Cobrar la factura de
+   reembolso*).
+
+## Cobrar la factura de reembolso
+
+El cobro se registra en **Ingresos**, igual que el de una factura de venta:
+
+1. En Ingresos pulse **Nuevo** y el botón de concepto **Factura de reembolso**.
+   Solo aparece si hay facturas de reembolso **autorizadas** con saldo pendiente.
+2. Busque la factura por número, cliente o RUC, y ajuste el valor que se cobra
+   (puede ser un abono parcial).
+3. Agregue la forma de cobro (caja, banco, cheque…) y guarde.
+
+En la factura de reembolso, la sub-pestaña **Cobros** (junto a *Formas de
+pago* y *Crédito*) lista los ingresos que la cobraron. Bajo el total se ven
+**Cobrado** y **Saldo pendiente**: el saldo sale en rojo mientras falte cobrar
+y en verde cuando ya está cancelada.
+
+Si la empresa no tiene el concepto «Facturas de reembolso», créelo en
+*Opciones de Ingreso/Egreso* con el comportamiento **Módulo factura de
+reembolso** y tipo *Ingreso*. Las empresas nuevas ya lo traen.
 
 ## Buscar y filtrar el listado
 
@@ -144,6 +166,12 @@ bajo el submódulo "Factura de Reembolso" (colgado junto a Factura de Venta).
   no son editables a mano.
 - Solo se puede editar o eliminar una factura en estado **borrador**. Una vez
   autorizada por el SRI, solo se puede **anular**.
+- Una factura con **cobros vigentes** en Ingresos no se puede anular: primero
+  hay que anular esos ingresos. El mensaje dice cuáles son.
+- El cobro, en su asiento, cancela la **misma Cuenta por Cobrar** que cargó el
+  asiento de la factura. Si la factura todavía no tiene asiento, usa la cuenta
+  *Cuentas por Cobrar Cliente* del concepto **Factura de Reembolso** o, si no
+  está configurada, la de Ventas con Factura.
 - El asiento contable se genera recién cuando el SRI autoriza el documento
   (no al guardar el borrador), para no contabilizar documentos que se anulan
   antes de enviarse.
@@ -161,7 +189,7 @@ bajo el submódulo "Factura de Reembolso" (colgado junto a Factura de Venta).
   ya tenga configuradas Factura de Venta (salvo la cuenta puente, que es
   nueva y no tiene equivalente).
 - **Cuentas por Cobrar / Ingresos**: el cliente debe el total de la factura y
-  se puede registrar su cobro desde Ingresos. *(Nota: por ahora el documento
+  su cobro se registra en Ingresos (ver *Cobrar la factura de reembolso*). *(Nota: por ahora el documento
   todavía no aparece en el listado principal ni en la antigüedad de saldos de
   Cuentas por Cobrar — es una integración más profunda pendiente.)*
 - **Correo**: al autorizarse en el SRI, se envía automáticamente el PDF + XML
@@ -169,6 +197,14 @@ bajo el submódulo "Factura de Reembolso" (colgado junto a Factura de Venta).
   correo).
 
 ## Errores frecuentes
+
+- **En Ingresos no aparece el botón «Factura de reembolso»**: no hay facturas de
+  reembolso autorizadas con saldo pendiente, o falta el concepto con el
+  comportamiento *Módulo factura de reembolso* en Opciones de Ingreso/Egreso.
+  Un borrador todavía no se puede cobrar.
+- **«No se puede anular la factura de reembolso porque tiene cobros
+  registrados en Ingresos»**: anule primero los ingresos que se nombran y luego
+  la factura.
 
 - **Botón "Nueva" deshabilitado**: falta configurar el secuencial inicial
   para "Facturas de reembolso" en Empresa → Secuenciales.
@@ -199,6 +235,12 @@ igual. Los períodos se abren y se cierran en **Contabilidad → Períodos
 Contables**; reabrir el período permite la operación de inmediato.
 
 ## Historial de cambios
+
+- **2.1** — Cobro desde **Ingresos**: el asiento del cobro cancela la Cuenta por
+  Cobrar de la propia factura de reembolso. Nueva sub-pestaña **Cobros** y
+  líneas **Cobrado** y **Saldo pendiente** en el modal. Ya no se puede anular
+  una factura que tiene cobros vigentes. Las empresas nuevas traen el concepto
+  de ingreso «Facturas de reembolso».
 
 - **2.0** — Si una factura **autorizada** se quedó sin asiento contable (por
   ejemplo, faltaba la cuenta puente «Reembolso a Terceros»), la pestaña

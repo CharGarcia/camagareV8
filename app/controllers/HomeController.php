@@ -9,6 +9,10 @@ namespace App\controllers;
 
 use App\core\Controller;
 use App\models\Empresa;
+use App\models\ModuloMenu;
+use App\repositories\UsuarioPreferenciaRepository;
+use App\Services\AccesosFrecuentesService;
+use App\Services\UsuarioPreferenciaService;
 use App\Traits\PermisoModuloTrait;
 
 class HomeController extends Controller
@@ -39,22 +43,42 @@ class HomeController extends Controller
         $idEmpresa  = (int) ($_SESSION['id_empresa'] ?? 0);
         $sinEmpresa = $nivel === 3 && $idEmpresa <= 0;
 
-        // El dashboard es un módulo (modulos/dashboard). Al ingresar se redirige
-        // allí cuando el usuario puede verlo: Nivel 3 siempre; los demás solo si
-        // tienen el módulo asignado (permiso de lectura). Sin empresa activa o sin
-        // permiso, se queda en la bienvenida.
+        // Al ingresar se muestra esta pantalla con los submódulos que el usuario más
+        // usa últimamente en la empresa activa (AccesosFrecuentesService). Si tiene
+        // asignado el dashboard (Nivel 3 siempre; los demás con permiso de lectura),
+        // su ícono va primero. Quien prefiera entrar directo al dashboard lo elige en
+        // Personalizar menú → «Al ingresar mostrar» (preferencia 'inicio').
+        // Sin accesos ni dashboard (usuario nuevo o tabla sin crear): la bienvenida.
+        $accesos = [];
+        $accesoDashboard = null;
         if ($idEmpresa > 0 && !$sinEmpresa) {
+            $idUsuario = (int) $_SESSION['id_usuario'];
             $puedeDashboard = $nivel >= 3
                 || !empty($this->permisosModuloPorRuta('modulos/dashboard')['ver']);
-            if ($puedeDashboard) {
+
+            $prefMenu = (new UsuarioPreferenciaService(new UsuarioPreferenciaRepository()))->obtenerMenuUsuario($idUsuario);
+            if (($prefMenu['inicio'] ?? 'accesos') === 'dashboard' && $puedeDashboard) {
                 $this->redirect(rtrim(BASE_URL, '/') . '/modulos/dashboard');
                 return;
+            }
+
+            try {
+                $menuModulos = (new ModuloMenu())->getModulosConSubmodulos($idUsuario, $idEmpresa, $nivel);
+            } catch (\Throwable $e) {
+                $menuModulos = [];
+            }
+            $servicio = new AccesosFrecuentesService();
+            $accesos = $servicio->obtener($idUsuario, $idEmpresa, $menuModulos, 12);
+            if ($puedeDashboard) {
+                $accesoDashboard = $servicio->accesoDashboard($menuModulos);
             }
         }
 
         $this->viewWithLayout('layouts.main', 'home.index', [
             'titulo' => 'Inicio',
             'sinEmpresaSuperAdmin' => $sinEmpresa,
+            'accesos' => $accesos,
+            'accesoDashboard' => $accesoDashboard,
         ]);
     }
 

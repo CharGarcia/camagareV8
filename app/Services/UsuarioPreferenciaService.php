@@ -34,12 +34,17 @@ class UsuarioPreferenciaService
      * Se guarda en la misma tabla usuarios_preferencias con id_empresa = 0, que
      * significa "del usuario, no de una empresa" (la tabla no tiene FK a empresas).
      * Claves (todas opcionales):
-     *   tipo      'horizontal' (por defecto) | 'vertical'
+     *   tipo      'horizontal' (por defecto, una fila con flechas) |
+     *             'horizontal_filas' (barra horizontal que pasa a una segunda fila
+     *             cuando los módulos no caben) | 'vertical'
      *   orden     ids de módulo en el orden elegido; [] = orden original
      *   colapsado sidebar contraído (solo íconos)
+     *   inicio    pantalla al ingresar: 'accesos' (por defecto, Inicio con los
+     *             accesos frecuentes y el dashboard primero si lo tiene) | 'dashboard'
      */
     public const SIN_EMPRESA = 0;
     public const MODULO_MENU = 'menu_usuario';
+    public const TIPOS_MENU = ['horizontal', 'horizontal_filas', 'vertical'];
 
     public function obtenerMenuUsuario(int $idUsuario): array
     {
@@ -59,13 +64,16 @@ class UsuarioPreferenciaService
         $menu = $this->obtenerMenuUsuario($idUsuario);
 
         if (array_key_exists('tipo', $cambios)) {
-            $menu['tipo'] = $cambios['tipo'] === 'vertical' ? 'vertical' : 'horizontal';
+            $menu['tipo'] = in_array($cambios['tipo'], self::TIPOS_MENU, true) ? $cambios['tipo'] : 'horizontal';
         }
         if (array_key_exists('orden', $cambios) && is_array($cambios['orden'])) {
             $menu['orden'] = array_values(array_unique(array_filter(
                 array_map('intval', $cambios['orden']),
                 static fn(int $id) => $id > 0
             )));
+        }
+        if (array_key_exists('inicio', $cambios)) {
+            $menu['inicio'] = $cambios['inicio'] === 'dashboard' ? 'dashboard' : 'accesos';
         }
         if (array_key_exists('colapsado', $cambios)) {
             $menu['colapsado'] = filter_var($cambios['colapsado'], FILTER_VALIDATE_BOOLEAN);

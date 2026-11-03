@@ -332,6 +332,11 @@ class FacturaReembolsoService
         $res['pagos']          = $this->repository->getPagos($id);
         $res['info_adicional'] = $this->repository->getInfoAdicional($id);
 
+        // Cobros registrados en Ingresos y saldo pendiente (total − cobros).
+        $res['cobros']         = $this->repository->getCobros($id, $idEmpresa);
+        $res['total_cobrado']  = round(array_sum(array_map(static fn($c) => (float) $c['monto_cobrado'], $res['cobros'])), 2);
+        $res['saldo_pendiente'] = round((float) ($res['importe_total'] ?? 0) - $res['total_cobrado'], 2);
+
         return $res;
     }
 
@@ -381,6 +386,17 @@ class FacturaReembolsoService
             }
             if (($fr['estado'] ?? '') === 'anulado') {
                 throw new Exception('La factura de reembolso ya está anulada.');
+            }
+
+            // Con cobros vigentes, anularla dejaría esos ingresos cobrando un documento anulado
+            // (y su asiento acreditando una cuenta por cobrar que ya no existe).
+            $cobros = $this->repository->getCobros($id, $idEmpresa);
+            if (!empty($cobros)) {
+                $numeros = implode(', ', array_map(static fn($c) => (string) ($c['numero_ingreso'] ?: ('#' . $c['id_ingreso'])), $cobros));
+                throw new Exception(
+                    "No se puede anular la factura de reembolso porque tiene cobros registrados en Ingresos ({$numeros}). "
+                    . 'Anule primero esos ingresos.'
+                );
             }
 
             // Anular revierte su asiento: no puede tocar un período ya cerrado.

@@ -368,23 +368,19 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                     <?php
                         // Botones ligados a un tipo de documento (Factura de venta/Recibo de venta/Factura
                         // reembolso): solo se muestran si hay algún documento pendiente de ese tipo en la
-                        // empresa. Los demás botones (p. ej. Anticipo Cliente, sin búsqueda de documentos)
-                        // siempre se muestran.
+                        // empresa. Se dibujan igual, ocultos (d-none), para que el modal los muestre o los
+                        // esconda al abrir un ingreso nuevo (ingActualizarBotonesPendientes). Los demás
+                        // botones (p. ej. Anticipo Cliente, sin búsqueda de documentos) siempre se muestran.
                         $comportamientosDocDriven = ['FACTURA_VENTA', 'RECIBO_VENTA', 'FACTURA_REEMBOLSO'];
                         $conPendientes = $comportamientosConPendientes ?? [];
-                        $conceptosBoton  = array_values(array_filter($conceptos, function ($c) use ($comportamientosDocDriven, $conPendientes) {
-                            $comp = $c['comportamiento'] ?? 'GENERAL';
-                            if ($comp === 'GENERAL') return false;
-                            if (in_array($comp, $comportamientosDocDriven, true) && !in_array($comp, $conPendientes, true)) return false;
-                            return true;
-                        }));
+                        $conceptosBoton  = array_values(array_filter($conceptos, fn($c) => ($c['comportamiento'] ?? 'GENERAL') !== 'GENERAL'));
                         $conceptosSelect = array_values(array_filter($conceptos, fn($c) => ($c['comportamiento'] ?? 'GENERAL') === 'GENERAL'));
                     ?>
                     <div id="concepto-btns-group" class="ms-auto d-flex gap-1 align-items-center flex-wrap">
                         <div class="vr mx-1"></div>
 <?php foreach ($conceptosBoton as $c): ?>
                         <button type="button"
-                                class="btn btn-sm btn-outline-secondary concepto-ingreso-btn"
+                                class="btn btn-sm btn-outline-secondary concepto-ingreso-btn<?= in_array($c['comportamiento'] ?? '', $comportamientosDocDriven, true) && !in_array($c['comportamiento'], $conPendientes, true) ? ' d-none' : '' ?>"
                                 data-id="<?= $c['id'] ?>"
                                 data-comportamiento="<?= htmlspecialchars($c['comportamiento'] ?? 'GENERAL') ?>">
                             <?= htmlspecialchars($c['nombre']) ?>
@@ -2077,7 +2073,38 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
         sel.value = id;
     }
 
-    function abrirModalIngreso() {
+    // Comportamientos cuyo botón depende de que haya documentos pendientes de cobro, y los que
+    // hoy los tienen (lo calcula el servidor; se refresca al abrir un ingreso nuevo).
+    const ING_COMP_DOC = ['FACTURA_VENTA', 'RECIBO_VENTA', 'FACTURA_REEMBOLSO'];
+    let ingCompConPendientes = <?= json_encode(array_values($comportamientosConPendientes ?? [])) ?>;
+
+    function ingActualizarBotonesPendientes() {
+        const idElegido = document.getElementById('m-select-concepto')?.value || '';
+        document.querySelectorAll('.concepto-ingreso-btn').forEach(btn => {
+            const comp = btn.dataset.comportamiento || 'GENERAL';
+            if (!ING_COMP_DOC.includes(comp)) return;
+            // El concepto de un ingreso ya guardado que se está viendo no se esconde.
+            const elegido = idElegido !== '' && btn.dataset.id == idElegido;
+            btn.classList.toggle('d-none', !ingCompConPendientes.includes(comp) && !elegido);
+        });
+    }
+
+    function ingRefrescarConceptosConPendientes() {
+        return fetch(`<?= BASE_URL ?>/<?= $rutaModulo ?>/conceptosConPendientesAjax`)
+            .then(r => r.json())
+            .then(res => {
+                if (res && res.ok && Array.isArray(res.comportamientos)) {
+                    ingCompConPendientes = res.comportamientos;
+                    ingActualizarBotonesPendientes();
+                }
+            })
+            .catch(() => {}); // sin respuesta se queda lo que calculó la página
+    }
+
+    function abrirModalIngreso(desdeVer = false) {
+        // Ingreso nuevo: volver a preguntar qué conceptos tienen documentos pendientes (al ver uno
+        // guardado no, para no esconder el botón de su propio concepto mientras se carga).
+        if (!desdeVer) ingRefrescarConceptosConPendientes();
         // Reset form UI
         document.getElementById('modalIngresoTitulo').textContent = 'Registrar Nuevo Ingreso';
         const iconEl = document.getElementById('modalIngresoIcono');
@@ -2506,7 +2533,7 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                 const soloLectura = esAnulado || periodoCerrado;
                 esIngresoModoLectura = soloLectura; // Propagar estado globalmente
 
-                abrirModalIngreso(); // Resets all, variables and resets fields to enabled
+                abrirModalIngreso(true); // Resets all, variables and resets fields to enabled
                 esIngresoModoLectura = soloLectura; // abrirModalIngreso() lo reinicia a false
                 ingObsAuto = false; // no pisar las observaciones guardadas; se decide tras hidratar
                 document.getElementById('tab-ingreso-cnt-li')?.classList.remove('d-none'); // Registro guardado: sí mostrar Asiento contable
@@ -3391,7 +3418,8 @@ window.onOpcionCreada = function (id, nombre, comportamiento, cuenta, aplica) {
             }
         }
     } else if (grupo && sel) {
-        // Concepto relacionado con un módulo → botón visible
+        // Concepto relacionado con un módulo → botón (oculto si es de documentos y no hay
+        // ninguno pendiente de cobro: misma regla que los que dibuja el servidor).
         const btn = document.createElement('button');
         btn.type = 'button';
         btn.className = 'btn btn-sm btn-outline-secondary concepto-ingreso-btn';
@@ -3401,6 +3429,12 @@ window.onOpcionCreada = function (id, nombre, comportamiento, cuenta, aplica) {
         btn.addEventListener('click', function () { ingOnClickConceptoBtn(this); });
         // Insertar antes del selector general para conservar el orden
         if (selGen) grupo.insertBefore(btn, selGen); else grupo.appendChild(btn);
+        if (ING_COMP_DOC.includes(comportamiento) && !ingCompConPendientes.includes(comportamiento)) {
+            btn.classList.add('d-none');
+            Swal.fire({ toast: true, position: 'top-end', icon: 'info', showConfirmButton: false, timer: 4000,
+                title: `Opción "${nombre}" creada. Su botón aparece cuando haya documentos pendientes de cobro.` });
+            return;
+        }
         // Queda elegido, igual que si se pulsara el botón (puede abrir los documentos pendientes).
         if (editable) ingOnClickConceptoBtn(btn);
     }

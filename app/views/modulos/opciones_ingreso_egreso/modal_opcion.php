@@ -130,7 +130,7 @@ $idEmpresaActOIE = (int)($_SESSION['id_empresa'] ?? 0);
     // coincidir con AsientoProgramadoRepository::tieneCuentaOficialPorComportamiento()
     // (COMPORTAMIENTO_CUENTA_OFICIAL + COMPORTAMIENTO_CUENTA_BLOQUEADA_SIN_OFICIAL). ROL (Nómina)
     // se resuelve solo entre "Sueldos por Pagar" y "Anticipos y Descuentos" según el tipo de rol.
-    const OIE_COMPORTAMIENTOS_CUENTA_BLOQUEADA = ['COMPRA', 'LIQUIDACION', 'FACTURA_VENTA', 'RECIBO_VENTA', 'ROL'];
+    const OIE_COMPORTAMIENTOS_CUENTA_BLOQUEADA = ['COMPRA', 'LIQUIDACION', 'FACTURA_VENTA', 'RECIBO_VENTA', 'FACTURA_REEMBOLSO', 'ROL'];
 
     function actualizarBloqueoCuentaOIE(comportamiento) {
         const bloqueada = OIE_COMPORTAMIENTOS_CUENTA_BLOQUEADA.includes(comportamiento);

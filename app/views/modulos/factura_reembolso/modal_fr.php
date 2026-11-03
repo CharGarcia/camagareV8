@@ -153,6 +153,9 @@ $vistaConfigFR = \App\Helpers\PreferenciasHelper::getPreferenciasVista('modulos/
                                             <li class="nav-item">
                                                 <button class="nav-link py-1 small" id="fr-subtab-credito-btn" data-bs-toggle="tab" data-bs-target="#fr-subtab-credito" type="button">Crédito</button>
                                             </li>
+                                            <li class="nav-item">
+                                                <button class="nav-link py-1 small" id="fr-subtab-cobros-btn" data-bs-toggle="tab" data-bs-target="#fr-subtab-cobros" type="button">Cobros <span class="badge bg-success bg-opacity-10 text-success border border-success border-opacity-25 ms-1 d-none" id="fr-cobros-count">0</span></button>
+                                            </li>
                                         </ul>
                                         <div class="tab-content bg-white border p-2 rounded-bottom" style="min-height: 120px;">
                                             <!-- Info Adicional -->
@@ -223,6 +226,24 @@ $vistaConfigFR = \App\Helpers\PreferenciasHelper::getPreferenciasVista('modulos/
                                                 </div>
                                                 <button type="button" class="btn btn-link btn-xs p-0 text-decoration-none small mt-1" onclick="window.FR_agregarPago()"><i class="bi bi-plus-circle me-1"></i>Añadir pago</button>
                                             </div>
+                                            <!-- Cobros registrados en Ingresos (solo lectura) -->
+                                            <div class="tab-pane fade" id="fr-subtab-cobros" role="tabpanel">
+                                                <div class="border rounded-2 overflow-hidden bg-white mt-1">
+                                                    <table class="table table-sm table-hover mb-0" style="font-size:0.75rem;">
+                                                        <thead class="table-light">
+                                                            <tr>
+                                                                <th>Ingreso</th>
+                                                                <th>Fecha</th>
+                                                                <th class="text-end">Cobrado</th>
+                                                            </tr>
+                                                        </thead>
+                                                        <tbody id="fr-cobros-tbody">
+                                                            <tr><td colspan="3" class="text-center py-3 text-muted">Sin cobros registrados.</td></tr>
+                                                        </tbody>
+                                                    </table>
+                                                </div>
+                                                <div class="x-small text-muted mt-1"><i class="bi bi-info-circle me-1"></i>Los cobros se registran en <strong>Ingresos</strong> con el concepto de facturas de reembolso, una vez autorizada la factura.</div>
+                                            </div>
                                             <!-- Crédito SRI -->
                                             <div class="tab-pane fade" id="fr-subtab-credito" role="tabpanel">
                                                 <div class="p-2">
@@ -266,6 +287,17 @@ $vistaConfigFR = \App\Helpers\PreferenciasHelper::getPreferenciasVista('modulos/
                                             <div class="d-flex justify-content-between align-items-center mb-0 x-small text-info">
                                                 <span>Total reembolsado (terceros)</span>
                                                 <span id="fr_lbl_total_reembolsado">0.00</span>
+                                            </div>
+                                            <div id="fr_bloque_saldo" class="d-none">
+                                                <hr class="my-1 opacity-25">
+                                                <div class="d-flex justify-content-between align-items-center mb-1 x-small text-success">
+                                                    <span>Cobrado</span>
+                                                    <span id="fr_lbl_cobrado">0.00</span>
+                                                </div>
+                                                <div class="d-flex justify-content-between align-items-center mb-0">
+                                                    <span class="fw-bold text-dark">Saldo pendiente</span>
+                                                    <span class="fw-bold" id="fr_lbl_saldo">0.00</span>
+                                                </div>
                                             </div>
                                         </div>
                                     </div>

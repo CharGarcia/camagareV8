@@ -236,6 +236,7 @@ class EmpresaInicializadorService
      *   - "Liquidaciones compras" → LIQUIDACION       (egreso)
      *   - "Facturas ventas"       → FACTURA_VENTA     (ingreso)
      *   - "Recibos de venta"      → RECIBO_VENTA      (ingreso)
+     *   - "Facturas de reembolso" → FACTURA_REEMBOLSO (ingreso)
      *   - "Anticipos Clientes"    → ANTICIPO_CLIENTE  (ingreso)
      *   - "Anticipos Proveedores" → ANTICIPO_PROVEEDOR (egreso)
      *   - "Nómina"                → ROL               (egreso, pago de roles de pago)
@@ -255,6 +256,7 @@ class EmpresaInicializadorService
             ['nombre' => 'Liquidaciones compras', 'comportamiento' => 'LIQUIDACION',       'ingresos' => 'false', 'egresos' => 'true'],
             ['nombre' => 'Facturas ventas',       'comportamiento' => 'FACTURA_VENTA',     'ingresos' => 'true',  'egresos' => 'false'],
             ['nombre' => 'Recibos de venta',      'comportamiento' => 'RECIBO_VENTA',      'ingresos' => 'true',  'egresos' => 'false'],
+            ['nombre' => 'Facturas de reembolso', 'comportamiento' => 'FACTURA_REEMBOLSO', 'ingresos' => 'true',  'egresos' => 'false'],
             ['nombre' => 'Anticipos Clientes',    'comportamiento' => 'ANTICIPO_CLIENTE',   'ingresos' => 'true',  'egresos' => 'false'],
             ['nombre' => 'Anticipos Proveedores', 'comportamiento' => 'ANTICIPO_PROVEEDOR', 'ingresos' => 'false', 'egresos' => 'true'],
             ['nombre' => 'Nómina',                'comportamiento' => 'ROL',               'ingresos' => 'false', 'egresos' => 'true'],

@@ -1,22 +1,27 @@
 <?php
 /** @var array $menuModulos */
 /** @var string $base */
+/** @var string $tipoMenu 'horizontal' | 'horizontal_filas' (Controller::getLayoutData) */
 $menuModulos = $menuModulos ?? [];
 $base = $base ?? BASE_URL;
 $menuModulos = array_values(array_filter($menuModulos, fn($m) => !empty($m['submodulos'] ?? [])));
+// Dos filas: si los módulos no caben, pasan a la fila de abajo en vez de mostrar flechas.
+$menuFilas = ($tipoMenu ?? 'horizontal') === 'horizontal_filas';
 ?>
-<nav class="cmg-menu-modulos d-none d-lg-flex" aria-label="Módulos del sistema">
+<nav class="cmg-menu-modulos<?= $menuFilas ? ' cmg-menu-modulos--filas' : '' ?> d-none d-lg-flex" aria-label="Módulos del sistema">
     <?php if (!empty($menuModulos)): ?>
-    <button type="button" id="cmg-menu-reordenar-btn" class="cmg-menu-scroll-btn cmg-menu-reordenar-btn" title="Reordenar módulos" aria-pressed="false">
-        <i class="bi bi-arrows-move"></i>
-    </button>
-    <button type="button" id="cmg-menu-restablecer-btn" class="cmg-menu-scroll-btn cmg-menu-restablecer-btn d-none" title="Restablecer orden original">
-        <i class="bi bi-arrow-counterclockwise"></i>
+    <?php // Solo visible en el modo «Reordenar módulos» (botón «Personalizar menú»). ?>
+    <div class="cmg-menu-franja-reordenar d-none" id="cmg-menu-franja-reordenar">
+        <span class="cmg-menu-franja-reordenar__texto"><i class="bi bi-arrows-move"></i> Arrastre los módulos para ordenarlos</span>
+        <button type="button" class="btn btn-sm btn-light border" data-cmg-reordenar-cancelar>Cancelar</button>
+        <button type="button" class="btn btn-sm btn-primary" data-cmg-reordenar-listo>Listo</button>
+    </div>
+    <?php endif; ?>
+    <?php if (!$menuFilas): ?>
+    <button type="button" class="cmg-menu-scroll-btn cmg-menu-scroll-left" aria-label="Desplazar izquierda">
+        <i class="bi bi-chevron-double-left"></i>
     </button>
     <?php endif; ?>
-    <button type="button" class="cmg-menu-scroll-btn cmg-menu-scroll-left" aria-label="Desplazar izquierda">
-        <i class="bi bi-chevron-left"></i>
-    </button>
     <div class="cmg-menu-scroll-wrap">
         <ul class="cmg-menu-list" id="cmg-menu-list">
             <?php if (empty($menuModulos)): ?>
@@ -54,16 +59,17 @@ $menuModulos = array_values(array_filter($menuModulos, fn($m) => !empty($m['subm
             <?php endif; ?>
         </ul>
     </div>
+    <?php if (!$menuFilas): ?>
     <button type="button" class="cmg-menu-scroll-btn cmg-menu-scroll-right" aria-label="Desplazar derecha">
-        <i class="bi bi-chevron-right"></i>
-    </button>
-    <?php if (!empty($menuModulos)): ?>
-    <button type="button" class="cmg-menu-scroll-btn" data-cmg-tipo-menu="vertical" title="Cambiar a menú lateral (vertical)">
-        <i class="bi bi-layout-sidebar"></i>
+        <i class="bi bi-chevron-double-right"></i>
     </button>
     <?php endif; ?>
+    <button type="button" class="cmg-menu-scroll-btn cmg-menu-ajustes-btn" id="cmg-menu-ajustes-btn" title="Personalizar menú">
+        <i class="bi bi-sliders2"></i>
+    </button>
 </nav>
 
+<script src="<?= rtrim($base, '/') ?>/js/menu-personalizar.js?v=<?= asset_ver('/js/menu-personalizar.js') ?>"></script>
 <script>
 (function() {
     var wrap = document.querySelector('.cmg-menu-scroll-wrap');
@@ -141,90 +147,30 @@ $menuModulos = array_values(array_filter($menuModulos, fn($m) => !empty($m['subm
     });
 })();
 
-/* Guarda la personalización del menú del USUARIO (igual en todas sus empresas):
-   {tipo, orden, colapsado}. La usa también partials/menu-sidebar.php. */
-window.CMG_guardarMenuUsuario = window.CMG_guardarMenuUsuario || function(cambios) {
-    var fd = new FormData();
-    fd.append('menu', JSON.stringify(cambios));
-    return fetch('<?= rtrim($base, '/') ?>/Preferencias/guardarMenuAjax', {
-        method: 'POST', body: fd, credentials: 'same-origin',
-        headers: { 'X-Requested-With': 'XMLHttpRequest' }
-    });
-};
-
+/* Botón «Personalizar menú»: tipo de menú y reordenar (public/js/menu-personalizar.js). */
 (function() {
-    var btnReordenar = document.getElementById('cmg-menu-reordenar-btn');
-    var btnRestablecer = document.getElementById('cmg-menu-restablecer-btn');
-    var nav = document.querySelector('.cmg-menu-modulos');
-    var lista = document.getElementById('cmg-menu-list');
-    if (!btnReordenar || !nav || !lista) return;
-
-    var dragEl = null;
-
-    function itemsArray() {
-        return Array.prototype.slice.call(lista.querySelectorAll('.cmg-menu-item[data-id-modulo]'));
-    }
-
-    function activarModoReordenar(activo) {
-        window.__cmgMenuReordenando = activo;
-        nav.classList.toggle('cmg-menu-reordenando', activo);
-        btnReordenar.setAttribute('aria-pressed', activo ? 'true' : 'false');
-        btnReordenar.classList.toggle('active', activo);
-        if (btnRestablecer) btnRestablecer.classList.toggle('d-none', !activo);
-        itemsArray().forEach(function(li) {
-            li.setAttribute('draggable', activo ? 'true' : 'false');
-        });
-    }
-
-    function guardarOrden() {
-        var orden = itemsArray().map(function(li) { return li.dataset.idModulo; });
-        window.CMG_guardarMenuUsuario({ orden: orden }).catch(function() {});
-    }
-
-    btnReordenar.addEventListener('click', function() {
-        activarModoReordenar(!nav.classList.contains('cmg-menu-reordenando'));
-    });
-
-    if (btnRestablecer) {
-        btnRestablecer.addEventListener('click', function() {
-            window.CMG_guardarMenuUsuario({ orden: [] }).finally(function() { window.location.reload(); });
-        });
-    }
-
-    lista.addEventListener('dragstart', function(e) {
-        var li = e.target.closest('.cmg-menu-item[data-id-modulo]');
-        if (!li || !nav.classList.contains('cmg-menu-reordenando')) { e.preventDefault(); return; }
-        dragEl = li;
-        li.classList.add('cmg-menu-dragging');
-        e.dataTransfer.effectAllowed = 'move';
-        try { e.dataTransfer.setData('text/plain', li.dataset.idModulo || ''); } catch (err) {}
-    });
-
-    lista.addEventListener('dragover', function(e) {
-        if (!dragEl) return;
-        e.preventDefault();
-        var li = e.target.closest('.cmg-menu-item[data-id-modulo]');
-        if (!li || li === dragEl) return;
-        var rect = li.getBoundingClientRect();
-        var after = (e.clientX - rect.left) > (rect.width / 2);
-        lista.insertBefore(dragEl, after ? li.nextSibling : li);
-    });
-
-    lista.addEventListener('drop', function(e) { e.preventDefault(); });
-
-    lista.addEventListener('dragend', function() {
-        if (dragEl) dragEl.classList.remove('cmg-menu-dragging');
-        dragEl = null;
-        guardarOrden();
+    var boton = document.getElementById('cmg-menu-ajustes-btn');
+    if (!boton || !window.CMG_MenuPersonalizar) return;
+    window.CMG_MenuPersonalizar.init({
+        boton: boton,
+        url: '<?= rtrim($base, '/') ?>/Preferencias/guardarMenuAjax',
+        tipoActual: '<?= $menuFilas ? 'horizontal_filas' : 'horizontal' ?>',
+        inicioActual: '<?= ($inicioMenu ?? '') === 'dashboard' ? 'dashboard' : 'accesos' ?>',
+        puedeDashboard: <?= !empty($puedeDashboardMenu) ? 'true' : 'false' ?>,
+        contenedor: document.querySelector('.cmg-menu-modulos'),
+        claseModo: 'cmg-menu-reordenando',
+        lista: document.getElementById('cmg-menu-list'),
+        selectorItem: '.cmg-menu-item[data-id-modulo]',
+        claseArrastre: 'cmg-menu-dragging',
+        eje: 'x',
+        scroller: <?= $menuFilas ? 'null' : "document.querySelector('.cmg-menu-scroll-wrap')" ?>,
+        franja: document.getElementById('cmg-menu-franja-reordenar'),
+        alEntrar: function() {
+            // Cierra el submenú que hubiera quedado abierto.
+            document.querySelectorAll('.cmg-menu-dropdown-menu.cmg-dropdown-visible').forEach(function(m) {
+                m.classList.remove('cmg-dropdown-visible');
+            });
+        }
     });
 })();
-
-/* Pasar al menú lateral: guarda la preferencia del usuario y recarga. */
-document.querySelectorAll('.cmg-menu-modulos [data-cmg-tipo-menu]').forEach(function(btn) {
-    btn.addEventListener('click', function() {
-        btn.disabled = true;
-        window.CMG_guardarMenuUsuario({ tipo: btn.getAttribute('data-cmg-tipo-menu') })
-            .finally(function() { window.location.reload(); });
-    });
-});
 </script>

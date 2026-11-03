@@ -133,18 +133,20 @@ class AsientoBuilderService
 
     /**
      * Mismo mecanismo que MODULO_ORIGEN_CARTERA_COMPRAS, pero para la CARTERA de ventas
-     * (ingresos_detalle.tipo_documento IN ('FACTURA','RECIBO')): modulo_origen con el que ese
+     * (ingresos_detalle.tipo_documento IN ('FACTURA','RECIBO','FACTURA_REEMBOLSO')): modulo_origen con el que ese
      * documento guardó su propio asiento (Cuenta por Cobrar en el Debe, posiblemente repartida
      * por línea/Cliente/Producto — misma cascada que Compras).
      */
     private const MODULO_ORIGEN_CARTERA_VENTAS = [
-        'FACTURA' => 'factura_venta',
-        'RECIBO'  => 'recibo_venta',
+        'FACTURA'           => 'factura_venta',
+        'RECIBO'            => 'recibo_venta',
+        'FACTURA_REEMBOLSO' => 'factura_reembolso',
     ];
 
     private const NOMBRE_CONTRAPARTIDA_CARTERA_VENTAS = [
-        'FACTURA' => 'Cuentas por Cobrar (Factura de Venta)',
-        'RECIBO'  => 'Cuentas por Cobrar (Recibo de Venta)',
+        'FACTURA'           => 'Cuentas por Cobrar (Factura de Venta)',
+        'RECIBO'            => 'Cuentas por Cobrar (Recibo de Venta)',
+        'FACTURA_REEMBOLSO' => 'Cuentas por Cobrar (Factura de Reembolso)',
     ];
 
     /**
@@ -155,8 +157,9 @@ class AsientoBuilderService
      * Egresos), así que la referencia del asiento dice lo mismo que el documento.
      */
     private const ETIQUETA_DOC_CARTERA_VENTAS = [
-        'FACTURA' => ['factura de venta', 'facturas de venta'],
-        'RECIBO'  => ['recibo de venta', 'recibos de venta'],
+        'FACTURA'           => ['factura de venta', 'facturas de venta'],
+        'RECIBO'            => ['recibo de venta', 'recibos de venta'],
+        'FACTURA_REEMBOLSO' => ['factura de reembolso', 'facturas de reembolso'],
     ];
 
     private const ETIQUETA_DOC_CARTERA_COMPRAS = [
@@ -244,8 +247,9 @@ class AsientoBuilderService
      * todas esas líneas acreditaba cuentas de resultado dejando cartera sin cancelar.
      */
     private const SLOT_CARTERA_VENTAS = [
-        'FACTURA' => 'PORCOBRARFACTURAVENTA',
-        'RECIBO'  => 'PORCOBRARRECIBOVENTA',
+        'FACTURA'           => 'PORCOBRARFACTURAVENTA',
+        'RECIBO'            => 'PORCOBRARRECIBOVENTA',
+        'FACTURA_REEMBOLSO' => 'FACTREEMB_CXC_CLIENTE',
     ];
 
     private const SLOT_CARTERA_COMPRAS = [
@@ -311,6 +315,13 @@ class AsientoBuilderService
                 $this->registrarFaltante(
                     'Falta la cuenta «Cuentas por Cobrar» en Configuración Contable → Recibos de Venta, '
                     . "o los recibos que cobra {$documento} todavía no tienen su propio asiento generado."
+                );
+                return;
+            case 'FACTURA_REEMBOLSO':
+                $this->registrarFaltante(
+                    'Falta la cuenta «Cuentas por Cobrar Cliente» en Configuración Contable → Factura de '
+                    . 'Reembolso (o «Cuentas por Cobrar» en Ventas con Factura, que es su respaldo), o las '
+                    . "facturas de reembolso que cobra {$documento} todavía no tienen su propio asiento generado."
                 );
                 return;
             case 'ROL':
@@ -5217,8 +5228,9 @@ class AsientoBuilderService
     private const COMPORTAMIENTO_POR_DOC_CARTERA = [
         'COMPRA'      => 'COMPRA',
         'LIQUIDACION' => 'LIQUIDACION',
-        'FACTURA'     => 'FACTURA_VENTA',
-        'RECIBO'      => 'RECIBO_VENTA',
+        'FACTURA'           => 'FACTURA_VENTA',
+        'RECIBO'            => 'RECIBO_VENTA',
+        'FACTURA_REEMBOLSO' => 'FACTURA_REEMBOLSO',
     ];
 
     /**
@@ -5275,7 +5287,7 @@ class AsientoBuilderService
 
     /**
      * Espejo de contrapartidaCarteraCompras para la CARTERA de ventas (ingresos_detalle.
-     * tipo_documento IN ('FACTURA','RECIBO')): por cada documento cobrado, refleja la MISMA
+     * tipo_documento IN ('FACTURA','RECIBO','FACTURA_REEMBOLSO')): por cada documento cobrado, refleja la MISMA
      * distribución de cuentas que ESE documento acreditó en su propio asiento (modulo_origen
      * 'factura_venta'/'recibo_venta'), esta vez leyendo el lado DEBE (donde vive la Cuenta por
      * Cobrar en una venta, en vez del Haber como en compras). ingresos_detalle no tiene columna
@@ -5291,14 +5303,15 @@ class AsientoBuilderService
         // Mayor por tercero no vería ese cobro. Las líneas se funden por cuenta Y cliente.
         $sql = "SELECT d.tipo_documento, d.id_referencia_documento, SUM(d.monto_cobrado) AS total_cobrado,
                        MAX(d.numero_documento) AS numero_documento,
-                       COALESCE(v.id_cliente, rv.id_cliente) AS id_cliente
+                       COALESCE(v.id_cliente, rv.id_cliente, fr.id_cliente) AS id_cliente
                 FROM ingresos_detalle d
                 LEFT JOIN ventas_cabecera v         ON d.tipo_documento = 'FACTURA' AND v.id = d.id_referencia_documento
                 LEFT JOIN recibos_venta_cabecera rv ON d.tipo_documento = 'RECIBO'  AND rv.id = d.id_referencia_documento
+                LEFT JOIN factura_reembolso_cabecera fr ON d.tipo_documento = 'FACTURA_REEMBOLSO' AND fr.id = d.id_referencia_documento
                 WHERE d.id_ingreso = :id
-                  AND d.tipo_documento IN ('FACTURA','RECIBO')
+                  AND d.tipo_documento IN ('FACTURA','RECIBO','FACTURA_REEMBOLSO')
                   AND d.id_referencia_documento IS NOT NULL
-                GROUP BY d.tipo_documento, d.id_referencia_documento, COALESCE(v.id_cliente, rv.id_cliente)";
+                GROUP BY d.tipo_documento, d.id_referencia_documento, COALESCE(v.id_cliente, rv.id_cliente, fr.id_cliente)";
         $st = $db->prepare($sql);
         $st->execute([':id' => $idIngreso]);
         $documentos = $st->fetchAll(\PDO::FETCH_ASSOC);

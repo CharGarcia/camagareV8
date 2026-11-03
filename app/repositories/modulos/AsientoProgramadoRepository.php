@@ -335,17 +335,27 @@ class AsientoProgramadoRepository extends BaseRepository
      * comportamiento (empresa_opciones_ingreso_egreso) => [tipo_asiento, codigo] de la cuenta
      * "oficial" que ese módulo YA usa para su propia Cuenta por Pagar/Cobrar en Configuración
      * Contable. Solo cubre comportamientos con una ÚNICA cuenta oficial resoluble (compra,
-     * liquidación, factura de venta, recibo de venta). ROL también tiene cuenta oficial, pero
+     * liquidación, factura de venta, recibo de venta, factura de reembolso). ROL también tiene cuenta oficial, pero
      * repartida entre DOS cuentas de 'nomina' según el tipo de rol (ver
      * COMPORTAMIENTO_CUENTA_BLOQUEADA_SIN_OFICIAL) — no encaja en este mapa de "una sola cuenta".
      * Anticipos y préstamos (ANTICIPO_CLIENTE, ANTICIPO_PROVEEDOR, QUINCENA, PRESTAMO) sí quedan
      * fuera de ambos: son la transacción de origen y necesitan su propia cuenta configurable.
      */
     private const COMPORTAMIENTO_CUENTA_OFICIAL = [
-        'COMPRA'        => ['adquisiciones_compras', 'PORPAGARFACTURACOMPRA'],
-        'LIQUIDACION'   => ['adquisiciones_compras', 'PORPAGARFACTURACOMPRA'],
-        'FACTURA_VENTA' => ['ventas_factura',        'PORCOBRARFACTURAVENTA'],
-        'RECIBO_VENTA'  => ['recibos_venta',         'PORCOBRARRECIBOVENTA'],
+        'COMPRA'            => ['adquisiciones_compras', 'PORPAGARFACTURACOMPRA'],
+        'LIQUIDACION'       => ['adquisiciones_compras', 'PORPAGARFACTURACOMPRA'],
+        'FACTURA_VENTA'     => ['ventas_factura',        'PORCOBRARFACTURAVENTA'],
+        'RECIBO_VENTA'      => ['recibos_venta',         'PORCOBRARRECIBOVENTA'],
+        'FACTURA_REEMBOLSO' => ['factura_reembolso',     'FACTREEMB_CXC_CLIENTE'],
+    ];
+
+    /**
+     * Respaldo cuando el slot oficial no resuelve cuenta: la Factura de Reembolso, sin su propia
+     * "Cuentas por Cobrar Cliente", debita la Cuenta por Cobrar de Ventas con Factura (ver
+     * AsientoBuilderService::generarAsientoFacturaReembolso), así que su cobro debe acreditar esa misma.
+     */
+    private const COMPORTAMIENTO_CUENTA_OFICIAL_RESPALDO = [
+        'FACTURA_REEMBOLSO' => ['ventas_factura', 'PORCOBRARFACTURAVENTA'],
     ];
 
     /**
@@ -389,11 +399,26 @@ class AsientoProgramadoRepository extends BaseRepository
         ?int $idEntidad = null,
         ?string $tipoEntidad = null
     ): ?array {
-        $map = self::COMPORTAMIENTO_CUENTA_OFICIAL[strtoupper($comportamiento)] ?? null;
+        $comportamiento = strtoupper($comportamiento);
+        $map = self::COMPORTAMIENTO_CUENTA_OFICIAL[$comportamiento] ?? null;
         if ($map === null) {
             return null;
         }
-        [$tipoAsiento, $codigo] = $map;
+
+        $cuenta = $this->resolverCuentaSlot($idEmpresa, $map[0], $map[1], $idEntidad, $tipoEntidad);
+        $respaldo = self::COMPORTAMIENTO_CUENTA_OFICIAL_RESPALDO[$comportamiento] ?? null;
+        if ($cuenta === null && $respaldo !== null) {
+            $cuenta = $this->resolverCuentaSlot($idEmpresa, $respaldo[0], $respaldo[1], $idEntidad, $tipoEntidad);
+        }
+
+        return $cuenta ?? ['id_cuenta' => 0, 'cuenta_codigo' => '', 'cuenta_nombre' => ''];
+    }
+
+    /**
+     * Cascada de un slot concreto (entidad → General → cuenta única). null si no resuelve.
+     */
+    private function resolverCuentaSlot(int $idEmpresa, string $tipoAsiento, string $codigo, ?int $idEntidad, ?string $tipoEntidad): ?array
+    {
 
         // 1. La ENTIDAD manda (cascada acordada, Opción 2): si el cliente del ingreso o el
         //    proveedor del egreso tiene su propia regla para este concepto, esa gana sobre General.
@@ -422,12 +447,7 @@ class AsientoProgramadoRepository extends BaseRepository
         //    exigir además la regla General sería pedir que se configure algo ya deducible.
         //    Con dos o más cuentas distintas NO se adivina: se devuelve 0 y el documento queda
         //    pendiente.
-        $unica = $this->getCuentaUnicaDelSlot($idEmpresa, $codigo);
-        if ($unica !== null) {
-            return $unica;
-        }
-
-        return ['id_cuenta' => 0, 'cuenta_codigo' => '', 'cuenta_nombre' => ''];
+        return $this->getCuentaUnicaDelSlot($idEmpresa, $codigo);
     }
 
     /**

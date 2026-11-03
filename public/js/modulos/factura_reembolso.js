@@ -148,6 +148,7 @@
             FR_renderTerceros();
 
             FR_limpiarInfoAdicional();
+            FR_renderCobros(null);
             setEl('fr_lbl_cliente_ruc', 'textContent', '');
             setEl('fr_lbl_cliente_direccion', 'textContent', '');
             setEl('fr_lbl_cliente_correo', 'textContent', '');
@@ -256,6 +257,7 @@
                     setEl('fr-select-plazo-credito', 'value', (result.pagos && result.pagos[0] && result.pagos[0].unidad_tiempo) || 'dias');
                     FR_renderInfoAdicional(result.info_adicional || []);
                     FR_calcTotales();
+                    FR_renderCobros(result);
 
                     setEl('fr_lbl_cliente_ruc', 'textContent', cab.cliente_ruc || '');
                     setEl('fr_lbl_cliente_direccion', 'textContent', cab.cliente_direccion || '');
@@ -821,6 +823,52 @@
         pagosBody.appendChild(div);
         div.querySelector('input[name="fp_total[]"]').focus();
     };
+
+    function frEsc(t) {
+        const d = document.createElement('div');
+        d.textContent = t == null ? '' : String(t);
+        return d.innerHTML;
+    }
+
+    // Cobros registrados en Ingresos + saldo pendiente. Solo informativo: con null (documento
+    // nuevo) o sin estado autorizado/anulado, se esconde el bloque de saldo.
+    function FR_renderCobros(doc) {
+        const tbody  = document.getElementById('fr-cobros-tbody');
+        const badge  = document.getElementById('fr-cobros-count');
+        const bloque = document.getElementById('fr_bloque_saldo');
+        const cobros = (doc && doc.cobros) || [];
+
+        if (tbody) {
+            tbody.innerHTML = cobros.length
+                ? cobros.map(c => {
+                    const f = String(c.fecha_emision || '').split(' ')[0].split('T')[0].split('-');
+                    const fecha = f.length === 3 ? `${f[2]}-${f[1]}-${f[0]}` : '';
+                    return `<tr>
+                        <td class="p-0 px-1">${frEsc(c.numero_ingreso || ('#' + c.id_ingreso))}</td>
+                        <td class="p-0 px-1">${frEsc(fecha)}</td>
+                        <td class="p-0 px-1 text-end">${r2(c.monto_cobrado).toFixed(2)}</td>
+                    </tr>`;
+                }).join('')
+                : '<tr><td colspan="3" class="text-center py-3 text-muted">Sin cobros registrados.</td></tr>';
+        }
+        if (badge) {
+            badge.textContent = String(cobros.length);
+            badge.classList.toggle('d-none', !cobros.length);
+        }
+
+        const conSaldo = !!doc && doc.estado === 'autorizado';
+        if (bloque) bloque.classList.toggle('d-none', !conSaldo);
+        if (conSaldo) {
+            const saldo = r2(doc.saldo_pendiente || 0);
+            setEl('fr_lbl_cobrado', 'textContent', r2(doc.total_cobrado || 0).toFixed(2));
+            setEl('fr_lbl_saldo', 'textContent', saldo.toFixed(2));
+            const elSaldo = document.getElementById('fr_lbl_saldo');
+            if (elSaldo) {
+                elSaldo.classList.toggle('text-danger', saldo > 0);
+                elSaldo.classList.toggle('text-success', saldo <= 0);
+            }
+        }
+    }
 
     function FR_renderPagos(pagos) {
         document.querySelectorAll('#fr_pagos_body .row-fr-pago').forEach(tr => tr.remove());

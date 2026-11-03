@@ -99,16 +99,7 @@ class IngresosController extends BaseModuloController
         // venta/Factura reembolso) solo se muestran si hay algún documento pendiente de
         // ese tipo en la empresa; los conceptos sin búsqueda de documentos (GENERAL,
         // Anticipo Cliente) no dependen de esto y siempre se muestran.
-        $comportamientosConPendientes = [];
-        foreach (['FACTURA' => 'FACTURA_VENTA', 'RECIBO' => 'RECIBO_VENTA', 'FACTURA_REEMBOLSO' => 'FACTURA_REEMBOLSO'] as $tipoDoc => $comportamiento) {
-            $chk = $this->repository->buscarDocumentosPendientes(
-                $idEmpresa, '', null, $tipoDoc, null, null, null, null,
-                $this->alcanceDocumentosPendientes($idEmpresa)
-            );
-            if (!empty($chk['data'])) {
-                $comportamientosConPendientes[] = $comportamiento;
-            }
-        }
+        $comportamientosConPendientes = $this->comportamientosConPendientes($idEmpresa);
 
         // Atajos "crear X" de la barra del modal: solo se muestran si el usuario puede crear en
         // ese módulo (el guard real sigue en el guardar de cada módulo, con requireCrear()).
@@ -551,6 +542,41 @@ class IngresosController extends BaseModuloController
             (int) ($_SESSION['id_usuario'] ?? 0),
             [$idEmpresa]
         );
+    }
+
+    /**
+     * Comportamientos de concepto ligados a un documento (FACTURA_VENTA, RECIBO_VENTA,
+     * FACTURA_REEMBOLSO) que tienen hoy al menos un documento pendiente de cobro, con el
+     * mismo alcance del usuario que el buscador de documentos.
+     */
+    private function comportamientosConPendientes(int $idEmpresa): array
+    {
+        $con = [];
+        foreach (['FACTURA' => 'FACTURA_VENTA', 'RECIBO' => 'RECIBO_VENTA', 'FACTURA_REEMBOLSO' => 'FACTURA_REEMBOLSO'] as $tipoDoc => $comportamiento) {
+            $chk = $this->repository->buscarDocumentosPendientes(
+                $idEmpresa, '', null, $tipoDoc, null, null, null, null,
+                $this->alcanceDocumentosPendientes($idEmpresa)
+            );
+            if (!empty($chk['data'])) {
+                $con[] = $comportamiento;
+            }
+        }
+        return $con;
+    }
+
+    /**
+     * Lo mismo que calcula index() al cargar la página, para que el modal lo vuelva a pedir al
+     * abrir un ingreso nuevo: si mientras tanto se cobró el último documento pendiente (o se
+     * autorizó uno nuevo), el botón de ese concepto se esconde (o aparece) sin recargar.
+     */
+    public function conceptosConPendientesAjax(): void
+    {
+        $this->requireLeer();
+        header('Content-Type: application/json');
+
+        $idEmpresa = (int) $_SESSION['id_empresa'];
+        echo json_encode(['ok' => true, 'comportamientos' => $this->comportamientosConPendientes($idEmpresa)]);
+        exit;
     }
 
     public function buscarDocumentosPendientesAjax(): void

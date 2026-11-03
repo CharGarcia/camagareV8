@@ -561,6 +561,28 @@ class FacturaReembolsoRepository extends BaseRepository
         return $st->fetchAll();
     }
 
+    /**
+     * Cobros vigentes (ingresos no anulados ni eliminados) de una factura de reembolso,
+     * tal como los registra Ingresos (ingresos_detalle.tipo_documento = 'FACTURA_REEMBOLSO').
+     */
+    public function getCobros(int $idFR, int $idEmpresa): array
+    {
+        $sql = "SELECT i.id AS id_ingreso, i.numero_ingreso, i.fecha_emision, i.estado,
+                       SUM(d.monto_cobrado) AS monto_cobrado
+                FROM ingresos_detalle d
+                INNER JOIN ingresos_cabecera i ON i.id = d.id_ingreso
+                WHERE d.tipo_documento = 'FACTURA_REEMBOLSO'
+                  AND d.id_referencia_documento = :id
+                  AND i.id_empresa = :id_empresa
+                  AND i.estado != 'anulado'
+                  AND i.eliminado = false
+                GROUP BY i.id, i.numero_ingreso, i.fecha_emision, i.estado
+                ORDER BY i.fecha_emision ASC, i.id ASC";
+        $st = $this->db->prepare($sql);
+        $st->execute([':id' => $idFR, ':id_empresa' => $idEmpresa]);
+        return $st->fetchAll();
+    }
+
     public function insertPago(array $data): void
     {
         $sql = "INSERT INTO factura_reembolso_pagos (id_factura_reembolso, forma_pago, total, plazo, unidad_tiempo) VALUES (?, ?, ?, ?, ?)";

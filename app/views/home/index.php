@@ -1,9 +1,65 @@
 <?php
 /** @var string $titulo */
 /** @var bool $sinEmpresaSuperAdmin */
+/** @var array $accesos  AccesosFrecuentesService::obtener() */
+/** @var array|null $accesoDashboard  AccesosFrecuentesService::accesoDashboard(): va primero */
 $sinEmpresaSuperAdmin = $sinEmpresaSuperAdmin ?? false;
+$accesos = $accesos ?? [];
+$accesoDashboard = $accesoDashboard ?? null;
+$tarjetas = $accesoDashboard ? array_merge([$accesoDashboard], $accesos) : $accesos;
 $base = rtrim(BASE_URL ?? '', '/');
 ?>
+
+<?php if (!empty($tarjetas)): ?>
+<style>
+    .inicio-acceso {
+        display: flex; flex-direction: column; align-items: center; justify-content: center;
+        gap: .45rem; height: 100%; min-height: 128px; padding: 1rem .5rem;
+        background: #fff; border: 1px solid #e9ecef; border-radius: 12px;
+        color: #495057; text-decoration: none; text-align: center;
+        transition: border-color .15s, box-shadow .15s, transform .15s;
+    }
+    .inicio-acceso:hover, .inicio-acceso:focus-visible {
+        border-color: var(--cmg-primary, #0d6efd); color: var(--cmg-primary, #0d6efd);
+        box-shadow: 0 4px 14px rgba(13, 110, 253, .12); transform: translateY(-2px); outline: none;
+    }
+    .inicio-acceso__icono {
+        display: flex; align-items: center; justify-content: center;
+        width: 52px; height: 52px; border-radius: 14px; font-size: 1.5rem;
+        background: rgba(13, 110, 253, .08); color: var(--cmg-primary, #0d6efd);
+    }
+    .inicio-acceso__nombre { font-size: .88rem; font-weight: 600; line-height: 1.2; }
+    .inicio-acceso__modulo { font-size: .72rem; color: #6c757d; }
+    .inicio-acceso--dashboard { border-color: rgba(13, 110, 253, .35); }
+    .inicio-acceso--dashboard .inicio-acceso__icono { background: var(--cmg-primary, #0d6efd); color: #fff; }
+</style>
+<div class="mb-3">
+    <h5 class="mb-1">Bienvenid@<?= !empty($_SESSION['nombre']) ? ', ' . htmlspecialchars($_SESSION['nombre']) : '' ?></h5>
+    <div class="text-muted small"><i class="bi bi-lightning-charge me-1"></i>Tus accesos frecuentes: las pantallas que más has usado últimamente en esta empresa.</div>
+</div>
+<div class="row row-cols-2 row-cols-sm-3 row-cols-md-4 row-cols-xl-6 g-3">
+    <?php foreach ($tarjetas as $i => $a): ?>
+    <div class="col">
+        <a class="inicio-acceso<?= ($accesoDashboard && $i === 0) ? ' inicio-acceso--dashboard' : '' ?>" href="<?= htmlspecialchars($a['href']) ?>"<?= $a['nueva_pestana'] ? ' target="_blank" rel="noopener"' : '' ?>
+           title="<?= htmlspecialchars($a['modulo'] . ' › ' . $a['nombre']) ?>">
+            <span class="inicio-acceso__icono"><i class="<?= htmlspecialchars(iconoClase($a['icono'])) ?>"></i></span>
+            <span class="inicio-acceso__nombre"><?= htmlspecialchars($a['nombre']) ?></span>
+            <span class="inicio-acceso__modulo"><?= htmlspecialchars($a['modulo']) ?></span>
+        </a>
+    </div>
+    <?php endforeach; ?>
+</div>
+<p class="text-muted small mt-3 mb-0">
+    <i class="bi bi-info-circle me-1"></i>
+    <?= empty($accesos)
+        ? 'Aquí aparecerán las pantallas que más uses: la lista se arma sola a medida que trabajas.'
+        : 'La lista se arma sola según tu uso.' ?>
+    <?php if ($accesoDashboard): ?>
+    Para entrar directo al dashboard al ingresar, usa el botón
+    <i class="bi bi-sliders2"></i> <strong>Personalizar menú</strong> → <em>Al ingresar mostrar</em>.
+    <?php endif; ?>
+</p>
+<?php else: ?>
 
 <?php if ($sinEmpresaSuperAdmin): ?>
 <div class="alert alert-info border-0 shadow-sm rounded-3 mb-3 d-flex align-items-center">
@@ -28,3 +84,4 @@ $base = rtrim(BASE_URL ?? '', '/');
         </p>
     </div>
 </div>
+<?php endif; ?>

@@ -47,18 +47,21 @@ foreach ($menuModulos as $mod) {
         <button type="button" class="cmg-sidebar__tool" id="cmg-sidebar-colapsar" title="Contraer / expandir menú">
             <i class="bi bi-chevron-double-left cmg-sidebar__icono-colapsar"></i>
         </button>
-        <?php if (!empty($menuModulos)): ?>
-        <button type="button" class="cmg-sidebar__tool cmg-sidebar__solo-expandido" id="cmg-sidebar-reordenar" title="Reordenar módulos" aria-pressed="false">
-            <i class="bi bi-arrows-move"></i>
-        </button>
-        <button type="button" class="cmg-sidebar__tool cmg-sidebar__solo-expandido d-none" id="cmg-sidebar-restablecer" title="Restablecer orden original">
-            <i class="bi bi-arrow-counterclockwise"></i>
-        </button>
-        <?php endif; ?>
-        <button type="button" class="cmg-sidebar__tool ms-auto" data-cmg-tipo-menu="horizontal" title="Cambiar a menú horizontal">
-            <i class="bi bi-window"></i>
+        <button type="button" class="cmg-sidebar__tool ms-auto" id="cmg-sidebar-ajustes" title="Personalizar menú">
+            <i class="bi bi-sliders2"></i>
         </button>
     </div>
+
+    <?php if (!empty($menuModulos)): ?>
+    <?php // Solo visible en el modo «Reordenar módulos» (botón «Personalizar menú»). ?>
+    <div class="cmg-menu-franja-reordenar cmg-menu-franja-reordenar--lateral d-none" id="cmg-sidebar-franja-reordenar">
+        <span class="cmg-menu-franja-reordenar__texto"><i class="bi bi-arrows-move"></i> Arrastre los módulos para ordenarlos</span>
+        <div class="d-flex gap-1">
+            <button type="button" class="btn btn-sm btn-light border flex-fill" data-cmg-reordenar-cancelar>Cancelar</button>
+            <button type="button" class="btn btn-sm btn-primary flex-fill" data-cmg-reordenar-listo>Listo</button>
+        </div>
+    </div>
+    <?php endif; ?>
 
     <?php // El cuerpo no hace scroll: dibuja el degradado de «hay más» arriba/abajo sobre la lista. ?>
     <div class="cmg-sidebar__cuerpo" id="cmg-sidebar-cuerpo">
@@ -102,24 +105,15 @@ foreach ($menuModulos as $mod) {
     </div>
 </aside>
 
+<script src="<?= rtrim($base, '/') ?>/js/menu-personalizar.js?v=<?= asset_ver('/js/menu-personalizar.js') ?>"></script>
 <script>
 (function() {
     var sidebar = document.getElementById('cmg-sidebar');
     var lista = document.getElementById('cmg-sidebar-lista');
     if (!sidebar || !lista) return;
     var body = document.body;
-    var reordenando = false;
-
-    /* Personalización del menú del USUARIO (igual en todas sus empresas):
-       {tipo, orden, colapsado}. Misma función que en partials/menu-modulos.php. */
-    window.CMG_guardarMenuUsuario = window.CMG_guardarMenuUsuario || function(cambios) {
-        var fd = new FormData();
-        fd.append('menu', JSON.stringify(cambios));
-        return fetch('<?= rtrim($base, '/') ?>/Preferencias/guardarMenuAjax', {
-            method: 'POST', body: fd, credentials: 'same-origin',
-            headers: { 'X-Requested-With': 'XMLHttpRequest' }
-        });
-    };
+    var personalizar = null; // controlador del botón «Personalizar menú» (se crea más abajo)
+    function reordenando() { return !!(personalizar && personalizar.reordenando()); }
 
     function colapsado() { return body.classList.contains('cmg-sidebar-colapsado'); }
     function items() { return Array.prototype.slice.call(lista.querySelectorAll('.cmg-sidebar__item[data-id-modulo]')); }
@@ -133,7 +127,7 @@ foreach ($menuModulos as $mod) {
     }
     document.getElementById('cmg-sidebar-colapsar').addEventListener('click', function() {
         var c = !colapsado();
-        if (c && reordenando) activarReordenar(false);
+        if (c && reordenando()) personalizar.cancelar();
         body.classList.toggle('cmg-sidebar-colapsado', c);
         ocultarFlyouts();
         window.CMG_guardarMenuUsuario({ colapsado: c }).catch(function() {});
@@ -160,7 +154,7 @@ foreach ($menuModulos as $mod) {
         });
 
         function mostrarFlyout() {
-            if (!colapsado() || reordenando) return;
+            if (!colapsado() || reordenando()) return;
             clearTimeout(timer);
             ocultarFlyouts();
             var r = btn.getBoundingClientRect();
@@ -210,61 +204,30 @@ foreach ($menuModulos as $mod) {
     window.addEventListener('resize', programarSombras);
     actualizarSombras();
 
-    /* ── Reordenar (mismo orden del usuario que la barra horizontal) ── */
-    var btnReordenar = document.getElementById('cmg-sidebar-reordenar');
-    var btnRestablecer = document.getElementById('cmg-sidebar-restablecer');
-    var dragEl = null;
-
-    function activarReordenar(activo) {
-        reordenando = activo;
-        sidebar.classList.toggle('cmg-sidebar--reordenando', activo);
-        if (btnReordenar) {
-            btnReordenar.classList.toggle('active', activo);
-            btnReordenar.setAttribute('aria-pressed', activo ? 'true' : 'false');
-        }
-        if (btnRestablecer) btnRestablecer.classList.toggle('d-none', !activo);
-        items().forEach(function(li) { li.setAttribute('draggable', activo ? 'true' : 'false'); });
-    }
-    if (btnReordenar) {
-        btnReordenar.addEventListener('click', function() { activarReordenar(!reordenando); });
-    }
-    if (btnRestablecer) {
-        btnRestablecer.addEventListener('click', function() {
-            window.CMG_guardarMenuUsuario({ orden: [] }).finally(function() { window.location.reload(); });
+    /* ── Botón «Personalizar menú»: tipo de menú y reordenar (mismo orden del
+       usuario que la barra horizontal). Lógica en public/js/menu-personalizar.js ── */
+    if (window.CMG_MenuPersonalizar) {
+        personalizar = window.CMG_MenuPersonalizar.init({
+            boton: document.getElementById('cmg-sidebar-ajustes'),
+            url: '<?= rtrim($base, '/') ?>/Preferencias/guardarMenuAjax',
+            tipoActual: 'vertical',
+            inicioActual: '<?= ($inicioMenu ?? '') === 'dashboard' ? 'dashboard' : 'accesos' ?>',
+            puedeDashboard: <?= !empty($puedeDashboardMenu) ? 'true' : 'false' ?>,
+            contenedor: sidebar,
+            claseModo: 'cmg-sidebar--reordenando',
+            lista: lista,
+            selectorItem: '.cmg-sidebar__item[data-id-modulo]',
+            claseArrastre: 'cmg-sidebar__item--arrastrando',
+            eje: 'y',
+            scroller: lista,
+            franja: document.getElementById('cmg-sidebar-franja-reordenar'),
+            alEntrar: function() {
+                // Para arrastrar hace falta ver los nombres: si está contraído, se expande.
+                if (colapsado()) document.getElementById('cmg-sidebar-colapsar').click();
+                ocultarFlyouts();
+            }
         });
     }
-    lista.addEventListener('dragstart', function(e) {
-        var li = e.target.closest('.cmg-sidebar__item[data-id-modulo]');
-        if (!li || !reordenando) { e.preventDefault(); return; }
-        dragEl = li;
-        li.classList.add('cmg-sidebar__item--arrastrando');
-        e.dataTransfer.effectAllowed = 'move';
-        try { e.dataTransfer.setData('text/plain', li.dataset.idModulo || ''); } catch (err) {}
-    });
-    lista.addEventListener('dragover', function(e) {
-        if (!dragEl) return;
-        e.preventDefault();
-        var li = e.target.closest('.cmg-sidebar__item[data-id-modulo]');
-        if (!li || li === dragEl) return;
-        var r = li.getBoundingClientRect();
-        lista.insertBefore(dragEl, (e.clientY - r.top) > (r.height / 2) ? li.nextSibling : li);
-    });
-    lista.addEventListener('drop', function(e) { e.preventDefault(); });
-    lista.addEventListener('dragend', function() {
-        if (!dragEl) return;
-        dragEl.classList.remove('cmg-sidebar__item--arrastrando');
-        dragEl = null;
-        window.CMG_guardarMenuUsuario({ orden: items().map(function(li) { return li.dataset.idModulo; }) }).catch(function() {});
-    });
-
-    /* ── Volver al menú horizontal ── */
-    sidebar.querySelectorAll('[data-cmg-tipo-menu]').forEach(function(btn) {
-        btn.addEventListener('click', function() {
-            btn.disabled = true;
-            window.CMG_guardarMenuUsuario({ tipo: btn.getAttribute('data-cmg-tipo-menu') })
-                .finally(function() { window.location.reload(); });
-        });
-    });
 
     // Dejar a la vista el submódulo de la pantalla actual.
     var activo = lista.querySelector('.cmg-sidebar__link.activo');
