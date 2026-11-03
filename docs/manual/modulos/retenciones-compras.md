@@ -5,8 +5,8 @@ categoria: Compras
 ruta_modulo: modulos/retenciones_compras
 tipo: modulo
 visibilidad: todos
-etiquetas: retencion, retenciones, retencion de liquidacion, retener liquidacion de compra, liquidacion de compra, vincular compra, vincular documento, documento sustento, buscar compra para retener, comprobante de retencion, proveedor, iva, renta, sustento tributario, sri, plazo, base imponible, porcentaje, advertencias, ruc proveedor, ruc del proveedor del sistema, informacion adicional, resolucion 27, pdf, ride, imprimir, imprimir retencion, impresora, descargar pdf, ver pdf, buscar retencion, buscador, filtros, filtrar retenciones, buscar por codigo de retencion, estado de correo, chips, aparecen documentos que no busque, resultados que no corresponden, la busqueda trae otros documentos, archivo no cumple estructura xml, totalDigits, tarifa 14.99, retencion antes de la factura, enlazar retencion, retencion sin compra, factura registrada despues, aviso, avisos, novedad sri, documentos con novedad, devuelto, no autorizado, pendientes de enviar, borrador, borradores, eliminar retencion autorizada, borrar retencion, volver a cargar retencion, superadmin
-version: 1.28
+etiquetas: retencion, retenciones, retencion de liquidacion, retener liquidacion de compra, liquidacion de compra, vincular compra, vincular documento, documento sustento, buscar compra para retener, comprobante de retencion, proveedor, iva, renta, sustento tributario, sri, plazo, base imponible, porcentaje, advertencias, ruc proveedor, ruc del proveedor del sistema, informacion adicional, resolucion 27, pdf, ride, imprimir, imprimir retencion, impresora, descargar pdf, ver pdf, buscar retencion, buscador, filtros, filtrar retenciones, buscar por codigo de retencion, estado de correo, chips, aparecen documentos que no busque, resultados que no corresponden, la busqueda trae otros documentos, archivo no cumple estructura xml, totalDigits, tarifa 14.99, retencion antes de la factura, enlazar retencion, retencion sin compra, factura registrada despues, aviso, avisos, novedad sri, documentos con novedad, devuelto, no autorizado, pendientes de enviar, borrador, borradores, eliminar retencion autorizada, borrar retencion, volver a cargar retencion, superadmin, conceptos sugeridos, retencion predeterminada del proveedor, conceptos del proveedor, codigos sugeridos
+version: 1.29
 orden: 30
 estado: activo
 ---
@@ -29,6 +29,24 @@ sustento —con su tipo, número, fecha y totales— vienen ya cargados.
 3. Compruebe el **documento de sustento**: tipo, número y fecha de emisión.
 4. Elija los códigos de retención de la lista y revise bases y porcentajes.
 5. Guarde y envíe al SRI.
+
+### Conceptos sugeridos del proveedor
+
+Si el proveedor tiene configuradas retenciones predeterminadas en su ficha
+(pestaña **Retenciones**: *Retención en la Fuente (Renta)* y *Retención de IVA*),
+al pulsar **Emitir Retención** desde la compra o la liquidación esos conceptos
+aparecen ya cargados como líneas sugeridas:
+
+- La de **renta** toma como base el **subtotal** del documento.
+- La de **IVA** toma como base el **IVA** del documento; si el documento no tiene
+  IVA, no se sugiere.
+- Si la tarifa del código cambió en el catálogo del SRI, se usa la vigente a la
+  fecha de hoy con el mismo código. Si el código ya no está activo ni vigente, esa
+  línea no se sugiere.
+
+Son solo sugerencias: puede cambiar el código, la base o quitar la línea antes de
+guardar. Si el proveedor no tiene conceptos asignados, el modal abre con una línea
+vacía, como siempre.
 
 El porcentaje sale del código que elija en la lista del catálogo del SRI y solo se
 puede escribir cuando ese código es de **tarifa variable** (ver *El porcentaje lo
@@ -473,6 +491,9 @@ El valor lo configura el superadministrador en `/config/sri-proveedor`.
 
 ## Historial de cambios
 
+- **1.29** — Al emitir la retención desde la compra o la liquidación, los conceptos de
+  retención asignados al proveedor (renta e IVA) se cargan como líneas sugeridas con
+  la base del documento.
 - **1.28** — Corregido: las retenciones con **valor retenido cero** aparecían en el
   aviso de asientos pendientes de generar («quedaron sin asiento porque les falta un
   dato»), aunque no tienen nada que contabilizar. Ya no se cuentan como pendientes.

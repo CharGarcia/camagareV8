@@ -902,6 +902,10 @@ class RetencionesComprasController extends BaseModuloController
                     . ' aún no está autorizada por el SRI. Envíela y espere la autorización antes de emitir la retención.']);
                 exit;
             }
+            // Conceptos de retención del proveedor: el modal los pone como líneas sugeridas.
+            $rows[0]['retenciones_sugeridas'] = $this->repository->getRetencionesSugeridasProveedor(
+                (int) $rows[0]['id_proveedor'], $idEmpresa, date('Y-m-d')
+            );
             echo json_encode(['ok' => true, 'data' => $rows[0]]);
         } catch (\Throwable $e) {
             \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);

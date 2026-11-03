@@ -1304,6 +1304,36 @@ class RetencionCompraRepository extends BaseRepository
         return $id ? (int) $id : null;
     }
 
+    /**
+     * Conceptos de retención predeterminados del proveedor (ficha → pestaña
+     * Retenciones: renta e IVA), para sugerirlos como líneas al emitir la retención
+     * desde una compra/liquidación. El SRI cambia tarifas manteniendo el código, así
+     * que si la fila asignada ya no está activa o vigente a la fecha se usa la fila
+     * vigente del mismo código e impuesto; si no hay ninguna, el concepto se omite.
+     */
+    public function getRetencionesSugeridasProveedor(int $idProveedor, int $idEmpresa, string $fecha): array
+    {
+        $st = $this->db->prepare(
+            "SELECT r.id, r.codigo_ret, r.cod_anexo_ret, r.concepto_ret, r.porcentaje_ret, r.impuesto_ret,
+                    (CASE WHEN UPPER(r.impuesto_ret) = 'RENTA' THEN COALESCE(NULLIF(r.cod_anexo_ret, ''), r.codigo_ret) ELSE r.codigo_ret END) AS codigo_sri
+               FROM proveedores p
+              CROSS JOIN LATERAL (VALUES (p.id_retencion_renta, 1), (p.id_retencion_iva, 2)) AS a(id_ret, orden)
+               JOIN retenciones_sri asig ON asig.id = a.id_ret
+               JOIN LATERAL (
+                    SELECT x.* FROM retenciones_sri x
+                     WHERE x.status = 1
+                       AND x.codigo_ret = asig.codigo_ret AND x.impuesto_ret = asig.impuesto_ret
+                       AND (x.desde IS NULL OR x.desde <= :f1) AND (x.hasta IS NULL OR x.hasta >= :f2)
+                     ORDER BY (x.id = asig.id) DESC, x.desde DESC NULLS LAST
+                     LIMIT 1
+               ) r ON true
+              WHERE p.id = :id AND p.id_empresa = :ie AND p.eliminado = false
+              ORDER BY a.orden"
+        );
+        $st->execute([':id' => $idProveedor, ':ie' => $idEmpresa, ':f1' => $fecha, ':f2' => $fecha]);
+        return $st->fetchAll(PDO::FETCH_ASSOC);
+    }
+
     public function getRetencionSriPorId(int $id): ?array
     {
         $st = $this->db->prepare("SELECT id, codigo_ret, cod_anexo_ret, concepto_ret, porcentaje_ret, impuesto_ret, (CASE WHEN UPPER(impuesto_ret) = 'RENTA' THEN COALESCE(NULLIF(cod_anexo_ret, ''), codigo_ret) ELSE codigo_ret END) AS codigo_sri FROM retenciones_sri WHERE id = ?");

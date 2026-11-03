@@ -1924,6 +1924,49 @@
         }
         window.RET_abrirModalNuevo();
         window.RET_aplicarDocumentoSustento(doc);
+        aplicarRetencionesSugeridas(doc);
+    }
+
+    /**
+     * Conceptos de retención asignados al proveedor (renta / IVA): reemplazan la línea
+     * vacía inicial con la base del documento (renta → subtotal, IVA → IVA). Si el
+     * documento no tiene IVA, la retención de IVA no se sugiere. El usuario puede
+     * cambiarlas o quitarlas como cualquier otra línea.
+     */
+    function aplicarRetencionesSugeridas(doc) {
+        const sugeridas = Array.isArray(doc?.retenciones_sugeridas) ? doc.retenciones_sugeridas : [];
+        if (!sugeridas.length) return;
+        // Solo si el usuario aún no capturó nada (la única línea es la vacía inicial)
+        if (lineasData.some(l => l.id_retencion_sri || String(l.codigo_retencion || '').trim() !== '')) return;
+
+        const subtotal = parseFloat(doc.subtotal) || 0;
+        const iva      = parseFloat(doc.iva) || 0;
+        const r2 = (v) => (typeof window.CMG_r2 === 'function' ? window.CMG_r2(v) : Math.round(v * 100) / 100);
+
+        const nuevas = [];
+        sugeridas.forEach((item) => {
+            const imp     = String(item.impuesto_ret || '').toUpperCase();
+            const esIva   = imp === '2' || imp.includes('IVA');
+            const base    = esIva ? iva : subtotal;
+            if (esIva && base <= 0) return;
+            const pct = parseFloat(item.porcentaje_ret || 0);
+            nuevas.push({
+                codigo_impuesto:    item.impuesto_ret,
+                id_retencion_sri:   item.id,
+                codigo_retencion:   item.codigo_sri || item.codigo_ret,
+                concepto:           item.concepto_ret,
+                base_imponible:     base.toFixed(2),
+                porcentaje_retener: item.porcentaje_ret,
+                valor_retenido:     r2(base * pct / 100),
+                porcentaje_fijo:    pct > 0,
+            });
+        });
+        if (!nuevas.length) return;
+
+        lineasData = nuevas;
+        renderLineas();
+        calcTotales();
+        mostrarAlerta('Se sugirieron los conceptos de retención asignados al proveedor.', 'info');
     }
 
     window.RET_nuevaRetencionDesdeLiquidacion = (idLiq) => nuevaRetencionDesdeDocumento('liquidacion', idLiq);

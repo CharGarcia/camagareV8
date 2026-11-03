@@ -5,8 +5,8 @@ categoria: Compras
 ruta_modulo: modulos/compras
 tipo: modulo
 visibilidad: todos
-etiquetas: compras, compra, factura de compra, detalle de items, descripcion completa, descripcion cortada, no se ve el codigo, buscar compra, buscador, aparecen compras que no busque, resultados que no corresponden, la busqueda trae otras compras, buscar por numero de autorizacion, filtros, filtrar compras, buscar por producto comprado, filtro de fechas, saldo pendiente, estado de pago, chips, ordenar por dos columnas, ordenar por proveedor y fecha, asiento contable, editar asiento, pestaña asiento, proveedor, xml, sri, entrada de mercaderia, vincular producto, retencion, orden de compra, vincular orden, pedido a proveedor, comparar pedido vs facturado, entrega parcial, recibido parcial, cerrar orden, sustento tributario, codigo de sustento, autorizacion, fecha de caducidad, ats, persona natural, obligada a llevar contabilidad, tipo de contribuyente, registro manual, compra fisica, pagar la compra, pestaña pagos, saldo pendiente, valores de terceros, otros conceptos, valores adicionales, bomberos, tasa de basura, recoleccion de basura, planilla de luz, planilla de agua, servicios basicos, informacion adicional, info adicional, nombre muy largo, limite de caracteres, value too long, no se pudo guardar la compra, imprimir, impresora, retencion antes de la factura, enlazar retencion, pdf en dos hojas, segunda hoja casi vacia, totales en otra pagina, el pdf corta la pagina, hoja de mas, asiento no cuadra, el asiento no se genera, asiento manual, registrar asiento a mano, importe total no es subtotal mas iva, supera el maximo de ajuste, xml inconsistente, iva de cabecera distinto al de las lineas, seguro campesino, generar contabilidad, centro de costo, proyecto, centro de costo por factura, proyecto por factura, dos facturas mismo proveedor distinto proyecto, otros rubros de terceros, tasa de pernoctacion, tasa turistica, hotel, hospedaje, rubro dentro del total, iva inflado en el listado, nota de credito de compra, devolucion al proveedor, restar inventario, salida de inventario por nota de credito, procesar salidas, adicional, columna adicional, detalle adicional, det. adicional, informacion adicional del item, detallesAdicionales, dato extra por linea
-version: 2.40
+etiquetas: compras, compra, factura de compra, detalle de items, descripcion completa, descripcion cortada, no se ve el codigo, buscar compra, buscador, aparecen compras que no busque, resultados que no corresponden, la busqueda trae otras compras, buscar por numero de autorizacion, filtros, filtrar compras, buscar por producto comprado, filtro de fechas, saldo pendiente, estado de pago, chips, ordenar por dos columnas, ordenar por proveedor y fecha, asiento contable, editar asiento, pestaña asiento, proveedor, xml, sri, entrada de mercaderia, vincular producto, retencion, orden de compra, vincular orden, pedido a proveedor, comparar pedido vs facturado, entrega parcial, recibido parcial, cerrar orden, sustento tributario, codigo de sustento, autorizacion, fecha de caducidad, ats, persona natural, obligada a llevar contabilidad, tipo de contribuyente, registro manual, compra fisica, pagar la compra, pestaña pagos, saldo pendiente, valores de terceros, otros conceptos, valores adicionales, bomberos, tasa de basura, recoleccion de basura, planilla de luz, planilla de agua, servicios basicos, informacion adicional, info adicional, nombre muy largo, limite de caracteres, value too long, no se pudo guardar la compra, imprimir, impresora, retencion antes de la factura, enlazar retencion, pdf en dos hojas, segunda hoja casi vacia, totales en otra pagina, el pdf corta la pagina, hoja de mas, asiento no cuadra, el asiento no se genera, asiento manual, registrar asiento a mano, importe total no es subtotal mas iva, supera el maximo de ajuste, xml inconsistente, iva de cabecera distinto al de las lineas, seguro campesino, generar contabilidad, centro de costo, proyecto, centro de costo por factura, proyecto por factura, dos facturas mismo proveedor distinto proyecto, otros rubros de terceros, tasa de pernoctacion, tasa turistica, hotel, hospedaje, rubro dentro del total, iva inflado en el listado, nota de credito de compra, devolucion al proveedor, restar inventario, salida de inventario por nota de credito, procesar salidas, adicional, columna adicional, detalle adicional, det. adicional, informacion adicional del item, detallesAdicionales, dato extra por linea, conceptos de retencion sugeridos, retencion predeterminada del proveedor
+version: 2.41
 orden: 20
 estado: activo
 ---
@@ -331,8 +331,11 @@ el costo **tal como vienen en la factura**:
 
 ## Retenciones
 
-Desde la compra se genera la retención al proveedor, con los porcentajes que
-tenga configurados en su ficha. La retención es un documento aparte que también
+Desde la compra se genera la retención al proveedor (pestaña **Retenciones** →
+**Emitir Retención**). Si el proveedor tiene conceptos de retención asignados en su
+ficha (renta e IVA), se cargan como líneas sugeridas: la de renta con el subtotal de
+la compra como base y la de IVA con el IVA de la compra (si la compra no tiene IVA,
+no se sugiere). Se pueden cambiar o quitar antes de guardar. La retención es un documento aparte que también
 se envía al SRI.
 
 **Importante**: una compra con retención asociada **no se puede eliminar**. Hay
@@ -833,6 +836,7 @@ aprobaciones pasa, así que no se paga dos veces.
 
 ## Historial de cambios
 
+- **2.41** — **Emitir Retención** carga como sugeridos los conceptos de retención (renta e IVA) asignados al proveedor, con la base de la compra.
 - **2.40** — Nueva columna **Adicional** en el detalle de ítems: se toma del XML del proveedor (también en las descargas del SRI) o se escribe a mano en las compras manuales, y sale en el PDF como *Det. Adicional* cuando hay información. Requiere `database/2026-10-29_compras_detalle_info_adicional.sql`; las compras ya registradas se completan desde su XML con `database/2026-10-29_compras_detalle_info_adicional_desde_xml.sql`.
 - **2.39** — En el asiento de la compra, la línea del IVA se rotula **IVA en compras** (antes *IVA crédito tributario*).
 - **2.38** — La pestaña **Asiento contable** tiene las columnas **Centro de costo** y **Proyecto** por línea: se puede asignar a cada compra un centro o proyecto distinto del que la cuenta tiene por periodo.
