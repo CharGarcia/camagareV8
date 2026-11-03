@@ -6,7 +6,7 @@ ruta_modulo: modulos/control-bancario
 tipo: modulo
 visibilidad: todos
 etiquetas: control bancario, liquidacion de tarjetas, cobros con tarjeta en el banco, traspaso, traspasos en el banco, deposito de caja al banco, traspaso no aparece en el banco, conciliacion bancaria, estado de cuenta, banco, cheques, movimientos, cuadrar banco, buscar movimiento, buscador, filtros, filtrar movimientos bancarios, buscar cheque, chips, cheques posfechados, cheque por cobrar, cheque por depositar, aviso de cheques, alerta, notificacion, vencimiento de cheques, comprobar con contabilidad, cuadrar con contabilidad, saldo contable vs banco, diferencia contable, asiento faltante, sin asiento
-version: 1.21
+version: 1.22
 orden: 60
 estado: activo
 ---
@@ -155,9 +155,21 @@ Junto a la fecha, cada cheque lleva una etiqueta:
 | **Vence en N días** (ámbar) | La fecha cae dentro de los próximos 5 días |
 | Sin etiqueta | Fecha más lejana |
 
-Un cheque sale de la ventana en cuanto se le registra la **Fecha Banco** (ver
-*Marcar un cheque como cobrado*). "Posfechado" quiere decir que la fecha del
-cheque es posterior a la del ingreso/egreso: un cheque al día no aparece aquí.
+"Posfechado" quiere decir que la fecha del cheque es posterior a la del
+ingreso/egreso: un cheque al día no aparece aquí.
+
+### Marcar como cobrado desde la ventana
+
+En las tres pestañas, cada cheque sin Fecha Banco tiene el botón **Cobrado**. Pide
+la **Fecha Banco** (propone hoy o, si el cheque todavía no vence, su fecha) y la
+registra: es lo mismo que hacerlo desde la fila del listado (ver *Marcar un cheque
+como cobrado*), con las mismas reglas — período conciliado bloqueado, asiento de
+cobro si usa cuenta puente, mes cerrado no permitido. El botón solo aparece si tiene
+permiso de **modificar** en Control Bancario.
+
+Al guardarlo, la fila muestra **✔ DD-MM-AAAA** (verde). Un cheque cuya fecha ya
+llegó sale de la ventana la próxima vez que se abra; uno con fecha futura se sigue
+listando, ya marcado como cobrado.
 
 Los cheques **migrados del sistema anterior** se tratan aparte: si su fecha es
 futura se siguen listando, pero **sin etiqueta**; si su fecha ya pasó y no tienen
@@ -445,6 +457,9 @@ los dos casos.
 
 ## Historial de cambios
 
+- **1.22** — Botón **Cobrado** en cada cheque de la ventana *Cheques Posfechados*
+  (recibidos, emitidos y a empleados): registra la Fecha Banco sin tener que buscar
+  el cheque en el listado.
 - **1.21** — Las **liquidaciones de tarjetas** se muestran cobro por cobro (un
   depósito por cada línea del estado de cuenta de la tarjeta, por su neto) en vez
   de un solo depósito por el total, para que coincidan con el estado de cuenta que

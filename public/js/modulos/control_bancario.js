@@ -891,36 +891,134 @@
         return r.es_migrado === true || r.es_migrado === 't' || r.es_migrado === 1;
     }
 
+    /**
+     * Filas del modal, por pestaña: se guardan para que el botón «Cobrado» lea el cheque por
+     * índice (sin meter el JSON de la fila dentro de un onclick).
+     */
+    const posfRows = {};
+
     /** @param {boolean} [conProtesto] Recibidos: botón «Protestado» por fila (ver CB_protestarCheque). */
     function renderPosfechados(tbodyId, rows, diasPorVencer, conProtesto = false) {
         const tbody = document.getElementById(tbodyId);
-        const cols = conProtesto ? 6 : 5;
+        posfRows[tbodyId] = rows || [];
         if (!rows || !rows.length) {
-            tbody.innerHTML = `<tr><td colspan="${cols}" class="text-center text-muted py-4">No hay cheques posfechados.</td></tr>`;
+            tbody.innerHTML = `<tr><td colspan="6" class="text-center text-muted py-4">No hay cheques posfechados.</td></tr>`;
             return;
         }
-        tbody.innerHTML = rows.map(r => {
+        tbody.innerHTML = rows.map((r, i) => {
             const monto = parseFloat(r.debe) > 0 ? r.debe : r.haber;
             const montoTxt = Number(monto || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-            let accion = '';
-            if (conProtesto) {
-                const puede = r.origen_tipo === 'ingreso' && !esMigrado(r) && parseInt(r.origen_id, 10) > 0;
-                accion = `<td class="text-center">${puede
-                    ? `<button type="button" class="btn btn-sm btn-outline-danger py-0 px-1 text-nowrap" title="El banco devolvió el cheque: anula el ingreso y la factura vuelve a quedar pendiente"
+            const botones = [];
+            // Cobrado = registrar su Fecha Banco (lo mismo que hacerlo desde la fila del listado).
+            if (r.fecha_banco_manual) {
+                botones.push(`<span class="badge bg-success bg-opacity-10 text-success border border-success border-opacity-25" title="Cobrado: el banco lo hizo efectivo en esta fecha"><i class="bi bi-check-circle-fill"></i> ${fmtDateDisplay(r.fecha_banco_manual)}</span>`);
+            } else if (CB_PERM_ACTUALIZAR && r.origen_tipo && parseInt(r.origen_id, 10) > 0) {
+                botones.push(`<button type="button" class="btn btn-sm btn-outline-success py-0 px-1 text-nowrap" title="Registrar la Fecha Banco: el banco hizo efectivo el cheque"
+                               onclick="CB_marcarChequeCobrado('${tbodyId}', ${i})">
+                           <i class="bi bi-check2-circle me-1"></i>Cobrado</button>`);
+            }
+            if (conProtesto && r.origen_tipo === 'ingreso' && !esMigrado(r) && parseInt(r.origen_id, 10) > 0) {
+                botones.push(`<button type="button" class="btn btn-sm btn-outline-danger py-0 px-1 text-nowrap" title="El banco devolvió el cheque: anula el ingreso y la factura vuelve a quedar pendiente"
                                onclick="CB_protestarCheque(${parseInt(r.origen_id, 10)}, ${parseInt(r.id_empresa, 10) || 0}, '${escHtml(r.numero_cheque)}', '${montoTxt}', '${escHtml(r.nombre_entidad)}')">
-                           <i class="bi bi-x-octagon me-1"></i>Protestado</button>`
-                    : ''}</td>`;
+                           <i class="bi bi-x-octagon me-1"></i>Protestado</button>`);
             }
             return `<tr>
-                <td class="text-nowrap">${fmtDateDisplay(r.fecha_cheque)}${esMigrado(r) ? '' : badgePosfechado(r.fecha_cheque, diasPorVencer)}</td>
+                <td class="text-nowrap">${fmtDateDisplay(r.fecha_cheque)}${esMigrado(r) || r.fecha_banco_manual ? '' : badgePosfechado(r.fecha_cheque, diasPorVencer)}</td>
                 <td>${escHtml(r.numero_cheque)}</td>
                 <td>${escHtml(r.forma_pago_nombre)}</td>
                 <td>${escHtml(r.nombre_entidad)}</td>
                 <td class="text-end">$${montoTxt}</td>
-                ${accion}
+                <td class="text-center"><div class="d-flex gap-1 justify-content-center">${botones.join('')}</div></td>
             </tr>`;
         }).join('');
     }
+
+    let posfCobrando = false;
+
+    /**
+     * Marca como cobrado un cheque del modal: registra su Fecha Banco con el mismo endpoint que
+     * el modal de clasificación (guardarClasificacionAjax). El servidor relee del documento el
+     * tipo, número y fecha del cheque, valida el período conciliado y, si el cheque usa cuenta
+     * puente, genera su asiento de cobro en la misma transacción.
+     */
+    window.CB_marcarChequeCobrado = async function (tbodyId, idx) {
+        if (posfCobrando) return;
+        const r = (posfRows[tbodyId] || [])[idx];
+        if (!r) return;
+        posfCobrando = true;
+        try {
+            const hoy = new Date();
+            const hoyIso = `${hoy.getFullYear()}-${String(hoy.getMonth() + 1).padStart(2, '0')}-${String(hoy.getDate()).padStart(2, '0')}`;
+            const fechaCheque = fmtDateInput(r.fecha_cheque) || '';
+            const monto = parseFloat(r.debe) > 0 ? r.debe : r.haber;
+            const montoTxt = Number(monto || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+            const res = await Swal.fire({
+                icon: 'question',
+                title: 'Cheque cobrado',
+                html: `<div class="text-start small">
+                        <p class="mb-2">Cheque <b>#${escHtml(r.numero_cheque)}</b> de <b>${escHtml(r.nombre_entidad)}</b> por <b>$${montoTxt}</b>
+                           (fecha del cheque: ${fmtDateDisplay(r.fecha_cheque)}).</p>
+                        <p class="mb-2">Indique la fecha en que el banco lo hizo efectivo (Fecha Banco). Desde esa fecha mueve el saldo de la cuenta.</p>
+                        <label class="form-label mb-1 d-block">Fecha Banco</label>
+                        <input type="date" id="cb-cobro-fecha" class="form-control form-control-sm" value="${fechaCheque && fechaCheque > hoyIso ? fechaCheque : hoyIso}">
+                       </div>`,
+                showCancelButton: true,
+                confirmButtonText: 'Marcar como cobrado',
+                confirmButtonColor: '#198754',
+                cancelButtonText: 'Cancelar',
+                focusConfirm: false,
+                preConfirm: () => {
+                    const fecha = document.getElementById('cb-cobro-fecha').value;
+                    if (!fecha) {
+                        Swal.showValidationMessage('Indique la Fecha Banco.');
+                        return false;
+                    }
+                    return fecha;
+                },
+            });
+            if (!res.isConfirmed) return;
+
+            const resp = await fetch(`${CB_URL_BASE}/guardarClasificacionAjax`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
+                body: JSON.stringify({
+                    id_asiento_detalle: 0,
+                    origen_tipo: r.origen_tipo,
+                    origen_id: parseInt(r.origen_id, 10) || 0,
+                    id_empresa: parseInt(r.id_empresa, 10) || 0,
+                    id_forma_pago: parseInt(r.id_forma_pago, 10) || state.forma,
+                    tipo_transaccion: 'CHEQUE',
+                    cheque_direccion: r.cheque_direccion || (parseFloat(r.debe) > 0 ? 'RECIBIDO' : 'EMITIDO'),
+                    numero_cheque: r.numero_cheque || null,
+                    fecha_cheque: fechaCheque || null,
+                    fecha_banco: res.value,
+                    observacion: r.observacion || null,
+                }),
+            });
+            const json = await resp.json();
+            if (!json.ok) {
+                Swal.fire({ icon: 'error', title: 'No se marcó como cobrado', text: json.error || 'No se pudo registrar la Fecha Banco.' });
+                return;
+            }
+            r.fecha_banco_manual = res.value;
+            const tbody = document.getElementById(tbodyId);
+            const fila = tbody?.rows[idx];
+            if (fila) {
+                fila.cells[0].innerHTML = fmtDateDisplay(r.fecha_cheque);
+                fila.cells[5].innerHTML = `<span class="badge bg-success bg-opacity-10 text-success border border-success border-opacity-25" title="Cobrado: el banco lo hizo efectivo en esta fecha"><i class="bi bi-check-circle-fill"></i> ${fmtDateDisplay(res.value)}</span>`;
+            }
+            Swal.fire({ icon: 'success', title: 'Cheque cobrado', text: `Fecha Banco registrada: ${fmtDateDisplay(res.value)}.`, timer: 1800, showConfirmButton: false });
+            if (state.forma) {
+                window.CB_fetchSearch(state.page);
+                cargarSaldos();
+            }
+        } catch (e) {
+            console.error(e);
+            Swal.fire({ icon: 'error', title: 'Error', text: 'Error de red o servidor.' });
+        } finally {
+            posfCobrando = false;
+        }
+    };
 
     /**
      * Protesto de un cheque recibido: el banco lo devolvió. Anula el ingreso que lo registró

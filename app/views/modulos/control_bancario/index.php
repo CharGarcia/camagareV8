@@ -498,16 +498,16 @@ $urlBase = rtrim($base, '/') . '/' . ltrim($rutaModulo, '/');
                     <div class="tab-pane fade" id="cb-tab-emitidos">
                         <div class="table-responsive" style="max-height:400px;overflow-y:auto;">
                             <table class="table table-sm table-hover mb-0">
-                                <thead class="table-light"><tr><th>Fecha Cheque</th><th>Nº Cheque</th><th>Cuenta</th><th>Proveedor</th><th class="text-end">Monto</th></tr></thead>
-                                <tbody id="cb-tbody-posf-emitidos"><tr><td colspan="5" class="text-center text-muted py-4">Cargando…</td></tr></tbody>
+                                <thead class="table-light"><tr><th>Fecha Cheque</th><th>Nº Cheque</th><th>Cuenta</th><th>Proveedor</th><th class="text-end">Monto</th><th class="text-center" style="width:1%"></th></tr></thead>
+                                <tbody id="cb-tbody-posf-emitidos"><tr><td colspan="6"class="text-center text-muted py-4">Cargando…</td></tr></tbody>
                             </table>
                         </div>
                     </div>
                     <div class="tab-pane fade" id="cb-tab-emitidos-emp">
                         <div class="table-responsive" style="max-height:400px;overflow-y:auto;">
                             <table class="table table-sm table-hover mb-0">
-                                <thead class="table-light"><tr><th>Fecha Cheque</th><th>Nº Cheque</th><th>Cuenta</th><th>Empleado</th><th class="text-end">Monto</th></tr></thead>
-                                <tbody id="cb-tbody-posf-emitidos-emp"><tr><td colspan="5" class="text-center text-muted py-4">Cargando…</td></tr></tbody>
+                                <thead class="table-light"><tr><th>Fecha Cheque</th><th>Nº Cheque</th><th>Cuenta</th><th>Empleado</th><th class="text-end">Monto</th><th class="text-center" style="width:1%"></th></tr></thead>
+                                <tbody id="cb-tbody-posf-emitidos-emp"><tr><td colspan="6"class="text-center text-muted py-4">Cargando…</td></tr></tbody>
                             </table>
                         </div>
                     </div>
@@ -615,6 +615,8 @@ $urlBase = rtrim($base, '/') . '/' . ltrim($rutaModulo, '/');
 
 <script>
     const CB_PERM_ELIMINAR = <?= !empty($perm['eliminar']) ? 'true' : 'false' ?>;
+    // Botón «Cobrado» del modal de cheques posfechados (registra la Fecha Banco).
+    const CB_PERM_ACTUALIZAR = <?= !empty($perm['actualizar']) ? 'true' : 'false' ?>;
     const RUTA_MODULO_CB = "<?= $rutaModulo ?>";
     const CB_URL_BASE = "<?= $urlBase ?>";
     window.BASE_URL = '<?= $base ?>';
