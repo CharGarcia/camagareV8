@@ -68,10 +68,12 @@ class HomeController extends Controller
                 $menuModulos = [];
             }
             $servicio = new AccesosFrecuentesService();
-            $accesos = $servicio->obtener($idUsuario, $idEmpresa, $menuModulos, 12);
             if ($puedeDashboard) {
                 $accesoDashboard = $servicio->accesoDashboard($menuModulos);
             }
+            // 12 íconos en total, contando el dashboard: dos filas completas de 6
+            // (también parejas a 4, 3 y 2 por fila en pantallas más angostas).
+            $accesos = $servicio->obtener($idUsuario, $idEmpresa, $menuModulos, $accesoDashboard ? 11 : 12);
         }
 
         $this->viewWithLayout('layouts.main', 'home.index', [

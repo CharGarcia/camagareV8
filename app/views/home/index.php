@@ -32,11 +32,37 @@ $base = rtrim(BASE_URL ?? '', '/');
     .inicio-acceso__modulo { font-size: .72rem; color: #6c757d; }
     .inicio-acceso--dashboard { border-color: rgba(13, 110, 253, .35); }
     .inicio-acceso--dashboard .inicio-acceso__icono { background: var(--cmg-primary, #0d6efd); color: #fff; }
+    /* Encabezado compacto: logo + CaMaGaRe ERP + acrónimo, saludo a la derecha */
+    .inicio-encabezado {
+        display: flex; flex-wrap: wrap; align-items: center; gap: .75rem 1.25rem;
+        padding: .75rem 1rem; margin-bottom: 1.25rem;
+        background: #fff; border: 1px solid #e9ecef; border-radius: 12px;
+    }
+    .inicio-encabezado__logo { height: 64px; width: auto; flex-shrink: 0; }
+    .inicio-encabezado__marca { flex: 1 1 320px; min-width: 0; }
+    .inicio-encabezado__titulo { font-size: 1.8rem; line-height: 1.1; margin: 0 0 .2rem; }
+    .inicio-encabezado__acronimo { font-size: .8rem; font-style: italic; color: #6c757d; margin: 0; }
+    .inicio-encabezado__saludo { font-size: 1rem; font-weight: 600; margin: 0; white-space: nowrap; }
+    @media (max-width: 575.98px) {
+        .inicio-encabezado__logo { height: 48px; }
+        .inicio-encabezado__titulo { font-size: 1.45rem; }
+        .inicio-encabezado__saludo { flex-basis: 100%; white-space: normal; }
+    }
 </style>
-<div class="mb-3">
-    <h5 class="mb-1">Bienvenid@<?= !empty($_SESSION['nombre']) ? ', ' . htmlspecialchars($_SESSION['nombre']) : '' ?></h5>
-    <div class="text-muted small"><i class="bi bi-lightning-charge me-1"></i>Tus accesos frecuentes: las pantallas que más has usado últimamente en esta empresa.</div>
+<div class="inicio-encabezado">
+    <img src="<?= $base ?>/image/logofinal.png" alt="CaMaGaRe ERP" class="inicio-encabezado__logo">
+    <div class="inicio-encabezado__marca">
+        <p class="inicio-encabezado__titulo"><span class="fw-bold text-primary">CaMaGaRe</span> <span class="text-muted">ERP</span></p>
+        <p class="inicio-encabezado__acronimo">
+            <span class="fw-bold text-dark">C</span>ontrol <span class="fw-bold text-dark">A</span>dministrativo ·
+            <span class="fw-bold text-dark">M</span>anejo <span class="fw-bold text-dark">A</span>utomatizado ·
+            <span class="fw-bold text-dark">G</span>estión <span class="fw-bold text-dark">A</span>nalítica ·
+            <span class="fw-bold text-dark">R</span>esultados <span class="fw-bold text-dark">E</span>mpresariales
+        </p>
+    </div>
+    <p class="inicio-encabezado__saludo"><i class="bi bi-person-circle text-primary me-1"></i>Bienvenid@<?= !empty($_SESSION['nombre']) ? ', ' . htmlspecialchars($_SESSION['nombre']) : '' ?></p>
 </div>
+<div class="text-muted small mb-2"><i class="bi bi-lightning-charge me-1"></i>Tus accesos frecuentes: las pantallas que más has usado últimamente en esta empresa.</div>
 <div class="row row-cols-2 row-cols-sm-3 row-cols-md-4 row-cols-xl-6 g-3">
     <?php foreach ($tarjetas as $i => $a): ?>
     <div class="col">

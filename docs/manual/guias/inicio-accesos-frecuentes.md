@@ -10,8 +10,9 @@ orden: 3
 estado: activo
 ---
 
-Al ingresar al sistema se muestra la pantalla **Inicio**: una cuadrícula de
-íconos grandes con las pantallas que usted más ha usado últimamente en la
+Al ingresar al sistema se muestra la pantalla **Inicio**: arriba, un encabezado
+con el logo, **CaMaGaRe ERP** y su significado, y su nombre; debajo, una
+cuadrícula de íconos grandes con las pantallas que usted más ha usado últimamente en la
 empresa activa. Un clic y está dentro, sin buscar en el menú.
 
 ## Qué es y para qué sirve
@@ -29,7 +30,8 @@ lista se arma y se actualiza sola.
    nombre aparece el módulo al que pertenece.
 
 Si tiene asignado el **Tablero (dashboard)**, su ícono aparece **siempre
-primero**, resaltado, y a continuación sus accesos frecuentes (hasta 12).
+primero**, resaltado, y a continuación sus accesos frecuentes. En total se
+muestran hasta **12 íconos** (contando el Tablero).
 
 ## Cómo se elige qué aparece
 
