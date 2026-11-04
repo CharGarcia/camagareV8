@@ -58,6 +58,23 @@ abstract class BaseRepository
         return (int) $this->db->lastInsertId($sequence);
     }
 
+    /** Tope (en días) de un plazo de crédito al calcular un vencimiento: 100 años. */
+    public const MAX_DIAS_PLAZO = 36500;
+
+    /**
+     * Días de un plazo, acotados a ±MAX_DIAS_PLAZO, para usar en
+     * `fecha + INTERVAL '1 day' * (…)`. Un plazo absurdo guardado en un documento
+     * (p. ej. un XML de proveedor con la fecha 20261231 en <plazo>) desbordaba el
+     * timestamp («SQLSTATE[22008] timestamp out of range») y tumbaba el listado o
+     * consulta entera (Dashboard, Cuentas por Cobrar/Pagar). Se calcula en bigint
+     * para que `plazo * 365` tampoco desborde el integer.
+     */
+    protected function sqlDiasAcotados(string $exprDias): string
+    {
+        $max = self::MAX_DIAS_PLAZO;
+        return "LEAST(GREATEST(COALESCE(({$exprDias})::bigint, 0), -{$max}), {$max})";
+    }
+
     /**
      * Aplica filtro de id_empresa y eliminado = false por defecto.
      */

@@ -6,7 +6,7 @@ ruta_modulo: modulos/cuentas_por_pagar
 tipo: modulo
 visibilidad: todos
 etiquetas: cuentas por pagar, comprobar con contabilidad, cuadrar con contabilidad, cartera vs contabilidad, no cuadra con contabilidad, cuenta por pagar contable, mayor de proveedores, cxp, deudas, proveedores, saldo pendiente, vencimiento, pagar, obligaciones, fecha de corte, saldo a una fecha, fecha hasta, consolidado, establecimientos, sucursales, matriz, mismo ruc, deudas consolidadas, todas las sucursales, valores de terceros, otros conceptos, valores adicionales, bomberos, tasa de basura, planilla de luz, supera el saldo pendiente, filtrar por proveedor, error de conexion, serie, punto de emision, serie inactiva, registrar pago, cedula y ruc, cliente duplicado, proveedor duplicado, mismo cliente dos veces, mismo proveedor dos veces, identificacion repetida, ruc es la cedula mas 001, unificar fichas, cartera partida en dos, tildes, acentos, eñe, buscar sin tildes, no encuentra al proveedor, no aparece el proveedor, buscar por apellido, buscar por varias palabras, mayor, mayor del proveedor, deuda como mayor, agrupado por proveedor, subtotal por proveedor, total general, seccion por proveedor, no carga al entrar, boton aplicar, aplicar filtros, listado vacio al entrar, detalle por proveedor, columnas del detalle, nc, abonos, retenciones, dias vencidos, ordenar, ordenamiento, orden alfabetico, a-z, z-a, ordenar por proveedor, ordenar por saldo, ordenar por vencimiento, clic en la columna, ordenar la tabla, ordenar el excel, ordenar el pdf, flecha de la columna, saldo junto al nombre, saldo del proveedor, pdf vertical, pdf horizontal, orientacion del pdf, hoja vertical, pdf apaisado, acceso total, permiso de ver todos, registros propios, solo mis compras, no veo las compras de otro, cada usuario ve lo suyo, documentos migrados no aparecen, filtros del pdf, filtros aplicados, quitar filtros del pdf, encabezado del pdf, menu del celular, menu bloqueado, menu no responde, lineas montadas, lineas encimadas, lineas pisadas, texto montado en el pdf, filas cortadas, fila partida entre paginas, paginas en blanco, hojas en blanco en el pdf, pdf descuadrado, encabezado de columnas en cada pagina, nota de debito, notas de debito, nd del proveedor, no cuadra el pdf, total menos pagado no da el saldo, totales repetidos, totales en cada hoja, letra del pdf, pdf se lee chiquito, cuadricula del pdf, columna documento cortada, numero de documento montado, documento se pasa a la otra columna, numero cortado en el pdf, pagar dos veces, doble pago, pago duplicado, importacion no se puede pagar, supera el saldo pendiente, vencimiento segun, plazo del proveedor, plazo del documento, vencer desde la emision, sin credito, antiguedad de cartera, aging, por antiguedad, tramos de dias, 15 30 60 90 dias, vencidos por dias, favoritos, filtro favorito, estrella, datos viejos, limpiar pantalla, pdf lento, pdf de un solo proveedor, sin columna proveedor
-version: 1.32
+version: 1.33
 orden: 50
 estado: activo
 ---
@@ -416,6 +416,10 @@ dos egresos.
 
 ## Errores frecuentes
 
+- **"timestamp out of range" (SQLSTATE 22008)**: un documento tenía un plazo de
+  crédito absurdo (p. ej. una fecha escrita como número de días en el XML del
+  proveedor). Desde ahora el vencimiento se calcula con un tope de 100 años y la
+  pantalla carga; corrija el plazo de ese documento.
 - **"El monto (…) supera el saldo pendiente (…)"** o **"Este documento ya se
   encuentra pagado"**: otro pago ya cubrió parte o todo el documento; recargue
   el listado para ver el saldo actual.
@@ -448,6 +452,7 @@ la factura que modifican. Mismo criterio que
 el Reporte de Cartera y que el asiento contable de la compra.
 
 ## Historial de cambios
+- **1.33** — Corregido: un documento con un plazo de crédito desmedido (millones de días) hacía fallar la consulta con *timestamp out of range*; el vencimiento ahora se limita a 100 años.
 - **1.32** — Selector **Vencimiento según** (plazo del documento, del proveedor o
   emisión), vista **Por antigüedad** con tramos elegibles (también en PDF y
   Excel), **favoritos** en los filtros y pantalla que se limpia al filtrar. PDF

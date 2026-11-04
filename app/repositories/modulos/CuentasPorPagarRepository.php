@@ -236,7 +236,7 @@ class CuentasPorPagarRepository extends BaseRepository
     private function vencimientoAlterno(array $filtros, string $exprEmision, string $exprIdProveedor): ?string
     {
         return match (self::modoVencimiento($filtros)) {
-            'PROVEEDOR' => "(({$exprEmision}) + INTERVAL '1 day' * COALESCE((SELECT pv_dc.plazo FROM proveedores pv_dc WHERE pv_dc.id = {$exprIdProveedor}), 0))",
+            'PROVEEDOR' => "(({$exprEmision}) + INTERVAL '1 day' * " . $this->sqlDiasAcotados("(SELECT pv_dc.plazo FROM proveedores pv_dc WHERE pv_dc.id = {$exprIdProveedor})") . ")",
             'EMISION'   => "(({$exprEmision}) + INTERVAL '0 day')",
             default     => null,
         };
@@ -258,19 +258,18 @@ class CuentasPorPagarRepository extends BaseRepository
         if ($alt = $this->vencimientoAlterno($filtros, "{$aliasC}.fecha_emision", "{$aliasC}.id_proveedor")) {
             return $alt;
         }
+        $dias = $this->sqlDiasAcotados(
+            "SELECT CASE cp.unidad_tiempo
+                        WHEN 'meses' THEN cp.plazo::bigint * 30
+                        WHEN 'anos'  THEN cp.plazo::bigint * 365
+                        ELSE cp.plazo
+                    END
+             FROM compras_pagos cp
+             WHERE cp.id_compra = {$aliasC}.id
+             ORDER BY cp.plazo DESC LIMIT 1"
+        );
         return "(
-            SELECT {$aliasC}.fecha_emision + INTERVAL '1 day' *
-                COALESCE(
-                    (SELECT CASE cp.unidad_tiempo
-                                WHEN 'meses' THEN cp.plazo * 30
-                                WHEN 'anos'  THEN cp.plazo * 365
-                                ELSE cp.plazo
-                            END
-                     FROM compras_pagos cp
-                     WHERE cp.id_compra = {$aliasC}.id
-                     ORDER BY cp.plazo DESC LIMIT 1),
-                    0
-                )
+            SELECT {$aliasC}.fecha_emision + INTERVAL '1 day' * {$dias}
         )";
     }
 
@@ -282,19 +281,18 @@ class CuentasPorPagarRepository extends BaseRepository
         if ($alt = $this->vencimientoAlterno($filtros, "{$aliasL}.fecha_emision", "{$aliasL}.id_proveedor")) {
             return $alt;
         }
+        $dias = $this->sqlDiasAcotados(
+            "SELECT CASE lp.unidad_tiempo
+                        WHEN 'meses' THEN lp.plazo::bigint * 30
+                        WHEN 'anos'  THEN lp.plazo::bigint * 365
+                        ELSE lp.plazo
+                    END
+             FROM liquidaciones_pagos lp
+             WHERE lp.id_cabecera = {$aliasL}.id
+             ORDER BY lp.plazo DESC LIMIT 1"
+        );
         return "(
-            SELECT {$aliasL}.fecha_emision + INTERVAL '1 day' *
-                COALESCE(
-                    (SELECT CASE lp.unidad_tiempo
-                                WHEN 'meses' THEN lp.plazo * 30
-                                WHEN 'anos'  THEN lp.plazo * 365
-                                ELSE lp.plazo
-                            END
-                     FROM liquidaciones_pagos lp
-                     WHERE lp.id_cabecera = {$aliasL}.id
-                     ORDER BY lp.plazo DESC LIMIT 1),
-                    0
-                )
+            SELECT {$aliasL}.fecha_emision + INTERVAL '1 day' * {$dias}
         )";
     }
 
@@ -312,7 +310,7 @@ class CuentasPorPagarRepository extends BaseRepository
         }
         return "(
             COALESCE({$aliasF}.fecha_factura, {$aliasIc}.fecha_nacionalizacion, {$aliasIc}.created_at::date)
-            + INTERVAL '1 day' * COALESCE({$aliasF}.plazo_dias, 0)
+            + INTERVAL '1 day' * {$this->sqlDiasAcotados("{$aliasF}.plazo_dias")}
         )";
     }
 

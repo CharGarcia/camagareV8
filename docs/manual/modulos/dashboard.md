@@ -6,7 +6,7 @@ ruta_modulo: modulos/dashboard
 tipo: modulo
 visibilidad: todos
 etiquetas: tablero, dashboard, inicio, resumen, indicadores, avisos, pantalla principal, home, ordenar tarjetas, mover tarjetas, arrastrar, reubicar, personalizar tablero, filtros fijos, ancho de tarjetas, redimensionar, cambiar tamaño, columnas, saldo cxc, saldo cxp, cartera, cuentas por cobrar, cuentas por pagar, comparativo mensual, nómina, sin iva, con iva, notas de crédito, ventas netas
-version: 1.5
+version: 1.6
 orden: 2
 estado: activo
 ---
@@ -121,6 +121,10 @@ Suele ser una de tres cosas:
 
 ## Errores frecuentes
 
+- **"timestamp out of range" (SQLSTATE 22008)**: un documento tenía un plazo de
+  crédito absurdo (p. ej. una fecha escrita como número de días en el XML del
+  proveedor). Desde ahora el vencimiento se calcula con un tope de 100 años y la
+  pantalla carga; corrija el plazo de ese documento.
 - **Los números no coinciden con los reportes**: revise el periodo que muestra
   cada indicador y si le falta el permiso de acceso total.
 - **Entré a un módulo y volví al tablero**: es lo que ocurre cuando no se tiene
@@ -128,6 +132,7 @@ Suele ser una de tres cosas:
 
 ## Historial de cambios
 
+- **1.6** — Corregido: un documento con un plazo de crédito desmedido (millones de días) hacía fallar la consulta con *timestamp out of range*; el vencimiento ahora se limita a 100 años.
 - **1.5** — Al ingresar se muestra la pantalla
   [Inicio con los accesos frecuentes](../guias/inicio-accesos-frecuentes.md), con
   el ícono del tablero siempre primero para quien lo tiene asignado. Quien prefiera

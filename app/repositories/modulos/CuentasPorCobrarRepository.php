@@ -296,7 +296,7 @@ class CuentasPorCobrarRepository extends BaseRepository
     /** Fecha de vencimiento (date) de una factura o recibo según el modo. */
     private function sqlVencimiento(array $filtros, string $alias = 'v'): string
     {
-        return "({$alias}.fecha_emision + INTERVAL '1 day' * {$this->sqlDiasCredito($filtros, $alias)})::date";
+        return "({$alias}.fecha_emision + INTERVAL '1 day' * {$this->sqlDiasAcotados($this->sqlDiasCredito($filtros, $alias))})::date";
     }
 
     /** Fecha de vencimiento de un saldo inicial `s` según el modo (puede ser NULL en DOCUMENTO). */
@@ -972,7 +972,7 @@ class CuentasPorCobrarRepository extends BaseRepository
                 0                                               AS total_nc,
                 v.importe_total - COALESCE(cb.total_cobrado, 0) AS saldo,
                 CONCAT(v.establecimiento,'-',v.punto_emision,'-',v.secuencial) AS numero_factura,
-                (v.fecha_emision + INTERVAL '1 day' * v.dias_credito)::date    AS fecha_vencimiento
+                (v.fecha_emision + INTERVAL '1 day' * {$this->sqlDiasAcotados('v.dias_credito')})::date    AS fecha_vencimiento
             FROM recibos_venta_cabecera v
             JOIN clientes c ON c.id = v.id_cliente
             LEFT JOIN cobrado cb ON cb.id_venta = v.id
@@ -1381,8 +1381,8 @@ class CuentasPorCobrarRepository extends BaseRepository
                 c.identificacion        AS cliente_ruc,
                 v.fecha_emision,
                 CONCAT(v.establecimiento,'-',v.punto_emision,'-',v.secuencial) AS numero_factura,
-                (v.fecha_emision + INTERVAL '1 day' * v.dias_credito)::date     AS fecha_vencimiento,
-                (CURRENT_DATE - (v.fecha_emision + INTERVAL '1 day' * v.dias_credito)::date) AS dias_vencido,
+                (v.fecha_emision + INTERVAL '1 day' * {$this->sqlDiasAcotados('v.dias_credito')})::date     AS fecha_vencimiento,
+                (CURRENT_DATE - (v.fecha_emision + INTERVAL '1 day' * {$this->sqlDiasAcotados('v.dias_credito')})::date) AS dias_vencido,
                 v.importe_total                                                              AS total,
                 COALESCE(cb.total_cobrado, 0)                                               AS total_cobrado,
                 COALESCE(rt.total_retenido, 0)                                              AS total_retenido,
@@ -1399,7 +1399,7 @@ class CuentasPorCobrarRepository extends BaseRepository
         ";
 
         if ($soloVencidas || $diasMin > 0) {
-            $sql .= " AND (CURRENT_DATE - (v.fecha_emision + INTERVAL '1 day' * v.dias_credito)::date) >= :dmin";
+            $sql .= " AND (CURRENT_DATE - (v.fecha_emision + INTERVAL '1 day' * {$this->sqlDiasAcotados('v.dias_credito')})::date) >= :dmin";
             $params[':dmin'] = max(1, $diasMin);
         }
 
