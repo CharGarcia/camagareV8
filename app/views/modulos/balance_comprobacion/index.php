@@ -116,6 +116,7 @@ $urlBaseReporte = rtrim($base, '/') . '/' . ltrim($rutaModulo ?? '', '/');
             <p class="text-muted mt-2 small">Generando reporte...</p>
         </div>
         <div id="alerta-cuadre" class="d-none"></div>
+        <div id="alerta-periodos-cerrados" class="alert alert-warning py-2 px-3 small mb-3 d-none"></div>
         <div id="content-reporte" class="table-responsive">
             <p class="text-muted text-center py-5 small"><i class="bi bi-info-circle me-1"></i> Seleccione el rango de fechas y presione Generar.</p>
         </div>
@@ -197,11 +198,19 @@ $urlBaseReporte = rtrim($base, '/') . '/' . ltrim($rutaModulo ?? '', '/');
             document.getElementById('loader-reporte').classList.remove('d-none');
             document.getElementById('content-reporte').innerHTML = '';
             document.getElementById('alerta-cuadre').classList.add('d-none');
+            const alertaPeriodos = document.getElementById('alerta-periodos-cerrados');
+            alertaPeriodos.classList.add('d-none');
 
             const params = new URLSearchParams(getFiltrosActuales());
             const json = await fetchJson(`${urlBase}/generarAjax?${params.toString()}`);
             if (json.success) {
                 renderBalance(json.data);
+                // Documentos sin asiento de períodos cerrados dentro de las fechas: el balance no los refleja.
+                if (json.avisoPeriodosCerrados) {
+                    alertaPeriodos.innerHTML = '<i class="bi bi-exclamation-triangle me-1"></i>';
+                    alertaPeriodos.append(json.avisoPeriodosCerrados);
+                    alertaPeriodos.classList.remove('d-none');
+                }
             } else {
                 Swal.fire({ icon: 'error', title: 'Error', text: json.error || 'Error al generar el reporte' });
             }

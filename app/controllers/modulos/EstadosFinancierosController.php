@@ -197,7 +197,7 @@ class EstadosFinancierosController extends BaseModuloController
             $this->requireLeer();
             $datos = $this->reporteSegunEstablecimiento('resultados');
 
-            $this->json(['success' => true, 'data' => $datos]);
+            $this->json(['success' => true, 'data' => $datos, 'avisoPeriodosCerrados' => $this->avisoPeriodosCerrados()]);
         } catch (\Throwable $th) {
             \App\Services\ErrorLogService::registrar($th, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             $this->json(['success' => false, 'error' => $th->getMessage() . ' en ' . $th->getFile() . ':' . $th->getLine()]);
@@ -210,7 +210,7 @@ class EstadosFinancierosController extends BaseModuloController
             $this->requireLeer();
             $datos = $this->reporteSegunEstablecimiento('situacion');
 
-            $this->json(['success' => true, 'data' => $datos]);
+            $this->json(['success' => true, 'data' => $datos, 'avisoPeriodosCerrados' => $this->avisoPeriodosCerrados()]);
         } catch (\Throwable $th) {
             \App\Services\ErrorLogService::registrar($th, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             $this->json(['success' => false, 'error' => $th->getMessage() . ' en ' . $th->getFile() . ':' . $th->getLine()]);
@@ -236,7 +236,7 @@ class EstadosFinancierosController extends BaseModuloController
 
             $datos = $this->service->getConsolidadoRuc($idEmpresa, $idUsuario, $fechaInicio, $fechaFin, $idCentroCosto, $idProyecto, $nivel);
 
-            $this->json(['success' => true, 'data' => $datos]);
+            $this->json(['success' => true, 'data' => $datos, 'avisoPeriodosCerrados' => $this->avisoPeriodosCerrados(true)]);
         } catch (\Throwable $th) {
             \App\Services\ErrorLogService::registrar($th, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             $this->json(['success' => false, 'error' => $th->getMessage()]);
@@ -249,7 +249,7 @@ class EstadosFinancierosController extends BaseModuloController
             $this->requireLeer();
             $datos = $this->reporteSegunEstablecimiento('resultados_periodos');
 
-            $this->json(['success' => true, 'data' => $datos]);
+            $this->json(['success' => true, 'data' => $datos, 'avisoPeriodosCerrados' => $this->avisoPeriodosCerrados()]);
         } catch (\Throwable $th) {
             \App\Services\ErrorLogService::registrar($th, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             $this->json(['success' => false, 'error' => $th->getMessage()]);
@@ -262,7 +262,7 @@ class EstadosFinancierosController extends BaseModuloController
             $this->requireLeer();
             $datos = $this->reporteSegunEstablecimiento('situacion_periodos');
 
-            $this->json(['success' => true, 'data' => $datos]);
+            $this->json(['success' => true, 'data' => $datos, 'avisoPeriodosCerrados' => $this->avisoPeriodosCerrados()]);
         } catch (\Throwable $th) {
             \App\Services\ErrorLogService::registrar($th, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             $this->json(['success' => false, 'error' => $th->getMessage()]);
@@ -525,6 +525,24 @@ class EstadosFinancierosController extends BaseModuloController
             return $this->service->getReportePorEstablecimientos($tipo, $this->establecimientosAccesibles(), $f['fecha_inicio'], $f['fecha_fin'], $f['nivel']);
         }
         return $this->service->getReporte($tipo, $f['id_empresa'], $f['fecha_inicio'], $f['fecha_fin'], $f['centro_costo'], $f['proyecto'], $f['nivel']);
+    }
+
+    /**
+     * Aviso de documentos sin asiento de períodos cerrados dentro de las fechas del reporte (null
+     * si no hay). Mismos establecimientos que el reporte: el elegido, o todos los accesibles con
+     * «Todos» y en el Consolidado por RUC ($consolidado).
+     */
+    private function avisoPeriodosCerrados(bool $consolidado = false): ?string
+    {
+        $desde = (string) ($_GET['fecha_inicio'] ?? date('Y-01-01'));
+        $hasta = (string) ($_GET['fecha_fin'] ?? date('Y-12-31'));
+        $empresas = ($consolidado || $this->pideTodos())
+            ? $this->establecimientosAccesibles()
+            : [$this->empresaReporte() => null];
+        if (count($empresas) === 1) {
+            $empresas = [array_key_first($empresas) => null]; // un solo establecimiento: sin etiqueta
+        }
+        return (new \App\Services\modulos\SincronizadorAsientosService())->avisoPeriodosCerrados($empresas, $desde, $hasta);
     }
 
     /**

@@ -5,8 +5,8 @@ categoria: Contabilidad
 ruta_modulo: modulos/balance-comprobacion
 tipo: modulo
 visibilidad: todos
-etiquetas: balance de comprobacion, balance de sumas y saldos, cuadre contable, debe haber, saldo deudor acreedor, comprobacion de saldos, sumas y saldos
-version: 1.3
+etiquetas: balance de comprobacion, balance de sumas y saldos, cuadre contable, debe haber, saldo deudor acreedor, comprobacion de saldos, sumas y saldos, periodo cerrado, documentos sin asiento, balance incompleto
+version: 1.4
 orden: 45
 estado: activo
 ---
@@ -51,6 +51,12 @@ responda el aviso (o termine la generación), el botón **Generar** y las
 exportaciones quedan bloqueados: así el balance nunca se calcula con asientos
 que faltan sin que usted lo haya decidido.
 
+Los documentos con fecha en un **período contable cerrado** no se cuentan como
+pendientes. Si las fechas del balance incluyen alguno de esos documentos sin
+asiento, al generar aparece un aviso amarillo que dice cuántos son y de qué
+módulos: el balance no los refleja. Si deben reflejarse, reabra el período en
+Períodos Contables y genere sus asientos.
+
 ## Errores frecuentes
 
 - **El balance no cuadra**: casi siempre son asientos pendientes de generar;
@@ -68,6 +74,8 @@ El asiento de apertura del año siguiente cuenta solo si cae en el primer día d
 
 ## Historial de cambios
 
+- **1.4** — Aviso al generar cuando las fechas incluyen documentos sin asiento de períodos
+  contables cerrados.
 - **1.3** — Ignora el asiento de cierre del **Cierre del Ejercicio** y cuenta su apertura solo
   al inicio del rango, igual que los Estados Financieros.
 - **1.2** — El reporte muestra solo documentos de **producción**, aunque la empresa esté configurada en pruebas (ver el artículo *Los reportes solo muestran documentos de producción*).

@@ -278,11 +278,14 @@ class OpcionIngresoEgresoRepository extends BaseRepository
      * necesitando cuenta (AsientoBuilderService no filtra por estado), pero Configuración Contable
      * solo lista los activos — el aviso de la sincronización lo manda a configurar en este módulo.
      * Misma lectura de la cuenta que el resto del sistema: COALESCE(asientos_programados, columna).
+     * Los documentos con fecha en un período contable cerrado no cuentan: no se contabilizan.
      *
      * @return array<int, array{nombre:string, comportamiento:?string, activo:bool}>
      */
     public function getUsadosSinCuenta(int $idEmpresa): array
     {
+        $abiertoI = 'NOT ' . PeriodosContablesRepository::sqlEnPeriodoCerrado('i.fecha_emision', 'i.id_empresa');
+        $abiertoE = 'NOT ' . PeriodosContablesRepository::sqlEnPeriodoCerrado('e.fecha_emision', 'e.id_empresa');
         $sql = "SELECT DISTINCT o.nombre, o.comportamiento,
                        (UPPER(COALESCE(o.estado, 'ACTIVO')) = 'ACTIVO') AS activo
                   FROM empresa_opciones_ingreso_egreso o
@@ -294,9 +297,11 @@ class OpcionIngresoEgresoRepository extends BaseRepository
                  WHERE o.id_empresa = :id_empresa AND o.eliminado = false
                    AND COALESCE(ap.id_cuenta, o.id_cuenta_contable) IS NULL
                    AND (EXISTS (SELECT 1 FROM ingresos_cabecera i
-                                WHERE i.id_ingreso_concepto = o.id AND i.id_empresa = o.id_empresa AND i.eliminado = false)
+                                WHERE i.id_ingreso_concepto = o.id AND i.id_empresa = o.id_empresa AND i.eliminado = false
+                                  AND {$abiertoI})
                         OR EXISTS (SELECT 1 FROM egresos_cabecera e
-                                   WHERE e.id_egreso_concepto = o.id AND e.id_empresa = o.id_empresa AND e.eliminado = false))
+                                   WHERE e.id_egreso_concepto = o.id AND e.id_empresa = o.id_empresa AND e.eliminado = false
+                                     AND {$abiertoE}))
                  ORDER BY o.nombre";
         $st = $this->db->prepare($sql);
         $st->execute([':id_empresa' => $idEmpresa]);

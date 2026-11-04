@@ -17,6 +17,32 @@ class PeriodosContablesRepository
         $this->db = Database::getConnection();
     }
 
+    /**
+     * Condición SQL «la fecha cae en un período cerrado de esa empresa», para incrustar en otra
+     * consulta. La usan la detección de asientos pendientes y sus avisos de configuración: un
+     * documento de un período cerrado no se contabiliza, así que tampoco debe reclamar cuentas.
+     * Ambas expresiones son literales del código del llamador (columnas), nunca entrada de usuario.
+     */
+    public static function sqlEnPeriodoCerrado(string $exprFecha, string $exprEmpresa): string
+    {
+        return "EXISTS (SELECT 1 FROM periodos_contables _pcc
+                         WHERE _pcc.id_empresa = {$exprEmpresa} AND _pcc.eliminado = false AND _pcc.status = 0
+                           AND CAST({$exprFecha} AS DATE) BETWEEN _pcc.fecha_inicial AND _pcc.fecha_final)";
+    }
+
+    /** ¿Algún período cerrado de la empresa se cruza con el rango [desde, hasta]? */
+    public function hayCerradoEnRango(int $idEmpresa, string $desde, string $hasta): bool
+    {
+        $st = $this->db->prepare(
+            "SELECT 1 FROM periodos_contables
+              WHERE id_empresa = :id_empresa AND eliminado = false AND status = 0
+                AND fecha_inicial <= CAST(:hasta AS DATE) AND fecha_final >= CAST(:desde AS DATE)
+              LIMIT 1"
+        );
+        $st->execute([':id_empresa' => $idEmpresa, ':desde' => $desde, ':hasta' => $hasta]);
+        return (bool) $st->fetchColumn();
+    }
+
     public function beginTransaction(): void
     {
         if (!$this->db->inTransaction()) {

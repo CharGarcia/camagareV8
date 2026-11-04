@@ -138,9 +138,7 @@ class SincronizadorAsientosService
     /** Condición «la fecha del documento cae en un período cerrado de su empresa» (alias `_d`). */
     private static function sqlEnPeriodoCerrado(string $exprFecha): string
     {
-        return "EXISTS (SELECT 1 FROM periodos_contables _pcc
-                         WHERE _pcc.id_empresa = _d.id_empresa AND _pcc.eliminado = false AND _pcc.status = 0
-                           AND {$exprFecha} BETWEEN _pcc.fecha_inicial AND _pcc.fecha_final)";
+        return \App\repositories\modulos\PeriodosContablesRepository::sqlEnPeriodoCerrado($exprFecha, '_d.id_empresa');
     }
 
     /**
@@ -168,6 +166,23 @@ class SincronizadorAsientosService
      */
     private function informarPeriodosCerrados(\PDO $db, array $trabajos): void
     {
+        $porModulo = $this->conteoEnPeriodosCerrados($db, $trabajos);
+        if (!$porModulo) {
+            return;
+        }
+        $this->info[] = "Hay " . array_sum($porModulo) . " documento(s) sin asiento con fecha en períodos contables cerrados ("
+            . self::listaPorModulo($porModulo) . "). No se generan ni se cuentan como pendientes; "
+            . "si deben contabilizarse, reabra el período en Períodos Contables.";
+    }
+
+    /**
+     * Documentos sin asiento con fecha en un período cerrado, por módulo (nombre => cantidad).
+     * Con $desde/$hasta, solo los de ese rango de fechas.
+     *
+     * @return array<string,int>
+     */
+    private function conteoEnPeriodosCerrados(\PDO $db, array $trabajos, ?string $desde = null, ?string $hasta = null): array
+    {
         $porModulo = [];
         foreach ($trabajos as $t) {
             $expr  = self::FECHA_DOCUMENTO[$t['clave'] ?? ''] ?? null;
@@ -175,27 +190,75 @@ class SincronizadorAsientosService
             if ($expr === null || $tabla === null || !isset($t['sqlBase'])) {
                 continue;
             }
+            $rango  = $desde !== null ? " AND CAST({$expr} AS DATE) BETWEEN CAST(? AS DATE) AND CAST(? AS DATE)" : '';
+            $params = $desde !== null ? array_merge(array_values($t['params']), [$desde, $hasta]) : $t['params'];
+            // Dentro de una transacción, un módulo al que le falta una columna abortaría la
+            // transacción entera (25P02) y los demás conteos saldrían en cero: SAVEPOINT por módulo.
+            $enTx = $db->inTransaction();
             try {
+                if ($enTx) { $db->exec('SAVEPOINT conteo_periodo_cerrado'); }
                 $st = $db->prepare("SELECT COUNT(*) FROM ({$t['sqlBase']}) AS _pc
                                      WHERE EXISTS (SELECT 1 FROM {$tabla} _d
-                                                    WHERE _d.id = _pc.id AND " . self::sqlEnPeriodoCerrado($expr) . ")");
-                $st->execute($t['params']);
+                                                    WHERE _d.id = _pc.id{$rango} AND " . self::sqlEnPeriodoCerrado($expr) . ")");
+                $st->execute($params);
                 $n = (int) $st->fetchColumn();
+                if ($enTx) { $db->exec('RELEASE SAVEPOINT conteo_periodo_cerrado'); }
             } catch (\Throwable $e) {
+                if ($enTx) { $db->exec('ROLLBACK TO SAVEPOINT conteo_periodo_cerrado'); }
                 continue; // tabla o columna inexistente: ya se omite en el trabajo
             }
             if ($n > 0) {
                 $porModulo[$t['nombre']] = ($porModulo[$t['nombre']] ?? 0) + $n;
             }
         }
-        if (!$porModulo) {
-            return;
+        return $porModulo;
+    }
+
+    /** «Facturas de Venta 40, Compras 5» */
+    private static function listaPorModulo(array $porModulo): string
+    {
+        return implode(', ', array_map(fn ($nom, $n) => "{$nom} {$n}", array_keys($porModulo), $porModulo));
+    }
+
+    /**
+     * Aviso para los reportes contables (Estados Financieros, Balance de Comprobación): el rango
+     * pedido incluye documentos sin asiento de períodos cerrados, que esos reportes no reflejan.
+     * Como ya no cuentan como pendientes, sin este aviso el reporte de un período cerrado saldría
+     * incompleto en silencio. Solo mira el rango del reporte: lo anterior que se decidió no
+     * contabilizar (p. ej. 2022 en una empresa migrada) no se repite en cada balance posterior.
+     * Nunca rompe el reporte: ante cualquier error devuelve null.
+     *
+     * @param array<int,?string> $empresas id_empresa => etiqueta del establecimiento (null = una sola empresa)
+     */
+    public function avisoPeriodosCerrados(array $empresas, string $desde, string $hasta): ?string
+    {
+        try {
+            $db = Database::getConnection();
+            $periodos = new \App\repositories\modulos\PeriodosContablesRepository();
+            $excMig = $this->construirExclusionMigracion($db);
+            $total = 0;
+            $partes = [];
+            foreach ($empresas as $idEmpresa => $etiqueta) {
+                // Lo barato primero: sin un período cerrado que toque el rango no hay nada que contar.
+                if (!$periodos->hayCerradoEnRango((int) $idEmpresa, $desde, $hasta)) {
+                    continue;
+                }
+                $porModulo = $this->conteoEnPeriodosCerrados($db, $this->construirTrabajos((int) $idEmpresa, $excMig), $desde, $hasta);
+                if (!$porModulo) {
+                    continue;
+                }
+                $total += array_sum($porModulo);
+                $partes[] = ($etiqueta !== null ? $etiqueta . ': ' : '') . self::listaPorModulo($porModulo);
+            }
+            if ($total === 0) {
+                return null;
+            }
+            return "Este reporte no incluye {$total} documento(s) sin asiento contable de períodos cerrados dentro de las fechas elegidas ("
+                . implode('; ', $partes) . "). Si deben reflejarse, reabra el período en Períodos Contables y genere sus asientos.";
+        } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
+            return null;
         }
-        $total = array_sum($porModulo);
-        $partes = array_map(fn ($nom, $n) => "{$nom} {$n}", array_keys($porModulo), $porModulo);
-        $this->info[] = "Hay {$total} documento(s) sin asiento con fecha en períodos contables cerrados ("
-            . implode(', ', $partes) . "). No se generan ni se cuentan como pendientes; "
-            . "si deben contabilizarse, reabra el período en Períodos Contables.";
     }
 
     /** Empresa de la corrida en curso: la usa registrarAccion() para consultar el interruptor. */
@@ -1460,12 +1523,22 @@ class SincronizadorAsientosService
     private function verificarCosteoVentasPendiente(\PDO $db, int $idEmpresa): void
     {
         try {
-            $sql = "SELECT tipo_documento, motivo_pendiente, COUNT(*) AS total
-                    FROM ventas_costeo_seguimiento
-                    WHERE id_empresa = ? AND eliminado = false
-                      AND requiere_costo = true AND costo_generado = false
-                    GROUP BY tipo_documento, motivo_pendiente
-                    ORDER BY tipo_documento";
+            // Los documentos con fecha en un período cerrado no se regeneran (ver
+            // excluirPeriodosCerrados()), así que su costo pendiente tampoco se reclama.
+            $cerrado = fn(string $tabla): string => "EXISTS (SELECT 1 FROM {$tabla} _d WHERE _d.id = cs.id_documento AND "
+                . self::sqlEnPeriodoCerrado('_d.fecha_emision') . ")";
+            $sql = "SELECT cs.tipo_documento, cs.motivo_pendiente, COUNT(*) AS total
+                    FROM ventas_costeo_seguimiento cs
+                    WHERE cs.id_empresa = ? AND cs.eliminado = false
+                      AND cs.requiere_costo = true AND cs.costo_generado = false
+                      AND NOT CASE cs.tipo_documento
+                                WHEN 'factura_venta'      THEN " . $cerrado('ventas_cabecera') . "
+                                WHEN 'recibo_venta'       THEN " . $cerrado('recibos_venta_cabecera') . "
+                                WHEN 'nota_credito_venta' THEN " . $cerrado('notas_credito_cabecera') . "
+                                ELSE false
+                              END
+                    GROUP BY cs.tipo_documento, cs.motivo_pendiente
+                    ORDER BY cs.tipo_documento";
             $st = $db->prepare($sql);
             $st->execute([$idEmpresa]);
             $rows = $st->fetchAll(\PDO::FETCH_ASSOC);
@@ -1550,6 +1623,7 @@ class SincronizadorAsientosService
                       AND cv.eliminado = false
                       AND cv.estado <> 'Anulada'
                       AND cv.id_asiento_contable IS NULL
+                      AND NOT " . \App\repositories\modulos\PeriodosContablesRepository::sqlEnPeriodoCerrado('cv.fecha_emision', 'cv.id_empresa') . "
                       AND EXISTS (SELECT 1 FROM inventario_kardex k
                                   WHERE k.referencia_tipo = 'CONSIGNACION_VENTA'
                                     AND k.referencia_id   = cv.id

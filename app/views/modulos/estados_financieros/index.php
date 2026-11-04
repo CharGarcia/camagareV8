@@ -263,6 +263,7 @@ $urlBaseActivosFijos = rtrim($base, '/') . '/modulos/activos-fijos';
                     <div class="spinner-border text-primary" role="status"><span class="visually-hidden">Cargando...</span></div>
                 </div>
                 <div id="content-consolidado" class="d-none">
+                    <div id="aviso-periodos-consolidado"></div>
                     <p class="text-muted small mb-3"><i class="bi bi-info-circle me-1"></i>El <strong>Total General Consolidado</strong> es un solo Estado de Situación Financiera / Resultados para todo el RUC: cada concepto mapeado en <a href="<?= $base ?>/modulos/balances-consolidados" target="_blank">Balances Consolidados</a> aparece una sola vez (sumado, o con un valor único si así se configuró — ej. Capital), y cada cuenta que no está mapeada se lista por su propio establecimiento. Nada se cuenta dos veces.</p>
 
                     <h6 class="fw-bold small text-uppercase text-muted">Total General Consolidado — Situación Financiera</h6>
@@ -633,6 +634,12 @@ $urlBaseActivosFijos = rtrim($base, '/') . '/modulos/activos-fijos';
 
     const EF_esc = (s) => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 
+    // Documentos sin asiento de períodos cerrados dentro de las fechas: el reporte no los refleja
+    // (ya no cuentan como pendientes, así que sin esto saldría incompleto en silencio).
+    const EF_avisoPeriodosCerrados = (texto) => texto
+        ? `<div class="alert alert-warning small py-2 mb-3"><i class="bi bi-exclamation-triangle me-1"></i>${EF_esc(texto)}</div>`
+        : '';
+
     const formatMoney = (amount) => {
         // Redondear a centavos antes de mirar el signo: un residuo de coma flotante
         // (-0.0000001) o un -0 se mostraban como "-0.00" en rojo. "+ 0" convierte -0 en 0.
@@ -660,6 +667,7 @@ $urlBaseActivosFijos = rtrim($base, '/') . '/modulos/activos-fijos';
             const res = await fetch(`${urlBase}/generarConsolidadoRucAjax?${params.toString()}`).then(r => r.json());
             if (!res.success) { Swal.fire('Error', res.error || 'No se pudo cargar el consolidado.', 'error'); modal.hide(); return; }
             const d = res.data;
+            document.getElementById('aviso-periodos-consolidado').innerHTML = EF_avisoPeriodosCerrados(res.avisoPeriodosCerrados);
 
             const escTG = (s) => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
             const origenTG = (l) => {
@@ -792,7 +800,7 @@ $urlBaseActivosFijos = rtrim($base, '/') . '/modulos/activos-fijos';
                     html = ep.render(json.data, nivel);
                 }
                 EF_empRender = EF_EMPRESA_ACTUAL;
-                document.getElementById('content-reporte').innerHTML = html;
+                document.getElementById('content-reporte').innerHTML = EF_avisoPeriodosCerrados(json.avisoPeriodosCerrados) + html;
                 EF_actualizarStats(tipoReporteActivo, json.data.totales || {});
             } else {
                 Swal.fire({ icon: 'error', title: 'Error', text: json.error || 'Error al generar el reporte' });

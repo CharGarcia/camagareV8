@@ -38,7 +38,9 @@ una empresa migrada que tiene documentos de 2022 sin asiento:
 2. Ciérrelo.
 
 Si no existe ningún período para esas fechas, el sistema las considera abiertas y
-sigue reclamando sus asientos. Al **reabrir** el período, sus documentos vuelven a
+sigue reclamando sus asientos. Tampoco cuentan para los avisos de configuración
+(conceptos o formas de cobro/pago sin cuenta que solo se usan en esas fechas). Al
+**reabrir** el período, sus documentos vuelven a
 aparecer como pendientes. Al sincronizar, el aviso informa cuántos documentos sin
 asiento quedaron fuera por estar en períodos cerrados, para que no pase
 inadvertido cerrar un mes sin haber generado antes sus asientos.

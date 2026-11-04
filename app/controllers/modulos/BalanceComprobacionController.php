@@ -64,7 +64,10 @@ class BalanceComprobacionController extends BaseModuloController
             $idEmpresa = (int) $_SESSION['id_empresa'];
             $f = $this->getFiltrosDesdeRequest();
             $datos = $this->service->generar($idEmpresa, $f['fecha_inicio'], $f['fecha_fin'], $f['id_centro_costo'], $f['id_proyecto'], $f['nivel']);
-            $this->json(['success' => true, 'data' => $datos]);
+            // Documentos sin asiento de períodos cerrados dentro de las fechas: el balance no los refleja.
+            $aviso = (new \App\Services\modulos\SincronizadorAsientosService())
+                ->avisoPeriodosCerrados([$idEmpresa => null], (string) $f['fecha_inicio'], (string) $f['fecha_fin']);
+            $this->json(['success' => true, 'data' => $datos, 'avisoPeriodosCerrados' => $aviso]);
         } catch (\Throwable $th) {
             \App\Services\ErrorLogService::registrar($th, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             $this->json(['success' => false, 'error' => $th->getMessage()]);

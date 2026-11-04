@@ -227,6 +227,14 @@ documentos de 2022 de una empresa migrada), cree y cierre ese período en
 lista de pendientes. El aviso de la sincronización informa cuántos quedaron fuera
 por esta razón.
 
+Esos documentos tampoco generan avisos de configuración: un concepto o una forma
+de cobro/pago sin cuenta que solo se usa en períodos cerrados no se reclama, ni
+el costo de venta pendiente ni las consignaciones sin asiento de esas fechas.
+Siguen apareciendo los avisos que no dependen de la fecha de un documento, como
+una cuenta con naturaleza que no corresponde al concepto o productos cuya
+categoría no tiene la cuenta de ventas: afectan a los documentos que se registren
+en adelante.
+
 ## Aviso antes de generar asientos en masa
 
 Al sincronizar asientos, antes de contabilizar nada el sistema revisa la
@@ -576,7 +584,8 @@ cambiarlos se revierte el cierre en ese módulo y se genera de nuevo.
 
 - **1.44** — Los documentos con fecha en un período contable cerrado ya no se cuentan como
   pendientes ni se generan, en todos los módulos (antes solo los migrados); el aviso informa
-  cuántos quedaron fuera.
+  cuántos quedaron fuera. Tampoco cuentan para los avisos de conceptos y formas de cobro/pago
+  sin cuenta, costo de venta pendiente ni consignaciones sin asiento.
 - **1.43** — En el modal del asiento, una línea con un centro de costo o proyecto **inactivo** lo muestra como «(inactivo)» en lugar de dejar el campo vacío; antes, guardar el asiento lo borraba sin aviso.
 - **1.42** — La pestaña **Asiento contable** de los documentos (compras,
   ventas, ingresos, egresos, etc.) permite elegir el centro de costo y el

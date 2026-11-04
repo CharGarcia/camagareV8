@@ -5,8 +5,8 @@ categoria: Contabilidad
 ruta_modulo: modulos/estados_financieros
 tipo: modulo
 visibilidad: todos
-etiquetas: estados financieros, cuadre con modulos, tarjetas por liquidar, cuenta puente de tarjetas, activos fijos vs contabilidad, depreciacion acumulada vs contabilidad, cuadre de caja, caja vs contabilidad, anticipos vs contabilidad, cuadre de anticipos, cuadrar contabilidad con modulos, contabilidad vs bancos, contabilidad vs cartera, contabilidad vs inventario, comprobar con contabilidad, no cuadra con el modulo, balance, estado de resultados, situacion financiera, perdidas y ganancias, activo pasivo patrimonio, reportes por periodos, comparativo mensual, horizontal por mes, editar cuenta desde el balance, codigo sri, supercias, entidades de control, pdf con logo, firma del contador, firma del representante legal, balances firmados, excel por niveles, columnas por nivel, exportar excel, establecimiento, varios establecimientos, sucursal, sucursales, mismo ruc, todos los establecimientos, matriz, asientos pendientes de otro establecimiento, balance descuadrado, no cuadra, partida doble, asiento descuadrado, donde esta la diferencia, diferencia del balance, cuenta eliminada
-version: 1.17
+etiquetas: estados financieros, cuadre con modulos, tarjetas por liquidar, cuenta puente de tarjetas, activos fijos vs contabilidad, depreciacion acumulada vs contabilidad, cuadre de caja, caja vs contabilidad, anticipos vs contabilidad, cuadre de anticipos, cuadrar contabilidad con modulos, contabilidad vs bancos, contabilidad vs cartera, contabilidad vs inventario, comprobar con contabilidad, no cuadra con el modulo, balance, estado de resultados, situacion financiera, perdidas y ganancias, activo pasivo patrimonio, reportes por periodos, comparativo mensual, horizontal por mes, editar cuenta desde el balance, codigo sri, supercias, entidades de control, pdf con logo, firma del contador, firma del representante legal, balances firmados, excel por niveles, columnas por nivel, exportar excel, establecimiento, varios establecimientos, sucursal, sucursales, mismo ruc, todos los establecimientos, matriz, asientos pendientes de otro establecimiento, balance descuadrado, no cuadra, partida doble, asiento descuadrado, donde esta la diferencia, diferencia del balance, cuenta eliminada, periodo cerrado, documentos sin asiento, balance incompleto
+version: 1.18
 orden: 50
 estado: activo
 ---
@@ -50,6 +50,23 @@ avisan: **Generar ahora** genera los del establecimiento activo; los de cada
 uno de los demás se generan cambiando a ese establecimiento y abriendo este
 módulo. Si solo los otros tienen pendientes, el aviso lo dice y permite
 continuar.
+
+## Reportes de períodos cerrados con documentos sin asiento
+
+Los documentos con fecha en un **período contable cerrado** no se cuentan como
+asientos pendientes (ver [Períodos contables](modulos/periodos-contables)). Si
+las fechas del reporte incluyen alguno de esos documentos sin asiento, sobre el
+reporte aparece un aviso amarillo, por ejemplo: *«Este reporte no incluye 2
+documento(s) sin asiento contable de períodos cerrados dentro de las fechas
+elegidas (Recibos de Venta 2)…»*. El reporte se muestra igual; el aviso solo
+indica que no los refleja.
+
+- Solo mira las fechas del reporte: un balance de 2025 no avisa por documentos
+  de 2022 que se decidió no contabilizar.
+- Con **Todos los establecimientos** y en el **Consolidado por RUC**, el aviso
+  indica qué establecimiento tiene esos documentos.
+- Si deben reflejarse, reabra el período, genere sus asientos y vuelva a
+  cerrarlo.
 
 ## Cómo se generan
 
@@ -463,6 +480,8 @@ los otros módulos.
 
 ## Historial de cambios
 
+- **1.18** — Aviso sobre el reporte cuando sus fechas incluyen documentos sin asiento de
+  períodos contables cerrados (también en el Consolidado por RUC).
 - **1.17** — Al abrir el módulo se muestra el aviso **Buscando asientos contables
   pendientes…** mientras dura la búsqueda, con el tiempo transcurrido y el botón
   **Omitir**. Antes la pantalla no decía nada y el botón Mostrar quedaba inactivo.
