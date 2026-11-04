@@ -89,18 +89,28 @@
      * todos los productos y servicios deben tenerla asignada. Lista los que no la tienen.
      * Datos: AsientoProgramadoRepository::getProductosSinClasificacion() (null = no se usa esa dimensión).
      */
+    // Último aviso pintado: se vuelve a pintar sin el producto al asignarle la categoría/marca.
+    let sinClasifData = null;
+
     window.ASIENTOPROG_renderSinClasificacion = function (data) {
+        sinClasifData = data || null;
         const cont = document.getElementById('avisoSinClasificacion');
         if (!cont) return;
         const esc = (s) => String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
         const rutaProd = `${window.BASE_URL || ''}/modulos/productos`;
+        const puede = !!window.ASIENTOPROG_PUEDE_CLASIFICAR;
         const bloques = [['categoria', 'categorías', 'categoría'], ['marca', 'marcas', 'marca']].map(([dim, plural, singular]) => {
             const d = (data || {})[dim];
             if (!d || !d.total) return '';
             const filas = (d.items || []).map(p => {
                 const href = `${rutaProd}?b=${encodeURIComponent(p.codigo || p.nombre)}`;
+                const btn = puede && p.id
+                    ? ` <button type="button" class="btn btn-link btn-sm p-0 ms-1 align-baseline" style="font-size:inherit"`
+                      + ` data-clasif-dim="${dim}" data-clasif-id="${p.id}" data-clasif-nombre="${esc(p.codigo)} - ${esc(p.nombre)}"`
+                      + ` title="Asignar ${singular}"><i class="bi bi-pencil-square me-1"></i>Asignar ${singular}</button>`
+                    : '';
                 return `<li><a href="${href}" target="_blank" rel="noopener" title="Abrir en Productos">${esc(p.codigo)} - ${esc(p.nombre)}</a>`
-                     + `<span class="text-muted"> · ${p.servicio ? 'Servicio' : 'Bien'}</span></li>`;
+                     + `<span class="text-muted"> · ${p.servicio ? 'Servicio' : 'Bien'}</span>${btn}</li>`;
             }).join('');
             const mas = d.total > (d.items || []).length ? `<li class="text-muted">y ${d.total - d.items.length} más…</li>` : '';
             return `
@@ -115,6 +125,90 @@
         cont.innerHTML = bloques;
         cont.style.display = bloques ? '' : 'none';
     };
+
+    // ── Asignar categoría / marca a un producto del aviso (modal #modalClasificacionProducto) ──
+    // Las opciones se piden una vez por dimensión; el guardado pasa por
+    // ProductoClasificacionService (permiso de actualizar en Productos, registros propios, log).
+    const clasifOpciones = {};
+    let clasifActual = null;
+    let clasifGuardando = false;
+
+    document.addEventListener('click', function (e) {
+        const btn = e.target.closest('[data-clasif-dim]');
+        if (!btn || !btn.closest('#avisoSinClasificacion')) return;
+        ASIENTOPROG_abrirClasificacion(btn.dataset.clasifDim, parseInt(btn.dataset.clasifId, 10), btn.dataset.clasifNombre || '');
+    });
+
+    window.ASIENTOPROG_abrirClasificacion = async function (dim, idProducto, nombre) {
+        const modalEl = document.getElementById('modalClasificacionProducto');
+        if (!modalEl || !idProducto) return;
+        const singular = dim === 'marca' ? 'marca' : 'categoría';
+        const sel = document.getElementById('clasifValor');
+        try {
+            if (!clasifOpciones[dim]) {
+                const res = await fetch(`${API_PROG}/opcionesClasificacionAjax?dimension=${encodeURIComponent(dim)}`,
+                    { headers: { 'X-Requested-With': 'XMLHttpRequest' } }).then(r => r.json());
+                if (!res.ok) throw new Error(res.error || `No se pudieron cargar las ${singular === 'marca' ? 'marcas' : 'categorías'}.`);
+                clasifOpciones[dim] = res.opciones || [];
+            }
+        } catch (err) {
+            Swal.fire('Error', err.message, 'error');
+            return;
+        }
+        if (!clasifOpciones[dim].length) {
+            Swal.fire('Atención', `No hay ${singular === 'marca' ? 'marcas' : 'categorías'} registradas. Créelas primero en Productos.`, 'warning');
+            return;
+        }
+        const esc = (s) => String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+        sel.innerHTML = `<option value="">-- Elija la ${singular} --</option>`
+            + clasifOpciones[dim].map(o => `<option value="${o.id}">${esc(o.nombre)}</option>`).join('');
+        document.getElementById('clasifTitulo').textContent = `Asignar ${singular}`;
+        document.getElementById('clasifEtiqueta').textContent = singular.charAt(0).toUpperCase() + singular.slice(1);
+        document.getElementById('clasifProducto').textContent = nombre;
+        clasifActual = { dim, idProducto };
+        bootstrap.Modal.getOrCreateInstance(modalEl).show();
+    };
+
+    document.addEventListener('click', async function (e) {
+        const btn = e.target.closest('#clasifGuardar');
+        if (!btn || !clasifActual) return;
+        if (clasifGuardando) return;
+        const sel = document.getElementById('clasifValor');
+        const idValor = parseInt(sel.value, 10) || 0;
+        if (!idValor) {
+            sel.classList.add('is-invalid');
+            return;
+        }
+        sel.classList.remove('is-invalid');
+        clasifGuardando = true;
+        btn.disabled = true;
+        const { dim, idProducto } = clasifActual;
+        try {
+            const body = new URLSearchParams({ id_producto: idProducto, dimension: dim, id_valor: idValor });
+            const res = await fetch(`${API_PROG}/cambiarClasificacionProductoAjax`, {
+                method: 'POST',
+                headers: { 'X-Requested-With': 'XMLHttpRequest', 'Content-Type': 'application/x-www-form-urlencoded' },
+                body
+            }).then(r => r.json());
+            if (!res.ok) throw new Error(res.error || 'No se pudo guardar.');
+
+            clasifActual = null;
+            bootstrap.Modal.getOrCreateInstance(document.getElementById('modalClasificacionProducto')).hide();
+            // Fuera del aviso: ya tiene la categoría/marca.
+            const d = sinClasifData && sinClasifData[dim];
+            if (d) {
+                d.items = (d.items || []).filter(p => p.id !== idProducto);
+                d.total = Math.max(0, (d.total || 0) - 1);
+                ASIENTOPROG_renderSinClasificacion(sinClasifData);
+            }
+            if (window.Swal) Swal.fire({ icon: 'success', title: 'Guardado', text: `Se asignó «${res.nombre}».`, timer: 1500, showConfirmButton: false });
+        } catch (err) {
+            Swal.fire('Error', err.message, 'error');
+        } finally {
+            clasifGuardando = false;
+            btn.disabled = false;
+        }
+    });
 
     window.ASIENTOPROG_configurar = async function () {
         const selector = document.getElementById('tipoAsientoSelector');

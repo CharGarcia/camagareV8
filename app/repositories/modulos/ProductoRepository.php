@@ -651,6 +651,18 @@ class ProductoRepository extends BaseRepository
         ]);
     }
 
+    /** Cambia solo la marca del producto (desde el aviso de Configuración Contable). */
+    public function actualizarMarca(int $id, int $idEmpresa, ?int $idMarca, int $userId): void
+    {
+        $sql = "UPDATE {$this->table}
+                SET id_marca = :id_marca, updated_by = :uid, updated_at = CURRENT_TIMESTAMP
+                WHERE id = :id AND id_empresa = :id_empresa AND eliminado = false";
+        $st = $this->db->prepare($sql);
+        $st->execute([
+            ':id_marca' => $idMarca, ':id' => $id, ':id_empresa' => $idEmpresa, ':uid' => $userId,
+        ]);
+    }
+
     public function getDetalleCompleto(int $id, int $idEmpresa): ?array
     {
         $sql = "SELECT p.*,

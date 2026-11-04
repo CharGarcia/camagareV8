@@ -1914,7 +1914,7 @@ class AsientoProgramadoRepository extends BaseRepository
                     continue;
                 }
                 $st = $this->db->prepare(
-                    "SELECT p.codigo, p.nombre, p.tipo_produccion, COUNT(*) OVER () AS total
+                    "SELECT p.id, p.codigo, p.nombre, p.tipo_produccion, COUNT(*) OVER () AS total
                        FROM productos p
                        LEFT JOIN {$d['tabla']} x ON x.id = p.{$d['col']} AND x.eliminado = false AND x.id_empresa = p.id_empresa
                       WHERE p.id_empresa = :e AND p.eliminado = false AND x.id IS NULL
@@ -1928,6 +1928,7 @@ class AsientoProgramadoRepository extends BaseRepository
                 $out[$dim] = [
                     'total' => $rows ? (int) $rows[0]['total'] : 0,
                     'items' => array_map(fn($r) => [
+                        'id'       => (int) $r['id'],
                         'codigo'   => (string) $r['codigo'],
                         'nombre'   => (string) $r['nombre'],
                         'servicio' => (string) $r['tipo_produccion'] === '02',

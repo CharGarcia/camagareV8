@@ -269,6 +269,12 @@ Debajo del aviso se lista **qué falta y en qué documentos**, por ejemplo:
 001-101-000000004»*, o *«La categoría «Limpieza» (de «Jabón») no tiene la cuenta
 «Inventario de Mercaderías»»* cuando el costo se contabiliza por categorías.
 
+Los productos **sin categoría (o marca) asignada** van juntos en una sola línea,
+aunque estén en muchos documentos: se muestran tres de ejemplo y cuántos más
+hay, por ejemplo *«Jabón», «Shampoo», «Cloro» y 12 productos más no tienen
+categoría asignada*. Asígneles la categoría en **Productos** (editar el
+producto → Categoría).
+
 Antes el resultado los daba por generados y, al volver a entrar, el aviso
 reclamaba los mismos documentos. Una vez configurada la cuenta, la siguiente
 generación los completa.
@@ -622,7 +628,8 @@ cambiarlos se revierte el cierre en ese módulo y se genera de nuevo.
 
 - **1.46** — Al generar, un documento que ya tenía asiento y sigue pendiente (costo de venta sin
   cuenta) ya no se cuenta como generado: queda en *Quedan pendientes* con la cuenta que falta y
-  el producto, categoría o marca que no la tiene.
+  el producto, categoría o marca que no la tiene. Los productos sin categoría/marca se resumen
+  en una línea con tres ejemplos y «y N productos más».
 - **1.45** — Los ingresos y egresos sin ningún cobro/pago con monto (o con todos los cheques
   anulados) ya no aparecen como asientos pendientes.
 - **1.44** — Los documentos con fecha en un período contable cerrado ya no se cuentan como

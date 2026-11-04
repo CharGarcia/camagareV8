@@ -154,8 +154,52 @@ class ConfiguracionContableController extends BaseModuloController
             'ordenDir'     => $ordenDir,
             'vistaConfig'  => $prefsVista,
             'asientosTipo' => $asientosTipo,
+            // Asignar categoría/marca desde el aviso de productos sin clasificar: es un cambio al
+            // producto, así que lo decide el permiso de actualizar de Productos.
+            'puedeClasificarProductos' => !empty(\App\Helpers\Permisos::porRuta('modulos/productos')['actualizar']),
             'fullWidth'    => true,
         ]);
+    }
+
+    /** Categorías o marcas de la empresa para el modal «Asignar categoría/marca» (?dimension=). */
+    public function opcionesClasificacionAjax(): void
+    {
+        $this->requireLeer();
+        $this->requirePermisoModulo('modulos/productos', 'u');
+        try {
+            $dimension = (string) ($_GET['dimension'] ?? '');
+            $this->json(['ok' => true, 'opciones' => \App\Services\modulos\ProductoClasificacionService::crear()
+                ->opciones((int) $_SESSION['id_empresa'], $dimension)]);
+        } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
+            $this->json(['ok' => false, 'error' => $e->getMessage()]);
+        }
+    }
+
+    /**
+     * Asigna la categoría o marca a un producto del aviso de productos sin clasificar
+     * (POST id_producto, dimension, id_valor). Respeta los registros propios de Productos.
+     */
+    public function cambiarClasificacionProductoAjax(): void
+    {
+        $this->requireLeer();
+        $this->requirePermisoModulo('modulos/productos', 'u');
+        try {
+            $permProd = \App\Helpers\Permisos::porRuta('modulos/productos');
+            $idUsuario = (int) $_SESSION['id_usuario'];
+            $res = \App\Services\modulos\ProductoClasificacionService::crear()->cambiar(
+                (int) $_SESSION['id_empresa'],
+                $idUsuario,
+                empty($permProd['todo']) ? $idUsuario : null,
+                (int) ($_POST['id_producto'] ?? 0),
+                (string) ($_POST['dimension'] ?? ''),
+                (int) ($_POST['id_valor'] ?? 0)
+            );
+            $this->json(['ok' => true] + $res);
+        } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
+            $this->json(['ok' => false, 'error' => $e->getMessage()]);
+        }
     }
 
     public function searchAjax(): void

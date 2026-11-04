@@ -106,6 +106,44 @@ class AsientoBuilderService
         }
     }
 
+    /**
+     * Acorta las listas de «Producto» no tiene categoría/marca asignada (las arma
+     * motivoLineasSinCuenta(), separadas por "; "): por cada cosa que falta deja $max ejemplos y
+     * «y N productos más». Con decenas de productos sin clasificar el aviso era ilegible. El resto
+     * del texto queda igual.
+     */
+    public static function resumirSinClasificacion(string $texto, int $max = 3): string
+    {
+        $porFalta = [];
+        $otros = [];
+        foreach (explode('; ', $texto) as $parte) {
+            if (preg_match('/^«(.+)» no tiene (.+) asignada$/u', $parte, $m)) {
+                $porFalta[$m[2]][$m[1]] = true;
+            } else {
+                $otros[] = $parte;
+            }
+        }
+        if (!$porFalta) {
+            return $texto;
+        }
+        $partes = [];
+        foreach ($porFalta as $falta => $productos) {
+            $nombres = array_keys($productos);
+            $n = count($nombres);
+            if ($n === 1) {
+                $partes[] = "«{$nombres[0]}» no tiene {$falta} asignada";
+                continue;
+            }
+            $muestra = array_map(static fn($nom) => "«{$nom}»", array_slice($nombres, 0, $max));
+            $resto = $n - count($muestra);
+            $lista = $resto > 0
+                ? implode(', ', $muestra) . " y {$resto} producto" . ($resto > 1 ? 's' : '') . ' más'
+                : implode(', ', array_slice($muestra, 0, -1)) . ' y ' . end($muestra);
+            $partes[] = "{$lista} no tienen {$falta} asignada";
+        }
+        return implode('; ', array_merge($partes, $otros));
+    }
+
     /** @return string[] Motivos de anotarCostoSinCuenta() del documento (vacío si su costo resolvió). */
     public static function costoSinCuenta(string $tipoDocumento, int $idDocumento): array
     {
@@ -1750,7 +1788,7 @@ class AsientoBuilderService
             }
             $partes = [];
             if ($sinClasif) {
-                $partes[] = "No se puede generar el asiento de {$etiqueta}: " . implode('; ', array_unique($sinClasif))
+                $partes[] = "No se puede generar el asiento de {$etiqueta}: " . self::resumirSinClasificacion(implode('; ', array_unique($sinClasif)))
                     . '. Las cuentas de este asiento están configuradas por categoría/marca: asígnesela en Productos '
                     . '(editar el producto → Categoría / Marca).';
             }

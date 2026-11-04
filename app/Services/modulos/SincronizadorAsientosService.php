@@ -1886,11 +1886,29 @@ class SincronizadorAsientosService
             // Qué producto, categoría o marca no resolvió cuenta: lo anotó el builder al armar
             // cada documento en esta misma petición (AsientoBuilderService::costoSinCuenta()).
             // Una línea de detalle por causa, con los documentos que la tienen.
+            // Los productos sin categoría/marca de TODOS los documentos van juntos en una sola línea
+            // (con pocos ejemplos, ver resumirSinClasificacion()): uno por documento repetía el
+            // mismo aviso decenas de veces.
             $porCausa = [];
+            $sinClasif = [];   // texto «Producto» no tiene … asignada => ids
             foreach ($idsMotivo as $id) {
                 foreach (\App\Services\modulos\AsientoBuilderService::costoSinCuenta($costeo[0], (int) $id) as $causa) {
-                    $porCausa[$causa][] = $id;
+                    $resto = [];
+                    foreach (explode('; ', $causa) as $parte) {
+                        if (preg_match('/^«.+» no tiene .+ asignada$/u', $parte)) {
+                            $sinClasif[$parte][] = $id;
+                        } else {
+                            $resto[] = $parte;
+                        }
+                    }
+                    if ($resto) {
+                        $porCausa[implode('; ', $resto)][] = $id;
+                    }
                 }
+            }
+            if ($sinClasif) {
+                $idsClasif = array_values(array_unique(array_merge(...array_values($sinClasif))));
+                $porCausa[\App\Services\modulos\AsientoBuilderService::resumirSinClasificacion(implode('; ', array_keys($sinClasif)))] = $idsClasif;
             }
             if (!$porCausa) {
                 $porCausa[''] = $idsMotivo;
@@ -1900,7 +1918,7 @@ class SincronizadorAsientosService
                 // La causa llega como «Inventario» para Producto A, B… o como «la categoría «X» (de
                 // «Producto») no tiene la cuenta «Inventario»» (ver motivoLineasSinCuenta()).
                 $causa = (string) $causa;
-                $leyenda = str_starts_with($causa, '«') ? 'Sin cuenta ' . $causa : mb_strtoupper(mb_substr($causa, 0, 1)) . mb_substr($causa, 1);
+                $leyenda = preg_match('/^«[^»]+» para /u', $causa) ? 'Sin cuenta ' . $causa : mb_strtoupper(mb_substr($causa, 0, 1)) . mb_substr($causa, 1);
                 $this->detalleActual = $causa !== ''
                     ? "{$leyenda} — {$nombreModulo} {$docs}"
                     : "{$nombreModulo}: {$docs}";

@@ -942,8 +942,32 @@ $base = BASE_URL;
     </div>
 </div>
 
+<!-- Modal: Asignar categoría o marca a un producto del aviso de productos sin clasificar
+     (ASIENTOPROG_abrirClasificacion, configuracion_contable_modal.js) -->
+<div class="modal fade" id="modalClasificacionProducto" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered" style="max-width:420px;">
+        <div class="modal-content">
+            <div class="modal-header py-2">
+                <h6 class="modal-title mb-0"><i class="bi bi-tag me-1 text-primary"></i> <span id="clasifTitulo">Asignar categoría</span></h6>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+            </div>
+            <div class="modal-body">
+                <div class="small text-muted mb-2" id="clasifProducto"></div>
+                <label for="clasifValor" class="form-label small mb-1 d-block" id="clasifEtiqueta">Categoría</label>
+                <select id="clasifValor" class="form-select form-select-sm"></select>
+            </div>
+            <div class="modal-footer py-2">
+                <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Cancelar</button>
+                <button type="button" class="btn btn-primary btn-sm" id="clasifGuardar"><i class="bi bi-check2 me-1"></i> Guardar</button>
+            </div>
+        </div>
+    </div>
+</div>
+
 <script>
     window.BASE_URL = '<?= $base ?>';
+    // Permiso de actualizar en Productos: habilita «Asignar» en el aviso de productos sin categoría/marca.
+    window.ASIENTOPROG_PUEDE_CLASIFICAR = <?= !empty($puedeClasificarProductos) ? 'true' : 'false' ?>;
     // Sección a abrir al llegar desde el aviso de asientos pendientes (viaja en sesión, no en la URL).
     window.ASIENTOPROG_ABRIR = <?= json_encode($abrirSeccion ?? null, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT) ?>;
     // Catálogo completo del selector de tipo de asiento, para reconstruirlo al encender/apagar módulos.
