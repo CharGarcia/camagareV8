@@ -372,6 +372,35 @@ class ReporteVentasController extends BaseModuloController
              . "<td class='text-end'>100.00%</td><td class='text-end pe-4'>100.00%</td></tr>";
     }
 
+    /**
+     * Fila de totales al pie de las vistas con montos (detallado, por cliente, variante,
+     * fecha, cajero y mes), en pantalla. Suma las filas mostradas, así que coincide con las
+     * tarjetas de arriba y con la fila "TOTALES GENERALES" del PDF. En "Facturas − NC" las
+     * notas de crédito ya vienen en negativo y restan.
+     */
+    private function renderFilaTotalesMontosHtml(array $rows, string $agrupar): string
+    {
+        $n      = count($rows);
+        $etq    = "TOTAL ({$n} " . $this->sustantivoFilas($agrupar, $n) . ")";
+        $num    = static fn (string $c): string => number_format(self::sumarCampo($rows, $c), 2);
+        $montos = "<td class='text-end'>{$num('base_0')}</td>"
+                . "<td class='text-end'>{$num('base_iva')}</td>"
+                . "<td class='text-end'>{$num('valor_iva')}</td>"
+                . "<td class='text-end text-success'>{$num('total')}</td>";
+
+        $html = "<tr class='table-light fw-bold'>";
+        $html .= match ($agrupar) {
+            'CLIENTE'  => "<td class='ps-4'>{$etq}</td><td class='text-end'>{$num('saldo')}</td>" . $montos,
+            'VARIANTE' => "<td class='ps-4' colspan='2'>{$etq}</td>"
+                        . "<td class='text-center'>" . self::fmtCantidad(self::sumarCampo($rows, 'cantidad_vendida')) . "</td><td></td>" . $montos,
+            'FECHA', 'CAJERO', 'MES' => "<td class='ps-4'>{$etq}</td>"
+                        . "<td class='text-center'>" . (int) self::sumarCampo($rows, 'cantidad_facturas') . "</td>" . $montos,
+            default    => "<td class='ps-4' colspan='7'>{$etq}</td>" . $montos
+                        . "<td class='text-end text-danger'>{$num('retenciones')}</td>",
+        };
+        return $html . '</tr>';
+    }
+
     /** Texto del alcance para el encabezado del PDF ('' si no es consolidado). */
     private function describirAlcance(array $idsEmpresa, bool $consolidado): string
     {
@@ -424,6 +453,8 @@ class ReporteVentasController extends BaseModuloController
                     echo $this->renderFilaTotalesClienteCategoriaHtml($rows, $meses);
                 } elseif ($filtros['agrupar_por'] === 'PRODUCTO') {
                     echo $this->renderFilaTotalesProductoHtml($rows);
+                } else {
+                    echo $this->renderFilaTotalesMontosHtml($rows, (string) $filtros['agrupar_por']);
                 }
             }
             $rowsHtml = ob_get_clean();
