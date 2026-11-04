@@ -5,8 +5,8 @@ categoria: Reportes
 ruta_modulo: modulos/reporte_ventas
 tipo: modulo
 visibilidad: todos
-etiquetas: reporte de ventas, ventas, cuanto vendi, por cliente, por vendedor, por producto, estadisticas, exportar, pdf, excel, establecimientos, sucursales, matriz, mismo ruc, consolidado por ruc, borradores, borrador, facturas en borrador, incluir borradores, documentos sin autorizar, pendientes de enviar al sri, ordenar, ordenamiento, ordenar por columna, de mayor a menor, quien compro mas, saldo por cobrar, saldo x cobrar, cuanto me debe el cliente, nro facturas, numero de documentos, cartera en el reporte de ventas, acceso total, permiso de ver todos, registros propios, solo mis ventas, no veo las ventas de otro, cada usuario ve lo suyo, documentos migrados no aparecen, cartera del vendedor, mis clientes, clientes asignados, vendedor vinculado, usuario del sistema, el vendedor no ve nada, asesor solo ve sus clientes, nivel de usuario, administrador ve todo, el asesor ve las ventas de todos, imprimir el reporte, logo en el pdf, el pdf sale angosto, el pdf no ocupa la hoja, nombre del producto cortado, filtros aplicados en el pdf, encabezado del pdf, totales repetidos en el pdf, pdf horizontal, numero de pagina, boton buscar, no se actualiza, no cambia al elegir, hay que pulsar buscar, boton amarillo, filtros sin aplicar, unidades vendidas, unidades por mes, cantidades por mes, cuantas unidades vendi, ventas por producto y mes, producto por mes, rotacion mensual, tabla por meses, una columna por mes, marca, categoria, filtrar por marca, filtrar por categoria, ventas de una marca, ventas de una categoria, linea de productos, participacion por producto, porcentaje de ventas, porcentaje de unidades, % venta, % unidades, unidad de medida, total venta sin iva, producto mas vendido, cajero, por cajero, por usuario, ventas por usuario, ventas de un cajero, quien facturo, recibos de venta, recibos no aparecen, no salen los recibos, recibos en borrador, todos los documentos, facturas y recibos juntos, facturas recibos y notas de credito, ventas totales, grafico, ocultar grafico, acordeon, vendedores que puede ver, solo algunos vendedores, ocultar vendedores, coordinador de zona, ver las ventas de ciertos vendedores, donde esta el resumen diario, cliente por categoria, categorias por cliente, que compro cada cliente, cuanto compro cada cliente de cada categoria, productos por cliente, unidades por cliente, una columna por categoria, total general por cliente
-version: 1.18
+etiquetas: reporte de ventas, ventas, cuanto vendi, por cliente, por vendedor, por producto, estadisticas, exportar, pdf, excel, establecimientos, sucursales, matriz, mismo ruc, consolidado por ruc, borradores, borrador, facturas en borrador, incluir borradores, documentos sin autorizar, pendientes de enviar al sri, ordenar, ordenamiento, ordenar por columna, de mayor a menor, quien compro mas, saldo por cobrar, saldo x cobrar, cuanto me debe el cliente, nro facturas, numero de documentos, cartera en el reporte de ventas, acceso total, permiso de ver todos, registros propios, solo mis ventas, no veo las ventas de otro, cada usuario ve lo suyo, documentos migrados no aparecen, cartera del vendedor, mis clientes, clientes asignados, vendedor vinculado, usuario del sistema, el vendedor no ve nada, asesor solo ve sus clientes, nivel de usuario, administrador ve todo, el asesor ve las ventas de todos, imprimir el reporte, logo en el pdf, el pdf sale angosto, el pdf no ocupa la hoja, nombre del producto cortado, filtros aplicados en el pdf, encabezado del pdf, totales repetidos en el pdf, pdf horizontal, numero de pagina, boton buscar, no se actualiza, no cambia al elegir, hay que pulsar buscar, boton amarillo, filtros sin aplicar, unidades vendidas, unidades por mes, cantidades por mes, cuantas unidades vendi, ventas por producto y mes, producto por mes, rotacion mensual, tabla por meses, una columna por mes, marca, categoria, filtrar por marca, filtrar por categoria, total de una categoria, solo lo de la categoria, la factura completa, el total no cuadra con el filtro, filtrar por producto, filtrar por variante, ventas de una marca, ventas de una categoria, linea de productos, participacion por producto, porcentaje de ventas, porcentaje de unidades, % venta, % unidades, unidad de medida, total venta sin iva, producto mas vendido, cajero, por cajero, por usuario, ventas por usuario, ventas de un cajero, quien facturo, recibos de venta, recibos no aparecen, no salen los recibos, recibos en borrador, todos los documentos, facturas y recibos juntos, facturas recibos y notas de credito, ventas totales, grafico, ocultar grafico, acordeon, vendedores que puede ver, solo algunos vendedores, ocultar vendedores, coordinador de zona, ver las ventas de ciertos vendedores, donde esta el resumen diario, cliente por categoria, categorias por cliente, que compro cada cliente, cuanto compro cada cliente de cada categoria, productos por cliente, unidades por cliente, una columna por categoria, total general por cliente
+version: 1.19
 orden: 10
 estado: activo
 ---
@@ -23,8 +23,8 @@ qué, en el periodo que se indique.
 | Cliente | Ventas de un cliente concreto |
 | Vendedor | Ventas de un vendedor concreto. Las notas de crédito entran por **su propio vendedor** (el campo *Vendedor* de la nota), también en *Facturas − NC* |
 | Cajero | Documentos de un usuario concreto: el **responsable** del documento, el que aparece en la columna *Cajero* del detallado. Lista los usuarios asignados a la empresa. A un usuario que solo ve sus propios documentos (o los de su vendedor) no se le muestra: su alcance ya lo limita |
-| Producto | Ventas de un producto concreto |
-| Marca / Categoría | Solo los productos de esa marca o categoría (las de la ficha del producto). Están en la primera fila, a continuación de *Agrupar por*. Ver la sección *Filtrar por marca o categoría* |
+| Producto / Variante | Solo lo vendido de los productos cuya descripción o código (o variante) contiene el texto. Ver la sección *Filtrar por producto, variante, marca o categoría* |
+| Marca / Categoría | Solo los productos de esa marca o categoría (las de la ficha del producto). Están en la primera fila, a continuación de *Agrupar por*. Ver la sección *Filtrar por producto, variante, marca o categoría* |
 | Borradores | *Sin borradores* (por defecto), *Con borradores* o *Solo borradores*. Ver la sección *Documentos en borrador* |
 
 Los filtros se combinan: *las ventas del producto X al cliente Y en marzo*.
@@ -38,7 +38,7 @@ pueden ajustar varios filtros seguidos y lanzar una sola consulta. Ordenar por
 una columna sí regenera la tabla, siempre que no haya filtros pendientes; si
 los hay, el orden queda guardado y se aplica al pulsar Buscar.
 
-## Filtrar por marca o categoría
+## Filtrar por producto, variante, marca o categoría
 
 Los selectores **Marca** y **Categoría** (primera fila, después de *Agrupar por*)
 acotan el reporte a los productos que tienen esa marca o esa categoría en su
@@ -48,16 +48,27 @@ junto a cada uno lo guarda como favorito.
 
 Qué cambia según la vista:
 
+La misma regla vale para los buscadores **Producto** y **Variante**: los cuatro
+filtros miran las **líneas** de cada documento y **solo cuenta lo vendido de lo
+filtrado**, en todas las vistas:
+
 - En **Por producto**, **Por variante**, **Unidades por producto / mes** y
-  **Unidades por cliente / categoría** se filtran las **líneas**: solo aparecen los productos de esa marca o categoría,
-  con sus cantidades e importes.
-- En el **Detallado**, **Por cliente**, **Por fecha** y **Por mes** se filtran
-  los **documentos**: entra toda factura que tenga al menos una línea de esa
-  marca o categoría, con su **total completo** (no solo la parte de esa marca).
-  Es la misma regla que ya aplicaba el filtro *Producto*. Para ver únicamente
-  lo vendido de la marca, use *Por producto* o *Unidades por producto / mes*.
-- Las tarjetas de arriba (documentos y totales) siguen a los documentos, así que
-  en las vistas por línea pueden ser mayores que la suma de la tabla.
+  **Unidades por cliente / categoría** solo aparecen los productos que cumplen el
+  filtro, con sus cantidades e importes. Buscar *aceite* en *Por producto* muestra
+  solo los aceites, no el resto de productos de esas facturas.
+- En el **Detallado**, **Por cliente**, **Por fecha**, **Por mes** y **Por cajero**
+  aparecen los documentos con al menos una línea que cumple, pero sus **bases, IVA
+  y total son solo los de esas líneas**: una factura de $100 con $10 de la
+  categoría *Lácteos* sale con $10 al filtrar por *Lácteos*.
+- Las **tarjetas de arriba** (documentos y totales) siguen la misma regla, así que
+  coinciden con la suma de la tabla en cualquier vista.
+- Lo que es del documento entero no se reparte por líneas: la columna
+  **Retenciones** del detallado y el **Saldo x Cobrar** de *Por cliente* siguen
+  siendo los del documento completo.
+- La marca y la categoría son las que el producto tiene **hoy** en su ficha: si un
+  producto cambió de categoría, sus ventas anteriores cuentan en la nueva.
+- Las **notas de crédito** no registran variante: con el buscador *Variante* no
+  entra ninguna (en *Facturas − NC* no se resta nada).
 - En **consolidado por RUC**, la marca o categoría elegida se cruza **por
   nombre** con las de los demás establecimientos (cada uno tiene su propia
   lista); si en una sucursal la marca se llama distinto, sus ventas no entran.
@@ -248,7 +259,7 @@ cada producto se vendieron cada mes*. Es una tabla de cantidades, no de dinero:
 - El gráfico muestra la **curva de unidades vendidas por mes** (la suma de todos
   los productos de la tabla), sin signo de dólar.
 - Se combina con todos los filtros, en especial **Marca** y **Categoría** (ver
-  *Filtrar por marca o categoría*): *cuántas unidades de la marca X vendí cada
+  *Filtrar por producto, variante, marca o categoría*): *cuántas unidades de la marca X vendí cada
   mes de este año*.
 - Ordena por código, descripción, total o **por cualquier mes** (clic en la
   cabecera del mes). El PDF y el Excel salen con las mismas columnas, la misma
@@ -448,6 +459,7 @@ El PDF es la misma pantalla en hoja, pensado para imprimir o enviar por correo:
 
 ## Historial de cambios
 
+- **1.19** — Los filtros **Producto**, **Variante**, **Marca** y **Categoría** cuentan solo lo vendido de lo filtrado en todas las vistas: en el detallado, por cliente, por fecha, por mes, por cajero y en las tarjetas de totales ya no se suma la factura completa, sino solo sus líneas que cumplen el filtro. *Producto* y *Variante* ahora también acotan las líneas en *Por producto* y demás vistas por producto (antes mostraban todos los productos de esas facturas). Corregido el error que daba el buscador *Variante* con notas de crédito o *Facturas − NC*.
 - **1.18** — Nueva agrupación **Unidades por Cliente / Categoría**: una fila por cliente,
   una columna por categoría con las unidades compradas, Total Unidades, Total Venta sin IVA
   y fila TOTAL GENERAL, en pantalla, gráfico, PDF y Excel (ver *Unidades por cliente /

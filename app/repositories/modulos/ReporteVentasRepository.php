@@ -572,8 +572,32 @@ class ReporteVentasRepository extends BaseRepository
      * (ya lo hace vía buildWhereYParams; reutilizar el mismo nombre de placeholder es
      * seguro en este proyecto, ver memoria pdo-placeholders-repetidos).
      */
-    private function getCteBasesImpuestos(array $f): string
+    private function getCteBasesImpuestos(array $f, string $condLinea = ''): string
     {
+        // Con filtros por línea (categoría, marca, producto, variante) solo cuentan las
+        // líneas que cumplen, y se agrega su subtotal para armar el total del documento
+        // (exprTotalDoc). Los impuestos se suman por línea en un LATERAL: unirlos directo
+        // repetiría el subtotal de una línea con dos impuestos (IVA + ICE).
+        if ($condLinea !== '') {
+            return "
+            SELECT
+                d.{$f['fk_det']} AS id_doc,
+                SUM(COALESCE(li.base_0, 0))   as base_0,
+                SUM(COALESCE(li.base_iva, 0)) as base_iva,
+                SUM(COALESCE(li.valor_iva, 0)) as valor_iva,
+                SUM(COALESCE(d.precio_total_sin_impuesto, 0)) as subtotal
+            FROM {$f['det']} d
+            JOIN {$f['cab']} vcte ON vcte.id = d.{$f['fk_det']} AND vcte.id_empresa IN ({$this->inEmp})
+            LEFT JOIN LATERAL (
+                SELECT SUM(CASE WHEN i.tarifa = 0 THEN i.base_imponible ELSE 0 END) as base_0,
+                       SUM(CASE WHEN i.tarifa > 0 THEN i.base_imponible ELSE 0 END) as base_iva,
+                       SUM(i.valor) as valor_iva
+                FROM {$f['imp']} i WHERE i.{$f['fk_imp']} = d.id
+            ) li ON true
+            WHERE " . str_replace('{d}', 'd', $condLinea) . "
+            GROUP BY d.{$f['fk_det']}
+        ";
+        }
         return "
             SELECT
                 d.{$f['fk_det']} AS id_doc,
@@ -716,66 +740,19 @@ class ReporteVentasRepository extends BaseRepository
             $params[':id_cajero'] = (int) $filtros['id_cajero'];
         }
 
-        if (!empty($filtros['id_producto'])) {
-            $productos = is_array($filtros['id_producto']) ? $filtros['id_producto'] : [$filtros['id_producto']];
-            $inNames = [];
-            foreach ($productos as $i => $id) {
-                $pName = ":prod$i";
-                $inNames[] = $pName;
-                $params[$pName] = $id;
-            }
+        // Filtros por LÍNEA (producto, marca, categoría, texto del producto, variante): en los
+        // agrupados por línea (alias de detalle) acotan las líneas; en los que van por
+        // documento, entran los documentos con al menos una línea que cumpla, y sus montos
+        // salen solo de esas líneas (ver condLinea / getCteBasesImpuestos).
+        $condLinea = $this->condLinea($filtros, $f, $params);
+        if ($condLinea !== '') {
             if ($aliasDetalle) {
-                $where .= " AND {$aliasDetalle}.id_producto IN (" . implode(',', $inNames) . ")";
+                $where .= " AND " . str_replace('{d}', $aliasDetalle, $condLinea);
             } else {
-                $where .= " AND EXISTS (SELECT 1 FROM {$f['det']} vd WHERE vd.{$f['fk_det']} = {$aliasVenta}.id AND vd.id_producto IN (" . implode(',', $inNames) . "))";
+                $where .= " AND EXISTS (SELECT 1 FROM {$f['det']} vdl
+                                        WHERE vdl.{$f['fk_det']} = {$aliasVenta}.id
+                                          AND " . str_replace('{d}', 'vdl', $condLinea) . ")";
             }
-        }
-
-        // Filtro por Marca / Categoría del producto de la línea. En los agrupados por línea
-        // (alias de detalle) acota las líneas; en los que van por documento, entran los
-        // documentos que tengan al menos una línea de esa marca/categoría (igual que el
-        // filtro por id de producto). En consolidado, el controller ya expandió el id a las
-        // marcas/categorías homónimas de los demás establecimientos (expandirCatalogoPorNombre).
-        foreach (['id_marca', 'id_categoria'] as $atributo) {
-            $ids = array_values(array_filter(array_map('intval', (array) ($filtros[$atributo] ?? []))));
-            if (!$ids) {
-                continue;
-            }
-            $ph = [];
-            foreach ($ids as $i => $id) {
-                $ph[] = ":{$atributo}{$i}";
-                $params[":{$atributo}{$i}"] = $id;
-            }
-            $cond = "EXISTS (SELECT 1 FROM productos pat WHERE pat.id = {alias}.id_producto
-                             AND pat.{$atributo} IN (" . implode(',', $ph) . "))";
-            if ($aliasDetalle) {
-                $where .= " AND " . str_replace('{alias}', $aliasDetalle, $cond);
-            } else {
-                $where .= " AND EXISTS (SELECT 1 FROM {$f['det']} vda
-                                        WHERE vda.{$f['fk_det']} = {$aliasVenta}.id
-                                          AND " . str_replace('{alias}', 'vda', $cond) . ")";
-            }
-        }
-
-        // Filtro por Producto = texto de los ítems del documento (descripción o código de línea)
-        if (!empty($filtros['producto_texto'])) {
-            $where .= " AND EXISTS (
-                SELECT 1 FROM {$f['det']} vdp
-                WHERE vdp.{$f['fk_det']} = {$aliasVenta}.id
-                  AND (vdp.descripcion ILIKE :prodtxt OR vdp.codigo_principal ILIKE :prodtxt)
-            )";
-            $params[':prodtxt'] = '%' . trim($filtros['producto_texto']) . '%';
-        }
-
-        // Filtro por Variante = texto de la variante elegida en la línea (Color/Talla, etc.)
-        if (!empty($filtros['variante_texto'])) {
-            $where .= " AND EXISTS (
-                SELECT 1 FROM {$f['det']} vdv
-                JOIN productos_variantes pv ON pv.id = vdv.id_producto_variante
-                WHERE vdv.{$f['fk_det']} = {$aliasVenta}.id
-                  AND (pv.nombre ILIKE :vartxt OR pv.valor ILIKE :vartxt)
-            )";
-            $params[':vartxt'] = '%' . trim($filtros['variante_texto']) . '%';
         }
 
         // Filtro por Información Adicional del documento (campos adicionales nombre/valor)
@@ -788,7 +765,84 @@ class ReporteVentasRepository extends BaseRepository
             $params[':info'] = '%' . trim($filtros['buscar_info']) . '%';
         }
 
-        return [$where, $params];
+        // Tercer elemento: la condición de línea (con `{d}` como alias del detalle), para que
+        // los reportes por documento sumen solo las líneas filtradas. Comparte los params.
+        return [$where, $params, $condLinea];
+    }
+
+    /**
+     * Condición sobre UNA línea de detalle (alias `{d}`) con todos los filtros por línea
+     * del reporte, o '' si no hay ninguno. Agrega sus placeholders a `$params`.
+     *
+     *  - Producto (id): `id_producto` de la línea. En consolidado, el controller ya
+     *    expandió el id a los productos hermanos con el mismo código.
+     *  - Marca / Categoría: la que tiene HOY la ficha del producto. Una línea sin producto
+     *    (concepto libre) no entra. En consolidado, ya expandidas a las homónimas.
+     *  - Producto (texto): descripción o código escritos en la línea.
+     *  - Variante (texto): nombre o valor de la variante de la línea. Las notas de crédito
+     *    no registran variante (su detalle no tiene `id_producto_variante`): con este
+     *    filtro no entra ninguna NC.
+     */
+    private function condLinea(array $filtros, array $f, array &$params): string
+    {
+        $conds = [];
+
+        if (!empty($filtros['id_producto'])) {
+            $raw = is_array($filtros['id_producto']) ? $filtros['id_producto'] : explode(',', (string) $filtros['id_producto']);
+            $ids = array_values(array_filter(array_map('intval', $raw)));
+            if ($ids) {
+                $ph = [];
+                foreach ($ids as $i => $id) {
+                    $ph[] = ":prod{$i}";
+                    $params[":prod{$i}"] = $id;
+                }
+                $conds[] = "{d}.id_producto IN (" . implode(',', $ph) . ")";
+            }
+        }
+
+        foreach (['id_marca', 'id_categoria'] as $atributo) {
+            $ids = array_values(array_filter(array_map('intval', (array) ($filtros[$atributo] ?? []))));
+            if (!$ids) {
+                continue;
+            }
+            $ph = [];
+            foreach ($ids as $i => $id) {
+                $ph[] = ":{$atributo}{$i}";
+                $params[":{$atributo}{$i}"] = $id;
+            }
+            $conds[] = "EXISTS (SELECT 1 FROM productos pat WHERE pat.id = {d}.id_producto
+                                AND pat.{$atributo} IN (" . implode(',', $ph) . "))";
+        }
+
+        if (trim((string) ($filtros['producto_texto'] ?? '')) !== '') {
+            $conds[] = "({d}.descripcion ILIKE :prodtxt OR {d}.codigo_principal ILIKE :prodtxt)";
+            $params[':prodtxt'] = '%' . trim((string) $filtros['producto_texto']) . '%';
+        }
+
+        if (trim((string) ($filtros['variante_texto'] ?? '')) !== '') {
+            if ($f['cab'] === 'notas_credito_cabecera') {
+                $conds[] = 'false';
+            } else {
+                $conds[] = "EXISTS (SELECT 1 FROM productos_variantes pvf
+                                    WHERE pvf.id = {d}.id_producto_variante
+                                      AND (pvf.nombre ILIKE :vartxt OR pvf.valor ILIKE :vartxt))";
+                $params[':vartxt'] = '%' . trim((string) $filtros['variante_texto']) . '%';
+            }
+        }
+
+        return $conds ? '(' . implode(' AND ', $conds) . ')' : '';
+    }
+
+    /**
+     * Total de cada documento en los reportes por documento: el `importe_total` de la
+     * cabecera o, con filtros por línea, solo el de las líneas que cumplen (subtotal + sus
+     * impuestos), para que coincida con lo que suma el agrupado por producto.
+     */
+    private function exprTotalDoc(string $condLinea, string $alias = 'v', string $aliasBases = 'b'): string
+    {
+        return $condLinea === ''
+            ? "{$alias}.importe_total"
+            : "(COALESCE({$aliasBases}.subtotal, 0) + COALESCE({$aliasBases}.valor_iva, 0))";
     }
 
     /**
@@ -802,7 +856,7 @@ class ReporteVentasRepository extends BaseRepository
         }
 
         $f = $this->fuente($filtros);
-        list($where, $params) = $this->buildWhereYParams($idEmpresa, $filtros, 'v');
+        [$where, $params, $condLinea] = $this->buildWhereYParams($idEmpresa, $filtros, 'v');
 
         $clave = $f['clave'] ? "COALESCE(v.clave_acceso, '')" : "''";
         // Retenciones aplicadas a cada factura: la MISMA regla que Cuentas por Cobrar, Ingresos,
@@ -838,7 +892,7 @@ class ReporteVentasRepository extends BaseRepository
         $orden = $this->ordenSql($filtros, 'NINGUNO');
 
         $sql = "
-            WITH bases AS (" . $this->getCteBasesImpuestos($f) . "){$retenCte}
+            WITH bases AS (" . $this->getCteBasesImpuestos($f, $condLinea) . "){$retenCte}
             SELECT
                 v.id,
                 v.id_empresa,
@@ -851,7 +905,7 @@ class ReporteVentasRepository extends BaseRepository
                 COALESCE(b.base_0, 0)   as base_0,
                 COALESCE(b.base_iva, 0) as base_iva,
                 COALESCE(b.valor_iva, 0) as valor_iva,
-                v.importe_total          as total,
+                " . $this->exprTotalDoc($condLinea) . " as total,
                 {$vendedorSel}              as vendedor_nombre,
                 COALESCE(ucaj.nombre, '')   as cajero_nombre,
                 COALESCE(uusr.nombre, '')   as usuario_nombre,
@@ -886,11 +940,11 @@ class ReporteVentasRepository extends BaseRepository
         }
 
         $f = $this->fuente($filtros);
-        list($where, $params) = $this->buildWhereYParams($idEmpresa, $filtros, 'v');
+        [$where, $params, $condLinea] = $this->buildWhereYParams($idEmpresa, $filtros, 'v');
         $orden = $this->ordenSql($filtros, 'CLIENTE');
 
         $sql = "
-            WITH bases AS (" . $this->getCteBasesImpuestos($f) . ")
+            WITH bases AS (" . $this->getCteBasesImpuestos($f, $condLinea) . ")
             " . $this->getCtesSaldo($f) . "
             SELECT
                 c.id as id_cliente,
@@ -900,7 +954,7 @@ class ReporteVentasRepository extends BaseRepository
                 SUM(COALESCE(b.base_0, 0)) as base_0,
                 SUM(COALESCE(b.base_iva, 0)) as base_iva,
                 SUM(COALESCE(b.valor_iva, 0)) as valor_iva,
-                SUM(v.importe_total) as total,
+                SUM(" . $this->exprTotalDoc($condLinea) . ") as total,
                 -- Pendiente de cobro de esos mismos documentos (ver getCtesSaldo)
                 " . $this->exprSaldo($f) . " as saldo
             FROM {$f['cab']} v
@@ -1038,18 +1092,18 @@ class ReporteVentasRepository extends BaseRepository
         }
 
         $f = $this->fuente($filtros);
-        list($where, $params) = $this->buildWhereYParams($idEmpresa, $filtros, 'v');
+        [$where, $params, $condLinea] = $this->buildWhereYParams($idEmpresa, $filtros, 'v');
         $orden = $this->ordenSql($filtros, 'FECHA');
 
         $sql = "
-            WITH bases AS (" . $this->getCteBasesImpuestos($f) . ")
+            WITH bases AS (" . $this->getCteBasesImpuestos($f, $condLinea) . ")
             SELECT
                 v.fecha_emision as fecha,
                 COUNT(v.id) as cantidad_facturas,
                 SUM(COALESCE(b.base_0, 0)) as base_0,
                 SUM(COALESCE(b.base_iva, 0)) as base_iva,
                 SUM(COALESCE(b.valor_iva, 0)) as valor_iva,
-                SUM(v.importe_total) as total
+                SUM(" . $this->exprTotalDoc($condLinea) . ") as total
             FROM {$f['cab']} v
             LEFT JOIN bases b ON b.id_doc = v.id
             WHERE {$where}
@@ -1075,11 +1129,11 @@ class ReporteVentasRepository extends BaseRepository
         }
 
         $f = $this->fuente($filtros);
-        list($where, $params) = $this->buildWhereYParams($idEmpresa, $filtros, 'v');
+        [$where, $params, $condLinea] = $this->buildWhereYParams($idEmpresa, $filtros, 'v');
         $orden = $this->ordenSql($filtros, 'CAJERO');
 
         $sql = "
-            WITH bases AS (" . $this->getCteBasesImpuestos($f) . ")
+            WITH bases AS (" . $this->getCteBasesImpuestos($f, $condLinea) . ")
             SELECT
                 COALESCE(v.id_usuario, 0) as id_cajero,
                 COALESCE(MAX(u.nombre), 'Sin cajero') as cajero_nombre,
@@ -1087,7 +1141,7 @@ class ReporteVentasRepository extends BaseRepository
                 SUM(COALESCE(b.base_0, 0)) as base_0,
                 SUM(COALESCE(b.base_iva, 0)) as base_iva,
                 SUM(COALESCE(b.valor_iva, 0)) as valor_iva,
-                SUM(v.importe_total) as total
+                SUM(" . $this->exprTotalDoc($condLinea) . ") as total
             FROM {$f['cab']} v
             LEFT JOIN bases b ON b.id_doc = v.id
             LEFT JOIN usuarios u ON u.id = v.id_usuario
@@ -1139,18 +1193,18 @@ class ReporteVentasRepository extends BaseRepository
         }
 
         $f = $this->fuente($filtros);
-        list($where, $params) = $this->buildWhereYParams($idEmpresa, $filtros, 'v');
+        [$where, $params, $condLinea] = $this->buildWhereYParams($idEmpresa, $filtros, 'v');
         $orden = $this->ordenSql($filtros, 'MES');
 
         $sql = "
-            WITH bases AS (" . $this->getCteBasesImpuestos($f) . ")
+            WITH bases AS (" . $this->getCteBasesImpuestos($f, $condLinea) . ")
             SELECT
                 TO_CHAR(v.fecha_emision, 'YYYY-MM') as mes,
                 COUNT(v.id) as cantidad_facturas,
                 SUM(COALESCE(b.base_0, 0)) as base_0,
                 SUM(COALESCE(b.base_iva, 0)) as base_iva,
                 SUM(COALESCE(b.valor_iva, 0)) as valor_iva,
-                SUM(v.importe_total) as total
+                SUM(" . $this->exprTotalDoc($condLinea) . ") as total
             FROM {$f['cab']} v
             LEFT JOIN bases b ON b.id_doc = v.id
             WHERE {$where}
@@ -1509,15 +1563,15 @@ class ReporteVentasRepository extends BaseRepository
         }
 
         $f = $this->fuente($filtros);
-        list($where, $params) = $this->buildWhereYParams($idEmpresa, $filtros, 'v');
+        [$where, $params, $condLinea] = $this->buildWhereYParams($idEmpresa, $filtros, 'v');
 
         $sql = "
-            WITH bases AS (" . $this->getCteBasesImpuestos($f) . ")
+            WITH bases AS (" . $this->getCteBasesImpuestos($f, $condLinea) . ")
             SELECT
                 SUM(COALESCE(b.base_0, 0)) as total_base_0,
                 SUM(COALESCE(b.base_iva, 0)) as total_base_iva,
                 SUM(COALESCE(b.valor_iva, 0)) as total_iva,
-                SUM(v.importe_total) as gran_total,
+                SUM(" . $this->exprTotalDoc($condLinea) . ") as gran_total,
                 COUNT(v.id) as total_documentos
             FROM {$f['cab']} v
             LEFT JOIN bases b ON b.id_doc = v.id
