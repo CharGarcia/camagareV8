@@ -5,8 +5,8 @@ categoria: Reportes
 ruta_modulo: modulos/reporte_compras
 tipo: modulo
 visibilidad: todos
-etiquetas: reporte de compras, compras, cuanto compre, por proveedor, por producto, gasto, exportar, pdf, excel, establecimientos, sucursales, matriz, mismo ruc, consolidado por ruc, boton buscar, no se actualiza, no cambia al elegir, hay que pulsar buscar, boton amarillo, filtros sin aplicar, grafico, ocultar grafico, acordeon, mostrar grafico
-version: 1.6
+etiquetas: reporte de compras, compras, cuanto compre, fila de totales, total al final de la tabla, no sale el total en pantalla, suma de la tabla, total en el excel, por proveedor, por producto, gasto, exportar, pdf, excel, establecimientos, sucursales, matriz, mismo ruc, consolidado por ruc, boton buscar, no se actualiza, no cambia al elegir, hay que pulsar buscar, boton amarillo, filtros sin aplicar, grafico, ocultar grafico, acordeon, mostrar grafico
+version: 1.7
 orden: 20
 estado: activo
 ---
@@ -76,6 +76,16 @@ Los resultados se agrupan por proveedor, producto o periodo, según lo que se
 quiera responder: *a qué proveedor le compro más*, *qué producto me está costando
 más este año*, *cómo evoluciona el gasto mes a mes*.
 
+**Fila de totales**: todas las vistas terminan con una fila **TOTAL** (en gris, al
+pie de la tabla) que suma las filas mostradas: bases, IVA, ICE, gran total y, según
+la vista, el número de comprobantes, la cantidad comprada o las retenciones. Respeta
+todos los filtros y coincide con las tarjetas de arriba. El **Excel** trae la misma
+fila al final y el PDF la suya (*TOTALES*).
+
+En **Por producto** el total sale de las líneas (bases + IVA + ICE de cada producto),
+así que puede quedar algo por debajo del *Gran Total* de las tarjetas, que es el
+total de cada comprobante e incluye valores que no son de ningún producto.
+
 ## Compras por producto
 
 Filtrar por producto sirve para negociar: muestra cuánto se le ha comprado de ese
@@ -102,6 +112,7 @@ su **número de página** sobre el total (*Página 2/5*).
 
 ## Historial de cambios
 
+- **1.7** — Nueva **fila TOTAL** al pie de la tabla en pantalla y al final del **Excel**, en todas las vistas (detallado, por proveedor, por producto, por fecha y por mes). Antes los totales solo se veían en las tarjetas de arriba y en el PDF.
 - **1.6** — El reporte muestra solo documentos de **producción**, aunque la empresa esté configurada en pruebas (ver el artículo *Los reportes solo muestran documentos de producción*).
 - **1.5** — El **gráfico de compras** queda dentro de un acordeón, **cerrado por
   defecto**: se abre con un clic en su título o en la flecha del extremo derecho.

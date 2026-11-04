@@ -148,6 +148,7 @@ class ReporteComprasController extends BaseModuloController
                 foreach ($rows as $r) {
                     echo $this->renderFilaHtml($r, $filtros['agrupar_por'], $consolidado);
                 }
+                echo $this->renderFilaTotalesHtml($rows, (string) $filtros['agrupar_por']);
             }
             $rowsHtml = ob_get_clean();
 
@@ -173,6 +174,56 @@ class ReporteComprasController extends BaseModuloController
             echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
         }
         exit;
+    }
+
+    /** Suma de un campo sobre las filas del reporte. */
+    private static function sumarCampo(array $rows, string $campo): float
+    {
+        return array_sum(array_map(static fn (array $r): float => (float) ($r[$campo] ?? 0), $rows));
+    }
+
+    /** Cantidad: sin decimales si es entera, con dos si no. */
+    private static function fmtCantidad(float $n): string
+    {
+        return number_format($n, abs($n - round($n)) < 0.00001 ? 0 : 2);
+    }
+
+    /** "N proveedores", "N días"… para la etiqueta de la fila de totales (pantalla y Excel). */
+    private static function etiquetaTotal(string $agrupar, int $n): string
+    {
+        $s = match ($agrupar) {
+            'PROVEEDOR' => $n === 1 ? 'proveedor' : 'proveedores',
+            'PRODUCTO'  => $n === 1 ? 'producto'  : 'productos',
+            'FECHA'     => $n === 1 ? 'día'       : 'días',
+            'MES'       => $n === 1 ? 'mes'       : 'meses',
+            default     => $n === 1 ? 'comprobante' : 'comprobantes',
+        };
+        return "TOTAL ({$n} {$s})";
+    }
+
+    /**
+     * Fila de totales al pie de la tabla (pantalla). Suma las filas mostradas, así que
+     * coincide con las tarjetas de arriba y con la fila "TOTALES" del PDF.
+     */
+    private function renderFilaTotalesHtml(array $rows, string $agrupar): string
+    {
+        $etq    = self::etiquetaTotal($agrupar, count($rows));
+        $num    = static fn (string $c): string => number_format(self::sumarCampo($rows, $c), 2);
+        $montos = "<td class='text-end'>{$num('base_0')}</td>"
+                . "<td class='text-end'>{$num('base_iva')}</td>"
+                . "<td class='text-end'>{$num('valor_iva')}</td>"
+                . "<td class='text-end'>{$num('valor_ice')}</td>"
+                . "<td class='text-end text-danger'>{$num('total')}</td>";
+        $docs   = "<td class='text-center'>" . (int) self::sumarCampo($rows, 'cantidad_comprobantes') . "</td>";
+
+        $html = "<tr class='table-light fw-bold'>";
+        $html .= match ($agrupar) {
+            'PROVEEDOR', 'FECHA', 'MES' => "<td>{$etq}</td>{$docs}{$montos}",
+            'PRODUCTO' => "<td>{$etq}</td><td class='text-center'>"
+                        . self::fmtCantidad(self::sumarCampo($rows, 'cantidad_comprada')) . "</td><td></td>{$montos}",
+            default    => "<td colspan='7'>{$etq}</td>{$montos}<td class='text-end text-warning'>{$num('retenciones')}</td>",
+        };
+        return $html . '</tr>';
     }
 
     private function renderFilaHtml(array $r, string $agruparPor, bool $consolidado = false): string
@@ -343,6 +394,23 @@ class ReporteComprasController extends BaseModuloController
         exit;
     }
 
+    /** Fila TOTAL del Excel, alineada con las columnas de cada agrupación. */
+    private function filaTotalesExcel(array $rows, string $agrupar, bool $consolidado): array
+    {
+        $etq    = self::etiquetaTotal($agrupar, count($rows));
+        $s      = static fn (string $c): float => round(self::sumarCampo($rows, $c), 2);
+        $montos = [$s('base_0'), $s('base_iva'), $s('valor_iva'), $s('valor_ice'), $s('total')];
+        $docs   = (int) self::sumarCampo($rows, 'cantidad_comprobantes');
+
+        return match ($agrupar) {
+            'PROVEEDOR'     => array_merge([$etq, '', $docs], $montos),
+            'PRODUCTO'      => array_merge([$etq, '', self::sumarCampo($rows, 'cantidad_comprada'), ''], $montos),
+            'FECHA', 'MES'  => array_merge([$etq, $docs], $montos),
+            // Detallado: 8 columnas de texto (+ "Estab." en consolidado), montos y retenciones.
+            default         => array_merge([$etq], array_fill(0, $consolidado ? 8 : 7, ''), $montos, [$s('retenciones')]),
+        };
+    }
+
     public function exportExcel(): void
     {
         $this->requireLeer();
@@ -454,6 +522,11 @@ class ReporteComprasController extends BaseModuloController
                         (float)($r['retenciones'] ?? 0),
                     ]);
                 }
+            }
+
+            // Fila TOTAL al final, con las mismas sumas que la pantalla.
+            if ($rows) {
+                $exportData[] = $this->filaTotalesExcel($rows, (string) $filtros['agrupar_por'], $consolidado);
             }
 
             $reportService = new \App\Services\ReportService();
