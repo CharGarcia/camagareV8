@@ -6,7 +6,7 @@ ruta_modulo: modulos/descargas-masivas
 tipo: modulo
 visibilidad: todos
 etiquetas: descarga masiva, descargas masivas, zip, exportar facturas, exportar xml, exportar pdf, backup de comprobantes, descargar todas las facturas, descargar notas de crédito, descargar retenciones, descargar guías de remisión, descargar compras, descargar egresos, descargar ingresos, descargar cheques, rango de número, rango numérico, desde número hasta número
-version: 2.0
+version: 2.1
 orden: 0
 estado: activo
 ---
@@ -151,6 +151,7 @@ en ninguno de ellos.
 
 ## Historial de cambios
 
+- **2.1** — Los PDF de facturas, notas de crédito y débito, guías, retenciones, liquidaciones, ingresos y egresos del paquete usan la configuración del **establecimiento de la serie** de cada documento (decimales, dirección, leyendas), no la del primer establecimiento de la empresa. El logo propio del punto de emisión sigue mandando.
 - **2.0** — Se agregan Egresos, Ingresos y Cheques (11 tipos en total). Nuevo
   filtro por rango de número (alternativo al de fechas). Si el formato es PDF
   y la cantidad cabe en el umbral configurado, se entrega un solo PDF

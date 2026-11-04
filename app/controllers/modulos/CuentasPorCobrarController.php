@@ -1906,35 +1906,11 @@ $plantillasFiltradas = [];
             $pagos = $ventasRepo->getPagos($idVenta);
             $infoAdicional = $ventasRepo->getInfoAdicional($idVenta);
 
-            $empresaModel  = new \App\models\Empresa();
-            $empresa       = $empresaModel->getPorId($idEmpresa) ?? [];
-            $establecimientos = $empresaModel->getEstablecimientos($idEmpresa);
-            if (!empty($establecimientos)) {
-                if (!empty($establecimientos[0]['logo_ruta'])) $empresa['logo_ruta'] = $establecimientos[0]['logo_ruta'];
-                if (!empty($establecimientos[0]['direccion'])) $empresa['direccion_establecimiento'] = $establecimientos[0]['direccion'];
-                if (!empty($establecimientos[0]['leyenda_pdf_titulo'])) $empresa['leyenda_pdf_titulo'] = $establecimientos[0]['leyenda_pdf_titulo'];
-                if (!empty($establecimientos[0]['leyenda_pdf_mensaje'])) $empresa['leyenda_pdf_mensaje'] = $establecimientos[0]['leyenda_pdf_mensaje'];
-
-                // Config del establecimiento: sin esto el PDF que se envía por
-                // correo desde aquí salía distinto al del módulo Factura de Venta
-                // (otros decimales, sin la presentación de ítems configurada y sin
-                // los interruptores de Vendedor/Cajero y propina del RIDE).
-                // Mismo bloque que FacturaVentaController::generarPdf().
-                try {
-                    $estRepo   = new \App\repositories\modulos\EmpresaRepository();
-                    $estConfig = $estRepo->getEstablecimientoConfig((int) $establecimientos[0]['id']);
-                    if ($estConfig) {
-                        $estConfig['direccion_matriz'] = $empresa['direccion'] ?? '';
-                        $estConfig['direccion_establecimiento'] = $establecimientos[0]['direccion'] ?? '';
-                        if (!empty($establecimientos[0]['logo_ruta'])) $estConfig['logo_ruta'] = $establecimientos[0]['logo_ruta'];
-                        if (!empty($establecimientos[0]['leyenda_pdf_titulo'])) $estConfig['leyenda_pdf_titulo'] = $establecimientos[0]['leyenda_pdf_titulo'];
-                        if (!empty($establecimientos[0]['leyenda_pdf_mensaje'])) $estConfig['leyenda_pdf_mensaje'] = $establecimientos[0]['leyenda_pdf_mensaje'];
-                        $empresa = array_merge($empresa, $estConfig);
-                    }
-                } catch (\Throwable $e) {
-                    // El PDF se genera igual sin la config extendida del establecimiento.
-                }
-            }
+            // Config del establecimiento DE LA FACTURA (decimales, presentación de ítems,
+            // Vendedor/Cajero, propina, dirección, leyendas): mismo armado que Factura de
+            // Venta, para que el PDF enviado desde aquí salga igual. Antes: el primero de
+            // la empresa. El logo del punto se aplica después, para que gane.
+            $empresa = \App\Helpers\ConfigEstablecimiento::paraDocumento($idEmpresa, $factura ?? []);
 
             \App\Helpers\LogoPuntoEmision::aplicar($empresa, $idEmpresa, $factura['id_punto_emision'] ?? null);
             $renderer  = new \App\Services\PlantillasPdfRendererService();

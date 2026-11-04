@@ -353,19 +353,9 @@ class ReciboVentaController extends BaseModuloController
             $data['id_empresa'] = (int) $_SESSION['id_empresa'];
             $data['id_usuario'] = (int) $_SESSION['id_usuario'];
 
-            $empresaModel = new Empresa();
-            $empresaData  = $empresaModel->getPorId($data['id_empresa']) ?? [];
-            try {
-                $establecimientos = $empresaModel->getEstablecimientos($data['id_empresa']);
-                if (!empty($establecimientos)) {
-                    $estRepo   = new \App\repositories\modulos\EmpresaRepository();
-                    $estConfig = $estRepo->getEstablecimientoConfig((int) $establecimientos[0]['id']);
-                    if ($estConfig) {
-                        $empresaData = array_merge($empresaData, $estConfig);
-                    }
-                }
-            } catch (\Throwable $e) {}
-            $data['empresa_config'] = $empresaData;
+            // Config del establecimiento DE LA SERIE del recibo (decimales, etc.), no la
+            // del primer establecimiento de la empresa.
+            $data['empresa_config'] = \App\Helpers\ConfigEstablecimiento::paraDocumento((int) $data['id_empresa'], $data);
 
             $idExistente = !empty($data['id']) ? (int) $data['id'] : 0;
 
@@ -511,24 +501,9 @@ class ReciboVentaController extends BaseModuloController
             $pagos         = $this->repository->getPagos($id);
             $infoAdicional = $this->repository->getInfoAdicional($id);
 
-            $empresaModel = new Empresa();
-            $empresa      = $empresaModel->getPorId($idEmpresa) ?? [];
-
-            $establecimientos = $empresaModel->getEstablecimientos($idEmpresa);
-            if (!empty($establecimientos)) {
-                if (!empty($establecimientos[0]['logo_ruta']))  $empresa['logo_ruta'] = $establecimientos[0]['logo_ruta'];
-                if (!empty($establecimientos[0]['direccion']))  $empresa['direccion_establecimiento'] = $establecimientos[0]['direccion'];
-                try {
-                    $estRepo   = new \App\repositories\modulos\EmpresaRepository();
-                    $estConfig = $estRepo->getEstablecimientoConfig((int) $establecimientos[0]['id']);
-                    if ($estConfig) {
-                        $estConfig['direccion_matriz'] = $empresa['direccion'] ?? '';
-                        $estConfig['direccion_establecimiento'] = $establecimientos[0]['direccion'] ?? '';
-                        if (!empty($establecimientos[0]['logo_ruta'])) $estConfig['logo_ruta'] = $establecimientos[0]['logo_ruta'];
-                        $empresa = array_merge($empresa, $estConfig);
-                    }
-                } catch (\Throwable $e) {}
-            }
+            // Config del establecimiento de la serie del recibo (decimales, logo, dirección…).
+            // Sin leyendas: el PDF del recibo nunca las llevó (igual que DocumentoVentaPdfService).
+            $empresa = \App\Helpers\ConfigEstablecimiento::paraDocumento($idEmpresa, $recibo, null, false);
 
             \App\Helpers\LogoPuntoEmision::aplicar($empresa, $idEmpresa, $recibo['id_punto_emision'] ?? null);
             $renderer  = new \App\Services\PlantillasPdfRendererService();
@@ -843,18 +818,9 @@ class ReciboVentaController extends BaseModuloController
 
         try {
             // Configuración de empresa (tipo_ambiente, ruc, etc.) para la clave de acceso de la factura.
-            $empresaModel = new Empresa();
-            $empresaData  = $empresaModel->getPorId($idEmpresa) ?? [];
-            try {
-                $establecimientos = $empresaModel->getEstablecimientos($idEmpresa);
-                if (!empty($establecimientos)) {
-                    $estRepo   = new \App\repositories\modulos\EmpresaRepository();
-                    $estConfig = $estRepo->getEstablecimientoConfig((int) $establecimientos[0]['id']);
-                    if ($estConfig) {
-                        $empresaData = array_merge($empresaData, $estConfig);
-                    }
-                }
-            } catch (\Throwable $e) {}
+            // Con el establecimiento DEL RECIBO: la factura sale por el mismo punto de emisión.
+            $reciboOrigen = $this->repository->getPorId($id) ?? [];
+            $empresaData  = \App\Helpers\ConfigEstablecimiento::paraDocumento($idEmpresa, $reciboOrigen);
 
             $res = $this->service->generarFacturaDesdeRecibo($id, $idEmpresa, $idUsuario, $empresaData);
 

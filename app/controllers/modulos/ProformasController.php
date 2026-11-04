@@ -344,7 +344,7 @@ class ProformasController extends BaseModuloController
 
             // Empresa + configuración de facturación: tipo de ambiente (SecuencialRepository)
             // y los decimales / modo de IVA con los que el servicio ajusta los importes.
-            $config = $this->empresaConfig($idEmpresa);
+            $config = $this->empresaConfig($idEmpresa, $data);
             $data['tipo_ambiente'] = (string) ($config['tipo_ambiente'] ?? '1');
 
             $id = (int) ($data['id'] ?? 0);
@@ -558,7 +558,7 @@ class ProformasController extends BaseModuloController
         $adicional = $this->repository->getInfoAdicional($id);
 
         try {
-            $empresa = $this->empresaConfig($idEmpresa);
+            $empresa = $this->empresaConfig($idEmpresa, $cabecera);
             \App\Helpers\LogoPuntoEmision::aplicar($empresa, $idEmpresa, $cabecera['id_punto_emision'] ?? null);
 
             // IVA GUARDADO (calculado al guardar con la configuración de facturación de la
@@ -598,7 +598,7 @@ class ProformasController extends BaseModuloController
         }
 
         $detalles = $this->repository->getDetalles($id);
-        $empresa  = $this->empresaConfig($idEmpresa);
+        $empresa  = $this->empresaConfig($idEmpresa, $cabecera);
         \App\Helpers\LogoPuntoEmision::aplicar($empresa, $idEmpresa, $cabecera['id_punto_emision'] ?? null);
 
         $pdf = (new \App\Services\modulos\ProformaFichaProductosPdfService())->generar($cabecera, $detalles, $empresa, 'S');
@@ -632,7 +632,7 @@ class ProformasController extends BaseModuloController
             exit;
         }
 
-        $empresa = $this->empresaConfig($idEmpresa);
+        $empresa = $this->empresaConfig($idEmpresa, $cabecera);
         \App\Helpers\LogoPuntoEmision::aplicar($empresa, $idEmpresa, $cabecera['id_punto_emision'] ?? null);
         $pdf = (new \App\Services\modulos\ProformaCondicionesPdfService())->generar($cabecera, $empresa, 'S');
         if ($pdf === '') {
@@ -678,7 +678,7 @@ class ProformasController extends BaseModuloController
 
             $adicional = $this->repository->getInfoAdicional($id);
 
-            $empresa = $this->empresaConfig($idEmpresa);
+            $empresa = $this->empresaConfig($idEmpresa, $cabecera);
             \App\Helpers\LogoPuntoEmision::aplicar($empresa, $idEmpresa, $cabecera['id_punto_emision'] ?? null);
 
             // IVA GUARDADO, igual que el PDF (sin recalcular con la configuración vigente).
@@ -1395,9 +1395,9 @@ class ProformasController extends BaseModuloController
      * FacturaVentaController: la pantalla y el PDF deben usar la misma configuración,
      * porque de ahí salen los decimales y el redondeo con los que se muestran las cifras.
      */
-    private function empresaConfig(int $idEmpresa): array
+    private function empresaConfig(int $idEmpresa, ?array $doc = null): array
     {
-        return $this->documentoService->empresaConfig($idEmpresa);
+        return $this->documentoService->empresaConfig($idEmpresa, $doc);
     }
 
     /** Badge del estado de envío por correo (reutilizable listado inicial + AJAX). */

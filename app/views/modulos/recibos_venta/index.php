@@ -1189,8 +1189,11 @@ $totalPages = $totalPagesOriginal;
         });
     // Facturar desde recibo exige, además, permiso de CREAR en Facturas de venta.
     const PERM_CREAR_FACTURA = <?= \App\Helpers\Permisos::puedeCrear('modulos/factura-venta') ? 'true' : 'false' ?>;
-    const DEC_PRECIO = EMPRESA_CONFIG.decimales_precio;
-    const DEC_CANT = EMPRESA_CONFIG.decimales_cantidad;
+    // Decimales de precio y cantidad del establecimiento DE LA SERIE elegida (la config de
+    // facturación es por establecimiento, igual que el modo de IVA). EMPRESA_CONFIG queda
+    // como respaldo si el punto no está en el mapa (partials/iva_modos_punto.php).
+    function rvDecPrecio() { return CMG_decimalesPunto(document.getElementById('m-select-puntos')?.value, 'precio',   EMPRESA_CONFIG.decimales_precio); }
+    function rvDecCant()   { return CMG_decimalesPunto(document.getElementById('m-select-puntos')?.value, 'cantidad', EMPRESA_CONFIG.decimales_cantidad); }
 
     let modalMain = null;
 
@@ -3469,8 +3472,8 @@ $totalPages = $totalPagesOriginal;
                     <option value="3">Precio 3</option>
                 </select>
             </td>
-            <td><input type="number" class="form-control form-control-sm input-detalle text-end input-precio" value="${(0).toFixed(DEC_PRECIO)}" step="any" oninput="calcSinImp(this)" onblur="this.value=parseFloat(this.value||0).toFixed(DEC_PRECIO)" ${EMPRESA_CONFIG.editar_precio_factura ? '' : 'readonly'}></td>
-            <td><input type="number" class="form-control form-control-sm input-detalle text-end input-precio-iva" value="${(0).toFixed(DEC_PRECIO)}" step="any" oninput="calcConImp(this)" onblur="this.value=parseFloat(this.value||0).toFixed(DEC_PRECIO)" ${EMPRESA_CONFIG.editar_precio_factura ? '' : 'readonly'}></td>
+            <td><input type="number" class="form-control form-control-sm input-detalle text-end input-precio" value="${(0).toFixed(rvDecPrecio())}" step="any" oninput="calcSinImp(this)" onblur="this.value=parseFloat(this.value||0).toFixed(rvDecPrecio())" ${EMPRESA_CONFIG.editar_precio_factura ? '' : 'readonly'}></td>
+            <td><input type="number" class="form-control form-control-sm input-detalle text-end input-precio-iva" value="${(0).toFixed(rvDecPrecio())}" step="any" oninput="calcConImp(this)" onblur="this.value=parseFloat(this.value||0).toFixed(rvDecPrecio())" ${EMPRESA_CONFIG.editar_precio_factura ? '' : 'readonly'}></td>
             <td>
                 <div class="d-flex align-items-center">
                     <input type="number" class="form-control form-control-sm input-detalle text-end text-danger input-desc" value="0.00" step="any" style="min-width:85px;" oninput="calcFila(this)" ${EMPRESA_CONFIG.editar_descuento_factura ? '' : 'readonly'}>
@@ -3554,7 +3557,7 @@ $totalPages = $totalPagesOriginal;
         const seleccionarProductoEnFila = (p, row) => {
             row.querySelector('.input-codigo').value = p.codigo;
             row.querySelector('.input-descripcion').value = p.nombre;
-            row.querySelector('.input-precio').value = parseFloat(p.precio_base).toFixed(DEC_PRECIO);
+            row.querySelector('.input-precio').value = parseFloat(p.precio_base).toFixed(rvDecPrecio());
             row.querySelector('.input-id-producto').value = p.id;
             row.dataset.idProducto = p.id;
             row.dataset.tipoProduccion = p.tipo_produccion || '01';
@@ -3600,7 +3603,7 @@ $totalPages = $totalPagesOriginal;
                     const base = parseFloat(row.querySelector('.input-precio-base-original').value) || 0;
                     const add = parseFloat(selVar.value) || 0;
                     const total = base + add;
-                    row.querySelector('.input-precio').value = total.toFixed(DEC_PRECIO);
+                    row.querySelector('.input-precio').value = total.toFixed(rvDecPrecio());
 
                     const opt = selVar.options[selVar.selectedIndex];
                     const inputAdi = row.querySelector('.input-adicional');
@@ -3739,7 +3742,7 @@ $totalPages = $totalPagesOriginal;
 
                         // New Price = BasePrice * (NewFactor / OriginalFactor)
                         const convertedPrice = basePrice * (factorNew / factorOri);
-                        row.querySelector('.input-precio').value = convertedPrice.toFixed(DEC_PRECIO);
+                        row.querySelector('.input-precio').value = convertedPrice.toFixed(rvDecPrecio());
 
                         syncPrecioIva(row.querySelector('.input-precio'));
                         calcFila(row.querySelector('.input-cantidad'));
@@ -3764,7 +3767,7 @@ $totalPages = $totalPagesOriginal;
             // Siempre agregamos el precio base
             const optBase = document.createElement('option');
             optBase.value = p.precio_base;
-            optBase.textContent = `P. Base ($${parseFloat(p.precio_base).toFixed(DEC_PRECIO)})`;
+            optBase.textContent = `P. Base ($${parseFloat(p.precio_base).toFixed(rvDecPrecio())})`;
             selPrecios.appendChild(optBase);
 
             // Agregar precios adicionales si existen
@@ -3772,7 +3775,7 @@ $totalPages = $totalPagesOriginal;
                 p.precios_lista.forEach(pl => {
                     const opt = document.createElement('option');
                     opt.value = pl.precio;
-                    opt.textContent = `${pl.nombre_precio} ($${parseFloat(pl.precio).toFixed(DEC_PRECIO)})`;
+                    opt.textContent = `${pl.nombre_precio} ($${parseFloat(pl.precio).toFixed(rvDecPrecio())})`;
                     selPrecios.appendChild(opt);
                 });
             }
@@ -3782,7 +3785,7 @@ $totalPages = $totalPagesOriginal;
 
             // Cambiar precio al seleccionar de la lista
             selPrecios.onchange = () => {
-                row.querySelector('.input-precio').value = parseFloat(selPrecios.value).toFixed(DEC_PRECIO);
+                row.querySelector('.input-precio').value = parseFloat(selPrecios.value).toFixed(rvDecPrecio());
                 syncPrecioIva(row.querySelector('.input-precio'));
             };
 
@@ -4294,7 +4297,7 @@ $totalPages = $totalPagesOriginal;
         const pSin = parseFloat(tr.querySelector('.input-precio').value) || 0;
         const ivaPct = parseFloat(tr.querySelector('.input-iva').value) || 0;
         const pCon = pSin * (1 + (ivaPct / 100));
-        tr.querySelector('.input-precio-iva').value = pCon.toFixed(DEC_PRECIO);
+        tr.querySelector('.input-precio-iva').value = pCon.toFixed(rvDecPrecio());
         calcFila(tr.querySelector('.input-cantidad'));
     }
 
@@ -4302,7 +4305,7 @@ $totalPages = $totalPagesOriginal;
         const tr = el.closest('tr');
         const pSin = parseFloat(el.value) || 0;
         const ivaPct = parseFloat(tr.querySelector('.input-iva').value) || 0;
-        tr.querySelector('.input-precio-iva').value = (pSin * (1 + (ivaPct / 100))).toFixed(DEC_PRECIO);
+        tr.querySelector('.input-precio-iva').value = (pSin * (1 + (ivaPct / 100))).toFixed(rvDecPrecio());
         calcFila(el);
     }
 
@@ -4311,7 +4314,7 @@ $totalPages = $totalPagesOriginal;
         const pCon = parseFloat(el.value) || 0;
         const ivaPct = parseFloat(tr.querySelector('.input-iva').value) || 0;
         const pSin = pCon / (1 + (ivaPct / 100));
-        tr.querySelector('.input-precio').value = pSin.toFixed(DEC_PRECIO);
+        tr.querySelector('.input-precio').value = pSin.toFixed(rvDecPrecio());
         calcFila(el);
     }
 
@@ -4996,8 +4999,8 @@ $totalPages = $totalPagesOriginal;
                 tr.querySelector('.input-codigo').value = d.codigo_principal || '';
                 tr.querySelector('.input-casillero').value = d.casillero || '';
                 tr.querySelector('.input-codigo-auxiliar').value = d.codigo_auxiliar || '';
-                tr.querySelector('.input-cantidad').value = parseFloat(d.cantidad || 1).toFixed(DEC_CANT);
-                tr.querySelector('.input-precio').value = parseFloat(d.precio_unitario || 0).toFixed(DEC_PRECIO);
+                tr.querySelector('.input-cantidad').value = parseFloat(d.cantidad || 1).toFixed(rvDecCant());
+                tr.querySelector('.input-precio').value = parseFloat(d.precio_unitario || 0).toFixed(rvDecPrecio());
                 tr.querySelector('.input-desc').value = parseFloat(d.descuento || 0).toFixed(2);
                 const inputAdi = tr.querySelector('.input-adicional');
                 if (inputAdi) inputAdi.value = d.info_adicional || '';
@@ -5167,7 +5170,7 @@ $totalPages = $totalPagesOriginal;
                     // OpciÃ³n base
                     const optBase = document.createElement('option');
                     optBase.value = pBase;
-                    optBase.textContent = `P. Base ($${pBase.toFixed(DEC_PRECIO)})`;
+                    optBase.textContent = `P. Base ($${pBase.toFixed(rvDecPrecio())})`;
                     selPrecios.appendChild(optBase);
 
                     // Otras opciones de la lista
@@ -5175,7 +5178,7 @@ $totalPages = $totalPagesOriginal;
                         d.precios_lista.forEach(pl => {
                             const opt = document.createElement('option');
                             opt.value = pl.precio;
-                            opt.textContent = `${pl.nombre_precio} ($${parseFloat(pl.precio).toFixed(DEC_PRECIO)})`;
+                            opt.textContent = `${pl.nombre_precio} ($${parseFloat(pl.precio).toFixed(rvDecPrecio())})`;
                             selPrecios.appendChild(opt);
                         });
                     }
@@ -5189,7 +5192,7 @@ $totalPages = $totalPagesOriginal;
                     if (optMatch) selPrecios.value = optMatch.value;
 
                     selPrecios.onchange = () => {
-                        tr.querySelector('.input-precio').value = parseFloat(selPrecios.value).toFixed(DEC_PRECIO);
+                        tr.querySelector('.input-precio').value = parseFloat(selPrecios.value).toFixed(rvDecPrecio());
                         syncPrecioIva(tr.querySelector('.input-precio'));
                     };
                 }
@@ -5227,7 +5230,7 @@ $totalPages = $totalPagesOriginal;
                         tr.querySelector('.input-id-variante').value = selVar.selectedIndex > 0 ? (selVar.options[selVar.selectedIndex].dataset.id || '') : '';
                         const base = parseFloat(tr.querySelector('.input-precio-base-original').value) || 0;
                         const add = parseFloat(selVar.value) || 0;
-                        tr.querySelector('.input-precio').value = (base + add).toFixed(DEC_PRECIO);
+                        tr.querySelector('.input-precio').value = (base + add).toFixed(rvDecPrecio());
 
                         const opt = selVar.options[selVar.selectedIndex];
                         const inputAdi = tr.querySelector('.input-adicional');

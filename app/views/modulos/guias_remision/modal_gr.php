@@ -22,6 +22,8 @@
 $grPermCrearCliente       = \App\Helpers\Permisos::puedeCrear('modulos/clientes');
 $grPermCrearTransportista = \App\Helpers\Permisos::puedeCrear('modulos/transportistas');
 ?>
+<?php // Decimales por serie (CMG_DEC_PUNTO) para formatear la cantidad con el establecimiento de la guía. ?>
+<?php require MVC_APP . '/views/partials/iva_modos_punto.php'; ?>
 
 <!-- ═══════════════════════ MODAL GUÍA DE REMISIÓN ═══════════════════════ -->
 <style>

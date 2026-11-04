@@ -470,22 +470,15 @@ class FacturaVentaController extends BaseModuloController
             $data['id_empresa'] = (int) $_SESSION['id_empresa'];
             $data['id_usuario'] = (int) $_SESSION['id_usuario'];
 
-            // Cargar configuración de la empresa para que el service pueda usarla.
-            // Fusionar la config del establecimiento (decimales, etc.) igual que en
-            // el resto del sistema, para que el XML generado use los mismos decimales.
-            $empresaModel = new \App\models\Empresa();
-            $empresaData  = $empresaModel->getPorId($data['id_empresa']) ?? [];
-            try {
-                $establecimientos = $empresaModel->getEstablecimientos($data['id_empresa']);
-                if (!empty($establecimientos)) {
-                    $estRepo   = new \App\repositories\modulos\EmpresaRepository();
-                    $estConfig = $estRepo->getEstablecimientoConfig((int) $establecimientos[0]['id']);
-                    if ($estConfig) {
-                        $empresaData = array_merge($empresaData, $estConfig);
-                    }
-                }
-            } catch (\Throwable $e) {}
-            $data['empresa_config'] = $empresaData;
+            // Cargar configuración de la empresa para que el service pueda usarla,
+            // con la config del establecimiento DE LA SERIE elegida (decimales, etc.):
+            // así el XML que se genera al guardar usa los mismos decimales que el que
+            // se envía al SRI (SriEnvioService) y que el PDF.
+            $data['empresa_config'] = $this->empresaConEstablecimiento(
+                (int) $data['id_empresa'],
+                !empty($data['id_establecimiento']) ? (int) $data['id_establecimiento'] : null,
+                !empty($data['id_punto_emision'])   ? (int) $data['id_punto_emision']   : null
+            );
 
             $idExistente = !empty($data['id']) ? (int) $data['id'] : 0;
 
@@ -659,46 +652,8 @@ class FacturaVentaController extends BaseModuloController
             $pagos         = $this->repository->getPagos($id);
             $infoAdicional = $this->repository->getInfoAdicional($id);
 
-            $empresaModel  = new \App\models\Empresa();
-            $empresa       = $empresaModel->getPorId($idEmpresa) ?? [];
-
-            $establecimientos = $empresaModel->getEstablecimientos($idEmpresa);
-            if (!empty($establecimientos)) {
-                // Asignar campos críticos del establecimiento antes del try/catch
-                if (!empty($establecimientos[0]['logo_ruta'])) {
-                    $empresa['logo_ruta'] = $establecimientos[0]['logo_ruta'];
-                }
-                if (!empty($establecimientos[0]['direccion'])) {
-                    $empresa['direccion_establecimiento'] = $establecimientos[0]['direccion'];
-                }
-                if (!empty($establecimientos[0]['leyenda_pdf_titulo'])) {
-                    $empresa['leyenda_pdf_titulo'] = $establecimientos[0]['leyenda_pdf_titulo'];
-                }
-                if (!empty($establecimientos[0]['leyenda_pdf_mensaje'])) {
-                    $empresa['leyenda_pdf_mensaje'] = $establecimientos[0]['leyenda_pdf_mensaje'];
-                }
-                try {
-                    $estRepo   = new \App\repositories\modulos\EmpresaRepository();
-                    $estConfig = $estRepo->getEstablecimientoConfig((int) $establecimientos[0]['id']);
-                    if ($estConfig) {
-                        $estConfig['direccion_matriz'] = $empresa['direccion'] ?? '';
-                        $estConfig['direccion_establecimiento'] = $establecimientos[0]['direccion'] ?? '';
-
-                        if (!empty($establecimientos[0]['logo_ruta'])) {
-                            $estConfig['logo_ruta'] = $establecimientos[0]['logo_ruta'];
-                        }
-
-                        if (!empty($establecimientos[0]['leyenda_pdf_titulo'])) {
-                            $estConfig['leyenda_pdf_titulo'] = $establecimientos[0]['leyenda_pdf_titulo'];
-                        }
-                        if (!empty($establecimientos[0]['leyenda_pdf_mensaje'])) {
-                            $estConfig['leyenda_pdf_mensaje'] = $establecimientos[0]['leyenda_pdf_mensaje'];
-                        }
-
-                        $empresa = array_merge($empresa, $estConfig);
-                    }
-                } catch (\Throwable $e) {}
-            }
+            // Config del establecimiento de la factura (decimales, logo, dirección…).
+            $empresa = $this->empresaParaFactura($idEmpresa, $factura);
 
             // Logo del punto de emisión de la factura (si no tiene, queda el del establecimiento).
             \App\Helpers\LogoPuntoEmision::aplicar($empresa, $idEmpresa, $factura['id_punto_emision'] ?? null);
@@ -890,46 +845,8 @@ class FacturaVentaController extends BaseModuloController
             $pagos         = $this->repository->getPagos($idFactura);
             $infoAdicional = $this->repository->getInfoAdicional($idFactura);
 
-            $empresaModel  = new \App\models\Empresa();
-            $empresa       = $empresaModel->getPorId($idEmpresa) ?? [];
-
-            $establecimientos = $empresaModel->getEstablecimientos($idEmpresa);
-            if (!empty($establecimientos)) {
-                // Asignar campos críticos del establecimiento antes del try/catch
-                if (!empty($establecimientos[0]['logo_ruta'])) {
-                    $empresa['logo_ruta'] = $establecimientos[0]['logo_ruta'];
-                }
-                if (!empty($establecimientos[0]['direccion'])) {
-                    $empresa['direccion_establecimiento'] = $establecimientos[0]['direccion'];
-                }
-                if (!empty($establecimientos[0]['leyenda_pdf_titulo'])) {
-                    $empresa['leyenda_pdf_titulo'] = $establecimientos[0]['leyenda_pdf_titulo'];
-                }
-                if (!empty($establecimientos[0]['leyenda_pdf_mensaje'])) {
-                    $empresa['leyenda_pdf_mensaje'] = $establecimientos[0]['leyenda_pdf_mensaje'];
-                }
-                try {
-                    $estRepo   = new \App\repositories\modulos\EmpresaRepository();
-                    $estConfig = $estRepo->getEstablecimientoConfig((int) $establecimientos[0]['id']);
-                    if ($estConfig) {
-                        $estConfig['direccion_matriz'] = $empresa['direccion'] ?? '';
-                        $estConfig['direccion_establecimiento'] = $establecimientos[0]['direccion'] ?? '';
-
-                        if (!empty($establecimientos[0]['logo_ruta'])) {
-                            $estConfig['logo_ruta'] = $establecimientos[0]['logo_ruta'];
-                        }
-
-                        if (!empty($establecimientos[0]['leyenda_pdf_titulo'])) {
-                            $estConfig['leyenda_pdf_titulo'] = $establecimientos[0]['leyenda_pdf_titulo'];
-                        }
-                        if (!empty($establecimientos[0]['leyenda_pdf_mensaje'])) {
-                            $estConfig['leyenda_pdf_mensaje'] = $establecimientos[0]['leyenda_pdf_mensaje'];
-                        }
-
-                        $empresa = array_merge($empresa, $estConfig);
-                    }
-                } catch (\Throwable $e) {}
-            }
+            // Config del establecimiento de la factura (decimales, logo, dirección…).
+            $empresa = $this->empresaParaFactura($idEmpresa, $factura);
 
             \App\Helpers\LogoPuntoEmision::aplicar($empresa, $idEmpresa, $factura['id_punto_emision'] ?? null);
             $renderer  = new \App\Services\PlantillasPdfRendererService();
@@ -1097,6 +1014,23 @@ class FacturaVentaController extends BaseModuloController
             echo json_encode(['ok' => false, 'error' => 'Error inesperado: ' . $e->getMessage()]);
         }
         exit;
+    }
+
+    /**
+     * Datos de la empresa con la configuración del establecimiento DE LA FACTURA
+     * (decimales de cantidad/precio, facturación, logo, dirección, leyendas del PDF).
+     * La resolución vive en App\Helpers\ConfigEstablecimiento (compartida con NC, ND,
+     * recibos, proformas, guías y liquidaciones).
+     */
+    private function empresaConEstablecimiento(int $idEmpresa, ?int $idEstablecimiento, ?int $idPunto = null, ?array $base = null): array
+    {
+        return \App\Helpers\ConfigEstablecimiento::empresa($idEmpresa, $idEstablecimiento, $idPunto, $base);
+    }
+
+    /** empresaConEstablecimiento() a partir de la cabecera de una factura. */
+    private function empresaParaFactura(int $idEmpresa, array $factura, ?array $base = null): array
+    {
+        return \App\Helpers\ConfigEstablecimiento::paraDocumento($idEmpresa, $factura, $base);
     }
 
     /**
@@ -1476,19 +1410,10 @@ class FacturaVentaController extends BaseModuloController
         }
 
         try {
-            // empresa_config fusionada con el establecimiento (decimales/config).
-            $empresaModel = new \App\models\Empresa();
-            $empresaData  = $empresaModel->getPorId($idEmpresa) ?? [];
-            try {
-                $establecimientos = $empresaModel->getEstablecimientos($idEmpresa);
-                if (!empty($establecimientos)) {
-                    $estRepo   = new \App\repositories\modulos\EmpresaRepository();
-                    $estConfig = $estRepo->getEstablecimientoConfig((int) $establecimientos[0]['id']);
-                    if ($estConfig) {
-                        $empresaData = array_merge($empresaData, $estConfig);
-                    }
-                }
-            } catch (\Throwable $e) {}
+            // empresa_config con el establecimiento DE LA FACTURA (el recibo sale por
+            // el mismo punto de emisión), no con el primero de la empresa.
+            $facturaOrigen = $this->repository->getPorId($id) ?? [];
+            $empresaData   = $this->empresaParaFactura($idEmpresa, $facturaOrigen);
 
             $reciboService = new \App\Services\modulos\ReciboVentaService(
                 new \App\repositories\modulos\ReciboVentaRepository(),
@@ -2099,8 +2024,9 @@ class FacturaVentaController extends BaseModuloController
             $pagos         = $this->repository->getPagos($id);
             $infoAdicional = $this->repository->getInfoAdicional($id);
 
-            $empresaModel = new \App\models\Empresa();
-            $empresa      = $empresaModel->getPorId($idEmpresa) ?? [];
+            // Config del establecimiento de la factura: sin ella el XML regenerado
+            // salía siempre con 2 decimales (la config ya no vive en `empresas`).
+            $empresa = $this->empresaParaFactura($idEmpresa, $factura);
 
             // Dirección del establecimiento (fallback: empresa.direccion)
             $dirEstablecimiento = null;
@@ -2902,21 +2828,8 @@ class FacturaVentaController extends BaseModuloController
                 $pagos         = $this->repository->getPagos($idFactura);
                 $infoAdicional = $this->repository->getInfoAdicional($idFactura);
 
-                $establecimientos = $empresaModel->getEstablecimientos($idEmpresa);
-                if (!empty($establecimientos)) {
-                    if (!empty($establecimientos[0]['logo_ruta']))    $empresaData['logo_ruta'] = $establecimientos[0]['logo_ruta'];
-                    if (!empty($establecimientos[0]['direccion']))     $empresaData['direccion_establecimiento'] = $establecimientos[0]['direccion'];
-                    try {
-                        $estRepo   = new \App\repositories\modulos\EmpresaRepository();
-                        $estConfig = $estRepo->getEstablecimientoConfig((int) $establecimientos[0]['id']);
-                        if ($estConfig) {
-                            $estConfig['direccion_matriz']          = $empresaData['direccion'] ?? '';
-                            $estConfig['direccion_establecimiento'] = $establecimientos[0]['direccion'] ?? '';
-                            if (!empty($establecimientos[0]['logo_ruta'])) $estConfig['logo_ruta'] = $establecimientos[0]['logo_ruta'];
-                            $empresaData = array_merge($empresaData, $estConfig);
-                        }
-                    } catch (\Throwable $e) {}
-                }
+                // Config del establecimiento de la factura (decimales, logo, dirección…).
+                $empresaData = $this->empresaParaFactura($idEmpresa, $factura, $empresaData ?? []);
 
                 \App\Helpers\LogoPuntoEmision::aplicar($empresaData, $idEmpresa, $factura['id_punto_emision'] ?? null);
                 $renderer     = new \App\Services\PlantillasPdfRendererService();
@@ -3222,21 +3135,8 @@ class FacturaVentaController extends BaseModuloController
                 $pagos         = $this->repository->getPagos($idFactura);
                 $infoAdicional = $this->repository->getInfoAdicional($idFactura);
 
-                $establecimientos = $empresaModel->getEstablecimientos($idEmpresa);
-                if (!empty($establecimientos)) {
-                    if (!empty($establecimientos[0]['logo_ruta']))    $empresaData['logo_ruta'] = $establecimientos[0]['logo_ruta'];
-                    if (!empty($establecimientos[0]['direccion']))     $empresaData['direccion_establecimiento'] = $establecimientos[0]['direccion'];
-                    try {
-                        $estRepo   = new \App\repositories\modulos\EmpresaRepository();
-                        $estConfig = $estRepo->getEstablecimientoConfig((int) $establecimientos[0]['id']);
-                        if ($estConfig) {
-                            $estConfig['direccion_matriz']          = $empresaData['direccion'] ?? '';
-                            $estConfig['direccion_establecimiento'] = $establecimientos[0]['direccion'] ?? '';
-                            if (!empty($establecimientos[0]['logo_ruta'])) $estConfig['logo_ruta'] = $establecimientos[0]['logo_ruta'];
-                            $empresaData = array_merge($empresaData, $estConfig);
-                        }
-                    } catch (\Throwable $e) {}
-                }
+                // Config del establecimiento de la factura (decimales, logo, dirección…).
+                $empresaData = $this->empresaParaFactura($idEmpresa, $factura, $empresaData ?? []);
 
                 \App\Helpers\LogoPuntoEmision::aplicar($empresaData, $idEmpresa, $factura['id_punto_emision'] ?? null);
                 $renderer     = new \App\Services\PlantillasPdfRendererService();
@@ -3441,46 +3341,8 @@ class FacturaVentaController extends BaseModuloController
             $pagos    = $this->repository->getPagos($id);
             $infoAdicional = $this->repository->getInfoAdicional($id);
 
-            $empresaModel = new \App\models\Empresa();
-            $empresa      = $empresaModel->getPorId($idEmpresa) ?? [];
-
-            $establecimientos = $empresaModel->getEstablecimientos($idEmpresa);
-            if (!empty($establecimientos)) {
-                // Asignar campos críticos del establecimiento antes del try/catch
-                if (!empty($establecimientos[0]['logo_ruta'])) {
-                    $empresa['logo_ruta'] = $establecimientos[0]['logo_ruta'];
-                }
-                if (!empty($establecimientos[0]['direccion'])) {
-                    $empresa['direccion_establecimiento'] = $establecimientos[0]['direccion'];
-                }
-                if (!empty($establecimientos[0]['leyenda_pdf_titulo'])) {
-                    $empresa['leyenda_pdf_titulo'] = $establecimientos[0]['leyenda_pdf_titulo'];
-                }
-                if (!empty($establecimientos[0]['leyenda_pdf_mensaje'])) {
-                    $empresa['leyenda_pdf_mensaje'] = $establecimientos[0]['leyenda_pdf_mensaje'];
-                }
-                try {
-                    $estRepo   = new \App\repositories\modulos\EmpresaRepository();
-                    $estConfig = $estRepo->getEstablecimientoConfig((int) $establecimientos[0]['id']);
-                    if ($estConfig) {
-                        $estConfig['direccion_matriz'] = $empresa['direccion'] ?? '';
-                        $estConfig['direccion_establecimiento'] = $establecimientos[0]['direccion'] ?? '';
-
-                        if (!empty($establecimientos[0]['logo_ruta'])) {
-                            $estConfig['logo_ruta'] = $establecimientos[0]['logo_ruta'];
-                        }
-
-                        if (!empty($establecimientos[0]['leyenda_pdf_titulo'])) {
-                            $estConfig['leyenda_pdf_titulo'] = $establecimientos[0]['leyenda_pdf_titulo'];
-                        }
-                        if (!empty($establecimientos[0]['leyenda_pdf_mensaje'])) {
-                            $estConfig['leyenda_pdf_mensaje'] = $establecimientos[0]['leyenda_pdf_mensaje'];
-                        }
-
-                        $empresa = array_merge($empresa, $estConfig);
-                    }
-                } catch (\Throwable $e) {}
-            }
+            // Config del establecimiento de la factura (decimales, logo, dirección…).
+            $empresa = $this->empresaParaFactura($idEmpresa, $factura);
 
             \App\Helpers\LogoPuntoEmision::aplicar($empresa, $idEmpresa, $factura['id_punto_emision'] ?? null);
             $renderer  = new \App\Services\PlantillasPdfRendererService();

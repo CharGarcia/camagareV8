@@ -1285,9 +1285,13 @@
         return s.toString().replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#039;');
     }
 
-    // Cantidad con la cantidad de decimales configurada por empresa (config/empresa).
+    // Cantidad con los decimales del establecimiento DE LA SERIE elegida (la config de
+    // facturación es por establecimiento); GR_decimalesCantidad queda como respaldo.
     function GR_formatearCantidad(v) {
-        const dec = Number.isInteger(window.GR_decimalesCantidad) ? window.GR_decimalesCantidad : 2;
+        const resp = Number.isInteger(window.GR_decimalesCantidad) ? window.GR_decimalesCantidad : 2;
+        const dec = typeof window.CMG_decimalesPunto === 'function'
+            ? window.CMG_decimalesPunto(document.getElementById('gr-serie')?.value, 'cantidad', resp)
+            : resp;
         const n = parseFloat(v);
         return (isNaN(n) ? 1 : n).toFixed(dec);
     }

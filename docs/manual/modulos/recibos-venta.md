@@ -6,7 +6,7 @@ ruta_modulo: modulos/recibo-venta
 tipo: modulo
 visibilidad: todos
 etiquetas: recibo de venta, recibos, buscar recibos, buscador, filtros, filtrar recibos, buscar por cliente, buscar por producto, estado de pago, saldo pendiente, nota de venta, venta sin factura, documento interno, sin impuestos, numeracion por fecha, numero con el año, reiniciar numeracion, reinicio anual, reinicio mensual, correlativo por año, correlativo por mes, modo de numeracion, lote, vencimiento, caducidad, fecha de vencimiento, lote y vencimiento, ancho de columna, agrandar columna, ensanchar, codigo cortado, descripcion cortada, no se ve la descripcion completa, redimensionar, precio con impuestos, precio con iva, sale en cero, tipo de identificacion, tipo de documento del cliente, ruc o cedula, es ruc o cedula, cedula o pasaporte, consumidor final, no se cual identificacion tiene el cliente, buscador de clientes, buscar cliente, elegir cliente, datos del cliente, imprimir, impresora, estado del recibo, borrador, emitido, recibo pagado sigue en borrador, no cambia a emitido, recibo sin asiento, asiento del recibo, cuando se emite, no puedo modificar el recibo, no aparece actualizar, editar recibo emitido, corregir recibo, iva del listado, iva diferente, iva no coincide, iva con descuento, columna iva, pdf en dos hojas, segunda hoja casi vacia, totales en otra pagina, el pdf corta la pagina, hoja de mas, stock descontado dos veces, generar factura desde recibo, generar recibo desde factura, no se pudo eliminar la factura borrador
-version: 1.29
+version: 1.30
 orden: 35
 estado: activo
 ---
@@ -248,6 +248,7 @@ la operación de inmediato.
 
 ## Historial de cambios
 
+- **1.30** — Los **decimales de cantidad y precio** salen del **establecimiento de la serie** del recibo, no del primer establecimiento de la empresa: en la ventana (al elegir la serie), al guardar, en el PDF y al **generar la factura desde el recibo** (o el recibo desde una factura borrador), que usan la configuración del establecimiento del documento de origen.
 - **1.29** — **Generar la factura desde el recibo** (y el recibo desde una factura borrador) es ahora un solo paso: si algo falla, no queda nada a medias. Antes, un fallo volvía a descontar el inventario que el recibo ya había descontado (stock dos veces abajo), y si la factura borrador no se podía eliminar quedaba viva **sin** su salida de inventario.
 - **1.28** — Al crear un **cliente nuevo** desde el recibo, la ficha se cierra sola y el cliente queda seleccionado en el recibo. Lo mismo con un **producto nuevo**: se agrega solo al detalle del recibo.
 - **1.27** — El PDF ya no manda los **totales y la información adicional** a una segunda hoja cuando

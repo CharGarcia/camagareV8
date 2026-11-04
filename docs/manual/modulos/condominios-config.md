@@ -6,7 +6,7 @@ ruta_modulo: modulos/condominios-config
 tipo: modulo
 visibilidad: todos
 etiquetas: condominio, condominios, generar cobro, emitir recibos en bloque, facturas masivas, multas masivas, cuota extraordinaria, enviar por correo, emisiones, configuracion condominio, condominos, condomino, inmuebles, inmueble, departamento, parqueadero, bodega, local, propietario, arrendatario, inquilino, propiedad horizontal, edificio, conjunto, urbanizacion, expensas, administrador del condominio, alicuota, alicuotas, cuota de mantenimiento, cuotas extraordinarias, cuota extraordinaria, fondo de reserva, intereses de mora, tasa legal, multas, reglamento, pronto pago, pago anticipado, dias de gracia, restriccion areas comunes, cargar inmuebles excel, reajuste de cuotas, activar condominios
-version: 1.6
+version: 1.7
 orden: 1
 estado: activo
 ---
@@ -269,6 +269,7 @@ permiso ven todos los condóminos.
 
 ## Historial de cambios
 
+- **1.7** — El PDF de la factura o recibo que se envía por correo al cobrar usa la configuración del **establecimiento de la serie** del documento (decimales, dirección, leyendas), no la del primer establecimiento de la empresa. El logo propio del punto de emisión sigue mandando.
 - **1.6** — «Fondo de reserva» pasa a llamarse **Cuotas extraordinarias** (pestaña **Alícuota y
   cuotas extraordinarias** y ventana del inmueble). Funciona igual: se suma a cada cuota. La
   pantalla ocupa todo el ancho. En Condóminos: el botón + pasa a la celda de inmuebles, **Generar

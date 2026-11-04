@@ -229,7 +229,7 @@ class ProformasController extends ApiBaseController
         ]);
 
         try {
-            $id = $this->service->crear($data, $this->documentos->empresaConfig($idEmpresa));
+            $id = $this->service->crear($data, $this->documentos->empresaConfig($idEmpresa, $data));
         } catch (Throwable $e) {
             $this->jsonError('ERROR_GUARDAR', $e->getMessage(), 422);
         }
@@ -279,7 +279,7 @@ class ProformasController extends ApiBaseController
         ]);
 
         try {
-            $this->service->actualizar($id, $data, $this->documentos->empresaConfig($idEmpresa));
+            $this->service->actualizar($id, $data, $this->documentos->empresaConfig($idEmpresa, $data));
         } catch (Throwable $e) {
             $this->jsonError('ERROR_GUARDAR', $e->getMessage(), 422);
         }

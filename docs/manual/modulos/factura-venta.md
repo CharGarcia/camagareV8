@@ -6,7 +6,7 @@ ruta_modulo: modulos/factura-venta
 tipo: modulo
 visibilidad: todos
 etiquetas: agregar item a factura de consignacion, servicio de envio, flete, agregar servicio, no me deja agregar producto, factura, facturar, venta, buscar factura, buscador, aparecen facturas que no busque, resultados que no corresponden, la busqueda trae otras facturas, buscar por clave de acceso, filtros, filtrar facturas, buscar por producto vendido, buscar por forma de pago, filtro de fechas, saldo pendiente, chips, ordenar por dos columnas, ordenar por estado de pago, ordenar por cliente y fecha, sri, comprobante electronico, xml, excel, anular, nota de credito, whatsapp, link de pago, payphone, nuvei, serie vacia, sin puntos de emision, secuencial repetido, secuencial ya existe, punto de emision, ambiente, pruebas, produccion, cambio de ambiente, clave de acceso en procesamiento, error 70, comprobante devuelto, reintento automatico, saldo, stock, existencias, cuanto queda, disponible, buscador de productos, lote, vencimiento, caducidad, fecha de vencimiento, lote y vencimiento, pdf, ride, columnas del pdf, subsidio, irbpnr, servicio, propina, codigo cortado, detalle adicional, forma de pago, plazo, dias credito, unidad de tiempo, meses, anios, informacion adicional, vendedor, cajero, no sale el vendedor, falta informacion en el pdf, se cierra el modal, autorizar, bloquear factura, no puedo editar, letra pequena, tamano de letra, fuente del pdf, letra del pdf, no se lee el pdf, ancho de columna, agrandar columna, ensanchar, codigo cortado en el modal, descripcion cortada, adicional cortado, columna adicional, ancho del adicional, no se ve la descripcion completa, redimensionar, precio con impuestos, precio con iva, sale en cero, columna descuento, tipo de identificacion, tipo de documento del cliente, ruc o cedula, es ruc o cedula, cedula o pasaporte, consumidor final, no se cual identificacion tiene el cliente, buscador de clientes, buscar cliente, elegir cliente, datos del cliente, informacion adicional larga, limite de caracteres, maximo 300 caracteres, value too long, no se pudo guardar la factura, imprimir, impresora, iva al subtotal, iva sobre el subtotal, iva linea por linea, calculo del iva, iva no cuadra, iva mal calculado, centavos de diferencia, factura grande, muchas lineas, muchos items, factura lenta, tarda en abrir, tarda en cargar, peso del xml, tamano del xml, 320 kb, crear cliente desde la factura, nuevo cliente, crear producto desde la factura, nuevo producto, no aparece el boton de crear cliente, falta el boton nuevo producto, aviso, avisos, novedad sri, documentos con novedad, devuelto, no autorizado, pendientes de enviar, borrador, borradores, iva del listado, iva diferente, iva no coincide, iva distinto al documento, iva con descuento, columna iva, filas por pagina, registros por pagina, cuantas filas, mostrar mas filas, paginador, 25 50 75 100, sin saldo, sin stock, producto sin existencias, productos similares, productos equivalentes, equivalencias, otra marca, sugerir otro producto, misma categoria, reemplazar producto, usar este, mantener el producto, pdf en dos hojas, segunda hoja casi vacia, espacio en blanco abajo, margen inferior, aprovechar la hoja, totales en otra pagina, el pdf corta la pagina, hoja de mas, direccion del cliente en el xml, xml sin direccion, direccion del comprador, direccionComprador, descuento global, descuento a toda la factura, descuento general, repartir descuento, prorratear descuento, aplicar a todos los items, no se puede anular la factura, tiene notas de credito vigentes, eliminar factura con nota de credito, stock duplicado al anular
-version: 2.52
+version: 2.53
 orden: 20
 estado: activo
 ---
@@ -626,6 +626,15 @@ la operación de inmediato.
 
 ## Historial de cambios
 
+- **2.53** — Los **decimales de cantidad y precio** salen siempre de la configuración de
+  facturación del **establecimiento de la serie** de la factura, no del primer establecimiento
+  de la empresa: en la ventana (al elegir la serie), en el PDF que se descarga, se envía por
+  correo o por WhatsApp, y en el XML. Antes, en empresas con varios establecimientos
+  configurados con decimales distintos, el PDF descargado podía mostrar otros decimales que
+  la factura autorizada. Con esto también el logo, la dirección y las leyendas del PDF son
+  los del establecimiento de la factura. El PDF se vuelve a generar en cada descarga: si se
+  cambian los decimales del establecimiento después de autorizar, el PDF de esas facturas
+  sale con la configuración nueva (el XML autorizado no cambia).
 - **2.52** — En el PDF, las columnas **Cantidad**, **Precio Unitario**, **Descuento** y
   **Precio Total** se ensanchan según la cifra más larga de la factura: una cantidad muy
   grande (p. ej. 1,250,000.00) ya no se sale de su recuadro. Si aun así no cabe, la cifra

@@ -192,25 +192,10 @@ class DocumentosHandler extends BaseHandler
         $empresa      = $empresaModel->getPorId($idEmpresa) ?? [];
 
         $establecimientos = $empresaModel->getEstablecimientos($idEmpresa);
-        if (!empty($establecimientos)) {
-            $est = $establecimientos[0];
-            if (!empty($est['logo_ruta']))           $empresa['logo_ruta'] = $est['logo_ruta'];
-            if (!empty($est['direccion']))           $empresa['direccion_establecimiento'] = $est['direccion'];
-            if (!empty($est['leyenda_pdf_titulo']))  $empresa['leyenda_pdf_titulo'] = $est['leyenda_pdf_titulo'];
-            if (!empty($est['leyenda_pdf_mensaje'])) $empresa['leyenda_pdf_mensaje'] = $est['leyenda_pdf_mensaje'];
-            try {
-                $estRepo   = new \App\repositories\modulos\EmpresaRepository();
-                $estConfig = $estRepo->getEstablecimientoConfig((int)$est['id']);
-                if ($estConfig) {
-                    $estConfig['direccion_matriz']          = $empresa['direccion'] ?? '';
-                    $estConfig['direccion_establecimiento'] = $est['direccion'] ?? '';
-                    if (!empty($est['logo_ruta']))           $estConfig['logo_ruta'] = $est['logo_ruta'];
-                    if (!empty($est['leyenda_pdf_titulo']))  $estConfig['leyenda_pdf_titulo'] = $est['leyenda_pdf_titulo'];
-                    if (!empty($est['leyenda_pdf_mensaje'])) $estConfig['leyenda_pdf_mensaje'] = $est['leyenda_pdf_mensaje'];
-                    $empresa = array_merge($empresa, $estConfig);
-                }
-            } catch (\Throwable) {}
-        }
+
+        // Config del establecimiento DE LA FACTURA (decimales, dirección, leyendas), no la
+        // del primero de la empresa. El logo del punto se aplica después, para que gane.
+        $empresa = \App\Helpers\ConfigEstablecimiento::paraDocumento($idEmpresa, $factura, $empresa);
 
         \App\Helpers\LogoPuntoEmision::aplicar($empresa, $idEmpresa, $factura['id_punto_emision'] ?? null);
         // PDF (plantilla activa o servicio por defecto)

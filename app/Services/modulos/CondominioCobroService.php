@@ -601,28 +601,9 @@ class CondominioCobroService
     /** Datos de la empresa para el PDF (mismo armado que la pantalla de Facturas / Recibos). */
     private function empresaPdf(int $idEmpresa, ?int $idPunto): array
     {
-        $model = new \App\models\Empresa();
-        $empresa = $model->getPorId($idEmpresa) ?? [];
-        $est = $model->getEstablecimientos($idEmpresa)[0] ?? null;
-        if ($est) {
-            foreach (['logo_ruta' => 'logo_ruta', 'direccion' => 'direccion_establecimiento', 'leyenda_pdf_titulo' => 'leyenda_pdf_titulo', 'leyenda_pdf_mensaje' => 'leyenda_pdf_mensaje'] as $k => $dest) {
-                if (!empty($est[$k])) {
-                    $empresa[$dest] = $est[$k];
-                }
-            }
-            try {
-                $cfg = (new \App\repositories\modulos\EmpresaRepository())->getEstablecimientoConfig((int) $est['id']);
-                if ($cfg) {
-                    $cfg['direccion_matriz'] = $empresa['direccion'] ?? '';
-                    $cfg['direccion_establecimiento'] = $est['direccion'] ?? '';
-                    if (!empty($est['logo_ruta'])) {
-                        $cfg['logo_ruta'] = $est['logo_ruta'];
-                    }
-                    $empresa = array_merge($empresa, $cfg);
-                }
-            } catch (\Throwable) {
-            }
-        }
+        // Config del establecimiento DE LA SERIE (lo identifica el punto de emisión), no la
+        // del primero de la empresa. El logo del punto se aplica después, para que gane.
+        $empresa = \App\Helpers\ConfigEstablecimiento::empresa($idEmpresa, null, $idPunto);
         \App\Helpers\LogoPuntoEmision::aplicar($empresa, $idEmpresa, $idPunto);
         return $empresa;
     }

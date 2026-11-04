@@ -15,14 +15,9 @@
      * tienen que mostrar exactamente las mismas cifras, así que todo el módulo formatea
      * y redondea con estos valores en vez de constantes fijas.
      */
-    const decPrecio = () => {
-        const n = parseInt(CFG().decimales_precio, 10);
-        return isNaN(n) ? 2 : Math.max(0, Math.min(6, n));
-    };
-    const decCant = () => {
-        const n = parseInt(CFG().decimales_cantidad, 10);
-        return isNaN(n) ? 2 : Math.max(0, Math.min(6, n));
-    };
+    // Decimales del establecimiento de la serie elegida (pf_punto); CFG() es el respaldo.
+    const decPrecio = () => window.CMG_decimalesPunto(document.getElementById('pf_punto')?.value, 'precio', CFG().decimales_precio);
+    const decCant   = () => window.CMG_decimalesPunto(document.getElementById('pf_punto')?.value, 'cantidad', CFG().decimales_cantidad);
     // Modo de IVA del establecimiento de la serie elegida; CFG().calculo_iva es el respaldo.
     const modoIva = () => window.CMG_modoIvaPunto(document.getElementById('pf_punto')?.value, CFG().calculo_iva);
 

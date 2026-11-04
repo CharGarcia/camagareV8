@@ -392,7 +392,7 @@ function CMG_poblarModal(d) {
 
     // Detalles
     document.getElementById('tbodyDetalle').innerHTML = '';
-    (d.detalles || []).forEach(det => CMG_agregarFilaDetalle(det));
+    mcCargarFilasDetalle(d.detalles || []);
     CMG_recalcularTotales();
     mcCargarStatusInventario().then(() => {
         mcSincronizarInventario();
@@ -1785,6 +1785,48 @@ window.CMG_agregarItemLibre = function() {
     CMG_agregarFilaDetalle({ descripcion:'', cantidad:1, precio_unitario:0, descuento:0, impuestos:[{codigo_impuesto:'2',codigo_porcentaje:_codigoIvaDefault,tarifa:_ivaDefault,base_imponible:0,valor:0}] });
 };
 
+// Detalle con el mismo diseño que Factura de Venta (public/js/components/detalle_columnas.js):
+// descripción y adicional crecen en alto con su texto, y Código/Descripción/Adicional se
+// ensanchan arrastrando el borde del encabezado (doble clic: ajustar al texto); el ancho se
+// guarda por usuario. En compras el código visible es .mc-det-codigo (.input-codigo es oculto).
+// Se crea al primer uso; si el componente no cargó, no-ops: el módulo sigue igual que antes.
+let _mcDet = null;
+function mcDet() {
+    if (_mcDet) return _mcDet;
+    _mcDet = typeof CMG_detalleColumnas !== 'function'
+        ? { engancharDescripcion() {}, ajustarDescripciones() {}, pausarAjuste() {} }
+        : CMG_detalleColumnas({
+            tabla:   '#mc-tabla-detalle',
+            tbody:   '#tbodyDetalle',
+            modal:   '#modalCompra',
+            anchos:  window.MC_DET_ANCHOS || {},
+            modulo:  window.MC_RUTA_MODULO || 'modulos/compras',
+            urlBase: window.BASE_URL || '',
+            campos:  { codigo: 'input.mc-det-codigo' },
+        });
+    return _mcDet;
+}
+document.addEventListener('DOMContentLoaded', mcDet);
+
+// La casilla Cant. crece con lo escrito (mismo criterio que Factura de Venta): una
+// cantidad grande no queda cortada; si la tabla no cabe, aparece scroll horizontal.
+function mcAjustarAnchoCantidad(input) {
+    if (!input) return;
+    const largo = String(input.value || '').length;
+    input.style.minWidth = `max(60px, calc(${Math.max(largo, 3)}ch + 34px))`;
+}
+
+/** Carga en bloque de líneas: pausa la medición de altos y la hace una sola vez al final. */
+function mcCargarFilasDetalle(lista) {
+    const det = mcDet();
+    det.pausarAjuste(true);
+    try {
+        lista.forEach(d => CMG_agregarFilaDetalle(d));
+    } finally {
+        det.pausarAjuste(false);
+    }
+}
+
 function CMG_agregarFilaDetalle(det) {
     const tbody = document.getElementById('tbodyDetalle');
     const idx   = tbody.rows.length;
@@ -1865,12 +1907,15 @@ function CMG_agregarFilaDetalle(det) {
         <td class="text-center"><select class="form-select form-select-sm input-detalle input-iva" onchange="mcMarcarIvaEditado(this);CMG_recalcularFila(this)">${opcIva}</select></td>
         <td class="text-end pe-4 align-middle fw-semibold"><span class="subtotal-line">0.00</span></td>
         <td class="text-center p-0 align-middle">
-            <button type="button" class="btn btn-sm btn-link text-danger p-0 shadow-none border-0" onclick="mcMarcarDetalleEditado();this.closest('tr').remove();CMG_recalcularTotales()">
+            <button type="button" class="btn btn-sm btn-link text-danger p-0 shadow-none border-0 mc-quitar-fila" title="Quitar línea" onclick="mcMarcarDetalleEditado();this.closest('tr').remove();CMG_recalcularTotales()">
                 <i class="bi bi-trash3 fs-6"></i>
             </button>
         </td>`;
     tbody.appendChild(tr);
     mcPintarProductoDetalle(tr);
+    mcDet().engancharDescripcion(tr.querySelector('.input-descripcion'));
+    mcDet().engancharDescripcion(tr.querySelector('.input-adicional'));
+    mcAjustarAnchoCantidad(tr.querySelector('.input-cantidad'));
 
     // Si viene código de proveedor pero no id_producto, intentamos buscar homologación
     if ((!det.id_producto || det.id_producto == '0') && det.codigo_principal) {
@@ -1959,6 +2004,7 @@ function mcPintarOtrosRubros(total, items) {
 
 function CMG_recalcularFila(input) {
     const tr    = input.closest('tr');
+    mcAjustarAnchoCantidad(tr.querySelector('.input-cantidad'));
     const cant  = parseFloat(tr.querySelector('.input-cantidad').value || 0);
     const prec  = parseFloat(tr.querySelector('.input-precio').value || 0);
     const desc  = _r2(parseFloat(tr.querySelector('.input-desc').value || 0));
@@ -2719,18 +2765,16 @@ async function mcEjecutarRestauracion(estado) {
     // Restaurar detalles
     document.getElementById('tbodyDetalle').innerHTML = '';
     if (estado.detalles && estado.detalles.length) {
-        estado.detalles.forEach(d => {
-            CMG_agregarFilaDetalle({
-                id_producto: d.id_producto,
-                codigo_principal: d.codigo_principal,
-                descripcion: d.descripcion,
-                info_adicional: d.info_adicional || '',
-                cantidad: d.cantidad,
-                precio_unitario: d.precio_unitario,
-                descuento: d.descuento,
-                impuestos: [{ tarifa: d.iva, codigo_porcentaje: d.codigo_iva || '' }]
-            });
-        });
+        mcCargarFilasDetalle(estado.detalles.map(d => ({
+            id_producto: d.id_producto,
+            codigo_principal: d.codigo_principal,
+            descripcion: d.descripcion,
+            info_adicional: d.info_adicional || '',
+            cantidad: d.cantidad,
+            precio_unitario: d.precio_unitario,
+            descuento: d.descuento,
+            impuestos: [{ tarifa: d.iva, codigo_porcentaje: d.codigo_iva || '' }]
+        })));
     } else {
         // Al menos una fila vacía
         CMG_agregarItemLibre();

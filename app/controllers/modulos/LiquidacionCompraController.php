@@ -324,22 +324,16 @@ class LiquidacionCompraController extends BaseModuloController
             $data['id_empresa'] = (int) $_SESSION['id_empresa'];
             $data['id_usuario'] = (int) $_SESSION['id_usuario'];
 
-            // Cargar configuración de la empresa para que el service pueda usarla.
-            // Fusionar la config del establecimiento (decimales, etc.) para que el
-            // XML use los mismos decimales que el sistema.
-            $empresaModel = new \App\models\Empresa();
-            $empresaData  = $empresaModel->getPorId($data['id_empresa']) ?? [];
-            try {
-                $establecimientos = $empresaModel->getEstablecimientos($data['id_empresa']);
-                if (!empty($establecimientos)) {
-                    $estRepo   = new \App\repositories\modulos\EmpresaRepository();
-                    $estConfig = $estRepo->getEstablecimientoConfig((int) $establecimientos[0]['id']);
-                    if ($estConfig) {
-                        $empresaData = array_merge($empresaData, $estConfig);
-                    }
-                }
-            } catch (\Throwable $e) {}
-            $data['empresa_config'] = $empresaData;
+            // Configuración de la empresa con la del establecimiento DE LA SERIE elegida
+            // (decimales, modo de IVA…), para que el XML use los mismos decimales que el
+            // que se envía al SRI y que el PDF. Manda el punto de emisión; antes se tomaba
+            // siempre el primer establecimiento de la empresa.
+            $idPuntoLiq = !empty($data['id_punto_emision']) ? (int) $data['id_punto_emision'] : null;
+            $data['empresa_config'] = \App\Helpers\ConfigEstablecimiento::empresa(
+                (int) $data['id_empresa'],
+                $idPuntoLiq === null && !empty($data['id_establecimiento']) ? (int) $data['id_establecimiento'] : null,
+                $idPuntoLiq
+            );
 
             // Los impuestos por línea y los totales de la cabecera los calcula el
             // service con la configuración de facturación de la empresa (decimales y
@@ -1161,27 +1155,12 @@ class LiquidacionCompraController extends BaseModuloController
         }
         unset($d);
 
-        $empresaModel = new Empresa();
-        $empresa      = $empresaModel->getPorId($idEmpresa) ?? [];
-
-        // El logo y las direcciones viven en el establecimiento (igual que factura/retención).
-        $establecimientos = $empresaModel->getEstablecimientos($idEmpresa);
-        $est = null;
-        if (!empty($cabecera['id_establecimiento'])) {
-            foreach ($establecimientos as $e) {
-                if ((int)$e['id'] === (int)$cabecera['id_establecimiento']) { $est = $e; break; }
-            }
-        }
-        if ($est === null && !empty($establecimientos)) {
-            $est = $establecimientos[0];
-        }
-        if ($est) {
-            if (!empty($est['logo_ruta'])) {
-                $empresa['logo_ruta'] = $est['logo_ruta'];
-            }
-            $empresa['direccion_matriz']          = $empresa['direccion'] ?? '';
-            $empresa['direccion_establecimiento'] = $est['direccion'] ?? '';
-        }
+        // El logo, las direcciones y la config de facturación (decimales…) salen del
+        // establecimiento de la serie de la liquidación (por id_establecimiento y, si
+        // falta, por el punto de emisión). Antes el PDF no recibía los decimales.
+        $empresa = \App\Helpers\ConfigEstablecimiento::paraDocumento($idEmpresa, $cabecera);
+        $empresa['direccion_matriz']          ??= $empresa['direccion'] ?? '';
+        $empresa['direccion_establecimiento'] ??= '';
 
         \App\Helpers\LogoPuntoEmision::aplicar($empresa, $idEmpresa, $cabecera['id_punto_emision'] ?? null);
         return [

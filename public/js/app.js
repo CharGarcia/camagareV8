@@ -841,4 +841,21 @@ window.CMG_Identificacion = (function () {
         if (!modo) modo = porDefecto;
         return modo === 'subtotal' ? 'subtotal' : 'linea_linea';
     };
+
+    /**
+     * Decimales de precio o cantidad del establecimiento de la serie elegida (misma regla
+     * que el modo de IVA: la config de facturación es por establecimiento). El mapa lo
+     * inyecta app/views/partials/iva_modos_punto.php (id_punto => {precio, cantidad}).
+     *
+     * @param {string|number} idPunto    id de empresa_punto_emision seleccionado.
+     * @param {string}        tipo       'precio' | 'cantidad'.
+     * @param {number}        porDefecto Decimales a usar si el punto no está en el mapa.
+     */
+    window.CMG_decimalesPunto = function (idPunto, tipo, porDefecto) {
+        var mapa = window.CMG_DEC_PUNTO || {};
+        var d = mapa[String(idPunto || '')];
+        var n = d ? parseInt(d[tipo === 'cantidad' ? 'cantidad' : 'precio'], 10) : parseInt(porDefecto, 10);
+        if (isNaN(n)) n = 2;
+        return Math.max(0, Math.min(6, n));
+    };
 })();

@@ -633,6 +633,12 @@
         document.getElementById('nc_id_punto_emision')?.value, window.nc_calculo_iva
     );
 
+    // Decimales de precio del establecimiento de la serie elegida (misma regla que el IVA);
+    // window.nc_dec_p es el respaldo si el punto no está en el mapa.
+    window.NC_decPrecio = () => window.CMG_decimalesPunto(
+        document.getElementById('nc_id_punto_emision')?.value, 'precio', window.nc_dec_p || 2
+    );
+
     window.NC_cargarSecuencial = () => {
         const idPt = document.getElementById('nc_id_punto_emision').value;
         if (!idPt) return;
@@ -1495,7 +1501,7 @@
 
             // El subtotal de la línea muestra el neto (después de descuento, SIN IVA):
             // es el mismo valor que se guarda en precio_total_sin_impuesto.
-            const decP = window.nc_dec_p || 2;
+            const decP = window.NC_decPrecio();
             const totalFilaEl = tr.querySelector('.nc-fila-total');
             if (totalFilaEl) {
                 totalFilaEl.textContent = baseConDesc.toFixed(decP);
@@ -1516,7 +1522,7 @@
             });
         }
 
-        const decP = window.nc_dec_p || 2;
+        const decP = window.NC_decPrecio();
 
         const updateLabel = (id, val, isHtml = false) => {
             const el = document.getElementById(id);

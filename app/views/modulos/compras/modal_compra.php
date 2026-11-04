@@ -259,12 +259,12 @@
             <div class="mt-4">
               <div class="border rounded-3 overflow-hidden bg-white shadow-sm">
                 <div class="table-responsive" style="max-height: 350px;">
-                  <table class="table table-sm table-detalle mb-0 text-nowrap">
+                  <table class="table table-sm table-detalle mb-0 text-nowrap" id="mc-tabla-detalle">
                     <thead>
                       <tr class="table-light border-bottom">
-                        <th class="ps-3 py-2 small fw-bold text-muted" style="width: 12%;" title="Código del producto vinculado; en gris, el del proveedor si aún no se vincula">Código</th>
-                        <th class="py-2 small fw-bold text-muted" style="width: 20%;">Descripción / Producto</th>
-                        <th class="py-2 small fw-bold text-muted" style="width: 8%;" title="Información adicional del ítem (en electrónicas, la que trae el XML del proveedor)">Adicional</th>
+                        <th class="ps-3 py-2 small fw-bold text-muted" data-det-col="codigo" style="width: 12%;" title="Código del producto vinculado; en gris, el del proveedor si aún no se vincula">Código</th>
+                        <th class="py-2 small fw-bold text-muted" data-det-col="descripcion" style="width: 20%;">Descripción / Producto</th>
+                        <th class="py-2 small fw-bold text-muted" data-det-col="adicional" style="width: 8%;" title="Información adicional del ítem (en electrónicas, la que trae el XML del proveedor)">Adicional</th>
                         <th class="py-2 small fw-bold text-muted text-center" style="width: 10%;">Cant.</th>
                         <th class="py-2 small fw-bold text-muted text-end" style="width: 13%;">P. Unitario</th>
                         <th class="py-2 small fw-bold text-muted text-end" style="width: 10%;">Desc.</th>

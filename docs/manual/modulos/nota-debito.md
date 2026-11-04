@@ -6,7 +6,7 @@ ruta_modulo: modulos/nota_debito
 tipo: modulo
 visibilidad: todos
 etiquetas: nota de debito, notas de debito, cargo adicional, interes por mora, sri, buscar nota de debito, buscador, filtros, filtrar notas de debito, buscar por motivo, filtro de fechas, documento modificado, chips, aparecen notas que no busque, resultados que no corresponden, buscar por clave de acceso, imprimir, impresora, pdf en dos hojas, segunda hoja casi vacia, totales en otra pagina, el pdf corta la pagina, hoja de mas
-version: 1.13
+version: 1.14
 orden: 31
 estado: activo
 ---
@@ -158,6 +158,7 @@ la operación de inmediato.
 
 ## Historial de cambios
 
+- **1.14** — La configuración de facturación (decimales, logo, dirección, leyendas) sale del **establecimiento de la serie** de la nota de débito, también al guardar (XML); antes se tomaba el primer establecimiento de la empresa. Las notas antiguas sin establecimiento guardado lo toman de su punto de emisión.
 - **1.13** — El botón **Registrar nuevo cliente** no funcionaba (decía «no está disponible»): ahora abre la ficha del cliente y, al guardarlo, queda seleccionado en la nota.
 - **1.12** — El PDF ya no manda los **totales y la información adicional** a una segunda hoja cuando
   caben en la primera. Antes saltaba de página siempre que el detalle pasara de cierta

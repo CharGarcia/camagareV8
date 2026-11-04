@@ -26,8 +26,10 @@
     // empresas configuradas con más decimales, tanto al cargar un producto como al
     // reabrir la liquidación (y ese valor recortado era el que se volvía a guardar).
     const LC_CFG = window.LC_EMPRESA_CONFIG || {};
-    const DEC_PRECIO = Math.max(0, Math.min(6, parseInt(LC_CFG.decimales_precio ?? 2, 10) || 0));
-    const DEC_CANT   = Math.max(0, Math.min(6, parseInt(LC_CFG.decimales_cantidad ?? 2, 10) || 0));
+    // Decimales del establecimiento DE LA SERIE elegida (liq-punto): la config de
+    // facturación es por establecimiento, igual que el modo de IVA. LC_CFG es el respaldo.
+    const decPrecioLc = () => window.CMG_decimalesPunto(document.getElementById('liq-punto')?.value, 'precio',   LC_CFG.decimales_precio ?? 2);
+    const decCantLc   = () => window.CMG_decimalesPunto(document.getElementById('liq-punto')?.value, 'cantidad', LC_CFG.decimales_cantidad ?? 2);
     // Modo de IVA del establecimiento de la serie elegida; LC_CFG.calculo_iva es el respaldo.
     const modoIva = () => window.CMG_modoIvaPunto(document.getElementById('liq-punto')?.value, LC_CFG.calculo_iva);
 
@@ -624,8 +626,8 @@
             </td>
             <td><input type="text" class="input-detalle input-descripcion" placeholder="Descripción" value="${descripcion}"></td>
             <td><input type="text" class="input-detalle input-adicional" placeholder="Info extra..." value="${adicional}"></td>
-            <td><input type="number" class="input-detalle text-center input-cantidad" value="${lcFmt(cantidad, DEC_CANT)}" step="any" oninput="window.LC_calcFila(this)"></td>
-            <td><input type="number" class="input-detalle text-end input-precio" value="${lcFmt(p_unitario, DEC_PRECIO)}" step="any" oninput="window.LC_calcSinImp(this)"></td>
+            <td><input type="number" class="input-detalle text-center input-cantidad" value="${lcFmt(cantidad, decCantLc())}" step="any" oninput="window.LC_calcFila(this)"></td>
+            <td><input type="number" class="input-detalle text-end input-precio" value="${lcFmt(p_unitario, decPrecioLc())}" step="any" oninput="window.LC_calcSinImp(this)"></td>
             <td><input type="number" class="input-detalle text-end input-desc" value="${descuento.toFixed(2)}" step="0.01" oninput="window.LC_calcFila(this)"></td>
             <td>
                 <select class="form-select form-select-sm border-0 bg-transparent py-0 input-iva" style="font-size:0.8rem" onchange="window.LC_syncPrecioIva(this)">

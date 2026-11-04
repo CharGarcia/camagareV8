@@ -27,30 +27,17 @@ class ProformaDocumentoService
     }
 
     /**
-     * Datos de la empresa fusionados con la configuración de su primer establecimiento
+     * Datos de la empresa fusionados con la configuración del establecimiento de la serie
      * (decimales de cantidad/precio, modo de cálculo del IVA, logo). La pantalla, el
      * guardado y el PDF deben usar la misma configuración: de ahí salen los decimales y
      * el redondeo con los que se calculan y muestran las cifras.
      */
-    public function empresaConfig(int $idEmpresa): array
+    public function empresaConfig(int $idEmpresa, ?array $doc = null): array
     {
-        $empresaModel = new Empresa();
-        $empresa      = $empresaModel->getPorId($idEmpresa) ?? [];
-        try {
-            $estabs = $empresaModel->getEstablecimientos($idEmpresa);
-            if (!empty($estabs)) {
-                $estConfig = (new EmpresaRepository())->getEstablecimientoConfig((int) $estabs[0]['id']);
-                if ($estConfig) {
-                    $empresa = array_merge($empresa, $estConfig);
-                }
-                if (!empty($estabs[0]['logo_ruta'])) {
-                    $empresa['logo_ruta'] = $estabs[0]['logo_ruta'];
-                }
-            }
-        } catch (\Throwable $e) {
-            // Sin config de establecimiento se usan los valores por defecto (2 decimales).
-        }
-        return $empresa;
+        // Con la cabecera (o los datos a guardar) de la proforma, manda el establecimiento
+        // de SU serie (id_establecimiento / id_punto_emision), igual que en Facturas de
+        // Venta; sin documento (catálogos, plantillas) queda el primer establecimiento.
+        return \App\Helpers\ConfigEstablecimiento::paraDocumento($idEmpresa, $doc ?? []);
     }
 
     /** Detalles de la proforma con sus impuestos (en lote: una consulta para todas las líneas). */
@@ -90,7 +77,7 @@ class ProformaDocumentoService
         $cabecera = $cabecera ?? $this->repository->getPorId($id);
         if (!$cabecera) return null;
 
-        $empresa   = $this->empresaConfig($idEmpresa);
+        $empresa   = $this->empresaConfig($idEmpresa, $cabecera);
         \App\Helpers\LogoPuntoEmision::aplicar($empresa, $idEmpresa, $cabecera['id_punto_emision'] ?? null);
         [$cabecera, $detalles] = $this->conIvaVigente($id, $cabecera, $empresa);
         $adicional = $this->repository->getInfoAdicional($id);

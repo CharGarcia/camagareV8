@@ -1610,8 +1610,20 @@ $totalPages = $totalPagesOriginal;
             modulo:  RUTA_MODULO,
             urlBase: B_URL,
         });
-    const DEC_PRECIO = EMPRESA_CONFIG.decimales_precio;
-    const DEC_CANT = EMPRESA_CONFIG.decimales_cantidad;
+    // Decimales de precio y cantidad del establecimiento DE LA SERIE elegida (la config de
+    // facturación es por establecimiento, igual que el modo de IVA): una serie de otro
+    // establecimiento puede usar otros decimales. EMPRESA_CONFIG queda como respaldo si el
+    // punto no está en el mapa. El PDF y el XML del servidor siguen la misma regla.
+    const FV_DEC_PUNTO = <?= json_encode((object) (function () {
+        try { return (new \App\repositories\modulos\EmpresaRepository())->getDecimalesPorPunto((int) ($_SESSION['id_empresa'] ?? 0)); }
+        catch (\Throwable $e) { return []; }
+    })()) ?>;
+    function fvDecimalesSerie() {
+        const idPunto = document.getElementById('m-select-puntos')?.value || '';
+        return FV_DEC_PUNTO[idPunto] || null;
+    }
+    function fvDecPrecio() { return fvDecimalesSerie()?.precio   ?? EMPRESA_CONFIG.decimales_precio; }
+    function fvDecCant()   { return fvDecimalesSerie()?.cantidad ?? EMPRESA_CONFIG.decimales_cantidad; }
 
     let modalMain = null;
 
@@ -4380,8 +4392,8 @@ $totalPages = $totalPagesOriginal;
                     <option value="3">Precio 3</option>
                 </select>
             </td>
-            <td><input type="number" class="form-control form-control-sm input-detalle text-end input-precio" value="${(0).toFixed(DEC_PRECIO)}" step="any" min="0" oninput="calcSinImp(this)" onblur="this.value=parseFloat(this.value||0).toFixed(DEC_PRECIO)" ${EMPRESA_CONFIG.editar_precio_factura ? '' : 'readonly'}></td>
-            <td><input type="number" class="form-control form-control-sm input-detalle text-end input-precio-iva" value="${(0).toFixed(DEC_PRECIO)}" step="any" min="0" oninput="calcConImp(this)" onblur="this.value=parseFloat(this.value||0).toFixed(DEC_PRECIO)" ${EMPRESA_CONFIG.editar_precio_factura ? '' : 'readonly'}></td>
+            <td><input type="number" class="form-control form-control-sm input-detalle text-end input-precio" value="${(0).toFixed(fvDecPrecio())}" step="any" min="0" oninput="calcSinImp(this)" onblur="this.value=parseFloat(this.value||0).toFixed(fvDecPrecio())" ${EMPRESA_CONFIG.editar_precio_factura ? '' : 'readonly'}></td>
+            <td><input type="number" class="form-control form-control-sm input-detalle text-end input-precio-iva" value="${(0).toFixed(fvDecPrecio())}" step="any" min="0" oninput="calcConImp(this)" onblur="this.value=parseFloat(this.value||0).toFixed(fvDecPrecio())" ${EMPRESA_CONFIG.editar_precio_factura ? '' : 'readonly'}></td>
             <td>
                 <div class="d-flex align-items-center">
                     <input type="number" class="form-control form-control-sm input-detalle text-end text-danger input-desc" value="0.00" step="any" min="0" style="min-width:85px;" oninput="calcFila(this)" ${EMPRESA_CONFIG.editar_descuento_factura ? '' : 'readonly'}>
@@ -4476,7 +4488,7 @@ $totalPages = $totalPagesOriginal;
         const seleccionarProductoEnFila = (p, row) => {
             row.querySelector('.input-codigo').value = p.codigo;
             row.querySelector('.input-descripcion').value = p.nombre;
-            row.querySelector('.input-precio').value = parseFloat(p.precio_base).toFixed(DEC_PRECIO);
+            row.querySelector('.input-precio').value = parseFloat(p.precio_base).toFixed(fvDecPrecio());
             row.querySelector('.input-id-producto').value = p.id;
             row.dataset.idProducto = p.id;
             row.dataset.tipoProduccion = p.tipo_produccion || '01';
@@ -4522,7 +4534,7 @@ $totalPages = $totalPagesOriginal;
                     const base = parseFloat(row.querySelector('.input-precio-base-original').value) || 0;
                     const add = parseFloat(selVar.value) || 0;
                     const total = base + add;
-                    row.querySelector('.input-precio').value = total.toFixed(DEC_PRECIO);
+                    row.querySelector('.input-precio').value = total.toFixed(fvDecPrecio());
 
                     const opt = selVar.options[selVar.selectedIndex];
                     const inputAdi = row.querySelector('.input-adicional');
@@ -4666,7 +4678,7 @@ $totalPages = $totalPagesOriginal;
 
                         // New Price = BasePrice * (NewFactor / OriginalFactor)
                         const convertedPrice = basePrice * (factorNew / factorOri);
-                        row.querySelector('.input-precio').value = convertedPrice.toFixed(DEC_PRECIO);
+                        row.querySelector('.input-precio').value = convertedPrice.toFixed(fvDecPrecio());
 
                         syncPrecioIva(row.querySelector('.input-precio'));
                         calcFila(row.querySelector('.input-cantidad'));
@@ -4691,7 +4703,7 @@ $totalPages = $totalPagesOriginal;
             // Siempre agregamos el precio base
             const optBase = document.createElement('option');
             optBase.value = p.precio_base;
-            optBase.textContent = `P. Base ($${parseFloat(p.precio_base).toFixed(DEC_PRECIO)})`;
+            optBase.textContent = `P. Base ($${parseFloat(p.precio_base).toFixed(fvDecPrecio())})`;
             selPrecios.appendChild(optBase);
 
             // Agregar precios adicionales si existen
@@ -4699,7 +4711,7 @@ $totalPages = $totalPagesOriginal;
                 p.precios_lista.forEach(pl => {
                     const opt = document.createElement('option');
                     opt.value = pl.precio;
-                    opt.textContent = `${pl.nombre_precio} ($${parseFloat(pl.precio).toFixed(DEC_PRECIO)})`;
+                    opt.textContent = `${pl.nombre_precio} ($${parseFloat(pl.precio).toFixed(fvDecPrecio())})`;
                     selPrecios.appendChild(opt);
                 });
             }
@@ -4709,7 +4721,7 @@ $totalPages = $totalPagesOriginal;
 
             // Cambiar precio al seleccionar de la lista
             selPrecios.onchange = () => {
-                row.querySelector('.input-precio').value = parseFloat(selPrecios.value).toFixed(DEC_PRECIO);
+                row.querySelector('.input-precio').value = parseFloat(selPrecios.value).toFixed(fvDecPrecio());
                 syncPrecioIva(row.querySelector('.input-precio'));
             };
 
@@ -4767,7 +4779,7 @@ $totalPages = $totalPagesOriginal;
             const filas = similares.map((s, i) => `
                 <tr>
                     <td class="text-start"><div class="fw-semibold">${esc(s.nombre)}${s.equivalente ? ' <span class="badge bg-primary bg-opacity-10 text-primary border border-primary border-opacity-25">Equivalente</span>' : ''}</div><div class="text-muted" style="font-size:.72rem">${esc(s.codigo || '')}${s.coincide && !s.equivalente ? ' · coincide en ' + esc(s.coincide) : ''}</div></td>
-                    <td class="text-end"><span class="badge bg-success bg-opacity-10 text-success border border-success border-opacity-25">${fmt(s.stock_actual, DEC_CANT)}</span></td>
+                    <td class="text-end"><span class="badge bg-success bg-opacity-10 text-success border border-success border-opacity-25">${fmt(s.stock_actual, fvDecCant())}</span></td>
                     <td class="text-end">$${fmt(s.precio_base, 2)}</td>
                     <td class="text-center"><button type="button" class="btn btn-outline-primary btn-sm py-0 px-2 fv-usar-similar" data-i="${i}">Usar este</button></td>
                 </tr>`).join('');
@@ -4837,7 +4849,7 @@ $totalPages = $totalPagesOriginal;
                             const saldo = parseFloat(p.stock_bodega) || 0;
                             const cls = saldo > 0 ? 'success' : 'danger';
                             saldoHtml = `<span class="badge bg-${cls} bg-opacity-10 text-${cls} border border-${cls} border-opacity-10" title="Saldo disponible en la bodega seleccionada">
-                                            <i class="bi bi-box-seam me-1"></i>${saldo.toFixed(DEC_CANT)}
+                                            <i class="bi bi-box-seam me-1"></i>${saldo.toFixed(fvDecCant())}
                                          </span>`;
                         }
                         b.innerHTML = `
@@ -5324,7 +5336,7 @@ $totalPages = $totalPagesOriginal;
         const pSin = parseFloat(tr.querySelector('.input-precio').value) || 0;
         const ivaPct = parseFloat(tr.querySelector('.input-iva').value) || 0;
         const pCon = pSin * (1 + (ivaPct / 100));
-        tr.querySelector('.input-precio-iva').value = pCon.toFixed(DEC_PRECIO);
+        tr.querySelector('.input-precio-iva').value = pCon.toFixed(fvDecPrecio());
         calcFila(tr.querySelector('.input-cantidad'));
     }
 
@@ -5363,7 +5375,7 @@ $totalPages = $totalPagesOriginal;
         const tr = el.closest('tr');
         const pSin = parseFloat(el.value) || 0;
         const ivaPct = parseFloat(tr.querySelector('.input-iva').value) || 0;
-        tr.querySelector('.input-precio-iva').value = (pSin * (1 + (ivaPct / 100))).toFixed(DEC_PRECIO);
+        tr.querySelector('.input-precio-iva').value = (pSin * (1 + (ivaPct / 100))).toFixed(fvDecPrecio());
         calcFila(el);
     }
 
@@ -5373,7 +5385,7 @@ $totalPages = $totalPagesOriginal;
         const pCon = parseFloat(el.value) || 0;
         const ivaPct = parseFloat(tr.querySelector('.input-iva').value) || 0;
         const pSin = pCon / (1 + (ivaPct / 100));
-        tr.querySelector('.input-precio').value = pSin.toFixed(DEC_PRECIO);
+        tr.querySelector('.input-precio').value = pSin.toFixed(fvDecPrecio());
         calcFila(el);
     }
 
@@ -6171,8 +6183,8 @@ $totalPages = $totalPagesOriginal;
                 tr.querySelector('.input-codigo').value = d.codigo_principal || '';
                 tr.querySelector('.input-casillero').value = d.casillero || '';
                 tr.querySelector('.input-codigo-auxiliar').value = d.codigo_auxiliar || '';
-                tr.querySelector('.input-cantidad').value = parseFloat(d.cantidad || 1).toFixed(DEC_CANT);
-                tr.querySelector('.input-precio').value = parseFloat(d.precio_unitario || 0).toFixed(DEC_PRECIO);
+                tr.querySelector('.input-cantidad').value = parseFloat(d.cantidad || 1).toFixed(fvDecCant());
+                tr.querySelector('.input-precio').value = parseFloat(d.precio_unitario || 0).toFixed(fvDecPrecio());
                 tr.querySelector('.input-desc').value = parseFloat(d.descuento || 0).toFixed(2);
                 const inputAdi = tr.querySelector('.input-adicional');
                 if (inputAdi) inputAdi.value = d.info_adicional || '';
@@ -6346,7 +6358,7 @@ $totalPages = $totalPagesOriginal;
                     // OpciÃ³n base
                     const optBase = document.createElement('option');
                     optBase.value = pBase;
-                    optBase.textContent = `P. Base ($${pBase.toFixed(DEC_PRECIO)})`;
+                    optBase.textContent = `P. Base ($${pBase.toFixed(fvDecPrecio())})`;
                     selPrecios.appendChild(optBase);
 
                     // Otras opciones de la lista
@@ -6354,7 +6366,7 @@ $totalPages = $totalPagesOriginal;
                         d.precios_lista.forEach(pl => {
                             const opt = document.createElement('option');
                             opt.value = pl.precio;
-                            opt.textContent = `${pl.nombre_precio} ($${parseFloat(pl.precio).toFixed(DEC_PRECIO)})`;
+                            opt.textContent = `${pl.nombre_precio} ($${parseFloat(pl.precio).toFixed(fvDecPrecio())})`;
                             selPrecios.appendChild(opt);
                         });
                     }
@@ -6368,7 +6380,7 @@ $totalPages = $totalPagesOriginal;
                     if (optMatch) selPrecios.value = optMatch.value;
 
                     selPrecios.onchange = () => {
-                        tr.querySelector('.input-precio').value = parseFloat(selPrecios.value).toFixed(DEC_PRECIO);
+                        tr.querySelector('.input-precio').value = parseFloat(selPrecios.value).toFixed(fvDecPrecio());
                         syncPrecioIva(tr.querySelector('.input-precio'));
                     };
                 }
@@ -6406,7 +6418,7 @@ $totalPages = $totalPagesOriginal;
                         tr.querySelector('.input-id-variante').value = selVar.selectedIndex > 0 ? (selVar.options[selVar.selectedIndex].dataset.id || '') : '';
                         const base = parseFloat(tr.querySelector('.input-precio-base-original').value) || 0;
                         const add = parseFloat(selVar.value) || 0;
-                        tr.querySelector('.input-precio').value = (base + add).toFixed(DEC_PRECIO);
+                        tr.querySelector('.input-precio').value = (base + add).toFixed(fvDecPrecio());
 
                         const opt = selVar.options[selVar.selectedIndex];
                         const inputAdi = tr.querySelector('.input-adicional');

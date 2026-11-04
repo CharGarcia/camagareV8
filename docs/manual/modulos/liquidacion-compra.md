@@ -6,7 +6,7 @@ ruta_modulo: modulos/liquidacion-compra
 tipo: modulo
 visibilidad: todos
 etiquetas: liquidacion de compra, liquidacion, proveedor sin factura, comprobante 03, sri, sustento, eliminar, borrar, borrador, anular, buscar liquidacion, buscador, filtros, filtrar liquidaciones, buscar por producto, saldo pendiente, estado de pago, chips, aparecen documentos que no busque, resultados que no corresponden, la busqueda trae otros documentos, totales, subtotal, descuento, iva, redondeo, centavos, decimales, decimales de precio, calculo del iva, al subtotal, linea por linea, no cuadra, diferencia de un centavo, error en diferencias, exento, no objeto de iva, codigo del item, item sin codigo, item sin descripcion, falta el codigo, error en estructura de comprobante, rechazado por estructura, no autorizado, informacion adicional, ruc proveedor, campo que no se puede borrar, no me deja eliminar la fila, concepto muy largo, limite de caracteres, maximo 100 caracteres, value too long, no se pudo guardar la liquidacion, registrar pago, pagar liquidacion, egreso de liquidacion, pestaña pagos, no deja pagar, error al registrar pago, secuencial de egreso, imprimir, impresora, retencion, emitir retencion, retener liquidacion, pestaña retenciones, comprobante de retencion, columna saldo, cuanto se debe, saldo por pagar, datos de otra liquidacion, modal no se actualiza, pestaña liquidacion, pagada en el sistema anterior, liquidaciones migradas pendientes, liquidaciones 2020, liquidaciones antiguas sin pago, sistema anterior no registraba pagos, aviso, avisos, novedad sri, documentos con novedad, devuelto, no autorizado, pendientes de enviar, borrador, borradores, proveedor del exterior, proveedor extranjero, no residente, identificacion del exterior, pasaporte, importacion de servicios, servicios del exterior, pago al exterior, pais de pago, convenio de doble tributacion, ats pago exterior, no aparece el proveedor
-version: 1.26
+version: 1.27
 orden: 40
 estado: activo
 ---
@@ -388,6 +388,7 @@ la operación de inmediato.
 
 ## Historial de cambios
 
+- **1.27** — Los **decimales de cantidad y precio** salen del **establecimiento de la serie** de la liquidación: en la ventana (al elegir la serie), al guardar (XML) y en el PDF. Antes el guardado tomaba el primer establecimiento de la empresa y el PDF no recibía los decimales configurados (salía con los de por defecto).
 - **1.26** — **Proveedores del exterior**: el buscador de proveedor ahora muestra
   también a los proveedores con **identificación del exterior** (antes solo
   cédula y pasaporte, aunque el SRI los acepta). Nueva subpestaña **Pago al

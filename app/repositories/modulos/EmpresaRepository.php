@@ -828,6 +828,32 @@ class EmpresaRepository extends BaseModel
     }
 
     /**
+     * Decimales de cantidad y precio de cada punto de emisión de la empresa, tomados del
+     * establecimiento al que pertenece el punto (misma regla que el modo de IVA: la serie
+     * con la que se emite manda, no el primer establecimiento).
+     *
+     * @return array<int, array{cantidad:int, precio:int}> id_punto => decimales
+     */
+    public function getDecimalesPorPunto(int $idEmpresa): array
+    {
+        $st = $this->db->prepare(
+            "SELECT p.id, e.decimales_cantidad, e.decimales_precio
+               FROM empresa_punto_emision p
+               JOIN empresa_establecimiento e ON e.id = p.id_establecimiento AND e.eliminado = false
+              WHERE p.id_empresa = :id_empresa AND p.eliminado = false"
+        );
+        $st->execute([':id_empresa' => $idEmpresa]);
+        $out = [];
+        foreach ($st->fetchAll(\PDO::FETCH_ASSOC) as $r) {
+            $out[(int) $r['id']] = [
+                'cantidad' => max(0, min(6, (int) ($r['decimales_cantidad'] ?? 2))),
+                'precio'   => max(0, min(6, (int) ($r['decimales_precio']   ?? 2))),
+            ];
+        }
+        return $out;
+    }
+
+    /**
      * Valor de `calculo_iva_facturacion` del establecimiento de un punto de emisión
      * (null si el punto no existe en la empresa).
      */

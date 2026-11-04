@@ -53,9 +53,49 @@ $to         = $to         ?? 0;
         font-family: monospace;
     }
 
+    /* ── Tarjeta del detalle con el mismo diseño que Factura de Venta ──
+       Encabezados compactos en mayúsculas, celdas sin relleno y campos sin borde
+       (solo un contorno azul al enfocarlos), 30px de alto por línea. */
+    #modalCompra .table-detalle th {
+        font-size: 0.7rem !important;
+        text-transform: uppercase;
+        background-color: #f8f9fa;
+        padding: 4px 8px !important;
+    }
+
     #tbodyDetalle tr td {
-        padding: .3rem .4rem;
+        padding: 0 !important;
         vertical-align: middle;
+    }
+
+    #modalCompra .table-detalle .input-detalle {
+        border: none;
+        /* background-color, no `background`: el atajo borraría la flecha del select de IVA. */
+        background-color: transparent;
+        height: 30px !important;
+        font-size: 0.82rem !important;
+        padding: 2px 8px !important;
+    }
+
+    #modalCompra .table-detalle .input-detalle:focus {
+        background-color: #fff;
+        box-shadow: inset 0 0 0 1px #0d6efd;
+        outline: none;
+    }
+
+    #modalCompra .table-detalle .row-detalle:hover {
+        background-color: rgba(13, 110, 253, 0.03);
+    }
+
+    /* La papelera aparece al pasar sobre la fila, como en Factura de Venta. */
+    #modalCompra .table-detalle .row-detalle .mc-quitar-fila {
+        opacity: 0;
+        transition: opacity 0.2s;
+    }
+
+    #modalCompra .table-detalle .row-detalle:hover .mc-quitar-fila,
+    #modalCompra .table-detalle .row-detalle .mc-quitar-fila:focus {
+        opacity: 1;
     }
 
     /* Detalle de ítems como en Factura de Venta: el código se ensancha a su contenido y la
@@ -66,12 +106,15 @@ $to         = $to         ?? 0;
         max-width: 320px;
     }
 
-    #tbodyDetalle .input-descripcion {
+    /* Mínimos solo mientras el usuario no fije un ancho arrastrando el encabezado
+       (CMG_detalleColumnas marca la tabla con .cmg-det-anchos-usuario): con un ancho
+       elegido, el campo llena su columna y no la desborda. */
+    #mc-tabla-detalle:not(.cmg-det-anchos-usuario) #tbodyDetalle .input-descripcion {
         min-width: 260px;
     }
 
-    /* El adicional del ítem se lee igual que la descripción: 2 filas y desplazamiento si es más largo. */
-    #tbodyDetalle .input-adicional {
+    /* El adicional del ítem se lee igual que la descripción y crece en alto con su texto. */
+    #mc-tabla-detalle:not(.cmg-det-anchos-usuario) #tbodyDetalle .input-adicional {
         min-width: 200px;
     }
 
@@ -418,6 +461,10 @@ $to         = $to         ?? 0;
     // cargada desde el XML del SRI) para que no pierda su tipo al abrirla.
     window.CMG_tiposComprobanteTodos = <?= json_encode(array_column($tiposComprobanteTodos ?? [], 'comprobante', 'codigo_comprobante')) ?>;
     window.CMG_sucursal = <?= json_encode($sucursal_principal ?? []) ?>;
+    // Anchos de Código/Descripción/Adicional del detalle elegidos por el usuario
+    // (CMG_detalleColumnas, mismo componente que Factura de Venta).
+    window.MC_DET_ANCHOS = <?= json_encode((object) \App\Helpers\PreferenciasHelper::getAnchosDetalle($vistaConfig ?? [])) ?>;
+    window.MC_RUTA_MODULO = '<?= $rutaModulo ?? 'modulos/compras' ?>';
 </script>
 
 <?php include __DIR__ . '/modal_compra.php'; ?>
@@ -430,6 +477,7 @@ $to         = $to         ?? 0;
 <script src="<?= $base ?>/js/modulos/marcas_modal.js?v=<?= asset_ver('/js/modulos/marcas_modal.js') ?>"></script>
 <script src="<?= $base ?>/js/modulos/unidades_medida_modal.js?v=<?= asset_ver('/js/modulos/unidades_medida_modal.js') ?>"></script>
 <script src="<?= $base ?>/js/modulos/asiento_contable_tab.js?v=<?= asset_ver('/js/modulos/asiento_contable_tab.js') ?>"></script>
+<script src="<?= $base ?>/js/components/detalle_columnas.js?v=<?= asset_ver('/js/components/detalle_columnas.js') ?>"></script>
 <script src="<?= $base ?>/js/modulos/compras.js?v=<?= asset_ver('/js/modulos/compras.js') ?>"></script>
 <script src="<?= $base ?>/js/modulos/retenciones_compras.js?v=<?= asset_ver('/js/modulos/retenciones_compras.js') ?>"></script>
 

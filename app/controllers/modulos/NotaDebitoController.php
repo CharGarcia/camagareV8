@@ -599,20 +599,7 @@ class NotaDebitoController extends BaseModuloController
             $data['id_empresa'] = (int) $_SESSION['id_empresa'];
             $data['id_usuario'] = (int) $_SESSION['id_usuario'];
 
-            $empresaModel = new Empresa();
-            $empresaData  = $empresaModel->getPorId($data['id_empresa']) ?? [];
-            try {
-                $establecimientos = $empresaModel->getEstablecimientos($data['id_empresa']);
-                if (!empty($establecimientos)) {
-                    $estRepo   = new \App\repositories\modulos\EmpresaRepository();
-                    $estConfig = $estRepo->getEstablecimientoConfig((int) $establecimientos[0]['id']);
-                    if ($estConfig) {
-                        $empresaData = array_merge($empresaData, $estConfig);
-                    }
-                }
-            } catch (\Throwable $e) {}
-            $data['empresa_config'] = $empresaData;
-
+            $puntoRow = null;
             if (!empty($data['id_punto_emision'])) {
                 // La serie sale del punto REAL, validando que sea de la empresa activa (antes la
                 // consulta filtraba solo por p.id: un id de otra empresa se aceptaba).
@@ -631,6 +618,16 @@ class NotaDebitoController extends BaseModuloController
                     }
                 }
             }
+
+            // Config del establecimiento DE LA SERIE de la ND (decimales, etc.), para que
+            // el XML que se genera al guardar use los mismos decimales que el que se envía
+            // al SRI (SriEnvioService) y que el PDF. Antes: el primer establecimiento.
+            $data['empresa_config'] = \App\Helpers\ConfigEstablecimiento::empresa(
+                (int) $data['id_empresa'],
+                !empty($puntoRow['id_establecimiento']) ? (int) $puntoRow['id_establecimiento']
+                    : (!empty($data['id_establecimiento']) ? (int) $data['id_establecimiento'] : null),
+                !empty($data['id_punto_emision']) ? (int) $data['id_punto_emision'] : null
+            );
 
             $idExistente = !empty($data['id']) ? (int) $data['id'] : 0;
 
@@ -748,40 +745,15 @@ class NotaDebitoController extends BaseModuloController
      */
     private function construirEmpresaComprobante(int $idEmpresa, array $nd): array
     {
-        $empresaModel = new Empresa();
-        $empresa = $empresaModel->getPorId($idEmpresa) ?? [];
-        $dirEstablecimiento = null;
-
-        $establecimientos = $empresaModel->getEstablecimientos($idEmpresa);
-
-        $est = null;
-        if (!empty($nd['id_establecimiento'])) {
-            foreach ($establecimientos as $e) {
-                if ((int)$e['id'] === (int)$nd['id_establecimiento']) { $est = $e; break; }
-            }
-        }
-        if (!$est && !empty($establecimientos)) $est = $establecimientos[0];
-
-        if ($est) {
-            $dirEstablecimiento = $est['direccion'] ?? null;
-            if (!empty($est['logo_ruta']))           $empresa['logo_ruta'] = $est['logo_ruta'];
-            if (!empty($est['direccion']))           $empresa['direccion_establecimiento'] = $est['direccion'];
-            if (!empty($est['leyenda_pdf_titulo']))  $empresa['leyenda_pdf_titulo'] = $est['leyenda_pdf_titulo'];
-            if (!empty($est['leyenda_pdf_mensaje'])) $empresa['leyenda_pdf_mensaje'] = $est['leyenda_pdf_mensaje'];
-
-            try {
-                $estRepo   = new \App\repositories\modulos\EmpresaRepository();
-                $estConfig = $estRepo->getEstablecimientoConfig((int)$est['id']);
-                if ($estConfig) {
-                    $estConfig['direccion_matriz']          = $empresa['direccion'] ?? '';
-                    $estConfig['direccion_establecimiento'] = $est['direccion'] ?? '';
-                    if (!empty($est['logo_ruta']))           $estConfig['logo_ruta'] = $est['logo_ruta'];
-                    if (!empty($est['leyenda_pdf_titulo']))  $estConfig['leyenda_pdf_titulo'] = $est['leyenda_pdf_titulo'];
-                    if (!empty($est['leyenda_pdf_mensaje'])) $estConfig['leyenda_pdf_mensaje'] = $est['leyenda_pdf_mensaje'];
-                    $empresa = array_merge($empresa, $estConfig);
-                }
-            } catch (\Throwable $e) {}
-        }
+        // Establecimiento de la serie de la ND (por id_establecimiento y, en documentos
+        // antiguos sin él, por el punto de emisión); el primero solo como último recurso.
+        $empresa = \App\Helpers\ConfigEstablecimiento::paraDocumento($idEmpresa, $nd);
+        $est     = \App\Helpers\ConfigEstablecimiento::establecimiento(
+            $idEmpresa,
+            !empty($nd['id_establecimiento']) ? (int) $nd['id_establecimiento'] : null,
+            !empty($nd['id_punto_emision'])   ? (int) $nd['id_punto_emision']   : null
+        );
+        $dirEstablecimiento = $est['direccion'] ?? null;
 
         \App\Helpers\LogoPuntoEmision::aplicar($empresa, $idEmpresa, $nd['id_punto_emision'] ?? null);
         return [$empresa, $dirEstablecimiento];

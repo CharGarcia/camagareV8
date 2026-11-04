@@ -46,7 +46,7 @@ class DocumentoVentaPdfService
 
         $pagos         = $repo->getPagos($idDocumento);
         $infoAdicional = $repo->getInfoAdicional($idDocumento);
-        $empresa       = $this->empresaParaPdf($idEmpresa, !$esRecibo);
+        $empresa       = $this->empresaParaPdf($idEmpresa, !$esRecibo, $cabecera);
 
         \App\Helpers\LogoPuntoEmision::aplicar($empresa, $idEmpresa, $cabecera['id_punto_emision'] ?? null);
         $renderer  = new PlantillasPdfRendererService();
@@ -63,42 +63,13 @@ class DocumentoVentaPdfService
 
     /**
      * Datos de la empresa que imprime el PDF: los de la empresa más los del establecimiento
-     * principal (logo, dirección, decimales, presentación de ítems…). Mismo armado que
-     * FacturaVentaController::exportarPdfAjax() y ReciboVentaController::exportarPdfAjax();
-     * las leyendas del PDF solo las lleva la factura, igual que en esos módulos.
+     * DE LA SERIE del documento (logo, dirección, decimales, presentación de ítems…), no
+     * los del primero de la empresa. Mismo armado que FacturaVentaController y
+     * ReciboVentaController (App\Helpers\ConfigEstablecimiento); las leyendas del PDF solo
+     * las lleva la factura. El logo del punto se aplica después, en descargar().
      */
-    private function empresaParaPdf(int $idEmpresa, bool $conLeyendas): array
+    private function empresaParaPdf(int $idEmpresa, bool $conLeyendas, array $cabecera): array
     {
-        $empresaModel = new Empresa();
-        $empresa      = $empresaModel->getPorId($idEmpresa) ?? [];
-
-        $est = $empresaModel->getEstablecimientos($idEmpresa)[0] ?? null;
-        if (!$est) {
-            return $empresa;
-        }
-
-        $propios = ['logo_ruta' => $est['logo_ruta'] ?? ''];
-        if ($conLeyendas) {
-            $propios['leyenda_pdf_titulo']  = $est['leyenda_pdf_titulo'] ?? '';
-            $propios['leyenda_pdf_mensaje'] = $est['leyenda_pdf_mensaje'] ?? '';
-        }
-        $propios = array_filter($propios, static fn ($v): bool => !empty($v));
-
-        $empresa = array_merge($empresa, $propios);
-        if (!empty($est['direccion'])) {
-            $empresa['direccion_establecimiento'] = $est['direccion'];
-        }
-
-        try {
-            $estConfig = (new EmpresaRepository())->getEstablecimientoConfig((int) $est['id']);
-            if ($estConfig) {
-                $estConfig['direccion_matriz']          = $empresa['direccion'] ?? '';
-                $estConfig['direccion_establecimiento'] = $est['direccion'] ?? '';
-                $empresa = array_merge($empresa, $estConfig, $propios);
-            }
-        } catch (\Throwable $e) {
-            // El PDF se genera igual sin la configuración extendida del establecimiento.
-        }
-        return $empresa;
+        return \App\Helpers\ConfigEstablecimiento::paraDocumento($idEmpresa, $cabecera, null, $conLeyendas);
     }
 }
