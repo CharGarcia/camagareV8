@@ -965,6 +965,26 @@ $urlManual = $base . '/documentacion' . ($rutaActualAyuda !== '' ? '?ruta=' . ur
             soporte_sin_leer:             { icon: '.soporte-sinleer-icon',              badge: '.soporte-sinleer-badge' }
         };
 
+        // Ícono de suscripciones de clientes: con pagos reportados por revisar abre el modal
+        // «Pagos reportados» en la página actual (el JS se carga al primer clic).
+        document.addEventListener('click', function(e) {
+            const w = e.target.closest('.cmg-suscgest-wrap[data-susc-reportados]');
+            if (!w) return;
+            e.preventDefault();
+            const oc = w.closest('.offcanvas.show');
+            if (oc && window.bootstrap) { bootstrap.Offcanvas.getOrCreateInstance(oc).hide(); }
+            const base = <?= json_encode($base) ?>;
+            if (typeof window.SUSC_abrirPagosReportados === 'function') {
+                window.SUSC_abrirPagosReportados(base);
+                return;
+            }
+            const s = document.createElement('script');
+            s.src = base + '/js/modulos/suscripciones_pagos_reportados.js?v=<?= asset_ver('/js/modulos/suscripciones_pagos_reportados.js') ?>';
+            s.onload = function() { window.SUSC_abrirPagosReportados(base); };
+            s.onerror = function() { window.location.href = w.getAttribute('href'); };
+            document.head.appendChild(s);
+        });
+
         let CMG_contadoresEnVuelo = false;
         window.CMG_refreshContadores = async function() {
             if (CMG_contadoresEnVuelo) return; // evita solapar peticiones
@@ -1164,10 +1184,14 @@ $urlManual = $base . '/documentacion' . ($rutaActualAyuda !== '' ? '?ruta=' . ur
                     });
                     let sgTit = 'Suscripciones DE CLIENTES: ' + sgV + ' vencida' + (sgV === 1 ? '' : 's') + ' · ' + sgP + ' por vencer';
                     if (sgR > 0) { sgTit += ' · ' + sgR + ' pago' + (sgR === 1 ? '' : 's') + ' reportado' + (sgR === 1 ? '' : 's') + ' por revisar'; }
-                    sgTit += ' — clic para gestionarlas';
-                    // Con pagos por revisar, el clic abre directamente «Pagos reportados».
-                    const sgHref = '<?= $base ?>/modulos/suscripciones' + (sgR > 0 ? '?reportados=1' : '');
-                    sgWraps.forEach(function(w) { w.classList.remove('d-none'); w.setAttribute('title', sgTit); w.setAttribute('href', sgHref); });
+                    sgTit += sgR > 0 ? ' — clic para revisar los pagos reportados' : ' — clic para gestionarlas';
+                    // Con pagos por revisar, el clic abre el modal «Pagos reportados» aquí mismo
+                    // (ver el listener de .cmg-suscgest-wrap); si no, va a Suscripciones.
+                    sgWraps.forEach(function(w) {
+                        w.classList.remove('d-none');
+                        w.setAttribute('title', sgTit);
+                        w.toggleAttribute('data-susc-reportados', sgR > 0);
+                    });
                 } else {
                     sgWraps.forEach(function(w) { w.classList.add('d-none'); });
                 }
@@ -1473,6 +1497,10 @@ $urlManual = $base . '/documentacion' . ($rutaActualAyuda !== '' ? '?ruta=' . ur
                     html += '<div class="alert alert-info py-2 px-3 mb-2" style="font-size:.82rem;"><i class="bi bi-hourglass-split me-1"></i>'
                          +  'Reportaste el pago el <strong>' + fechaHora(rep.fecha) + '</strong>' + (rep.usuario ? ' (' + esc(rep.usuario) + ')' : '')
                          +  '. Lo estamos revisando; mientras tanto no verás este aviso al ingresar.</div>';
+                } else if (est === 'aceptado') {
+                    html += '<div class="alert alert-success py-2 px-3 mb-2" style="font-size:.82rem;"><i class="bi bi-check-circle me-1"></i>'
+                         +  'Verificamos el pago que reportaste el <strong>' + fechaHora(rep.fecha) + '</strong>'
+                         +  '. En breve quedará registrado; no verás este aviso al ingresar.</div>';
                 } else if (est === 'rechazado') {
                     html += '<div class="alert alert-danger py-2 px-3 mb-2" style="font-size:.82rem;"><i class="bi bi-x-circle me-1"></i>'
                          +  'El pago que reportaste el <strong>' + fechaHora(rep.fecha) + '</strong> fue rechazado.'
@@ -1485,7 +1513,7 @@ $urlManual = $base . '/documentacion' . ($rutaActualAyuda !== '' ? '?ruta=' . ur
                 if (!d.puede_reportar) {
                     return html;
                 }
-                const oculto = est === 'en_revision';
+                const oculto = est === 'en_revision' || est === 'aceptado';
                 if (oculto) {
                     html += '<a href="#" class="small" data-susc-rep-abrir><i class="bi bi-chat-left-text me-1"></i>Enviar otro mensaje o comprobante</a>';
                 }

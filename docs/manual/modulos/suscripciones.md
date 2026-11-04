@@ -5,8 +5,8 @@ categoria: Ventas
 ruta_modulo: modulos/suscripciones
 tipo: modulo
 visibilidad: todos
-etiquetas: suscripciones, suscripcion, adicional, adicional por item, informacion adicional del item, detalle adicional, texto por linea, cobro recurrente, facturacion recurrente, factura recurrente, mensualidad, pension, plan mensual, membresia, renovacion, periodicidad, proximo cobro, generar documentos, generar facturas, facturacion automatica, facturas del cliente, facturas emitidas, historial de facturas, detalle de facturas, recibos del cliente, que le facture, saldo del cliente, facturas pendientes, facturas pagadas, facturas abonadas, cobro con tarjeta, debito automatico, nuvei, kushki, aviso de vencimiento, pagos reportados, comprobante de pago, reporte de pago, revisar pago, rechazar pago, ya pague, transferencia del cliente, imprimir, impresora, excel, exportar, resumen de valores, total por periodicidad, proyeccion anual, ingresos recurrentes, iva por tarifa, resumen por concepto, detalle por cliente, que se le factura a cada cliente, items por cliente, informacion adicional en excel, resumen en pdf, detalle por cliente en pdf, pdf de la suscripcion, imprimir suscripcion, contrato, ficha de la suscripcion, detalle de la suscripcion en pdf, devengado, devengo, ingreso diferido, ingresos diferidos, ingreso anticipado, cobro por adelantado, mes caido, mes vencido, facturacion vencida, niif 15, seccion 23, reconocimiento de ingresos, provision de ingresos, ingresos por facturar
-version: 1.31
+etiquetas: suscripciones, suscripcion, adicional, adicional por item, informacion adicional del item, detalle adicional, texto por linea, cobro recurrente, facturacion recurrente, factura recurrente, mensualidad, pension, plan mensual, membresia, renovacion, periodicidad, proximo cobro, generar documentos, generar facturas, facturacion automatica, facturas del cliente, facturas emitidas, historial de facturas, detalle de facturas, recibos del cliente, que le facture, saldo del cliente, facturas pendientes, facturas pagadas, facturas abonadas, cobro con tarjeta, debito automatico, nuvei, kushki, aviso de vencimiento, pagos reportados, comprobante de pago, reporte de pago, revisar pago, rechazar pago, pago verificado, aceptar pago, confirmar pago, quitar aviso de pagos reportados, pagado, ya pague, transferencia del cliente, imprimir, impresora, excel, exportar, resumen de valores, total por periodicidad, proyeccion anual, ingresos recurrentes, iva por tarifa, resumen por concepto, detalle por cliente, que se le factura a cada cliente, items por cliente, informacion adicional en excel, resumen en pdf, detalle por cliente en pdf, pdf de la suscripcion, imprimir suscripcion, contrato, ficha de la suscripcion, detalle de la suscripcion en pdf, devengado, devengo, ingreso diferido, ingresos diferidos, ingreso anticipado, cobro por adelantado, mes caido, mes vencido, facturacion vencida, niif 15, seccion 23, reconocimiento de ingresos, provision de ingresos, ingresos por facturar
+version: 1.32
 orden: 0
 estado: activo
 ---
@@ -319,11 +319,12 @@ Cada envío:
 - Llega por **correo** al correo registrado de la empresa dueña de la suscripción (campo
   correo de la empresa; si tiene varios separados por coma, a todos), con el comprobante
   adjunto y un botón para abrir este módulo.
-- Aparece en el botón **Pagos reportados**, junto a **Generar Documentos** en la barra del
-  listado. El botón solo se muestra en la **empresa controladora de suscripciones** (la que
-  otras empresas tienen como controladora en Empresas del sistema). El número rojo
-  indica cuántos siguen **en revisión**. El aviso de suscripciones de la barra superior
-  también los cuenta y, al hacer clic, abre directamente esta ventana.
+- Se cuenta en el ícono de suscripciones de la barra superior (flechas circulares), en la
+  **empresa controladora de suscripciones** (la que otras empresas tienen como controladora
+  en Empresas del sistema). Mientras haya pagos **en revisión**, el clic en ese ícono abre
+  la ventana **Pagos reportados** en la misma página donde estés, sin salir de ella; desde
+  la ventana, **Ir a Suscripciones** lleva al listado. Sin pagos por revisar, el ícono
+  lleva a Suscripciones como siempre.
 
 La ventana lista los reportes de los últimos 60 días: cuándo se reportó, empresa, usuario,
 fecha límite de pago, documento y saldo pendientes, el mensaje, el comprobante (clic para
@@ -333,12 +334,21 @@ abrirlo) y el estado:
 |---|---|
 | **En revisión** | Recién reportado. El cliente no ve el aviso de vencimiento. |
 | **Sin respuesta** | Pasaron 3 días sin revisarlo: el cliente vuelve a ver el aviso. |
+| **Pagado** | Se registró el cobro y el reporte se cerró solo (se muestra cuándo). |
+| **Pago verificado** | Alguien de la empresa confirmó el pago con el botón **Pago verificado** (se muestra quién y cuándo). |
 | **Rechazado** | Se rechazó con un motivo (se muestra quién y cuándo). |
 
 Qué hacer con cada reporte:
 
 - **El pago es correcto**: registra el cobro como siempre (en Ingresos). La suscripción del
-  cliente queda al día y su aviso desaparece solo. No hace falta marcar nada aquí.
+  cliente queda al día, su aviso desaparece y el reporte pasa solo a **Pagado**, con lo que
+  deja de contar en el aviso de la barra superior (puede tardar hasta 5 minutos en
+  actualizarse; al abrir esta ventana se revisa al momento).
+- **El pago es correcto pero aún no puedes registrar el cobro** (por ejemplo, falta ver el
+  depósito en el banco): pulsa **Pago verificado**. El reporte sale del aviso de la barra
+  superior y el cliente sigue sin ver el aviso de vencimiento de ese período (en su ventana
+  le aparece que el pago fue verificado). No se le envía ningún correo. Después registra el
+  cobro como siempre. Necesita permiso de **modificar**.
 - **El pago no es correcto**: pulsa **Rechazar**, escribe el motivo y confirma. Al cliente
   le vuelve a salir el aviso con ese motivo y le llega por correo (al usuario que lo reportó
   y al correo de su empresa). Necesita permiso de **modificar**.
@@ -414,7 +424,7 @@ registrados*.
   registró (igual que en el listado del módulo); la nota al pie de la pestaña lo
   indica.
 - **Pagos reportados**: con permiso de ver se consultan y se abren los comprobantes;
-  para **Rechazar** hace falta permiso de modificar.
+  para **Pago verificado** y **Rechazar** hace falta permiso de modificar.
 
 ## Reglas de negocio
 
@@ -456,11 +466,21 @@ registrados*.
   la automatización los registra otro usuario). Tampoco aparecen los documentos de
   otro ambiente (pruebas / producción).
 - **"De esta suscripción" está deshabilitado**: la suscripción todavía no se guardó.
+- **El aviso «Pagos reportados» no se quita aunque el cliente pagó**: el cobro todavía no
+  se registró, o se registró en otro documento y el período sigue con saldo. Registre el
+  cobro o use **Pago verificado** en la ventana Pagos reportados. No use **Rechazar**: le
+  envía al cliente un correo de rechazo y le vuelve a mostrar el aviso de vencimiento.
 - **Una factura aparece como Pendiente aunque el cliente pagó**: el cobro no se ha
   registrado en Ingresos, o se registró en otro documento.
 
 ## Historial de cambios
 
+- **1.32** — **Pagos reportados**: al registrar el cobro, el reporte pasa solo a **Pagado** y
+  deja de contar en el aviso de la barra superior (antes seguía contando hasta 3 días y la
+  única forma de quitarlo era Rechazar). Nuevo botón **Pago verificado** para cerrarlo a mano
+  sin avisar un rechazo al cliente. Se quita el botón **Pagos reportados** de la pantalla
+  Suscripciones: la ventana se abre desde el ícono de suscripciones de la barra superior,
+  en cualquier página.
 - **1.31** — Nueva columna **Adicional** en cada ítem del detalle de la suscripción (como
   en Facturas de Venta): el texto se guarda por línea, pasa al *Adicional* de esa línea en
   la factura generada y se imprime bajo la descripción en el PDF de la suscripción.

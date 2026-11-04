@@ -152,8 +152,9 @@ class VigenciaSuscripcionService
                 $v['ruc']     = (string) ($empresa['ruc'] ?? '');
                 // Pago reportado por el cliente para ESTA fecha límite. Si la controladora
                 // registra el cobro, la fecha cambia y el reporte deja de aplicar solo.
+                // 'aceptado' (la controladora verificó el pago) también oculta el aviso.
                 $v['reporte']     = (new SuscripcionReportePagoService())->estadoReporte($idEmpresa, (string) $v['fecha']);
-                $v['en_revision'] = ($v['reporte']['estado'] ?? '') === 'en_revision';
+                $v['en_revision'] = in_array($v['reporte']['estado'] ?? '', ['en_revision', 'aceptado'], true);
             }
         } catch (\Throwable $e) {
             error_log('VigenciaSuscripcionService::estado ' . $e->getMessage());

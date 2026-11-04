@@ -204,14 +204,6 @@ $estadoClases = [
                     <i class="bi bi-file-earmark-text"></i><span class="d-none d-md-inline"> Generar Documentos</span>
                 </button>
                 <?php endif; ?>
-                <?php if (!empty($reportesDisponible)): // solo en la empresa controladora de suscripciones ?>
-                <button type="button" class="btn btn-outline-secondary position-relative" onclick="SUSC_abrirPagosReportados()" title="Pagos que los clientes informaron desde su aviso de suscripción">
-                    <i class="bi bi-inbox"></i><span class="d-none d-md-inline"> Pagos reportados</span>
-                    <?php if (!empty($reportesEnRevision)): ?>
-                        <span class="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-danger" id="susc-reportes-badge"><?= (int) $reportesEnRevision ?></span>
-                    <?php endif; ?>
-                </button>
-                <?php endif; ?>
             </div>
         </div>
         <div class="d-flex align-items-center gap-3">
@@ -300,7 +292,7 @@ $estadoClases = [
 <?php include 'modal_suscripcion.php'; ?>
 <?php include 'modal_generar_documentos.php'; ?>
 <?php include 'modal_pagos.php'; ?>
-<?php if (!empty($reportesDisponible)) { include 'modal_pagos_reportados.php'; } ?>
+<?php // «Pagos reportados» se abre desde el ícono de suscripciones del navbar (public/js/modulos/suscripciones_pagos_reportados.js). ?>
 
 <?php // Modales compartidos para crear cliente / producto desde la suscripción ?>
 <?php include dirname(__DIR__) . '/clientes/modal_cliente.php'; ?>

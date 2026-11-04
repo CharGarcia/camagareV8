@@ -99,6 +99,7 @@ class SuscripcionReportePagoRepository extends BaseRepository
             "SELECT r.id, r.id_empresa, r.fecha_limite, r.fecha_periodo, r.documento, r.saldo,
                     r.mensaje, r.archivo_nombre, r.estado, r.motivo_rechazo, r.created_at,
                     r.revisado_at, r.correo_enviado,
+                    (r.estado = 'aceptado' AND r.revisado_by IS NULL) AS cierre_automatico,
                     (r.created_at >= NOW() - (CAST(:tope AS INTEGER) * INTERVAL '1 day')) AS dentro_tope,
                     e.nombre AS empresa, e.ruc,
                     u.nombre AS usuario, u.mail AS usuario_mail,
@@ -129,6 +130,48 @@ class SuscripcionReportePagoRepository extends BaseRepository
         );
         $st->execute([':ctrl' => $idControladora, ':dias' => $diasTope]);
         return (int) $st->fetchColumn();
+    }
+
+    /**
+     * Reportes que siguen en revisión (dentro o fuera del tope) recibidos por la
+     * controladora en los últimos $dias días: candidatos al cierre automático.
+     */
+    public function listarEnRevision(int $idControladora, int $dias): array
+    {
+        $st = $this->db->prepare(
+            "SELECT id, id_empresa, fecha_limite
+               FROM suscripciones_reportes_pago
+              WHERE id_empresa_controladora = :ctrl
+                AND eliminado = false
+                AND estado = 'en_revision'
+                AND created_at >= NOW() - (CAST(:dias AS INTEGER) * INTERVAL '1 day')"
+        );
+        $st->execute([':ctrl' => $idControladora, ':dias' => $dias]);
+        return $st->fetchAll(PDO::FETCH_ASSOC);
+    }
+
+    /**
+     * Pasa a aceptado solo si sigue en revisión. $idUsuario null = cierre automático
+     * (se registró el cobro). true si cambió.
+     */
+    public function aceptar(int $id, int $idControladora, ?int $idUsuario, ?int $idUsuarioActualiza): bool
+    {
+        $st = $this->db->prepare(
+            "UPDATE suscripciones_reportes_pago
+                SET estado = 'aceptado',
+                    revisado_by = :u, revisado_at = NOW(),
+                    updated_by = :u2, updated_at = NOW()
+              WHERE id = :id
+                AND id_empresa_controladora = :ctrl
+                AND estado = 'en_revision'
+                AND eliminado = false"
+        );
+        $st->bindValue(':u', $idUsuario, $idUsuario === null ? PDO::PARAM_NULL : PDO::PARAM_INT);
+        $st->bindValue(':u2', $idUsuarioActualiza, $idUsuarioActualiza === null ? PDO::PARAM_NULL : PDO::PARAM_INT);
+        $st->bindValue(':id', $id, PDO::PARAM_INT);
+        $st->bindValue(':ctrl', $idControladora, PDO::PARAM_INT);
+        $st->execute();
+        return $st->rowCount() > 0;
     }
 
     /** Un reporte, solo si lo recibió esta controladora. */

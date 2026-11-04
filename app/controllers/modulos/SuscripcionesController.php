@@ -104,12 +104,6 @@ class SuscripcionesController extends BaseModuloController
             }
         }
 
-        $reportes = new SuscripcionReportePagoService();
-        // «Pagos reportados» solo en la empresa controladora de suscripciones (la que recibe
-        // esos reportes); en las demás no hay nada que revisar.
-        $verReportes = $reportes->disponible()
-            && (new \App\models\Empresa())->esControladoraSuscripciones($idEmpresa);
-
         $this->viewWithLayout('layouts.main', 'modulos.suscripciones.index', [
             'titulo'         => 'Suscripciones',
             'perm'           => $perm,
@@ -137,29 +131,33 @@ class SuscripcionesController extends BaseModuloController
             'calculoIva'        => $calculoIva,
             // Columna «Adicional» por ítem del detalle (como Facturas de Venta).
             'adicionalItem'     => $this->service->tieneAdicionalDetalle(),
-            // Botón «Pagos reportados» (pagos que los clientes informaron desde su aviso).
-            'reportesDisponible' => $verReportes,
-            'reportesEnRevision' => $verReportes ? $reportes->contarEnRevision($idEmpresa) : 0,
             'fullWidth'      => true,
         ]);
     }
 
     /**
-     * Modal «Pagos reportados»: lo que los clientes informaron desde el aviso de suscripción
-     * vencida (mensaje + comprobante) en los últimos días. JSON { ok, rows }.
+     * Modal «Pagos reportados» (se abre desde el ícono de suscripciones del navbar): lo que
+     * los clientes informaron desde el aviso de suscripción vencida (mensaje + comprobante)
+     * en los últimos días. JSON { ok, rows, puede_actualizar, dias_listado, dias_revision }.
      */
     public function pagosReportadosAjax(): void
     {
         $this->requireLeer();
         try {
-            $rows = (new SuscripcionReportePagoService())->listarParaControladora((int) $_SESSION['id_empresa']);
+            $rows = (new SuscripcionReportePagoService())->listarParaControladora((int) $_SESSION['id_empresa'], (int) $_SESSION['id_usuario']);
             foreach ($rows as &$r) {
                 $r['created_at_fmt']   = date('d-m-Y H:i:s', strtotime((string) $r['created_at']));
                 $r['revisado_at_fmt']  = !empty($r['revisado_at']) ? date('d-m-Y H:i:s', strtotime((string) $r['revisado_at'])) : '';
                 $r['fecha_limite_fmt'] = !empty($r['fecha_limite']) ? date('d-m-Y', strtotime((string) $r['fecha_limite'])) : '';
             }
             unset($r);
-            $this->json(['ok' => true, 'rows' => $rows]);
+            $this->json([
+                'ok'               => true,
+                'rows'             => $rows,
+                'puede_actualizar' => !empty($this->getPermisos()['actualizar']),
+                'dias_listado'     => SuscripcionReportePagoService::DIAS_LISTADO,
+                'dias_revision'    => SuscripcionReportePagoService::DIAS_REVISION,
+            ]);
         } catch (\Throwable $e) {
             \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             $this->json(['ok' => false, 'mensaje' => 'No se pudieron cargar los pagos reportados.']);
@@ -183,6 +181,31 @@ class SuscripcionesController extends BaseModuloController
         header('X-Content-Type-Options: nosniff');
         readfile($arch['ruta']);
         exit;
+    }
+
+    /**
+     * «Pago verificado»: el pago reportado es correcto. Sale del aviso «Pagos reportados»
+     * y el cliente sigue sin ver el aviso de vencimiento hasta que se registre el cobro.
+     */
+    public function aceptarReporteAjax(): void
+    {
+        $this->requireActualizar();
+        try {
+            (new SuscripcionReportePagoService())->aceptar(
+                (int) ($_POST['id'] ?? 0),
+                (int) $_SESSION['id_empresa'],
+                (int) $_SESSION['id_usuario']
+            );
+        } catch (\InvalidArgumentException | \RuntimeException $e) {
+            $this->json(['ok' => false, 'mensaje' => $e->getMessage()]);
+        } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
+            $this->json(['ok' => false, 'mensaje' => 'No se pudo marcar el pago como verificado.']);
+        }
+        $this->json([
+            'ok'      => true,
+            'mensaje' => 'Pago marcado como verificado. Recuerda registrar el cobro de la suscripción.',
+        ]);
     }
 
     /** Rechaza un pago reportado (motivo obligatorio): el aviso vuelve al cliente y se le envía el motivo. */

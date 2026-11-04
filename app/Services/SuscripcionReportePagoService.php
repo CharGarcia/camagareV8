@@ -12,9 +12,12 @@ use App\repositories\modulos\SuscripcionReportePagoRepository;
  *
  * - Al reportar se avisa por correo a la empresa dueña de la suscripción (su campo `mail`)
  *   con el comprobante adjunto, y el aviso deja de salir mientras se revisa.
- * - La revisión no se cierra a mano: si la controladora registra el cobro, la fecha límite
- *   del aviso cambia y el reporte deja de aplicar solo. Si el comprobante no sirve, la
- *   controladora lo RECHAZA desde Suscripciones (el aviso vuelve y el usuario recibe el motivo).
+ * - Cómo termina la revisión (Suscripciones → Pagos reportados):
+ *     · Automático: si la controladora registra el cobro, la fecha límite del cliente avanza
+ *       y el reporte pasa solo a 'aceptado' (revisado_by NULL) — ver cerrarPagados().
+ *     · «Pago verificado»: la controladora lo acepta a mano ('aceptado' con revisado_by);
+ *       el aviso del cliente sigue oculto para esa fecha límite hasta que se registre el cobro.
+ *     · «Rechazar»: el aviso vuelve y el usuario recibe el motivo por correo.
  * - Tope: pasados DIAS_REVISION días sin respuesta el aviso vuelve a salir, para que no
  *   quede oculto para siempre si el correo se perdió.
  */
@@ -61,9 +64,13 @@ class SuscripcionReportePagoService
         }
     }
 
+    /** Si el CHECK aún no admite 'aceptado' (migración pendiente), no reintentar en cada sondeo. */
+    private static bool $sinMigracionAceptado = false;
+
     /**
      * Estado del último reporte para esa fecha límite, tal como lo necesita el aviso:
-     *   ['estado' => 'en_revision'|'rechazado'|'sin_respuesta', 'fecha', 'usuario', 'motivo', 'archivo']
+     *   ['estado' => 'en_revision'|'aceptado'|'rechazado'|'sin_respuesta', 'fecha', 'usuario', 'motivo', 'archivo']
+     * 'aceptado' = la controladora verificó el pago: el aviso sigue oculto (sin tope).
      * 'sin_respuesta' = estaba en revisión pero pasó el tope: el aviso vuelve a salir.
      * null si no hay reporte (o la tabla aún no existe).
      */
@@ -179,27 +186,147 @@ class SuscripcionReportePagoService
         return ['id' => $id, 'ya_existia' => false, 'correo_enviado' => $enviado];
     }
 
-    /** Listado de la controladora (pantalla Suscripciones → Pagos reportados). */
-    public function listarParaControladora(int $idControladora): array
+    /**
+     * Listado de la controladora (pantalla Suscripciones → Pagos reportados). Antes de
+     * listar cierra solos los reportes cuyo cobro ya se registró (vigencia en vivo).
+     */
+    public function listarParaControladora(int $idControladora, int $idUsuario = 0): array
     {
         if (!$this->disponible()) {
             return [];
         }
+        $this->cerrarPagados($idControladora, $idUsuario, false);
         $rows = $this->repo->listarParaControladora($idControladora, self::DIAS_LISTADO, self::DIAS_REVISION);
         foreach ($rows as &$r) {
             if ($r['estado'] === 'en_revision' && !$r['dentro_tope']) {
                 $r['estado'] = 'sin_respuesta';
             }
             unset($r['dentro_tope']);
+            $r['cierre_automatico'] = !empty($r['cierre_automatico']);
             $r['tiene_archivo'] = !empty($r['archivo_nombre']);
         }
         unset($r);
         return $rows;
     }
 
-    public function contarEnRevision(int $idControladora): int
+    /**
+     * Contador del aviso «Pagos reportados» del navbar. Primero cierra los reportes ya
+     * cobrados (con la vigencia en caché: el navbar sondea seguido).
+     */
+    public function contarEnRevision(int $idControladora, int $idUsuario = 0): int
     {
-        return $this->disponible() ? $this->repo->contarEnRevision($idControladora, self::DIAS_REVISION) : 0;
+        if (!$this->disponible()) {
+            return 0;
+        }
+        $this->cerrarPagados($idControladora, $idUsuario, true);
+        return $this->repo->contarEnRevision($idControladora, self::DIAS_REVISION);
+    }
+
+    /**
+     * Cierre automático: un reporte en revisión cuyo cliente ya tiene una fecha límite
+     * POSTERIOR a la del reporte significa que se registró el cobro (o una nota de crédito)
+     * de ese período. Pasa a 'aceptado' sin revisor. Si la vigencia no se puede calcular
+     * (null: error, regalía, sin suscripción) no se toca: vence solo con el tope.
+     *
+     * @return int Reportes cerrados.
+     */
+    public function cerrarPagados(int $idControladora, int $idUsuario = 0, bool $usarCache = true): int
+    {
+        if ($idControladora <= 0 || self::$sinMigracionAceptado || !$this->disponible()) {
+            return 0;
+        }
+        try {
+            $pendientes = $this->repo->listarEnRevision($idControladora, self::DIAS_LISTADO);
+        } catch (\Throwable $e) {
+            error_log('SuscripcionReportePagoService::cerrarPagados ' . $e->getMessage());
+            return 0;
+        }
+        if (empty($pendientes)) {
+            return 0;
+        }
+
+        $vigSrv   = new VigenciaSuscripcionService();
+        $vigencia = [];
+        $cerrados = 0;
+        foreach ($pendientes as $p) {
+            $idEmp = (int) $p['id_empresa'];
+            if (!array_key_exists($idEmp, $vigencia)) {
+                $vigencia[$idEmp] = $vigSrv->estado($idEmp, $usarCache);
+            }
+            $vig = $vigencia[$idEmp];
+            $fechaActual = is_array($vig) ? (string) ($vig['fecha'] ?? '') : '';
+            if ($fechaActual === '' || $fechaActual <= substr((string) $p['fecha_limite'], 0, 10)) {
+                continue;
+            }
+
+            try {
+                $this->repo->beginTransaction();
+                $cambio = $this->repo->aceptar((int) $p['id'], $idControladora, null, $idUsuario > 0 ? $idUsuario : null);
+                if ($cambio && $idUsuario > 0) {
+                    (new LogSistemaService())->registrar(
+                        $idUsuario, $idControladora, 'PAGO_SUSCRIPCION_COBRADO_AUTO', 'suscripciones_reportes_pago', (int) $p['id'],
+                        ['estado' => 'en_revision', 'fecha_limite' => $p['fecha_limite']],
+                        ['estado' => 'aceptado', 'cierre_automatico' => true, 'nueva_fecha_limite' => $fechaActual, 'id_empresa' => $idEmp]
+                    );
+                }
+                $this->repo->commit();
+            } catch (\Throwable $e) {
+                $this->repo->rollBack();
+                if (str_contains($e->getMessage(), 'chk_susc_rep_pago_estado')) {
+                    self::$sinMigracionAceptado = true;
+                    error_log('SuscripcionReportePagoService: falta database/20261104_suscripciones_reportes_pago_aceptado.sql');
+                    return $cerrados;
+                }
+                error_log('SuscripcionReportePagoService::cerrarPagados ' . $e->getMessage());
+                continue;
+            }
+            if ($cambio) {
+                $cerrados++;
+                VigenciaSuscripcionService::invalidar($idEmp);
+            }
+        }
+        return $cerrados;
+    }
+
+    /**
+     * «Pago verificado»: la controladora confirma que el pago reportado es correcto. El
+     * reporte sale del aviso del navbar y el aviso del cliente sigue oculto para esa fecha
+     * límite (cuando se registre el cobro la fecha avanza y deja de aplicar).
+     */
+    public function aceptar(int $id, int $idControladora, int $idUsuario): void
+    {
+        if (self::$sinMigracionAceptado) {
+            throw new \RuntimeException('Falta aplicar database/20261104_suscripciones_reportes_pago_aceptado.sql.');
+        }
+        try {
+            $this->repo->beginTransaction();
+            $antes = $this->repo->getParaControladora($id, $idControladora);
+            if ($antes === null) {
+                throw new \RuntimeException('El reporte no existe.');
+            }
+            if (!$this->repo->aceptar($id, $idControladora, $idUsuario, $idUsuario)) {
+                throw new \RuntimeException($antes['estado'] === 'rechazado'
+                    ? 'Este reporte ya fue rechazado.'
+                    : 'Este reporte ya estaba marcado como pagado.');
+            }
+            (new LogSistemaService())->registrar(
+                $idUsuario, $idControladora, 'VERIFICAR_PAGO_SUSCRIPCION', 'suscripciones_reportes_pago', $id,
+                ['estado' => $antes['estado']],
+                ['estado' => 'aceptado', 'id_empresa' => (int) $antes['id_empresa']]
+            );
+            $this->repo->commit();
+        } catch (\PDOException $e) {
+            $this->repo->rollBack();
+            if (str_contains($e->getMessage(), 'chk_susc_rep_pago_estado')) {
+                throw new \RuntimeException('Falta aplicar database/20261104_suscripciones_reportes_pago_aceptado.sql.');
+            }
+            throw $e;
+        } catch (\Throwable $e) {
+            $this->repo->rollBack();
+            throw $e;
+        }
+
+        VigenciaSuscripcionService::invalidar((int) $antes['id_empresa']);
     }
 
     /** Reporte + ruta absoluta del comprobante, solo si lo recibió esta controladora. */

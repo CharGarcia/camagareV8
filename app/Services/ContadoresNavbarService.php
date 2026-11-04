@@ -228,7 +228,9 @@ class ContadoresNavbarService
         }
         // Pagos de suscripción reportados por clientes, en revisión (tabla puede no existir).
         try {
-            $datos['__pagos_reportados'] = (new SuscripcionReportePagoService())->contarEnRevision($idEmpresa);
+            // Antes de contar cierra solos los que ya tienen el cobro registrado.
+            $datos['__pagos_reportados'] = (new SuscripcionReportePagoService())
+                ->contarEnRevision($idEmpresa, (int) ($_SESSION['id_usuario'] ?? 0));
         } catch (\Throwable $e) {
             $datos['__pagos_reportados'] = 0;
         }
