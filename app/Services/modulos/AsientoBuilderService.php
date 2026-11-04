@@ -88,6 +88,31 @@ class AsientoBuilderService
     }
 
     /**
+     * Líneas del costo de venta (Costo de Ventas / Inventario) que no resolvieron cuenta, por
+     * documento ('tipo_documento:id', mismo tipo que ventas_costeo_seguimiento), en las armadas de
+     * esta petición. Un bloque de costo incompleto se omite sin lanzar nada (el asiento comercial
+     * se graba igual), así que el motivo exacto —qué producto, categoría o marca— solo existe aquí:
+     * lo lee la sincronización de asientos para decir qué configurar. Vive solo durante la petición.
+     */
+    private static array $costoSinCuenta = [];
+
+    private static function anotarCostoSinCuenta(string $tipoDocumento, int $idDocumento, string $motivo): void
+    {
+        if ($idDocumento <= 0) return;
+        $motivo = self::sinMarcaLinea([$motivo])[0];
+        $clave = $tipoDocumento . ':' . $idDocumento;
+        if (!in_array($motivo, self::$costoSinCuenta[$clave] ?? [], true)) {
+            self::$costoSinCuenta[$clave][] = $motivo;
+        }
+    }
+
+    /** @return string[] Motivos de anotarCostoSinCuenta() del documento (vacío si su costo resolvió). */
+    public static function costoSinCuenta(string $tipoDocumento, int $idDocumento): array
+    {
+        return self::$costoSinCuenta[$tipoDocumento . ':' . $idDocumento] ?? [];
+    }
+
+    /**
      * Motivo legible de las líneas que no resolvieron cuenta en un concepto. Si el asiento se
      * contabiliza por categoría (o marca) y el producto no la tiene, lo que falta es ESO, no la
      * cuenta: se dice "X no tiene categoría asignada" (marcado con LINEA_SIN_CLASIFICACION, texto
@@ -1246,6 +1271,9 @@ class AsientoBuilderService
         if ($res['sin_cuenta'] >= 0.01) {
             // Línea COMERCIAL sin cuenta (Cuenta por Cobrar, venta, ICE, descuento): se marca para que
             // aplicarAjusteRedondeo() bloquee el asiento aunque cuadre — ver LINEA_SIN_CUENTA.
+            if ($esLineaCosto) {
+                self::anotarCostoSinCuenta('factura_venta', $idVenta, $this->motivoLineasSinCuenta($idEmpresa, (int) $r['id_asiento_tipo'], $refBase, $res));
+            }
             $reglasSinCuenta[] = $esLineaCosto
                 ? $refBase . ' (algunas líneas sin cuenta por producto/categoría/marca/tipo de producción, ni en la General)'
                 : self::LINEA_SIN_CUENTA . $this->motivoLineasSinCuenta($idEmpresa, (int) $r['id_asiento_tipo'], $refBase, $res);
@@ -1400,6 +1428,9 @@ class AsientoBuilderService
         if ($res['sin_cuenta'] >= 0.01) {
             // Línea COMERCIAL sin cuenta (Cuenta por Cobrar, venta, ICE, descuento): se marca para que
             // aplicarAjusteRedondeo() bloquee el asiento aunque cuadre — ver LINEA_SIN_CUENTA.
+            if ($esLineaCosto) {
+                self::anotarCostoSinCuenta('recibo_venta', $idRecibo, $this->motivoLineasSinCuenta($idEmpresa, (int) $r['id_asiento_tipo'], $refBase, $res));
+            }
             $reglasSinCuenta[] = $esLineaCosto
                 ? $refBase . ' (algunas líneas sin cuenta por producto/categoría/marca/tipo de producción, ni en la General)'
                 : self::LINEA_SIN_CUENTA . $this->motivoLineasSinCuenta($idEmpresa, (int) $r['id_asiento_tipo'], $refBase, $res);
@@ -1554,6 +1585,9 @@ class AsientoBuilderService
         if ($res['sin_cuenta'] >= 0.01) {
             // Línea COMERCIAL sin cuenta (Cuenta por Cobrar, venta, ICE, descuento): se marca para que
             // aplicarAjusteRedondeo() bloquee el asiento aunque cuadre — ver LINEA_SIN_CUENTA.
+            if ($esLineaCosto) {
+                self::anotarCostoSinCuenta('nota_credito_venta', $idNotaCredito, $this->motivoLineasSinCuenta($idEmpresa, (int) $r['id_asiento_tipo'], $refBase, $res));
+            }
             $reglasSinCuenta[] = $esLineaCosto
                 ? $refBase . ' (algunas líneas sin cuenta por producto/categoría/marca/tipo de producción, ni en la General)'
                 : self::LINEA_SIN_CUENTA . $this->motivoLineasSinCuenta($idEmpresa, (int) $r['id_asiento_tipo'], $refBase, $res);

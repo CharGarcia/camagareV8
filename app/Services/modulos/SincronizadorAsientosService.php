@@ -1577,7 +1577,7 @@ class SincronizadorAsientosService
 
             $motivos = [
                 'cuenta_no_configurada'         =>'falta configurar la cuenta de Costo de Ventas y/o Inventario (a nivel General, o por Cliente/Producto/Categoría/Marca)',
-                'bloque_incompleto_descuadrado' => 'el bloque de costo quedó descuadrado (revise que la cuenta de Costo y la de Inventario resuelvan el mismo monto)',
+                'bloque_incompleto_descuadrado' => 'hay productos con solo una de las dos cuentas del costo (Costo de Ventas o Inventario) en su regla por producto/categoría/marca y sin la otra en la General',
             ];
 
             foreach ($rows as $row) {
@@ -1865,17 +1865,46 @@ class SincronizadorAsientosService
         }
         foreach ($porMotivo as $motivo => $idsMotivo) {
             $motivo = $motivo === "\0" ? null : (string) $motivo;
-            $this->detalleActual = "{$nombreModulo}: " . $this->listarDocumentos($idsMotivo, $numeros);
-            if ($motivo === 'bloque_incompleto_descuadrado') {
-                $this->agregarAccion($costeo[1], 'general',
-                    "El costo de venta queda descuadrado en {$costeo[2]}: revise que la cuenta de Costo de Ventas y la de Inventario resuelvan el mismo monto");
-            } elseif ($motivo !== null) {
-                $this->agregarAccion($costeo[1], 'general',
-                    "Falta configurar la cuenta de Costo de Ventas y/o Inventario en {$costeo[2]} (General, o por Cliente/Producto/Categoría/Marca): "
-                    . 'sin ella el costo de venta de esos documentos no se contabiliza');
-            } else {
+            if ($motivo === null) {
+                $this->detalleActual = "{$nombreModulo}: " . $this->listarDocumentos($idsMotivo, $numeros);
                 $this->agregarAccion('', '',
                     "Algunos documentos de {$nombreModulo} ya tienen asiento pero no se pudieron completar: revise su pestaña Asiento contable");
+                continue;
+            }
+
+            // El builder arma el bloque de costo línea por línea (cuenta del producto, su categoría,
+            // marca o tipo de producción, o la General): si en alguna línea solo una de las dos
+            // cuentas resuelve, el Debe y el Haber del costo no cuadran y se omite.
+            $texto = $motivo === 'bloque_incompleto_descuadrado'
+                ? "En {$costeo[2]} hay productos que solo tienen una de las dos cuentas del costo (Costo de Ventas o Inventario) "
+                  . 'en su regla por producto, categoría, marca o tipo de producción, y la otra tampoco está en la General: '
+                  . 'configure las dos en la misma regla (o ambas en la General)'
+                : "Falta configurar la cuenta de Costo de Ventas y/o Inventario en {$costeo[2]} (General, o por Cliente/Producto/Categoría/Marca): "
+                  . 'sin ella el costo de venta de esos documentos no se contabiliza';
+            $generico = "Falta configurar las cuentas del costo de venta (Costo de Ventas e Inventario) en {$costeo[2]}";
+
+            // Qué producto, categoría o marca no resolvió cuenta: lo anotó el builder al armar
+            // cada documento en esta misma petición (AsientoBuilderService::costoSinCuenta()).
+            // Una línea de detalle por causa, con los documentos que la tienen.
+            $porCausa = [];
+            foreach ($idsMotivo as $id) {
+                foreach (\App\Services\modulos\AsientoBuilderService::costoSinCuenta($costeo[0], (int) $id) as $causa) {
+                    $porCausa[$causa][] = $id;
+                }
+            }
+            if (!$porCausa) {
+                $porCausa[''] = $idsMotivo;
+            }
+            foreach ($porCausa as $causa => $idsCausa) {
+                $docs = $this->listarDocumentos($idsCausa, $numeros);
+                // La causa llega como «Inventario» para Producto A, B… o como «la categoría «X» (de
+                // «Producto») no tiene la cuenta «Inventario»» (ver motivoLineasSinCuenta()).
+                $causa = (string) $causa;
+                $leyenda = str_starts_with($causa, '«') ? 'Sin cuenta ' . $causa : mb_strtoupper(mb_substr($causa, 0, 1)) . mb_substr($causa, 1);
+                $this->detalleActual = $causa !== ''
+                    ? "{$leyenda} — {$nombreModulo} {$docs}"
+                    : "{$nombreModulo}: {$docs}";
+                $this->agregarAccion($costeo[1], 'general', $texto, $generico);
             }
         }
         $this->detalleActual = null;

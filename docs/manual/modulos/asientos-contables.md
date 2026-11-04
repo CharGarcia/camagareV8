@@ -256,6 +256,19 @@ categoría o marca). Al generar se vuelven a procesar y, si la cuenta sigue
 faltando, el resultado **no los cuenta como generados**: los deja en *Quedan
 pendientes* y dice qué configurar, con el enlace a Configuración Contable.
 
+Si el aviso dice que hay **productos con solo una de las dos cuentas del
+costo**, el costo se arma producto por producto: cada uno toma la cuenta de su
+regla por producto, categoría, marca o tipo de producción, o la General. Cuando
+una regla tiene Costo de Ventas pero no Inventario (o al revés) y la General
+tampoco tiene la que falta, el Debe y el Haber del costo no cuadran y el costo
+no se registra. Configure las dos cuentas en la misma regla, o ambas en la
+General.
+
+Debajo del aviso se lista **qué falta y en qué documentos**, por ejemplo:
+*«Sin cuenta «Inventario de Mercaderías» para Jabón — Recibos de Venta
+001-101-000000004»*, o *«La categoría «Limpieza» (de «Jabón») no tiene la cuenta
+«Inventario de Mercaderías»»* cuando el costo se contabiliza por categorías.
+
 Antes el resultado los daba por generados y, al volver a entrar, el aviso
 reclamaba los mismos documentos. Una vez configurada la cuenta, la siguiente
 generación los completa.
@@ -608,7 +621,8 @@ cambiarlos se revierte el cierre en ese módulo y se genera de nuevo.
 ## Historial de cambios
 
 - **1.46** — Al generar, un documento que ya tenía asiento y sigue pendiente (costo de venta sin
-  cuenta) ya no se cuenta como generado: queda en *Quedan pendientes* con la cuenta que falta.
+  cuenta) ya no se cuenta como generado: queda en *Quedan pendientes* con la cuenta que falta y
+  el producto, categoría o marca que no la tiene.
 - **1.45** — Los ingresos y egresos sin ningún cobro/pago con monto (o con todos los cheques
   anulados) ya no aparecen como asientos pendientes.
 - **1.44** — Los documentos con fecha en un período contable cerrado ya no se cuentan como
