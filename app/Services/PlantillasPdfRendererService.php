@@ -434,7 +434,10 @@ class PlantillasPdfRendererService
                     // Alineación horizontal según columna + vertical centrada (valign 'M')
                     $pdf->MultiCell((float)$col['ancho'], $ch, $vals[$i], 1, $col['alineacion'], true, 0, '', '', true, 0, false, true, 0, 'M');
                 } else {
-                    $pdf->Cell((float)$col['ancho'], $ch, $vals[$i], 1, 0, $col['alineacion'], true);
+                    // stretch = 1: el ancho lo fija el diseño de la plantilla; si una
+                    // cantidad/valor/código grande no cabe, TCPDF lo condensa dentro
+                    // de su celda en vez de dibujarlo encima de la columna vecina.
+                    $pdf->Cell((float)$col['ancho'], $ch, $vals[$i], 1, 0, $col['alineacion'], true, '', 1);
                 }
                 $xCur += (float)$col['ancho'];
             }

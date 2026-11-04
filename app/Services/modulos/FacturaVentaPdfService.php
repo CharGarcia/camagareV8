@@ -592,8 +592,31 @@ class FacturaVentaPdfService
         }
         unset($c);
 
-        // Piso de la Descripción: si los códigos se llevaron demasiado ancho, se
-        // les devuelve el exceso (primero al auxiliar, que es el prescindible).
+        // Mismo criterio para las columnas NUMÉRICAS: una cantidad o un valor
+        // grande (p. ej. 1,250,000.00) no cabía en el ancho fijo y se salía del
+        // recuadro. Se mide el texto ya formateado, tal como se imprime.
+        $fmtNum = [
+            'cant' => fn($d) => number_format((float)($d['cantidad'] ?? 0), $this->decCantidad),
+            'pu'   => fn($d) => number_format((float)($d['precio_unitario'] ?? 0), $this->decPrecio),
+            'dcto' => fn($d) => number_format((float)($d['descuento'] ?? 0), 2),
+            'ptot' => fn($d) => number_format((float)($d['precio_total_sin_impuesto'] ?? 0), 2),
+        ];
+        $maxNum = ['cant' => 30.0, 'pu' => 32.0, 'dcto' => 26.0, 'ptot' => 30.0];
+        foreach ($cols as &$c) {
+            if (!isset($fmtNum[$c['key']])) { continue; }
+            $minCod[$c['key']] = (float)$c['w'];
+            $wTexto = 0.0;
+            foreach ($detalles as $d) {
+                $wTexto = max($wTexto, $pdf->GetStringWidth($fmtNum[$c['key']]($d)));
+            }
+            $c['w'] = round(max((float)$c['w'], min($maxNum[$c['key']], $wTexto + 2.0)), 1);
+        }
+        unset($c);
+
+        // Piso de la Descripción: si los códigos o los números se llevaron
+        // demasiado ancho, se les devuelve el exceso (primero al auxiliar, que es
+        // el prescindible; las cifras al final). Lo que no quepa tras el recorte
+        // lo condensa TCPDF al dibujar la celda (stretch), nunca se desborda.
         $minDesc  = 28.0;
         $wDescRes = $cW - array_sum(array_map(
             fn($c) => $c['key'] === 'desc' ? 0.0 : (float)$c['w'],
@@ -601,7 +624,7 @@ class FacturaVentaPdfService
         ));
         if ($wDescRes < $minDesc) {
             $porRecortar = $minDesc - $wDescRes;
-            foreach (['coda', 'codp'] as $k) {
+            foreach (['coda', 'codp', 'dcto', 'pu', 'ptot', 'cant'] as $k) {
                 if ($porRecortar <= 0.01) { break; }
                 foreach ($cols as &$c) {
                     if ($c['key'] !== $k) { continue; }
@@ -714,7 +737,9 @@ class FacturaVentaPdfService
                     // de desbordarse encima de la columna siguiente.
                     $pdf->Cell($col['w'], $ch, $val, 1, 0, $col['align'], true, '', 1);
                 } else {
-                    $pdf->Cell($col['w'], $ch, $val, 1, 0, $col['align'], true);
+                    // stretch = 1 también en las cifras: si una cantidad/valor no
+                    // cabe ni con el ancho ampliado, se condensa dentro de su celda.
+                    $pdf->Cell($col['w'], $ch, $val, 1, 0, $col['align'], true, '', 1);
                 }
                 $xCur += $col['w'];
             }
