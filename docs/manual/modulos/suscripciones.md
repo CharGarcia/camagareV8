@@ -5,8 +5,8 @@ categoria: Ventas
 ruta_modulo: modulos/suscripciones
 tipo: modulo
 visibilidad: todos
-etiquetas: suscripciones, suscripcion, cobro recurrente, facturacion recurrente, factura recurrente, mensualidad, pension, plan mensual, membresia, renovacion, periodicidad, proximo cobro, generar documentos, generar facturas, facturacion automatica, facturas del cliente, facturas emitidas, historial de facturas, detalle de facturas, recibos del cliente, que le facture, saldo del cliente, facturas pendientes, facturas pagadas, facturas abonadas, cobro con tarjeta, debito automatico, nuvei, kushki, aviso de vencimiento, pagos reportados, comprobante de pago, reporte de pago, revisar pago, rechazar pago, ya pague, transferencia del cliente, imprimir, impresora, excel, exportar, resumen de valores, total por periodicidad, proyeccion anual, ingresos recurrentes, iva por tarifa, resumen por concepto, detalle por cliente, que se le factura a cada cliente, items por cliente, informacion adicional en excel, resumen en pdf, detalle por cliente en pdf, pdf de la suscripcion, imprimir suscripcion, contrato, ficha de la suscripcion, detalle de la suscripcion en pdf, devengado, devengo, ingreso diferido, ingresos diferidos, ingreso anticipado, cobro por adelantado, mes caido, mes vencido, facturacion vencida, niif 15, seccion 23, reconocimiento de ingresos, provision de ingresos, ingresos por facturar
-version: 1.30
+etiquetas: suscripciones, suscripcion, adicional, adicional por item, informacion adicional del item, detalle adicional, texto por linea, cobro recurrente, facturacion recurrente, factura recurrente, mensualidad, pension, plan mensual, membresia, renovacion, periodicidad, proximo cobro, generar documentos, generar facturas, facturacion automatica, facturas del cliente, facturas emitidas, historial de facturas, detalle de facturas, recibos del cliente, que le facture, saldo del cliente, facturas pendientes, facturas pagadas, facturas abonadas, cobro con tarjeta, debito automatico, nuvei, kushki, aviso de vencimiento, pagos reportados, comprobante de pago, reporte de pago, revisar pago, rechazar pago, ya pague, transferencia del cliente, imprimir, impresora, excel, exportar, resumen de valores, total por periodicidad, proyeccion anual, ingresos recurrentes, iva por tarifa, resumen por concepto, detalle por cliente, que se le factura a cada cliente, items por cliente, informacion adicional en excel, resumen en pdf, detalle por cliente en pdf, pdf de la suscripcion, imprimir suscripcion, contrato, ficha de la suscripcion, detalle de la suscripcion en pdf, devengado, devengo, ingreso diferido, ingresos diferidos, ingreso anticipado, cobro por adelantado, mes caido, mes vencido, facturacion vencida, niif 15, seccion 23, reconocimiento de ingresos, provision de ingresos, ingresos por facturar
+version: 1.31
 orden: 0
 estado: activo
 ---
@@ -73,6 +73,7 @@ Periodicidad guarda ese valor como favorito: cada suscripción nueva lo trae ya 
 | Modalidad de cobro | Sí | **Por adelantado**: cada documento cubre el período que empieza en el próximo cobro. **Mes caído (vencido)**: cubre el período que termina el día anterior al próximo cobro (se factura lo ya prestado). |
 | Reconocimiento del ingreso | Sí | **Al facturar**: todo el ingreso se registra el día de la factura. **Durante el período**: el ingreso de los servicios se reconoce mes a mes (ver *Reconocimiento del ingreso*). Al crear se propone *Durante el período* para las periodicidades de un mes o más. |
 | Productos / servicios | Sí | Al menos una línea con producto, cantidad mayor a cero y precio no negativo. |
+| Adicional (por ítem) | No | Texto propio de cada línea (hasta 300 caracteres), igual que la columna **Adicional** de Facturas de Venta. Al generar el documento pasa al *Adicional* de esa línea en la factura (en el RIDE sale bajo la descripción y en el XML como detalle adicional del ítem). Admite los marcadores del período (`{mes}`, `{anio}`…). |
 | Información adicional | No | Pares concepto / detalle que se copian a cada documento generado. |
 | Forma de cobro | Sí | Crédito (pago manual) o Tarjeta (cobro automático con Kushki o Nuvei). |
 | Observaciones | No | Notas internas. |
@@ -160,7 +161,11 @@ Cada documento generado nace en **borrador** (la factura se envía al SRI con la
 automatización de Facturas de venta), avanza el próximo cobro de la suscripción y
 queda enlazado a ella: por eso aparece marcado en la pestaña **Facturas**.
 
-En el texto del ítem y en la información adicional se pueden usar marcadores del
+Si una línea de la suscripción tiene **Adicional**, ese texto va al *Adicional* de la
+misma línea en la factura; si además se escribió el texto para agregar a cada ítem, se
+pone a continuación del Adicional de la línea.
+
+En el texto del ítem, en el Adicional de cada línea y en la información adicional se pueden usar marcadores del
 período facturado, por ejemplo `{mes}`, `{MES}`, `{anio}`, `{mes_anio}`, `{fecha}` y
 sus equivalentes del período anterior (`{mes_ant}`, `{anio_ant}`…).
 
@@ -456,6 +461,9 @@ registrados*.
 
 ## Historial de cambios
 
+- **1.31** — Nueva columna **Adicional** en cada ítem del detalle de la suscripción (como
+  en Facturas de Venta): el texto se guarda por línea, pasa al *Adicional* de esa línea en
+  la factura generada y se imprime bajo la descripción en el PDF de la suscripción.
 - **1.30** — Al configurar la automatización *Generar facturación*, el selector de
   **serie** muestra solo los puntos de emisión activos (antes salían también los inactivos).
 - **1.29** — Se quita la columna **Inmueble** del listado, del PDF y del Excel. Se corrige el

@@ -135,6 +135,8 @@ class SuscripcionesController extends BaseModuloController
             'decimalesPrecio'   => $decimalesPrecio,
             'decimalesCantidad' => $decimalesCantidad,
             'calculoIva'        => $calculoIva,
+            // Columna «Adicional» por ítem del detalle (como Facturas de Venta).
+            'adicionalItem'     => $this->service->tieneAdicionalDetalle(),
             // Botón «Pagos reportados» (pagos que los clientes informaron desde su aviso).
             'reportesDisponible' => $verReportes,
             'reportesEnRevision' => $verReportes ? $reportes->contarEnRevision($idEmpresa) : 0,

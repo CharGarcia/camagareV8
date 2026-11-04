@@ -93,10 +93,10 @@ class SuscripcionFacturacionService
                 'codigo_principal'          => $det['codigo_producto'] ?? '000',
                 'descripcion'               => $det['descripcion'] ?? $det['nombre_producto'],
                 // Texto propio de la línea (`info_item`, lo manda Alumnos) o, si no
-                // trae, el texto general del lote. Suscripciones no envía `info_item`.
-                'info_adicional'            => trim((string)($det['info_item'] ?? '')) !== ''
-                    ? strtr(trim((string)$det['info_item']), $reemplazos)
-                    : ($textoItem !== '' ? $textoItem : null),
+                // trae, el texto general del lote. En Suscripciones el texto propio
+                // es el "Adicional" del ítem (suscripciones_detalle.info_adicional),
+                // que se une al texto del lote.
+                'info_adicional'            => $this->adicionalLinea($det, $textoItem, $reemplazos),
                 'cantidad'                  => $det['cantidad'],
                 'precio_unitario'           => $det['precio_unitario'],
                 'descuento'                 => $descLinea,
@@ -288,6 +288,30 @@ class SuscripcionFacturacionService
      * Período anterior (un período atrás según la periodicidad):
      *   {mes_ant} {MES_ANT} {mes_num_ant} {anio_ant}/{año_ant} {mes_anio_ant} {fecha_ant}
      */
+    /**
+     * "Adicional" de una línea de la factura generada.
+     *   1. `info_item` (Alumnos): manda solo, como siempre.
+     *   2. Si no, el Adicional del ítem de la suscripción (`info_adicional`) seguido
+     *      del texto general del lote ("Texto para agregar a cada ítem").
+     * Ambos admiten los mismos marcadores ({mes}, {anio}...). Capado a 300 (columna
+     * facturas_venta_detalle.info_adicional y límite del SRI para detAdicional).
+     */
+    private function adicionalLinea(array $det, string $textoItem, array $reemplazos): ?string
+    {
+        $propio = trim((string) ($det['info_item'] ?? ''));
+        if ($propio !== '') {
+            return strtr($propio, $reemplazos);
+        }
+        $partes = array_filter([
+            strtr(trim((string) ($det['info_adicional'] ?? '')), $reemplazos),
+            $textoItem,
+        ], static fn($t) => $t !== '');
+        if (!$partes) {
+            return null;
+        }
+        return mb_substr(implode(' ', $partes), 0, 300);
+    }
+
     private function construirReemplazos(string $periodoFecha, int $meses, string $codigo): array
     {
         if ($periodoFecha === '') {

@@ -237,7 +237,10 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosPestanasOcultas($vistaConfigS
                                         <table class="table table-sm table-detalle mb-0 text-nowrap">
                                             <thead>
                                                 <tr class="table-light border-bottom">
-                                                    <th class="ps-3 py-2 small fw-bold text-muted" style="width:35%;">Descripción</th>
+                                                    <th class="ps-3 py-2 small fw-bold text-muted" style="width:<?= !empty($adicionalItem) ? 24 : 35 ?>%;">Descripción</th>
+                                                    <?php if (!empty($adicionalItem)): ?>
+                                                    <th class="py-2 small fw-bold text-muted" style="width:15%;" title="Información adicional de la línea: pasa al Adicional del ítem en la factura generada. Admite {mes}, {anio}, {mes_anio}...">Adicional</th>
+                                                    <?php endif; ?>
                                                     <th class="py-2 small fw-bold text-muted text-center" style="width:9%;">Cant.</th>
                                                     <th class="py-2 small fw-bold text-muted text-end" style="width:13%;">Precio Unit.</th>
                                                     <th class="py-2 small fw-bold text-muted text-end" style="width:13%;" title="Precio unitario con el IVA de la línea. Si lo cambia, se recalcula el precio sin impuesto.">P. con Imp.</th>
@@ -248,7 +251,7 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosPestanasOcultas($vistaConfigS
                                             </thead>
                                             <tbody id="susc_tbody_detalle">
                                                 <tr id="susc_row_vacia">
-                                                    <td colspan="7" class="text-center text-muted py-3 small">
+                                                    <td colspan="<?= !empty($adicionalItem) ? 8 : 7 ?>" class="text-center text-muted py-3 small">
                                                         <i class="bi bi-box-seam me-1"></i>Agregue productos o servicios
                                                     </td>
                                                 </tr>
@@ -572,6 +575,10 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosPestanasOcultas($vistaConfigS
     const SUSC_DEC_CANT   = <?= (int) ($decimalesCantidad ?? 2) ?>;
     // Modo de cálculo de IVA configurado en el establecimiento (igual que la factura).
     const SUSC_CALCULO_IVA = '<?= ($calculoIva ?? 'linea_linea') === 'subtotal' ? 'subtotal' : 'linea_linea' ?>';
+    // Columna «Adicional» por ítem (solo si ya existe suscripciones_detalle.info_adicional).
+    const SUSC_ADICIONAL_ITEM = <?= !empty($adicionalItem) ? 'true' : 'false' ?>;
+    const SUSC_COLS = SUSC_ADICIONAL_ITEM ? 8 : 7;
+    const suscEsc = (v) => String(v ?? '').replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;');
     const suscStepDec = (d) => d > 0 ? '0.' + '0'.repeat(d - 1) + '1' : '1';
     let suscDetLineIdx = 0;
 
@@ -790,6 +797,12 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosPestanasOcultas($vistaConfigS
                        value="${(item.descripcion ?? '').replace(/"/g, '&quot;')}"
                        placeholder="Escribe o busca un producto/servicio..." autocomplete="off">
             </td>
+            ${SUSC_ADICIONAL_ITEM ? `<td>
+                <input type="text" class="form-control form-control-sm input-detalle det-adicional" name="detalle[${idx}][info_adicional]"
+                       value="${suscEsc(item.info_adicional)}" maxlength="300" placeholder="Info adicional" autocomplete="off"
+                       title="${suscEsc(item.info_adicional)}"
+                       onblur="this.value=this.value.replace(/\\s+/g,' ').trim(); this.title=this.value;">
+            </td>` : ''}
             <td class="text-center">
                 <input type="number" class="form-control form-control-sm input-detalle text-center det-qty" name="detalle[${idx}][cantidad]"
                        value="${parseFloat(item.cantidad ?? 1).toFixed(SUSC_DEC_CANT)}" min="0" step="${suscStepDec(SUSC_DEC_CANT)}"
@@ -842,7 +855,7 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosPestanasOcultas($vistaConfigS
         btn.closest('tr').remove();
         if (!document.querySelector('#susc_tbody_detalle tr')) {
             document.getElementById('susc_tbody_detalle').innerHTML =
-                '<tr id="susc_row_vacia"><td colspan="7" class="text-center text-muted py-3 small"><i class="bi bi-box-seam me-1"></i>Agregue productos o servicios</td></tr>';
+                `<tr id="susc_row_vacia"><td colspan="${SUSC_COLS}" class="text-center text-muted py-3 small"><i class="bi bi-box-seam me-1"></i>Agregue productos o servicios</td></tr>`;
         }
         suscRecalcTotales();
     };
@@ -1173,7 +1186,7 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosPestanasOcultas($vistaConfigS
     function suscLimpiarDetalle() {
         suscDetLineIdx = 0;
         document.getElementById('susc_tbody_detalle').innerHTML =
-            '<tr id="susc_row_vacia"><td colspan="7" class="text-center text-muted py-3 small"><i class="bi bi-box-seam me-1"></i>Agregue productos o servicios</td></tr>';
+            `<tr id="susc_row_vacia"><td colspan="${SUSC_COLS}" class="text-center text-muted py-3 small"><i class="bi bi-box-seam me-1"></i>Agregue productos o servicios</td></tr>`;
         suscRecalcTotales();
     }
 
@@ -1191,6 +1204,7 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosPestanasOcultas($vistaConfigS
                     precio_unitario: parseFloat(item.precio_unitario),
                     porcentaje_iva:  parseFloat(item.porcentaje_iva),
                     id_tarifa_iva:   item.id_tarifa_iva ?? null,
+                    info_adicional:  item.info_adicional ?? '',
                 }));
             }
         } catch (e) { console.error(e); }

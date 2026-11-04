@@ -46,6 +46,12 @@ class SuscripcionesService
         return $this->repository->getPeriodicidades();
     }
 
+    /** ¿Ya corrió el SQL de la columna «Adicional» por ítem? (el modal la muestra solo entonces) */
+    public function tieneAdicionalDetalle(): bool
+    {
+        return $this->repository->tieneAdicionalDetalle();
+    }
+
     public function getDetalle(int $idSuscripcion, int $idEmpresa): array
     {
         $susc = $this->repository->findById($idSuscripcion, $idEmpresa);

@@ -1249,16 +1249,27 @@ class SuscripcionesRepository extends BaseRepository
         return $st->execute([':p' => $precio, ':u' => $idUsuario, ':id' => $idDetalle, ':e' => $idEmpresa]);
     }
 
+    /**
+     * ¿Ya existe la columna "Adicional" por ítem (database/2026-11-04_suscripciones_detalle_info_adicional.sql)?
+     * Sin ella el detalle se guarda como antes y el modal oculta la columna.
+     */
+    public function tieneAdicionalDetalle(): bool
+    {
+        return $this->columnaExiste('suscripciones_detalle', 'info_adicional');
+    }
+
     public function insertDetalle(array $data): int
     {
+        $conAdicional = $this->tieneAdicionalDetalle();
+        $colAdi = $conAdicional ? ', info_adicional' : '';
+        $valAdi = $conAdicional ? ', :info_adicional' : '';
         $sql = "INSERT INTO suscripciones_detalle
                     (id_suscripcion, id_empresa, id_producto, descripcion, cantidad,
-                     precio_unitario, porcentaje_iva, id_tarifa_iva, orden, created_by, created_at, eliminado)
+                     precio_unitario, porcentaje_iva, id_tarifa_iva, orden, created_by, created_at, eliminado{$colAdi})
                 VALUES
                     (:id_suscripcion, :id_empresa, :id_producto, :descripcion, :cantidad,
-                     :precio_unitario, :porcentaje_iva, :id_tarifa_iva, :orden, :created_by, CURRENT_TIMESTAMP, false)";
-        $st = $this->db->prepare($sql);
-        $st->execute([
+                     :precio_unitario, :porcentaje_iva, :id_tarifa_iva, :orden, :created_by, CURRENT_TIMESTAMP, false{$valAdi})";
+        $params = [
             ':id_suscripcion' => $data['id_suscripcion'],
             ':id_empresa'     => $data['id_empresa'],
             ':id_producto'    => $data['id_producto'],
@@ -1269,7 +1280,14 @@ class SuscripcionesRepository extends BaseRepository
             ':id_tarifa_iva'  => !empty($data['id_tarifa_iva']) ? (int) $data['id_tarifa_iva'] : null,
             ':orden'          => $data['orden'] ?? 0,
             ':created_by'     => $data['id_usuario'] ?? 0,
-        ]);
+        ];
+        if ($conAdicional) {
+            // Texto libre: espacios normalizados y capado a VARCHAR(300) (evita SQLSTATE 22001).
+            $adi = trim(preg_replace('/\s+/u', ' ', (string) ($data['info_adicional'] ?? '')));
+            $params[':info_adicional'] = $adi !== '' ? mb_substr($adi, 0, 300) : null;
+        }
+        $st = $this->db->prepare($sql);
+        $st->execute($params);
         return $this->lastInsertId('suscripciones_detalle_id_seq');
     }
 

@@ -283,6 +283,11 @@ class SuscripcionPdfService
             $pctTarifa[$clave] = $pct;
 
             $desc = trim((string) ($d['descripcion'] ?? '')) !== '' ? (string) $d['descripcion'] : (string) ($d['nombre_producto'] ?? '');
+            // «Adicional» del ítem, debajo de la descripción (como el RIDE de la factura).
+            $adi  = trim((string) ($d['info_adicional'] ?? ''));
+            if ($adi !== '') {
+                $desc .= "\n" . $adi;
+            }
             $vals = [
                 (string) ($i + 1),
                 (string) ($d['codigo_producto'] ?? ''),
