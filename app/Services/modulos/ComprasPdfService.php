@@ -21,9 +21,6 @@ class ComprasPdfService
     private float $pageW    = 210;
     private float $contentW = 190;
 
-    private int $decCantidad = 2;
-    private int $decPrecio   = 2;
-
     /** Mapa de tipos de comprobante (código SRI => nombre para el título). */
     private array $tiposComprobante = [
         '01' => 'FACTURA',
@@ -68,9 +65,6 @@ class ComprasPdfService
 
     private function renderizar(array $cabecera, array $detalles, array $pagos, array $infoAdicional, array $empresa): void
     {
-        $this->decCantidad = max(0, (int)($empresa['decimales_cantidad'] ?? 2));
-        $this->decPrecio   = max(0, (int)($empresa['decimales_precio']   ?? 2));
-
         $this->pdf = new TCPDF('P', 'mm', 'A4', true, 'UTF-8', false);
         $this->pdf->SetCreator('Sistema');
         $this->pdf->SetAuthor($empresa['nombre'] ?? '');
@@ -388,18 +382,14 @@ class ComprasPdfService
             $altColor = !$altColor;
             $pdf->SetFillColor($bg[0], $bg[1], $bg[2]);
 
-            $pu   = (float)($d['precio_unitario'] ?? 0);
-            $dcto = (float)($d['descuento'] ?? 0);
-            $ptot = (float)($d['precio_total_sin_impuesto'] ?? 0);
-
             $vals = [
                 'codp' => $d['codigo_principal'] ?? ($d['producto_codigo'] ?? ''),
-                'cant' => number_format((float)($d['cantidad'] ?? 0), $this->decCantidad),
+                'cant' => $this->valorXml($d, 'cantidad'),
                 'desc' => $d['descripcion'] ?? ($d['producto_nombre'] ?? ''),
                 'deta' => trim((string)($d['info_adicional'] ?? '')),
-                'pu'   => number_format($pu, $this->decPrecio),
-                'dcto' => number_format($dcto, 2),
-                'ptot' => number_format($ptot, 2),
+                'pu'   => $this->valorXml($d, 'precio_unitario'),
+                'dcto' => $this->valorXml($d, 'descuento'),
+                'ptot' => $this->valorXml($d, 'precio_total_sin_impuesto'),
             ];
 
             // Alto de la fila: el de la columna de texto (Descripción / Det. Adicional) que más
@@ -432,7 +422,9 @@ class ComprasPdfService
                 if ($col['key'] === 'desc' || $col['key'] === 'deta') {
                     $pdf->MultiCell($col['w'], $ch, $val, 1, $col['align'], true, 0, '', '', true, 0, false, true, 0, 'M');
                 } else {
-                    $pdf->Cell($col['w'], $ch, $val, 1, 0, $col['align'], true);
+                    // stretch = 1: un valor largo del XML (p. ej. "1250000.000000") se
+                    // condensa dentro de su celda en vez de montarse sobre la vecina.
+                    $pdf->Cell($col['w'], $ch, $val, 1, 0, $col['align'], true, '', 1);
                 }
                 $xCur += $col['w'];
             }
@@ -440,6 +432,24 @@ class ComprasPdfService
         }
 
         return $pdf->GetY();
+    }
+
+    /**
+     * Valor de una línea TAL CUAL viene en el XML del proveedor (cantidad, precio
+     * unitario, descuento, precio total). Una compra es un documento de un tercero: no
+     * sigue la configuración de decimales de facturación de la empresa, que es para los
+     * documentos que ella emite. Si la línea no trae el texto del XML (nota de débito por
+     * motivos), se muestra el número exacto, solo sin ceros de cola sobrantes.
+     */
+    private function valorXml(array $d, string $campo): string
+    {
+        $txt = trim((string)($d['texto_xml'][$campo] ?? ''));
+        if ($txt !== '' && is_numeric($txt)) {
+            return $txt;
+        }
+        $s = number_format((float)($d[$campo] ?? 0), 6, '.', '');
+        $s = rtrim(rtrim($s, '0'), '.');
+        return $s === '' || $s === '-0' ? '0' : $s;
     }
 
     // ─── PIE ─────────────────────────────────────────────────────────────────

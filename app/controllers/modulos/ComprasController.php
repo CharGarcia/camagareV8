@@ -1029,12 +1029,10 @@ class ComprasController extends BaseModuloController
             $cabecera['fecha_registro'] = $compra['fecha_registro'] ?? '';
 
             // Adquirente (comprador) = datos del receptor tomados del XML.
-            // Los decimales de presentación se toman de la config de la empresa.
-            $empresaModel = new \App\models\Empresa();
-            $empresaCfg   = $empresaModel->getPorId($idEmpresa) ?? [];
+            // Cantidades y valores del detalle salen tal cual del XML del proveedor
+            // (ComprasPdfService::valorXml): la config de decimales de facturación de la
+            // empresa es para sus propios documentos, no para los de un tercero.
             $empresa = [
-                'decimales_cantidad' => $empresaCfg['decimales_cantidad'] ?? 2,
-                'decimales_precio'   => $empresaCfg['decimales_precio']   ?? 2,
                 'nombre'             => $parsed['comprador']['nombre'],
                 'ruc'                => $parsed['comprador']['ruc'],
                 'direccion'          => $parsed['comprador']['direccion'],

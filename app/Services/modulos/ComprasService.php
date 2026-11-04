@@ -931,6 +931,15 @@ class ComprasService
                 'precio_total_sin_impuesto' => (float) ($d->precioTotalSinImpuesto ?? 0),
                 'info_adicional'            => \App\Helpers\DetalleAdicionalXmlHelper::texto($d),
                 'impuestos'                 => $impuestos,
+                // Texto TAL CUAL lo escribió el proveedor en el XML (p. ej. "1.500000",
+                // "12.3456"): el PDF de compras lo imprime así, sin la configuración de
+                // decimales de facturación de la empresa, que es para documentos propios.
+                'texto_xml'                 => [
+                    'cantidad'                  => trim((string) ($d->cantidad ?? '')),
+                    'precio_unitario'           => trim((string) ($d->precioUnitario ?? '')),
+                    'descuento'                 => trim((string) ($d->descuento ?? '')),
+                    'precio_total_sin_impuesto' => trim((string) ($d->precioTotalSinImpuesto ?? '')),
+                ],
             ];
         }
         // Nota de Débito: no trae <detalles><detalle> — trae <motivos><motivo> (una

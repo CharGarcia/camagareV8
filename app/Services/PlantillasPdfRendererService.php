@@ -79,7 +79,7 @@ class PlantillasPdfRendererService
         };
 
         // Decimales configurados por la empresa (igual que en el sistema/UI).
-        $this->decCantidad = max(0, (int)($empresa['decimales_cantidad'] ?? 2));
+        $this->decCantidad = max(0, min(6, (int)($empresa['decimales_cantidad'] ?? 2)));
         $this->decPrecio   = max(0, (int)($empresa['decimales_precio']   ?? 2));
 
         $totales     = $this->calcularTotales($detalles, $cabecera);
@@ -404,7 +404,15 @@ class PlantillasPdfRendererService
                 // pero el dato se guarda en 'info_adicional'. Resolver con fallback.
                 $key = $col['key'] === 'detalle_adicional' ? 'info_adicional' : $col['key'];
                 $v   = (string)($d[$key] ?? $d[$col['key']] ?? '');
-                if (in_array($col['key'], $numericKeys)) {
+                // Documento de un tercero (compras): el valor TAL CUAL lo escribió el
+                // proveedor en su XML, sin la config de decimales de facturación. Solo
+                // ComprasService::parsearComprobanteXml() entrega 'texto_xml'.
+                $txtXml = in_array($col['key'], $numericKeys)
+                    ? trim((string)($d['texto_xml'][$col['key']] ?? ''))
+                    : '';
+                if ($txtXml !== '' && is_numeric($txtXml)) {
+                    $v = $txtXml;
+                } elseif (in_array($col['key'], $numericKeys)) {
                     // cantidad y precio unitario usan los decimales configurados;
                     // descuento y total van a 2 (montos).
                     $dec = match ($col['key']) {
@@ -412,7 +420,11 @@ class PlantillasPdfRendererService
                         'precio_unitario' => $this->decPrecio,
                         default           => 2,
                     };
-                    $v = number_format((float)$v, $dec);
+                    // La cantidad va como en el XML, sin separador de miles: con 0
+                    // decimales, "183,200" (183200 unidades) se leía como decimales.
+                    $v = $col['key'] === 'cantidad'
+                        ? number_format((float)$v, $dec, '.', '')
+                        : number_format((float)$v, $dec);
                 }
                 $vals[] = $v;
             }

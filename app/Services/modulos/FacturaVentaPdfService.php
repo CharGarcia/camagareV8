@@ -529,6 +529,16 @@ class FacturaVentaPdfService
     // apareciendo en el bloque de totales del pie).
     // "Cód. Auxiliar" y "Detalle Adicional" se ocultan si ningún ítem los trae.
 
+    /**
+     * Cantidad como la escribe el XML: con los decimales de la configuración y SIN
+     * separador de miles. Con 0 decimales, number_format() por defecto daba "183,200"
+     * para 183200 unidades, y esa coma de miles se leía como si fueran decimales.
+     */
+    private function fmtCantidad($v): string
+    {
+        return number_format((float) $v, $this->decCantidad, '.', '');
+    }
+
     private function dibujarDetalle(array $detalles, float $y): float
     {
         $pdf = $this->pdf;
@@ -596,7 +606,7 @@ class FacturaVentaPdfService
         // grande (p. ej. 1,250,000.00) no cabía en el ancho fijo y se salía del
         // recuadro. Se mide el texto ya formateado, tal como se imprime.
         $fmtNum = [
-            'cant' => fn($d) => number_format((float)($d['cantidad'] ?? 0), $this->decCantidad),
+            'cant' => fn($d) => $this->fmtCantidad($d['cantidad'] ?? 0),
             'pu'   => fn($d) => number_format((float)($d['precio_unitario'] ?? 0), $this->decPrecio),
             'dcto' => fn($d) => number_format((float)($d['descuento'] ?? 0), 2),
             'ptot' => fn($d) => number_format((float)($d['precio_total_sin_impuesto'] ?? 0), 2),
@@ -695,7 +705,7 @@ class FacturaVentaPdfService
             $vals = [
                 'codp' => $d['codigo_principal'] ?? '',
                 'coda' => $d['codigo_auxiliar']  ?? '',
-                'cant' => number_format((float)($d['cantidad'] ?? 0), $this->decCantidad),
+                'cant' => $this->fmtCantidad($d['cantidad'] ?? 0),
                 'desc' => $d['descripcion'] ?? '',
                 'deta' => $d['info_adicional'] ?? ($d['detalle_adicional'] ?? ''),
                 'pu'   => number_format($pu, $this->decPrecio),
