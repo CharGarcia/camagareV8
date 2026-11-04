@@ -68,7 +68,7 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                 'diario' => 'Diario', 'egresos' => 'Egresos', 'ingresos' => 'Ingresos', 'nomina' => 'Nómina',
                 'retenciones_compras' => 'Retenciones compras', 'retenciones_ventas' => 'Retenciones ventas',
                 'retorno_consignacion' => 'Retorno consignación', 'ventas' => 'Ventas',
-                'ajuste_inventario' => 'Ajuste de inventario',
+                'ajuste_inventario' => 'Ajuste de inventario', 'produccion' => 'Producción',
             ];
             $etiquetaLegible = fn(string $v, array $mapa) => $mapa[$v] ?? ucfirst(str_replace('_', ' ', mb_strtolower($v)));
             $opcionesTipo    = array_map(fn($t) => ['v' => (string) $t, 'l' => $etiquetaLegible((string) $t, $etiquetasTipo)], $opcionesFiltro['tipos'] ?? []);

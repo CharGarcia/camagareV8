@@ -5,8 +5,8 @@ categoria: Contabilidad
 ruta_modulo: modulos/configuracion-contable
 tipo: modulo
 visibilidad: admin
-etiquetas: configuracion contable, cuentas por documento, asiento automatico, parametrizacion, ventas, compras, cierre, tipo de produccion, bien, servicio, filtro por año, periodo, listado de proveedores, listado de clientes, cobros y pagos, ingresos y egresos, forma de pago, cuenta bancaria, efectivo, misma cuenta en los dos bloques, formas hermanas, cheques y transferencias, mismo banco, numero de cuenta, nomina, rol de pagos, prestamo quirografario, prestamo hipotecario, prestamo empresa, prestamos iess, cuentas opcionales, costo de ventas, costo de venta, inventario, asiento sin costo, no sale el costo, cuenta de iva del cliente, reglas por cliente, buscar proveedor, buscar cliente, buscar ficha, filtrar fichas, muchos proveedores, cuentas faltantes, modulos que contabilizan, apagar asientos, no generar asientos, no contabilizar, desactivar contabilidad, interruptor, consignaciones sin asiento, aviso de asientos pendientes, asientos pendientes en el balance, proveedores sin cuentas, clientes sin cuentas, productos sin cuentas, pendientes de configurar, retenciones en venta, retenciones en compra, retencion de renta, no aparecen las retenciones, codigo de retencion, catalogo de retenciones sri, codigo ats, codigo del anexo, retencion mal asignada, codigo de retencion no existe, en que documento esta el error, retencion con codigo invalido, sugerencias, sugerir cuentas, proveedores que compran lo mismo, copiar cuentas de otro proveedor, misma cuenta para varios proveedores, gasolineras, proveedores parecidos, subtotal de compras, cuenta de gasto del proveedor, mostrar las demas cuentas, ver todas las cuentas, tipo de asiento no aparece, falta tipo de asiento en el selector, modulo apagado, personalizar asiento contable, tabla de proveedores, detalle de compras, cuenta de subtotal por proveedor, recibos de venta, copiar configuracion de facturas, recibos con otras cuentas, recibo sin asiento, igualar recibos y facturas, ajustes de inventario, asiento de ajustes, sobrante de inventario, faltante de inventario, merma, perdida de inventario, baja de inventario, iva al gasto, iva en compras al gasto, iva no deducible, cuenta de gasto en el iva, iva como costo, centro de costo en el buscador, proyecto en el buscador, ver centro de costo de la cuenta
-version: 1.40
+etiquetas: configuracion contable, cuentas por documento, asiento automatico, parametrizacion, ventas, compras, cierre, tipo de produccion, bien, servicio, filtro por año, periodo, listado de proveedores, listado de clientes, cobros y pagos, ingresos y egresos, forma de pago, cuenta bancaria, efectivo, misma cuenta en los dos bloques, formas hermanas, cheques y transferencias, mismo banco, numero de cuenta, nomina, rol de pagos, prestamo quirografario, prestamo hipotecario, prestamo empresa, prestamos iess, cuentas opcionales, costo de ventas, costo de venta, inventario, asiento sin costo, no sale el costo, cuenta de iva del cliente, reglas por cliente, buscar proveedor, buscar cliente, buscar ficha, filtrar fichas, muchos proveedores, cuentas faltantes, modulos que contabilizan, apagar asientos, no generar asientos, no contabilizar, desactivar contabilidad, interruptor, consignaciones sin asiento, aviso de asientos pendientes, asientos pendientes en el balance, proveedores sin cuentas, clientes sin cuentas, productos sin cuentas, pendientes de configurar, retenciones en venta, retenciones en compra, retencion de renta, no aparecen las retenciones, codigo de retencion, catalogo de retenciones sri, codigo ats, codigo del anexo, retencion mal asignada, codigo de retencion no existe, en que documento esta el error, retencion con codigo invalido, sugerencias, sugerir cuentas, proveedores que compran lo mismo, copiar cuentas de otro proveedor, misma cuenta para varios proveedores, gasolineras, proveedores parecidos, subtotal de compras, cuenta de gasto del proveedor, mostrar las demas cuentas, ver todas las cuentas, tipo de asiento no aparece, falta tipo de asiento en el selector, modulo apagado, personalizar asiento contable, tabla de proveedores, detalle de compras, cuenta de subtotal por proveedor, recibos de venta, copiar configuracion de facturas, recibos con otras cuentas, recibo sin asiento, igualar recibos y facturas, ajustes de inventario, asiento de ajustes, sobrante de inventario, faltante de inventario, merma, perdida de inventario, baja de inventario, iva al gasto, iva en compras al gasto, iva no deducible, cuenta de gasto en el iva, iva como costo, centro de costo en el buscador, proyecto en el buscador, ver centro de costo de la cuenta, produccion, cuentas de produccion, productos en proceso, materia prima, producto terminado, mano de obra aplicada, costos indirectos aplicados, merma anormal, orden de produccion
+version: 1.41
 orden: 5
 estado: activo
 ---
@@ -485,6 +485,31 @@ asiento y aparecen en el aviso de asientos pendientes con el nombre de la cuenta
 falta; al configurarla se contabilizan solos. Ver
 [Inventario](modulos/inventario), sección *Asiento contable del ajuste*.
 
+## Producción: cuentas de las órdenes de producción
+
+El tipo **Producción** da las cuentas de los asientos de las
+[Órdenes de producción](modulos/produccion-ordenes). Solo aparece en el selector (y su
+interruptor en *Módulos que contabilizan*) cuando la empresa **tiene el módulo Producción**
+(algún submódulo de Producción asignado a sus usuarios) y ya guardó la
+[Configuración de Producción](modulos/produccion-configuracion). Además, el usuario debe
+tener permiso de ver alguno de los submódulos de Producción (el nivel 3 no lo necesita).
+
+| Concepto | Obligatorio | Uso |
+|----------|-------------|-----|
+| Inventario de materia prima | Sí | Sale con cada consumo de insumos. |
+| Productos en proceso | Sí | Recibe los consumos y se salda al cerrar la orden. |
+| Inventario de producto terminado | Sí | Entra al cerrar la orden, con el costo real de lo producido. |
+| Mano de obra aplicada | Si hay mano de obra | Contrapartida de la mano de obra sumada al costo. |
+| Costos indirectos aplicados | Si hay CIF o máquina | Contrapartida de los costos indirectos sumados al costo. |
+| Merma anormal | Si se registra merma anormal | Gasto por la merma fuera de lo normal. |
+
+Si un insumo o un producto fabricado tiene su propia **cuenta de inventario** en la ficha de
+Productos, el asiento usa esa en lugar de la de materia prima o producto terminado. Se
+configuran solo en **General**. Mientras falte una cuenta obligatoria, la orden se guarda y
+muestra el aviso; las órdenes cerradas pendientes se contabilizan solas al configurarla
+(asientos pendientes) o con el botón **Generar asiento** de la orden. Los asientos se numeran
+con el prefijo **PR-**.
+
 ## Módulos que contabilizan: apagar los asientos de un módulo
 
 El botón **Módulos que contabilizan** (arriba, junto a *Configurar*)
@@ -609,6 +634,7 @@ ingresos o egresos. Solo falta asignar la cuenta.
 
 ## Historial de cambios
 
+- **1.41** — Nuevo tipo de asiento **Producción** (materia prima, productos en proceso, producto terminado, mano de obra, costos indirectos y merma), visible solo en las empresas que usan el módulo Producción y para los usuarios con acceso a él, con su interruptor en *Módulos que contabilizan*.
 - **1.40** — Al buscar una cuenta, cada sugerencia muestra el **centro de costo** y el **proyecto** vigentes de la cuenta, si los tiene.
 - **1.39** — En *Adquisiciones Compras*, el **IVA por tarifa** admite también cuentas de **costo o gasto**, para enviar al gasto el IVA que no se usa como crédito tributario.
 - **1.38** — *Cierre del Ejercicio* suma las cuentas de **Utilidades Acumuladas** y **Pérdidas

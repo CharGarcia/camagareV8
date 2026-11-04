@@ -2179,6 +2179,30 @@ class AsientoProgramadoRepository extends BaseRepository
     }
 
     /**
+     * ¿La empresa tiene contratado alguno de estos submódulos? Lo tiene si al menos uno de sus
+     * usuarios lo tiene asignado con permiso de ver (modulos_asignados). Lo usan los módulos que
+     * se activan por empresa (Producción) para no mostrar su configuración a quien no lo tiene.
+     *
+     * @param string[] $rutas rutas MVC (submodulos_menu.ruta)
+     */
+    public function empresaTieneRutas(int $idEmpresa, array $rutas): bool
+    {
+        $rutas = array_values(array_filter(array_map('strval', $rutas)));
+        if ($rutas === []) {
+            return false;
+        }
+        $st = $this->db->prepare(
+            "SELECT 1 FROM modulos_asignados ma
+               JOIN submodulos_menu sm ON sm.id = ma.id_submodulo
+              WHERE ma.id_empresa = :e AND COALESCE(ma.r, 0) > 0
+                AND sm.ruta = ANY(string_to_array(:rutas, ','))
+              LIMIT 1"
+        );
+        $st->execute([':e' => $idEmpresa, ':rutas' => implode(',', $rutas)]);
+        return (bool) $st->fetchColumn();
+    }
+
+    /**
      * Tipos de asiento (asientos_tipo.tipo_asiento) con al menos una cuenta configurada en la
      * empresa, más los que se configuran por referencia (formas de cobro/pago y conceptos de
      * Ingresos/Egresos no pasan por asientos_tipo).

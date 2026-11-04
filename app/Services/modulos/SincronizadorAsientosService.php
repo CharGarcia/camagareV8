@@ -101,6 +101,7 @@ class SincronizadorAsientosService
         'traspasos'             => ['tipo' => 'cobros_pagos',              'nombre' => 'Cobros y Pagos'],
         'cobros_cheques'        => ['tipo' => 'cobros_pagos',              'nombre' => 'Cobros y Pagos'],
         'activos_fijos_alta'    => ['tipo' => 'activos_fijos_alta',        'nombre' => 'Activos Fijos - Alta'],
+        'produccion'            => ['tipo' => 'produccion',                'nombre' => 'Producción'],
     ];
 
     /** Empresa de la corrida en curso: la usa registrarAccion() para consultar el interruptor. */
@@ -909,6 +910,31 @@ class SincronizadorAsientosService
                 'tablaVerif' => 'inventario_kardex',
                 'colAsiento' => 'id_asiento_contable',
                 'colsDoc' => [], // sin número propio: el aviso los muestra como "#id" del movimiento
+            ];
+        }
+
+        // 7c-quater. Órdenes de producción CERRADAS sin su asiento de cierre o con algún consumo
+        //            sin asiento (ProduccionAsientoService arma los que falten). Las abiertas se
+        //            contabilizan en cada consumo. Sin las tablas (SQL 2026-11-03 pendiente) no se
+        //            agrega el trabajo; una empresa que no usa Producción no tiene filas.
+        if ((new \App\repositories\modulos\ProduccionConfiguracionRepository())->instalado()) {
+            $trabajos[] = [
+                'sql'    => "SELECT o.id FROM produccion_ordenes o
+                             WHERE o.id_empresa = ? AND o.eliminado = false AND o.estado = 'cerrada'
+                               AND (o.id_asiento_cierre IS NULL
+                                    OR EXISTS (SELECT 1 FROM produccion_ordenes_movimientos m
+                                                WHERE m.id_orden = o.id AND m.eliminado = false
+                                                  AND m.tipo = 'consumo' AND m.id_asiento IS NULL))",
+                'params' => [$idEmpresa],
+                'factory' => function() {
+                    return new \App\Services\modulos\ProduccionAsientoService();
+                },
+                'clave'  => 'produccion',
+                'nombre' => 'Producción',
+                'dondeConfigurar' => 'Configuración Contable (Producción)',
+                'tablaVerif' => 'produccion_ordenes',
+                'colAsiento' => 'id_asiento_cierre',
+                'colsDoc' => ['numero'],
             ];
         }
 

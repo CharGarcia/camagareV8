@@ -117,6 +117,7 @@ $base = BASE_URL;
                         'activos_fijos_alta'         => 'Activos Fijos - Alta',
                         'activos_fijos_depreciacion' => 'Activos Fijos - Depreciación',
                         'suscripciones_devengo'      => 'Suscripciones - Devengo',
+                        'produccion'                 => 'Producción',
                     ];
                     // Tipos que la empresa no usa (sin registros en su módulo ni cuentas configuradas):
                     // se quitan también de ASIENTOPROG_TIPOS, así el JS no los vuelve a pintar.

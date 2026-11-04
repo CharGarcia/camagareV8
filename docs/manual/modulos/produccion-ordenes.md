@@ -6,7 +6,7 @@ ruta_modulo: modulos/produccion-ordenes
 tipo: modulo
 visibilidad: todos
 etiquetas: orden de produccion, orden de fabricacion, op, produccion rapida, fabricar, producir, consumir materia prima, consumo de insumos, consumo por peso, bobina, pesar, registro de lote, batch record, lote de produccion, caducidad, costo de produccion, costo real, costo unitario, merma anormal, coproductos, subproductos, cerrar orden, anular orden, trazabilidad de lotes, retiro de mercado, productos en proceso, asiento de produccion
-version: 1.0
+version: 1.1
 orden: 2
 estado: activo
 ---
@@ -84,7 +84,7 @@ Hay dos formas de producir:
 ## Integraciones con otros módulos
 
 - **Inventario / Kardex**: salidas *Consumo de producción* y entradas *Entrega de producción*, con lote y caducidad.
-- **Contabilidad**, si está encendida en la configuración:
+- **Contabilidad** (cuentas en Configuración Contable → Producción; se apaga en *Módulos que contabilizan*):
   - cada consumo genera **Productos en proceso contra Materia prima**;
   - el cierre genera **Producto terminado (+ Merma) contra Productos en proceso, Mano de obra aplicada y Costos indirectos aplicados**.
   - Si falta una cuenta, la orden se guarda igual, muestra el aviso y ofrece **Generar asiento**.
@@ -95,8 +95,9 @@ Hay dos formas de producir:
 - **«Stock insuficiente de …»**: falta el insumo en la bodega de insumos. Registre la compra o la transferencia.
 - **«… maneja lotes: indique de qué lote sale»**: la configuración o la fórmula exige lote para ese insumo.
 - **«No se puede anular: … ya se vendió o se usó»**: reverse primero los documentos que consumieron lo producido.
-- **«Asiento pendiente: …»**: complete las cuentas en la Configuración de Producción y pulse **Generar asiento**.
+- **«Asiento pendiente: …»**: complete las cuentas en Configuración Contable → Producción y pulse **Generar asiento** (las órdenes cerradas pendientes también se contabilizan solas desde el aviso de asientos pendientes).
 
 ## Historial de cambios
 
 - **1.0** — Versión inicial.
+- **1.1** — Las cuentas de los asientos se configuran en **Configuración Contable → Producción**; los asientos se numeran **PR-** y las órdenes cerradas sin asiento entran en el aviso de asientos pendientes.

@@ -7,9 +7,9 @@ namespace App\controllers\modulos;
 use App\Services\modulos\ProduccionConfiguracionService;
 
 /**
- * Configuración de Producción (modulos/produccion-configuracion): bodegas por defecto,
- * interruptores del motor y cuentas contables del módulo. Guardarla activa Producción
- * para la empresa. Permisos: ver = consultar; actualizar = guardar.
+ * Configuración de Producción (modulos/produccion-configuracion): bodegas por defecto e
+ * interruptores del motor; las cuentas van en Configuración Contable → Producción.
+ * Guardarla activa Producción para la empresa. Permisos: ver = consultar; actualizar = guardar.
  * Sin lógica de negocio: delega en ProduccionConfiguracionService.
  */
 class ProduccionConfiguracionController extends BaseModuloController
@@ -42,10 +42,8 @@ class ProduccionConfiguracionController extends BaseModuloController
             'rutaModulo' => self::RUTA_MODULO,
             'instalado'  => $instalado,
             'config'     => $cfg,
-            'cuentas'    => $this->service->cuentasParaVista($cfg, $idEmpresa),
             'bodegas'    => $instalado ? $this->service->repo()->getBodegas($idEmpresa) : [],
             'metodos'    => ProduccionConfiguracionService::METODOS_REPARTO,
-            'etiquetas'  => ProduccionConfiguracionService::ETIQUETAS_CUENTA,
             'base'       => BASE_URL,
         ]);
     }
@@ -66,17 +64,5 @@ class ProduccionConfiguracionController extends BaseModuloController
             \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             $this->json(['ok' => false, 'mensaje' => 'Ocurrió un error inesperado al guardar la configuración.']);
         }
-    }
-
-    public function buscarCuentasAjax(): void
-    {
-        $this->requireLeer();
-        $q = trim((string) ($_GET['q'] ?? ''));
-        $this->json([
-            'ok'   => true,
-            'data' => $this->service->instalado()
-                ? $this->service->repo()->buscarCuentas((int) $_SESSION['id_empresa'], $q)
-                : [],
-        ]);
     }
 }

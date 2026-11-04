@@ -15,10 +15,9 @@ use App\Services\LogSistemaService;
  *                               / Cr Productos en proceso (materiales) + Cr Mano de obra aplicada
  *                               + Cr Costos indirectos aplicados + Cr Productos en proceso (otros).
  * La cuenta de inventario de cada producto sale de su ficha (productos.id_cuenta_inventario) y,
- * si no tiene, de la Configuración de Producción.
- *
- * Las cuentas viven en produccion_configuracion: el módulo no agrega conceptos a Configuración
- * Contable ni avisos a las empresas que no lo usan (§10.4). Se genera DESPUÉS del commit del
+ * si no tiene, de Configuración Contable → Producción (tipo de asiento 'produccion', que solo ven
+ * las empresas que usan el módulo). Respeta el interruptor «Producción» de Módulos que contabilizan
+ * y el sincronizador genera los pendientes de las órdenes cerradas. Se genera DESPUÉS del commit del
  * movimiento y un fallo no lo revierte (patrón AjusteInventarioAsientoService::procesarSeguro):
  * el motivo queda en produccion_ordenes.asiento_aviso y la orden ofrece «Generar asiento».
  * La anulación va DENTRO de la transacción de la orden.
@@ -27,6 +26,19 @@ class ProduccionAsientoService
 {
     public const ORIGEN_CONSUMO = 'produccion_consumo';
     public const ORIGEN_CIERRE  = 'produccion_cierre';
+    /** Tipo de asiento de Configuración Contable y clave de «Módulos que contabilizan». */
+    public const TIPO_ASIENTO = 'produccion';
+    public const CLAVE        = 'produccion';
+
+    /** Campo de cuenta => código del concepto en asientos_tipo. */
+    public const CONCEPTOS = [
+        'id_cuenta_materia_prima' => 'PROD_MATERIA_PRIMA',
+        'id_cuenta_en_proceso'    => 'PROD_EN_PROCESO',
+        'id_cuenta_terminado'     => 'PROD_TERMINADO',
+        'id_cuenta_mano_obra'     => 'PROD_MANO_OBRA',
+        'id_cuenta_cif'           => 'PROD_CIF',
+        'id_cuenta_merma'         => 'PROD_MERMA',
+    ];
 
     private ProduccionOrdenRepository $repo;
     private ProduccionConfiguracionService $config;
@@ -55,19 +67,64 @@ class ProduccionAsientoService
         }
     }
 
+    /** Punto de entrada del sincronizador: el asiento queda a nombre de quien creó la orden. */
+    public function procesarAsientoContablePorSincronizacion(int $idOrden): void
+    {
+        $st = Database::getConnection()->prepare("SELECT id_empresa, created_by FROM produccion_ordenes WHERE id = ? AND eliminado = false");
+        $st->execute([$idOrden]);
+        $o = $st->fetch(\PDO::FETCH_ASSOC);
+        if (!$o) {
+            return;
+        }
+        $this->contabilizar($idOrden, (int) $o['id_empresa'], (int) ($o['created_by'] ?? 0));
+        $this->repo->actualizarCabecera($idOrden, ['asiento_aviso' => null], (int) $o['id_empresa'], (int) ($o['created_by'] ?? 0));
+    }
+
+    /**
+     * Cuentas de producción de la empresa: reglas generales del tipo «Producción» de
+     * Configuración Contable. Mientras una cuenta no esté allí se usa la que hubiera quedado
+     * en produccion_configuracion (versión anterior del módulo), para no romper la transición.
+     *
+     * @return array<string, int> campo de cuenta => id_cuenta
+     */
+    public function cuentas(int $idEmpresa): array
+    {
+        $porCodigo = [];
+        foreach ((new \App\repositories\modulos\AsientoProgramadoRepository())->getReglasGeneralesPorConcepto($idEmpresa, self::TIPO_ASIENTO) as $r) {
+            if (!empty($r['id_cuenta'])) {
+                $porCodigo[strtoupper((string) $r['codigo'])] = (int) $r['id_cuenta'];
+            }
+        }
+        $cfg = $this->config->get($idEmpresa) ?? [];
+        $out = [];
+        foreach (self::CONCEPTOS as $campo => $codigo) {
+            $out[$campo] = $porCodigo[$codigo] ?? (int) ($cfg[$campo] ?? 0);
+        }
+        return $out;
+    }
+
     /**
      * Genera los asientos que le falten a la orden (cada consumo sin asiento y, si está
-     * cerrada, el de cierre). Si la contabilización está apagada, no hace nada.
+     * cerrada, el de cierre). No hace nada si «Producción» está apagado en Configuración
+     * Contable → Módulos que contabilizan (los asientos ya creados se conservan).
      */
     public function contabilizar(int $idOrden, int $idEmpresa, int $idUsuario): void
     {
-        $cfg = $this->config->get($idEmpresa);
-        if (!$cfg || empty($cfg['contabilizar'])) {
+        if (!$this->config->get($idEmpresa)) {
             return;
         }
-        $faltan = $this->config->cuentasFaltantes($cfg);
+        if (!ContabilidadInterruptorService::crear()->contabiliza($idEmpresa, self::CLAVE)) {
+            return;
+        }
+        $cfg = $this->cuentas($idEmpresa);
+        $faltan = [];
+        foreach (['id_cuenta_materia_prima', 'id_cuenta_en_proceso', 'id_cuenta_terminado'] as $campo) {
+            if (empty($cfg[$campo])) {
+                $faltan[] = '«' . ProduccionConfiguracionService::ETIQUETAS_CUENTA[$campo] . '»';
+            }
+        }
         if ($faltan !== []) {
-            throw new \DomainException('Falta configurar en Configuración de Producción: ' . implode(', ', $faltan) . '.');
+            throw new \DomainException('Falta configurar la cuenta ' . implode(', ', $faltan) . ' en Configuración Contable → Producción.');
         }
         $orden = $this->repo->getPorId($idOrden, $idEmpresa);
         if (!$orden || $orden['estado'] === 'anulada') {
@@ -145,13 +202,13 @@ class ProduccionAsientoService
         $ref   = (string) $orden['numero'];
 
         if ($mo > 0 && empty($cfg['id_cuenta_mano_obra'])) {
-            throw new \DomainException('La orden tiene mano de obra aplicada: configure la cuenta «Mano de obra aplicada».');
+            throw new \DomainException('La orden tiene mano de obra aplicada: configure la cuenta «Mano de obra aplicada» en Configuración Contable → Producción.');
         }
         if ($cif > 0 && empty($cfg['id_cuenta_cif'])) {
-            throw new \DomainException('La orden tiene costos indirectos: configure la cuenta «Costos indirectos aplicados».');
+            throw new \DomainException('La orden tiene costos indirectos: configure la cuenta «Costos indirectos aplicados» en Configuración Contable → Producción.');
         }
         if ($merma > 0 && empty($cfg['id_cuenta_merma'])) {
-            throw new \DomainException('La orden tiene merma anormal: configure la cuenta «Merma anormal (gasto)».');
+            throw new \DomainException('La orden tiene merma anormal: configure la cuenta «Merma anormal» en Configuración Contable → Producción.');
         }
 
         $detalles = [];

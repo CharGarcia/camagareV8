@@ -6,7 +6,8 @@
  *     de `.modal-factura .input-detalle` la dejaba en poco más de una línea y el
  *     resto quedaba escondido tras una barra de scroll. Pasadas ~10 líneas, el
  *     campo muestra su propia barra.
- *  2. Las columnas cuyo <th> lleva `data-det-col` ("codigo" / "descripcion") se
+ *     Lo mismo el Adicional cuando es textarea (Factura de Venta).
+ *  2. Las columnas cuyo <th> lleva `data-det-col` ("codigo" / "descripcion" / "adicional") se
  *     ensanchan arrastrando el borde derecho del encabezado, o con doble clic en
  *     ese borde para ajustarlas al texto más largo. El ancho se guarda por
  *     usuario en las preferencias del módulo.
@@ -38,8 +39,9 @@
 
     const ALTO_MIN = 30;    // el alto de siempre de .input-detalle (una línea)
     const ALTO_MAX = 160;   // ~10 líneas; más allá, scroll dentro del campo
-    const LIMITES  = { codigo: [70, 420], descripcion: [150, 700] };   // [mín, máx] px
-    const CAMPOS   = { codigo: 'input.input-codigo', descripcion: 'textarea.input-descripcion' };
+    const LIMITES  = { codigo: [70, 420], descripcion: [150, 700], adicional: [90, 600] };   // [mín, máx] px
+    // adicional: textarea en Factura de Venta; donde sigue siendo <input> no coincide y se ignora.
+    const CAMPOS   = { codigo: 'input.input-codigo', descripcion: 'textarea.input-descripcion', adicional: 'textarea.input-adicional' };
     const CLASE_ANCHOS_USUARIO = 'cmg-det-anchos-usuario';
 
     const valueNativo = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value');
@@ -85,7 +87,8 @@
          */
         function ajustarDescripciones() {
             if (pausado) return;
-            const tas = Array.from(document.querySelectorAll(`${selBody} ${campos.descripcion}`))
+            const sel = [campos.descripcion, campos.adicional].filter(Boolean).map(c => `${selBody} ${c}`).join(', ');
+            const tas = Array.from(document.querySelectorAll(sel))
                 .filter(ta => ta.offsetParent !== null);   // ocultas: se ajustan al mostrarse
             if (!tas.length) return;
             tas.forEach(ta => ta.style.setProperty('height', ALTO_MIN + 'px', 'important'));

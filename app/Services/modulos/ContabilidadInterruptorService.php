@@ -110,8 +110,19 @@ class ContabilidadInterruptorService
     public function listar(int $idEmpresa): array
     {
         $apagadas = $this->clavesApagadas($idEmpresa);
+        // Módulos que solo se listan en las empresas que los usan ('solo_si_tabla', p. ej. Producción).
+        $tablas = array_values(array_filter(array_map(fn($d) => (string) ($d['solo_si_tabla'] ?? ''), ContabilidadModulos::todos())));
+        $progRepo = new AsientoProgramadoRepository();
+        $conDatos = $tablas ? $progRepo->tablasConRegistros($idEmpresa, $tablas) : [];
         $grupos = [];
         foreach (ContabilidadModulos::todos() as $clave => $def) {
+            if (!empty($def['solo_si_tabla']) && !in_array($def['solo_si_tabla'], $conDatos, true)) {
+                continue;
+            }
+            // ... y solo si la empresa tiene el módulo asignado ('solo_si_rutas').
+            if (!empty($def['solo_si_rutas']) && !$progRepo->empresaTieneRutas($idEmpresa, (array) $def['solo_si_rutas'])) {
+                continue;
+            }
             $sigueA = !empty($def['sigue_a']) ? (ContabilidadModulos::definicion((string) $def['sigue_a'])['nombre'] ?? null) : null;
             $grupos[(string) ($def['grupo'] ?? 'Otros')][] = [
                 'clave'       => (string) $clave,

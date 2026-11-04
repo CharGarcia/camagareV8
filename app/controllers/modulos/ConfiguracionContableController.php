@@ -32,12 +32,30 @@ class ConfiguracionContableController extends BaseModuloController
         return self::RUTA_MODULO;
     }
 
+    /**
+     * Las cuentas de Producción se configuran solo si la empresa tiene el módulo (algún submódulo
+     * asignado) y el usuario puede ver alguno de sus submódulos (nivel 3: basta con la empresa).
+     */
+    private function tieneAccesoProduccion(): bool
+    {
+        $rutas = \App\Services\modulos\ProduccionConfiguracionService::RUTAS;
+        if (!$this->repository->empresaTieneRutas((int) $_SESSION['id_empresa'], $rutas)) {
+            return false;
+        }
+        foreach ($rutas as $ruta) {
+            if (!empty(\App\Helpers\Permisos::porRuta($ruta)['ver'])) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     /** Tipos de asiento del selector de la pantalla y secciones que se pueden abrir desde un enlace. */
     private const TIPOS_ABRIR = [
         'ventas_factura', 'factura_reembolso', 'recibos_venta', 'consignacion_venta', 'adquisiciones_compras',
         'adquisiciones_importacion', 'retenciones_venta', 'retenciones_compra', 'ingresos_egresos', 'cobros_pagos',
         'nomina', 'cierre_ejercicio', 'activos_fijos_alta', 'activos_fijos_depreciacion', 'suscripciones_devengo',
-        'ajuste_inventario',
+        'ajuste_inventario', 'produccion',
     ];
     private const SECCIONES_ABRIR = ['general', 'cliente', 'proveedor', 'empleado', 'ingresos', 'egresos', 'cobros', 'pagos'];
 
@@ -114,6 +132,10 @@ class ConfiguracionContableController extends BaseModuloController
         if (is_array($abrirSeccion) && !empty($abrirSeccion['tipo'])) {
             $tiposSinUso = array_values(array_diff($tiposSinUso, [$abrirSeccion['tipo']]));
         }
+        // «Producción» solo para quien tiene acceso a algún submódulo de Producción (nivel 3 siempre).
+        if (!$this->tieneAccesoProduccion()) {
+            $tiposSinUso[] = 'produccion';
+        }
 
         $this->viewWithLayout('layouts.main', 'modulos.configuracion_contable.index', [
             'abrirSeccion' => is_array($abrirSeccion) ? $abrirSeccion : null,
@@ -176,6 +198,7 @@ class ConfiguracionContableController extends BaseModuloController
             'activos_fijos_alta' => 'Activos Fijos - Alta',
             'activos_fijos_depreciacion' => 'Activos Fijos - Depreciación',
             'suscripciones_devengo' => 'Suscripciones - Devengo',
+            'produccion' => 'Producción',
         ];
 
         ob_start();
@@ -349,6 +372,10 @@ class ConfiguracionContableController extends BaseModuloController
 
         if ($tipoAsiento === '') {
             echo json_encode(['ok' => false, 'error' => 'Tipo de asiento no especificado.']);
+            exit;
+        }
+        if ($tipoAsiento === 'produccion' && !$this->tieneAccesoProduccion()) {
+            echo json_encode(['ok' => false, 'error' => 'No tiene acceso al módulo Producción.']);
             exit;
         }
 

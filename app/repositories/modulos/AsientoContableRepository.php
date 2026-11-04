@@ -670,6 +670,7 @@ class AsientoContableRepository
             'traspasos'            => 'TR',
             'cheques'              => 'CH', // cobro de cheques posfechados (ChequePosfechadoService)
             'ajuste_inventario'    => 'AI', // ajustes del módulo Inventario (AjusteInventarioAsientoService)
+            'produccion'           => 'PR', // consumos y cierres de órdenes de producción (ProduccionAsientoService)
         ];
         // Sin esto, cualquier tipo_comprobante no listado cae en 'DI' y comparte numeración
         // con el diario real: dos documentos de tipos distintos pueden terminar con el MISMO

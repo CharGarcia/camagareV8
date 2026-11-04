@@ -758,7 +758,7 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                                                     <th class="ps-3 py-2 small fw-bold text-muted" data-det-col="codigo" style="width: 9%;">Código</th>
                                                     <th class="py-2 small fw-bold text-muted" data-det-col="descripcion" style="width: 26%;">Descripción</th>
                                                     <?php $fvColAdicional = (($empresa['mostrar_columna_adicional_factura'] ?? true) === 'true' || ($empresa['mostrar_columna_adicional_factura'] ?? true) === true); ?>
-                                                    <th class="py-2 small fw-bold text-muted col-adicional<?= $fvColAdicional ? '' : ' d-none' ?>" style="width: 7%;">Adicional</th>
+                                                    <th class="py-2 small fw-bold text-muted col-adicional<?= $fvColAdicional ? '' : ' d-none' ?>" data-det-col="adicional" style="width: 12%;">Adicional</th>
                                                     <th class="py-2 small fw-bold text-muted col-medida-header col-medida d-none" style="width: 8%;">Medida</th>
                                                     <th class="py-2 small fw-bold text-muted text-center" style="width: 6%;">Cant.</th>
                                                     <th class="py-2 small fw-bold text-muted col-lista-precios d-none" style="width: 12%;">Precios</th>
@@ -4364,7 +4364,9 @@ $totalPages = $totalPagesOriginal;
                     <i class="bi bi-geo-alt-fill text-secondary"></i>
                 </span>
             </td>
-            <td class="col-adicional${EMPRESA_CONFIG.mostrar_columna_adicional_factura ? '' : ' d-none'}"><input type="text" class="form-control form-control-sm input-detalle input-adicional text-muted fst-italic" placeholder="Info adicional"></td>
+            <td class="col-adicional${EMPRESA_CONFIG.mostrar_columna_adicional_factura ? '' : ' d-none'}">
+                <textarea rows="2" class="form-control form-control-sm input-detalle input-adicional" style="resize:none; overflow:auto; line-height:1.15;" placeholder="Info adicional"></textarea>
+            </td>
             <td class="col-medida d-none">
                 <select class="form-select form-select-sm input-detalle input-medida d-none">
                     <option value="">Medida</option>
@@ -4431,6 +4433,16 @@ $totalPages = $totalPagesOriginal;
         });
         inputDesc.addEventListener('blur', () => {
             inputDesc.value = inputDesc.value.replace(/\s+/g, ' ').trim();
+        });
+        // Adicional: mismo diseño que la descripción (crece en alto, columna
+        // redimensionable) y también en una sola línea, porque va al XML del SRI.
+        const inputAdicional = tr.querySelector('.input-adicional');
+        FV_DET.engancharDescripcion(inputAdicional);
+        inputAdicional.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter') e.preventDefault();
+        });
+        inputAdicional.addEventListener('blur', () => {
+            inputAdicional.value = inputAdicional.value.replace(/\s+/g, ' ').trim();
         });
         // Solo al agregar una fila a mano. Al abrir un documento se crean todas de
         // golpe: enfocar cada una (500 focus seguidos, cada uno recalculando el

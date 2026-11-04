@@ -101,7 +101,7 @@ class PreferenciasHelper
         $raw = $vistaConfig['__detalle_anchos__'] ?? [];
         $anchos = [];
         if (is_array($raw)) {
-            foreach (['codigo', 'descripcion'] as $col) {
+            foreach (['codigo', 'descripcion', 'adicional'] as $col) {
                 $px = (int) ($raw[$col] ?? 0);
                 if ($px > 0) {
                     $anchos[$col] = $px;

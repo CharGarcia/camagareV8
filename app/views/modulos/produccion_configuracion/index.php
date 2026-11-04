@@ -1,6 +1,6 @@
 <?php
 /** @var string $titulo @var array $perm @var string $rutaModulo @var bool $instalado @var ?array $config
- *  @var array $cuentas @var array $bodegas @var array $metodos @var array $etiquetas @var string $base */
+ *  @var array $bodegas @var array $metodos @var string $base */
 $urlBase      = rtrim($base, '/') . '/' . $rutaModulo;
 $cfg          = $config ?? [];
 $puedeGuardar = !empty($perm['actualizar']);
@@ -19,7 +19,6 @@ $selectBodega = function (string $campo, string $label, string $ayuda) use ($bod
 };
 ?>
 <style>
-    .pcfg-dropdown { z-index: 1090; max-height: 240px; overflow-y: auto; }
     .pcfg .form-text { font-size: .72rem; }
 </style>
 
@@ -100,37 +99,6 @@ $selectBodega = function (string $campo, string $label, string $ayuda) use ($bod
                 </div>
             </div>
 
-            <div class="card border-0 shadow-sm rounded-3 mb-3">
-                <div class="card-header bg-white border-bottom py-2 px-3 d-flex justify-content-between align-items-center flex-wrap gap-2">
-                    <h6 class="mb-0 fw-bold"><i class="bi bi-journal-text me-2 text-primary"></i>Contabilidad</h6>
-                    <div class="form-check form-switch mb-0">
-                        <input class="form-check-input" type="checkbox" id="pcfg-contabilizar" name="contabilizar" value="1" <?= $chk('contabilizar') ?>>
-                        <label class="form-check-label small fw-bold" for="pcfg-contabilizar">Generar asientos de producción</label>
-                    </div>
-                </div>
-                <div class="card-body p-3">
-                    <div class="form-text mb-3">
-                        Cada consumo genera <b>Productos en proceso</b> contra <b>Materia prima</b>; al cerrar la orden, <b>Producto terminado</b> contra
-                        <b>Productos en proceso</b>, <b>Mano de obra</b> y <b>Costos indirectos</b> aplicados. Si el producto tiene su propia cuenta de
-                        inventario en su ficha, se usa esa en lugar de la de materia prima o producto terminado.
-                    </div>
-                    <div class="row g-3">
-                        <?php foreach ($etiquetas as $campo => $label): $c = $cuentas[$campo] ?? null; ?>
-                            <div class="col-md-6 position-relative">
-                                <label class="form-label small fw-bold d-block" for="pcfg-<?= $campo ?>_txt"><?= htmlspecialchars($label) ?></label>
-                                <div class="input-group input-group-sm">
-                                    <span class="input-group-text bg-white"><i class="bi bi-journal-bookmark"></i></span>
-                                    <input type="text" class="form-control pcfg-cuenta-txt" id="pcfg-<?= $campo ?>_txt" data-campo="<?= $campo ?>"
-                                           placeholder="Buscar cuenta por código o nombre…" autocomplete="off"
-                                           value="<?= $c ? htmlspecialchars($c['codigo'] . ' - ' . $c['nombre']) : '' ?>">
-                                    <input type="hidden" id="pcfg-<?= $campo ?>" name="<?= $campo ?>" value="<?= $c ? (int) $c['id'] : '' ?>">
-                                </div>
-                                <div class="list-group position-absolute shadow pcfg-dropdown d-none" id="pcfg-<?= $campo ?>_dd" style="width:calc(100% - 24px);"></div>
-                            </div>
-                        <?php endforeach; ?>
-                    </div>
-                </div>
-            </div>
         </form>
     <?php endif; ?>
 </div>

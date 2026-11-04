@@ -1,5 +1,5 @@
 /**
- * Configuración de Producción — bodegas, interruptores y cuentas del módulo.
+ * Configuración de Producción — bodegas e interruptores (las cuentas van en Configuración Contable).
  * Guardar por primera vez activa Producción para la empresa.
  */
 (function () {
@@ -10,70 +10,10 @@
 
     function el(id) { return document.getElementById(id); }
 
-    function esc(t) {
-        return String(t ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
-    }
-
     function aviso(icono, titulo, texto) {
         if (typeof Swal === 'undefined') { alert(titulo + '\n' + (texto || '')); return; }
         return Swal.fire({ icon: icono, title: titulo, text: texto || '', confirmButtonColor: '#0d6efd' });
     }
-
-    // ── Buscador de cuentas (selección tipo chip) ────────────────────────────
-
-    document.querySelectorAll('.pcfg-cuenta-txt').forEach(input => {
-        const campo  = input.dataset.campo;
-        const oculto = el('pcfg-' + campo);
-        const dd     = el('pcfg-' + campo + '_dd');
-        let timer = null;
-
-        const cerrar = () => { dd.classList.add('d-none'); dd.innerHTML = ''; };
-
-        input.addEventListener('keydown', e => {
-            // Con una cuenta ya elegida, Backspace/Delete limpian toda la selección de una vez.
-            if ((e.key === 'Backspace' || e.key === 'Delete') && oculto.value) {
-                e.preventDefault();
-                oculto.value = '';
-                input.value = '';
-                cerrar();
-            }
-        });
-
-        input.addEventListener('input', () => {
-            if (oculto.value) oculto.value = '';
-            clearTimeout(timer);
-            const q = input.value.trim();
-            if (q.length < 2) { cerrar(); return; }
-            timer = setTimeout(() => {
-                fetch(`${URL}/buscar-cuentas-ajax?q=${encodeURIComponent(q)}`)
-                    .then(r => r.json())
-                    .then(res => {
-                        const data = res.data || [];
-                        if (!data.length) {
-                            dd.innerHTML = '<div class="list-group-item small text-muted">Sin cuentas de movimiento con ese texto.</div>';
-                        } else {
-                            dd.innerHTML = data.map(c =>
-                                `<button type="button" class="list-group-item list-group-item-action small py-1" data-id="${c.id}" data-txt="${esc(c.codigo + ' - ' + c.nombre)}">
-                                    <code>${esc(c.codigo)}</code> ${esc(c.nombre)}</button>`).join('');
-                        }
-                        dd.classList.remove('d-none');
-                    })
-                    .catch(e => console.error('PCFG cuentas', e));
-            }, 250);
-        });
-
-        dd.addEventListener('click', e => {
-            const b = e.target.closest('[data-id]');
-            if (!b) return;
-            oculto.value = b.dataset.id;
-            input.value = b.dataset.txt;
-            cerrar();
-        });
-
-        document.addEventListener('click', e => {
-            if (!dd.contains(e.target) && e.target !== input) cerrar();
-        });
-    });
 
     // ── Guardar ──────────────────────────────────────────────────────────────
 

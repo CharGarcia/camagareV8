@@ -9,16 +9,21 @@ use App\repositories\modulos\ProduccionConfiguracionRepository;
 use App\Services\LogSistemaService;
 
 /**
- * Configuración del módulo Producción por empresa: bodegas por defecto, interruptores
- * (§3.3 del diseño) y cuentas contables propias del módulo. Guardarla por primera vez
- * activa el módulo para la empresa.
+ * Configuración del módulo Producción por empresa: bodegas por defecto e interruptores
+ * (§3.3 del diseño). Guardarla por primera vez activa el módulo para la empresa.
  *
- * Las cuentas viven aquí y no en Configuración Contable a propósito: así el módulo no
- * agrega conceptos ni avisos de "cuentas faltantes" a las empresas que no lo usan
- * (docs/diseno/produccion-fase1.md §10.4).
+ * Las cuentas contables NO se configuran aquí: van en Configuración Contable → Producción
+ * (tipo de asiento 'produccion'), que solo ven las empresas que usan el módulo.
+ * ETIQUETAS_CUENTA se conserva para los mensajes del asiento.
  */
 class ProduccionConfiguracionService
 {
+    /** Submódulos del módulo Producción (los que dan acceso a él a la empresa y al usuario). */
+    public const RUTAS = [
+        'modulos/produccion-configuracion', 'modulos/produccion-formulas',
+        'modulos/produccion-ordenes', 'modulos/produccion-reportes',
+    ];
+
     public const METODOS_REPARTO = [
         'valor_venta' => 'Valor de venta relativo',
         'unidades'    => 'Unidades físicas (kg, litros, unidades)',
@@ -97,11 +102,7 @@ class ProduccionConfiguracionService
             'exigir_lote_insumos'  => $bool($in['exigir_lote_insumos'] ?? false),
             'usar_cuarentena'      => $bool($in['usar_cuarentena'] ?? false),
             'metodo_reparto'       => (string) ($in['metodo_reparto'] ?? 'valor_venta'),
-            'contabilizar'         => $bool($in['contabilizar'] ?? false),
         ];
-        foreach (ProduccionConfiguracionRepository::CAMPOS_CUENTA as $campo) {
-            $d[$campo] = $idOpc($in[$campo] ?? null);
-        }
 
         if (!isset(self::METODOS_REPARTO[$d['metodo_reparto']])) {
             throw new \DomainException('Método de reparto del costo no válido.');
@@ -114,18 +115,6 @@ class ProduccionConfiguracionService
         if ($d['usar_cuarentena'] && $d['id_bodega_cuarentena'] === null) {
             throw new \DomainException('Para usar cuarentena elija la bodega de cuarentena.');
         }
-        foreach (ProduccionConfiguracionRepository::CAMPOS_CUENTA as $campo) {
-            if ($d[$campo] !== null && !$this->repo->cuentaValida($d[$campo], $idEmpresa)) {
-                throw new \DomainException('La cuenta «' . self::ETIQUETAS_CUENTA[$campo] . '» debe ser una cuenta de movimiento de esta empresa.');
-            }
-        }
-        if ($d['contabilizar']) {
-            $faltan = $this->cuentasFaltantes($d);
-            if ($faltan !== []) {
-                throw new \DomainException('Para contabilizar la producción configure: ' . implode(', ', $faltan) . '.');
-            }
-        }
-
         $db = Database::getConnection();
         $db->beginTransaction();
         try {
@@ -154,46 +143,5 @@ class ProduccionConfiguracionService
         }
 
         return $this->repo->getPorEmpresa($idEmpresa) ?? [];
-    }
-
-    /**
-     * Cuentas que faltan para poder contabilizar (la de merma solo es obligatoria
-     * cuando se registra merma anormal; la de mano de obra/CIF, cuando hay importes).
-     *
-     * @return string[] etiquetas
-     */
-    public function cuentasFaltantes(array $cfg): array
-    {
-        $obligatorias = ['id_cuenta_materia_prima', 'id_cuenta_en_proceso', 'id_cuenta_terminado'];
-        $faltan = [];
-        foreach ($obligatorias as $campo) {
-            if (empty($cfg[$campo])) {
-                $faltan[] = self::ETIQUETAS_CUENTA[$campo];
-            }
-        }
-        return $faltan;
-    }
-
-    /** Cuentas configuradas con su código y nombre, para pintar los selectores. */
-    public function cuentasParaVista(?array $cfg, int $idEmpresa): array
-    {
-        if (!$cfg) {
-            return [];
-        }
-        $ids = [];
-        foreach (ProduccionConfiguracionRepository::CAMPOS_CUENTA as $campo) {
-            if (!empty($cfg[$campo])) {
-                $ids[] = (int) $cfg[$campo];
-            }
-        }
-        $datos = $this->repo->getCuentas($ids, $idEmpresa);
-        $out = [];
-        foreach (ProduccionConfiguracionRepository::CAMPOS_CUENTA as $campo) {
-            $id = (int) ($cfg[$campo] ?? 0);
-            if ($id > 0 && isset($datos[$id])) {
-                $out[$campo] = $datos[$id];
-            }
-        }
-        return $out;
     }
 }

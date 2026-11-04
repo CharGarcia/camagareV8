@@ -52,7 +52,14 @@
  *   grupo        Encabezado bajo el que se lista el módulo en la ventana
  *                «Módulos que contabilizan» de Configuración Contable.
  *   ayuda        (Opcional) Texto que explica qué deja de pasar al apagarlo.
- *   sigue_a      (Opcional) El módulo NO tiene interruptor propio: su asiento
+ *   solo_si_tabla
+ *                (Opcional) El interruptor solo se lista en las empresas que tienen
+ *                alguna fila vigente en esa tabla (módulos que la empresa activa a
+ *                propósito, como Producción). Sin el campo, se lista siempre.
+ *   solo_si_rutas
+ *                (Opcional) Además, solo se lista si la empresa tiene asignado alguno
+ *                de esos submódulos (alguna fila de modulos_asignados con ver).
+ *   sigue_a    (Opcional) El módulo NO tiene interruptor propio: su asiento
  *                depende del documento de origen que pertenece a otro módulo
  *                (Retornos y Facturación CV siguen a su consignación madre).
  *
@@ -335,6 +342,21 @@ return [
         'conceptos_firma' => ['ventas_factura'],
         'ayuda'           => 'Las entradas y salidas por ajuste mueven Inventario contra Sobrante o Faltante / merma. '
                            . 'Apagado, el ajuste solo cambia el stock y la cuenta de Inventario no se entera.',
+    ],
+
+    // Producción (ProduccionAsientoService): cada consumo Productos en proceso / Materia prima;
+    // el cierre Producto terminado (+ Merma) / Productos en proceso, MO y CIF aplicados.
+    // El interruptor solo se lista en las empresas que tienen el módulo asignado ('solo_si_rutas')
+    // y ya guardaron la Configuración de Producción ('solo_si_tabla'); las demás no lo ven.
+    'produccion' => [
+        'nombre'        => 'Producción',
+        'grupo'         => 'Inventario',
+        'rutas'         => ['modulos/produccion-ordenes'],
+        'conceptos'     => ['produccion'],
+        'solo_si_tabla' => 'produccion_configuracion',
+        'solo_si_rutas' => \App\Services\modulos\ProduccionConfiguracionService::RUTAS,
+        'ayuda'         => 'Los consumos y cierres de las órdenes de producción mueven Materia prima, Productos en proceso y '
+                         . 'Producto terminado. Apagado, la orden solo mueve el stock y no genera asientos.',
     ],
 
     // ─── Nómina ─────────────────────────────────────────────────────────────

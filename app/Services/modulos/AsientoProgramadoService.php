@@ -695,6 +695,8 @@ class AsientoProgramadoService
         'activos_fijos_alta'         => ['activos_fijos'],
         'activos_fijos_depreciacion' => ['activos_fijos'],
         'suscripciones_devengo'      => ['suscripciones'],
+        // Solo aparece en las empresas que guardaron la Configuración de Producción.
+        'produccion'                 => ['produccion_configuracion', 'produccion_ordenes'],
     ];
 
     /**
@@ -702,7 +704,7 @@ class AsientoProgramadoService
      * Retenciones ni Ingresos/Egresos, que se configuran por código / opción y no tienen filas
      * en asientos_tipo.
      */
-    private const TIPOS_CON_CATALOGO_PROPIO = ['ajuste_inventario'];
+    private const TIPOS_CON_CATALOGO_PROPIO = ['ajuste_inventario', 'produccion'];
 
     /**
      * Tipos de asiento que la empresa todavía no usa: su módulo no tiene ningún registro y no
@@ -737,6 +739,12 @@ class AsientoProgramadoService
             && in_array('ajuste_inventario', $conCatalogo, true)
             && $this->repo->tieneProductosInventariables($idEmpresa)) {
             $sinUso = array_values(array_diff($sinUso, ['ajuste_inventario']));
+        }
+
+        // «Producción» además exige que la empresa tenga el módulo (algún submódulo asignado).
+        if (!in_array('produccion', $sinUso, true)
+            && !$this->repo->empresaTieneRutas($idEmpresa, ProduccionConfiguracionService::RUTAS)) {
+            $sinUso[] = 'produccion';
         }
         return $sinUso;
     }
