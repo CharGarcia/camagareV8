@@ -1743,7 +1743,14 @@ class SincronizadorAsientosService
             }
         }
 
-        $this->generados += count($intentados) - count($sinAsiento);
+        // Segunda comprobación: los que YA tenían asiento y se detectan por otra razón (Facturas,
+        // Recibos y NC con el costo de venta pendiente) pasan la de arriba aunque nada haya
+        // cambiado. Si tras procesarlos la misma consulta de detección los sigue trayendo, no se
+        // resolvieron: no cuentan como generados y se avisa la causa. Sin esto el resultado decía
+        // «Se generaron N» y al volver a entrar el aviso reclamaba los mismos N, sin fin.
+        $sinResolver = $this->idsQueSiguenPendientes($db, $sql, $params, array_values(array_diff($intentados, $sinAsiento)));
+
+        $this->generados += count($intentados) - count($sinAsiento) - count($sinResolver);
 
         // Resuelve el número de documento (serie-secuencial) de todos los ids que van a aparecer
         // en algún aviso, para mostrar "001-001-000000123" en vez de un id interno sin significado.
@@ -1793,6 +1800,13 @@ class SincronizadorAsientosService
             }
         }
 
+        if (!empty($sinResolver)) {
+            $totalConProblema += count($sinResolver);
+            $this->avisarSinResolver($tablaVerif, $nombreModulo, $sinResolver, $numeros + ($tablaVerif !== null && !empty($colsDoc)
+                ? $this->resolverNumerosDocumento($db, $tablaVerif, $colsDoc, $sinResolver)
+                : []));
+        }
+
         if ($totalConProblema > 0) {
             $this->resumenPorModulo[$nombreModulo] = ($this->resumenPorModulo[$nombreModulo] ?? 0) + $totalConProblema;
         }
@@ -1803,6 +1817,72 @@ class SincronizadorAsientosService
             'quedan'     => count($ids) - $procesados,
             'ultimoId'   => $ultimoId,
         ];
+    }
+
+    /**
+     * De $ids (ya procesados y con asiento), los que la consulta de detección del módulo sigue
+     * trayendo. Una falla de la consulta no cambia nada (devuelve []).
+     *
+     * @return int[]
+     */
+    private function idsQueSiguenPendientes(\PDO $db, string $sql, array $params, array $ids): array
+    {
+        if (empty($ids)) {
+            return [];
+        }
+        try {
+            $in = implode(',', array_map('intval', $ids));
+            $st = $db->prepare("SELECT _p.id FROM ({$sql}) AS _p WHERE _p.id IN ({$in})");
+            $st->execute($params);
+            return array_map('intval', $st->fetchAll(\PDO::FETCH_COLUMN));
+        } catch (\Throwable $e) {
+            return [];
+        }
+    }
+
+    /** Tabla cabecera => [tipo en ventas_costeo_seguimiento, tipo de asiento de Configuración Contable, nombre]. */
+    private const COSTEO_POR_TABLA = [
+        'ventas_cabecera'        => ['factura_venta',      'ventas_factura', 'Ventas con Factura'],
+        'recibos_venta_cabecera' => ['recibo_venta',       'recibos_venta',  'Recibos de Venta'],
+        'notas_credito_cabecera' => ['nota_credito_venta', 'ventas_factura', 'Ventas con Factura'],
+    ];
+
+    /**
+     * Acción del resultado para los documentos que siguen pendientes aunque se procesaron (ver
+     * idsQueSiguenPendientes()). El caso conocido es el costo de venta: el asiento se arma, pero
+     * sin las cuentas de Costo de Ventas / Inventario su bloque de costo no se puede contabilizar.
+     */
+    private function avisarSinResolver(?string $tablaVerif, string $nombreModulo, array $ids, array $numeros): void
+    {
+        $costeo = self::COSTEO_POR_TABLA[$tablaVerif ?? ''] ?? null;
+        $motivos = $costeo !== null
+            ? (new \App\repositories\modulos\CosteoVentaSeguimientoRepository())->getMotivosPendientes($this->idEmpresa, $costeo[0], $ids)
+            : [];
+
+        $porMotivo = [];
+        foreach ($ids as $id) {
+            $porMotivo[$motivos[$id] ?? "\0"][] = $id;
+        }
+        foreach ($porMotivo as $motivo => $idsMotivo) {
+            $motivo = $motivo === "\0" ? null : (string) $motivo;
+            $this->detalleActual = "{$nombreModulo}: " . $this->listarDocumentos($idsMotivo, $numeros);
+            if ($motivo === 'bloque_incompleto_descuadrado') {
+                $this->agregarAccion($costeo[1], 'general',
+                    "El costo de venta queda descuadrado en {$costeo[2]}: revise que la cuenta de Costo de Ventas y la de Inventario resuelvan el mismo monto");
+            } elseif ($motivo !== null) {
+                $this->agregarAccion($costeo[1], 'general',
+                    "Falta configurar la cuenta de Costo de Ventas y/o Inventario en {$costeo[2]} (General, o por Cliente/Producto/Categoría/Marca): "
+                    . 'sin ella el costo de venta de esos documentos no se contabiliza');
+            } else {
+                $this->agregarAccion('', '',
+                    "Algunos documentos de {$nombreModulo} ya tienen asiento pero no se pudieron completar: revise su pestaña Asiento contable");
+            }
+        }
+        $this->detalleActual = null;
+
+        $docs = $this->listarDocumentos($ids, $numeros);
+        $this->detalle[] = "{$nombreModulo} — " . count($ids) . " documento(s) procesados que siguen pendientes (documento(s): {$docs})";
+        error_log("[SincronizadorAsientos] {$nombreModulo}: " . count($ids) . " documento(s) procesados que siguen pendientes — ids: " . implode(',', $ids));
     }
 
     /**
