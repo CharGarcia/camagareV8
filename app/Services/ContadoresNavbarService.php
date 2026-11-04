@@ -228,10 +228,14 @@ class ContadoresNavbarService
         }
         // Pagos de suscripción reportados por clientes, en revisión (tabla puede no existir).
         try {
+            $srvRep = new SuscripcionReportePagoService();
+            $datos['__recibe_reportes'] = $srvRep->recibeReportes($idEmpresa);
             // Antes de contar cierra solos los que ya tienen el cobro registrado.
-            $datos['__pagos_reportados'] = (new SuscripcionReportePagoService())
-                ->contarEnRevision($idEmpresa, (int) ($_SESSION['id_usuario'] ?? 0));
+            $datos['__pagos_reportados'] = $datos['__recibe_reportes']
+                ? $srvRep->contarEnRevision($idEmpresa, (int) ($_SESSION['id_usuario'] ?? 0))
+                : 0;
         } catch (\Throwable $e) {
+            $datos['__recibe_reportes']  = false;
             $datos['__pagos_reportados'] = 0;
         }
         // Estado de la firma electrónica (['sin_firma'=>true] | ['dias'=>int] | null).
@@ -493,18 +497,22 @@ class ContadoresNavbarService
             // (antes estaba anidado bajo el permiso de Empresa y quien tenía Suscripciones
             // asignado sin Empresa no veía el aviso).
             if (!empty($permRuta[self::RUTA_SUSCRIPCIONES])) {
-                $sus = $empresa['__suscripciones'] ?? null;
-                if (is_array($sus)) {
+                $sus  = $empresa['__suscripciones'] ?? null;
+                // Empresa que revisa pagos reportados: el ícono sale siempre (aunque no haya
+                // nada pendiente) para poder abrir «Pagos reportados» y ver el historial.
+                $ctrl = !empty($empresa['__recibe_reportes']);
+                if (is_array($sus) || $ctrl) {
                     $sVenc = (int) ($sus['vencidas'] ?? 0);
                     $sProx = (int) ($sus['por_vencer'] ?? 0);
                     $sRep  = (int) ($empresa['__pagos_reportados'] ?? 0);
-                    if ($sVenc > 0 || $sProx > 0 || $sRep > 0) {
+                    if ($sVenc > 0 || $sProx > 0 || $sRep > 0 || $ctrl) {
                         $out['suscripciones_gestion'] = [
-                            'vencidas'   => $sVenc,
-                            'por_vencer' => $sProx,
+                            'vencidas'     => $sVenc,
+                            'por_vencer'   => $sProx,
                             // Pagos que los clientes reportaron y siguen en revisión.
-                            'reportados' => $sRep,
-                            'total'      => $sVenc + $sProx,
+                            'reportados'   => $sRep,
+                            'total'        => $sVenc + $sProx,
+                            'controladora' => $ctrl,
                         ];
                     }
                 }

@@ -319,12 +319,18 @@ Cada envío:
 - Llega por **correo** al correo registrado de la empresa dueña de la suscripción (campo
   correo de la empresa; si tiene varios separados por coma, a todos), con el comprobante
   adjunto y un botón para abrir este módulo.
-- Se cuenta en el ícono de suscripciones de la barra superior (flechas circulares), en la
+- Se revisa desde el ícono de suscripciones de la barra superior (flechas circulares) en la
   **empresa controladora de suscripciones** (la que otras empresas tienen como controladora
-  en Empresas del sistema). Mientras haya pagos **en revisión**, el clic en ese ícono abre
-  la ventana **Pagos reportados** en la misma página donde estés, sin salir de ella; desde
-  la ventana, **Ir a Suscripciones** lleva al listado. Sin pagos por revisar, el ícono
-  lleva a Suscripciones como siempre.
+  en Empresas del sistema, o la que ya recibió algún reporte). En esa empresa el ícono
+  **siempre** se muestra, aunque no haya nada pendiente, y al hacer clic despliega un menú:
+  - **Suscripciones de clientes**: lleva al listado (indica cuántas están vencidas y por vencer).
+  - **Pagos reportados**: abre la ventana de reportes en la misma página donde estés, sin
+    salir de ella. El número rojo indica cuántos siguen **en revisión**; sin pendientes igual
+    se abre para consultar el historial.
+
+  En el menú del celular, **Pagos reportados** aparece como un acceso propio junto a
+  **Suscrip.**. En las empresas que no revisan pagos reportados, el ícono lleva directo a
+  Suscripciones, como siempre.
 
 La ventana lista los reportes de los últimos 60 días: cuándo se reportó, empresa, usuario,
 fecha límite de pago, documento y saldo pendientes, el mensaje, el comprobante (clic para
@@ -446,7 +452,9 @@ registrados*.
   del cliente.
 - **Barra superior**: el ícono de flechas circulares avisa cuántas suscripciones de
   clientes están vencidas o por vencer (próximos 7 días). Lo ve quien tiene asignado
-  este módulo en la empresa activa (el superadministrador lo ve siempre).
+  este módulo en la empresa activa (el superadministrador lo ve siempre). En la empresa
+  controladora también cuenta los pagos reportados en revisión y da acceso a **Pagos
+  reportados** (ver la sección anterior).
 
 ## Errores frecuentes
 
@@ -479,8 +487,8 @@ registrados*.
   deja de contar en el aviso de la barra superior (antes seguía contando hasta 3 días y la
   única forma de quitarlo era Rechazar). Nuevo botón **Pago verificado** para cerrarlo a mano
   sin avisar un rechazo al cliente. Se quita el botón **Pagos reportados** de la pantalla
-  Suscripciones: la ventana se abre desde el ícono de suscripciones de la barra superior,
-  en cualquier página.
+  Suscripciones: la ventana se abre desde el menú del ícono de suscripciones de la barra
+  superior, en cualquier página y aunque no haya reportes pendientes.
 - **1.31** — Nueva columna **Adicional** en cada ítem del detalle de la suscripción (como
   en Facturas de Venta): el texto se guarda por línea, pasa al *Adicional* de esa línea en
   la factura generada y se imprime bajo la descripción en el PDF de la suscripción.

@@ -117,6 +117,18 @@ class SuscripcionReportePagoRepository extends BaseRepository
         return $st->fetchAll(PDO::FETCH_ASSOC);
     }
 
+    /** ¿Esta empresa recibió alguna vez un reporte de pago como controladora? */
+    public function tieneReportes(int $idControladora): bool
+    {
+        $st = $this->db->prepare(
+            "SELECT 1 FROM suscripciones_reportes_pago
+              WHERE id_empresa_controladora = :ctrl AND eliminado = false
+              LIMIT 1"
+        );
+        $st->execute([':ctrl' => $idControladora]);
+        return (bool) $st->fetchColumn();
+    }
+
     /** Reportes en revisión vigentes (dentro del tope) que recibió la controladora. */
     public function contarEnRevision(int $idControladora, int $diasTope): int
     {

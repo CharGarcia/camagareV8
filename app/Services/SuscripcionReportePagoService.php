@@ -210,6 +210,21 @@ class SuscripcionReportePagoService
     }
 
     /**
+     * ¿La empresa revisa pagos reportados? = es controladora de suscripciones de otras
+     * empresas o ya recibió algún reporte (el reporte se guarda a nombre de la empresa dueña
+     * de la suscripción, que puede ser otro establecimiento del mismo RUC). Decide si el
+     * ícono de suscripciones del navbar ofrece «Pagos reportados».
+     */
+    public function recibeReportes(int $idEmpresa): bool
+    {
+        if ($idEmpresa <= 0 || !$this->disponible()) {
+            return false;
+        }
+        return (new \App\models\Empresa())->esControladoraSuscripciones($idEmpresa)
+            || $this->repo->tieneReportes($idEmpresa);
+    }
+
+    /**
      * Contador del aviso «Pagos reportados» del navbar. Primero cierra los reportes ya
      * cobrados (con la vigencia en caché: el navbar sondea seguido).
      */

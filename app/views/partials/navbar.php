@@ -473,10 +473,25 @@ $urlManual = $base . '/documentacion' . ($rutaActualAyuda !== '' ? '?ruta=' . ur
                 </a>
 
                 <!-- Suscripciones de clientes por vencer / vencidas (empresa administradora) -->
-                <a href="<?= $base ?>/modulos/suscripciones" class="text-white text-decoration-none position-relative d-none cmg-suscgest-wrap" title="Suscripciones">
-                    <i class="bi bi-arrow-repeat" style="font-size: 1.1rem;"></i>
-                    <span class="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-warning text-dark cmg-suscgest-badge" style="font-size: 0.6rem; padding: 0.25em 0.5em;">0</span>
-                </a>
+                <!-- En la empresa que revisa pagos reportados es un menú (Suscripciones / Pagos
+                     reportados); en las demás, un enlace directo (sin data-bs-toggle: lo pone el JS). -->
+                <div class="dropdown d-none cmg-suscgest-wrap" title="Suscripciones">
+                    <a href="<?= $base ?>/modulos/suscripciones" class="text-white text-decoration-none position-relative cmg-suscgest-toggle" role="button" aria-expanded="false" data-navbar-link="true">
+                        <i class="bi bi-arrow-repeat" style="font-size: 1.1rem;"></i>
+                        <span class="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-warning text-dark cmg-suscgest-badge" style="font-size: 0.6rem; padding: 0.25em 0.5em;">0</span>
+                    </a>
+                    <div class="dropdown-menu dropdown-menu-end shadow-sm py-1" style="min-width: 270px; z-index: 5065;">
+                        <a class="dropdown-item d-flex align-items-center gap-2 py-2" href="<?= $base ?>/modulos/suscripciones">
+                            <i class="bi bi-arrow-repeat text-primary"></i>
+                            <span class="flex-grow-1">Suscripciones de clientes<span class="d-block small text-muted cmg-suscgest-detalle"></span></span>
+                        </a>
+                        <button type="button" class="dropdown-item d-flex align-items-center gap-2 py-2" data-susc-pagos-reportados>
+                            <i class="bi bi-inbox text-primary"></i>
+                            <span class="flex-grow-1">Pagos reportados<span class="d-block small text-muted">Comprobantes que enviaron los clientes</span></span>
+                            <span class="badge rounded-pill bg-danger d-none cmg-suscrep-badge">0</span>
+                        </button>
+                    </div>
+                </div>
 
                 <!-- Tareas y obligaciones vencidas / por vencer: la campana despliega la lista
                      (se pide al abrirla, ver CMG_cargarTareasAlertas) y cada tarea abre su ficha. -->
@@ -701,6 +716,11 @@ $urlManual = $base . '/documentacion' . ($rutaActualAyuda !== '' ? '?ruta=' . ur
                     <i class="bi bi-arrow-repeat text-danger"></i>
                     <span class="position-absolute badge rounded-pill bg-warning text-dark cmg-suscgest-badge">0</span>
                     <small>Suscrip.</small>
+                </a>
+                <a class="cmg-suscrep-tile d-none" href="#" data-susc-pagos-reportados>
+                    <i class="bi bi-inbox text-danger"></i>
+                    <span class="position-absolute badge rounded-pill bg-danger d-none cmg-suscrep-badge">0</span>
+                    <small>Pag. report.</small>
                 </a>
                 <a class="cmg-icon-update tareas-alertas-link tareas-alertas-toggle d-none" href="#" data-bs-toggle="modal" data-bs-target="#modalTareasAlertas">
                     <i class="bi bi-bell-fill"></i>
@@ -965,10 +985,10 @@ $urlManual = $base . '/documentacion' . ($rutaActualAyuda !== '' ? '?ruta=' . ur
             soporte_sin_leer:             { icon: '.soporte-sinleer-icon',              badge: '.soporte-sinleer-badge' }
         };
 
-        // Ícono de suscripciones de clientes: con pagos reportados por revisar abre el modal
-        // «Pagos reportados» en la página actual (el JS se carga al primer clic).
+        // «Pagos reportados» (opción del menú del ícono de suscripciones y tile móvil): abre el
+        // modal en la página actual; su JS se carga al primer clic.
         document.addEventListener('click', function(e) {
-            const w = e.target.closest('.cmg-suscgest-wrap[data-susc-reportados]');
+            const w = e.target.closest('[data-susc-pagos-reportados]');
             if (!w) return;
             e.preventDefault();
             const oc = w.closest('.offcanvas.show');
@@ -981,7 +1001,7 @@ $urlManual = $base . '/documentacion' . ($rutaActualAyuda !== '' ? '?ruta=' . ur
             const s = document.createElement('script');
             s.src = base + '/js/modulos/suscripciones_pagos_reportados.js?v=<?= asset_ver('/js/modulos/suscripciones_pagos_reportados.js') ?>';
             s.onload = function() { window.SUSC_abrirPagosReportados(base); };
-            s.onerror = function() { window.location.href = w.getAttribute('href'); };
+            s.onerror = function() { window.location.href = base + '/modulos/suscripciones'; };
             document.head.appendChild(s);
         });
 
@@ -1171,29 +1191,48 @@ $urlManual = $base . '/documentacion' . ($rutaActualAyuda !== '' ? '?ruta=' . ur
                 // Suscripciones de clientes (empresa administradora): vencidas / por vencer
                 const sg = c.suscripciones_gestion || null;
                 const sgWraps = document.querySelectorAll('.cmg-suscgest-wrap');
+                const sgRepTiles = document.querySelectorAll('.cmg-suscrep-tile');
                 if (sg) {
                     const sgV = parseInt(sg.vencidas || 0, 10);
                     const sgP = parseInt(sg.por_vencer || 0, 10);
                     const sgR = parseInt(sg.reportados || 0, 10);
+                    const sgCtrl = !!sg.controladora;
                     const sgT = parseInt(sg.total || (sgV + sgP), 10) + sgR;
                     document.querySelectorAll('.cmg-suscgest-badge').forEach(function(b) {
                         b.textContent = sgT > 99 ? '99+' : sgT;
+                        // En la controladora el ícono sale aunque no haya nada: sin número.
+                        b.classList.toggle('d-none', sgT === 0);
                         b.classList.remove('bg-warning', 'text-dark', 'bg-danger', 'text-white');
                         if (sgV > 0 || sgR > 0) { b.classList.add('bg-danger', 'text-white'); }
                         else { b.classList.add('bg-warning', 'text-dark'); }
                     });
-                    let sgTit = 'Suscripciones DE CLIENTES: ' + sgV + ' vencida' + (sgV === 1 ? '' : 's') + ' · ' + sgP + ' por vencer';
+                    const sgDet = sgV + ' vencida' + (sgV === 1 ? '' : 's') + ' · ' + sgP + ' por vencer';
+                    document.querySelectorAll('.cmg-suscgest-detalle').forEach(function(d) { d.textContent = sgDet; });
+                    document.querySelectorAll('.cmg-suscrep-badge').forEach(function(b) {
+                        b.textContent = sgR > 99 ? '99+' : sgR;
+                        b.classList.toggle('d-none', sgR === 0);
+                    });
+                    let sgTit = 'Suscripciones DE CLIENTES: ' + sgDet;
                     if (sgR > 0) { sgTit += ' · ' + sgR + ' pago' + (sgR === 1 ? '' : 's') + ' reportado' + (sgR === 1 ? '' : 's') + ' por revisar'; }
-                    sgTit += sgR > 0 ? ' — clic para revisar los pagos reportados' : ' — clic para gestionarlas';
-                    // Con pagos por revisar, el clic abre el modal «Pagos reportados» aquí mismo
-                    // (ver el listener de .cmg-suscgest-wrap); si no, va a Suscripciones.
+                    sgTit += sgCtrl ? ' — clic para ver las opciones' : ' — clic para gestionarlas';
                     sgWraps.forEach(function(w) {
                         w.classList.remove('d-none');
                         w.setAttribute('title', sgTit);
-                        w.toggleAttribute('data-susc-reportados', sgR > 0);
                     });
+                    // Escritorio: con «Pagos reportados» el ícono despliega el menú; si no, es
+                    // un enlace directo a Suscripciones.
+                    document.querySelectorAll('.cmg-suscgest-toggle').forEach(function(t) {
+                        if (sgCtrl) { t.setAttribute('data-bs-toggle', 'dropdown'); }
+                        else {
+                            if (window.bootstrap) { const dd = bootstrap.Dropdown.getInstance(t); if (dd) { dd.hide(); dd.dispose(); } }
+                            t.removeAttribute('data-bs-toggle');
+                        }
+                    });
+                    // Móvil: tile propio para «Pagos reportados».
+                    sgRepTiles.forEach(function(t) { t.classList.toggle('d-none', !sgCtrl); });
                 } else {
                     sgWraps.forEach(function(w) { w.classList.add('d-none'); });
+                    sgRepTiles.forEach(function(t) { t.classList.add('d-none'); });
                 }
 
                 // Firma electrónica (empresa activa): sin firma / por caducar / caducada
