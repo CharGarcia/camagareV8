@@ -104,6 +104,100 @@ class SincronizadorAsientosService
         'produccion'            => ['tipo' => 'produccion',                'nombre' => 'Producción'],
     ];
 
+    /**
+     * Fecha del documento que decide si cae en un período contable cerrado, por clave del trabajo
+     * (alias `_d` = tablaVerif). Es la misma fecha con la que su service arma el asiento. Un
+     * trabajo sin entrada aquí (Producción: la fecha sale de sus movimientos) no se filtra.
+     */
+    private const FECHA_DOCUMENTO = [
+        'facturas_venta'        => '_d.fecha_emision',
+        'recibos_venta'         => '_d.fecha_emision',
+        'liquidaciones_compra'  => '_d.fecha_emision',
+        'compras'               => '_d.fecha_emision',
+        'notas_credito'         => '_d.fecha_emision',
+        'retenciones_venta'     => '_d.fecha_emision',
+        'retenciones_compra'    => '_d.fecha_emision',
+        'ingresos'              => '_d.fecha_emision',
+        'egresos'               => '_d.fecha_emision',
+        'consignaciones'        => '_d.fecha_emision',
+        'retornos_cv'           => '_d.fecha_retorno',
+        'cambios_producto_cv'   => '_d.fecha_cambio',
+        'ajustes_inventario'    => 'CAST(_d.fecha_movimiento AS DATE)',
+        'facturacion_cv'        => '_d.fecha_emision',
+        // Igual que RolAsientoService: fecha de pago o, sin ella, el último día del mes del rol.
+        'roles_pago'            => "COALESCE(_d.fecha_pago, CAST(make_date(_d.periodo_anio, _d.periodo_mes, 1) + INTERVAL '1 month - 1 day' AS DATE))",
+        'importaciones'         => '_d.fecha_nacionalizacion',
+        'conciliacion_tarjetas' => '_d.fecha_conciliacion',
+        'notas_debito'          => '_d.fecha_emision',
+        'factura_reembolso'     => '_d.fecha_emision',
+        'traspasos'             => '_d.fecha_emision',
+        'cobros_cheques'        => '_d.fecha_banco',
+        'activos_fijos_alta'    => '_d.fecha_adquisicion',
+    ];
+
+    /** Condición «la fecha del documento cae en un período cerrado de su empresa» (alias `_d`). */
+    private static function sqlEnPeriodoCerrado(string $exprFecha): string
+    {
+        return "EXISTS (SELECT 1 FROM periodos_contables _pcc
+                         WHERE _pcc.id_empresa = _d.id_empresa AND _pcc.eliminado = false AND _pcc.status = 0
+                           AND {$exprFecha} BETWEEN _pcc.fecha_inicial AND _pcc.fecha_final)";
+    }
+
+    /**
+     * Envuelve el SQL de detección de un trabajo para dejar fuera los documentos con fecha en un
+     * período cerrado. Todos los SQL devuelven la columna `id` de su tablaVerif. La tabla y la
+     * expresión son literales del código, no entrada de usuario.
+     */
+    private function excluirPeriodosCerrados(array $t): string
+    {
+        $expr  = self::FECHA_DOCUMENTO[$t['clave'] ?? ''] ?? null;
+        $tabla = $t['tablaVerif'] ?? null;
+        if ($expr === null || $tabla === null) {
+            return $t['sql'];
+        }
+        return "SELECT _pc.id FROM ({$t['sql']}) AS _pc
+                 WHERE NOT EXISTS (SELECT 1 FROM {$tabla} _d
+                                    WHERE _d.id = _pc.id AND " . self::sqlEnPeriodoCerrado($expr) . ")";
+    }
+
+    /**
+     * Aviso informativo: cuántos documentos sin asiento quedaron fuera por estar en un período
+     * cerrado, para que cerrar un mes sin haber generado antes sus asientos no pase inadvertido.
+     * Solo en la sincronización manual (una consulta más por módulo); el conteo y la generación
+     * automática no lo calculan.
+     */
+    private function informarPeriodosCerrados(\PDO $db, array $trabajos): void
+    {
+        $porModulo = [];
+        foreach ($trabajos as $t) {
+            $expr  = self::FECHA_DOCUMENTO[$t['clave'] ?? ''] ?? null;
+            $tabla = $t['tablaVerif'] ?? null;
+            if ($expr === null || $tabla === null || !isset($t['sqlBase'])) {
+                continue;
+            }
+            try {
+                $st = $db->prepare("SELECT COUNT(*) FROM ({$t['sqlBase']}) AS _pc
+                                     WHERE EXISTS (SELECT 1 FROM {$tabla} _d
+                                                    WHERE _d.id = _pc.id AND " . self::sqlEnPeriodoCerrado($expr) . ")");
+                $st->execute($t['params']);
+                $n = (int) $st->fetchColumn();
+            } catch (\Throwable $e) {
+                continue; // tabla o columna inexistente: ya se omite en el trabajo
+            }
+            if ($n > 0) {
+                $porModulo[$t['nombre']] = ($porModulo[$t['nombre']] ?? 0) + $n;
+            }
+        }
+        if (!$porModulo) {
+            return;
+        }
+        $total = array_sum($porModulo);
+        $partes = array_map(fn ($nom, $n) => "{$nom} {$n}", array_keys($porModulo), $porModulo);
+        $this->info[] = "Hay {$total} documento(s) sin asiento con fecha en períodos contables cerrados ("
+            . implode(', ', $partes) . "). No se generan ni se cuentan como pendientes; "
+            . "si deben contabilizarse, reabra el período en Períodos Contables.";
+    }
+
     /** Empresa de la corrida en curso: la usa registrarAccion() para consultar el interruptor. */
     private int $idEmpresa = 0;
 
@@ -134,6 +228,7 @@ class SincronizadorAsientosService
         // Verificación proactiva: conceptos y formas SIN cuenta contable configurada
         // (avisa aunque todavía no existan documentos pendientes).
         $this->verificarConfiguracionCuentas($db, $idEmpresa);
+        $this->informarPeriodosCerrados($db, $trabajos);
 
         // Consignaciones con costo en Kardex que no se pueden contabilizar por falta
         // de la cuenta «Mercadería en Consignación» configurada.
@@ -189,6 +284,7 @@ class SincronizadorAsientosService
         } elseif ($paso === count($trabajos)) {
             $nombrePaso = 'Configuración de cuentas (Ingresos/Egresos, Cobros/Pagos, Productos en ventas)';
             $this->verificarConfiguracionCuentas($db, $idEmpresa);
+            $this->informarPeriodosCerrados($db, $trabajos);
         } elseif ($paso === count($trabajos) + 1) {
             $nombrePaso = 'Consignaciones en Ventas pendientes';
             $this->verificarConsignacionesPendientes($db, $idEmpresa);
@@ -1154,6 +1250,19 @@ class SincronizadorAsientosService
             'colAsiento' => 'id_asiento_alta',
             'colsDoc' => ['codigo', 'nombre'],
         ];
+
+        // Documentos con fecha en un período contable CERRADO: no se generan ni se cuentan como
+        // pendientes (el período cerrado ya prohíbe tocar sus documentos; su asiento fallaría igual
+        // con «período cerrado»). Es la forma de que una empresa migrada deje fuera los años que no
+        // va a contabilizar: cerrarlos en Períodos Contables. Reabrir el período los devuelve.
+        // Se aplica aquí, igual que el interruptor de abajo, para que el conteo, la generación
+        // manual y la automática miren los mismos documentos. 'sqlBase' guarda la consulta sin
+        // este filtro para el aviso informativo (informarPeriodosCerrados()).
+        foreach ($trabajos as &$t) {
+            $t['sqlBase'] = $t['sql'];
+            $t['sql'] = $this->excluirPeriodosCerrados($t);
+        }
+        unset($t);
 
         // Módulos que la empresa apagó en «Módulos que contabilizan»: no se generan ni se cuentan
         // como pendientes (el aviso de Estados Financieros / Balance no debe reclamarlos). Filtrar

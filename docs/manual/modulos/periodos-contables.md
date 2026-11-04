@@ -5,8 +5,8 @@ categoria: Contabilidad
 ruta_modulo: modulos/periodos_contables
 tipo: modulo
 visibilidad: todos
-etiquetas: periodos contables, reabrir periodo, motivo de reapertura, periodos superpuestos, periodos cruzados, no deja eliminar periodo, cerrar mes, periodo cerrado, abrir periodo, bloqueo de fechas, cierre mensual
-version: 1.3
+etiquetas: periodos contables, reabrir periodo, motivo de reapertura, periodos superpuestos, periodos cruzados, no deja eliminar periodo, cerrar mes, periodo cerrado, abrir periodo, bloqueo de fechas, cierre mensual, asientos pendientes, no generar asientos, años anteriores, empresa migrada, dejar de contabilizar
+version: 1.4
 orden: 30
 estado: activo
 ---
@@ -24,6 +24,24 @@ general a todo lo que genere movimiento contable.
 El sistema lo comprueba también al **modificar la fecha** de un documento: valida
 tanto el periodo de origen como el de destino, para que no se pueda sacar un
 movimiento de un mes cerrado cambiándole la fecha.
+
+## Excluir años de la generación de asientos
+
+Los documentos con fecha en un período cerrado **no se cuentan como asientos
+pendientes ni se les genera asiento**: ni en el aviso de Asientos Contables ni en
+la generación automática al abrir cada módulo. Aplica a todos los módulos.
+
+Es la forma de dejar fuera los años que no se van a contabilizar, por ejemplo en
+una empresa migrada que tiene documentos de 2022 sin asiento:
+
+1. Cree el período (uno anual, del `01-01-2022` al `31-12-2022`, o uno por mes).
+2. Ciérrelo.
+
+Si no existe ningún período para esas fechas, el sistema las considera abiertas y
+sigue reclamando sus asientos. Al **reabrir** el período, sus documentos vuelven a
+aparecer como pendientes. Al sincronizar, el aviso informa cuántos documentos sin
+asiento quedaron fuera por estar en períodos cerrados, para que no pase
+inadvertido cerrar un mes sin haber generado antes sus asientos.
 
 ## Cómo se crea un periodo
 
@@ -84,6 +102,8 @@ el cierre, los períodos vuelven a como estaban.
 
 ## Historial de cambios
 
+- **1.4** — Los documentos con fecha en un período cerrado ya no se cuentan como asientos
+  pendientes ni se les genera asiento, en todos los módulos.
 - **1.3** — Los períodos no pueden cruzarse. Reabrir un período cerrado exige acceso total
   y un motivo (queda en el log), y no se permite en un año cerrado con el Cierre del
   Ejercicio. Un período cerrado no se puede eliminar ni cambiar de fechas.

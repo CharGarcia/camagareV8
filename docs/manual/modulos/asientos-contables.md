@@ -5,8 +5,8 @@ categoria: Contabilidad
 ruta_modulo: modulos/asientos_contables
 tipo: modulo
 visibilidad: todos
-etiquetas: asientos, cuenta eliminada, cuenta configurada no funciona, asiento contable, diario, debe, haber, partida doble, cuadrado, comprobante, contabilidad, imprimir, pdf, excel, documento origen, cuadre con el documento, total de la factura, cuenta por cobrar, cartera, editar asiento desde el documento, pestaña asiento contable, editado a mano, restaurar asiento automático, permisos de contabilidad, documentos migrados, migración, sistema anterior, buscar asiento, buscador, filtros, filtrar asientos, buscar por cuenta, buscar por referencia, libro diario, chips, asiento descuadrado, búsqueda lenta, se queda buscando, filtrar por origen, origen del asiento, módulo de origen, vista previa, costo de ventas, asiento sin costo, duplicar asiento, copiar asiento, clonar asiento, repetir asiento, centro de costo sugerido, proyecto sugerido, cambiar centro de costo desde el documento, cambiar proyecto desde la compra
-version: 1.43
+etiquetas: asientos, cuenta eliminada, cuenta configurada no funciona, asiento contable, diario, debe, haber, partida doble, cuadrado, comprobante, contabilidad, imprimir, pdf, excel, documento origen, cuadre con el documento, total de la factura, cuenta por cobrar, cartera, editar asiento desde el documento, pestaña asiento contable, editado a mano, restaurar asiento automático, permisos de contabilidad, documentos migrados, migración, sistema anterior, buscar asiento, buscador, filtros, filtrar asientos, buscar por cuenta, buscar por referencia, libro diario, chips, asiento descuadrado, búsqueda lenta, se queda buscando, filtrar por origen, origen del asiento, módulo de origen, vista previa, costo de ventas, asiento sin costo, duplicar asiento, copiar asiento, clonar asiento, repetir asiento, centro de costo sugerido, proyecto sugerido, cambiar centro de costo desde el documento, cambiar proyecto desde la compra, período cerrado, no generar asientos de años anteriores, excluir año
+version: 1.44
 orden: 20
 estado: activo
 ---
@@ -216,6 +216,16 @@ Eso no reemplaza al aviso de esta pantalla, que sigue siendo el lugar donde se
 ve **qué quedó sin contabilizar y por qué**: la generación automática es
 silenciosa a propósito, y lo que no puede resolver (una cuenta sin configurar, un
 período cerrado) se sigue reportando aquí.
+
+## Documentos de períodos cerrados no se generan
+
+Un documento con fecha dentro de un **período contable cerrado** no aparece como
+asiento pendiente y no se le genera asiento, ni desde esta pantalla ni al abrir
+su módulo. Para dejar fuera un año que no se va a contabilizar (por ejemplo, los
+documentos de 2022 de una empresa migrada), cree y cierre ese período en
+[Períodos contables](modulos/periodos-contables). Reabrirlo los devuelve a la
+lista de pendientes. El aviso de la sincronización informa cuántos quedaron fuera
+por esta razón.
 
 ## Aviso antes de generar asientos en masa
 
@@ -564,6 +574,9 @@ cambiarlos se revierte el cierre en ese módulo y se genera de nuevo.
 
 ## Historial de cambios
 
+- **1.44** — Los documentos con fecha en un período contable cerrado ya no se cuentan como
+  pendientes ni se generan, en todos los módulos (antes solo los migrados); el aviso informa
+  cuántos quedaron fuera.
 - **1.43** — En el modal del asiento, una línea con un centro de costo o proyecto **inactivo** lo muestra como «(inactivo)» en lugar de dejar el campo vacío; antes, guardar el asiento lo borraba sin aviso.
 - **1.42** — La pestaña **Asiento contable** de los documentos (compras,
   ventas, ingresos, egresos, etc.) permite elegir el centro de costo y el
