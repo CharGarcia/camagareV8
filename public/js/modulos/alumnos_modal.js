@@ -925,6 +925,7 @@
             const partes = separarNombreCompleto(json.data.nombre);
             rellenarSiLibre(document.getElementById('alu_apellidos'), partes.apellidos);
             rellenarSiLibre(document.getElementById('alu_nombres'), partes.nombres);
+            actualizarTituloAlumno();
         } catch (e) {
             if (sriUltimaConsultaAlu !== cedula) return;
             spinner?.classList.add('d-none');
@@ -1290,6 +1291,19 @@
     }
     document.getElementById('tab-facturas-btn')?.addEventListener('shown.bs.tab', cargarFacturasAlumno);
 
+    // Título del modal: el nombre del alumno (apellidos y nombres), al abrirlo y
+    // mientras se escribe; sin nombre todavía, «Nuevo Alumno» / «Editar Alumno».
+    function actualizarTituloAlumno() {
+        const el = document.getElementById('tituloModalAlumno');
+        if (!el) return;
+        const nombre = [document.getElementById('alu_apellidos')?.value, document.getElementById('alu_nombres')?.value]
+            .map(v => String(v || '').trim()).filter(Boolean).join(' ');
+        el.textContent = nombre || (idAlumnoActual ? 'Editar Alumno' : 'Nuevo Alumno');
+        el.title = nombre ? (idAlumnoActual ? 'Editar alumno' : 'Nuevo alumno') : '';
+    }
+    ['alu_nombres', 'alu_apellidos'].forEach(id =>
+        document.getElementById(id)?.addEventListener('input', actualizarTituloAlumno));
+
     // ── Abrir modal: Crear / Editar ─────────────────────────────────────────
     function irATabGeneral() {
         const btn = document.getElementById('tab-general-btn');
@@ -1318,7 +1332,7 @@
         previewCrear.src = `${window.BASE_URL}/img/no-image.png`;
         document.getElementById('alu_estado_academico').value = 'activo';
 
-        document.getElementById('tituloModalAlumno').textContent = 'Nuevo Alumno';
+        actualizarTituloAlumno();
         document.getElementById('btnEliminarAlumnoModal').classList.add('d-none');
 
         setAdjuntosHabilitados(false);
@@ -1406,8 +1420,8 @@
             recalcularTotalesServicios();
             renderDocumentos(d.documentos || []);
 
-            document.getElementById('tituloModalAlumno').textContent = 'Editar Alumno';
-                document.getElementById('btnEliminarAlumnoModal').classList.remove('d-none');
+            actualizarTituloAlumno();
+            document.getElementById('btnEliminarAlumnoModal').classList.remove('d-none');
             setAdjuntosHabilitados(true);
             refrescarEstrellasFavoritos();
             cargarFacturasAlumno();
@@ -1459,6 +1473,7 @@
                     document.getElementById('btnEliminarAlumnoModal').classList.remove('d-none');
                     setAdjuntosHabilitados(true);
                     renderDocumentos([]);
+                    actualizarTituloAlumno();
                 }
                 await aviso('success', json.msg || 'Alumno guardado correctamente.', { timer: 1400, showConfirmButton: false });
                 getModal()?.hide();

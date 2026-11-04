@@ -566,7 +566,8 @@ pestaña Transacciones aparece solo si el usuario puede **ver** Facturas de Vent
   agrega un botón **PDF** por factura para imprimirla, descargarla o verla.
   Ahora se ve **una fila por factura**: un clic despliega su detalle. Tiene
   buscador (por factura o por ítem) y muestra por defecto el **año actual**,
-  con selector de año o Todos.
+  con selector de año o Todos. El encabezado del modal muestra el **nombre del
+  alumno** (apellidos y nombres) y se actualiza mientras se escribe.
 - **1.10** — Pestaña **Representantes**: muestra arriba al representante que
   factura (cliente de la pestaña Facturación) con su identificación, teléfono y
   correo, y el botón **Agregar a la lista** para copiarlo como representante.
