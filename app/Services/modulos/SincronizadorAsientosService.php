@@ -935,9 +935,15 @@ class SincronizadorAsientosService
             'colsDoc' => ['establecimiento', 'punto_emision', 'secuencial'],
         ];
 
-        // 6. Ingresos (cobros): contrapartida del concepto + formas de cobro
+        // 6. Ingresos (cobros): contrapartida del concepto + formas de cobro.
+        //    Sin ningún cobro con monto > 0 no hay valor que contabilizar (el builder devuelve un
+        //    asiento vacío, ver motivosSinAsiento()): no se cuentan como pendientes, o el aviso los
+        //    reclamaría en cada apertura sin que se pueda generar nada. Si luego se les agrega un
+        //    cobro, vuelven a aparecer solos. Uno con cobro y forma inexistente sí sigue (es un error).
         $trabajos[] = [
-            'sql'    => "SELECT id FROM ingresos_cabecera WHERE id_empresa = ? AND eliminado = false AND id_asiento_contable IS NULL AND UPPER(TRIM(COALESCE(estado, ''))) <> 'ANULADO'" . $excMig('ingresos', 'ingresos_cabecera.id'),
+            'sql'    => "SELECT id FROM ingresos_cabecera WHERE id_empresa = ? AND eliminado = false AND id_asiento_contable IS NULL AND UPPER(TRIM(COALESCE(estado, ''))) <> 'ANULADO'"
+                      . " AND EXISTS (SELECT 1 FROM ingresos_pagos ipv WHERE ipv.id_ingreso = ingresos_cabecera.id AND ipv.monto > 0)"
+                      . $excMig('ingresos', 'ingresos_cabecera.id'),
             'params' => [$idEmpresa],
             'factory' => function() {
                 return new \App\Services\modulos\IngresoService(
@@ -960,8 +966,13 @@ class SincronizadorAsientosService
         //    contabilizar el rol (base devengado) — ver
         //    AsientoBuilderService::generarAsientoEgreso(). Ya no se duplica el gasto
         //    porque el rol ya no acredita Bancos directamente, solo el pasivo.
+        //    Igual que Ingresos: sin un pago vigente con monto > 0 (p. ej. todos los cheques
+        //    anulados) no hay valor que contabilizar y no se cuenta como pendiente.
         $trabajos[] = [
-            'sql'    => "SELECT id FROM egresos_cabecera WHERE id_empresa = ? AND eliminado = false AND id_asiento_contable IS NULL AND UPPER(TRIM(COALESCE(estado, ''))) <> 'ANULADO'" . $excMig('egresos', 'egresos_cabecera.id'),
+            'sql'    => "SELECT id FROM egresos_cabecera WHERE id_empresa = ? AND eliminado = false AND id_asiento_contable IS NULL AND UPPER(TRIM(COALESCE(estado, ''))) <> 'ANULADO'"
+                      . " AND EXISTS (SELECT 1 FROM egresos_pagos epv WHERE epv.id_egreso = egresos_cabecera.id AND epv.eliminado = false"
+                      . " AND COALESCE(epv.estado_cheque, 'vigente') <> 'anulado' AND epv.monto > 0)"
+                      . $excMig('egresos', 'egresos_cabecera.id'),
             'params' => [$idEmpresa],
             'factory' => function() {
                 return new \App\Services\modulos\EgresoService(

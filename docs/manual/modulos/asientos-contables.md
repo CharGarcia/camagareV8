@@ -5,8 +5,8 @@ categoria: Contabilidad
 ruta_modulo: modulos/asientos_contables
 tipo: modulo
 visibilidad: todos
-etiquetas: asientos, cuenta eliminada, cuenta configurada no funciona, asiento contable, diario, debe, haber, partida doble, cuadrado, comprobante, contabilidad, imprimir, pdf, excel, documento origen, cuadre con el documento, total de la factura, cuenta por cobrar, cartera, editar asiento desde el documento, pestaña asiento contable, editado a mano, restaurar asiento automático, permisos de contabilidad, documentos migrados, migración, sistema anterior, buscar asiento, buscador, filtros, filtrar asientos, buscar por cuenta, buscar por referencia, libro diario, chips, asiento descuadrado, búsqueda lenta, se queda buscando, filtrar por origen, origen del asiento, módulo de origen, vista previa, costo de ventas, asiento sin costo, duplicar asiento, copiar asiento, clonar asiento, repetir asiento, centro de costo sugerido, proyecto sugerido, cambiar centro de costo desde el documento, cambiar proyecto desde la compra, período cerrado, no generar asientos de años anteriores, excluir año
-version: 1.44
+etiquetas: asientos, cuenta eliminada, cuenta configurada no funciona, asiento contable, diario, debe, haber, partida doble, cuadrado, comprobante, contabilidad, imprimir, pdf, excel, documento origen, cuadre con el documento, total de la factura, cuenta por cobrar, cartera, editar asiento desde el documento, pestaña asiento contable, editado a mano, restaurar asiento automático, permisos de contabilidad, documentos migrados, migración, sistema anterior, buscar asiento, buscador, filtros, filtrar asientos, buscar por cuenta, buscar por referencia, libro diario, chips, asiento descuadrado, búsqueda lenta, se queda buscando, filtrar por origen, origen del asiento, módulo de origen, vista previa, costo de ventas, asiento sin costo, duplicar asiento, copiar asiento, clonar asiento, repetir asiento, centro de costo sugerido, proyecto sugerido, cambiar centro de costo desde el documento, cambiar proyecto desde la compra, período cerrado, no generar asientos de años anteriores, excluir año, ingreso sin valor, egreso sin valor, cheques anulados, siempre salen pendientes
+version: 1.45
 orden: 20
 estado: activo
 ---
@@ -234,6 +234,18 @@ Siguen apareciendo los avisos que no dependen de la fecha de un documento, como
 una cuenta con naturaleza que no corresponde al concepto o productos cuya
 categoría no tiene la cuenta de ventas: afectan a los documentos que se registren
 en adelante.
+
+## Ingresos y egresos sin valor que contabilizar
+
+Un ingreso o egreso **sin ningún cobro o pago con monto** (sin formas de
+cobro/pago, con todas en 0.00 o, en egresos, con todos los cheques anulados) no
+tiene nada que contabilizar: no aparece como asiento pendiente ni se intenta
+generar. Antes se contaba en el aviso cada vez que se abría la pantalla y, al
+generar, no se creaba nada. Si después se le registra un cobro o pago, vuelve a
+aparecer como pendiente y se genera como los demás.
+
+Un cobro o pago con monto cuya **forma ya no existe** sí sigue apareciendo: ahí
+hay que corregir el documento.
 
 ## Aviso antes de generar asientos en masa
 
@@ -582,6 +594,8 @@ cambiarlos se revierte el cierre en ese módulo y se genera de nuevo.
 
 ## Historial de cambios
 
+- **1.45** — Los ingresos y egresos sin ningún cobro/pago con monto (o con todos los cheques
+  anulados) ya no aparecen como asientos pendientes.
 - **1.44** — Los documentos con fecha en un período contable cerrado ya no se cuentan como
   pendientes ni se generan, en todos los módulos (antes solo los migrados); el aviso informa
   cuántos quedaron fuera. Tampoco cuentan para los avisos de conceptos y formas de cobro/pago
