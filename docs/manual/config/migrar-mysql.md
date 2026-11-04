@@ -5,8 +5,8 @@ categoria: Configuración global
 ruta_modulo: config/migrar-mysql
 tipo: modulo
 visibilidad: superadmin
-etiquetas: migracion, migrar, sistema anterior, mysql, vendedor asignado, vendedor del cliente, clientes sin vendedor, vendedores migracion, asignacion de vendedor, migrar empresas, establecimientos migracion, ruc base, elegir establecimiento, fusionar establecimientos, cliente separado, serie, series, punto de emision, secuencial, numeracion, numero repetido, ingresos sin serie, egresos sin serie, pedidos sin serie, liquidacion pendiente de pago, liquidaciones de compra migradas, pagos migrados, egresos migrados, pago no aparece, cuentas por pagar migradas, compra pendiente de pago, compra pagada sale pendiente, pago no cruza, retencion en borrador, marcas, marca del producto, productos sin marca, catalogo de marcas, migrar marcas, cambios de productos migrados, cambio sin factura, factura del cambio, nup del cambio, recambio, registro de cambio, facturacion de consignacion migrada, unidad duplicada para devolver, iva inflado, iva multiplicado, iva x1000, asiento de compra mal, iva del asiento mayor, nota de credito compra asiento, contabilidad migrada, alumnos, migrar alumnos, estudiantes, campus, niveles, cursos, horarios, pension, servicios del alumno, descuento del alumno, alumnos activos, alumnos pasivos, representante del alumno, vehiculos, migrar vehiculos, placas, placa, chasis, chasis 123456789, año 2022, propietario privado, vehiculos faltantes, vehiculo sin orden, car wash migracion, cobros de recibos, recibo pendiente migrado, recibo sin abono, pago de recibo no cruza, recibos de venta migrados, saldo de recibo, liquidaciones 2020, liquidaciones antiguas pendientes, pagada en el sistema anterior, liquidacion sin pago migrada, egreso sin asiento, asiento no migrado, asiento contable faltante, desde, re-sincronizar contabilidad, registrado tarde, anulado en el sistema anterior, ingreso anulado con asiento, egreso anulado con asiento, asiento migrado vivo, asiento de documento anulado, categorias, categoria del producto, productos sin categoria, grupo de producto, grupo familiar, migrar categorias, suscripciones, facturas programadas, recibos programados, facturacion recurrente, migrar suscripciones, cobro periodico, nota de credito no aparece, nota de credito migrada en pruebas, ambiente de pruebas, saldo de inventario no paso, stock migrado incompleto, kardex migrado falta compra, egreso rol de pagos sin mes, ROL_PAGOS, quincena migrada, mes del rol en el egreso, roles de pago no se migran, roles omitidos, quincenas omitidas, empleado inactivo, empleados inactivos, empleado creado a mano
-version: 1.27
+etiquetas: migracion, migrar, sistema anterior, mysql, vendedor asignado, vendedor del cliente, clientes sin vendedor, vendedores migracion, asignacion de vendedor, migrar empresas, establecimientos migracion, ruc base, elegir establecimiento, fusionar establecimientos, cliente separado, serie, series, punto de emision, secuencial, numeracion, numero repetido, ingresos sin serie, egresos sin serie, pedidos sin serie, liquidacion pendiente de pago, liquidaciones de compra migradas, pagos migrados, egresos migrados, pago no aparece, cuentas por pagar migradas, compra pendiente de pago, compra pagada sale pendiente, pago no cruza, retencion en borrador, marcas, marca del producto, productos sin marca, catalogo de marcas, migrar marcas, cambios de productos migrados, cambio sin factura, factura del cambio, nup del cambio, recambio, registro de cambio, facturacion de consignacion migrada, unidad duplicada para devolver, iva inflado, iva multiplicado, iva x1000, asiento de compra mal, iva del asiento mayor, nota de credito compra asiento, contabilidad migrada, alumnos, migrar alumnos, estudiantes, campus, niveles, cursos, horarios, pension, servicios del alumno, descuento del alumno, alumnos activos, alumnos pasivos, representante del alumno, vehiculos, migrar vehiculos, placas, placa, chasis, chasis 123456789, año 2022, propietario privado, vehiculos faltantes, vehiculo sin orden, car wash migracion, cobros de recibos, recibo pendiente migrado, recibo sin abono, pago de recibo no cruza, recibos de venta migrados, saldo de recibo, liquidaciones 2020, liquidaciones antiguas pendientes, pagada en el sistema anterior, liquidacion sin pago migrada, egreso sin asiento, asiento no migrado, asiento contable faltante, desde, re-sincronizar contabilidad, registrado tarde, anulado en el sistema anterior, ingreso anulado con asiento, egreso anulado con asiento, asiento migrado vivo, asiento de documento anulado, categorias, categoria del producto, productos sin categoria, grupo de producto, grupo familiar, migrar categorias, suscripciones, facturas programadas, recibos programados, facturacion recurrente, migrar suscripciones, cobro periodico, nota de credito no aparece, nota de credito migrada en pruebas, ambiente de pruebas, saldo de inventario no paso, stock migrado incompleto, kardex migrado falta compra, egreso rol de pagos sin mes, ROL_PAGOS, quincena migrada, mes del rol en el egreso, roles de pago no se migran, roles omitidos, quincenas omitidas, empleado inactivo, empleados inactivos, empleado creado a mano, detalle adicional del item, adicional por linea, det. adicional migrado, info adicional del producto en la factura
+version: 1.28
 orden: 2
 estado: activo
 ---
@@ -539,6 +539,14 @@ sistema anterior tampoco los aplicaba al facturar por alumno).
 
 ## Errores frecuentes
 
+- **Una factura de venta migrada no trae el detalle adicional de sus ítems**
+  (columna *Det. Adicional* / *Adicional* de cada línea): se migró con una
+  versión anterior de la herramienta, que no lo leía (el sistema anterior lo
+  guardaba en cada línea de la factura). Se corrige volviendo a ejecutar
+  **Facturas de venta** (con *Desde/Hasta* basta): no se duplica nada, solo se
+  completa el adicional de las líneas que lo tienen vacío; lo que se haya
+  escrito a mano en este sistema se respeta.
+
 - **Una nota de crédito migrada no aparece en el listado**: el sistema anterior
   guarda algunas notas de crédito autorizadas sin el dato de ambiente, y la
   herramienta las migraba como *pruebas*, que no se ven en una empresa en
@@ -649,6 +657,9 @@ sistema anterior tampoco los aplicaba al facturar por alumno).
 
 ## Historial de cambios
 
+- **1.28** — **Facturas de venta**: se migra el detalle adicional de cada
+  ítem. Al re-ejecutarlas se completa en las facturas ya migradas, solo en las
+  líneas que lo tienen vacío.
 - **1.27** — **Alumnos activos**: no se ejecuta sin migrar antes campus y
   niveles; avisa (resumen y observaciones del alumno) cuando el campus o nivel
   del sistema anterior ya no existía; ya no toma «2 horas» o «Grupo 1.» como

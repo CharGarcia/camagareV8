@@ -6396,17 +6396,25 @@ class MigracionMysqlService
         $oldCliRuc   = $mysql->prepare("SELECT ruc FROM clientes WHERE id = :id LIMIT 1");
 
         $cuerpoStmt = $mysql->prepare(
-            "SELECT id_producto, cantidad_factura, valor_unitario_factura, subtotal_factura, descuento, tarifa_iva, codigo_producto, nombre_producto, id_bodega, lote, vencimiento
-               FROM cuerpo_factura WHERE ruc_empresa = :r AND serie_factura = :s AND secuencial_factura = :sec"
+            "SELECT id_producto, cantidad_factura, valor_unitario_factura, subtotal_factura, descuento, tarifa_iva, codigo_producto, nombre_producto, id_bodega, lote, vencimiento, tarifa_bp
+               FROM cuerpo_factura WHERE ruc_empresa = :r AND serie_factura = :s AND secuencial_factura = :sec ORDER BY id_cuerpo_factura"
         );
+        // Detalle adicional del ítem: el viejo lo guardaba en cuerpo_factura.tarifa_bp ('0' = sin dato;
+        // así lo leía EnviarFactura() para el <detAdicional>) → nuevo ventas_detalle.info_adicional.
+        $adicItem = static function ($v): ?string {
+            $t = trim((string) $v);
+            return ($t === '' || $t === '0') ? null : mb_substr($t, 0, 300);
+        };
         $prodPorCod = $this->productosPorCodigo($pg, $idEmpresa);
 
         // Lotes de una factura ya migrada: reaplica numero_lote/fecha_caducidad a las líneas del detalle
         // emparejando por ORDEN (la migración inserta el detalle en el mismo orden del cuerpo viejo).
         // Se usa en la reconciliación (la re-corrida NO reconstruye el detalle de facturas).
-        $loteStmt   = $mysql->prepare("SELECT lote, vencimiento FROM cuerpo_factura WHERE ruc_empresa = :r AND serie_factura = :s AND secuencial_factura = :sec ORDER BY id_cuerpo_factura");
+        // También completa el detalle adicional del ítem, solo donde hoy está vacío (no pisa lo editado a mano).
+        $loteStmt   = $mysql->prepare("SELECT lote, vencimiento, tarifa_bp FROM cuerpo_factura WHERE ruc_empresa = :r AND serie_factura = :s AND secuencial_factura = :sec ORDER BY id_cuerpo_factura");
         $detIdsStmt = $pg->prepare("SELECT id FROM ventas_detalle WHERE id_venta = ? ORDER BY id");
-        $reaplicarLotes = function (int $idVenta, array $ef) use ($loteStmt, $detIdsStmt, $repo): void {
+        $updAdicDet = $pg->prepare("UPDATE ventas_detalle SET info_adicional = ? WHERE id = ? AND (info_adicional IS NULL OR btrim(info_adicional) = '')");
+        $reaplicarLotes = function (int $idVenta, array $ef) use ($loteStmt, $detIdsStmt, $updAdicDet, $adicItem, $repo): void {
             $loteStmt->execute([':r' => $ef['ruc_empresa'], ':s' => $ef['serie_factura'], ':sec' => $ef['secuencial_factura']]);
             $lotes = $loteStmt->fetchAll(PDO::FETCH_ASSOC);
             if (!$lotes) { return; }
@@ -6415,6 +6423,8 @@ class MigracionMysqlService
             foreach ($ids as $i => $idDet) {
                 $l = $lotes[$i] ?? null;
                 if ($l === null) { break; }
+                $adic = $adicItem($l['tarifa_bp'] ?? null);
+                if ($adic !== null) { $updAdicDet->execute([$adic, (int) $idDet]); }
                 $lote = trim((string) $l['lote']);
                 // NO pisar las líneas cuyo cuerpo_factura viejo viene SIN lote: en las empresas
                 // que facturan desde consignación, el lote/caducidad de la factura NO está en
@@ -6604,6 +6614,7 @@ class MigracionMysqlService
                         'precio_unitario' => (float) $l['valor_unitario_factura'],
                         'descuento' => (float) $l['descuento'],
                         'precio_total_sin_impuesto' => round($base_i, 2),
+                        'info_adicional' => $adicItem($l['tarifa_bp'] ?? null),
                     ]);
                     $cod = trim((string) $l['tarifa_iva']); // el valor viejo puede traer espacios
                     $pct = self::IVA_PCT[$cod] ?? 0;
