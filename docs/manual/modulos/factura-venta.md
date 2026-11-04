@@ -631,6 +631,8 @@ la operación de inmediato.
   grande (p. ej. 1,250,000.00) ya no se sale de su recuadro. Si aun así no cabe, la cifra
   se ve un poco más angosta dentro de la celda. En las plantillas de PDF personalizadas el
   ancho sigue siendo el del diseño, y la cifra que no quepa se condensa dentro de la celda.
+  En la ventana de la factura, la casilla **Cant.** de cada ítem se ensancha con la cantidad
+  escrita, para que se vea completa (si la tabla no cabe, aparece la barra horizontal).
 - **2.51** — La columna **Adicional** de los ítems tiene el mismo diseño que la
   **Descripción**: el texto se ve en letra normal, crece en alto con lo escrito y
   la columna se ensancha arrastrando el borde del encabezado (el ancho se guarda

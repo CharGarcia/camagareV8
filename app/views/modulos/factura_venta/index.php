@@ -5380,9 +5380,21 @@ $totalPages = $totalPagesOriginal;
     /** Redondea a 2 decimales evitando errores de punto flotante. */
     const r2 = v => window.CMG_r2(v); // redondeo común (public/js/app.js): 98,10 × 15% = 14,72, no 14,71
 
+    // El input de Cantidad crece con lo escrito: la columna mide 6% y una cantidad
+    // grande (1250000.00) quedaba cortada. Se fija un ancho mínimo por número de
+    // caracteres (unidad `ch` = ancho de un dígito) + padding y flechas del input;
+    // la tabla es text-nowrap dentro de .table-responsive, así que si no cabe
+    // aparece scroll horizontal en vez de recortar el valor.
+    function fvAjustarAnchoCantidad(input) {
+        if (!input) return;
+        const largo = String(input.value || '').length;
+        input.style.minWidth = `max(60px, calc(${Math.max(largo, 3)}ch + 34px))`;
+    }
+
     function calcFila(el) {
         fvNoNegativo(el);
         const tr = el.closest('tr');
+        fvAjustarAnchoCantidad(tr.querySelector('.input-cantidad'));
         const cant = parseFloat(tr.querySelector('.input-cantidad').value) || 0;
         const prec = parseFloat(tr.querySelector('.input-precio').value) || 0;
         const desc = parseFloat(tr.querySelector('.input-desc').value) || 0;
@@ -5436,6 +5448,9 @@ $totalPages = $totalPagesOriginal;
 
     function calcTotales() {
         fvActualizarColumnasDinamicas();
+        // También aquí: hay caminos (abrir una factura guardada) que llenan la
+        // cantidad por código sin pasar por calcFila.
+        document.querySelectorAll('#m-tbodyDetalle .input-cantidad').forEach(fvAjustarAnchoCantidad);
         const modoIva = fvModoIva();
 
         // Suma de los subtotales de LÍNEA (neto, ya con el descuento de cada línea
