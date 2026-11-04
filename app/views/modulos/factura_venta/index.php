@@ -883,7 +883,7 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                                                     <div class="row g-2">
                                                         <div class="col-md-6">
                                                             <label class="x-small text-muted mb-1">Días de crédito</label>
-                                                            <input type="number" class="form-control form-control-sm" name="sri_dias_credito" id="m-input-dias-credito" value="0">
+                                                            <input type="number" class="form-control form-control-sm" name="sri_dias_credito" id="m-input-dias-credito" min="0" max="<?= \App\Helpers\PlazoCredito::MAX_DIAS ?>" title="Máximo <?= \App\Helpers\PlazoCredito::MAX_DIAS ?> días (10 años)" value="0">
                                                         </div>
                                                         <div class="col-md-6">
                                                             <label class="x-small text-muted mb-1">Plazo</label>

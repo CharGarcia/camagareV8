@@ -209,6 +209,14 @@ class ComprasRules
                 if ((float)($pago['total'] ?? 0) <= 0) {
                     throw new \Exception('El total de la forma de pago #' . ($idx + 1) . ' debe ser mayor a cero.');
                 }
+                // Tope del plazo (App\Helpers\PlazoCredito). Solo en el registro manual:
+                // en el electrónico el plazo viene del XML y ComprasService lo acota.
+                $errPlazo = \App\Helpers\PlazoCredito::validar(
+                    $pago['plazo'] ?? null, $pago['unidad_tiempo'] ?? 'dias', 'Los días de crédito'
+                );
+                if ($errPlazo !== null) {
+                    throw new \Exception($errPlazo);
+                }
             }
         }
 

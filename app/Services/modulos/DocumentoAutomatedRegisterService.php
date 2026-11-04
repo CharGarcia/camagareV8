@@ -405,7 +405,7 @@ class DocumentoAutomatedRegisterService
                 'estado' => 'autorizado',
                 'moneda' => (string)($info->moneda ?? 'DOLAR'),
                 'tipo_registro' => 'electronico',
-                'dias_credito' => (int)($info->pagos->pago[0]->plazo ?? 0),
+                'dias_credito' => \App\Helpers\PlazoCredito::acotar((string)($info->pagos->pago[0]->plazo ?? 0), 'dias'),
                 'plazo' => (string)($info->pagos->pago[0]->plazo ?? ''),
                 'tipo_ambiente' => $ambiente
             ]);
@@ -459,7 +459,7 @@ class DocumentoAutomatedRegisterService
                         'id_venta'      => $idVenta,
                         'forma_pago'    => (string)$p->formaPago,
                         'total'         => (float)$p->total,
-                        'plazo'         => (int)($p->plazo ?? 0),
+                        'plazo'         => \App\Helpers\PlazoCredito::acotar((string)($p->plazo ?? 0), (string)($p->unidadTiempo ?? 'dias')),
                         'unidad_tiempo' => $this->normalizarUnidadTiempo($p->unidadTiempo ?? 'Días')
                     ]);
                 }
@@ -871,7 +871,7 @@ class DocumentoAutomatedRegisterService
                         'id_compra'     => $idCompra,
                         'forma_pago'    => (string)$p->formaPago,
                         'total'         => (float)$p->total,
-                        'plazo'         => (int)($p->plazo ?? 0),
+                        'plazo'         => \App\Helpers\PlazoCredito::acotar((string)($p->plazo ?? 0), (string)($p->unidadTiempo ?? 'dias')),
                         'unidad_tiempo' => $this->normalizarUnidadTiempo($p->unidadTiempo ?? 'Días')
                     ]);
                 }

@@ -363,7 +363,7 @@
                       <div class="row g-2">
                         <div class="col-md-6">
                           <label class="x-small text-muted mb-1">Días de crédito</label>
-                          <input type="number" id="mcDiasCredito" class="form-control form-control-sm" value="0">
+                          <input type="number" id="mcDiasCredito" class="form-control form-control-sm" min="0" max="<?= \App\Helpers\PlazoCredito::MAX_DIAS ?>" title="Máximo <?= \App\Helpers\PlazoCredito::MAX_DIAS ?> días (10 años)" value="0">
                         </div>
                         <div class="col-md-6">
                           <label class="x-small text-muted mb-1">Plazo</label>

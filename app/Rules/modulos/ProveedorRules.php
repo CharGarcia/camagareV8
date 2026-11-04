@@ -100,6 +100,13 @@ class ProveedorRules
             }
         }
 
+        $errPlazo = \App\Helpers\PlazoCredito::validar(
+            $data['plazo'] ?? null, $data['unidad_tiempo'] ?? 'dias', 'El plazo de pago del proveedor'
+        );
+        if ($errPlazo !== null) {
+            $errores[] = $errPlazo;
+        }
+
         if (!empty($errores)) {
             throw new Exception(implode(' ', $errores));
         }

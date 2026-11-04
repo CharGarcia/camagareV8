@@ -74,6 +74,8 @@ class FacturaVentaRules
         $diasCred = (int) ($data['dias_credito'] ?? 0);
         if ($diasCred < 0)
             throw new \Exception('Los días de crédito no pueden ser menores a cero.');
+        if ($err = \App\Helpers\PlazoCredito::validar($data['dias_credito'] ?? null, 'dias', 'Los días de crédito'))
+            throw new \Exception($err);
 
         if (empty($data['detalles']))
             throw new \Exception('La factura debe tener al menos un producto o servicio.');
@@ -89,8 +91,13 @@ class FacturaVentaRules
             throw new \Exception('El total de la factura no puede ser negativo.');
 
         $sumPagos = 0.0;
-        foreach ($data['pagos'] as $p) {
+        foreach ($data['pagos'] as $i => $p) {
             $sumPagos += (float) ($p['total'] ?? 0);
+            $err = \App\Helpers\PlazoCredito::validar(
+                $p['plazo'] ?? null, $p['unidad_tiempo'] ?? 'dias', 'El plazo de la forma de pago #' . ((int) $i + 1)
+            );
+            if ($err !== null)
+                throw new \Exception($err);
         }
         $sumPagos = round($sumPagos, 2);
 

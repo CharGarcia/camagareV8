@@ -162,13 +162,14 @@ if (!defined('LEAFLET_LOADED')) {
                         <!-- Pestaña 1: GENERAL -->
                         <div class="tab-pane fade show active" id="pane-general" role="tabpanel">
                             <div class="row g-3">
-                                <div class="col-md-4">
+                                <!-- Fila 1: identificación, vendedor y estado -->
+                                <div class="col-md-3">
                                     <label class="form-label small fw-bold d-flex align-items-center">Tipo Identificación * <?= \App\Helpers\PreferenciasHelper::renderEstrellaFavorito('clientes', 'cliente_tipo_id', 'tipo_id') ?></label>
                                     <select class="form-select form-select-sm" name="tipo_id" id="cliente_tipo_id" required>
                                         <option value="">-- Seleccione --</option>
                                     </select>
                                 </div>
-                                <div class="col-md-5">
+                                <div class="col-md-3">
                                     <label for="cliente_identificacion" class="form-label small fw-bold d-flex justify-content-between align-items-center">
                                         <span>Identificación *</span>
                                         <span id="sriBadge" class="badge d-none"></span>
@@ -181,51 +182,54 @@ if (!defined('LEAFLET_LOADED')) {
                                     </div>
                                     <div id="identificacionError" class="invalid-feedback d-block text-danger small mt-1" style="display:none!important"></div>
                                 </div>
-                                <div class="col-md-3">
+                                <div class="col-md-4">
+                                    <label for="cliente_vendedor" class="form-label small fw-bold d-flex align-items-center">Vendedor asignado <?= \App\Helpers\PreferenciasHelper::renderEstrellaFavorito('clientes', 'cliente_vendedor', 'id_vendedor') ?></label>
+                                    <select class="form-select form-select-sm" name="id_vendedor" id="cliente_vendedor">
+                                        <option value="">- Sin vendedor asignado -</option>
+                                    </select>
+                                </div>
+                                <div class="col-md-2">
                                     <label class="form-label small fw-bold d-flex align-items-center">Estado <?= \App\Helpers\PreferenciasHelper::renderEstrellaFavorito('clientes', 'cliente_status', 'status') ?></label>
                                     <select class="form-select form-select-sm" name="status" id="cliente_status">
                                         <option value="1">Activo</option>
                                         <option value="0">Inactivo</option>
                                     </select>
                                 </div>
+                                <!-- Fila 2: razón social -->
                                 <div class="col-md-12">
                                     <label for="cliente_nombre" class="form-label small fw-bold">Razón Social / Nombre *</label>
                                     <input type="text" class="form-control form-control-sm" name="nombre" id="cliente_nombre" required maxlength="150" autocomplete="off">
                                 </div>
+                                <!-- Fila 3: correo y dirección -->
                                 <div class="col-md-6">
                                     <label for="cliente_email" class="form-label small fw-bold">Correo Electrónico * <small class="text-muted fw-normal">(separados por coma)</small></label>
                                     <input type="text" class="form-control form-control-sm" name="email" id="cliente_email" maxlength="255" placeholder="ej@mail.com, otro@mail.com" autocomplete="off" required>
                                     <div id="emailError" class="text-danger small mt-1" style="display:none"></div>
                                 </div>
                                 <div class="col-md-6">
-                                    <label for="cliente_telefono" class="form-label small fw-bold">Teléfono</label>
-                                    <input type="text" class="form-control form-control-sm" name="telefono" id="cliente_telefono" maxlength="50">
+                                    <label for="cliente_direccion" class="form-label small fw-bold">Dirección</label>
+                                    <input type="text" class="form-control form-control-sm" name="direccion" id="cliente_direccion" maxlength="255">
                                 </div>
-                                <div class="col-md-6">
+                                <!-- Fila 4: ubicación, teléfono y plazo -->
+                                <div class="col-md-3">
                                     <label class="form-label small fw-bold d-flex align-items-center">Provincia <?= \App\Helpers\PreferenciasHelper::renderEstrellaFavorito('clientes', 'cliente_provincia', 'provincia') ?></label>
                                     <select class="form-select form-select-sm" name="provincia" id="cliente_provincia">
                                         <option value="">- Seleccione provincia -</option>
                                     </select>
                                 </div>
-                                <div class="col-md-6">
+                                <div class="col-md-3">
                                     <label for="cliente_ciudad" class="form-label small fw-bold">Ciudad</label>
                                     <select class="form-select form-select-sm" name="ciudad" id="cliente_ciudad">
                                         <option value="">- Seleccione ciudad -</option>
                                     </select>
                                 </div>
-                                <div class="col-md-12">
-                                    <label for="cliente_direccion" class="form-label small fw-bold">Dirección Completa</label>
-                                    <input type="text" class="form-control form-control-sm" name="direccion" id="cliente_direccion" maxlength="255">
+                                <div class="col-md-3">
+                                    <label for="cliente_telefono" class="form-label small fw-bold">Teléfono</label>
+                                    <input type="text" class="form-control form-control-sm" name="telefono" id="cliente_telefono" maxlength="50">
                                 </div>
-                                <div class="col-md-6">
-                                    <label for="cliente_plazo" class="form-label small fw-bold d-flex align-items-center">Plazo de Crédito (Días) <?= \App\Helpers\PreferenciasHelper::renderEstrellaFavorito('clientes', 'cliente_plazo', 'plazo') ?></label>
-                                    <input type="number" class="form-control form-control-sm" name="plazo" id="cliente_plazo" min="0" value="0">
-                                </div>
-                                <div class="col-md-6">
-                                    <label for="cliente_vendedor" class="form-label small fw-bold d-flex align-items-center">Vendedor asignado <?= \App\Helpers\PreferenciasHelper::renderEstrellaFavorito('clientes', 'cliente_vendedor', 'id_vendedor') ?></label>
-                                    <select class="form-select form-select-sm" name="id_vendedor" id="cliente_vendedor">
-                                        <option value="">- Sin vendedor asignado -</option>
-                                    </select>
+                                <div class="col-md-3">
+                                    <label for="cliente_plazo" class="form-label small fw-bold d-flex align-items-center">Plazo (días) <?= \App\Helpers\PreferenciasHelper::renderEstrellaFavorito('clientes', 'cliente_plazo', 'plazo') ?></label>
+                                    <input type="number" class="form-control form-control-sm" name="plazo" id="cliente_plazo" min="0" max="<?= \App\Helpers\PlazoCredito::MAX_DIAS ?>" title="Máximo <?= \App\Helpers\PlazoCredito::MAX_DIAS ?> días (10 años)" value="0">
                                 </div>
                             </div>
                         </div>

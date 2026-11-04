@@ -68,6 +68,10 @@ class ClienteRules
             }
         }
 
+        if ($err = \App\Helpers\PlazoCredito::validar($data['plazo'] ?? null, 'dias', 'El plazo de crédito del cliente')) {
+            throw new \InvalidArgumentException($err);
+        }
+
         $this->validarVisitas($data);
     }
 

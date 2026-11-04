@@ -219,7 +219,7 @@ if (!defined('LEAFLET_LOADED')) {
                             <div class="row g-3">
                                 <div class="col-md-6">
                                     <label class="form-label small fw-bold">Días de Crédito / Plazo</label>
-                                    <input type="number" step="1" min="0" class="form-control form-control-sm" name="plazo" id="prov_plazo" value="0">
+                                    <input type="number" step="1" min="0" max="<?= \App\Helpers\PlazoCredito::MAX_DIAS ?>" title="Máximo <?= \App\Helpers\PlazoCredito::MAX_DIAS ?> días (10 años)" class="form-control form-control-sm" name="plazo" id="prov_plazo" value="0">
                                 </div>
 
                                 <!-- Resumen Comercial (Lectura) -->

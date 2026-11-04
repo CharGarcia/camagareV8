@@ -1799,6 +1799,10 @@ class ComprasService
     {
         foreach ($pagos as $pago) {
             $pago['id_compra'] = $idCompra;
+            // Un plazo absurdo del XML del proveedor (p. ej. una fecha 20261231 en <plazo>)
+            // se deja en el tope: el comprobante autorizado no se puede rechazar, y el XML
+            // se conserva intacto. El registro manual ya lo rechazó ComprasRules.
+            $pago['plazo'] = \App\Helpers\PlazoCredito::acotar($pago['plazo'] ?? 0, $pago['unidad_tiempo'] ?? 'dias');
             $this->repository->insertPago($pago);
         }
     }

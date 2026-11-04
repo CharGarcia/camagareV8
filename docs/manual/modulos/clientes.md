@@ -6,7 +6,7 @@ ruta_modulo: modulos/clientes
 tipo: modulo
 visibilidad: todos
 etiquetas: clientes, contable, cuenta contable, cuentas contables, asiento contable, configuracion contable, cuenta por cobrar del cliente, cuenta de ventas del cliente, cliente, cartera, buscar cliente, buscador, filtros, filtrar clientes, clientes sin correo, clientes por ciudad, clientes por vendedor, chips, ordenar por dos columnas, ordenar por ciudad y nombre, ruc, cedula, consumidor final, deudores, cobro automatico, cobros pendientes, forma de cobro, ingreso automatico, cheque, dias de credito, visitas, dias de visita, ruta de visita, rutero, frecuencia de visita, vendedor, preventa, visita del vendedor, horario de atencion, orden de visita, importar clientes, carga masiva, asignar vendedor, transacciones, productos vendidos, servicios vendidos, historial de ventas, que le vendi, ultimo precio, precio de venta, estado de cuenta, kardex, saldo del cliente, historial de cobros, cobros realizados, ingresos, ver ingreso, cedula y ruc, cliente duplicado, proveedor duplicado, identificacion repetida, ruc es la cedula mas 001, mismo tercero dos fichas, estado de cuenta partido, cedula falsa, cedula invalida, cedula incorrecta, ruc invalido, digito verificador, validar cedula, comprobar cedula, imprimir, impresora
-version: 3.0
+version: 3.2
 orden: 10
 estado: activo
 ---
@@ -30,10 +30,19 @@ volver a escribir sus datos.
 3. Complete la identificación (RUC, cédula o pasaporte), el nombre y los datos de contacto.
 4. Guarde. El cliente queda disponible de inmediato en facturas y proformas.
 
+La pestaña **General** está ordenada en cuatro filas:
+
+| Fila | Campos |
+|---|---|
+| 1 | Tipo de identificación, Identificación, Vendedor asignado, Estado |
+| 2 | Razón social / Nombre |
+| 3 | Correo electrónico, Dirección |
+| 4 | Provincia, Ciudad, Teléfono, Plazo (días) |
+
 Para modificar un cliente existente, haga clic sobre su fila en el listado.
 
 **Valores por defecto (estrella de favoritos).** Junto a *Tipo de
-identificación*, *Estado*, *Provincia*, *Plazo de Crédito (Días)*, *Vendedor
+identificación*, *Estado*, *Provincia*, *Plazo (días)*, *Vendedor
 asignado* y *Frecuencia de visita* hay una estrella. Escriba o seleccione el valor que usa casi siempre
 y pulse la estrella: cada vez que abra **Nuevo**, ese campo ya vendrá cargado.
 Para quitarlo, pulse la estrella otra vez con el mismo valor puesto. El favorito
@@ -445,6 +454,9 @@ usuario y la fecha.
 
 ## Errores frecuentes
 
+- **"… el máximo permitido es 3.650 días (10 años)"**: el plazo escrito es demasiado
+  grande (suele ser un teléfono o una fecha escrita en ese campo). Corrija el valor. Ver
+  [Límite del plazo de crédito](../conceptos/plazo-credito.md).
 - **«Ubicación aproximada» al usar el botón GPS / el punto del mapa no es el lugar real**: el dispositivo no está usando GPS (apagado, bajo techo o un computador de escritorio, que ubica por la red a cientos de metros). Active el GPS, dé permiso de ubicación precisa al navegador y vuelva a pulsar **Usar mi ubicación (GPS)**, o arrastre el marcador hasta el punto exacto antes de guardar.
 - **Aviso ámbar «Cédula incorrecta, revisar.»**: revise el número, lo más
   probable es un dígito mal digitado. Si está seguro de que es correcto (el SRI lo
@@ -477,6 +489,8 @@ usuario y la fecha.
 
 ## Historial de cambios
 
+- **3.2** — Pestaña **General** del modal reordenada: identificación, vendedor y estado en la primera fila; razón social sola; correo y dirección; y provincia, ciudad, teléfono y plazo en la última fila.
+- **3.1** — El **Plazo de Crédito (Días)** admite como máximo **3.650 días (10 años)**; un valor mayor (p. ej. un teléfono escrito por error) se rechaza al guardar. Ver [Límite del plazo de crédito](../conceptos/plazo-credito.md).
 - **3.0** — Creado desde un documento (factura, nota, retención, pedido…), el cliente nuevo se **cierra solo y queda seleccionado** en el documento. Desde el listado de Clientes la ficha sigue sin cerrarse al guardar.
 - **2.9** — Anticipos: solo cuentan los ingresos del ambiente de la empresa
   (pruebas o producción), igual que en el resto de saldos. Antes un anticipo

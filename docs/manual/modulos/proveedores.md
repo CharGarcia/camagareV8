@@ -6,7 +6,7 @@ ruta_modulo: modulos/proveedores
 tipo: modulo
 visibilidad: todos
 etiquetas: proveedores, contable, cuenta contable, cuentas contables, asiento contable, configuracion contable, cuenta por pagar del proveedor, cuenta de gasto del proveedor, buscar proveedor, buscador, filtros, filtrar proveedores, proveedores sin correo, proveedores por banco, proveedores por ciudad, chips, ordenar por dos columnas, ordenar por ciudad y razon social, proveedor, acreedor, ruc, retencion, cuenta bancaria, plazo, credito, parte relacionada, pago automatico, cheque, egreso automatico, pagos pendientes, resumen comercial, por pagar, buscar, buscador, filtrar, copiar a otra empresa, replicar, duplicar, multiempresa, valores de terceros, otros conceptos, valores adicionales, bomberos, tasa de basura, planilla de luz, transacciones, productos comprados, servicios comprados, historial de compras, que le compre, ultimo precio, precio de compra, estado de cuenta, kardex, saldo del proveedor, historial de pagos, pagos realizados, egresos, ver egreso, cedula y ruc, cliente duplicado, proveedor duplicado, identificacion repetida, ruc es la cedula mas 001, mismo tercero dos fichas, estado de cuenta partido, cedula falsa, cedula invalida, cedula incorrecta, ruc invalido, digito verificador, validar cedula, comprobar cedula, imprimir, impresora
-version: 2.12
+version: 2.13
 orden: 10
 estado: activo
 ---
@@ -451,6 +451,9 @@ lo referencian se conservan intactas. Si solo quiere dejar de usarlo, cámbielo 
 
 ## Errores frecuentes
 
+- **"… el máximo permitido es 3.650 días (10 años)"**: el plazo escrito es demasiado
+  grande (suele ser un teléfono o una fecha escrita en ese campo). Corrija el valor. Ver
+  [Límite del plazo de crédito](../conceptos/plazo-credito.md).
 - **«Ubicación aproximada» al usar el botón GPS / el punto del mapa no es el lugar real**: el dispositivo no está usando GPS (apagado, bajo techo o un computador de escritorio, que ubica por la red a cientos de metros). Active el GPS, dé permiso de ubicación precisa al navegador y vuelva a pulsar **Usar mi ubicación (GPS)**, o arrastre el marcador hasta el punto exacto antes de guardar.
 - **Aviso ámbar «Cédula incorrecta, revisar.»**: revise el número, lo más
   probable es un dígito mal digitado. Si está seguro de que es correcto (el SRI lo
@@ -493,6 +496,7 @@ lo referencian se conservan intactas. Si solo quiere dejar de usarlo, cámbielo 
 
 ## Historial de cambios
 
+- **2.13** — El **Plazo** admite como máximo **3.650 días (10 años)** o su equivalente en meses o años; un valor mayor se rechaza al guardar. Ver [Límite del plazo de crédito](../conceptos/plazo-credito.md).
 - **2.12** — Creado desde un documento (compra, egreso, retención, importación…), el proveedor nuevo **se cierra solo y queda seleccionado** en el documento. Desde el listado la ficha sigue sin cerrarse al guardar.
 - **2.11** — Anticipos: solo cuentan los egresos del ambiente de la empresa
   (pruebas o producción), igual que en el resto de saldos. Antes un anticipo
