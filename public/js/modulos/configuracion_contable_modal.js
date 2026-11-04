@@ -97,19 +97,17 @@
         const cont = document.getElementById('avisoSinClasificacion');
         if (!cont) return;
         const esc = (s) => String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
-        const rutaProd = `${window.BASE_URL || ''}/modulos/productos`;
         const puede = !!window.ASIENTOPROG_PUEDE_CLASIFICAR;
         const bloques = [['categoria', 'categorías', 'categoría'], ['marca', 'marcas', 'marca']].map(([dim, plural, singular]) => {
             const d = (data || {})[dim];
             if (!d || !d.total) return '';
             const filas = (d.items || []).map(p => {
-                const href = `${rutaProd}?b=${encodeURIComponent(p.codigo || p.nombre)}`;
                 const btn = puede && p.id
                     ? ` <button type="button" class="btn btn-link btn-sm p-0 ms-1 align-baseline" style="font-size:inherit"`
                       + ` data-clasif-dim="${dim}" data-clasif-id="${p.id}" data-clasif-nombre="${esc(p.codigo)} - ${esc(p.nombre)}"`
                       + ` title="Asignar ${singular}"><i class="bi bi-pencil-square me-1"></i>Asignar ${singular}</button>`
                     : '';
-                return `<li><a href="${href}" target="_blank" rel="noopener" title="Abrir en Productos">${esc(p.codigo)} - ${esc(p.nombre)}</a>`
+                return `<li>${esc(p.codigo)} - ${esc(p.nombre)}`
                      + `<span class="text-muted"> · ${p.servicio ? 'Servicio' : 'Bien'}</span>${btn}</li>`;
             }).join('');
             const mas = d.total > (d.items || []).length ? `<li class="text-muted">y ${d.total - d.items.length} más…</li>` : '';
