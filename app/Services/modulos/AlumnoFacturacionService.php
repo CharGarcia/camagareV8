@@ -466,8 +466,15 @@ class AlumnoFacturacionService
         if (!$this->repository->existeEsquemaFacturacion()) {
             return [];
         }
-        $facturas = $this->repository->getFacturasAlumno($idAlumno, $idEmpresa);
-        $lineas = $this->repository->getLineasFacturas(array_column($facturas, 'id_factura'), $idEmpresa);
+        // Las generadas desde el alumno y, además, las del representante que son
+        // del alumno (migradas o hechas en Facturas de Venta).
+        $facturas = array_merge(
+            array_map(fn($f) => $f + ['origen' => 'alumno'], $this->repository->getFacturasAlumno($idAlumno, $idEmpresa)),
+            array_map(fn($f) => $f + ['origen' => 'cliente'], $this->repository->getFacturasRelacionadas($idAlumno, $idEmpresa))
+        );
+        usort($facturas, fn($a, $b) => [$b['periodo'], $b['fecha_emision'] ?? '', (int) $b['id_factura']]
+                                     <=> [$a['periodo'], $a['fecha_emision'] ?? '', (int) $a['id_factura']]);
+        $lineas =$this->repository->getLineasFacturas(array_column($facturas, 'id_factura'), $idEmpresa);
         foreach ($facturas as &$f) {
             $f['lineas'] = $lineas[(int) $f['id_factura']] ?? [];
         }

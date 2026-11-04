@@ -519,6 +519,7 @@ class AlumnosController extends BaseModuloController
                 'estado'     => $r['estado_factura'],
                 'total'      => (float) $r['importe_total'],
                 'generada'   => $r['created_at'] ? date('d-m-Y H:i:s', strtotime($r['created_at'])) : '',
+                'origen'     => $r['origen'] ?? 'alumno',
                 'lineas'     => array_map(fn($l) => [
                     'codigo'      => $l['codigo'],
                     'descripcion' => $l['descripcion'],

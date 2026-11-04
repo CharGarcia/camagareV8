@@ -27,7 +27,7 @@ class AlumnoRules
             throw new Exception('Los apellidos del alumno son obligatorios.');
         }
         if (empty($data['id_cliente'])) {
-            throw new Exception('El cliente que factura (pestaña Facturación) es obligatorio.');
+            throw new Exception('El cliente que factura (pestaña Por facturar) es obligatorio.');
         }
 
         $tipoId = trim($data['tipo_identificacion'] ?? '');

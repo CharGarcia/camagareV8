@@ -5,8 +5,8 @@ categoria: Ventas
 ruta_modulo: modulos/alumnos
 tipo: modulo
 visibilidad: todos
-etiquetas: alumnos, estudiantes, matrícula, matricula, colegio, escuela, centro infantil, campus, sede, nivel, curso, representante, representantes, padres, autorizado, autorizados, retirar, retiro, quién retira, facturación, facturar, generar factura, facturar pensión, facturar mensualidad, facturas del alumno, horario, pensión, pension, imprimir, impresora, filtrar alumnos, filtro por campus, filtro por nivel, alumnos por curso, alumnos por sede, buscar alumno, portal de representantes, qr, codigo qr, padres de familia, actualizar datos, registrar alumno, inscripcion, codigo de verificacion, enlace para padres, cargar facturación, carga masiva, importar excel, plantilla excel, precios por alumno, servicios por alumno, pensiones masivas, generar facturas, facturación masiva, facturar a todos, facturar todos los alumnos, facturas del mes, pensiones del mes, emitir pensiones, historial de cargas, deshacer carga, revertir carga, eliminar carga, filtrar por servicio, alumnos sin factura, alumnos facturados, filtro por estado, retirados, matrícula vigente
-version: 1.10
+etiquetas: alumnos, estudiantes, matrícula, matricula, colegio, escuela, centro infantil, campus, sede, nivel, curso, representante, representantes, padres, autorizado, autorizados, retirar, retiro, quién retira, facturación, facturar, generar factura, facturar pensión, facturar mensualidad, facturas del alumno, por facturar, transacciones, pdf de la factura, descargar factura, imprimir factura, facturas migradas, facturas anteriores, horario, pensión, pension, imprimir, impresora, filtrar alumnos, filtro por campus, filtro por nivel, alumnos por curso, alumnos por sede, buscar alumno, portal de representantes, qr, codigo qr, padres de familia, actualizar datos, registrar alumno, inscripcion, codigo de verificacion, enlace para padres, cargar facturación, carga masiva, importar excel, plantilla excel, precios por alumno, servicios por alumno, pensiones masivas, generar facturas, facturación masiva, facturar a todos, facturar todos los alumnos, facturas del mes, pensiones del mes, emitir pensiones, historial de cargas, deshacer carga, revertir carga, eliminar carga, filtrar por servicio, alumnos sin factura, alumnos facturados, filtro por estado, retirados, matrícula vigente
+version: 1.11
 orden: 0
 estado: activo
 ---
@@ -71,12 +71,12 @@ perder el historial de los anteriores.
    Clientes. Marcar **Puede retirar** en quienes están autorizados a retirar
    al alumno del centro educativo (por ejemplo, un abuelo o el transporte).
    Arriba de la lista se ve siempre el **representante que factura** (el
-   cliente de la pestaña Facturación) con su identificación, teléfono y
+   cliente de la pestaña Por facturar) con su identificación, teléfono y
    correo; ese cliente **no** forma parte de la lista hasta que se pulse
    **Agregar a la lista**, que copia sus datos en una fila nueva. En los alumnos
    migrados del sistema anterior la lista viene vacía, porque allá el
    representante era solo el cliente que factura.
-   En **Facturación**, buscar y seleccionar el Cliente al que se factura,
+   En **Por facturar**, buscar y seleccionar el Cliente al que se factura,
    opcionalmente la serie de facturación preferida, y agregar debajo los
    **servicios y productos** que se le facturan (ver *Facturar los servicios
    del alumno*). La relación de cada persona con el alumno se indica en
@@ -108,13 +108,13 @@ perder el historial de los anteriores.
 | Estado académico | Sí | Activo, retirado, egresado o suspendido. No reemplaza a la eliminación lógica del registro. |
 | Representantes (nombres, identificación, teléfono, relación, observación) | No | Personas a cargo del alumno, en la pestaña **Representantes**. Datos libres: no se registran como Clientes. Solo los nombres son obligatorios en cada fila. |
 | Puede retirar | No | Marca a los representantes autorizados a retirar al alumno del centro educativo. |
-| Cliente que factura | Sí | Cliente ya existente a cuyo nombre se factura al alumno (pestaña **Facturación**). |
+| Cliente que factura | Sí | Cliente ya existente a cuyo nombre se factura al alumno (pestaña **Por facturar**). |
 | Serie | No | Serie preferida para facturar al alumno, con el formato de la factura de venta (por ejemplo, 001-001). Solo se ofrecen las series activas que tienen secuencial de Facturas de venta configurado. Si la empresa tiene **una sola serie**, viene elegida sola; con varias, hay que elegir una. Es la que viene elegida al generar la factura. |
 | Campus / Nivel-Curso | No | De dónde y qué estudia el alumno. Se eligen en la pestaña General y se guardan en el período de matrícula vigente; cada período cerrado conserva los suyos. |
 | Fecha de ingreso / salida (por período) | Ingreso obligatorio | Salida vacía = matrícula vigente. Solo puede haber un período vigente por alumno. |
 | Horario (día, hora inicio/fin, jornada) | No | Horario propio del alumno, no se hereda de un curso compartido. |
 | Tipo de sangre / Alergias / Contacto de emergencia | No | Información útil en caso de emergencia. |
-| Servicios y productos (producto, cantidad, precio, activo) | No | En la pestaña **Facturación**, debajo del cliente. Productos o servicios del catálogo que se le facturan al alumno. Al elegir el producto (o al abrir un alumno cuya línea no tenía precio propio), el **precio** se llena con su precio base y se puede cambiar para este alumno. Ese precio queda guardado en la línea: si luego cambia el precio base del producto, hay que actualizarlo aquí. Si se borra, se usa el precio base vigente al facturar. El **IVA** viene de la tarifa del producto y se puede cambiar en la línea si la configuración de facturación lo permite; el **Total** se calcula solo. |
+| Servicios y productos (producto, cantidad, precio, activo) | No | En la pestaña **Por facturar**, debajo del cliente. Productos o servicios del catálogo que se le facturan al alumno. Al elegir el producto (o al abrir un alumno cuya línea no tenía precio propio), el **precio** se llena con su precio base y se puede cambiar para este alumno. Ese precio queda guardado en la línea: si luego cambia el precio base del producto, hay que actualizarlo aquí. Si se borra, se usa el precio base vigente al facturar. El **IVA** viene de la tarifa del producto y se puede cambiar en la línea si la configuración de facturación lo permite; el **Total** se calcula solo. |
 | Descuento (por ítem) | No | Valor en $ que se resta de esa línea en cada factura (no puede superar cantidad × precio). Sale como descuento de la línea, igual que en Facturas de Venta, y se suma en «(-) Descuento» de los totales. |
 | Adicional (por ítem) | No | Texto que sale bajo la descripción de esa línea en la factura (máx. 300 caracteres). Admite marcadores, p. ej. `{alumno} - Pensión {MES} {anio}`. Si la línea no tiene uno propio (las nuevas y las guardadas vacías) se muestra y se factura `{MES} {anio}` (en la factura: *NOVIEMBRE 2026*). |
 | Información adicional | No | Filas concepto / detalle que se agregan a cada factura del alumno (máx. 10). Un alumno nuevo viene con «{niño}: {alumno}» (en la factura: *Niño: PÉREZ JUAN* o *Niña: …* según el sexo). |
@@ -137,7 +137,7 @@ El botón **Filtros**, junto al buscador, abre estos filtros:
   - **Estado académico**: activo, retirado, egresado o suspendido.
 - **Facturación**:
   - **Servicio / producto**: alumnos que tienen ese servicio **activo** en su
-    pestaña Facturación (por ejemplo, todos los que usan Transporte).
+    pestaña Por facturar (por ejemplo, todos los que usan Transporte).
   - **Facturado en el mes**: *Con factura* o *Sin factura* vigente (no anulada)
     en el **Mes** elegido al lado; si no se elige mes, el actual. El mes solo,
     sin «Facturado en el mes», no filtra.
@@ -155,9 +155,9 @@ dirección limpia, `modulos/alumnos`, sin el filtro en la URL.
 ## Facturar los servicios del alumno
 
 Desde la ficha del alumno se genera la factura de sus servicios al **cliente
-que factura** (pestaña Facturación).
+que factura** (pestaña Por facturar).
 
-1. En la pestaña **Facturación**, debajo del cliente que factura, agregue los
+1. En la pestaña **Por facturar**, debajo del cliente que factura, agregue los
    productos o servicios con su cantidad, precio e IVA y, si quiere, un
    **adicional* del ítem* (si el alumno no tiene ítems, ya aparece una fila vacía
    lista para escribir, también al quitar el último ítem; las filas sin producto
@@ -323,7 +323,7 @@ alumno, con lo mismo que saldría desde el botón **Generar factura** de su fich
    actual**; sin filtro, todos.
 2. Elija el **Mes** y la **Serie**. Opciones:
    - **Usar la serie de cada alumno**: si el alumno tiene una serie en su
-     pestaña Facturación, se usa esa; si no, la elegida aquí.
+     pestaña Por facturar, se usa esa; si no, la elegida aquí.
    - **Texto para ítems sin adicional**: el texto que llevan los servicios que no
      tienen su propio Adicional (admite marcadores como `{MES} {anio}`).
    - **Permitir alumnos ya facturados en el mes**: normalmente se omiten.
@@ -358,13 +358,24 @@ alumno, con lo mismo que saldría desde el botón **Generar factura** de su fich
 
 ## Transacciones del alumno
 
-La pestaña **Transacciones**, junto a **Facturación**, muestra el **detalle
+La pestaña **Transacciones**, junto a **Por facturar**, muestra el **detalle
 de lo facturado** al alumno: **una fila por cada producto o servicio**, con la
 referencia a la factura en que salió.
 
-- De la factura: mes facturado, fecha de emisión, número (clic para abrir su
-  PDF; al pasar el puntero se ve el cliente y cuándo se generó) y estado
-  (borrador, autorizada, anulada).
+- De la factura: botón **PDF** (en la primera fila de cada factura), mes
+  facturado, fecha de emisión, número (también abre el PDF; al pasar el
+  puntero se ve el cliente y su origen) y estado (borrador, autorizada,
+  anulada). El PDF pregunta si se quiere **imprimir, descargar o ver**. El
+  botón aparece solo si el usuario puede **ver** Facturas de Venta.
+- Qué facturas salen:
+  - las generadas desde el alumno (botón Generar factura o la generación de
+    todos los alumnos), y
+  - las facturas del **representante** que no se generaron desde el alumno
+    —las **migradas del sistema anterior** y las emitidas a mano en
+    **Facturas de Venta**— cuando nombran al alumno (apellidos y nombres) en
+    su información adicional, o cuando el representante tiene un solo alumno
+    y la factura no nombra a otro. Llevan el ícono de ficha junto al número;
+    su mes es el de la fecha de emisión.
 - Del ítem: código, producto o servicio (con el texto del ítem debajo),
   cantidad, precio, descuento, subtotal, IVA y total.
 - Al pie, la cantidad de facturas vigentes y la suma de subtotal, IVA y total.
@@ -484,8 +495,8 @@ pestaña Transacciones aparece solo si el usuario puede **ver** Facturas de Vent
 
 ## Errores frecuentes
 
-- **"El cliente que factura (pestaña Facturación) es obligatorio"**: no se
-  seleccionó ningún cliente en la pestaña Facturación, o se escribió texto
+- **"El cliente que factura (pestaña Por facturar) es obligatorio"**: no se
+  seleccionó ningún cliente en la pestaña Por facturar, o se escribió texto
   en el buscador sin hacer clic en un resultado de la lista.
 - **"El alumno no puede tener más de una matrícula vigente"**: ya existe un
   período de matrícula sin fecha de salida; hay que cerrarlo (ponerle fecha
@@ -501,7 +512,7 @@ pestaña Transacciones aparece solo si el usuario puede **ver** Facturas de Vent
   vuelva a abrirla.
 - **"Para ventas mayores o iguales a $50.00 no se permite el uso de
   Consumidor Final"**: el cliente de esa factura es Consumidor Final; elija
-  un cliente con identificación en la pestaña Facturación.
+  un cliente con identificación en la pestaña Por facturar.
 - **"Falta ejecutar en la base el script …20260924_alumnos_facturacion.sql"**:
   el administrador debe ejecutar ese script en la base de datos.
 - **Cargar facturación: "La configuración de facturación no permite cambiar el
@@ -540,6 +551,11 @@ pestaña Transacciones aparece solo si el usuario puede **ver** Facturas de Vent
 
 ## Historial de cambios
 
+- **1.11** — La pestaña **Facturación** se llama ahora **Por facturar**. La pestaña
+  **Transacciones** muestra también las facturas del representante que son del
+  alumno (migradas del sistema anterior o emitidas en Facturas de Venta), que
+  antes no aparecían porque solo se listaban las generadas desde el alumno, y
+  agrega un botón **PDF** por factura para imprimirla, descargarla o verla.
 - **1.10** — Pestaña **Representantes**: muestra arriba al representante que
   factura (cliente de la pestaña Facturación) con su identificación, teléfono y
   correo, y el botón **Agregar a la lista** para copiarlo como representante.

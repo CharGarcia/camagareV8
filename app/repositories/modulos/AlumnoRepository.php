@@ -542,6 +542,58 @@ class AlumnoRepository extends BaseRepository
     }
 
     /**
+     * Facturas del representante (cliente del alumno) que NO se generaron desde
+     * el alumno pero son suyas: las migradas del sistema anterior y las emitidas
+     * a mano en Facturas de Venta. El sistema anterior solo dejaba el vínculo en
+     * la información adicional («NIÑO»/«NIÑA»: nombre), así que cuenta como del
+     * alumno la factura que:
+     *  - nombra al alumno en su información adicional (apellidos y nombres, en
+     *    cualquier orden, sin distinguir tildes ni mayúsculas), o
+     *  - es de un representante con un solo alumno y no nombra a otro alumno
+     *    (fila Niño/Niña/Alumno con otro nombre: es de un hermano no migrado).
+     * Mismas columnas que getFacturasAlumno(); periodo = mes de emisión.
+     */
+    public function getFacturasRelacionadas(int $idAlumno, int $idEmpresa): array
+    {
+        $norm = fn(string $col) => "regexp_replace(translate(upper(trim(COALESCE({$col}, ''))), 'ÁÉÍÓÚÜÑ', 'AEIOUUN'), '\\s+', ' ', 'g')";
+        $nombraAlumno = "strpos({$norm('va.valor')}, {$norm('a.apellidos')}) > 0
+                         AND strpos({$norm('va.valor')}, {$norm('a.nombres')}) > 0";
+        $conceptoAlumno = "{$norm('va.nombre')} IN ('NINO', 'NINA', 'NINO/A', 'ALUMNO', 'ALUMNA', 'ALUMNO/A', 'ESTUDIANTE')";
+
+        $sql = "SELECT NULL AS id, v.id AS id_factura, v.id_cliente,
+                       date_trunc('month', v.fecha_emision)::date AS periodo,
+                       v.importe_total AS importe, NULL AS items, v.created_at,
+                       c.nombre AS cliente_nombre,
+                       v.establecimiento, v.punto_emision, v.secuencial, v.fecha_emision,
+                       v.estado AS estado_factura, v.importe_total
+                FROM alumnos a
+                JOIN ventas_cabecera v ON v.id_cliente = a.id_cliente AND v.id_empresa = a.id_empresa
+                                      AND v.eliminado = false
+                LEFT JOIN clientes c ON c.id = v.id_cliente
+                WHERE a.id = :a AND a.id_empresa = :e AND a.eliminado = false
+                  AND NOT EXISTS (SELECT 1 FROM alumnos_facturas af
+                                  WHERE af.id_factura = v.id AND af.id_empresa = v.id_empresa
+                                    AND af.eliminado = false)
+                  AND (
+                        (trim(COALESCE(a.apellidos, '')) <> '' AND trim(COALESCE(a.nombres, '')) <> ''
+                         AND EXISTS (SELECT 1 FROM ventas_adicional va
+                                     WHERE va.id_venta = v.id AND {$nombraAlumno}))
+                     OR (
+                        (SELECT count(*) FROM alumnos a2
+                          WHERE a2.id_cliente = a.id_cliente AND a2.id_empresa = a.id_empresa
+                            AND a2.eliminado = false) = 1
+                        AND NOT EXISTS (SELECT 1 FROM ventas_adicional va
+                                        WHERE va.id_venta = v.id AND {$conceptoAlumno}
+                                          AND NOT ({$nombraAlumno}))
+                     )
+                  )
+                ORDER BY v.fecha_emision DESC, v.id DESC";
+        $st = $this->db->prepare($sql);
+        $st->execute([':a' => $idAlumno, ':e' => $idEmpresa]);
+        return $st->fetchAll(PDO::FETCH_ASSOC);
+    }
+
+    /**
      * Líneas de las facturas (código, descripción, texto del ítem, cantidad,
      * precio, descuento, subtotal e IVA), agrupadas por id de factura. Mismo
      * cálculo de IVA por línea que la pestaña Facturas de Suscripciones.

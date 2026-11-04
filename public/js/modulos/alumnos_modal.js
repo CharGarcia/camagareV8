@@ -545,7 +545,7 @@
         if (!nombre) return;
         if (!d) {
             nombre.textContent = 'Sin cliente que factura';
-            datos.textContent = 'Elíjalo en la pestaña Facturación.';
+            datos.textContent = 'Elíjalo en la pestaña Por facturar.';
             btn.classList.add('d-none');
             return;
         }
@@ -1036,7 +1036,7 @@
             ).join('');
 
             if (!json.lineas.length) {
-                tbody.innerHTML = '<tr><td colspan="6" class="text-center text-muted py-3 small">El alumno no tiene servicios activos guardados (pestaña Facturación).</td></tr>';
+                tbody.innerHTML = '<tr><td colspan="6" class="text-center text-muted py-3 small">El alumno no tiene servicios activos guardados (pestaña Por facturar).</td></tr>';
             } else {
                 tbody.innerHTML = json.lineas.map(l => `
                     <tr>
@@ -1125,7 +1125,8 @@
         const tbody = document.getElementById('tbodyFacturasAlumno');
         const tfoot = document.getElementById('tfootFacturasAlumno');
         if (!tbody) return;
-        const COLS = 12;
+        const conPdf = !!CFG_FACT.urlPdfFactura;
+        const COLS = conPdf ? 13 : 12;
         const mensaje = (txt, cls = 'text-muted') => {
             tbody.innerHTML = `<tr><td colspan="${COLS}" class="text-center ${cls} py-3 small">${escHtml(txt)}</td></tr>`;
             tfoot?.classList.add('d-none');
@@ -1142,23 +1143,33 @@
             json.data.forEach(f => {
                 const anulada = f.estado === 'anulado';
                 if (!anulada) tot.docs++;
-                const numero = CFG_FACT.urlPdfFactura
-                    ? `<a href="${escAttr(CFG_FACT.urlPdfFactura)}?id=${f.id_factura}" data-pdf-documento title="PDF de la factura"><i class="bi bi-file-earmark-pdf text-danger me-1"></i>${escHtml(f.numero)}</a>`
+                const urlPdf = conPdf ? `${CFG_FACT.urlPdfFactura}?id=${f.id_factura}` : '';
+                const numero = conPdf
+                    ? `<a href="${escAttr(urlPdf)}" data-pdf-documento title="PDF de la factura">${escHtml(f.numero)}</a>`
                     : escHtml(f.numero);
+                const delCliente = f.origen === 'cliente';
+                const titulo = delCliente
+                    ? `Cliente: ${f.cliente} · Factura del representante (migrada o emitida en Facturas de Venta)`
+                    : `Cliente: ${f.cliente} · Generada desde el alumno el ${f.generada}`;
+                const marca = delCliente ? '<i class="bi bi-person-vcard text-secondary ms-1"></i>' : '';
+                // El botón PDF va solo en la primera fila de cada factura.
+                const celdaPdf = primera => !conPdf ? '' : `<td class="text-center">${primera
+                    ? `<a href="${escAttr(urlPdf)}" data-pdf-documento class="btn btn-sm btn-outline-danger py-0 px-1" title="PDF de la factura ${escAttr(f.numero)}"><i class="bi bi-file-earmark-pdf"></i></a>`
+                    : ''}</td>`;
                 const refFactura = `<td>${escHtml(f.periodo)}</td>
                     <td>${escHtml(f.fecha)}</td>
-                    <td title="Cliente: ${escAttr(f.cliente)} · Generada el ${escAttr(f.generada)}">${numero}</td>
+                    <td title="${escAttr(titulo)}">${numero}${marca}</td>
                     <td>${ESTADOS_FACT[f.estado] || escHtml(f.estado)}</td>`;
                 const lineas = f.lineas && f.lineas.length ? f.lineas : [null];
-                lineas.forEach(l => {
+                lineas.forEach((l, i) => {
                     const cls = anulada ? 'text-decoration-line-through text-muted' : '';
                     if (!l) {
-                        filas.push(`<tr class="${cls}">${refFactura}<td colspan="8" class="text-muted small">Sin detalle.</td></tr>`);
+                        filas.push(`<tr class="${cls}">${celdaPdf(true)}${refFactura}<td colspan="8" class="text-muted small">Sin detalle.</td></tr>`);
                         return;
                     }
                     const total = l.subtotal + l.iva;
                     if (!anulada) { tot.subtotal += l.subtotal; tot.iva += l.iva; tot.total += total; }
-                    filas.push(`<tr class="${cls}">${refFactura}
+                    filas.push(`<tr class="${cls}">${celdaPdf(i === 0)}${refFactura}
                         <td class="text-muted">${escHtml(l.codigo)}</td>
                         <td style="white-space:normal; min-width:200px;">${escHtml(l.descripcion)}${l.detalle ? `<div class="text-muted" style="font-size:.72rem;">${escHtml(l.detalle)}</div>` : ''}</td>
                         <td class="text-end">${fmt(l.cantidad)}</td>
@@ -1173,7 +1184,7 @@
             tbody.innerHTML = filas.join('');
             if (tfoot) {
                 tfoot.innerHTML = `<tr class="fw-bold bg-light">
-                    <td colspan="9">${tot.docs} factura(s) vigente(s)</td>
+                    <td colspan="${COLS - 3}">${tot.docs} factura(s) vigente(s)</td>
                     <td class="text-end">${fmt(tot.subtotal)}</td>
                     <td class="text-end">${fmt(tot.iva)}</td>
                     <td class="text-end">${fmt(tot.total)}</td>
@@ -1327,7 +1338,7 @@
             return;
         }
         if (!document.getElementById('alu_id_cliente').value) {
-            aviso('warning', 'Debe seleccionar el cliente que factura al alumno (pestaña Facturación).');
+            aviso('warning', 'Debe seleccionar el cliente que factura al alumno (pestaña Por facturar).');
             const btn = document.getElementById('tab-facturacion-btn');
             if (btn && typeof bootstrap !== 'undefined') (bootstrap.Tab.getInstance(btn) || new bootstrap.Tab(btn)).show();
             return;

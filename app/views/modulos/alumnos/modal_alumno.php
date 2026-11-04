@@ -92,7 +92,7 @@ $pestanasConfigAlu = [
                         <ul class="nav nav-tabs border-bottom-0 flex-grow-1 flex-nowrap overflow-auto" id="tabsAlumno" role="tablist">
                             <li class="nav-item"><a class="nav-link active py-2 small" id="tab-general-btn" data-bs-toggle="tab" data-bs-target="#tab-general" href="#tab-general" role="tab"><i class="bi bi-person me-1"></i>General</a></li>
                             <li class="nav-item"><a class="nav-link py-2 small" id="tab-representante-btn" data-bs-toggle="tab" data-bs-target="#tab-representante" href="#tab-representante" role="tab"><i class="bi bi-people me-1"></i>Representantes</a></li>
-                            <li class="nav-item"><a class="nav-link py-2 small" id="tab-facturacion-btn" data-bs-toggle="tab" data-bs-target="#tab-facturacion" href="#tab-facturacion" role="tab"><i class="bi bi-receipt me-1"></i>Facturación</a></li>
+                            <li class="nav-item"><a class="nav-link py-2 small" id="tab-facturacion-btn" data-bs-toggle="tab" data-bs-target="#tab-facturacion" href="#tab-facturacion" role="tab"><i class="bi bi-receipt me-1"></i>Por facturar</a></li>
                             <li class="nav-item"><a class="nav-link py-2 small" id="tab-facturas-btn" data-bs-toggle="tab" data-bs-target="#tab-facturas" href="#tab-facturas" role="tab"><i class="bi bi-list-check me-1"></i>Transacciones</a></li>
                             <li class="nav-item"><a class="nav-link py-2 small" id="tab-matricula-btn" data-bs-toggle="tab" data-bs-target="#tab-matricula" href="#tab-matricula" role="tab"><i class="bi bi-journal-bookmark me-1"></i>Matrícula</a></li>
                             <li class="nav-item"><a class="nav-link py-2 small" id="tab-horario-btn" data-bs-toggle="tab" data-bs-target="#tab-horario" href="#tab-horario" role="tab"><i class="bi bi-clock-history me-1"></i>Horario</a></li>
@@ -189,7 +189,7 @@ $pestanasConfigAlu = [
 
                         <!-- ============ TAB: REPRESENTANTES Y AUTORIZADOS A RETIRAR ============ -->
                         <div class="tab-pane fade" id="tab-representante" role="tabpanel">
-                            <?php // La lista de abajo NO incluye al cliente que factura (pestaña Facturación): se muestra aquí para que se vea quién es el representante. ?>
+                            <?php // La lista de abajo NO incluye al cliente que factura (pestaña Por facturar): se muestra aquí para que se vea quién es el representante. ?>
                             <div id="aluRepSinTabla" class="alert alert-warning small py-2 mb-2 d-none">
                                 <i class="bi bi-exclamation-triangle me-1"></i>
                                 Falta ejecutar en la base el script <code>20260924_alumnos_representantes.sql</code>: los representantes no se pueden guardar todavía.
@@ -197,7 +197,7 @@ $pestanasConfigAlu = [
                             <div id="aluRepFactura" class="d-flex align-items-center flex-wrap gap-2 p-2 mb-2 border rounded-3 bg-light small">
                                 <i class="bi bi-person-vcard text-primary fs-5"></i>
                                 <div class="me-auto">
-                                    <div class="text-muted" style="font-size:.7rem;">Representante que factura (pestaña Facturación)</div>
+                                    <div class="text-muted" style="font-size:.7rem;">Representante que factura (pestaña Por facturar)</div>
                                     <div class="fw-bold" id="aluRepFacturaNombre">—</div>
                                     <div class="text-muted" id="aluRepFacturaDatos"></div>
                                 </div>
@@ -425,6 +425,7 @@ $pestanasConfigAlu = [
                                 <table class="table table-sm alu-grid mb-0 text-nowrap">
                                     <thead>
                                         <tr class="border-bottom">
+                                            <?php if ($aluPuedeVerFactura): ?><th class="text-center" style="width:34px;">PDF</th><?php endif; ?>
                                             <th>Mes</th>
                                             <th>Emisión</th>
                                             <th>Factura</th>
@@ -440,12 +441,12 @@ $pestanasConfigAlu = [
                                         </tr>
                                     </thead>
                                     <tbody id="tbodyFacturasAlumno">
-                                        <tr><td colspan="12" class="text-center text-muted py-3 small">Guarde el alumno para ver sus transacciones.</td></tr>
+                                        <tr><td colspan="<?= $aluPuedeVerFactura ? 13 : 12 ?>" class="text-center text-muted py-3 small">Guarde el alumno para ver sus transacciones.</td></tr>
                                     </tbody>
                                     <tfoot id="tfootFacturasAlumno" class="d-none"></tfoot>
                                 </table>
                             </div>
-                            <div class="small text-muted mt-2">Cada fila es un producto o servicio facturado al alumno, con la factura en que salió (clic en el número para su PDF). Las facturas se generan con el botón <i class="bi bi-receipt-cutoff"></i> de la barra superior; nacen en borrador y se envían al SRI desde Facturas de Venta. Las anuladas se ven tachadas y no suman.</div>
+                            <div class="small text-muted mt-2">Cada fila es un producto o servicio facturado al alumno, con la factura en que salió (botón <i class="bi bi-file-earmark-pdf text-danger"></i> para imprimir, descargar o ver su PDF). Incluye las facturas generadas desde el alumno y las del representante que lo nombran en su información adicional (migradas del sistema anterior o emitidas en Facturas de Venta), marcadas con <i class="bi bi-person-vcard"></i>. Las facturas se generan con el botón <i class="bi bi-receipt-cutoff"></i> de la barra superior; nacen en borrador y se envían al SRI desde Facturas de Venta. Las anuladas se ven tachadas y no suman.</div>
                         </div>
 
                         <!-- ============ TAB: DOCUMENTOS ============ -->
@@ -562,7 +563,7 @@ $pestanasConfigAlu = [
                     </div>
                 </div>
                 <div id="aluGfResumen" class="small mt-2"></div>
-                <div class="small text-muted mt-2">Se genera la factura al <strong>cliente que factura</strong>, en borrador, con la fecha de hoy. Se factura lo <strong>guardado</strong> en la pestaña Facturación. En el texto puede usar {mes}, {MES}, {anio}, {mes_anio}.</div>
+                <div class="small text-muted mt-2">Se genera la factura al <strong>cliente que factura</strong>, en borrador, con la fecha de hoy. Se factura lo <strong>guardado</strong> en la pestaña Por facturar. En el texto puede usar {mes}, {MES}, {anio}, {mes_anio}.</div>
             </div>
             <div class="modal-footer bg-light border-top p-2">
                 <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal"><i class="fa-solid fa-xmark me-1"></i>Cerrar</button>
