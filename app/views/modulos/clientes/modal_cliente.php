@@ -218,13 +218,13 @@ if (!defined('LEAFLET_LOADED')) {
                                     </select>
                                 </div>
                                 <div class="col-md-3">
-                                    <label for="cliente_ciudad" class="form-label small fw-bold">Ciudad</label>
+                                    <label for="cliente_ciudad" class="form-label small fw-bold d-flex align-items-center">Ciudad</label>
                                     <select class="form-select form-select-sm" name="ciudad" id="cliente_ciudad">
                                         <option value="">- Seleccione ciudad -</option>
                                     </select>
                                 </div>
                                 <div class="col-md-3">
-                                    <label for="cliente_telefono" class="form-label small fw-bold">Teléfono</label>
+                                    <label for="cliente_telefono" class="form-label small fw-bold d-flex align-items-center">Teléfono</label>
                                     <input type="text" class="form-control form-control-sm" name="telefono" id="cliente_telefono" maxlength="50">
                                 </div>
                                 <div class="col-md-3">
