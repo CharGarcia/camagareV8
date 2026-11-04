@@ -5,7 +5,7 @@ categoria: Ventas
 ruta_modulo: modulos/alumnos
 tipo: modulo
 visibilidad: todos
-etiquetas: alumnos, estudiantes, matrícula, matricula, colegio, escuela, centro infantil, campus, sede, nivel, curso, representante, representantes, padres, autorizado, autorizados, retirar, retiro, quién retira, facturación, facturar, generar factura, facturar pensión, facturar mensualidad, facturas del alumno, por facturar, transacciones, pdf de la factura, descargar factura, imprimir factura, facturas migradas, facturas anteriores, horario, pensión, pension, imprimir, impresora, filtrar alumnos, filtro por campus, filtro por nivel, alumnos por curso, alumnos por sede, buscar alumno, portal de representantes, qr, codigo qr, padres de familia, actualizar datos, registrar alumno, inscripcion, codigo de verificacion, enlace para padres, cargar facturación, carga masiva, importar excel, plantilla excel, precios por alumno, servicios por alumno, pensiones masivas, generar facturas, facturación masiva, facturar a todos, facturar todos los alumnos, facturas del mes, pensiones del mes, emitir pensiones, historial de cargas, deshacer carga, revertir carga, eliminar carga, filtrar por servicio, alumnos sin factura, alumnos facturados, filtro por estado, retirados, matrícula vigente
+etiquetas: alumnos, estudiantes, matrícula, matricula, colegio, escuela, centro infantil, campus, sede, nivel, curso, representante, representantes, padres, autorizado, autorizados, retirar, retiro, quién retira, facturación, facturar, generar factura, facturar pensión, facturar mensualidad, facturas del alumno, por facturar, transacciones, pdf de la factura, descargar factura, imprimir factura, facturas migradas, facturas anteriores, buscar factura, facturas del año, horario, pensión, pension, imprimir, impresora, filtrar alumnos, filtro por campus, filtro por nivel, alumnos por curso, alumnos por sede, buscar alumno, portal de representantes, qr, codigo qr, padres de familia, actualizar datos, registrar alumno, inscripcion, codigo de verificacion, enlace para padres, cargar facturación, carga masiva, importar excel, plantilla excel, precios por alumno, servicios por alumno, pensiones masivas, generar facturas, facturación masiva, facturar a todos, facturar todos los alumnos, facturas del mes, pensiones del mes, emitir pensiones, historial de cargas, deshacer carga, revertir carga, eliminar carga, filtrar por servicio, alumnos sin factura, alumnos facturados, filtro por estado, retirados, matrícula vigente
 version: 1.11
 orden: 0
 estado: activo
@@ -358,15 +358,24 @@ alumno, con lo mismo que saldría desde el botón **Generar factura** de su fich
 
 ## Transacciones del alumno
 
-La pestaña **Transacciones**, junto a **Por facturar**, muestra el **detalle
-de lo facturado** al alumno: **una fila por cada producto o servicio**, con la
-referencia a la factura en que salió.
+La pestaña **Transacciones**, junto a **Por facturar**, muestra las
+**facturas del alumno, una fila por factura**: mes facturado, fecha de
+emisión, número y total. Al pasar el puntero se ve el cliente, el origen y si
+está anulada.
 
-- De la factura: botón **PDF** (en la primera fila de cada factura), mes
-  facturado, fecha de emisión, número (también abre el PDF; al pasar el
-  puntero se ve el cliente y su origen) y estado (borrador, autorizada,
-  anulada). El PDF pregunta si se quiere **imprimir, descargar o ver**. El
-  botón aparece solo si el usuario puede **ver** Facturas de Venta.
+- **Ver el detalle**: haga clic sobre la fila de la factura y debajo se
+  despliegan sus productos o servicios (código y descripción con el texto del
+  ítem, cantidad × precio − descuento, IVA y total). Otro clic la encoge.
+- **PDF**: el botón rojo de cada factura pregunta si se quiere **imprimir,
+  descargar o ver** el PDF. Aparece solo si el usuario puede **ver** Facturas
+  de Venta.
+- **Año**: por defecto se muestran las facturas del **año actual** (por fecha
+  de emisión). El selector permite elegir otro año con facturas o **Todos**.
+- **Buscar**: el buscador encuentra facturas por número, mes, fecha o
+  cliente, y también por sus ítems (código, producto o texto del ítem), con
+  varias palabras en cualquier orden y sin importar tildes. Si la factura se
+  encontró por un ítem, se despliega sola mostrando solo los ítems que
+  coinciden, resaltados. **Limpiar** quita la búsqueda.
 - Qué facturas salen:
   - las generadas desde el alumno (botón Generar factura o la generación de
     todos los alumnos), y
@@ -376,10 +385,9 @@ referencia a la factura en que salió.
     su información adicional, o cuando el representante tiene un solo alumno
     y la factura no nombra a otro. Llevan el ícono de ficha junto al número;
     su mes es el de la fecha de emisión.
-- Del ítem: código, producto o servicio (con el texto del ítem debajo),
-  cantidad, precio, descuento, subtotal, IVA y total.
-- Al pie, la cantidad de facturas vigentes y la suma de subtotal, IVA y total.
-  Las facturas **anuladas** se ven tachadas y no suman.
+- Al pie, la cantidad de facturas vigentes y la suma de su total, según el
+  año y la búsqueda elegidos. Las facturas **anuladas** se ven tachadas y no
+  suman.
 
 ## Portal de representantes (QR)
 
@@ -556,6 +564,9 @@ pestaña Transacciones aparece solo si el usuario puede **ver** Facturas de Vent
   alumno (migradas del sistema anterior o emitidas en Facturas de Venta), que
   antes no aparecían porque solo se listaban las generadas desde el alumno, y
   agrega un botón **PDF** por factura para imprimirla, descargarla o verla.
+  Ahora se ve **una fila por factura**: un clic despliega su detalle. Tiene
+  buscador (por factura o por ítem) y muestra por defecto el **año actual**,
+  con selector de año o Todos.
 - **1.10** — Pestaña **Representantes**: muestra arriba al representante que
   factura (cliente de la pestaña Facturación) con su identificación, teléfono y
   correo, y el botón **Agregar a la lista** para copiarlo como representante.

@@ -1117,16 +1117,120 @@
     };
 
     /**
-     * Pestaña Transacciones: lo facturado al alumno, un renglón por ítem, con la
-     * factura en que salió (número con enlace al PDF, estado y cliente en el title).
-     * Las anuladas se muestran tachadas y no suman en el pie.
+     * Pestaña Transacciones: una fila por factura (mes, emisión, número, total y
+     * PDF); clic sobre ella despliega sus ítems, como Transacciones de Vehículos.
+     * Las anuladas se muestran tachadas y no suman en el pie. El buscador filtra
+     * en el navegador (los ítems ya vienen con cada factura).
      */
+    const aluNorm = s => String(s == null ? '' : s).normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
+    let aluTrxTimer = null;
+    let aluTrxAlumno = null;
+    function aluTrxCols() { return CFG_FACT.urlPdfFactura ? 6 : 5; }
+    function aluTrxChevron(tr, abierto) {
+        const i = tr.querySelector('i.alu-trx-chev');
+        if (i) i.className = 'bi small alu-trx-chev ' + (abierto ? 'bi-chevron-down' : 'bi-chevron-right');
+    }
+
+    // Varias palabras en cualquier orden, sin tildes ni mayúsculas. Una factura queda si
+    // alguno de sus ítems (código, producto, texto del ítem) tiene todas las palabras, o si
+    // las tiene su número/mes/fecha/cliente. Encontrada por sus ítems, se despliega solo con
+    // los que coinciden (resaltados); encontrada por su número, con todos.
+    function filtrarTransaccionesAlumno() {
+        const tbody = document.getElementById('tbodyFacturasAlumno');
+        const inp = document.getElementById('aluTrxBuscar');
+        if (!tbody || !inp) return;
+        const palabras = aluNorm(inp.value).split(/\s+/).filter(Boolean);
+        const hayFiltro = palabras.length > 0;
+        const tiene = txt => palabras.every(p => txt.includes(p));
+        const anio = document.getElementById('aluTrxAnio')?.value || '';
+        document.getElementById('aluTrxLimpiar')?.classList.toggle('d-none', !hayFiltro);
+        let total = 0, visibles = 0, docs = 0, suma = 0;
+        tbody.querySelectorAll('tr.alu-trx-fact').forEach(tr => {
+            const det0 = tbody.querySelector(`tr[data-det="${tr.dataset.id}"]`);
+            // Fuera del año elegido: ni se cuenta ni se ve.
+            if (anio !== '' && tr.dataset.anio !== anio) {
+                tr.classList.add('d-none');
+                if (det0) { det0.classList.add('d-none'); aluTrxChevron(tr, false); }
+                return;
+            }
+            total++;
+            const det = tbody.querySelector(`tr[data-det="${tr.dataset.id}"]`);
+            const lineas = det ? det.querySelectorAll('tr[data-txt]') : [];
+            let coinciden = 0;
+            lineas.forEach(l => {
+                const si = hayFiltro && tiene(l.dataset.txt);
+                l.classList.toggle('alu-trx-coincide', si);
+                if (si) coinciden++;
+            });
+            const porFactura = hayFiltro && tiene(tr.dataset.txt || '');
+            const muestra = !hayFiltro || coinciden > 0 || porFactura;
+            lineas.forEach(l => l.classList.toggle('d-none', hayFiltro && !porFactura && !l.classList.contains('alu-trx-coincide')));
+            tr.classList.toggle('d-none', !muestra);
+            if (muestra) {
+                visibles++;
+                if (tr.dataset.anulada !== '1') { docs++; suma += parseFloat(tr.dataset.total) || 0; }
+            }
+            if (det) {
+                const abrir = muestra && hayFiltro && coinciden > 0;
+                det.classList.toggle('d-none', !abrir);
+                aluTrxChevron(tr, abrir);
+            }
+        });
+        const hayFacturas = !!tbody.querySelector('tr.alu-trx-fact');
+        tbody.querySelector('tr.alu-trx-sin-resultados')?.remove();
+        if (hayFacturas && !visibles) {
+            const txt = total ? 'Ninguna factura coincide con la búsqueda.' : `No hay facturas en ${anio}. Elija otro año o «Todos».`;
+            tbody.insertAdjacentHTML('beforeend', `<tr class="alu-trx-sin-resultados"><td colspan="${aluTrxCols()}" class="text-center text-muted py-3 small">${escHtml(txt)}</td></tr>`);
+        }
+        const cn = document.getElementById('aluTrxConteo');
+        if (cn) cn.textContent = hayFiltro ? `${visibles} de ${total} factura(s)` : '';
+        // El pie suma lo que se ve (año + búsqueda), sin las anuladas.
+        const tfoot = document.getElementById('tfootFacturasAlumno');
+        if (tfoot && hayFacturas) {
+            tfoot.innerHTML = `<tr class="fw-bold bg-light">
+                <td colspan="4">${docs} factura(s) vigente(s)</td>
+                <td class="text-end">${fmt(suma)}</td>
+                ${CFG_FACT.urlPdfFactura ? '<td></td>' : ''}
+            </tr>`;
+            tfoot.classList.remove('d-none');
+        }
+    }
+    document.getElementById('aluTrxAnio')?.addEventListener('change', filtrarTransaccionesAlumno);
+    // Años con facturas (más el actual, que es el de por defecto) + «Todos».
+    function aluTrxLlenarAnios(facturas, conservar) {
+        const sel = document.getElementById('aluTrxAnio');
+        if (!sel) return;
+        const actual = String(new Date().getFullYear());
+        const anios = [...new Set([actual, ...facturas.map(f => f.anio).filter(Boolean)])].sort().reverse();
+        const previo = conservar ? sel.value : actual;
+        sel.innerHTML = anios.map(a => `<option value="${escAttr(a)}">${escHtml(a)}</option>`).join('') + '<option value="">Todos</option>';
+        sel.value = (previo === '' || anios.includes(previo)) ? previo : actual;
+    }
+    document.getElementById('aluTrxBuscar')?.addEventListener('input', () => {
+        clearTimeout(aluTrxTimer);
+        aluTrxTimer = setTimeout(filtrarTransaccionesAlumno, 200);
+    });
+    document.getElementById('aluTrxLimpiar')?.addEventListener('click', () => {
+        const inp = document.getElementById('aluTrxBuscar');
+        inp.value = '';
+        filtrarTransaccionesAlumno(); inp.focus();
+    });
+
     async function cargarFacturasAlumno() {
         const tbody = document.getElementById('tbodyFacturasAlumno');
         const tfoot = document.getElementById('tfootFacturasAlumno');
         if (!tbody) return;
         const conPdf = !!CFG_FACT.urlPdfFactura;
-        const COLS = conPdf ? 13 : 12;
+        const COLS = aluTrxCols();
+        // Otro alumno: la búsqueda y el año anteriores no aplican.
+        const mismoAlumno = aluTrxAlumno === idAlumnoActual;
+        if (!mismoAlumno) {
+            aluTrxAlumno = idAlumnoActual;
+            const inp = document.getElementById('aluTrxBuscar');
+            if (inp) inp.value = '';
+            document.getElementById('aluTrxLimpiar')?.classList.add('d-none');
+            const cn = document.getElementById('aluTrxConteo'); if (cn) cn.textContent = '';
+        }
         const mensaje = (txt, cls = 'text-muted') => {
             tbody.innerHTML = `<tr><td colspan="${COLS}" class="text-center ${cls} py-3 small">${escHtml(txt)}</td></tr>`;
             tfoot?.classList.add('d-none');
@@ -1136,61 +1240,50 @@
         try {
             const json = await fetchJson(`${urlBase}/facturasAjax?id=${idAlumnoActual}`);
             if (!json.ok) { mensaje(json.error || 'Error', 'text-danger'); return; }
-            if (!json.data.length) { mensaje('Aún no se ha facturado nada desde este alumno.'); return; }
+            if (!json.data.length) { mensaje('Aún no hay facturas de este alumno.'); return; }
 
-            const tot = { subtotal: 0, iva: 0, total: 0, docs: 0 };
-            const filas = [];
-            json.data.forEach(f => {
+            // Año de emisión (d-m-Y); sin fecha, el del mes facturado (m-Y).
+            json.data.forEach(f => { f.anio = String(f.fecha || f.periodo || '').slice(-4); });
+            aluTrxLlenarAnios(json.data, mismoAlumno);
+            tbody.innerHTML = json.data.map(f => {
                 const anulada = f.estado === 'anulado';
-                if (!anulada) tot.docs++;
+                const cls = anulada ? 'text-decoration-line-through text-muted' : '';
                 const urlPdf = conPdf ? `${CFG_FACT.urlPdfFactura}?id=${f.id_factura}` : '';
-                const numero = conPdf
-                    ? `<a href="${escAttr(urlPdf)}" data-pdf-documento title="PDF de la factura">${escHtml(f.numero)}</a>`
-                    : escHtml(f.numero);
                 const delCliente = f.origen === 'cliente';
-                const titulo = delCliente
-                    ? `Cliente: ${f.cliente} · Factura del representante (migrada o emitida en Facturas de Venta)`
-                    : `Cliente: ${f.cliente} · Generada desde el alumno el ${f.generada}`;
+                const titulo = `Cliente: ${f.cliente} · ` + (delCliente
+                    ? 'Factura del representante (migrada o emitida en Facturas de Venta)'
+                    : `Generada desde el alumno el ${f.generada}`) + (anulada ? ' · Anulada' : '');
                 const marca = delCliente ? '<i class="bi bi-person-vcard text-secondary ms-1"></i>' : '';
-                // El botón PDF va solo en la primera fila de cada factura.
-                const celdaPdf = primera => !conPdf ? '' : `<td class="text-center">${primera
-                    ? `<a href="${escAttr(urlPdf)}" data-pdf-documento class="btn btn-sm btn-outline-danger py-0 px-1" title="PDF de la factura ${escAttr(f.numero)}"><i class="bi bi-file-earmark-pdf"></i></a>`
-                    : ''}</td>`;
-                const refFactura = `<td>${escHtml(f.periodo)}</td>
-                    <td>${escHtml(f.fecha)}</td>
-                    <td title="${escAttr(titulo)}">${numero}${marca}</td>
-                    <td>${ESTADOS_FACT[f.estado] || escHtml(f.estado)}</td>`;
-                const lineas = f.lineas && f.lineas.length ? f.lineas : [null];
-                lineas.forEach((l, i) => {
-                    const cls = anulada ? 'text-decoration-line-through text-muted' : '';
-                    if (!l) {
-                        filas.push(`<tr class="${cls}">${celdaPdf(true)}${refFactura}<td colspan="8" class="text-muted small">Sin detalle.</td></tr>`);
-                        return;
-                    }
-                    const total = l.subtotal + l.iva;
-                    if (!anulada) { tot.subtotal += l.subtotal; tot.iva += l.iva; tot.total += total; }
-                    filas.push(`<tr class="${cls}">${celdaPdf(i === 0)}${refFactura}
-                        <td class="text-muted">${escHtml(l.codigo)}</td>
-                        <td style="white-space:normal; min-width:200px;">${escHtml(l.descripcion)}${l.detalle ? `<div class="text-muted" style="font-size:.72rem;">${escHtml(l.detalle)}</div>` : ''}</td>
-                        <td class="text-end">${fmt(l.cantidad)}</td>
-                        <td class="text-end">${fmt(l.precio)}</td>
-                        <td class="text-end">${l.descuento ? fmt(l.descuento) : ''}</td>
-                        <td class="text-end">${fmt(l.subtotal)}</td>
-                        <td class="text-end">${fmt(l.iva)}</td>
-                        <td class="text-end fw-semibold">${fmt(total)}</td>
-                    </tr>`);
-                });
-            });
-            tbody.innerHTML = filas.join('');
-            if (tfoot) {
-                tfoot.innerHTML = `<tr class="fw-bold bg-light">
-                    <td colspan="${COLS - 3}">${tot.docs} factura(s) vigente(s)</td>
-                    <td class="text-end">${fmt(tot.subtotal)}</td>
-                    <td class="text-end">${fmt(tot.iva)}</td>
-                    <td class="text-end">${fmt(tot.total)}</td>
-                </tr>`;
-                tfoot.classList.remove('d-none');
-            }
+                const pdf = conPdf
+                    ? `<td class="text-center"><a href="${escAttr(urlPdf)}" data-pdf-documento class="btn btn-sm btn-outline-danger py-0 px-1" title="PDF de la factura ${escAttr(f.numero)}" onclick="event.stopPropagation()"><i class="bi bi-file-earmark-pdf"></i></a></td>`
+                    : '';
+                const lineas = (f.lineas || []).map(l => `<tr data-txt="${escAttr(aluNorm([l.codigo, l.descripcion, l.detalle].filter(Boolean).join(' ')))}">
+                        <td class="ps-4" style="white-space:normal;">${escHtml(l.codigo ? l.codigo + ' - ' : '')}${escHtml(l.descripcion)}${l.detalle ? `<div class="text-muted" style="font-size:.72rem;">${escHtml(l.detalle)}</div>` : ''}</td>
+                        <td class="text-end">${fmt(l.cantidad)} × ${fmt(l.precio)}${l.descuento ? ' − ' + fmt(l.descuento) : ''}</td>
+                        <td class="text-end text-muted">IVA ${fmt(l.iva)}</td>
+                        <td class="text-end fw-semibold">${fmt(l.subtotal + l.iva)}</td>
+                    </tr>`).join('');
+                return `<tr class="alu-trx-fact ${cls}" data-id="${f.id_factura}" title="${escAttr(titulo)}"
+                            data-anio="${escAttr(f.anio)}" data-total="${f.total}" data-anulada="${anulada ? 1 : 0}"
+                            data-txt="${escAttr(aluNorm([f.numero, f.periodo, f.fecha, f.cliente].join(' ')))}">
+                        <td class="text-center"><i class="bi bi-chevron-right small alu-trx-chev"></i></td>
+                        <td>${escHtml(f.periodo)}</td>
+                        <td>${escHtml(f.fecha)}</td>
+                        <td class="fw-semibold">${escHtml(f.numero)}${marca}</td>
+                        <td class="text-end">${fmt(f.total)}</td>
+                        ${pdf}
+                    </tr>
+                    <tr class="alu-trx-det d-none" data-det="${f.id_factura}"><td colspan="${COLS}" class="p-0">
+                        <table class="table table-sm mb-0 bg-light ${cls}" style="font-size:.75rem;"><tbody>${lineas || '<tr><td class="ps-4 text-muted">Sin detalle.</td></tr>'}</tbody></table>
+                    </td></tr>`;
+            }).join('');
+            tbody.querySelectorAll('tr.alu-trx-fact').forEach(tr => tr.addEventListener('click', () => {
+                const det = tbody.querySelector(`tr[data-det="${tr.dataset.id}"]`);
+                if (!det) return;
+                aluTrxChevron(tr, det.classList.toggle('d-none') === false);
+            }));
+            // Aplica el año y la búsqueda, y arma el pie con lo que queda a la vista.
+            filtrarTransaccionesAlumno();
         } catch (e) {
             mensaje('Error de conexión.', 'text-danger');
         }

@@ -418,35 +418,44 @@ $pestanasConfigAlu = [
                             </div>
                         </div>
 
-                        <!-- ============ TAB: TRANSACCIONES (lo facturado, por ítem, con su factura) ============ -->
+                        <!-- ============ TAB: TRANSACCIONES (una fila por factura; clic = detalle) ============ -->
                         <?php // El id sigue siendo tab-facturas: así se respeta a quien ya la ocultó desde el engranaje. ?>
+                        <style>
+                            #tbodyFacturasAlumno tr.alu-trx-fact { cursor: pointer; }
+                            #tbodyFacturasAlumno tr.alu-trx-det > td { background: var(--bs-light); }
+                            #tbodyFacturasAlumno tr.alu-trx-coincide > td { background: rgba(255, 193, 7, .25) !important; }
+                        </style>
                         <div class="tab-pane fade" id="tab-facturas" role="tabpanel">
+                            <div class="d-flex flex-wrap align-items-center gap-2 mb-2">
+                                <select id="aluTrxAnio" class="form-select form-select-sm" style="width:110px;" title="Año de emisión">
+                                    <option value="<?= date('Y') ?>"><?= date('Y') ?></option>
+                                </select>
+                                <div class="input-group input-group-sm" style="width:340px; max-width:100%;">
+                                    <span class="input-group-text bg-white"><i class="bi bi-search"></i></span>
+                                    <input type="text" id="aluTrxBuscar" class="form-control" placeholder="Buscar: factura, mes, código o producto..." autocomplete="off">
+                                </div>
+                                <button type="button" class="btn btn-sm btn-outline-secondary d-none" id="aluTrxLimpiar" title="Limpiar búsqueda"><i class="bi bi-x-lg me-1"></i>Limpiar</button>
+                                <span class="small text-muted" id="aluTrxConteo"></span>
+                            </div>
                             <div class="table-responsive">
-                                <table class="table table-sm alu-grid mb-0 text-nowrap">
+                                <table class="table table-sm table-hover alu-grid mb-0 text-nowrap">
                                     <thead>
                                         <tr class="border-bottom">
-                                            <?php if ($aluPuedeVerFactura): ?><th class="text-center" style="width:34px;">PDF</th><?php endif; ?>
+                                            <th style="width:28px;"></th>
                                             <th>Mes</th>
                                             <th>Emisión</th>
                                             <th>Factura</th>
-                                            <th>Estado</th>
-                                            <th>Código</th>
-                                            <th>Producto / Servicio</th>
-                                            <th class="text-end">Cant.</th>
-                                            <th class="text-end">Precio</th>
-                                            <th class="text-end">Desc.</th>
-                                            <th class="text-end">Subtotal</th>
-                                            <th class="text-end">IVA</th>
                                             <th class="text-end">Total</th>
+                                            <?php if ($aluPuedeVerFactura): ?><th class="text-center" style="width:44px;">PDF</th><?php endif; ?>
                                         </tr>
                                     </thead>
                                     <tbody id="tbodyFacturasAlumno">
-                                        <tr><td colspan="<?= $aluPuedeVerFactura ? 13 : 12 ?>" class="text-center text-muted py-3 small">Guarde el alumno para ver sus transacciones.</td></tr>
+                                        <tr><td colspan="<?= $aluPuedeVerFactura ? 6 : 5 ?>" class="text-center text-muted py-3 small">Guarde el alumno para ver sus transacciones.</td></tr>
                                     </tbody>
                                     <tfoot id="tfootFacturasAlumno" class="d-none"></tfoot>
                                 </table>
                             </div>
-                            <div class="small text-muted mt-2">Cada fila es un producto o servicio facturado al alumno, con la factura en que salió (botón <i class="bi bi-file-earmark-pdf text-danger"></i> para imprimir, descargar o ver su PDF). Incluye las facturas generadas desde el alumno y las del representante que lo nombran en su información adicional (migradas del sistema anterior o emitidas en Facturas de Venta), marcadas con <i class="bi bi-person-vcard"></i>. Las facturas se generan con el botón <i class="bi bi-receipt-cutoff"></i> de la barra superior; nacen en borrador y se envían al SRI desde Facturas de Venta. Las anuladas se ven tachadas y no suman.</div>
+                            <div class="small text-muted mt-2">Una fila por factura; haga clic sobre ella para ver los productos o servicios facturados. El botón <i class="bi bi-file-earmark-pdf text-danger"></i> imprime, descarga o muestra su PDF. Incluye las facturas generadas desde el alumno y las del representante que lo nombran en su información adicional (migradas del sistema anterior o emitidas en Facturas de Venta), marcadas con <i class="bi bi-person-vcard"></i>. Las facturas se generan con el botón <i class="bi bi-receipt-cutoff"></i> de la barra superior; nacen en borrador y se envían al SRI desde Facturas de Venta. Las anuladas se ven tachadas y no suman.</div>
                         </div>
 
                         <!-- ============ TAB: DOCUMENTOS ============ -->
