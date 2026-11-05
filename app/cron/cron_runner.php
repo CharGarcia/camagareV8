@@ -283,6 +283,27 @@ try {
     echo "[" . date('Y-m-d H:i:s') . "] Error al retomar emisiones de condominios: " . $e->getMessage() . "\n";
 }
 
+// ── Métricas del sistema: resumen diario (FIJO, 1 vez al día, desde la 01:00) ─
+//    Recalcula metricas_diarias de los últimos 3 días (absorbe autorizaciones y anulaciones
+//    tardías). Datos derivados: reemplaza esas filas desde las tablas de origen. Si la tabla
+//    aún no existe (SQL sin aplicar), se salta sin error.
+try {
+    $marcaMetricas = sys_get_temp_dir() . '/sistema_metricas_diarias.txt';
+    $hoyMetricas   = date('Y-m-d');
+    if ((int) date('H') >= 1 && @file_get_contents($marcaMetricas) !== $hoyMetricas) {
+        $svcMetricas = new \App\Services\MetricasDiariasService();
+        file_put_contents($marcaMetricas, $hoyMetricas);
+        if ($svcMetricas->disponible()) {
+            $t0 = microtime(true);
+            $resMetricas = $svcMetricas->ejecutarDiario();
+            echo "[" . date('Y-m-d H:i:s') . "] Métricas diarias: {$resMetricas['dias']} día(s), {$resMetricas['filas']} fila(s), "
+                . round((microtime(true) - $t0) * 1000) . "ms.\n";
+        }
+    }
+} catch (\Throwable $e) {
+    echo "[" . date('Y-m-d H:i:s') . "] Error en métricas diarias: " . $e->getMessage() . "\n";
+}
+
 // ── Cambio temporal de IVA en productos (FIJO, cada tick) ─────────────────────
 //    Prestadores de servicios turísticos (IVA 8% en feriados): al llegar la fecha desde cambia la
 //    tarifa de sus productos y al pasar la fecha hasta la restaura. Barato: una

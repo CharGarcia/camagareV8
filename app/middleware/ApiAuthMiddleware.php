@@ -55,6 +55,10 @@ class ApiAuthMiddleware
         $_SESSION['session_token'] = $sessionToken;
         $_SESSION['nombre']        = (string) ($claims['nombre'] ?? '');
 
+        // Métricas del sistema: actividad del usuario en la empresa del token (solo telemetría,
+        // no cambia lo que la app puede hacer). Frenado por APCu y por el propio upsert.
+        \App\Services\ActividadUsuarioService::registrarMovil($idUsuario, $_SESSION['id_empresa']);
+
         return $claims;
     }
 

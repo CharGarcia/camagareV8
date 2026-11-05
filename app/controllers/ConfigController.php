@@ -923,6 +923,18 @@ class ConfigController extends Controller
         }
     }
 
+    /** Despachador de la tarjeta "Métricas del sistema" (/config/metricas-sistema), solo nivel 3. */
+    public function metricasSistema(): void
+    {
+        $sub = $_GET['action'] ?? $_POST['action'] ?? 'index';
+        $c = new MetricasSistemaConsultaController();
+        $method = match ($sub) {
+            'datos' => 'datosAjax',
+            default => 'index',
+        };
+        $c->$method();
+    }
+
     public function index(): void
     {
         $this->requireAuth();

@@ -61,6 +61,10 @@ class AuthMiddleware
             }
         }
 
+        // Métricas del sistema: en qué empresa trabaja el usuario hoy. Frenado a 5 min en la
+        // sesión (o al cambiar de empresa/día); nunca bloquea la navegación.
+        \App\Services\ActividadUsuarioService::registrarWeb();
+
         // Cambio temporal de IVA (prestadores de servicios turísticos): respaldo del cron. Si llegó la
         // fecha desde o pasó la fecha hasta y el cron no corrió, se aplica o restaura
         // aquí, antes de que el usuario facture con la tarifa equivocada. Cada 5 min y,
