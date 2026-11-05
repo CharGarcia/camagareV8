@@ -7300,8 +7300,21 @@ class MigracionMysqlService
         );
         $cuerpoStmt = $mysql->prepare("SELECT codigo_impuesto, impuesto, id_retencion, base_imponible, porcentaje_retencion, valor_retenido, nombre_retencion, ejercicio_fiscal FROM cuerpo_retencion WHERE ruc_empresa = :r AND serie_retencion = :s AND secuencial_retencion = :sec");
         // Reconciliación al re-correr: completa periodo_fiscal/estado y reconstruye el detalle de las ya migradas.
-        $mapRetC = $this->mapaDe($pg, $idEmpresa, 'retenciones_compra');
-        $updCab  = $pg->prepare("UPDATE retencion_compra_cabecera SET id_proveedor = ?, fecha_emision = ?, periodo_fiscal = ?, estado = ?, estado_correo = ?, total_retenido = ?, tipo_ambiente = ?, updated_at = now(), updated_by = ? WHERE id = ?");
+        // Solo se reconcilian las que la migración INSERTÓ: las vinculadas por número son retenciones
+        // propias del sistema nuevo y una re-migración no debe pisar su estado, total ni detalle.
+        $mapRetC = [];
+        $vincRetC = [];
+        $qMap = $pg->prepare("SELECT id_origen, id_destino, vinculado FROM migracion_mysql_map WHERE id_empresa = ? AND entidad = 'retenciones_compra'");
+        $qMap->execute([$idEmpresa]);
+        foreach ($qMap->fetchAll(PDO::FETCH_ASSOC) as $m) {
+            if ($m['vinculado'] === true || $m['vinculado'] === 't' || $m['vinculado'] === 1 || $m['vinculado'] === '1') {
+                $vincRetC[(string) $m['id_origen']] = true;
+            } else {
+                $mapRetC[(string) $m['id_origen']] = (int) $m['id_destino'];
+            }
+        }
+        $estadoActual = $pg->prepare("SELECT estado FROM retencion_compra_cabecera WHERE id = ?");
+        $updCab  =$pg->prepare("UPDATE retencion_compra_cabecera SET id_proveedor = ?, fecha_emision = ?, periodo_fiscal = ?, estado = ?, estado_correo = ?, total_retenido = ?, tipo_ambiente = ?, updated_at = now(), updated_by = ? WHERE id = ?");
         $delDet  = $pg->prepare("DELETE FROM retencion_compra_detalle WHERE id_retencion = ?");
 
         $sql = "SELECT id_encabezado_retencion, ruc_empresa, id_proveedor, serie_retencion, secuencial_retencion, total_retencion, aut_sri, fecha_emision, fecha_documento, tipo_comprobante, numero_comprobante, ambiente, estado_sri
@@ -7312,7 +7325,20 @@ class MigracionMysqlService
         while ($ec = $stmt->fetch(PDO::FETCH_ASSOC)) {
             $res['total']++;
             $old = (int) $ec['id_encabezado_retencion'];
+            if (isset($vincRetC[(string) $old])) { $res['ya_migrados']++; continue; } // retención nativa: no se toca
             $idRetExist = $mapRetC[(string) $old] ?? null;
+            if ($idRetExist) {
+                // Una migrada en borrador (PENDIENTE en el sistema anterior) que ya se envió o autorizó
+                // desde el sistema nuevo no se regresa a borrador ni se le reconstruye el detalle.
+                $estadoActual->execute([(int) $idRetExist]);
+                $estAct = $estadoActual->fetchColumn();
+                if ($estAct !== false && $estAct !== 'borrador'
+                    && $this->estadoRetencionSri((string) $ec['estado_sri']) === 'borrador') {
+                    $res['ya_migrados']++;
+                    $res['conservadas'] = ($res['conservadas'] ?? 0) + 1;
+                    continue;
+                }
+            }
             $idProv = $this->resolverOCrearProveedor($provPorIdent, $mapProv, (int) $ec['id_proveedor'], $idEmpresa, $idUsuario, $mysql, $pg);
             if (!$idProv) { $res['omitidos']++; continue; }
 
