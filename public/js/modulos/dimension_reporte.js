@@ -31,17 +31,90 @@
             return new URLSearchParams(Object.assign({ id }, p.desde ? { desde: p.desde } : {}, p.hasta ? { hasta: p.hasta } : {}, extra || {})).toString();
         }
 
-        // Las dos barras de período comparten valores.
-        qa('.dim-desde, .dim-hasta').forEach(inp => inp.addEventListener('change', () => {
-            const cls = inp.classList.contains('dim-desde') ? '.dim-desde' : '.dim-hasta';
-            qa(cls).forEach(o => { if (o !== inp) o.value = inp.value; });
+        // ── Período (Todo / Mes / Trimestre / Semestre / Año / Rango) ─────────
+        // Un solo estado para las dos barras (Documentos y Avance/Resumen). Mes, trimestre,
+        // semestre y año calculan Desde–Hasta; escribir una fecha a mano pasa a «Rango».
+        // Al servidor solo viajan desde/hasta.
+        const MESES = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'];
+        const SUBS = {
+            mes:       { lbl: 'Mes',       ops: MESES },
+            trimestre: { lbl: 'Trimestre', ops: ['1.º (ene–mar)', '2.º (abr–jun)', '3.º (jul–sep)', '4.º (oct–dic)'] },
+            semestre:  { lbl: 'Semestre',  ops: ['1.º (ene–jun)', '2.º (jul–dic)'] },
+        };
+        const MESES_POR = { mes: 1, trimestre: 3, semestre: 6, anio: 12 };
+        const hoy = new Date();
+        let per = { tipo: 'todo', sub: 1, anio: hoy.getFullYear(), desde: '', hasta: '' };
+
+        const pad = (n) => String(n).padStart(2, '0');
+        function subActual(tipo) {
+            const m = hoy.getMonth() + 1;
+            return tipo === 'mes' ? m : (tipo === 'trimestre' ? Math.ceil(m / 3) : (tipo === 'semestre' ? Math.ceil(m / 6) : 1));
+        }
+        function calcularFechas() {
+            const n = MESES_POR[per.tipo];
+            if (!n) { if (per.tipo === 'todo') { per.desde = ''; per.hasta = ''; } return; }
+            const mIni = per.tipo === 'anio' ? 1 : (per.sub - 1) * n + 1;
+            const mFin = mIni + n - 1;
+            per.desde = `${per.anio}-${pad(mIni)}-01`;
+            per.hasta = `${per.anio}-${pad(mFin)}-${pad(new Date(per.anio, mFin, 0).getDate())}`;
+        }
+        function pintarPeriodo() {
+            qa('.dim-barra-periodo').forEach(bar => {
+                const sub = SUBS[per.tipo];
+                bar.querySelector('.dim-per-tipo').value = per.tipo;
+                bar.querySelector('.dim-per-sub-wrap').classList.toggle('d-none', !sub);
+                bar.querySelector('.dim-per-anio-wrap').classList.toggle('d-none', !MESES_POR[per.tipo]);
+                const selSub = bar.querySelector('.dim-per-sub');
+                if (sub) {
+                    bar.querySelector('.dim-per-sub-lbl').textContent = sub.lbl;
+                    if (selSub.dataset.tipo !== per.tipo) {
+                        selSub.innerHTML = sub.ops.map((t, i) => `<option value="${i + 1}">${esc(t)}</option>`).join('');
+                        selSub.dataset.tipo = per.tipo;
+                    }
+                    selSub.value = String(per.sub);
+                }
+                const selAnio = bar.querySelector('.dim-per-anio');
+                if (![...selAnio.options].some(o => o.value === String(per.anio))) {
+                    selAnio.add(new Option(String(per.anio), String(per.anio)));
+                }
+                selAnio.value = String(per.anio);
+                bar.querySelector('.dim-desde').value = per.desde;
+                bar.querySelector('.dim-hasta').value = per.hasta;
+            });
+        }
+        function cambioPeriodo(recargar) {
             cargado = { documentos: false, resumen: false };
+            pintarPeriodo();
+            if (recargar) recargarVisible();
+        }
+
+        qa('.dim-per-tipo').forEach(s => s.addEventListener('change', () => {
+            per.tipo = s.value;
+            if (SUBS[per.tipo]) per.sub = per.anio === hoy.getFullYear() ? subActual(per.tipo) : 1;
+            calcularFechas();
+            // Rango: deja las fechas que había para ajustarlas; se consulta con «Mostrar».
+            cambioPeriodo(per.tipo !== 'rango');
+        }));
+        qa('.dim-per-sub').forEach(s => s.addEventListener('change', () => {
+            per.sub = parseInt(s.value, 10) || 1;
+            calcularFechas();
+            cambioPeriodo(true);
+        }));
+        qa('.dim-per-anio').forEach(s => s.addEventListener('change', () => {
+            per.anio = parseInt(s.value, 10) || hoy.getFullYear();
+            calcularFechas();
+            cambioPeriodo(true);
+        }));
+        qa('.dim-desde, .dim-hasta').forEach(inp => inp.addEventListener('change', () => {
+            per.tipo = 'rango';
+            per[inp.classList.contains('dim-desde') ? 'desde' : 'hasta'] = inp.value;
+            cambioPeriodo(false);
         }));
         qa('.dim-btn-mostrar').forEach(b => b.addEventListener('click', () => recargarVisible()));
         qa('.dim-btn-todo').forEach(b => b.addEventListener('click', () => {
-            qa('.dim-desde, .dim-hasta').forEach(i => { i.value = ''; });
-            cargado = { documentos: false, resumen: false };
-            recargarVisible();
+            per.tipo = 'todo';
+            calcularFechas();
+            cambioPeriodo(true);
         }));
         q('.dim-btn-pdf')?.addEventListener('click', () => {
             if (!id) return;
@@ -172,7 +245,8 @@
                 cargado = { documentos: false, resumen: false };
                 // El visor de documento solo abre documentos de este proyecto / centro.
                 window.DOCORIGEN_URL = `${cfg.urlBase}/documentoOrigenAjax?dim=${id}`;
-                qa('.dim-desde, .dim-hasta').forEach(i => { i.value = ''; });
+                per = { tipo: 'todo', sub: 1, anio: hoy.getFullYear(), desde: '', hasta: '' };
+                pintarPeriodo();
                 { const tb = q('.dim-docs-tbody'); if (tb) tb.innerHTML = '<tr><td colspan="7" class="text-center text-muted py-4">Seleccione la pestaña para cargar los documentos.</td></tr>'; }
                 { const rc = q('.dim-resumen-cuerpo'); if (rc) rc.innerHTML = '<div class="text-center text-muted py-4">Seleccione la pestaña para calcular el resumen.</div>'; }
                 mostrarTabs(id > 0);

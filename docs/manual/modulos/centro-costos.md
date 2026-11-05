@@ -5,8 +5,8 @@ categoria: Contabilidad
 ruta_modulo: modulos/centro-costos
 tipo: modulo
 visibilidad: todos
-etiquetas: centro de costos, centros de costo, departamento, sucursal, area, gasto por area, presupuesto, documentos del centro de costo, resumen del centro de costo, pdf centro de costo, excel centro de costo, no se puede eliminar centro de costo, centro en uso
-version: 1.3
+etiquetas: centro de costos, centros de costo, departamento, sucursal, area, gasto por area, presupuesto, documentos del centro de costo, resumen del centro de costo, pdf centro de costo, excel centro de costo, filtrar por mes, filtrar por año, trimestre, semestre, periodo, no se puede eliminar centro de costo, centro en uso
+version: 1.4
 orden: 85
 estado: activo
 ---
@@ -26,8 +26,9 @@ una sucursal, una línea de negocio. Sirve para saber cuánto consume cada una.
 
 Lista, uno por fila, los documentos cuyo asiento tiene al menos una línea con este
 centro de costo: fecha, número de asiento, origen, número del documento, tercero y
-los importes **de esas líneas**. Se filtra por **Desde / Hasta** con **Mostrar**,
-**Todo** quita las fechas y un clic en la fila abre el documento. Se muestran hasta
+los importes **de esas líneas**. Se filtra por **Período** (**Mes**, **Trimestre**, **Semestre** o **Año**, que
+consultan solos y llenan Desde / Hasta) o por **Rango** libre **Desde / Hasta** con
+**Mostrar**; **Todo** quita las fechas y un clic en la fila abre el documento. Se muestran hasta
 2.000, los más recientes.
 
 ## Pestaña Resumen
@@ -103,6 +104,7 @@ la flecha indica la prioridad. El orden se guarda para usted.
 
 ## Historial de cambios
 
+- **1.4** — Las pestañas Documentos y Resumen se filtran por **Período**: mes, trimestre, semestre o año, además del rango libre Desde / Hasta.
 - **1.3** — Las pestañas Documentos y Resumen ya no dependen del acceso a Asientos Contables: las ve quien ve Centros de costo, y para nivel 1 el administrador decide en Permisos de módulos.
 - **1.2** — Pestañas **Documentos** y **Resumen** en el modal, con PDF y Excel con logo. Ya no se puede eliminar un centro de costo en uso.
 - **1.1** — Buscador con ventana de filtros (embudo), orden por varias columnas (Shift+clic) y PDF/Excel con el mismo orden; el modal ya no tiene pestaña *Información*.

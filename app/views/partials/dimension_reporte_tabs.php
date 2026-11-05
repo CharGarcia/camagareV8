@@ -39,7 +39,19 @@ if ($dimParte === 'tabs'): ?>
               . '<button type="button" class="btn btn-sm btn-outline-success dim-btn-excel" title="Excel del resumen con los documentos"><i class="bi bi-file-earmark-spreadsheet"></i> Excel</button>'
               . '</div>'
             : '';
-        return '<div class="d-flex flex-wrap align-items-end gap-2 mb-2 pb-2 border-bottom">'
+        // Período: Todo / Mes / Trimestre / Semestre / Año arman Desde–Hasta solos; tocar las
+        // fechas a mano pasa a «Rango». El servidor solo recibe desde/hasta (sin cambios).
+        $anioAct = (int) date('Y');
+        $optAnios = '';
+        for ($a = $anioAct + 1; $a >= $anioAct - 10; $a--) {
+            $optAnios .= '<option value="' . $a . '"' . ($a === $anioAct ? ' selected' : '') . '>' . $a . '</option>';
+        }
+        return '<div class="d-flex flex-wrap align-items-end gap-2 mb-2 pb-2 border-bottom dim-barra-periodo">'
+            . '<div><label class="form-label small fw-bold mb-0 d-block">Período</label><select class="form-select form-select-sm dim-per-tipo" style="width:120px;">'
+            . '<option value="todo">Todo</option><option value="mes">Mes</option><option value="trimestre">Trimestre</option>'
+            . '<option value="semestre">Semestre</option><option value="anio">Año</option><option value="rango">Rango</option></select></div>'
+            . '<div class="dim-per-sub-wrap d-none"><label class="form-label small fw-bold mb-0 d-block dim-per-sub-lbl">Mes</label><select class="form-select form-select-sm dim-per-sub" style="width:130px;"></select></div>'
+            . '<div class="dim-per-anio-wrap d-none"><label class="form-label small fw-bold mb-0 d-block">Año</label><select class="form-select form-select-sm dim-per-anio" style="width:90px;">' . $optAnios . '</select></div>'
             . '<div><label class="form-label small fw-bold mb-0 d-block">Desde</label><input type="date" class="form-control form-control-sm dim-desde" style="width:140px;"></div>'
             . '<div><label class="form-label small fw-bold mb-0 d-block">Hasta</label><input type="date" class="form-control form-control-sm dim-hasta" style="width:140px;"></div>'
             . '<button type="button" class="btn btn-sm btn-primary dim-btn-mostrar"><i class="bi bi-search me-1"></i>Mostrar</button>'

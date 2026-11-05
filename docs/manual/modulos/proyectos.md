@@ -5,8 +5,8 @@ categoria: Contabilidad
 ruta_modulo: modulos/proyectos
 tipo: modulo
 visibilidad: todos
-etiquetas: proyectos, egreso del proyecto, ingreso del proyecto, asignar proyecto a un egreso, obra, contrato, rentabilidad por proyecto, agrupar gastos, seguimiento, avance del proyecto, porcentaje de ejecucion, ejecucion presupuestaria, presupuesto del proyecto, documentos del proyecto, que documentos tiene el proyecto, pdf del proyecto, excel del proyecto, avance fisico, no se puede eliminar proyecto, proyecto en uso
-version: 1.4
+etiquetas: proyectos, egreso del proyecto, ingreso del proyecto, asignar proyecto a un egreso, obra, contrato, rentabilidad por proyecto, agrupar gastos, seguimiento, avance del proyecto, porcentaje de ejecucion, ejecucion presupuestaria, presupuesto del proyecto, documentos del proyecto, que documentos tiene el proyecto, pdf del proyecto, excel del proyecto, filtrar por mes, filtrar por año, trimestre, semestre, periodo del proyecto, avance fisico, no se puede eliminar proyecto, proyecto en uso
+version: 1.5
 orden: 80
 estado: activo
 ---
@@ -43,7 +43,11 @@ Lista, uno por fila, los documentos cuyo asiento tiene al menos una línea con e
 proyecto: fecha, número de asiento, origen (compra, factura, egreso…), número del
 documento, tercero y los importes **de esas líneas** (no el total del documento).
 
-- Filtre por **Desde / Hasta** y pulse **Mostrar**; **Todo** quita las fechas.
+- Elija el **Período**: **Mes**, **Trimestre**, **Semestre** o **Año** (con su selector y el
+  **Año**) y la consulta se hace sola; Desde / Hasta se llenan con el período elegido. Con
+  **Rango** escriba **Desde / Hasta** a mano y pulse **Mostrar** (si cambia una fecha a mano,
+  el período pasa solo a *Rango*). **Todo** quita las fechas.
+- El período es el mismo en las pestañas Documentos y Avance, y lo usan el PDF y el Excel.
 - Clic en una fila para ver el documento.
 - Se muestran hasta 2.000 documentos, los más recientes; si hay más, el pie lo
   avisa y conviene acotar el período.
@@ -147,6 +151,7 @@ guarda para usted.
 
 ## Historial de cambios
 
+- **1.5** — Las pestañas Documentos y Avance se filtran por **Período**: mes, trimestre, semestre o año, además del rango libre Desde / Hasta.
 - **1.4** — Ingresos y Egresos tienen el campo **Proyecto** en su modal; el proyecto se pone en todas las líneas de su asiento, sin editarlo a mano.
 - **1.3** — Las pestañas Documentos y Avance ya no dependen del acceso a Asientos Contables: las ve quien ve Proyectos, y para nivel 1 el administrador decide en Permisos de módulos.
 - **1.2** — Pestañas **Documentos** y **Avance** en el modal, con PDF y Excel con logo. La columna **% Ejec.** se calcula desde los asientos (ejecutado / presupuesto); el campo digitado pasa a llamarse **% Avance físico**. Ya no se puede eliminar un proyecto en uso.
