@@ -845,6 +845,100 @@ class SecuencialRepository
     }
 
     /**
+     * Números "quemados" en el SRI que el generador acaba de SALTAR para llegar a $siguiente:
+     * documentos que ya no están vigentes (eliminados) pero cuya clave de acceso el SRI recibió
+     * en este ambiente, y que por eso getSiguienteDisponible() trata como usados.
+     *
+     * Para qué: sin esto, el usuario ve pasar la serie del 1129 al 1131 sin ninguna explicación,
+     * porque la 1130 eliminada ya no aparece en el listado. La pantalla usa este resultado para
+     * avisar qué número se omitió y por qué. Es solo informativo: no cambia la numeración.
+     *
+     * Se limita al tramo pegado al número propuesto: los quemados que están por encima del
+     * último documento vigente anterior a $siguiente (los quemados viejos, en medio de la serie,
+     * no explican este salto y solo serían ruido).
+     *
+     * @return array<int, array{secuencial:string, id:int, deleted_at:?string, accion:?string, fecha_sri:?string}>
+     */
+    public function getQuemadosOmitidos(int $idPuntoEmision, string $tipoDocumento, int $secuencialInicial, int $siguiente, ?int $techo = null): array
+    {
+        $map = self::DOCUMENT_MAP[$tipoDocumento] ?? null;
+        if (!$map || $siguiente <= 1) {
+            return [];
+        }
+        $tipoSriLog = self::TABLA_A_TIPO_SRI_LOG[$map['tabla']] ?? null;
+        if ($tipoSriLog === null || !$this->tableExists($map['tabla']) || !$this->tableExists('sri_envio_log')) {
+            return [];
+        }
+
+        $tabla    = $map['tabla'];
+        $colSec   = $map['col_sec'];
+        $colPunto = $map['col_punto'];
+        $acciones = self::ACCIONES_SRI_RETIENE_SECUENCIAL;
+        $inicial  = max(1, $secuencialInicial);
+        $techo    = $techo ?? PHP_INT_MAX;
+
+        $sql = "WITH vigente AS (
+                    SELECT COALESCE(MAX(CAST(TRIM({$colSec}) AS BIGINT)), 0) AS max_sec
+                      FROM {$tabla}
+                     WHERE {$colPunto} = :id_punto_v
+                       AND tipo_ambiente = :amb_v
+                       AND eliminado = false
+                       AND TRIM({$colSec}) ~ '^[0-9]+$'
+                       AND CAST(TRIM({$colSec}) AS BIGINT) BETWEEN :piso_v AND :techo_v
+                       AND CAST(TRIM({$colSec}) AS BIGINT) < :sig_v
+                )
+                SELECT DISTINCT ON (CAST(TRIM(d.{$colSec}) AS BIGINT))
+                       CAST(TRIM(d.{$colSec}) AS BIGINT) AS sec,
+                       d.id,
+                       d.deleted_at,
+                       l.accion,
+                       l.created_at AS fecha_sri
+                  FROM {$tabla} d
+                  CROSS JOIN vigente v
+                  JOIN LATERAL (
+                       SELECT x.accion, x.created_at
+                         FROM sri_envio_log x
+                        WHERE x.tipo_comprobante = :tipo_sri_log
+                          AND x.id_comprobante   = d.id
+                          AND x.tipo_ambiente    = :amb_l
+                          AND x.accion IN ({$acciones})
+                        ORDER BY x.created_at DESC
+                        LIMIT 1
+                  ) l ON true
+                 WHERE d.{$colPunto} = :id_punto
+                   AND TRIM(d.{$colSec}) ~ '^[0-9]+$'
+                   AND CAST(TRIM(d.{$colSec}) AS BIGINT) BETWEEN :piso AND :techo
+                   AND CAST(TRIM(d.{$colSec}) AS BIGINT) < :sig
+                   AND CAST(TRIM(d.{$colSec}) AS BIGINT) > v.max_sec
+                 ORDER BY CAST(TRIM(d.{$colSec}) AS BIGINT), d.deleted_at DESC NULLS LAST
+                 LIMIT 20";
+
+        $amb  = $this->getTipoAmbiente($idPuntoEmision);
+        $stmt = $this->db->prepare($sql);
+        $stmt->execute([
+            ':id_punto_v'   => $idPuntoEmision,
+            ':amb_v'        => $amb,
+            ':piso_v'       => $inicial,
+            ':techo_v'      => $techo,
+            ':sig_v'        => $siguiente,
+            ':tipo_sri_log' => $tipoSriLog,
+            ':amb_l'        => $amb,
+            ':id_punto'     => $idPuntoEmision,
+            ':piso'         => $inicial,
+            ':techo'        => $techo,
+            ':sig'          => $siguiente,
+        ]);
+
+        return array_map(static fn(array $r): array => [
+            'secuencial' => str_pad((string) $r['sec'], self::LONGITUD_SECUENCIAL, '0', STR_PAD_LEFT),
+            'id'         => (int) $r['id'],
+            'deleted_at' => $r['deleted_at'] !== null ? (string) $r['deleted_at'] : null,
+            'accion'     => $r['accion'] !== null ? (string) $r['accion'] : null,
+            'fecha_sri'  => $r['fecha_sri'] !== null ? (string) $r['fecha_sri'] : null,
+        ], $stmt->fetchAll(PDO::FETCH_ASSOC));
+    }
+
+    /**
      * Modo 'por_fecha': siguiente CORRELATIVO dentro del periodo, con las mismas reglas de
      * huecos que la numeración consecutiva pero mirando solo los documentos de ese periodo.
      *

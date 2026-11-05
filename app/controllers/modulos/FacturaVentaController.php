@@ -450,6 +450,8 @@ class FacturaVentaController extends BaseModuloController
 
         $secuencialService = new \App\Services\SecuencialService();
         $res = $secuencialService->obtenerSiguienteSecuencial($idPunto, $tipoDoc, $fecha);
+        // Números quemados en el SRI que se saltaron, para que el modal explique el salto.
+        $res['omitidos'] = $secuencialService->numerosOmitidos($idPunto, $tipoDoc, (int) $res['secuencial']);
 
         echo json_encode(array_merge(['ok' => true], $res));
         exit;
@@ -1819,6 +1821,41 @@ class FacturaVentaController extends BaseModuloController
         } catch (\Throwable $e) {
             \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             if ($db->inTransaction()) $db->rollBack();
+            echo json_encode(['ok' => false, 'mensaje' => $e->getMessage()]);
+        }
+        exit;
+    }
+
+    /**
+     * Restaura una factura eliminada en borrador con su mismo número (p. ej. una NO AUTORIZADA
+     * por el SRI que se eliminó: su número quedó quemado y solo esa factura puede usarlo).
+     * Solo el superadministrador (nivel 3): revivir un documento eliminado que ya pasó por el
+     * SRI es una excepción que se decide caso por caso, no una acción del día a día.
+     */
+    public function restaurarAjax(): void
+    {
+        $this->requireLeer();
+        header('Content-Type: application/json');
+
+        if ((int) ($_SESSION['nivel'] ?? 1) !== 3) {
+            echo json_encode(['ok' => false, 'mensaje' => 'Solo el superadministrador puede restaurar una factura eliminada.']);
+            exit;
+        }
+
+        $id = (int) ($_POST['id'] ?? 0);
+        if (!$id) {
+            echo json_encode(['ok' => false, 'mensaje' => 'ID requerido.']);
+            exit;
+        }
+        $idEmpresa = (int) $_SESSION['id_empresa'];
+        $idUsuario = (int) $_SESSION['id_usuario'];
+
+        try {
+            // Nivel 3 ve todo (CLAUDE.md §6): sin filtro de registros propios.
+            $res = $this->service->restaurar($id, $idEmpresa, $idUsuario, null);
+            echo json_encode(['ok' => true, 'id' => $res['id'], 'mensaje' => "Factura {$res['numero']} restaurada como borrador."]);
+        } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             echo json_encode(['ok' => false, 'mensaje' => $e->getMessage()]);
         }
         exit;
