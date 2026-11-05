@@ -5,7 +5,7 @@ categoria: Contabilidad
 tipo: guia
 visibilidad: todos
 etiquetas: asientos automáticos, generar asientos, contabilidad automática, asientos pendientes, asientos que faltan, contabilizar documentos, no se generó el asiento, factura sin asiento, sincronizar contabilidad, asientos en segundo plano, costo de ventas pendiente, asiento sin costo, actualizar asiento repetido
-version: 1.5
+version: 1.6
 orden: 30
 estado: activo
 ---
@@ -83,7 +83,10 @@ Si quiere ver el resultado, revise **Asientos Contables** o **Mayores**.
   Si falta una cuenta, o el período contable está cerrado, el documento queda
   anotado y se lo salta. **Se vuelve a intentar automáticamente en cuanto usted
   corrija la configuración contable** del módulo — no hay que pedirlo ni volver
-  a nada.
+  a nada. Esto incluye las cuentas de **IVA** (la general por tarifa y las de
+  cliente o proveedor, producto o ítem, categoría o marca) en Facturas de Venta,
+  Recibos de Venta, Notas de Crédito, Notas de Débito, Facturas de Reembolso,
+  Facturas de Compra y Liquidaciones de Compra.
 - **Con el costo de ventas pasa lo mismo.** Si a una factura, recibo o nota de
   crédito le falta la cuenta de Costo de Ventas o la de Inventario, su asiento se
   genera igual, sin el costo, y el documento queda anotado: no se vuelve a
@@ -163,6 +166,12 @@ permiso para ver el módulo tampoco genera nada, porque ni siquiera puede abrirl
 
 ## Historial de cambios
 
+- **1.6** — Configurar o corregir una cuenta de IVA ahora reintenta los documentos
+  que habían fallado por ella: facturas y recibos de venta, notas de crédito y de
+  débito, facturas de reembolso, facturas de compra y liquidaciones. Antes solo los
+  reintentaba un cambio en las cuentas del concepto principal, y un documento que
+  falló por el IVA se quedaba sin asiento aunque la cuenta ya estuviera puesta.
+  Lo mismo al pasar una regla por ítem de un ítem a otro.
 - **1.5** — El aviso de Asientos Contables, Mayores, Estados Financieros y Balance
   dice qué configurar, sin cifras, con enlace directo a Configuración Contable.
 - **1.4** — Las facturas, recibos y notas de crédito con el costo de ventas pendiente

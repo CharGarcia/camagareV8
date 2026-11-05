@@ -52,6 +52,13 @@
  *   grupo        Encabezado bajo el que se lista el módulo en la ventana
  *                «Módulos que contabilizan» de Configuración Contable.
  *   ayuda        (Opcional) Texto que explica qué deja de pasar al apagarlo.
+ *   iva_firma    (Opcional) Fuentes de las cuentas de IVA por tarifa, que no
+ *                cuelgan de ningún concepto (asientos_programados.id_asiento_tipo
+ *                = 0). Cada entrada: ['referencia' => tipo_referencia de la regla
+ *                general, 'direccion' => direccion_iva de los overrides por
+ *                proveedor, ítem, categoría o marca]. No abren la compuerta; solo
+ *                entran en la firma, para que configurar la cuenta de IVA reintente
+ *                los documentos que fallaron por ella.
  *   solo_si_tabla
  *                (Opcional) El interruptor solo se lista en las empresas que tienen
  *                alguna fila vigente en esa tabla (módulos que la empresa activa a
@@ -87,6 +94,7 @@ return [
         'rutas'           => ['modulos/factura-venta'],
         'conceptos'       => ['ventas_factura'],
         'conceptos_firma' => ['suscripciones_devengo'],
+        'iva_firma'       => [['referencia' => 'iva_ventas_factura', 'direccion' => 'venta']],
     ],
 
     'recibos_venta' => [
@@ -95,6 +103,8 @@ return [
         'rutas'           => ['modulos/recibo-venta'],
         'conceptos'       => ['recibos_venta'],
         'conceptos_firma' => ['suscripciones_devengo'],
+        // Catálogo de IVA propio de Recibos (no el de Facturas).
+        'iva_firma'       => [['referencia' => 'iva_recibos_venta', 'direccion' => 'recibo']],
     ],
 
     // Las NC de venta se arman con el catálogo de cuentas de la factura
@@ -104,6 +114,7 @@ return [
         'grupo'     => 'Ventas',
         'rutas'     => ['modulos/notas_credito'],
         'conceptos' => ['ventas_factura'],
+        'iva_firma' => [['referencia' => 'iva_ventas_factura', 'direccion' => 'venta']],
     ],
 
     // La ND de venta arma su asiento con el catálogo de la factura
@@ -113,6 +124,7 @@ return [
         'grupo'     => 'Ventas',
         'rutas'     => ['modulos/nota_debito'],
         'conceptos' => ['ventas_factura'],
+        'iva_firma' => [['referencia' => 'iva_ventas_factura', 'direccion' => 'venta']],
     ],
 
     // Devengo NIIF 15 de suscripciones. No tiene trabajo en SincronizadorAsientosService: su
@@ -135,6 +147,7 @@ return [
         'rutas'           => ['modulos/factura-reembolso'],
         'conceptos'       => ['factura_reembolso'],
         'conceptos_firma' => ['ventas_factura'],
+        'iva_firma'       => [['referencia' => 'iva_ventas_factura', 'direccion' => 'venta']],
     ],
 
     'retenciones_venta' => [
@@ -151,6 +164,7 @@ return [
         'grupo'     => 'Compras',
         'rutas'     => ['modulos/compras'],
         'conceptos' => ['adquisiciones_compras'],
+        'iva_firma' => [['referencia' => 'iva_compras_factura', 'direccion' => 'compra']],
     ],
 
     'liquidaciones_compra' => [
@@ -158,6 +172,7 @@ return [
         'grupo'     => 'Compras',
         'rutas'     => ['modulos/liquidacion-compra'],
         'conceptos' => ['adquisiciones_compras'],
+        'iva_firma' => [['referencia' => 'iva_compras_factura', 'direccion' => 'compra']],
     ],
 
     'retenciones_compra' => [

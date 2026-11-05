@@ -70,6 +70,17 @@ class ContabilidadAutoRepository extends BaseRepository
             return null; // sin ninguna cuenta configurada: no hay nada que generar
         }
 
+        // Cuentas de IVA por tarifa (reglas con id_asiento_tipo = 0): no cuelgan de ningún
+        // concepto, así que la consulta de arriba no las ve. No abren la compuerta (sin la cuenta
+        // principal no hay asiento), pero entran en la firma: si una compra falló por la cuenta de
+        // IVA y el usuario la configura después, la firma cambia y se reintenta. Sin esto el
+        // documento quedaba anotado como fallo para siempre.
+        foreach ((array) ($definicion['iva_firma'] ?? []) as $fuenteIva) {
+            foreach ($this->filasIva($idEmpresa, (array) $fuenteIva) as $f) {
+                $piezas[] = 'iva:' . $f['clave'] . ':' . $f['id_cuenta'];
+            }
+        }
+
         // Conceptos de respaldo: no abren la compuerta (ya está abierta si llegamos
         // aquí), pero entran en la firma para que corregir una cuenta ahí también
         // dispare el reintento de lo que había fallado.
@@ -120,9 +131,12 @@ class ContabilidadAutoRepository extends BaseRepository
             $ramas[] = 'ap.tipo_referencia IN (' . implode(', ', $ph) . ')';
         }
 
+        // referencia_texto: las reglas por ítem (item_compra) se identifican por el texto del
+        // ítem, no por id_referencia; sin él, pasar una regla de un ítem a otro no cambiaba la firma.
         $sql = "SELECT COALESCE(at.tipo_asiento, ap.tipo_referencia) || '#'
                        || COALESCE(ap.id_asiento_tipo, 0) || '#'
-                       || COALESCE(ap.id_referencia, 0) AS clave,
+                       || COALESCE(ap.id_referencia, 0) || '#'
+                       || COALESCE(TRIM(ap.referencia_texto), '') AS clave,
                        ap.id_cuenta
                 FROM asientos_programados ap
                 LEFT JOIN asientos_tipo at ON at.id = ap.id_asiento_tipo AND at.eliminado = false
@@ -137,6 +151,55 @@ class ContabilidadAutoRepository extends BaseRepository
             return $st->fetchAll(PDO::FETCH_ASSOC) ?: [];
         } catch (\Throwable $e) {
             // Migración pendiente en esta base: se comporta como "sin configurar".
+            return [];
+        }
+    }
+
+    /**
+     * Cuentas de IVA por tarifa de un documento: la regla general (tipo_referencia, p. ej.
+     * 'iva_compras_factura', por código de tarifa) y los overrides por proveedor, ítem,
+     * categoría o marca (id_asiento_tipo = 0 + direccion_iva). Son las mismas filas que lee
+     * AsientoBuilderService al armar las líneas de IVA.
+     *
+     * @param array{referencia?:string,direccion?:string} $fuente
+     * @return array<int,array{clave:string,id_cuenta:int}>
+     */
+    private function filasIva(int $idEmpresa, array $fuente): array
+    {
+        $referencia = trim((string) ($fuente['referencia'] ?? ''));
+        $direccion  = trim((string) ($fuente['direccion'] ?? ''));
+
+        $ramas  = [];
+        $params = [':id_empresa' => $idEmpresa];
+        if ($referencia !== '') {
+            $ramas[] = 'ap.tipo_referencia = :referencia';
+            $params[':referencia'] = $referencia;
+        }
+        if ($direccion !== '') {
+            $ramas[] = '(ap.id_asiento_tipo = 0 AND ap.direccion_iva = :direccion)';
+            $params[':direccion'] = $direccion;
+        }
+        if ($ramas === []) {
+            return [];
+        }
+
+        $sql = "SELECT ap.tipo_referencia || '#' || COALESCE(ap.id_referencia, 0) || '#'
+                       || COALESCE(TRIM(ap.referencia_texto), '') || '#'
+                       || COALESCE(ap.codigo_tarifa_iva, '') || '#'
+                       || COALESCE(ap.direccion_iva, '') AS clave,
+                       ap.id_cuenta
+                FROM asientos_programados ap
+                WHERE ap.id_empresa = :id_empresa
+                  AND ap.eliminado = false
+                  AND ap.id_cuenta IS NOT NULL
+                  AND (" . implode(' OR ', $ramas) . ")";
+
+        try {
+            $st = $this->db->prepare($sql);
+            $st->execute($params);
+            return $st->fetchAll(PDO::FETCH_ASSOC) ?: [];
+        } catch (\Throwable $e) {
+            // Columna de IVA inexistente (migración pendiente en esta base): sin aporte a la firma.
             return [];
         }
     }
