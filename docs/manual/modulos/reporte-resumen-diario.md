@@ -5,8 +5,8 @@ categoria: Reportes
 ruta_modulo: modulos/reporte_resumen_diario
 tipo: modulo
 visibilidad: todos
-etiquetas: resumen diario, cierre del dia, cierre de caja, abrir caja, cerrar caja, reabrir caja, arqueo, arqueo de caja, contar la caja, fondo de caja, faltante, sobrante, diferencia de caja, caja por usuario, caja por cajero, filtro por usuario, cuadre de caja, cuadre diario, libro de caja, movimiento del dia, que paso hoy, ventas del dia, compras del dia, ingresos del dia, egresos del dia, cobros del dia, cobros de dias anteriores, cobros atrasados, pagos del dia, facturas del dia, saldo de la factura, saldo pendiente, recibos, notas de credito, notas de debito, retenciones recibidas, retenciones emitidas, liquidaciones de compra, efectivo, tarjeta, transferencia, cheque, forma de pago, saldo inicial, saldo final, saldo de caja, saldo de apertura, apertura de caja, traslado, deposito del efectivo, depositar en el banco, retiro del banco, pasar de efectivo a banco, cuanto entro, cuanto salio, cuanto hay en caja, numero de ingreso, numero de egreso, recibido de, pagado a, firmas, realizado por, aprobado por, pdf, excel, imprimir
-version: 1.5
+etiquetas: resumen diario, cierre del dia, cierre de caja, correo de cierre, enviar cierre por correo, abrir caja, cerrar caja, reabrir caja, arqueo, arqueo de caja, contar la caja, fondo de caja, faltante, sobrante, diferencia de caja, caja por usuario, caja por cajero, filtro por usuario, cuadre de caja, cuadre diario, libro de caja, movimiento del dia, que paso hoy, ventas del dia, compras del dia, ingresos del dia, egresos del dia, cobros del dia, cobros de dias anteriores, cobros atrasados, pagos del dia, facturas del dia, saldo de la factura, saldo pendiente, recibos, notas de credito, notas de debito, retenciones recibidas, retenciones emitidas, liquidaciones de compra, efectivo, tarjeta, transferencia, cheque, forma de pago, saldo inicial, saldo final, saldo de caja, saldo de apertura, apertura de caja, traslado, deposito del efectivo, depositar en el banco, retiro del banco, pasar de efectivo a banco, cuanto entro, cuanto salio, cuanto hay en caja, numero de ingreso, numero de egreso, recibido de, pagado a, firmas, realizado por, aprobado por, pdf, excel, imprimir
+version: 1.6
 orden: 12
 estado: activo
 ---
@@ -193,6 +193,16 @@ calcula sola (en rojo si falta, en verde si sobra). **Copiar esperado** pone el
 esperado en todas las formas para corregir solo las que no cuadran. Todas las formas
 deben tener un valor. Al guardar, el sistema vuelve a calcular el esperado.
 
+**Correo del cierre.** Al cerrar la caja se envía automáticamente un correo al
+**correo de la empresa** (el registrado en la ficha de la empresa) con el resumen:
+día, de quién es la caja (un usuario o toda la empresa), quién la cerró, el
+*Resumen del día* (ventas netas, compras netas, ingresos, egresos y neto, sin
+borradores) y el **arqueo** por forma de pago (saldo inicial, ingresos, egresos,
+traslados, esperado, contado y diferencia), con las observaciones. Es el mismo
+formato del correo de cierre de turno del Restaurante. Si el correo no sale (la
+empresa no tiene correo válido o falla el envío), la caja **queda cerrada igual** y
+el sistema avisa el motivo.
+
 Con la caja cerrada, *Caja por forma de pago* trae además **Contado** y
 **Diferencia**, igual en el PDF y el Excel, y en *Filtros aplicados* sale quién la
 cerró y cuándo.
@@ -292,6 +302,9 @@ módulo: no generan asientos ni movimientos en Control Bancario.
 - **El saldo arranca con un valor que no es real**: no hay saldo de apertura y se
   está acumulando desde el primer movimiento (puede incluir datos migrados). Cargue
   la apertura con la fecha y el saldo reales.
+- **Cerré la caja y no llegó el correo**: revise que la empresa tenga un correo válido
+  en su ficha y la carpeta de spam. El aviso al cerrar indica el motivo; la caja quedó
+  cerrada igual.
 - **"Falta aplicar en la base de datos el SQL…"**: falta el SQL de saldos y traslados
   (ver *Requisitos previos*).
 - **No veo los saldos ni el botón Saldos de apertura**: hace falta *Acceso total* en
@@ -310,6 +323,8 @@ módulo: no generan asientos ni movimientos en Control Bancario.
 
 ## Historial de cambios
 
+- **1.6** — Al **cerrar la caja** se envía un correo con el resumen del día y el arqueo
+  por forma de pago al correo de la empresa.
 - **1.5** — Nueva opción **Caja: Cierre de caja**: abrir la caja del día con su saldo
   inicial por forma de pago y cerrarla con lo contado (arqueo) y la diferencia; reabrir
   con motivo. Nuevo selector **Usuario** (acceso total) para ver lo de un usuario y

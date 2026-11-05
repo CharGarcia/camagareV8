@@ -334,7 +334,9 @@ class ReporteResumenDiarioController extends BaseModuloController
                 (int) $_SESSION['id_empresa'], (string) ($_POST['fecha'] ?? ''), $this->alcanceUsuario(),
                 is_array($filas) ? $filas : [], (string) ($_POST['observaciones'] ?? ''), (int) $_SESSION['id_usuario']
             );
-            return ['mensaje' => 'Caja cerrada.', 'totales' => $tot];
+            $aviso = $tot['aviso_correo'] ?? null;
+            unset($tot['aviso_correo']);
+            return ['mensaje' => 'Caja cerrada.', 'totales' => $tot, 'aviso_correo' => $aviso];
         });
     }
 

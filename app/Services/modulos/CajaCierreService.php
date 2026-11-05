@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Services\modulos;
 
+use App\models\Empresa;
 use App\repositories\modulos\CajaCierreRepository;
 use App\repositories\modulos\CajaMovimientoRepository;
 use App\repositories\modulos\ReporteResumenDiarioRepository;
@@ -342,11 +343,142 @@ class CajaCierreService
             $this->log->registrar($idUsuarioSesion, $idEmpresa, 'CERRAR_CAJA_DIARIA', 'caja_cierres_diarios', $id,
                 ['estado' => 'abierta'], ['estado' => 'cerrada', 'observaciones' => $obs, 'totales' => $tot, 'detalle' => $filas]);
             $this->repo->commit();
-            return $tot;
         } catch (\Throwable $e) {
             $this->repo->rollBack();
             throw $e;
         }
+
+        // El correo va DESPUÉS del commit y no puede tumbar el cierre (igual que el cierre
+        // de turno del POS/Restaurante): si falla, se devuelve el motivo para avisarlo.
+        $tot['aviso_correo'] = $this->enviarCorreoCierre($idEmpresa, $fecha, $idUsuario, $filas, $tot, $obs, $idUsuarioSesion);
+        return $tot;
+    }
+
+    /**
+     * Correo con el resumen del cierre al buzón registrado en la empresa (empresas.mail).
+     * Devuelve null si salió bien, o el motivo por el que no se pudo enviar.
+     */
+    private function enviarCorreoCierre(int $idEmpresa, string $fecha, ?int $idUsuario, array $filas, array $tot, string $obs, int $idUsuarioSesion): ?string
+    {
+        try {
+            $empresa = (new Empresa())->getPorId($idEmpresa) ?? [];
+            $destino = trim((string) ($empresa['mail'] ?? ''));
+            if ($destino === '' || !filter_var($destino, FILTER_VALIDATE_EMAIL)) {
+                return 'la empresa no tiene un correo válido configurado, así que no se envió el resumen del cierre.';
+            }
+            if (!function_exists('enviar_correo_reporte')) {
+                return 'el envío de correo no está disponible en este servidor.';
+            }
+
+            // Indicadores del día con las mismas reglas del resumen (sin borradores). Si fallan,
+            // el correo sale igual con el arqueo, que es lo esencial del cierre.
+            $kpis = null;
+            try {
+                $kpis = (new ReporteResumenDiarioService())->generar($idEmpresa, $fecha, false, false, $idUsuario)['kpis'] ?? null;
+            } catch (\Throwable $e) {
+                error_log('[CajaCierre] KPIs del correo de cierre no disponibles: ' . $e->getMessage());
+            }
+
+            $nombres  = array_column($this->usuarios($idEmpresa, $idUsuarioSesion), 'nombre', 'id');
+            $alcance  = $idUsuario === null ? 'Toda la empresa' : (string) ($nombres[$idUsuario] ?? "Usuario #{$idUsuario}");
+            $cerroPor = (string) ($nombres[$idUsuarioSesion] ?? "Usuario #{$idUsuarioSesion}");
+
+            $ok = enviar_correo_reporte(
+                [$destino],
+                'Cierre de caja ' . date('d-m-Y', strtotime($fecha)) . ' — ' . ($empresa['nombre'] ?? ''),
+                $this->cuerpoCorreoCierre($empresa, $fecha, $alcance, $cerroPor, $filas, $tot, $obs, $kpis)
+            );
+            return $ok ? null : ($GLOBALS['LAST_EMAIL_ERROR'] ?? 'no se pudo enviar el correo del cierre.');
+        } catch (\Throwable $e) {
+            error_log('[CajaCierre] Correo de cierre no enviado (empresa ' . $idEmpresa . ', día ' . $fecha . '): ' . $e->getMessage());
+            return 'no se pudo enviar el correo del cierre: ' . $e->getMessage();
+        }
+    }
+
+    /**
+     * Cuerpo HTML del correo: mismo estilo de tirilla que el cierre de turno del
+     * Restaurante (CajaSesionService::cuerpoCorreoCierre): encabezado, datos del cierre,
+     * RESUMEN DEL DÍA y ARQUEO DE CAJA por forma de pago.
+     */
+    private function cuerpoCorreoCierre(array $empresa, string $fecha, string $alcance, string $cerroPor,
+                                        array $filas, array $tot, string $obs, ?array $kpis): string
+    {
+        $e = static fn ($v) => htmlspecialchars((string) $v, ENT_QUOTES, 'UTF-8');
+        $m = static fn ($v) => '$' . number_format((float) $v, 2);
+
+        $sep     = '<hr style="border:none;border-top:1px dashed #000;margin:6px 0;">';
+        $linea   = '<tr><td colspan="2"><hr style="border:none;border-top:1px solid #000;margin:2px 0;"></td></tr>';
+        $sub     = 'font-size:12px;';
+        $negrita = 'font-weight:bold;font-size:14px;';
+        $titulo  = static fn (string $t) => '<div style="text-align:center;font-weight:bold;">' . $t . '</div>';
+        $fila    = static fn (string $etq, string $valor, string $estilo = '') =>
+            '<tr style="' . $estilo . '"><td style="padding:1px 0;">' . $etq . '</td>'
+            . '<td style="padding:1px 0;text-align:right;white-space:nowrap;width:30%;">' . $valor . '</td></tr>';
+        $concepto = static fn (string $t) => '<tr><td colspan="2" style="padding:1px 0;">' . $t . '</td></tr>';
+        $tabla   = static fn (string $f) => '<table style="width:100%;border-collapse:collapse;font-size:13px;">' . $f . '</table>';
+        $chico   = static fn (string $t) => '<span style="' . $sub . '">' . $t . '</span>';
+        $difHtml = static function (float $d) use ($m): string {
+            $color = abs($d) < 0.01 ? '#198754' : '#dc3545';
+            return '<span style="color:' . $color . ';">' . $m($d) . '</span>';
+        };
+
+        $datos = '';
+        foreach ([
+            'Día'         => date('d-m-Y', strtotime($fecha)),
+            'Caja de'     => $alcance,
+            'Cerrada por' => $cerroPor,
+            'Cierre'      => date('d-m-Y H:i:s'),
+        ] as $etq => $valor) {
+            $datos .= '<tr><td style="padding:1px 0;width:38%;">' . $etq . ':</td><td style="padding:1px 0;">' . $e($valor) . '</td></tr>';
+        }
+
+        $resumen = '';
+        if ($kpis) {
+            $resumen = $sep . $titulo('RESUMEN DEL DÍA') . $tabla(
+                $fila('Ventas netas', $m($kpis['ventas_netas'] ?? 0))
+                . $fila('Compras netas', $m($kpis['compras_netas'] ?? 0))
+                . $fila('Ingresos', $m($kpis['ingresos'] ?? 0))
+                . $fila('Egresos', $m($kpis['egresos'] ?? 0))
+                . $fila('NETO DEL DÍA', $m($kpis['neto_caja'] ?? 0), $negrita)
+            );
+        }
+
+        // Arqueo por forma de pago: saldo inicial + ingresos − egresos ± traslados = esperado.
+        $filasArq = '';
+        foreach ($filas as $f) {
+            $mov = 'Inicial ' . $m($f['saldo_inicial']) . ' · Ing. ' . $m($f['ingresos']) . ' · Egr. ' . $m($f['egresos']);
+            if (abs((float) $f['traslados']) >= 0.01) {
+                $mov .= ' · Trasl. ' . $m($f['traslados']);
+            }
+            $filasArq .= $concepto('<strong>' . $e($f['forma']) . '</strong>')
+                       . $fila($chico($mov), '')
+                       . $fila($chico('Esperado ' . $m($f['esperado']) . ' · Contado ' . $m($f['contado'])),
+                               abs((float) $f['diferencia']) >= 0.01
+                                   ? '<span style="color:#dc3545;font-weight:bold;">' . $m($f['diferencia']) . '</span>' : '—');
+        }
+        $filasArq .= $linea
+                   . $fila('Saldo esperado', $m($tot['esperado']))
+                   . $fila('Contado', $m($tot['contado']))
+                   . $fila('DIFERENCIA', $difHtml((float) $tot['diferencia']), $negrita);
+
+        return '
+            <div style="font-family:Arial,Helvetica,sans-serif;font-size:13px;line-height:1.35;color:#000;max-width:420px;margin:auto;">
+                <div style="text-align:center;">
+                    <div style="font-size:15px;font-weight:bold;">' . $e($empresa['nombre_comercial'] ?? $empresa['nombre'] ?? '') . '</div>
+                    ' . (!empty($empresa['ruc']) ? '<div>RUC: ' . $e($empresa['ruc']) . '</div>' : '') . '
+                </div>
+                ' . $sep . '
+                <div style="text-align:center;font-weight:bold;font-size:14px;">CIERRE DE CAJA — RESUMEN DIARIO</div>
+                ' . $sep . '
+                <table style="width:100%;border-collapse:collapse;font-size:13px;">' . $datos . '</table>
+                ' . $resumen . '
+                ' . $sep . $titulo('ARQUEO DE CAJA') . '
+                <div style="text-align:center;' . $sub . '">Por forma de pago</div>
+                ' . $tabla($filasArq) . '
+                ' . ($obs !== '' ? $sep . '<div><strong>Observaciones:</strong> ' . $e($obs) . '</div>' : '') . '
+                ' . $sep . '
+                <div style="text-align:center;' . $sub . '">Enviado automáticamente al cerrar la caja, el ' . date('d-m-Y H:i:s') . '.</div>
+            </div>';
     }
 
     /** Vuelve a abrir una caja cerrada (para corregir): se borra el arqueo y se conservan los saldos iniciales. */

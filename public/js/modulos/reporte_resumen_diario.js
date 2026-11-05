@@ -448,8 +448,10 @@
                 cerrada = true;
                 bootstrap.Modal.getOrCreateInstance('#rrdModalCerrarCaja').hide();
                 const t = json.totales;
-                Swal.fire({ icon: 'success', title: json.mensaje,
-                    text: `Esperado ${money(t.esperado)} · Contado ${money(t.contado)} · Diferencia ${money(t.diferencia)}` });
+                const resumen = `Esperado ${money(t.esperado)} · Contado ${money(t.contado)} · Diferencia ${money(t.diferencia)}`;
+                Swal.fire(json.aviso_correo
+                    ? { icon: 'warning', title: json.mensaje, text: `${resumen}. El resumen no se envió por correo: ${json.aviso_correo}` }
+                    : { icon: 'success', title: json.mensaje, text: `${resumen}. Se envió el resumen al correo de la empresa.` });
                 await mostrar();
             } catch (e) {
                 Swal.fire({ icon: 'error', title: 'Error de comunicación', text: 'Vuelva a mostrar el día para ver si la caja quedó cerrada.' });
