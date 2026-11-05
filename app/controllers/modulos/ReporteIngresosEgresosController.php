@@ -204,7 +204,7 @@ class ReporteIngresosEgresosController extends BaseModuloController
     private function renderDetalle(array $rows): string
     {
         if (empty($rows)) {
-            return '<tr><td colspan="10" class="text-center py-5 text-muted"><i class="bi bi-search fs-3 d-block mb-2"></i>Sin resultados para los filtros seleccionados.</td></tr>';
+            return '<tr><td colspan="11" class="text-center py-5 text-muted"><i class="bi bi-search fs-3 d-block mb-2"></i>Sin resultados para los filtros seleccionados.</td></tr>';
         }
         $h = '';
         foreach ($rows as $r) {
@@ -223,6 +223,7 @@ class ReporteIngresosEgresosController extends BaseModuloController
                 . '<td><span class="badge bg-light text-dark border">' . htmlspecialchars($r['tipo_documento'] ?? '') . '</span> ' . htmlspecialchars($r['numero_documento'] ?? '') . '</td>'
                 . '<td class="text-truncate text-muted" style="max-width:220px" title="' . htmlspecialchars($r['descripcion'] ?? '') . '">' . htmlspecialchars($r['descripcion'] ?? '') . '</td>'
                 . '<td>' . htmlspecialchars($r['concepto'] ?? '') . '</td>'
+                . '<td class="text-truncate" style="max-width:180px" title="' . htmlspecialchars($r['formas'] ?? '') . '">' . htmlspecialchars($r['formas_nombres'] ?? '') . '</td>'
                 . '<td class="text-center">' . $estBadge . '</td>'
                 . '<td class="text-end fw-bold ' . $signo . '">$' . number_format((float)($r['monto'] ?? 0), 2)
                 . self::notaNoMonetario((float)($r['monto_anticipo'] ?? 0), (float)($r['monto_otros'] ?? 0)) . '</td>'
@@ -238,7 +239,7 @@ class ReporteIngresosEgresosController extends BaseModuloController
     private function renderComprobante(array $rows): string
     {
         if (empty($rows)) {
-            return '<tr><td colspan="10" class="text-center py-5 text-muted"><i class="bi bi-search fs-3 d-block mb-2"></i>Sin resultados para los filtros seleccionados.</td></tr>';
+            return '<tr><td colspan="11" class="text-center py-5 text-muted"><i class="bi bi-search fs-3 d-block mb-2"></i>Sin resultados para los filtros seleccionados.</td></tr>';
         }
         $h = '';
         foreach ($rows as $r) {
@@ -260,6 +261,7 @@ class ReporteIngresosEgresosController extends BaseModuloController
                 . htmlspecialchars($r['documentos'] ?? '') . '</td>'
                 . '<td class="text-truncate text-muted" style="max-width:200px" title="' . htmlspecialchars($r['observaciones'] ?? '') . '">' . htmlspecialchars($r['observaciones'] ?? '') . '</td>'
                 . '<td>' . htmlspecialchars($r['concepto'] ?? '') . '</td>'
+                . '<td class="text-truncate" style="max-width:220px" title="' . htmlspecialchars($r['formas'] ?? '') . '">' . htmlspecialchars($r['formas'] ?? '') . '</td>'
                 . '<td class="text-center">' . $estBadge . '</td>'
                 . '<td class="text-end fw-bold ' . $signo . '">$' . number_format((float)($r['valor'] ?? 0), 2)
                 . self::notaNoMonetario((float)($r['monto_anticipo'] ?? 0), (float)($r['monto_otros'] ?? 0)) . '</td>'
@@ -514,7 +516,7 @@ class ReporteIngresosEgresosController extends BaseModuloController
         // "Valor" es el comprobante completo; aparte, cuánto se pagó con formas no monetarias
         // (anticipo, otros) y cuánto fue entrada/salida de dinero.
         $headers = ['Tipo', 'N° Ingreso/Egreso', 'Fecha', 'Cliente / Proveedor / Empleado', 'Valor', 'No monetario',
-                    'Entrada/salida de dinero', 'Detalle', 'Observaciones', 'Asesor'];
+                    'Entrada/salida de dinero', 'Detalle', 'Formas de cobro/pago', 'Observaciones', 'Asesor'];
         $data = [];
         foreach ($this->repository->getResumenExport($idEmpresa, $f) as $r) {
             $data[] = [
@@ -526,6 +528,7 @@ class ReporteIngresosEgresosController extends BaseModuloController
                 self::noMonetarioXl($r['no_monetario']),
                 (float) $r['caja'],
                 $r['detalle'],
+                $r['formas_detalle'],
                 $r['observaciones'],
                 $r['asesor'],
             ];
@@ -534,7 +537,7 @@ class ReporteIngresosEgresosController extends BaseModuloController
             'headers'  => $headers,
             'data'     => $data,
             'formatos' => [3 => self::XL_FECHA, 5 => self::XL_DINERO, 6 => self::XL_DINERO, 7 => self::XL_DINERO],
-            'ajustar'  => [8 => 60, 9 => 40], // columna (1-based) => ancho
+            'ajustar'  => [8 => 60, 9 => 45, 10 => 40], // columna (1-based) => ancho
         ];
     }
 
@@ -778,13 +781,13 @@ class ReporteIngresosEgresosController extends BaseModuloController
                 return ['headers' => $headers, 'data' => $data, 'right' => [3,4,5,6], 'money' => [3,4,5,6]];
             default:
                 $rows = $this->repository->getReporteDetallado($idEmpresa, $f, 0);
-                $headers = ['Flujo', 'Número', 'Fecha', 'Tercero', 'Asesor', 'Tipo Doc.', 'N° Documento', 'Descripción', 'Concepto', 'Estado', 'Monto', 'No monetario'];
+                $headers = ['Flujo', 'Número', 'Fecha', 'Tercero', 'Asesor', 'Tipo Doc.', 'N° Documento', 'Descripción', 'Concepto', 'Forma de cobro/pago', 'Estado', 'Monto', 'No monetario'];
                 $data = array_map(fn($r) => [$fl($r['tipo_flujo']), $r['numero'],
                     !empty($r['fecha']) ? date('d-m-Y', strtotime($r['fecha'])) : '',
                     $r['tercero_nombre'], $r['vendedor'], $r['tipo_documento'], $r['numero_documento'],
-                    $r['descripcion'], $r['concepto'], ucfirst(strtolower($r['estado'] ?? '')), (float)$r['monto'],
+                    $r['descripcion'], $r['concepto'], $r['formas_nombres'], ucfirst(strtolower($r['estado'] ?? '')), (float)$r['monto'],
                     self::noMonetarioXl((float)$r['monto_anticipo'] + (float)$r['monto_otros'])], $rows);
-                return ['headers' => $headers, 'data' => $data, 'right' => [10,11], 'money' => [10,11]];
+                return ['headers' => $headers, 'data' => $data, 'right' => [11,12], 'money' => [11,12]];
         }
     }
 
@@ -833,8 +836,9 @@ class ReporteIngresosEgresosController extends BaseModuloController
                 ? $this->indicadoresAnticiposPdf($modo, $filas, $mov ?? null)
                 : $this->indicadoresPdf($this->repository->getEstadisticas($idEmpresa, $f), $f['tipo_flujo']);
 
-            $horizontal = in_array($modo, ['DETALLE', 'COMPROBANTE', 'ANTICIPOS_MOV'], true);
-            $pt         = $horizontal ? 7.0 : 8.0;
+            // Todas las vistas en A4 vertical; las de muchas columnas, con letra más pequeña.
+            $horizontal = false;
+            $pt         = in_array($modo, ['DETALLE', 'COMPROBANTE', 'ANTICIPOS_MOV'], true) ? 6.5 : 8.0;
             $cols       = \App\Helpers\ReportePdf::completarAnchos($this->columnasPdf($modo, $f, $horizontal, $pt));
 
             [$titulo, $subtitulo] = $this->tituloPdf($idEmpresa, $modo, $f);
@@ -983,13 +987,13 @@ class ReporteIngresosEgresosController extends BaseModuloController
             $saldo = $dinero('saldo', 'Saldo', 9, true);
             unset($saldo['tot']); // el saldo es corrido, no se suma
             return [
-                ['lbl' => 'Fecha', 'w' => 7, 'cls' => 'text-center',
+                ['lbl' => 'Fecha', 'w' => 8, 'cls' => 'text-center',
                  'val' => static fn (array $r): string => !empty($r['fecha']) ? date('d-m-Y', strtotime((string) $r['fecha'])) : ''],
-                ['lbl' => 'Movimiento', 'w' => 9, 'cls' => '',
+                ['lbl' => 'Movimiento', 'w' => 10, 'cls' => '',
                  'val' => static fn (array $r): string => $r['origen'] === 'SALDO_ANTERIOR' ? '<b>Saldo anterior</b>' : self::nombreMovAnticipo($r)],
-                ['lbl' => 'N° Comprobante', 'w' => 11, 'cls' => '', 'val' => $txt('numero', 11)],
-                ['lbl' => 'Forma / concepto', 'w' => 14, 'cls' => '', 'val' => $txt('forma', 14)],
-                ['lbl' => 'Detalle', 'w' => 28, 'cls' => '', 'flex' => true, 'val' => $txt('detalle', 28)],
+                ['lbl' => 'N° Comprobante', 'w' => 12, 'cls' => '', 'val' => $txt('numero', 12)],
+                ['lbl' => 'Forma / concepto', 'w' => 13, 'cls' => '', 'val' => $txt('forma', 13)],
+                ['lbl' => 'Detalle', 'w' => 24, 'cls' => '', 'flex' => true, 'val' => $txt('detalle', 24)],
                 $dinero('recibido', 'Recibido / entregado', 11),
                 $dinero('aplicado', 'Aplicado', 11),
                 $saldo,
@@ -1060,47 +1064,51 @@ class ReporteIngresosEgresosController extends BaseModuloController
         }
 
         if ($modo === 'COMPROBANTE') {
-            // A4 horizontal: una fila por ingreso/egreso; sus documentos juntos en una celda.
+            // A4 vertical: una fila por ingreso/egreso; sus documentos juntos en una celda.
             $cols = [
-                ['lbl' => 'Número', 'w' => 10, 'cls' => '', 'val' => $txt('numero', 10)],
-                ['lbl' => 'Fecha', 'w' => 6, 'cls' => 'text-center',
+                ['lbl' => 'Número', 'w' => 12, 'cls' => '', 'val' => $txt('numero', 12)],
+                ['lbl' => 'Fecha', 'w' => 8, 'cls' => 'text-center',
                  'val' => static fn (array $r): string => !empty($r['fecha']) ? date('d-m-Y', strtotime((string) $r['fecha'])) : '—'],
             ];
             if ($f['tercero_id'] <= 0) {
-                $cols[] = ['lbl' => 'Cliente / Proveedor / Empleado', 'w' => 18, 'cls' => '', 'flex' => true, 'val' => $txt('tercero_nombre', 18)];
+                $cols[] = ['lbl' => 'Cliente / Proveedor / Empleado', 'w' => 15, 'cls' => '', 'flex' => true, 'val' => $txt('tercero_nombre', 15)];
             }
             if ($f['id_vendedor'] <= 0) {
                 $cols[] = ['lbl' => 'Asesor', 'w' => 10, 'cls' => '', 'val' => $txt('asesor', 10)];
             }
-            $cols[] = ['lbl' => 'Documentos', 'w' => 24, 'cls' => '', 'flex' => true,
+            $cols[] = ['lbl' => 'Documentos', 'w' => 14, 'cls' => '', 'flex' => true,
                        'val' => static fn (array $r): string => htmlspecialchars((string) ($r['documentos'] ?? ''))];
             if ($f['id_concepto'] <= 0) {
-                $cols[] = ['lbl' => 'Concepto', 'w' => 8, 'cls' => '', 'val' => $txt('concepto', 8)];
+                $cols[] = ['lbl' => 'Concepto', 'w' => 9, 'cls' => '', 'val' => $txt('concepto', 9)];
             }
-            return array_merge($cols, $montos('valor', 6));
+            $cols[] = ['lbl' => 'Forma de cobro/pago', 'w' => 14, 'cls' => '', 'val' => $txt('formas', 14)];
+            return array_merge($cols, $montos('valor', 8));
         }
 
-        // DETALLE (A4 horizontal): una fila por línea del comprobante. Se omiten las
+        // DETALLE (A4 vertical): una fila por línea del comprobante. Se omiten las
         // columnas que un filtro deja con un único valor.
         $cols = [
-            ['lbl' => 'Número', 'w' => 9, 'cls' => '', 'val' => $txt('numero', 9)],
-            ['lbl' => 'Fecha', 'w' => 6, 'cls' => 'text-center',
+            ['lbl' => 'Número', 'w' => 11, 'cls' => '', 'val' => $txt('numero', 11)],
+            ['lbl' => 'Fecha', 'w' => 8, 'cls' => 'text-center',
              'val' => static fn (array $r): string => !empty($r['fecha']) ? date('d-m-Y', strtotime((string) $r['fecha'])) : '—'],
         ];
         if ($f['tercero_id'] <= 0) {
-            $cols[] = ['lbl' => 'Cliente / Proveedor / Empleado', 'w' => 17, 'cls' => '', 'flex' => true, 'val' => $txt('tercero_nombre', 17)];
+            $cols[] = ['lbl' => 'Cliente / Proveedor / Empleado', 'w' => 13, 'cls' => '', 'flex' => true, 'val' => $txt('tercero_nombre', 13)];
         }
         if ($f['id_vendedor'] <= 0) {
-            $cols[] = ['lbl' => 'Asesor', 'w' => 10, 'cls' => '', 'val' => $txt('vendedor', 10)];
+            $cols[] = ['lbl' => 'Asesor', 'w' => 9, 'cls' => '', 'val' => $txt('vendedor', 9)];
         }
         if ($f['tipo_documento'] === '') {
             $cols[] = ['lbl' => 'Tipo doc.', 'w' => 6, 'cls' => 'text-center', 'val' => $txt('tipo_documento', 6)];
         }
         $cols[] = ['lbl' => 'N° Documento', 'w' => 10, 'cls' => '', 'val' => $txt('numero_documento', 10)];
-        $cols[] = ['lbl' => 'Descripción', 'w' => 16, 'cls' => '', 'flex' => true, 'val' => $txt('descripcion', 16)];
+        $cols[] = ['lbl' => 'Descripción', 'w' => 10, 'cls' => '', 'flex' => true, 'val' => $txt('descripcion', 10)];
         if ($f['id_concepto'] <= 0) {
             $cols[] = ['lbl' => 'Concepto', 'w' => 8, 'cls' => '', 'val' => $txt('concepto', 8)];
         }
-        return array_merge($cols, $montos('monto', 6));
+        // Detalle: solo los nombres de las formas (el monto de cada una es del comprobante
+        // entero, no de la línea).
+        $cols[] = ['lbl' => 'Forma de cobro/pago', 'w' => 9, 'cls' => '', 'val' => $txt('formas_nombres', 9)];
+        return array_merge($cols, $montos('monto', 7.5));
     }
 }

@@ -5,8 +5,8 @@ categoria: Reportes
 ruta_modulo: modulos/reporte_ingresos_egresos
 tipo: modulo
 visibilidad: todos
-etiquetas: reporte de ingresos y egresos, proyecto, por proyecto, ingresos y egresos de un proyecto, obra, anulados, ingresos anulados, egresos anulados, vigentes, movimiento de dinero, cobros y pagos, por tercero, forma de pago, concepto, vendedor, asesor, cobros por vendedor, comisiones, asesor del cliente, otros conceptos, saldo inicial, saldos iniciales, exportar, excel detallado, pdf, imprimir, logo en el pdf, totales en el pdf, reporte de ingresos por vendedor, reporte de egresos, pdf por vendedor, anticipo, anticipos, anticipo aplicado, cruce de anticipo, ingresos repetidos, ingreso duplicado, doble conteo, saldo de anticipos, anticipos por cliente, anticipos de proveedores, anticipos recibidos, anticipos entregados, entrada de dinero, salida de dinero, flujo de caja, monetario, no monetario, solo monetarios, cruces, compensaciones, favoritos, filtro favorito, detalle del ingreso, ver comprobante, clic en la fila, agrupado, por comprobante, una fila por ingreso, sin detallar facturas, como en el ingreso
-version: 1.12
+etiquetas: reporte de ingresos y egresos, proyecto, por proyecto, ingresos y egresos de un proyecto, obra, anulados, ingresos anulados, egresos anulados, vigentes, movimiento de dinero, cobros y pagos, por tercero, forma de pago, formas de pago, forma de cobro, con qué pagó, efectivo o transferencia, concepto, vendedor, asesor, cobros por vendedor, comisiones, asesor del cliente, otros conceptos, saldo inicial, saldos iniciales, exportar, excel detallado, pdf, imprimir, logo en el pdf, totales en el pdf, reporte de ingresos por vendedor, reporte de egresos, pdf por vendedor, anticipo, anticipos, anticipo aplicado, cruce de anticipo, ingresos repetidos, ingreso duplicado, doble conteo, saldo de anticipos, anticipos por cliente, anticipos de proveedores, anticipos recibidos, anticipos entregados, entrada de dinero, salida de dinero, flujo de caja, monetario, no monetario, solo monetarios, cruces, compensaciones, favoritos, filtro favorito, detalle del ingreso, ver comprobante, clic en la fila, agrupado, por comprobante, una fila por ingreso, sin detallar facturas, como en el ingreso
+version: 1.14
 orden: 30
 estado: activo
 ---
@@ -194,9 +194,14 @@ las hojas del Excel.
   son varias; al pasar el mouse se ve el valor de cada una) y el *Valor* es el del
   comprobante. Si un filtro (tipo de documento, monto, búsqueda) deja fuera
   alguna línea, el valor es la suma de las líneas que sí cumplen, igual que en
-  los totales.
+  los totales. La columna *Forma de cobro/pago* muestra con qué se cobró o pagó
+  el comprobante, cada forma con su valor (*Efectivo $50.00; Banco Pichincha
+  $30.00*).
 - **Documento (detalle)**: cada línea de cada comprobante (una por factura
-  cobrada o pagada), con su asesor. Es la vista de auditoría.
+  cobrada o pagada), con su asesor. Es la vista de auditoría. La columna *Forma
+  de cobro/pago* muestra solo los nombres de las formas del comprobante, porque
+  los valores son del comprobante entero, no de cada línea; al pasar el mouse se
+  ven con su valor.
 - **Tercero (resumen)**: agrupado por cliente, proveedor o empleado, para saber
   cuánto se movió con cada uno.
 - **Forma de cobro/pago**: cuánto entró y salió por cada forma (efectivo, cada
@@ -233,7 +238,9 @@ El **Excel** sale en varias hojas:
   **Tipo** (ingreso o egreso), **número**, **fecha**, **cliente / proveedor /
   empleado**, **valor**, **detalle** (el cuerpo del comprobante: cada línea en un
   renglón, con el documento cobrado o pagado, su descripción y su valor),
-  **observaciones** y **asesor**. Arriba lleva los filtros aplicados (periodo,
+  **formas de cobro/pago** detalladas (cada forma en un renglón, con su valor,
+  operación bancaria, número de cheque y referencia: *Banco Pichincha $107.33
+  (Transferencia, Ref. 55584745)*), **observaciones** y **asesor**. Arriba lleva los filtros aplicados (periodo,
   vendedor, tercero…) y los totales de ingresos, egresos y neto. El valor de cada
   fila es la suma de sus líneas que cumplen los filtros, así cuadra con los totales.
 - **Por tercero / Por forma de pago / Por día / Por mes / Anticipos**: solo cuando en pantalla
@@ -271,6 +278,9 @@ Reporte de Ventas:
   tercero, la de *Cliente / Proveedor / Empleado*; al elegir un concepto o un
   tipo de documento, esa columna. El estado no va como columna: todo el PDF es de
   vigentes o todo de anulados, según el filtro. Ese dato ya está en el encabezado.
+- En las vistas Documento (agrupado y detalle) va la columna **Forma de
+  cobro/pago**, igual que en pantalla: con el valor de cada forma en la vista
+  agrupada y solo los nombres en la de detalle.
 - Con ingresos y egresos juntos, los valores van en **dos columnas, Ingreso y
   Egreso**, para poder sumar cada una; con *Solo ingresos* o *Solo egresos* va
   una sola. En *Por día* / *Por mes* se muestran solo las columnas del flujo
@@ -278,8 +288,10 @@ Reporte de Ventas:
 - Al final, la fila **TOTALES** con la suma de cada columna de valores y de
   conteos (en *Forma de cobro/pago* no se suman los comprobantes, porque uno
   cobrado con dos formas se contaría dos veces; sí los pagos).
-- Las vistas Documento (agrupado y detalle) salen en hoja **horizontal**; las resumidas, en
-  vertical. La cabecera de la tabla se repite en cada página y abajo va
+- Todas las vistas salen en hoja **vertical** (A4). Las vistas Documento (agrupado
+  y detalle) y los movimientos de anticipos usan una letra algo más pequeña para
+  que quepan todas las columnas; un texto largo pasa a la línea siguiente dentro de
+  su celda. La cabecera de la tabla se repite en cada página y abajo va
   *Página X/Y*.
 - El PDF se arma fila por fila, así que sale en segundos aunque traiga miles de
   líneas (1.000 líneas, unos 7 segundos).
@@ -321,6 +333,8 @@ cobró cada vendedor, qué movimientos hubo por encima de cierto monto.
 
 ## Historial de cambios
 
+- **1.14** — Columna **Forma de cobro/pago** en las vistas Documento (agrupado y detalle), en pantalla y en el PDF; en la primera hoja del Excel van detalladas (una por renglón, con operación bancaria, cheque y referencia).
+- **1.13** — El PDF sale siempre en hoja **vertical**, también en las vistas Documento (agrupado y detalle) y en los movimientos de anticipos, que antes salían en horizontal.
 - **1.12** — El panel lateral del detalle muestra completas las descripciones de los documentos, ítems y formas de cobro/pago, en lugar de cortarlas con «…».
 - **1.11** — Filtro **Proyecto**: muestra los ingresos y egresos de un proyecto; el PDF y el Excel lo indican en los filtros aplicados.
 - **1.10** — Nueva forma de ver **Documento (agrupado)**, que ahora es la vista

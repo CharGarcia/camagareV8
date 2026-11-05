@@ -232,12 +232,12 @@
                     <thead class="table-light">
                         <tr id="rie-head-detalle" class="d-none">
                             <th class="ps-3">Flujo</th><th>Número</th><th>Fecha</th><th>Tercero</th><th>Asesor</th>
-                            <th>Documento</th><th>Descripción</th><th>Concepto</th><th class="text-center">Estado</th>
+                            <th>Documento</th><th>Descripción</th><th>Concepto</th><th>Forma de cobro/pago</th><th class="text-center">Estado</th>
                             <th class="text-end pe-3">Monto</th>
                         </tr>
                         <tr id="rie-head-comprobante">
                             <th class="ps-3">Flujo</th><th>Número</th><th>Fecha</th><th>Tercero</th><th>Asesor</th>
-                            <th>Documentos</th><th>Observaciones</th><th>Concepto</th><th class="text-center">Estado</th>
+                            <th>Documentos</th><th>Observaciones</th><th>Concepto</th><th>Forma de cobro/pago</th><th class="text-center">Estado</th>
                             <th class="text-end pe-3">Valor</th>
                         </tr>
                         <tr id="rie-head-tercero" class="d-none">

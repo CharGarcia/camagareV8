@@ -581,7 +581,56 @@ class ReporteIngresosEgresosRepository extends BaseRepository
         if ($limite > 0) {
             $sql .= " LIMIT $limite";
         }
-        return $this->q($sql, $params)->fetchAll(PDO::FETCH_ASSOC);
+        return $this->adjuntarFormas($idEmpresa, $this->q($sql, $params)->fetchAll(PDO::FETCH_ASSOC));
+    }
+
+    /**
+     * Agrega a cada fila las formas de cobro/pago de su comprobante: `formas` (cada una
+     * con su monto: "EFECTIVO $50.00; TRANSFERENCIA $30.00"), `formas_nombres` (solo
+     * los nombres, sin repetir) y `formas_detalle` (para el Excel: una forma por
+     * renglón con operación bancaria, N° de cheque y referencia). Una consulta por flujo con los ids del resultado, en
+     * lugar de una subconsulta por fila.
+     */
+    private function adjuntarFormas(int $idEmpresa, array $filas): array
+    {
+        $ids = ['INGRESO' => [], 'EGRESO' => []];
+        foreach ($filas as $r) {
+            $id = (int) ($r['id_comprobante'] ?? 0);
+            if ($id > 0 && isset($ids[$r['tipo_flujo'] ?? ''])) {
+                $ids[$r['tipo_flujo']][$id] = true;
+            }
+        }
+        $formas = ['INGRESO' => [], 'EGRESO' => []];
+        foreach ($ids as $flujo => $lista) {
+            if (!$lista) continue;
+            $esIng = $flujo === 'INGRESO';
+            $pag   = $esIng ? 'ingresos_pagos'    : 'egresos_pagos';
+            $cab   = $esIng ? 'ingresos_cabecera' : 'egresos_cabecera';
+            $fk    = $esIng ? 'id_ingreso'        : 'id_egreso';
+            $forma = $esIng ? 'id_forma_cobro'    : 'id_forma_pago';
+            $vivo  = $esIng ? '' : self::pagoVigente('fpp');
+            $sql = "SELECT fpp.$fk AS id_comprobante,
+                           string_agg(fpf.nombre || ' \$' || to_char(fpp.monto, 'FM999999990.00'), '; ' ORDER BY fpp.id) AS formas,
+                           string_agg(DISTINCT fpf.nombre, ', ' ORDER BY fpf.nombre) AS formas_nombres,
+                           string_agg(" . self::textoPago('fpp', 'fpf') . ", E'\\n' ORDER BY fpp.id) AS formas_detalle
+                    FROM $pag fpp
+                    INNER JOIN $cab fpc ON fpc.id = fpp.$fk AND fpc.id_empresa = :id_empresa
+                    INNER JOIN empresa_formas_pago fpf ON fpf.id = fpp.$forma
+                    WHERE fpp.$fk = ANY(CAST(:ids AS int[]))$vivo
+                    GROUP BY fpp.$fk";
+            $st = $this->q($sql, [':id_empresa' => $idEmpresa, ':ids' => '{' . implode(',', array_keys($lista)) . '}']);
+            foreach ($st->fetchAll(PDO::FETCH_ASSOC) as $x) {
+                $formas[$flujo][(int) $x['id_comprobante']] = $x;
+            }
+        }
+        foreach ($filas as &$r) {
+            $x = $formas[$r['tipo_flujo'] ?? ''][(int) ($r['id_comprobante'] ?? 0)] ?? null;
+            $r['formas']         = $x['formas'] ?? '';
+            $r['formas_nombres'] = $x['formas_nombres'] ?? '';
+            $r['formas_detalle'] = $x['formas_detalle'] ?? '';
+        }
+        unset($r);
+        return $filas;
     }
 
     /**
@@ -634,7 +683,7 @@ class ReporteIngresosEgresosRepository extends BaseRepository
                 FROM ( $union ) r WHERE 1=1 $textoWhere
                 GROUP BY tipo_flujo, id_comprobante, numero, fecha, tercero_tipo, tercero_nombre, tercero_ident
                 ORDER BY fecha DESC, numero DESC, tipo_flujo";
-        return $this->q($sql, $params)->fetchAll(PDO::FETCH_ASSOC);
+        return $this->adjuntarFormas($idEmpresa, $this->q($sql, $params)->fetchAll(PDO::FETCH_ASSOC));
     }
 
     /**
