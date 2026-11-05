@@ -194,6 +194,46 @@ class MetricasDiariasRepository extends BaseRepository
         return array_map('intval', $this->db->query($sql)->fetch(\PDO::FETCH_ASSOC) ?: []);
     }
 
+    /** Primer día que ya tiene fila global en el resumen (null si está vacío). */
+    public function primeraFechaResumen(): ?string
+    {
+        $v = $this->db->query('SELECT MIN(fecha) FROM metricas_diarias WHERE id_empresa = 0')->fetchColumn();
+        return $v ? (string) $v : null;
+    }
+
+    /**
+     * Fecha del dato más antiguo que el resumen puede reflejar: el documento más antiguo
+     * (incluidos los migrados) o el primer inicio de sesión. Null si no hay nada.
+     */
+    public function fechaInicioDatos(): ?string
+    {
+        $mins = [];
+        $tablas = [];
+        foreach (MetricasSistemaRepository::DOCUMENTOS_SRI as [, $tabla]) {
+            $tablas[$tabla] = 'fecha_emision';
+        }
+        foreach (MetricasSistemaRepository::DOCUMENTOS_INTERNOS as [, $tabla, $colFecha]) {
+            if ($colFecha) {
+                $tablas[$tabla] = $colFecha;
+            }
+        }
+        foreach ($tablas as $tabla => $col) {
+            if (!$this->tablaExiste($tabla)) {
+                continue;
+            }
+            // Fechas absurdas (00-00, años 1900) de datos viejos no deben arrastrar el relleno.
+            $v = $this->db->query("SELECT MIN({$col}) FROM {$tabla} WHERE eliminado = false AND {$col} >= DATE '2000-01-01'")->fetchColumn();
+            if ($v) {
+                $mins[] = substr((string) $v, 0, 10);
+            }
+        }
+        $v = $this->db->query('SELECT MIN(created_at)::date FROM sesiones_activas')->fetchColumn();
+        if ($v) {
+            $mins[] = (string) $v;
+        }
+        return $mins === [] ? null : min($mins);
+    }
+
     // ───────────────────────────── Lectura (pestaña Tendencias) ─────────────────────────────
 
     /** Rango cubierto por el resumen (fila global). */

@@ -115,8 +115,14 @@ con el aviso *"No tiene permisos"*.
 - **Tendencias usa un resumen diario precalculado** (tabla `metricas_diarias`), que la
   tarea automática del servidor genera cada noche desde la 01:00 y recalcula los
   últimos 3 días (por si un documento se autorizó o anuló con atraso). El día de hoy
-  no se incluye. El historial anterior se genera una vez por consola:
-  `php app/cron/metricas_rellenar.php 2024-01-01` (se puede repetir sin duplicar).
+  no se incluye.
+- **El historial se rellena solo**: entre las 00:00 y las 05:59, en cada pasada de la
+  tarea automática se calcula un mes hacia atrás, hasta llegar al documento más
+  antiguo del sistema (los migrados incluidos). Varios años de historia quedan listos
+  en una sola madrugada; después se vuelve a revisar una vez por día por si se migró
+  una empresa con documentos más antiguos. Si se quiere tenerlo antes, se puede
+  forzar por consola: `php app/cron/metricas_rellenar.php 2017-01-01` (se puede
+  repetir sin duplicar).
 - En Tendencias, *SRI autorizados / rechazados* cuenta respuestas del SRI de ese día
   (un comprobante reenviado puede contar más de una vez), a diferencia de la pestaña
   SRI, que toma el último estado de cada comprobante. *Empresas activas* y *usuarios
@@ -147,8 +153,9 @@ con el aviso *"No tiene permisos"*.
   (*Atrasado* si pasaron más de 26 horas).
 - *"El resumen diario todavía no está activo"* (Tendencias): falta aplicar
   `2026-11-05_metricas_diarias.sql`.
-- *Tendencias sale en cero en fechas antiguas*: no se corrió el relleno del historial
-  para ese rango; la nota de la pestaña indica desde qué fecha hay datos.
+- *Tendencias sale en cero en fechas antiguas*: el relleno automático todavía no llegó
+  a esas fechas (se completa en la primera madrugada) o la tarea automática no está
+  corriendo; la nota de la pestaña indica desde qué fecha hay datos.
 - *Empresas conectadas en 0 aunque hay gente trabajando*: si solo hay
   superadministradores conectados, no cuentan.
 
@@ -166,4 +173,5 @@ con el aviso *"No tiene permisos"*.
   Tendencias (comparativo con el periodo anterior, empresas que crecen y que caen,
   rangos de hasta 5 años).
 - **v1.3** (2026-11-05): Pestañas Uso de módulos, Comercial y Salud técnica (sin tablas
-  nuevas).
+  nuevas). El historial del resumen diario se rellena solo desde la tarea automática
+  (madrugada), incluidos los documentos migrados; el script de consola queda opcional.

@@ -6,8 +6,9 @@
 --   más una fila GLOBAL por día con id_empresa = 0 (totales de la plataforma, inicios
 --   de sesión, errores, SRI y fotos del momento: empresas activas, usuarios habilitados).
 --   La llena el cron (app/cron/cron_runner.php, una vez al día después de la 01:00,
---   recalculando los últimos 3 días). El historial se rellena con:
---     php app/cron/metricas_rellenar.php 2024-01-01 2026-11-04
+--   recalculando los últimos 3 días). El historial lo rellena el mismo cron solo, de
+--   madrugada (00:00-05:59), un mes por pasada hasta el documento más antiguo. Opcional,
+--   para tenerlo de inmediato: php app/cron/metricas_rellenar.php 2017-01-01
 -- Tipo de tabla: datos DERIVADOS (caché de cálculo), no registros de negocio. Recalcular
 --   un día reemplaza sus filas: nunca se edita a mano y se puede reconstruir siempre
 --   desde las tablas de origen. id_empresa = 0 es la fila global (no es una empresa).

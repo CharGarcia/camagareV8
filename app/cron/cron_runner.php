@@ -304,6 +304,43 @@ try {
     echo "[" . date('Y-m-d H:i:s') . "] Error en métricas diarias: " . $e->getMessage() . "\n";
 }
 
+// ── Métricas del sistema: relleno automático del historial (madrugada, 00:00-05:59) ─
+//    Sin correr nada a mano: en cada pasada del cron calcula UN tramo de 31 días hacia
+//    atrás, hasta llegar al documento más antiguo (incluidos los migrados). Unos 12 tramos
+//    por año de historia, así que años de datos se completan en una sola madrugada.
+//    Cuando termina, lo vuelve a comprobar una vez por día (por si se migró una empresa
+//    con documentos más antiguos). Marca: JSON {fecha, inicio, completo}.
+try {
+    $hora = (int) date('H');
+    if ($hora < 6) {
+        $marcaRelleno = sys_get_temp_dir() . '/sistema_metricas_relleno.txt';
+        $estRelleno   = json_decode((string) @file_get_contents($marcaRelleno), true) ?: [];
+        $hoyRelleno   = date('Y-m-d');
+        $yaCompleto   = ($estRelleno['fecha'] ?? '') === $hoyRelleno && !empty($estRelleno['completo']);
+
+        if (!$yaCompleto) {
+            $svcRelleno = new \App\Services\MetricasDiariasService();
+            if ($svcRelleno->disponible()) {
+                // La fecha del dato más antiguo se calcula una vez por día y se reutiliza en cada tramo.
+                $inicioCache = ($estRelleno['fecha'] ?? '') === $hoyRelleno ? ($estRelleno['inicio'] ?? null) : null;
+                $t0  = microtime(true);
+                $res = $svcRelleno->rellenarSiguienteTramo($inicioCache);
+                file_put_contents($marcaRelleno, json_encode([
+                    'fecha'    => $hoyRelleno,
+                    'inicio'   => $res['inicio'] ?? $inicioCache,
+                    'completo' => $res === null,
+                ]));
+                if ($res !== null) {
+                    echo "[" . date('Y-m-d H:i:s') . "] Métricas: relleno {$res['desde']} .. {$res['hasta']} ({$res['filas']} filas, "
+                        . round((microtime(true) - $t0) * 1000) . "ms; historia desde {$res['inicio']}).\n";
+                }
+            }
+        }
+    }
+} catch (\Throwable $e) {
+    echo "[" . date('Y-m-d H:i:s') . "] Error en relleno de métricas: " . $e->getMessage() . "\n";
+}
+
 // ── Cambio temporal de IVA en productos (FIJO, cada tick) ─────────────────────
 //    Prestadores de servicios turísticos (IVA 8% en feriados): al llegar la fecha desde cambia la
 //    tarifa de sus productos y al pasar la fecha hasta la restaura. Barato: una

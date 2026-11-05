@@ -12,7 +12,8 @@ use App\Rules\RangoFechasRules;
  *
  * - Cron (`cron_runner.php`, una vez al día): recalcula los últimos DIAS_RECALCULO días,
  *   para absorber documentos que se autorizan o anulan con atraso.
- * - Relleno del historial: `php app/cron/metricas_rellenar.php DESDE HASTA`.
+ * - Relleno del historial: automático desde el cron de madrugada (`rellenarSiguienteTramo`,
+ *   un tramo por pasada hacia atrás); opcional por consola `php app/cron/metricas_rellenar.php DESDE`.
  *
  * Cada tramo de hasta TRAMO_DIAS días va en su propia transacción, bajo un candado
  * (pg_advisory_xact_lock): si falla, se revierte ese tramo completo y el resto sigue intacto.
@@ -40,6 +41,37 @@ class MetricasDiariasService
         $hasta = date('Y-m-d', strtotime('-1 day'));
         $desde = date('Y-m-d', strtotime('-' . self::DIAS_RECALCULO . ' days'));
         return $this->recalcular($desde, $hasta);
+    }
+
+    /**
+     * Relleno automático del historial (lo llama el cron en cada pasada de madrugada).
+     * Calcula UN tramo de hasta TRAMO_DIAS días hacia atrás, desde el primer día que ya tiene
+     * el resumen hasta llegar al dato más antiguo del sistema (documentos, incluidos los
+     * migrados, o inicios de sesión). Devuelve null cuando ya no queda nada por rellenar.
+     *
+     * @param string|null $inicio fecha del dato más antiguo (si el llamador ya la tiene cacheada)
+     * @return array{desde:string, hasta:string, filas:int, inicio:string}|null
+     */
+    public function rellenarSiguienteTramo(?string $inicio = null): ?array
+    {
+        if (!$this->disponible()) {
+            return null;
+        }
+        $inicio ??= $this->repo->fechaInicioDatos();
+        if ($inicio === null) {
+            return null;
+        }
+        $primera = $this->repo->primeraFechaResumen();
+        // Resumen vacío: se arranca desde ayer hacia atrás.
+        $hasta = $primera !== null
+            ? date('Y-m-d', strtotime($primera . ' -1 day'))
+            : date('Y-m-d', strtotime('-1 day'));
+        if ($hasta < $inicio) {
+            return null;   // completo
+        }
+        $desde = max($inicio, date('Y-m-d', strtotime($hasta . ' -' . (self::TRAMO_DIAS - 1) . ' days')));
+        $res   = $this->recalcular($desde, $hasta);
+        return ['desde' => $desde, 'hasta' => $hasta, 'filas' => $res['filas'], 'inicio' => $inicio];
     }
 
     /**
