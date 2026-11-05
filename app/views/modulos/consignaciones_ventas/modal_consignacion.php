@@ -2258,30 +2258,58 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosPestanasOcultas($vistaConfigC
         if (selB && selB.value !== valor) selB.value = valor;
         const badge = tr.querySelector('.bp-badge-stock');
         if (!datos.esInv || !valor) {
+            tr._bpStockBodega = undefined;
             if (badge) badge.innerHTML = '';
             if (datos.manejaNup) bpPintarLotesFila(tr, []);
             return;
         }
+        // Mientras llega la respuesta de la bodega nueva, el badge no debe seguir mostrando el
+        // stock de la bodega anterior.
+        tr._bpStockBodega = undefined;
+        if (badge) badge.innerHTML = '';
         const info = await bpLotesBodega(datos.item.id_producto, valor);
         // La fila pudo cambiar de bodega o desaparecer (re-render) mientras llegaba la respuesta.
         if (!tr.isConnected || tr.dataset.idBodega !== valor) return;
-        if (badge) {
-            if (info.stock === null) {
-                badge.innerHTML = '';
-            } else {
-                // Verde si alcanza para despachar todo lo pendiente, rojo si no. El stock viene en la
-                // unidad del producto y se muestra en la de la línea del pedido (400 UNIDAD = 4 CAJA X100).
-                const ratio = datos.ratio || 1;
-                const stockLinea = info.stock / ratio;
-                const alcanza = stockLinea >= datos.cantPendiente - 0.000001;
-                const cls = alcanza ? 'bg-success bg-opacity-10 text-success border-success' : 'bg-danger bg-opacity-10 text-danger border-danger';
-                const tituloStock = ratio !== 1
-                    ? `Stock disponible en la bodega de esta fila (${info.stock.toFixed(2)} en la unidad del producto)`
-                    : 'Stock disponible en la bodega de esta fila';
-                badge.innerHTML = `<span class="badge ${cls} border border-opacity-25" title="${tituloStock}">Stock: ${stockLinea.toFixed(2)}</span>`;
-            }
-        }
+        tr._bpStockBodega = info.stock;
         if (datos.manejaNup) bpPintarLotesFila(tr, info.lotes);
+        bpPintarStockFila(tr);
+    }
+    // Badge de stock de UNA fila: con un lote elegido muestra el stock de ESE lote en la bodega
+    // de la fila (y se compara con la cantidad de la fila); sin lote, el stock total de la bodega
+    // (comparado con todo lo pendiente). Se repinta al cambiar bodega, lote, vencimiento o cantidad.
+    function bpPintarStockFila(tr) {
+        const datos = tr._bpDatos;
+        const badge = tr.querySelector('.bp-badge-stock');
+        if (!datos || !badge) return;
+        const stockBodega = tr._bpStockBodega;
+        if (!datos.esInv || stockBodega === null || stockBodega === undefined) {
+            badge.innerHTML = '';
+            return;
+        }
+        // El stock viene en la unidad del producto y se muestra en la de la línea del pedido
+        // (400 UNIDAD = 4 CAJA X100).
+        const ratio = datos.ratio || 1;
+        const selLote = tr.querySelector('.item-lote');
+        const idxLote = selLote ? selLote.selectedIndex : 0;
+        const lote = (idxLote > 0 && tr._bpLotes) ? tr._bpLotes[idxLote - 1] : null;
+        let stockBase, requerido, titulo;
+        if (lote) {
+            stockBase = parseFloat(lote.stock_lote) || 0;
+            requerido = parseFloat(tr.querySelector('.item-cantidad')?.value) || 0;
+            const nombreLote = lote.numero_lote === 'sin_lote' ? 'Sin Lote' : lote.numero_lote;
+            titulo = `Stock del lote ${nombreLote} en la bodega de esta fila`;
+        } else {
+            stockBase = stockBodega;
+            requerido = datos.cantPendiente;
+            titulo = 'Stock disponible en la bodega de esta fila';
+        }
+        if (ratio !== 1) titulo += ` (${stockBase.toFixed(2)} en la unidad del producto)`;
+        const stockLinea = stockBase / ratio;
+        // Verde si alcanza (lo pendiente, o la cantidad de la fila si hay lote), rojo si no.
+        const alcanza = stockLinea >= requerido - 0.000001;
+        const cls = alcanza ? 'bg-success bg-opacity-10 text-success border-success' : 'bg-danger bg-opacity-10 text-danger border-danger';
+        const etiqueta = lote ? 'Stock lote' : 'Stock';
+        badge.innerHTML = `<span class="badge ${cls} border border-opacity-25" title="${titulo}">${etiqueta}: ${stockLinea.toFixed(2)}</span>`;
     }
     // Una fila "tocada" es una que el usuario ya configuró (cantidad, precio, lote, NUP o su
     // propia bodega). Cambiar la bodega por defecto no la altera.
@@ -2580,6 +2608,8 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosPestanasOcultas($vistaConfigC
                                 });
                             }
                             bpAplicarBodegaFila(tr, bodegaFila);
+                            // Con un lote elegido, el color del badge depende de la cantidad de la fila.
+                            tr.querySelector('.item-cantidad')?.addEventListener('input', () => bpPintarStockFila(tr));
 
                             if (u === 0 && manejaNup) {
                                 const chk = tr.querySelector('.chk-desagregar-producto');
@@ -2615,12 +2645,14 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosPestanasOcultas($vistaConfigC
                                     if (idx <= 0 || !lotesData.length) {
                                         selVencRow.innerHTML = tr._bpVencOptions || '<option value="">Vencimiento...</option>';
                                         selVencRow.selectedIndex = 0;
+                                        bpPintarStockFila(tr);
                                         return;
                                     }
                                     const l = lotesData[idx - 1];
                                     const c = (l && l.fecha_caducidad) ? l.fecha_caducidad : '';
                                     selVencRow.innerHTML = `<option value="${c}">${consFechaCadTexto(c)}</option>`;
                                     selVencRow.selectedIndex = 0;
+                                    bpPintarStockFila(tr);
                                     if (moverFoco && c !== '') enfocarNup();
                                 };
                                 selLoteRow.addEventListener('change', () => aplicarLote(selLoteRow.selectedIndex, true));

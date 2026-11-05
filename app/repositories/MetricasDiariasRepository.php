@@ -244,10 +244,19 @@ class MetricasDiariasRepository extends BaseRepository
         return $r ?: [];
     }
 
-    /** Serie global agregada por día o mes. */
-    public function serieGlobal(string $desde, string $hasta, bool $porMes): array
+    /** Documentos emitidos por tipo en el rango (fila global; incluye los migrados). */
+    public function totalesPorTipo(string $desde, string $hasta): array
     {
-        $trunc = $porMes ? 'month' : 'day';
+        $sel = implode(', ', array_map(static fn ($c) => "COALESCE(SUM({$c}), 0) AS {$c}", self::COLUMNA_DOC));
+        $st = $this->db->prepare("SELECT {$sel} FROM metricas_diarias WHERE id_empresa = 0 AND fecha BETWEEN :desde AND :hasta");
+        $st->execute([':desde' => $desde, ':hasta' => $hasta]);
+        return array_map('intval', $st->fetch(\PDO::FETCH_ASSOC) ?: []);
+    }
+
+    /** Serie global agregada por día, mes o año ($trunc = day | month | year). */
+    public function serieGlobal(string $desde, string $hasta, string $trunc): array
+    {
+        $trunc = in_array($trunc, ['day', 'month', 'year'], true) ? $trunc : 'month';
         $docs  = implode(', ', array_map(static fn ($c) => "SUM({$c}) AS {$c}", self::COLUMNA_DOC));
         $sql = "
             SELECT date_trunc('{$trunc}', fecha)::date AS periodo, {$docs},

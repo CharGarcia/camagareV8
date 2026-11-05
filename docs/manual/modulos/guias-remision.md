@@ -5,8 +5,8 @@ categoria: Ventas
 ruta_modulo: modulos/guias_remision
 tipo: modulo
 visibilidad: todos
-etiquetas: guia de remision, guias, traslado, transporte, envio, placa, transportista, sri, mercaderia en transito, ride, pdf, imprimir guia, guia desde transferencia, traslado entre bodegas, traslado entre establecimientos, buscar guia, buscador, filtros, filtrar guias, buscar por producto, filtro de fechas, chips, aparecen documentos que no busque, resultados que no corresponden, la busqueda trae otros documentos, aviso, avisos, novedad sri, documentos con novedad, devuelto, no autorizado, pendientes de enviar, borrador, borradores
-version: 1.15
+etiquetas: guia de remision, secuencial ya existe, secuencial repetido, guardada con otro numero, guias, traslado, transporte, envio, placa, transportista, sri, mercaderia en transito, ride, pdf, imprimir guia, guia desde transferencia, traslado entre bodegas, traslado entre establecimientos, buscar guia, buscador, filtros, filtrar guias, buscar por producto, filtro de fechas, chips, aparecen documentos que no busque, resultados que no corresponden, la busqueda trae otros documentos, aviso, avisos, novedad sri, documentos con novedad, devuelto, no autorizado, pendientes de enviar, borrador, borradores
+version: 1.16
 orden: 55
 estado: activo
 ---
@@ -261,6 +261,10 @@ traslado entre bodegas).
 
 ## Errores frecuentes
 
+- **«Guía guardada con otro número»**: el número que mostraba la pantalla lo usó otra
+  guía de la misma serie mientras usted la llenaba. El sistema tomó el siguiente libre
+  y le dice cuál quedó; no hay que hacer nada. Antes salía *"El número de secuencial ya
+  existe para este punto de emisión"* y había que recargar.
 - **"Ingrese la placa del vehículo transportista"**: es obligatoria aunque el
   transporte sea propio.
 - **"Seleccione el transportista"**: regístrelo primero en Transportistas o con
@@ -285,6 +289,7 @@ cargados. Solo queda completar el **destinatario**, el **transportista** y la
 
 ## Historial de cambios
 
+- **1.16** — Al **guardar una guía nueva**, el número se reserva en ese momento. Si otra persona de la misma serie ya usó el que mostraba la pantalla, la guía se guarda con el **siguiente libre** y aparece el aviso *«Guía guardada con otro número»*, en vez de rechazarse con *"El número de secuencial ya existe"*.
 - **1.15** — La cantidad del detalle se muestra con los decimales del **establecimiento de la serie** elegida (antes, los del primer establecimiento de la empresa). El PDF, el XML y el correo ya usaban el establecimiento de la guía; ahora, en guías antiguas sin establecimiento guardado, lo toman de su punto de emisión.
 - **1.14** — Al crear un **transportista** desde la guía, su ficha se cierra sola y queda seleccionado en la guía. Editar un cliente o transportista existente ya no cambia el de la guía.
 - **1.13** — Al hacer clic en los avisos de la barra superior (*Documentos con novedad

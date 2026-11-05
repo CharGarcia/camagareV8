@@ -55,6 +55,7 @@ $base = BASE_URL;
                         <option value="12m">Últimos 12 meses</option>
                         <option value="24m">Últimos 2 años (Tendencias)</option>
                         <option value="5a">Últimos 5 años (Tendencias)</option>
+                        <option value="todo">Todo el historial (Tendencias)</option>
                         <option value="otro">Personalizado</option>
                     </select>
                 </div>

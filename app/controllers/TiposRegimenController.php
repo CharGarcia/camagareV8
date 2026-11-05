@@ -92,12 +92,15 @@ class TiposRegimenController extends Controller
         foreach ($rows as $r) {
             $id = (int) ($r['id'] ?? $r['id_tipo_regimen'] ?? 0);
             $status = (int) ($r['status'] ?? 1);
+            // `codigo` es integer en la BD: con strict_types, htmlspecialchars(int) es un TypeError (fatal).
+            $codigo = htmlspecialchars((string) ($r['codigo'] ?? ''));
+            $nombre = htmlspecialchars((string) ($r['nombre'] ?? ''));
             $html .= '<tr class="tipo-regimen-row" role="button" tabindex="0" data-id="' . $id . '"'
-                . ' data-codigo="' . htmlspecialchars($r['codigo'] ?? '') . '"'
-                . ' data-nombre="' . htmlspecialchars($r['nombre'] ?? '') . '"'
+                . ' data-codigo="' . $codigo . '"'
+                . ' data-nombre="' . $nombre . '"'
                 . ' data-status="' . $status . '">';
-            $html .= '<td><code>' . htmlspecialchars($r['codigo'] ?? '') . '</code></td>';
-            $html .= '<td>' . htmlspecialchars($r['nombre'] ?? '') . '</td>';
+            $html .= '<td><code>' . $codigo . '</code></td>';
+            $html .= '<td>' . $nombre . '</td>';
             $html .= '<td class="text-center">' . ($status ? '<span class="badge bg-success">Activo</span>' : '<span class="badge bg-secondary">Inactivo</span>') . '</td>';
             $html .= '<td class="text-end">'
                 . '<form method="POST" action="' . BASE_URL . '/config/tiposRegimenDelete" class="d-inline" onsubmit="return confirm(&quot;¿Eliminar este tipo de régimen?&quot;);" onclick="event.stopPropagation();">'

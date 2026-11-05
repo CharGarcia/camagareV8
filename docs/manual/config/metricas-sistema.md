@@ -38,7 +38,9 @@ Es una tarjeta de **Configuración** que reúne en pestañas los indicadores glo
   **Errores del sistema** para ver el detalle).
 - **Tendencias**: evolución de documentos, ventas, empresas y usuarios activos, SRI y
   errores, comparada con el periodo anterior de igual largo, más las empresas que más
-  crecen y las que más caen (riesgo de abandono). Admite rangos de hasta 5 años.
+  crecen y las que más caen (riesgo de abandono), y el total de documentos por tipo.
+  Admite **todo el historial** (opción *Todo el historial* del Periodo), con los
+  documentos migrados incluidos; con más de 5 años los gráficos se agrupan por año.
 - **Uso de módulos**: submódulos más abiertos, los que nadie abrió en el periodo
   (ordenados por cuántos usuarios tienen permiso: sirve para decidir qué mejorar o
   retirar), aperturas por módulo y lo que más se crea, edita o elimina según la
@@ -73,7 +75,7 @@ Es una tarjeta de **Configuración** que reúne en pestañas los indicadores glo
 | Campo | Qué hace |
 |---|---|
 | Periodo | Atajo que llena Desde y Hasta. |
-| Desde / Hasta | Rango de fechas. Máximo 366 días (5 años en Tendencias; si se elige más de un año, la pantalla pasa sola a esa pestaña). |
+| Desde / Hasta | Rango de fechas. Máximo 366 días (sin tope en Tendencias; si se elige más de un año, la pantalla pasa sola a esa pestaña). Los números de cada pestaña son **del rango elegido**: para ver documentos antiguos (p. ej. migrados) hay que ampliar las fechas o usar *Todo el historial*. |
 | Mostrar | Calcula con el rango elegido. |
 | Recalcular | Igual que Mostrar, pero ignora la caché. |
 
@@ -142,6 +144,14 @@ con el aviso *"No tiene permisos"*.
   tardó demasiado; probar con un periodo más corto.
 - *"El registro de actividad por empresa todavía no está activo"*: falta aplicar en la
   base el SQL `2026-11-05_metricas_actividad_usuario.sql`.
+- *No salen los documentos migrados*: los indicadores son del rango de fechas elegido
+  (por defecto, este mes). Elegir *Todo el historial* en Tendencias. Si aun así faltan,
+  puede que se hayan migrado con la empresa en ambiente de pruebas: revisarlo con
+  `database/diagnosticos/20261105_metricas_documentos_migrados.sql`.
+- *Errores 24 h alto* (Salud técnica): cuenta los errores guardados en **Errores del
+  sistema** en las últimas 24 horas (fallos fatales y excepciones que el sistema
+  registra, incluidas validaciones rechazadas). Para ver cuáles son, agruparlos con
+  `database/diagnosticos/20261105_errores_ultimas_24h.sql` o abrir la pestaña Errores.
 - *Comercial vacío*: las suscripciones de la plataforma se buscan en la empresa que
   cobra (la elegida en *Empresas del sistema → Cobro y vigencia*, con todos sus
   establecimientos). Si ninguna empresa la tiene asignada, la pestaña lo avisa.
@@ -175,3 +185,4 @@ con el aviso *"No tiene permisos"*.
 - **v1.3** (2026-11-05): Pestañas Uso de módulos, Comercial y Salud técnica (sin tablas
   nuevas). El historial del resumen diario se rellena solo desde la tarea automática
   (madrugada), incluidos los documentos migrados; el script de consola queda opcional.
+  Tendencias admite todo el historial (agrupado por año) y muestra el total por tipo.

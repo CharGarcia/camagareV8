@@ -506,17 +506,27 @@ class FacturaVentaController extends BaseModuloController
                     $mensaje = 'Factura actualizada exitosamente.';
                 }
             } else {
-                // Creación de nueva factura
+                // Creación de nueva factura. El secuencial del modal es de solo lectura: lo
+                // reserva el servidor bajo candado al guardar, y si otra persona ya usó el que
+                // mostraba la pantalla, toma el siguiente libre en vez de rechazar (§8).
                 $this->requireCrear();
+                $data['secuencial_automatico'] = true;
                 $id = $this->service->crear($data);
                 $asientoWarning = $this->service->getLastAsientoWarning();
                 $mensaje = 'Factura guardada exitosamente.';
+                $reasignado = $this->service->getSecuencialReasignado();
+                if ($reasignado !== null) {
+                    $mensaje = 'Factura guardada con el número ' . $reasignado['nuevo']
+                        . ': el ' . $reasignado['anterior'] . ' ya lo había usado otra factura de esta serie.';
+                }
             }
 
             $ventaDB = $this->repository->getPorId($id);
             $rowHtml = $ventaDB ? $this->renderFilaHtml($ventaDB) : '';
 
-            echo json_encode(['ok' => true, 'mensaje' => $mensaje, 'id' => $id, 'asiento_warning' => $asientoWarning ?? null, 'rowHtml' => $rowHtml]);
+            echo json_encode(['ok' => true, 'mensaje' => $mensaje, 'id' => $id, 'asiento_warning' => $asientoWarning ?? null, 'rowHtml' => $rowHtml,
+                'secuencial' => $ventaDB['secuencial'] ?? null,
+                'secuencial_reasignado' => isset($reasignado) && $reasignado !== null]);
         } catch (\Throwable $e) {
             \App\Services\ErrorLogService::registrar($e, [
                 'ruta'   => 'modulos/factura-venta',
@@ -618,8 +628,8 @@ class FacturaVentaController extends BaseModuloController
             $detallesSugeridos = $this->service->obtenerAsientoSugerido($idEmpresa, $normalizedData);
             echo json_encode(['ok' => true, 'data' => $detallesSugeridos, 'detalles' => $detallesSugeridos, 'es_guardado' => false]);
         } catch (\Throwable $e) {
-            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
-            echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
+            // Falta de configuración contable: texto neutro y sin registrar como error (ver AsientoVistaPrevia).
+            echo json_encode(\App\Helpers\AsientoVistaPrevia::respuestaError($e, static::class, __FUNCTION__));
         }
         exit;
     }

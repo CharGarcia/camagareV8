@@ -557,8 +557,9 @@
             <div class="alert alert-light border small py-2 mb-3"><i class="bi bi-info-circle me-1"></i>
                 Datos del <strong>resumen diario</strong> (se calcula cada noche; hoy no se incluye).
                 Cubre del <strong>${fecha(cob.desde, false)}</strong> al <strong>${fecha(cob.hasta, false)}</strong>.
-                Se compara con el periodo anterior de igual largo (${fecha(ant.desde, false)} a ${fecha(ant.hasta, false)}).
-                Admite rangos de hasta 5 años.</div>
+                Incluye los documentos migrados. Rango mostrado: ${fecha(d.desde, false)} a ${fecha(d.hasta, false)};
+                se compara con el periodo anterior de igual largo (${fecha(ant.desde, false)} a ${fecha(ant.hasta, false)}).
+                Admite todo el historial.</div>
             <div class="row g-2 mb-3">
                 ${kpi(num(a.documentos), 'Documentos', 'primary', variacion(v.documentos))}
                 ${kpi(num(a.facturas), 'Facturas', '', variacion(v.facturas))}
@@ -574,13 +575,24 @@
             <div class="row g-3 mb-3">
                 ${tarjeta('SRI y errores', lienzo('met-ch-tend-calidad'), 'col-12', 'bi-shield-check')}
             </div>
+            <div class="row g-3 mb-3">
+                ${tarjeta('Documentos emitidos por tipo en el rango (incluye migrados)', tabla([
+                    { t: 'Documento', f: (x) => esc(x.etq) },
+                    { t: 'Emitidos', cls: 'text-end fw-bold', f: (x) => num(x.n) }
+                ], [
+                    ['facturas', 'Facturas'], ['notas_credito', 'Notas de crédito'], ['notas_debito', 'Notas de débito'],
+                    ['retenciones', 'Retenciones'], ['guias', 'Guías de remisión'], ['liquidaciones', 'Liquidaciones de compra'],
+                    ['reembolsos', 'Facturas de reembolso'], ['compras', 'Compras registradas'], ['recibos', 'Recibos de venta'],
+                    ['proformas', 'Proformas'], ['pedidos', 'Pedidos']
+                ].map(([k, etq]) => ({ etq, n: (d.por_tipo || {})[k] || 0 }))), 'col-lg-5', 'bi-files')}
+            </div>
             <div class="row g-3">
                 ${tarjeta('Empresas que más crecen', tabla(colsVar, d.crecen || [], 'Ninguna empresa creció frente al periodo anterior.'), 'col-xl-6', 'bi-graph-up-arrow')}
                 ${tarjeta('Empresas que más caen (riesgo de abandono)', tabla(colsVar, d.caen || [], 'Ninguna empresa cayó frente al periodo anterior.'), 'col-xl-6', 'bi-graph-down-arrow')}
             </div>`;
 
         const S = d.serie || [];
-        const lbl = S.map((x) => etiquetaPeriodo(x.periodo, d.por_mes));
+        const lbl = S.map((x) => d.agrupado === 'year' ? String(x.periodo).slice(0, 4) : etiquetaPeriodo(x.periodo, d.agrupado !== 'day'));
         const docs = (x) => ['facturas', 'notas_credito', 'notas_debito', 'retenciones', 'guias', 'liquidaciones', 'reembolsos', 'compras', 'recibos', 'proformas', 'pedidos']
             .reduce((s, k) => s + (+x[k] || 0), 0);
         grafico('met-ch-tend-docs', {
@@ -828,6 +840,7 @@
             case '12m': d = new Date(hoy.getFullYear() - 1, hoy.getMonth(), hoy.getDate() + 1); break;
             case '24m': d = new Date(hoy.getFullYear() - 2, hoy.getMonth(), hoy.getDate() + 1); break;
             case '5a': d = new Date(hoy.getFullYear() - 5, hoy.getMonth(), hoy.getDate() + 1); break;
+            case 'todo': d = new Date(2000, 0, 1); break;   // el servidor lo recorta al primer día con datos
             default: return;
         }
         document.getElementById('met-desde').value = isoLocal(d);

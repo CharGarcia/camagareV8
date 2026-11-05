@@ -6,7 +6,7 @@ ruta_modulo: modulos/asientos_contables
 tipo: modulo
 visibilidad: todos
 etiquetas: asientos, cuenta eliminada, cuenta configurada no funciona, asiento contable, diario, debe, haber, partida doble, cuadrado, comprobante, contabilidad, imprimir, pdf, excel, documento origen, cuadre con el documento, total de la factura, cuenta por cobrar, cartera, editar asiento desde el documento, pestaña asiento contable, editado a mano, restaurar asiento automático, permisos de contabilidad, documentos migrados, migración, sistema anterior, buscar asiento, buscador, filtros, filtrar asientos, buscar por cuenta, buscar por referencia, libro diario, chips, asiento descuadrado, búsqueda lenta, se queda buscando, filtrar por origen, origen del asiento, módulo de origen, vista previa, costo de ventas, asiento sin costo, duplicar asiento, copiar asiento, clonar asiento, repetir asiento, centro de costo sugerido, proyecto sugerido, cambiar centro de costo desde el documento, cambiar proyecto desde la compra, período cerrado, no generar asientos de años anteriores, excluir año, ingreso sin valor, egreso sin valor, cheques anulados, siempre salen pendientes, vuelve a pedir generar, dice que se generaron y siguen pendientes
-version: 1.46
+version: 1.47
 orden: 20
 estado: activo
 ---
@@ -216,6 +216,22 @@ Eso no reemplaza al aviso de esta pantalla, que sigue siendo el lugar donde se
 ve **qué quedó sin contabilizar y por qué**: la generación automática es
 silenciosa a propósito, y lo que no puede resolver (una cuenta sin configurar, un
 período cerrado) se sigue reportando aquí.
+
+### Si faltan cuentas, el documento no muestra error
+
+Que falte configurar una cuenta contable **no es un error del documento**. Al abrir
+una factura (o cualquier documento con pestaña *Asiento contable*) que todavía no
+puede generar su asiento porque faltan cuentas, la pestaña muestra en gris:
+*«Este documento aún no tiene asiento contable. Se generará automáticamente cuando
+la configuración contable esté completa.»* No aparece en rojo, no impide guardar ni
+emitir, y no se anota en *Errores del sistema*.
+
+Cuando se completan las cuentas en **Contabilidad → Configuración contable**, los
+asientos que faltaban se generan solos. Lo que siga pendiente se ve en el aviso de
+esta pantalla y conviene revisarlo **antes de generar los estados financieros**.
+
+Siguen mostrándose como aviso los problemas que no son de configuración: un
+documento cuyos totales no cuadran consigo mismos o uno sin líneas con valor.
 
 ## Documentos de períodos cerrados no se generan
 
@@ -626,6 +642,7 @@ cambiarlos se revierte el cierre en ese módulo y se genera de nuevo.
 
 ## Historial de cambios
 
+- **1.47** — Si a un documento le faltan cuentas contables para su asiento, la pestaña *Asiento contable* ya no muestra el error en rojo: indica en gris que el asiento se generará automáticamente cuando la configuración esté completa, y no se anota en *Errores del sistema*. Aplica a facturas, recibos, notas de crédito y débito, compras, reembolsos, importaciones, ingresos, egresos, inventario y consignaciones.
 - **1.46** — Al generar, un documento que ya tenía asiento y sigue pendiente (costo de venta sin
   cuenta) ya no se cuenta como generado: queda en *Quedan pendientes* con la cuenta que falta y
   el producto, categoría o marca que no la tiene. Los productos sin categoría/marca se resumen

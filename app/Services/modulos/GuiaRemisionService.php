@@ -36,24 +36,33 @@ class GuiaRemisionService
             $this->rules->validarAdicionales($adicionales);
         }
 
-        if ($this->repo->existeSecuencial(
-            (int) $data['id_empresa'],
-            (int) $data['id_establecimiento'],
-            (int) $data['id_punto_emision'],
-            (string) $data['secuencial']
-        )) {
-            throw new \Exception('El número de secuencial ya existe para este punto de emisión. Recargue e intente nuevamente.');
-        }
-
-        $data = $this->prepararData($data);
-
-        // RUC Proveedor (Res. NAC-DGERCGC26-00000027) se agrega aquí, al crear —
-        // así solo los documentos nuevos lo llevan; los ya emitidos no se alteran.
-        $adicionales = \App\Helpers\SriProveedorHelper::conRucProveedor($adicionales);
-
+        // La transacción se abre ANTES de validar el secuencial: con secuencial automático
+        // (modal, campo de solo lectura) el número se reserva bajo candado y el candado solo
+        // protege si sigue abierta hasta el INSERT de la cabecera (CLAUDE.md §8).
         $db = Database::getConnection();
         $db->beginTransaction();
         try {
+            $this->secuencialReasignado = null;
+            if (!empty($data['secuencial_automatico'])) {
+                $this->reservarSecuencial($data);
+            }
+
+            if ($this->repo->existeSecuencial(
+                (int) $data['id_empresa'],
+                (int) $data['id_establecimiento'],
+                (int) $data['id_punto_emision'],
+                (string) $data['secuencial']
+            )) {
+                throw new \Exception('El número de secuencial ya existe para este punto de emisión. Recargue e intente nuevamente.');
+            }
+
+            // prepararData arma la clave de acceso con el secuencial: va después de reservarlo.
+            $data = $this->prepararData($data);
+
+            // RUC Proveedor (Res. NAC-DGERCGC26-00000027) se agrega aquí, al crear —
+            // así solo los documentos nuevos lo llevan; los ya emitidos no se alteran.
+            $adicionales = \App\Helpers\SriProveedorHelper::conRucProveedor($adicionales);
+
             $id = $this->repo->insertarCabecera($data);
 
             foreach ($data['detalles'] as $detalle) {
@@ -81,6 +90,53 @@ class GuiaRemisionService
             $db->rollBack();
             throw $e;
         }
+    }
+
+    /**
+     * Número que mostraba la pantalla y número con el que se guardó, cuando el primero ya
+     * lo había tomado otra guía de la misma serie. Null si no cambió.
+     * @var array{anterior:string, nuevo:string}|null
+     */
+    private ?array $secuencialReasignado = null;
+
+    public function getSecuencialReasignado(): ?array
+    {
+        return $this->secuencialReasignado;
+    }
+
+    /**
+     * Reserva el secuencial de una guía NUEVA bajo el candado del punto de emisión. Si el
+     * número propuesto al abrir el modal sigue libre se respeta; si otra persona ya lo usó,
+     * se toma el siguiente libre y se avisa (mismo criterio que Facturas de venta).
+     * Requiere la transacción abierta (el candado se libera en su COMMIT).
+     */
+    private function reservarSecuencial(array &$data): void
+    {
+        $idPunto = (int) ($data['id_punto_emision'] ?? 0);
+        if ($idPunto <= 0) {
+            return;
+        }
+        (new \App\repositories\SecuencialRepository())->lockSecuencial($idPunto, 'Guía de remisión');
+
+        $propuesto = trim((string) ($data['secuencial'] ?? ''));
+        if ($propuesto !== '' && !$this->repo->existeSecuencial(
+            (int) $data['id_empresa'],
+            (int) $data['id_establecimiento'],
+            $idPunto,
+            $propuesto
+        )) {
+            return;
+        }
+
+        $res   = (new \App\Services\SecuencialService())->obtenerSiguienteSecuencial($idPunto, 'Guía de remisión');
+        $nuevo = (string) ($res['formateado'] ?? '');
+        if ($nuevo === '') {
+            return;
+        }
+        if ($propuesto !== '') {
+            $this->secuencialReasignado = ['anterior' => $propuesto, 'nuevo' => $nuevo];
+        }
+        $data['secuencial'] = $nuevo;
     }
 
     public function actualizar(int $id, array $data): void

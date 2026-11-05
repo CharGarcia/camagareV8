@@ -899,7 +899,12 @@
                 // NO se cierra el modal: el usuario lo cierra a mano (para corregir
                 // fecha y reenviar al SRI sin reabrir). Refrescar y recargar en edición.
                 if (typeof window.GR_cargar === 'function') window.GR_cargar(window.GR_page || 1);
-                Swal.fire({ toast: true, position: 'top-end', icon: 'success', title: d.mensaje || 'Guardado', showConfirmButton: false, timer: 2500, timerProgressBar: true });
+                if (d.secuencial_reasignado) {
+                    // Otra persona usó el número que mostraba la pantalla: se guardó con el siguiente libre.
+                    Swal.fire({ icon: 'info', title: 'Guía guardada con otro número', text: d.mensaje, target: document.getElementById('modalGuiaRemision') });
+                } else {
+                    Swal.fire({ toast: true, position: 'top-end', icon: 'success', title: d.mensaje || 'Guardado', showConfirmButton: false, timer: 2500, timerProgressBar: true });
+                }
                 if (idGuardado > 0 && typeof window.GR_abrirEditar === 'function') {
                     // El botón se libera cuando la guía ya está cargada con su id: mientras
                     // GR_resetModal deja gr-id vacío, un clic en Guardar crearía otra guía.

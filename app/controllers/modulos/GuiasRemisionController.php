@@ -265,8 +265,16 @@ class GuiasRemisionController extends BaseModuloController
                 echo json_encode(['ok' => true, 'mensaje' => 'Guía de remisión actualizada correctamente.', 'id' => $id]);
             } else {
                 $this->requireCrear();
+                // El secuencial del modal es de solo lectura: lo reserva el servidor al guardar y,
+                // si otra persona ya usó el que mostraba la pantalla, toma el siguiente libre.
+                $data['secuencial_automatico'] = true;
                 $newId = $this->service->crear($data);
-                echo json_encode(['ok' => true, 'mensaje' => 'Guía de remisión guardada correctamente.', 'id' => $newId]);
+                $reasignado = $this->service->getSecuencialReasignado();
+                $mensaje = $reasignado === null
+                    ? 'Guía de remisión guardada correctamente.'
+                    : 'Guía de remisión guardada con el número ' . $reasignado['nuevo']
+                        . ': el ' . $reasignado['anterior'] . ' ya lo había usado otra guía de esta serie.';
+                echo json_encode(['ok' => true, 'mensaje' => $mensaje, 'id' => $newId, 'secuencial_reasignado' => $reasignado !== null]);
             }
         } catch (\Throwable $e) {
             \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);

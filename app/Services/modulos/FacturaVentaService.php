@@ -492,6 +492,63 @@ class FacturaVentaService
     }
 
     /**
+     * Número que mostraba la pantalla y número con el que realmente se guardó, cuando el
+     * primero ya lo había tomado otra persona (ver reservarSecuencial). Null si no cambió.
+     * @var array{anterior:string, nuevo:string}|null
+     */
+    private ?array $secuencialReasignado = null;
+
+    public function getSecuencialReasignado(): ?array
+    {
+        return $this->secuencialReasignado;
+    }
+
+    /**
+     * Reserva el secuencial de una factura NUEVA bajo el candado del punto de emisión
+     * (CLAUDE.md §8). El modal propone el número al abrirse; si mientras tanto otra persona
+     * guardó una factura con ese mismo número, en vez de rechazar el guardado («Recargue e
+     * intente nuevamente») se toma el siguiente libre y se avisa. Si el número propuesto
+     * sigue libre, se respeta tal cual.
+     *
+     * Requiere la transacción del llamador ABIERTA: el candado (pg_advisory_xact_lock) se
+     * libera recién en su COMMIT, después del INSERT de la cabecera.
+     * Solo se usa con `secuencial_automatico` (el modal, cuyo campo es de solo lectura): las
+     * cargas que traen un número propio (Excel, migración) no se renumeran nunca.
+     */
+    private function reservarSecuencial(array &$data): void
+    {
+        $idPunto = (int) ($data['id_punto_emision'] ?? 0);
+        if ($idPunto <= 0) {
+            return;   // sin serie: lo rechaza la validación normal
+        }
+        $secuencialService = new \App\Services\SecuencialService();
+        $secuencialRepo    = new \App\repositories\SecuencialRepository();
+        $secuencialRepo->lockSecuencial($idPunto, 'Facturas de venta');
+
+        $propuesto = trim((string) ($data['secuencial'] ?? ''));
+        $libre = $propuesto !== '' && !$this->repository->existeSecuencial(
+            (int) $data['id_empresa'],
+            (int) $data['id_establecimiento'],
+            $idPunto,
+            $propuesto,
+            null
+        );
+        if ($libre) {
+            return;
+        }
+
+        $res   = $secuencialService->obtenerSiguienteSecuencial($idPunto, 'Facturas de venta', $data['fecha_emision'] ?? null);
+        $nuevo = (string) ($res['formateado'] ?? '');
+        if ($nuevo === '') {
+            return;
+        }
+        if ($propuesto !== '') {
+            $this->secuencialReasignado = ['anterior' => $propuesto, 'nuevo' => $nuevo];
+        }
+        $data['secuencial'] = $nuevo;
+    }
+
+    /**
      * Valida que el secuencial no estÃ© duplicado
      */
     private function validarSecuencial(array $data, ?int $excluirId = null): void
@@ -935,7 +992,12 @@ class FacturaVentaService
         $managedTransaction = !$db->inTransaction();
         $guardado = new \App\Services\GuardadoUnicoService();
         $tokenGuardado = $data['token_guardado'] ?? '';
-        $abiertaTemprano = $managedTransaction && \App\Services\GuardadoUnicoService::normalizar($tokenGuardado) !== '';
+        // Secuencial automático (modal de Facturas, campo de solo lectura): el número se reserva
+        // bajo candado DENTRO de esta transacción, así que también hay que abrirla temprano.
+        $secuencialAuto = !empty($data['secuencial_automatico']);
+        $this->secuencialReasignado = null;
+        $abiertaTemprano = $managedTransaction
+            && (\App\Services\GuardadoUnicoService::normalizar($tokenGuardado) !== '' || $secuencialAuto);
         if ($abiertaTemprano) $db->beginTransaction();
 
         try {
@@ -951,6 +1013,9 @@ class FacturaVentaService
             'No se puede emitir la factura porque el período contable de esa fecha está cerrado.'
         );
 
+        if ($secuencialAuto && $db->inTransaction()) {
+            $this->reservarSecuencial($data);
+        }
         $this->validarSecuencial($data);
 
         // Tomar tipo_ambiente y tipo_emision desde la configuraciÃ³n de empresa

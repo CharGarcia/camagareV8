@@ -219,9 +219,20 @@ class MetricasSistemaService
             return ['disponible' => false];
         }
 
+        // «Todo el historial» llega como una fecha muy antigua: se recorta al primer día que
+        // tiene el resumen, para que el periodo anterior de comparación tenga sentido.
+        $cobertura = $diarias->cobertura();
+        if (!empty($cobertura['desde']) && $desde < $cobertura['desde']) {
+            $desde = (string) $cobertura['desde'];
+        }
+        if ($desde > $hasta) {
+            $desde = $hasta;
+        }
+
         $ini  = new \DateTimeImmutable($desde);
         $fin  = new \DateTimeImmutable($hasta);
         $dias = (int) $ini->diff($fin)->days + 1;
+        $trunc = $dias > 1830 ? 'year' : ($porMes ? 'month' : 'day');
         $hastaAnt = $ini->modify('-1 day')->format('Y-m-d');
         $desdeAnt = $ini->modify('-' . $dias . ' days')->format('Y-m-d');
 
@@ -252,8 +263,12 @@ class MetricasSistemaService
 
         return [
             'disponible' => true,
-            'cobertura'  => $diarias->cobertura(),
-            'serie'      => $diarias->serieGlobal($desde, $hasta, $porMes),
+            'cobertura'  => $cobertura,
+            'desde'      => $desde,
+            'hasta'      => $hasta,
+            'agrupado'   => $trunc,
+            'serie'      => $diarias->serieGlobal($desde, $hasta, $trunc),
+            'por_tipo'   => $diarias->totalesPorTipo($desde, $hasta),
             'actual'     => $actual,
             'anterior'   => $anterior + ['desde' => $desdeAnt, 'hasta' => $hastaAnt],
             'variacion'  => $variacion,

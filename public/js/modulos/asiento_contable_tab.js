@@ -491,10 +491,12 @@
                             cabecera = null;
                         }
                     }
-                    placeholder(json.ok
-                        ? '<i class="bi bi-info-circle me-1"></i> ' + (json.aviso || 'A&uacute;n no se ha generado el asiento contable de este documento.')
+                    // `sin_configuracion`: faltan cuentas contables. No es un error del documento:
+                    // el asiento se genera solo cuando la configuración esté completa (AsientoVistaPrevia).
+                    placeholder(json.ok || json.sin_configuracion
+                        ? '<i class="bi bi-info-circle me-1"></i> ' + (json.aviso || (json.sin_configuracion ? json.error : '') || 'A&uacute;n no se ha generado el asiento contable de este documento.')
                         : '<i class="bi bi-exclamation-triangle-fill me-1"></i> ' + (json.error || 'No se pudo consultar el asiento contable.'),
-                        json.ok ? 'text-muted' : 'text-danger');
+                        json.ok || json.sin_configuracion ? 'text-muted' : 'text-danger');
                     setStatus('');
                     return;
                 }
@@ -578,6 +580,14 @@
                             + '<br>El comprobante electr&oacute;nico no se puede corregir, as&iacute; que el asiento se registra a mano.' + falta
                             + ' Al guardarlo queda enlazado al documento y marcado como editado a mano.', 'text-warning-emphasis');
                     }
+                } else if (json.sin_configuracion) {
+                    // Faltan cuentas contables: texto neutro, no un error. El asiento lo genera la
+                    // sincronización contable cuando la configuración esté completa; lo pendiente se
+                    // revisa al generar los estados financieros.
+                    editable = false;
+                    pintarBotones();
+                    placeholder('<i class="bi bi-info-circle me-1"></i> ' + json.error, 'text-muted');
+                    setStatus('');
                 } else if (!json.ok) {
                     placeholder('<i class="bi bi-exclamation-triangle-fill me-1"></i> ' + (json.error || 'No se pudo generar el asiento.'), 'text-danger');
                     setStatus('');

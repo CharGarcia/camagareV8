@@ -467,8 +467,8 @@ class ReciboVentaController extends BaseModuloController
             $detallesSugeridos = $this->service->obtenerAsientoSugerido($idEmpresa, $normalizedData);
             echo json_encode(['ok' => true, 'data' => $detallesSugeridos, 'detalles' => $detallesSugeridos, 'es_guardado' => false]);
         } catch (\Throwable $e) {
-            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
-            echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
+            // Falta de configuración contable: texto neutro y sin registrar como error (ver AsientoVistaPrevia).
+            echo json_encode(\App\Helpers\AsientoVistaPrevia::respuestaError($e, static::class, __FUNCTION__));
         }
         exit;
     }

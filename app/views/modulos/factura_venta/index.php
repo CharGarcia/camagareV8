@@ -2289,15 +2289,21 @@ $totalPages = $totalPagesOriginal;
                 // El asiento es un efecto automático del documento y no se le reporta al
                 // usuario: si falla, queda en el log del servidor (json.asiento_warning) y la
                 // pestaña Asiento contable lo muestra como "Sin asiento contable".
-                Swal.fire({
-                    toast: true,
-                    position: 'top-end',
-                    icon: 'success',
-                    title: esActualizacion ? 'Factura actualizada con éxito' : 'Factura guardada con éxito',
-                    showConfirmButton: false,
-                    timer: 2500,
-                    timerProgressBar: true
-                });
+                if (json.secuencial_reasignado) {
+                    // Otra persona usó el número que mostraba la pantalla: el servidor tomó el
+                    // siguiente libre. Se avisa con un mensaje que hay que leer (no un toast).
+                    Swal.fire({ icon: 'info', title: 'Factura guardada con otro número', text: json.mensaje });
+                } else {
+                    Swal.fire({
+                        toast: true,
+                        position: 'top-end',
+                        icon: 'success',
+                        title: esActualizacion ? 'Factura actualizada con éxito' : 'Factura guardada con éxito',
+                        showConfirmButton: false,
+                        timer: 2500,
+                        timerProgressBar: true
+                    });
+                }
 
                 // Mantener el botón habilitado para seguir editando/guardando.
                 btn.disabled = false;
