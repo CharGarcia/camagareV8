@@ -4179,7 +4179,10 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 });
 
-window.CMG_cargarPagosTab = async function() {
+// opts.sinMonto: tras registrar un pago el monto queda VACÍO (no se precarga el saldo
+// restante), para que un segundo clic o un Enter en el formulario no pague todo el
+// saldo con la misma forma de pago sin que el usuario lo escriba a propósito.
+window.CMG_cargarPagosTab = async function(opts = {}) {
     const idCompra = document.getElementById('mcId').value || document.getElementById('modalCompra').dataset.id;
     
     const alertaNueva = document.getElementById('pagoAlertaNueva');
@@ -4391,14 +4394,18 @@ window.CMG_cargarPagosTab = async function() {
             // Prefillar datos para registrar pago rápido
             const montoInput = document.getElementById('pagoMontoPagar');
             if (montoInput) {
-                montoInput.value = saldo.toFixed(2);
+                montoInput.value = opts.sinMonto ? '' : saldo.toFixed(2);
                 montoInput.max = saldo;
             }
             
             const obsInput = document.getElementById('pagoObservaciones');
             if (obsInput) {
                 const numComp = document.getElementById('mcNumeroComprobante').value;
-                obsInput.value = `Pago de Compra #${numComp}`;
+                // Mismo texto que el modal de Egresos ("Pago factura de compra 42869;
+                // Pagado con … $…"), y se actualiza solo al cambiar monto o forma.
+                const obsAuto = _cmgObsAutoCompra();
+                if (obsAuto) obsAuto.reset(numComp);
+                else obsInput.value = `Pago factura de compra ${numComp}`;
             }
             
             const fEmisInput = document.getElementById('pagoFechaEmision');
@@ -4466,9 +4473,28 @@ window.CMG_toggleTipoOp = function(tipo) {
     }
 };
 
+// Bandera "en curso" (CLAUDE.md §8): se activa antes del primer await y se libera
+// solo cuando el panel ya se recargó con el pago nuevo.
+let _cmgPagandoCompra = false;
+
+// Observaciones automáticas del pago (CMG_obsAutoDocumento, app.js), creadas al primer uso.
+let _cmgObsAutoCompraInst = null;
+function _cmgObsAutoCompra() {
+    if (!_cmgObsAutoCompraInst && typeof window.CMG_obsAutoDocumento === 'function') {
+        _cmgObsAutoCompraInst = window.CMG_obsAutoDocumento({
+            tipo: 'pago', documento: 'factura de compra',
+            obs: 'pagoObservaciones', monto: 'pagoMontoPagar', forma: 'pagoFormaPago',
+            operacion: 'pagoTipoOp', referencia: 'pagoNumOp', banco: 'pagoDivDetalleBanco',
+        });
+    }
+    return _cmgObsAutoCompraInst;
+}
+
 window.CMG_registrarPagoEgreso = async function(e) {
     if (e) e.preventDefault();
-    
+    if (_cmgPagandoCompra) return;
+    _cmgObsAutoCompra()?.actualizar();
+
     const btn = document.getElementById('pagoBtnRegistrar');
     const idCompra = document.getElementById('mcId').value || document.getElementById('modalCompra').dataset.id;
     
@@ -4503,24 +4529,44 @@ window.CMG_registrarPagoEgreso = async function(e) {
         return;
     }
 
-    if (montoPagar > (saldoActual + 0.01)) {
-        const sConf = await Swal.fire({
-            title: '¿Monto superior?',
-            text: `El valor ingresado ($${montoPagar.toFixed(2)}) es mayor al saldo pendiente ($${saldoActual.toFixed(2)}). ¿Está seguro de continuar?`,
-            icon: 'question',
-            showCancelButton: true,
-            confirmButtonText: 'Sí, continuar',
-            cancelButtonText: 'Modificar'
-        });
-        if (!sConf.isConfirmed) return;
-    }
-
-    if (btn) {
-        btn.disabled = true;
-        btn.innerHTML = '<i class="spinner-grow spinner-grow-sm me-2"></i>Registrando...';
-    }
+    _cmgPagandoCompra = true;
+    if (btn) btn.disabled = true;
 
     try {
+        if (montoPagar > (saldoActual + 0.01)) {
+            const sConf = await Swal.fire({
+                title: '¿Monto superior?',
+                text: `El valor ingresado ($${montoPagar.toFixed(2)}) es mayor al saldo pendiente ($${saldoActual.toFixed(2)}). ¿Está seguro de continuar?`,
+                icon: 'question',
+                showCancelButton: true,
+                confirmButtonText: 'Sí, continuar',
+                cancelButtonText: 'Modificar'
+            });
+            if (!sConf.isConfirmed) return;
+        }
+
+        // Confirmación explícita: muestra monto y forma de pago, para que ningún pago
+        // (en especial el del saldo restante) se registre por un clic o Enter de más.
+        const nombreForma = pFP.selectedIndex >= 0 ? (pFP.options[pFP.selectedIndex].text || '').trim() : '';
+        const esTodoSaldo = saldoActual > 0 && Math.abs(montoPagar - saldoActual) < 0.005;
+        const conf = await Swal.fire({
+            icon: 'question',
+            title: 'Registrar pago',
+            html: `¿Registrar un pago de <strong>$${montoPagar.toFixed(2)}</strong>`
+                + (nombreForma ? ` con <strong>${_esc(nombreForma)}</strong>` : '')
+                + `?<br><small class="text-muted">Saldo pendiente: $${saldoActual.toFixed(2)}`
+                + (esTodoSaldo ? ' — este pago deja la compra totalmente pagada.' : '') + '</small>',
+            showCancelButton: true,
+            confirmButtonText: '<i class="bi bi-check-circle me-1"></i> Registrar',
+            cancelButtonText: 'Cancelar',
+            confirmButtonColor: '#198754',
+            focusCancel: true,
+            target: document.getElementById('modalCompra') || 'body',
+        });
+        if (!conf.isConfirmed) return;
+
+        if (btn) btn.innerHTML = '<i class="spinner-grow spinner-grow-sm me-2"></i>Registrando...';
+
         const divBanco = document.getElementById('pagoDivDetalleBanco');
         const esBanco = divBanco && !divBanco.classList.contains('d-none');
 
@@ -4559,8 +4605,9 @@ window.CMG_registrarPagoEgreso = async function(e) {
             const fNum = document.getElementById('pagoNumOp');
             if (fNum) fNum.value = '';
             
-            // Refrescar datos del tab de pagos
-            await window.CMG_cargarPagosTab();
+            // Refrescar datos del tab de pagos. El botón no se reactiva hasta que el panel
+            // ya muestra el pago nuevo y el monto quedó vacío (§8, «un guardado = un registro»).
+            await window.CMG_cargarPagosTab({ sinMonto: true });
             
             // Recargar listado principal de compras en el fondo para reflejar saldos si aplica
             if (typeof window.CMG_fetchSearch === 'function') {
@@ -4573,6 +4620,7 @@ window.CMG_registrarPagoEgreso = async function(e) {
         console.error('Error al registrar pago:', err);
         Swal.fire('Error de Red', 'Ocurrió un fallo inesperado al conectarse al servidor.', 'error');
     } finally {
+        _cmgPagandoCompra = false;
         if (btn) {
             btn.disabled = false;
             btn.innerHTML = '<i class="bi bi-check-circle me-2"></i>Registrar Pago y Generar Egreso';

@@ -1343,7 +1343,7 @@ class ComprasController extends BaseModuloController
                 'id_proveedor'       => (int)$compra['id_proveedor'],
                 'id_egreso_concepto' => $idConcepto,
                 'monto_total'        => $montoPagar,
-                'observaciones'      => !empty($post['observaciones']) ? trim($post['observaciones']) : "Pago de Compra #{$numDoc}",
+                'observaciones'      => !empty($post['observaciones']) ? trim($post['observaciones']) : 'Pago factura de compra ' . (ltrim((string)$compra['secuencial_prov'], '0') ?: '0'),
                 'estado'             => 'registrado',
                 'detalles'           => [
                     [

@@ -6274,7 +6274,10 @@ $totalPages = $totalPagesOriginal;
         document.getElementById('fvPagoSaldoPendiente').textContent    = saldo.toFixed(2);
     }
 
-    async function fvCargarCobrosTab() {
+    // opts.sinMonto: tras registrar un cobro el monto queda VACÍO (no se precarga el saldo
+    // restante), para que un segundo clic en «Registrar Cobro» no cobre todo el saldo
+    // con la misma forma de cobro sin que el usuario lo escriba a propósito.
+    async function fvCargarCobrosTab(opts = {}) {
         const idFact = parseInt(RV_ID_ACTIVO) || 0;
 
         const alertaNueva  = document.getElementById('fvPagoAlertaNueva');
@@ -6538,7 +6541,7 @@ $totalPages = $totalPagesOriginal;
                 cardReg.classList.remove('d-none');
                 const elMonto = document.getElementById('fvPagoMonto');
                 if (elMonto) {
-                    elMonto.value = saldo.toFixed(2);
+                    elMonto.value = opts.sinMonto ? '' : saldo.toFixed(2);
                     elMonto.max   = saldo.toFixed(2);        // límite máximo en el input
                 }
                 const elObs = document.getElementById('fvPagoObs');
@@ -6546,7 +6549,11 @@ $totalPages = $totalPagesOriginal;
                     const n = (jCob.factura.establecimiento || '') + '-'
                             + (jCob.factura.punto_emision   || '') + '-'
                             + (jCob.factura.secuencial      || '');
-                    elObs.value = `Cobro de recibo ${n}`;
+                    // Mismo texto que el modal de Ingresos ("Cobro recibo de venta 4;
+                    // Cobrado con … $…"), y se actualiza solo al cambiar monto o forma.
+                    const obsAuto = fvObsAuto();
+                    if (obsAuto) obsAuto.reset(n);
+                    else elObs.value = `Cobro recibo de venta ${n}`;
                 }
             }
         } catch (err) {
@@ -6638,9 +6645,29 @@ $totalPages = $totalPagesOriginal;
         if (!esCheque) document.getElementById('fvPagoFechaCobro').value = '';
     }
 
+    // Bandera "en curso" (CLAUDE.md §8): se activa antes del primer await y se libera
+    // solo cuando el panel ya se recargó con el cobro nuevo.
+    let _fvCobrando = false;
+
+    // Observaciones automáticas del cobro (CMG_obsAutoDocumento, app.js). Se crea la
+    // primera vez que se usa: app.js puede cargarse después de este script.
+    let _fvObsAuto = null;
+    function fvObsAuto() {
+        if (!_fvObsAuto && typeof window.CMG_obsAutoDocumento === 'function') {
+            _fvObsAuto = window.CMG_obsAutoDocumento({
+                tipo: 'cobro', documento: 'recibo de venta',
+                obs: 'fvPagoObs', monto: 'fvPagoMonto', forma: 'fvPagoFormaCobro',
+                operacion: 'fvPagoTipoOp', referencia: 'fvPagoNumOp', banco: 'fvPagoDivBanco',
+            });
+        }
+        return _fvObsAuto;
+    }
+
     async function fvRegistrarCobro() {
         const idFact = parseInt(RV_ID_ACTIVO) || 0;
         if (!idFact) return;
+        if (_fvCobrando) return;
+        fvObsAuto()?.actualizar();
 
         const btn = document.getElementById('fvPagoBtnRegistrar');
         const payload = {
@@ -6686,10 +6713,34 @@ $totalPages = $totalPagesOriginal;
             );
         }
 
+        _fvCobrando  = true;
         btn.disabled = true;
-        btn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Registrando...';
 
         try {
+            // Confirmación explícita: muestra monto y forma de cobro, para que ningún cobro
+            // (en especial el del saldo restante) se registre por un clic o Enter de más.
+            const selForma   = document.getElementById('fvPagoFormaCobro');
+            const nombreForma = selForma && selForma.selectedIndex >= 0
+                ? (selForma.options[selForma.selectedIndex].text || '').trim() : '';
+            const esTodoSaldo = _fvSaldoPendiente > 0 && Math.abs(payload.monto_cobrar - _fvSaldoPendiente) < 0.005;
+            const ok = await Swal.fire({
+                icon: 'question',
+                title: 'Registrar cobro',
+                html: `¿Registrar un cobro de <strong>$${payload.monto_cobrar.toFixed(2)}</strong>`
+                    + (nombreForma ? ` con <strong>${nombreForma.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')}</strong>` : '')
+                    + `?<br><small class="text-muted">Saldo pendiente: $${_fvSaldoPendiente.toFixed(2)}`
+                    + (esTodoSaldo ? ' — este cobro deja el recibo totalmente pagado.' : '') + '</small>',
+                showCancelButton: true,
+                confirmButtonText: '<i class="bi bi-check-circle me-1"></i> Registrar',
+                cancelButtonText: 'Cancelar',
+                confirmButtonColor: '#198754',
+                focusCancel: true,
+                target: document.getElementById('modalNuevaFactura') || 'body',
+            });
+            if (!ok.isConfirmed) return;
+
+            btn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Registrando...';
+
             const resp = await fetch(`${B_URL}/${RUTA_MODULO}/registrarCobroRapidoAjax`, {
                 method : 'POST',
                 headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
@@ -6704,7 +6755,9 @@ $totalPages = $totalPagesOriginal;
                     fvActualizarEstadoBotones('emitido');
                     document.getElementById('btnGuardarFacturaModal')?.classList.add('d-none');
                 }
-                fvCargarCobrosTab();
+                // El botón no se reactiva hasta que el panel ya muestra el cobro nuevo
+                // y el monto quedó vacío (§8, «un guardado = un registro»).
+                await fvCargarCobrosTab({ sinMonto: true });
                 if (typeof fetchSearchFn === 'function') fetchSearchFn(window.RV_currentPage || 1);
             } else {
                 throw new Error(res.mensaje || res.error || 'Error desconocido.');
@@ -6712,6 +6765,7 @@ $totalPages = $totalPagesOriginal;
         } catch (err) {
             Swal.fire('Error', err.message, 'error');
         } finally {
+            _fvCobrando  = false;
             btn.disabled = false;
             btn.innerHTML = '<i class="bi bi-check-circle me-2"></i>Registrar Cobro';
         }

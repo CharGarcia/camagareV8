@@ -5,8 +5,8 @@ categoria: Ventas
 ruta_modulo: modulos/recibo-venta
 tipo: modulo
 visibilidad: todos
-etiquetas: recibo de venta, recibos, buscar recibos, buscador, filtros, filtrar recibos, buscar por cliente, buscar por producto, estado de pago, saldo pendiente, nota de venta, venta sin factura, documento interno, sin impuestos, numeracion por fecha, numero con el año, reiniciar numeracion, reinicio anual, reinicio mensual, correlativo por año, correlativo por mes, modo de numeracion, lote, vencimiento, caducidad, fecha de vencimiento, lote y vencimiento, ancho de columna, agrandar columna, ensanchar, codigo cortado, descripcion cortada, no se ve la descripcion completa, redimensionar, precio con impuestos, precio con iva, sale en cero, tipo de identificacion, tipo de documento del cliente, ruc o cedula, es ruc o cedula, cedula o pasaporte, consumidor final, no se cual identificacion tiene el cliente, buscador de clientes, buscar cliente, elegir cliente, datos del cliente, imprimir, impresora, estado del recibo, borrador, emitido, recibo pagado sigue en borrador, no cambia a emitido, recibo sin asiento, asiento del recibo, cuando se emite, no puedo modificar el recibo, no aparece actualizar, editar recibo emitido, corregir recibo, iva del listado, iva diferente, iva no coincide, iva con descuento, columna iva, pdf en dos hojas, segunda hoja casi vacia, totales en otra pagina, el pdf corta la pagina, hoja de mas, stock descontado dos veces, generar factura desde recibo, generar recibo desde factura, no se pudo eliminar la factura borrador
-version: 1.30
+etiquetas: recibo de venta, recibos, buscar recibos, buscador, filtros, filtrar recibos, buscar por cliente, buscar por producto, estado de pago, saldo pendiente, nota de venta, venta sin factura, documento interno, sin impuestos, numeracion por fecha, numero con el año, reiniciar numeracion, reinicio anual, reinicio mensual, correlativo por año, correlativo por mes, modo de numeracion, lote, vencimiento, caducidad, fecha de vencimiento, lote y vencimiento, ancho de columna, agrandar columna, ensanchar, codigo cortado, descripcion cortada, no se ve la descripcion completa, redimensionar, precio con impuestos, precio con iva, sale en cero, tipo de identificacion, tipo de documento del cliente, ruc o cedula, es ruc o cedula, cedula o pasaporte, consumidor final, no se cual identificacion tiene el cliente, buscador de clientes, buscar cliente, elegir cliente, datos del cliente, imprimir, impresora, estado del recibo, borrador, emitido, recibo pagado sigue en borrador, no cambia a emitido, recibo sin asiento, asiento del recibo, cuando se emite, no puedo modificar el recibo, no aparece actualizar, editar recibo emitido, corregir recibo, iva del listado, iva diferente, iva no coincide, iva con descuento, columna iva, pdf en dos hojas, segunda hoja casi vacia, totales en otra pagina, el pdf corta la pagina, hoja de mas, stock descontado dos veces, generar factura desde recibo, generar recibo desde factura, no se pudo eliminar la factura borrador, abono, abonos, cobro parcial, registrar cobro, cobro duplicado, se cobro todo el saldo, factura pagada sola, cobro al autorizar
+version: 1.31
 orden: 35
 estado: activo
 ---
@@ -246,8 +246,22 @@ mes cerrado a uno abierto lo alteraría igual. Los períodos se abren y se
 cierran en **Contabilidad → Períodos Contables**; reabrir el período permite
 la operación de inmediato.
 
+## Registrar un cobro (abono) desde la pestaña Pagos
+
+En la pestaña **Pagos** del recibo se registran cobros totales o parciales.
+Antes de guardar, el sistema pide **confirmar el monto y la forma de cobro**, y
+después de cada cobro el **Monto queda vacío**: para el siguiente abono hay que
+escribirlo. Así un clic o Enter de más no cobra el resto del recibo con la misma
+forma de cobro.
+
+Las **observaciones** del ingreso se arman solas con el mismo texto que el módulo
+Ingresos, por ejemplo *Cobro recibo de venta 4; Cobrado con CAJA $20.00*, y se
+actualizan al cambiar el monto, la forma de cobro o la referencia. Si escribe su
+propio texto, se respeta.
+
 ## Historial de cambios
 
+- **1.31** — Pestaña **Pagos**: registrar un cobro pide **confirmar monto y forma de cobro**, y después de cada cobro el **Monto queda vacío** en lugar de traer el saldo restante. Las **observaciones** del cobro usan el mismo formato que Ingresos (*Cobro recibo de venta 4; Cobrado con …*); antes decían *Cobro de recibo 001-…*.
 - **1.30** — Los **decimales de cantidad y precio** salen del **establecimiento de la serie** del recibo, no del primer establecimiento de la empresa: en la ventana (al elegir la serie), al guardar, en el PDF y al **generar la factura desde el recibo** (o el recibo desde una factura borrador), que usan la configuración del establecimiento del documento de origen.
 - **1.29** — **Generar la factura desde el recibo** (y el recibo desde una factura borrador) es ahora un solo paso: si algo falla, no queda nada a medias. Antes, un fallo volvía a descontar el inventario que el recibo ya había descontado (stock dos veces abajo), y si la factura borrador no se podía eliminar quedaba viva **sin** su salida de inventario.
 - **1.28** — Al crear un **cliente nuevo** desde el recibo, la ficha se cierra sola y el cliente queda seleccionado en el recibo. Lo mismo con un **producto nuevo**: se agrega solo al detalle del recibo.

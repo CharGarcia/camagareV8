@@ -6,7 +6,7 @@ ruta_modulo: modulos/liquidacion-compra
 tipo: modulo
 visibilidad: todos
 etiquetas: liquidacion de compra, liquidacion, proveedor sin factura, comprobante 03, sri, sustento, eliminar, borrar, borrador, anular, buscar liquidacion, buscador, filtros, filtrar liquidaciones, buscar por producto, saldo pendiente, estado de pago, chips, aparecen documentos que no busque, resultados que no corresponden, la busqueda trae otros documentos, totales, subtotal, descuento, iva, redondeo, centavos, decimales, decimales de precio, calculo del iva, al subtotal, linea por linea, no cuadra, diferencia de un centavo, error en diferencias, exento, no objeto de iva, codigo del item, item sin codigo, item sin descripcion, falta el codigo, error en estructura de comprobante, rechazado por estructura, no autorizado, informacion adicional, ruc proveedor, campo que no se puede borrar, no me deja eliminar la fila, concepto muy largo, limite de caracteres, maximo 100 caracteres, value too long, no se pudo guardar la liquidacion, registrar pago, pagar liquidacion, egreso de liquidacion, pestaña pagos, no deja pagar, error al registrar pago, secuencial de egreso, imprimir, impresora, retencion, emitir retencion, retener liquidacion, pestaña retenciones, comprobante de retencion, columna saldo, cuanto se debe, saldo por pagar, datos de otra liquidacion, modal no se actualiza, pestaña liquidacion, pagada en el sistema anterior, liquidaciones migradas pendientes, liquidaciones 2020, liquidaciones antiguas sin pago, sistema anterior no registraba pagos, aviso, avisos, novedad sri, documentos con novedad, devuelto, no autorizado, pendientes de enviar, borrador, borradores, proveedor del exterior, proveedor extranjero, no residente, identificacion del exterior, pasaporte, importacion de servicios, servicios del exterior, pago al exterior, pais de pago, convenio de doble tributacion, ats pago exterior, no aparece el proveedor
-version: 1.27
+version: 1.28
 orden: 40
 estado: activo
 ---
@@ -277,9 +277,17 @@ salir del módulo; el sistema genera el **Egreso** correspondiente.
 1. Elija la **serie** (punto de emisión) del egreso, el **concepto**, la **forma
    de pago** y, si es banco, el tipo de operación y su número.
 2. El monto propuesto es el **saldo pendiente**: total menos retenciones y pagos
-   anteriores. Puede pagar menos (abono parcial), nunca más.
-3. Pulse **Registrar Pago y Generar Egreso**. El número del egreso lo asigna el sistema al
-   guardar, así que dos personas pagando a la vez no reciben el mismo número.
+   anteriores. Puede pagar menos (abono parcial), nunca más. Después de cada pago
+   el **Monto queda vacío**: el siguiente abono hay que escribirlo, para que un
+   clic o Enter de más no pague el resto con la misma forma de pago.
+3. Pulse **Registrar Pago y Generar Egreso** y **confirme el monto y la forma de
+   pago** en el aviso. El número del egreso lo asigna el sistema al guardar, así que
+   dos personas pagando a la vez no reciben el mismo número.
+
+Las **observaciones** del egreso se arman solas con el mismo texto que el módulo
+Egresos, por ejemplo *Pago liquidación de compra 45; Pagado con CAJA $100.00*, y
+se actualizan al cambiar el monto, la forma de pago o la referencia. Si escribe
+su propio texto, se respeta.
 
 El saldo se vuelve a calcular en el momento de guardar: si alguien registró otro
 pago mientras tenía la pestaña abierta, el sistema lo tiene en cuenta. El egreso
@@ -388,6 +396,7 @@ la operación de inmediato.
 
 ## Historial de cambios
 
+- **1.28** — Pestaña **Pagos**: registrar un pago pide **confirmar monto y forma de pago**, el monto queda vacío después de cada pago y las **observaciones** usan el mismo formato que Egresos (*Pago liquidación de compra 45; Pagado con …*).
 - **1.27** — Los **decimales de cantidad y precio** salen del **establecimiento de la serie** de la liquidación: en la ventana (al elegir la serie), al guardar (XML) y en el PDF. Antes el guardado tomaba el primer establecimiento de la empresa y el PDF no recibía los decimales configurados (salía con los de por defecto).
 - **1.26** — **Proveedores del exterior**: el buscador de proveedor ahora muestra
   también a los proveedores con **identificación del exterior** (antes solo

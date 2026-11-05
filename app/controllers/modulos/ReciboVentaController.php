@@ -1031,7 +1031,7 @@ class ReciboVentaController extends BaseModuloController
                 'tipo_ingreso'        => 'RECIBO_VENTA',
                 'id_ingreso_concepto' => !empty($data['id_ingreso_concepto']) ? (int)$data['id_ingreso_concepto'] : null,
                 'monto_total'         => $montoCobrar,
-                'observaciones'       => !empty($data['observaciones']) ? $data['observaciones'] : 'Cobro de recibo ' . $numDoc,
+                'observaciones'       => !empty($data['observaciones']) ? $data['observaciones'] : 'Cobro recibo de venta ' . (ltrim((string)$recibo['secuencial'], '0') ?: '0'),
                 'recibo_de'           => $recibo['cliente_nombre'],
                 'id_recibo_cliente'   => (int)$recibo['id_cliente'],
                 'detalles'            => [[

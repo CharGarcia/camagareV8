@@ -2642,7 +2642,8 @@ class FacturaVentaController extends BaseModuloController
                 'monto_total'         => $montoCobrar,
                 'observaciones'       => !empty($data['observaciones'])
                                             ? $data['observaciones']
-                                            : 'Cobro de factura ' . $numDoc,
+                                            // Mismo formato que el modal de Ingresos (solo el secuencial).
+                                            : 'Cobro factura de venta ' . (ltrim((string)$factura['secuencial'], '0') ?: '0'),
                 'recibo_de'           => $factura['cliente_nombre'],
                 'id_recibo_cliente'   => (int)$factura['id_cliente'],
                 'detalles'            => [[

@@ -6,7 +6,7 @@ ruta_modulo: modulos/compras
 tipo: modulo
 visibilidad: todos
 etiquetas: compras, compra, factura de compra, detalle de items, descripcion completa, descripcion cortada, no se ve el codigo, buscar compra, buscador, aparecen compras que no busque, resultados que no corresponden, la busqueda trae otras compras, buscar por numero de autorizacion, filtros, filtrar compras, buscar por producto comprado, filtro de fechas, saldo pendiente, estado de pago, chips, ordenar por dos columnas, ordenar por proveedor y fecha, asiento contable, editar asiento, pestaña asiento, proveedor, xml, sri, entrada de mercaderia, vincular producto, retencion, orden de compra, vincular orden, pedido a proveedor, comparar pedido vs facturado, entrega parcial, recibido parcial, cerrar orden, sustento tributario, codigo de sustento, autorizacion, fecha de caducidad, ats, persona natural, obligada a llevar contabilidad, tipo de contribuyente, registro manual, compra fisica, pagar la compra, pestaña pagos, saldo pendiente, valores de terceros, otros conceptos, valores adicionales, bomberos, tasa de basura, recoleccion de basura, planilla de luz, planilla de agua, servicios basicos, informacion adicional, info adicional, nombre muy largo, limite de caracteres, value too long, no se pudo guardar la compra, imprimir, impresora, retencion antes de la factura, enlazar retencion, pdf en dos hojas, segunda hoja casi vacia, totales en otra pagina, el pdf corta la pagina, hoja de mas, asiento no cuadra, el asiento no se genera, asiento manual, registrar asiento a mano, importe total no es subtotal mas iva, supera el maximo de ajuste, xml inconsistente, iva de cabecera distinto al de las lineas, seguro campesino, generar contabilidad, centro de costo, proyecto, centro de costo por factura, proyecto por factura, dos facturas mismo proveedor distinto proyecto, otros rubros de terceros, tasa de pernoctacion, tasa turistica, hotel, hospedaje, rubro dentro del total, iva inflado en el listado, nota de credito de compra, devolucion al proveedor, restar inventario, salida de inventario por nota de credito, procesar salidas, adicional, columna adicional, detalle adicional, det. adicional, informacion adicional del item, detallesAdicionales, dato extra por linea, conceptos de retencion sugeridos, retencion predeterminada del proveedor
-version: 2.44
+version: 2.45
 orden: 20
 estado: activo
 ---
@@ -733,6 +733,24 @@ ve solo las que registró.
 La pestaña **Asiento contable** no se rige por los permisos de Compras sino por
 los de *Contabilidad → Asientos Contables* (ver la sección anterior).
 
+## Registrar un pago desde la compra (pestaña Pagos)
+
+En la pestaña **Pagos** de la compra se registran pagos totales o parciales
+(abonos); el sistema genera el **Egreso** correspondiente.
+
+- La primera vez que abre la pestaña, el **Monto** trae el saldo pendiente.
+  Puede cambiarlo para registrar un abono.
+- Al pulsar **Registrar Pago y Generar Egreso** (o Enter en el formulario) el
+  sistema pide **confirmar el monto y la forma de pago**. Si ese pago cubre todo el
+  saldo, el aviso lo indica.
+- Después de cada pago el **Monto queda vacío**: el siguiente abono hay que
+  escribirlo, para que un clic o Enter de más no pague el resto con la misma forma
+  de pago.
+- Las **observaciones** del egreso se arman solas con el mismo texto que el módulo
+  Egresos, por ejemplo *Pago factura de compra 42869; Pagado con BANCO PICHINCHA
+  $500.00 (cheque #45)*, y se actualizan al cambiar el monto, la forma de pago o la
+  referencia. Si escribe su propio texto, se respeta.
+
 ## Errores frecuentes
 
 - **"… el máximo permitido es 3.650 días (10 años)"**: el plazo escrito es demasiado
@@ -839,6 +857,7 @@ aprobaciones pasa, así que no se paga dos veces.
 
 ## Historial de cambios
 
+- **2.45** — Pestaña **Pagos**: registrar un pago pide **confirmar monto y forma de pago** (también al pulsar Enter), el monto queda vacío después de cada pago y las **observaciones** usan el mismo formato que Egresos (*Pago factura de compra 42869; Pagado con …*). Antes decían *Pago de Compra #…*.
 - **2.44** — Los **días de crédito** de una compra manual admiten como máximo **3.650 días (10 años)**. En la compra electrónica, un plazo mayor que venga en el XML del proveedor se guarda en el tope, sin rechazar el comprobante (el XML se conserva intacto). Ver [Límite del plazo de crédito](../conceptos/plazo-credito.md).
 - **2.43** — En el **PDF** de la compra, la cantidad, el precio unitario, el descuento y el precio total de cada ítem se imprimen **tal cual vienen en el XML del proveedor** (p. ej. `12.251000` o `7.739130`), sin la configuración de decimales de facturación de la empresa, que es solo para los documentos que ella emite. Antes se redondeaban (a 2 decimales en la práctica). Aplica también a las plantillas de PDF personalizadas de compras.
 - **2.42** — El detalle de ítems tiene el mismo diseño que el de **Facturas de Venta**: filas compactas con campos sin borde, la papelera aparece al pasar sobre la línea, la **Descripción** y el **Adicional** crecen en alto con su texto, y las columnas **Código**, **Descripción** y **Adicional** se ensanchan arrastrando el borde del encabezado (doble clic: se ajustan al texto más largo; el ancho se guarda por usuario). La casilla **Cant.** se ensancha con la cantidad escrita para que se vea completa.

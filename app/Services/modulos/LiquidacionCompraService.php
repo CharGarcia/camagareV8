@@ -396,7 +396,7 @@ class LiquidacionCompraService
                 'id_proveedor'       => (int) $cab['id_proveedor'],
                 'id_egreso_concepto' => $idConcepto,
                 'monto_total'        => $monto,
-                'observaciones'      => $observ !== '' ? $observ : "Pago de Liquidación #{$numDoc}",
+                'observaciones'      => $observ !== '' ? $observ : 'Pago liquidación de compra ' . (ltrim((string)$cab['secuencial'], '0') ?: '0'),
                 'detalles'           => [[
                     'tipo_documento'          => 'LIQUIDACION',
                     'id_referencia_documento' => $idLiquidacion,

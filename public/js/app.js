@@ -755,6 +755,88 @@ window.CMG_Identificacion = (function () {
     };
 
     /**
+     * Observaciones automáticas del cobro/pago que se registra DESDE UN DOCUMENTO (pestaña
+     * Pagos de Factura de venta, Recibo de venta, Compra y Liquidación de compra). Arma el
+     * mismo texto que el modal de Ingresos / Egresos (ingGenerarObservaciones /
+     * egGenerarObservaciones), para que el registro se vea igual venga de donde venga:
+     *   "Cobro factura de venta 14644; Cobrado con BANCO PICHINCHA $6.02 (transferencia ref. 55)"
+     *   "Pago factura de compra 42869; Pagado con CAJA $100.00"
+     * Igual que allá: en cuanto el usuario escribe su propio texto el campo ya no se toca; si
+     * lo vacía, vuelve a completarse solo con el siguiente cambio.
+     *
+     * cfg = { tipo: 'cobro'|'pago', documento: 'factura de venta', obs, monto, forma,
+     *         operacion, referencia, banco }  (ids de los campos; banco = div de datos bancarios)
+     * Devuelve { reset(numeroDocumento), actualizar() }.
+     */
+    window.CMG_obsAutoDocumento = function (cfg) {
+        var numero = '';
+        var auto = true;
+        var OPERACION = { TRANSFERENCIA: 'transferencia', DEPOSITO: 'depósito', DEBITO: 'débito' };
+        function el(id) { return id ? document.getElementById(id) : null; }
+
+        // Facturas, recibos y liquidaciones: solo el secuencial, sin establecimiento/punto ni
+        // ceros a la izquierda ("001-101-000014644" → "14644"), como en Ingresos/Egresos.
+        function secuencialCorto(n) {
+            var partes = String(n || '').trim().split('-');
+            var ultimo = partes[partes.length - 1].replace(/^0+(?=\d)/, '');
+            return ultimo !== '' ? ultimo : String(n || '');
+        }
+
+        function generar() {
+            var esCobro = cfg.tipo === 'cobro';
+            var textos = [(esCobro ? 'Cobro ' : 'Pago ') + cfg.documento + ' ' + secuencialCorto(numero)];
+
+            var sel = el(cfg.forma);
+            var monto = parseFloat((el(cfg.monto) || {}).value) || 0;
+            if (sel && sel.value && sel.selectedIndex >= 0 && monto > 0) {
+                var nombre = String(sel.options[sel.selectedIndex].text || '').trim();
+                var detalles = [];
+                var divBanco = el(cfg.banco);
+                if (divBanco && !divBanco.classList.contains('d-none')) {
+                    var op = String((el(cfg.operacion) || {}).value || '').toUpperCase();
+                    var ref = String((el(cfg.referencia) || {}).value || '').trim();
+                    // En estos paneles un solo campo es el Nº de cheque o la referencia.
+                    if (op === 'CHEQUE') {
+                        detalles.push(ref ? 'cheque #' + ref : 'cheque');
+                    } else {
+                        if (op) detalles.push(OPERACION[op] || op.toLowerCase());
+                        if (ref) detalles.push('ref. ' + ref);
+                    }
+                }
+                if (nombre) {
+                    textos.push((esCobro ? 'Cobrado con ' : 'Pagado con ') + nombre + ' $' + window.CMG_r2(monto).toFixed(2)
+                        + (detalles.length ? ' (' + detalles.join(' ') + ')' : ''));
+                }
+            }
+            return textos.join('; ');
+        }
+
+        function actualizar() {
+            var o = el(cfg.obs);
+            if (!o || o.disabled || !auto || !numero) return;
+            o.value = generar();
+        }
+
+        // Fase de burbuja (no captura): el onchange en línea de la forma de pago, que muestra u
+        // oculta los datos bancarios, corre antes y el texto ya ve el estado final.
+        document.addEventListener('input', function (e) {
+            var id = e.target && e.target.id;
+            if (!id) return;
+            if (id === cfg.obs) { auto = String(e.target.value || '').trim() === ''; return; }
+            if (id === cfg.monto || id === cfg.referencia) actualizar();
+        });
+        document.addEventListener('change', function (e) {
+            var id = e.target && e.target.id;
+            if (id && (id === cfg.forma || id === cfg.operacion || id === cfg.monto)) actualizar();
+        });
+
+        return {
+            reset: function (numeroDocumento) { numero = numeroDocumento || ''; auto = true; actualizar(); },
+            actualizar: actualizar
+        };
+    };
+
+    /**
      * Porcentaje de descuento como texto para mostrar junto a un valor: '(10%)', '(12.5%)',
      * '(33.33%)'. Devuelve '' si no hay descuento o no hay base. Solo informativo (modales de
      * Factura, Recibo y Proforma); no se guarda ni se imprime.

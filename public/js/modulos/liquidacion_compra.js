@@ -1699,7 +1699,10 @@
     window.duplicar = () => alert('Funcionalidad de duplicar en desarrollo.');
 
     // --- Gestión de Pagos (Egresos) ---
-    window.LC_cargarPagosTab = async function() {
+    // opts.sinMonto: tras registrar un pago el monto queda VACÍO (no se precarga el saldo
+    // restante), para que un segundo clic o un Enter en el formulario no pague todo el
+    // saldo con la misma forma de pago sin que el usuario lo escriba a propósito.
+    window.LC_cargarPagosTab = async function(opts = {}) {
         const idLiq = document.getElementById('liq-id').value;
         const totalLiq = parseFloat(document.getElementById('liq-lbl-total').textContent) || 0;
         
@@ -1826,8 +1829,13 @@
             } else {
                 alertaPagada.classList.add('d-none');
                 cardRegistro.classList.remove('d-none');
-                document.getElementById('pagoMontoPagar').value = saldo.toFixed(2);
-                document.getElementById('pagoObservaciones').value = `Pago de Liquidación #${cab.establecimiento}-${cab.punto_emision}-${cab.secuencial}`;
+                document.getElementById('pagoMontoPagar').value = opts.sinMonto ? '' : saldo.toFixed(2);
+                // Mismo texto que el modal de Egresos ("Pago liquidación de compra 45;
+                // Pagado con … $…"), y se actualiza solo al cambiar monto o forma.
+                const numLiq = `${cab.establecimiento}-${cab.punto_emision}-${cab.secuencial}`;
+                const obsAuto = _lcObsAuto();
+                if (obsAuto) obsAuto.reset(numLiq);
+                else document.getElementById('pagoObservaciones').value = `Pago liquidación de compra ${numLiq}`;
             }
         } catch (e) {
             tbody.innerHTML = `<tr><td colspan="4" class="text-center py-4 text-danger">Error: ${e.message}</td></tr>`;
@@ -1851,8 +1859,25 @@
         if (!esCheque) document.getElementById('pagoFechaCobro').value = '';
     };
 
+    // Bandera "en curso" (CLAUDE.md §8).
+    let _lcPagando = false;
+
+    // Observaciones automáticas del pago (CMG_obsAutoDocumento, app.js), creadas al primer uso.
+    let _lcObsAutoInst = null;
+    function _lcObsAuto() {
+        if (!_lcObsAutoInst && typeof window.CMG_obsAutoDocumento === 'function') {
+            _lcObsAutoInst = window.CMG_obsAutoDocumento({
+                tipo: 'pago', documento: 'liquidación de compra',
+                obs: 'pagoObservaciones', monto: 'pagoMontoPagar', forma: 'pagoFormaPago',
+                operacion: 'pagoTipoOp', referencia: 'pagoNumOp', banco: 'pagoDivDetalleBanco',
+            });
+        }
+        return _lcObsAutoInst;
+    }
+
     window.LC_registrarPagoEgre = async function(e) {
         if (e) e.preventDefault();
+        _lcObsAuto()?.actualizar();
         const idLiq = document.getElementById('liq-id').value;
         if (!idLiq) return;
 
@@ -1878,8 +1903,36 @@
             payload.fecha_cobro = fc;
         }
 
+        if (!payload.monto_pagar || payload.monto_pagar <= 0) {
+            return Swal.fire('Atención', 'El monto a pagar debe ser mayor a cero.', 'warning');
+        }
+        if (_lcPagando) return;
+
+        _lcPagando   = true;
         btn.disabled = true;
         try {
+            // Confirmación explícita: muestra monto y forma de pago, para que ningún pago
+            // (en especial el del saldo restante) se registre por un clic o Enter de más.
+            const selFP = document.getElementById('pagoFormaPago');
+            const nombreForma = selFP && selFP.selectedIndex >= 0 ? (selFP.options[selFP.selectedIndex].text || '').trim() : '';
+            const saldoActual = parseFloat(document.getElementById('pagoSaldoPendiente').textContent) || 0;
+            const esTodoSaldo = saldoActual > 0 && Math.abs(payload.monto_pagar - saldoActual) < 0.005;
+            const conf = await Swal.fire({
+                icon: 'question',
+                title: 'Registrar pago',
+                html: `¿Registrar un pago de <strong>$${payload.monto_pagar.toFixed(2)}</strong>`
+                    + (nombreForma ? ` con <strong>${nombreForma.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')}</strong>` : '')
+                    + `?<br><small class="text-muted">Saldo pendiente: $${saldoActual.toFixed(2)}`
+                    + (esTodoSaldo ? ' — este pago deja la liquidación totalmente pagada.' : '') + '</small>',
+                showCancelButton: true,
+                confirmButtonText: '<i class="bi bi-check-circle me-1"></i> Registrar',
+                cancelButtonText: 'Cancelar',
+                confirmButtonColor: '#198754',
+                focusCancel: true,
+                target: document.getElementById('modalLiquidacion') || 'body',
+            });
+            if (!conf.isConfirmed) return;
+
             const resp = await fetch(`${API_URL}/registrarEgresoAjax`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -1888,12 +1941,14 @@
             const res = await resp.json();
             if (res.ok) {
                 Swal.fire('Éxito', res.msg, 'success');
-                window.LC_cargarPagosTab();
+                // El botón no se reactiva hasta que el panel ya muestra el pago nuevo
+                // y el monto quedó vacío (§8, «un guardado = un registro»).
+                await window.LC_cargarPagosTab({ sinMonto: true });
                 fetchSearchFn(1);
             } else throw new Error(res.error);
         } catch (err) {
             Swal.fire('Error', err.message, 'error');
-        } finally { btn.disabled = false; }
+        } finally { _lcPagando = false; btn.disabled = false; }
     };
 
     // --- Gestión de Retenciones ---
